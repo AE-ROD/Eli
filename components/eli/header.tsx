@@ -44,12 +44,16 @@ export function Header() {
           </nav>
 
           <div className="hidden md:flex items-center gap-3">
-            <Button variant="ghost" size="sm" className="text-muted-foreground">
-              Iniciar Sesión
-            </Button>
-            <Button size="sm" className="bg-primary hover:bg-primary/90">
-              Comenzar Gratis
-            </Button>
+            <Link href="/iniciar-sesion">
+              <Button variant="ghost" size="sm" className="text-muted-foreground">
+                Iniciar Sesión
+              </Button>
+            </Link>
+            <Link href="/crear-cuenta">
+              <Button size="sm" className="bg-primary hover:bg-primary/90">
+                Comenzar Gratis
+              </Button>
+            </Link>
           </div>
 
           {/* Mobile Menu Button */}
@@ -82,12 +86,16 @@ export function Header() {
                 </Link>
               ))}
               <div className="flex flex-col gap-2 pt-4 border-t border-border/50">
-                <Button variant="ghost" size="sm" className="justify-start text-muted-foreground">
-                  Iniciar Sesión
-                </Button>
-                <Button size="sm" className="bg-primary hover:bg-primary/90">
-                  Comenzar Gratis
-                </Button>
+                <Link href="/iniciar-sesion">
+                  <Button variant="ghost" size="sm" className="justify-start text-muted-foreground w-full">
+                    Iniciar Sesión
+                  </Button>
+                </Link>
+                <Link href="/crear-cuenta">
+                  <Button size="sm" className="bg-primary hover:bg-primary/90 w-full">
+                    Comenzar Gratis
+                  </Button>
+                </Link>
               </div>
             </nav>
           </motion.div>
