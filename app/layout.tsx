@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter, DM_Sans } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { Providers } from '@/components/providers'
 import './globals.css'
 
 const inter = Inter({ 
@@ -31,7 +32,7 @@ export default function RootLayout({
   return (
     <html lang="es" className="bg-background">
       <body className={`${inter.variable} ${dmSans.variable} font-sans antialiased`}>
-        {children}
+        <Providers>{children}</Providers>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

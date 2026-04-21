@@ -1,10 +1,10 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { BarraSuperior } from "@/components/eli/app/barra-superior"
 import { TarjetaEstadistica } from "@/components/eli/app/tarjeta-estadistica"
 import { TarjetaCita } from "@/components/eli/app/tarjeta-cita"
-import { AvatarUsuario } from "@/components/eli/app/avatar-usuario"
 import {
   CalendarDays,
   Users,
@@ -15,35 +15,32 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 
-// Datos de ejemplo
-const estadisticasHoy = [
-  { titulo: "Citas hoy", valor: 8, icono: CalendarDays, colorIcono: "primario" as const, tendencia: { valor: 12, esPositiva: true } },
-  { titulo: "Clientes activos", valor: 156, icono: Users, colorIcono: "exito" as const, tendencia: { valor: 8, esPositiva: true } },
-  { titulo: "Ingresos del mes", valor: "$4,250", icono: DollarSign, colorIcono: "info" as const, tendencia: { valor: 15, esPositiva: true } },
-  { titulo: "Tasa ocupación", valor: "78%", icono: TrendingUp, colorIcono: "advertencia" as const, tendencia: { valor: 5, esPositiva: true } },
-]
-
-const citasProximas = [
-  { id: "1", pacienteNombre: "María García", servicio: "Corte + Tinte", horaInicio: "09:00", horaFin: "10:30", duracion: 90, estado: "confirmada" as const },
-  { id: "2", pacienteNombre: "Carlos Rodríguez", servicio: "Corte de cabello", horaInicio: "10:30", horaFin: "11:00", duracion: 30, estado: "en-progreso" as const },
-  { id: "3", pacienteNombre: "Ana Pérez", servicio: "Manicure", horaInicio: "11:30", horaFin: "12:30", duracion: 60, estado: "pendiente" as const },
-  { id: "4", pacienteNombre: "Luis Martínez", servicio: "Consulta general", horaInicio: "14:00", horaFin: "14:30", duracion: 30, estado: "confirmada" as const },
-]
-
-const clientesRecientes = [
-  { nombre: "María García", ultimaVisita: "Hoy", servicios: 12 },
-  { nombre: "Carlos Rodríguez", ultimaVisita: "Hace 2 días", servicios: 5 },
-  { nombre: "Ana Pérez", ultimaVisita: "Hace 1 semana", servicios: 8 },
-  { nombre: "Luis Martínez", ultimaVisita: "Hace 3 días", servicios: 3 },
-]
+interface StatsData {
+  citasHoy: number
+  citasHoyLista: Array<{
+    id: string
+    title: string
+    startTime: string
+    endTime: string
+    status: string
+    patient: { id: string; name: string }
+  }>
+  totalPacientes: number
+  ingresoseMes: number
+  tasaOcupacion: number
+  tendencias: {
+    citas: number
+    pacientes: number
+    ingresos: number
+    ocupacion: number
+  }
+}
 
 const contenedorVariantes = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
-    transition: {
-      staggerChildren: 0.1,
-    },
+    transition: { staggerChildren: 0.1 },
   },
 }
 
@@ -52,13 +49,74 @@ const itemVariantes = {
   show: { opacity: 1, y: 0 },
 }
 
+function formatHora(iso: string) {
+  return new Date(iso).toLocaleTimeString("es-ES", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+}
+
+function duracionMinutos(start: string, end: string) {
+  return Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000)
+}
+
 export default function DashboardPage() {
+  const [stats, setStats] = useState<StatsData | null>(null)
+
+  useEffect(() => {
+    fetch("/api/dashboard/stats")
+      .then((r) => r.json())
+      .then(setStats)
+      .catch(console.error)
+  }, [])
+
   const fechaActual = new Date().toLocaleDateString("es-ES", {
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
   })
+
+  const estadisticas = stats
+    ? [
+        {
+          titulo: "Citas hoy",
+          valor: stats.citasHoy,
+          icono: CalendarDays,
+          colorIcono: "primario" as const,
+          tendencia: { valor: Math.abs(stats.tendencias.citas), esPositiva: stats.tendencias.citas >= 0 },
+        },
+        {
+          titulo: "Clientes activos",
+          valor: stats.totalPacientes,
+          icono: Users,
+          colorIcono: "exito" as const,
+          tendencia: { valor: Math.abs(stats.tendencias.pacientes), esPositiva: stats.tendencias.pacientes >= 0 },
+        },
+        {
+          titulo: "Ingresos del mes",
+          valor: `$${stats.ingresoseMes.toLocaleString("es-ES")}`,
+          icono: DollarSign,
+          colorIcono: "info" as const,
+          tendencia: { valor: Math.abs(stats.tendencias.ingresos), esPositiva: stats.tendencias.ingresos >= 0 },
+        },
+        {
+          titulo: "Tasa ocupación",
+          valor: `${stats.tasaOcupacion}%`,
+          icono: TrendingUp,
+          colorIcono: "advertencia" as const,
+          tendencia: { valor: Math.abs(stats.tendencias.ocupacion), esPositiva: true },
+        },
+      ]
+    : [
+        { titulo: "Citas hoy", valor: "—", icono: CalendarDays, colorIcono: "primario" as const },
+        { titulo: "Clientes activos", valor: "—", icono: Users, colorIcono: "exito" as const },
+        { titulo: "Ingresos del mes", valor: "—", icono: DollarSign, colorIcono: "info" as const },
+        { titulo: "Tasa ocupación", valor: "—", icono: TrendingUp, colorIcono: "advertencia" as const },
+      ]
+
+  const citasHoy = stats?.citasHoyLista ?? []
 
   return (
     <div className="min-h-screen">
@@ -73,20 +131,16 @@ export default function DashboardPage() {
 
       <div className="p-6 space-y-8">
         {/* Estadisticas */}
-        <motion.section
-          variants={contenedorVariantes}
-          initial="hidden"
-          animate="show"
-        >
+        <motion.section variants={contenedorVariantes} initial="hidden" animate="show">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {estadisticasHoy.map((stat) => (
+            {estadisticas.map((stat) => (
               <motion.div key={stat.titulo} variants={itemVariantes}>
                 <TarjetaEstadistica
                   titulo={stat.titulo}
                   valor={stat.valor}
                   icono={stat.icono}
                   colorIcono={stat.colorIcono}
-                  tendencia={stat.tendencia}
+                  tendencia={"tendencia" in stat ? stat.tendencia : undefined}
                 />
               </motion.div>
             ))}
@@ -110,7 +164,9 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <h2 className="font-semibold text-foreground">Citas de hoy</h2>
-                    <p className="text-sm text-muted-foreground">{citasProximas.length} citas programadas</p>
+                    <p className="text-sm text-muted-foreground">
+                      {stats ? `${citasHoy.length} citas programadas` : "Cargando..."}
+                    </p>
                   </div>
                 </div>
                 <Link
@@ -122,14 +178,32 @@ export default function DashboardPage() {
                 </Link>
               </div>
               <div className="p-5 space-y-3">
-                {citasProximas.map((cita) => (
-                  <TarjetaCita key={cita.id} cita={cita} compacta />
-                ))}
+                {citasHoy.length > 0 ? (
+                  citasHoy.map((cita) => (
+                    <TarjetaCita
+                      key={cita.id}
+                      cita={{
+                        id: cita.id,
+                        pacienteNombre: cita.patient.name,
+                        servicio: cita.title,
+                        horaInicio: formatHora(cita.startTime),
+                        horaFin: formatHora(cita.endTime),
+                        duracion: duracionMinutos(cita.startTime, cita.endTime),
+                        estado: cita.status as any,
+                      }}
+                      compacta
+                    />
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    {stats ? "Sin citas para hoy" : "Cargando citas..."}
+                  </p>
+                )}
               </div>
             </div>
           </motion.section>
 
-          {/* Clientes recientes */}
+          {/* Pacientes recientes */}
           <motion.section
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -142,8 +216,10 @@ export default function DashboardPage() {
                     <Users className="h-5 w-5 text-green-600" />
                   </div>
                   <div>
-                    <h2 className="font-semibold text-foreground">Clientes recientes</h2>
-                    <p className="text-sm text-muted-foreground">Últimas visitas</p>
+                    <h2 className="font-semibold text-foreground">Pacientes</h2>
+                    <p className="text-sm text-muted-foreground">
+                      {stats ? `${stats.totalPacientes} en total` : "Cargando..."}
+                    </p>
                   </div>
                 </div>
                 <Link
@@ -154,24 +230,26 @@ export default function DashboardPage() {
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
-              <div className="p-5 space-y-4">
-                {clientesRecientes.map((cliente) => (
-                  <div
-                    key={cliente.nombre}
-                    className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3">
-                      <AvatarUsuario nombre={cliente.nombre} tamaño="sm" />
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{cliente.nombre}</p>
-                        <p className="text-xs text-muted-foreground">{cliente.ultimaVisita}</p>
-                      </div>
+              <div className="p-5">
+                {stats && stats.totalPacientes === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Aún no tienes pacientes registrados
+                  </p>
+                ) : (
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Users className="h-4 w-4 text-primary" />
                     </div>
-                    <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
-                      {cliente.servicios} servicios
-                    </span>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        {stats ? stats.totalPacientes : "—"} pacientes
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        registrados en tu negocio
+                      </p>
+                    </div>
                   </div>
-                ))}
+                )}
               </div>
             </div>
           </motion.section>
@@ -179,72 +257,80 @@ export default function DashboardPage() {
 
         {/* Grafico y actividad */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Grafico de ingresos */}
+          {/* Grafico de citas por hora */}
           <motion.section
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
           >
             <div className="bg-card border border-border/50 rounded-xl p-5">
-              <h3 className="font-semibold text-foreground mb-4">Ingresos semanales</h3>
-              <div className="h-48 flex items-end justify-between gap-2">
-                {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((dia, i) => {
-                  const altura = [60, 80, 45, 90, 75, 95, 40][i]
-                  return (
-                    <div key={dia} className="flex-1 flex flex-col items-center gap-2">
-                      <motion.div
-                        className="w-full bg-primary/20 rounded-t-md relative overflow-hidden"
-                        initial={{ height: 0 }}
-                        animate={{ height: `${altura}%` }}
-                        transition={{ delay: 0.5 + i * 0.1, duration: 0.5 }}
-                      >
-                        <motion.div
-                          className="absolute bottom-0 left-0 right-0 bg-primary rounded-t-md"
-                          initial={{ height: 0 }}
-                          animate={{ height: "100%" }}
-                          transition={{ delay: 0.6 + i * 0.1, duration: 0.4 }}
-                        />
-                      </motion.div>
-                      <span className="text-xs text-muted-foreground">{dia}</span>
+              <h3 className="font-semibold text-foreground mb-4">Citas de hoy por hora</h3>
+              {citasHoy.length > 0 ? (
+                <div className="space-y-3">
+                  {citasHoy.map((cita) => (
+                    <div key={cita.id} className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground w-12 flex-shrink-0">
+                        {formatHora(cita.startTime)}
+                      </span>
+                      <div className="flex-1 h-7 bg-primary/10 rounded-lg flex items-center px-3">
+                        <span className="text-xs font-medium text-primary truncate">
+                          {cita.patient.name} — {cita.title}
+                        </span>
+                      </div>
                     </div>
-                  )
-                })}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
+                  {stats ? "Sin citas para hoy" : "Cargando..."}
+                </div>
+              )}
             </div>
           </motion.section>
 
-          {/* Actividad reciente */}
+          {/* Resumen del dia */}
           <motion.section
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
           >
             <div className="bg-card border border-border/50 rounded-xl p-5">
-              <h3 className="font-semibold text-foreground mb-4">Actividad reciente</h3>
+              <h3 className="font-semibold text-foreground mb-4">Resumen del negocio</h3>
               <div className="space-y-4">
                 {[
-                  { texto: "Nueva cita agendada con María García", tiempo: "Hace 5 min", tipo: "cita" },
-                  { texto: "Pago recibido de Carlos Rodríguez", tiempo: "Hace 1 hora", tipo: "pago" },
-                  { texto: "Ana Pérez canceló su cita", tiempo: "Hace 2 horas", tipo: "cancelacion" },
-                  { texto: "Nuevo cliente registrado: Luis M.", tiempo: "Hace 3 horas", tipo: "cliente" },
-                ].map((actividad, i) => (
+                  {
+                    label: "Citas hoy",
+                    valor: stats?.citasHoy ?? "—",
+                    color: "bg-primary",
+                  },
+                  {
+                    label: "Total pacientes",
+                    valor: stats?.totalPacientes ?? "—",
+                    color: "bg-green-500",
+                  },
+                  {
+                    label: "Ingresos este mes",
+                    valor: stats ? `$${stats.ingresoseMes.toLocaleString("es-ES")}` : "—",
+                    color: "bg-blue-500",
+                  },
+                  {
+                    label: "Tasa de ocupación",
+                    valor: stats ? `${stats.tasaOcupacion}%` : "—",
+                    color: "bg-orange-500",
+                  },
+                ].map((item, i) => (
                   <motion.div
-                    key={i}
-                    className="flex items-start gap-3"
+                    key={item.label}
+                    className="flex items-center justify-between"
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.6 + i * 0.1 }}
                   >
-                    <div className={`w-2 h-2 rounded-full mt-2 ${
-                      actividad.tipo === "cita" ? "bg-primary" :
-                      actividad.tipo === "pago" ? "bg-green-500" :
-                      actividad.tipo === "cancelacion" ? "bg-red-500" :
-                      "bg-blue-500"
-                    }`} />
-                    <div className="flex-1">
-                      <p className="text-sm text-foreground">{actividad.texto}</p>
-                      <p className="text-xs text-muted-foreground">{actividad.tiempo}</p>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full ${item.color}`} />
+                      <span className="text-sm text-foreground">{item.label}</span>
                     </div>
+                    <span className="text-sm font-semibold text-foreground">{item.valor}</span>
                   </motion.div>
                 ))}
               </div>

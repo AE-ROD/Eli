@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { signOut } from "next-auth/react"
 import { motion, AnimatePresence } from "framer-motion"
 import { EliLogo } from "../eli-logo"
 import { AvatarUsuario } from "./avatar-usuario"
@@ -14,7 +15,6 @@ import {
   Settings,
   LogOut,
   ChevronLeft,
-  Bell,
   HelpCircle,
 } from "lucide-react"
 
@@ -223,6 +223,8 @@ export function BarraLateral({ usuario }: BarraLateralProps) {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
+                onClick={() => signOut({ callbackUrl: "/iniciar-sesion" })}
+                title="Cerrar sesión"
               >
                 <LogOut className="h-4 w-4 text-muted-foreground" />
               </motion.button>
