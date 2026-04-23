@@ -34,7 +34,14 @@ export async function GET(request: NextRequest) {
         startTime: { gte: hoy, lt: manana },
         status: { not: "cancelada" },
       },
-      include: { patient: { select: { id: true, name: true } } },
+      select: {
+        id: true,
+        title: true,
+        startTime: true,
+        endTime: true,
+        status: true,
+        patient: { select: { id: true, name: true } },
+      },
       orderBy: { startTime: "asc" },
     }),
     prisma.appointment.count({

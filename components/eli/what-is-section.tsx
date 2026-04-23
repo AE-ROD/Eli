@@ -1,7 +1,6 @@
 "use client"
 
-import { motion, useInView } from "framer-motion"
-import { useRef } from "react"
+import { motion } from "framer-motion"
 import { CalendarDays, Users2, BarChart3, MessageCircle, Globe, Bell } from "lucide-react"
 
 const features = [
@@ -38,17 +37,15 @@ const features = [
 ]
 
 export function WhatIsSection() {
-  const ref = useRef(null)
-  const isInView = useInView(ref, { once: true, margin: "-100px" })
-
   return (
-    <section id="que-es" className="py-24 bg-secondary/30" ref={ref}>
+    <section id="que-es" className="py-24 bg-secondary/30">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <motion.div
           className="text-center max-w-3xl mx-auto mb-16"
-          initial={{ opacity: 0, y: 30 }}
-          animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.6 }}
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-60px" }}
+          transition={{ duration: 0.45 }}
         >
           <span className="text-sm font-medium text-primary uppercase tracking-wider">
             Qué es Eli
@@ -57,7 +54,7 @@ export function WhatIsSection() {
             Todo lo que necesitas para gestionar tu negocio
           </h2>
           <p className="mt-4 text-lg text-muted-foreground text-pretty">
-            Eli resuelve la fragmentación de herramientas que sufren los negocios de bienestar 
+            Eli resuelve la fragmentación de herramientas que sufren los negocios de bienestar
             al centralizar todo en una sola interfaz minimalista y profesional.
           </p>
         </motion.div>
@@ -67,9 +64,10 @@ export function WhatIsSection() {
             <motion.div
               key={feature.title}
               className="group relative bg-card rounded-2xl p-6 border border-border/50 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300"
-              initial={{ opacity: 0, y: 20 }}
-              animate={isInView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.5, delay: i * 0.1 }}
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-40px" }}
+              transition={{ duration: 0.4, delay: i * 0.07 }}
             >
               <div className="flex items-start gap-4">
                 <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors duration-300">

@@ -1,7 +1,7 @@
 "use client"
 
-import { motion, useInView } from "framer-motion"
-import { useRef, useState } from "react"
+import { motion } from "framer-motion"
+import { useState } from "react"
 import { LayoutDashboard, CalendarDays, Users, MessageCircle } from "lucide-react"
 
 const tabs = [
@@ -11,11 +11,9 @@ const tabs = [
   { id: "chat", label: "Chat", icon: MessageCircle },
 ]
 
-// Mock Dashboard Preview Component
 function DashboardMockup({ activeTab }: { activeTab: string }) {
   return (
     <div className="bg-card rounded-xl border border-border/50 overflow-hidden shadow-2xl shadow-primary/5">
-      {/* Top Bar */}
       <div className="flex items-center gap-2 px-4 py-3 bg-muted/50 border-b border-border/50">
         <div className="flex gap-1.5">
           <div className="w-3 h-3 rounded-full bg-red-400" />
@@ -29,9 +27,7 @@ function DashboardMockup({ activeTab }: { activeTab: string }) {
         </div>
       </div>
 
-      {/* Content */}
       <div className="flex min-h-[400px] md:min-h-[500px]">
-        {/* Sidebar */}
         <div className="hidden md:flex flex-col w-56 bg-muted/30 border-r border-border/50 p-4">
           <div className="flex items-center gap-2 mb-6">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm">
@@ -56,7 +52,6 @@ function DashboardMockup({ activeTab }: { activeTab: string }) {
           </nav>
         </div>
 
-        {/* Main Content Area */}
         <div className="flex-1 p-6">
           {activeTab === "dashboard" && <DashboardContent />}
           {activeTab === "calendario" && <CalendarContent />}
@@ -95,11 +90,11 @@ function DashboardContent() {
 function CalendarContent() {
   const hours = ["09:00", "10:00", "11:00", "12:00", "13:00"]
   const appointments = [
-    { time: "09:00", name: "María G.", service: "Corte + Tinte", duration: 2 },
-    { time: "11:00", name: "Carlos R.", service: "Corte de cabello", duration: 1 },
-    { time: "13:00", name: "Ana P.", service: "Manicure", duration: 1 },
+    { time: "09:00", name: "María G.", service: "Corte + Tinte" },
+    { time: "11:00", name: "Carlos R.", service: "Corte de cabello" },
+    { time: "13:00", name: "Ana P.", service: "Manicure" },
   ]
-  
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -177,9 +172,9 @@ function PatientsContent() {
 
 function ChatContent() {
   const messages = [
-    { from: "client", name: "María G.", text: "Hola, quisiera confirmar mi cita de mañana", time: "10:30" },
-    { from: "business", name: "Tú", text: "¡Hola María! Sí, tienes cita mañana a las 10:00 para corte y tinte.", time: "10:32" },
-    { from: "client", name: "María G.", text: "¡Perfecto! Muchas gracias", time: "10:33" },
+    { from: "client", text: "Hola, quisiera confirmar mi cita de mañana", time: "10:30" },
+    { from: "business", text: "¡Hola María! Sí, tienes cita mañana a las 10:00 para corte y tinte.", time: "10:32" },
+    { from: "client", text: "¡Perfecto! Muchas gracias", time: "10:33" },
   ]
 
   return (
@@ -222,18 +217,17 @@ function ChatContent() {
 }
 
 export function DashboardPreviewSection() {
-  const ref = useRef(null)
-  const isInView = useInView(ref, { once: true, margin: "-100px" })
   const [activeTab, setActiveTab] = useState("dashboard")
 
   return (
-    <section className="py-24 bg-background" ref={ref}>
+    <section className="py-24 bg-background">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <motion.div
           className="text-center max-w-3xl mx-auto mb-12"
-          initial={{ opacity: 0, y: 30 }}
-          animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.6 }}
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-60px" }}
+          transition={{ duration: 0.45 }}
         >
           <span className="text-sm font-medium text-primary uppercase tracking-wider">
             Vista previa
@@ -242,17 +236,17 @@ export function DashboardPreviewSection() {
             Una interfaz que amarás usar
           </h2>
           <p className="mt-4 text-lg text-muted-foreground text-pretty">
-            Diseñada para ser simple, profesional y eficiente. 
+            Diseñada para ser simple, profesional y eficiente.
             Explora las diferentes secciones del panel de Eli.
           </p>
         </motion.div>
 
-        {/* Tab Navigation */}
         <motion.div
           className="flex justify-center gap-2 mb-8"
-          initial={{ opacity: 0, y: 20 }}
-          animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.5, delay: 0.2 }}
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-40px" }}
+          transition={{ duration: 0.4, delay: 0.1 }}
         >
           {tabs.map((tab) => (
             <button
@@ -270,11 +264,11 @@ export function DashboardPreviewSection() {
           ))}
         </motion.div>
 
-        {/* Dashboard Preview */}
         <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.7, delay: 0.3 }}
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-40px" }}
+          transition={{ duration: 0.5, delay: 0.15 }}
         >
           <DashboardMockup activeTab={activeTab} />
         </motion.div>

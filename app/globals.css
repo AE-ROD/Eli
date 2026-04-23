@@ -116,14 +116,29 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* Carousel — animación en el compositor, no bloquea el scroll */
+@keyframes carousel-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-1236px); } /* 3 tarjetas × (380px + 32px gap) */
+}
+
+.carousel-track {
+  animation-name: carousel-scroll;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   html {
     scroll-behavior: smooth;
+    overscroll-behavior-y: none;
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
   }
 }

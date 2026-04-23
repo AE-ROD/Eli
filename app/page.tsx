@@ -19,7 +19,7 @@ export default function HomePage() {
     // Simulate loading time for smooth transition
     const timer = setTimeout(() => {
       setIsLoading(false)
-    }, 2000)
+    }, 1200)
 
     return () => clearTimeout(timer)
   }, [])

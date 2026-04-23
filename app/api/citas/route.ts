@@ -42,10 +42,19 @@ export async function GET(request: NextRequest) {
         startTime: { gte: fechaInicio, lte: fechaFin },
       }),
     },
-    include: {
+    select: {
+      id: true,
+      title: true,
+      startTime: true,
+      endTime: true,
+      status: true,
+      notes: true,
+      price: true,
+      patientId: true,
       patient: { select: { id: true, name: true, email: true, phone: true } },
     },
     orderBy: { startTime: "asc" },
+    take: fechaInicio ? undefined : 100,
   })
 
   return NextResponse.json(citas)

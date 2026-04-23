@@ -1,7 +1,6 @@
 "use client"
 
-import { motion, useInView } from "framer-motion"
-import { useRef } from "react"
+import { motion } from "framer-motion"
 
 const steps = [
   {
@@ -27,17 +26,15 @@ const steps = [
 ]
 
 export function HowItWorksSection() {
-  const ref = useRef(null)
-  const isInView = useInView(ref, { once: true, margin: "-100px" })
-
   return (
-    <section id="como-funciona" className="py-24 bg-background" ref={ref}>
+    <section id="como-funciona" className="py-24 bg-background">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <motion.div
           className="text-center max-w-3xl mx-auto mb-16"
-          initial={{ opacity: 0, y: 30 }}
-          animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.6 }}
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-60px" }}
+          transition={{ duration: 0.45 }}
         >
           <span className="text-sm font-medium text-primary uppercase tracking-wider">
             Cómo funciona
@@ -46,15 +43,14 @@ export function HowItWorksSection() {
             Comienza a usarlo en minutos
           </h2>
           <p className="mt-4 text-lg text-muted-foreground text-pretty">
-            Eli está diseñado para que no necesites capacitación. 
+            Eli está diseñado para que no necesites capacitación.
             Es tan simple que puedes empezar a usarlo hoy mismo.
           </p>
         </motion.div>
 
         <div className="relative">
-          {/* Connection Line */}
           <div className="hidden lg:block absolute left-1/2 top-0 bottom-0 w-px bg-border -translate-x-1/2" />
-          
+
           <div className="space-y-12 lg:space-y-0">
             {steps.map((step, i) => (
               <motion.div
@@ -62,9 +58,10 @@ export function HowItWorksSection() {
                 className={`relative lg:grid lg:grid-cols-2 lg:gap-8 ${
                   i % 2 === 0 ? "" : "lg:direction-rtl"
                 }`}
-                initial={{ opacity: 0, x: i % 2 === 0 ? -30 : 30 }}
-                animate={isInView ? { opacity: 1, x: 0 } : {}}
-                transition={{ duration: 0.6, delay: i * 0.15 }}
+                initial={{ opacity: 0, x: i % 2 === 0 ? -20 : 20 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true, margin: "-40px" }}
+                transition={{ duration: 0.4, delay: i * 0.08 }}
               >
                 <div
                   className={`lg:text-right ${
@@ -90,7 +87,6 @@ export function HowItWorksSection() {
                   </div>
                 </div>
 
-                {/* Center Circle for Desktop */}
                 <div className="hidden lg:flex absolute left-1/2 -translate-x-1/2 top-0 w-14 h-14 rounded-full bg-primary text-primary-foreground items-center justify-center font-bold text-lg shadow-lg shadow-primary/20">
                   {step.number}
                 </div>
