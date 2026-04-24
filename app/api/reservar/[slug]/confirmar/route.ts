@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { enviarConfirmacionCliente, enviarAvisoProfesional } from "@/lib/email"
 
 const reservaSchema = z.object({
   servicioId: z.string(),
@@ -22,7 +23,11 @@ export async function POST(
 
   const negocio = await prisma.business.findUnique({
     where: { slug },
-    select: { id: true },
+    select: {
+      id: true,
+      name: true,
+      user: { select: { email: true } },
+    },
   })
   if (!negocio) return NextResponse.json({ error: "Negocio no encontrado" }, { status: 404 })
 
@@ -93,6 +98,37 @@ export async function POST(
         businessId: negocio.id,
       },
     })
+
+    // Enviar emails en paralelo (sin bloquear la respuesta si fallan)
+    const emailsPromises: Promise<unknown>[] = []
+
+    if (datos.email) {
+      emailsPromises.push(
+        enviarConfirmacionCliente({
+          emailCliente: datos.email,
+          nombreCliente: `${datos.nombre} ${datos.apellido}`,
+          nombreNegocio: negocio.name,
+          servicio: servicio.name,
+          fecha: datos.fecha,
+          hora: datos.hora,
+          duracion: servicio.duration,
+        }).catch(() => null)
+      )
+    }
+
+    emailsPromises.push(
+      enviarAvisoProfesional({
+        emailProfesional: negocio.user.email,
+        nombreNegocio: negocio.name,
+        nombreCliente: `${datos.nombre} ${datos.apellido}`,
+        servicio: servicio.name,
+        fecha: datos.fecha,
+        hora: datos.hora,
+        comentarios: datos.comentarios,
+      }).catch(() => null)
+    )
+
+    await Promise.all(emailsPromises)
 
     return NextResponse.json({ citaId: cita.id, mensaje: "Reserva confirmada" }, { status: 201 })
   } catch (error) {
