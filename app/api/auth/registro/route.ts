@@ -3,6 +3,27 @@ import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
 
+function generarSlug(nombre: string): string {
+  return nombre
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .substring(0, 50)
+}
+
+async function slugUnico(base: string): Promise<string> {
+  let slug = generarSlug(base)
+  let intento = slug
+  let contador = 1
+  while (await prisma.business.findUnique({ where: { slug: intento } })) {
+    intento = `${slug}-${contador++}`
+  }
+  return intento
+}
+
 const registroSchema = z.object({
   nombre: z.string().min(2),
   email: z.string().email(),
@@ -28,6 +49,7 @@ export async function POST(request: NextRequest) {
     }
 
     const passwordHash = await bcrypt.hash(datos.contrasena, 12)
+    const slug = await slugUnico(datos.nombreNegocio)
 
     const usuario = await prisma.user.create({
       data: {
@@ -38,6 +60,7 @@ export async function POST(request: NextRequest) {
           create: {
             name: datos.nombreNegocio,
             type: datos.tipoNegocio,
+            slug,
           },
         },
       },

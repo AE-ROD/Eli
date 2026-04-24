@@ -26,10 +26,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Ya tienes un negocio configurado" }, { status: 400 })
     }
 
+    const slugBase = nombreNegocio
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9\s-]/g, "")
+      .trim()
+      .replace(/\s+/g, "-")
+      .substring(0, 50)
+
+    let slug = slugBase
+    let contador = 1
+    while (await prisma.business.findUnique({ where: { slug } })) {
+      slug = `${slugBase}-${contador++}`
+    }
+
     const negocio = await prisma.business.create({
       data: {
         name: nombreNegocio,
         type: tipoNegocio,
+        slug,
         userId,
       },
     })
