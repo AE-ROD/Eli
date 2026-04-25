@@ -94,6 +94,42 @@ export async function enviarAvisoProfesional(datos: DatosAvisoProfesional) {
   })
 }
 
+export interface DatosInvitacionTrabajador {
+  emailTrabajador: string
+  nombreTrabajador: string
+  nombreNegocio: string
+  rol: string
+  enlaceAceptar: string
+}
+
+export async function enviarInvitacionTrabajador(datos: DatosInvitacionTrabajador) {
+  const rolLabel = datos.rol === "admin" ? "Administrador" : "Trabajador"
+
+  return resend.emails.send({
+    from: FROM,
+    to: datos.emailTrabajador,
+    subject: `Te invitaron a unirte a ${datos.nombreNegocio} en Eli`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px; background: #fff;">
+        <h1 style="font-size: 24px; font-weight: 700; color: #111; margin-bottom: 8px;">Tienes una invitación</h1>
+        <p style="color: #555; margin-bottom: 24px;">Hola <strong>${datos.nombreTrabajador}</strong>, te invitaron a formar parte de <strong>${datos.nombreNegocio}</strong> como <strong>${rolLabel}</strong>.</p>
+
+        <div style="background: #f0f7ff; border-radius: 12px; padding: 20px; margin-bottom: 24px; border-left: 4px solid #3b82f6;">
+          <p style="margin: 0 0 8px; color: #111;"><strong>Negocio:</strong> ${datos.nombreNegocio}</p>
+          <p style="margin: 0; color: #111;"><strong>Tu rol:</strong> ${rolLabel}</p>
+        </div>
+
+        <a href="${datos.enlaceAceptar}" style="display: inline-block; background: #3b82f6; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 15px;">
+          Aceptar invitación
+        </a>
+
+        <p style="color: #999; font-size: 12px; margin-top: 32px;">Este enlace expira en 7 días. Si no esperabas esta invitación, ignora este correo.</p>
+        <p style="color: #999; font-size: 12px;">Enviado por Eli · Sistema de agendamiento</p>
+      </div>
+    `,
+  })
+}
+
 export async function enviarRecordatorio(datos: DatosRecordatorio) {
   const fechaLegible = formatFechaLegible(datos.fecha)
 

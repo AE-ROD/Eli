@@ -16,6 +16,7 @@ import {
   LogOut,
   ChevronLeft,
   HelpCircle,
+  UsersRound,
 } from "lucide-react"
 
 const itemsNavegacion = [
@@ -37,9 +38,10 @@ interface BarraLateralProps {
     imagenUrl?: string
     negocio: string
   }
+  esOwner?: boolean
 }
 
-export function BarraLateral({ usuario }: BarraLateralProps) {
+export function BarraLateral({ usuario, esOwner }: BarraLateralProps) {
   const pathname = usePathname()
   const [colapsado, setColapsado] = useState(false)
 
@@ -103,7 +105,10 @@ export function BarraLateral({ usuario }: BarraLateralProps) {
           )}
         </AnimatePresence>
         
-        {itemsNavegacion.map((item) => {
+        {[
+          ...itemsNavegacion,
+          ...(esOwner ? [{ id: "equipo", nombre: "Equipo", icono: UsersRound, ruta: "/dashboard/equipo" }] : []),
+        ].map((item) => {
           const activo = pathname === item.ruta || (item.ruta !== "/dashboard" && pathname.startsWith(item.ruta))
           
           return (

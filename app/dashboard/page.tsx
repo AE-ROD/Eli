@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
+import { useSession } from "next-auth/react"
 import { BarraSuperior } from "@/components/eli/app/barra-superior"
 import { TarjetaEstadistica } from "@/components/eli/app/tarjeta-estadistica"
 import { TarjetaCita } from "@/components/eli/app/tarjeta-cita"
@@ -12,6 +13,9 @@ import {
   TrendingUp,
   Clock,
   ArrowRight,
+  Link2,
+  Copy,
+  Check,
 } from "lucide-react"
 import Link from "next/link"
 
@@ -63,6 +67,19 @@ function duracionMinutos(start: string, end: string) {
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<StatsData | null>(null)
+  const [copiado, setCopiado] = useState(false)
+  const { data: session } = useSession()
+  const businessSlug = (session?.user as any)?.businessSlug ?? ""
+  const enlaceReservas = typeof window !== "undefined" && businessSlug
+    ? `${window.location.origin}/reservar/${businessSlug}`
+    : businessSlug ? `/reservar/${businessSlug}` : ""
+
+  const copiarEnlace = async () => {
+    if (!enlaceReservas) return
+    await navigator.clipboard.writeText(enlaceReservas)
+    setCopiado(true)
+    setTimeout(() => setCopiado(false), 2000)
+  }
 
   useEffect(() => {
     fetch("/api/dashboard/stats")
@@ -254,6 +271,42 @@ export default function DashboardPage() {
             </div>
           </motion.section>
         </div>
+
+        {/* Enlace de reservas */}
+        {enlaceReservas && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+          >
+            <div className="bg-primary/5 border border-primary/20 rounded-xl p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="p-3 rounded-xl bg-primary/10 flex-shrink-0">
+                <Link2 className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-foreground mb-0.5">Tu enlace de reservas</p>
+                <p className="text-xs text-muted-foreground truncate font-mono">{enlaceReservas}</p>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={copiarEnlace}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background border border-border hover:bg-muted transition-colors text-sm font-medium"
+                >
+                  {copiado ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4 text-muted-foreground" />}
+                  {copiado ? "Copiado" : "Copiar"}
+                </button>
+                <Link
+                  href={`/reservar/${businessSlug}`}
+                  target="_blank"
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-sm font-medium"
+                >
+                  Ver página
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            </div>
+          </motion.section>
+        )}
 
         {/* Grafico y actividad */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

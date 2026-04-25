@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react"
 import { EliLogo } from "@/components/eli/eli-logo"
 import { CampoFormulario } from "@/components/eli/app/campo-formulario"
 import { BotonPrimario } from "@/components/eli/app/boton-primario"
-import { Building2, ArrowRight } from "lucide-react"
+import { Building2, ArrowRight, User, Users } from "lucide-react"
 
 const tiposNegocio = [
   { id: "salon", nombre: "Salón de belleza / Spa", icono: "💇" },
@@ -16,12 +16,19 @@ const tiposNegocio = [
   { id: "otro", nombre: "Otro tipo de negocio", icono: "📋" },
 ]
 
+const opcionesEquipo = [
+  { valor: 1, label: "Solo yo", icono: User },
+  { valor: 2, label: "2 – 5 personas", icono: Users },
+  { valor: 6, label: "6 o más", icono: Users },
+]
+
 export default function CompletarPerfilPage() {
   const router = useRouter()
   const { update } = useSession()
   const [cargando, setCargando] = useState(false)
   const [nombreNegocio, setNombreNegocio] = useState("")
   const [tipoNegocio, setTipoNegocio] = useState("")
+  const [teamSize, setTeamSize] = useState<number>(1)
   const [error, setError] = useState("")
 
   const manejarEnvio = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -39,7 +46,7 @@ export default function CompletarPerfilPage() {
       const res = await fetch("/api/auth/completar-perfil", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombreNegocio, tipoNegocio }),
+        body: JSON.stringify({ nombreNegocio, tipoNegocio, teamSize }),
       })
 
       const data = await res.json()
@@ -50,7 +57,6 @@ export default function CompletarPerfilPage() {
         return
       }
 
-      // Refresca el JWT para que incluya el nuevo businessId
       await update()
       router.push("/dashboard")
       router.refresh()
@@ -73,15 +79,13 @@ export default function CompletarPerfilPage() {
         </div>
 
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-foreground">
-            Un último paso
-          </h1>
+          <h1 className="text-2xl font-bold text-foreground">Un último paso</h1>
           <p className="mt-2 text-muted-foreground">
             Cuéntanos sobre tu negocio para personalizar tu experiencia
           </p>
         </div>
 
-        <form onSubmit={manejarEnvio} className="space-y-5">
+        <form onSubmit={manejarEnvio} className="space-y-6">
           <CampoFormulario
             etiqueta="Nombre de tu negocio"
             type="text"
@@ -92,38 +96,63 @@ export default function CompletarPerfilPage() {
             required
           />
 
+          {/* Tipo de negocio */}
           <div className="space-y-3">
-            <label className="text-sm font-medium text-foreground">
-              Tipo de negocio
-            </label>
+            <label className="text-sm font-medium text-foreground">Tipo de negocio</label>
             <div className="grid grid-cols-2 gap-3">
               {tiposNegocio.map((tipo) => (
                 <motion.button
                   key={tipo.id}
                   type="button"
-                  className={`
-                    p-4 rounded-xl border-2 text-left transition-all
-                    ${tipoNegocio === tipo.id
+                  className={`p-4 rounded-xl border-2 text-left transition-all ${
+                    tipoNegocio === tipo.id
                       ? "border-primary bg-primary/5"
                       : "border-border hover:border-primary/50"
-                    }
-                  `}
+                  }`}
                   onClick={() => setTipoNegocio(tipo.id)}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                 >
                   <span className="text-2xl mb-2 block">{tipo.icono}</span>
-                  <span className="text-sm font-medium text-foreground">
-                    {tipo.nombre}
-                  </span>
+                  <span className="text-sm font-medium text-foreground">{tipo.nombre}</span>
                 </motion.button>
               ))}
             </div>
           </div>
 
-          {error && (
-            <p className="text-sm text-red-500 text-center">{error}</p>
-          )}
+          {/* Tamaño del equipo */}
+          <div className="space-y-3">
+            <label className="text-sm font-medium text-foreground">
+              ¿Cuántas personas trabajan contigo?
+            </label>
+            <div className="flex gap-3">
+              {opcionesEquipo.map((op) => {
+                const Icono = op.icono
+                const seleccionado = teamSize === op.valor
+                return (
+                  <motion.button
+                    key={op.valor}
+                    type="button"
+                    className={`flex-1 flex flex-col items-center gap-2 py-3 px-2 rounded-xl border-2 transition-all ${
+                      seleccionado
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/50"
+                    }`}
+                    onClick={() => setTeamSize(op.valor)}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <Icono className={`h-5 w-5 ${seleccionado ? "text-primary" : "text-muted-foreground"}`} />
+                    <span className={`text-xs font-medium text-center leading-tight ${seleccionado ? "text-primary" : "text-foreground"}`}>
+                      {op.label}
+                    </span>
+                  </motion.button>
+                )
+              })}
+            </div>
+          </div>
+
+          {error && <p className="text-sm text-red-500 text-center">{error}</p>}
 
           <BotonPrimario
             type="submit"

@@ -7,6 +7,7 @@ import { z } from "zod"
 const schema = z.object({
   nombreNegocio: z.string().min(2),
   tipoNegocio: z.string().min(1),
+  teamSize: z.number().int().min(1).default(1),
 })
 
 export async function POST(request: NextRequest) {
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { nombreNegocio, tipoNegocio } = schema.parse(body)
+    const { nombreNegocio, tipoNegocio, teamSize } = schema.parse(body)
 
     const existente = await prisma.business.findFirst({ where: { userId } })
     if (existente) {
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
         name: nombreNegocio,
         type: tipoNegocio,
         slug,
+        teamSize,
         userId,
       },
     })

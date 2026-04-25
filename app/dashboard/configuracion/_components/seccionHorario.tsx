@@ -24,16 +24,20 @@ const HORARIO_INICIAL: HorarioAPI[] = DIAS.map((_, i) => ({
 
 interface SeccionHorarioProps {
   horariosIniciales: HorarioAPI[]
+  memberId?: string | null
+  titulo?: string
 }
 
-export function SeccionHorario({ horariosIniciales }: SeccionHorarioProps) {
-  const [horarios, setHorarios] = useState<HorarioAPI[]>(() => {
-    if (horariosIniciales.length === 0) return HORARIO_INICIAL
-    return DIAS.map((_, i) => {
-      const existente = horariosIniciales.find((h) => h.dayOfWeek === i)
-      return existente ?? { dayOfWeek: i, startTime: "09:00", endTime: "18:00", active: false }
-    })
+function horariosDesdeDB(db: HorarioAPI[]): HorarioAPI[] {
+  if (db.length === 0) return HORARIO_INICIAL
+  return DIAS.map((_, i) => {
+    const existente = db.find((h) => h.dayOfWeek === i)
+    return existente ?? { dayOfWeek: i, startTime: "09:00", endTime: "18:00", active: false }
   })
+}
+
+export function SeccionHorario({ horariosIniciales, memberId, titulo }: SeccionHorarioProps) {
+  const [horarios, setHorarios] = useState<HorarioAPI[]>(() => horariosDesdeDB(horariosIniciales))
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
 
@@ -54,7 +58,10 @@ export function SeccionHorario({ horariosIniciales }: SeccionHorarioProps) {
   const guardar = async () => {
     setGuardando(true)
     try {
-      const res = await fetch("/api/configuracion/horarios", {
+      const url = memberId
+        ? `/api/configuracion/horarios?memberId=${memberId}`
+        : "/api/configuracion/horarios"
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(horarios),
@@ -73,8 +80,8 @@ export function SeccionHorario({ horariosIniciales }: SeccionHorarioProps) {
             <Clock className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h2 className="font-semibold text-foreground">Horario laboral</h2>
-            <p className="text-sm text-muted-foreground">Define los días y horas en que atiendes</p>
+            <h2 className="font-semibold text-foreground">{titulo ?? "Horario laboral"}</h2>
+            <p className="text-sm text-muted-foreground">Define los días y horas de atención</p>
           </div>
         </div>
         <BotonPrimario
