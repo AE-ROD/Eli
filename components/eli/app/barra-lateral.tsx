@@ -17,7 +17,9 @@ import {
   ChevronLeft,
   HelpCircle,
   UsersRound,
+  Sparkles,
 } from "lucide-react"
+import { usePrecios } from "./provider-precios"
 
 const itemsNavegacion = [
   { id: "dashboard", nombre: "Dashboard", icono: LayoutDashboard, ruta: "/dashboard" },
@@ -39,9 +41,11 @@ interface BarraLateralProps {
     negocio: string
   }
   esOwner?: boolean
+  diasTrialRestantes?: number
 }
 
-export function BarraLateral({ usuario, esOwner }: BarraLateralProps) {
+export function BarraLateral({ usuario, esOwner, diasTrialRestantes }: BarraLateralProps) {
+  const { abrirPrecios } = usePrecios()
   const pathname = usePathname()
   const [colapsado, setColapsado] = useState(false)
 
@@ -203,6 +207,46 @@ export function BarraLateral({ usuario, esOwner }: BarraLateralProps) {
           })}
         </div>
       </nav>
+
+      {/* Banner trial */}
+      {esOwner && diasTrialRestantes !== undefined && diasTrialRestantes <= 3 && (
+        <div className="px-3 pb-2">
+          <motion.button
+            onClick={abrirPrecios}
+            className="w-full rounded-xl bg-primary/10 border border-primary/20 p-3 text-left hover:bg-primary/15 transition-colors"
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <Sparkles className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+              <AnimatePresence>
+                {!colapsado && (
+                  <motion.span
+                    className="text-xs font-semibold text-primary"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                  >
+                    {diasTrialRestantes > 0 ? `${diasTrialRestantes} día${diasTrialRestantes !== 1 ? "s" : ""} de prueba` : "Trial finalizado"}
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </div>
+            <AnimatePresence>
+              {!colapsado && (
+                <motion.p
+                  className="text-xs text-muted-foreground leading-tight"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  Ver planes →
+                </motion.p>
+              )}
+            </AnimatePresence>
+          </motion.button>
+        </div>
+      )}
 
       {/* Usuario */}
       <div className="p-3 border-t border-border/50">
