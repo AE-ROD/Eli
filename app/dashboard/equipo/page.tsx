@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { BarraSuperior } from "@/components/eli/app/barra-superior"
+import { BarraSuperior } from "@/components/app/layout/barra-superior"
 import { ListaEquipo } from "./_components/listaEquipo"
 import { ModalInvitar } from "./_components/modalInvitar"
 

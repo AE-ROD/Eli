@@ -2,8 +2,8 @@
 
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { AvatarUsuario } from "./avatar-usuario"
-import { BotonPrimario } from "./boton-primario"
+import { AvatarUsuario } from "@/components/app/comunes/avatar-usuario"
+import { BotonPrimario } from "@/components/app/formularios/boton-primario"
 import {
   Search,
   Bell,

@@ -2,8 +2,8 @@
 
 import { motion } from "framer-motion"
 import { X, Stethoscope, Clock, DollarSign, FileText } from "lucide-react"
-import { BotonPrimario } from "@/components/eli/app/boton-primario"
-import { CampoFormulario } from "@/components/eli/app/campo-formulario"
+import { BotonPrimario } from "@/components/app/formularios/boton-primario"
+import { CampoFormulario } from "@/components/app/formularios/campo-formulario"
 
 export interface FormServicio {
   name: string

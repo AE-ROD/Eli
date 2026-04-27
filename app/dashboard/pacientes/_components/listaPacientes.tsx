@@ -1,8 +1,8 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { TarjetaPaciente, type Paciente } from "@/components/eli/app/tarjeta-paciente"
-import { BotonPrimario } from "@/components/eli/app/boton-primario"
+import { TarjetaPaciente, type Paciente } from "@/components/app/tarjetas/tarjeta-paciente"
+import { BotonPrimario } from "@/components/app/formularios/boton-primario"
 import { ChevronDown, User } from "lucide-react"
 
 interface ListaPacientesProps {

@@ -1,8 +1,8 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { BotonPrimario } from "@/components/eli/app/boton-primario"
-import { CampoFormulario } from "@/components/eli/app/campo-formulario"
+import { BotonPrimario } from "@/components/app/formularios/boton-primario"
+import { CampoFormulario } from "@/components/app/formularios/campo-formulario"
 import { X, User, Mail, Phone } from "lucide-react"
 
 export interface FormNuevoPaciente {

@@ -5,9 +5,9 @@ import { motion } from "framer-motion"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { signIn } from "next-auth/react"
-import { EliLogo } from "@/components/eli/eli-logo"
-import { CampoFormulario } from "@/components/eli/app/campo-formulario"
-import { BotonPrimario } from "@/components/eli/app/boton-primario"
+import { EliLogo } from "@/components/shared/eli-logo"
+import { CampoFormulario } from "@/components/app/formularios/campo-formulario"
+import { BotonPrimario } from "@/components/app/formularios/boton-primario"
 import { Mail, Lock, User, Building2, ArrowRight, Check } from "lucide-react"
 
 const tiposNegocio = [

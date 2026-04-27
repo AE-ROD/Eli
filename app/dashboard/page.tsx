@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { useSession } from "next-auth/react"
-import { BarraSuperior } from "@/components/eli/app/barra-superior"
-import { TarjetaEstadistica } from "@/components/eli/app/tarjeta-estadistica"
-import { TarjetaCita } from "@/components/eli/app/tarjeta-cita"
+import { BarraSuperior } from "@/components/app/layout/barra-superior"
+import { TarjetaEstadistica } from "@/components/app/tarjetas/tarjeta-estadistica"
+import { TarjetaCita } from "@/components/app/tarjetas/tarjeta-cita"
 import {
   CalendarDays,
   Users,

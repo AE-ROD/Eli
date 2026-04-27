@@ -4,9 +4,9 @@ import { useState } from "react"
 import { motion } from "framer-motion"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { EliLogo } from "@/components/eli/eli-logo"
-import { CampoFormulario } from "@/components/eli/app/campo-formulario"
-import { BotonPrimario } from "@/components/eli/app/boton-primario"
+import { EliLogo } from "@/components/shared/eli-logo"
+import { CampoFormulario } from "@/components/app/formularios/campo-formulario"
+import { BotonPrimario } from "@/components/app/formularios/boton-primario"
 import { Building2, ArrowRight, User, Users } from "lucide-react"
 
 const tiposNegocio = [

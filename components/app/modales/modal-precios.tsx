@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Check, X as XIcon, Zap, Users, Building2, Clock, Star, ArrowRight, Sparkles } from "lucide-react"
-import { BotonPrimario } from "./boton-primario"
+import { BotonPrimario } from "@/components/app/formularios/boton-primario"
 
 const VALOR_ELI = [
   { icono: Clock, texto: "Ahorra 2–4 horas por semana en coordinación de citas" },
@@ -106,12 +106,13 @@ export function ModalPrecios({
     <AnimatePresence>
       {abierto && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
+          className="fixed inset-0 z-50 overflow-y-auto"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
           <div className="absolute inset-0 bg-foreground/30 backdrop-blur-sm" onClick={onCerrar} />
+          <div className="flex min-h-full items-center justify-center p-4">
 
           <motion.div
             className="relative bg-card rounded-2xl shadow-2xl w-full max-w-4xl my-4"
@@ -285,6 +286,7 @@ export function ModalPrecios({
               </p>
             </div>
           </motion.div>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

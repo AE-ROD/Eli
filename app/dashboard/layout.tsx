@@ -1,9 +1,9 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { BarraLateral } from "@/components/eli/app/barra-lateral"
-import { ModalBienvenida } from "@/components/eli/app/modal-bienvenida"
-import { ProviderPrecios } from "@/components/eli/app/provider-precios"
+import { BarraLateral } from "@/components/app/layout/barra-lateral"
+import { ModalBienvenida } from "@/components/app/modales/modal-bienvenida"
+import { ProviderPrecios } from "@/components/app/modales/provider-precios"
 
 export default async function DashboardLayout({
   children,

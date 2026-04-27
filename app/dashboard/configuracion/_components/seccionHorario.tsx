@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Clock, Save } from "lucide-react"
-import { BotonPrimario } from "@/components/eli/app/boton-primario"
+import { BotonPrimario } from "@/components/app/formularios/boton-primario"
 
 export interface HorarioAPI {
   id?: string

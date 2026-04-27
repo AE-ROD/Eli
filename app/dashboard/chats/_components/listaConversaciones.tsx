@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion"
 import { Search, MessageSquarePlus } from "lucide-react"
-import { AvatarUsuario } from "@/components/eli/app/avatar-usuario"
+import { AvatarUsuario } from "@/components/app/comunes/avatar-usuario"
 
 export interface MensajeAPI {
   id: string

@@ -3,8 +3,8 @@
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, UserPlus, Mail, User, ShieldCheck } from "lucide-react"
-import { CampoFormulario } from "@/components/eli/app/campo-formulario"
-import { BotonPrimario } from "@/components/eli/app/boton-primario"
+import { CampoFormulario } from "@/components/app/formularios/campo-formulario"
+import { BotonPrimario } from "@/components/app/formularios/boton-primario"
 
 interface Props {
   abierto: boolean

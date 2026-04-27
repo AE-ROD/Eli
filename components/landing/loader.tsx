@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { EliLogo } from "./eli-logo"
+import { EliLogo } from "@/components/shared/eli-logo"
 
 export function EliLoader() {
   return (

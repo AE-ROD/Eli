@@ -5,12 +5,13 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Menu, X } from "lucide-react"
 import { useState } from "react"
-import { EliLogo } from "./eli-logo"
+import { EliLogo } from "@/components/shared/eli-logo"
 
 const navLinks = [
   { href: "#que-es", label: "Qué es Eli" },
   { href: "#como-funciona", label: "Cómo funciona" },
   { href: "#para-quien", label: "Para quién" },
+  { href: "#precios", label: "Precios" },
   { href: "#contacto", label: "Contacto" },
 ]
 

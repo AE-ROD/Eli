@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Clock, Stethoscope, Link2, CheckCircle2, Copy, Check, ArrowRight } from "lucide-react"
-import { BotonPrimario } from "./boton-primario"
+import { BotonPrimario } from "@/components/app/formularios/boton-primario"
 import { useRouter } from "next/navigation"
 
 const STORAGE_KEY = "eli_onboarding_completado"

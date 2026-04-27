@@ -3,8 +3,8 @@
 import { useRef, useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { Send, Phone, Video, Calendar, MoreVertical, Smile } from "lucide-react"
-import { AvatarUsuario } from "@/components/eli/app/avatar-usuario"
-import { BurbujaMensaje, type Mensaje } from "@/components/eli/app/burbuja-mensaje"
+import { AvatarUsuario } from "@/components/app/comunes/avatar-usuario"
+import { BurbujaMensaje, type Mensaje } from "@/components/app/comunes/burbuja-mensaje"
 import type { ConversacionAPI, MensajeAPI } from "./listaConversaciones"
 
 const RESPUESTAS_RAPIDAS = [

@@ -5,8 +5,8 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { signOut } from "next-auth/react"
 import { motion, AnimatePresence } from "framer-motion"
-import { EliLogo } from "../eli-logo"
-import { AvatarUsuario } from "./avatar-usuario"
+import { EliLogo } from "@/components/shared/eli-logo"
+import { AvatarUsuario } from "@/components/app/comunes/avatar-usuario"
 import {
   LayoutDashboard,
   CalendarDays,
@@ -19,7 +19,7 @@ import {
   UsersRound,
   Sparkles,
 } from "lucide-react"
-import { usePrecios } from "./provider-precios"
+import { usePrecios } from "@/components/app/modales/provider-precios"
 
 const itemsNavegacion = [
   { id: "dashboard", nombre: "Dashboard", icono: LayoutDashboard, ruta: "/dashboard" },

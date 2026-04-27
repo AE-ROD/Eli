@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { AnimatePresence } from "framer-motion"
-import { BarraSuperior } from "@/components/eli/app/barra-superior"
+import { BarraSuperior } from "@/components/app/layout/barra-superior"
 import { ControlesCalendario, type VistaCalendario } from "./_components/controlesCalendario"
 import { VistaCalendarioSemana } from "./_components/vistaCalendarioSemana"
 import { VistaCalendarioDia } from "./_components/vistaCalendarioDia"

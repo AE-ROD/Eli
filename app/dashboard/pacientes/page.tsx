@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { AnimatePresence } from "framer-motion"
-import { BarraSuperior } from "@/components/eli/app/barra-superior"
+import { BarraSuperior } from "@/components/app/layout/barra-superior"
 import { FiltrosPacientes } from "./_components/filtrosPacientes"
 import { ListaPacientes } from "./_components/listaPacientes"
 import { PanelDetallePaciente, type PacienteAPICompleto } from "./_components/panelDetallePaciente"
 import { ModalNuevoPaciente, type FormNuevoPaciente } from "./_components/modalNuevoPaciente"
-import type { Paciente } from "@/components/eli/app/tarjeta-paciente"
+import type { Paciente } from "@/components/app/tarjetas/tarjeta-paciente"
 
 const ETIQUETAS_VALIDAS = ["VIP", "Frecuente", "Nuevo", "Inactivo"] as const
 

@@ -1,11 +1,11 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { AvatarUsuario } from "@/components/eli/app/avatar-usuario"
-import { BotonPrimario } from "@/components/eli/app/boton-primario"
-import { TarjetaCita, type Cita } from "@/components/eli/app/tarjeta-cita"
+import { AvatarUsuario } from "@/components/app/comunes/avatar-usuario"
+import { BotonPrimario } from "@/components/app/formularios/boton-primario"
+import { TarjetaCita, type Cita } from "@/components/app/tarjetas/tarjeta-cita"
 import { X, Mail, Phone, Calendar, Clock, FileText, Tag } from "lucide-react"
-import type { Paciente } from "@/components/eli/app/tarjeta-paciente"
+import type { Paciente } from "@/components/app/tarjetas/tarjeta-paciente"
 
 export interface CitaPacienteAPI {
   id: string

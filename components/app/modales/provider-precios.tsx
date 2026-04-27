@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, type ReactNode } from "react"
-import { ModalPrecios } from "./modal-precios"
+import { ModalPrecios } from "@/components/app/modales/modal-precios"
 
 interface PreciosContextType {
   abrirPrecios: () => void

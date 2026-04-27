@@ -1,6 +1,6 @@
 "use client"
 
-import { TarjetaCita, type Cita } from "@/components/eli/app/tarjeta-cita"
+import { TarjetaCita, type Cita } from "@/components/app/tarjetas/tarjeta-cita"
 import type { CitaAPI } from "./panelDetalleCita"
 
 const HORA_INICIO = 8

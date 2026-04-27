@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { Plus, Pencil, Trash2, Clock, DollarSign, Stethoscope, ToggleLeft, ToggleRight } from "lucide-react"
-import { BotonPrimario } from "@/components/eli/app/boton-primario"
+import { BotonPrimario } from "@/components/app/formularios/boton-primario"
 import { ModalServicio, type FormServicio } from "./modalServicio"
 
 export interface ServicioAPI {

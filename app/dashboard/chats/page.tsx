@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { Send } from "lucide-react"
-import { BarraSuperior } from "@/components/eli/app/barra-superior"
+import { BarraSuperior } from "@/components/app/layout/barra-superior"
 import { ListaConversaciones, type ConversacionAPI, type MensajeAPI } from "./_components/listaConversaciones"
 import { AreaChat } from "./_components/areaChat"
 import { ModalNuevaConversacion, type FormNuevaConversacion } from "./_components/modalNuevaConversacion"

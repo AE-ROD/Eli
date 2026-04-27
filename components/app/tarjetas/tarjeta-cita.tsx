@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { AvatarUsuario } from "./avatar-usuario"
+import { AvatarUsuario } from "@/components/app/comunes/avatar-usuario"
 import { Clock, MapPin, MoreVertical } from "lucide-react"
 
 export interface Cita {

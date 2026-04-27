@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { EliLogo } from "./eli-logo"
+import { EliLogo } from "@/components/shared/eli-logo"
 
 const footerLinks = {
   producto: [

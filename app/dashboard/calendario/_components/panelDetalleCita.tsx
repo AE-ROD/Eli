@@ -2,8 +2,8 @@
 
 import { motion } from "framer-motion"
 import { X } from "lucide-react"
-import { AvatarUsuario } from "@/components/eli/app/avatar-usuario"
-import { BotonPrimario } from "@/components/eli/app/boton-primario"
+import { AvatarUsuario } from "@/components/app/comunes/avatar-usuario"
+import { BotonPrimario } from "@/components/app/formularios/boton-primario"
 
 export interface CitaAPI {
   id: string
