@@ -1,21 +1,29 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { signIn } from "next-auth/react"
-import { EliLogo } from "@/components/eli/eli-logo"
-import { CampoFormulario } from "@/components/eli/app/campo-formulario"
-import { BotonPrimario } from "@/components/eli/app/boton-primario"
+import { EliLogo } from "@/components/shared/eli-logo"
+import { CampoFormulario } from "@/components/app/formularios/campo-formulario"
+import { BotonPrimario } from "@/components/app/formularios/boton-primario"
 import { Mail, Lock, ArrowRight } from "lucide-react"
 
 export default function IniciarSesionPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [cargando, setCargando] = useState(false)
   const [email, setEmail] = useState("")
   const [contrasena, setContrasena] = useState("")
-  const [error,  setError] = useState("")
+  const [error, setError] = useState("")
+
+  useEffect(() => {
+    const oauthError = searchParams.get("error")
+    if (oauthError) {
+      setError("No se pudo iniciar sesión con Google. Verifica que tu cuenta esté habilitada.")
+    }
+  }, [searchParams])
 
   const manejarEnvio = async (e: React.FormEvent) => {
     e.preventDefault()

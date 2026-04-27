@@ -2,23 +2,29 @@
 
 import { useState, useEffect } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { EliLoader } from "@/components/eli/loader"
-import { Header } from "@/components/eli/header"
-import { HeroSection } from "@/components/eli/hero-section"
-import { WhatIsSection } from "@/components/eli/what-is-section"
-import { HowItWorksSection } from "@/components/eli/how-it-works-section"
-import { TargetSection } from "@/components/eli/target-section"
-import { DashboardPreviewSection } from "@/components/eli/dashboard-preview-section"
-import { ContactSection } from "@/components/eli/contact-section"
-import { Footer } from "@/components/eli/footer"
+import { EliLoader } from "@/components/landing/loader"
+import { Header } from "@/components/landing/header"
+import { HeroSection } from "@/components/landing/hero-section"
+import { WhatIsSection } from "@/components/landing/what-is-section"
+import { HowItWorksSection } from "@/components/landing/how-it-works-section"
+import { TargetSection } from "@/components/landing/target-section"
+import { DashboardPreviewSection } from "@/components/landing/dashboard-preview-section"
+import { PreciosSection } from "@/components/landing/precios-section"
+import { ContactSection } from "@/components/landing/contact-section"
+import { Footer } from "@/components/landing/footer"
 
 export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    // Simulate loading time for smooth transition
+    const alreadyLoaded = sessionStorage.getItem("eli_loaded")
+    if (alreadyLoaded) {
+      setIsLoading(false)
+      return
+    }
     const timer = setTimeout(() => {
       setIsLoading(false)
+      sessionStorage.setItem("eli_loaded", "1")
     }, 1200)
 
     return () => clearTimeout(timer)
@@ -44,6 +50,7 @@ export default function HomePage() {
               <HowItWorksSection />
               <TargetSection />
               <DashboardPreviewSection />
+              <PreciosSection />
               <ContactSection />
             </main>
             <Footer />
