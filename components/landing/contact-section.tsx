@@ -12,18 +12,21 @@ const contactInfo = [
     title: "Email",
     value: "hola@eli.app",
     description: "Respondemos en menos de 24h",
+    color: "bg-blue-50 text-blue-600",
   },
   {
     icon: MapPin,
     title: "Ubicación",
     value: "Latinoamérica",
     description: "Servicio 100% remoto",
+    color: "bg-emerald-50 text-emerald-600",
   },
   {
     icon: Clock,
     title: "Horario",
     value: "Lun - Vie, 9:00 - 18:00",
     description: "Hora de Ciudad de México",
+    color: "bg-violet-50 text-violet-600",
   },
 ]
 
@@ -32,7 +35,7 @@ export function ContactSection() {
   const isInView = useInView(ref, { once: true, margin: "-100px" })
 
   return (
-    <section id="contacto" className="py-24 bg-secondary/30" ref={ref}>
+    <section id="contacto" className="py-24 bg-transparent" ref={ref}>
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-16">
           {/* Left Column */}
@@ -41,10 +44,10 @@ export function ContactSection() {
             animate={isInView ? { opacity: 1, x: 0 } : {}}
             transition={{ duration: 0.6 }}
           >
-            <span className="text-sm font-medium text-primary uppercase tracking-wider">
+            <span className="text-sm font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full uppercase tracking-wider">
               Contacto
             </span>
-            <h2 className="mt-4 text-3xl sm:text-4xl font-bold text-foreground text-balance">
+            <h2 className="mt-6 text-3xl sm:text-4xl font-bold text-foreground text-balance">
               ¿Tienes preguntas? Estamos aquí para ayudarte
             </h2>
             <p className="mt-4 text-lg text-muted-foreground text-pretty">
@@ -61,8 +64,8 @@ export function ContactSection() {
                   animate={isInView ? { opacity: 1, x: 0 } : {}}
                   transition={{ duration: 0.5, delay: 0.2 + i * 0.1 }}
                 >
-                  <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <item.icon className="h-5 w-5 text-primary" />
+                  <div className={`flex-shrink-0 w-12 h-12 rounded-xl ${item.color} flex items-center justify-center`}>
+                    <item.icon className="h-5 w-5" />
                   </div>
                   <div>
                     <h3 className="font-medium text-foreground">{item.title}</h3>

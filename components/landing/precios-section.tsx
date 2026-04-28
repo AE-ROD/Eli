@@ -1,16 +1,16 @@
 "use client"
 
 import { useState } from "react"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { Check, X, Clock, Zap, Users, Star, Building2 } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 
 const VALOR_ELI = [
-  { icono: Clock,  titulo: "2–4 horas/semana",   descripcion: "Tiempo que recuperas al dejar de coordinar citas por WhatsApp" },
-  { icono: Zap,    titulo: "Cero doble-reservas", descripcion: "El sistema bloquea horarios automáticamente en tiempo real" },
-  { icono: Star,   titulo: "Clientes que no faltan", descripcion: "Recordatorios automáticos por email 24h antes de cada cita" },
-  { icono: Users,  titulo: "Página profesional",  descripcion: "Tus clientes reservan solos, sin llamadas ni mensajes" },
+  { icono: Clock,  titulo: "2–4 horas/semana",      descripcion: "Tiempo que recuperas al dejar de coordinar citas por WhatsApp", color: "bg-blue-50 text-blue-600" },
+  { icono: Zap,    titulo: "Cero doble-reservas",   descripcion: "El sistema bloquea horarios automáticamente en tiempo real",    color: "bg-amber-50 text-amber-600" },
+  { icono: Star,   titulo: "Clientes que no faltan", descripcion: "Recordatorios automáticos por email 24h antes de cada cita",   color: "bg-rose-50 text-rose-600" },
+  { icono: Users,  titulo: "Página profesional",    descripcion: "Tus clientes reservan solos, sin llamadas ni mensajes",         color: "bg-violet-50 text-violet-600" },
 ]
 
 const PLANES = [
@@ -83,7 +83,7 @@ export function PreciosSection() {
   const [periodo, setPeriodo] = useState<"mensual" | "anual">("anual")
 
   return (
-    <section id="precios" className="py-24 px-4 bg-background">
+    <section id="precios" className="py-24 px-4 bg-muted/20">
       <div className="max-w-6xl mx-auto">
 
         {/* Encabezado */}
@@ -112,14 +112,14 @@ export function PreciosSection() {
             return (
               <motion.div
                 key={i}
-                className="flex flex-col items-center text-center gap-3 p-5 rounded-2xl bg-muted/40 border border-border/50"
+                className="flex flex-col items-center text-center gap-3 p-5 rounded-2xl bg-card border border-border/50 hover:shadow-md transition-all duration-300"
                 initial={{ opacity: 0, y: 16 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.08, duration: 0.4 }}
               >
-                <div className="p-3 rounded-xl bg-primary/10">
-                  <Icono className="h-5 w-5 text-primary" />
+                <div className={`p-3 rounded-xl ${v.color}`}>
+                  <Icono className="h-5 w-5" />
                 </div>
                 <p className="font-semibold text-foreground text-sm">{v.titulo}</p>
                 <p className="text-xs text-muted-foreground leading-relaxed">{v.descripcion}</p>
@@ -165,7 +165,7 @@ export function PreciosSection() {
                 key={plan.id}
                 className={`relative rounded-2xl border-2 p-6 flex flex-col ${
                   plan.destacado
-                    ? "border-primary bg-primary/5 shadow-xl shadow-primary/10"
+                    ? "border-primary bg-primary/5 animate-glow-pulse"
                     : "border-border bg-card"
                 }`}
                 initial={{ opacity: 0, y: 20 }}
@@ -192,15 +192,29 @@ export function PreciosSection() {
                   </div>
                 </div>
 
-                {/* Precio */}
+                {/* Precio — I */}
                 <div className="mb-6">
-                  <div className="flex items-end gap-1">
+                  <div className="flex items-end gap-2">
                     <span className="text-4xl font-bold text-foreground">${precio}</span>
                     <span className="text-muted-foreground text-sm mb-1">USD/mes</span>
+                    <AnimatePresence>
+                      {periodo === "anual" && (
+                        <motion.span
+                          key="ahorro"
+                          className="mb-1 text-xs bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full"
+                          initial={{ opacity: 0, scale: 0.7, x: -6 }}
+                          animate={{ opacity: 1, scale: 1, x: 0 }}
+                          exit={{ opacity: 0, scale: 0.7, x: -6 }}
+                          transition={{ type: "spring", damping: 18, stiffness: 300 }}
+                        >
+                          −${plan.ahorroAnual}/año
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
                   </div>
                   {precioTotal && (
                     <p className="text-xs text-muted-foreground mt-1">
-                      ${precioTotal} USD/año · ahorras ${plan.ahorroAnual}
+                      ${precioTotal} USD/año facturado anualmente
                     </p>
                   )}
                 </div>
