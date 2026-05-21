@@ -22,12 +22,19 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url)
   const fecha = searchParams.get("fecha")
+  const desde = searchParams.get("desde")
+  const hasta = searchParams.get("hasta")
   const patientId = searchParams.get("patientId")
 
   let fechaInicio: Date | undefined
   let fechaFin: Date | undefined
 
-  if (fecha) {
+  if (desde && hasta) {
+    fechaInicio = new Date(desde)
+    fechaInicio.setHours(0, 0, 0, 0)
+    fechaFin = new Date(hasta)
+    fechaFin.setHours(23, 59, 59, 999)
+  } else if (fecha) {
     fechaInicio = new Date(fecha)
     fechaInicio.setHours(0, 0, 0, 0)
     fechaFin = new Date(fecha)
@@ -42,10 +49,19 @@ export async function GET(request: NextRequest) {
         startTime: { gte: fechaInicio, lte: fechaFin },
       }),
     },
-    include: {
+    select: {
+      id: true,
+      title: true,
+      startTime: true,
+      endTime: true,
+      status: true,
+      notes: true,
+      price: true,
+      patientId: true,
       patient: { select: { id: true, name: true, email: true, phone: true } },
     },
     orderBy: { startTime: "asc" },
+    take: fechaInicio ? undefined : 100,
   })
 
   return NextResponse.json(citas)

@@ -8,67 +8,155 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  password      String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  business Business?
+  business    Business?
+  memberships BusinessMember[]
 
-  @@map("users")
+  @@map("usuarios")
 }
 
 model Business {
   id        String   @id @default(cuid())
   name      String
   type      String
+  slug      String   @unique
+  teamSize  Int      @default(1)
   userId    String   @unique
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  patients      Patient[]
-  appointments  Appointment[]
-  conversations Conversation[]
+  patients          Patient[]
+  appointments      Appointment[]
+  services          Service[]
+  workSchedules     WorkSchedule[]
+  conversations     Conversation[]
+  members           BusinessMember[]
+  invitations       WorkerInvitation[]
 
-  @@map("businesses")
+  @@map("negocios")
+}
+
+model BusinessMember {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       String   @default("worker") // "admin" | "worker"
+  createdAt  DateTime @default(now())
+
+  workSchedules WorkSchedule[]
+  appointments  Appointment[]
+
+  @@unique([businessId, userId])
+  @@index([businessId])
+  @@index([userId])
+  @@map("miembros_negocio")
+}
+
+model WorkerInvitation {
+  id         String    @id @default(cuid())
+  businessId String
+  business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  email      String
+  name       String
+  role       String    @default("worker")
+  token      String    @unique @default(cuid())
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([businessId])
+  @@map("invitaciones")
 }
 
 model Patient {
-  id         String   @id @default(cuid())
-  name       String
-  email      String?
-  phone      String?
-  tags       String[]
-  notes      String?
+  id        String   @id @default(cuid())
+  name      String
+  lastName  String?
+  cedula    String?
+  email     String?
+  phone     String?
+  tags      String[]
+  notes     String?
   businessId String
-  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  business  Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   appointments Appointment[]
 
-  @@map("patients")
+  @@index([businessId])
+  @@index([businessId, createdAt])
+  @@map("clientes")
+}
+
+model Service {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  duration    Int      // en minutos: 15, 30, 45, 60, 90, 120...
+  price       Float?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  appointments Appointment[]
+
+  @@index([businessId])
+  @@map("servicios")
+}
+
+model WorkSchedule {
+  id         String          @id @default(cuid())
+  businessId String
+  business   Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  memberId   String?
+  member     BusinessMember? @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  dayOfWeek  Int             // 0=Domingo, 1=Lunes, 2=Martes, 3=Miércoles, 4=Jueves, 5=Viernes, 6=Sábado
+  startTime  String          // "09:00"
+  endTime    String          // "18:00"
+  active     Boolean         @default(true)
+
+  @@index([businessId])
+  @@index([memberId])
+  @@map("horarios_laborales")
 }
 
 model Appointment {
-  id         String   @id @default(cuid())
-  title      String
-  startTime  DateTime
-  endTime    DateTime
-  status     String   @default("pendiente")
-  notes      String?
-  price      Float?
-  patientId  String
-  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  businessId String
-  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id               String   @id @default(cuid())
+  serviceId        String?
+  service          Service? @relation(fields: [serviceId], references: [id])
+  title            String   // nombre del servicio como texto libre o copia del servicio
+  startTime        DateTime
+  endTime          DateTime
+  status           String   @default("pendiente") // pendiente, confirmada, en-progreso, completada, cancelada
+  notes            String?  // notas internas del profesional
+  clientComments   String?  // comentarios del cliente al reservar
+  price            Float?
+  patientId        String?
+  patient          Patient?        @relation(fields: [patientId], references: [id])
+  memberId         String?
+  member           BusinessMember? @relation(fields: [memberId], references: [id])
+  businessId       String
+  business         Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
-  @@map("appointments")
+  @@index([businessId])
+  @@index([businessId, startTime])
+  @@index([patientId])
+  @@index([memberId])
+  @@map("citas")
 }
 
 model Conversation {
@@ -82,7 +170,8 @@ model Conversation {
 
   messages Message[]
 
-  @@map("conversations")
+  @@index([businessId])
+  @@map("conversaciones")
 }
 
 model Message {
@@ -93,5 +182,6 @@ model Message {
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   createdAt      DateTime     @default(now())
 
-  @@map("messages")
+  @@index([conversationId])
+  @@map("mensajes")
 }

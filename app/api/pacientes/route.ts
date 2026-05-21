@@ -21,30 +21,59 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const busqueda = searchParams.get("q") ?? ""
   const etiqueta = searchParams.get("tag") ?? ""
+  const pagina = Math.max(1, parseInt(searchParams.get("pagina") ?? "1"))
+  const limite = Math.min(50, parseInt(searchParams.get("limite") ?? "20"))
+  const skip = (pagina - 1) * limite
 
-  const pacientes = await prisma.patient.findMany({
-    where: {
-      businessId: session.user.businessId,
-      ...(busqueda && {
-        OR: [
-          { name: { contains: busqueda, mode: "insensitive" } },
-          { email: { contains: busqueda, mode: "insensitive" } },
-          { phone: { contains: busqueda, mode: "insensitive" } },
-        ],
-      }),
-      ...(etiqueta && { tags: { has: etiqueta } }),
-    },
-    include: {
-      appointments: {
-        orderBy: { startTime: "desc" },
-        take: 5,
-        include: { patient: { select: { name: true } } },
+  const where = {
+    businessId: session.user.businessId,
+    ...(busqueda && {
+      OR: [
+        { name: { contains: busqueda, mode: "insensitive" as const } },
+        { email: { contains: busqueda, mode: "insensitive" as const } },
+        { phone: { contains: busqueda, mode: "insensitive" as const } },
+      ],
+    }),
+    ...(etiqueta && { tags: { has: etiqueta } }),
+  }
+
+  const [pacientes, total] = await Promise.all([
+    prisma.patient.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        tags: true,
+        notes: true,
+        createdAt: true,
+        appointments: {
+          orderBy: { startTime: "desc" },
+          take: 5,
+          select: {
+            id: true,
+            title: true,
+            startTime: true,
+            endTime: true,
+            status: true,
+            price: true,
+          },
+        },
       },
-    },
-    orderBy: { createdAt: "desc" },
-  })
+      orderBy: { createdAt: "desc" },
+      take: limite,
+      skip,
+    }),
+    prisma.patient.count({ where }),
+  ])
 
-  return NextResponse.json(pacientes)
+  return NextResponse.json({
+    pacientes,
+    total,
+    pagina,
+    paginas: Math.ceil(total / limite),
+  })
 }
 
 export async function POST(request: NextRequest) {
