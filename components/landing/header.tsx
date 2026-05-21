@@ -20,7 +20,7 @@ export function Header() {
 
   return (
     <motion.header
-      className="fixed top-0 left-0 right-0 z-40 bg-background/90 backdrop-blur-sm border-b border-border/50"
+      className="fixed top-0 left-0 right-0 z-40 bg-background/80 backdrop-blur-md border-b border-border/40 shadow-sm shadow-foreground/[0.02]"
       initial={{ y: -64, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.35, ease: "easeOut" }}
@@ -36,9 +36,10 @@ export function Header() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors duration-200"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative group"
               >
                 {link.label}
+                <span className="absolute -bottom-0.5 left-0 right-0 h-px bg-primary scale-x-0 group-hover:scale-x-100 transition-transform duration-200 rounded-full origin-left" />
               </Link>
             ))}
           </nav>

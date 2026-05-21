@@ -84,11 +84,14 @@ export function TargetSection() {
           viewport={{ once: true, margin: "-60px" }}
           transition={{ duration: 0.45 }}
         >
-          <span className="text-sm font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full uppercase tracking-wider">
-            Para quién
-          </span>
-          <h2 className="mt-6 text-3xl sm:text-4xl font-bold text-foreground text-balance">
-            Disenado para negocios de bienestar y salud
+          <div className="inline-flex items-center gap-2.5 mb-1">
+            <div className="h-px w-5 bg-primary/60 rounded-full" />
+            <span className="text-xs font-semibold text-primary uppercase tracking-[0.12em]">Para quién</span>
+            <div className="h-px w-5 bg-primary/60 rounded-full" />
+          </div>
+          <h2 className="mt-5 text-3xl sm:text-4xl font-bold text-foreground text-balance">
+            Diseñado para{" "}
+            <span className="font-display italic font-normal text-primary">negocios de bienestar y salud</span>
           </h2>
           <p className="mt-4 text-lg text-muted-foreground text-pretty">
             Si actualmente gestionas tus citas por WhatsApp, Instagram DM o una libreta fisica,
@@ -114,28 +117,33 @@ export function TargetSection() {
           {duplicatedAudiences.map((audience, i) => (
             <div
               key={`${audience.title}-${i}`}
-              className="flex-shrink-0 bg-card rounded-2xl p-8 border border-border/50 hover:border-primary/20 transition-all duration-300 hover:shadow-xl"
-              style={{ width: CARD_WIDTH, height: 280 }}
+              className="flex-shrink-0 bg-card rounded-2xl p-7 border border-border/40 hover:border-primary/15 transition-all duration-300 hover:shadow-xl overflow-hidden relative"
+              style={{ width: CARD_WIDTH, height: 260 }}
             >
-              <div className={`w-14 h-14 rounded-xl ${audience.color} flex items-center justify-center mb-6`}>
-                <audience.icon className="h-7 w-7" />
-              </div>
+              {/* Watermark icon */}
+              <audience.icon className="absolute -right-4 -bottom-4 h-32 w-32 text-foreground opacity-[0.045] pointer-events-none" />
 
-              <h3 className="text-xl font-semibold text-foreground mb-2">
-                {audience.title}
-              </h3>
+              <div className="relative z-10 h-full flex flex-col">
+                {/* Header: icono pequeño + título inline */}
+                <div className="flex items-center gap-3 mb-4">
+                  <div className={`w-8 h-8 rounded-lg ${audience.color} flex items-center justify-center flex-shrink-0`}>
+                    <audience.icon className="h-4 w-4" />
+                  </div>
+                  <h3 className="text-base font-semibold text-foreground leading-tight">
+                    {audience.title}
+                  </h3>
+                </div>
 
-              <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
-                {audience.examples}
-              </p>
-
-              <div className="pt-4 border-t border-border/50">
-                <span className="text-xs font-medium text-primary uppercase tracking-wider">
-                  Necesidad clave
-                </span>
-                <p className="mt-1 text-sm text-foreground font-medium line-clamp-1">
-                  {audience.need}
+                <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2 flex-1">
+                  {audience.examples}
                 </p>
+
+                <div className="pt-4 border-t border-border/40 mt-4">
+                  <p className="text-xs font-semibold text-primary/60 uppercase tracking-[0.1em] mb-1">Necesidad clave</p>
+                  <p className="text-sm text-foreground font-medium line-clamp-1">
+                    {audience.need}
+                  </p>
+                </div>
               </div>
             </div>
           ))}

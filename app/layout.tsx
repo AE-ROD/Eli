@@ -1,17 +1,20 @@
 import type { Metadata } from 'next'
-import { Inter, DM_Sans } from 'next/font/google'
+import { Fraunces, Plus_Jakarta_Sans } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Providers } from '@/components/providers'
 import './globals.css'
 
-const inter = Inter({ 
+const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
-  variable: '--font-inter'
+  variable: '--font-plus-jakarta-sans',
+  display: 'swap',
 });
 
-const dmSans = DM_Sans({ 
+const fraunces = Fraunces({
   subsets: ["latin"],
-  variable: '--font-dm-sans'
+  variable: '--font-fraunces',
+  display: 'swap',
+  style: ['normal', 'italic'],
 });
 
 export const metadata: Metadata = {
@@ -31,7 +34,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" className="bg-background">
-      <body className={`${inter.variable} ${dmSans.variable} font-sans antialiased`}>
+      <body className={`${plusJakarta.variable} ${fraunces.variable} font-sans antialiased`}>
         <Providers>{children}</Providers>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

@@ -44,11 +44,13 @@ export function ContactSection() {
             animate={isInView ? { opacity: 1, x: 0 } : {}}
             transition={{ duration: 0.6 }}
           >
-            <span className="text-sm font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full uppercase tracking-wider">
-              Contacto
-            </span>
-            <h2 className="mt-6 text-3xl sm:text-4xl font-bold text-foreground text-balance">
-              ¿Tienes preguntas? Estamos aquí para ayudarte
+            <div className="inline-flex items-center gap-2.5 mb-1">
+              <div className="h-px w-5 bg-primary/60 rounded-full" />
+              <span className="text-xs font-semibold text-primary uppercase tracking-[0.12em]">Contacto</span>
+            </div>
+            <h2 className="mt-5 text-3xl sm:text-4xl font-bold text-foreground text-balance">
+              ¿Tienes preguntas?{" "}
+              <span className="font-display italic font-normal text-primary">Estamos aquí para ayudarte</span>
             </h2>
             <p className="mt-4 text-lg text-muted-foreground text-pretty">
               Ya sea que quieras saber más sobre Eli, necesites ayuda con tu cuenta 
@@ -83,7 +85,7 @@ export function ContactSection() {
             animate={isInView ? { opacity: 1, x: 0 } : {}}
             transition={{ duration: 0.6, delay: 0.2 }}
           >
-            <div className="bg-card rounded-2xl p-8 border border-border/50 shadow-xl shadow-primary/5">
+            <div className="bg-card rounded-2xl p-8 border border-border/40 shadow-[0_20px_60px_-12px_oklch(0_0_0/0.10)]">
               <h3 className="text-xl font-semibold text-foreground mb-6">
                 Envíanos un mensaje
               </h3>

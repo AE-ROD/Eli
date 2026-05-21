@@ -94,11 +94,14 @@ export function PreciosSection() {
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
         >
-          <span className="inline-block text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full mb-4 uppercase tracking-wider">
-            Precios
-          </span>
+          <div className="inline-flex items-center gap-2.5 mb-4">
+            <div className="h-px w-5 bg-primary/60 rounded-full" />
+            <span className="text-xs font-semibold text-primary uppercase tracking-[0.12em]">Precios</span>
+            <div className="h-px w-5 bg-primary/60 rounded-full" />
+          </div>
           <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-            Eli trabaja para que tú<br className="hidden sm:block" /> no tengas que hacerlo
+            Eli trabaja para que tú<br className="hidden sm:block" />{" "}
+            <span className="font-display italic font-normal text-primary">no tengas que hacerlo</span>
           </h2>
           <p className="text-muted-foreground max-w-xl mx-auto">
             Miles de profesionales ya dejaron de coordinar citas por WhatsApp. Empieza gratis 3 días, sin tarjeta.
@@ -163,10 +166,10 @@ export function PreciosSection() {
             return (
               <motion.div
                 key={plan.id}
-                className={`relative rounded-2xl border-2 p-6 flex flex-col ${
+                className={`relative rounded-2xl border-2 p-6 flex flex-col transition-all duration-300 ${
                   plan.destacado
-                    ? "border-primary bg-primary/5 animate-glow-pulse"
-                    : "border-border bg-card"
+                    ? "border-primary/70 bg-gradient-to-b from-primary/8 to-primary/4 animate-glow-pulse shadow-xl shadow-primary/10"
+                    : "border-border/60 bg-card hover:border-border hover:shadow-lg hover:shadow-foreground/[0.04]"
                 }`}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}

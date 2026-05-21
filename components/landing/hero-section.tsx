@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Calendar, Users, MessageSquare, Sparkles, Star } from "lucide-react"
+import { ArrowRight, Sparkles, Star } from "lucide-react"
 import Link from "next/link"
 
 const NEGOCIOS = [
@@ -41,15 +41,20 @@ export function HeroSection() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="inline-flex items-center gap-2 rounded-full bg-primary/10 border border-primary/20 px-4 py-1.5 text-sm text-primary font-medium mb-8"
+          className="inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium mb-8"
+          style={{
+            background: 'oklch(0.76 0.155 72 / 0.08)',
+            borderColor: 'oklch(0.76 0.155 72 / 0.25)',
+            color: 'oklch(0.52 0.14 72)',
+          }}
         >
-          <Sparkles className="h-3.5 w-3.5" />
+          <Sparkles className="h-3.5 w-3.5" style={{ color: 'oklch(0.65 0.155 72)' }} />
           3 días gratis · Sin tarjeta de crédito
         </motion.div>
 
         {/* Título */}
         <motion.h1
-          className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight text-foreground text-balance leading-[1.08]"
+          className="text-5xl sm:text-6xl md:text-[4.5rem] font-bold tracking-tight text-foreground text-balance leading-[1.06]"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.08 }}
@@ -57,12 +62,12 @@ export function HeroSection() {
           Simplifica tu agenda,{" "}
           <br className="hidden sm:block" />
           <span className="relative">
-            <span className="text-primary">enfócate en tu talento</span>
+            <span className="font-display italic font-normal text-primary">enfócate en tu talento</span>
             <motion.span
-              className="absolute -bottom-2 left-0 right-0 h-[3px] bg-gradient-to-r from-primary/0 via-primary/60 to-primary/0 rounded-full"
+              className="absolute -bottom-2 left-0 right-0 h-[2px] bg-gradient-to-r from-primary/0 via-primary/45 to-primary/0 rounded-full"
               initial={{ scaleX: 0 }}
               animate={{ scaleX: 1 }}
-              transition={{ duration: 0.6, delay: 0.5 }}
+              transition={{ duration: 0.7, delay: 0.55 }}
             />
           </span>
         </motion.h1>
@@ -137,25 +142,18 @@ export function HeroSection() {
           <span className="text-sm text-muted-foreground">+1,200 negocios confían en Eli</span>
         </motion.div>
 
-        {/* Pills de características */}
+        {/* Features — texto inline elegante */}
         <motion.div
-          className="mt-8 flex flex-wrap justify-center gap-3"
+          className="mt-8 flex items-center justify-center gap-0 flex-wrap"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.4, delay: 0.42 }}
         >
-          {[
-            { icon: Calendar, text: "Reservas 24/7" },
-            { icon: Users, text: "Gestión de equipo" },
-            { icon: MessageSquare, text: "Chat integrado" },
-          ].map((item) => (
-            <div
-              key={item.text}
-              className="flex items-center gap-2 rounded-full bg-card/80 backdrop-blur-sm border border-border/60 px-4 py-2 text-sm text-muted-foreground shadow-sm"
-            >
-              <item.icon className="h-3.5 w-3.5 text-primary" />
-              {item.text}
-            </div>
+          {["Reservas 24/7", "Gestión de equipo", "Chat integrado", "Recordatorios"].map((item, i) => (
+            <span key={item} className="flex items-center gap-0">
+              {i > 0 && <span className="mx-3 w-[3px] h-[3px] rounded-full bg-muted-foreground/30 inline-block" />}
+              <span className="text-xs text-muted-foreground/55 uppercase tracking-[0.16em] font-medium">{item}</span>
+            </span>
           ))}
         </motion.div>
 
