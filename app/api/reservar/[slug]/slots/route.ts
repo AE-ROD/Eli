@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
+import { toZonedTime, fromZonedTime } from "date-fns-tz"
 import { prisma } from "@/lib/prisma"
 
-function generarSlots(
+export function generarSlots(
   horaInicio: string,
   horaFin: string,
   duracion: number,
@@ -40,7 +41,7 @@ export async function GET(
 ) {
   const { slug } = await params
   const { searchParams } = new URL(request.url)
-  const fecha = searchParams.get("fecha")       // YYYY-MM-DD
+  const fecha = searchParams.get("fecha")
   const servicioId = searchParams.get("servicioId")
 
   if (!fecha || !servicioId) {
@@ -49,7 +50,7 @@ export async function GET(
 
   const negocio = await prisma.business.findUnique({
     where: { slug },
-    select: { id: true },
+    select: { id: true, timezone: true },
   })
   if (!negocio) return NextResponse.json({ error: "Negocio no encontrado" }, { status: 404 })
 
@@ -59,11 +60,79 @@ export async function GET(
   })
   if (!servicio) return NextResponse.json({ error: "Servicio no encontrado" }, { status: 404 })
 
-  const fechaObj = new Date(fecha)
+  const tz = negocio.timezone ?? "America/Cancun"
+  const fechaObj = new Date(`${fecha}T12:00:00`)
   const diaSemana = fechaObj.getDay()
 
+  // Build UTC day boundaries for DB query
+  const inicioDiaLocal = fromZonedTime(`${fecha}T00:00:00`, tz)
+  const finDiaLocal = fromZonedTime(`${fecha}T23:59:59`, tz)
+
+  // "now" in the business timezone for past-slot filtering
+  const ahoraLocal = toZonedTime(new Date(), tz)
+  const esHoy = fecha === ahoraLocal.toISOString().slice(0, 10)
+  const ahoraMin = ahoraLocal.getHours() * 60 + ahoraLocal.getMinutes()
+
+  // T14: Check if business has active workers with per-worker schedules
+  const miembros = await prisma.businessMember.findMany({
+    where: { businessId: negocio.id },
+    select: {
+      id: true,
+      workSchedules: {
+        where: { dayOfWeek: diaSemana, active: true },
+        select: { startTime: true, endTime: true },
+      },
+    },
+  })
+
+  const miembrosConHorario = miembros.filter((m) => m.workSchedules.length > 0)
+
+  if (miembrosConHorario.length > 0) {
+    // T14: Union of available slots across all workers
+    // A slot is available if at least one worker is free during it
+
+    // Fetch all appointments for the business that day, grouped by worker
+    const citasDelDia = await prisma.appointment.findMany({
+      where: {
+        businessId: negocio.id,
+        startTime: { gte: inicioDiaLocal, lte: finDiaLocal },
+        status: { notIn: ["cancelada"] },
+      },
+      select: { memberId: true, startTime: true, endTime: true },
+    })
+
+    const slotsDisponibles = new Set<string>()
+
+    for (const miembro of miembrosConHorario) {
+      const horario = miembro.workSchedules[0]
+
+      // Appointments for this specific worker
+      const citasMiembro = citasDelDia
+        .filter((c) => c.memberId === miembro.id)
+        .map((c) => ({
+          startTime: toZonedTime(c.startTime, tz),
+          endTime: toZonedTime(c.endTime, tz),
+        }))
+
+      const slotsWorker = generarSlots(horario.startTime, horario.endTime, servicio.duration, citasMiembro)
+
+      for (const slot of slotsWorker) {
+        if (esHoy) {
+          const [h, m] = slot.split(":").map(Number)
+          if (h * 60 + m <= ahoraMin) continue
+        }
+        slotsDisponibles.add(slot)
+      }
+    }
+
+    // Return sorted union
+    const slots = Array.from(slotsDisponibles).sort()
+    return NextResponse.json({ slots })
+  }
+
+  // No per-worker schedules — fall back to business-level schedule
   const horario = await prisma.workSchedule.findFirst({
-    where: { businessId: negocio.id, dayOfWeek: diaSemana, active: true },
+    where: { businessId: negocio.id, memberId: null, dayOfWeek: diaSemana, active: true },
     select: { startTime: true, endTime: true },
   })
 
@@ -71,31 +140,25 @@ export async function GET(
     return NextResponse.json({ slots: [], mensaje: "No hay atención ese día" })
   }
 
-  const inicioDia = new Date(fecha)
-  inicioDia.setHours(0, 0, 0, 0)
-  const finDia = new Date(fecha)
-  finDia.setHours(23, 59, 59, 999)
-
   const citasDelDia = await prisma.appointment.findMany({
     where: {
       businessId: negocio.id,
-      startTime: { gte: inicioDia, lte: finDia },
+      startTime: { gte: inicioDiaLocal, lte: finDiaLocal },
       status: { notIn: ["cancelada"] },
     },
     select: { startTime: true, endTime: true },
   })
 
-  // No mostrar slots en el pasado si la fecha es hoy
-  const ahora = new Date()
-  const esHoy = fechaObj.toDateString() === ahora.toDateString()
+  const citasLocales = citasDelDia.map((c) => ({
+    startTime: toZonedTime(c.startTime, tz),
+    endTime: toZonedTime(c.endTime, tz),
+  }))
 
-  const slots = generarSlots(horario.startTime, horario.endTime, servicio.duration, citasDelDia)
+  const slots = generarSlots(horario.startTime, horario.endTime, servicio.duration, citasLocales)
     .filter((slot) => {
       if (!esHoy) return true
       const [h, m] = slot.split(":").map(Number)
-      const slotMin = h * 60 + m
-      const ahoraMin = ahora.getHours() * 60 + ahora.getMinutes()
-      return slotMin > ahoraMin
+      return h * 60 + m > ahoraMin
     })
 
   return NextResponse.json({ slots })

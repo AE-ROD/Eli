@@ -1,7 +1,27 @@
 import { Resend } from "resend"
+import { t } from "@/lib/i18n/booking"
 
-const resend = new Resend(process.env.RESEND_API_KEY)
 const FROM = process.env.RESEND_FROM_EMAIL ?? "Eli <no-reply@eli.app>"
+
+function getResend() {
+  return new Resend(process.env.RESEND_API_KEY)
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;")
+}
+
+function formatFechaLegible(fechaISO: string, locale = "es"): string {
+  return new Date(fechaISO).toLocaleDateString(
+    locale === "pt" ? "pt-BR" : locale === "en" ? "en-US" : "es-MX",
+    { weekday: "long", day: "numeric", month: "long", year: "numeric" }
+  )
+}
 
 export interface DatosConfirmacionCliente {
   emailCliente: string
@@ -11,6 +31,7 @@ export interface DatosConfirmacionCliente {
   fecha: string
   hora: string
   duracion: number
+  locale?: string
 }
 
 export interface DatosAvisoProfesional {
@@ -21,6 +42,7 @@ export interface DatosAvisoProfesional {
   fecha: string
   hora: string
   comentarios?: string | null
+  locale?: string
 }
 
 export interface DatosRecordatorio {
@@ -30,65 +52,65 @@ export interface DatosRecordatorio {
   servicio: string
   fecha: string
   hora: string
-}
-
-function formatFechaLegible(fechaISO: string): string {
-  return new Date(fechaISO).toLocaleDateString("es-ES", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  })
+  locale?: string
 }
 
 export async function enviarConfirmacionCliente(datos: DatosConfirmacionCliente) {
-  const fechaLegible = formatFechaLegible(datos.fecha)
+  const locale = datos.locale ?? "es"
+  const fechaLegible = formatFechaLegible(datos.fecha, locale)
+  const nombreNegocio = escapeHtml(datos.nombreNegocio)
+  const nombreCliente = escapeHtml(datos.nombreCliente)
+  const servicio = escapeHtml(datos.servicio)
 
-  return resend.emails.send({
+  return getResend().emails.send({
     from: FROM,
     to: datos.emailCliente,
-    subject: `✅ Cita confirmada — ${datos.nombreNegocio}`,
+    subject: `✅ ${t(locale, "emailConfirmSubject")} — ${nombreNegocio}`,
     html: `
       <div style="font-family: sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px; background: #fff;">
-        <h1 style="font-size: 24px; font-weight: 700; color: #111; margin-bottom: 8px;">¡Tu cita está confirmada!</h1>
-        <p style="color: #555; margin-bottom: 24px;">Hola <strong>${datos.nombreCliente}</strong>, te esperamos en <strong>${datos.nombreNegocio}</strong>.</p>
+        <h1 style="font-size: 24px; font-weight: 700; color: #111; margin-bottom: 8px;">${t(locale, "emailConfirmTitle")}</h1>
+        <p style="color: #555; margin-bottom: 24px;">${t(locale, "greeting_morning")} <strong>${nombreCliente}</strong>, ${t(locale, "emailConfirmBody")} <strong>${nombreNegocio}</strong>.</p>
 
         <div style="background: #f5f5f5; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-          <p style="margin: 0 0 8px; color: #111;"><strong>Servicio:</strong> ${datos.servicio}</p>
-          <p style="margin: 0 0 8px; color: #111;"><strong>Fecha:</strong> ${fechaLegible}</p>
-          <p style="margin: 0 0 8px; color: #111;"><strong>Hora:</strong> ${datos.hora}</p>
-          <p style="margin: 0; color: #111;"><strong>Duración:</strong> ${datos.duracion} minutos</p>
+          <p style="margin: 0 0 8px; color: #111;"><strong>${t(locale, "emailService")}:</strong> ${servicio}</p>
+          <p style="margin: 0 0 8px; color: #111;"><strong>${t(locale, "emailDate")}:</strong> ${fechaLegible}</p>
+          <p style="margin: 0 0 8px; color: #111;"><strong>${t(locale, "emailTime")}:</strong> ${escapeHtml(datos.hora)}</p>
+          <p style="margin: 0; color: #111;"><strong>${t(locale, "emailDuration")}:</strong> ${datos.duracion} ${t(locale, "emailMinutes")}</p>
         </div>
 
-        <p style="color: #555; font-size: 14px;">Si necesitas cancelar o cambiar tu cita, contáctanos con anticipación.</p>
-        <p style="color: #999; font-size: 12px; margin-top: 32px;">Enviado por Eli · Sistema de agendamiento</p>
+        <p style="color: #555; font-size: 14px;">${t(locale, "emailCancelNote")}</p>
+        <p style="color: #999; font-size: 12px; margin-top: 32px;">${t(locale, "emailFooter")}</p>
       </div>
     `,
   })
 }
 
 export async function enviarAvisoProfesional(datos: DatosAvisoProfesional) {
-  const fechaLegible = formatFechaLegible(datos.fecha)
+  const locale = datos.locale ?? "es"
+  const fechaLegible = formatFechaLegible(datos.fecha, locale)
+  const nombreNegocio = escapeHtml(datos.nombreNegocio)
+  const nombreCliente = escapeHtml(datos.nombreCliente)
+  const servicio = escapeHtml(datos.servicio)
 
-  return resend.emails.send({
+  return getResend().emails.send({
     from: FROM,
     to: datos.emailProfesional,
-    subject: `📅 Nueva reserva — ${datos.nombreCliente}`,
+    subject: `📅 ${t(locale, "emailNewBookingSubject")} — ${nombreCliente}`,
     html: `
       <div style="font-family: sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px; background: #fff;">
-        <h1 style="font-size: 24px; font-weight: 700; color: #111; margin-bottom: 8px;">Nueva reserva recibida</h1>
-        <p style="color: #555; margin-bottom: 24px;">Tienes una nueva cita en <strong>${datos.nombreNegocio}</strong>.</p>
+        <h1 style="font-size: 24px; font-weight: 700; color: #111; margin-bottom: 8px;">${t(locale, "emailNewBookingTitle")}</h1>
+        <p style="color: #555; margin-bottom: 24px;">${t(locale, "emailNewBookingBody")} <strong>${nombreNegocio}</strong>.</p>
 
         <div style="background: #f0f7ff; border-radius: 12px; padding: 20px; margin-bottom: 24px; border-left: 4px solid #3b82f6;">
-          <p style="margin: 0 0 8px; color: #111;"><strong>Cliente:</strong> ${datos.nombreCliente}</p>
-          <p style="margin: 0 0 8px; color: #111;"><strong>Servicio:</strong> ${datos.servicio}</p>
-          <p style="margin: 0 0 8px; color: #111;"><strong>Fecha:</strong> ${fechaLegible}</p>
-          <p style="margin: 0 0 8px; color: #111;"><strong>Hora:</strong> ${datos.hora}</p>
-          ${datos.comentarios ? `<p style="margin: 8px 0 0; color: #555; font-size: 14px;"><strong>Comentarios:</strong> ${datos.comentarios}</p>` : ""}
+          <p style="margin: 0 0 8px; color: #111;"><strong>${t(locale, "emailClient")}:</strong> ${nombreCliente}</p>
+          <p style="margin: 0 0 8px; color: #111;"><strong>${t(locale, "emailService")}:</strong> ${servicio}</p>
+          <p style="margin: 0 0 8px; color: #111;"><strong>${t(locale, "emailDate")}:</strong> ${fechaLegible}</p>
+          <p style="margin: 0 0 8px; color: #111;"><strong>${t(locale, "emailTime")}:</strong> ${escapeHtml(datos.hora)}</p>
+          ${datos.comentarios ? `<p style="margin: 8px 0 0; color: #555; font-size: 14px;"><strong>${t(locale, "emailComments")}:</strong> ${escapeHtml(datos.comentarios)}</p>` : ""}
         </div>
 
-        <p style="color: #555; font-size: 14px;">Revisa tu calendario en el dashboard para ver todos los detalles.</p>
-        <p style="color: #999; font-size: 12px; margin-top: 32px;">Enviado por Eli · Sistema de agendamiento</p>
+        <p style="color: #555; font-size: 14px;">${t(locale, "emailCheckCalendar")}</p>
+        <p style="color: #999; font-size: 12px; margin-top: 32px;">${t(locale, "emailFooter")}</p>
       </div>
     `,
   })
@@ -104,18 +126,20 @@ export interface DatosInvitacionTrabajador {
 
 export async function enviarInvitacionTrabajador(datos: DatosInvitacionTrabajador) {
   const rolLabel = datos.rol === "admin" ? "Administrador" : "Trabajador"
+  const nombreNegocio = escapeHtml(datos.nombreNegocio)
+  const nombreTrabajador = escapeHtml(datos.nombreTrabajador)
 
-  return resend.emails.send({
+  return getResend().emails.send({
     from: FROM,
     to: datos.emailTrabajador,
-    subject: `Te invitaron a unirte a ${datos.nombreNegocio} en Eli`,
+    subject: `Te invitaron a unirte a ${nombreNegocio} en Eli`,
     html: `
       <div style="font-family: sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px; background: #fff;">
         <h1 style="font-size: 24px; font-weight: 700; color: #111; margin-bottom: 8px;">Tienes una invitación</h1>
-        <p style="color: #555; margin-bottom: 24px;">Hola <strong>${datos.nombreTrabajador}</strong>, te invitaron a formar parte de <strong>${datos.nombreNegocio}</strong> como <strong>${rolLabel}</strong>.</p>
+        <p style="color: #555; margin-bottom: 24px;">Hola <strong>${nombreTrabajador}</strong>, te invitaron a formar parte de <strong>${nombreNegocio}</strong> como <strong>${rolLabel}</strong>.</p>
 
         <div style="background: #f0f7ff; border-radius: 12px; padding: 20px; margin-bottom: 24px; border-left: 4px solid #3b82f6;">
-          <p style="margin: 0 0 8px; color: #111;"><strong>Negocio:</strong> ${datos.nombreNegocio}</p>
+          <p style="margin: 0 0 8px; color: #111;"><strong>Negocio:</strong> ${nombreNegocio}</p>
           <p style="margin: 0; color: #111;"><strong>Tu rol:</strong> ${rolLabel}</p>
         </div>
 
@@ -131,25 +155,29 @@ export async function enviarInvitacionTrabajador(datos: DatosInvitacionTrabajado
 }
 
 export async function enviarRecordatorio(datos: DatosRecordatorio) {
-  const fechaLegible = formatFechaLegible(datos.fecha)
+  const locale = datos.locale ?? "es"
+  const fechaLegible = formatFechaLegible(datos.fecha, locale)
+  const nombreNegocio = escapeHtml(datos.nombreNegocio)
+  const nombreCliente = escapeHtml(datos.nombreCliente)
+  const servicio = escapeHtml(datos.servicio)
 
-  return resend.emails.send({
+  return getResend().emails.send({
     from: FROM,
     to: datos.emailCliente,
-    subject: `🔔 Recordatorio — Tu cita es mañana`,
+    subject: `🔔 ${t(locale, "emailReminderSubject")} — ${nombreNegocio}`,
     html: `
       <div style="font-family: sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px; background: #fff;">
-        <h1 style="font-size: 24px; font-weight: 700; color: #111; margin-bottom: 8px;">Tu cita es mañana 👋</h1>
-        <p style="color: #555; margin-bottom: 24px;">Hola <strong>${datos.nombreCliente}</strong>, te recordamos que tienes una cita mañana en <strong>${datos.nombreNegocio}</strong>.</p>
+        <h1 style="font-size: 24px; font-weight: 700; color: #111; margin-bottom: 8px;">${t(locale, "emailReminderTitle")} 👋</h1>
+        <p style="color: #555; margin-bottom: 24px;">${t(locale, "greeting_morning")} <strong>${nombreCliente}</strong>, ${t(locale, "emailReminderBody")} <strong>${nombreNegocio}</strong>.</p>
 
         <div style="background: #f5f5f5; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-          <p style="margin: 0 0 8px; color: #111;"><strong>Servicio:</strong> ${datos.servicio}</p>
-          <p style="margin: 0 0 8px; color: #111;"><strong>Fecha:</strong> ${fechaLegible}</p>
-          <p style="margin: 0; color: #111;"><strong>Hora:</strong> ${datos.hora}</p>
+          <p style="margin: 0 0 8px; color: #111;"><strong>${t(locale, "emailService")}:</strong> ${servicio}</p>
+          <p style="margin: 0 0 8px; color: #111;"><strong>${t(locale, "emailDate")}:</strong> ${fechaLegible}</p>
+          <p style="margin: 0; color: #111;"><strong>${t(locale, "emailTime")}:</strong> ${escapeHtml(datos.hora)}</p>
         </div>
 
-        <p style="color: #555; font-size: 14px;">¡Te esperamos! Si no puedes asistir, por favor avísanos con anticipación.</p>
-        <p style="color: #999; font-size: 12px; margin-top: 32px;">Enviado por Eli · Sistema de agendamiento</p>
+        <p style="color: #555; font-size: 14px;">${t(locale, "emailCancelNote")}</p>
+        <p style="color: #999; font-size: 12px; margin-top: 32px;">${t(locale, "emailFooter")}</p>
       </div>
     `,
   })

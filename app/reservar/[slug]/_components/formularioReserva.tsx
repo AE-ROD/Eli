@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { User, Mail, Phone, CreditCard, MessageSquare, CheckCircle2, ChevronRight, ChevronLeft } from "lucide-react"
+import { User, Mail, Phone, CreditCard, MessageSquare, CheckCircle2, ChevronRight, ChevronLeft, Check, CalendarPlus, MessageCircle, AlertTriangle } from "lucide-react"
 import { BotonPrimario } from "@/components/app/formularios/boton-primario"
 import { CampoFormulario } from "@/components/app/formularios/campo-formulario"
 import { SelectorServicio, type ServicioPublico } from "./selectorServicio"
 import { SelectorFechaHora } from "./selectorFechaHora"
+import { t } from "@/lib/i18n/booking"
 
 interface HorarioPublico {
   dayOfWeek: number
@@ -19,19 +20,53 @@ interface FormularioReservaProps {
   nombreNegocio: string
   servicios: ServicioPublico[]
   horarios: HorarioPublico[]
+  locale?: string
 }
 
 type Paso = 1 | 2 | 3
 
-function saludo(): string {
-  const h = new Date().getHours()
-  if (h < 12) return "Buenos días"
-  if (h < 19) return "Buenas tardes"
-  return "Buenas noches"
+const stepVariants = {
+  enter: (dir: number) => ({ x: dir > 0 ? 300 : -300, opacity: 0 }),
+  center: { x: 0, opacity: 1, transition: { duration: 0.25 } },
+  exit: (dir: number) => ({ x: dir > 0 ? -300 : 300, opacity: 0, transition: { duration: 0.2 } }),
 }
 
-export function FormularioReserva({ slug, nombreNegocio, servicios, horarios }: FormularioReservaProps) {
+function saludo(locale: string): string {
+  const h = new Date().getHours()
+  if (h < 12) return t(locale, "greeting_morning")
+  if (h < 19) return t(locale, "greeting_afternoon")
+  return t(locale, "greeting_evening")
+}
+
+function buildCalendarUrl(servicio: string, negocio: string, fecha: string, hora: string, duracion: number): string {
+  const start = new Date(`${fecha}T${hora}:00`)
+  const end = new Date(start.getTime() + duracion * 60000)
+  const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(".000", "")
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: `${servicio} — ${negocio}`,
+    dates: `${fmt(start)}/${fmt(end)}`,
+  })
+  return `https://calendar.google.com/calendar/render?${params}`
+}
+
+function buildWhatsAppText(locale: string, servicio: string, negocio: string, fecha: string, hora: string): string {
+  const dateLabel = new Intl.DateTimeFormat(
+    locale === "pt" ? "pt-BR" : locale === "en" ? "en-US" : "es-MX",
+    { weekday: "long", day: "numeric", month: "long" }
+  ).format(new Date(`${fecha}T12:00:00`))
+
+  const msgs: Record<string, string> = {
+    es: `¡Reservé ${servicio} en ${negocio} para el ${dateLabel} a las ${hora}!`,
+    en: `I booked ${servicio} at ${negocio} for ${dateLabel} at ${hora}!`,
+    pt: `Reservei ${servicio} em ${negocio} para ${dateLabel} às ${hora}!`,
+  }
+  return encodeURIComponent(msgs[locale] ?? msgs.es)
+}
+
+export function FormularioReserva({ slug, nombreNegocio, servicios, horarios, locale = "es" }: FormularioReservaProps) {
   const [paso, setPaso] = useState<Paso>(1)
+  const [dir, setDir] = useState(1)
   const [servicioSel, setServicioSel] = useState<ServicioPublico | null>(null)
   const [fecha, setFecha] = useState("")
   const [hora, setHora] = useState("")
@@ -43,13 +78,34 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios }: 
   const [comentarios, setComentarios] = useState("")
   const [enviando, setEnviando] = useState(false)
   const [confirmado, setConfirmado] = useState(false)
+  const [citaId, setCitaId] = useState<string | null>(null)
+  const [slotTakenToast, setSlotTakenToast] = useState(false)
   const [error, setError] = useState("")
+
+  // T-DR2: set html lang attribute for this booking session
+  useEffect(() => {
+    const intlLocale = locale === "pt" ? "pt-BR" : locale === "en" ? "en-US" : "es-MX"
+    document.documentElement.lang = intlLocale
+    return () => { document.documentElement.lang = "es" }
+  }, [locale])
+
+  // Auto-dismiss SLOT_TAKEN toast after 5s
+  useEffect(() => {
+    if (!slotTakenToast) return
+    const timer = setTimeout(() => setSlotTakenToast(false), 5000)
+    return () => clearTimeout(timer)
+  }, [slotTakenToast])
 
   const diasDisponibles = horarios.map((h) => h.dayOfWeek)
 
   const puedeAvanzarPaso1 = !!servicioSel
   const puedeAvanzarPaso2 = !!fecha && !!hora
   const puedeEnviar = !!nombre && !!apellido
+
+  function navPaso(siguiente: Paso) {
+    setDir(siguiente > paso ? 1 : -1)
+    setPaso(siguiente)
+  }
 
   const confirmar = async () => {
     setEnviando(true)
@@ -70,10 +126,17 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios }: 
           comentarios: comentarios || undefined,
         }),
       })
+      const data = await res.json()
       if (res.ok) {
+        setCitaId(data.citaId)
         setConfirmado(true)
+      } else if (data.error === "SLOT_TAKEN") {
+        // T-DR1: reset to step 2, clear slot, show toast
+        setHora("")
+        setDir(-1)
+        setPaso(2)
+        setSlotTakenToast(true)
       } else {
-        const data = await res.json()
         setError(data.error ?? "Error al confirmar la reserva")
       }
     } finally {
@@ -81,81 +144,147 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios }: 
     }
   }
 
-  if (confirmado) {
+  const steps = [
+    { id: 1, label: t(locale, "step_service") },
+    { id: 2, label: t(locale, "step_datetime") },
+    { id: 3, label: t(locale, "step_details") },
+  ]
+
+  if (confirmado && servicioSel) {
+    const calUrl = buildCalendarUrl(servicioSel.name, nombreNegocio, fecha, hora, servicioSel.duration)
+    const waText = buildWhatsAppText(locale, servicioSel.name, nombreNegocio, fecha, hora)
+    const fechaFormateada = new Intl.DateTimeFormat(
+      locale === "pt" ? "pt-BR" : locale === "en" ? "en-US" : "es-MX",
+      { weekday: "long", day: "numeric", month: "long" }
+    ).format(new Date(`${fecha}T12:00:00`))
+
     return (
       <motion.div
         className="text-center py-12"
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
       >
-        <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-          <CheckCircle2 className="h-10 w-10 text-green-600" />
+        <div className="w-20 h-20 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4">
+          <CheckCircle2 className="h-10 w-10 text-success" />
         </div>
-        <h2 className="text-2xl font-bold text-foreground mb-2">¡Reserva confirmada!</h2>
+        <h2 className="text-2xl font-bold text-foreground mb-2">{t(locale, "bookingConfirmed")}</h2>
         <p className="text-muted-foreground mb-1">
-          <span className="font-medium text-foreground">{servicioSel?.name}</span> con <span className="font-medium text-foreground">{nombreNegocio}</span>
+          <span className="font-medium text-foreground">{servicioSel.name}</span>{" "}
+          {t(locale, "at")}{" "}
+          <span className="font-medium text-foreground">{nombreNegocio}</span>
         </p>
-        <p className="text-muted-foreground">
-          {fecha} a las <span className="font-medium text-foreground">{hora}</span>
+        <p className="text-muted-foreground capitalize">
+          {fechaFormateada} · <span className="font-medium text-foreground">{hora}</span>
         </p>
         <p className="text-sm text-muted-foreground mt-4">
-          Te esperamos, {nombre}. ¡Hasta pronto!
+          {t(locale, "seeYouSoon")}
         </p>
+
+        {/* T-DR5: Post-booking actions */}
+        <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+          <a
+            href={calUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-border hover:bg-muted transition-colors text-sm font-medium text-foreground"
+          >
+            <CalendarPlus className="h-4 w-4" />
+            {t(locale, "addToCalendar")}
+          </a>
+          <a
+            href={`https://wa.me/?text=${waText}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-border hover:bg-muted transition-colors text-sm font-medium text-foreground"
+          >
+            <MessageCircle className="h-4 w-4 text-green-600" />
+            {t(locale, "shareWhatsApp")}
+          </a>
+        </div>
       </motion.div>
     )
   }
 
   return (
     <div>
-      {/* Saludo */}
+      {/* SLOT_TAKEN toast (T-DR1) */}
+      <AnimatePresence>
+        {slotTakenToast && (
+          <motion.div
+            role="alert"
+            aria-live="assertive"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="mb-4 flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive"
+          >
+            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+            {t(locale, "slotTaken")}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Greeting */}
       <div className="mb-8">
-        <p className="text-muted-foreground text-lg">{saludo()},</p>
-        <h1 className="text-3xl font-bold text-foreground">Reserva tu cita</h1>
-        <p className="text-muted-foreground mt-1">en <span className="font-semibold text-foreground">{nombreNegocio}</span></p>
+        <p className="text-muted-foreground text-lg">{saludo(locale)},</p>
+        <h1 className="text-3xl font-bold text-foreground">{t(locale, "bookYourAppointment")}</h1>
+        <p className="text-muted-foreground mt-1">
+          {t(locale, "at")} <span className="font-semibold text-foreground">{nombreNegocio}</span>
+        </p>
       </div>
 
-      {/* Indicador de pasos */}
-      <div className="flex items-center gap-2 mb-8">
-        {([1, 2, 3] as Paso[]).map((p) => (
-          <div key={p} className="flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${
-              paso === p ? "bg-primary text-primary-foreground" :
-              paso > p ? "bg-green-500 text-white" :
-              "bg-muted text-muted-foreground"
-            }`}>
-              {paso > p ? "✓" : p}
-            </div>
-            {p < 3 && <div className={`h-0.5 w-8 transition-all ${paso > p ? "bg-green-500" : "bg-muted"}`} />}
-          </div>
-        ))}
-        <span className="ml-2 text-sm text-muted-foreground">
-          {paso === 1 ? "Servicio" : paso === 2 ? "Fecha y hora" : "Tus datos"}
-        </span>
-      </div>
+      {/* Step indicator (R2 — labels always visible) */}
+      <nav aria-label="Booking progress" className="mb-8">
+        <ol role="list" className="flex items-center gap-0">
+          {steps.map((step, i) => (
+            <li key={step.id} aria-current={paso === step.id ? "step" : undefined} className="flex items-center">
+              <div className="flex flex-col items-center gap-1">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
+                  paso === step.id ? "bg-primary text-primary-foreground" :
+                  paso > step.id ? "bg-success/20 text-success" :
+                  "bg-muted text-muted-foreground"
+                }`}>
+                  {paso > step.id ? <Check size={12} /> : step.id}
+                </div>
+                <span className={`text-[10px] font-semibold uppercase tracking-wide ${
+                  paso === step.id ? "text-primary" :
+                  paso > step.id ? "text-success" :
+                  "text-muted-foreground"
+                }`}>
+                  {step.label}
+                </span>
+              </div>
+              {i < steps.length - 1 && (
+                <div className={`h-0.5 w-10 mx-1 mb-4 transition-all ${paso > step.id ? "bg-success/40" : "bg-muted"}`} />
+              )}
+            </li>
+          ))}
+        </ol>
+      </nav>
 
-      <AnimatePresence mode="wait">
-        {/* Paso 1: Servicio */}
+      <AnimatePresence mode="wait" custom={dir}>
+        {/* Step 1: Service */}
         {paso === 1 && (
-          <motion.div key="paso1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-            <h2 className="font-semibold text-foreground mb-4">¿Qué servicio necesitas?</h2>
-            <SelectorServicio servicios={servicios} seleccionado={servicioSel} onSeleccionar={setServicioSel} />
+          <motion.div key="paso1" custom={dir} variants={stepVariants} initial="enter" animate="center" exit="exit">
+            <h2 className="font-semibold text-foreground mb-4">{t(locale, "whatService")}</h2>
+            <SelectorServicio servicios={servicios} seleccionado={servicioSel} onSeleccionar={setServicioSel} locale={locale} />
             <div className="mt-6 flex justify-end">
               <BotonPrimario
                 disabled={!puedeAvanzarPaso1}
                 icono={<ChevronRight className="h-4 w-4" />}
                 iconoDerecha
-                onClick={() => setPaso(2)}
+                onClick={() => navPaso(2)}
               >
-                Continuar
+                {t(locale, "continue")}
               </BotonPrimario>
             </div>
           </motion.div>
         )}
 
-        {/* Paso 2: Fecha y hora */}
+        {/* Step 2: Date & time */}
         {paso === 2 && (
-          <motion.div key="paso2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-            <h2 className="font-semibold text-foreground mb-4">¿Cuándo quieres venir?</h2>
+          <motion.div key="paso2" custom={dir} variants={stepVariants} initial="enter" animate="center" exit="exit">
+            <h2 className="font-semibold text-foreground mb-4">{t(locale, "whenCome")}</h2>
             <SelectorFechaHora
               slug={slug}
               servicioId={servicioSel!.id}
@@ -164,40 +293,60 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios }: 
               horaSeleccionada={hora}
               onFecha={setFecha}
               onHora={setHora}
+              locale={locale}
             />
             <div className="mt-6 flex justify-between">
-              <BotonPrimario variante="secundario" icono={<ChevronLeft className="h-4 w-4" />} onClick={() => setPaso(1)}>
-                Atrás
+              <BotonPrimario variante="secundario" icono={<ChevronLeft className="h-4 w-4" />} onClick={() => navPaso(1)}>
+                {t(locale, "back")}
               </BotonPrimario>
               <BotonPrimario
                 disabled={!puedeAvanzarPaso2}
                 icono={<ChevronRight className="h-4 w-4" />}
                 iconoDerecha
-                onClick={() => setPaso(3)}
+                onClick={() => navPaso(3)}
               >
-                Continuar
+                {t(locale, "continue")}
               </BotonPrimario>
             </div>
           </motion.div>
         )}
 
-        {/* Paso 3: Datos del cliente */}
+        {/* Step 3: Client details */}
         {paso === 3 && (
-          <motion.div key="paso3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-            <h2 className="font-semibold text-foreground mb-4">Tus datos</h2>
+          <motion.div key="paso3" custom={dir} variants={stepVariants} initial="enter" animate="center" exit="exit">
+            <h2 className="font-semibold text-foreground mb-4">{t(locale, "yourDetails")}</h2>
+
+            {/* Booking summary (T-DR4 date formatting) */}
+            <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 mb-5 space-y-1.5 text-sm">
+              <p className="font-semibold text-foreground mb-2">{t(locale, "bookingSummary")}</p>
+              <p className="text-muted-foreground">{t(locale, "service")}: <span className="text-foreground font-medium">{servicioSel?.name}</span></p>
+              <p className="text-muted-foreground capitalize">
+                {t(locale, "date")}: <span className="text-foreground font-medium">
+                  {new Intl.DateTimeFormat(
+                    locale === "pt" ? "pt-BR" : locale === "en" ? "en-US" : "es-MX",
+                    { weekday: "long", day: "numeric", month: "long" }
+                  ).format(new Date(`${fecha}T12:00:00`))}
+                </span>
+              </p>
+              <p className="text-muted-foreground">{t(locale, "time")}: <span className="text-foreground font-medium">{hora}</span></p>
+              {servicioSel?.price != null && (
+                <p className="text-muted-foreground">{t(locale, "price")}: <span className="text-foreground font-medium tabular-nums">${servicioSel.price.toLocaleString("es-ES")}</span></p>
+              )}
+            </div>
+
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <CampoFormulario
-                  etiqueta="Nombre"
-                  placeholder="Tu nombre"
+                  etiqueta={t(locale, "firstName")}
+                  placeholder={t(locale, "firstNamePlaceholder")}
                   value={nombre}
                   onChange={(e) => setNombre(e.target.value)}
                   icono={<User className="h-4 w-4" />}
                   required
                 />
                 <CampoFormulario
-                  etiqueta="Apellido"
-                  placeholder="Tu apellido"
+                  etiqueta={t(locale, "lastName")}
+                  placeholder={t(locale, "lastNamePlaceholder")}
                   value={apellido}
                   onChange={(e) => setApellido(e.target.value)}
                   icono={<User className="h-4 w-4" />}
@@ -205,67 +354,57 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios }: 
                 />
               </div>
               <CampoFormulario
-                etiqueta="Cédula / Documento (opcional)"
-                placeholder="Número de documento"
+                etiqueta={t(locale, "document")}
+                placeholder={t(locale, "documentPlaceholder")}
                 value={cedula}
                 onChange={(e) => setCedula(e.target.value)}
                 icono={<CreditCard className="h-4 w-4" />}
               />
               <CampoFormulario
-                etiqueta="Correo electrónico (opcional)"
+                etiqueta={t(locale, "email")}
                 type="email"
-                placeholder="tu@correo.com"
+                placeholder={t(locale, "emailPlaceholder")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 icono={<Mail className="h-4 w-4" />}
               />
               <CampoFormulario
-                etiqueta="Teléfono (opcional)"
+                etiqueta={t(locale, "phone")}
                 type="tel"
-                placeholder="+52 555 123 4567"
+                placeholder={t(locale, "phonePlaceholder")}
                 value={telefono}
                 onChange={(e) => setTelefono(e.target.value)}
                 icono={<Phone className="h-4 w-4" />}
               />
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">
+                <label htmlFor="comentarios" className="block text-sm font-medium text-foreground mb-1.5">
                   <span className="flex items-center gap-2">
-                    <MessageSquare className="h-4 w-4" />
-                    Comentarios o requisitos especiales (opcional)
+                    <MessageSquare className="h-4 w-4" aria-hidden="true" />
+                    {t(locale, "comments")}
                   </span>
                 </label>
                 <textarea
+                  id="comentarios"
                   value={comentarios}
                   onChange={(e) => setComentarios(e.target.value)}
-                  placeholder="¿Algo que debamos saber antes de tu cita?"
+                  placeholder={t(locale, "commentsPlaceholder")}
                   className="w-full p-3 rounded-lg border border-border bg-background text-sm resize-none h-20 focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
               </div>
 
-              {/* Resumen */}
-              <div className="bg-muted/50 rounded-xl p-4 space-y-1.5 text-sm">
-                <p className="font-semibold text-foreground mb-2">Resumen de tu reserva</p>
-                <p className="text-muted-foreground">Servicio: <span className="text-foreground font-medium">{servicioSel?.name}</span></p>
-                <p className="text-muted-foreground">Fecha: <span className="text-foreground font-medium">{fecha}</span></p>
-                <p className="text-muted-foreground">Hora: <span className="text-foreground font-medium">{hora}</span></p>
-                {servicioSel?.price != null && (
-                  <p className="text-muted-foreground">Precio: <span className="text-foreground font-medium">${servicioSel.price.toLocaleString("es-ES")}</span></p>
-                )}
-              </div>
-
-              {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+              {error && <p role="alert" className="text-sm text-destructive text-center">{error}</p>}
             </div>
 
             <div className="mt-6 flex justify-between">
-              <BotonPrimario variante="secundario" icono={<ChevronLeft className="h-4 w-4" />} onClick={() => setPaso(2)}>
-                Atrás
+              <BotonPrimario variante="secundario" icono={<ChevronLeft className="h-4 w-4" />} onClick={() => navPaso(2)}>
+                {t(locale, "back")}
               </BotonPrimario>
               <BotonPrimario
                 disabled={!puedeEnviar}
                 cargando={enviando}
                 onClick={confirmar}
               >
-                Confirmar reserva
+                {enviando ? t(locale, "confirming") : t(locale, "confirmBooking")}
               </BotonPrimario>
             </div>
           </motion.div>

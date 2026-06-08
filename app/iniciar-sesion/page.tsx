@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { Suspense, useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -10,7 +10,7 @@ import { CampoFormulario } from "@/components/app/formularios/campo-formulario"
 import { BotonPrimario } from "@/components/app/formularios/boton-primario"
 import { Mail, Lock, ArrowRight } from "lucide-react"
 
-export default function IniciarSesionPage() {
+function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [cargando, setCargando] = useState(false)
@@ -27,7 +27,7 @@ export default function IniciarSesionPage() {
 
   const manejarEnvio = async (e: React.FormEvent) => {
     e.preventDefault()
-    setCargando(true) 
+    setCargando(true)
     setError("")
 
     const resultado = await signIn("credentials", {
@@ -45,6 +45,69 @@ export default function IniciarSesionPage() {
     }
   }
 
+  return (
+    <motion.form
+      className="space-y-5"
+      onSubmit={manejarEnvio}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ delay: 0.2, duration: 0.5 }}
+    >
+      <CampoFormulario
+        etiqueta="Correo electrónico"
+        type="email"
+        placeholder="tu@email.com"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        icono={<Mail className="h-4 w-4" />}
+        required
+      />
+
+      <CampoFormulario
+        etiqueta="Contraseña"
+        type="password"
+        placeholder="Tu contraseña"
+        value={contrasena}
+        onChange={(e) => setContrasena(e.target.value)}
+        icono={<Lock className="h-4 w-4" />}
+        required
+      />
+
+      {error && (
+        <p className="text-sm text-red-500 text-center">{error}</p>
+      )}
+
+      <div className="flex items-center justify-between">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+          />
+          <span className="text-sm text-muted-foreground">Recordarme</span>
+        </label>
+        <Link
+          href="/recuperar-contrasena"
+          className="text-sm text-primary hover:text-primary/80 transition-colors"
+        >
+          ¿Olvidaste tu contraseña?
+        </Link>
+      </div>
+
+      <BotonPrimario
+        type="submit"
+        anchoCompleto
+        tamaño="lg"
+        cargando={cargando}
+        icono={<ArrowRight className="h-4 w-4" />}
+        iconoDerecha
+      >
+        Iniciar Sesión
+      </BotonPrimario>
+    </motion.form>
+  )
+}
+
+export default function IniciarSesionPage() {
   return (
     <div className="min-h-screen bg-background flex">
       {/* Panel izquierdo - Formulario */}
@@ -68,64 +131,9 @@ export default function IniciarSesionPage() {
             </p>
           </div>
 
-          <motion.form
-            className="space-y-5"
-            onSubmit={manejarEnvio}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2, duration: 0.5 }}
-          >
-            <CampoFormulario
-              etiqueta="Correo electrónico"
-              type="email"
-              placeholder="tu@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              icono={<Mail className="h-4 w-4" />}
-              required
-            />
-
-            <CampoFormulario
-              etiqueta="Contraseña"
-              type="password"
-              placeholder="Tu contraseña"
-              value={contrasena}
-              onChange={(e) => setContrasena(e.target.value)}
-              icono={<Lock className="h-4 w-4" />}
-              required
-            />
-
-            {error && (
-              <p className="text-sm text-red-500 text-center">{error}</p>
-            )}
-
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
-                />
-                <span className="text-sm text-muted-foreground">Recordarme</span>
-              </label>
-              <Link
-                href="/recuperar-contrasena"
-                className="text-sm text-primary hover:text-primary/80 transition-colors"
-              >
-                ¿Olvidaste tu contraseña?
-              </Link>
-            </div>
-
-            <BotonPrimario
-              type="submit"
-              anchoCompleto
-              tamaño="lg"
-              cargando={cargando}
-              icono={<ArrowRight className="h-4 w-4" />}
-              iconoDerecha
-            >
-              Iniciar Sesión
-            </BotonPrimario>
-          </motion.form>
+          <Suspense fallback={null}>
+            <LoginForm />
+          </Suspense>
 
           <div className="mt-8">
             <div className="relative">

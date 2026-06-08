@@ -22,15 +22,20 @@ model User {
 }
 
 model Business {
-  id        String   @id @default(cuid())
-  name      String
-  type      String
-  slug      String   @unique
-  teamSize  Int      @default(1)
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String    @id @default(cuid())
+  name             String
+  type             String
+  slug             String    @unique
+  phone            String?
+  teamSize         Int       @default(1)
+  userId           String    @unique
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timezone         String    @default("America/Cancun")
+  plan             String    @default("free")
+  trialEndsAt      DateTime?
+  stripeCustomerId String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   patients          Patient[]
   appointments      Appointment[]
@@ -93,6 +98,7 @@ model Patient {
 
   appointments Appointment[]
 
+  @@unique([businessId, email])
   @@index([businessId])
   @@index([businessId, createdAt])
   @@map("clientes")
@@ -143,6 +149,7 @@ model Appointment {
   notes            String?  // notas internas del profesional
   clientComments   String?  // comentarios del cliente al reservar
   price            Float?
+  reminderSentAt   DateTime?
   patientId        String?
   patient          Patient?        @relation(fields: [patientId], references: [id])
   memberId         String?

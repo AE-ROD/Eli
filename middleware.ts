@@ -1,17 +1,36 @@
-import { withAuth } from "next-auth/middleware"
+import { withAuth, type NextRequestWithAuth } from "next-auth/middleware"
 import { NextResponse } from "next/server"
 
-export default withAuth(
-  function middleware(req) {
-    const token = req.nextauth.token
-    const pathname = req.nextUrl.pathname
+const SUPPORTED_LOCALES = ["es", "en", "pt"]
 
-    // Autenticado pero sin negocio → completar perfil antes de entrar al dashboard
+function detectLocale(req: NextRequestWithAuth): string {
+  const cookie = req.cookies.get("eli-locale")?.value
+  if (cookie && SUPPORTED_LOCALES.includes(cookie)) return cookie
+
+  const acceptLang = req.headers.get("accept-language") ?? ""
+  const browserLocale = acceptLang.split(",")[0]?.split("-")[0]?.toLowerCase()
+  if (browserLocale && SUPPORTED_LOCALES.includes(browserLocale)) return browserLocale
+
+  return "es"
+}
+
+export default withAuth(
+  function middleware(req: NextRequestWithAuth) {
+    const { pathname } = req.nextUrl
+    const token = req.nextauth.token
+
+    // Booking routes: inject x-locale header, no auth redirect
+    if (pathname.startsWith("/reservar/")) {
+      const locale = detectLocale(req)
+      const requestHeaders = new Headers(req.headers)
+      requestHeaders.set("x-locale", locale)
+      return NextResponse.next({ request: { headers: requestHeaders } })
+    }
+
+    // Auth redirects for dashboard routes
     if (pathname.startsWith("/dashboard") && !token?.businessId) {
       return NextResponse.redirect(new URL("/completar-perfil", req.url))
     }
-
-    // Ya tiene negocio → no necesita estar en completar-perfil
     if (pathname === "/completar-perfil" && token?.businessId) {
       return NextResponse.redirect(new URL("/dashboard", req.url))
     }
@@ -20,7 +39,11 @@ export default withAuth(
   },
   {
     callbacks: {
-      authorized: ({ token }) => !!token,
+      // Booking routes are public — pass through without auth check
+      authorized: ({ token, req }) => {
+        if (req.nextUrl.pathname.startsWith("/reservar/")) return true
+        return !!token
+      },
     },
     pages: {
       signIn: "/iniciar-sesion",
@@ -29,5 +52,5 @@ export default withAuth(
 )
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/completar-perfil"],
+  matcher: ["/dashboard/:path*", "/completar-perfil", "/reservar/:path*"],
 }

@@ -1,6 +1,10 @@
 import { notFound } from "next/navigation"
+import { headers } from "next/headers"
 import { prisma } from "@/lib/prisma"
 import { FormularioReserva } from "./_components/formularioReserva"
+import { LocaleSwitcher } from "./_components/localeSwitcher"
+
+export const dynamic = "force-dynamic"
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -12,6 +16,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 export default async function PaginaReserva({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
+  const headersList = await headers()
+  const locale = headersList.get("x-locale") ?? "es"
 
   const negocio = await prisma.business.findUnique({
     where: { slug },
@@ -48,11 +54,17 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
   return (
     <main className="min-h-screen bg-background">
       <div className="max-w-lg mx-auto px-4 py-10">
+        {/* Header: locale switcher */}
+        <header className="flex justify-end mb-6">
+          <LocaleSwitcher locale={locale} />
+        </header>
+
         <FormularioReserva
           slug={negocio.slug}
           nombreNegocio={negocio.name}
           servicios={negocio.services}
           horarios={negocio.workSchedules}
+          locale={locale}
         />
       </div>
     </main>
