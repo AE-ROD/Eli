@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react"
 import { BarraSuperior } from "@/components/app/layout/barra-superior"
 import { TarjetaEstadistica } from "@/components/app/tarjetas/tarjeta-estadistica"
 import { TarjetaCita } from "@/components/app/tarjetas/tarjeta-cita"
+import { ChecklistOnboarding } from "@/components/app/tarjetas/checklist-onboarding"
 import {
   CalendarDays,
   Users,
@@ -147,6 +148,9 @@ export default function DashboardPage() {
       />
 
       <div className="p-6 space-y-8">
+        {/* Onboarding checklist — hides automatically once all steps are done */}
+        <ChecklistOnboarding />
+
         {/* Estadisticas */}
         <motion.section variants={contenedorVariantes} initial="hidden" animate="show">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

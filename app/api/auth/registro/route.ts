@@ -7,7 +7,7 @@ function generarSlug(nombre: string): string {
   return nombre
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9\s-]/g, "")
     .trim()
     .replace(/\s+/g, "-")
@@ -22,6 +22,28 @@ async function slugUnico(base: string): Promise<string> {
     intento = `${slug}-${contador++}`
   }
   return intento
+}
+
+// T15: Default weekly schedules by business type
+function horariosDefault(tipo: string): Array<{ dayOfWeek: number; startTime: string; endTime: string }> {
+  const tipo_n = tipo.toLowerCase()
+  const esBarberiaOSpa = ["barberia", "barbershop", "spa", "salon", "salón", "peluqueria", "peluquería"].some(
+    (t) => tipo_n.includes(t)
+  )
+  const esClinica = ["clinica", "clínica", "consultorio", "medico", "médico", "dental", "fisio"].some(
+    (t) => tipo_n.includes(t)
+  )
+
+  if (esBarberiaOSpa) {
+    // Mon–Sat 09:00–19:00
+    return [1, 2, 3, 4, 5, 6].map((d) => ({ dayOfWeek: d, startTime: "09:00", endTime: "19:00" }))
+  }
+  if (esClinica) {
+    // Mon–Fri 08:00–18:00
+    return [1, 2, 3, 4, 5].map((d) => ({ dayOfWeek: d, startTime: "08:00", endTime: "18:00" }))
+  }
+  // Default: Mon–Fri 09:00–18:00
+  return [1, 2, 3, 4, 5].map((d) => ({ dayOfWeek: d, startTime: "09:00", endTime: "18:00" }))
 }
 
 const registroSchema = z.object({
@@ -50,6 +72,7 @@ export async function POST(request: NextRequest) {
 
     const passwordHash = await bcrypt.hash(datos.contrasena, 12)
     const slug = await slugUnico(datos.nombreNegocio)
+    const horarios = horariosDefault(datos.tipoNegocio)
 
     const usuario = await prisma.user.create({
       data: {
@@ -61,6 +84,9 @@ export async function POST(request: NextRequest) {
             name: datos.nombreNegocio,
             type: datos.tipoNegocio,
             slug,
+            workSchedules: {
+              create: horarios,
+            },
           },
         },
       },
