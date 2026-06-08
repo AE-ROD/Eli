@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { toZonedTime, fromZonedTime } from "date-fns-tz"
 import { prisma } from "@/lib/prisma"
 import { enviarRecordatorio } from "@/lib/email"
+import { enviarRecordatorioWhatsApp } from "@/lib/whatsapp"
 
 const DEFAULT_TZ = "America/Cancun"
 
@@ -11,19 +12,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
-  // Find all businesses to handle per-business timezone
   const negocios = await prisma.business.findMany({
     select: { id: true, name: true, timezone: true },
   })
 
   let totalEnviados = 0
   let totalFallidos = 0
-  let totalOmitidos = 0
 
   for (const negocio of negocios) {
     const tz = negocio.timezone ?? DEFAULT_TZ
 
-    // "tomorrow" in the business's local timezone
     const ahoraLocal = toZonedTime(new Date(), tz)
     const mananaLocal = new Date(ahoraLocal)
     mananaLocal.setDate(mananaLocal.getDate() + 1)
@@ -37,33 +35,56 @@ export async function GET(request: NextRequest) {
         businessId: negocio.id,
         startTime: { gte: inicioUTC, lte: finUTC },
         status: { notIn: ["cancelada", "completada"] },
-        reminderSentAt: null,           // idempotency guard — skip already-sent
-        patient: { email: { not: null } },
+        reminderSentAt: null,
+        // Fetch appointments where at least one notification channel is available
+        patient: { OR: [{ email: { not: null } }, { phone: { not: null } }] },
       },
       select: {
         id: true,
         startTime: true,
         title: true,
-        patient: { select: { name: true, lastName: true, email: true } },
+        patient: { select: { name: true, lastName: true, email: true, phone: true } },
       },
     })
 
     const resultados = await Promise.allSettled(
       citas.map(async (cita) => {
-        if (!cita.patient?.email) return null
+        const pat = cita.patient
+        if (!pat) return null
 
         const startLocal = toZonedTime(cita.startTime, tz)
+        const nombreCliente = `${pat.name}${pat.lastName ? " " + pat.lastName : ""}`
+        const hora = startLocal.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
+        const fecha = startLocal.toISOString().slice(0, 10)
 
-        await enviarRecordatorio({
-          emailCliente: cita.patient.email,
-          nombreCliente: `${cita.patient.name}${cita.patient.lastName ? " " + cita.patient.lastName : ""}`,
-          nombreNegocio: negocio.name,
-          servicio: cita.title,
-          fecha: startLocal.toISOString().slice(0, 10),
-          hora: startLocal.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }),
-        })
+        const canal: Promise<unknown>[] = []
 
-        // Mark as sent so re-runs are safe
+        if (pat.email) {
+          canal.push(
+            enviarRecordatorio({
+              emailCliente: pat.email,
+              nombreCliente,
+              nombreNegocio: negocio.name,
+              servicio: cita.title,
+              fecha,
+              hora,
+            })
+          )
+        }
+
+        if (pat.phone) {
+          canal.push(
+            enviarRecordatorioWhatsApp({
+              telefono: pat.phone,
+              nombreNegocio: negocio.name,
+              servicio: cita.title,
+              hora,
+            })
+          )
+        }
+
+        await Promise.all(canal)
+
         await prisma.appointment.update({
           where: { id: cita.id },
           data: { reminderSentAt: new Date() },
@@ -76,9 +97,8 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
-    mensaje: `Recordatorios procesados: ${totalEnviados} enviados, ${totalFallidos} fallidos, ${totalOmitidos} omitidos (ya enviados)`,
+    mensaje: `Recordatorios procesados: ${totalEnviados} enviados, ${totalFallidos} fallidos`,
     enviados: totalEnviados,
     fallidos: totalFallidos,
-    omitidos: totalOmitidos,
   })
 }

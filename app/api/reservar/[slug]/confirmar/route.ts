@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { enviarConfirmacionCliente, enviarAvisoProfesional } from "@/lib/email"
+import { enviarConfirmacionWhatsApp } from "@/lib/whatsapp"
 import { checkRateLimit } from "@/lib/rate-limit"
 
 const reservaSchema = z.object({
@@ -137,11 +138,12 @@ export async function POST(
       throw err
     }
 
-    // Fire-and-forget — do not await, email failure must not block confirmation
-    const emailsPromises: Promise<unknown>[] = []
+    // Fire-and-forget — do not await, notification failure must not block confirmation
+    const locale = request.headers.get("x-locale") ?? "es"
+    const notifPromises: Promise<unknown>[] = []
 
     if (emailCliente) {
-      emailsPromises.push(
+      notifPromises.push(
         enviarConfirmacionCliente({
           emailCliente,
           nombreCliente: `${datos.nombre} ${datos.apellido}`,
@@ -154,7 +156,20 @@ export async function POST(
       )
     }
 
-    emailsPromises.push(
+    if (datos.telefono) {
+      notifPromises.push(
+        enviarConfirmacionWhatsApp({
+          telefono: datos.telefono,
+          nombreNegocio: negocio.name,
+          servicio: servicio.name,
+          fecha: datos.fecha,
+          hora: datos.hora,
+          locale,
+        })
+      )
+    }
+
+    notifPromises.push(
       enviarAvisoProfesional({
         emailProfesional: negocio.user.email,
         nombreNegocio: negocio.name,
@@ -166,8 +181,8 @@ export async function POST(
       })
     )
 
-    void Promise.all(emailsPromises).catch((err) => {
-      console.error("[email] send failed — appointment already created:", err)
+    void Promise.all(notifPromises).catch((err) => {
+      console.error("[notif] send failed — appointment already created:", err)
     })
 
     return NextResponse.json({ citaId: cita.id, mensaje: "Reserva confirmada" }, { status: 201 })
