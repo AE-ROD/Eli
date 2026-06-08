@@ -18,6 +18,8 @@ import {
   HelpCircle,
   UsersRound,
   Sparkles,
+  BarChart2,
+  Zap,
 } from "lucide-react"
 import { usePrecios } from "@/components/app/modales/provider-precios"
 
@@ -25,11 +27,13 @@ const itemsNavegacion = [
   { id: "dashboard", nombre: "Dashboard", icono: LayoutDashboard, ruta: "/dashboard" },
   { id: "calendario", nombre: "Calendario", icono: CalendarDays, ruta: "/dashboard/calendario" },
   { id: "pacientes", nombre: "Pacientes", icono: Users, ruta: "/dashboard/pacientes" },
+  { id: "analitica", nombre: "Analítica", icono: BarChart2, ruta: "/dashboard/analytics" },
   { id: "chats", nombre: "Chats", icono: MessageCircle, ruta: "/dashboard/chats", notificaciones: 3 },
 ]
 
 const itemsSecundarios = [
   { id: "configuracion", nombre: "Configuración", icono: Settings, ruta: "/dashboard/configuracion" },
+  { id: "upgrade", nombre: "Actualizar plan", icono: Zap, ruta: "/dashboard/upgrade" },
   { id: "ayuda", nombre: "Ayuda", icono: HelpCircle, ruta: "/dashboard/ayuda" },
 ]
 

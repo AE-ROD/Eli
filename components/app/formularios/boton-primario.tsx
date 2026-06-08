@@ -1,10 +1,10 @@
 "use client"
 
-import { motion } from "framer-motion"
-import type { ButtonHTMLAttributes, ReactNode } from "react"
+import { motion, type HTMLMotionProps } from "framer-motion"
+import type { ReactNode } from "react"
 import { Loader2 } from "lucide-react"
 
-interface BotonPrimarioProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface BotonPrimarioProps extends Omit<HTMLMotionProps<"button">, "children"> {
   children: ReactNode
   variante?: "primario" | "secundario" | "fantasma" | "peligro"
   tamaño?: "sm" | "md" | "lg"

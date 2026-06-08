@@ -8,9 +8,34 @@ export const dynamic = "force-dynamic"
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const negocio = await prisma.business.findUnique({ where: { slug }, select: { name: true } })
+  const negocio = await prisma.business.findUnique({ where: { slug }, select: { name: true, type: true } })
+  if (!negocio) return { title: "Negocio no encontrado" }
+
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "https://useeli.com"
+  const url = `${baseUrl}/reservar/${slug}`
+  const descriptions = {
+    es: `Reserva tu cita en ${negocio.name} fácil y rápido. Confirma tu hora en línea, sin llamadas.`,
+    en: `Book your appointment at ${negocio.name} easily and quickly. Confirm your slot online, no calls needed.`,
+    pt: `Agende sua consulta em ${negocio.name} de forma fácil e rápida. Confirme seu horário online.`,
+  }
+
   return {
-    title: negocio ? `Reservar cita — ${negocio.name}` : "Negocio no encontrado",
+    title: `Reservar cita — ${negocio.name}`,
+    description: descriptions.es,
+    openGraph: {
+      title: `${negocio.name} — Book Online`,
+      description: descriptions.en,
+      url,
+      type: "website",
+      locale: "es_MX",
+      alternateLocale: ["en_US", "pt_BR"],
+    },
+    twitter: {
+      card: "summary",
+      title: `${negocio.name} — Book Online`,
+      description: descriptions.en,
+    },
+    alternates: { canonical: url },
   }
 }
 

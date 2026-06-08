@@ -82,9 +82,9 @@ describe("POST /api/reservar/[slug]/confirmar", () => {
   it("returns 409 SLOT_TAKEN when a concurrent booking occupies the same slot", async () => {
     setupNegocioAndServicio()
 
-    vi.mocked(prisma.$transaction).mockImplementation(async (callback: (tx: ReturnType<typeof makeMockTx>) => Promise<unknown>) => {
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback: unknown) => {
       const tx = makeMockTx({ id: "existing-appt" }) // conflict exists
-      return callback(tx)
+      return (callback as (tx: ReturnType<typeof makeMockTx>) => Promise<unknown>)(tx)
     })
 
     const req = makeRequest("test-clinic", BASE_PAYLOAD)
@@ -100,9 +100,9 @@ describe("POST /api/reservar/[slug]/confirmar", () => {
 
     let capturedTx: ReturnType<typeof makeMockTx> | undefined
 
-    vi.mocked(prisma.$transaction).mockImplementation(async (callback: (tx: ReturnType<typeof makeMockTx>) => Promise<unknown>) => {
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback: unknown) => {
       capturedTx = makeMockTx(null) // no conflict for this worker
-      return callback(capturedTx)
+      return (callback as (tx: ReturnType<typeof makeMockTx>) => Promise<unknown>)(capturedTx)
     })
 
     const req = makeRequest("test-clinic", { ...BASE_PAYLOAD, memberId: "worker-a" })
@@ -124,9 +124,9 @@ describe("POST /api/reservar/[slug]/confirmar", () => {
   it("email resilience: returns 201 even when both emails throw after appointment is created", async () => {
     setupNegocioAndServicio()
 
-    vi.mocked(prisma.$transaction).mockImplementation(async (callback: (tx: ReturnType<typeof makeMockTx>) => Promise<unknown>) => {
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback: unknown) => {
       const tx = makeMockTx(null)
-      return callback(tx)
+      return (callback as (tx: ReturnType<typeof makeMockTx>) => Promise<unknown>)(tx)
     })
 
     // Emails fail

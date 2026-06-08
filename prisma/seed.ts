@@ -17,7 +17,7 @@ async function main() {
   // Crear usuario de prueba
   const hashedPassword = await bcrypt.hash('password123', 10)
   
-  const user = await prisma.user.create({
+  const userRecord = await prisma.user.create({
     data: {
       name: 'Admin Demo',
       email: 'admin@eli.com',
@@ -26,13 +26,13 @@ async function main() {
         create: {
           name: 'Salón de Belleza Demo',
           type: 'salon',
+          slug: 'salon-de-belleza-demo',
         },
       },
     },
-    include: {
-      business: true,
-    },
   })
+  const business = await prisma.business.findUnique({ where: { userId: userRecord.id } })
+  const user = { ...userRecord, business }
 
   console.log('✅ Usuario creado:', user.email)
 
