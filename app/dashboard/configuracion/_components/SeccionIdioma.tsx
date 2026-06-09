@@ -16,19 +16,25 @@ export function SeccionIdioma({ localeInicial }: SeccionIdiomaProps) {
   const [locale, setLocale] = useState(localeInicial)
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function handleChange(nuevoLocale: string) {
     setLocale(nuevoLocale)
     setGuardando(true)
     setGuardado(false)
+    setError(null)
     try {
-      await fetch("/api/dashboard/configuracion/idioma", {
+      const res = await fetch("/api/dashboard/configuracion/idioma", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ locale: nuevoLocale }),
       })
+      if (!res.ok) throw new Error(`Error ${res.status}`)
       setGuardado(true)
       setTimeout(() => setGuardado(false), 2000)
+    } catch {
+      setError("No se pudo guardar. Intenta de nuevo.")
+      setLocale(localeInicial)
     } finally {
       setGuardando(false)
     }
@@ -62,6 +68,9 @@ export function SeccionIdioma({ localeInicial }: SeccionIdiomaProps) {
       </div>
       {guardado && (
         <p className="text-sm text-success font-medium">Guardado</p>
+      )}
+      {error && (
+        <p className="text-sm text-destructive font-medium">{error}</p>
       )}
     </div>
   )
