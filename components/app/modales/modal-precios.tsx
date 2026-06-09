@@ -228,8 +228,14 @@ export function ModalPrecios({
                       {/* Precio */}
                       <div className="mb-4">
                         <div className="flex items-end gap-1">
-                          <span className="text-3xl font-bold text-foreground">${precio}</span>
-                          <span className="text-muted-foreground text-sm mb-1">USD/mes</span>
+                          {precio === 0 ? (
+                            <span className="text-3xl font-bold text-foreground">Gratis</span>
+                          ) : (
+                            <>
+                              <span className="text-3xl font-bold text-foreground">${precio}</span>
+                              <span className="text-muted-foreground text-sm mb-1">USD/mes</span>
+                            </>
+                          )}
                         </div>
                         {precioTotal && (
                           <p className="text-xs text-muted-foreground mt-0.5">
