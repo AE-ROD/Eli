@@ -38,16 +38,55 @@ function saludo(locale: string): string {
   return t(locale, "greeting_evening")
 }
 
-function buildCalendarUrl(servicio: string, negocio: string, fecha: string, hora: string, duracion: number): string {
-  const start = new Date(`${fecha}T${hora}:00`)
-  const end = new Date(start.getTime() + duracion * 60000)
-  const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(".000", "")
-  const params = new URLSearchParams({
-    action: "TEMPLATE",
-    text: `${servicio} — ${negocio}`,
-    dates: `${fmt(start)}/${fmt(end)}`,
-  })
-  return `https://calendar.google.com/calendar/render?${params}`
+function generateIcsContent(opts: {
+  uid: string
+  summary: string
+  description: string
+  location: string
+  startIso: string
+  durationMinutes: number
+}): string {
+  const pad = (n: number) => String(n).padStart(2, "0")
+  const toIcsDate = (iso: string): string => {
+    const d = new Date(iso)
+    return (
+      `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}` +
+      `T${pad(d.getHours())}${pad(d.getMinutes())}00`
+    )
+  }
+  const dtStart = toIcsDate(opts.startIso)
+  const endDate = new Date(opts.startIso)
+  endDate.setMinutes(endDate.getMinutes() + opts.durationMinutes)
+  const dtEnd = toIcsDate(endDate.toISOString().slice(0, 19))
+  const nowUtc = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z"
+
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Eli//Eli Booking//ES",
+    "BEGIN:VEVENT",
+    `UID:${opts.uid}@eli.app`,
+    `DTSTAMP:${nowUtc}`,
+    `DTSTART:${dtStart}`,
+    `DTEND:${dtEnd}`,
+    `SUMMARY:${opts.summary}`,
+    `DESCRIPTION:${opts.description}`,
+    `LOCATION:${opts.location}`,
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n")
+}
+
+function triggerIcsDownload(content: string, filename: string): void {
+  const blob = new Blob([content], { type: "text/calendar;charset=utf-8" })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 function buildWhatsAppText(locale: string, servicio: string, negocio: string, fecha: string, hora: string): string {
@@ -151,7 +190,6 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios, lo
   ]
 
   if (confirmado && servicioSel) {
-    const calUrl = buildCalendarUrl(servicioSel.name, nombreNegocio, fecha, hora, servicioSel.duration)
     const waText = buildWhatsAppText(locale, servicioSel.name, nombreNegocio, fecha, hora)
     const fechaFormateada = new Intl.DateTimeFormat(
       locale === "pt" ? "pt-BR" : locale === "en" ? "en-US" : "es-MX",
@@ -182,15 +220,26 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios, lo
 
         {/* T-DR5: Post-booking actions */}
         <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
-          <a
-            href={calUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={() => {
+              if (!servicioSel || !fecha || !hora) return
+              const startIso = `${fecha}T${hora}:00`
+              const icsContent = generateIcsContent({
+                uid: `booking-${Date.now()}`,
+                summary: `${servicioSel.name} — ${nombreNegocio}`,
+                description: `${servicioSel.name} | ${nombreNegocio}`,
+                location: nombreNegocio,
+                startIso,
+                durationMinutes: servicioSel.duration,
+              })
+              triggerIcsDownload(icsContent, `cita-${slug ?? "eli"}.ics`)
+            }}
             className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-border hover:bg-muted transition-colors text-sm font-medium text-foreground"
           >
             <CalendarPlus className="h-4 w-4" />
-            {t(locale, "addToCalendar")}
-          </a>
+            {t(locale, "downloadIcs")}
+          </button>
           <a
             href={`https://wa.me/?text=${waText}`}
             target="_blank"

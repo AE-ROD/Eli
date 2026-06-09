@@ -40,6 +40,7 @@ export const BOOKING_STRINGS = {
     availableSlots: "Horarios disponibles",
     noSlotsAvailable: "No hay horarios disponibles para este día",
     addToCalendar: "Agregar al calendario",
+    downloadIcs: "Agregar al calendario (.ics)",
     shareWhatsApp: "Compartir por WhatsApp",
     serviceNameHint: "",
     // Email strings
@@ -102,6 +103,7 @@ export const BOOKING_STRINGS = {
     availableSlots: "Available times",
     noSlotsAvailable: "No available times for this day",
     addToCalendar: "Add to calendar",
+    downloadIcs: "Add to Calendar (.ics)",
     shareWhatsApp: "Share via WhatsApp",
     serviceNameHint: "Service name as provided by the business",
     emailConfirmSubject: "Appointment confirmed",
@@ -163,6 +165,7 @@ export const BOOKING_STRINGS = {
     availableSlots: "Horários disponíveis",
     noSlotsAvailable: "Nenhum horário disponível para este dia",
     addToCalendar: "Adicionar ao calendário",
+    downloadIcs: "Adicionar ao calendário (.ics)",
     shareWhatsApp: "Compartilhar pelo WhatsApp",
     serviceNameHint: "Nome do serviço conforme fornecido pelo negócio",
     emailConfirmSubject: "Consulta confirmada",
