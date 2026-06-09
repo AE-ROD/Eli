@@ -15,66 +15,61 @@ const VALOR_ELI = [
 
 const PLANES = [
   {
-    id: "starter",
-    nombre: "Starter",
+    id: "free",
+    nombre: "Free",
     icono: Zap,
     descripcion: "Para profesionales independientes",
-    mensual: 12,
-    anual: 99,
-    ahorroAnual: 45,
+    mensual: 0,
+    anual: 0,
+    ahorroAnual: 0,
     colorIcono: "bg-blue-100 text-blue-600",
     destacado: false,
     features: [
-      { texto: "1 profesional", incluido: true },
-      { texto: "Agenda y calendario", incluido: true },
-      { texto: "Página pública de reservas", incluido: true },
-      { texto: "Gestión de clientes", incluido: true },
-      { texto: "Emails de confirmación", incluido: true },
-      { texto: "Recordatorios automáticos 24h", incluido: true },
+      { texto: "1 trabajador", incluido: true },
+      { texto: "Reservas en español", incluido: true },
+      { texto: "Email de confirmación", incluido: true },
+      { texto: "Página de reservas básica", incluido: true },
+      { texto: "3 idiomas (ES/EN/PT)", incluido: false },
+      { texto: "WhatsApp notifications", incluido: false },
+      { texto: "Analytics dashboard", incluido: false },
       { texto: "Equipo de trabajadores", incluido: false },
-      { texto: "Reportes exportables", incluido: false },
-    ],
-  },
-  {
-    id: "equipo",
-    nombre: "Equipo",
-    icono: Users,
-    descripcion: "Para negocios con hasta 5 personas",
-    mensual: 29,
-    anual: 239,
-    ahorroAnual: 109,
-    colorIcono: "bg-primary/10 text-primary",
-    destacado: true,
-    features: [
-      { texto: "Hasta 5 trabajadores", incluido: true },
-      { texto: "Agenda y calendario", incluido: true },
-      { texto: "Página pública de reservas", incluido: true },
-      { texto: "Gestión de clientes", incluido: true },
-      { texto: "Emails de confirmación", incluido: true },
-      { texto: "Recordatorios automáticos 24h", incluido: true },
-      { texto: "Horarios independientes por trabajador", incluido: true },
-      { texto: "Reportes exportables", incluido: true },
     ],
   },
   {
     id: "pro",
     nombre: "Pro",
+    icono: Users,
+    descripcion: "Para negocios en crecimiento",
+    mensual: 19,
+    anual: 190,
+    ahorroAnual: 38,
+    colorIcono: "bg-primary/10 text-primary",
+    destacado: true,
+    features: [
+      { texto: "5 trabajadores", incluido: true },
+      { texto: "3 idiomas (ES/EN/PT)", incluido: true },
+      { texto: "WhatsApp notifications", incluido: true },
+      { texto: "Analytics dashboard", incluido: true },
+      { texto: "Perfil SEO + Open Graph", incluido: true },
+      { texto: "Trabajadores ilimitados", incluido: false },
+      { texto: "Exportación de datos", incluido: false },
+    ],
+  },
+  {
+    id: "team",
+    nombre: "Team",
     icono: Building2,
     descripcion: "Para clínicas y salones grandes",
-    mensual: 59,
-    anual: 479,
-    ahorroAnual: 229,
+    mensual: 49,
+    anual: 490,
+    ahorroAnual: 98,
     colorIcono: "bg-purple-100 text-purple-600",
     destacado: false,
     features: [
       { texto: "Trabajadores ilimitados", incluido: true },
-      { texto: "Agenda y calendario", incluido: true },
-      { texto: "Página pública de reservas", incluido: true },
-      { texto: "Gestión de clientes", incluido: true },
-      { texto: "Emails de confirmación", incluido: true },
-      { texto: "Recordatorios automáticos 24h", incluido: true },
-      { texto: "Horarios independientes por trabajador", incluido: true },
-      { texto: "Reportes + estadísticas avanzadas", incluido: true },
+      { texto: "Todo lo del plan Pro", incluido: true },
+      { texto: "Soporte prioritario", incluido: true },
+      { texto: "Exportación de datos", incluido: true },
     ],
   },
 ]
@@ -198,24 +193,30 @@ export function PreciosSection() {
                 {/* Precio — I */}
                 <div className="mb-6">
                   <div className="flex items-end gap-2">
-                    <span className="text-4xl font-bold text-foreground">${precio}</span>
-                    <span className="text-muted-foreground text-sm mb-1">USD/mes</span>
-                    <AnimatePresence>
-                      {periodo === "anual" && (
-                        <motion.span
-                          key="ahorro"
-                          className="mb-1 text-xs bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full"
-                          initial={{ opacity: 0, scale: 0.7, x: -6 }}
-                          animate={{ opacity: 1, scale: 1, x: 0 }}
-                          exit={{ opacity: 0, scale: 0.7, x: -6 }}
-                          transition={{ type: "spring", damping: 18, stiffness: 300 }}
-                        >
-                          −${plan.ahorroAnual}/año
-                        </motion.span>
-                      )}
-                    </AnimatePresence>
+                    {precio === 0 ? (
+                      <span className="text-4xl font-bold text-foreground">Gratis</span>
+                    ) : (
+                      <>
+                        <span className="text-4xl font-bold text-foreground">${precio}</span>
+                        <span className="text-muted-foreground text-sm mb-1">USD/mes</span>
+                        <AnimatePresence>
+                          {periodo === "anual" && plan.ahorroAnual > 0 && (
+                            <motion.span
+                              key="ahorro"
+                              className="mb-1 text-xs bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full"
+                              initial={{ opacity: 0, scale: 0.7, x: -6 }}
+                              animate={{ opacity: 1, scale: 1, x: 0 }}
+                              exit={{ opacity: 0, scale: 0.7, x: -6 }}
+                              transition={{ type: "spring", damping: 18, stiffness: 300 }}
+                            >
+                              −${plan.ahorroAnual}/año
+                            </motion.span>
+                          )}
+                        </AnimatePresence>
+                      </>
+                    )}
                   </div>
-                  {precioTotal && (
+                  {precioTotal && precioTotal > 0 && (
                     <p className="text-xs text-muted-foreground mt-1">
                       ${precioTotal} USD/año facturado anualmente
                     </p>
