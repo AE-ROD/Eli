@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Instrument_Sans } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Providers } from '@/components/providers'
+import { headers } from 'next/headers'
 import './globals.css'
 
 const font = Instrument_Sans({
@@ -21,13 +22,17 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const h = await headers()
+  const locale = h.get('x-locale') ?? 'es'
+  const htmlLang = locale === 'pt' ? 'pt-BR' : locale === 'en' ? 'en' : 'es'
+
   return (
-    <html lang="es" className="bg-background">
+    <html lang={htmlLang} className="bg-background">
       <body className={`${font.variable} font-sans antialiased`}>
         <Providers>{children}</Providers>
         {process.env.NODE_ENV === 'production' && <Analytics />}

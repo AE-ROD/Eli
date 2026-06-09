@@ -18,16 +18,11 @@ export default withAuth(
   function middleware(req: NextRequestWithAuth) {
     const { pathname } = req.nextUrl
     const token = req.nextauth.token
+    const locale = detectLocale(req)
+    const requestHeaders = new Headers(req.headers)
+    requestHeaders.set("x-locale", locale)
 
-    // Booking routes: inject x-locale header, no auth redirect
-    if (pathname.startsWith("/reservar/")) {
-      const locale = detectLocale(req)
-      const requestHeaders = new Headers(req.headers)
-      requestHeaders.set("x-locale", locale)
-      return NextResponse.next({ request: { headers: requestHeaders } })
-    }
-
-    // Auth redirects for dashboard routes
+    // Auth redirects (no need to inject headers on redirects)
     if (pathname.startsWith("/dashboard") && !token?.businessId) {
       return NextResponse.redirect(new URL("/completar-perfil", req.url))
     }
@@ -35,7 +30,8 @@ export default withAuth(
       return NextResponse.redirect(new URL("/dashboard", req.url))
     }
 
-    return NextResponse.next()
+    // All other routes: pass through with x-locale header
+    return NextResponse.next({ request: { headers: requestHeaders } })
   },
   {
     callbacks: {
