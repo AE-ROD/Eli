@@ -31,6 +31,7 @@ model Business {
   userId           String    @unique
   user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   timezone         String    @default("America/Cancun")
+  preferredLocale  String    @default("es")
   plan             String    @default("free")
   trialEndsAt      DateTime?
   stripeCustomerId String?

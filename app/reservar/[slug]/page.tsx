@@ -42,7 +42,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function PaginaReserva({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const headersList = await headers()
-  const locale = headersList.get("x-locale") ?? "es"
+  const explicitLocale = headersList.get("x-locale-explicit") || null
 
   const negocio = await prisma.business.findUnique({
     where: { slug },
@@ -50,6 +50,7 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
       name: true,
       type: true,
       slug: true,
+      preferredLocale: true,
       services: {
         where: { active: true },
         select: { id: true, name: true, description: true, duration: true, price: true },
@@ -64,6 +65,8 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
   })
 
   if (!negocio) notFound()
+
+  const locale = explicitLocale ?? negocio.preferredLocale ?? "es"
 
   if (negocio.services.length === 0) {
     return (

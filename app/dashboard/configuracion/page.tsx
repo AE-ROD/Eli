@@ -6,6 +6,7 @@ import { BarraSuperior } from "@/components/app/layout/barra-superior"
 import { SeccionHorario } from "./_components/seccionHorario"
 import { SeccionServicios } from "./_components/seccionServicios"
 import { SelectorHorarioMiembro } from "./_components/selectorHorarioMiembro"
+import { SeccionIdioma } from "./_components/SeccionIdioma"
 
 export default async function PaginaConfiguracion() {
   const session = await getServerSession(authOptions)
@@ -16,7 +17,7 @@ export default async function PaginaConfiguracion() {
   const memberId: string | null = user.memberId ?? null
 
   // Horarios del usuario actual (owner → memberId null, worker → su memberId)
-  const [horariosActuales, servicios] = await Promise.all([
+  const [horariosActuales, servicios, business] = await Promise.all([
     prisma.workSchedule.findMany({
       where: { businessId: user.businessId, memberId: esOwner ? null : memberId },
       orderBy: { dayOfWeek: "asc" },
@@ -24,6 +25,10 @@ export default async function PaginaConfiguracion() {
     prisma.service.findMany({
       where: { businessId: user.businessId },
       orderBy: { createdAt: "asc" },
+    }),
+    prisma.business.findUnique({
+      where: { id: user.businessId },
+      select: { preferredLocale: true },
     }),
   ])
 
@@ -70,6 +75,11 @@ export default async function PaginaConfiguracion() {
 
         {/* Servicios: solo para owners */}
         {esOwner && <SeccionServicios serviciosIniciales={servicios} />}
+
+        {/* Idioma de la página de reservas: solo para owners */}
+        {esOwner && (
+          <SeccionIdioma localeInicial={business?.preferredLocale ?? "es"} />
+        )}
       </div>
     </div>
   )

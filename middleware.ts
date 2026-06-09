@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 
 const SUPPORTED_LOCALES = ["es", "en", "pt"]
 
-function detectLocale(req: NextRequestWithAuth): string {
+function detectLocale(req: NextRequestWithAuth): string | null {
   const cookie = req.cookies.get("eli-locale")?.value
   if (cookie && SUPPORTED_LOCALES.includes(cookie)) return cookie
 
@@ -11,16 +11,17 @@ function detectLocale(req: NextRequestWithAuth): string {
   const browserLocale = acceptLang.split(",")[0]?.split("-")[0]?.toLowerCase()
   if (browserLocale && SUPPORTED_LOCALES.includes(browserLocale)) return browserLocale
 
-  return "es"
+  return null  // no explicit preference
 }
 
 export default withAuth(
   function middleware(req: NextRequestWithAuth) {
     const { pathname } = req.nextUrl
     const token = req.nextauth.token
-    const locale = detectLocale(req)
+    const explicitLocale = detectLocale(req)
     const requestHeaders = new Headers(req.headers)
-    requestHeaders.set("x-locale", locale)
+    requestHeaders.set("x-locale", explicitLocale ?? "es")        // for html lang (always set)
+    requestHeaders.set("x-locale-explicit", explicitLocale ?? "") // "" = no explicit pref
 
     // Auth redirects (no need to inject headers on redirects)
     if (pathname.startsWith("/dashboard") && !token?.businessId) {
