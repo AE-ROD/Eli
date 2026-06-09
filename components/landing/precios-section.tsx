@@ -91,7 +91,7 @@ export function PreciosSection() {
           className="text-center mb-16"
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
+          viewport={{ once: true, margin: "-60px" }}
           transition={{ duration: 0.5 }}
         >
           <div className="inline-flex items-center gap-2.5 mb-4">
@@ -118,7 +118,7 @@ export function PreciosSection() {
                 className="flex flex-col items-center text-center gap-3 p-5 rounded-2xl bg-card border border-border/50 hover:shadow-md transition-all duration-300"
                 initial={{ opacity: 0, y: 16 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
+                viewport={{ once: true, margin: "-40px" }}
                 transition={{ delay: i * 0.08, duration: 0.4 }}
               >
                 <div className={`p-3 rounded-xl ${v.color}`}>
@@ -173,7 +173,7 @@ export function PreciosSection() {
                 }`}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
+                viewport={{ once: true, margin: "-40px" }}
                 transition={{ delay: 0.1 + i * 0.1, duration: 0.4 }}
               >
                 {plan.destacado && (
