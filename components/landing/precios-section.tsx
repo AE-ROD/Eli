@@ -7,10 +7,10 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 
 const VALOR_ELI = [
-  { icono: Clock,  titulo: "2–4 horas/semana",      descripcion: "Tiempo que recuperas al dejar de coordinar citas por WhatsApp", color: "bg-blue-50 text-blue-600" },
-  { icono: Zap,    titulo: "Cero doble-reservas",   descripcion: "El sistema bloquea horarios automáticamente en tiempo real",    color: "bg-amber-50 text-amber-600" },
-  { icono: Star,   titulo: "Clientes que no faltan", descripcion: "Recordatorios automáticos por email 24h antes de cada cita",   color: "bg-rose-50 text-rose-600" },
-  { icono: Users,  titulo: "Página profesional",    descripcion: "Tus clientes reservan solos, sin llamadas ni mensajes",         color: "bg-violet-50 text-violet-600" },
+  { icono: Clock,  titulo: "2–4 horas/semana",      descripcion: "Tiempo que recuperas al dejar de coordinar citas por WhatsApp", color: "bg-blue-500/10 text-blue-400" },
+  { icono: Zap,    titulo: "Cero doble-reservas",   descripcion: "El sistema bloquea horarios automáticamente en tiempo real",    color: "bg-amber-500/10 text-amber-400" },
+  { icono: Star,   titulo: "Clientes que no faltan", descripcion: "Recordatorios automáticos por email 24h antes de cada cita",   color: "bg-rose-500/10 text-rose-400" },
+  { icono: Users,  titulo: "Página profesional",    descripcion: "Tus clientes reservan solos, sin llamadas ni mensajes",         color: "bg-violet-500/10 text-violet-400" },
 ]
 
 const PLANES = [
@@ -22,7 +22,7 @@ const PLANES = [
     mensual: 0,
     anual: 0,
     ahorroAnual: 0,
-    colorIcono: "bg-blue-100 text-blue-600",
+    colorIcono: "bg-blue-500/10 text-blue-400",
     destacado: false,
     features: [
       { texto: "1 trabajador", incluido: true },
@@ -63,7 +63,7 @@ const PLANES = [
     mensual: 49,
     anual: 490,
     ahorroAnual: 98,
-    colorIcono: "bg-purple-100 text-purple-600",
+    colorIcono: "bg-purple-500/10 text-purple-400",
     destacado: false,
     features: [
       { texto: "Trabajadores ilimitados", incluido: true },
@@ -145,7 +145,7 @@ export function PreciosSection() {
             <span className={`text-sm font-medium transition-colors ${periodo === "anual" ? "text-foreground" : "text-muted-foreground"}`}>
               Anual
             </span>
-            <span className="text-xs bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full">
+            <span className="text-xs bg-green-500/15 text-green-400 font-semibold px-2 py-0.5 rounded-full">
               Ahorra hasta 32%
             </span>
           </div>
@@ -203,7 +203,7 @@ export function PreciosSection() {
                           {periodo === "anual" && plan.ahorroAnual > 0 && (
                             <motion.span
                               key="ahorro"
-                              className="mb-1 text-xs bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full"
+                              className="mb-1 text-xs bg-green-500/15 text-green-400 font-semibold px-2 py-0.5 rounded-full"
                               initial={{ opacity: 0, scale: 0.7, x: -6 }}
                               animate={{ opacity: 1, scale: 1, x: 0 }}
                               exit={{ opacity: 0, scale: 0.7, x: -6 }}
