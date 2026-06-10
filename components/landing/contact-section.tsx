@@ -12,21 +12,21 @@ const contactInfo = [
     title: "Email",
     value: "hola@eli.app",
     description: "Respondemos en menos de 24h",
-    color: "bg-blue-50 text-blue-600",
+    color: "bg-blue-500/10 text-blue-400",
   },
   {
     icon: MapPin,
     title: "Ubicación",
     value: "Latinoamérica",
     description: "Servicio 100% remoto",
-    color: "bg-emerald-50 text-emerald-600",
+    color: "bg-emerald-500/10 text-emerald-400",
   },
   {
     icon: Clock,
     title: "Horario",
     value: "Lun - Vie, 9:00 - 18:00",
     description: "Hora de Ciudad de México",
-    color: "bg-violet-50 text-violet-600",
+    color: "bg-violet-500/10 text-violet-400",
   },
 ]
 
