@@ -31,11 +31,8 @@ export function EliLogo({ className, size = "md", inverted = false }: EliLogoPro
       </span>
       <span className="relative">
         l
-        <span 
-          className={cn(
-            "absolute -top-[0.15em] -right-[0.1em] w-[0.2em] h-[0.2em] rotate-45",
-            inverted ? "bg-background" : "bg-[#0a3a6b]"
-          )}
+        <span
+          className="absolute -top-[0.15em] -right-[0.1em] w-[0.2em] h-[0.2em] rotate-45 bg-current"
         />
       </span>
       <span>i</span>
