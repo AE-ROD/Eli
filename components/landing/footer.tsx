@@ -5,7 +5,7 @@ import { EliLogo } from "@/components/shared/eli-logo"
 
 const footerLinks = {
   producto: [
-    { label: "Características", href: "#que-es" },
+    { label: "Características", href: "#por-que-eli" },
     { label: "Cómo funciona", href: "#como-funciona" },
     { label: "Precios", href: "#precios" },
   ],
