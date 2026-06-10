@@ -8,9 +8,7 @@ import { useState } from "react"
 import { EliLogo } from "@/components/shared/eli-logo"
 
 const navLinks = [
-  { href: "#que-es", label: "Qué es Eli" },
   { href: "#como-funciona", label: "Cómo funciona" },
-  { href: "#para-quien", label: "Para quién" },
   { href: "#precios", label: "Precios" },
   { href: "#contacto", label: "Contacto" },
 ]
@@ -28,7 +26,7 @@ export function Header() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           <Link href="/" className="flex items-center">
-            <EliLogo size="md" />
+            <EliLogo size="md" className="text-white" />
           </Link>
 
           <nav className="hidden md:flex items-center gap-8">
