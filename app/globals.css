@@ -77,6 +77,8 @@
 
 /* Identidad dark/navy del landing público (app/page.tsx) */
 .eli-landing-dark {
+  background-color: var(--background);
+  color: var(--foreground);
   --background: #07070d;
   --foreground: oklch(0.98 0 0);
   --card: #0f1929;
