@@ -11,6 +11,9 @@ const citaUpdateSchema = z.object({
   status: z.enum(["pendiente", "confirmada", "en-progreso", "completada", "cancelada"]).optional(),
   notes: z.string().optional().or(z.literal("")),
   price: z.number().positive().optional(),
+  paymentMethod: z.string().optional(),
+  paymentBreakdown: z.array(z.object({ method: z.string(), amount: z.number() })).optional(),
+  tipAmount: z.number().min(0).optional(),
 })
 
 async function verificarCita(id: string, businessId: string) {
@@ -69,6 +72,9 @@ export async function PUT(
         ...(datos.status && { status: datos.status }),
         ...(datos.notes !== undefined && { notes: datos.notes || null }),
         ...(datos.price !== undefined && { price: datos.price }),
+        ...(datos.paymentMethod !== undefined && { paymentMethod: datos.paymentMethod || null }),
+        ...(datos.paymentBreakdown !== undefined && { paymentBreakdown: datos.paymentBreakdown }),
+        ...(datos.tipAmount !== undefined && { tipAmount: datos.tipAmount }),
       },
       include: {
         patient: { select: { id: true, name: true, email: true, phone: true } },

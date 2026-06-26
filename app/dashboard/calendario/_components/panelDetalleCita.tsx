@@ -4,6 +4,7 @@ import { motion } from "framer-motion"
 import { X } from "lucide-react"
 import { AvatarUsuario } from "@/components/app/comunes/avatar-usuario"
 import { BotonPrimario } from "@/components/app/formularios/boton-primario"
+import { METODOS_PAGO } from "./modalNuevaCita"
 
 export interface CitaAPI {
   id: string
@@ -14,6 +15,9 @@ export interface CitaAPI {
   isWalkIn: boolean
   notes: string | null
   price: number | null
+  paymentMethod: string | null
+  tipAmount: number | null
+  paymentBreakdown: { method: string; amount: number }[] | null
   patientId: string
   patient: {
     id: string
@@ -21,6 +25,10 @@ export interface CitaAPI {
     email: string | null
     phone: string | null
   }
+}
+
+function labelMetodoPago(method: string): string {
+  return METODOS_PAGO.find((m) => m.value.toUpperCase() === method.toUpperCase())?.label ?? method
 }
 
 const etiquetasEstado: Record<string, { texto: string; color: string }> = {
@@ -96,7 +104,30 @@ export function PanelDetalleCita({ cita, onCerrar, onCambiarEstado }: PanelDetal
         {cita.price != null && (
           <div className="flex justify-between py-2.5">
             <span className="text-sm text-muted-foreground">Precio</span>
-            <span className="text-sm font-medium">${cita.price.toLocaleString("es-ES")}</span>
+            <span className="text-sm font-medium">${cita.price.toLocaleString("es-CL")}</span>
+          </div>
+        )}
+        {cita.paymentMethod && cita.paymentMethod.toUpperCase() !== "DIVIDIDO" && (
+          <div className="flex justify-between py-2.5">
+            <span className="text-sm text-muted-foreground">Método de pago</span>
+            <span className="text-sm font-medium">{labelMetodoPago(cita.paymentMethod)}</span>
+          </div>
+        )}
+        {cita.paymentMethod?.toUpperCase() === "DIVIDIDO" && cita.paymentBreakdown && (
+          <div className="py-2.5 space-y-1">
+            <span className="text-sm text-muted-foreground">Pago dividido</span>
+            {cita.paymentBreakdown.map((p, i) => (
+              <div key={i} className="flex justify-between pl-3">
+                <span className="text-xs text-muted-foreground">{labelMetodoPago(p.method)}</span>
+                <span className="text-xs font-medium">${p.amount.toLocaleString("es-CL")}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {cita.tipAmount != null && cita.tipAmount > 0 && (
+          <div className="flex justify-between py-2.5">
+            <span className="text-sm text-muted-foreground">Propina</span>
+            <span className="text-sm font-medium">${cita.tipAmount.toLocaleString("es-CL")}</span>
           </div>
         )}
         <div className="flex justify-between items-center py-2.5">
