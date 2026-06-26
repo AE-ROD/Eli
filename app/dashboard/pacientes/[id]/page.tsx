@@ -20,6 +20,11 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 
+const LABEL_PAGO: Record<string, string> = {
+  EFECTIVO: "Efectivo", DEBITO: "Débito", CREDITO: "Crédito",
+  TRANSFERENCIA: "Transferencia", DIVIDIDO: "Dividido",
+}
+
 interface Cita {
   id: string
   title: string
@@ -28,6 +33,8 @@ interface Cita {
   status: string
   isWalkIn: boolean
   price: number | null
+  paymentMethod: string | null
+  tipAmount: number | null
   notes: string | null
   service: { name: string } | null
   member: { user: { name: string | null } } | null
@@ -124,7 +131,7 @@ export default function PerfilPacientePage() {
   const walkIns = paciente.appointments.filter((c) => c.isWalkIn)
   const totalGastado = paciente.appointments
     .filter((c) => c.status === "completada" && c.price != null)
-    .reduce((s, c) => s + (c.price ?? 0), 0)
+    .reduce((s, c) => s + (c.price ?? 0) + (c.tipAmount ?? 0), 0)
   const ultimaCita = paciente.appointments[0]
 
   let intervaloPromedio: number | null = null
@@ -279,11 +286,23 @@ export default function PerfilPacientePage() {
                         </p>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 flex-shrink-0">
+                    <div className="flex items-center gap-3 flex-shrink-0 text-right">
                       {cita.price != null && (
-                        <span className="text-sm font-semibold text-foreground">
-                          ${cita.price.toLocaleString("es-MX")}
-                        </span>
+                        <div>
+                          <span className="text-sm font-semibold text-foreground">
+                            ${cita.price.toLocaleString("es-CL")}
+                          </span>
+                          {cita.tipAmount != null && cita.tipAmount > 0 && (
+                            <span className="block text-[10px] text-muted-foreground">
+                              +${cita.tipAmount.toLocaleString("es-CL")} propina
+                            </span>
+                          )}
+                          {cita.paymentMethod && (
+                            <span className="block text-[10px] text-muted-foreground">
+                              {LABEL_PAGO[cita.paymentMethod.toUpperCase()] ?? cita.paymentMethod}
+                            </span>
+                          )}
+                        </div>
                       )}
                       <div className="flex items-center gap-1">
                         <Icono className={`h-4 w-4 ${conf.color}`} />

@@ -40,6 +40,8 @@ export async function GET(
           status: true,
           isWalkIn: true,
           price: true,
+          paymentMethod: true,
+          tipAmount: true,
           notes: true,
           service: { select: { name: true } },
           member: { select: { user: { select: { name: true } } } },
