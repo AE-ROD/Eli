@@ -25,8 +25,10 @@ import {
   ClipboardList,
   FileBarChart,
   StickyNote,
+  X,
 } from "lucide-react"
 import { usePrecios } from "@/components/app/modales/provider-precios"
+import { useSidebar } from "./sidebar-context"
 
 const itemsNavegacion = [
   { id: "dashboard", nombre: "Dashboard", icono: LayoutDashboard, ruta: "/dashboard" },
@@ -60,6 +62,7 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes }: BarraLate
   const pathname = usePathname()
   const [colapsado, setColapsado] = useState(false)
   const [agentesAlta, setAgentesAlta] = useState(0)
+  const { abierto, cerrar } = useSidebar()
 
   const usuarioDefault = usuario || {
     nombre: "María García",
@@ -92,11 +95,41 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes }: BarraLate
   }, [])
 
   return (
+    <>
+      {/* Overlay móvil */}
+      <AnimatePresence>
+        {abierto && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="lg:hidden fixed inset-0 bg-black/40 z-40"
+            onClick={cerrar}
+          />
+        )}
+      </AnimatePresence>
+
     <motion.aside
-      className="fixed left-0 top-0 h-screen bg-card border-r border-border/50 flex flex-col z-40"
+      className={[
+        "fixed left-0 top-0 h-screen bg-card border-r border-border/50 flex flex-col z-50",
+        "transition-transform duration-300 ease-in-out",
+        // Móvil: oculto por defecto, visible cuando abierto
+        abierto ? "translate-x-0" : "-translate-x-full",
+        // Desktop: siempre visible (override del translate)
+        "lg:translate-x-0",
+      ].join(" ")}
       animate={{ width: colapsado ? 80 : 260 }}
       transition={{ duration: 0.3, ease: "easeInOut" }}
     >
+      {/* Botón cerrar — solo en móvil */}
+      <button
+        onClick={cerrar}
+        className="lg:hidden absolute top-3 right-3 p-1.5 rounded-lg hover:bg-muted transition-colors"
+        aria-label="Cerrar menú"
+      >
+        <X className="h-4 w-4 text-muted-foreground" />
+      </button>
       {/* Header */}
       <div className="p-4 border-b border-border/50">
         <div className="flex items-center justify-between">
@@ -330,5 +363,6 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes }: BarraLate
         </div>
       </div>
     </motion.aside>
+    </>
   )
 }

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { BarraLateral } from "@/components/app/layout/barra-lateral"
 import { ModalBienvenida } from "@/components/app/modales/modal-bienvenida"
 import { ProviderPrecios } from "@/components/app/modales/provider-precios"
+import { SidebarProvider } from "@/components/app/layout/sidebar-context"
 
 export default async function DashboardLayout({
   children,
@@ -41,10 +42,11 @@ export default async function DashboardLayout({
   }
 
   return (
+    <SidebarProvider>
     <ProviderPrecios diasTrialRestantes={diasTrialRestantes}>
       <div className="min-h-screen bg-background">
         <BarraLateral usuario={usuario} esOwner={esOwner} diasTrialRestantes={diasTrialRestantes} />
-        <main className="lg:ml-[260px] transition-all duration-300">
+        <main className="pt-14 lg:pt-0 lg:ml-[260px] transition-all duration-300">
           {children}
         </main>
         {businessName && businessSlug && (
@@ -52,5 +54,6 @@ export default async function DashboardLayout({
         )}
       </div>
     </ProviderPrecios>
+    </SidebarProvider>
   )
 }

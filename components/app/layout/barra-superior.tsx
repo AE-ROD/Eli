@@ -4,12 +4,12 @@ import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { AvatarUsuario } from "@/components/app/comunes/avatar-usuario"
 import { BotonPrimario } from "@/components/app/formularios/boton-primario"
+import { useSidebar } from "@/components/app/layout/sidebar-context"
 import {
   Search,
   Bell,
   Plus,
   Menu,
-  X,
 } from "lucide-react"
 
 interface BarraSuperiorProps {
@@ -29,7 +29,7 @@ export function BarraSuperior({
   mostrarBusqueda = true,
 }: BarraSuperiorProps) {
   const [busquedaActiva, setBusquedaActiva] = useState(false)
-  const [menuMovilAbierto, setMenuMovilAbierto] = useState(false)
+  const { toggle } = useSidebar()
 
   return (
     <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border/50">
@@ -38,9 +38,10 @@ export function BarraSuperior({
         <div className="flex items-center gap-4">
           <button
             className="lg:hidden p-2 rounded-lg hover:bg-muted transition-colors"
-            onClick={() => setMenuMovilAbierto(!menuMovilAbierto)}
+            onClick={toggle}
+            aria-label="Abrir menú"
           >
-            {menuMovilAbierto ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            <Menu className="h-5 w-5" />
           </button>
           <div>
             <h1 className="text-xl font-bold text-foreground">{titulo}</h1>
