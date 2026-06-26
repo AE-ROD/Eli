@@ -14,6 +14,9 @@ import { parsearPrecios } from "@/lib/import/parsers/precios"
 import { parsearRegistro } from "@/lib/import/parsers/registro"
 import { parsearTotales } from "@/lib/import/parsers/totales"
 import { persistirImport } from "../_lib/persistir"
+import { calcularDiscrepanciasTotales, calcularDiscrepanciasEmpleadas } from "../_lib/discrepancias"
+import type { TotalDeclaradoImportado } from "@/lib/import/parsers/totales"
+import type { EmpleadaDeclaradaImportada } from "@/lib/import/parsers/empleadas"
 
 const parsers = {
   precios: parsearPrecios,
@@ -87,6 +90,8 @@ export async function POST(request: NextRequest) {
     ...serializarSinMatch(resultado.sinMatch),
   ]
 
+  let discrepancias: Awaited<ReturnType<typeof calcularDiscrepanciasTotales>> | undefined
+
   await prisma.$transaction(async (tx) => {
     await persistirImport(
       payload.tipo,
@@ -95,11 +100,25 @@ export async function POST(request: NextRequest) {
       tx
     )
 
+    if (payload.tipo === "totales") {
+      discrepancias = await calcularDiscrepanciasTotales(
+        resultado.ok.map((f) => f.data) as TotalDeclaradoImportado[],
+        businessId,
+        tx
+      )
+    } else if (payload.tipo === "empleadas") {
+      discrepancias = await calcularDiscrepanciasEmpleadas(
+        resultado.ok.map((f) => f.data) as EmpleadaDeclaradaImportada[],
+        businessId,
+        tx
+      )
+    }
+
     await tx.dataImport.updateMany({
       where: { id: payload.importId, businessId },
       data: { rowsImported: rowsOk, rowsSkipped: rowsErrored },
     })
   })
 
-  return NextResponse.json({ rowsOk, rowsErrored, errores })
+  return NextResponse.json({ rowsOk, rowsErrored, errores, ...(discrepancias && { discrepancias }) })
 }

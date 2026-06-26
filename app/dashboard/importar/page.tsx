@@ -22,7 +22,7 @@ type TipoImport =
 
 interface FilaOk { indice: number; data: unknown }
 interface FilaError { indice: number; mensaje: string }
-interface FilaSinMatch { indice: number; campo: string; valor: string }
+interface FilaSinMatch { indice: number; campo: string; valor: string; fila: Record<string, unknown> }
 
 interface PreviewData {
   importId: string
@@ -33,8 +33,10 @@ interface PreviewData {
   sinMatch: FilaSinMatch[]
 }
 
-interface ResultData { rowsOk: number; rowsErrored: number; errores: { indice: number; mensaje: string }[] }
+interface Discrepancia { etiqueta: string; declarado: number; real: number; diferencia: number }
+interface ResultData { rowsOk: number; rowsErrored: number; errores: { indice: number; mensaje: string }[]; discrepancias?: Discrepancia[] }
 interface HistorialItem { id: string; fileName: string; rowsTotal: number; rowsImported: number; rowsSkipped: number; createdAt: string; createdBy: { user: { name: string } } }
+interface MiembroImport { id: string; nombre: string }
 
 const TIPOS: { id: TipoImport; label: string; desc: string; icono: React.ElementType }[] = [
   { id: "registro", label: "Registro de citas", desc: "Citas históricas con método de pago y propina", icono: Calendar },
@@ -61,11 +63,30 @@ export default function ImportarPage() {
   const [error, setError] = useState<string | null>(null)
   const [arrastrando, setArrastrando] = useState(false)
   const [historial, setHistorial] = useState<HistorialItem[]>([])
+  const [miembros, setMiembros] = useState<MiembroImport[]>([])
+  const [resoluciones, setResoluciones] = useState<Record<number, string>>({})
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetch("/api/imports").then((r) => r.json()).then((d) => setHistorial(d.imports ?? [])).catch(() => {})
   }, [result])
+
+  useEffect(() => {
+    if (paso !== "resultado" || !preview?.sinMatch.length) return
+
+    setResoluciones((actuales) => {
+      const siguientes = { ...actuales }
+      for (const fila of preview.sinMatch) {
+        siguientes[fila.indice] ??= "omitir"
+      }
+      return siguientes
+    })
+
+    fetch("/api/imports/miembros")
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error("No se pudieron cargar los miembros")))
+      .then((data: { miembros?: MiembroImport[] }) => setMiembros(data.miembros ?? []))
+      .catch(() => setMiembros([]))
+  }, [paso, preview])
 
   const subirArchivo = useCallback(async (file: File) => {
     if (!tipoSeleccionado) return
@@ -79,6 +100,7 @@ export default function ImportarPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? "Error al procesar el archivo")
       setPreview(data)
+      setResoluciones({})
       setPaso("resultado")
     } catch (err: unknown) {
       setError((err as Error).message)
@@ -99,10 +121,15 @@ export default function ImportarPage() {
     setCargando(true)
     setError(null)
     try {
+      const filasOk = preview.ok.map((f) => f.data)
+      const filasResueltas = preview.sinMatch
+        .filter((s) => resoluciones[s.indice] && resoluciones[s.indice] !== "omitir")
+        .map((s) => ({ ...s.fila, memberId: resoluciones[s.indice] }))
+
       const res = await fetch("/api/imports/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ importId: preview.importId, tipo: preview.tipo, filas: preview.ok.map((f) => f.data) }),
+        body: JSON.stringify({ importId: preview.importId, tipo: preview.tipo, filas: [...filasOk, ...filasResueltas] }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? "Error al confirmar")
@@ -121,11 +148,15 @@ export default function ImportarPage() {
     setPreview(null)
     setResult(null)
     setError(null)
+    setResoluciones({})
+    setMiembros([])
     if (inputRef.current) inputRef.current.value = ""
   }
 
   const tipoInfo = tipoSeleccionado ? TIPOS.find((t) => t.id === tipoSeleccionado) : null
   const esVerificacion = tipoSeleccionado && TIPOS_VERIFICACION.includes(tipoSeleccionado)
+  const filasResueltas = preview?.sinMatch.filter((s) => resoluciones[s.indice] && resoluciones[s.indice] !== "omitir").length ?? 0
+  const filasAImportar = (preview?.ok.length ?? 0) + filasResueltas
 
   return (
     <div className="min-h-screen">
@@ -278,12 +309,27 @@ export default function ImportarPage() {
 
             {preview.sinMatch.length > 0 && (
               <div className="bg-card border border-border/50 rounded-xl overflow-hidden">
-                <p className="text-xs font-medium text-muted-foreground px-4 py-2 border-b border-border/50">Sin coincidencia — estas filas serán omitidas</p>
-                <div className="divide-y divide-border/30 max-h-40 overflow-y-auto">
+                <div className="px-4 py-2 border-b border-border/50">
+                  <p className="text-xs font-medium text-muted-foreground">Sin coincidencia — resuelve o confirma omisión</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Elige un miembro del negocio para importar la fila, o déjala como omitida.</p>
+                </div>
+                <div className="divide-y divide-border/30 max-h-64 overflow-y-auto">
                   {preview.sinMatch.map((s) => (
-                    <div key={s.indice} className="flex items-center gap-3 px-4 py-2.5">
-                      <span className="text-xs text-muted-foreground">Fila {s.indice}</span>
-                      <span className="text-xs text-foreground">{s.campo}: <span className="font-medium">{s.valor}</span></span>
+                    <div key={s.indice} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs text-muted-foreground">Fila {s.indice}</p>
+                        <p className="text-xs text-foreground truncate">{s.campo}: <span className="font-medium">{s.valor}</span></p>
+                      </div>
+                      <select
+                        value={resoluciones[s.indice] ?? "omitir"}
+                        onChange={(e) => setResoluciones((actuales) => ({ ...actuales, [s.indice]: e.target.value }))}
+                        className="w-full sm:w-56 rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground outline-none focus:border-primary"
+                      >
+                        <option value="omitir">Omitir fila</option>
+                        {miembros.map((miembro) => (
+                          <option key={miembro.id} value={miembro.id}>{miembro.nombre}</option>
+                        ))}
+                      </select>
                     </div>
                   ))}
                 </div>
@@ -296,13 +342,13 @@ export default function ImportarPage() {
               </button>
               <button
                 onClick={confirmar}
-                disabled={cargando || preview.ok.length === 0}
+                disabled={cargando || filasAImportar === 0}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors"
               >
                 {cargando ? <><RefreshCw className="h-4 w-4 animate-spin" />Importando...</> : (
                   esVerificacion
-                    ? `Registrar ${preview.ok.length} filas verificadas`
-                    : `Importar ${preview.ok.length} de ${preview.rowsTotal} filas`
+                    ? `Registrar ${filasAImportar} filas verificadas`
+                    : `Importar ${filasAImportar} de ${preview.rowsTotal} filas`
                 )}
               </button>
             </div>
@@ -337,6 +383,38 @@ export default function ImportarPage() {
                   {result.errores.slice(0, 5).map((e, i) => (
                     <p key={i} className="text-xs text-amber-600">Fila {e.indice}: {e.mensaje}</p>
                   ))}
+                </div>
+              )}
+
+              {result.discrepancias && result.discrepancias.length > 0 && (
+                <div className="mt-4 text-left bg-card border border-border/50 rounded-xl overflow-hidden">
+                  <p className="text-xs font-semibold text-foreground px-4 py-2.5 border-b border-border/50">
+                    Cruce declarado vs registrado en Eli
+                  </p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-border/30 bg-muted/30">
+                          <th className="text-left px-4 py-2 text-muted-foreground font-medium">Período · Detalle</th>
+                          <th className="text-right px-4 py-2 text-muted-foreground font-medium">Declarado</th>
+                          <th className="text-right px-4 py-2 text-muted-foreground font-medium">En Eli</th>
+                          <th className="text-right px-4 py-2 text-muted-foreground font-medium">Diferencia</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {result.discrepancias.map((d, i) => (
+                          <tr key={i} className={`border-b border-border/20 ${Math.abs(d.diferencia) > 0 ? "bg-amber-50/50" : ""}`}>
+                            <td className="px-4 py-2 text-foreground">{d.etiqueta}</td>
+                            <td className="px-4 py-2 text-right font-medium">${d.declarado.toLocaleString("es-CL")}</td>
+                            <td className="px-4 py-2 text-right font-medium">${d.real.toLocaleString("es-CL")}</td>
+                            <td className={`px-4 py-2 text-right font-semibold ${d.diferencia === 0 ? "text-emerald-600" : "text-amber-600"}`}>
+                              {d.diferencia === 0 ? "✓" : (d.diferencia > 0 ? "+" : "") + `$${d.diferencia.toLocaleString("es-CL")}`}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>
