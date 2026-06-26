@@ -34,7 +34,6 @@ const itemsNavegacion = [
   { id: "pacientes", nombre: "Usuarios", icono: Users, ruta: "/dashboard/pacientes" },
   { id: "analitica", nombre: "Analítica", icono: BarChart2, ruta: "/dashboard/analytics" },
   { id: "chats", nombre: "Mensajería", icono: MessageCircle, ruta: "/dashboard/chats" },
-  { id: "importar", nombre: "Importar datos", icono: FileUp, ruta: "/dashboard/importar" },
   { id: "walkin", nombre: "Walk-in", icono: UserPlus, ruta: "/dashboard/walk-in" },
   { id: "agentes", nombre: "Agentes IA", icono: Sparkles, ruta: "/dashboard/agentes" },
 ]
@@ -151,6 +150,7 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes }: BarraLate
           ...itemsNavegacion,
           ...(esOwner ? [
             { id: "equipo", nombre: "Equipo", icono: UsersRound, ruta: "/dashboard/equipo" },
+            { id: "importar", nombre: "Importar datos", icono: FileUp, ruta: "/dashboard/importar" },
             { id: "cierre-turno", nombre: "Cierre de turno", icono: ClipboardList, ruta: "/dashboard/cierre-turno" },
             { id: "notas-turno", nombre: "Notas de turno", icono: StickyNote, ruta: "/dashboard/notas-turno" },
             { id: "reportes", nombre: "Reportes", icono: FileBarChart, ruta: "/dashboard/reportes" },
