@@ -22,6 +22,9 @@ import {
   Zap,
   FileUp,
   UserPlus,
+  ClipboardList,
+  FileBarChart,
+  StickyNote,
 } from "lucide-react"
 import { usePrecios } from "@/components/app/modales/provider-precios"
 
@@ -146,7 +149,12 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes }: BarraLate
         
         {[
           ...itemsNavegacion,
-          ...(esOwner ? [{ id: "equipo", nombre: "Equipo", icono: UsersRound, ruta: "/dashboard/equipo" }] : []),
+          ...(esOwner ? [
+            { id: "equipo", nombre: "Equipo", icono: UsersRound, ruta: "/dashboard/equipo" },
+            { id: "cierre-turno", nombre: "Cierre de turno", icono: ClipboardList, ruta: "/dashboard/cierre-turno" },
+            { id: "notas-turno", nombre: "Notas de turno", icono: StickyNote, ruta: "/dashboard/notas-turno" },
+            { id: "reportes", nombre: "Reportes", icono: FileBarChart, ruta: "/dashboard/reportes" },
+          ] : []),
         ].map((item) => {
           const activo = pathname === item.ruta || (item.ruta !== "/dashboard" && pathname.startsWith(item.ruta))
           const notificaciones = item.id === "agentes" && agentesAlta > 0
