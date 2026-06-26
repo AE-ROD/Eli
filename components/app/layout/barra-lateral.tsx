@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { signOut } from "next-auth/react"
@@ -20,15 +20,20 @@ import {
   Sparkles,
   BarChart2,
   Zap,
+  FileUp,
+  UserPlus,
 } from "lucide-react"
 import { usePrecios } from "@/components/app/modales/provider-precios"
 
 const itemsNavegacion = [
   { id: "dashboard", nombre: "Dashboard", icono: LayoutDashboard, ruta: "/dashboard" },
   { id: "calendario", nombre: "Calendario", icono: CalendarDays, ruta: "/dashboard/calendario" },
-  { id: "pacientes", nombre: "Pacientes", icono: Users, ruta: "/dashboard/pacientes" },
+  { id: "pacientes", nombre: "Usuarios", icono: Users, ruta: "/dashboard/pacientes" },
   { id: "analitica", nombre: "Analítica", icono: BarChart2, ruta: "/dashboard/analytics" },
-  { id: "chats", nombre: "Chats", icono: MessageCircle, ruta: "/dashboard/chats", notificaciones: 3 },
+  { id: "chats", nombre: "Mensajería", icono: MessageCircle, ruta: "/dashboard/chats" },
+  { id: "importar", nombre: "Importar datos", icono: FileUp, ruta: "/dashboard/importar" },
+  { id: "walkin", nombre: "Walk-in", icono: UserPlus, ruta: "/dashboard/walk-in" },
+  { id: "agentes", nombre: "Agentes IA", icono: Sparkles, ruta: "/dashboard/agentes" },
 ]
 
 const itemsSecundarios = [
@@ -52,12 +57,37 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes }: BarraLate
   const { abrirPrecios } = usePrecios()
   const pathname = usePathname()
   const [colapsado, setColapsado] = useState(false)
+  const [agentesAlta, setAgentesAlta] = useState(0)
 
   const usuarioDefault = usuario || {
     nombre: "María García",
     email: "maria@salon.com",
     negocio: "Salón María",
   }
+
+  useEffect(() => {
+    let cancelado = false
+
+    async function cargarConteoAgentes() {
+      try {
+        const res = await fetch("/api/agents/count")
+        if (!res.ok) return
+
+        const data = await res.json()
+        if (!cancelado) {
+          setAgentesAlta(Number(data.alta) || 0)
+        }
+      } catch {
+        // Silencioso: el badge no debe interrumpir la navegación.
+      }
+    }
+
+    cargarConteoAgentes()
+
+    return () => {
+      cancelado = true
+    }
+  }, [])
 
   return (
     <motion.aside
@@ -89,9 +119,10 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes }: BarraLate
             </AnimatePresence>
           </Link>
           <motion.button
-            className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+            className="p-2.5 rounded-lg hover:bg-muted transition-colors"
             onClick={() => setColapsado(!colapsado)}
             animate={{ rotate: colapsado ? 180 : 0 }}
+            title={colapsado ? "Expandir menú" : "Colapsar menú"}
           >
             <ChevronLeft className="h-4 w-4 text-muted-foreground" />
           </motion.button>
@@ -118,18 +149,22 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes }: BarraLate
           ...(esOwner ? [{ id: "equipo", nombre: "Equipo", icono: UsersRound, ruta: "/dashboard/equipo" }] : []),
         ].map((item) => {
           const activo = pathname === item.ruta || (item.ruta !== "/dashboard" && pathname.startsWith(item.ruta))
+          const notificaciones = item.id === "agentes" && agentesAlta > 0
+            ? agentesAlta
+            : (item as { notificaciones?: number }).notificaciones
           
           return (
             <Link key={item.id} href={item.ruta}>
               <motion.div
                 className={`
                   flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors relative
-                  ${activo 
-                    ? "bg-primary/10 text-primary" 
+                  ${activo
+                    ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   }
                 `}
                 whileHover={{ x: 2 }}
+                title={colapsado ? item.nombre : undefined}
               >
                 <item.icono className="h-5 w-5 flex-shrink-0" />
                 <AnimatePresence>
@@ -144,12 +179,12 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes }: BarraLate
                     </motion.span>
                   )}
                 </AnimatePresence>
-                {item.notificaciones && item.notificaciones > 0 && (
+                {notificaciones && notificaciones > 0 && (
                   <span className={`
                     flex items-center justify-center text-xs font-medium text-primary-foreground bg-primary rounded-full
                     ${colapsado ? "absolute -top-1 -right-1 w-4 h-4 text-[10px]" : "ml-auto w-5 h-5"}
                   `}>
-                    {item.notificaciones}
+                    {notificaciones}
                   </span>
                 )}
                 {activo && (
@@ -185,12 +220,13 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes }: BarraLate
                 <motion.div
                   className={`
                     flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors
-                    ${activo 
-                      ? "bg-primary/10 text-primary" 
+                    ${activo
+                      ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     }
                   `}
                   whileHover={{ x: 2 }}
+                  title={colapsado ? item.nombre : undefined}
                 >
                   <item.icono className="h-5 w-5 flex-shrink-0" />
                   <AnimatePresence>

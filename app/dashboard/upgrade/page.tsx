@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { motion } from "framer-motion"
 import { BarraSuperior } from "@/components/app/layout/barra-superior"
-import { Check, Zap, Users, Crown } from "lucide-react"
+import { Check, Zap, Crown } from "lucide-react"
 import { PLANS } from "@/lib/stripe"
 
 const PLAN_ICONS = { pro: Zap, team: Crown }
@@ -16,8 +16,14 @@ const BTN_COLORS = {
   team: "bg-amber-500 text-white hover:bg-amber-500/90",
 }
 
+const PRECIOS = {
+  pro:  { mensual: 19, anual: 190, ahorroAnual: 38 },
+  team: { mensual: 49, anual: 490, ahorroAnual: 98 },
+} as const
+
 export default function UpgradePage() {
   const [loading, setLoading] = useState<string | null>(null)
+  const [periodo, setPeriodo] = useState<"mensual" | "anual">("anual")
 
   const handleUpgrade = async (plan: "pro" | "team") => {
     setLoading(plan)
@@ -52,11 +58,40 @@ export default function UpgradePage() {
             <span className="text-xs bg-muted text-muted-foreground px-3 py-1 rounded-full font-medium">Activo</span>
           </div>
 
+          {/* Toggle mensual / anual */}
+          <div className="flex items-center justify-center gap-3 mb-6">
+            <span className={`text-sm font-medium ${periodo === "mensual" ? "text-foreground" : "text-muted-foreground"}`}>
+              Mensual
+            </span>
+            <button
+              onClick={() => setPeriodo(p => p === "mensual" ? "anual" : "mensual")}
+              className={`relative w-12 h-6 rounded-full transition-colors ${periodo === "anual" ? "bg-primary" : "bg-muted-foreground/30"}`}
+            >
+              <span
+                className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all duration-200"
+                style={{ left: periodo === "anual" ? "calc(100% - 22px)" : "2px" }}
+              />
+            </button>
+            <div className="flex items-center gap-2">
+              <span className={`text-sm font-medium ${periodo === "anual" ? "text-foreground" : "text-muted-foreground"}`}>
+                Anual
+              </span>
+              <span className="text-xs bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full">
+                Ahorra hasta 32%
+              </span>
+            </div>
+          </div>
+
           {/* Plan cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {(["pro", "team"] as const).map((key, i) => {
               const plan = PLANS[key]
               const Icon = PLAN_ICONS[key]
+              const precioMostrado = periodo === "mensual"
+                ? PRECIOS[key].mensual
+                : Math.round(PRECIOS[key].anual / 12)
+              const precioAnual = periodo === "anual" ? PRECIOS[key].anual : null
+
               return (
                 <motion.div
                   key={key}
@@ -69,13 +104,19 @@ export default function UpgradePage() {
                     <div className="p-2 rounded-xl bg-background border border-border/50">
                       <Icon className="h-5 w-5 text-primary" />
                     </div>
-                    <div>
-                      <p className="font-bold text-foreground">{plan.name}</p>
-                      <p className="text-2xl font-bold text-foreground">
-                        ${plan.price}
-                        <span className="text-sm font-normal text-muted-foreground"> USD/mes</span>
-                      </p>
+                    <p className="font-bold text-foreground">{plan.name}</p>
+                  </div>
+
+                  <div className="mb-4">
+                    <div className="flex items-end gap-1">
+                      <span className="text-3xl font-bold text-foreground">${precioMostrado}</span>
+                      <span className="text-muted-foreground text-sm mb-1">USD/mes</span>
                     </div>
+                    {precioAnual !== null && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        ${precioAnual} USD/año · ahorras ${PRECIOS[key].ahorroAnual}
+                      </p>
+                    )}
                   </div>
 
                   <ul className="space-y-2 flex-1 mb-6">

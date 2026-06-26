@@ -67,7 +67,10 @@ const PLANES = [
     destacado: false,
     features: [
       { texto: "Trabajadores ilimitados", incluido: true },
-      { texto: "Todo lo del plan Pro", incluido: true },
+      { texto: "5+ idiomas (ES/EN/PT + más)", incluido: true },
+      { texto: "WhatsApp notifications", incluido: true },
+      { texto: "Analytics avanzado", incluido: true },
+      { texto: "Perfil SEO + Open Graph", incluido: true },
       { texto: "Soporte prioritario", incluido: true },
       { texto: "Exportación de datos", incluido: true },
     ],
@@ -216,7 +219,7 @@ export function PreciosSection() {
                       </>
                     )}
                   </div>
-                  {precioTotal && precioTotal > 0 && (
+                  {precioTotal !== null && precioTotal > 0 && (
                     <p className="text-xs text-muted-foreground mt-1">
                       ${precioTotal} USD/año facturado anualmente
                     </p>
@@ -244,7 +247,7 @@ export function PreciosSection() {
                     className={`w-full ${plan.destacado ? "bg-primary hover:bg-primary/90" : ""}`}
                     variant={plan.destacado ? "default" : "outline"}
                   >
-                    Empezar gratis 3 días
+                    {plan.id === "free" ? "Empezar gratis →" : "Empezar gratis 3 días →"}
                   </Button>
                 </Link>
               </motion.div>

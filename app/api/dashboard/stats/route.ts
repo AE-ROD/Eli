@@ -19,6 +19,8 @@ export async function GET(request: NextRequest) {
   const inicioMesAnterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1)
   const finMesAnterior = new Date(hoy.getFullYear(), hoy.getMonth(), 0)
 
+  const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0, 23, 59, 59)
+
   const [
     citasHoy,
     citasMesAnteriorCount,
@@ -27,6 +29,9 @@ export async function GET(request: NextRequest) {
     ingresosMes,
     ingresosMesAnterior,
     citasTotalesMes,
+    ingresosProyectados,
+    walkInsEsteMes,
+    cantidadServicios,
   ] = await Promise.all([
     prisma.appointment.findMany({
       where: {
@@ -83,6 +88,27 @@ export async function GET(request: NextRequest) {
         status: { not: "cancelada" },
       },
     }),
+    // Ingresos proyectados: completadas + pendientes/confirmadas con precio hasta fin de mes
+    prisma.appointment.aggregate({
+      where: {
+        businessId,
+        startTime: { gte: manana, lte: finMes },
+        status: { in: ["pendiente", "confirmada"] },
+        price: { not: null },
+      },
+      _sum: { price: true },
+    }),
+    prisma.appointment.count({
+      where: {
+        businessId,
+        startTime: { gte: inicioMes },
+        isWalkIn: true,
+        status: { not: "cancelada" },
+      },
+    }),
+    prisma.service.count({
+      where: { businessId, active: true },
+    }),
   ])
 
   const citasHoyCount = citasHoy.length
@@ -109,12 +135,17 @@ export async function GET(request: NextRequest) {
   const capacidadMes = diasMes * 8
   const tasaOcupacion = Math.min(Math.round((citasTotalesMes / capacidadMes) * 100), 100)
 
+  const ingresosProyectadosValor = Number(ingresosProyectados._sum.price ?? 0)
+
   return NextResponse.json({
     citasHoy: citasHoyCount,
     citasHoyLista: citasHoy,
     totalPacientes,
     ingresoseMes: ingresosActuales,
+    ingresosProyectados: Number(ingresosActuales) + ingresosProyectadosValor,
+    walkInsEsteMes,
     tasaOcupacion,
+    tieneServicios: cantidadServicios > 0,
     tendencias: {
       citas: tendenciaCitas,
       pacientes: tendenciaPacientes,

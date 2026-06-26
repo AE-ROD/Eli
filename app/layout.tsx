@@ -13,12 +13,42 @@ const font = Instrument_Sans({
 });
 
 export const metadata: Metadata = {
-  title: 'Eli - Asistente Inteligente de Reservas',
-  description: 'Simplifica la gestión de tu negocio de bienestar y salud. Centraliza reservas, clientes, equipo y comunicación en una sola plataforma.',
-  generator: 'v0.app',
+  title: 'Eli — Sistema de Reservas para Negocios de Servicios',
+  description:
+    'Eli automatiza tus reservas, elimina el doble-booking y envía recordatorios por WhatsApp y email. Ideal para barberías, salones y consultorios en LATAM. 3 días gratis.',
+  keywords: ['reservas online', 'agenda digital', 'barbería', 'salón de belleza', 'LATAM', 'WhatsApp'],
+  authors: [{ name: 'Eli' }],
   icons: {
-    icon: '/images/eli-logo.png',
-    apple: '/images/eli-logo.png',
+    icon: '/images/eli-logo-icon.png',
+    apple: '/images/eli-logo-icon.png',
+  },
+  openGraph: {
+    type: 'website',
+    locale: 'es_MX',
+    url: 'https://useeli.com',
+    siteName: 'Eli',
+    title: 'Eli — Simplifica tu agenda, enfócate en tu talento',
+    description:
+      'Sistema de reservas automático para barberías, salones y negocios de servicios en LATAM. Sin doble-bookings, con WhatsApp y email incluidos.',
+    images: [
+      {
+        url: 'https://useeli.com/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'Eli — Dashboard de reservas',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Eli — Sistema de Reservas para Negocios de Servicios',
+    description:
+      'Automatiza tus reservas, elimina el caos del WhatsApp y crece con datos reales. Pruébalo gratis 3 días.',
+    images: ['https://useeli.com/og-image.png'],
+  },
+  robots: {
+    index: true,
+    follow: true,
   },
 }
 

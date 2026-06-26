@@ -91,56 +91,32 @@ export function ContactSection() {
               </h3>
               
               <form className="space-y-5">
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Nombre
-                    </label>
-                    <Input 
-                      placeholder="Tu nombre" 
-                      className="bg-background border-border focus:border-primary"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Negocio
-                    </label>
-                    <Input 
-                      placeholder="Nombre de tu negocio" 
-                      className="bg-background border-border focus:border-primary"
-                    />
-                  </div>
-                </div>
-
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-2">
-                    Email
+                    Nombre
                   </label>
-                  <Input 
-                    type="email"
-                    placeholder="tu@email.com" 
+                  <Input
+                    placeholder="Tu nombre"
                     className="bg-background border-border focus:border-primary"
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-2">
-                    Tipo de negocio
+                    Email
                   </label>
-                  <select className="w-full h-10 px-3 rounded-md border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
-                    <option value="">Selecciona una opción</option>
-                    <option value="salon">Salón de belleza / Spa</option>
-                    <option value="health">Consultorio de salud</option>
-                    <option value="fitness">Estudio fitness / Yoga</option>
-                    <option value="other">Otro</option>
-                  </select>
+                  <Input
+                    type="email"
+                    placeholder="tu@email.com"
+                    className="bg-background border-border focus:border-primary"
+                  />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-2">
                     Mensaje
                   </label>
-                  <textarea 
+                  <textarea
                     rows={4}
                     placeholder="Cuéntanos cómo podemos ayudarte..."
                     className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"

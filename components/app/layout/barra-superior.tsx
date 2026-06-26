@@ -97,9 +97,10 @@ export function BarraSuperior({
             className="relative p-2 rounded-lg hover:bg-muted transition-colors"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
+            title="Notificaciones"
+            aria-label="Notificaciones"
           >
             <Bell className="h-5 w-5 text-muted-foreground" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
           </motion.button>
 
           {/* Accion principal */}

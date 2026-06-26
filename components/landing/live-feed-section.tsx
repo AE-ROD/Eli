@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion"
 import { ArrowRight, Check } from "lucide-react"
+import Link from "next/link"
 
 const FEATURES = [
   "Confirmación automática al cliente por email",
@@ -75,10 +76,10 @@ export function LiveFeedSection() {
               </li>
             ))}
           </ul>
-          <button type="button" className="stream-cta">
+          <Link href="/crear-cuenta" className="stream-cta">
             Ver el dashboard
             <ArrowRight className="h-[13px] w-[13px]" strokeWidth={2.5} />
-          </button>
+          </Link>
         </div>
 
         <div>

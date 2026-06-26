@@ -9,6 +9,7 @@ import { WhyEliSection } from "@/components/landing/why-eli-section"
 import { LiveFeedSection } from "@/components/landing/live-feed-section"
 import { HowItWorksSection } from "@/components/landing/how-it-works-section"
 import { PreciosSection } from "@/components/landing/precios-section"
+import { FaqSection } from "@/components/landing/faq-section"
 import { ContactSection } from "@/components/landing/contact-section"
 import { Footer } from "@/components/landing/footer"
 
@@ -59,6 +60,7 @@ export default function HomePage() {
                 <LiveFeedSection />
                 <HowItWorksSection />
                 <PreciosSection />
+                <FaqSection />
                 <ContactSection />
               </main>
             </div>

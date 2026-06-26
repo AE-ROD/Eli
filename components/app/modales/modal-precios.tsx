@@ -69,7 +69,10 @@ const PLANES = [
     destacado: false,
     features: [
       { texto: "Trabajadores ilimitados", incluido: true },
-      { texto: "Todo lo del plan Pro", incluido: true },
+      { texto: "5+ idiomas (ES/EN/PT + más)", incluido: true },
+      { texto: "WhatsApp notifications", incluido: true },
+      { texto: "Analytics avanzado", incluido: true },
+      { texto: "Perfil SEO + Open Graph", incluido: true },
       { texto: "Soporte prioritario", incluido: true },
       { texto: "Exportación de datos", incluido: true },
     ],
@@ -81,6 +84,8 @@ interface ModalPreciosProps {
   onCerrar: () => void
   diasTrialRestantes?: number
   onSeleccionarPlan?: (planId: string, periodo: "mensual" | "anual") => void
+  planCargando?: string | null
+  error?: string | null
 }
 
 export function ModalPrecios({
@@ -88,6 +93,8 @@ export function ModalPrecios({
   onCerrar,
   diasTrialRestantes,
   onSeleccionarPlan,
+  planCargando = null,
+  error = null,
 }: ModalPreciosProps) {
   const [periodo, setPeriodo] = useState<"mensual" | "anual">("anual")
 
@@ -191,6 +198,15 @@ export function ModalPrecios({
                 </div>
               </div>
 
+              {error && (
+                <div
+                  role="alert"
+                  className="mb-6 rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+                >
+                  {error}
+                </div>
+              )}
+
               {/* Planes */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {PLANES.map((plan, i) => {
@@ -266,6 +282,8 @@ export function ModalPrecios({
                         variante={plan.destacado ? "primario" : "secundario"}
                         icono={<ArrowRight className="h-4 w-4" />}
                         iconoDerecha
+                        cargando={planCargando === plan.id}
+                        disabled={planCargando !== null}
                         onClick={() => onSeleccionarPlan?.(plan.id, periodo)}
                       >
                         Elegir {plan.nombre}

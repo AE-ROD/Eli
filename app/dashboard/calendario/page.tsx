@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { AnimatePresence } from "framer-motion"
 import { BarraSuperior } from "@/components/app/layout/barra-superior"
 import { ControlesCalendario, type VistaCalendario } from "./_components/controlesCalendario"
@@ -32,17 +33,33 @@ const FORM_INICIAL: FormNuevaCita = {
   horaFin: "10:00",
   precio: "",
   notas: "",
+  metodoPago: "",
+  propina: "",
+  metodoPago2: "",
+  monto2: "",
 }
 
-export default function PaginaCalendario() {
+function PaginaCalendarioInner() {
+  const searchParams = useSearchParams()
+  const pacienteIdParam = searchParams.get("pacienteId") ?? ""
+  const pacienteNombreParam = searchParams.get("pacienteNombre") ?? ""
+  const nuevaCitaParam = searchParams.get("nuevaCita") === "1"
+
   const [fechaActual, setFechaActual] = useState(new Date())
   const [vista, setVista] = useState<VistaCalendario>("semana")
   const [citasAPI, setCitasAPI] = useState<CitaAPI[]>([])
   const [cargando, setCargando] = useState(true)
   const [citaSeleccionada, setCitaSeleccionada] = useState<CitaAPI | null>(null)
-  const [modalAbierto, setModalAbierto] = useState(false)
+  const [modalAbierto, setModalAbierto] = useState(!!pacienteIdParam || nuevaCitaParam)
   const [guardando, setGuardando] = useState(false)
-  const [formNueva, setFormNueva] = useState<FormNuevaCita>(FORM_INICIAL)
+  const [formNueva, setFormNueva] = useState<FormNuevaCita>({
+    ...FORM_INICIAL,
+    pacienteId: pacienteIdParam,
+  })
+
+  const pacienteInicial = pacienteIdParam
+    ? { id: pacienteIdParam, nombre: pacienteNombreParam }
+    : undefined
 
   const fetchCitas = useCallback(async (fecha: Date, v: VistaCalendario) => {
     setCargando(true)
@@ -103,6 +120,13 @@ export default function PaginaCalendario() {
     try {
       const startTime = new Date(`${formNueva.fecha}T${formNueva.horaInicio}:00`)
       const endTime = new Date(`${formNueva.fecha}T${formNueva.horaFin}:00`)
+      const paymentBreakdown = formNueva.metodoPago === "dividido" && formNueva.metodoPago2
+        ? [
+            { method: "dividido_parte1", amount: formNueva.precio ? parseFloat(formNueva.precio) - (parseFloat(formNueva.monto2) || 0) : 0 },
+            { method: formNueva.metodoPago2, amount: parseFloat(formNueva.monto2) || 0 },
+          ]
+        : undefined
+
       const res = await fetch("/api/citas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -113,6 +137,9 @@ export default function PaginaCalendario() {
           patientId: formNueva.pacienteId,
           price: formNueva.precio ? parseFloat(formNueva.precio) : undefined,
           notes: formNueva.notas || undefined,
+          paymentMethod: formNueva.metodoPago || undefined,
+          paymentBreakdown,
+          tipAmount: formNueva.propina ? parseFloat(formNueva.propina) : undefined,
         }),
       })
       if (res.ok) {
@@ -197,9 +224,18 @@ export default function PaginaCalendario() {
             onFormChange={(campo, valor) => setFormNueva((p) => ({ ...p, [campo]: valor }))}
             onSubmit={crearCita}
             onCerrar={() => setModalAbierto(false)}
+            pacienteInicial={pacienteInicial}
           />
         )}
       </AnimatePresence>
     </div>
+  )
+}
+
+export default function PaginaCalendario() {
+  return (
+    <Suspense>
+      <PaginaCalendarioInner />
+    </Suspense>
   )
 }

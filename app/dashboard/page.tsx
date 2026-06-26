@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { useSession } from "next-auth/react"
 import { BarraSuperior } from "@/components/app/layout/barra-superior"
@@ -17,6 +18,11 @@ import {
   Link2,
   Copy,
   Check,
+  Sparkles,
+  FileUp,
+  UserPlus,
+  TrendingDown,
+  Settings,
 } from "lucide-react"
 import Link from "next/link"
 
@@ -32,7 +38,10 @@ interface StatsData {
   }>
   totalPacientes: number
   ingresoseMes: number
+  ingresosProyectados: number
+  walkInsEsteMes: number
   tasaOcupacion: number
+  tieneServicios: boolean
   tendencias: {
     citas: number
     pacientes: number
@@ -67,6 +76,7 @@ function duracionMinutos(start: string, end: string) {
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
   const [stats, setStats] = useState<StatsData | null>(null)
   const [copiado, setCopiado] = useState(false)
   const { data: session } = useSession()
@@ -143,7 +153,7 @@ export default function DashboardPage() {
         subtitulo={fechaActual.charAt(0).toUpperCase() + fechaActual.slice(1)}
         accionPrincipal={{
           texto: "Nueva cita",
-          onClick: () => {},
+          onClick: () => router.push("/dashboard/calendario?nuevaCita=1"),
         }}
       />
 
@@ -216,15 +226,27 @@ export default function DashboardPage() {
                     />
                   ))
                 ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    {stats ? "Sin citas para hoy" : "Cargando citas..."}
-                  </p>
+                  <div className="text-center py-6 space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      {stats ? "Sin citas para hoy" : "Cargando citas..."}
+                    </p>
+                    {stats && enlaceReservas && (
+                      <a
+                        href={enlaceReservas}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline"
+                      >
+                        Comparte tu enlace para recibir reservas →
+                      </a>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
           </motion.section>
 
-          {/* Pacientes recientes */}
+          {/* Usuarios recientes */}
           <motion.section
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -237,7 +259,7 @@ export default function DashboardPage() {
                     <Users className="h-5 w-5 text-green-600" />
                   </div>
                   <div>
-                    <h2 className="font-semibold text-foreground">Pacientes</h2>
+                    <h2 className="font-semibold text-foreground">Usuarios</h2>
                     <p className="text-sm text-muted-foreground">
                       {stats ? `${stats.totalPacientes} en total` : "Cargando..."}
                     </p>
@@ -253,9 +275,12 @@ export default function DashboardPage() {
               </div>
               <div className="p-5">
                 {stats && stats.totalPacientes === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    Aún no tienes pacientes registrados
-                  </p>
+                  <div className="text-center py-6 space-y-2">
+                    <p className="text-sm text-muted-foreground">Aún no tienes usuarios registrados</p>
+                    <a href="/dashboard/importar" className="text-xs text-primary hover:underline">
+                      Importa tus clientes existentes →
+                    </a>
+                  </div>
                 ) : (
                   <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
                     <div className="p-2 rounded-lg bg-primary/10">
@@ -263,7 +288,7 @@ export default function DashboardPage() {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-foreground">
-                        {stats ? stats.totalPacientes : "—"} pacientes
+                        {stats ? stats.totalPacientes : "—"} usuarios
                       </p>
                       <p className="text-xs text-muted-foreground">
                         registrados en tu negocio
@@ -311,6 +336,102 @@ export default function DashboardPage() {
             </div>
           </motion.section>
         )}
+
+        {/* Pronóstico de ingresos + Acciones rápidas */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Pronóstico */}
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.33 }}
+          >
+            <div className="bg-card border border-border/50 rounded-xl p-5 h-full">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 rounded-lg bg-emerald-100">
+                  <TrendingDown className="h-5 w-5 text-emerald-600" />
+                </div>
+                <div>
+                  <h2 className="font-semibold text-foreground">Pronóstico del mes</h2>
+                  <p className="text-xs text-muted-foreground">Completado + confirmado</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Ingresos completados</span>
+                  <span className="text-sm font-semibold text-foreground">
+                    ${(stats?.ingresoseMes ?? 0).toLocaleString("es-MX")}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Proyección fin de mes</span>
+                  <span className="text-sm font-bold text-emerald-600">
+                    ${(stats?.ingresosProyectados ?? 0).toLocaleString("es-MX")}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between border-t border-border/40 pt-3 mt-1">
+                  <span className="text-sm text-muted-foreground">Walk-ins este mes</span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {stats?.walkInsEsteMes ?? 0}
+                  </span>
+                </div>
+                {stats && stats.ingresosProyectados > 0 && (
+                  <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-2">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full"
+                      style={{
+                        width: `${Math.min((stats.ingresoseMes / stats.ingresosProyectados) * 100, 100)}%`,
+                      }}
+                    />
+                  </div>
+                )}
+                {stats && stats.ingresoseMes === 0 && stats.ingresosProyectados === 0 && (
+                  <p className="text-xs text-muted-foreground text-center pt-2">
+                    Los datos de ingresos aparecerán cuando registres citas completadas.
+                  </p>
+                )}
+              </div>
+            </div>
+          </motion.section>
+
+          {/* Acciones rápidas */}
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.37 }}
+          >
+            <div className="bg-card border border-border/50 rounded-xl p-5 h-full">
+              <h2 className="font-semibold text-foreground mb-4">Acciones rápidas</h2>
+              <div className="grid grid-cols-1 gap-2">
+                {(stats?.tieneServicios
+                  ? [
+                      { icono: UserPlus, label: "Registrar walk-in", href: "/dashboard/walk-in", color: "text-blue-600 bg-blue-50" },
+                      { icono: FileUp, label: "Importar clientes", href: "/dashboard/importar", color: "text-violet-600 bg-violet-50" },
+                      { icono: Sparkles, label: "Ver sugerencias IA", href: "/dashboard/agentes", color: "text-amber-600 bg-amber-50" },
+                      { icono: TrendingUp, label: "Analítica del negocio", href: "/dashboard/analytics", color: "text-emerald-600 bg-emerald-50" },
+                    ]
+                  : [
+                      { icono: Settings, label: "Crear primer servicio", href: "/dashboard/configuracion", color: "text-blue-600 bg-blue-50" },
+                      { icono: CalendarDays, label: "Configurar horarios", href: "/dashboard/configuracion", color: "text-violet-600 bg-violet-50" },
+                      { icono: UserPlus, label: "Registrar walk-in", href: "/dashboard/walk-in", color: "text-amber-600 bg-amber-50" },
+                      { icono: FileUp, label: "Importar clientes", href: "/dashboard/importar", color: "text-emerald-600 bg-emerald-50" },
+                    ]
+                ).map((accion) => (
+                  <Link
+                    key={accion.href}
+                    href={accion.href}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted transition-colors"
+                  >
+                    <div className={`p-1.5 rounded-lg ${accion.color.split(" ")[1]}`}>
+                      <accion.icono className={`h-4 w-4 ${accion.color.split(" ")[0]}`} />
+                    </div>
+                    <span className="text-sm font-medium text-foreground">{accion.label}</span>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground ml-auto" />
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </motion.section>
+        </div>
 
         {/* Grafico y actividad */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -361,7 +482,7 @@ export default function DashboardPage() {
                     color: "bg-primary",
                   },
                   {
-                    label: "Total pacientes",
+                    label: "Total usuarios",
                     valor: stats?.totalPacientes ?? "—",
                     color: "bg-green-500",
                   },
