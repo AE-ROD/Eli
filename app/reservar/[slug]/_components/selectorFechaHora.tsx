@@ -7,6 +7,7 @@ import { t } from "@/lib/i18n/booking"
 interface SelectorFechaHoraProps {
   slug: string
   servicioId: string
+  memberId?: string | null
   diasDisponibles: number[]
   fechaSeleccionada: string
   horaSeleccionada: string
@@ -18,6 +19,7 @@ interface SelectorFechaHoraProps {
 export function SelectorFechaHora({
   slug,
   servicioId,
+  memberId,
   diasDisponibles,
   fechaSeleccionada,
   horaSeleccionada,
@@ -42,13 +44,14 @@ export function SelectorFechaHora({
     setCargandoSlots(true)
     setSlots([])
     onHora("")
-    fetch(`/api/reservar/${slug}/slots?fecha=${fechaSeleccionada}&servicioId=${servicioId}`)
+    const url = `/api/reservar/${slug}/slots?fecha=${fechaSeleccionada}&servicioId=${servicioId}${memberId ? `&memberId=${memberId}` : ""}`
+    fetch(url)
       .then((r) => r.json())
       .then((data) => setSlots(data.slots ?? []))
       .catch(() => setSlots([]))
       .finally(() => setCargandoSlots(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fechaSeleccionada, servicioId])
+  }, [fechaSeleccionada, servicioId, memberId])
 
   // Day headers using Intl (T-DR4)
   const cabeceraDias = useMemo(() => {

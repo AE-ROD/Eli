@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, type ButtonHTMLAttributes, type ReactNode } from "react"
+import { useState, useEffect, useCallback, type ButtonHTMLAttributes, type ReactNode } from "react"
 import { User, Mail, Phone, CreditCard, MessageSquare, CheckCircle2, ChevronRight, ChevronLeft, Check, CalendarPlus, MessageCircle, AlertTriangle, Loader2 } from "lucide-react"
 import { CampoFormulario } from "@/components/app/formularios/campo-formulario"
 import { SelectorServicio, type ServicioPublico } from "./selectorServicio"
@@ -142,6 +142,8 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios, lo
   const [paso, setPaso] = useState<Paso>(1)
   const [dir, setDir] = useState(0)
   const [servicioSel, setServicioSel] = useState<ServicioPublico | null>(null)
+  const [miembros, setMiembros] = useState<{ id: string; nombre: string }[]>([])
+  const [miembroSel, setMiembroSel] = useState<{ id: string; nombre: string } | null>(null)
   const [fecha, setFecha] = useState("")
   const [hora, setHora] = useState("")
   const [nombre, setNombre] = useState("")
@@ -169,6 +171,20 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios, lo
     const timer = setTimeout(() => setSlotTakenToast(false), 5000)
     return () => clearTimeout(timer)
   }, [slotTakenToast])
+
+  useEffect(() => {
+    if (!servicioSel) return
+    fetch(`/api/reservar/${slug}/miembros`)
+      .then((r) => r.json())
+      .then((d: { miembros?: { id: string; nombre: string }[] }) => setMiembros(d.miembros ?? []))
+      .catch(() => setMiembros([]))
+  }, [slug, servicioSel])
+
+  const seleccionarMiembro = useCallback((m: { id: string; nombre: string } | null) => {
+    setMiembroSel(m)
+    setFecha("")
+    setHora("")
+  }, [])
 
   const diasDisponibles = horarios.map((h) => h.dayOfWeek)
 
@@ -198,6 +214,7 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios, lo
           email: email || undefined,
           telefono: telefono || undefined,
           comentarios: comentarios || undefined,
+          memberId: miembroSel?.id || undefined,
         }),
       })
       const data = await res.json()
@@ -338,11 +355,58 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios, lo
       </nav>
 
       <div>
-        {/* Step 1: Service */}
+        {/* Step 1: Service + optional worker picker */}
         {paso === 1 && (
           <div key="paso1" className={dir === 0 ? undefined : dir > 0 ? motionStyles.stepForward : motionStyles.stepBackward}>
             <h2 className="font-semibold text-foreground mb-4">{t(locale, "whatService")}</h2>
-            <SelectorServicio servicios={servicios} seleccionado={servicioSel} onSeleccionar={setServicioSel} locale={locale} />
+            <SelectorServicio
+              servicios={servicios}
+              seleccionado={servicioSel}
+              onSeleccionar={(s) => { setServicioSel(s); setMiembroSel(null); setFecha(""); setHora("") }}
+              locale={locale}
+            />
+
+            {servicioSel && miembros.length >= 2 && (
+              <div className="mt-6">
+                <h3 className="font-semibold text-foreground mb-3 text-sm">{t(locale, "chooseSpecialist")}</h3>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {/* "Cualquier especialista" option */}
+                  <button
+                    type="button"
+                    onClick={() => seleccionarMiembro(null)}
+                    className={`flex flex-col items-center gap-2 p-3 rounded-xl border text-sm transition-all ${
+                      miembroSel === null
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-border hover:border-primary/40 text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold ${miembroSel === null ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+                      ✦
+                    </div>
+                    <span className="font-medium text-center leading-tight">{t(locale, "anySpecialist")}</span>
+                  </button>
+
+                  {miembros.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => seleccionarMiembro(m)}
+                      className={`flex flex-col items-center gap-2 p-3 rounded-xl border text-sm transition-all ${
+                        miembroSel?.id === m.id
+                          ? "border-primary bg-primary/5 text-primary"
+                          : "border-border hover:border-primary/40 text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold ${miembroSel?.id === m.id ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+                        {m.nombre.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="font-medium text-center leading-tight">{m.nombre.split(" ")[0]}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="mt-6 flex justify-end">
               <BotonReserva
                 disabled={!puedeAvanzarPaso1}
@@ -363,6 +427,7 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios, lo
             <SelectorFechaHora
               slug={slug}
               servicioId={servicioSel!.id}
+              memberId={miembroSel?.id ?? null}
               diasDisponibles={diasDisponibles}
               fechaSeleccionada={fecha}
               horaSeleccionada={hora}
@@ -404,6 +469,9 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios, lo
                 </span>
               </p>
               <p className="text-muted-foreground">{t(locale, "time")}: <span className="text-foreground font-medium">{hora}</span></p>
+              {miembroSel && (
+                <p className="text-muted-foreground">{t(locale, "specialist")}: <span className="text-foreground font-medium">{miembroSel.nombre}</span></p>
+              )}
               {servicioSel?.price != null && (
                 <p className="text-muted-foreground">{t(locale, "price")}: <span className="text-foreground font-medium tabular-nums">${servicioSel.price.toLocaleString("es-ES")}</span></p>
               )}

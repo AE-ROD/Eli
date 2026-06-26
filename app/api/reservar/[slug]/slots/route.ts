@@ -43,6 +43,7 @@ export async function GET(
   const { searchParams } = new URL(request.url)
   const fecha = searchParams.get("fecha")
   const servicioId = searchParams.get("servicioId")
+  const memberIdFiltro = searchParams.get("memberId") ?? null
 
   if (!fecha || !servicioId) {
     return NextResponse.json({ error: "Faltan parámetros: fecha y servicioId" }, { status: 400 })
@@ -75,7 +76,10 @@ export async function GET(
 
   // T14: Check if business has active workers with per-worker schedules
   const miembros = await prisma.businessMember.findMany({
-    where: { businessId: negocio.id },
+    where: {
+      businessId: negocio.id,
+      ...(memberIdFiltro ? { id: memberIdFiltro } : {}),
+    },
     select: {
       id: true,
       workSchedules: {
@@ -88,15 +92,13 @@ export async function GET(
   const miembrosConHorario = miembros.filter((m) => m.workSchedules.length > 0)
 
   if (miembrosConHorario.length > 0) {
-    // T14: Union of available slots across all workers
-    // A slot is available if at least one worker is free during it
-
-    // Fetch all appointments for the business that day, grouped by worker
+    // Union of available slots (or single-worker slots when memberIdFiltro is set)
     const citasDelDia = await prisma.appointment.findMany({
       where: {
         businessId: negocio.id,
         startTime: { gte: inicioDiaLocal, lte: finDiaLocal },
         status: { notIn: ["cancelada"] },
+        ...(memberIdFiltro ? { memberId: memberIdFiltro } : {}),
       },
       select: { memberId: true, startTime: true, endTime: true },
     })
@@ -106,7 +108,6 @@ export async function GET(
     for (const miembro of miembrosConHorario) {
       const horario = miembro.workSchedules[0]
 
-      // Appointments for this specific worker
       const citasMiembro = citasDelDia
         .filter((c) => c.memberId === miembro.id)
         .map((c) => ({
@@ -125,7 +126,6 @@ export async function GET(
       }
     }
 
-    // Return sorted union
     const slots = Array.from(slotsDisponibles).sort()
     return NextResponse.json({ slots })
   }
