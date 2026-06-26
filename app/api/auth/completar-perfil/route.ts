@@ -42,14 +42,27 @@ export async function POST(request: NextRequest) {
       slug = `${slugBase}-${contador++}`
     }
 
-    const negocio = await prisma.business.create({
-      data: {
-        name: nombreNegocio,
-        type: tipoNegocio,
-        slug,
-        teamSize,
-        userId,
-      },
+    const negocio = await prisma.$transaction(async (tx) => {
+      const creado = await tx.business.create({
+        data: {
+          name: nombreNegocio,
+          type: tipoNegocio,
+          slug,
+          teamSize,
+          userId,
+        },
+      })
+
+      await tx.businessMember.create({
+        data: {
+          businessId: creado.id,
+          userId,
+          role: "admin",
+          isOwner: true,
+        },
+      })
+
+      return creado
     })
 
     return NextResponse.json(negocio)

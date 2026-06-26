@@ -1,8 +1,8 @@
 "use client"
 
-import { Search, Grid3X3, List } from "lucide-react"
+import { Search, Grid3X3, List, UserPlus } from "lucide-react"
 
-const ETIQUETAS = ["Todos", "VIP", "Frecuente", "Nuevo", "Inactivo"]
+const ETIQUETAS = ["Todos", "Walk-in", "VIP", "Frecuente", "Nuevo", "Inactivo"]
 
 interface FiltrosPacientesProps {
   busqueda: string
@@ -39,12 +39,15 @@ export function FiltrosPacientes({
           <button
             key={etiqueta}
             onClick={() => onEtiqueta(etiqueta)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
               etiquetaActiva === etiqueta
-                ? "bg-primary text-primary-foreground"
+                ? etiqueta === "Walk-in"
+                  ? "bg-amber-500 text-white"
+                  : "bg-primary text-primary-foreground"
                 : "bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-muted"
             }`}
           >
+            {etiqueta === "Walk-in" && <UserPlus className="h-3.5 w-3.5" />}
             {etiqueta}
           </button>
         ))}

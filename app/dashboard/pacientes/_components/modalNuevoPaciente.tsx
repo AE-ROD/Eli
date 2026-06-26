@@ -41,7 +41,7 @@ export function ModalNuevoPaciente({
         exit={{ scale: 0.9, opacity: 0 }}
       >
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-foreground">Nuevo paciente</h2>
+          <h2 className="text-xl font-bold text-foreground">Nuevo usuario</h2>
           <button onClick={onCerrar} className="p-1 rounded-lg hover:bg-muted transition-colors">
             <X className="h-5 w-5" />
           </button>
@@ -50,7 +50,7 @@ export function ModalNuevoPaciente({
         <form onSubmit={onSubmit} className="space-y-4">
           <CampoFormulario
             etiqueta="Nombre completo"
-            placeholder="Nombre del paciente"
+            placeholder="Nombre del usuario"
             value={form.nombre}
             onChange={(e) => onFormChange("nombre", e.target.value)}
             icono={<User className="h-4 w-4" />}
@@ -77,7 +77,7 @@ export function ModalNuevoPaciente({
               Cancelar
             </BotonPrimario>
             <BotonPrimario type="submit" anchoCompleto cargando={guardando}>
-              Guardar paciente
+              Guardar usuario
             </BotonPrimario>
           </div>
         </form>

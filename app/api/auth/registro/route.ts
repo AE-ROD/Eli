@@ -74,23 +74,36 @@ export async function POST(request: NextRequest) {
     const slug = await slugUnico(datos.nombreNegocio)
     const horarios = horariosDefault(datos.tipoNegocio)
 
-    const usuario = await prisma.user.create({
-      data: {
-        name: datos.nombre,
-        email: datos.email,
-        password: passwordHash,
-        business: {
-          create: {
-            name: datos.nombreNegocio,
-            type: datos.tipoNegocio,
-            slug,
-            workSchedules: {
-              create: horarios,
+    const usuario = await prisma.$transaction(async (tx) => {
+      const creado = await tx.user.create({
+        data: {
+          name: datos.nombre,
+          email: datos.email,
+          password: passwordHash,
+          business: {
+            create: {
+              name: datos.nombreNegocio,
+              type: datos.tipoNegocio,
+              slug,
+              workSchedules: {
+                create: horarios,
+              },
             },
           },
         },
-      },
-      include: { business: true },
+        include: { business: true },
+      })
+
+      await tx.businessMember.create({
+        data: {
+          businessId: creado.business!.id,
+          userId: creado.id,
+          role: "admin",
+          isOwner: true,
+        },
+      })
+
+      return creado
     })
 
     return NextResponse.json({

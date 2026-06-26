@@ -2,16 +2,16 @@
 
 import { useRef, useEffect, useState } from "react"
 import { motion } from "framer-motion"
-import { Send, Phone, Video, Calendar, MoreVertical, Smile } from "lucide-react"
+import { AlertCircle, Send, Smile, UsersRound } from "lucide-react"
 import { AvatarUsuario } from "@/components/app/comunes/avatar-usuario"
 import { BurbujaMensaje, type Mensaje } from "@/components/app/comunes/burbuja-mensaje"
 import type { ConversacionAPI, MensajeAPI } from "./listaConversaciones"
 
 const RESPUESTAS_RAPIDAS = [
-  "¡Hola! ¿En qué puedo ayudarte?",
-  "Tu cita está confirmada",
-  "Te envío los detalles por aquí",
-  "¿Prefieres llamar para más información?",
+  "¿Cuántas personas quedan por atender hoy?",
+  "Estoy teniendo un problema en recepción",
+  "¿Alguien puede apoyar este turno?",
+  "Queda actualizado el estado de la agenda",
 ]
 
 function mensajeAPIaMensaje(m: MensajeAPI): Mensaje {
@@ -70,23 +70,14 @@ export function AreaChat({ conversacion, mensajesAPI, cargando, onEnviar }: Area
           </div>
         </div>
         <div className="flex items-center gap-1">
-          {conversacion.patientPhone && (
-            <a
-              href={`tel:${conversacion.patientPhone}`}
-              className="p-2 rounded-lg hover:bg-muted transition-colors"
-            >
-              <Phone className="h-5 w-5 text-muted-foreground" />
-            </a>
-          )}
-          <button className="p-2 rounded-lg hover:bg-muted transition-colors">
-            <Video className="h-5 w-5 text-muted-foreground" />
-          </button>
-          <button className="p-2 rounded-lg hover:bg-muted transition-colors">
-            <Calendar className="h-5 w-5 text-muted-foreground" />
-          </button>
-          <button className="p-2 rounded-lg hover:bg-muted transition-colors">
-            <MoreVertical className="h-5 w-5 text-muted-foreground" />
-          </button>
+          <span className="hidden items-center gap-1 rounded-full bg-muted px-3 py-1.5 text-xs text-muted-foreground sm:flex">
+            <UsersRound className="h-3.5 w-3.5" />
+            Equipo
+          </span>
+          <span className="hidden items-center gap-1 rounded-full bg-primary/10 px-3 py-1.5 text-xs text-primary sm:flex">
+            <AlertCircle className="h-3.5 w-3.5" />
+            Interno
+          </span>
         </div>
       </header>
 
@@ -98,7 +89,7 @@ export function AreaChat({ conversacion, mensajesAPI, cargando, onEnviar }: Area
           </div>
         ) : mensajes.length === 0 ? (
           <div className="flex justify-center py-8">
-            <p className="text-sm text-muted-foreground">Sin mensajes aún. ¡Sé el primero en escribir!</p>
+            <p className="text-sm text-muted-foreground">Sin mensajes aún. Deja la primera actualización para el equipo.</p>
           </div>
         ) : (
           mensajes.map((m) => <BurbujaMensaje key={m.id} mensaje={m} />)
@@ -131,7 +122,7 @@ export function AreaChat({ conversacion, mensajesAPI, cargando, onEnviar }: Area
                   handleEnviar()
                 }
               }}
-              placeholder="Escribe un mensaje..."
+              placeholder="Escribe una actualización para el equipo..."
               rows={1}
               className="w-full px-4 py-3 pr-10 rounded-xl border border-border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 max-h-32"
             />

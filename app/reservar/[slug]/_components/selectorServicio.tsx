@@ -1,6 +1,5 @@
 "use client"
 
-import { motion } from "framer-motion"
 import { Clock, DollarSign } from "lucide-react"
 import { t } from "@/lib/i18n/booking"
 
@@ -32,17 +31,15 @@ export function SelectorServicio({ servicios, seleccionado, onSeleccionar, local
   return (
     <div className="grid gap-3">
       {servicios.map((s) => (
-        <motion.button
+        <button
           key={s.id}
           type="button"
           onClick={() => onSeleccionar(s)}
-          className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+          className={`w-full text-left p-4 rounded-xl border-2 transition-all hover:scale-[1.01] active:scale-[0.99] ${
             seleccionado?.id === s.id
               ? "border-primary bg-primary/5"
               : "border-border hover:border-primary/40 hover:bg-muted/50"
           }`}
-          whileHover={{ scale: 1.01 }}
-          whileTap={{ scale: 0.99 }}
           aria-pressed={seleccionado?.id === s.id}
         >
           <div className="flex items-start justify-between gap-3">
@@ -74,7 +71,7 @@ export function SelectorServicio({ servicios, seleccionado, onSeleccionar, local
               </span>
             )}
           </div>
-        </motion.button>
+        </button>
       ))}
     </div>
   )

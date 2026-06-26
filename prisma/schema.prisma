@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -45,25 +46,64 @@ model Business {
   conversations     Conversation[]
   members           BusinessMember[]
   invitations       WorkerInvitation[]
+  roles             BusinessRole[]
+  shiftNotes        ShiftNote[]
+  shiftCloses       ShiftClose[]
+  savedReports      SavedReport[]
+  scheduledReports  ScheduledReport[]
+  dataImports       DataImport[]
 
   @@map("negocios")
 }
 
-model BusinessMember {
-  id         String   @id @default(cuid())
-  businessId String
-  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role       String   @default("worker") // "admin" | "worker"
-  createdAt  DateTime @default(now())
+// Roles personalizados por negocio (plan Pro/Team)
+model BusinessRole {
+  id          String           @id @default(cuid())
+  businessId  String
+  business    Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  permissions Json
+  isDefault   Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  members     BusinessMember[]
 
-  workSchedules WorkSchedule[]
-  appointments  Appointment[]
+  @@unique([businessId, name])
+  @@index([businessId])
+  @@map("roles_negocio")
+}
+
+model BusinessMember {
+  id           String        @id @default(cuid())
+  businessId   String
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         String        @default("worker") // "owner" | "admin" | "manager" | "worker" | "viewer"
+  customRoleId String?
+  customRole   BusinessRole? @relation(fields: [customRoleId], references: [id], onDelete: SetNull)
+  permissions  Json?         // override granular, solo cuando customRoleId es null
+  isOwner      Boolean       @default(false) // creador del negocio, no degradable
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  createdAt    DateTime      @default(now())
+
+  workSchedules    WorkSchedule[]
+  appointments     Appointment[]
+  authoredNotes    ShiftNote[]    @relation("ShiftNoteAuthor")
+  assignedNotes    ShiftNote[]    @relation("ShiftNoteAssignee")
+  resolvedNotes    ShiftNote[]    @relation("ShiftNoteResolver")
+  closedShifts     ShiftClose[]   @relation("ShiftCloseClosedBy")
+  reviewedShifts   ShiftClose[]   @relation("ShiftCloseReviewedBy")
+  savedReports     SavedReport[]
+  scheduledReports ScheduledReport[]
+  dataImports      DataImport[]
 
   @@unique([businessId, userId])
   @@index([businessId])
   @@index([userId])
+  @@index([customRoleId])
   @@map("miembros_negocio")
 }
 
@@ -147,9 +187,13 @@ model Appointment {
   startTime        DateTime
   endTime          DateTime
   status           String   @default("pendiente") // pendiente, confirmada, en-progreso, completada, cancelada
+  isWalkIn         Boolean  @default(false)
   notes            String?  // notas internas del profesional
   clientComments   String?  // comentarios del cliente al reservar
   price            Float?
+  paymentMethod    String?
+  paymentBreakdown Json?
+  tipAmount        Float?
   reminderSentAt   DateTime?
   patientId        String?
   patient          Patient?        @relation(fields: [patientId], references: [id])
@@ -192,4 +236,194 @@ model Message {
 
   @@index([conversationId])
   @@map("mensajes")
+}
+
+enum ShiftNoteType {
+  INCIDENTE
+  OBSERVACION
+  PENDIENTE
+  TRANSFERENCIA
+  RECORDATORIO
+}
+
+enum ShiftNotePriority {
+  NORMAL
+  ALTA
+  URGENTE
+}
+
+enum ShiftNoteStatus {
+  ACTIVA
+  EN_PROGRESO
+  RESUELTA
+  TRANSFERIDA
+  ARCHIVADA
+}
+
+model ShiftNote {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  authorId String
+  author   BusinessMember @relation("ShiftNoteAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  assignedTo String?
+  assignee   BusinessMember? @relation("ShiftNoteAssignee", fields: [assignedTo], references: [id], onDelete: SetNull)
+
+  resolvedBy String?
+  resolver   BusinessMember? @relation("ShiftNoteResolver", fields: [resolvedBy], references: [id], onDelete: SetNull)
+
+  type     ShiftNoteType
+  priority ShiftNotePriority @default(NORMAL)
+  status   ShiftNoteStatus   @default(ACTIVA)
+  title    String
+  content  String
+  tags     String[]          @default([])
+
+  shiftDate   DateTime
+  shiftPeriod String?
+
+  resolvedAt        DateTime?
+  transferredToDate DateTime?
+
+  seenBy String[] @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, shiftDate])
+  @@index([businessId, status])
+  @@index([authorId])
+  @@map("notas_turno")
+}
+
+enum ShiftCloseStatus {
+  BORRADOR
+  CERRADO
+  REVISADO
+}
+
+enum PaymentMethod {
+  EFECTIVO
+  TARJETA_DEBITO
+  TARJETA_CREDITO
+  TRANSFERENCIA
+  OTRO
+}
+
+model ShiftClose {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  closedById String
+  closedBy   BusinessMember @relation("ShiftCloseClosedBy", fields: [closedById], references: [id], onDelete: Cascade)
+
+  reviewedById String?
+  reviewedBy   BusinessMember? @relation("ShiftCloseReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  shiftDate      DateTime
+  shiftPeriod    String?
+  shiftStartTime DateTime?
+  shiftEndTime   DateTime?
+
+  status ShiftCloseStatus @default(BORRADOR)
+
+  appointmentsTotal     Int @default(0)
+  appointmentsCompleted Int @default(0)
+  appointmentsCancelled Int @default(0)
+  appointmentsNoShow    Int @default(0)
+  appointmentsPending   Int @default(0)
+
+  expectedRevenue Decimal? @db.Decimal(10, 2)
+  declaredRevenue Decimal? @db.Decimal(10, 2)
+  discrepancy     Decimal? @db.Decimal(10, 2)
+
+  cashOpening     Decimal? @db.Decimal(10, 2)
+  cashClosing     Decimal? @db.Decimal(10, 2)
+  cashWithdrawals Decimal? @db.Decimal(10, 2)
+  cashDeposits    Decimal? @db.Decimal(10, 2)
+
+  paymentBreakdown    Json?
+  cashExpenses        Json?
+  cashDenominations   Json?
+  bankDepositVerified Boolean?
+
+  tipsTotal     Decimal? @db.Decimal(10, 2)
+  tipsBreakdown Json?
+
+  pendingItems String[] @default([])
+  observations String?
+  reviewNotes  String?
+
+  closedAt   DateTime?
+  reviewedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([businessId, shiftDate, shiftPeriod, closedById])
+  @@index([businessId, shiftDate])
+  @@index([closedById])
+  @@map("cierres_turno")
+}
+
+model SavedReport {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   BusinessMember @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  reportType  String
+  filters     Json
+  isPinned    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([businessId])
+  @@map("reportes_guardados")
+}
+
+model ScheduledReport {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   BusinessMember @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  name        String
+  reportType  String
+  filters     Json
+  frequency   String
+  dayOfWeek   Int?
+  dayOfMonth  Int?
+  sendTime    String
+  recipients  String[]
+  isActive    Boolean   @default(true)
+  lastSentAt  DateTime?
+  nextSendAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([businessId])
+  @@index([nextSendAt, isActive])
+  @@map("reportes_programados")
+}
+
+model DataImport {
+  id           String         @id @default(cuid())
+  businessId   String
+  business     Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdById  String
+  createdBy    BusinessMember @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  fileName     String
+  rowsTotal    Int            @default(0)
+  rowsImported Int            @default(0)
+  rowsSkipped  Int            @default(0)
+  createdAt    DateTime       @default(now())
+
+  @@index([businessId])
+  @@map("importaciones_datos")
 }

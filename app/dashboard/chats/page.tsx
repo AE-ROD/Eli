@@ -8,7 +8,7 @@ import { ListaConversaciones, type ConversacionAPI, type MensajeAPI } from "./_c
 import { AreaChat } from "./_components/areaChat"
 import { ModalNuevaConversacion, type FormNuevaConversacion } from "./_components/modalNuevaConversacion"
 
-const FORM_INICIAL: FormNuevaConversacion = { nombre: "", telefono: "" }
+const FORM_INICIAL: FormNuevaConversacion = { titulo: "", contexto: "" }
 
 export default function PaginaChats() {
   const [conversaciones, setConversaciones] = useState<ConversacionAPI[]>([])
@@ -75,8 +75,8 @@ export default function PaginaChats() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          patientName: formNueva.nombre,
-          patientPhone: formNueva.telefono || undefined,
+          patientName: formNueva.titulo,
+          patientPhone: formNueva.contexto || undefined,
         }),
       })
       if (res.ok) {
@@ -94,9 +94,9 @@ export default function PaginaChats() {
   return (
     <div className="min-h-screen flex flex-col">
       <BarraSuperior
-        titulo="Chats"
+        titulo="Mensajería interna"
         subtitulo={
-          cargandoLista ? "Cargando..." : `${conversaciones.length} conversaciones`
+          cargandoLista ? "Cargando..." : `${conversaciones.length} conversaciones del equipo`
         }
         mostrarBusqueda={false}
       />
@@ -128,9 +128,9 @@ export default function PaginaChats() {
               <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
                 <Send className="h-10 w-10 text-muted-foreground" />
               </div>
-              <h3 className="text-xl font-semibold text-foreground mb-2">Tus mensajes</h3>
+              <h3 className="text-xl font-semibold text-foreground mb-2">Conversaciones del equipo</h3>
               <p className="text-muted-foreground text-sm">
-                Selecciona una conversación para comenzar a chatear
+                Selecciona un tema para coordinar turnos, avisos o problemas operativos.
               </p>
             </motion.div>
           </div>

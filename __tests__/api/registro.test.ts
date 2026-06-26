@@ -5,6 +5,8 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     user: { findUnique: vi.fn(), create: vi.fn() },
     business: { findUnique: vi.fn() },
+    businessMember: { create: vi.fn() },
+    $transaction: vi.fn(),
   },
 }))
 
@@ -30,7 +32,10 @@ function makeRequest(body: object) {
 }
 
 describe("POST /api/auth/registro", () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => callback(prisma))
+  })
 
   it("returns 400 when email is already taken", async () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "existing" } as never)

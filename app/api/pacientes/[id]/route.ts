@@ -31,13 +31,25 @@ export async function GET(
     include: {
       appointments: {
         orderBy: { startTime: "desc" },
-        take: 20,
+        take: 50,
+        select: {
+          id: true,
+          title: true,
+          startTime: true,
+          endTime: true,
+          status: true,
+          isWalkIn: true,
+          price: true,
+          notes: true,
+          service: { select: { name: true } },
+          member: { select: { user: { select: { name: true } } } },
+        },
       },
     },
   })
 
   if (!paciente) {
-    return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 })
+    return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 })
   }
 
   return NextResponse.json(paciente)
@@ -55,7 +67,7 @@ export async function PUT(
   const { id } = await params
   const existente = await verificarPaciente(id, session.user.businessId)
   if (!existente) {
-    return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 })
+    return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 })
   }
 
   try {
@@ -94,13 +106,18 @@ export async function DELETE(
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
+  const role = (session.user as any).role as string | undefined
+  if (!["owner", "admin"].includes(role ?? "")) {
+    return NextResponse.json({ error: "Solo administradores pueden eliminar usuarios" }, { status: 403 })
+  }
+
   const { id } = await params
   const existente = await verificarPaciente(id, session.user.businessId)
   if (!existente) {
-    return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 })
+    return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 })
   }
 
   await prisma.patient.delete({ where: { id } })
 
-  return NextResponse.json({ mensaje: "Paciente eliminado" })
+  return NextResponse.json({ mensaje: "Usuario eliminado" })
 }

@@ -47,7 +47,7 @@ export function ListaConversaciones({
 }: ListaConversacionesProps) {
   const filtradas = conversaciones.filter((c) =>
     c.patientName.toLowerCase().includes(busqueda.toLowerCase()) ||
-    (c.patientPhone ?? "").includes(busqueda)
+    (c.patientPhone ?? "").toLowerCase().includes(busqueda.toLowerCase())
   )
 
   return (
@@ -57,7 +57,7 @@ export function ListaConversaciones({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Buscar conversación..."
+            placeholder="Buscar tema interno..."
             value={busqueda}
             onChange={(e) => onBusqueda(e.target.value)}
             className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -66,7 +66,7 @@ export function ListaConversaciones({
         <button
           onClick={onNueva}
           className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-          title="Nueva conversación"
+          title="Nueva conversación interna"
         >
           <MessageSquarePlus className="h-5 w-5" />
         </button>
@@ -75,7 +75,7 @@ export function ListaConversaciones({
       <div className="flex-1 overflow-y-auto">
         {filtradas.length === 0 ? (
           <div className="p-6 text-center text-sm text-muted-foreground">
-            Sin conversaciones
+            Sin conversaciones internas
           </div>
         ) : (
           filtradas.map((conv) => {
@@ -99,7 +99,7 @@ export function ListaConversaciones({
                   </div>
                   <p className="text-sm text-muted-foreground truncate">
                     {ultimo
-                      ? (ultimo.fromBusiness ? "Tú: " : "") + ultimo.content
+                      ? (ultimo.fromBusiness ? "Equipo: " : "") + ultimo.content
                       : "Sin mensajes"}
                   </p>
                 </div>

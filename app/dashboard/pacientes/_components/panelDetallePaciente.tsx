@@ -4,8 +4,9 @@ import { motion } from "framer-motion"
 import { AvatarUsuario } from "@/components/app/comunes/avatar-usuario"
 import { BotonPrimario } from "@/components/app/formularios/boton-primario"
 import { TarjetaCita, type Cita } from "@/components/app/tarjetas/tarjeta-cita"
-import { X, Mail, Phone, Calendar, Clock, FileText, Tag } from "lucide-react"
+import { X, Mail, Phone, Calendar, CalendarDays, Clock, FileText, Tag, Trash2, ExternalLink } from "lucide-react"
 import type { Paciente } from "@/components/app/tarjetas/tarjeta-paciente"
+import Link from "next/link"
 
 export interface CitaPacienteAPI {
   id: string
@@ -67,9 +68,12 @@ interface PanelDetallePacienteProps {
   raw: PacienteAPICompleto | null
   notas: string
   guardandoNotas: boolean
+  puedeEliminar: boolean
+  eliminando: boolean
   onCerrar: () => void
   onNotasChange: (v: string) => void
   onNotasBlur: () => void
+  onEliminar: () => void
 }
 
 export function PanelDetallePaciente({
@@ -77,13 +81,16 @@ export function PanelDetallePaciente({
   raw,
   notas,
   guardandoNotas,
+  puedeEliminar,
+  eliminando,
   onCerrar,
   onNotasChange,
   onNotasBlur,
+  onEliminar,
 }: PanelDetallePacienteProps) {
   return (
     <motion.aside
-      className="w-96 bg-card border border-border/50 rounded-xl overflow-hidden hidden lg:flex lg:flex-col flex-shrink-0"
+      className="hidden w-full bg-card border border-border/50 rounded-xl overflow-hidden lg:flex lg:flex-col xl:w-[22rem] 2xl:w-96 xl:flex-shrink-0"
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 20 }}
@@ -134,9 +141,22 @@ export function PanelDetallePaciente({
         </div>
 
         {/* Acciones */}
-        <div className="grid grid-cols-2 gap-2 mb-6">
-          <BotonPrimario tamaño="sm" anchoCompleto>Agendar cita</BotonPrimario>
+        <div className="grid grid-cols-1 gap-2 mb-6 2xl:grid-cols-2">
+          <Link
+            href={`/dashboard/calendario?pacienteId=${paciente.id}&pacienteNombre=${encodeURIComponent(paciente.nombre)}`}
+            className="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <CalendarDays className="h-4 w-4" />
+            Agendar cita
+          </Link>
           <BotonPrimario variante="secundario" tamaño="sm" anchoCompleto>Enviar mensaje</BotonPrimario>
+          <Link
+            href={`/dashboard/pacientes/${paciente.id}`}
+            className="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-xl border border-border/60 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <ExternalLink className="h-4 w-4" />
+            Ver perfil completo
+          </Link>
         </div>
 
         {/* Historial usando TarjetaCita compacta */}
@@ -176,13 +196,31 @@ export function PanelDetallePaciente({
             value={notas}
             onChange={(e) => onNotasChange(e.target.value)}
             onBlur={onNotasBlur}
-            placeholder="Agregar notas sobre el paciente..."
+            placeholder="Agregar notas sobre el usuario..."
             className="w-full p-3 rounded-lg border border-border bg-background text-sm resize-none h-24 focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
           {guardandoNotas && (
             <p className="text-xs text-muted-foreground mt-1">Guardando...</p>
           )}
         </div>
+
+        {puedeEliminar && (
+          <div className="mt-6 border-t border-border/50 pt-4">
+            <BotonPrimario
+              variante="secundario"
+              tamaño="sm"
+              anchoCompleto
+              cargando={eliminando}
+              icono={<Trash2 className="h-4 w-4" />}
+              onClick={onEliminar}
+            >
+              Eliminar usuario
+            </BotonPrimario>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Solo administradores pueden eliminar usuarios.
+            </p>
+          </div>
+        )}
       </div>
     </motion.aside>
   )

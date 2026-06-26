@@ -35,21 +35,21 @@ export function TarjetaPaciente({ paciente, onClick }: TarjetaPacienteProps) {
       onClick={onClick}
     >
       <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
+        <div className="min-w-0 flex items-center gap-3">
           <AvatarUsuario nombre={paciente.nombre} imagenUrl={paciente.imagenUrl} tamaño="lg" />
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h4 className="font-semibold text-foreground">{paciente.nombre}</h4>
+              <h4 className="truncate font-semibold text-foreground">{paciente.nombre}</h4>
               {paciente.etiqueta && (
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${coloresEtiqueta[paciente.etiqueta]}`}>
                   {paciente.etiqueta}
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-3 mt-1">
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
+            <div className="mt-1 min-w-0">
+              <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
                 <Mail className="h-3 w-3" />
-                {paciente.email}
+                <span className="truncate">{paciente.email}</span>
               </span>
             </div>
           </div>
@@ -59,11 +59,11 @@ export function TarjetaPaciente({ paciente, onClick }: TarjetaPacienteProps) {
         </button>
       </div>
       
-      <div className="flex items-center justify-between mt-4 pt-4 border-t border-border/50">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+      <div className="mt-4 flex flex-col gap-2 border-t border-border/50 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
             <Phone className="h-3 w-3" />
-            {paciente.telefono}
+            <span className="truncate">{paciente.telefono}</span>
           </div>
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Calendar className="h-3 w-3" />

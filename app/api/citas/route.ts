@@ -12,6 +12,9 @@ const citaSchema = z.object({
   notes: z.string().optional().or(z.literal("")),
   price: z.number().positive().optional(),
   patientId: z.string(),
+  paymentMethod: z.string().optional(),
+  paymentBreakdown: z.array(z.object({ method: z.string(), amount: z.number() })).optional(),
+  tipAmount: z.number().min(0).optional(),
 })
 
 export async function GET(request: NextRequest) {
@@ -55,6 +58,7 @@ export async function GET(request: NextRequest) {
       startTime: true,
       endTime: true,
       status: true,
+      isWalkIn: true,
       notes: true,
       price: true,
       patientId: true,
@@ -93,6 +97,9 @@ export async function POST(request: NextRequest) {
         status: datos.status ?? "pendiente",
         notes: datos.notes || null,
         price: datos.price ?? null,
+        paymentMethod: datos.paymentMethod ?? null,
+        paymentBreakdown: datos.paymentBreakdown ?? undefined,
+        tipAmount: datos.tipAmount ?? null,
         patientId: datos.patientId,
         businessId: session.user.businessId,
       },

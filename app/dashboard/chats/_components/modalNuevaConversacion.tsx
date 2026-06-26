@@ -1,13 +1,13 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { X, User, Phone } from "lucide-react"
+import { MessageSquareText, NotebookText, X } from "lucide-react"
 import { BotonPrimario } from "@/components/app/formularios/boton-primario"
 import { CampoFormulario } from "@/components/app/formularios/campo-formulario"
 
 export interface FormNuevaConversacion {
-  nombre: string
-  telefono: string
+  titulo: string
+  contexto: string
 }
 
 interface ModalNuevaConversacionProps {
@@ -40,7 +40,7 @@ export function ModalNuevaConversacion({
         exit={{ scale: 0.9, opacity: 0 }}
       >
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-foreground">Nueva conversación</h2>
+          <h2 className="text-xl font-bold text-foreground">Nueva conversación interna</h2>
           <button onClick={onCerrar} className="p-1 rounded-lg hover:bg-muted transition-colors">
             <X className="h-5 w-5" />
           </button>
@@ -48,27 +48,26 @@ export function ModalNuevaConversacion({
 
         <form onSubmit={onSubmit} className="space-y-4">
           <CampoFormulario
-            etiqueta="Nombre del cliente"
-            placeholder="Nombre completo"
-            value={form.nombre}
-            onChange={(e) => onFormChange("nombre", e.target.value)}
-            icono={<User className="h-4 w-4" />}
+            etiqueta="Tema o destinatario"
+            placeholder="Ej: Turno de hoy, Recepción, Problema con agenda"
+            value={form.titulo}
+            onChange={(e) => onFormChange("titulo", e.target.value)}
+            icono={<MessageSquareText className="h-4 w-4" />}
             required
           />
           <CampoFormulario
-            etiqueta="Teléfono (opcional)"
-            type="tel"
-            placeholder="+52 555 123 4567"
-            value={form.telefono}
-            onChange={(e) => onFormChange("telefono", e.target.value)}
-            icono={<Phone className="h-4 w-4" />}
+            etiqueta="Contexto breve (opcional)"
+            placeholder="Ej: Coordinación del staff para las próximas citas"
+            value={form.contexto}
+            onChange={(e) => onFormChange("contexto", e.target.value)}
+            icono={<NotebookText className="h-4 w-4" />}
           />
           <div className="flex gap-3 pt-2">
             <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar}>
               Cancelar
             </BotonPrimario>
             <BotonPrimario type="submit" anchoCompleto cargando={guardando}>
-              Crear
+              Crear conversación
             </BotonPrimario>
           </div>
         </form>

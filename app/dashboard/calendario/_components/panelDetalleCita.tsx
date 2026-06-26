@@ -11,6 +11,7 @@ export interface CitaAPI {
   startTime: string
   endTime: string
   status: string
+  isWalkIn: boolean
   notes: string | null
   price: number | null
   patientId: string
@@ -100,9 +101,16 @@ export function PanelDetalleCita({ cita, onCerrar, onCambiarEstado }: PanelDetal
         )}
         <div className="flex justify-between items-center py-2.5">
           <span className="text-sm text-muted-foreground">Estado</span>
-          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${etiqueta.color}`}>
-            {etiqueta.texto}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${etiqueta.color}`}>
+              {etiqueta.texto}
+            </span>
+            {cita.isWalkIn && (
+              <span className="inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                Walk-in
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

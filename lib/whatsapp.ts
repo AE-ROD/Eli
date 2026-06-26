@@ -2,7 +2,7 @@ import twilio from "twilio"
 
 let _client: ReturnType<typeof twilio> | null = null
 
-function getClient() {
+export function getClient() {
   const sid = process.env.TWILIO_ACCOUNT_SID
   const token = process.env.TWILIO_AUTH_TOKEN
   if (!sid || !token) return null        // graceful no-op when not configured
@@ -10,7 +10,7 @@ function getClient() {
   return _client
 }
 
-function toWhatsApp(phone: string): string {
+export function toWhatsApp(phone: string): string {
   // Strip everything except digits, then prefix with whatsapp:+
   const digits = phone.replace(/\D/g, "")
   return `whatsapp:+${digits}`

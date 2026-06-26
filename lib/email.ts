@@ -154,6 +154,42 @@ export async function enviarInvitacionTrabajador(datos: DatosInvitacionTrabajado
   })
 }
 
+export interface DatosNotaUrgente {
+  emailDestinatario: string
+  nombreDestinatario: string
+  nombreNegocio: string
+  nombreAutor: string
+  titulo: string
+  contenido: string
+}
+
+export async function enviarNotificacionNotaUrgente(datos: DatosNotaUrgente) {
+  const nombreNegocio = escapeHtml(datos.nombreNegocio)
+  const nombreAutor = escapeHtml(datos.nombreAutor)
+  const titulo = escapeHtml(datos.titulo)
+  const contenido = escapeHtml(datos.contenido)
+
+  return getResend().emails.send({
+    from: FROM,
+    to: datos.emailDestinatario,
+    subject: `🚨 Nota urgente — ${nombreNegocio}`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px; background: #fff;">
+        <h1 style="font-size: 24px; font-weight: 700; color: #111; margin-bottom: 8px;">Nota de turno urgente</h1>
+        <p style="color: #555; margin-bottom: 24px;">Hola <strong>${escapeHtml(datos.nombreDestinatario)}</strong>, <strong>${nombreAutor}</strong> registró una nota urgente en <strong>${nombreNegocio}</strong>.</p>
+
+        <div style="background: #fef2f2; border-radius: 12px; padding: 20px; margin-bottom: 24px; border-left: 4px solid #ef4444;">
+          <p style="margin: 0 0 8px; color: #111; font-weight: 700;">${titulo}</p>
+          <p style="margin: 0; color: #555; font-size: 14px; white-space: pre-wrap;">${contenido}</p>
+        </div>
+
+        <p style="color: #555; font-size: 14px;">Revisa el módulo de Notas de Turno en Eli para más detalles.</p>
+        <p style="color: #999; font-size: 12px; margin-top: 32px;">Enviado por Eli · Sistema de agendamiento</p>
+      </div>
+    `,
+  })
+}
+
 export async function enviarRecordatorio(datos: DatosRecordatorio) {
   const locale = datos.locale ?? "es"
   const fechaLegible = formatFechaLegible(datos.fecha, locale)

@@ -16,3 +16,9 @@ node_modules
 .next/
 .DS_Store
 /lib/generated/prisma
+.gstack/
+tsconfig.tsbuildinfo
+.context/
+.superpowers/
+http:/
+.vercel

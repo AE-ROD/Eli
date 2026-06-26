@@ -1,12 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { User, Mail, Phone, CreditCard, MessageSquare, CheckCircle2, ChevronRight, ChevronLeft, Check, CalendarPlus, MessageCircle, AlertTriangle } from "lucide-react"
-import { BotonPrimario } from "@/components/app/formularios/boton-primario"
+import { useState, useEffect, type ButtonHTMLAttributes, type ReactNode } from "react"
+import { User, Mail, Phone, CreditCard, MessageSquare, CheckCircle2, ChevronRight, ChevronLeft, Check, CalendarPlus, MessageCircle, AlertTriangle, Loader2 } from "lucide-react"
 import { CampoFormulario } from "@/components/app/formularios/campo-formulario"
 import { SelectorServicio, type ServicioPublico } from "./selectorServicio"
 import { SelectorFechaHora } from "./selectorFechaHora"
+import motionStyles from "./booking-motion.module.css"
 import { t } from "@/lib/i18n/booking"
 
 interface HorarioPublico {
@@ -25,10 +24,46 @@ interface FormularioReservaProps {
 
 type Paso = 1 | 2 | 3
 
-const stepVariants = {
-  enter: (dir: number) => ({ x: dir > 0 ? 300 : -300, opacity: 0 }),
-  center: { x: 0, opacity: 1, transition: { duration: 0.25 } },
-  exit: (dir: number) => ({ x: dir > 0 ? -300 : 300, opacity: 0, transition: { duration: 0.2 } }),
+interface BotonReservaProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  children: ReactNode
+  variante?: "primario" | "secundario"
+  cargando?: boolean
+  icono?: ReactNode
+  iconoDerecha?: boolean
+}
+
+function BotonReserva({
+  children,
+  variante = "primario",
+  cargando = false,
+  icono,
+  iconoDerecha = false,
+  disabled,
+  className = "",
+  ...props
+}: BotonReservaProps) {
+  const estilos = variante === "primario"
+    ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20"
+    : "bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border"
+
+  return (
+    <button
+      type="button"
+      disabled={disabled || cargando}
+      className={`inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium transition-all duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 ${estilos} ${className}`}
+      {...props}
+    >
+      {cargando ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <>
+          {icono && !iconoDerecha && icono}
+          {children}
+          {icono && iconoDerecha && icono}
+        </>
+      )}
+    </button>
+  )
 }
 
 function saludo(locale: string): string {
@@ -105,7 +140,7 @@ function buildWhatsAppText(locale: string, servicio: string, negocio: string, fe
 
 export function FormularioReserva({ slug, nombreNegocio, servicios, horarios, locale = "es" }: FormularioReservaProps) {
   const [paso, setPaso] = useState<Paso>(1)
-  const [dir, setDir] = useState(1)
+  const [dir, setDir] = useState(0)
   const [servicioSel, setServicioSel] = useState<ServicioPublico | null>(null)
   const [fecha, setFecha] = useState("")
   const [hora, setHora] = useState("")
@@ -197,11 +232,7 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios, lo
     ).format(new Date(`${fecha}T12:00:00`))
 
     return (
-      <motion.div
-        className="text-center py-12"
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-      >
+      <div className={`text-center py-12 ${motionStyles.confirmation}`}>
         <div className="w-20 h-20 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4">
           <CheckCircle2 className="h-10 w-10 text-success" />
         </div>
@@ -250,28 +281,23 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios, lo
             {t(locale, "shareWhatsApp")}
           </a>
         </div>
-      </motion.div>
+      </div>
     )
   }
 
   return (
     <div>
       {/* SLOT_TAKEN toast (T-DR1) */}
-      <AnimatePresence>
-        {slotTakenToast && (
-          <motion.div
+      {slotTakenToast && (
+          <div
             role="alert"
             aria-live="assertive"
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="mb-4 flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive"
+            className={`mb-4 flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive ${motionStyles.toast}`}
           >
             <AlertTriangle className="h-4 w-4 flex-shrink-0" />
             {t(locale, "slotTaken")}
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
 
       {/* Greeting */}
       <div className="mb-8">
@@ -311,28 +337,28 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios, lo
         </ol>
       </nav>
 
-      <AnimatePresence mode="wait" custom={dir}>
+      <div>
         {/* Step 1: Service */}
         {paso === 1 && (
-          <motion.div key="paso1" custom={dir} variants={stepVariants} initial="enter" animate="center" exit="exit">
+          <div key="paso1" className={dir === 0 ? undefined : dir > 0 ? motionStyles.stepForward : motionStyles.stepBackward}>
             <h2 className="font-semibold text-foreground mb-4">{t(locale, "whatService")}</h2>
             <SelectorServicio servicios={servicios} seleccionado={servicioSel} onSeleccionar={setServicioSel} locale={locale} />
             <div className="mt-6 flex justify-end">
-              <BotonPrimario
+              <BotonReserva
                 disabled={!puedeAvanzarPaso1}
                 icono={<ChevronRight className="h-4 w-4" />}
                 iconoDerecha
                 onClick={() => navPaso(2)}
               >
                 {t(locale, "continue")}
-              </BotonPrimario>
+              </BotonReserva>
             </div>
-          </motion.div>
+          </div>
         )}
 
         {/* Step 2: Date & time */}
         {paso === 2 && (
-          <motion.div key="paso2" custom={dir} variants={stepVariants} initial="enter" animate="center" exit="exit">
+          <div key="paso2" className={dir > 0 ? motionStyles.stepForward : motionStyles.stepBackward}>
             <h2 className="font-semibold text-foreground mb-4">{t(locale, "whenCome")}</h2>
             <SelectorFechaHora
               slug={slug}
@@ -345,24 +371,24 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios, lo
               locale={locale}
             />
             <div className="mt-6 flex justify-between">
-              <BotonPrimario variante="secundario" icono={<ChevronLeft className="h-4 w-4" />} onClick={() => navPaso(1)}>
+              <BotonReserva variante="secundario" icono={<ChevronLeft className="h-4 w-4" />} onClick={() => navPaso(1)}>
                 {t(locale, "back")}
-              </BotonPrimario>
-              <BotonPrimario
+              </BotonReserva>
+              <BotonReserva
                 disabled={!puedeAvanzarPaso2}
                 icono={<ChevronRight className="h-4 w-4" />}
                 iconoDerecha
                 onClick={() => navPaso(3)}
               >
                 {t(locale, "continue")}
-              </BotonPrimario>
+              </BotonReserva>
             </div>
-          </motion.div>
+          </div>
         )}
 
         {/* Step 3: Client details */}
         {paso === 3 && (
-          <motion.div key="paso3" custom={dir} variants={stepVariants} initial="enter" animate="center" exit="exit">
+          <div key="paso3" className={dir > 0 ? motionStyles.stepForward : motionStyles.stepBackward}>
             <h2 className="font-semibold text-foreground mb-4">{t(locale, "yourDetails")}</h2>
 
             {/* Booking summary (T-DR4 date formatting) */}
@@ -445,20 +471,20 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios, lo
             </div>
 
             <div className="mt-6 flex justify-between">
-              <BotonPrimario variante="secundario" icono={<ChevronLeft className="h-4 w-4" />} onClick={() => navPaso(2)}>
+              <BotonReserva variante="secundario" icono={<ChevronLeft className="h-4 w-4" />} onClick={() => navPaso(2)}>
                 {t(locale, "back")}
-              </BotonPrimario>
-              <BotonPrimario
+              </BotonReserva>
+              <BotonReserva
                 disabled={!puedeEnviar}
                 cargando={enviando}
                 onClick={confirmar}
               >
                 {enviando ? t(locale, "confirming") : t(locale, "confirmBooking")}
-              </BotonPrimario>
+              </BotonReserva>
             </div>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
+      </div>
     </div>
   )
 }

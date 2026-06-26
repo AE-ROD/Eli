@@ -2,9 +2,23 @@
 
 import { useState, useRef, useEffect } from "react"
 import { motion } from "framer-motion"
-import { X, Search, User, Stethoscope, Calendar, Clock, DollarSign, FileText } from "lucide-react"
+import { X, Search, User, Stethoscope, Calendar, Clock, DollarSign, FileText, CreditCard, Gift } from "lucide-react"
 import { BotonPrimario } from "@/components/app/formularios/boton-primario"
 import { CampoFormulario } from "@/components/app/formularios/campo-formulario"
+
+export const METODOS_PAGO = [
+  { value: "EFECTIVO", label: "Efectivo" },
+  { value: "DEBITO", label: "Débito" },
+  { value: "CREDITO", label: "Crédito" },
+  { value: "TRANSFERENCIA", label: "Transferencia" },
+  { value: "CORTESIA", label: "Cortesía" },
+  { value: "GARANTIA", label: "Garantía" },
+  { value: "GIFTCARD", label: "Gift Card" },
+  { value: "REEMBOLSO", label: "Reembolso" },
+  { value: "FIDELIZACION", label: "Tarjeta de Fidelización" },
+  { value: "INTERCAMBIO", label: "Intercambio de Servicio" },
+  { value: "dividido", label: "Pago Dividido" },
+] as const
 
 export interface FormNuevaCita {
   pacienteId: string
@@ -14,6 +28,10 @@ export interface FormNuevaCita {
   horaFin: string
   precio: string
   notas: string
+  metodoPago: string
+  propina: string
+  metodoPago2: string
+  monto2: string
 }
 
 interface PacienteSugerido {
@@ -28,13 +46,24 @@ interface ModalNuevaCitaProps {
   onFormChange: (campo: keyof FormNuevaCita, valor: string) => void
   onSubmit: (e: React.SyntheticEvent<HTMLFormElement>) => void
   onCerrar: () => void
+  pacienteInicial?: { id: string; nombre: string }
 }
 
-export function ModalNuevaCita({ form, guardando, onFormChange, onSubmit, onCerrar }: ModalNuevaCitaProps) {
-  const [busquedaPaciente, setBusquedaPaciente] = useState("")
+export function ModalNuevaCita({ form, guardando, onFormChange, onSubmit, onCerrar, pacienteInicial }: ModalNuevaCitaProps) {
+  const [busquedaPaciente, setBusquedaPaciente] = useState(pacienteInicial?.nombre ?? "")
   const [sugerencias, setSugerencias] = useState<PacienteSugerido[]>([])
-  const [pacienteNombre, setPacienteNombre] = useState("")
+  const [pacienteNombre, setPacienteNombre] = useState(pacienteInicial?.nombre ?? "")
   const [showSugerencias, setShowSugerencias] = useState(false)
+
+  useEffect(() => {
+    if (pacienteInicial) {
+      setBusquedaPaciente(pacienteInicial.nombre)
+      setPacienteNombre(pacienteInicial.nombre)
+      onFormChange("pacienteId", pacienteInicial.id)
+    }
+  // Solo al montar
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -86,14 +115,14 @@ export function ModalNuevaCita({ form, guardando, onFormChange, onSubmit, onCerr
         </div>
 
         <form onSubmit={onSubmit} className="space-y-4">
-          {/* Búsqueda de paciente */}
+          {/* Búsqueda de usuario */}
           <div className="relative">
-            <label className="block text-sm font-medium text-foreground mb-1.5">Paciente</label>
+            <label className="block text-sm font-medium text-foreground mb-1.5">Usuario</label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Buscar paciente..."
+                placeholder="Buscar usuario..."
                 value={busquedaPaciente}
                 onChange={(e) => {
                   setBusquedaPaciente(e.target.value)
@@ -170,6 +199,72 @@ export function ModalNuevaCita({ form, guardando, onFormChange, onSubmit, onCerr
             value={form.precio}
             onChange={(e) => onFormChange("precio", e.target.value)}
             icono={<DollarSign className="h-4 w-4" />}
+          />
+
+          {/* Método de pago */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1.5">
+              <span className="flex items-center gap-2">
+                <CreditCard className="h-4 w-4" />
+                Método de pago (opcional)
+              </span>
+            </label>
+            <select
+              value={form.metodoPago}
+              onChange={(e) => {
+                onFormChange("metodoPago", e.target.value)
+                if (e.target.value !== "dividido") {
+                  onFormChange("metodoPago2", "")
+                  onFormChange("monto2", "")
+                }
+              }}
+              className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            >
+              <option value="">Sin especificar</option>
+              {METODOS_PAGO.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Pago dividido */}
+          {form.metodoPago === "dividido" && (
+            <div className="p-3 rounded-lg border border-border bg-muted/30 space-y-3">
+              <p className="text-xs text-muted-foreground font-medium">Segundo método de pago</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">Método</label>
+                  <select
+                    value={form.metodoPago2}
+                    onChange={(e) => onFormChange("metodoPago2", e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    <option value="">Seleccionar...</option>
+                    {METODOS_PAGO.filter((m) => m.value !== "dividido").map((m) => (
+                      <option key={m.value} value={m.value}>{m.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <CampoFormulario
+                  etiqueta="Monto"
+                  type="number"
+                  placeholder="0"
+                  value={form.monto2}
+                  onChange={(e) => onFormChange("monto2", e.target.value)}
+                  icono={<DollarSign className="h-4 w-4" />}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Propina */}
+          <CampoFormulario
+            etiqueta="Propina (opcional)"
+            type="number"
+            placeholder="0"
+            value={form.propina}
+            onChange={(e) => onFormChange("propina", e.target.value)}
+            icono={<Gift className="h-4 w-4" />}
           />
 
           <div>

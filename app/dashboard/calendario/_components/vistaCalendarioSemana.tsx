@@ -114,7 +114,14 @@ export function VistaCalendarioSemana({ dias, citasAPI, onSeleccionar }: VistaCa
                     whileHover={{ scale: 1.02, zIndex: 10 }}
                     onClick={() => onSeleccionar(cita)}
                   >
-                    <p className="text-xs font-medium truncate">{cita.patient.name}</p>
+                    <div className="flex items-start gap-1">
+                      <p className="min-w-0 flex-1 truncate text-xs font-medium">{cita.patient.name}</p>
+                      {cita.isWalkIn && (
+                        <span className="inline-flex items-center rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white shadow-sm">
+                          W
+                        </span>
+                      )}
+                    </div>
                     {height > 32 && (
                       <p className="text-xs opacity-70 truncate">{cita.title}</p>
                     )}

@@ -1,7 +1,9 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { useSession } from "next-auth/react"
 import { AnimatePresence } from "framer-motion"
+import { Download, Loader2 } from "lucide-react"
 import { BarraSuperior } from "@/components/app/layout/barra-superior"
 import { FiltrosPacientes } from "./_components/filtrosPacientes"
 import { ListaPacientes } from "./_components/listaPacientes"
@@ -39,6 +41,7 @@ function mapearPaciente(p: PacienteAPICompleto): Paciente {
 }
 
 export default function PaginaPacientes() {
+  const { data: session } = useSession()
   const [pacientes, setPacientes] = useState<Paciente[]>([])
   const [rawMap, setRawMap] = useState<Record<string, PacienteAPICompleto>>({})
   const [total, setTotal] = useState(0)
@@ -55,9 +58,13 @@ export default function PaginaPacientes() {
   const [guardando, setGuardando] = useState(false)
   const [notas, setNotas] = useState("")
   const [guardandoNotas, setGuardandoNotas] = useState(false)
+  const [eliminando, setEliminando] = useState(false)
+  const [exportando, setExportando] = useState(false)
+  const [errorAccion, setErrorAccion] = useState<string | null>(null)
   const [formNuevo, setFormNuevo] = useState<FormNuevoPaciente>({ nombre: "", email: "", telefono: "" })
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const puedeEliminar = ["owner", "admin"].includes(((session?.user as any)?.role as string | undefined) ?? "")
 
   const fetchPacientes = useCallback(async (q: string, tag: string, pag: number, acumular = false) => {
     acumular ? setCargandoMas(true) : setCargando(true)
@@ -106,6 +113,35 @@ export default function PaginaPacientes() {
     setGuardandoNotas(false)
   }
 
+  const eliminarPaciente = async () => {
+    if (!pacienteSeleccionado || eliminando) return
+    const confirmado = window.confirm(`¿Eliminar a ${pacienteSeleccionado.nombre}? Esta acción no se puede deshacer.`)
+    if (!confirmado) return
+
+    setEliminando(true)
+    setErrorAccion(null)
+    try {
+      const res = await fetch(`/api/pacientes/${pacienteSeleccionado.id}`, { method: "DELETE" })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setErrorAccion(data.error ?? "No pudimos eliminar este usuario.")
+        return
+      }
+      setPacientes((prev) => prev.filter((p) => p.id !== pacienteSeleccionado.id))
+      setRawMap((prev) => {
+        const siguiente = { ...prev }
+        delete siguiente[pacienteSeleccionado.id]
+        return siguiente
+      })
+      setTotal((prev) => Math.max(0, prev - 1))
+      setPacienteSeleccionado(null)
+    } catch {
+      setErrorAccion("No pudimos eliminar este usuario. Revisa tu conexión e inténtalo nuevamente.")
+    } finally {
+      setEliminando(false)
+    }
+  }
+
   const crearPaciente = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault()
     setGuardando(true)
@@ -129,15 +165,65 @@ export default function PaginaPacientes() {
     }
   }
 
+  const exportarPacientes = async () => {
+    if (exportando) return
+
+    setExportando(true)
+    setErrorAccion(null)
+    let url: string | null = null
+
+    try {
+      const res = await fetch("/api/patients/export")
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setErrorAccion(data.error ?? "No pudimos exportar los usuarios.")
+        return
+      }
+
+      const blob = await res.blob()
+      url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `clientes-eli-${new Date().toISOString().split("T")[0]}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+    } catch {
+      setErrorAccion("No pudimos exportar los usuarios. Revisa tu conexión e inténtalo nuevamente.")
+    } finally {
+      if (url) {
+        const urlDescarga = url
+        window.setTimeout(() => URL.revokeObjectURL(urlDescarga), 0)
+      }
+      setExportando(false)
+    }
+  }
+
   return (
     <div className="min-h-screen">
       <BarraSuperior
-        titulo="Pacientes"
-        subtitulo={cargando ? "Cargando..." : `${total} clientes registrados`}
-        accionPrincipal={{ texto: "Nuevo paciente", onClick: () => setModalAbierto(true) }}
+        titulo="Usuarios"
+        subtitulo={cargando ? "Cargando..." : `${total} usuarios registrados`}
+        accionPrincipal={{ texto: "Nuevo usuario", onClick: () => setModalAbierto(true) }}
       />
 
       <div className="p-6">
+        <div className="mb-4 flex justify-end">
+          <button
+            type="button"
+            onClick={exportarPacientes}
+            disabled={exportando}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {exportando ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            {exportando ? "Exportando..." : "Exportar"}
+          </button>
+        </div>
+
         <FiltrosPacientes
           busqueda={busqueda}
           onBusqueda={setBusqueda}
@@ -147,8 +233,14 @@ export default function PaginaPacientes() {
           onVista={setVista}
         />
 
-        <div className="flex gap-6">
-          <div className="flex-1">
+        {errorAccion && (
+          <p role="alert" className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {errorAccion}
+          </p>
+        )}
+
+        <div className="flex flex-col gap-6 xl:flex-row">
+          <div className="min-w-0 flex-1">
             <ListaPacientes
               pacientes={pacientes}
               cargando={cargando}
@@ -157,6 +249,7 @@ export default function PaginaPacientes() {
               total={total}
               pagina={pagina}
               paginas={paginas}
+              panelAbierto={pacienteSeleccionado !== null}
               onSeleccionar={setPacienteSeleccionado}
               onCargarMas={() => fetchPacientes(busqueda, etiquetaActiva, pagina + 1, true)}
             />
@@ -169,9 +262,12 @@ export default function PaginaPacientes() {
                 raw={rawMap[pacienteSeleccionado.id] ?? null}
                 notas={notas}
                 guardandoNotas={guardandoNotas}
+                puedeEliminar={puedeEliminar}
+                eliminando={eliminando}
                 onCerrar={() => setPacienteSeleccionado(null)}
                 onNotasChange={setNotas}
                 onNotasBlur={guardarNotas}
+                onEliminar={eliminarPaciente}
               />
             )}
           </AnimatePresence>

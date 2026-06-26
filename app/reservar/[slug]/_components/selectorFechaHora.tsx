@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { motion } from "framer-motion"
 import { ChevronLeft, ChevronRight, Clock, Calendar } from "lucide-react"
 import { t } from "@/lib/i18n/booking"
 
@@ -119,7 +118,7 @@ export function SelectorFechaHora({
             : ""
 
           return (
-            <motion.button
+            <button
               key={i}
               type="button"
               disabled={!disponible}
@@ -127,17 +126,16 @@ export function SelectorFechaHora({
               aria-pressed={seleccionado}
               aria-label={fullLabel || undefined}
               onClick={() => disponible && onFecha(iso)}
-              className={`aspect-square rounded-md text-sm transition-all ${
+              className={`aspect-square rounded-md text-sm transition-all ${disponible && !seleccionado ? "hover:scale-110" : ""} ${
                 !esDelMes ? "invisible" :
                 seleccionado ? "bg-primary text-primary-foreground font-semibold" :
                 esHoy ? "ring-2 ring-primary text-primary font-semibold hover:bg-primary/10" :
                 disponible ? "hover:bg-primary/10 text-foreground" :
                 "text-muted-foreground/40 cursor-not-allowed"
               }`}
-              whileHover={disponible && !seleccionado ? { scale: 1.1 } : {}}
             >
               {esDelMes && diaNum > 0 ? diaNum : ""}
-            </motion.button>
+            </button>
           )
         })}
       </div>
@@ -163,22 +161,20 @@ export function SelectorFechaHora({
               {slots.map((slot) => {
                 const selected = horaSeleccionada === slot
                 return (
-                  <motion.button
+                  <button
                     key={slot}
                     type="button"
                     role="option"
                     aria-selected={selected}
                     onClick={() => onHora(slot)}
-                    className={`py-2 rounded-full text-sm font-medium border transition-all ${
+                    className={`py-2 rounded-full text-sm font-medium border transition-all hover:scale-105 active:scale-95 ${
                       selected
                         ? "bg-primary text-primary-foreground border-primary"
                         : "border-border hover:border-primary/50 hover:bg-primary/5 text-foreground"
                     }`}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
                   >
                     {slot}
-                  </motion.button>
+                  </button>
                 )
               })}
             </div>

@@ -57,12 +57,17 @@ export function VistaCalendarioDia({ fecha, citasAPI, onSeleccionar }: VistaCale
           <div key={hora} className="flex gap-4">
             <span className="text-sm text-muted-foreground w-16 flex-shrink-0 pt-2">{hora}</span>
             {citaEnHora ? (
-              <div className="flex-1">
+              <div className="flex-1 relative">
                 <TarjetaCita
                   cita={mapearCita(citaEnHora)}
                   compacta
                   onClick={() => onSeleccionar(citaEnHora)}
                 />
+                {citaEnHora.isWalkIn && (
+                  <span className="absolute right-2 top-2 inline-flex items-center rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white shadow-sm">
+                    W
+                  </span>
+                )}
               </div>
             ) : (
               <div className="flex-1 h-12 border border-dashed border-border/50 rounded-lg hover:bg-muted/30 cursor-pointer transition-colors" />

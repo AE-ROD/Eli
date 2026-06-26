@@ -13,13 +13,20 @@ interface ListaPacientesProps {
   total: number
   pagina: number
   paginas: number
+  panelAbierto?: boolean
   onSeleccionar: (p: Paciente) => void
   onCargarMas: () => void
 }
 
-function SkeletonPacientes({ vista }: { vista: "grid" | "lista" }) {
+function gridClass(panelAbierto?: boolean) {
+  return panelAbierto
+    ? "grid grid-cols-1 2xl:grid-cols-2 gap-4"
+    : "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
+}
+
+function SkeletonPacientes({ vista, panelAbierto }: { vista: "grid" | "lista"; panelAbierto?: boolean }) {
   return (
-    <div className={vista === "grid" ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" : "space-y-3"}>
+    <div className={vista === "grid" ? gridClass(panelAbierto) : "space-y-3"}>
       {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className="bg-card border border-border/50 rounded-xl p-4 animate-pulse">
           <div className="flex items-center gap-3 mb-4">
@@ -44,10 +51,11 @@ export function ListaPacientes({
   total,
   pagina,
   paginas,
+  panelAbierto,
   onSeleccionar,
   onCargarMas,
 }: ListaPacientesProps) {
-  if (cargando) return <SkeletonPacientes vista={vista} />
+  if (cargando) return <SkeletonPacientes vista={vista} panelAbierto={panelAbierto} />
 
   if (pacientes.length === 0) {
     return (
@@ -55,9 +63,9 @@ export function ListaPacientes({
         <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
           <User className="h-8 w-8 text-muted-foreground" />
         </div>
-        <h3 className="font-semibold text-foreground mb-2">No se encontraron pacientes</h3>
+        <h3 className="font-semibold text-foreground mb-2">No se encontraron usuarios</h3>
         <p className="text-muted-foreground text-sm">
-          Intenta cambiar los filtros o agrega un nuevo paciente
+          Intenta cambiar los filtros o agrega un nuevo usuario
         </p>
       </div>
     )
@@ -66,7 +74,7 @@ export function ListaPacientes({
   return (
     <>
       <motion.div
-        className={vista === "grid" ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" : "space-y-3"}
+        className={vista === "grid" ? gridClass(panelAbierto) : "space-y-3"}
         layout
       >
         <AnimatePresence mode="popLayout">
