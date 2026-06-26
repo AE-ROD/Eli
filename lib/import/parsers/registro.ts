@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client"
 import type { ResultadoParseo } from "@/lib/import/tipos"
 import { matchEspecialista } from "@/lib/import/matchEspecialista"
 import { normalizarNombre } from "@/lib/import/normalizar"
-import { agregarError, campo, crearResultado, fechaCampo, montoCampo, type FilaParser } from "./_helpers"
+import { agregarError, campo, crearResultado, fechaCampo, memberIdResuelto, montoCampo, type FilaParser } from "./_helpers"
 
 export interface PagoImportado {
   title: string
@@ -29,6 +29,7 @@ export async function parsearRegistro(
     const tipAmount = montoCampo(fila, ["propina"]) ?? 0
     const fechaTexto = campo(fila, ["fecha"])
     const fecha = fechaTexto ? fechaCampo(fila, ["fecha"]) : new Date()
+    const miembroResuelto = await memberIdResuelto(fila, businessId, prisma)
 
     if (!fecha) {
       agregarError(resultado.errores, indice, "Fecha inválida", fila)
@@ -43,14 +44,14 @@ export async function parsearRegistro(
       continue
     }
     const especialistaOpcional = ["VACANTE", "SIN ESPECIALISTA"].includes(especialista.toUpperCase())
-    if (!especialista) {
+    if (!especialista && !miembroResuelto) {
       agregarError(resultado.errores, indice, "Falta especialista", fila)
       continue
     }
 
-    const miembro = especialistaOpcional
+    const miembro = miembroResuelto ?? (especialistaOpcional
       ? null
-      : await matchEspecialista(normalizarNombre(especialista), businessId, prisma)
+      : await matchEspecialista(normalizarNombre(especialista), businessId, prisma))
     if (!especialistaOpcional && !miembro) {
       resultado.sinMatch.push({ indice, campo: "especialista", valor: especialista, fila })
       continue

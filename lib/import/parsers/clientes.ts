@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client"
 import type { ResultadoParseo } from "@/lib/import/tipos"
 import { matchEspecialista } from "@/lib/import/matchEspecialista"
 import { normalizarNombre } from "@/lib/import/normalizar"
-import { agregarError, campo, crearResultado, fechaCampo, tieneFormulaRota, type FilaParser } from "./_helpers"
+import { agregarError, campo, crearResultado, fechaCampo, memberIdResuelto, tieneFormulaRota, type FilaParser } from "./_helpers"
 
 export interface ClienteAgendaImportado {
   patientName: string
@@ -41,9 +41,10 @@ export async function parsearClientes(
       continue
     }
 
-    const miembro = especialista
+    const miembroResuelto = await memberIdResuelto(fila, businessId, prisma)
+    const miembro = miembroResuelto ?? (especialista
       ? await matchEspecialista(normalizarNombre(especialista), businessId, prisma)
-      : null
+      : null)
     if (especialista && !miembro) {
       resultado.sinMatch.push({ indice, campo: "especialista", valor: especialista, fila })
       continue

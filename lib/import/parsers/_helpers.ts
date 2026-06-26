@@ -1,3 +1,4 @@
+import type { PrismaClient } from "@prisma/client"
 import type { FilaError, ResultadoParseo } from "@/lib/import/tipos"
 import { parsearFechaChilena, parsearMontoCLP } from "@/lib/import/normalizar"
 
@@ -41,4 +42,18 @@ export function numeroPositivoCampo(fila: FilaParser, nombres: string[]): number
   if (!/^\d+(\.\d+)?$/.test(valor)) return null
   const numero = Number(valor)
   return Number.isFinite(numero) && numero > 0 ? numero : null
+}
+
+export async function memberIdResuelto(
+  fila: FilaParser,
+  businessId: string,
+  prisma: PrismaClient
+): Promise<{ id: string } | null> {
+  const memberId = campo(fila, ["memberId"])
+  if (!memberId) return null
+
+  return prisma.businessMember.findFirst({
+    where: { id: memberId, businessId },
+    select: { id: true },
+  })
 }

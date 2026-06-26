@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client"
 import type { ResultadoParseo } from "@/lib/import/tipos"
 import { matchEspecialista } from "@/lib/import/matchEspecialista"
 import { normalizarNombre } from "@/lib/import/normalizar"
-import { agregarError, campo, crearResultado, fechaCampo, montoCampo, type FilaParser } from "./_helpers"
+import { agregarError, campo, crearResultado, fechaCampo, memberIdResuelto, montoCampo, type FilaParser } from "./_helpers"
 
 export type BitacoraEventoImportado =
   | { tipo: "produccion"; memberId?: string; amount: number; date: Date }
@@ -45,7 +45,8 @@ export async function parsearBitacoraEventos(
       continue
     }
 
-    const miembro = await matchEspecialista(normalizarNombre(trabajadora), businessId, prisma)
+    const miembro = (await memberIdResuelto(fila, businessId, prisma))
+      ?? (await matchEspecialista(normalizarNombre(trabajadora), businessId, prisma))
     if (!miembro) {
       resultado.sinMatch.push({ indice, campo: "especialista", valor: trabajadora, fila })
       continue

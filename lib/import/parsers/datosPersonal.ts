@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client"
 import type { ResultadoParseo } from "@/lib/import/tipos"
 import { matchEspecialista } from "@/lib/import/matchEspecialista"
 import { normalizarNombre } from "@/lib/import/normalizar"
-import { agregarError, campo, crearResultado, type FilaParser } from "./_helpers"
+import { agregarError, campo, crearResultado, memberIdResuelto, type FilaParser } from "./_helpers"
 
 export interface DatosPersonalImportado {
   memberId?: string
@@ -22,8 +22,9 @@ export async function parsearDatosPersonal(
     const nombre = campo(fila, ["nombre", "especialista", "trabajadora"])
     const emergencyContactName = campo(fila, ["contactoEmergenciaNombre", "contacto emergencia nombre"])
     const emergencyContactPhone = campo(fila, ["contactoEmergenciaTelefono", "contacto emergencia telefono", "contacto emergencia teléfono"])
+    const miembroResuelto = await memberIdResuelto(fila, businessId, prisma)
 
-    if (!nombre) {
+    if (!nombre && !miembroResuelto) {
       agregarError(resultado.errores, indice, "Falta nombre", fila)
       continue
     }
@@ -32,7 +33,7 @@ export async function parsearDatosPersonal(
       continue
     }
 
-    const miembro = await matchEspecialista(normalizarNombre(nombre), businessId, prisma)
+    const miembro = miembroResuelto ?? (await matchEspecialista(normalizarNombre(nombre), businessId, prisma))
     if (!miembro) {
       resultado.sinMatch.push({ indice, campo: "especialista", valor: nombre, fila })
       continue

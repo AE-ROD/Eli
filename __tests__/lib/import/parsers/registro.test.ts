@@ -6,6 +6,9 @@ function makePrisma(miembros: { id: string; user: { name: string } }[]) {
   return {
     businessMember: {
       findMany: vi.fn().mockResolvedValue(miembros),
+      findFirst: vi.fn(({ where }) =>
+        Promise.resolve(miembros.find((miembro) => miembro.id === where.id) ?? null)
+      ),
     },
   } as unknown as PrismaClient
 }
@@ -42,6 +45,24 @@ describe("parsearRegistro", () => {
     expect(res.sinMatch).toHaveLength(1)
     expect(res.sinMatch[0].campo).toBe("especialista")
     expect(res.sinMatch[0].valor).toBe("Desconocida X")
+  })
+
+  test("memberId resuelto evita sinMatch y queda validado por negocio", async () => {
+    const prisma = makePrisma([{ id: "m1", user: { name: "Ana López" } }])
+    const filas = [{
+      fecha: "15-01-2024",
+      especialista: "Desconocida X",
+      memberId: "m1",
+      servicio: "Pedicure",
+      precio: "12.000",
+      metodoPago: "EFECTIVO",
+    }]
+
+    const res = await parsearRegistro(filas, "biz-1", prisma)
+
+    expect(res.sinMatch).toHaveLength(0)
+    expect(res.ok).toHaveLength(1)
+    expect(res.ok[0].data.memberId).toBe("m1")
   })
 
   test("pago dividido construye paymentBreakdown", async () => {

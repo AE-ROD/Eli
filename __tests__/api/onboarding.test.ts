@@ -32,6 +32,16 @@ describe("GET /api/dashboard/onboarding", () => {
     } as never)
   })
 
+  it("returns 401 without session", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(null)
+
+    const response = await GET()
+
+    expect(response.status).toBe(401)
+    expect(prisma.service.count).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toEqual({ error: "No autorizado" })
+  })
+
   it("marks every checklist item pending for a new business", async () => {
     setChecklistCounts(0, 0, 0)
 
