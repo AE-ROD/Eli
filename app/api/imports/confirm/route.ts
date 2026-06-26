@@ -2,135 +2,104 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import * as XLSX from "xlsx"
+import type { FilaSinMatch } from "@/lib/import/tipos"
+import type { FilaParser } from "@/lib/import/parsers/_helpers"
+import { parsearBitacoraEventos } from "@/lib/import/parsers/bitacoraEventos"
+import { parsearCajaChica } from "@/lib/import/parsers/cajaChica"
+import { parsearClientes } from "@/lib/import/parsers/clientes"
+import { parsearDatosPersonal } from "@/lib/import/parsers/datosPersonal"
+import { parsearEmpleadas } from "@/lib/import/parsers/empleadas"
+import { parsearListaNegra } from "@/lib/import/parsers/listaNegra"
+import { parsearPrecios } from "@/lib/import/parsers/precios"
+import { parsearRegistro } from "@/lib/import/parsers/registro"
+import { parsearTotales } from "@/lib/import/parsers/totales"
+import { persistirImport } from "../_lib/persistir"
 
-interface ColumnMapping {
-  nombre?: string
-  apellido?: string
-  telefono?: string
-  email?: string
-  notas?: string
+const parsers = {
+  precios: parsearPrecios,
+  listaNegra: parsearListaNegra,
+  clientes: parsearClientes,
+  cajaChica: parsearCajaChica,
+  bitacoraEventos: parsearBitacoraEventos,
+  totales: parsearTotales,
+  empleadas: parsearEmpleadas,
+  datosPersonal: parsearDatosPersonal,
+  registro: parsearRegistro,
 }
 
+export type TipoImport = keyof typeof parsers
+
 interface ConfirmPayload {
-  fileName: string
-  mapeo: ColumnMapping
-  file: string // base64-encoded file
+  importId: string
+  tipo: TipoImport
+  filas: FilaParser[]
+}
+
+function esObjeto(valor: unknown): valor is Record<string, unknown> {
+  return typeof valor === "object" && valor !== null && !Array.isArray(valor)
+}
+
+function esTipoImport(tipo: string): tipo is TipoImport {
+  return tipo in parsers
+}
+
+function parsePayload(body: unknown): ConfirmPayload | null {
+  if (!esObjeto(body)) return null
+  const importId = typeof body.importId === "string" ? body.importId : ""
+  const tipo = typeof body.tipo === "string" ? body.tipo : ""
+  const filas = Array.isArray(body.filas) && body.filas.every(esObjeto) ? body.filas : null
+
+  if (!importId || !esTipoImport(tipo) || !filas) return null
+  return { importId, tipo, filas }
+}
+
+function serializarSinMatch(sinMatch: FilaSinMatch[]) {
+  return sinMatch.map((fila) => ({
+    indice: fila.indice,
+    mensaje: `Sin match para ${fila.campo}: ${fila.valor}`,
+  }))
 }
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.businessId || !session.user.id) {
+  if (!session?.user?.businessId) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
   const businessId = session.user.businessId as string
 
-  const member = await prisma.businessMember.findFirst({
-    where: { userId: session.user.id, businessId },
-    select: { id: true },
-  })
-  if (!member) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 })
-  }
-
-  let body: ConfirmPayload
+  let body: unknown
   try {
     body = await request.json()
   } catch {
     return NextResponse.json({ error: "Payload inválido" }, { status: 400 })
   }
 
-  const { fileName, mapeo, file: fileBase64 } = body
-
-  if (!fileBase64 || !mapeo) {
-    return NextResponse.json({ error: "Datos incompletos" }, { status: 400 })
+  const payload = parsePayload(body)
+  if (!payload) {
+    return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
   }
 
-  const buffer = Buffer.from(fileBase64, "base64")
-  let workbook: XLSX.WorkBook
-  try {
-    workbook = XLSX.read(buffer, { type: "buffer", cellDates: true })
-  } catch {
-    return NextResponse.json({ error: "No se pudo procesar el archivo" }, { status: 400 })
-  }
+  const resultado = await parsers[payload.tipo](payload.filas, businessId, prisma)
+  const rowsOk = resultado.ok.length
+  const rowsErrored = resultado.errores.length + resultado.sinMatch.length
+  const errores = [
+    ...resultado.errores.map((fila) => ({ indice: fila.indice, mensaje: fila.mensaje })),
+    ...serializarSinMatch(resultado.sinMatch),
+  ]
 
-  const sheetName = workbook.SheetNames[0]
-  const sheet = workbook.Sheets[sheetName]
-  const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, {
-    defval: "",
-    raw: false,
-  })
-
-  let importados = 0
-  let omitidos = 0
-  const errores: string[] = []
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i]
-    const nombre = String(row[mapeo.nombre ?? ""] ?? "").trim()
-
-    if (!nombre) {
-      omitidos++
-      continue
-    }
-
-    const apellido = mapeo.apellido ? String(row[mapeo.apellido] ?? "").trim() : undefined
-    const telefono = mapeo.telefono ? String(row[mapeo.telefono] ?? "").trim() : undefined
-    const email = mapeo.email ? String(row[mapeo.email] ?? "").trim() || undefined : undefined
-    const notas = mapeo.notas ? String(row[mapeo.notas] ?? "").trim() || undefined : undefined
-
-    try {
-      if (email) {
-        await prisma.patient.upsert({
-          where: { businessId_email: { businessId, email } },
-          update: {
-            name: nombre,
-            lastName: apellido || undefined,
-            phone: telefono || undefined,
-            notes: notas || undefined,
-          },
-          create: {
-            businessId,
-            name: nombre,
-            lastName: apellido || undefined,
-            phone: telefono || undefined,
-            email,
-            notes: notas || undefined,
-          },
-        })
-      } else {
-        await prisma.patient.create({
-          data: {
-            businessId,
-            name: nombre,
-            lastName: apellido || undefined,
-            phone: telefono || undefined,
-            notes: notas || undefined,
-          },
-        })
-      }
-      importados++
-    } catch (err: unknown) {
-      // skip duplicate without email (no unique constraint to upsert on)
-      if ((err as { code?: string }).code === "P2002") {
-        omitidos++
-      } else {
-        errores.push(`Fila ${i + 2}: ${nombre}`)
-        omitidos++
-      }
-    }
-  }
-
-  await prisma.dataImport.create({
-    data: {
+  await prisma.$transaction(async (tx) => {
+    await persistirImport(
+      payload.tipo,
+      resultado.ok.map((fila) => fila.data),
       businessId,
-      createdById: member.id,
-      fileName: fileName ?? "importación",
-      rowsTotal: rows.length,
-      rowsImported: importados,
-      rowsSkipped: omitidos,
-    },
+      tx
+    )
+
+    await tx.dataImport.updateMany({
+      where: { id: payload.importId, businessId },
+      data: { rowsImported: rowsOk, rowsSkipped: rowsErrored },
+    })
   })
 
-  return NextResponse.json({ importados, omitidos, errores })
+  return NextResponse.json({ rowsOk, rowsErrored, errores })
 }
