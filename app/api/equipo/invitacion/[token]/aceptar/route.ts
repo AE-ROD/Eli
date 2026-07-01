@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import type { Prisma } from "@prisma/client"
 import { z } from "zod"
 import bcrypt from "bcryptjs"
 
@@ -30,7 +31,7 @@ export async function POST(
     const hashedPassword = await bcrypt.hash(password, 12)
 
     // Usar transacción: crear usuario (o buscar existente) + crear membership + marcar invitación aceptada
-    const resultado = await prisma.$transaction(async (tx) => {
+    const resultado = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Si ya existe el usuario con ese email, solo agregar como miembro
       let usuario = await tx.user.findUnique({ where: { email: invitacion.email } })
 

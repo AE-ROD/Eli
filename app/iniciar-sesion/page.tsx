@@ -21,6 +21,7 @@ export default function IniciarSesionPage() {
   useEffect(() => {
     const oauthError = searchParams.get("error")
     if (oauthError) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reacts to the OAuth redirect's query param, not a render-time value
       setError("No se pudo iniciar sesión con Google. Verifica que tu cuenta esté habilitada.")
     }
   }, [searchParams])

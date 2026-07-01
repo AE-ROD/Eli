@@ -35,6 +35,7 @@ export function SelectorFechaHora({
 
   useEffect(() => {
     if (!fechaSeleccionada || !servicioId) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- kicks off a data fetch triggered by prop changes
     setCargandoSlots(true)
     setSlots([])
     onHora("")

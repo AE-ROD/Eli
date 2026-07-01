@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
   })
 
   const resultados = await Promise.allSettled(
-    citas.map((cita) => {
+    citas.map((cita: (typeof citas)[number]) => {
       if (!cita.patient?.email) return Promise.resolve(null)
       return enviarRecordatorio({
         emailCliente: cita.patient.email,
@@ -43,8 +43,8 @@ export async function GET(request: NextRequest) {
     })
   )
 
-  const enviados = resultados.filter((r) => r.status === "fulfilled").length
-  const fallidos = resultados.filter((r) => r.status === "rejected").length
+  const enviados = resultados.filter((r: PromiseSettledResult<unknown>) => r.status === "fulfilled").length
+  const fallidos = resultados.filter((r: PromiseSettledResult<unknown>) => r.status === "rejected").length
 
   return NextResponse.json({
     mensaje: `Recordatorios procesados: ${enviados} enviados, ${fallidos} fallidos`,

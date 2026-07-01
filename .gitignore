@@ -15,6 +15,7 @@ next.user-config.*
 node_modules
 .next/
 .DS_Store
+tsconfig.tsbuildinfo
 /lib/generated/prisma
 skills-lock.json
 .superpowers/

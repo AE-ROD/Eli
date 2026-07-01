@@ -112,22 +112,24 @@ Eli/
 
 ### ✅ Implementado
 - 🎨 Diseño UI/UX profesional
-- 🔐 Autenticación con NextAuth.js
+- 🔐 Autenticación con NextAuth.js (credenciales + Google)
 - 👥 Gestión de pacientes (CRUD)
-- 📅 Sistema de citas (CRUD)
+- 📅 Sistema de citas y agendamiento público (CRUD + reserva online)
+- 👨‍👩‍👧 Equipo multi-trabajador con invitaciones por email
 - 💬 Chat/Mensajería
-- 📊 Dashboard con estadísticas
+- 📊 Dashboard con estadísticas conectado a datos reales
+- 📧 Notificaciones y recordatorios por email (Resend)
 - 📱 Diseño responsive
 - 🎭 Animaciones fluidas
-- 🗄️ Base de datos PostgreSQL
+- 🗄️ Base de datos PostgreSQL con Prisma
 
 ### 🚧 En Desarrollo
-- 🔗 Integración frontend-backend
-- 📧 Notificaciones por email
-- 📱 Notificaciones push
+- 💳 Pagos en línea (Stripe) — la UI de precios existe, falta la integración
 - 📄 Exportar reportes PDF
-- 💳 Pagos en línea
+- 📱 Notificaciones push
 - 🔄 Sincronización con Google Calendar
+- 🔑 Recuperación de contraseña
+- 🧪 Tests y CI/CD
 
 ---
 
@@ -185,14 +187,9 @@ NODE_ENV="development"
 
 ## 📊 Estado del Proyecto
 
-**Progreso General: 65%**
+Frontend, backend e integración están completos y funcionando end-to-end. Antes de producción falta: facturación (Stripe), rate limiting, recuperación de contraseña, tests y CI.
 
-- ✅ Frontend: 95%
-- 🟡 Backend: 50%
-- ❌ Integración: 10%
-- 🟡 Infraestructura: 40%
-
-Ver [ESTADO-PROYECTO.md](ESTADO-PROYECTO.md) para más detalles.
+Ver [ESTADO-PROYECTO.md](ESTADO-PROYECTO.md) para el detalle completo.
 
 ---
 

@@ -39,6 +39,7 @@ export function ModalNuevaCita({ form, guardando, onFormChange, onSubmit, onCerr
 
   useEffect(() => {
     if (!busquedaPaciente || busquedaPaciente.length < 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clears stale suggestions when the search query is cleared
       setSugerencias([])
       return
     }
@@ -48,8 +49,11 @@ export function ModalNuevaCita({ form, guardando, onFormChange, onSubmit, onCerr
         const res = await fetch(`/api/pacientes?q=${encodeURIComponent(busquedaPaciente)}&limite=8`)
         const data = await res.json()
         setSugerencias(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (data.pacientes ?? []).map((p: any) => ({ id: p.id, nombre: p.name, email: p.email ?? "" }))
+          (data.pacientes ?? []).map((p: { id: string; name: string; email?: string }) => ({
+            id: p.id,
+            nombre: p.name,
+            email: p.email ?? "",
+          }))
         )
         setShowSugerencias(true)
       } catch { /* silencioso */ }

@@ -38,6 +38,7 @@ export default function PaginaEquipo() {
     setCargando(false)
   }
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches team members/invitations on mount
   useEffect(() => { cargar() }, [])
 
   return (

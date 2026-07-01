@@ -50,7 +50,7 @@ export function ListaEquipo({ miembros, invitaciones, cargando }: Props) {
             </div>
             <p className="font-semibold text-foreground mb-1">Sin trabajadores aún</p>
             <p className="text-sm text-muted-foreground max-w-xs">
-              Usa el botón "Invitar trabajador" para agregar personas a tu equipo.
+              Usa el botón &ldquo;Invitar trabajador&rdquo; para agregar personas a tu equipo.
             </p>
           </div>
         ) : (

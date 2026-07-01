@@ -36,7 +36,7 @@ export default async function PaginaConfiguracion() {
       })
     : []
 
-  const miembrosFormateados = miembros.map((m) => ({
+  const miembrosFormateados = miembros.map((m: (typeof miembros)[number]) => ({
     id: m.id,
     nombre: m.user.name,
     email: m.user.email,

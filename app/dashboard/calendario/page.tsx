@@ -64,6 +64,7 @@ export default function PaginaCalendario() {
     finally { setCargando(false) }
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches appointments whenever the visible date/view changes
   useEffect(() => { fetchCitas(fechaActual, vista) }, [fechaActual, vista, fetchCitas])
 
   const irAnterior = () => {
