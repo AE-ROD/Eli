@@ -94,6 +94,33 @@ export async function enviarAvisoProfesional(datos: DatosAvisoProfesional) {
   })
 }
 
+export interface DatosRecuperacionPassword {
+  emailUsuario: string
+  nombreUsuario: string
+  enlaceRestablecer: string
+}
+
+export async function enviarRecuperacionPassword(datos: DatosRecuperacionPassword) {
+  return resend.emails.send({
+    from: FROM,
+    to: datos.emailUsuario,
+    subject: "🔑 Restablece tu contraseña — Eli",
+    html: `
+      <div style="font-family: sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px; background: #fff;">
+        <h1 style="font-size: 24px; font-weight: 700; color: #111; margin-bottom: 8px;">Restablece tu contraseña</h1>
+        <p style="color: #555; margin-bottom: 24px;">Hola <strong>${datos.nombreUsuario}</strong>, recibimos una solicitud para restablecer tu contraseña.</p>
+
+        <a href="${datos.enlaceRestablecer}" style="display: inline-block; background: #3b82f6; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 15px;">
+          Crear nueva contraseña
+        </a>
+
+        <p style="color: #999; font-size: 12px; margin-top: 32px;">Este enlace expira en 1 hora. Si no solicitaste este cambio, ignora este correo — tu contraseña actual sigue siendo válida.</p>
+        <p style="color: #999; font-size: 12px;">Enviado por Eli · Sistema de agendamiento</p>
+      </div>
+    `,
+  })
+}
+
 export interface DatosInvitacionTrabajador {
   emailTrabajador: string
   nombreTrabajador: string

@@ -10,18 +10,19 @@
 - **Modelo de datos completo**: 10 modelos en Prisma (usuarios, negocios, miembros, invitaciones, pacientes, servicios, horarios, citas, conversaciones, mensajes), con 2 migraciones ya generadas.
 - **Funcionalidades de negocio**: agendamiento público con validación de disponibilidad, equipo multi-trabajador con invitaciones por email, notificaciones por email (Resend) y recordatorios automáticos vía cron.
 - **Calidad de build**: se corrigieron los errores reales de TypeScript que estaban ocultos por `ignoreBuildErrors: true` (ya eliminado de `next.config.mjs`), y se dejó funcionando `eslint.config.mjs` (antes `npm run lint` fallaba de inmediato por falta de configuración). `npx eslint .` y `npx tsc --noEmit` corren limpios.
+- **Recuperación de contraseña**: flujo completo — `/recuperar-contrasena` (solicitar enlace) → email con `PasswordResetToken` (expira en 1 hora) → `/restablecer-contrasena/[token]` (definir nueva contraseña). No revela si un email existe o no, para evitar enumeración de usuarios.
+- **Tests y CI**: suite de Vitest (`npm test`) cubriendo la generación de slugs y los schemas de validación de Zod (registro, reserva, recuperación de contraseña), y un workflow de GitHub Actions (`.github/workflows/ci.yml`) que corre lint, `tsc --noEmit`, tests y build en cada push/PR a `main`.
 
 ## 🔴 Crítico — pendiente antes de producción
 
 - **Facturación no implementada**: el modal de precios es solo UI (`components/app/modales/provider-precios.tsx`); no hay integración con Stripe ni modelo de suscripción/trial en el schema. Cualquier cuenta registrada usa el producto completo gratis indefinidamente.
 - **Sin rate limiting** en login, registro y en los endpoints públicos de reserva (`/api/reservar/[slug]/*`) — expuestos a fuerza bruta y spam.
-- **Sin recuperación de contraseña** ("olvidé mi contraseña") para el login por credenciales.
 - **Variables de entorno de producción**: `.env.example` ya incluye todas las requeridas (`GOOGLE_CLIENT_ID/SECRET`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `CRON_SECRET`); falta configurarlas en el entorno real de despliegue.
-- **Migraciones**: correr `npx prisma migrate deploy` (no `migrate dev`) contra la base de datos de producción antes del primer release.
+- **Migraciones**: correr `npx prisma migrate deploy` (no `migrate dev`) contra la base de datos de producción antes del primer release, incluyendo la migración de `PasswordResetToken`.
 
 ## 🟡 Importante
 
-- **Cero tests** (unitarios, integración o e2e) y **sin CI** (no hay GitHub Actions) que corra build/lint/tests antes de mergear.
+- **Cobertura de tests limitada**: solo cubre funciones puras (slugs, validaciones). Falta cobertura de integración sobre las rutas de API (requiere una base de datos de test) y e2e sobre los flujos críticos (reserva, login, recuperación de contraseña).
 - **Sin headers de seguridad** (CSP, X-Frame-Options, etc.) en `next.config.mjs`.
 - **Sin monitoreo/logging estructurado** (Sentry o similar) — los errores solo van a `console.error`.
 - Creación manual de citas desde el dashboard (`app/api/citas` POST) no valida solapamiento de horarios, a diferencia de la reserva pública que sí lo hace.
@@ -36,7 +37,6 @@
 ## 🎯 Prioridad para salir a producción
 
 1. Decidir el modelo de monetización real (Stripe + campos de suscripción en el schema) o lanzar sin cobro y agregarlo después.
-2. Rate limiting básico en endpoints de auth y reserva pública.
-3. Flujo de recuperación de contraseña.
-4. Pipeline de CI (build + lint + `tsc --noEmit`) antes de cada merge a main.
-5. Configurar variables de entorno y correr `prisma migrate deploy` en el entorno de producción.
+2. Rate limiting básico en endpoints de auth y reserva pública (por ejemplo con Upstash Redis, dado que el proyecto corre en Vercel).
+3. Configurar variables de entorno y correr `prisma migrate deploy` en el entorno de producción.
+4. Ampliar la cobertura de tests a rutas de API críticas y flujos e2e.

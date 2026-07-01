@@ -163,7 +163,11 @@ npm run prisma:studio    # Abrir Prisma Studio
 
 # Otros
 npm run lint             # Ejecutar ESLint
+npm test                 # Ejecutar tests (Vitest)
+npm run test:watch       # Tests en modo watch
 ```
+
+Un workflow de GitHub Actions (`.github/workflows/ci.yml`) corre lint, chequeo de tipos, tests y build en cada push/PR a `main`.
 
 ---
 

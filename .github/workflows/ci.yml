@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  DATABASE_URL: "postgresql://user:pass@localhost:5432/eli"
+  NEXTAUTH_URL: "http://localhost:3000"
+  NEXTAUTH_SECRET: "ci-secret-not-used-for-anything-real"
+  GOOGLE_CLIENT_ID: "ci-placeholder"
+  GOOGLE_CLIENT_SECRET: "ci-placeholder"
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Generar cliente de Prisma
+        run: npx prisma generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Chequeo de tipos
+        run: npx tsc --noEmit
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        run: npm run build

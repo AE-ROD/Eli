@@ -17,6 +17,7 @@ model User {
 
   business    Business?
   memberships BusinessMember[]
+  resetTokens PasswordResetToken[]
 
   @@map("usuarios")
 }
@@ -75,6 +76,19 @@ model WorkerInvitation {
 
   @@index([businessId])
   @@map("invitaciones")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique @default(cuid())
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("tokens_recuperacion")
 }
 
 model Patient {

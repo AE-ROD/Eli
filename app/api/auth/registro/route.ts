@@ -2,17 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
-
-function generarSlug(nombre: string): string {
-  return nombre
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .substring(0, 50)
-}
+import { generarSlug } from "@/lib/slug"
+import { registroSchema } from "@/lib/validaciones"
 
 async function slugUnico(base: string): Promise<string> {
   let slug = generarSlug(base)
@@ -23,14 +14,6 @@ async function slugUnico(base: string): Promise<string> {
   }
   return intento
 }
-
-const registroSchema = z.object({
-  nombre: z.string().min(2),
-  email: z.string().email(),
-  contrasena: z.string().min(8),
-  nombreNegocio: z.string().min(2),
-  tipoNegocio: z.string().min(1),
-})
 
 export async function POST(request: NextRequest) {
   try {
