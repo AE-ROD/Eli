@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { enviarRecuperacionPassword } from "@/lib/email"
 import { olvidePasswordSchema as schema } from "@/lib/validaciones"
+import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 
 const MENSAJE_GENERICO = {
   mensaje: "Si existe una cuenta con ese correo, te enviamos un enlace para restablecer tu contraseña.",
@@ -10,6 +11,11 @@ const MENSAJE_GENERICO = {
 
 // POST /api/auth/olvide-password — solicitar enlace de recuperación
 export async function POST(request: NextRequest) {
+  const { permitido } = await verificarLimite("auth", obtenerIp(request))
+  if (!permitido) {
+    return NextResponse.json({ error: "Demasiados intentos, intenta más tarde" }, { status: 429 })
+  }
+
   try {
     const body = await request.json()
     const { email } = schema.parse(body)

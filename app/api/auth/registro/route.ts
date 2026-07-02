@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs"
 import { z } from "zod"
 import { generarSlug } from "@/lib/slug"
 import { registroSchema } from "@/lib/validaciones"
+import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 
 async function slugUnico(base: string): Promise<string> {
   let slug = generarSlug(base)
@@ -16,6 +17,11 @@ async function slugUnico(base: string): Promise<string> {
 }
 
 export async function POST(request: NextRequest) {
+  const { permitido } = await verificarLimite("auth", obtenerIp(request))
+  if (!permitido) {
+    return NextResponse.json({ error: "Demasiados intentos, intenta más tarde" }, { status: 429 })
+  }
+
   try {
     const body = await request.json()
     const datos = registroSchema.parse(body)

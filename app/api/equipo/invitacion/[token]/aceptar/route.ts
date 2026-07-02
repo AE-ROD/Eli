@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
 import { z } from "zod"
 import bcrypt from "bcryptjs"
+import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 
 const schema = z.object({
   password: z.string().min(8),
@@ -13,6 +14,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
+  const { permitido } = await verificarLimite("auth", obtenerIp(request))
+  if (!permitido) {
+    return NextResponse.json({ error: "Demasiados intentos, intenta más tarde" }, { status: 429 })
+  }
+
   const { token } = await params
 
   const invitacion = await prisma.workerInvitation.findUnique({
