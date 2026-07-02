@@ -15,6 +15,7 @@ export default function PaginaChats() {
   const [cargandoLista, setCargandoLista] = useState(true)
   const [busqueda, setBusqueda] = useState("")
   const [activa, setActiva] = useState<ConversacionAPI | null>(null)
+  const [vistaMovil, setVistaMovil] = useState<"lista" | "chat">("lista")
   const [mensajesActivos, setMensajesActivos] = useState<MensajeAPI[]>([])
   const [cargandoMensajes, setCargandoMensajes] = useState(false)
   const [modalAbierto, setModalAbierto] = useState(false)
@@ -34,6 +35,7 @@ export default function PaginaChats() {
 
   const seleccionarConversacion = async (conv: ConversacionAPI) => {
     setActiva(conv)
+    setVistaMovil("chat")
     setMensajesActivos([])
     setCargandoMensajes(true)
     try {
@@ -102,24 +104,29 @@ export default function PaginaChats() {
       />
 
       <div className="flex-1 flex overflow-hidden">
-        <ListaConversaciones
-          conversaciones={conversaciones}
-          busqueda={busqueda}
-          onBusqueda={setBusqueda}
-          activaId={activa?.id ?? null}
-          onSeleccionar={seleccionarConversacion}
-          onNueva={() => setModalAbierto(true)}
-        />
+        <div className={`${vistaMovil === "chat" ? "hidden" : "flex"} w-full lg:flex lg:w-auto`}>
+          <ListaConversaciones
+            conversaciones={conversaciones}
+            busqueda={busqueda}
+            onBusqueda={setBusqueda}
+            activaId={activa?.id ?? null}
+            onSeleccionar={seleccionarConversacion}
+            onNueva={() => setModalAbierto(true)}
+          />
+        </div>
 
         {activa ? (
-          <AreaChat
-            conversacion={activa}
-            mensajesAPI={mensajesActivos}
-            cargando={cargandoMensajes}
-            onEnviar={enviarMensaje}
-          />
+          <div className={`${vistaMovil === "lista" ? "hidden" : "flex"} min-w-0 flex-1 lg:flex`}>
+            <AreaChat
+              conversacion={activa}
+              mensajesAPI={mensajesActivos}
+              cargando={cargandoMensajes}
+              onEnviar={enviarMensaje}
+              onVolver={() => setVistaMovil("lista")}
+            />
+          </div>
         ) : (
-          <div className="flex-1 flex items-center justify-center bg-muted/30">
+          <div className="hidden flex-1 items-center justify-center bg-muted/30 lg:flex">
             <motion.div
               className="text-center"
               initial={{ opacity: 0, y: 10 }}

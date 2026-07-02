@@ -51,7 +51,7 @@ export function ListaConversaciones({
   )
 
   return (
-    <aside className="w-80 border-r border-border/50 bg-card flex flex-col flex-shrink-0">
+    <aside className="w-full border-r border-border/50 bg-card flex flex-col flex-shrink-0 lg:w-80">
       <div className="p-4 border-b border-border/50 flex items-center gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

@@ -14,6 +14,7 @@ interface ControlesCalendarioProps {
   onSiguiente: () => void
   onHoy: () => void
   onVista: (v: VistaCalendario) => void
+  ocultarSemana?: boolean
 }
 
 function formatoFecha(fecha: Date, vista: VistaCalendario): string {
@@ -30,7 +31,14 @@ export function ControlesCalendario({
   onSiguiente,
   onHoy,
   onVista,
+  ocultarSemana = false,
 }: ControlesCalendarioProps) {
+  const vistas = [
+    { id: "dia" as const, label: "Día", icono: Calendar },
+    { id: "semana" as const, label: "Semana", icono: List },
+    { id: "mes" as const, label: "Mes", icono: Grid3X3 },
+  ].filter((opcion) => !ocultarSemana || opcion.id !== "semana")
+
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
       <div className="flex items-center gap-3">
@@ -51,11 +59,7 @@ export function ControlesCalendario({
       </div>
 
       <div className="flex items-center gap-2 bg-card border border-border/50 rounded-lg p-1">
-        {([
-          { id: "dia" as const, label: "Día", icono: Calendar },
-          { id: "semana" as const, label: "Semana", icono: List },
-          { id: "mes" as const, label: "Mes", icono: Grid3X3 },
-        ] as const).map(({ id, label, icono: Icono }) => (
+        {vistas.map(({ id, label, icono: Icono }) => (
           <button
             key={id}
             onClick={() => onVista(id)}

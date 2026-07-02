@@ -47,6 +47,7 @@ function PaginaCalendarioInner() {
 
   const [fechaActual, setFechaActual] = useState(new Date())
   const [vista, setVista] = useState<VistaCalendario>("semana")
+  const [esMobile, setEsMobile] = useState(false)
   const [citasAPI, setCitasAPI] = useState<CitaAPI[]>([])
   const [cargando, setCargando] = useState(true)
   const [citaSeleccionada, setCitaSeleccionada] = useState<CitaAPI | null>(null)
@@ -79,6 +80,18 @@ function PaginaCalendarioInner() {
       if (res.ok) setCitasAPI(await res.json())
     } catch { /* silencioso */ }
     finally { setCargando(false) }
+  }, [])
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 1023px)")
+    const actualizar = () => {
+      setEsMobile(media.matches)
+      if (media.matches) setVista("dia")
+    }
+
+    actualizar()
+    media.addEventListener("change", actualizar)
+    return () => media.removeEventListener("change", actualizar)
   }, [])
 
   useEffect(() => { fetchCitas(fechaActual, vista) }, [fechaActual, vista, fetchCitas])
@@ -166,17 +179,18 @@ function PaginaCalendarioInner() {
         accionPrincipal={{ texto: "Nueva cita", onClick: () => setModalAbierto(true) }}
       />
 
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <ControlesCalendario
           fechaActual={fechaActual}
           vista={vista}
           onAnterior={irAnterior}
           onSiguiente={irSiguiente}
           onHoy={() => setFechaActual(new Date())}
-          onVista={setVista}
+          onVista={(siguienteVista) => setVista(esMobile && siguienteVista === "semana" ? "dia" : siguienteVista)}
+          ocultarSemana={esMobile}
         />
 
-        <div className="flex gap-6">
+        <div className="flex flex-col gap-6 lg:flex-row">
           <div className="flex-1 bg-card border border-border/50 rounded-xl overflow-hidden">
             {vista === "semana" && (
               <VistaCalendarioSemana

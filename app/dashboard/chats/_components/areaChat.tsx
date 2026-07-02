@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState } from "react"
 import { motion } from "framer-motion"
-import { AlertCircle, Send, Smile, UsersRound } from "lucide-react"
+import { AlertCircle, ArrowLeft, Send, Smile, UsersRound } from "lucide-react"
 import { AvatarUsuario } from "@/components/app/comunes/avatar-usuario"
 import { BurbujaMensaje, type Mensaje } from "@/components/app/comunes/burbuja-mensaje"
 import type { ConversacionAPI, MensajeAPI } from "./listaConversaciones"
@@ -29,9 +29,10 @@ interface AreaChatProps {
   mensajesAPI: MensajeAPI[]
   cargando: boolean
   onEnviar: (texto: string) => Promise<void>
+  onVolver?: () => void
 }
 
-export function AreaChat({ conversacion, mensajesAPI, cargando, onEnviar }: AreaChatProps) {
+export function AreaChat({ conversacion, mensajesAPI, cargando, onEnviar, onVolver }: AreaChatProps) {
   const [texto, setTexto] = useState("")
   const [enviando, setEnviando] = useState(false)
   const mensajesRef = useRef<HTMLDivElement>(null)
@@ -59,8 +60,18 @@ export function AreaChat({ conversacion, mensajesAPI, cargando, onEnviar }: Area
   return (
     <div className="flex-1 flex flex-col bg-background min-w-0">
       {/* Cabecera */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border/50 bg-card flex-shrink-0">
+      <header className="flex items-center justify-between px-4 py-4 border-b border-border/50 bg-card flex-shrink-0 sm:px-6">
         <div className="flex items-center gap-3">
+          {onVolver && (
+            <button
+              type="button"
+              onClick={onVolver}
+              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden"
+              aria-label="Volver a conversaciones"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+          )}
           <AvatarUsuario nombre={conversacion.patientName} tamaño="md" />
           <div>
             <h3 className="font-semibold text-foreground">{conversacion.patientName}</h3>
@@ -82,7 +93,7 @@ export function AreaChat({ conversacion, mensajesAPI, cargando, onEnviar }: Area
       </header>
 
       {/* Mensajes */}
-      <div ref={mensajesRef} className="flex-1 overflow-y-auto p-6 space-y-4">
+      <div ref={mensajesRef} className="flex-1 overflow-y-auto p-4 space-y-4 sm:p-6">
         {cargando ? (
           <div className="flex justify-center py-8">
             <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -97,7 +108,7 @@ export function AreaChat({ conversacion, mensajesAPI, cargando, onEnviar }: Area
       </div>
 
       {/* Respuestas rápidas */}
-      <div className="px-6 py-2 flex gap-2 overflow-x-auto border-t border-border/30 flex-shrink-0">
+      <div className="px-4 py-2 flex gap-2 overflow-x-auto border-t border-border/30 flex-shrink-0 sm:px-6">
         {RESPUESTAS_RAPIDAS.map((r, i) => (
           <button
             key={i}

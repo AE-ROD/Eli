@@ -22,7 +22,7 @@ export function FiltrosPacientes({
   onVista,
 }: FiltrosPacientesProps) {
   return (
-    <div className="flex flex-col sm:flex-row gap-4 mb-6">
+    <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-start sm:gap-4">
       <div className="relative flex-1">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <input
@@ -34,7 +34,7 @@ export function FiltrosPacientes({
         />
       </div>
 
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0">
+      <div className="flex w-full items-center gap-2 overflow-x-auto pb-2 sm:w-auto sm:pb-0">
         {ETIQUETAS.map((etiqueta) => (
           <button
             key={etiqueta}
@@ -53,7 +53,7 @@ export function FiltrosPacientes({
         ))}
       </div>
 
-      <div className="flex items-center gap-1 bg-card border border-border rounded-lg p-1">
+      <div className="flex w-fit items-center gap-1 bg-card border border-border rounded-lg p-1">
         <button
           onClick={() => onVista("grid")}
           className={`p-2 rounded-md transition-colors ${

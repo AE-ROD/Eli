@@ -147,7 +147,7 @@ export default function PaginaWalkIn() {
           subtitulo="Cliente atendido sin reserva previa"
         />
 
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           <div className="mx-auto max-w-xl rounded-xl border border-border/50 bg-card p-8 text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-success/10 text-success">
               <CheckCircle2 className="h-8 w-8" />
@@ -156,7 +156,7 @@ export default function PaginaWalkIn() {
             <p className="mt-2 text-sm text-muted-foreground">
               {confirmacion.nombre} quedó registrado como walk-in y la cita fue marcada como completada.
             </p>
-            <BotonPrimario className="mt-6" onClick={registrarOtro}>
+            <BotonPrimario className="mt-6 w-full sm:w-auto" onClick={registrarOtro}>
               Registrar otro
             </BotonPrimario>
           </div>
@@ -172,7 +172,7 @@ export default function PaginaWalkIn() {
         subtitulo="Agrega rápidamente un cliente que llegó sin reserva"
       />
 
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <form onSubmit={enviarFormulario} className="mx-auto max-w-4xl space-y-6">
           {error && (
             <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -188,7 +188,7 @@ export default function PaginaWalkIn() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <CampoFormulario
                 etiqueta="Nombre del cliente*"
                 placeholder="Ej: Carlos Pérez"
@@ -223,7 +223,7 @@ export default function PaginaWalkIn() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Servicio*</label>
                 <select
@@ -325,7 +325,7 @@ export default function PaginaWalkIn() {
               <UserRoundCheck className="h-4 w-4" />
               La cita se guardará como completada.
             </p>
-            <BotonPrimario type="submit" cargando={guardando} disabled={cargandoDatos || servicios.length === 0}>
+            <BotonPrimario className="w-full sm:w-auto" type="submit" cargando={guardando} disabled={cargandoDatos || servicios.length === 0}>
               Registrar walk-in
             </BotonPrimario>
           </div>

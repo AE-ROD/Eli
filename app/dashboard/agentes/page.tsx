@@ -96,7 +96,7 @@ export default function AgentesPage() {
         accionPrincipal={{ texto: "Actualizar", onClick: cargar }}
       />
 
-      <div className="p-6 space-y-6">
+      <div className="space-y-6 p-4 sm:p-6">
         {/* Resumen */}
         {resumen && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -120,7 +120,7 @@ export default function AgentesPage() {
         )}
 
         {/* Filtros */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
           {(["todos", "ventas", "retencion", "horario", "noshows"] as const).map((f) => (
             <button
               key={f}
@@ -168,16 +168,16 @@ export default function AgentesPage() {
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.04 }}
-                  className="bg-card border border-border/50 rounded-xl p-5 flex gap-4"
+                  className="flex flex-col gap-4 rounded-xl border border-border/50 bg-card p-4 sm:flex-row sm:p-5"
                 >
                   <div className={`p-2.5 rounded-xl ${tipoConf.bg} flex-shrink-0 h-fit`}>
                     <TipoIcono className={`h-5 w-5 ${tipoConf.color}`} />
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <p className="font-semibold text-foreground text-sm">{s.titulo}</p>
-                      <div className="flex items-center gap-2 flex-shrink-0">
+                      <div className="flex flex-wrap items-center gap-2 sm:flex-shrink-0">
                         <span
                           className={`text-xs font-medium px-2 py-0.5 rounded-full ${prioridadConf.bg} ${prioridadConf.color}`}
                         >
@@ -192,13 +192,13 @@ export default function AgentesPage() {
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">{s.descripcion}</p>
 
-                    <div className="flex items-center gap-2 mt-3">
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
                       {(s.tipo === "retencion" || s.tipo === "noshows") && telefono && whatsappMsg ? (
                         <a
                           href={`https://wa.me/${telefono.replace(/\D/g, "")}?text=${whatsappMsg}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 text-white text-xs font-medium hover:bg-emerald-600 transition-colors"
+                          className="flex items-center justify-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-600 sm:justify-start"
                         >
                           <MessageCircle className="h-3.5 w-3.5" />
                           Enviar WhatsApp
@@ -206,7 +206,7 @@ export default function AgentesPage() {
                       ) : s.tipo === "ventas" ? (
                         <Link
                           href="/dashboard/analytics"
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
+                          className="flex items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 sm:justify-start"
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
                           {s.accion}
@@ -214,13 +214,13 @@ export default function AgentesPage() {
                       ) : s.tipo === "horario" ? (
                         <Link
                           href="/dashboard/analytics"
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-600 text-xs font-medium hover:bg-amber-500/20 transition-colors"
+                          className="flex items-center justify-center gap-1.5 rounded-lg bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-600 transition-colors hover:bg-amber-500/20 sm:justify-start"
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
                           Ver analítica
                         </Link>
                       ) : (
-                        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted text-muted-foreground text-xs font-medium hover:bg-muted/80 transition-colors">
+                        <button className="flex items-center justify-center gap-1.5 rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/80 sm:justify-start">
                           <ChevronRight className="h-3.5 w-3.5" />
                           {s.accion}
                         </button>

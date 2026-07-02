@@ -63,7 +63,7 @@ export function PanelDetalleCita({ cita, onCerrar, onCambiarEstado }: PanelDetal
 
   return (
     <motion.div
-      className="w-80 bg-card border border-border/50 rounded-xl p-5 hidden lg:flex lg:flex-col flex-shrink-0"
+      className="fixed inset-0 z-50 flex w-full flex-col overflow-y-auto bg-card p-5 sm:inset-y-4 sm:left-auto sm:right-4 sm:max-w-md sm:rounded-xl sm:border sm:border-border/50 lg:relative lg:inset-auto lg:z-auto lg:w-80 lg:max-w-none lg:flex-shrink-0"
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 20 }}

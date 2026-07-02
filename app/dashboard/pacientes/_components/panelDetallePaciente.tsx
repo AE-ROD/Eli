@@ -90,7 +90,7 @@ export function PanelDetallePaciente({
 }: PanelDetallePacienteProps) {
   return (
     <motion.aside
-      className="hidden w-full bg-card border border-border/50 rounded-xl overflow-hidden lg:flex lg:flex-col xl:w-[22rem] 2xl:w-96 xl:flex-shrink-0"
+      className="fixed inset-0 z-50 flex w-full flex-col overflow-hidden bg-card lg:relative lg:inset-auto lg:z-auto lg:rounded-xl lg:border lg:border-border/50 xl:w-[22rem] xl:flex-shrink-0 2xl:w-96"
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 20 }}
