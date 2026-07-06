@@ -51,7 +51,8 @@ export interface ResultadoLimite {
 
 /**
  * Aplica rate limiting si Upstash está configurado (UPSTASH_REDIS_REST_URL/TOKEN).
- * Si no está configurado, deja pasar todo (fail-open) para no romper desarrollo local.
+ * Si no está configurado, o si Upstash falla/no responde (caída, cuota agotada, etc.),
+ * deja pasar la petición (fail-open): un problema en Redis no debe tumbar login/registro/reserva.
  */
 export async function verificarLimite(tipo: TipoLimite, identificador: string): Promise<ResultadoLimite> {
   const limitador = limitadores[tipo]
@@ -66,6 +67,11 @@ export async function verificarLimite(tipo: TipoLimite, identificador: string): 
     return { permitido: true, restantes: Infinity }
   }
 
-  const resultado = await limitador.limit(identificador)
-  return { permitido: resultado.success, restantes: resultado.remaining }
+  try {
+    const resultado = await limitador.limit(identificador)
+    return { permitido: resultado.success, restantes: resultado.remaining }
+  } catch (error) {
+    console.error("[rate-limit] Error consultando Upstash, se deja pasar la petición:", error)
+    return { permitido: true, restantes: Infinity }
+  }
 }
