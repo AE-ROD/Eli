@@ -21,8 +21,10 @@ export async function GET(
       patientName: true,
       patientPhone: true,
       updatedAt: true,
+      // Últimos 200 mensajes: evita traer historiales muy largos completos en cada apertura del chat
       messages: {
-        orderBy: { createdAt: "asc" },
+        orderBy: { createdAt: "desc" },
+        take: 200,
         select: { id: true, content: true, fromBusiness: true, createdAt: true },
       },
     },
@@ -32,5 +34,8 @@ export async function GET(
     return NextResponse.json({ error: "Conversación no encontrada" }, { status: 404 })
   }
 
-  return NextResponse.json(conversacion)
+  return NextResponse.json({
+    ...conversacion,
+    messages: [...conversacion.messages].reverse(),
+  })
 }
