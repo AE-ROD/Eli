@@ -1,7 +1,8 @@
 # Eli v1 — Levantamiento de requerimientos
 
 > Documento vivo. Se responde y se va completando; es el insumo de `PRODUCTO.md` y del backlog.
-> **Estado:** esperando respuestas a §3.
+> **Estado:** definidos nicho (§3.1), diferenciador (§3.3) y la función central (§3.4).
+> Pendientes bloqueantes: modelo de negocio (§3.2) y granularidad de la comisión (§3.9).
 
 ---
 
@@ -57,10 +58,21 @@ La versión anterior apuntaba a barberías, consultorios médicos, gimnasios, es
 - ¿En qué país o países? Define moneda, impuestos, formato de fecha y medio de pago.
 - ¿Hay algún cliente real o potencial concreto hoy? Aunque sea uno.
 
-**Recomendación:** un solo rubro. Vender es mucho más fácil cuando el cliente siente que la herramienta fue hecha para él, y ampliar después es barato. Si hay acceso a barberías, es el nicho natural: el caso de comisiones 30/70 es exactamente su dolor.
+**Recomendación original:** un solo rubro, para no hablar siete idiomas a la vez.
 
-**Respuesta:**
-> _(pendiente)_
+**Respuesta (decidida):** **no se segmenta por rubro, pero se elimina toda enumeración de rubros.**
+
+El producto sigue sirviendo a cualquier negocio que trabaje con reservas, pero el mensaje deja de listar barberías, consultorios, gimnasios, etc. Listar rubros genera dos problemas: quien no aparece siente que el producto no es para él, y quien aparece último siente que es de segunda.
+
+**El posicionamiento pasa a ser el comportamiento compartido, no el rubro:**
+> *Si tu negocio trabaja con reservas, este sistema es para ti.*
+
+**Consecuencias de diseño:**
+- **Vocabulario único y neutro: "Clientes".** Se descarta adaptar el término por rubro (paciente/alumno). Si el mensaje no segmenta, la interfaz tampoco debe hacerlo. Esto además simplifica el producto: un solo término en toda la aplicación.
+- Nada de íconos, ejemplos ni imágenes atados a un rubro específico en la landing.
+- El campo `Business.type` deja de usarse para cambiar la interfaz. Se conserva sólo como dato interno de segmentación.
+
+**Riesgo asumido y a vigilar:** un mensaje universal no elimina que los rubros operen distinto (una barbería atiende sin cita previa, un consultorio necesita historial, un gimnasio maneja cupos grupales). El posicionamiento puede ser universal; el producto igual va a tener que elegir qué flujos soporta. Si aparece un flujo que sólo sirve a un rubro, se evalúa aparte.
 
 ---
 
@@ -87,10 +99,16 @@ La pregunta más importante, y la única que no puedo responder yo.
 - ¿Por qué alguien elegiría Eli en vez de Booksy, Fresha, Agenda Pro o un cuaderno?
 - ¿Qué hace mal la competencia que nosotros podemos hacer bien?
 
-Sin respuesta clara acá, el producto compite sólo por precio. Las comisiones por trabajador son un buen candidato: es un dolor real, concreto y mal resuelto por las herramientas genéricas.
+**Respuesta (decidida): la gestión de comisiones por servicio prestado.**
 
-**Respuesta:**
-> _(pendiente)_
+Muchos negocios que trabajan con reservas comparten un mismo modelo: el profesional que atiende se lleva un porcentaje del monto del servicio y el negocio retiene el resto. Es una operación que hoy se resuelve con planillas, calculadora o memoria, y que las herramientas de reservas genéricas no cubren.
+
+**Por qué funciona como diferenciador:**
+- Es un dolor **económico**, no organizativo. Duele todos los meses y se puede medir en dinero.
+- Es **transversal a los rubros**, lo que encaja con la decisión de §3.1: no hay que elegir vertical para resolverlo.
+- Booksy, Fresha, Calendly y Agenda Pro compiten en agendar. Ninguna resuelve bien el reparto entre negocio y profesional.
+
+**Implicancia:** las comisiones dejan de ser "una función más" y pasan a ser **el centro del producto**. Eso eleva el estándar: no alcanza con configurar un porcentaje, hay que resolver el ciclo completo — configurar, calcular, liquidar y poder auditar.
 
 ---
 
@@ -109,6 +127,35 @@ Hay ideas nuevas por incorporar y son el insumo principal del backlog.
 | Panel de empleado | Su agenda del día y sus trabajos pendientes |
 | Comisiones por trabajador | Por trabajador (no por servicio), sobre el precio total, **sólo el dueño las modifica**. El porcentaje se congela en la cita al completarse: cambiarlo hoy no debe recalcular liquidaciones ya pagadas |
 | Elegir profesional al reservar | Hoy no se puede, aunque los horarios ya son por trabajador |
+
+**Respuesta (parcial):** la función central es la **vista de administración de comisiones**: el administrador configura el porcentaje de ganancia que recibe cada profesional **según el servicio**.
+
+⚠️ **Esto modifica una decisión anterior.** En la etapa previa se había definido el porcentaje **por trabajador** (un único porcentaje que aplica a todo lo que hace esa persona). Lo planteado ahora incorpora el **servicio** a la ecuación. Hay que precisar cuál de estos tres modelos es (ver §3.9), porque define el esquema de base de datos y cambiarlo después obliga a migrar datos ya cargados.
+
+**Reglas que se mantienen de la etapa anterior:**
+
+| Regla | Detalle |
+|---|---|
+| Sólo el dueño modifica porcentajes | El encargado gestiona equipo y agenda, pero no toca dinero |
+| Se calcula sobre el precio total | Sin descontar insumos. Riesgo asumido: si entran negocios con materiales caros (tintura), habrá que revisarlo |
+| El porcentaje se congela en la cita | Al pasar a `completada` se guarda el valor aplicado. Cambiar un porcentaje hoy **no** debe recalcular liquidaciones ya pagadas |
+| Historial de cambios | Quién cambió qué y cuándo. Es dinero: sin registro, una disputa entre dueño y profesional no se puede resolver |
+
+**Aún pendiente:** el resto de ideas nuevas por incorporar.
+
+---
+
+### 3.9 ⭐ Granularidad de la comisión (nuevo — bloqueante)
+
+Define el esquema de datos. Tres modelos posibles:
+
+| Modelo | Ejemplo | Costo |
+|---|---|---|
+| **A. Por profesional** | "Juan se lleva el 70% de todo lo que hace" | Simple. Un valor por persona |
+| **B. Por servicio** | "Todo corte reparte 70/30, sin importar quién lo haga" | Simple. Un valor por servicio |
+| **C. Por profesional × servicio** | "Juan 70% en corte y 50% en color; Pedro 60% en corte" | Matriz. Más potente y más trabajo de configuración |
+
+**Recomendación: C, pero con herencia** — un porcentaje por defecto en cada profesional, y la posibilidad de sobrescribirlo para servicios puntuales. Cubre los tres casos sin obligar al dueño a llenar una matriz completa el primer día, y evita tener que migrar si mañana necesita el caso complejo.
 
 **Respuesta:**
 > _(pendiente)_
@@ -194,9 +241,12 @@ Las decisiones se anotan **dentro de la feature que las usa**, no en archivos ap
 | Bloqueante | Estado |
 |---|---|
 | `git commit` denegado por configuración | ✅ Resuelto — la configuración desapareció con el reseteo del contenedor y no se vuelve a introducir |
-| Nicho, modelo de negocio y diferenciador sin definir | 🔴 Bloquea producto y branding (§3.1–3.3) |
-| Funciones nuevas desconocidas | 🔴 Bloquea el backlog (§3.4) |
+| Nicho | ✅ Resuelto — sin segmentar por rubro, mensaje sobre el comportamiento compartido (§3.1) |
+| Diferenciador | ✅ Resuelto — gestión de comisiones por servicio prestado (§3.3) |
+| Granularidad de la comisión | 🔴 **Bloqueante.** Define el esquema de datos (§3.9) |
+| Modelo de negocio | 🔴 **Bloqueante.** Sin responder (§3.2) |
+| Resto de funciones nuevas | 🟡 Falta el resto del listado (§3.4) |
 | Carpeta de buenas prácticas no compartida | 🟡 Se puede avanzar y aplicarla después (§3.8) |
 | Sólo existe base de datos de producción | 🟡 No bloquea la etapa de requerimientos |
 
-**Camino más corto para desbloquear:** responder §3.1, §3.2, §3.3 y §3.4.
+**Camino más corto para desbloquear:** responder §3.9 (granularidad de la comisión) y §3.2 (modelo de negocio). Con eso se puede diseñar el esquema y redactar `PRODUCTO.md`.
