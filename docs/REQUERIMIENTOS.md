@@ -1,8 +1,8 @@
 # Eli v1 — Levantamiento de requerimientos
 
 > Documento vivo. Se responde y se va completando; es el insumo de `PRODUCTO.md` y del backlog.
-> **Estado:** definidos nicho (§3.1), diferenciador (§3.3) y la función central (§3.4).
-> Pendientes bloqueantes: modelo de negocio (§3.2) y granularidad de la comisión (§3.9).
+> **Estado:** cerradas todas las definiciones bloqueantes. Producto redactado en `PRODUCTO.md`.
+> Pendientes menores: precio (§3.2), resto de funciones nuevas (§3.4), branding (§3.6) y convenciones (§3.8).
 
 ---
 
@@ -85,10 +85,11 @@ Los planes anteriores (12/29/59 USD) nunca tuvieron Stripe conectado ni límites
 - ¿Los límites por plan se aplican de verdad en v1?
 - ¿Prueba gratuita? ¿Cuántos días, con o sin tarjeta?
 
-**Recomendación:** suscripción mensual por negocio. Con comisiones entre dueño y trabajador dentro del producto, es el modelo con menos fricción: no se le toca la caja al negocio.
+**Respuesta (decidida): suscripción mensual por negocio.**
 
-**Respuesta:**
-> _(pendiente)_
+No se cobra comisión sobre las reservas: el producto administra el dinero del negocio, no lo toca. Cobrarle un porcentaje a quien usa Eli justamente para repartir porcentajes sería contradictorio.
+
+**Pendiente de definir (no bloquea el diseño):** precio, si los límites por plan se aplican en v1, y duración de la prueba gratuita.
 
 ---
 
@@ -155,10 +156,15 @@ Define el esquema de datos. Tres modelos posibles:
 | **B. Por servicio** | "Todo corte reparte 70/30, sin importar quién lo haga" | Simple. Un valor por servicio |
 | **C. Por profesional × servicio** | "Juan 70% en corte y 50% en color; Pedro 60% en corte" | Matriz. Más potente y más trabajo de configuración |
 
-**Recomendación: C, pero con herencia** — un porcentaje por defecto en cada profesional, y la posibilidad de sobrescribirlo para servicios puntuales. Cubre los tres casos sin obligar al dueño a llenar una matriz completa el primer día, y evita tener que migrar si mañana necesita el caso complejo.
+**Respuesta (decidida): C con herencia.**
 
-**Respuesta:**
-> _(pendiente)_
+Cada profesional tiene un porcentaje por defecto; se puede sobrescribir para servicios puntuales. Resolución en cascada:
+
+1. ¿Existe un porcentaje definido para *ese profesional* en *ese servicio*? → se usa ese.
+2. Si no, ¿el profesional tiene un porcentaje por defecto? → se usa ese.
+3. Si no hay ninguno → la cita queda sin comisión, y se muestra como pendiente de configurar (no se asume cero en silencio).
+
+Detalle en `PRODUCTO.md`.
 
 ---
 
@@ -243,10 +249,10 @@ Las decisiones se anotan **dentro de la feature que las usa**, no en archivos ap
 | `git commit` denegado por configuración | ✅ Resuelto — la configuración desapareció con el reseteo del contenedor y no se vuelve a introducir |
 | Nicho | ✅ Resuelto — sin segmentar por rubro, mensaje sobre el comportamiento compartido (§3.1) |
 | Diferenciador | ✅ Resuelto — gestión de comisiones por servicio prestado (§3.3) |
-| Granularidad de la comisión | 🔴 **Bloqueante.** Define el esquema de datos (§3.9) |
-| Modelo de negocio | 🔴 **Bloqueante.** Sin responder (§3.2) |
+| Granularidad de la comisión | ✅ Resuelto — profesional × servicio con herencia (§3.9) |
+| Modelo de negocio | ✅ Resuelto — suscripción mensual por negocio (§3.2). Falta definir precio |
 | Resto de funciones nuevas | 🟡 Falta el resto del listado (§3.4) |
 | Carpeta de buenas prácticas no compartida | 🟡 Se puede avanzar y aplicarla después (§3.8) |
 | Sólo existe base de datos de producción | 🟡 No bloquea la etapa de requerimientos |
 
-**Camino más corto para desbloquear:** responder §3.9 (granularidad de la comisión) y §3.2 (modelo de negocio). Con eso se puede diseñar el esquema y redactar `PRODUCTO.md`.
+**Siguiente paso:** con el producto definido, redactar el backlog en `FEATURES.md` y la identidad en la sección de branding.
