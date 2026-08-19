@@ -148,6 +148,10 @@ describe("puedeEditarComisiones", () => {
   it("es false para admin: el encargado no toca dinero", () => {
     expect(puedeEditarComisiones(crearActor("admin"))).toBe(false)
   })
+
+  it("es false para worker", () => {
+    expect(puedeEditarComisiones(crearActor("worker"))).toBe(false)
+  })
 })
 
 describe("puedeVerIngresosDelNegocio", () => {
@@ -272,5 +276,39 @@ describe("filtroDeAgenda", () => {
 
   it("falla cerrado: sin actor no se ve nada", () => {
     expect(filtroDeAgenda(null)).toEqual({ id: { in: [] } })
+  })
+})
+
+// `null` no es un caso hipotético: es exactamente lo que devuelve
+// actorDeSesion() cuando la sesión es inválida o el token venció. Si alguien
+// refactoriza `actor?.role` a `actor!.role` sin darse cuenta, estos tests
+// tienen que fallar — es la fuga de permisos que evita el fallo cerrado.
+describe("sin actor: toda función niega", () => {
+  it("puedeGestionarEquipo(null) es false", () => {
+    expect(puedeGestionarEquipo(null)).toBe(false)
+  })
+
+  it("puedeCambiarRolDe(null, memberId) es false", () => {
+    expect(puedeCambiarRolDe(null, "member-1")).toBe(false)
+  })
+
+  it("puedeEditarComisiones(null) es false", () => {
+    expect(puedeEditarComisiones(null)).toBe(false)
+  })
+
+  it("puedeVerIngresosDelNegocio(null) es false", () => {
+    expect(puedeVerIngresosDelNegocio(null)).toBe(false)
+  })
+
+  it("puedeVerLiquidacionDe(null, memberId) es false", () => {
+    expect(puedeVerLiquidacionDe(null, "member-1")).toBe(false)
+  })
+
+  it("puedeVerTodaLaAgenda(null) es false", () => {
+    expect(puedeVerTodaLaAgenda(null)).toBe(false)
+  })
+
+  it("puedeEditarHorarioDe(null, memberId) es false", () => {
+    expect(puedeEditarHorarioDe(null, "member-1")).toBe(false)
   })
 })

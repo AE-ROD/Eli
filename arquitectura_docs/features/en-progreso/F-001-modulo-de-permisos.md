@@ -182,3 +182,25 @@ edita el horario general del negocio (`memberIdObjetivo` null).
 `app/api/configuracion/horarios/route.ts` en F-002+, el `admin` va a ganar
 acceso al horario de otros miembros que hoy no tiene (ver "Fuera de alcance
 detectado" — no es una regresión, es alinear el endpoint con la regla real).
+
+### 2026-08-17 — backend (F-001, iteración 3: cobertura de `actor: null`)
+
+**Hecho:** QA aprobó el comportamiento pero encontró un hueco de cobertura:
+las siete funciones que reciben `actor: Actor | null`
+(`puedeGestionarEquipo`, `puedeCambiarRolDe`, `puedeEditarComisiones`,
+`puedeVerIngresosDelNegocio`, `puedeVerLiquidacionDe`, `puedeVerTodaLaAgenda`,
+`puedeEditarHorarioDe`) no tenían ningún test que las llamara con `null` —el
+camino real cuando `actorDeSesion` rechaza una sesión inválida o vencida—, así
+que un refactor accidental de `actor?.role` a `actor!.role` habría pasado sin
+que ningún test se quejara. Agregué el describe `"sin actor: toda función
+niega"` con un test por función, más `puedeEditarComisiones(worker) → false`
+para completar el trío de roles. No toqué `lib/permisos.ts`, sólo tests, tal
+como se pidió.
+
+**Archivos:** `lib/permisos.test.ts` (modificado).
+
+**Verificación:** `npx tsc --noEmit`, `npm run lint` y `npm test` (72 tests en
+total, 46 en `lib/permisos.test.ts`, 5 archivos) en verde.
+
+**Pendiente:** tareas 3 (qa, ya revisó comportamiento — confirmar que este
+hueco quedó cerrado) y 4 (revisor) de esta ficha; migrar endpoints en F-002+.
