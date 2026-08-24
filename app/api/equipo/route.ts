@@ -16,11 +16,24 @@ export async function GET() {
   const [miembros, invitaciones] = await Promise.all([
     prisma.businessMember.findMany({
       where: { businessId: user.businessId },
-      include: { user: { select: { id: true, name: true, email: true } } },
+      select: {
+        id: true,
+        role: true,
+        createdAt: true,
+        user: { select: { id: true, name: true, email: true } },
+      },
       orderBy: { createdAt: "asc" },
     }),
     prisma.workerInvitation.findMany({
       where: { businessId: user.businessId, acceptedAt: null },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        expiresAt: true,
+        createdAt: true,
+      },
       orderBy: { createdAt: "desc" },
     }),
   ])
@@ -72,6 +85,15 @@ export async function POST(request: NextRequest) {
         role: rol,
         expiresAt,
       },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        expiresAt: true,
+        createdAt: true,
+        token: true, // usado solo para armar el enlace del correo, no se responde al cliente
+      },
     })
 
     const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000"
@@ -90,7 +112,9 @@ export async function POST(request: NextRequest) {
       enlaceAceptar,
     }).catch(() => null)
 
-    return NextResponse.json({ invitacion }, { status: 201 })
+    const { token: _token, ...invitacionSinToken } = invitacion
+
+    return NextResponse.json({ invitacion: invitacionSinToken }, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
