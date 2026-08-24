@@ -69,15 +69,14 @@ export const puedeEditarComisiones = esDueño
 
 /**
  * A quién se asigna una cita. El profesional no elige: termina siempre
- * asignado a sí mismo, mande lo que mande el cliente. Dueño y encargado
- * gestionan el negocio y se respeta lo pedido, incluido `null` ("sin
- * asignar"). Sin actor no hay cita posible: llegar hasta acá sin uno es un
- * error de quien llama, no un caso de negocio a resolver en silencio.
+ * asignado a sí mismo, mande lo que mande. Dueño y encargado gestionan el
+ * negocio, así que se respeta lo pedido, incluido `null` ("sin asignar").
+ *
+ * Pide un `Actor` y no `Actor | null` a propósito: sin sesión no hay cita, y
+ * el endpoint ya cortó con 401 antes de llegar acá.
  */
-export function memberIdParaCita(actor: Actor | null, memberIdPedido: string | null): string | null {
-  if (!actor) throw new Error("memberIdParaCita requiere un actor")
-  if (actor.rol === "worker") return actor.memberId
-  return memberIdPedido
+export function memberIdParaCita(actor: Actor, memberIdPedido: string | null): string | null {
+  return actor.rol === "worker" ? actor.memberId : memberIdPedido
 }
 
 /** Nadie se cambia el rol a sí mismo: evita autoascensos y quedarse sin acceso. */
@@ -104,8 +103,12 @@ export const puedeEditarHorarioDe = (actor: Actor | null, miembro: Miembro | nul
 
 // ─── Filtros para consultas ──────────────────────────────────────────────────
 
-/** No matchea nada. Niega sin devolver un filtro vacío. */
-const NINGUNA: Prisma.AppointmentWhereInput = { memberId: { in: [] } }
+/**
+ * No matchea nada. Va dentro de `AND` porque el llamador combina el filtro con
+ * spread (`{ ...filtro, id }`): cualquier clave suelta que use puede pisarla y
+ * la negación desaparece sin que nadie lo note.
+ */
+const NADA = { AND: [{ id: { in: [] as string[] } }] }
 
 /**
  * Filtro de agenda para el `where` de Prisma. **Siempre acota al negocio del
@@ -113,16 +116,14 @@ const NINGUNA: Prisma.AppointmentWhereInput = { memberId: { in: [] } }
  * traería las citas de todos los negocios.
  */
 export function filtroDeAgenda(actor: Actor | null): Prisma.AppointmentWhereInput {
-  if (!actor) return NINGUNA
+  if (!actor) return NADA
   if (puedeVerTodaLaAgenda(actor)) return { businessId: actor.businessId }
-  if (!actor.memberId) return { businessId: actor.businessId, ...NINGUNA }
+  if (!actor.memberId) return { businessId: actor.businessId, ...NADA }
   return { businessId: actor.businessId, memberId: actor.memberId }
 }
 
-const NINGÚN_CLIENTE: Prisma.PatientWhereInput = { id: { in: [] } }
-
 /** Los clientes son del negocio, no del profesional: todo rol ve los mismos. */
 export function filtroDeClientes(actor: Actor | null): Prisma.PatientWhereInput {
-  if (!actor) return NINGÚN_CLIENTE
+  if (!actor) return NADA
   return { businessId: actor.businessId }
 }

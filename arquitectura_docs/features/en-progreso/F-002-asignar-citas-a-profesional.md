@@ -78,10 +78,47 @@ Se configura algo que no se aplica.
 
 ## Fuera de alcance detectado
 
-<!-- El agente completa acá. -->
+- `app/api/equipo/route.ts` (GET/POST existente) usa `session.user as any` y
+  restringe a `role !== "owner"`, dejando a `admin` sin acceso pese a que
+  `puedeGestionarEquipo` lo permite. No se tocó: es F-001, no esta ficha.
 
 ## Decisiones tomadas
 
-<!-- El agente registra acá las que surjan. -->
+- `memberIdParaCita(actor, memberIdPedido)`: si `actor` es `null` la función
+  **lanza** (`throw`), no devuelve `null`. Un `null` de retorno ya tiene
+  significado de negocio ("sin asignar"); usarlo también para "no hay sesión"
+  mezclaría dos cosas distintas. En la práctica nunca se llega a esta rama
+  porque el endpoint corta antes con 401 si no hay actor — el `throw` es una
+  aserción de que la función no se usa sin haber pasado por `actorDeSesion`.
+- `filtroDeClientes(actor)` acota solo por `businessId`, igual para los tres
+  roles: los clientes son del negocio, no de un profesional en particular (a
+  diferencia de la agenda).
+- `GET /api/equipo/miembros` se restringió con `puedeGestionarEquipo` (owner y
+  admin), igual que el resto de `/api/equipo`: sólo quien gestiona el negocio
+  arma citas para otros, así que sólo ellos necesitan la lista completa del
+  equipo. Devuelve 401 en el mismo estilo que el endpoint vecino (no hay un
+  recurso concreto que ocultar con 404 acá, es un permiso de rol).
+- El `GET`/`POST` de `/api/citas` no se migraron por completo a
+  `actorDeSesion` para no ampliar el alcance: el `GET` sigue leyendo
+  `session.user.businessId` directo (no lo necesitaba tocar); el `POST` sí usa
+  `actorDeSesion` porque necesita el `Actor` completo para `memberIdParaCita`.
+- No se agregó rate limit a `GET /api/equipo/miembros`: ningún endpoint
+  autenticado del panel (`/api/equipo`, `/api/citas`) lo usa hoy — el rate
+  limiting existente sólo cubre login/registro/reserva pública por IP.
+- No se agregaron tests de endpoint (`route.test.ts`): no hay precedente en el
+  repo de testear rutas de `app/api` (se prueba `lib/`), así que se mantuvo el
+  patrón existente.
 
 ## Bitácora
+
+- 2026-08-24 — backend (tarea #1): agregadas `memberIdParaCita` y
+  `filtroDeClientes` a `lib/permisos.ts` con sus tests en
+  `lib/permisos.test.ts` (formato `it.each`). Creado
+  `app/api/equipo/miembros/route.ts` (GET, sólo owner/admin, id/nombre/rol).
+  Modificado `app/api/citas/route.ts`: el `POST` valida `memberId` con zod
+  (`nullable().optional()`), lo resuelve con `memberIdParaCita`, verifica
+  pertenencia al negocio (404 si es de otro negocio o no existe) y lo guarda;
+  el `GET` ahora incluye `memberId` y `member.user.name`/`role` en la
+  respuesta. `npm run lint`, `npx tsc --noEmit` y `npx vitest run` en verde.
+  Pendiente para frontend: selector en el modal (tarea #2) y ocultarlo para
+  `worker`.

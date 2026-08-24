@@ -16,6 +16,9 @@ import {
   type Rol,
 } from "./permisos"
 
+/** El filtro que no matchea nada, tal como lo devuelve el módulo. */
+const NADA = { AND: [{ id: { in: [] } }] }
+
 const NEGOCIO = "negocio-1"
 const OTRO_NEGOCIO = "negocio-2"
 
@@ -116,8 +119,8 @@ describe("a quién se asigna una cita", () => {
     expect(memberIdParaCita(actor, pedido)).toBe(esperado)
   })
 
-  it("sin actor no hay cita posible", () => {
-    expect(() => memberIdParaCita(null, "colega")).toThrow()
+  it("un profesional sin memberId deja la cita sin asignar, no en otro", () => {
+    expect(memberIdParaCita(actor("worker", null), "colega")).toBeNull()
   })
 })
 
@@ -166,17 +169,17 @@ describe("falla cerrado", () => {
   })
 
   it("sin actor, el filtro de agenda no devuelve nada", () => {
-    expect(filtroDeAgenda(null)).toEqual({ memberId: { in: [] } })
+    expect(filtroDeAgenda(null)).toEqual(NADA)
   })
 
   it("sin actor, el filtro de clientes no devuelve nada", () => {
-    expect(filtroDeClientes(null)).toEqual({ id: { in: [] } })
+    expect(filtroDeClientes(null)).toEqual(NADA)
   })
 
   it("un profesional sin memberId no ve ninguna cita, en vez de verlas todas", () => {
     const roto = actor("worker", null)
 
-    expect(filtroDeAgenda(roto)).toEqual({ businessId: NEGOCIO, memberId: { in: [] } })
+    expect(filtroDeAgenda(roto)).toEqual({ businessId: NEGOCIO, ...NADA })
     expect(puedeVerLiquidacionDe(roto, yoMismo)).toBe(false)
     expect(puedeEditarHorarioDe(roto, yoMismo)).toBe(false)
   })

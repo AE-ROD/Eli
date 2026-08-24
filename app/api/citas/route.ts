@@ -73,7 +73,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.businessId) {
+  const actor = actorDeSesion(session)
+  if (!actor) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
@@ -82,11 +83,23 @@ export async function POST(request: NextRequest) {
     const datos = citaSchema.parse(body)
 
     const paciente = await prisma.patient.findFirst({
-      where: { id: datos.patientId, businessId: session.user.businessId },
+      where: { id: datos.patientId, businessId: actor.businessId },
     })
 
     if (!paciente) {
       return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 })
+    }
+
+    // El worker no elige: memberIdParaCita ignora lo pedido y devuelve su propio id.
+    const memberId = memberIdParaCita(actor, datos.memberId ?? null)
+
+    if (memberId) {
+      const miembro = await prisma.businessMember.findFirst({
+        where: { id: memberId, businessId: actor.businessId },
+      })
+      if (!miembro) {
+        return NextResponse.json({ error: "Miembro no encontrado" }, { status: 404 })
+      }
     }
 
     const cita = await prisma.appointment.create({
@@ -98,10 +111,12 @@ export async function POST(request: NextRequest) {
         notes: datos.notes || null,
         price: datos.price ?? null,
         patientId: datos.patientId,
-        businessId: session.user.businessId,
+        memberId,
+        businessId: actor.businessId,
       },
       include: {
         patient: { select: { id: true, name: true, email: true, phone: true } },
+        member: { select: { id: true, role: true, user: { select: { id: true, name: true } } } },
       },
     })
 
