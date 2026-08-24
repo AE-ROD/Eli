@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { actorDeSesion, memberIdParaCita } from "@/lib/permisos"
 
 const citaSchema = z.object({
   title: z.string().min(2),
@@ -12,6 +13,7 @@ const citaSchema = z.object({
   notes: z.string().optional().or(z.literal("")),
   price: z.number().positive().optional(),
   patientId: z.string(),
+  memberId: z.string().nullable().optional(),
 })
 
 export async function GET(request: NextRequest) {
@@ -59,6 +61,8 @@ export async function GET(request: NextRequest) {
       price: true,
       patientId: true,
       patient: { select: { id: true, name: true, email: true, phone: true } },
+      memberId: true,
+      member: { select: { id: true, role: true, user: { select: { id: true, name: true } } } },
     },
     orderBy: { startTime: "asc" },
     take: fechaInicio ? undefined : 100,

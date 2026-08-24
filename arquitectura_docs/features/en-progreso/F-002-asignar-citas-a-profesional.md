@@ -1,7 +1,7 @@
 ---
 id: F-002
 titulo: Asignar citas a un profesional
-estado: backlog
+estado: en-progreso
 prioridad: alta
 areas: [backend, frontend]
 rama: v1

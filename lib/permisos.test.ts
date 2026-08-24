@@ -10,6 +10,8 @@ import {
   puedeVerTodaLaAgenda,
   puedeEditarHorarioDe,
   filtroDeAgenda,
+  memberIdParaCita,
+  filtroDeClientes,
   type Actor,
   type Rol,
 } from "./permisos"
@@ -95,6 +97,28 @@ describe("aislamiento entre negocios", () => {
     expect(filtroDeAgenda(dueño)).toEqual({ businessId: NEGOCIO })
     expect(filtroDeAgenda(profesional)).toEqual({ businessId: NEGOCIO, memberId: "yo" })
   })
+
+  it("el filtro de clientes acota al negocio para cualquier rol", () => {
+    expect(filtroDeClientes(dueño)).toEqual({ businessId: NEGOCIO })
+    expect(filtroDeClientes(encargado)).toEqual({ businessId: NEGOCIO })
+    expect(filtroDeClientes(profesional)).toEqual({ businessId: NEGOCIO })
+  })
+})
+
+describe("a quién se asigna una cita", () => {
+  it.each([
+    ["dueño pide asignar a un miembro", dueño, "colega", "colega"],
+    ["dueño pide dejarla sin asignar", dueño, null, null],
+    ["encargado pide asignar a un miembro", encargado, "colega", "colega"],
+    ["profesional pide asignar a un colega: termina siendo él mismo", profesional, "colega", "yo"],
+    ["profesional pide dejarla sin asignar: igual termina siendo él mismo", profesional, null, "yo"],
+  ])("%s", (_caso, actor, pedido, esperado) => {
+    expect(memberIdParaCita(actor, pedido)).toBe(esperado)
+  })
+
+  it("sin actor no hay cita posible", () => {
+    expect(() => memberIdParaCita(null, "colega")).toThrow()
+  })
 })
 
 describe("sobre un miembro concreto", () => {
@@ -143,6 +167,10 @@ describe("falla cerrado", () => {
 
   it("sin actor, el filtro de agenda no devuelve nada", () => {
     expect(filtroDeAgenda(null)).toEqual({ memberId: { in: [] } })
+  })
+
+  it("sin actor, el filtro de clientes no devuelve nada", () => {
+    expect(filtroDeClientes(null)).toEqual({ id: { in: [] } })
   })
 
   it("un profesional sin memberId no ve ninguna cita, en vez de verlas todas", () => {

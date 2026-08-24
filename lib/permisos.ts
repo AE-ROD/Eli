@@ -67,6 +67,19 @@ export const puedeVerIngresosDelNegocio = gestionaElNegocio
 /** Dinero. El encargado gestiona la operación pero no define cuánto cobra cada uno. */
 export const puedeEditarComisiones = esDueño
 
+/**
+ * A quién se asigna una cita. El profesional no elige: termina siempre
+ * asignado a sí mismo, mande lo que mande el cliente. Dueño y encargado
+ * gestionan el negocio y se respeta lo pedido, incluido `null` ("sin
+ * asignar"). Sin actor no hay cita posible: llegar hasta acá sin uno es un
+ * error de quien llama, no un caso de negocio a resolver en silencio.
+ */
+export function memberIdParaCita(actor: Actor | null, memberIdPedido: string | null): string | null {
+  if (!actor) throw new Error("memberIdParaCita requiere un actor")
+  if (actor.rol === "worker") return actor.memberId
+  return memberIdPedido
+}
+
 /** Nadie se cambia el rol a sí mismo: evita autoascensos y quedarse sin acceso. */
 export const puedeCambiarRolDe = (actor: Actor | null, miembro: Miembro): boolean =>
   puedeGestionarEquipo(actor) &&
@@ -104,4 +117,12 @@ export function filtroDeAgenda(actor: Actor | null): Prisma.AppointmentWhereInpu
   if (puedeVerTodaLaAgenda(actor)) return { businessId: actor.businessId }
   if (!actor.memberId) return { businessId: actor.businessId, ...NINGUNA }
   return { businessId: actor.businessId, memberId: actor.memberId }
+}
+
+const NINGÚN_CLIENTE: Prisma.PatientWhereInput = { id: { in: [] } }
+
+/** Los clientes son del negocio, no del profesional: todo rol ve los mismos. */
+export function filtroDeClientes(actor: Actor | null): Prisma.PatientWhereInput {
+  if (!actor) return NINGÚN_CLIENTE
+  return { businessId: actor.businessId }
 }
