@@ -67,6 +67,14 @@ Se configura algo que no se aplica.
   "la atiende el dueño" son el mismo valor (`null`) y **no se distinguen**. Se
   acepta por ahora; queda anotado para las comisiones.
 - Usa `lib/permisos.ts` (F-001). No repetir chequeos de rol en el endpoint.
+- **Falta en `lib/permisos.ts`** (lo marcó el revisor al cerrar F-001; se agrega
+  acá porque esta ficha es la primera que lo necesita):
+  - `memberIdParaCita(actor, memberIdPedido)` — decide a quién se asigna la cita.
+    Devuelve el `memberId` del propio actor si es `worker`, sin importar lo que
+    haya mandado. Es el criterio "un worker termina con la cita asignada a sí
+    mismo" convertido en función, para que ningún endpoint lo reimplemente.
+  - `filtroDeClientes(actor)` — el equivalente de `filtroDeAgenda` para
+    `Patient`. Sin él, listar clientes se resuelve a mano en cada endpoint.
 
 ## Fuera de alcance detectado
 

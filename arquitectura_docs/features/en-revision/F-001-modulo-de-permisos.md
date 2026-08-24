@@ -1,7 +1,7 @@
 ---
 id: F-001
 titulo: Módulo central de permisos
-estado: en-progreso
+estado: en-revision
 prioridad: alta
 areas: [backend]
 rama: v1
@@ -41,13 +41,16 @@ puede hacer?" en un solo lugar.
 - [x] Existe `lib/permisos.ts` con: `actorDeSesion`, `puedeGestionarEquipo`,
       `puedeCambiarRolDe`, `puedeEditarComisiones`, `puedeVerIngresosDelNegocio`,
       `puedeVerLiquidacionDe`, `puedeVerTodaLaAgenda`, `puedeEditarHorarioDe`,
-      `filtroDeAgenda`, `perteneceAlNegocio`.
+      `filtroDeAgenda`, `mismoNegocio`.
 - [x] Tres roles distinguibles: `owner` > `admin` > `worker`.
 - [x] `puedeEditarComisiones` es **true sólo para `owner`**. El `admin` no toca dinero.
 - [x] `puedeVerIngresosDelNegocio` es **false para `worker`**.
 - [x] Nadie puede cambiarse el rol a sí mismo.
-- [x] `filtroDeAgenda` devuelve `{}` para quien ve todo, y acota por `memberId`
-      para el profesional.
+- [x] `filtroDeAgenda` **siempre acota al `businessId` del actor**, y agrega
+      `memberId` para el profesional. (Corregido: el criterio original decía
+      `{}` para quien ve todo, y eso era el agujero H1.)
+- [x] Las funciones que deciden sobre un miembro reciben su `businessId` y
+      verifican pertenencia: no alcanzan a un miembro de otro negocio.
 - [x] **Falla cerrado**: un `worker` sin `memberId` no ve nada, en lugar de verlo todo.
 - [x] `actorDeSesion` rechaza sesiones con rol desconocido o sin `businessId`.
 - [ ] Ningún archivo del proyecto usa ya `session.user as any` para leer el rol.
@@ -61,8 +64,8 @@ puede hacer?" en un solo lugar.
 |---|---|---|---|---|---|
 | 1 | backend | Crear `lib/permisos.ts` y tipar la sesión | backend | hecha | — |
 | 2 | backend | Tests de todas las reglas | backend | hecha | 1 |
-| 3 | qa | Verificar criterios y buscar casos borde | qa | pendiente | 1,2 |
-| 4 | revisor | Verificar aislamiento y fallo cerrado | revisor | pendiente | 3 |
+| 3 | qa | Verificar criterios y buscar casos borde | qa | hecha | 1,2 |
+| 4 | revisor | Verificar aislamiento y fallo cerrado | revisor | hecha | 3 |
 
 ## Contexto técnico
 
@@ -123,9 +126,12 @@ puede hacer?" en un solo lugar.
   `app/api/configuracion/horarios/route.ts` (que quedó desactualizado, ver
   "Fuera de alcance detectado") en lugar de generalizar la regla real.
 - Falla cerrada de `filtroDeAgenda`: para quien no puede ver nada (sin actor,
-  o profesional sin `memberId`) se devuelve `{ id: { in: [] } }`, un filtro de
-  Prisma que garantiza cero resultados sin asumir el formato del `id`
-  (evita usar un string mágico que "nunca matchee").
+  o profesional sin `memberId`) se devuelve `{ memberId: { in: [] } }`. La
+  primera versión usaba `id`, que es justo la clave que el llamador pisa al
+  combinar filtros (`{ ...filtro, id }`): el filtro que negaba desaparecía.
+- Las funciones que deciden sobre un miembro reciben `Miembro { id, businessId }`
+  y no un `string` suelto. Con el string, `puedeVerLiquidacionDe` no tenía cómo
+  saber de qué negocio era ese miembro y devolvía `true` para uno ajeno.
 
 ## Bitácora
 
@@ -204,3 +210,39 @@ total, 46 en `lib/permisos.test.ts`, 5 archivos) en verde.
 
 **Pendiente:** tareas 3 (qa, ya revisó comportamiento — confirmar que este
 hueco quedó cerrado) y 4 (revisor) de esta ficha; migrar endpoints en F-002+.
+
+### 2026-08-24 — orquestador (F-001, iteración 4: hallazgos del revisor)
+
+**Hecho:** el revisor encontró tres agujeros reales; los tres confirmados y
+corregidos.
+
+- **H1 — `filtroDeAgenda` devolvía `{}` para dueño y encargado.** Un endpoint
+  que hiciera `where: filtroDeAgenda(actor)` traía las citas de **todos los
+  negocios**. Ahora siempre incluye `businessId`.
+- **H2 — el filtro que niega usaba `{ id: { in: [] } }`.** `id` es la clave que
+  el llamador pisa al combinar (`{ ...filtro, id }`), así que la negación se
+  perdía. Ahora usa `memberId`, que nadie sobrescribe.
+- **H3 — `puedeCambiarRolDe`, `puedeVerLiquidacionDe` y `puedeEditarHorarioDe`
+  recibían un `memberId: string`.** Sin el negocio del miembro no había forma de
+  validar pertenencia: un dueño del negocio A obtenía `true` sobre un miembro del
+  negocio B. Ahora reciben `Miembro { id, businessId }` y pasan por `mismoNegocio`.
+
+Además, al corregir `types/next-auth.d.ts` (importaba `Role`, un tipo que no
+existe: es `Rol`) aparecieron errores reales en `lib/auth.ts` que `skipLibCheck`
+venía tapando. `session.user.role` era `any`: **la capa de seguridad no estaba
+tipada**. Corregido, y `lib/auth.ts` pasó de repetir cuatro veces el mismo bloque
+a una función `perfilDe()`.
+
+Los tests bajaron de 72 casos a 24 sin perder cobertura: eran el mismo assert
+repetido por rol, ahora son tablas con `it.each`. Se sumaron los cruces entre
+negocios, que antes no se probaban.
+
+**Archivos:** `lib/permisos.ts`, `lib/permisos.test.ts`, `types/next-auth.d.ts`,
+`lib/auth.ts`.
+
+**Verificación:** `npm run build`, `npm run lint`, `npx tsc --noEmit` y
+`npm test` (50 tests, 5 archivos) en verde.
+
+**Pendiente:** dos huecos de diseño que el revisor marcó y que F-002 necesita el
+primer día — `puedeAsignarCitasAOtros` / `memberIdParaCita`, y `filtroDeClientes`.
+No se agregan acá (fuera de alcance): van en la ficha de F-002.
