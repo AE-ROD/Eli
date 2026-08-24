@@ -1,242 +1,56 @@
-# 🏥 Eli - Sistema de Gestión para Negocios de Bienestar
+# Eli
 
-Sistema completo de gestión de citas, pacientes y comunicación para negocios de salud y bienestar.
+Sistema de reservas para negocios que atienden con cita. Cada negocio tiene su
+agenda, su equipo y su página pública de reserva; los profesionales cobran un
+porcentaje del servicio que atienden.
 
-## 🚀 Inicio Rápido
+Qué es y para quién, en `docs/PRODUCTO.md`.
 
-### Prerequisitos
-- Node.js 18+
-- PostgreSQL 14+
-- npm o pnpm
+## Levantarlo
 
-### Instalación
-
-1. **Clonar e instalar dependencias**
 ```bash
-git clone https://github.com/AE-ROD/Eli.git
-cd Eli
 npm install
-```
-
-2. **Configurar base de datos**
-```bash
-# Crear base de datos en PostgreSQL
-createdb eli
-
-# Configurar .env (ver .env.example)
-cp .env.example .env
-# Edita .env con tus credenciales
-```
-
-3. **Configurar Prisma y datos de prueba**
-```bash
-npm run db:setup
-```
-
-4. **Iniciar servidor de desarrollo**
-```bash
+npx prisma generate
 npm run dev
 ```
 
-5. **Abrir en navegador**
-```
-http://localhost:3000
-```
+Necesita un `.env` con:
 
-### Credenciales de Prueba
-- Email: `admin@eli.com`
-- Password: `password123`
+| Variable | Para qué |
+|---|---|
+| `DATABASE_URL` | Postgres (Neon), conexión con pool. |
+| `DIRECT_URL` | Postgres directo. Sólo lo usan las migraciones. |
+| `NEXTAUTH_URL` / `NEXTAUTH_SECRET` | Sesiones. |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Entrar con Google. |
+| `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Correos. Sin esto no se envían, pero nada se rompe. |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Rate limiting. Sin esto queda desactivado. |
+| `CRON_SECRET` | Protege el cron de recordatorios. |
 
----
-
-## 📚 Documentación
-
-- **[INICIO-RAPIDO.md](INICIO-RAPIDO.md)** - Guía de 5 minutos para empezar
-- **[GUIA-CONEXION-BD.md](GUIA-CONEXION-BD.md)** - Guía detallada de conexión a PostgreSQL
-- **[GUIA-PROYECTO.md](GUIA-PROYECTO.md)** - Estructura y arquitectura del proyecto
-- **[ESTADO-PROYECTO.md](ESTADO-PROYECTO.md)** - Estado actual y roadmap
-
----
-
-## 🛠️ Stack Tecnológico
-
-### Frontend
-- **Framework**: Next.js 16 (App Router)
-- **Lenguaje**: TypeScript
-- **Estilos**: Tailwind CSS 4
-- **UI Components**: Radix UI + shadcn/ui
-- **Animaciones**: Framer Motion
-- **Formularios**: React Hook Form + Zod
-- **Iconos**: Lucide React
-
-### Backend
-- **ORM**: Prisma
-- **Base de Datos**: PostgreSQL
-- **Autenticación**: NextAuth.js
-- **Validación**: Zod
-- **Encriptación**: bcryptjs
-
----
-
-## 📁 Estructura del Proyecto
-
-```
-Eli/
-├── app/                    # Páginas y rutas (Next.js App Router)
-│   ├── api/               # API Routes
-│   ├── dashboard/         # Dashboard protegido
-│   ├── iniciar-sesion/    # Login
-│   └── crear-cuenta/      # Registro
-│
-├── components/            # Componentes React
-│   ├── eli/              # Componentes específicos de Eli
-│   └── ui/               # Componentes base (shadcn/ui)
-│
-├── lib/                   # Utilidades y configuración
-│   ├── auth.ts           # Configuración de NextAuth
-│   ├── prisma.ts         # Cliente de Prisma
-│   └── utils.ts          # Funciones helper
-│
-├── prisma/               # Base de datos
-│   ├── schema.prisma     # Esquema de la BD
-│   └── seed.ts           # Datos de prueba
-│
-├── hooks/                # Custom React Hooks
-├── public/               # Archivos estáticos
-└── styles/               # Estilos globales
-```
-
----
-
-## 🎯 Características
-
-### ✅ Implementado
-- 🎨 Diseño UI/UX profesional
-- 🔐 Autenticación con NextAuth.js (credenciales + Google)
-- 👥 Gestión de pacientes (CRUD)
-- 📅 Sistema de citas y agendamiento público (CRUD + reserva online)
-- 👨‍👩‍👧 Equipo multi-trabajador con invitaciones por email
-- 💬 Chat/Mensajería
-- 📊 Dashboard con estadísticas conectado a datos reales
-- 📧 Notificaciones y recordatorios por email (Resend)
-- 📱 Diseño responsive
-- 🎭 Animaciones fluidas
-- 🗄️ Base de datos PostgreSQL con Prisma
-
-### 🚧 En Desarrollo
-- 💳 Pagos en línea (Stripe) — la UI de precios existe, falta la integración
-- 📄 Exportar reportes PDF
-- 📱 Notificaciones push
-- 🔄 Sincronización con Google Calendar
-- 🔑 Recuperación de contraseña
-- 🧪 Tests y CI/CD
-
----
-
-## 🗄️ Modelo de Datos
-
-```
-User (Usuario)
-  ├── Business (Negocio)
-      ├── Patient (Pacientes)
-      │   └── Appointment (Citas)
-      └── Conversation (Conversaciones)
-          └── Message (Mensajes)
-```
-
----
-
-## 🔧 Scripts Disponibles
+## Comandos
 
 ```bash
-# Desarrollo
-npm run dev              # Iniciar servidor de desarrollo
-npm run build            # Build para producción
-npm run start            # Iniciar servidor de producción
-
-# Base de Datos
-npm run db:setup         # Setup completo (generate + migrate + seed)
-npm run prisma:generate  # Generar cliente de Prisma
-npm run prisma:migrate   # Ejecutar migraciones
-npm run prisma:seed      # Cargar datos de prueba
-npm run prisma:studio    # Abrir Prisma Studio
-
-# Otros
-npm run lint             # Ejecutar ESLint
-npm test                 # Ejecutar tests (Vitest)
-npm run test:watch       # Tests en modo watch
+npm run dev            # desarrollo
+npm run build          # build de producción
+npm run lint           # eslint
+npm test               # vitest
+npx tsc --noEmit       # chequeo de tipos
+npx prisma studio      # ver la base
 ```
 
-Un workflow de GitHub Actions (`.github/workflows/ci.yml`) corre lint, chequeo de tipos, tests y build en cada push/PR a `main`.
+**Cuidado con la base:** hoy la única configurada es producción. `migrate dev`,
+`db push` y `migrate reset` van contra datos reales.
 
----
+## Cómo se trabaja acá
 
-## 🌐 Variables de Entorno
+Lee `CLAUDE.md`: es el contrato de trabajo. En resumen, toda tarea nace de una
+ficha en `arquitectura_docs/features/`, y los permisos se preguntan siempre a
+`lib/permisos.ts`, nunca comparando roles a mano.
 
-Crea un archivo `.env` en la raíz:
-
-```env
-# Base de Datos
-DATABASE_URL="postgresql://postgres:password@localhost:5432/eli"
-
-# NextAuth
-NEXTAUTH_URL="http://localhost:3000"
-NEXTAUTH_SECRET="tu-secreto-super-seguro"
-
-# Environment
-NODE_ENV="development"
 ```
-
----
-
-## 📊 Estado del Proyecto
-
-Frontend, backend e integración están completos y funcionando end-to-end. Antes de producción falta: facturación (Stripe), rate limiting, recuperación de contraseña, tests y CI.
-
-Ver [ESTADO-PROYECTO.md](ESTADO-PROYECTO.md) para el detalle completo.
-
----
-
-## 🤝 Contribuir
-
-1. Fork el proyecto
-2. Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
-
----
-
-## 📝 Licencia
-
-Este proyecto es privado y está bajo desarrollo.
-
----
-
-## 👨‍💻 Autor
-
-**Alejandro Rodríguez**
-- GitHub: [@AE-ROD](https://github.com/AE-ROD)
-
----
-
-## 🙏 Agradecimientos
-
-- [Next.js](https://nextjs.org/)
-- [Tailwind CSS](https://tailwindcss.com/)
-- [Radix UI](https://www.radix-ui.com/)
-- [shadcn/ui](https://ui.shadcn.com/)
-- [Prisma](https://www.prisma.io/)
-
----
-
-## 📞 Soporte
-
-¿Problemas? Revisa la documentación:
-- [INICIO-RAPIDO.md](INICIO-RAPIDO.md) - Para empezar rápido
-- [GUIA-CONEXION-BD.md](GUIA-CONEXION-BD.md) - Problemas con la base de datos
-- [ESTADO-PROYECTO.md](ESTADO-PROYECTO.md) - Estado y roadmap
-
----
-
-**Hecho con ❤️ para profesionales del bienestar y la salud**
+app/                 rutas y endpoints (App Router)
+components/          UI compartida
+lib/                 permisos, auth, prisma, correo, rate limit, validaciones
+prisma/              esquema y migraciones
+arquitectura_docs/   reglas de trabajo y fichas de feature
+docs/                producto y requerimientos
+```
