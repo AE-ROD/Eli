@@ -1,8 +1,7 @@
 import { describe, it, expect } from "vitest"
-import type { Session } from "next-auth"
 import {
   actorDeSesion,
-  perteneceAlNegocio,
+  mismoNegocio,
   puedeGestionarEquipo,
   puedeCambiarRolDe,
   puedeEditarComisiones,
@@ -12,303 +11,145 @@ import {
   puedeEditarHorarioDe,
   filtroDeAgenda,
   type Actor,
-  type Role,
+  type Rol,
 } from "./permisos"
 
-const NEGOCIO_A = "negocio-a"
-const NEGOCIO_B = "negocio-b"
+const NEGOCIO = "negocio-1"
+const OTRO_NEGOCIO = "negocio-2"
 
-function crearActor(role: Role, overrides: Partial<Actor> = {}): Actor {
-  return {
-    role,
-    businessId: NEGOCIO_A,
-    memberId: role === "owner" ? null : "member-1",
-    ...overrides,
-  }
-}
+const actor = (rol: Rol, memberId: string | null = rol === "owner" ? null : "yo"): Actor => ({
+  rol,
+  businessId: NEGOCIO,
+  memberId,
+})
 
-function sesionDe(user: Partial<Session["user"]>): Pick<Session, "user"> {
-  return {
-    user: {
-      id: "u1",
-      name: "Ana",
-      email: "ana@negocio.com",
-      role: "owner",
-      businessId: NEGOCIO_A,
-      businessName: "Negocio A",
-      businessSlug: "negocio-a",
-      memberId: null,
-      ...user,
-    } as Session["user"],
-  }
-}
+const dueño = actor("owner")
+const encargado = actor("admin")
+const profesional = actor("worker")
+
+const miembro = { id: "colega", businessId: NEGOCIO }
+const yoMismo = { id: "yo", businessId: NEGOCIO }
+const ajeno = { id: "colega", businessId: OTRO_NEGOCIO }
 
 describe("actorDeSesion", () => {
-  it("devuelve el actor cuando la sesión es válida", () => {
-    const sesion = sesionDe({ role: "admin", memberId: "member-1" })
+  const sesion = (user: Record<string, unknown>) => ({ user }) as never
 
-    const actor = actorDeSesion(sesion)
-
-    expect(actor).toEqual({ role: "admin", businessId: NEGOCIO_A, memberId: "member-1" })
+  it("traduce una sesión válida", () => {
+    expect(actorDeSesion(sesion({ role: "admin", businessId: NEGOCIO, memberId: "yo" }))).toEqual({
+      rol: "admin",
+      businessId: NEGOCIO,
+      memberId: "yo",
+    })
   })
 
-  it("devuelve memberId null para el dueño, que no es BusinessMember", () => {
-    const sesion = sesionDe({ role: "owner", memberId: null })
-
-    const actor = actorDeSesion(sesion)
-
-    expect(actor?.memberId).toBeNull()
+  it("el dueño no tiene memberId", () => {
+    expect(actorDeSesion(sesion({ role: "owner", businessId: NEGOCIO }))?.memberId).toBeNull()
   })
 
-  it("rechaza una sesión sin businessId", () => {
-    const sesion = { user: { role: "admin", memberId: "member-1" } } as unknown as Pick<Session, "user">
-
-    expect(actorDeSesion(sesion)).toBeNull()
+  it.each([
+    ["sin rol", { businessId: NEGOCIO }],
+    ["rol desconocido", { role: "gerente", businessId: NEGOCIO }],
+    ["sin negocio", { role: "admin" }],
+    ["negocio vacío", { role: "admin", businessId: "" }],
+  ])("rechaza una sesión %s", (_caso, user) => {
+    expect(actorDeSesion(sesion(user))).toBeNull()
   })
 
-  it("rechaza una sesión con rol desconocido", () => {
-    const sesion = sesionDe({ role: "gerente" as unknown as Role })
-
-    expect(actorDeSesion(sesion)).toBeNull()
-  })
-
-  it("rechaza una sesión sin usuario", () => {
-    expect(actorDeSesion({ user: undefined } as unknown as Pick<Session, "user">)).toBeNull()
-  })
-
-  it("rechaza una sesión null o undefined", () => {
+  it("rechaza cuando no hay sesión", () => {
     expect(actorDeSesion(null)).toBeNull()
     expect(actorDeSesion(undefined)).toBeNull()
   })
 })
 
-describe("perteneceAlNegocio", () => {
-  it("es true cuando el businessId coincide con el del actor", () => {
-    const actor = crearActor("owner")
-
-    expect(perteneceAlNegocio(actor, NEGOCIO_A)).toBe(true)
+describe("jerarquía de roles", () => {
+  it.each([
+    ["gestionar equipo", puedeGestionarEquipo, true, true, false],
+    ["ver toda la agenda", puedeVerTodaLaAgenda, true, true, false],
+    ["ver ingresos del negocio", puedeVerIngresosDelNegocio, true, true, false],
+    ["editar comisiones", puedeEditarComisiones, true, false, false],
+  ])("%s — dueño/encargado/profesional", (_que, puede, esperaDueño, esperaEncargado, esperaProfesional) => {
+    expect(puede(dueño)).toBe(esperaDueño)
+    expect(puede(encargado)).toBe(esperaEncargado)
+    expect(puede(profesional)).toBe(esperaProfesional)
   })
 
-  it("es false cuando el businessId es de otro negocio", () => {
-    const actor = crearActor("owner")
-
-    expect(perteneceAlNegocio(actor, NEGOCIO_B)).toBe(false)
-  })
-
-  it("es false cuando no hay actor", () => {
-    expect(perteneceAlNegocio(null, NEGOCIO_A)).toBe(false)
-  })
-})
-
-describe("tres roles distinguibles: owner > admin > worker", () => {
-  it("owner y admin gestionan equipo; worker no", () => {
-    expect(puedeGestionarEquipo(crearActor("owner"))).toBe(true)
-    expect(puedeGestionarEquipo(crearActor("admin"))).toBe(true)
-    expect(puedeGestionarEquipo(crearActor("worker"))).toBe(false)
-  })
-
-  it("sólo owner edita comisiones, ni siquiera admin", () => {
-    expect(puedeEditarComisiones(crearActor("owner"))).toBe(true)
-    expect(puedeEditarComisiones(crearActor("admin"))).toBe(false)
-    expect(puedeEditarComisiones(crearActor("worker"))).toBe(false)
+  it("el dinero es sólo del dueño: el encargado no toca comisiones", () => {
+    expect(puedeEditarComisiones(encargado)).toBe(false)
   })
 })
 
-describe("puedeCambiarRolDe", () => {
-  it("el dueño puede cambiar el rol de un miembro del equipo", () => {
-    const actor = crearActor("owner")
-
-    expect(puedeCambiarRolDe(actor, "member-2")).toBe(true)
+describe("aislamiento entre negocios", () => {
+  it("mismoNegocio compara el negocio del actor", () => {
+    expect(mismoNegocio(dueño, NEGOCIO)).toBe(true)
+    expect(mismoNegocio(dueño, OTRO_NEGOCIO)).toBe(false)
+    expect(mismoNegocio(dueño, null)).toBe(false)
   })
 
-  it("el encargado puede cambiar el rol de un miembro del equipo", () => {
-    const actor = crearActor("admin")
-
-    expect(puedeCambiarRolDe(actor, "member-2")).toBe(true)
+  it("ni el dueño alcanza a un miembro de otro negocio", () => {
+    expect(puedeCambiarRolDe(dueño, ajeno)).toBe(false)
+    expect(puedeVerLiquidacionDe(dueño, ajeno)).toBe(false)
+    expect(puedeEditarHorarioDe(dueño, ajeno)).toBe(false)
   })
 
-  it("el profesional no puede cambiar el rol de nadie", () => {
-    const actor = crearActor("worker")
-
-    expect(puedeCambiarRolDe(actor, "member-2")).toBe(false)
-  })
-
-  it("nadie puede cambiarse el rol a sí mismo", () => {
-    const admin = crearActor("admin", { memberId: "member-1" })
-
-    expect(puedeCambiarRolDe(admin, "member-1")).toBe(false)
+  it("el filtro de agenda siempre acota al negocio, incluso para quien ve todo", () => {
+    expect(filtroDeAgenda(dueño)).toEqual({ businessId: NEGOCIO })
+    expect(filtroDeAgenda(profesional)).toEqual({ businessId: NEGOCIO, memberId: "yo" })
   })
 })
 
-describe("puedeEditarComisiones", () => {
-  it("es true sólo para owner", () => {
-    expect(puedeEditarComisiones(crearActor("owner"))).toBe(true)
+describe("sobre un miembro concreto", () => {
+  it("dueño y encargado cambian el rol de otro; el profesional no", () => {
+    expect(puedeCambiarRolDe(dueño, miembro)).toBe(true)
+    expect(puedeCambiarRolDe(encargado, miembro)).toBe(true)
+    expect(puedeCambiarRolDe(profesional, miembro)).toBe(false)
   })
 
-  it("es false para admin: el encargado no toca dinero", () => {
-    expect(puedeEditarComisiones(crearActor("admin"))).toBe(false)
+  it("nadie se cambia el rol a sí mismo", () => {
+    expect(puedeCambiarRolDe(encargado, yoMismo)).toBe(false)
   })
 
-  it("es false para worker", () => {
-    expect(puedeEditarComisiones(crearActor("worker"))).toBe(false)
-  })
-})
-
-describe("puedeVerIngresosDelNegocio", () => {
-  it("es true para owner", () => {
-    expect(puedeVerIngresosDelNegocio(crearActor("owner"))).toBe(true)
+  it("el profesional ve su liquidación, no la de un colega", () => {
+    expect(puedeVerLiquidacionDe(profesional, yoMismo)).toBe(true)
+    expect(puedeVerLiquidacionDe(profesional, miembro)).toBe(false)
   })
 
-  it("es true para admin", () => {
-    expect(puedeVerIngresosDelNegocio(crearActor("admin"))).toBe(true)
+  it("dueño y encargado ven la liquidación de cualquiera", () => {
+    expect(puedeVerLiquidacionDe(dueño, miembro)).toBe(true)
+    expect(puedeVerLiquidacionDe(encargado, miembro)).toBe(true)
   })
 
-  it("es false para worker", () => {
-    expect(puedeVerIngresosDelNegocio(crearActor("worker"))).toBe(false)
-  })
-})
-
-describe("puedeVerLiquidacionDe", () => {
-  it("owner ve la liquidación de cualquier miembro", () => {
-    const actor = crearActor("owner")
-
-    expect(puedeVerLiquidacionDe(actor, "member-2")).toBe(true)
-  })
-
-  it("admin ve la liquidación de cualquier miembro", () => {
-    const actor = crearActor("admin")
-
-    expect(puedeVerLiquidacionDe(actor, "member-2")).toBe(true)
-  })
-
-  it("el profesional ve su propia liquidación", () => {
-    const actor = crearActor("worker", { memberId: "member-1" })
-
-    expect(puedeVerLiquidacionDe(actor, "member-1")).toBe(true)
-  })
-
-  it("el profesional no ve la liquidación de un compañero", () => {
-    const actor = crearActor("worker", { memberId: "member-1" })
-
-    expect(puedeVerLiquidacionDe(actor, "member-2")).toBe(false)
-  })
-
-  it("falla cerrado: un worker sin memberId no ve ninguna liquidación", () => {
-    const actor = crearActor("worker", { memberId: null })
-
-    expect(puedeVerLiquidacionDe(actor, "member-1")).toBe(false)
-  })
-})
-
-describe("puedeVerTodaLaAgenda", () => {
-  it("es true para owner y admin", () => {
-    expect(puedeVerTodaLaAgenda(crearActor("owner"))).toBe(true)
-    expect(puedeVerTodaLaAgenda(crearActor("admin"))).toBe(true)
-  })
-
-  it("es false para worker: sólo ve la suya", () => {
-    expect(puedeVerTodaLaAgenda(crearActor("worker"))).toBe(false)
-  })
-})
-
-describe("puedeEditarHorarioDe", () => {
-  it("el dueño edita el horario de cualquier miembro", () => {
-    const actor = crearActor("owner")
-
-    expect(puedeEditarHorarioDe(actor, "member-2")).toBe(true)
-  })
-
-  it("el dueño edita el horario general del negocio (memberId null)", () => {
-    const actor = crearActor("owner")
-
-    expect(puedeEditarHorarioDe(actor, null)).toBe(true)
-  })
-
-  it("el encargado edita el horario de cualquier miembro: horarios son operación, no dinero", () => {
-    const actor = crearActor("admin", { memberId: "member-1" })
-
-    expect(puedeEditarHorarioDe(actor, "member-2")).toBe(true)
-  })
-
-  it("el encargado edita el horario general del negocio (memberId null)", () => {
-    const actor = crearActor("admin", { memberId: "member-1" })
-
-    expect(puedeEditarHorarioDe(actor, null)).toBe(true)
+  it("horarios son operación: el encargado edita el de cualquiera y el general", () => {
+    expect(puedeEditarHorarioDe(encargado, miembro)).toBe(true)
+    expect(puedeEditarHorarioDe(encargado, null)).toBe(true)
   })
 
   it("el profesional sólo edita su propio horario", () => {
-    const actor = crearActor("worker", { memberId: "member-1" })
-
-    expect(puedeEditarHorarioDe(actor, "member-1")).toBe(true)
-    expect(puedeEditarHorarioDe(actor, "member-2")).toBe(false)
-  })
-
-  it("falla cerrado: un worker sin memberId no edita ni siquiera el horario general", () => {
-    const actor = crearActor("worker", { memberId: null })
-
-    expect(puedeEditarHorarioDe(actor, null)).toBe(false)
+    expect(puedeEditarHorarioDe(profesional, yoMismo)).toBe(true)
+    expect(puedeEditarHorarioDe(profesional, miembro)).toBe(false)
+    expect(puedeEditarHorarioDe(profesional, null)).toBe(false)
   })
 })
 
-describe("filtroDeAgenda", () => {
-  it("devuelve {} para owner: ve toda la agenda del negocio", () => {
-    expect(filtroDeAgenda(crearActor("owner"))).toEqual({})
-  })
-
-  it("devuelve {} para admin: ve toda la agenda del negocio", () => {
-    expect(filtroDeAgenda(crearActor("admin"))).toEqual({})
-  })
-
-  it("acota por memberId para el profesional", () => {
-    const actor = crearActor("worker", { memberId: "member-1" })
-
-    expect(filtroDeAgenda(actor)).toEqual({ memberId: "member-1" })
-  })
-
-  it("falla cerrado: un worker sin memberId no ve nada, no toda la agenda", () => {
-    const actor = crearActor("worker", { memberId: null })
-
-    const filtro = filtroDeAgenda(actor)
-
-    expect(filtro).not.toEqual({})
-    expect(filtro).toEqual({ id: { in: [] } })
-  })
-
-  it("falla cerrado: sin actor no se ve nada", () => {
-    expect(filtroDeAgenda(null)).toEqual({ id: { in: [] } })
-  })
-})
-
-// `null` no es un caso hipotético: es exactamente lo que devuelve
-// actorDeSesion() cuando la sesión es inválida o el token venció. Si alguien
-// refactoriza `actor?.role` a `actor!.role` sin darse cuenta, estos tests
-// tienen que fallar — es la fuga de permisos que evita el fallo cerrado.
-describe("sin actor: toda función niega", () => {
-  it("puedeGestionarEquipo(null) es false", () => {
+describe("falla cerrado", () => {
+  it("sin actor, toda función niega", () => {
     expect(puedeGestionarEquipo(null)).toBe(false)
-  })
-
-  it("puedeCambiarRolDe(null, memberId) es false", () => {
-    expect(puedeCambiarRolDe(null, "member-1")).toBe(false)
-  })
-
-  it("puedeEditarComisiones(null) es false", () => {
-    expect(puedeEditarComisiones(null)).toBe(false)
-  })
-
-  it("puedeVerIngresosDelNegocio(null) es false", () => {
-    expect(puedeVerIngresosDelNegocio(null)).toBe(false)
-  })
-
-  it("puedeVerLiquidacionDe(null, memberId) es false", () => {
-    expect(puedeVerLiquidacionDe(null, "member-1")).toBe(false)
-  })
-
-  it("puedeVerTodaLaAgenda(null) es false", () => {
     expect(puedeVerTodaLaAgenda(null)).toBe(false)
+    expect(puedeVerIngresosDelNegocio(null)).toBe(false)
+    expect(puedeEditarComisiones(null)).toBe(false)
+    expect(puedeCambiarRolDe(null, miembro)).toBe(false)
+    expect(puedeVerLiquidacionDe(null, miembro)).toBe(false)
+    expect(puedeEditarHorarioDe(null, miembro)).toBe(false)
   })
 
-  it("puedeEditarHorarioDe(null, memberId) es false", () => {
-    expect(puedeEditarHorarioDe(null, "member-1")).toBe(false)
+  it("sin actor, el filtro de agenda no devuelve nada", () => {
+    expect(filtroDeAgenda(null)).toEqual({ memberId: { in: [] } })
+  })
+
+  it("un profesional sin memberId no ve ninguna cita, en vez de verlas todas", () => {
+    const roto = actor("worker", null)
+
+    expect(filtroDeAgenda(roto)).toEqual({ businessId: NEGOCIO, memberId: { in: [] } })
+    expect(puedeVerLiquidacionDe(roto, yoMismo)).toBe(false)
+    expect(puedeEditarHorarioDe(roto, yoMismo)).toBe(false)
   })
 })
