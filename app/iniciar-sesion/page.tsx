@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { signIn } from "next-auth/react"
 import { EliLogo } from "@/components/shared/eli-logo"
 import { CampoFormulario } from "@/components/app/formularios/campo-formulario"
@@ -12,19 +12,19 @@ import { Mail, Lock, ArrowRight } from "lucide-react"
 
 export default function IniciarSesionPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [cargando, setCargando] = useState(false)
   const [email, setEmail] = useState("")
   const [contrasena, setContrasena] = useState("")
   const [error, setError] = useState("")
 
+  // Se lee del navegador y no con useSearchParams: ese hook obliga a envolver
+  // la página en un <Suspense> o el prerender falla.
   useEffect(() => {
-    const oauthError = searchParams.get("error")
-    if (oauthError) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reacts to the OAuth redirect's query param, not a render-time value
+    if (new URLSearchParams(window.location.search).has("error")) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- responde al redirect de OAuth, no a un valor de render
       setError("No se pudo iniciar sesión con Google. Verifica que tu cuenta esté habilitada.")
     }
-  }, [searchParams])
+  }, [])
 
   const manejarEnvio = async (e: React.FormEvent) => {
     e.preventDefault()
