@@ -16,7 +16,7 @@ vi.mock("@/lib/email", () => ({
 const prismaMock = {
   businessMember: { findMany: vi.fn() },
   workerInvitation: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
-  user: { findUnique: vi.fn() },
+  user: { findFirst: vi.fn() },
   business: { findUnique: vi.fn() },
 }
 
@@ -64,7 +64,7 @@ describe("POST /api/equipo", () => {
     const { POST } = await import("./route")
 
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
-    prismaMock.user.findUnique.mockResolvedValueOnce(null)
+    prismaMock.user.findFirst.mockResolvedValueOnce(null)
     prismaMock.workerInvitation.findFirst.mockResolvedValueOnce(null)
     prismaMock.workerInvitation.create.mockResolvedValueOnce({
       id: "inv-2",

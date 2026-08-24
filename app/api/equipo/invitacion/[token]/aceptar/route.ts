@@ -39,13 +39,20 @@ export async function POST(
     // Una invitación no crea ni pisa credenciales de una cuenta que ya existe:
     // ese caso solo puede sumar la membresía, y solo si quien acepta ya
     // demostró ser dueño del correo iniciando sesión con él.
-    const usuarioExistente = await prisma.user.findUnique({ where: { email: invitacion.email } })
+    // Sin distinguir mayúsculas, igual que la comparación con la sesión de abajo:
+    // buscar exacto acá y comparar en minúsculas allá dejaba que una invitación
+    // a `ana@x.com` no viera la cuenta `Ana@x.com` y creara una segunda.
+    const usuarioExistente = await prisma.user.findFirst({
+      where: { email: { equals: invitacion.email, mode: "insensitive" } },
+    })
 
     if (usuarioExistente) {
       const session = await getServerSession(authOptions)
       const emailSesion = session?.user?.email
 
-      if (!emailSesion || emailSesion.toLowerCase() !== invitacion.email.toLowerCase()) {
+      // Contra el correo de la cuenta encontrada, no el de la invitación: es el
+      // que identifica a la persona que tiene que demostrar ser dueña de él.
+      if (!emailSesion || emailSesion.toLowerCase() !== usuarioExistente.email.toLowerCase()) {
         return NextResponse.json(
           {
             error: "Iniciá sesión con ese correo para aceptar la invitación",

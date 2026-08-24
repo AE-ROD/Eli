@@ -20,8 +20,11 @@ const prismaMock = {
     update: vi.fn(),
   },
   user: {
-    findUnique: vi.fn(),
+    findFirst: vi.fn(),
     create: vi.fn(),
+    // Presente a propósito: si alguien reintroduce el update que pisaba la
+    // contraseña, los tests lo ven en vez de fallar por un mock inexistente.
+    update: vi.fn(),
   },
   businessMember: {
     findUnique: vi.fn(),
@@ -93,7 +96,7 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     const { POST } = await import("./route")
 
     prismaMock.workerInvitation.findUnique.mockResolvedValueOnce(invitacionBase)
-    prismaMock.user.findUnique.mockResolvedValueOnce(null)
+    prismaMock.user.findFirst.mockResolvedValueOnce(null)
     prismaMock.user.create.mockResolvedValueOnce({ id: "user-nuevo", email: invitacionBase.email })
 
     const res = await POST(fakeRequest({ password: "unaClaveSegura1" }), { params: params() })
@@ -111,11 +114,33 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     })
   })
 
+  it("la cuenta existente se reconoce aunque el correo venga con otras mayúsculas", async () => {
+    const { POST } = await import("./route")
+
+    prismaMock.workerInvitation.findUnique.mockResolvedValueOnce(invitacionBase)
+    prismaMock.user.findFirst.mockResolvedValueOnce({
+      ...cuentaExistente,
+      email: cuentaExistente.email.toUpperCase(),
+    })
+    mockGetServerSession.mockResolvedValueOnce(null)
+
+    const res = await POST(fakeRequest({ password: "loQueElijaElAtacante1" }), { params: params() })
+
+    // Sin este reconocimiento caería al camino de cuenta nueva y crearía una
+    // segunda cuenta para la misma persona, con el nombre que eligió el que invita.
+    expect(res.status).toBe(401)
+    expect(prismaMock.user.create).not.toHaveBeenCalled()
+    expect(prismaMock.user.update).not.toHaveBeenCalled()
+    expect(prismaMock.user.findFirst).toHaveBeenCalledWith({
+      where: { email: { equals: invitacionBase.email, mode: "insensitive" } },
+    })
+  })
+
   it("email con cuenta existente y sin sesión: no crea nada y pide iniciar sesión", async () => {
     const { POST } = await import("./route")
 
     prismaMock.workerInvitation.findUnique.mockResolvedValueOnce(invitacionBase)
-    prismaMock.user.findUnique.mockResolvedValueOnce(cuentaExistente)
+    prismaMock.user.findFirst.mockResolvedValueOnce(cuentaExistente)
     mockGetServerSession.mockResolvedValueOnce(null)
 
     const res = await POST(fakeRequest({ password: "loQueElijaElAtacante1" }), { params: params() })
@@ -133,7 +158,7 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     const { POST } = await import("./route")
 
     prismaMock.workerInvitation.findUnique.mockResolvedValueOnce(invitacionBase)
-    prismaMock.user.findUnique.mockResolvedValueOnce(cuentaExistente)
+    prismaMock.user.findFirst.mockResolvedValueOnce(cuentaExistente)
     // El atacante está logueado con su propia cuenta, no con la de la víctima.
     mockGetServerSession.mockResolvedValueOnce({ user: { email: "atacante@mi-negocio.com" } })
 
@@ -151,7 +176,7 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     const { POST } = await import("./route")
 
     prismaMock.workerInvitation.findUnique.mockResolvedValueOnce(invitacionBase)
-    prismaMock.user.findUnique.mockResolvedValueOnce(cuentaExistente)
+    prismaMock.user.findFirst.mockResolvedValueOnce(cuentaExistente)
     prismaMock.businessMember.findUnique.mockResolvedValueOnce(null)
     mockGetServerSession.mockResolvedValueOnce({ user: { email: cuentaExistente.email } })
 
@@ -161,6 +186,9 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     expect(res.status).toBe(200)
     expect(data).toMatchObject({ ok: true, cuentaNueva: false, email: cuentaExistente.email })
     expect(prismaMock.user.create).not.toHaveBeenCalled()
+    // Lo que sostiene toda la ficha: ni siquiera en el camino feliz se escribe
+    // sobre la cuenta que ya existía.
+    expect(prismaMock.user.update).not.toHaveBeenCalled()
     expect(prismaMock.businessMember.create).toHaveBeenCalledWith({
       data: { businessId: invitacionBase.businessId, userId: cuentaExistente.id, role: invitacionBase.role },
     })

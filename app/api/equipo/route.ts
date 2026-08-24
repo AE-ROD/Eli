@@ -23,6 +23,7 @@ export async function GET() {
         user: { select: { id: true, name: true, email: true } },
       },
       orderBy: { createdAt: "asc" },
+      take: 200,
     }),
     prisma.workerInvitation.findMany({
       where: { businessId: user.businessId, acceptedAt: null },
@@ -35,6 +36,7 @@ export async function GET() {
         createdAt: true,
       },
       orderBy: { createdAt: "desc" },
+      take: 200,
     }),
   ])
 
@@ -59,9 +61,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { nombre, email, rol } = invitarSchema.parse(body)
 
-    // Verificar que no exista ya un miembro o invitación pendiente con ese email
-    const yaExiste = await prisma.user.findUnique({
-      where: { email },
+    // Los correos se comparan sin distinguir mayúsculas: para el servidor de
+    // correo `Ana@x.com` y `ana@x.com` son la misma casilla, y si acá se
+    // trataran como distintas se podría invitar N veces a la misma persona.
+    const mismoEmail = { equals: email, mode: "insensitive" as const }
+
+    const yaExiste = await prisma.user.findFirst({
+      where: { email: mismoEmail },
       include: { memberships: { where: { businessId: user.businessId } } },
     })
     if (yaExiste?.memberships.length) {
@@ -69,7 +75,7 @@ export async function POST(request: NextRequest) {
     }
 
     const invitacionPendiente = await prisma.workerInvitation.findFirst({
-      where: { businessId: user.businessId, email, acceptedAt: null },
+      where: { businessId: user.businessId, email: mismoEmail, acceptedAt: null },
     })
     if (invitacionPendiente) {
       return NextResponse.json({ error: "Ya existe una invitación pendiente para este correo" }, { status: 409 })

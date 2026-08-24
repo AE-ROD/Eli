@@ -3,9 +3,17 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import bcrypt from "bcryptjs"
 import { restablecerPasswordSchema as schema } from "@/lib/validaciones"
+import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 
 // POST /api/auth/restablecer-password — establecer nueva contraseña con el token recibido por email
 export async function POST(request: NextRequest) {
+  // Sin tope, el token del enlace se puede adivinar a fuerza de intentos y
+  // este endpoint fija la contraseña de la cuenta que ese token identifique.
+  const { permitido } = await verificarLimite("auth", obtenerIp(request))
+  if (!permitido) {
+    return NextResponse.json({ error: "Demasiados intentos, intenta más tarde" }, { status: 429 })
+  }
+
   try {
     const body = await request.json()
     const { token, password } = schema.parse(body)
