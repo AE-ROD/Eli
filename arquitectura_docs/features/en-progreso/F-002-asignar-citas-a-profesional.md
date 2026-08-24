@@ -122,3 +122,25 @@ Se configura algo que no se aplica.
   respuesta. `npm run lint`, `npx tsc --noEmit` y `npx vitest run` en verde.
   Pendiente para frontend: selector en el modal (tarea #2) y ocultarlo para
   `worker`.
+- 2026-08-24 — frontend (tarea #2): agregado `memberId` a `FormNuevaCita` y
+  selector "Profesional" en `modalNuevaCita.tsx` con `<select>` nativo
+  (mismo estilo que los `input` del modal; no había `select` de shadcn ni
+  Radix disponible). El modal pide `GET /api/equipo/miembros` sólo si
+  `puedeAsignarProfesional` es `true` y usa `.then/.catch` que deja
+  `miembros` en `[]` ante cualquier falla (401 incluido): el modal sigue
+  funcionando sin selector, no rompe. El `<select>` sólo se renderiza si
+  además `miembros.length > 0`. En `page.tsx` se agregó `useSession()` para
+  leer `session.user.role` (ya tipado en `types/next-auth.d.ts`, sin
+  `as any`) y derivar `puedeAsignarProfesional = rol === "owner" || rol ===
+  "admin"`; se pasa esa prop al modal y se agrega `memberId:
+  formNueva.memberId || null` al body del `POST /api/citas`.
+  `npm run lint`, `npx tsc --noEmit`, `npx vitest run` y `npm run build`
+  en verde.
+
+## Fuera de alcance detectado (frontend)
+
+- `app/dashboard/page.tsx` y `app/dashboard/configuracion/page.tsx` usan
+  `session.user as any` / `session?.user as any` para leer `businessSlug` y
+  `role`/`businessId`/`memberId`. Los tipos ya están declarados en
+  `types/next-auth.d.ts` y no hacen falta esos `as any`. No se tocó: no es
+  parte de esta ficha ni de la tarea asignada.

@@ -14,6 +14,7 @@ export interface FormNuevaCita {
   horaFin: string
   precio: string
   notas: string
+  memberId: string
 }
 
 interface PacienteSugerido {
@@ -22,20 +23,45 @@ interface PacienteSugerido {
   email: string
 }
 
+interface MiembroEquipo {
+  id: string
+  nombre: string
+  rol: string
+}
+
 interface ModalNuevaCitaProps {
   form: FormNuevaCita
   guardando: boolean
+  /** Sólo owner y admin asignan profesional; el worker no ve el selector. */
+  puedeAsignarProfesional: boolean
   onFormChange: (campo: keyof FormNuevaCita, valor: string) => void
   onSubmit: (e: React.SyntheticEvent<HTMLFormElement>) => void
   onCerrar: () => void
 }
 
-export function ModalNuevaCita({ form, guardando, onFormChange, onSubmit, onCerrar }: ModalNuevaCitaProps) {
+export function ModalNuevaCita({
+  form,
+  guardando,
+  puedeAsignarProfesional,
+  onFormChange,
+  onSubmit,
+  onCerrar,
+}: ModalNuevaCitaProps) {
   const [busquedaPaciente, setBusquedaPaciente] = useState("")
   const [sugerencias, setSugerencias] = useState<PacienteSugerido[]>([])
   const [pacienteNombre, setPacienteNombre] = useState("")
   const [showSugerencias, setShowSugerencias] = useState(false)
+  const [miembros, setMiembros] = useState<MiembroEquipo[]>([])
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (!puedeAsignarProfesional) return
+    fetch("/api/equipo/miembros")
+      .then((res) => (res.ok ? res.json() : null))
+      // si falla o no autoriza, el modal sigue sin selector en vez de romperse
+      .then((data) => setMiembros(data?.miembros ?? []))
+      .catch(() => setMiembros([]))
+  }, [puedeAsignarProfesional])
 
   useEffect(() => {
     if (!busquedaPaciente || busquedaPaciente.length < 2) {
@@ -175,6 +201,27 @@ export function ModalNuevaCita({ form, guardando, onFormChange, onSubmit, onCerr
             onChange={(e) => onFormChange("precio", e.target.value)}
             icono={<DollarSign className="h-4 w-4" />}
           />
+
+          {puedeAsignarProfesional && miembros.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1.5">
+                <span className="flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  Profesional
+                </span>
+              </label>
+              <select
+                value={form.memberId}
+                onChange={(e) => onFormChange("memberId", e.target.value)}
+                className="w-full px-4 py-3 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              >
+                <option value="">Sin asignar</option>
+                {miembros.map((m) => (
+                  <option key={m.id} value={m.id}>{m.nombre}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-foreground mb-1.5">
