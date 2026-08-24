@@ -8,7 +8,9 @@ import bcrypt from "bcryptjs"
 /** El usuario con lo necesario para saber en qué negocio entra y con qué rol. */
 const CON_NEGOCIO = {
   business: true,
-  memberships: { include: { business: true }, take: 1 },
+  // La más antigua primero: sin `orderBy`, Postgres puede devolver otra en cada
+  // login y quien trabaje en dos negocios entraría a uno distinto cada vez.
+  memberships: { include: { business: true }, orderBy: { createdAt: "asc" }, take: 1 },
 } as const
 
 type UsuarioConNegocio = NonNullable<
@@ -22,18 +24,23 @@ function buscarUsuario(where: { id: string } | { email: string }) {
 /**
  * Un usuario es dueño si el negocio le pertenece; si no, entra por su membresía.
  * Sin membresía válida cae a `worker`, el rol con menos permisos.
+ *
+ * El dueño entra a **su** negocio y sin `memberId`, aunque además sea miembro de
+ * otro: si se le dejara la membresía ajena, el par `(businessId, memberId)` de la
+ * sesión apuntaría a dos negocios distintos y cualquier consulta por `memberId`
+ * leería del equivocado.
  */
 function perfilDe(usuario: UsuarioConNegocio) {
+  const esDueño = !!usuario.business
   const membresia = usuario.memberships[0]
   const negocio = usuario.business ?? membresia?.business ?? null
-  const rol: Rol = usuario.business ? "owner" : membresia?.role === "admin" ? "admin" : "worker"
 
   return {
-    role: rol,
+    role: (esDueño ? "owner" : membresia?.role === "admin" ? "admin" : "worker") as Rol,
     businessId: negocio?.id ?? null,
     businessName: negocio?.name ?? null,
     businessSlug: negocio?.slug ?? null,
-    memberId: membresia?.id ?? null,
+    memberId: esDueño ? null : (membresia?.id ?? null),
   }
 }
 

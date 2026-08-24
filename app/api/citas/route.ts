@@ -65,7 +65,8 @@ export async function GET(request: NextRequest) {
       member: { select: { id: true, role: true, user: { select: { id: true, name: true } } } },
     },
     orderBy: { startTime: "asc" },
-    take: fechaInicio ? undefined : 100,
+    // Siempre con tope: con un rango amplio, sin él se traía el histórico entero.
+    take: 500,
   })
 
   return NextResponse.json(citas)
@@ -91,7 +92,9 @@ export async function POST(request: NextRequest) {
     }
 
     // El worker no elige: memberIdParaCita ignora lo pedido y devuelve su propio id.
-    const memberId = memberIdParaCita(actor, datos.memberId ?? null)
+    // `|| null` y no `?? null`: el string vacío es "sin asignar", no un id.
+    // Con `??` se colaba hasta el insert y reventaba contra la foreign key.
+    const memberId = memberIdParaCita(actor, datos.memberId || null)
 
     if (memberId) {
       const miembro = await prisma.businessMember.findFirst({
