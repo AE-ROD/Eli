@@ -1,7 +1,7 @@
 ---
 id: F-004
 titulo: Cerrar la toma de cuenta por invitación
-estado: en-progreso
+estado: en-revision
 prioridad: crítica
 areas: [backend]
 rama: v1
@@ -57,16 +57,15 @@ No hay RLS detrás que lo contenga.
 - [x] Aceptar una invitación de un email **sin cuenta** sigue funcionando igual
       que hoy: crea el usuario con la contraseña que eligió y la membresía.
 - [x] Una invitación ya aceptada o vencida sigue devolviendo 410.
-- [x] `npm run lint`, `npx tsc --noEmit` y `npm test` en verde. (backend
-      verificó con `npx vitest run`; falta confirmación del `revisor` en la
-      tarea #2)
+- [x] `npm run lint`, `npx tsc --noEmit` y `npm test` en verde. Confirmado por
+      el `revisor` corriendo los comandos él mismo.
 
 ## Tareas por área
 
 | # | Área | Tarea | Agente | Estado | Depende de |
 |---|---|---|---|---|---|
 | 1 | backend | Cerrar las dos filtraciones | backend | completada | — |
-| 2 | revisor | Confirmar que el ataque ya no corre | revisor | pendiente | 1 |
+| 2 | revisor | Confirmar que el ataque ya no corre | revisor | completada | 1 |
 
 ## Contexto técnico
 
@@ -182,3 +181,49 @@ Pendiente para el siguiente agente (`revisor`, tarea #2): confirmar
 end-to-end que el ataque de dos requests ya no corre, y que la migración a
 `lib/permisos.ts` de `/api/equipo` (fuera de alcance acá) no se coló por
 error.
+
+
+**2026-08-24 — orquestador (tarea #2: hallazgos del revisor, corregidos)**
+
+El revisor confirmó que el ataque de dos requests **está cerrado en las dos
+capas**, y probó variantes que no estaban en la ficha: aceptar dos veces
+(secuencial y concurrente), la carrera entre el `findUnique` de usuario y el
+`create`, invitado que ya es miembro de otro negocio, cuenta de Google sin
+contraseña, y sesión nula o sin email. Todas fallan cerradas.
+
+Tres cosas que sí había que corregir, ya hechas:
+
+- **Mayúsculas en el correo (lo introdujo el arreglo mismo).** La búsqueda de la
+  cuenta era exacta (`findUnique`) y la comparación contra la sesión pasaba por
+  `toLowerCase()`: dos criterios distintos para decidir la misma identidad. Una
+  invitación a `ana@x.com` con la cuenta `Ana@x.com` no veía la cuenta y caía al
+  camino de "cuenta nueva", creando una segunda cuenta para la misma persona con
+  el nombre que eligió quien invitó. Todas las búsquedas de correo van ahora con
+  `mode: "insensitive"`, y la sesión se compara contra el correo de la cuenta
+  encontrada, no el de la invitación. Con test de regresión.
+- **Los dos `findMany` de `GET /api/equipo` sin `take`**, en líneas que la tarea
+  #1 había editado. Tope de 200.
+- **El mock de `user` en los tests no tenía `update`**, así que una regresión
+  habría fallado por "no es una función" en vez de por el assert correcto. Ahora
+  está, y dos tests afirman explícitamente que nunca se llama.
+
+**Fuera de alcance, reportado por el revisor y corregido igual por ser
+seguridad:** `POST /api/auth/restablecer-password` no tenía rate limit, siendo el
+endpoint que fija la contraseña de la cuenta que identifique el token del enlace.
+Sin tope, ese token se puede buscar a fuerza de intentos. Usa ahora el mismo
+`verificarLimite("auth", ip)` que registro y aceptar.
+
+**Verificación:** `npm run build`, `npm run lint`, `npx tsc --noEmit` y
+`npm test` (66 tests, 7 archivos) en verde.
+
+**Pendientes que el revisor dejó anotados y NO se tocaron** (cada uno es su
+propia ficha):
+- `lib/email.ts` interpola sin escapar el nombre que eligió quien invita dentro
+  del HTML del correo: inyección de HTML en un mail que le llega a la víctima.
+- `/api/equipo` sigue siendo owner-only por chequeo manual y con
+  `session.user as any`. El rol `admin` todavía no gestiona equipo.
+- Ningún endpoint autenticado del panel tiene rate limit.
+- `lib/rate-limit` **falla abierto** si falta Upstash, y hay un test que lo
+  consagra. Contradice "los permisos fallan cerrados".
+- `/iniciar-sesion` no soporta `callbackUrl`: quien ya tiene cuenta debe volver
+  al enlace de invitación a mano. Es UX, no seguridad.

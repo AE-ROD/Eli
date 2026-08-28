@@ -1,7 +1,7 @@
 ---
 id: F-002
 titulo: Asignar citas a un profesional
-estado: en-progreso
+estado: en-revision
 prioridad: alta
 areas: [backend, frontend]
 rama: v1
@@ -55,8 +55,8 @@ Se configura algo que no se aplica.
 |---|---|---|---|---|---|
 | 1 | backend | `GET /api/equipo/miembros` + `memberId` en POST/GET de citas | backend | pendiente | — |
 | 2 | frontend | Selector de profesional en el modal | frontend | pendiente | 1 |
-| 3 | qa | Verificar criterios, sobre todo el intento de asignar a otro | qa | pendiente | 1,2 |
-| 4 | revisor | Verificar aislamiento y permisos | revisor | pendiente | 3 |
+| 3 | qa | Verificar criterios, sobre todo el intento de asignar a otro | qa | completada | 1,2 |
+| 4 | revisor | Verificar aislamiento y permisos | revisor | completada | 3 |
 
 ## Contexto técnico
 
@@ -144,3 +144,47 @@ Se configura algo que no se aplica.
   `role`/`businessId`/`memberId`. Los tipos ya están declarados en
   `types/next-auth.d.ts` y no hacen falta esos `as any`. No se tocó: no es
   parte de esta ficha ni de la tarea asignada.
+
+
+**2026-08-24 — orquestador (tareas #3 y #4: qa y revisor)**
+
+QA aprobó los siete criterios y verificó el camino completo: un `worker` no
+puede quedarse con una cita asignada a otro ni llamando la API directo, y un
+`memberId` de otro negocio devuelve 404. Entre los dos agentes salieron cuatro
+huecos, los cuatro corregidos:
+
+- `memberId: ""` devolvía un **500**. El string vacío pasaba el schema, `?? null`
+  no lo normaliza, `if (memberId)` lo daba por ausente y se salteaba la
+  verificación de pertenencia, así que llegaba al insert y violaba la foreign
+  key. Ahora `|| null`: vacío es "sin asignar".
+- `GET /api/citas` no tenía tope con rango de fechas
+  (`take: fechaInicio ? undefined : 100`): `desde=1900&hasta=2999` traía el
+  histórico completo, y esta ficha le sumó a cada fila el join con el
+  profesional. Tope fijo de 500.
+- `lib/auth.ts` le dejaba `memberId` al dueño si además era miembro de otro
+  negocio, así que el par `(businessId, memberId)` de la sesión apuntaba a dos
+  negocios distintos — la invariante de la que dependen todas las funciones de
+  `lib/permisos.ts`. Hoy ninguna consulta lo explota porque todas revalidan
+  `businessId`; la primera que no lo haga lee del negocio equivocado, y no hay
+  RLS detrás.
+- La membresía se elegía con `take: 1` sin `orderBy`. Postgres no garantiza
+  orden: quien trabaje en dos negocios podía entrar a uno distinto en cada login.
+
+Sobre lo que devolvió el agente backend, dos correcciones antes de aceptarlo:
+`memberIdParaCita` lanzaba una excepción sin actor (única función del módulo que
+no fallaba cerrada, y en un endpoint eso es un 500 en lugar de un 401 — ahora
+pide un `Actor` no nulo y el tipo obliga a chequear la sesión antes), y
+`filtroDeClientes` negaba con `{ id: { in: [] } }`, exactamente el patrón H2 que
+el revisor había marcado en F-001. Los dos filtros que niegan usan ahora
+`{ AND: [...] }`.
+
+**Verificación:** `npm run build`, `npm run lint`, `npx tsc --noEmit` y
+`npm test` (66 tests) en verde.
+
+**Bloqueante para cerrar, decisión humana pendiente:** `filtroDeAgenda` y
+`filtroDeClientes` existen, están testeados y **no los usa ningún endpoint**. Un
+profesional que llame `GET /api/citas` ve toda la agenda del negocio, con
+teléfonos, precios y notas de clientes que no atiende. Era así antes de esta
+ficha —no es una regresión— pero ahora que las citas tienen dueño, la
+información para aislarlas existe y no se está usando. Aplicarlo cambia lo que
+la gente ve en pantalla, así que no se hace sin decisión.
