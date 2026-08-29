@@ -116,3 +116,36 @@ Resultado: la regla vive escrita y testeada en `lib/`, y sin aplicar en `app/`.
   ficha (cambiar rol / eliminar miembro, ambos explícitamente fuera).
 - **Pendiente:** tarea 2 (frontend, enlace a Equipo en la barra lateral usando
   `lib/permisos.ts` en vez de `esOwner`) y tarea 3 (revisor).
+
+### Tarea 2 (frontend) — `barra-lateral.tsx` ya no esconde Equipo con un `esOwner` propio
+
+- **Qué se hizo:** en `components/app/layout/barra-lateral.tsx`, el ítem
+  "Equipo" del menú dejó de depender del prop `esOwner` (que venía calculado
+  a mano en `app/dashboard/layout.tsx`) y ahora se decide con
+  `puedeGestionarEquipo(actorDeSesion(session))`, leyendo la sesión del lado
+  del cliente con `useSession()` de `next-auth/react` (el `<SessionProvider>`
+  ya envuelve la app en `components/providers.tsx`, no hizo falta agregar
+  nada). No había otras comparaciones de rol sueltas dentro de ese archivo:
+  el único otro uso de `esOwner` es el banner de trial, que es una feature
+  explícitamente de dueño (facturación), no de "gestionar equipo" — se dejó
+  intacto y sigue recibiendo el prop `esOwner` como antes.
+- **Revisión de `app/dashboard/equipo/`:** ni `page.tsx`, ni `_components/listaEquipo.tsx`,
+  ni `_components/modalInvitar.tsx` tienen chequeo propio de `owner`. La página
+  confía en el `200`/`401` de `/api/equipo`; el selector de rol del formulario de
+  invitación ya ofrece `worker` y `admin` para cualquiera que llegue a abrir el
+  modal, sin restricción adicional. No hizo falta tocar nada ahí.
+- **Archivos:**
+  - `components/app/layout/barra-lateral.tsx` (modificado)
+- **Verificación:** `npm run lint` limpio. `npx tsc --noEmit` limpio.
+  `npx vitest run` → 73/73 OK (sin tests nuevos: es un cambio de UI sin lógica
+  propia que testear, cubierto por los tests de `lib/permisos.ts` que ya
+  fijan `puedeGestionarEquipo`). `npm run build` OK.
+- **Fuera de alcance detectado:** `app/dashboard/layout.tsx` sigue leyendo
+  `(session?.user as any)?.role`, `businessId`, `businessSlug` y `businessName`
+  con cuatro `as any` (líneas 23-26) para calcular el `esOwner` que pasa a
+  `BarraLateral` (banner de trial) y a `ModalBienvenida`. Es la misma clase de
+  problema que tenía `/api/equipo` antes de la tarea 1, pero no está dentro del
+  alcance de esta ficha (que sólo pide el enlace a Equipo) y tocarlo habría
+  significado decidir si el banner de trial pasa a ser "dueño y encargado" o
+  sigue siendo sólo dueño — eso no lo dice la ficha. Queda para una ficha aparte.
+- **Pendiente:** tarea 3 (revisor).

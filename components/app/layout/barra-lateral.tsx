@@ -3,10 +3,11 @@
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { signOut } from "next-auth/react"
+import { signOut, useSession } from "next-auth/react"
 import { motion, AnimatePresence } from "framer-motion"
 import { EliLogo } from "@/components/shared/eli-logo"
 import { AvatarUsuario } from "@/components/app/comunes/avatar-usuario"
+import { actorDeSesion, puedeGestionarEquipo } from "@/lib/permisos"
 import {
   LayoutDashboard,
   CalendarDays,
@@ -48,6 +49,9 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes }: BarraLate
   const { abrirPrecios } = usePrecios()
   const pathname = usePathname()
   const [colapsado, setColapsado] = useState(false)
+  const { data: session } = useSession()
+  // Dueño y encargado gestionan el equipo; el profesional no ve el enlace.
+  const puedeVerEquipo = puedeGestionarEquipo(actorDeSesion(session))
 
   const usuarioDefault = usuario || {
     nombre: "María García",
@@ -111,7 +115,7 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes }: BarraLate
         
         {[
           ...itemsNavegacion,
-          ...(esOwner ? [{ id: "equipo", nombre: "Equipo", icono: UsersRound, ruta: "/dashboard/equipo" }] : []),
+          ...(puedeVerEquipo ? [{ id: "equipo", nombre: "Equipo", icono: UsersRound, ruta: "/dashboard/equipo" }] : []),
         ].map((item) => {
           const activo = pathname === item.ruta || (item.ruta !== "/dashboard" && pathname.startsWith(item.ruta))
           
