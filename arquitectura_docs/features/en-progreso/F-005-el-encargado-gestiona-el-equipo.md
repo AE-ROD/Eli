@@ -86,3 +86,33 @@ Resultado: la regla vive escrita y testeada en `lib/`, y sin aplicar en `app/`.
   datos del equipo que gestiona.
 
 ## Bitácora
+
+### Tarea 1 (backend) — `app/api/equipo/route.ts` migrado a `lib/permisos.ts`
+
+- **Qué se hizo:** `GET` y `POST` dejaron de leer `session.user as any` y de
+  comparar `user.role !== "owner"`. Ahora usan `actorDeSesion(session)` +
+  `puedeGestionarEquipo(actor)`, y el `businessId` de las cuatro consultas
+  (`businessMember.findMany`, `workerInvitation.findMany`/`findFirst`/`create`,
+  `business.findUnique`) sale de `actor.businessId`. No se tocaron los `select`
+  explícitos ni los `take: 200` de F-004.
+- **Decisión:** el fallback de `nombreNegocio` para el correo de invitación
+  (`negocio?.name ?? user.businessName`) pasó a `negocio?.name ?? session?.user.businessName ?? ""`.
+  `Actor` (de `lib/permisos.ts`) no trae `businessName` a propósito — sólo lleva
+  lo necesario para permisos y aislamiento — así que ese dato se sigue leyendo
+  de `session.user`, que ya está tipado en `types/next-auth.d.ts` (no es un
+  `as any`, es un campo declarado del tipo `Session`).
+- **Archivos:**
+  - `app/api/equipo/route.ts` (modificado)
+  - `app/api/equipo/route.test.ts` (modificado): se agregaron 8 tests nuevos
+    sobre los 2 existentes (que no se tocaron): admin recibe 200 en GET y 201
+    en POST; worker recibe 401 en los dos sin llegar a tocar Prisma; sin
+    sesión, 401 en los dos; y un test que fija que `where.businessId` de
+    `businessMember.findMany` y `workerInvitation.findMany` en el GET es el
+    del actor.
+- **Tests:** `npx vitest run app/api/equipo/route.test.ts` → 9/9 OK.
+  `npx vitest run` (suite completa) → 73/73 OK. `npm run lint` limpio.
+  `npx tsc --noEmit` limpio. `npm run build` OK.
+- **Fuera de alcance detectado:** ninguno nuevo más allá de lo ya anotado en la
+  ficha (cambiar rol / eliminar miembro, ambos explícitamente fuera).
+- **Pendiente:** tarea 2 (frontend, enlace a Equipo en la barra lateral usando
+  `lib/permisos.ts` en vez de `esOwner`) y tarea 3 (revisor).

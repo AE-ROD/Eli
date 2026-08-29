@@ -26,6 +26,14 @@ const sesionDueño = {
   user: { id: "owner-1", role: "owner", businessId: "negocio-1", businessName: "Mi negocio" },
 }
 
+const sesionEncargado = {
+  user: { id: "admin-1", role: "admin", businessId: "negocio-1", businessName: "Mi negocio", memberId: "member-admin-1" },
+}
+
+const sesionProfesional = {
+  user: { id: "worker-1", role: "worker", businessId: "negocio-1", businessName: "Mi negocio", memberId: "member-worker-1" },
+}
+
 const fakeRequest = (body: unknown): NextRequest =>
   ({
     headers: new Headers(),
@@ -55,6 +63,55 @@ describe("GET /api/equipo", () => {
     expect(argumentos.select).toBeDefined()
     expect(argumentos.select.token).toBeUndefined()
   })
+
+  it("un encargado (admin) recibe 200 y ve los datos de su negocio", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    prismaMock.businessMember.findMany.mockResolvedValueOnce([])
+    prismaMock.workerInvitation.findMany.mockResolvedValueOnce([])
+
+    const res = await GET()
+
+    expect(res.status).toBe(200)
+  })
+
+  it("las dos consultas quedan acotadas por el businessId del actor", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    prismaMock.businessMember.findMany.mockResolvedValueOnce([])
+    prismaMock.workerInvitation.findMany.mockResolvedValueOnce([])
+
+    await GET()
+
+    const argumentosMiembros = prismaMock.businessMember.findMany.mock.calls[0][0]
+    const argumentosInvitaciones = prismaMock.workerInvitation.findMany.mock.calls[0][0]
+
+    expect(argumentosMiembros.where.businessId).toBe("negocio-1")
+    expect(argumentosInvitaciones.where.businessId).toBe("negocio-1")
+  })
+
+  it("un profesional (worker) recibe 401", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+
+    const res = await GET()
+
+    expect(res.status).toBe(401)
+    expect(prismaMock.businessMember.findMany).not.toHaveBeenCalled()
+  })
+
+  it("sin sesión recibe 401", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(null)
+
+    const res = await GET()
+
+    expect(res.status).toBe(401)
+  })
 })
 
 describe("POST /api/equipo", () => {
@@ -83,5 +140,48 @@ describe("POST /api/equipo", () => {
     expect(res.status).toBe(201)
     expect(data.invitacion).not.toHaveProperty("token")
     expect(JSON.stringify(data)).not.toContain("token-secreto")
+  })
+
+  it("un encargado (admin) puede invitar", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    prismaMock.user.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.create.mockResolvedValueOnce({
+      id: "inv-3",
+      name: "Ana",
+      email: "ana@x.com",
+      role: "worker",
+      expiresAt: new Date(),
+      createdAt: new Date(),
+      token: "token-secreto",
+    })
+    prismaMock.business.findUnique.mockResolvedValueOnce({ name: "Mi negocio" })
+
+    const res = await POST(fakeRequest({ nombre: "Ana", email: "ana@x.com", rol: "worker" }))
+
+    expect(res.status).toBe(201)
+  })
+
+  it("un profesional (worker) recibe 401 y no llega a invitar", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+
+    const res = await POST(fakeRequest({ nombre: "Ana", email: "ana@x.com", rol: "worker" }))
+
+    expect(res.status).toBe(401)
+    expect(prismaMock.workerInvitation.create).not.toHaveBeenCalled()
+  })
+
+  it("sin sesión recibe 401", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(null)
+
+    const res = await POST(fakeRequest({ nombre: "Ana", email: "ana@x.com", rol: "worker" }))
+
+    expect(res.status).toBe(401)
   })
 })
