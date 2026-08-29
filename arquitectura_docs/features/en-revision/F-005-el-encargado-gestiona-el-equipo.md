@@ -1,7 +1,7 @@
 ---
 id: F-005
 titulo: El encargado gestiona el equipo
-estado: en-progreso
+estado: en-revision
 prioridad: alta
 areas: [backend, frontend]
 rama: v1
@@ -42,26 +42,26 @@ Resultado: la regla vive escrita y testeada en `lib/`, y sin aplicar en `app/`.
 
 ## Criterios de aceptación
 
-- [ ] Un `admin` autenticado recibe **200** en `GET /api/equipo` y ve los
+- [x] Un `admin` autenticado recibe **200** en `GET /api/equipo` y ve los
       miembros e invitaciones **de su negocio**.
-- [ ] Un `admin` puede invitar con `POST /api/equipo`.
-- [ ] Un `worker` sigue recibiendo 401 en los dos.
-- [ ] Ningún `admin` ve datos de otro negocio: las dos consultas siguen acotadas
+- [x] Un `admin` puede invitar con `POST /api/equipo`.
+- [x] Un `worker` sigue recibiendo 401 en los dos.
+- [x] Ningún `admin` ve datos de otro negocio: las dos consultas siguen acotadas
       por el `businessId` del actor, y el `take` no se pierde.
-- [ ] La barra lateral muestra "Equipo" a dueño y encargado, no al profesional,
+- [x] La barra lateral muestra "Equipo" a dueño y encargado, no al profesional,
       y decide con `lib/permisos.ts` en vez de comparar el rol a mano.
-- [ ] `app/api/equipo/route.ts` no tiene ni un `session.user as any`.
-- [ ] Hay tests de endpoint que fijan quién entra y quién no: `admin` sí,
+- [x] `app/api/equipo/route.ts` no tiene ni un `session.user as any`.
+- [x] Hay tests de endpoint que fijan quién entra y quién no: `admin` sí,
       `worker` no, sin sesión no. `app/api/equipo/route.test.ts` ya existe.
-- [ ] `npm run lint`, `npx tsc --noEmit`, `npm test` y `npm run build` en verde.
+- [x] `npm run lint`, `npx tsc --noEmit`, `npm test` y `npm run build` en verde.
 
 ## Tareas por área
 
 | # | Área | Tarea | Agente | Estado | Depende de |
 |---|---|---|---|---|---|
-| 1 | backend | Migrar `/api/equipo` a `lib/permisos.ts` + tests | backend | pendiente | — |
-| 2 | frontend | Enlace a Equipo para el encargado | frontend | pendiente | 1 |
-| 3 | revisor | Verificar aislamiento y que el `worker` siga afuera | revisor | pendiente | 1,2 |
+| 1 | backend | Migrar `/api/equipo` a `lib/permisos.ts` + tests | backend | completada | — |
+| 2 | frontend | Enlace a Equipo para el encargado | frontend | completada | 1 |
+| 3 | revisor | Verificar aislamiento y que el `worker` siga afuera | revisor | completada | 1,2 |
 
 ## Contexto técnico
 
@@ -210,3 +210,44 @@ Resultado: la regla vive escrita y testeada en `lib/`, y sin aplicar en `app/`.
   (confía en el 401/200 de `/api/equipo`) — no es parte de esta corrección.
 - **Pendiente:** ninguno para esta ficha. Vuelve al revisor para el visto
   bueno final sobre este punto puntual.
+
+
+### Cierre — verificación del orquestador
+
+El `revisor` aprobó la ficha (los 8 criterios) y encontró de paso un
+**endurecimiento que nadie había pedido**: antes, `businessId` salía de un
+`as any`. Si ese campo llegaba `undefined` —token viejo, sesión a medio
+migrar— Prisma **descarta** `where: { businessId: undefined }` y
+`businessMember.findMany` habría devuelto los miembros de **todos los
+negocios**. `actorDeSesion` valida en runtime y devuelve 401. Agujero latente
+cerrado sin proponérselo.
+
+Confirmó además, campo por campo, que los `select` y los `take: 200` de F-004
+sobrevivieron: el `token` de invitación sigue sin salir en ninguna respuesta.
+
+Los dos hallazgos que sí había que arreglar están hechos (ver las dos entradas
+anteriores): el test de aislamiento que no probaba lo que decía, y el salto de
+layout que introdujo la tarea 2.
+
+**Verificación final:** `npm run build`, `npm run lint`, `npx tsc --noEmit` y
+`npm test` (74 tests, 7 archivos) en verde.
+
+**Nota de trazabilidad:** el commit `b86306c` se anunció como "WIP sin
+verificar", pero en realidad capturó el trabajo ya terminado de los dos agentes.
+La verificación es la de arriba y es posterior al commit.
+
+## Pendientes que deja esta ficha
+
+Cada uno es su propia ficha; ninguno se tocó acá:
+
+- **`app/dashboard/configuracion/page.tsx` reparte todo con un `esOwner`
+  propio.** El encargado todavía **no gestiona servicios ni horarios de otros**,
+  aunque `puedeGestionarServicios` y `puedeEditarHorarioDe` ya digan que puede.
+  Es el mismo problema que esta ficha acaba de sacar de `/api/equipo`, y es la
+  continuación natural.
+- **`/dashboard/equipo` no tiene guard de servidor.** Un `worker` que escriba la
+  URL ve el cascarón: título, botón de invitar y lista vacía. No se filtra ningún
+  dato (el 401 del endpoint corta), pero la página no muestra el error y queda un
+  estado vacío confuso. Preexistente.
+- **`puedeCambiarRolDe` sigue sin llamador.** No existe el endpoint para cambiar
+  el rol de un miembro ni para eliminarlo, para ningún rol.
