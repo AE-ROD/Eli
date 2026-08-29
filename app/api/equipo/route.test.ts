@@ -34,6 +34,12 @@ const sesionProfesional = {
   user: { id: "worker-1", role: "worker", businessId: "negocio-1", businessName: "Mi negocio", memberId: "member-worker-1" },
 }
 
+// Segundo negocio, sin relación con "negocio-1": si un handler hardcodeara
+// businessId: "negocio-1" en vez de leerlo del actor, estos tests fallarían.
+const sesionEncargadoNegocio2 = {
+  user: { id: "admin-2", role: "admin", businessId: "negocio-2", businessName: "Otro negocio", memberId: "member-admin-2" },
+}
+
 const fakeRequest = (body: unknown): NextRequest =>
   ({
     headers: new Headers(),
@@ -79,7 +85,9 @@ describe("GET /api/equipo", () => {
   it("las dos consultas quedan acotadas por el businessId del actor", async () => {
     const { GET } = await import("./route")
 
-    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    // Sesión de un negocio distinto al resto del archivo: si el handler
+    // hardcodeara "negocio-1" en el where, esta aserción lo detectaría.
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargadoNegocio2)
     prismaMock.businessMember.findMany.mockResolvedValueOnce([])
     prismaMock.workerInvitation.findMany.mockResolvedValueOnce([])
 
@@ -88,8 +96,8 @@ describe("GET /api/equipo", () => {
     const argumentosMiembros = prismaMock.businessMember.findMany.mock.calls[0][0]
     const argumentosInvitaciones = prismaMock.workerInvitation.findMany.mock.calls[0][0]
 
-    expect(argumentosMiembros.where.businessId).toBe("negocio-1")
-    expect(argumentosInvitaciones.where.businessId).toBe("negocio-1")
+    expect(argumentosMiembros.where.businessId).toBe("negocio-2")
+    expect(argumentosInvitaciones.where.businessId).toBe("negocio-2")
   })
 
   it("un profesional (worker) recibe 401", async () => {
@@ -162,6 +170,39 @@ describe("POST /api/equipo", () => {
     const res = await POST(fakeRequest({ nombre: "Ana", email: "ana@x.com", rol: "worker" }))
 
     expect(res.status).toBe(201)
+  })
+
+  it("las cuatro consultas quedan acotadas por el businessId del actor", async () => {
+    const { POST } = await import("./route")
+
+    // Mismo criterio que en el GET: negocio distinto al resto del archivo
+    // para que un businessId hardcodeado se note.
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargadoNegocio2)
+    prismaMock.user.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.create.mockResolvedValueOnce({
+      id: "inv-4",
+      name: "Ana",
+      email: "ana@x.com",
+      role: "worker",
+      expiresAt: new Date(),
+      createdAt: new Date(),
+      token: "token-secreto",
+    })
+    prismaMock.business.findUnique.mockResolvedValueOnce({ name: "Otro negocio" })
+
+    const res = await POST(fakeRequest({ nombre: "Ana", email: "ana@x.com", rol: "worker" }))
+    expect(res.status).toBe(201)
+
+    const argumentosUsuario = prismaMock.user.findFirst.mock.calls[0][0]
+    const argumentosInvitacionPendiente = prismaMock.workerInvitation.findFirst.mock.calls[0][0]
+    const argumentosCrear = prismaMock.workerInvitation.create.mock.calls[0][0]
+    const argumentosNegocio = prismaMock.business.findUnique.mock.calls[0][0]
+
+    expect(argumentosUsuario.include.memberships.where.businessId).toBe("negocio-2")
+    expect(argumentosInvitacionPendiente.where.businessId).toBe("negocio-2")
+    expect(argumentosCrear.data.businessId).toBe("negocio-2")
+    expect(argumentosNegocio.where.id).toBe("negocio-2")
   })
 
   it("un profesional (worker) recibe 401 y no llega a invitar", async () => {

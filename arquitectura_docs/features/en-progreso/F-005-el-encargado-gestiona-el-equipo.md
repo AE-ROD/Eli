@@ -103,7 +103,7 @@ Resultado: la regla vive escrita y testeada en `lib/`, y sin aplicar en `app/`.
   `as any`, es un campo declarado del tipo `Session`).
 - **Archivos:**
   - `app/api/equipo/route.ts` (modificado)
-  - `app/api/equipo/route.test.ts` (modificado): se agregaron 8 tests nuevos
+  - `app/api/equipo/route.test.ts` (modificado): se agregaron 7 tests nuevos
     sobre los 2 existentes (que no se tocaron): admin recibe 200 en GET y 201
     en POST; worker recibe 401 en los dos sin llegar a tocar Prisma; sin
     sesión, 401 en los dos; y un test que fija que `where.businessId` de
@@ -149,3 +149,64 @@ Resultado: la regla vive escrita y testeada en `lib/`, y sin aplicar en `app/`.
   significado decidir si el banner de trial pasa a ser "dueño y encargado" o
   sigue siendo sólo dueño — eso no lo dice la ficha. Queda para una ficha aparte.
 - **Pendiente:** tarea 3 (revisor).
+
+### Corrección post-revisión — el test de aislamiento no probaba lo que decía probar
+
+- **Qué se hizo:** el revisor detectó que `"negocio-1"` era el único
+  `businessId` de todo `app/api/equipo/route.test.ts`, así que el test "las
+  dos consultas quedan acotadas por el businessId del actor" pasaba igual con
+  un `businessId: "negocio-1"` hardcodeado en el handler. Se agregó una
+  sesión de fixture de un segundo negocio (`sesionEncargadoNegocio2`,
+  `businessId: "negocio-2"`) y ese test ahora corre con ella, afirmando que
+  el `where` de ambas consultas del GET es `"negocio-2"`. Se agregó además un
+  test nuevo que hace lo mismo para las cuatro consultas del POST que antes
+  no tenían ninguna aserción de acotamiento: el `include.memberships.where`
+  de `user.findFirst`, el `where` de `workerInvitation.findFirst`, el
+  `data.businessId` de `workerInvitation.create` y el `where.id` de
+  `business.findUnique`.
+- **No se tocó:** `app/api/equipo/route.ts` ni `lib/permisos.ts` (ya
+  aprobados), ni los 2 tests de F-004 sobre la fuga del token de invitación.
+- **Archivos:** `app/api/equipo/route.test.ts` (modificado).
+- **Tests:** `npx vitest run app/api/equipo/route.test.ts` → 10/10 OK.
+  `npx vitest run` (suite completa) → 74/74 OK. `npm run lint` limpio.
+  `npx tsc --noEmit` limpio.
+
+### Corrección post-revisión — regresión de UX de la tarea 2 (salto de layout del ítem Equipo)
+
+- **Qué se hizo:** el revisor detectó que el `useSession()` que la tarea 2
+  agregó a `barra-lateral.tsx` arranca en `status: "loading"` con
+  `data: undefined` (el `<SessionProvider>` de `components/providers.tsx` no
+  recibe `session` por prop), así que el SSR de `app/dashboard/layout.tsx`
+  salía sin el ítem "Equipo" y aparecía un instante después con salto de
+  layout. Se movió la decisión al servidor: `app/dashboard/layout.tsx` ahora
+  calcula `puedeVerEquipo = puedeGestionarEquipo(actorDeSesion(session))` con
+  la sesión que ya obtiene de `getServerSession` y lo pasa a `<BarraLateral>`
+  como prop nuevo (`puedeVerEquipo`). `barra-lateral.tsx` perdió el
+  `useSession()` (y su import de `next-auth/react`, que se dejó reducido a
+  `signOut`) junto con el cálculo local: ahora sólo lee el prop. El prop
+  `esOwner` no se tocó — sigue siendo del banner de trial, que es facturación
+  del dueño, no gestión de equipo.
+- **De paso (pedido explícito de esta tarea):** se sacaron los cuatro
+  `(session?.user as any)` de `app/dashboard/layout.tsx` (líneas 23-26 antes
+  del cambio) que el "Fuera de alcance detectado" de la tarea 2 había dejado
+  anotados. `session.user.role`, `.businessId`, `.businessSlug` y
+  `.businessName` ya están tipados en `types/next-auth.d.ts`, así que se leen
+  directo (`session?.user?.role`, etc.) sin ningún cast. El archivo queda sin
+  un solo `as any`.
+- **No se tocó:** a quién se le muestra qué. `esOwner` (banner de trial) y
+  `puedeVerEquipo` (enlace a Equipo) siguen siendo dos preguntas distintas,
+  calculadas por separado, igual que antes — sólo cambió *dónde* se resuelve
+  la segunda (de cliente a servidor) y *cómo* se leen los campos de sesión
+  (tipados, no `as any`).
+- **Archivos:**
+  - `app/dashboard/layout.tsx` (modificado)
+  - `components/app/layout/barra-lateral.tsx` (modificado)
+- **Verificación:** `npm run lint` limpio. `npx tsc --noEmit` limpio.
+  `npx vitest run` → 74/74 OK (sin tests nuevos: cambio de UI/SSR sin lógica
+  propia, cubierto por los tests existentes de `lib/permisos.ts`).
+  `npm run build` OK (26 rutas, incluida `/dashboard`).
+- **Fuera de alcance detectado:** ninguno nuevo. Sigue pendiente, como ya
+  estaba anotado, que `app/dashboard/equipo/` no tiene chequeo propio de rol
+  (confía en el 401/200 de `/api/equipo`) — no es parte de esta corrección.
+- **Pendiente:** ninguno para esta ficha. Vuelve al revisor para el visto
+  bueno final sobre este punto puntual.

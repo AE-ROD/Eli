@@ -3,11 +3,10 @@
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { signOut, useSession } from "next-auth/react"
+import { signOut } from "next-auth/react"
 import { motion, AnimatePresence } from "framer-motion"
 import { EliLogo } from "@/components/shared/eli-logo"
 import { AvatarUsuario } from "@/components/app/comunes/avatar-usuario"
-import { actorDeSesion, puedeGestionarEquipo } from "@/lib/permisos"
 import {
   LayoutDashboard,
   CalendarDays,
@@ -43,15 +42,14 @@ interface BarraLateralProps {
   }
   esOwner?: boolean
   diasTrialRestantes?: number
+  /** Dueño y encargado gestionan el equipo; el profesional no ve el enlace. Resuelto en el servidor. */
+  puedeVerEquipo?: boolean
 }
 
-export function BarraLateral({ usuario, esOwner, diasTrialRestantes }: BarraLateralProps) {
+export function BarraLateral({ usuario, esOwner, diasTrialRestantes, puedeVerEquipo }: BarraLateralProps) {
   const { abrirPrecios } = usePrecios()
   const pathname = usePathname()
   const [colapsado, setColapsado] = useState(false)
-  const { data: session } = useSession()
-  // Dueño y encargado gestionan el equipo; el profesional no ve el enlace.
-  const puedeVerEquipo = puedeGestionarEquipo(actorDeSesion(session))
 
   const usuarioDefault = usuario || {
     nombre: "María García",
