@@ -62,7 +62,7 @@ dueño, así que la información para aislarlas por fin existe.
 
 | # | Área | Tarea | Agente | Estado | Depende de |
 |---|---|---|---|---|---|
-| 1 | backend | `whereDeAgenda` + aplicar los filtros en los tres endpoints | backend | pendiente | — |
+| 1 | backend | `whereDeAgenda` + aplicar los filtros en los tres endpoints | backend | hecha | — |
 | 2 | qa | Verificar los criterios con los tres roles | qa | pendiente | 1 |
 | 3 | revisor | Verificar aislamiento y que el filtro no se pueda anular | revisor | pendiente | 2 |
 
@@ -81,12 +81,48 @@ dueño, así que la información para aislarlas por fin existe.
 
 ## Fuera de alcance detectado
 
-<!-- El agente completa acá. -->
+- `GET/PUT/DELETE /api/citas/[id]` no verifican pertenencia al profesional
+  (sólo al negocio). Ya estaba anotado como ficha aparte; no se tocó.
+- `POST /api/pacientes` sigue filtrando/creando con `session.user.businessId`
+  directo en vez de `actorDeSesion`. Funciona igual (no hay filtro de rol que
+  aplicar en un alta), pero convendría unificar el patrón en una pasada aparte.
+- El endpoint de dashboard (`citasHoyLista`, `citasHoy`, `totalPacientes`,
+  `tasaOcupacion`) sigue siendo agregados de **todo el negocio**, no sólo del
+  profesional. La ficha sólo pidió ocultar ingresos (`puedeVerIngresosDelNegocio`);
+  no pidió acotar el resto por `memberId`. Lo dejo anotado porque
+  `docs/PRODUCTO.md` §5 dice "su agenda... y nada más", y hoy un `worker` sigue
+  viendo cuántas citas y clientes tiene el negocio entero en el dashboard — sólo
+  no ve cuánto factura. Si se quiere ir más allá, es una ficha nueva.
+- No se tocó rate limiting en estos tres endpoints (ficha aparte, ya anotado).
 
 ## Decisiones tomadas
 
 - Los clientes son del negocio, no del profesional: `filtroDeClientes` acota por
   negocio y da lo mismo para los tres roles. La decisión ya estaba tomada en
   F-002 al escribir la función; acá sólo se aplica.
+- `whereDeClientes(actor, extra)` se agregó espejando `whereDeAgenda`, aunque la
+  ficha sólo pedía el nombre `whereDeAgenda` explícitamente: el mismo riesgo de
+  pisar el filtro por spread existe en `GET /api/pacientes` (`busqueda`,
+  `etiqueta`), así que se cerró con la misma herramienta.
+- En `GET /api/dashboard/stats`, cuando `puedeVerIngresosDelNegocio(actor)` es
+  `false`, las agregaciones de facturación (`prisma.appointment.aggregate` para
+  ingresos del mes y del mes anterior) ni siquiera se ejecutan, y las claves
+  `ingresoseMes` y `tendencias.ingresos` se omiten de la respuesta (no se mandan
+  como `0` ni `null`): el contrato es "esta clave no existe", no "está vacía".
+- Front (`app/dashboard/page.tsx`): la tarjeta "Ingresos del mes" y la fila
+  "Ingresos este mes" del resumen se construyen condicionalmente según si
+  `stats.ingresoseMes !== undefined`. Cambio mínimo: mismo layout de grid,
+  mismos componentes, sólo se omite el ítem cuando no hay dato. No se tocó
+  estilos ni estructura visual.
 
 ## Bitácora
+
+- 2026-09-01 — backend: agregadas `whereDeAgenda` y `whereDeClientes` en
+  `lib/permisos.ts` (envuelven filtro + extra en `AND`, no en spread). Aplicadas
+  en `GET /api/citas` y `GET /api/pacientes`. `GET /api/dashboard/stats` ahora
+  decide con `puedeVerIngresosDelNegocio` si calcula y devuelve ingresos.
+  Archivos: `lib/permisos.ts`, `lib/permisos.test.ts`, `app/api/citas/route.ts`,
+  `app/api/citas/route.test.ts` (nuevo), `app/api/pacientes/route.ts`,
+  `app/api/dashboard/stats/route.ts`, `app/api/dashboard/stats/route.test.ts`
+  (nuevo), `app/dashboard/page.tsx`. `npm run lint`, `npx tsc --noEmit`,
+  `npx vitest run` (86 tests) y `npm run build` en verde.

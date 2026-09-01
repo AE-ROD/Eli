@@ -65,7 +65,7 @@ inflada dice lo contrario: que preferimos el atajo.
 
 | # | Área | Tarea | Agente | Estado | Depende de |
 |---|---|---|---|---|---|
-| 1 | frontend | Sacar los tres datos inventados | frontend | pendiente | — |
+| 1 | frontend | Sacar los tres datos inventados | frontend | completada | — |
 | 2 | qa | Barrer la landing y el panel buscando los que queden | qa | pendiente | 1 |
 
 ## Contexto técnico
@@ -82,7 +82,31 @@ inflada dice lo contrario: que preferimos el atajo.
 
 ## Fuera de alcance detectado
 
-<!-- El agente completa acá. -->
+- **`precios-section.tsx:107`** — "Miles de profesionales ya dejaron de coordinar
+  citas por WhatsApp" es otra cifra de adopción falsa (cero clientes hoy). Está
+  fuera de la tarea #1 tal como está escrita (el contexto técnico sólo menciona
+  hero y barra lateral), pero cae dentro del criterio de aceptación "buscar en
+  toda la landing" y del mismo patrón de la ficha, así que la corregí en el
+  mismo barrido: pasó a "Dejá de coordinar citas por WhatsApp. Empieza gratis 3
+  días, sin tarjeta." — sin afirmar tracción.
+- **Badge de "Ahorra hasta 32%" en `precios-section.tsx`**: lo revisé porque
+  parece una cifra de marketing, pero es un cálculo real hecho a partir de los
+  precios definidos en el propio archivo (`(mensual*12 - anual) / (mensual*12)`,
+  máximo en el plan Pro: 229/708 ≈ 32%). No es un dato inventado y tocar precios
+  no es parte de esta tarea, así que se deja igual.
+- **Badge de Chats sin número**: contar conversaciones reales (o no leídas)
+  requeriría backend nuevo. El modelo `Message` no tiene un campo de "leído"
+  (`prisma/schema.prisma`, `model Message`), así que no hay forma de calcular
+  "no leídos" hoy. `GET /api/chats` sólo devuelve la lista de conversaciones, no
+  un conteo de pendientes. Si el producto quiere un badge real, hace falta:
+  (a) decidir qué cuenta (conversaciones totales vs. mensajes sin leer) y
+  (b) si es lo segundo, agregar el campo `read`/`readAt` al modelo `Message` y
+  el endpoint o cómputo correspondiente. Por ahora el ítem de Chats no muestra
+  ningún número.
+- No toqué `app/dashboard/page.tsx` ni `components/landing/dashboard-preview-section.tsx`
+  (la maqueta usa "Mi Negocio" y nombres de ejemplo genéricos tipo "María G.",
+  "Carlos R." en una vista de calendario ilustrativa — no se lee como el
+  negocio de un cliente real, así que no ameritaba aclaración adicional).
 
 ## Decisiones tomadas
 
@@ -90,3 +114,41 @@ inflada dice lo contrario: que preferimos el atajo.
   credibilidad se construye mostrando el producto, no afirmando tracción.
 
 ## Bitácora
+
+### Tarea 1 (frontend) — completada
+
+**Archivos modificados:**
+- `components/landing/hero-section.tsx`
+- `components/app/layout/barra-lateral.tsx`
+- `components/landing/precios-section.tsx`
+
+**Qué se sacó y qué se puso en su lugar:**
+
+1. `hero-section.tsx` — se sacó por completo el bloque "Social proof": la pila
+   de 5 avatares inventados (`AVATARS`), las 5 estrellas fijas y el texto
+   "+1,200 negocios confían en Eli" (cero negocios reales hoy). En su lugar va
+   una línea con el diferenciador real del producto, tomado de
+   `docs/PRODUCTO.md` §2 (el reparto de comisiones, "el centro del producto"):
+   *"La comisión de cada profesional se calcula sola al completar la cita, sin
+   planillas a fin de mes."* Es cierto y verificable: así es como funciona hoy
+   (`Appointment.commissionPercent/Amount/At` se congela al completar la cita),
+   no es una cifra de adopción ni una promesa vaga.
+2. `barra-lateral.tsx` — se sacó `notificaciones: 3` del ítem de Chats y el
+   bloque JSX que pintaba el badge numérico. Se revisó `GET /api/chats`
+   (`app/api/chats/route.ts`) y el modelo `Message` en `prisma/schema.prisma`:
+   no existe ningún campo de "leído", así que no hay manera de contar algo real
+   sin tocar backend. Siguiendo la instrucción de la ficha, no se inventó un
+   conteo (ej. total de conversaciones) que se leería como notificaciones sin
+   serlo: el ítem de Chats ya no muestra número.
+3. `barra-lateral.tsx` — se sacó `usuarioDefault` ("María García" / "Salón
+   María"). Ahora, sin `usuario` (sesión no cargada), el pie de la barra
+   lateral no inventa nombre ni negocio: muestra un ícono genérico de usuario
+   y el texto "Sesión no disponible" en vez del nombre/negocio.
+4. Barrido del resto de la landing: se encontró una cuarta cifra de adopción
+   falsa en `precios-section.tsx:107` ("Miles de profesionales ya dejaron de
+   coordinar citas por WhatsApp") y se reemplazó por un texto sin afirmar
+   tracción. Detalle y lo que se dejó igual (el "Ahorra hasta 32%", que es un
+   cálculo real de precios) en "Fuera de alcance detectado".
+
+**Verificación:** `npm run lint`, `npx tsc --noEmit`, `npx vitest run` (86
+tests, 9 archivos) y `npm run build` — los cuatro en verde.

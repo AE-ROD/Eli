@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Sparkles, Star } from "lucide-react"
+import { ArrowRight, Sparkles, Percent } from "lucide-react"
 import Link from "next/link"
 
 const NEGOCIOS = [
@@ -14,14 +14,6 @@ const NEGOCIOS = [
   "barberías",
   "estudios de fotografía",
   "academias de idiomas",
-]
-
-const AVATARS = [
-  { bg: "bg-blue-500",   letra: "M" },
-  { bg: "bg-violet-500", letra: "A" },
-  { bg: "bg-emerald-500",letra: "C" },
-  { bg: "bg-rose-500",   letra: "L" },
-  { bg: "bg-amber-500",  letra: "R" },
 ]
 
 export function HeroSection() {
@@ -117,29 +109,15 @@ export function HeroSection() {
           </Link>
         </motion.div>
 
-        {/* Social proof — B */}
+        {/* Qué resuelve — dato concreto del producto, no prueba social */}
         <motion.div
-          className="mt-10 flex flex-wrap items-center justify-center gap-3"
+          className="mt-10 flex items-center justify-center gap-2 text-sm text-muted-foreground max-w-lg mx-auto"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.4, delay: 0.34 }}
         >
-          <div className="flex -space-x-2">
-            {AVATARS.map((a, i) => (
-              <div
-                key={i}
-                className={`w-8 h-8 rounded-full border-2 border-background ${a.bg} flex items-center justify-center text-white text-xs font-bold shadow-sm`}
-              >
-                {a.letra}
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-0.5">
-            {[...Array(5)].map((_, i) => (
-              <Star key={i} className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-            ))}
-          </div>
-          <span className="text-sm text-muted-foreground">+1,200 negocios confían en Eli</span>
+          <Percent className="h-4 w-4 flex-shrink-0" style={{ color: 'oklch(0.65 0.155 72)' }} />
+          <span>La comisión de cada profesional se calcula sola al completar la cita, sin planillas a fin de mes.</span>
         </motion.div>
 
         {/* Features — texto inline elegante */}

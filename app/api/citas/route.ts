@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
-import { actorDeSesion, memberIdParaCita } from "@/lib/permisos"
+import { actorDeSesion, memberIdParaCita, whereDeAgenda } from "@/lib/permisos"
 
 const citaSchema = z.object({
   title: z.string().min(2),
@@ -18,7 +18,8 @@ const citaSchema = z.object({
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.businessId) {
+  const actor = actorDeSesion(session)
+  if (!actor) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
@@ -44,13 +45,12 @@ export async function GET(request: NextRequest) {
   }
 
   const citas = await prisma.appointment.findMany({
-    where: {
-      businessId: session.user.businessId,
+    where: whereDeAgenda(actor, {
       ...(patientId && { patientId }),
       ...(fechaInicio && fechaFin && {
         startTime: { gte: fechaInicio, lte: fechaFin },
       }),
-    },
+    }),
     select: {
       id: true,
       title: true,

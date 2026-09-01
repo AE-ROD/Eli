@@ -104,7 +104,7 @@ export function PreciosSection() {
             <span className="font-display italic font-normal text-primary">no tengas que hacerlo</span>
           </h2>
           <p className="text-muted-foreground max-w-xl mx-auto">
-            Miles de profesionales ya dejaron de coordinar citas por WhatsApp. Empieza gratis 3 días, sin tarjeta.
+            Dejá de coordinar citas por WhatsApp. Empieza gratis 3 días, sin tarjeta.
           </p>
         </motion.div>
 

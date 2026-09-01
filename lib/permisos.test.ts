@@ -12,6 +12,8 @@ import {
   filtroDeAgenda,
   memberIdParaCita,
   filtroDeClientes,
+  whereDeAgenda,
+  whereDeClientes,
   type Actor,
   type Rol,
 } from "./permisos"
@@ -105,6 +107,51 @@ describe("aislamiento entre negocios", () => {
     expect(filtroDeClientes(dueño)).toEqual({ businessId: NEGOCIO })
     expect(filtroDeClientes(encargado)).toEqual({ businessId: NEGOCIO })
     expect(filtroDeClientes(profesional)).toEqual({ businessId: NEGOCIO })
+  })
+})
+
+describe("whereDeAgenda / whereDeClientes: combinar el filtro no lo anula", () => {
+  it("envuelve el filtro y lo extra en AND, en vez de mezclarlos por spread", () => {
+    const extra = { patientId: "paciente-1" }
+
+    expect(whereDeAgenda(profesional, extra)).toEqual({
+      AND: [filtroDeAgenda(profesional), extra],
+    })
+  })
+
+  it("una clave repetida en `extra` no pisa la del filtro (pasó con `id` y con `AND`)", () => {
+    // Mismo tipo de objeto que rompió antes: trae `id` y `AND` propios. Con
+    // `{ ...filtroDeAgenda(actor), ...extra }` esto habría reemplazado la
+    // condición del actor. Con `whereDeAgenda`, sigue siendo un elemento más
+    // del AND exterior, y el filtro del actor no se toca.
+    const extraConClavesQuePisan = { id: "cualquiera", AND: [{ startTime: { gte: new Date(0) } }] }
+
+    const resultado = whereDeAgenda(profesional, extraConClavesQuePisan)
+
+    expect(resultado).toEqual({
+      AND: [{ businessId: NEGOCIO, memberId: "yo" }, extraConClavesQuePisan],
+    })
+    // El filtro del actor sigue intacto como primer elemento del AND.
+    expect((resultado.AND as unknown[])[0]).toEqual({ businessId: NEGOCIO, memberId: "yo" })
+  })
+
+  it("sin actor, whereDeAgenda tampoco matchea nada aunque `extra` lo intente", () => {
+    expect(whereDeAgenda(null, { businessId: OTRO_NEGOCIO })).toEqual({
+      AND: [NADA, { businessId: OTRO_NEGOCIO }],
+    })
+  })
+
+  it("whereDeClientes combina igual: el filtro de negocio no se puede pisar", () => {
+    const extra = { tags: { has: "vip" } }
+
+    expect(whereDeClientes(profesional, extra)).toEqual({
+      AND: [filtroDeClientes(profesional), extra],
+    })
+  })
+
+  it("sin extra, el default es un objeto vacío y el filtro queda igual", () => {
+    expect(whereDeAgenda(dueño)).toEqual({ AND: [{ businessId: NEGOCIO }, {}] })
+    expect(whereDeClientes(dueño)).toEqual({ AND: [{ businessId: NEGOCIO }, {}] })
   })
 })
 

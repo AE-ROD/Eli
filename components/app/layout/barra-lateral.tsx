@@ -18,6 +18,7 @@ import {
   HelpCircle,
   UsersRound,
   Sparkles,
+  User,
 } from "lucide-react"
 import { usePrecios } from "@/components/app/modales/provider-precios"
 
@@ -25,7 +26,7 @@ const itemsNavegacion = [
   { id: "dashboard", nombre: "Dashboard", icono: LayoutDashboard, ruta: "/dashboard" },
   { id: "calendario", nombre: "Calendario", icono: CalendarDays, ruta: "/dashboard/calendario" },
   { id: "pacientes", nombre: "Pacientes", icono: Users, ruta: "/dashboard/pacientes" },
-  { id: "chats", nombre: "Chats", icono: MessageCircle, ruta: "/dashboard/chats", notificaciones: 3 },
+  { id: "chats", nombre: "Chats", icono: MessageCircle, ruta: "/dashboard/chats" },
 ]
 
 const itemsSecundarios = [
@@ -50,12 +51,6 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes, puedeVerEqu
   const { abrirPrecios } = usePrecios()
   const pathname = usePathname()
   const [colapsado, setColapsado] = useState(false)
-
-  const usuarioDefault = usuario || {
-    nombre: "María García",
-    email: "maria@salon.com",
-    negocio: "Salón María",
-  }
 
   return (
     <motion.aside
@@ -142,14 +137,6 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes, puedeVerEqu
                     </motion.span>
                   )}
                 </AnimatePresence>
-                {item.notificaciones && item.notificaciones > 0 && (
-                  <span className={`
-                    flex items-center justify-center text-xs font-medium text-primary-foreground bg-primary rounded-full
-                    ${colapsado ? "absolute -top-1 -right-1 w-4 h-4 text-[10px]" : "ml-auto w-5 h-5"}
-                  `}>
-                    {item.notificaciones}
-                  </span>
-                )}
                 {activo && (
                   <motion.div
                     className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full"
@@ -250,10 +237,16 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes, puedeVerEqu
         </div>
       )}
 
-      {/* Usuario */}
+      {/* Usuario — sin sesión no se inventa nombre ni negocio */}
       <div className="p-3 border-t border-border/50">
         <div className={`flex items-center ${colapsado ? "justify-center" : "gap-3"} p-2 rounded-xl hover:bg-muted transition-colors cursor-pointer`}>
-          <AvatarUsuario nombre={usuarioDefault.nombre} imagenUrl={usuarioDefault.imagenUrl} tamaño="sm" />
+          {usuario ? (
+            <AvatarUsuario nombre={usuario.nombre} imagenUrl={usuario.imagenUrl} tamaño="sm" />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+              <User className="h-4 w-4 text-muted-foreground" />
+            </div>
+          )}
           <AnimatePresence>
             {!colapsado && (
               <motion.div
@@ -262,8 +255,14 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes, puedeVerEqu
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
               >
-                <p className="text-sm font-medium text-foreground truncate">{usuarioDefault.nombre}</p>
-                <p className="text-xs text-muted-foreground truncate">{usuarioDefault.negocio}</p>
+                {usuario ? (
+                  <>
+                    <p className="text-sm font-medium text-foreground truncate">{usuario.nombre}</p>
+                    <p className="text-xs text-muted-foreground truncate">{usuario.negocio}</p>
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground truncate">Sesión no disponible</p>
+                )}
               </motion.div>
             )}
           </AnimatePresence>

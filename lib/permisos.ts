@@ -127,3 +127,28 @@ export function filtroDeClientes(actor: Actor | null): Prisma.PatientWhereInput 
   if (!actor) return NADA
   return { businessId: actor.businessId }
 }
+
+/**
+ * Combina el filtro de agenda con condiciones adicionales del endpoint
+ * (`patientId`, rango de fechas, etc.) sin que puedan pisarlo.
+ *
+ * `{ ...filtroDeAgenda(actor), ...extra }` es inseguro: si `extra` trae una
+ * clave que el filtro también usa (pasó con `id` en F-001 y con `AND` en
+ * F-002), el spread la sobrescribe y la negación desaparece en silencio.
+ * Envolver ambos en `AND` hace que combinarlos nunca pueda anular el filtro,
+ * sin depender de que el llamador se acuerde de no repetir una clave.
+ */
+export function whereDeAgenda(
+  actor: Actor | null,
+  extra: Prisma.AppointmentWhereInput = {}
+): Prisma.AppointmentWhereInput {
+  return { AND: [filtroDeAgenda(actor), extra] }
+}
+
+/** Igual que `whereDeAgenda`, para consultas de clientes. */
+export function whereDeClientes(
+  actor: Actor | null,
+  extra: Prisma.PatientWhereInput = {}
+): Prisma.PatientWhereInput {
+  return { AND: [filtroDeClientes(actor), extra] }
+}

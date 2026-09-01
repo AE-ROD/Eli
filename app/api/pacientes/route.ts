@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { actorDeSesion, whereDeClientes } from "@/lib/permisos"
 
 const pacienteSchema = z.object({
   name: z.string().min(2),
@@ -14,7 +15,8 @@ const pacienteSchema = z.object({
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.businessId) {
+  const actor = actorDeSesion(session)
+  if (!actor) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
@@ -25,8 +27,7 @@ export async function GET(request: NextRequest) {
   const limite = Math.min(50, parseInt(searchParams.get("limite") ?? "20"))
   const skip = (pagina - 1) * limite
 
-  const where = {
-    businessId: session.user.businessId,
+  const where = whereDeClientes(actor, {
     ...(busqueda && {
       OR: [
         { name: { contains: busqueda, mode: "insensitive" as const } },
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
       ],
     }),
     ...(etiqueta && { tags: { has: etiqueta } }),
-  }
+  })
 
   const [pacientes, total] = await Promise.all([
     prisma.patient.findMany({

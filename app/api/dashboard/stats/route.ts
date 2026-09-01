@@ -2,14 +2,17 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { actorDeSesion, puedeVerIngresosDelNegocio } from "@/lib/permisos"
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.businessId) {
+  const actor = actorDeSesion(session)
+  if (!actor) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
-  const businessId = session.user.businessId
+  const verIngresos = puedeVerIngresosDelNegocio(actor)
+  const businessId = actor.businessId
   const hoy = new Date()
   hoy.setHours(0, 0, 0, 0)
   const manana = new Date(hoy)
@@ -58,24 +61,31 @@ export async function GET(request: NextRequest) {
         createdAt: { lt: inicioMes },
       },
     }),
-    prisma.appointment.aggregate({
-      where: {
-        businessId,
-        startTime: { gte: inicioMes },
-        status: "completada",
-        price: { not: null },
-      },
-      _sum: { price: true },
-    }),
-    prisma.appointment.aggregate({
-      where: {
-        businessId,
-        startTime: { gte: inicioMesAnterior, lte: finMesAnterior },
-        status: "completada",
-        price: { not: null },
-      },
-      _sum: { price: true },
-    }),
+    // La facturación es del negocio: sólo se calcula (y se devuelve) si el
+    // actor puede verla. Un profesional no recibe este dato ni siquiera para
+    // que el cliente lo descarte.
+    verIngresos
+      ? prisma.appointment.aggregate({
+          where: {
+            businessId,
+            startTime: { gte: inicioMes },
+            status: "completada",
+            price: { not: null },
+          },
+          _sum: { price: true },
+        })
+      : Promise.resolve({ _sum: { price: null as number | null } }),
+    verIngresos
+      ? prisma.appointment.aggregate({
+          where: {
+            businessId,
+            startTime: { gte: inicioMesAnterior, lte: finMesAnterior },
+            status: "completada",
+            price: { not: null },
+          },
+          _sum: { price: true },
+        })
+      : Promise.resolve({ _sum: { price: null as number | null } }),
     prisma.appointment.count({
       where: {
         businessId,
@@ -113,12 +123,12 @@ export async function GET(request: NextRequest) {
     citasHoy: citasHoyCount,
     citasHoyLista: citasHoy,
     totalPacientes,
-    ingresoseMes: ingresosActuales,
+    ...(verIngresos && { ingresoseMes: ingresosActuales }),
     tasaOcupacion,
     tendencias: {
       citas: tendenciaCitas,
       pacientes: tendenciaPacientes,
-      ingresos: tendenciaIngresos,
+      ...(verIngresos && { ingresos: tendenciaIngresos }),
       ocupacion: 0,
     },
   })

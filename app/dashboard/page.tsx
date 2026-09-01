@@ -30,12 +30,13 @@ interface StatsData {
     patient: { id: string; name: string }
   }>
   totalPacientes: number
-  ingresoseMes: number
+  /** Ausente para quien no puede ver la facturación del negocio (profesional). */
+  ingresoseMes?: number
   tasaOcupacion: number
   tendencias: {
     citas: number
     pacientes: number
-    ingresos: number
+    ingresos?: number
     ocupacion: number
   }
 }
@@ -95,6 +96,10 @@ export default function DashboardPage() {
     day: "numeric",
   })
 
+  // Si el endpoint no manda ingresos (profesional sin acceso a la facturación
+  // del negocio), la tarjeta se omite en vez de mostrar un vacío raro.
+  const puedeVerIngresos = stats?.ingresoseMes !== undefined
+
   const estadisticas = stats
     ? [
         {
@@ -111,13 +116,20 @@ export default function DashboardPage() {
           colorIcono: "exito" as const,
           tendencia: { valor: Math.abs(stats.tendencias.pacientes), esPositiva: stats.tendencias.pacientes >= 0 },
         },
-        {
-          titulo: "Ingresos del mes",
-          valor: `$${stats.ingresoseMes.toLocaleString("es-ES")}`,
-          icono: DollarSign,
-          colorIcono: "info" as const,
-          tendencia: { valor: Math.abs(stats.tendencias.ingresos), esPositiva: stats.tendencias.ingresos >= 0 },
-        },
+        ...(puedeVerIngresos
+          ? [
+              {
+                titulo: "Ingresos del mes",
+                valor: `$${(stats.ingresoseMes ?? 0).toLocaleString("es-ES")}`,
+                icono: DollarSign,
+                colorIcono: "info" as const,
+                tendencia: {
+                  valor: Math.abs(stats.tendencias.ingresos ?? 0),
+                  esPositiva: (stats.tendencias.ingresos ?? 0) >= 0,
+                },
+              },
+            ]
+          : []),
         {
           titulo: "Tasa ocupación",
           valor: `${stats.tasaOcupacion}%`,
@@ -361,11 +373,17 @@ export default function DashboardPage() {
                     valor: stats?.totalPacientes ?? "—",
                     color: "bg-green-500",
                   },
-                  {
-                    label: "Ingresos este mes",
-                    valor: stats ? `$${stats.ingresoseMes.toLocaleString("es-ES")}` : "—",
-                    color: "bg-blue-500",
-                  },
+                  // Sin stats aún se muestra el placeholder; con stats cargados
+                  // se omite del todo si el endpoint no mandó ingresos.
+                  ...(!stats || puedeVerIngresos
+                    ? [
+                        {
+                          label: "Ingresos este mes",
+                          valor: stats ? `$${(stats.ingresoseMes ?? 0).toLocaleString("es-ES")}` : "—",
+                          color: "bg-blue-500",
+                        },
+                      ]
+                    : []),
                   {
                     label: "Tasa de ocupación",
                     valor: stats ? `${stats.tasaOcupacion}%` : "—",
