@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Sparkles, Percent } from "lucide-react"
+import { ArrowRight, Sparkles, CalendarCheck } from "lucide-react"
 import Link from "next/link"
 
 const NEGOCIOS = [
@@ -116,8 +116,8 @@ export function HeroSection() {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.4, delay: 0.34 }}
         >
-          <Percent className="h-4 w-4 flex-shrink-0" style={{ color: 'oklch(0.65 0.155 72)' }} />
-          <span>La comisión de cada profesional se calcula sola al completar la cita, sin planillas a fin de mes.</span>
+          <CalendarCheck className="h-4 w-4 flex-shrink-0" style={{ color: 'oklch(0.65 0.155 72)' }} />
+          <span>Tus clientes reservan desde un enlace, a la hora que quieran, y el recordatorio sale solo.</span>
         </motion.div>
 
         {/* Features — texto inline elegante */}

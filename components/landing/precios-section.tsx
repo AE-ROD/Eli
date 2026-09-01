@@ -7,7 +7,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 
 const VALOR_ELI = [
-  { icono: Clock,  titulo: "2–4 horas/semana",      descripcion: "Tiempo que recuperas al dejar de coordinar citas por WhatsApp", color: "bg-blue-50 text-blue-600" },
+  { icono: Clock,  titulo: "Reservas sin ida y vuelta", descripcion: "El cliente elige entre tus horarios libres, sin que tengas que contestar", color: "bg-blue-50 text-blue-600" },
   { icono: Zap,    titulo: "Cero doble-reservas",   descripcion: "El sistema bloquea horarios automáticamente en tiempo real",    color: "bg-amber-50 text-amber-600" },
   { icono: Star,   titulo: "Clientes que no faltan", descripcion: "Recordatorios automáticos por email 24h antes de cada cita",   color: "bg-rose-50 text-rose-600" },
   { icono: Users,  titulo: "Página profesional",    descripcion: "Tus clientes reservan solos, sin llamadas ni mensajes",         color: "bg-violet-50 text-violet-600" },
@@ -104,7 +104,7 @@ export function PreciosSection() {
             <span className="font-display italic font-normal text-primary">no tengas que hacerlo</span>
           </h2>
           <p className="text-muted-foreground max-w-xl mx-auto">
-            Dejá de coordinar citas por WhatsApp. Empieza gratis 3 días, sin tarjeta.
+            Deja de coordinar citas por WhatsApp. Empieza gratis 3 días, sin tarjeta.
           </p>
         </motion.div>
 
