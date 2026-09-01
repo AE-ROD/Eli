@@ -9,9 +9,7 @@ import {
   puedeVerLiquidacionDe,
   puedeVerTodaLaAgenda,
   puedeEditarHorarioDe,
-  filtroDeAgenda,
   memberIdParaCita,
-  filtroDeClientes,
   whereDeAgenda,
   whereDeClientes,
   type Actor,
@@ -98,15 +96,20 @@ describe("aislamiento entre negocios", () => {
     expect(puedeEditarHorarioDe(dueño, ajeno)).toBe(false)
   })
 
+  // filtroDeAgenda/filtroDeClientes no se exportan: son la primitiva cuyo
+  // spread causó la fuga dos veces. Se verifica el mismo comportamiento a
+  // través de whereDeAgenda/whereDeClientes, que es la única puerta pública.
   it("el filtro de agenda siempre acota al negocio, incluso para quien ve todo", () => {
-    expect(filtroDeAgenda(dueño)).toEqual({ businessId: NEGOCIO })
-    expect(filtroDeAgenda(profesional)).toEqual({ businessId: NEGOCIO, memberId: "yo" })
+    expect(whereDeAgenda(dueño)).toEqual({ AND: [{ businessId: NEGOCIO }, {}] })
+    expect(whereDeAgenda(profesional)).toEqual({
+      AND: [{ businessId: NEGOCIO, memberId: "yo" }, {}],
+    })
   })
 
   it("el filtro de clientes acota al negocio para cualquier rol", () => {
-    expect(filtroDeClientes(dueño)).toEqual({ businessId: NEGOCIO })
-    expect(filtroDeClientes(encargado)).toEqual({ businessId: NEGOCIO })
-    expect(filtroDeClientes(profesional)).toEqual({ businessId: NEGOCIO })
+    expect(whereDeClientes(dueño)).toEqual({ AND: [{ businessId: NEGOCIO }, {}] })
+    expect(whereDeClientes(encargado)).toEqual({ AND: [{ businessId: NEGOCIO }, {}] })
+    expect(whereDeClientes(profesional)).toEqual({ AND: [{ businessId: NEGOCIO }, {}] })
   })
 })
 
@@ -115,7 +118,7 @@ describe("whereDeAgenda / whereDeClientes: combinar el filtro no lo anula", () =
     const extra = { patientId: "paciente-1" }
 
     expect(whereDeAgenda(profesional, extra)).toEqual({
-      AND: [filtroDeAgenda(profesional), extra],
+      AND: [{ businessId: NEGOCIO, memberId: "yo" }, extra],
     })
   })
 
@@ -145,7 +148,7 @@ describe("whereDeAgenda / whereDeClientes: combinar el filtro no lo anula", () =
     const extra = { tags: { has: "vip" } }
 
     expect(whereDeClientes(profesional, extra)).toEqual({
-      AND: [filtroDeClientes(profesional), extra],
+      AND: [{ businessId: NEGOCIO }, extra],
     })
   })
 
@@ -216,18 +219,52 @@ describe("falla cerrado", () => {
   })
 
   it("sin actor, el filtro de agenda no devuelve nada", () => {
-    expect(filtroDeAgenda(null)).toEqual(NADA)
+    expect(whereDeAgenda(null)).toEqual({ AND: [NADA, {}] })
   })
 
   it("sin actor, el filtro de clientes no devuelve nada", () => {
-    expect(filtroDeClientes(null)).toEqual(NADA)
+    expect(whereDeClientes(null)).toEqual({ AND: [NADA, {}] })
   })
 
   it("un profesional sin memberId no ve ninguna cita, en vez de verlas todas", () => {
     const roto = actor("worker", null)
 
-    expect(filtroDeAgenda(roto)).toEqual({ businessId: NEGOCIO, ...NADA })
+    expect(whereDeAgenda(roto)).toEqual({ AND: [{ businessId: NEGOCIO, ...NADA }, {}] })
     expect(puedeVerLiquidacionDe(roto, yoMismo)).toBe(false)
     expect(puedeEditarHorarioDe(roto, yoMismo)).toBe(false)
+  })
+
+  /**
+   * Mismo helper que `app/api/citas/route.test.ts`: entiende `AND`, igualdad
+   * simple y `{ in: [...] }`. Se reusa acá para comprobar, contra datos
+   * fake, que la negación de un profesional sin `memberId` sobrevive incluso
+   * cuando `extra` trae su propio `AND` (el bug de F-002 con `AND`).
+   */
+  function coincide(item: Record<string, unknown>, where: Record<string, unknown>): boolean {
+    return Object.entries(where).every(([clave, valor]) => {
+      if (clave === "AND") {
+        return (valor as Record<string, unknown>[]).every((sub) => coincide(item, sub))
+      }
+      if (valor && typeof valor === "object" && "in" in (valor as Record<string, unknown>)) {
+        return ((valor as { in: unknown[] }).in).includes(item[clave])
+      }
+      return item[clave] === valor
+    })
+  }
+
+  it("un `extra` con su propio AND no le abre a un profesional sin memberId las citas del negocio", () => {
+    const roto = actor("worker", null)
+    const citasFake = [
+      { id: "cita-1", businessId: NEGOCIO, memberId: "colega-1" },
+      { id: "cita-2", businessId: NEGOCIO, memberId: "colega-2" },
+    ]
+
+    // Este `extra` es justo el que rompía con spread: `{ ...filtro, ...extra }`
+    // pisaba la negación del filtro con el `AND` de `extra` y devolvía todas
+    // las citas del negocio (bug de F-002). Con `whereDeAgenda` ambos quedan
+    // como elementos separados del AND exterior y ninguno pisa al otro.
+    const where = whereDeAgenda(roto, { AND: [{ businessId: NEGOCIO }] })
+
+    expect(citasFake.filter((c) => coincide(c, where))).toHaveLength(0)
   })
 })

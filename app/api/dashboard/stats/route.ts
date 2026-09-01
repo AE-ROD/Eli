@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { actorDeSesion, puedeVerIngresosDelNegocio } from "@/lib/permisos"
+import { actorDeSesion, puedeVerIngresosDelNegocio, whereDeAgenda } from "@/lib/permisos"
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -32,11 +32,13 @@ export async function GET(request: NextRequest) {
     citasTotalesMes,
   ] = await Promise.all([
     prisma.appointment.findMany({
-      where: {
-        businessId,
+      // Filas, no un agregado: un worker no debe ver acá las citas de un
+      // colega ni el nombre de su paciente. `whereDeAgenda` acota por
+      // profesional además de por negocio.
+      where: whereDeAgenda(actor, {
         startTime: { gte: hoy, lt: manana },
         status: { not: "cancelada" },
-      },
+      }),
       select: {
         id: true,
         title: true,
@@ -46,6 +48,8 @@ export async function GET(request: NextRequest) {
         patient: { select: { id: true, name: true } },
       },
       orderBy: { startTime: "asc" },
+      // Listado sin agregar: siempre con tope (reglas/01-arquitectura.md).
+      take: 200,
     }),
     prisma.appointment.count({
       where: {

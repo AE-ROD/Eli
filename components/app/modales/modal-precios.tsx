@@ -33,8 +33,6 @@ const PLANES = [
       { texto: "Recordatorios 24h antes de la cita", incluido: true },
       { texto: "Modal de onboarding guiado", incluido: true },
       { texto: "Equipo de trabajadores", incluido: false },
-      { texto: "Reportes exportables PDF/CSV", incluido: false },
-      { texto: "Estadísticas avanzadas", incluido: false },
     ],
   },
   {
@@ -57,8 +55,6 @@ const PLANES = [
       { texto: "Recordatorios 24h antes de la cita", incluido: true },
       { texto: "Horarios independientes por trabajador", incluido: true },
       { texto: "Panel de equipo e invitaciones", incluido: true },
-      { texto: "Reportes exportables PDF/CSV", incluido: true },
-      { texto: "Estadísticas avanzadas", incluido: false },
     ],
   },
   {
@@ -81,8 +77,6 @@ const PLANES = [
       { texto: "Recordatorios 24h antes de la cita", incluido: true },
       { texto: "Horarios independientes por trabajador", incluido: true },
       { texto: "Panel de equipo e invitaciones", incluido: true },
-      { texto: "Reportes exportables PDF/CSV", incluido: true },
-      { texto: "Estadísticas avanzadas + horarios pico", incluido: true },
     ],
   },
 ]
@@ -152,7 +146,7 @@ export function ModalPrecios({
                   Eli trabaja para que tú no tengas que hacerlo
                 </h2>
                 <p className="text-muted-foreground text-sm">
-                  Miles de profesionales ya dejaron de coordinar citas por WhatsApp
+                  Deja de coordinar citas por WhatsApp. Empieza gratis 3 días, sin tarjeta.
                 </p>
               </div>
 
@@ -282,7 +276,7 @@ export function ModalPrecios({
 
               {/* Footer */}
               <p className="text-center text-xs text-muted-foreground mt-6">
-                3 días de prueba gratuita sin tarjeta · Cancela cuando quieras · Pagos procesados por Stripe
+                3 días de prueba gratuita sin tarjeta · Cancela cuando quieras
               </p>
             </div>
           </motion.div>

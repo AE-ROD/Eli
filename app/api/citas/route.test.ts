@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { NextRequest } from "next/server"
+import { whereDeAgenda, type Actor } from "@/lib/permisos"
 
 const mockGetServerSession = vi.fn()
 
@@ -87,17 +88,25 @@ describe("GET /api/citas", () => {
     expect(data.map((c: { id: string }) => c.id).sort()).toEqual(["cita-colega", "cita-mia"])
   })
 
-  it("combinar el filtro con patientId no le abre al worker la cita de un colega", async () => {
-    const { GET } = await import("./route")
+  // `route.ts` no expone hoy un query param que produzca un `extra` con
+  // `memberId` o `AND` propios (sólo `patientId` y rango de fechas), así que
+  // estos dos casos no se pueden disparar armando una URL: se prueba
+  // directamente `whereDeAgenda` — la misma función que usa el endpoint —
+  // contra `citasFake`, reusando `coincide`. Es justo la combinación que
+  // rompía con `{ ...filtroDeAgenda(actor), ...extra }`.
+  const workerConMember: Actor = { rol: "worker", businessId: "negocio-1", memberId: "member-worker-1" }
+  const workerSinMember: Actor = { rol: "worker", businessId: "negocio-1", memberId: null }
 
-    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+  it("worker con memberId: un extra con memberId de un colega no le abre su cita (antes sí, pisaba el filtro)", () => {
+    const where = whereDeAgenda(workerConMember, { memberId: "member-colega" })
 
-    // patientId de la cita del colega: si `extra` pudiera pisar el filtro del
-    // actor (el bug de F-001/F-002), esto devolvería la cita ajena.
-    const res = await GET(fakeRequest("http://localhost/api/citas?patientId=p-2"))
-    const data = await res.json()
+    expect(citasFake.filter((c) => coincide(c, where))).toHaveLength(0)
+  })
 
-    expect(data).toHaveLength(0)
+  it("worker sin memberId: un extra con su propio AND no destapa todas las del negocio (bug de F-002)", () => {
+    const where = whereDeAgenda(workerSinMember, { AND: [{ businessId: "negocio-1" }] })
+
+    expect(citasFake.filter((c) => coincide(c, where))).toHaveLength(0)
   })
 
   it("sin sesión recibe 401", async () => {

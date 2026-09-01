@@ -62,6 +62,27 @@ describe("GET /api/dashboard/stats", () => {
     expect(prismaMock.appointment.aggregate).not.toHaveBeenCalled()
   })
 
+  it("un worker sólo recibe en citasHoyLista sus propias citas, con tope", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+
+    await GET(fakeRequest())
+
+    const llamada = prismaMock.appointment.findMany.mock.calls[0][0] as {
+      where: { AND: [Record<string, unknown>, Record<string, unknown>] }
+      take: number
+    }
+
+    // `whereDeAgenda`, no `{ businessId }` a secas: es la fuga que cerró F-006
+    // y que este endpoint (vecino de /api/citas) seguía teniendo.
+    expect(llamada.where.AND[0]).toEqual({
+      businessId: "negocio-1",
+      memberId: "member-worker-1",
+    })
+    expect(llamada.take).toBe(200)
+  })
+
   it("el dueño sí recibe los ingresos del negocio", async () => {
     const { GET } = await import("./route")
 

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useSession } from "next-auth/react"
 import { motion, AnimatePresence } from "framer-motion"
 import { AvatarUsuario } from "@/components/app/comunes/avatar-usuario"
 import { BotonPrimario } from "@/components/app/formularios/boton-primario"
@@ -10,6 +11,7 @@ import {
   Plus,
   Menu,
   X,
+  User,
 } from "lucide-react"
 
 interface BarraSuperiorProps {
@@ -30,6 +32,8 @@ export function BarraSuperior({
 }: BarraSuperiorProps) {
   const [busquedaActiva, setBusquedaActiva] = useState(false)
   const [menuMovilAbierto, setMenuMovilAbierto] = useState(false)
+  const { data: session } = useSession()
+  const nombreUsuario = session?.user?.name
 
   return (
     <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border/50">
@@ -92,14 +96,14 @@ export function BarraSuperior({
             </AnimatePresence>
           )}
 
-          {/* Notificaciones */}
+          {/* Notificaciones — sin conteo real que mostrar, el ícono no lleva indicador */}
           <motion.button
             className="relative p-2 rounded-lg hover:bg-muted transition-colors"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
+            aria-label="Notificaciones"
           >
             <Bell className="h-5 w-5 text-muted-foreground" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
           </motion.button>
 
           {/* Accion principal */}
@@ -114,9 +118,15 @@ export function BarraSuperior({
             </BotonPrimario>
           )}
 
-          {/* Avatar (solo movil) */}
+          {/* Avatar (solo movil) — sin sesión no se inventa nombre */}
           <div className="lg:hidden">
-            <AvatarUsuario nombre="María García" tamaño="sm" />
+            {nombreUsuario ? (
+              <AvatarUsuario nombre={nombreUsuario} tamaño="sm" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                <User className="h-4 w-4 text-muted-foreground" />
+              </div>
+            )}
           </div>
         </div>
       </div>

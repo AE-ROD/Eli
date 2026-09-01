@@ -32,7 +32,6 @@ const PLANES = [
       { texto: "Emails de confirmación", incluido: true },
       { texto: "Recordatorios automáticos 24h", incluido: true },
       { texto: "Equipo de trabajadores", incluido: false },
-      { texto: "Reportes exportables", incluido: false },
     ],
   },
   {
@@ -53,7 +52,6 @@ const PLANES = [
       { texto: "Emails de confirmación", incluido: true },
       { texto: "Recordatorios automáticos 24h", incluido: true },
       { texto: "Horarios independientes por trabajador", incluido: true },
-      { texto: "Reportes exportables", incluido: true },
     ],
   },
   {
@@ -74,7 +72,6 @@ const PLANES = [
       { texto: "Emails de confirmación", incluido: true },
       { texto: "Recordatorios automáticos 24h", incluido: true },
       { texto: "Horarios independientes por trabajador", incluido: true },
-      { texto: "Reportes + estadísticas avanzadas", incluido: true },
     ],
   },
 ]
@@ -253,7 +250,7 @@ export function PreciosSection() {
 
         {/* Footer de precios */}
         <p className="text-center text-sm text-muted-foreground">
-          Sin tarjeta de crédito para el trial · Cancela cuando quieras · Pagos seguros con Stripe
+          Sin tarjeta de crédito para el trial · Cancela cuando quieras
         </p>
       </div>
     </section>

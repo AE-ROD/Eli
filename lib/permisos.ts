@@ -114,16 +114,24 @@ const NADA = { AND: [{ id: { in: [] as string[] } }] }
  * Filtro de agenda para el `where` de Prisma. **Siempre acota al negocio del
  * actor**: si devolviera sólo el miembro, un endpoint que lo usara tal cual
  * traería las citas de todos los negocios.
+ *
+ * No se exporta: es la primitiva cuyo spread causó la fuga dos veces (F-001
+ * con `id`, F-002 con `AND`). La única forma de armar un `where` con esto es
+ * a través de `whereDeAgenda`, que la combina de forma segura.
  */
-export function filtroDeAgenda(actor: Actor | null): Prisma.AppointmentWhereInput {
+function filtroDeAgenda(actor: Actor | null): Prisma.AppointmentWhereInput {
   if (!actor) return NADA
   if (puedeVerTodaLaAgenda(actor)) return { businessId: actor.businessId }
   if (!actor.memberId) return { businessId: actor.businessId, ...NADA }
   return { businessId: actor.businessId, memberId: actor.memberId }
 }
 
-/** Los clientes son del negocio, no del profesional: todo rol ve los mismos. */
-export function filtroDeClientes(actor: Actor | null): Prisma.PatientWhereInput {
+/**
+ * Los clientes son del negocio, no del profesional: todo rol ve los mismos.
+ * No se exporta por el mismo motivo que `filtroDeAgenda`: sólo se usa a
+ * través de `whereDeClientes`.
+ */
+function filtroDeClientes(actor: Actor | null): Prisma.PatientWhereInput {
   if (!actor) return NADA
   return { businessId: actor.businessId }
 }

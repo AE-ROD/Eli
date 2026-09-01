@@ -126,3 +126,36 @@ dueño, así que la información para aislarlas por fin existe.
   `app/api/dashboard/stats/route.ts`, `app/api/dashboard/stats/route.test.ts`
   (nuevo), `app/dashboard/page.tsx`. `npm run lint`, `npx tsc --noEmit`,
   `npx vitest run` (86 tests) y `npm run build` en verde.
+- 2026-09-01 — backend: cerrados los tres bloqueantes que dejó el revisor.
+  (1) `GET /api/dashboard/stats` — `citasHoyLista` era un listado de filas (no
+  un agregado) que traía las citas de **todo el negocio** con `patient.name`,
+  la misma fuga que esta ficha vino a cerrar, en el endpoint de al lado. Ahora
+  usa `whereDeAgenda(actor, { startTime: {...}, status: {...} })` y suma
+  `take: 200` (ningún listado sin tope). (2) `filtroDeAgenda` y
+  `filtroDeClientes` dejaron de exportarse en `lib/permisos.ts`: son la
+  primitiva cuyo spread causó la fuga dos veces, y mientras se pudieran
+  importar directo el problema era cuestión de tiempo. `lib/permisos.test.ts`
+  se reescribió para probar el mismo comportamiento a través de
+  `whereDeAgenda`/`whereDeClientes` (sin export "sólo para tests"), y se sumó
+  un test que reusa el helper `coincide` de `route.test.ts` para comprobar que
+  la negación de un worker sin `memberId` sobrevive aunque `extra` traiga su
+  propio `AND` (el bug de F-002). (3) El test de
+  `app/api/citas/route.test.ts` que decía probar que el filtro no se podía
+  pisar usaba `extra = { patientId: "p-2" }`, una clave que no colisiona con
+  nada del filtro: pasaba igual con el bug. Se reemplazó por dos casos que sí
+  discriminan — como `route.ts` no expone hoy un query param que produzca un
+  `extra` con `memberId` o `AND` propios, se probaron directo contra
+  `whereDeAgenda` (la misma función que usa el endpoint) y `citasFake` con
+  `coincide`: worker con `memberId` + `extra = { memberId: "member-colega" }`
+  (con el spread viejo devolvía la cita del colega) y worker sin `memberId` +
+  `extra = { AND: [{ businessId: "negocio-1" }] }` (con el spread viejo
+  devolvía las dos citas del negocio). Verificado a mano con una réplica en
+  JS puro del spread viejo vs. `whereDeAgenda`: el viejo da 1 y 2 filas
+  respectivamente, el nuevo da 0 en los dos casos.
+  Archivos: `app/api/dashboard/stats/route.ts`,
+  `app/api/dashboard/stats/route.test.ts`, `lib/permisos.ts`,
+  `lib/permisos.test.ts`, `app/api/citas/route.test.ts`. No se tocó
+  `app/dashboard/page.tsx`: `citasHoyLista` y `citasHoy` comparten la misma
+  consulta, así que quedaron coherentes entre sí sin necesidad de ocultar
+  nada en la UI. `npm run lint`, `npx tsc --noEmit`, `npx vitest run`
+  (89 tests) y `npm run build` en verde.
