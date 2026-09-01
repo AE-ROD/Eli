@@ -1,7 +1,7 @@
 ---
 id: F-007
 titulo: Credibilidad — fuera los datos inventados
-estado: en-progreso
+estado: en-revision
 prioridad: alta
 areas: [frontend]
 rama: v1
@@ -52,14 +52,14 @@ inflada dice lo contrario: que preferimos el atajo.
 
 ## Criterios de aceptación
 
-- [ ] No queda ninguna cifra de adopción, testimonio, reseña ni valoración que
+- [x] No queda ninguna cifra de adopción, testimonio, reseña ni valoración que
       no sea verificable. Buscar en toda la landing, no sólo en el hero.
-- [ ] Lo que reemplace a la cifra dice algo cierto y concreto sobre el producto.
+- [x] Lo que reemplace a la cifra dice algo cierto y concreto sobre el producto.
       Nada de rellenar el hueco con otra afirmación vaga.
-- [ ] El badge de Chats refleja conversaciones reales; si eso no se puede
+- [x] El badge de Chats refleja conversaciones reales; si eso no se puede
       resolver sin backend nuevo, **no se muestra ningún número**.
-- [ ] Sin sesión, la barra lateral no muestra un nombre ni un negocio inventado.
-- [ ] `npm run lint`, `npx tsc --noEmit`, `npm test` y `npm run build` en verde.
+- [x] Sin sesión, la barra lateral no muestra un nombre ni un negocio inventado.
+- [x] `npm run lint`, `npx tsc --noEmit`, `npm test` y `npm run build` en verde.
 
 ## Tareas por área
 
@@ -290,3 +290,54 @@ funcionalidad en landing y modales de precios contra el código que la cumple.
 
 **Verificación:** `npm run lint`, `npx tsc --noEmit`, `npx vitest run` (89
 tests, 9 archivos) y `npm run build` — los cuatro en verde.
+
+
+### Cierre — verificación del orquestador
+
+Hicieron falta **tres barridos** y cada uno encontró lo que el anterior no vio.
+Vale anotarlo como aprendizaje: "buscá datos inventados" sin una lista cerrada
+siempre deja cola. Lo que sí termina es la regla inversa — **por cada afirmación
+que queda, decir en qué archivo del código se verificó que es cierta**.
+
+Lo encontrado, en total:
+
+| Dónde | Qué decía | Realidad |
+|---|---|---|
+| Hero | "+1,200 negocios confían en Eli" + estrellas + avatares | Cero negocios |
+| Precios | "Miles de profesionales ya dejaron de coordinar citas por WhatsApp" | Cero |
+| Precios | "2–4 horas/semana" de tiempo recuperado | Estadística sin respaldo |
+| Precios y modal | "Pagos seguros / procesados con **Stripe**" | Cero líneas de Stripe |
+| Precios y modal | "Reportes exportables", "estadísticas avanzadas" | No existen |
+| Crear cuenta | "Únete a cientos de profesionales" | Cero |
+| Barra lateral | "María García / Salón María" al fallar la sesión | Inventado |
+| Barra superior | `nombre="María García"` **hardcodeado** | Se mostraba siempre, con sesión válida, en el móvil de las 6 páginas |
+| Barra lateral | Badge de Chats fijo en `3` | Sin campo de leído en `Message` |
+| Barra superior | Punto de notificación siempre encendido | Sin dato detrás |
+| Qué es Eli | "tus clientes más frecuentes" | No se calcula |
+
+Las dos peores no estaban en el primer barrido:
+
+- **Stripe.** Una afirmación de *seguridad de pago*, falsa, en la landing **y**
+  dentro del panel, mostrada justo donde alguien decide poner su tarjeta.
+  Mientras tanto `provider-precios.tsx:32` dice `// TODO: conectar con Stripe
+  Checkout`.
+- **"Reportes exportables" como función de un plan pago.** Prometer una función
+  facturada que no existe es de otra categoría que inflar un titular.
+
+Y un error que cometió el propio arreglo: la primera corrección reemplazó la
+cifra del hero por *"la comisión de cada profesional se calcula sola al
+completar la cita"*, citando campos de comisión del esquema. **Esos campos no
+existen** — F-003 sigue en backlog. Se cambió una afirmación falsa por otra. El
+texto actual habla del enlace de reservas y del recordatorio automático, los dos
+verificados en `app/reservar/[slug]` y `app/api/cron/recordatorios`.
+
+**Verificación final:** `npm run build`, `npm run lint`, `npx tsc --noEmit` y
+`npm test` (89 tests) en verde.
+
+## Pendientes que deja esta ficha
+
+- **La tabla de planes quedó más corta.** Al sacar los reportes, hay que revisar
+  si los planes siguen diferenciándose entre sí. Es decisión de producto, no de
+  código.
+- Sigue sin definirse el cobro: precio real, límites por plan aplicados y días de
+  prueba. Mientras Stripe no exista, no se puede cobrar.
