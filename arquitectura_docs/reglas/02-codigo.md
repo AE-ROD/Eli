@@ -36,3 +36,24 @@ línea, reescribe la línea.
 - Ningún archivo pasa de ~300 líneas sin justificación.
 - Ninguna función pasa de ~50 líneas.
 - Si vas a superarlos, párate y propone cómo dividirlo.
+
+## Interfaz
+
+Dirección **B** de la propuesta de identidad, aprobada como estándar
+permanente: aplica a toda pantalla nueva, no a una en particular.
+
+- **Ninguna cifra sin procedencia.** Si un número aparece en pantalla, algo
+  cerca dice de qué está hecho. Si no hay nada verdadero que decir, no se
+  escribe una línea de relleno.
+- **Nada de datos de ejemplo en producción.** Ni nombres por defecto, ni
+  contadores fijos, ni porcentajes que se rellenan con `0` cuando falta el
+  dato. Si no hay dato, se dice que no hay.
+- **No se promete lo que no existe.** Ninguna función se menciona en la
+  interfaz —ni en un plan de precios— antes de estar implementada.
+- **Cifras tabulares** (`font-variant-numeric: tabular-nums`) donde los
+  números se alinean en columna.
+- **El color significa algo.** Verde, ámbar y rojo son estado, no decoración,
+  y no se usan como color de marca.
+- **No todo es una tarjeta.** Borde, relleno, radio y sombra dicen "objeto
+  aparte": se gastan donde hay jerarquía que marcar, no por defecto.
+- **Un estado vacío explica**, no disimula: por qué está vacío y qué hacer.
