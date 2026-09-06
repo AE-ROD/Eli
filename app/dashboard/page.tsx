@@ -299,7 +299,7 @@ export default function DashboardPage() {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-foreground">
-                        {stats ? stats.totalPacientes : "—"} pacientes
+                        {stats ? `${stats.totalPacientes} ${stats.totalPacientes === 1 ? "cliente" : "clientes"}` : "—"}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         registrados en tu negocio
@@ -388,7 +388,9 @@ export default function DashboardPage() {
             transition={{ delay: 0.5 }}
           >
             <div className="bg-card border border-border/50 rounded-xl p-5">
-              <h3 className="font-semibold text-foreground mb-4">Resumen del negocio</h3>
+              <h3 className="font-semibold text-foreground mb-4">
+                {puedeVerIngresos ? "Resumen del negocio" : "Tu resumen"}
+              </h3>
               <div className="space-y-4">
                 {[
                   {
