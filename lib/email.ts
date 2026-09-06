@@ -47,9 +47,44 @@ function html(partes: TemplateStringsArray, ...valores: unknown[]): HtmlSeguro {
   return { __marca: "HtmlSeguro", valor: texto }
 }
 
+/**
+ * Asunto de correo ya libre de saltos de línea y caracteres de control. Es un
+ * tipo opaco (no un `string`) a propósito, mismo patrón que `HtmlSeguro`: no
+ * hay forma de producir uno excepto llamando a `asunto`, así que un asunto
+ * nuevo armado a mano con un template literal común ni siquiera compila. La
+ * protección no depende de que quien lo escriba se acuerde de limpiarlo.
+ */
+type AsuntoSeguro = { readonly __marca: "AsuntoSeguro"; readonly valor: string }
+
+/**
+ * Quita del asunto todo lo que un encabezado de correo no debería llevar:
+ * `\r`, `\n`, los separadores de línea/párrafo de Unicode (`U+2028` y
+ * `U+2029`, que algunos consumidores tratan como salto de línea aunque no
+ * sean `\r`/`\n`) y el resto de los caracteres de control (incluido `DEL`).
+ * Sin esto, un nombre con un `\r\n` podría agregar un encabezado falso —un
+ * `Bcc:`, por ejemplo— al correo.
+ */
+function limpiarAsunto(valor: unknown): string {
+  return String(valor).replace(/[\r\n\u2028\u2029\x00-\x1f\x7f]/g, "")
+}
+
+/**
+ * Tagged template para armar el asunto de un correo. El texto literal de la
+ * plantilla (fijo, escrito por nosotros) se preserva tal cual; cada valor
+ * interpolado —el dato que escribió una persona— se limpia siempre. Es la
+ * única forma marcada de producir un `AsuntoSeguro`.
+ */
+function asunto(partes: TemplateStringsArray, ...valores: unknown[]): AsuntoSeguro {
+  const texto = partes.reduce(
+    (acc, parte, i) => acc + parte + (i < valores.length ? limpiarAsunto(valores[i]) : ""),
+    "",
+  )
+  return { __marca: "AsuntoSeguro", valor: texto }
+}
+
 interface Correo {
   para: string
-  asunto: string
+  asunto: AsuntoSeguro
   /** Siempre un texto fijo que escribimos nosotros, nunca un dato de persona. */
   titulo: string
   intro: HtmlSeguro
@@ -62,10 +97,10 @@ interface Correo {
 }
 
 /** Sin clave configurada no se envía nada, igual que el rate limit sin Upstash. */
-async function enviar({ para, asunto, titulo, intro, detalle, destacado, boton, cierre }: Correo) {
+async function enviar({ para, asunto: asuntoSeguro, titulo, intro, detalle, destacado, boton, cierre }: Correo) {
   const api = resend()
   if (!api) {
-    console.warn(`[email] RESEND_API_KEY no configurada: no se envió "${asunto}".`)
+    console.warn(`[email] RESEND_API_KEY no configurada: no se envió "${asuntoSeguro.valor}".`)
     return null
   }
 
@@ -76,7 +111,7 @@ async function enviar({ para, asunto, titulo, intro, detalle, destacado, boton, 
   return api.emails.send({
     from: FROM,
     to: para,
-    subject: asunto,
+    subject: asuntoSeguro.valor,
     html: `
       <div style="font-family: sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px; background: #fff;">
         <h1 style="font-size: 24px; font-weight: 700; color: #111; margin-bottom: 8px;">${titulo}</h1>
@@ -127,7 +162,7 @@ export interface DatosConfirmacionCliente {
 export function enviarConfirmacionCliente(datos: DatosConfirmacionCliente) {
   return enviar({
     para: datos.emailCliente,
-    asunto: `✅ Cita confirmada — ${datos.nombreNegocio}`,
+    asunto: asunto`✅ Cita confirmada — ${datos.nombreNegocio}`,
     titulo: "¡Tu cita está confirmada!",
     intro: html`Hola <strong>${datos.nombreCliente}</strong>, te esperamos en <strong>${datos.nombreNegocio}</strong>.`,
     detalle: [
@@ -161,7 +196,7 @@ export function enviarAvisoProfesional(datos: DatosAvisoProfesional) {
 
   return enviar({
     para: datos.emailProfesional,
-    asunto: `📅 Nueva reserva — ${datos.nombreCliente}`,
+    asunto: asunto`📅 Nueva reserva — ${datos.nombreCliente}`,
     titulo: "Nueva reserva recibida",
     intro: html`Tienes una nueva cita en <strong>${datos.nombreNegocio}</strong>.`,
     detalle,
@@ -182,7 +217,7 @@ export interface DatosRecordatorio {
 export function enviarRecordatorio(datos: DatosRecordatorio) {
   return enviar({
     para: datos.emailCliente,
-    asunto: "🔔 Recordatorio — Tu cita es mañana",
+    asunto: asunto`🔔 Recordatorio — Tu cita es mañana`,
     titulo: "Tu cita es mañana 👋",
     intro: html`Hola <strong>${datos.nombreCliente}</strong>, te recordamos que tienes una cita mañana en <strong>${datos.nombreNegocio}</strong>.`,
     detalle: [
@@ -203,7 +238,7 @@ export interface DatosRecuperacionPassword {
 export function enviarRecuperacionPassword(datos: DatosRecuperacionPassword) {
   return enviar({
     para: datos.emailUsuario,
-    asunto: "🔑 Restablece tu contraseña — Eli",
+    asunto: asunto`🔑 Restablece tu contraseña — Eli`,
     titulo: "Restablece tu contraseña",
     intro: html`Hola <strong>${datos.nombreUsuario}</strong>, recibimos una solicitud para restablecer tu contraseña.`,
     boton: { texto: "Crear nueva contraseña", enlace: datos.enlaceRestablecer },
@@ -224,7 +259,7 @@ export function enviarInvitacionTrabajador(datos: DatosInvitacionTrabajador) {
 
   return enviar({
     para: datos.emailTrabajador,
-    asunto: `Te invitaron a unirte a ${datos.nombreNegocio} en Eli`,
+    asunto: asunto`Te invitaron a unirte a ${datos.nombreNegocio} en Eli`,
     titulo: "Tienes una invitación",
     intro: html`Hola <strong>${datos.nombreTrabajador}</strong>, te invitaron a formar parte de <strong>${datos.nombreNegocio}</strong> como <strong>${rol}</strong>.`,
     detalle: [
