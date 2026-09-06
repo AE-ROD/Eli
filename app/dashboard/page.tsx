@@ -26,7 +26,8 @@ interface StatsData {
     startTime: string
     endTime: string
     status: string
-    patient: { id: string; name: string }
+    /** Opcional en el esquema: una cita puede no tener cliente vinculado. */
+    patient: { id: string; name: string } | null
   }>
   /** Sólo cuando no hay citas hoy: el dato honesto es cuándo es la próxima. */
   proximaCita?: { id: string; title: string; startTime: string }
@@ -82,15 +83,12 @@ function procedenciaDeCitas(stats: StatsData): string | undefined {
 }
 
 function procedenciaDeClientes(stats: StatsData): string | undefined {
-  const { clientesNuevosMes, totalPacientes, tendencias } = stats
+  const { clientesNuevosMes, totalPacientes } = stats
 
   if (totalPacientes === 0) return "Se suman solos cuando alguien reserva."
-  if (clientesNuevosMes > 0) {
-    const nuevos = clientesNuevosMes === 1 ? "1 nuevo" : `${clientesNuevosMes} nuevos`
-    return `${nuevos} este mes.`
-  }
-  if (tendencias.pacientes === undefined) return "Ninguno nuevo este mes."
-  return "Ninguno nuevo este mes; los de antes siguen ahí."
+  if (clientesNuevosMes === 0) return "Ninguno nuevo este mes."
+
+  return clientesNuevosMes === 1 ? "1 nuevo este mes." : `${clientesNuevosMes} nuevos este mes.`
 }
 
 function procedenciaDeIngresos(stats: StatsData): string | undefined {
@@ -241,7 +239,7 @@ export default function DashboardPage() {
                       key={cita.id}
                       cita={{
                         id: cita.id,
-                        pacienteNombre: cita.patient.name,
+                        pacienteNombre: cita.patient?.name ?? "Sin cliente",
                         servicio: cita.title,
                         horaInicio: formatHora(cita.startTime),
                         horaFin: formatHora(cita.endTime),
@@ -302,7 +300,9 @@ export default function DashboardPage() {
                         {stats ? `${stats.totalPacientes} ${stats.totalPacientes === 1 ? "cliente" : "clientes"}` : "—"}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        registrados en tu negocio
+                        {stats && stats.clientesNuevosMes > 0
+                          ? `${stats.clientesNuevosMes} desde el 1 de este mes`
+                          : "Se suman al reservar"}
                       </p>
                     </div>
                   </div>
@@ -367,7 +367,7 @@ export default function DashboardPage() {
                       </span>
                       <div className="flex-1 h-7 bg-primary/10 rounded-lg flex items-center px-3">
                         <span className="text-xs font-medium text-primary truncate">
-                          {cita.patient.name} — {cita.title}
+                          {cita.patient?.name ?? "Sin cliente"} — {cita.title}
                         </span>
                       </div>
                     </div>

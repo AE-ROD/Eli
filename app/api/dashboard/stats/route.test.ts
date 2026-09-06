@@ -137,6 +137,23 @@ describe("GET /api/dashboard/stats", () => {
     expect(data.tendencias.pacientes).toBe(20)
   })
 
+  it("la tendencia de ingresos sale de los dos meses, no de un valor por defecto", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    // 1.000 este mes contra 500 el anterior: el doble.
+    prismaMock.appointment.aggregate
+      .mockResolvedValueOnce({ _sum: { price: 1000 }, _count: 4 })
+      .mockResolvedValueOnce({ _sum: { price: 500 }, _count: 2 })
+
+    const res = await GET(fakeRequest())
+    const data = await res.json()
+
+    expect(data.ingresoseMes).toBe(1000)
+    expect(data.citasFacturadasMes).toBe(4)
+    expect(data.tendencias.ingresos).toBe(100)
+  })
+
   it("sin citas hoy, dice cuándo es la próxima en vez de un cero mudo", async () => {
     const { GET } = await import("./route")
 
