@@ -26,14 +26,40 @@ describe("verificarLimite cuando Upstash está configurado pero falla", () => {
   })
 })
 
-describe("verificarLimite sin Upstash configurado", () => {
+describe("verificarLimite sin Upstash configurado, en producción", () => {
   beforeEach(() => {
     vi.stubEnv("UPSTASH_REDIS_REST_URL", "")
     vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "")
+    vi.stubEnv("NODE_ENV", "production")
     vi.resetModules()
   })
 
-  it("deja pasar (fail-open) cuando no hay credenciales de Upstash", async () => {
+  it("NO deja pasar (fail-closed): sin credenciales, en producción, se bloquea", async () => {
+    const { verificarLimite } = await import("./rate-limit")
+    const resultado = await verificarLimite("login", "127.0.0.1")
+    expect(resultado.permitido).toBe(false)
+    expect(resultado.restantes).toBe(0)
+  })
+
+  it("avisa con console.error, de forma inequívoca, que falta configuración", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {})
+    const { verificarLimite } = await import("./rate-limit")
+    await verificarLimite("login", "127.0.0.1")
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining("CONFIGURACIÓN FALTANTE"))
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining("PRODUCCIÓN"))
+    spy.mockRestore()
+  })
+})
+
+describe("verificarLimite sin Upstash configurado, fuera de producción", () => {
+  beforeEach(() => {
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "")
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "")
+    vi.stubEnv("NODE_ENV", "development")
+    vi.resetModules()
+  })
+
+  it("deja pasar (fail-open): sin credenciales, fuera de producción, no bloquea el desarrollo local", async () => {
     const { verificarLimite } = await import("./rate-limit")
     const resultado = await verificarLimite("login", "127.0.0.1")
     expect(resultado.permitido).toBe(true)

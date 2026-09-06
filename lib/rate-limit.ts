@@ -14,6 +14,10 @@ const redis = redisConfigurado
 
 let avisoMostrado = false
 
+function esProduccion(): boolean {
+  return process.env.NODE_ENV === "production"
+}
+
 function crearLimitador(prefix: string, tokens: number, ventana: `${number} ${"s" | "m" | "h"}`) {
   if (!redis) return null
   return new Ratelimit({
@@ -51,18 +55,33 @@ export interface ResultadoLimite {
 
 /**
  * Aplica rate limiting si Upstash está configurado (UPSTASH_REDIS_REST_URL/TOKEN).
- * Si no está configurado, o si Upstash falla/no responde (caída, cuota agotada, etc.),
- * deja pasar la petición (fail-open): un problema en Redis no debe tumbar login/registro/reserva.
+ *
+ * Sin credenciales configuradas el comportamiento depende del entorno:
+ * - En producción, falla CERRADO: no se puede dejar login/registro/restablecer
+ *   contraseña sin ningún tope porque una variable desapareció de Vercel.
+ * - Fuera de producción, falla abierto: no tiene sentido bloquear el desarrollo
+ *   local ni los tests por no tener Upstash configurado.
+ *
+ * Si Upstash está configurado pero falla en tiempo de ejecución (caída, cuota
+ * agotada, etc.) se deja pasar la petición (fail-open): una caída transitoria
+ * de un proveedor externo no debe tumbar el login de todo el mundo.
  */
 export async function verificarLimite(tipo: TipoLimite, identificador: string): Promise<ResultadoLimite> {
   const limitador = limitadores[tipo]
 
   if (!limitador) {
     if (!avisoMostrado) {
-      console.warn(
-        "[rate-limit] UPSTASH_REDIS_REST_URL/TOKEN no configurados: rate limiting desactivado."
+      console.error(
+        "[rate-limit] CONFIGURACIÓN FALTANTE: UPSTASH_REDIS_REST_URL/TOKEN no están definidos. " +
+          (esProduccion()
+            ? "Entorno de PRODUCCIÓN: se bloquean las peticiones hasta que se configure (fail-closed)."
+            : "Entorno de desarrollo: se deja pasar sin límite (fail-open).")
       )
       avisoMostrado = true
+    }
+
+    if (esProduccion()) {
+      return { permitido: false, restantes: 0 }
     }
     return { permitido: true, restantes: Infinity }
   }
