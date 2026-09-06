@@ -43,16 +43,16 @@ dice que el encargado edita el de cualquiera.
 
 ## Criterios de aceptación
 
-- [ ] Un `admin` ve y usa la sección de servicios en configuración.
-- [ ] Un `admin` edita el horario de cualquier miembro del negocio y el horario
+- [x] Un `admin` ve y usa la sección de servicios en configuración.
+- [x] Un `admin` edita el horario de cualquier miembro del negocio y el horario
       general; un `worker` sigue editando sólo el propio.
-- [ ] Un `worker` no ve la sección de servicios.
-- [ ] Ningún archivo tocado compara roles a mano ni usa `session.user as any`
+- [x] Un `worker` no ve la sección de servicios.
+- [x] Ningún archivo tocado compara roles a mano ni usa `session.user as any`
       para autorizar.
-- [ ] **Aislamiento intacto:** ningún miembro de otro negocio es alcanzable;
+- [x] **Aislamiento intacto:** ningún miembro de otro negocio es alcanzable;
       404, nunca 403.
-- [ ] Tests de endpoint que fijen quién entra y quién no en servicios y horarios.
-- [ ] `npm run lint`, `npx tsc --noEmit`, `npm test` y `npm run build` en verde.
+- [x] Tests de endpoint que fijen quién entra y quién no en servicios y horarios.
+- [x] `npm run lint`, `npx tsc --noEmit`, `npm test` y `npm run build` en verde.
 
 ## Contexto técnico
 
@@ -69,11 +69,70 @@ dice que el encargado edita el de cualquiera.
 
 ## Fuera de alcance detectado
 
-<!-- El agente completa acá. -->
+- `app/api/configuracion/servicios/route.ts` (GET/POST) y `.../servicios/[id]/route.ts`
+  no llevan `take` en los listados, contra la regla general de
+  `arquitectura_docs/reglas/01-arquitectura.md` ("todo listado lleva take"). No
+  se tocó: es preexistente, no forma parte de la migración de permisos y un
+  negocio no tiene miles de servicios, pero queda anotado para una tarea aparte.
+- `resolverObjetivo()` en `horarios/route.ts` devuelve 401 (no 403) cuando un
+  `worker` pide el horario de otro miembro del mismo negocio: es una decisión
+  de diseño (sigue la convención "No autorizado" ya usada en `/api/equipo` y
+  `/api/citas` para permisos insuficientes dentro del mismo negocio), separada
+  del 404 que sí exige el aislamiento entre negocios. No estaba en el alcance
+  cuestionar esa convención, así que se respetó.
 
 ## Decisiones tomadas
 
 - El límite del encargado es el dinero, no la operación (`docs/PRODUCTO.md` §5).
   Servicios y horarios son operación.
+- El 404 se reserva estrictamente para "el recurso es de otro negocio" (existe
+  o no, misma respuesta). El caso "mismo negocio, rol insuficiente" (worker
+  pidiendo el horario de otro miembro) usa 401, igual que el resto de los
+  endpoints de permisos del proyecto.
 
 ## Bitácora
+
+- Migrados a `lib/permisos.ts` (patrón de F-005/`app/api/equipo/route.ts`,
+  `actorDeSesion` + función de permiso, sin comparar roles a mano ni
+  `session.user as any`):
+  - `app/dashboard/configuracion/page.tsx`: el `esOwner` propio se reemplazó
+    por `gestionaElNegocio`, `puedeEditarHorarioDe` y `puedeGestionarServicios`
+    (más `esDueño` sólo para el texto "Mi horario" vs "Mi horario de atención",
+    que no es una decisión de autorización). El `admin` ahora ve la sección de
+    servicios y el selector de horario de todo el equipo, no sólo el propio.
+  - `app/api/configuracion/servicios/route.ts` y `.../servicios/[id]/route.ts`:
+    GET/POST/PUT/DELETE preguntan a `puedeGestionarServicios`. El filtro y la
+    verificación de pertenencia (404 en detalle) ya usaban `businessId` del
+    actor; ahora ese `businessId` sale de `actor`, no de `session.user`
+    suelto.
+  - `app/api/configuracion/horarios/route.ts`: se borró el `resolverMemberId()`
+    owner-only. Se agregó `resolverObjetivo()`, que sin `memberId` en la URL
+    resuelve el horario propio (dueño → `null`/general; encargado/profesional →
+    su `memberId`) y con `memberId` busca el `BusinessMember` real en la base y
+    llama a `puedeEditarHorarioDe(actor, miembro)` — nunca confía en el id
+    suelto de la URL. Miembro inexistente o de otro negocio → misma respuesta
+    404 ("Miembro no encontrado"); mismo negocio pero sin permiso (worker
+    pidiendo el de otro) → 401.
+- Tests nuevos (32 casos, los tres archivos en verde):
+  `app/api/configuracion/servicios/route.test.ts`,
+  `app/api/configuracion/servicios/[id]/route.test.ts`,
+  `app/api/configuracion/horarios/route.test.ts`. Cada uno cubre: dueño/admin
+  entran, worker no (o sólo lo propio en horarios), sin sesión 401, y un
+  miembro/servicio de otro negocio da 404 nunca 403 (verificado con una sesión
+  de "negocio-2" contra datos de "negocio-1", igual que en
+  `app/api/equipo/route.test.ts`).
+- Verificación de aislamiento: en `horarios`, el caso crítico es que
+  `resolverObjetivo()` recibe el `memberId` de la URL, lo resuelve contra la
+  base (`businessMember.findUnique`) y compara su `businessId` real contra
+  `actor.businessId` con `mismoNegocio()` antes de llamar a
+  `puedeEditarHorarioDe`. El test "un miembro de otro negocio da 404, nunca
+  403" simula exactamente eso: el miembro existe pero pertenece a
+  `"negocio-2"` mientras el actor es de `"negocio-1"` → 404, y
+  `workSchedule.findMany`/`$transaction` nunca se llaman. En servicios, la
+  pertenencia se verifica igual que antes (`findFirst` con `id` +
+  `businessId: actor.businessId`), ahora con `actor.businessId` en vez de
+  `session.user.businessId`; el test correspondiente confirma que el `where`
+  usa el `businessId` del actor y que un servicio no encontrado con ese filtro
+  da 404, no 403.
+- `npm run lint`, `npx tsc --noEmit`, `npx vitest run` (134/134) y
+  `npm run build` en verde.
