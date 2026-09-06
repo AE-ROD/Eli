@@ -25,6 +25,12 @@ async function resolverObjetivo(actor: Actor, paramMemberId: string | null): Pro
     const propio: Miembro | null = actor.memberId
       ? { id: actor.memberId, businessId: actor.businessId }
       : null
+
+    // `null` acá no es "nadie": es el horario general del negocio, el que
+    // alimenta la reserva pública. Un profesional sin `memberId` caía en ese
+    // caso y lo reescribía sin que nadie preguntara si podía.
+    if (!puedeEditarHorarioDe(actor, propio)) return { ok: false, status: 401 }
+
     return { ok: true, miembro: propio }
   }
 

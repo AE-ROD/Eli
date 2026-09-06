@@ -168,7 +168,7 @@ describe("POST /api/configuracion/horarios", () => {
     expect(argumentosCreate.data[0]).toMatchObject({ businessId: "negocio-1", memberId: "member-worker-1" })
   })
 
-  it("un encargado edita el horario general del negocio (sin memberId)", async () => {
+  it("un encargado sin memberId en la URL edita su propio horario, no el general", async () => {
     const { POST } = await import("./route")
 
     mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
@@ -178,6 +178,29 @@ describe("POST /api/configuracion/horarios", () => {
     const res = await POST(fakeRequest("/api/configuracion/horarios", horarios))
 
     expect(res.status).toBe(200)
+    // El nombre viejo de este test decía "el horario general" y sólo miraba el
+    // status: escribía en su propio memberId y pasaba igual.
+    const argumentosCreate = prismaMock.workSchedule.createMany.mock.calls[0][0]
+    expect(argumentosCreate.data[0]).toMatchObject({
+      businessId: "negocio-1",
+      memberId: "member-admin-1",
+    })
+  })
+
+  it("un profesional sin memberId no reescribe el horario general del negocio", async () => {
+    const { POST } = await import("./route")
+
+    // `memberId: null` en un worker no debería existir tras el login, pero si
+    // llegara, el horario general (memberId: null) es el de la reserva pública.
+    mockGetServerSession.mockResolvedValueOnce({
+      user: { ...sesionProfesional.user, memberId: null },
+    })
+
+    const res = await POST(fakeRequest("/api/configuracion/horarios", horarios))
+
+    expect(res.status).toBe(401)
+    expect(prismaMock.$transaction).not.toHaveBeenCalled()
+    expect(prismaMock.workSchedule.createMany).not.toHaveBeenCalled()
   })
 
   it("un profesional (worker) sólo edita el propio: pedir el de otro da 401", async () => {

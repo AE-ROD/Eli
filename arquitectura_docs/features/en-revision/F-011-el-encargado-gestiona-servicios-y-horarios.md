@@ -1,7 +1,7 @@
 ---
 id: F-011
 titulo: El encargado gestiona servicios y horarios
-estado: en-progreso
+estado: en-revision
 prioridad: alta
 areas: [backend, frontend]
 rama: v1
@@ -136,3 +136,56 @@ dice que el encargado edita el de cualquiera.
   da 404, no 403.
 - `npm run lint`, `npx tsc --noEmit`, `npx vitest run` (134/134) y
   `npm run build` en verde.
+
+
+### Cierre — hallazgos del revisor, corregidos
+
+El revisor devolvió **cambios requeridos** con dos hallazgos; los dos eran reales.
+
+**1. La rama "sin `memberId`" decidía sin preguntarle al módulo de permisos.**
+`null` ahí no es "nadie": es el **horario general del negocio**, el que alimenta
+la página pública de reservas (`app/api/reservar/[slug]/slots`). Un `worker` con
+`memberId` nulo caía en esa rama y el `POST` hacía
+`deleteMany({ businessId, memberId: null })` + `createMany`, o sea reescribía el
+horario de atención del local. `puedeEditarHorarioDe(actor, null)` habría dicho
+que no, pero nunca se lo llamaba.
+
+Hoy no era explotable desde el login —`perfilDe()` sólo produce `memberId: null`
+para el dueño, y un no-dueño sin membresía sale sin `businessId` y recibe 401—
+pero era la única rama del cambio donde la autorización se decidía a mano. Es
+exactamente el patrón que ya salió caro dos veces (H2 en F-001, el `AND` en
+F-002). Corregido: tres líneas.
+
+**2. Un test que no probaba lo que decía.** «Un encargado edita el horario
+general del negocio (sin memberId)» sólo miraba el status: el código escribía en
+el `memberId` del propio encargado y pasaba igual. Renombrado a lo que hace de
+verdad, con la aserción sobre el `memberId` escrito, más el caso que faltaba
+—`worker` sin `memberId` → 401 y `$transaction` sin llamarse—.
+
+**Comprobado que el test nuevo discrimina**, no que sólo pasa: se revirtió el
+arreglo de tres líneas y el test falla; restaurado, los 14 vuelven a verde.
+
+## Decisión pendiente para el dueño del producto
+
+El encargado ahora define el **precio** de los servicios (`servicioSchema`
+incluye `price`). No configura porcentajes de comisión —eso sigue siendo del
+dueño— pero sí mueve la base sobre la que se calculan, y `docs/PRODUCTO.md` §5
+lista su alcance como «Equipo, agenda, horarios y clientes», sin nombrar
+servicios.
+
+Se resolvió tratando servicios como operación, porque un encargado que no puede
+dar de alta un servicio no puede operar el local. Es reversible en una línea de
+`lib/permisos.ts` (`puedeGestionarServicios = esDueño`) si el criterio es otro.
+No es retroactivo: §3.3 congela la comisión al completarse la cita.
+
+## Observaciones que quedan anotadas
+
+- Para un `admin`, el selector muestra dos solapas para el mismo horario: la de
+  «(tú)» y su propia fila del equipo.
+- El **horario general** del negocio quedó inalcanzable para el `admin` por UI y
+  por API, aunque `puedeEditarHorarioDe(admin, null)` diga que puede. Falla
+  hacia el lado cerrado, así que no es riesgo, pero el módulo y el endpoint no
+  dicen lo mismo.
+- `service.findMany` se ejecuta también para el `worker`, que nunca ve la
+  sección. Está acotado por negocio; es una consulta de más.
+- Listados de servicios sin `take` y rate limit ausente: van en F-012.
