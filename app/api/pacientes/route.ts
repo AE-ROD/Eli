@@ -79,7 +79,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.businessId) {
+  const actor = actorDeSesion(session)
+  if (!actor) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
@@ -94,7 +95,7 @@ export async function POST(request: NextRequest) {
         phone: datos.phone || null,
         tags: datos.tags ?? [],
         notes: datos.notes || null,
-        businessId: session.user.businessId,
+        businessId: actor.businessId,
       },
     })
 

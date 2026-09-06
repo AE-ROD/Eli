@@ -16,6 +16,7 @@ export async function GET() {
   const servicios = await prisma.service.findMany({
     where: { businessId: actor.businessId },
     orderBy: { createdAt: "asc" },
+    take: 200,
   })
 
   return NextResponse.json(servicios)

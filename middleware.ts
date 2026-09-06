@@ -3,6 +3,31 @@ import { getToken } from "next-auth/jwt"
 import type { NextRequest } from "next/server"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 
+/**
+ * Prefijos de `/api` que NO llevan el límite genérico del panel: cada uno ya
+ * tiene su propio control, más ajustado a su caso (login, registro,
+ * recuperar contraseña, invitación por token, reserva pública), o no
+ * corresponde uno por sesión porque no hay una persona logueada del otro
+ * lado (el cron lo llama Vercel con un secreto).
+ *
+ * A propósito es una lista de EXCEPCIONES y no de endpoints cubiertos: un
+ * endpoint nuevo bajo `/api/lo-que-sea/route.ts` queda limitado por sesión
+ * *por defecto*, sin que quien lo escriba tenga que acordarse de nada. Para
+ * sacarlo de ese límite hay que agregarlo acá a propósito, a la vista en el
+ * diff — el mismo espíritu que `whereDeAgenda`/`HtmlSeguro`: el camino fácil
+ * es el seguro, no al revés.
+ */
+const PREFIJOS_SIN_LIMITE_DE_PANEL = [
+  "/api/auth", // NextAuth + registro/recuperación: su propio límite, antes de que exista sesión
+  "/api/cron", // Lo llama Vercel con un secreto, no una persona
+  "/api/reservar", // Página pública de reservas, sin sesión
+  "/api/equipo/invitacion", // Aceptar invitación: por token, antes de tener sesión
+]
+
+function esRutaDePanel(pathname: string): boolean {
+  return pathname.startsWith("/api/") && !PREFIJOS_SIN_LIMITE_DE_PANEL.some((prefijo) => pathname.startsWith(prefijo))
+}
+
 export default async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname
 
@@ -12,6 +37,33 @@ export default async function middleware(req: NextRequest) {
     if (!permitido) {
       return NextResponse.json({ error: "Demasiados intentos, intenta más tarde" }, { status: 429 })
     }
+    return NextResponse.next()
+  }
+
+  // Rate limit genérico de los endpoints autenticados del panel (citas,
+  // pacientes, configuración, equipo, chats, dashboard...). Se cuenta por
+  // sesión, no sólo por IP: un salón con wifi compartido sale por una sola
+  // IP, y varias personas del mismo negocio no deben poder gastarse el cupo
+  // entre ellas. Sin sesión válida el propio endpoint responde 401; acá se
+  // cuenta por IP nomás para no dejar la petición completamente sin tope.
+  if (esRutaDePanel(pathname)) {
+    const token = await getToken({ req })
+    const clave = token?.id ? `usuario:${token.id}` : `ip:${obtenerIp(req)}`
+    const tipo = req.method === "GET" || req.method === "HEAD" ? "panelLectura" : "panelEscritura"
+
+    const { permitido } = await verificarLimite(tipo, clave)
+    if (!permitido) {
+      return NextResponse.json(
+        { error: "Demasiadas solicitudes, esperá un momento e intentá de nuevo" },
+        { status: 429 }
+      )
+    }
+    return NextResponse.next()
+  }
+
+  // El resto de `/api` (auth, cron, reservar, invitación) ya resolvió lo suyo
+  // arriba o no lo necesita: lo que sigue es sólo para páginas del panel.
+  if (pathname.startsWith("/api/")) {
     return NextResponse.next()
   }
 
@@ -35,5 +87,5 @@ export default async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/completar-perfil", "/api/auth/callback/credentials"],
+  matcher: ["/dashboard/:path*", "/completar-perfil", "/api/:path*"],
 }

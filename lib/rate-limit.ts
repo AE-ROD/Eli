@@ -33,13 +33,23 @@ const limitadorLogin = crearLimitador("login", 10, "1 m")
 const limitadorAuth = crearLimitador("auth", 5, "10 m")
 // Reserva pública: 20 por hora por IP
 const limitadorReserva = crearLimitador("reserva", 20, "1 h")
+// Panel autenticado, lectura (GET): un calendario abierto dispara varias
+// consultas por minuto sin que sea abuso — el límite es alto a propósito,
+// bien por encima del uso normal (arquitectura_docs/seguridad/03-rate-limiting.md).
+const limitadorPanelLectura = crearLimitador("panel-lectura", 200, "1 m")
+// Panel autenticado, escritura (POST/PUT/PATCH/DELETE): crear o editar una
+// fila es más caro que leerla, así que el tope es menor que el de lectura,
+// pero sigue siendo generoso frente al uso real de un negocio.
+const limitadorPanelEscritura = crearLimitador("panel-escritura", 60, "1 m")
 
-export type TipoLimite = "login" | "auth" | "reserva"
+export type TipoLimite = "login" | "auth" | "reserva" | "panelLectura" | "panelEscritura"
 
 const limitadores: Record<TipoLimite, Ratelimit | null> = {
   login: limitadorLogin,
   auth: limitadorAuth,
   reserva: limitadorReserva,
+  panelLectura: limitadorPanelLectura,
+  panelEscritura: limitadorPanelEscritura,
 }
 
 export function obtenerIp(request: NextRequest | { headers: Headers }): string {
