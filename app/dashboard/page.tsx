@@ -10,7 +10,6 @@ import {
   CalendarDays,
   Users,
   DollarSign,
-  TrendingUp,
   Clock,
   ArrowRight,
   Link2,
@@ -29,15 +28,17 @@ interface StatsData {
     status: string
     patient: { id: string; name: string }
   }>
+  /** Sólo cuando no hay citas hoy: el dato honesto es cuándo es la próxima. */
+  proximaCita?: { id: string; title: string; startTime: string }
   totalPacientes: number
-  /** Ausente para quien no puede ver la facturación del negocio (profesional). */
+  clientesNuevosMes: number
+  /** Ausentes para quien no puede ver la facturación del negocio (profesional). */
   ingresoseMes?: number
-  tasaOcupacion: number
+  citasFacturadasMes?: number
+  /** Sólo viajan las que se pudieron calcular: sin mes anterior, no hay clave. */
   tendencias: {
-    citas: number
-    pacientes: number
+    pacientes?: number
     ingresos?: number
-    ocupacion: number
   }
 }
 
@@ -64,6 +65,44 @@ function formatHora(iso: string) {
 
 function duracionMinutos(start: string, end: string) {
   return Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000)
+}
+
+/**
+ * De qué está hecha cada cifra. Devuelven `undefined` cuando no hay nada
+ * verdadero que decir: una línea vaga es la misma mentira que un `+0%`, con
+ * más palabras (`arquitectura_docs/reglas/02-codigo.md`).
+ */
+function procedenciaDeCitas(stats: StatsData): string | undefined {
+  if (stats.citasHoy > 0) return undefined
+  if (!stats.proximaCita) return "Ninguna agendada todavía."
+
+  const cuando = new Date(stats.proximaCita.startTime)
+  const dia = cuando.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
+  return `La próxima es el ${dia} a las ${formatHora(stats.proximaCita.startTime)}.`
+}
+
+function procedenciaDeClientes(stats: StatsData): string | undefined {
+  const { clientesNuevosMes, totalPacientes, tendencias } = stats
+
+  if (totalPacientes === 0) return "Se suman solos cuando alguien reserva."
+  if (clientesNuevosMes > 0) {
+    const nuevos = clientesNuevosMes === 1 ? "1 nuevo" : `${clientesNuevosMes} nuevos`
+    return `${nuevos} este mes.`
+  }
+  if (tendencias.pacientes === undefined) return "Ninguno nuevo este mes."
+  return "Ninguno nuevo este mes; los de antes siguen ahí."
+}
+
+function procedenciaDeIngresos(stats: StatsData): string | undefined {
+  const citas = stats.citasFacturadasMes ?? 0
+  if (citas === 0) return "Se cuenta al completar una cita. Todavía ninguna este mes."
+
+  const base = citas === 1 ? "1 cita completada" : `${citas} citas completadas`
+  const tendencia = stats.tendencias.ingresos
+  if (tendencia === undefined) return `${base} este mes.`
+
+  const signo = tendencia >= 0 ? "+" : "−"
+  return `${base} este mes · ${signo}${Math.abs(tendencia)}% vs el mes pasado.`
 }
 
 export default function DashboardPage() {
@@ -107,14 +146,14 @@ export default function DashboardPage() {
           valor: stats.citasHoy,
           icono: CalendarDays,
           colorIcono: "primario" as const,
-          tendencia: { valor: Math.abs(stats.tendencias.citas), esPositiva: stats.tendencias.citas >= 0 },
+          procedencia: procedenciaDeCitas(stats),
         },
         {
           titulo: "Clientes activos",
           valor: stats.totalPacientes,
           icono: Users,
           colorIcono: "exito" as const,
-          tendencia: { valor: Math.abs(stats.tendencias.pacientes), esPositiva: stats.tendencias.pacientes >= 0 },
+          procedencia: procedenciaDeClientes(stats),
         },
         ...(puedeVerIngresos
           ? [
@@ -123,26 +162,15 @@ export default function DashboardPage() {
                 valor: `$${(stats.ingresoseMes ?? 0).toLocaleString("es-ES")}`,
                 icono: DollarSign,
                 colorIcono: "info" as const,
-                tendencia: {
-                  valor: Math.abs(stats.tendencias.ingresos ?? 0),
-                  esPositiva: (stats.tendencias.ingresos ?? 0) >= 0,
-                },
+                procedencia: procedenciaDeIngresos(stats),
               },
             ]
           : []),
-        {
-          titulo: "Tasa ocupación",
-          valor: `${stats.tasaOcupacion}%`,
-          icono: TrendingUp,
-          colorIcono: "advertencia" as const,
-          tendencia: { valor: Math.abs(stats.tendencias.ocupacion), esPositiva: true },
-        },
       ]
     : [
         { titulo: "Citas hoy", valor: "—", icono: CalendarDays, colorIcono: "primario" as const },
         { titulo: "Clientes activos", valor: "—", icono: Users, colorIcono: "exito" as const },
         { titulo: "Ingresos del mes", valor: "—", icono: DollarSign, colorIcono: "info" as const },
-        { titulo: "Tasa ocupación", valor: "—", icono: TrendingUp, colorIcono: "advertencia" as const },
       ]
 
   const citasHoy = stats?.citasHoyLista ?? []
@@ -161,7 +189,7 @@ export default function DashboardPage() {
       <div className="p-6 space-y-8">
         {/* Estadisticas */}
         <motion.section variants={contenedorVariantes} initial="hidden" animate="show">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {estadisticas.map((stat) => (
               <motion.div key={stat.titulo} variants={itemVariantes}>
                 <TarjetaEstadistica
@@ -169,7 +197,7 @@ export default function DashboardPage() {
                   valor={stat.valor}
                   icono={stat.icono}
                   colorIcono={stat.colorIcono}
-                  tendencia={"tendencia" in stat ? stat.tendencia : undefined}
+                  procedencia={"procedencia" in stat ? stat.procedencia : undefined}
                 />
               </motion.div>
             ))}
@@ -385,8 +413,8 @@ export default function DashboardPage() {
                       ]
                     : []),
                   {
-                    label: "Tasa de ocupación",
-                    valor: stats ? `${stats.tasaOcupacion}%` : "—",
+                    label: "Clientes nuevos este mes",
+                    valor: stats?.clientesNuevosMes ?? "—",
                     color: "bg-orange-500",
                   },
                 ].map((item, i) => (
