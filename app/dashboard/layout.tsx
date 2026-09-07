@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { BarraLateral } from "@/components/app/layout/barra-lateral"
 import { ModalBienvenida } from "@/components/app/modales/modal-bienvenida"
 import { ProviderPrecios } from "@/components/app/modales/provider-precios"
+import { actorDeSesion, puedeGestionarEquipo } from "@/lib/permisos"
 
 export default async function DashboardLayout({
   children,
@@ -20,10 +21,11 @@ export default async function DashboardLayout({
       }
     : undefined
 
-  const businessName = (session?.user as any)?.businessName ?? ""
-  const businessSlug = (session?.user as any)?.businessSlug ?? ""
-  const esOwner = (session?.user as any)?.role === "owner"
-  const businessId = (session?.user as any)?.businessId ?? ""
+  const businessName = session?.user?.businessName ?? ""
+  const businessSlug = session?.user?.businessSlug ?? ""
+  const esOwner = session?.user?.role === "owner"
+  const businessId = session?.user?.businessId ?? ""
+  const puedeVerEquipo = puedeGestionarEquipo(actorDeSesion(session))
 
   // Calcular días de trial restantes (solo para owners)
   let diasTrialRestantes: number | undefined
@@ -43,7 +45,12 @@ export default async function DashboardLayout({
   return (
     <ProviderPrecios diasTrialRestantes={diasTrialRestantes}>
       <div className="min-h-screen bg-background">
-        <BarraLateral usuario={usuario} esOwner={esOwner} diasTrialRestantes={diasTrialRestantes} />
+        <BarraLateral
+          usuario={usuario}
+          esOwner={esOwner}
+          diasTrialRestantes={diasTrialRestantes}
+          puedeVerEquipo={puedeVerEquipo}
+        />
         <main className="lg:ml-[260px] transition-all duration-300">
           {children}
         </main>

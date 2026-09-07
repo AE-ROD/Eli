@@ -52,6 +52,7 @@ export function ModalBienvenida({ nombreNegocio, slug }: ModalBienvenidaProps) {
 
   useEffect(() => {
     const completado = localStorage.getItem(STORAGE_KEY)
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is only available client-side, can't read during SSR render
     if (!completado) setVisible(true)
   }, [])
 

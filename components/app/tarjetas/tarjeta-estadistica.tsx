@@ -7,10 +7,11 @@ interface TarjetaEstadisticaProps {
   titulo: string
   valor: string | number
   icono: LucideIcon
-  tendencia?: {
-    valor: number
-    esPositiva: boolean
-  }
+  /**
+   * De qué está hecha la cifra: la línea que la explica. Se omite cuando no hay
+   * nada verdadero que decir — nunca se rellena (`reglas/02-codigo.md`).
+   */
+  procedencia?: string
   colorIcono?: "primario" | "exito" | "advertencia" | "info"
 }
 
@@ -25,7 +26,7 @@ export function TarjetaEstadistica({
   titulo,
   valor,
   icono: Icono,
-  tendencia,
+  procedencia,
   colorIcono = "primario",
 }: TarjetaEstadisticaProps) {
   return (
@@ -34,17 +35,15 @@ export function TarjetaEstadistica({
       whileHover={{ y: -2 }}
       transition={{ duration: 0.2 }}
     >
-      <div className="flex items-start justify-between">
-        <div className="space-y-1">
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1 min-w-0">
           <p className="text-sm text-muted-foreground">{titulo}</p>
-          <p className="text-2xl font-bold text-foreground">{valor}</p>
-          {tendencia && (
-            <p className={`text-xs font-medium ${tendencia.esPositiva ? "text-green-600" : "text-red-500"}`}>
-              {tendencia.esPositiva ? "+" : "-"}{Math.abs(tendencia.valor)}% vs mes anterior
-            </p>
+          <p className="text-2xl font-bold text-foreground tabular-nums">{valor}</p>
+          {procedencia && (
+            <p className="text-xs text-muted-foreground/80 leading-snug text-balance">{procedencia}</p>
           )}
         </div>
-        <div className={`p-3 rounded-lg ${coloresIcono[colorIcono]}`}>
+        <div className={`p-3 rounded-lg shrink-0 ${coloresIcono[colorIcono]}`}>
           <Icono className="h-5 w-5" />
         </div>
       </div>

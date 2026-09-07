@@ -23,7 +23,7 @@ const audiences = [
     icon: Dumbbell,
     title: "Estudios Fitness",
     examples: "Gym boutique, pilates, yoga, crossfit, artes marciales",
-    need: "Clases grupales con cupo limitado",
+    need: "Agenda por instructor, sin cruces de horario",
     color: "bg-orange-50 text-orange-600",
   },
   {
@@ -37,7 +37,7 @@ const audiences = [
     icon: Camera,
     title: "Fotografia y Video",
     examples: "Fotografo, videoasta, estudio de grabacion, podcast",
-    need: "Reserva de sesiones y uso de equipos",
+    need: "Reserva de sesiones sin doble-reservas",
     color: "bg-slate-50 text-slate-600",
   },
   {
@@ -51,7 +51,7 @@ const audiences = [
     icon: Palette,
     title: "Arte y Creatividad",
     examples: "Clases de pintura, ceramica, manualidades, tatuajes",
-    need: "Gestion de talleres y materiales incluidos",
+    need: "Notas y seguimiento por alumno",
     color: "bg-rose-50 text-rose-600",
   },
   {

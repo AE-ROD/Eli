@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { actorDeSesion, memberIdParaCita, whereDeAgenda } from "@/lib/permisos"
 
 const citaSchema = z.object({
   title: z.string().min(2),
@@ -12,11 +13,13 @@ const citaSchema = z.object({
   notes: z.string().optional().or(z.literal("")),
   price: z.number().positive().optional(),
   patientId: z.string(),
+  memberId: z.string().nullable().optional(),
 })
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.businessId) {
+  const actor = actorDeSesion(session)
+  if (!actor) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
@@ -42,13 +45,12 @@ export async function GET(request: NextRequest) {
   }
 
   const citas = await prisma.appointment.findMany({
-    where: {
-      businessId: session.user.businessId,
+    where: whereDeAgenda(actor, {
       ...(patientId && { patientId }),
       ...(fechaInicio && fechaFin && {
         startTime: { gte: fechaInicio, lte: fechaFin },
       }),
-    },
+    }),
     select: {
       id: true,
       title: true,
@@ -59,9 +61,12 @@ export async function GET(request: NextRequest) {
       price: true,
       patientId: true,
       patient: { select: { id: true, name: true, email: true, phone: true } },
+      memberId: true,
+      member: { select: { id: true, role: true, user: { select: { id: true, name: true } } } },
     },
     orderBy: { startTime: "asc" },
-    take: fechaInicio ? undefined : 100,
+    // Siempre con tope: con un rango amplio, sin él se traía el histórico entero.
+    take: 500,
   })
 
   return NextResponse.json(citas)
@@ -69,7 +74,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.businessId) {
+  const actor = actorDeSesion(session)
+  if (!actor) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
@@ -78,11 +84,25 @@ export async function POST(request: NextRequest) {
     const datos = citaSchema.parse(body)
 
     const paciente = await prisma.patient.findFirst({
-      where: { id: datos.patientId, businessId: session.user.businessId },
+      where: { id: datos.patientId, businessId: actor.businessId },
     })
 
     if (!paciente) {
       return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 })
+    }
+
+    // El worker no elige: memberIdParaCita ignora lo pedido y devuelve su propio id.
+    // `|| null` y no `?? null`: el string vacío es "sin asignar", no un id.
+    // Con `??` se colaba hasta el insert y reventaba contra la foreign key.
+    const memberId = memberIdParaCita(actor, datos.memberId || null)
+
+    if (memberId) {
+      const miembro = await prisma.businessMember.findFirst({
+        where: { id: memberId, businessId: actor.businessId },
+      })
+      if (!miembro) {
+        return NextResponse.json({ error: "Miembro no encontrado" }, { status: 404 })
+      }
     }
 
     const cita = await prisma.appointment.create({
@@ -94,10 +114,12 @@ export async function POST(request: NextRequest) {
         notes: datos.notes || null,
         price: datos.price ?? null,
         patientId: datos.patientId,
-        businessId: session.user.businessId,
+        memberId,
+        businessId: actor.businessId,
       },
       include: {
         patient: { select: { id: true, name: true, email: true, phone: true } },
+        member: { select: { id: true, role: true, user: { select: { id: true, name: true } } } },
       },
     })
 

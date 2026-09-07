@@ -1,0 +1,215 @@
+---
+id: F-006
+titulo: El profesional ve sólo lo suyo
+estado: en-revision
+prioridad: alta
+areas: [backend]
+rama: v1
+estimacion: media
+max_iteraciones: 3
+---
+
+# F-006 — El profesional ve sólo lo suyo
+
+## Problema
+
+`filtroDeAgenda` y `filtroDeClientes` existen, están testeados y **no los llama
+nadie**. La regla vive escrita en `lib/` y sin aplicar en `app/`.
+
+Se vio en vivo al correr el sistema con datos de demo: en el dashboard de Carla,
+una `worker`, aparecen **"Ingresos del mes"** y **"Resumen del negocio"** con la
+facturación del local, y la cartera completa de clientes con sus teléfonos.
+Debería ver su agenda y nada más (`docs/PRODUCTO.md` §5).
+
+No es una regresión —era así desde antes— pero desde F-002 las citas tienen
+dueño, así que la información para aislarlas por fin existe.
+
+## Alcance
+
+**Incluye:**
+- `GET /api/citas` filtra con `filtroDeAgenda`.
+- `GET /api/pacientes` filtra con `filtroDeClientes`.
+- `GET /api/dashboard/stats` no le da al profesional los números del negocio.
+- Una forma de combinar el filtro que **no** se pueda pisar por accidente.
+
+**NO incluye:**
+- Cambiar la UI del dashboard más allá de no mostrar lo que el endpoint ya no
+  devuelve. Si una tarjeta queda vacía para el profesional, se oculta; no se
+  rediseña nada.
+- `GET /api/citas/[id]`, `PUT` y `DELETE` de una cita concreta: hoy verifican
+  pertenencia al negocio pero no al profesional. Queda anotado como ficha aparte.
+- El rate limit de los endpoints del panel (ficha aparte).
+
+## Criterios de aceptación
+
+- [x] Un `worker` que llama `GET /api/citas` recibe **sólo** las citas cuyo
+      `memberId` es el suyo. Dueño y encargado siguen viendo todas las del negocio.
+- [x] Un `worker` no recibe ingresos del negocio en `GET /api/dashboard/stats`.
+      Lo que sí puede ver de lo suyo se decide con `lib/permisos.ts`, no a mano.
+- [x] `GET /api/pacientes` usa `filtroDeClientes`.
+- [x] **El filtro no se puede pisar combinándolo.** Hoy se hace
+      `{ ...filtroDeAgenda(actor), ...otrasCondiciones }` y cualquier clave
+      repetida borra la negación: pasó ya dos veces (H2 en F-001 con `id`, y de
+      nuevo con `AND` en F-002). Exportar `whereDeAgenda(actor, extra)` que
+      devuelva `{ AND: [filtro, extra] }`, y que los endpoints usen eso.
+      Un objeto que sólo es seguro si el llamador se acuerda de no pisar una
+      clave no es un límite de seguridad, es una convención.
+- [x] Tests: un `worker` no ve la cita de un colega; el dueño sí ve las dos; y
+      uno que fije que combinar el filtro con otra condición **no** lo anula.
+- [x] `npm run lint`, `npx tsc --noEmit`, `npm test` y `npm run build` en verde.
+
+## Tareas por área
+
+| # | Área | Tarea | Agente | Estado | Depende de |
+|---|---|---|---|---|---|
+| 1 | backend | `whereDeAgenda` + aplicar los filtros en los tres endpoints | backend | hecha | — |
+| 2 | qa | Verificar los criterios con los tres roles | qa | completada | 1 |
+| 3 | revisor | Verificar aislamiento y que el filtro no se pueda anular | revisor | completada | 2 |
+
+## Contexto técnico
+
+- `app/api/citas/route.ts:46-53` — el `where` que hoy sólo filtra por negocio, y
+  que además combina `patientId` y el rango de fechas por spread.
+- `app/api/pacientes/route.ts` y `app/api/dashboard/stats/route.ts`.
+- `lib/permisos.ts` — `filtroDeAgenda`, `filtroDeClientes`,
+  `puedeVerIngresosDelNegocio`, `puedeVerTodaLaAgenda`.
+- El dueño **no** es `BusinessMember`: su `memberId` es `null`. Una cita sin
+  asignar y una cita "del dueño" hoy son el mismo valor y no se distinguen
+  (anotado desde F-002). Para el dueño no importa acá, porque ve todas.
+- Un `worker` sin `memberId` no debe ver **ninguna** cita, no todas. Ya está
+  resuelto dentro de `filtroDeAgenda`; no lo reimplementes en el endpoint.
+
+## Fuera de alcance detectado
+
+- `GET/PUT/DELETE /api/citas/[id]` no verifican pertenencia al profesional
+  (sólo al negocio). Ya estaba anotado como ficha aparte; no se tocó.
+- `POST /api/pacientes` sigue filtrando/creando con `session.user.businessId`
+  directo en vez de `actorDeSesion`. Funciona igual (no hay filtro de rol que
+  aplicar en un alta), pero convendría unificar el patrón en una pasada aparte.
+- El endpoint de dashboard (`citasHoyLista`, `citasHoy`, `totalPacientes`,
+  `tasaOcupacion`) sigue siendo agregados de **todo el negocio**, no sólo del
+  profesional. La ficha sólo pidió ocultar ingresos (`puedeVerIngresosDelNegocio`);
+  no pidió acotar el resto por `memberId`. Lo dejo anotado porque
+  `docs/PRODUCTO.md` §5 dice "su agenda... y nada más", y hoy un `worker` sigue
+  viendo cuántas citas y clientes tiene el negocio entero en el dashboard — sólo
+  no ve cuánto factura. Si se quiere ir más allá, es una ficha nueva.
+- No se tocó rate limiting en estos tres endpoints (ficha aparte, ya anotado).
+
+## Decisiones tomadas
+
+- Los clientes son del negocio, no del profesional: `filtroDeClientes` acota por
+  negocio y da lo mismo para los tres roles. La decisión ya estaba tomada en
+  F-002 al escribir la función; acá sólo se aplica.
+- `whereDeClientes(actor, extra)` se agregó espejando `whereDeAgenda`, aunque la
+  ficha sólo pedía el nombre `whereDeAgenda` explícitamente: el mismo riesgo de
+  pisar el filtro por spread existe en `GET /api/pacientes` (`busqueda`,
+  `etiqueta`), así que se cerró con la misma herramienta.
+- En `GET /api/dashboard/stats`, cuando `puedeVerIngresosDelNegocio(actor)` es
+  `false`, las agregaciones de facturación (`prisma.appointment.aggregate` para
+  ingresos del mes y del mes anterior) ni siquiera se ejecutan, y las claves
+  `ingresoseMes` y `tendencias.ingresos` se omiten de la respuesta (no se mandan
+  como `0` ni `null`): el contrato es "esta clave no existe", no "está vacía".
+- Front (`app/dashboard/page.tsx`): la tarjeta "Ingresos del mes" y la fila
+  "Ingresos este mes" del resumen se construyen condicionalmente según si
+  `stats.ingresoseMes !== undefined`. Cambio mínimo: mismo layout de grid,
+  mismos componentes, sólo se omite el ítem cuando no hay dato. No se tocó
+  estilos ni estructura visual.
+
+## Bitácora
+
+- 2026-09-01 — backend: agregadas `whereDeAgenda` y `whereDeClientes` en
+  `lib/permisos.ts` (envuelven filtro + extra en `AND`, no en spread). Aplicadas
+  en `GET /api/citas` y `GET /api/pacientes`. `GET /api/dashboard/stats` ahora
+  decide con `puedeVerIngresosDelNegocio` si calcula y devuelve ingresos.
+  Archivos: `lib/permisos.ts`, `lib/permisos.test.ts`, `app/api/citas/route.ts`,
+  `app/api/citas/route.test.ts` (nuevo), `app/api/pacientes/route.ts`,
+  `app/api/dashboard/stats/route.ts`, `app/api/dashboard/stats/route.test.ts`
+  (nuevo), `app/dashboard/page.tsx`. `npm run lint`, `npx tsc --noEmit`,
+  `npx vitest run` (86 tests) y `npm run build` en verde.
+- 2026-09-01 — backend: cerrados los tres bloqueantes que dejó el revisor.
+  (1) `GET /api/dashboard/stats` — `citasHoyLista` era un listado de filas (no
+  un agregado) que traía las citas de **todo el negocio** con `patient.name`,
+  la misma fuga que esta ficha vino a cerrar, en el endpoint de al lado. Ahora
+  usa `whereDeAgenda(actor, { startTime: {...}, status: {...} })` y suma
+  `take: 200` (ningún listado sin tope). (2) `filtroDeAgenda` y
+  `filtroDeClientes` dejaron de exportarse en `lib/permisos.ts`: son la
+  primitiva cuyo spread causó la fuga dos veces, y mientras se pudieran
+  importar directo el problema era cuestión de tiempo. `lib/permisos.test.ts`
+  se reescribió para probar el mismo comportamiento a través de
+  `whereDeAgenda`/`whereDeClientes` (sin export "sólo para tests"), y se sumó
+  un test que reusa el helper `coincide` de `route.test.ts` para comprobar que
+  la negación de un worker sin `memberId` sobrevive aunque `extra` traiga su
+  propio `AND` (el bug de F-002). (3) El test de
+  `app/api/citas/route.test.ts` que decía probar que el filtro no se podía
+  pisar usaba `extra = { patientId: "p-2" }`, una clave que no colisiona con
+  nada del filtro: pasaba igual con el bug. Se reemplazó por dos casos que sí
+  discriminan — como `route.ts` no expone hoy un query param que produzca un
+  `extra` con `memberId` o `AND` propios, se probaron directo contra
+  `whereDeAgenda` (la misma función que usa el endpoint) y `citasFake` con
+  `coincide`: worker con `memberId` + `extra = { memberId: "member-colega" }`
+  (con el spread viejo devolvía la cita del colega) y worker sin `memberId` +
+  `extra = { AND: [{ businessId: "negocio-1" }] }` (con el spread viejo
+  devolvía las dos citas del negocio). Verificado a mano con una réplica en
+  JS puro del spread viejo vs. `whereDeAgenda`: el viejo da 1 y 2 filas
+  respectivamente, el nuevo da 0 en los dos casos.
+  Archivos: `app/api/dashboard/stats/route.ts`,
+  `app/api/dashboard/stats/route.test.ts`, `lib/permisos.ts`,
+  `lib/permisos.test.ts`, `app/api/citas/route.test.ts`. No se tocó
+  `app/dashboard/page.tsx`: `citasHoyLista` y `citasHoy` comparten la misma
+  consulta, así que quedaron coherentes entre sí sin necesidad de ocultar
+  nada en la UI. `npm run lint`, `npx tsc --noEmit`, `npx vitest run`
+  (89 tests) y `npm run build` en verde.
+
+
+### Cierre — verificación del orquestador
+
+QA aprobó los seis criterios. El revisor devolvió **cambios requeridos** con tres
+bloqueantes, los tres reales y los tres cerrados:
+
+1. **`citasHoyLista` filtraba las citas de los colegas.** No era un agregado: eran
+   filas, de todo el negocio, **con el nombre del cliente**. Es exactamente la
+   fuga que esta ficha vino a cerrar, en el endpoint de al lado — y el mismo
+   usuario, el mismo día, veía un calendario filtrado y un dashboard sin filtrar.
+   Ahora usa `whereDeAgenda` y tiene `take: 200`.
+2. **La puerta insegura seguía abierta.** `filtroDeAgenda` y `filtroDeClientes`
+   se exportaban: son la primitiva cuyo spread causó la fuga dos veces. Se
+   agregó la puerta segura sin cerrar la otra. Ahora son privadas del módulo y
+   la única forma de armar un `where` es `whereDeAgenda`/`whereDeClientes`. Los
+   tests se reescribieron para verificar el mismo comportamiento a través de la
+   puerta pública, sin un export "sólo para tests".
+3. **El test del criterio 4 no probaba lo que decía.** Usaba
+   `extra = { patientId }`, que no colisiona con ninguna clave del filtro, así
+   que daba el mismo resultado contra la implementación con bug: el criterio
+   estaba tildado y no cumplido.
+
+**Comprobación del punto 3, hecha por el orquestador y no por un agente:** se
+revirtió `whereDeAgenda`/`whereDeClientes` a la implementación vieja
+(`{ ...filtro, ...extra }`) y se corrieron los tests. Los dos escenarios nuevos
+**fallan** contra el bug:
+
+```
+× worker con memberId: un extra con memberId de un colega no le abre su cita
+× worker sin memberId: un extra con su propio AND no destapa todas las del negocio
+```
+
+Después se restauró la implementación correcta y los 89 tests vuelven a verde.
+Ahora el criterio está cumplido de verdad: el test discrimina.
+
+**Verificación final:** `npm run build`, `npm run lint`, `npx tsc --noEmit` y
+`npm test` (89 tests) en verde.
+
+## Pendientes que deja esta ficha
+
+- **Los ingresos siguen siendo deducibles.** Ocultar `ingresoseMes` es un control
+  parcial: `tasaOcupacion` le da al profesional el volumen de citas del mes, y
+  los precios por servicio son **públicos** (`app/api/reservar/[slug]/route.ts`
+  los expone sin autenticación). Volumen + lista de precios ≈ facturación. Lo
+  anoto porque la ficha da a entender que el tema del dinero quedó cerrado, y no.
+- `citasHoy`, `totalPacientes` y `tasaOcupacion` siguen siendo del negocio
+  entero para el profesional. Ya no filtran datos de clientes, pero tampoco son
+  "su agenda y nada más".
+- `POST /api/pacientes` sigue con `session.user.businessId` en vez de
+  `actorDeSesion`: dos patrones distintos en 100 líneas del mismo archivo.
+- `GET/PUT/DELETE /api/citas/[id]` verifican pertenencia al negocio, no al
+  profesional.
+- Ningún endpoint del panel tiene rate limit.

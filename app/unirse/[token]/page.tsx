@@ -27,6 +27,7 @@ export default function UnirsePage() {
   const [password, setPassword] = useState("")
   const [confirmar, setConfirmar] = useState("")
   const [error, setError] = useState("")
+  const [requiereSesion, setRequiereSesion] = useState(false)
   const [enviando, setEnviando] = useState(false)
 
   useEffect(() => {
@@ -43,6 +44,7 @@ export default function UnirsePage() {
   const aceptar = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
+    setRequiereSesion(false)
 
     if (password.length < 8) {
       setError("La contraseña debe tener al menos 8 caracteres")
@@ -61,14 +63,23 @@ export default function UnirsePage() {
       body: JSON.stringify({ password }),
     })
 
+    const data = await res.json()
+
     if (!res.ok) {
-      const data = await res.json()
       setError(data.error ?? "Error al crear la cuenta")
+      setRequiereSesion(Boolean(data.requiereSesion))
       setEnviando(false)
       return
     }
 
-    // Iniciar sesión automáticamente
+    // Si la cuenta ya existía, aceptar solo suma la membresía: la sesión
+    // que ya tenía la persona sigue siendo válida, no hay contraseña nueva.
+    if (data.cuentaNueva === false) {
+      router.push("/dashboard")
+      return
+    }
+
+    // Iniciar sesión automáticamente con la contraseña recién creada
     const loginRes = await signIn("credentials", {
       email: invitacion!.email,
       password,
@@ -181,7 +192,25 @@ export default function UnirsePage() {
             required
           />
 
-          {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+          {error && (
+            <div className="text-center">
+              <p className="text-sm text-red-500">{error}</p>
+              {requiereSesion && (
+                <>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Iniciá sesión y volvé a este enlace para aceptar la invitación.
+                  </p>
+                  <button
+                    type="button"
+                    className="text-sm text-primary underline mt-1"
+                    onClick={() => router.push("/iniciar-sesion")}
+                  >
+                    Ir a iniciar sesión
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           <BotonPrimario
             type="submit"

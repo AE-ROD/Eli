@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { actorDeSesion, puedeGestionarServicios } from "@/lib/permisos"
 
 const servicioUpdateSchema = z.object({
   name: z.string().min(2).optional(),
@@ -17,14 +18,16 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.businessId) {
+  const actor = actorDeSesion(session)
+
+  if (!actor || !puedeGestionarServicios(actor)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
   const { id } = await params
 
   const existente = await prisma.service.findFirst({
-    where: { id, businessId: session.user.businessId },
+    where: { id, businessId: actor.businessId },
   })
   if (!existente) {
     return NextResponse.json({ error: "Servicio no encontrado" }, { status: 404 })
@@ -53,14 +56,16 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.businessId) {
+  const actor = actorDeSesion(session)
+
+  if (!actor || !puedeGestionarServicios(actor)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
   const { id } = await params
 
   const existente = await prisma.service.findFirst({
-    where: { id, businessId: session.user.businessId },
+    where: { id, businessId: actor.businessId },
   })
   if (!existente) {
     return NextResponse.json({ error: "Servicio no encontrado" }, { status: 404 })

@@ -3,16 +3,20 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { actorDeSesion, puedeGestionarServicios } from "@/lib/permisos"
 
 export async function GET() {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.businessId) {
+  const actor = actorDeSesion(session)
+
+  if (!actor || !puedeGestionarServicios(actor)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
   const servicios = await prisma.service.findMany({
-    where: { businessId: session.user.businessId },
+    where: { businessId: actor.businessId },
     orderBy: { createdAt: "asc" },
+    take: 200,
   })
 
   return NextResponse.json(servicios)
@@ -27,7 +31,9 @@ const servicioSchema = z.object({
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.businessId) {
+  const actor = actorDeSesion(session)
+
+  if (!actor || !puedeGestionarServicios(actor)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
@@ -39,7 +45,7 @@ export async function POST(request: NextRequest) {
       data: {
         ...datos,
         price: datos.price ?? null,
-        businessId: session.user.businessId,
+        businessId: actor.businessId,
       },
     })
 

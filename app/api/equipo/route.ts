@@ -4,24 +4,41 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { enviarInvitacionTrabajador } from "@/lib/email"
+import { actorDeSesion, puedeGestionarEquipo } from "@/lib/permisos"
 
 // GET /api/equipo — lista de miembros del negocio
 export async function GET() {
   const session = await getServerSession(authOptions)
-  const user = session?.user as any
-  if (!user?.id || user.role !== "owner") {
+  const actor = actorDeSesion(session)
+
+  if (!actor || !puedeGestionarEquipo(actor)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
   const [miembros, invitaciones] = await Promise.all([
     prisma.businessMember.findMany({
-      where: { businessId: user.businessId },
-      include: { user: { select: { id: true, name: true, email: true } } },
+      where: { businessId: actor.businessId },
+      select: {
+        id: true,
+        role: true,
+        createdAt: true,
+        user: { select: { id: true, name: true, email: true } },
+      },
       orderBy: { createdAt: "asc" },
+      take: 200,
     }),
     prisma.workerInvitation.findMany({
-      where: { businessId: user.businessId, acceptedAt: null },
+      where: { businessId: actor.businessId, acceptedAt: null },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        expiresAt: true,
+        createdAt: true,
+      },
       orderBy: { createdAt: "desc" },
+      take: 200,
     }),
   ])
 
@@ -37,8 +54,9 @@ const invitarSchema = z.object({
 // POST /api/equipo — invitar trabajador
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
-  const user = session?.user as any
-  if (!user?.id || user.role !== "owner") {
+  const actor = actorDeSesion(session)
+
+  if (!actor || !puedeGestionarEquipo(actor)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
@@ -46,17 +64,21 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { nombre, email, rol } = invitarSchema.parse(body)
 
-    // Verificar que no exista ya un miembro o invitación pendiente con ese email
-    const yaExiste = await prisma.user.findUnique({
-      where: { email },
-      include: { memberships: { where: { businessId: user.businessId } } },
+    // Los correos se comparan sin distinguir mayúsculas: para el servidor de
+    // correo `Ana@x.com` y `ana@x.com` son la misma casilla, y si acá se
+    // trataran como distintas se podría invitar N veces a la misma persona.
+    const mismoEmail = { equals: email, mode: "insensitive" as const }
+
+    const yaExiste = await prisma.user.findFirst({
+      where: { email: mismoEmail },
+      include: { memberships: { where: { businessId: actor.businessId } } },
     })
     if (yaExiste?.memberships.length) {
       return NextResponse.json({ error: "Este usuario ya es miembro del negocio" }, { status: 409 })
     }
 
     const invitacionPendiente = await prisma.workerInvitation.findFirst({
-      where: { businessId: user.businessId, email, acceptedAt: null },
+      where: { businessId: actor.businessId, email: mismoEmail, acceptedAt: null },
     })
     if (invitacionPendiente) {
       return NextResponse.json({ error: "Ya existe una invitación pendiente para este correo" }, { status: 409 })
@@ -66,11 +88,20 @@ export async function POST(request: NextRequest) {
 
     const invitacion = await prisma.workerInvitation.create({
       data: {
-        businessId: user.businessId,
+        businessId: actor.businessId,
         email,
         name: nombre,
         role: rol,
         expiresAt,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        expiresAt: true,
+        createdAt: true,
+        token: true, // usado solo para armar el enlace del correo, no se responde al cliente
       },
     })
 
@@ -78,19 +109,21 @@ export async function POST(request: NextRequest) {
     const enlaceAceptar = `${baseUrl}/unirse/${invitacion.token}`
 
     const negocio = await prisma.business.findUnique({
-      where: { id: user.businessId },
+      where: { id: actor.businessId },
       select: { name: true },
     })
 
     await enviarInvitacionTrabajador({
       emailTrabajador: email,
       nombreTrabajador: nombre,
-      nombreNegocio: negocio?.name ?? user.businessName,
+      nombreNegocio: negocio?.name ?? session?.user.businessName ?? "",
       rol,
       enlaceAceptar,
     }).catch(() => null)
 
-    return NextResponse.json({ invitacion }, { status: 201 })
+    const { token: _token, ...invitacionSinToken } = invitacion
+
+    return NextResponse.json({ invitacion: invitacionSinToken }, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })

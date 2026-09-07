@@ -23,7 +23,7 @@ const features = [
   {
     icon: BarChart3,
     title: "Reportes y Métricas",
-    description: "Dashboard con ingresos, ocupación y tus clientes más frecuentes.",
+    description: "Dashboard con citas del día, clientes totales, ingresos y tasa de ocupación.",
     iconColor: "bg-emerald-100/70 text-emerald-600",
     borderHover: "hover:border-emerald-200/80",
     featured: false,

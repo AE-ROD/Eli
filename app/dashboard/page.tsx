@@ -6,11 +6,12 @@ import { useSession } from "next-auth/react"
 import { BarraSuperior } from "@/components/app/layout/barra-superior"
 import { TarjetaEstadistica } from "@/components/app/tarjetas/tarjeta-estadistica"
 import { TarjetaCita } from "@/components/app/tarjetas/tarjeta-cita"
+import { VistaDiaProfesional } from "@/app/dashboard/_components/vistaDiaProfesional"
+import { formatHora, duracionMinutos } from "@/lib/utils"
 import {
   CalendarDays,
   Users,
   DollarSign,
-  TrendingUp,
   Clock,
   ArrowRight,
   Link2,
@@ -27,16 +28,26 @@ interface StatsData {
     startTime: string
     endTime: string
     status: string
-    patient: { id: string; name: string }
+    /** Opcional en el esquema: una cita puede no tener cliente vinculado. */
+    patient: { id: string; name: string } | null
   }>
+  /** Sólo cuando no hay citas hoy: el dato honesto es cuándo es la próxima. */
+  proximaCita?: { id: string; title: string; startTime: string }
   totalPacientes: number
-  ingresoseMes: number
-  tasaOcupacion: number
+  clientesNuevosMes: number
+  /** Ausentes para quien no puede ver la facturación del negocio (profesional). */
+  ingresoseMes?: number
+  citasFacturadasMes?: number
+  /**
+   * Sólo para `worker`, y sólo si tiene horario activo cargado para hoy
+   * (F-014). Ausente para dueño/encargado y para un profesional sin horario:
+   * la ausencia es el estado, nunca un rango inventado.
+   */
+  horarioHoy?: Array<{ startTime: string; endTime: string }>
+  /** Sólo viajan las que se pudieron calcular: sin mes anterior, no hay clave. */
   tendencias: {
-    citas: number
-    pacientes: number
-    ingresos: number
-    ocupacion: number
+    pacientes?: number
+    ingresos?: number
   }
 }
 
@@ -53,22 +64,51 @@ const itemVariantes = {
   show: { opacity: 1, y: 0 },
 }
 
-function formatHora(iso: string) {
-  return new Date(iso).toLocaleTimeString("es-ES", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  })
+/**
+ * De qué está hecha cada cifra. Devuelven `undefined` cuando no hay nada
+ * verdadero que decir: una línea vaga es la misma mentira que un `+0%`, con
+ * más palabras (`arquitectura_docs/reglas/02-codigo.md`).
+ */
+function procedenciaDeCitas(stats: StatsData): string | undefined {
+  if (stats.citasHoy > 0) return undefined
+  if (!stats.proximaCita) return "Ninguna agendada todavía."
+
+  const cuando = new Date(stats.proximaCita.startTime)
+  const dia = cuando.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
+  return `La próxima es el ${dia} a las ${formatHora(stats.proximaCita.startTime)}.`
 }
 
-function duracionMinutos(start: string, end: string) {
-  return Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000)
+function procedenciaDeClientes(stats: StatsData): string | undefined {
+  const { clientesNuevosMes, totalPacientes } = stats
+
+  if (totalPacientes === 0) return "Se suman solos cuando alguien reserva."
+  if (clientesNuevosMes === 0) return "Ninguno nuevo este mes."
+
+  return clientesNuevosMes === 1 ? "1 nuevo este mes." : `${clientesNuevosMes} nuevos este mes.`
+}
+
+function procedenciaDeIngresos(stats: StatsData): string | undefined {
+  const citas = stats.citasFacturadasMes ?? 0
+  if (citas === 0) return "Se cuenta al completar una cita. Todavía ninguna este mes."
+
+  const base = citas === 1 ? "1 cita completada" : `${citas} citas completadas`
+  const tendencia = stats.tendencias.ingresos
+  if (tendencia === undefined) return `${base} este mes.`
+
+  const signo = tendencia >= 0 ? "+" : "−"
+  return `${base} este mes · ${signo}${Math.abs(tendencia)}% vs el mes pasado.`
 }
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<StatsData | null>(null)
   const [copiado, setCopiado] = useState(false)
-  const { data: session } = useSession()
+  const { data: session, status: estadoSesion } = useSession()
+  // El panel del profesional es su día (F-014), no el tablero del negocio:
+  // dueño y encargado siguen viendo exactamente lo de antes, sin tocar su rama.
+  // Mientras no se sabe el rol no se elige ninguna rama: evita el parpadeo de
+  // mostrarle a un profesional el tablero de administración por un instante.
+  const rolConocido = estadoSesion !== "loading"
+  const esWorker = session?.user?.role === "worker"
   const businessSlug = (session?.user as any)?.businessSlug ?? ""
   const enlaceReservas = typeof window !== "undefined" && businessSlug
     ? `${window.location.origin}/reservar/${businessSlug}`
@@ -95,6 +135,10 @@ export default function DashboardPage() {
     day: "numeric",
   })
 
+  // Si el endpoint no manda ingresos (profesional sin acceso a la facturación
+  // del negocio), la tarjeta se omite en vez de mostrar un vacío raro.
+  const puedeVerIngresos = stats?.ingresoseMes !== undefined
+
   const estadisticas = stats
     ? [
         {
@@ -102,35 +146,31 @@ export default function DashboardPage() {
           valor: stats.citasHoy,
           icono: CalendarDays,
           colorIcono: "primario" as const,
-          tendencia: { valor: Math.abs(stats.tendencias.citas), esPositiva: stats.tendencias.citas >= 0 },
+          procedencia: procedenciaDeCitas(stats),
         },
         {
           titulo: "Clientes activos",
           valor: stats.totalPacientes,
           icono: Users,
           colorIcono: "exito" as const,
-          tendencia: { valor: Math.abs(stats.tendencias.pacientes), esPositiva: stats.tendencias.pacientes >= 0 },
+          procedencia: procedenciaDeClientes(stats),
         },
-        {
-          titulo: "Ingresos del mes",
-          valor: `$${stats.ingresoseMes.toLocaleString("es-ES")}`,
-          icono: DollarSign,
-          colorIcono: "info" as const,
-          tendencia: { valor: Math.abs(stats.tendencias.ingresos), esPositiva: stats.tendencias.ingresos >= 0 },
-        },
-        {
-          titulo: "Tasa ocupación",
-          valor: `${stats.tasaOcupacion}%`,
-          icono: TrendingUp,
-          colorIcono: "advertencia" as const,
-          tendencia: { valor: Math.abs(stats.tendencias.ocupacion), esPositiva: true },
-        },
+        ...(puedeVerIngresos
+          ? [
+              {
+                titulo: "Ingresos del mes",
+                valor: `$${(stats.ingresoseMes ?? 0).toLocaleString("es-ES")}`,
+                icono: DollarSign,
+                colorIcono: "info" as const,
+                procedencia: procedenciaDeIngresos(stats),
+              },
+            ]
+          : []),
       ]
     : [
         { titulo: "Citas hoy", valor: "—", icono: CalendarDays, colorIcono: "primario" as const },
         { titulo: "Clientes activos", valor: "—", icono: Users, colorIcono: "exito" as const },
         { titulo: "Ingresos del mes", valor: "—", icono: DollarSign, colorIcono: "info" as const },
-        { titulo: "Tasa ocupación", valor: "—", icono: TrendingUp, colorIcono: "advertencia" as const },
       ]
 
   const citasHoy = stats?.citasHoyLista ?? []
@@ -147,249 +187,269 @@ export default function DashboardPage() {
       />
 
       <div className="p-6 space-y-8">
-        {/* Estadisticas */}
-        <motion.section variants={contenedorVariantes} initial="hidden" animate="show">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {estadisticas.map((stat) => (
-              <motion.div key={stat.titulo} variants={itemVariantes}>
-                <TarjetaEstadistica
-                  titulo={stat.titulo}
-                  valor={stat.valor}
-                  icono={stat.icono}
-                  colorIcono={stat.colorIcono}
-                  tendencia={"tendencia" in stat ? stat.tendencia : undefined}
-                />
-              </motion.div>
-            ))}
+        {!rolConocido ? (
+          <div className="bg-card border border-border/50 rounded-xl p-8 text-center text-sm text-muted-foreground">
+            Cargando...
           </div>
-        </motion.section>
-
-        {/* Contenido principal */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Citas del dia */}
-          <motion.section
-            className="lg:col-span-2"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <div className="bg-card border border-border/50 rounded-xl">
-              <div className="flex items-center justify-between p-5 border-b border-border/50">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <Clock className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h2 className="font-semibold text-foreground">Citas de hoy</h2>
-                    <p className="text-sm text-muted-foreground">
-                      {stats ? `${citasHoy.length} citas programadas` : "Cargando..."}
-                    </p>
-                  </div>
-                </div>
-                <Link
-                  href="/dashboard/calendario"
-                  className="flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
-                >
-                  Ver calendario
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
-              <div className="p-5 space-y-3">
-                {citasHoy.length > 0 ? (
-                  citasHoy.map((cita) => (
-                    <TarjetaCita
-                      key={cita.id}
-                      cita={{
-                        id: cita.id,
-                        pacienteNombre: cita.patient.name,
-                        servicio: cita.title,
-                        horaInicio: formatHora(cita.startTime),
-                        horaFin: formatHora(cita.endTime),
-                        duracion: duracionMinutos(cita.startTime, cita.endTime),
-                        estado: cita.status as any,
-                      }}
-                      compacta
-                    />
-                  ))
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    {stats ? "Sin citas para hoy" : "Cargando citas..."}
-                  </p>
-                )}
-              </div>
+        ) : esWorker ? (
+          <VistaDiaProfesional stats={stats} />
+        ) : (
+          <>
+          {/* Estadisticas */}
+          <motion.section variants={contenedorVariantes} initial="hidden" animate="show">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {estadisticas.map((stat) => (
+                <motion.div key={stat.titulo} variants={itemVariantes}>
+                  <TarjetaEstadistica
+                    titulo={stat.titulo}
+                    valor={stat.valor}
+                    icono={stat.icono}
+                    colorIcono={stat.colorIcono}
+                    procedencia={"procedencia" in stat ? stat.procedencia : undefined}
+                  />
+                </motion.div>
+              ))}
             </div>
           </motion.section>
 
-          {/* Pacientes recientes */}
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            <div className="bg-card border border-border/50 rounded-xl">
-              <div className="flex items-center justify-between p-5 border-b border-border/50">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-green-100">
-                    <Users className="h-5 w-5 text-green-600" />
-                  </div>
-                  <div>
-                    <h2 className="font-semibold text-foreground">Pacientes</h2>
-                    <p className="text-sm text-muted-foreground">
-                      {stats ? `${stats.totalPacientes} en total` : "Cargando..."}
-                    </p>
-                  </div>
-                </div>
-                <Link
-                  href="/dashboard/pacientes"
-                  className="flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
-                >
-                  Ver todos
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
-              <div className="p-5">
-                {stats && stats.totalPacientes === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    Aún no tienes pacientes registrados
-                  </p>
-                ) : (
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+          {/* Contenido principal */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Citas del dia */}
+            <motion.section
+              className="lg:col-span-2"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <div className="bg-card border border-border/50 rounded-xl">
+                <div className="flex items-center justify-between p-5 border-b border-border/50">
+                  <div className="flex items-center gap-3">
                     <div className="p-2 rounded-lg bg-primary/10">
-                      <Users className="h-4 w-4 text-primary" />
+                      <Clock className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-foreground">
-                        {stats ? stats.totalPacientes : "—"} pacientes
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        registrados en tu negocio
+                      <h2 className="font-semibold text-foreground">Citas de hoy</h2>
+                      <p className="text-sm text-muted-foreground">
+                        {stats ? `${citasHoy.length} citas programadas` : "Cargando..."}
                       </p>
                     </div>
                   </div>
-                )}
+                  <Link
+                    href="/dashboard/calendario"
+                    className="flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
+                  >
+                    Ver calendario
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </div>
+                <div className="p-5 space-y-3">
+                  {citasHoy.length > 0 ? (
+                    citasHoy.map((cita) => (
+                      <TarjetaCita
+                        key={cita.id}
+                        cita={{
+                          id: cita.id,
+                          pacienteNombre: cita.patient?.name ?? "Sin cliente",
+                          servicio: cita.title,
+                          horaInicio: formatHora(cita.startTime),
+                          horaFin: formatHora(cita.endTime),
+                          duracion: duracionMinutos(cita.startTime, cita.endTime),
+                          estado: cita.status as any,
+                        }}
+                        compacta
+                      />
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      {stats ? "Sin citas para hoy" : "Cargando citas..."}
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
-          </motion.section>
-        </div>
+            </motion.section>
 
-        {/* Enlace de reservas */}
-        {enlaceReservas && (
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.35 }}
-          >
-            <div className="bg-primary/5 border border-primary/20 rounded-xl p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <div className="p-3 rounded-xl bg-primary/10 flex-shrink-0">
-                <Link2 className="h-5 w-5 text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground mb-0.5">Tu enlace de reservas</p>
-                <p className="text-xs text-muted-foreground truncate font-mono">{enlaceReservas}</p>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                  onClick={copiarEnlace}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background border border-border hover:bg-muted transition-colors text-sm font-medium"
-                >
-                  {copiado ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4 text-muted-foreground" />}
-                  {copiado ? "Copiado" : "Copiar"}
-                </button>
-                <Link
-                  href={`/reservar/${businessSlug}`}
-                  target="_blank"
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-sm font-medium"
-                >
-                  Ver página
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
-            </div>
-          </motion.section>
-        )}
-
-        {/* Grafico y actividad */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Grafico de citas por hora */}
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-          >
-            <div className="bg-card border border-border/50 rounded-xl p-5">
-              <h3 className="font-semibold text-foreground mb-4">Citas de hoy por hora</h3>
-              {citasHoy.length > 0 ? (
-                <div className="space-y-3">
-                  {citasHoy.map((cita) => (
-                    <div key={cita.id} className="flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground w-12 flex-shrink-0">
-                        {formatHora(cita.startTime)}
-                      </span>
-                      <div className="flex-1 h-7 bg-primary/10 rounded-lg flex items-center px-3">
-                        <span className="text-xs font-medium text-primary truncate">
-                          {cita.patient.name} — {cita.title}
-                        </span>
+            {/* Pacientes recientes */}
+            <motion.section
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+            >
+              <div className="bg-card border border-border/50 rounded-xl">
+                <div className="flex items-center justify-between p-5 border-b border-border/50">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-green-100">
+                      <Users className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <h2 className="font-semibold text-foreground">Pacientes</h2>
+                      <p className="text-sm text-muted-foreground">
+                        {stats ? `${stats.totalPacientes} en total` : "Cargando..."}
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    href="/dashboard/pacientes"
+                    className="flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
+                  >
+                    Ver todos
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </div>
+                <div className="p-5">
+                  {stats && stats.totalPacientes === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      Aún no tienes pacientes registrados
+                    </p>
+                  ) : (
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                      <div className="p-2 rounded-lg bg-primary/10">
+                        <Users className="h-4 w-4 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-foreground">
+                          {stats ? `${stats.totalPacientes} ${stats.totalPacientes === 1 ? "cliente" : "clientes"}` : "—"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {stats && stats.clientesNuevosMes > 0
+                            ? `${stats.clientesNuevosMes} desde el 1 de este mes`
+                            : "Se suman al reservar"}
+                        </p>
                       </div>
                     </div>
+                  )}
+                </div>
+              </div>
+            </motion.section>
+          </div>
+
+          {/* Enlace de reservas */}
+          {enlaceReservas && (
+            <motion.section
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.35 }}
+            >
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <div className="p-3 rounded-xl bg-primary/10 flex-shrink-0">
+                  <Link2 className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground mb-0.5">Tu enlace de reservas</p>
+                  <p className="text-xs text-muted-foreground truncate font-mono">{enlaceReservas}</p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={copiarEnlace}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background border border-border hover:bg-muted transition-colors text-sm font-medium"
+                  >
+                    {copiado ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4 text-muted-foreground" />}
+                    {copiado ? "Copiado" : "Copiar"}
+                  </button>
+                  <Link
+                    href={`/reservar/${businessSlug}`}
+                    target="_blank"
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-sm font-medium"
+                  >
+                    Ver página
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </div>
+              </div>
+            </motion.section>
+          )}
+
+          {/* Grafico y actividad */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Grafico de citas por hora */}
+            <motion.section
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+            >
+              <div className="bg-card border border-border/50 rounded-xl p-5">
+                <h3 className="font-semibold text-foreground mb-4">Citas de hoy por hora</h3>
+                {citasHoy.length > 0 ? (
+                  <div className="space-y-3">
+                    {citasHoy.map((cita) => (
+                      <div key={cita.id} className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground w-12 flex-shrink-0">
+                          {formatHora(cita.startTime)}
+                        </span>
+                        <div className="flex-1 h-7 bg-primary/10 rounded-lg flex items-center px-3">
+                          <span className="text-xs font-medium text-primary truncate">
+                            {cita.patient?.name ?? "Sin cliente"} — {cita.title}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
+                    {stats ? "Sin citas para hoy" : "Cargando..."}
+                  </div>
+                )}
+              </div>
+            </motion.section>
+
+            {/* Resumen del dia */}
+            <motion.section
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+            >
+              <div className="bg-card border border-border/50 rounded-xl p-5">
+                <h3 className="font-semibold text-foreground mb-4">
+                  {puedeVerIngresos ? "Resumen del negocio" : "Tu resumen"}
+                </h3>
+                <div className="space-y-4">
+                  {[
+                    {
+                      label: "Citas hoy",
+                      valor: stats?.citasHoy ?? "—",
+                      color: "bg-primary",
+                    },
+                    {
+                      label: "Total pacientes",
+                      valor: stats?.totalPacientes ?? "—",
+                      color: "bg-green-500",
+                    },
+                    // Sin stats aún se muestra el placeholder; con stats cargados
+                    // se omite del todo si el endpoint no mandó ingresos.
+                    ...(!stats || puedeVerIngresos
+                      ? [
+                          {
+                            label: "Ingresos este mes",
+                            valor: stats ? `$${(stats.ingresoseMes ?? 0).toLocaleString("es-ES")}` : "—",
+                            color: "bg-blue-500",
+                          },
+                        ]
+                      : []),
+                    {
+                      label: "Clientes nuevos este mes",
+                      valor: stats?.clientesNuevosMes ?? "—",
+                      color: "bg-orange-500",
+                    },
+                  ].map((item, i) => (
+                    <motion.div
+                      key={item.label}
+                      className="flex items-center justify-between"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.6 + i * 0.1 }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-2 h-2 rounded-full ${item.color}`} />
+                        <span className="text-sm text-foreground">{item.label}</span>
+                      </div>
+                      <span className="text-sm font-semibold text-foreground">{item.valor}</span>
+                    </motion.div>
                   ))}
                 </div>
-              ) : (
-                <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
-                  {stats ? "Sin citas para hoy" : "Cargando..."}
-                </div>
-              )}
-            </div>
-          </motion.section>
-
-          {/* Resumen del dia */}
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-          >
-            <div className="bg-card border border-border/50 rounded-xl p-5">
-              <h3 className="font-semibold text-foreground mb-4">Resumen del negocio</h3>
-              <div className="space-y-4">
-                {[
-                  {
-                    label: "Citas hoy",
-                    valor: stats?.citasHoy ?? "—",
-                    color: "bg-primary",
-                  },
-                  {
-                    label: "Total pacientes",
-                    valor: stats?.totalPacientes ?? "—",
-                    color: "bg-green-500",
-                  },
-                  {
-                    label: "Ingresos este mes",
-                    valor: stats ? `$${stats.ingresoseMes.toLocaleString("es-ES")}` : "—",
-                    color: "bg-blue-500",
-                  },
-                  {
-                    label: "Tasa de ocupación",
-                    valor: stats ? `${stats.tasaOcupacion}%` : "—",
-                    color: "bg-orange-500",
-                  },
-                ].map((item, i) => (
-                  <motion.div
-                    key={item.label}
-                    className="flex items-center justify-between"
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.6 + i * 0.1 }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-2 h-2 rounded-full ${item.color}`} />
-                      <span className="text-sm text-foreground">{item.label}</span>
-                    </div>
-                    <span className="text-sm font-semibold text-foreground">{item.valor}</span>
-                  </motion.div>
-                ))}
               </div>
-            </div>
-          </motion.section>
-        </div>
+            </motion.section>
+          </div>
+          </>
+        )}
       </div>
     </div>
   )

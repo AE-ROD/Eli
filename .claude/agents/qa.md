@@ -1,0 +1,1 @@
+../../arquitectura_docs/agentes/qa.md

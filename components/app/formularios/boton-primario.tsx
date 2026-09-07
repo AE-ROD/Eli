@@ -4,7 +4,12 @@ import { motion } from "framer-motion"
 import type { ButtonHTMLAttributes, ReactNode } from "react"
 import { Loader2 } from "lucide-react"
 
-interface BotonPrimarioProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+type NativeButtonProps = Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  "onAnimationStart" | "onAnimationEnd" | "onAnimationIteration" | "onDrag" | "onDragStart" | "onDragEnd"
+>
+
+interface BotonPrimarioProps extends NativeButtonProps {
   children: ReactNode
   variante?: "primario" | "secundario" | "fantasma" | "peligro"
   tamaño?: "sm" | "md" | "lg"

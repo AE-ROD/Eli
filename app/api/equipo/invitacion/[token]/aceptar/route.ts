@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import type { Prisma } from "@prisma/client"
 import { z } from "zod"
 import bcrypt from "bcryptjs"
+import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 
 const schema = z.object({
-  password: z.string().min(8),
+  password: z.string().min(8).optional(),
 })
 
 // POST /api/equipo/invitacion/[token]/aceptar — crear cuenta y unirse al negocio
@@ -12,6 +16,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
+  const { permitido } = await verificarLimite("auth", obtenerIp(request))
+  if (!permitido) {
+    return NextResponse.json({ error: "Demasiados intentos, intenta más tarde" }, { status: 429 })
+  }
+
   const { token } = await params
 
   const invitacion = await prisma.workerInvitation.findUnique({
@@ -27,44 +36,79 @@ export async function POST(
     const body = await request.json()
     const { password } = schema.parse(body)
 
-    const hashedPassword = await bcrypt.hash(password, 12)
+    // Una invitación no crea ni pisa credenciales de una cuenta que ya existe:
+    // ese caso solo puede sumar la membresía, y solo si quien acepta ya
+    // demostró ser dueño del correo iniciando sesión con él.
+    // Sin distinguir mayúsculas, igual que la comparación con la sesión de abajo:
+    // buscar exacto acá y comparar en minúsculas allá dejaba que una invitación
+    // a `ana@x.com` no viera la cuenta `Ana@x.com` y creara una segunda.
+    const usuarioExistente = await prisma.user.findFirst({
+      where: { email: { equals: invitacion.email, mode: "insensitive" } },
+    })
 
-    // Usar transacción: crear usuario (o buscar existente) + crear membership + marcar invitación aceptada
-    const resultado = await prisma.$transaction(async (tx) => {
-      // Si ya existe el usuario con ese email, solo agregar como miembro
-      let usuario = await tx.user.findUnique({ where: { email: invitacion.email } })
+    if (usuarioExistente) {
+      const session = await getServerSession(authOptions)
+      const emailSesion = session?.user?.email
 
-      if (!usuario) {
-        usuario = await tx.user.create({
-          data: {
-            name: invitacion.name,
-            email: invitacion.email,
-            password: hashedPassword,
+      // Contra el correo de la cuenta encontrada, no el de la invitación: es el
+      // que identifica a la persona que tiene que demostrar ser dueña de él.
+      if (!emailSesion || emailSesion.toLowerCase() !== usuarioExistente.email.toLowerCase()) {
+        return NextResponse.json(
+          {
+            error: "Iniciá sesión con ese correo para aceptar la invitación",
+            requiereSesion: true,
           },
-        })
-      } else {
-        // Si ya existe (p.ej. cuenta Google con password vacío), actualizar password
-        // para que pueda iniciar sesión con credenciales
-        await tx.user.update({
-          where: { id: usuario.id },
-          data: { name: invitacion.name, password: hashedPassword },
-        })
+          { status: 401 }
+        )
       }
 
-      // Verificar que no sea ya miembro
-      const yaEsMiembro = await tx.businessMember.findUnique({
-        where: { businessId_userId: { businessId: invitacion.businessId, userId: usuario.id } },
+      await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        const yaEsMiembro = await tx.businessMember.findUnique({
+          where: { businessId_userId: { businessId: invitacion.businessId, userId: usuarioExistente.id } },
+        })
+
+        if (!yaEsMiembro) {
+          await tx.businessMember.create({
+            data: {
+              businessId: invitacion.businessId,
+              userId: usuarioExistente.id,
+              role: invitacion.role,
+            },
+          })
+        }
+
+        await tx.workerInvitation.update({
+          where: { id: invitacion.id },
+          data: { acceptedAt: new Date() },
+        })
       })
 
-      if (!yaEsMiembro) {
-        await tx.businessMember.create({
-          data: {
-            businessId: invitacion.businessId,
-            userId: usuario.id,
-            role: invitacion.role,
-          },
-        })
-      }
+      return NextResponse.json({ ok: true, email: usuarioExistente.email, cuentaNueva: false })
+    }
+
+    if (!password) {
+      return NextResponse.json({ error: "La contraseña es requerida" }, { status: 400 })
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12)
+
+    // Usar transacción: crear usuario + crear membership + marcar invitación aceptada
+    const resultado = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const usuario = await tx.user.create({
+        data: {
+          name: invitacion.name,
+          email: invitacion.email,
+          password: hashedPassword,
+        },
+      })
+
+      await tx.businessMember.create({
+        data: {
+          businessId: invitacion.businessId,
+          userId: usuario.id,
+          role: invitacion.role,
+        },
+      })
 
       await tx.workerInvitation.update({
         where: { id: invitacion.id },
@@ -74,7 +118,7 @@ export async function POST(
       return usuario
     })
 
-    return NextResponse.json({ ok: true, email: resultado.email })
+    return NextResponse.json({ ok: true, email: resultado.email, cuentaNueva: true })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })

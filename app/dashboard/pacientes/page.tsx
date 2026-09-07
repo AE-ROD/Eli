@@ -83,6 +83,7 @@ export default function PaginaPacientes() {
     }
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches the patient list on mount
   useEffect(() => { fetchPacientes("", "Todos", 1) }, [fetchPacientes])
 
   useEffect(() => {
@@ -92,6 +93,7 @@ export default function PaginaPacientes() {
   }, [busqueda, etiquetaActiva, fetchPacientes])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs the notes draft when the selected patient changes
     if (pacienteSeleccionado) setNotas(rawMap[pacienteSeleccionado.id]?.notes ?? "")
   }, [pacienteSeleccionado, rawMap])
 

@@ -116,7 +116,7 @@ export default function CrearCuentaPage() {
               Comienza a crecer tu negocio hoy
             </h2>
             <p className="text-lg opacity-90 text-pretty">
-              Únete a cientos de profesionales que ya confían en Eli para gestionar su día a día.
+              Configura tu negocio en minutos y deja que tus clientes reserven solos, sin llamadas ni WhatsApp.
             </p>
 
             <div className="mt-10 space-y-6">

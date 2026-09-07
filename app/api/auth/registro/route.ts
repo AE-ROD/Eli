@@ -2,17 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
-
-function generarSlug(nombre: string): string {
-  return nombre
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .substring(0, 50)
-}
+import { generarSlug } from "@/lib/slug"
+import { registroSchema } from "@/lib/validaciones"
+import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 
 async function slugUnico(base: string): Promise<string> {
   let slug = generarSlug(base)
@@ -24,15 +16,12 @@ async function slugUnico(base: string): Promise<string> {
   return intento
 }
 
-const registroSchema = z.object({
-  nombre: z.string().min(2),
-  email: z.string().email(),
-  contrasena: z.string().min(8),
-  nombreNegocio: z.string().min(2),
-  tipoNegocio: z.string().min(1),
-})
-
 export async function POST(request: NextRequest) {
+  const { permitido } = await verificarLimite("auth", obtenerIp(request))
+  if (!permitido) {
+    return NextResponse.json({ error: "Demasiados intentos, intenta más tarde" }, { status: 429 })
+  }
+
   try {
     const body = await request.json()
     const datos = registroSchema.parse(body)

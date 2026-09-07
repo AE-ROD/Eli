@@ -30,6 +30,7 @@ export default function PaginaChats() {
     finally { setCargandoLista(false) }
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches the conversation list on mount
   useEffect(() => { fetchConversaciones() }, [fetchConversaciones])
 
   const seleccionarConversacion = async (conv: ConversacionAPI) => {

@@ -24,6 +24,7 @@ export async function GET() {
       },
     },
     orderBy: { updatedAt: "desc" },
+    take: 50,
   })
 
   return NextResponse.json(conversaciones)

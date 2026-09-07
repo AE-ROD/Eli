@@ -6,37 +6,41 @@ import { BarraSuperior } from "@/components/app/layout/barra-superior"
 import { SeccionHorario } from "./_components/seccionHorario"
 import { SeccionServicios } from "./_components/seccionServicios"
 import { SelectorHorarioMiembro } from "./_components/selectorHorarioMiembro"
+import { actorDeSesion, esDueño, gestionaElNegocio, puedeEditarHorarioDe, puedeGestionarServicios } from "@/lib/permisos"
 
 export default async function PaginaConfiguracion() {
   const session = await getServerSession(authOptions)
-  const user = session?.user as any
-  if (!user?.businessId) redirect("/iniciar-sesion")
+  const actor = actorDeSesion(session)
+  if (!actor) redirect("/iniciar-sesion")
 
-  const esOwner = user.role === "owner"
-  const memberId: string | null = user.memberId ?? null
+  // Horario propio: el dueño no es miembro del equipo (clave null → horario
+  // general del negocio); encargado y profesional tienen su propio memberId.
+  const memberIdPropio = actor.memberId
 
-  // Horarios del usuario actual (owner → memberId null, worker → su memberId)
   const [horariosActuales, servicios] = await Promise.all([
     prisma.workSchedule.findMany({
-      where: { businessId: user.businessId, memberId: esOwner ? null : memberId },
+      where: { businessId: actor.businessId, memberId: memberIdPropio },
       orderBy: { dayOfWeek: "asc" },
     }),
     prisma.service.findMany({
-      where: { businessId: user.businessId },
+      where: { businessId: actor.businessId },
       orderBy: { createdAt: "asc" },
     }),
   ])
 
-  // Si es owner, también carga los miembros del equipo
-  const miembros = esOwner
+  // Dueño y encargado editan el horario de cualquier miembro: cargan el
+  // equipo para el selector de tabs. El profesional sólo ve el propio.
+  const puedeEditarHorarioDeOtros = puedeEditarHorarioDe(actor, null)
+
+  const miembros = puedeEditarHorarioDeOtros
     ? await prisma.businessMember.findMany({
-        where: { businessId: user.businessId },
+        where: { businessId: actor.businessId },
         include: { user: { select: { name: true, email: true } } },
         orderBy: { createdAt: "asc" },
       })
     : []
 
-  const miembrosFormateados = miembros.map((m) => ({
+  const miembrosFormateados = miembros.map((m: (typeof miembros)[number]) => ({
     id: m.id,
     nombre: m.user.name,
     email: m.user.email,
@@ -44,32 +48,33 @@ export default async function PaginaConfiguracion() {
   }))
 
   const tieneEquipo = miembrosFormateados.length > 0
+  const nombreActor = session?.user?.name ?? "Yo"
 
   return (
     <div className="min-h-screen">
       <BarraSuperior
         titulo="Configuración"
-        subtitulo={esOwner ? "Gestiona horarios, servicios y equipo" : "Gestiona tu horario de atención"}
+        subtitulo={gestionaElNegocio(actor) ? "Gestiona horarios, servicios y equipo" : "Gestiona tu horario de atención"}
       />
 
       <div className="p-6 space-y-6 max-w-3xl">
-        {/* Horario: owner con equipo → selector de tabs; owner solo / worker → directo */}
-        {esOwner && tieneEquipo ? (
+        {/* Horario: quien gestiona el negocio y tiene equipo → selector de tabs; el resto → directo */}
+        {puedeEditarHorarioDeOtros && tieneEquipo ? (
           <SelectorHorarioMiembro
             horariosOwner={horariosActuales}
             miembros={miembrosFormateados}
-            nombreOwner={user.name ?? "Yo"}
+            nombreOwner={nombreActor}
           />
         ) : (
           <SeccionHorario
             horariosIniciales={horariosActuales}
-            memberId={esOwner ? null : memberId}
-            titulo={esOwner ? "Mi horario" : "Mi horario de atención"}
+            memberId={memberIdPropio}
+            titulo={esDueño(actor) ? "Mi horario" : "Mi horario de atención"}
           />
         )}
 
-        {/* Servicios: solo para owners */}
-        {esOwner && <SeccionServicios serviciosIniciales={servicios} />}
+        {/* Servicios: dueño y encargado, no el profesional */}
+        {puedeGestionarServicios(actor) && <SeccionServicios serviciosIniciales={servicios} />}
       </div>
     </div>
   )

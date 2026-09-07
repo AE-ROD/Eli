@@ -1,0 +1,253 @@
+---
+id: F-005
+titulo: El encargado gestiona el equipo
+estado: en-revision
+prioridad: alta
+areas: [backend, frontend]
+rama: v1
+estimacion: chica
+max_iteraciones: 3
+---
+
+# F-005 — El encargado gestiona el equipo
+
+## Problema
+
+**El rol `admin` sigue sin dar ningún permiso real.** Era medio motivo de esta
+versión y hoy es una etiqueta de color en la lista de equipo.
+
+`lib/permisos.ts` ya define `puedeGestionarEquipo` como dueño + encargado
+(F-001), pero `/api/equipo` no lo usa: chequea `user.role !== "owner"` a mano,
+leyendo la sesión con `session.user as any` — las dos cosas prohibidas por
+`reglas/01-arquitectura.md`. La barra lateral hace lo mismo por su cuenta
+(`barra-lateral.tsx:114`, `esOwner`), así que el encargado ni siquiera ve el
+enlace a Equipo.
+
+Resultado: la regla vive escrita y testeada en `lib/`, y sin aplicar en `app/`.
+
+## Alcance
+
+**Incluye:**
+- `GET` y `POST /api/equipo` preguntan a `lib/permisos.ts` en vez de comparar
+  roles a mano, y dejan de usar `session.user as any`.
+- El encargado ve el enlace a Equipo en la barra lateral.
+- El encargado puede invitar, con los mismos roles disponibles que el dueño.
+
+**NO incluye:**
+- **Cambiar el rol de un miembro ya existente.** Hoy no existe ese endpoint para
+  nadie, así que no es una regresión. `puedeCambiarRolDe` sigue sin llamador y
+  queda anotado como ficha aparte.
+- Eliminar miembros del equipo (tampoco existe hoy).
+- El rate limit de los endpoints del panel (ficha aparte).
+
+## Criterios de aceptación
+
+- [x] Un `admin` autenticado recibe **200** en `GET /api/equipo` y ve los
+      miembros e invitaciones **de su negocio**.
+- [x] Un `admin` puede invitar con `POST /api/equipo`.
+- [x] Un `worker` sigue recibiendo 401 en los dos.
+- [x] Ningún `admin` ve datos de otro negocio: las dos consultas siguen acotadas
+      por el `businessId` del actor, y el `take` no se pierde.
+- [x] La barra lateral muestra "Equipo" a dueño y encargado, no al profesional,
+      y decide con `lib/permisos.ts` en vez de comparar el rol a mano.
+- [x] `app/api/equipo/route.ts` no tiene ni un `session.user as any`.
+- [x] Hay tests de endpoint que fijan quién entra y quién no: `admin` sí,
+      `worker` no, sin sesión no. `app/api/equipo/route.test.ts` ya existe.
+- [x] `npm run lint`, `npx tsc --noEmit`, `npm test` y `npm run build` en verde.
+
+## Tareas por área
+
+| # | Área | Tarea | Agente | Estado | Depende de |
+|---|---|---|---|---|---|
+| 1 | backend | Migrar `/api/equipo` a `lib/permisos.ts` + tests | backend | completada | — |
+| 2 | frontend | Enlace a Equipo para el encargado | frontend | completada | 1 |
+| 3 | revisor | Verificar aislamiento y que el `worker` siga afuera | revisor | completada | 1,2 |
+
+## Contexto técnico
+
+- `app/api/equipo/route.ts:11,55` — los dos `session.user as any` y el
+  `user.role !== "owner"`. Sustituir por `actorDeSesion()` + `puedeGestionarEquipo()`.
+  **Ojo:** el `businessId` para las consultas pasa a salir del actor.
+- `components/app/layout/barra-lateral.tsx:114` — el `esOwner` que esconde el enlace.
+- `app/api/equipo/miembros/route.ts` es el ejemplo a seguir: ya está migrado.
+- Los `take: 200` y los `select` explícitos de `/api/equipo` vienen de F-004 y
+  **no se tocan**: el `select` es lo que evita filtrar el token de invitación.
+
+## Fuera de alcance detectado
+
+<!-- El agente completa acá. -->
+
+## Decisiones tomadas
+
+- El encargado puede invitar a otro encargado. El límite del encargado es el
+  dinero, no la operación (`docs/PRODUCTO.md` §5), y `puedeCambiarRolDe` ya
+  estaba definido con ese criterio en F-001.
+- El encargado ve los correos de sus compañeros, igual que el dueño: son los
+  datos del equipo que gestiona.
+
+## Bitácora
+
+### Tarea 1 (backend) — `app/api/equipo/route.ts` migrado a `lib/permisos.ts`
+
+- **Qué se hizo:** `GET` y `POST` dejaron de leer `session.user as any` y de
+  comparar `user.role !== "owner"`. Ahora usan `actorDeSesion(session)` +
+  `puedeGestionarEquipo(actor)`, y el `businessId` de las cuatro consultas
+  (`businessMember.findMany`, `workerInvitation.findMany`/`findFirst`/`create`,
+  `business.findUnique`) sale de `actor.businessId`. No se tocaron los `select`
+  explícitos ni los `take: 200` de F-004.
+- **Decisión:** el fallback de `nombreNegocio` para el correo de invitación
+  (`negocio?.name ?? user.businessName`) pasó a `negocio?.name ?? session?.user.businessName ?? ""`.
+  `Actor` (de `lib/permisos.ts`) no trae `businessName` a propósito — sólo lleva
+  lo necesario para permisos y aislamiento — así que ese dato se sigue leyendo
+  de `session.user`, que ya está tipado en `types/next-auth.d.ts` (no es un
+  `as any`, es un campo declarado del tipo `Session`).
+- **Archivos:**
+  - `app/api/equipo/route.ts` (modificado)
+  - `app/api/equipo/route.test.ts` (modificado): se agregaron 7 tests nuevos
+    sobre los 2 existentes (que no se tocaron): admin recibe 200 en GET y 201
+    en POST; worker recibe 401 en los dos sin llegar a tocar Prisma; sin
+    sesión, 401 en los dos; y un test que fija que `where.businessId` de
+    `businessMember.findMany` y `workerInvitation.findMany` en el GET es el
+    del actor.
+- **Tests:** `npx vitest run app/api/equipo/route.test.ts` → 9/9 OK.
+  `npx vitest run` (suite completa) → 73/73 OK. `npm run lint` limpio.
+  `npx tsc --noEmit` limpio. `npm run build` OK.
+- **Fuera de alcance detectado:** ninguno nuevo más allá de lo ya anotado en la
+  ficha (cambiar rol / eliminar miembro, ambos explícitamente fuera).
+- **Pendiente:** tarea 2 (frontend, enlace a Equipo en la barra lateral usando
+  `lib/permisos.ts` en vez de `esOwner`) y tarea 3 (revisor).
+
+### Tarea 2 (frontend) — `barra-lateral.tsx` ya no esconde Equipo con un `esOwner` propio
+
+- **Qué se hizo:** en `components/app/layout/barra-lateral.tsx`, el ítem
+  "Equipo" del menú dejó de depender del prop `esOwner` (que venía calculado
+  a mano en `app/dashboard/layout.tsx`) y ahora se decide con
+  `puedeGestionarEquipo(actorDeSesion(session))`, leyendo la sesión del lado
+  del cliente con `useSession()` de `next-auth/react` (el `<SessionProvider>`
+  ya envuelve la app en `components/providers.tsx`, no hizo falta agregar
+  nada). No había otras comparaciones de rol sueltas dentro de ese archivo:
+  el único otro uso de `esOwner` es el banner de trial, que es una feature
+  explícitamente de dueño (facturación), no de "gestionar equipo" — se dejó
+  intacto y sigue recibiendo el prop `esOwner` como antes.
+- **Revisión de `app/dashboard/equipo/`:** ni `page.tsx`, ni `_components/listaEquipo.tsx`,
+  ni `_components/modalInvitar.tsx` tienen chequeo propio de `owner`. La página
+  confía en el `200`/`401` de `/api/equipo`; el selector de rol del formulario de
+  invitación ya ofrece `worker` y `admin` para cualquiera que llegue a abrir el
+  modal, sin restricción adicional. No hizo falta tocar nada ahí.
+- **Archivos:**
+  - `components/app/layout/barra-lateral.tsx` (modificado)
+- **Verificación:** `npm run lint` limpio. `npx tsc --noEmit` limpio.
+  `npx vitest run` → 73/73 OK (sin tests nuevos: es un cambio de UI sin lógica
+  propia que testear, cubierto por los tests de `lib/permisos.ts` que ya
+  fijan `puedeGestionarEquipo`). `npm run build` OK.
+- **Fuera de alcance detectado:** `app/dashboard/layout.tsx` sigue leyendo
+  `(session?.user as any)?.role`, `businessId`, `businessSlug` y `businessName`
+  con cuatro `as any` (líneas 23-26) para calcular el `esOwner` que pasa a
+  `BarraLateral` (banner de trial) y a `ModalBienvenida`. Es la misma clase de
+  problema que tenía `/api/equipo` antes de la tarea 1, pero no está dentro del
+  alcance de esta ficha (que sólo pide el enlace a Equipo) y tocarlo habría
+  significado decidir si el banner de trial pasa a ser "dueño y encargado" o
+  sigue siendo sólo dueño — eso no lo dice la ficha. Queda para una ficha aparte.
+- **Pendiente:** tarea 3 (revisor).
+
+### Corrección post-revisión — el test de aislamiento no probaba lo que decía probar
+
+- **Qué se hizo:** el revisor detectó que `"negocio-1"` era el único
+  `businessId` de todo `app/api/equipo/route.test.ts`, así que el test "las
+  dos consultas quedan acotadas por el businessId del actor" pasaba igual con
+  un `businessId: "negocio-1"` hardcodeado en el handler. Se agregó una
+  sesión de fixture de un segundo negocio (`sesionEncargadoNegocio2`,
+  `businessId: "negocio-2"`) y ese test ahora corre con ella, afirmando que
+  el `where` de ambas consultas del GET es `"negocio-2"`. Se agregó además un
+  test nuevo que hace lo mismo para las cuatro consultas del POST que antes
+  no tenían ninguna aserción de acotamiento: el `include.memberships.where`
+  de `user.findFirst`, el `where` de `workerInvitation.findFirst`, el
+  `data.businessId` de `workerInvitation.create` y el `where.id` de
+  `business.findUnique`.
+- **No se tocó:** `app/api/equipo/route.ts` ni `lib/permisos.ts` (ya
+  aprobados), ni los 2 tests de F-004 sobre la fuga del token de invitación.
+- **Archivos:** `app/api/equipo/route.test.ts` (modificado).
+- **Tests:** `npx vitest run app/api/equipo/route.test.ts` → 10/10 OK.
+  `npx vitest run` (suite completa) → 74/74 OK. `npm run lint` limpio.
+  `npx tsc --noEmit` limpio.
+
+### Corrección post-revisión — regresión de UX de la tarea 2 (salto de layout del ítem Equipo)
+
+- **Qué se hizo:** el revisor detectó que el `useSession()` que la tarea 2
+  agregó a `barra-lateral.tsx` arranca en `status: "loading"` con
+  `data: undefined` (el `<SessionProvider>` de `components/providers.tsx` no
+  recibe `session` por prop), así que el SSR de `app/dashboard/layout.tsx`
+  salía sin el ítem "Equipo" y aparecía un instante después con salto de
+  layout. Se movió la decisión al servidor: `app/dashboard/layout.tsx` ahora
+  calcula `puedeVerEquipo = puedeGestionarEquipo(actorDeSesion(session))` con
+  la sesión que ya obtiene de `getServerSession` y lo pasa a `<BarraLateral>`
+  como prop nuevo (`puedeVerEquipo`). `barra-lateral.tsx` perdió el
+  `useSession()` (y su import de `next-auth/react`, que se dejó reducido a
+  `signOut`) junto con el cálculo local: ahora sólo lee el prop. El prop
+  `esOwner` no se tocó — sigue siendo del banner de trial, que es facturación
+  del dueño, no gestión de equipo.
+- **De paso (pedido explícito de esta tarea):** se sacaron los cuatro
+  `(session?.user as any)` de `app/dashboard/layout.tsx` (líneas 23-26 antes
+  del cambio) que el "Fuera de alcance detectado" de la tarea 2 había dejado
+  anotados. `session.user.role`, `.businessId`, `.businessSlug` y
+  `.businessName` ya están tipados en `types/next-auth.d.ts`, así que se leen
+  directo (`session?.user?.role`, etc.) sin ningún cast. El archivo queda sin
+  un solo `as any`.
+- **No se tocó:** a quién se le muestra qué. `esOwner` (banner de trial) y
+  `puedeVerEquipo` (enlace a Equipo) siguen siendo dos preguntas distintas,
+  calculadas por separado, igual que antes — sólo cambió *dónde* se resuelve
+  la segunda (de cliente a servidor) y *cómo* se leen los campos de sesión
+  (tipados, no `as any`).
+- **Archivos:**
+  - `app/dashboard/layout.tsx` (modificado)
+  - `components/app/layout/barra-lateral.tsx` (modificado)
+- **Verificación:** `npm run lint` limpio. `npx tsc --noEmit` limpio.
+  `npx vitest run` → 74/74 OK (sin tests nuevos: cambio de UI/SSR sin lógica
+  propia, cubierto por los tests existentes de `lib/permisos.ts`).
+  `npm run build` OK (26 rutas, incluida `/dashboard`).
+- **Fuera de alcance detectado:** ninguno nuevo. Sigue pendiente, como ya
+  estaba anotado, que `app/dashboard/equipo/` no tiene chequeo propio de rol
+  (confía en el 401/200 de `/api/equipo`) — no es parte de esta corrección.
+- **Pendiente:** ninguno para esta ficha. Vuelve al revisor para el visto
+  bueno final sobre este punto puntual.
+
+
+### Cierre — verificación del orquestador
+
+El `revisor` aprobó la ficha (los 8 criterios) y encontró de paso un
+**endurecimiento que nadie había pedido**: antes, `businessId` salía de un
+`as any`. Si ese campo llegaba `undefined` —token viejo, sesión a medio
+migrar— Prisma **descarta** `where: { businessId: undefined }` y
+`businessMember.findMany` habría devuelto los miembros de **todos los
+negocios**. `actorDeSesion` valida en runtime y devuelve 401. Agujero latente
+cerrado sin proponérselo.
+
+Confirmó además, campo por campo, que los `select` y los `take: 200` de F-004
+sobrevivieron: el `token` de invitación sigue sin salir en ninguna respuesta.
+
+Los dos hallazgos que sí había que arreglar están hechos (ver las dos entradas
+anteriores): el test de aislamiento que no probaba lo que decía, y el salto de
+layout que introdujo la tarea 2.
+
+**Verificación final:** `npm run build`, `npm run lint`, `npx tsc --noEmit` y
+`npm test` (74 tests, 7 archivos) en verde.
+
+**Nota de trazabilidad:** el commit `b86306c` se anunció como "WIP sin
+verificar", pero en realidad capturó el trabajo ya terminado de los dos agentes.
+La verificación es la de arriba y es posterior al commit.
+
+## Pendientes que deja esta ficha
+
+Cada uno es su propia ficha; ninguno se tocó acá:
+
+- **`app/dashboard/configuracion/page.tsx` reparte todo con un `esOwner`
+  propio.** El encargado todavía **no gestiona servicios ni horarios de otros**,
+  aunque `puedeGestionarServicios` y `puedeEditarHorarioDe` ya digan que puede.
+  Es el mismo problema que esta ficha acaba de sacar de `/api/equipo`, y es la
+  continuación natural.
+- **`/dashboard/equipo` no tiene guard de servidor.** Un `worker` que escriba la
+  URL ve el cascarón: título, botón de invitar y lista vacía. No se filtra ningún
+  dato (el 401 del endpoint corta), pero la página no muestra el error y queda un
+  estado vacío confuso. Preexistente.
+- **`puedeCambiarRolDe` sigue sin llamador.** No existe el endpoint para cambiar
+  el rol de un miembro ni para eliminarlo, para ningún rol.

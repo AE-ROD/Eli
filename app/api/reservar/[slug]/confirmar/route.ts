@@ -2,23 +2,18 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { enviarConfirmacionCliente, enviarAvisoProfesional } from "@/lib/email"
-
-const reservaSchema = z.object({
-  servicioId: z.string(),
-  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  hora: z.string().regex(/^\d{2}:\d{2}$/),
-  nombre: z.string().min(2),
-  apellido: z.string().min(2),
-  cedula: z.string().optional(),
-  email: z.string().email().optional().or(z.literal("")),
-  telefono: z.string().optional(),
-  comentarios: z.string().optional(),
-})
+import { reservaSchema } from "@/lib/validaciones"
+import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
+  const { permitido } = await verificarLimite("reserva", obtenerIp(request))
+  if (!permitido) {
+    return NextResponse.json({ error: "Demasiadas solicitudes, intenta más tarde" }, { status: 429 })
+  }
+
   const { slug } = await params
 
   const negocio = await prisma.business.findUnique({

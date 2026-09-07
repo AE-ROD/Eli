@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useSession } from "next-auth/react"
 import { AnimatePresence } from "framer-motion"
 import { BarraSuperior } from "@/components/app/layout/barra-superior"
 import { ControlesCalendario, type VistaCalendario } from "./_components/controlesCalendario"
@@ -32,9 +33,13 @@ const FORM_INICIAL: FormNuevaCita = {
   horaFin: "10:00",
   precio: "",
   notas: "",
+  memberId: "",
 }
 
 export default function PaginaCalendario() {
+  const { data: session } = useSession()
+  const rol = session?.user.role
+  const puedeAsignarProfesional = rol === "owner" || rol === "admin"
   const [fechaActual, setFechaActual] = useState(new Date())
   const [vista, setVista] = useState<VistaCalendario>("semana")
   const [citasAPI, setCitasAPI] = useState<CitaAPI[]>([])
@@ -64,6 +69,7 @@ export default function PaginaCalendario() {
     finally { setCargando(false) }
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches appointments whenever the visible date/view changes
   useEffect(() => { fetchCitas(fechaActual, vista) }, [fechaActual, vista, fetchCitas])
 
   const irAnterior = () => {
@@ -113,6 +119,7 @@ export default function PaginaCalendario() {
           patientId: formNueva.pacienteId,
           price: formNueva.precio ? parseFloat(formNueva.precio) : undefined,
           notes: formNueva.notas || undefined,
+          memberId: formNueva.memberId || null,
         }),
       })
       if (res.ok) {
@@ -194,6 +201,7 @@ export default function PaginaCalendario() {
           <ModalNuevaCita
             form={formNueva}
             guardando={guardando}
+            puedeAsignarProfesional={puedeAsignarProfesional}
             onFormChange={(campo, valor) => setFormNueva((p) => ({ ...p, [campo]: valor }))}
             onSubmit={crearCita}
             onCerrar={() => setModalAbierto(false)}

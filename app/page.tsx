@@ -27,6 +27,7 @@ export default function HomePage() {
   useEffect(() => {
     const alreadyLoaded = sessionStorage.getItem("eli_loaded")
     if (alreadyLoaded) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sessionStorage is only available client-side, can't read during SSR render
       setIsLoading(false)
       return
     }
