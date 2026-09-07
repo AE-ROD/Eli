@@ -19,7 +19,9 @@ model User {
   business          Business?
   memberships       BusinessMember[]
   resetTokens       PasswordResetToken[]
-  commissionChanges CommissionChange[] // cambios de porcentaje que este usuario (siempre dueño) aplicó
+  commissionChanges CommissionChange[] // cambios de porcentaje que este usuario (siempre dueño) aplicó.
+  // Relación opcional (ver CommissionChange.changedById): la auditoría no
+  // puede depender de que el usuario siga existiendo.
 
   @@map("usuarios")
 }
@@ -57,17 +59,27 @@ model BusinessMember {
   role       String   @default("worker") // "admin" | "worker"
   createdAt  DateTime @default(now())
 
-  // Porcentaje por defecto de comisión (0-100). Sin valor por defecto a propósito:
-  // `null` es "todavía no configurado", no "0%". Segundo escalón de la cascada,
-  // detrás de CommissionRate y delante de "pendiente de configurar".
+  // Porcentaje por defecto de comisión (0-100) -- el rango lo garantiza un
+  // CHECK de la migración (`miembros_negocio_commissionPercent_check`), no
+  // Prisma. Sin valor por defecto a propósito: `null` es "todavía no
+  // configurado", no "0%". Segundo escalón de la cascada, detrás de
+  // CommissionRate y delante de "pendiente de configurar".
   commissionPercent Float?
 
   workSchedules     WorkSchedule[]
   appointments      Appointment[]
   commissionRates   CommissionRate[]
+  // Filas de auditoría donde este miembro es el auditado. La relación de
+  // CommissionChange.member es simple (no compuesta) y SetNull: ver el
+  // comentario en ese modelo.
   commissionChanges CommissionChange[]
 
   @@unique([businessId, userId])
+  // Habilita la FK compuesta de CommissionRate (memberId, businessId): sin
+  // esto Postgres no puede referenciar el par, y es lo único que impide que
+  // una fila de comisión tenga el profesional de un negocio con el
+  // businessId de otro.
+  @@unique([id, businessId])
   @@index([businessId])
   @@index([userId])
   @@map("miembros_negocio")
@@ -137,9 +149,14 @@ model Service {
 
   appointments      Appointment[]
   commissionRates   CommissionRate[]
+  // Filas de auditoría con este servicio como excepción puntual. Relación
+  // simple (no compuesta) y SetNull: ver el comentario en CommissionChange.
   commissionChanges CommissionChange[]
 
   @@index([businessId])
+  // Habilita la FK compuesta de CommissionRate (serviceId, businessId), igual
+  // que en BusinessMember.
+  @@unique([id, businessId])
   @@map("servicios")
 }
 
@@ -179,17 +196,28 @@ model Appointment {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
-  // Comisión congelada al completar la cita (F-005 decide cuándo y cómo se
-  // llenan). Se escriben una sola vez y no se recalculan: cambiar un porcentaje
-  // después no puede alterar una cita ya liquidada. Opcionales sin valor por
-  // defecto a propósito, por la misma razón que en BusinessMember/CommissionRate:
-  // `null` tiene que poder significar "todavía no tiene comisión resuelta", nunca "0".
-  commissionPercent Float? // porcentaje ya resuelto por la cascada al momento del cálculo
+  // Comisión congelada al completar la cita (lo decide una futura feature de
+  // cálculo, todavía sin ficha creada -- no confundir con F-005, que ya
+  // existe y es "el encargado gestiona el equipo"). Se escriben una sola vez y
+  // no se recalculan: cambiar un porcentaje después no puede alterar una cita
+  // ya liquidada. Opcionales sin valor por defecto a propósito, por la misma
+  // razón que en BusinessMember/CommissionRate: `null` tiene que poder
+  // significar "todavía no tiene comisión resuelta", nunca "0".
+  //
+  // Los tres son NULL juntos o NOT NULL juntos: lo garantiza un CHECK de la
+  // migración (`citas_comision_congelada_check`), no Prisma. Sin esto, una
+  // cita podría quedar con `commissionAmount = 0` y `commissionPercent = NULL`
+  // ("pendiente de configurar") y liquidarse como si valiera cero sin que
+  // nadie lo note.
+  commissionPercent Float? // porcentaje ya resuelto por la cascada al momento del cálculo -- rango 0-100 vía CHECK
   commissionAmount  Float? // monto resultante, sobre el precio total sin descontar insumos
   commissionAt      DateTime? // cuándo se calculó y congeló
 
   @@index([businessId])
   @@index([businessId, startTime])
+  // Consulta de liquidación: businessId + memberId + status + rango de fechas
+  // (futura feature de cálculo/liquidación, hoy sin ficha).
+  @@index([businessId, memberId, startTime])
   @@index([patientId])
   @@index([memberId])
   @@map("citas")
@@ -201,16 +229,36 @@ model Appointment {
  * para (memberId, serviceId), gana sobre `BusinessMember.commissionPercent`.
  * Modelo "con herencia": no hace falta una fila por cada combinación
  * profesional × servicio, sólo donde hay una excepción real.
+ *
+ * `member` y `service` usan FK compuesta contra `(id, businessId)` del
+ * profesional y del servicio, no contra `id` solo. Sin esto, Postgres acepta
+ * una fila con el `businessId` de un negocio y el `memberId`/`serviceId` de
+ * otro (nada las relaciona entre sí), y es exactamente el caso que
+ * `findUnique(memberId_serviceId)` -- la resolución de la cascada -- no puede
+ * filtrar por negocio: aplicaría el porcentaje de otro negocio a una cita, y
+ * quedaría congelado. La FK compuesta hace que Postgres rechace el insert
+ * directamente.
  */
 model CommissionRate {
   id         String         @id @default(cuid())
   businessId String
   business   Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
   memberId   String
-  member     BusinessMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  member     BusinessMember @relation(fields: [memberId, businessId], references: [id, businessId], onDelete: Cascade)
   serviceId  String
-  service    Service        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  percent    Float // 0-100. Nunca tiene default: la fila sólo existe si alguien la configuró.
+  // Restrict, no Cascade: borrar un servicio con comisiones configuradas debe
+  // fallar, no arrastrarlas en silencio. `puedeGestionarServicios` incluye al
+  // encargado, pero `puedeEditarComisiones` es sólo del dueño -- con Cascade,
+  // el encargado borra un servicio y de paso borra los porcentajes de
+  // comisión de todos los profesionales para ese servicio, sin pasar nunca
+  // por un permiso de comisiones. Restrict cierra ese atajo en la base, no
+  // sólo en la app, y es el mismo tratamiento implícito que ya tiene
+  // `Appointment.service` (sin `onDelete`, Postgres también actúa como
+  // Restrict/NO ACTION ahí). Quien quiera borrar el servicio primero borra o
+  // reasigna sus filas de `CommissionRate`, o lo desactiva con
+  // `Service.active` sin borrarlo.
+  service Service @relation(fields: [serviceId, businessId], references: [id, businessId], onDelete: Restrict)
+  percent Float // 0-100 -- rango vía CHECK de la migración, no Prisma. Nunca tiene default: la fila sólo existe si alguien la configuró.
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
 
@@ -224,32 +272,72 @@ model CommissionRate {
 
 /**
  * Auditoría de cambios de porcentaje (docs/PRODUCTO.md §3.5): quién, cuándo, de
- * qué valor a qué valor. `serviceId` nulo indica que el cambio fue al
- * porcentaje por defecto del profesional; con `serviceId`, fue a una excepción
- * puntual. Sólo el dueño puede generar estas filas (`lib/permisos.ts`,
+ * qué valor a qué valor. `scope` dice a qué aplicó el cambio ("default" = al
+ * porcentaje por defecto del profesional, "service" = a una excepción
+ * puntual) y es explícito: no se infiere de si `serviceId` es null, porque
+ * `serviceId` puede volverse null por SetNull al borrarse el servicio, y ese
+ * mismo valor es el que usa la cascada para decir "sin excepción". Si el
+ * significado dependiera de `serviceId`, borrar un servicio reescribiría en
+ * silencio "cambié la excepción de Juan en Color" por "cambié el porcentaje
+ * por defecto de Juan" -- la auditoría no quedaría incompleta, quedaría
+ * mintiendo, y no habría forma de distinguir un registro adulterado de uno
+ * legítimo. `serviceName` es un snapshot del nombre del servicio al momento
+ * del cambio, para que el registro siga siendo legible si el servicio se
+ * borra (sólo tiene sentido cuando `scope = "service"`).
+ *
+ * `memberId` y `changedById` son nullable con SetNull, y `memberName` /
+ * `changedByName` / `changedByEmail` son snapshots tomados al crear la fila.
+ * Una tabla de auditoría no puede cascadear con lo que audita: si
+ * `changedById` cascadeara, borrar al usuario borraría el registro de los
+ * cambios que hizo; si `memberId` cascadeara, dar de baja a un profesional
+ * borraría todo su historial de comisiones justo cuando más se necesita (una
+ * baja es cuando aparecen las disputas). SetNull + snapshot hace que la fila
+ * sobreviva siempre, legible, aunque lo auditado desaparezca.
+ *
+ * Ninguna de las dos relaciones usa la FK compuesta de `CommissionRate`
+ * (`(id, businessId)`): una FK compuesta con `onDelete: SetNull` anula TODAS
+ * las columnas de la constraint a la vez, incluida `businessId` -- y
+ * `businessId` acá es NOT NULL (regla 1 de arquitectura: toda fila debe poder
+ * filtrarse por negocio), así que esa combinación o rompe el insert o vuelve
+ * la fila invisible para cualquier consulta multi-tenant. Quedan como FK
+ * simples contra `.id`; el negocio se resuelve siempre escribiendo el
+ * `businessId` del actor de sesión al crear la fila, igual que en el resto
+ * del código (nunca del cliente). `changedById` tampoco admite FK compuesta
+ * por otra razón: `usuarios` no tiene `businessId` (el dueño no es miembro del
+ * negocio). Sólo el dueño puede generar estas filas (`lib/permisos.ts`,
  * `puedeEditarComisiones`), por eso quien cambia es un `User` y no un
- * `BusinessMember`: el dueño no necesariamente tiene fila de miembro.
+ * `BusinessMember`.
  */
 model CommissionChange {
-  id          String         @id @default(cuid())
-  businessId  String
-  business    Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  memberId    String
-  member      BusinessMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  memberId   String?
+  member     BusinessMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  memberName String // snapshot del nombre del profesional al momento del cambio
+
+  scope       String // "default" | "service" -- explícito, no inferido de serviceId (ver comentario del modelo)
   serviceId   String?
-  service     Service?       @relation(fields: [serviceId], references: [id], onDelete: SetNull)
-  changedById String
-  changedBy   User           @relation(fields: [changedById], references: [id], onDelete: Cascade)
+  service     Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  serviceName String? // snapshot; sólo aplica cuando scope = "service"
+
+  changedById    String?
+  changedBy      User?  @relation(fields: [changedById], references: [id], onDelete: SetNull)
+  changedByName  String // snapshot
+  changedByEmail String // snapshot
 
   // `null` en cualquiera de los dos es "no estaba configurado" (no es lo mismo
-  // que 0), igual que en los campos que audita.
+  // que 0), igual que en los campos que audita. Rango 0-100 vía CHECK.
   previousPercent Float?
   newPercent      Float?
 
   createdAt DateTime @default(now())
 
-  @@index([businessId])
-  @@index([memberId, createdAt])
+  // Multi-tenant: todo índice empieza por businessId. Sirve tanto para
+  // "auditoría del negocio" como, con el prefijo, para "auditoría de este
+  // profesional en este negocio".
+  @@index([businessId, memberId, createdAt])
   @@map("cambios_comision")
 }
 
