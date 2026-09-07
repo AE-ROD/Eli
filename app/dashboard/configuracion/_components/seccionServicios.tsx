@@ -34,6 +34,7 @@ export function SeccionServicios({ serviciosIniciales }: SeccionServiciosProps) 
   const [servicioEditando, setServicioEditando] = useState<ServicioAPI | null>(null)
   const [form, setForm] = useState<FormServicio>(FORM_INICIAL)
   const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState("")
 
   const abrirNuevo = () => {
     setServicioEditando(null)
@@ -104,8 +105,20 @@ export function SeccionServicios({ serviciosIniciales }: SeccionServiciosProps) 
 
   const eliminar = async (id: string) => {
     if (!confirm("¿Eliminar este servicio?")) return
+    setError("")
+
     const res = await fetch(`/api/configuracion/servicios/${id}`, { method: "DELETE" })
-    if (res.ok) setServicios((prev) => prev.filter((s) => s.id !== id))
+
+    // El 409 explica cómo seguir (el servicio tiene comisiones configuradas y
+    // hay que desactivarlo en vez de borrarlo): sin esta rama el servicio se
+    // queda en la lista y nadie sabe por qué.
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setError(data.error ?? "No se pudo eliminar el servicio")
+      return
+    }
+
+    setServicios((prev) => prev.filter((s) => s.id !== id))
   }
 
   return (
@@ -124,6 +137,12 @@ export function SeccionServicios({ serviciosIniciales }: SeccionServiciosProps) 
           Nuevo servicio
         </BotonPrimario>
       </div>
+
+      {error && (
+        <p role="alert" className="text-sm text-red-500 mb-4">
+          {error}
+        </p>
+      )}
 
       {servicios.length === 0 ? (
         <div className="text-center py-10">

@@ -280,11 +280,13 @@ model CommissionRate {
   // el encargado borra un servicio y de paso borra los porcentajes de
   // comisión de todos los profesionales para ese servicio, sin pasar nunca
   // por un permiso de comisiones. Restrict cierra ese atajo en la base, no
-  // sólo en la app, y es el mismo tratamiento implícito que ya tiene
-  // `Appointment.service` (sin `onDelete`, Postgres también actúa como
-  // Restrict/NO ACTION ahí). Quien quiera borrar el servicio primero borra o
-  // reasigna sus filas de `CommissionRate`, o lo desactiva con
-  // `Service.active` sin borrarlo.
+  // sólo en la app. Es un cambio real de comportamiento, no la formalización
+  // de algo que ya pasaba: `Appointment.service` es `ON DELETE SET NULL`
+  // (migración init, línea 161), o sea que hoy borrar un servicio con
+  // historial funciona. A partir de acá, borrar uno con comisiones
+  // configuradas falla; quien quiera hacerlo primero quita esas filas de
+  // `CommissionRate`, o lo desactiva con `Service.active` sin borrarlo (el
+  // endpoint devuelve 409 con esa explicación).
   service    Service        @relation(fields: [serviceId, businessId], references: [id, businessId], onDelete: Restrict)
   percent    Float // 0-100 -- rango vía CHECK de la migración, no Prisma. Nunca tiene default: la fila sólo existe si alguien la configuró.
   createdAt  DateTime       @default(now())

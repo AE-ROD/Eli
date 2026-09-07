@@ -1,7 +1,7 @@
 ---
 id: F-003
 titulo: Modelo de datos de comisiones
-estado: en-progreso
+estado: en-revision
 prioridad: alta
 areas: [backend, datos]
 rama: f-003-comisiones
@@ -66,7 +66,7 @@ corregir un modelo de datos con registros ya cargados obliga a migrar.
 | # | Área | Tarea | Agente | Estado | Depende de |
 |---|---|---|---|---|---|
 | 1 | datos | Modelos en `schema.prisma` + migración SQL | backend | completada | — |
-| 2 | revisor | Verificar aislamiento e integridad del modelo | revisor | pendiente | 1 |
+| 2 | revisor | Verificar aislamiento e integridad del modelo | revisor | completada (2 pasadas) | 1 |
 
 ## Contexto técnico
 
@@ -121,6 +121,10 @@ Usá `psql` contra localhost:5433, nunca Prisma contra la URL del `.env`.
   `memberId`/`serviceId` de otro), pero no estaba en el pedido de esta ronda y
   tocar `Appointment` es un cambio más grande (esa tabla ya tiene filas en
   producción). Lo dejo anotado para que se evalúe como feature propia.
+- **`DELETE /api/configuracion/servicios/[id]` no tenía `try/catch`** (resuelto
+  en esta ficha, ver bitácora: el endpoint devuelve 409 con explicación y la
+  sección de servicios lo muestra). Se deja el hallazgo original abajo porque es
+  el ejemplo de por qué un cambio de `onDelete` no termina en el esquema.
 - **`DELETE /api/configuracion/servicios/[id]` no tiene `try/catch`.** Con el
   nuevo `Restrict` de `CommissionRate.service`, borrar un servicio con
   comisiones configuradas ahora falla en la base (correcto, es la intención del
@@ -139,6 +143,56 @@ Usá `psql` contra localhost:5433, nunca Prisma contra la URL del `.env`.
   resuelve F-015 al convertir `price`, o la propia feature de cálculo si decide
   convertir puntualmente antes de F-015. Quedó pedido explícitamente no tocar
   `price` en esta ficha.
+
+### Hallazgos de la segunda pasada del revisor (no bloqueantes)
+
+Ninguno impide cerrar la ficha; todos quedan anotados para no perderse.
+
+- **`CommissionChange` sí acepta filas de tenant cruzado** (el revisor lo probó
+  con un insert real: `businessId` de un negocio, `memberId` de otro, aceptado).
+  La ficha justificaba la FK simple como una imposibilidad técnica -- "una FK
+  compuesta con `SetNull` anula todas las columnas, incluida `businessId`, que
+  es NOT NULL". **Eso es falso desde Postgres 15**, que permite `ON DELETE SET
+  NULL ("memberId")`, anulando sólo la columna indicada; el revisor lo probó
+  funcionando. Corrección importante de método: era una **elección**, no una ley
+  de la física, y una elección documentada como imposibilidad es la que nadie
+  vuelve a revisar.
+  **Por qué no se aplica ahora, siendo que la migración todavía no llegó a
+  Neon:** (a) Prisma no tiene sintaxis para `SET NULL` por columna, así que la
+  constraint viviría sólo en SQL a mano y `prisma migrate diff` la marcaría como
+  desvío en cada migración futura -- el esquema y la base quedarían mintiendo en
+  sentidos opuestos; (b) exige confirmar que Neon corre Postgres 15 o superior
+  antes de aplicar (el local es 16.13; Neon no se consultó en esta ronda, ver
+  "no se tocó Neon"). Es un chequeo de un minuto, pero es un chequeo, y el
+  impacto real es acotado: `CommissionChange` es sólo lectura humana y no
+  participa del cálculo del dinero. Si se decide hacerlo, el momento sigue
+  siendo antes de que la migración se aplique.
+- **La comisión congelada se puede reescribir con un `UPDATE`.** El `CHECK`
+  `citas_comision_congelada_check` valida la *forma* (los tres campos `NULL` o
+  los tres `NOT NULL`), no la inmutabilidad: nada en la base impide cambiar
+  `commissionPercent` después de congelado. Que sea inmutable es hoy una
+  promesa de la aplicación, y todavía no hay aplicación. Si se quiere que la
+  base lo garantice, es un trigger, y es decisión de la feature de cálculo.
+- **Tras dar de baja a un profesional, su auditoría deja de ser filtrable por
+  `memberId`** (queda `NULL` por el `SetNull`, con el nombre en el snapshot). La
+  fila sobrevive y es legible -- que era el objetivo -- pero una consulta
+  "historial de comisiones de Carla" ya no la encuentra por id. Lo asume la
+  futura interfaz de auditoría: filtrar también por `memberName`, o guardar el
+  id original en una columna sin FK.
+- **`app/api/citas/[id]/route.ts:30-35` no usa `whereDeAgenda`.** No es un bug
+  de esta ficha, pero sí una precondición de la feature de cálculo: ahí es donde
+  se va a completar una cita y congelar la comisión, y hoy ese endpoint arma el
+  filtro a mano en vez de pasar por `lib/permisos.ts` (F-006). Conviene
+  arreglarlo antes de colgarle el cálculo encima.
+- **Falta `@@index([serviceId])` en `CommissionRate`.** El `@@unique([memberId,
+  serviceId])` indexa el par empezando por `memberId`, así que una consulta por
+  servicio solo (por ejemplo "qué comisiones tiene configuradas este servicio",
+  la que necesitaría la pantalla del 409) no lo aprovecha. Con el volumen actual
+  no se nota; queda anotado.
+
+**Confirmado seguro por el revisor:** la migración sobre Neon (los `@@unique([id,
+businessId])` nuevos no pueden fallar, `id` ya es PK), el tamaño `Decimal(12,2)`,
+y el `try/catch` del endpoint de servicios.
 
 ## Decisiones tomadas
 
@@ -233,6 +287,20 @@ una segunda.
    de borrarlo, y `Restrict` es justamente lo que fuerza esa elección en vez de
    dejar que se pierda información. Probado borrando un servicio con una fila
    de `CommissionRate`: falla con violación de FK; el servicio sigue existiendo.
+
+   **Es un cambio real de comportamiento.** Una versión anterior de esta ficha
+   decía que `Appointment.service` ya se comportaba como `NO ACTION`/Restrict y
+   que por eso `Restrict` no traía nada nuevo. Es falso: la migración inicial
+   genera `ON DELETE SET NULL` para `citas_serviceId_fkey`
+   (`prisma/migrations/20260424184359_init/migration.sql:161`), así que hoy
+   borrar un servicio con historial de citas funciona y deja las citas con
+   `serviceId = NULL`. La decisión se sostiene con el argumento de permisos, que
+   es sólido por sí solo; el argumento de "no es nuevo" se saca porque confunde
+   a quien lea esto después. Consecuencia concreta a asumir: a partir de la
+   migración, el dueño o el encargado que intente borrar un servicio con
+   comisiones configuradas recibe un 409 con la explicación de cómo seguir
+   (`app/api/configuracion/servicios/[id]/route.ts`), y la sección de servicios
+   ahora muestra ese mensaje en vez de descartarlo.
 
 4. **CHECK de comisión congelada todo-o-nada.** Agregado
    `citas_comision_congelada_check`: `commissionPercent`, `commissionAmount` y
@@ -329,3 +397,21 @@ en orden con `psql` sobre una base vacía, seed corrido de nuevo. Ver "Bitácora
 - `npx prisma validate`, `npm run lint`, `npx tsc --noEmit`, `npx vitest run`
   (178 tests) y `npm run build`: todos en verde contra el estado final.
 - No se tocó Neon en ningún momento de esta ronda.
+
+### Cierre de la segunda pasada del revisor
+
+- `app/dashboard/configuracion/_components/seccionServicios.tsx`: `eliminar()`
+  tenía `if (res.ok)` sin rama de error, así que el 409 del endpoint se
+  descartaba sin leerlo: el dueño confirmaba el borrado y no pasaba nada --
+  ni error, ni aviso, el servicio seguía en la lista. Ahora lee
+  `(await res.json()).error` y lo muestra con el mismo patrón del resto de la
+  app (`text-sm text-red-500`, como `modalInvitar.tsx`), con `role="alert"`
+  porque el mensaje aparece lejos del botón que lo disparó.
+- `prisma/schema.prisma` y esta ficha decían que `Restrict` no cambiaba nada
+  porque `Appointment.service` ya se comportaba como `NO ACTION`. Es falso:
+  `prisma/migrations/20260424184359_init/migration.sql:161` genera
+  `ON DELETE SET NULL`. Verificado a mano sobre la migración. La justificación
+  se reescribió en los dos lugares: `Restrict` se sostiene con el argumento de
+  permisos, que es sólido solo.
+- Hallazgos no bloqueantes de la pasada anotados arriba, en "Fuera de alcance
+  detectado".
