@@ -246,4 +246,28 @@ describe("POST /api/configuracion/horarios", () => {
     expect(res.status).toBe(404)
     expect(prismaMock.$transaction).not.toHaveBeenCalled()
   })
+
+  it("una franja invertida (fin antes o igual que inicio) da 400 y no llega a escribir", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+    const horarioInvertido = [{ dayOfWeek: 1, startTime: "22:00", endTime: "02:00", active: true }]
+
+    const res = await POST(fakeRequest("/api/configuracion/horarios", horarioInvertido))
+
+    expect(res.status).toBe(400)
+    expect(prismaMock.$transaction).not.toHaveBeenCalled()
+  })
+
+  it("una franja con inicio y fin iguales da 400", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+    const horarioIgual = [{ dayOfWeek: 1, startTime: "09:00", endTime: "09:00", active: true }]
+
+    const res = await POST(fakeRequest("/api/configuracion/horarios", horarioIgual))
+
+    expect(res.status).toBe(400)
+    expect(prismaMock.$transaction).not.toHaveBeenCalled()
+  })
 })

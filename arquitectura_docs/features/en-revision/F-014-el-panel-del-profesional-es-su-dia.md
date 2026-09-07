@@ -1,7 +1,7 @@
 ---
 id: F-014
 titulo: El panel del profesional es su día
-estado: en-progreso
+estado: en-revision
 prioridad: media
 areas: [backend, frontend]
 rama: v1
@@ -44,20 +44,20 @@ tiempo con los espacios vacíos a la vista sí lo dice.
 
 ## Criterios de aceptación
 
-- [ ] Un `worker` ve su día por horas al entrar al panel; dueño y encargado ven
+- [x] Un `worker` ve su día por horas al entrar al panel; dueño y encargado ven
       exactamente lo que veían antes.
-- [ ] **Las horas salen del horario real del profesional** (`WorkSchedule`). Si no
+- [x] **Las horas salen del horario real del profesional** (`WorkSchedule`). Si no
       tiene horario configurado para hoy, **no se inventa un rango**: se dice que
       no tiene horario cargado y se muestran las citas que haya.
-- [ ] Las citas aparecen en su franja, con hora, servicio y cliente.
-- [ ] Una cita **sin cliente** no rompe la vista: el esquema lo permite y ya tiró
+- [x] Las citas aparecen en su franja, con hora, servicio y cliente.
+- [x] Una cita **sin cliente** no rompe la vista: el esquema lo permite y ya tiró
       el panel una vez (ver F-008).
-- [ ] Los huecos entre citas se distinguen de las franjas ocupadas.
-- [ ] El tiempo libre que se muestre **se calcula**, no se estima: si no se puede
+- [x] Los huecos entre citas se distinguen de las franjas ocupadas.
+- [x] El tiempo libre que se muestre **se calcula**, no se estima: si no se puede
       calcular con datos reales, no se muestra.
-- [ ] Un día sin citas se lee como un día libre, no como un error.
-- [ ] Sigue sin ver ingresos del negocio ni citas de sus colegas (F-006).
-- [ ] `npm run lint`, `npx tsc --noEmit`, `npm test` y `npm run build` en verde.
+- [x] Un día sin citas se lee como un día libre, no como un error.
+- [x] Sigue sin ver ingresos del negocio ni citas de sus colegas (F-006).
+- [x] `npm run lint`, `npx tsc --noEmit`, `npm test` y `npm run build` en verde.
 
 ## Contexto técnico
 
@@ -200,3 +200,124 @@ tiempo con los espacios vacíos a la vista sí lo dice.
 - **Fuera de alcance**: no se tocó `/dashboard/calendario`, no se creó ni
   editó ninguna cita desde la línea de tiempo (sólo lectura), no se cambió
   nada de `app/api/**` ni `middleware.ts`, no se tocó el árbol de dueño/encargado.
+
+### Backend — arreglo de los 3 hallazgos de QA en `lib/horario-dia.ts`
+
+QA rechazó la ficha con 2 bloqueantes y 1 mayor, los tres reproducibles en
+`segmentosDeFranja`/`minutosLibresEnFranjas` y su render. Antes de tocar el
+código se agregaron los 8 casos que QA pidió a `lib/horario-dia.test.ts`
+(cita anidada, solapamiento parcial, franja invertida ×2, cita de duración
+cero, cita que termina después de la franja, cita justo en el borde, turno
+partido) y se corrió la suite contra el código viejo: **4 de los 8 fallaban**
+— cita anidada, solapamiento parcial, cita de duración cero (misma familia
+que el bloqueante 1: una cita que un cursor no "ve" desaparece de la vista) y
+franja invertida en `minutosLibresEnFranjas` (devolvía `0` en vez de "no se
+puede calcular"). Los otros 4 (franja invertida en `segmentosDeFranja`, cita
+que termina después, cita en el borde, turno partido) ya pasaban con el
+código viejo.
+
+- **Bloqueante 1 y mayor (misma causa raíz)**: `segmentosDeFranja` recortaba
+  cada cita al `cursor` que dejaba la cita anterior. Si una cita quedaba
+  íntegramente dentro del rango ya cubierto (anidada), el guard `fin > cursor`
+  la descartaba sin generar ni cita ni hueco: desaparecía de la vista sin
+  caer tampoco en `citasFueraDeFranjas` (sí estaba dentro de una franja). Si
+  dos citas se solapaban parcialmente, la segunda se dibujaba con
+  `inicioMin = Math.max(inicio, cursor)`, una hora distinta a la real que
+  usa `TarjetaCita` al lado. Se reescribió el algoritmo: cada cita que se
+  solapa con la franja (chequeo semiabierto sobre su hora **real**, no
+  recortada) genera su propio segmento con `inicioMin`/`finMin` recortados
+  sólo a los **bordes de la franja**, nunca al cursor de otra cita. Los
+  huecos se calculan aparte, sobre la **unión** de los intervalos ocupados
+  (`fusionarIntervalos`, nuevo helper privado) para no abrir un hueco
+  fantasma entre dos citas que se pisan. Con esto una cita anidada, una
+  parcialmente solapada y una de duración cero (mismo bug: un cursor que no
+  la contaba) se muestran siempre, en su hora real.
+- **Bloqueante 2**: se agregó `franjaValida()` (`startTime < endTime`).
+  `segmentosDeFranja` devuelve `[]` para una franja inválida (nada honesto
+  que dibujar). `minutosLibresEnFranjas` ahora devuelve **`number | null`**:
+  `null` si alguna franja es inválida, nunca `0` — cero es una afirmación
+  ("no te queda nada") y un rango que no se puede medir no permite afirmar
+  eso. `citasFueraDeFranjas` ignora las franjas inválidas al decidir
+  cobertura (no hay forma confiable de saber si una cita cae "dentro" de un
+  rango roto, así que cae del lado de "fuera de franjas" en vez de
+  ocultarse). Origen del dato: se agregó `.refine(startTime < endTime)` al
+  `horarioSchema` (zod) de `app/api/configuracion/horarios/route.ts`, que
+  antes sólo validaba el formato `HH:MM`; ahora una franja invertida da 400 y
+  no llega a escribirse.
+- **Render (`vistaDiaProfesional.tsx`)**: nuevo estado explícito para
+  `minutosLibres === null` — mismo tratamiento honesto que "sin horario
+  cargado" (aviso ámbar + lista de citas, sin línea de tiempo ni cifra de
+  tiempo libre), pero con texto propio ("Tu horario de hoy no es válido") en
+  vez de mezclarlo con "no cargaste horario". Se extrajeron `AvisoHorario` y
+  `ListaCitasDelDia` para no duplicar ese bloque entre los dos estados.
+  (`lineaDeTiempoDia.tsx`): la `key` de cada fila pasó de
+  `tipo-inicioMin-finMin` a `cita-${cita.id}` para las citas (evita colisión
+  cuando dos citas anidadas comparten `inicioMin`), sin tocar el resto del
+  render — no es un rediseño, la línea de tiempo sigue siendo la misma lista
+  vertical.
+- **Verificación**: `npm run lint`, `npx tsc --noEmit`, `npx vitest run` (178
+  tests — 167 previos + 11 nuevos: 8 en `lib/horario-dia.test.ts` y 3 en
+  `app/api/configuracion/horarios/route.test.ts` — todos en verde) y
+  `npm run build`, los cuatro en verde.
+- **Archivos**: `lib/horario-dia.ts`, `lib/horario-dia.test.ts`,
+  `app/dashboard/_components/vistaDiaProfesional.tsx`,
+  `app/dashboard/_components/lineaDeTiempoDia.tsx`,
+  `app/api/configuracion/horarios/route.ts`,
+  `app/api/configuracion/horarios/route.test.ts`.
+- **Fuera de alcance**: no se tocó `app/api/dashboard/stats/route.ts` (no
+  hizo falta para ninguno de los 3 arreglos), no se tocó el árbol de
+  dueño/encargado, no se rediseñó la línea de tiempo (mismo layout, mismos
+  componentes).
+
+
+### Cierre — QA rechazó, y tenía razón
+
+Dos bloqueantes, los dos en `lib/horario-dia.ts`, y los dos del mismo origen:
+recortar cita por cita con un cursor en vez de calcular los huecos sobre la
+unión de los intervalos ocupados.
+
+1. **Una cita anidada dentro de otra desaparecía.** Con un color de 10:00 a
+   12:00 y una consulta de 10:30 a 11:00, la segunda no aparecía en ningún
+   segmento — ni como cita, ni como hueco, ni en `citasFueraDeFranjas`, porque
+   sí caía dentro de una franja. La vista mentía por omisión, que en una
+   pantalla cuyo único trabajo es decir qué tenés hoy es el peor error posible.
+2. **Una franja invertida producía una afirmación falsa.** `22:00–02:00` daba
+   `minutosLibres = 0` por defecto aritmético (`reduce` sobre cero elementos) y
+   la pantalla decía «Tu agenda de hoy está completa» para un horario que nunca
+   se pudo medir. Es exactamente lo que prohíbe la regla «Interfaz»: si no se
+   puede calcular con datos reales, no se muestra. Ahora devuelve `null` y el
+   día se lee como «no se puede calcular», con el mismo trato honesto que «sin
+   horario cargado».
+3. **Menor, del mismo origen:** con dos citas solapadas parcialmente, la
+   etiqueta de la izquierda mostraba la hora recortada al cursor y la tarjeta de
+   al lado la hora real. La misma fila se contradecía.
+
+Se arregló también el **origen** del caso 2, no sólo el síntoma: el `zod` de
+`app/api/configuracion/horarios/route.ts` no validaba que `startTime < endTime`,
+así que el dato inválido entraba sin fricción. Ahora se rechaza con 400.
+
+**Los 13 tests originales pasaban todos y no cubrían ninguno de estos casos**:
+eran espejo de la implementación, no prueba de comportamiento. De los 8 casos
+nuevos que pidió QA, **4 fallaban** contra el código viejo.
+
+**Verificado por el orquestador, con los casos exactos de QA:**
+
+```
+citas visibles:                       A, B      (antes B desaparecía)
+minutosLibres con franja invertida:   null      (antes 0)
+inicioMin de B (solapada):            630       (10:30, antes 660)
+```
+
+Y en la app andando, con una cita de 11:15 a 11:45 metida dentro de un color de
+11:00 a 12:30: las tres citas se ven, cada una en su hora, y el tiempo libre
+sigue dando 7 h — la anidada no descuenta dos veces.
+
+**Verificación final:** `npm run build`, `npm run lint`, `npx tsc --noEmit` y
+`npm test` (178 tests) en verde.
+
+## Pendiente
+
+Los horarios inválidos que ya estén guardados en la base no se limpian: la
+validación nueva sólo impide que entren más, y el panel los neutraliza al
+leerlos. No se pidió migración en esta ficha, y la única base configurada es
+producción.

@@ -6,6 +6,7 @@ import {
   minutosLibresEnFranjas,
   segmentosDeFranja,
   type CitaDelDia,
+  type SegmentoDia,
 } from "./horario-dia"
 
 function cita(id: string, startHHMM: string, endHHMM: string): CitaDelDia {
@@ -17,6 +18,14 @@ function cita(id: string, startHHMM: string, endHHMM: string): CitaDelDia {
     status: "confirmada",
     patient: null,
   }
+}
+
+/** Ids de las citas que aparecen como segmento "cita", en el orden que sea. */
+function idsDeCitasEnSegmentos(segmentos: SegmentoDia[]): string[] {
+  return segmentos
+    .filter((s): s is Extract<SegmentoDia, { tipo: "cita" }> => s.tipo === "cita")
+    .map((s) => s.cita.id)
+    .sort()
 }
 
 describe("segmentosDeFranja", () => {
@@ -54,6 +63,68 @@ describe("segmentosDeFranja", () => {
     ])
 
     expect(segmentos).toEqual([{ tipo: "hueco", inicioMin: 540, finMin: 780 }])
+  })
+
+  // --- Casos que QA marcó como no cubiertos (rechazo de F-014) ---
+
+  it("BLOQUEANTE: una cita anidada dentro de otra no desaparece", () => {
+    const franja = { startTime: "09:00", endTime: "13:00" }
+    const segmentos = segmentosDeFranja(franja, [cita("A", "10:00", "12:00"), cita("B", "10:30", "11:00")])
+
+    expect(idsDeCitasEnSegmentos(segmentos)).toEqual(["A", "B"])
+  })
+
+  it("MAYOR: un solapamiento parcial muestra cada cita en su hora real, no recortada al cursor", () => {
+    const franja = { startTime: "09:00", endTime: "13:00" }
+    const segmentos = segmentosDeFranja(franja, [cita("A", "10:00", "11:00"), cita("B", "10:30", "11:30")])
+
+    const segmentoB = segmentos.find(
+      (s): s is Extract<SegmentoDia, { tipo: "cita" }> => s.tipo === "cita" && s.cita.id === "B"
+    )
+    expect(segmentoB).toBeDefined()
+    expect(segmentoB?.inicioMin).toBe(630) // 10:30, no 11:00
+    expect(segmentoB?.finMin).toBe(690) // 11:30
+  })
+
+  it("BLOQUEANTE: una franja invertida (fin antes que inicio) no produce segmentos", () => {
+    const segmentos = segmentosDeFranja({ startTime: "22:00", endTime: "02:00" }, [])
+
+    expect(segmentos).toEqual([])
+  })
+
+  it("una cita de duracion cero dentro de la franja no desaparece", () => {
+    const franja = { startTime: "09:00", endTime: "13:00" }
+    const segmentos = segmentosDeFranja(franja, [cita("A", "10:00", "10:00")])
+
+    expect(idsDeCitasEnSegmentos(segmentos)).toEqual(["A"])
+  })
+
+  it("una cita que termina despues de la franja se recorta al borde derecho", () => {
+    const franja = { startTime: "09:00", endTime: "13:00" }
+    const segmentos = segmentosDeFranja(franja, [cita("A", "12:30", "14:30")])
+
+    const segmentoA = segmentos.find(
+      (s): s is Extract<SegmentoDia, { tipo: "cita" }> => s.tipo === "cita"
+    )
+    expect(segmentoA).toEqual(
+      expect.objectContaining({ tipo: "cita", inicioMin: 750, finMin: 780 })
+    )
+  })
+
+  it("una cita justo en el borde (termina cuando empieza la franja) no se cuenta", () => {
+    const franja = { startTime: "09:00", endTime: "13:00" }
+    const segmentos = segmentosDeFranja(franja, [cita("A", "08:00", "09:00")])
+
+    expect(segmentos).toEqual([{ tipo: "hueco", inicioMin: 540, finMin: 780 }])
+  })
+
+  it("turno partido: dos franjas no se interfieren entre si", () => {
+    const franjaManana = { startTime: "09:00", endTime: "13:00" }
+    const franjaTarde = { startTime: "14:00", endTime: "18:00" }
+    const citas = [cita("A", "10:00", "11:00"), cita("B", "15:00", "16:00")]
+
+    expect(idsDeCitasEnSegmentos(segmentosDeFranja(franjaManana, citas))).toEqual(["A"])
+    expect(idsDeCitasEnSegmentos(segmentosDeFranja(franjaTarde, citas))).toEqual(["B"])
   })
 })
 
@@ -96,6 +167,22 @@ describe("minutosLibresEnFranjas", () => {
     ])
 
     expect(libres).toBe(0)
+  })
+
+  it("BLOQUEANTE: una franja invertida no se puede calcular, no cuenta como cero", () => {
+    const libres = minutosLibresEnFranjas([{ startTime: "22:00", endTime: "02:00" }], [])
+
+    expect(libres).toBeNull()
+  })
+
+  it("turno partido: suma el libre de ambas franjas descontando lo ocupado de cada una", () => {
+    const franjas = [
+      { startTime: "09:00", endTime: "13:00" },
+      { startTime: "14:00", endTime: "18:00" },
+    ]
+    const citas = [cita("A", "10:00", "11:00"), cita("B", "15:00", "16:00")]
+
+    expect(minutosLibresEnFranjas(franjas, citas)).toBe(360)
   })
 })
 

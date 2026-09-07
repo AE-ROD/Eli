@@ -58,7 +58,11 @@ export function LineaDeTiempoDia({ franjas, citas }: LineaDeTiempoDiaProps) {
             <div className="space-y-2">
               {segmentos.map((segmento) => (
                 <motion.div
-                  key={`${segmento.tipo}-${segmento.inicioMin}-${segmento.finMin}`}
+                  key={
+                    segmento.tipo === "cita"
+                      ? `cita-${segmento.cita.id}`
+                      : `hueco-${segmento.inicioMin}-${segmento.finMin}`
+                  }
                   className="flex items-start gap-3"
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}

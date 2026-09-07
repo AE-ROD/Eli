@@ -76,12 +76,24 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(horarios)
 }
 
+function horaEnMinutos(hhmm: string): number {
+  const [horas, minutos] = hhmm.split(":").map(Number)
+  return horas * 60 + minutos
+}
+
 const horarioSchema = z.array(
   z.object({
     dayOfWeek: z.number().min(0).max(6),
     startTime: z.string().regex(/^\d{2}:\d{2}$/),
     endTime: z.string().regex(/^\d{2}:\d{2}$/),
     active: z.boolean(),
+  })
+  // Sin esto, un horario invertido (ej. "22:00"–"02:00") entraba sin fricción
+  // y después no había forma honesta de calcular tiempo libre sobre él
+  // (lib/horario-dia.ts lo trata como "no se puede calcular", nunca como 0).
+  .refine((h) => horaEnMinutos(h.startTime) < horaEnMinutos(h.endTime), {
+    message: "La hora de inicio debe ser anterior a la hora de fin",
+    path: ["endTime"],
   })
 )
 

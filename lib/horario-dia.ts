@@ -39,50 +39,103 @@ function minutosDeInstante(iso: string): number {
 }
 
 /**
- * Segmentos de una franja: las citas que caen dentro (recortadas a sus bordes)
- * y los huecos que quedan entre ellas. Una franja sin citas es un único hueco
- * del largo completo — así un día sin citas se lee como agenda libre.
+ * Una franja con `endTime` <= `startTime` no se puede medir: en el modelo
+ * "HH:MM sin fecha" de `WorkSchedule` no hay forma honesta de saber cuánto
+ * dura (¿22:00–02:00 son 4 horas del día siguiente, o un dato mal cargado?).
+ * En vez de adivinar, se trata como "no se puede calcular" en todo el módulo.
+ */
+export function franjaValida(franja: FranjaHorario): boolean {
+  return minutosDeHHMM(franja.startTime) < minutosDeHHMM(franja.endTime)
+}
+
+/** Intervalos [inicio, fin) fusionados: dos citas que se pisan no deben abrir un hueco fantasma entre ellas. */
+function fusionarIntervalos(
+  intervalos: { inicio: number; fin: number }[]
+): { inicio: number; fin: number }[] {
+  const ordenados = [...intervalos].sort((a, b) => a.inicio - b.inicio || a.fin - b.fin)
+  const fusionados: { inicio: number; fin: number }[] = []
+
+  for (const actual of ordenados) {
+    const ultimo = fusionados[fusionados.length - 1]
+    if (ultimo && actual.inicio <= ultimo.fin) {
+      ultimo.fin = Math.max(ultimo.fin, actual.fin)
+    } else {
+      fusionados.push({ ...actual })
+    }
+  }
+
+  return fusionados
+}
+
+/**
+ * Segmentos de una franja: toda cita que se solapa con ella (aunque se pise
+ * con otra, aunque quede anidada dentro de otra, aunque dure cero minutos) en
+ * su hora real recortada sólo a los bordes de la franja — nunca al cursor de
+ * otra cita, que es lo que hacía desaparecer o cambiar de hora a una cita
+ * anidada o parcialmente solapada. Los huecos se calculan aparte, sobre la
+ * *unión* de los intervalos ocupados, no restando cita por cita.
+ *
+ * Una franja inválida (`endTime` <= `startTime`) no genera segmentos: no hay
+ * nada honesto que dibujar sobre un rango que no se puede medir.
  */
 export function segmentosDeFranja(franja: FranjaHorario, citas: CitaDelDia[]): SegmentoDia[] {
+  if (!franjaValida(franja)) return []
+
   const inicioFranja = minutosDeHHMM(franja.startTime)
   const finFranja = minutosDeHHMM(franja.endTime)
 
   const citasEnFranja = citas
-    .map((cita) => ({
-      cita,
-      inicio: Math.max(inicioFranja, minutosDeInstante(cita.startTime)),
-      fin: Math.min(finFranja, minutosDeInstante(cita.endTime)),
-    }))
-    .filter(({ inicio, fin }) => fin > inicio)
-    .sort((a, b) => a.inicio - b.inicio)
+    .map((cita) => {
+      const inicioReal = minutosDeInstante(cita.startTime)
+      const finReal = minutosDeInstante(cita.endTime)
+      return {
+        cita,
+        // Semiabierto (igual que `citasFueraDeFranjas`): una cita que termina
+        // justo cuando empieza la franja, o que empieza justo cuando termina,
+        // no se cuenta como parte de ella.
+        seSolapa: inicioReal < finFranja && finReal > inicioFranja,
+        inicio: Math.max(inicioFranja, inicioReal),
+        fin: Math.min(finFranja, finReal),
+      }
+    })
+    .filter(({ seSolapa }) => seSolapa)
+    .sort((a, b) => a.inicio - b.inicio || a.fin - b.fin)
 
-  const segmentos: SegmentoDia[] = []
+  const segmentosCita: SegmentoDia[] = citasEnFranja.map(({ cita, inicio, fin }) => ({
+    tipo: "cita",
+    inicioMin: inicio,
+    finMin: fin,
+    cita,
+  }))
+
+  const huecos: SegmentoDia[] = []
   let cursor = inicioFranja
-
-  for (const { cita, inicio, fin } of citasEnFranja) {
-    if (inicio > cursor) {
-      segmentos.push({ tipo: "hueco", inicioMin: cursor, finMin: inicio })
+  for (const ocupado of fusionarIntervalos(citasEnFranja)) {
+    if (ocupado.inicio > cursor) {
+      huecos.push({ tipo: "hueco", inicioMin: cursor, finMin: ocupado.inicio })
     }
-    // Si dos citas se pisan, la segunda no resta hueco: el cursor no retrocede.
-    if (fin > cursor) {
-      segmentos.push({ tipo: "cita", inicioMin: Math.max(inicio, cursor), finMin: fin, cita })
-      cursor = fin
-    }
+    cursor = Math.max(cursor, ocupado.fin)
   }
-
   if (cursor < finFranja) {
-    segmentos.push({ tipo: "hueco", inicioMin: cursor, finMin: finFranja })
+    huecos.push({ tipo: "hueco", inicioMin: cursor, finMin: finFranja })
   }
 
-  return segmentos
+  return [...segmentosCita, ...huecos].sort((a, b) => a.inicioMin - b.inicioMin)
 }
 
-/** Una cita no cubierta por ninguna franja no debe desaparecer de la vista. */
+/**
+ * Una cita no cubierta por ninguna franja no debe desaparecer de la vista.
+ * Una franja inválida no cuenta como cobertura: no hay forma confiable de
+ * saber si una cita cae "dentro" de un rango que no se puede medir, así que
+ * se ignora para esta decisión (la cita cae del lado de "fuera de franjas").
+ */
 export function citasFueraDeFranjas(franjas: FranjaHorario[], citas: CitaDelDia[]): CitaDelDia[] {
+  const franjasValidas = franjas.filter(franjaValida)
+
   return citas.filter((cita) => {
     const inicio = minutosDeInstante(cita.startTime)
     const fin = minutosDeInstante(cita.endTime)
-    return !franjas.some((franja) => {
+    return !franjasValidas.some((franja) => {
       const inicioFranja = minutosDeHHMM(franja.startTime)
       const finFranja = minutosDeHHMM(franja.endTime)
       return fin > inicioFranja && inicio < finFranja
@@ -94,8 +147,14 @@ export function citasFueraDeFranjas(franjas: FranjaHorario[], citas: CitaDelDia[
  * Minutos libres reales: horas del horario menos horas ocupadas por citas.
  * Se calcula, no se estima — por eso pide siempre `franjas`; si no hay
  * horario, el llamador no debe invocar esta función (no hay contra qué medir).
+ *
+ * Si alguna franja es inválida (`endTime` <= `startTime`) el resultado es
+ * `null`, nunca `0`: cero minutos libres es una afirmación ("no te queda
+ * nada"), y un rango que no se puede medir no permite afirmar eso ni nada.
  */
-export function minutosLibresEnFranjas(franjas: FranjaHorario[], citas: CitaDelDia[]): number {
+export function minutosLibresEnFranjas(franjas: FranjaHorario[], citas: CitaDelDia[]): number | null {
+  if (franjas.some((franja) => !franjaValida(franja))) return null
+
   return franjas.reduce((total, franja) => {
     const libresDeLaFranja = segmentosDeFranja(franja, citas)
       .filter((segmento) => segmento.tipo === "hueco")
