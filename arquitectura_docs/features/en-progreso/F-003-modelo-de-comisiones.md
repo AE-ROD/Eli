@@ -1,10 +1,10 @@
 ---
 id: F-003
 titulo: Modelo de datos de comisiones
-estado: backlog
+estado: en-progreso
 prioridad: alta
 areas: [backend, datos]
-rama: v1
+rama: f-003-comisiones
 estimacion: media
 max_iteraciones: 3
 ---
@@ -32,8 +32,9 @@ corregir un modelo de datos con registros ya cargados obliga a migrar.
 **NO incluye:**
 - Interfaz de configuración (F-004).
 - El cálculo al completar la cita (F-005).
-- **Aplicar la migración**: la única base configurada es producción y está
-  bloqueada por permisos. El agente deja el `.sql` listo y reporta.
+- **Aplicar la migración en producción.** Sí se aplica y se prueba en la base
+  local (ver "Contexto técnico"): es la única forma de saber que el `.sql`
+  funciona antes de que toque datos reales.
 
 ## Criterios de aceptación
 
@@ -46,6 +47,10 @@ corregir un modelo de datos con registros ya cargados obliga a migrar.
 - [ ] Todos los modelos nuevos llevan `businessId` e índice por él.
 - [ ] Nombres de tabla en español vía `@@map`, como el resto del esquema.
 - [ ] Existe la migración en `prisma/migrations/`.
+- [ ] **La migración se aplica limpia sobre la base local** y el cliente de
+      Prisma se regenera sin errores. Una migración que nadie corrió no está
+      terminada: es un archivo que esperamos que funcione.
+- [ ] Aplicada la migración, el seed sigue corriendo y la app sigue levantando.
 - [ ] `npx prisma validate` pasa. `npx tsc --noEmit` y `npm test` en verde.
 
 ## Tareas por área
@@ -72,8 +77,18 @@ corregir un modelo de datos con registros ya cargados obliga a migrar.
 **Riesgo documentado:** no contemplar descuento de materiales. Si aparecen negocios
 con insumos caros habrá que migrar. Aceptado para v1 (`docs/PRODUCTO.md` §3.2).
 
-**Restricción del entorno:** `migrate deploy`, `db push`, `db execute` y
-`migrate reset` están bloqueados. No intentar aplicar la migración.
+**Base local, novedad respecto de cuando se escribió esta ficha:** ya hay un
+Postgres local con el esquema y el seed cargados (`README.md`, sección "Una base
+de desarrollo"). Corre en el puerto 5433, base `eli`. Ahí **sí** se aplica la
+migración, con `psql`:
+
+```bash
+psql -h /tmp -p 5433 -U postgres -d eli -v ON_ERROR_STOP=1 -f prisma/migrations/<nueva>/migration.sql
+```
+
+**Contra producción no se toca nada.** `migrate deploy`, `db push`, `db execute`
+y `migrate reset` siguen bloqueados por permisos, y `DATABASE_URL` apunta a Neon.
+Usá `psql` contra localhost:5433, nunca Prisma contra la URL del `.env`.
 
 ## Fuera de alcance detectado
 
