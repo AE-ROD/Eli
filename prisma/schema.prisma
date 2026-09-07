@@ -153,10 +153,10 @@ model Service {
   // simple (no compuesta) y SetNull: ver el comentario en CommissionChange.
   commissionChanges CommissionChange[]
 
-  @@index([businessId])
   // Habilita la FK compuesta de CommissionRate (serviceId, businessId), igual
   // que en BusinessMember.
   @@unique([id, businessId])
+  @@index([businessId])
   @@map("servicios")
 }
 
@@ -209,8 +209,37 @@ model Appointment {
   // cita podría quedar con `commissionAmount = 0` y `commissionPercent = NULL`
   // ("pendiente de configurar") y liquidarse como si valiera cero sin que
   // nadie lo note.
+  //
+  // `commissionAmount` es `Decimal`, no `Float`: es dinero que se va a sumar
+  // sobre decenas de citas en cada liquidación mensual, y el punto flotante
+  // acumula error de redondeo en cada suma -- eso son disputas con gente que
+  // cobra por su trabajo. Se decide ahora porque la tabla tiene cero filas
+  // (recién creada en esta misma migración) y esa ventana no se repite:
+  // convertir un `Float` a `Decimal` con datos ya cargados es una migración
+  // aparte, con `USING` y riesgo de reescritura de tabla. `Decimal(12, 2)`:
+  // 2 decimales es la escala universal para dinero (centavos/céntimos), y 12
+  // dígitos totales (hasta 9.999.999.999,99) da margen amplio para el monto
+  // de una única cita en cualquier moneda con la que trabaje un negocio,
+  // sin ser un tamaño arbitrario/desperdiciado (Postgres sólo ocupa espacio
+  // por los dígitos que el valor realmente tiene, no por la precisión
+  // declarada). `Appointment.price` y `Service.price` **no** se tocan acá:
+  // siguen en `Float` a propósito (ver F-015, ya en backlog) porque ya tienen
+  // datos en producción y los usan 43 lugares del código; ese es un cambio de
+  // otra escala y con otro plan de prueba (sobre una base con datos, no vacía).
+  //
+  // `commissionPercent` (acá y en BusinessMember/CommissionRate) se queda en
+  // `Float`, a propósito y no por descuido: un porcentaje es un valor
+  // independiente por fila, no algo que se sume repetidamente como
+  // `commissionAmount` en una liquidación -- no hay superficie para que un
+  // error de redondeo se acumule. El error de representación de un `Float`
+  // de doble precisión es del orden de 1e-15, muy por debajo de cualquier
+  // precisión de porcentaje que el producto vaya a pedir (ni siquiera define
+  // decimales para el porcentaje). Pasarlo a `Decimal` tampoco evitaría la
+  // mezcla de tipos al calcular (`price` sigue siendo `Float`): esa conversión
+  // haría falta igual en el momento del cálculo, la tenga `percent` el tipo
+  // que tenga. Ver nota de "Fuera de alcance" sobre esa mezcla.
   commissionPercent Float? // porcentaje ya resuelto por la cascada al momento del cálculo -- rango 0-100 vía CHECK
-  commissionAmount  Float? // monto resultante, sobre el precio total sin descontar insumos
+  commissionAmount  Decimal?  @db.Decimal(12, 2) // monto resultante, sobre el precio total sin descontar insumos
   commissionAt      DateTime? // cuándo se calculó y congeló
 
   @@index([businessId])
@@ -229,7 +258,6 @@ model Appointment {
  * para (memberId, serviceId), gana sobre `BusinessMember.commissionPercent`.
  * Modelo "con herencia": no hace falta una fila por cada combinación
  * profesional × servicio, sólo donde hay una excepción real.
- *
  * `member` y `service` usan FK compuesta contra `(id, businessId)` del
  * profesional y del servicio, no contra `id` solo. Sin esto, Postgres acepta
  * una fila con el `businessId` de un negocio y el `memberId`/`serviceId` de
@@ -257,8 +285,8 @@ model CommissionRate {
   // Restrict/NO ACTION ahí). Quien quiera borrar el servicio primero borra o
   // reasigna sus filas de `CommissionRate`, o lo desactiva con
   // `Service.active` sin borrarlo.
-  service Service @relation(fields: [serviceId, businessId], references: [id, businessId], onDelete: Restrict)
-  percent Float // 0-100 -- rango vía CHECK de la migración, no Prisma. Nunca tiene default: la fila sólo existe si alguien la configuró.
+  service    Service        @relation(fields: [serviceId, businessId], references: [id, businessId], onDelete: Restrict)
+  percent    Float // 0-100 -- rango vía CHECK de la migración, no Prisma. Nunca tiene default: la fila sólo existe si alguien la configuró.
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
 
@@ -284,7 +312,6 @@ model CommissionRate {
  * legítimo. `serviceName` es un snapshot del nombre del servicio al momento
  * del cambio, para que el registro siga siendo legible si el servicio se
  * borra (sólo tiene sentido cuando `scope = "service"`).
- *
  * `memberId` y `changedById` son nullable con SetNull, y `memberName` /
  * `changedByName` / `changedByEmail` son snapshots tomados al crear la fila.
  * Una tabla de auditoría no puede cascadear con lo que audita: si
@@ -293,7 +320,6 @@ model CommissionRate {
  * borraría todo su historial de comisiones justo cuando más se necesita (una
  * baja es cuando aparecen las disputas). SetNull + snapshot hace que la fila
  * sobreviva siempre, legible, aunque lo auditado desaparezca.
- *
  * Ninguna de las dos relaciones usa la FK compuesta de `CommissionRate`
  * (`(id, businessId)`): una FK compuesta con `onDelete: SetNull` anula TODAS
  * las columnas de la constraint a la vez, incluida `businessId` -- y
@@ -323,7 +349,7 @@ model CommissionChange {
   serviceName String? // snapshot; sólo aplica cuando scope = "service"
 
   changedById    String?
-  changedBy      User?  @relation(fields: [changedById], references: [id], onDelete: SetNull)
+  changedBy      User?   @relation(fields: [changedById], references: [id], onDelete: SetNull)
   changedByName  String // snapshot
   changedByEmail String // snapshot
 

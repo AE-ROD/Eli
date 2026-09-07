@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { actorDeSesion, puedeGestionarServicios } from "@/lib/permisos"
 
@@ -71,7 +72,23 @@ export async function DELETE(
     return NextResponse.json({ error: "Servicio no encontrado" }, { status: 404 })
   }
 
-  await prisma.service.delete({ where: { id } })
+  try {
+    await prisma.service.delete({ where: { id } })
+  } catch (error) {
+    // El servicio tiene comisiones configuradas y la base lo impide (Restrict,
+    // F-003): borrarlo se llevaría por delante porcentajes que sólo el dueño
+    // puede tocar. Se retira con `active`, sin perder el historial.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+      return NextResponse.json(
+        {
+          error:
+            "Este servicio tiene comisiones configuradas. Desactivalo en vez de borrarlo, o pedile al dueño que quite esas comisiones primero.",
+        },
+        { status: 409 }
+      )
+    }
+    throw error
+  }
 
   return NextResponse.json({ mensaje: "Servicio eliminado" })
 }

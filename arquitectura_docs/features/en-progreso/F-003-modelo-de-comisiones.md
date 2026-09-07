@@ -30,8 +30,11 @@ corregir un modelo de datos con registros ya cargados obliga a migrar.
 - Archivo de migración SQL.
 
 **NO incluye:**
-- Interfaz de configuración (F-004).
-- El cálculo al completar la cita (F-005).
+- Interfaz de configuración (todavía sin ficha creada -- **no es F-004**, que ya
+  existe y es "toma de cuenta por invitación". Referencia corregida tras la
+  revisión: el esquema y esta ficha apuntaban mal).
+- El cálculo al completar la cita (todavía sin ficha creada -- **no es F-005**,
+  que ya existe y es "el encargado gestiona el equipo". Misma corrección).
 - **Aplicar la migración en producción.** Sí se aplica y se prueba en la base
   local (ver "Contexto técnico"): es la única forma de saber que el `.sql`
   funciona antes de que toque datos reales.
@@ -52,6 +55,11 @@ corregir un modelo de datos con registros ya cargados obliga a migrar.
       terminada: es un archivo que esperamos que funcione.
 - [x] Aplicada la migración, el seed sigue corriendo y la app sigue levantando.
 - [x] `npx prisma validate` pasa. `npx tsc --noEmit` y `npm test` en verde.
+- [x] **Ronda de revisión (post `dca02e1`):** FK compuesta en `CommissionRate`
+      contra tenant cruzado, auditoría desnormalizada (no cascadea con lo que
+      audita), `scope` explícito en `CommissionChange`, CHECK de comisión
+      congelada todo-o-nada, índice de liquidación, `commissionAmount` en
+      `Decimal`. Ver "Decisiones tomadas" y "Bitácora".
 
 ## Tareas por área
 
@@ -93,7 +101,9 @@ Usá `psql` contra localhost:5433, nunca Prisma contra la URL del `.env`.
 ## Fuera de alcance detectado
 
 - No existe todavía ningún endpoint ni componente que use estos modelos (correcto,
-  es F-004/F-005). No se tocó `lib/permisos.ts` ni `app/api/`.
+  son la futura interfaz de configuración y el futuro cálculo, ninguna con ficha
+  todavía -- no `F-004`/`F-005`, que ya existen y son otra cosa; ver nota de
+  corrección de referencias más abajo). No se tocó `lib/permisos.ts` ni `app/api/`.
 - El local de Postgres (puerto 5433) estaba apagado al empezar (quedó un
   `postmaster.pid` de una sesión anterior con el socket en `/tmp` pero sin proceso
   vivo). Se relevantó con `pg_ctl -D /var/lib/postgresql/eli -o '-p 5433
@@ -105,6 +115,30 @@ Usá `psql` contra localhost:5433, nunca Prisma contra la URL del `.env`.
   --create-only` no sirve ahí — Prisma la ve como "no migrada" y pide resetearla.
   Se generó el SQL con `prisma migrate diff` (sólo lectura, compara contra la
   base real) y se aplicó a mano con `psql`, como pide la ficha.
+- **`Appointment.member` y `Appointment.service` siguen sin FK compuesta contra
+  `businessId`.** Es la misma clase de bug que el revisor encontró en
+  `CommissionRate` (nada impide una fila con el `businessId` de un negocio y el
+  `memberId`/`serviceId` de otro), pero no estaba en el pedido de esta ronda y
+  tocar `Appointment` es un cambio más grande (esa tabla ya tiene filas en
+  producción). Lo dejo anotado para que se evalúe como feature propia.
+- **`DELETE /api/configuracion/servicios/[id]` no tiene `try/catch`.** Con el
+  nuevo `Restrict` de `CommissionRate.service`, borrar un servicio con
+  comisiones configuradas ahora falla en la base (correcto, es la intención del
+  punto 3), pero el endpoint no atrapa el error de Prisma (`P2003`, violación de
+  FK): hoy devuelve un 500 genérico sin catch, en vez de un 409 con un mensaje
+  útil ("no se puede borrar, tiene comisiones configuradas"). No lo toco: es un
+  cambio de endpoint (fuera de esta ficha, que es sólo de modelo), pero conviene
+  resolverlo antes de exponer el borrado de servicios a un encargado real.
+- **Mezcla de tipos `Float`/`Decimal` en el cálculo futuro de comisión.**
+  `commissionAmount` ahora es `Decimal(12,2)` pero `Appointment.price` y
+  `Service.price` siguen en `Float` (a propósito, ver `F-015`, backlog). La
+  futura feature de cálculo va a tener que convertir `price` a `Decimal` en el
+  momento del cálculo (`Decimal × percent / 100`) para no heredar el error de
+  redondeo del `Float` de origen -- no alcanza con que el campo de destino sea
+  `Decimal` si el insumo no lo es. No es un problema para resolver acá: lo
+  resuelve F-015 al convertir `price`, o la propia feature de cálculo si decide
+  convertir puntualmente antes de F-015. Quedó pedido explícitamente no tocar
+  `price` en esta ficha.
 
 ## Decisiones tomadas
 
@@ -122,7 +156,8 @@ Usá `psql` contra localhost:5433, nunca Prisma contra la URL del `.env`.
   (`cambios_comision`), todos permitiendo `NULL`. No estaba pedido explícitamente,
   pero el criterio de aceptación fija el rango 0–100 y esto es dinero de terceros:
   vale la pena que la base lo garantice y no sólo la validación de Zod que vendrá
-  en F-004. Quien siga con `prisma migrate dev` en el futuro debe saber que estas
+  en la futura interfaz de configuración (sin ficha todavía). Quien siga con
+  `prisma migrate dev` en el futuro debe saber que estas
   constraints viven sólo en el SQL, no en `schema.prisma` (Prisma no soporta
   `@@check` en la versión de este proyecto): si alguien corre `migrate dev`
   después de tocar estos campos, revisar que no las borre por "drift".
@@ -131,6 +166,114 @@ Usá `psql` contra localhost:5433, nunca Prisma contra la URL del `.env`.
   `CommissionChange.serviceId` es `SetNull` (igual que `citas.serviceId`): si se
   borra un servicio, el historial de auditoría sobrevive pero pierde la
   referencia puntual.
+
+### Ronda de revisión (post `dca02e1`)
+
+El revisor encontró cuatro problemas reales sobre lo anterior. Se corrigieron
+todos editando la migración existente (no aplicada aún en Neon), no agregando
+una segunda.
+
+1. **Tenant cruzado en `CommissionRate`.** `memberId` y `serviceId` pasan a FK
+   compuesta contra `(id, businessId)` de `BusinessMember`/`Service`
+   (`@@unique([id, businessId])` nuevo en ambos). Postgres ahora rechaza
+   directamente una fila cuyo `businessId` no coincide con el del profesional o
+   el servicio -- probado insertando una fila cruzada a mano: falla con
+   violación de FK, no se llega a insertar. Esto es lo que hacía inseguro al
+   `findUnique(memberId_serviceId)` de la cascada, que no puede filtrar por
+   negocio.
+
+2. **La auditoría no cascadea con lo que audita.** `CommissionChange.memberId`
+   y `.changedById` pasan de obligatorios/Cascade a **nullables con `SetNull`**,
+   y se agregan snapshots (`memberName`, `changedByName`, `changedByEmail`)
+   tomados al crear la fila. Probado borrando el profesional auditado y el
+   usuario que hizo el cambio: la fila sobrevive con la referencia en `NULL`
+   pero el snapshot legible.
+
+   **Por qué no llevan la misma FK compuesta que `CommissionRate`** (aunque el
+   revisor pidió "mismo tratamiento"): una FK compuesta con `onDelete: SetNull`
+   anula *todas* las columnas de la constraint a la vez, incluida `businessId`.
+   `businessId` en `CommissionChange` es `NOT NULL` (regla de arquitectura: toda
+   fila debe poder filtrarse por negocio) -- ponerla en la FK compuesta hubiera
+   hecho que la acción fallara (violación de NOT NULL al intentar anularla) o,
+   si se la dejaba nullable, que la fila de auditoría quedara invisible para
+   cualquier consulta multi-tenant justo cuando más se la necesita, que es lo
+   opuesto de lo que pide el punto 2. Se optó por FK simple contra `.id` +
+   snapshot, con el negocio resuelto siempre por el `businessId` del actor de
+   sesión al escribir (igual que en el resto del código, nunca del cliente).
+   Verificado que el tenant-cruzado que preocupaba en el punto 1 es
+   específicamente el de `CommissionRate` (la tabla que resuelve la cascada y
+   afecta dinero real); `CommissionChange` es sólo lectura humana y no participa
+   del cálculo.
+
+3. **`scope` explícito + decisión sobre borrar un servicio con comisiones.**
+   `CommissionChange` suma `scope` ("default" | "service", con CHECK) y
+   `serviceName` (snapshot): el significado del registro ya no depende de si
+   `serviceId` es `NULL`, que es justo el valor que deja el `SetNull` al borrar
+   un servicio.
+
+   **Decisión sobre `CommissionRate.service`: `Restrict`, no `SetNull` ni
+   borrado lógico automático.** Si el servicio se borrara y la fila de
+   `CommissionRate` sobreviviera con `serviceId = NULL`, esa fila se
+   confundiría con una excepción al porcentaje por defecto (mismo problema que
+   en el punto anterior, pero afectando dinero real, no sólo auditoría) -- por
+   eso `SetNull` queda descartado de entrada. Entre `Restrict` y depender de
+   `Service.active` (borrado lógico) se eligió `Restrict`: borrar un servicio
+   con `CommissionRate` configurada ahora **falla** en la base de datos, en vez
+   de arrastrar silenciosamente los porcentajes. Esto cierra en la base el
+   agujero de permisos que señaló el revisor (`puedeGestionarServicios` incluye
+   al encargado, `puedeEditarComisiones` es sólo del dueño: con `Cascade` el
+   encargado borraba comisiones sin pasar por ese permiso) sin depender de que
+   ningún endpoint futuro se acuerde de chequearlo. Además es consistente con
+   el comportamiento que **ya tiene** `Appointment.service` (sin `onDelete`
+   explícito, Postgres actúa como `NO ACTION`/Restrict ahí también): borrar un
+   servicio con historial ya fallaba en la práctica, así que no es un
+   comportamiento nuevo en el producto. La alternativa de borrado lógico vía
+   `Service.active` sigue disponible y sin tocar (el campo ya existe): quien
+   quiera "borrar" un servicio con comisiones configuradas lo desactiva en vez
+   de borrarlo, y `Restrict` es justamente lo que fuerza esa elección en vez de
+   dejar que se pierda información. Probado borrando un servicio con una fila
+   de `CommissionRate`: falla con violación de FK; el servicio sigue existiendo.
+
+4. **CHECK de comisión congelada todo-o-nada.** Agregado
+   `citas_comision_congelada_check`: `commissionPercent`, `commissionAmount` y
+   `commissionAt` son los tres `NULL` o los tres `NOT NULL`. Probado: setear
+   sólo uno de los tres falla; setear los tres juntos (incluido
+   `commissionPercent = 0`, para confirmar que sigue siendo distinguible de
+   `NULL`) funciona.
+
+5. **Índice de liquidación.** `Appointment` suma
+   `@@index([businessId, memberId, startTime])` para la consulta que va a hacer
+   la futura liquidación. El índice de `CommissionChange` pasa a
+   `@@index([businessId, memberId, createdAt])` (antes empezaba por `memberId`).
+
+6. **`commissionAmount` pasa a `Decimal(12, 2)`** (pedido explícito del dueño
+   del producto, aprobado durante esta misma ronda). Es dinero que se suma sobre
+   muchas citas en cada liquidación; `Float` acumula error de redondeo en cada
+   suma. Se decide ahora porque la tabla tenía y tiene cero filas -- esa ventana
+   no se repite, a diferencia de `Appointment.price`/`Service.price`, que **no
+   se tocan** (tienen datos en producción y 43 usos en el código; ver `F-015`,
+   ya en `backlog/`). `12` dígitos totales / `2` decimales: 2 decimales es la
+   escala universal de moneda, y 12 dígitos da margen amplio para el monto de
+   una sola cita en cualquier moneda sin ser un tamaño arbitrario (Postgres sólo
+   ocupa espacio por los dígitos que el valor realmente tiene).
+
+   `commissionPercent` (acá y en `BusinessMember`/`CommissionRate`) **se queda
+   en `Float`**, decisión explícita y no un olvido: un porcentaje no se suma
+   repetidamente como sí se suma `commissionAmount` en una liquidación, así que
+   no hay superficie de acumulación de error; el error de representación de un
+   `Float` de doble precisión (~1e-15) es irrelevante para cualquier precisión
+   de porcentaje que el producto vaya a pedir. Pasarlo a `Decimal` tampoco
+   resolvería la mezcla de tipos en el cálculo futuro, porque `price` sigue
+   siendo `Float` de todos modos (ver "Fuera de alcance detectado").
+
+Comentarios del esquema que apuntaban a `F-004` (interfaz) y `F-005` (cálculo)
+corregidos: ambos IDs ya existen y son otra cosa (invitaciones y equipo). Se
+reemplazó por una referencia genérica a "futura feature, todavía sin ficha", en
+`schema.prisma` y en el "Alcance" de esta misma ficha.
+
+Corrida completa de verificación (obligatoria por tratarse de una migración
+editada, no nueva): base local borrada y recreada, las 4 migraciones aplicadas
+en orden con `psql` sobre una base vacía, seed corrido de nuevo. Ver "Bitácora".
 
 ## Bitácora
 
@@ -147,3 +290,42 @@ Usá `psql` contra localhost:5433, nunca Prisma contra la URL del `.env`.
 - No se tocó `.env`: todos los comandos locales se corrieron con
   `DATABASE_URL`/`DIRECT_URL` inline apuntando a
   `postgresql://postgres@localhost:5433/eli?schema=public`.
+
+### Ronda de revisión (post `dca02e1`)
+
+- `prisma/schema.prisma`: FK compuesta `(memberId, businessId)` /
+  `(serviceId, businessId)` en `CommissionRate` (con `@@unique([id,
+  businessId])` nuevo en `BusinessMember` y `Service`); `CommissionRate.service`
+  pasa a `onDelete: Restrict`; `CommissionChange` reestructurado (`memberId` y
+  `changedById` nullable + `SetNull`, `memberName`/`changedByName`/
+  `changedByEmail` de snapshot, `scope` + `serviceName` nuevos, índice
+  `@@index([businessId, memberId, createdAt])`); `Appointment.commissionAmount`
+  pasa de `Float?` a `Decimal? @db.Decimal(12, 2)`; nuevo
+  `@@index([businessId, memberId, startTime])` en `Appointment`; comentarios
+  `F-004`/`F-005` corregidos.
+- **Se editó la migración existente**
+  `prisma/migrations/20260907190000_add_commissions/migration.sql` (no se creó
+  una segunda): aún no estaba aplicada en Neon. Regenerada con `prisma migrate
+  diff` contra la base local llevada al estado previo a esta migración
+  (migraciones 1-3 aplicadas), más los `CHECK` a mano
+  (`citas_comision_congelada_check`, `cambios_comision_scope_check`, y los de
+  rango 0-100 preexistentes).
+- **Verificación desde base vacía:** `DROP DATABASE`/`CREATE DATABASE` en el
+  Postgres local (puerto 5433), las 4 migraciones aplicadas en orden con `psql`
+  sin errores, `npx prisma generate`, seed (`SEED_CONFIRMO=si npm run
+  prisma:seed`) en verde.
+- Probado a mano contra la base local (detalle completo en "Decisiones
+  tomadas"): insert de `CommissionRate` con tenant cruzado rechazado por la FK
+  compuesta; cascada profesional→default→sin-excepción funcionando, con 0%
+  distinguible de `NULL`; `DELETE` de un servicio con `CommissionRate`
+  configurada rechazado (`Restrict`); borrar el profesional auditado y borrar
+  el usuario que hizo un cambio dejan la fila de `CommissionChange` viva con
+  `NULL` + snapshot legible; `scope` inválido rechazado por `CHECK`; el `CHECK`
+  de comisión congelada rechaza combinaciones parciales y acepta
+  `commissionPercent = 0` junto con los otros dos (0% real sigue distinguible
+  de "sin configurar" tras el cambio a `Decimal`).
+- Base local vuelta a recrear desde cero una segunda vez (mismo procedimiento)
+  para dejarla sin los datos de prueba manual antes de correr la suite.
+- `npx prisma validate`, `npm run lint`, `npx tsc --noEmit`, `npx vitest run`
+  (178 tests) y `npm run build`: todos en verde contra el estado final.
+- No se tocó Neon en ningún momento de esta ronda.
