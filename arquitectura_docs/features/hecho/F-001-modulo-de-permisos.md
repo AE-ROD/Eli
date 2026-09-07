@@ -1,7 +1,7 @@
 ---
 id: F-001
 titulo: Módulo central de permisos
-estado: en-revision
+estado: hecho
 prioridad: alta
 areas: [backend]
 rama: v1

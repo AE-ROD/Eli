@@ -1,7 +1,7 @@
 ---
 id: F-006
 titulo: El profesional ve sólo lo suyo
-estado: en-revision
+estado: hecho
 prioridad: alta
 areas: [backend]
 rama: v1

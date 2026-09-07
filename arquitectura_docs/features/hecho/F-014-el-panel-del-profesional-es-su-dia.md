@@ -1,7 +1,7 @@
 ---
 id: F-014
 titulo: El panel del profesional es su día
-estado: en-revision
+estado: hecho
 prioridad: media
 areas: [backend, frontend]
 rama: v1

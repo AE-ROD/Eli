@@ -1,7 +1,7 @@
 ---
 id: F-004
 titulo: Cerrar la toma de cuenta por invitación
-estado: en-revision
+estado: hecho
 prioridad: crítica
 areas: [backend]
 rama: v1

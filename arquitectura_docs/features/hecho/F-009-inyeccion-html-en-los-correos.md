@@ -1,7 +1,7 @@
 ---
 id: F-009
 titulo: Inyección de HTML en los correos
-estado: en-progreso
+estado: hecho
 prioridad: alta
 areas: [backend]
 rama: v1

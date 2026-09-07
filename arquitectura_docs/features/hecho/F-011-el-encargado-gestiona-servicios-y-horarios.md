@@ -1,7 +1,7 @@
 ---
 id: F-011
 titulo: El encargado gestiona servicios y horarios
-estado: en-revision
+estado: hecho
 prioridad: alta
 areas: [backend, frontend]
 rama: v1

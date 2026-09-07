@@ -1,7 +1,7 @@
 ---
 id: F-013
 titulo: Inyección de encabezados en el asunto del correo
-estado: en-revision
+estado: hecho
 prioridad: media
 areas: [backend]
 rama: v1

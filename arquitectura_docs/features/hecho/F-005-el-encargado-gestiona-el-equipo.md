@@ -1,7 +1,7 @@
 ---
 id: F-005
 titulo: El encargado gestiona el equipo
-estado: en-revision
+estado: hecho
 prioridad: alta
 areas: [backend, frontend]
 rama: v1

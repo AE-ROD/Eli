@@ -1,7 +1,7 @@
 ---
 id: F-007
 titulo: Credibilidad — fuera los datos inventados
-estado: en-revision
+estado: hecho
 prioridad: alta
 areas: [frontend]
 rama: v1

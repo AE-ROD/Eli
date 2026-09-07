@@ -1,7 +1,7 @@
 ---
 id: F-008
 titulo: Cada número dice de dónde salió
-estado: en-revision
+estado: hecho
 prioridad: alta
 areas: [backend, frontend]
 rama: v1

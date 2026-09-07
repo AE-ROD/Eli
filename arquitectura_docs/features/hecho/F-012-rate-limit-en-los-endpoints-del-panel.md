@@ -1,7 +1,7 @@
 ---
 id: F-012
 titulo: Rate limit en los endpoints del panel
-estado: en-revision
+estado: hecho
 prioridad: media
 areas: [backend]
 rama: v1

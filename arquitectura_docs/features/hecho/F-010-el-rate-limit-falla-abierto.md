@@ -1,7 +1,7 @@
 ---
 id: F-010
 titulo: El rate limit falla abierto
-estado: en-progreso
+estado: hecho
 prioridad: alta
 areas: [backend]
 rama: v1
