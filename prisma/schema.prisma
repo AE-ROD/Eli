@@ -9,16 +9,17 @@ datasource db {
 }
 
 model User {
-  id            String   @id @default(cuid())
-  name          String
-  email         String   @unique
-  password      String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  business    Business?
-  memberships BusinessMember[]
-  resetTokens PasswordResetToken[]
+  business          Business?
+  memberships       BusinessMember[]
+  resetTokens       PasswordResetToken[]
+  commissionChanges CommissionChange[] // cambios de porcentaje que este usuario (siempre dueño) aplicó
 
   @@map("usuarios")
 }
@@ -41,6 +42,8 @@ model Business {
   conversations     Conversation[]
   members           BusinessMember[]
   invitations       WorkerInvitation[]
+  commissionRates   CommissionRate[]
+  commissionChanges CommissionChange[]
 
   @@map("negocios")
 }
@@ -54,8 +57,15 @@ model BusinessMember {
   role       String   @default("worker") // "admin" | "worker"
   createdAt  DateTime @default(now())
 
-  workSchedules WorkSchedule[]
-  appointments  Appointment[]
+  // Porcentaje por defecto de comisión (0-100). Sin valor por defecto a propósito:
+  // `null` es "todavía no configurado", no "0%". Segundo escalón de la cascada,
+  // detrás de CommissionRate y delante de "pendiente de configurar".
+  commissionPercent Float?
+
+  workSchedules     WorkSchedule[]
+  appointments      Appointment[]
+  commissionRates   CommissionRate[]
+  commissionChanges CommissionChange[]
 
   @@unique([businessId, userId])
   @@index([businessId])
@@ -93,18 +103,18 @@ model PasswordResetToken {
 }
 
 model Patient {
-  id        String   @id @default(cuid())
-  name      String
-  lastName  String?
-  cedula    String?
-  email     String?
-  phone     String?
-  tags      String[]
-  notes     String?
+  id         String   @id @default(cuid())
+  name       String
+  lastName   String?
+  cedula     String?
+  email      String?
+  phone      String?
+  tags       String[]
+  notes      String?
   businessId String
-  business  Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   appointments Appointment[]
 
@@ -119,13 +129,15 @@ model Service {
   business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   name        String
   description String?
-  duration    Int      // en minutos: 15, 30, 45, 60, 90, 120...
+  duration    Int // en minutos: 15, 30, 45, 60, 90, 120...
   price       Float?
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  appointments Appointment[]
+  appointments      Appointment[]
+  commissionRates   CommissionRate[]
+  commissionChanges CommissionChange[]
 
   @@index([businessId])
   @@map("servicios")
@@ -137,9 +149,9 @@ model WorkSchedule {
   business   Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
   memberId   String?
   member     BusinessMember? @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  dayOfWeek  Int             // 0=Domingo, 1=Lunes, 2=Martes, 3=Miércoles, 4=Jueves, 5=Viernes, 6=Sábado
-  startTime  String          // "09:00"
-  endTime    String          // "18:00"
+  dayOfWeek  Int // 0=Domingo, 1=Lunes, 2=Martes, 3=Miércoles, 4=Jueves, 5=Viernes, 6=Sábado
+  startTime  String // "09:00"
+  endTime    String // "18:00"
   active     Boolean         @default(true)
 
   @@index([businessId])
@@ -148,24 +160,33 @@ model WorkSchedule {
 }
 
 model Appointment {
-  id               String   @id @default(cuid())
-  serviceId        String?
-  service          Service? @relation(fields: [serviceId], references: [id])
-  title            String   // nombre del servicio como texto libre o copia del servicio
-  startTime        DateTime
-  endTime          DateTime
-  status           String   @default("pendiente") // pendiente, confirmada, en-progreso, completada, cancelada
-  notes            String?  // notas internas del profesional
-  clientComments   String?  // comentarios del cliente al reservar
-  price            Float?
-  patientId        String?
-  patient          Patient?        @relation(fields: [patientId], references: [id])
-  memberId         String?
-  member           BusinessMember? @relation(fields: [memberId], references: [id])
-  businessId       String
-  business         Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  id             String          @id @default(cuid())
+  serviceId      String?
+  service        Service?        @relation(fields: [serviceId], references: [id])
+  title          String // nombre del servicio como texto libre o copia del servicio
+  startTime      DateTime
+  endTime        DateTime
+  status         String          @default("pendiente") // pendiente, confirmada, en-progreso, completada, cancelada
+  notes          String? // notas internas del profesional
+  clientComments String? // comentarios del cliente al reservar
+  price          Float?
+  patientId      String?
+  patient        Patient?        @relation(fields: [patientId], references: [id])
+  memberId       String?
+  member         BusinessMember? @relation(fields: [memberId], references: [id])
+  businessId     String
+  business       Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  // Comisión congelada al completar la cita (F-005 decide cuándo y cómo se
+  // llenan). Se escriben una sola vez y no se recalculan: cambiar un porcentaje
+  // después no puede alterar una cita ya liquidada. Opcionales sin valor por
+  // defecto a propósito, por la misma razón que en BusinessMember/CommissionRate:
+  // `null` tiene que poder significar "todavía no tiene comisión resuelta", nunca "0".
+  commissionPercent Float? // porcentaje ya resuelto por la cascada al momento del cálculo
+  commissionAmount  Float? // monto resultante, sobre el precio total sin descontar insumos
+  commissionAt      DateTime? // cuándo se calculó y congeló
 
   @@index([businessId])
   @@index([businessId, startTime])
@@ -174,14 +195,72 @@ model Appointment {
   @@map("citas")
 }
 
+/**
+ * Excepción de comisión para un profesional en un servicio puntual. Primer
+ * escalón de la cascada (regla 1 de docs/PRODUCTO.md §3.1): si existe una fila
+ * para (memberId, serviceId), gana sobre `BusinessMember.commissionPercent`.
+ * Modelo "con herencia": no hace falta una fila por cada combinación
+ * profesional × servicio, sólo donde hay una excepción real.
+ */
+model CommissionRate {
+  id         String         @id @default(cuid())
+  businessId String
+  business   Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  memberId   String
+  member     BusinessMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  serviceId  String
+  service    Service        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  percent    Float // 0-100. Nunca tiene default: la fila sólo existe si alguien la configuró.
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  // Sin esto, dos porcentajes para la misma combinación hacen la cascada no
+  // determinista. También es la clave que usa la resolución en cascada
+  // (findUnique por memberId_serviceId), así que de paso queda indexada.
+  @@unique([memberId, serviceId])
+  @@index([businessId])
+  @@map("porcentajes_comision")
+}
+
+/**
+ * Auditoría de cambios de porcentaje (docs/PRODUCTO.md §3.5): quién, cuándo, de
+ * qué valor a qué valor. `serviceId` nulo indica que el cambio fue al
+ * porcentaje por defecto del profesional; con `serviceId`, fue a una excepción
+ * puntual. Sólo el dueño puede generar estas filas (`lib/permisos.ts`,
+ * `puedeEditarComisiones`), por eso quien cambia es un `User` y no un
+ * `BusinessMember`: el dueño no necesariamente tiene fila de miembro.
+ */
+model CommissionChange {
+  id          String         @id @default(cuid())
+  businessId  String
+  business    Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  memberId    String
+  member      BusinessMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  serviceId   String?
+  service     Service?       @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  changedById String
+  changedBy   User           @relation(fields: [changedById], references: [id], onDelete: Cascade)
+
+  // `null` en cualquiera de los dos es "no estaba configurado" (no es lo mismo
+  // que 0), igual que en los campos que audita.
+  previousPercent Float?
+  newPercent      Float?
+
+  createdAt DateTime @default(now())
+
+  @@index([businessId])
+  @@index([memberId, createdAt])
+  @@map("cambios_comision")
+}
+
 model Conversation {
-  id           String    @id @default(cuid())
+  id           String   @id @default(cuid())
   patientName  String
   patientPhone String?
   businessId   String
-  business     Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   messages Message[]
 
