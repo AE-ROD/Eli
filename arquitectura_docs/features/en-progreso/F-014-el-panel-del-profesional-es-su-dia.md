@@ -89,3 +89,45 @@ tiempo con los espacios vacíos a la vista sí lo dice.
   preguntas distintas y no se resuelven con la misma pantalla.
 
 ## Bitácora
+
+### Backend — horario de hoy en `GET /api/dashboard/stats`
+
+- **Qué se agregó**: `horarioHoy`, un array de franjas `{ startTime, endTime }`
+  ("HH:MM") con el horario **activo** de hoy del `WorkSchedule` del actor
+  (`memberId` propio, `dayOfWeek` de hoy). Se calcula con `Promise.all` junto al
+  resto de las consultas del endpoint.
+- **Sólo para `worker`**: se computa (y sólo entonces se dispara la consulta a
+  `workSchedule.findMany`) cuando `actor.rol === "worker"`. Dueño y encargado no
+  reciben la clave ni generan la query — cubierto por un test que confirma
+  `workSchedule.findMany` sin llamar.
+- **Contrato "sin dato, sin clave"**: si no hay franjas (`active: true`) para el
+  `dayOfWeek` de hoy, `horarioHoy` **no viaja** en la respuesta. Ni `null`, ni
+  `[]`, ni un rango por defecto. Mismo contrato que `ingresoseMes` /
+  `tendencias.ingresos` en F-006/F-008.
+- **Decisión tomada — un solo bucket para "no trabaja hoy"**: `WorkSchedule`
+  puede tener una fila para el día de hoy con `active: false` (día marcado
+  como libre desde `/dashboard/configuracion`) o directamente no tener fila
+  para ese `dayOfWeek`. La ficha pide que el front distinga "no trabaja hoy /
+  no tiene horario cargado" de "trabaja de 9 a 18", pero **no pide distinguir
+  esos dos casos entre sí** — y no hay forma honesta de hacerlo desde el punto
+  de vista del panel: en ambos casos el profesional no tiene una franja para
+  hoy. Por eso el filtro incluye `active: true` y ambos casos colapsan en "la
+  clave no viaja". Si más adelante se necesita diferenciar "día libre
+  explícito" de "nunca configuró horario", hace falta una ficha nueva: hoy el
+  panel no tiene ningún criterio de aceptación que lo pida.
+- **No se reimplementó `resolverObjetivo()`**: este endpoint nunca acepta
+  `memberId` por querystring, así que la única rama relevante de ese resolver
+  es la de "horario propio" (`paramMemberId` ausente). La consulta acá es
+  exactamente esa rama (`memberId: actor.memberId`), documentada en un
+  comentario que remite a `app/api/configuracion/horarios/route.ts` para que
+  quede claro que no es una segunda forma de resolver lo mismo.
+- **Aislamiento**: la consulta usa siempre `actor.memberId`, nunca un id
+  recibido por request. `businessId` se sigue filtrando en todas las queries.
+- **Archivos**: `app/api/dashboard/stats/route.ts`,
+  `app/api/dashboard/stats/route.test.ts` (3 tests nuevos: horario con
+  franjas, sin franjas → sin clave, dueño no dispara la consulta ni recibe la
+  clave; los 9 casos previos siguen en verde, 12 en total).
+- **Verificación**: `npm run lint`, `npx tsc --noEmit`, `npx vitest run` (154
+  tests, todos en verde) y `npm run build` — los cuatro en verde.
+- **Fuera de alcance**: no se tocó `app/dashboard/page.tsx` ni componentes
+  (tarea de frontend), ni `prisma/schema.prisma`, ni `middleware.ts`.

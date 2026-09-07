@@ -22,6 +22,10 @@ export async function GET(_request: NextRequest) {
   }
 
   const verIngresos = puedeVerIngresosDelNegocio(actor)
+  // El horario del día es para que el profesional dibuje su línea de tiempo
+  // (F-014). Dueño y encargado administran el negocio, no su propio día: no
+  // les agregamos una clave que su vista no usa.
+  const esWorker = actor.rol === "worker"
   const businessId = actor.businessId
 
   const hoy = new Date()
@@ -35,7 +39,7 @@ export async function GET(_request: NextRequest) {
 
   const sinIngresos = { _sum: { price: null as number | null }, _count: 0 }
 
-  const [citasHoy, totalPacientes, pacientesMesAnterior, clientesNuevosMes, ingresosMes, ingresosMesAnterior] =
+  const [citasHoy, totalPacientes, pacientesMesAnterior, clientesNuevosMes, ingresosMes, ingresosMesAnterior, franjasHoy] =
     await Promise.all([
       prisma.appointment.findMany({
         // Filas, no un agregado: un worker no debe ver acá las citas de un
@@ -86,6 +90,27 @@ export async function GET(_request: NextRequest) {
             _sum: { price: true },
           })
         : Promise.resolve(sinIngresos),
+      // Horario propio de hoy, sólo para el profesional. Nunca acepta un
+      // `memberId` de querystring (a diferencia de /api/configuracion/horarios):
+      // este endpoint sólo conoce el horario del actor, jamás el de un colega.
+      // Es exactamente la rama "propio" de `resolverObjetivo()` en ese archivo,
+      // sin re-implementar otra forma de resolverlo.
+      esWorker && actor.memberId
+        ? prisma.workSchedule.findMany({
+            where: {
+              businessId,
+              memberId: actor.memberId,
+              dayOfWeek: hoy.getDay(),
+              // `active: false` es un día marcado como libre a propósito
+              // (configuracion/horarios): para esta vista es lo mismo que no
+              // tener horario cargado, así que no cuenta como franja de hoy.
+              active: true,
+            },
+            select: { startTime: true, endTime: true },
+            orderBy: { startTime: "asc" },
+            take: 10,
+          })
+        : Promise.resolve([]),
     ])
 
   const ingresosActuales = ingresosMes._sum.price ?? 0
@@ -127,6 +152,11 @@ export async function GET(_request: NextRequest) {
       ingresoseMes: ingresosActuales,
       citasFacturadasMes: ingresosMes._count,
     }),
+    // No viaja si el profesional no tiene horario activo cargado para hoy: ni
+    // un rango por defecto ni un array vacío como placeholder. El front debe
+    // poder leer "sin horario cargado hoy" a partir de la ausencia de la clave,
+    // igual que hace con `ingresoseMes` y `tendencias.ingresos`.
+    ...(esWorker && franjasHoy.length > 0 && { horarioHoy: franjasHoy }),
     tendencias,
   })
 }

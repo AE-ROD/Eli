@@ -18,6 +18,9 @@ const prismaMock = {
   patient: {
     count: vi.fn(),
   },
+  workSchedule: {
+    findMany: vi.fn(),
+  },
 }
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
@@ -45,6 +48,7 @@ describe("GET /api/dashboard/stats", () => {
     prismaMock.appointment.findFirst.mockResolvedValue(null)
     prismaMock.appointment.aggregate.mockResolvedValue({ _sum: { price: 1000 }, _count: 4 })
     prismaMock.patient.count.mockResolvedValue(0)
+    prismaMock.workSchedule.findMany.mockResolvedValue([])
   })
 
   it("un worker no recibe ingresos del negocio", async () => {
@@ -190,6 +194,58 @@ describe("GET /api/dashboard/stats", () => {
     expect(data.citasHoy).toBe(1)
     expect(data).not.toHaveProperty("proximaCita")
     expect(prismaMock.appointment.findFirst).not.toHaveBeenCalled()
+  })
+
+  it("un worker con horario activo hoy recibe horarioHoy con sus franjas", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+    prismaMock.workSchedule.findMany.mockResolvedValueOnce([
+      { startTime: "09:00", endTime: "13:00" },
+      { startTime: "14:00", endTime: "18:00" },
+    ])
+
+    const res = await GET(fakeRequest())
+    const data = await res.json()
+
+    expect(data.horarioHoy).toEqual([
+      { startTime: "09:00", endTime: "13:00" },
+      { startTime: "14:00", endTime: "18:00" },
+    ])
+
+    const llamada = prismaMock.workSchedule.findMany.mock.calls[0][0] as {
+      where: { businessId: string; memberId: string; active: boolean }
+    }
+    // Nunca el horario de otro: siempre el propio `memberId` del actor, sin
+    // aceptar ninguno por querystring.
+    expect(llamada.where.memberId).toBe("member-worker-1")
+    expect(llamada.where.businessId).toBe("negocio-1")
+    expect(llamada.where.active).toBe(true)
+  })
+
+  it("un worker sin horario cargado hoy no recibe la clave horarioHoy", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+    prismaMock.workSchedule.findMany.mockResolvedValueOnce([])
+
+    const res = await GET(fakeRequest())
+    const data = await res.json()
+
+    // Ni un rango inventado ni un array vacío como placeholder: la clave no viaja.
+    expect(data).not.toHaveProperty("horarioHoy")
+  })
+
+  it("el dueño no recibe horarioHoy ni dispara la consulta de horarios", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    const res = await GET(fakeRequest())
+    const data = await res.json()
+
+    expect(data).not.toHaveProperty("horarioHoy")
+    expect(prismaMock.workSchedule.findMany).not.toHaveBeenCalled()
   })
 
   it("sin sesión recibe 401", async () => {
