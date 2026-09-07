@@ -87,6 +87,13 @@ tiempo con los espacios vacíos a la vista sí lo dice.
 - La línea de tiempo es **para el profesional**, no para todos. El dueño con
   cinco personas necesita ver el negocio; el profesional, su día. Son dos
   preguntas distintas y no se resuelven con la misma pantalla.
+- **Frontend — reemplazo completo del tablero para `worker`**: cuando
+  `esWorker`, el panel no muestra las tarjetas de estadísticas, "Pacientes
+  recientes", "Enlace de reservas" ni el gráfico/resumen duplicado — sólo la
+  línea de tiempo. La ficha describe el problema como "dos tarjetas con
+  números y un cartel que no le sirven"; dejar esos widgets al lado de la
+  línea de tiempo hubiera sido la mitad del arreglo. Dueño y encargado siguen
+  viendo todo eso tal cual porque su rama de JSX no se tocó.
 
 ## Bitácora
 
@@ -131,3 +138,65 @@ tiempo con los espacios vacíos a la vista sí lo dice.
   tests, todos en verde) y `npm run build` — los cuatro en verde.
 - **Fuera de alcance**: no se tocó `app/dashboard/page.tsx` ni componentes
   (tarea de frontend), ni `prisma/schema.prisma`, ni `middleware.ts`.
+
+### Frontend — la línea de tiempo del profesional
+
+- **`app/dashboard/page.tsx`**: se agrega `horarioHoy?` a `StatsData` y se
+  calcula `esWorker` desde `session.user.role`. El JSX del dueño/encargado
+  queda **exactamente igual**, sólo envuelto en `{esWorker ? <VistaDiaProfesional
+  stats={stats} /> : (...todo lo que ya existía...)}` — mismo árbol, mismas
+  condiciones, sin tocar una línea de su rama. `formatHora` y
+  `duracionMinutos` (antes locales al archivo) se movieron a `lib/utils.ts`
+  porque el componente nuevo también los necesita: es la segunda vez que
+  hacía falta la misma conversión, no una abstracción especulativa.
+- **`lib/horario-dia.ts`** (nuevo, puro, sin red ni Prisma): arma los
+  segmentos cita/hueco de una franja (`segmentosDeFranja`), detecta citas que
+  no caen en ninguna franja (`citasFueraDeFranjas` — para no ocultar una cita
+  si el horario cambió después de agendarla), calcula el tiempo libre real
+  (`minutosLibresEnFranjas`, horario menos ocupado, nunca estimado) y formatea
+  duraciones/horas. `WorkSchedule` es `"HH:MM"` sin fecha: se compara en
+  minutos desde medianoche, nunca como `Date`; las citas sí son instantes ISO
+  y se leen con `Date` en hora local del navegador, igual que ya hacía
+  `formatHora`. 13 tests en `lib/horario-dia.test.ts` (franja sin citas → un
+  solo hueco completo, huecos intercalados, recorte de una cita que empieza
+  antes de la franja, cita totalmente fuera de franja, cálculo de libres con y
+  sin citas, día completo sin libre, formatos de duración y de hora).
+- **`app/dashboard/_components/lineaDeTiempoDia.tsx`** (nuevo): pinta cada
+  franja como una lista vertical con la hora a la izquierda de cada segmento;
+  una cita se muestra reutilizando `TarjetaCita` (`compacta`, el mismo
+  componente que ya usaba el tablero — nada nuevo para pintar una cita) y un
+  hueco con una trama diagonal tenue + borde punteado, a propósito distinta al
+  borde de color de una cita. Entre dos franjas (turno partido) se muestra una
+  línea muda "13:00–14:00 · fuera de tu horario": ese tiempo no es hueco
+  vendible, así que no se dibuja como tal. Las citas que no caen en ninguna
+  franja no desaparecen: se listan aparte al final ("Fuera de tu horario
+  cargado").
+- **`app/dashboard/_components/vistaDiaProfesional.tsx`** (nuevo): decide
+  entre los tres estados. Cargando (`stats === null`): mensaje neutro. Sin
+  `horarioHoy`: aviso ambar "No tenés un horario cargado para hoy" con link a
+  `/dashboard/configuracion` (no se inventa un rango 09–18) y, debajo, la
+  lista de citas que haya (o "Tampoco tenés citas agendadas" si tampoco hay,
+  para no mezclar dos vacíos en un solo mensaje). Con `horarioHoy`: título
+  "N citas hoy" o **"Tu día está libre"** cuando `citasHoy === 0` (no es un
+  error, es la lectura correcta del mismo cálculo), subtítulo con el tiempo
+  libre real (`"Tu agenda de hoy está completa"` cuando da cero) y la
+  `LineaDeTiempoDia` debajo.
+- **Ningún componente se copió**: `TarjetaCita`, `BarraSuperior` y las
+  primitivas de `components/ui/` se reutilizan tal cual. `citaParaTarjeta`
+  (endpoint → prop de `TarjetaCita`) se define una sola vez en
+  `lineaDeTiempoDia.tsx` y se reexporta para `vistaDiaProfesional.tsx`, en vez
+  de duplicarla.
+- **Dueño y encargado no tienen `horarioHoy` en la respuesta** (server ya lo
+  garantiza), así que `esWorker` es la única condición que importa: nunca ven
+  `VistaDiaProfesional`, y su árbol de JSX es el de siempre.
+- **Verificación**: `npm run lint`, `npx tsc --noEmit`, `npx vitest run` (167
+  tests, todos en verde, 13 nuevos de `horario-dia`) y `npm run build` — los
+  cuatro en verde.
+- **Archivos**: `app/dashboard/page.tsx`, `lib/utils.ts` (nuevas
+  `formatHora`/`duracionMinutos`), `lib/horario-dia.ts` (nuevo),
+  `lib/horario-dia.test.ts` (nuevo),
+  `app/dashboard/_components/lineaDeTiempoDia.tsx` (nuevo),
+  `app/dashboard/_components/vistaDiaProfesional.tsx` (nuevo).
+- **Fuera de alcance**: no se tocó `/dashboard/calendario`, no se creó ni
+  editó ninguna cita desde la línea de tiempo (sólo lectura), no se cambió
+  nada de `app/api/**` ni `middleware.ts`, no se tocó el árbol de dueño/encargado.
