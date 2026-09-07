@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { actorDeSesion, whereDeAgenda } from "@/lib/permisos"
 
 const citaUpdateSchema = z.object({
   title: z.string().min(2).optional(),
@@ -13,8 +14,8 @@ const citaUpdateSchema = z.object({
   price: z.number().positive().optional(),
 })
 
-async function verificarCita(id: string, businessId: string) {
-  return prisma.appointment.findFirst({ where: { id, businessId } })
+async function verificarCita(actor: ReturnType<typeof actorDeSesion>, id: string) {
+  return prisma.appointment.findFirst({ where: whereDeAgenda(actor, { id }) })
 }
 
 export async function GET(
@@ -22,13 +23,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.businessId) {
+  const actor = actorDeSesion(session)
+  if (!actor) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
   const { id } = await params
   const cita = await prisma.appointment.findFirst({
-    where: { id, businessId: session.user.businessId },
+    where: whereDeAgenda(actor, { id }),
     include: {
       patient: { select: { id: true, name: true, email: true, phone: true } },
     },
@@ -46,12 +48,13 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.businessId) {
+  const actor = actorDeSesion(session)
+  if (!actor) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
   const { id } = await params
-  const existente = await verificarCita(id, session.user.businessId)
+  const existente = await verificarCita(actor, id)
   if (!existente) {
     return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 })
   }
@@ -92,12 +95,13 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.businessId) {
+  const actor = actorDeSesion(session)
+  if (!actor) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
   const { id } = await params
-  const existente = await verificarCita(id, session.user.businessId)
+  const existente = await verificarCita(actor, id)
   if (!existente) {
     return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 })
   }

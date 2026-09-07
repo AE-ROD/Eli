@@ -95,12 +95,49 @@ Lo detectó el revisor en la segunda pasada de F-003.
 
 ## Fuera de alcance detectado
 
-<!-- El agente completa acá. -->
+- No se revisaron otros endpoints de detalle (`/api/pacientes/[id]`,
+  `/api/configuracion/servicios/[id]`, etc.) por si tienen el mismo patrón de
+  `findFirst({ id, businessId })` a mano. La ficha lo pide explícitamente fuera
+  de alcance; si alguno tiene el mismo problema, es una ficha nueva.
+- El cálculo de comisiones sobre `PUT /api/citas/[id]` (mencionado como
+  motivación en el "Problema") no se tocó: es de F-003.
 
 ## Decisiones tomadas
 
-<!-- El agente completa acá. -->
+- `verificarCita` pasó a recibir el `actor` (no `id, businessId`) y arma el
+  `where` con `whereDeAgenda(actor, { id })`, igual que ya hacía
+  `app/api/citas/route.ts`. Se mantiene como único punto de resolución para
+  que PUT y DELETE no puedan divergir del filtro de GET.
+- El `update`/`delete` posteriores siguen escribiendo por `where: { id }`
+  simple: el id ya vino de un `findFirst` que pasó por `whereDeAgenda`, así que
+  no hay ninguna rama entre la verificación y la escritura que pueda saltearse
+  el filtro (igual que antes, sólo que ahora la verificación es la correcta).
+- Se usó `actorDeSesion(session)` en vez de `session?.user?.businessId` en los
+  tres handlers, siguiendo el patrón ya establecido en
+  `app/api/citas/route.ts`. Esto además resuelve gratis el criterio "worker sin
+  `memberId` no llega a ninguna": `actorDeSesion` sigue exigiendo `businessId`
+  válido (401 si falta), y es `whereDeAgenda` quien niega todo cuando no hay
+  `memberId` para un `worker` — no se agregó ninguna verificación nueva de rol
+  en el endpoint.
+- No se tocaron los `select`/`include` del GET/PUT (mismos campos que antes):
+  fuera de alcance según la ficha.
+- Tests nuevos en `app/api/citas/[id]/route.test.ts`, mockeando
+  `getServerSession` y `prisma` igual que `app/api/citas/route.test.ts` (mismo
+  helper `coincide` para simular el filtrado de Prisma sin base de datos real).
 
 ## Bitácora
 
-<!-- El agente completa acá. -->
+- Reemplazados los tres handlers (GET, PUT, DELETE) de
+  `app/api/citas/[id]/route.ts` para resolver la cita con
+  `whereDeAgenda(actor, { id })` vía `actorDeSesion`, en vez de
+  `{ id, businessId }` a mano.
+- Agregado `app/api/citas/[id]/route.test.ts` con 12 tests: por cada verbo, un
+  worker no llega a la cita de un colega (404) pero sí a la propia (200); el
+  dueño llega a cualquiera del negocio; un worker sin `memberId` no llega a
+  ninguna.
+- Verificado manualmente que los 6 tests de aislamiento (2 por verbo) fallan
+  contra el código de antes del fix (revert temporal, sin commitear) —
+  confirma que el arreglo es necesario y que el test lo cubre. Salida completa
+  en el reporte de la tarea.
+- `npm run lint`, `npx tsc --noEmit`, `npx vitest run` (190 tests, 16 archivos)
+  y `npm run build` en verde tras el cambio.
