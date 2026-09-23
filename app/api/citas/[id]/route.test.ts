@@ -241,7 +241,7 @@ describe("PUT /api/citas/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
 
-    const res = await PUT(fakeRequest({ title: "x" }), params("cita-sin-profesional"))
+    const res = await PUT(fakeRequest({ title: "xx" }), params("cita-sin-profesional"))
 
     expect(res.status).toBe(404)
     expect(prismaMock.appointment.update).not.toHaveBeenCalled()
@@ -251,11 +251,11 @@ describe("PUT /api/citas/[id]", () => {
     const { PUT } = await import("./route")
 
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
-    const resDueño = await PUT(fakeRequest({ title: "x" }), params("cita-sin-profesional"))
+    const resDueño = await PUT(fakeRequest({ title: "xx" }), params("cita-sin-profesional"))
     expect(resDueño.status).toBe(200)
 
     mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
-    const resEncargado = await PUT(fakeRequest({ title: "y" }), params("cita-sin-profesional"))
+    const resEncargado = await PUT(fakeRequest({ title: "yy" }), params("cita-sin-profesional"))
     expect(resEncargado.status).toBe(200)
   })
 })
