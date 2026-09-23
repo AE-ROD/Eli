@@ -30,6 +30,8 @@ function coincide(item: Record<string, unknown>, where: Record<string, unknown>)
 const citasFake = [
   { id: "cita-mia", businessId: "negocio-1", memberId: "member-worker-1", patientId: "p-1" },
   { id: "cita-colega", businessId: "negocio-1", memberId: "member-colega", patientId: "p-2" },
+  /** Sin profesional asignado: `memberId` es opcional en el esquema, así que existen de verdad. */
+  { id: "cita-sin-profesional", businessId: "negocio-1", memberId: null, patientId: "p-3" },
 ]
 
 const prismaMock = {
@@ -70,6 +72,21 @@ const sesionProfesionalSinMember = {
     role: "worker",
     businessId: "negocio-1",
     businessName: "Mi negocio",
+  },
+}
+
+/**
+ * El encargado, a diferencia del dueño, es miembro del negocio: tiene
+ * `memberId`. Ve toda la agenda igual (por `puedeVerTodaLaAgenda`), no porque
+ * le falte el filtro por profesional.
+ */
+const sesionEncargado = {
+  user: {
+    id: "admin-1",
+    role: "admin",
+    businessId: "negocio-1",
+    businessName: "Mi negocio",
+    memberId: "member-admin-1",
   },
 }
 
@@ -118,6 +135,16 @@ describe("GET /api/citas/[id]", () => {
     expect(res.status).toBe(200)
   })
 
+  it("el encargado llega a cualquier cita del negocio", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+
+    const res = await GET(fakeRequest(), params("cita-colega"))
+
+    expect(res.status).toBe(200)
+  })
+
   it("un worker sin memberId no llega a ninguna cita (falla cerrado)", async () => {
     const { GET } = await import("./route")
 
@@ -126,6 +153,28 @@ describe("GET /api/citas/[id]", () => {
     const res = await GET(fakeRequest(), params("cita-mia"))
 
     expect(res.status).toBe(404)
+  })
+
+  it("un worker no llega a una cita sin profesional asignado: 404, no 403", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+
+    const res = await GET(fakeRequest(), params("cita-sin-profesional"))
+
+    expect(res.status).toBe(404)
+  })
+
+  it("el dueño y el encargado llegan a una cita sin profesional asignado", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const resDueño = await GET(fakeRequest(), params("cita-sin-profesional"))
+    expect(resDueño.status).toBe(200)
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    const resEncargado = await GET(fakeRequest(), params("cita-sin-profesional"))
+    expect(resEncargado.status).toBe(200)
   })
 })
 
@@ -166,6 +215,16 @@ describe("PUT /api/citas/[id]", () => {
     expect(res.status).toBe(200)
   })
 
+  it("el encargado puede editar cualquier cita del negocio", async () => {
+    const { PUT } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+
+    const res = await PUT(fakeRequest({ title: "Editada por el encargado" }), params("cita-colega"))
+
+    expect(res.status).toBe(200)
+  })
+
   it("un worker sin memberId no puede editar ninguna cita", async () => {
     const { PUT } = await import("./route")
 
@@ -175,6 +234,29 @@ describe("PUT /api/citas/[id]", () => {
 
     expect(res.status).toBe(404)
     expect(prismaMock.appointment.update).not.toHaveBeenCalled()
+  })
+
+  it("un worker no puede editar una cita sin profesional asignado: 404, no 403", async () => {
+    const { PUT } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+
+    const res = await PUT(fakeRequest({ title: "x" }), params("cita-sin-profesional"))
+
+    expect(res.status).toBe(404)
+    expect(prismaMock.appointment.update).not.toHaveBeenCalled()
+  })
+
+  it("el dueño y el encargado pueden editar una cita sin profesional asignado", async () => {
+    const { PUT } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const resDueño = await PUT(fakeRequest({ title: "x" }), params("cita-sin-profesional"))
+    expect(resDueño.status).toBe(200)
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    const resEncargado = await PUT(fakeRequest({ title: "y" }), params("cita-sin-profesional"))
+    expect(resEncargado.status).toBe(200)
   })
 })
 
@@ -213,6 +295,16 @@ describe("DELETE /api/citas/[id]", () => {
     expect(res.status).toBe(200)
   })
 
+  it("el encargado puede borrar cualquier cita del negocio", async () => {
+    const { DELETE } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+
+    const res = await DELETE(fakeRequest(), params("cita-colega"))
+
+    expect(res.status).toBe(200)
+  })
+
   it("un worker sin memberId no puede borrar ninguna cita", async () => {
     const { DELETE } = await import("./route")
 
@@ -222,5 +314,28 @@ describe("DELETE /api/citas/[id]", () => {
 
     expect(res.status).toBe(404)
     expect(prismaMock.appointment.delete).not.toHaveBeenCalled()
+  })
+
+  it("un worker no puede borrar una cita sin profesional asignado: 404, no 403", async () => {
+    const { DELETE } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+
+    const res = await DELETE(fakeRequest(), params("cita-sin-profesional"))
+
+    expect(res.status).toBe(404)
+    expect(prismaMock.appointment.delete).not.toHaveBeenCalled()
+  })
+
+  it("el dueño y el encargado pueden borrar una cita sin profesional asignado", async () => {
+    const { DELETE } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const resDueño = await DELETE(fakeRequest(), params("cita-sin-profesional"))
+    expect(resDueño.status).toBe(200)
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    const resEncargado = await DELETE(fakeRequest(), params("cita-sin-profesional"))
+    expect(resEncargado.status).toBe(200)
   })
 })
