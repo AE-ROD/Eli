@@ -101,6 +101,13 @@ Lo detectó el revisor en la segunda pasada de F-003.
   de alcance; si alguno tiene el mismo problema, es una ficha nueva.
 - El cálculo de comisiones sobre `PUT /api/citas/[id]` (mencionado como
   motivación en el "Problema") no se tocó: es de F-003.
+- **`app/dashboard/calendario/page.tsx:96` no mira `response.ok`** al hacer
+  `PUT /api/citas/[id]` para cambiar el estado de una cita. Un 404 queda
+  silencioso: la pantalla no avisa nada. Es preexistente y no lo introduce esta
+  ficha —y en la práctica el profesional no debería tener citas ajenas en su
+  lista, que ya filtra F-006— pero es el mismo patrón que hubo que arreglar en
+  la sección de servicios al cerrar F-003: la respuesta de error existe y el
+  cliente la tira. Lo encontró QA; queda para una ficha propia.
 
 ## Decisiones tomadas
 
@@ -141,3 +148,26 @@ Lo detectó el revisor en la segunda pasada de F-003.
   en el reporte de la tarea.
 - `npm run lint`, `npx tsc --noEmit`, `npx vitest run` (190 tests, 16 archivos)
   y `npm run build` en verde tras el cambio.
+
+### Recomendaciones del revisor (commit `8ba1119`)
+
+Veredicto del revisor: **aprobado**, con dos recomendaciones no bloqueantes.
+Ambas aplicadas; ninguna cambia comportamiento.
+
+- `verificarCita` pide `Actor`, no `Actor | null`. El tipo laxo
+  (`ReturnType<typeof actorDeSesion>`) era seguro —`whereDeAgenda(null)`
+  devuelve `NADA` y niega todo— pero rompía la convención que el repo ya había
+  fijado a propósito en `memberIdParaCita` (`lib/permisos.ts:78`). El costo no
+  era una fuga: era que el compilador dejaba de obligar a poner la guarda de
+  401 primero, y un handler futuro podía convertir "no hay sesión" en un 404
+  silencioso.
+- `update` y `delete` escriben por `existente.id`, no por `id` suelto. El
+  criterio de la ficha se cumplía igual, pero la garantía dependía del orden de
+  lectura: si alguien borraba la verificación, el `update` seguía compilando.
+  Ahora `existente` queda sin declarar y el build falla.
+
+- El revisor dejó anotado, **para F-003 y no para esta ficha**: el `catch` del
+  PUT (`route.ts`) se traga los errores no-Zod con un 500 sin loguear, mientras
+  que el POST de `app/api/citas/route.ts` sí hace `console.error`. Es
+  preexistente. Como el cálculo de comisiones va a colgar justo de ese `try`,
+  conviene arreglarlo ahí.
