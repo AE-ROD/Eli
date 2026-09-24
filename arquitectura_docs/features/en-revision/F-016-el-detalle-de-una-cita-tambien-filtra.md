@@ -1,7 +1,7 @@
 ---
 id: F-016
 titulo: El detalle de una cita también filtra por profesional
-estado: en-progreso
+estado: en-revision
 prioridad: alta
 areas: [backend]
 rama: f-016-detalle-de-cita
@@ -60,22 +60,22 @@ Lo detectó el revisor en la segunda pasada de F-003.
 
 ## Criterios de aceptación
 
-- [ ] GET, PUT y DELETE de `/api/citas/[id]` resuelven la cita con
+- [x] GET, PUT y DELETE de `/api/citas/[id]` resuelven la cita con
       `whereDeAgenda(actor, { id })`, no con `{ id, businessId }` a mano.
-- [ ] Un `worker` que pide la cita de un colega recibe **404**, no 403: no se le
+- [x] Un `worker` que pide la cita de un colega recibe **404**, no 403: no se le
       confirma que la cita existe (regla 1 de arquitectura).
-- [ ] Un `worker` sigue pudiendo leer, editar y borrar **las suyas**, igual que
+- [x] Un `worker` sigue pudiendo leer, editar y borrar **las suyas**, igual que
       hoy. El dueño y el encargado siguen viendo todas.
-- [ ] Un `worker` sin `memberId` no llega a ninguna (el filtro falla cerrado, ya
+- [x] Un `worker` sin `memberId` no llega a ninguna (el filtro falla cerrado, ya
       lo garantiza `whereDeAgenda`; el test lo confirma acá).
-- [ ] El `update` y el `delete` no pueden ejecutarse sobre un id que la
+- [x] El `update` y el `delete` no pueden ejecutarse sobre un id que la
       verificación no devolvió. Si se resuelve con `findFirst` y después se
       escribe por `where: { id }`, entre una cosa y la otra no puede haber
       ninguna rama que se saltee la verificación.
-- [ ] Hay un test por verbo, y **cada uno falla contra el código de hoy**. Un
+- [x] Hay un test por verbo, y **cada uno falla contra el código de hoy**. Un
       test de aislamiento que pasa antes del arreglo no está probando el
       aislamiento.
-- [ ] `npm run lint`, `npx tsc --noEmit`, `npm test` y `npm run build` en verde.
+- [x] `npm run lint`, `npx tsc --noEmit`, `npm test` y `npm run build` en verde.
 
 ## Contexto técnico
 
@@ -166,8 +166,50 @@ Ambas aplicadas; ninguna cambia comportamiento.
   lectura: si alguien borraba la verificación, el `update` seguía compilando.
   Ahora `existente` queda sin declarar y el build falla.
 
+  **Corrección, de la segunda pasada de QA.** Esa frase, como estaba escrita
+  acá, prometía más de lo que cumple. El build falla si alguien borra **el
+  bloque entero** (`const existente = ...` y su `if`). No falla si alguien
+  vuelve a poner `id` en lugar de `existente.id`: QA lo probó, compila y los 21
+  tests siguen en verde, porque en todos los fixtures `id === existente.id` por
+  construcción. No es una vulnerabilidad —hoy no hay ninguna rama donde los dos
+  valores difieran— pero es una garantía sobredimensionada, que es exactamente
+  el tipo de frase que hace que nadie vuelva a mirar. Es el mismo error que
+  hubo que corregir en F-003 con el `Restrict`, dos fichas seguidas. El alcance
+  real: protege contra borrar la verificación, no contra sustituirla.
+
 - El revisor dejó anotado, **para F-003 y no para esta ficha**: el `catch` del
   PUT (`route.ts`) se traga los errores no-Zod con un 500 sin loguear, mientras
   que el POST de `app/api/citas/route.ts` sí hace `console.error`. Es
   preexistente. Como el cálculo de comisiones va a colgar justo de ese `try`,
   conviene arreglarlo ahí.
+
+### Cierre: segunda pasada de QA
+
+Veredicto: **aprobada**. El bloqueante (encargado sin cobertura) y los dos
+mayores quedaron cerrados; QA verificó cada uno revirtiendo `route.ts` al
+código anterior, no leyendo la bitácora.
+
+Un matiz que QA caracterizó bien y que conviene no perder: de los 9 tests
+nuevos, los **6 de aislamiento** (worker denegado en la cita de un colega y en
+la cita sin profesional) fallan contra el código vulnerable; los **3 de
+dueño/encargado acceden** pasan en los dos lados. Es correcto que sea así: el
+código vulnerable dejaba pasar a cualquier rol, así que "el encargado entra"
+nunca fue un test de aislamiento. Es cobertura de rol, y vale como tal — pero
+no hay que contarlo como prueba del arreglo.
+
+**Hallazgo mayor, no bloqueante, que se va a ficha propia (F-018):** el helper
+`coincide()` de los tests degrada en silencio. QA fue más lejos que la
+verificación del orquestador: con el filtro del worker mutado a `OR`, no sólo
+falla el test equivocado — los 3 tests nuevos de "worker no llega a la cita sin
+profesional" **siguen en verde**, porque `coincide` devuelve `false` para todo y
+entonces todo pedido de un worker termina en 404, correcto o no. O sea que da
+confianza falsa justo en la cobertura que se acababa de agregar para cerrar el
+bloqueante.
+
+Lo que salva hoy a la suite no es esta ficha: es `lib/permisos.test.ts:102-107`,
+que compara la forma cruda del filtro con `toEqual` sin pasar por `coincide`, y
+que con esa mutación falla apuntando al lugar correcto. CI se pone rojo igual,
+pero por una casualidad de arquitectura de tests, no porque los tests de este
+endpoint sean confiables solos. Se corrige en F-018, no acá: `coincide` es
+compartido con `app/api/citas/route.test.ts` y viene de F-001/F-002, así que
+tocarlo desde esta ficha sería ampliar alcance.
