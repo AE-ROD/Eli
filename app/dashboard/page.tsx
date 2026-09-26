@@ -67,7 +67,7 @@ const itemVariantes = {
 /**
  * De qué está hecha cada cifra. Devuelven `undefined` cuando no hay nada
  * verdadero que decir: una línea vaga es la misma mentira que un `+0%`, con
- * más palabras (`arquitectura_docs/reglas/02-codigo.md`).
+ * más palabras.
  */
 function procedenciaDeCitas(stats: StatsData): string | undefined {
   if (stats.citasHoy > 0) return undefined

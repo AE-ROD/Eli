@@ -4,20 +4,20 @@
 > El original asume modelo de agencia (`core/` vs `clientes/<slug>/`); Eli es un
 > solo producto con muchos negocios. La regla 1 está traducida en consecuencia.
 
-Punto de entrada del proyecto. Lee solo lo que la tarea necesite; no cargues
-todas las reglas por defecto.
+Punto de entrada del proyecto. Este archivo es el contrato completo: las reglas
+de trabajo, las fichas de feature, los agentes y los comandos vivían en
+`arquitectura_docs/`, que se borró a pedido del dueño del producto. Lo que
+queda del proceso es lo que está acá.
 
 | Si vas a... | Lee primero |
 |---|---|
-| Decidir dónde va un archivo | `arquitectura_docs/reglas/01-arquitectura.md` |
-| Escribir o refactorizar código | `arquitectura_docs/reglas/02-codigo.md` |
-| Ramas, commits, PRs | `arquitectura_docs/reglas/03-git-y-flujo.md` |
-| Escribir o correr tests | `arquitectura_docs/reglas/04-testing.md` |
-| Tocar auth, datos, `.env`, endpoints | `arquitectura_docs/seguridad/` |
-| Saber el stack y los comandos | `arquitectura_docs/reglas/06-stack.md` |
-| Tomar o crear una tarea | `arquitectura_docs/features/README.md` |
-| Entender el negocio y el producto | `arquitectura_docs/contexto/cliente.md` y `docs/PRODUCTO.md` |
-| Saber por qué algo está así | `arquitectura_docs/decisiones/` |
+| Entender el negocio y el producto | `docs/PRODUCTO.md` |
+| Saber el stack y cómo correr el proyecto | `README.md` |
+| Tocar permisos o aislamiento entre negocios | `lib/permisos.ts` (y su test) |
+
+Si hace falta recuperar las reglas, las fichas o los agentes, están en el
+historial: `git show e28b487 --stat` los lista, y
+`git checkout e28b487 -- arquitectura_docs .claude` los trae de vuelta enteros.
 
 ---
 
@@ -26,10 +26,11 @@ todas las reglas por defecto.
 1. **Aislamiento entre negocios.** Toda consulta a datos filtra por el
    `businessId` de la sesión, y los endpoints de detalle verifican pertenencia
    antes de leer o escribir (404, nunca 403). Los permisos se preguntan a
-   `lib/permisos.ts` y fallan cerrados. Detalle en `reglas/01-arquitectura.md`.
+   `lib/permisos.ts` y fallan cerrados.
 
-2. **Toda tarea nace de una feature.** No se escribe código sin una ficha en
-   `arquitectura_docs/features/en-progreso/`.
+2. **Toda tarea nace de una feature.** Ya no hay carpeta de fichas: el alcance
+   se acuerda en el chat antes de escribir código, y sigue valiendo que no se
+   empieza sin saber qué entra y qué no.
 
 3. **No amplíes el alcance.** Haces lo que dice la ficha y nada más. Lo que
    detectes de más va a "Fuera de alcance detectado"; no lo implementas.

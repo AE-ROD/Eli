@@ -73,8 +73,8 @@ rol, que es la forma corta de ver qué cambia con cada uno.
 
 ## Cómo se trabaja acá
 
-Lee `CLAUDE.md`: es el contrato de trabajo. En resumen, toda tarea nace de una
-ficha en `arquitectura_docs/features/`, y los permisos se preguntan siempre a
+Lee `CLAUDE.md`: es el contrato de trabajo. En resumen, el alcance de cada
+tarea se acuerda antes de escribir código, y los permisos se preguntan siempre a
 `lib/permisos.ts`, nunca comparando roles a mano.
 
 ```
@@ -82,6 +82,5 @@ app/                 rutas y endpoints (App Router)
 components/          UI compartida
 lib/                 permisos, auth, prisma, correo, rate limit, validaciones
 prisma/              esquema y migraciones
-arquitectura_docs/   reglas de trabajo y fichas de feature
 docs/                producto y requerimientos
 ```

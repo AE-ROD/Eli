@@ -35,7 +35,7 @@ const limitadorAuth = crearLimitador("auth", 5, "10 m")
 const limitadorReserva = crearLimitador("reserva", 20, "1 h")
 // Panel autenticado, lectura (GET): un calendario abierto dispara varias
 // consultas por minuto sin que sea abuso — el límite es alto a propósito,
-// bien por encima del uso normal (arquitectura_docs/seguridad/03-rate-limiting.md).
+// bien por encima del uso normal.
 const limitadorPanelLectura = crearLimitador("panel-lectura", 200, "1 m")
 // Panel autenticado, escritura (POST/PUT/PATCH/DELETE): crear o editar una
 // fila es más caro que leerla, así que el tope es menor que el de lectura,

@@ -3,7 +3,7 @@ import type { Session } from "next-auth"
 
 /**
  * Quién puede hacer qué. Única fuente de verdad: ningún endpoint compara roles
- * por su cuenta. Ver arquitectura_docs/reglas/01-arquitectura.md.
+ * por su cuenta.
  *
  * Jerarquía: owner (dueño) > admin (encargado) > worker (profesional).
  * El encargado gestiona la operación; el dinero es sólo del dueño.

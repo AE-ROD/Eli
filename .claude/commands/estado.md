@@ -1,1 +1,0 @@
-../../arquitectura_docs/comandos/estado.md

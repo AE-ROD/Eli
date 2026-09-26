@@ -1,1 +1,0 @@
-../../arquitectura_docs/agentes/frontend.md
