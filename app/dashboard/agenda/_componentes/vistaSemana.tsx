@@ -1,8 +1,8 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { diasSemana } from "./controlesCalendario"
-import type { CitaAPI } from "./panelDetalleCita"
+import { diasSemana } from "./controlesDeAgenda"
+import { nombreDeCliente, type Cita } from "../_datos"
 
 const HORA_INICIO = 8
 const HORA_FIN = 20
@@ -24,13 +24,13 @@ function esHoy(fecha: Date) {
   return fecha.toDateString() === new Date().toDateString()
 }
 
-interface VistaCalendarioSemanaProps {
+interface VistaSemanaProps {
   dias: Date[]
-  citasAPI: CitaAPI[]
-  onSeleccionar: (cita: CitaAPI) => void
+  citas: Cita[]
+  onSeleccionar: (cita: Cita) => void
 }
 
-export function VistaCalendarioSemana({ dias, citasAPI, onSeleccionar }: VistaCalendarioSemanaProps) {
+export function VistaSemana({ dias, citas, onSeleccionar }: VistaSemanaProps) {
   return (
     <div className="overflow-auto max-h-[calc(100vh-280px)]">
       {/* Cabecera con días */}
@@ -72,7 +72,7 @@ export function VistaCalendarioSemana({ dias, citasAPI, onSeleccionar }: VistaCa
 
         {/* Columnas por día */}
         {dias.map((dia, diaIdx) => {
-          const citasDelDia = citasAPI.filter((c) => {
+          const citasDelDia = citas.filter((c) => {
             const f = new Date(c.startTime)
             return f.toDateString() === dia.toDateString()
           })
@@ -114,7 +114,7 @@ export function VistaCalendarioSemana({ dias, citasAPI, onSeleccionar }: VistaCa
                     whileHover={{ scale: 1.02, zIndex: 10 }}
                     onClick={() => onSeleccionar(cita)}
                   >
-                    <p className="text-xs font-medium truncate">{cita.patient.name}</p>
+                    <p className="text-xs font-medium truncate">{nombreDeCliente(cita)}</p>
                     {height > 32 && (
                       <p className="text-xs opacity-70 truncate">{cita.title}</p>
                     )}

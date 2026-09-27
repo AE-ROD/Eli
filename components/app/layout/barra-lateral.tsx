@@ -24,7 +24,7 @@ import { usePrecios } from "@/components/app/modales/provider-precios"
 
 const itemsNavegacion = [
   { id: "dashboard", nombre: "Dashboard", icono: LayoutDashboard, ruta: "/dashboard" },
-  { id: "calendario", nombre: "Calendario", icono: CalendarDays, ruta: "/dashboard/calendario" },
+  { id: "agenda", nombre: "Agenda", icono: CalendarDays, ruta: "/dashboard/agenda" },
   { id: "pacientes", nombre: "Pacientes", icono: Users, ruta: "/dashboard/pacientes" },
   { id: "chats", nombre: "Chats", icono: MessageCircle, ruta: "/dashboard/chats" },
 ]

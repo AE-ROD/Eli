@@ -4,7 +4,7 @@ import { motion } from "framer-motion"
 import { AvatarUsuario } from "@/components/app/comunes/avatar-usuario"
 import { Clock, MapPin, MoreVertical } from "lucide-react"
 
-export interface Cita {
+export interface CitaEnTarjeta {
   id: string
   pacienteNombre: string
   pacienteImagen?: string
@@ -17,7 +17,7 @@ export interface Cita {
 }
 
 interface TarjetaCitaProps {
-  cita: Cita
+  cita: CitaEnTarjeta
   compacta?: boolean
   onClick?: () => void
 }

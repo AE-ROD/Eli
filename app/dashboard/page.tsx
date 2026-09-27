@@ -235,10 +235,10 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <Link
-                    href="/dashboard/calendario"
+                    href="/dashboard/agenda"
                     className="flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
                   >
-                    Ver calendario
+                    Ver agenda
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                 </div>

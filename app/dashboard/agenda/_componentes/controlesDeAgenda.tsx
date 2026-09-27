@@ -2,35 +2,35 @@
 
 import { ChevronLeft, ChevronRight, Calendar, List, Grid3X3 } from "lucide-react"
 
-export type VistaCalendario = "dia" | "semana" | "mes"
+import type { UnidadDeTiempo } from "@/nucleo/fechas"
 
 const diasSemana = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"]
 const meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 
-interface ControlesCalendarioProps {
+interface ControlesDeAgendaProps {
   fechaActual: Date
-  vista: VistaCalendario
+  vista: UnidadDeTiempo
   onAnterior: () => void
   onSiguiente: () => void
   onHoy: () => void
-  onVista: (v: VistaCalendario) => void
+  onVista: (v: UnidadDeTiempo) => void
 }
 
-function formatoFecha(fecha: Date, vista: VistaCalendario): string {
+function formatoFecha(fecha: Date, vista: UnidadDeTiempo): string {
   if (vista === "dia") {
     return fecha.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
   }
   return `${meses[fecha.getMonth()]} ${fecha.getFullYear()}`
 }
 
-export function ControlesCalendario({
+export function ControlesDeAgenda({
   fechaActual,
   vista,
   onAnterior,
   onSiguiente,
   onHoy,
   onVista,
-}: ControlesCalendarioProps) {
+}: ControlesDeAgendaProps) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
       <div className="flex items-center gap-3">

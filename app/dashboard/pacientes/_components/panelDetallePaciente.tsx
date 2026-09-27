@@ -3,7 +3,7 @@
 import { motion } from "framer-motion"
 import { AvatarUsuario } from "@/components/app/comunes/avatar-usuario"
 import { BotonPrimario } from "@/components/app/formularios/boton-primario"
-import { TarjetaCita, type Cita } from "@/components/app/tarjetas/tarjeta-cita"
+import { TarjetaCita, type CitaEnTarjeta } from "@/components/app/tarjetas/tarjeta-cita"
 import { X, Mail, Phone, Calendar, Clock, FileText, Tag } from "lucide-react"
 import type { Paciente } from "@/components/app/tarjetas/tarjeta-paciente"
 
@@ -46,10 +46,10 @@ function duracionMin(start: string, end: string) {
   return Math.max(1, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000))
 }
 
-function mapearCitaParaTarjeta(cita: CitaPacienteAPI, nombrePaciente: string): Cita {
+function mapearCitaParaTarjeta(cita: CitaPacienteAPI, nombrePaciente: string): CitaEnTarjeta {
   const estadosValidos = ["pendiente", "confirmada", "en-progreso", "completada", "cancelada"] as const
   const estado = estadosValidos.includes(cita.status as (typeof estadosValidos)[number])
-    ? (cita.status as Cita["estado"])
+    ? (cita.status as CitaEnTarjeta["estado"])
     : "pendiente"
   return {
     id: cita.id,

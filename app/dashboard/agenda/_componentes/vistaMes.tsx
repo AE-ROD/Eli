@@ -1,8 +1,8 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { diasSemana } from "./controlesCalendario"
-import type { CitaAPI } from "./panelDetalleCita"
+import { diasSemana } from "./controlesDeAgenda"
+import type { Cita } from "../_datos"
 
 const coloresPunto: Record<string, string> = {
   pendiente: "bg-amber-400",
@@ -16,13 +16,13 @@ function esHoy(fecha: Date) {
   return fecha.toDateString() === new Date().toDateString()
 }
 
-interface VistaCalendarioMesProps {
+interface VistaMesProps {
   fechaActual: Date
-  citasAPI: CitaAPI[]
+  citas: Cita[]
   onDiaClick: (fecha: Date) => void
 }
 
-export function VistaCalendarioMes({ fechaActual, citasAPI, onDiaClick }: VistaCalendarioMesProps) {
+export function VistaMes({ fechaActual, citas, onDiaClick }: VistaMesProps) {
   const primerDia = new Date(fechaActual.getFullYear(), fechaActual.getMonth(), 1)
   const offset = primerDia.getDay()
   const totalCeldas = 42
@@ -46,7 +46,7 @@ export function VistaCalendarioMes({ fechaActual, citasAPI, onDiaClick }: VistaC
           const esDelMes = fecha.getMonth() === fechaActual.getMonth() && diaNum > 0
 
           const citasDelDia = esDelMes
-            ? citasAPI.filter((c) => new Date(c.startTime).toDateString() === fecha.toDateString())
+            ? citas.filter((c) => new Date(c.startTime).toDateString() === fecha.toDateString())
             : []
 
           return (

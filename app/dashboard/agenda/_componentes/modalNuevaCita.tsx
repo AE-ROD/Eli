@@ -5,17 +5,8 @@ import { motion } from "framer-motion"
 import { X, Search, User, Stethoscope, Calendar, Clock, DollarSign, FileText } from "lucide-react"
 import { BotonPrimario } from "@/components/app/formularios/boton-primario"
 import { CampoFormulario } from "@/components/app/formularios/campo-formulario"
+import type { DatosDeNuevaCita } from "../_datos"
 
-export interface FormNuevaCita {
-  pacienteId: string
-  servicio: string
-  fecha: string
-  horaInicio: string
-  horaFin: string
-  precio: string
-  notas: string
-  memberId: string
-}
 
 interface PacienteSugerido {
   id: string
@@ -30,11 +21,11 @@ interface MiembroEquipo {
 }
 
 interface ModalNuevaCitaProps {
-  form: FormNuevaCita
+  form: DatosDeNuevaCita
   guardando: boolean
   /** Sólo owner y admin asignan profesional; el worker no ve el selector. */
   puedeAsignarProfesional: boolean
-  onFormChange: (campo: keyof FormNuevaCita, valor: string) => void
+  onFormChange: (campo: keyof DatosDeNuevaCita, valor: string) => void
   onSubmit: (e: React.SyntheticEvent<HTMLFormElement>) => void
   onCerrar: () => void
 }

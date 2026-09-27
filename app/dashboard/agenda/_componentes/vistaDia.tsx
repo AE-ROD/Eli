@@ -1,7 +1,7 @@
 "use client"
 
-import { TarjetaCita, type Cita } from "@/components/app/tarjetas/tarjeta-cita"
-import type { CitaAPI } from "./panelDetalleCita"
+import { TarjetaCita, type CitaEnTarjeta } from "@/components/app/tarjetas/tarjeta-cita"
+import { nombreDeCliente, type Cita } from "../_datos"
 
 const HORA_INICIO = 8
 const HORA_FIN = 20
@@ -20,13 +20,13 @@ function duracionMin(start: string, end: string) {
   return Math.max(1, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000))
 }
 
-function mapearCita(c: CitaAPI): Cita {
+function paraTarjeta(c: Cita): CitaEnTarjeta {
   const estado = (estadosValidos as readonly string[]).includes(c.status)
-    ? (c.status as Cita["estado"])
+    ? (c.status as CitaEnTarjeta["estado"])
     : "pendiente"
   return {
     id: c.id,
-    pacienteNombre: c.patient.name,
+    pacienteNombre: nombreDeCliente(c),
     servicio: c.title,
     horaInicio: formatHora(c.startTime),
     horaFin: formatHora(c.endTime),
@@ -36,14 +36,14 @@ function mapearCita(c: CitaAPI): Cita {
   }
 }
 
-interface VistaCalendarioDiaProps {
+interface VistaDiaProps {
   fecha: Date
-  citasAPI: CitaAPI[]
-  onSeleccionar: (cita: CitaAPI) => void
+  citas: Cita[]
+  onSeleccionar: (cita: Cita) => void
 }
 
-export function VistaCalendarioDia({ fecha, citasAPI, onSeleccionar }: VistaCalendarioDiaProps) {
-  const citasDelDia = citasAPI.filter((c) =>
+export function VistaDia({ fecha, citas, onSeleccionar }: VistaDiaProps) {
+  const citasDelDia = citas.filter((c) =>
     new Date(c.startTime).toDateString() === fecha.toDateString()
   )
 
@@ -59,7 +59,7 @@ export function VistaCalendarioDia({ fecha, citasAPI, onSeleccionar }: VistaCale
             {citaEnHora ? (
               <div className="flex-1">
                 <TarjetaCita
-                  cita={mapearCita(citaEnHora)}
+                  cita={paraTarjeta(citaEnHora)}
                   compacta
                   onClick={() => onSeleccionar(citaEnHora)}
                 />

@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { TarjetaCita, type Cita } from "@/components/app/tarjetas/tarjeta-cita"
+import { TarjetaCita, type CitaEnTarjeta } from "@/components/app/tarjetas/tarjeta-cita"
 import { formatHora, duracionMinutos } from "@/lib/utils"
 import {
   citasFueraDeFranjas,
@@ -18,7 +18,7 @@ interface LineaDeTiempoDiaProps {
 }
 
 /** Compartida con `vistaDiaProfesional.tsx`: única forma de mapear una cita del endpoint a `TarjetaCita`. */
-export function citaParaTarjeta(cita: CitaDelDia): Cita {
+export function citaParaTarjeta(cita: CitaDelDia): CitaEnTarjeta {
   return {
     id: cita.id,
     pacienteNombre: cita.patient?.name ?? "Sin cliente",
@@ -28,7 +28,7 @@ export function citaParaTarjeta(cita: CitaDelDia): Cita {
     duracion: duracionMinutos(cita.startTime, cita.endTime),
     // El endpoint no restringe el string a la unión de TarjetaCita; el estado
     // real siempre es uno de esos valores (columna `status` de Appointment).
-    estado: cita.status as Cita["estado"],
+    estado: cita.status as CitaEnTarjeta["estado"],
   }
 }
 

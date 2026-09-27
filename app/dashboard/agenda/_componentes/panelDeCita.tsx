@@ -4,23 +4,8 @@ import { motion } from "framer-motion"
 import { X } from "lucide-react"
 import { AvatarUsuario } from "@/components/app/comunes/avatar-usuario"
 import { BotonPrimario } from "@/components/app/formularios/boton-primario"
+import { nombreDeCliente, type Cita } from "../_datos"
 
-export interface CitaAPI {
-  id: string
-  title: string
-  startTime: string
-  endTime: string
-  status: string
-  notes: string | null
-  price: number | null
-  patientId: string
-  patient: {
-    id: string
-    name: string
-    email: string | null
-    phone: string | null
-  }
-}
 
 const etiquetasEstado: Record<string, { texto: string; color: string }> = {
   pendiente: { texto: "Pendiente", color: "bg-amber-100 text-amber-700" },
@@ -43,12 +28,12 @@ function duracionMin(start: string, end: string) {
 }
 
 interface PanelDetalleCitaProps {
-  cita: CitaAPI
+  cita: Cita
   onCerrar: () => void
   onCambiarEstado: (id: string, status: string) => void
 }
 
-export function PanelDetalleCita({ cita, onCerrar, onCambiarEstado }: PanelDetalleCitaProps) {
+export function PanelDeCita({ cita, onCerrar, onCambiarEstado }: PanelDetalleCitaProps) {
   const etiqueta = etiquetasEstado[cita.status] ?? etiquetasEstado.pendiente
   const duracion = duracionMin(cita.startTime, cita.endTime)
 
@@ -70,9 +55,9 @@ export function PanelDetalleCita({ cita, onCerrar, onCambiarEstado }: PanelDetal
       </div>
 
       <div className="flex items-center gap-3 mb-6">
-        <AvatarUsuario nombre={cita.patient.name} tamaño="lg" />
+        <AvatarUsuario nombre={nombreDeCliente(cita)} tamaño="lg" />
         <div>
-          <p className="font-semibold text-foreground">{cita.patient.name}</p>
+          <p className="font-semibold text-foreground">{nombreDeCliente(cita)}</p>
           <p className="text-sm text-muted-foreground">{cita.title}</p>
         </div>
       </div>
