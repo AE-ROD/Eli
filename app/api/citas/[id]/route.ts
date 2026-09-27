@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { actorDeSesion, whereDeAgenda, type Actor } from "@/lib/permisos"
 
 const citaUpdateSchema = z.object({
   title: z.string().min(2).optional(),
@@ -13,8 +14,14 @@ const citaUpdateSchema = z.object({
   price: z.number().positive().optional(),
 })
 
-async function verificarCita(id: string, businessId: string) {
-  return prisma.appointment.findFirst({ where: { id, businessId } })
+/**
+ * Pide un `Actor`, no `Actor | null`: sin sesión no hay cita, y el handler ya
+ * cortó con 401 antes de llegar acá (misma convención que `memberIdParaCita`
+ * en `lib/permisos.ts`). Así el compilador es el que obliga a poner la guarda
+ * primero, en vez de convertir "no hay sesión" en un 404 silencioso.
+ */
+async function verificarCita(actor: Actor, id: string) {
+  return prisma.appointment.findFirst({ where: whereDeAgenda(actor, { id }) })
 }
 
 export async function GET(
@@ -22,13 +29,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.businessId) {
+  const actor = actorDeSesion(session)
+  if (!actor) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
   const { id } = await params
   const cita = await prisma.appointment.findFirst({
-    where: { id, businessId: session.user.businessId },
+    where: whereDeAgenda(actor, { id }),
     include: {
       patient: { select: { id: true, name: true, email: true, phone: true } },
     },
@@ -46,12 +54,13 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.businessId) {
+  const actor = actorDeSesion(session)
+  if (!actor) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
   const { id } = await params
-  const existente = await verificarCita(id, session.user.businessId)
+  const existente = await verificarCita(actor, id)
   if (!existente) {
     return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 })
   }
@@ -60,8 +69,11 @@ export async function PUT(
     const body = await request.json()
     const datos = citaUpdateSchema.parse(body)
 
+    // Por `existente.id`, no por `id`: si alguien borra la verificación de
+    // arriba, `existente` queda sin declarar y el build falla. La garantía deja
+    // de depender de que el próximo lea las dos líneas en orden.
     const cita = await prisma.appointment.update({
-      where: { id },
+      where: { id: existente.id },
       data: {
         ...(datos.title && { title: datos.title }),
         ...(datos.startTime && { startTime: new Date(datos.startTime) }),
@@ -92,17 +104,18 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.businessId) {
+  const actor = actorDeSesion(session)
+  if (!actor) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
   const { id } = await params
-  const existente = await verificarCita(id, session.user.businessId)
+  const existente = await verificarCita(actor, id)
   if (!existente) {
     return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 })
   }
 
-  await prisma.appointment.delete({ where: { id } })
+  await prisma.appointment.delete({ where: { id: existente.id } })
 
   return NextResponse.json({ mensaje: "Cita eliminada" })
 }
