@@ -1,7 +1,7 @@
 # Eli — Definición de producto
 
 > Fuente de verdad de qué construimos y por qué. Lo que todavía no está
-> decidido vive en la sección 8, no en documentos aparte.
+> decidido vive en la sección 10, no en documentos aparte.
 
 ---
 
@@ -63,7 +63,7 @@ Modelo **profesional × servicio con herencia**. Resolución en cascada, del má
 |---|---|---|
 | 1 | Porcentaje de **ese profesional en ese servicio** | Juan cobra 50% en Color |
 | 2 | Porcentaje **por defecto del profesional** | Juan cobra 70% en todo lo demás |
-| 3 | Sin configurar | La cita queda **pendiente de configurar** |
+| 3 | Sin configurar | La línea queda **pendiente de configurar** |
 
 **El caso 3 nunca asume cero en silencio.** Una comisión sin configurar es un error de configuración, no una comisión de $0. Se muestra como pendiente y se le avisa al dueño; si no, se liquida de menos sin que nadie lo note.
 
@@ -71,15 +71,15 @@ Modelo **profesional × servicio con herencia**. Resolución en cascada, del má
 
 ### 3.2 Base de cálculo
 
-Sobre el **precio total** de la cita, sin descontar insumos.
+Sobre el **precio de cada servicio cobrado**, sin descontar insumos. Es la línea de la atención (sección 7): servicio, profesional que lo hizo y precio. La cita es lo planeado; la atención es lo que realmente se hizo y se cobró, y una atención puede tener varios servicios hechos por distintas personas.
 
 > ⚠️ **Riesgo asumido y documentado.** No contempla descontar materiales antes de repartir (relevante donde hay insumos caros, como tintura). Si aparece esa necesidad, agregarla implicará migrar datos ya cargados. Se acepta el riesgo para v1.
 
 ### 3.3 Congelado — la regla que no se negocia
 
-**Al pasar la cita a `completada`, el porcentaje y el monto se guardan en la cita.** No se recalculan nunca más.
+**Al cobrar la atención, el porcentaje y el monto se guardan en cada línea.** No se recalculan nunca más.
 
-Si el dueño le cambia el porcentaje a Juan hoy, **las citas de los meses anteriores conservan el porcentaje que tenían.** Sin esto, cada ajuste reescribe liquidaciones ya pagadas y las cuentas dejan de cerrar. Es el error clásico de los sistemas de comisiones y es carísimo de reparar una vez que hay datos.
+Si el dueño le cambia el porcentaje a Juan hoy, **las atenciones de los meses anteriores conservan el porcentaje que tenían.** Sin esto, cada ajuste reescribe liquidaciones ya pagadas y las cuentas dejan de cerrar. Es el error clásico de los sistemas de comisiones y es carísimo de reparar una vez que hay datos.
 
 ### 3.4 Quién puede tocar qué
 
@@ -89,7 +89,7 @@ Si el dueño le cambia el porcentaje a Juan hoy, **las citas de los meses anteri
 | **Encargado** | ❌ | ✅ | — |
 | **Profesional** | ❌ | ❌ | ✅ |
 
-El encargado gestiona la operación: equipo, agenda, horarios. **No toca dinero.** Se puede abrir después; cerrarlo después es incómodo.
+El encargado gestiona la operación: equipo, agenda, horarios. **No define cuánto cobra cada uno.** Sí registra cobros en el tablero: es la caja del día y así lo decidió el dueño. Ver más permisos se puede abrir después; cerrarlos después es incómodo.
 
 ### 3.5 Auditoría
 
@@ -100,9 +100,11 @@ Todo cambio de porcentaje deja registro: **quién, cuándo, de qué valor a qué
 ```
 BusinessMember.commissionPercent   Float?   → porcentaje por defecto del profesional
 CommissionRate (memberId, serviceId, percent) → excepción puntual
-Appointment.commissionPercent/Amount/At       → congelado al completar
+VisitService.commissionPercent/Amount         → congelado al cobrar, en cada línea
 CommissionChange (quién, cuándo, antes, después) → auditoría
 ```
+
+> La rama `f-003-comisiones` (sin fusionar, nacida de `main`) guarda el congelado en la cita. Al integrarla hay que moverlo a las líneas de la atención.
 
 ---
 
@@ -112,7 +114,7 @@ CommissionChange (quién, cuándo, antes, después) → auditoría
 
 No se cobra comisión sobre las reservas. Eli **administra** el dinero del negocio, no lo toca. Cobrarle un porcentaje a quien usa Eli justamente para repartir porcentajes sería contradictorio, y además obligaría a procesar pagos de terceros.
 
-Precio, límites por plan y prueba gratuita: pendientes (sección 8).
+Precio, límites por plan y prueba gratuita: pendientes (sección 10).
 
 **Regla firme:** no se vende ninguna función que no exista. La versión anterior listaba "reportes exportables" en planes pagos sin haberlos construido — eso es motivo directo de reembolso.
 
@@ -123,8 +125,8 @@ Precio, límites por plan y prueba gratuita: pendientes (sección 8).
 | Rol | Alcance |
 |---|---|
 | **Dueño** | Todo, incluidos los porcentajes de comisión |
-| **Encargado** | Equipo, agenda, horarios y clientes. Sin acceso a configuración de comisiones |
-| **Profesional** | Su agenda, sus clientes atendidos y su propia liquidación |
+| **Encargado** | Equipo, agenda, horarios, clientes y cobros del tablero. Sin acceso a configuración de comisiones |
+| **Profesional** | Su agenda, sus atenciones, sus clientes atendidos y su propia liquidación |
 | **Cliente final** | Reserva desde la página pública, sin cuenta |
 
 El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisiones de por medio, cuánto factura el local es información del dueño.
@@ -135,6 +137,8 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 
 **Entra:**
 - Reservas, agenda y clientes
+- **Tablero de atenciones**, con y sin reserva, y registro de cobros (sección 7)
+- **Reportes** de lo atendido y cobrado, con filtros (sección 8)
 - Equipo con los tres roles reales
 - **Comisiones: ciclo completo** (configurar, calcular, liquidar, auditar)
 - Elegir profesional al reservar
@@ -149,7 +153,57 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 
 ---
 
-## 7. Branding — dirección propuesta
+## 7. Tablero de atenciones
+
+Una **atención** es la visita de un cliente al local, con o sin reserva. El tablero muestra el día en columnas y es donde se anota qué se hizo, quién lo hizo y cuánto se cobró. **Los ingresos del negocio son lo cobrado acá.**
+
+| Columna | Qué hay | Para pasar a la siguiente |
+|---|---|---|
+| **Reservas de hoy** | Las citas del día que todavía no llegaron, por hora. Entran solas. Si la hora pasó, se marcan como atrasadas. | "Llegó" |
+| **En espera** | Quien llegó, con o sin reserva, y espera ser atendido. | Al menos un servicio con su profesional |
+| **En atención** | Quien está siendo atendido. | Cada servicio con su profesional y su precio |
+| **Por cobrar** | Atendido; falta pagar ("por cancelar"). | Medios de pago que sumen exactamente el total |
+| **Finalizado** | Lo cobrado hoy. Ya no se edita. | — |
+
+**Cada servicio con su profesional.** Una atención tiene una o más líneas: servicio, profesional que lo hizo y precio cobrado. El precio se copia del catálogo y se puede ajustar; el total es la suma de las líneas. Así se sabe cuánto generó cada profesional, que es la base de las comisiones (sección 3).
+
+**El dueño también atiende.** El dueño no es miembro del equipo. Por eso una línea sin profesional significa que la hizo el dueño, y esa línea no genera comisión.
+
+**Pago dividido.** Medios fijos: efectivo, tarjeta de débito, tarjeta de crédito, transferencia y billetera digital. Un cobro se puede repartir entre varios medios. La suma tiene que coincidir con el total al centavo: se calcula en centavos enteros, nunca con decimales sueltos.
+
+**Lo cobrado no se reescribe.** Una vez finalizada, la atención no se edita. Si hubo un error, el dueño la anula: queda en el historial como anulada y deja de sumar. Si alguien se va sin ser atendido, también se anula.
+
+**La agenda se entera sola.** Al empezar la atención de alguien con reserva, su cita pasa a "en progreso"; al cobrarla, a "completada". Una cita marcada como completada en la agenda sin pasar por el cobro **no suma ingresos**: no hay registro de cuánto se cobró ni cómo.
+
+| | Dueño | Encargado | Profesional |
+|---|---|---|---|
+| Ver el tablero | Todo | Todo | Sus atenciones y sus reservas |
+| Anotar a alguien sin reserva | ✅ | ✅ | ✅, asignado a sí mismo |
+| Mover hasta "Por cobrar" y editar servicios | ✅ | ✅ | Sólo sus atenciones y sus líneas |
+| Cobrar | ✅ | ✅ | ❌ |
+| Anular antes de cobrar | ✅ | ✅ | ❌ |
+| Anular algo ya cobrado | ✅ | ❌ | ❌ |
+
+---
+
+## 8. Reportes
+
+El historial de todo lo atendido y cobrado. Cada fila es una atención finalizada: fecha y hora del cobro, cliente, servicios con su profesional, total y medios de pago.
+
+**Filtros**, combinables como quiera el administrador:
+- período: hoy, ayer, esta semana, este mes o un rango de fechas;
+- turno: mañana (antes de las 12), tarde (de 12 a 18) o noche (desde las 18);
+- profesional, servicio y medio de pago.
+
+**Resumen del período:** ingresos, cantidad de atenciones, ticket promedio, y desglose por medio de pago, por profesional y por servicio.
+
+**Quién ve qué.** Dueño y encargado ven todo el negocio. El profesional ve sólo sus propias líneas (lo que él atendió y cuánto sumó), sin los totales del negocio ni los medios de pago.
+
+El día y el turno se calculan en la zona horaria del dispositivo de quien mira. Alcanza mientras el negocio y su equipo estén en el mismo huso; ver sección 10.
+
+---
+
+## 9. Branding — dirección propuesta
 
 > Pendiente de decidir. Esta es la dirección que se desprende del posicionamiento.
 
@@ -168,7 +222,7 @@ La paleta y la tipografía de la landing ya están propuestas en `docs/diseno/RE
 
 ---
 
-## 8. Pendiente de definir
+## 10. Pendiente de definir
 
 Nada de esto bloquea el trabajo actual, pero cada punto se decide antes de construir lo que depende de él.
 
@@ -176,7 +230,9 @@ Nada de esto bloquea el trabajo actual, pero cada punto se decide antes de const
 |---|---|
 | **Precio** | Monto de la suscripción, si los límites por plan se aplican en v1 y duración de la prueba gratuita (con o sin tarjeta). |
 | **Funciones nuevas** | El resto del listado de ideas por incorporar, con qué problema resuelve cada una y si es imprescindible para vender. |
-| **Atención sin reserva** | Las barberías atienden mucho sin cita previa. Hay que decidir si v1 registra al cliente que llega sin reservar (y su comisión). |
+| **Comisiones en el tablero** | Integrar la rama `f-003-comisiones` sobre las líneas de atención (sección 3.6). |
+| **Turnos y zona horaria** | Si cada negocio define sus propios turnos y su zona horaria, en vez de los turnos fijos y la hora del dispositivo (sección 8). |
+| **Corregir un cobro** | Hoy lo cobrado sólo se anula. Falta decidir si el dueño puede reabrirlo y corregirlo, y con qué registro. |
 | **Roles** | Si hace falta un super administrador de la plataforma, y si el cliente final puede crear cuenta para ver su historial y reprogramar. |
 | **Branding** | Nombre definitivo (mantener *Eli* o cambiar), dominio, y tono: cercano o sobrio. |
 | **No funcionales** | Móvil primero (un barbero gestiona desde el teléfono); zonas horarias y país; sólo español o también inglés; política de privacidad y retención de datos de clientes. |
