@@ -3,6 +3,7 @@
 import { motion } from "framer-motion"
 import { CalendarDays, Users, DollarSign, type LucideIcon } from "lucide-react"
 import { formatearHora } from "@/lib/fechas"
+import { formatearMonto } from "@/lib/dinero"
 import { TarjetaEstadistica } from "./tarjeta-estadistica"
 import { puedeVerIngresos, type EstadisticasDelPanel } from "../_datos"
 
@@ -50,11 +51,16 @@ function procedenciaDeClientes(estadisticas: EstadisticasDelPanel): string | und
   return clientesNuevosMes === 1 ? "1 nuevo este mes." : `${clientesNuevosMes} nuevos este mes.`
 }
 
+/**
+ * Los ingresos son lo cobrado en el tablero (PRODUCTO.md, sección 7): una cita
+ * completada en la agenda sin pasar por el cobro no suma, así que la línea
+ * habla de atenciones cobradas y no de citas.
+ */
 function procedenciaDeIngresos(estadisticas: EstadisticasDelPanel): string | undefined {
-  const citas = estadisticas.citasFacturadasMes ?? 0
-  if (citas === 0) return "Se cuenta al completar una cita. Todavía ninguna este mes."
+  const cobradas = estadisticas.atencionesCobradasMes ?? 0
+  if (cobradas === 0) return "Se suma al cobrar en el tablero. Todavía nada este mes."
 
-  const base = citas === 1 ? "1 cita completada" : `${citas} citas completadas`
+  const base = cobradas === 1 ? "1 atención cobrada" : `${cobradas} atenciones cobradas`
   const tendencia = estadisticas.tendencias.ingresos
   if (tendencia === undefined) return `${base} este mes.`
 
@@ -89,7 +95,7 @@ function tarjetasDe(estadisticas: EstadisticasDelPanel): Tarjeta[] {
       ? [
           {
             titulo: "Ingresos del mes",
-            valor: `$${(estadisticas.ingresoseMes ?? 0).toLocaleString("es-ES")}`,
+            valor: formatearMonto(estadisticas.ingresosMes ?? 0),
             icono: DollarSign,
             colorIcono: "info" as const,
             procedencia: procedenciaDeIngresos(estadisticas),

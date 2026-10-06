@@ -9,9 +9,11 @@ import { LogoEli } from "@/components/comunes/logo-eli"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import {
   LayoutDashboard,
+  SquareKanban,
   CalendarDays,
   Users,
   MessageCircle,
+  ChartColumn,
   Settings,
   LogOut,
   ChevronLeft,
@@ -22,11 +24,19 @@ import {
 } from "lucide-react"
 import { usePrecios } from "@/components/panel/contexto-precios"
 
+/**
+ * El orden sigue el día del negocio: el tablero, donde se atiende y se cobra,
+ * justo después del inicio; agenda, clientes y chats después; los reportes,
+ * que miran lo ya cobrado, al final. Tablero y reportes son para todos los
+ * roles: cada endpoint ya recorta lo que ve cada uno.
+ */
 const itemsNavegacion = [
   { id: "dashboard", nombre: "Dashboard", icono: LayoutDashboard, ruta: "/dashboard" },
+  { id: "tablero", nombre: "Tablero", icono: SquareKanban, ruta: "/dashboard/tablero" },
   { id: "agenda", nombre: "Agenda", icono: CalendarDays, ruta: "/dashboard/agenda" },
   { id: "clientes", nombre: "Clientes", icono: Users, ruta: "/dashboard/clientes" },
   { id: "chats", nombre: "Chats", icono: MessageCircle, ruta: "/dashboard/chats" },
+  { id: "reportes", nombre: "Reportes", icono: ChartColumn, ruta: "/dashboard/reportes" },
 ]
 
 const itemsSecundarios = [

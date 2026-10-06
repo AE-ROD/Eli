@@ -15,6 +15,16 @@
 /** Lo que devuelve todo pedido al servidor: los datos, o por qué no llegaron. */
 export type Resultado<T = void> = { ok: true; datos: T } | { ok: false; error: string }
 
+/**
+ * Como `Resultado`, pero el fallo trae además el código HTTP: `null` si no
+ * hubo respuesta. Es para las pantallas que reaccionan distinto según el
+ * motivo, como el tablero de atenciones, que ante un 409 recarga en vez de
+ * sólo avisar.
+ */
+export type ResultadoConCodigo<T = void> =
+  | { ok: true; datos: T }
+  | { ok: false; error: string; codigo: number | null }
+
 /** El aviso cuando el pedido ni siquiera llegó: sin red o con el servidor caído. */
 export const SIN_CONEXION = "Sin conexión con el servidor"
 
@@ -50,13 +60,30 @@ export async function pedir<T = void>(
   errorPorDefecto: string,
   opciones?: RequestInit
 ): Promise<Resultado<T>> {
+  const resultado = await pedirConCodigo<T>(url, errorPorDefecto, opciones)
+  // Sin el código: quien usa `pedir` decide sólo con el mensaje, y así el
+  // valor que recibe es exactamente el de siempre.
+  return resultado.ok ? resultado : { ok: false, error: resultado.error }
+}
+
+/**
+ * Igual que `pedir`, pero el fallo dice también con qué código respondió el
+ * servidor (`null` si no respondió). No lanza nunca.
+ */
+export async function pedirConCodigo<T = void>(
+  url: string,
+  errorPorDefecto: string,
+  opciones?: RequestInit
+): Promise<ResultadoConCodigo<T>> {
   try {
     const respuesta = await fetch(url, opciones)
     const cuerpo = await leerCuerpo(respuesta)
-    if (!respuesta.ok) return { ok: false, error: mensajeDelServidor(cuerpo) ?? errorPorDefecto }
+    if (!respuesta.ok) {
+      return { ok: false, error: mensajeDelServidor(cuerpo) ?? errorPorDefecto, codigo: respuesta.status }
+    }
     return { ok: true, datos: (cuerpo ?? undefined) as T }
   } catch {
-    return { ok: false, error: SIN_CONEXION }
+    return { ok: false, error: SIN_CONEXION, codigo: null }
   }
 }
 

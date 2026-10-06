@@ -19,12 +19,15 @@ export interface EstadisticasDelPanel {
   totalClientes: number
   clientesNuevosMes: number
   /**
+   * Lo cobrado en el tablero este mes: la suma de los pagos de las atenciones
+   * finalizadas (docs/PRODUCTO.md, sección 7). Una cita completada en la
+   * agenda sin pasar por el cobro no suma. `atencionesCobradasMes` dice sobre
+   * cuántas atenciones está hecha la cifra.
+   *
    * Ausentes para quien no puede ver la facturación del negocio (profesional).
-   * `ingresoseMes` se llama así en el endpoint: corregir el nombre es cambiar
-   * el contrato de los dos lados a la vez.
    */
-  ingresoseMes?: number
-  citasFacturadasMes?: number
+  ingresosMes?: number
+  atencionesCobradasMes?: number
   /**
    * Sólo para `worker`, y sólo si tiene horario activo cargado para hoy
    * (F-014). Ausente para dueño/encargado y para un profesional sin horario:
@@ -48,5 +51,5 @@ export async function leerEstadisticas(): Promise<Resultado<EstadisticasDelPanel
  * raro. Mientras las cifras no llegaron, tampoco hay ingresos que mostrar.
  */
 export function puedeVerIngresos(estadisticas: EstadisticasDelPanel | null): boolean {
-  return estadisticas?.ingresoseMes !== undefined
+  return estadisticas?.ingresosMes !== undefined
 }

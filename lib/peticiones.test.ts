@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
-import { pedir, leerCuerpo, conJson, SIN_CONEXION } from "./peticiones"
+import { pedir, pedirConCodigo, leerCuerpo, conJson, SIN_CONEXION } from "./peticiones"
 
 /** Simula la respuesta que daría el servidor, sin red de por medio. */
 function simularRespuesta(respuesta: Response) {
@@ -80,6 +80,48 @@ describe("pedir", () => {
 
     expect(resultado).toEqual({ ok: false, error: SIN_CONEXION })
     expect(SIN_CONEXION).toBe("Sin conexión con el servidor")
+  })
+})
+
+describe("pedirConCodigo", () => {
+  it("con respuesta ok devuelve los datos, igual que pedir", async () => {
+    simularRespuesta(json({ id: "v1" }, 201))
+
+    expect(await pedirConCodigo("/api/atenciones", "No se pudo anotar")).toEqual({ ok: true, datos: { id: "v1" } })
+  })
+
+  it("con error devuelve el mensaje del servidor y el código, para decidir según el motivo", async () => {
+    simularRespuesta(json({ error: "La atención cambió mientras tanto" }, 409))
+
+    const resultado = await pedirConCodigo("/api/atenciones/v1/estado", "No se pudo mover")
+
+    expect(resultado).toEqual({ ok: false, error: "La atención cambió mientras tanto", codigo: 409 })
+  })
+
+  it("con error y sin mensaje usa el mensaje por defecto y conserva el código", async () => {
+    simularRespuesta(new Response(null, { status: 404 }))
+
+    expect(await pedirConCodigo("/api/atenciones/v9", "No se pudo guardar")).toEqual({
+      ok: false,
+      error: "No se pudo guardar",
+      codigo: 404,
+    })
+  })
+
+  it("sin respuesta del servidor el código es null", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")))
+
+    expect(await pedirConCodigo("/api/atenciones", "No se pudo cargar")).toEqual({
+      ok: false,
+      error: SIN_CONEXION,
+      codigo: null,
+    })
+  })
+
+  it("pedir sigue sin exponer el código: su fallo es sólo el mensaje", async () => {
+    simularRespuesta(json({ error: "No autorizado" }, 401))
+
+    expect(await pedir("/api/atenciones/v1/cobro", "No se pudo cobrar")).toEqual({ ok: false, error: "No autorizado" })
   })
 })
 

@@ -9,6 +9,9 @@ import {
   duracionParaMostrar,
   esHoy,
   formatearDuracionDeServicio,
+  deTexto,
+  rangoDelDia,
+  tiempoDesde,
 } from "./fechas"
 
 describe("comoTexto", () => {
@@ -183,5 +186,85 @@ describe("formatearDuracionDeServicio", () => {
   it("horas con resto van con los dos", () => {
     expect(formatearDuracionDeServicio(90)).toBe("1h 30min")
     expect(formatearDuracionDeServicio(135)).toBe("2h 15min")
+  })
+})
+
+describe("deTexto", () => {
+  it("lee el texto de un campo de fecha como la medianoche local de ese día", () => {
+    const fecha = deTexto("2026-03-08")
+    expect(fecha).toEqual(new Date(2026, 2, 8))
+    expect(comoTexto(fecha!)).toBe("2026-03-08")
+  })
+
+  it("es la inversa de comoTexto", () => {
+    for (const texto of ["2026-01-01", "2026-12-31", "2028-02-29"]) {
+      expect(comoTexto(deTexto(texto)!)).toBe(texto)
+    }
+  })
+
+  it("una fecha que no existe da null en vez de correrse a otro día", () => {
+    expect(deTexto("2026-02-31")).toBeNull()
+    expect(deTexto("2026-13-01")).toBeNull()
+    expect(deTexto("2027-02-29")).toBeNull()
+  })
+
+  it("un texto que no tiene la forma de fecha da null", () => {
+    expect(deTexto("")).toBeNull()
+    expect(deTexto("08/03/2026")).toBeNull()
+    expect(deTexto("2026-3-8")).toBeNull()
+  })
+})
+
+describe("rangoDelDia", () => {
+  it("va de la medianoche local del día a la del día siguiente", () => {
+    const { desde, hasta } = rangoDelDia(new Date(2026, 9, 6, 15, 30))
+    expect(desde).toEqual(new Date(2026, 9, 6, 0, 0, 0, 0))
+    expect(hasta).toEqual(new Date(2026, 9, 7, 0, 0, 0, 0))
+  })
+
+  it("a cualquier hora del día da el mismo rango", () => {
+    const temprano = rangoDelDia(new Date(2026, 9, 6, 0, 0))
+    const tarde = rangoDelDia(new Date(2026, 9, 6, 23, 59, 59))
+    expect(temprano).toEqual(tarde)
+  })
+
+  it("cruza el fin de mes y el fin de año con el calendario", () => {
+    expect(comoTexto(rangoDelDia(new Date(2026, 9, 31, 12)).hasta)).toBe("2026-11-01")
+    expect(comoTexto(rangoDelDia(new Date(2026, 11, 31, 12)).hasta)).toBe("2027-01-01")
+  })
+
+  it("no modifica la fecha que recibe", () => {
+    const original = new Date(2026, 9, 6, 15, 30)
+    rangoDelDia(original)
+    expect(original).toEqual(new Date(2026, 9, 6, 15, 30))
+  })
+})
+
+describe("tiempoDesde", () => {
+  const ahora = new Date("2026-10-06T15:00:00.000Z").getTime()
+  const antes = (minutos: number) => new Date(ahora - minutos * 60000).toISOString()
+
+  it("menos de un minuto es recién", () => {
+    expect(tiempoDesde(antes(0), ahora)).toBe("recién")
+    expect(tiempoDesde(new Date(ahora - 59_000).toISOString(), ahora)).toBe("recién")
+  })
+
+  it("en minutos y horas, con el formato de la línea de tiempo del profesional", () => {
+    expect(tiempoDesde(antes(5), ahora)).toBe("hace 5 min")
+    expect(tiempoDesde(antes(60), ahora)).toBe("hace 1 h")
+    expect(tiempoDesde(antes(80), ahora)).toBe("hace 1 h 20 min")
+  })
+
+  it("desde un día en adelante cuenta días: una atención que quedó abierta ayer", () => {
+    expect(tiempoDesde(antes(24 * 60), ahora)).toBe("hace 1 día")
+    expect(tiempoDesde(antes(3 * 24 * 60 + 10), ahora)).toBe("hace 3 días")
+  })
+
+  it("un instante en el futuro (un reloj atrasado) no da un tiempo negativo", () => {
+    expect(tiempoDesde(antes(-10), ahora)).toBe("recién")
+  })
+
+  it("un instante ilegible no rompe: se lee como recién", () => {
+    expect(tiempoDesde("no es una fecha", ahora)).toBe("recién")
   })
 })

@@ -1,6 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
+import { formatearMonto } from "@/lib/dinero"
 import { puedeVerIngresos, type EstadisticasDelPanel } from "../_datos"
 
 interface ResumenDelNegocioProps {
@@ -29,7 +30,7 @@ export function ResumenDelNegocio({ estadisticas }: ResumenDelNegocioProps) {
       ? [
           {
             etiqueta: "Ingresos este mes",
-            valor: estadisticas ? `$${(estadisticas.ingresoseMes ?? 0).toLocaleString("es-ES")}` : "—",
+            valor: estadisticas ? formatearMonto(estadisticas.ingresosMes ?? 0) : "—",
             color: "bg-blue-500",
           },
         ]
