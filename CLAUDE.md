@@ -4,16 +4,18 @@
 > El original asume modelo de agencia (`core/` vs `clientes/<slug>/`); Eli es un
 > solo producto con muchos negocios. La regla 1 está traducida en consecuencia.
 
-Punto de entrada del proyecto. Este archivo es el contrato completo: las reglas
-de trabajo, las fichas de feature, los agentes y los comandos vivían en
-`arquitectura_docs/`, que se borró a pedido del dueño del producto. Lo que
+Punto de entrada del proyecto. Este archivo es el contrato completo. Las reglas
+de trabajo, las fichas de feature, los agentes con nombre y los comandos vivían
+en `arquitectura_docs/`, que se borró a pedido del dueño del producto; lo que
 queda del proceso es lo que está acá.
 
 | Si vas a... | Lee primero |
 |---|---|
 | Entender el negocio y el producto | `docs/PRODUCTO.md` |
 | Saber el stack y cómo correr el proyecto | `README.md` |
+| Decidir dónde va un archivo y cómo se llama | `README.md` → "Cómo está organizado" y "Convenciones" |
 | Tocar permisos o aislamiento entre negocios | `lib/permisos.ts` (y su test) |
+| Tocar el diseño de la landing | `docs/diseno/README.md` |
 
 Si hace falta recuperar las reglas, las fichas o los agentes, están en el
 historial: `git show e28b487 --stat` los lista, y
@@ -32,8 +34,8 @@ historial: `git show e28b487 --stat` los lista, y
    se acuerda en el chat antes de escribir código, y sigue valiendo que no se
    empieza sin saber qué entra y qué no.
 
-3. **No amplíes el alcance.** Haces lo que dice la ficha y nada más. Lo que
-   detectes de más va a "Fuera de alcance detectado"; no lo implementas.
+3. **No amplíes el alcance.** Haces lo acordado y nada más. Lo que detectes de
+   más va a "Fuera de alcance detectado"; no lo implementas.
 
 4. **No inventes dependencias ni configuración.** Librería nueva, variable de
    entorno o servicio externo: se proponen y se espera aprobación.
@@ -43,8 +45,10 @@ historial: `git show e28b487 --stat` los lista, y
    como deuda documentada: el aislamiento hoy es de capa de aplicación y debe ser
    impecable justamente porque no hay una segunda barrera detrás.
 
-6. **Deja rastro.** Al terminar actualizas la ficha: archivos tocados,
-   decisiones, pendientes.
+6. **Deja rastro.** Al terminar reportas archivos tocados, decisiones y
+   pendientes. Lo que cambie el producto (reglas, alcance, lo que queda por
+   decidir) se anota en `docs/PRODUCTO.md`; el porqué de cada cambio, en el
+   mensaje del commit.
 
 ---
 
@@ -57,25 +61,34 @@ agentes en su propio contexto.
 Excepción: cambios de una sola línea, obvios y sin ambigüedad. Ante la duda,
 delegas.
 
-### Agentes disponibles
+### Roles
 
-| Agente | Para qué | Escribe |
+Las definiciones de agentes con nombre se borraron junto con
+`arquitectura_docs/`. Los roles siguen valiendo: se le asignan a un subagente en
+su prompt.
+
+| Rol | Para qué | Escribe |
 |---|---|---|
-| `explorador` | Investigar el código antes de planificar | No |
-| `backend` | Endpoints, servicios, datos, migraciones | Sí |
-| `frontend` | Componentes, vistas, estado de UI | Sí |
-| `qa` | Verificar contra criterios de aceptación | No |
-| `revisor` | Verificar aislamiento entre negocios y permisos | No |
+| Explorador | Investigar el código antes de planificar | No |
+| Backend | Endpoints, servicios, datos, migraciones | Sí |
+| Frontend | Componentes, vistas, estado de UI | Sí |
+| QA | Verificar contra lo acordado, en el navegador si hay interfaz | No |
+| Revisor | Verificar aislamiento entre negocios y permisos | No |
 
-Que `qa` y `revisor` no puedan editar es deliberado: quien escribe el código no
-certifica su propio trabajo.
+Que QA y revisor no editen es deliberado: quien escribe el código no certifica
+su propio trabajo. Se usa para ellos un tipo de subagente sin herramientas de
+edición cuando existe. Si no existe, se les prohíbe en el prompt, y antes de
+aceptar su veredicto se comprueba con `git status` que no tocaron nada.
 
 ### Cómo delegas
 
 - Tareas independientes → en paralelo, máximo 3 a la vez.
 - Tareas dependientes → en orden, pasando el bloque SIGUIENTE de una a la otra.
-- A cada agente le das: la ficha, su tarea puntual y el resultado del anterior.
-  Nada más.
+- A cada agente le das: lo acordado, su tarea puntual y el resultado del
+  anterior. Nada más.
+- Cada agente devuelve el formato `ESTADO / ARCHIVOS / QUÉ HICE / VERIFICACIÓN /
+  FUERA DE ALCANCE / SIGUIENTE`. QA devuelve `VEREDICTO / CRITERIOS / HALLAZGOS /
+  REGRESIÓN` y el revisor `VEREDICTO / HALLAZGOS`.
 
 ### El loop tiene techo
 
@@ -88,15 +101,16 @@ Cuando un agente vuelve `bloqueada` o `parcial`:
 Al agotar el techo **te detienes y reportas**. Iterar sin límite no es autonomía,
 es quemar tokens sin avanzar.
 
-### Ciclo completo de una feature
+### Ciclo completo de una tarea
 
 ```
-ficha → rama → en-progreso → agentes (loop con techo) → qa → revisor
-      → en-revision → [aprobación humana] → merge → hecho
+alcance acordado en el chat → rama → agentes (loop con techo)
+      → lint, tipos, tests y build en verde → commit → qa → revisor
+      → push (con permiso) → [aprobación humana] → merge
 ```
 
-Los comandos `/tomar-feature`, `/nueva-feature`, `/estado`, `/cerrar-feature` y
-`/auditar-seguridad` ejecutan esto paso a paso.
+Antes de cada commit: `npx tsc --noEmit`, `npm run lint`, `npm test` y
+`npm run build`. Los comandos están en `README.md`.
 
 ---
 
@@ -118,5 +132,5 @@ Los comandos `/tomar-feature`, `/nueva-feature`, `/estado`, `/cerrar-feature` y
   `prisma migrate reset`, `db push`, `db execute` y `migrate deploy` están
   bloqueados por permisos.
 - Instalar o actualizar dependencias.
-- Tocar `.env`, credenciales o `clientes/*/secretos/`.
+- Tocar `.env` o credenciales.
 - Borrar archivos que no creaste en esta sesión.
