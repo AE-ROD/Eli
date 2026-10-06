@@ -1,6 +1,7 @@
 # Eli — Definición de producto
 
-> Derivado de `REQUERIMIENTOS.md`. Es la fuente de verdad de qué construimos y por qué.
+> Fuente de verdad de qué construimos y por qué. Lo que todavía no está
+> decidido vive en la sección 8, no en documentos aparte.
 
 ---
 
@@ -8,17 +9,27 @@
 
 **Eli es el sistema de reservas que además reparte el dinero.**
 
-Gestiona la agenda, los clientes y el equipo de cualquier negocio que trabaje con reservas — y resuelve algo que ninguna herramienta de agendamiento resuelve bien: **cuánto le corresponde a cada profesional por lo que atendió.**
+Gestiona la agenda, los clientes y el equipo de negocios de belleza y cuidado personal — y resuelve algo que ninguna herramienta de agendamiento resuelve bien: **cuánto le corresponde a cada profesional por lo que atendió.**
 
 ### A quién le habla
 
-A cualquier negocio que trabaje con reservas. **No se enumeran rubros.**
+Eli arranca con **tres rubros**:
 
-Listar rubros excluye a quien no aparece y degrada a quien aparece último. El posicionamiento apunta al comportamiento compartido, no al tipo de negocio:
+| Rubro | Id interno (`Business.type`) |
+|---|---|
+| **Salones de belleza** | `salon` |
+| **Barberías** | `barberia` |
+| **Spas de uñas** | `spa-de-unas` |
 
-> **Si tu negocio trabaja con reservas, Eli es para ti.**
+El catálogo vive en un solo lugar, `lib/rubros.ts`; el registro sólo acepta esos tres.
 
-**Consecuencia obligatoria:** el producto no habla ningún dialecto vertical. Se dice **"Clientes"** en toda la aplicación — nunca "pacientes", "alumnos" ni "usuarios". Sin íconos, ejemplos ni imágenes atados a un rubro.
+**Por qué estos tres.** Comparten exactamente el modelo que Eli resuelve: atienden con reserva, trabajan con un equipo de profesionales y a cada profesional se le paga un porcentaje de lo que atiende. Elegir un nicho permite que el producto hable un solo idioma y sea el mejor en algo, en vez de servir a medias a siete rubros distintos.
+
+> **Esto reemplaza una decisión anterior.** Antes Eli se ofrecía a "cualquier negocio que trabaje con reservas" y no nombraba rubros. Ahora sí se nombran: el mensaje, los ejemplos y las imágenes hablan de cortes, color, barba y manicura.
+
+**Vocabulario:** se dice **"Clientes"** en toda la aplicación — nunca "pacientes" ni "usuarios". Quien atiende es **"profesional"**.
+
+Los negocios que ya existen con otros rubros (`salud`, `fitness`, `otro`) siguen funcionando: el rubro es un dato de segmentación y no cambia la interfaz.
 
 ### Misión
 
@@ -30,7 +41,7 @@ Centralizar la información, eliminar el trabajo engorroso y construir solucione
 
 Booksy, Fresha, Calendly y Agenda Pro compiten en **agendar**. Ninguna resuelve el **reparto**.
 
-En una enorme cantidad de negocios que trabajan con reservas, quien atiende se lleva un porcentaje del servicio y el negocio retiene el resto. Hoy eso se hace con planilla, calculadora o memoria — y a fin de mes genera discusiones, errores y desconfianza.
+En salones, barberías y spas de uñas, quien atiende se lleva un porcentaje del servicio y el negocio retiene el resto. Hoy eso se hace con planilla, calculadora o memoria — y a fin de mes genera discusiones, errores y desconfianza.
 
 **Eli lo resuelve dentro del mismo sistema donde ya vive la cita.** No hay que exportar nada ni recalcular a mano: si la cita se completó, la comisión ya está calculada.
 
@@ -101,7 +112,7 @@ CommissionChange (quién, cuándo, antes, después) → auditoría
 
 No se cobra comisión sobre las reservas. Eli **administra** el dinero del negocio, no lo toca. Cobrarle un porcentaje a quien usa Eli justamente para repartir porcentajes sería contradictorio, y además obligaría a procesar pagos de terceros.
 
-**Pendiente de definir:** precio, límites por plan y duración de la prueba gratuita.
+Precio, límites por plan y prueba gratuita: pendientes (sección 8).
 
 **Regla firme:** no se vende ninguna función que no exista. La versión anterior listaba "reportes exportables" en planes pagos sin haberlos construido — eso es motivo directo de reembolso.
 
@@ -149,8 +160,23 @@ Con el diferenciador definido, la identidad ya no debería comunicar "agenda bon
 | **Nombre** | A decidir: mantener *Eli* o cambiar |
 | **Tono** | Claro y directo. Nada de jerga técnica ni de promesas infladas |
 | **Atributos** | Exactitud, transparencia, calma |
-| **Evitar** | Estética atada a un rubro; enumerar tipos de negocio; cifras no verificables |
+| **Evitar** | Rubros fuera de los tres elegidos (consultorios, gimnasios, yoga); cifras no verificables |
 
 **Frase de cierre vigente:** *Deja de complicarte. Pásate a Eli.*
 
-**A definir:** nombre definitivo, dominio, paleta y tipografía.
+La paleta y la tipografía de la landing ya están propuestas en `docs/diseno/README.md`.
+
+---
+
+## 8. Pendiente de definir
+
+Nada de esto bloquea el trabajo actual, pero cada punto se decide antes de construir lo que depende de él.
+
+| Tema | Qué falta decidir |
+|---|---|
+| **Precio** | Monto de la suscripción, si los límites por plan se aplican en v1 y duración de la prueba gratuita (con o sin tarjeta). |
+| **Funciones nuevas** | El resto del listado de ideas por incorporar, con qué problema resuelve cada una y si es imprescindible para vender. |
+| **Atención sin reserva** | Las barberías atienden mucho sin cita previa. Hay que decidir si v1 registra al cliente que llega sin reservar (y su comisión). |
+| **Roles** | Si hace falta un super administrador de la plataforma, y si el cliente final puede crear cuenta para ver su historial y reprogramar. |
+| **Branding** | Nombre definitivo (mantener *Eli* o cambiar), dominio, y tono: cercano o sobrio. |
+| **No funcionales** | Móvil primero (un barbero gestiona desde el teléfono); zonas horarias y país; sólo español o también inglés; política de privacidad y retención de datos de clientes. |

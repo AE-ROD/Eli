@@ -1,21 +1,33 @@
 # Diseño de la landing
 
-Mockups en HTML suelto. Se abren con doble clic: **no necesitan servidor ni
-conexión**, porque las fuentes y las librerías van incrustadas en el archivo.
-Se incrustaron porque el contenedor donde se hicieron no alcanza los CDN ni
-Google Fonts; en una máquina normal conviene servirlas como corresponde.
+`mockup-landing.html` es el diseño vigente de la página de inicio. Se abre con
+doble clic: **no necesita servidor ni conexión**, porque las fuentes y las
+librerías van incrustadas en el archivo. Se incrustaron porque el contenedor
+donde se hizo no alcanza los CDN ni Google Fonts; en el código real se sirven
+como corresponde.
 
-El orden es cronológico y cada archivo fue una decisión, no una variante suelta.
+> ⚠️ El texto del mockup se escribió cuando Eli no nombraba rubros. Desde el
+> reenfoque en salones de belleza, barberías y spas de uñas
+> (`docs/PRODUCTO.md` §1), hay que reescribir el texto para esos tres nichos
+> antes de llevarlo al código. La estructura visual y las decisiones de abajo
+> siguen valiendo.
 
-| Archivo | Qué probaba | Resultado |
+### Cómo se llegó a este diseño
+
+Antes hubo seis exploraciones; cada una fue una decisión, no una variante
+suelta. Se sacaron del repositorio para no tener archivos muertos, pero siguen
+en el historial: `git show 06aed7a --stat` las lista y
+`git checkout 06aed7a -- diseno/` las trae de vuelta.
+
+| Exploración | Qué probaba | Resultado |
 |---|---|---|
-| `g1-el-dia.html` | La página como una jornada: un riel de horas del que cuelga cada sección | La estructura explica el producto sin leer |
-| `g2-el-documento.html` | La página como un paper: notas al margen, secciones `§`, tabla con epígrafe | La más difícil de confundir con otra cosa |
-| `g3-el-mostrador.html` | Grilla asimétrica, titular sangrado fuera del margen | La más linda y la más fácil de copiar |
-| `h1-dia-centrado.html` | `g1` centrada y con el texto justificado | Pedido del dueño del producto |
-| `i-compacta.html` | Tres pantallas en vez de cinco secciones | 2.562 px contra 3.756 |
-| `j-brief.html` | El brief de diseño completo: héroe de tres columnas, bento, avatares de iniciales | 4.668 px — demasiado scroll |
-| `k-mockup.html` | **El vigente.** `j` comprimido, con GSAP, ScrollTrigger y Lenis | 3.304 px |
+| `g1-el-dia` | La página como una jornada: un riel de horas del que cuelga cada sección | La estructura explica el producto sin leer |
+| `g2-el-documento` | La página como un paper: notas al margen, secciones `§`, tabla con epígrafe | La más difícil de confundir con otra cosa |
+| `g3-el-mostrador` | Grilla asimétrica, titular sangrado fuera del margen | La más linda y la más fácil de copiar |
+| `h1-dia-centrado` | `g1` centrada y con el texto justificado | Pedido del dueño del producto |
+| `i-compacta` | Tres pantallas en vez de cinco secciones | 2.562 px contra 3.756 |
+| `j-brief` | El brief de diseño completo: héroe de tres columnas, bento, avatares de iniciales | 4.668 px — demasiado scroll |
+| `k-mockup` → **`mockup-landing.html`** | **El vigente.** `j` comprimido, con GSAP, ScrollTrigger y Lenis | 3.304 px |
 
 ## Decisiones que ya están tomadas
 
@@ -47,7 +59,7 @@ quien tiene vértigo no es fluida, es hostil.
 equipo hasta 5 personas con el administrador incluido, y el monto por persona
 extra. Nadie los definió todavía y no se inventan.
 
-**Las librerías.** `k-mockup.html` usa GSAP 3.12.5 con ScrollTrigger y Lenis
+**Las librerías.** `mockup-landing.html` usa GSAP 3.12.5 con ScrollTrigger y Lenis
 1.1.18, bajadas a una carpeta aparte: **no están en el `package.json`**. Lenis es
 MIT. GSAP no: usa su licencia estándar sin cargo, que alcanza para un SaaS pero
 conviene leer antes de publicar. Las mismas animaciones se pueden hacer con la
@@ -58,8 +70,8 @@ API nativa de scroll del navegador, perdiendo algo de compatibilidad con Safari.
 Se verificó contra el código, no contra el brief:
 
 - **Elegir profesional al reservar.** El flujo público tiene tres pasos
-  (servicio → fecha y hora → datos). `confirmar` no acepta `memberId` y `/slots`
-  no calcula disponibilidad por persona.
+  (servicio → fecha y hora → datos). `confirmar` no acepta `memberId` y
+  `disponibilidad` no la calcula por persona.
 - **Porcentaje de ocupación.** No hay ningún cálculo.
 - **Ingresos estimados.** Lo que existe son ingresos reales, contados al
   completar la cita.
