@@ -2,27 +2,25 @@
 
 import { useState, useRef, useEffect } from "react"
 import { motion } from "framer-motion"
-import { X, Search, User, Stethoscope, Calendar, Clock, DollarSign, FileText } from "lucide-react"
+import { X, Search, User, Scissors, Calendar, Clock, DollarSign, FileText } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
-import type { DatosDeNuevaCita } from "../_datos"
-
-
-interface ClienteSugerido {
-  id: string
-  nombre: string
-  email: string
-}
-
-interface MiembroEquipo {
-  id: string
-  nombre: string
-  rol: string
-}
+import {
+  buscarClientes,
+  leerProfesionales,
+  type ClienteSugerido,
+  type DatosDeNuevaCita,
+  type Profesional,
+} from "../_datos"
 
 interface ModalNuevaCitaProps {
   form: DatosDeNuevaCita
   guardando: boolean
+  /**
+   * Por qué no se pudo guardar la cita, si falló. Se muestra dentro del modal y
+   * no en la página: mientras el modal está abierto, la página queda tapada.
+   */
+  aviso: string
   /** Sólo owner y admin asignan profesional; el worker no ve el selector. */
   puedeAsignarProfesional: boolean
   onFormChange: (campo: keyof DatosDeNuevaCita, valor: string) => void
@@ -33,6 +31,7 @@ interface ModalNuevaCitaProps {
 export function ModalNuevaCita({
   form,
   guardando,
+  aviso,
   puedeAsignarProfesional,
   onFormChange,
   onSubmit,
@@ -41,48 +40,52 @@ export function ModalNuevaCita({
   const [busquedaCliente, setBusquedaCliente] = useState("")
   const [sugerencias, setSugerencias] = useState<ClienteSugerido[]>([])
   const [nombreCliente, setNombreCliente] = useState("")
-  const [showSugerencias, setShowSugerencias] = useState(false)
-  const [miembros, setMiembros] = useState<MiembroEquipo[]>([])
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [mostrarSugerencias, setMostrarSugerencias] = useState(false)
+  const [profesionales, setProfesionales] = useState<Profesional[]>([])
+  const [avisoDeBusqueda, setAvisoDeBusqueda] = useState("")
+  const [avisoDeEquipo, setAvisoDeEquipo] = useState("")
+  const esperaDeBusqueda = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (!puedeAsignarProfesional) return
-    fetch("/api/equipo/miembros")
-      .then((res) => (res.ok ? res.json() : null))
-      // si falla o no autoriza, el modal sigue sin selector en vez de romperse
-      .then((data) => setMiembros(data?.miembros ?? []))
-      .catch(() => setMiembros([]))
+    // Si el equipo no carga, el modal sigue sirviendo: la cita se guarda sin
+    // profesional asignado. Pero se avisa, para que el selector no desaparezca
+    // sin explicación.
+    leerProfesionales().then((resultado) => {
+      if (resultado.ok) setProfesionales(resultado.datos)
+      else setAvisoDeEquipo(resultado.error)
+    })
   }, [puedeAsignarProfesional])
 
   useEffect(() => {
     if (!busquedaCliente || busquedaCliente.length < 2) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- clears stale suggestions when the search query is cleared
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- limpia las sugerencias viejas cuando se borra la búsqueda
       setSugerencias([])
+      setAvisoDeBusqueda("")
       return
     }
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/clientes?q=${encodeURIComponent(busquedaCliente)}&limite=8`)
-        const data = await res.json()
-        setSugerencias(
-          (data.clientes ?? []).map((c: { id: string; name: string; email?: string }) => ({
-            id: c.id,
-            nombre: c.name,
-            email: c.email ?? "",
-          }))
-        )
-        setShowSugerencias(true)
-      } catch { /* silencioso */ }
+    if (esperaDeBusqueda.current) clearTimeout(esperaDeBusqueda.current)
+    esperaDeBusqueda.current = setTimeout(async () => {
+      const resultado = await buscarClientes(busquedaCliente)
+      if (!resultado.ok) {
+        // Las sugerencias que había eran de otra búsqueda: no se dejan como si
+        // fueran las de esta.
+        setSugerencias([])
+        setAvisoDeBusqueda(resultado.error)
+        return
+      }
+      setAvisoDeBusqueda("")
+      setSugerencias(resultado.datos)
+      setMostrarSugerencias(true)
     }, 300)
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+    return () => { if (esperaDeBusqueda.current) clearTimeout(esperaDeBusqueda.current) }
   }, [busquedaCliente])
 
   function seleccionarCliente(cliente: ClienteSugerido) {
     onFormChange("clienteId", cliente.id)
     setNombreCliente(cliente.nombre)
     setBusquedaCliente(cliente.nombre)
-    setShowSugerencias(false)
+    setMostrarSugerencias(false)
   }
 
   return (
@@ -127,7 +130,12 @@ export function ModalNuevaCita({
                 required
               />
             </div>
-            {showSugerencias && sugerencias.length > 0 && (
+            {avisoDeBusqueda && (
+              <p role="alert" className="text-sm text-red-500 mt-1.5">
+                {avisoDeBusqueda}
+              </p>
+            )}
+            {mostrarSugerencias && sugerencias.length > 0 && (
               <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-card border border-border rounded-lg shadow-lg overflow-hidden">
                 {sugerencias.map((cliente) => (
                   <button
@@ -149,10 +157,10 @@ export function ModalNuevaCita({
 
           <CampoFormulario
             etiqueta="Servicio"
-            placeholder="Ej: Consulta, Corte, Masaje..."
+            placeholder="Ej: Corte, Color, Manicura..."
             value={form.servicio}
             onChange={(e) => onFormChange("servicio", e.target.value)}
-            icono={<Stethoscope className="h-4 w-4" />}
+            icono={<Scissors className="h-4 w-4" />}
             required
           />
 
@@ -193,7 +201,13 @@ export function ModalNuevaCita({
             icono={<DollarSign className="h-4 w-4" />}
           />
 
-          {puedeAsignarProfesional && miembros.length > 0 && (
+          {puedeAsignarProfesional && avisoDeEquipo && (
+            <p role="alert" className="text-sm text-red-500">
+              {avisoDeEquipo}
+            </p>
+          )}
+
+          {puedeAsignarProfesional && profesionales.length > 0 && (
             <div>
               <label className="block text-sm font-medium text-foreground mb-1.5">
                 <span className="flex items-center gap-2">
@@ -207,8 +221,8 @@ export function ModalNuevaCita({
                 className="w-full px-4 py-3 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
               >
                 <option value="">Sin asignar</option>
-                {miembros.map((m) => (
-                  <option key={m.id} value={m.id}>{m.nombre}</option>
+                {profesionales.map((profesional) => (
+                  <option key={profesional.id} value={profesional.id}>{profesional.nombre}</option>
                 ))}
               </select>
             </div>
@@ -228,6 +242,12 @@ export function ModalNuevaCita({
               className="w-full p-3 rounded-lg border border-border bg-background text-sm resize-none h-20 focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
           </div>
+
+          {aviso && (
+            <p role="alert" className="text-sm text-red-500">
+              {aviso}
+            </p>
+          )}
 
           <div className="flex gap-3 pt-2">
             <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar}>

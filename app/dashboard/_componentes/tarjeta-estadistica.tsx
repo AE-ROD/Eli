@@ -9,7 +9,8 @@ interface TarjetaEstadisticaProps {
   icono: LucideIcon
   /**
    * De qué está hecha la cifra: la línea que la explica. Se omite cuando no hay
-   * nada verdadero que decir — nunca se rellena (`reglas/02-codigo.md`).
+   * nada verdadero que decir: nunca se rellena con una frase vaga, que es la
+   * misma mentira que un `+0%` con más palabras.
    */
   procedencia?: string
   colorIcono?: "primario" | "exito" | "advertencia" | "info"

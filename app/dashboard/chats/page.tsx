@@ -1,95 +1,103 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { AnimatePresence, motion } from "framer-motion"
-import { Send } from "lucide-react"
+import { AnimatePresence } from "framer-motion"
 import { BarraSuperior } from "@/components/panel/barra-superior"
-import { ListaConversaciones, type ConversacionAPI, type MensajeAPI } from "./_componentes/lista-conversaciones"
+import {
+  leerConversaciones,
+  leerMensajes,
+  enviarMensaje,
+  crearConversacion,
+  type Conversacion,
+  type DatosDeNuevaConversacion,
+  type Mensaje,
+} from "./_datos"
+import { ListaConversaciones } from "./_componentes/lista-conversaciones"
 import { AreaChat } from "./_componentes/area-chat"
-import { ModalNuevaConversacion, type FormNuevaConversacion } from "./_componentes/modal-nueva-conversacion"
+import { ModalNuevaConversacion } from "./_componentes/modal-nueva-conversacion"
+import { SinConversacionAbierta } from "./_componentes/sin-conversacion-abierta"
 
-const FORM_INICIAL: FormNuevaConversacion = { nombre: "", telefono: "" }
+const CONVERSACION_EN_BLANCO: DatosDeNuevaConversacion = { nombre: "", telefono: "" }
 
 export default function PaginaChats() {
-  const [conversaciones, setConversaciones] = useState<ConversacionAPI[]>([])
+  const [conversaciones, setConversaciones] = useState<Conversacion[]>([])
   const [cargandoLista, setCargandoLista] = useState(true)
   const [busqueda, setBusqueda] = useState("")
-  const [activa, setActiva] = useState<ConversacionAPI | null>(null)
-  const [mensajesActivos, setMensajesActivos] = useState<MensajeAPI[]>([])
+  const [activa, setActiva] = useState<Conversacion | null>(null)
+  const [mensajesActivos, setMensajesActivos] = useState<Mensaje[]>([])
   const [cargandoMensajes, setCargandoMensajes] = useState(false)
+  const [aviso, setAviso] = useState("")
   const [modalAbierto, setModalAbierto] = useState(false)
   const [guardando, setGuardando] = useState(false)
-  const [formNueva, setFormNueva] = useState<FormNuevaConversacion>(FORM_INICIAL)
+  const [avisoDelModal, setAvisoDelModal] = useState("")
+  const [nuevaConversacion, setNuevaConversacion] = useState<DatosDeNuevaConversacion>(CONVERSACION_EN_BLANCO)
 
-  const fetchConversaciones = useCallback(async () => {
+  const cargarConversaciones = useCallback(async () => {
     setCargandoLista(true)
-    try {
-      const res = await fetch("/api/chats")
-      if (res.ok) setConversaciones(await res.json())
-    } catch { /* silencioso */ }
-    finally { setCargandoLista(false) }
+    const resultado = await leerConversaciones()
+    if (resultado.ok) setConversaciones(resultado.datos)
+    else setAviso(resultado.error)
+    setCargandoLista(false)
   }, [])
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches the conversation list on mount
-  useEffect(() => { fetchConversaciones() }, [fetchConversaciones])
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- carga la lista de conversaciones al montar
+  useEffect(() => { cargarConversaciones() }, [cargarConversaciones])
 
-  const seleccionarConversacion = async (conv: ConversacionAPI) => {
-    setActiva(conv)
+  const abrirConversacion = async (conversacion: Conversacion) => {
+    setAviso("")
+    setActiva(conversacion)
     setMensajesActivos([])
     setCargandoMensajes(true)
-    try {
-      const res = await fetch(`/api/chats/${conv.id}`)
-      if (res.ok) {
-        const data = await res.json()
-        setMensajesActivos(data.messages)
-      }
-    } catch { /* silencioso */ }
-    finally { setCargandoMensajes(false) }
+    const resultado = await leerMensajes(conversacion.id)
+    if (resultado.ok) setMensajesActivos(resultado.datos)
+    else setAviso(resultado.error)
+    setCargandoMensajes(false)
   }
 
-  const enviarMensaje = async (texto: string) => {
+  const enviar = async (texto: string) => {
     if (!activa) return
-    const res = await fetch(`/api/chats/${activa.id}/mensajes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: texto }),
-    })
-    if (res.ok) {
-      const nuevoMensaje: MensajeAPI = await res.json()
-      setMensajesActivos((prev) => [...prev, nuevoMensaje])
-      // Actualizar último mensaje en la lista
-      setConversaciones((prev) =>
-        prev.map((c) =>
-          c.id === activa.id
-            ? { ...c, updatedAt: nuevoMensaje.createdAt, messages: [nuevoMensaje] }
-            : c
-        ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-      )
-    }
+
+    setAviso("")
+    const resultado = await enviarMensaje(activa.id, texto)
+    if (!resultado.ok) return setAviso(resultado.error)
+
+    const nuevoMensaje = resultado.datos
+    setMensajesActivos((previos) => [...previos, nuevoMensaje])
+    // La lista muestra el último mensaje de cada conversación y las ordena por
+    // actividad: la que acaba de recibir uno pasa a ir primera.
+    setConversaciones((previas) =>
+      previas
+        .map((conversacion) =>
+          conversacion.id === activa.id
+            ? { ...conversacion, updatedAt: nuevoMensaje.createdAt, messages: [nuevoMensaje] }
+            : conversacion
+        )
+        .sort((una, otra) => new Date(otra.updatedAt).getTime() - new Date(una.updatedAt).getTime())
+    )
   }
 
-  const crearConversacion = async (e: React.SyntheticEvent<HTMLFormElement>) => {
-    e.preventDefault()
+  const abrirModal = () => {
+    setAvisoDelModal("")
+    setModalAbierto(true)
+  }
+
+  const guardarNuevaConversacion = async (evento: React.SyntheticEvent<HTMLFormElement>) => {
+    evento.preventDefault()
+
+    setAvisoDelModal("")
     setGuardando(true)
-    try {
-      const res = await fetch("/api/chats", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customerName: formNueva.nombre,
-          customerPhone: formNueva.telefono || undefined,
-        }),
-      })
-      if (res.ok) {
-        const nueva: ConversacionAPI = await res.json()
-        setConversaciones((prev) => [nueva, ...prev])
-        setModalAbierto(false)
-        setFormNueva(FORM_INICIAL)
-        seleccionarConversacion(nueva)
-      }
-    } finally {
-      setGuardando(false)
-    }
+    const resultado = await crearConversacion(nuevaConversacion)
+    setGuardando(false)
+
+    // El aviso va dentro del modal, que sigue abierto con lo que se cargó: en
+    // la página quedaría tapado por el velo del modal.
+    if (!resultado.ok) return setAvisoDelModal(resultado.error)
+
+    const creada = resultado.datos
+    setConversaciones((previas) => [creada, ...previas])
+    setModalAbierto(false)
+    setNuevaConversacion(CONVERSACION_EN_BLANCO)
+    abrirConversacion(creada)
   }
 
   return (
@@ -102,49 +110,42 @@ export default function PaginaChats() {
         mostrarBusqueda={false}
       />
 
+      {aviso && (
+        <p role="alert" className="text-sm text-red-500 px-6 py-3">
+          {aviso}
+        </p>
+      )}
+
       <div className="flex-1 flex overflow-hidden">
         <ListaConversaciones
           conversaciones={conversaciones}
           busqueda={busqueda}
           onBusqueda={setBusqueda}
           activaId={activa?.id ?? null}
-          onSeleccionar={seleccionarConversacion}
-          onNueva={() => setModalAbierto(true)}
+          onSeleccionar={abrirConversacion}
+          onNueva={abrirModal}
         />
 
         {activa ? (
           <AreaChat
             conversacion={activa}
-            mensajesAPI={mensajesActivos}
+            mensajes={mensajesActivos}
             cargando={cargandoMensajes}
-            onEnviar={enviarMensaje}
+            onEnviar={enviar}
           />
         ) : (
-          <div className="flex-1 flex items-center justify-center bg-muted/30">
-            <motion.div
-              className="text-center"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-                <Send className="h-10 w-10 text-muted-foreground" />
-              </div>
-              <h3 className="text-xl font-semibold text-foreground mb-2">Tus mensajes</h3>
-              <p className="text-muted-foreground text-sm">
-                Selecciona una conversación para comenzar a chatear
-              </p>
-            </motion.div>
-          </div>
+          <SinConversacionAbierta />
         )}
       </div>
 
       <AnimatePresence>
         {modalAbierto && (
           <ModalNuevaConversacion
-            form={formNueva}
+            form={nuevaConversacion}
             guardando={guardando}
-            onFormChange={(campo, valor) => setFormNueva((p) => ({ ...p, [campo]: valor }))}
-            onSubmit={crearConversacion}
+            aviso={avisoDelModal}
+            onFormChange={(campo, valor) => setNuevaConversacion((previa) => ({ ...previa, [campo]: valor }))}
+            onSubmit={guardarNuevaConversacion}
             onCerrar={() => setModalAbierto(false)}
           />
         )}

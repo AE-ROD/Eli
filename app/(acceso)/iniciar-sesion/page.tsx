@@ -57,7 +57,7 @@ export default function PaginaIniciarSesion() {
           transition={{ duration: 0.5 }}
         >
           <Link href="/" className="flex justify-center mb-8">
-            <LogoEli size="lg" />
+            <LogoEli tamaño="lg" />
           </Link>
 
           <div className="text-center mb-8">
@@ -184,7 +184,7 @@ export default function PaginaIniciarSesion() {
               Gestiona tu negocio de forma inteligente
             </h2>
             <p className="text-lg opacity-90 text-pretty">
-              Centraliza reservas, clientes y comunicación en una sola plataforma diseñada para profesionales del bienestar y la salud.
+              Centraliza reservas, clientes y comunicación en una sola plataforma diseñada para salones, barberías y spas de uñas.
             </p>
 
             <div className="mt-8 space-y-4">

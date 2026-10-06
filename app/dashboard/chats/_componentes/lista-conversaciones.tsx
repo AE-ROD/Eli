@@ -3,37 +3,24 @@
 import { motion } from "framer-motion"
 import { Search, MessageSquarePlus } from "lucide-react"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
+import type { Conversacion } from "../_datos"
 
-export interface MensajeAPI {
-  id: string
-  content: string
-  fromBusiness: boolean
-  createdAt: string
-}
-
-export interface ConversacionAPI {
-  id: string
-  customerName: string
-  customerPhone: string | null
-  updatedAt: string
-  messages: MensajeAPI[]
-}
-
+/** `Ahora`, `5m`, `14:30`, `Mié` o `8 mar`, según cuánto pasó. */
 function formatearHoraRelativa(iso: string): string {
-  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (diff < 60) return "Ahora"
-  if (diff < 3600) return `${Math.floor(diff / 60)}m`
-  if (diff < 86400) return new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
-  if (diff < 604800) return ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"][new Date(iso).getDay()]
+  const segundos = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  if (segundos < 60) return "Ahora"
+  if (segundos < 3600) return `${Math.floor(segundos / 60)}m`
+  if (segundos < 86400) return new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
+  if (segundos < 604800) return ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"][new Date(iso).getDay()]
   return new Date(iso).toLocaleDateString("es-ES", { day: "numeric", month: "short" })
 }
 
 interface ListaConversacionesProps {
-  conversaciones: ConversacionAPI[]
+  conversaciones: Conversacion[]
   busqueda: string
-  onBusqueda: (v: string) => void
+  onBusqueda: (busqueda: string) => void
   activaId: string | null
-  onSeleccionar: (conv: ConversacionAPI) => void
+  onSeleccionar: (conversacion: Conversacion) => void
   onNueva: () => void
 }
 
@@ -45,9 +32,9 @@ export function ListaConversaciones({
   onSeleccionar,
   onNueva,
 }: ListaConversacionesProps) {
-  const filtradas = conversaciones.filter((c) =>
-    c.customerName.toLowerCase().includes(busqueda.toLowerCase()) ||
-    (c.customerPhone ?? "").includes(busqueda)
+  const filtradas = conversaciones.filter((conversacion) =>
+    conversacion.customerName.toLowerCase().includes(busqueda.toLowerCase()) ||
+    (conversacion.customerPhone ?? "").includes(busqueda)
   )
 
   return (
@@ -78,23 +65,23 @@ export function ListaConversaciones({
             Sin conversaciones
           </div>
         ) : (
-          filtradas.map((conv) => {
-            const ultimo = conv.messages[0]
+          filtradas.map((conversacion) => {
+            const ultimo = conversacion.messages[0]
             return (
               <motion.button
-                key={conv.id}
+                key={conversacion.id}
                 className={`w-full p-4 flex items-start gap-3 hover:bg-muted/50 transition-colors text-left ${
-                  activaId === conv.id ? "bg-primary/5 border-l-2 border-primary" : ""
+                  activaId === conversacion.id ? "bg-primary/5 border-l-2 border-primary" : ""
                 }`}
-                onClick={() => onSeleccionar(conv)}
+                onClick={() => onSeleccionar(conversacion)}
                 whileHover={{ x: 2 }}
               >
-                <AvatarUsuario nombre={conv.customerName} tamaño="md" />
+                <AvatarUsuario nombre={conversacion.customerName} tamaño="md" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="font-medium text-foreground truncate">{conv.customerName}</span>
+                    <span className="font-medium text-foreground truncate">{conversacion.customerName}</span>
                     <span className="text-xs text-muted-foreground flex-shrink-0">
-                      {formatearHoraRelativa(conv.updatedAt)}
+                      {formatearHoraRelativa(conversacion.updatedAt)}
                     </span>
                   </div>
                   <p className="text-sm text-muted-foreground truncate">

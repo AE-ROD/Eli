@@ -3,7 +3,11 @@
 import { motion } from "framer-motion"
 import { Check, CheckCheck } from "lucide-react"
 
-export interface Mensaje {
+/**
+ * Un mensaje tal como lo dibuja la burbuja, con la hora ya escrita. No es el
+ * `Mensaje` del servidor; se arma con `mensajeParaBurbuja` en `area-chat.tsx`.
+ */
+export interface MensajeEnBurbuja {
   id: string
   texto: string
   hora: string
@@ -13,7 +17,7 @@ export interface Mensaje {
 }
 
 interface BurbujaMensajeProps {
-  mensaje: Mensaje
+  mensaje: MensajeEnBurbuja
 }
 
 export function BurbujaMensaje({ mensaje }: BurbujaMensajeProps) {

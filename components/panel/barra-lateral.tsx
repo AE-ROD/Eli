@@ -76,7 +76,7 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes, puedeVerEqu
                   exit={{ opacity: 0, x: -10 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <LogoEli size="sm" />
+                  <LogoEli tamaño="sm" />
                 </motion.div>
               )}
             </AnimatePresence>

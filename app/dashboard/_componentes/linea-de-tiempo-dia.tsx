@@ -17,7 +17,10 @@ interface LineaDeTiempoDiaProps {
   citas: CitaDelDia[]
 }
 
-/** Compartida con `vista-dia-profesional.tsx`: única forma de mapear una cita del endpoint a `TarjetaCita`. */
+/**
+ * Única forma de mapear una cita de las cifras del panel a `TarjetaCita`: la
+ * usan esta línea de tiempo, `vista-dia-profesional.tsx` y `citas-de-hoy.tsx`.
+ */
 export function citaParaTarjeta(cita: CitaDelDia): CitaEnTarjeta {
   return {
     id: cita.id,
@@ -34,7 +37,8 @@ export function citaParaTarjeta(cita: CitaDelDia): CitaEnTarjeta {
 
 /**
  * Trama tenue para los huecos: a propósito distinta al borde de color de una
- * cita, para que "ocupado" y "libre" se lean de un vistazo (reglas/02-codigo.md).
+ * cita, para que "ocupado" y "libre" se distingan de un vistazo y no sólo por
+ * el color.
  */
 const CLASE_HUECO =
   "border border-dashed border-border rounded-lg bg-[repeating-linear-gradient(45deg,rgba(0,0,0,0.035)_0px,rgba(0,0,0,0.035)_6px,transparent_6px,transparent_14px)] px-3 py-3"

@@ -17,7 +17,7 @@ export function PantallaDeCarga() {
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.35, ease: "easeOut" }}
         >
-          <LogoEli size="xl" />
+          <LogoEli tamaño="xl" />
         </motion.div>
 
         <motion.div

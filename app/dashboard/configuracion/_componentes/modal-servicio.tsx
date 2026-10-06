@@ -1,16 +1,10 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { X, Stethoscope, Clock, DollarSign, FileText } from "lucide-react"
+import { X, Scissors, Clock, DollarSign, FileText } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
-
-export interface FormServicio {
-  name: string
-  description: string
-  duration: number
-  price: string
-}
+import type { DatosDeServicio } from "../_datos"
 
 const DURACIONES = [
   { valor: 15, etiqueta: "15 min" },
@@ -23,10 +17,15 @@ const DURACIONES = [
 ]
 
 interface ModalServicioProps {
-  form: FormServicio
+  form: DatosDeServicio
   guardando: boolean
+  /**
+   * Por qué no se pudo guardar el servicio, si falló. Se muestra dentro del
+   * modal y no en la sección: mientras el modal está abierto, queda tapada.
+   */
+  aviso: string
   modoEdicion: boolean
-  onFormChange: (campo: keyof FormServicio, valor: string | number) => void
+  onFormChange: (campo: keyof DatosDeServicio, valor: string | number) => void
   onSubmit: (e: React.SyntheticEvent<HTMLFormElement>) => void
   onCerrar: () => void
 }
@@ -34,6 +33,7 @@ interface ModalServicioProps {
 export function ModalServicio({
   form,
   guardando,
+  aviso,
   modoEdicion,
   onFormChange,
   onSubmit,
@@ -65,10 +65,10 @@ export function ModalServicio({
         <form onSubmit={onSubmit} className="space-y-4">
           <CampoFormulario
             etiqueta="Nombre del servicio"
-            placeholder="Ej: Corte de cabello, Masaje, Consulta..."
+            placeholder="Ej: Corte de cabello, Arreglo de barba, Manicura..."
             value={form.name}
             onChange={(e) => onFormChange("name", e.target.value)}
-            icono={<Stethoscope className="h-4 w-4" />}
+            icono={<Scissors className="h-4 w-4" />}
             required
           />
 
@@ -121,6 +121,12 @@ export function ModalServicio({
             onChange={(e) => onFormChange("price", e.target.value)}
             icono={<DollarSign className="h-4 w-4" />}
           />
+
+          {aviso && (
+            <p role="alert" className="text-sm text-red-500">
+              {aviso}
+            </p>
+          )}
 
           <div className="flex gap-3 pt-2">
             <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar}>

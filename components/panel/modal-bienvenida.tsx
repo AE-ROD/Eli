@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { X, Clock, Stethoscope, Link2, CheckCircle2, Copy, Check, ArrowRight } from "lucide-react"
+import { X, Clock, Scissors, Link2, CheckCircle2, Copy, Check, ArrowRight } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { useRouter } from "next/navigation"
 
@@ -18,7 +18,7 @@ const PASOS = [
     ruta: "/dashboard/configuracion",
   },
   {
-    icono: Stethoscope,
+    icono: Scissors,
     color: "bg-purple-100 text-purple-600",
     titulo: "Agrega tus servicios",
     descripcion: "Crea el catálogo de servicios que ofreces con su duración y precio. Esto aparecerá en tu página de reservas.",

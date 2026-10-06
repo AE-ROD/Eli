@@ -61,7 +61,7 @@ const PLANES = [
     id: "pro",
     nombre: "Pro",
     icono: Building2,
-    descripcion: "Para clínicas y salones grandes",
+    descripcion: "Para salones con equipo grande",
     mensual: 59,
     anual: 479,
     ahorroAnual: 229,

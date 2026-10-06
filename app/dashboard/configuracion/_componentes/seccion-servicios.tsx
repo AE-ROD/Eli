@@ -2,48 +2,50 @@
 
 import { useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { Plus, Pencil, Trash2, Clock, DollarSign, Stethoscope, ToggleLeft, ToggleRight } from "lucide-react"
+import { Plus, Pencil, Trash2, Clock, DollarSign, Scissors, ToggleLeft, ToggleRight } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
-import { ModalServicio, type FormServicio } from "./modal-servicio"
+import { formatearDuracionDeServicio } from "@/lib/fechas"
+import { ModalServicio } from "./modal-servicio"
+import {
+  crearServicio,
+  editarServicio,
+  activarODesactivarServicio,
+  borrarServicio,
+  type DatosDeServicio,
+  type Servicio,
+} from "../_datos"
 
-export interface ServicioAPI {
-  id: string
-  name: string
-  description: string | null
-  duration: number
-  price: number | null
-  active: boolean
-}
-
-const FORM_INICIAL: FormServicio = { name: "", description: "", duration: 30, price: "" }
-
-function formatDuracion(min: number): string {
-  if (min < 60) return `${min} min`
-  const h = Math.floor(min / 60)
-  const m = min % 60
-  return m === 0 ? `${h}h` : `${h}h ${m}min`
-}
+const SERVICIO_EN_BLANCO: DatosDeServicio = { name: "", description: "", duration: 30, price: "" }
 
 interface SeccionServiciosProps {
-  serviciosIniciales: ServicioAPI[]
+  serviciosIniciales: Servicio[]
 }
 
 export function SeccionServicios({ serviciosIniciales }: SeccionServiciosProps) {
-  const [servicios, setServicios] = useState<ServicioAPI[]>(serviciosIniciales)
+  const [servicios, setServicios] = useState<Servicio[]>(serviciosIniciales)
   const [modalAbierto, setModalAbierto] = useState(false)
-  const [servicioEditando, setServicioEditando] = useState<ServicioAPI | null>(null)
-  const [form, setForm] = useState<FormServicio>(FORM_INICIAL)
+  const [servicioEditando, setServicioEditando] = useState<Servicio | null>(null)
+  const [form, setForm] = useState<DatosDeServicio>(SERVICIO_EN_BLANCO)
   const [guardando, setGuardando] = useState(false)
+  const [aviso, setAviso] = useState("")
+  const [avisoDelModal, setAvisoDelModal] = useState("")
 
   const abrirNuevo = () => {
     setServicioEditando(null)
-    setForm(FORM_INICIAL)
+    setForm(SERVICIO_EN_BLANCO)
+    setAvisoDelModal("")
     setModalAbierto(true)
   }
 
-  const abrirEdicion = (s: ServicioAPI) => {
-    setServicioEditando(s)
-    setForm({ name: s.name, description: s.description ?? "", duration: s.duration, price: s.price?.toString() ?? "" })
+  const abrirEdicion = (servicio: Servicio) => {
+    setServicioEditando(servicio)
+    setForm({
+      name: servicio.name,
+      description: servicio.description ?? "",
+      duration: servicio.duration,
+      price: servicio.price?.toString() ?? "",
+    })
+    setAvisoDelModal("")
     setModalAbierto(true)
   }
 
@@ -52,60 +54,42 @@ export function SeccionServicios({ serviciosIniciales }: SeccionServiciosProps) 
     setServicioEditando(null)
   }
 
+  /** Pone en la lista el servicio tal como volvió del servidor. */
+  const reemplazarEnLista = (actualizado: Servicio) =>
+    setServicios((previos) => previos.map((servicio) => (servicio.id === actualizado.id ? actualizado : servicio)))
+
   const guardar = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault()
+    setAvisoDelModal("")
     setGuardando(true)
-    try {
-      const payload = {
-        name: form.name,
-        description: form.description || undefined,
-        duration: form.duration,
-        price: form.price ? parseFloat(form.price) : undefined,
-      }
+    const resultado = servicioEditando
+      ? await editarServicio(servicioEditando.id, form)
+      : await crearServicio(form)
+    setGuardando(false)
 
-      if (servicioEditando) {
-        const res = await fetch(`/api/configuracion/servicios/${servicioEditando.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        })
-        if (res.ok) {
-          const actualizado: ServicioAPI = await res.json()
-          setServicios((prev) => prev.map((s) => (s.id === actualizado.id ? actualizado : s)))
-        }
-      } else {
-        const res = await fetch("/api/configuracion/servicios", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        })
-        if (res.ok) {
-          const nuevo: ServicioAPI = await res.json()
-          setServicios((prev) => [...prev, nuevo])
-        }
-      }
-      cerrarModal()
-    } finally {
-      setGuardando(false)
-    }
+    // Si el servidor lo rechaza, el modal queda abierto con lo cargado y el
+    // motivo: cerrarlo haría parecer que se guardó.
+    if (!resultado.ok) return setAvisoDelModal(resultado.error)
+
+    const guardado = resultado.datos
+    if (servicioEditando) reemplazarEnLista(guardado)
+    else setServicios((previos) => [...previos, guardado])
+    cerrarModal()
   }
 
-  const toggleActivo = async (s: ServicioAPI) => {
-    const res = await fetch(`/api/configuracion/servicios/${s.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ active: !s.active }),
-    })
-    if (res.ok) {
-      const actualizado: ServicioAPI = await res.json()
-      setServicios((prev) => prev.map((x) => (x.id === actualizado.id ? actualizado : x)))
-    }
+  const alternarActivo = async (servicio: Servicio) => {
+    setAviso("")
+    const resultado = await activarODesactivarServicio(servicio.id, !servicio.active)
+    if (resultado.ok) reemplazarEnLista(resultado.datos)
+    else setAviso(resultado.error)
   }
 
   const eliminar = async (id: string) => {
     if (!confirm("¿Eliminar este servicio?")) return
-    const res = await fetch(`/api/configuracion/servicios/${id}`, { method: "DELETE" })
-    if (res.ok) setServicios((prev) => prev.filter((s) => s.id !== id))
+    setAviso("")
+    const resultado = await borrarServicio(id)
+    if (resultado.ok) setServicios((previos) => previos.filter((servicio) => servicio.id !== id))
+    else setAviso(resultado.error)
   }
 
   return (
@@ -113,7 +97,7 @@ export function SeccionServicios({ serviciosIniciales }: SeccionServiciosProps) 
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Stethoscope className="h-5 w-5 text-primary" />
+            <Scissors className="h-5 w-5 text-primary" />
           </div>
           <div>
             <h2 className="font-semibold text-foreground">Servicios</h2>
@@ -125,10 +109,16 @@ export function SeccionServicios({ serviciosIniciales }: SeccionServiciosProps) 
         </BotonPrimario>
       </div>
 
+      {aviso && (
+        <p role="alert" className="text-sm text-red-500 mb-4">
+          {aviso}
+        </p>
+      )}
+
       {servicios.length === 0 ? (
         <div className="text-center py-10">
           <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
-            <Stethoscope className="h-7 w-7 text-muted-foreground" />
+            <Scissors className="h-7 w-7 text-muted-foreground" />
           </div>
           <p className="font-medium text-foreground mb-1">Sin servicios aún</p>
           <p className="text-sm text-muted-foreground">Agrega el primer servicio que ofreces</p>
@@ -136,38 +126,38 @@ export function SeccionServicios({ serviciosIniciales }: SeccionServiciosProps) 
       ) : (
         <div className="space-y-3">
           <AnimatePresence>
-            {servicios.map((s) => (
+            {servicios.map((servicio) => (
               <motion.div
-                key={s.id}
+                key={servicio.id}
                 layout
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 className={`flex items-center gap-4 p-4 rounded-xl border transition-all ${
-                  s.active ? "border-border/50" : "border-border/30 opacity-50"
+                  servicio.active ? "border-border/50" : "border-border/30 opacity-50"
                 }`}
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <p className="font-medium text-foreground truncate">{s.name}</p>
-                    {!s.active && (
+                    <p className="font-medium text-foreground truncate">{servicio.name}</p>
+                    {!servicio.active && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
                         Inactivo
                       </span>
                     )}
                   </div>
-                  {s.description && (
-                    <p className="text-xs text-muted-foreground truncate mb-1">{s.description}</p>
+                  {servicio.description && (
+                    <p className="text-xs text-muted-foreground truncate mb-1">{servicio.description}</p>
                   )}
                   <div className="flex items-center gap-3">
                     <span className="flex items-center gap-1 text-xs text-muted-foreground">
                       <Clock className="h-3 w-3" />
-                      {formatDuracion(s.duration)}
+                      {formatearDuracionDeServicio(servicio.duration)}
                     </span>
-                    {s.price != null && (
+                    {servicio.price != null && (
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         <DollarSign className="h-3 w-3" />
-                        {s.price.toLocaleString("es-ES")}
+                        {servicio.price.toLocaleString("es-ES")}
                       </span>
                     )}
                   </div>
@@ -175,23 +165,23 @@ export function SeccionServicios({ serviciosIniciales }: SeccionServiciosProps) 
 
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <button
-                    onClick={() => toggleActivo(s)}
+                    onClick={() => alternarActivo(servicio)}
                     className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                    title={s.active ? "Desactivar" : "Activar"}
+                    title={servicio.active ? "Desactivar" : "Activar"}
                   >
-                    {s.active
+                    {servicio.active
                       ? <ToggleRight className="h-5 w-5 text-primary" />
                       : <ToggleLeft className="h-5 w-5" />
                     }
                   </button>
                   <button
-                    onClick={() => abrirEdicion(s)}
+                    onClick={() => abrirEdicion(servicio)}
                     className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
                   >
                     <Pencil className="h-4 w-4" />
                   </button>
                   <button
-                    onClick={() => eliminar(s.id)}
+                    onClick={() => eliminar(servicio.id)}
                     className="p-2 rounded-lg hover:bg-red-50 transition-colors text-muted-foreground hover:text-red-600"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -208,8 +198,9 @@ export function SeccionServicios({ serviciosIniciales }: SeccionServiciosProps) 
           <ModalServicio
             form={form}
             guardando={guardando}
+            aviso={avisoDelModal}
             modoEdicion={!!servicioEditando}
-            onFormChange={(campo, valor) => setForm((p) => ({ ...p, [campo]: valor }))}
+            onFormChange={(campo, valor) => setForm((previo) => ({ ...previo, [campo]: valor }))}
             onSubmit={guardar}
             onCerrar={cerrarModal}
           />

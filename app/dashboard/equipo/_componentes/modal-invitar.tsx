@@ -5,8 +5,9 @@ import { motion, AnimatePresence } from "framer-motion"
 import { X, UserPlus, Mail, User, ShieldCheck } from "lucide-react"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
+import { invitarAlEquipo } from "../_datos"
 
-interface Props {
+interface ModalInvitarProps {
   abierto: boolean
   onCerrar: () => void
   onInvitado: () => void
@@ -15,17 +16,17 @@ interface Props {
 const roles = [
   {
     id: "worker",
-    label: "Trabajador",
+    nombre: "Trabajador",
     descripcion: "Gestiona su propio horario y citas",
   },
   {
     id: "admin",
-    label: "Administrador",
+    nombre: "Administrador",
     descripcion: "Acceso completo al negocio, puede invitar otros",
   },
-]
+] as const
 
-export function ModalInvitar({ abierto, onCerrar, onInvitado }: Props) {
+export function ModalInvitar({ abierto, onCerrar, onInvitado }: ModalInvitarProps) {
   const [nombre, setNombre] = useState("")
   const [email, setEmail] = useState("")
   const [rol, setRol] = useState<"worker" | "admin">("worker")
@@ -52,16 +53,10 @@ export function ModalInvitar({ abierto, onCerrar, onInvitado }: Props) {
     setError("")
     setEnviando(true)
 
-    const res = await fetch("/api/equipo", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nombre, email, rol }),
-    })
+    const resultado = await invitarAlEquipo({ nombre, email, rol })
 
-    const data = await res.json()
-
-    if (!res.ok) {
-      setError(data.error ?? "Error al enviar la invitación")
+    if (!resultado.ok) {
+      setError(resultado.error)
       setEnviando(false)
       return
     }
@@ -142,21 +137,21 @@ export function ModalInvitar({ abierto, onCerrar, onInvitado }: Props) {
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-foreground">Rol</label>
                     <div className="space-y-2">
-                      {roles.map((r) => (
+                      {roles.map((opcion) => (
                         <button
-                          key={r.id}
+                          key={opcion.id}
                           type="button"
                           className={`w-full flex items-start gap-3 p-3 rounded-xl border-2 text-left transition-all ${
-                            rol === r.id
+                            rol === opcion.id
                               ? "border-primary bg-primary/5"
                               : "border-border hover:border-primary/40"
                           }`}
-                          onClick={() => setRol(r.id as "worker" | "admin")}
+                          onClick={() => setRol(opcion.id)}
                         >
-                          <ShieldCheck className={`h-4 w-4 mt-0.5 flex-shrink-0 ${rol === r.id ? "text-primary" : "text-muted-foreground"}`} />
+                          <ShieldCheck className={`h-4 w-4 mt-0.5 flex-shrink-0 ${rol === opcion.id ? "text-primary" : "text-muted-foreground"}`} />
                           <div>
-                            <p className="text-sm font-semibold text-foreground">{r.label}</p>
-                            <p className="text-xs text-muted-foreground">{r.descripcion}</p>
+                            <p className="text-sm font-semibold text-foreground">{opcion.nombre}</p>
+                            <p className="text-xs text-muted-foreground">{opcion.descripcion}</p>
                           </div>
                         </button>
                       ))}

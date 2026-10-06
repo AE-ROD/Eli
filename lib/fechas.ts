@@ -1,10 +1,10 @@
 /**
  * Todo lo que el sistema hace con fechas y horas: los cálculos de la agenda
- * (qué semana, qué mes, cuánto correr) y cómo se escribe la hora y la duración
- * de una cita. Van acá y no dentro de las vistas porque no tienen nada de
- * pantalla: son reglas que se pueden probar solas, y equivocarse en una semana,
- * en un fin de mes o en una hora se paga con citas que no aparecen o que se
- * leen corridas.
+ * (qué semana, qué mes, cuánto correr), cómo se escribe la hora de una cita y
+ * cuánto dura una cita o un servicio. Van acá y no dentro de las vistas porque
+ * no tienen nada de pantalla: son reglas que se pueden probar solas, y
+ * equivocarse en una semana, en un fin de mes o en una hora se paga con citas
+ * que no aparecen o que se leen corridas.
  */
 
 /** Lo que se está mirando de una vez: un día, una semana o un mes. */
@@ -69,4 +69,32 @@ export function formatearHora(iso: string): string {
 /** Cuántos minutos hay entre dos instantes ISO, redondeado al minuto. */
 export function duracionEnMinutos(inicio: string, fin: string): number {
   return Math.round((new Date(fin).getTime() - new Date(inicio).getTime()) / 60000)
+}
+
+/**
+ * La duración de una cita tal como se muestra en la agenda y en el historial
+ * de un cliente: en minutos y nunca menos de uno. Una cita mal cargada, que
+ * termina cuando empieza o antes, no se lee como "0 minutos" ni como una
+ * duración negativa. Para cuentas sobre el tiempo real, `duracionEnMinutos`.
+ */
+export function duracionParaMostrar(inicio: string, fin: string): number {
+  return Math.max(1, duracionEnMinutos(inicio, fin))
+}
+
+/** Si `fecha` cae en el día de hoy, en la zona horaria del navegador. */
+export function esHoy(fecha: Date): boolean {
+  return fecha.toDateString() === new Date().toDateString()
+}
+
+/**
+ * Cuánto dura un servicio del catálogo, escrito corto: `45 min`, `1h`,
+ * `1h 30min`. Es el formato de la lista de servicios y de la página pública de
+ * reservas; el tiempo libre del profesional se escribe con otro
+ * (`formatoDuracion`, en `horario-dia.ts`).
+ */
+export function formatearDuracionDeServicio(minutos: number): string {
+  if (minutos < 60) return `${minutos} min`
+  const horas = Math.floor(minutos / 60)
+  const resto = minutos % 60
+  return resto === 0 ? `${horas}h` : `${horas}h ${resto}min`
 }

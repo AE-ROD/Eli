@@ -1,6 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
+import { esHoy, duracionParaMostrar } from "@/lib/fechas"
 import { diasSemana } from "./controles-de-agenda"
 import { nombreDeCliente, type Cita } from "../_datos"
 
@@ -18,10 +19,6 @@ const coloresEstado: Record<string, string> = {
   "en-progreso": "bg-blue-100 border-l-blue-500 text-blue-900",
   completada: "bg-gray-100 border-l-gray-400 text-gray-700",
   cancelada: "bg-red-100 border-l-red-400 text-red-800 opacity-60",
-}
-
-function esHoy(fecha: Date) {
-  return fecha.toDateString() === new Date().toDateString()
 }
 
 interface VistaSemanaProps {
@@ -71,15 +68,14 @@ export function VistaSemana({ dias, citas, onSeleccionar }: VistaSemanaProps) {
         </div>
 
         {/* Columnas por día */}
-        {dias.map((dia, diaIdx) => {
-          const citasDelDia = citas.filter((c) => {
-            const f = new Date(c.startTime)
-            return f.toDateString() === dia.toDateString()
-          })
+        {dias.map((dia, indiceDia) => {
+          const citasDelDia = citas.filter(
+            (cita) => new Date(cita.startTime).toDateString() === dia.toDateString()
+          )
 
           return (
             <div
-              key={diaIdx}
+              key={indiceDia}
               className={`flex-1 relative border-l border-border/30 ${esHoy(dia) ? "bg-primary/5" : ""}`}
               style={{ height: ALTURA_HORA * (HORA_FIN - HORA_INICIO) }}
             >
@@ -94,28 +90,25 @@ export function VistaSemana({ dias, citas, onSeleccionar }: VistaSemanaProps) {
 
               {/* Citas */}
               {citasDelDia.map((cita) => {
-                const start = new Date(cita.startTime)
-                const hora = start.getHours()
-                const min = start.getMinutes()
+                const inicio = new Date(cita.startTime)
+                const hora = inicio.getHours()
+                const minutos = inicio.getMinutes()
                 if (hora < HORA_INICIO || hora >= HORA_FIN) return null
-                const top = (hora - HORA_INICIO) * ALTURA_HORA + (min / 60) * ALTURA_HORA
-                const durMin = Math.max(
-                  1,
-                  Math.round((new Date(cita.endTime).getTime() - start.getTime()) / 60000)
-                )
-                const height = Math.max((durMin / 60) * ALTURA_HORA - 4, 24)
-                const colorClass = coloresEstado[cita.status] ?? coloresEstado.pendiente
+                const distanciaArriba = (hora - HORA_INICIO) * ALTURA_HORA + (minutos / 60) * ALTURA_HORA
+                const duracion = duracionParaMostrar(cita.startTime, cita.endTime)
+                const altura = Math.max((duracion / 60) * ALTURA_HORA - 4, 24)
+                const claseDeColor = coloresEstado[cita.status] ?? coloresEstado.pendiente
 
                 return (
                   <motion.button
                     key={cita.id}
-                    className={`absolute left-1 right-1 rounded-lg border-l-2 px-1.5 py-1 text-left overflow-hidden ${colorClass}`}
-                    style={{ top, height }}
+                    className={`absolute left-1 right-1 rounded-lg border-l-2 px-1.5 py-1 text-left overflow-hidden ${claseDeColor}`}
+                    style={{ top: distanciaArriba, height: altura }}
                     whileHover={{ scale: 1.02, zIndex: 10 }}
                     onClick={() => onSeleccionar(cita)}
                   >
                     <p className="text-xs font-medium truncate">{nombreDeCliente(cita)}</p>
-                    {height > 32 && (
+                    {altura > 32 && (
                       <p className="text-xs opacity-70 truncate">{cita.title}</p>
                     )}
                   </motion.button>

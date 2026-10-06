@@ -31,7 +31,7 @@ export function PieDePagina() {
         <div className="py-16 grid grid-cols-2 md:grid-cols-4 gap-8">
           {/* Brand */}
           <div className="col-span-2 md:col-span-1">
-            <LogoEli size="md" inverted />
+            <LogoEli tamaño="md" invertido />
             <p className="mt-4 text-sm text-background/70 max-w-xs">
               Simplificamos tu agenda para que tú te enfoques en tu talento.
             </p>

@@ -10,6 +10,7 @@ import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { RUBROS, type RubroId } from "@/lib/rubros"
 import { Mail, Lock, User, Building2, ArrowRight, Check } from "lucide-react"
+import { crearCuenta } from "../_datos"
 
 export default function PaginaCrearCuenta() {
   const router = useRouter()
@@ -53,34 +54,30 @@ export default function PaginaCrearCuenta() {
 
     setCargando(true)
 
+    const registro = await crearCuenta({
+      nombre: formData.nombre,
+      email: formData.email,
+      contrasena: formData.contrasena,
+      nombreNegocio: formData.nombreNegocio,
+      tipoNegocio,
+    })
+
+    if (!registro.ok) {
+      setError(registro.error)
+      setCargando(false)
+      return
+    }
+
+    // `signIn` es de next-auth y sí puede lanzar si se cae la red, a
+    // diferencia de `crearCuenta`, que devuelve el error.
     try {
-      const respuesta = await fetch("/api/auth/registro", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nombre: formData.nombre,
-          email: formData.email,
-          contrasena: formData.contrasena,
-          nombreNegocio: formData.nombreNegocio,
-          tipoNegocio,
-        }),
-      })
-
-      const datos = await respuesta.json()
-
-      if (!respuesta.ok) {
-        setError(datos.error ?? "Error al crear la cuenta")
-        setCargando(false)
-        return
-      }
-
-      const resultado = await signIn("credentials", {
+      const inicioDeSesion = await signIn("credentials", {
         email: formData.email,
         password: formData.contrasena,
         redirect: false,
       })
 
-      if (resultado?.error) {
+      if (inicioDeSesion?.error) {
         setError("Cuenta creada pero no se pudo iniciar sesión automáticamente")
         setCargando(false)
       } else {
@@ -149,7 +146,7 @@ export default function PaginaCrearCuenta() {
           transition={{ duration: 0.5 }}
         >
           <Link href="/" className="flex justify-center mb-8">
-            <LogoEli size="lg" />
+            <LogoEli tamaño="lg" />
           </Link>
 
           {/* Progress indicator */}
@@ -235,13 +232,15 @@ export default function PaginaCrearCuenta() {
                   <label className="text-sm font-medium text-foreground">
                     Tipo de negocio
                   </label>
-                  <div className="grid grid-cols-2 gap-3">
+                  {/* Tres rubros, tres columnas: en un celular angosto el padding
+                      lateral se achica para que entren sin cortar los nombres. */}
+                  <div className="grid grid-cols-3 gap-3">
                     {RUBROS.map((rubro) => (
                       <motion.button
                         key={rubro.id}
                         type="button"
                         className={`
-                          p-4 rounded-xl border-2 text-left transition-all
+                          px-2 py-4 sm:px-4 rounded-xl border-2 text-left break-words transition-all
                           ${tipoNegocio === rubro.id
                             ? "border-primary bg-primary/5"
                             : "border-border hover:border-primary/50"

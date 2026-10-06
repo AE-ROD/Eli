@@ -4,16 +4,18 @@ import { motion } from "framer-motion"
 import { X, User, Phone } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
-
-export interface FormNuevaConversacion {
-  nombre: string
-  telefono: string
-}
+import type { DatosDeNuevaConversacion } from "../_datos"
 
 interface ModalNuevaConversacionProps {
-  form: FormNuevaConversacion
+  form: DatosDeNuevaConversacion
   guardando: boolean
-  onFormChange: (campo: keyof FormNuevaConversacion, valor: string) => void
+  /**
+   * Por qué no se pudo crear la conversación, si falló. Se muestra dentro del
+   * modal y no en la página: mientras el modal está abierto, la página queda
+   * tapada.
+   */
+  aviso: string
+  onFormChange: (campo: keyof DatosDeNuevaConversacion, valor: string) => void
   onSubmit: (e: React.SyntheticEvent<HTMLFormElement>) => void
   onCerrar: () => void
 }
@@ -21,6 +23,7 @@ interface ModalNuevaConversacionProps {
 export function ModalNuevaConversacion({
   form,
   guardando,
+  aviso,
   onFormChange,
   onSubmit,
   onCerrar,
@@ -63,6 +66,11 @@ export function ModalNuevaConversacion({
             onChange={(e) => onFormChange("telefono", e.target.value)}
             icono={<Phone className="h-4 w-4" />}
           />
+          {aviso && (
+            <p role="alert" className="text-sm text-red-500">
+              {aviso}
+            </p>
+          )}
           <div className="flex gap-3 pt-2">
             <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar}>
               Cancelar

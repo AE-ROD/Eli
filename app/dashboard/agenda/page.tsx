@@ -43,6 +43,7 @@ export default function PaginaAgenda() {
   const [citaAbierta, setCitaAbierta] = useState<Cita | null>(null)
   const [modalAbierto, setModalAbierto] = useState(false)
   const [guardando, setGuardando] = useState(false)
+  const [avisoDelModal, setAvisoDelModal] = useState("")
   const [nuevaCita, setNuevaCita] = useState<DatosDeNuevaCita>(CITA_EN_BLANCO)
 
   const recargar = useCallback(async (fecha: Date, modo: UnidadDeTiempo) => {
@@ -61,20 +62,27 @@ export default function PaginaAgenda() {
     const resultado = await cambiarEstadoDeCita(id, estado)
     if (!resultado.ok) return setAviso(resultado.error)
 
-    setCitas((previas) => previas.map((c) => (c.id === id ? { ...c, status: estado } : c)))
+    setCitas((previas) => previas.map((cita) => (cita.id === id ? { ...cita, status: estado } : cita)))
     setCitaAbierta((abierta) => (abierta?.id === id ? { ...abierta, status: estado } : abierta))
+  }
+
+  const abrirModal = () => {
+    setAvisoDelModal("")
+    setModalAbierto(true)
   }
 
   const guardarNuevaCita = async (evento: React.SyntheticEvent<HTMLFormElement>) => {
     evento.preventDefault()
     if (!nuevaCita.clienteId) return
 
-    setAviso("")
+    setAvisoDelModal("")
     setGuardando(true)
     const resultado = await crearCita(nuevaCita)
     setGuardando(false)
 
-    if (!resultado.ok) return setAviso(resultado.error)
+    // El aviso va dentro del modal, que sigue abierto con lo que se cargó: en
+    // la página quedaría tapado por el velo del modal.
+    if (!resultado.ok) return setAvisoDelModal(resultado.error)
 
     setModalAbierto(false)
     setNuevaCita(CITA_EN_BLANCO)
@@ -86,7 +94,7 @@ export default function PaginaAgenda() {
       <BarraSuperior
         titulo="Agenda"
         subtitulo={resumen(cargando, citas.length)}
-        accionPrincipal={{ texto: "Nueva cita", onClick: () => setModalAbierto(true) }}
+        accionPrincipal={{ texto: "Nueva cita", onClick: abrirModal }}
       />
 
       <div className="p-6">
@@ -142,6 +150,7 @@ export default function PaginaAgenda() {
           <ModalNuevaCita
             form={nuevaCita}
             guardando={guardando}
+            aviso={avisoDelModal}
             puedeAsignarProfesional={puedeAsignarProfesional}
             onFormChange={(campo, valor) => setNuevaCita((previa) => ({ ...previa, [campo]: valor }))}
             onSubmit={guardarNuevaCita}

@@ -1,19 +1,19 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { TarjetaCliente, type Cliente } from "./tarjeta-cliente"
+import { TarjetaCliente, type ClienteEnTarjeta } from "./tarjeta-cliente"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { ChevronDown, User } from "lucide-react"
 
 interface ListaClientesProps {
-  clientes: Cliente[]
+  clientes: ClienteEnTarjeta[]
   cargando: boolean
   cargandoMas: boolean
   vista: "grid" | "lista"
   total: number
   pagina: number
   paginas: number
-  onSeleccionar: (cliente: Cliente) => void
+  onSeleccionar: (cliente: ClienteEnTarjeta) => void
   onCargarMas: () => void
 }
 

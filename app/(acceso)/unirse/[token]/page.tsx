@@ -8,13 +8,7 @@ import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { Lock, CheckCircle2, XCircle, Loader2 } from "lucide-react"
 import { signIn } from "next-auth/react"
-
-interface DatosInvitacion {
-  nombre: string
-  email: string
-  rol: string
-  negocio: string
-}
+import { leerInvitacion, aceptarInvitacion, type Invitacion } from "../../_datos"
 
 export default function PaginaUnirse() {
   const params = useParams()
@@ -22,22 +16,19 @@ export default function PaginaUnirse() {
   const token = params.token as string
 
   const [estado, setEstado] = useState<"cargando" | "valida" | "invalida" | "aceptada">("cargando")
-  const [invitacion, setInvitacion] = useState<DatosInvitacion | null>(null)
-  const [password, setPassword] = useState("")
-  const [confirmar, setConfirmar] = useState("")
+  const [invitacion, setInvitacion] = useState<Invitacion | null>(null)
+  const [contrasena, setContrasena] = useState("")
+  const [confirmarContrasena, setConfirmarContrasena] = useState("")
   const [error, setError] = useState("")
   const [requiereSesion, setRequiereSesion] = useState(false)
   const [enviando, setEnviando] = useState(false)
 
   useEffect(() => {
-    fetch(`/api/equipo/invitacion/${token}`)
-      .then(async (res) => {
-        if (!res.ok) { setEstado("invalida"); return }
-        const data = await res.json()
-        setInvitacion(data)
-        setEstado("valida")
-      })
-      .catch(() => setEstado("invalida"))
+    leerInvitacion(token).then((resultado) => {
+      if (!resultado.ok) return setEstado("invalida")
+      setInvitacion(resultado.datos)
+      setEstado("valida")
+    })
   }, [token])
 
   const aceptar = async (e: React.FormEvent) => {
@@ -45,47 +36,41 @@ export default function PaginaUnirse() {
     setError("")
     setRequiereSesion(false)
 
-    if (password.length < 8) {
+    if (contrasena.length < 8) {
       setError("La contraseña debe tener al menos 8 caracteres")
       return
     }
-    if (password !== confirmar) {
+    if (contrasena !== confirmarContrasena) {
       setError("Las contraseñas no coinciden")
       return
     }
 
     setEnviando(true)
 
-    const res = await fetch(`/api/equipo/invitacion/${token}/aceptar`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    })
+    const resultado = await aceptarInvitacion(token, contrasena)
 
-    const data = await res.json()
-
-    if (!res.ok) {
-      setError(data.error ?? "Error al crear la cuenta")
-      setRequiereSesion(Boolean(data.requiereSesion))
+    if (!resultado.ok) {
+      setError(resultado.error)
+      setRequiereSesion(resultado.requiereSesion)
       setEnviando(false)
       return
     }
 
     // Si la cuenta ya existía, aceptar solo suma la membresía: la sesión
     // que ya tenía la persona sigue siendo válida, no hay contraseña nueva.
-    if (data.cuentaNueva === false) {
+    if (!resultado.datos.cuentaNueva) {
       router.push("/dashboard")
       return
     }
 
     // Iniciar sesión automáticamente con la contraseña recién creada
-    const loginRes = await signIn("credentials", {
+    const inicioDeSesion = await signIn("credentials", {
       email: invitacion!.email,
-      password,
+      password: contrasena,
       redirect: false,
     })
 
-    if (loginRes?.ok) {
+    if (inicioDeSesion?.ok) {
       router.push("/dashboard")
     } else {
       setEstado("aceptada")
@@ -148,7 +133,7 @@ export default function PaginaUnirse() {
         transition={{ duration: 0.4 }}
       >
         <div className="flex justify-center mb-8">
-          <LogoEli size="lg" />
+          <LogoEli tamaño="lg" />
         </div>
 
         {/* Tarjeta de invitación */}
@@ -176,8 +161,8 @@ export default function PaginaUnirse() {
             etiqueta="Contraseña"
             type="password"
             placeholder="Mínimo 8 caracteres"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            value={contrasena}
+            onChange={(e) => setContrasena(e.target.value)}
             icono={<Lock className="h-4 w-4" />}
             required
           />
@@ -185,8 +170,8 @@ export default function PaginaUnirse() {
             etiqueta="Confirmar contraseña"
             type="password"
             placeholder="Repite la contraseña"
-            value={confirmar}
-            onChange={(e) => setConfirmar(e.target.value)}
+            value={confirmarContrasena}
+            onChange={(e) => setConfirmarContrasena(e.target.value)}
             icono={<Lock className="h-4 w-4" />}
             required
           />

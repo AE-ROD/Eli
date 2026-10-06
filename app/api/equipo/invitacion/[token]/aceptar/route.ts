@@ -7,8 +7,9 @@ import { z } from "zod"
 import bcrypt from "bcryptjs"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 
+// `contrasena`, igual que el registro y el restablecimiento de contraseña.
 const schema = z.object({
-  password: z.string().min(8).optional(),
+  contrasena: z.string().min(8).optional(),
 })
 
 // POST /api/equipo/invitacion/[token]/aceptar — crear cuenta y unirse al negocio
@@ -34,7 +35,7 @@ export async function POST(
 
   try {
     const body = await request.json()
-    const { password } = schema.parse(body)
+    const { contrasena } = schema.parse(body)
 
     // Una invitación no crea ni pisa credenciales de una cuenta que ya existe:
     // ese caso solo puede sumar la membresía, y solo si quien acepta ya
@@ -86,11 +87,11 @@ export async function POST(
       return NextResponse.json({ ok: true, email: usuarioExistente.email, cuentaNueva: false })
     }
 
-    if (!password) {
+    if (!contrasena) {
       return NextResponse.json({ error: "La contraseña es requerida" }, { status: 400 })
     }
 
-    const hashedPassword = await bcrypt.hash(password, 12)
+    const hashDeContrasena = await bcrypt.hash(contrasena, 12)
 
     // Usar transacción: crear usuario + crear membership + marcar invitación aceptada
     const resultado = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -98,7 +99,7 @@ export async function POST(
         data: {
           name: invitacion.name,
           email: invitacion.email,
-          password: hashedPassword,
+          password: hashDeContrasena,
         },
       })
 

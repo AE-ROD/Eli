@@ -2,43 +2,31 @@
 
 import { useEffect, useState } from "react"
 import { BarraSuperior } from "@/components/panel/barra-superior"
+import { leerEquipo, type InvitacionPendiente, type MiembroDelEquipo } from "./_datos"
 import { ListaEquipo } from "./_componentes/lista-equipo"
 import { ModalInvitar } from "./_componentes/modal-invitar"
 
-export interface MiembroAPI {
-  id: string
-  role: string
-  createdAt: string
-  user: { id: string; name: string; email: string }
-}
-
-export interface InvitacionAPI {
-  id: string
-  name: string
-  email: string
-  role: string
-  expiresAt: string
-  createdAt: string
-}
-
 export default function PaginaEquipo() {
-  const [miembros, setMiembros] = useState<MiembroAPI[]>([])
-  const [invitaciones, setInvitaciones] = useState<InvitacionAPI[]>([])
+  const [miembros, setMiembros] = useState<MiembroDelEquipo[]>([])
+  const [invitaciones, setInvitaciones] = useState<InvitacionPendiente[]>([])
   const [cargando, setCargando] = useState(true)
+  const [aviso, setAviso] = useState("")
   const [modalAbierto, setModalAbierto] = useState(false)
 
   const cargar = async () => {
     setCargando(true)
-    const res = await fetch("/api/equipo")
-    if (res.ok) {
-      const data = await res.json()
-      setMiembros(data.miembros)
-      setInvitaciones(data.invitaciones)
+    setAviso("")
+    const resultado = await leerEquipo()
+    if (resultado.ok) {
+      setMiembros(resultado.datos.miembros)
+      setInvitaciones(resultado.datos.invitaciones)
+    } else {
+      setAviso(resultado.error)
     }
     setCargando(false)
   }
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches team members/invitations on mount
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- carga los miembros y las invitaciones al montar
   useEffect(() => { cargar() }, [])
 
   return (
@@ -53,6 +41,12 @@ export default function PaginaEquipo() {
       />
 
       <div className="p-6">
+        {aviso && (
+          <p role="alert" className="text-sm text-red-500 mb-4">
+            {aviso}
+          </p>
+        )}
+
         <ListaEquipo
           miembros={miembros}
           invitaciones={invitaciones}

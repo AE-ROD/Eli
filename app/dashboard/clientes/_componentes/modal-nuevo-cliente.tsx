@@ -4,17 +4,17 @@ import { motion } from "framer-motion"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { X, User, Mail, Phone } from "lucide-react"
-
-export interface FormNuevoCliente {
-  nombre: string
-  email: string
-  telefono: string
-}
+import type { DatosDeNuevoCliente } from "../_datos"
 
 interface ModalNuevoClienteProps {
-  form: FormNuevoCliente
+  form: DatosDeNuevoCliente
   guardando: boolean
-  onFormChange: (campo: keyof FormNuevoCliente, valor: string) => void
+  /**
+   * Por qué no se pudo crear el cliente, si falló. Se muestra dentro del modal
+   * y no en la página: mientras el modal está abierto, la página queda tapada.
+   */
+  aviso: string
+  onFormChange: (campo: keyof DatosDeNuevoCliente, valor: string) => void
   onSubmit: (e: React.SyntheticEvent<HTMLFormElement>) => void
   onCerrar: () => void
 }
@@ -22,6 +22,7 @@ interface ModalNuevoClienteProps {
 export function ModalNuevoCliente({
   form,
   guardando,
+  aviso,
   onFormChange,
   onSubmit,
   onCerrar,
@@ -72,6 +73,11 @@ export function ModalNuevoCliente({
             onChange={(e) => onFormChange("telefono", e.target.value)}
             icono={<Phone className="h-4 w-4" />}
           />
+          {aviso && (
+            <p role="alert" className="text-sm text-red-500">
+              {aviso}
+            </p>
+          )}
           <div className="flex gap-3 pt-4">
             <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar}>
               Cancelar

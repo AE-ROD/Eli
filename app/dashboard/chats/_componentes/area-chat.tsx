@@ -4,8 +4,8 @@ import { useRef, useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { Send, Phone, Video, Calendar, MoreVertical, Smile } from "lucide-react"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
-import { BurbujaMensaje, type Mensaje } from "./burbuja-mensaje"
-import type { ConversacionAPI, MensajeAPI } from "./lista-conversaciones"
+import { BurbujaMensaje, type MensajeEnBurbuja } from "./burbuja-mensaje"
+import type { Conversacion, Mensaje } from "../_datos"
 
 const RESPUESTAS_RAPIDAS = [
   "¡Hola! ¿En qué puedo ayudarte?",
@@ -14,24 +14,24 @@ const RESPUESTAS_RAPIDAS = [
   "¿Prefieres llamar para más información?",
 ]
 
-function mensajeAPIaMensaje(m: MensajeAPI): Mensaje {
+function mensajeParaBurbuja(mensaje: Mensaje): MensajeEnBurbuja {
   return {
-    id: m.id,
-    texto: m.content,
-    hora: new Date(m.createdAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }),
-    esPropio: m.fromBusiness,
-    leido: m.fromBusiness,
+    id: mensaje.id,
+    texto: mensaje.content,
+    hora: new Date(mensaje.createdAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }),
+    esPropio: mensaje.fromBusiness,
+    leido: mensaje.fromBusiness,
   }
 }
 
 interface AreaChatProps {
-  conversacion: ConversacionAPI
-  mensajesAPI: MensajeAPI[]
+  conversacion: Conversacion
+  mensajes: Mensaje[]
   cargando: boolean
   onEnviar: (texto: string) => Promise<void>
 }
 
-export function AreaChat({ conversacion, mensajesAPI, cargando, onEnviar }: AreaChatProps) {
+export function AreaChat({ conversacion, mensajes, cargando, onEnviar }: AreaChatProps) {
   const [texto, setTexto] = useState("")
   const [enviando, setEnviando] = useState(false)
   const mensajesRef = useRef<HTMLDivElement>(null)
@@ -40,21 +40,21 @@ export function AreaChat({ conversacion, mensajesAPI, cargando, onEnviar }: Area
     if (mensajesRef.current) {
       mensajesRef.current.scrollTop = mensajesRef.current.scrollHeight
     }
-  }, [mensajesAPI])
+  }, [mensajes])
 
-  const handleEnviar = async () => {
-    const trimmed = texto.trim()
-    if (!trimmed || enviando) return
+  const enviar = async () => {
+    const textoLimpio = texto.trim()
+    if (!textoLimpio || enviando) return
     setTexto("")
     setEnviando(true)
     try {
-      await onEnviar(trimmed)
+      await onEnviar(textoLimpio)
     } finally {
       setEnviando(false)
     }
   }
 
-  const mensajes: Mensaje[] = mensajesAPI.map(mensajeAPIaMensaje)
+  const burbujas = mensajes.map(mensajeParaBurbuja)
 
   return (
     <div className="flex-1 flex flex-col bg-background min-w-0">
@@ -96,24 +96,24 @@ export function AreaChat({ conversacion, mensajesAPI, cargando, onEnviar }: Area
           <div className="flex justify-center py-8">
             <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
-        ) : mensajes.length === 0 ? (
+        ) : burbujas.length === 0 ? (
           <div className="flex justify-center py-8">
             <p className="text-sm text-muted-foreground">Sin mensajes aún. ¡Sé el primero en escribir!</p>
           </div>
         ) : (
-          mensajes.map((m) => <BurbujaMensaje key={m.id} mensaje={m} />)
+          burbujas.map((burbuja) => <BurbujaMensaje key={burbuja.id} mensaje={burbuja} />)
         )}
       </div>
 
       {/* Respuestas rápidas */}
       <div className="px-6 py-2 flex gap-2 overflow-x-auto border-t border-border/30 flex-shrink-0">
-        {RESPUESTAS_RAPIDAS.map((r, i) => (
+        {RESPUESTAS_RAPIDAS.map((respuestaRapida, i) => (
           <button
             key={i}
-            onClick={() => setTexto(r)}
+            onClick={() => setTexto(respuestaRapida)}
             className="px-3 py-1.5 rounded-full bg-muted text-xs text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors whitespace-nowrap"
           >
-            {r}
+            {respuestaRapida}
           </button>
         ))}
       </div>
@@ -128,7 +128,7 @@ export function AreaChat({ conversacion, mensajesAPI, cargando, onEnviar }: Area
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault()
-                  handleEnviar()
+                  enviar()
                 }
               }}
               placeholder="Escribe un mensaje..."
@@ -140,7 +140,7 @@ export function AreaChat({ conversacion, mensajesAPI, cargando, onEnviar }: Area
             </button>
           </div>
           <motion.button
-            onClick={handleEnviar}
+            onClick={enviar}
             disabled={!texto.trim() || enviando}
             className="p-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             whileHover={{ scale: 1.05 }}

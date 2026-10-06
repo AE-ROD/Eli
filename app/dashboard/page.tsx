@@ -1,185 +1,58 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { motion } from "framer-motion"
 import { useSession } from "next-auth/react"
 import { BarraSuperior } from "@/components/panel/barra-superior"
-import { TarjetaCita } from "@/components/panel/tarjeta-cita"
-import { TarjetaEstadistica } from "./_componentes/tarjeta-estadistica"
+import { leerEstadisticas, type EstadisticasDelPanel } from "./_datos"
 import { VistaDiaProfesional } from "./_componentes/vista-dia-profesional"
-import { formatearHora, duracionEnMinutos } from "@/lib/fechas"
-import {
-  CalendarDays,
-  Users,
-  DollarSign,
-  Clock,
-  ArrowRight,
-  Link2,
-  Copy,
-  Check,
-} from "lucide-react"
-import Link from "next/link"
+import { EstadisticasDelNegocio } from "./_componentes/estadisticas-del-negocio"
+import { CitasDeHoy } from "./_componentes/citas-de-hoy"
+import { ResumenDeClientes } from "./_componentes/resumen-de-clientes"
+import { EnlaceDeReservas } from "./_componentes/enlace-de-reservas"
+import { CitasPorHora } from "./_componentes/citas-por-hora"
+import { ResumenDelNegocio } from "./_componentes/resumen-del-negocio"
 
-interface StatsData {
-  citasHoy: number
-  citasHoyLista: Array<{
-    id: string
-    title: string
-    startTime: string
-    endTime: string
-    status: string
-    /** Opcional en el esquema: una cita puede no tener cliente vinculado. */
-    customer: { id: string; name: string } | null
-  }>
-  /** Sólo cuando no hay citas hoy: el dato honesto es cuándo es la próxima. */
-  proximaCita?: { id: string; title: string; startTime: string }
-  totalClientes: number
-  clientesNuevosMes: number
-  /** Ausentes para quien no puede ver la facturación del negocio (profesional). */
-  ingresoseMes?: number
-  citasFacturadasMes?: number
-  /**
-   * Sólo para `worker`, y sólo si tiene horario activo cargado para hoy
-   * (F-014). Ausente para dueño/encargado y para un profesional sin horario:
-   * la ausencia es el estado, nunca un rango inventado.
-   */
-  horarioHoy?: Array<{ startTime: string; endTime: string }>
-  /** Sólo viajan las que se pudieron calcular: sin mes anterior, no hay clave. */
-  tendencias: {
-    clientes?: number
-    ingresos?: number
-  }
-}
-
-const contenedorVariantes = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1 },
-  },
-}
-
-const itemVariantes = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 },
-}
-
-/**
- * De qué está hecha cada cifra. Devuelven `undefined` cuando no hay nada
- * verdadero que decir: una línea vaga es la misma mentira que un `+0%`, con
- * más palabras.
- */
-function procedenciaDeCitas(stats: StatsData): string | undefined {
-  if (stats.citasHoy > 0) return undefined
-  if (!stats.proximaCita) return "Ninguna agendada todavía."
-
-  const cuando = new Date(stats.proximaCita.startTime)
-  const dia = cuando.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
-  return `La próxima es el ${dia} a las ${formatearHora(stats.proximaCita.startTime)}.`
-}
-
-function procedenciaDeClientes(stats: StatsData): string | undefined {
-  const { clientesNuevosMes, totalClientes } = stats
-
-  if (totalClientes === 0) return "Se suman solos cuando alguien reserva."
-  if (clientesNuevosMes === 0) return "Ninguno nuevo este mes."
-
-  return clientesNuevosMes === 1 ? "1 nuevo este mes." : `${clientesNuevosMes} nuevos este mes.`
-}
-
-function procedenciaDeIngresos(stats: StatsData): string | undefined {
-  const citas = stats.citasFacturadasMes ?? 0
-  if (citas === 0) return "Se cuenta al completar una cita. Todavía ninguna este mes."
-
-  const base = citas === 1 ? "1 cita completada" : `${citas} citas completadas`
-  const tendencia = stats.tendencias.ingresos
-  if (tendencia === undefined) return `${base} este mes.`
-
-  const signo = tendencia >= 0 ? "+" : "−"
-  return `${base} este mes · ${signo}${Math.abs(tendencia)}% vs el mes pasado.`
-}
-
-export default function PaginaPanel() {
-  const [stats, setStats] = useState<StatsData | null>(null)
-  const [copiado, setCopiado] = useState(false)
-  const { data: session, status: estadoSesion } = useSession()
-  // El panel del profesional es su día (F-014), no el tablero del negocio:
-  // dueño y encargado siguen viendo exactamente lo de antes, sin tocar su rama.
-  // Mientras no se sabe el rol no se elige ninguna rama: evita el parpadeo de
-  // mostrarle a un profesional el tablero de administración por un instante.
-  const rolConocido = estadoSesion !== "loading"
-  const esWorker = session?.user?.role === "worker"
-  const businessSlug = (session?.user as any)?.businessSlug ?? ""
-  const enlaceReservas = typeof window !== "undefined" && businessSlug
-    ? `${window.location.origin}/reservar/${businessSlug}`
-    : businessSlug ? `/reservar/${businessSlug}` : ""
-
-  const copiarEnlace = async () => {
-    if (!enlaceReservas) return
-    await navigator.clipboard.writeText(enlaceReservas)
-    setCopiado(true)
-    setTimeout(() => setCopiado(false), 2000)
-  }
-
-  useEffect(() => {
-    fetch("/api/dashboard/stats")
-      .then((r) => r.json())
-      .then(setStats)
-      .catch(console.error)
-  }, [])
-
-  const fechaActual = new Date().toLocaleDateString("es-ES", {
+/** `Lunes, 8 de marzo de 2026`, con mayúscula inicial. */
+function fechaDeHoy(): string {
+  const fecha = new Date().toLocaleDateString("es-ES", {
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
   })
+  return fecha.charAt(0).toUpperCase() + fecha.slice(1)
+}
 
-  // Si el endpoint no manda ingresos (profesional sin acceso a la facturación
-  // del negocio), la tarjeta se omite en vez de mostrar un vacío raro.
-  const puedeVerIngresos = stats?.ingresoseMes !== undefined
+export default function PaginaPanel() {
+  const [estadisticas, setEstadisticas] = useState<EstadisticasDelPanel | null>(null)
+  const [aviso, setAviso] = useState("")
+  const { data: sesion, status: estadoSesion } = useSession()
+  // El panel del profesional es su día (F-014), no el tablero del negocio:
+  // dueño y encargado siguen viendo exactamente lo de antes, sin tocar su rama.
+  // Mientras no se sabe el rol no se elige ninguna rama: evita el parpadeo de
+  // mostrarle a un profesional el tablero de administración por un instante.
+  const rolConocido = estadoSesion !== "loading"
+  const esWorker = sesion?.user?.role === "worker"
+  const slugDelNegocio = sesion?.user?.businessSlug ?? ""
 
-  const estadisticas = stats
-    ? [
-        {
-          titulo: "Citas hoy",
-          valor: stats.citasHoy,
-          icono: CalendarDays,
-          colorIcono: "primario" as const,
-          procedencia: procedenciaDeCitas(stats),
-        },
-        {
-          titulo: "Clientes activos",
-          valor: stats.totalClientes,
-          icono: Users,
-          colorIcono: "exito" as const,
-          procedencia: procedenciaDeClientes(stats),
-        },
-        ...(puedeVerIngresos
-          ? [
-              {
-                titulo: "Ingresos del mes",
-                valor: `$${(stats.ingresoseMes ?? 0).toLocaleString("es-ES")}`,
-                icono: DollarSign,
-                colorIcono: "info" as const,
-                procedencia: procedenciaDeIngresos(stats),
-              },
-            ]
-          : []),
-      ]
-    : [
-        { titulo: "Citas hoy", valor: "—", icono: CalendarDays, colorIcono: "primario" as const },
-        { titulo: "Clientes activos", valor: "—", icono: Users, colorIcono: "exito" as const },
-        { titulo: "Ingresos del mes", valor: "—", icono: DollarSign, colorIcono: "info" as const },
-      ]
+  useEffect(() => {
+    leerEstadisticas().then((resultado) => {
+      if (resultado.ok) setEstadisticas(resultado.datos)
+      else setAviso(resultado.error)
+    })
+  }, [])
 
-  const citasHoy = stats?.citasHoyLista ?? []
+  // Si las cifras no llegaron, los bloques que viven de ellas no se dibujan:
+  // dirían "Cargando..." para siempre debajo del aviso. El enlace de reservas
+  // no depende de ellas y se queda.
+  const sinEstadisticas = aviso !== ""
+  const citasDeHoy = estadisticas?.citasHoyLista ?? null
 
   return (
     <div className="min-h-screen">
       <BarraSuperior
         titulo="Dashboard"
-        subtitulo={fechaActual.charAt(0).toUpperCase() + fechaActual.slice(1)}
+        subtitulo={fechaDeHoy()}
         accionPrincipal={{
           texto: "Nueva cita",
           onClick: () => {},
@@ -187,267 +60,39 @@ export default function PaginaPanel() {
       />
 
       <div className="p-6 space-y-8">
+        {aviso && (
+          <p role="alert" className="text-sm text-red-500">
+            {aviso}
+          </p>
+        )}
+
         {!rolConocido ? (
           <div className="bg-card border border-border/50 rounded-xl p-8 text-center text-sm text-muted-foreground">
             Cargando...
           </div>
         ) : esWorker ? (
-          <VistaDiaProfesional stats={stats} />
+          !sinEstadisticas && <VistaDiaProfesional estadisticas={estadisticas} />
         ) : (
           <>
-          {/* Estadisticas */}
-          <motion.section variants={contenedorVariantes} initial="hidden" animate="show">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {estadisticas.map((stat) => (
-                <motion.div key={stat.titulo} variants={itemVariantes}>
-                  <TarjetaEstadistica
-                    titulo={stat.titulo}
-                    valor={stat.valor}
-                    icono={stat.icono}
-                    colorIcono={stat.colorIcono}
-                    procedencia={"procedencia" in stat ? stat.procedencia : undefined}
-                  />
-                </motion.div>
-              ))}
-            </div>
-          </motion.section>
+            {!sinEstadisticas && (
+              <>
+                <EstadisticasDelNegocio estadisticas={estadisticas} />
 
-          {/* Contenido principal */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Citas del dia */}
-            <motion.section
-              className="lg:col-span-2"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-            >
-              <div className="bg-card border border-border/50 rounded-xl">
-                <div className="flex items-center justify-between p-5 border-b border-border/50">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-primary/10">
-                      <Clock className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <h2 className="font-semibold text-foreground">Citas de hoy</h2>
-                      <p className="text-sm text-muted-foreground">
-                        {stats ? `${citasHoy.length} citas programadas` : "Cargando..."}
-                      </p>
-                    </div>
-                  </div>
-                  <Link
-                    href="/dashboard/agenda"
-                    className="flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
-                  >
-                    Ver agenda
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <CitasDeHoy citas={citasDeHoy} className="lg:col-span-2" />
+                  <ResumenDeClientes estadisticas={estadisticas} />
                 </div>
-                <div className="p-5 space-y-3">
-                  {citasHoy.length > 0 ? (
-                    citasHoy.map((cita) => (
-                      <TarjetaCita
-                        key={cita.id}
-                        cita={{
-                          id: cita.id,
-                          nombreCliente: cita.customer?.name ?? "Sin cliente",
-                          servicio: cita.title,
-                          horaInicio: formatearHora(cita.startTime),
-                          horaFin: formatearHora(cita.endTime),
-                          duracion: duracionEnMinutos(cita.startTime, cita.endTime),
-                          estado: cita.status as any,
-                        }}
-                        compacta
-                      />
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      {stats ? "Sin citas para hoy" : "Cargando citas..."}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </motion.section>
+              </>
+            )}
 
-            {/* Clientes recientes */}
-            <motion.section
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-            >
-              <div className="bg-card border border-border/50 rounded-xl">
-                <div className="flex items-center justify-between p-5 border-b border-border/50">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-green-100">
-                      <Users className="h-5 w-5 text-green-600" />
-                    </div>
-                    <div>
-                      <h2 className="font-semibold text-foreground">Clientes</h2>
-                      <p className="text-sm text-muted-foreground">
-                        {stats ? `${stats.totalClientes} en total` : "Cargando..."}
-                      </p>
-                    </div>
-                  </div>
-                  <Link
-                    href="/dashboard/clientes"
-                    className="flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
-                  >
-                    Ver todos
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </div>
-                <div className="p-5">
-                  {stats && stats.totalClientes === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      Aún no tienes clientes registrados
-                    </p>
-                  ) : (
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                      <div className="p-2 rounded-lg bg-primary/10">
-                        <Users className="h-4 w-4 text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">
-                          {stats ? `${stats.totalClientes} ${stats.totalClientes === 1 ? "cliente" : "clientes"}` : "—"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {stats && stats.clientesNuevosMes > 0
-                            ? `${stats.clientesNuevosMes} desde el 1 de este mes`
-                            : "Se suman al reservar"}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </motion.section>
-          </div>
+            {slugDelNegocio && <EnlaceDeReservas slug={slugDelNegocio} />}
 
-          {/* Enlace de reservas */}
-          {enlaceReservas && (
-            <motion.section
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.35 }}
-            >
-              <div className="bg-primary/5 border border-primary/20 rounded-xl p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                <div className="p-3 rounded-xl bg-primary/10 flex-shrink-0">
-                  <Link2 className="h-5 w-5 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-foreground mb-0.5">Tu enlace de reservas</p>
-                  <p className="text-xs text-muted-foreground truncate font-mono">{enlaceReservas}</p>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <button
-                    onClick={copiarEnlace}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background border border-border hover:bg-muted transition-colors text-sm font-medium"
-                  >
-                    {copiado ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4 text-muted-foreground" />}
-                    {copiado ? "Copiado" : "Copiar"}
-                  </button>
-                  <Link
-                    href={`/reservar/${businessSlug}`}
-                    target="_blank"
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-sm font-medium"
-                  >
-                    Ver página
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </div>
+            {!sinEstadisticas && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <CitasPorHora citas={citasDeHoy} />
+                <ResumenDelNegocio estadisticas={estadisticas} />
               </div>
-            </motion.section>
-          )}
-
-          {/* Grafico y actividad */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Grafico de citas por hora */}
-            <motion.section
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-            >
-              <div className="bg-card border border-border/50 rounded-xl p-5">
-                <h3 className="font-semibold text-foreground mb-4">Citas de hoy por hora</h3>
-                {citasHoy.length > 0 ? (
-                  <div className="space-y-3">
-                    {citasHoy.map((cita) => (
-                      <div key={cita.id} className="flex items-center gap-3">
-                        <span className="text-xs text-muted-foreground w-12 flex-shrink-0">
-                          {formatearHora(cita.startTime)}
-                        </span>
-                        <div className="flex-1 h-7 bg-primary/10 rounded-lg flex items-center px-3">
-                          <span className="text-xs font-medium text-primary truncate">
-                            {cita.customer?.name ?? "Sin cliente"} — {cita.title}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
-                    {stats ? "Sin citas para hoy" : "Cargando..."}
-                  </div>
-                )}
-              </div>
-            </motion.section>
-
-            {/* Resumen del dia */}
-            <motion.section
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-            >
-              <div className="bg-card border border-border/50 rounded-xl p-5">
-                <h3 className="font-semibold text-foreground mb-4">
-                  {puedeVerIngresos ? "Resumen del negocio" : "Tu resumen"}
-                </h3>
-                <div className="space-y-4">
-                  {[
-                    {
-                      label: "Citas hoy",
-                      valor: stats?.citasHoy ?? "—",
-                      color: "bg-primary",
-                    },
-                    {
-                      label: "Total clientes",
-                      valor: stats?.totalClientes ?? "—",
-                      color: "bg-green-500",
-                    },
-                    // Sin stats aún se muestra el placeholder; con stats cargados
-                    // se omite del todo si el endpoint no mandó ingresos.
-                    ...(!stats || puedeVerIngresos
-                      ? [
-                          {
-                            label: "Ingresos este mes",
-                            valor: stats ? `$${(stats.ingresoseMes ?? 0).toLocaleString("es-ES")}` : "—",
-                            color: "bg-blue-500",
-                          },
-                        ]
-                      : []),
-                    {
-                      label: "Clientes nuevos este mes",
-                      valor: stats?.clientesNuevosMes ?? "—",
-                      color: "bg-orange-500",
-                    },
-                  ].map((item, i) => (
-                    <motion.div
-                      key={item.label}
-                      className="flex items-center justify-between"
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.6 + i * 0.1 }}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full ${item.color}`} />
-                        <span className="text-sm text-foreground">{item.label}</span>
-                      </div>
-                      <span className="text-sm font-semibold text-foreground">{item.valor}</span>
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
-            </motion.section>
-          </div>
+            )}
           </>
         )}
       </div>

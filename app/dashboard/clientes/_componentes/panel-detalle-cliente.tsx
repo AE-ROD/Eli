@@ -4,29 +4,10 @@ import { motion } from "framer-motion"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { TarjetaCita, type CitaEnTarjeta } from "@/components/panel/tarjeta-cita"
-import { formatearHora } from "@/lib/fechas"
+import { formatearHora, duracionParaMostrar } from "@/lib/fechas"
 import { X, Mail, Phone, Calendar, Clock, FileText, Tag } from "lucide-react"
-import type { Cliente } from "./tarjeta-cliente"
-
-export interface CitaDeClienteAPI {
-  id: string
-  title: string
-  startTime: string
-  endTime: string
-  status: string
-  price: number | null
-}
-
-export interface ClienteAPICompleto {
-  id: string
-  name: string
-  email: string | null
-  phone: string | null
-  tags: string[]
-  notes: string | null
-  createdAt: string
-  appointments: CitaDeClienteAPI[]
-}
+import type { ClienteEnTarjeta } from "./tarjeta-cliente"
+import type { CitaDeCliente } from "../_datos"
 
 const coloresEtiqueta: Record<string, string> = {
   VIP: "bg-amber-100 text-amber-700",
@@ -35,11 +16,7 @@ const coloresEtiqueta: Record<string, string> = {
   Inactivo: "bg-gray-100 text-gray-600",
 }
 
-function duracionMin(start: string, end: string) {
-  return Math.max(1, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000))
-}
-
-function mapearCitaParaTarjeta(cita: CitaDeClienteAPI, nombreCliente: string): CitaEnTarjeta {
+function mapearCitaParaTarjeta(cita: CitaDeCliente, nombreCliente: string): CitaEnTarjeta {
   const estadosValidos = ["pendiente", "confirmada", "en-progreso", "completada", "cancelada"] as const
   const estado = estadosValidos.includes(cita.status as (typeof estadosValidos)[number])
     ? (cita.status as CitaEnTarjeta["estado"])
@@ -50,24 +27,25 @@ function mapearCitaParaTarjeta(cita: CitaDeClienteAPI, nombreCliente: string): C
     servicio: cita.title,
     horaInicio: formatearHora(cita.startTime),
     horaFin: formatearHora(cita.endTime ?? cita.startTime),
-    duracion: duracionMin(cita.startTime, cita.endTime ?? cita.startTime),
+    duracion: duracionParaMostrar(cita.startTime, cita.endTime ?? cita.startTime),
     estado,
   }
 }
 
 interface PanelDetalleClienteProps {
-  cliente: Cliente
-  raw: ClienteAPICompleto | null
+  cliente: ClienteEnTarjeta
+  /** Sus últimas citas, de la más reciente a la más vieja. */
+  citas: CitaDeCliente[]
   notas: string
   guardandoNotas: boolean
   onCerrar: () => void
-  onNotasChange: (v: string) => void
+  onNotasChange: (notas: string) => void
   onNotasBlur: () => void
 }
 
 export function PanelDetalleCliente({
   cliente,
-  raw,
+  citas,
   notas,
   guardandoNotas,
   onCerrar,
@@ -138,9 +116,9 @@ export function PanelDetalleCliente({
             <FileText className="h-4 w-4" />
             Historial de citas
           </h4>
-          {raw && raw.appointments.length > 0 ? (
+          {citas.length > 0 ? (
             <div className="space-y-2">
-              {raw.appointments.map((cita) => (
+              {citas.map((cita) => (
                 <div key={cita.id}>
                   <TarjetaCita
                     cita={mapearCitaParaTarjeta(cita, cliente.nombre)}

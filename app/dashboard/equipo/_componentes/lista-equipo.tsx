@@ -2,25 +2,25 @@
 
 import { motion } from "framer-motion"
 import { Users, Mail, Clock, ShieldCheck, UserCircle2 } from "lucide-react"
-import type { MiembroAPI, InvitacionAPI } from "../page"
+import type { InvitacionPendiente, MiembroDelEquipo } from "../_datos"
 
-function rolLabel(rol: string) {
+function nombreDelRol(rol: string) {
   return rol === "admin" ? "Administrador" : "Trabajador"
 }
 
-function rolColor(rol: string) {
+function coloresDelRol(rol: string) {
   return rol === "admin"
     ? "bg-purple-100 text-purple-700"
     : "bg-blue-100 text-blue-700"
 }
 
-interface Props {
-  miembros: MiembroAPI[]
-  invitaciones: InvitacionAPI[]
+interface ListaEquipoProps {
+  miembros: MiembroDelEquipo[]
+  invitaciones: InvitacionPendiente[]
   cargando: boolean
 }
 
-export function ListaEquipo({ miembros, invitaciones, cargando }: Props) {
+export function ListaEquipo({ miembros, invitaciones, cargando }: ListaEquipoProps) {
   if (cargando) {
     return (
       <div className="space-y-3">
@@ -55,9 +55,9 @@ export function ListaEquipo({ miembros, invitaciones, cargando }: Props) {
           </div>
         ) : (
           <div className="space-y-3">
-            {miembros.map((m, i) => (
+            {miembros.map((miembro, i) => (
               <motion.div
-                key={m.id}
+                key={miembro.id}
                 className="flex items-center gap-4 bg-card border border-border/50 rounded-xl p-4"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -67,15 +67,15 @@ export function ListaEquipo({ miembros, invitaciones, cargando }: Props) {
                   <UserCircle2 className="h-5 w-5 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-foreground">{m.user.name}</p>
+                  <p className="font-semibold text-foreground">{miembro.user.name}</p>
                   <p className="text-sm text-muted-foreground flex items-center gap-1">
                     <Mail className="h-3 w-3" />
-                    {m.user.email}
+                    {miembro.user.email}
                   </p>
                 </div>
-                <span className={`text-xs font-medium px-2.5 py-1 rounded-full flex items-center gap-1 ${rolColor(m.role)}`}>
+                <span className={`text-xs font-medium px-2.5 py-1 rounded-full flex items-center gap-1 ${coloresDelRol(miembro.role)}`}>
                   <ShieldCheck className="h-3 w-3" />
-                  {rolLabel(m.role)}
+                  {nombreDelRol(miembro.role)}
                 </span>
               </motion.div>
             ))}
@@ -90,9 +90,9 @@ export function ListaEquipo({ miembros, invitaciones, cargando }: Props) {
             Invitaciones pendientes ({invitaciones.length})
           </h2>
           <div className="space-y-3">
-            {invitaciones.map((inv, i) => (
+            {invitaciones.map((invitacion, i) => (
               <motion.div
-                key={inv.id}
+                key={invitacion.id}
                 className="flex items-center gap-4 bg-card border border-border/50 rounded-xl p-4 opacity-80"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 0.8, y: 0 }}
@@ -102,15 +102,15 @@ export function ListaEquipo({ miembros, invitaciones, cargando }: Props) {
                   <Clock className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-foreground">{inv.name}</p>
+                  <p className="font-semibold text-foreground">{invitacion.name}</p>
                   <p className="text-sm text-muted-foreground flex items-center gap-1">
                     <Mail className="h-3 w-3" />
-                    {inv.email}
+                    {invitacion.email}
                   </p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${rolColor(inv.role)}`}>
-                    {rolLabel(inv.role)}
+                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${coloresDelRol(invitacion.role)}`}>
+                    {nombreDelRol(invitacion.role)}
                   </span>
                   <p className="text-xs text-muted-foreground mt-1">Pendiente</p>
                 </div>

@@ -7,6 +7,7 @@ import { LogoEli } from "@/components/comunes/logo-eli"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { Mail, ArrowRight, ArrowLeft, CheckCircle2 } from "lucide-react"
+import { pedirEnlaceDeRecuperacion } from "../_datos"
 
 export default function PaginaRecuperarContrasena() {
   const [email, setEmail] = useState("")
@@ -19,26 +20,11 @@ export default function PaginaRecuperarContrasena() {
     setCargando(true)
     setError("")
 
-    try {
-      const res = await fetch("/api/auth/recuperar-contrasena", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      })
+    const resultado = await pedirEnlaceDeRecuperacion(email)
+    setCargando(false)
 
-      if (!res.ok) {
-        const data = await res.json()
-        setError(data.error ?? "No se pudo procesar la solicitud")
-        setCargando(false)
-        return
-      }
-
-      setEnviado(true)
-    } catch {
-      setError("No se pudo procesar la solicitud")
-    } finally {
-      setCargando(false)
-    }
+    if (resultado.ok) setEnviado(true)
+    else setError(resultado.error)
   }
 
   return (
@@ -50,7 +36,7 @@ export default function PaginaRecuperarContrasena() {
         transition={{ duration: 0.5 }}
       >
         <Link href="/" className="flex justify-center mb-8">
-          <LogoEli size="lg" />
+          <LogoEli tamaño="lg" />
         </Link>
 
         {enviado ? (

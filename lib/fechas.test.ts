@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi, afterEach } from "vitest"
 import {
   comoTexto,
   diasDeLaSemanaDe,
@@ -6,6 +6,9 @@ import {
   correr,
   formatearHora,
   duracionEnMinutos,
+  duracionParaMostrar,
+  esHoy,
+  formatearDuracionDeServicio,
 } from "./fechas"
 
 describe("comoTexto", () => {
@@ -113,5 +116,72 @@ describe("duracionEnMinutos", () => {
   it("redondea al minuto más cercano", () => {
     expect(duracionEnMinutos("2026-03-08T10:00:00.000Z", "2026-03-08T10:00:29.000Z")).toBe(0)
     expect(duracionEnMinutos("2026-03-08T10:00:00.000Z", "2026-03-08T10:00:31.000Z")).toBe(1)
+  })
+})
+
+describe("duracionParaMostrar", () => {
+  it("una cita normal muestra sus minutos reales", () => {
+    expect(duracionParaMostrar("2026-03-08T10:00:00.000Z", "2026-03-08T10:45:00.000Z")).toBe(45)
+    expect(duracionParaMostrar("2026-03-08T23:30:00.000Z", "2026-03-09T01:00:00.000Z")).toBe(90)
+  })
+
+  it("una cita que termina cuando empieza se muestra como de un minuto, no de cero", () => {
+    expect(duracionParaMostrar("2026-03-08T10:00:00.000Z", "2026-03-08T10:00:00.000Z")).toBe(1)
+  })
+
+  it("una cita mal cargada, que termina antes de empezar, tampoco muestra minutos negativos", () => {
+    expect(duracionParaMostrar("2026-03-08T11:00:00.000Z", "2026-03-08T10:00:00.000Z")).toBe(1)
+  })
+
+  it("redondea igual que duracionEnMinutos antes de aplicar el mínimo", () => {
+    expect(duracionParaMostrar("2026-03-08T10:00:00.000Z", "2026-03-08T10:00:29.000Z")).toBe(1)
+    expect(duracionParaMostrar("2026-03-08T10:00:00.000Z", "2026-03-08T10:01:31.000Z")).toBe(2)
+  })
+})
+
+describe("esHoy", () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it("compara por día local, sin importar la hora", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 2, 8, 10, 0))
+
+    expect(esHoy(new Date(2026, 2, 8, 0, 0))).toBe(true)
+    expect(esHoy(new Date(2026, 2, 8, 23, 59))).toBe(true)
+  })
+
+  it("ayer y mañana no son hoy, aunque estén a un minuto", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 2, 8, 10, 0))
+
+    expect(esHoy(new Date(2026, 2, 7, 23, 59))).toBe(false)
+    expect(esHoy(new Date(2026, 2, 9, 0, 0))).toBe(false)
+  })
+
+  it("el mismo día de otro mes o de otro año no es hoy", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 2, 8, 10, 0))
+
+    expect(esHoy(new Date(2026, 3, 8, 10, 0))).toBe(false)
+    expect(esHoy(new Date(2025, 2, 8, 10, 0))).toBe(false)
+  })
+})
+
+describe("formatearDuracionDeServicio", () => {
+  it("menos de una hora va en minutos", () => {
+    expect(formatearDuracionDeServicio(15)).toBe("15 min")
+    expect(formatearDuracionDeServicio(45)).toBe("45 min")
+  })
+
+  it("horas justas van sin minutos", () => {
+    expect(formatearDuracionDeServicio(60)).toBe("1h")
+    expect(formatearDuracionDeServicio(120)).toBe("2h")
+  })
+
+  it("horas con resto van con los dos", () => {
+    expect(formatearDuracionDeServicio(90)).toBe("1h 30min")
+    expect(formatearDuracionDeServicio(135)).toBe("2h 15min")
   })
 })

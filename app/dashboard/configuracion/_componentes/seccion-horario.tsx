@@ -3,19 +3,12 @@
 import { useState } from "react"
 import { Clock, Save } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
-
-export interface HorarioAPI {
-  id?: string
-  dayOfWeek: number
-  startTime: string
-  endTime: string
-  active: boolean
-}
+import { guardarHorario, type HorarioDelDia } from "../_datos"
 
 const DIAS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
 const DIAS_CORTO = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"]
 
-const HORARIO_INICIAL: HorarioAPI[] = DIAS.map((_, i) => ({
+const HORARIO_INICIAL: HorarioDelDia[] = DIAS.map((_, i) => ({
   dayOfWeek: i,
   startTime: "09:00",
   endTime: "18:00",
@@ -23,53 +16,55 @@ const HORARIO_INICIAL: HorarioAPI[] = DIAS.map((_, i) => ({
 }))
 
 interface SeccionHorarioProps {
-  horariosIniciales: HorarioAPI[]
+  horariosIniciales: HorarioDelDia[]
+  /** De quién es el horario. Sin él, el propio de quien está en sesión. */
   memberId?: string | null
   titulo?: string
 }
 
-function horariosDesdeDB(db: HorarioAPI[]): HorarioAPI[] {
-  if (db.length === 0) return HORARIO_INICIAL
+/**
+ * Los siete días, aunque la base tenga guardados sólo algunos: los que faltan
+ * se muestran como no laborables. Sin nada guardado, el horario de ejemplo.
+ */
+function semanaCompleta(guardados: HorarioDelDia[]): HorarioDelDia[] {
+  if (guardados.length === 0) return HORARIO_INICIAL
   return DIAS.map((_, i) => {
-    const existente = db.find((h) => h.dayOfWeek === i)
+    const existente = guardados.find((horario) => horario.dayOfWeek === i)
     return existente ?? { dayOfWeek: i, startTime: "09:00", endTime: "18:00", active: false }
   })
 }
 
 export function SeccionHorario({ horariosIniciales, memberId, titulo }: SeccionHorarioProps) {
-  const [horarios, setHorarios] = useState<HorarioAPI[]>(() => horariosDesdeDB(horariosIniciales))
+  const [horarios, setHorarios] = useState<HorarioDelDia[]>(() => semanaCompleta(horariosIniciales))
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
+  const [aviso, setAviso] = useState("")
 
-  const toggleDia = (idx: number) => {
-    setHorarios((prev) =>
-      prev.map((h) => (h.dayOfWeek === idx ? { ...h, active: !h.active } : h))
+  const alternarDia = (dia: number) => {
+    setHorarios((previos) =>
+      previos.map((horario) => (horario.dayOfWeek === dia ? { ...horario, active: !horario.active } : horario))
     )
     setGuardado(false)
   }
 
-  const cambiarHora = (idx: number, campo: "startTime" | "endTime", valor: string) => {
-    setHorarios((prev) =>
-      prev.map((h) => (h.dayOfWeek === idx ? { ...h, [campo]: valor } : h))
+  const cambiarHora = (dia: number, campo: "startTime" | "endTime", valor: string) => {
+    setHorarios((previos) =>
+      previos.map((horario) => (horario.dayOfWeek === dia ? { ...horario, [campo]: valor } : horario))
     )
     setGuardado(false)
   }
 
   const guardar = async () => {
+    setAviso("")
     setGuardando(true)
-    try {
-      const url = memberId
-        ? `/api/configuracion/horarios?memberId=${memberId}`
-        : "/api/configuracion/horarios"
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(horarios),
-      })
-      if (res.ok) setGuardado(true)
-    } finally {
-      setGuardando(false)
-    }
+    const resultado = await guardarHorario(memberId ?? null, horarios)
+    setGuardando(false)
+
+    // Un horario rechazado (por ejemplo, con la hora de fin antes que la de
+    // inicio) tiene que decirlo: si no, el botón vuelve a "Guardar" y parece un
+    // clic perdido.
+    if (resultado.ok) setGuardado(true)
+    else setAviso(resultado.error)
   }
 
   return (
@@ -95,6 +90,12 @@ export function SeccionHorario({ horariosIniciales, memberId, titulo }: SeccionH
         </BotonPrimario>
       </div>
 
+      {aviso && (
+        <p role="alert" className="text-sm text-red-500 mb-4">
+          {aviso}
+        </p>
+      )}
+
       <div className="space-y-3">
         {horarios.map((horario) => (
           <div
@@ -105,9 +106,9 @@ export function SeccionHorario({ horariosIniciales, memberId, titulo }: SeccionH
                 : "border-border/50 bg-muted/30 opacity-60"
             }`}
           >
-            {/* Toggle día */}
+            {/* Interruptor del día */}
             <button
-              onClick={() => toggleDia(horario.dayOfWeek)}
+              onClick={() => alternarDia(horario.dayOfWeek)}
               className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
                 horario.active ? "bg-primary" : "bg-muted-foreground/30"
               }`}

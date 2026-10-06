@@ -4,8 +4,8 @@ import { motion } from "framer-motion"
 import { X } from "lucide-react"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
+import { formatearHora, duracionParaMostrar } from "@/lib/fechas"
 import { nombreDeCliente, type Cita } from "../_datos"
-
 
 const etiquetasEstado: Record<string, { texto: string; color: string }> = {
   pendiente: { texto: "Pendiente", color: "bg-amber-100 text-amber-700" },
@@ -15,27 +15,20 @@ const etiquetasEstado: Record<string, { texto: string; color: string }> = {
   cancelada: { texto: "Cancelada", color: "bg-red-100 text-red-700" },
 }
 
-function formatFechaHora(iso: string) {
-  return new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", hour12: false })
-}
-
-function formatFecha(iso: string) {
+/** `lunes, 8 de marzo`: el día de la cita, sin la hora. */
+function formatearFecha(iso: string) {
   return new Date(iso).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
 }
 
-function duracionMin(start: string, end: string) {
-  return Math.max(1, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000))
-}
-
-interface PanelDetalleCitaProps {
+interface PanelDeCitaProps {
   cita: Cita
   onCerrar: () => void
-  onCambiarEstado: (id: string, status: string) => void
+  onCambiarEstado: (id: string, estado: string) => void
 }
 
-export function PanelDeCita({ cita, onCerrar, onCambiarEstado }: PanelDetalleCitaProps) {
+export function PanelDeCita({ cita, onCerrar, onCambiarEstado }: PanelDeCitaProps) {
   const etiqueta = etiquetasEstado[cita.status] ?? etiquetasEstado.pendiente
-  const duracion = duracionMin(cita.startTime, cita.endTime)
+  const duracion = duracionParaMostrar(cita.startTime, cita.endTime)
 
   return (
     <motion.div
@@ -65,12 +58,12 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado }: PanelDetalleCit
       <div className="space-y-0 mb-6 divide-y divide-border/50">
         <div className="flex justify-between py-2.5">
           <span className="text-sm text-muted-foreground">Fecha</span>
-          <span className="text-sm font-medium capitalize">{formatFecha(cita.startTime)}</span>
+          <span className="text-sm font-medium capitalize">{formatearFecha(cita.startTime)}</span>
         </div>
         <div className="flex justify-between py-2.5">
           <span className="text-sm text-muted-foreground">Horario</span>
           <span className="text-sm font-medium">
-            {formatFechaHora(cita.startTime)} – {formatFechaHora(cita.endTime)}
+            {formatearHora(cita.startTime)} – {formatearHora(cita.endTime)}
           </span>
         </div>
         <div className="flex justify-between py-2.5">

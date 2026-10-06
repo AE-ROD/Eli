@@ -7,6 +7,7 @@ import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { SelectorServicio, type ServicioPublico } from "./selector-servicio"
 import { SelectorFechaHora } from "./selector-fecha-hora"
+import { confirmarReserva } from "../_datos"
 
 interface HorarioPublico {
   dayOfWeek: number
@@ -24,15 +25,15 @@ interface FormularioReservaProps {
 type Paso = 1 | 2 | 3
 
 function saludo(): string {
-  const h = new Date().getHours()
-  if (h < 12) return "Buenos días"
-  if (h < 19) return "Buenas tardes"
+  const hora = new Date().getHours()
+  if (hora < 12) return "Buenos días"
+  if (hora < 19) return "Buenas tardes"
   return "Buenas noches"
 }
 
 export function FormularioReserva({ slug, nombreNegocio, servicios, horarios }: FormularioReservaProps) {
   const [paso, setPaso] = useState<Paso>(1)
-  const [servicioSel, setServicioSel] = useState<ServicioPublico | null>(null)
+  const [servicioSeleccionado, setServicioSeleccionado] = useState<ServicioPublico | null>(null)
   const [fecha, setFecha] = useState("")
   const [hora, setHora] = useState("")
   const [nombre, setNombre] = useState("")
@@ -45,40 +46,30 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios }: 
   const [confirmado, setConfirmado] = useState(false)
   const [error, setError] = useState("")
 
-  const diasDisponibles = horarios.map((h) => h.dayOfWeek)
+  const diasDisponibles = horarios.map((horario) => horario.dayOfWeek)
 
-  const puedeAvanzarPaso1 = !!servicioSel
+  const puedeAvanzarPaso1 = !!servicioSeleccionado
   const puedeAvanzarPaso2 = !!fecha && !!hora
   const puedeEnviar = !!nombre && !!apellido
 
   const confirmar = async () => {
     setEnviando(true)
     setError("")
-    try {
-      const res = await fetch(`/api/reservar/${slug}/confirmar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          servicioId: servicioSel!.id,
-          fecha,
-          hora,
-          nombre,
-          apellido,
-          cedula: cedula || undefined,
-          email: email || undefined,
-          telefono: telefono || undefined,
-          comentarios: comentarios || undefined,
-        }),
-      })
-      if (res.ok) {
-        setConfirmado(true)
-      } else {
-        const data = await res.json()
-        setError(data.error ?? "Error al confirmar la reserva")
-      }
-    } finally {
-      setEnviando(false)
-    }
+    const resultado = await confirmarReserva(slug, {
+      servicioId: servicioSeleccionado!.id,
+      fecha,
+      hora,
+      nombre,
+      apellido,
+      cedula,
+      email,
+      telefono,
+      comentarios,
+    })
+    setEnviando(false)
+
+    if (resultado.ok) setConfirmado(true)
+    else setError(resultado.error)
   }
 
   if (confirmado) {
@@ -93,7 +84,7 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios }: 
         </div>
         <h2 className="text-2xl font-bold text-foreground mb-2">¡Reserva confirmada!</h2>
         <p className="text-muted-foreground mb-1">
-          <span className="font-medium text-foreground">{servicioSel?.name}</span> con <span className="font-medium text-foreground">{nombreNegocio}</span>
+          <span className="font-medium text-foreground">{servicioSeleccionado?.name}</span> con <span className="font-medium text-foreground">{nombreNegocio}</span>
         </p>
         <p className="text-muted-foreground">
           {fecha} a las <span className="font-medium text-foreground">{hora}</span>
@@ -116,16 +107,16 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios }: 
 
       {/* Indicador de pasos */}
       <div className="flex items-center gap-2 mb-8">
-        {([1, 2, 3] as Paso[]).map((p) => (
-          <div key={p} className="flex items-center gap-2">
+        {([1, 2, 3] as Paso[]).map((numero) => (
+          <div key={numero} className="flex items-center gap-2">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${
-              paso === p ? "bg-primary text-primary-foreground" :
-              paso > p ? "bg-green-500 text-white" :
+              paso === numero ? "bg-primary text-primary-foreground" :
+              paso > numero ? "bg-green-500 text-white" :
               "bg-muted text-muted-foreground"
             }`}>
-              {paso > p ? "✓" : p}
+              {paso > numero ? "✓" : numero}
             </div>
-            {p < 3 && <div className={`h-0.5 w-8 transition-all ${paso > p ? "bg-green-500" : "bg-muted"}`} />}
+            {numero < 3 && <div className={`h-0.5 w-8 transition-all ${paso > numero ? "bg-green-500" : "bg-muted"}`} />}
           </div>
         ))}
         <span className="ml-2 text-sm text-muted-foreground">
@@ -138,7 +129,7 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios }: 
         {paso === 1 && (
           <motion.div key="paso1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
             <h2 className="font-semibold text-foreground mb-4">¿Qué servicio necesitas?</h2>
-            <SelectorServicio servicios={servicios} seleccionado={servicioSel} onSeleccionar={setServicioSel} />
+            <SelectorServicio servicios={servicios} seleccionado={servicioSeleccionado} onSeleccionar={setServicioSeleccionado} />
             <div className="mt-6 flex justify-end">
               <BotonPrimario
                 disabled={!puedeAvanzarPaso1}
@@ -158,7 +149,7 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios }: 
             <h2 className="font-semibold text-foreground mb-4">¿Cuándo quieres venir?</h2>
             <SelectorFechaHora
               slug={slug}
-              servicioId={servicioSel!.id}
+              servicioId={servicioSeleccionado!.id}
               diasDisponibles={diasDisponibles}
               fechaSeleccionada={fecha}
               horaSeleccionada={hora}
@@ -245,11 +236,11 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios }: 
               {/* Resumen */}
               <div className="bg-muted/50 rounded-xl p-4 space-y-1.5 text-sm">
                 <p className="font-semibold text-foreground mb-2">Resumen de tu reserva</p>
-                <p className="text-muted-foreground">Servicio: <span className="text-foreground font-medium">{servicioSel?.name}</span></p>
+                <p className="text-muted-foreground">Servicio: <span className="text-foreground font-medium">{servicioSeleccionado?.name}</span></p>
                 <p className="text-muted-foreground">Fecha: <span className="text-foreground font-medium">{fecha}</span></p>
                 <p className="text-muted-foreground">Hora: <span className="text-foreground font-medium">{hora}</span></p>
-                {servicioSel?.price != null && (
-                  <p className="text-muted-foreground">Precio: <span className="text-foreground font-medium">${servicioSel.price.toLocaleString("es-ES")}</span></p>
+                {servicioSeleccionado?.price != null && (
+                  <p className="text-muted-foreground">Precio: <span className="text-foreground font-medium">${servicioSeleccionado.price.toLocaleString("es-ES")}</span></p>
                 )}
               </div>
 

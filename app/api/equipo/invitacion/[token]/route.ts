@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 
-// GET /api/equipo/invitacion/[token] — consultar datos de la invitación (público)
+// GET /api/equipo/invitacion/[token] — consultar datos de la invitación (público).
+// Lo pide cualquiera que tenga el enlace, así que responde sólo lo que la
+// pantalla de aceptar muestra: nada más del negocio.
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
@@ -10,7 +12,7 @@ export async function GET(
 
   const invitacion = await prisma.workerInvitation.findUnique({
     where: { token },
-    include: { business: { select: { name: true, type: true } } },
+    include: { business: { select: { name: true } } },
   })
 
   if (!invitacion) {
@@ -30,6 +32,5 @@ export async function GET(
     email: invitacion.email,
     rol: invitacion.role,
     negocio: invitacion.business.name,
-    tipoNegocio: invitacion.business.type,
   })
 }

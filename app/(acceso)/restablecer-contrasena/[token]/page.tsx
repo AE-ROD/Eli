@@ -8,6 +8,7 @@ import { LogoEli } from "@/components/comunes/logo-eli"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { Lock, ArrowRight } from "lucide-react"
+import { restablecerContrasena } from "../../_datos"
 
 export default function PaginaRestablecerContrasena() {
   const params = useParams()
@@ -33,26 +34,15 @@ export default function PaginaRestablecerContrasena() {
 
     setCargando(true)
 
-    try {
-      const res = await fetch("/api/auth/restablecer-contrasena", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, contrasena }),
-      })
+    const resultado = await restablecerContrasena(token, contrasena)
 
-      const data = await res.json()
-
-      if (!res.ok) {
-        setError(data.error ?? "No se pudo restablecer la contraseña")
-        setCargando(false)
-        return
-      }
-
-      router.push("/iniciar-sesion")
-    } catch {
-      setError("No se pudo restablecer la contraseña")
+    if (!resultado.ok) {
+      setError(resultado.error)
       setCargando(false)
+      return
     }
+
+    router.push("/iniciar-sesion")
   }
 
   return (
@@ -64,7 +54,7 @@ export default function PaginaRestablecerContrasena() {
         transition={{ duration: 0.5 }}
       >
         <Link href="/" className="flex justify-center mb-8">
-          <LogoEli size="lg" />
+          <LogoEli tamaño="lg" />
         </Link>
 
         <div className="text-center mb-8">

@@ -1,6 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
+import { esHoy } from "@/lib/fechas"
 import { diasSemana } from "./controles-de-agenda"
 import type { Cita } from "../_datos"
 
@@ -12,10 +13,6 @@ const coloresPunto: Record<string, string> = {
   cancelada: "bg-red-400",
 }
 
-function esHoy(fecha: Date) {
-  return fecha.toDateString() === new Date().toDateString()
-}
-
 interface VistaMesProps {
   fechaActual: Date
   citas: Cita[]
@@ -24,7 +21,8 @@ interface VistaMesProps {
 
 export function VistaMes({ fechaActual, citas, onDiaClick }: VistaMesProps) {
   const primerDia = new Date(fechaActual.getFullYear(), fechaActual.getMonth(), 1)
-  const offset = primerDia.getDay()
+  // Cuántas celdas de la grilla quedan antes del día 1: la semana empieza en domingo.
+  const celdasAntesDelPrimero = primerDia.getDay()
   const totalCeldas = 42
 
   return (
@@ -41,12 +39,12 @@ export function VistaMes({ fechaActual, citas, onDiaClick }: VistaMesProps) {
       {/* Celdas del mes */}
       <div className="grid grid-cols-7 gap-1">
         {Array.from({ length: totalCeldas }, (_, i) => {
-          const diaNum = i - offset + 1
+          const diaNum = i - celdasAntesDelPrimero + 1
           const fecha = new Date(fechaActual.getFullYear(), fechaActual.getMonth(), diaNum)
           const esDelMes = fecha.getMonth() === fechaActual.getMonth() && diaNum > 0
 
           const citasDelDia = esDelMes
-            ? citas.filter((c) => new Date(c.startTime).toDateString() === fecha.toDateString())
+            ? citas.filter((cita) => new Date(cita.startTime).toDateString() === fecha.toDateString())
             : []
 
           return (
@@ -63,10 +61,10 @@ export function VistaMes({ fechaActual, citas, onDiaClick }: VistaMesProps) {
               </span>
               {citasDelDia.length > 0 && (
                 <div className="flex flex-wrap gap-0.5 mt-auto">
-                  {citasDelDia.slice(0, 3).map((c) => (
+                  {citasDelDia.slice(0, 3).map((cita) => (
                     <div
-                      key={c.id}
-                      className={`w-1.5 h-1.5 rounded-full ${coloresPunto[c.status] ?? "bg-primary"}`}
+                      key={cita.id}
+                      className={`w-1.5 h-1.5 rounded-full ${coloresPunto[cita.status] ?? "bg-primary"}`}
                     />
                   ))}
                   {citasDelDia.length > 3 && (

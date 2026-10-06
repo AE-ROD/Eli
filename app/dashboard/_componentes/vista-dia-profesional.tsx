@@ -5,22 +5,18 @@ import Link from "next/link"
 import { CalendarClock, Settings } from "lucide-react"
 import { TarjetaCita } from "@/components/panel/tarjeta-cita"
 import { LineaDeTiempoDia, citaParaTarjeta } from "./linea-de-tiempo-dia"
-import { formatoDuracion, minutosLibresEnFranjas, type CitaDelDia, type FranjaHorario } from "@/lib/horario-dia"
+import { formatoDuracion, minutosLibresEnFranjas, type CitaDelDia } from "@/lib/horario-dia"
+import type { EstadisticasDelPanel } from "../_datos"
 
 /**
- * Lo mínimo de `StatsData` (app/dashboard/page.tsx) que necesita la vista del
- * profesional. Se define acá en vez de importar el tipo de `page.tsx` para no
- * acoplar un componente de `_componentes` a la página que lo consume.
+ * Lo mínimo de las cifras del panel que necesita la vista del profesional.
+ * `horarioHoy` viene ausente si no tiene horario activo cargado para hoy.
  */
-interface StatsParaProfesional {
-  citasHoy: number
-  citasHoyLista: CitaDelDia[]
-  /** Ausente si no tiene horario activo cargado para hoy (contrato del endpoint). */
-  horarioHoy?: FranjaHorario[]
-}
+type EstadisticasDelProfesional = Pick<EstadisticasDelPanel, "citasHoy" | "citasHoyLista" | "horarioHoy">
 
 interface VistaDiaProfesionalProps {
-  stats: StatsParaProfesional | null
+  /** Nulo mientras cargan. */
+  estadisticas: EstadisticasDelProfesional | null
 }
 
 function tituloResumen(citasHoy: number): string {
@@ -61,8 +57,8 @@ function AvisoHorario({ titulo, children }: { titulo: string; children: ReactNod
   )
 }
 
-export function VistaDiaProfesional({ stats }: VistaDiaProfesionalProps) {
-  if (!stats) {
+export function VistaDiaProfesional({ estadisticas }: VistaDiaProfesionalProps) {
+  if (!estadisticas) {
     return (
       <div className="bg-card border border-border/50 rounded-xl p-8 text-center text-sm text-muted-foreground">
         Cargando tu día...
@@ -70,7 +66,7 @@ export function VistaDiaProfesional({ stats }: VistaDiaProfesionalProps) {
     )
   }
 
-  const { citasHoy, citasHoyLista, horarioHoy } = stats
+  const { citasHoy, citasHoyLista, horarioHoy } = estadisticas
 
   // Sin horario activo para hoy: no hay contra qué medir el tiempo libre, así
   // que no se inventa ninguna cifra. Igual se muestran las citas que haya.

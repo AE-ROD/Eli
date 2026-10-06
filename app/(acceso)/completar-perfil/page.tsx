@@ -9,6 +9,7 @@ import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { RUBROS, type RubroId } from "@/lib/rubros"
 import { Building2, ArrowRight, User, Users } from "lucide-react"
+import { completarPerfil } from "../_datos"
 
 const opcionesEquipo = [
   { valor: 1, label: "Solo yo", icono: User },
@@ -36,28 +37,17 @@ export default function PaginaCompletarPerfil() {
 
     setCargando(true)
 
-    try {
-      const res = await fetch("/api/auth/completar-perfil", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombreNegocio, tipoNegocio, teamSize }),
-      })
+    const resultado = await completarPerfil({ nombreNegocio, tipoNegocio, teamSize })
 
-      const data = await res.json()
-
-      if (!res.ok) {
-        setError(data.error ?? "Error al guardar el negocio")
-        setCargando(false)
-        return
-      }
-
-      await update()
-      router.push("/dashboard")
-      router.refresh()
-    } catch {
-      setError("Error de conexión. Inténtalo de nuevo.")
+    if (!resultado.ok) {
+      setError(resultado.error)
       setCargando(false)
+      return
     }
+
+    await update()
+    router.push("/dashboard")
+    router.refresh()
   }
 
   return (
@@ -69,7 +59,7 @@ export default function PaginaCompletarPerfil() {
         transition={{ duration: 0.4 }}
       >
         <div className="flex justify-center mb-8">
-          <LogoEli size="lg" />
+          <LogoEli tamaño="lg" />
         </div>
 
         <div className="text-center mb-8">
@@ -93,12 +83,14 @@ export default function PaginaCompletarPerfil() {
           {/* Tipo de negocio */}
           <div className="space-y-3">
             <label className="text-sm font-medium text-foreground">Tipo de negocio</label>
-            <div className="grid grid-cols-2 gap-3">
+            {/* Tres rubros, tres columnas: en un celular angosto el padding
+                lateral se achica para que entren sin cortar los nombres. */}
+            <div className="grid grid-cols-3 gap-3">
               {RUBROS.map((rubro) => (
                 <motion.button
                   key={rubro.id}
                   type="button"
-                  className={`p-4 rounded-xl border-2 text-left transition-all ${
+                  className={`px-2 py-4 sm:px-4 rounded-xl border-2 text-left break-words transition-all ${
                     tipoNegocio === rubro.id
                       ? "border-primary bg-primary/5"
                       : "border-border hover:border-primary/50"
