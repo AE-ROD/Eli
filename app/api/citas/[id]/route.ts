@@ -38,7 +38,7 @@ export async function GET(
   const cita = await prisma.appointment.findFirst({
     where: whereDeAgenda(actor, { id }),
     include: {
-      patient: { select: { id: true, name: true, email: true, phone: true } },
+      customer: { select: { id: true, name: true, email: true, phone: true } },
     },
   })
 
@@ -83,7 +83,7 @@ export async function PUT(
         ...(datos.price !== undefined && { price: datos.price }),
       },
       include: {
-        patient: { select: { id: true, name: true, email: true, phone: true } },
+        customer: { select: { id: true, name: true, email: true, phone: true } },
       },
     })
 

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { actorDeSesion, whereDeClientes } from "@/lib/permisos"
 
-const pacienteSchema = z.object({
+const clienteSchema = z.object({
   name: z.string().min(2),
   email: z.string().email().optional().or(z.literal("")),
   phone: z.string().optional().or(z.literal("")),
@@ -38,8 +38,8 @@ export async function GET(request: NextRequest) {
     ...(etiqueta && { tags: { has: etiqueta } }),
   })
 
-  const [pacientes, total] = await Promise.all([
-    prisma.patient.findMany({
+  const [clientes, total] = await Promise.all([
+    prisma.customer.findMany({
       where,
       select: {
         id: true,
@@ -66,11 +66,11 @@ export async function GET(request: NextRequest) {
       take: limite,
       skip,
     }),
-    prisma.patient.count({ where }),
+    prisma.customer.count({ where }),
   ])
 
   return NextResponse.json({
-    pacientes,
+    clientes,
     total,
     pagina,
     paginas: Math.ceil(total / limite),
@@ -86,9 +86,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const datos = pacienteSchema.parse(body)
+    const datos = clienteSchema.parse(body)
 
-    const paciente = await prisma.patient.create({
+    const cliente = await prisma.customer.create({
       data: {
         name: datos.name,
         email: datos.email || null,
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json(paciente, { status: 201 })
+    return NextResponse.json(cliente, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    console.error("Error creando paciente:", error)
+    console.error("Error creando cliente:", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
 }

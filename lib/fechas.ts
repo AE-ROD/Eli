@@ -1,8 +1,10 @@
 /**
- * Cálculos de fechas que la agenda necesita. Van acá y no dentro de la vista
- * porque no tienen nada de pantalla: son reglas que se pueden probar solas, y
- * equivocarse en una semana o en un fin de mes se paga con citas que no
- * aparecen.
+ * Todo lo que el sistema hace con fechas y horas: los cálculos de la agenda
+ * (qué semana, qué mes, cuánto correr) y cómo se escribe la hora y la duración
+ * de una cita. Van acá y no dentro de las vistas porque no tienen nada de
+ * pantalla: son reglas que se pueden probar solas, y equivocarse en una semana,
+ * en un fin de mes o en una hora se paga con citas que no aparecen o que se
+ * leen corridas.
  */
 
 /** Lo que se está mirando de una vez: un día, una semana o un mes. */
@@ -49,4 +51,22 @@ export function correr(fecha: Date, unidad: UnidadDeTiempo, pasos: number): Date
   else if (unidad === "semana") movida.setDate(movida.getDate() + pasos * 7)
   else movida.setMonth(movida.getMonth() + pasos)
   return movida
+}
+
+/**
+ * Hora local en formato 24h (`09:05`, `21:30`) a partir de un instante ISO.
+ * Es para citas, que son instantes reales; los horarios laborales ya viajan
+ * como `"HH:MM"` sin fecha ni zona y no pasan por acá.
+ */
+export function formatearHora(iso: string): string {
+  return new Date(iso).toLocaleTimeString("es-ES", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+}
+
+/** Cuántos minutos hay entre dos instantes ISO, redondeado al minuto. */
+export function duracionEnMinutos(inicio: string, fin: string): number {
+  return Math.round((new Date(fin).getTime() - new Date(inicio).getTime()) / 60000)
 }

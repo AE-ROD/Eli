@@ -2,7 +2,7 @@
 
 import { ChevronLeft, ChevronRight, Calendar, List, Grid3X3 } from "lucide-react"
 
-import type { UnidadDeTiempo } from "@/nucleo/fechas"
+import type { UnidadDeTiempo } from "@/lib/fechas"
 
 const diasSemana = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"]
 const meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]

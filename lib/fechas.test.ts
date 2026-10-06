@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest"
-import { comoTexto, diasDeLaSemanaDe, limitesDelMesDe, correr } from "./fechas"
+import {
+  comoTexto,
+  diasDeLaSemanaDe,
+  limitesDelMesDe,
+  correr,
+  formatearHora,
+  duracionEnMinutos,
+} from "./fechas"
 
 describe("comoTexto", () => {
   it("escribe la fecha local, no la UTC", () => {
@@ -65,5 +72,46 @@ describe("correr", () => {
     const original = new Date(2026, 2, 11)
     correr(original, "mes", 3)
     expect(comoTexto(original)).toBe("2026-03-11")
+  })
+})
+
+describe("formatearHora", () => {
+  // Se arma con `new Date(año, mes, ...)` y `toISOString()` a propósito: ida y
+  // vuelta por la zona local, así el test da lo mismo en cualquier huso. Es un
+  // 15 de julio porque ningún huso cambia la hora ese día: en un día de cambio
+  // (8 de marzo en La Habana, por ejemplo) la 00:30 ni siquiera existe.
+  const instante = (hora: number, minuto: number) =>
+    new Date(2026, 6, 15, hora, minuto).toISOString()
+
+  it("escribe la hora local en 24h, con cero a la izquierda", () => {
+    expect(formatearHora(instante(9, 5))).toBe("09:05")
+    expect(formatearHora(instante(21, 30))).toBe("21:30")
+  })
+
+  it("la hora de la tarde sigue en 24h, sin am/pm", () => {
+    expect(formatearHora(instante(14, 0))).toBe("14:00")
+  })
+
+  it("después de medianoche empieza en 00, no en 24", () => {
+    expect(formatearHora(instante(0, 30))).toBe("00:30")
+  })
+})
+
+describe("duracionEnMinutos", () => {
+  it("cuenta los minutos entre el inicio y el fin de la cita", () => {
+    expect(duracionEnMinutos("2026-03-08T10:00:00.000Z", "2026-03-08T10:45:00.000Z")).toBe(45)
+  })
+
+  it("cruza la hora y la medianoche sin perder minutos", () => {
+    expect(duracionEnMinutos("2026-03-08T23:30:00.000Z", "2026-03-09T01:00:00.000Z")).toBe(90)
+  })
+
+  it("una cita que termina cuando empieza dura cero", () => {
+    expect(duracionEnMinutos("2026-03-08T10:00:00.000Z", "2026-03-08T10:00:00.000Z")).toBe(0)
+  })
+
+  it("redondea al minuto más cercano", () => {
+    expect(duracionEnMinutos("2026-03-08T10:00:00.000Z", "2026-03-08T10:00:29.000Z")).toBe(0)
+    expect(duracionEnMinutos("2026-03-08T10:00:00.000Z", "2026-03-08T10:00:31.000Z")).toBe(1)
   })
 })

@@ -19,22 +19,22 @@ export async function GET(request: NextRequest) {
     where: {
       startTime: { gte: manana, lte: finManana },
       status: { notIn: ["cancelada", "completada"] },
-      patient: { email: { not: null } },
+      customer: { email: { not: null } },
     },
     select: {
       startTime: true,
       title: true,
-      patient: { select: { name: true, lastName: true, email: true } },
+      customer: { select: { name: true, lastName: true, email: true } },
       business: { select: { name: true } },
     },
   })
 
   const resultados = await Promise.allSettled(
     citas.map((cita: (typeof citas)[number]) => {
-      if (!cita.patient?.email) return Promise.resolve(null)
+      if (!cita.customer?.email) return Promise.resolve(null)
       return enviarRecordatorio({
-        emailCliente: cita.patient.email,
-        nombreCliente: `${cita.patient.name}${cita.patient.lastName ? " " + cita.patient.lastName : ""}`,
+        emailCliente: cita.customer.email,
+        nombreCliente: `${cita.customer.name}${cita.customer.lastName ? " " + cita.customer.lastName : ""}`,
         nombreNegocio: cita.business.name,
         servicio: cita.title,
         fecha: cita.startTime.toISOString().split("T")[0],

@@ -21,7 +21,7 @@ const fakeRequest = (pathname: string, method = "GET"): NextRequest =>
     headers: new Headers(),
   }) as unknown as NextRequest
 
-describe("middleware — rate limit de los endpoints del panel", () => {
+describe("proxy — rate limit de los endpoints del panel", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockGetToken.mockResolvedValue({ id: "usuario-1", businessId: "negocio-1" })
@@ -29,11 +29,11 @@ describe("middleware — rate limit de los endpoints del panel", () => {
   })
 
   it("responde 429 con un mensaje entendible cuando se pasa el límite", async () => {
-    const { default: middleware } = await import("./middleware")
+    const { default: proxy } = await import("./proxy")
 
     mockVerificarLimite.mockResolvedValueOnce({ permitido: false, restantes: 0 })
 
-    const res = await middleware(fakeRequest("/api/pacientes"))
+    const res = await proxy(fakeRequest("/api/clientes"))
     const data = await res.json()
 
     expect(res.status).toBe(429)
@@ -44,66 +44,69 @@ describe("middleware — rate limit de los endpoints del panel", () => {
   })
 
   it("cuenta por sesión (usuario), no sólo por IP: usa el id del actor como clave", async () => {
-    const { default: middleware } = await import("./middleware")
+    const { default: proxy } = await import("./proxy")
 
     mockGetToken.mockResolvedValueOnce({ id: "usuario-42", businessId: "negocio-1" })
 
-    await middleware(fakeRequest("/api/citas"))
+    await proxy(fakeRequest("/api/citas"))
 
     expect(mockVerificarLimite).toHaveBeenCalledWith("panelLectura", "usuario:usuario-42")
   })
 
   it("dos personas del mismo negocio (misma IP, distinta sesión) no comparten el cupo", async () => {
-    const { default: middleware } = await import("./middleware")
+    const { default: proxy } = await import("./proxy")
 
     mockGetToken.mockResolvedValueOnce({ id: "empleado-a", businessId: "negocio-1" })
-    await middleware(fakeRequest("/api/citas"))
+    await proxy(fakeRequest("/api/citas"))
 
     mockGetToken.mockResolvedValueOnce({ id: "empleado-b", businessId: "negocio-1" })
-    await middleware(fakeRequest("/api/citas"))
+    await proxy(fakeRequest("/api/citas"))
 
     const claves = mockVerificarLimite.mock.calls.map((llamada) => llamada[1])
     expect(claves[0]).not.toBe(claves[1])
   })
 
   it("usa el límite de escritura (más bajo) en POST/PUT/DELETE y el de lectura en GET", async () => {
-    const { default: middleware } = await import("./middleware")
+    const { default: proxy } = await import("./proxy")
 
-    await middleware(fakeRequest("/api/pacientes", "GET"))
+    await proxy(fakeRequest("/api/clientes", "GET"))
     expect(mockVerificarLimite).toHaveBeenLastCalledWith("panelLectura", expect.any(String))
 
-    await middleware(fakeRequest("/api/pacientes", "POST"))
+    await proxy(fakeRequest("/api/clientes", "POST"))
     expect(mockVerificarLimite).toHaveBeenLastCalledWith("panelEscritura", expect.any(String))
   })
 
   it("deja pasar cuando no se pasó el límite", async () => {
-    const { default: middleware } = await import("./middleware")
+    const { default: proxy } = await import("./proxy")
 
-    const res = await middleware(fakeRequest("/api/equipo"))
+    const res = await proxy(fakeRequest("/api/equipo"))
 
     expect(res.status).not.toBe(429)
   })
 
   it.each([
     "/api/auth/registro",
+    "/api/auth/recuperar-contrasena",
+    "/api/auth/restablecer-contrasena",
     "/api/cron/recordatorios",
     "/api/reservar/mi-negocio",
+    "/api/reservar/mi-negocio/disponibilidad",
     "/api/equipo/invitacion/token-123/aceptar",
   ])("no aplica el límite del panel a %s (tiene el suyo propio, o no corresponde)", async (ruta) => {
-    const { default: middleware } = await import("./middleware")
+    const { default: proxy } = await import("./proxy")
 
-    await middleware(fakeRequest(ruta, "POST"))
+    await proxy(fakeRequest(ruta, "POST"))
 
     expect(mockVerificarLimite).not.toHaveBeenCalledWith("panelLectura", expect.anything())
     expect(mockVerificarLimite).not.toHaveBeenCalledWith("panelEscritura", expect.anything())
   })
 
   it("sin sesión, cuenta por IP en vez de romper la petición", async () => {
-    const { default: middleware } = await import("./middleware")
+    const { default: proxy } = await import("./proxy")
 
     mockGetToken.mockResolvedValueOnce(null)
 
-    await middleware(fakeRequest("/api/pacientes"))
+    await proxy(fakeRequest("/api/clientes"))
 
     expect(mockVerificarLimite).toHaveBeenCalledWith("panelLectura", "ip:127.0.0.1")
   })

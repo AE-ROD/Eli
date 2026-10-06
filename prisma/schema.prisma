@@ -34,7 +34,7 @@ model Business {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  patients          Patient[]
+  customers         Customer[]
   appointments      Appointment[]
   services          Service[]
   workSchedules     WorkSchedule[]
@@ -92,7 +92,7 @@ model PasswordResetToken {
   @@map("tokens_recuperacion")
 }
 
-model Patient {
+model Customer {
   id        String   @id @default(cuid())
   name      String
   lastName  String?
@@ -158,8 +158,11 @@ model Appointment {
   notes            String?  // notas internas del profesional
   clientComments   String?  // comentarios del cliente al reservar
   price            Float?
-  patientId        String?
-  patient          Patient?        @relation(fields: [patientId], references: [id])
+  // La columna sigue llamándose `patientId` en la base (de cuando Eli apuntaba a
+  // consultorios). Renombrarla pide una migración sobre datos reales; el `@map`
+  // deja el nombre claro en el código sin tocar la tabla.
+  customerId       String?         @map("patientId")
+  customer         Customer?       @relation(fields: [customerId], references: [id])
   memberId         String?
   member           BusinessMember? @relation(fields: [memberId], references: [id])
   businessId       String
@@ -169,19 +172,20 @@ model Appointment {
 
   @@index([businessId])
   @@index([businessId, startTime])
-  @@index([patientId])
+  @@index([customerId])
   @@index([memberId])
   @@map("citas")
 }
 
 model Conversation {
-  id           String    @id @default(cuid())
-  patientName  String
-  patientPhone String?
-  businessId   String
-  business     Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  // Mismo caso que `Appointment.customerId`: las columnas conservan su nombre.
+  customerName  String    @map("patientName")
+  customerPhone String?   @map("patientPhone")
+  businessId    String
+  business      Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   messages Message[]
 

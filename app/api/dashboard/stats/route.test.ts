@@ -15,7 +15,7 @@ const prismaMock = {
     findFirst: vi.fn(),
     aggregate: vi.fn(),
   },
-  patient: {
+  customer: {
     count: vi.fn(),
   },
   workSchedule: {
@@ -47,7 +47,7 @@ describe("GET /api/dashboard/stats", () => {
     prismaMock.appointment.findMany.mockResolvedValue([])
     prismaMock.appointment.findFirst.mockResolvedValue(null)
     prismaMock.appointment.aggregate.mockResolvedValue({ _sum: { price: 1000 }, _count: 4 })
-    prismaMock.patient.count.mockResolvedValue(0)
+    prismaMock.customer.count.mockResolvedValue(0)
     prismaMock.workSchedule.findMany.mockResolvedValue([])
   })
 
@@ -117,7 +117,7 @@ describe("GET /api/dashboard/stats", () => {
     // Ni `0` ni `null`: la clave no existe. Un `0` se muestra como
     // "+0% vs mes anterior" y se lee como un placeholder roto.
     expect(data.tendencias).not.toHaveProperty("ingresos")
-    expect(data.tendencias).not.toHaveProperty("pacientes")
+    expect(data.tendencias).not.toHaveProperty("clientes")
     // Y no queda rastro de la comparación que medía un día contra un mes.
     expect(data.tendencias).not.toHaveProperty("citas")
     expect(data).not.toHaveProperty("tasaOcupacion")
@@ -128,7 +128,7 @@ describe("GET /api/dashboard/stats", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
     // 12 clientes hoy, 10 al cierre del mes pasado, 2 nuevos este mes.
-    prismaMock.patient.count
+    prismaMock.customer.count
       .mockResolvedValueOnce(12)
       .mockResolvedValueOnce(10)
       .mockResolvedValueOnce(2)
@@ -136,9 +136,9 @@ describe("GET /api/dashboard/stats", () => {
     const res = await GET(fakeRequest())
     const data = await res.json()
 
-    expect(data.totalPacientes).toBe(12)
+    expect(data.totalClientes).toBe(12)
     expect(data.clientesNuevosMes).toBe(2)
-    expect(data.tendencias.pacientes).toBe(20)
+    expect(data.tendencias.clientes).toBe(20)
   })
 
   it("la tendencia de ingresos sale de los dos meses, no de un valor por defecto", async () => {
@@ -185,7 +185,7 @@ describe("GET /api/dashboard/stats", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
     prismaMock.appointment.findMany.mockResolvedValueOnce([
-      { id: "cita-hoy", title: "Color", startTime: new Date(), endTime: new Date(), status: "confirmada", patient: null },
+      { id: "cita-hoy", title: "Color", startTime: new Date(), endTime: new Date(), status: "confirmada", customer: null },
     ])
 
     const res = await GET(fakeRequest())

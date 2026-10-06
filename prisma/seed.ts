@@ -64,7 +64,7 @@ async function main() {
       ],
     })
 
-    const cliente = await prisma.patient.create({
+    const cliente = await prisma.customer.create({
       data: { businessId: negocio.id, name: "María", lastName: "González", phone: "+56 9 1234 5678" },
     })
 
@@ -79,7 +79,7 @@ async function main() {
     await prisma.appointment.create({
       data: {
         businessId: negocio.id,
-        patientId: cliente.id,
+        customerId: cliente.id,
         memberId: profesional?.id ?? null,
         title: "Corte",
         startTime: mañana,

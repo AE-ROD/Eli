@@ -1,11 +1,21 @@
 import { z } from "zod"
+import { IDS_DE_RUBROS } from "@/lib/rubros"
+
+/**
+ * El rubro de un negocio nuevo: sólo ids del catálogo (`lib/rubros.ts`). Antes
+ * valía cualquier texto, y así quedaron guardados `salud`, `fitness` y `otro`
+ * en negocios de cuando Eli apuntaba a otros rubros. Esos negocios siguen
+ * existiendo y se muestran bien (`nombreDeRubro`), pero ya no se puede crear
+ * uno nuevo con un rubro que el catálogo no conoce.
+ */
+export const tipoNegocioSchema = z.enum(IDS_DE_RUBROS)
 
 export const registroSchema = z.object({
   nombre: z.string().min(2),
   email: z.string().email(),
   contrasena: z.string().min(8),
   nombreNegocio: z.string().min(2),
-  tipoNegocio: z.string().min(1),
+  tipoNegocio: tipoNegocioSchema,
 })
 
 export const reservaSchema = z.object({
@@ -20,11 +30,11 @@ export const reservaSchema = z.object({
   comentarios: z.string().optional(),
 })
 
-export const olvidePasswordSchema = z.object({
+export const recuperarContrasenaSchema = z.object({
   email: z.string().email(),
 })
 
-export const restablecerPasswordSchema = z.object({
+export const restablecerContrasenaSchema = z.object({
   token: z.string().min(1),
-  password: z.string().min(8),
+  contrasena: z.string().min(8),
 })

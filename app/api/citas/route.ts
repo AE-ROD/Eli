@@ -12,7 +12,7 @@ const citaSchema = z.object({
   status: z.enum(["pendiente", "confirmada", "en-progreso", "completada", "cancelada"]).optional(),
   notes: z.string().optional().or(z.literal("")),
   price: z.number().positive().optional(),
-  patientId: z.string(),
+  customerId: z.string(),
   memberId: z.string().nullable().optional(),
 })
 
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   const fecha = searchParams.get("fecha")
   const desde = searchParams.get("desde")
   const hasta = searchParams.get("hasta")
-  const patientId = searchParams.get("patientId")
+  const customerId = searchParams.get("customerId")
 
   let fechaInicio: Date | undefined
   let fechaFin: Date | undefined
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
 
   const citas = await prisma.appointment.findMany({
     where: whereDeAgenda(actor, {
-      ...(patientId && { patientId }),
+      ...(customerId && { customerId }),
       ...(fechaInicio && fechaFin && {
         startTime: { gte: fechaInicio, lte: fechaFin },
       }),
@@ -59,8 +59,8 @@ export async function GET(request: NextRequest) {
       status: true,
       notes: true,
       price: true,
-      patientId: true,
-      patient: { select: { id: true, name: true, email: true, phone: true } },
+      customerId: true,
+      customer: { select: { id: true, name: true, email: true, phone: true } },
       memberId: true,
       member: { select: { id: true, role: true, user: { select: { id: true, name: true } } } },
     },
@@ -83,12 +83,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const datos = citaSchema.parse(body)
 
-    const paciente = await prisma.patient.findFirst({
-      where: { id: datos.patientId, businessId: actor.businessId },
+    const cliente = await prisma.customer.findFirst({
+      where: { id: datos.customerId, businessId: actor.businessId },
     })
 
-    if (!paciente) {
-      return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 })
+    if (!cliente) {
+      return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 })
     }
 
     // El worker no elige: memberIdParaCita ignora lo pedido y devuelve su propio id.
@@ -113,12 +113,12 @@ export async function POST(request: NextRequest) {
         status: datos.status ?? "pendiente",
         notes: datos.notes || null,
         price: datos.price ?? null,
-        patientId: datos.patientId,
+        customerId: datos.customerId,
         memberId,
         businessId: actor.businessId,
       },
       include: {
-        patient: { select: { id: true, name: true, email: true, phone: true } },
+        customer: { select: { id: true, name: true, email: true, phone: true } },
         member: { select: { id: true, role: true, user: { select: { id: true, name: true } } } },
       },
     })

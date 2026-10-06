@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion"
 import { TarjetaCita, type CitaEnTarjeta } from "@/components/app/tarjetas/tarjeta-cita"
-import { formatHora, duracionMinutos } from "@/lib/utils"
+import { formatearHora, duracionEnMinutos } from "@/lib/fechas"
 import {
   citasFueraDeFranjas,
   formatoDuracion,
@@ -21,11 +21,11 @@ interface LineaDeTiempoDiaProps {
 export function citaParaTarjeta(cita: CitaDelDia): CitaEnTarjeta {
   return {
     id: cita.id,
-    pacienteNombre: cita.patient?.name ?? "Sin cliente",
+    pacienteNombre: cita.customer?.name ?? "Sin cliente",
     servicio: cita.title,
-    horaInicio: formatHora(cita.startTime),
-    horaFin: formatHora(cita.endTime),
-    duracion: duracionMinutos(cita.startTime, cita.endTime),
+    horaInicio: formatearHora(cita.startTime),
+    horaFin: formatearHora(cita.endTime),
+    duracion: duracionEnMinutos(cita.startTime, cita.endTime),
     // El endpoint no restringe el string a la unión de TarjetaCita; el estado
     // real siempre es uno de esos valores (columna `status` de Appointment).
     estado: cita.status as CitaEnTarjeta["estado"],

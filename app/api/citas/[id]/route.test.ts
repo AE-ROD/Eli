@@ -28,10 +28,10 @@ function coincide(item: Record<string, unknown>, where: Record<string, unknown>)
 }
 
 const citasFake = [
-  { id: "cita-mia", businessId: "negocio-1", memberId: "member-worker-1", patientId: "p-1" },
-  { id: "cita-colega", businessId: "negocio-1", memberId: "member-colega", patientId: "p-2" },
+  { id: "cita-mia", businessId: "negocio-1", memberId: "member-worker-1", customerId: "c-1" },
+  { id: "cita-colega", businessId: "negocio-1", memberId: "member-colega", customerId: "c-2" },
   /** Sin profesional asignado: `memberId` es opcional en el esquema, así que existen de verdad. */
-  { id: "cita-sin-profesional", businessId: "negocio-1", memberId: null, patientId: "p-3" },
+  { id: "cita-sin-profesional", businessId: "negocio-1", memberId: null, customerId: "c-3" },
 ]
 
 const prismaMock = {

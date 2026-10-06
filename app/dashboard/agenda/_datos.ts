@@ -9,7 +9,7 @@
  * no hizo nada y no dice por qué.
  */
 
-import { comoTexto, diasDeLaSemanaDe, limitesDelMesDe, type UnidadDeTiempo } from "@/nucleo/fechas"
+import { comoTexto, diasDeLaSemanaDe, limitesDelMesDe, type UnidadDeTiempo } from "@/lib/fechas"
 
 export interface Cita {
   id: string

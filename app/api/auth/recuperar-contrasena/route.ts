@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { enviarRecuperacionPassword } from "@/lib/email"
-import { olvidePasswordSchema as schema } from "@/lib/validaciones"
+import { recuperarContrasenaSchema as schema } from "@/lib/validaciones"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 
 const MENSAJE_GENERICO = {
   mensaje: "Si existe una cuenta con ese correo, te enviamos un enlace para restablecer tu contraseña.",
 }
 
-// POST /api/auth/olvide-password — solicitar enlace de recuperación
+// POST /api/auth/recuperar-contrasena — solicitar enlace de recuperación
 export async function POST(request: NextRequest) {
   const { permitido } = await verificarLimite("auth", obtenerIp(request))
   if (!permitido) {
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
     }
-    console.error("Error en olvide-password:", error)
+    console.error("Error en recuperar-contrasena:", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
 }

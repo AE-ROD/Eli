@@ -28,7 +28,13 @@ function esRutaDePanel(pathname: string): boolean {
   return pathname.startsWith("/api/") && !PREFIJOS_SIN_LIMITE_DE_PANEL.some((prefijo) => pathname.startsWith(prefijo))
 }
 
-export default async function middleware(req: NextRequest) {
+/**
+ * Next 16 renombró la convención `middleware` a `proxy`: es la misma puerta de
+ * entrada (rate limit y sesión antes de llegar a las rutas), con otro nombre.
+ * Corre en Node.js y no en Edge, que es lo que la convención nueva trae por
+ * defecto.
+ */
+export default async function proxy(req: NextRequest) {
   const pathname = req.nextUrl.pathname
 
   // Rate limiting sobre el intento de login por credenciales, antes de que NextAuth lo procese
@@ -41,7 +47,7 @@ export default async function middleware(req: NextRequest) {
   }
 
   // Rate limit genérico de los endpoints autenticados del panel (citas,
-  // pacientes, configuración, equipo, chats, dashboard...). Se cuenta por
+  // clientes, configuración, equipo, chats, dashboard...). Se cuenta por
   // sesión, no sólo por IP: un salón con wifi compartido sale por una sola
   // IP, y varias personas del mismo negocio no deben poder gastarse el cupo
   // entre ellas. Sin sesión válida el propio endpoint responde 401; acá se

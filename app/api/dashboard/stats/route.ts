@@ -39,11 +39,11 @@ export async function GET(_request: NextRequest) {
 
   const sinIngresos = { _sum: { price: null as number | null }, _count: 0 }
 
-  const [citasHoy, totalPacientes, pacientesMesAnterior, clientesNuevosMes, ingresosMes, ingresosMesAnterior, franjasHoy] =
+  const [citasHoy, totalClientes, clientesMesAnterior, clientesNuevosMes, ingresosMes, ingresosMesAnterior, franjasHoy] =
     await Promise.all([
       prisma.appointment.findMany({
         // Filas, no un agregado: un worker no debe ver acá las citas de un
-        // colega ni el nombre de su paciente. `whereDeAgenda` acota por
+        // colega ni el nombre de su cliente. `whereDeAgenda` acota por
         // profesional además de por negocio.
         where: whereDeAgenda(actor, {
           startTime: { gte: hoy, lt: manana },
@@ -55,16 +55,16 @@ export async function GET(_request: NextRequest) {
           startTime: true,
           endTime: true,
           status: true,
-          patient: { select: { id: true, name: true } },
+          customer: { select: { id: true, name: true } },
         },
         orderBy: { startTime: "asc" },
         // Listado sin agregar: siempre con tope (reglas/01-arquitectura.md).
         take: 200,
       }),
-      prisma.patient.count({ where: { businessId } }),
-      prisma.patient.count({ where: { businessId, createdAt: { lt: inicioMes } } }),
+      prisma.customer.count({ where: { businessId } }),
+      prisma.customer.count({ where: { businessId, createdAt: { lt: inicioMes } } }),
       // De qué está hecha la cifra de clientes: cuántos entraron este mes.
-      prisma.patient.count({ where: { businessId, createdAt: { gte: inicioMes } } }),
+      prisma.customer.count({ where: { businessId, createdAt: { gte: inicioMes } } }),
       // La facturación es del negocio: no se calcula siquiera si el actor no
       // puede verla. `_count` dice sobre cuántas citas está hecha la suma.
       verIngresos
@@ -132,10 +132,10 @@ export async function GET(_request: NextRequest) {
   // Sólo viajan las tendencias que se pudieron calcular. No se comparan las
   // citas: el cálculo anterior medía las de hoy contra el total del mes pasado,
   // un día contra un mes. Para esa tarjeta, el contexto es `proximaCita`.
-  const tendencias: { pacientes?: number; ingresos?: number } = {}
+  const tendencias: { clientes?: number; ingresos?: number } = {}
 
-  const tendenciaPacientes = variacion(totalPacientes, pacientesMesAnterior)
-  if (tendenciaPacientes !== null) tendencias.pacientes = tendenciaPacientes
+  const tendenciaClientes = variacion(totalClientes, clientesMesAnterior)
+  if (tendenciaClientes !== null) tendencias.clientes = tendenciaClientes
 
   if (verIngresos) {
     const tendenciaIngresos = variacion(ingresosActuales, ingresosAnteriores)
@@ -146,7 +146,7 @@ export async function GET(_request: NextRequest) {
     citasHoy: citasHoy.length,
     citasHoyLista: citasHoy,
     ...(proximaCita && { proximaCita }),
-    totalPacientes,
+    totalClientes,
     clientesNuevosMes,
     ...(verIngresos && {
       ingresoseMes: ingresosActuales,

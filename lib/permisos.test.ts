@@ -115,7 +115,7 @@ describe("aislamiento entre negocios", () => {
 
 describe("whereDeAgenda / whereDeClientes: combinar el filtro no lo anula", () => {
   it("envuelve el filtro y lo extra en AND, en vez de mezclarlos por spread", () => {
-    const extra = { patientId: "paciente-1" }
+    const extra = { customerId: "cliente-1" }
 
     expect(whereDeAgenda(profesional, extra)).toEqual({
       AND: [{ businessId: NEGOCIO, memberId: "yo" }, extra],

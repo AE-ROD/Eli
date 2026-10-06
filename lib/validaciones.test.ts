@@ -2,9 +2,11 @@ import { describe, it, expect } from "vitest"
 import {
   registroSchema,
   reservaSchema,
-  olvidePasswordSchema,
-  restablecerPasswordSchema,
+  recuperarContrasenaSchema,
+  restablecerContrasenaSchema,
+  tipoNegocioSchema,
 } from "./validaciones"
+import { RUBROS } from "./rubros"
 
 describe("registroSchema", () => {
   const datosValidos = {
@@ -32,6 +34,30 @@ describe("registroSchema", () => {
   it("rechaza un nombre de negocio vacío", () => {
     const resultado = registroSchema.safeParse({ ...datosValidos, nombreNegocio: "" })
     expect(resultado.success).toBe(false)
+  })
+
+  it.each(RUBROS.map((rubro) => rubro.id))("acepta el rubro %s del catálogo", (tipoNegocio) => {
+    expect(registroSchema.safeParse({ ...datosValidos, tipoNegocio }).success).toBe(true)
+  })
+
+  it.each(["salud", "fitness", "otro", "peluqueria-canina", ""])(
+    "rechaza el rubro %j: no está en el catálogo",
+    (tipoNegocio) => {
+      expect(registroSchema.safeParse({ ...datosValidos, tipoNegocio }).success).toBe(false)
+    }
+  )
+
+  it("rechaza un registro sin rubro", () => {
+    const { tipoNegocio: _sinRubro, ...sinRubro } = datosValidos
+    expect(registroSchema.safeParse(sinRubro).success).toBe(false)
+  })
+})
+
+describe("tipoNegocioSchema", () => {
+  it("acepta los ids del catálogo y nada más", () => {
+    expect(tipoNegocioSchema.safeParse("barberia").success).toBe(true)
+    expect(tipoNegocioSchema.safeParse("Barbería").success).toBe(false)
+    expect(tipoNegocioSchema.safeParse(undefined).success).toBe(false)
   })
 })
 
@@ -63,32 +89,38 @@ describe("reservaSchema", () => {
   })
 })
 
-describe("olvidePasswordSchema", () => {
+describe("recuperarContrasenaSchema", () => {
   it("acepta un email válido", () => {
-    expect(olvidePasswordSchema.safeParse({ email: "user@example.com" }).success).toBe(true)
+    expect(recuperarContrasenaSchema.safeParse({ email: "user@example.com" }).success).toBe(true)
   })
 
   it("rechaza un email inválido", () => {
-    expect(olvidePasswordSchema.safeParse({ email: "no-valido" }).success).toBe(false)
+    expect(recuperarContrasenaSchema.safeParse({ email: "no-valido" }).success).toBe(false)
   })
 })
 
-describe("restablecerPasswordSchema", () => {
+describe("restablecerContrasenaSchema", () => {
   it("acepta un token y una contraseña válidos", () => {
     expect(
-      restablecerPasswordSchema.safeParse({ token: "abc123", password: "nuevaClave1" }).success
+      restablecerContrasenaSchema.safeParse({ token: "abc123", contrasena: "nuevaClave1" }).success
     ).toBe(true)
   })
 
   it("rechaza una contraseña corta", () => {
     expect(
-      restablecerPasswordSchema.safeParse({ token: "abc123", password: "corta" }).success
+      restablecerContrasenaSchema.safeParse({ token: "abc123", contrasena: "corta" }).success
     ).toBe(false)
   })
 
   it("rechaza un token vacío", () => {
     expect(
-      restablecerPasswordSchema.safeParse({ token: "", password: "nuevaClave1" }).success
+      restablecerContrasenaSchema.safeParse({ token: "", contrasena: "nuevaClave1" }).success
+    ).toBe(false)
+  })
+
+  it("rechaza el cuerpo de antes: la contraseña ahora viaja en `contrasena`, no en `password`", () => {
+    expect(
+      restablecerContrasenaSchema.safeParse({ token: "abc123", password: "nuevaClave1" }).success
     ).toBe(false)
   })
 })

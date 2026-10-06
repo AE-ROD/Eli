@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 
-const pacienteUpdateSchema = z.object({
+const clienteUpdateSchema = z.object({
   name: z.string().min(2).optional(),
   email: z.string().email().optional().or(z.literal("")),
   phone: z.string().optional().or(z.literal("")),
@@ -12,8 +12,8 @@ const pacienteUpdateSchema = z.object({
   notes: z.string().optional().or(z.literal("")),
 })
 
-async function verificarPaciente(id: string, businessId: string) {
-  return prisma.patient.findFirst({ where: { id, businessId } })
+async function verificarCliente(id: string, businessId: string) {
+  return prisma.customer.findFirst({ where: { id, businessId } })
 }
 
 export async function GET(
@@ -26,7 +26,7 @@ export async function GET(
   }
 
   const { id } = await params
-  const paciente = await prisma.patient.findFirst({
+  const cliente = await prisma.customer.findFirst({
     where: { id, businessId: session.user.businessId },
     include: {
       appointments: {
@@ -36,11 +36,11 @@ export async function GET(
     },
   })
 
-  if (!paciente) {
-    return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 })
+  if (!cliente) {
+    return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 })
   }
 
-  return NextResponse.json(paciente)
+  return NextResponse.json(cliente)
 }
 
 export async function PUT(
@@ -53,16 +53,16 @@ export async function PUT(
   }
 
   const { id } = await params
-  const existente = await verificarPaciente(id, session.user.businessId)
+  const existente = await verificarCliente(id, session.user.businessId)
   if (!existente) {
-    return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 })
+    return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 })
   }
 
   try {
     const body = await request.json()
-    const datos = pacienteUpdateSchema.parse(body)
+    const datos = clienteUpdateSchema.parse(body)
 
-    const paciente = await prisma.patient.update({
+    const cliente = await prisma.customer.update({
       where: { id },
       data: {
         ...(datos.name && { name: datos.name }),
@@ -73,7 +73,7 @@ export async function PUT(
       },
     })
 
-    return NextResponse.json(paciente)
+    return NextResponse.json(cliente)
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -95,12 +95,12 @@ export async function DELETE(
   }
 
   const { id } = await params
-  const existente = await verificarPaciente(id, session.user.businessId)
+  const existente = await verificarCliente(id, session.user.businessId)
   if (!existente) {
-    return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 })
+    return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 })
   }
 
-  await prisma.patient.delete({ where: { id } })
+  await prisma.customer.delete({ where: { id } })
 
-  return NextResponse.json({ mensaje: "Paciente eliminado" })
+  return NextResponse.json({ mensaje: "Cliente eliminado" })
 }

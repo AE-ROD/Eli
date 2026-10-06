@@ -18,8 +18,8 @@ export async function GET(
     where: { id, businessId: session.user.businessId },
     select: {
       id: true,
-      patientName: true,
-      patientPhone: true,
+      customerName: true,
+      customerPhone: true,
       updatedAt: true,
       // Últimos 200 mensajes: evita traer historiales muy largos completos en cada apertura del chat
       messages: {

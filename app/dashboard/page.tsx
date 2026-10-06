@@ -7,7 +7,7 @@ import { BarraSuperior } from "@/components/app/layout/barra-superior"
 import { TarjetaEstadistica } from "@/components/app/tarjetas/tarjeta-estadistica"
 import { TarjetaCita } from "@/components/app/tarjetas/tarjeta-cita"
 import { VistaDiaProfesional } from "@/app/dashboard/_components/vistaDiaProfesional"
-import { formatHora, duracionMinutos } from "@/lib/utils"
+import { formatearHora, duracionEnMinutos } from "@/lib/fechas"
 import {
   CalendarDays,
   Users,
@@ -29,7 +29,7 @@ interface StatsData {
     endTime: string
     status: string
     /** Opcional en el esquema: una cita puede no tener cliente vinculado. */
-    patient: { id: string; name: string } | null
+    customer: { id: string; name: string } | null
   }>
   /** Sólo cuando no hay citas hoy: el dato honesto es cuándo es la próxima. */
   proximaCita?: { id: string; title: string; startTime: string }
@@ -75,7 +75,7 @@ function procedenciaDeCitas(stats: StatsData): string | undefined {
 
   const cuando = new Date(stats.proximaCita.startTime)
   const dia = cuando.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
-  return `La próxima es el ${dia} a las ${formatHora(stats.proximaCita.startTime)}.`
+  return `La próxima es el ${dia} a las ${formatearHora(stats.proximaCita.startTime)}.`
 }
 
 function procedenciaDeClientes(stats: StatsData): string | undefined {
@@ -249,11 +249,11 @@ export default function DashboardPage() {
                         key={cita.id}
                         cita={{
                           id: cita.id,
-                          pacienteNombre: cita.patient?.name ?? "Sin cliente",
+                          pacienteNombre: cita.customer?.name ?? "Sin cliente",
                           servicio: cita.title,
-                          horaInicio: formatHora(cita.startTime),
-                          horaFin: formatHora(cita.endTime),
-                          duracion: duracionMinutos(cita.startTime, cita.endTime),
+                          horaInicio: formatearHora(cita.startTime),
+                          horaFin: formatearHora(cita.endTime),
+                          duracion: duracionEnMinutos(cita.startTime, cita.endTime),
                           estado: cita.status as any,
                         }}
                         compacta
@@ -373,11 +373,11 @@ export default function DashboardPage() {
                     {citasHoy.map((cita) => (
                       <div key={cita.id} className="flex items-center gap-3">
                         <span className="text-xs text-muted-foreground w-12 flex-shrink-0">
-                          {formatHora(cita.startTime)}
+                          {formatearHora(cita.startTime)}
                         </span>
                         <div className="flex-1 h-7 bg-primary/10 rounded-lg flex items-center px-3">
                           <span className="text-xs font-medium text-primary truncate">
-                            {cita.patient?.name ?? "Sin cliente"} — {cita.title}
+                            {cita.customer?.name ?? "Sin cliente"} — {cita.title}
                           </span>
                         </div>
                       </div>
