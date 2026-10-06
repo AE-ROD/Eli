@@ -23,7 +23,7 @@ Necesita un `.env` con:
 | `NEXTAUTH_URL` / `NEXTAUTH_SECRET` | Sesiones. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Entrar con Google. |
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Correos. Sin esto no se envían, pero nada se rompe. |
-| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Rate limiting. Sin esto queda desactivado. |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Rate limiting. En desarrollo, sin esto queda desactivado. **En producción es obligatorio:** sin él el límite falla cerrado y todo endpoint responde 429. |
 | `CRON_SECRET` | Protege el cron de recordatorios. |
 
 ## Comandos
@@ -83,6 +83,8 @@ app/                          Pantallas y endpoints (App Router de Next.js)
                               agrupan sin cambiar la URL.
   dashboard/                  El panel del negocio
     page.tsx                  Inicio del panel
+    tablero/                  El día en columnas: llegadas, atención y cobro
+    reportes/                 Historial de lo cobrado, con filtros
     agenda/  clientes/  chats/  configuracion/  equipo/
   reservar/[slug]/            Página pública donde el cliente final reserva
   api/                        Endpoints: cada carpeta es una URL bajo /api
@@ -92,19 +94,30 @@ components/
   landing/                    Secciones de la página de inicio
   ui/                         Primitivas de shadcn (conservan sus nombres en inglés)
   proveedores.tsx             Sesión de NextAuth para toda la app
-lib/                          Lógica compartida, cada archivo con su test al lado
+lib/                          Lógica compartida, cada archivo con su test al lado.
+                              Los marcados (servidor) usan la base o la sesión:
+                              nunca se importan desde un componente de cliente.
   permisos.ts                 Quién puede ver y hacer qué. Toda consulta pasa por acá
-  auth.ts                     Sesiones: credenciales y Google
-  prisma.ts                   Conexión a la base
-  peticiones.ts               Cómo la interfaz le pide cosas al servidor
+  atenciones.ts               Reglas del tablero: estados, pasos, cobro en centavos
+  acciones-del-tablero.ts     Qué ofrece cada tarjeta del tablero según rol y estado
+  medios-de-pago.ts           Los medios de pago que se aceptan
+  reportes.ts                 Turnos por zona horaria y resumen de lo cobrado
+  periodos.ts                 Rangos de fechas de los filtros de reportes
+  dinero.ts                   Formato y lectura de montos
   fechas.ts                   Cálculos y formatos de fecha
   horario-dia.ts              La jornada de un profesional: citas y huecos del día
   rubros.ts                   Los tres rubros que atiende Eli
   validaciones.ts             Lo que aceptan los endpoints (zod)
-  email.ts                    Correos (Resend)
-  rate-limit.ts               Límite de peticiones (Upstash)
+  peticiones.ts               Cómo la interfaz le pide cosas al servidor
   slug.ts                     La dirección pública de cada negocio
   utils.ts                    `cn`, para combinar clases de Tailwind
+  tablero.ts                  (servidor) Leer y tomar atenciones dentro de un endpoint
+  lineas-de-atencion.ts       (servidor) Validar y guardar las líneas de una atención
+  llegadas.ts                 (servidor) Registrar la llegada de una reserva
+  auth.ts                     (servidor) Sesiones: credenciales y Google
+  prisma.ts                   (servidor) Conexión a la base
+  email.ts                    (servidor) Correos (Resend)
+  rate-limit.ts               (servidor) Límite de peticiones (Upstash)
 prisma/                       Esquema, migraciones y datos de ejemplo
 proxy.ts                      Puerta de entrada: sesión y límite de peticiones
 types/                        Tipos que extienden librerías (la sesión de NextAuth)
@@ -144,6 +157,9 @@ Cada vista del panel se arma igual:
   (Neon).** Para renombrar un modelo o un campo se usa `@map`: así se pasó de
   `Patient` a `Customer` sin tocar la base. Cambiar una columna de verdad pide
   una migración sobre datos reales.
+- **Dinero en centavos.** Los montos se guardan como `Float`, igual que el resto
+  del esquema, pero toda suma y comparación de dinero se hace en centavos enteros
+  (`lib/atenciones.ts`): 0,1 + 0,2 tiene que dar 0,3 cuando se cuadra una caja.
 - **NextAuth sigue en v4.** Auth.js v5 existe, pero migrar rompe lo que funciona
   sin aportar valor.
 - **Vercel Hobby prohíbe el uso comercial.** Antes de cobrar hay que pasar a Pro
