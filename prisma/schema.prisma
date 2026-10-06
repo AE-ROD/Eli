@@ -41,6 +41,7 @@ model Business {
   conversations     Conversation[]
   members           BusinessMember[]
   invitations       WorkerInvitation[]
+  visits            Visit[]
 
   @@map("negocios")
 }
@@ -56,6 +57,7 @@ model BusinessMember {
 
   workSchedules WorkSchedule[]
   appointments  Appointment[]
+  visitServices VisitService[]
 
   @@unique([businessId, userId])
   @@index([businessId])
@@ -107,6 +109,7 @@ model Customer {
   updatedAt DateTime @updatedAt
 
   appointments Appointment[]
+  visits       Visit[]
 
   @@index([businessId])
   @@index([businessId, createdAt])
@@ -125,7 +128,8 @@ model Service {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  appointments Appointment[]
+  appointments  Appointment[]
+  visitServices VisitService[]
 
   @@index([businessId])
   @@map("servicios")
@@ -170,11 +174,99 @@ model Appointment {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
+  // La atención que nació de esta reserva, si el cliente ya llegó.
+  visit Visit?
+
   @@index([businessId])
   @@index([businessId, startTime])
   @@index([customerId])
   @@index([memberId])
   @@map("citas")
+}
+
+// ─── Tablero de atenciones (docs/PRODUCTO.md, sección 7) ────────────────────
+//
+// La cita es lo planeado; la atención es lo que de verdad se hizo y se cobró.
+// Es historial de dinero: por eso copia los nombres (cliente, servicio,
+// profesional) en vez de depender de que esos registros sigan existiendo, y
+// sus relaciones con el resto del negocio son opcionales y quedan en null si
+// el otro lado se borra. Lo único que arrastra a una atención es borrar el
+// negocio entero.
+model Visit {
+  id            String       @id @default(cuid())
+  businessId    String
+  business      Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerId    String?
+  customer      Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerName  String // copia: el historial se lee igual aunque el cliente se borre
+  appointmentId String?      @unique
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  status        String       @default("en-espera") // en-espera, en-atencion, por-cobrar, finalizada, anulada
+  notes         String?
+  arrivedAt     DateTime     @default(now())
+  startedAt     DateTime?
+  readyAt       DateTime?
+  paidAt        DateTime?
+  voidedAt      DateTime?
+  voidReason    String?
+  // Se congela al cobrar y no se recalcula nunca más. Mientras la atención
+  // está abierta queda en null: el total vivo es la suma de las líneas.
+  total         Float?
+  // Ids de `User` SIN relación, a propósito. Con una FK, borrar al usuario
+  // obligaría a poner estas columnas en null (o a impedir el borrado) y se
+  // perdería quién cobró o anuló algo ya cobrado: justo el dato que hace falta
+  // para resolver una discusión sobre dinero. Por eso nadie puede navegar de
+  // acá al usuario con Prisma: el id se guarda como registro, no como vínculo.
+  createdById   String?
+  paidById      String?
+  voidedById    String?
+
+  services VisitService[]
+  payments VisitPayment[]
+
+  @@index([businessId, status])
+  @@index([businessId, paidAt])
+  @@index([customerId])
+  @@map("atenciones")
+}
+
+// Una línea de la atención: qué servicio se hizo, quién lo hizo y a qué precio.
+// Es la base de las comisiones (sección 3).
+model VisitService {
+  id               String          @id @default(cuid())
+  visitId          String
+  visit            Visit           @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  serviceId        String?
+  service          Service?        @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  serviceName      String // copia del nombre del catálogo al anotarla
+  memberId         String?
+  member           BusinessMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  // El dueño no es `BusinessMember`, así que su línea se marca acá y lleva
+  // `memberId` en null. Nunca se usa un `memberId` nulo para decir "dueño": al
+  // borrar a un miembro, su `memberId` queda en null, y esa línea pasaría a
+  // leerse como del dueño. Con la marca aparte, una línea sin `memberId` y sin
+  // `byOwner` es de alguien que ya no está en el equipo, y se lee como tal.
+  byOwner          Boolean         @default(false)
+  professionalName String // copia del nombre de quien la hizo
+  price            Float
+
+  @@index([visitId])
+  @@index([memberId])
+  @@map("atencion_servicios")
+}
+
+// Un pago de la atención. Un cobro se puede repartir entre varios medios
+// (`lib/medios-de-pago.ts`); la suma coincide con el total al centavo.
+model VisitPayment {
+  id        String   @id @default(cuid())
+  visitId   String
+  visit     Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  method    String // id de `lib/medios-de-pago.ts`: efectivo, tarjeta-debito, ...
+  amount    Float
+  createdAt DateTime @default(now())
+
+  @@index([visitId])
+  @@map("atencion_pagos")
 }
 
 model Conversation {

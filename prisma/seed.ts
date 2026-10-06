@@ -72,6 +72,28 @@ async function main() {
       where: { businessId: negocio.id, role: "worker" },
     })
 
+    // Una reserva de hoy, con servicio, profesional y precio: es la que el
+    // tablero de atenciones muestra en "Reservas de hoy", y al marcarla como
+    // llegada precarga su línea. A las 15:00 cae dentro de cualquier jornada;
+    // si el seed corre más tarde, aparece como atrasada, que también sirve.
+    const corte = await prisma.service.findFirst({ where: { businessId: negocio.id, name: "Corte" } })
+    const hoy = new Date()
+    hoy.setHours(15, 0, 0, 0)
+
+    await prisma.appointment.create({
+      data: {
+        businessId: negocio.id,
+        customerId: cliente.id,
+        memberId: profesional?.id ?? null,
+        serviceId: corte?.id ?? null,
+        title: "Corte",
+        startTime: hoy,
+        endTime: new Date(hoy.getTime() + 30 * 60 * 1000),
+        status: "confirmada",
+        price: 8000,
+      },
+    })
+
     const mañana = new Date()
     mañana.setDate(mañana.getDate() + 1)
     mañana.setHours(10, 0, 0, 0)

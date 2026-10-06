@@ -1,0 +1,539 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { crearBaseFalsa } from "./_pruebas/base-falsa"
+import { NEGOCIO, OTRO_NEGOCIO, atencion, datosBase, linea, pago, pedido, sesiones } from "./_pruebas/datos"
+
+const mockGetServerSession = vi.fn()
+
+vi.mock("next-auth", () => ({
+  getServerSession: (...args: unknown[]) => mockGetServerSession(...args),
+}))
+
+vi.mock("@/lib/auth", () => ({ authOptions: {} }))
+
+const base = crearBaseFalsa()
+
+vi.mock("@/lib/prisma", () => ({ prisma: base.prisma }))
+
+/** El día del tablero en Santiago (UTC-3 en octubre): [03:00Z, 03:00Z del día siguiente). */
+const DESDE = "2026-10-06T03:00:00.000Z"
+const HASTA = "2026-10-07T03:00:00.000Z"
+const URL_DEL_DIA = `http://localhost/api/atenciones?desde=${DESDE}&hasta=${HASTA}`
+
+const hoyA = (hora: string) => new Date(`2026-10-06T${hora}:00.000Z`)
+
+function escenario() {
+  return {
+    ...datosBase(),
+    appointment: [
+      // Reserva de Carla para hoy, con servicio y precio: al llegar precarga su línea.
+      { id: "cita-carla", businessId: NEGOCIO, customerId: "c-maria", memberId: "m-carla", serviceId: "s-corte", title: "Corte", price: 8000, status: "confirmada", startTime: hoyA("13:00"), endTime: hoyA("13:30") },
+      { id: "cita-pedro", businessId: NEGOCIO, customerId: "c-beto", memberId: "m-pedro", serviceId: "s-color", title: "Color", price: 25000, status: "pendiente", startTime: hoyA("14:00"), endTime: hoyA("15:30") },
+      // De la página pública: sin profesional elegido.
+      { id: "cita-publica", businessId: NEGOCIO, customerId: "c-beto", serviceId: "s-color", title: "Color", price: 25000, status: "pendiente", startTime: hoyA("16:00"), endTime: hoyA("17:30") },
+      { id: "cita-cancelada", businessId: NEGOCIO, customerId: "c-maria", memberId: "m-carla", title: "Corte", status: "cancelada", startTime: hoyA("17:00"), endTime: hoyA("17:30") },
+      // Ya llegó: su atención está en el tablero, así que no es una reserva pendiente.
+      { id: "cita-que-llego", businessId: NEGOCIO, customerId: "c-maria", memberId: "m-carla", title: "Corte", status: "en-progreso", startTime: hoyA("11:00"), endTime: hoyA("11:30") },
+      { id: "cita-de-manana", businessId: NEGOCIO, customerId: "c-maria", memberId: "m-carla", title: "Corte", status: "confirmada", startTime: new Date("2026-10-07T13:00:00.000Z"), endTime: new Date("2026-10-07T13:30:00.000Z") },
+      { id: "cita-ajena", businessId: OTRO_NEGOCIO, customerId: "c-ajeno", memberId: "m-ajeno", title: "Corte", status: "confirmada", startTime: hoyA("13:00"), endTime: hoyA("13:30") },
+    ],
+    visit: [
+      atencion("v-de-cita", { status: "en-atencion", appointmentId: "cita-que-llego", startedAt: hoyA("11:05") }),
+      atencion("v-pedro", { customerId: "c-beto", customerName: "Beto" }),
+      atencion("v-mixta", { status: "por-cobrar" }),
+      // Quedó abierta ayer: tiene que seguir en el tablero hasta que se cobre o se anule.
+      atencion("v-de-ayer", { arrivedAt: new Date("2026-10-05T20:00:00.000Z") }),
+      atencion("v-cobrada-hoy", { status: "finalizada", paidAt: hoyA("14:30"), total: 8000 }),
+      atencion("v-cobrada-ayer", { status: "finalizada", paidAt: new Date("2026-10-05T20:00:00.000Z"), total: 8000 }),
+      atencion("v-anulada", { status: "anulada", voidedAt: hoyA("12:00") }),
+      atencion("v-ajena", { businessId: OTRO_NEGOCIO, customerId: "c-ajeno" }),
+    ],
+    visitService: [
+      linea("l-de-cita", "v-de-cita"),
+      linea("l-pedro", "v-pedro", { memberId: "m-pedro", professionalName: "Pedro Profesional", serviceId: "s-color", serviceName: "Color", price: 25000 }),
+      linea("l-mixta-carla", "v-mixta"),
+      linea("l-mixta-pedro", "v-mixta", { memberId: "m-pedro", professionalName: "Pedro Profesional", serviceId: "s-color", serviceName: "Color", price: 25000 }),
+      linea("l-de-ayer", "v-de-ayer"),
+      linea("l-cobrada-hoy", "v-cobrada-hoy"),
+      linea("l-cobrada-ayer", "v-cobrada-ayer"),
+      linea("l-anulada", "v-anulada"),
+      linea("l-ajena", "v-ajena", { memberId: "m-ajeno", serviceId: "s-ajeno" }),
+    ],
+    visitPayment: [pago("p-cobrada-hoy", "v-cobrada-hoy", "efectivo", 8000)],
+  }
+}
+
+const ids = (lista: { id: string }[]) => lista.map((item) => item.id).sort()
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.useFakeTimers({ toFake: ["Date"] })
+  vi.setSystemTime(hoyA("15:00"))
+  base.reiniciar(escenario())
+})
+
+afterEach(() => vi.useRealTimers())
+
+describe("GET /api/atenciones", () => {
+  it("sin sesión recibe 401 y no toca la base", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(null)
+
+    const res = await GET(pedido(URL_DEL_DIA))
+
+    expect(res.status).toBe(401)
+    expect(base.prisma.visit.findMany).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ["sin rango", "http://localhost/api/atenciones"],
+    ["con una fecha inválida", `http://localhost/api/atenciones?desde=ayer&hasta=${HASTA}`],
+    ["sin zona en la fecha", `http://localhost/api/atenciones?desde=2026-10-06T03:00:00&hasta=${HASTA}`],
+    ["con hasta antes que desde", `http://localhost/api/atenciones?desde=${HASTA}&hasta=${DESDE}`],
+    ["con un rango de más de 48 horas", `http://localhost/api/atenciones?desde=${DESDE}&hasta=2026-10-08T03:00:01.000Z`],
+  ])("%s responde 400 sin consultar", async (_caso, url) => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const res = await GET(pedido(url))
+
+    expect(res.status).toBe(400)
+    expect(base.prisma.visit.findMany).not.toHaveBeenCalled()
+  })
+
+  it("la dueña ve las reservas del día que no llegaron, en orden, con lo que necesita la tarjeta", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const data = await (await GET(pedido(URL_DEL_DIA))).json()
+
+    expect(data.reservas.map((r: { id: string }) => r.id)).toEqual(["cita-carla", "cita-pedro", "cita-publica"])
+    expect(data.reservas[0]).toEqual({
+      id: "cita-carla",
+      inicio: "2026-10-06T13:00:00.000Z",
+      fin: "2026-10-06T13:30:00.000Z",
+      estado: "confirmada",
+      titulo: "Corte",
+      servicioId: "s-corte",
+      precio: 8000,
+      cliente: { id: "c-maria", nombre: "María González" },
+      profesional: { id: "m-carla", nombre: "Carla Profesional" },
+    })
+    expect(data.reservas[2].profesional).toBeNull()
+  })
+
+  it("la dueña ve las activas de cualquier fecha y las cobradas hoy; ni anuladas, ni lo de ayer, ni lo ajeno", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const data = await (await GET(pedido(URL_DEL_DIA))).json()
+
+    expect(ids(data.atenciones)).toEqual(["v-cobrada-hoy", "v-de-ayer", "v-de-cita", "v-mixta", "v-pedro"])
+  })
+
+  it("la dueña recibe cada atención con todas sus líneas, sus pagos y su total", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const data = await (await GET(pedido(URL_DEL_DIA))).json()
+    const mixta = data.atenciones.find((a: { id: string }) => a.id === "v-mixta")
+    const cobrada = data.atenciones.find((a: { id: string }) => a.id === "v-cobrada-hoy")
+
+    expect(mixta.lineas).toHaveLength(2)
+    // Abierta: el total es la suma viva de sus líneas.
+    expect(mixta.total).toBe(33000)
+    expect(mixta.pagos).toEqual([])
+    expect(cobrada.total).toBe(8000)
+    expect(cobrada.pagos).toEqual([{ id: "p-cobrada-hoy", medio: "efectivo", nombreMedio: "Efectivo", monto: 8000 }])
+    expect(mixta.lineas[1]).toEqual({
+      id: "l-mixta-pedro",
+      servicioId: "s-color",
+      servicio: "Color",
+      profesional: { id: "m-pedro", nombre: "Pedro Profesional" },
+      precio: 25000,
+    })
+  })
+
+  it("el catálogo trae los servicios activos del negocio, a quién se le puede anotar y los medios de pago", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.encargado)
+
+    const { catalogo } = await (await GET(pedido(URL_DEL_DIA))).json()
+
+    expect(catalogo.servicios).toEqual([
+      { id: "s-color", nombre: "Color", precio: 25000 },
+      { id: "s-corte", nombre: "Corte", precio: 8000 },
+      { id: "s-peinado", nombre: "Peinado", precio: null },
+    ])
+    expect(catalogo.profesionales).toEqual([
+      { id: "m-encargado", nombre: "Bruno Encargado" },
+      { id: "m-carla", nombre: "Carla Profesional" },
+      { id: "m-pedro", nombre: "Pedro Profesional" },
+      { id: "duenio", nombre: "Ana Dueña" },
+    ])
+    expect(catalogo.mediosDePago.map((m: { id: string }) => m.id)).toEqual([
+      "efectivo",
+      "tarjeta-debito",
+      "tarjeta-credito",
+      "transferencia",
+      "billetera-digital",
+    ])
+  })
+
+  it("la profesional ve sus reservas y sus atenciones, no las de un colega", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+
+    const data = await (await GET(pedido(URL_DEL_DIA))).json()
+
+    expect(data.reservas.map((r: { id: string }) => r.id)).toEqual(["cita-carla"])
+    // `v-pedro` es sólo de Pedro: no viaja. `v-mixta` sí, porque tiene una línea suya.
+    expect(ids(data.atenciones)).toEqual(["v-cobrada-hoy", "v-de-ayer", "v-de-cita", "v-mixta"])
+  })
+
+  it("a la profesional le viajan sólo sus líneas, sin pagos ni total", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+
+    const data = await (await GET(pedido(URL_DEL_DIA))).json()
+    const mixta = data.atenciones.find((a: { id: string }) => a.id === "v-mixta")
+
+    expect(mixta.lineas.map((l: { id: string }) => l.id)).toEqual(["l-mixta-carla"])
+    for (const visible of data.atenciones) {
+      expect(visible).not.toHaveProperty("total")
+      expect(visible).not.toHaveProperty("pagos")
+    }
+    // Ni siquiera se le piden a la base: el filtro de pagos no matchea nada.
+    expect(JSON.stringify(data)).not.toContain("p-cobrada-hoy")
+  })
+
+  it("la profesional ve la atención que nació de su cita aunque todavía no tenga líneas", async () => {
+    const { GET } = await import("./route")
+    base.reiniciar({
+      ...escenario(),
+      visit: [atencion("v-recien-llegada", { appointmentId: "cita-que-llego" })],
+      visitService: [],
+    })
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+
+    const data = await (await GET(pedido(URL_DEL_DIA))).json()
+
+    expect(ids(data.atenciones)).toEqual(["v-recien-llegada"])
+  })
+
+  it("en el catálogo, la profesional sólo puede anotarse a sí misma", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+
+    const { catalogo } = await (await GET(pedido(URL_DEL_DIA))).json()
+
+    expect(catalogo.profesionales).toEqual([{ id: "m-carla", nombre: "Carla Profesional" }])
+  })
+
+  it("Pedro no ve las atenciones de Carla, y de la mixta sólo su línea", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.pedro)
+
+    const data = await (await GET(pedido(URL_DEL_DIA))).json()
+    const mixta = data.atenciones.find((a: { id: string }) => a.id === "v-mixta")
+
+    expect(ids(data.atenciones)).toEqual(["v-mixta", "v-pedro"])
+    expect(mixta.lineas.map((l: { id: string }) => l.id)).toEqual(["l-mixta-pedro"])
+  })
+
+  it("un profesional sin memberId no ve nada (falla cerrado)", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.sinMiembro)
+
+    const data = await (await GET(pedido(URL_DEL_DIA))).json()
+
+    expect(data.reservas).toEqual([])
+    expect(data.atenciones).toEqual([])
+    expect(data.catalogo.profesionales).toEqual([])
+  })
+
+  it("el otro negocio ve sólo lo suyo: el aislamiento va en los dos sentidos", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueñoAjeno)
+
+    const data = await (await GET(pedido(URL_DEL_DIA))).json()
+
+    expect(data.reservas.map((r: { id: string }) => r.id)).toEqual(["cita-ajena"])
+    expect(ids(data.atenciones)).toEqual(["v-ajena"])
+    expect(data.catalogo.servicios.map((s: { id: string }) => s.id)).toEqual(["s-ajeno"])
+  })
+
+  it("toda consulta de listado lleva tope", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    await GET(pedido(URL_DEL_DIA))
+
+    for (const delegado of [base.prisma.appointment, base.prisma.visit, base.prisma.service, base.prisma.businessMember]) {
+      for (const [argumentos] of delegado.findMany.mock.calls) {
+        expect(argumentos).toHaveProperty("take")
+      }
+    }
+  })
+})
+
+describe("POST /api/atenciones con { citaId }: llegó una reserva", () => {
+  it("crea la atención en espera, con el cliente copiado y la línea de la reserva precargada", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.encargado)
+
+    const res = await POST(pedido("http://localhost/api/atenciones", { citaId: "cita-carla" }))
+    const data = await res.json()
+
+    expect(res.status).toBe(201)
+    expect(data).toMatchObject({
+      estado: "en-espera",
+      citaId: "cita-carla",
+      cliente: { id: "c-maria", nombre: "María González" },
+      total: 8000,
+      lineas: [{ servicioId: "s-corte", servicio: "Corte", profesional: { id: "m-carla", nombre: "Carla Profesional" }, precio: 8000 }],
+    })
+    const [creada] = base.buscar("visit", { appointmentId: "cita-carla" })
+    expect(creada).toMatchObject({ businessId: NEGOCIO, createdById: "u-encargado", customerName: "María González" })
+  })
+
+  it("sin profesional en la cita no precarga nada: la línea la anota quien sepa quién la hace", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const data = await (await POST(pedido("http://localhost/api/atenciones", { citaId: "cita-publica" }))).json()
+
+    expect(data.lineas).toEqual([])
+  })
+
+  it("la profesional registra la llegada de su propia reserva", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+
+    const res = await POST(pedido("http://localhost/api/atenciones", { citaId: "cita-carla" }))
+
+    expect(res.status).toBe(201)
+    expect((await res.json()).lineas).toHaveLength(1)
+  })
+
+  it.each([
+    ["una cita de otro negocio", sesiones.dueña, "cita-ajena"],
+    ["la cita de un colega, para la profesional", sesiones.carla, "cita-pedro"],
+    ["una cita que no existe", sesiones.dueña, "cita-inventada"],
+  ])("%s da 404 y no escribe nada", async (_caso, sesion, citaId) => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesion)
+    const antes = base.volcado()
+
+    const res = await POST(pedido("http://localhost/api/atenciones", { citaId }))
+
+    expect(res.status).toBe(404)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("una reserva que ya está en el tablero da 409", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const res = await POST(pedido("http://localhost/api/atenciones", { citaId: "cita-que-llego" }))
+
+    expect(res.status).toBe(409)
+    expect(base.buscar("visit", { appointmentId: "cita-que-llego" })).toHaveLength(1)
+  })
+
+  it("una reserva cancelada no llega: 409", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const res = await POST(pedido("http://localhost/api/atenciones", { citaId: "cita-cancelada" }))
+
+    expect(res.status).toBe(409)
+  })
+
+  it("si dos marcan 'Llegó' a la vez, la segunda choca con el único y responde 409", async () => {
+    const { POST } = await import("./route")
+    // Simula la carrera: la cita se leyó sin atención, pero otra la creó antes.
+    base.prisma.appointment.findFirst.mockImplementationOnce(async () => ({
+      ...base.buscar("appointment", { id: "cita-que-llego" })[0],
+      customer: { name: "María", lastName: "González" },
+      service: null,
+      member: { user: { name: "Carla Profesional" } },
+      visit: null,
+    }))
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const res = await POST(pedido("http://localhost/api/atenciones", { citaId: "cita-que-llego" }))
+
+    expect(res.status).toBe(409)
+    expect(base.buscar("visit", { appointmentId: "cita-que-llego" })).toHaveLength(1)
+  })
+})
+
+describe("POST /api/atenciones sin reserva", () => {
+  const URL = "http://localhost/api/atenciones"
+
+  it("con un cliente nuevo: lo crea en el negocio y anota las líneas con los nombres de la base", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const res = await POST(
+      pedido(URL, {
+        clienteNuevo: { nombre: "Daniela Ruiz", telefono: "+56 9 5555 5555" },
+        lineas: [
+          { servicioId: "s-corte", profesional: "m-pedro", precio: 7500, servicio: "Hackeado", nombreProfesional: "Otro" },
+          { servicioId: "s-color", profesional: "duenio" },
+        ],
+        notas: "Primera vez",
+      })
+    )
+    const data = await res.json()
+
+    expect(res.status).toBe(201)
+    const [cliente] = base.buscar("customer", { name: "Daniela Ruiz" })
+    expect(cliente).toMatchObject({ businessId: NEGOCIO, phone: "+56 9 5555 5555" })
+    expect(data).toMatchObject({ estado: "en-espera", cliente: { id: cliente.id, nombre: "Daniela Ruiz" }, notas: "Primera vez" })
+    expect(base.buscar("visitService", { visitId: data.id })).toEqual([
+      expect.objectContaining({ serviceName: "Corte", memberId: "m-pedro", byOwner: false, professionalName: "Pedro Profesional", price: 7500 }),
+      // Sin precio en el cuerpo, el del catálogo. La dueña va con `byOwner` y sin memberId.
+      expect.objectContaining({ serviceName: "Color", memberId: null, byOwner: true, professionalName: "Ana Dueña", price: 25000 }),
+    ])
+  })
+
+  it("con un cliente existente del negocio", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.encargado)
+
+    const res = await POST(pedido(URL, { clienteId: "c-beto" }))
+
+    expect(res.status).toBe(201)
+    expect((await res.json()).cliente).toEqual({ id: "c-beto", nombre: "Beto" })
+  })
+
+  it("un cliente de otro negocio da 404 y no escribe nada", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const antes = base.volcado()
+
+    const res = await POST(pedido(URL, { clienteId: "c-ajeno" }))
+
+    expect(res.status).toBe(404)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("un servicio de otro negocio da 404 y deshace todo, también el cliente nuevo", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const antes = base.volcado()
+
+    const res = await POST(
+      pedido(URL, { clienteNuevo: { nombre: "Daniela Ruiz" }, lineas: [{ servicioId: "s-ajeno", profesional: "m-carla" }] })
+    )
+
+    expect(res.status).toBe(404)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("un profesional de otro negocio da 404", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const res = await POST(pedido(URL, { clienteId: "c-maria", lineas: [{ servicioId: "s-corte", profesional: "m-ajeno" }] }))
+
+    expect(res.status).toBe(404)
+  })
+
+  it("la profesional anota a alguien y la línea queda a su nombre aunque pida otro", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+
+    const res = await POST(pedido(URL, { clienteId: "c-beto", lineas: [{ servicioId: "s-corte", profesional: "m-pedro" }] }))
+    const data = await res.json()
+
+    expect(res.status).toBe(201)
+    expect(base.buscar("visitService", { visitId: data.id })).toEqual([
+      expect.objectContaining({ memberId: "m-carla", byOwner: false, professionalName: "Carla Profesional" }),
+    ])
+    // Y la ve: es suya.
+    expect(data.lineas).toHaveLength(1)
+    expect(data).not.toHaveProperty("total")
+  })
+
+  it("la profesional no puede anotar una línea a nombre de la dueña", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+
+    const data = await (await POST(pedido(URL, { clienteId: "c-beto", lineas: [{ servicioId: "s-corte", profesional: "duenio" }] }))).json()
+
+    expect(base.buscar("visitService", { visitId: data.id })).toEqual([
+      expect.objectContaining({ memberId: "m-carla", byOwner: false }),
+    ])
+  })
+
+  it("la profesional sin líneas recibe 400: nunca podría ver una atención vacía", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+    const antes = base.volcado()
+
+    const res = await POST(pedido(URL, { clienteNuevo: { nombre: "Daniela Ruiz" } }))
+
+    expect(res.status).toBe(400)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("un profesional sin memberId no puede anotar a nadie (falla cerrado)", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.sinMiembro)
+
+    const res = await POST(pedido(URL, { clienteId: "c-beto", lineas: [{ servicioId: "s-corte" }] }))
+
+    expect(res.status).toBe(401)
+  })
+
+  it("dueña o encargado: toda línea necesita a alguien que la haga", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const res = await POST(pedido(URL, { clienteId: "c-beto", lineas: [{ servicioId: "s-corte" }] }))
+
+    expect(res.status).toBe(400)
+  })
+
+  it("un servicio sin precio en el catálogo pide el precio en vez de inventar un cero", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const sinPrecio = await POST(pedido(URL, { clienteId: "c-beto", lineas: [{ servicioId: "s-peinado", profesional: "m-carla" }] }))
+    const conPrecio = await POST(
+      pedido(URL, { clienteId: "c-beto", lineas: [{ servicioId: "s-peinado", profesional: "m-carla", precio: 12000 }] })
+    )
+
+    expect(sinPrecio.status).toBe(400)
+    expect(conPrecio.status).toBe(201)
+  })
+
+  it.each([
+    ["sin cliente", { lineas: [] }],
+    ["con cliente existente y nuevo a la vez", { clienteId: "c-beto", clienteNuevo: { nombre: "Daniela" } }],
+    ["con un precio negativo", { clienteId: "c-beto", lineas: [{ servicioId: "s-corte", profesional: "m-carla", precio: -1 }] }],
+    ["con un precio de tres decimales", { clienteId: "c-beto", lineas: [{ servicioId: "s-corte", profesional: "m-carla", precio: 10.005 }] }],
+    ["sin cuerpo", undefined],
+  ])("%s responde 400", async (_caso, cuerpo) => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const res = await POST(pedido(URL, cuerpo))
+
+    expect(res.status).toBe(400)
+  })
+
+  it("sin sesión recibe 401 y no crea nada", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(null)
+    const antes = base.volcado()
+
+    const res = await POST(pedido(URL, { clienteId: "c-beto" }))
+
+    expect(res.status).toBe(401)
+    expect(base.volcado()).toEqual(antes)
+  })
+})

@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client"
 import type { Session } from "next-auth"
+import { esEstadoActivo } from "@/lib/atenciones"
 
 /**
  * Quién puede hacer qué. Única fuente de verdad: ningún endpoint compara roles
@@ -101,6 +102,69 @@ export const puedeEditarHorarioDe = (actor: Actor | null, miembro: Miembro | nul
   return !!actor.memberId && actor.memberId === miembro?.id
 }
 
+// ─── Tablero de atenciones (docs/PRODUCTO.md, sección 7) ─────────────────────
+
+/** Todas las atenciones con todas sus líneas, pagos y totales. El profesional ve lo suyo. */
+export const puedeVerTodoElTablero = gestionaElNegocio
+
+/** Anotar una línea a nombre de otro miembro o del dueño. El profesional sólo a su nombre. */
+export const puedeAsignarLineasAOtros = gestionaElNegocio
+
+/**
+ * La caja del día. Es dinero, pero no reparto: el dueño decidió que el
+ * encargado cobre (PRODUCTO.md, sección 3.4). Lo que no hace es anular lo cobrado.
+ */
+export const puedeCobrar = gestionaElNegocio
+
+/**
+ * Anotar a alguien que llegó sin reserva. El profesional también, pero la
+ * atención queda a su nombre: sin `memberId` no hay a quién asignarla, y
+ * crearía una atención que ni él podría ver.
+ */
+export const puedeAnotarSinReserva = (actor: Actor | null): boolean =>
+  gestionaElNegocio(actor) || !!actor?.memberId
+
+/** Atención sobre la que se decide algo. Trae su negocio para poder validarlo. */
+export interface AtencionDelNegocio {
+  businessId: string
+  status: string
+}
+
+/**
+ * Anular. Antes de cobrar, dueño y encargado: alguien se fue sin ser atendido
+ * o se anotó por error. Ya cobrada, sólo el dueño: es plata que deja de sumar
+ * y es la única forma de corregir un cobro.
+ *
+ * Falla cerrado: cualquier estado que no sea uno activo conocido se trata como
+ * ya cobrado, así que un estado inesperado en la base pide al dueño.
+ */
+export const puedeAnular = (actor: Actor | null, atencion: AtencionDelNegocio): boolean => {
+  if (!mismoNegocio(actor, atencion.businessId)) return false
+  return esEstadoActivo(atencion.status) ? gestionaElNegocio(actor) : esDueño(actor)
+}
+
+/**
+ * A quién queda asignada una línea. `byOwner` y no un `memberId` nulo para el
+ * dueño: un `memberId` nulo es también el de alguien que dejó el equipo.
+ */
+export interface ProfesionalDeLinea {
+  memberId: string | null
+  byOwner: boolean
+}
+
+/**
+ * Como `memberIdParaCita`: el profesional no elige. Sus líneas quedan a su
+ * nombre, mande lo que mande, y nunca a nombre del dueño; así no puede
+ * cargarle a otro lo que hizo él ni sumarse lo que hizo otro. Dueño y
+ * encargado asignan a cualquier miembro o al dueño; que el miembro sea del
+ * negocio lo verifica el endpoint contra la base.
+ */
+export function profesionalParaLinea(actor: Actor, pedido: ProfesionalDeLinea): ProfesionalDeLinea {
+  if (!puedeAsignarLineasAOtros(actor)) return { memberId: actor.memberId, byOwner: false }
+  if (pedido.byOwner) return { memberId: null, byOwner: true }
+  return { memberId: pedido.memberId, byOwner: false }
+}
+
 // ─── Filtros para consultas ──────────────────────────────────────────────────
 
 /**
@@ -159,4 +223,69 @@ export function whereDeClientes(
   extra: Prisma.CustomerWhereInput = {}
 ): Prisma.CustomerWhereInput {
   return { AND: [filtroDeClientes(actor), extra] }
+}
+
+/**
+ * Las atenciones que ve el actor. Dueño y encargado, todas las del negocio. El
+ * profesional, las que tienen una línea suya o nacieron de una cita suya: la
+ * segunda condición es la que le muestra a su cliente apenas llega, antes de
+ * que nadie le anote un servicio. No se exporta, igual que `filtroDeAgenda`.
+ */
+function filtroDeAtenciones(actor: Actor | null): Prisma.VisitWhereInput {
+  if (!actor) return NADA
+  if (puedeVerTodoElTablero(actor)) return { businessId: actor.businessId }
+  if (!actor.memberId) return { businessId: actor.businessId, ...NADA }
+  return {
+    businessId: actor.businessId,
+    OR: [
+      { services: { some: { memberId: actor.memberId } } },
+      { appointment: { is: { memberId: actor.memberId } } },
+    ],
+  }
+}
+
+/**
+ * Las líneas que el actor ve, y también las que puede reemplazar: dueño y
+ * encargado, todas; el profesional, sólo las suyas. Va por la atención para
+ * acotar al negocio, porque la línea no tiene `businessId` propio.
+ */
+function filtroDeLineas(actor: Actor | null): Prisma.VisitServiceWhereInput {
+  if (!actor) return NADA
+  const delNegocio = { visit: { is: { businessId: actor.businessId } } }
+  if (puedeVerTodoElTablero(actor)) return delNegocio
+  if (!actor.memberId) return { ...delNegocio, ...NADA }
+  return { ...delNegocio, memberId: actor.memberId }
+}
+
+/**
+ * Los pagos son facturación del negocio: el profesional no ve ninguno, ni
+ * siquiera los de sus propias atenciones (PRODUCTO.md, secciones 7 y 8).
+ */
+function filtroDePagos(actor: Actor | null): Prisma.VisitPaymentWhereInput {
+  if (!actor || !puedeVerIngresosDelNegocio(actor)) return NADA
+  return { visit: { is: { businessId: actor.businessId } } }
+}
+
+/** Igual que `whereDeAgenda`, para consultas de atenciones. */
+export function whereDeAtenciones(
+  actor: Actor | null,
+  extra: Prisma.VisitWhereInput = {}
+): Prisma.VisitWhereInput {
+  return { AND: [filtroDeAtenciones(actor), extra] }
+}
+
+/** Igual que `whereDeAgenda`, para las líneas de una atención. */
+export function whereDeLineas(
+  actor: Actor | null,
+  extra: Prisma.VisitServiceWhereInput = {}
+): Prisma.VisitServiceWhereInput {
+  return { AND: [filtroDeLineas(actor), extra] }
+}
+
+/** Igual que `whereDeAgenda`, para los pagos de una atención. */
+export function whereDePagos(
+  actor: Actor | null,
+  extra: Prisma.VisitPaymentWhereInput = {}
+): Prisma.VisitPaymentWhereInput {
+  return { AND: [filtroDePagos(actor), extra] }
 }
