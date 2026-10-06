@@ -177,7 +177,9 @@ export default function PaginaUnirse() {
           />
 
           {error && (
-            <div className="text-center">
+            // El aviso abarca también la indicación de iniciar sesión: sin ella,
+            // quien no ve la pantalla oye el error pero no qué hacer.
+            <div role="alert" className="text-center">
               <p className="text-sm text-red-500">{error}</p>
               {requiereSesion && (
                 <>

@@ -262,7 +262,7 @@ export default function PaginaCrearCuenta() {
             )}
 
             {error && (
-              <p className="text-sm text-red-500 text-center">{error}</p>
+              <p role="alert" className="text-sm text-red-500 text-center">{error}</p>
             )}
 
             <div className="flex gap-3 pt-2">

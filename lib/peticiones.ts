@@ -46,7 +46,14 @@ function mensajeDelServidor(cuerpo: unknown): string | null {
 /**
  * Hace el pedido y devuelve un `Resultado`. No lanza nunca.
  *
- * - Si la respuesta es ok, `datos` es el cuerpo JSON (`undefined` si vino vacío).
+ * - Si la respuesta es ok, `datos` es el cuerpo JSON. Un 204 No Content es un
+ *   éxito sin cuerpo: `datos` queda sin definir.
+ * - Si la respuesta es ok pero el cuerpo no se puede leer como JSON (HTML,
+ *   vacío sin ser un 204, cortado), es un fallo con `errorPorDefecto`. Ningún
+ *   endpoint responde así: lo que llegó es la página de un portal cautivo o de
+ *   un proxy, y darlo por bueno deja a la pantalla usando datos que no existen.
+ *   Un `null` literal cuenta igual (`leerCuerpo` no lo distingue): ningún
+ *   endpoint lo manda como éxito.
  * - Si no, el campo `error` que mandó el servidor y, si no mandó ninguno,
  *   `errorPorDefecto`: el mensaje que tiene sentido para esa acción.
  * - Si no hubo respuesta, `SIN_CONEXION`.
@@ -69,6 +76,8 @@ export async function pedir<T = void>(
 /**
  * Igual que `pedir`, pero el fallo dice también con qué código respondió el
  * servidor (`null` si no respondió). No lanza nunca.
+ *
+ * Ese código puede ser un 2xx: es el caso de un ok cuyo cuerpo no se pudo leer.
  */
 export async function pedirConCodigo<T = void>(
   url: string,
@@ -81,7 +90,13 @@ export async function pedirConCodigo<T = void>(
     if (!respuesta.ok) {
       return { ok: false, error: mensajeDelServidor(cuerpo) ?? errorPorDefecto, codigo: respuesta.status }
     }
-    return { ok: true, datos: (cuerpo ?? undefined) as T }
+    // 204: el servidor dice que salió bien y que no manda nada. Es el único
+    // éxito sin cuerpo que se acepta.
+    if (respuesta.status === 204) return { ok: true, datos: undefined as T }
+    // Cualquier otro ok sin JSON no lo armó el endpoint (ver `pedir`): se avisa
+    // en vez de dejar que la pantalla se caiga al usar `datos`.
+    if (cuerpo === null) return { ok: false, error: errorPorDefecto, codigo: respuesta.status }
+    return { ok: true, datos: cuerpo as T }
   } catch {
     return { ok: false, error: SIN_CONEXION, codigo: null }
   }

@@ -18,10 +18,18 @@ import { clienteParaTarjeta, type ClienteEnTarjeta } from "./_componentes/tarjet
 
 const CLIENTE_EN_BLANCO: DatosDeNuevoCliente = { nombre: "", email: "", telefono: "" }
 
+/** Los mismos clientes, con las notas de uno cambiadas. Si no está en la lista, quedan como estaban. */
+function conNotas(clientesPorId: Record<string, Cliente>, clienteId: string, notas: string | null) {
+  const cliente = clientesPorId[clienteId]
+  return cliente ? { ...clientesPorId, [clienteId]: { ...cliente, notes: notas } } : clientesPorId
+}
+
 export default function PaginaClientes() {
   const [clientes, setClientes] = useState<ClienteEnTarjeta[]>([])
   // Lo que devolvió el servidor de cada cliente de la lista: el panel de
   // detalle saca de acá el historial y las notas, que la tarjeta no guarda.
+  // Las notas que se mandan a guardar se anotan acá, para que reabrir el panel
+  // muestre lo último y no lo que vino con la lista.
   const [clientesPorId, setClientesPorId] = useState<Record<string, Cliente>>({})
   const [total, setTotal] = useState(0)
   const [pagina, setPagina] = useState(1)
@@ -39,6 +47,11 @@ export default function PaginaClientes() {
   const [avisoDelModal, setAvisoDelModal] = useState("")
   const [notas, setNotas] = useState("")
   const [guardandoNotas, setGuardandoNotas] = useState(false)
+  // Va junto al campo de notas y no arriba de la página: el guardado sale del
+  // blur de ese campo, al final del panel, y un aviso arriba no se ve. Recuerda
+  // de qué cliente es porque el blur también salta al tocar otra tarjeta: si
+  // ese guardado falla, el aviso no debe aparecer bajo las notas del nuevo.
+  const [avisoDeNotas, setAvisoDeNotas] = useState<{ clienteId: string; mensaje: string } | null>(null)
   const [nuevoCliente, setNuevoCliente] = useState<DatosDeNuevoCliente>(CLIENTE_EN_BLANCO)
 
   const esperaDeBusqueda = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -84,20 +97,46 @@ export default function PaginaClientes() {
     return () => { if (esperaDeBusqueda.current) clearTimeout(esperaDeBusqueda.current) }
   }, [busqueda, etiquetaActiva, cargarClientes])
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- sincroniza el borrador de notas cuando cambia el cliente seleccionado
-    if (clienteSeleccionado) setNotas(clientesPorId[clienteSeleccionado.id]?.notes ?? "")
-  }, [clienteSeleccionado, clientesPorId])
+  /**
+   * Abre el panel de un cliente con sus notas como están guardadas. El
+   * borrador se carga sólo al abrir otro cliente, no cada vez que cambia
+   * `clientesPorId`: eso pasa al guardar o al recargar la lista, y pisaría lo
+   * que se está escribiendo. Tocar la tarjeta del que ya está abierto lo deja
+   * como está: ese clic hizo blur en las notas, que se están guardando.
+   */
+  const seleccionarCliente = (cliente: ClienteEnTarjeta) => {
+    if (cliente.id !== clienteSeleccionado?.id) setNotas(clientesPorId[cliente.id]?.notes ?? "")
+    setClienteSeleccionado(cliente)
+  }
 
   const guardarNotas = async () => {
     if (!clienteSeleccionado) return
+    const clienteId = clienteSeleccionado.id
+    const texto = notas
+    const enLaLista = clientesPorId[clienteId]
+    const guardadas = enLaLista?.notes ?? null
 
-    setAviso("")
+    // Un blur sin cambios no manda nada. Si el cliente ya no está en la lista
+    // (se buscó otra cosa con el panel abierto), no se sabe qué hay guardado
+    // y se manda igual.
+    if (enLaLista && texto === (guardadas ?? "")) return
+
+    setAvisoDeNotas(null)
     setGuardandoNotas(true)
-    const resultado = await guardarNotasDeCliente(clienteSeleccionado.id, notas)
+    // Se anotan como guardadas al mandarlas y no al volver la respuesta: si el
+    // panel se cierra y se reabre mientras tanto, tiene que mostrar éstas. Con
+    // las de antes, un blur sin tocarlas las volvería a mandar y pisaría éstas.
+    setClientesPorId((previos) => conNotas(previos, clienteId, texto))
+    const resultado = await guardarNotasDeCliente(clienteId, texto)
     setGuardandoNotas(false)
+    if (resultado.ok) return
 
-    if (!resultado.ok) setAviso(resultado.error)
+    // No se guardaron: vuelve lo que hay en la base, así el próximo blur las
+    // reintenta. Salvo que entretanto se hayan mandado otras: ésas mandan.
+    setClientesPorId((previos) =>
+      previos[clienteId]?.notes === texto ? conNotas(previos, clienteId, guardadas) : previos
+    )
+    setAvisoDeNotas({ clienteId, mensaje: resultado.error })
   }
 
   const abrirModal = () => {
@@ -156,7 +195,7 @@ export default function PaginaClientes() {
               total={total}
               pagina={pagina}
               paginas={paginas}
-              onSeleccionar={setClienteSeleccionado}
+              onSeleccionar={seleccionarCliente}
               onCargarMas={() => cargarClientes(busqueda, etiquetaActiva, pagina + 1, true)}
             />
           </div>
@@ -168,6 +207,7 @@ export default function PaginaClientes() {
                 citas={clientesPorId[clienteSeleccionado.id]?.appointments ?? []}
                 notas={notas}
                 guardandoNotas={guardandoNotas}
+                avisoDeNotas={avisoDeNotas?.clienteId === clienteSeleccionado.id ? avisoDeNotas.mensaje : ""}
                 onCerrar={() => setClienteSeleccionado(null)}
                 onNotasChange={setNotas}
                 onNotasBlur={guardarNotas}

@@ -38,6 +38,12 @@ interface PanelDetalleClienteProps {
   citas: CitaDeCliente[]
   notas: string
   guardandoNotas: boolean
+  /**
+   * Por qué no se guardaron las notas, si falló. Se muestra bajo el campo: el
+   * guardado sale de su blur, y un aviso arriba de la página quedaría fuera de
+   * la vista.
+   */
+  avisoDeNotas: string
   onCerrar: () => void
   onNotasChange: (notas: string) => void
   onNotasBlur: () => void
@@ -48,6 +54,7 @@ export function PanelDetalleCliente({
   citas,
   notas,
   guardandoNotas,
+  avisoDeNotas,
   onCerrar,
   onNotasChange,
   onNotasBlur,
@@ -152,6 +159,11 @@ export function PanelDetalleCliente({
           />
           {guardandoNotas && (
             <p className="text-xs text-muted-foreground mt-1">Guardando...</p>
+          )}
+          {avisoDeNotas && (
+            <p role="alert" className="text-sm text-red-500 mt-1.5">
+              {avisoDeNotas}
+            </p>
           )}
         </div>
       </div>

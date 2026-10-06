@@ -85,7 +85,7 @@ export default function PaginaRestablecerContrasena() {
             required
           />
 
-          {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+          {error && <p role="alert" className="text-sm text-red-500 text-center">{error}</p>}
 
           <BotonPrimario
             type="submit"

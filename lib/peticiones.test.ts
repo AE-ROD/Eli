@@ -33,12 +33,36 @@ describe("pedir", () => {
     expect(fetchFalso).toHaveBeenCalledWith("/api/citas/c1", opciones)
   })
 
-  it("con respuesta ok y cuerpo vacío no revienta: los datos quedan sin definir", async () => {
+  it("con 204 (sin contenido) es un éxito: los datos quedan sin definir", async () => {
     simularRespuesta(new Response(null, { status: 204 }))
 
     const resultado = await pedir("/api/clientes/c1", "No se pudieron guardar las notas")
 
     expect(resultado).toEqual({ ok: true, datos: undefined })
+  })
+
+  it("con 200 y una página HTML (un portal cautivo, un proxy) falla con el mensaje por defecto", async () => {
+    simularRespuesta(
+      new Response("<html>Conectate al wifi</html>", { status: 200, headers: { "Content-Type": "text/html" } })
+    )
+
+    const resultado = await pedir<{ id: string }[]>("/api/citas", "No se pudieron cargar las citas")
+
+    expect(resultado).toEqual({ ok: false, error: "No se pudieron cargar las citas" })
+  })
+
+  it("con 200 y cuerpo vacío falla con el mensaje por defecto: sólo un 204 es éxito sin cuerpo", async () => {
+    simularRespuesta(new Response(null, { status: 200 }))
+    expect(await pedir("/api/chats", "No se pudieron cargar las conversaciones")).toEqual({
+      ok: false,
+      error: "No se pudieron cargar las conversaciones",
+    })
+
+    simularRespuesta(new Response("", { status: 200 }))
+    expect(await pedir("/api/chats", "No se pudieron cargar las conversaciones")).toEqual({
+      ok: false,
+      error: "No se pudieron cargar las conversaciones",
+    })
   })
 
   it("con error usa el mensaje que mandó el servidor", async () => {
@@ -88,6 +112,34 @@ describe("pedirConCodigo", () => {
     simularRespuesta(json({ id: "v1" }, 201))
 
     expect(await pedirConCodigo("/api/atenciones", "No se pudo anotar")).toEqual({ ok: true, datos: { id: "v1" } })
+  })
+
+  it.each([
+    {
+      caso: "200 con JSON: éxito con los datos",
+      respuesta: () => json({ atenciones: [] }),
+      esperado: { ok: true, datos: { atenciones: [] } },
+    },
+    {
+      caso: "204: éxito sin datos",
+      respuesta: () => new Response(null, { status: 204 }),
+      esperado: { ok: true, datos: undefined },
+    },
+    {
+      caso: "200 con HTML: fallo con el mensaje por defecto y el código",
+      respuesta: () =>
+        new Response("<html>Conectate al wifi</html>", { status: 200, headers: { "Content-Type": "text/html" } }),
+      esperado: { ok: false, error: "No se pudo cargar el tablero", codigo: 200 },
+    },
+    {
+      caso: "200 vacío: fallo con el mensaje por defecto y el código",
+      respuesta: () => new Response(null, { status: 200 }),
+      esperado: { ok: false, error: "No se pudo cargar el tablero", codigo: 200 },
+    },
+  ])("$caso", async ({ respuesta, esperado }) => {
+    simularRespuesta(respuesta())
+
+    expect(await pedirConCodigo("/api/atenciones", "No se pudo cargar el tablero")).toEqual(esperado)
   })
 
   it("con error devuelve el mensaje del servidor y el código, para decidir según el motivo", async () => {

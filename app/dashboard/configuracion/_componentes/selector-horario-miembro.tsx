@@ -36,7 +36,9 @@ export function SelectorHorarioMiembro({ horariosOwner, miembros, nombreOwner }:
   ]
 
   const cambiarDePestaña = async (memberId: string | null) => {
-    if (memberId === seleccionado) return
+    // Tocar la pestaña que ya está abierta sólo vuelve a pedir si la última vez
+    // falló: es la forma de reintentar. Si cargó bien (o está cargando), nada.
+    if (memberId === seleccionado && !aviso) return
     setSeleccionado(memberId)
     setAviso("")
 

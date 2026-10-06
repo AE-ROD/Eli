@@ -244,7 +244,7 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios }: 
                 )}
               </div>
 
-              {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+              {error && <p role="alert" className="text-sm text-red-500 text-center">{error}</p>}
             </div>
 
             <div className="mt-6 flex justify-between">

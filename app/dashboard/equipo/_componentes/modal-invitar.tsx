@@ -158,7 +158,7 @@ export function ModalInvitar({ abierto, onCerrar, onInvitado }: ModalInvitarProp
                     </div>
                   </div>
 
-                  {error && <p className="text-sm text-red-500">{error}</p>}
+                  {error && <p role="alert" className="text-sm text-red-500">{error}</p>}
 
                   <BotonPrimario
                     type="submit"

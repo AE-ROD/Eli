@@ -71,6 +71,9 @@ export function SeccionServicios({ serviciosIniciales }: SeccionServiciosProps) 
     // motivo: cerrarlo haría parecer que se guardó.
     if (!resultado.ok) return setAvisoDelModal(resultado.error)
 
+    // El aviso de una falla anterior (activar, borrar) ya no corresponde: si
+    // quedara, parecería que esto tampoco se guardó.
+    setAviso("")
     const guardado = resultado.datos
     if (servicioEditando) reemplazarEnLista(guardado)
     else setServicios((previos) => [...previos, guardado])
