@@ -19,27 +19,27 @@ export interface Cita {
   status: string
   notes: string | null
   price: number | null
-  patientId: string | null
+  customerId: string | null
   /**
-   * Nulo de verdad: `patientId` es opcional en el esquema, así que una cita
+   * Nulo de verdad: `customerId` es opcional en el esquema, así que una cita
    * puede no tener cliente (una reserva bloqueada, por ejemplo). Tipearlo como
    * obligatorio es lo que hace que la pantalla explote la primera vez que
    * aparece una.
    */
-  patient: { id: string; name: string; email: string | null; phone: string | null } | null
+  customer: { id: string; name: string; email: string | null; phone: string | null } | null
 }
 
 /**
  * Cómo se llama la cita en pantalla cuando no tiene cliente. Está acá, en un
  * solo lugar, para que las tres vistas no inventen cada una su propia palabra
- * — y para que ninguna vuelva a asumir que `patient` siempre viene.
+ * — y para que ninguna vuelva a asumir que `customer` siempre viene.
  */
 export function nombreDeCliente(cita: Cita): string {
-  return cita.patient?.name ?? "Sin cliente"
+  return cita.customer?.name ?? "Sin cliente"
 }
 
 export interface DatosDeNuevaCita {
-  pacienteId: string
+  clienteId: string
   servicio: string
   fecha: string
   horaInicio: string
@@ -104,7 +104,7 @@ export async function crearCita(datos: DatosDeNuevaCita): Promise<Resultado> {
         title: datos.servicio,
         startTime: inicio.toISOString(),
         endTime: fin.toISOString(),
-        patientId: datos.pacienteId,
+        customerId: datos.clienteId,
         price: datos.precio ? parseFloat(datos.precio) : undefined,
         notes: datos.notas || undefined,
         memberId: datos.memberId || null,

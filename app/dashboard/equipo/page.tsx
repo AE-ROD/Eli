@@ -1,9 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { BarraSuperior } from "@/components/app/layout/barra-superior"
-import { ListaEquipo } from "./_components/listaEquipo"
-import { ModalInvitar } from "./_components/modalInvitar"
+import { BarraSuperior } from "@/components/panel/barra-superior"
+import { ListaEquipo } from "./_componentes/lista-equipo"
+import { ModalInvitar } from "./_componentes/modal-invitar"
 
 export interface MiembroAPI {
   id: string

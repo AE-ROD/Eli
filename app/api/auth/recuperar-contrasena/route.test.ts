@@ -10,7 +10,7 @@ vi.mock("@/lib/rate-limit", () => ({
 }))
 
 vi.mock("@/lib/email", () => ({
-  enviarRecuperacionPassword: (...args: unknown[]) => mockEnviarRecuperacion(...args),
+  enviarRecuperacionContrasena: (...args: unknown[]) => mockEnviarRecuperacion(...args),
 }))
 
 const prismaMock = {

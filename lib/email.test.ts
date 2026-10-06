@@ -115,10 +115,10 @@ describe("lib/email — escapado de datos de origen humano", () => {
     expect(html).toContain("&#39;robo&#39;")
   })
 
-  it("escapa el nombre de usuario en la recuperación de contraseña (enviarRecuperacionPassword)", async () => {
-    const { enviarRecuperacionPassword } = await import("./email")
+  it("escapa el nombre de usuario en la recuperación de contraseña (enviarRecuperacionContrasena)", async () => {
+    const { enviarRecuperacionContrasena } = await import("./email")
 
-    await enviarRecuperacionPassword({
+    await enviarRecuperacionContrasena({
       emailUsuario: "usuario@ejemplo.com",
       nombreUsuario: '"><script>document.location="http://robo"</script>',
       enlaceRestablecer: "https://eli.app/restablecer/token-real",
@@ -230,7 +230,7 @@ describe("lib/email — inyección de encabezados en el asunto", () => {
   })
 
   it("un asunto normal se ve exactamente igual que hoy, emojis incluidos", async () => {
-    const { enviarConfirmacionCliente, enviarRecordatorio, enviarRecuperacionPassword } = await import("./email")
+    const { enviarConfirmacionCliente, enviarRecordatorio, enviarRecuperacionContrasena } = await import("./email")
 
     await enviarConfirmacionCliente({
       emailCliente: "cliente@ejemplo.com",
@@ -253,7 +253,7 @@ describe("lib/email — inyección de encabezados en el asunto", () => {
     })
     expect(enviarMock.mock.calls[1][0].subject).toBe("🔔 Recordatorio — Tu cita es mañana")
 
-    await enviarRecuperacionPassword({
+    await enviarRecuperacionContrasena({
       emailUsuario: "usuario@ejemplo.com",
       nombreUsuario: "Ana",
       enlaceRestablecer: "https://eli.app/restablecer/token-real",

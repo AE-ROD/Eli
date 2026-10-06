@@ -229,13 +229,13 @@ export function enviarRecordatorio(datos: DatosRecordatorio) {
   })
 }
 
-export interface DatosRecuperacionPassword {
+export interface DatosRecuperacionContrasena {
   emailUsuario: string
   nombreUsuario: string
   enlaceRestablecer: string
 }
 
-export function enviarRecuperacionPassword(datos: DatosRecuperacionPassword) {
+export function enviarRecuperacionContrasena(datos: DatosRecuperacionContrasena) {
   return enviar({
     para: datos.emailUsuario,
     asunto: asunto`🔑 Restablece tu contraseña — Eli`,

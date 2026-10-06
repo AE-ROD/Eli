@@ -3,18 +3,18 @@
 import { useState, useEffect, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import { AnimatePresence } from "framer-motion"
-import { BarraSuperior } from "@/components/app/layout/barra-superior"
+import { BarraSuperior } from "@/components/panel/barra-superior"
 import { correr, comoTexto, diasDeLaSemanaDe, type UnidadDeTiempo } from "@/lib/fechas"
 import { leerCitas, crearCita, cambiarEstadoDeCita, type Cita, type DatosDeNuevaCita } from "./_datos"
-import { ControlesDeAgenda } from "./_componentes/controlesDeAgenda"
-import { VistaSemana } from "./_componentes/vistaSemana"
-import { VistaDia } from "./_componentes/vistaDia"
-import { VistaMes } from "./_componentes/vistaMes"
-import { PanelDeCita } from "./_componentes/panelDeCita"
-import { ModalNuevaCita } from "./_componentes/modalNuevaCita"
+import { ControlesDeAgenda } from "./_componentes/controles-de-agenda"
+import { VistaSemana } from "./_componentes/vista-semana"
+import { VistaDia } from "./_componentes/vista-dia"
+import { VistaMes } from "./_componentes/vista-mes"
+import { PanelDeCita } from "./_componentes/panel-de-cita"
+import { ModalNuevaCita } from "./_componentes/modal-nueva-cita"
 
 const CITA_EN_BLANCO: DatosDeNuevaCita = {
-  pacienteId: "",
+  clienteId: "",
   servicio: "",
   fecha: comoTexto(new Date()),
   horaInicio: "09:00",
@@ -67,7 +67,7 @@ export default function PaginaAgenda() {
 
   const guardarNuevaCita = async (evento: React.SyntheticEvent<HTMLFormElement>) => {
     evento.preventDefault()
-    if (!nuevaCita.pacienteId) return
+    if (!nuevaCita.clienteId) return
 
     setAviso("")
     setGuardando(true)

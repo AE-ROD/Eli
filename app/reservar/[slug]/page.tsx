@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
-import { FormularioReserva } from "./_components/formularioReserva"
+import { FormularioReserva } from "./_componentes/formulario-reserva"
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params

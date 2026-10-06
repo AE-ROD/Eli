@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
-import { enviarRecuperacionPassword } from "@/lib/email"
+import { enviarRecuperacionContrasena } from "@/lib/email"
 import { recuperarContrasenaSchema as schema } from "@/lib/validaciones"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000"
     const enlaceRestablecer = `${baseUrl}/restablecer-contrasena/${resetToken.token}`
 
-    await enviarRecuperacionPassword({
+    await enviarRecuperacionContrasena({
       emailUsuario: usuario.email,
       nombreUsuario: usuario.name,
       enlaceRestablecer,

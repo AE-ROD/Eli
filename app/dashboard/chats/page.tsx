@@ -3,10 +3,10 @@
 import { useState, useEffect, useCallback } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { Send } from "lucide-react"
-import { BarraSuperior } from "@/components/app/layout/barra-superior"
-import { ListaConversaciones, type ConversacionAPI, type MensajeAPI } from "./_components/listaConversaciones"
-import { AreaChat } from "./_components/areaChat"
-import { ModalNuevaConversacion, type FormNuevaConversacion } from "./_components/modalNuevaConversacion"
+import { BarraSuperior } from "@/components/panel/barra-superior"
+import { ListaConversaciones, type ConversacionAPI, type MensajeAPI } from "./_componentes/lista-conversaciones"
+import { AreaChat } from "./_componentes/area-chat"
+import { ModalNuevaConversacion, type FormNuevaConversacion } from "./_componentes/modal-nueva-conversacion"
 
 const FORM_INICIAL: FormNuevaConversacion = { nombre: "", telefono: "" }
 
@@ -76,8 +76,8 @@ export default function PaginaChats() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          patientName: formNueva.nombre,
-          patientPhone: formNueva.telefono || undefined,
+          customerName: formNueva.nombre,
+          customerPhone: formNueva.telefono || undefined,
         }),
       })
       if (res.ok) {

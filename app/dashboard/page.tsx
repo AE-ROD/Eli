@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { useSession } from "next-auth/react"
-import { BarraSuperior } from "@/components/app/layout/barra-superior"
-import { TarjetaEstadistica } from "@/components/app/tarjetas/tarjeta-estadistica"
-import { TarjetaCita } from "@/components/app/tarjetas/tarjeta-cita"
-import { VistaDiaProfesional } from "@/app/dashboard/_components/vistaDiaProfesional"
+import { BarraSuperior } from "@/components/panel/barra-superior"
+import { TarjetaCita } from "@/components/panel/tarjeta-cita"
+import { TarjetaEstadistica } from "./_componentes/tarjeta-estadistica"
+import { VistaDiaProfesional } from "./_componentes/vista-dia-profesional"
 import { formatearHora, duracionEnMinutos } from "@/lib/fechas"
 import {
   CalendarDays,
@@ -33,7 +33,7 @@ interface StatsData {
   }>
   /** Sólo cuando no hay citas hoy: el dato honesto es cuándo es la próxima. */
   proximaCita?: { id: string; title: string; startTime: string }
-  totalPacientes: number
+  totalClientes: number
   clientesNuevosMes: number
   /** Ausentes para quien no puede ver la facturación del negocio (profesional). */
   ingresoseMes?: number
@@ -46,7 +46,7 @@ interface StatsData {
   horarioHoy?: Array<{ startTime: string; endTime: string }>
   /** Sólo viajan las que se pudieron calcular: sin mes anterior, no hay clave. */
   tendencias: {
-    pacientes?: number
+    clientes?: number
     ingresos?: number
   }
 }
@@ -79,9 +79,9 @@ function procedenciaDeCitas(stats: StatsData): string | undefined {
 }
 
 function procedenciaDeClientes(stats: StatsData): string | undefined {
-  const { clientesNuevosMes, totalPacientes } = stats
+  const { clientesNuevosMes, totalClientes } = stats
 
-  if (totalPacientes === 0) return "Se suman solos cuando alguien reserva."
+  if (totalClientes === 0) return "Se suman solos cuando alguien reserva."
   if (clientesNuevosMes === 0) return "Ninguno nuevo este mes."
 
   return clientesNuevosMes === 1 ? "1 nuevo este mes." : `${clientesNuevosMes} nuevos este mes.`
@@ -99,7 +99,7 @@ function procedenciaDeIngresos(stats: StatsData): string | undefined {
   return `${base} este mes · ${signo}${Math.abs(tendencia)}% vs el mes pasado.`
 }
 
-export default function DashboardPage() {
+export default function PaginaPanel() {
   const [stats, setStats] = useState<StatsData | null>(null)
   const [copiado, setCopiado] = useState(false)
   const { data: session, status: estadoSesion } = useSession()
@@ -150,7 +150,7 @@ export default function DashboardPage() {
         },
         {
           titulo: "Clientes activos",
-          valor: stats.totalPacientes,
+          valor: stats.totalClientes,
           icono: Users,
           colorIcono: "exito" as const,
           procedencia: procedenciaDeClientes(stats),
@@ -249,7 +249,7 @@ export default function DashboardPage() {
                         key={cita.id}
                         cita={{
                           id: cita.id,
-                          pacienteNombre: cita.customer?.name ?? "Sin cliente",
+                          nombreCliente: cita.customer?.name ?? "Sin cliente",
                           servicio: cita.title,
                           horaInicio: formatearHora(cita.startTime),
                           horaFin: formatearHora(cita.endTime),
@@ -268,7 +268,7 @@ export default function DashboardPage() {
               </div>
             </motion.section>
 
-            {/* Pacientes recientes */}
+            {/* Clientes recientes */}
             <motion.section
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -281,14 +281,14 @@ export default function DashboardPage() {
                       <Users className="h-5 w-5 text-green-600" />
                     </div>
                     <div>
-                      <h2 className="font-semibold text-foreground">Pacientes</h2>
+                      <h2 className="font-semibold text-foreground">Clientes</h2>
                       <p className="text-sm text-muted-foreground">
-                        {stats ? `${stats.totalPacientes} en total` : "Cargando..."}
+                        {stats ? `${stats.totalClientes} en total` : "Cargando..."}
                       </p>
                     </div>
                   </div>
                   <Link
-                    href="/dashboard/pacientes"
+                    href="/dashboard/clientes"
                     className="flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
                   >
                     Ver todos
@@ -296,9 +296,9 @@ export default function DashboardPage() {
                   </Link>
                 </div>
                 <div className="p-5">
-                  {stats && stats.totalPacientes === 0 ? (
+                  {stats && stats.totalClientes === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4">
-                      Aún no tienes pacientes registrados
+                      Aún no tienes clientes registrados
                     </p>
                   ) : (
                     <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
@@ -307,7 +307,7 @@ export default function DashboardPage() {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-foreground">
-                          {stats ? `${stats.totalPacientes} ${stats.totalPacientes === 1 ? "cliente" : "clientes"}` : "—"}
+                          {stats ? `${stats.totalClientes} ${stats.totalClientes === 1 ? "cliente" : "clientes"}` : "—"}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {stats && stats.clientesNuevosMes > 0
@@ -409,8 +409,8 @@ export default function DashboardPage() {
                       color: "bg-primary",
                     },
                     {
-                      label: "Total pacientes",
-                      valor: stats?.totalPacientes ?? "—",
+                      label: "Total clientes",
+                      valor: stats?.totalClientes ?? "—",
                       color: "bg-green-500",
                     },
                     // Sin stats aún se muestra el placeholder; con stats cargados

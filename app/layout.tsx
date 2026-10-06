@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { Fraunces, Plus_Jakarta_Sans } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
-import { Providers } from '@/components/providers'
+import { Proveedores } from '@/components/proveedores'
 import './globals.css'
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -18,16 +18,15 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: 'Eli - Asistente Inteligente de Reservas',
-  description: 'Simplifica la gestión de tu negocio de bienestar y salud. Centraliza reservas, clientes, equipo y comunicación en una sola plataforma.',
-  generator: 'v0.app',
+  title: 'Eli — Reservas para salones, barberías y spas de uñas',
+  description: 'Agenda, clientes y equipo para salones de belleza, barberías y spas de uñas, en un solo lugar.',
   icons: {
-    icon: '/images/eli-logo.png',
-    apple: '/images/eli-logo.png',
+    icon: '/images/logo-eli.png',
+    apple: '/images/logo-eli.png',
   },
 }
 
-export default function RootLayout({
+export default function LayoutRaiz({
   children,
 }: Readonly<{
   children: React.ReactNode
@@ -35,7 +34,7 @@ export default function RootLayout({
   return (
     <html lang="es" className="bg-background">
       <body className={`${plusJakarta.variable} ${fraunces.variable} font-sans antialiased`}>
-        <Providers>{children}</Providers>
+        <Proveedores>{children}</Proveedores>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

@@ -1,12 +1,12 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { BarraLateral } from "@/components/app/layout/barra-lateral"
-import { ModalBienvenida } from "@/components/app/modales/modal-bienvenida"
-import { ProviderPrecios } from "@/components/app/modales/provider-precios"
+import { BarraLateral } from "@/components/panel/barra-lateral"
+import { ModalBienvenida } from "@/components/panel/modal-bienvenida"
+import { ProveedorDePrecios } from "@/components/panel/contexto-precios"
 import { actorDeSesion, puedeGestionarEquipo } from "@/lib/permisos"
 
-export default async function DashboardLayout({
+export default async function LayoutDelPanel({
   children,
 }: {
   children: React.ReactNode
@@ -43,7 +43,7 @@ export default async function DashboardLayout({
   }
 
   return (
-    <ProviderPrecios diasTrialRestantes={diasTrialRestantes}>
+    <ProveedorDePrecios diasTrialRestantes={diasTrialRestantes}>
       <div className="min-h-screen bg-background">
         <BarraLateral
           usuario={usuario}
@@ -58,6 +58,6 @@ export default async function DashboardLayout({
           <ModalBienvenida nombreNegocio={businessName} slug={businessSlug} />
         )}
       </div>
-    </ProviderPrecios>
+    </ProveedorDePrecios>
   )
 }

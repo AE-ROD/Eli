@@ -2,15 +2,15 @@
 
 import { useState, useEffect } from "react"
 import { AnimatePresence, motion, useScroll } from "framer-motion"
-import { EliLoader } from "@/components/landing/loader"
-import { Header } from "@/components/landing/header"
-import { HeroSection } from "@/components/landing/hero-section"
-import { WhatIsSection } from "@/components/landing/what-is-section"
-import { HowItWorksSection } from "@/components/landing/how-it-works-section"
-import { TargetSection } from "@/components/landing/target-section"
-import { PreciosSection } from "@/components/landing/precios-section"
-import { ContactSection } from "@/components/landing/contact-section"
-import { Footer } from "@/components/landing/footer"
+import { PantallaDeCarga } from "@/components/landing/pantalla-de-carga"
+import { Encabezado } from "@/components/landing/encabezado"
+import { SeccionPortada } from "@/components/landing/seccion-portada"
+import { SeccionQueEs } from "@/components/landing/seccion-que-es"
+import { SeccionComoFunciona } from "@/components/landing/seccion-como-funciona"
+import { SeccionParaQuien } from "@/components/landing/seccion-para-quien"
+import { SeccionPrecios } from "@/components/landing/seccion-precios"
+import { SeccionContacto } from "@/components/landing/seccion-contacto"
+import { PieDePagina } from "@/components/landing/pie-de-pagina"
 
 function SectionDivider() {
   return (
@@ -20,7 +20,7 @@ function SectionDivider() {
   )
 }
 
-export default function HomePage() {
+export default function PaginaLanding() {
   const [isLoading, setIsLoading] = useState(true)
   const { scrollYProgress } = useScroll()
 
@@ -42,7 +42,7 @@ export default function HomePage() {
   return (
     <>
       <AnimatePresence mode="wait">
-        {isLoading && <EliLoader key="loader" />}
+        {isLoading && <PantallaDeCarga key="loader" />}
       </AnimatePresence>
 
       <AnimatePresence>
@@ -79,21 +79,21 @@ export default function HomePage() {
             </div>
 
             <div className="relative z-10">
-              <Header />
+              <Encabezado />
               <main>
-                <HeroSection />
+                <SeccionPortada />
                 <SectionDivider />
-                <WhatIsSection />
+                <SeccionQueEs />
                 <SectionDivider />
-                <TargetSection />
+                <SeccionParaQuien />
                 <SectionDivider />
-                <HowItWorksSection />
+                <SeccionComoFunciona />
                 <SectionDivider />
-                <PreciosSection />
+                <SeccionPrecios />
                 <SectionDivider />
-                <ContactSection />
+                <SeccionContacto />
               </main>
-              <Footer />
+              <PieDePagina />
             </div>
           </motion.div>
         )}
