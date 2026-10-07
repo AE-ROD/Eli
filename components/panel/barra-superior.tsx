@@ -5,13 +5,14 @@ import { useSession } from "next-auth/react"
 import { motion, AnimatePresence } from "framer-motion"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
+import { ID_DEL_CAJON, useBarraLateral } from "@/components/panel/contexto-barra-lateral"
 import {
   Search,
   Bell,
   Plus,
   Menu,
-  X,
   User,
+  type LucideIcon,
 } from "lucide-react"
 
 interface BarraSuperiorProps {
@@ -20,6 +21,8 @@ interface BarraSuperiorProps {
   accionPrincipal?: {
     texto: string
     onClick: () => void
+    /** Sin ícono propio va `Plus`. En el teléfono es lo único que se ve del botón. */
+    icono?: LucideIcon
   }
   mostrarBusqueda?: boolean
 }
@@ -31,23 +34,37 @@ export function BarraSuperior({
   mostrarBusqueda = true,
 }: BarraSuperiorProps) {
   const [busquedaActiva, setBusquedaActiva] = useState(false)
-  const [menuMovilAbierto, setMenuMovilAbierto] = useState(false)
+  const { cajonAbierto, abrirCajon, refBotonMenu } = useBarraLateral()
   const { data: session } = useSession()
   const nombreUsuario = session?.user?.name
+  const IconoDeLaAccion = accionPrincipal?.icono ?? Plus
 
   return (
     <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border/50">
-      <div className="flex items-center justify-between px-6 py-4">
+      {/*
+        Tiene que entrar en 320 px con menú, título, campana, acción y avatar.
+        Bajo sm el margen y los espacios son menores y el título baja a 18 px:
+        así "Dashboard", el más largo de los que llevan acción, entra entero.
+        Si aun así faltara lugar, cede el título (se corta con "…") en vez de
+        empujar los botones fuera de la pantalla.
+      */}
+      <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4">
         {/* Titulo */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+          {/* Con el cajón abierto la superposición lo tapa: este botón sólo abre. */}
           <button
+            ref={refBotonMenu}
+            type="button"
             className="lg:hidden p-2 rounded-lg hover:bg-muted transition-colors"
-            onClick={() => setMenuMovilAbierto(!menuMovilAbierto)}
+            onClick={abrirCajon}
+            aria-label="Menú"
+            aria-controls={ID_DEL_CAJON}
+            aria-expanded={cajonAbierto}
           >
-            {menuMovilAbierto ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            <Menu className="h-5 w-5" aria-hidden="true" />
           </button>
-          <div>
-            <h1 className="text-xl font-bold text-foreground">{titulo}</h1>
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-xl font-bold text-foreground truncate">{titulo}</h1>
             {subtitulo && (
               <p className="text-sm text-muted-foreground">{subtitulo}</p>
             )}
@@ -55,7 +72,7 @@ export function BarraSuperior({
         </div>
 
         {/* Acciones */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {/* Busqueda */}
           {mostrarBusqueda && (
             <AnimatePresence mode="wait">
@@ -106,16 +123,32 @@ export function BarraSuperior({
             <Bell className="h-5 w-5 text-muted-foreground" />
           </motion.button>
 
-          {/* Accion principal */}
+          {/*
+            Accion principal. En el teléfono no se puede perder (es por donde se
+            crea una cita, un cliente o una invitación), pero su texto no entra
+            en 320 px: bajo sm va sólo el ícono, con el texto como nombre
+            (aria-label) y como globo (title), en un botón de 44 × 44 px, lo
+            mínimo para un dedo. Desde sm, el botón con texto.
+          */}
           {accionPrincipal && (
-            <BotonPrimario
-              onClick={accionPrincipal.onClick}
-              icono={<Plus className="h-4 w-4" />}
-              tamaño="sm"
-              className="hidden sm:flex"
-            >
-              {accionPrincipal.texto}
-            </BotonPrimario>
+            <>
+              <BotonPrimario
+                onClick={accionPrincipal.onClick}
+                aria-label={accionPrincipal.texto}
+                title={accionPrincipal.texto}
+                className="sm:hidden h-11 w-11 p-0"
+              >
+                <IconoDeLaAccion className="h-5 w-5" aria-hidden="true" />
+              </BotonPrimario>
+              <BotonPrimario
+                onClick={accionPrincipal.onClick}
+                icono={<IconoDeLaAccion className="h-4 w-4" aria-hidden="true" />}
+                tamaño="sm"
+                className="hidden sm:inline-flex"
+              >
+                {accionPrincipal.texto}
+              </BotonPrimario>
+            </>
           )}
 
           {/* Avatar (solo movil) — sin sesión no se inventa nombre */}

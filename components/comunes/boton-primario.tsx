@@ -3,6 +3,7 @@
 import { motion } from "framer-motion"
 import type { ButtonHTMLAttributes, ReactNode } from "react"
 import { Loader2 } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 type NativeButtonProps = Omit<
   ButtonHTMLAttributes<HTMLButtonElement>,
@@ -49,15 +50,18 @@ export function BotonPrimario({
       whileHover={{ scale: disabled || cargando ? 1 : 1.02 }}
       whileTap={{ scale: disabled || cargando ? 1 : 0.98 }}
       disabled={disabled || cargando}
-      className={`
-        inline-flex items-center justify-center gap-2 rounded-lg font-medium
-        transition-colors duration-200
-        disabled:opacity-50 disabled:cursor-not-allowed
-        ${estilosVariante[variante]}
-        ${estilosTamaño[tamaño]}
-        ${anchoCompleto ? "w-full" : ""}
-        ${className}
-      `}
+      // Con `cn` lo que llega en `className` le gana a lo de acá cuando chocan:
+      // `hidden` saca al `inline-flex` en vez de competir con él en el CSS,
+      // donde ganaba `inline-flex` y el botón no se ocultaba nunca.
+      className={cn(
+        "inline-flex items-center justify-center gap-2 rounded-lg font-medium",
+        "transition-colors duration-200",
+        "disabled:opacity-50 disabled:cursor-not-allowed",
+        estilosVariante[variante],
+        estilosTamaño[tamaño],
+        anchoCompleto && "w-full",
+        className
+      )}
       {...props}
     >
       {cargando ? (

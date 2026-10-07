@@ -2,8 +2,10 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { BarraLateral } from "@/components/panel/barra-lateral"
+import { ContenidoDelPanel } from "@/components/panel/contenido-del-panel"
 import { ModalBienvenida } from "@/components/panel/modal-bienvenida"
 import { ProveedorDePrecios } from "@/components/panel/contexto-precios"
+import { ProveedorDeBarraLateral } from "@/components/panel/contexto-barra-lateral"
 import { actorDeSesion, puedeGestionarEquipo } from "@/lib/permisos"
 
 export default async function LayoutDelPanel({
@@ -44,20 +46,20 @@ export default async function LayoutDelPanel({
 
   return (
     <ProveedorDePrecios diasTrialRestantes={diasTrialRestantes}>
-      <div className="min-h-screen bg-background">
-        <BarraLateral
-          usuario={usuario}
-          esOwner={esOwner}
-          diasTrialRestantes={diasTrialRestantes}
-          puedeVerEquipo={puedeVerEquipo}
-        />
-        <main className="lg:ml-[260px] transition-all duration-300">
-          {children}
-        </main>
-        {businessName && businessSlug && (
-          <ModalBienvenida nombreNegocio={businessName} slug={businessSlug} />
-        )}
-      </div>
+      <ProveedorDeBarraLateral>
+        <div className="min-h-screen bg-background">
+          <BarraLateral
+            usuario={usuario}
+            esOwner={esOwner}
+            diasTrialRestantes={diasTrialRestantes}
+            puedeVerEquipo={puedeVerEquipo}
+          />
+          <ContenidoDelPanel>{children}</ContenidoDelPanel>
+          {businessName && businessSlug && (
+            <ModalBienvenida nombreNegocio={businessName} slug={businessSlug} />
+          )}
+        </div>
+      </ProveedorDeBarraLateral>
     </ProveedorDePrecios>
   )
 }
