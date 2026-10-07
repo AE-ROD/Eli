@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
-import { actorDeSesion, whereDeClientes } from "@/lib/permisos"
+import { actorDeSesion, whereDeAgenda, whereDeClientes } from "@/lib/permisos"
 
 const clienteSchema = z.object({
   name: z.string().min(2),
@@ -11,6 +11,19 @@ const clienteSchema = z.object({
   phone: z.string().optional().or(z.literal("")),
   tags: z.array(z.string()).optional(),
   notes: z.string().optional().or(z.literal("")),
+})
+
+/**
+ * La paginación del listado. Lo que no sea un entero en rango cae al valor por
+ * defecto en vez de llegar a Prisma. Con `parseInt`, un texto daba `NaN` y un
+ * 500, y `limite=-100000` pasaba el tope de 50: `Math.min` no lo tocaba y
+ * Prisma acepta `take` negativo, que lee desde el final. `safe()` porque
+ * `skip` sale de multiplicar la página: pasado `Number.MAX_SAFE_INTEGER`
+ * (`pagina=1e300`) deja de ser un entero exacto.
+ */
+const paginacionSchema = z.object({
+  pagina: z.coerce.number().int().min(1).safe().catch(1),
+  limite: z.coerce.number().int().min(1).max(50).catch(20),
 })
 
 export async function GET(request: NextRequest) {
@@ -23,8 +36,10 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const busqueda = searchParams.get("q") ?? ""
   const etiqueta = searchParams.get("tag") ?? ""
-  const pagina = Math.max(1, parseInt(searchParams.get("pagina") ?? "1"))
-  const limite = Math.min(50, parseInt(searchParams.get("limite") ?? "20"))
+  const { pagina, limite } = paginacionSchema.parse({
+    pagina: searchParams.get("pagina") ?? undefined,
+    limite: searchParams.get("limite") ?? undefined,
+  })
   const skip = (pagina - 1) * limite
 
   const where = whereDeClientes(actor, {
@@ -49,9 +64,15 @@ export async function GET(request: NextRequest) {
         tags: true,
         notes: true,
         createdAt: true,
+        // El cliente es del negocio, pero sus citas son agenda: el profesional
+        // ve en el historial sólo las suyas, no las de sus colegas ni lo que
+        // cobraron. Sin este `where`, el anidado traía las de todo el negocio.
         appointments: {
+          where: whereDeAgenda(actor),
           orderBy: { startTime: "desc" },
           take: 5,
+          // Lo que dibuja la vista (`CitaDeCliente`): ni notas internas ni
+          // comentarios del cliente.
           select: {
             id: true,
             title: true,

@@ -89,8 +89,8 @@ describe("proxy — rate limit de los endpoints del panel", () => {
     "/api/auth/recuperar-contrasena",
     "/api/auth/restablecer-contrasena",
     "/api/cron/recordatorios",
-    "/api/reservar/mi-negocio",
     "/api/reservar/mi-negocio/disponibilidad",
+    "/api/equipo/invitacion/token-123",
     "/api/equipo/invitacion/token-123/aceptar",
   ])("no aplica el límite del panel a %s (tiene el suyo propio, o no corresponde)", async (ruta) => {
     const { default: proxy } = await import("./proxy")
@@ -99,6 +99,17 @@ describe("proxy — rate limit de los endpoints del panel", () => {
 
     expect(mockVerificarLimite).not.toHaveBeenCalledWith("panelLectura", expect.anything())
     expect(mockVerificarLimite).not.toHaveBeenCalledWith("panelEscritura", expect.anything())
+  })
+
+  // No es una excepción justificada: es un hueco anotado. La página de
+  // reservas lee el negocio directo de la base y nadie llama a este endpoint,
+  // pero sigue público, fuera del límite del panel y sin uno propio.
+  it("PENDIENTE: /api/reservar/[slug] queda fuera del límite del panel y todavía no tiene uno propio", async () => {
+    const { default: proxy } = await import("./proxy")
+
+    await proxy(fakeRequest("/api/reservar/mi-negocio", "GET"))
+
+    expect(mockVerificarLimite).not.toHaveBeenCalled()
   })
 
   it("sin sesión, cuenta por IP en vez de romper la petición", async () => {

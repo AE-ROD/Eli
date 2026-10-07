@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest"
+import { describe, it, expect, beforeEach, vi, type Mock } from "vitest"
 
 vi.mock("@upstash/redis", () => ({
   Redis: vi.fn().mockImplementation(() => ({})),
@@ -6,11 +6,20 @@ vi.mock("@upstash/redis", () => ({
 
 vi.mock("@upstash/ratelimit", () => {
   class Ratelimit {
-    static slidingWindow = vi.fn()
+    /** Cada limitador creado, para ver en qué balde y con qué ventana cuenta cada tipo. */
+    static creados: Ratelimit[] = []
+    static slidingWindow = vi.fn((tokens: number, ventana: string) => ({ tokens, ventana }))
     limit = vi.fn().mockRejectedValue(new Error("Upstash no responde"))
+    constructor(readonly config: { prefix: string; limiter: unknown }) {
+      Ratelimit.creados.push(this)
+    }
   }
   return { Ratelimit }
 })
+
+interface RatelimitFalso {
+  creados: { config: { prefix: string; limiter: unknown }; limit: Mock }[]
+}
 
 describe("verificarLimite cuando Upstash está configurado pero falla", () => {
   beforeEach(() => {
@@ -23,6 +32,19 @@ describe("verificarLimite cuando Upstash está configurado pero falla", () => {
     const { verificarLimite } = await import("./rate-limit")
     const resultado = await verificarLimite("login", "127.0.0.1")
     expect(resultado.permitido).toBe(true)
+  })
+
+  it("la lectura pública cuenta en su propio balde, de 60 por minuto: no gasta el de las reservas (20 por hora)", async () => {
+    const { Ratelimit } = (await import("@upstash/ratelimit")) as unknown as { Ratelimit: RatelimitFalso }
+    Ratelimit.creados.length = 0
+    const { verificarLimite } = await import("./rate-limit")
+
+    await verificarLimite("lecturaPublica", "203.0.113.7")
+
+    const usados = Ratelimit.creados.filter((limitador) => limitador.limit.mock.calls.length > 0)
+    expect(usados).toHaveLength(1)
+    expect(usados[0].config).toMatchObject({ prefix: "eli:lectura-publica", limiter: { tokens: 60, ventana: "1 m" } })
+    expect(usados[0].limit).toHaveBeenCalledWith("203.0.113.7")
   })
 })
 

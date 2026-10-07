@@ -33,6 +33,15 @@ const limitadorLogin = crearLimitador("login", 10, "1 m")
 const limitadorAuth = crearLimitador("auth", 5, "10 m")
 // Reserva pública: 20 por hora por IP
 const limitadorReserva = crearLimitador("reserva", 20, "1 h")
+// Lectura pública, sin sesión (las horas libres de la página de reservas): 60
+// por minuto por IP. Cada día que se toca en el calendario, y cada cambio de
+// servicio, es una consulta. Quien elige turno recorre unos cuantos días y ni
+// apurado llega a una por segundo, así que sobra margen para varias personas
+// detrás de la misma IP (el wifi del local, una operadora móvil). El de
+// `reserva` (20 por hora) cortaría a alguien que revisa tres semanas. A un
+// script lo deja en una consulta por segundo, y cada una son 3 o 4 lecturas
+// a la base.
+const limitadorLecturaPublica = crearLimitador("lectura-publica", 60, "1 m")
 // Panel autenticado, lectura (GET): un calendario abierto dispara varias
 // consultas por minuto sin que sea abuso — el límite es alto a propósito,
 // bien por encima del uso normal.
@@ -42,12 +51,13 @@ const limitadorPanelLectura = crearLimitador("panel-lectura", 200, "1 m")
 // pero sigue siendo generoso frente al uso real de un negocio.
 const limitadorPanelEscritura = crearLimitador("panel-escritura", 60, "1 m")
 
-export type TipoLimite = "login" | "auth" | "reserva" | "panelLectura" | "panelEscritura"
+export type TipoLimite = "login" | "auth" | "reserva" | "lecturaPublica" | "panelLectura" | "panelEscritura"
 
 const limitadores: Record<TipoLimite, Ratelimit | null> = {
   login: limitadorLogin,
   auth: limitadorAuth,
   reserva: limitadorReserva,
+  lecturaPublica: limitadorLecturaPublica,
   panelLectura: limitadorPanelLectura,
   panelEscritura: limitadorPanelEscritura,
 }

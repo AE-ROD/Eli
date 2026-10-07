@@ -1,5 +1,28 @@
 import { NextRequest, NextResponse } from "next/server"
+import { z } from "zod"
 import { prisma } from "@/lib/prisma"
+import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
+
+const FALTA_LA_FECHA = "Falta la fecha (AAAA-MM-DD)"
+const FALTA_EL_SERVICIO = "Falta el servicio (servicioId)"
+
+/**
+ * Lo que llega por la URL, validado antes de tocar la base. `date()` exige un
+ * día que exista, con formato AAAA-MM-DD: con `fecha=xyz` (o `2026-02-30`),
+ * `new Date` daba una fecha inválida, el día de la semana salía `NaN` y la
+ * consulta del horario terminaba en un 500. `servicioId` es un id (`cuid()`
+ * en el esquema, de 25 caracteres): el tope corta un texto arbitrario antes de
+ * mandarlo a la base.
+ */
+const parametrosSchema = z.object({
+  fecha: z
+    .string({ required_error: FALTA_LA_FECHA, invalid_type_error: FALTA_LA_FECHA })
+    .date("La fecha no es válida: tiene que ser un día real, con el formato AAAA-MM-DD"),
+  servicioId: z
+    .string({ required_error: FALTA_EL_SERVICIO, invalid_type_error: FALTA_EL_SERVICIO })
+    .min(1, FALTA_EL_SERVICIO)
+    .max(64, "El servicio (servicioId) no es válido"),
+})
 
 function generarSlots(
   horaInicio: string,
@@ -38,14 +61,24 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
+  // Público y sin sesión, fuera del límite del panel (`proxy.ts`): el tope es
+  // éste, por IP. No es el de `reserva` porque cada día que se mira en el
+  // calendario es una consulta (`lecturaPublica` en `lib/rate-limit.ts`).
+  const { permitido } = await verificarLimite("lecturaPublica", obtenerIp(request))
+  if (!permitido) {
+    return NextResponse.json({ error: "Demasiadas solicitudes, intenta más tarde" }, { status: 429 })
+  }
+
   const { slug } = await params
   const { searchParams } = new URL(request.url)
-  const fecha = searchParams.get("fecha")       // YYYY-MM-DD
-  const servicioId = searchParams.get("servicioId")
-
-  if (!fecha || !servicioId) {
-    return NextResponse.json({ error: "Faltan parámetros: fecha y servicioId" }, { status: 400 })
+  const parametros = parametrosSchema.safeParse({
+    fecha: searchParams.get("fecha") ?? undefined,
+    servicioId: searchParams.get("servicioId") ?? undefined,
+  })
+  if (!parametros.success) {
+    return NextResponse.json({ error: parametros.error.issues[0].message }, { status: 400 })
   }
+  const { fecha, servicioId } = parametros.data
 
   const negocio = await prisma.business.findUnique({
     where: { slug },

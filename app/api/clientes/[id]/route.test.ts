@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import type { NextRequest } from "next/server"
+import { crearBaseDeClientes, escenarioDeClientes } from "../_pruebas/base-de-clientes"
+import { NEGOCIO, conId, pedido, sesiones } from "@/app/api/atenciones/_pruebas/datos"
 
 const mockGetServerSession = vi.fn()
 
@@ -10,83 +11,37 @@ vi.mock("next-auth", () => ({
 vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
 /**
- * Mismo helper que `app/api/citas/[id]/route.test.ts`: entiende la igualdad
- * simple y `AND`, para que el mock de Prisma filtre de verdad según el `where`
- * que arma el endpoint, en vez de limitarse a inspeccionar el argumento.
+ * La base falsa filtra de verdad con el `where` que arma el endpoint, también
+ * el de las citas anidadas, y lanza ante lo que no entiende. Así estos tests
+ * miran qué devuelve y qué queda escrito, no la forma de la consulta.
  */
-function coincide(item: Record<string, unknown>, where: Record<string, unknown>): boolean {
-  return Object.entries(where).every(([clave, valor]) => {
-    if (clave === "AND") {
-      return (valor as Record<string, unknown>[]).every((sub) => coincide(item, sub))
-    }
-    return item[clave] === valor
-  })
-}
+const base = crearBaseDeClientes()
 
-const clientesFake = [
-  { id: "cliente-1", businessId: "negocio-1", name: "Ana Pérez" },
-  { id: "cliente-2", businessId: "negocio-1", name: "Beto Soto" },
-  { id: "cliente-ajeno", businessId: "negocio-2", name: "Clienta de otro negocio" },
-]
-
-const prismaMock = {
-  customer: {
-    findFirst: vi.fn((args: { where: Record<string, unknown> }) =>
-      Promise.resolve(clientesFake.find((c) => coincide(c, args.where)) ?? null)
-    ),
-    update: vi.fn((args: { where: { id: string }; data: Record<string, unknown> }) => {
-      const cliente = clientesFake.find((c) => c.id === args.where.id)
-      return Promise.resolve({ ...cliente, ...args.data })
-    }),
-    delete: vi.fn((args: { where: { id: string } }) =>
-      Promise.resolve(clientesFake.find((c) => c.id === args.where.id))
-    ),
-  },
-}
-
-vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
-
-const sesionDueño = {
-  user: { id: "owner-1", role: "owner", businessId: "negocio-1", businessName: "Mi negocio" },
-}
-
-const sesionProfesional = {
-  user: {
-    id: "worker-1",
-    role: "worker",
-    businessId: "negocio-1",
-    businessName: "Mi negocio",
-    memberId: "member-worker-1",
-  },
-}
-
-/** Dueña de otro negocio: con su sesión, `cliente-1` y `cliente-2` no existen. */
-const sesionOtroNegocio = {
-  user: { id: "owner-2", role: "owner", businessId: "negocio-2", businessName: "Otro negocio" },
-}
+vi.mock("@/lib/prisma", () => ({ prisma: base.prisma }))
 
 /** Token viejo o mal formado: hay usuario, pero ningún negocio al que atarlo. */
-const sesionSinNegocio = {
-  user: { id: "owner-3", role: "owner", businessId: "", businessName: "" },
+const sesionSinNegocio = { user: { id: "u-viejo", role: "owner", businessId: "", businessName: "" } }
+
+const URL_DE_MARIA = "http://localhost/api/clientes/c-maria"
+
+interface CitaDelHistorial {
+  id: string
 }
 
-const fakeRequest = (body?: Record<string, unknown>): NextRequest =>
-  ({
-    url: "http://localhost/api/clientes/cliente-1",
-    json: () => Promise.resolve(body ?? {}),
-  }) as unknown as NextRequest
+const idsDeCitas = (cliente: { appointments: CitaDelHistorial[] }) => cliente.appointments.map((c) => c.id)
 
-const params = (id: string) => ({ params: Promise.resolve({ id }) })
+beforeEach(() => {
+  vi.clearAllMocks()
+  base.reiniciar(escenarioDeClientes())
+})
 
 describe("GET /api/clientes/[id]", () => {
-  beforeEach(() => vi.clearAllMocks())
-
   it("un cliente de otro negocio: 404, no 403", async () => {
     const { GET } = await import("./route")
 
-    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
 
-    const res = await GET(fakeRequest(), params("cliente-ajeno"))
+    const res = await GET(pedido(URL_DE_MARIA), conId("c-ajeno"))
 
     expect(res.status).toBe(404)
     expect(await res.json()).toEqual({ error: "Cliente no encontrado" })
@@ -95,59 +50,65 @@ describe("GET /api/clientes/[id]", () => {
   it("un cliente de otro negocio responde igual que uno que no existe: no se puede averiguar cuál es cuál", async () => {
     const { GET } = await import("./route")
 
-    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
-    const resAjeno = await GET(fakeRequest(), params("cliente-ajeno"))
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const resAjeno = await GET(pedido(URL_DE_MARIA), conId("c-ajeno"))
 
-    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
-    const resInexistente = await GET(fakeRequest(), params("cliente-que-no-existe"))
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const resInexistente = await GET(pedido(URL_DE_MARIA), conId("cliente-que-no-existe"))
 
     expect(resAjeno.status).toBe(resInexistente.status)
     expect(await resAjeno.json()).toEqual(await resInexistente.json())
   })
 
-  it("la consulta siempre acota por el negocio de la sesión", async () => {
+  it("la consulta acota por el negocio de la sesión también en las citas: una de otro negocio que apunte al cliente no aparece", async () => {
     const { GET } = await import("./route")
 
-    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
 
-    await GET(fakeRequest(), params("cliente-ajeno"))
+    const res = await GET(pedido(URL_DE_MARIA), conId("c-maria"))
+    const cliente = await res.json()
 
-    expect(prismaMock.customer.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "cliente-ajeno", businessId: "negocio-1" } })
-    )
+    expect(res.status).toBe(200)
+    expect(idsDeCitas(cliente)).not.toContain("cita-cruzada")
+    expect(JSON.stringify(cliente)).not.toContain("Nota del otro negocio")
   })
 
   it("un cliente del propio negocio sí se ve", async () => {
     const { GET } = await import("./route")
 
-    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
 
-    const res = await GET(fakeRequest(), params("cliente-1"))
+    const res = await GET(pedido(URL_DE_MARIA), conId("c-maria"))
 
     expect(res.status).toBe(200)
-    expect((await res.json()).id).toBe("cliente-1")
+    expect((await res.json()).id).toBe("c-maria")
   })
 
-  it("los clientes son del negocio, no del profesional: un worker del mismo negocio también llega", async () => {
+  it("los clientes son del negocio, no del profesional: un worker del mismo negocio también llega, aunque no lo haya atendido", async () => {
     const { GET } = await import("./route")
 
-    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
 
-    const res = await GET(fakeRequest(), params("cliente-2"))
+    const res = await GET(pedido(URL_DE_MARIA), conId("c-beto"))
+    const cliente = await res.json()
 
     expect(res.status).toBe(200)
+    expect(cliente.id).toBe("c-beto")
+    // Beto sólo se atendió con Pedro: el cliente existe para Carla, su historial con él no.
+    expect(cliente.appointments).toEqual([])
   })
 
   it("el otro negocio no llega a los clientes de este: el aislamiento va en los dos sentidos", async () => {
     const { GET } = await import("./route")
 
-    mockGetServerSession.mockResolvedValueOnce(sesionOtroNegocio)
-    const resAjeno = await GET(fakeRequest(), params("cliente-1"))
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueñoAjeno)
+    const resAjeno = await GET(pedido(URL_DE_MARIA), conId("c-maria"))
     expect(resAjeno.status).toBe(404)
 
-    mockGetServerSession.mockResolvedValueOnce(sesionOtroNegocio)
-    const resPropio = await GET(fakeRequest(), params("cliente-ajeno"))
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueñoAjeno)
+    const resPropio = await GET(pedido(URL_DE_MARIA), conId("c-ajeno"))
     expect(resPropio.status).toBe(200)
+    expect(idsDeCitas(await resPropio.json())).toEqual(["cita-ajena"])
   })
 
   it("sin sesión recibe 401 y no toca la base", async () => {
@@ -155,10 +116,10 @@ describe("GET /api/clientes/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(null)
 
-    const res = await GET(fakeRequest(), params("cliente-1"))
+    const res = await GET(pedido(URL_DE_MARIA), conId("c-maria"))
 
     expect(res.status).toBe(401)
-    expect(prismaMock.customer.findFirst).not.toHaveBeenCalled()
+    expect(base.prisma.customer.findFirst).not.toHaveBeenCalled()
   })
 
   it("una sesión sin negocio recibe 401 y no toca la base", async () => {
@@ -166,98 +127,216 @@ describe("GET /api/clientes/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionSinNegocio)
 
-    const res = await GET(fakeRequest(), params("cliente-1"))
+    const res = await GET(pedido(URL_DE_MARIA), conId("c-maria"))
 
     expect(res.status).toBe(401)
-    expect(prismaMock.customer.findFirst).not.toHaveBeenCalled()
+    expect(base.prisma.customer.findFirst).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ["la dueña", sesiones.dueña],
+    ["el encargado", sesiones.encargado],
+  ])("%s ve todo el historial del cliente en su negocio, de la cita más reciente a la más vieja", async (_quien, sesion) => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesion)
+
+    const res = await GET(pedido(URL_DE_MARIA), conId("c-maria"))
+
+    expect(idsDeCitas(await res.json())).toEqual(["cita-publica", "cita-pedro-otra", "cita-pedro", "cita-carla"])
+  })
+
+  it("el profesional ve sólo sus citas con el cliente: ni las de su colega, ni sus notas, ni lo que cobró", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+    const resCarla = await GET(pedido(URL_DE_MARIA), conId("c-maria"))
+    const deCarla = await resCarla.json()
+
+    expect(resCarla.status).toBe(200)
+    expect(idsDeCitas(deCarla)).toEqual(["cita-carla"])
+    expect(JSON.stringify(deCarla)).not.toContain("Nota interna de Pedro")
+    expect(deCarla.appointments.map((c: { price: number | null }) => c.price)).toEqual([8000])
+
+    // Y al revés: Pedro no ve la de Carla.
+    mockGetServerSession.mockResolvedValueOnce(sesiones.pedro)
+    const dePedro = await (await GET(pedido(URL_DE_MARIA), conId("c-maria"))).json()
+
+    expect(idsDeCitas(dePedro)).toEqual(["cita-pedro-otra", "cita-pedro"])
+  })
+
+  it("un profesional sin memberId ve al cliente, pero ningún historial: falla cerrado", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.sinMiembro)
+
+    const res = await GET(pedido(URL_DE_MARIA), conId("c-maria"))
+    const cliente = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(cliente.id).toBe("c-maria")
+    expect(cliente.appointments).toEqual([])
+  })
+
+  it("cada cita trae sólo lo que dibuja el historial: ni notas internas ni comentarios del cliente", async () => {
+    const { GET } = await import("./route")
+
+    // La dueña ve todas: si algún campo de más se colara, estaría acá.
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const cliente = await (await GET(pedido(URL_DE_MARIA), conId("c-maria"))).json()
+
+    expect(cliente.appointments).toHaveLength(4)
+    for (const citaDelHistorial of cliente.appointments) {
+      expect(Object.keys(citaDelHistorial).sort()).toEqual(["endTime", "id", "price", "startTime", "status", "title"])
+    }
+    expect(JSON.stringify(cliente)).not.toMatch(/Nota interna|Prefiere la tarde|Reservé por la web/)
+  })
+
+  it("del cliente se sigue devolviendo lo mismo que antes del `select`: sólo cambió el historial", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const cliente = await (await GET(pedido(URL_DE_MARIA), conId("c-maria"))).json()
+
+    expect(Object.keys(cliente).sort()).toEqual([
+      "appointments",
+      "businessId",
+      "cedula",
+      "createdAt",
+      "email",
+      "id",
+      "lastName",
+      "name",
+      "notes",
+      "phone",
+      "tags",
+      "updatedAt",
+    ])
+    expect(cliente).toMatchObject({ id: "c-maria", name: "María", lastName: "González", businessId: NEGOCIO })
   })
 })
 
 describe("PUT /api/clientes/[id]", () => {
-  beforeEach(() => vi.clearAllMocks())
-
-  it("no se puede editar un cliente de otro negocio: 404, no 403", async () => {
+  it("no se puede editar un cliente de otro negocio: 404, no 403, y la base queda igual", async () => {
     const { PUT } = await import("./route")
 
-    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const antes = base.volcado()
 
-    const res = await PUT(fakeRequest({ name: "Hackeada" }), params("cliente-ajeno"))
+    const res = await PUT(pedido(URL_DE_MARIA, { name: "Hackeada" }), conId("c-ajeno"))
 
     expect(res.status).toBe(404)
-    expect(prismaMock.customer.update).not.toHaveBeenCalled()
+    expect(base.volcado()).toEqual(antes)
   })
 
-  it("un cliente del propio negocio sí se edita", async () => {
+  it("un cliente del propio negocio sí se edita, y la respuesta es el cliente actualizado", async () => {
     const { PUT } = await import("./route")
 
-    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
 
-    const res = await PUT(fakeRequest({ name: "Ana Actualizada" }), params("cliente-1"))
+    const res = await PUT(pedido(URL_DE_MARIA, { name: "María José", notes: "Viene cada mes" }), conId("c-maria"))
 
     expect(res.status).toBe(200)
-    expect(prismaMock.customer.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "cliente-1" } })
-    )
+    expect(await res.json()).toMatchObject({ id: "c-maria", name: "María José", notes: "Viene cada mes" })
+    expect(base.buscar("customer", { id: "c-maria" })[0]).toMatchObject({ name: "María José", notes: "Viene cada mes" })
   })
 
-  it("el cuerpo no puede mudar al cliente a otro negocio: `businessId` nunca llega al update", async () => {
+  it("el cuerpo no puede mudar al cliente a otro negocio: `businessId` nunca llega a la base", async () => {
     const { PUT } = await import("./route")
 
-    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
 
-    await PUT(fakeRequest({ name: "Ana", businessId: "negocio-2" }), params("cliente-1"))
+    await PUT(pedido(URL_DE_MARIA, { name: "María", businessId: "negocio-2" }), conId("c-maria"))
 
-    const { data } = prismaMock.customer.update.mock.calls[0][0]
-    expect(data).not.toHaveProperty("businessId")
+    expect(base.buscar("customer", { id: "c-maria" })[0].businessId).toBe(NEGOCIO)
   })
 
   it("sin sesión recibe 401 y no toca la base", async () => {
     const { PUT } = await import("./route")
 
     mockGetServerSession.mockResolvedValueOnce(null)
+    const antes = base.volcado()
 
-    const res = await PUT(fakeRequest({ name: "xx" }), params("cliente-1"))
+    const res = await PUT(pedido(URL_DE_MARIA, { name: "xx" }), conId("c-maria"))
 
     expect(res.status).toBe(401)
-    expect(prismaMock.customer.findFirst).not.toHaveBeenCalled()
-    expect(prismaMock.customer.update).not.toHaveBeenCalled()
+    expect(base.prisma.customer.findFirst).not.toHaveBeenCalled()
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("una sesión sin negocio recibe 401 y no escribe nada", async () => {
+    const { PUT } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionSinNegocio)
+    const antes = base.volcado()
+
+    const res = await PUT(pedido(URL_DE_MARIA, { notes: "x" }), conId("c-maria"))
+
+    expect(res.status).toBe(401)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("el profesional también guarda notas del cliente: el cliente es del negocio, no de quien lo atendió", async () => {
+    const { PUT } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+
+    const res = await PUT(pedido(URL_DE_MARIA, { notes: "Pidió turno a la tarde" }), conId("c-beto"))
+
+    expect(res.status).toBe(200)
+    expect(base.buscar("customer", { id: "c-beto" })[0].notes).toBe("Pidió turno a la tarde")
   })
 })
 
 describe("DELETE /api/clientes/[id]", () => {
-  beforeEach(() => vi.clearAllMocks())
-
   it("no se puede borrar un cliente de otro negocio: 404, no 403", async () => {
     const { DELETE } = await import("./route")
 
-    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
 
-    const res = await DELETE(fakeRequest(), params("cliente-ajeno"))
+    const res = await DELETE(pedido(URL_DE_MARIA), conId("c-ajeno"))
 
     expect(res.status).toBe(404)
-    expect(prismaMock.customer.delete).not.toHaveBeenCalled()
+    expect(base.buscar("customer", { id: "c-ajeno" })).toHaveLength(1)
   })
 
   it("un cliente del propio negocio sí se borra", async () => {
     const { DELETE } = await import("./route")
 
-    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
 
-    const res = await DELETE(fakeRequest(), params("cliente-1"))
+    const res = await DELETE(pedido(URL_DE_MARIA), conId("c-maria"))
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ mensaje: "Cliente eliminado" })
-    expect(prismaMock.customer.delete).toHaveBeenCalledWith({ where: { id: "cliente-1" } })
+    expect(base.buscar("customer", { id: "c-maria" })).toEqual([])
+    expect(base.buscar("customer", { id: "c-ajeno" })).toHaveLength(1)
+  })
+
+  it("un id que no existe responde igual que uno de otro negocio", async () => {
+    const { DELETE } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const resInexistente = await DELETE(pedido(URL_DE_MARIA), conId("cliente-que-no-existe"))
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const resAjeno = await DELETE(pedido(URL_DE_MARIA), conId("c-ajeno"))
+
+    expect(resInexistente.status).toBe(404)
+    expect(await resInexistente.json()).toEqual(await resAjeno.json())
   })
 
   it("sin sesión recibe 401 y no borra nada", async () => {
     const { DELETE } = await import("./route")
 
     mockGetServerSession.mockResolvedValueOnce(null)
+    const antes = base.volcado()
 
-    const res = await DELETE(fakeRequest(), params("cliente-1"))
+    const res = await DELETE(pedido(URL_DE_MARIA), conId("c-maria"))
 
     expect(res.status).toBe(401)
-    expect(prismaMock.customer.delete).not.toHaveBeenCalled()
+    expect(base.volcado()).toEqual(antes)
   })
 })
