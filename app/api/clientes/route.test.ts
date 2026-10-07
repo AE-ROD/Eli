@@ -63,15 +63,16 @@ function paginarComoPrisma<T>(lista: T[], { skip = 0, take }: { skip?: number; t
 const creadoEl = (dia: number) => new Date(Date.UTC(2026, 0, dia))
 
 const clientesFake: Registro[] = [
-  { id: "cliente-1", businessId: "negocio-1", name: "Ana Pérez", email: "ana@example.com", phone: null, tags: ["vip"], notes: null, createdAt: creadoEl(1) },
-  { id: "cliente-2", businessId: "negocio-1", name: "Beto Soto", email: null, phone: "+56 9 1111 1111", tags: [], notes: null, createdAt: creadoEl(2) },
+  { id: "cliente-1", businessId: "negocio-1", name: "Ana", lastName: "Pérez", email: "ana@example.com", phone: null, tags: ["vip"], notes: null, createdAt: creadoEl(1) },
+  { id: "cliente-2", businessId: "negocio-1", name: "Beto Soto", lastName: null, email: null, phone: "+56 9 1111 1111", tags: [], notes: null, createdAt: creadoEl(2) },
   /** Se llama igual que `cliente-1` y tiene su misma etiqueta: sólo el negocio los distingue. */
-  { id: "cliente-ajeno", businessId: "negocio-2", name: "Ana Pérez", email: "ana@otro.com", phone: null, tags: ["vip"], notes: null, createdAt: creadoEl(1) },
+  { id: "cliente-ajeno", businessId: "negocio-2", name: "Ana", lastName: "Pérez", email: "ana@otro.com", phone: null, tags: ["vip"], notes: null, createdAt: creadoEl(1) },
   /** Un negocio con sesenta clientes, para probar la paginación contra el tope de 50. */
   ...Array.from({ length: 60 }, (_, i) => ({
     id: `cliente-grande-${i + 1}`,
     businessId: "negocio-3",
     name: `Cliente ${i + 1}`,
+    lastName: null,
     email: null,
     phone: null,
     tags: [],
@@ -225,6 +226,26 @@ describe("GET /api/clientes", () => {
     expect(res.status).toBe(200)
     expect(ids(data.clientes)).toEqual(["cliente-1", "cliente-2"])
     expect(data.total).toBe(2)
+  })
+
+  it("cada cliente trae su apellido, para que el buscador muestre el nombre completo", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    const data = await (await GET(fakeGet("?q=ana"))).json()
+
+    expect(data.clientes).toEqual([expect.objectContaining({ id: "cliente-1", name: "Ana", lastName: "Pérez" })])
+  })
+
+  it("sin apellido cargado, viaja en null", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    const data = await (await GET(fakeGet())).json()
+
+    expect(data.clientes.find((c: { id: string }) => c.id === "cliente-2").lastName).toBeNull()
   })
 
   it("el otro negocio ve sólo lo suyo: el aislamiento va en los dos sentidos", async () => {

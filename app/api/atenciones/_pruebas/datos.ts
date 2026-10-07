@@ -24,6 +24,14 @@ export const sesiones = {
 
 type Registro = Record<string, unknown>
 
+/**
+ * Un monto escrito en unidades, como se lee (`centavos(25000)`), en los
+ * centavos enteros que guarda la base. Es aparte de `aCentavos` a propósito:
+ * si la conversión de producción tuviera un error, los escenarios no lo
+ * heredarían.
+ */
+export const centavos = (unidades: number) => Math.round(unidades * 100)
+
 /** Una atención del negocio 1, en espera, de María, salvo lo que se pise. */
 export function atencion(id: string, datos: Registro = {}): Registro {
   return {
@@ -37,7 +45,7 @@ export function atencion(id: string, datos: Registro = {}): Registro {
   }
 }
 
-/** Una línea: un Corte de Carla a 8.000, salvo lo que se pise. */
+/** Una línea: un Corte de Carla a 8.000, salvo lo que se pise. El precio va en centavos, como en la base. */
 export function linea(id: string, visitId: string, datos: Registro = {}): Registro {
   return {
     id,
@@ -47,7 +55,7 @@ export function linea(id: string, visitId: string, datos: Registro = {}): Regist
     memberId: "m-carla",
     byOwner: false,
     professionalName: "Carla Profesional",
-    price: 8000,
+    priceCents: centavos(8000),
     ...datos,
   }
 }
@@ -57,8 +65,9 @@ export function lineaDeLaDueña(id: string, visitId: string, datos: Registro = {
   return linea(id, visitId, { memberId: null, byOwner: true, professionalName: "Ana Dueña", ...datos })
 }
 
-export function pago(id: string, visitId: string, method: string, amount: number): Registro {
-  return { id, visitId, method, amount, createdAt: new Date("2026-10-06T15:00:00.000Z") }
+/** Un pago de `monto` en unidades; la base lo guarda en centavos. */
+export function pago(id: string, visitId: string, method: string, monto: number): Registro {
+  return { id, visitId, method, amountCents: centavos(monto), createdAt: new Date("2026-10-06T15:00:00.000Z") }
 }
 
 /** Lo que tiene todo escenario: personas, negocios, servicios y clientes. */

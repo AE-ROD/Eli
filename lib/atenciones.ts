@@ -86,17 +86,14 @@ export function tiemposDeTransicion(desde: EstadoActivo, hacia: EstadoActivo, ah
 // ─── Dinero ──────────────────────────────────────────────────────────────────
 
 /**
- * Tope de cualquier precio o monto. Muy por encima de lo que cuesta un
- * servicio, y muy por debajo de donde los centavos dejan de ser enteros
- * exactos en un `number`.
- */
-export const MONTO_MAXIMO = 1_000_000_000
-
-/**
- * Los montos se guardan como `Float`, igual que el resto del esquema, pero
- * toda suma y toda comparación se hace en centavos enteros: `0.1 + 0.2` da
- * `0.30000000000000004`, y un cobro de 0,30 pagado con 0,10 y 0,20 no puede
- * rechazarse por eso.
+ * El dinero de las atenciones se guarda en centavos enteros (`priceCents`,
+ * `amountCents`, `totalCents`) y toda suma y toda comparación se hace en
+ * centavos: `0.1 + 0.2` da `0.30000000000000004`, y un cobro de 0,30 pagado
+ * con 0,10 y 0,20 no puede rechazarse por eso.
+ *
+ * Lo que entra y sale por la API sigue en unidades, con hasta dos decimales
+ * (`precio: 8000`, `monto: 0.3`): se convierte en el borde con estas dos.
+ * Así la pantalla no cambia de contrato, y la base nunca ve un `Float`.
  */
 export function aCentavos(monto: number): number {
   return Math.round(monto * 100)
@@ -105,6 +102,43 @@ export function aCentavos(monto: number): number {
 export function deCentavos(centavos: number): number {
   return centavos / 100
 }
+
+/**
+ * Topes del dinero. Las columnas de centavos son `Int` de Postgres: 32 bits
+ * con signo, hasta 2.147.483.647 centavos (21.474.836,47 en unidades).
+ * Pasarse no redondea ni da la vuelta: Postgres rechaza la fila, y el pedido
+ * terminaría en un 500 en vez de un mensaje que diga qué corregir.
+ *
+ * - El total de una atención no pasa de 2.000.000.000 centavos (20 millones).
+ *   Es una cifra redonda que se puede decir en un mensaje, deja un 7 % de
+ *   margen bajo el límite de la columna y sobra para cualquier visita en la
+ *   moneda que sea. Se valida sobre la suma de las líneas al anotarlas, al
+ *   editarlas y otra vez al cobrar.
+ * - Un precio o un pago tampoco pasa de eso: ninguno puede ser más que el
+ *   total que lo contiene. Como los pagos suman exactamente el total, con el
+ *   total acotado ningún pago puede desbordar, y el tope por monto corta antes
+ *   de sumar nada.
+ * - Lo que se suma entre muchas atenciones (los ingresos de un mes, un
+ *   reporte) no se guarda en una columna: se suma en JavaScript o con `_sum`,
+ *   que Postgres calcula como `bigint`.
+ * - 2.000 millones de centavos está muy por debajo de 2^53: en un `number`
+ *   los centavos siguen siendo enteros exactos.
+ */
+export const TOTAL_MAXIMO_CENTAVOS = 2_000_000_000
+
+/** El mismo tope en unidades: lo más que vale un precio o un pago. */
+export const MONTO_MAXIMO = deCentavos(TOTAL_MAXIMO_CENTAVOS)
+
+/**
+ * Cuántos servicios puede tener una atención, sumando los de todos los que la
+ * atendieron. Ninguna visita real tiene tantos; el tope corta un pedido
+ * absurdo y asegura que leer las líneas con este `take` las trae todas, así
+ * que el total que se muestra y el que se cobra salen de las mismas.
+ */
+export const MAXIMO_DE_LINEAS_POR_ATENCION = 20
+
+/** Más medios que esto en un solo cobro no es un pago dividido, es un error de carga. */
+export const MAXIMO_DE_PAGOS = 20
 
 /**
  * Si el monto se escribe con hasta dos decimales. Un precio de 10,005 no es
@@ -125,9 +159,9 @@ export function esMontoDePagoValido(monto: number): boolean {
   return tieneCentavosExactos(monto) && monto > 0 && monto <= MONTO_MAXIMO
 }
 
-/** El total de una atención: la suma de sus líneas, en centavos. */
-export function totalEnCentavos(lineas: readonly { price: number }[]): number {
-  return lineas.reduce((suma, linea) => suma + aCentavos(linea.price), 0)
+/** El total de una atención: la suma de sus líneas, tal como se guardan, en centavos. */
+export function totalEnCentavos(lineas: readonly { priceCents: number }[]): number {
+  return lineas.reduce((suma, linea) => suma + linea.priceCents, 0)
 }
 
 /** Para los mensajes de error: `$25.000`, `$0,3`. */
@@ -135,9 +169,27 @@ function comoMonto(centavos: number): string {
   return `$${deCentavos(centavos).toLocaleString("es-ES", { maximumFractionDigits: 2 })}`
 }
 
+/** Por qué el total de una atención no se puede guardar ni cobrar, o `null` si está bien. */
+export function errorDeTotal(totalCentavos: number): string | null {
+  return totalCentavos > TOTAL_MAXIMO_CENTAVOS
+    ? `El total de la atención no puede pasar de ${comoMonto(TOTAL_MAXIMO_CENTAVOS)}: divídela en dos.`
+    : null
+}
+
+/** Por qué una atención tiene demasiados servicios, o `null` si está bien. */
+export function errorDeCantidadDeLineas(cantidad: number): string | null {
+  return cantidad > MAXIMO_DE_LINEAS_POR_ATENCION
+    ? `Una atención puede tener hasta ${MAXIMO_DE_LINEAS_POR_ATENCION} servicios.`
+    : null
+}
+
 // ─── Requisitos para avanzar ─────────────────────────────────────────────────
 
-/** Lo de una línea que hace falta para saber si la atención puede avanzar. */
+/**
+ * Lo de una línea que hace falta para saber si la atención puede avanzar. El
+ * precio va en unidades, como lo escribe la pantalla: el servidor la arma
+ * desde `priceCents` con `deCentavos`, así las dos aplican la misma regla.
+ */
 export interface LineaDeAtencion {
   memberId: string | null
   byOwner: boolean
@@ -195,6 +247,33 @@ export function requisitoFaltante(destino: string, lineas: readonly LineaDeAtenc
   }
 
   return null
+}
+
+// ─── Llegadas ────────────────────────────────────────────────────────────────
+
+/**
+ * Si se puede deshacer la llegada (borrar la atención y devolver la reserva a
+ * "Reservas de hoy"): sólo si nació de una reserva, porque sin reserva no hay
+ * adónde volver (eso se anula), y sólo mientras espera, porque una atención
+ * que ya empezó registró algo que no se borra.
+ */
+export function sePuedeDeshacerLaLlegada<T extends { status: string; appointmentId: string | null }>(
+  atencion: T
+): atencion is T & { appointmentId: string } {
+  return atencion.status === "en-espera" && atencion.appointmentId !== null
+}
+
+/**
+ * Si el nombre de un servicio del catálogo es el que quedó escrito en una
+ * cita. La agenda guarda el servicio como texto (`title`) y no su id: para
+ * precargar la línea al llegar, se busca por nombre, sin distinguir
+ * mayúsculas ni espacios al borde. Nada más laxo: con acentos o palabras de
+ * más ya no es seguro que sea el mismo servicio, y una línea con el servicio
+ * equivocado se cobraría al precio equivocado.
+ */
+export function mismoNombreDeServicio(nombre: string, titulo: string): boolean {
+  const normal = (texto: string) => texto.trim().toLocaleLowerCase("es")
+  return normal(nombre) === normal(titulo)
 }
 
 // ─── Cobro ───────────────────────────────────────────────────────────────────

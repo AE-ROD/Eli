@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { crearBaseFalsa } from "./_pruebas/base-falsa"
-import { NEGOCIO, OTRO_NEGOCIO, atencion, datosBase, linea, pago, pedido, sesiones } from "./_pruebas/datos"
+import { NEGOCIO, OTRO_NEGOCIO, atencion, centavos, datosBase, linea, pago, pedido, sesiones } from "./_pruebas/datos"
 
 const mockGetServerSession = vi.fn()
 
@@ -42,16 +42,16 @@ function escenario() {
       atencion("v-mixta", { status: "por-cobrar" }),
       // Quedó abierta ayer: tiene que seguir en el tablero hasta que se cobre o se anule.
       atencion("v-de-ayer", { arrivedAt: new Date("2026-10-05T20:00:00.000Z") }),
-      atencion("v-cobrada-hoy", { status: "finalizada", paidAt: hoyA("14:30"), total: 8000 }),
-      atencion("v-cobrada-ayer", { status: "finalizada", paidAt: new Date("2026-10-05T20:00:00.000Z"), total: 8000 }),
+      atencion("v-cobrada-hoy", { status: "finalizada", paidAt: hoyA("14:30"), totalCents: centavos(8000) }),
+      atencion("v-cobrada-ayer", { status: "finalizada", paidAt: new Date("2026-10-05T20:00:00.000Z"), totalCents: centavos(8000) }),
       atencion("v-anulada", { status: "anulada", voidedAt: hoyA("12:00") }),
       atencion("v-ajena", { businessId: OTRO_NEGOCIO, customerId: "c-ajeno" }),
     ],
     visitService: [
       linea("l-de-cita", "v-de-cita"),
-      linea("l-pedro", "v-pedro", { memberId: "m-pedro", professionalName: "Pedro Profesional", serviceId: "s-color", serviceName: "Color", price: 25000 }),
+      linea("l-pedro", "v-pedro", { memberId: "m-pedro", professionalName: "Pedro Profesional", serviceId: "s-color", serviceName: "Color", priceCents: centavos(25000) }),
       linea("l-mixta-carla", "v-mixta"),
-      linea("l-mixta-pedro", "v-mixta", { memberId: "m-pedro", professionalName: "Pedro Profesional", serviceId: "s-color", serviceName: "Color", price: 25000 }),
+      linea("l-mixta-pedro", "v-mixta", { memberId: "m-pedro", professionalName: "Pedro Profesional", serviceId: "s-color", serviceName: "Color", priceCents: centavos(25000) }),
       linea("l-de-ayer", "v-de-ayer"),
       linea("l-cobrada-hoy", "v-cobrada-hoy"),
       linea("l-cobrada-ayer", "v-cobrada-ayer"),
@@ -274,6 +274,85 @@ describe("GET /api/atenciones", () => {
       }
     }
   })
+
+  it("al profesional no se le pide el total a la base, ni siquiera para descartarlo", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+
+    await GET(pedido(URL_DEL_DIA))
+
+    expect(base.prisma.visit.findMany).toHaveBeenCalled()
+    for (const [argumentos] of base.prisma.visit.findMany.mock.calls) {
+      expect((argumentos as { select: { totalCents: boolean } }).select.totalCents).toBe(false)
+    }
+  })
+
+  it("sin nada cortado, truncado es false", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const data = await (await GET(pedido(URL_DEL_DIA))).json()
+
+    expect(data.truncado).toBe(false)
+  })
+
+  it("muchas activas viejas no esconden las de hoy: van aparte, con su tope y de la más reciente a la más vieja", async () => {
+    const { GET } = await import("./route")
+    const viejas = Array.from({ length: 60 }, (_, i) =>
+      atencion(`v-vieja-${String(i).padStart(2, "0")}`, { arrivedAt: new Date(Date.UTC(2026, 8, 1 + (i % 30), 12, i)) })
+    )
+    const deHoy = [atencion("v-hoy-1", { arrivedAt: hoyA("12:00") }), atencion("v-hoy-2", { arrivedAt: hoyA("14:00") })]
+    base.reiniciar({ ...datosBase(), visit: [...viejas, ...deHoy] })
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const data = await (await GET(pedido(URL_DEL_DIA))).json()
+    const recibidas = data.atenciones.map((a: { id: string }) => a.id)
+
+    expect(recibidas).toEqual(expect.arrayContaining(["v-hoy-1", "v-hoy-2"]))
+    expect(recibidas).toHaveLength(52)
+    expect(data.truncado).toBe(true)
+    // Las diez que quedan afuera son las más viejas.
+    const masViejas = [...viejas]
+      .sort((a, b) => (a.arrivedAt as Date).getTime() - (b.arrivedAt as Date).getTime())
+      .slice(0, 10)
+      .map((v) => v.id)
+    for (const id of masViejas) expect(recibidas).not.toContain(id)
+  })
+
+  it("cada atención que nació de una cita trae la reserva, para precargar el editor", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const data = await (await GET(pedido(URL_DEL_DIA))).json()
+    const deCita = data.atenciones.find((a: { id: string }) => a.id === "v-de-cita")
+    const sinReserva = data.atenciones.find((a: { id: string }) => a.id === "v-pedro")
+
+    expect(deCita.reserva).toEqual({
+      servicioId: null,
+      titulo: "Corte",
+      precio: null,
+      profesional: { id: "m-carla", nombre: "Carla Profesional" },
+    })
+    expect(sinReserva.reserva).toBeNull()
+  })
+
+  it("un profesional con una línea en la atención de la cita de un colega no ve esa reserva", async () => {
+    const { GET } = await import("./route")
+    base.reiniciar({
+      ...escenario(),
+      visit: [atencion("v-de-cita", { status: "en-atencion", appointmentId: "cita-que-llego" })],
+      visitService: [
+        linea("l-de-carla", "v-de-cita"),
+        linea("l-de-pedro", "v-de-cita", { memberId: "m-pedro", professionalName: "Pedro Profesional" }),
+      ],
+    })
+    mockGetServerSession.mockResolvedValueOnce(sesiones.pedro)
+
+    const data = await (await GET(pedido(URL_DEL_DIA))).json()
+
+    expect(data.atenciones.map((a: { id: string }) => a.id)).toEqual(["v-de-cita"])
+    expect(data.atenciones[0].reserva).toBeNull()
+  })
 })
 
 describe("POST /api/atenciones con { citaId }: llegó una reserva", () => {
@@ -291,6 +370,7 @@ describe("POST /api/atenciones con { citaId }: llegó una reserva", () => {
       cliente: { id: "c-maria", nombre: "María González" },
       total: 8000,
       lineas: [{ servicioId: "s-corte", servicio: "Corte", profesional: { id: "m-carla", nombre: "Carla Profesional" }, precio: 8000 }],
+      reserva: { servicioId: "s-corte", titulo: "Corte", precio: 8000, profesional: { id: "m-carla", nombre: "Carla Profesional" } },
     })
     const [creada] = base.buscar("visit", { appointmentId: "cita-carla" })
     expect(creada).toMatchObject({ businessId: NEGOCIO, createdById: "u-encargado", customerName: "María González" })
@@ -368,6 +448,119 @@ describe("POST /api/atenciones con { citaId }: llegó una reserva", () => {
   })
 })
 
+describe("POST /api/atenciones con { citaId }: qué línea se precarga", () => {
+  const URL = "http://localhost/api/atenciones"
+
+  /** Una cita de hoy de la agenda: guarda el servicio como texto, sin `serviceId`. */
+  const deLaAgenda = (id: string, datos: Record<string, unknown>) => ({
+    id,
+    businessId: NEGOCIO,
+    customerId: "c-maria",
+    status: "confirmada",
+    startTime: hoyA("16:00"),
+    endTime: hoyA("16:30"),
+    ...datos,
+  })
+
+  async function llegar(sesion: unknown, cita: Record<string, unknown>, servicios?: Record<string, unknown>[]) {
+    const { POST } = await import("./route")
+    const datos = datosBase()
+    base.reiniciar({ ...datos, service: servicios ?? datos.service, appointment: [cita] })
+    mockGetServerSession.mockResolvedValueOnce(sesion)
+    const res = await POST(pedido(URL, { citaId: cita.id }))
+    return { status: res.status, data: await res.json() }
+  }
+
+  it("QA: una cita de la agenda, sin serviceId, precarga el servicio activo que se llama igual, sin mayúsculas ni espacios", async () => {
+    const { status, data } = await llegar(sesiones.dueña, deLaAgenda("cita-agenda", { title: "  corte ", memberId: "m-carla" }))
+
+    expect(status).toBe(201)
+    // Sin precio en la cita, el del catálogo.
+    expect(data.lineas).toEqual([
+      expect.objectContaining({ servicioId: "s-corte", servicio: "Corte", profesional: { id: "m-carla", nombre: "Carla Profesional" }, precio: 8000 }),
+    ])
+    expect(base.buscar("visitService", { visitId: data.id })).toEqual([expect.objectContaining({ priceCents: centavos(8000) })])
+  })
+
+  it("con precio en la cita, ése, y la profesional que marca la llegada de su cita la recibe a su nombre", async () => {
+    const { data } = await llegar(sesiones.carla, deLaAgenda("cita-agenda", { title: "Color", memberId: "m-carla", price: 20000 }))
+
+    expect(data.lineas).toEqual([
+      expect.objectContaining({ servicioId: "s-color", profesional: { id: "m-carla", nombre: "Carla Profesional" }, precio: 20000 }),
+    ])
+  })
+
+  it("QA: la reserva pública trae el servicio pero no el profesional: la dueña no recibe línea y sí la reserva", async () => {
+    const publica = deLaAgenda("cita-publica", { title: "Color", serviceId: "s-color", price: 25000 })
+
+    const { data } = await llegar(sesiones.dueña, publica)
+
+    expect(data.lineas).toEqual([])
+    expect(data.reserva).toEqual({ servicioId: "s-color", titulo: "Color", precio: 25000, profesional: null })
+  })
+
+  it.each([
+    ["un título que no es ningún servicio", { title: "Masaje descontracturante", memberId: "m-carla" }, undefined],
+    ["un título que sólo coincide con un servicio inactivo", { title: "Alisado", memberId: "m-carla" }, undefined],
+    [
+      "dos servicios activos con ese nombre: no se adivina",
+      { title: "Corte", memberId: "m-carla" },
+      [
+        { id: "s-corte", businessId: NEGOCIO, name: "Corte", price: 8000 },
+        { id: "s-corte-nino", businessId: NEGOCIO, name: "corte", price: 6000 },
+      ],
+    ],
+    ["un serviceId de un servicio que ya no se ofrece", { title: "Alisado", serviceId: "s-viejo", memberId: "m-carla" }, undefined],
+    ["un servicio sin precio, ni en la cita ni en el catálogo", { title: "Peinado", memberId: "m-carla" }, undefined],
+  ])("%s: llega sin línea, con la reserva para el editor", async (_caso, datos, servicios) => {
+    const { status, data } = await llegar(sesiones.dueña, deLaAgenda("cita-agenda", datos), servicios)
+
+    expect(status).toBe(201)
+    expect(data.lineas).toEqual([])
+    expect(data.reserva).toMatchObject({ titulo: datos.title, profesional: { id: "m-carla", nombre: "Carla Profesional" } })
+  })
+})
+
+describe("POST /api/atenciones con { citaId }: sólo reservas de hoy", () => {
+  const URL = "http://localhost/api/atenciones"
+  const AHORA = hoyA("15:00")
+  const aHoras = (horas: number) => new Date(AHORA.getTime() + horas * 60 * 60 * 1000)
+
+  async function llegarA(startTime: Date) {
+    const { POST } = await import("./route")
+    base.reiniciar({
+      ...datosBase(),
+      appointment: [
+        { id: "cita", businessId: NEGOCIO, customerId: "c-maria", memberId: "m-carla", serviceId: "s-corte", title: "Corte", status: "confirmada", startTime, endTime: new Date(startTime.getTime() + 30 * 60_000) },
+      ],
+    })
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const res = await POST(pedido(URL, { citaId: "cita" }))
+    return { status: res.status, data: await res.json() }
+  }
+
+  it.each([
+    ["a más de 24 horas hacia adelante", 25],
+    ["pasado mañana", 48],
+    ["a más de 24 horas hacia atrás", -25],
+  ])("una reserva %s da 409 con un mensaje claro, y no crea nada", async (_caso, horas) => {
+    const { status, data } = await llegarA(aHoras(horas))
+
+    expect(status).toBe(409)
+    expect(data.error).toBe("Esta reserva no es de hoy: sólo se marca la llegada de las reservas del día.")
+    expect(base.buscar("visit")).toEqual([])
+  })
+
+  it.each([
+    ["que todavía no empieza", 23],
+    ["atrasada", -23],
+  ])("una reserva de hoy %s llega", async (_caso, horas) => {
+    const { status } = await llegarA(aHoras(horas))
+
+    expect(status).toBe(201)
+  })
+})
+
 describe("POST /api/atenciones sin reserva", () => {
   const URL = "http://localhost/api/atenciones"
 
@@ -391,11 +584,14 @@ describe("POST /api/atenciones sin reserva", () => {
     const [cliente] = base.buscar("customer", { name: "Daniela Ruiz" })
     expect(cliente).toMatchObject({ businessId: NEGOCIO, phone: "+56 9 5555 5555" })
     expect(data).toMatchObject({ estado: "en-espera", cliente: { id: cliente.id, nombre: "Daniela Ruiz" }, notas: "Primera vez" })
+    // En la base, en centavos.
     expect(base.buscar("visitService", { visitId: data.id })).toEqual([
-      expect.objectContaining({ serviceName: "Corte", memberId: "m-pedro", byOwner: false, professionalName: "Pedro Profesional", price: 7500 }),
+      expect.objectContaining({ serviceName: "Corte", memberId: "m-pedro", byOwner: false, professionalName: "Pedro Profesional", priceCents: centavos(7500) }),
       // Sin precio en el cuerpo, el del catálogo. La dueña va con `byOwner` y sin memberId.
-      expect.objectContaining({ serviceName: "Color", memberId: null, byOwner: true, professionalName: "Ana Dueña", price: 25000 }),
+      expect.objectContaining({ serviceName: "Color", memberId: null, byOwner: true, professionalName: "Ana Dueña", priceCents: centavos(25000) }),
     ])
+    // Por la API, en unidades.
+    expect(data.lineas.map((l: { precio: number }) => l.precio)).toEqual([7500, 25000])
   })
 
   it("con un cliente existente del negocio", async () => {
@@ -497,6 +693,38 @@ describe("POST /api/atenciones sin reserva", () => {
     expect(res.status).toBe(400)
   })
 
+  it("una línea nueva con un servicio que ya no se ofrece da 400 y no crea nada", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const antes = base.volcado()
+
+    const res = await POST(pedido(URL, { clienteNuevo: { nombre: "Daniela Ruiz" }, lineas: [{ servicioId: "s-viejo", profesional: "m-carla" }] }))
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe("«Alisado» ya no se ofrece: elige otro servicio.")
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("si el total no cabe, 400 y no crea nada, aunque cada precio sea válido", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const antes = base.volcado()
+
+    const res = await POST(
+      pedido(URL, {
+        clienteNuevo: { nombre: "Daniela Ruiz" },
+        lineas: [
+          { servicioId: "s-color", profesional: "m-carla", precio: 20_000_000 },
+          { servicioId: "s-corte", profesional: "m-pedro", precio: 0.01 },
+        ],
+      })
+    )
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/no puede pasar de \$20\.000\.000/)
+    expect(base.volcado()).toEqual(antes)
+  })
+
   it("un servicio sin precio en el catálogo pide el precio en vez de inventar un cero", async () => {
     const { POST } = await import("./route")
     mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
@@ -516,6 +744,8 @@ describe("POST /api/atenciones sin reserva", () => {
     ["con cliente existente y nuevo a la vez", { clienteId: "c-beto", clienteNuevo: { nombre: "Daniela" } }],
     ["con un precio negativo", { clienteId: "c-beto", lineas: [{ servicioId: "s-corte", profesional: "m-carla", precio: -1 }] }],
     ["con un precio de tres decimales", { clienteId: "c-beto", lineas: [{ servicioId: "s-corte", profesional: "m-carla", precio: 10.005 }] }],
+    ["con un precio por encima del tope", { clienteId: "c-beto", lineas: [{ servicioId: "s-corte", profesional: "m-carla", precio: 20_000_000.01 }] }],
+    ["con más de 20 líneas", { clienteId: "c-beto", lineas: Array.from({ length: 21 }, () => ({ servicioId: "s-corte", profesional: "m-carla" })) }],
     ["sin cuerpo", undefined],
   ])("%s responde 400", async (_caso, cuerpo) => {
     const { POST } = await import("./route")

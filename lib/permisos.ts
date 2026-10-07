@@ -124,6 +124,42 @@ export const puedeCobrar = gestionaElNegocio
 export const puedeAnotarSinReserva = (actor: Actor | null): boolean =>
   gestionaElNegocio(actor) || !!actor?.memberId
 
+/**
+ * Deshacer una llegada marcada por error: la atención en espera se borra y la
+ * reserva vuelve a "Reservas de hoy". Lo hace quien ve la atención
+ * (`whereDeAtenciones`): dueño y encargado, cualquiera; el profesional, la que
+ * nació de su cita o tiene una línea suya. Como en `puedeAnotarSinReserva`,
+ * un profesional sin `memberId` no puede: no hay atención que sea suya.
+ */
+export const puedeDeshacerLlegada = (actor: Actor | null): boolean =>
+  gestionaElNegocio(actor) || !!actor?.memberId
+
+/**
+ * El historial de lo anulado: totales y pagos de atenciones que dejaron de
+ * sumar, y quién las anuló. Es facturación del negocio, así que lo ve quien
+ * ve los ingresos.
+ */
+export const puedeVerAnuladas = puedeVerIngresosDelNegocio
+
+/** Cita sobre la que se decide algo, ya leída. */
+export interface CitaDelNegocio {
+  businessId: string
+  memberId: string | null
+}
+
+/**
+ * Si el actor ve una cita que llegó por otro camino que una consulta de
+ * agenda (la reserva de la que nació una atención). La misma regla que
+ * `whereDeAgenda`: dueño y encargado, todas las del negocio; el profesional,
+ * sólo las suyas. Un profesional ve la atención de la cita de un colega si
+ * tiene una línea en ella, y eso no le abre la cita del colega.
+ */
+export const puedeVerCita = (actor: Actor | null, cita: CitaDelNegocio): boolean => {
+  if (!mismoNegocio(actor, cita.businessId)) return false
+  if (puedeVerTodaLaAgenda(actor)) return true
+  return !!actor?.memberId && actor.memberId === cita.memberId
+}
+
 /** Atención sobre la que se decide algo. Trae su negocio para poder validarlo. */
 export interface AtencionDelNegocio {
   businessId: string

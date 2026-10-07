@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { crearBaseFalsa } from "../../_pruebas/base-falsa"
-import { NEGOCIO, OTRO_NEGOCIO, atencion, conId, datosBase, linea, pedido, sesiones } from "../../_pruebas/datos"
+import { NEGOCIO, OTRO_NEGOCIO, atencion, centavos, conId, datosBase, linea, pedido, sesiones } from "../../_pruebas/datos"
 
 const mockGetServerSession = vi.fn()
 
@@ -45,7 +45,7 @@ function escenario() {
         readyAt: new Date("2026-10-06T14:40:00.000Z"),
       }),
       atencion("v-pedro"),
-      atencion("v-cobrada", { status: "finalizada", paidAt: new Date(), total: 8000 }),
+      atencion("v-cobrada", { status: "finalizada", paidAt: new Date(), totalCents: centavos(8000) }),
       atencion("v-ajena", { businessId: OTRO_NEGOCIO, customerId: "c-ajeno" }),
     ],
     visitService: [

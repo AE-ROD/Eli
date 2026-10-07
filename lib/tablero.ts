@@ -2,9 +2,19 @@ import { NextResponse } from "next/server"
 import type { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { deCentavos, idDeProfesional, totalEnCentavos } from "@/lib/atenciones"
+import {
+  MAXIMO_DE_LINEAS_POR_ATENCION,
+  MAXIMO_DE_PAGOS,
+  deCentavos,
+  errorDeCantidadDeLineas,
+  errorDeTotal,
+  idDeProfesional,
+  totalEnCentavos,
+  type LineaDeAtencion,
+} from "@/lib/atenciones"
 import { nombreDeMedio } from "@/lib/medios-de-pago"
 import {
+  puedeVerCita,
   puedeVerTodoElTablero,
   whereDeAtenciones,
   whereDeLineas,
@@ -108,27 +118,58 @@ const SELECCION_DE_LINEA = {
   memberId: true,
   byOwner: true,
   professionalName: true,
-  price: true,
+  priceCents: true,
 } satisfies Prisma.VisitServiceSelect
 
 const SELECCION_DE_PAGO = {
   id: true,
   method: true,
-  amount: true,
+  amountCents: true,
 } satisfies Prisma.VisitPaymentSelect
 
 /**
- * Tope de líneas y de pagos que se leen de una atención. Son pocos (cada
- * pedido trae hasta 20), pero todo listado lleva `take`, y el mismo tope rige
- * en todas las lecturas para que el total que se muestra y el que se cobra
- * salgan de las mismas líneas.
+ * Las líneas y los pagos de una atención que ve el actor. Pasan por
+ * `lib/permisos.ts`: al profesional la base ni siquiera le devuelve las
+ * líneas de otros ni un solo pago. Los `take` son los topes de
+ * `lib/atenciones.ts`, que se validan al escribir: una atención nunca tiene
+ * más, así que leer con ellos trae todo y el total que se muestra sale de las
+ * mismas líneas que se cobran.
  */
-export const TOPE_POR_ATENCION = 100
+function lineasQueVe(actor: Actor) {
+  return {
+    where: whereDeLineas(actor),
+    select: SELECCION_DE_LINEA,
+    orderBy: { id: "asc" },
+    take: MAXIMO_DE_LINEAS_POR_ATENCION,
+  } satisfies Prisma.Visit$servicesArgs
+}
+
+function pagosQueVe(actor: Actor) {
+  return {
+    where: whereDePagos(actor),
+    select: SELECCION_DE_PAGO,
+    orderBy: { createdAt: "asc" },
+    take: MAXIMO_DE_PAGOS,
+  } satisfies Prisma.Visit$paymentsArgs
+}
+
+/** De la reserva de origen, lo que precarga el editor cuando la atención todavía no tiene líneas. */
+const SELECCION_DE_RESERVA = {
+  businessId: true,
+  memberId: true,
+  serviceId: true,
+  title: true,
+  price: true,
+  member: { select: { id: true, user: { select: { name: true } } } },
+} satisfies Prisma.AppointmentSelect
 
 /**
- * Qué se lee de una atención según quién mira. Las líneas y los pagos pasan
- * por `lib/permisos.ts`: al profesional la base ni siquiera le devuelve las
- * líneas de otros ni un solo pago.
+ * Qué se lee de una atención según quién mira, para el tablero.
+ *
+ * `totalCents` sólo se le pide a la base para quien puede verlo: al
+ * profesional no le viaja, y así tampoco sale de la base. Prisma lo tipa como
+ * presente igual (un `select` con `boolean` no se distingue de uno con
+ * `true`); lo lee sólo código que ya preguntó `puedeVerTodoElTablero`.
  */
 export function seleccionDeAtencion(actor: Actor) {
   return {
@@ -144,25 +185,37 @@ export function seleccionDeAtencion(actor: Actor) {
     paidAt: true,
     voidedAt: true,
     voidReason: true,
-    total: true,
-    services: {
-      where: whereDeLineas(actor),
-      select: SELECCION_DE_LINEA,
-      orderBy: { id: "asc" },
-      take: TOPE_POR_ATENCION,
-    },
-    payments: {
-      where: whereDePagos(actor),
-      select: SELECCION_DE_PAGO,
-      orderBy: { createdAt: "asc" },
-      take: TOPE_POR_ATENCION,
-    },
+    totalCents: puedeVerTodoElTablero(actor),
+    services: lineasQueVe(actor),
+    payments: pagosQueVe(actor),
+    appointment: { select: SELECCION_DE_RESERVA },
+  } satisfies Prisma.VisitSelect
+}
+
+/**
+ * Lo que leen los reportes, de lo cobrado y de lo anulado: lo mismo que el
+ * tablero salvo la reserva de origen, que el historial no muestra y que en un
+ * período largo serían miles de lecturas de más.
+ */
+export function seleccionParaReporte(actor: Actor) {
+  return {
+    id: true,
+    customerId: true,
+    customerName: true,
+    paidAt: true,
+    voidedAt: true,
+    voidReason: true,
+    voidedById: true,
+    totalCents: puedeVerTodoElTablero(actor),
+    services: lineasQueVe(actor),
+    payments: pagosQueVe(actor),
   } satisfies Prisma.VisitSelect
 }
 
 type AtencionLeida = Prisma.VisitGetPayload<{ select: ReturnType<typeof seleccionDeAtencion> }>
 type LineaLeida = AtencionLeida["services"][number]
 type PagoLeido = AtencionLeida["payments"][number]
+type ReservaLeida = NonNullable<AtencionLeida["appointment"]>
 
 /**
  * Toma la atención para escribirla, sólo si sigue en `estado`, y le aplica
@@ -173,17 +226,58 @@ type PagoLeido = AtencionLeida["payments"][number]
  *   líneas de una atención mientras se la cobra.
  * - Si otro la movió entretanto, no matchea: se responde 409 en vez de pisar
  *   lo que hizo, y lo que se valide después se valida sobre lo último.
+ * - Acota por el negocio del actor, no sólo por el id. Hoy cada endpoint
+ *   llega acá con un id que ya verificó con `whereDeAtenciones`, pero una
+ *   escritura no puede depender de que el llamador se acuerde: si alguna vez
+ *   llega un id ajeno, no matchea y no se escribe nada en otro negocio.
  */
 export async function tomarAtencion(
   tx: Prisma.TransactionClient,
+  actor: Actor,
   id: string,
   estado: string,
   datos: Prisma.VisitUpdateManyMutationInput
 ): Promise<void> {
-  const { count } = await tx.visit.updateMany({ where: { id, status: estado }, data: datos })
+  const { count } = await tx.visit.updateMany({
+    where: { id, businessId: actor.businessId, status: estado },
+    data: datos,
+  })
   if (count === 0) {
     throw new ErrorDeAtencion(409, "La atención cambió mientras tanto: vuelve a cargar el tablero.")
   }
+}
+
+/** La línea como la leen las reglas de `lib/atenciones.ts`, que hablan en unidades. */
+function paraReglas(linea: { memberId: string | null; byOwner: boolean; priceCents: number }): LineaDeAtencion {
+  return { memberId: linea.memberId, byOwner: linea.byOwner, price: deCentavos(linea.priceCents) }
+}
+
+/**
+ * Las líneas de una atención para validarla, con su total en centavos. Todas,
+ * no sólo las que ve el actor: un requisito o un tope se cumple o no sobre la
+ * atención entera. Va dentro de la transacción y después de `tomarAtencion`,
+ * para que nadie las cambie en el medio.
+ *
+ * Primero se cuentan, y si pasan del tope es un 400. Leerlas con `take` y
+ * seguir habría validado (y al cobrar, congelado) el total de una parte.
+ * Después se mira que el total quepa en la columna (`TOTAL_MAXIMO_CENTAVOS`).
+ */
+export async function lineasDeLaAtencion(tx: Prisma.TransactionClient, actor: Actor, visitId: string) {
+  const where = { visitId, visit: { is: { businessId: actor.businessId } } } satisfies Prisma.VisitServiceWhereInput
+
+  const demasiadas = errorDeCantidadDeLineas(await tx.visitService.count({ where }))
+  if (demasiadas) throw new ErrorDeAtencion(400, demasiadas)
+
+  const lineas = await tx.visitService.findMany({
+    where,
+    select: { memberId: true, byOwner: true, priceCents: true },
+    take: MAXIMO_DE_LINEAS_POR_ATENCION,
+  })
+  const totalCentavos = totalEnCentavos(lineas)
+  const excedido = errorDeTotal(totalCentavos)
+  if (excedido) throw new ErrorDeAtencion(400, excedido)
+
+  return { lineas: lineas.map(paraReglas), totalCentavos }
 }
 
 /**
@@ -204,6 +298,7 @@ export async function leerAtencion(db: Prisma.TransactionClient, actor: Actor, i
 
 // ─── Cómo viaja ──────────────────────────────────────────────────────────────
 
+/** En la base va en centavos; por la API, en unidades con hasta dos decimales. */
 export function formatearLinea(linea: LineaLeida) {
   return {
     id: linea.id,
@@ -211,12 +306,45 @@ export function formatearLinea(linea: LineaLeida) {
     servicio: linea.serviceName,
     // `id` en null: quien la hizo ya no está en el equipo (el nombre quedó copiado).
     profesional: { id: idDeProfesional(linea), nombre: linea.professionalName },
-    precio: linea.price,
+    precio: deCentavos(linea.priceCents),
   }
 }
 
 export function formatearPago(pago: PagoLeido) {
-  return { id: pago.id, medio: pago.method, nombreMedio: nombreDeMedio(pago.method), monto: pago.amount }
+  return {
+    id: pago.id,
+    medio: pago.method,
+    nombreMedio: nombreDeMedio(pago.method),
+    monto: deCentavos(pago.amountCents),
+  }
+}
+
+/**
+ * El total que ve dueño o encargado, en unidades: el congelado al cobrar, o
+ * mientras está abierta, la suma viva de sus líneas.
+ */
+export function totalVisible(atencion: { totalCents: number | null; services: readonly { priceCents: number }[] }) {
+  return deCentavos(atencion.totalCents ?? totalEnCentavos(atencion.services))
+}
+
+/**
+ * De qué reserva nació la atención, para que el editor precargue el servicio
+ * cuando todavía no hay líneas: la llegada no siempre puede armar la línea
+ * sola (una cita sin profesional, o con un servicio escrito que no está en el
+ * catálogo). `servicioId` es el de la cita, que puede ya no estar activo.
+ *
+ * `null` si no nació de una cita, si la cita se borró, o si el actor no ve
+ * esa cita: un profesional ve la atención de la cita de un colega cuando
+ * tiene una línea en ella, y eso no le muestra la agenda del colega.
+ */
+function reservaDe(actor: Actor, cita: ReservaLeida | null) {
+  if (!cita || !puedeVerCita(actor, cita)) return null
+  return {
+    servicioId: cita.serviceId,
+    titulo: cita.title,
+    precio: cita.price,
+    profesional: cita.member ? { id: cita.member.id, nombre: cita.member.user.name } : null,
+  }
 }
 
 /**
@@ -231,6 +359,7 @@ export function formatearAtencion(actor: Actor, atencion: AtencionLeida) {
     estado: atencion.status,
     cliente: { id: atencion.customerId, nombre: atencion.customerName },
     citaId: atencion.appointmentId,
+    reserva: reservaDe(actor, atencion.appointment),
     notas: atencion.notes,
     llegoEn: atencion.arrivedAt,
     empezoEn: atencion.startedAt,
@@ -245,7 +374,7 @@ export function formatearAtencion(actor: Actor, atencion: AtencionLeida) {
 
   return {
     ...visible,
-    total: atencion.total ?? deCentavos(totalEnCentavos(atencion.services)),
+    total: totalVisible(atencion),
     pagos: atencion.payments.map(formatearPago),
   }
 }

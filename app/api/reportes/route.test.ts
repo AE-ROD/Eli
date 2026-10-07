@@ -4,6 +4,7 @@ import {
   NEGOCIO,
   OTRO_NEGOCIO,
   atencion,
+  centavos,
   datosBase,
   linea,
   lineaDeLaDueña,
@@ -30,9 +31,11 @@ const reporte = (consulta = "") =>
   pedido(`http://localhost/api/reportes?${DIA}&zona=America/Santiago${consulta ? `&${consulta}` : ""}`)
 
 const pedro = { memberId: "m-pedro", professionalName: "Pedro Profesional" }
-const color = { serviceId: "s-color", serviceName: "Color", price: 25000 }
+const color = { serviceId: "s-color", serviceName: "Color", priceCents: centavos(25000) }
 const cobrada = (id: string, paidAt: string, total: number, datos: Record<string, unknown> = {}) =>
-  atencion(id, { status: "finalizada", paidAt: new Date(paidAt), total, ...datos })
+  atencion(id, { status: "finalizada", paidAt: new Date(paidAt), totalCents: centavos(total), ...datos })
+const anulada = (id: string, voidedAt: string, datos: Record<string, unknown> = {}) =>
+  atencion(id, { status: "anulada", voidedAt: new Date(voidedAt), ...datos })
 
 function escenario() {
   return {
@@ -52,7 +55,19 @@ function escenario() {
       // 22:30 del 6 en Santiago, pero ya 7 en UTC: sigue siendo noche del día 6.
       cobrada("v-casi-medianoche", "2026-10-07T01:30:00.000Z", 25000),
       cobrada("v-de-ayer", "2026-10-05T15:00:00.000Z", 8000),
-      atencion("v-anulada", { status: "anulada", paidAt: new Date("2026-10-06T16:00:00.000Z"), total: 8000 }),
+      // Se cobró a las 13:00 de Santiago y la dueña la anuló a las 15:00: no suma en lo cobrado.
+      anulada("v-anulada", "2026-10-06T18:00:00.000Z", {
+        paidAt: new Date("2026-10-06T16:00:00.000Z"),
+        totalCents: centavos(8000),
+        voidedById: "u-duena",
+        voidReason: "Cobro duplicado",
+      }),
+      // Se fue sin ser atendida: nunca se cobró.
+      anulada("v-anulada-sin-cobrar", "2026-10-06T14:00:00.000Z", { voidedById: "u-encargado", customerId: "c-beto", customerName: "Beto" }),
+      // La anuló alguien que ya no está en el equipo (hoy es de otro negocio): su nombre no se resuelve.
+      anulada("v-anulada-por-quien-se-fue", "2026-10-06T20:00:00.000Z", { voidedById: "u-ajeno" }),
+      anulada("v-anulada-ayer", "2026-10-05T20:00:00.000Z", { voidedById: "u-duena" }),
+      anulada("v-anulada-ajena", "2026-10-06T18:00:00.000Z", { businessId: OTRO_NEGOCIO, customerId: "c-ajeno", voidedById: "u-otro" }),
       atencion("v-abierta", { status: "en-atencion" }),
       cobrada("v-ajena", "2026-10-06T16:00:00.000Z", 9000, { businessId: OTRO_NEGOCIO, customerId: "c-ajeno" }),
     ],
@@ -60,13 +75,17 @@ function escenario() {
       linea("l-manana-carla", "v-manana"),
       lineaDeLaDueña("l-manana-duena", "v-manana", color),
       linea("l-tarde", "v-tarde", { ...pedro, ...color }),
-      linea("l-mediodia", "v-mediodia", { ...pedro, price: 12000 }),
+      linea("l-mediodia", "v-mediodia", { ...pedro, priceCents: centavos(12000) }),
       linea("l-noche", "v-noche", { memberId: null, professionalName: "Juan (ya no está)" }),
       linea("l-casi-medianoche", "v-casi-medianoche", color),
       linea("l-de-ayer", "v-de-ayer"),
       linea("l-anulada", "v-anulada"),
+      linea("l-anulada-sin-cobrar", "v-anulada-sin-cobrar", { ...pedro, ...color }),
+      linea("l-anulada-por-quien-se-fue", "v-anulada-por-quien-se-fue"),
+      linea("l-anulada-ayer", "v-anulada-ayer"),
+      linea("l-anulada-ajena", "v-anulada-ajena", { memberId: "m-ajeno", serviceId: "s-ajeno" }),
       linea("l-abierta", "v-abierta"),
-      linea("l-ajena", "v-ajena", { memberId: "m-ajeno", serviceId: "s-ajeno", price: 9000 }),
+      linea("l-ajena", "v-ajena", { memberId: "m-ajeno", serviceId: "s-ajeno", priceCents: centavos(9000) }),
     ],
     visitPayment: [
       pago("p-manana-1", "v-manana", "efectivo", 20000),
@@ -120,9 +139,10 @@ describe("GET /api/reportes: dueña y encargado", () => {
       cobradaEn: "2026-10-06T13:00:00.000Z",
       turno: "manana",
       cliente: { id: "c-maria", nombre: "María González" },
+      // Sin filtros de línea, todas coinciden.
       lineas: [
-        { id: "l-manana-carla", servicioId: "s-corte", servicio: "Corte", profesional: { id: "m-carla", nombre: "Carla Profesional" }, precio: 8000 },
-        { id: "l-manana-duena", servicioId: "s-color", servicio: "Color", profesional: { id: "duenio", nombre: "Ana Dueña" }, precio: 25000 },
+        { id: "l-manana-carla", servicioId: "s-corte", servicio: "Corte", profesional: { id: "m-carla", nombre: "Carla Profesional" }, precio: 8000, coincide: true },
+        { id: "l-manana-duena", servicioId: "s-color", servicio: "Color", profesional: { id: "duenio", nombre: "Ana Dueña" }, precio: 25000, coincide: true },
       ],
       total: 33000,
       pagos: [
@@ -184,6 +204,15 @@ describe("GET /api/reportes: dueña y encargado", () => {
     expect(data.resumen).toMatchObject({ ingresos: 33000, cantidad: 2, ticketPromedio: 16500 })
   })
 
+  it("lo anulado no suma, aunque se haya cobrado en el período y conserve sus pagos", async () => {
+    const { data } = await pedir(sesiones.dueña)
+
+    expect(idsDeFilas(data)).not.toContain("v-anulada")
+    // 103.000 son las cinco finalizadas: los 8.000 de la anulada no están.
+    expect(data.resumen.ingresos).toBe(103000)
+    expect(data.resumen.porMedio.find((m: { medio: string }) => m.medio === "efectivo").monto).toBe(40000)
+  })
+
   it("el turno se calcula en la zona que se pide: el cobro de las 12:00 de Santiago es de mañana en Caracas", async () => {
     const { GET } = await import("./route")
     mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
@@ -224,6 +253,154 @@ describe("GET /api/reportes: dueña y encargado", () => {
 
     expect(idsDeFilas(data)).toEqual(["v-ajena"])
     expect(data.resumen.ingresos).toBe(9000)
+  })
+})
+
+describe("GET /api/reportes: qué suma cada filtro", () => {
+  it("QA: con medio = efectivo, ingresos y por medio son sólo lo pagado en efectivo, no la atención entera", async () => {
+    const { data } = await pedir(sesiones.dueña, "medio=efectivo")
+
+    expect(idsDeFilas(data)).toEqual(["v-manana", "v-mediodia", "v-noche"])
+    // 20.000 + 12.000 + 8.000. Sumando las atenciones enteras eran 53.000:
+    // a la mañana se pagaron 13.000 con tarjeta.
+    expect(data.resumen).toEqual({
+      ingresos: 40000,
+      cantidad: 3,
+      ticketPromedio: 13333.33,
+      porMedio: [{ medio: "efectivo", nombre: "Efectivo", monto: 40000 }],
+      porProfesional: null,
+      porServicio: null,
+    })
+  })
+
+  it("QA: con profesional = Carla, ingresos y desgloses son sólo sus líneas, y por medio es null", async () => {
+    const { data } = await pedir(sesiones.dueña, "profesional=m-carla")
+
+    expect(idsDeFilas(data)).toEqual(["v-casi-medianoche", "v-manana"])
+    // 8.000 del corte y 25.000 del color. Sumando las atenciones enteras eran
+    // 58.000: a la mañana la dueña hizo un color de 25.000.
+    expect(data.resumen).toEqual({
+      ingresos: 33000,
+      cantidad: 2,
+      ticketPromedio: 16500,
+      porMedio: null,
+      porProfesional: [{ clave: "miembro:m-carla", id: "m-carla", nombre: "Carla Profesional", monto: 33000, servicios: 2 }],
+      porServicio: [
+        { clave: "servicio:s-color", id: "s-color", nombre: "Color", cantidad: 1, monto: 25000 },
+        { clave: "servicio:s-corte", id: "s-corte", nombre: "Corte", cantidad: 1, monto: 8000 },
+      ],
+    })
+  })
+
+  it("cada línea de la fila dice si cumple los filtros de línea, para resaltarla; el total y los pagos son los de la atención", async () => {
+    const { data } = await pedir(sesiones.dueña, "profesional=m-carla")
+    const manana = data.filas.find((f: { id: string }) => f.id === "v-manana")
+
+    expect(manana.lineas.map((l: { id: string; coincide: boolean }) => [l.id, l.coincide])).toEqual([
+      ["l-manana-carla", true],
+      ["l-manana-duena", false],
+    ])
+    expect(manana.total).toBe(33000)
+    expect(manana.pagos).toHaveLength(2)
+  })
+
+  it("por servicio: sólo las líneas de ese servicio, de quien las haya hecho", async () => {
+    const { data } = await pedir(sesiones.encargado, "servicio=s-color")
+
+    expect(data.resumen).toMatchObject({ ingresos: 75000, cantidad: 3, ticketPromedio: 25000, porMedio: null })
+    // Los tres hicieron un color de 25.000: a igual monto, por nombre.
+    expect(data.resumen.porProfesional.map((p: { id: string }) => p.id)).toEqual(["duenio", "m-carla", "m-pedro"])
+    const manana = data.filas.find((f: { id: string }) => f.id === "v-manana")
+    expect(manana.lineas.map((l: { coincide: boolean }) => l.coincide)).toEqual([false, true])
+  })
+
+  it("medio y profesional: el medio sólo decide qué atenciones entran; las cifras son las líneas", async () => {
+    const { data } = await pedir(sesiones.dueña, "medio=efectivo&profesional=m-carla")
+
+    // Las tres atenciones con efectivo, pero sólo la de la mañana tiene una línea de Carla.
+    expect(idsDeFilas(data)).toEqual(["v-manana"])
+    expect(data.resumen).toMatchObject({ ingresos: 8000, cantidad: 1, ticketPromedio: 8000, porMedio: null })
+    expect(data.resumen.porProfesional).toEqual([
+      { clave: "miembro:m-carla", id: "m-carla", nombre: "Carla Profesional", monto: 8000, servicios: 1 },
+    ])
+  })
+
+  it.each([
+    ["profesional", "profesional"],
+    ["servicio", "servicio"],
+  ])("%s de más de 64 caracteres da 400; de 64, no", async (_caso, parametro) => {
+    const largo = await pedir(sesiones.dueña, `${parametro}=${"x".repeat(65)}`)
+    const justo = await pedir(sesiones.dueña, `${parametro}=${"x".repeat(64)}`)
+
+    expect(largo.status).toBe(400)
+    expect(justo.status).toBe(200)
+  })
+})
+
+describe("GET /api/reportes?anuladas=1: el historial de lo anulado", () => {
+  it("la dueña ve las anuladas del período, de la más reciente a la más vieja, con quién, cuándo y por qué", async () => {
+    const { status, data } = await pedir(sesiones.dueña, "anuladas=1")
+
+    expect(status).toBe(200)
+    expect(data.filas.map((f: { id: string }) => f.id)).toEqual([
+      "v-anulada-por-quien-se-fue",
+      "v-anulada",
+      "v-anulada-sin-cobrar",
+    ])
+    expect(data).toMatchObject({ total: 3, pagina: 1, paginas: 1, truncado: false })
+    expect(data.filas[1]).toEqual({
+      id: "v-anulada",
+      anuladaEn: "2026-10-06T18:00:00.000Z",
+      motivoDeAnulacion: "Cobro duplicado",
+      anuladaPor: "Ana Dueña",
+      estabaCobrada: true,
+      cobradaEn: "2026-10-06T16:00:00.000Z",
+      cliente: { id: "c-maria", nombre: "María González" },
+      lineas: [{ id: "l-anulada", servicioId: "s-corte", servicio: "Corte", profesional: { id: "m-carla", nombre: "Carla Profesional" }, precio: 8000 }],
+      total: 8000,
+      pagos: [{ id: "p-anulada", medio: "efectivo", nombreMedio: "Efectivo", monto: 8000 }],
+    })
+  })
+
+  it("una que no se cobró: sin cobro ni pagos, con el total vivo de sus líneas; la anuló el encargado", async () => {
+    const { data } = await pedir(sesiones.dueña, "anuladas=1")
+    const sinCobrar = data.filas.find((f: { id: string }) => f.id === "v-anulada-sin-cobrar")
+
+    expect(sinCobrar).toMatchObject({ estabaCobrada: false, cobradaEn: null, total: 25000, pagos: [], anuladaPor: "Bruno Encargado" })
+  })
+
+  it("quien anuló se busca sólo dentro del negocio: si ya no está, null", async () => {
+    const { data } = await pedir(sesiones.dueña, "anuladas=1")
+    const porQuienSeFue = data.filas.find((f: { id: string }) => f.id === "v-anulada-por-quien-se-fue")
+
+    // `u-ajeno` existe y se llama "Carla Profesional", pero es del otro negocio.
+    expect(porQuienSeFue.anuladaPor).toBeNull()
+  })
+
+  it("el resumen: cuántas se anularon y cuánto de eso estaba cobrado", async () => {
+    const { data } = await pedir(sesiones.encargado, "anuladas=1")
+
+    expect(data.resumen).toEqual({ cantidad: 3, montoAnulado: 8000 })
+  })
+
+  it("el otro negocio ve sólo las suyas", async () => {
+    const { data } = await pedir(sesiones.dueñoAjeno, "anuladas=1")
+
+    expect(data.filas.map((f: { id: string }) => f.id)).toEqual(["v-anulada-ajena"])
+    expect(data.filas[0].anuladaPor).toBe("Otro Dueño")
+  })
+
+  it("la profesional no lo ve: 401, sin consultar nada", async () => {
+    const { status } = await pedir(sesiones.carla, "anuladas=1")
+
+    expect(status).toBe(401)
+    expect(base.prisma.visit.findMany).not.toHaveBeenCalled()
+  })
+
+  it("un valor que no es 1 da 400", async () => {
+    const { status } = await pedir(sesiones.dueña, "anuladas=si")
+
+    expect(status).toBe(400)
   })
 })
 
@@ -269,6 +446,19 @@ describe("GET /api/reportes: la profesional", () => {
     const { data } = await pedir(sesiones.carla, "medio=transferencia")
 
     expect(idsDeFilas(data)).toEqual(["v-casi-medianoche", "v-manana"])
+    // Ni las cifras cambian: siguen siendo sus líneas, con sus desgloses.
+    expect(data.resumen).toMatchObject({ ingresos: 33000, cantidad: 2 })
+    expect(data.resumen.porProfesional).toHaveLength(1)
+  })
+
+  it("con un filtro de servicio, suma sólo sus líneas de ese servicio y no ve las de nadie más", async () => {
+    const { data } = await pedir(sesiones.carla, "servicio=s-color")
+
+    expect(idsDeFilas(data)).toEqual(["v-casi-medianoche"])
+    expect(data.resumen).toMatchObject({ ingresos: 25000, cantidad: 1 })
+    expect(data.resumen).not.toHaveProperty("porMedio")
+    // De la mañana, la dueña hizo un color: no le llega ni para resaltarlo.
+    expect(JSON.stringify(data)).not.toMatch(/l-manana-duena|Ana Dueña/)
   })
 
   it("filtrar por un colega no le muestra nada del colega", async () => {

@@ -5,6 +5,9 @@ import {
   cumpleFiltros,
   esZonaHorariaValida,
   horaEn,
+  inicioDelDiaEn,
+  iniciosDeMesEn,
+  lineaCumpleFiltros,
   resumirAtenciones,
   turnoDe,
   type AtencionParaReporte,
@@ -90,7 +93,57 @@ describe("esZonaHorariaValida", () => {
   })
 })
 
+// ─── Meses en una zona ───────────────────────────────────────────────────────
+
+describe("inicioDelDiaEn", () => {
+  it("es la medianoche de ese día en la zona, como instante", () => {
+    // Octubre en Santiago es UTC-3; el 1 de septiembre de 2026, todavía UTC-4.
+    expect(inicioDelDiaEn(2026, 10, 1, "America/Santiago").toISOString()).toBe("2026-10-01T03:00:00.000Z")
+    expect(inicioDelDiaEn(2026, 9, 1, "America/Santiago").toISOString()).toBe("2026-09-01T04:00:00.000Z")
+    expect(inicioDelDiaEn(2026, 10, 1, "UTC").toISOString()).toBe("2026-10-01T00:00:00.000Z")
+    // Al este de Greenwich, el día empieza la víspera en UTC.
+    expect(inicioDelDiaEn(2026, 10, 1, "Asia/Tokyo").toISOString()).toBe("2026-09-30T15:00:00.000Z")
+  })
+
+  it("si el día empieza con un salto de hora y sus 00:00 no existen, empieza en el salto", () => {
+    // Asunción, 1 de octubre de 2023: de las 23:59:59 (UTC-4) se pasó a la 01:00 (UTC-3).
+    expect(inicioDelDiaEn(2023, 10, 1, "America/Asuncion").toISOString()).toBe("2023-10-01T04:00:00.000Z")
+  })
+
+  it("el mes 0 es diciembre del año anterior, como en Date.UTC", () => {
+    expect(inicioDelDiaEn(2027, 0, 1, "America/Santiago").toISOString()).toBe("2026-12-01T03:00:00.000Z")
+  })
+})
+
+describe("iniciosDeMesEn", () => {
+  it("el mes de ahora y el anterior, en la zona de quien mira", () => {
+    expect(iniciosDeMesEn(instante("2026-10-15T15:00:00.000Z"), "America/Santiago")).toEqual({
+      inicioMes: instante("2026-10-01T03:00:00.000Z"),
+      inicioMesAnterior: instante("2026-09-01T04:00:00.000Z"),
+    })
+  })
+
+  it("en el borde: el 30 de septiembre a las 22:30 en Santiago, en UTC ya es octubre, pero el mes sigue siendo septiembre", () => {
+    const casiOctubre = instante("2026-10-01T01:30:00.000Z")
+
+    expect(iniciosDeMesEn(casiOctubre, "America/Santiago")).toEqual({
+      inicioMes: instante("2026-09-01T04:00:00.000Z"),
+      inicioMesAnterior: instante("2026-08-01T04:00:00.000Z"),
+    })
+    expect(iniciosDeMesEn(casiOctubre, "UTC").inicioMes).toEqual(instante("2026-10-01T00:00:00.000Z"))
+  })
+
+  it("en enero, el mes anterior es diciembre del año pasado", () => {
+    expect(iniciosDeMesEn(instante("2027-01-10T12:00:00.000Z"), "America/Santiago").inicioMesAnterior).toEqual(
+      instante("2026-12-01T03:00:00.000Z")
+    )
+  })
+})
+
 // ─── Resumen y filtros ───────────────────────────────────────────────────────
+
+/** Los montos de estos escenarios se escriben en unidades; la base los guarda en centavos. */
+const c = (unidades: number) => Math.round(unidades * 100)
 
 const linea = (datos: Partial<LineaParaReporte>): LineaParaReporte => ({
   serviceId: "s-corte",
@@ -98,20 +151,48 @@ const linea = (datos: Partial<LineaParaReporte>): LineaParaReporte => ({
   memberId: "m-carla",
   byOwner: false,
   professionalName: "Carla",
-  price: 8000,
+  priceCents: c(8000),
   ...datos,
 })
 
 const atencion = (datos: Partial<AtencionParaReporte>): AtencionParaReporte => ({
   paidAt: instante("2026-10-06T13:00:00.000Z"),
-  total: 8000,
+  totalCents: c(8000),
   lineas: [linea({})],
-  pagos: [{ method: "efectivo", amount: 8000 }],
+  pagos: [{ method: "efectivo", amountCents: c(8000) }],
   ...datos,
 })
 
-describe("resumirAtenciones", () => {
-  it("sin atenciones: todo en cero y el ticket promedio en null, no en cero", () => {
+/**
+ * Las tres atenciones con que QA encontró el error: cada una mezcla
+ * profesionales, servicios o medios, así que sumarla entera con un filtro de
+ * adentro da otra cifra que sumar sólo lo filtrado.
+ */
+const mixta = atencion({
+  totalCents: c(33000),
+  lineas: [
+    linea({}),
+    linea({ memberId: null, byOwner: true, professionalName: "Ana", serviceId: "s-color", serviceName: "Color", priceCents: c(25000) }),
+  ],
+  pagos: [
+    { method: "efectivo", amountCents: c(20000) },
+    { method: "tarjeta-credito", amountCents: c(13000) },
+  ],
+})
+const dePedro = atencion({
+  totalCents: c(25000),
+  lineas: [linea({ memberId: "m-pedro", professionalName: "Pedro", serviceId: "s-color", serviceName: "Color", priceCents: c(25000) })],
+  pagos: [{ method: "transferencia", amountCents: c(25000) }],
+})
+const deCarlaConTarjeta = atencion({
+  totalCents: c(12000),
+  lineas: [linea({ priceCents: c(12000) })],
+  pagos: [{ method: "tarjeta-credito", amountCents: c(12000) }],
+})
+const periodo = [mixta, dePedro, deCarlaConTarjeta]
+
+describe("resumirAtenciones sin filtros de línea ni de medio", () => {
+  it("sin atenciones: todo en cero, el ticket promedio en null y los desgloses vacíos", () => {
     expect(resumirAtenciones([])).toEqual({
       ingresos: 0,
       cantidad: 0,
@@ -123,47 +204,59 @@ describe("resumirAtenciones", () => {
   })
 
   it("ingresos es la suma de los totales, y el ticket promedio sale de ahí", () => {
-    const resumen = resumirAtenciones([atencion({ total: 10000 }), atencion({ total: 5000 }), atencion({ total: 0.01 })])
+    const resumen = resumirAtenciones([
+      atencion({ totalCents: c(10000) }),
+      atencion({ totalCents: c(5000) }),
+      atencion({ totalCents: 1 }),
+    ])
 
     expect(resumen.ingresos).toBe(15000.01)
     expect(resumen.cantidad).toBe(3)
     expect(resumen.ticketPromedio).toBe(5000)
   })
 
-  it("suma en centavos: tres pagos de 0,10 dan 0,30 justos", () => {
+  it("por medio suma todos los pagos, y por profesional y por servicio todas las líneas", () => {
+    const resumen = resumirAtenciones(periodo)
+
+    expect(resumen).toMatchObject({ ingresos: 70000, cantidad: 3 })
+    expect(resumen.porMedio).toEqual([
+      { medio: "tarjeta-credito", nombre: "Tarjeta de crédito", monto: 25000 },
+      { medio: "transferencia", nombre: "Transferencia", monto: 25000 },
+      { medio: "efectivo", nombre: "Efectivo", monto: 20000 },
+    ])
+    expect(resumen.porProfesional?.map(({ id, monto }) => [id, monto])).toEqual([
+      ["duenio", 25000],
+      ["m-pedro", 25000],
+      ["m-carla", 20000],
+    ])
+    expect(resumen.porServicio?.map(({ id, monto, cantidad }) => [id, monto, cantidad])).toEqual([
+      ["s-color", 50000, 2],
+      ["s-corte", 20000, 2],
+    ])
+  })
+
+  it("suma en centavos enteros: tres pagos de 0,10 dan 0,30 justos", () => {
     const resumen = resumirAtenciones(
-      [0.1, 0.1, 0.1].map((monto) => atencion({ total: monto, pagos: [{ method: "efectivo", amount: monto }] }))
+      [10, 10, 10].map((cents) => atencion({ totalCents: cents, pagos: [{ method: "efectivo", amountCents: cents }] }))
     )
 
     expect(resumen.ingresos).toBe(0.3)
     expect(resumen.porMedio).toEqual([{ medio: "efectivo", nombre: "Efectivo", monto: 0.3 }])
   })
 
-  it("desglosa por medio de pago, de mayor a menor", () => {
-    const resumen = resumirAtenciones([
-      atencion({ total: 33000, pagos: [{ method: "efectivo", amount: 20000 }, { method: "tarjeta-credito", amount: 13000 }] }),
-      atencion({ total: 8000, pagos: [{ method: "tarjeta-credito", amount: 8000 }] }),
-    ])
-
-    expect(resumen.porMedio).toEqual([
-      { medio: "tarjeta-credito", nombre: "Tarjeta de crédito", monto: 21000 },
-      { medio: "efectivo", nombre: "Efectivo", monto: 20000 },
-    ])
-  })
-
   it("desglosa por profesional: los miembros por id, el dueño y los ex-miembros por el nombre copiado", () => {
     const resumen = resumirAtenciones([
       atencion({
         lineas: [
-          linea({ price: 8000 }),
-          linea({ memberId: null, byOwner: true, professionalName: "Ana", price: 25000 }),
-          linea({ memberId: null, professionalName: "Juan", price: 5000 }),
+          linea({ priceCents: c(8000) }),
+          linea({ memberId: null, byOwner: true, professionalName: "Ana", priceCents: c(25000) }),
+          linea({ memberId: null, professionalName: "Juan", priceCents: c(5000) }),
         ],
       }),
       // Carla se cambió el nombre: sigue siendo la misma persona (mismo id).
-      atencion({ lineas: [linea({ professionalName: "Carla P.", price: 2000 })] }),
+      atencion({ lineas: [linea({ professionalName: "Carla P.", priceCents: c(2000) })] }),
       // Un ex-miembro que se llama igual que la dueña no se suma con ella.
-      atencion({ lineas: [linea({ memberId: null, professionalName: "Ana", price: 1000 })] }),
+      atencion({ lineas: [linea({ memberId: null, professionalName: "Ana", priceCents: c(1000) })] }),
     ])
 
     expect(resumen.porProfesional).toEqual([
@@ -176,8 +269,8 @@ describe("resumirAtenciones", () => {
 
   it("desglosa por servicio con cantidad y monto; uno que ya no está en el catálogo se agrupa por su nombre", () => {
     const resumen = resumirAtenciones([
-      atencion({ lineas: [linea({}), linea({ serviceId: "s-color", serviceName: "Color", price: 25000 })] }),
-      atencion({ lineas: [linea({}), linea({ serviceId: null, serviceName: "Alisado viejo", price: 30000 })] }),
+      atencion({ lineas: [linea({}), linea({ serviceId: "s-color", serviceName: "Color", priceCents: c(25000) })] }),
+      atencion({ lineas: [linea({}), linea({ serviceId: null, serviceName: "Alisado viejo", priceCents: c(30000) })] }),
     ])
 
     expect(resumen.porServicio).toEqual([
@@ -188,46 +281,164 @@ describe("resumirAtenciones", () => {
   })
 })
 
+describe("resumirAtenciones con filtros de línea (profesional, servicio)", () => {
+  it("profesional: ingresos son sólo sus líneas, no la atención entera", () => {
+    // QA: con "Profesional = Carla" aparecían las líneas de la dueña.
+    const resumen = resumirAtenciones([mixta, deCarlaConTarjeta], { profesional: "m-carla" })
+
+    expect(resumen.ingresos).toBe(20000) // 8.000 + 12.000; la atención mixta entera eran 33.000
+    expect(resumen.cantidad).toBe(2)
+    expect(resumen.ticketPromedio).toBe(10000)
+    expect(resumen.porProfesional).toEqual([
+      { clave: "miembro:m-carla", id: "m-carla", nombre: "Carla", monto: 20000, servicios: 2 },
+    ])
+    expect(resumen.porServicio).toEqual([
+      { clave: "servicio:s-corte", id: "s-corte", nombre: "Corte", cantidad: 2, monto: 20000 },
+    ])
+  })
+
+  it("por medio es null: un pago no se puede atribuir a una línea", () => {
+    expect(resumirAtenciones(periodo, { profesional: "m-carla" }).porMedio).toBeNull()
+    expect(resumirAtenciones(periodo, { servicio: "s-color" }).porMedio).toBeNull()
+  })
+
+  it("servicio: sólo las líneas de ese servicio, de quien sea", () => {
+    const resumen = resumirAtenciones(periodo, { servicio: "s-color" })
+
+    expect(resumen).toMatchObject({ ingresos: 50000, cantidad: 2, ticketPromedio: 25000 })
+    expect(resumen.porProfesional?.map(({ id }) => id)).toEqual(["duenio", "m-pedro"])
+  })
+
+  it("profesional y servicio a la vez: la línea tiene que cumplir los dos", () => {
+    expect(resumirAtenciones(periodo, { profesional: "duenio", servicio: "s-color" })).toMatchObject({
+      ingresos: 25000,
+      cantidad: 1,
+    })
+    expect(resumirAtenciones(periodo, { profesional: "m-carla", servicio: "s-color" })).toMatchObject({
+      ingresos: 0,
+      cantidad: 0,
+      ticketPromedio: null,
+      porProfesional: [],
+      porServicio: [],
+    })
+  })
+
+  it("cantidad son las atenciones con al menos una línea que cumple, aunque tengan varias", () => {
+    const dosDeCarla = atencion({ lineas: [linea({}), linea({ priceCents: c(2000) })] })
+
+    expect(resumirAtenciones([dosDeCarla, dePedro], { profesional: "m-carla" })).toMatchObject({
+      ingresos: 10000,
+      cantidad: 1,
+      ticketPromedio: 10000,
+    })
+  })
+
+  it("con medio además: el medio no cambia las cifras, que salen de las líneas", () => {
+    const resumen = resumirAtenciones([mixta], { profesional: "m-carla", medio: "efectivo" })
+
+    expect(resumen).toMatchObject({ ingresos: 8000, cantidad: 1, porMedio: null })
+    expect(resumen.porProfesional).toHaveLength(1)
+  })
+})
+
+describe("resumirAtenciones con medio de pago y sin filtros de línea", () => {
+  it("ingresos son sólo los pagos de ese medio, no el total de la atención", () => {
+    // QA: con "Medio = Efectivo" sumaba también lo pagado con tarjeta.
+    const resumen = resumirAtenciones([mixta], { medio: "efectivo" })
+
+    expect(resumen.ingresos).toBe(20000) // la atención eran 33.000: 13.000 fueron con tarjeta
+    expect(resumen.cantidad).toBe(1)
+    expect(resumen.ticketPromedio).toBe(20000)
+    expect(resumen.porMedio).toEqual([{ medio: "efectivo", nombre: "Efectivo", monto: 20000 }])
+  })
+
+  it("cuentan sólo las atenciones con al menos un pago de ese medio", () => {
+    const resumen = resumirAtenciones(periodo, { medio: "tarjeta-credito" })
+
+    expect(resumen).toMatchObject({ ingresos: 25000, cantidad: 2, ticketPromedio: 12500 })
+    expect(resumen.porMedio).toEqual([{ medio: "tarjeta-credito", nombre: "Tarjeta de crédito", monto: 25000 }])
+  })
+
+  it("por profesional y por servicio son null: lo pagado con un medio no se reparte entre las líneas", () => {
+    const resumen = resumirAtenciones(periodo, { medio: "efectivo" })
+
+    expect(resumen.porProfesional).toBeNull()
+    expect(resumen.porServicio).toBeNull()
+  })
+
+  it("sin atenciones con ese medio: cero, sin ticket y el desglose vacío", () => {
+    expect(resumirAtenciones(periodo, { medio: "billetera-digital" })).toEqual({
+      ingresos: 0,
+      cantidad: 0,
+      ticketPromedio: null,
+      porMedio: [],
+      porProfesional: null,
+      porServicio: null,
+    })
+  })
+})
+
+describe("lineaCumpleFiltros", () => {
+  const color = linea({ memberId: "m-pedro", serviceId: "s-color" })
+
+  it("sin filtros de línea, toda línea cumple", () => {
+    expect(lineaCumpleFiltros(color, {})).toBe(true)
+  })
+
+  it("con filtros, tiene que cumplirlos todos", () => {
+    expect(lineaCumpleFiltros(color, { profesional: "m-pedro" })).toBe(true)
+    expect(lineaCumpleFiltros(color, { servicio: "s-color" })).toBe(true)
+    expect(lineaCumpleFiltros(color, { profesional: "m-pedro", servicio: "s-color" })).toBe(true)
+    expect(lineaCumpleFiltros(color, { profesional: "m-pedro", servicio: "s-corte" })).toBe(false)
+    expect(lineaCumpleFiltros(color, { profesional: "m-carla" })).toBe(false)
+  })
+
+  it("el dueño se filtra como `duenio`, y un ex-miembro no coincide con nadie", () => {
+    expect(lineaCumpleFiltros(linea({ memberId: null, byOwner: true }), { profesional: "duenio" })).toBe(true)
+    expect(lineaCumpleFiltros(linea({ memberId: null }), { profesional: "duenio" })).toBe(false)
+  })
+})
+
 describe("cumpleFiltros", () => {
   const zona = "America/Santiago"
-  const mixta = atencion({
+  const variada = atencion({
     paidAt: instante("2026-10-06T13:00:00.000Z"), // 10:00 en Santiago
     lineas: [
       linea({}),
       linea({ memberId: "m-pedro", professionalName: "Pedro", serviceId: "s-color", serviceName: "Color" }),
       linea({ memberId: null, byOwner: true, professionalName: "Ana", serviceId: "s-color", serviceName: "Color" }),
     ],
-    pagos: [{ method: "transferencia", amount: 41000 }],
+    pagos: [{ method: "transferencia", amountCents: c(41000) }],
   })
 
   it("sin filtros, entra", () => {
-    expect(cumpleFiltros(mixta, { zona })).toBe(true)
+    expect(cumpleFiltros(variada, { zona })).toBe(true)
   })
 
   it("por turno, en la zona dada", () => {
-    expect(cumpleFiltros(mixta, { zona, turno: "manana" })).toBe(true)
-    expect(cumpleFiltros(mixta, { zona, turno: "tarde" })).toBe(false)
+    expect(cumpleFiltros(variada, { zona, turno: "manana" })).toBe(true)
+    expect(cumpleFiltros(variada, { zona, turno: "tarde" })).toBe(false)
     // En Tokio las 13:00 UTC son las 22:00.
-    expect(cumpleFiltros(mixta, { zona: "Asia/Tokyo", turno: "noche" })).toBe(true)
+    expect(cumpleFiltros(variada, { zona: "Asia/Tokyo", turno: "noche" })).toBe(true)
   })
 
   it("por profesional: un miembro o el dueño", () => {
-    expect(cumpleFiltros(mixta, { zona, profesional: "m-pedro" })).toBe(true)
-    expect(cumpleFiltros(mixta, { zona, profesional: "duenio" })).toBe(true)
-    expect(cumpleFiltros(mixta, { zona, profesional: "m-otro" })).toBe(false)
+    expect(cumpleFiltros(variada, { zona, profesional: "m-pedro" })).toBe(true)
+    expect(cumpleFiltros(variada, { zona, profesional: "duenio" })).toBe(true)
+    expect(cumpleFiltros(variada, { zona, profesional: "m-otro" })).toBe(false)
   })
 
   it("por servicio y por medio", () => {
-    expect(cumpleFiltros(mixta, { zona, servicio: "s-color" })).toBe(true)
-    expect(cumpleFiltros(mixta, { zona, servicio: "s-peinado" })).toBe(false)
-    expect(cumpleFiltros(mixta, { zona, medio: "transferencia" })).toBe(true)
-    expect(cumpleFiltros(mixta, { zona, medio: "efectivo" })).toBe(false)
+    expect(cumpleFiltros(variada, { zona, servicio: "s-color" })).toBe(true)
+    expect(cumpleFiltros(variada, { zona, servicio: "s-peinado" })).toBe(false)
+    expect(cumpleFiltros(variada, { zona, medio: "transferencia" })).toBe(true)
+    expect(cumpleFiltros(variada, { zona, medio: "efectivo" })).toBe(false)
   })
 
   it("profesional y servicio se miran sobre la misma línea", () => {
-    expect(cumpleFiltros(mixta, { zona, profesional: "m-carla", servicio: "s-corte" })).toBe(true)
+    expect(cumpleFiltros(variada, { zona, profesional: "m-carla", servicio: "s-corte" })).toBe(true)
     // Carla hizo un corte y Pedro un color, pero Carla no hizo color.
-    expect(cumpleFiltros(mixta, { zona, profesional: "m-carla", servicio: "s-color" })).toBe(false)
-    expect(cumpleFiltros(mixta, { zona, profesional: "duenio", servicio: "s-color" })).toBe(true)
+    expect(cumpleFiltros(variada, { zona, profesional: "m-carla", servicio: "s-color" })).toBe(false)
+    expect(cumpleFiltros(variada, { zona, profesional: "duenio", servicio: "s-color" })).toBe(true)
   })
 })

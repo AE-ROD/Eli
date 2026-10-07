@@ -1,9 +1,15 @@
 import { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { esPrecioValido } from "@/lib/atenciones"
+import { aCentavos, errorDeTotal, esPrecioValido, mismoNombreDeServicio, totalEnCentavos } from "@/lib/atenciones"
 import { lineasPedidasSchema, resolverLineas, type LineaResuelta } from "@/lib/lineas-de-atencion"
-import { puedeVerTodoElTablero, whereDeAgenda, whereDeClientes, type Actor } from "@/lib/permisos"
+import {
+  profesionalParaLinea,
+  puedeVerTodoElTablero,
+  whereDeAgenda,
+  whereDeClientes,
+  type Actor,
+} from "@/lib/permisos"
 import { ErrorDeAtencion, formatearAtencion, nombreDeCliente, seleccionDeAtencion } from "@/lib/tablero"
 
 /**
@@ -17,6 +23,17 @@ export const ESTADOS_DE_RESERVA = ["pendiente", "confirmada", "en-progreso"]
 
 /** Si la cita ya no tiene su ficha de cliente, la atención igual necesita un nombre que mostrar. */
 const CLIENTE_SIN_FICHA = "Cliente sin ficha"
+
+/**
+ * Cuán lejos de ahora puede estar una reserva para marcar que llegó: 24 horas
+ * hacia atrás o hacia adelante. El servidor no sabe en qué huso está el local,
+ * así que no puede decir "hoy" con el calendario. Con 24 horas a cada lado
+ * caben las reservas de hoy en cualquier huso (salvo los extremos del día de
+ * 25 horas del cambio de hora), y una de pasado mañana o de la semana pasada,
+ * que es un clic en la tarjeta equivocada, no. Una de mañana temprano puede
+ * caber: para cortar justo en la medianoche haría falta la zona de quien mira.
+ */
+const VENTANA_DE_LLEGADA_MS = 24 * 60 * 60 * 1000
 
 export const llegadaConReservaSchema = z.object({
   citaId: z.string().min(1),
@@ -41,35 +58,88 @@ export const llegadaSinReservaSchema = z
 
 export type LlegadaSinReserva = z.infer<typeof llegadaSinReservaSchema>
 
-/**
- * La línea que se precarga al llegar una reserva: sólo si la cita ya dice qué
- * servicio, quién lo hace y cuánto cuesta. Si falta el precio no se inventa
- * un cero, que se cobraría como cortesía sin que nadie lo decidiera.
- */
-function lineaDeLaReserva(cita: {
+interface CitaQueLlega {
+  title: string
+  price: number | null
   serviceId: string | null
   memberId: string | null
-  price: number | null
-  service: { name: string; price: number | null } | null
+  service: { id: string; name: string; price: number | null; active: boolean } | null
   member: { user: { name: string } } | null
-}): LineaResuelta | null {
-  if (!cita.serviceId || !cita.memberId || !cita.service || !cita.member) return null
-  const precio = cita.price ?? cita.service.price
+}
+
+/**
+ * El servicio de la reserva. Si la cita lo guarda por id (la reserva
+ * pública), ése, mientras siga activo: una línea nueva no puede ser de un
+ * servicio que ya no se ofrece. Si no (la agenda guarda el servicio como
+ * texto en `title`), el servicio activo del negocio que se llama igual; si
+ * hay dos con ese nombre no se adivina cuál.
+ */
+async function servicioDeLaReserva(actor: Actor, cita: CitaQueLlega) {
+  if (cita.serviceId) return cita.service?.active ? cita.service : null
+
+  const activos = await prisma.service.findMany({
+    where: { businessId: actor.businessId, active: true },
+    select: { id: true, name: true, price: true },
+    orderBy: { name: "asc" },
+    take: 200,
+  })
+  const conEseNombre = activos.filter((servicio) => mismoNombreDeServicio(servicio.name, cita.title))
+  return conEseNombre.length === 1 ? conEseNombre[0] : null
+}
+
+/**
+ * La línea que se precarga al llegar una reserva, o `null` si la reserva no
+ * dice lo suficiente:
+ *
+ * - El servicio, como lo encuentra `servicioDeLaReserva`.
+ * - Quién lo hace: el profesional de la cita, o quien marca la llegada si es
+ *   profesional (`profesionalParaLinea`, la misma regla que al anotar). Si
+ *   queda sin nadie (dueño o encargado con una cita sin asignar), no se
+ *   precarga: toda línea nace con su profesional, y el editor se abre con la
+ *   reserva (`reserva` en la atención) para que alguien diga quién.
+ * - El precio de la cita o, si no tiene, el del catálogo. Si falta no se
+ *   inventa un cero, que se cobraría como cortesía sin que nadie lo decidiera.
+ */
+async function lineaDeLaReserva(actor: Actor, cita: CitaQueLlega): Promise<LineaResuelta | null> {
+  const { memberId } = profesionalParaLinea(actor, { memberId: cita.memberId, byOwner: false })
+  if (!memberId) return null
+
+  const servicio = await servicioDeLaReserva(actor, cita)
+  if (!servicio) return null
+
+  const precio = cita.price ?? servicio.price
   if (precio === null || !esPrecioValido(precio)) return null
+
+  // Con `whereDeAgenda`, el profesional sólo llega a sus propias citas: quien
+  // hace la línea es casi siempre el de la cita, cuyo nombre ya vino. Si no,
+  // se busca dentro del negocio.
+  const nombre =
+    memberId === cita.memberId && cita.member
+      ? cita.member.user.name
+      : (
+          await prisma.businessMember.findFirst({
+            where: { id: memberId, businessId: actor.businessId },
+            select: { user: { select: { name: true } } },
+          })
+        )?.user.name
+  if (!nombre) return null
+
   return {
-    serviceId: cita.serviceId,
-    serviceName: cita.service.name,
-    memberId: cita.memberId,
+    serviceId: servicio.id,
+    serviceName: servicio.name,
+    memberId,
     byOwner: false,
-    professionalName: cita.member.user.name,
-    price: precio,
+    professionalName: nombre,
+    priceCents: aCentavos(precio),
   }
 }
 
 /**
  * Llegó alguien con reserva: la cita pasa al tablero como atención en espera.
  * La cita tiene que ser visible para el actor (`whereDeAgenda`): una ajena da
- * 404 igual que una que no existe.
+ * 404 igual que una que no existe. Y tiene que ser de hoy
+ * (`VENTANA_DE_LLEGADA_MS`): una de otro día no está llegando, es un clic en
+ * la tarjeta equivocada.
  */
 export async function registrarLlegada(actor: Actor, usuarioId: string | null, citaId: string) {
   const cita = await prisma.appointment.findFirst({
@@ -77,12 +147,14 @@ export async function registrarLlegada(actor: Actor, usuarioId: string | null, c
     select: {
       id: true,
       status: true,
+      startTime: true,
+      title: true,
       price: true,
       serviceId: true,
       memberId: true,
       customerId: true,
       customer: { select: { name: true, lastName: true } },
-      service: { select: { name: true, price: true } },
+      service: { select: { id: true, name: true, price: true, active: true } },
       member: { select: { user: { select: { name: true } } } },
       visit: { select: { id: true } },
     },
@@ -93,8 +165,11 @@ export async function registrarLlegada(actor: Actor, usuarioId: string | null, c
   if (!ESTADOS_DE_RESERVA.includes(cita.status)) {
     throw new ErrorDeAtencion(409, "La reserva está cancelada o ya se completó")
   }
+  if (Math.abs(cita.startTime.getTime() - Date.now()) > VENTANA_DE_LLEGADA_MS) {
+    throw new ErrorDeAtencion(409, "Esta reserva no es de hoy: sólo se marca la llegada de las reservas del día.")
+  }
 
-  const linea = lineaDeLaReserva(cita)
+  const linea = await lineaDeLaReserva(actor, cita)
 
   try {
     const atencion = await prisma.visit.create({
@@ -152,6 +227,9 @@ export async function anotarSinReserva(actor: Actor, usuarioId: string | null, d
     if (!cliente) throw new ErrorDeAtencion(404, "Cliente no encontrado")
 
     const lineas = await resolverLineas(tx, actor, datos.lineas ?? [])
+    // Son todas las líneas de la atención: si su total no cabe, no se crea.
+    const excedido = errorDeTotal(totalEnCentavos(lineas))
+    if (excedido) throw new ErrorDeAtencion(400, excedido)
 
     const atencion = await tx.visit.create({
       data: {

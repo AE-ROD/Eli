@@ -4,6 +4,7 @@ import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { transicionPermitida } from "@/lib/atenciones"
+import { ESTADOS_DE_RESERVA } from "@/lib/llegadas"
 import { actorDeSesion, puedeAnular } from "@/lib/permisos"
 import {
   ErrorDeAtencion,
@@ -24,8 +25,10 @@ const anulacionSchema = z.object({
  *
  * Antes de cobrar anulan dueño y encargado; ya cobrada, sólo el dueño
  * (`puedeAnular`). Si no estaba cobrada y venía de una reserva, la cita pasa a
- * cancelada: el cliente no se atendió. Si estaba cobrada, la cita queda
- * completada, porque esa visita sí ocurrió.
+ * cancelada: el cliente no se atendió. Pero sólo si la cita seguía abierta
+ * (pendiente, confirmada o en progreso): una que alguien completó o canceló a
+ * mano en la agenda es una decisión que no se pisa. Si estaba cobrada, la
+ * cita queda completada, porque esa visita sí ocurrió.
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -54,7 +57,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const atencion = await prisma.$transaction(async (tx) => {
       // Sobre el mismo estado con que se decidió el permiso: si entretanto la
       // cobraron, el encargado ya no puede anularla y esto no matchea.
-      await tomarAtencion(tx, existente.id, existente.status, {
+      await tomarAtencion(tx, actor, existente.id, existente.status, {
         status: "anulada",
         voidedAt: new Date(),
         voidedById: session?.user?.id ?? null,
@@ -63,7 +66,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       if (existente.appointmentId && existente.status !== "finalizada") {
         await tx.appointment.updateMany({
-          where: { id: existente.appointmentId, businessId: actor.businessId },
+          where: { id: existente.appointmentId, businessId: actor.businessId, status: { in: ESTADOS_DE_RESERVA } },
           data: { status: "cancelada" },
         })
       }

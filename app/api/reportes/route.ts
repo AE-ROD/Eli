@@ -5,16 +5,24 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { deCentavos, totalEnCentavos } from "@/lib/atenciones"
 import { IDS_DE_MEDIOS_DE_PAGO } from "@/lib/medios-de-pago"
-import { actorDeSesion, puedeVerIngresosDelNegocio, whereDeAtenciones, type Actor } from "@/lib/permisos"
+import {
+  actorDeSesion,
+  puedeVerAnuladas,
+  puedeVerIngresosDelNegocio,
+  whereDeAtenciones,
+  type Actor,
+} from "@/lib/permisos"
 import {
   IDS_DE_TURNOS,
   cumpleFiltros,
   esZonaHorariaValida,
+  lineaCumpleFiltros,
   resumirAtenciones,
   turnoDe,
   type AtencionParaReporte,
+  type FiltrosDeLinea,
 } from "@/lib/reportes"
-import { formatearLinea, formatearPago, leerRango, seleccionDeAtencion } from "@/lib/tablero"
+import { formatearLinea, formatearPago, leerRango, seleccionParaReporte, totalVisible } from "@/lib/tablero"
 
 /** Un año, con margen para uno bisiesto. Más que eso se pide por partes. */
 const RANGO_MAXIMO_MS = 366 * 24 * 60 * 60 * 1000
@@ -28,13 +36,21 @@ const TOPE_DE_ATENCIONES = 5000
 
 const FILAS_POR_PAGINA = 50
 
+/**
+ * Un id de miembro o de servicio es un cuid (25 caracteres); 64 sobra y corta
+ * un parámetro absurdo antes de recorrer miles de líneas comparándolo.
+ */
+const LARGO_MAXIMO_DE_ID = 64
+
 const filtrosSchema = z.object({
   zona: z.string().refine(esZonaHorariaValida),
   turno: z.enum(IDS_DE_TURNOS).optional(),
   /** Id de miembro o `duenio`. */
-  profesional: z.string().min(1).optional(),
-  servicio: z.string().min(1).optional(),
+  profesional: z.string().min(1).max(LARGO_MAXIMO_DE_ID).optional(),
+  servicio: z.string().min(1).max(LARGO_MAXIMO_DE_ID).optional(),
   medio: z.enum(IDS_DE_MEDIOS_DE_PAGO).optional(),
+  /** `1`: en vez de lo cobrado, el historial de lo anulado en el período. */
+  anuladas: z.literal("1").optional(),
   pagina: z.coerce.number().int().min(1).default(1),
 })
 
@@ -43,13 +59,24 @@ function parametrosConValor(searchParams: URLSearchParams): Record<string, strin
   return Object.fromEntries([...searchParams.entries()].filter(([, valor]) => valor !== ""))
 }
 
+function paginar<T>(filas: readonly T[], pagina: number) {
+  return {
+    filas: filas.slice((pagina - 1) * FILAS_POR_PAGINA, pagina * FILAS_POR_PAGINA),
+    total: filas.length,
+    pagina,
+    paginas: Math.ceil(filas.length / FILAS_POR_PAGINA),
+  }
+}
+
+// ─── Lo cobrado ──────────────────────────────────────────────────────────────
+
 type AtencionLeida = Awaited<ReturnType<typeof buscarCobradas>>[number]
 
 /** Las atenciones cobradas en el período que ve el actor, de la más reciente a la más vieja. */
 function buscarCobradas(actor: Actor, desde: Date, hasta: Date) {
   return prisma.visit.findMany({
     where: whereDeAtenciones(actor, { status: "finalizada", paidAt: { gte: desde, lt: hasta } }),
-    select: seleccionDeAtencion(actor),
+    select: seleccionParaReporte(actor),
     orderBy: { paidAt: "desc" },
     take: TOPE_DE_ATENCIONES + 1,
   })
@@ -57,25 +84,107 @@ function buscarCobradas(actor: Actor, desde: Date, hasta: Date) {
 
 /**
  * La atención como entra al resumen. Para el profesional, la base ya devolvió
- * sólo sus líneas y ningún pago (`seleccionDeAtencion`), y su total es lo que
+ * sólo sus líneas y ningún pago (`seleccionParaReporte`), y su total es lo que
  * sumaron sus líneas: lo suyo, nunca el total del negocio.
  */
 function paraReporte(verNegocio: boolean, atencion: AtencionLeida, paidAt: Date): AtencionParaReporte {
   if (!verNegocio) {
-    return {
-      paidAt,
-      total: deCentavos(totalEnCentavos(atencion.services)),
-      lineas: atencion.services,
-      pagos: [],
-    }
+    return { paidAt, totalCents: totalEnCentavos(atencion.services), lineas: atencion.services, pagos: [] }
   }
   return {
     paidAt,
-    total: atencion.total ?? deCentavos(totalEnCentavos(atencion.services)),
+    totalCents: atencion.totalCents ?? totalEnCentavos(atencion.services),
     lineas: atencion.services,
     pagos: atencion.payments,
   }
 }
+
+/**
+ * Cada línea dice si cumple los filtros de línea (`coincide`), para que la
+ * pantalla resalte las que suman en el resumen. Sin filtros de línea, todas.
+ */
+function lineasDeLaFila(atencion: AtencionLeida, filtros: FiltrosDeLinea) {
+  return atencion.services.map((linea) => ({ ...formatearLinea(linea), coincide: lineaCumpleFiltros(linea, filtros) }))
+}
+
+// ─── Lo anulado ──────────────────────────────────────────────────────────────
+
+/**
+ * El nombre de quien anuló cada atención, por id de usuario. Sólo se busca
+ * dentro del negocio (su dueño y sus miembros): el id de otro negocio, o el
+ * de alguien que ya no está, no se resuelve y queda en `null`.
+ */
+async function nombresDeQuienesAnularon(actor: Actor, ids: string[]): Promise<Map<string, string>> {
+  const nombres = new Map<string, string>()
+  if (ids.length === 0) return nombres
+
+  const [negocio, miembros] = await Promise.all([
+    prisma.business.findUnique({
+      where: { id: actor.businessId },
+      select: { userId: true, user: { select: { name: true } } },
+    }),
+    prisma.businessMember.findMany({
+      where: { businessId: actor.businessId, userId: { in: ids } },
+      select: { userId: true, user: { select: { name: true } } },
+      take: ids.length,
+    }),
+  ])
+  for (const miembro of miembros) nombres.set(miembro.userId, miembro.user.name)
+  if (negocio) nombres.set(negocio.userId, negocio.user.name)
+  return nombres
+}
+
+/**
+ * El historial de lo anulado en el período (PRODUCTO.md, sección 7: lo
+ * anulado "queda en el historial como anulada"). Por fecha de anulación, de
+ * la más reciente a la más vieja. Sólo el período: los filtros de turno,
+ * profesional, servicio y medio son del reporte de lo cobrado.
+ *
+ * Estas atenciones no suman en el reporte de lo cobrado, que sólo lee las
+ * finalizadas. El resumen dice cuántas son y cuánto de lo anulado había
+ * llegado a cobrarse: lo que dejó de sumar.
+ */
+async function reporteDeAnuladas(actor: Actor, desde: Date, hasta: Date, pagina: number) {
+  const leidas = await prisma.visit.findMany({
+    where: whereDeAtenciones(actor, { status: "anulada", voidedAt: { gte: desde, lt: hasta } }),
+    select: seleccionParaReporte(actor),
+    orderBy: { voidedAt: "desc" },
+    take: TOPE_DE_ATENCIONES + 1,
+  })
+  const truncado = leidas.length > TOPE_DE_ATENCIONES
+  const anuladas = leidas.slice(0, TOPE_DE_ATENCIONES)
+
+  const ids = [...new Set(anuladas.flatMap((atencion) => (atencion.voidedById ? [atencion.voidedById] : [])))]
+  const nombres = await nombresDeQuienesAnularon(actor, ids)
+
+  // Lo cobrado se congeló en `totalCents` al cobrar: es lo que dejó de sumar.
+  const cobradas = anuladas.filter((atencion) => atencion.paidAt !== null)
+  const montoAnuladoCentavos = cobradas.reduce(
+    (suma, atencion) => suma + (atencion.totalCents ?? totalEnCentavos(atencion.services)),
+    0
+  )
+
+  const { filas, ...paginado } = paginar(anuladas, pagina)
+  return {
+    resumen: { cantidad: anuladas.length, montoAnulado: deCentavos(montoAnuladoCentavos) },
+    filas: filas.map((atencion) => ({
+      id: atencion.id,
+      anuladaEn: atencion.voidedAt,
+      motivoDeAnulacion: atencion.voidReason,
+      anuladaPor: (atencion.voidedById && nombres.get(atencion.voidedById)) || null,
+      estabaCobrada: atencion.paidAt !== null,
+      cobradaEn: atencion.paidAt,
+      cliente: { id: atencion.customerId, nombre: atencion.customerName },
+      lineas: atencion.services.map(formatearLinea),
+      total: totalVisible(atencion),
+      pagos: atencion.payments.map(formatearPago),
+    })),
+    ...paginado,
+    truncado,
+  }
+}
+
+// ─── GET ─────────────────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -103,7 +212,14 @@ export async function GET(request: NextRequest) {
       { status: 400 }
     )
   }
-  const { pagina, ...filtros } = parametros.data
+  const { pagina, anuladas, ...filtros } = parametros.data
+
+  if (anuladas) {
+    if (!puedeVerAnuladas(actor)) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+    }
+    return NextResponse.json(await reporteDeAnuladas(actor, rango.desde, rango.hasta, pagina))
+  }
 
   const verNegocio = puedeVerIngresosDelNegocio(actor)
   // El profesional no ve medios de pago: filtrar por uno le diría cómo pagó
@@ -121,29 +237,27 @@ export async function GET(request: NextRequest) {
     .filter(({ reporte }) => verNegocio || reporte.lineas.length > 0)
     .filter(({ reporte }) => cumpleFiltros(reporte, filtros))
 
-  const { porMedio, ...resumenSinMedios } = resumirAtenciones(incluidas.map(({ reporte }) => reporte))
-  const total = incluidas.length
+  const { porMedio, ...resumenSinMedios } = resumirAtenciones(
+    incluidas.map(({ reporte }) => reporte),
+    filtros
+  )
 
-  const filas = incluidas
-    .slice((pagina - 1) * FILAS_POR_PAGINA, pagina * FILAS_POR_PAGINA)
-    .map(({ atencion, reporte }) => ({
-      id: atencion.id,
-      cobradaEn: reporte.paidAt,
-      turno: turnoDe(reporte.paidAt, filtros.zona),
-      cliente: { id: atencion.customerId, nombre: atencion.customerName },
-      lineas: atencion.services.map(formatearLinea),
-      ...(verNegocio && { total: reporte.total, pagos: atencion.payments.map(formatearPago) }),
-    }))
+  const { filas, ...paginado } = paginar(incluidas, pagina)
 
   return NextResponse.json({
     // Para que la pantalla sepa cómo titular las cifras: lo del negocio, o lo
     // que sumó el profesional que mira.
     alcance: verNegocio ? "negocio" : "propio",
     resumen: verNegocio ? { ...resumenSinMedios, porMedio } : resumenSinMedios,
-    filas,
-    total,
-    pagina,
-    paginas: Math.ceil(total / FILAS_POR_PAGINA),
+    filas: filas.map(({ atencion, reporte }) => ({
+      id: atencion.id,
+      cobradaEn: reporte.paidAt,
+      turno: turnoDe(reporte.paidAt, filtros.zona),
+      cliente: { id: atencion.customerId, nombre: atencion.customerName },
+      lineas: lineasDeLaFila(atencion, filtros),
+      ...(verNegocio && { total: deCentavos(reporte.totalCents), pagos: atencion.payments.map(formatearPago) }),
+    })),
+    ...paginado,
     truncado,
   })
 }

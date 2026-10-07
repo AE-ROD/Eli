@@ -209,9 +209,15 @@ model Visit {
   paidAt        DateTime?
   voidedAt      DateTime?
   voidReason    String?
+  // En centavos enteros, como todo el dinero de estas tres tablas: un `Float`
+  // guarda 0,1 + 0,2 como 0,30000000000000004, y el cobro se compara al
+  // centavo. La API sigue hablando en unidades; se convierte en el borde
+  // (`aCentavos`/`deCentavos`). Los topes que impiden desbordar el `Int` están
+  // en `lib/atenciones.ts`.
+  //
   // Se congela al cobrar y no se recalcula nunca más. Mientras la atención
   // está abierta queda en null: el total vivo es la suma de las líneas.
-  total         Float?
+  totalCents    Int?
   // Ids de `User` SIN relación, a propósito. Con una FK, borrar al usuario
   // obligaría a poner estas columnas en null (o a impedir el borrado) y se
   // perdería quién cobró o anuló algo ya cobrado: justo el dato que hace falta
@@ -248,7 +254,7 @@ model VisitService {
   // `byOwner` es de alguien que ya no está en el equipo, y se lee como tal.
   byOwner          Boolean         @default(false)
   professionalName String // copia del nombre de quien la hizo
-  price            Float
+  priceCents       Int // centavos enteros, como `Visit.totalCents`
 
   @@index([visitId])
   @@index([memberId])
@@ -258,12 +264,12 @@ model VisitService {
 // Un pago de la atención. Un cobro se puede repartir entre varios medios
 // (`lib/medios-de-pago.ts`); la suma coincide con el total al centavo.
 model VisitPayment {
-  id        String   @id @default(cuid())
-  visitId   String
-  visit     Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  method    String // id de `lib/medios-de-pago.ts`: efectivo, tarjeta-debito, ...
-  amount    Float
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  visitId     String
+  visit       Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  method      String // id de `lib/medios-de-pago.ts`: efectivo, tarjeta-debito, ...
+  amountCents Int // centavos enteros, como `Visit.totalCents`
+  createdAt   DateTime @default(now())
 
   @@index([visitId])
   @@map("atencion_pagos")

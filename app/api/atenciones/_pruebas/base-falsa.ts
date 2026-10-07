@@ -67,7 +67,7 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     paidAt: null,
     voidedAt: null,
     voidReason: null,
-    total: null,
+    totalCents: null,
     createdById: null,
     paidById: null,
     voidedById: null,

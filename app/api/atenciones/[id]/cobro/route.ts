@@ -3,32 +3,23 @@ import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import {
-  aCentavos,
-  deCentavos,
-  errorDeCobro,
-  requisitoFaltante,
-  totalEnCentavos,
-  transicionPermitida,
-} from "@/lib/atenciones"
+import { MAXIMO_DE_PAGOS, aCentavos, errorDeCobro, requisitoFaltante, transicionPermitida } from "@/lib/atenciones"
 import { actorDeSesion, puedeCobrar } from "@/lib/permisos"
 import {
   ErrorDeAtencion,
-  TOPE_POR_ATENCION,
   buscarAtencion,
   cuerpoDelPedido,
   leerAtencion,
+  lineasDeLaAtencion,
   respuestaDeError,
   tomarAtencion,
 } from "@/lib/tablero"
 
-/** Más medios que esto en un solo cobro no es un pago dividido, es un error de carga. */
-const MAXIMO_DE_PAGOS = 20
-
 /**
  * Sólo la forma: que el medio exista, que el monto sea válido y que todo sume
  * el total lo decide `errorDeCobro`, que devuelve un mensaje que se puede
- * mostrar en la caja en vez del detalle de zod.
+ * mostrar en la caja en vez del detalle de zod. Los montos llegan en
+ * unidades; se guardan en centavos.
  */
 const cobroSchema = z.object({
   pagos: z
@@ -39,7 +30,12 @@ const cobroSchema = z.object({
 /**
  * Cobra una atención que está por cobrar. Todo en una transacción: los pagos,
  * la atención finalizada con su total congelado y quién cobró, y la cita de
- * origen completada con ese mismo total. O pasa todo, o nada.
+ * origen completada. O pasa todo, o nada.
+ *
+ * A la cita no se le escribe el precio. Ese total incluye las líneas de la
+ * dueña y de los colegas, y el profesional dueño de la cita la ve en la
+ * agenda y en `/api/citas`: copiarlo ahí le mostraba lo que facturó el
+ * negocio en esa visita. Lo cobrado vive en la atención.
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -69,43 +65,44 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const atencion = await prisma.$transaction(async (tx) => {
       // Primero se toma la fila: un segundo cobro de la misma atención (un
       // doble clic) encuentra que ya no está por cobrar y no registra nada.
-      await tomarAtencion(tx, existente.id, "por-cobrar", {
+      await tomarAtencion(tx, actor, existente.id, "por-cobrar", {
         status: "finalizada",
         paidAt: new Date(),
         paidById: session?.user?.id ?? null,
       })
 
-      const lineas = await tx.visitService.findMany({
-        where: { visitId: existente.id, visit: { is: { businessId: actor.businessId } } },
-        select: { memberId: true, byOwner: true, price: true },
-        take: TOPE_POR_ATENCION,
-      })
+      // Todas las líneas, contadas antes de leerlas: si pasan del tope, o si
+      // el total no cabe, 400. Nunca se congela el total de una parte.
+      const { lineas, totalCentavos } = await lineasDeLaAtencion(tx, actor, existente.id)
       const falta = requisitoFaltante("finalizada", lineas)
       if (falta) throw new ErrorDeAtencion(400, falta)
 
-      const totalCentavos = totalEnCentavos(lineas)
       const errorDePagos = errorDeCobro(totalCentavos, pagos)
       if (errorDePagos) throw new ErrorDeAtencion(400, errorDePagos)
-
-      const total = deCentavos(totalCentavos)
 
       if (pagos.length > 0) {
         await tx.visitPayment.createMany({
           data: pagos.map((pago) => ({
             visitId: existente.id,
             method: pago.medio,
-            // Ya validado con centavos exactos: esto sólo lo normaliza.
-            amount: deCentavos(aCentavos(pago.monto)),
+            // Ya validado con centavos exactos y bajo el tope.
+            amountCents: aCentavos(pago.monto),
           })),
         })
       }
 
-      await tx.visit.update({ where: { id: existente.id }, data: { total } })
+      // Acotado por negocio igual que la toma: una escritura no depende de
+      // que el id venga verificado.
+      const { count } = await tx.visit.updateMany({
+        where: { id: existente.id, businessId: actor.businessId },
+        data: { totalCents: totalCentavos },
+      })
+      if (count === 0) throw new ErrorDeAtencion(409, "La atención cambió mientras tanto: vuelve a cargar el tablero.")
 
       if (existente.appointmentId) {
         await tx.appointment.updateMany({
           where: { id: existente.appointmentId, businessId: actor.businessId },
-          data: { status: "completada", price: total },
+          data: { status: "completada" },
         })
       }
 

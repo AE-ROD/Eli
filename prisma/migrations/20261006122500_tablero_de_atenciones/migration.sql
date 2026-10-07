@@ -13,7 +13,7 @@ CREATE TABLE "atenciones" (
     "paidAt" TIMESTAMP(3),
     "voidedAt" TIMESTAMP(3),
     "voidReason" TEXT,
-    "total" DOUBLE PRECISION,
+    "totalCents" INTEGER,
     "createdById" TEXT,
     "paidById" TEXT,
     "voidedById" TEXT,
@@ -30,7 +30,7 @@ CREATE TABLE "atencion_servicios" (
     "memberId" TEXT,
     "byOwner" BOOLEAN NOT NULL DEFAULT false,
     "professionalName" TEXT NOT NULL,
-    "price" DOUBLE PRECISION NOT NULL,
+    "priceCents" INTEGER NOT NULL,
 
     CONSTRAINT "atencion_servicios_pkey" PRIMARY KEY ("id")
 );
@@ -40,7 +40,7 @@ CREATE TABLE "atencion_pagos" (
     "id" TEXT NOT NULL,
     "visitId" TEXT NOT NULL,
     "method" TEXT NOT NULL,
-    "amount" DOUBLE PRECISION NOT NULL,
+    "amountCents" INTEGER NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "atencion_pagos_pkey" PRIMARY KEY ("id")

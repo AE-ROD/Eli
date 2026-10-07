@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { crearBaseFalsa } from "../../_pruebas/base-falsa"
-import { NEGOCIO, OTRO_NEGOCIO, atencion, conId, datosBase, linea, pago, pedido, sesiones } from "../../_pruebas/datos"
+import { NEGOCIO, OTRO_NEGOCIO, atencion, centavos, conId, datosBase, linea, pago, pedido, sesiones } from "../../_pruebas/datos"
 
 const mockGetServerSession = vi.fn()
 
@@ -32,13 +32,21 @@ const cita = (id: string, status: string) => ({
 function escenario() {
   return {
     ...datosBase(),
-    appointment: [cita("cita-abierta", "en-progreso"), cita("cita-cobrada", "completada")],
+    appointment: [
+      cita("cita-abierta", "en-progreso"),
+      cita("cita-cobrada", "completada"),
+      cita("cita-pendiente", "pendiente"),
+      // Alguien la completó a mano en la agenda mientras la atención seguía abierta.
+      cita("cita-completada-a-mano", "completada"),
+    ],
     visit: [
       atencion("v-por-cobrar", { status: "por-cobrar", appointmentId: "cita-abierta" }),
       atencion("v-espera"),
-      atencion("v-cobrada", { status: "finalizada", paidAt: new Date("2026-10-06T14:00:00.000Z"), total: 8000, appointmentId: "cita-cobrada" }),
+      atencion("v-cobrada", { status: "finalizada", paidAt: new Date("2026-10-06T14:00:00.000Z"), totalCents: centavos(8000), appointmentId: "cita-cobrada" }),
+      atencion("v-de-pendiente", { appointmentId: "cita-pendiente" }),
+      atencion("v-de-completada-a-mano", { status: "en-atencion", appointmentId: "cita-completada-a-mano" }),
       atencion("v-anulada", { status: "anulada", voidedAt: new Date("2026-10-06T12:00:00.000Z") }),
-      atencion("v-ajena", { businessId: OTRO_NEGOCIO, customerId: "c-ajeno", status: "finalizada", paidAt: new Date(), total: 9000 }),
+      atencion("v-ajena", { businessId: OTRO_NEGOCIO, customerId: "c-ajeno", status: "finalizada", paidAt: new Date(), totalCents: centavos(9000) }),
     ],
     visitService: [
       linea("l-por-cobrar", "v-por-cobrar"),
@@ -122,9 +130,23 @@ describe("POST /api/atenciones/[id]/anulacion", () => {
     const res = await anular(sesiones.dueña, "v-cobrada", { motivo: "Cobro duplicado" })
 
     expect(res.status).toBe(200)
-    expect(atencionGuardada("v-cobrada")).toMatchObject({ status: "anulada", voidedById: "u-duena", total: 8000 })
+    expect(atencionGuardada("v-cobrada")).toMatchObject({ status: "anulada", voidedById: "u-duena", totalCents: centavos(8000) })
     expect(base.buscar("visitPayment", { visitId: "v-cobrada" })).toHaveLength(1)
     expect(citaGuardada("cita-cobrada").status).toBe("completada")
+  })
+
+  it("una cita pendiente también pasa a cancelada", async () => {
+    await anular(sesiones.encargado, "v-de-pendiente")
+
+    expect(citaGuardada("cita-pendiente").status).toBe("cancelada")
+  })
+
+  it("una cita completada a mano en la agenda no se pisa al anular lo que no se cobró", async () => {
+    const res = await anular(sesiones.dueña, "v-de-completada-a-mano", { motivo: "Se cargó dos veces" })
+
+    expect(res.status).toBe(200)
+    expect(atencionGuardada("v-de-completada-a-mano").status).toBe("anulada")
+    expect(citaGuardada("cita-completada-a-mano").status).toBe("completada")
   })
 
   it("el motivo es opcional", async () => {

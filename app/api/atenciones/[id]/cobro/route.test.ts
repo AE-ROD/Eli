@@ -4,6 +4,7 @@ import {
   NEGOCIO,
   OTRO_NEGOCIO,
   atencion,
+  centavos,
   conId,
   datosBase,
   linea,
@@ -55,9 +56,9 @@ function escenario() {
     ],
     visitService: [
       linea("l-mixta-carla", "v-mixta"),
-      lineaDeLaDueña("l-mixta-duena", "v-mixta", { serviceId: "s-color", serviceName: "Color", price: 25000 }),
-      linea("l-centavos", "v-centavos", { price: 0.3 }),
-      linea("l-cortesia", "v-cortesia", { price: 0 }),
+      lineaDeLaDueña("l-mixta-duena", "v-mixta", { serviceId: "s-color", serviceName: "Color", priceCents: centavos(25000) }),
+      linea("l-centavos", "v-centavos", { priceCents: 30 }),
+      linea("l-cortesia", "v-cortesia", { priceCents: 0 }),
       linea("l-ex-miembro", "v-ex-miembro", { memberId: null, professionalName: "Juan (ya no está)" }),
       linea("l-en-atencion", "v-en-atencion"),
       linea("l-pedro", "v-pedro", { memberId: "m-pedro", professionalName: "Pedro Profesional" }),
@@ -135,22 +136,46 @@ describe("POST /api/atenciones/[id]/cobro: el cobro", () => {
     const data = await res.json()
 
     expect(res.status).toBe(200)
+    // En la base, en centavos enteros.
     expect(atencionGuardada("v-mixta")).toMatchObject({
       status: "finalizada",
       paidAt: AHORA,
       paidById: "u-duena",
-      total: 33000,
+      totalCents: centavos(33000),
     })
     expect(pagosDe("v-mixta")).toEqual([
-      expect.objectContaining({ method: "efectivo", amount: 20000 }),
-      expect.objectContaining({ method: "tarjeta-credito", amount: 13000 }),
+      expect.objectContaining({ method: "efectivo", amountCents: centavos(20000) }),
+      expect.objectContaining({ method: "tarjeta-credito", amountCents: centavos(13000) }),
     ])
-    expect(base.buscar("appointment", { id: "cita-de-la-mixta" })[0]).toMatchObject({ status: "completada", price: 33000 })
+    // Por la API, en unidades.
     expect(data).toMatchObject({ estado: "finalizada", total: 33000 })
-    expect(data.pagos.map((p: { medio: string }) => p.medio)).toEqual(["efectivo", "tarjeta-credito"])
+    expect(data.pagos.map((p: { medio: string; monto: number }) => [p.medio, p.monto])).toEqual([
+      ["efectivo", 20000],
+      ["tarjeta-credito", 13000],
+    ])
   })
 
-  it("se compara en centavos: 0,10 + 0,20 contra un total de 0,30 se acepta", async () => {
+  it("la cita pasa a completada sin que se le escriba el precio: el total es de toda la visita, no de esa cita", async () => {
+    await cobrar(sesiones.dueña, "v-mixta", { pagos: [{ medio: "efectivo", monto: 33000 }] })
+
+    // 8.000 es lo que decía la reserva; los 33.000 incluyen el color de la dueña.
+    expect(base.buscar("appointment", { id: "cita-de-la-mixta" })[0]).toMatchObject({ status: "completada", price: 8000 })
+  })
+
+  it("después del cobro, la profesional dueña de la cita la pide y no ve el total de la visita", async () => {
+    await cobrar(sesiones.dueña, "v-mixta", { pagos: [{ medio: "efectivo", monto: 33000 }] })
+
+    const { GET } = await import("@/app/api/citas/[id]/route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+    const res = await GET(pedido("http://localhost/api/citas/cita-de-la-mixta"), conId("cita-de-la-mixta"))
+    const cita = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(cita).toMatchObject({ id: "cita-de-la-mixta", status: "completada", price: 8000 })
+    expect(JSON.stringify(cita)).not.toMatch(/33000|3300000/)
+  })
+
+  it("se compara en centavos: 0,10 + 0,20 contra un total de 0,30 se acepta, y se guarda en centavos exactos", async () => {
     const res = await cobrar(sesiones.dueña, "v-centavos", {
       pagos: [
         { medio: "efectivo", monto: 0.1 },
@@ -159,7 +184,9 @@ describe("POST /api/atenciones/[id]/cobro: el cobro", () => {
     })
 
     expect(res.status).toBe(200)
-    expect(atencionGuardada("v-centavos")).toMatchObject({ status: "finalizada", total: 0.3 })
+    expect(atencionGuardada("v-centavos")).toMatchObject({ status: "finalizada", totalCents: 30 })
+    expect(pagosDe("v-centavos").map((p) => p.amountCents)).toEqual([10, 20])
+    expect((await res.json()).total).toBe(0.3)
   })
 
   it("si los pagos no suman el total: 400 con las dos cifras, y no se escribe nada", async () => {
@@ -176,7 +203,7 @@ describe("POST /api/atenciones/[id]/cobro: el cobro", () => {
     const res = await cobrar(sesiones.dueña, "v-cortesia", { pagos: [] })
 
     expect(res.status).toBe(200)
-    expect(atencionGuardada("v-cortesia")).toMatchObject({ status: "finalizada", total: 0 })
+    expect(atencionGuardada("v-cortesia")).toMatchObject({ status: "finalizada", totalCents: 0 })
     expect(pagosDe("v-cortesia")).toEqual([])
   })
 
@@ -237,5 +264,48 @@ describe("POST /api/atenciones/[id]/cobro: el cobro", () => {
 
     expect(res.status).toBe(400)
     expect(base.volcado()).toEqual(antes)
+  })
+})
+
+describe("POST /api/atenciones/[id]/cobro: topes", () => {
+  it("si la atención pasa del tope de servicios, 400: nunca se congela el total de una parte", async () => {
+    // Datos de antes del tope: 21 líneas. Con `take`, se habría cobrado el total de 20.
+    base.reiniciar({
+      ...datosBase(),
+      visit: [atencion("v-larga", { status: "por-cobrar" })],
+      visitService: Array.from({ length: 21 }, (_, i) => linea(`l-${i}`, "v-larga", { priceCents: centavos(1000) })),
+    })
+    const antes = base.volcado()
+
+    const res = await cobrar(sesiones.dueña, "v-larga", { pagos: [{ medio: "efectivo", monto: 20000 }] })
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe("Una atención puede tener hasta 20 servicios.")
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("si el total no cabe en la columna, 400 y no se escribe nada", async () => {
+    base.reiniciar({
+      ...datosBase(),
+      visit: [atencion("v-enorme", { status: "por-cobrar" })],
+      visitService: [
+        linea("l-1", "v-enorme", { priceCents: 1_500_000_000 }),
+        linea("l-2", "v-enorme", { priceCents: 600_000_000 }),
+      ],
+    })
+    const antes = base.volcado()
+
+    const res = await cobrar(sesiones.dueña, "v-enorme", { pagos: [{ medio: "efectivo", monto: 21_000_000 }] })
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/no puede pasar de \$20\.000\.000/)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("un pago por encima del tope se rechaza antes de sumar nada", async () => {
+    const res = await cobrar(sesiones.dueña, "v-mixta", { pagos: [{ medio: "efectivo", monto: 20_000_000.01 }] })
+
+    expect(res.status).toBe(400)
+    expect(pagosDe("v-mixta")).toEqual([])
   })
 })

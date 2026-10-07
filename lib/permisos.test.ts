@@ -14,6 +14,9 @@ import {
   puedeAsignarLineasAOtros,
   puedeAnotarSinReserva,
   puedeAnular,
+  puedeDeshacerLlegada,
+  puedeVerAnuladas,
+  puedeVerCita,
   memberIdParaCita,
   profesionalParaLinea,
   whereDeAgenda,
@@ -85,6 +88,8 @@ describe("jerarquía de roles", () => {
     ["cobrar", puedeCobrar, true, true, false],
     ["anotar líneas a nombre de otros", puedeAsignarLineasAOtros, true, true, false],
     ["anotar a alguien sin reserva", puedeAnotarSinReserva, true, true, true],
+    ["deshacer una llegada que ve", puedeDeshacerLlegada, true, true, true],
+    ["ver el historial de anuladas", puedeVerAnuladas, true, true, false],
   ])("%s — dueño/encargado/profesional", (_que, puede, esperaDueño, esperaEncargado, esperaProfesional) => {
     expect(puede(dueño)).toBe(esperaDueño)
     expect(puede(encargado)).toBe(esperaEncargado)
@@ -233,6 +238,17 @@ describe("falla cerrado", () => {
     expect(puedeCobrar(null)).toBe(false)
     expect(puedeAnotarSinReserva(null)).toBe(false)
     expect(puedeAnular(null, { businessId: NEGOCIO, status: "en-espera" })).toBe(false)
+    expect(puedeDeshacerLlegada(null)).toBe(false)
+    expect(puedeVerAnuladas(null)).toBe(false)
+    expect(puedeVerCita(null, { businessId: NEGOCIO, memberId: "yo" })).toBe(false)
+  })
+
+  it("un profesional sin memberId no deshace llegadas ni ve citas sin asignar", () => {
+    const roto = actor("worker", null)
+
+    expect(puedeDeshacerLlegada(roto)).toBe(false)
+    // `null === null` no es "su" cita: falla cerrado.
+    expect(puedeVerCita(roto, { businessId: NEGOCIO, memberId: null })).toBe(false)
   })
 
   it("sin actor, los filtros del tablero no devuelven nada", () => {
@@ -326,6 +342,26 @@ describe("tablero de atenciones", () => {
 
     it("ni el dueño anula una atención de otro negocio", () => {
       expect(puedeAnular(dueño, { businessId: OTRO_NEGOCIO, status: "en-espera" })).toBe(false)
+    })
+  })
+
+  describe("puedeVerCita", () => {
+    it("la misma regla que whereDeAgenda: dueño y encargado, todas las del negocio", () => {
+      for (const quien of [dueño, encargado]) {
+        expect(puedeVerCita(quien, { businessId: NEGOCIO, memberId: "colega" })).toBe(true)
+        expect(puedeVerCita(quien, { businessId: NEGOCIO, memberId: null })).toBe(true)
+      }
+    })
+
+    it("el profesional, sólo las suyas: ni la de un colega ni una sin asignar", () => {
+      expect(puedeVerCita(profesional, { businessId: NEGOCIO, memberId: "yo" })).toBe(true)
+      expect(puedeVerCita(profesional, { businessId: NEGOCIO, memberId: "colega" })).toBe(false)
+      expect(puedeVerCita(profesional, { businessId: NEGOCIO, memberId: null })).toBe(false)
+    })
+
+    it("nadie ve una cita de otro negocio, aunque el memberId coincida", () => {
+      expect(puedeVerCita(dueño, { businessId: OTRO_NEGOCIO, memberId: null })).toBe(false)
+      expect(puedeVerCita(profesional, { businessId: OTRO_NEGOCIO, memberId: "yo" })).toBe(false)
     })
   })
 

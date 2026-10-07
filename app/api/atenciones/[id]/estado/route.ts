@@ -14,10 +14,10 @@ import {
 import { actorDeSesion } from "@/lib/permisos"
 import {
   ErrorDeAtencion,
-  TOPE_POR_ATENCION,
   buscarAtencion,
   cuerpoDelPedido,
   leerAtencion,
+  lineasDeLaAtencion,
   respuestaDeError,
   tomarAtencion,
 } from "@/lib/tablero"
@@ -62,18 +62,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const atencion = await prisma.$transaction(async (tx) => {
-      await tomarAtencion(tx, existente.id, desde, {
+      await tomarAtencion(tx, actor, existente.id, desde, {
         status: destino,
         ...tiemposDeTransicion(desde, destino, new Date()),
       })
 
       // Los requisitos se miran sobre todas las líneas, no sólo las que ve el
       // actor, y después de tomar la fila: así nadie las cambia en el medio.
-      const lineas = await tx.visitService.findMany({
-        where: { visitId: existente.id, visit: { is: { businessId: actor.businessId } } },
-        select: { memberId: true, byOwner: true, price: true },
-        take: TOPE_POR_ATENCION,
-      })
+      const { lineas } = await lineasDeLaAtencion(tx, actor, existente.id)
       const falta = requisitoFaltante(destino, lineas)
       if (falta) throw new ErrorDeAtencion(400, falta)
 

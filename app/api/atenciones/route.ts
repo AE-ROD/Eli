@@ -58,22 +58,65 @@ function buscarReservas(actor: Actor, desde: Date, hasta: Date) {
 }
 
 /**
- * Las atenciones del tablero: todas las activas, de cualquier fecha, para que
- * una que quedó abierta ayer no desaparezca sin cobrarse; y las finalizadas
- * del día, que son lo cobrado hoy.
+ * Topes de cada parte del tablero. Cada consulta pide uno más que su tope:
+ * si llega, la respuesta lo dice con `truncado` en vez de callarlo.
+ *
+ * - Activas de hoy: lo que se está atendiendo. Un tope alto, muy por encima
+ *   de un día de mucho trabajo, para que ninguna quede afuera.
+ * - Activas viejas: las que quedaron abiertas otro día y nadie cobró ni
+ *   anuló. Van aparte y con su propio tope, de la más reciente a la más
+ *   vieja: antes compartían consulta con las de hoy, en orden de llegada, y
+ *   un montón de viejas olvidadas podía dejar afuera a las de hoy.
+ * - Finalizadas: lo cobrado en el día.
  */
-function buscarAtenciones(actor: Actor, desde: Date, hasta: Date) {
-  return prisma.visit.findMany({
-    where: whereDeAtenciones(actor, {
-      OR: [
-        { status: { in: [...ESTADOS_ACTIVOS] } },
-        { status: "finalizada", paidAt: { gte: desde, lt: hasta } },
-      ],
+const TOPE_DE_ACTIVAS_DE_HOY = 300
+const TOPE_DE_ACTIVAS_VIEJAS = 50
+const TOPE_DE_FINALIZADAS = 300
+
+/**
+ * Las atenciones del tablero: las activas, de hoy y de antes (para que una
+ * que quedó abierta ayer no desaparezca sin cobrarse), y las finalizadas del
+ * día, que son lo cobrado hoy. Las activas "de hoy" son las que llegaron
+ * desde el inicio del día, sin cota de fin: una con la hora corrida hacia
+ * adelante tampoco se pierde.
+ */
+async function buscarAtenciones(actor: Actor, desde: Date, hasta: Date) {
+  const seleccion = seleccionDeAtencion(actor)
+  const activas = { in: [...ESTADOS_ACTIVOS] }
+
+  const [deHoy, viejas, finalizadas] = await Promise.all([
+    prisma.visit.findMany({
+      where: whereDeAtenciones(actor, { status: activas, arrivedAt: { gte: desde } }),
+      select: seleccion,
+      orderBy: { arrivedAt: "asc" },
+      take: TOPE_DE_ACTIVAS_DE_HOY + 1,
     }),
-    select: seleccionDeAtencion(actor),
-    orderBy: { arrivedAt: "asc" },
-    take: 300,
-  })
+    prisma.visit.findMany({
+      where: whereDeAtenciones(actor, { status: activas, arrivedAt: { lt: desde } }),
+      select: seleccion,
+      orderBy: { arrivedAt: "desc" },
+      take: TOPE_DE_ACTIVAS_VIEJAS + 1,
+    }),
+    prisma.visit.findMany({
+      where: whereDeAtenciones(actor, { status: "finalizada", paidAt: { gte: desde, lt: hasta } }),
+      select: seleccion,
+      orderBy: { paidAt: "desc" },
+      take: TOPE_DE_FINALIZADAS + 1,
+    }),
+  ])
+
+  return {
+    // En orden de llegada, como antes; cada columna se ordena en la pantalla.
+    atenciones: [
+      ...viejas.slice(0, TOPE_DE_ACTIVAS_VIEJAS).reverse(),
+      ...deHoy.slice(0, TOPE_DE_ACTIVAS_DE_HOY),
+      ...finalizadas.slice(0, TOPE_DE_FINALIZADAS),
+    ],
+    truncado:
+      deHoy.length > TOPE_DE_ACTIVAS_DE_HOY ||
+      viejas.length > TOPE_DE_ACTIVAS_VIEJAS ||
+      finalizadas.length > TOPE_DE_FINALIZADAS,
+  }
 }
 
 /**
@@ -122,7 +165,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: rango.error }, { status: 400 })
   }
 
-  const [reservas, atenciones, servicios, profesionales] = await Promise.all([
+  const [reservas, { atenciones, truncado }, servicios, profesionales] = await Promise.all([
     buscarReservas(actor, rango.desde, rango.hasta),
     buscarAtenciones(actor, rango.desde, rango.hasta),
     prisma.service.findMany({
@@ -152,6 +195,7 @@ export async function GET(request: NextRequest) {
       profesionales,
       mediosDePago: MEDIOS_DE_PAGO,
     },
+    truncado,
   })
 }
 

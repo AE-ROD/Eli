@@ -2,15 +2,22 @@ import { describe, it, expect } from "vitest"
 import {
   ESTADOS_ACTIVOS,
   ESTADOS_DE_ATENCION,
+  MAXIMO_DE_LINEAS_POR_ATENCION,
+  MONTO_MAXIMO,
+  TOTAL_MAXIMO_CENTAVOS,
   aCentavos,
   deCentavos,
+  errorDeCantidadDeLineas,
   errorDeCobro,
+  errorDeTotal,
   esEstadoActivo,
   esMontoDePagoValido,
   esPrecioValido,
   idDeProfesional,
+  mismoNombreDeServicio,
   nombreDeEstado,
   requisitoFaltante,
+  sePuedeDeshacerLaLlegada,
   tieneCentavosExactos,
   tiemposDeTransicion,
   totalEnCentavos,
@@ -107,9 +114,9 @@ describe("dinero en centavos", () => {
     expect(deCentavos(30)).toBe(0.3)
   })
 
-  it("totalEnCentavos suma las líneas en centavos", () => {
-    expect(totalEnCentavos([{ price: 0.1 }, { price: 0.2 }])).toBe(30)
-    expect(totalEnCentavos([{ price: 8000 }, { price: 25000 }])).toBe(3_300_000)
+  it("totalEnCentavos suma las líneas como se guardan, en centavos enteros", () => {
+    expect(totalEnCentavos([{ priceCents: 10 }, { priceCents: 20 }])).toBe(30)
+    expect(totalEnCentavos([{ priceCents: 800_000 }, { priceCents: 2_500_000 }])).toBe(3_300_000)
     expect(totalEnCentavos([])).toBe(0)
   })
 
@@ -134,6 +141,69 @@ describe("dinero en centavos", () => {
     expect(esMontoDePagoValido(0.01)).toBe(true)
     expect(esMontoDePagoValido(0)).toBe(false)
     expect(esMontoDePagoValido(-5)).toBe(false)
+  })
+})
+
+describe("topes del dinero: nada desborda la columna Int de Postgres", () => {
+  const INT_MAXIMO = 2_147_483_647
+
+  it("el total máximo cabe en la columna, y en un number los centavos siguen exactos", () => {
+    expect(TOTAL_MAXIMO_CENTAVOS).toBeLessThanOrEqual(INT_MAXIMO)
+    expect(Number.isSafeInteger(TOTAL_MAXIMO_CENTAVOS)).toBe(true)
+  })
+
+  it("un precio o un pago llega justo hasta el tope, en unidades: 20 millones", () => {
+    expect(MONTO_MAXIMO).toBe(20_000_000)
+    expect(aCentavos(MONTO_MAXIMO)).toBeLessThanOrEqual(INT_MAXIMO)
+    expect(esPrecioValido(MONTO_MAXIMO)).toBe(true)
+    expect(esPrecioValido(MONTO_MAXIMO + 0.01)).toBe(false)
+    expect(esMontoDePagoValido(MONTO_MAXIMO)).toBe(true)
+    expect(esMontoDePagoValido(MONTO_MAXIMO + 0.01)).toBe(false)
+  })
+
+  it("el total de una atención se rechaza con un mensaje en cuanto pasa del tope, aunque cada línea sea válida", () => {
+    expect(errorDeTotal(TOTAL_MAXIMO_CENTAVOS)).toBeNull()
+    expect(errorDeTotal(TOTAL_MAXIMO_CENTAVOS + 1)).toBe(
+      "El total de la atención no puede pasar de $20.000.000: divídela en dos."
+    )
+    // Dos líneas válidas que juntas no caben.
+    expect(errorDeTotal(totalEnCentavos([{ priceCents: aCentavos(MONTO_MAXIMO) }, { priceCents: 1 }]))).not.toBeNull()
+  })
+
+  it("una atención tiene hasta 20 servicios", () => {
+    expect(MAXIMO_DE_LINEAS_POR_ATENCION).toBe(20)
+    expect(errorDeCantidadDeLineas(20)).toBeNull()
+    expect(errorDeCantidadDeLineas(21)).toBe("Una atención puede tener hasta 20 servicios.")
+  })
+})
+
+describe("sePuedeDeshacerLaLlegada", () => {
+  it("sólo de una reserva que todavía espera", () => {
+    expect(sePuedeDeshacerLaLlegada({ status: "en-espera", appointmentId: "cita-1" })).toBe(true)
+  })
+
+  it.each([
+    ["sin reserva: no hay adónde volver", "en-espera", null],
+    ["ya empezó", "en-atencion", "cita-1"],
+    ["por cobrar", "por-cobrar", "cita-1"],
+    ["cobrada", "finalizada", "cita-1"],
+    ["anulada", "anulada", "cita-1"],
+  ])("no: %s", (_caso, status, appointmentId) => {
+    expect(sePuedeDeshacerLaLlegada({ status, appointmentId })).toBe(false)
+  })
+})
+
+describe("mismoNombreDeServicio", () => {
+  it("sin distinguir mayúsculas ni espacios al borde", () => {
+    expect(mismoNombreDeServicio("Corte", "corte")).toBe(true)
+    expect(mismoNombreDeServicio("Corte de pelo", "  CORTE DE PELO ")).toBe(true)
+    expect(mismoNombreDeServicio("Ñandú Spa", "ñandú spa")).toBe(true)
+  })
+
+  it("nada más laxo: ni acentos de menos ni palabras de más", () => {
+    expect(mismoNombreDeServicio("Peinado", "Peinado y lavado")).toBe(false)
+    expect(mismoNombreDeServicio("Depilación", "Depilacion")).toBe(false)
+    expect(mismoNombreDeServicio("Corte", "")).toBe(false)
   })
 })
 

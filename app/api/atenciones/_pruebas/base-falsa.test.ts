@@ -25,8 +25,8 @@ beforeEach(() => {
       { id: "v2", businessId: "n1", customerName: "Beto", status: "finalizada", paidAt: new Date(10) },
     ],
     visitService: [
-      { id: "l1", visitId: "v1", serviceName: "Corte", memberId: "m1", professionalName: "Ana", price: 10 },
-      { id: "l2", visitId: "v1", serviceName: "Color", byOwner: true, professionalName: "Ana", price: 20 },
+      { id: "l1", visitId: "v1", serviceName: "Corte", memberId: "m1", professionalName: "Ana", priceCents: 1000 },
+      { id: "l2", visitId: "v1", serviceName: "Color", byOwner: true, professionalName: "Ana", priceCents: 2000 },
     ],
   })
 })
