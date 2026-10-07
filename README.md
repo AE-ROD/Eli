@@ -157,9 +157,12 @@ Cada vista del panel se arma igual:
   (Neon).** Para renombrar un modelo o un campo se usa `@map`: así se pasó de
   `Patient` a `Customer` sin tocar la base. Cambiar una columna de verdad pide
   una migración sobre datos reales.
-- **Dinero en centavos.** Los montos se guardan como `Float`, igual que el resto
-  del esquema, pero toda suma y comparación de dinero se hace en centavos enteros
-  (`lib/atenciones.ts`): 0,1 + 0,2 tiene que dar 0,3 cuando se cuadra una caja.
+- **Dinero en centavos.** Las tablas del tablero (atenciones, sus líneas y sus
+  pagos) guardan centavos enteros (`priceCents`, `amountCents`, `totalCents`),
+  con topes que no desbordan un `Int`. Las tablas anteriores (`Service.price`,
+  `Appointment.price`) siguen en `Float`. La API habla en unidades y toda suma o
+  comparación de dinero se hace en centavos (`lib/atenciones.ts`): 0,1 + 0,2
+  tiene que dar 0,3 cuando se cuadra una caja.
 - **NextAuth sigue en v4.** Auth.js v5 existe, pero migrar rompe lo que funciona
   sin aportar valor.
 - **Vercel Hobby prohíbe el uso comercial.** Antes de cobrar hay que pasar a Pro

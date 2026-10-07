@@ -159,30 +159,34 @@ Una **atención** es la visita de un cliente al local, con o sin reserva. El tab
 
 | Columna | Qué hay | Para pasar a la siguiente |
 |---|---|---|
-| **Reservas de hoy** | Las citas del día que todavía no llegaron, por hora. Entran solas. Si la hora pasó, se marcan como atrasadas. | "Llegó" |
+| **Reservas de hoy** | Las citas del día que todavía no llegaron, por hora. Entran solas. Si la hora pasó, se marcan como atrasadas. | "Llegó" (sólo para reservas del día) |
 | **En espera** | Quien llegó, con o sin reserva, y espera ser atendido. | Al menos un servicio con su profesional |
 | **En atención** | Quien está siendo atendido. | Cada servicio con su profesional y su precio |
 | **Por cobrar** | Atendido; falta pagar ("por cancelar"). | Medios de pago que sumen exactamente el total |
 | **Finalizado** | Lo cobrado hoy. Ya no se edita. | — |
 
-**Cada servicio con su profesional.** Una atención tiene una o más líneas: servicio, profesional que lo hizo y precio cobrado. El precio se copia del catálogo y se puede ajustar; el total es la suma de las líneas. Así se sabe cuánto generó cada profesional, que es la base de las comisiones (sección 3).
+**Cada servicio con su profesional.** Una atención tiene una o más líneas: servicio, profesional que lo hizo y precio cobrado. El precio se copia del catálogo y se puede ajustar; el total es la suma de las líneas. Así se sabe cuánto generó cada profesional, que es la base de las comisiones (sección 3). Topes: hasta 20 servicios y $20.000.000 por atención; más que eso es un error de carga, o dos atenciones.
 
-**El dueño también atiende.** El dueño no es miembro del equipo. Por eso una línea sin profesional significa que la hizo el dueño, y esa línea no genera comisión.
+**Al llegar, se precarga lo reservado.** Si la cita tiene servicio y profesional, la atención nace con esa línea. Si falta el profesional, el editor la propone y alguien lo elige. Un "Llegó" marcado por error se deshace mientras la persona está en espera, y la reserva vuelve a su columna.
+
+**El dueño también atiende.** El dueño no es miembro del equipo, así que sus líneas se marcan aparte como suyas y no generan comisión. Si quien hizo una línea deja el equipo, la línea conserva su nombre en el historial. Si todavía no se cobró, alguien tiene que reasignarla antes de cobrar.
 
 **Pago dividido.** Medios fijos: efectivo, tarjeta de débito, tarjeta de crédito, transferencia y billetera digital. Un cobro se puede repartir entre varios medios. La suma tiene que coincidir con el total al centavo: se calcula en centavos enteros, nunca con decimales sueltos.
 
-**Lo cobrado no se reescribe.** Una vez finalizada, la atención no se edita. Si hubo un error, el dueño la anula: queda en el historial como anulada y deja de sumar. Si alguien se va sin ser atendido, también se anula.
+**Lo cobrado no se reescribe.** Una vez finalizada, la atención no se edita. Si hubo un error, el dueño la anula, también días después desde Reportes: queda en el historial de anuladas (quién, cuándo y por qué) y deja de sumar. Si alguien se va sin ser atendido, también se anula.
 
-**La agenda se entera sola.** Al empezar la atención de alguien con reserva, su cita pasa a "en progreso"; al cobrarla, a "completada". Una cita marcada como completada en la agenda sin pasar por el cobro **no suma ingresos**: no hay registro de cuánto se cobró ni cómo.
+**La agenda se entera sola.** Al empezar la atención de alguien con reserva, su cita pasa a "en progreso"; al cobrarla, a "completada". El precio de la cita no cambia: lo cobrado vive en la atención, y el total puede incluir servicios de otros profesionales que quien atendió la cita no debe ver. Una cita marcada como completada en la agenda sin pasar por el cobro **no suma ingresos**: no hay registro de cuánto se cobró ni cómo.
 
 | | Dueño | Encargado | Profesional |
 |---|---|---|---|
 | Ver el tablero | Todo | Todo | Sus atenciones y sus reservas |
 | Anotar a alguien sin reserva | ✅ | ✅ | ✅, asignado a sí mismo |
 | Mover hasta "Por cobrar" y editar servicios | ✅ | ✅ | Sólo sus atenciones y sus líneas |
+| Deshacer un "Llegó" | ✅ | ✅ | Sólo sus reservas |
 | Cobrar | ✅ | ✅ | ❌ |
 | Anular antes de cobrar | ✅ | ✅ | ❌ |
 | Anular algo ya cobrado | ✅ | ❌ | ❌ |
+| Ver las anuladas | ✅ | ✅ | ❌ |
 
 ---
 
@@ -196,6 +200,10 @@ El historial de todo lo atendido y cobrado. Cada fila es una atención finalizad
 - profesional, servicio y medio de pago.
 
 **Resumen del período:** ingresos, cantidad de atenciones, ticket promedio, y desglose por medio de pago, por profesional y por servicio.
+
+**Las cifras siguen al filtro.** Con un filtro de profesional o de servicio, los ingresos son la suma de los servicios que cumplen el filtro, no la atención entera: "Carla" muestra lo que generó Carla. Con un filtro de medio de pago, son lo que entró por ese medio. Un pago no se puede atribuir a un servicio, así que el desglose que no corresponde no se muestra; en la tabla, las líneas que cumplen el filtro se destacan.
+
+**Anuladas.** Dueño y encargado tienen una vista aparte con lo anulado en el período: quién, cuándo, por qué y si estaba cobrado. Desde el historial, el dueño puede anular un cobro de cualquier día.
 
 **Quién ve qué.** Dueño y encargado ven todo el negocio. El profesional ve sólo sus propias líneas (lo que él atendió y cuánto sumó), sin los totales del negocio ni los medios de pago.
 
@@ -232,7 +240,7 @@ Nada de esto bloquea el trabajo actual, pero cada punto se decide antes de const
 | **Funciones nuevas** | El resto del listado de ideas por incorporar, con qué problema resuelve cada una y si es imprescindible para vender. |
 | **Comisiones en el tablero** | Integrar la rama `f-003-comisiones` sobre las líneas de atención (sección 3.6). |
 | **Turnos y zona horaria** | Si cada negocio define sus propios turnos y su zona horaria, en vez de los turnos fijos y la hora del dispositivo (sección 8). |
-| **Corregir un cobro** | Hoy lo cobrado sólo se anula. Falta decidir si el dueño puede reabrirlo y corregirlo, y con qué registro. |
+| **Corregir un cobro** | Hoy lo cobrado se anula, también días después desde Reportes. Falta decidir si el dueño puede reabrirlo y corregirlo, y con qué registro. |
 | **Roles** | Si hace falta un super administrador de la plataforma, y si el cliente final puede crear cuenta para ver su historial y reprogramar. |
 | **Branding** | Nombre definitivo (mantener *Eli* o cambiar), dominio, y tono: cercano o sobrio. |
 | **No funcionales** | Móvil primero (un barbero gestiona desde el teléfono); zonas horarias y país; sólo español o también inglés; política de privacidad y retención de datos de clientes. |
