@@ -175,7 +175,7 @@ Una **atención** es la visita de un cliente al local, con o sin reserva. El tab
 
 **Lo cobrado no se reescribe.** Una vez finalizada, la atención no se edita. Si hubo un error, el dueño la anula, también días después desde Reportes: queda en el historial de anuladas (quién, cuándo y por qué) y deja de sumar. El nombre de quien cobró y de quien anuló se guarda con la atención, y se conserva aunque esa persona deje el negocio. Si alguien se va sin ser atendido, también se anula.
 
-**La agenda se entera sola.** Al empezar la atención de alguien con reserva, su cita pasa a "en progreso"; al cobrarla, a "completada". El precio de la cita no cambia: lo cobrado vive en la atención, y el total puede incluir servicios de otros profesionales que quien atendió la cita no debe ver. Una cita marcada como completada en la agenda sin pasar por el cobro **no suma ingresos**: no hay registro de cuánto se cobró ni cómo. Si se anula la atención de una reserva antes de cobrarla, la cita queda cancelada y atada a esa atención; si la persona vuelve ese día, se la anota sin reserva.
+**La agenda se entera sola.** Al empezar la atención de alguien con reserva, su cita pasa a "en progreso"; al cobrarla, a "completada". El precio de la cita no cambia: lo cobrado vive en la atención, y el total puede incluir servicios de otros profesionales que quien atendió la cita no debe ver. Una cita marcada como completada en la agenda sin pasar por el cobro **no suma ingresos**: no hay registro de cuánto se cobró ni cómo. Si se anula la atención de una reserva antes de cobrarla, la cita queda cancelada (salvo que alguien ya la haya completado o cancelado a mano en la agenda: esa decisión no se pisa) y atada a esa atención; si la persona vuelve ese día, se la anota sin reserva.
 
 | | Dueño | Encargado | Profesional |
 |---|---|---|---|
@@ -242,5 +242,6 @@ Nada de esto bloquea el trabajo actual, pero cada punto se decide antes de const
 | **Turnos y zona horaria** | Si cada negocio define sus propios turnos y su zona horaria, en vez de los turnos fijos y la hora del dispositivo (sección 8). |
 | **Corregir un cobro** | Hoy lo cobrado se anula, también días después desde Reportes. Falta decidir si el dueño puede reabrirlo y corregirlo, y con qué registro. |
 | **Roles** | Si hace falta un super administrador de la plataforma, y si el cliente final puede crear cuenta para ver su historial y reprogramar. |
+| **Clientes y el profesional** | Qué puede cambiar el profesional en la ficha de un cliente: sólo las notas, o también los datos, y si borrar queda sólo para dueño y encargado. Hoy el servidor deja a cualquier rol editar y borrar cualquier cliente del negocio (sección 5 dice que el profesional los ve; no dice que los edite). |
 | **Branding** | Nombre definitivo (mantener *Eli* o cambiar), dominio, y tono: cercano o sobrio. |
 | **No funcionales** | Móvil primero (un barbero gestiona desde el teléfono); zonas horarias y país; sólo español o también inglés; política de privacidad y retención de datos de clientes. |
