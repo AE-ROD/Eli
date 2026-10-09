@@ -274,9 +274,11 @@ const SELECCION_PARA_REGLAS = { memberId: true, byOwner: true, priceCents: true 
  *   parte.
  * - `lineas`, para los requisitos de `requisitoFaltante`, son todas: un
  *   requisito se cumple o no sobre la atención entera.
- * - `totalCentavos` es el de la atención entera, quienquiera que pregunte: es
- *   el que se congela al cobrar. No se le muestra a quien no ve todo el
- *   tablero.
+ * - `totalCentavos` es el de la atención entera: el que se congela al cobrar.
+ *   Sólo para quien ve todo el tablero, con el mismo criterio con que
+ *   `seleccionDeAtencion` pide `totalCents`; para el profesional es `null`.
+ *   Así no le llega por ningún llamador, sin depender de que cada uno lo
+ *   corte.
  * - `errorDelTotalQueVe` es el tope del total (`errorDeTotal`) medido sobre
  *   las líneas que ve el actor (`whereDeLineas`): todas para dueño y
  *   encargado, sólo las suyas para el profesional. Sobre la atención entera,
@@ -298,7 +300,8 @@ export async function lineasDeLaAtencion(tx: Prisma.TransactionClient, actor: Ac
   })
 
   // Dueño y encargado ven todas.
-  const vistas = puedeVerTodoElTablero(actor)
+  const veTodo = puedeVerTodoElTablero(actor)
+  const vistas = veTodo
     ? todas
     : await tx.visitService.findMany({
         where: whereDeLineas(actor, { visitId }),
@@ -309,7 +312,7 @@ export async function lineasDeLaAtencion(tx: Prisma.TransactionClient, actor: Ac
 
   return {
     lineas: todas.map(paraReglas),
-    totalCentavos: totalEnCentavos(todas),
+    totalCentavos: veTodo ? totalEnCentavos(todas) : null,
     errorDelTotalQueVe: errorDeTotal(totalEnCentavos(vistas)),
   }
 }

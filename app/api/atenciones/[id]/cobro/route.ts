@@ -86,11 +86,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       // Todas las líneas, de todos, contadas antes de leerlas: si pasan del
       // tope de servicios, o si su total no cabe, 400. Nunca se congela el
-      // total de una parte. El total es el de la atención entera y no el de
-      // lo que ve quien cobra: hoy es lo mismo, porque sólo cobra quien ve
-      // todo el tablero (`lib/permisos.test.ts` lo exige), pero lo que se
-      // congela no depende de eso.
+      // total de una parte. El total es el de la atención entera, y sólo lo
+      // recibe quien ve todo el tablero.
       const { lineas, totalCentavos } = await lineasDeLaAtencion(tx, actor, existente.id)
+
+      // Inalcanzable mientras `puedeCobrar` implique `puedeVerTodoElTablero`
+      // (`lib/permisos.test.ts` lo exige). Si alguna vez no, falla cerrado
+      // antes de validar o congelar nada, con el mismo 404 que el resto.
+      if (totalCentavos === null) throw new ErrorDeAtencion(404, "Atención no encontrada")
+
       const excedido = errorDeTotal(totalCentavos)
       if (excedido) throw new ErrorDeAtencion(400, excedido)
 

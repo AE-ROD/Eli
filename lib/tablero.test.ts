@@ -113,12 +113,18 @@ describe("lineasDeLaAtencion", () => {
     ])
   })
 
-  it("el total, en centavos, es el de la atención entera, pregunte quien pregunte: es el que se congela al cobrar", async () => {
+  it("el total, en centavos, es el de la atención entera para dueño y encargado: es el que se congela al cobrar", async () => {
     const { lineasDeLaAtencion } = await import("./tablero")
 
-    for (const quien of [dueña, encargado, carla]) {
+    for (const quien of [dueña, encargado]) {
       expect((await lineasDeLaAtencion(tx, quien, "v-con-colegas")).totalCentavos).toBe(centavos(33000))
     }
+  })
+
+  it("a la profesional el total no le llega: es null, aunque tenga una línea en la atención", async () => {
+    const { lineasDeLaAtencion } = await import("./tablero")
+
+    expect((await lineasDeLaAtencion(tx, carla, "v-con-colegas")).totalCentavos).toBeNull()
   })
 
   it("el tope del total, para la profesional, sobre sus líneas: no se entera de cuánto suman las de los demás", async () => {

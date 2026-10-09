@@ -189,8 +189,12 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
       )
 
       // De quién es la reserva, otra vez y con la atención ya tomada: lo de
-      // afuera se leyó antes de la transacción. Va después de la toma, en el
-      // mismo orden de bloqueo que el resto del tablero: atención → cita.
+      // afuera se leyó antes de la transacción. Esta lectura no bloquea la
+      // cita: si la reserva cambia después, es como si hubiera cambiado
+      // después de deshacer la llegada. Que la borren lo cierra la toma, que
+      // exige `appointmentId`. Lo único que bloquea la cita es el `updateMany`
+      // del final, que va después de la atención, como en el resto del
+      // tablero.
       const reserva = await reservaDeOrigen(tx, actor, citaId)
       if (!reserva || !puedeDeshacerLlegada(actor, reserva)) {
         throw new ErrorDeAtencion(404, "Atención no encontrada")

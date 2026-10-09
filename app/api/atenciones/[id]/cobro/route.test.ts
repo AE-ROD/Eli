@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { puedeCobrar } from "@/lib/permisos"
 import { crearBaseFalsa } from "../../_pruebas/base-falsa"
 import {
   NEGOCIO,
@@ -20,6 +21,13 @@ vi.mock("next-auth", () => ({
 }))
 
 vi.mock("@/lib/auth", () => ({ authOptions: {} }))
+
+// Los permisos de verdad. `puedeCobrar` va envuelto sólo para poder simular,
+// en un test, a alguien que cobre sin ver todo el tablero.
+vi.mock("@/lib/permisos", async (importOriginal) => {
+  const permisos = await importOriginal<typeof import("@/lib/permisos")>()
+  return { ...permisos, puedeCobrar: vi.fn(permisos.puedeCobrar) }
+})
 
 const base = crearBaseFalsa()
 
@@ -126,6 +134,19 @@ describe("POST /api/atenciones/[id]/cobro: quién cobra", () => {
     const res = await cobrar(null, "v-mixta", { pagos: [] })
 
     expect(res.status).toBe(401)
+  })
+
+  it("si alguien pudiera cobrar sin ver todo el tablero, no recibe el total: 404 y no se escribe nada", async () => {
+    // Hoy no pasa: sólo cobra quien ve todo el tablero (`lib/permisos.test.ts`).
+    // Se simula que Pedro, profesional, pudiera cobrar su atención.
+    vi.mocked(puedeCobrar).mockReturnValueOnce(true)
+    const antes = base.volcado()
+
+    const res = await cobrar(sesiones.pedro, "v-pedro", { pagos: [{ medio: "efectivo", monto: 8000 }] })
+
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: "Atención no encontrada" })
+    expect(base.volcado()).toEqual(antes)
   })
 })
 
