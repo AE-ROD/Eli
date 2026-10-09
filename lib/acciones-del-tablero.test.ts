@@ -522,9 +522,11 @@ describe("ofreceDeshacerLlegada", () => {
     expect(ofreceDeshacerLlegada(dueño, { ...enEspera, citaId: null })).toBe(false)
   })
 
-  it("dueño, encargado y el profesional con memberId; sin sesión ni memberId, no", () => {
+  it("dueño y encargado; el profesional no, mientras no se sepa si la reserva es suya; sin sesión ni memberId, no", () => {
     expect(ofreceDeshacerLlegada(encargado, enEspera)).toBe(true)
-    expect(ofreceDeshacerLlegada(profesional, enEspera)).toBe(true)
+    // `puedeDeshacerLlegada` sin la reserva falla cerrado para el profesional:
+    // la pantalla todavía no le pasa de quién es (PRODUCTO.md, sección 7: "sólo sus reservas").
+    expect(ofreceDeshacerLlegada(profesional, enEspera)).toBe(false)
     expect(ofreceDeshacerLlegada({ ...profesional, memberId: null }, enEspera)).toBe(false)
     expect(ofreceDeshacerLlegada(null, enEspera)).toBe(false)
   })

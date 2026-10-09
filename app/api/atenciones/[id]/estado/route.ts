@@ -69,6 +69,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       // Los requisitos se miran sobre todas las líneas, no sólo las que ve el
       // actor, y después de tomar la fila: así nadie las cambia en el medio.
+      // Los topes, sobre las que ve: al profesional, la atención entera le
+      // diría cuánto suman las de los demás (`lineasDeLaAtencion`).
       const { lineas } = await lineasDeLaAtencion(tx, actor, existente.id)
       const falta = requisitoFaltante(destino, lineas)
       if (falta) throw new ErrorDeAtencion(400, falta)

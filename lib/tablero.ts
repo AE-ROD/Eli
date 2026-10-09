@@ -107,7 +107,7 @@ export function leerRango(searchParams: URLSearchParams, maximoMs: number, cuant
 export function buscarAtencion(actor: Actor, id: string) {
   return prisma.visit.findFirst({
     where: whereDeAtenciones(actor, { id }),
-    select: { id: true, businessId: true, status: true, appointmentId: true },
+    select: { id: true, businessId: true, status: true, appointmentId: true, startedAt: true },
   })
 }
 
@@ -131,9 +131,12 @@ const SELECCION_DE_PAGO = {
  * Las líneas y los pagos de una atención que ve el actor. Pasan por
  * `lib/permisos.ts`: al profesional la base ni siquiera le devuelve las
  * líneas de otros ni un solo pago. Los `take` son los topes de
- * `lib/atenciones.ts`, que se validan al escribir: una atención nunca tiene
- * más, así que leer con ellos trae todo y el total que se muestra sale de las
- * mismas líneas que se cobran.
+ * `lib/atenciones.ts`, que se validan al escribir y al cobrar: una atención
+ * cobrada nunca tiene más, así que leer con ellos trae todo y el total que se
+ * muestra sale de las mismas líneas que se cobraron. Una abierta sólo puede
+ * pasarse si entre varios profesionales, cada uno dentro de su tope, cargan
+ * más de la cuenta (`lineasDeLaAtencion`); no se cobra hasta que dueño o
+ * encargado la corrigen.
  */
 function lineasQueVe(actor: Actor) {
   return {
@@ -205,7 +208,7 @@ export function seleccionParaReporte(actor: Actor) {
     paidAt: true,
     voidedAt: true,
     voidReason: true,
-    voidedById: true,
+    voidedByName: true,
     totalCents: puedeVerTodoElTablero(actor),
     services: lineasQueVe(actor),
     payments: pagosQueVe(actor),
@@ -230,16 +233,21 @@ type ReservaLeida = NonNullable<AtencionLeida["appointment"]>
  *   llega acá con un id que ya verificó con `whereDeAtenciones`, pero una
  *   escritura no puede depender de que el llamador se acuerde: si alguna vez
  *   llega un id ajeno, no matchea y no se escribe nada en otro negocio.
+ *
+ * `condicion` es lo que además tiene que seguir siendo cierto (deshacer una
+ * llegada exige que no haya empezado). Va en un `AND` aparte, para que no
+ * pueda pisar el id, el negocio ni el estado.
  */
 export async function tomarAtencion(
   tx: Prisma.TransactionClient,
   actor: Actor,
   id: string,
   estado: string,
-  datos: Prisma.VisitUpdateManyMutationInput
+  datos: Prisma.VisitUpdateManyMutationInput,
+  condicion: Prisma.VisitWhereInput = {}
 ): Promise<void> {
   const { count } = await tx.visit.updateMany({
-    where: { id, businessId: actor.businessId, status: estado },
+    where: { AND: [{ id, businessId: actor.businessId, status: estado }, condicion] },
     data: datos,
   })
   if (count === 0) {
@@ -252,32 +260,79 @@ function paraReglas(linea: { memberId: string | null; byOwner: boolean; priceCen
   return { memberId: linea.memberId, byOwner: linea.byOwner, price: deCentavos(linea.priceCents) }
 }
 
+const SELECCION_PARA_REGLAS = { memberId: true, byOwner: true, priceCents: true } satisfies Prisma.VisitServiceSelect
+
 /**
- * Las líneas de una atención para validarla, con su total en centavos. Todas,
- * no sólo las que ve el actor: un requisito o un tope se cumple o no sobre la
- * atención entera. Va dentro de la transacción y después de `tomarAtencion`,
- * para que nadie las cambie en el medio.
+ * Las líneas de una atención para validarla. Va dentro de la transacción y
+ * después de `tomarAtencion`, para que nadie las cambie en el medio.
  *
- * Primero se cuentan, y si pasan del tope es un 400. Leerlas con `take` y
- * seguir habría validado (y al cobrar, congelado) el total de una parte.
- * Después se mira que el total quepa en la columna (`TOTAL_MAXIMO_CENTAVOS`).
+ * - Los topes de servicios y de total se validan sobre las líneas que ve el
+ *   actor (`whereDeLineas`): todas para dueño y encargado, sólo las suyas para
+ *   el profesional. Sobre la atención entera, el 400 le diría al profesional
+ *   lo que no ve: probando precios o cantidades en sus líneas deduciría cuánto
+ *   suman o cuántas son las de los demás. La atención entera se sigue
+ *   validando donde actúan dueño o encargado, que la ven completa: al
+ *   editarla, al moverla y al cobrarla, que es cuando el total se congela.
+ * - Primero se cuentan, y si pasan del tope es un 400. Leerlas con `take` y
+ *   seguir habría validado (y al cobrar, congelado) el total de una parte.
+ *   Después se mira que el total quepa en la columna (`TOTAL_MAXIMO_CENTAVOS`).
+ * - `lineas`, para los requisitos de `requisitoFaltante`, son todas: un
+ *   requisito se cumple o no sobre la atención entera.
+ * - `totalCentavos` es el de las líneas que ve el actor: el de la atención
+ *   entera sólo para dueño y encargado, los únicos que cobran.
  */
 export async function lineasDeLaAtencion(tx: Prisma.TransactionClient, actor: Actor, visitId: string) {
-  const where = { visitId, visit: { is: { businessId: actor.businessId } } } satisfies Prisma.VisitServiceWhereInput
+  const queVe = whereDeLineas(actor, { visitId })
 
-  const demasiadas = errorDeCantidadDeLineas(await tx.visitService.count({ where }))
+  const demasiadas = errorDeCantidadDeLineas(await tx.visitService.count({ where: queVe }))
   if (demasiadas) throw new ErrorDeAtencion(400, demasiadas)
 
-  const lineas = await tx.visitService.findMany({
-    where,
-    select: { memberId: true, byOwner: true, priceCents: true },
+  const vistas = await tx.visitService.findMany({
+    where: queVe,
+    select: SELECCION_PARA_REGLAS,
+    orderBy: { id: "asc" },
     take: MAXIMO_DE_LINEAS_POR_ATENCION,
   })
-  const totalCentavos = totalEnCentavos(lineas)
+  const totalCentavos = totalEnCentavos(vistas)
   const excedido = errorDeTotal(totalCentavos)
   if (excedido) throw new ErrorDeAtencion(400, excedido)
 
-  return { lineas: lineas.map(paraReglas), totalCentavos }
+  // Dueño y encargado ya leyeron todas.
+  const todas = puedeVerTodoElTablero(actor)
+    ? vistas
+    : await tx.visitService.findMany({
+        where: { visitId, visit: { is: { businessId: actor.businessId } } },
+        select: SELECCION_PARA_REGLAS,
+        orderBy: { id: "asc" },
+        take: MAXIMO_DE_LINEAS_POR_ATENCION,
+      })
+
+  return { lineas: todas.map(paraReglas), totalCentavos }
+}
+
+/**
+ * El nombre de un usuario dentro del negocio del actor: su dueño o uno de sus
+ * miembros; si no es ninguno, `null`. Es lo que se copia al cobrar y al anular
+ * (`paidByName`, `voidedByName`), igual que `professionalName` en las líneas:
+ * si después deja el negocio, el historial sigue diciendo quién fue.
+ */
+export async function nombreEnElNegocio(
+  db: Prisma.TransactionClient,
+  actor: Actor,
+  usuarioId: string | null
+): Promise<string | null> {
+  if (!usuarioId) return null
+  const [negocio, miembro] = await Promise.all([
+    db.business.findFirst({
+      where: { id: actor.businessId, userId: usuarioId },
+      select: { user: { select: { name: true } } },
+    }),
+    db.businessMember.findFirst({
+      where: { businessId: actor.businessId, userId: usuarioId },
+      select: { user: { select: { name: true } } },
+    }),
+  ])
+  return negocio?.user.name ?? miembro?.user.name ?? null
 }
 
 /**

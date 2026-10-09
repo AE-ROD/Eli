@@ -60,14 +60,26 @@ function escenario() {
         paidAt: new Date("2026-10-06T16:00:00.000Z"),
         totalCents: centavos(8000),
         voidedById: "u-duena",
+        voidedByName: "Ana Dueña",
         voidReason: "Cobro duplicado",
       }),
       // Se fue sin ser atendida: nunca se cobró.
-      anulada("v-anulada-sin-cobrar", "2026-10-06T14:00:00.000Z", { voidedById: "u-encargado", customerId: "c-beto", customerName: "Beto" }),
-      // La anuló alguien que ya no está en el equipo (hoy es de otro negocio): su nombre no se resuelve.
-      anulada("v-anulada-por-quien-se-fue", "2026-10-06T20:00:00.000Z", { voidedById: "u-ajeno" }),
-      anulada("v-anulada-ayer", "2026-10-05T20:00:00.000Z", { voidedById: "u-duena" }),
-      anulada("v-anulada-ajena", "2026-10-06T18:00:00.000Z", { businessId: OTRO_NEGOCIO, customerId: "c-ajeno", voidedById: "u-otro" }),
+      anulada("v-anulada-sin-cobrar", "2026-10-06T14:00:00.000Z", {
+        voidedById: "u-encargado",
+        voidedByName: "Bruno Encargado",
+        customerId: "c-beto",
+        customerName: "Beto",
+      }),
+      // La anuló alguien que ya no está en el equipo (hoy es de otro negocio):
+      // su id no se resuelve, pero el nombre quedó copiado al anular.
+      anulada("v-anulada-por-quien-se-fue", "2026-10-06T20:00:00.000Z", { voidedById: "u-ajeno", voidedByName: "Juan Ex Encargado" }),
+      anulada("v-anulada-ayer", "2026-10-05T20:00:00.000Z", { voidedById: "u-duena", voidedByName: "Ana Dueña" }),
+      anulada("v-anulada-ajena", "2026-10-06T18:00:00.000Z", {
+        businessId: OTRO_NEGOCIO,
+        customerId: "c-ajeno",
+        voidedById: "u-otro",
+        voidedByName: "Otro Dueño",
+      }),
       atencion("v-abierta", { status: "en-atencion" }),
       cobrada("v-ajena", "2026-10-06T16:00:00.000Z", 9000, { businessId: OTRO_NEGOCIO, customerId: "c-ajeno" }),
     ],
@@ -369,12 +381,23 @@ describe("GET /api/reportes?anuladas=1: el historial de lo anulado", () => {
     expect(sinCobrar).toMatchObject({ estabaCobrada: false, cobradaEn: null, total: 25000, pagos: [], anuladaPor: "Bruno Encargado" })
   })
 
-  it("quien anuló se busca sólo dentro del negocio: si ya no está, null", async () => {
+  it("quien anuló es el nombre copiado al anular: sigue ahí aunque ya no esté en el negocio", async () => {
     const { data } = await pedir(sesiones.dueña, "anuladas=1")
     const porQuienSeFue = data.filas.find((f: { id: string }) => f.id === "v-anulada-por-quien-se-fue")
 
-    // `u-ajeno` existe y se llama "Carla Profesional", pero es del otro negocio.
-    expect(porQuienSeFue.anuladaPor).toBeNull()
+    // `u-ajeno` hoy es de otro negocio y se llama "Carla Profesional": no se busca por id.
+    expect(porQuienSeFue.anuladaPor).toBe("Juan Ex Encargado")
+  })
+
+  it("sin nombre copiado, null: no se adivina por el id", async () => {
+    base.reiniciar({
+      ...datosBase(),
+      visit: [anulada("v-sin-nombre", "2026-10-06T18:00:00.000Z", { voidedById: "u-duena" })],
+    })
+
+    const { data } = await pedir(sesiones.dueña, "anuladas=1")
+
+    expect(data.filas.map((f: { anuladaPor: string | null }) => f.anuladaPor)).toEqual([null])
   })
 
   it("el resumen: cuántas se anularon y cuánto de eso estaba cobrado", async () => {

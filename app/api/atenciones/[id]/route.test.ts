@@ -48,6 +48,9 @@ function escenario() {
       cita("cita-carla", "m-carla", "confirmada"),
       // Empezó (la cita pasó a en progreso) y la volvieron a espera.
       cita("cita-que-volvio", "m-carla", "en-progreso"),
+      // Alguien la marcó en progreso en la agenda; la atención nunca empezó.
+      cita("cita-en-progreso-a-mano", "m-carla", "en-progreso"),
+      cita("cita-recien-llegada", "m-carla", "confirmada"),
       cita("cita-cancelada-a-mano", "m-carla", "cancelada"),
       cita("cita-empezada", "m-carla", "en-progreso"),
       cita("cita-de-carla-atendida-por-pedro", "m-carla", "confirmada"),
@@ -58,7 +61,9 @@ function escenario() {
       atencion("v-pedro"),
       // Nació de una cita de Carla y nadie le anotó nada todavía.
       atencion("v-de-cita-carla", { appointmentId: "cita-carla" }),
-      atencion("v-que-volvio", { appointmentId: "cita-que-volvio" }),
+      atencion("v-que-volvio", { appointmentId: "cita-que-volvio", startedAt: new Date("2026-10-06T16:05:00.000Z") }),
+      atencion("v-de-cita-en-progreso", { appointmentId: "cita-en-progreso-a-mano" }),
+      atencion("v-recien-llegada", { appointmentId: "cita-recien-llegada" }),
       atencion("v-de-cita-cancelada", { appointmentId: "cita-cancelada-a-mano" }),
       atencion("v-empezada", { status: "en-atencion", appointmentId: "cita-empezada" }),
       atencion("v-con-linea-de-pedro", { appointmentId: "cita-de-carla-atendida-por-pedro" }),
@@ -72,6 +77,8 @@ function escenario() {
       lineaDeLaDueña("l-duena", "v-mixta", { priceCents: centavos(5000) }),
       linea("l-solo-pedro", "v-pedro", { memberId: "m-pedro", professionalName: "Pedro Profesional" }),
       linea("l-que-volvio", "v-que-volvio"),
+      linea("l-de-cita-en-progreso", "v-de-cita-en-progreso"),
+      linea("l-recien-llegada", "v-recien-llegada"),
       linea("l-empezada", "v-empezada"),
       linea("l-de-pedro-en-cita-de-carla", "v-con-linea-de-pedro", { memberId: "m-pedro", professionalName: "Pedro Profesional" }),
       linea("l-cobrada", "v-cobrada"),
@@ -327,37 +334,101 @@ describe("PUT /api/atenciones/[id]: servicios que ya no se ofrecen", () => {
   })
 })
 
-describe("PUT /api/atenciones/[id]: topes de la atención entera", () => {
-  it("la profesional no pasa del tope de servicios sumando los de sus colegas: 400 y nada cambia", async () => {
+describe("PUT /api/atenciones/[id]: topes", () => {
+  /**
+   * v-mixta tiene, además de lo de Carla, 25.000 de Pedro y 5.000 de la
+   * dueña; v-de-cita-carla no tiene ninguna línea de nadie. Si los topes se
+   * validaran sobre la atención entera, el mismo pedido de Carla pasaría en
+   * una y no en la otra: probando precios o cantidades, el 400 le diría cuánto
+   * suman o cuántas son las líneas que no ve.
+   */
+  async function enLasDos(cuerpo: unknown) {
     const { PUT } = await import("./route")
-    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+    const respuesta = async (id: string) => {
+      mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+      const res = await PUT(pedido(URL, cuerpo), conId(id))
+      const data = await res.json()
+      // Lo que le llega: el error, o sus líneas (sin los ids, que son nuevos en cada atención), y si viaja un total.
+      return {
+        status: res.status,
+        error: data.error ?? null,
+        lineas:
+          data.lineas?.map((l: { servicio: string; profesional: unknown; precio: number }) => [l.servicio, l.profesional, l.precio]) ??
+          null,
+        conTotal: "total" in data,
+      }
+    }
+    return { conColegas: await respuesta("v-mixta"), sinColegas: await respuesta("v-de-cita-carla") }
+  }
+
+  it("la profesional no distingue cuánto suman las líneas ajenas: un precio que con ellas pasaría del tope, pasa igual", async () => {
+    const { conColegas, sinColegas } = await enLasDos({ lineas: [{ servicioId: "s-color", precio: 20_000_000 }] })
+
+    expect(conColegas).toEqual(sinColegas)
+    expect(conColegas).toMatchObject({ status: 200, conTotal: false })
+    // La atención entera quedó por encima del tope: así no se cobra (ver abajo).
+    expect(lineasDe("v-mixta").reduce((suma, l) => suma + (l.priceCents as number), 0)).toBe(centavos(20_030_000))
+  })
+
+  it("lo suyo sí tiene tope: dos líneas que juntas pasan de 20.000.000 dan el mismo 400, con y sin colegas, y nada cambia", async () => {
     const antes = base.volcado()
 
-    // v-mixta tiene una de Pedro y una de la dueña: 19 suyas harían 21.
-    const res = await PUT(pedido(URL, { lineas: Array.from({ length: 19 }, () => ({ servicioId: "s-corte" })) }), conId("v-mixta"))
+    const { conColegas, sinColegas } = await enLasDos({
+      lineas: [
+        { servicioId: "s-color", precio: 19_999_999.99 },
+        { servicioId: "s-corte", precio: 0.02 },
+      ],
+    })
 
-    expect(res.status).toBe(400)
-    expect((await res.json()).error).toBe("Una atención puede tener hasta 20 servicios.")
+    expect(conColegas).toEqual(sinColegas)
+    expect(conColegas).toMatchObject({ status: 400, error: "El total de la atención no puede pasar de $20.000.000: divídela en dos." })
     expect(base.volcado()).toEqual(antes)
   })
 
-  it("justo en el tope, sí", async () => {
-    const { PUT } = await import("./route")
-    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+  it("tampoco deduce cuántas líneas ajenas hay: 20 suyas pasan igual con y sin colegas", async () => {
+    const { conColegas, sinColegas } = await enLasDos({ lineas: Array.from({ length: 20 }, () => ({ servicioId: "s-corte" })) })
 
-    const res = await PUT(pedido(URL, { lineas: Array.from({ length: 18 }, () => ({ servicioId: "s-corte" })) }), conId("v-mixta"))
-
-    expect(res.status).toBe(200)
-    expect(lineasDe("v-mixta")).toHaveLength(20)
+    expect(conColegas).toEqual(sinColegas)
+    expect(conColegas.status).toBe(200)
+    expect(lineasDe("v-mixta")).toHaveLength(22)
   })
 
-  it("si el total de la atención entera no cabe, 400 y nada cambia, aunque cada precio sea válido", async () => {
-    const { PUT } = await import("./route")
-    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+  it("y 21 suyas no pasan en ninguna: el pedido ya trae más de las que caben", async () => {
     const antes = base.volcado()
 
-    // 20.000.000 de Carla más los 30.000 de Pedro y la dueña.
-    const res = await PUT(pedido(URL, { lineas: [{ servicioId: "s-color", precio: 20_000_000 }] }), conId("v-mixta"))
+    const { conColegas, sinColegas } = await enLasDos({ lineas: Array.from({ length: 21 }, () => ({ servicioId: "s-corte" })) })
+
+    expect(conColegas.status).toBe(400)
+    expect(conColegas).toEqual(sinColegas)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("la atención entera se sigue validando donde actúa el encargado, que la ve completa: no la pasa a cobro", async () => {
+    await enLasDos({ lineas: [{ servicioId: "s-color", precio: 20_000_000 }] })
+    const { POST } = await import("./estado/route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.encargado)
+
+    const res = await POST(pedido(URL, { estado: "por-cobrar" }), conId("v-mixta"))
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe("El total de la atención no puede pasar de $20.000.000: divídela en dos.")
+    expect(base.buscar("visit", { id: "v-mixta" })[0].status).toBe("en-atencion")
+  })
+
+  it("si edita la dueña, la atención entera: 400 si no cabe, aunque cada precio sea válido, y nada cambia", async () => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const antes = base.volcado()
+
+    const res = await PUT(
+      pedido(URL, {
+        lineas: [
+          { servicioId: "s-color", profesional: "m-carla", precio: 20_000_000 },
+          { servicioId: "s-corte", profesional: "duenio", precio: 0.01 },
+        ],
+      }),
+      conId("v-mixta")
+    )
 
     expect(res.status).toBe(400)
     expect((await res.json()).error).toMatch(/no puede pasar de \$20\.000\.000/)
@@ -471,15 +542,21 @@ describe("DELETE /api/atenciones/[id]: deshacer una llegada", () => {
     return { status: res.status, data: await res.json() }
   }
 
+  async function mover(sesion: unknown, id: string, estado: string) {
+    const { POST } = await import("./estado/route")
+    mockGetServerSession.mockResolvedValueOnce(sesion)
+    return (await POST(pedido(URL, { estado }), conId(id))).status
+  }
+
   const citaGuardada = (id: string) => base.buscar("appointment", { id })[0]
 
   it("la dueña borra la atención en espera de una reserva, con sus líneas, y la cita vuelve a Reservas de hoy", async () => {
-    const { status, data } = await deshacer(sesiones.dueña, "v-que-volvio")
+    const { status, data } = await deshacer(sesiones.dueña, "v-de-cita-en-progreso")
 
     expect(status).toBe(200)
     expect(data).toEqual({ eliminada: true })
-    expect(base.buscar("visit", { id: "v-que-volvio" })).toEqual([])
-    expect(lineasDe("v-que-volvio")).toEqual([])
+    expect(base.buscar("visit", { id: "v-de-cita-en-progreso" })).toEqual([])
+    expect(lineasDe("v-de-cita-en-progreso")).toEqual([])
 
     // La reserva aparece de nuevo en el tablero del día.
     const { GET } = await import("../route")
@@ -487,13 +564,13 @@ describe("DELETE /api/atenciones/[id]: deshacer una llegada", () => {
     const tablero = await (
       await GET(pedido("http://localhost/api/atenciones?desde=2026-10-06T03:00:00.000Z&hasta=2026-10-07T03:00:00.000Z"))
     ).json()
-    expect(tablero.reservas.map((r: { id: string }) => r.id)).toContain("cita-que-volvio")
+    expect(tablero.reservas.map((r: { id: string }) => r.id)).toContain("cita-en-progreso-a-mano")
   })
 
-  it("la cita que había quedado en progreso vuelve a confirmada: en Reservas de hoy no puede figurar atendiéndose", async () => {
-    await deshacer(sesiones.dueña, "v-que-volvio")
+  it("una cita marcada en progreso en la agenda vuelve a confirmada: en Reservas de hoy no puede figurar atendiéndose", async () => {
+    await deshacer(sesiones.dueña, "v-de-cita-en-progreso")
 
-    expect(citaGuardada("cita-que-volvio").status).toBe("confirmada")
+    expect(citaGuardada("cita-en-progreso-a-mano").status).toBe("confirmada")
   })
 
   it("una cita confirmada queda confirmada", async () => {
@@ -516,15 +593,30 @@ describe("DELETE /api/atenciones/[id]: deshacer una llegada", () => {
     expect(base.buscar("visit", { id: "v-de-cita-carla" })).toEqual([])
   })
 
-  it("y el profesional con una línea en la atención, aunque la cita sea de una colega", async () => {
-    const { status } = await deshacer(sesiones.pedro, "v-con-linea-de-pedro")
+  it("también si un colega ya tiene una línea en la atención: la reserva es suya", async () => {
+    const { status } = await deshacer(sesiones.carla, "v-con-linea-de-pedro")
 
     expect(status).toBe(200)
+    expect(base.buscar("visit", { id: "v-con-linea-de-pedro" })).toEqual([])
+    expect(lineasDe("v-con-linea-de-pedro")).toEqual([])
+  })
+
+  it("el profesional con una línea en la atención de la cita de una colega la ve, pero no la deshace: 404 y no toca nada", async () => {
+    const antes = base.volcado()
+
+    const { status, data } = await deshacer(sesiones.pedro, "v-con-linea-de-pedro")
+
+    expect(status).toBe(404)
+    expect(data).toEqual({ error: "Atención no encontrada" })
+    // Ni la atención, ni la línea de Pedro, ni la cita de Carla.
+    expect(base.volcado()).toEqual(antes)
+    expect(base.prisma.$transaction).not.toHaveBeenCalled()
   })
 
   it.each([
     ["una atención de otro negocio", sesiones.dueña, "v-ajena"],
     ["la de la cita de una colega, sin líneas suyas", sesiones.pedro, "v-de-cita-carla"],
+    ["la de la cita de una colega, aunque tenga una línea suya", sesiones.pedro, "v-con-linea-de-pedro"],
     ["una que no existe", sesiones.dueña, "v-inventada"],
     ["cualquiera, para un profesional sin memberId", sesiones.sinMiembro, "v-de-cita-carla"],
   ])("%s: 404 y no borra nada", async (_caso, sesion, id) => {
@@ -540,6 +632,7 @@ describe("DELETE /api/atenciones/[id]: deshacer una llegada", () => {
   it.each([
     ["sin reserva: eso se anula", "v-pedro"],
     ["ya empezó", "v-empezada"],
+    ["empezó y la volvieron a espera: eso se anula", "v-que-volvio"],
     ["ya está cobrada", "v-cobrada"],
     ["ya está anulada", "v-anulada"],
   ])("%s: 409 y no borra nada", async (_caso, id) => {
@@ -551,22 +644,54 @@ describe("DELETE /api/atenciones/[id]: deshacer una llegada", () => {
     expect(base.volcado()).toEqual(antes)
   })
 
+  it("empezar la atención y volverla a espera deja el rastro: ya no se deshace, se anula", async () => {
+    expect(await mover(sesiones.dueña, "v-recien-llegada", "en-atencion")).toBe(200)
+    expect(await mover(sesiones.dueña, "v-recien-llegada", "en-espera")).toBe(200)
+
+    const { status, data } = await deshacer(sesiones.dueña, "v-recien-llegada")
+
+    expect(status).toBe(409)
+    expect(data.error).toBe("Sólo se deshace la llegada de una reserva que todavía no empezó a atenderse; lo demás se anula.")
+    expect(base.buscar("visit", { id: "v-recien-llegada" })[0]).toMatchObject({ status: "en-espera", startedAt: expect.any(Date) })
+    expect(lineasDe("v-recien-llegada")).toHaveLength(1)
+    expect(citaGuardada("cita-recien-llegada").status).toBe("en-progreso")
+  })
+
   it("si alguien la empieza mientras tanto, 409 y no se borra nada", async () => {
     const { DELETE } = await import("./route")
     mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
     const original = base.prisma.visit.findFirst.getMockImplementation()!
     base.prisma.visit.findFirst.mockImplementationOnce(async (args) => {
       const leida = await original(args)
-      await base.prisma.visit.updateMany({ where: { id: "v-que-volvio" }, data: { status: "en-atencion" } })
+      await base.prisma.visit.updateMany({ where: { id: "v-de-cita-en-progreso" }, data: { status: "en-atencion" } })
       return leida
     })
 
-    const res = await DELETE(pedido(URL), conId("v-que-volvio"))
+    const res = await DELETE(pedido(URL), conId("v-de-cita-en-progreso"))
 
     expect(res.status).toBe(409)
-    expect(base.buscar("visit", { id: "v-que-volvio" })).toHaveLength(1)
-    expect(lineasDe("v-que-volvio")).toHaveLength(1)
-    expect(citaGuardada("cita-que-volvio").status).toBe("en-progreso")
+    expect(base.buscar("visit", { id: "v-de-cita-en-progreso" })).toHaveLength(1)
+    expect(lineasDe("v-de-cita-en-progreso")).toHaveLength(1)
+    expect(citaGuardada("cita-en-progreso-a-mano").status).toBe("en-progreso")
+  })
+
+  it("si alguien la empieza y la vuelve a espera mientras tanto, también 409: la toma exige que no haya empezado", async () => {
+    const { DELETE } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const original = base.prisma.visit.findFirst.getMockImplementation()!
+    base.prisma.visit.findFirst.mockImplementationOnce(async (args) => {
+      const leida = await original(args)
+      // Sigue en espera, pero ya empezó una vez.
+      await base.prisma.visit.updateMany({ where: { id: "v-de-cita-en-progreso" }, data: { startedAt: new Date() } })
+      return leida
+    })
+
+    const res = await DELETE(pedido(URL), conId("v-de-cita-en-progreso"))
+
+    expect(res.status).toBe(409)
+    expect(base.buscar("visit", { id: "v-de-cita-en-progreso" })).toHaveLength(1)
+    expect(lineasDe("v-de-cita-en-progreso")).toHaveLength(1)
+    expect(citaGuardada("cita-en-progreso-a-mano").status).toBe("en-progreso")
   })
 
   it("sin sesión recibe 401 y no borra nada", async () => {

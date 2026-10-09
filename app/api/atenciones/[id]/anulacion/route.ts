@@ -11,6 +11,7 @@ import {
   buscarAtencion,
   cuerpoDelPedido,
   leerAtencion,
+  nombreEnElNegocio,
   respuestaDeError,
   tomarAtencion,
 } from "@/lib/tablero"
@@ -21,7 +22,9 @@ const anulacionSchema = z.object({
 
 /**
  * Anula una atención. Queda en el historial como anulada y deja de sumar: lo
- * cobrado no se borra ni se reescribe (PRODUCTO.md, sección 7).
+ * cobrado no se borra ni se reescribe (PRODUCTO.md, sección 7). Quién la
+ * anuló queda con su id y una copia de su nombre, para que el historial lo
+ * diga aunque después deje el negocio.
  *
  * Antes de cobrar anulan dueño y encargado; ya cobrada, sólo el dueño
  * (`puedeAnular`). Si no estaba cobrada y venía de una reserva, la cita pasa a
@@ -54,13 +57,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       throw new ErrorDeAtencion(409, "Esta atención ya está anulada.")
     }
 
+    const usuarioId = session?.user?.id ?? null
+    const nombre = await nombreEnElNegocio(prisma, actor, usuarioId)
+
     const atencion = await prisma.$transaction(async (tx) => {
       // Sobre el mismo estado con que se decidió el permiso: si entretanto la
       // cobraron, el encargado ya no puede anularla y esto no matchea.
       await tomarAtencion(tx, actor, existente.id, existente.status, {
         status: "anulada",
         voidedAt: new Date(),
-        voidedById: session?.user?.id ?? null,
+        voidedById: usuarioId,
+        voidedByName: nombre,
         voidReason: motivo || null,
       })
 

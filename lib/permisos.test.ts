@@ -88,7 +88,6 @@ describe("jerarquía de roles", () => {
     ["cobrar", puedeCobrar, true, true, false],
     ["anotar líneas a nombre de otros", puedeAsignarLineasAOtros, true, true, false],
     ["anotar a alguien sin reserva", puedeAnotarSinReserva, true, true, true],
-    ["deshacer una llegada que ve", puedeDeshacerLlegada, true, true, true],
     ["ver el historial de anuladas", puedeVerAnuladas, true, true, false],
   ])("%s — dueño/encargado/profesional", (_que, puede, esperaDueño, esperaEncargado, esperaProfesional) => {
     expect(puede(dueño)).toBe(esperaDueño)
@@ -239,6 +238,7 @@ describe("falla cerrado", () => {
     expect(puedeAnotarSinReserva(null)).toBe(false)
     expect(puedeAnular(null, { businessId: NEGOCIO, status: "en-espera" })).toBe(false)
     expect(puedeDeshacerLlegada(null)).toBe(false)
+    expect(puedeDeshacerLlegada(null, { businessId: NEGOCIO, memberId: "yo" })).toBe(false)
     expect(puedeVerAnuladas(null)).toBe(false)
     expect(puedeVerCita(null, { businessId: NEGOCIO, memberId: "yo" })).toBe(false)
   })
@@ -248,6 +248,7 @@ describe("falla cerrado", () => {
 
     expect(puedeDeshacerLlegada(roto)).toBe(false)
     // `null === null` no es "su" cita: falla cerrado.
+    expect(puedeDeshacerLlegada(roto, { businessId: NEGOCIO, memberId: null })).toBe(false)
     expect(puedeVerCita(roto, { businessId: NEGOCIO, memberId: null })).toBe(false)
   })
 
@@ -362,6 +363,40 @@ describe("tablero de atenciones", () => {
     it("nadie ve una cita de otro negocio, aunque el memberId coincida", () => {
       expect(puedeVerCita(dueño, { businessId: OTRO_NEGOCIO, memberId: null })).toBe(false)
       expect(puedeVerCita(profesional, { businessId: OTRO_NEGOCIO, memberId: "yo" })).toBe(false)
+    })
+  })
+
+  describe("puedeDeshacerLlegada", () => {
+    const suya = { businessId: NEGOCIO, memberId: "yo" }
+    const deUnaColega = { businessId: NEGOCIO, memberId: "colega" }
+    const sinAsignar = { businessId: NEGOCIO, memberId: null }
+
+    it("dueño y encargado deshacen la llegada de cualquier reserva del negocio", () => {
+      for (const quien of [dueño, encargado]) {
+        expect(puedeDeshacerLlegada(quien, deUnaColega)).toBe(true)
+        expect(puedeDeshacerLlegada(quien, sinAsignar)).toBe(true)
+      }
+    })
+
+    it("el profesional, sólo la de una reserva suya", () => {
+      expect(puedeDeshacerLlegada(profesional, suya)).toBe(true)
+      expect(puedeDeshacerLlegada(profesional, sinAsignar)).toBe(false)
+    })
+
+    it("ver la atención no alcanza: la reserva de una colega no la deshace, aunque tenga una línea en la atención", () => {
+      expect(puedeDeshacerLlegada(profesional, deUnaColega)).toBe(false)
+    })
+
+    it("nadie deshace la llegada de una reserva de otro negocio", () => {
+      expect(puedeDeshacerLlegada(dueño, { businessId: OTRO_NEGOCIO, memberId: null })).toBe(false)
+      expect(puedeDeshacerLlegada(profesional, { businessId: OTRO_NEGOCIO, memberId: "yo" })).toBe(false)
+    })
+
+    it("sin la reserva no se sabe de quién es: dueño y encargado sí, el profesional no", () => {
+      expect(puedeDeshacerLlegada(dueño)).toBe(true)
+      expect(puedeDeshacerLlegada(encargado, null)).toBe(true)
+      expect(puedeDeshacerLlegada(profesional)).toBe(false)
+      expect(puedeDeshacerLlegada(profesional, null)).toBe(false)
     })
   })
 

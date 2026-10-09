@@ -213,10 +213,11 @@ export async function POST(request: NextRequest) {
   try {
     const cuerpo = await cuerpoDelPedido(request)
 
-    // Con `citaId` es una reserva que llegó; sin él, alguien sin reserva.
+    // Con `citaId` es una reserva que llegó (y la zona de quien la marca, para
+    // saber si es de hoy); sin él, alguien sin reserva.
     if (typeof cuerpo === "object" && cuerpo !== null && "citaId" in cuerpo) {
-      const { citaId } = llegadaConReservaSchema.parse(cuerpo)
-      return NextResponse.json(await registrarLlegada(actor, usuarioId, citaId), { status: 201 })
+      const llegada = llegadaConReservaSchema.parse(cuerpo)
+      return NextResponse.json(await registrarLlegada(actor, usuarioId, llegada), { status: 201 })
     }
 
     if (!puedeAnotarSinReserva(actor)) {

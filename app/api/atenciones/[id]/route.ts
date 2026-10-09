@@ -34,9 +34,11 @@ const edicionSchema = z
  * nombre aunque pida otro (`profesionalParaLinea`). Lo cobrado no se reescribe:
  * una atención finalizada o anulada da 409.
  *
- * Después de escribir, la atención entera (con las líneas que el pedido no
- * tocó) tiene que seguir dentro de los topes de servicios y de total; si no,
- * 400 y la transacción se deshace.
+ * Después de escribir, las líneas que ve quien edita tienen que seguir dentro
+ * de los topes de servicios y de total; si no, 400 y la transacción se
+ * deshace. Para dueño y encargado es la atención entera; para el profesional,
+ * sus líneas: si contaran las de sus colegas, el 400 le diría cuánto suman
+ * (`lineasDeLaAtencion`).
  */
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -101,12 +103,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
  * reserva vuelve sola a "Reservas de hoy" (el tablero muestra las citas del
  * día sin atención).
  *
- * - Quien la ve, la borra (`whereDeAtenciones` y `puedeDeshacerLlegada`):
- *   dueño y encargado, o el profesional de esa cita o de una línea. Si no la
- *   ve, 404 como si no existiera.
- * - Sólo una atención que nació de una reserva y sigue en espera
- *   (`sePuedeDeshacerLaLlegada`); si no, 409. Lo que ya empezó o se cobró no
- *   se borra: se anula, y queda en el historial.
+ * - La atención tiene que verse (`whereDeAtenciones`); si no, 404 como si no
+ *   existiera.
+ * - Sólo una que nació de una reserva, está en espera y nunca empezó
+ *   (`sePuedeDeshacerLaLlegada`); si no, 409. Lo que empezó o se cobró no se
+ *   borra: se anula, y queda en el historial.
+ * - Y la reserva tiene que ser de quien deshace (`puedeDeshacerLlegada`):
+ *   dueño y encargado, cualquiera del negocio; el profesional, sólo una suya.
+ *   Ver la atención no alcanza: el profesional ve la de la cita de una colega
+ *   si tiene una línea en ella, y borrarla se llevaría las líneas de la
+ *   colega y le cambiaría la cita. Si no puede, 404 sin escribir nada.
  */
 export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -121,23 +127,29 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     return NextResponse.json({ error: "Atención no encontrada" }, { status: 404 })
   }
 
-  if (!puedeDeshacerLlegada(actor)) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 })
-  }
-
   try {
     if (!sePuedeDeshacerLaLlegada(existente)) {
       throw new ErrorDeAtencion(
         409,
-        "Sólo se deshace la llegada de una reserva que todavía está en espera; lo demás se anula."
+        "Sólo se deshace la llegada de una reserva que todavía no empezó a atenderse; lo demás se anula."
       )
     }
     const citaId = existente.appointmentId
 
+    // La reserva de origen, del negocio: decide si quien pide puede deshacerla.
+    const cita = await prisma.appointment.findFirst({
+      where: { id: citaId, businessId: actor.businessId },
+      select: { businessId: true, memberId: true },
+    })
+    if (!cita || !puedeDeshacerLlegada(actor, cita)) {
+      return NextResponse.json({ error: "Atención no encontrada" }, { status: 404 })
+    }
+
     await prisma.$transaction(async (tx) => {
-      // Primero se toma la fila en espera: si entretanto alguien la empezó,
+      // Primero se toma la fila, sólo si sigue en espera y nunca empezó: si
+      // entretanto alguien la empezó, aunque después la haya vuelto a espera,
       // no matchea, 409, y no se borra nada.
-      await tomarAtencion(tx, actor, existente.id, "en-espera", { status: "en-espera" })
+      await tomarAtencion(tx, actor, existente.id, "en-espera", { status: "en-espera" }, { startedAt: null })
 
       // La base borra las líneas en cascada; se borran a la vista igual, para
       // no depender de eso al leer este endpoint.
@@ -146,12 +158,13 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
       })
       await tx.visit.deleteMany({ where: { id: existente.id, businessId: actor.businessId, status: "en-espera" } })
 
-      // La cita vuelve a ser una reserva que no llegó. Si la atención llegó a
-      // empezar y volvió a espera, la cita quedó "en progreso", que en
-      // "Reservas de hoy" se leería como alguien atendiéndose: vuelve a
-      // "confirmada" (la reserva era real y el cliente vino). Pendiente y
-      // confirmada quedan como están; cancelada o completada son decisiones
-      // tomadas a mano en la agenda y no se pisan.
+      // La cita vuelve a ser una reserva que no llegó. Si figura "en
+      // progreso" (alguien la marcó así en la agenda), en "Reservas de hoy" se
+      // leería como alguien atendiéndose: vuelve a "confirmada" (la reserva
+      // era real y el cliente vino). Por el tablero ya no llega a quedar así:
+      // una atención que empezó no se deshace. Pendiente y confirmada quedan
+      // como están; cancelada o completada son decisiones tomadas a mano en la
+      // agenda y no se pisan.
       await tx.appointment.updateMany({
         where: { id: citaId, businessId: actor.businessId, status: "en-progreso" },
         data: { status: "confirmada" },

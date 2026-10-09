@@ -100,9 +100,17 @@ describe("tiemposDeTransicion", () => {
     expect(tiemposDeTransicion("en-atencion", "por-cobrar", ahora)).toEqual({ readyAt: ahora })
   })
 
-  it("hacia atrás borra el del paso que se deshace", () => {
+  it("de por cobrar a en atención borra cuándo quedó lista: todavía no lo está", () => {
     expect(tiemposDeTransicion("por-cobrar", "en-atencion", ahora)).toEqual({ readyAt: null })
-    expect(tiemposDeTransicion("en-atencion", "en-espera", ahora)).toEqual({ startedAt: null })
+  })
+
+  it("de en atención a en espera conserva cuándo empezó: es el rastro de que empezó", () => {
+    expect(tiemposDeTransicion("en-atencion", "en-espera", ahora)).toEqual({})
+  })
+
+  it("al volver a empezar marca el momento nuevo", () => {
+    const despues = new Date("2026-10-06T15:30:00.000Z")
+    expect(tiemposDeTransicion("en-espera", "en-atencion", despues)).toEqual({ startedAt: despues })
   })
 })
 
@@ -178,8 +186,8 @@ describe("topes del dinero: nada desborda la columna Int de Postgres", () => {
 })
 
 describe("sePuedeDeshacerLaLlegada", () => {
-  it("sólo de una reserva que todavía espera", () => {
-    expect(sePuedeDeshacerLaLlegada({ status: "en-espera", appointmentId: "cita-1" })).toBe(true)
+  it("sólo de una reserva que espera y nunca empezó", () => {
+    expect(sePuedeDeshacerLaLlegada({ status: "en-espera", appointmentId: "cita-1", startedAt: null })).toBe(true)
   })
 
   it.each([
@@ -189,7 +197,19 @@ describe("sePuedeDeshacerLaLlegada", () => {
     ["cobrada", "finalizada", "cita-1"],
     ["anulada", "anulada", "cita-1"],
   ])("no: %s", (_caso, status, appointmentId) => {
-    expect(sePuedeDeshacerLaLlegada({ status, appointmentId })).toBe(false)
+    expect(sePuedeDeshacerLaLlegada({ status, appointmentId, startedAt: null })).toBe(false)
+  })
+
+  it("no si empezó y la volvieron a espera: eso se anula", () => {
+    // Desde la base llega como `Date`; desde la API, como texto ISO.
+    expect(sePuedeDeshacerLaLlegada({ status: "en-espera", appointmentId: "cita-1", startedAt: new Date() })).toBe(false)
+    expect(
+      sePuedeDeshacerLaLlegada({ status: "en-espera", appointmentId: "cita-1", startedAt: "2026-10-06T15:00:00.000Z" })
+    ).toBe(false)
+  })
+
+  it("sin startedAt (la pantalla todavía no lo manda) se lee como no empezada: el servidor siempre lo pasa", () => {
+    expect(sePuedeDeshacerLaLlegada({ status: "en-espera", appointmentId: "cita-1" })).toBe(true)
   })
 })
 

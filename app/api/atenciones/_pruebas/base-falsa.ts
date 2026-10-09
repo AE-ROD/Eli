@@ -71,6 +71,8 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     createdById: null,
     paidById: null,
     voidedById: null,
+    paidByName: null,
+    voidedByName: null,
   }),
   visitService: () => ({ serviceId: null, memberId: null, byOwner: false }),
   visitPayment: () => ({ createdAt: new Date() }),

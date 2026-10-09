@@ -110,31 +110,6 @@ function lineasDeLaFila(atencion: AtencionLeida, filtros: FiltrosDeLinea) {
 // ─── Lo anulado ──────────────────────────────────────────────────────────────
 
 /**
- * El nombre de quien anuló cada atención, por id de usuario. Sólo se busca
- * dentro del negocio (su dueño y sus miembros): el id de otro negocio, o el
- * de alguien que ya no está, no se resuelve y queda en `null`.
- */
-async function nombresDeQuienesAnularon(actor: Actor, ids: string[]): Promise<Map<string, string>> {
-  const nombres = new Map<string, string>()
-  if (ids.length === 0) return nombres
-
-  const [negocio, miembros] = await Promise.all([
-    prisma.business.findUnique({
-      where: { id: actor.businessId },
-      select: { userId: true, user: { select: { name: true } } },
-    }),
-    prisma.businessMember.findMany({
-      where: { businessId: actor.businessId, userId: { in: ids } },
-      select: { userId: true, user: { select: { name: true } } },
-      take: ids.length,
-    }),
-  ])
-  for (const miembro of miembros) nombres.set(miembro.userId, miembro.user.name)
-  if (negocio) nombres.set(negocio.userId, negocio.user.name)
-  return nombres
-}
-
-/**
  * El historial de lo anulado en el período (PRODUCTO.md, sección 7: lo
  * anulado "queda en el historial como anulada"). Por fecha de anulación, de
  * la más reciente a la más vieja. Sólo el período: los filtros de turno,
@@ -143,6 +118,9 @@ async function nombresDeQuienesAnularon(actor: Actor, ids: string[]): Promise<Ma
  * Estas atenciones no suman en el reporte de lo cobrado, que sólo lee las
  * finalizadas. El resumen dice cuántas son y cuánto de lo anulado había
  * llegado a cobrarse: lo que dejó de sumar.
+ *
+ * Quién anuló es el nombre que se copió al anular (`voidedByName`): sigue
+ * ahí aunque esa persona ya no esté en el negocio.
  */
 async function reporteDeAnuladas(actor: Actor, desde: Date, hasta: Date, pagina: number) {
   const leidas = await prisma.visit.findMany({
@@ -153,9 +131,6 @@ async function reporteDeAnuladas(actor: Actor, desde: Date, hasta: Date, pagina:
   })
   const truncado = leidas.length > TOPE_DE_ATENCIONES
   const anuladas = leidas.slice(0, TOPE_DE_ATENCIONES)
-
-  const ids = [...new Set(anuladas.flatMap((atencion) => (atencion.voidedById ? [atencion.voidedById] : [])))]
-  const nombres = await nombresDeQuienesAnularon(actor, ids)
 
   // Lo cobrado se congeló en `totalCents` al cobrar: es lo que dejó de sumar.
   const cobradas = anuladas.filter((atencion) => atencion.paidAt !== null)
@@ -171,7 +146,7 @@ async function reporteDeAnuladas(actor: Actor, desde: Date, hasta: Date, pagina:
       id: atencion.id,
       anuladaEn: atencion.voidedAt,
       motivoDeAnulacion: atencion.voidReason,
-      anuladaPor: (atencion.voidedById && nombres.get(atencion.voidedById)) || null,
+      anuladaPor: atencion.voidedByName,
       estabaCobrada: atencion.paidAt !== null,
       cobradaEn: atencion.paidAt,
       cliente: { id: atencion.customerId, nombre: atencion.customerName },

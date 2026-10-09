@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { aCentavos, errorDeTotal, esPrecioValido, mismoNombreDeServicio, totalEnCentavos } from "@/lib/atenciones"
 import { lineasPedidasSchema, resolverLineas, type LineaResuelta } from "@/lib/lineas-de-atencion"
+import { diaEn, esZonaHorariaValida } from "@/lib/reportes"
 import {
   profesionalParaLinea,
   puedeVerTodoElTablero,
@@ -25,19 +26,32 @@ export const ESTADOS_DE_RESERVA = ["pendiente", "confirmada", "en-progreso"]
 const CLIENTE_SIN_FICHA = "Cliente sin ficha"
 
 /**
- * Cuán lejos de ahora puede estar una reserva para marcar que llegó: 24 horas
- * hacia atrás o hacia adelante. El servidor no sabe en qué huso está el local,
- * así que no puede decir "hoy" con el calendario. Con 24 horas a cada lado
- * caben las reservas de hoy en cualquier huso (salvo los extremos del día de
- * 25 horas del cambio de hora), y una de pasado mañana o de la semana pasada,
- * que es un clic en la tarjeta equivocada, no. Una de mañana temprano puede
- * caber: para cortar justo en la medianoche haría falta la zona de quien mira.
+ * Cuán lejos de ahora puede estar una reserva para marcar que llegó, cuando
+ * el pedido no trae la zona de quien la marca: 24 horas hacia atrás o hacia
+ * adelante. Sin zona, el servidor no sabe en qué huso está el local y no
+ * puede decir "hoy" con el calendario. Con 24 horas a cada lado caben las
+ * reservas de hoy en cualquier huso (salvo los extremos del día de 25 horas
+ * del cambio de hora), y una de pasado mañana o de la semana pasada, que es
+ * un clic en la tarjeta equivocada, no. Una de mañana temprano sí cabe: por
+ * eso la pantalla manda la zona (`llegadaConReservaSchema`).
  */
 const VENTANA_DE_LLEGADA_MS = 24 * 60 * 60 * 1000
 
 export const llegadaConReservaSchema = z.object({
   citaId: z.string().min(1),
+  /**
+   * La zona IANA del dispositivo de quien marca la llegada
+   * (`America/Santiago`), la misma con que pide el tablero del día. Con ella,
+   * "de hoy" es el día calendario en esa zona; sin ella, la ventana de
+   * `VENTANA_DE_LLEGADA_MS`.
+   */
+  zona: z
+    .string()
+    .refine(esZonaHorariaValida, "La zona horaria no es una zona IANA válida, como America/Santiago.")
+    .optional(),
 })
+
+export type LlegadaConReserva = z.infer<typeof llegadaConReservaSchema>
 
 export const llegadaSinReservaSchema = z
   .object({
@@ -135,13 +149,23 @@ async function lineaDeLaReserva(actor: Actor, cita: CitaQueLlega): Promise<Linea
 }
 
 /**
+ * Si la reserva es de hoy: con la zona de quien marca la llegada, si empieza
+ * dentro de su día calendario (`diaEn`); sin ella, si está a menos de
+ * `VENTANA_DE_LLEGADA_MS` de ahora.
+ */
+function esDeHoy(inicio: Date, ahora: Date, zona: string | undefined): boolean {
+  if (!zona) return Math.abs(inicio.getTime() - ahora.getTime()) <= VENTANA_DE_LLEGADA_MS
+  const hoy = diaEn(ahora, zona)
+  return inicio >= hoy.desde && inicio < hoy.hasta
+}
+
+/**
  * Llegó alguien con reserva: la cita pasa al tablero como atención en espera.
  * La cita tiene que ser visible para el actor (`whereDeAgenda`): una ajena da
- * 404 igual que una que no existe. Y tiene que ser de hoy
- * (`VENTANA_DE_LLEGADA_MS`): una de otro día no está llegando, es un clic en
- * la tarjeta equivocada.
+ * 404 igual que una que no existe. Y tiene que ser de hoy (`esDeHoy`): una de
+ * otro día no está llegando, es un clic en la tarjeta equivocada.
  */
-export async function registrarLlegada(actor: Actor, usuarioId: string | null, citaId: string) {
+export async function registrarLlegada(actor: Actor, usuarioId: string | null, { citaId, zona }: LlegadaConReserva) {
   const cita = await prisma.appointment.findFirst({
     where: whereDeAgenda(actor, { id: citaId }),
     select: {
@@ -165,7 +189,7 @@ export async function registrarLlegada(actor: Actor, usuarioId: string | null, c
   if (!ESTADOS_DE_RESERVA.includes(cita.status)) {
     throw new ErrorDeAtencion(409, "La reserva está cancelada o ya se completó")
   }
-  if (Math.abs(cita.startTime.getTime() - Date.now()) > VENTANA_DE_LLEGADA_MS) {
+  if (!esDeHoy(cita.startTime, new Date(), zona)) {
     throw new ErrorDeAtencion(409, "Esta reserva no es de hoy: sólo se marca la llegada de las reservas del día.")
   }
 

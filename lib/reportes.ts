@@ -174,6 +174,16 @@ export function iniciosDeMesEn(ahora: Date, zona: string): { inicioMes: Date; in
   }
 }
 
+/**
+ * El día de `instante` en una zona, como [desde, hasta): `hasta` es el inicio
+ * del día siguiente, igual que el rango que pide el tablero. No se suman 24
+ * horas a `desde`: el día del cambio de hora dura 23 o 25.
+ */
+export function diaEn(instante: Date, zona: string): { desde: Date; hasta: Date } {
+  const { año, mes, dia } = fechaDeParedEn(instante.getTime(), zona)
+  return { desde: inicioDelDiaEn(año, mes, dia, zona), hasta: inicioDelDiaEn(año, mes, dia + 1, zona) }
+}
+
 // ─── Lo que el reporte lee de una atención ───────────────────────────────────
 
 export interface LineaParaReporte {

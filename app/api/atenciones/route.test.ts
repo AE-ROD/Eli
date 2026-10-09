@@ -523,10 +523,12 @@ describe("POST /api/atenciones con { citaId }: qué línea se precarga", () => {
 
 describe("POST /api/atenciones con { citaId }: sólo reservas de hoy", () => {
   const URL = "http://localhost/api/atenciones"
+  /** Las 12:00 del 6 de octubre en Santiago (UTC-3); en Tokio (UTC+9) ya son las 00:00 del 7. */
   const AHORA = hoyA("15:00")
   const aHoras = (horas: number) => new Date(AHORA.getTime() + horas * 60 * 60 * 1000)
+  const NO_ES_DE_HOY = "Esta reserva no es de hoy: sólo se marca la llegada de las reservas del día."
 
-  async function llegarA(startTime: Date) {
+  async function llegarA(startTime: Date, extra: Record<string, unknown> = {}) {
     const { POST } = await import("./route")
     base.reiniciar({
       ...datosBase(),
@@ -535,29 +537,78 @@ describe("POST /api/atenciones con { citaId }: sólo reservas de hoy", () => {
       ],
     })
     mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
-    const res = await POST(pedido(URL, { citaId: "cita" }))
+    const res = await POST(pedido(URL, { citaId: "cita", ...extra }))
     return { status: res.status, data: await res.json() }
   }
 
-  it.each([
-    ["a más de 24 horas hacia adelante", 25],
-    ["pasado mañana", 48],
-    ["a más de 24 horas hacia atrás", -25],
-  ])("una reserva %s da 409 con un mensaje claro, y no crea nada", async (_caso, horas) => {
-    const { status, data } = await llegarA(aHoras(horas))
+  describe("con la zona de quien marca la llegada: el día calendario en esa zona", () => {
+    const enSantiago = { zona: "America/Santiago" }
 
-    expect(status).toBe(409)
-    expect(data.error).toBe("Esta reserva no es de hoy: sólo se marca la llegada de las reservas del día.")
-    expect(base.buscar("visit")).toEqual([])
+    it.each([
+      ["QA: de ayer a las 20:00", "2026-10-05T23:00:00.000Z"],
+      ["de ayer a las 23:59", "2026-10-06T02:59:00.000Z"],
+      ["QA: de mañana a la 01:00, aunque esté a 13 horas", "2026-10-07T04:00:00.000Z"],
+      ["de mañana a las 00:00 en punto", "2026-10-07T03:00:00.000Z"],
+    ])("una reserva %s da 409 y no crea nada", async (_caso, inicio) => {
+      const { status, data } = await llegarA(new Date(inicio), enSantiago)
+
+      expect(status).toBe(409)
+      expect(data.error).toBe(NO_ES_DE_HOY)
+      expect(base.buscar("visit")).toEqual([])
+    })
+
+    it.each([
+      ["a las 00:00 en punto", "2026-10-06T03:00:00.000Z"],
+      ["atrasada, de la mañana", "2026-10-06T12:00:00.000Z"],
+      ["a las 23:30", "2026-10-07T02:30:00.000Z"],
+    ])("una reserva de hoy %s llega", async (_caso, inicio) => {
+      const { status } = await llegarA(new Date(inicio), enSantiago)
+
+      expect(status).toBe(201)
+      expect(base.buscar("visit")).toHaveLength(1)
+    })
+
+    it("el día es el de esa zona: las 23:00 del 6 en Tokio ya son de ayer para alguien que está en Tokio", async () => {
+      const inicio = new Date("2026-10-06T14:00:00.000Z")
+
+      expect((await llegarA(inicio, enSantiago)).status).toBe(201)
+      expect((await llegarA(inicio, { zona: "Asia/Tokyo" })).status).toBe(409)
+    })
+
+    it.each([
+      ["un desplazamiento, que no es una zona", "-03:00"],
+      ["una zona que no existe", "Marte/Olympus"],
+      ["vacía", ""],
+      ["que no es texto", -3],
+    ])("una zona %s da 400 y no crea nada", async (_caso, zona) => {
+      const { status } = await llegarA(hoyA("16:00"), { zona })
+
+      expect(status).toBe(400)
+      expect(base.buscar("visit")).toEqual([])
+    })
   })
 
-  it.each([
-    ["que todavía no empieza", 23],
-    ["atrasada", -23],
-  ])("una reserva de hoy %s llega", async (_caso, horas) => {
-    const { status } = await llegarA(aHoras(horas))
+  describe("sin zona: a menos de 24 horas de ahora", () => {
+    it.each([
+      ["a más de 24 horas hacia adelante", 25],
+      ["pasado mañana", 48],
+      ["a más de 24 horas hacia atrás", -25],
+    ])("una reserva %s da 409 con un mensaje claro, y no crea nada", async (_caso, horas) => {
+      const { status, data } = await llegarA(aHoras(horas))
 
-    expect(status).toBe(201)
+      expect(status).toBe(409)
+      expect(data.error).toBe(NO_ES_DE_HOY)
+      expect(base.buscar("visit")).toEqual([])
+    })
+
+    it.each([
+      ["que todavía no empieza", 23],
+      ["atrasada", -23],
+    ])("una reserva de hoy %s llega", async (_caso, horas) => {
+      const { status } = await llegarA(aHoras(horas))
+
+      expect(status).toBe(201)
+    })
   })
 })
 

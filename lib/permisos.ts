@@ -125,16 +125,6 @@ export const puedeAnotarSinReserva = (actor: Actor | null): boolean =>
   gestionaElNegocio(actor) || !!actor?.memberId
 
 /**
- * Deshacer una llegada marcada por error: la atención en espera se borra y la
- * reserva vuelve a "Reservas de hoy". Lo hace quien ve la atención
- * (`whereDeAtenciones`): dueño y encargado, cualquiera; el profesional, la que
- * nació de su cita o tiene una línea suya. Como en `puedeAnotarSinReserva`,
- * un profesional sin `memberId` no puede: no hay atención que sea suya.
- */
-export const puedeDeshacerLlegada = (actor: Actor | null): boolean =>
-  gestionaElNegocio(actor) || !!actor?.memberId
-
-/**
  * El historial de lo anulado: totales y pagos de atenciones que dejaron de
  * sumar, y quién las anuló. Es facturación del negocio, así que lo ve quien
  * ve los ingresos.
@@ -159,6 +149,24 @@ export const puedeVerCita = (actor: Actor | null, cita: CitaDelNegocio): boolean
   if (puedeVerTodaLaAgenda(actor)) return true
   return !!actor?.memberId && actor.memberId === cita.memberId
 }
+
+/**
+ * Deshacer una llegada marcada por error: la atención en espera se borra y la
+ * reserva vuelve a "Reservas de hoy". Dueño y encargado, la de cualquier
+ * reserva del negocio; el profesional, sólo la de una reserva suya
+ * (PRODUCTO.md, sección 7), con la misma regla que `puedeVerCita`.
+ *
+ * Ver la atención no alcanza: el profesional ve la de la cita de una colega
+ * si tiene una línea en ella, y deshacerla borraría las líneas de la colega y
+ * le cambiaría la cita.
+ *
+ * `cita` es la reserva de la que nació la atención, leída del negocio. Sin
+ * ella no se sabe de quién es la reserva, así que sólo pueden dueño y
+ * encargado, a quienes eso no les cambia nada; el profesional, no (falla
+ * cerrado). Un profesional sin `memberId` nunca: ninguna reserva es suya.
+ */
+export const puedeDeshacerLlegada = (actor: Actor | null, cita?: CitaDelNegocio | null): boolean =>
+  cita ? puedeVerCita(actor, cita) : gestionaElNegocio(actor)
 
 /** Atención sobre la que se decide algo. Trae su negocio para poder validarlo. */
 export interface AtencionDelNegocio {

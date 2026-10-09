@@ -111,11 +111,15 @@ describe("POST /api/atenciones/[id]/cobro: quién cobra", () => {
     expect(res.status).toBe(404)
   })
 
-  it("el encargado cobra: es la caja del día", async () => {
+  it("el encargado cobra: es la caja del día, y queda quién cobró con su nombre copiado", async () => {
     const res = await cobrar(sesiones.encargado, "v-pedro", { pagos: [{ medio: "efectivo", monto: 8000 }] })
 
     expect(res.status).toBe(200)
-    expect(atencionGuardada("v-pedro")).toMatchObject({ status: "finalizada", paidById: "u-encargado" })
+    expect(atencionGuardada("v-pedro")).toMatchObject({
+      status: "finalizada",
+      paidById: "u-encargado",
+      paidByName: "Bruno Encargado",
+    })
   })
 
   it("sin sesión recibe 401", async () => {
@@ -141,6 +145,7 @@ describe("POST /api/atenciones/[id]/cobro: el cobro", () => {
       status: "finalizada",
       paidAt: AHORA,
       paidById: "u-duena",
+      paidByName: "Ana Dueña",
       totalCents: centavos(33000),
     })
     expect(pagosDe("v-mixta")).toEqual([

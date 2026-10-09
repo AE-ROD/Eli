@@ -11,7 +11,11 @@ import { esMedioDePago } from "@/lib/medios-de-pago"
 
 // ─── Estados ─────────────────────────────────────────────────────────────────
 
-/** En kebab-case, igual que los estados de la cita. */
+/**
+ * En kebab-case, igual que los estados de la cita. La base repite la lista en
+ * una restricción CHECK (`atenciones_status_check`, en la migración del
+ * tablero): un estado nuevo pide también una migración.
+ */
 export const ESTADOS_DE_ATENCION = [
   { id: "en-espera", nombre: "En espera" },
   { id: "en-atencion", nombre: "En atención" },
@@ -71,15 +75,18 @@ export interface TiemposDeAtencion {
 
 /**
  * Qué tiempos marca un movimiento entre columnas activas. Hacia adelante se
- * marca el momento; hacia atrás se borra el del paso que se deshace, para que
- * una atención de vuelta en espera no muestre que ya empezó. Al volver a
- * avanzar se marca de nuevo.
+ * marca el momento, también si se vuelve a avanzar después de retroceder.
+ *
+ * Hacia atrás, de "Por cobrar" a "En atención" se borra cuándo quedó lista
+ * para cobrar: todavía no lo está. De "En atención" a "En espera", en cambio,
+ * `startedAt` se conserva: es el rastro de que la atención empezó, y una que
+ * empezó no se borra deshaciendo la llegada, se anula y queda en el historial
+ * (`sePuedeDeshacerLaLlegada`).
  */
 export function tiemposDeTransicion(desde: EstadoActivo, hacia: EstadoActivo, ahora: Date): TiemposDeAtencion {
   if (desde === "en-espera" && hacia === "en-atencion") return { startedAt: ahora }
   if (desde === "en-atencion" && hacia === "por-cobrar") return { readyAt: ahora }
   if (desde === "por-cobrar" && hacia === "en-atencion") return { readyAt: null }
-  if (desde === "en-atencion" && hacia === "en-espera") return { startedAt: null }
   return {}
 }
 
@@ -113,7 +120,11 @@ export function deCentavos(centavos: number): number {
  *   Es una cifra redonda que se puede decir en un mensaje, deja un 7 % de
  *   margen bajo el límite de la columna y sobra para cualquier visita en la
  *   moneda que sea. Se valida sobre la suma de las líneas al anotarlas, al
- *   editarlas y otra vez al cobrar.
+ *   editarlas y otra vez al cobrar, que es cuando se congela. El profesional
+ *   lo cumple sobre sus líneas, que son las que ve: sobre la atención entera,
+ *   el rechazo le diría cuánto suman las de los demás (ver
+ *   `lineasDeLaAtencion`). La base repite el tope del total congelado en una
+ *   restricción CHECK (`atenciones_totalCents_check`).
  * - Un precio o un pago tampoco pasa de eso: ninguno puede ser más que el
  *   total que lo contiene. Como los pagos suman exactamente el total, con el
  *   total acotado ningún pago puede desbordar, y el tope por monto corta antes
@@ -134,6 +145,11 @@ export const MONTO_MAXIMO = deCentavos(TOTAL_MAXIMO_CENTAVOS)
  * atendieron. Ninguna visita real tiene tantos; el tope corta un pedido
  * absurdo y asegura que leer las líneas con este `take` las trae todas, así
  * que el total que se muestra y el que se cobra salen de las mismas.
+ *
+ * Como el total, el profesional lo cumple sobre sus líneas, para no poder
+ * contar las de los demás. Una atención abierta puede entonces pasarse si
+ * entre todos cargan más; no se cobra así: dueño y encargado la validan
+ * entera al moverla y al cobrarla, y la corrigen desde el editor.
  */
 export const MAXIMO_DE_LINEAS_POR_ATENCION = 20
 
@@ -254,13 +270,22 @@ export function requisitoFaltante(destino: string, lineas: readonly LineaDeAtenc
 /**
  * Si se puede deshacer la llegada (borrar la atención y devolver la reserva a
  * "Reservas de hoy"): sólo si nació de una reserva, porque sin reserva no hay
- * adónde volver (eso se anula), y sólo mientras espera, porque una atención
- * que ya empezó registró algo que no se borra.
+ * adónde volver (eso se anula), y sólo si nunca empezó: está en espera y sin
+ * `startedAt`. Una atención que empezó registró algo que no se borra, aunque
+ * la hayan vuelto a espera (volver no borra `startedAt`, ver
+ * `tiemposDeTransicion`): se anula, y queda en el historial.
+ *
+ * `startedAt` llega como `Date` desde la base y como texto ISO desde la API
+ * (`empezoEn`). Si no viene se lee como no empezada: es opcional sólo para que
+ * la pantalla compile hasta que lo mande, y lo que decide ella es si ofrece el
+ * botón. El servidor siempre lo pasa (`buscarAtencion`) y además lo exige en
+ * el `WHERE` con que toma la fila antes de borrarla.
  */
-export function sePuedeDeshacerLaLlegada<T extends { status: string; appointmentId: string | null }>(
-  atencion: T
-): atencion is T & { appointmentId: string } {
-  return atencion.status === "en-espera" && atencion.appointmentId !== null
+export function sePuedeDeshacerLaLlegada<
+  T extends { status: string; appointmentId: string | null; startedAt?: Date | string | null },
+>(atencion: T): atencion is T & { appointmentId: string } {
+  const empezo = atencion.startedAt !== null && atencion.startedAt !== undefined
+  return atencion.status === "en-espera" && atencion.appointmentId !== null && !empezo
 }
 
 /**

@@ -110,6 +110,7 @@ describe("POST /api/atenciones/[id]/anulacion", () => {
       status: "anulada",
       voidedAt: AHORA,
       voidedById: "u-encargado",
+      voidedByName: "Bruno Encargado",
       voidReason: "Se fue sin esperar",
     })
     expect(citaGuardada("cita-abierta").status).toBe("cancelada")
@@ -130,7 +131,12 @@ describe("POST /api/atenciones/[id]/anulacion", () => {
     const res = await anular(sesiones.dueña, "v-cobrada", { motivo: "Cobro duplicado" })
 
     expect(res.status).toBe(200)
-    expect(atencionGuardada("v-cobrada")).toMatchObject({ status: "anulada", voidedById: "u-duena", totalCents: centavos(8000) })
+    expect(atencionGuardada("v-cobrada")).toMatchObject({
+      status: "anulada",
+      voidedById: "u-duena",
+      voidedByName: "Ana Dueña",
+      totalCents: centavos(8000),
+    })
     expect(base.buscar("visitPayment", { visitId: "v-cobrada" })).toHaveLength(1)
     expect(citaGuardada("cita-cobrada").status).toBe("completada")
   })
@@ -183,5 +189,24 @@ describe("POST /api/atenciones/[id]/anulacion", () => {
     const res = await anular(null, "v-espera")
 
     expect(res.status).toBe(401)
+  })
+
+  it("si quien anuló deja el negocio, el historial de anuladas sigue diciendo quién fue", async () => {
+    await anular(sesiones.encargado, "v-por-cobrar", { motivo: "Se fue sin esperar" })
+    // Bruno deja el equipo: su id ya no se resuelve dentro del negocio.
+    await base.prisma.businessMember.deleteMany({ where: { id: "m-encargado" } })
+
+    const { GET } = await import("@/app/api/reportes/route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const res = await GET(
+      pedido("http://localhost/api/reportes?desde=2026-10-06T03:00:00.000Z&hasta=2026-10-07T03:00:00.000Z&zona=America/Santiago&anuladas=1")
+    )
+    const data = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(data.filas.find((fila: { id: string }) => fila.id === "v-por-cobrar")).toMatchObject({
+      anuladaPor: "Bruno Encargado",
+      motivoDeAnulacion: "Se fue sin esperar",
+    })
   })
 })

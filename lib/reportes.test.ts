@@ -3,6 +3,7 @@ import {
   IDS_DE_TURNOS,
   TURNOS,
   cumpleFiltros,
+  diaEn,
   esZonaHorariaValida,
   horaEn,
   inicioDelDiaEn,
@@ -138,6 +139,46 @@ describe("iniciosDeMesEn", () => {
     expect(iniciosDeMesEn(instante("2027-01-10T12:00:00.000Z"), "America/Santiago").inicioMesAnterior).toEqual(
       instante("2026-12-01T03:00:00.000Z")
     )
+  })
+})
+
+describe("diaEn", () => {
+  const horas = (dia: { desde: Date; hasta: Date }) => (dia.hasta.getTime() - dia.desde.getTime()) / 3_600_000
+
+  it("el día de un instante en la zona, de su medianoche a la del día siguiente", () => {
+    expect(diaEn(instante("2026-10-06T15:00:00.000Z"), "America/Santiago")).toEqual({
+      desde: instante("2026-10-06T03:00:00.000Z"),
+      hasta: instante("2026-10-07T03:00:00.000Z"),
+    })
+  })
+
+  it("las 22:30 del 6 en Santiago ya son el 7 en UTC, pero el día sigue siendo el 6", () => {
+    expect(diaEn(instante("2026-10-07T01:30:00.000Z"), "America/Santiago").desde).toEqual(instante("2026-10-06T03:00:00.000Z"))
+    expect(diaEn(instante("2026-10-07T01:30:00.000Z"), "UTC").desde).toEqual(instante("2026-10-07T00:00:00.000Z"))
+  })
+
+  it("al este de Greenwich, el día empieza la víspera en UTC", () => {
+    expect(diaEn(instante("2026-10-06T15:00:00.000Z"), "Asia/Tokyo")).toEqual({
+      desde: instante("2026-10-06T15:00:00.000Z"),
+      hasta: instante("2026-10-07T15:00:00.000Z"),
+    })
+  })
+
+  it("el día del cambio de hora dura lo que dura: 23 horas en septiembre y 25 en abril, en Santiago", () => {
+    // El 6 de septiembre de 2026 las 00:00 pasan a ser la 01:00: el día empieza en el salto.
+    const conSalto = diaEn(instante("2026-09-06T15:00:00.000Z"), "America/Santiago")
+    expect(conSalto).toEqual({ desde: instante("2026-09-06T04:00:00.000Z"), hasta: instante("2026-09-07T03:00:00.000Z") })
+    expect(horas(conSalto)).toBe(23)
+
+    // El 5 de abril de 2026 a las 00:00 se vuelve a las 23:00 del 4: el 4 tiene una hora de más.
+    const conHoraRepetida = diaEn(instante("2026-04-04T15:00:00.000Z"), "America/Santiago")
+    expect(conHoraRepetida).toEqual({ desde: instante("2026-04-04T03:00:00.000Z"), hasta: instante("2026-04-05T04:00:00.000Z") })
+    expect(horas(conHoraRepetida)).toBe(25)
+  })
+
+  it("el último día del mes y del año terminan en el primero del siguiente", () => {
+    expect(diaEn(instante("2026-10-31T15:00:00.000Z"), "America/Santiago").hasta).toEqual(instante("2026-11-01T03:00:00.000Z"))
+    expect(diaEn(instante("2026-12-31T15:00:00.000Z"), "America/Santiago").hasta).toEqual(instante("2027-01-01T03:00:00.000Z"))
   })
 })
 

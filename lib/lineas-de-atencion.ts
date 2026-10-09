@@ -27,9 +27,10 @@ export const lineaPedidaSchema = z.object({
 
 /**
  * Un pedido no trae más líneas de las que puede tener una atención: corta lo
- * absurdo antes de tocar la base. Que la atención entera (con las líneas de
- * los colegas que el pedido no toca) no pase del tope lo mira el endpoint
- * después de escribir (`lineasDeLaAtencion`).
+ * absurdo antes de tocar la base. Que lo que quedó no pase de los topes lo
+ * mira el endpoint después de escribir (`lineasDeLaAtencion`): la atención
+ * entera si edita dueño o encargado, las líneas propias si edita un
+ * profesional.
  */
 export const lineasPedidasSchema = z.array(lineaPedidaSchema).max(MAXIMO_DE_LINEAS_POR_ATENCION)
 

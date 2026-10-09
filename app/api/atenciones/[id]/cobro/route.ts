@@ -11,6 +11,7 @@ import {
   cuerpoDelPedido,
   leerAtencion,
   lineasDeLaAtencion,
+  nombreEnElNegocio,
   respuestaDeError,
   tomarAtencion,
 } from "@/lib/tablero"
@@ -29,8 +30,9 @@ const cobroSchema = z.object({
 
 /**
  * Cobra una atención que está por cobrar. Todo en una transacción: los pagos,
- * la atención finalizada con su total congelado y quién cobró, y la cita de
- * origen completada. O pasa todo, o nada.
+ * la atención finalizada con su total congelado y quién cobró (el id y una
+ * copia del nombre, para que el historial lo diga aunque después deje el
+ * negocio), y la cita de origen completada. O pasa todo, o nada.
  *
  * A la cita no se le escribe el precio. Ese total incluye las líneas de la
  * dueña y de los colegas, y el profesional dueño de la cita la ve en la
@@ -62,13 +64,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       throw new ErrorDeAtencion(409, "Sólo se cobra una atención que está por cobrar.")
     }
 
+    const usuarioId = session?.user?.id ?? null
+    const nombre = await nombreEnElNegocio(prisma, actor, usuarioId)
+
     const atencion = await prisma.$transaction(async (tx) => {
       // Primero se toma la fila: un segundo cobro de la misma atención (un
       // doble clic) encuentra que ya no está por cobrar y no registra nada.
       await tomarAtencion(tx, actor, existente.id, "por-cobrar", {
         status: "finalizada",
         paidAt: new Date(),
-        paidById: session?.user?.id ?? null,
+        paidById: usuarioId,
+        paidByName: nombre,
       })
 
       // Todas las líneas, contadas antes de leerlas: si pasan del tope, o si

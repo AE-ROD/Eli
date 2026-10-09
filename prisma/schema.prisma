@@ -201,6 +201,7 @@ model Visit {
   customerName  String // copia: el historial se lee igual aunque el cliente se borre
   appointmentId String?      @unique
   appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  // En la base, además, una CHECK lo limita a los cinco de `lib/atenciones.ts`.
   status        String       @default("en-espera") // en-espera, en-atencion, por-cobrar, finalizada, anulada
   notes         String?
   arrivedAt     DateTime     @default(now())
@@ -217,6 +218,10 @@ model Visit {
   //
   // Se congela al cobrar y no se recalcula nunca más. Mientras la atención
   // está abierta queda en null: el total vivo es la suma de las líneas.
+  //
+  // Prisma no representa restricciones CHECK en este archivo: las del dinero
+  // (total, precios y pagos) y la del estado están escritas a mano al final de
+  // la migración del tablero. Son la segunda barrera, porque no hay RLS.
   totalCents    Int?
   // Ids de `User` SIN relación, a propósito. Con una FK, borrar al usuario
   // obligaría a poner estas columnas en null (o a impedir el borrado) y se
@@ -226,6 +231,11 @@ model Visit {
   createdById   String?
   paidById      String?
   voidedById    String?
+  // Copia del nombre de quien cobró y de quien anuló, como `professionalName`
+  // en las líneas: el id solo se resuelve mientras la persona siga en el
+  // negocio, y si se va, el historial tiene que seguir diciendo quién fue.
+  paidByName    String?
+  voidedByName  String?
 
   services VisitService[]
   payments VisitPayment[]
