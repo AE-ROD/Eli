@@ -7,6 +7,7 @@
  * quedarse en "Cargando..." para siempre.
  */
 
+import { zonaDelDispositivo } from "@/lib/fechas"
 import { pedir, type Resultado } from "@/lib/peticiones"
 import type { CitaDelDia, FranjaHorario } from "@/lib/horario-dia"
 
@@ -41,8 +42,16 @@ export interface EstadisticasDelPanel {
   }
 }
 
+/**
+ * Con la zona del dispositivo, el mes de los ingresos es el del calendario de
+ * quien mira, el mismo que cuentan los reportes: con la del servidor (UTC), un
+ * cobro del 30 a la noche ya caía en el mes siguiente. Si el navegador no la
+ * informa, no se manda y el servidor usa la suya, como antes.
+ */
 export async function leerEstadisticas(): Promise<Resultado<EstadisticasDelPanel>> {
-  return pedir<EstadisticasDelPanel>("/api/dashboard/stats", "No se pudieron cargar las estadísticas")
+  const zona = zonaDelDispositivo()
+  const url = zona ? `/api/dashboard/stats?${new URLSearchParams({ zona })}` : "/api/dashboard/stats"
+  return pedir<EstadisticasDelPanel>(url, "No se pudieron cargar las estadísticas")
 }
 
 /**

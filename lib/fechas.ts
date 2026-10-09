@@ -120,6 +120,27 @@ export function formatearHora(iso: string): string {
   })
 }
 
+/**
+ * La hora de un instante con su artículo, para decirla dentro de una frase:
+ * `las 10:30`, `la 01:15`. Con ella los botones distinguen dos visitas del
+ * mismo cliente en su nombre accesible: "Anular el cobro de María González
+ * de las 10:30".
+ */
+export function horaConArticulo(iso: string): string {
+  const hora = formatearHora(iso)
+  return `${hora.startsWith("01:") ? "la" : "las"} ${hora}`
+}
+
+/**
+ * La zona horaria del dispositivo (`America/Santiago`). El día y el turno de
+ * los reportes, y el mes de los ingresos del inicio, se cuentan en la hora de
+ * quien mira (PRODUCTO.md, sección 8): el servidor corre en UTC y no la sabe.
+ * Vacío si el navegador no la informa.
+ */
+export function zonaDelDispositivo(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone ?? ""
+}
+
 /** Cuántos minutos hay entre dos instantes ISO, redondeado al minuto. */
 export function duracionEnMinutos(inicio: string, fin: string): number {
   return Math.round((new Date(fin).getTime() - new Date(inicio).getTime()) / 60000)

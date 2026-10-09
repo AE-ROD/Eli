@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react"
 import { Search, User, UserPlus } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
+import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { ANILLO_DE_FOCO, CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { lineasDesdeFilas, type FilaDeServicio } from "@/lib/acciones-del-tablero"
 import type { Resultado } from "@/lib/peticiones"
@@ -15,7 +16,6 @@ import {
   type DatosSinReserva,
 } from "../_datos"
 import { EditorDeServicios, filaVacia } from "./editor-de-servicios"
-import { MarcoDeModal } from "./marco-de-modal"
 
 /** Lo que acepta el servidor para un cliente nuevo. */
 const LARGO_MINIMO_DEL_NOMBRE = 2

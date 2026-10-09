@@ -4,7 +4,7 @@ import { useId, type DragEvent } from "react"
 import { Clock } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { ANILLO_DE_FOCO } from "@/components/panel/estilos"
-import { formatearHora } from "@/lib/fechas"
+import { formatearHora, horaConArticulo } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
 import type { Reserva } from "../_datos"
 
@@ -29,6 +29,8 @@ interface TarjetaDeReservaProps {
 export function TarjetaDeReserva({ reserva, atrasada, enCurso, arrastre, onLlego }: TarjetaDeReservaProps) {
   const idDelNombre = useId()
   const nombre = reserva.cliente?.nombre ?? "Sin cliente"
+  // Con la hora: dos reservas de la misma clienta no se llaman igual para el lector de pantalla.
+  const quien = `${nombre}, reserva de ${horaConArticulo(reserva.inicio)}`
 
   return (
     <article
@@ -66,7 +68,7 @@ export function TarjetaDeReserva({ reserva, atrasada, enCurso, arrastre, onLlego
         anchoCompleto
         onClick={onLlego}
         cargando={enCurso}
-        aria-label={enCurso ? `Marcando la llegada de ${nombre}` : `Llegó ${nombre}`}
+        aria-label={enCurso ? `Marcando la llegada: ${quien}` : `Llegó: ${quien}`}
         className={ANILLO_DE_FOCO}
       >
         Llegó

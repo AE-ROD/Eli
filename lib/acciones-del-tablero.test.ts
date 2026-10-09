@@ -7,16 +7,21 @@ import {
   accionPrincipal,
   accionesSecundarias,
   atencionesDeColumna,
+  consecuenciasDeAnular,
   destinosDeArrastre,
   estadoAnterior,
   estadoDelCobro,
   estadoSiguiente,
   estaAtrasada,
+  errorDeMontoDePago,
   faltaAsignar,
   filaDePagoSugerida,
   filaDesdeLinea,
+  filaDesdeReserva,
   lineaParaReglas,
   lineasDesdeFilas,
+  nombreConHora,
+  ofreceDeshacerLlegada,
   requisitoParaPasarA,
   textoDeMovimiento,
   totalDeFilasEnCentavos,
@@ -307,10 +312,41 @@ describe("editor de servicios", () => {
     expect(erroresDeFila(fila({ profesional: "" }), false)).toEqual({})
   })
 
-  it("un precio de cero vale; uno negativo o con tres decimales no", () => {
+  it("un precio de cero vale; uno negativo, con tres decimales o sobre el tope no", () => {
     expect(erroresDeFila(fila({ precio: "0" }), true)).toEqual({})
     expect(erroresDeFila(fila({ precio: "-1" }), true).precio).toBeDefined()
-    expect(erroresDeFila(fila({ precio: "10.005" }), true).precio).toBeDefined()
+    expect(erroresDeFila(fila({ precio: "10,005" }), true).precio).toBeDefined()
+    expect(erroresDeFila(fila({ precio: "20000000,01" }), true).precio).toContain("$20.000.000")
+    expect(erroresDeFila(fila({ precio: "20.000.000" }), true)).toEqual({})
+  })
+
+  it("acepta el precio con coma decimal y con miles, como se escribe en español", () => {
+    expect(erroresDeFila(fila({ precio: "8000,50" }), true)).toEqual({})
+    expect(erroresDeFila(fila({ precio: "8.000,50" }), true)).toEqual({})
+    expect(lineasDesdeFilas([fila({ precio: "8.000,50" })], true)).toEqual({
+      ok: true,
+      lineas: [{ servicioId: "s-corte", profesional: "m-carla", precio: 8000.5 }],
+    })
+  })
+
+  it("un precio que no se entiende dice cómo escribirlo, no que falta", () => {
+    expect(erroresDeFila(fila({ precio: "8,000" }), true).precio).toBe(
+      "No se entiende el precio. Escríbelo así: 8000 o 8000,50."
+    )
+    expect(erroresDeFila(fila({ precio: "abc" }), true).precio).toContain("No se entiende")
+    expect(erroresDeFila(fila({ precio: "  " }), true).precio).toBe("Escribe el precio.")
+  })
+
+  it("filaDesdeLinea escribe el precio con coma, como lo lee el campo", () => {
+    const desdeLinea = filaDesdeLinea({
+      id: "l2",
+      servicioId: "s-corte",
+      servicio: "Corte",
+      profesional: { id: "m-carla", nombre: "Carla" },
+      precio: 8000.5,
+    })
+    expect(desdeLinea.precio).toBe("8000,50")
+    expect(erroresDeFila(desdeLinea, true)).toEqual({})
   })
 
   it("lineasDesdeFilas arma el pedido, con el profesional sólo si se elige", () => {
@@ -344,6 +380,153 @@ describe("editor de servicios", () => {
     const filas = [fila({ precio: "0.1" }), fila({ clave: "f2", precio: "0.2" }), fila({ clave: "f3", precio: "" })]
     expect(totalDeFilasEnCentavos(filas)).toBe(30)
     expect(totalDeFilasEnCentavos([fila(), fila({ clave: "f2", precio: "-5" })])).toBe(aCentavos(8000))
+  })
+})
+
+describe("filaDesdeReserva", () => {
+  const catalogo = {
+    servicios: [
+      { id: "s-corte", nombre: "Corte", precio: 8000 },
+      { id: "s-color", nombre: "Color", precio: 25000 },
+      { id: "s-barba", nombre: "Barba", precio: null },
+      { id: "s-lavado-1", nombre: "Lavado", precio: 3000 },
+      { id: "s-lavado-2", nombre: "lavado ", precio: 3500 },
+    ],
+    profesionales: [
+      { id: "m-carla", nombre: "Carla" },
+      { id: "m-juan", nombre: "Juan" },
+      { id: "duenio", nombre: "Ana (dueña)" },
+    ],
+  }
+  const reserva = (cambios: Partial<Parameters<typeof filaDesdeReserva>[0]> = {}) => ({
+    servicioId: "s-corte",
+    titulo: "Corte",
+    precio: 9000,
+    profesional: { id: "m-carla", nombre: "Carla" },
+    ...cambios,
+  })
+
+  it("con servicio del catálogo y profesional del equipo, precarga todo con el precio de la reserva", () => {
+    expect(filaDesdeReserva(reserva(), catalogo, "r1")).toEqual({
+      clave: "r1",
+      servicioId: "s-corte",
+      profesional: "m-carla",
+      precio: "9000",
+    })
+  })
+
+  it("sin precio en la reserva usa el del catálogo; sin ninguno, queda para escribir", () => {
+    expect(filaDesdeReserva(reserva({ precio: null }), catalogo, "r1").precio).toBe("8000")
+    expect(filaDesdeReserva(reserva({ servicioId: "s-barba", titulo: "Barba", precio: null }), catalogo, "r1").precio).toBe("")
+    expect(filaDesdeReserva(reserva({ precio: 9000.5 }), catalogo, "r1").precio).toBe("9000,50")
+  })
+
+  it("si la agenda guardó el servicio como texto, lo busca por nombre sin mayúsculas ni espacios al borde", () => {
+    const fila = filaDesdeReserva(reserva({ servicioId: null, titulo: "  COLOR ", precio: null }), catalogo, "r1")
+    expect(fila.servicioId).toBe("s-color")
+    expect(fila.precio).toBe("25000")
+  })
+
+  it("un nombre repetido en el catálogo no se adivina", () => {
+    const fila = filaDesdeReserva(reserva({ servicioId: null, titulo: "Lavado" }), catalogo, "r1")
+    expect(fila.servicioId).toBe("")
+    expect(fila.servicioOriginal).toBe("Lavado")
+  })
+
+  it("un servicio dado de baja (fuera del catálogo) no se precarga, ni su precio: queda su nombre como ayuda", () => {
+    expect(filaDesdeReserva(reserva({ servicioId: "s-inactivo", titulo: "Alisado" }), catalogo, "r1")).toEqual({
+      clave: "r1",
+      servicioId: "",
+      profesional: "m-carla",
+      precio: "",
+      servicioOriginal: "Alisado",
+    })
+  })
+
+  it("un profesional que ya no se puede asignar queda sin elegir, con su nombre como ayuda", () => {
+    const fila = filaDesdeReserva(reserva({ profesional: { id: "m-se-fue", nombre: "Pedro" } }), catalogo, "r1")
+    expect(fila.profesional).toBe("")
+    expect(fila.profesionalOriginal).toBe("Pedro")
+  })
+
+  it("sin profesional en la reserva, el único posible ya viene elegido", () => {
+    const soloYo = { ...catalogo, profesionales: [{ id: "m-yo", nombre: "Yo" }] }
+    expect(filaDesdeReserva(reserva({ profesional: null }), soloYo, "r1").profesional).toBe("m-yo")
+    expect(filaDesdeReserva(reserva({ profesional: { id: "m-carla", nombre: "Carla" } }), soloYo, "r1")).toEqual({
+      clave: "r1",
+      servicioId: "s-corte",
+      profesional: "m-yo",
+      precio: "9000",
+    })
+    expect(filaDesdeReserva(reserva({ profesional: null }), catalogo, "r1").profesional).toBe("")
+  })
+})
+
+describe("nombreConHora", () => {
+  // Ida y vuelta por la zona local, como en los tests de fechas: da lo mismo en cualquier huso.
+  const a = (hora: number, minuto: number) => new Date(2026, 6, 15, hora, minuto).toISOString()
+  const atencion = { cliente: { nombre: "María González" }, llegoEn: a(10, 30), cobradaEn: null }
+
+  it("lleva la hora de llegada mientras está abierta", () => {
+    expect(nombreConHora({ ...atencion, estado: "en-espera" })).toBe("María González de las 10:30")
+    expect(nombreConHora({ ...atencion, estado: "por-cobrar" })).toBe("María González de las 10:30")
+  })
+
+  it("lo cobrado lleva la hora del cobro", () => {
+    expect(nombreConHora({ ...atencion, estado: "finalizada", cobradaEn: a(11, 45) })).toBe("María González de las 11:45")
+  })
+
+  it("dos visitas de la misma clienta no se llaman igual", () => {
+    const otra = { ...atencion, estado: "en-espera", llegoEn: a(13, 0) }
+    expect(nombreConHora({ ...atencion, estado: "en-espera" })).not.toBe(nombreConHora(otra))
+  })
+})
+
+describe("consecuenciasDeAnular", () => {
+  const cliente = { nombre: "María González" }
+
+  it("lo cobrado otro día dice cuándo y por cuánto, y que no se puede deshacer", () => {
+    const cobradaEn = new Date(2026, 9, 5, 10, 30).toISOString()
+    expect(consecuenciasDeAnular({ estado: "finalizada", cliente, total: 25000, cobradaEn })).toBe(
+      "Se cobró el lunes, 5 de octubre a las 10:30, por $25.000. Al anularla deja de sumar a los ingresos del negocio y queda en el historial como anulada. No se puede deshacer."
+    )
+  })
+
+  it("lo cobrado hoy dice hoy", () => {
+    const hoy = new Date()
+    hoy.setHours(9, 15, 0, 0)
+    expect(consecuenciasDeAnular({ estado: "finalizada", cliente, total: 8000.5, cobradaEn: hoy.toISOString() })).toMatch(
+      /^Se cobró hoy a las 09:15, por \$8000,50\./
+    )
+  })
+
+  it("sin fecha ni total, igual avisa que está cobrada", () => {
+    expect(consecuenciasDeAnular({ estado: "finalizada", cliente })).toMatch(/^Esta atención ya está cobrada\. Al anularla/)
+  })
+
+  it("sin cobrar, sale del tablero; si venía de una reserva, la cita queda cancelada", () => {
+    expect(consecuenciasDeAnular({ estado: "en-espera", cliente, citaId: "c1" })).toBe(
+      "La atención sale del tablero y queda en el historial como anulada. La reserva de la agenda queda cancelada. No se puede deshacer."
+    )
+    expect(consecuenciasDeAnular({ estado: "por-cobrar", cliente, citaId: null })).not.toContain("reserva")
+  })
+})
+
+describe("ofreceDeshacerLlegada", () => {
+  const enEspera = { estado: "en-espera", citaId: "cita-1" }
+
+  it("sólo en espera y si nació de una reserva", () => {
+    expect(ofreceDeshacerLlegada(dueño, enEspera)).toBe(true)
+    expect(ofreceDeshacerLlegada(dueño, { ...enEspera, estado: "en-atencion" })).toBe(false)
+    expect(ofreceDeshacerLlegada(dueño, { ...enEspera, estado: "finalizada" })).toBe(false)
+    expect(ofreceDeshacerLlegada(dueño, { ...enEspera, citaId: null })).toBe(false)
+  })
+
+  it("dueño, encargado y el profesional con memberId; sin sesión ni memberId, no", () => {
+    expect(ofreceDeshacerLlegada(encargado, enEspera)).toBe(true)
+    expect(ofreceDeshacerLlegada(profesional, enEspera)).toBe(true)
+    expect(ofreceDeshacerLlegada({ ...profesional, memberId: null }, enEspera)).toBe(false)
+    expect(ofreceDeshacerLlegada(null, enEspera)).toBe(false)
   })
 })
 
@@ -396,6 +579,28 @@ describe("cobro", () => {
       medio: "tarjeta-debito",
       monto: "13000",
     })
+  })
+
+  it("la fila sugerida escribe lo que falta con coma decimal", () => {
+    const medios = [{ id: "efectivo" }, { id: "tarjeta-debito" }]
+    expect(filaDePagoSugerida(medios, [pago("efectivo", "20000")], aCentavos(33000.5), "p2").monto).toBe("13000,50")
+  })
+
+  it("los montos con coma decimal y con miles cuadran el cobro", () => {
+    const estado = estadoDelCobro(aCentavos(33000.5), [pago("efectivo", "20.000"), pago("tarjeta-debito", "13000,50")])
+    expect(estado.error).toBeNull()
+    expect(estado.diferenciaCentavos).toBe(0)
+  })
+
+  it("errorDeMontoDePago: vacío no es error del campo; ilegible, cero, negativo o sobre el tope sí", () => {
+    expect(errorDeMontoDePago("")).toBeNull()
+    expect(errorDeMontoDePago("8000,50")).toBeNull()
+    expect(errorDeMontoDePago("8.000,50")).toBeNull()
+    expect(errorDeMontoDePago("8000.50")).toBeNull()
+    expect(errorDeMontoDePago("8,000")).toBe("No se entiende el monto. Escríbelo así: 8000 o 8000,50.")
+    expect(errorDeMontoDePago("0")).toContain("mayor que cero")
+    expect(errorDeMontoDePago("-5")).toContain("mayor que cero")
+    expect(errorDeMontoDePago("20000000,01")).toContain("$20.000.000")
   })
 
   it("si ya no falta nada, la fila sugerida va sin monto; si todos los medios se usaron, repite el primero", () => {

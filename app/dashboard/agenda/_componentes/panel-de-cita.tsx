@@ -4,6 +4,7 @@ import { motion } from "framer-motion"
 import { X } from "lucide-react"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
+import { formatearMonto } from "@/lib/dinero"
 import { formatearHora, duracionParaMostrar } from "@/lib/fechas"
 import { nombreDeCliente, type Cita } from "../_datos"
 
@@ -73,7 +74,7 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado }: PanelDeCitaProp
         {cita.price != null && (
           <div className="flex justify-between py-2.5">
             <span className="text-sm text-muted-foreground">Precio</span>
-            <span className="text-sm font-medium">${cita.price.toLocaleString("es-ES")}</span>
+            <span className="text-sm font-medium">{formatearMonto(cita.price)}</span>
           </div>
         )}
         <div className="flex justify-between items-center py-2.5">

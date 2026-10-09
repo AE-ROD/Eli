@@ -2,16 +2,28 @@
 
 import { useState, type FormEvent } from "react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
+import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { ANILLO_DE_FOCO } from "@/components/panel/estilos"
 import {
   filaDesdeLinea,
+  filaDesdeReserva,
   lineasDesdeFilas,
   type FilaDeServicio,
   type LineaPedida,
 } from "@/lib/acciones-del-tablero"
 import type { Atencion, Catalogo } from "../_datos"
 import { EditorDeServicios, filaVacia } from "./editor-de-servicios"
-import { MarcoDeModal } from "./marco-de-modal"
+
+/**
+ * Con qué filas se abre el editor: las líneas que ya tiene la atención; si no
+ * tiene y nació de una reserva, lo que dice la reserva (`filaDesdeReserva`);
+ * si no, una fila vacía.
+ */
+function filasIniciales(atencion: Atencion, catalogo: Catalogo): FilaDeServicio[] {
+  if (atencion.lineas.length > 0) return atencion.lineas.map(filaDesdeLinea)
+  if (atencion.reserva) return [filaDesdeReserva(atencion.reserva, catalogo, "fila-inicial")]
+  return [filaVacia(catalogo, "fila-inicial")]
+}
 
 interface ModalServiciosProps {
   atencion: Atencion
@@ -48,9 +60,7 @@ export function ModalServicios({
   // Las filas se toman una sola vez, al abrir: la recarga del tablero cada
   // 30 segundos no pisa lo que se está escribiendo. Si la atención cambió
   // entretanto, el servidor responde 409 y el tablero se recarga.
-  const [filas, setFilas] = useState<FilaDeServicio[]>(() =>
-    atencion.lineas.length > 0 ? atencion.lineas.map(filaDesdeLinea) : [filaVacia(catalogo, "fila-inicial")]
-  )
+  const [filas, setFilas] = useState<FilaDeServicio[]>(() => filasIniciales(atencion, catalogo))
   const [intentoGuardar, setIntentoGuardar] = useState(false)
 
   const validacion = lineasDesdeFilas(filas, eligeProfesional)

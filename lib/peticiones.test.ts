@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
-import { pedir, pedirConCodigo, leerCuerpo, conJson, SIN_CONEXION } from "./peticiones"
+import { pedir, pedirConCodigo, pedirConCuerpo, leerCuerpo, conJson, SIN_CONEXION } from "./peticiones"
 
 /** Simula la respuesta que daría el servidor, sin red de por medio. */
 function simularRespuesta(respuesta: Response) {
@@ -174,6 +174,59 @@ describe("pedirConCodigo", () => {
     simularRespuesta(json({ error: "No autorizado" }, 401))
 
     expect(await pedir("/api/atenciones/v1/cobro", "No se pudo cobrar")).toEqual({ ok: false, error: "No autorizado" })
+  })
+})
+
+describe("pedirConCuerpo", () => {
+  it("con error devuelve también el cuerpo, para leer lo que no es el mensaje", async () => {
+    simularRespuesta(json({ error: "Inicia sesión con esa cuenta", requiereSesion: true }, 409))
+
+    expect(await pedirConCuerpo("/api/equipo/invitacion/t/aceptar", "Error al crear la cuenta")).toEqual({
+      ok: false,
+      error: "Inicia sesión con esa cuenta",
+      codigo: 409,
+      cuerpo: { error: "Inicia sesión con esa cuenta", requiereSesion: true },
+    })
+  })
+
+  it("con 200 y una página HTML falla igual que pedir, con el cuerpo en null", async () => {
+    simularRespuesta(new Response("<html>Conectate al wifi</html>", { status: 200, headers: { "Content-Type": "text/html" } }))
+
+    expect(await pedirConCuerpo("/api/equipo/invitacion/t/aceptar", "Error al crear la cuenta")).toEqual({
+      ok: false,
+      error: "Error al crear la cuenta",
+      codigo: 200,
+      cuerpo: null,
+    })
+  })
+
+  it("con 204 es un éxito sin datos, y con JSON devuelve los datos", async () => {
+    simularRespuesta(new Response(null, { status: 204 }))
+    expect(await pedirConCuerpo("/api/x", "Por defecto")).toEqual({ ok: true, datos: undefined })
+
+    simularRespuesta(json({ cuentaNueva: false }, 201))
+    expect(await pedirConCuerpo("/api/x", "Por defecto")).toEqual({ ok: true, datos: { cuentaNueva: false } })
+  })
+
+  it("sin respuesta no lanza: sin conexión, sin código y sin cuerpo", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")))
+
+    expect(await pedirConCuerpo("/api/x", "Por defecto")).toEqual({
+      ok: false,
+      error: SIN_CONEXION,
+      codigo: null,
+      cuerpo: null,
+    })
+  })
+
+  it("pedirConCodigo sigue sin exponer el cuerpo", async () => {
+    simularRespuesta(json({ error: "La atención cambió", detalle: 1 }, 409))
+
+    expect(await pedirConCodigo("/api/atenciones/v1/estado", "No se pudo mover")).toEqual({
+      ok: false,
+      error: "La atención cambió",
+      codigo: 409,
+    })
   })
 })
 

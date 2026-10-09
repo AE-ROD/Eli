@@ -25,6 +25,16 @@ export type ResultadoConCodigo<T = void> =
   | { ok: true; datos: T }
   | { ok: false; error: string; codigo: number | null }
 
+/**
+ * Como `ResultadoConCodigo`, pero el fallo trae además el cuerpo que mandó el
+ * servidor, ya leído (`null` si no mandó nada o no es JSON). Es para la
+ * pantalla que necesita algo más que el mensaje, como `requiereSesion` al
+ * aceptar una invitación.
+ */
+export type ResultadoConCuerpo<T = void> =
+  | { ok: true; datos: T }
+  | { ok: false; error: string; codigo: number | null; cuerpo: unknown }
+
 /** El aviso cuando el pedido ni siquiera llegó: sin red o con el servidor caído. */
 export const SIN_CONEXION = "Sin conexión con el servidor"
 
@@ -84,21 +94,38 @@ export async function pedirConCodigo<T = void>(
   errorPorDefecto: string,
   opciones?: RequestInit
 ): Promise<ResultadoConCodigo<T>> {
+  const resultado = await pedirConCuerpo<T>(url, errorPorDefecto, opciones)
+  // Sin el cuerpo, como `pedir` sin el código.
+  return resultado.ok ? resultado : { ok: false, error: resultado.error, codigo: resultado.codigo }
+}
+
+/**
+ * Igual que `pedirConCodigo`, pero el fallo trae también el cuerpo que mandó
+ * el servidor, para leer de él lo que no es el mensaje. No lanza nunca.
+ *
+ * Las reglas son las de `pedir`, y viven acá: un 2xx sin JSON es un fallo,
+ * salvo el 204.
+ */
+export async function pedirConCuerpo<T = void>(
+  url: string,
+  errorPorDefecto: string,
+  opciones?: RequestInit
+): Promise<ResultadoConCuerpo<T>> {
   try {
     const respuesta = await fetch(url, opciones)
     const cuerpo = await leerCuerpo(respuesta)
     if (!respuesta.ok) {
-      return { ok: false, error: mensajeDelServidor(cuerpo) ?? errorPorDefecto, codigo: respuesta.status }
+      return { ok: false, error: mensajeDelServidor(cuerpo) ?? errorPorDefecto, codigo: respuesta.status, cuerpo }
     }
     // 204: el servidor dice que salió bien y que no manda nada. Es el único
     // éxito sin cuerpo que se acepta.
     if (respuesta.status === 204) return { ok: true, datos: undefined as T }
     // Cualquier otro ok sin JSON no lo armó el endpoint (ver `pedir`): se avisa
     // en vez de dejar que la pantalla se caiga al usar `datos`.
-    if (cuerpo === null) return { ok: false, error: errorPorDefecto, codigo: respuesta.status }
+    if (cuerpo === null) return { ok: false, error: errorPorDefecto, codigo: respuesta.status, cuerpo }
     return { ok: true, datos: cuerpo as T }
   } catch {
-    return { ok: false, error: SIN_CONEXION, codigo: null }
+    return { ok: false, error: SIN_CONEXION, codigo: null, cuerpo: null }
   }
 }
 

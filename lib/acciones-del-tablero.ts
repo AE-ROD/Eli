@@ -1,19 +1,24 @@
 import {
   ESTADOS_ACTIVOS,
+  MONTO_MAXIMO,
   PROFESIONAL_DUEÑO,
   aCentavos,
   deCentavos,
   errorDeCobro,
   esEstadoActivo,
+  esMontoDePagoValido,
   esPrecioValido,
+  mismoNombreDeServicio,
   nombreDeEstado,
   requisitoFaltante,
+  sePuedeDeshacerLaLlegada,
   type EstadoActivo,
   type LineaDeAtencion,
   type PagoPedido,
 } from "@/lib/atenciones"
-import { leerMonto } from "@/lib/dinero"
-import { puedeAnular, puedeCobrar, type Actor } from "@/lib/permisos"
+import { formatearMonto, leerMonto, montoParaEscribir } from "@/lib/dinero"
+import { esHoy, horaConArticulo } from "@/lib/fechas"
+import { puedeAnular, puedeCobrar, puedeDeshacerLlegada, type Actor } from "@/lib/permisos"
 
 /**
  * El tablero de atenciones (docs/PRODUCTO.md, sección 7) visto desde la
@@ -135,6 +140,23 @@ export function textoDeMovimiento(desde: string, hacia: EstadoActivo): string {
   return `Volver a ${nombreDeEstado(hacia)}`
 }
 
+/**
+ * Cómo se nombra una atención en los botones de su tarjeta: el cliente y una
+ * hora que no cambia mientras está en el tablero, la del cobro si ya se cobró
+ * y si no la de llegada. Con el nombre solo, dos visitas de la misma clienta
+ * daban dos "Anular el cobro de María González" que el lector de pantalla no
+ * distinguía.
+ */
+export function nombreConHora(atencion: {
+  estado: string
+  cliente: { nombre: string }
+  llegoEn: string
+  cobradaEn: string | null
+}): string {
+  const iso = atencion.estado === "finalizada" && atencion.cobradaEn ? atencion.cobradaEn : atencion.llegoEn
+  return `${atencion.cliente.nombre} de ${horaConArticulo(iso)}`
+}
+
 export type AccionPrincipal =
   | { tipo: "mover"; hacia: EstadoActivo; texto: string }
   | { tipo: "cobrar"; texto: string }
@@ -174,6 +196,66 @@ export function accionesSecundarias(actor: Actor | null, estado: string): Accion
     // filtra por su negocio), así que el negocio de la atención es el suyo.
     anular: puedeAnular(actor, { businessId: actor.businessId, status: estado }),
   }
+}
+
+/**
+ * Si la tarjeta ofrece "Deshacer llegada": la atención nació de una reserva y
+ * sigue en espera (`sePuedeDeshacerLaLlegada`), y quien mira puede deshacer
+ * llegadas (`puedeDeshacerLlegada`). El servidor vuelve a mirar las dos cosas.
+ */
+export function ofreceDeshacerLlegada(
+  actor: Actor | null,
+  atencion: { estado: string; citaId: string | null }
+): boolean {
+  return (
+    puedeDeshacerLlegada(actor) &&
+    sePuedeDeshacerLaLlegada({ status: atencion.estado, appointmentId: atencion.citaId })
+  )
+}
+
+/**
+ * Lo que hace falta saber de una atención para confirmar que se anula. Viene
+ * del tablero o del historial de reportes, donde el dueño anula cobros de
+ * cualquier día.
+ */
+export interface AtencionParaAnular {
+  estado: string
+  cliente: { nombre: string }
+  /** Sólo para quien ve los totales. */
+  total?: number
+  /** Si nació de una reserva: anularla sin cobrar cancela la cita de la agenda. */
+  citaId?: string | null
+  /** Cuándo se cobró, si se cobró. */
+  cobradaEn?: string | null
+}
+
+/** "hoy a las 10:30", o "el lunes, 5 de octubre a las 10:30" si fue otro día. */
+function momentoDelCobro(iso: string): string {
+  const fecha = new Date(iso)
+  const dia = esHoy(fecha)
+    ? "hoy"
+    : `el ${fecha.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}`
+  return `${dia} a ${horaConArticulo(iso)}`
+}
+
+/**
+ * Qué pasa al anular, dicho antes de hacerlo. Lo cobrado no se borra: deja de
+ * sumar a los ingresos y queda en el historial como anulado; se dice cuándo se
+ * cobró y por cuánto, porque desde el historial se anulan cobros de otros
+ * días. Si no estaba cobrada y venía de una reserva, la cita de la agenda pasa
+ * a cancelada.
+ */
+export function consecuenciasDeAnular(atencion: AtencionParaAnular): string {
+  if (atencion.estado === "finalizada") {
+    const porCuanto = atencion.total !== undefined ? formatearMonto(atencion.total) : null
+    const cuando = atencion.cobradaEn ? momentoDelCobro(atencion.cobradaEn) : null
+    const cobro = cuando
+      ? `Se cobró ${cuando}${porCuanto ? `, por ${porCuanto}` : ""}.`
+      : `Esta atención ya está cobrada${porCuanto ? ` (${porCuanto})` : ""}.`
+    return `${cobro} Al anularla deja de sumar a los ingresos del negocio y queda en el historial como anulada. No se puede deshacer.`
+  }
+  const reserva = atencion.citaId ? " La reserva de la agenda queda cancelada." : ""
+  return `La atención sale del tablero y queda en el historial como anulada.${reserva} No se puede deshacer.`
 }
 
 // ─── Arrastrar y soltar ──────────────────────────────────────────────────────
@@ -236,16 +318,82 @@ export interface LineaGuardada extends LineaEnPantalla {
   profesional: { id: string | null; nombre: string }
 }
 
-/** La línea guardada como fila para editarla. Un profesional que dejó el equipo queda sin elegir. */
+/**
+ * La línea guardada como fila para editarla. Un profesional que dejó el
+ * equipo queda sin elegir. El precio se escribe como lo lee el campo
+ * (`montoParaEscribir`): `8000,50`.
+ */
 export function filaDesdeLinea(linea: LineaGuardada): FilaDeServicio {
   return {
     clave: linea.id,
     servicioId: linea.servicioId ?? "",
     profesional: linea.profesional.id ?? "",
-    precio: String(linea.precio),
+    precio: montoParaEscribir(linea.precio),
     servicioOriginal: linea.servicio,
     profesionalOriginal: linea.profesional.nombre,
   }
+}
+
+/** De qué reserva nació una atención, como la manda el servidor para precargar el editor. */
+export interface ReservaDeOrigen {
+  /** El servicio de la cita, si lo guardó por id (la reserva pública); `null` si la agenda lo guardó como texto. */
+  servicioId: string | null
+  /** El servicio tal como quedó escrito en la cita. */
+  titulo: string
+  precio: number | null
+  profesional: { id: string; nombre: string } | null
+}
+
+/** Lo del catálogo del tablero que hace falta para armar una fila. */
+export interface CatalogoParaFilas {
+  /** Sólo los activos. */
+  servicios: readonly { id: string; nombre: string; precio: number | null }[]
+  /** A quién se le puede asignar una línea. */
+  profesionales: readonly { id: string; nombre: string }[]
+}
+
+/**
+ * La fila con que se abre el editor de una atención que nació de una reserva
+ * y todavía no tiene servicios: lo que dice la reserva, en lo que se pueda usar.
+ *
+ * - El servicio de la cita, si sigue en el catálogo, que sólo trae los
+ *   activos. Si la agenda lo guardó como texto, el único servicio del catálogo
+ *   que se llama igual (`mismoNombreDeServicio`, la misma regla que aplica el
+ *   servidor al marcar la llegada). Uno dado de baja, o un nombre que no está
+ *   o que está repetido, no se precarga: su nombre queda como ayuda para elegir.
+ * - Quién lo hace: el profesional de la cita, si se le puede asignar. Si no,
+ *   el único posible, como en una fila vacía; y si ya no está en el equipo,
+ *   su nombre queda como ayuda.
+ * - El precio de la reserva o, si no tiene, el del catálogo. Sólo con un
+ *   servicio precargado: elegir otro lo pisa con el precio del catálogo.
+ */
+export function filaDesdeReserva(reserva: ReservaDeOrigen, catalogo: CatalogoParaFilas, clave: string): FilaDeServicio {
+  const servicio =
+    reserva.servicioId !== null
+      ? catalogo.servicios.find((candidato) => candidato.id === reserva.servicioId)
+      : unicoConEseNombre(catalogo.servicios, reserva.titulo)
+
+  const deLaReserva = reserva.profesional?.id
+  const asignable = deLaReserva !== undefined && catalogo.profesionales.some((candidato) => candidato.id === deLaReserva)
+  const unico = catalogo.profesionales.length === 1 ? catalogo.profesionales[0].id : ""
+  const profesional = asignable ? deLaReserva : unico
+
+  const precio = servicio ? (reserva.precio ?? servicio.precio) : null
+
+  return {
+    clave,
+    servicioId: servicio?.id ?? "",
+    profesional,
+    precio: precio === null ? "" : montoParaEscribir(precio),
+    ...(!servicio && { servicioOriginal: reserva.titulo }),
+    ...(reserva.profesional && !asignable && !profesional && { profesionalOriginal: reserva.profesional.nombre }),
+  }
+}
+
+/** El servicio que se llama como el título, sólo si es uno: con dos iguales no se adivina cuál. */
+function unicoConEseNombre<T extends { nombre: string }>(servicios: readonly T[], titulo: string): T | undefined {
+  const conEseNombre = servicios.filter((servicio) => mismoNombreDeServicio(servicio.nombre, titulo))
+  return conEseNombre.length === 1 ? conEseNombre[0] : undefined
 }
 
 /** Lo que se manda por cada línea; es el contrato de `PUT /api/atenciones/[id]`. */
@@ -261,6 +409,9 @@ export interface ErroresDeFila {
   precio?: string
 }
 
+/** Lo que se le dice a quien escribió un monto que `leerMonto` no puede leer sin adivinar. */
+const MONTO_ILEGIBLE = "Escríbelo así: 8000 o 8000,50."
+
 /**
  * Qué le falta a una fila, campo por campo, con un mensaje que se puede
  * mostrar al lado del campo. Un precio de cero vale (una cortesía); vacío no:
@@ -273,8 +424,11 @@ export function erroresDeFila(fila: FilaDeServicio, eligeProfesional: boolean): 
   if (eligeProfesional && !fila.profesional) errores.profesional = "Elige quién lo hace."
 
   const precio = leerMonto(fila.precio)
-  if (precio === null) errores.precio = "Escribe el precio."
-  else if (!esPrecioValido(precio)) errores.precio = "El precio tiene que ser cero o más, con hasta dos decimales."
+  if (fila.precio.trim() === "") errores.precio = "Escribe el precio."
+  else if (precio === null) errores.precio = `No se entiende el precio. ${MONTO_ILEGIBLE}`
+  else if (!esPrecioValido(precio)) {
+    errores.precio = `El precio tiene que ser cero o más, hasta ${formatearMonto(MONTO_MAXIMO)}, con hasta dos decimales.`
+  }
 
   return errores
 }
@@ -362,5 +516,20 @@ export function filaDePagoSugerida(
   const usados = new Set(filas.map((fila) => fila.medio))
   const medio = medios.find((candidato) => !usados.has(candidato.id)) ?? medios[0]
   const falta = estadoDelCobro(totalCentavos, filas).diferenciaCentavos
-  return { clave, medio: medio?.id ?? "", monto: falta > 0 ? String(deCentavos(falta)) : "" }
+  return { clave, medio: medio?.id ?? "", monto: falta > 0 ? montoParaEscribir(deCentavos(falta)) : "" }
+}
+
+/**
+ * Lo que hay que decir de un monto de pago escrito, al lado del campo, o
+ * `null` si está vacío o sirve. Vacío no es un error del campo: lo dice el
+ * cobro, como lo que falta para el total.
+ */
+export function errorDeMontoDePago(texto: string): string | null {
+  if (texto.trim() === "") return null
+  const monto = leerMonto(texto)
+  if (monto === null) return `No se entiende el monto. ${MONTO_ILEGIBLE}`
+  if (!esMontoDePagoValido(monto)) {
+    return `Tiene que ser mayor que cero, hasta ${formatearMonto(MONTO_MAXIMO)}, con hasta dos decimales.`
+  }
+  return null
 }

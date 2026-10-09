@@ -42,21 +42,31 @@ export function BotonPrimario({
   iconoDerecha = false,
   anchoCompleto = false,
   disabled,
+  onClick,
   className = "",
   ...props
 }: BotonPrimarioProps) {
+  const inactivo = disabled || cargando
+
   return (
     <motion.button
-      whileHover={{ scale: disabled || cargando ? 1 : 1.02 }}
-      whileTap={{ scale: disabled || cargando ? 1 : 0.98 }}
-      disabled={disabled || cargando}
+      whileHover={{ scale: inactivo ? 1 : 1.02 }}
+      whileTap={{ scale: inactivo ? 1 : 0.98 }}
+      // Mientras carga no se deshabilita: un botón deshabilitado pierde el
+      // foco, el navegador lo tira al <body>, y en un diálogo eso deja afuera
+      // a quien usa teclado. Se marca con `aria-disabled` y no responde: el
+      // `preventDefault` corta también el envío del formulario, con clic o con
+      // Enter desde un campo.
+      disabled={disabled}
+      aria-disabled={cargando && !disabled ? true : undefined}
+      onClick={cargando ? (evento) => evento.preventDefault() : onClick}
       // Con `cn` lo que llega en `className` le gana a lo de acá cuando chocan:
       // `hidden` saca al `inline-flex` en vez de competir con él en el CSS,
       // donde ganaba `inline-flex` y el botón no se ocultaba nunca.
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-lg font-medium",
+        "relative inline-flex items-center justify-center gap-2 rounded-lg font-medium",
         "transition-colors duration-200",
-        "disabled:opacity-50 disabled:cursor-not-allowed",
+        "disabled:opacity-50 disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:cursor-not-allowed",
         estilosVariante[variante],
         estilosTamaño[tamaño],
         anchoCompleto && "w-full",
@@ -65,7 +75,11 @@ export function BotonPrimario({
       {...props}
     >
       {cargando ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
+        <>
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          {/* El texto sigue siendo el nombre del botón, que conserva el foco mientras carga. */}
+          <span className="sr-only">{children}</span>
+        </>
       ) : (
         <>
           {icono && !iconoDerecha && icono}

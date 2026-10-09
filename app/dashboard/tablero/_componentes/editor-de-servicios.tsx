@@ -4,14 +4,14 @@ import { useId, useRef } from "react"
 import Link from "next/link"
 import { Plus, Trash2 } from "lucide-react"
 import { ANILLO_DE_FOCO, CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO } from "@/components/panel/estilos"
-import { deCentavos } from "@/lib/atenciones"
+import { MAXIMO_DE_LINEAS_POR_ATENCION, deCentavos } from "@/lib/atenciones"
 import { totalDeFilasEnCentavos, type ErroresDeFila, type FilaDeServicio } from "@/lib/acciones-del-tablero"
-import { formatearMonto } from "@/lib/dinero"
+import { formatearMonto, montoParaEscribir } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
 import type { Catalogo } from "../_datos"
 
-/** Ninguna atención real tiene más; el servidor rechaza más de 20 líneas. */
-const MAXIMO_DE_FILAS = 20
+/** Ninguna atención real tiene más; es el tope del servidor. */
+const MAXIMO_DE_FILAS = MAXIMO_DE_LINEAS_POR_ATENCION
 
 /**
  * Las filas que se agregan en esta pestaña. Un contador y no un azar: las
@@ -67,8 +67,9 @@ export function EditorDeServicios({
     const precio = catalogo.servicios.find((servicio) => servicio.id === servicioId)?.precio
     // El precio del catálogo pisa lo escrito: se eligió otro servicio. Sin
     // precio en el catálogo queda vacío, para que alguien lo escriba en vez
-    // de cobrar un cero que nadie decidió.
-    cambiarFila(fila.clave, { servicioId, precio: precio == null ? "" : String(precio) })
+    // de cobrar un cero que nadie decidió. Se escribe como lo lee el campo
+    // ("8000,50"): con un punto, "10.005" se leería como diez mil cinco.
+    cambiarFila(fila.clave, { servicioId, precio: precio == null ? "" : montoParaEscribir(precio) })
   }
 
   // El foco sigue a lo que se hace: a la fila nueva al agregar, y al botón de
@@ -148,13 +149,13 @@ export function EditorDeServicios({
               {deLaFila.servicio ? (
                 <p id={id("servicio-ayuda")} className={ERROR_DE_CAMPO}>
                   {deLaFila.servicio}
-                  {fila.servicioOriginal && !fila.servicioId && ` «${fila.servicioOriginal}» ya no está en el catálogo.`}
+                  {fila.servicioOriginal && !fila.servicioId && ` «${fila.servicioOriginal}» no está en el catálogo.`}
                 </p>
               ) : (
                 !fila.servicioId &&
                 fila.servicioOriginal && (
                   <p id={id("servicio-ayuda")} className="text-xs text-amber-700 mt-1">
-                    «{fila.servicioOriginal}» ya no está en el catálogo: elige otro.
+                    «{fila.servicioOriginal}» no está en el catálogo: elige otro.
                   </p>
                 )
               )}
@@ -207,22 +208,23 @@ export function EditorDeServicios({
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground" aria-hidden="true">
                   $
                 </span>
+                {/*
+                  Texto y no número: en un `type="number"` Chromium descartaba
+                  la coma y "8000,50" llegaba como 800050. `inputMode` deja el
+                  teclado numérico en el teléfono; lo escrito lo lee `leerMonto`
+                  (8000,50, 8.000,50 y 8000.50 son el mismo precio).
+                */}
                 <input
                   id={id("precio")}
-                  type="number"
+                  type="text"
                   inputMode="decimal"
-                  min="0"
-                  step="0.01"
+                  autoComplete="off"
                   value={fila.precio}
                   disabled={deshabilitado}
                   required
                   aria-invalid={deLaFila.precio ? true : undefined}
                   aria-describedby={deLaFila.precio ? id("precio-error") : undefined}
                   onChange={(evento) => cambiarFila(fila.clave, { precio: evento.target.value })}
-                  // La rueda del mouse sobre un campo numérico con foco le
-                  // suma o resta el paso: un precio cambiaría sin que nadie lo
-                  // note. Se suelta el foco y la rueda sólo desplaza.
-                  onWheel={(evento) => evento.currentTarget.blur()}
                   className={cn(CAMPO, "pl-7 tabular-nums", deLaFila.precio && CAMPO_CON_ERROR)}
                 />
               </div>

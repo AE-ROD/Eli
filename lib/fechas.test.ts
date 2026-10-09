@@ -5,6 +5,8 @@ import {
   limitesDelMesDe,
   correr,
   formatearHora,
+  horaConArticulo,
+  zonaDelDispositivo,
   duracionEnMinutos,
   duracionParaMostrar,
   esHoy,
@@ -100,6 +102,29 @@ describe("formatearHora", () => {
 
   it("después de medianoche empieza en 00, no en 24", () => {
     expect(formatearHora(instante(0, 30))).toBe("00:30")
+  })
+})
+
+describe("horaConArticulo", () => {
+  // Igual que en formatearHora: ida y vuelta por la zona local, un día sin cambio de hora.
+  const instante = (hora: number, minuto: number) => new Date(2026, 6, 15, hora, minuto).toISOString()
+
+  it("dice la hora con su artículo, para leerla dentro de una frase", () => {
+    expect(horaConArticulo(instante(10, 30))).toBe("las 10:30")
+    expect(horaConArticulo(instante(0, 15))).toBe("las 00:15")
+    expect(horaConArticulo(instante(21, 5))).toBe("las 21:05")
+  })
+
+  it("la una va en singular", () => {
+    expect(horaConArticulo(instante(1, 15))).toBe("la 01:15")
+    expect(horaConArticulo(instante(13, 15))).toBe("las 13:15")
+  })
+})
+
+describe("zonaDelDispositivo", () => {
+  it("es la zona IANA que informa el entorno", () => {
+    expect(zonaDelDispositivo()).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone)
+    expect(zonaDelDispositivo()).not.toBe("")
   })
 })
 

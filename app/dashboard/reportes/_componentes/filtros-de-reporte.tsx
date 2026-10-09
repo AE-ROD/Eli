@@ -1,7 +1,8 @@
 "use client"
 
 import { useId } from "react"
-import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO } from "@/components/panel/estilos"
+import { RefreshCw } from "lucide-react"
+import { ANILLO_DE_FOCO, CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO } from "@/components/panel/estilos"
 import { MEDIOS_DE_PAGO } from "@/lib/medios-de-pago"
 import { PERIODOS, type PeriodoId } from "@/lib/periodos"
 import { TURNOS } from "@/lib/reportes"
@@ -29,7 +30,11 @@ interface FiltrosDeReporteProps {
   alcance: "negocio" | "propio" | null
   /** Por qué el período personalizado no sirve, si no sirve. */
   errorDeRango: string
+  /** Lo anulado se filtra sólo por período: los demás filtros no se muestran. */
+  soloPeriodo?: boolean
   onCambiar: (cambios: Partial<FiltrosElegidos>) => void
+  /** Vuelve a pedir los profesionales y servicios, si no llegaron. */
+  onReintentarOpciones: () => void
 }
 
 const ETIQUETA_CHICA = "block text-xs font-medium text-muted-foreground mb-1"
@@ -44,7 +49,9 @@ export function FiltrosDeReporte({
   errorDeOpciones,
   alcance,
   errorDeRango,
+  soloPeriodo = false,
   onCambiar,
+  onReintentarOpciones,
 }: FiltrosDeReporteProps) {
   const idBase = useId()
   const id = (campo: string) => `${idBase}-${campo}`
@@ -121,94 +128,108 @@ export function FiltrosDeReporte({
         )}
       </fieldset>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div>
-          <label htmlFor={id("turno")} className={ETIQUETA_CHICA}>
-            Turno
-          </label>
-          <select
-            id={id("turno")}
-            value={filtros.turno}
-            onChange={(evento) => onCambiar({ turno: evento.target.value })}
-            className={CAMPO}
-          >
-            <option value="">Todo el día</option>
-            {TURNOS.map((turno) => (
-              <option key={turno.id} value={turno.id}>
-                {turno.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Al profesional el reporte ya le muestra sólo lo suyo: elegirse a sí mismo no filtra nada. */}
-        {delNegocio && (
-          <div>
-            <label htmlFor={id("profesional")} className={ETIQUETA_CHICA}>
-              Profesional
-            </label>
-            <select
-              id={id("profesional")}
-              value={filtros.profesional}
-              onChange={(evento) => onCambiar({ profesional: evento.target.value })}
-              className={CAMPO}
-            >
-              <option value="">Todos</option>
-              {opciones?.profesionales.map((profesional) => (
-                <option key={profesional.id} value={profesional.id}>
-                  {profesional.nombre}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <div>
-          <label htmlFor={id("servicio")} className={ETIQUETA_CHICA}>
-            Servicio
-          </label>
-          <select
-            id={id("servicio")}
-            value={filtros.servicio}
-            onChange={(evento) => onCambiar({ servicio: evento.target.value })}
-            className={CAMPO}
-          >
-            <option value="">Todos</option>
-            {opciones?.servicios.map((servicio) => (
-              <option key={servicio.id} value={servicio.id}>
-                {servicio.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Cómo pagó cada cliente es facturación del negocio: el profesional no lo ve. */}
-        {delNegocio && (
-          <div>
-            <label htmlFor={id("medio")} className={ETIQUETA_CHICA}>
-              Medio de pago
-            </label>
-            <select
-              id={id("medio")}
-              value={filtros.medio}
-              onChange={(evento) => onCambiar({ medio: evento.target.value })}
-              className={CAMPO}
-            >
-              <option value="">Todos</option>
-              {MEDIOS_DE_PAGO.map((medio) => (
-                <option key={medio.id} value={medio.id}>
-                  {medio.nombre}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-      </div>
-
-      {errorDeOpciones && (
-        <p role="alert" className="text-sm text-red-500">
-          {errorDeOpciones}. Los demás filtros funcionan igual.
+      {soloPeriodo ? (
+        <p className="text-sm text-muted-foreground">
+          Lo anulado se filtra sólo por período, por la fecha en que se anuló.
         </p>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div>
+            <label htmlFor={id("turno")} className={ETIQUETA_CHICA}>
+              Turno
+            </label>
+            <select
+              id={id("turno")}
+              value={filtros.turno}
+              onChange={(evento) => onCambiar({ turno: evento.target.value })}
+              className={CAMPO}
+            >
+              <option value="">Todo el día</option>
+              {TURNOS.map((turno) => (
+                <option key={turno.id} value={turno.id}>
+                  {turno.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Al profesional el reporte ya le muestra sólo lo suyo: elegirse a sí mismo no filtra nada. */}
+          {delNegocio && (
+            <div>
+              <label htmlFor={id("profesional")} className={ETIQUETA_CHICA}>
+                Profesional
+              </label>
+              <select
+                id={id("profesional")}
+                value={filtros.profesional}
+                onChange={(evento) => onCambiar({ profesional: evento.target.value })}
+                className={CAMPO}
+              >
+                <option value="">Todos</option>
+                {opciones?.profesionales.map((profesional) => (
+                  <option key={profesional.id} value={profesional.id}>
+                    {profesional.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label htmlFor={id("servicio")} className={ETIQUETA_CHICA}>
+              Servicio
+            </label>
+            <select
+              id={id("servicio")}
+              value={filtros.servicio}
+              onChange={(evento) => onCambiar({ servicio: evento.target.value })}
+              className={CAMPO}
+            >
+              <option value="">Todos</option>
+              {opciones?.servicios.map((servicio) => (
+                <option key={servicio.id} value={servicio.id}>
+                  {servicio.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Cómo pagó cada cliente es facturación del negocio: el profesional no lo ve. */}
+          {delNegocio && (
+            <div>
+              <label htmlFor={id("medio")} className={ETIQUETA_CHICA}>
+                Medio de pago
+              </label>
+              <select
+                id={id("medio")}
+                value={filtros.medio}
+                onChange={(evento) => onCambiar({ medio: evento.target.value })}
+                className={CAMPO}
+              >
+                <option value="">Todos</option>
+                {MEDIOS_DE_PAGO.map((medio) => (
+                  <option key={medio.id} value={medio.id}>
+                    {medio.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      )}
+
+      {errorDeOpciones && !soloPeriodo && (
+        <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-red-500">
+          <span>{errorDeOpciones}. Los demás filtros funcionan igual.</span>
+          <button
+            type="button"
+            onClick={onReintentarOpciones}
+            className={cn("inline-flex items-center gap-1 font-medium underline rounded", ANILLO_DE_FOCO)}
+          >
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            Reintentar
+          </button>
+        </div>
       )}
     </section>
   )

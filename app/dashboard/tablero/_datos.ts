@@ -10,7 +10,7 @@
  */
 
 import type { EstadoActivo, PagoPedido } from "@/lib/atenciones"
-import type { LineaGuardada, LineaPedida } from "@/lib/acciones-del-tablero"
+import type { LineaGuardada, LineaPedida, ReservaDeOrigen } from "@/lib/acciones-del-tablero"
 import { rangoDelDia } from "@/lib/fechas"
 import { conJson, pedir, pedirConCodigo, type Resultado, type ResultadoConCodigo } from "@/lib/peticiones"
 
@@ -38,6 +38,12 @@ export interface Atencion {
   /** `id` en null si el cliente se borró: el nombre siempre está. */
   cliente: { id: string | null; nombre: string }
   citaId: string | null
+  /**
+   * La reserva de la que nació, para precargar el editor mientras la atención
+   * no tiene servicios. `null` si no nació de una, si la cita se borró o si
+   * quien mira no ve esa cita.
+   */
+  reserva: ReservaDeOrigen | null
   notas: string | null
   llegoEn: string
   empezoEn: string | null
@@ -90,6 +96,8 @@ export interface Tablero {
   reservas: Reserva[]
   atenciones: Atencion[]
   catalogo: Catalogo
+  /** Había más atenciones de las que el servidor manda de una vez: algunas no se ven. */
+  truncado: boolean
 }
 
 /** Un cliente que coincide con lo que se escribe en el buscador. */
@@ -141,7 +149,7 @@ export async function leerTablero(hoy: Date): Promise<Resultado<Tablero>> {
 export async function buscarClientes(texto: string): Promise<Resultado<ClienteEncontrado[]>> {
   const parametros = new URLSearchParams({ q: texto, limite: "8" })
   const resultado = await pedir<{
-    clientes: { id: string; name: string; email: string | null; phone: string | null }[]
+    clientes: { id: string; name: string; lastName: string | null; email: string | null; phone: string | null }[]
   }>(`/api/clientes?${parametros}`, "No se pudieron buscar los clientes")
   if (!resultado.ok) return resultado
 
@@ -149,7 +157,8 @@ export async function buscarClientes(texto: string): Promise<Resultado<ClienteEn
     ok: true,
     datos: resultado.datos.clientes.map((cliente) => ({
       id: cliente.id,
-      nombre: cliente.name,
+      // Nombre y apellido, como queda escrito en la atención: "María González".
+      nombre: [cliente.name, cliente.lastName].filter(Boolean).join(" "),
       detalle: cliente.phone ?? cliente.email ?? "",
     })),
   }
@@ -157,10 +166,24 @@ export async function buscarClientes(texto: string): Promise<Resultado<ClienteEn
 
 // ─── Acciones ────────────────────────────────────────────────────────────────
 
-/** Llegó alguien con reserva: la cita entra al tablero como atención en espera. */
+/**
+ * Llegó alguien con reserva: la cita entra al tablero como atención en espera.
+ * Una reserva de otro día da 409 con un mensaje para mostrar.
+ */
 export async function marcarLlegada(citaId: string): Promise<ResultadoDeAccion<Atencion>> {
   return conMotivo(
     await pedirConCodigo<Atencion>(URL_DE_ATENCIONES, "No se pudo marcar la llegada", conJson("POST", { citaId }))
+  )
+}
+
+/**
+ * Deshace una llegada marcada por error: la atención en espera se borra y la
+ * reserva vuelve a "Reservas de hoy". Si ya empezó, o no nació de una
+ * reserva, el servidor responde 409 con un mensaje: eso se anula.
+ */
+export async function deshacerLlegada(id: string): Promise<ResultadoDeAccion<{ eliminada: true }>> {
+  return conMotivo(
+    await pedirConCodigo<{ eliminada: true }>(urlDeAtencion(id), "No se pudo deshacer la llegada", { method: "DELETE" })
   )
 }
 

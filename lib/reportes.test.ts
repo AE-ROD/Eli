@@ -9,6 +9,7 @@ import {
   iniciosDeMesEn,
   lineaCumpleFiltros,
   resumirAtenciones,
+  rotuloDeIngresos,
   turnoDe,
   type AtencionParaReporte,
   type LineaParaReporte,
@@ -440,5 +441,35 @@ describe("cumpleFiltros", () => {
     // Carla hizo un corte y Pedro un color, pero Carla no hizo color.
     expect(cumpleFiltros(variada, { zona, profesional: "m-carla", servicio: "s-color" })).toBe(false)
     expect(cumpleFiltros(variada, { zona, profesional: "duenio", servicio: "s-color" })).toBe(true)
+  })
+})
+
+describe("rotuloDeIngresos", () => {
+  const sinFiltros = { profesional: "", servicio: "", medio: "" }
+
+  it("sin filtros es Ingresos; al profesional, lo que atendió", () => {
+    expect(rotuloDeIngresos(false, sinFiltros)).toBe("Ingresos")
+    expect(rotuloDeIngresos(true, sinFiltros)).toBe("Lo que atendiste")
+  })
+
+  it("con filtros de línea dice de qué líneas son las cifras", () => {
+    expect(rotuloDeIngresos(false, { ...sinFiltros, profesional: "Carla" })).toBe("Ingresos · servicios de Carla")
+    expect(rotuloDeIngresos(false, { ...sinFiltros, servicio: "Color" })).toBe("Ingresos · Color")
+    expect(rotuloDeIngresos(false, { ...sinFiltros, profesional: "Carla", servicio: "Color" })).toBe(
+      "Ingresos · Color de Carla"
+    )
+    expect(rotuloDeIngresos(true, { ...sinFiltros, servicio: "Color" })).toBe("Lo que atendiste · Color")
+  })
+
+  it("con sólo el medio, es lo cobrado con ese medio", () => {
+    expect(rotuloDeIngresos(false, { ...sinFiltros, medio: "efectivo" })).toBe("Cobrado en efectivo")
+    expect(rotuloDeIngresos(false, { ...sinFiltros, medio: "tarjeta-debito" })).toBe("Cobrado con tarjeta de débito")
+    expect(rotuloDeIngresos(false, { ...sinFiltros, medio: "transferencia" })).toBe("Cobrado con transferencia")
+  })
+
+  it("con medio y filtros de línea, suma las líneas y aclara qué atenciones entran", () => {
+    expect(rotuloDeIngresos(false, { profesional: "Carla", servicio: "", medio: "efectivo" })).toBe(
+      "Ingresos · servicios de Carla · atenciones pagadas en efectivo"
+    )
   })
 })

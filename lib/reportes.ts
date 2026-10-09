@@ -454,3 +454,52 @@ export function resumirAtenciones(
     porServicio: desglosePorServicio(lineas),
   }
 }
+
+// ─── Cómo se titula ──────────────────────────────────────────────────────────
+
+/** "en efectivo", "con tarjeta de débito": el medio dicho dentro de una frase. */
+function conElMedio(medio: string): string {
+  if (medio === "efectivo") return "en efectivo"
+  return `con ${nombreDeMedio(medio).toLocaleLowerCase("es")}`
+}
+
+/** Lo elegido en los filtros, con nombre: vacío es "sin filtro". */
+export interface FiltrosConNombre {
+  /** El nombre del profesional elegido. */
+  profesional: string
+  /** El nombre del servicio elegido. */
+  servicio: string
+  /** El id del medio elegido. */
+  medio: string
+}
+
+/**
+ * Cómo se titula la cifra principal del resumen, para que diga qué se sumó
+ * (`resumirAtenciones`): con filtro de profesional o de servicio son sólo las
+ * líneas que lo cumplen; con filtro de medio, sólo lo pagado con ese medio.
+ * Un "Ingresos" a secas sobre esas cifras se leía como lo facturado en total.
+ *
+ * - Sin filtros: "Ingresos" (al profesional, "Lo que atendiste").
+ * - Profesional o servicio: "Ingresos · servicios de Carla", "Ingresos ·
+ *   Color", "Ingresos · Color de Carla".
+ * - Sólo medio: "Cobrado en efectivo", "Cobrado con transferencia".
+ * - Medio y profesional o servicio: el medio sólo decide qué atenciones
+ *   entran, así que se suma como el anterior y se aclara cuáles:
+ *   "Ingresos · servicios de Carla · atenciones pagadas en efectivo".
+ *
+ * Al profesional no le llegan los filtros de profesional ni de medio: su
+ * reporte ya es sólo lo suyo y no ve medios de pago.
+ */
+export function rotuloDeIngresos(propio: boolean, filtros: FiltrosConNombre): string {
+  const { profesional, servicio, medio } = filtros
+  if (propio) return servicio ? `Lo que atendiste · ${servicio}` : "Lo que atendiste"
+
+  const lineas =
+    profesional && servicio
+      ? `${servicio} de ${profesional}`
+      : profesional
+        ? `servicios de ${profesional}`
+        : servicio
+  if (!lineas) return medio ? `Cobrado ${conElMedio(medio)}` : "Ingresos"
+  return medio ? `Ingresos · ${lineas} · atenciones pagadas ${conElMedio(medio)}` : `Ingresos · ${lineas}`
+}

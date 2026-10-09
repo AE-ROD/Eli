@@ -4,6 +4,7 @@ import { motion } from "framer-motion"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { TarjetaCita, type CitaEnTarjeta } from "@/components/panel/tarjeta-cita"
+import { formatearMonto } from "@/lib/dinero"
 import { formatearHora, duracionParaMostrar } from "@/lib/fechas"
 import { X, Mail, Phone, Calendar, Clock, FileText, Tag } from "lucide-react"
 import type { ClienteEnTarjeta } from "./tarjeta-cliente"
@@ -133,7 +134,7 @@ export function PanelDetalleCliente({
                   />
                   {cita.price != null && (
                     <p className="text-xs text-right text-muted-foreground mt-0.5 pr-1">
-                      ${cita.price.toLocaleString("es-ES")}
+                      {formatearMonto(cita.price)}
                     </p>
                   )}
                 </div>

@@ -1,6 +1,7 @@
 "use client"
 
-import { useId, useState, useSyncExternalStore, type DragEvent, type ReactNode } from "react"
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from "react"
+import { ANILLO_DE_FOCO } from "@/components/panel/estilos"
 import type { EstadoActivo } from "@/lib/atenciones"
 import {
   COLUMNAS_DEL_TABLERO,
@@ -31,9 +32,15 @@ const VACIO: Record<ColumnaId, string> = {
  * que se detiene en cada una; en escritorio se reparten el ancho. Mínimo
  * 280 px hasta escritorio, donde bajan a 200 para que las cinco entren en una
  * pantalla común sin scroll.
+ *
+ * `relative` no es decorativo: los textos `sr-only` de adentro (el contador
+ * de cada columna, el "Cargando…") son `position: absolute`. Sin un ancestro
+ * posicionado dentro del scroll se ubicaban respecto de la página, fuera del
+ * contenedor que recorta, y la estiraban: la página entera se desplazaba de
+ * costado en el teléfono.
  */
 const CONTENEDOR =
-  "flex gap-3 overflow-x-auto snap-x snap-mandatory lg:snap-none pb-3 -mx-4 px-4 scroll-px-4 sm:mx-0 sm:px-0 sm:scroll-px-0"
+  "relative flex gap-3 overflow-x-auto snap-x snap-mandatory lg:snap-none pb-3 -mx-4 px-4 scroll-px-4 sm:mx-0 sm:px-0 sm:scroll-px-0"
 const ANCHO_DE_COLUMNA =
   "snap-start shrink-0 w-[85vw] min-w-[280px] max-w-[340px] lg:w-auto lg:max-w-none lg:min-w-[200px] lg:flex-1 lg:shrink"
 
@@ -61,10 +68,39 @@ function usePunteroFino(): boolean {
 
 type Arrastrada = { tipo: "reserva"; reserva: Reserva } | { tipo: "atencion"; atencion: Atencion }
 
+/**
+ * Adonde va el foco después de una acción que saca de la pantalla el botón
+ * que se apretó ("Llegó", cobrar, anular, mover): sin esto caía al <body> y
+ * con teclado había que volver a recorrer la página desde arriba.
+ */
+export interface DestinoDelFoco {
+  /** La tarjeta de la atención, si sigue en el tablero (en su columna nueva). */
+  atencionId?: string
+  /** Si no, el título de esta columna: la que la tenía, o adonde volvió. */
+  columna: ColumnaId
+}
+
+/**
+ * Enfoca sin mover el tablero, salvo que se esté usando el teclado: tocar
+ * "Llegó" en el teléfono no debe correr la vista a otra columna, pero con
+ * teclado el foco tiene que quedar a la vista.
+ */
+function enfocar(destino: HTMLElement) {
+  destino.focus({ preventScroll: true })
+  let conTeclado = true
+  try {
+    conTeclado = destino.matches(":focus-visible")
+  } catch {
+    // Un navegador sin `:focus-visible`: se muestra siempre.
+  }
+  if (conTeclado) destino.scrollIntoView({ block: "nearest", inline: "nearest" })
+}
+
 const comoTarjeta = (arrastrada: Arrastrada): TarjetaDelTablero =>
   arrastrada.tipo === "reserva" ? { tipo: "reserva" } : { tipo: "atencion", estado: arrastrada.atencion.estado }
 
 interface ColumnaProps {
+  id: ColumnaId
   titulo: string
   cantidad: number
   vacio: string
@@ -79,6 +115,7 @@ interface ColumnaProps {
 }
 
 function Columna({
+  id,
   titulo,
   cantidad,
   vacio,
@@ -105,9 +142,17 @@ function Columna({
         encima && "bg-primary/10"
       )}
     >
+      {/* El título se enfoca desde el código: es adonde va el foco cuando la tarjeta ya no está. */}
       <h2
         id={idDelTitulo}
-        className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-border/50 text-sm font-semibold text-foreground"
+        data-columna={id}
+        tabIndex={-1}
+        className={cn(
+          "flex items-center justify-between gap-2 px-3 py-2.5 border-b border-border/50 text-sm font-semibold text-foreground rounded-t-xl",
+          // Hacia adentro: arriba no hay lugar, el contenedor con scroll recortaría el anillo.
+          ANILLO_DE_FOCO,
+          "focus-visible:ring-inset focus-visible:ring-offset-0"
+        )}
       >
         <span>{titulo}</span>
         <span className="rounded-full bg-background border border-border/70 px-2 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground">
@@ -129,7 +174,11 @@ interface TableroDeColumnasProps {
   ahora: number
   /** Ids de reservas y atenciones con un pedido en curso. */
   enCurso: ReadonlySet<string>
+  /** Adonde llevar el foco en cuanto se dibuje lo que cambió; `null` si no hay que moverlo. */
+  foco: DestinoDelFoco | null
+  onFocoAplicado: () => void
   onLlego: (reserva: Reserva) => void
+  onDeshacerLlegada: (atencion: Atencion) => void
   onMover: (atencion: Atencion, hacia: EstadoActivo) => void
   onCobrar: (atencion: Atencion) => void
   onEditar: (atencion: Atencion) => void
@@ -147,7 +196,10 @@ export function TableroDeColumnas({
   actor,
   ahora,
   enCurso,
+  foco,
+  onFocoAplicado,
   onLlego,
+  onDeshacerLlegada,
   onMover,
   onCobrar,
   onEditar,
@@ -156,6 +208,22 @@ export function TableroDeColumnas({
   const punteroFino = usePunteroFino()
   const [arrastrada, setArrastrada] = useState<Arrastrada | null>(null)
   const [encima, setEncima] = useState<ColumnaId | null>(null)
+
+  const contenedor = useRef<HTMLDivElement>(null)
+
+  // Después de dibujar lo que cambió: la tarjeta en su lugar nuevo o, si ya
+  // no está, el título de la columna. Las tarjetas y los títulos se marcan
+  // con `data-atencion` y `data-columna`.
+  useEffect(() => {
+    if (!foco) return
+    const raiz = contenedor.current
+    const tarjeta = foco.atencionId
+      ? raiz?.querySelector<HTMLElement>(`[data-atencion="${CSS.escape(foco.atencionId)}"]`)
+      : null
+    const destino = tarjeta ?? raiz?.querySelector<HTMLElement>(`[data-columna="${foco.columna}"]`)
+    if (destino) enfocar(destino)
+    onFocoAplicado()
+  }, [foco, onFocoAplicado])
 
   const destinos = arrastrada ? destinosDeArrastre(actor, comoTarjeta(arrastrada)) : []
 
@@ -213,9 +281,10 @@ export function TableroDeColumnas({
   })
 
   return (
-    <div className={CONTENEDOR}>
+    <div ref={contenedor} className={CONTENEDOR}>
       {COLUMNAS_DEL_TABLERO.map(({ id: columna, titulo }) => {
         const propsDeColumna = {
+          id: columna,
           titulo,
           vacio: VACIO[columna],
           destinoValido: destinos.includes(columna),
@@ -252,6 +321,7 @@ export function TableroDeColumnas({
                 ahora={ahora}
                 enCurso={enCurso.has(atencion.id)}
                 arrastre={arrastreDe({ tipo: "atencion", atencion }, atencion.id)}
+                onDeshacerLlegada={() => onDeshacerLlegada(atencion)}
                 onMover={(hacia) => onMover(atencion, hacia)}
                 onCobrar={() => onCobrar(atencion)}
                 onEditar={() => onEditar(atencion)}

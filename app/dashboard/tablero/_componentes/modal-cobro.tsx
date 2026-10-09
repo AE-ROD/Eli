@@ -3,26 +3,30 @@
 import { useId, useRef, useState, type FormEvent } from "react"
 import { Plus, Trash2 } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
+import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { ANILLO_DE_FOCO, CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO } from "@/components/panel/estilos"
-import { aCentavos, deCentavos, esMontoDePagoValido, type PagoPedido } from "@/lib/atenciones"
-import { estadoDelCobro, filaDePagoSugerida, type FilaDePago } from "@/lib/acciones-del-tablero"
-import { formatearMonto, leerMonto } from "@/lib/dinero"
+import { MAXIMO_DE_PAGOS, aCentavos, deCentavos, type PagoPedido } from "@/lib/atenciones"
+import { errorDeMontoDePago, estadoDelCobro, filaDePagoSugerida, type FilaDePago } from "@/lib/acciones-del-tablero"
+import { formatearMonto } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
 import type { Atencion } from "../_datos"
-import { MarcoDeModal } from "./marco-de-modal"
-
-/** Más medios que esto en un solo cobro es un error de carga; el servidor rechaza más de 20. */
-const MAXIMO_DE_PAGOS = 20
 
 let pagosAgregados = 0
 
 interface ModalCobroProps {
+  /**
+   * La atención como se la conoce. Si el servidor rechaza el cobro porque el
+   * total cambió, la pantalla la reemplaza por la recién leída: el total y la
+   * lista se actualizan y los pagos escritos se conservan.
+   */
   atencion: Atencion
   mediosDePago: { id: string; nombre: string }[]
   /** Por qué no se pudo cobrar, si falló. */
   aviso: string
   guardando: boolean
   onCobrar: (pagos: PagoPedido[]) => void
+  /** Se tocó un pago: el aviso del intento anterior ya no es de lo que se ve. */
+  onCambiarPagos: () => void
   onCerrar: () => void
 }
 
@@ -36,20 +40,13 @@ function totalEnCentavosDe(atencion: Atencion): number {
   return atencion.lineas.reduce((suma, linea) => suma + aCentavos(linea.precio), 0)
 }
 
-/** Lo que hay que decir de un monto escrito, o nada si está vacío o sirve. */
-function errorDeMonto(texto: string): string | null {
-  if (texto.trim() === "") return null
-  const monto = leerMonto(texto)
-  return monto !== null && esMontoDePagoValido(monto) ? null : "Tiene que ser mayor que cero, con hasta dos decimales."
-}
-
 /**
  * Cobrar una atención: el resumen de lo que se hizo y los pagos, que pueden
  * repartirse entre varios medios. Lo que falta o sobra se calcula en vivo y
  * en centavos, y "Cobrar" se habilita sólo cuando los pagos dan el total
  * exacto: con la misma regla que aplica el servidor (`errorDeCobro`).
  */
-export function ModalCobro({ atencion, mediosDePago, aviso, guardando, onCobrar, onCerrar }: ModalCobroProps) {
+export function ModalCobro({ atencion, mediosDePago, aviso, guardando, onCobrar, onCambiarPagos, onCerrar }: ModalCobroProps) {
   const idBase = useId()
   const botonAgregar = useRef<HTMLButtonElement>(null)
   const totalCentavos = totalEnCentavosDe(atencion)
@@ -62,10 +59,12 @@ export function ModalCobro({ atencion, mediosDePago, aviso, guardando, onCobrar,
 
   const cobro = estadoDelCobro(totalCentavos, filas)
   const listo = cobro.error === null
-  const hayMontoInvalido = filas.some((fila) => errorDeMonto(fila.monto) !== null)
+  const hayMontoInvalido = filas.some((fila) => errorDeMontoDePago(fila.monto) !== null)
 
-  const cambiarFila = (clave: string, cambios: Partial<FilaDePago>) =>
+  const cambiarFila = (clave: string, cambios: Partial<FilaDePago>) => {
     setFilas((previas) => previas.map((fila) => (fila.clave === clave ? { ...fila, ...cambios } : fila)))
+    onCambiarPagos()
+  }
 
   // Al agregar, el foco va al monto nuevo, que es lo que se ajusta; al
   // quitar, al botón de agregar, porque el que se apretó desaparece.
@@ -73,11 +72,13 @@ export function ModalCobro({ atencion, mediosDePago, aviso, guardando, onCobrar,
     pagosAgregados += 1
     const clave = `pago-${pagosAgregados}`
     setFilas((previas) => [...previas, filaDePagoSugerida(mediosDePago, previas, totalCentavos, clave)])
+    onCambiarPagos()
     requestAnimationFrame(() => document.getElementById(`${idBase}-${clave}-monto`)?.focus())
   }
 
   const quitar = (clave: string) => {
     setFilas((previas) => previas.filter((fila) => fila.clave !== clave))
+    onCambiarPagos()
     requestAnimationFrame(() => botonAgregar.current?.focus())
   }
 
@@ -128,7 +129,7 @@ export function ModalCobro({ atencion, mediosDePago, aviso, guardando, onCobrar,
 
           {filas.map((fila, indice) => {
             const numero = indice + 1
-            const error = errorDeMonto(fila.monto)
+            const error = errorDeMontoDePago(fila.monto)
             return (
               <div
                 key={fila.clave}
@@ -162,20 +163,18 @@ export function ModalCobro({ atencion, mediosDePago, aviso, guardando, onCobrar,
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground" aria-hidden="true">
                       $
                     </span>
+                    {/* Texto y no número, igual que el precio: así la coma decimal no se pierde. */}
                     <input
                       id={`${idBase}-${fila.clave}-monto`}
-                      type="number"
+                      type="text"
                       inputMode="decimal"
-                      min="0"
-                      step="0.01"
+                      autoComplete="off"
                       value={fila.monto}
                       disabled={guardando}
                       required
                       aria-invalid={error ? true : undefined}
                       aria-describedby={error ? `${idBase}-${fila.clave}-error` : undefined}
                       onChange={(evento) => cambiarFila(fila.clave, { monto: evento.target.value })}
-                      // Igual que en el precio: que la rueda no cambie un monto sin que se note.
-                      onWheel={(evento) => evento.currentTarget.blur()}
                       className={cn(CAMPO, "pl-7 tabular-nums", error && CAMPO_CON_ERROR)}
                     />
                   </div>
@@ -227,7 +226,8 @@ export function ModalCobro({ atencion, mediosDePago, aviso, guardando, onCobrar,
           {cobro.diferenciaCentavos < 0 && (
             <p className="text-red-600">Sobra {formatearMonto(deCentavos(-cobro.diferenciaCentavos))}</p>
           )}
-          {cobro.diferenciaCentavos === 0 && filas.length > 0 && !hayMontoInvalido && cobro.error === null && (
+          {/* Nunca a la vez que un aviso del servidor: se leería que está todo bien y que no. */}
+          {cobro.diferenciaCentavos === 0 && filas.length > 0 && !hayMontoInvalido && cobro.error === null && !aviso && (
             <p className="text-green-700">Los pagos cuadran con el total.</p>
           )}
           {/* Lo que no es una diferencia (un monto en cero, por ejemplo) lo dice la regla del servidor. */}

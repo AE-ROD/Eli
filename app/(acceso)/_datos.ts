@@ -9,7 +9,7 @@
  * la pantalla está obligada a decidir qué mostrar cuando algo falla.
  */
 
-import { pedir, conJson, leerCuerpo, SIN_CONEXION, type Resultado } from "@/lib/peticiones"
+import { pedir, pedirConCuerpo, conJson, type Resultado } from "@/lib/peticiones"
 import type { RubroId } from "@/lib/rubros"
 
 export interface DatosDeRegistro {
@@ -79,8 +79,8 @@ export type ResultadoDeAceptar =
   | { ok: true; datos: { cuentaNueva: boolean } }
   | { ok: false; error: string; requiereSesion: boolean }
 
+/** Lo que puede traer el cuerpo de la respuesta, ok o no: sin validar, se lee con cuidado. */
 interface RespuestaDeAceptar {
-  error?: unknown
   requiereSesion?: unknown
   cuentaNueva?: unknown
 }
@@ -89,24 +89,23 @@ interface RespuestaDeAceptar {
  * Crea la cuenta con la contraseña elegida y la suma al negocio. Si el correo
  * ya tenía cuenta, sólo suma la membresía (`cuentaNueva: false`).
  *
- * No usa `pedir` porque necesita `requiereSesion`, que viene en el cuerpo del
- * error; lo demás sigue las mismas reglas.
+ * Usa `pedirConCuerpo` y no `pedir` porque necesita `requiereSesion`, que
+ * viene en el cuerpo del error. Las reglas son las de todos los pedidos: un
+ * 200 con una página HTML (un portal cautivo, un proxy) es un fallo, no una
+ * cuenta creada que no existe.
  */
 export async function aceptarInvitacion(token: string, contrasena: string): Promise<ResultadoDeAceptar> {
-  try {
-    const respuesta = await fetch(`/api/equipo/invitacion/${token}/aceptar`, conJson("POST", { contrasena }))
-    const cuerpo = (await leerCuerpo(respuesta)) as RespuestaDeAceptar | null
+  const resultado = await pedirConCuerpo<RespuestaDeAceptar | undefined>(
+    `/api/equipo/invitacion/${token}/aceptar`,
+    "Error al crear la cuenta",
+    conJson("POST", { contrasena })
+  )
 
-    if (!respuesta.ok) {
-      return {
-        ok: false,
-        error: typeof cuerpo?.error === "string" ? cuerpo.error : "Error al crear la cuenta",
-        requiereSesion: cuerpo?.requiereSesion === true,
-      }
-    }
-
-    return { ok: true, datos: { cuentaNueva: cuerpo?.cuentaNueva !== false } }
-  } catch {
-    return { ok: false, error: SIN_CONEXION, requiereSesion: false }
+  if (!resultado.ok) {
+    const cuerpo = resultado.cuerpo as RespuestaDeAceptar | null
+    return { ok: false, error: resultado.error, requiereSesion: cuerpo?.requiereSesion === true }
   }
+
+  // Un 204 no trae cuerpo: sin decir lo contrario, la cuenta es nueva.
+  return { ok: true, datos: { cuentaNueva: resultado.datos?.cuentaNueva !== false } }
 }

@@ -2,17 +2,16 @@
 
 import { useId, useState, type FormEvent } from "react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
+import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { ANILLO_DE_FOCO, CAMPO, ETIQUETA } from "@/components/panel/estilos"
-import { formatearMonto } from "@/lib/dinero"
+import { consecuenciasDeAnular, type AtencionParaAnular } from "@/lib/acciones-del-tablero"
 import { cn } from "@/lib/utils"
-import type { Atencion } from "../_datos"
-import { MarcoDeModal } from "./marco-de-modal"
 
 /** El servidor acepta hasta 500 caracteres de motivo. */
 const LARGO_MAXIMO_DEL_MOTIVO = 500
 
 interface ModalAnularProps {
-  atencion: Atencion
+  atencion: AtencionParaAnular
   /** Por qué no se pudo anular, si falló. */
   aviso: string
   guardando: boolean
@@ -21,20 +20,10 @@ interface ModalAnularProps {
 }
 
 /**
- * Qué pasa al anular, dicho antes de hacerlo. Lo cobrado no se borra: deja de
- * sumar a los ingresos y queda en el historial como anulado. Si no estaba
- * cobrada y venía de una reserva, la cita de la agenda pasa a cancelada.
+ * Confirmar la anulación, con un motivo opcional que queda registrado. Lo usan
+ * el tablero (antes o después de cobrar) y el historial de reportes, donde el
+ * dueño anula cobros de días anteriores.
  */
-function consecuencias(atencion: Atencion): string {
-  if (atencion.estado === "finalizada") {
-    const cuanto = atencion.total !== undefined ? ` (${formatearMonto(atencion.total)})` : ""
-    return `Esta atención ya está cobrada${cuanto}. Al anularla deja de sumar a los ingresos del negocio y queda en el historial como anulada. No se puede deshacer.`
-  }
-  const reserva = atencion.citaId ? " La reserva de la agenda queda cancelada." : ""
-  return `La atención sale del tablero y queda en el historial como anulada.${reserva} No se puede deshacer.`
-}
-
-/** Confirmar la anulación, con un motivo opcional que queda registrado. */
 export function ModalAnular({ atencion, aviso, guardando, onAnular, onCerrar }: ModalAnularProps) {
   const idDelMotivo = useId()
   const [motivo, setMotivo] = useState("")
@@ -48,7 +37,7 @@ export function ModalAnular({ atencion, aviso, guardando, onAnular, onCerrar }: 
   return (
     <MarcoDeModal
       titulo={cobrada ? `¿Anular el cobro de ${atencion.cliente.nombre}?` : `¿Anular la atención de ${atencion.cliente.nombre}?`}
-      descripcion={consecuencias(atencion)}
+      descripcion={consecuenciasDeAnular(atencion)}
       bloqueado={guardando}
       alCerrar={onCerrar}
     >

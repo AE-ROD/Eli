@@ -5,7 +5,13 @@ import { Ban, Pencil, Undo2 } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { ANILLO_DE_FOCO } from "@/components/panel/estilos"
 import { nombreDeEstado, type EstadoActivo } from "@/lib/atenciones"
-import { accionPrincipal, accionesSecundarias, faltaAsignar } from "@/lib/acciones-del-tablero"
+import {
+  accionPrincipal,
+  accionesSecundarias,
+  faltaAsignar,
+  nombreConHora,
+  ofreceDeshacerLlegada,
+} from "@/lib/acciones-del-tablero"
 import { formatearMonto } from "@/lib/dinero"
 import { formatearHora, tiempoDesde } from "@/lib/fechas"
 import type { Actor } from "@/lib/permisos"
@@ -72,6 +78,7 @@ interface TarjetaDeAtencionProps {
   /** Hay un pedido en curso para esta atención: los botones esperan. */
   enCurso: boolean
   arrastre: PropsDeArrastre
+  onDeshacerLlegada: () => void
   onMover: (hacia: EstadoActivo) => void
   onCobrar: () => void
   onEditar: () => void
@@ -82,6 +89,9 @@ interface TarjetaDeAtencionProps {
  * Una atención en el tablero: el cliente, desde cuándo está, qué se le hace y
  * quién, y el total si quien mira puede verlo. Los botones son sólo los que
  * quien mira puede usar (`lib/acciones-del-tablero.ts`).
+ *
+ * La tarjeta se puede enfocar desde el código (`data-atencion`): después de
+ * moverla, el foco la sigue a su columna nueva.
  */
 export function TarjetaDeAtencion({
   atencion,
@@ -89,6 +99,7 @@ export function TarjetaDeAtencion({
   ahora,
   enCurso,
   arrastre,
+  onDeshacerLlegada,
   onMover,
   onCobrar,
   onEditar,
@@ -96,18 +107,23 @@ export function TarjetaDeAtencion({
 }: TarjetaDeAtencionProps) {
   const idDelNombre = useId()
   const nombre = atencion.cliente.nombre
+  const quien = nombreConHora(atencion)
   const momento = momentoDe(atencion, ahora)
   const principal = accionPrincipal(actor, atencion.estado)
   const secundarias = accionesSecundarias(actor, atencion.estado)
   const volverA = secundarias.volverA
+  const deshacer = ofreceDeshacerLlegada(actor, atencion)
   const cobrada = atencion.estado === "finalizada"
 
   return (
     <article
       aria-labelledby={idDelNombre}
+      data-atencion={atencion.id}
+      tabIndex={-1}
       {...arrastre}
       className={cn(
         "rounded-lg border border-border/70 bg-card p-3 shadow-sm space-y-2",
+        ANILLO_DE_FOCO,
         arrastre.draggable && "cursor-grab active:cursor-grabbing"
       )}
     >
@@ -155,7 +171,7 @@ export function TarjetaDeAtencion({
           anchoCompleto
           onClick={principal.tipo === "cobrar" ? onCobrar : () => onMover(principal.hacia)}
           cargando={enCurso}
-          aria-label={enCurso ? `Guardando: ${nombre}` : `${principal.texto}: ${nombre}`}
+          aria-label={enCurso ? `Guardando: ${quien}` : `${principal.texto}: ${quien}`}
           className={ANILLO_DE_FOCO}
         >
           {principal.texto}
@@ -166,10 +182,10 @@ export function TarjetaDeAtencion({
         <p className="text-xs text-muted-foreground">Lista para cobrar: la cobra el dueño o el encargado.</p>
       )}
 
-      {(secundarias.editar || volverA || secundarias.anular) && (
+      {(secundarias.editar || volverA || deshacer || secundarias.anular) && (
         <div className="flex flex-wrap gap-1 -mx-1">
           {secundarias.editar && (
-            <BotonSecundario onClick={onEditar} disabled={enCurso} etiqueta={`Editar servicios de ${nombre}`}>
+            <BotonSecundario onClick={onEditar} disabled={enCurso} etiqueta={`Editar servicios de ${quien}`}>
               <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
               Servicios
             </BotonSecundario>
@@ -178,17 +194,24 @@ export function TarjetaDeAtencion({
             <BotonSecundario
               onClick={() => onMover(volverA)}
               disabled={enCurso}
-              etiqueta={`Volver a ${nombreDeEstado(volverA)}: ${nombre}`}
+              etiqueta={`Volver a ${nombreDeEstado(volverA)}: ${quien}`}
             >
               <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
               Volver
+            </BotonSecundario>
+          )}
+          {/* La llegada se marcó por error: la reserva vuelve a "Reservas de hoy". */}
+          {deshacer && (
+            <BotonSecundario onClick={onDeshacerLlegada} disabled={enCurso} etiqueta={`Deshacer llegada: ${quien}`}>
+              <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
+              Deshacer llegada
             </BotonSecundario>
           )}
           {secundarias.anular && (
             <BotonSecundario
               onClick={onAnular}
               disabled={enCurso}
-              etiqueta={cobrada ? `Anular el cobro de ${nombre}` : `Anular la atención de ${nombre}`}
+              etiqueta={cobrada ? `Anular el cobro de ${quien}` : `Anular la atención de ${quien}`}
               peligro
             >
               <Ban className="h-3.5 w-3.5" aria-hidden="true" />
