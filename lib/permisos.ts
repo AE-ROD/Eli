@@ -160,12 +160,14 @@ export const puedeVerCita = (actor: Actor | null, cita: CitaDelNegocio): boolean
  * si tiene una línea en ella, y deshacerla borraría las líneas de la colega y
  * le cambiaría la cita.
  *
- * `cita` es la reserva de la que nació la atención, leída del negocio. Sin
- * ella no se sabe de quién es la reserva, así que sólo pueden dueño y
- * encargado, a quienes eso no les cambia nada; el profesional, no (falla
- * cerrado). Un profesional sin `memberId` nunca: ninguna reserva es suya.
+ * `cita` es la reserva de la que nació la atención, leída del negocio. Es
+ * obligatoria, aunque sea `null`: quien pregunta dice de quién es la reserva
+ * o que no lo sabe (la pantalla no la recibe si quien mira no ve esa cita).
+ * En `null` sólo pueden dueño y encargado, a quienes eso no les cambia nada;
+ * el profesional, no (falla cerrado). Un profesional sin `memberId` nunca:
+ * ninguna reserva es suya.
  */
-export const puedeDeshacerLlegada = (actor: Actor | null, cita?: CitaDelNegocio | null): boolean =>
+export const puedeDeshacerLlegada = (actor: Actor | null, cita: CitaDelNegocio | null): boolean =>
   cita ? puedeVerCita(actor, cita) : gestionaElNegocio(actor)
 
 /** Atención sobre la que se decide algo. Trae su negocio para poder validarlo. */

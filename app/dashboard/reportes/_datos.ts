@@ -79,7 +79,10 @@ export interface FilaAnulada {
   id: string
   anuladaEn: string
   motivoDeAnulacion: string | null
-  /** `null` si quien anuló ya no está en el negocio. */
+  /**
+   * Quién la anuló: el nombre que se copió al anular (`voidedByName`), que
+   * queda aunque esa persona deje el negocio. `null` sólo si no se registró.
+   */
   anuladaPor: string | null
   estabaCobrada: boolean
   cobradaEn: string | null

@@ -494,8 +494,11 @@ export interface FiltrosConNombre {
  *   Color", "Ingresos · Color de Carla".
  * - Sólo medio: "Cobrado en efectivo", "Cobrado con transferencia".
  * - Medio y profesional o servicio: el medio sólo decide qué atenciones
- *   entran, así que se suma como el anterior y se aclara cuáles:
- *   "Ingresos · servicios de Carla · atenciones pagadas en efectivo".
+ *   entran (las que tienen al menos un pago con ese medio), así que se suma
+ *   como el anterior y se aclara cuáles: "Ingresos · servicios de Carla ·
+ *   atenciones con algún pago en efectivo". No "pagadas en efectivo": eso se
+ *   leía como pagadas enteras con ese medio, y una pagada en parte también
+ *   entra.
  *
  * Al profesional no le llegan los filtros de profesional ni de medio: su
  * reporte ya es sólo lo suyo y no ve medios de pago.
@@ -511,5 +514,5 @@ export function rotuloDeIngresos(propio: boolean, filtros: FiltrosConNombre): st
         ? `servicios de ${profesional}`
         : servicio
   if (!lineas) return medio ? `Cobrado ${conElMedio(medio)}` : "Ingresos"
-  return medio ? `Ingresos · ${lineas} · atenciones pagadas ${conElMedio(medio)}` : `Ingresos · ${lineas}`
+  return medio ? `Ingresos · ${lineas} · atenciones con algún pago ${conElMedio(medio)}` : `Ingresos · ${lineas}`
 }

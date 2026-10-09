@@ -21,6 +21,7 @@ import {
   lineaParaReglas,
   lineasDesdeFilas,
   nombreConHora,
+  nombresSinRepetir,
   ofreceDeshacerLlegada,
   requisitoParaPasarA,
   textoDeMovimiento,
@@ -482,6 +483,64 @@ describe("nombreConHora", () => {
   })
 })
 
+describe("nombresSinRepetir", () => {
+  const a = (hora: number, minuto: number, segundo = 0) => new Date(2026, 6, 15, hora, minuto, segundo).toISOString()
+  const visita = (id: string, nombre: string, llegoEn: string, estado = "en-espera", cobradaEn: string | null = null) => ({
+    id,
+    estado,
+    cliente: { nombre },
+    llegoEn,
+    cobradaEn,
+  })
+
+  it("sin repetidos, cada una con el nombre de siempre", () => {
+    const lucia = visita("v1", "Lucía Pérez", a(2, 51))
+    const maria = visita("v2", "María González", a(2, 51))
+    const nombres = nombresSinRepetir([lucia, maria])
+    expect(nombres.get("v1")).toBe("Lucía Pérez de las 02:51")
+    expect(nombres.get("v2")).toBe("María González de las 02:51")
+  })
+
+  it("dos llegadas de la misma clienta en el mismo minuto: la segunda lleva (2) (QA: dos «Empezar atención» iguales)", () => {
+    const primera = visita("v-b", "Lucía Pérez 24440", a(2, 51, 5))
+    const segunda = visita("v-a", "Lucía Pérez 24440", a(2, 51, 40))
+    // Ni el orden de la lista ni el id deciden: decide quién llegó primero.
+    const nombres = nombresSinRepetir([segunda, primera])
+    expect(nombres.get("v-b")).toBe("Lucía Pérez 24440 de las 02:51")
+    expect(nombres.get("v-a")).toBe("Lucía Pérez 24440 de las 02:51 (2)")
+  })
+
+  it("el ordinal no cambia cuando una pasa a otra columna", () => {
+    const primera = visita("v1", "Lucía Pérez", a(2, 51, 5))
+    const segunda = visita("v2", "Lucía Pérez", a(2, 51, 40))
+    const antes = nombresSinRepetir([primera, segunda])
+    const despues = nombresSinRepetir([{ ...segunda, estado: "en-atencion" }, primera])
+    expect(despues).toEqual(antes)
+  })
+
+  it("en el mismo instante desempata el id, así el nombre no cambia entre recargas", () => {
+    const una = visita("v-2", "Lucía Pérez", a(2, 51))
+    const otra = visita("v-1", "Lucía Pérez", a(2, 51))
+    expect(nombresSinRepetir([una, otra])).toEqual(nombresSinRepetir([otra, una]))
+    expect(nombresSinRepetir([una, otra]).get("v-2")).toBe("Lucía Pérez de las 02:51 (2)")
+  })
+
+  it("con tres, (2) y (3); lo cobrado se distingue por la hora del cobro", () => {
+    const atenciones = [
+      visita("v1", "Lucía Pérez", a(10, 30, 1)),
+      visita("v2", "Lucía Pérez", a(10, 30, 2)),
+      visita("v3", "Lucía Pérez", a(10, 30, 3)),
+      visita("v4", "Lucía Pérez", a(9, 0, 1), "finalizada", a(9, 45, 10)),
+      visita("v5", "Lucía Pérez", a(9, 10, 1), "finalizada", a(9, 45, 50)),
+    ]
+    const nombres = nombresSinRepetir(atenciones)
+    expect([...nombres.values()]).toHaveLength(new Set(nombres.values()).size)
+    expect(nombres.get("v3")).toBe("Lucía Pérez de las 10:30 (3)")
+    expect(nombres.get("v4")).toBe("Lucía Pérez de las 09:45")
+    expect(nombres.get("v5")).toBe("Lucía Pérez de las 09:45 (2)")
+  })
+})
+
 describe("consecuenciasDeAnular", () => {
   const cliente = { nombre: "María González" }
 
@@ -513,22 +572,53 @@ describe("consecuenciasDeAnular", () => {
 })
 
 describe("ofreceDeshacerLlegada", () => {
-  const enEspera = { estado: "en-espera", citaId: "cita-1" }
+  // La reserva como la manda el servidor: al profesional, sólo si la cita es suya.
+  const deReserva = (profesionalId: string | null) => ({
+    profesional: profesionalId === null ? null : { id: profesionalId, nombre: profesionalId },
+  })
+  const enEspera = { estado: "en-espera", citaId: "cita-1", empezoEn: null, reserva: deReserva("colega") }
+  const suya = { ...enEspera, reserva: deReserva("yo") }
+  const empezo = "2026-10-09T13:05:00.000Z"
 
-  it("sólo en espera y si nació de una reserva", () => {
-    expect(ofreceDeshacerLlegada(dueño, enEspera)).toBe(true)
-    expect(ofreceDeshacerLlegada(dueño, { ...enEspera, estado: "en-atencion" })).toBe(false)
-    expect(ofreceDeshacerLlegada(dueño, { ...enEspera, estado: "finalizada" })).toBe(false)
-    expect(ofreceDeshacerLlegada(dueño, { ...enEspera, citaId: null })).toBe(false)
+  it("dueño y encargado, con la reserva de cualquiera, en espera y sin empezar", () => {
+    for (const quien of [dueño, encargado]) {
+      expect(ofreceDeshacerLlegada(quien, enEspera)).toBe(true)
+      expect(ofreceDeshacerLlegada(quien, suya)).toBe(true)
+      expect(ofreceDeshacerLlegada(quien, { ...enEspera, reserva: deReserva(null) })).toBe(true)
+    }
   })
 
-  it("dueño y encargado; el profesional no, mientras no se sepa si la reserva es suya; sin sesión ni memberId, no", () => {
-    expect(ofreceDeshacerLlegada(encargado, enEspera)).toBe(true)
-    // `puedeDeshacerLlegada` sin la reserva falla cerrado para el profesional:
-    // la pantalla todavía no le pasa de quién es (PRODUCTO.md, sección 7: "sólo sus reservas").
+  it("el profesional, sólo con su propia reserva, en espera y sin empezar", () => {
+    expect(ofreceDeshacerLlegada(profesional, suya)).toBe(true)
+    expect(ofreceDeshacerLlegada(profesional, { ...suya, empezoEn: empezo })).toBe(false)
+    expect(ofreceDeshacerLlegada(profesional, { ...suya, estado: "en-atencion" })).toBe(false)
+  })
+
+  it("el profesional no deshace la reserva de una colega, aunque vea la atención por tener un servicio en ella", () => {
+    // El servidor no le manda la reserva de una colega: sin ella no se sabe de quién es, y es que no.
+    expect(ofreceDeshacerLlegada(profesional, { ...enEspera, reserva: null })).toBe(false)
+    // Y si llegara igual, no es suya.
     expect(ofreceDeshacerLlegada(profesional, enEspera)).toBe(false)
-    expect(ofreceDeshacerLlegada({ ...profesional, memberId: null }, enEspera)).toBe(false)
-    expect(ofreceDeshacerLlegada(null, enEspera)).toBe(false)
+    expect(ofreceDeshacerLlegada(profesional, { ...enEspera, reserva: deReserva(null) })).toBe(false)
+  })
+
+  it("nadie la deshace si ya empezó, aunque haya vuelto a espera: eso se anula", () => {
+    for (const quien of [dueño, encargado, profesional]) {
+      expect(ofreceDeshacerLlegada(quien, { ...suya, empezoEn: empezo })).toBe(false)
+    }
+  })
+
+  it("sólo en espera y si nació de una reserva", () => {
+    for (const estado of ["en-atencion", "por-cobrar", "finalizada", "anulada"]) {
+      expect(ofreceDeshacerLlegada(dueño, { ...enEspera, estado })).toBe(false)
+    }
+    expect(ofreceDeshacerLlegada(dueño, { ...enEspera, citaId: null, reserva: null })).toBe(false)
+  })
+
+  it("sin sesión, o un profesional sin memberId, no", () => {
+    expect(ofreceDeshacerLlegada(null, suya)).toBe(false)
+    expect(ofreceDeshacerLlegada({ ...profesional, memberId: null }, suya)).toBe(false)
+    expect(ofreceDeshacerLlegada({ ...profesional, memberId: null }, { ...enEspera, reserva: deReserva(null) })).toBe(false)
   })
 })
 

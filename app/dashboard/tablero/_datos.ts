@@ -11,7 +11,7 @@
 
 import type { EstadoActivo, PagoPedido } from "@/lib/atenciones"
 import type { LineaGuardada, LineaPedida, ReservaDeOrigen } from "@/lib/acciones-del-tablero"
-import { rangoDelDia } from "@/lib/fechas"
+import { rangoDelDia, zonaDelDispositivo } from "@/lib/fechas"
 import { conJson, pedir, pedirConCodigo, type Resultado, type ResultadoConCodigo } from "@/lib/peticiones"
 
 // ─── Lo que devuelve el servidor ─────────────────────────────────────────────
@@ -40,12 +40,14 @@ export interface Atencion {
   citaId: string | null
   /**
    * La reserva de la que nació, para precargar el editor mientras la atención
-   * no tiene servicios. `null` si no nació de una, si la cita se borró o si
-   * quien mira no ve esa cita.
+   * no tiene servicios y para saber de quién es al ofrecer "Deshacer llegada"
+   * (`ofreceDeshacerLlegada`). `null` si no nació de una, si la cita se borró
+   * o si quien mira no ve esa cita: al profesional sólo le llega la suya.
    */
   reserva: ReservaDeOrigen | null
   notas: string | null
   llegoEn: string
+  /** Cuándo empezó a atenderse. Volver a espera no lo borra: una que empezó ya no se deshace, se anula. */
   empezoEn: string | null
   terminoEn: string | null
   cobradaEn: string | null
@@ -168,11 +170,21 @@ export async function buscarClientes(texto: string): Promise<Resultado<ClienteEn
 
 /**
  * Llegó alguien con reserva: la cita entra al tablero como atención en espera.
- * Una reserva de otro día da 409 con un mensaje para mostrar.
+ *
+ * Va con la zona del dispositivo, la misma con que `leerTablero` arma el día:
+ * así el servidor corta "hoy" en el calendario de quien marca la llegada, y
+ * una reserva de otro día da 409 con un mensaje para mostrar ("Esta reserva no
+ * es de hoy…"), igual que una que ya llegó o se canceló. Si el navegador no
+ * informa la zona no se manda, y el servidor acepta las de ±24 horas.
  */
 export async function marcarLlegada(citaId: string): Promise<ResultadoDeAccion<Atencion>> {
+  const zona = zonaDelDispositivo()
   return conMotivo(
-    await pedirConCodigo<Atencion>(URL_DE_ATENCIONES, "No se pudo marcar la llegada", conJson("POST", { citaId }))
+    await pedirConCodigo<Atencion>(
+      URL_DE_ATENCIONES,
+      "No se pudo marcar la llegada",
+      conJson("POST", { citaId, ...(zona && { zona }) })
+    )
   )
 }
 

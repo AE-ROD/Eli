@@ -68,12 +68,14 @@ interface BarraLateralProps {
 export function BarraLateral({ usuario, esOwner, diasTrialRestantes, puedeVerEquipo }: BarraLateralProps) {
   const { abrirPrecios } = usePrecios()
   const pathname = usePathname()
-  const { cajonAbierto, cerrarCajon, colapsada: colapsado, alternarColapso, enfocarBotonMenu } = useBarraLateral()
+  const { cajonAbierto, cerrarCajon, cerrarCajonParaIrA, colapsada: colapsado, alternarColapso, enfocarBotonMenu } =
+    useBarraLateral()
   const refCajon = useRef<HTMLDivElement>(null)
 
   // Mientras el cajón está abierto el foco vive adentro: entra al abrirse,
-  // Tab y Shift+Tab dan la vuelta sin salir y Escape lo cierra. Al cerrarse,
-  // por la vía que sea, vuelve al botón de menú que lo abrió.
+  // Tab y Shift+Tab dan la vuelta sin salir y Escape lo cierra. Al cerrarse
+  // vuelve al botón de menú; si se cerró al elegir otra página, al botón de
+  // menú de la página nueva, cuando llega (`cerrarCajonParaIrA`).
   useEffect(() => {
     const cajon = refCajon.current
     if (!cajonAbierto || !cajon) return
@@ -168,7 +170,7 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes, puedeVerEqu
           {/* Header */}
           <div className="p-4 border-b border-border/50">
             <div className="flex items-center justify-between">
-              <Link href="/dashboard" onClick={cerrarCajon} className="flex items-center gap-3">
+              <Link href="/dashboard" onClick={() => cerrarCajonParaIrA("/dashboard")} className="flex items-center gap-3">
                 <motion.div
                   className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center"
                   whileHover={{ scale: 1.05 }}
@@ -237,7 +239,7 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes, puedeVerEqu
               const activo = pathname === item.ruta || (item.ruta !== "/dashboard" && pathname.startsWith(item.ruta))
           
               return (
-                <Link key={item.id} href={item.ruta} onClick={cerrarCajon}>
+                <Link key={item.id} href={item.ruta} onClick={() => cerrarCajonParaIrA(item.ruta)}>
                   <motion.div
                     className={`
                       flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors relative
@@ -290,7 +292,7 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes, puedeVerEqu
                 const activo = pathname === item.ruta
             
                 return (
-                  <Link key={item.id} href={item.ruta} onClick={cerrarCajon}>
+                  <Link key={item.id} href={item.ruta} onClick={() => cerrarCajonParaIrA(item.ruta)}>
                     <motion.div
                       className={`
                         flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors

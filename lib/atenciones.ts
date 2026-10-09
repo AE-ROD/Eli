@@ -275,17 +275,17 @@ export function requisitoFaltante(destino: string, lineas: readonly LineaDeAtenc
  * la hayan vuelto a espera (volver no borra `startedAt`, ver
  * `tiemposDeTransicion`): se anula, y queda en el historial.
  *
- * `startedAt` llega como `Date` desde la base y como texto ISO desde la API
- * (`empezoEn`). Si no viene se lee como no empezada: es opcional sólo para que
- * la pantalla compile hasta que lo mande, y lo que decide ella es si ofrece el
- * botón. El servidor siempre lo pasa (`buscarAtencion`) y además lo exige en
- * el `WHERE` con que toma la fila antes de borrarla.
+ * `startedAt` llega como `Date` desde la base (`buscarAtencion`) y como texto
+ * ISO desde la API (`empezoEn`, en la pantalla). Es obligatorio: quien
+ * pregunta tiene que decir si empezó. Sólo `null` es "no empezó"; un valor
+ * que llegue sin él, por fuera de los tipos, se lee como empezada y no se
+ * deshace (falla cerrado). El servidor además lo exige en el `WHERE` con que
+ * toma la fila antes de borrarla.
  */
 export function sePuedeDeshacerLaLlegada<
-  T extends { status: string; appointmentId: string | null; startedAt?: Date | string | null },
+  T extends { status: string; appointmentId: string | null; startedAt: Date | string | null },
 >(atencion: T): atencion is T & { appointmentId: string } {
-  const empezo = atencion.startedAt !== null && atencion.startedAt !== undefined
-  return atencion.status === "en-espera" && atencion.appointmentId !== null && !empezo
+  return atencion.status === "en-espera" && atencion.appointmentId !== null && atencion.startedAt === null
 }
 
 /**

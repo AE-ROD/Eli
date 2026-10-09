@@ -130,7 +130,12 @@ export function HistorialDeCobros({
           <p className="text-sm text-muted-foreground mt-1">Prueba con otro período o con otros filtros.</p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        // `relative` no es decorativo: los `sr-only` de la tabla (el título, la
+        // columna "Acciones", el "no entra en el filtro") son `position:
+        // absolute`. Sin un ancestro posicionado dentro del scroll se ubicaban
+        // respecto de la página, fuera del contenedor que recorta, y la
+        // estiraban: en el teléfono la página entera se corría de costado.
+        <div className="relative overflow-x-auto">
           <table className={cn("w-full text-sm", anchoMinimo)}>
             <caption className="sr-only">
               Atenciones cobradas, página {pagina} de {paginas}

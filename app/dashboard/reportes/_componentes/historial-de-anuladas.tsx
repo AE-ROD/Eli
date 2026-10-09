@@ -109,7 +109,10 @@ export function HistorialDeAnuladas({ reporte, actualizando, onPagina }: Histori
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        // `relative`, como en el historial de cobros: el título `sr-only` de la
+        // tabla es `position: absolute` y, sin un ancestro posicionado dentro
+        // del scroll, estiraba la página de costado.
+        <div className="relative overflow-x-auto">
           <table className="w-full text-sm min-w-[880px]">
             <caption className="sr-only">
               Atenciones anuladas, página {pagina} de {paginas}
@@ -132,7 +135,8 @@ export function HistorialDeAnuladas({ reporte, actualizando, onPagina }: Histori
                     <Momento iso={fila.anuladaEn} />
                   </td>
                   <td className="px-3 py-3 text-foreground">
-                    {fila.anuladaPor ?? <span className="text-muted-foreground">Ya no está en el negocio</span>}
+                    {/* El nombre se copia al anular y queda aunque la persona se vaya: sólo falta si no se registró. */}
+                    {fila.anuladaPor ?? <span className="text-muted-foreground">Sin registro</span>}
                   </td>
                   <td className="px-3 py-3 text-foreground">{fila.cliente.nombre}</td>
                   <td className="px-3 py-3 text-foreground">

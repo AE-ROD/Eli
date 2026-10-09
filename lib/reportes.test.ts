@@ -508,9 +508,12 @@ describe("rotuloDeIngresos", () => {
     expect(rotuloDeIngresos(false, { ...sinFiltros, medio: "transferencia" })).toBe("Cobrado con transferencia")
   })
 
-  it("con medio y filtros de línea, suma las líneas y aclara qué atenciones entran", () => {
+  it("con medio y filtros de línea, suma las líneas y aclara qué atenciones entran: las que tienen algún pago con ese medio", () => {
     expect(rotuloDeIngresos(false, { profesional: "Carla", servicio: "", medio: "efectivo" })).toBe(
-      "Ingresos · servicios de Carla · atenciones pagadas en efectivo"
+      "Ingresos · servicios de Carla · atenciones con algún pago en efectivo"
+    )
+    expect(rotuloDeIngresos(false, { profesional: "", servicio: "Color", medio: "transferencia" })).toBe(
+      "Ingresos · Color · atenciones con algún pago con transferencia"
     )
   })
 })

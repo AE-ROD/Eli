@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -46,14 +47,23 @@ interface ValorDeLaBarraLateral {
   cajonAbierto: boolean
   abrirCajon: () => void
   cerrarCajon: () => void
+  /**
+   * Para los enlaces de la barra: cierra el cajón al elegir una página. Si es
+   * otra página, el foco no vuelve al botón de menú de la que se deja: espera
+   * a que cambie la ruta y va al de la página nueva (ver el efecto de
+   * `ProveedorDeBarraLateral`).
+   */
+  cerrarCajonParaIrA: (ruta: string) => void
   /** La barra de escritorio muestra sólo los íconos: 80 px en vez de 260. En el teléfono es siempre `false`. */
   colapsada: boolean
   alternarColapso: () => void
   /** Para el botón de menú de la barra superior, que vive en cada vista y no en el layout. */
   refBotonMenu: RefObject<HTMLButtonElement | null>
   /**
-   * Lleva el foco al botón de menú, el que esté montado al llamarla: si el
-   * cajón se cerró porque se navegó, es el de la página nueva.
+   * Lleva el foco al botón de menú, el que esté montado al llamarla. Si el
+   * cajón se cerró porque cambió la ruta (el "atrás" del teléfono), es el de
+   * la página nueva. Si se cerró al elegir otra página en el cajón, no hace
+   * nada: el foco va a la página nueva cuando llegue (`cerrarCajonParaIrA`).
    */
   enfocarBotonMenu: () => void
 }
@@ -62,6 +72,7 @@ const ContextoBarraLateral = createContext<ValorDeLaBarraLateral>({
   cajonAbierto: false,
   abrirCajon: () => {},
   cerrarCajon: () => {},
+  cerrarCajonParaIrA: () => {},
   colapsada: false,
   alternarColapso: () => {},
   refBotonMenu: { current: null },
@@ -97,10 +108,44 @@ export function ProveedorDeBarraLateral({ children }: { children: ReactNode }) {
   }
   if (cajonAbierto && esEscritorio) setCajonAbierto(false)
 
-  const abrirCajon = useCallback(() => setCajonAbierto(true), [])
+  /**
+   * Se eligió otra página en el cajón y el foco la espera. El enlace cierra el
+   * cajón antes de navegar: si el foco volviera en ese momento al botón de
+   * menú, sería el de la página que se deja, que se desmonta con ella y lo
+   * tiraba al <body>. Un ref y no un estado: no cambia nada de lo que se dibuja.
+   */
+  const focoParaLaPaginaNueva = useRef(false)
+
+  const abrirCajon = useCallback(() => {
+    // Lo pendiente de una navegación que no llegó (un enlace abierto en otra
+    // pestaña) no se arrastra a la próxima vez que se cierre.
+    focoParaLaPaginaNueva.current = false
+    setCajonAbierto(true)
+  }, [])
   const cerrarCajon = useCallback(() => setCajonAbierto(false), [])
+  const cerrarCajonParaIrA = useCallback(
+    (destino: string) => {
+      // En escritorio no hay cajón: la barra queda y el foco, en el enlace. Ir
+      // a la misma página no navega: el foco vuelve al botón, como al cerrar.
+      if (cajonAbierto && destino !== ruta) focoParaLaPaginaNueva.current = true
+      setCajonAbierto(false)
+    },
+    [cajonAbierto, ruta]
+  )
   const alternarColapso = useCallback(() => setColapsadaEnEscritorio((previa) => !previa), [])
-  const enfocarBotonMenu = useCallback(() => refBotonMenu.current?.focus(), [])
+  const enfocarBotonMenu = useCallback(() => {
+    if (focoParaLaPaginaNueva.current) return
+    refBotonMenu.current?.focus()
+  }, [])
+
+  // Llegó la página elegida en el cajón: el foco, a su botón de menú. En un
+  // efecto, que corre con la página nueva ya montada (el ref apunta a su
+  // botón) y después de que Next acomoda el scroll de la navegación.
+  useEffect(() => {
+    if (!focoParaLaPaginaNueva.current) return
+    focoParaLaPaginaNueva.current = false
+    refBotonMenu.current?.focus()
+  }, [ruta])
 
   return (
     <ContextoBarraLateral.Provider
@@ -108,6 +153,7 @@ export function ProveedorDeBarraLateral({ children }: { children: ReactNode }) {
         cajonAbierto,
         abrirCajon,
         cerrarCajon,
+        cerrarCajonParaIrA,
         // Colapsar es cosa del escritorio. En el teléfono el cajón se ve entero
         // aunque se haya colapsado antes en una ventana más ancha: ahí no hay
         // botón para expandirlo.

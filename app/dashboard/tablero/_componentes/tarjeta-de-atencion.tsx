@@ -5,13 +5,7 @@ import { Ban, Pencil, Undo2 } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { ANILLO_DE_FOCO } from "@/components/panel/estilos"
 import { nombreDeEstado, type EstadoActivo } from "@/lib/atenciones"
-import {
-  accionPrincipal,
-  accionesSecundarias,
-  faltaAsignar,
-  nombreConHora,
-  ofreceDeshacerLlegada,
-} from "@/lib/acciones-del-tablero"
+import { accionPrincipal, accionesSecundarias, faltaAsignar, ofreceDeshacerLlegada } from "@/lib/acciones-del-tablero"
 import { formatearMonto } from "@/lib/dinero"
 import { formatearHora, tiempoDesde } from "@/lib/fechas"
 import type { Actor } from "@/lib/permisos"
@@ -72,6 +66,12 @@ function BotonSecundario({
 
 interface TarjetaDeAtencionProps {
   atencion: Atencion
+  /**
+   * Cómo se nombra la atención en sus botones, para el lector de pantalla:
+   * el cliente y la hora y, si otra del tablero se llama igual, un ordinal
+   * (`nombresSinRepetir`). Lo calcula el tablero, que las ve todas.
+   */
+  quien: string
   actor: Actor | null
   /** El mismo instante para todo el tablero, en milisegundos. */
   ahora: number
@@ -95,6 +95,7 @@ interface TarjetaDeAtencionProps {
  */
 export function TarjetaDeAtencion({
   atencion,
+  quien,
   actor,
   ahora,
   enCurso,
@@ -107,7 +108,6 @@ export function TarjetaDeAtencion({
 }: TarjetaDeAtencionProps) {
   const idDelNombre = useId()
   const nombre = atencion.cliente.nombre
-  const quien = nombreConHora(atencion)
   const momento = momentoDe(atencion, ahora)
   const principal = accionPrincipal(actor, atencion.estado)
   const secundarias = accionesSecundarias(actor, atencion.estado)

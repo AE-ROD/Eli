@@ -237,7 +237,7 @@ describe("falla cerrado", () => {
     expect(puedeCobrar(null)).toBe(false)
     expect(puedeAnotarSinReserva(null)).toBe(false)
     expect(puedeAnular(null, { businessId: NEGOCIO, status: "en-espera" })).toBe(false)
-    expect(puedeDeshacerLlegada(null)).toBe(false)
+    expect(puedeDeshacerLlegada(null, null)).toBe(false)
     expect(puedeDeshacerLlegada(null, { businessId: NEGOCIO, memberId: "yo" })).toBe(false)
     expect(puedeVerAnuladas(null)).toBe(false)
     expect(puedeVerCita(null, { businessId: NEGOCIO, memberId: "yo" })).toBe(false)
@@ -246,7 +246,7 @@ describe("falla cerrado", () => {
   it("un profesional sin memberId no deshace llegadas ni ve citas sin asignar", () => {
     const roto = actor("worker", null)
 
-    expect(puedeDeshacerLlegada(roto)).toBe(false)
+    expect(puedeDeshacerLlegada(roto, null)).toBe(false)
     // `null === null` no es "su" cita: falla cerrado.
     expect(puedeDeshacerLlegada(roto, { businessId: NEGOCIO, memberId: null })).toBe(false)
     expect(puedeVerCita(roto, { businessId: NEGOCIO, memberId: null })).toBe(false)
@@ -393,9 +393,8 @@ describe("tablero de atenciones", () => {
     })
 
     it("sin la reserva no se sabe de quién es: dueño y encargado sí, el profesional no", () => {
-      expect(puedeDeshacerLlegada(dueño)).toBe(true)
+      expect(puedeDeshacerLlegada(dueño, null)).toBe(true)
       expect(puedeDeshacerLlegada(encargado, null)).toBe(true)
-      expect(puedeDeshacerLlegada(profesional)).toBe(false)
       expect(puedeDeshacerLlegada(profesional, null)).toBe(false)
     })
   })

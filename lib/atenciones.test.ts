@@ -208,8 +208,9 @@ describe("sePuedeDeshacerLaLlegada", () => {
     ).toBe(false)
   })
 
-  it("sin startedAt (la pantalla todavía no lo manda) se lee como no empezada: el servidor siempre lo pasa", () => {
-    expect(sePuedeDeshacerLaLlegada({ status: "en-espera", appointmentId: "cita-1" })).toBe(true)
+  it("si startedAt no viene (un JSON sin la clave, por fuera de los tipos), falla cerrado: no se deshace", () => {
+    const sinStartedAt = JSON.parse('{ "status": "en-espera", "appointmentId": "cita-1" }')
+    expect(sePuedeDeshacerLaLlegada(sinStartedAt)).toBe(false)
   })
 })
 

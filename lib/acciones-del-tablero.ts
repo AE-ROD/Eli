@@ -157,6 +157,33 @@ export function nombreConHora(atencion: {
   return `${atencion.cliente.nombre} de ${horaConArticulo(iso)}`
 }
 
+/** Lo que hace falta de una atención para nombrarla en los botones del tablero. */
+export type AtencionConNombre = Parameters<typeof nombreConHora>[0] & { id: string }
+
+/**
+ * El nombre de cada atención del tablero en sus botones, por id y sin
+ * repetir. Es el de `nombreConHora`, pero la hora sola no alcanza: dos
+ * llegadas de la misma clienta en el mismo minuto daban dos "Empezar
+ * atención: Lucía Pérez de las 02:51" que el lector de pantalla no
+ * distinguía. La primera en llegar se queda con el nombre; las siguientes
+ * llevan un ordinal, "(2)", "(3)", en el orden en que llegaron. Ese orden no
+ * cambia mientras siguen en el tablero, aunque pasen a otra columna.
+ */
+export function nombresSinRepetir(atenciones: readonly AtencionConNombre[]): Map<string, string> {
+  const porLlegada = [...atenciones].sort(
+    (a, b) => instante(a.llegoEn) - instante(b.llegoEn) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  )
+  const veces = new Map<string, number>()
+  const nombres = new Map<string, string>()
+  for (const atencion of porLlegada) {
+    const nombre = nombreConHora(atencion)
+    const vez = (veces.get(nombre) ?? 0) + 1
+    veces.set(nombre, vez)
+    nombres.set(atencion.id, vez === 1 ? nombre : `${nombre} (${vez})`)
+  }
+  return nombres
+}
+
 export type AccionPrincipal =
   | { tipo: "mover"; hacia: EstadoActivo; texto: string }
   | { tipo: "cobrar"; texto: string }
@@ -198,19 +225,47 @@ export function accionesSecundarias(actor: Actor | null, estado: string): Accion
   }
 }
 
+/** Lo que el tablero mira de una atención para ofrecer "Deshacer llegada". */
+export interface AtencionParaDeshacer {
+  estado: string
+  citaId: string | null
+  /** Cuándo empezó a atenderse. Volver a espera no lo borra: una que empezó ya no se deshace. */
+  empezoEn: string | null
+  /**
+   * La reserva de la que nació. El servidor la manda sólo a quien ve esa
+   * cita: dueño y encargado, cualquiera; el profesional, sólo una suya. `null`
+   * si no nació de una reserva o si quien mira no la ve.
+   */
+  reserva: Pick<ReservaDeOrigen, "profesional"> | null
+}
+
 /**
- * Si la tarjeta ofrece "Deshacer llegada": la atención nació de una reserva y
- * sigue en espera (`sePuedeDeshacerLaLlegada`), y quien mira puede deshacer
- * llegadas (`puedeDeshacerLlegada`). El servidor vuelve a mirar las dos cosas.
+ * Si la tarjeta ofrece "Deshacer llegada". Las mismas dos preguntas que hace
+ * el servidor antes de borrar (`DELETE /api/atenciones/[id]`):
+ *
+ * - si la llegada se puede deshacer: nació de una reserva, está en espera y
+ *   nunca empezó (`sePuedeDeshacerLaLlegada`);
+ * - si quien mira puede deshacer esa reserva (`puedeDeshacerLlegada`): dueño y
+ *   encargado, la de cualquiera; el profesional, sólo una suya. Ver la
+ *   atención no alcanza: el profesional ve la de la reserva de una colega si
+ *   tiene un servicio en ella.
+ *
+ * Sin la reserva no se sabe de quién es, y para el profesional eso es que no
+ * (falla cerrado). El servidor igual vuelve a mirar todo.
  */
-export function ofreceDeshacerLlegada(
-  actor: Actor | null,
-  atencion: { estado: string; citaId: string | null }
-): boolean {
-  return (
-    puedeDeshacerLlegada(actor) &&
-    sePuedeDeshacerLaLlegada({ status: atencion.estado, appointmentId: atencion.citaId })
-  )
+export function ofreceDeshacerLlegada(actor: Actor | null, atencion: AtencionParaDeshacer): boolean {
+  if (!actor) return false
+  const deshacible = sePuedeDeshacerLaLlegada({
+    status: atencion.estado,
+    appointmentId: atencion.citaId,
+    startedAt: atencion.empezoEn,
+  })
+  // El tablero sólo trae atenciones del negocio de quien mira (el endpoint
+  // filtra por su negocio), así que la reserva de origen es de ese negocio.
+  const cita = atencion.reserva
+    ? { businessId: actor.businessId, memberId: atencion.reserva.profesional?.id ?? null }
+    : null
+  return deshacible && puedeDeshacerLlegada(actor, cita)
 }
 
 /**

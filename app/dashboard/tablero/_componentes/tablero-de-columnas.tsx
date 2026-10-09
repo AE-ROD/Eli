@@ -9,6 +9,8 @@ import {
   atencionesDeColumna,
   destinosDeArrastre,
   estaAtrasada,
+  nombreConHora,
+  nombresSinRepetir,
   type ColumnaId,
   type TarjetaDelTablero,
 } from "@/lib/acciones-del-tablero"
@@ -227,6 +229,10 @@ export function TableroDeColumnas({
 
   const destinos = arrastrada ? destinosDeArrastre(actor, comoTarjeta(arrastrada)) : []
 
+  // Sobre todo el tablero y no por columna: los botones de editar y anular
+  // dicen lo mismo en cualquier columna.
+  const nombres = nombresSinRepetir(tablero.atenciones)
+
   const terminarArrastre = () => {
     setArrastrada(null)
     setEncima(null)
@@ -317,6 +323,7 @@ export function TableroDeColumnas({
               <TarjetaDeAtencion
                 key={atencion.id}
                 atencion={atencion}
+                quien={nombres.get(atencion.id) ?? nombreConHora(atencion)}
                 actor={actor}
                 ahora={ahora}
                 enCurso={enCurso.has(atencion.id)}
