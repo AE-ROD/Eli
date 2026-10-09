@@ -33,8 +33,10 @@ beforeEach(() => {
       atencion("v-con-colegas", { status: "por-cobrar" }),
       // Empezó y la volvieron a espera: conserva cuándo empezó.
       atencion("v-que-empezo", { startedAt: new Date("2026-10-06T14:00:00.000Z") }),
-      // Lo de cada uno cabe en los topes; la atención entera, no.
+      // Lo de cada uno cabe en el tope del total; la atención entera, no.
       atencion("v-cara", { status: "en-atencion" }),
+      // 21 servicios entre dos: datos de antes de que el tope de servicios se
+      // contara sobre la atención entera. La API ya no deja llegar a esto.
       atencion("v-larga", { status: "en-atencion" }),
     ],
     visitService: [
@@ -111,28 +113,34 @@ describe("lineasDeLaAtencion", () => {
     ])
   })
 
-  it("el total, en centavos, es el de lo que ve el actor: la atención entera para la dueña, lo suyo para la profesional", async () => {
+  it("el total, en centavos, es el de la atención entera, pregunte quien pregunte: es el que se congela al cobrar", async () => {
     const { lineasDeLaAtencion } = await import("./tablero")
 
-    expect((await lineasDeLaAtencion(tx, dueña, "v-con-colegas")).totalCentavos).toBe(centavos(33000))
-    expect((await lineasDeLaAtencion(tx, carla, "v-con-colegas")).totalCentavos).toBe(centavos(8000))
+    for (const quien of [dueña, encargado, carla]) {
+      expect((await lineasDeLaAtencion(tx, quien, "v-con-colegas")).totalCentavos).toBe(centavos(33000))
+    }
   })
 
-  it("los topes, para la profesional, sobre sus líneas: no se entera de cuánto suman ni de cuántas son las de los demás", async () => {
+  it("el tope del total, para la profesional, sobre sus líneas: no se entera de cuánto suman las de los demás", async () => {
     const { lineasDeLaAtencion } = await import("./tablero")
 
-    await expect(lineasDeLaAtencion(tx, carla, "v-cara")).resolves.toMatchObject({ totalCentavos: centavos(8000) })
-    await expect(lineasDeLaAtencion(tx, carla, "v-larga")).resolves.toMatchObject({ totalCentavos: centavos(8000) * 20 })
+    await expect(lineasDeLaAtencion(tx, carla, "v-cara")).resolves.toMatchObject({ errorDelTotalQueVe: null })
   })
 
-  it("dueño y encargado, que la ven entera, la validan entera: 400 con el tope que se pasa", async () => {
+  it("dueño y encargado, que la ven entera, miden el tope del total sobre la atención entera", async () => {
     const { lineasDeLaAtencion } = await import("./tablero")
 
     for (const quien of [dueña, encargado]) {
-      await expect(lineasDeLaAtencion(tx, quien, "v-cara")).rejects.toMatchObject({
-        status: 400,
-        message: "El total de la atención no puede pasar de $20.000.000: divídela en dos.",
+      await expect(lineasDeLaAtencion(tx, quien, "v-cara")).resolves.toMatchObject({
+        errorDelTotalQueVe: "El total de la atención no puede pasar de $20.000.000: divídela en dos.",
       })
+    }
+  })
+
+  it("el tope de servicios, sobre la atención entera para todos, también la profesional: 400 antes de leer una parte", async () => {
+    const { lineasDeLaAtencion } = await import("./tablero")
+
+    for (const quien of [dueña, encargado, carla]) {
       await expect(lineasDeLaAtencion(tx, quien, "v-larga")).rejects.toMatchObject({
         status: 400,
         message: "Una atención puede tener hasta 20 servicios.",
@@ -144,7 +152,11 @@ describe("lineasDeLaAtencion", () => {
     const { lineasDeLaAtencion } = await import("./tablero")
     const ajeno: Actor = { rol: "owner", businessId: OTRO_NEGOCIO, memberId: null }
 
-    expect(await lineasDeLaAtencion(tx, ajeno, "v-con-colegas")).toEqual({ lineas: [], totalCentavos: 0 })
+    expect(await lineasDeLaAtencion(tx, ajeno, "v-con-colegas")).toEqual({
+      lineas: [],
+      totalCentavos: 0,
+      errorDelTotalQueVe: null,
+    })
   })
 })
 

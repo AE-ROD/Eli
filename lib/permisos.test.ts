@@ -346,6 +346,25 @@ describe("tablero de atenciones", () => {
     })
   })
 
+  describe("puedeCobrar", () => {
+    /**
+     * El cobro congela el total de la atención entera, y el profesional no
+     * puede verlo: quien cobra tiene que ver todo el tablero. Si alguien
+     * pudiera cobrar sin verlo, cobraría un total que no se le puede mostrar.
+     */
+    const actores: [string, Actor | null][] = [
+      ...(["owner", "admin", "worker"] as const).flatMap((rol): [string, Actor][] => [
+        [`${rol} con memberId`, actor(rol, "yo")],
+        [`${rol} sin memberId`, actor(rol, null)],
+      ]),
+      ["sin actor", null],
+    ]
+
+    it.each(actores)("%s: si cobra, ve todo el tablero", (_caso, quien) => {
+      expect(!puedeCobrar(quien) || puedeVerTodoElTablero(quien)).toBe(true)
+    })
+  })
+
   describe("puedeVerCita", () => {
     it("la misma regla que whereDeAgenda: dueño y encargado, todas las del negocio", () => {
       for (const quien of [dueño, encargado]) {

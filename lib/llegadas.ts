@@ -27,13 +27,14 @@ const CLIENTE_SIN_FICHA = "Cliente sin ficha"
 
 /**
  * Cuán lejos de ahora puede estar una reserva para marcar que llegó, cuando
- * el pedido no trae la zona de quien la marca: 24 horas hacia atrás o hacia
- * adelante. Sin zona, el servidor no sabe en qué huso está el local y no
- * puede decir "hoy" con el calendario. Con 24 horas a cada lado caben las
- * reservas de hoy en cualquier huso (salvo los extremos del día de 25 horas
- * del cambio de hora), y una de pasado mañana o de la semana pasada, que es
- * un clic en la tarjeta equivocada, no. Una de mañana temprano sí cabe: por
- * eso la pantalla manda la zona (`llegadaConReservaSchema`).
+ * el pedido no trae la zona de quien la marca, o trae una que el servidor no
+ * reconoce: 24 horas hacia atrás o hacia adelante. Sin zona, el servidor no
+ * sabe en qué huso está el local y no puede decir "hoy" con el calendario.
+ * Con 24 horas a cada lado caben las reservas de hoy en cualquier huso (salvo
+ * los extremos del día de 25 horas del cambio de hora), y una de pasado
+ * mañana o de la semana pasada, que es un clic en la tarjeta equivocada, no.
+ * Una de mañana temprano sí cabe: por eso la pantalla manda la zona
+ * (`llegadaConReservaSchema`).
  */
 const VENTANA_DE_LLEGADA_MS = 24 * 60 * 60 * 1000
 
@@ -44,10 +45,19 @@ export const llegadaConReservaSchema = z.object({
    * (`America/Santiago`), la misma con que pide el tablero del día. Con ella,
    * "de hoy" es el día calendario en esa zona; sin ella, la ventana de
    * `VENTANA_DE_LLEGADA_MS`.
+   *
+   * Un texto que no es una zona que el servidor reconozca
+   * (`esZonaHorariaValida`) cuenta como si no hubiera venido: `Etc/Unknown`,
+   * de un equipo sin zona configurada, o una zona más nueva que la base de
+   * zonas del servidor. Con un 400, "Llegó" fallaría en cada reintento y sin
+   * salida, mientras el tablero carga igual (arma el día con `desde`/`hasta`
+   * del navegador). No amplía nada: la ventana es lo que el servidor acepta
+   * sin zona, y el día de cualquier zona cabe en ella. Lo que no es texto sí
+   * es un pedido mal armado: 400.
    */
   zona: z
     .string()
-    .refine(esZonaHorariaValida, "La zona horaria no es una zona IANA válida, como America/Santiago.")
+    .transform((zona) => (esZonaHorariaValida(zona) ? zona : undefined))
     .optional(),
 })
 

@@ -3,7 +3,14 @@ import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { MAXIMO_DE_PAGOS, aCentavos, errorDeCobro, requisitoFaltante, transicionPermitida } from "@/lib/atenciones"
+import {
+  MAXIMO_DE_PAGOS,
+  aCentavos,
+  errorDeCobro,
+  errorDeTotal,
+  requisitoFaltante,
+  transicionPermitida,
+} from "@/lib/atenciones"
 import { actorDeSesion, puedeCobrar } from "@/lib/permisos"
 import {
   ErrorDeAtencion,
@@ -77,9 +84,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         paidByName: nombre,
       })
 
-      // Todas las líneas, contadas antes de leerlas: si pasan del tope, o si
-      // el total no cabe, 400. Nunca se congela el total de una parte.
+      // Todas las líneas, de todos, contadas antes de leerlas: si pasan del
+      // tope de servicios, o si su total no cabe, 400. Nunca se congela el
+      // total de una parte. El total es el de la atención entera y no el de
+      // lo que ve quien cobra: hoy es lo mismo, porque sólo cobra quien ve
+      // todo el tablero (`lib/permisos.test.ts` lo exige), pero lo que se
+      // congela no depende de eso.
       const { lineas, totalCentavos } = await lineasDeLaAtencion(tx, actor, existente.id)
+      const excedido = errorDeTotal(totalCentavos)
+      if (excedido) throw new ErrorDeAtencion(400, excedido)
+
       const falta = requisitoFaltante("finalizada", lineas)
       if (falta) throw new ErrorDeAtencion(400, falta)
 

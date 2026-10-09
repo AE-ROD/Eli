@@ -131,12 +131,12 @@ const SELECCION_DE_PAGO = {
  * Las líneas y los pagos de una atención que ve el actor. Pasan por
  * `lib/permisos.ts`: al profesional la base ni siquiera le devuelve las
  * líneas de otros ni un solo pago. Los `take` son los topes de
- * `lib/atenciones.ts`, que se validan al escribir y al cobrar: una atención
- * cobrada nunca tiene más, así que leer con ellos trae todo y el total que se
- * muestra sale de las mismas líneas que se cobraron. Una abierta sólo puede
- * pasarse si entre varios profesionales, cada uno dentro de su tope, cargan
- * más de la cuenta (`lineasDeLaAtencion`); no se cobra hasta que dueño o
- * encargado la corrigen.
+ * `lib/atenciones.ts`. El de servicios se cuenta sobre la atención entera
+ * cada vez que se escriben sus líneas, las escriba quien las escriba
+ * (`lineasDeLaAtencion`): ninguna atención, abierta o cobrada, tiene más, así
+ * que leer con él las trae todas, y el total que se muestra sale de las
+ * mismas líneas que se cobran. Los pagos se escriben sólo al cobrar, y nunca
+ * más que `MAXIMO_DE_PAGOS`.
  */
 function lineasQueVe(actor: Actor) {
   return {
@@ -235,8 +235,8 @@ type ReservaLeida = NonNullable<AtencionLeida["appointment"]>
  *   llega un id ajeno, no matchea y no se escribe nada en otro negocio.
  *
  * `condicion` es lo que además tiene que seguir siendo cierto (deshacer una
- * llegada exige que no haya empezado). Va en un `AND` aparte, para que no
- * pueda pisar el id, el negocio ni el estado.
+ * llegada exige que no haya empezado y que siga atada a la misma reserva). Va
+ * en un `AND` aparte, para que no pueda pisar el id, el negocio ni el estado.
  */
 export async function tomarAtencion(
   tx: Prisma.TransactionClient,
@@ -266,48 +266,52 @@ const SELECCION_PARA_REGLAS = { memberId: true, byOwner: true, priceCents: true 
  * Las líneas de una atención para validarla. Va dentro de la transacción y
  * después de `tomarAtencion`, para que nadie las cambie en el medio.
  *
- * - Los topes de servicios y de total se validan sobre las líneas que ve el
- *   actor (`whereDeLineas`): todas para dueño y encargado, sólo las suyas para
- *   el profesional. Sobre la atención entera, el 400 le diría al profesional
- *   lo que no ve: probando precios o cantidades en sus líneas deduciría cuánto
- *   suman o cuántas son las de los demás. La atención entera se sigue
- *   validando donde actúan dueño o encargado, que la ven completa: al
- *   editarla, al moverla y al cobrarla, que es cuando el total se congela.
- * - Primero se cuentan, y si pasan del tope es un 400. Leerlas con `take` y
- *   seguir habría validado (y al cobrar, congelado) el total de una parte.
- *   Después se mira que el total quepa en la columna (`TOTAL_MAXIMO_CENTAVOS`).
+ * - Primero se cuentan todas, las de todos los que la atendieron, y si pasan
+ *   de `MAXIMO_DE_LINEAS_POR_ATENCION` es un 400, para cualquier rol: cuántos
+ *   servicios hay no es dinero. Así ninguna atención pasa del tope y leerla
+ *   con ese `take`, acá y en el tablero, la trae entera. Leer con `take` sin
+ *   contar antes habría validado (y al cobrar, congelado) el total de una
+ *   parte.
  * - `lineas`, para los requisitos de `requisitoFaltante`, son todas: un
  *   requisito se cumple o no sobre la atención entera.
- * - `totalCentavos` es el de las líneas que ve el actor: el de la atención
- *   entera sólo para dueño y encargado, los únicos que cobran.
+ * - `totalCentavos` es el de la atención entera, quienquiera que pregunte: es
+ *   el que se congela al cobrar. No se le muestra a quien no ve todo el
+ *   tablero.
+ * - `errorDelTotalQueVe` es el tope del total (`errorDeTotal`) medido sobre
+ *   las líneas que ve el actor (`whereDeLineas`): todas para dueño y
+ *   encargado, sólo las suyas para el profesional. Sobre la atención entera,
+ *   el 400 le diría lo que no ve: probando precios en sus líneas deduciría
+ *   cuánto suman las de los demás. No se lanza acá porque no todo movimiento
+ *   lo valida (ver `POST /api/atenciones/[id]/estado`).
  */
 export async function lineasDeLaAtencion(tx: Prisma.TransactionClient, actor: Actor, visitId: string) {
-  const queVe = whereDeLineas(actor, { visitId })
+  const deLaAtencion = { visitId, visit: { is: { businessId: actor.businessId } } }
 
-  const demasiadas = errorDeCantidadDeLineas(await tx.visitService.count({ where: queVe }))
+  const demasiadas = errorDeCantidadDeLineas(await tx.visitService.count({ where: deLaAtencion }))
   if (demasiadas) throw new ErrorDeAtencion(400, demasiadas)
 
-  const vistas = await tx.visitService.findMany({
-    where: queVe,
+  const todas = await tx.visitService.findMany({
+    where: deLaAtencion,
     select: SELECCION_PARA_REGLAS,
     orderBy: { id: "asc" },
     take: MAXIMO_DE_LINEAS_POR_ATENCION,
   })
-  const totalCentavos = totalEnCentavos(vistas)
-  const excedido = errorDeTotal(totalCentavos)
-  if (excedido) throw new ErrorDeAtencion(400, excedido)
 
-  // Dueño y encargado ya leyeron todas.
-  const todas = puedeVerTodoElTablero(actor)
-    ? vistas
+  // Dueño y encargado ven todas.
+  const vistas = puedeVerTodoElTablero(actor)
+    ? todas
     : await tx.visitService.findMany({
-        where: { visitId, visit: { is: { businessId: actor.businessId } } },
+        where: whereDeLineas(actor, { visitId }),
         select: SELECCION_PARA_REGLAS,
         orderBy: { id: "asc" },
         take: MAXIMO_DE_LINEAS_POR_ATENCION,
       })
 
-  return { lineas: todas.map(paraReglas), totalCentavos }
+  return {
+    lineas: todas.map(paraReglas),
+    totalCentavos: totalEnCentavos(todas),
+    errorDelTotalQueVe: errorDeTotal(totalEnCentavos(vistas)),
+  }
 }
 
 /**

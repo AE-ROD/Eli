@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
+import type { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { MAXIMO_DE_LINEAS_POR_ATENCION, esEstadoActivo, sePuedeDeshacerLaLlegada } from "@/lib/atenciones"
 import { lineasPedidasSchema, resolverLineas } from "@/lib/lineas-de-atencion"
-import { actorDeSesion, puedeDeshacerLlegada, whereDeLineas } from "@/lib/permisos"
+import { actorDeSesion, puedeDeshacerLlegada, whereDeLineas, type Actor } from "@/lib/permisos"
 import {
   ErrorDeAtencion,
   buscarAtencion,
@@ -34,11 +35,17 @@ const edicionSchema = z
  * nombre aunque pida otro (`profesionalParaLinea`). Lo cobrado no se reescribe:
  * una atención finalizada o anulada da 409.
  *
- * Después de escribir, las líneas que ve quien edita tienen que seguir dentro
- * de los topes de servicios y de total; si no, 400 y la transacción se
- * deshace. Para dueño y encargado es la atención entera; para el profesional,
- * sus líneas: si contaran las de sus colegas, el 400 le diría cuánto suman
- * (`lineasDeLaAtencion`).
+ * Un reemplazo sólo borra líneas que quien edita pudo ver: si las que
+ * reemplaza son más de las que devuelve una lectura
+ * (`MAXIMO_DE_LINEAS_POR_ATENCION`, el `take` del tablero), algunas nunca le
+ * llegaron, y guardar las borraría sin que nadie lo decidiera: 409 y no se
+ * escribe nada.
+ *
+ * Después de escribir, 400 y la transacción se deshace si la atención entera
+ * pasa del tope de servicios, la edite quien la edite, o si las líneas que ve
+ * quien edita pasan del tope del total: para dueño y encargado, la atención
+ * entera; para el profesional, sus líneas, porque si contaran las de sus
+ * colegas el 400 le diría cuánto suman (`lineasDeLaAtencion`).
  */
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -71,11 +78,20 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       if (datos.lineas !== undefined) {
         // Por `whereDeLineas`: al profesional sólo se le reemplazan las suyas.
         const reemplazables = whereDeLineas(actor, { visitId: existente.id })
+        // Una más que las que devuelve una lectura: si llega, hay líneas que
+        // quien edita nunca vio, y el reemplazo se las llevaría.
         const reemplazadas = await tx.visitService.findMany({
           where: reemplazables,
           select: { serviceId: true },
-          take: MAXIMO_DE_LINEAS_POR_ATENCION,
+          take: MAXIMO_DE_LINEAS_POR_ATENCION + 1,
         })
+        if (reemplazadas.length > MAXIMO_DE_LINEAS_POR_ATENCION) {
+          throw new ErrorDeAtencion(
+            409,
+            `Esta atención tiene más de ${MAXIMO_DE_LINEAS_POR_ATENCION} servicios y no se ven todos: guardar borraría los que faltan. Anúlala y anótala de nuevo.`
+          )
+        }
+
         const nuevas = await resolverLineas(
           tx,
           actor,
@@ -86,7 +102,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         if (nuevas.length > 0) {
           await tx.visitService.createMany({ data: nuevas.map((linea) => ({ ...linea, visitId: existente.id })) })
         }
-        await lineasDeLaAtencion(tx, actor, existente.id)
+
+        const { errorDelTotalQueVe } = await lineasDeLaAtencion(tx, actor, existente.id)
+        if (errorDelTotalQueVe) throw new ErrorDeAtencion(400, errorDelTotalQueVe)
       }
 
       return leerAtencion(tx, actor, existente.id)
@@ -96,6 +114,17 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   } catch (error) {
     return respuestaDeError(error, "editando atención")
   }
+}
+
+/**
+ * La reserva de la que nació una atención, del negocio del actor: lo que
+ * `puedeDeshacerLlegada` necesita para decir si el actor deshace su llegada.
+ */
+function reservaDeOrigen(db: Prisma.TransactionClient, actor: Actor, citaId: string) {
+  return db.appointment.findFirst({
+    where: { id: citaId, businessId: actor.businessId },
+    select: { businessId: true, memberId: true },
+  })
 }
 
 /**
@@ -112,7 +141,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
  *   dueño y encargado, cualquiera del negocio; el profesional, sólo una suya.
  *   Ver la atención no alcanza: el profesional ve la de la cita de una colega
  *   si tiene una línea en ella, y borrarla se llevaría las líneas de la
- *   colega y le cambiaría la cita. Si no puede, 404 sin escribir nada.
+ *   colega y le cambiaría la cita. Si no puede, 404 sin escribir nada. Se
+ *   mira antes de abrir la transacción, para no tomar la fila de balde, y otra
+ *   vez adentro, con la atención ya tomada: entretanto la reserva pudo
+ *   cambiar.
  */
 export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -137,19 +169,32 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     const citaId = existente.appointmentId
 
     // La reserva de origen, del negocio: decide si quien pide puede deshacerla.
-    const cita = await prisma.appointment.findFirst({
-      where: { id: citaId, businessId: actor.businessId },
-      select: { businessId: true, memberId: true },
-    })
+    const cita = await reservaDeOrigen(prisma, actor, citaId)
     if (!cita || !puedeDeshacerLlegada(actor, cita)) {
       return NextResponse.json({ error: "Atención no encontrada" }, { status: 404 })
     }
 
     await prisma.$transaction(async (tx) => {
-      // Primero se toma la fila, sólo si sigue en espera y nunca empezó: si
-      // entretanto alguien la empezó, aunque después la haya vuelto a espera,
+      // Primero se toma la fila, sólo si sigue en espera, nunca empezó y sigue
+      // atada a la reserva que se acaba de mirar: si entretanto alguien la
+      // empezó, aunque después la haya vuelto a espera, o la reserva se borró,
       // no matchea, 409, y no se borra nada.
-      await tomarAtencion(tx, actor, existente.id, "en-espera", { status: "en-espera" }, { startedAt: null })
+      await tomarAtencion(
+        tx,
+        actor,
+        existente.id,
+        "en-espera",
+        { status: "en-espera" },
+        { startedAt: null, appointmentId: citaId }
+      )
+
+      // De quién es la reserva, otra vez y con la atención ya tomada: lo de
+      // afuera se leyó antes de la transacción. Va después de la toma, en el
+      // mismo orden de bloqueo que el resto del tablero: atención → cita.
+      const reserva = await reservaDeOrigen(tx, actor, citaId)
+      if (!reserva || !puedeDeshacerLlegada(actor, reserva)) {
+        throw new ErrorDeAtencion(404, "Atención no encontrada")
+      }
 
       // La base borra las líneas en cascada; se borran a la vista igual, para
       // no depender de eso al leer este endpoint.

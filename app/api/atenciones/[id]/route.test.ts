@@ -337,10 +337,11 @@ describe("PUT /api/atenciones/[id]: servicios que ya no se ofrecen", () => {
 describe("PUT /api/atenciones/[id]: topes", () => {
   /**
    * v-mixta tiene, además de lo de Carla, 25.000 de Pedro y 5.000 de la
-   * dueña; v-de-cita-carla no tiene ninguna línea de nadie. Si los topes se
-   * validaran sobre la atención entera, el mismo pedido de Carla pasaría en
-   * una y no en la otra: probando precios o cantidades, el 400 le diría cuánto
-   * suman o cuántas son las líneas que no ve.
+   * dueña; v-de-cita-carla no tiene ninguna línea de nadie. Si el tope del
+   * total se validara sobre la atención entera, el mismo pedido de Carla
+   * pasaría en una y no en la otra: probando precios, el 400 le diría cuánto
+   * suman las líneas que no ve. El de servicios, en cambio, sí se cuenta sobre
+   * la atención entera: cuántos servicios hay no es dinero.
    */
   async function enLasDos(cuerpo: unknown) {
     const { PUT } = await import("./route")
@@ -385,12 +386,61 @@ describe("PUT /api/atenciones/[id]: topes", () => {
     expect(base.volcado()).toEqual(antes)
   })
 
-  it("tampoco deduce cuántas líneas ajenas hay: 20 suyas pasan igual con y sin colegas", async () => {
+  it("los servicios, en cambio, se cuentan con los de todos: 20 suyas caben solas, pero no junto a las de sus colegas", async () => {
+    const antes = lineasDe("v-mixta")
+
     const { conColegas, sinColegas } = await enLasDos({ lineas: Array.from({ length: 20 }, () => ({ servicioId: "s-corte" })) })
 
-    expect(conColegas).toEqual(sinColegas)
-    expect(conColegas.status).toBe(200)
-    expect(lineasDe("v-mixta")).toHaveLength(22)
+    expect(sinColegas.status).toBe(200)
+    expect(lineasDe("v-de-cita-carla")).toHaveLength(20)
+    expect(conColegas).toMatchObject({ status: 400, error: "Una atención puede tener hasta 20 servicios." })
+    expect(lineasDe("v-mixta")).toEqual(antes)
+  })
+
+  describe("la profesional no pasa de 20 servicios en total", () => {
+    /** 19 servicios de Pedro y 1 de Carla: lo que reprodujo QA, con 20 justos. */
+    function conDiecinueveDePedro() {
+      const datos = escenario()
+      base.reiniciar({
+        ...datos,
+        visit: [...datos.visit, atencion("v-llena", { status: "en-atencion" })],
+        visitService: [
+          ...datos.visitService,
+          ...Array.from({ length: 19 }, (_, i) =>
+            linea(`l-llena-pedro-${String(i).padStart(2, "0")}`, "v-llena", { memberId: "m-pedro", professionalName: "Pedro Profesional" })
+          ),
+          linea("l-llena-carla", "v-llena"),
+        ],
+      })
+    }
+
+    it("con 19 de un colega, 20 suyas dan 400 y la atención queda como estaba", async () => {
+      conDiecinueveDePedro()
+      const { PUT } = await import("./route")
+      mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+      const antes = base.volcado()
+
+      const res = await PUT(pedido(URL, { lineas: Array.from({ length: 20 }, () => ({ servicioId: "s-corte" })) }), conId("v-llena"))
+
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toBe("Una atención puede tener hasta 20 servicios.")
+      expect(base.volcado()).toEqual(antes)
+      expect(lineasDe("v-llena")).toHaveLength(20)
+    })
+
+    it("hasta 20 en total sí: reemplaza la suya por otra", async () => {
+      conDiecinueveDePedro()
+      const { PUT } = await import("./route")
+      mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+
+      const res = await PUT(pedido(URL, { lineas: [{ servicioId: "s-color" }] }), conId("v-llena"))
+
+      expect(res.status).toBe(200)
+      expect(lineasDe("v-llena")).toHaveLength(20)
+      expect(lineasDe("v-llena").filter((l) => l.memberId === "m-carla")).toEqual([
+        expect.objectContaining({ serviceName: "Color", priceCents: centavos(25000) }),
+      ])
+    })
   })
 
   it("y 21 suyas no pasan en ninguna: el pedido ya trae más de las que caben", async () => {
@@ -452,6 +502,99 @@ describe("PUT /api/atenciones/[id]: topes", () => {
     expect(res.status).toBe(200)
     expect((await res.json()).total).toBe(20_000_000)
     expect(lineasDe("v-mixta").map((l) => l.priceCents)).toEqual([1_999_999_999, 1])
+  })
+})
+
+describe("PUT /api/atenciones/[id]: nunca borra líneas que quien edita no vio", () => {
+  /**
+   * 19 servicios de Pedro y 20 de Carla: 39, de antes de que el tope de
+   * servicios se contara sobre la atención entera. El tablero lee con `take`
+   * y muestra 20; el editor de la dueña guarda esos 20.
+   */
+  function conTreintaYNueve() {
+    const datos = escenario()
+    base.reiniciar({
+      ...datos,
+      visit: [...datos.visit, atencion("v-pasada", { status: "en-atencion" })],
+      visitService: [
+        ...datos.visitService,
+        ...Array.from({ length: 19 }, (_, i) =>
+          linea(`l-pasada-a-pedro-${String(i).padStart(2, "0")}`, "v-pasada", { memberId: "m-pedro", professionalName: "Pedro Profesional" })
+        ),
+        ...Array.from({ length: 20 }, (_, i) => linea(`l-pasada-b-carla-${String(i).padStart(2, "0")}`, "v-pasada")),
+      ],
+    })
+  }
+
+  /** Las líneas de la atención tal como le llegan a quien mira el tablero. */
+  async function lineasQueVe(sesion: unknown, id: string) {
+    const { GET } = await import("../route")
+    mockGetServerSession.mockResolvedValueOnce(sesion)
+    const tablero = await (
+      await GET(pedido("http://localhost/api/atenciones?desde=2026-10-06T03:00:00.000Z&hasta=2026-10-07T03:00:00.000Z"))
+    ).json()
+    const atencionVista = tablero.atenciones.find((a: { id: string }) => a.id === id)
+    return atencionVista.lineas as { servicioId: string; profesional: { id: string }; precio: number }[]
+  }
+
+  it.each([
+    ["la dueña", sesiones.dueña],
+    ["el encargado", sesiones.encargado],
+  ])("%s guarda lo que ve: 409, y las líneas que no le llegaron siguen ahí", async (_quien, sesion) => {
+    conTreintaYNueve()
+    const vistas = await lineasQueVe(sesion, "v-pasada")
+    expect(vistas).toHaveLength(20)
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesion)
+    const antes = base.volcado()
+
+    const res = await PUT(
+      pedido(URL, {
+        lineas: vistas.map((l) => ({ servicioId: l.servicioId, profesional: l.profesional.id, precio: l.precio })),
+      }),
+      conId("v-pasada")
+    )
+
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe(
+      "Esta atención tiene más de 20 servicios y no se ven todos: guardar borraría los que faltan. Anúlala y anótala de nuevo."
+    )
+    expect(base.volcado()).toEqual(antes)
+    expect(lineasDe("v-pasada")).toHaveLength(39)
+  })
+
+  it("tampoco vaciándola: una lista vacía borraría las 39", async () => {
+    conTreintaYNueve()
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const res = await PUT(pedido(URL, { lineas: [] }), conId("v-pasada"))
+
+    expect(res.status).toBe(409)
+    expect(lineasDe("v-pasada")).toHaveLength(39)
+  })
+
+  it("las notas sí se guardan: no tocan ninguna línea", async () => {
+    conTreintaYNueve()
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const res = await PUT(pedido(URL, { notas: "revisar los servicios" }), conId("v-pasada"))
+
+    expect(res.status).toBe(200)
+    expect(lineasDe("v-pasada")).toHaveLength(39)
+  })
+
+  it("la profesional, que ve todas las suyas, sí la puede achicar hasta que entre", async () => {
+    conTreintaYNueve()
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+
+    const res = await PUT(pedido(URL, { lineas: [{ servicioId: "s-corte" }] }), conId("v-pasada"))
+
+    expect(res.status).toBe(200)
+    expect(lineasDe("v-pasada")).toHaveLength(20)
+    expect(lineasDe("v-pasada").filter((l) => l.memberId === "m-pedro")).toHaveLength(19)
   })
 })
 
@@ -692,6 +835,48 @@ describe("DELETE /api/atenciones/[id]: deshacer una llegada", () => {
     expect(base.buscar("visit", { id: "v-de-cita-en-progreso" })).toHaveLength(1)
     expect(lineasDe("v-de-cita-en-progreso")).toHaveLength(1)
     expect(citaGuardada("cita-en-progreso-a-mano").status).toBe("en-progreso")
+  })
+
+  it("si la reserva se borra mientras tanto, 409 y no se borra nada: la toma exige que siga atada a la misma reserva", async () => {
+    const { DELETE } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    // Se lee la reserva, y antes de tomar la atención alguien la borra de la
+    // agenda: la base deja la atención sin reserva (ON DELETE SET NULL).
+    const original = base.prisma.appointment.findFirst.getMockImplementation()!
+    base.prisma.appointment.findFirst.mockImplementationOnce(async (args) => {
+      const leida = await original(args)
+      await base.prisma.visit.updateMany({ where: { id: "v-de-cita-carla" }, data: { appointmentId: null } })
+      await base.prisma.appointment.deleteMany({ where: { id: "cita-carla" } })
+      return leida
+    })
+
+    const res = await DELETE(pedido(URL), conId("v-de-cita-carla"))
+
+    expect(res.status).toBe(409)
+    // Sin reserva no hay adónde volver: eso ya no se deshace, se anula.
+    expect(base.buscar("visit", { id: "v-de-cita-carla" })).toEqual([
+      expect.objectContaining({ status: "en-espera", appointmentId: null }),
+    ])
+  })
+
+  it("si la reserva deja de ser de la profesional mientras tanto, 404 y no se borra nada: se vuelve a mirar con la atención tomada", async () => {
+    const { DELETE } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+    // Afuera de la transacción la reserva todavía es de Carla; cuando toma la
+    // atención, ya es de Pedro.
+    const original = base.prisma.appointment.findFirst.getMockImplementation()!
+    base.prisma.appointment.findFirst.mockImplementationOnce(async (args) => {
+      const leida = await original(args)
+      await base.prisma.appointment.updateMany({ where: { id: "cita-carla" }, data: { memberId: "m-pedro" } })
+      return leida
+    })
+
+    const res = await DELETE(pedido(URL), conId("v-de-cita-carla"))
+
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: "Atención no encontrada" })
+    expect(base.buscar("visit", { id: "v-de-cita-carla" })).toHaveLength(1)
+    expect(citaGuardada("cita-carla")).toMatchObject({ memberId: "m-pedro", status: "confirmada" })
   })
 
   it("sin sesión recibe 401 y no borra nada", async () => {

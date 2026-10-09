@@ -36,6 +36,11 @@ const CITA_SIN_EMPEZAR = ["pendiente", "confirmada"]
  * Quien la ve, la mueve: el profesional, las suyas (`whereDeAtenciones`). Una
  * transición que no existe da 409; una que existe pero a la que le falta algo
  * (un servicio, su profesional) da 400 con lo que falta.
+ *
+ * El tope del total se valida sólo al pasar a "Por cobrar", el paso previo a
+ * cobrarla (y el cobro lo vuelve a validar). Ni al empezar ni al volver
+ * atrás: una atención que se pasó del tope tiene que poder volver a "En
+ * atención" para corregirla.
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -67,11 +72,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         ...tiemposDeTransicion(desde, destino, new Date()),
       })
 
-      // Los requisitos se miran sobre todas las líneas, no sólo las que ve el
-      // actor, y después de tomar la fila: así nadie las cambia en el medio.
-      // Los topes, sobre las que ve: al profesional, la atención entera le
-      // diría cuánto suman las de los demás (`lineasDeLaAtencion`).
-      const { lineas } = await lineasDeLaAtencion(tx, actor, existente.id)
+      // Todo después de tomar la fila: así nadie cambia las líneas en el
+      // medio. El tope de servicios, sobre la atención entera; el del total,
+      // sobre las líneas que ve el actor, porque al profesional la atención
+      // entera le diría cuánto suman las de los demás (`lineasDeLaAtencion`).
+      // Los requisitos, sobre todas las líneas.
+      const { lineas, errorDelTotalQueVe } = await lineasDeLaAtencion(tx, actor, existente.id)
+      if (destino === "por-cobrar" && errorDelTotalQueVe) throw new ErrorDeAtencion(400, errorDelTotalQueVe)
       const falta = requisitoFaltante(destino, lineas)
       if (falta) throw new ErrorDeAtencion(400, falta)
 

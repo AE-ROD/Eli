@@ -576,15 +576,45 @@ describe("POST /api/atenciones con { citaId }: sólo reservas de hoy", () => {
     })
 
     it.each([
-      ["un desplazamiento, que no es una zona", "-03:00"],
-      ["una zona que no existe", "Marte/Olympus"],
-      ["vacía", ""],
-      ["que no es texto", -3],
-    ])("una zona %s da 400 y no crea nada", async (_caso, zona) => {
+      ["un número", -3],
+      ["null", null],
+      ["un objeto", { nombre: "America/Santiago" }],
+    ])("una zona que no es texto (%s) es un pedido mal armado: 400 y no crea nada", async (_caso, zona) => {
       const { status } = await llegarA(hoyA("16:00"), { zona })
 
       expect(status).toBe(400)
       expect(base.buscar("visit")).toEqual([])
+    })
+  })
+
+  describe("con una zona que el servidor no reconoce: como sin zona, a menos de 24 horas de ahora", () => {
+    const zonasQueNoReconoce = [
+      ["la de un equipo sin zona configurada", "Etc/Unknown"],
+      ["una que no existe, o más nueva que la base de zonas del servidor", "Marte/Olympus"],
+      ["un desplazamiento, que no es una zona", "-03:00"],
+      ["una vacía", ""],
+    ]
+
+    it.each(zonasQueNoReconoce)("con %s (%s), una reserva dentro de las 24 horas llega", async (_caso, zona) => {
+      // La 01:00 de mañana y las 13:00 de ayer en Santiago: con esa zona, las
+      // dos darían 409. Con una que no se reconoce vale la ventana, y las dos
+      // están a menos de 24 horas.
+      for (const inicio of [aHoras(13), aHoras(-23)]) {
+        const { status } = await llegarA(inicio, { zona })
+
+        expect(status).toBe(201)
+        expect(base.buscar("visit")).toHaveLength(1)
+      }
+    })
+
+    it.each(zonasQueNoReconoce)("con %s (%s), una reserva a más de 24 horas da el 409 de «no es de hoy» y no crea nada", async (_caso, zona) => {
+      for (const inicio of [aHoras(25), aHoras(-25)]) {
+        const { status, data } = await llegarA(inicio, { zona })
+
+        expect(status).toBe(409)
+        expect(data.error).toBe(NO_ES_DE_HOY)
+        expect(base.buscar("visit")).toEqual([])
+      }
     })
   })
 

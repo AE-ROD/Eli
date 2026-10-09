@@ -101,11 +101,14 @@ ALTER TABLE "atencion_pagos" ADD CONSTRAINT "atencion_pagos_visitId_fkey" FOREIG
 -- las borra, y `prisma migrate diff` no las compara. Por eso van acá, a mano,
 -- y si cambia una de estas reglas hace falta una migración nueva.
 
--- El precio de una línea: cero (una cortesía) o más (`esPrecioValido`).
-ALTER TABLE "atencion_servicios" ADD CONSTRAINT "atencion_servicios_priceCents_check" CHECK ("priceCents" >= 0);
+-- El precio de una línea: cero (una cortesía) o más, y no más que
+-- TOTAL_MAXIMO_CENTAVOS (2.000.000.000, 20 millones en unidades), igual que
+-- `esPrecioValido`: ninguna línea vale más que el total que la contiene.
+ALTER TABLE "atencion_servicios" ADD CONSTRAINT "atencion_servicios_priceCents_check" CHECK ("priceCents" >= 0 AND "priceCents" <= 2000000000);
 
--- Un pago: siempre mayor que cero (`esMontoDePagoValido`).
-ALTER TABLE "atencion_pagos" ADD CONSTRAINT "atencion_pagos_amountCents_check" CHECK ("amountCents" > 0);
+-- Un pago: siempre mayor que cero, y no más que TOTAL_MAXIMO_CENTAVOS, igual
+-- que `esMontoDePagoValido`: ningún pago es más que el total que cobra.
+ALTER TABLE "atencion_pagos" ADD CONSTRAINT "atencion_pagos_amountCents_check" CHECK ("amountCents" > 0 AND "amountCents" <= 2000000000);
 
 -- El total congelado al cobrar: null mientras la atención está abierta; si no,
 -- entre 0 y TOTAL_MAXIMO_CENTAVOS (2.000.000.000, 20 millones en unidades).

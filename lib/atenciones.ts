@@ -120,15 +120,19 @@ export function deCentavos(centavos: number): number {
  *   Es una cifra redonda que se puede decir en un mensaje, deja un 7 % de
  *   margen bajo el límite de la columna y sobra para cualquier visita en la
  *   moneda que sea. Se valida sobre la suma de las líneas al anotarlas, al
- *   editarlas y otra vez al cobrar, que es cuando se congela. El profesional
- *   lo cumple sobre sus líneas, que son las que ve: sobre la atención entera,
- *   el rechazo le diría cuánto suman las de los demás (ver
- *   `lineasDeLaAtencion`). La base repite el tope del total congelado en una
- *   restricción CHECK (`atenciones_totalCents_check`).
+ *   editarlas, al pasar a "Por cobrar" y otra vez al cobrar, que es cuando se
+ *   congela; no al empezar ni al volver atrás, para que una atención que se
+ *   pasó se pueda volver a corregir. El profesional lo cumple sobre sus
+ *   líneas, que son las que ve: sobre la atención entera, el rechazo le diría
+ *   cuánto suman las de los demás (ver `lineasDeLaAtencion`). Una abierta
+ *   puede entonces pasarse si entre varios cargan más de la cuenta; no se
+ *   cobra así, porque el cobro la valida entera. La base repite el tope del
+ *   total congelado en una restricción CHECK (`atenciones_totalCents_check`).
  * - Un precio o un pago tampoco pasa de eso: ninguno puede ser más que el
  *   total que lo contiene. Como los pagos suman exactamente el total, con el
  *   total acotado ningún pago puede desbordar, y el tope por monto corta antes
- *   de sumar nada.
+ *   de sumar nada. La base lo repite en `atencion_servicios_priceCents_check`
+ *   y `atencion_pagos_amountCents_check`.
  * - Lo que se suma entre muchas atenciones (los ingresos de un mes, un
  *   reporte) no se guarda en una columna: se suma en JavaScript o con `_sum`,
  *   que Postgres calcula como `bigint`.
@@ -146,10 +150,10 @@ export const MONTO_MAXIMO = deCentavos(TOTAL_MAXIMO_CENTAVOS)
  * absurdo y asegura que leer las líneas con este `take` las trae todas, así
  * que el total que se muestra y el que se cobra salen de las mismas.
  *
- * Como el total, el profesional lo cumple sobre sus líneas, para no poder
- * contar las de los demás. Una atención abierta puede entonces pasarse si
- * entre todos cargan más; no se cobra así: dueño y encargado la validan
- * entera al moverla y al cobrarla, y la corrigen desde el editor.
+ * A diferencia del total, se mide sobre la atención entera para todos,
+ * también para el profesional: cuántos servicios hay no es dinero. Se valida
+ * cada vez que se escriben sus líneas, así que ninguna atención pasa de este
+ * tope, ni siquiera mientras está abierta.
  */
 export const MAXIMO_DE_LINEAS_POR_ATENCION = 20
 

@@ -175,7 +175,10 @@ export async function buscarClientes(texto: string): Promise<Resultado<ClienteEn
  * así el servidor corta "hoy" en el calendario de quien marca la llegada, y
  * una reserva de otro día da 409 con un mensaje para mostrar ("Esta reserva no
  * es de hoy…"), igual que una que ya llegó o se canceló. Si el navegador no
- * informa la zona no se manda, y el servidor acepta las de ±24 horas.
+ * informa la zona no se manda, y el servidor acepta las de ±24 horas. Lo
+ * mismo si manda una que el servidor no reconoce (`Etc/Unknown`, de un equipo
+ * sin zona configurada, o una más nueva que la base de zonas del servidor):
+ * la trata como si no hubiera venido, en vez de rechazar la llegada.
  */
 export async function marcarLlegada(citaId: string): Promise<ResultadoDeAccion<Atencion>> {
   const zona = zonaDelDispositivo()

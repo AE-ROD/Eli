@@ -45,9 +45,18 @@ function escenario() {
         readyAt: new Date("2026-10-06T14:40:00.000Z"),
       }),
       atencion("v-pedro"),
-      // Lo de cada uno cabe en los topes; la atención entera, no. Así queda
-      // si cada profesional carga lo suyo sin saber lo que cargaron los demás.
+      // Lo de cada uno cabe en el tope del total; la atención entera, no. Así
+      // queda si cada profesional carga lo suyo sin saber lo que cargaron los
+      // demás. Está en las tres columnas activas.
       atencion("v-compartida-cara", { status: "en-atencion", startedAt: new Date("2026-10-06T14:05:00.000Z") }),
+      atencion("v-cara-en-espera"),
+      atencion("v-cara-por-cobrar", {
+        status: "por-cobrar",
+        startedAt: new Date("2026-10-06T14:05:00.000Z"),
+        readyAt: new Date("2026-10-06T14:40:00.000Z"),
+      }),
+      // 21 servicios entre dos: datos de antes de que el tope de servicios se
+      // contara sobre la atención entera. La API ya no deja llegar a esto.
       atencion("v-compartida-larga", { status: "en-atencion", startedAt: new Date("2026-10-06T14:05:00.000Z") }),
       atencion("v-cobrada", { status: "finalizada", paidAt: new Date(), totalCents: centavos(8000) }),
       atencion("v-ajena", { businessId: OTRO_NEGOCIO, customerId: "c-ajeno" }),
@@ -62,14 +71,23 @@ function escenario() {
       linea("l-atencion-ex", "v-atencion-ex-miembro", { memberId: null, professionalName: "Juan (ya no está)" }),
       linea("l-por-cobrar", "v-por-cobrar"),
       linea("l-pedro", "v-pedro", { memberId: "m-pedro", professionalName: "Pedro Profesional" }),
-      linea("l-cara-carla", "v-compartida-cara"),
-      linea("l-cara-pedro", "v-compartida-cara", { memberId: "m-pedro", professionalName: "Pedro Profesional", priceCents: centavos(19_999_000) }),
+      ...lineasCaras("l-cara", "v-compartida-cara"),
+      ...lineasCaras("l-cara-en-espera", "v-cara-en-espera"),
+      ...lineasCaras("l-cara-por-cobrar", "v-cara-por-cobrar"),
       ...Array.from({ length: 20 }, (_, i) => linea(`l-larga-${String(i).padStart(2, "0")}`, "v-compartida-larga")),
       linea("l-larga-pedro", "v-compartida-larga", { memberId: "m-pedro", professionalName: "Pedro Profesional" }),
       linea("l-cobrada", "v-cobrada"),
       linea("l-ajena", "v-ajena", { memberId: "m-ajeno", serviceId: "s-ajeno" }),
     ],
   }
+}
+
+/** 8.000 de Carla y 19.999.000 de Pedro: lo de cada uno cabe en el tope del total; la atención entera, no. */
+function lineasCaras(prefijo: string, visitId: string) {
+  return [
+    linea(`${prefijo}-carla`, visitId),
+    linea(`${prefijo}-pedro`, visitId, { memberId: "m-pedro", professionalName: "Pedro Profesional", priceCents: centavos(19_999_000) }),
+  ]
 }
 
 const atencionGuardada = (id: string) => base.buscar("visit", { id })[0]
@@ -239,26 +257,61 @@ describe("POST /api/atenciones/[id]/estado: requisitos", () => {
 })
 
 describe("POST /api/atenciones/[id]/estado: topes", () => {
-  it.each([
-    ["el total entero pasa del tope", "v-compartida-cara"],
-    ["entre todos tiene más de 20 servicios", "v-compartida-larga"],
-  ])("%s: la profesional la mueve igual, porque no se entera de lo que cargaron los demás", async (_caso, id) => {
-    const res = await mover(sesiones.carla, id, "por-cobrar")
+  it("con el total entero sobre el tope, la profesional la pasa a cobro igual: no se entera de lo que cargaron los demás", async () => {
+    const res = await mover(sesiones.carla, "v-compartida-cara", "por-cobrar")
 
     expect(res.status).toBe(200)
-    expect(atencionGuardada(id).status).toBe("por-cobrar")
+    expect(atencionGuardada("v-compartida-cara").status).toBe("por-cobrar")
+  })
+
+  it("con el total entero sobre el tope, el encargado, que la ve entera, no la pasa a cobro: 400 y nada cambia", async () => {
+    const antes = base.volcado()
+
+    const res = await mover(sesiones.encargado, "v-compartida-cara", "por-cobrar")
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe("El total de la atención no puede pasar de $20.000.000: divídela en dos.")
+    expect(base.volcado()).toEqual(antes)
   })
 
   it.each([
-    ["el total entero pasa del tope", "v-compartida-cara", "El total de la atención no puede pasar de $20.000.000: divídela en dos."],
-    ["entre todos tiene más de 20 servicios", "v-compartida-larga", "Una atención puede tener hasta 20 servicios."],
-  ])("%s: el encargado, que la ve entera, no la pasa a cobro: 400 y nada cambia", async (_caso, id, mensaje) => {
-    const antes = base.volcado()
+    ["la dueña", "vuelve de por cobrar a en atención", sesiones.dueña, "v-cara-por-cobrar", "en-atencion"],
+    ["el encargado", "vuelve de por cobrar a en atención", sesiones.encargado, "v-cara-por-cobrar", "en-atencion"],
+    ["la dueña", "vuelve de en atención a en espera", sesiones.dueña, "v-compartida-cara", "en-espera"],
+    ["el encargado", "empieza", sesiones.encargado, "v-cara-en-espera", "en-atencion"],
+  ])(
+    "con el total entero sobre el tope, %s la %s: el tope del total sólo se mira al pasar a cobro, así se puede corregir",
+    async (_quien, _movimiento, sesion, id, destino) => {
+      const res = await mover(sesion, id, destino)
 
-    const res = await mover(sesiones.encargado, id, "por-cobrar")
+      expect(res.status).toBe(200)
+      expect(atencionGuardada(id).status).toBe(destino)
+    }
+  )
+
+  it("y una vez de vuelta en atención, pasarla otra vez a cobro sin corregirla sigue dando 400", async () => {
+    expect((await mover(sesiones.dueña, "v-cara-por-cobrar", "en-atencion")).status).toBe(200)
+
+    const res = await mover(sesiones.dueña, "v-cara-por-cobrar", "por-cobrar")
 
     expect(res.status).toBe(400)
-    expect((await res.json()).error).toBe(mensaje)
-    expect(base.volcado()).toEqual(antes)
+    expect(atencionGuardada("v-cara-por-cobrar").status).toBe("en-atencion")
   })
+
+  it.each([
+    ["la profesional", "por-cobrar", sesiones.carla],
+    ["la profesional", "en-espera", sesiones.carla],
+    ["el encargado", "por-cobrar", sesiones.encargado],
+  ])(
+    "con más de 20 servicios entre todos, %s no la mueve (a %s): los servicios se cuentan con los de todos, 400 y nada cambia",
+    async (_quien, destino, sesion) => {
+      const antes = base.volcado()
+
+      const res = await mover(sesion, "v-compartida-larga", destino)
+
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toBe("Una atención puede tener hasta 20 servicios.")
+      expect(base.volcado()).toEqual(antes)
+    }
+  )
 })
