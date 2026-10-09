@@ -48,10 +48,16 @@ interface ValorDeLaBarraLateral {
   abrirCajon: () => void
   cerrarCajon: () => void
   /**
-   * Para los enlaces de la barra: cierra el cajón al elegir una página. Si es
-   * otra página, el foco no vuelve al botón de menú de la que se deja: espera
-   * a que cambie la ruta y va al de la página nueva (ver el efecto de
-   * `ProveedorDeBarraLateral`).
+   * Para el `onNavigate` de los enlaces de la barra, no para su `onClick`:
+   * Next la llama sólo cuando va a navegar en esta pestaña. Un clic con Ctrl,
+   * Cmd, Shift o Alt lo resuelve el navegador (otra pestaña, otra ventana, una
+   * descarga) sin llamarla, y el cajón queda abierto con el foco en el enlace.
+   *
+   * Cierra el cajón. Si el enlace lleva a otra página, el foco no vuelve al
+   * botón de menú de la que se deja: espera a que cambie la ruta y va al de la
+   * página nueva (ver el efecto de `ProveedorDeBarraLateral`). Si lleva a la
+   * misma, Next navega igual pero la ruta no cambia: el foco vuelve al botón
+   * al cerrarse, como con Escape.
    */
   cerrarCajonParaIrA: (ruta: string) => void
   /** La barra de escritorio muestra sólo los íconos: 80 px en vez de 260. En el teléfono es siempre `false`. */
@@ -62,8 +68,9 @@ interface ValorDeLaBarraLateral {
   /**
    * Lleva el foco al botón de menú, el que esté montado al llamarla. Si el
    * cajón se cerró porque cambió la ruta (el "atrás" del teléfono), es el de
-   * la página nueva. Si se cerró al elegir otra página en el cajón, no hace
-   * nada: el foco va a la página nueva cuando llegue (`cerrarCajonParaIrA`).
+   * la página nueva. Si lo cerró un enlace del cajón que lleva a otra página,
+   * no hace nada: el foco va a la página nueva cuando llegue
+   * (`cerrarCajonParaIrA`).
    */
   enfocarBotonMenu: () => void
 }
@@ -109,24 +116,27 @@ export function ProveedorDeBarraLateral({ children }: { children: ReactNode }) {
   if (cajonAbierto && esEscritorio) setCajonAbierto(false)
 
   /**
-   * Se eligió otra página en el cajón y el foco la espera. El enlace cierra el
-   * cajón antes de navegar: si el foco volviera en ese momento al botón de
-   * menú, sería el de la página que se deja, que se desmonta con ella y lo
-   * tiraba al <body>. Un ref y no un estado: no cambia nada de lo que se dibuja.
+   * Un enlace del cajón lleva a otra página y el foco la espera. Next llama a
+   * su `onNavigate`, que cierra el cajón, antes de navegar: si el foco volviera
+   * en ese momento al botón de menú, sería el de la página que se deja, que se
+   * desmonta con ella y lo tiraría al <body>. Un ref y no un estado: no cambia
+   * nada de lo que se dibuja.
    */
   const focoParaLaPaginaNueva = useRef(false)
 
   const abrirCajon = useCallback(() => {
-    // Lo pendiente de una navegación que no llegó (un enlace abierto en otra
-    // pestaña) no se arrastra a la próxima vez que se cierre.
+    // Por si una navegación pedida desde el cajón terminó sin cambiar la ruta
+    // (una redirección de vuelta a la misma página): lo pendiente no se
+    // arrastra a la próxima vez que se cierre.
     focoParaLaPaginaNueva.current = false
     setCajonAbierto(true)
   }, [])
   const cerrarCajon = useCallback(() => setCajonAbierto(false), [])
   const cerrarCajonParaIrA = useCallback(
     (destino: string) => {
-      // En escritorio no hay cajón: la barra queda y el foco, en el enlace. Ir
-      // a la misma página no navega: el foco vuelve al botón, como al cerrar.
+      // En escritorio no hay cajón: la barra queda y el foco, en el enlace. A
+      // la misma página la ruta no cambia y el efecto de abajo no corre: el
+      // foco vuelve al botón al cerrarse, como con Escape.
       if (cajonAbierto && destino !== ruta) focoParaLaPaginaNueva.current = true
       setCajonAbierto(false)
     },
