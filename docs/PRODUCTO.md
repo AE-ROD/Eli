@@ -126,7 +126,7 @@ Precio, límites por plan y prueba gratuita: pendientes (sección 10).
 |---|---|
 | **Dueño** | Todo, incluidos los porcentajes de comisión |
 | **Encargado** | Equipo, agenda, horarios, clientes y cobros del tablero. Sin acceso a configuración de comisiones |
-| **Profesional** | Su agenda, sus atenciones, sus clientes atendidos y su propia liquidación |
+| **Profesional** | Su agenda, sus atenciones y su propia liquidación. Ve los clientes del negocio (los necesita para anotar a quien llega), pero en su historial sólo sus propias citas |
 | **Cliente final** | Reserva desde la página pública, sin cuenta |
 
 El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisiones de por medio, cuánto factura el local es información del dueño.
@@ -175,7 +175,7 @@ Una **atención** es la visita de un cliente al local, con o sin reserva. El tab
 
 **Lo cobrado no se reescribe.** Una vez finalizada, la atención no se edita. Si hubo un error, el dueño la anula, también días después desde Reportes: queda en el historial de anuladas (quién, cuándo y por qué) y deja de sumar. El nombre de quien cobró y de quien anuló se guarda con la atención, y se conserva aunque esa persona deje el negocio. Si alguien se va sin ser atendido, también se anula.
 
-**La agenda se entera sola.** Al empezar la atención de alguien con reserva, su cita pasa a "en progreso"; al cobrarla, a "completada". El precio de la cita no cambia: lo cobrado vive en la atención, y el total puede incluir servicios de otros profesionales que quien atendió la cita no debe ver. Una cita marcada como completada en la agenda sin pasar por el cobro **no suma ingresos**: no hay registro de cuánto se cobró ni cómo.
+**La agenda se entera sola.** Al empezar la atención de alguien con reserva, su cita pasa a "en progreso"; al cobrarla, a "completada". El precio de la cita no cambia: lo cobrado vive en la atención, y el total puede incluir servicios de otros profesionales que quien atendió la cita no debe ver. Una cita marcada como completada en la agenda sin pasar por el cobro **no suma ingresos**: no hay registro de cuánto se cobró ni cómo. Si se anula la atención de una reserva antes de cobrarla, la cita queda cancelada y atada a esa atención; si la persona vuelve ese día, se la anota sin reserva.
 
 | | Dueño | Encargado | Profesional |
 |---|---|---|---|
