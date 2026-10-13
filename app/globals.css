@@ -137,6 +137,8 @@
   --radius: 0.75rem;
   /* El halo del foco. Cada módulo lo cambia por su pastel con `halo-<módulo>`. */
   --halo: var(--color-azul-suave);
+  /* El contorno del foco. Sobre navy pasa a blanco con `anillo-foco-claro`. */
+  --anillo: var(--color-navy);
 }
 
 /* Tipografía. De teléfono a escritorio cambian en md (768px). */
@@ -229,20 +231,35 @@
 }
 
 /*
- * El foco del teclado: anillo navy de 2px y, alrededor, un halo de 6px del
- * pastel del módulo. El halo solo no llega al contraste de 3:1; el navy sí.
+ * El foco del teclado: anillo navy de 2px (blanco sobre navy) y, alrededor,
+ * un halo de 6px del pastel del módulo. El halo solo no llega al contraste de
+ * 3:1; el anillo sí.
  * El halo entra en la misma `box-shadow` que las sombras de Tailwind, así una
  * tarjeta con `shadow-sm` no pierde su sombra al recibir el foco.
  */
 @utility anillo-foco {
   &:focus-visible {
-    outline: 2px solid var(--color-navy);
+    outline: 2px solid var(--anillo, var(--color-navy));
     outline-offset: 2px;
     --tw-ring-shadow: 0 0 0 6px var(--halo, var(--color-azul-suave));
     box-shadow:
       var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000),
       var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
   }
+}
+
+/*
+ * Sobre navy, un contorno navy no se ve. `anillo-foco-claro` lo pasa a blanco
+ * para todo lo que está adentro (se hereda, como el halo): va una sola vez en
+ * el contenedor navy, no en cada botón. `Seccion fondo="navy"` ya lo trae.
+ * `anillo-foco-oscuro` lo devuelve a navy en una superficie clara que quede
+ * adentro; la `Tarjeta` ya lo trae.
+ */
+@utility anillo-foco-claro {
+  --anillo: #ffffff;
+}
+@utility anillo-foco-oscuro {
+  --anillo: var(--color-navy);
 }
 
 /* El halo de cada módulo, para la pantalla o el bloque de ese módulo (se hereda). */
@@ -277,6 +294,28 @@
     position: relative;
     scroll-behavior: smooth;
     overscroll-behavior-y: none;
+  }
+
+  /*
+   * En las páginas con el encabezado público, la franja de arriba la tapa la
+   * tarjeta flotante, y el navegador no desplaza hacia lo que ya considera a
+   * la vista aunque esté debajo de ella: sin este margen, un enlace con # o el
+   * foco que llega con Tab quedaban escondidos (WCAG 2.4.11). Es lo que ocupa
+   * la tarjeta con su aire: 8 + 60 + 8 en el teléfono y 24 + 72 + 24 desde md.
+   * Es fijo y no sigue al encabezado a propósito: con el encabezado oculto, un
+   * Shift+Tab dejaba el foco a 24px del borde, la página subía, el encabezado
+   * volvía y quedaba encima del foco.
+   *
+   * Va atado a `data-encabezado-publico` (lo pone `Encabezado`) y no a todo
+   * <html>: el panel tiene su propia barra fija y su propio margen, como el
+   * `scroll-mt-24` de reportes, que con este se sumaría. `:has()` se resuelve
+   * sin JavaScript, así que vale desde el primer pintado.
+   */
+  html:has([data-encabezado-publico]) {
+    scroll-padding-top: 76px;
+    @media (width >= 48rem) {
+      scroll-padding-top: 120px;
+    }
   }
   body {
     @apply bg-background text-foreground;

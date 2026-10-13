@@ -5,12 +5,13 @@ import { cn } from "@/lib/utils"
 
 type FondoDeSeccion = "crema" | "superficie" | "navy" | "degradado"
 
-const variantesDeSeccion = cva("isla scroll-mt-6", {
+const variantesDeSeccion = cva("isla", {
   variants: {
     fondo: {
       crema: "bg-crema text-navy",
       superficie: "bg-superficie text-navy",
-      navy: "bg-navy text-white",
+      // Sobre navy, el contorno del foco de todo lo de adentro pasa a blanco.
+      navy: "bg-navy text-white anillo-foco-claro",
       // Tres manchas pastel sobre crema: azul arriba a la izquierda, lila arriba
       // a la derecha y naranja abajo, como la isla "degradado" de la referencia.
       degradado:

@@ -130,6 +130,12 @@ menú.
 - `isla`: un bloque redondeado (`rounded-seccion`, squircle) separado 8px del
   borde de la pantalla, 24px desde md. La separación vertical entre islas la
   pone quien las apila (`gap-2 md:gap-6`), no cada isla.
+- En las páginas con el encabezado público (`data-encabezado-publico`, lo
+  pone `Encabezado`), lo que se alcanza con un enlace `#` o con Tab queda
+  debajo de la tarjeta flotante gracias al `scroll-padding-top` del `<html>`
+  (76px en teléfono, 120px desde md). Por eso esas secciones no llevan
+  `scroll-mt-*`: se sumaría. El panel no lo usa: tiene su propia barra fija y
+  sus propios márgenes.
 - Breakpoints de Tailwind: `md` 768, `lg` 1024, `xl` 1280. Todo tiene que
   funcionar de 360px a 1440px o más sin scroll horizontal.
 
@@ -137,8 +143,13 @@ menú.
 
 - **`anillo-foco` en todo lo que se enfoca.** En `:focus-visible` pone un
   contorno navy de 2px, separado 2px, y alrededor un halo de 6px del pastel
-  suave. El halo solo no llega al contraste de 3:1; el navy sí. El halo se
+  suave. El halo solo no llega al contraste de 3:1; el contorno sí. El halo se
   suma a la sombra: una tarjeta con `shadow-sm` no la pierde al enfocarse.
+- **Sobre navy, el contorno es blanco.** `anillo-foco-claro` va una sola vez
+  en el contenedor navy (una isla, el pie, una barra) y vale para todo lo que
+  tiene adentro, como el halo; no se pone en cada botón. `Seccion
+  fondo="navy"` ya lo trae. Una superficie clara dentro de un fondo navy lo
+  devuelve a navy con `anillo-foco-oscuro`, y la `Tarjeta` ya lo trae.
 - El halo es azul por defecto. `halo-agenda`, `halo-tablero`,
   `halo-clientes`, `halo-reportes` y `halo-equipo` lo cambian por el pastel de
   ese módulo para todo lo que está adentro: se ponen en el contenedor de la
@@ -151,7 +162,7 @@ menú.
 
 | Archivo | Qué es |
 |---|---|
-| `boton.tsx` | `Boton` y `clasesDeBoton`. Variantes primario, secundario, fantasma, enlace e invertido; altos de 36, 48 y 56px; ícono en un cuadro a la izquierda. Con `href` es un `Link`; sin `href`, un `<button>` con estado `cargando` |
+| `boton.tsx` | `Boton` y `clasesDeBoton`. Variantes primario, secundario, fantasma, enlace e invertido; altos de 36, 48 y 56px; ícono en un cuadro a la izquierda. Con `href` es un `Link`; sin `href`, un `<button>` con estado `cargando`. De ancho natural no se achica; con `w-full` sí, hasta el ancho de su texto, para que dos compartan una fila |
 | `boton-icono.tsx` | `BotonIcono`: cuadrado de sólo ícono, blanco, navy en hover. `etiqueta` es su nombre |
 | `boton-primario.tsx` | `BotonPrimario`: la API de siempre de formularios y panel, por dentro un `Boton`. Suma la variante `peligro` |
 | `tarjeta.tsx` | `Tarjeta`: blanca, radio de tarjeta, sombra sm. `interactiva` se eleva en hover y con el foco adentro |

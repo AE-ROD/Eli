@@ -45,6 +45,7 @@ export function BotonPrimario({
       // `hidden` saca al `inline-flex` en vez de competir con él en el CSS.
       className={cn(
         variante === "peligro" && "bg-error text-white hover:bg-error/90",
+        // Con `w-full`, `Boton` se deja achicar: dos de ancho completo comparten la fila.
         anchoCompleto && "w-full",
         className
       )}

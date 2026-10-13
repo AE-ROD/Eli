@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState, type FocusEvent } from "react"
+import { useEffect, useRef, useState, type FocusEvent } from "react"
 import Link from "next/link"
 import { Menu } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
@@ -13,6 +13,16 @@ import type { EstadoDelEncabezado } from "@/lib/direccion-de-scroll"
 import { cn } from "@/lib/utils"
 
 const ID_DEL_MENU_MOVIL = "menu-movil"
+
+/**
+ * Cuánto ocupa arriba el encabezado, para que lo que queda fijo en la pantalla
+ * (el escenario del recorrido) se corra y no quede debajo: flotante, su
+ * margen, su alto y otro margen igual (120px desde md, 76px en el teléfono);
+ * oculto o arriba de todo, sólo el margen de 24px. Es una variable de CSS en
+ * el <html>, así quien la usa no depende de este componente.
+ */
+const VARIABLE_DE_OCUPACION = "--encabezado-ocupa"
+const OCUPACION_SIN_ENCABEZADO = "24px"
 
 /**
  * El encabezado de la landing, en tres estados según el scroll
@@ -31,6 +41,7 @@ export function Encabezado() {
   const [conFoco, setConFoco] = useState(false)
   const [menuMovilAbierto, setMenuMovilAbierto] = useState(false)
   const botonDelMenu = useRef<HTMLButtonElement>(null)
+  const encabezado = useRef<HTMLElement>(null)
 
   // Lo que tiene el foco del teclado no puede quedar fuera de la vista: si el
   // foco entra al encabezado oculto, el encabezado vuelve como tarjeta. Sólo
@@ -47,6 +58,35 @@ export function Encabezado() {
     setEstadoAnterior(estado)
     setSinTransicion(estadoAnterior === "arriba")
   }
+
+  useEffect(() => {
+    const nodo = encabezado.current
+    const raiz = document.documentElement
+    if (!nodo) return
+    if (estado !== "flotante") {
+      raiz.style.setProperty(VARIABLE_DE_OCUPACION, OCUPACION_SIN_ENCABEZADO)
+      return
+    }
+    // Se mide en vez de repetir las clases: `top` es el margen ya resuelto
+    // (el desplazamiento de la transición no lo cambia) y `offsetHeight`, el alto.
+    const publicar = () => {
+      const margen = parseFloat(getComputedStyle(nodo).top) || 0
+      raiz.style.setProperty(VARIABLE_DE_OCUPACION, `${margen * 2 + nodo.offsetHeight}px`)
+    }
+    publicar()
+    // Al cruzar md cambian el alto y el margen: se vuelve a medir.
+    const observador = new ResizeObserver(publicar)
+    observador.observe(nodo)
+    return () => observador.disconnect()
+  }, [estado])
+
+  // Al desmontarse no deja un valor viejo: quien la use vuelve a su respaldo.
+  useEffect(
+    () => () => {
+      document.documentElement.style.removeProperty(VARIABLE_DE_OCUPACION)
+    },
+    []
+  )
 
   const alRecibirElFoco = (evento: FocusEvent<HTMLElement>) => {
     if (evento.target instanceof Element && evento.target.matches(":focus-visible")) setConFoco(true)
@@ -69,6 +109,10 @@ export function Encabezado() {
     <>
       <div className="relative z-50 h-[68px] md:h-20">
         <header
+          ref={encabezado}
+          // Lo lee `app/globals.css`: sólo las páginas con este encabezado
+          // reservan arriba el lugar que tapa al desplazarse (`scroll-padding-top`).
+          data-encabezado-publico
           onFocus={alRecibirElFoco}
           onBlur={alSalirElFoco}
           className={cn(
@@ -97,7 +141,7 @@ export function Encabezado() {
             <Link
               href="/"
               aria-label="Eli, ir al inicio"
-              className="inline-flex min-h-11 shrink-0 items-center rounded-[12px] px-1.5 anillo-foco"
+              className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-[12px] px-1.5 anillo-foco"
             >
               <LogoEli tamaño="md" />
             </Link>

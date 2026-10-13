@@ -134,7 +134,7 @@ function PanelDelMenu({ id, alCerrar }: Omit<PropsDeMenuMovil, "abierto">) {
           href="/"
           onClick={irA}
           aria-label="Eli, ir al inicio"
-          className="inline-flex min-h-11 items-center rounded-[12px] px-1.5 anillo-foco"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[12px] px-1.5 anillo-foco"
         >
           <LogoEli tamaño="md" />
         </Link>

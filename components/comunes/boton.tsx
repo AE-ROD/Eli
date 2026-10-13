@@ -31,9 +31,15 @@ const variantesDeBoton = cva(
   [
     // Grupo con nombre: la flecha de `enlace` se mueve con el hover del botón y
     // no con el de una tarjeta `group` que lo contenga.
-    "group/boton relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap font-medium",
+    "group/boton relative inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium",
     "squircle anillo-foco transition-[background-color,color,border-color] duration-150 ease-suave",
     "disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50",
+    // De ancho natural no se achica: en una barra no le cede su lugar a nada.
+    // Con `w-full` sí, para que dos botones de ancho completo compartan una
+    // fila; sin esto se empujaban y el segundo quedaba afuera. No baja del
+    // ancho de su texto (`whitespace-nowrap`), así que el texto no se sale.
+    // Con `flex-1`, `cn` ya saca el `shrink-0`.
+    "shrink-0 [&.w-full]:shrink",
   ],
   {
     variants: {

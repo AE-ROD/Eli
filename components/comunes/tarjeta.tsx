@@ -2,7 +2,8 @@ import type { ReactNode } from "react"
 import { cva } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
-const variantesDeTarjeta = cva("rounded-tarjeta bg-tarjeta text-navy shadow-sm squircle", {
+// Es blanca aunque esté sobre navy: adentro, el contorno del foco vuelve a navy.
+const variantesDeTarjeta = cva("rounded-tarjeta bg-tarjeta text-navy shadow-sm squircle anillo-foco-oscuro", {
   variants: {
     interactiva: {
       true: "transition-[box-shadow,translate] duration-200 ease-suave hover:-translate-y-0.5 hover:shadow-md has-focus-visible:-translate-y-0.5 has-focus-visible:shadow-md",

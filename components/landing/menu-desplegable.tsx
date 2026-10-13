@@ -102,8 +102,8 @@ interface PropsDeMenuDesplegable {
  *
  * Se abre al pasar el cursor y se cierra 150ms después de que se va. También
  * con clic, Enter o Espacio sobre el botón; flecha abajo lo abre y entra al
- * primer enlace; Escape lo cierra y devuelve el foco al botón; y se cierra si
- * el foco o un toque salen de la navegación.
+ * primer enlace; Escape lo cierra y devuelve el foco al botón; y se cierra
+ * cuando el foco sale de su grupo o cuando se toca fuera de la navegación.
  */
 export function MenuDesplegable({ oculto, className }: PropsDeMenuDesplegable) {
   const base = useId()
@@ -218,10 +218,13 @@ export function MenuDesplegable({ oculto, className }: PropsDeMenuDesplegable) {
     }
   }
 
-  const alSalirElFoco = (evento: FocusEvent<HTMLElement>) => {
+  // Un menú abierto se cierra en cuanto el foco sale de su grupo (su botón y
+  // sus enlaces): al pasar con Tab a "Para quién" o a "Cómo funciona", o fuera
+  // de la navegación. Si el abierto ya es otro, no se toca.
+  const alSalirElFoco = (menu: IdDeMenu, evento: FocusEvent<HTMLLIElement>) => {
     const destino = evento.relatedTarget
     if (destino instanceof Node && evento.currentTarget.contains(destino)) return
-    cerrar()
+    setEstado((previo) => (previo.abierto === menu ? { ...previo, abierto: null, fijado: false } : previo))
   }
 
   const abierto = estado.abierto
@@ -236,7 +239,7 @@ export function MenuDesplegable({ oculto, className }: PropsDeMenuDesplegable) {
   const idDelGrupo = (menu: IdDeMenu) => `${base}-${menu}`
 
   return (
-    <nav ref={nav} aria-label="Principal" onBlur={alSalirElFoco} className={cn("relative h-12", className)}>
+    <nav ref={nav} aria-label="Principal" className={cn("relative h-12", className)}>
       <ul className="flex h-full items-center gap-1">
         <li
           ref={itemProducto}
@@ -244,6 +247,7 @@ export function MenuDesplegable({ oculto, className }: PropsDeMenuDesplegable) {
           onMouseEnter={() => entrar("producto")}
           onMouseLeave={cerrarConRetardo}
           onKeyDown={(evento) => alTeclear("producto", evento)}
+          onBlur={(evento) => alSalirElFoco("producto", evento)}
         >
           <BotonDeMenu
             ref={botonProducto}
@@ -286,6 +290,7 @@ export function MenuDesplegable({ oculto, className }: PropsDeMenuDesplegable) {
           onMouseEnter={() => entrar("oficios")}
           onMouseLeave={cerrarConRetardo}
           onKeyDown={(evento) => alTeclear("oficios", evento)}
+          onBlur={(evento) => alSalirElFoco("oficios", evento)}
         >
           <BotonDeMenu
             ref={botonOficios}

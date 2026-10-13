@@ -1,9 +1,10 @@
 "use client"
 
 import { useEffect, useId, useState } from "react"
-import { motion, useReducedMotion } from "framer-motion"
+import { motion } from "framer-motion"
 import { Plus } from "lucide-react"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
+import { useCoincideMedia } from "@/components/movimiento/usar-coincide-media"
 import { cn } from "@/lib/utils"
 
 interface PropsDeMaqueta {
@@ -65,7 +66,10 @@ const RETRASO_DEL_PASE = 1300
  */
 export function MaquetaTablero({ activa }: PropsDeMaqueta) {
   const idDePaula = useId()
-  const reducido = useReducedMotion()
+  // Decide dónde se pinta Paula, así que tiene que valer lo mismo que en el
+  // servidor mientras se hidrata: `useReducedMotion` ya lee la preferencia en
+  // el primer render del cliente y los contadores no coincidían (error #418).
+  const reducido = useCoincideMedia("(prefers-reduced-motion: reduce)")
   const [pasoPaula, setPasoPaula] = useState(false)
 
   // A la vista, Paula pasa al rato; cuando la maqueta se va, vuelve a esperar

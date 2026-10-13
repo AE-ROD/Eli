@@ -56,7 +56,11 @@ interface PropsDeEscenarioConScroll {
  *
  * Entre 640 y 820px de alto, los rellenos se achican
  * (`md:[@media(max-height:820px)]:`) para que la maqueta más alta, el
- * calendario, entre en la tarjeta.
+ * calendario, entre en la tarjeta. Con el encabezado flotante la tarjeta se
+ * achica para quedar debajo de él, pero no baja de 592px, lo que mide en la
+ * pantalla más baja del modo fijo: en una pantalla baja, mientras el
+ * encabezado está a la vista, prefiere cortarse un poco abajo a que el
+ * calendario no entre.
  */
 const CONSULTA_CON_SCROLL =
   "(min-width: 768px) and (min-height: 640px) and (prefers-reduced-motion: no-preference)"
@@ -104,7 +108,8 @@ const ESCENA: Record<ColorDeModulo, string> = {
  *
  * Desde md (con alto suficiente) y sin movimiento reducido, el contenedor
  * mide el alto de la tarjeta más un tramo por paso, y la tarjeta queda
- * `sticky` a 24px del borde: lo que se baja dentro de ese alto elige el paso
+ * `sticky` a 24px del borde, o debajo del encabezado cuando está flotante:
+ * lo que se baja dentro de ese alto elige el paso
  * (`Math.floor(avance × N)`), y mientras la tarjeta asoma por abajo crece
  * hasta quedar a 24px de los costados. Las pestañas llevan a su paso bajando
  * hasta él.
@@ -189,11 +194,19 @@ export function EscenarioConScroll({ pasos, etiqueta, saltarA }: PropsDeEscenari
 
   return (
     <div ref={contenedor} className="relative">
-      <div className="md:motion-safe:[@media(min-height:640px)]:sticky md:motion-safe:[@media(min-height:640px)]:top-6">
-        <Revelar>
+      {/*
+        Queda fijo debajo del encabezado: con el encabezado flotante baja hasta
+        donde termina (`--encabezado-ocupa`, la publica `Encabezado`) y se
+        achica para seguir entrando en la pantalla; cuando el encabezado se va,
+        sube a 24px y vuelve a crecer. Se mueve y cambia de alto con la misma
+        duración y curva que el encabezado, así nunca queda debajo de él.
+      */}
+      <div className="transition-[top,height] duration-200 ease-suave md:motion-safe:[@media(min-height:640px)]:sticky md:motion-safe:[@media(min-height:640px)]:top-[var(--encabezado-ocupa,24px)] md:motion-safe:[@media(min-height:640px)]:h-[min(760px,max(592px,calc(100svh_-_var(--encabezado-ocupa,24px)_-_24px)))]">
+        {/* Sin alto fijo arriba (teléfono, movimiento reducido), `h-full` es su alto natural. */}
+        <Revelar className="h-full">
           <motion.div
             style={{ scale: escala }}
-            className="relative flex origin-top flex-col overflow-hidden rounded-panel bg-tarjeta p-4 squircle md:rounded-tarjeta md:p-6 md:[@media(max-height:820px)]:p-4 md:motion-safe:[@media(min-height:640px)]:h-[min(760px,calc(100svh_-_48px))]"
+            className="relative flex h-full origin-top flex-col overflow-hidden rounded-panel bg-tarjeta p-4 squircle md:rounded-tarjeta md:p-6 md:[@media(max-height:820px)]:p-4"
           >
             <Malla pasos={pasos} activo={activo} enMovimiento={enPantalla} />
 
@@ -264,6 +277,16 @@ export function EscenarioConScroll({ pasos, etiqueta, saltarA }: PropsDeEscenari
           </motion.div>
         </Revelar>
       </div>
+
+      {/*
+        Lo que la tarjeta se achicó, devuelto abajo y con la misma transición:
+        el contenedor mide siempre lo mismo, así el avance no salta de paso
+        cuando aparece el encabezado. Con el encabezado afuera mide 0.
+      */}
+      <div
+        aria-hidden="true"
+        className="hidden transition-[height] duration-200 ease-suave md:motion-safe:[@media(min-height:640px)]:block md:motion-safe:[@media(min-height:640px)]:h-[calc(min(760px,calc(100svh_-_48px))_-_min(760px,max(592px,calc(100svh_-_var(--encabezado-ocupa,24px)_-_24px))))]"
+      />
 
       {/* Un tramo de scroll por paso: dan el alto al contenedor mientras la tarjeta queda fija. */}
       {pasos.map((paso) => (

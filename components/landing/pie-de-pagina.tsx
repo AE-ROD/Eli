@@ -20,23 +20,20 @@ const ENLACES_DE_CUENTA: Enlace[] = [
 ]
 
 /**
- * Sobre navy, el anillo de foco es blanco: el navy de `anillo-foco` no se
- * vería contra el fondo.
+ * El pie de la landing: una isla navy con los mismos destinos que el
+ * encabezado. `anillo-foco-claro` pasa a blanco el contorno del foco de todo
+ * lo de adentro: el navy de `anillo-foco` no se vería contra el fondo.
  */
-const FOCO_SOBRE_NAVY =
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-
-/** El pie de la landing: una isla navy con los mismos destinos que el encabezado. */
 export function PieDePagina() {
   return (
-    <footer className="isla my-2 bg-navy text-white md:my-6">
+    <footer className="isla my-2 bg-navy text-white anillo-foco-claro md:my-6">
       <Revelar className="contenedor px-6 pb-8 pt-14 md:px-12 md:pb-10 md:pt-16 xl:px-18 xl:pt-18">
         <div className="grid gap-8 md:grid-cols-2 md:gap-12 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
           <div>
             <Link
               href="/"
               aria-label="Eli, ir al inicio"
-              className={`inline-flex min-h-11 items-center rounded-[12px] px-1.5 ${FOCO_SOBRE_NAVY}`}
+              className="inline-flex min-h-11 items-center rounded-[12px] px-1.5 anillo-foco"
             >
               <LogoEli tamaño="lg" invertido />
             </Link>
@@ -67,7 +64,7 @@ function ColumnaDelPie({ titulo, enlaces }: { titulo: string; enlaces: Enlace[] 
           <li key={enlace.texto}>
             <Link
               href={enlace.href}
-              className={`inline-flex min-h-11 items-center rounded-[8px] text-[15px] text-white/80 underline-offset-[3px] transition-colors duration-150 ease-suave hover:text-white hover:underline ${FOCO_SOBRE_NAVY}`}
+              className="inline-flex min-h-11 items-center rounded-[8px] text-[15px] text-white/80 underline-offset-[3px] transition-colors duration-150 ease-suave hover:text-white hover:underline anillo-foco"
             >
               {enlace.texto}
             </Link>

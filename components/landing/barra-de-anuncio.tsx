@@ -42,7 +42,8 @@ export function BarraDeAnuncio() {
           ref={barra}
           role="region"
           aria-label="Aviso"
-          className="relative z-[60] bg-navy text-white"
+          // Sobre navy, el contorno del foco del enlace y de la X pasa a blanco.
+          className="relative z-[60] bg-navy text-white anillo-foco-claro"
           exit={{ opacity: 0 }}
           transition={{ duration: DURACION.hover, ease: CURVA.suave }}
         >
