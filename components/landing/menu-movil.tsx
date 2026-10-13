@@ -162,7 +162,7 @@ function PanelDelMenu({ id, alCerrar }: Omit<PropsDeMenuMovil, "abierto">) {
                 <IconoDeModulo modulo={modulo.id} activo />
                 <span className="flex min-w-0 flex-col gap-0.5">
                   <span className="text-[15px] font-semibold leading-[1.3]">{modulo.nombre}</span>
-                  <span className="truncate text-[13px] leading-[1.35] text-texto-2">{modulo.descripcion}</span>
+                  <span className="line-clamp-2 text-[13px] leading-[1.35] text-texto-2">{modulo.descripcion}</span>
                 </span>
               </a>
             </li>

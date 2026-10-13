@@ -142,7 +142,7 @@ export function Marquesina({ palabras, etiqueta, className }: PropsDeMarquesina)
   }, [enMarcha, reducido, porCopia])
 
   return (
-    <div className={cn("relative", className)}>
+    <div className={className}>
       <div
         ref={contenedorRef}
         onPointerEnter={() => setConCursor(true)}
@@ -175,24 +175,27 @@ export function Marquesina({ palabras, etiqueta, className }: PropsDeMarquesina)
         </motion.div>
       </div>
       {/*
-        Fuera de la máscara, que lo desvanecería, y sobre el borde derecho, donde
-        las palabras ya se funden: se ve sin tapar ninguna. Toma el color del
-        texto de alrededor, así sirve sobre navy y sobre crema. Con movimiento
-        reducido no hace falta: la fila ya está quieta.
+        En su propia fila, debajo de las palabras: encima de la banda taparía
+        alguna en algún ancho. Va a la derecha, con el mismo margen que el
+        contenido de una sección, y fuera de la máscara, que lo desvanecería.
+        Toma el color del texto de alrededor, así sirve sobre navy y sobre
+        crema. Con movimiento reducido no hace falta: la fila ya está quieta.
       */}
-      <button
-        type="button"
-        aria-label="Pausar el movimiento de las palabras"
-        aria-pressed={pausada}
-        onClick={() => setPausada((antes) => !antes)}
-        className="absolute right-2 top-1/2 grid size-11 -translate-y-1/2 cursor-pointer place-items-center rounded-full bg-current/10 transition-colors duration-150 ease-suave hover:bg-current/20 anillo-foco motion-reduce:hidden md:right-4"
-      >
-        {pausada ? (
-          <Play aria-hidden="true" strokeWidth={1.75} className="size-4" />
-        ) : (
-          <Pause aria-hidden="true" strokeWidth={1.75} className="size-4" />
-        )}
-      </button>
+      <div className="flex justify-end px-5 md:px-12 motion-reduce:hidden">
+        <button
+          type="button"
+          aria-label="Pausar el movimiento de las palabras"
+          aria-pressed={pausada}
+          onClick={() => setPausada((antes) => !antes)}
+          className="grid size-11 cursor-pointer place-items-center rounded-full bg-current/10 transition-colors duration-150 ease-suave hover:bg-current/20 anillo-foco"
+        >
+          {pausada ? (
+            <Play aria-hidden="true" strokeWidth={1.75} className="size-4" />
+          ) : (
+            <Pause aria-hidden="true" strokeWidth={1.75} className="size-4" />
+          )}
+        </button>
+      </div>
     </div>
   )
 }
