@@ -89,11 +89,10 @@ app/                          Pantallas y endpoints (App Router de Next.js)
   reservar/[slug]/            Página pública donde el cliente final reserva
   api/                        Endpoints: cada carpeta es una URL bajo /api
 components/
-  comunes/                    Lo que usan varias zonas: botón, campo de formulario, logo
+  comunes/                    Componentes base del diseño: botones, campos, tarjetas, secciones, logo
   panel/                      Estructura del panel: barras, avatar, tarjeta de cita, modales
   landing/                    Secciones de la página de inicio
-  ui/                         Primitivas de shadcn (conservan sus nombres en inglés)
-  proveedores.tsx             Sesión de NextAuth para toda la app
+  proveedores.tsx             Sesión de NextAuth y MotionConfig (movimiento reducido) para toda la app
 lib/                          Lógica compartida, cada archivo con su test al lado.
                               Los marcados (servidor) usan la base o la sesión:
                               nunca se importan desde un componente de cliente.
@@ -121,7 +120,7 @@ lib/                          Lógica compartida, cada archivo con su test al la
 prisma/                       Esquema, migraciones y datos de ejemplo
 proxy.ts                      Puerta de entrada: sesión y límite de peticiones
 types/                        Tipos que extienden librerías (la sesión de NextAuth)
-docs/                         Producto (PRODUCTO.md) y diseño de la landing (diseno/)
+docs/                         Producto (PRODUCTO.md) y sistema de diseño (diseno/)
 ```
 
 Cada vista del panel se arma igual:
@@ -150,6 +149,8 @@ Cada vista del panel se arma igual:
   - la lógica sin pantalla, en `lib/`, con su test al lado.
 - **Nombres que dicen qué contienen**, con palabras completas: `respuesta`, no
   `res`; `servicio`, no `s`.
+- **Diseño:** tokens y componentes base en `docs/diseno/README.md`; se usan
+  sus clases (`bg-crema`, `rounded-tarjeta`), no colores ni medidas sueltos.
 
 ## Decisiones técnicas que no se tocan sin pensarlo
 

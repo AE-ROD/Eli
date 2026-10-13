@@ -1,84 +1,93 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+/*
+ * Tokens del sistema de diseño de Eli: la única fuente de colores, fuentes,
+ * radios, sombras y curvas. Cada uno se vuelve una clase de Tailwind
+ * (`--color-navy` → `bg-navy`, `--radius-tarjeta` → `rounded-tarjeta`).
+ * Qué es cada uno y cómo agregar otro: `docs/diseno/README.md`.
+ */
+
+/*
+ * No hay modo oscuro: el producto se ve siempre sobre crema. Las clases
+ * `dark:` (las traen los componentes de shadcn) quedan atadas a una clase
+ * `.dark` que nada pone; sin esto se activarían con el modo oscuro del sistema.
+ */
 @custom-variant dark (&:is(.dark *));
 
-:root {
-  --background: oklch(0.993 0.003 80);
-  --foreground: oklch(0.22 0.055 248);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.055 248);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.055 248);
-  --primary: oklch(0.38 0.18 243);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.97 0.012 243);
-  --secondary-foreground: oklch(0.38 0.18 243);
-  --muted: oklch(0.96 0.006 243);
-  --muted-foreground: oklch(0.50 0.035 243);
-  --accent: oklch(0.48 0.15 243);
-  --accent-foreground: oklch(0.99 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.577 0.245 27.325);
-  --border: oklch(0.91 0.012 243);
-  --input: oklch(0.91 0.012 243);
-  --ring: oklch(0.48 0.15 243);
-  --amber: oklch(0.76 0.155 72);
-  --chart-1: oklch(0.38 0.18 243);
-  --chart-2: oklch(0.48 0.15 243);
-  --chart-3: oklch(0.58 0.10 243);
-  --chart-4: oklch(0.68 0.07 243);
-  --chart-5: oklch(0.76 0.155 72);
-  --radius: 0.75rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.22 0.055 248);
-  --sidebar-primary: oklch(0.38 0.18 243);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0.012 243);
-  --sidebar-accent-foreground: oklch(0.38 0.18 243);
-  --sidebar-border: oklch(0.91 0.012 243);
-  --sidebar-ring: oklch(0.48 0.15 243);
+/*
+ * `static` hace que las variables estén siempre en :root, aunque ninguna
+ * clase las use todavía: el halo del foco, el degradado de las secciones y
+ * el código que anima con framer-motion las leen con var().
+ */
+@theme static {
+  /* Base. Crema es el fondo de página: nunca blanco puro. */
+  --color-crema: #fcfbf8;
+  --color-superficie: #f5f3ee;
+  --color-tarjeta: #ffffff;
+  --color-navy: #071a31;
+  --color-texto-2: #5f6d77;
+  /* Sólo para bordes decorativos: contra crema no llega al 3:1 de un control. */
+  --color-borde: #e7e3da;
+  --color-error: #b91c1c;
+
+  /* Un par por módulo: el fuerte para el ícono activo, el suave para fondos y halo. */
+  --color-azul: #84c1ff;
+  --color-azul-suave: #d5e8fe;
+  --color-naranja: #f5a85a;
+  --color-naranja-suave: #fdebd8;
+  --color-lila: #c9b8ff;
+  --color-lila-suave: #eee8ff;
+  --color-lima: #cee67e;
+  --color-lima-suave: #f2f8de;
+  --color-turquesa: #8fe0d6;
+  --color-turquesa-suave: #e6f7f5;
+
+  --radius-boton: 16px;
+  --radius-boton-lg: 20px;
+  --radius-campo: 14px;
+  --radius-panel: 32px;
+  --radius-tarjeta: 48px;
+  --radius-seccion: 64px;
+
+  /* Teñidas con el gris del texto secundario, nunca negras. Reemplazan a las de Tailwind. */
+  --shadow-sm: 0 4px 5px #5f6d770a, 0 6px 10px #5f6d770d;
+  --shadow-md: 0 4px 5px #5f6d770a, 0 8px 15px #5f6d7708;
+
+  /* Las mismas curvas que `components/movimiento/tiempos.ts` le da a framer-motion. */
+  --ease-suave: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-fundido: cubic-bezier(0.5, 0, 0.5, 1);
+
+  /* El brillo que cruza un esqueleto de carga. */
+  --animate-brillo: brillo 2.4s linear infinite;
+
+  @keyframes brillo {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
-}
-
-@theme inline {
-  --font-sans: var(--font-plus-jakarta-sans), 'Plus Jakarta Sans', system-ui, sans-serif;
-  --font-mono: 'Geist Mono', 'Geist Mono Fallback';
+/*
+ * Las fuentes las carga `next/font` en `app/layout.tsx`, que pone
+ * `--font-geist` y `--font-fraunces` en el <html>. Fraunces se usa con peso
+ * 500 (`font-medium`): titulares de sección, citas y chips de palabra.
+ */
+@theme {
+  --font-sans: var(--font-geist), 'Geist', system-ui, sans-serif;
+  --font-serif: var(--font-fraunces), 'Fraunces', Georgia, serif;
   --font-display: var(--font-fraunces), 'Fraunces', Georgia, serif;
+}
+
+/*
+ * Los nombres semánticos de shadcn que usa el panel (`bg-primary`,
+ * `text-muted-foreground`…), apuntados a la paleta nueva: así el panel cambia
+ * de aspecto sin tocar sus archivos.
+ */
+@theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -98,45 +107,159 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* Glow pulse — plan destacado (H) */
-@keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 18px 2px hsl(var(--primary) / 0.15), 0 0 40px 6px hsl(var(--primary) / 0.07); }
-  50%       { box-shadow: 0 0 28px 6px hsl(var(--primary) / 0.28), 0 0 60px 12px hsl(var(--primary) / 0.13); }
-}
-.animate-glow-pulse {
-  animation: glow-pulse 2.8s ease-in-out infinite;
+:root {
+  --background: var(--color-crema);
+  --foreground: var(--color-navy);
+  --card: var(--color-tarjeta);
+  --card-foreground: var(--color-navy);
+  --popover: var(--color-tarjeta);
+  --popover-foreground: var(--color-navy);
+  --primary: var(--color-navy);
+  --primary-foreground: #ffffff;
+  --secondary: var(--color-superficie);
+  --secondary-foreground: var(--color-navy);
+  --muted: var(--color-superficie);
+  --muted-foreground: var(--color-texto-2);
+  --accent: var(--color-superficie);
+  --accent-foreground: var(--color-navy);
+  --destructive: var(--color-error);
+  --destructive-foreground: #ffffff;
+  --border: var(--color-borde);
+  /* El borde de los campos: el gris de texto secundario sí llega al 3:1. */
+  --input: var(--color-texto-2);
+  --ring: var(--color-navy);
+  --radius: 0.75rem;
+  /* El halo del foco. Cada módulo lo cambia por su pastel con `halo-<módulo>`. */
+  --halo: var(--color-azul-suave);
 }
 
-/* Carousel — animación en el compositor, no bloquea el scroll */
-@keyframes carousel-scroll {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-3296px); } /* 8 tarjetas × (380px + 32px gap) */
+/* Tipografía. De teléfono a escritorio cambian en md (768px). */
+
+@utility titulo-1 {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 2.5rem;
+  line-height: 1.1;
+  letter-spacing: -1px;
+  @media (width >= 48rem) {
+    font-size: 4.5rem;
+    letter-spacing: -2px;
+  }
 }
 
-.carousel-track {
-  animation-name: carousel-scroll;
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
-  will-change: transform;
+@utility titulo-2 {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 1.75rem;
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+  @media (width >= 48rem) {
+    font-size: 3rem;
+    letter-spacing: -2px;
+  }
+}
+
+@utility titulo-seccion {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 1.75rem;
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+  @media (width >= 48rem) {
+    font-size: 3rem;
+    letter-spacing: -1.5px;
+  }
+}
+
+@utility titulo-3 {
+  font-weight: 500;
+  font-size: 1.5rem;
+  line-height: 1.25;
+  letter-spacing: -0.5px;
+}
+
+@utility cuerpo-xl {
+  font-size: 1.125rem;
+  line-height: 1.4;
+}
+
+@utility antetitulo {
+  font-weight: 500;
+  font-size: 0.75rem;
+  line-height: 1.3;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-texto-2);
+  @media (width >= 48rem) {
+    font-size: 0.8125rem;
+  }
+}
+
+/* Forma y layout. */
+
+/* Esquinas de superelipse donde el navegador las sabe dibujar; en el resto, el radio común. */
+@utility squircle {
+  @supports (corner-shape: squircle) {
+    corner-shape: squircle;
+  }
+}
+
+@utility contenedor {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 1440px;
+}
+
+/* Una sección como bloque redondeado, separado del borde de la pantalla. */
+@utility isla {
+  margin-inline: 0.5rem;
+  border-radius: var(--radius-seccion);
+  @supports (corner-shape: squircle) {
+    corner-shape: squircle;
+  }
+  @media (width >= 48rem) {
+    margin-inline: 1.5rem;
+  }
+}
+
+/*
+ * El foco del teclado: anillo navy de 2px y, alrededor, un halo de 6px del
+ * pastel del módulo. El halo solo no llega al contraste de 3:1; el navy sí.
+ * El halo entra en la misma `box-shadow` que las sombras de Tailwind, así una
+ * tarjeta con `shadow-sm` no pierde su sombra al recibir el foco.
+ */
+@utility anillo-foco {
+  &:focus-visible {
+    outline: 2px solid var(--color-navy);
+    outline-offset: 2px;
+    --tw-ring-shadow: 0 0 0 6px var(--halo, var(--color-azul-suave));
+    box-shadow:
+      var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000),
+      var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+  }
+}
+
+/* El halo de cada módulo, para la pantalla o el bloque de ese módulo (se hereda). */
+@utility halo-agenda {
+  --halo: var(--color-azul-suave);
+}
+@utility halo-tablero {
+  --halo: var(--color-naranja-suave);
+}
+@utility halo-clientes {
+  --halo: var(--color-lila-suave);
+}
+@utility halo-reportes {
+  --halo: var(--color-lima-suave);
+}
+@utility halo-equipo {
+  --halo: var(--color-turquesa-suave);
 }
 
 @layer base {
@@ -144,11 +267,36 @@
     @apply border-border outline-ring/50;
   }
   html {
+    /*
+     * `useScroll` de framer-motion con `target` (el recorrido y la lista fija
+     * de la landing) mide al elemento contra el contenedor del scroll, que es
+     * el <html>, y en desarrollo avisa si ese contenedor es `static`. No
+     * mueve nada: todo lo `absolute` de la app tiene un ancestro posicionado
+     * más cerca, así que ninguno se ubica contra el <html>.
+     */
+    position: relative;
     scroll-behavior: smooth;
     overscroll-behavior-y: none;
   }
   body {
     @apply bg-background text-foreground;
     -webkit-font-smoothing: antialiased;
+  }
+
+  /*
+   * Con "reducir movimiento" no hay animaciones ni transiciones de CSS: lo que
+   * se movía aparece en su lugar final. Lo de framer-motion lo apaga
+   * `MotionConfig` en `components/proveedores.tsx`. Va en `base` porque ahí un
+   * `!important` le gana al de cualquier utilidad.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }

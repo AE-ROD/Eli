@@ -1,108 +1,133 @@
 "use client"
 
-import { motion, AnimatePresence } from "framer-motion"
+import { useRef, useState, type FocusEvent } from "react"
 import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Menu, X } from "lucide-react"
-import { useState } from "react"
+import { Menu } from "lucide-react"
+import { Boton } from "@/components/comunes/boton"
+import { BotonIcono } from "@/components/comunes/boton-icono"
 import { LogoEli } from "@/components/comunes/logo-eli"
+import { MenuDesplegable } from "@/components/landing/menu-desplegable"
+import { MenuMovil } from "@/components/landing/menu-movil"
+import { useDireccionDeScroll } from "@/components/movimiento/usar-direccion-de-scroll"
+import type { EstadoDelEncabezado } from "@/lib/direccion-de-scroll"
+import { cn } from "@/lib/utils"
 
-const navLinks = [
-  { href: "#que-es", label: "Qué es Eli" },
-  { href: "#como-funciona", label: "Cómo funciona" },
-  { href: "#para-quien", label: "Para quién" },
-  { href: "#precios", label: "Precios" },
-  { href: "#contacto", label: "Contacto" },
-]
+const ID_DEL_MENU_MOVIL = "menu-movil"
 
+/**
+ * El encabezado de la landing, en tres estados según el scroll
+ * (`useDireccionDeScroll`):
+ *
+ * - `arriba`: en su lugar, transparente y a todo el ancho;
+ * - `oculto`: la página baja y el encabezado se va hacia arriba;
+ * - `flotante`: la página sube y vuelve como tarjeta blanca fija, a 24px del
+ *   borde, con un desplazamiento y un fundido de 200ms.
+ *
+ * Ocupa siempre su alto en la página aunque se vuelva fijo: lo de abajo no se
+ * corre cuando cambia de estado.
+ */
 export function Encabezado() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const direccion = useDireccionDeScroll()
+  const [conFoco, setConFoco] = useState(false)
+  const [menuMovilAbierto, setMenuMovilAbierto] = useState(false)
+  const botonDelMenu = useRef<HTMLButtonElement>(null)
+
+  // Lo que tiene el foco del teclado no puede quedar fuera de la vista: si el
+  // foco entra al encabezado oculto, el encabezado vuelve como tarjeta. Sólo
+  // el del teclado: un botón que quedó enfocado por un clic no tiene que
+  // impedir que el encabezado se vaya al bajar.
+  const estado: EstadoDelEncabezado = direccion === "oculto" && conFoco ? "flotante" : direccion
+
+  // Al bajar desde arriba de todo el encabezado pasa de su lugar a fijo y
+  // oculto de golpe: con transición se vería aparecer la tarjeta un instante
+  // para irse enseguida. Las demás idas y vueltas sí se animan.
+  const [estadoAnterior, setEstadoAnterior] = useState(estado)
+  const [sinTransicion, setSinTransicion] = useState(false)
+  if (estado !== estadoAnterior) {
+    setEstadoAnterior(estado)
+    setSinTransicion(estadoAnterior === "arriba")
+  }
+
+  const alRecibirElFoco = (evento: FocusEvent<HTMLElement>) => {
+    if (evento.target instanceof Element && evento.target.matches(":focus-visible")) setConFoco(true)
+  }
+
+  const alSalirElFoco = (evento: FocusEvent<HTMLElement>) => {
+    const destino = evento.relatedTarget
+    if (destino instanceof Node && evento.currentTarget.contains(destino)) return
+    setConFoco(false)
+  }
+
+  const cerrarMenuMovil = (devolverFoco: boolean) => {
+    setMenuMovilAbierto(false)
+    if (devolverFoco) botonDelMenu.current?.focus({ preventScroll: true })
+  }
+
+  const arriba = estado === "arriba"
 
   return (
-    <motion.header
-      className="fixed top-0 left-0 right-0 z-40 bg-background/80 backdrop-blur-md border-b border-border/40 shadow-sm shadow-foreground/[0.02]"
-      initial={{ y: -64, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.35, ease: "easeOut" }}
-    >
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between">
-          <Link href="/" className="flex items-center">
-            <LogoEli tamaño="md" />
-          </Link>
-
-          <nav className="hidden md:flex items-center gap-8">
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative group"
-              >
-                {link.label}
-                <span className="absolute -bottom-0.5 left-0 right-0 h-px bg-primary scale-x-0 group-hover:scale-x-100 transition-transform duration-200 rounded-full origin-left" />
-              </Link>
-            ))}
-          </nav>
-
-          <div className="hidden md:flex items-center gap-3">
-            <Link href="/iniciar-sesion">
-              <Button variant="ghost" size="sm" className="text-muted-foreground">
-                Iniciar Sesión
-              </Button>
-            </Link>
-            <Link href="/crear-cuenta">
-              <Button size="sm" className="bg-primary hover:bg-primary/90">
-                Comenzar Gratis
-              </Button>
-            </Link>
-          </div>
-
-          <button
-            className="md:hidden p-2 text-foreground"
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            aria-label="Toggle menu"
-          >
-            {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-          </button>
-        </div>
-
-        <AnimatePresence>
-          {isMenuOpen && (
-            <motion.div
-              className="md:hidden py-4 border-t border-border/50"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <nav className="flex flex-col gap-4">
-                {navLinks.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    {link.label}
-                  </Link>
-                ))}
-                <div className="flex flex-col gap-2 pt-4 border-t border-border/50">
-                  <Link href="/iniciar-sesion">
-                    <Button variant="ghost" size="sm" className="justify-start text-muted-foreground w-full">
-                      Iniciar Sesión
-                    </Button>
-                  </Link>
-                  <Link href="/crear-cuenta">
-                    <Button size="sm" className="bg-primary hover:bg-primary/90 w-full">
-                      Comenzar Gratis
-                    </Button>
-                  </Link>
-                </div>
-              </nav>
-            </motion.div>
+    <>
+      <div className="relative z-50 h-[68px] md:h-20">
+        <header
+          onFocus={alRecibirElFoco}
+          onBlur={alSalirElFoco}
+          className={cn(
+            arriba
+              ? "absolute inset-x-0 top-0 h-full"
+              : "fixed inset-x-2 top-2 h-[60px] md:inset-x-10 md:top-6 md:h-[72px]",
+            estado === "oculto" && "pointer-events-none -translate-y-[140%] opacity-0",
+            !arriba &&
+              !sinTransicion &&
+              "transition-[translate,opacity] duration-200 ease-suave motion-reduce:transition-opacity"
           )}
-        </AnimatePresence>
+        >
+          <div
+            aria-hidden="true"
+            className={cn(
+              "absolute inset-0 rounded-[24px] bg-tarjeta shadow-md ring-1 ring-borde/70 squircle",
+              arriba && "opacity-0"
+            )}
+          />
+          <div
+            className={cn(
+              "contenedor relative flex h-full items-center gap-5 lg:gap-8",
+              arriba ? "pl-4 pr-2 md:px-10" : "pl-3 pr-1.5 md:pl-6 md:pr-3"
+            )}
+          >
+            <Link
+              href="/"
+              aria-label="Eli, ir al inicio"
+              className="inline-flex min-h-11 shrink-0 items-center rounded-[12px] px-1.5 anillo-foco"
+            >
+              <LogoEli tamaño="md" />
+            </Link>
+
+            <MenuDesplegable oculto={estado === "oculto"} className="hidden md:flex" />
+
+            <div className="ml-auto flex items-center gap-2">
+              <Boton href="/iniciar-sesion" variante="fantasma" className="hidden lg:inline-flex">
+                Iniciar sesión
+              </Boton>
+              <Boton href="/crear-cuenta" className="hidden md:inline-flex">
+                Crear cuenta
+              </Boton>
+              <BotonIcono
+                ref={botonDelMenu}
+                etiqueta="Abrir menú"
+                icono={<Menu aria-hidden="true" />}
+                aria-expanded={menuMovilAbierto}
+                aria-controls={menuMovilAbierto ? ID_DEL_MENU_MOVIL : undefined}
+                onClick={() => setMenuMovilAbierto(true)}
+                className="md:hidden"
+              />
+            </div>
+          </div>
+        </header>
       </div>
-    </motion.header>
+
+      {/* Fuera del <header>: el encabezado oculto lleva un desplazamiento, y
+          un `fixed` dentro de algo desplazado ya no se mide desde la pantalla. */}
+      <MenuMovil id={ID_DEL_MENU_MOVIL} abierto={menuMovilAbierto} alCerrar={cerrarMenuMovil} />
+    </>
   )
 }

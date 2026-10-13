@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils"
 interface LogoEliProps {
   className?: string
   tamaño?: "sm" | "md" | "lg" | "xl"
-  /** Claro, para ir sobre un fondo oscuro. */
+  /** En blanco, para ir sobre navy. */
   invertido?: boolean
 }
 
@@ -19,13 +19,14 @@ const clasesPorTamaño = {
 export function LogoEli({ className, tamaño = "md", invertido = false }: LogoEliProps) {
   return (
     <span
+      // Geist, la sans del sistema. Antes pedía DM Sans, que nunca se cargó y
+      // caía a la sans de cada sistema operativo.
       className={cn(
-        "font-bold tracking-tight select-none",
+        "font-sans font-bold tracking-tight select-none",
         clasesPorTamaño[tamaño],
-        invertido ? "text-background" : "text-[#0a3a6b]",
+        invertido ? "text-white" : "text-navy",
         className
       )}
-      style={{ fontFamily: "'DM Sans', sans-serif" }}
     >
       <span className="relative">
         E
@@ -35,7 +36,7 @@ export function LogoEli({ className, tamaño = "md", invertido = false }: LogoEl
         <span
           className={cn(
             "absolute -top-[0.15em] -right-[0.1em] w-[0.2em] h-[0.2em] rotate-45",
-            invertido ? "bg-background" : "bg-[#0a3a6b]"
+            invertido ? "bg-white" : "bg-navy"
           )}
         />
       </span>

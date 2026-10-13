@@ -1,38 +1,29 @@
 "use client"
 
-import { motion } from "framer-motion"
 import type { ButtonHTMLAttributes, ReactNode } from "react"
-import { Loader2 } from "lucide-react"
+import { Boton } from "@/components/comunes/boton"
 import { cn } from "@/lib/utils"
 
-type NativeButtonProps = Omit<
-  ButtonHTMLAttributes<HTMLButtonElement>,
-  "onAnimationStart" | "onAnimationEnd" | "onAnimationIteration" | "onDrag" | "onDragStart" | "onDragEnd"
->
-
-interface BotonPrimarioProps extends NativeButtonProps {
+interface BotonPrimarioProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode
   variante?: "primario" | "secundario" | "fantasma" | "peligro"
   tamaño?: "sm" | "md" | "lg"
+  /** Muestra un indicador y no responde, sin perder el foco (ver `Boton`). */
   cargando?: boolean
+  /** Va junto al texto, sin el cuadro blanco de `Boton`. */
   icono?: ReactNode
   iconoDerecha?: boolean
   anchoCompleto?: boolean
 }
 
-const estilosVariante = {
-  primario: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20",
-  secundario: "bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border",
-  fantasma: "bg-transparent text-foreground hover:bg-muted",
-  peligro: "bg-red-500 text-white hover:bg-red-600 shadow-lg shadow-red-500/20",
-}
-
-const estilosTamaño = {
-  sm: "px-3 py-1.5 text-sm",
-  md: "px-5 py-2.5 text-sm",
-  lg: "px-6 py-3 text-base",
-}
-
+/**
+ * El botón de los formularios y del panel, con la API de siempre. Por dentro
+ * es un `Boton`: mismo aspecto, mismo foco y la misma forma de cargar con
+ * `aria-disabled`. Para código nuevo, `Boton` directamente.
+ *
+ * `peligro` no existe en `Boton`: es el primario en el rojo de error, para
+ * las acciones que no se deshacen (anular un cobro, cancelar una cita).
+ */
 export function BotonPrimario({
   children,
   variante = "primario",
@@ -41,52 +32,26 @@ export function BotonPrimario({
   icono,
   iconoDerecha = false,
   anchoCompleto = false,
-  disabled,
-  onClick,
-  className = "",
+  className,
   ...props
 }: BotonPrimarioProps) {
-  const inactivo = disabled || cargando
-
   return (
-    <motion.button
-      whileHover={{ scale: inactivo ? 1 : 1.02 }}
-      whileTap={{ scale: inactivo ? 1 : 0.98 }}
-      // Mientras carga no se deshabilita: un botón deshabilitado pierde el
-      // foco, el navegador lo tira al <body>, y en un diálogo eso deja afuera
-      // a quien usa teclado. Se marca con `aria-disabled` y no responde: el
-      // `preventDefault` corta también el envío del formulario, con clic o con
-      // Enter desde un campo.
-      disabled={disabled}
-      aria-disabled={cargando && !disabled ? true : undefined}
-      onClick={cargando ? (evento) => evento.preventDefault() : onClick}
+    <Boton
+      {...props}
+      variante={variante === "peligro" ? "primario" : variante}
+      tamano={tamaño}
+      cargando={cargando}
       // Con `cn` lo que llega en `className` le gana a lo de acá cuando chocan:
-      // `hidden` saca al `inline-flex` en vez de competir con él en el CSS,
-      // donde ganaba `inline-flex` y el botón no se ocultaba nunca.
+      // `hidden` saca al `inline-flex` en vez de competir con él en el CSS.
       className={cn(
-        "relative inline-flex items-center justify-center gap-2 rounded-lg font-medium",
-        "transition-colors duration-200",
-        "disabled:opacity-50 disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:cursor-not-allowed",
-        estilosVariante[variante],
-        estilosTamaño[tamaño],
+        variante === "peligro" && "bg-error text-white hover:bg-error/90",
         anchoCompleto && "w-full",
         className
       )}
-      {...props}
     >
-      {cargando ? (
-        <>
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-          {/* El texto sigue siendo el nombre del botón, que conserva el foco mientras carga. */}
-          <span className="sr-only">{children}</span>
-        </>
-      ) : (
-        <>
-          {icono && !iconoDerecha && icono}
-          {children}
-          {icono && iconoDerecha && icono}
-        </>
-      )}
-    </motion.button>
+      {icono && !iconoDerecha && icono}
+      {children}
+      {icono && iconoDerecha && icono}
+    </Boton>
   )
 }
