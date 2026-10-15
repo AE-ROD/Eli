@@ -55,6 +55,9 @@ export function PieDePagina() {
   )
 }
 
+const ENLACE_DEL_PIE =
+  "inline-flex min-h-11 items-center rounded-[8px] text-[15px] text-white/80 underline-offset-[3px] transition-colors duration-150 ease-suave hover:text-white hover:underline anillo-foco"
+
 function ColumnaDelPie({ titulo, enlaces }: { titulo: string; enlaces: Enlace[] }) {
   return (
     <nav aria-label={titulo}>
@@ -62,12 +65,17 @@ function ColumnaDelPie({ titulo, enlaces }: { titulo: string; enlaces: Enlace[] 
       <ul className="mt-3">
         {enlaces.map((enlace) => (
           <li key={enlace.texto}>
-            <Link
-              href={enlace.href}
-              className="inline-flex min-h-11 items-center rounded-[8px] text-[15px] text-white/80 underline-offset-[3px] transition-colors duration-150 ease-suave hover:text-white hover:underline anillo-foco"
-            >
-              {enlace.texto}
-            </Link>
+            {/* A una sección de esta página, un `<a>` común: con el `#` ya en
+                la dirección, `Link` no hace nada y el navegador sí vuelve a ella. */}
+            {enlace.href.startsWith("#") ? (
+              <a href={enlace.href} className={ENLACE_DEL_PIE}>
+                {enlace.texto}
+              </a>
+            ) : (
+              <Link href={enlace.href} className={ENLACE_DEL_PIE}>
+                {enlace.texto}
+              </Link>
+            )}
           </li>
         ))}
       </ul>

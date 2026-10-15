@@ -8,7 +8,7 @@ import type { RubroId } from "@/lib/rubros"
 import { completarPerfil } from "../_datos"
 import { AvisoDeError } from "../_componentes/aviso-de-error"
 import { CamposDelNegocio } from "../_componentes/campos-del-negocio"
-import { FALTA_EL_TIPO_DE_NEGOCIO } from "../_componentes/errores-de-validacion"
+import { borrarSiEs, FALTA_EL_TIPO_DE_NEGOCIO } from "../_componentes/errores-de-validacion"
 import { GrupoDeOpciones, type OpcionDeGrupo } from "../_componentes/grupo-de-opciones"
 import { MarcoDeAcceso } from "../_componentes/marco-de-acceso"
 
@@ -66,7 +66,10 @@ export default function PaginaCompletarPerfil() {
           nombre={nombreNegocio}
           alCambiarNombre={setNombreNegocio}
           rubro={tipoNegocio}
-          alElegirRubro={setTipoNegocio}
+          alElegirRubro={(rubro) => {
+            setTipoNegocio(rubro)
+            setError(borrarSiEs(FALTA_EL_TIPO_DE_NEGOCIO))
+          }}
           errorDeRubro={errorDeRubro}
         />
 

@@ -11,6 +11,7 @@ import { AccesoConGoogle } from "../_componentes/acceso-con-google"
 import { AvisoDeError } from "../_componentes/aviso-de-error"
 import { CamposDelNegocio } from "../_componentes/campos-del-negocio"
 import {
+  borrarSiEs,
   CONTRASENA_CORTA,
   CONTRASENAS_DISTINTAS,
   FALTA_EL_TIPO_DE_NEGOCIO,
@@ -151,7 +152,10 @@ export default function PaginaCrearCuenta() {
               autoComplete="new-password"
               placeholder="Al menos 8 caracteres"
               value={formData.contrasena}
-              onChange={(e) => actualizarCampo("contrasena", e.target.value)}
+              onChange={(e) => {
+                actualizarCampo("contrasena", e.target.value)
+                setError(borrarSiEs(CONTRASENA_CORTA))
+              }}
               error={errorDeContrasena}
               required
             />
@@ -161,7 +165,10 @@ export default function PaginaCrearCuenta() {
               type="password"
               autoComplete="new-password"
               value={formData.confirmarContrasena}
-              onChange={(e) => actualizarCampo("confirmarContrasena", e.target.value)}
+              onChange={(e) => {
+                actualizarCampo("confirmarContrasena", e.target.value)
+                setError(borrarSiEs(CONTRASENAS_DISTINTAS))
+              }}
               error={errorDeConfirmacion}
               required
             />
@@ -171,7 +178,10 @@ export default function PaginaCrearCuenta() {
             nombre={formData.nombreNegocio}
             alCambiarNombre={(nombre) => actualizarCampo("nombreNegocio", nombre)}
             rubro={tipoNegocio}
-            alElegirRubro={setTipoNegocio}
+            alElegirRubro={(rubro) => {
+              setTipoNegocio(rubro)
+              setError(borrarSiEs(FALTA_EL_TIPO_DE_NEGOCIO))
+            }}
             errorDeRubro={errorDeRubro}
           />
         )}

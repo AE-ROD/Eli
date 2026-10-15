@@ -10,7 +10,7 @@ import { CuadroDeIcono, IconoDeModulo } from "@/components/comunes/icono-de-modu
 import { signIn } from "next-auth/react"
 import { leerInvitacion, aceptarInvitacion, type Invitacion } from "../../_datos"
 import { AvisoDeError } from "../../_componentes/aviso-de-error"
-import { CONTRASENA_CORTA, CONTRASENAS_DISTINTAS } from "../../_componentes/errores-de-validacion"
+import { borrarSiEs, CONTRASENA_CORTA, CONTRASENAS_DISTINTAS } from "../../_componentes/errores-de-validacion"
 import { MarcoDeAcceso, PreguntaConEnlace } from "../../_componentes/marco-de-acceso"
 
 /** La invitación es la puerta de entrada al equipo: las pantallas llevan su ícono y su pastel. */
@@ -185,7 +185,10 @@ export default function PaginaUnirse() {
           autoComplete="new-password"
           placeholder="Al menos 8 caracteres"
           value={contrasena}
-          onChange={(e) => setContrasena(e.target.value)}
+          onChange={(e) => {
+            setContrasena(e.target.value)
+            setError(borrarSiEs(CONTRASENA_CORTA))
+          }}
           error={errorDeContrasena}
           required
         />
@@ -194,7 +197,10 @@ export default function PaginaUnirse() {
           type="password"
           autoComplete="new-password"
           value={confirmarContrasena}
-          onChange={(e) => setConfirmarContrasena(e.target.value)}
+          onChange={(e) => {
+            setConfirmarContrasena(e.target.value)
+            setError(borrarSiEs(CONTRASENAS_DISTINTAS))
+          }}
           error={errorDeConfirmacion}
           required
         />

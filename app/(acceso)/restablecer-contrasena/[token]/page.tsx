@@ -6,7 +6,7 @@ import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { restablecerContrasena } from "../../_datos"
 import { AvisoDeError } from "../../_componentes/aviso-de-error"
-import { CONTRASENA_CORTA, CONTRASENAS_DISTINTAS } from "../../_componentes/errores-de-validacion"
+import { borrarSiEs, CONTRASENA_CORTA, CONTRASENAS_DISTINTAS } from "../../_componentes/errores-de-validacion"
 import { MarcoDeAcceso, PreguntaConEnlace } from "../../_componentes/marco-de-acceso"
 
 export default function PaginaRestablecerContrasena() {
@@ -66,7 +66,10 @@ export default function PaginaRestablecerContrasena() {
           autoComplete="new-password"
           placeholder="Al menos 8 caracteres"
           value={contrasena}
-          onChange={(e) => setContrasena(e.target.value)}
+          onChange={(e) => {
+            setContrasena(e.target.value)
+            setError(borrarSiEs(CONTRASENA_CORTA))
+          }}
           error={errorDeContrasena}
           required
         />
@@ -76,7 +79,10 @@ export default function PaginaRestablecerContrasena() {
           type="password"
           autoComplete="new-password"
           value={confirmarContrasena}
-          onChange={(e) => setConfirmarContrasena(e.target.value)}
+          onChange={(e) => {
+            setConfirmarContrasena(e.target.value)
+            setError(borrarSiEs(CONTRASENAS_DISTINTAS))
+          }}
           error={errorDeConfirmacion}
           required
         />

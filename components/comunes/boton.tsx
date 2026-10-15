@@ -5,8 +5,9 @@ import { ArrowRight, LoaderCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 /**
- * El botón del sistema. Con `href` es un enlace de Next (navega); sin `href`,
- * un `<button>` (hace algo en la pantalla). No hay "botón que navega" con
+ * El botón del sistema. Con `href` es un enlace (navega): de Next si va a otra
+ * ruta, un `<a>` común si es un `#` de la misma página. Sin `href`, un
+ * `<button>` (hace algo en la pantalla). No hay "botón que navega" con
  * `onClick`: el lector de pantalla tiene que saber si va a cambiar de página.
  *
  * No lleva "use client" a propósito: así `clasesDeBoton` se puede llamar desde
@@ -134,6 +135,35 @@ type PropsDeBotonComoBoton = PropsComunesDeBoton &
 
 export type PropsDeBoton = PropsDeBotonComoEnlace | PropsDeBotonComoBoton
 
+/**
+ * Las props de `Link` que no son atributos de un `<a>`: el ancla de la misma
+ * página no las usa, y en el DOM React avisaría que no las conoce. Entre ellas
+ * está `onNavigate`, que con un `#` no se llama: lo que haya que hacer al ir
+ * va en `onClick`, que corre antes de que el navegador desplace.
+ */
+const PROPS_SOLO_DE_LINK = [
+  "as",
+  "replace",
+  "scroll",
+  "shallow",
+  "passHref",
+  "prefetch",
+  "unstable_dynamicOnHover",
+  "locale",
+  "legacyBehavior",
+  "onNavigate",
+  "transitionTypes",
+] as const
+
+const ES_SOLO_DE_LINK: ReadonlySet<string> = new Set(PROPS_SOLO_DE_LINK)
+
+function sinPropsDeLink<Props extends object>(props: Props) {
+  return Object.fromEntries(Object.entries(props).filter(([prop]) => !ES_SOLO_DE_LINK.has(prop))) as Omit<
+    Props,
+    (typeof PROPS_SOLO_DE_LINK)[number]
+  >
+}
+
 function evitarElClic(evento: MouseEvent<HTMLButtonElement>) {
   evento.preventDefault()
 }
@@ -161,8 +191,20 @@ function contenido(variante: VarianteDeBoton, tamano: TamanoDeBoton, icono: Reac
 export function Boton(props: PropsDeBoton) {
   if (props.href !== undefined) {
     const { variante = "primario", tamano = "md", icono, className, children, ...resto } = props
+    const clases = cn(variantesDeBoton({ variante, tamano, conIcono: Boolean(icono) }), className)
+
+    // A una sección de la misma página, un `<a>` común: con el `#` ya en la
+    // dirección, `Link` no hace nada y el navegador sí vuelve a la sección.
+    if (resto.href.startsWith("#")) {
+      return (
+        <a {...sinPropsDeLink(resto)} className={clases}>
+          {contenido(variante, tamano, icono, children)}
+        </a>
+      )
+    }
+
     return (
-      <Link {...resto} className={cn(variantesDeBoton({ variante, tamano, conIcono: Boolean(icono) }), className)}>
+      <Link {...resto} className={clases}>
         {contenido(variante, tamano, icono, children)}
       </Link>
     )

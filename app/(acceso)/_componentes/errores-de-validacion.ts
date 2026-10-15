@@ -11,3 +11,14 @@ export const CONTRASENA_CORTA = "La contraseña debe tener al menos 8 caracteres
 export const CONTRASENAS_DISTINTAS = "Las contraseñas no coinciden"
 
 export const FALTA_EL_TIPO_DE_NEGOCIO = "Selecciona el tipo de negocio"
+
+/**
+ * Para el `setError` de la pantalla cuando se escribe o se elige en un campo:
+ * borra el error si es el de ese campo y deja cualquier otro como está. Sin
+ * esto, el campo seguía rojo y con `aria-invalid` hasta el envío siguiente, y
+ * el lector de pantalla anunciaba la opción recién elegida junto con el error
+ * que ya no valía. La validación no cambia: vuelve a correr al enviar.
+ */
+export function borrarSiEs(errorDelCampo: string) {
+  return (errorActual: string) => (errorActual === errorDelCampo ? "" : errorActual)
+}

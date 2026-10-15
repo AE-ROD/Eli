@@ -1,7 +1,6 @@
 "use client"
 
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
-import Link from "next/link"
 import {
   AnimatePresence,
   motion,
@@ -265,14 +264,16 @@ export function EscenarioConScroll({ pasos, etiqueta, saltarA }: PropsDeEscenari
 
               {/* En el teléfono va debajo; desde md, arriba a la derecha, a la
                   altura de las pestañas. Es una píldora: no usa `Boton`, que
-                  trae `squircle` y le aplanaría las puntas. */}
-              <Link
+                  trae `squircle` y le aplanaría las puntas. Es un `<a>` común
+                  y no un `Link`: con el `#` ya en la dirección, `Link` no
+                  desplaza, y el navegador sí. */}
+              <a
                 href={`#${saltarA}`}
                 className="mt-3 inline-flex h-11 items-center gap-2 self-center rounded-full bg-white/70 px-4 text-sm font-medium text-navy transition-colors duration-150 ease-suave hover:bg-white anillo-foco md:absolute md:right-0 md:top-1.5 md:mt-0"
               >
                 Saltar el recorrido
                 <ArrowDown aria-hidden="true" strokeWidth={1.75} className="size-4" />
-              </Link>
+              </a>
             </div>
           </motion.div>
         </Revelar>
