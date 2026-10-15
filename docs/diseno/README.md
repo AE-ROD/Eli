@@ -166,7 +166,7 @@ menú.
 
 | Archivo | Qué es |
 |---|---|
-| `boton.tsx` | `Boton` y `clasesDeBoton`. Variantes primario, secundario, fantasma, enlace e invertido; altos de 36, 48 y 56px; ícono en un cuadro a la izquierda. Con `href` es un `Link`; sin `href`, un `<button>` con estado `cargando`. De ancho natural no se achica; con `w-full` sí, hasta el ancho de su texto, para que dos compartan una fila |
+| `boton.tsx` | `Boton` y `clasesDeBoton`. Variantes primario, secundario, fantasma, enlace e invertido; altos de 36, 48 y 56px; ícono en un cuadro a la izquierda. Con `href` es un `Link`, o un `<a>` común si empieza con `#` (el `Link` de Next no desplaza a un ancla que ya está en la dirección; lo que haga falta al ir va en `onClick`, no en `onNavigate`); sin `href`, un `<button>` con estado `cargando`. De ancho natural no se achica; con `w-full` sí, hasta el ancho de su texto, para que dos compartan una fila |
 | `boton-icono.tsx` | `BotonIcono`: cuadrado de sólo ícono, blanco, navy en hover. `etiqueta` es su nombre |
 | `boton-primario.tsx` | `BotonPrimario`: la API de siempre de formularios y panel, por dentro un `Boton`. Suma la variante `peligro` |
 | `tarjeta.tsx` | `Tarjeta`: blanca, radio de tarjeta, sombra sm. `interactiva` se eleva en hover y con el foco adentro |
@@ -189,8 +189,8 @@ Fuera de `comunes/`:
   menú, el recorrido y los íconos leen de acá.
 - `components/movimiento/`: los tiempos (`tiempos.ts`) y los patrones de
   movimiento de la landing, que se cuentan abajo.
-- `components/panel/estilos.ts`: las clases de campo y foco del panel, con el
-  mismo aspecto que `CampoFormulario` pero más compactas.
+- `components/panel/`: las piezas del panel, que se cuentan más abajo, en
+  "El panel".
 
 Las primitivas de shadcn (`components/ui/button` e `input`) se retiraron:
 las reemplazan `Boton` y `CampoFormulario`.
@@ -201,6 +201,35 @@ botón, el fondo de la sección, el tono de la insignia) y `cn` resuelve los
 choques al final, así lo que llega en `className` le gana a la variante. Un
 componente nuevo con variantes sigue el mismo molde; `boton.tsx` es el
 ejemplo más completo, con variantes compuestas.
+
+### El panel
+
+Las pantallas de adentro usan las piezas de `comunes/` con un lenguaje más
+denso: tarjetas blancas de radio 32 sobre crema, el título de cada tarjeta en
+serif a 24px y el pastel del módulo de cada pantalla. Inicio, chats,
+configuración y ayuda no son un módulo y van en gris. Lo que comparten las
+pantallas vive en `components/panel/`:
+
+| Archivo | Qué es |
+|---|---|
+| `secciones-del-panel.ts` | Las secciones del panel (inicio, los cinco módulos de `lib/modulos.ts`, chats, configuración y ayuda), con nombre, ruta y módulo, y `seccionDeLaRuta(ruta)`, que dice de qué sección es una página. De acá salen los enlaces de la barra lateral, el antetítulo de cada página y el halo del foco: una sección nueva se agrega acá |
+| `icono-de-seccion.tsx` | `CuadroDeSeccion`: el ícono de una sección en su cuadro. El de un módulo es `IconoDeModulo`, en su pastel fuerte; el de las demás, gris. De 32px en la barra lateral y de 20px en el antetítulo |
+| `barra-lateral.tsx`, `contexto-barra-lateral.tsx` | La isla de la izquierda desde lg (240px, 76 colapsada, con la sección actual en la píldora de su pastel y `aria-current`) y, por debajo, el cajón del teléfono con su manejo del foco |
+| `barra-superior.tsx` | `BarraSuperior`: el encabezado de cada página (antetítulo con la sección de la ruta, título en serif, subtítulo, búsqueda y acción principal) y, por debajo de lg, la fila fija con el botón del menú |
+| `contenido-del-panel.tsx` | El `<main>` de cada vista: deja el lugar de la barra y pone el `halo-<módulo>` de la ruta, así cada página y sus modales enfocan con su pastel sin hacer nada |
+| `marco-de-modal.tsx` | `MarcoDeModal`: velo navy, tarjeta blanca de radio 32, título en serif y la X. Se anuncia como diálogo, atrapa el foco, se cierra con Escape y devuelve el foco a lo que lo abrió, también si adentro un campo lleva `autoFocus`. Además de `titulo` y `alCerrar`: `descripcion`, `bloqueado` (mientras guarda no se cierra), `antetitulo` (el módulo o el paso) y `ancho` (`md` 448px por defecto, `lg` 672, `xl` 896) |
+| `aviso.tsx` | `Aviso`: un mensaje que no es de un campo, con ícono y fondo según el tono: `error` (por defecto, rojo, se anuncia con `role="alert"`), `info` (gris), `atencion` (naranja suave: lo que se ve está incompleto) y `listo` (lima suave: algo salió bien). Fuera del error no se anuncia salvo que se pida `rol="status"` o `rol="alert"`. `titulo` pone una primera línea en negrita, y `accion`, un botón como "Reintentar" a la derecha o debajo |
+| `estado-vacio.tsx` | `EstadoVacio`: el lugar de una lista que todavía no tiene nada, con borde punteado para que no se lea como una tarjeta más |
+| `encabezado-de-tarjeta.tsx` | `EncabezadoDeTarjeta`: la cabecera de una tarjeta, con el ícono en su cuadro, el título en serif, una bajada y una acción a la derecha que baja de renglón si no entra |
+| `tarjeta-cita.tsx`, `avatar-usuario.tsx` | `TarjetaCita` (compacta en las listas, o completa; con `onClick` es un botón) y `AvatarUsuario` (la foto o las iniciales navy sobre un pastel fuerte; es decorativo, va siempre junto al nombre) |
+| `estilos.ts` | Las clases que no son un componente: `CAMPO` (el aspecto de `CampoFormulario` en 44px de alto en vez de 48: lo mínimo para un dedo), `CAMPO_CON_ERROR`, `ETIQUETA`, `ERROR_DE_CAMPO`, `ANILLO_DE_FOCO`, `TARJETA_DEL_PANEL` (blanca, radio 32 y sombra sm, para lo que no es `Tarjeta`) y `TITULO_DE_TARJETA` (la serif a 24px del `<h2>` de una tarjeta) |
+
+**El estado de una cita** se ve igual en todo el panel, siempre en palabras
+y nunca sólo por el color: gris la pendiente, azul la confirmada, el naranja
+del tablero la que se está atendiendo, el lima de lo cobrado la completada y
+el rojo de error la cancelada. Lo usan `TarjetaCita` y la agenda
+(`app/dashboard/agenda/_componentes/estados-de-cita.ts`, para la insignia del
+detalle y el bloque de la semana).
 
 ## Patrones de movimiento
 

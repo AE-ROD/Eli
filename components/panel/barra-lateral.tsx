@@ -5,52 +5,41 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { signOut } from "next-auth/react"
 import { motion, AnimatePresence } from "framer-motion"
+import { ArrowRight, LogOut, PanelLeftClose, PanelLeftOpen, Sparkles, UserRound, X } from "lucide-react"
+import { FONDO_SUAVE, HALO_DE_MODULO } from "@/components/comunes/colores-de-modulo"
 import { LogoEli } from "@/components/comunes/logo-eli"
+import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { ID_DEL_CAJON, useBarraLateral } from "@/components/panel/contexto-barra-lateral"
-import { ANILLO_DE_FOCO } from "@/components/panel/estilos"
-import { cn } from "@/lib/utils"
-import {
-  LayoutDashboard,
-  SquareKanban,
-  CalendarDays,
-  Users,
-  MessageCircle,
-  ChartColumn,
-  Settings,
-  LogOut,
-  ChevronLeft,
-  HelpCircle,
-  UsersRound,
-  Sparkles,
-  User,
-  X,
-} from "lucide-react"
 import { usePrecios } from "@/components/panel/contexto-precios"
+import { CuadroDeSeccion } from "@/components/panel/icono-de-seccion"
+import {
+  SECCION_DE_AYUDA,
+  SECCION_DE_CHATS,
+  SECCION_DE_CONFIGURACION,
+  SECCION_DE_INICIO,
+  SECCIONES_DE_MODULOS,
+  seccionDeLaRuta,
+  type SeccionDelPanel,
+} from "@/components/panel/secciones-del-panel"
+import { moduloPorId } from "@/lib/modulos"
+import { cn } from "@/lib/utils"
 
 /** Lo que se puede enfocar con Tab dentro del cajón. */
 const ENFOCABLES =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
-/**
- * El orden sigue el día del negocio: el tablero, donde se atiende y se cobra,
- * justo después del inicio; agenda, clientes y chats después; los reportes,
- * que miran lo ya cobrado, al final. Tablero y reportes son para todos los
- * roles: cada endpoint ya recorta lo que ve cada uno.
- */
-const itemsNavegacion = [
-  { id: "dashboard", nombre: "Dashboard", icono: LayoutDashboard, ruta: "/dashboard" },
-  { id: "tablero", nombre: "Tablero", icono: SquareKanban, ruta: "/dashboard/tablero" },
-  { id: "agenda", nombre: "Agenda", icono: CalendarDays, ruta: "/dashboard/agenda" },
-  { id: "clientes", nombre: "Clientes", icono: Users, ruta: "/dashboard/clientes" },
-  { id: "chats", nombre: "Chats", icono: MessageCircle, ruta: "/dashboard/chats" },
-  { id: "reportes", nombre: "Reportes", icono: ChartColumn, ruta: "/dashboard/reportes" },
-]
+/** Los botones de sólo ícono de la barra: 44 × 44, lo mínimo para un dedo. */
+const BOTON_DE_ICONO =
+  "grid size-11 shrink-0 place-items-center rounded-boton text-navy squircle anillo-foco transition-colors duration-150 ease-suave hover:bg-superficie"
 
-const itemsSecundarios = [
-  { id: "configuracion", nombre: "Configuración", icono: Settings, ruta: "/dashboard/configuracion" },
-  { id: "ayuda", nombre: "Ayuda", icono: HelpCircle, ruta: "/dashboard/ayuda" },
-]
+/**
+ * El ancho de la isla: 240 px, o 76 colapsada (sólo los íconos). El cajón del
+ * teléfono es un poco más ancho. `ContenidoDelPanel` corre el contenido lo
+ * mismo, más el margen de 24 px de la isla.
+ */
+const ANCHO_EXPANDIDA = "w-64 lg:w-60"
+const ANCHO_COLAPSADA = "w-[76px]"
 
 interface BarraLateralProps {
   usuario?: {
@@ -68,9 +57,23 @@ interface BarraLateralProps {
 export function BarraLateral({ usuario, esOwner, diasTrialRestantes, puedeVerEquipo }: BarraLateralProps) {
   const { abrirPrecios } = usePrecios()
   const pathname = usePathname()
-  const { cajonAbierto, cerrarCajon, cerrarCajonParaIrA, colapsada: colapsado, alternarColapso, enfocarBotonMenu } =
+  const { cajonAbierto, cerrarCajon, cerrarCajonParaIrA, colapsada, alternarColapso, enfocarBotonMenu } =
     useBarraLateral()
   const refCajon = useRef<HTMLDivElement>(null)
+  const seccionActiva = seccionDeLaRuta(pathname)
+
+  /**
+   * El orden es el de la referencia aprobada: el inicio, los módulos en el
+   * orden del día de trabajo (`lib/modulos.ts`) y chats; abajo, aparte,
+   * configuración y ayuda. Tablero y reportes son para todos los roles: cada
+   * endpoint ya recorta lo que ve cada uno. Equipo, sólo para quien lo gestiona.
+   */
+  const principales: SeccionDelPanel[] = [
+    SECCION_DE_INICIO,
+    ...SECCIONES_DE_MODULOS.filter((seccion) => seccion.id !== "equipo" || puedeVerEquipo),
+    SECCION_DE_CHATS,
+  ]
+  const secundarias: SeccionDelPanel[] = [SECCION_DE_CONFIGURACION, SECCION_DE_AYUDA]
 
   // Mientras el cajón está abierto el foco vive adentro: entra al abrirse,
   // Tab y Shift+Tab dan la vuelta sin salir y Escape lo cierra. Al cerrarse
@@ -118,29 +121,35 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes, puedeVerEqu
     }
   }, [cajonAbierto, cerrarCajon, enfocarBotonMenu])
 
+  const hayPrueba = esOwner && diasTrialRestantes !== undefined && diasTrialRestantes <= 3
+  const textoDeLaPrueba =
+    diasTrialRestantes !== undefined && diasTrialRestantes > 0
+      ? `${diasTrialRestantes} día${diasTrialRestantes !== 1 ? "s" : ""} de prueba`
+      : "Prueba finalizada"
+
   return (
     <>
-      {/* La superposición oscura del cajón, sólo en el teléfono. Tocarla lo cierra. */}
+      {/* La superposición del cajón, sólo en el teléfono. Tocarla lo cierra. */}
       <AnimatePresence>
         {cajonAbierto && (
           <motion.div
-            className="fixed inset-0 z-40 bg-foreground/40 lg:hidden"
+            className="fixed inset-0 z-40 bg-navy/40 lg:hidden"
             onClick={cerrarCajon}
             aria-hidden="true"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
+            transition={{ duration: DURACION.pildora, ease: CURVA.suave }}
           />
         )}
       </AnimatePresence>
 
       {/*
-        Desde lg la barra está fija a la izquierda, como siempre. Por debajo es
-        un cajón fuera de la pantalla; cerrado es `invisible`, que lo saca del
-        orden de Tab y del lector de pantalla sin esperar al JS. Al abrir se
-        hace visible en el acto (el foco no puede entrar a algo invisible) y al
-        cerrar recién cuando termina de deslizarse.
+        Desde lg la barra es una isla blanca fija a la izquierda, separada 24 px
+        del borde. Por debajo es un cajón fuera de la pantalla; cerrado es
+        `invisible`, que lo saca del orden de Tab y del lector de pantalla sin
+        esperar al JS. Al abrir se hace visible en el acto (el foco no puede
+        entrar a algo invisible) y al cerrar recién cuando termina de deslizarse.
 
         Abierto, es un diálogo modal (role="dialog" con aria-modal): el lector
         lo anuncia como "Menú" y no deja salir de él. Detrás, el contenido queda
@@ -156,272 +165,207 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes, puedeVerEqu
         aria-label={cajonAbierto ? "Menú" : undefined}
         tabIndex={cajonAbierto ? -1 : undefined}
         className={cn(
-          "fixed inset-y-0 left-0 z-40 duration-300 ease-in-out focus:outline-none motion-reduce:transition-none lg:visible lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 p-2 duration-300 ease-in-out focus:outline-none motion-reduce:transition-none lg:visible lg:translate-x-0 lg:py-6 lg:pr-0 lg:pl-6",
           cajonAbierto
             ? "visible translate-x-0 transition-[translate]"
             : "invisible -translate-x-full transition-[translate,visibility]"
         )}
       >
-        <motion.aside
-          className="h-full bg-card border-r border-border/50 flex flex-col"
-          animate={{ width: colapsado ? 80 : 260 }}
-          transition={{ duration: 0.3, ease: "easeInOut" }}
+        <aside
+          aria-label="Barra lateral"
+          className={cn(
+            "flex h-full flex-col gap-5 rounded-panel bg-tarjeta px-3 pt-3 pb-3 text-navy shadow-sm squircle",
+            colapsada ? ANCHO_COLAPSADA : ANCHO_EXPANDIDA
+          )}
         >
-          {/* Header */}
-          <div className="p-4 border-b border-border/50">
-            <div className="flex items-center justify-between">
-              {/*
-                Este enlace y los de la navegación cierran el cajón en
-                `onNavigate`, no en `onClick`: Next lo llama sólo cuando navega
-                en esta pestaña. Con Ctrl, Cmd, Shift o Alt el clic lo resuelve
-                el navegador (otra pestaña, otra ventana, una descarga), y el
-                cajón queda abierto con el foco en el enlace.
-              */}
-              <Link href="/dashboard" onNavigate={() => cerrarCajonParaIrA("/dashboard")} className="flex items-center gap-3">
-                <motion.div
-                  className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center"
-                  whileHover={{ scale: 1.05 }}
-                >
-                  <span className="text-primary-foreground font-bold text-lg">E</span>
-                </motion.div>
-                <AnimatePresence>
-                  {!colapsado && (
-                    <motion.div
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -10 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <LogoEli tamaño="sm" />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+          <div className={cn("flex min-h-11 items-center gap-2", colapsada ? "justify-center" : "justify-between")}>
+            {/*
+              Este enlace y los de la navegación cierran el cajón en
+              `onNavigate`, no en `onClick`: Next lo llama sólo cuando navega
+              en esta pestaña. Con Ctrl, Cmd, Shift o Alt el clic lo resuelve
+              el navegador (otra pestaña, otra ventana, una descarga), y el
+              cajón queda abierto con el foco en el enlace.
+            */}
+            {!colapsada && (
+              <Link
+                href="/dashboard"
+                onNavigate={() => cerrarCajonParaIrA("/dashboard")}
+                aria-label="Eli, ir al inicio"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[12px] px-2.5 anillo-foco"
+              >
+                <LogoEli tamaño="md" />
               </Link>
-              {/* Colapsar es cosa del escritorio: en el teléfono el cajón se cierra. */}
-              <motion.button
-                type="button"
-                className="hidden lg:block p-1.5 rounded-lg hover:bg-muted transition-colors"
-                onClick={alternarColapso}
-                animate={{ rotate: colapsado ? 180 : 0 }}
-                aria-label={colapsado ? "Expandir menú" : "Contraer menú"}
-                aria-expanded={!colapsado}
-              >
-                <ChevronLeft className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-              </motion.button>
-              {/*
-                En el teléfono no hay tecla Escape, y con aria-modal el lector de
-                pantalla no llega a la superposición: sin este botón, quien lo usa
-                sólo saldría del cajón eligiendo una página.
-              */}
-              <button
-                type="button"
-                className={cn("lg:hidden p-1.5 rounded-lg hover:bg-muted transition-colors", ANILLO_DE_FOCO)}
-                onClick={cerrarCajon}
-                aria-label="Cerrar menú"
-              >
-                <X className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-              </button>
-            </div>
+            )}
+            {/* Colapsar es cosa del escritorio: en el teléfono el cajón se cierra. */}
+            <button
+              type="button"
+              className={cn(BOTON_DE_ICONO, "hidden lg:grid")}
+              onClick={alternarColapso}
+              aria-label={colapsada ? "Expandir menú" : "Contraer menú"}
+              aria-expanded={!colapsada}
+            >
+              {colapsada ? (
+                <PanelLeftOpen className="size-5" aria-hidden="true" strokeWidth={1.75} />
+              ) : (
+                <PanelLeftClose className="size-5" aria-hidden="true" strokeWidth={1.75} />
+              )}
+            </button>
+            {/*
+              En el teléfono no hay tecla Escape, y con aria-modal el lector de
+              pantalla no llega a la superposición: sin este botón, quien lo usa
+              sólo saldría del cajón eligiendo una página.
+            */}
+            <button type="button" className={cn(BOTON_DE_ICONO, "lg:hidden")} onClick={cerrarCajon} aria-label="Cerrar menú">
+              <X className="size-5" aria-hidden="true" strokeWidth={1.75} />
+            </button>
           </div>
 
-          {/* Navegacion principal */}
-          <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-            <AnimatePresence>
-              {!colapsado && (
-                <motion.p
-                  className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                >
-                  Menú principal
-                </motion.p>
-              )}
-            </AnimatePresence>
-        
-            {[
-              ...itemsNavegacion,
-              ...(puedeVerEquipo ? [{ id: "equipo", nombre: "Equipo", icono: UsersRound, ruta: "/dashboard/equipo" }] : []),
-            ].map((item) => {
-              const activo = pathname === item.ruta || (item.ruta !== "/dashboard" && pathname.startsWith(item.ruta))
-          
-              return (
-                <Link key={item.id} href={item.ruta} onNavigate={() => cerrarCajonParaIrA(item.ruta)}>
-                  <motion.div
-                    className={`
-                      flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors relative
-                      ${activo 
-                        ? "bg-primary/10 text-primary" 
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                      }
-                    `}
-                    whileHover={{ x: 2 }}
-                  >
-                    <item.icono className="h-5 w-5 flex-shrink-0" />
-                    <AnimatePresence>
-                      {!colapsado && (
-                        <motion.span
-                          className="font-medium text-sm"
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -10 }}
-                        >
-                          {item.nombre}
-                        </motion.span>
-                      )}
-                    </AnimatePresence>
-                    {activo && (
-                      <motion.div
-                        className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full"
-                        layoutId="activeIndicator"
-                      />
-                    )}
-                  </motion.div>
-                </Link>
-              )
-            })}
-
-            <div className="pt-4 mt-4 border-t border-border/50">
-              <AnimatePresence>
-                {!colapsado && (
-                  <motion.p
-                    className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                  >
-                    Configuración
-                  </motion.p>
-                )}
-              </AnimatePresence>
-          
-              {itemsSecundarios.map((item) => {
-                const activo = pathname === item.ruta
-            
-                return (
-                  <Link key={item.id} href={item.ruta} onNavigate={() => cerrarCajonParaIrA(item.ruta)}>
-                    <motion.div
-                      className={`
-                        flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors
-                        ${activo 
-                          ? "bg-primary/10 text-primary" 
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                        }
-                      `}
-                      whileHover={{ x: 2 }}
-                    >
-                      <item.icono className="h-5 w-5 flex-shrink-0" />
-                      <AnimatePresence>
-                        {!colapsado && (
-                          <motion.span
-                            className="font-medium text-sm"
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -10 }}
-                          >
-                            {item.nombre}
-                          </motion.span>
-                        )}
-                      </AnimatePresence>
-                    </motion.div>
-                  </Link>
-                )
-              })}
-            </div>
+          {/*
+            Si el alto no alcanza, la lista se desplaza. El margen negativo con
+            su relleno deja lugar al anillo del foco, que un contenedor que
+            desplaza recortaría en los bordes.
+          */}
+          <nav aria-label="Secciones del panel" className="-mx-2 -my-1 min-h-0 flex-1 overflow-y-auto px-2 py-1">
+            <ul className="flex flex-col gap-1">
+              {principales.map((seccion) => (
+                <ItemDeLaBarra
+                  key={seccion.id}
+                  seccion={seccion}
+                  activa={seccionActiva?.id === seccion.id}
+                  colapsada={colapsada}
+                  alNavegar={() => cerrarCajonParaIrA(seccion.ruta)}
+                />
+              ))}
+            </ul>
+            <div aria-hidden="true" className="mx-3 my-3 h-px bg-borde" />
+            <ul className="flex flex-col gap-1">
+              {secundarias.map((seccion) => (
+                <ItemDeLaBarra
+                  key={seccion.id}
+                  seccion={seccion}
+                  activa={seccionActiva?.id === seccion.id}
+                  colapsada={colapsada}
+                  alNavegar={() => cerrarCajonParaIrA(seccion.ruta)}
+                />
+              ))}
+            </ul>
           </nav>
 
-          {/* Banner trial */}
-          {esOwner && diasTrialRestantes !== undefined && diasTrialRestantes <= 3 && (
-            <div className="px-3 pb-2">
-              <motion.button
+          <div className="flex flex-col gap-2">
+            {hayPrueba && (
+              <button
+                type="button"
                 onClick={() => {
                   // Los planes se abren con el cajón ya cerrado: abierto, seguiría
                   // reteniendo el foco detrás del modal.
                   cerrarCajon()
                   abrirPrecios()
                 }}
-                className="w-full rounded-xl bg-primary/10 border border-primary/20 p-3 text-left hover:bg-primary/15 transition-colors"
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
+                title={colapsada ? `${textoDeLaPrueba}. Ver planes` : undefined}
+                className={cn(
+                  "group flex w-full items-center gap-3 rounded-[20px] p-1.5 text-left text-navy inset-ring-1 inset-ring-borde anillo-foco transition-colors duration-150 ease-suave hover:bg-superficie",
+                  colapsada ? "justify-center" : "pr-3"
+                )}
               >
-                <div className="flex items-center gap-2 mb-1">
-                  <Sparkles className="h-3.5 w-3.5 text-primary flex-shrink-0" />
-                  <AnimatePresence>
-                    {!colapsado && (
-                      <motion.span
-                        className="text-xs font-semibold text-primary"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                      >
-                        {diasTrialRestantes > 0 ? `${diasTrialRestantes} día${diasTrialRestantes !== 1 ? "s" : ""} de prueba` : "Trial finalizado"}
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
-                </div>
-                <AnimatePresence>
-                  {!colapsado && (
-                    <motion.p
-                      className="text-xs text-muted-foreground leading-tight"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                    >
-                      Ver planes →
-                    </motion.p>
-                  )}
-                </AnimatePresence>
-              </motion.button>
-            </div>
-          )}
+                <span
+                  aria-hidden="true"
+                  className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-superficie squircle transition-colors duration-150 ease-suave group-hover:bg-tarjeta"
+                >
+                  <Sparkles className="size-4" strokeWidth={1.75} />
+                </span>
+                <span className={cn("min-w-0", colapsada && "sr-only")}>
+                  <span className="block text-sm leading-tight font-medium">{textoDeLaPrueba}</span>
+                  <span className="mt-0.5 flex items-center gap-1 text-[13px] leading-tight text-texto-2">
+                    Ver planes
+                    <ArrowRight className="size-3.5" aria-hidden="true" strokeWidth={1.75} />
+                  </span>
+                </span>
+              </button>
+            )}
 
-          {/* Usuario — sin sesión no se inventa nombre ni negocio */}
-          <div className="p-3 border-t border-border/50">
-            <div className={`flex items-center ${colapsado ? "justify-center" : "gap-3"} p-2 rounded-xl hover:bg-muted transition-colors cursor-pointer`}>
+            {/* Quién está en sesión: sin sesión no se inventa nombre ni negocio. */}
+            <div
+              className={cn("flex items-center rounded-[24px] bg-superficie p-2", colapsada ? "flex-col gap-1.5" : "gap-2")}
+            >
               {usuario ? (
-                <AvatarUsuario nombre={usuario.nombre} imagenUrl={usuario.imagenUrl} tamaño="sm" />
+                <AvatarUsuario nombre={usuario.nombre} imagenUrl={usuario.imagenUrl} tamaño="md" />
               ) : (
-                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                </div>
+                <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-full bg-tarjeta text-texto-2">
+                  <UserRound className="size-5" strokeWidth={1.75} />
+                </span>
               )}
-              <AnimatePresence>
-                {!colapsado && (
-                  <motion.div
-                    className="flex-1 min-w-0"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                  >
-                    {usuario ? (
-                      <>
-                        <p className="text-sm font-medium text-foreground truncate">{usuario.nombre}</p>
-                        <p className="text-xs text-muted-foreground truncate">{usuario.negocio}</p>
-                      </>
-                    ) : (
-                      <p className="text-xs text-muted-foreground truncate">Sesión no disponible</p>
+              {/* Un nombre o un negocio largo se corta con "…": el globo del cursor lo muestra entero. */}
+              <div className={cn("min-w-0 flex-1 pl-1", colapsada && "sr-only")}>
+                {usuario ? (
+                  <>
+                    <p title={usuario.nombre} className="truncate text-[15px] leading-tight font-semibold">
+                      {usuario.nombre}
+                    </p>
+                    {usuario.negocio && (
+                      <p title={usuario.negocio} className="mt-0.5 truncate text-[13px] leading-tight text-texto-2">
+                        {usuario.negocio}
+                      </p>
                     )}
-                  </motion.div>
+                  </>
+                ) : (
+                  <p className="text-[13px] leading-tight text-texto-2">Sesión no disponible</p>
                 )}
-              </AnimatePresence>
-              <AnimatePresence>
-                {!colapsado && (
-                  <motion.button
-                    className="p-1.5 rounded-lg hover:bg-background transition-colors"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    onClick={() => signOut({ callbackUrl: "/iniciar-sesion" })}
-                    title="Cerrar sesión"
-                  >
-                    <LogOut className="h-4 w-4 text-muted-foreground" />
-                  </motion.button>
-                )}
-              </AnimatePresence>
+              </div>
+              <button
+                type="button"
+                onClick={() => signOut({ callbackUrl: "/iniciar-sesion" })}
+                aria-label="Cerrar sesión"
+                title="Cerrar sesión"
+                // 40 px a la vista para dejarle lugar al nombre; el ::after lleva el área táctil a 44.
+                className={cn(BOTON_DE_ICONO, "relative size-10 rounded-[12px] after:absolute after:-inset-0.5 hover:bg-tarjeta")}
+              >
+                <LogOut className="size-[18px]" aria-hidden="true" strokeWidth={1.75} />
+              </button>
             </div>
           </div>
-        </motion.aside>
+        </aside>
       </div>
     </>
+  )
+}
+
+interface PropsDeItemDeLaBarra {
+  seccion: SeccionDelPanel
+  activa: boolean
+  colapsada: boolean
+  alNavegar: () => void
+}
+
+/**
+ * Un enlace de la barra: el ícono de la sección y su nombre. El de la página
+ * en la que se está lleva la píldora del pastel suave de su módulo (gris si
+ * no es un módulo), el texto más grueso y `aria-current`. Colapsada, el
+ * nombre queda para el lector de pantalla y para el globo del cursor.
+ */
+function ItemDeLaBarra({ seccion, activa, colapsada, alNavegar }: PropsDeItemDeLaBarra) {
+  const pildora = seccion.modulo ? FONDO_SUAVE[moduloPorId(seccion.modulo).color] : "bg-superficie"
+
+  return (
+    <li>
+      <Link
+        href={seccion.ruta}
+        onNavigate={alNavegar}
+        aria-current={activa ? "page" : undefined}
+        title={colapsada ? seccion.nombre : undefined}
+        className={cn(
+          "group flex min-h-11 items-center gap-3 rounded-full p-1.5 text-[15px] leading-tight text-navy anillo-foco transition-colors duration-150 ease-suave",
+          // Cada módulo enfoca con su pastel.
+          seccion.modulo && HALO_DE_MODULO[seccion.modulo],
+          activa ? cn(pildora, "font-semibold") : "font-medium hover:bg-superficie",
+          colapsada ? "justify-center" : "pr-4"
+        )}
+      >
+        <CuadroDeSeccion
+          seccion={seccion}
+          fondoSinModulo={cn("bg-superficie", activa ? "bg-tarjeta" : "group-hover:bg-tarjeta")}
+        />
+        <span className={cn("min-w-0 truncate", colapsada && "sr-only")}>{seccion.nombre}</span>
+      </Link>
+    </li>
   )
 }

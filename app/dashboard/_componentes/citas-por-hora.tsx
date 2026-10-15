@@ -1,8 +1,13 @@
 "use client"
 
-import { motion } from "framer-motion"
+import { useId } from "react"
+import { Clock } from "lucide-react"
+import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
+import { EstadoVacio } from "@/components/panel/estado-vacio"
+import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { formatearHora } from "@/lib/fechas"
 import type { CitaDelDia } from "@/lib/horario-dia"
+import { cn } from "@/lib/utils"
 
 interface CitasPorHoraProps {
   /** Nulo mientras cargan las cifras del panel. */
@@ -11,35 +16,31 @@ interface CitasPorHoraProps {
 
 /** Las citas de hoy en fila por hora de inicio: quién viene y a qué. */
 export function CitasPorHora({ citas }: CitasPorHoraProps) {
+  const idDelTitulo = useId()
+
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.4 }}
-    >
-      <div className="bg-card border border-border/50 rounded-xl p-5">
-        <h3 className="font-semibold text-foreground mb-4">Citas de hoy por hora</h3>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+      <EncabezadoDeTarjeta id={idDelTitulo} titulo="Citas de hoy por hora" icono={{ figura: Clock, color: "azul" }} />
+
+      <div className="mt-5">
         {citas && citas.length > 0 ? (
-          <div className="space-y-3">
+          <ul className="space-y-2">
             {citas.map((cita) => (
-              <div key={cita.id} className="flex items-center gap-3">
-                <span className="text-xs text-muted-foreground w-12 flex-shrink-0">
-                  {formatearHora(cita.startTime)}
-                </span>
-                <div className="flex-1 h-7 bg-primary/10 rounded-lg flex items-center px-3">
-                  <span className="text-xs font-medium text-primary truncate">
+              <li key={cita.id} className="flex items-center gap-3">
+                <span className="w-12 shrink-0 text-xs text-texto-2 tabular-nums">{formatearHora(cita.startTime)}</span>
+                {/* `min-w-0`: sin él, un nombre largo ensanchaba la fila más allá de la pantalla en vez de cortarse. */}
+                <span className="flex h-8 min-w-0 flex-1 items-center rounded-[12px] bg-azul-suave px-3 squircle">
+                  <span className="truncate text-xs font-medium text-navy">
                     {cita.customer?.name ?? "Sin cliente"} — {cita.title}
                   </span>
-                </div>
-              </div>
+                </span>
+              </li>
             ))}
-          </div>
+          </ul>
         ) : (
-          <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
-            {citas ? "Sin citas para hoy" : "Cargando..."}
-          </div>
+          <EstadoVacio>{citas ? "Sin citas para hoy" : "Cargando..."}</EstadoVacio>
         )}
       </div>
-    </motion.section>
+    </section>
   )
 }

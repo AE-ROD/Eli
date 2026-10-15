@@ -2,13 +2,17 @@
 
 import { useEffect, useId, useRef } from "react"
 import { Ban, Receipt } from "lucide-react"
-import { ANILLO_DE_FOCO } from "@/components/panel/estilos"
+import { Boton } from "@/components/comunes/boton"
+import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
+import { Insignia } from "@/components/comunes/insignia"
+import { TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
 import { formatearMonto } from "@/lib/dinero"
 import { formatearHora, horaConArticulo } from "@/lib/fechas"
 import { TURNOS } from "@/lib/reportes"
 import { cn } from "@/lib/utils"
 import type { FilaDeReporte, Reporte } from "../_datos"
 import { Paginador } from "./paginador"
+import { useIrALaSeccion } from "./usar-ir-a-la-seccion"
 
 /** `mar, 6 oct`: el día del cobro, corto, en la hora de quien mira. */
 export function diaCorto(iso: string): string {
@@ -17,22 +21,31 @@ export function diaCorto(iso: string): string {
 
 const nombreDeTurno = (id: string) => TURNOS.find((turno) => turno.id === id)?.nombre ?? id
 
+/** Las celdas de los historiales: arriba, con el mismo relleno; la primera y la última, con el de la tarjeta. */
+export const CELDA = "px-3 py-3.5 align-top first:pl-5 last:pr-5 sm:first:pl-6 sm:last:pr-6"
+export const ENCABEZADO_DE_COLUMNA = "px-3 py-3 text-xs font-medium text-texto-2 first:pl-5 last:pr-5 sm:first:pl-6 sm:last:pr-6"
+
 /**
  * Los servicios de la atención. Con filtro de profesional o de servicio
  * (`resaltar`), las líneas que lo cumplen (`coincide`) son las que suman en el
- * resumen: van resaltadas, y las demás atenuadas, con un aviso para el lector
- * de pantalla. Sin esos filtros se ven todas iguales.
+ * resumen: van marcadas con el lima de reportes, y las demás en gris, con un
+ * aviso para el lector de pantalla. Sin esos filtros se ven todas iguales.
+ *
+ * El gris de las que no entran es el del texto secundario, sin transparencia:
+ * con la opacidad de antes quedaba por debajo del contraste mínimo.
  */
 function Servicios({ fila, resaltar }: { fila: FilaDeReporte; resaltar: boolean }) {
   return (
-    <ul className="space-y-0.5">
+    <ul className="space-y-1">
       {fila.lineas.map((linea) => {
         const destacada = resaltar && linea.coincide
         const atenuada = resaltar && !linea.coincide
         return (
-          <li key={linea.id} className={cn(destacada && "font-medium", atenuada && "text-muted-foreground opacity-70")}>
-            {linea.servicio}{" "}
-            <span className={cn(!destacada && "text-muted-foreground")}>
+          <li key={linea.id} className={cn(atenuada && "text-texto-2")}>
+            <span className={cn(destacada && "rounded-[6px] bg-lima-suave px-1 font-medium box-decoration-clone")}>
+              {linea.servicio}
+            </span>{" "}
+            <span className="text-texto-2">
               · {linea.profesional.nombre}
               {linea.profesional.id === null && " (ya no está en el equipo)"} · {formatearMonto(linea.precio)}
             </span>
@@ -45,17 +58,28 @@ function Servicios({ fila, resaltar }: { fila: FilaDeReporte; resaltar: boolean 
 }
 
 export function Medios({ pagos }: { pagos: FilaDeReporte["pagos"] }) {
-  if (!pagos || pagos.length === 0) return <span className="text-muted-foreground">Sin pago (cortesía)</span>
+  if (!pagos || pagos.length === 0) return <span className="text-texto-2">Sin pago (cortesía)</span>
   const dividido = pagos.length > 1
   return (
-    <ul className="space-y-0.5">
+    <ul className="space-y-1">
       {pagos.map((pago) => (
         <li key={pago.id}>
           {pago.nombreMedio}
-          {dividido && <span className="text-muted-foreground tabular-nums"> {formatearMonto(pago.monto)}</span>}
+          {dividido && <span className="text-texto-2 tabular-nums"> {formatearMonto(pago.monto)}</span>}
         </li>
       ))}
     </ul>
+  )
+}
+
+/** Cuando el período no tiene nada: el ícono del reporte en lima, qué pasó y qué probar. */
+export function SinFilas({ icono, titulo, children }: { icono: typeof Receipt; titulo: string; children: string }) {
+  return (
+    <div className="flex flex-col items-center px-5 pb-10 pt-6 text-center">
+      <CuadroDeIcono icono={icono} color="lima" tamano="lg" />
+      <p className="mt-4 font-medium">{titulo}</p>
+      <p className="mt-1 max-w-sm text-sm text-pretty text-texto-2">{children}</p>
+    </div>
   )
 }
 
@@ -88,12 +112,12 @@ export function HistorialDeCobros({
   onTituloEnfocado,
 }: HistorialDeCobrosProps) {
   const idDelTitulo = useId()
-  const seccion = useRef<HTMLElement>(null)
   const titulo = useRef<HTMLHeadingElement>(null)
   const delNegocio = reporte.alcance === "negocio"
   const anula = delNegocio && onAnular !== undefined
   const cantidad = reporte.total ?? reporte.resumen.cantidad
   const { pagina, paginas } = reporte
+  const { seccion, irA } = useIrALaSeccion(onPagina, actualizando, reporte)
 
   useEffect(() => {
     if (!enfocarTitulo) return
@@ -101,34 +125,31 @@ export function HistorialDeCobros({
     onTituloEnfocado?.()
   }, [enfocarTitulo, onTituloEnfocado])
 
-  // Al cambiar de página se vuelve al principio de la tabla: los botones
-  // están abajo y la página nueva empieza arriba.
-  const irA = (otra: number) => {
-    onPagina(otra)
-    seccion.current?.scrollIntoView({ block: "start", behavior: "smooth" })
-  }
-
-  const anchoMinimo = anula ? "min-w-[860px]" : delNegocio ? "min-w-[760px]" : "min-w-[560px]"
+  const anchoMinimo = anula ? "min-w-[880px]" : delNegocio ? "min-w-[780px]" : "min-w-[560px]"
 
   return (
-    <section ref={seccion} aria-labelledby={idDelTitulo} className="bg-card border border-border/50 rounded-xl scroll-mt-24">
-      <div className="flex flex-wrap items-baseline justify-between gap-2 p-5 border-b border-border/50">
-        <h2 id={idDelTitulo} ref={titulo} tabIndex={-1} className={cn("font-semibold text-foreground rounded", ANILLO_DE_FOCO)}>
+    <section
+      ref={seccion}
+      aria-labelledby={idDelTitulo}
+      // La fila fija de arriba del teléfono mide 68 px: el principio de la sección no queda debajo.
+      className={cn(TARJETA_DEL_PANEL, "scroll-mt-20 lg:scroll-mt-6")}
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-5 pb-4 pt-5 sm:px-6 sm:pt-6">
+        <h2
+          id={idDelTitulo}
+          ref={titulo}
+          tabIndex={-1}
+          className={cn(TITULO_DE_TARJETA, "rounded-[10px] anillo-foco")}
+        >
           Historial de cobros
         </h2>
-        <p className="text-sm text-muted-foreground">
-          {cantidad === 1 ? "1 atención" : `${cantidad} atenciones`}
-        </p>
+        <p className="text-sm text-texto-2 tabular-nums">{cantidad === 1 ? "1 atención" : `${cantidad} atenciones`}</p>
       </div>
 
       {reporte.filas.length === 0 ? (
-        <div className="text-center py-12 px-5">
-          <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
-            <Receipt className="h-7 w-7 text-muted-foreground" aria-hidden="true" />
-          </div>
-          <p className="font-medium text-foreground">No hay atenciones cobradas</p>
-          <p className="text-sm text-muted-foreground mt-1">Prueba con otro período o con otros filtros.</p>
-        </div>
+        <SinFilas icono={Receipt} titulo="No hay atenciones cobradas">
+          Prueba con otro período o con otros filtros.
+        </SinFilas>
       ) : (
         // `relative` no es decorativo: los `sr-only` de la tabla (el título, la
         // columna "Acciones", el "no entra en el filtro") son `position:
@@ -141,63 +162,80 @@ export function HistorialDeCobros({
               Atenciones cobradas, página {pagina} de {paginas}
             </caption>
             <thead>
-              <tr className="text-left text-xs text-muted-foreground border-b border-border/50">
-                <th scope="col" className="px-5 py-2.5 font-medium">Cobrada</th>
-                <th scope="col" className="px-3 py-2.5 font-medium">Turno</th>
-                <th scope="col" className="px-3 py-2.5 font-medium">Cliente</th>
-                <th scope="col" className="px-3 py-2.5 font-medium">Servicios</th>
+              <tr className="border-y border-borde bg-crema text-left">
+                <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
+                  Cobrada
+                </th>
+                <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
+                  Turno
+                </th>
+                <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
+                  Cliente
+                </th>
+                <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
+                  Servicios
+                </th>
                 {delNegocio && (
                   <>
-                    <th scope="col" className="px-3 py-2.5 font-medium text-right">Total</th>
-                    <th scope="col" className="px-5 py-2.5 font-medium">Medios</th>
+                    <th scope="col" className={cn(ENCABEZADO_DE_COLUMNA, "text-right")}>
+                      Total
+                    </th>
+                    <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
+                      Medios
+                    </th>
                   </>
                 )}
                 {anula && (
-                  <th scope="col" className="px-5 py-2.5 font-medium">
+                  <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
                     <span className="sr-only">Acciones</span>
                   </th>
                 )}
               </tr>
             </thead>
-            <tbody className={cn("divide-y divide-border/50", actualizando && "opacity-60")}>
+            <tbody
+              className={cn(
+                "divide-y divide-borde transition-opacity duration-200 ease-suave",
+                actualizando && "opacity-60"
+              )}
+            >
               {reporte.filas.map((fila) => (
-                <tr key={fila.id} className="align-top">
-                  <td className="px-5 py-3 whitespace-nowrap">
+                <tr key={fila.id}>
+                  <td className={cn(CELDA, "whitespace-nowrap")}>
                     <time dateTime={fila.cobradaEn}>
-                      <span className="block text-foreground">{diaCorto(fila.cobradaEn)}</span>
-                      <span className="block text-muted-foreground tabular-nums">{formatearHora(fila.cobradaEn)}</span>
+                      <span className="block font-medium">{diaCorto(fila.cobradaEn)}</span>
+                      <span className="block text-texto-2 tabular-nums">{formatearHora(fila.cobradaEn)}</span>
                     </time>
                   </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-muted-foreground">{nombreDeTurno(fila.turno)}</td>
-                  <td className="px-3 py-3 text-foreground">{fila.cliente.nombre}</td>
-                  <td className="px-3 py-3 text-foreground">
+                  <td className={cn(CELDA, "whitespace-nowrap")}>
+                    <Insignia>{nombreDeTurno(fila.turno)}</Insignia>
+                  </td>
+                  <td className={cn(CELDA, "font-medium break-words")}>{fila.cliente.nombre}</td>
+                  <td className={CELDA}>
                     <Servicios fila={fila} resaltar={resaltarCoincidencias} />
                   </td>
                   {delNegocio && (
                     <>
-                      <td className="px-3 py-3 text-right font-semibold text-foreground tabular-nums whitespace-nowrap">
+                      <td className={cn(CELDA, "text-right font-semibold whitespace-nowrap tabular-nums")}>
                         {fila.total !== undefined ? formatearMonto(fila.total) : "—"}
                       </td>
-                      <td className="px-5 py-3 text-foreground">
+                      <td className={CELDA}>
                         <Medios pagos={fila.pagos} />
                       </td>
                     </>
                   )}
                   {anula && (
-                    <td className="px-5 py-2 text-right">
-                      <button
-                        type="button"
+                    <td className={cn(CELDA, "py-2.5 text-right")}>
+                      <Boton
+                        variante="fantasma"
+                        tamano="sm"
                         onClick={() => onAnular(fila)}
                         disabled={actualizando}
                         aria-label={`Anular el cobro de ${fila.cliente.nombre} del ${diaCorto(fila.cobradaEn)} a ${horaConArticulo(fila.cobradaEn)}`}
-                        className={cn(
-                          "inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                          ANILLO_DE_FOCO
-                        )}
+                        className="px-2.5 text-error hover:bg-error/8"
                       >
-                        <Ban className="h-3.5 w-3.5" aria-hidden="true" />
+                        <Ban aria-hidden="true" className="size-4" strokeWidth={1.75} />
                         Anular
-                      </button>
+                      </Boton>
                     </td>
                   )}
                 </tr>

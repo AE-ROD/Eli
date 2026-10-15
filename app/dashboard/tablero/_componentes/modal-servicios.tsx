@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, type FormEvent } from "react"
-import { BotonPrimario } from "@/components/comunes/boton-primario"
+import { TriangleAlert } from "lucide-react"
+import { Boton } from "@/components/comunes/boton"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
-import { ANILLO_DE_FOCO } from "@/components/panel/estilos"
 import {
   filaDesdeLinea,
   filaDesdeReserva,
@@ -12,6 +12,7 @@ import {
   type LineaPedida,
 } from "@/lib/acciones-del-tablero"
 import type { Atencion, Catalogo } from "../_datos"
+import { Aviso } from "@/components/panel/aviso"
 import { EditorDeServicios, filaVacia } from "./editor-de-servicios"
 
 /**
@@ -74,10 +75,15 @@ export function ModalServicios({
 
   return (
     <MarcoDeModal
+      antetitulo="Tablero"
       titulo={`Servicios de ${atencion.cliente.nombre}`}
       descripcion={
         requisito ? (
-          <span className="block rounded-lg border border-amber-200 bg-amber-50 text-amber-900 p-3 mt-2">{requisito}</span>
+          // Por qué se abrió: lo que le falta a la atención para avanzar.
+          <span className="mt-3 flex items-start gap-2.5 rounded-campo bg-naranja-suave px-4 py-3 font-medium text-navy squircle">
+            <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" strokeWidth={2} />
+            <span className="min-w-0">{requisito}</span>
+          </span>
         ) : eligeProfesional ? undefined : (
           "Ves y cambias sólo tus servicios; los de tus compañeros no se tocan. Quedan a tu nombre."
         )
@@ -86,7 +92,7 @@ export function ModalServicios({
       bloqueado={guardando}
       alCerrar={onCerrar}
     >
-      <form onSubmit={guardar} noValidate className="space-y-5">
+      <form onSubmit={guardar} noValidate className="space-y-6">
         <EditorDeServicios
           filas={filas}
           catalogo={catalogo}
@@ -98,38 +104,30 @@ export function ModalServicios({
         />
 
         {intentoGuardar && !validacion.ok && (
-          <p role="alert" className="text-sm text-red-500">
+          <Aviso tono="error" rol="alert">
             Revisa los servicios marcados.
-          </p>
+          </Aviso>
         )}
         {aviso && (
-          <p role="alert" className="text-sm text-red-500">
+          <Aviso tono="error" rol="alert">
             {aviso}
-          </p>
+          </Aviso>
         )}
 
-        <div className="flex flex-col-reverse sm:flex-row gap-3 pt-1">
-          <BotonPrimario
-            type="button"
-            variante="secundario"
-            anchoCompleto
-            onClick={onCerrar}
-            disabled={guardando}
-            className={ANILLO_DE_FOCO}
-          >
+        <div className="flex flex-col-reverse gap-3 sm:flex-row">
+          <Boton type="button" variante="secundario" onClick={onCerrar} disabled={guardando} className="w-full">
             Cancelar
-          </BotonPrimario>
-          <BotonPrimario
+          </Boton>
+          <Boton
             type="submit"
-            anchoCompleto
             cargando={guardando}
-            // Mientras guarda, el botón muestra sólo el ícono que gira: sin
-            // esto, el lector de pantalla anunciaría un botón sin nombre.
+            // Mientras guarda, el botón muestra sólo el ícono que gira: el
+            // nombre dice qué está haciendo.
             aria-label={guardando ? "Guardando" : undefined}
-            className={ANILLO_DE_FOCO}
+            className="w-full"
           >
             {textoDelBoton}
-          </BotonPrimario>
+          </Boton>
         </div>
       </form>
     </MarcoDeModal>

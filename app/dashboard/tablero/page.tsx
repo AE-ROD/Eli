@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { AnimatePresence } from "framer-motion"
-import { RefreshCw, TriangleAlert, UserPlus } from "lucide-react"
+import { CircleAlert, RefreshCw, UserPlus } from "lucide-react"
 import { BarraSuperior } from "@/components/panel/barra-superior"
-import { BotonPrimario } from "@/components/comunes/boton-primario"
+import { Boton } from "@/components/comunes/boton"
 import { ModalAnular } from "@/components/panel/modal-anular"
-import { ANILLO_DE_FOCO } from "@/components/panel/estilos"
+import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { esEstadoActivo, type EstadoActivo, type PagoPedido } from "@/lib/atenciones"
 import { formatearMonto } from "@/lib/dinero"
 import {
@@ -23,6 +23,7 @@ import {
   puedeGestionarServicios,
   puedeVerTodoElTablero,
 } from "@/lib/permisos"
+import { cn } from "@/lib/utils"
 import {
   anotarSinReserva,
   anularAtencion,
@@ -38,6 +39,7 @@ import {
   type Reserva,
   type Tablero,
 } from "./_datos"
+import { Aviso } from "@/components/panel/aviso"
 import { TableroCargando, TableroDeColumnas, type DestinoDelFoco } from "./_componentes/tablero-de-columnas"
 import { ModalAnotarSinReserva } from "./_componentes/modal-anotar-sin-reserva"
 import { ModalServicios } from "./_componentes/modal-servicios"
@@ -81,6 +83,9 @@ function textoParaGuardar(atencion: Atencion, despues: Despues | null): string {
 function columnaDe(atencion: Atencion): ColumnaDeAtencion {
   return esEstadoActivo(atencion.estado) || atencion.estado === "finalizada" ? atencion.estado : "en-espera"
 }
+
+/** La tarjeta de una atención, en la columna donde estaba: adonde vuelve el foco si se recarga. */
+const tarjetaDe = (atencion: Atencion): DestinoDelFoco => ({ atencionId: atencion.id, columna: columnaDe(atencion) })
 
 /** El mensaje del servidor sobre una reserva que cambió, seguido de que se recargó. */
 const conRecarga = (mensaje: string) => `${mensaje.replace(/\.$/, "")}. Se recargó el tablero.`
@@ -231,17 +236,26 @@ export default function PaginaTablero() {
     setModal(abierto)
   }
 
-  /** Lo que se veía quedó viejo: se cierra lo abierto, se avisa y se recarga. */
-  const tableroDesactualizado = (mensaje = AVISO_DE_CAMBIO) => {
+  /**
+   * Lo que se veía quedó viejo: se cierra lo abierto, se avisa y se recarga.
+   *
+   * La recarga se puede llevar el botón que se apretó (la atención la movió
+   * otro, o la reserva ya llegó), y el foco caía al `<body>`. Cuando llega el
+   * tablero nuevo, el foco va a la tarjeta en su lugar nuevo o, si ya no
+   * está, al título de su columna: lugares que la recarga no se lleva. Se
+   * espera a la recarga para no enfocar la tarjeta vieja, que se desmonta
+   * apenas llega la nueva.
+   */
+  const tableroDesactualizado = (destino: DestinoDelFoco, mensaje = AVISO_DE_CAMBIO) => {
     cerrarModal()
     setAviso(mensaje)
-    recargar()
+    recargar().then(() => setFoco(destino))
   }
 
   /** Un fallo dentro de un modal: si el tablero quedó viejo se recarga; si no, se avisa adentro. */
-  const falloEnModal = (fallo: { error: string; motivo: MotivoDeFallo }) => {
+  const falloEnModal = (fallo: { error: string; motivo: MotivoDeFallo }, atencion: Atencion) => {
     setGuardando(false)
-    if (fallo.motivo === "desactualizada") return tableroDesactualizado()
+    if (fallo.motivo === "desactualizada") return tableroDesactualizado(tarjetaDe(atencion))
     setAvisoDelModal(fallo.error)
   }
 
@@ -255,7 +269,9 @@ export default function PaginaTablero() {
       if (!resultado.ok) {
         // Otro ya la marcó, la cancelaron o no es de hoy: el mensaje del
         // servidor dice cuál, y se muestra tal cual.
-        if (resultado.motivo === "desactualizada") return tableroDesactualizado(conRecarga(resultado.error))
+        if (resultado.motivo === "desactualizada") {
+          return tableroDesactualizado({ reservaId: reserva.id, columna: "reservas" }, conRecarga(resultado.error))
+        }
         return setAviso(resultado.error)
       }
 
@@ -280,7 +296,7 @@ export default function PaginaTablero() {
 
       if (!resultado.ok) {
         // Ya empezó, o ya no está: se dice por qué y se recarga.
-        if (resultado.motivo === "desactualizada") return tableroDesactualizado(conRecarga(resultado.error))
+        if (resultado.motivo === "desactualizada") return tableroDesactualizado(tarjetaDe(atencion), conRecarga(resultado.error))
         return setAviso(resultado.error)
       }
 
@@ -307,7 +323,7 @@ export default function PaginaTablero() {
       const resultado = await moverAtencion(atencion.id, hacia)
 
       if (!resultado.ok) {
-        if (resultado.motivo === "desactualizada") return tableroDesactualizado()
+        if (resultado.motivo === "desactualizada") return tableroDesactualizado(tarjetaDe(atencion))
         // El profesional ve sólo sus líneas: lo que falta puede estar en las de
         // otro, y eso lo sabe el servidor. Se abre el editor con su mensaje.
         if (resultado.motivo === "falta-requisito") {
@@ -334,7 +350,7 @@ export default function PaginaTablero() {
   const guardarServiciosDe = (abierto: ModalDeServicios, lineas: LineaPedida[]) =>
     desdeUnModal(async () => {
       const guardado = await guardarServicios(abierto.atencion.id, lineas)
-      if (!guardado.ok) return falloEnModal(guardado)
+      if (!guardado.ok) return falloEnModal(guardado, abierto.atencion)
 
       const atencion = guardado.datos
       ponerAtencion(atencion)
@@ -371,7 +387,7 @@ export default function PaginaTablero() {
           return
         }
         setModal({ ...abierto, atencion })
-        return falloEnModal(movida)
+        return falloEnModal(movida, atencion)
       }
       ponerAtencion(movida.datos)
       cerrarModal()
@@ -391,7 +407,7 @@ export default function PaginaTablero() {
         return
       }
 
-      if (resultado.motivo !== "falta-requisito") return falloEnModal(resultado)
+      if (resultado.motivo !== "falta-requisito") return falloEnModal(resultado, atencion)
 
       // Un 400 con los pagos cuadrados contra el total que se veía: la
       // atención cambió en el servidor (otro le sumó o le quitó un servicio)
@@ -402,7 +418,7 @@ export default function PaginaTablero() {
       if (!actual || actual.estado !== "por-cobrar" || requisitoParaPasarA(actual.lineas, "finalizada")) {
         // Ya no se puede cobrar desde acá: la movieron, o le falta algo que
         // se completa en el editor. Se cierra y se dice por qué.
-        return tableroDesactualizado(conRecarga(resultado.error))
+        return tableroDesactualizado(tarjetaDe(atencion), conRecarga(resultado.error))
       }
       setModal({ tipo: "cobro", atencion: actual })
       setGuardando(false)
@@ -417,7 +433,7 @@ export default function PaginaTablero() {
   const anular = (atencion: Atencion, motivo: string) =>
     desdeUnModal(async () => {
       const resultado = await anularAtencion(atencion.id, motivo)
-      if (!resultado.ok) return falloEnModal(resultado)
+      if (!resultado.ok) return falloEnModal(resultado, atencion)
 
       // Las anuladas no tienen columna: sale del tablero, y el foco va al
       // título de la columna donde estaba.
@@ -460,48 +476,44 @@ export default function PaginaTablero() {
         }
       />
 
-      <div className="p-4 sm:p-6 space-y-4">
+      <div className="space-y-4 px-4 pb-8 pt-4 sm:px-6 sm:pt-6">
         {aviso && (
-          <p role="alert" className="text-sm text-red-500">
+          <Aviso tono="error" rol="alert">
             {aviso}
-          </p>
+          </Aviso>
         )}
 
         {tablero && errorDeCarga && (
-          <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-red-500">
-            <span>No se pudo actualizar el tablero: {errorDeCarga}. Se vuelve a intentar solo.</span>
-            <button
-              type="button"
-              onClick={recargar}
-              className={`inline-flex items-center gap-1 font-medium underline rounded ${ANILLO_DE_FOCO}`}
-            >
-              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-              Reintentar ahora
-            </button>
-          </div>
+          <Aviso
+            tono="error"
+            rol="alert"
+            accion={
+              <Boton variante="secundario" tamano="sm" onClick={recargar}>
+                <RefreshCw aria-hidden="true" className="size-4" strokeWidth={2} />
+                Reintentar ahora
+              </Boton>
+            }
+          >
+            No se pudo actualizar el tablero: {errorDeCarga}. Se vuelve a intentar solo.
+          </Aviso>
         )}
 
         {listo && tablero.truncado && (
-          <p role="status" className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            <TriangleAlert className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+          <Aviso tono="atencion" rol="status">
             Hay más atenciones de las que el tablero muestra de una vez: algunas no se ven.
-          </p>
+          </Aviso>
         )}
 
         {!tablero && errorDeCarga ? (
-          <div className="rounded-xl border border-border/50 bg-card p-8 text-center space-y-4">
-            <p role="alert" className="text-sm text-red-500">
+          <div className={cn(TARJETA_DEL_PANEL, "flex flex-col items-center gap-4 px-6 py-10 text-center")}>
+            <p role="alert" className="flex max-w-md items-start gap-2 text-sm font-medium text-error">
+              <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" strokeWidth={2} />
               {errorDeCarga}
             </p>
-            <BotonPrimario
-              variante="secundario"
-              tamaño="sm"
-              onClick={recargar}
-              icono={<RefreshCw className="h-4 w-4" aria-hidden="true" />}
-              className={ANILLO_DE_FOCO}
-            >
+            <Boton variante="secundario" tamano="sm" onClick={recargar}>
+              <RefreshCw aria-hidden="true" className="size-4" strokeWidth={2} />
               Reintentar
-            </BotonPrimario>
+            </Boton>
           </div>
         ) : !listo ? (
           <TableroCargando />

@@ -1,7 +1,6 @@
 "use client"
 
 import { useRef, type KeyboardEvent } from "react"
-import { ANILLO_DE_FOCO } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
 
 export type VistaDeReporte = "cobradas" | "anuladas"
@@ -26,6 +25,10 @@ interface SelectorDeVistaProps {
  * Lo cobrado o lo anulado, como pestañas (patrón de pestañas de ARIA): con
  * las flechas se pasa de una a otra, y Tab entra sólo a la elegida. Lo ve
  * sólo quien puede ver lo anulado (`puedeVerAnuladas`).
+ *
+ * Una píldora blanca con las dos pestañas adentro; la elegida, en navy, como
+ * los segmentos de los formularios. Cada pestaña mide 40 px y el `::after` la
+ * lleva a 44 para el dedo.
  */
 export function SelectorDeVista({ idBase, idDelPanel, vista, onCambiar }: SelectorDeVistaProps) {
   const lista = useRef<HTMLDivElement>(null)
@@ -58,7 +61,7 @@ export function SelectorDeVista({ idBase, idDelPanel, vista, onCambiar }: Select
       role="tablist"
       aria-label="Qué mirar"
       onKeyDown={alTeclear}
-      className="inline-flex rounded-lg border border-border bg-muted/40 p-1"
+      className="inline-flex gap-1 rounded-full bg-tarjeta p-1 shadow-sm"
     >
       {VISTAS.map(({ id, texto }) => {
         const elegida = vista === id
@@ -73,9 +76,9 @@ export function SelectorDeVista({ idBase, idDelPanel, vista, onCambiar }: Select
             tabIndex={elegida ? 0 : -1}
             onClick={() => elegir(id)}
             className={cn(
-              "rounded-md px-4 py-1.5 text-sm font-medium transition-colors",
-              elegida ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-              ANILLO_DE_FOCO
+              "relative h-10 rounded-full px-5 text-sm font-medium anillo-foco after:absolute after:inset-x-0 after:-inset-y-0.5",
+              "transition-colors duration-150 ease-suave",
+              elegida ? "bg-navy text-white" : "text-texto-2 hover:bg-superficie hover:text-navy"
             )}
           >
             {texto}

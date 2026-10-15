@@ -1,15 +1,16 @@
 "use client"
 
-import { useId, useRef, useState, type FormEvent } from "react"
-import { Plus, Trash2 } from "lucide-react"
-import { BotonPrimario } from "@/components/comunes/boton-primario"
+import { useId, useRef, useState, type FormEvent, type ReactNode } from "react"
+import { CircleAlert, CircleCheck, CircleDashed, Plus, Trash2, type LucideIcon } from "lucide-react"
+import { Boton } from "@/components/comunes/boton"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
-import { ANILLO_DE_FOCO, CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO } from "@/components/panel/estilos"
+import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { MAXIMO_DE_PAGOS, aCentavos, deCentavos, type PagoPedido } from "@/lib/atenciones"
 import { errorDeMontoDePago, estadoDelCobro, filaDePagoSugerida, type FilaDePago } from "@/lib/acciones-del-tablero"
 import { formatearMonto } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
 import type { Atencion } from "../_datos"
+import { Aviso } from "@/components/panel/aviso"
 
 let pagosAgregados = 0
 
@@ -91,40 +92,39 @@ export function ModalCobro({ atencion, mediosDePago, aviso, guardando, onCobrar,
 
   return (
     <MarcoDeModal
+      antetitulo="Tablero"
       titulo={`Cobrar a ${atencion.cliente.nombre}`}
       descripcion={`Total: ${formatearMonto(deCentavos(totalCentavos))}`}
       ancho="lg"
       bloqueado={guardando}
       alCerrar={onCerrar}
     >
-      <form onSubmit={cobrar} noValidate className="space-y-5">
-        <section aria-labelledby={`${idBase}-resumen`} className="rounded-lg bg-muted/50 p-3">
-          <h3 id={`${idBase}-resumen`} className="text-sm font-semibold text-foreground mb-2">
+      <form onSubmit={cobrar} noValidate className="space-y-6">
+        <section aria-labelledby={`${idBase}-resumen`} className="rounded-[24px] bg-superficie p-4 squircle sm:p-5">
+          <h3 id={`${idBase}-resumen`} className="mb-3 text-sm font-semibold">
             Lo que se hizo
           </h3>
-          <ul className="space-y-1.5">
+          <ul className="space-y-2">
             {atencion.lineas.map((linea) => (
               <li key={linea.id} className="flex items-baseline justify-between gap-3 text-sm">
-                <span className="min-w-0">
-                  {linea.servicio} <span className="text-muted-foreground">· {linea.profesional.nombre}</span>
+                <span className="min-w-0 break-words">
+                  {linea.servicio} <span className="text-texto-2">· {linea.profesional.nombre}</span>
                 </span>
-                <span className="tabular-nums shrink-0">{formatearMonto(linea.precio)}</span>
+                <span className="shrink-0 tabular-nums">{formatearMonto(linea.precio)}</span>
               </li>
             ))}
           </ul>
-          <p className="flex justify-between gap-3 border-t border-border/70 mt-2 pt-2 text-sm font-semibold">
+          <p className="mt-3 flex items-baseline justify-between gap-3 border-t border-borde pt-3 font-semibold">
             <span>Total</span>
-            <span className="tabular-nums">{formatearMonto(deCentavos(totalCentavos))}</span>
+            <span className="text-lg tabular-nums">{formatearMonto(deCentavos(totalCentavos))}</span>
           </p>
         </section>
 
         <fieldset className="space-y-3">
-          <legend className="text-sm font-semibold text-foreground mb-2">Cómo pagó</legend>
+          <legend className="mb-3 text-sm font-semibold">Cómo pagó</legend>
 
           {totalCentavos === 0 && filas.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              El total es {formatearMonto(0)}: se registra como cortesía, sin pagos.
-            </p>
+            <p className="text-sm text-texto-2">El total es {formatearMonto(0)}: se registra como cortesía, sin pagos.</p>
           )}
 
           {filas.map((fila, indice) => {
@@ -135,10 +135,10 @@ export function ModalCobro({ atencion, mediosDePago, aviso, guardando, onCobrar,
                 key={fila.clave}
                 role="group"
                 aria-label={`Pago ${numero}`}
-                className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 items-start"
+                className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-2 sm:gap-3"
               >
                 <div>
-                  <label htmlFor={`${idBase}-${fila.clave}-medio`} className="block text-xs font-medium text-muted-foreground mb-1">
+                  <label htmlFor={`${idBase}-${fila.clave}-medio`} className={ETIQUETA}>
                     Medio
                   </label>
                   <select
@@ -156,11 +156,11 @@ export function ModalCobro({ atencion, mediosDePago, aviso, guardando, onCobrar,
                   </select>
                 </div>
                 <div>
-                  <label htmlFor={`${idBase}-${fila.clave}-monto`} className="block text-xs font-medium text-muted-foreground mb-1">
+                  <label htmlFor={`${idBase}-${fila.clave}-monto`} className={ETIQUETA}>
                     Monto
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground" aria-hidden="true">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-texto-2" aria-hidden="true">
                       $
                     </span>
                     {/* Texto y no número, igual que el precio: así la coma decimal no se pierde. */}
@@ -184,87 +184,91 @@ export function ModalCobro({ atencion, mediosDePago, aviso, guardando, onCobrar,
                     </p>
                   )}
                 </div>
-                <div className="pt-5">
-                  <button
-                    type="button"
-                    onClick={() => quitar(fila.clave)}
-                    disabled={guardando}
-                    aria-label={`Quitar el pago ${numero}: ${nombreDeMedio(fila.medio)}`}
-                    title="Quitar"
-                    className={cn(
-                      "rounded-lg p-2.5 text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50",
-                      ANILLO_DE_FOCO
-                    )}
-                  >
-                    <Trash2 className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                </div>
+                {/* A la altura del campo: baja lo que mide la etiqueta y mide lo mismo que él, 44 px. */}
+                <Boton
+                  variante="fantasma"
+                  onClick={() => quitar(fila.clave)}
+                  disabled={guardando}
+                  aria-label={`Quitar el pago ${numero}: ${nombreDeMedio(fila.medio)}`}
+                  title="Quitar"
+                  className="mt-6.5 size-11 px-0 text-texto-2 hover:bg-error/8 hover:text-error"
+                >
+                  <Trash2 aria-hidden="true" className="size-[18px]" strokeWidth={1.75} />
+                </Boton>
               </div>
             )
           })}
 
-          <button
+          <Boton
             ref={botonAgregar}
-            type="button"
+            variante="secundario"
+            tamano="sm"
             onClick={agregar}
             disabled={guardando || filas.length >= MAXIMO_DE_PAGOS || mediosDePago.length === 0}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-sm font-medium text-primary hover:bg-primary/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-              ANILLO_DE_FOCO
-            )}
           >
-            <Plus className="h-4 w-4" aria-hidden="true" />
+            <Plus aria-hidden="true" className="size-4" strokeWidth={2} />
             Agregar medio de pago
-          </button>
+          </Boton>
         </fieldset>
 
-        {/* En vivo, para que se lea mientras se escribe: cuánto falta o sobra. */}
+        {/*
+          En vivo, para que se lea mientras se escribe: cuánto falta o sobra.
+          Con ícono además del color, como los errores.
+        */}
         <div aria-live="polite" className="text-sm font-medium">
           {cobro.diferenciaCentavos > 0 && (
-            <p className="text-amber-700">Falta {formatearMonto(deCentavos(cobro.diferenciaCentavos))}</p>
+            <EstadoDelCobro icono={CircleDashed}>
+              Falta {formatearMonto(deCentavos(cobro.diferenciaCentavos))}
+            </EstadoDelCobro>
           )}
           {cobro.diferenciaCentavos < 0 && (
-            <p className="text-red-600">Sobra {formatearMonto(deCentavos(-cobro.diferenciaCentavos))}</p>
+            <EstadoDelCobro icono={CircleAlert} error>
+              Sobra {formatearMonto(deCentavos(-cobro.diferenciaCentavos))}
+            </EstadoDelCobro>
           )}
           {/* Nunca a la vez que un aviso del servidor: se leería que está todo bien y que no. */}
           {cobro.diferenciaCentavos === 0 && filas.length > 0 && !hayMontoInvalido && cobro.error === null && !aviso && (
-            <p className="text-green-700">Los pagos cuadran con el total.</p>
+            <EstadoDelCobro icono={CircleCheck}>Los pagos cuadran con el total.</EstadoDelCobro>
           )}
           {/* Lo que no es una diferencia (un monto en cero, por ejemplo) lo dice la regla del servidor. */}
           {cobro.diferenciaCentavos === 0 && cobro.error !== null && !hayMontoInvalido && (
-            <p className="text-red-500">{cobro.error}</p>
+            <EstadoDelCobro icono={CircleAlert} error>
+              {cobro.error}
+            </EstadoDelCobro>
           )}
         </div>
 
         {aviso && (
-          <p role="alert" className="text-sm text-red-500">
+          <Aviso tono="error" rol="alert">
             {aviso}
-          </p>
+          </Aviso>
         )}
 
-        <div className="flex flex-col-reverse sm:flex-row gap-3 pt-1">
-          <BotonPrimario
-            type="button"
-            variante="secundario"
-            anchoCompleto
-            onClick={onCerrar}
-            disabled={guardando}
-            className={ANILLO_DE_FOCO}
-          >
+        <div className="flex flex-col-reverse gap-3 sm:flex-row">
+          <Boton type="button" variante="secundario" onClick={onCerrar} disabled={guardando} className="w-full">
             Cancelar
-          </BotonPrimario>
-          <BotonPrimario
+          </Boton>
+          <Boton
             type="submit"
-            anchoCompleto
             disabled={!listo}
             cargando={guardando}
             aria-label={guardando ? "Cobrando" : undefined}
-            className={ANILLO_DE_FOCO}
+            className="w-full"
           >
             Cobrar {formatearMonto(deCentavos(totalCentavos))}
-          </BotonPrimario>
+          </Boton>
         </div>
       </form>
     </MarcoDeModal>
+  )
+}
+
+/** Una línea del estado del cobro: falta, sobra o cuadra. */
+function EstadoDelCobro({ icono: Icono, error = false, children }: { icono: LucideIcon; error?: boolean; children: ReactNode }) {
+  return (
+    <p className={cn("flex items-start gap-2", error ? "text-error" : "text-navy")}>
+      <Icono aria-hidden="true" className="mt-0.5 size-4 shrink-0" strokeWidth={2} />
+      <span className="min-w-0">{children}</span>
+    </p>
   )
 }

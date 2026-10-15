@@ -1,10 +1,17 @@
 "use client"
 
-import { useState } from "react"
-import { AnimatePresence, motion } from "framer-motion"
-import { Plus, Pencil, Trash2, Clock, DollarSign, Scissors, ToggleLeft, ToggleRight } from "lucide-react"
+import { useId, useState } from "react"
+import { AnimatePresence } from "framer-motion"
+import { Clock, Pencil, Plus, Scissors, Trash2 } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
+import { Insignia } from "@/components/comunes/insignia"
+import { Aviso } from "@/components/panel/aviso"
+import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
+import { EstadoVacio } from "@/components/panel/estado-vacio"
+import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { formatearMonto } from "@/lib/dinero"
 import { formatearDuracionDeServicio } from "@/lib/fechas"
+import { cn } from "@/lib/utils"
 import { ModalServicio } from "./modal-servicio"
 import {
   crearServicio,
@@ -17,11 +24,16 @@ import {
 
 const SERVICIO_EN_BLANCO: DatosDeServicio = { name: "", description: "", duration: 30, price: "" }
 
+/** Los botones de sólo ícono de cada servicio: 44 × 44, lo mínimo para un dedo. */
+const BOTON_DE_ICONO =
+  "grid size-11 shrink-0 place-items-center rounded-[14px] text-navy squircle anillo-foco transition-colors duration-150 ease-suave hover:bg-superficie"
+
 interface SeccionServiciosProps {
   serviciosIniciales: Servicio[]
 }
 
 export function SeccionServicios({ serviciosIniciales }: SeccionServiciosProps) {
+  const idDelTitulo = useId()
   const [servicios, setServicios] = useState<Servicio[]>(serviciosIniciales)
   const [modalAbierto, setModalAbierto] = useState(false)
   const [servicioEditando, setServicioEditando] = useState<Servicio | null>(null)
@@ -96,104 +108,73 @@ export function SeccionServicios({ serviciosIniciales }: SeccionServiciosProps) 
   }
 
   return (
-    <div className="bg-card border border-border/50 rounded-xl p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Scissors className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h2 className="font-semibold text-foreground">Servicios</h2>
-            <p className="text-sm text-muted-foreground">Los servicios que ofreces a tus clientes</p>
-          </div>
-        </div>
-        <BotonPrimario tamaño="sm" icono={<Plus className="h-4 w-4" />} onClick={abrirNuevo}>
-          Nuevo servicio
-        </BotonPrimario>
-      </div>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+      <EncabezadoDeTarjeta
+        id={idDelTitulo}
+        titulo="Servicios"
+        subtitulo="Los servicios que ofreces a tus clientes"
+        icono={{ figura: Scissors }}
+        accion={
+          <BotonPrimario tamaño="sm" icono={<Plus className="h-4 w-4" />} onClick={abrirNuevo}>
+            Nuevo servicio
+          </BotonPrimario>
+        }
+      />
 
-      {aviso && (
-        <p role="alert" className="text-sm text-red-500 mb-4">
-          {aviso}
-        </p>
-      )}
+      {aviso && <Aviso className="mt-5">{aviso}</Aviso>}
 
       {servicios.length === 0 ? (
-        <div className="text-center py-10">
-          <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
-            <Scissors className="h-7 w-7 text-muted-foreground" />
-          </div>
-          <p className="font-medium text-foreground mb-1">Sin servicios aún</p>
-          <p className="text-sm text-muted-foreground">Agrega el primer servicio que ofreces</p>
-        </div>
+        <EstadoVacio className="mt-5" titulo="Sin servicios aún">
+          Agrega el primer servicio que ofreces
+        </EstadoVacio>
       ) : (
-        <div className="space-y-3">
-          <AnimatePresence>
-            {servicios.map((servicio) => (
-              <motion.div
-                key={servicio.id}
-                layout
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className={`flex items-center gap-4 p-4 rounded-xl border transition-all ${
-                  servicio.active ? "border-border/50" : "border-border/30 opacity-50"
-                }`}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <p className="font-medium text-foreground truncate">{servicio.name}</p>
-                    {!servicio.active && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                        Inactivo
-                      </span>
-                    )}
-                  </div>
-                  {servicio.description && (
-                    <p className="text-xs text-muted-foreground truncate mb-1">{servicio.description}</p>
+        <ul className="mt-5 divide-y divide-borde">
+          {servicios.map((servicio) => (
+            // Si no entran los botones al lado (el teléfono), bajan a la derecha, debajo del servicio.
+            <li key={servicio.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3.5 first:pt-0 last:pb-0">
+              <div className="min-w-48 flex-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <p className="font-medium break-words">{servicio.name}</p>
+                  {!servicio.active && <Insignia>Inactivo</Insignia>}
+                </div>
+                {servicio.description && (
+                  <p className="mt-0.5 line-clamp-2 text-[13px] text-texto-2">{servicio.description}</p>
+                )}
+                <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-texto-2">
+                  <span className="flex items-center gap-1">
+                    <Clock className="size-3.5" aria-hidden="true" strokeWidth={1.75} />
+                    {formatearDuracionDeServicio(servicio.duration)}
+                  </span>
+                  {servicio.price != null && (
+                    <span className="font-medium text-navy tabular-nums">{formatearMonto(servicio.price)}</span>
                   )}
-                  <div className="flex items-center gap-3">
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Clock className="h-3 w-3" />
-                      {formatearDuracionDeServicio(servicio.duration)}
-                    </span>
-                    {servicio.price != null && (
-                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <DollarSign className="h-3 w-3" />
-                        {servicio.price.toLocaleString("es-ES")}
-                      </span>
-                    )}
-                  </div>
-                </div>
+                </p>
+              </div>
 
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <button
-                    onClick={() => alternarActivo(servicio)}
-                    className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                    title={servicio.active ? "Desactivar" : "Activar"}
-                  >
-                    {servicio.active
-                      ? <ToggleRight className="h-5 w-5 text-primary" />
-                      : <ToggleLeft className="h-5 w-5" />
-                    }
-                  </button>
-                  <button
-                    onClick={() => abrirEdicion(servicio)}
-                    className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => eliminar(servicio.id)}
-                    className="p-2 rounded-lg hover:bg-red-50 transition-colors text-muted-foreground hover:text-red-600"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
+              <div className="ml-auto flex shrink-0 items-center gap-1">
+                <InterruptorDelServicio servicio={servicio} alCambiar={() => alternarActivo(servicio)} />
+                <button
+                  type="button"
+                  onClick={() => abrirEdicion(servicio)}
+                  aria-label={`Editar ${servicio.name}`}
+                  title="Editar"
+                  className={BOTON_DE_ICONO}
+                >
+                  <Pencil className="size-4" aria-hidden="true" strokeWidth={1.75} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => eliminar(servicio.id)}
+                  aria-label={`Eliminar ${servicio.name}`}
+                  title="Eliminar"
+                  className={cn(BOTON_DE_ICONO, "hover:bg-error/6 hover:text-error")}
+                >
+                  <Trash2 className="size-4" aria-hidden="true" strokeWidth={1.75} />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
 
       <AnimatePresence>
@@ -209,6 +190,39 @@ export function SeccionServicios({ serviciosIniciales }: SeccionServiciosProps) 
           />
         )}
       </AnimatePresence>
-    </div>
+    </section>
+  )
+}
+
+/**
+ * Activo o inactivo: un servicio inactivo no aparece en la página pública de
+ * reservas. Es el interruptor de `Interruptor`, sin la etiqueta a la vista: en
+ * cada fila el nombre del servicio ya está al lado, y va en su nombre para el
+ * lector de pantalla.
+ */
+function InterruptorDelServicio({ servicio, alCambiar }: { servicio: Servicio; alCambiar: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={servicio.active}
+      aria-label={`Servicio activo: ${servicio.name}`}
+      title={servicio.active ? "Desactivar" : "Activar"}
+      onClick={alCambiar}
+      className={cn(
+        // 52×32 a la vista; el ::after lleva el área táctil a 60×44.
+        "relative mr-1 inline-flex h-8 w-13 shrink-0 cursor-pointer items-center rounded-full p-1",
+        "anillo-foco transition-colors duration-150 ease-suave after:absolute after:-inset-x-1 after:-inset-y-1.5",
+        servicio.active ? "bg-navy" : "bg-texto-2"
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          "size-6 rounded-full bg-white shadow-sm transition-transform duration-300 ease-suave",
+          servicio.active && "translate-x-5"
+        )}
+      />
+    </button>
   )
 }

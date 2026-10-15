@@ -1,6 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { UserPlus } from "lucide-react"
+import { Aviso } from "@/components/panel/aviso"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { leerEquipo, type InvitacionPendiente, type MiembroDelEquipo } from "./_datos"
 import { ListaEquipo } from "./_componentes/lista-equipo"
@@ -30,35 +32,24 @@ export default function PaginaEquipo() {
   useEffect(() => { cargar() }, [])
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-dvh">
       <BarraSuperior
         titulo="Equipo"
-        subtitulo="Gestiona los trabajadores de tu negocio"
+        subtitulo="Gestiona el equipo de tu negocio"
         accionPrincipal={{
-          texto: "Invitar trabajador",
+          texto: "Invitar al equipo",
           onClick: () => setModalAbierto(true),
+          icono: UserPlus,
         }}
       />
 
-      <div className="p-6">
-        {aviso && (
-          <p role="alert" className="text-sm text-red-500 mb-4">
-            {aviso}
-          </p>
-        )}
+      <div className="space-y-4 px-4 pt-6 pb-10 sm:px-6">
+        {aviso && <Aviso>{aviso}</Aviso>}
 
-        <ListaEquipo
-          miembros={miembros}
-          invitaciones={invitaciones}
-          cargando={cargando}
-        />
+        <ListaEquipo miembros={miembros} invitaciones={invitaciones} cargando={cargando} />
       </div>
 
-      <ModalInvitar
-        abierto={modalAbierto}
-        onCerrar={() => setModalAbierto(false)}
-        onInvitado={cargar}
-      />
+      <ModalInvitar abierto={modalAbierto} onCerrar={() => setModalAbierto(false)} onInvitado={cargar} />
     </div>
   )
 }

@@ -1,10 +1,14 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
-import { motion } from "framer-motion"
-import { X, Search, User, Scissors, Calendar, Clock, DollarSign, FileText } from "lucide-react"
-import { BotonPrimario } from "@/components/comunes/boton-primario"
+import { useState, useRef, useEffect, useId } from "react"
+import { Search, User, Scissors, Calendar, Clock, DollarSign, Check } from "lucide-react"
+import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
+import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
+import { Selector } from "@/components/comunes/selector"
+import { MarcoDeModal } from "@/components/panel/marco-de-modal"
+import { CAMPO, ETIQUETA } from "@/components/panel/estilos"
+import { cn } from "@/lib/utils"
 import {
   buscarClientes,
   leerProfesionales,
@@ -12,6 +16,19 @@ import {
   type DatosDeNuevaCita,
   type Profesional,
 } from "../_datos"
+import { Aviso } from "@/components/panel/aviso"
+
+/** Con menos letras no se busca. */
+const LETRAS_PARA_BUSCAR = 2
+
+/**
+ * El foco de una fila de la lista de clientes, hacia adentro: la lista se
+ * desplaza y recorta lo que se sale de ella. El contorno queda dentro de la
+ * fila y el halo es su fondo. Es el mismo buscador del tablero, al anotar a
+ * alguien sin reserva.
+ */
+const ANILLO_HACIA_ADENTRO =
+  "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--anillo) focus-visible:bg-(--halo)"
 
 interface ModalNuevaCitaProps {
   form: DatosDeNuevaCita
@@ -45,6 +62,12 @@ export function ModalNuevaCita({
   const [avisoDeBusqueda, setAvisoDeBusqueda] = useState("")
   const [avisoDeEquipo, setAvisoDeEquipo] = useState("")
   const esperaDeBusqueda = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const campoBusqueda = useRef<HTMLInputElement>(null)
+  const idBase = useId()
+  const idDelBuscador = `${idBase}-buscador`
+  const idDelEstado = `${idBase}-estado`
+  const idDelAvisoDeBusqueda = `${idBase}-aviso-busqueda`
+  const idDeNotas = `${idBase}-notas`
 
   useEffect(() => {
     if (!puedeAsignarProfesional) return
@@ -58,7 +81,7 @@ export function ModalNuevaCita({
   }, [puedeAsignarProfesional])
 
   useEffect(() => {
-    if (!busquedaCliente || busquedaCliente.length < 2) {
+    if (!busquedaCliente || busquedaCliente.length < LETRAS_PARA_BUSCAR) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- limpia las sugerencias viejas cuando se borra la búsqueda
       setSugerencias([])
       setAvisoDeBusqueda("")
@@ -81,184 +104,200 @@ export function ModalNuevaCita({
     return () => { if (esperaDeBusqueda.current) clearTimeout(esperaDeBusqueda.current) }
   }, [busquedaCliente])
 
-  function seleccionarCliente(cliente: ClienteSugerido) {
+  function seleccionarCliente(cliente: ClienteSugerido, conTeclado: boolean) {
     onFormChange("clienteId", cliente.id)
     setNombreCliente(cliente.nombre)
     setBusquedaCliente(cliente.nombre)
     setMostrarSugerencias(false)
+    // Con teclado, la fila elegida sale de la pantalla con la lista y el foco
+    // caería fuera del diálogo: vuelve al buscador, que ahora dice el nombre
+    // elegido. Con el dedo no: en el teléfono, enfocar el campo volvería a
+    // abrir el teclado.
+    if (conTeclado) requestAnimationFrame(() => campoBusqueda.current?.focus())
   }
 
+  // Ya se eligió de la lista y lo escrito sigue siendo ese nombre: la lista no
+  // se vuelve a abrir con el mismo cliente cuando llega la búsqueda de su nombre.
+  const clienteElegido = nombreCliente !== "" && busquedaCliente === nombreCliente
+  const listaVisible = mostrarSugerencias && sugerencias.length > 0 && !clienteElegido
+
+  // Lo que dice la línea de debajo del buscador. Se anuncia al cambiar.
+  const estadoDeBusqueda =
+    busquedaCliente.length < LETRAS_PARA_BUSCAR
+      ? `Escribe al menos ${LETRAS_PARA_BUSCAR} letras y elige de la lista.`
+      : clienteElegido
+        ? "Cliente elegido."
+        : listaVisible
+          ? `${sugerencias.length === 1 ? "1 cliente coincide" : `${sugerencias.length} clientes coinciden`}. Elige uno de la lista.`
+          : "Elige un cliente de la lista."
+
   return (
-    <motion.div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-    >
-      <div className="absolute inset-0 bg-foreground/20 backdrop-blur-sm" onClick={onCerrar} />
-      <motion.div
-        className="relative bg-card rounded-xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto"
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-      >
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-foreground">Nueva cita</h2>
-          <button onClick={onCerrar} className="p-1 rounded-lg hover:bg-muted transition-colors">
-            <X className="h-5 w-5" />
-          </button>
+    <MarcoDeModal titulo="Nueva cita" bloqueado={guardando} alCerrar={onCerrar}>
+      <form onSubmit={onSubmit} className="space-y-5">
+        {/* Búsqueda de cliente */}
+        <div>
+          <label htmlFor={idDelBuscador} className={cn(ETIQUETA, "mb-2")}>
+            Cliente
+          </label>
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-texto-2"
+              aria-hidden="true"
+              strokeWidth={1.75}
+            />
+            {/* Al abrir, el foco va al buscador: es lo primero que se hace. `MarcoDeModal` anota antes quién lo abrió. */}
+            <input
+              ref={campoBusqueda}
+              id={idDelBuscador}
+              autoFocus
+              type="text"
+              autoComplete="off"
+              placeholder="Buscar cliente..."
+              value={busquedaCliente}
+              aria-describedby={avisoDeBusqueda ? `${idDelEstado} ${idDelAvisoDeBusqueda}` : idDelEstado}
+              onChange={(e) => {
+                setBusquedaCliente(e.target.value)
+                if (nombreCliente && e.target.value !== nombreCliente) {
+                  onFormChange("clienteId", "")
+                  setNombreCliente("")
+                }
+              }}
+              className={cn(CAMPO, "h-12 pl-11 text-base", clienteElegido && "pr-11")}
+              required
+            />
+            {clienteElegido && (
+              <Check
+                className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-navy"
+                aria-hidden="true"
+                strokeWidth={2}
+              />
+            )}
+          </div>
+
+          <p id={idDelEstado} aria-live="polite" className="mt-1.5 text-xs text-texto-2">
+            {estadoDeBusqueda}
+          </p>
+
+          {avisoDeBusqueda && (
+            <div role="alert" className="mt-2">
+              <ErrorDeCampo id={idDelAvisoDeBusqueda}>{avisoDeBusqueda}</ErrorDeCampo>
+            </div>
+          )}
+
+          {listaVisible && (
+            <ul
+              aria-label="Clientes que coinciden"
+              className="mt-2 max-h-56 divide-y divide-borde overflow-y-auto rounded-campo bg-tarjeta inset-ring-1 inset-ring-borde squircle"
+            >
+              {sugerencias.map((cliente) => (
+                <li key={cliente.id}>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-suave hover:bg-superficie",
+                      ANILLO_HACIA_ADENTRO
+                    )}
+                    // Un clic que llega del teclado (Enter o Espacio) no cuenta pulsaciones: `detail` es 0.
+                    onClick={(evento) => seleccionarCliente(cliente, evento.detail === 0)}
+                  >
+                    <User className="size-4 shrink-0 text-texto-2" aria-hidden="true" strokeWidth={1.75} />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium break-words text-navy">{cliente.nombre}</span>
+                      {cliente.email && (
+                        <span className="block text-xs wrap-anywhere text-texto-2">{cliente.email}</span>
+                      )}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
-        <form onSubmit={onSubmit} className="space-y-4">
-          {/* Búsqueda de cliente */}
-          <div className="relative">
-            <label className="block text-sm font-medium text-foreground mb-1.5">Cliente</label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Buscar cliente..."
-                value={busquedaCliente}
-                onChange={(e) => {
-                  setBusquedaCliente(e.target.value)
-                  if (nombreCliente && e.target.value !== nombreCliente) {
-                    onFormChange("clienteId", "")
-                    setNombreCliente("")
-                  }
-                }}
-                className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                required
-              />
-            </div>
-            {avisoDeBusqueda && (
-              <p role="alert" className="text-sm text-red-500 mt-1.5">
-                {avisoDeBusqueda}
-              </p>
-            )}
-            {mostrarSugerencias && sugerencias.length > 0 && (
-              <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-card border border-border rounded-lg shadow-lg overflow-hidden">
-                {sugerencias.map((cliente) => (
-                  <button
-                    key={cliente.id}
-                    type="button"
-                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted text-left transition-colors"
-                    onClick={() => seleccionarCliente(cliente)}
-                  >
-                    <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{cliente.nombre}</p>
-                      {cliente.email && <p className="text-xs text-muted-foreground">{cliente.email}</p>}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+        <CampoFormulario
+          etiqueta="Servicio"
+          placeholder="Ej: Corte, Color, Manicura..."
+          value={form.servicio}
+          onChange={(e) => onFormChange("servicio", e.target.value)}
+          icono={<Scissors className="size-4" aria-hidden="true" strokeWidth={1.75} />}
+          required
+        />
 
+        <CampoFormulario
+          etiqueta="Fecha"
+          type="date"
+          value={form.fecha}
+          onChange={(e) => onFormChange("fecha", e.target.value)}
+          icono={<Calendar className="size-4" aria-hidden="true" strokeWidth={1.75} />}
+          required
+        />
+
+        <div className="grid grid-cols-2 gap-3">
           <CampoFormulario
-            etiqueta="Servicio"
-            placeholder="Ej: Corte, Color, Manicura..."
-            value={form.servicio}
-            onChange={(e) => onFormChange("servicio", e.target.value)}
-            icono={<Scissors className="h-4 w-4" />}
+            etiqueta="Hora inicio"
+            type="time"
+            value={form.horaInicio}
+            onChange={(e) => onFormChange("horaInicio", e.target.value)}
+            icono={<Clock className="size-4" aria-hidden="true" strokeWidth={1.75} />}
             required
           />
-
           <CampoFormulario
-            etiqueta="Fecha"
-            type="date"
-            value={form.fecha}
-            onChange={(e) => onFormChange("fecha", e.target.value)}
-            icono={<Calendar className="h-4 w-4" />}
+            etiqueta="Hora fin"
+            type="time"
+            value={form.horaFin}
+            onChange={(e) => onFormChange("horaFin", e.target.value)}
+            icono={<Clock className="size-4" aria-hidden="true" strokeWidth={1.75} />}
             required
           />
+        </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <CampoFormulario
-              etiqueta="Hora inicio"
-              type="time"
-              value={form.horaInicio}
-              onChange={(e) => onFormChange("horaInicio", e.target.value)}
-              icono={<Clock className="h-4 w-4" />}
-              required
-            />
-            <CampoFormulario
-              etiqueta="Hora fin"
-              type="time"
-              value={form.horaFin}
-              onChange={(e) => onFormChange("horaFin", e.target.value)}
-              icono={<Clock className="h-4 w-4" />}
-              required
-            />
-          </div>
+        <CampoFormulario
+          etiqueta="Precio (opcional)"
+          type="number"
+          placeholder="0.00"
+          value={form.precio}
+          onChange={(e) => onFormChange("precio", e.target.value)}
+          icono={<DollarSign className="size-4" aria-hidden="true" strokeWidth={1.75} />}
+        />
 
-          <CampoFormulario
-            etiqueta="Precio (opcional)"
-            type="number"
-            placeholder="0.00"
-            value={form.precio}
-            onChange={(e) => onFormChange("precio", e.target.value)}
-            icono={<DollarSign className="h-4 w-4" />}
+        {puedeAsignarProfesional && avisoDeEquipo && <Aviso>{avisoDeEquipo}</Aviso>}
+
+        {puedeAsignarProfesional && profesionales.length > 0 && (
+          <Selector
+            etiqueta="Profesional"
+            value={form.memberId}
+            onChange={(e) => onFormChange("memberId", e.target.value)}
+            opciones={profesionales.map((profesional) => ({ valor: profesional.id, texto: profesional.nombre }))}
+          >
+            <option value="">Sin asignar</option>
+          </Selector>
+        )}
+
+        <div>
+          <label htmlFor={idDeNotas} className={cn(ETIQUETA, "mb-2")}>
+            Notas (opcional)
+          </label>
+          {/* 16px de letra, como los otros campos: con menos, el teléfono acerca la pantalla al tocarlo. */}
+          <textarea
+            id={idDeNotas}
+            value={form.notas}
+            onChange={(e) => onFormChange("notas", e.target.value)}
+            placeholder="Observaciones, instrucciones..."
+            className={cn(CAMPO, "h-24 resize-none px-4 py-3 text-base")}
           />
+        </div>
 
-          {puedeAsignarProfesional && avisoDeEquipo && (
-            <p role="alert" className="text-sm text-red-500">
-              {avisoDeEquipo}
-            </p>
-          )}
+        {aviso && <Aviso>{aviso}</Aviso>}
 
-          {puedeAsignarProfesional && profesionales.length > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">
-                <span className="flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  Profesional
-                </span>
-              </label>
-              <select
-                value={form.memberId}
-                onChange={(e) => onFormChange("memberId", e.target.value)}
-                className="w-full px-4 py-3 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              >
-                <option value="">Sin asignar</option>
-                {profesionales.map((profesional) => (
-                  <option key={profesional.id} value={profesional.id}>{profesional.nombre}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">
-              <span className="flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                Notas (opcional)
-              </span>
-            </label>
-            <textarea
-              value={form.notas}
-              onChange={(e) => onFormChange("notas", e.target.value)}
-              placeholder="Observaciones, instrucciones..."
-              className="w-full p-3 rounded-lg border border-border bg-background text-sm resize-none h-20 focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
-
-          {aviso && (
-            <p role="alert" className="text-sm text-red-500">
-              {aviso}
-            </p>
-          )}
-
-          <div className="flex gap-3 pt-2">
-            <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar}>
-              Cancelar
-            </BotonPrimario>
-            <BotonPrimario type="submit" anchoCompleto cargando={guardando}>
-              Guardar cita
-            </BotonPrimario>
-          </div>
-        </form>
-      </motion.div>
-    </motion.div>
+        <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">
+          <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={onCerrar}>
+            Cancelar
+          </Boton>
+          <Boton type="submit" className="w-full" cargando={guardando}>
+            Guardar cita
+          </Boton>
+        </div>
+      </form>
+    </MarcoDeModal>
   )
 }

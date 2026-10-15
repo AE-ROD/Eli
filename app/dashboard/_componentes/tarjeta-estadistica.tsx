@@ -1,53 +1,34 @@
-"use client"
-
-import { motion } from "framer-motion"
 import type { LucideIcon } from "lucide-react"
+import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
+import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import type { ColorDeModulo } from "@/lib/modulos"
+import { cn } from "@/lib/utils"
 
 interface TarjetaEstadisticaProps {
   titulo: string
   valor: string | number
   icono: LucideIcon
+  /** El pastel del módulo del que sale la cifra: las citas de la agenda, los clientes, lo cobrado. */
+  color: ColorDeModulo
   /**
    * De qué está hecha la cifra: la línea que la explica. Se omite cuando no hay
    * nada verdadero que decir: nunca se rellena con una frase vaga, que es la
    * misma mentira que un `+0%` con más palabras.
    */
   procedencia?: string
-  colorIcono?: "primario" | "exito" | "advertencia" | "info"
 }
 
-const coloresIcono = {
-  primario: "bg-primary/10 text-primary",
-  exito: "bg-green-100 text-green-600",
-  advertencia: "bg-amber-100 text-amber-600",
-  info: "bg-blue-100 text-blue-600",
-}
-
-export function TarjetaEstadistica({
-  titulo,
-  valor,
-  icono: Icono,
-  procedencia,
-  colorIcono = "primario",
-}: TarjetaEstadisticaProps) {
+/** Una cifra del inicio, en grande, con lo que mide arriba y de qué está hecha abajo. No es un enlace: no se eleva. */
+export function TarjetaEstadistica({ titulo, valor, icono, color, procedencia }: TarjetaEstadisticaProps) {
   return (
-    <motion.div
-      className="bg-card border border-border/50 rounded-xl p-5 hover:shadow-md transition-shadow"
-      whileHover={{ y: -2 }}
-      transition={{ duration: 0.2 }}
-    >
+    <div className={cn(TARJETA_DEL_PANEL, "flex h-full flex-col p-5 sm:p-6")}>
       <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1 min-w-0">
-          <p className="text-sm text-muted-foreground">{titulo}</p>
-          <p className="text-2xl font-bold text-foreground tabular-nums">{valor}</p>
-          {procedencia && (
-            <p className="text-xs text-muted-foreground/80 leading-snug text-balance">{procedencia}</p>
-          )}
-        </div>
-        <div className={`p-3 rounded-lg shrink-0 ${coloresIcono[colorIcono]}`}>
-          <Icono className="h-5 w-5" />
-        </div>
+        <p className="pt-1.5 text-sm font-medium text-texto-2">{titulo}</p>
+        <CuadroDeIcono icono={icono} color={color} tamano="sm" />
       </div>
-    </motion.div>
+      {/* Un monto muy largo baja de renglón antes que salirse de la tarjeta. */}
+      <p className="mt-2 text-[2rem] leading-[1.1] font-medium tracking-[-1px] break-words tabular-nums">{valor}</p>
+      {procedencia && <p className="mt-2 text-sm leading-snug text-pretty text-texto-2">{procedencia}</p>}
+    </div>
   )
 }

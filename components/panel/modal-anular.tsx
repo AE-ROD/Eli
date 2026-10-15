@@ -2,8 +2,9 @@
 
 import { useId, useState, type FormEvent } from "react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
+import { Aviso } from "@/components/panel/aviso"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
-import { ANILLO_DE_FOCO, CAMPO, ETIQUETA } from "@/components/panel/estilos"
+import { CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { consecuenciasDeAnular, type AtencionParaAnular } from "@/lib/acciones-del-tablero"
 import { cn } from "@/lib/utils"
 
@@ -41,7 +42,7 @@ export function ModalAnular({ atencion, aviso, guardando, onAnular, onCerrar }: 
       bloqueado={guardando}
       alCerrar={onCerrar}
     >
-      <form onSubmit={anular} className="space-y-4">
+      <form onSubmit={anular} className="space-y-5">
         <div>
           <label htmlFor={idDelMotivo} className={ETIQUETA}>
             Motivo (opcional)
@@ -53,25 +54,15 @@ export function ModalAnular({ atencion, aviso, guardando, onAnular, onCerrar }: 
             disabled={guardando}
             onChange={(evento) => setMotivo(evento.target.value)}
             placeholder={cobrada ? "Ej.: se cobró de más, se cargó a otro cliente…" : "Ej.: se fue sin ser atendido…"}
-            className={cn(CAMPO, "resize-none h-20")}
+            className={cn(CAMPO, "h-24 resize-none")}
           />
         </div>
 
-        {aviso && (
-          <p role="alert" className="text-sm text-red-500">
-            {aviso}
-          </p>
-        )}
+        {aviso && <Aviso>{aviso}</Aviso>}
 
-        <div className="flex flex-col-reverse sm:flex-row gap-3 pt-1">
-          <BotonPrimario
-            type="button"
-            variante="secundario"
-            anchoCompleto
-            onClick={onCerrar}
-            disabled={guardando}
-            className={ANILLO_DE_FOCO}
-          >
+        {/* En el teléfono, uno debajo del otro y el que anula arriba: el que no se deshace no queda al alcance del pulgar por error. */}
+        <div className="flex flex-col-reverse gap-3 sm:flex-row">
+          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar} disabled={guardando}>
             No anular
           </BotonPrimario>
           <BotonPrimario
@@ -80,7 +71,6 @@ export function ModalAnular({ atencion, aviso, guardando, onAnular, onCerrar }: 
             anchoCompleto
             cargando={guardando}
             aria-label={guardando ? "Anulando" : undefined}
-            className={ANILLO_DE_FOCO}
           >
             {cobrada ? "Anular cobro" : "Anular atención"}
           </BotonPrimario>

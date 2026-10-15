@@ -1,9 +1,14 @@
 "use client"
 
-import { motion } from "framer-motion"
-import { X, Scissors, Clock, DollarSign, FileText } from "lucide-react"
+import { useId } from "react"
+import { Scissors, DollarSign } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
+import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
+import { Aviso } from "@/components/panel/aviso"
+import { MarcoDeModal } from "@/components/panel/marco-de-modal"
+import { CAMPO, ETIQUETA } from "@/components/panel/estilos"
+import { cn } from "@/lib/utils"
 import type { DatosDeServicio } from "../_datos"
 
 const DURACIONES = [
@@ -15,6 +20,10 @@ const DURACIONES = [
   { valor: 120, etiqueta: "2 horas" },
   { valor: 180, etiqueta: "3 horas" },
 ]
+
+/** El radio no se ve: el anillo del foco lo dibuja la opción entera cuando el radio de adentro lo tiene. */
+const ANILLO_DE_LA_OPCION =
+  "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-(--anillo) has-focus-visible:shadow-[0_0_0_6px_var(--halo)]"
 
 interface ModalServicioProps {
   form: DatosDeServicio
@@ -39,105 +48,94 @@ export function ModalServicio({
   onSubmit,
   onCerrar,
 }: ModalServicioProps) {
+  const idDeLaDescripcion = useId()
+  const nombreDeLaDuracion = useId()
+
   return (
-    <motion.div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+    <MarcoDeModal
+      titulo={modoEdicion ? "Editar servicio" : "Nuevo servicio"}
+      antetitulo="Servicios"
+      bloqueado={guardando}
+      alCerrar={onCerrar}
     >
-      <div className="absolute inset-0 bg-foreground/20 backdrop-blur-sm" onClick={onCerrar} />
-      <motion.div
-        className="relative bg-card rounded-xl shadow-xl w-full max-w-md p-6"
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-      >
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-foreground">
-            {modoEdicion ? "Editar servicio" : "Nuevo servicio"}
-          </h2>
-          <button onClick={onCerrar} className="p-1 rounded-lg hover:bg-muted transition-colors">
-            <X className="h-5 w-5" />
-          </button>
+      <form onSubmit={onSubmit} className="space-y-5">
+        <CampoFormulario
+          etiqueta="Nombre del servicio"
+          placeholder="Ej: Corte de cabello, Arreglo de barba, Manicura..."
+          value={form.name}
+          onChange={(e) => onFormChange("name", e.target.value)}
+          icono={<Scissors className="h-4 w-4" />}
+          required
+        />
+
+        <div>
+          <label htmlFor={idDeLaDescripcion} className={ETIQUETA}>
+            Descripción (opcional)
+          </label>
+          <textarea
+            id={idDeLaDescripcion}
+            value={form.description}
+            onChange={(e) => onFormChange("description", e.target.value)}
+            placeholder="Describe brevemente el servicio..."
+            className={cn(CAMPO, "h-24 resize-none")}
+          />
         </div>
 
-        <form onSubmit={onSubmit} className="space-y-4">
-          <CampoFormulario
-            etiqueta="Nombre del servicio"
-            placeholder="Ej: Corte de cabello, Arreglo de barba, Manicura..."
-            value={form.name}
-            onChange={(e) => onFormChange("name", e.target.value)}
-            icono={<Scissors className="h-4 w-4" />}
-            required
-          />
-
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">
-              <span className="flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                Descripción (opcional)
-              </span>
-            </label>
-            <textarea
-              value={form.description}
-              onChange={(e) => onFormChange("description", e.target.value)}
-              placeholder="Describe brevemente el servicio..."
-              className="w-full p-3 rounded-lg border border-border bg-background text-sm resize-none h-20 focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
-
-          {/* Duración */}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-2">
-              <span className="flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                Duración
-              </span>
-            </label>
-            <div className="grid grid-cols-4 gap-2">
-              {DURACIONES.map(({ valor, etiqueta }) => (
-                <button
+        {/*
+          Una duración entre siete, todas a la vista. Son radios nativos: el
+          lector de pantalla dice cuál está elegida y las flechas pasan de una
+          a otra. Antes eran botones que no decían cuál estaba elegida.
+        */}
+        <fieldset className="min-w-0">
+          <legend className={cn(CLASES_DE_ETIQUETA, "mb-2")}>Duración</legend>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {DURACIONES.map(({ valor, etiqueta }) => {
+              const elegida = form.duration === valor
+              return (
+                <label
                   key={valor}
-                  type="button"
-                  onClick={() => onFormChange("duration", valor)}
-                  className={`py-2 rounded-lg text-sm font-medium transition-all border ${
-                    form.duration === valor
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-background border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
-                  }`}
+                  className={cn(
+                    "relative grid h-11 cursor-pointer place-items-center rounded-campo border px-2 text-center text-sm font-medium squircle transition-[border-color,background-color,color] duration-150 ease-suave",
+                    ANILLO_DE_LA_OPCION,
+                    elegida ? "border-navy bg-navy text-white" : "border-texto-2 bg-tarjeta text-navy hover:border-navy"
+                  )}
                 >
+                  <input
+                    type="radio"
+                    name={nombreDeLaDuracion}
+                    value={valor}
+                    checked={elegida}
+                    onChange={() => onFormChange("duration", valor)}
+                    className="sr-only"
+                  />
                   {etiqueta}
-                </button>
-              ))}
-            </div>
+                </label>
+              )
+            })}
           </div>
+        </fieldset>
 
-          <CampoFormulario
-            etiqueta="Precio (opcional)"
-            type="number"
-            placeholder="0.00"
-            value={form.price}
-            onChange={(e) => onFormChange("price", e.target.value)}
-            icono={<DollarSign className="h-4 w-4" />}
-          />
+        <CampoFormulario
+          etiqueta="Precio (opcional)"
+          type="number"
+          placeholder="0.00"
+          value={form.price}
+          onChange={(e) => onFormChange("price", e.target.value)}
+          icono={<DollarSign className="h-4 w-4" />}
+        />
 
-          {aviso && (
-            <p role="alert" className="text-sm text-red-500">
-              {aviso}
-            </p>
-          )}
+        {aviso && <Aviso>{aviso}</Aviso>}
 
-          <div className="flex gap-3 pt-2">
-            <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar}>
-              Cancelar
-            </BotonPrimario>
-            <BotonPrimario type="submit" anchoCompleto cargando={guardando}>
-              {modoEdicion ? "Guardar cambios" : "Crear servicio"}
-            </BotonPrimario>
-          </div>
-        </form>
-      </motion.div>
-    </motion.div>
+        {/* En el teléfono, uno debajo del otro: lado a lado no entraban con "Guardar cambios". */}
+        <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">
+          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar} disabled={guardando}>
+            Cancelar
+          </BotonPrimario>
+          <BotonPrimario type="submit" anchoCompleto cargando={guardando}>
+            {modoEdicion ? "Guardar cambios" : "Crear servicio"}
+          </BotonPrimario>
+        </div>
+      </form>
+    </MarcoDeModal>
   )
 }

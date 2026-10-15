@@ -1,12 +1,16 @@
 "use client"
 
-import { useState } from "react"
+import { useId, useState } from "react"
 import { Clock, Save } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
+import { Interruptor } from "@/components/comunes/interruptor"
+import { Aviso } from "@/components/panel/aviso"
+import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
+import { CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { cn } from "@/lib/utils"
 import { guardarHorario, type HorarioDelDia } from "../_datos"
 
 const DIAS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
-const DIAS_CORTO = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"]
 
 const HORARIO_INICIAL: HorarioDelDia[] = DIAS.map((_, i) => ({
   dayOfWeek: i,
@@ -35,6 +39,7 @@ function semanaCompleta(guardados: HorarioDelDia[]): HorarioDelDia[] {
 }
 
 export function SeccionHorario({ horariosIniciales, memberId, titulo }: SeccionHorarioProps) {
+  const idDelTitulo = useId()
   const [horarios, setHorarios] = useState<HorarioDelDia[]>(() => semanaCompleta(horariosIniciales))
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
@@ -68,87 +73,70 @@ export function SeccionHorario({ horariosIniciales, memberId, titulo }: SeccionH
   }
 
   return (
-    <div className="bg-card border border-border/50 rounded-xl p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Clock className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h2 className="font-semibold text-foreground">{titulo ?? "Horario laboral"}</h2>
-            <p className="text-sm text-muted-foreground">Define los días y horas de atención</p>
-          </div>
-        </div>
-        <BotonPrimario
-          tamaño="sm"
-          icono={<Save className="h-4 w-4" />}
-          cargando={guardando}
-          onClick={guardar}
-          variante={guardado ? "secundario" : "primario"}
-        >
-          {guardado ? "Guardado" : "Guardar"}
-        </BotonPrimario>
-      </div>
-
-      {aviso && (
-        <p role="alert" className="text-sm text-red-500 mb-4">
-          {aviso}
-        </p>
-      )}
-
-      <div className="space-y-3">
-        {horarios.map((horario) => (
-          <div
-            key={horario.dayOfWeek}
-            className={`flex items-center gap-4 p-4 rounded-xl border transition-all ${
-              horario.active
-                ? "border-primary/20 bg-primary/5"
-                : "border-border/50 bg-muted/30 opacity-60"
-            }`}
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+      <EncabezadoDeTarjeta
+        id={idDelTitulo}
+        titulo={titulo ?? "Horario laboral"}
+        subtitulo="Define los días y horas de atención"
+        icono={{ figura: Clock }}
+        accion={
+          <BotonPrimario
+            tamaño="sm"
+            icono={<Save className="h-4 w-4" />}
+            cargando={guardando}
+            onClick={guardar}
+            variante={guardado ? "secundario" : "primario"}
           >
-            {/* Interruptor del día */}
-            <button
-              onClick={() => alternarDia(horario.dayOfWeek)}
-              className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
-                horario.active ? "bg-primary" : "bg-muted-foreground/30"
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                  horario.active ? "translate-x-5" : "translate-x-0"
-                }`}
-              />
-            </button>
+            {guardado ? "Guardado" : "Guardar"}
+          </BotonPrimario>
+        }
+      />
+      {/* El botón cambia a "Guardado", pero el lector de pantalla no siempre lo dice: esto sí. */}
+      <p role="status" className="sr-only">
+        {guardado ? "Horario guardado" : ""}
+      </p>
 
-            {/* Nombre del día */}
-            <span className={`w-24 font-medium text-sm ${horario.active ? "text-foreground" : "text-muted-foreground"}`}>
-              <span className="hidden sm:inline">{DIAS[horario.dayOfWeek]}</span>
-              <span className="sm:hidden">{DIAS_CORTO[horario.dayOfWeek]}</span>
-            </span>
+      {aviso && <Aviso className="mt-5">{aviso}</Aviso>}
 
-            {/* Horas */}
-            {horario.active ? (
-              <div className="flex items-center gap-3 flex-1">
-                <input
-                  type="time"
-                  value={horario.startTime}
-                  onChange={(e) => cambiarHora(horario.dayOfWeek, "startTime", e.target.value)}
-                  className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                />
-                <span className="text-muted-foreground text-sm">hasta</span>
-                <input
-                  type="time"
-                  value={horario.endTime}
-                  onChange={(e) => cambiarHora(horario.dayOfWeek, "endTime", e.target.value)}
-                  className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                />
+      {/*
+        Desde sm, cada día en una fila: el interruptor con su nombre y las
+        horas al lado. En el teléfono las horas bajan debajo del día: en una
+        sola fila no entraban y la página se ensanchaba a 478 px.
+      */}
+      <ul className="mt-5 divide-y divide-borde">
+        {horarios.map((horario) => {
+          const dia = DIAS[horario.dayOfWeek]
+          return (
+            <li key={horario.dayOfWeek} className="flex flex-wrap items-center gap-x-6 gap-y-2.5 py-3.5 first:pt-0 last:pb-0">
+              <div className="w-full sm:w-40">
+                <Interruptor etiqueta={dia} activo={horario.active} alCambiar={() => alternarDia(horario.dayOfWeek)} />
               </div>
-            ) : (
-              <span className="text-sm text-muted-foreground">No disponible</span>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
+
+              {horario.active ? (
+                <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:flex-1">
+                  <input
+                    type="time"
+                    aria-label={`${dia}: desde`}
+                    value={horario.startTime}
+                    onChange={(e) => cambiarHora(horario.dayOfWeek, "startTime", e.target.value)}
+                    className={cn(CAMPO, "w-auto min-w-0 flex-1 tabular-nums sm:w-32 sm:flex-none")}
+                  />
+                  <span className="shrink-0 text-sm text-texto-2">hasta</span>
+                  <input
+                    type="time"
+                    aria-label={`${dia}: hasta`}
+                    value={horario.endTime}
+                    onChange={(e) => cambiarHora(horario.dayOfWeek, "endTime", e.target.value)}
+                    className={cn(CAMPO, "w-auto min-w-0 flex-1 tabular-nums sm:w-32 sm:flex-none")}
+                  />
+                </div>
+              ) : (
+                <p className="text-sm text-texto-2">No disponible</p>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }

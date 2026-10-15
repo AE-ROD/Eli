@@ -60,7 +60,7 @@ interface ValorDeLaBarraLateral {
    * al cerrarse, como con Escape.
    */
   cerrarCajonParaIrA: (ruta: string) => void
-  /** La barra de escritorio muestra sólo los íconos: 80 px en vez de 260. En el teléfono es siempre `false`. */
+  /** La barra de escritorio muestra sólo los íconos: 76 px en vez de 240. En el teléfono es siempre `false`. */
   colapsada: boolean
   alternarColapso: () => void
   /** Para el botón de menú de la barra superior, que vive en cada vista y no en el layout. */

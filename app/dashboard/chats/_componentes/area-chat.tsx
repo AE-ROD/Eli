@@ -1,9 +1,10 @@
 "use client"
 
-import { useRef, useEffect, useState } from "react"
-import { motion } from "framer-motion"
-import { Send, Phone, Video, Calendar, MoreVertical, Smile } from "lucide-react"
+import { useRef, useEffect, useId, useState } from "react"
+import { ArrowLeft, Calendar, EllipsisVertical, LoaderCircle, Phone, Send, Smile, Video } from "lucide-react"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
+import { CAMPO } from "@/components/panel/estilos"
+import { cn } from "@/lib/utils"
 import { BurbujaMensaje, type MensajeEnBurbuja } from "./burbuja-mensaje"
 import type { Conversacion, Mensaje } from "../_datos"
 
@@ -13,6 +14,10 @@ const RESPUESTAS_RAPIDAS = [
   "Te envío los detalles por aquí",
   "¿Prefieres llamar para más información?",
 ]
+
+/** Los botones de sólo ícono de la cabecera: 40 px a la vista, 44 para el dedo. */
+const BOTON_DE_ICONO =
+  "relative grid size-10 shrink-0 place-items-center rounded-[12px] text-navy squircle anillo-foco transition-colors duration-150 ease-suave hover:bg-superficie after:absolute after:-inset-0.5"
 
 function mensajeParaBurbuja(mensaje: Mensaje): MensajeEnBurbuja {
   return {
@@ -29,18 +34,33 @@ interface AreaChatProps {
   mensajes: Mensaje[]
   cargando: boolean
   onEnviar: (texto: string) => Promise<void>
+  /** En el teléfono la conversación ocupa el lugar de la lista: esto vuelve a ella. */
+  onVolver?: () => void
+  /**
+   * El foco va al nombre de la conversación al abrirla. Lo pide la página
+   * cuando la lista se oculta (el teléfono): el botón que se tocó ya no se ve
+   * y el foco caía al `<body>`.
+   */
+  enfocarAlAbrir?: boolean
+  className?: string
 }
 
-export function AreaChat({ conversacion, mensajes, cargando, onEnviar }: AreaChatProps) {
+export function AreaChat({ conversacion, mensajes, cargando, onEnviar, onVolver, enfocarAlAbrir, className }: AreaChatProps) {
+  const idDelTitulo = useId()
   const [texto, setTexto] = useState("")
   const [enviando, setEnviando] = useState(false)
   const mensajesRef = useRef<HTMLDivElement>(null)
+  const refTitulo = useRef<HTMLHeadingElement>(null)
 
   useEffect(() => {
     if (mensajesRef.current) {
       mensajesRef.current.scrollTop = mensajesRef.current.scrollHeight
     }
   }, [mensajes])
+
+  useEffect(() => {
+    if (enfocarAlAbrir) refTitulo.current?.focus()
+  }, [enfocarAlAbrir, conversacion.id])
 
   const enviar = async () => {
     const textoLimpio = texto.trim()
@@ -57,72 +77,76 @@ export function AreaChat({ conversacion, mensajes, cargando, onEnviar }: AreaCha
   const burbujas = mensajes.map(mensajeParaBurbuja)
 
   return (
-    <div className="flex-1 flex flex-col bg-background min-w-0">
-      {/* Cabecera */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border/50 bg-card flex-shrink-0">
-        <div className="flex items-center gap-3">
+    <section aria-labelledby={idDelTitulo} className={cn("min-h-0 min-w-0 flex-1 flex-col", className)}>
+      {/* Cabecera. Si no entran los botones al lado del nombre, bajan a la derecha. */}
+      <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-borde px-3 py-2.5 sm:px-5">
+        {onVolver && (
+          <button type="button" onClick={onVolver} aria-label="Volver a las conversaciones" className={cn(BOTON_DE_ICONO, "md:hidden")}>
+            <ArrowLeft className="size-5" aria-hidden="true" strokeWidth={1.75} />
+          </button>
+        )}
+        <span className="hidden sm:block">
           <AvatarUsuario nombre={conversacion.customerName} tamaño="md" />
-          <div>
-            <h3 className="font-semibold text-foreground">{conversacion.customerName}</h3>
-            {conversacion.customerPhone && (
-              <p className="text-xs text-muted-foreground">{conversacion.customerPhone}</p>
-            )}
-          </div>
+        </span>
+        <div className="min-w-32 flex-1 py-1">
+          {/* Recibe el foco por código al abrir la conversación en el teléfono; no es un control, no lleva anillo. */}
+          <h2 ref={refTitulo} id={idDelTitulo} tabIndex={-1} className="font-semibold break-words outline-none">
+            {conversacion.customerName}
+          </h2>
+          {conversacion.customerPhone && <p className="text-xs text-texto-2 tabular-nums">{conversacion.customerPhone}</p>}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="ml-auto flex items-center gap-1">
           {conversacion.customerPhone && (
-            <a
-              href={`tel:${conversacion.customerPhone}`}
-              className="p-2 rounded-lg hover:bg-muted transition-colors"
-            >
-              <Phone className="h-5 w-5 text-muted-foreground" />
+            <a href={`tel:${conversacion.customerPhone}`} aria-label={`Llamar a ${conversacion.customerName}`} className={BOTON_DE_ICONO}>
+              <Phone className="size-5" aria-hidden="true" strokeWidth={1.75} />
             </a>
           )}
-          <button className="p-2 rounded-lg hover:bg-muted transition-colors">
-            <Video className="h-5 w-5 text-muted-foreground" />
+          <button type="button" aria-label="Videollamada" className={BOTON_DE_ICONO}>
+            <Video className="size-5" aria-hidden="true" strokeWidth={1.75} />
           </button>
-          <button className="p-2 rounded-lg hover:bg-muted transition-colors">
-            <Calendar className="h-5 w-5 text-muted-foreground" />
+          <button type="button" aria-label="Agendar" className={BOTON_DE_ICONO}>
+            <Calendar className="size-5" aria-hidden="true" strokeWidth={1.75} />
           </button>
-          <button className="p-2 rounded-lg hover:bg-muted transition-colors">
-            <MoreVertical className="h-5 w-5 text-muted-foreground" />
+          <button type="button" aria-label="Más opciones" className={BOTON_DE_ICONO}>
+            <EllipsisVertical className="size-5" aria-hidden="true" strokeWidth={1.75} />
           </button>
         </div>
       </header>
 
       {/* Mensajes */}
-      <div ref={mensajesRef} className="flex-1 overflow-y-auto p-6 space-y-4">
+      <div ref={mensajesRef} aria-busy={cargando || undefined} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-4 sm:px-5">
         {cargando ? (
           <div className="flex justify-center py-8">
-            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <LoaderCircle className="size-6 animate-spin text-navy" aria-hidden="true" />
+            <span className="sr-only">Cargando los mensajes...</span>
           </div>
         ) : burbujas.length === 0 ? (
-          <div className="flex justify-center py-8">
-            <p className="text-sm text-muted-foreground">Sin mensajes aún. ¡Sé el primero en escribir!</p>
-          </div>
+          <p className="py-8 text-center text-sm text-texto-2">Sin mensajes aún. ¡Sé el primero en escribir!</p>
         ) : (
           burbujas.map((burbuja) => <BurbujaMensaje key={burbuja.id} mensaje={burbuja} />)
         )}
       </div>
 
-      {/* Respuestas rápidas */}
-      <div className="px-6 py-2 flex gap-2 overflow-x-auto border-t border-border/30 flex-shrink-0">
-        {RESPUESTAS_RAPIDAS.map((respuestaRapida, i) => (
+      {/* Respuestas rápidas: llenan el campo, no envían. Si no entran, se desplazan de costado. */}
+      <div role="group" aria-label="Respuestas rápidas" className="flex shrink-0 gap-2 overflow-x-auto border-t border-borde px-3 py-2.5 sm:px-5">
+        {RESPUESTAS_RAPIDAS.map((respuestaRapida) => (
           <button
-            key={i}
+            key={respuestaRapida}
+            type="button"
             onClick={() => setTexto(respuestaRapida)}
-            className="px-3 py-1.5 rounded-full bg-muted text-xs text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors whitespace-nowrap"
+            className="inline-flex h-9 shrink-0 items-center rounded-full bg-superficie px-3.5 text-[13px] whitespace-nowrap text-navy anillo-foco transition-colors duration-150 ease-suave hover:bg-borde"
           >
             {respuestaRapida}
           </button>
         ))}
       </div>
 
-      {/* Input */}
-      <div className="p-4 border-t border-border/50 bg-card flex-shrink-0">
-        <div className="flex items-end gap-3">
-          <div className="flex-1 relative">
+      {/* Escribir */}
+      <div className="shrink-0 border-t border-borde p-3 sm:px-5">
+        <div className="flex items-end gap-2">
+          <div className="relative min-w-0 flex-1">
             <textarea
+              aria-label="Mensaje"
               value={texto}
               onChange={(e) => setTexto(e.target.value)}
               onKeyDown={(e) => {
@@ -133,23 +157,27 @@ export function AreaChat({ conversacion, mensajes, cargando, onEnviar }: AreaCha
               }}
               placeholder="Escribe un mensaje..."
               rows={1}
-              className="w-full px-4 py-3 pr-10 rounded-xl border border-border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 max-h-32"
+              className={cn(CAMPO, "block max-h-32 resize-none pr-12")}
             />
-            <button className="absolute right-3 bottom-3">
-              <Smile className="h-5 w-5 text-muted-foreground hover:text-foreground transition-colors" />
+            <button
+              type="button"
+              aria-label="Emojis"
+              className="absolute right-0.5 bottom-0.5 grid size-10 place-items-center rounded-[12px] text-texto-2 squircle anillo-foco transition-colors duration-150 ease-suave hover:text-navy"
+            >
+              <Smile className="size-5" aria-hidden="true" strokeWidth={1.75} />
             </button>
           </div>
-          <motion.button
+          <button
+            type="button"
             onClick={enviar}
             disabled={!texto.trim() || enviando}
-            className="p-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            aria-label="Enviar mensaje"
+            className="grid size-11 shrink-0 place-items-center rounded-boton bg-navy text-white squircle anillo-foco transition-colors duration-150 ease-suave hover:bg-[#1d3a5c] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-navy"
           >
-            <Send className="h-5 w-5" />
-          </motion.button>
+            <Send className="size-5" aria-hidden="true" strokeWidth={1.75} />
+          </button>
         </div>
       </div>
-    </div>
+    </section>
   )
 }

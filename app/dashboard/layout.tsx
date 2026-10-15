@@ -47,7 +47,7 @@ export default async function LayoutDelPanel({
   return (
     <ProveedorDePrecios diasTrialRestantes={diasTrialRestantes}>
       <ProveedorDeBarraLateral>
-        <div className="min-h-screen bg-background">
+        <div className="min-h-dvh bg-crema text-navy">
           <BarraLateral
             usuario={usuario}
             esOwner={esOwner}

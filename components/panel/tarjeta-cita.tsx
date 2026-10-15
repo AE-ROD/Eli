@@ -1,8 +1,9 @@
 "use client"
 
-import { motion } from "framer-motion"
+import type { ReactNode } from "react"
+import { Clock, Timer } from "lucide-react"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
-import { Clock, MapPin, MoreVertical } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 export interface CitaEnTarjeta {
   id: string
@@ -22,87 +23,121 @@ interface TarjetaCitaProps {
   onClick?: () => void
 }
 
-const coloresEstado = {
-  pendiente: "border-l-amber-500 bg-amber-50",
-  confirmada: "border-l-green-500 bg-green-50",
-  "en-progreso": "border-l-blue-500 bg-blue-50",
-  completada: "border-l-gray-400 bg-gray-50",
-  cancelada: "border-l-red-500 bg-red-50",
+/**
+ * El estado de la cita en palabras, sobre un pastel: el color solo no le dice
+ * nada a quien no lo distingue. El texto es navy, que pasa el contraste sobre
+ * todos, salvo en la cancelada, que va en el rojo de error.
+ */
+const ESTADOS: Record<CitaEnTarjeta["estado"], { texto: string; clases: string }> = {
+  pendiente: { texto: "Pendiente", clases: "bg-borde text-navy" },
+  confirmada: { texto: "Confirmada", clases: "bg-azul-suave text-navy" },
+  "en-progreso": { texto: "En progreso", clases: "bg-naranja-suave text-navy" },
+  completada: { texto: "Completada", clases: "bg-lima-suave text-navy" },
+  cancelada: { texto: "Cancelada", clases: "bg-error/8 text-error" },
 }
 
-const etiquetasEstado = {
-  pendiente: { texto: "Pendiente", color: "bg-amber-100 text-amber-700" },
-  confirmada: { texto: "Confirmada", color: "bg-green-100 text-green-700" },
-  "en-progreso": { texto: "En progreso", color: "bg-blue-100 text-blue-700" },
-  completada: { texto: "Completada", color: "bg-gray-100 text-gray-600" },
-  cancelada: { texto: "Cancelada", color: "bg-red-100 text-red-700" },
+function EstadoDeLaCita({ estado }: { estado: CitaEnTarjeta["estado"] }) {
+  // El endpoint no restringe el string: un estado desconocido se muestra tal cual, sin color.
+  const { texto, clases } = ESTADOS[estado] ?? { texto: estado, clases: "bg-borde text-navy" }
+  return (
+    <span
+      className={cn(
+        "inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[11px] leading-none font-medium whitespace-nowrap",
+        clases
+      )}
+    >
+      {texto}
+    </span>
+  )
 }
 
+/**
+ * Sin `onClick`, la tarjeta sólo muestra. Con `onClick` es un botón: se
+ * enfoca con Tab y se abre con Enter o Espacio, no sólo con el mouse. Por eso
+ * todo lo de adentro son `span`: dentro de un botón no va un `div` ni un `p`.
+ */
+function Contenedor({ onClick, className, children }: { onClick?: () => void; className: string; children: ReactNode }) {
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={cn(className, "cursor-pointer text-left anillo-foco")}>
+        {children}
+      </button>
+    )
+  }
+  return <div className={className}>{children}</div>
+}
+
+/**
+ * Una cita: quién viene, a qué, a qué hora y en qué estado está. La compacta
+ * va en listas sobre blanco (el inicio, la agenda del día, el historial de un
+ * cliente), sobre el gris de superficie; la completa es una tarjeta blanca.
+ */
 export function TarjetaCita({ cita, compacta = false, onClick }: TarjetaCitaProps) {
   if (compacta) {
     return (
-      <motion.div
-        className={`border-l-4 rounded-r-lg p-3 cursor-pointer ${coloresEstado[cita.estado]}`}
-        whileHover={{ x: 2 }}
+      <Contenedor
         onClick={onClick}
+        className={cn(
+          "flex w-full min-w-0 items-center gap-3 rounded-[20px] bg-superficie px-3 py-2.5 text-navy squircle",
+          onClick && "transition-[background-color,box-shadow] duration-200 ease-suave hover:bg-tarjeta hover:shadow-sm"
+        )}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <AvatarUsuario nombre={cita.nombreCliente} tamaño="sm" />
-            <div>
-              <p className="text-sm font-medium text-foreground">{cita.nombreCliente}</p>
-              <p className="text-xs text-muted-foreground">{cita.servicio}</p>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="text-sm font-medium text-foreground">{cita.horaInicio}</p>
-            <p className="text-xs text-muted-foreground">{cita.duracion} min</p>
-          </div>
-        </div>
-      </motion.div>
+        {/* En el teléfono el nombre necesita el lugar: la inicial no agrega nada que no diga el nombre. */}
+        <span className="hidden sm:block">
+          <AvatarUsuario nombre={cita.nombreCliente} imagenUrl={cita.imagenCliente} tamaño="sm" />
+        </span>
+        {/*
+          `contain-inline-size`: el nombre se corta con "…" y no cuenta para el
+          ancho mínimo de la tarjeta. Sin esto, metida en una grilla o en una
+          fila flexible, un nombre largo ensanchaba la página.
+        */}
+        <span className="min-w-0 flex-1 contain-inline-size">
+          <span className="block truncate text-sm font-medium">{cita.nombreCliente}</span>
+          <span className="mt-0.5 block truncate text-[13px] text-texto-2">
+            {cita.servicio} · {cita.duracion} min
+          </span>
+        </span>
+        <span className="flex shrink-0 flex-col items-end gap-1">
+          <span className="text-sm font-medium tabular-nums">{cita.horaInicio}</span>
+          <EstadoDeLaCita estado={cita.estado} />
+        </span>
+      </Contenedor>
     )
   }
 
   return (
-    <motion.div
-      className={`border-l-4 rounded-xl p-4 cursor-pointer bg-card border border-border/50 ${coloresEstado[cita.estado].split(" ")[0]}`}
-      whileHover={{ y: -2, boxShadow: "0 4px 12px rgba(0,0,0,0.05)" }}
+    <Contenedor
       onClick={onClick}
+      className={cn(
+        "flex w-full min-w-0 flex-col gap-4 rounded-[24px] bg-tarjeta p-4 text-navy shadow-sm squircle",
+        onClick && "transition-shadow duration-200 ease-suave hover:shadow-md"
+      )}
     >
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
+      <span className="flex items-start justify-between gap-3">
+        <span className="flex min-w-0 flex-1 items-center gap-3">
           <AvatarUsuario nombre={cita.nombreCliente} imagenUrl={cita.imagenCliente} tamaño="md" />
-          <div>
-            <h4 className="font-semibold text-foreground">{cita.nombreCliente}</h4>
-            <p className="text-sm text-muted-foreground">{cita.servicio}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${etiquetasEstado[cita.estado].color}`}>
-            {etiquetasEstado[cita.estado].texto}
+          <span className="min-w-0 flex-1 contain-inline-size">
+            <span className="block truncate font-semibold">{cita.nombreCliente}</span>
+            <span className="block truncate text-sm text-texto-2">{cita.servicio}</span>
           </span>
-          <button className="p-1 rounded-lg hover:bg-muted transition-colors">
-            <MoreVertical className="h-4 w-4 text-muted-foreground" />
-          </button>
-        </div>
-      </div>
+        </span>
+        <EstadoDeLaCita estado={cita.estado} />
+      </span>
 
-      <div className="flex items-center gap-4 mt-4 pt-3 border-t border-border/50">
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Clock className="h-4 w-4" />
-          {cita.horaInicio} - {cita.horaFin}
-        </div>
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <MapPin className="h-4 w-4" />
+      <span className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-borde pt-3 text-sm text-texto-2">
+        <span className="flex items-center gap-1.5 tabular-nums">
+          <Clock className="size-4" aria-hidden="true" strokeWidth={1.75} />
+          {cita.horaInicio} – {cita.horaFin}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <Timer className="size-4" aria-hidden="true" strokeWidth={1.75} />
           {cita.duracion} minutos
-        </div>
-      </div>
+        </span>
+      </span>
 
       {cita.notas && (
-        <p className="mt-3 text-xs text-muted-foreground bg-muted/50 rounded-lg p-2">
-          {cita.notas}
-        </p>
+        <span className="block rounded-[14px] bg-superficie p-2.5 text-[13px] text-texto-2 squircle">{cita.notas}</span>
       )}
-    </motion.div>
+    </Contenedor>
   )
 }

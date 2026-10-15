@@ -2,10 +2,10 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react"
 import { Search, User, UserPlus } from "lucide-react"
-import { BotonPrimario } from "@/components/comunes/boton-primario"
+import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
-import { ANILLO_DE_FOCO, CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, ETIQUETA } from "@/components/panel/estilos"
+import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { lineasDesdeFilas, type FilaDeServicio } from "@/lib/acciones-del-tablero"
 import type { Resultado } from "@/lib/peticiones"
 import { cn } from "@/lib/utils"
@@ -15,6 +15,7 @@ import {
   type ClienteEncontrado,
   type DatosSinReserva,
 } from "../_datos"
+import { Aviso } from "@/components/panel/aviso"
 import { EditorDeServicios, filaVacia } from "./editor-de-servicios"
 
 /** Lo que acepta el servidor para un cliente nuevo. */
@@ -27,6 +28,22 @@ const LARGO_MAXIMO_DE_LAS_NOTAS = 1000
 const LETRAS_PARA_BUSCAR = 2
 
 type ModoCliente = "existente" | "nuevo"
+
+/**
+ * El radio no se ve, así que el anillo del foco lo dibuja la opción entera
+ * cuando el radio de adentro lo tiene: el de `anillo-foco`, con las mismas
+ * variables (contorno de 2 px separado 2 px y el halo del módulo).
+ */
+const ANILLO_DE_LA_OPCION =
+  "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-(--anillo) has-focus-visible:shadow-[0_0_0_6px_var(--halo)]"
+
+/**
+ * El foco de una fila de la lista de clientes, hacia adentro: la lista se
+ * desplaza y recorta lo que se sale de ella. El contorno queda dentro de la
+ * fila y el halo es su fondo.
+ */
+const ANILLO_HACIA_ADENTRO =
+  "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--anillo) focus-visible:bg-(--halo)"
 
 interface ModalAnotarSinReservaProps {
   catalogo: Catalogo
@@ -152,6 +169,7 @@ export function ModalAnotarSinReserva({
 
   return (
     <MarcoDeModal
+      antetitulo="Tablero"
       titulo="Anotar sin reserva"
       descripcion="Entra al tablero en espera."
       ancho="lg"
@@ -161,9 +179,10 @@ export function ModalAnotarSinReserva({
       <form onSubmit={anotar} noValidate className="space-y-6">
         {/* ── Cliente ── */}
         <fieldset className="space-y-3">
-          <legend className="text-sm font-semibold text-foreground mb-2">Cliente</legend>
+          <legend className="mb-3 text-sm font-semibold">Cliente</legend>
 
-          <div className="flex gap-2" role="radiogroup" aria-label="¿Ya es cliente?">
+          {/* Las dos opciones lado a lado, la elegida en navy: el borde gris de los campos dice que son controles. */}
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="¿Ya es cliente?">
             {(
               [
                 { id: "existente", texto: "Ya es cliente", icono: User },
@@ -173,11 +192,10 @@ export function ModalAnotarSinReserva({
               <label
                 key={id}
                 className={cn(
-                  "flex-1 inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium cursor-pointer transition-colors",
-                  "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary has-[:focus-visible]:ring-offset-2",
-                  modo === id
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                  "flex h-12 cursor-pointer items-center justify-center gap-2 rounded-campo border px-3 text-center text-sm font-medium squircle",
+                  "transition-[border-color,background-color,color] duration-150 ease-suave",
+                  ANILLO_DE_LA_OPCION,
+                  modo === id ? "border-navy bg-navy text-white" : "border-texto-2 bg-tarjeta text-navy hover:border-navy"
                 )}
               >
                 <input
@@ -189,7 +207,7 @@ export function ModalAnotarSinReserva({
                   onChange={() => cambiarModo(id)}
                   className="sr-only"
                 />
-                <Icono className="h-4 w-4" aria-hidden="true" />
+                <Icono className="size-4 shrink-0" aria-hidden="true" strokeWidth={1.75} />
                 {texto}
               </label>
             ))}
@@ -197,23 +215,23 @@ export function ModalAnotarSinReserva({
 
           {modo === "existente" ? (
             elegido ? (
-              <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2.5">
+              <div className="flex items-center justify-between gap-3 rounded-campo bg-superficie py-2 pl-4 pr-2 squircle">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{elegido.nombre}</p>
-                  {elegido.detalle && <p className="text-xs text-muted-foreground truncate">{elegido.detalle}</p>}
+                  <p className="text-sm font-medium break-words">{elegido.nombre}</p>
+                  {elegido.detalle && <p className="text-xs break-words text-texto-2">{elegido.detalle}</p>}
                 </div>
-                <button
+                <Boton
                   ref={botonCambiar}
-                  type="button"
+                  variante="fantasma"
+                  tamano="sm"
                   onClick={() => {
                     setElegido(null)
                     requestAnimationFrame(() => campoBusqueda.current?.focus())
                   }}
                   disabled={guardando}
-                  className={cn("text-sm font-medium text-primary hover:underline rounded shrink-0", ANILLO_DE_FOCO)}
                 >
                   Cambiar
-                </button>
+                </Boton>
               </div>
             ) : (
               <div>
@@ -222,7 +240,7 @@ export function ModalAnotarSinReserva({
                 </label>
                 <div className="relative">
                   <Search
-                    className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+                    className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-texto-2"
                     aria-hidden="true"
                   />
                   <input
@@ -244,7 +262,7 @@ export function ModalAnotarSinReserva({
                   />
                 </div>
 
-                <div id={`${idBase}-estado-busqueda`} aria-live="polite" className="text-xs text-muted-foreground mt-1.5">
+                <div id={`${idBase}-estado-busqueda`} aria-live="polite" className="mt-1.5 text-xs text-texto-2">
                   {textoBuscado.length < LETRAS_PARA_BUSCAR && `Escribe al menos ${LETRAS_PARA_BUSCAR} letras para buscar.`}
                   {buscando && "Buscando…"}
                   {sugerencias.length > 0 &&
@@ -253,13 +271,13 @@ export function ModalAnotarSinReserva({
                 </div>
 
                 {avisoDeBusqueda && (
-                  <p role="alert" className="text-sm text-red-500 mt-1.5">
+                  <Aviso tono="error" rol="alert" className="mt-2">
                     {avisoDeBusqueda}
-                  </p>
+                  </Aviso>
                 )}
 
                 {sugerencias.length > 0 && (
-                  <ul className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-border divide-y divide-border/60">
+                  <ul className="mt-2 max-h-56 divide-y divide-borde overflow-y-auto rounded-campo bg-tarjeta inset-ring-1 inset-ring-borde squircle">
                     {sugerencias.map((cliente) => (
                       <li key={cliente.id}>
                         <button
@@ -267,16 +285,15 @@ export function ModalAnotarSinReserva({
                           onClick={() => elegirCliente(cliente)}
                           disabled={guardando}
                           className={cn(
-                            "w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-muted transition-colors",
-                            ANILLO_DE_FOCO,
-                            "focus-visible:ring-inset focus-visible:ring-offset-0"
+                            "flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-suave hover:bg-superficie",
+                            ANILLO_HACIA_ADENTRO
                           )}
                         >
-                          <User className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
+                          <User className="size-4 shrink-0 text-texto-2" aria-hidden="true" strokeWidth={1.75} />
                           <span className="min-w-0">
-                            <span className="block text-sm font-medium text-foreground truncate">{cliente.nombre}</span>
+                            <span className="block text-sm font-medium break-words">{cliente.nombre}</span>
                             {cliente.detalle && (
-                              <span className="block text-xs text-muted-foreground truncate">{cliente.detalle}</span>
+                              <span className="block text-xs break-words text-texto-2">{cliente.detalle}</span>
                             )}
                           </span>
                         </button>
@@ -286,14 +303,9 @@ export function ModalAnotarSinReserva({
                 )}
 
                 {sinResultados && (
-                  <button
-                    type="button"
-                    onClick={anotarComoNuevo}
-                    disabled={guardando}
-                    className={cn("mt-2 text-sm font-medium text-primary hover:underline rounded", ANILLO_DE_FOCO)}
-                  >
+                  <Boton variante="enlace" tamano="sm" onClick={anotarComoNuevo} disabled={guardando} className="mt-1">
                     Anotarlo como cliente nuevo
-                  </button>
+                  </Boton>
                 )}
               </div>
             )
@@ -332,8 +344,8 @@ export function ModalAnotarSinReserva({
 
         {/* ── Servicios ── */}
         <fieldset className="space-y-3">
-          <legend className="text-sm font-semibold text-foreground">Servicios</legend>
-          <p className="text-xs text-muted-foreground">
+          <legend className="text-sm font-semibold">Servicios</legend>
+          <p className="text-sm text-texto-2">
             {servicioObligatorio
               ? "Agrega el servicio que vas a hacer: la atención queda a tu nombre."
               : "Opcional: si todavía no se sabe, se agregan después desde la tarjeta."}
@@ -367,36 +379,23 @@ export function ModalAnotarSinReserva({
         </div>
 
         {mostrarErrores && (errorDeCliente || errorDeServicios || !validacionDeServicios.ok) && (
-          <p role="alert" className="text-sm text-red-500">
+          <Aviso tono="error" rol="alert">
             Revisa lo marcado antes de anotar.
-          </p>
+          </Aviso>
         )}
         {aviso && (
-          <p role="alert" className="text-sm text-red-500">
+          <Aviso tono="error" rol="alert">
             {aviso}
-          </p>
+          </Aviso>
         )}
 
-        <div className="flex flex-col-reverse sm:flex-row gap-3 pt-1">
-          <BotonPrimario
-            type="button"
-            variante="secundario"
-            anchoCompleto
-            onClick={onCerrar}
-            disabled={guardando}
-            className={ANILLO_DE_FOCO}
-          >
+        <div className="flex flex-col-reverse gap-3 sm:flex-row">
+          <Boton type="button" variante="secundario" onClick={onCerrar} disabled={guardando} className="w-full">
             Cancelar
-          </BotonPrimario>
-          <BotonPrimario
-            type="submit"
-            anchoCompleto
-            cargando={guardando}
-            aria-label={guardando ? "Anotando" : undefined}
-            className={ANILLO_DE_FOCO}
-          >
+          </Boton>
+          <Boton type="submit" cargando={guardando} aria-label={guardando ? "Anotando" : undefined} className="w-full">
             Anotar en espera
-          </BotonPrimario>
+          </Boton>
         </div>
       </form>
     </MarcoDeModal>

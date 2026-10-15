@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from "react"
-import { ANILLO_DE_FOCO } from "@/components/panel/estilos"
+import { Esqueleto } from "@/components/comunes/esqueleto"
 import type { EstadoActivo } from "@/lib/atenciones"
 import {
   COLUMNAS_DEL_TABLERO,
@@ -30,10 +30,15 @@ const VACIO: Record<ColumnaId, string> = {
 }
 
 /**
- * Las columnas: en el teléfono, una al lado de la otra con scroll horizontal
- * que se detiene en cada una; en escritorio se reparten el ancho. Mínimo
- * 280 px hasta escritorio, donde bajan a 200 para que las cinco entren en una
- * pantalla común sin scroll.
+ * Las columnas: en el teléfono, de 272 px una al lado de la otra, con scroll
+ * horizontal que se detiene en cada una; desde md se reparten el ancho con un
+ * mínimo de 196 px. Si las cinco no entran (una tableta, o una pantalla
+ * mediana con la barra lateral), el tablero se desplaza de costado dentro de
+ * su caja y la página no.
+ *
+ * La caja llega hasta el borde del contenido (el margen negativo deshace el
+ * relleno de la página y su propio relleno lo devuelve): al desplazarse, las
+ * columnas se pierden en ese borde en vez de cortarse 16 o 24 px antes.
  *
  * `relative` no es decorativo: los textos `sr-only` de adentro (el contador
  * de cada columna, el "Cargando…") son `position: absolute`. Sin un ancestro
@@ -42,9 +47,20 @@ const VACIO: Record<ColumnaId, string> = {
  * costado en el teléfono.
  */
 const CONTENEDOR =
-  "relative flex gap-3 overflow-x-auto snap-x snap-mandatory lg:snap-none pb-3 -mx-4 px-4 scroll-px-4 sm:mx-0 sm:px-0 sm:scroll-px-0"
-const ANCHO_DE_COLUMNA =
-  "snap-start shrink-0 w-[85vw] min-w-[280px] max-w-[340px] lg:w-auto lg:max-w-none lg:min-w-[200px] lg:flex-1 lg:shrink"
+  "relative flex gap-3 overflow-x-auto snap-x snap-mandatory md:snap-none pb-3 -mx-4 px-4 scroll-px-4 sm:-mx-6 sm:px-6 sm:scroll-px-6"
+const ANCHO_DE_COLUMNA = "w-68 shrink-0 snap-start md:w-auto md:min-w-[196px] md:flex-1 md:shrink"
+
+/**
+ * Cada columna es una isla gris de radio 32, con 10 px de relleno: el anillo
+ * del foco de lo que tiene adentro (el título, una tarjeta) mide 6 px hacia
+ * afuera y entra en ese relleno. Así no lo recorta la caja con scroll, que
+ * recorta todo lo que se sale de ella.
+ */
+const ISLA = "flex flex-col gap-2.5 rounded-panel bg-superficie p-2.5 squircle"
+
+/** El título de la columna, con el contador en una píldora blanca. */
+const TITULO_DE_COLUMNA =
+  "flex items-center justify-between gap-2 rounded-[20px] px-2.5 pb-1 pt-2 text-[15px] font-semibold leading-[1.3] tracking-[-0.2px] text-navy"
 
 /**
  * Arrastrar sólo donde hay mouse: en pantallas táctiles el arrastre nativo no
@@ -72,12 +88,15 @@ type Arrastrada = { tipo: "reserva"; reserva: Reserva } | { tipo: "atencion"; at
 
 /**
  * Adonde va el foco después de una acción que saca de la pantalla el botón
- * que se apretó ("Llegó", cobrar, anular, mover): sin esto caía al <body> y
- * con teclado había que volver a recorrer la página desde arriba.
+ * que se apretó ("Llegó", cobrar, anular, mover), o después de recargar un
+ * tablero que había quedado viejo: sin esto caía al <body> y con teclado había
+ * que volver a recorrer la página desde arriba.
  */
 export interface DestinoDelFoco {
   /** La tarjeta de la atención, si sigue en el tablero (en su columna nueva). */
   atencionId?: string
+  /** La tarjeta de la reserva, si sigue en "Reservas de hoy". */
+  reservaId?: string
   /** Si no, el título de esta columna: la que la tenía, o adonde volvió. */
   columna: ColumnaId
 }
@@ -139,32 +158,33 @@ function Columna({
       onDrop={onDrop}
       className={cn(
         ANCHO_DE_COLUMNA,
-        "flex flex-col rounded-xl border border-border/50 bg-muted/40 transition-colors",
-        arrastrando && destinoValido && "outline-2 outline-dashed outline-primary/50 -outline-offset-2",
-        encima && "bg-primary/10"
+        ISLA,
+        "transition-colors duration-150 ease-suave",
+        // Mientras se arrastra, las columnas que aceptan la tarjeta se marcan con
+        // un borde de trazos, y la que está debajo del puntero toma el naranja
+        // del tablero.
+        arrastrando && destinoValido && "outline-2 outline-dashed outline-texto-2 -outline-offset-2",
+        encima && "bg-naranja-suave"
       )}
     >
-      {/* El título se enfoca desde el código: es adonde va el foco cuando la tarjeta ya no está. */}
-      <h2
-        id={idDelTitulo}
-        data-columna={id}
-        tabIndex={-1}
-        className={cn(
-          "flex items-center justify-between gap-2 px-3 py-2.5 border-b border-border/50 text-sm font-semibold text-foreground rounded-t-xl",
-          // Hacia adentro: arriba no hay lugar, el contenedor con scroll recortaría el anillo.
-          ANILLO_DE_FOCO,
-          "focus-visible:ring-inset focus-visible:ring-offset-0"
-        )}
-      >
-        <span>{titulo}</span>
-        <span className="rounded-full bg-background border border-border/70 px-2 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground">
+      {/*
+        El título se enfoca desde el código: es adonde va el foco cuando la
+        tarjeta ya no está. El anillo entra en el relleno de la isla.
+      */}
+      <h2 id={idDelTitulo} data-columna={id} tabIndex={-1} className={cn(TITULO_DE_COLUMNA, "anillo-foco")}>
+        <span className="min-w-0 break-words">{titulo}</span>
+        <span className="inline-flex h-6 min-w-7 shrink-0 items-center justify-center rounded-full bg-tarjeta px-2 text-[13px] font-semibold tabular-nums">
           <span className="sr-only">, </span>
           {cantidad}
         </span>
       </h2>
-      <div className="flex-1 space-y-2 p-2 min-h-[120px]">
-        {cantidad === 0 ? <p className="px-1 py-6 text-center text-sm text-muted-foreground">{vacio}</p> : children}
-      </div>
+      {cantidad === 0 ? (
+        <p className="rounded-[24px] border-2 border-dashed border-borde px-3 py-5 text-center text-[13px] leading-snug text-texto-2">
+          {vacio}
+        </p>
+      ) : (
+        children
+      )}
     </section>
   )
 }
@@ -215,13 +235,15 @@ export function TableroDeColumnas({
 
   // Después de dibujar lo que cambió: la tarjeta en su lugar nuevo o, si ya
   // no está, el título de la columna. Las tarjetas y los títulos se marcan
-  // con `data-atencion` y `data-columna`.
+  // con `data-atencion`, `data-reserva` y `data-columna`.
   useEffect(() => {
     if (!foco) return
     const raiz = contenedor.current
     const tarjeta = foco.atencionId
       ? raiz?.querySelector<HTMLElement>(`[data-atencion="${CSS.escape(foco.atencionId)}"]`)
-      : null
+      : foco.reservaId
+        ? raiz?.querySelector<HTMLElement>(`[data-reserva="${CSS.escape(foco.reservaId)}"]`)
+        : null
     const destino = tarjeta ?? raiz?.querySelector<HTMLElement>(`[data-columna="${foco.columna}"]`)
     if (destino) enfocar(destino)
     onFocoAplicado()
@@ -232,6 +254,21 @@ export function TableroDeColumnas({
   // Sobre todo el tablero y no por columna: los botones de editar y anular
   // dicen lo mismo en cualquier columna.
   const nombres = nombresSinRepetir(tablero.atenciones)
+
+  // Las reservas, igual: dos de la misma clienta a la misma hora (una para
+  // ella y otra para su hija, anotadas a su nombre) daban dos "Llegó: María
+  // González, reserva de las 16:00". `nombreConHora` le suma la hora a lo que
+  // recibe como nombre, así que queda "María González, reserva de las 16:00",
+  // y la segunda, con "(2)".
+  const nombresDeReservas = nombresSinRepetir(
+    tablero.reservas.map((reserva) => ({
+      id: reserva.id,
+      estado: "reserva",
+      cliente: { nombre: `${reserva.cliente?.nombre ?? "Sin cliente"}, reserva` },
+      llegoEn: reserva.inicio,
+      cobradaEn: null,
+    }))
+  )
 
   const terminarArrastre = () => {
     setArrastrada(null)
@@ -306,6 +343,7 @@ export function TableroDeColumnas({
                 <TarjetaDeReserva
                   key={reserva.id}
                   reserva={reserva}
+                  quien={nombresDeReservas.get(reserva.id) ?? reserva.cliente?.nombre ?? "Sin cliente"}
                   atrasada={estaAtrasada(reserva.inicio, ahora)}
                   enCurso={enCurso.has(reserva.id)}
                   arrastre={arrastreDe({ tipo: "reserva", reserva }, reserva.id)}
@@ -348,17 +386,16 @@ export function TableroCargando() {
     <div className={CONTENEDOR} role="status">
       <span className="sr-only">Cargando el tablero…</span>
       {COLUMNAS_DEL_TABLERO.map(({ id, titulo }) => (
-        <div key={id} aria-hidden="true" className={cn(ANCHO_DE_COLUMNA, "rounded-xl border border-border/50 bg-muted/40")}>
-          <p className="px-3 py-2.5 border-b border-border/50 text-sm font-semibold text-foreground">{titulo}</p>
-          <div className="space-y-2 p-2">
-            {[0, 1].map((fila) => (
-              <div key={fila} className="rounded-lg border border-border/50 bg-card p-3 animate-pulse space-y-2">
-                <div className="h-3.5 w-2/3 rounded bg-muted" />
-                <div className="h-3 w-1/2 rounded bg-muted" />
-                <div className="h-7 w-full rounded bg-muted" />
-              </div>
-            ))}
-          </div>
+        <div key={id} aria-hidden="true" className={cn(ANCHO_DE_COLUMNA, ISLA)}>
+          <p className={TITULO_DE_COLUMNA}>{titulo}</p>
+          {[0, 1].map((fila) => (
+            <div key={fila} className="flex flex-col gap-3 rounded-[24px] bg-tarjeta p-3.5 shadow-sm squircle">
+              <Esqueleto className="w-1/3" />
+              <Esqueleto className="h-3.5 w-2/3" />
+              <Esqueleto className="w-1/2" />
+              <Esqueleto className="h-9 rounded-boton" />
+            </div>
+          ))}
         </div>
       ))}
     </div>

@@ -3,16 +3,18 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { AnimatePresence } from "framer-motion"
-import { RefreshCw, TriangleAlert } from "lucide-react"
+import { RefreshCw } from "lucide-react"
 import { BarraSuperior } from "@/components/panel/barra-superior"
-import { BotonPrimario } from "@/components/comunes/boton-primario"
+import { Boton } from "@/components/comunes/boton"
+import { Esqueleto } from "@/components/comunes/esqueleto"
 import { ModalAnular } from "@/components/panel/modal-anular"
-import { ANILLO_DE_FOCO } from "@/components/panel/estilos"
+import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { comoTexto, formatearHora } from "@/lib/fechas"
 import { rangoDePeriodo, rangoPersonalizado, type RangoDePeriodo } from "@/lib/periodos"
 import { actorDeSesion, puedeAnular, puedeVerAnuladas } from "@/lib/permisos"
 import type { Resultado } from "@/lib/peticiones"
 import { rotuloDeIngresos } from "@/lib/reportes"
+import { cn } from "@/lib/utils"
 import {
   anularCobro,
   leerAnuladas,
@@ -23,6 +25,7 @@ import {
   type Reporte,
   type ReporteDeAnuladas,
 } from "./_datos"
+import { Aviso } from "@/components/panel/aviso"
 import { FiltrosDeReporte, type FiltrosElegidos } from "./_componentes/filtros-de-reporte"
 import { ResumenDeReporte } from "./_componentes/resumen-de-reporte"
 import { HistorialDeCobros, diaCorto } from "./_componentes/historial-de-cobros"
@@ -50,21 +53,26 @@ type Respuesta =
   | { vista: "cobradas"; consulta: string; resultado: Resultado<Reporte> }
   | { vista: "anuladas"; consulta: string; resultado: Resultado<ReporteDeAnuladas> }
 
+/** Mientras llega el primer reporte: las cifras y el historial en gris, con su forma, sin números inventados. */
 function ReporteCargando() {
   return (
     <div role="status" className="space-y-4">
       <span className="sr-only">Cargando el reporte…</span>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" aria-hidden="true">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-hidden="true">
         {[0, 1, 2].map((cifra) => (
-          <div key={cifra} className="bg-card border border-border/50 rounded-xl p-5 animate-pulse space-y-2">
-            <div className="h-3.5 w-1/2 rounded bg-muted" />
-            <div className="h-7 w-2/3 rounded bg-muted" />
+          <div
+            key={cifra}
+            className={cn(TARJETA_DEL_PANEL, "space-y-4 p-5 sm:p-6", cifra === 0 && "sm:col-span-2 xl:col-span-1")}
+          >
+            <Esqueleto className="w-1/3" />
+            <Esqueleto className="h-7 w-1/2" />
           </div>
         ))}
       </div>
-      <div className="bg-card border border-border/50 rounded-xl p-5 animate-pulse space-y-3" aria-hidden="true">
+      <div className={cn(TARJETA_DEL_PANEL, "space-y-4 p-5 sm:p-6")} aria-hidden="true">
+        <Esqueleto className="h-5 w-1/4" />
         {[0, 1, 2, 3].map((fila) => (
-          <div key={fila} className="h-4 w-full rounded bg-muted" />
+          <Esqueleto key={fila} />
         ))}
       </div>
     </div>
@@ -73,11 +81,10 @@ function ReporteCargando() {
 
 function AvisoDeTruncado() {
   return (
-    <p role="status" className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-      <TriangleAlert className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+    <Aviso tono="atencion" rol="status">
       El período tiene demasiadas atenciones para sumarlas de una vez: las cifras y el historial están incompletos.
       Acota el período para verlo entero.
-    </p>
+    </Aviso>
   )
 }
 
@@ -257,6 +264,8 @@ export default function PaginaReportes() {
   // no es lo de lo elegido: no se muestra como si lo fuera.
   const mostrarReporte = vista === "cobradas" && reporte !== null && !errorDeRango && !errorDelReporte
   const mostrarAnuladas = vista === "anuladas" && anuladas !== null && !errorDeRango && !errorDelReporte
+  /** Se ve lo anterior mientras llega lo nuevo: los filtros lo dicen ("Actualizando…"). */
+  const actualizandoLoQueSeVe = cargando && (mostrarReporte || mostrarAnuladas)
 
   /** Los nombres de lo elegido en los filtros, para titular la cifra principal. */
   const nombreDe = (lista: { id: string; nombre: string }[] | undefined, id: string, siNoEsta: string) =>
@@ -273,7 +282,7 @@ export default function PaginaReportes() {
     <div className="min-h-screen">
       <BarraSuperior titulo="Reportes" subtitulo={subtitulo} />
 
-      <div className="p-4 sm:p-6 space-y-6">
+      <div className="space-y-6 px-4 pb-8 pt-4 sm:px-6 sm:pt-6">
         {verAnuladas && (
           <SelectorDeVista idBase={idBase} idDelPanel={idDelPanel} vista={vista} onCambiar={cambiarVista} />
         )}
@@ -291,31 +300,30 @@ export default function PaginaReportes() {
             alcance={reporte?.alcance ?? null}
             errorDeRango={errorDeRango}
             soloPeriodo={vista === "anuladas"}
+            actualizando={actualizandoLoQueSeVe}
             onCambiar={cambiarFiltros}
             onReintentarOpciones={reintentarOpciones}
           />
 
           {errorDelReporte && (
-            <div className="flex flex-wrap items-center gap-3">
-              <p role="alert" className="text-sm text-red-500">
-                {errorDelReporte}
-              </p>
-              <BotonPrimario
-                variante="secundario"
-                tamaño="sm"
-                onClick={() => setReintentos((previos) => previos + 1)}
-                icono={<RefreshCw className="h-4 w-4" aria-hidden="true" />}
-                className={ANILLO_DE_FOCO}
-              >
-                Reintentar
-              </BotonPrimario>
-            </div>
+            <Aviso
+              tono="error"
+              rol="alert"
+              accion={
+                <Boton variante="secundario" tamano="sm" onClick={() => setReintentos((previos) => previos + 1)}>
+                  <RefreshCw aria-hidden="true" className="size-4" strokeWidth={2} />
+                  Reintentar
+                </Boton>
+              }
+            >
+              {errorDelReporte}
+            </Aviso>
           )}
 
           {mensaje && (
-            <p role={mensaje.error ? "alert" : "status"} className={mensaje.error ? "text-sm text-red-500" : "text-sm text-green-700"}>
+            <Aviso tono={mensaje.error ? "error" : "listo"} rol={mensaje.error ? "alert" : "status"}>
               {mensaje.texto}
-            </p>
+            </Aviso>
           )}
 
           {((vista === "cobradas" && !reporte) || (vista === "anuladas" && !anuladas)) && cargando && <ReporteCargando />}
@@ -323,12 +331,7 @@ export default function PaginaReportes() {
           {mostrarReporte && (
             <div aria-busy={cargando} className="space-y-6">
               {reporte.truncado && !cargando && <AvisoDeTruncado />}
-              {cargando && (
-                <p role="status" className="text-sm text-muted-foreground">
-                  Actualizando…
-                </p>
-              )}
-              <div className={cargando ? "opacity-60 transition-opacity" : "transition-opacity"}>
+              <div className={cn("transition-opacity duration-200 ease-suave", cargando && "opacity-60")}>
                 <ResumenDeReporte reporte={reporte} rotuloDeIngresos={rotulo} />
               </div>
               <HistorialDeCobros
@@ -346,12 +349,7 @@ export default function PaginaReportes() {
           {mostrarAnuladas && (
             <div aria-busy={cargando} className="space-y-6">
               {anuladas.truncado && !cargando && <AvisoDeTruncado />}
-              {cargando && (
-                <p role="status" className="text-sm text-muted-foreground">
-                  Actualizando…
-                </p>
-              )}
-              <div className={cargando ? "opacity-60 transition-opacity" : "transition-opacity"}>
+              <div className={cn("transition-opacity duration-200 ease-suave", cargando && "opacity-60")}>
                 <ResumenDeAnuladas reporte={anuladas} />
               </div>
               <HistorialDeAnuladas reporte={anuladas} actualizando={cargando} onPagina={setPagina} />

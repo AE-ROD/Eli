@@ -1,8 +1,10 @@
 "use client"
 
-import { motion } from "framer-motion"
-import { Search, MessageSquarePlus } from "lucide-react"
+import { useEffect, useId } from "react"
+import { MessageSquarePlus, Search } from "lucide-react"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
+import { CAMPO } from "@/components/panel/estilos"
+import { cn } from "@/lib/utils"
 import type { Conversacion } from "../_datos"
 
 /** `Ahora`, `5m`, `14:30`, `Mié` o `8 mar`, según cuánto pasó. */
@@ -22,6 +24,12 @@ interface ListaConversacionesProps {
   activaId: string | null
   onSeleccionar: (conversacion: Conversacion) => void
   onNueva: () => void
+  /**
+   * La conversación cuyo botón recibe el foco: la que se acaba de dejar al
+   * volver a la lista en el teléfono. Sin esto, el foco caía al `<body>`.
+   */
+  enfocarId?: string | null
+  className?: string
 }
 
 export function ListaConversaciones({
@@ -31,68 +39,93 @@ export function ListaConversaciones({
   activaId,
   onSeleccionar,
   onNueva,
+  enfocarId,
+  className,
 }: ListaConversacionesProps) {
+  const prefijo = useId()
+  const idDe = (conversacion: string) => `${prefijo}-${conversacion}`
+
+  useEffect(() => {
+    if (enfocarId) document.getElementById(`${prefijo}-${enfocarId}`)?.focus()
+  }, [enfocarId, prefijo])
+
   const filtradas = conversaciones.filter((conversacion) =>
     conversacion.customerName.toLowerCase().includes(busqueda.toLowerCase()) ||
     (conversacion.customerPhone ?? "").includes(busqueda)
   )
 
   return (
-    <aside className="w-80 border-r border-border/50 bg-card flex flex-col flex-shrink-0">
-      <div className="p-4 border-b border-border/50 flex items-center gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+    <aside aria-label="Conversaciones" className={cn("min-h-0 w-full flex-col md:w-72 md:shrink-0 md:border-r md:border-borde lg:w-80", className)}>
+      <div className="flex items-center gap-2 border-b border-borde p-3">
+        <div className="relative min-w-0 flex-1">
+          <Search
+            className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-texto-2"
+            aria-hidden="true"
+            strokeWidth={1.75}
+          />
           <input
-            type="text"
+            type="search"
+            aria-label="Buscar conversación"
             placeholder="Buscar conversación..."
             value={busqueda}
             onChange={(e) => onBusqueda(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className={cn(CAMPO, "pl-10")}
           />
         </div>
         <button
+          type="button"
           onClick={onNueva}
-          className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+          aria-label="Nueva conversación"
           title="Nueva conversación"
+          className="grid size-11 shrink-0 place-items-center rounded-[14px] bg-superficie text-navy squircle anillo-foco transition-colors duration-150 ease-suave hover:bg-borde"
         >
-          <MessageSquarePlus className="h-5 w-5" />
+          <MessageSquarePlus className="size-5" aria-hidden="true" strokeWidth={1.75} />
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      {/* El relleno deja lugar al anillo del foco, que la lista que se desplaza recortaría en los bordes. */}
+      <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {filtradas.length === 0 ? (
-          <div className="p-6 text-center text-sm text-muted-foreground">
-            Sin conversaciones
-          </div>
+          <p className="p-6 text-center text-sm text-texto-2">Sin conversaciones</p>
         ) : (
-          filtradas.map((conversacion) => {
-            const ultimo = conversacion.messages[0]
-            return (
-              <motion.button
-                key={conversacion.id}
-                className={`w-full p-4 flex items-start gap-3 hover:bg-muted/50 transition-colors text-left ${
-                  activaId === conversacion.id ? "bg-primary/5 border-l-2 border-primary" : ""
-                }`}
-                onClick={() => onSeleccionar(conversacion)}
-                whileHover={{ x: 2 }}
-              >
-                <AvatarUsuario nombre={conversacion.customerName} tamaño="md" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-medium text-foreground truncate">{conversacion.customerName}</span>
-                    <span className="text-xs text-muted-foreground flex-shrink-0">
-                      {formatearHoraRelativa(conversacion.updatedAt)}
+          <ul className="space-y-1">
+            {filtradas.map((conversacion) => {
+              const ultimo = conversacion.messages[0]
+              const activa = activaId === conversacion.id
+              return (
+                <li key={conversacion.id}>
+                  <button
+                    id={idDe(conversacion.id)}
+                    type="button"
+                    aria-current={activa ? "true" : undefined}
+                    onClick={() => onSeleccionar(conversacion)}
+                    className={cn(
+                      "relative flex w-full items-start gap-3 rounded-[20px] p-3 text-left text-navy squircle anillo-foco transition-colors duration-150 ease-suave",
+                      // La abierta, además del fondo, lleva una barra navy: el gris solo casi no se distingue del blanco.
+                      activa
+                        ? "bg-superficie before:absolute before:inset-y-3 before:left-0 before:w-1 before:rounded-full before:bg-navy"
+                        : "hover:bg-crema"
+                    )}
+                  >
+                    <AvatarUsuario nombre={conversacion.customerName} tamaño="md" />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline justify-between gap-2">
+                        <span className={cn("truncate", activa ? "font-semibold" : "font-medium")}>
+                          {conversacion.customerName}
+                        </span>
+                        <span className="shrink-0 text-xs text-texto-2 tabular-nums">
+                          {formatearHoraRelativa(conversacion.updatedAt)}
+                        </span>
+                      </span>
+                      <span className="mt-0.5 block truncate text-sm text-texto-2">
+                        {ultimo ? (ultimo.fromBusiness ? "Tú: " : "") + ultimo.content : "Sin mensajes"}
+                      </span>
                     </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground truncate">
-                    {ultimo
-                      ? (ultimo.fromBusiness ? "Tú: " : "") + ultimo.content
-                      : "Sin mensajes"}
-                  </p>
-                </div>
-              </motion.button>
-            )
-          })
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
         )}
       </div>
     </aside>

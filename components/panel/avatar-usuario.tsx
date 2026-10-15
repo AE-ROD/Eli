@@ -1,6 +1,9 @@
 "use client"
 
 import Image from "next/image"
+import { FONDO_FUERTE } from "@/components/comunes/colores-de-modulo"
+import type { ColorDeModulo } from "@/lib/modulos"
+import { cn } from "@/lib/utils"
 
 interface AvatarUsuarioProps {
   nombre: string
@@ -10,82 +13,82 @@ interface AvatarUsuarioProps {
 }
 
 const tamañosClases = {
-  xs: "w-6 h-6 text-xs",
-  sm: "w-8 h-8 text-xs",
-  md: "w-10 h-10 text-sm",
-  lg: "w-12 h-12 text-base",
-  xl: "w-16 h-16 text-xl",
+  xs: "size-6 text-[10px]",
+  sm: "size-8 text-xs",
+  md: "size-10 text-sm",
+  lg: "size-12 text-base",
+  xl: "size-16 text-xl",
 }
 
 const tamañosIndicador = {
-  xs: "w-1.5 h-1.5 border",
-  sm: "w-2 h-2 border",
-  md: "w-2.5 h-2.5 border-2",
-  lg: "w-3 h-3 border-2",
-  xl: "w-4 h-4 border-2",
+  xs: "size-1.5 ring-1",
+  sm: "size-2 ring-[1.5px]",
+  md: "size-2.5 ring-2",
+  lg: "size-3 ring-2",
+  xl: "size-4 ring-2",
 }
+
+/**
+ * Los pasteles fuertes, con las iniciales en navy: todos pasan de 9:1. Las
+ * iniciales blancas sobre los colores de antes quedaban entre 2,1 y 3,7:1.
+ */
+const COLORES = Object.keys(FONDO_FUERTE) as ColorDeModulo[]
 
 function obtenerIniciales(nombre: string): string {
   return nombre
     .split(" ")
-    .map((n) => n[0])
+    .filter(Boolean)
+    .map((parte) => parte[0])
     .slice(0, 2)
     .join("")
     .toUpperCase()
 }
 
+/** El mismo nombre da siempre el mismo color. */
 function obtenerColorFondo(nombre: string): string {
-  const colores = [
-    "bg-blue-500",
-    "bg-green-500",
-    "bg-amber-500",
-    "bg-purple-500",
-    "bg-pink-500",
-    "bg-indigo-500",
-    "bg-teal-500",
-    "bg-orange-500",
-  ]
-  const indice = nombre.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) % colores.length
-  return colores[indice]
+  const indice = nombre.split("").reduce((suma, letra) => suma + letra.charCodeAt(0), 0) % COLORES.length
+  return FONDO_FUERTE[COLORES[indice]]
 }
 
-export function AvatarUsuario({
-  nombre,
-  imagenUrl,
-  tamaño = "md",
-  enLinea,
-}: AvatarUsuarioProps) {
+/**
+ * La foto de una persona o, sin foto, sus iniciales sobre un pastel. Es
+ * decorativo: siempre va junto al nombre, que es lo que se lee, así que no
+ * repite el nombre para el lector de pantalla. Todo es `span` para que pueda
+ * ir dentro de un botón (una tarjeta que se abre).
+ */
+export function AvatarUsuario({ nombre, imagenUrl, tamaño = "md", enLinea }: AvatarUsuarioProps) {
   return (
-    <div className="relative">
+    <span className="relative block shrink-0">
       {imagenUrl ? (
         <Image
           src={imagenUrl}
-          alt={nombre}
+          alt=""
           width={64}
           height={64}
-          className={`${tamañosClases[tamaño]} rounded-full object-cover`}
+          className={cn(tamañosClases[tamaño], "block rounded-full object-cover")}
         />
       ) : (
-        <div
-          className={`
-            ${tamañosClases[tamaño]} 
-            ${obtenerColorFondo(nombre)}
-            rounded-full flex items-center justify-center text-white font-medium
-          `}
+        <span
+          aria-hidden="true"
+          className={cn(
+            tamañosClases[tamaño],
+            obtenerColorFondo(nombre),
+            "flex items-center justify-center rounded-full font-medium tracking-[0.02em] text-navy select-none"
+          )}
         >
           {obtenerIniciales(nombre)}
-        </div>
+        </span>
       )}
       {enLinea !== undefined && (
         <span
-          className={`
-            absolute bottom-0 right-0 
-            ${tamañosIndicador[tamaño]}
-            rounded-full border-background
-            ${enLinea ? "bg-green-500" : "bg-gray-400"}
-          `}
+          aria-hidden="true"
+          className={cn(
+            "absolute right-0 bottom-0 rounded-full ring-tarjeta",
+            tamañosIndicador[tamaño],
+            enLinea ? "bg-lima" : "bg-texto-2"
+          )}
         />
       )}
-    </div>
+    </span>
   )
 }

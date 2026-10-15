@@ -1,9 +1,11 @@
 "use client"
 
-import { useState } from "react"
-import Link from "next/link"
-import { motion } from "framer-motion"
-import { Link2, Copy, Check, ArrowRight } from "lucide-react"
+import { useId, useState } from "react"
+import { ArrowUpRight, Check, Copy, Link2 } from "lucide-react"
+import { Boton } from "@/components/comunes/boton"
+import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
+import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { cn } from "@/lib/utils"
 
 interface EnlaceDeReservasProps {
   /** El slug del negocio: la página pública es `/reservar/<slug>`. */
@@ -12,6 +14,7 @@ interface EnlaceDeReservasProps {
 
 /** El enlace público de reservas del negocio, para copiarlo o abrirlo. */
 export function EnlaceDeReservas({ slug }: EnlaceDeReservasProps) {
+  const idDelTitulo = useId()
   const [copiado, setCopiado] = useState(false)
   const enlace =
     typeof window !== "undefined" ? `${window.location.origin}/reservar/${slug}` : `/reservar/${slug}`
@@ -23,37 +26,34 @@ export function EnlaceDeReservas({ slug }: EnlaceDeReservasProps) {
   }
 
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.35 }}
-    >
-      <div className="bg-primary/5 border border-primary/20 rounded-xl p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-        <div className="p-3 rounded-xl bg-primary/10 flex-shrink-0">
-          <Link2 className="h-5 w-5 text-primary" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-foreground mb-0.5">Tu enlace de reservas</p>
-          <p className="text-xs text-muted-foreground truncate font-mono">{enlace}</p>
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button
-            onClick={copiarEnlace}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background border border-border hover:bg-muted transition-colors text-sm font-medium"
-          >
-            {copiado ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4 text-muted-foreground" />}
-            {copiado ? "Copiado" : "Copiar"}
-          </button>
-          <Link
-            href={`/reservar/${slug}`}
-            target="_blank"
-            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-sm font-medium"
-          >
-            Ver página
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
-      </div>
-    </motion.section>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+      <EncabezadoDeTarjeta
+        id={idDelTitulo}
+        titulo="Tu enlace de reservas"
+        // Entero, aunque baje de renglón: es lo que se va a compartir.
+        subtitulo={<span className="font-mono break-all text-navy">{enlace}</span>}
+        icono={{ figura: Link2, color: "azul" }}
+        accion={
+          <>
+            <Boton
+              variante="secundario"
+              tamano="sm"
+              onClick={copiarEnlace}
+              icono={copiado ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+            >
+              {copiado ? "Copiado" : "Copiar"}
+            </Boton>
+            <Boton href={`/reservar/${slug}`} target="_blank" tamano="sm" icono={<ArrowUpRight aria-hidden="true" />}>
+              Ver página
+              <span className="sr-only"> (se abre en otra pestaña)</span>
+            </Boton>
+          </>
+        }
+      />
+      {/* El texto del botón cambia, pero el lector de pantalla no siempre lo dice: esto sí. */}
+      <p role="status" className="sr-only">
+        {copiado ? "Enlace copiado" : ""}
+      </p>
+    </section>
   )
 }

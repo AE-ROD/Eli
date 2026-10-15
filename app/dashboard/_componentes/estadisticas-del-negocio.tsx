@@ -1,30 +1,18 @@
 "use client"
 
-import { motion } from "framer-motion"
 import { CalendarDays, Users, DollarSign, type LucideIcon } from "lucide-react"
 import { formatearHora } from "@/lib/fechas"
 import { formatearMonto } from "@/lib/dinero"
+import type { ColorDeModulo } from "@/lib/modulos"
 import { TarjetaEstadistica } from "./tarjeta-estadistica"
 import { puedeVerIngresos, type EstadisticasDelPanel } from "../_datos"
-
-const contenedorVariantes = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1 },
-  },
-}
-
-const itemVariantes = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 },
-}
 
 interface Tarjeta {
   titulo: string
   valor: string | number
   icono: LucideIcon
-  colorIcono: "primario" | "exito" | "info"
+  /** El de la agenda para las citas, el de clientes y el de reportes para lo cobrado. */
+  color: ColorDeModulo
   procedencia?: string
 }
 
@@ -70,9 +58,9 @@ function procedenciaDeIngresos(estadisticas: EstadisticasDelPanel): string | und
 
 /** Mientras cargan, las tres tarjetas con un guion: nunca un cero que no es cierto. */
 const TARJETAS_CARGANDO: Tarjeta[] = [
-  { titulo: "Citas hoy", valor: "—", icono: CalendarDays, colorIcono: "primario" },
-  { titulo: "Clientes activos", valor: "—", icono: Users, colorIcono: "exito" },
-  { titulo: "Ingresos del mes", valor: "—", icono: DollarSign, colorIcono: "info" },
+  { titulo: "Citas hoy", valor: "—", icono: CalendarDays, color: "azul" },
+  { titulo: "Clientes activos", valor: "—", icono: Users, color: "lila" },
+  { titulo: "Ingresos del mes", valor: "—", icono: DollarSign, color: "lima" },
 ]
 
 function tarjetasDe(estadisticas: EstadisticasDelPanel): Tarjeta[] {
@@ -81,14 +69,14 @@ function tarjetasDe(estadisticas: EstadisticasDelPanel): Tarjeta[] {
       titulo: "Citas hoy",
       valor: estadisticas.citasHoy,
       icono: CalendarDays,
-      colorIcono: "primario",
+      color: "azul",
       procedencia: procedenciaDeCitas(estadisticas),
     },
     {
       titulo: "Clientes activos",
       valor: estadisticas.totalClientes,
       icono: Users,
-      colorIcono: "exito",
+      color: "lila",
       procedencia: procedenciaDeClientes(estadisticas),
     },
     ...(puedeVerIngresos(estadisticas)
@@ -97,7 +85,7 @@ function tarjetasDe(estadisticas: EstadisticasDelPanel): Tarjeta[] {
             titulo: "Ingresos del mes",
             valor: formatearMonto(estadisticas.ingresosMes ?? 0),
             icono: DollarSign,
-            colorIcono: "info" as const,
+            color: "lima" as const,
             procedencia: procedenciaDeIngresos(estadisticas),
           },
         ]
@@ -115,20 +103,17 @@ export function EstadisticasDelNegocio({ estadisticas }: EstadisticasDelNegocioP
   const tarjetas = estadisticas ? tarjetasDe(estadisticas) : TARJETAS_CARGANDO
 
   return (
-    <motion.section variants={contenedorVariantes} initial="hidden" animate="show">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {tarjetas.map((tarjeta) => (
-          <motion.div key={tarjeta.titulo} variants={itemVariantes}>
-            <TarjetaEstadistica
-              titulo={tarjeta.titulo}
-              valor={tarjeta.valor}
-              icono={tarjeta.icono}
-              colorIcono={tarjeta.colorIcono}
-              procedencia={tarjeta.procedencia}
-            />
-          </motion.div>
-        ))}
-      </div>
-    </motion.section>
+    <div aria-busy={!estadisticas || undefined} className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {tarjetas.map((tarjeta) => (
+        <TarjetaEstadistica
+          key={tarjeta.titulo}
+          titulo={tarjeta.titulo}
+          valor={tarjeta.valor}
+          icono={tarjeta.icono}
+          color={tarjeta.color}
+          procedencia={tarjeta.procedencia}
+        />
+      ))}
+    </div>
   )
 }

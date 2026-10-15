@@ -1,8 +1,9 @@
 "use client"
 
-import { motion } from "framer-motion"
+import { CalendarDays, Mail, Phone } from "lucide-react"
+import { Insignia } from "@/components/comunes/insignia"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
-import { MoreHorizontal, Phone, Mail, Calendar } from "lucide-react"
+import { cn } from "@/lib/utils"
 import type { Cliente } from "../_datos"
 
 /**
@@ -22,14 +23,9 @@ export interface ClienteEnTarjeta {
 
 interface TarjetaClienteProps {
   cliente: ClienteEnTarjeta
+  /** Si es el que está abierto en la ficha de al lado. La ficha se ve desde `lg`, y la marca también. */
+  seleccionado?: boolean
   onClick?: () => void
-}
-
-const coloresEtiqueta = {
-  VIP: "bg-amber-100 text-amber-700",
-  Frecuente: "bg-green-100 text-green-700",
-  Nuevo: "bg-blue-100 text-blue-700",
-  Inactivo: "bg-gray-100 text-gray-600",
 }
 
 const ETIQUETAS_VALIDAS = ["VIP", "Frecuente", "Nuevo", "Inactivo"] as const
@@ -46,6 +42,11 @@ function formatearFechaRelativa(iso: string): string {
   return `Hace ${Math.floor(dias / 30)} meses`
 }
 
+/** `1 visita`, `3 visitas`. */
+function visitasEnTexto(visitas: number): string {
+  return visitas === 1 ? "1 visita" : `${visitas} visitas`
+}
+
 /**
  * Del cliente que devuelve el servidor a lo que muestra la tarjeta. Las citas
  * vienen de la más reciente a la más vieja, así que la primera es la última
@@ -59,7 +60,8 @@ export function clienteParaTarjeta(cliente: Cliente): ClienteEnTarjeta {
   return {
     id: cliente.id,
     nombre: cliente.name,
-    email: cliente.email ?? "Sin email",
+    // "Correo", como en el formulario del cliente nuevo y en el resto del producto.
+    email: cliente.email ?? "Sin correo",
     telefono: cliente.phone ?? "Sin teléfono",
     visitas: cliente.appointments.length,
     ultimaVisita: ultimaCita ? formatearFechaRelativa(ultimaCita.startTime) : "Sin visitas",
@@ -67,53 +69,74 @@ export function clienteParaTarjeta(cliente: Cliente): ClienteEnTarjeta {
   }
 }
 
-export function TarjetaCliente({ cliente, onClick }: TarjetaClienteProps) {
+/**
+ * La etiqueta del cliente, en una píldora con el lila de Clientes; "Inactivo",
+ * en gris. El texto es navy sobre las dos.
+ */
+export function EtiquetaDeCliente({
+  etiqueta,
+  className,
+}: {
+  etiqueta: NonNullable<ClienteEnTarjeta["etiqueta"]>
+  className?: string
+}) {
   return (
-    <motion.div
-      className="bg-card border border-border/50 rounded-xl p-4 hover:shadow-md transition-all cursor-pointer"
-      whileHover={{ y: -2 }}
-      onClick={onClick}
-    >
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <AvatarUsuario nombre={cliente.nombre} imagenUrl={cliente.imagenUrl} tamaño="lg" />
-          <div>
-            <div className="flex items-center gap-2">
-              <h4 className="font-semibold text-foreground">{cliente.nombre}</h4>
-              {cliente.etiqueta && (
-                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${coloresEtiqueta[cliente.etiqueta]}`}>
-                  {cliente.etiqueta}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-3 mt-1">
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Mail className="h-3 w-3" />
-                {cliente.email}
-              </span>
-            </div>
-          </div>
-        </div>
-        <button className="p-1 rounded-lg hover:bg-muted transition-colors">
-          <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-        </button>
-      </div>
+    <Insignia tono={etiqueta === "Inactivo" ? "gris" : "lila"} className={className}>
+      {etiqueta}
+    </Insignia>
+  )
+}
 
-      <div className="flex items-center justify-between mt-4 pt-4 border-t border-border/50">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Phone className="h-3 w-3" />
-            {cliente.telefono}
-          </div>
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Calendar className="h-3 w-3" />
-            {cliente.visitas} visitas
-          </div>
-        </div>
-        <span className="text-xs text-muted-foreground">
-          Última: {cliente.ultimaVisita}
+/**
+ * Un cliente de la lista. La tarjeta entera es un botón que abre su ficha: se
+ * enfoca con Tab y se abre con Enter o Espacio, no sólo con el mouse. Por eso
+ * todo lo de adentro son `span`: en un botón no va un `div` ni un `p`.
+ *
+ * Mide su propio ancho (`@container`): angosta, en la cuadrícula, los datos
+ * van debajo del nombre; ancha, en la lista, todo va en una fila. Un nombre o
+ * un correo largos se cortan en renglones y no ensanchan la página.
+ */
+export function TarjetaCliente({ cliente, seleccionado = false, onClick }: TarjetaClienteProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        // Todo el alto de su celda: en la cuadrícula, las de una fila miden lo mismo.
+        "@container block h-full w-full rounded-[24px] bg-tarjeta p-4 text-left text-navy shadow-sm squircle anillo-foco",
+        "cursor-pointer transition-[box-shadow,background-color] duration-200 ease-suave hover:shadow-md",
+        // La abierta, con el lila de Clientes. Sólo marca: el nombre está en la ficha.
+        seleccionado && "lg:bg-lila-suave/50 lg:inset-ring-2 lg:inset-ring-lila"
+      )}
+    >
+      {/* En columna, los datos quedan al pie: alineados entre las tarjetas de una fila. */}
+      <span className="flex h-full flex-col justify-between gap-4 @xl:flex-row @xl:items-center @xl:gap-6">
+        <span className="flex min-w-0 items-center gap-3 @xl:flex-1">
+          <AvatarUsuario nombre={cliente.nombre} imagenUrl={cliente.imagenUrl} tamaño="lg" />
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="min-w-0 font-semibold break-words">{cliente.nombre}</span>
+              {cliente.etiqueta && <EtiquetaDeCliente etiqueta={cliente.etiqueta} />}
+            </span>
+            <span className="mt-1 flex items-start gap-1.5 text-sm text-texto-2">
+              <Mail className="mt-[3px] size-3.5 shrink-0" aria-hidden="true" strokeWidth={1.75} />
+              <span className="min-w-0 wrap-anywhere">{cliente.email}</span>
+            </span>
+          </span>
         </span>
-      </div>
-    </motion.div>
+
+        <span className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-borde pt-3 text-[13px] text-texto-2 @xl:shrink-0 @xl:border-t-0 @xl:pt-0">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <Phone className="size-3.5 shrink-0" aria-hidden="true" strokeWidth={1.75} />
+            <span className="min-w-0 wrap-anywhere">{cliente.telefono}</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <CalendarDays className="size-3.5 shrink-0" aria-hidden="true" strokeWidth={1.75} />
+            {visitasEnTexto(cliente.visitas)}
+          </span>
+          <span>Última: {cliente.ultimaVisita}</span>
+        </span>
+      </span>
+    </button>
   )
 }

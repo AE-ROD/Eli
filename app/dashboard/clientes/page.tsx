@@ -10,6 +10,7 @@ import {
   type Cliente,
   type DatosDeNuevoCliente,
 } from "./_datos"
+import { Aviso } from "@/components/panel/aviso"
 import { FiltrosClientes } from "./_componentes/filtros-clientes"
 import { ListaClientes } from "./_componentes/lista-clientes"
 import { PanelDetalleCliente } from "./_componentes/panel-detalle-cliente"
@@ -17,6 +18,11 @@ import { ModalNuevoCliente } from "./_componentes/modal-nuevo-cliente"
 import { clienteParaTarjeta, type ClienteEnTarjeta } from "./_componentes/tarjeta-cliente"
 
 const CLIENTE_EN_BLANCO: DatosDeNuevoCliente = { nombre: "", email: "", telefono: "" }
+
+/** `1 cliente registrado`, `12 clientes registrados`. */
+function cuantosClientes(total: number): string {
+  return total === 1 ? "1 cliente registrado" : `${total} clientes registrados`
+}
 
 /** Los mismos clientes, con las notas de uno cambiadas. Si no está en la lista, quedan como estaban. */
 function conNotas(clientesPorId: Record<string, Cliente>, clienteId: string, notas: string | null) {
@@ -162,19 +168,17 @@ export default function PaginaClientes() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-dvh">
+      {/* Sin la búsqueda de la cabecera: la página tiene la suya, justo debajo. */}
       <BarraSuperior
         titulo="Clientes"
-        subtitulo={cargando ? "Cargando..." : `${total} clientes registrados`}
+        subtitulo={cargando ? "Cargando..." : cuantosClientes(total)}
         accionPrincipal={{ texto: "Nuevo cliente", onClick: abrirModal }}
+        mostrarBusqueda={false}
       />
 
-      <div className="p-6">
-        {aviso && (
-          <p role="alert" className="text-sm text-red-500 mb-4">
-            {aviso}
-          </p>
-        )}
+      <div className="space-y-4 px-4 pt-6 pb-10 sm:space-y-6 sm:px-6">
+        {aviso && <Aviso>{aviso}</Aviso>}
 
         <FiltrosClientes
           busqueda={busqueda}
@@ -185,8 +189,9 @@ export default function PaginaClientes() {
           onVista={setVista}
         />
 
-        <div className="flex gap-6">
-          <div className="flex-1">
+        {/* La lista y, desde lg, la ficha del cliente elegido al lado. */}
+        <div className="flex items-start gap-6">
+          <div className="min-w-0 flex-1">
             <ListaClientes
               clientes={clientes}
               cargando={cargando}
@@ -195,6 +200,7 @@ export default function PaginaClientes() {
               total={total}
               pagina={pagina}
               paginas={paginas}
+              seleccionadoId={clienteSeleccionado?.id}
               onSeleccionar={seleccionarCliente}
               onCargarMas={() => cargarClientes(busqueda, etiquetaActiva, pagina + 1, true)}
             />

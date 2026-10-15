@@ -51,13 +51,13 @@ export default async function PaginaConfiguracion() {
   const nombreActor = session?.user?.name ?? "Yo"
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-dvh">
       <BarraSuperior
         titulo="Configuración"
         subtitulo={gestionaElNegocio(actor) ? "Gestiona horarios, servicios y equipo" : "Gestiona tu horario de atención"}
       />
 
-      <div className="p-6 space-y-6 max-w-3xl">
+      <div className="max-w-3xl space-y-6 px-4 pt-6 pb-10 sm:px-6">
         {/* Horario: quien gestiona el negocio y tiene equipo → selector de tabs; el resto → directo */}
         {puedeEditarHorarioDeOtros && tieneEquipo ? (
           <SelectorHorarioMiembro

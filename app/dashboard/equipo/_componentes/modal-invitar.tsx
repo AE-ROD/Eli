@@ -1,10 +1,15 @@
 "use client"
 
-import { useState } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { X, UserPlus, Mail, User, ShieldCheck } from "lucide-react"
-import { CampoFormulario } from "@/components/comunes/campo-formulario"
+import { useId, useState } from "react"
+import { AnimatePresence } from "framer-motion"
+import { Mail, MailCheck, User, UserRound, UsersRound, type LucideIcon } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
+import { CampoFormulario } from "@/components/comunes/campo-formulario"
+import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
+import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
+import { Aviso } from "@/components/panel/aviso"
+import { MarcoDeModal } from "@/components/panel/marco-de-modal"
+import { cn } from "@/lib/utils"
 import { invitarAlEquipo } from "../_datos"
 
 interface ModalInvitarProps {
@@ -13,18 +18,25 @@ interface ModalInvitarProps {
   onInvitado: () => void
 }
 
-const roles = [
+/**
+ * Los roles que se pueden dar al invitar, con los nombres del producto. Lo
+ * que dice cada uno es lo que le permite `lib/permisos.ts`: el encargado
+ * gestiona la operación, pero no define comisiones ni anula lo cobrado.
+ */
+const roles: readonly { id: "worker" | "admin"; nombre: string; descripcion: string; icono: LucideIcon }[] = [
   {
     id: "worker",
-    nombre: "Trabajador",
+    nombre: "Profesional",
     descripcion: "Gestiona su propio horario y citas",
+    icono: UserRound,
   },
   {
     id: "admin",
-    nombre: "Administrador",
-    descripcion: "Acceso completo al negocio, puede invitar otros",
+    nombre: "Encargado",
+    descripcion: "Gestiona el equipo, la agenda, los horarios, los servicios y los cobros. Puede invitar a otros.",
+    icono: UsersRound,
   },
-] as const
+]
 
 export function ModalInvitar({ abierto, onCerrar, onInvitado }: ModalInvitarProps) {
   const [nombre, setNombre] = useState("")
@@ -69,111 +81,118 @@ export function ModalInvitar({ abierto, onCerrar, onInvitado }: ModalInvitarProp
   return (
     <AnimatePresence>
       {abierto && (
-        <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+        <MarcoDeModal
+          titulo={exito ? "Invitación enviada" : "Invitar al equipo"}
+          antetitulo="Equipo"
+          bloqueado={enviando}
+          alCerrar={cerrar}
         >
-          <div className="absolute inset-0 bg-foreground/20 backdrop-blur-sm" onClick={cerrar} />
-
-          <motion.div
-            className="relative bg-card rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: 20 }}
-          >
-            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-border/50">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-primary/10">
-                  <UserPlus className="h-5 w-5 text-primary" />
-                </div>
-                <h2 className="text-lg font-bold text-foreground">Invitar trabajador</h2>
-              </div>
-              <button onClick={cerrar} className="p-1 rounded-lg hover:bg-muted transition-colors">
-                <X className="h-4 w-4 text-muted-foreground" />
-              </button>
+          {exito ? (
+            <div>
+              <CuadroDeIcono icono={MailCheck} color="turquesa" tamano="lg" />
+              <p role="status" className="mt-4 text-pretty text-texto-2">
+                <strong className="font-medium break-words text-navy">{nombre}</strong> recibirá un correo en{" "}
+                <strong className="font-medium break-all text-navy">{email}</strong> con el enlace para crear su cuenta.
+              </p>
+              <BotonPrimario onClick={cerrar} anchoCompleto variante="secundario" className="mt-6">
+                Cerrar
+              </BotonPrimario>
             </div>
+          ) : (
+            <form onSubmit={enviar} className="space-y-5">
+              <CampoFormulario
+                etiqueta="Nombre"
+                type="text"
+                placeholder="Nombre de la persona"
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                icono={<User className="h-4 w-4" />}
+                required
+              />
+              <CampoFormulario
+                etiqueta="Correo electrónico"
+                type="email"
+                placeholder="correo@ejemplo.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                icono={<Mail className="h-4 w-4" />}
+                required
+              />
 
-            <div className="px-6 py-6">
-              {exito ? (
-                <motion.div
-                  className="text-center py-6"
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                >
-                  <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-                    <Mail className="h-7 w-7 text-green-600" />
-                  </div>
-                  <p className="font-bold text-foreground text-lg mb-2">Invitación enviada</p>
-                  <p className="text-sm text-muted-foreground mb-6">
-                    <strong>{nombre}</strong> recibirá un correo en <strong>{email}</strong> con el enlace para crear su cuenta.
-                  </p>
-                  <BotonPrimario onClick={cerrar} anchoCompleto variante="secundario">
-                    Cerrar
-                  </BotonPrimario>
-                </motion.div>
-              ) : (
-                <form onSubmit={enviar} className="space-y-5">
-                  <CampoFormulario
-                    etiqueta="Nombre"
-                    type="text"
-                    placeholder="Nombre del trabajador"
-                    value={nombre}
-                    onChange={(e) => setNombre(e.target.value)}
-                    icono={<User className="h-4 w-4" />}
-                    required
-                  />
-                  <CampoFormulario
-                    etiqueta="Correo electrónico"
-                    type="email"
-                    placeholder="correo@ejemplo.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    icono={<Mail className="h-4 w-4" />}
-                    required
-                  />
+              <EleccionDeRol elegido={rol} alElegir={setRol} />
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-foreground">Rol</label>
-                    <div className="space-y-2">
-                      {roles.map((opcion) => (
-                        <button
-                          key={opcion.id}
-                          type="button"
-                          className={`w-full flex items-start gap-3 p-3 rounded-xl border-2 text-left transition-all ${
-                            rol === opcion.id
-                              ? "border-primary bg-primary/5"
-                              : "border-border hover:border-primary/40"
-                          }`}
-                          onClick={() => setRol(opcion.id)}
-                        >
-                          <ShieldCheck className={`h-4 w-4 mt-0.5 flex-shrink-0 ${rol === opcion.id ? "text-primary" : "text-muted-foreground"}`} />
-                          <div>
-                            <p className="text-sm font-semibold text-foreground">{opcion.nombre}</p>
-                            <p className="text-xs text-muted-foreground">{opcion.descripcion}</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+              {error && <Aviso>{error}</Aviso>}
 
-                  {error && <p role="alert" className="text-sm text-red-500">{error}</p>}
-
-                  <BotonPrimario
-                    type="submit"
-                    anchoCompleto
-                    cargando={enviando}
-                    icono={<Mail className="h-4 w-4" />}
-                  >
-                    Enviar invitación
-                  </BotonPrimario>
-                </form>
-              )}
-            </div>
-          </motion.div>
-        </motion.div>
+              <BotonPrimario type="submit" anchoCompleto cargando={enviando} icono={<Mail className="h-4 w-4" />}>
+                Enviar invitación
+              </BotonPrimario>
+            </form>
+          )}
+        </MarcoDeModal>
       )}
     </AnimatePresence>
+  )
+}
+
+/** El radio no se ve: el anillo del foco lo dibuja la fila entera cuando el radio de adentro lo tiene. */
+const ANILLO_DE_LA_FILA =
+  "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-(--anillo) has-focus-visible:shadow-[0_0_0_6px_var(--halo)]"
+
+/**
+ * Elegir el rol entre dos, los dos a la vista. Son radios nativos: el lector
+ * de pantalla dice cuál está elegido y las flechas pasan de uno al otro. Antes
+ * eran botones que no decían cuál estaba elegido.
+ */
+function EleccionDeRol({ elegido, alElegir }: { elegido: "worker" | "admin"; alElegir: (rol: "worker" | "admin") => void }) {
+  const nombreDelGrupo = useId()
+
+  return (
+    <fieldset className="min-w-0">
+      <legend className={cn(CLASES_DE_ETIQUETA, "mb-2")}>Rol</legend>
+      <div className="flex flex-col gap-2">
+        {roles.map((opcion) => {
+          const esElElegido = elegido === opcion.id
+          return (
+            <label
+              key={opcion.id}
+              className={cn(
+                "relative flex cursor-pointer items-center gap-3 rounded-campo border-[1.5px] bg-tarjeta py-3 pr-4 pl-3 text-navy squircle transition-[border-color] duration-150 ease-suave",
+                ANILLO_DE_LA_FILA,
+                esElElegido ? "border-navy" : "border-borde hover:border-texto-2"
+              )}
+            >
+              <input
+                type="radio"
+                name={nombreDelGrupo}
+                value={opcion.id}
+                checked={esElElegido}
+                onChange={() => alElegir(opcion.id)}
+                className="sr-only"
+              />
+              <CuadroDeIcono icono={opcion.icono} color="turquesa" activo={esElElegido} />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold">{opcion.nombre}</span>
+                <span className="mt-0.5 block text-[13px] leading-snug text-texto-2">{opcion.descripcion}</span>
+              </span>
+              {/* El círculo vacío o con el punto: lo que dice que es una elección, con contraste de 3:1. */}
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "grid size-5 shrink-0 place-items-center rounded-full border-[1.5px] bg-tarjeta transition-colors duration-150 ease-suave",
+                  esElElegido ? "border-navy" : "border-texto-2"
+                )}
+              >
+                <span
+                  className={cn(
+                    "size-2.5 rounded-full bg-navy transition-transform duration-150 ease-suave",
+                    esElElegido ? "scale-100" : "scale-0"
+                  )}
+                />
+              </span>
+            </label>
+          )
+        })}
+      </div>
+    </fieldset>
   )
 }

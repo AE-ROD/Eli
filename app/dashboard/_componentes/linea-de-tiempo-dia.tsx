@@ -1,6 +1,5 @@
 "use client"
 
-import { motion } from "framer-motion"
 import { TarjetaCita, type CitaEnTarjeta } from "@/components/panel/tarjeta-cita"
 import { formatearHora, duracionEnMinutos } from "@/lib/fechas"
 import {
@@ -36,12 +35,12 @@ export function citaParaTarjeta(cita: CitaDelDia): CitaEnTarjeta {
 }
 
 /**
- * Trama tenue para los huecos: a propósito distinta al borde de color de una
+ * Trama de rayas para los huecos: a propósito distinta del gris liso de una
  * cita, para que "ocupado" y "libre" se distingan de un vistazo y no sólo por
  * el color.
  */
 const CLASE_HUECO =
-  "border border-dashed border-border rounded-lg bg-[repeating-linear-gradient(45deg,rgba(0,0,0,0.035)_0px,rgba(0,0,0,0.035)_6px,transparent_6px,transparent_14px)] px-3 py-3"
+  "rounded-[20px] border-[1.5px] border-dashed border-borde bg-[repeating-linear-gradient(45deg,var(--color-superficie)_0px,var(--color-superficie)_6px,transparent_6px,transparent_14px)] px-3 py-3 squircle"
 
 export function LineaDeTiempoDia({ franjas, citas }: LineaDeTiempoDiaProps) {
   const fueraDeHorario = citasFueraDeFranjas(franjas, citas)
@@ -55,51 +54,51 @@ export function LineaDeTiempoDia({ franjas, citas }: LineaDeTiempoDiaProps) {
         return (
           <div key={`${franja.startTime}-${franja.endTime}`}>
             {franjaAnterior && (
-              <p className="text-xs text-muted-foreground/70 text-center py-2">
+              <p className="py-2 text-center text-xs text-texto-2 tabular-nums">
                 {franjaAnterior.endTime}–{franja.startTime} · fuera de tu horario
               </p>
             )}
-            <div className="space-y-2">
+            <ol className="space-y-2">
               {segmentos.map((segmento) => (
-                <motion.div
+                <li
                   key={
                     segmento.tipo === "cita"
                       ? `cita-${segmento.cita.id}`
                       : `hueco-${segmento.inicioMin}-${segmento.finMin}`
                   }
                   className="flex items-start gap-3"
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
                 >
-                  <span className="w-12 shrink-0 pt-2.5 text-xs text-muted-foreground tabular-nums text-right">
+                  <span className="w-11 shrink-0 pt-3 text-right text-xs text-texto-2 tabular-nums">
                     {formatoHHMM(segmento.inicioMin)}
                   </span>
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-0 flex-1">
                     {segmento.tipo === "cita" ? (
                       <TarjetaCita cita={citaParaTarjeta(segmento.cita)} compacta />
                     ) : (
                       <div className={CLASE_HUECO}>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-texto-2">
                           Hueco · {formatoDuracion(segmento.finMin - segmento.inicioMin)} sin reservar
                         </p>
                       </div>
                     )}
                   </div>
-                </motion.div>
+                </li>
               ))}
-            </div>
+            </ol>
           </div>
         )
       })}
 
       {fueraDeHorario.length > 0 && (
-        <div className="pt-2 border-t border-border/50 space-y-2">
-          <p className="text-xs text-muted-foreground">
-            Fuera de tu horario cargado:
-          </p>
-          {fueraDeHorario.map((cita) => (
-            <TarjetaCita key={cita.id} cita={citaParaTarjeta(cita)} compacta />
-          ))}
+        <div className="space-y-2 border-t border-borde pt-4">
+          <p className="text-xs text-texto-2">Fuera de tu horario cargado:</p>
+          <ul className="space-y-2">
+            {fueraDeHorario.map((cita) => (
+              <li key={cita.id}>
+                <TarjetaCita cita={citaParaTarjeta(cita)} compacta />
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

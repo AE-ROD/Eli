@@ -1,14 +1,16 @@
 "use client"
 
-import { useId, useRef } from "react"
+import { useId, useRef, type ReactNode } from "react"
 import Link from "next/link"
-import { Plus, Trash2 } from "lucide-react"
-import { ANILLO_DE_FOCO, CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO } from "@/components/panel/estilos"
+import { Plus, Trash2, TriangleAlert } from "lucide-react"
+import { Boton } from "@/components/comunes/boton"
+import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { MAXIMO_DE_LINEAS_POR_ATENCION, deCentavos } from "@/lib/atenciones"
 import { totalDeFilasEnCentavos, type ErroresDeFila, type FilaDeServicio } from "@/lib/acciones-del-tablero"
 import { formatearMonto, montoParaEscribir } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
 import type { Catalogo } from "../_datos"
+import { Aviso } from "@/components/panel/aviso"
 
 /** Ninguna atención real tiene más; es el tope del servidor. */
 const MAXIMO_DE_FILAS = MAXIMO_DE_LINEAS_POR_ATENCION
@@ -18,6 +20,16 @@ const MAXIMO_DE_FILAS = MAXIMO_DE_LINEAS_POR_ATENCION
  * claves sólo tienen que ser únicas mientras el modal está abierto.
  */
 let filasAgregadas = 0
+
+/** Lo que conviene saber de un campo sin ser un error: un servicio que salió del catálogo, alguien que dejó el equipo. */
+function AyudaDeCampo({ id, children }: { id: string; children: ReactNode }) {
+  return (
+    <p id={id} className="mt-1 flex items-start gap-1.5 text-xs font-medium text-navy">
+      <TriangleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" strokeWidth={2} />
+      <span className="min-w-0">{children}</span>
+    </p>
+  )
+}
 
 /**
  * Una fila vacía. Si hay un solo profesional posible (el dueño que atiende
@@ -90,21 +102,22 @@ export function EditorDeServicios({
   return (
     <div className="space-y-3">
       {catalogo.servicios.length === 0 && (
-        <p className="text-sm rounded-lg border border-amber-200 bg-amber-50 text-amber-900 p-3">
+        <Aviso tono="atencion">
           Todavía no hay servicios en el catálogo.{" "}
           {puedeConfigurarServicios ? (
-            <Link href="/dashboard/configuracion" className={cn("font-medium underline rounded", ANILLO_DE_FOCO)}>
+            <Link
+              href="/dashboard/configuracion"
+              className="rounded-sm underline decoration-[1.5px] underline-offset-4 anillo-foco"
+            >
               Agrégalos en Configuración
             </Link>
           ) : (
             "Pídele al dueño o al encargado que los cargue en Configuración."
           )}
-        </p>
+        </Aviso>
       )}
 
-      {filas.length === 0 && catalogo.servicios.length > 0 && (
-        <p className="text-sm text-muted-foreground">Sin servicios todavía.</p>
-      )}
+      {filas.length === 0 && catalogo.servicios.length > 0 && <p className="text-sm text-texto-2">Sin servicios todavía.</p>}
 
       {filas.map((fila, indice) => {
         const numero = indice + 1
@@ -115,14 +128,16 @@ export function EditorDeServicios({
           catalogo.servicios.find((servicio) => servicio.id === fila.servicioId)?.nombre ?? fila.servicioOriginal
 
         return (
+          // Cada servicio en un bloque gris: los campos blancos se recortan
+          // contra él y se ve dónde termina uno y empieza el otro.
           <fieldset
             key={fila.clave}
-            className="rounded-lg border border-border/70 p-3 grid grid-cols-1 sm:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.2fr)_auto] gap-3 items-start"
+            className="grid grid-cols-1 items-start gap-3 rounded-[20px] bg-superficie p-3 squircle sm:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.2fr)_auto] sm:p-4"
           >
             <legend className="sr-only">Servicio {numero}</legend>
 
             <div className={cn(!eligeProfesional && "sm:col-span-2")}>
-              <label htmlFor={id("servicio")} className="block text-xs font-medium text-muted-foreground mb-1">
+              <label htmlFor={id("servicio")} className={ETIQUETA}>
                 Servicio
               </label>
               <select
@@ -154,16 +169,16 @@ export function EditorDeServicios({
               ) : (
                 !fila.servicioId &&
                 fila.servicioOriginal && (
-                  <p id={id("servicio-ayuda")} className="text-xs text-amber-700 mt-1">
+                  <AyudaDeCampo id={id("servicio-ayuda")}>
                     «{fila.servicioOriginal}» no está en el catálogo: elige otro.
-                  </p>
+                  </AyudaDeCampo>
                 )
               )}
             </div>
 
             {eligeProfesional && (
               <div>
-                <label htmlFor={id("profesional")} className="block text-xs font-medium text-muted-foreground mb-1">
+                <label htmlFor={id("profesional")} className={ETIQUETA}>
                   Profesional
                 </label>
                 <select
@@ -187,9 +202,15 @@ export function EditorDeServicios({
                 </select>
                 {!fila.profesional && fila.profesionalOriginal ? (
                   // Quien la hizo dejó el equipo: su nombre ayuda a decidir a quién reasignarla.
-                  <p id={id("profesional-ayuda")} className={deLaFila.profesional ? ERROR_DE_CAMPO : "text-xs text-amber-700 mt-1"}>
-                    Falta asignar: {fila.profesionalOriginal} ya no está en el equipo.
-                  </p>
+                  deLaFila.profesional ? (
+                    <p id={id("profesional-ayuda")} className={ERROR_DE_CAMPO}>
+                      Falta asignar: {fila.profesionalOriginal} ya no está en el equipo.
+                    </p>
+                  ) : (
+                    <AyudaDeCampo id={id("profesional-ayuda")}>
+                      Falta asignar: {fila.profesionalOriginal} ya no está en el equipo.
+                    </AyudaDeCampo>
+                  )
                 ) : (
                   deLaFila.profesional && (
                     <p id={id("profesional-ayuda")} className={ERROR_DE_CAMPO}>
@@ -201,11 +222,11 @@ export function EditorDeServicios({
             )}
 
             <div>
-              <label htmlFor={id("precio")} className="block text-xs font-medium text-muted-foreground mb-1">
+              <label htmlFor={id("precio")} className={ETIQUETA}>
                 Precio
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground" aria-hidden="true">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-texto-2" aria-hidden="true">
                   $
                 </span>
                 {/*
@@ -235,43 +256,42 @@ export function EditorDeServicios({
               )}
             </div>
 
-            <div className="flex sm:pt-5 justify-end">
-              <button
-                type="button"
+            {/*
+              En el teléfono, a lo ancho y con su nombre; desde sm, sólo el
+              ícono, a la altura de los campos (baja lo que mide la etiqueta).
+            */}
+            <div className="flex justify-end">
+              <Boton
+                variante="fantasma"
+                tamano="sm"
                 onClick={() => quitar(fila.clave)}
                 disabled={deshabilitado}
                 aria-label={`Quitar el servicio ${numero}${nombreDelServicio ? `: ${nombreDelServicio}` : ""}`}
                 title="Quitar"
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50",
-                  ANILLO_DE_FOCO
-                )}
+                className="text-texto-2 hover:bg-error/8 hover:text-error sm:mt-6.5 sm:size-11 sm:px-0 sm:after:hidden"
               >
-                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                <Trash2 aria-hidden="true" className="size-[18px]" strokeWidth={1.75} />
                 <span className="sm:hidden">Quitar</span>
-              </button>
+              </Boton>
             </div>
           </fieldset>
         )
       })}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <button
+        <Boton
           ref={botonAgregar}
-          type="button"
+          variante="secundario"
+          tamano="sm"
           onClick={agregar}
           disabled={deshabilitado || filas.length >= MAXIMO_DE_FILAS || catalogo.servicios.length === 0}
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-sm font-medium text-primary hover:bg-primary/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-            ANILLO_DE_FOCO
-          )}
         >
-          <Plus className="h-4 w-4" aria-hidden="true" />
+          <Plus aria-hidden="true" className="size-4" strokeWidth={2} />
           Agregar servicio
-        </button>
-        <p className="text-sm text-foreground" aria-live="polite">
-          {eligeProfesional ? "Total" : "Total de tus servicios"}:{" "}
-          <span className="font-semibold tabular-nums">{formatearMonto(deCentavos(totalCentavos))}</span>
+        </Boton>
+        <p className="text-sm" aria-live="polite">
+          <span className="text-texto-2">{eligeProfesional ? "Total" : "Total de tus servicios"}:</span>{" "}
+          <span className="text-base font-semibold tabular-nums">{formatearMonto(deCentavos(totalCentavos))}</span>
         </p>
       </div>
     </div>

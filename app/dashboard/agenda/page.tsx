@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useId } from "react"
 import { useSession } from "next-auth/react"
 import { AnimatePresence } from "framer-motion"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { correr, comoTexto, diasDeLaSemanaDe, type UnidadDeTiempo } from "@/lib/fechas"
 import { leerCitas, crearCita, cambiarEstadoDeCita, type Cita, type DatosDeNuevaCita } from "./_datos"
+import { Aviso } from "@/components/panel/aviso"
 import { ControlesDeAgenda } from "./_componentes/controles-de-agenda"
 import { VistaSemana } from "./_componentes/vista-semana"
 import { VistaDia } from "./_componentes/vista-dia"
@@ -45,6 +46,7 @@ export default function PaginaAgenda() {
   const [guardando, setGuardando] = useState(false)
   const [avisoDelModal, setAvisoDelModal] = useState("")
   const [nuevaCita, setNuevaCita] = useState<DatosDeNuevaCita>(CITA_EN_BLANCO)
+  const idDelPeriodo = useId()
 
   const recargar = useCallback(async (fecha: Date, modo: UnidadDeTiempo) => {
     setCargando(true)
@@ -90,31 +92,33 @@ export default function PaginaAgenda() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-dvh">
       <BarraSuperior
         titulo="Agenda"
         subtitulo={resumen(cargando, citas.length)}
         accionPrincipal={{ texto: "Nueva cita", onClick: abrirModal }}
       />
 
-      <div className="p-6">
-        {aviso && (
-          <p role="alert" className="text-sm text-red-500 mb-4">
-            {aviso}
-          </p>
-        )}
+      <div className="space-y-4 px-4 pt-6 pb-10 sm:space-y-6 sm:px-6">
+        {aviso && <Aviso>{aviso}</Aviso>}
 
-        <ControlesDeAgenda
-          fechaActual={fecha}
-          vista={modo}
-          onAnterior={() => setFecha((actual) => correr(actual, modo, -1))}
-          onSiguiente={() => setFecha((actual) => correr(actual, modo, 1))}
-          onHoy={() => setFecha(new Date())}
-          onVista={setModo}
-        />
+        {/* El calendario en una tarjeta blanca y, desde lg, el detalle de la cita elegida al lado. */}
+        <div className="flex items-start gap-6">
+          <section
+            aria-labelledby={idDelPeriodo}
+            aria-busy={cargando}
+            className="min-w-0 flex-1 rounded-panel bg-tarjeta text-navy shadow-sm squircle"
+          >
+            <ControlesDeAgenda
+              fechaActual={fecha}
+              vista={modo}
+              idDelTitulo={idDelPeriodo}
+              onAnterior={() => setFecha((actual) => correr(actual, modo, -1))}
+              onSiguiente={() => setFecha((actual) => correr(actual, modo, 1))}
+              onHoy={() => setFecha(new Date())}
+              onVista={setModo}
+            />
 
-        <div className="flex gap-6">
-          <div className="flex-1 bg-card border border-border/50 rounded-xl overflow-hidden">
             {modo === "semana" && (
               <VistaSemana dias={diasDeLaSemanaDe(fecha)} citas={citas} onSeleccionar={setCitaAbierta} />
             )}
@@ -131,7 +135,7 @@ export default function PaginaAgenda() {
                 }}
               />
             )}
-          </div>
+          </section>
 
           <AnimatePresence>
             {citaAbierta && (

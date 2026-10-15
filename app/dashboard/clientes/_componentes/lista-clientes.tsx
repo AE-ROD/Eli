@@ -1,9 +1,11 @@
 "use client"
 
-import { motion, AnimatePresence } from "framer-motion"
+import { Users } from "lucide-react"
+import { Boton } from "@/components/comunes/boton"
+import { Esqueleto } from "@/components/comunes/esqueleto"
+import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
+import { cn } from "@/lib/utils"
 import { TarjetaCliente, type ClienteEnTarjeta } from "./tarjeta-cliente"
-import { BotonPrimario } from "@/components/comunes/boton-primario"
-import { ChevronDown, User } from "lucide-react"
 
 interface ListaClientesProps {
   clientes: ClienteEnTarjeta[]
@@ -13,25 +15,39 @@ interface ListaClientesProps {
   total: number
   pagina: number
   paginas: number
+  /** El que está abierto en la ficha, para marcar su tarjeta. */
+  seleccionadoId?: string
   onSeleccionar: (cliente: ClienteEnTarjeta) => void
   onCargarMas: () => void
 }
 
-function SkeletonClientes({ vista }: { vista: "grid" | "lista" }) {
+/**
+ * Las columnas salen del ancho de la lista (`@container`) y no del de la
+ * ventana: con la ficha de un cliente abierta al lado, la lista se angosta
+ * aunque la pantalla sea ancha. Una columna en el teléfono, dos desde 576 px y
+ * tres desde 896 px.
+ */
+const CUADRICULA = "grid grid-cols-1 gap-3 sm:gap-4 @xl:grid-cols-2 @4xl:grid-cols-3"
+const LISTA = "space-y-3"
+
+function EsqueletoDeClientes({ vista }: { vista: "grid" | "lista" }) {
   return (
-    <div className={vista === "grid" ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" : "space-y-3"}>
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="bg-card border border-border/50 rounded-xl p-4 animate-pulse">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-full bg-muted" />
-            <div className="flex-1 space-y-2">
-              <div className="h-4 bg-muted rounded w-2/3" />
-              <div className="h-3 bg-muted rounded w-1/2" />
+    <div aria-busy="true">
+      <span className="sr-only">Cargando clientes...</span>
+      <ul aria-hidden="true" className={vista === "grid" ? CUADRICULA : LISTA}>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <li key={i} className="rounded-[24px] bg-tarjeta p-4 shadow-sm squircle">
+            <div className="flex items-center gap-3">
+              <Esqueleto forma="circulo" />
+              <div className="min-w-0 flex-1 space-y-2.5">
+                <Esqueleto className="h-3.5 w-2/3" />
+                <Esqueleto className="w-1/2" />
+              </div>
             </div>
-          </div>
-          <div className="h-3 bg-muted rounded w-full" />
-        </div>
-      ))}
+            <Esqueleto className="mt-6 w-4/5" />
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -44,60 +60,45 @@ export function ListaClientes({
   total,
   pagina,
   paginas,
+  seleccionadoId,
   onSeleccionar,
   onCargarMas,
 }: ListaClientesProps) {
-  if (cargando) return <SkeletonClientes vista={vista} />
-
-  if (clientes.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-          <User className="h-8 w-8 text-muted-foreground" />
-        </div>
-        <h3 className="font-semibold text-foreground mb-2">No se encontraron clientes</h3>
-        <p className="text-muted-foreground text-sm">
-          Intenta cambiar los filtros o agrega un nuevo cliente
-        </p>
-      </div>
-    )
-  }
-
   return (
-    <>
-      <motion.div
-        className={vista === "grid" ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" : "space-y-3"}
-        layout
-      >
-        <AnimatePresence mode="popLayout">
-          {clientes.map((cliente) => (
-            <motion.div
-              key={cliente.id}
-              layout
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.15 }}
-            >
-              <TarjetaCliente cliente={cliente} onClick={() => onSeleccionar(cliente)} />
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </motion.div>
-
-      {pagina < paginas && (
-        <div className="mt-6 flex justify-center">
-          <BotonPrimario
-            variante="secundario"
-            cargando={cargandoMas}
-            icono={<ChevronDown className="h-4 w-4" />}
-            iconoDerecha
-            onClick={onCargarMas}
-          >
-            Cargar más ({total - clientes.length} restantes)
-          </BotonPrimario>
+    <div className="@container">
+      {cargando ? (
+        <EsqueletoDeClientes vista={vista} />
+      ) : clientes.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 rounded-panel border-2 border-dashed border-borde px-6 py-12 text-center squircle">
+          <CuadroDeIcono icono={Users} color="lila" tamano="lg" />
+          <h2 className="mt-2 font-semibold text-navy">No se encontraron clientes</h2>
+          <p className="max-w-sm text-sm text-pretty text-texto-2">
+            Intenta cambiar los filtros o agrega un nuevo cliente
+          </p>
         </div>
+      ) : (
+        <>
+          <ul className={cn(vista === "grid" ? CUADRICULA : LISTA)}>
+            {clientes.map((cliente) => (
+              <li key={cliente.id} className="min-w-0">
+                <TarjetaCliente
+                  cliente={cliente}
+                  seleccionado={cliente.id === seleccionadoId}
+                  onClick={() => onSeleccionar(cliente)}
+                />
+              </li>
+            ))}
+          </ul>
+
+          {pagina < paginas && (
+            <div className="mt-6 flex justify-center">
+              <Boton variante="secundario" cargando={cargandoMas} onClick={onCargarMas}>
+                Cargar más ({total - clientes.length} restantes)
+              </Boton>
+            </div>
+          )}
+        </>
       )}
-    </>
+    </div>
   )
 }

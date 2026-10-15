@@ -1,17 +1,19 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { X, Clock, Scissors, Link2, CheckCircle2, Copy, Check, ArrowRight } from "lucide-react"
-import { BotonPrimario } from "@/components/comunes/boton-primario"
-import { useRouter } from "next/navigation"
+import { useEffect, useRef, useState } from "react"
+import { AnimatePresence, motion } from "framer-motion"
+import { Check, Clock, Copy, Link2, Scissors } from "lucide-react"
+import { Boton } from "@/components/comunes/boton"
+import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
+import { CURVA, DURACION } from "@/components/movimiento/tiempos"
+import { MarcoDeModal } from "@/components/panel/marco-de-modal"
+import { cn } from "@/lib/utils"
 
 const STORAGE_KEY = "eli_onboarding_completado"
 
 const PASOS = [
   {
     icono: Clock,
-    color: "bg-blue-100 text-blue-600",
     titulo: "Configura tu horario",
     descripcion: "Define los días y horas en que atiendes. Así tus clientes solo podrán reservar en tu disponibilidad real.",
     accion: "Ir a configuración",
@@ -19,7 +21,6 @@ const PASOS = [
   },
   {
     icono: Scissors,
-    color: "bg-purple-100 text-purple-600",
     titulo: "Agrega tus servicios",
     descripcion: "Crea el catálogo de servicios que ofreces con su duración y precio. Esto aparecerá en tu página de reservas.",
     accion: "Agregar servicios",
@@ -27,7 +28,6 @@ const PASOS = [
   },
   {
     icono: Link2,
-    color: "bg-green-100 text-green-600",
     titulo: "Comparte tu enlace",
     descripcion: "Este es tu link único de reservas. Compártelo con tus clientes por WhatsApp, redes sociales o donde quieras.",
     accion: null,
@@ -40,21 +40,38 @@ interface ModalBienvenidaProps {
   slug: string
 }
 
+/**
+ * Los tres primeros pasos, la primera vez que se entra al panel: horario,
+ * servicios y el enlace de reservas. Es un diálogo (`MarcoDeModal`): se
+ * anuncia con su título, el foco no sale y Escape lo cierra. Cerrarlo de
+ * cualquier forma lo da por visto.
+ *
+ * Al cambiar de paso el foco se queda en el botón que se apretó, para seguir
+ * con Enter; el paso nuevo se anuncia al lector de pantalla.
+ */
 export function ModalBienvenida({ nombreNegocio, slug }: ModalBienvenidaProps) {
   const [visible, setVisible] = useState(false)
   const [paso, setPaso] = useState(0)
+  const [cambioDePaso, setCambioDePaso] = useState(false)
   const [copiado, setCopiado] = useState(false)
-  const router = useRouter()
+  const refBotonPrincipal = useRef<HTMLButtonElement>(null)
+  const enfocarElBotonPrincipal = useRef(false)
 
-  const enlace = typeof window !== "undefined"
-    ? `${window.location.origin}/reservar/${slug}`
-    : `/reservar/${slug}`
+  const enlace = typeof window !== "undefined" ? `${window.location.origin}/reservar/${slug}` : `/reservar/${slug}`
 
   useEffect(() => {
     const completado = localStorage.getItem(STORAGE_KEY)
     // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is only available client-side, can't read during SSR render
     if (!completado) setVisible(true)
   }, [])
+
+  // "Atrás" no existe en el primer paso: si era lo que tenía el foco, el foco
+  // pasa a "Siguiente" en vez de caer al <body>.
+  useEffect(() => {
+    if (!enfocarElBotonPrincipal.current) return
+    enfocarElBotonPrincipal.current = false
+    refBotonPrincipal.current?.focus()
+  }, [paso])
 
   const cerrar = () => {
     localStorage.setItem(STORAGE_KEY, "1")
@@ -67,129 +84,99 @@ export function ModalBienvenida({ nombreNegocio, slug }: ModalBienvenidaProps) {
     setTimeout(() => setCopiado(false), 2000)
   }
 
-  const irYCerrar = (ruta: string) => {
-    cerrar()
-    router.push(ruta)
+  const irAlPaso = (nuevo: number) => {
+    if (nuevo === 0) enfocarElBotonPrincipal.current = true
+    setCambioDePaso(true)
+    setPaso(nuevo)
   }
 
   const pasoActual = PASOS[paso]
-  const IconoPaso = pasoActual.icono
+  const esElUltimo = paso === PASOS.length - 1
 
   return (
     <AnimatePresence>
       {visible && (
-        <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+        <MarcoDeModal
+          titulo={`¡Bienvenido a Eli, ${nombreNegocio}!`}
+          antetitulo={`Paso ${paso + 1} de ${PASOS.length}`}
+          alCerrar={cerrar}
         >
-          <div className="absolute inset-0 bg-foreground/20 backdrop-blur-sm" onClick={cerrar} />
-
-          <motion.div
-            className="relative bg-card rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: 20 }}
-          >
-            {/* Header */}
-            <div className="bg-primary/5 px-6 pt-6 pb-4 border-b border-border/50">
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-sm text-muted-foreground">Paso {paso + 1} de {PASOS.length}</p>
-                <button onClick={cerrar} className="p-1 rounded-lg hover:bg-muted transition-colors">
-                  <X className="h-4 w-4 text-muted-foreground" />
-                </button>
-              </div>
-              <h2 className="text-xl font-bold text-foreground">
-                ¡Bienvenido a Eli, <span className="text-primary">{nombreNegocio}</span>! 🎉
-              </h2>
-
-              {/* Barra de progreso */}
-              <div className="flex gap-1.5 mt-4">
-                {PASOS.map((_, i) => (
-                  <div
-                    key={i}
-                    className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
-                      i <= paso ? "bg-primary" : "bg-muted"
-                    }`}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Contenido del paso */}
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={paso}
-                className="px-6 py-6"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.2 }}
-              >
-                <div className={`w-14 h-14 rounded-2xl ${pasoActual.color} flex items-center justify-center mb-4`}>
-                  <IconoPaso className="h-7 w-7" />
-                </div>
-                <h3 className="text-lg font-bold text-foreground mb-2">{pasoActual.titulo}</h3>
-                <p className="text-muted-foreground text-sm leading-relaxed mb-6">{pasoActual.descripcion}</p>
-
-                {/* Enlace en el último paso */}
-                {paso === 2 && (
-                  <div className="bg-muted/50 rounded-xl p-3 flex items-center gap-3 mb-4">
-                    <p className="text-sm text-foreground flex-1 truncate font-mono">{enlace}</p>
-                    <button
-                      onClick={copiar}
-                      className="p-2 rounded-lg bg-background border border-border hover:bg-muted transition-colors flex-shrink-0"
-                    >
-                      {copiado ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4 text-muted-foreground" />}
-                    </button>
-                  </div>
+          {/* El avance ya lo dice el antetítulo: las barras son para el ojo. */}
+          <div aria-hidden="true" className="-mt-2 mb-7 flex gap-1.5">
+            {PASOS.map((_, indice) => (
+              <span
+                key={indice}
+                className={cn(
+                  "h-1.5 flex-1 rounded-full transition-colors duration-300 ease-suave",
+                  indice <= paso ? "bg-navy" : "bg-borde"
                 )}
+              />
+            ))}
+          </div>
 
-                {/* Botones */}
-                <div className="flex gap-3">
-                  {paso > 0 && (
-                    <BotonPrimario variante="secundario" onClick={() => setPaso(paso - 1)} tamaño="sm">
-                      Atrás
-                    </BotonPrimario>
-                  )}
+          <p aria-live="polite" className="sr-only">
+            {cambioDePaso ? `Paso ${paso + 1} de ${PASOS.length}: ${pasoActual.titulo}` : ""}
+          </p>
 
-                  {paso < PASOS.length - 1 ? (
-                    <>
-                      {pasoActual.ruta && (
-                        <BotonPrimario
-                          variante="secundario"
-                          tamaño="sm"
-                          onClick={() => irYCerrar(pasoActual.ruta!)}
-                        >
-                          {pasoActual.accion}
-                        </BotonPrimario>
-                      )}
-                      <BotonPrimario
-                        tamaño="sm"
-                        anchoCompleto
-                        icono={<ArrowRight className="h-4 w-4" />}
-                        iconoDerecha
-                        onClick={() => setPaso(paso + 1)}
-                      >
-                        Siguiente
-                      </BotonPrimario>
-                    </>
-                  ) : (
-                    <BotonPrimario
-                      anchoCompleto
-                      tamaño="sm"
-                      icono={<CheckCircle2 className="h-4 w-4" />}
-                      onClick={cerrar}
-                    >
-                      ¡Entendido, empecemos!
-                    </BotonPrimario>
-                  )}
+          {/* La clave rearma el paso: entra con un fundido corto, sin desplazarse. */}
+          <motion.div
+            key={paso}
+            initial={cambioDePaso ? { opacity: 0 } : false}
+            animate={{ opacity: 1 }}
+            transition={{ duration: DURACION.sombra, ease: CURVA.fundido }}
+          >
+            <CuadroDeIcono icono={pasoActual.icono} color="azul" tamano="lg" />
+            <h3 className="mt-4 text-lg leading-snug font-semibold">{pasoActual.titulo}</h3>
+            <p className="mt-1.5 text-sm leading-relaxed text-pretty text-texto-2">{pasoActual.descripcion}</p>
+
+            {esElUltimo && (
+              <div className="mt-5">
+                <div className="flex items-center gap-2 rounded-campo bg-superficie py-1.5 pr-1.5 pl-3.5 squircle">
+                  <p className="min-w-0 flex-1 truncate font-mono text-sm" title={enlace}>
+                    {enlace}
+                  </p>
+                  <Boton
+                    variante="secundario"
+                    tamano="sm"
+                    onClick={copiar}
+                    icono={copiado ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+                  >
+                    {copiado ? "Copiado" : "Copiar"}
+                  </Boton>
                 </div>
-              </motion.div>
-            </AnimatePresence>
+                <p role="status" className="sr-only">
+                  {copiado ? "Enlace copiado" : ""}
+                </p>
+              </div>
+            )}
+
+            {pasoActual.ruta && pasoActual.accion && (
+              <Boton href={pasoActual.ruta} onClick={cerrar} variante="enlace" tamano="sm" className="mt-2">
+                {pasoActual.accion}
+              </Boton>
+            )}
           </motion.div>
-        </motion.div>
+
+          {/* En el teléfono, uno debajo del otro: el que avanza arriba y de ancho completo. */}
+          <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {paso > 0 ? (
+              <Boton variante="fantasma" onClick={() => irAlPaso(paso - 1)} className="w-full sm:w-auto">
+                Atrás
+              </Boton>
+            ) : (
+              <span aria-hidden="true" className="hidden sm:block" />
+            )}
+            {esElUltimo ? (
+              <Boton ref={refBotonPrincipal} onClick={cerrar} icono={<Check aria-hidden="true" />} className="w-full sm:w-auto">
+                ¡Entendido, empecemos!
+              </Boton>
+            ) : (
+              <Boton ref={refBotonPrincipal} onClick={() => irAlPaso(paso + 1)} className="w-full sm:w-auto">
+                Siguiente
+              </Boton>
+            )}
+          </div>
+        </MarcoDeModal>
       )}
     </AnimatePresence>
   )

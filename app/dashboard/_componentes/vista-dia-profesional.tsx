@@ -1,9 +1,14 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { useId, type ReactNode } from "react"
 import Link from "next/link"
-import { CalendarClock, Settings } from "lucide-react"
+import { CalendarClock } from "lucide-react"
+import { Aviso } from "@/components/panel/aviso"
+import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
+import { EstadoVacio } from "@/components/panel/estado-vacio"
+import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { TarjetaCita } from "@/components/panel/tarjeta-cita"
+import { cn } from "@/lib/utils"
 import { LineaDeTiempoDia, citaParaTarjeta } from "./linea-de-tiempo-dia"
 import { formatoDuracion, minutosLibresEnFranjas, type CitaDelDia } from "@/lib/horario-dia"
 import type { EstadisticasDelPanel } from "../_datos"
@@ -24,43 +29,60 @@ function tituloResumen(citasHoy: number): string {
   return citasHoy === 1 ? "1 cita hoy" : `${citasHoy} citas hoy`
 }
 
-/** Lista simple de citas, reutilizada por los dos estados que no pueden dibujar la línea de tiempo (sin horario / horario inválido). */
-function ListaCitasDelDia({ citas }: { citas: CitaDelDia[] }) {
+/** El enlace a configuración dentro de un aviso: subrayado, como un enlace en medio del texto. */
+function EnlaceAConfiguracion() {
   return (
-    <div className="bg-card border border-border/50 rounded-xl p-5">
-      <h2 className="font-semibold text-foreground mb-3">
-        {citas.length > 0 ? "Tus citas de hoy" : "Sin citas para hoy"}
-      </h2>
-      {citas.length > 0 ? (
-        <div className="space-y-2">
-          {citas.map((cita) => (
-            <TarjetaCita key={cita.id} cita={citaParaTarjeta(cita)} compacta />
-          ))}
-        </div>
-      ) : (
-        <p className="text-sm text-muted-foreground">Tampoco tenés citas agendadas para hoy.</p>
-      )}
-    </div>
+    <Link
+      href="/dashboard/configuracion"
+      className="rounded-sm font-medium text-navy underline decoration-[1.5px] underline-offset-4 anillo-foco"
+    >
+      Configuración
+    </Link>
   )
 }
 
-/** Aviso ámbar reutilizado por los dos estados "no se puede calcular" (sin horario / horario inválido). */
+/** Lista simple de citas, reutilizada por los dos estados que no pueden dibujar la línea de tiempo (sin horario / horario inválido). */
+function ListaCitasDelDia({ citas }: { citas: CitaDelDia[] }) {
+  const idDelTitulo = useId()
+  return (
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+      <EncabezadoDeTarjeta
+        id={idDelTitulo}
+        titulo={citas.length > 0 ? "Tus citas de hoy" : "Sin citas para hoy"}
+        icono={{ figura: CalendarClock, color: "azul" }}
+      />
+      <div className="mt-5">
+        {citas.length > 0 ? (
+          <ul className="space-y-2">
+            {citas.map((cita) => (
+              <li key={cita.id}>
+                <TarjetaCita cita={citaParaTarjeta(cita)} compacta />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <EstadoVacio>Tampoco tienes citas agendadas para hoy.</EstadoVacio>
+        )}
+      </div>
+    </section>
+  )
+}
+
+/** Aviso reutilizado por los dos estados "no se puede calcular" (sin horario / horario inválido). */
 function AvisoHorario({ titulo, children }: { titulo: string; children: ReactNode }) {
   return (
-    <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 flex items-start gap-3">
-      <Settings className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
-      <div>
-        <p className="text-sm font-semibold text-foreground">{titulo}</p>
-        <p className="text-sm text-muted-foreground mt-1">{children}</p>
-      </div>
-    </div>
+    <Aviso tono="info" titulo={titulo}>
+      {children}
+    </Aviso>
   )
 }
 
 export function VistaDiaProfesional({ estadisticas }: VistaDiaProfesionalProps) {
+  const idDelTitulo = useId()
+
   if (!estadisticas) {
     return (
-      <div className="bg-card border border-border/50 rounded-xl p-8 text-center text-sm text-muted-foreground">
+      <div aria-busy="true" className={cn(TARJETA_DEL_PANEL, "p-8 text-center text-sm text-texto-2")}>
         Cargando tu día...
       </div>
     )
@@ -73,12 +95,8 @@ export function VistaDiaProfesional({ estadisticas }: VistaDiaProfesionalProps) 
   if (!horarioHoy) {
     return (
       <div className="space-y-4">
-        <AvisoHorario titulo="No tenés un horario cargado para hoy">
-          Sin horario no se puede calcular tu tiempo libre. Se configura en{" "}
-          <Link href="/dashboard/configuracion" className="text-primary hover:underline focus-visible:underline focus-visible:outline-none">
-            Configuración
-          </Link>
-          .
+        <AvisoHorario titulo="No tienes un horario cargado para hoy">
+          Sin horario no se puede calcular tu tiempo libre. Se configura en <EnlaceAConfiguracion />.
         </AvisoHorario>
         <ListaCitasDelDia citas={citasHoyLista} />
       </div>
@@ -89,18 +107,14 @@ export function VistaDiaProfesional({ estadisticas }: VistaDiaProfesionalProps) 
 
   // Una franja con la hora de fin antes (o igual) que la de inicio no se puede
   // medir: "0 minutos libres" sería una cifra inventada, así que el día se
-  // lee igual que "no tenés horario cargado" — no se dibuja la línea de
+  // lee igual que "no tienes horario cargado" — no se dibuja la línea de
   // tiempo sobre un dato que no se pudo validar.
   if (minutosLibres === null) {
     return (
       <div className="space-y-4">
         <AvisoHorario titulo="Tu horario de hoy no es válido">
-          Una franja tiene la hora de fin antes o igual que la de inicio, así que
-          no se puede calcular tu tiempo libre. Se corrige en{" "}
-          <Link href="/dashboard/configuracion" className="text-primary hover:underline focus-visible:underline focus-visible:outline-none">
-            Configuración
-          </Link>
-          .
+          Una franja tiene la hora de fin antes o igual que la de inicio, así que no se puede calcular tu tiempo
+          libre. Se corrige en <EnlaceAConfiguracion />.
         </AvisoHorario>
         <ListaCitasDelDia citas={citasHoyLista} />
       </div>
@@ -108,22 +122,21 @@ export function VistaDiaProfesional({ estadisticas }: VistaDiaProfesionalProps) 
   }
 
   return (
-    <div className="bg-card border border-border/50 rounded-xl p-5">
-      <div className="flex items-center gap-3 mb-5">
-        <div className="p-2 rounded-lg bg-primary/10">
-          <CalendarClock className="h-5 w-5 text-primary" aria-hidden="true" />
-        </div>
-        <div>
-          <h2 className="font-semibold text-foreground">{tituloResumen(citasHoy)}</h2>
-          <p className="text-sm text-muted-foreground tabular-nums">
-            {minutosLibres > 0
-              ? `${formatoDuracion(minutosLibres)} sin reservar hoy`
-              : "Tu agenda de hoy está completa"}
-          </p>
-        </div>
-      </div>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+      <EncabezadoDeTarjeta
+        id={idDelTitulo}
+        titulo={tituloResumen(citasHoy)}
+        subtitulo={
+          <span className="tabular-nums">
+            {minutosLibres > 0 ? `${formatoDuracion(minutosLibres)} sin reservar hoy` : "Tu agenda de hoy está completa"}
+          </span>
+        }
+        icono={{ figura: CalendarClock, color: "azul" }}
+      />
 
-      <LineaDeTiempoDia franjas={horarioHoy} citas={citasHoyLista} />
-    </div>
+      <div className="mt-5">
+        <LineaDeTiempoDia franjas={horarioHoy} citas={citasHoyLista} />
+      </div>
+    </section>
   )
 }

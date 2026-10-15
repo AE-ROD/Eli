@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
+import { Aviso } from "@/components/panel/aviso"
 import { BarraSuperior } from "@/components/panel/barra-superior"
+import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { cn } from "@/lib/utils"
 import { leerEstadisticas, type EstadisticasDelPanel } from "./_datos"
 import { VistaDiaProfesional } from "./_componentes/vista-dia-profesional"
 import { EstadisticasDelNegocio } from "./_componentes/estadisticas-del-negocio"
@@ -49,9 +52,9 @@ export default function PaginaPanel() {
   const citasDeHoy = estadisticas?.citasHoyLista ?? null
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-dvh">
       <BarraSuperior
-        titulo="Dashboard"
+        titulo="Inicio"
         subtitulo={fechaDeHoy()}
         accionPrincipal={{
           texto: "Nueva cita",
@@ -59,15 +62,11 @@ export default function PaginaPanel() {
         }}
       />
 
-      <div className="p-6 space-y-8">
-        {aviso && (
-          <p role="alert" className="text-sm text-red-500">
-            {aviso}
-          </p>
-        )}
+      <div className="space-y-4 px-4 pt-6 pb-10 sm:space-y-6 sm:px-6">
+        {aviso && <Aviso>{aviso}</Aviso>}
 
         {!rolConocido ? (
-          <div className="bg-card border border-border/50 rounded-xl p-8 text-center text-sm text-muted-foreground">
+          <div aria-busy="true" className={cn(TARJETA_DEL_PANEL, "p-8 text-center text-sm text-texto-2")}>
             Cargando...
           </div>
         ) : esWorker ? (
@@ -78,7 +77,7 @@ export default function PaginaPanel() {
               <>
                 <EstadisticasDelNegocio estadisticas={estadisticas} />
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
                   <CitasDeHoy citas={citasDeHoy} className="lg:col-span-2" />
                   <ResumenDeClientes estadisticas={estadisticas} />
                 </div>
@@ -88,7 +87,7 @@ export default function PaginaPanel() {
             {slugDelNegocio && <EnlaceDeReservas slug={slugDelNegocio} />}
 
             {!sinEstadisticas && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
                 <CitasPorHora citas={citasDeHoy} />
                 <ResumenDelNegocio estadisticas={estadisticas} />
               </div>

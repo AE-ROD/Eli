@@ -1,10 +1,22 @@
 "use client"
 
-import { useEffect, useEffectEvent, useId, useRef, type FocusEvent, type ReactNode } from "react"
+import { useEffect, useEffectEvent, useId, useRef, useState, type FocusEvent, type ReactNode } from "react"
 import { motion, useIsPresent } from "framer-motion"
 import { X } from "lucide-react"
+import { Antetitulo } from "@/components/comunes/antetitulo"
+import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { ANILLO_DE_FOCO } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
+
+/** El ancho máximo de la tarjeta: 448, 672 o 896 px. */
+const ANCHOS = {
+  md: "max-w-md",
+  lg: "max-w-2xl",
+  xl: "max-w-4xl",
+} as const
+
+/** Un fundido corto, también al cerrar: nada se agranda ni se desliza. */
+const FUNDIDO = { duration: DURACION.sombra, ease: CURVA.suave }
 
 /** Lo que se puede enfocar con Tab dentro del diálogo. */
 const ENFOCABLES =
@@ -57,15 +69,19 @@ interface MarcoDeModalProps {
   descripcion?: ReactNode
   /** Mientras se guarda no se cierra: el pedido ya salió y su respuesta tiene que verse. */
   bloqueado?: boolean
-  ancho?: "md" | "lg"
+  /** `md` (por defecto) para un formulario corto; `lg` y `xl` para lo que necesita columnas. */
+  ancho?: keyof typeof ANCHOS
+  /** La línea chica en mayúsculas arriba del título: de qué módulo es, o en qué paso va. */
+  antetitulo?: string
   alCerrar: () => void
   children: ReactNode
 }
 
 /**
- * El marco de los modales del panel (tablero y reportes): el mismo velo y la
- * misma tarjeta que los modales de la agenda y de clientes, más lo que un
- * diálogo necesita para usarse con teclado y lector de pantalla:
+ * El marco de los modales del panel: un velo navy y una tarjeta blanca de
+ * radio 32, con el título en la serif de los titulares y el botón de cerrar
+ * arriba a la derecha. Además, lo que un diálogo necesita para usarse con
+ * teclado y lector de pantalla:
  *
  * - se anuncia como diálogo, con su título;
  * - al abrirse el foco entra (al campo con `autoFocus`, o al diálogo), y al
@@ -84,7 +100,15 @@ interface MarcoDeModalProps {
  * para no pelearle el foco a lo que viene después (el modal siguiente, o la
  * tarjeta que se acaba de mover).
  */
-export function MarcoDeModal({ titulo, descripcion, bloqueado = false, ancho = "md", alCerrar, children }: MarcoDeModalProps) {
+export function MarcoDeModal({
+  titulo,
+  descripcion,
+  bloqueado = false,
+  ancho = "md",
+  antetitulo,
+  alCerrar,
+  children,
+}: MarcoDeModalProps) {
   const idDelTitulo = useId()
   const idDeLaDescripcion = useId()
   const panel = useRef<HTMLDivElement>(null)
@@ -92,6 +116,15 @@ export function MarcoDeModal({ titulo, descripcion, bloqueado = false, ancho = "
   /** Lo último que tuvo el foco adentro: adonde vuelve si guardar falla. */
   const ultimoEnfocado = useRef<HTMLElement | null>(null)
   const estabaBloqueado = useRef(bloqueado)
+  /**
+   * Lo que tenía el foco cuando se abrió: adonde vuelve al cerrar. Se anota en
+   * el primer render y no en un efecto: un campo con `autoFocus` toma el foco
+   * antes de que corran los efectos, y entonces se anotaba el campo mismo, que
+   * al cerrar ya no existe, y el foco caía al <body>.
+   */
+  const [quienLoAbrio] = useState(() =>
+    typeof document !== "undefined" && document.activeElement instanceof HTMLElement ? document.activeElement : null
+  )
 
   const cerrar = () => {
     if (!bloqueado) alCerrar()
@@ -154,7 +187,6 @@ export function MarcoDeModal({ titulo, descripcion, bloqueado = false, ancho = "
   // Al abrirse el foco entra; al cerrarse vuelve a lo que abrió el diálogo.
   useEffect(() => {
     const nodo = panel.current
-    const anterior = document.activeElement instanceof HTMLElement ? document.activeElement : null
     // Si un campo ya tomó el foco con `autoFocus`, se respeta.
     if (!nodo?.contains(document.activeElement)) nodo?.focus()
     return () => {
@@ -163,9 +195,9 @@ export function MarcoDeModal({ titulo, descripcion, bloqueado = false, ancho = "
       // tarjeta que se acaba de mover. Devolvérselo a lo que abrió éste se lo
       // sacaría.
       const actual = document.activeElement
-      if (!actual || actual === document.body || nodo?.contains(actual)) anterior?.focus()
+      if (!actual || actual === document.body || nodo?.contains(actual)) quienLoAbrio?.focus()
     }
-  }, [])
+  }, [quienLoAbrio])
 
   // Mientras guarda, y cuando termina sin cerrarse (porque falló).
   useEffect(() => {
@@ -192,13 +224,14 @@ export function MarcoDeModal({ titulo, descripcion, bloqueado = false, ancho = "
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      transition={FUNDIDO}
     >
-      <div className="absolute inset-0 bg-foreground/20 backdrop-blur-sm" onClick={cerrar} aria-hidden="true" />
-      <motion.div
+      <div className="absolute inset-0 bg-navy/40" onClick={cerrar} aria-hidden="true" />
+      <div
         ref={panel}
         role="dialog"
         aria-modal="true"
@@ -207,36 +240,42 @@ export function MarcoDeModal({ titulo, descripcion, bloqueado = false, ancho = "
         tabIndex={-1}
         onFocus={recordarFoco}
         className={cn(
-          "relative bg-card rounded-xl shadow-xl w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6 focus:outline-none",
-          ancho === "lg" ? "max-w-2xl" : "max-w-md"
+          // Lo que no entra en el alto se desplaza adentro, y lo que se sale
+          // de la tarjeta se corta: el relleno deja lugar al anillo del foco
+          // de lo que va pegado al borde, como un campo de ancho completo.
+          "relative max-h-[calc(100dvh-1.5rem)] w-full overflow-y-auto rounded-panel bg-tarjeta text-navy shadow-md squircle focus:outline-none sm:max-h-[calc(100dvh-3rem)]",
+          "px-5 pt-5 pb-6 sm:px-8 sm:pt-7 sm:pb-8",
+          ANCHOS[ancho]
         )}
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
       >
-        <div className="flex items-start justify-between gap-4 mb-5">
-          <div className="min-w-0">
-            <h2 id={idDelTitulo} className="text-xl font-bold text-foreground">
+        <div className="mb-6 flex items-start justify-between gap-3">
+          <div className="min-w-0 pt-1">
+            {antetitulo && <Antetitulo className="mb-2">{antetitulo}</Antetitulo>}
+            <h2 id={idDelTitulo} className="titulo-3 font-serif text-balance break-words">
               {titulo}
             </h2>
             {descripcion && (
-              <div id={idDeLaDescripcion} className="text-sm text-muted-foreground mt-1">
+              <div id={idDeLaDescripcion} className="mt-2 text-sm text-pretty text-texto-2">
                 {descripcion}
               </div>
             )}
           </div>
+          {/* 44 × 44: el área de un dedo. Se corre hacia el borde para alinear la X con el contenido. */}
           <button
             type="button"
             onClick={cerrar}
             disabled={bloqueado}
             aria-label="Cerrar"
-            className={cn("p-1 rounded-lg hover:bg-muted transition-colors disabled:opacity-50", ANILLO_DE_FOCO)}
+            className={cn(
+              "-mr-2 -mt-1 grid size-11 shrink-0 place-items-center rounded-[14px] text-navy squircle transition-colors duration-150 ease-suave hover:bg-superficie disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent sm:-mr-3",
+              ANILLO_DE_FOCO
+            )}
           >
-            <X className="h-5 w-5" aria-hidden="true" />
+            <X className="size-5" aria-hidden="true" strokeWidth={1.75} />
           </button>
         </div>
         {children}
-      </motion.div>
+      </div>
     </motion.div>
   )
 }

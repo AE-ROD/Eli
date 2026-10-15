@@ -35,22 +35,27 @@ interface VistaDiaProps {
   onSeleccionar: (cita: Cita) => void
 }
 
+/**
+ * El día hora por hora, de 8 a 20: la cita de cada hora, o el hueco. Se
+ * desplaza dentro de la tarjeta; el relleno deja lugar al anillo del foco de
+ * las tarjetas, que esa caja recortaría.
+ */
 export function VistaDia({ fecha, citas, onSeleccionar }: VistaDiaProps) {
   const citasDelDia = citas.filter((cita) =>
     new Date(cita.startTime).toDateString() === fecha.toDateString()
   )
 
   return (
-    <div className="p-4 space-y-3 overflow-auto max-h-[calc(100vh-280px)]">
+    <ol className="max-h-[calc(100dvh-17.5rem)] min-h-96 space-y-2 overflow-y-auto px-3 pt-2.5 pb-4 sm:px-5 sm:pb-5">
       {horasDelDia.map((hora) => {
         const citaEnHora = citasDelDia.find((cita) =>
           new Date(cita.startTime).getHours() === parseInt(hora.slice(0, 2))
         )
         return (
-          <div key={hora} className="flex gap-4">
-            <span className="text-sm text-muted-foreground w-16 flex-shrink-0 pt-2">{hora}</span>
+          <li key={hora} className="flex items-start gap-3">
+            <span className="w-12 shrink-0 pt-3.5 text-right text-xs text-texto-2 tabular-nums">{hora}</span>
             {citaEnHora ? (
-              <div className="flex-1">
+              <div className="min-w-0 flex-1">
                 <TarjetaCita
                   cita={paraTarjeta(citaEnHora)}
                   compacta
@@ -58,11 +63,14 @@ export function VistaDia({ fecha, citas, onSeleccionar }: VistaDiaProps) {
                 />
               </div>
             ) : (
-              <div className="flex-1 h-12 border border-dashed border-border/50 rounded-lg hover:bg-muted/30 cursor-pointer transition-colors" />
+              // El hueco no se toca: sólo marca que esa hora está libre.
+              <div className="h-12 min-w-0 flex-1 rounded-[20px] border-[1.5px] border-dashed border-borde squircle">
+                <span className="sr-only">Libre</span>
+              </div>
             )}
-          </div>
+          </li>
         )
       })}
-    </div>
+    </ol>
   )
 }

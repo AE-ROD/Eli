@@ -1,25 +1,20 @@
-"use client"
-
-import { motion } from "framer-motion"
 import { Send } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 /** Lo que ocupa el lugar del chat mientras no se eligió ninguna conversación. */
-export function SinConversacionAbierta() {
+export function SinConversacionAbierta({ className }: { className?: string }) {
   return (
-    <div className="flex-1 flex items-center justify-center bg-muted/30">
-      <motion.div
-        className="text-center"
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-          <Send className="h-10 w-10 text-muted-foreground" />
-        </div>
-        <h3 className="text-xl font-semibold text-foreground mb-2">Tus mensajes</h3>
-        <p className="text-muted-foreground text-sm">
-          Selecciona una conversación para comenzar a chatear
-        </p>
-      </motion.div>
+    <div className={cn("min-w-0 flex-1 items-center justify-center p-6", className)}>
+      <div className="max-w-xs text-center">
+        <span
+          aria-hidden="true"
+          className="mx-auto mb-4 grid size-14 place-items-center rounded-campo bg-superficie text-navy squircle"
+        >
+          <Send className="size-6" strokeWidth={1.75} />
+        </span>
+        <h2 className="titulo-3 font-serif">Tus mensajes</h2>
+        <p className="mt-2 text-sm text-pretty text-texto-2">Selecciona una conversación para comenzar a chatear</p>
+      </div>
     </div>
   )
 }
