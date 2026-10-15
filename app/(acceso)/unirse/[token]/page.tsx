@@ -2,13 +2,19 @@
 
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { motion } from "framer-motion"
-import { LogoEli } from "@/components/comunes/logo-eli"
+import { CircleCheck } from "lucide-react"
+import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
-import { BotonPrimario } from "@/components/comunes/boton-primario"
-import { Lock, CheckCircle2, XCircle, Loader2 } from "lucide-react"
+import { Esqueleto } from "@/components/comunes/esqueleto"
+import { CuadroDeIcono, IconoDeModulo } from "@/components/comunes/icono-de-modulo"
 import { signIn } from "next-auth/react"
 import { leerInvitacion, aceptarInvitacion, type Invitacion } from "../../_datos"
+import { AvisoDeError } from "../../_componentes/aviso-de-error"
+import { CONTRASENA_CORTA, CONTRASENAS_DISTINTAS } from "../../_componentes/errores-de-validacion"
+import { MarcoDeAcceso, PreguntaConEnlace } from "../../_componentes/marco-de-acceso"
+
+/** La invitación es la puerta de entrada al equipo: las pantallas llevan su ícono y su pastel. */
+const ICONO_DEL_EQUIPO = <IconoDeModulo modulo="equipo" tamano="lg" />
 
 export default function PaginaUnirse() {
   const params = useParams()
@@ -37,11 +43,11 @@ export default function PaginaUnirse() {
     setRequiereSesion(false)
 
     if (contrasena.length < 8) {
-      setError("La contraseña debe tener al menos 8 caracteres")
+      setError(CONTRASENA_CORTA)
       return
     }
     if (contrasena !== confirmarContrasena) {
-      setError("Las contraseñas no coinciden")
+      setError(CONTRASENAS_DISTINTAS)
       return
     }
 
@@ -77,138 +83,139 @@ export default function PaginaUnirse() {
     }
   }
 
+  // Cada estado es una pantalla distinta del mismo marco: al pasar de uno a
+  // otro, el marco lleva el foco al título nuevo.
   if (estado === "cargando") {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
+      <MarcoDeAcceso
+        clave={estado}
+        modulo="equipo"
+        arriba={ICONO_DEL_EQUIPO}
+        antetitulo="Invitación al equipo"
+        titulo="Cargando la invitación"
+        // Con la forma de lo que va a llegar (saludo, datos, dos campos y el
+        // botón), para que al cargar salte lo menos posible.
+        bajada={
+          <span className="flex flex-col gap-2.5 pt-1.5">
+            <Esqueleto className="h-3.5" />
+            <Esqueleto className="h-3.5 w-2/3" />
+          </span>
+        }
+        ocupado
+      >
+        <div className="flex flex-col gap-5">
+          {/* Los datos van en dos filas en el teléfono y en una desde sm. */}
+          <Esqueleto className="h-[136px] rounded-campo sm:h-[76px]" />
+          {["w-24", "w-36"].map((anchoDeLaEtiqueta) => (
+            <span key={anchoDeLaEtiqueta} className="flex flex-col gap-2.5">
+              <Esqueleto className={`h-3.5 ${anchoDeLaEtiqueta}`} />
+              <Esqueleto className="h-12 rounded-campo" />
+            </span>
+          ))}
+          <Esqueleto className="h-14 rounded-boton-lg" />
+        </div>
+      </MarcoDeAcceso>
     )
   }
 
   if (estado === "invalida") {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <motion.div
-          className="text-center max-w-sm"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <XCircle className="h-16 w-16 text-red-400 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-foreground mb-2">Invitación no válida</h1>
-          <p className="text-muted-foreground">
-            Este enlace de invitación expiró, ya fue usado o no existe.
-          </p>
-        </motion.div>
-      </div>
+      <MarcoDeAcceso
+        clave={estado}
+        modulo="equipo"
+        arriba={ICONO_DEL_EQUIPO}
+        antetitulo="Invitación al equipo"
+        titulo="Invitación no válida"
+        bajada="El enlace venció, ya se usó o no existe. Pídele a quien te invitó que te mande otro."
+        pie={
+          <PreguntaConEnlace pregunta="¿Ya la aceptaste?" href="/iniciar-sesion">
+            Inicia sesión
+          </PreguntaConEnlace>
+        }
+      />
     )
   }
 
   if (estado === "aceptada") {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <motion.div
-          className="text-center max-w-sm"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-foreground mb-2">Cuenta creada</h1>
-          <p className="text-muted-foreground mb-6">
-            Ya puedes iniciar sesión con tu correo y contraseña.
-          </p>
-          <BotonPrimario anchoCompleto onClick={() => router.push("/iniciar-sesion")}>
-            Ir a iniciar sesión
-          </BotonPrimario>
-        </motion.div>
-      </div>
+      <MarcoDeAcceso
+        clave={estado}
+        modulo="equipo"
+        arriba={<CuadroDeIcono icono={CircleCheck} color="turquesa" activo tamano="lg" />}
+        antetitulo="Invitación aceptada"
+        titulo="Cuenta creada"
+        bajada="Ya puedes iniciar sesión con tu correo y tu contraseña."
+      >
+        <Boton href="/iniciar-sesion" tamano="lg" className="w-full">
+          Ir a iniciar sesión
+        </Boton>
+      </MarcoDeAcceso>
     )
   }
 
+  // Lo que se valida acá va debajo de su campo; lo que responde el servidor, arriba del botón.
+  const errorDeContrasena = error === CONTRASENA_CORTA ? error : undefined
+  const errorDeConfirmacion = error === CONTRASENAS_DISTINTAS ? error : undefined
+
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-12">
-      <motion.div
-        className="w-full max-w-md"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-      >
-        <div className="flex justify-center mb-8">
-          <LogoEli tamaño="lg" />
+    <MarcoDeAcceso
+      clave={estado}
+      modulo="equipo"
+      arriba={ICONO_DEL_EQUIPO}
+      antetitulo="Invitación al equipo"
+      titulo={`Únete a ${invitacion?.negocio ?? ""}`}
+      bajada={`Hola, ${invitacion?.nombre ?? ""}. Para entrar al equipo, crea tu contraseña.`}
+    >
+      <dl className="grid gap-4 rounded-campo bg-superficie px-5 py-4 text-sm squircle sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-8">
+        <div className="min-w-0">
+          <dt className="text-texto-2">Tu cuenta</dt>
+          <dd className="mt-1 break-words font-medium">{invitacion?.email}</dd>
         </div>
-
-        {/* Tarjeta de invitación */}
-        <div className="bg-primary/5 border border-primary/20 rounded-2xl p-5 mb-8">
-          <p className="text-xs text-muted-foreground uppercase font-medium tracking-wide mb-1">
-            Fuiste invitado a
-          </p>
-          <p className="text-xl font-bold text-foreground">{invitacion?.negocio}</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            Tu rol: <span className="font-medium text-foreground capitalize">
-              {invitacion?.rol === "admin" ? "Administrador" : "Trabajador"}
-            </span>
-          </p>
+        <div>
+          <dt className="text-texto-2">Tu rol</dt>
+          {/* Los nombres del producto, los mismos del correo de la invitación. */}
+          <dd className="mt-1 font-medium">{invitacion?.rol === "admin" ? "Encargado" : "Profesional"}</dd>
         </div>
+      </dl>
 
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-foreground">Crea tu contraseña</h1>
-          <p className="mt-1 text-muted-foreground text-sm">
-            Tu cuenta será <strong>{invitacion?.email}</strong>
-          </p>
-        </div>
+      <form onSubmit={aceptar} className="mt-6 flex flex-col gap-5">
+        <CampoFormulario
+          etiqueta="Contraseña"
+          type="password"
+          autoComplete="new-password"
+          placeholder="Al menos 8 caracteres"
+          value={contrasena}
+          onChange={(e) => setContrasena(e.target.value)}
+          error={errorDeContrasena}
+          required
+        />
+        <CampoFormulario
+          etiqueta="Repite la contraseña"
+          type="password"
+          autoComplete="new-password"
+          value={confirmarContrasena}
+          onChange={(e) => setConfirmarContrasena(e.target.value)}
+          error={errorDeConfirmacion}
+          required
+        />
 
-        <form onSubmit={aceptar} className="space-y-4">
-          <CampoFormulario
-            etiqueta="Contraseña"
-            type="password"
-            placeholder="Mínimo 8 caracteres"
-            value={contrasena}
-            onChange={(e) => setContrasena(e.target.value)}
-            icono={<Lock className="h-4 w-4" />}
-            required
-          />
-          <CampoFormulario
-            etiqueta="Confirmar contraseña"
-            type="password"
-            placeholder="Repite la contraseña"
-            value={confirmarContrasena}
-            onChange={(e) => setConfirmarContrasena(e.target.value)}
-            icono={<Lock className="h-4 w-4" />}
-            required
-          />
-
-          {error && (
-            // El aviso abarca también la indicación de iniciar sesión: sin ella,
-            // quien no ve la pantalla oye el error pero no qué hacer.
-            <div role="alert" className="text-center">
-              <p className="text-sm text-red-500">{error}</p>
-              {requiereSesion && (
-                <>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Iniciá sesión y volvé a este enlace para aceptar la invitación.
-                  </p>
-                  <button
-                    type="button"
-                    className="text-sm text-primary underline mt-1"
-                    onClick={() => router.push("/iniciar-sesion")}
-                  >
-                    Ir a iniciar sesión
-                  </button>
-                </>
-              )}
-            </div>
+        {/* El aviso abarca también la indicación de iniciar sesión: sin ella,
+            quien no ve la pantalla oye el error pero no qué hacer. */}
+        <AvisoDeError mensaje={error} visible={!errorDeContrasena && !errorDeConfirmacion}>
+          {requiereSesion && (
+            <>
+              <p>Después, vuelve a abrir este enlace.</p>
+              <Boton href="/iniciar-sesion" variante="enlace" tamano="sm">
+                Ir a iniciar sesión
+              </Boton>
+            </>
           )}
+        </AvisoDeError>
 
-          <BotonPrimario
-            type="submit"
-            anchoCompleto
-            tamaño="lg"
-            cargando={enviando}
-            icono={<CheckCircle2 className="h-4 w-4" />}
-          >
-            Crear cuenta y entrar
-          </BotonPrimario>
-        </form>
-      </motion.div>
-    </div>
+        <Boton type="submit" tamano="lg" cargando={enviando} className="w-full">
+          Crear cuenta y entrar
+        </Boton>
+      </form>
+    </MarcoDeAcceso>
   )
 }

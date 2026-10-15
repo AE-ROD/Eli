@@ -1,8 +1,9 @@
 "use client"
 
-import { motion } from "framer-motion"
-import { Clock, DollarSign } from "lucide-react"
+import { Check, Clock } from "lucide-react"
+import { formatearMonto } from "@/lib/dinero"
 import { formatearDuracionDeServicio } from "@/lib/fechas"
+import { cn } from "@/lib/utils"
 
 export interface ServicioPublico {
   id: string
@@ -18,49 +19,69 @@ interface SelectorServicioProps {
   onSeleccionar: (servicio: ServicioPublico) => void
 }
 
+/**
+ * Los servicios del negocio, uno por tarjeta. El elegido se marca con el
+ * azul de la Agenda, un borde navy de 2px y un tilde: el pastel solo no llega
+ * al contraste de 3:1 contra el blanco, el borde sí.
+ *
+ * Los bordes son `inset-ring` y no `border` para que el más grueso del
+ * elegido no corra el contenido, y porque `anillo-foco` los conserva al
+ * enfocar. El de reposo es del gris de texto secundario, como el de los
+ * campos: el gris de los bordes decorativos no se distingue sobre blanco.
+ */
 export function SelectorServicio({ servicios, seleccionado, onSeleccionar }: SelectorServicioProps) {
   return (
-    <div className="grid gap-3">
-      {servicios.map((servicio) => (
-        <motion.button
-          key={servicio.id}
-          type="button"
-          onClick={() => onSeleccionar(servicio)}
-          className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
-            seleccionado?.id === servicio.id
-              ? "border-primary bg-primary/5"
-              : "border-border hover:border-primary/40 hover:bg-muted/50"
-          }`}
-          whileHover={{ scale: 1.01 }}
-          whileTap={{ scale: 0.99 }}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-foreground">{servicio.name}</p>
-              {servicio.description && (
-                <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">{servicio.description}</p>
+    <ul className="grid gap-3 md:grid-cols-2">
+      {servicios.map((servicio) => {
+        const elegido = seleccionado?.id === servicio.id
+        // El gris secundario da 4,3:1 sobre el azul suave del elegido: ahí el texto chico pasa a navy al 75%.
+        const textoSecundario = elegido ? "text-navy/75" : "text-texto-2"
+        return (
+          <li key={servicio.id} className="flex">
+            <button
+              type="button"
+              aria-pressed={elegido}
+              onClick={() => onSeleccionar(servicio)}
+              className={cn(
+                "flex w-full flex-col rounded-boton-lg p-4 text-left text-navy squircle anillo-foco sm:p-5",
+                "transition-[background-color,box-shadow] duration-150 ease-suave",
+                elegido
+                  ? "bg-azul-suave inset-ring-2 inset-ring-navy"
+                  : "bg-tarjeta inset-ring-1 inset-ring-texto-2 hover:bg-crema hover:inset-ring-navy"
               )}
-            </div>
-            {seleccionado?.id === servicio.id && (
-              <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center flex-shrink-0 mt-0.5">
-                <span className="text-primary-foreground text-xs">✓</span>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-4 mt-3">
-            <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Clock className="h-4 w-4" />
-              {formatearDuracionDeServicio(servicio.duration)}
-            </span>
-            {servicio.price != null && (
-              <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-                {servicio.price.toLocaleString("es-ES")}
+            >
+              <span className="flex w-full items-start justify-between gap-3">
+                <span className="min-w-0">
+                  <span className="block font-medium break-words">{servicio.name}</span>
+                  {/* Sin `block`: le ganaría al `display` de `line-clamp` y el texto no se cortaría. */}
+                  {servicio.description && (
+                    <span className={cn("mt-1 line-clamp-2 text-sm", textoSecundario)}>{servicio.description}</span>
+                  )}
+                </span>
+                {/* Un círculo vacío que se llena: se lee como una elección entre varias. */}
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "grid size-6 shrink-0 place-items-center rounded-full transition-colors duration-150 ease-suave",
+                    elegido ? "bg-azul text-navy" : "inset-ring-[1.5px] inset-ring-texto-2"
+                  )}
+                >
+                  {elegido && <Check className="size-3.5" strokeWidth={2.5} />}
+                </span>
               </span>
-            )}
-          </div>
-        </motion.button>
-      ))}
-    </div>
+              <span className="mt-auto flex w-full items-center gap-4 pt-4 text-sm">
+                <span className={cn("flex items-center gap-1.5", textoSecundario)}>
+                  <Clock aria-hidden="true" className="size-4" strokeWidth={1.75} />
+                  {formatearDuracionDeServicio(servicio.duration)}
+                </span>
+                {servicio.price != null && (
+                  <span className="ml-auto font-medium tabular-nums">{formatearMonto(servicio.price)}</span>
+                )}
+              </span>
+            </button>
+          </li>
+        )
+      })}
+    </ul>
   )
 }

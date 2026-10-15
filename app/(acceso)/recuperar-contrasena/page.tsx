@@ -1,13 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { motion } from "framer-motion"
-import Link from "next/link"
-import { LogoEli } from "@/components/comunes/logo-eli"
+import { ArrowLeft, MailCheck } from "lucide-react"
+import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
-import { BotonPrimario } from "@/components/comunes/boton-primario"
-import { Mail, ArrowRight, ArrowLeft, CheckCircle2 } from "lucide-react"
+import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { pedirEnlaceDeRecuperacion } from "../_datos"
+import { AvisoDeError } from "../_componentes/aviso-de-error"
+import { MarcoDeAcceso } from "../_componentes/marco-de-acceso"
 
 export default function PaginaRecuperarContrasena() {
   const [email, setEmail] = useState("")
@@ -27,81 +27,58 @@ export default function PaginaRecuperarContrasena() {
     else setError(resultado.error)
   }
 
-  return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-6 py-12">
-      <motion.div
-        className="w-full max-w-md"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <Link href="/" className="flex justify-center mb-8">
-          <LogoEli tamaño="lg" />
-        </Link>
-
-        {enviado ? (
-          <div className="text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-500/10">
-              <CheckCircle2 className="h-6 w-6 text-green-500" />
-            </div>
-            <h1 className="text-2xl font-bold text-foreground">Revisa tu correo</h1>
-            <p className="mt-2 text-muted-foreground">
-              Si existe una cuenta con ese correo, te enviamos un enlace para restablecer tu contraseña. El enlace expira en 1 hora.
-            </p>
-            <Link
-              href="/iniciar-sesion"
-              className="mt-8 inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Volver a iniciar sesión
-            </Link>
-          </div>
-        ) : (
+  if (enviado) {
+    return (
+      <MarcoDeAcceso
+        clave="enviado"
+        arriba={<CuadroDeIcono icono={MailCheck} color="azul" activo tamano="lg" />}
+        antetitulo="Recuperar contraseña"
+        titulo="Revisa tu correo"
+        bajada={
+          // Lo mismo exista o no la cuenta: la pantalla no dice quién está registrado.
           <>
-            <div className="text-center mb-8">
-              <h1 className="text-2xl font-bold text-foreground">¿Olvidaste tu contraseña?</h1>
-              <p className="mt-2 text-muted-foreground">
-                Ingresa tu correo y te enviaremos un enlace para restablecerla.
-              </p>
-            </div>
-
-            <form className="space-y-5" onSubmit={manejarEnvio}>
-              <CampoFormulario
-                etiqueta="Correo electrónico"
-                type="email"
-                placeholder="tu@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                icono={<Mail className="h-4 w-4" />}
-                required
-              />
-
-              {error && <p role="alert" className="text-sm text-red-500 text-center">{error}</p>}
-
-              <BotonPrimario
-                type="submit"
-                anchoCompleto
-                tamaño="lg"
-                cargando={cargando}
-                icono={<ArrowRight className="h-4 w-4" />}
-                iconoDerecha
-              >
-                Enviar enlace
-              </BotonPrimario>
-            </form>
-
-            <p className="mt-8 text-center text-sm text-muted-foreground">
-              <Link
-                href="/iniciar-sesion"
-                className="font-medium text-primary hover:text-primary/80 transition-colors inline-flex items-center gap-1"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Volver a iniciar sesión
-              </Link>
-            </p>
+            Si <span className="font-medium text-navy">{email}</span> tiene una cuenta en Eli, te enviamos un enlace
+            para crear una contraseña nueva. El enlace vence en 1 hora.
           </>
-        )}
-      </motion.div>
-    </div>
+        }
+      >
+        <p className="text-sm text-texto-2">Si no lo ves en unos minutos, búscalo en la carpeta de spam.</p>
+        <Boton href="/iniciar-sesion" variante="secundario" tamano="lg" className="mt-6 w-full">
+          Volver a iniciar sesión
+        </Boton>
+      </MarcoDeAcceso>
+    )
+  }
+
+  return (
+    <MarcoDeAcceso
+      clave="formulario"
+      antetitulo="Recuperar contraseña"
+      titulo="¿Olvidaste tu contraseña?"
+      bajada="Escribe el correo de tu cuenta y te enviamos un enlace para crear una nueva."
+      pie={
+        <Boton href="/iniciar-sesion" variante="fantasma" tamano="sm" icono={<ArrowLeft />}>
+          Volver a iniciar sesión
+        </Boton>
+      }
+    >
+      <form className="flex flex-col gap-5" onSubmit={manejarEnvio}>
+        <CampoFormulario
+          etiqueta="Correo electrónico"
+          type="email"
+          autoComplete="email"
+          placeholder="tu@correo.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
+
+        <AvisoDeError mensaje={error} />
+
+        <Boton type="submit" tamano="lg" cargando={cargando} className="w-full">
+          Enviar enlace
+        </Boton>
+      </form>
+    </MarcoDeAcceso>
   )
 }

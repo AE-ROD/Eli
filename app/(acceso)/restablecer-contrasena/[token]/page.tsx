@@ -1,14 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { motion } from "framer-motion"
-import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
-import { LogoEli } from "@/components/comunes/logo-eli"
+import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
-import { BotonPrimario } from "@/components/comunes/boton-primario"
-import { Lock, ArrowRight } from "lucide-react"
 import { restablecerContrasena } from "../../_datos"
+import { AvisoDeError } from "../../_componentes/aviso-de-error"
+import { CONTRASENA_CORTA, CONTRASENAS_DISTINTAS } from "../../_componentes/errores-de-validacion"
+import { MarcoDeAcceso, PreguntaConEnlace } from "../../_componentes/marco-de-acceso"
 
 export default function PaginaRestablecerContrasena() {
   const params = useParams()
@@ -24,11 +23,11 @@ export default function PaginaRestablecerContrasena() {
     setError("")
 
     if (contrasena.length < 8) {
-      setError("La contraseña debe tener al menos 8 caracteres")
+      setError(CONTRASENA_CORTA)
       return
     }
     if (contrasena !== confirmarContrasena) {
-      setError("Las contraseñas no coinciden")
+      setError(CONTRASENAS_DISTINTAS)
       return
     }
 
@@ -45,60 +44,49 @@ export default function PaginaRestablecerContrasena() {
     router.push("/iniciar-sesion")
   }
 
+  // Lo que se valida acá va debajo de su campo; lo que responde el servidor, arriba del botón.
+  const errorDeContrasena = error === CONTRASENA_CORTA ? error : undefined
+  const errorDeConfirmacion = error === CONTRASENAS_DISTINTAS ? error : undefined
+
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-6 py-12">
-      <motion.div
-        className="w-full max-w-md"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <Link href="/" className="flex justify-center mb-8">
-          <LogoEli tamaño="lg" />
-        </Link>
+    <MarcoDeAcceso
+      antetitulo="Recuperar contraseña"
+      titulo="Crea una contraseña nueva"
+      bajada="Elige una de al menos 8 caracteres. Después vas a iniciar sesión con ella."
+      pie={
+        <PreguntaConEnlace pregunta="¿El enlace venció?" href="/recuperar-contrasena">
+          Pide uno nuevo
+        </PreguntaConEnlace>
+      }
+    >
+      <form className="flex flex-col gap-5" onSubmit={manejarEnvio}>
+        <CampoFormulario
+          etiqueta="Contraseña nueva"
+          type="password"
+          autoComplete="new-password"
+          placeholder="Al menos 8 caracteres"
+          value={contrasena}
+          onChange={(e) => setContrasena(e.target.value)}
+          error={errorDeContrasena}
+          required
+        />
 
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-foreground">Crea una nueva contraseña</h1>
-          <p className="mt-2 text-muted-foreground">
-            Elige una contraseña segura de al menos 8 caracteres.
-          </p>
-        </div>
+        <CampoFormulario
+          etiqueta="Repite la contraseña"
+          type="password"
+          autoComplete="new-password"
+          value={confirmarContrasena}
+          onChange={(e) => setConfirmarContrasena(e.target.value)}
+          error={errorDeConfirmacion}
+          required
+        />
 
-        <form className="space-y-5" onSubmit={manejarEnvio}>
-          <CampoFormulario
-            etiqueta="Nueva contraseña"
-            type="password"
-            placeholder="Tu nueva contraseña"
-            value={contrasena}
-            onChange={(e) => setContrasena(e.target.value)}
-            icono={<Lock className="h-4 w-4" />}
-            required
-          />
+        <AvisoDeError mensaje={error} visible={!errorDeContrasena && !errorDeConfirmacion} />
 
-          <CampoFormulario
-            etiqueta="Confirmar contraseña"
-            type="password"
-            placeholder="Repite tu nueva contraseña"
-            value={confirmarContrasena}
-            onChange={(e) => setConfirmarContrasena(e.target.value)}
-            icono={<Lock className="h-4 w-4" />}
-            required
-          />
-
-          {error && <p role="alert" className="text-sm text-red-500 text-center">{error}</p>}
-
-          <BotonPrimario
-            type="submit"
-            anchoCompleto
-            tamaño="lg"
-            cargando={cargando}
-            icono={<ArrowRight className="h-4 w-4" />}
-            iconoDerecha
-          >
-            Restablecer contraseña
-          </BotonPrimario>
-        </form>
-      </motion.div>
-    </div>
+        <Boton type="submit" tamano="lg" cargando={cargando} className="w-full">
+          Guardar contraseña
+        </Boton>
+      </form>
+    </MarcoDeAcceso>
   )
 }
