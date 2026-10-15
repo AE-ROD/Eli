@@ -131,11 +131,15 @@ menú.
   borde de la pantalla, 24px desde md. La separación vertical entre islas la
   pone quien las apila (`gap-2 md:gap-6`), no cada isla.
 - En las páginas con el encabezado público (`data-encabezado-publico`, lo
-  pone `Encabezado`), lo que se alcanza con un enlace `#` o con Tab queda
-  debajo de la tarjeta flotante gracias al `scroll-padding-top` del `<html>`
-  (76px en teléfono, 120px desde md). Por eso esas secciones no llevan
-  `scroll-mt-*`: se sumaría. El panel no lo usa: tiene su propia barra fija y
-  sus propios márgenes.
+  pone `Encabezado`), nada queda escondido debajo de la tarjeta flotante (76px
+  en teléfono, 120px desde md):
+  - el foco del teclado, por el `scroll-padding-top` del `<html>`, que sólo
+    vale con `:focus-visible`: así un clic nunca mueve la página;
+  - las anclas, por el `scroll-margin-top` de cada `section[id]`, que vale
+    sólo sin foco de teclado para no sumarse al otro.
+
+  Por eso esas secciones no llevan `scroll-mt-*`. El panel no usa nada de
+  esto: tiene su propia barra fija y sus propios márgenes.
 - Breakpoints de Tailwind: `md` 768, `lg` 1024, `xl` 1280. Todo tiene que
   funcionar de 360px a 1440px o más sin scroll horizontal.
 

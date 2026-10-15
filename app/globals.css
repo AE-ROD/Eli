@@ -298,23 +298,36 @@
 
   /*
    * En las páginas con el encabezado público, la franja de arriba la tapa la
-   * tarjeta flotante, y el navegador no desplaza hacia lo que ya considera a
-   * la vista aunque esté debajo de ella: sin este margen, un enlace con # o el
-   * foco que llega con Tab quedaban escondidos (WCAG 2.4.11). Es lo que ocupa
-   * la tarjeta con su aire: 8 + 60 + 8 en el teléfono y 24 + 72 + 24 desde md.
-   * Es fijo y no sigue al encabezado a propósito: con el encabezado oculto, un
-   * Shift+Tab dejaba el foco a 24px del borde, la página subía, el encabezado
-   * volvía y quedaba encima del foco.
+   * tarjeta flotante: 8 + 60 + 8 en el teléfono y 24 + 72 + 24 desde md. Dos
+   * reglas evitan que algo quede escondido debajo de ella, cada una en su caso:
    *
-   * Va atado a `data-encabezado-publico` (lo pone `Encabezado`) y no a todo
-   * <html>: el panel tiene su propia barra fija y su propio margen, como el
-   * `scroll-mt-24` de reportes, que con este se sumaría. `:has()` se resuelve
-   * sin JavaScript, así que vale desde el primer pintado.
+   * - El foco del teclado (WCAG 2.4.11). El navegador no desplaza hacia lo que
+   *   ya considera a la vista, aunque esté debajo del encabezado; con este
+   *   margen, sí. Vale sólo mientras hay foco de teclado (`:focus-visible`):
+   *   un clic no lleva margen, y así nunca mueve la página. Es fijo y no sigue
+   *   al encabezado a propósito: con el encabezado oculto, un Shift+Tab dejaba
+   *   el foco a 24px del borde, la página subía, el encabezado volvía y quedaba
+   *   encima del foco.
+   * - Las anclas (`#recorrido`, `#oficios`…): la sección de destino lleva el
+   *   mismo margen, bajando o subiendo. Sólo sin foco de teclado: con Enter en
+   *   un enlace ya cuenta el de arriba, y los dos sumados la dejaban al doble.
+   *
+   * Van atadas a `data-encabezado-publico` (lo pone `Encabezado`) y no a todo
+   * <html>: el panel tiene su propia barra fija y sus propios márgenes, como el
+   * `scroll-mt-24` de reportes. `:has()` se resuelve sin JavaScript, así que
+   * vale desde el primer pintado, y el estilo cambia antes de que el navegador
+   * desplace hacia el foco recién puesto.
    */
-  html:has([data-encabezado-publico]) {
+  html:has([data-encabezado-publico]):has(:focus-visible) {
     scroll-padding-top: 76px;
     @media (width >= 48rem) {
       scroll-padding-top: 120px;
+    }
+  }
+  html:has([data-encabezado-publico]):not(:has(:focus-visible)) section[id] {
+    scroll-margin-top: 76px;
+    @media (width >= 48rem) {
+      scroll-margin-top: 120px;
     }
   }
   body {
