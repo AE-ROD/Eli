@@ -2,10 +2,10 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
-import { BarraSuperior } from "@/components/app/layout/barra-superior"
-import { SeccionHorario } from "./_components/seccionHorario"
-import { SeccionServicios } from "./_components/seccionServicios"
-import { SelectorHorarioMiembro } from "./_components/selectorHorarioMiembro"
+import { BarraSuperior } from "@/components/panel/barra-superior"
+import { SeccionHorario } from "./_componentes/seccion-horario"
+import { SeccionServicios } from "./_componentes/seccion-servicios"
+import { SelectorHorarioMiembro } from "./_componentes/selector-horario-miembro"
 import { actorDeSesion, esDueño, gestionaElNegocio, puedeEditarHorarioDe, puedeGestionarServicios } from "@/lib/permisos"
 
 export default async function PaginaConfiguracion() {
@@ -51,13 +51,13 @@ export default async function PaginaConfiguracion() {
   const nombreActor = session?.user?.name ?? "Yo"
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-dvh">
       <BarraSuperior
         titulo="Configuración"
         subtitulo={gestionaElNegocio(actor) ? "Gestiona horarios, servicios y equipo" : "Gestiona tu horario de atención"}
       />
 
-      <div className="p-6 space-y-6 max-w-3xl">
+      <div className="max-w-3xl space-y-6 px-4 pt-6 pb-10 sm:px-6">
         {/* Horario: quien gestiona el negocio y tiene equipo → selector de tabs; el resto → directo */}
         {puedeEditarHorarioDeOtros && tieneEquipo ? (
           <SelectorHorarioMiembro

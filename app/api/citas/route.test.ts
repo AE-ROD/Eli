@@ -29,8 +29,8 @@ function coincide(item: Record<string, unknown>, where: Record<string, unknown>)
 }
 
 const citasFake = [
-  { id: "cita-mia", businessId: "negocio-1", memberId: "member-worker-1", patientId: "p-1" },
-  { id: "cita-colega", businessId: "negocio-1", memberId: "member-colega", patientId: "p-2" },
+  { id: "cita-mia", businessId: "negocio-1", memberId: "member-worker-1", customerId: "c-1" },
+  { id: "cita-colega", businessId: "negocio-1", memberId: "member-colega", customerId: "c-2" },
 ]
 
 const prismaMock = {
@@ -39,7 +39,7 @@ const prismaMock = {
       Promise.resolve(citasFake.filter((c) => coincide(c, args.where)))
     ),
   },
-  patient: { findFirst: vi.fn() },
+  customer: { findFirst: vi.fn() },
   businessMember: { findFirst: vi.fn() },
 }
 
@@ -89,7 +89,7 @@ describe("GET /api/citas", () => {
   })
 
   // `route.ts` no expone hoy un query param que produzca un `extra` con
-  // `memberId` o `AND` propios (sólo `patientId` y rango de fechas), así que
+  // `memberId` o `AND` propios (sólo `customerId` y rango de fechas), así que
   // estos dos casos no se pueden disparar armando una URL: se prueba
   // directamente `whereDeAgenda` — la misma función que usa el endpoint —
   // contra `citasFake`, reusando `coincide`. Es justo la combinación que

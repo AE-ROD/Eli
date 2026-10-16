@@ -3,10 +3,11 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { tipoNegocioSchema } from "@/lib/validaciones"
 
 const schema = z.object({
   nombreNegocio: z.string().min(2),
-  tipoNegocio: z.string().min(1),
+  tipoNegocio: tipoNegocioSchema,
   teamSize: z.number().int().min(1).default(1),
 })
 

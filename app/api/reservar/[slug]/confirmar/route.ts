@@ -56,7 +56,7 @@ export async function POST(
     }
 
     // Buscar o crear cliente
-    let cliente = await prisma.patient.findFirst({
+    let cliente = await prisma.customer.findFirst({
       where: {
         businessId: negocio.id,
         OR: [
@@ -67,7 +67,7 @@ export async function POST(
     })
 
     if (!cliente) {
-      cliente = await prisma.patient.create({
+      cliente = await prisma.customer.create({
         data: {
           name: datos.nombre,
           lastName: datos.apellido,
@@ -89,7 +89,7 @@ export async function POST(
         status: "pendiente",
         clientComments: datos.comentarios || null,
         price: servicio.price,
-        patientId: cliente.id,
+        customerId: cliente.id,
         businessId: negocio.id,
       },
     })

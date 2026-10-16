@@ -16,7 +16,7 @@ function cita(id: string, startHHMM: string, endHHMM: string): CitaDelDia {
     startTime: `2026-09-07T${startHHMM}:00`,
     endTime: `2026-09-07T${endHHMM}:00`,
     status: "confirmada",
-    patient: null,
+    customer: null,
   }
 }
 

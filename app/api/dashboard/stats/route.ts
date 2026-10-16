@@ -2,7 +2,16 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { actorDeSesion, puedeVerIngresosDelNegocio, whereDeAgenda } from "@/lib/permisos"
+import { deCentavos } from "@/lib/atenciones"
+import {
+  actorDeSesion,
+  puedeVerIngresosDelNegocio,
+  whereDeAgenda,
+  whereDeAtenciones,
+  whereDePagos,
+  type Actor,
+} from "@/lib/permisos"
+import { esZonaHorariaValida, iniciosDeMesEn } from "@/lib/reportes"
 
 /**
  * Variación porcentual entre dos períodos comparables.
@@ -14,11 +23,45 @@ function variacion(actual: number, anterior: number): number | null {
   return Math.round(((actual - anterior) / anterior) * 100)
 }
 
-export async function GET(_request: NextRequest) {
+/** Las atenciones cobradas en un período: finalizadas, con el cobro adentro. */
+function cobradasEn(paidAt: { gte: Date; lt?: Date }) {
+  return { status: "finalizada", paidAt }
+}
+
+/**
+ * Lo cobrado en un período: la suma de los pagos de las atenciones
+ * finalizadas (PRODUCTO.md, sección 7: los ingresos son lo cobrado en el
+ * tablero). Una cita marcada como completada en la agenda sin pasar por el
+ * cobro no suma: no hay registro de cuánto se cobró ni cómo; una atención
+ * anulada tampoco, aunque conserve sus pagos.
+ *
+ * La base suma centavos enteros (Postgres devuelve la suma como `bigint`, así
+ * que el mes no tiene el tope de la columna) y se devuelve en unidades.
+ */
+async function sumaDePagos(actor: Actor, paidAt: { gte: Date; lt?: Date }): Promise<number> {
+  const { _sum } = await prisma.visitPayment.aggregate({
+    where: whereDePagos(actor, { visit: { is: cobradasEn(paidAt) } }),
+    _sum: { amountCents: true },
+  })
+  return deCentavos(_sum.amountCents ?? 0)
+}
+
+export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions)
   const actor = actorDeSesion(session)
   if (!actor) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  }
+
+  // La zona de quien mira, opcional. Con ella, el mes de los ingresos es el
+  // de su calendario, igual que en Reportes; sin ella, el del servidor, como
+  // siempre. Vacía es lo mismo que no mandarla.
+  const zona = new URL(request.url).searchParams.get("zona") || null
+  if (zona !== null && !esZonaHorariaValida(zona)) {
+    return NextResponse.json(
+      { error: "La zona horaria no es una zona IANA válida, como America/Santiago." },
+      { status: 400 }
+    )
   }
 
   const verIngresos = puedeVerIngresosDelNegocio(actor)
@@ -35,15 +78,16 @@ export async function GET(_request: NextRequest) {
 
   const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
   const inicioMesAnterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1)
-  const finMesAnterior = new Date(hoy.getFullYear(), hoy.getMonth(), 0)
+  // Los meses de los ingresos. Con la hora del servidor (UTC), un cobro del
+  // 30 de septiembre a las 22:30 en Santiago ya cae en octubre, y el inicio
+  // no coincidía con Reportes en el borde del mes.
+  const mesesDeIngresos = zona ? iniciosDeMesEn(new Date(), zona) : { inicioMes, inicioMesAnterior }
 
-  const sinIngresos = { _sum: { price: null as number | null }, _count: 0 }
-
-  const [citasHoy, totalPacientes, pacientesMesAnterior, clientesNuevosMes, ingresosMes, ingresosMesAnterior, franjasHoy] =
+  const [citasHoy, totalClientes, clientesMesAnterior, clientesNuevosMes, ingresosMes, atencionesCobradasMes, ingresosMesAnterior, franjasHoy] =
     await Promise.all([
       prisma.appointment.findMany({
         // Filas, no un agregado: un worker no debe ver acá las citas de un
-        // colega ni el nombre de su paciente. `whereDeAgenda` acota por
+        // colega ni el nombre de su cliente. `whereDeAgenda` acota por
         // profesional además de por negocio.
         where: whereDeAgenda(actor, {
           startTime: { gte: hoy, lt: manana },
@@ -55,41 +99,29 @@ export async function GET(_request: NextRequest) {
           startTime: true,
           endTime: true,
           status: true,
-          patient: { select: { id: true, name: true } },
+          customer: { select: { id: true, name: true } },
         },
         orderBy: { startTime: "asc" },
         // Listado sin agregar: siempre con tope (reglas/01-arquitectura.md).
         take: 200,
       }),
-      prisma.patient.count({ where: { businessId } }),
-      prisma.patient.count({ where: { businessId, createdAt: { lt: inicioMes } } }),
+      prisma.customer.count({ where: { businessId } }),
+      prisma.customer.count({ where: { businessId, createdAt: { lt: inicioMes } } }),
       // De qué está hecha la cifra de clientes: cuántos entraron este mes.
-      prisma.patient.count({ where: { businessId, createdAt: { gte: inicioMes } } }),
+      prisma.customer.count({ where: { businessId, createdAt: { gte: inicioMes } } }),
       // La facturación es del negocio: no se calcula siquiera si el actor no
-      // puede verla. `_count` dice sobre cuántas citas está hecha la suma.
+      // puede verla. `atencionesCobradasMes` dice sobre cuántas atenciones
+      // está hecha la suma.
+      verIngresos ? sumaDePagos(actor, { gte: mesesDeIngresos.inicioMes }) : Promise.resolve(0),
       verIngresos
-        ? prisma.appointment.aggregate({
-            where: {
-              businessId,
-              startTime: { gte: inicioMes },
-              status: "completada",
-              price: { not: null },
-            },
-            _sum: { price: true },
-            _count: true,
-          })
-        : Promise.resolve(sinIngresos),
+        ? prisma.visit.count({ where: whereDeAtenciones(actor, cobradasEn({ gte: mesesDeIngresos.inicioMes })) })
+        : Promise.resolve(0),
+      // El mes anterior termina donde empieza este (`lt`). Con `lte` contra
+      // las 00:00 de su último día, como se comparaba antes, ese día quedaba
+      // afuera de la comparación.
       verIngresos
-        ? prisma.appointment.aggregate({
-            where: {
-              businessId,
-              startTime: { gte: inicioMesAnterior, lte: finMesAnterior },
-              status: "completada",
-              price: { not: null },
-            },
-            _sum: { price: true },
-          })
-        : Promise.resolve(sinIngresos),
+        ? sumaDePagos(actor, { gte: mesesDeIngresos.inicioMesAnterior, lt: mesesDeIngresos.inicioMes })
+        : Promise.resolve(0),
       // Horario propio de hoy, sólo para el profesional. Nunca acepta un
       // `memberId` de querystring (a diferencia de /api/configuracion/horarios):
       // este endpoint sólo conoce el horario del actor, jamás el de un colega.
@@ -113,9 +145,6 @@ export async function GET(_request: NextRequest) {
         : Promise.resolve([]),
     ])
 
-  const ingresosActuales = ingresosMes._sum.price ?? 0
-  const ingresosAnteriores = ingresosMesAnterior._sum.price ?? 0
-
   // Sin citas hoy, el dato honesto no es un cero mudo sino cuándo es la próxima.
   const proximaCita =
     citasHoy.length === 0
@@ -132,13 +161,13 @@ export async function GET(_request: NextRequest) {
   // Sólo viajan las tendencias que se pudieron calcular. No se comparan las
   // citas: el cálculo anterior medía las de hoy contra el total del mes pasado,
   // un día contra un mes. Para esa tarjeta, el contexto es `proximaCita`.
-  const tendencias: { pacientes?: number; ingresos?: number } = {}
+  const tendencias: { clientes?: number; ingresos?: number } = {}
 
-  const tendenciaPacientes = variacion(totalPacientes, pacientesMesAnterior)
-  if (tendenciaPacientes !== null) tendencias.pacientes = tendenciaPacientes
+  const tendenciaClientes = variacion(totalClientes, clientesMesAnterior)
+  if (tendenciaClientes !== null) tendencias.clientes = tendenciaClientes
 
   if (verIngresos) {
-    const tendenciaIngresos = variacion(ingresosActuales, ingresosAnteriores)
+    const tendenciaIngresos = variacion(ingresosMes, ingresosMesAnterior)
     if (tendenciaIngresos !== null) tendencias.ingresos = tendenciaIngresos
   }
 
@@ -146,16 +175,13 @@ export async function GET(_request: NextRequest) {
     citasHoy: citasHoy.length,
     citasHoyLista: citasHoy,
     ...(proximaCita && { proximaCita }),
-    totalPacientes,
+    totalClientes,
     clientesNuevosMes,
-    ...(verIngresos && {
-      ingresoseMes: ingresosActuales,
-      citasFacturadasMes: ingresosMes._count,
-    }),
+    ...(verIngresos && { ingresosMes, atencionesCobradasMes }),
     // No viaja si el profesional no tiene horario activo cargado para hoy: ni
     // un rango por defecto ni un array vacío como placeholder. El front debe
     // poder leer "sin horario cargado hoy" a partir de la ausencia de la clave,
-    // igual que hace con `ingresoseMes` y `tendencias.ingresos`.
+    // igual que hace con `ingresosMes` y `tendencias.ingresos`.
     ...(esWorker && franjasHoy.length > 0 && { horarioHoy: franjasHoy }),
     tendencias,
   })

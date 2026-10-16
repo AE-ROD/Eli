@@ -13,9 +13,14 @@ const prismaMock = {
   appointment: {
     findMany: vi.fn(),
     findFirst: vi.fn(),
+  },
+  visit: {
+    count: vi.fn(),
+  },
+  visitPayment: {
     aggregate: vi.fn(),
   },
-  patient: {
+  customer: {
     count: vi.fn(),
   },
   workSchedule: {
@@ -39,33 +44,21 @@ const sesionProfesional = {
   },
 }
 
-const fakeRequest = (): NextRequest => ({} as unknown as NextRequest)
+const fakeRequest = (): NextRequest => ({ url: "http://localhost/api/dashboard/stats" }) as unknown as NextRequest
 
+/**
+ * Lo que no es ingresos: citas de hoy, clientes y horario. Los ingresos se
+ * prueban contra datos, con la base falsa, en `ingresos.test.ts`.
+ */
 describe("GET /api/dashboard/stats", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     prismaMock.appointment.findMany.mockResolvedValue([])
     prismaMock.appointment.findFirst.mockResolvedValue(null)
-    prismaMock.appointment.aggregate.mockResolvedValue({ _sum: { price: 1000 }, _count: 4 })
-    prismaMock.patient.count.mockResolvedValue(0)
+    prismaMock.visitPayment.aggregate.mockResolvedValue({ _sum: { amountCents: 100000 } })
+    prismaMock.visit.count.mockResolvedValue(4)
+    prismaMock.customer.count.mockResolvedValue(0)
     prismaMock.workSchedule.findMany.mockResolvedValue([])
-  })
-
-  it("un worker no recibe ingresos del negocio", async () => {
-    const { GET } = await import("./route")
-
-    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
-
-    const res = await GET(fakeRequest())
-    const data = await res.json()
-
-    expect(res.status).toBe(200)
-    expect(data).not.toHaveProperty("ingresoseMes")
-    // Tampoco el contexto de esa cifra: diría sobre cuántas citas se factura.
-    expect(data).not.toHaveProperty("citasFacturadasMes")
-    expect(data.tendencias).not.toHaveProperty("ingresos")
-    // Tampoco se calcula: el endpoint no le pide el dato a Prisma.
-    expect(prismaMock.appointment.aggregate).not.toHaveBeenCalled()
   })
 
   it("un worker sólo recibe en citasHoyLista sus propias citas, con tope", async () => {
@@ -89,27 +82,14 @@ describe("GET /api/dashboard/stats", () => {
     expect(llamada.take).toBe(200)
   })
 
-  it("el dueño sí recibe los ingresos, con la cantidad de citas que los sostienen", async () => {
-    const { GET } = await import("./route")
-
-    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
-
-    const res = await GET(fakeRequest())
-    const data = await res.json()
-
-    expect(res.status).toBe(200)
-    expect(data.ingresoseMes).toBe(1000)
-    expect(data.citasFacturadasMes).toBe(4)
-  })
-
   it("sin mes anterior con qué comparar, la tendencia no viaja", async () => {
     const { GET } = await import("./route")
 
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
     // Facturación del mes actual, nada el mes anterior: es un negocio nuevo.
-    prismaMock.appointment.aggregate
-      .mockResolvedValueOnce({ _sum: { price: 1000 }, _count: 4 })
-      .mockResolvedValueOnce({ _sum: { price: null }, _count: 0 })
+    prismaMock.visitPayment.aggregate
+      .mockResolvedValueOnce({ _sum: { amountCents: 100000 } })
+      .mockResolvedValueOnce({ _sum: { amountCents: null } })
 
     const res = await GET(fakeRequest())
     const data = await res.json()
@@ -117,7 +97,7 @@ describe("GET /api/dashboard/stats", () => {
     // Ni `0` ni `null`: la clave no existe. Un `0` se muestra como
     // "+0% vs mes anterior" y se lee como un placeholder roto.
     expect(data.tendencias).not.toHaveProperty("ingresos")
-    expect(data.tendencias).not.toHaveProperty("pacientes")
+    expect(data.tendencias).not.toHaveProperty("clientes")
     // Y no queda rastro de la comparación que medía un día contra un mes.
     expect(data.tendencias).not.toHaveProperty("citas")
     expect(data).not.toHaveProperty("tasaOcupacion")
@@ -128,7 +108,7 @@ describe("GET /api/dashboard/stats", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
     // 12 clientes hoy, 10 al cierre del mes pasado, 2 nuevos este mes.
-    prismaMock.patient.count
+    prismaMock.customer.count
       .mockResolvedValueOnce(12)
       .mockResolvedValueOnce(10)
       .mockResolvedValueOnce(2)
@@ -136,26 +116,9 @@ describe("GET /api/dashboard/stats", () => {
     const res = await GET(fakeRequest())
     const data = await res.json()
 
-    expect(data.totalPacientes).toBe(12)
+    expect(data.totalClientes).toBe(12)
     expect(data.clientesNuevosMes).toBe(2)
-    expect(data.tendencias.pacientes).toBe(20)
-  })
-
-  it("la tendencia de ingresos sale de los dos meses, no de un valor por defecto", async () => {
-    const { GET } = await import("./route")
-
-    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
-    // 1.000 este mes contra 500 el anterior: el doble.
-    prismaMock.appointment.aggregate
-      .mockResolvedValueOnce({ _sum: { price: 1000 }, _count: 4 })
-      .mockResolvedValueOnce({ _sum: { price: 500 }, _count: 2 })
-
-    const res = await GET(fakeRequest())
-    const data = await res.json()
-
-    expect(data.ingresoseMes).toBe(1000)
-    expect(data.citasFacturadasMes).toBe(4)
-    expect(data.tendencias.ingresos).toBe(100)
+    expect(data.tendencias.clientes).toBe(20)
   })
 
   it("sin citas hoy, dice cuándo es la próxima en vez de un cero mudo", async () => {
@@ -185,7 +148,7 @@ describe("GET /api/dashboard/stats", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
     prismaMock.appointment.findMany.mockResolvedValueOnce([
-      { id: "cita-hoy", title: "Color", startTime: new Date(), endTime: new Date(), status: "confirmada", patient: null },
+      { id: "cita-hoy", title: "Color", startTime: new Date(), endTime: new Date(), status: "confirmada", customer: null },
     ])
 
     const res = await GET(fakeRequest())

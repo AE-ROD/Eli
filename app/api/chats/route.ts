@@ -14,8 +14,8 @@ export async function GET() {
     where: { businessId: session.user.businessId },
     select: {
       id: true,
-      patientName: true,
-      patientPhone: true,
+      customerName: true,
+      customerPhone: true,
       updatedAt: true,
       messages: {
         orderBy: { createdAt: "desc" },
@@ -31,8 +31,8 @@ export async function GET() {
 }
 
 const nuevaConvSchema = z.object({
-  patientName: z.string().min(2),
-  patientPhone: z.string().optional(),
+  customerName: z.string().min(2),
+  customerPhone: z.string().optional(),
 })
 
 export async function POST(request: NextRequest) {
@@ -47,14 +47,14 @@ export async function POST(request: NextRequest) {
 
     const conversacion = await prisma.conversation.create({
       data: {
-        patientName: datos.patientName,
-        patientPhone: datos.patientPhone ?? null,
+        customerName: datos.customerName,
+        customerPhone: datos.customerPhone ?? null,
         businessId: session.user.businessId,
       },
       select: {
         id: true,
-        patientName: true,
-        patientPhone: true,
+        customerName: true,
+        customerPhone: true,
         updatedAt: true,
         messages: { select: { id: true, content: true, fromBusiness: true, createdAt: true } },
       },

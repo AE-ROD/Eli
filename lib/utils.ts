@@ -1,20 +1,25 @@
 import { clsx, type ClassValue } from 'clsx'
-import { twMerge } from 'tailwind-merge'
+import { extendTailwindMerge } from 'tailwind-merge'
+
+/**
+ * tailwind-merge resuelve los choques entre clases de Tailwind que conoce,
+ * pero no los nombres propios de los tokens de `app/globals.css`: sin esto,
+ * `cn("rounded-tarjeta", "rounded-[24px]")` dejaba las dos y ganaba la que el
+ * CSS escribía después, que va por orden alfabético. Los colores y las
+ * sombras con nombre de tamaño ya los reconoce solo (`bg-navy`, `shadow-md`).
+ * Un radio, una curva o una animación nueva en `@theme` suma acá su nombre;
+ * una sombra con nombre propio, en una lista `shadow`.
+ */
+const twMerge = extendTailwindMerge({
+  extend: {
+    theme: {
+      radius: ['boton', 'boton-lg', 'campo', 'panel', 'tarjeta', 'seccion'],
+      ease: ['suave', 'fundido'],
+      animate: ['brillo'],
+    },
+  },
+})
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
-}
-
-/** Hora local en formato 24h a partir de un instante ISO (citas, no horarios). */
-export function formatHora(iso: string): string {
-  return new Date(iso).toLocaleTimeString('es-ES', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
-}
-
-/** Duración en minutos entre dos instantes ISO. */
-export function duracionMinutos(start: string, end: string): number {
-  return Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000)
 }

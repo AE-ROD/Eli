@@ -9,9 +9,21 @@ import {
   puedeVerLiquidacionDe,
   puedeVerTodaLaAgenda,
   puedeEditarHorarioDe,
+  puedeVerTodoElTablero,
+  puedeCobrar,
+  puedeAsignarLineasAOtros,
+  puedeAnotarSinReserva,
+  puedeAnular,
+  puedeDeshacerLlegada,
+  puedeVerAnuladas,
+  puedeVerCita,
   memberIdParaCita,
+  profesionalParaLinea,
   whereDeAgenda,
   whereDeClientes,
+  whereDeAtenciones,
+  whereDeLineas,
+  whereDePagos,
   type Actor,
   type Rol,
 } from "./permisos"
@@ -72,6 +84,11 @@ describe("jerarquía de roles", () => {
     ["ver toda la agenda", puedeVerTodaLaAgenda, true, true, false],
     ["ver ingresos del negocio", puedeVerIngresosDelNegocio, true, true, false],
     ["editar comisiones", puedeEditarComisiones, true, false, false],
+    ["ver todo el tablero", puedeVerTodoElTablero, true, true, false],
+    ["cobrar", puedeCobrar, true, true, false],
+    ["anotar líneas a nombre de otros", puedeAsignarLineasAOtros, true, true, false],
+    ["anotar a alguien sin reserva", puedeAnotarSinReserva, true, true, true],
+    ["ver el historial de anuladas", puedeVerAnuladas, true, true, false],
   ])("%s — dueño/encargado/profesional", (_que, puede, esperaDueño, esperaEncargado, esperaProfesional) => {
     expect(puede(dueño)).toBe(esperaDueño)
     expect(puede(encargado)).toBe(esperaEncargado)
@@ -115,7 +132,7 @@ describe("aislamiento entre negocios", () => {
 
 describe("whereDeAgenda / whereDeClientes: combinar el filtro no lo anula", () => {
   it("envuelve el filtro y lo extra en AND, en vez de mezclarlos por spread", () => {
-    const extra = { patientId: "paciente-1" }
+    const extra = { customerId: "cliente-1" }
 
     expect(whereDeAgenda(profesional, extra)).toEqual({
       AND: [{ businessId: NEGOCIO, memberId: "yo" }, extra],
@@ -216,6 +233,37 @@ describe("falla cerrado", () => {
     expect(puedeCambiarRolDe(null, miembro)).toBe(false)
     expect(puedeVerLiquidacionDe(null, miembro)).toBe(false)
     expect(puedeEditarHorarioDe(null, miembro)).toBe(false)
+    expect(puedeVerTodoElTablero(null)).toBe(false)
+    expect(puedeCobrar(null)).toBe(false)
+    expect(puedeAnotarSinReserva(null)).toBe(false)
+    expect(puedeAnular(null, { businessId: NEGOCIO, status: "en-espera" })).toBe(false)
+    expect(puedeDeshacerLlegada(null, null)).toBe(false)
+    expect(puedeDeshacerLlegada(null, { businessId: NEGOCIO, memberId: "yo" })).toBe(false)
+    expect(puedeVerAnuladas(null)).toBe(false)
+    expect(puedeVerCita(null, { businessId: NEGOCIO, memberId: "yo" })).toBe(false)
+  })
+
+  it("un profesional sin memberId no deshace llegadas ni ve citas sin asignar", () => {
+    const roto = actor("worker", null)
+
+    expect(puedeDeshacerLlegada(roto, null)).toBe(false)
+    // `null === null` no es "su" cita: falla cerrado.
+    expect(puedeDeshacerLlegada(roto, { businessId: NEGOCIO, memberId: null })).toBe(false)
+    expect(puedeVerCita(roto, { businessId: NEGOCIO, memberId: null })).toBe(false)
+  })
+
+  it("sin actor, los filtros del tablero no devuelven nada", () => {
+    expect(whereDeAtenciones(null)).toEqual({ AND: [NADA, {}] })
+    expect(whereDeLineas(null)).toEqual({ AND: [NADA, {}] })
+    expect(whereDePagos(null)).toEqual({ AND: [NADA, {}] })
+  })
+
+  it("un profesional sin memberId no ve ninguna atención ni línea, y no anota a nadie", () => {
+    const roto = actor("worker", null)
+
+    expect(whereDeAtenciones(roto)).toEqual({ AND: [{ businessId: NEGOCIO, ...NADA }, {}] })
+    expect(whereDeLineas(roto)).toEqual({ AND: [{ visit: { is: { businessId: NEGOCIO } }, ...NADA }, {}] })
+    expect(puedeAnotarSinReserva(roto)).toBe(false)
   })
 
   it("sin actor, el filtro de agenda no devuelve nada", () => {
@@ -266,5 +314,171 @@ describe("falla cerrado", () => {
     const where = whereDeAgenda(roto, { AND: [{ businessId: NEGOCIO }] })
 
     expect(citasFake.filter((c) => coincide(c, where))).toHaveLength(0)
+  })
+})
+
+describe("tablero de atenciones", () => {
+  const delNegocio = (status: string) => ({ businessId: NEGOCIO, status })
+
+  describe("puedeAnular", () => {
+    it.each(["en-espera", "en-atencion", "por-cobrar"])(
+      "antes de cobrar (%s) anulan dueño y encargado; el profesional no",
+      (status) => {
+        expect(puedeAnular(dueño, delNegocio(status))).toBe(true)
+        expect(puedeAnular(encargado, delNegocio(status))).toBe(true)
+        expect(puedeAnular(profesional, delNegocio(status))).toBe(false)
+      }
+    )
+
+    it("lo ya cobrado sólo lo anula el dueño: el encargado no", () => {
+      expect(puedeAnular(dueño, delNegocio("finalizada"))).toBe(true)
+      expect(puedeAnular(encargado, delNegocio("finalizada"))).toBe(false)
+      expect(puedeAnular(profesional, delNegocio("finalizada"))).toBe(false)
+    })
+
+    it("un estado desconocido se trata como cobrado: pide al dueño (falla cerrado)", () => {
+      expect(puedeAnular(encargado, delNegocio("raro"))).toBe(false)
+      expect(puedeAnular(dueño, delNegocio("raro"))).toBe(true)
+    })
+
+    it("ni el dueño anula una atención de otro negocio", () => {
+      expect(puedeAnular(dueño, { businessId: OTRO_NEGOCIO, status: "en-espera" })).toBe(false)
+    })
+  })
+
+  describe("puedeCobrar", () => {
+    /**
+     * El cobro congela el total de la atención entera, y el profesional no
+     * puede verlo: quien cobra tiene que ver todo el tablero. Si alguien
+     * pudiera cobrar sin verlo, cobraría un total que no se le puede mostrar.
+     */
+    const actores: [string, Actor | null][] = [
+      ...(["owner", "admin", "worker"] as const).flatMap((rol): [string, Actor][] => [
+        [`${rol} con memberId`, actor(rol, "yo")],
+        [`${rol} sin memberId`, actor(rol, null)],
+      ]),
+      ["sin actor", null],
+    ]
+
+    it.each(actores)("%s: si cobra, ve todo el tablero", (_caso, quien) => {
+      expect(!puedeCobrar(quien) || puedeVerTodoElTablero(quien)).toBe(true)
+    })
+  })
+
+  describe("puedeVerCita", () => {
+    it("la misma regla que whereDeAgenda: dueño y encargado, todas las del negocio", () => {
+      for (const quien of [dueño, encargado]) {
+        expect(puedeVerCita(quien, { businessId: NEGOCIO, memberId: "colega" })).toBe(true)
+        expect(puedeVerCita(quien, { businessId: NEGOCIO, memberId: null })).toBe(true)
+      }
+    })
+
+    it("el profesional, sólo las suyas: ni la de un colega ni una sin asignar", () => {
+      expect(puedeVerCita(profesional, { businessId: NEGOCIO, memberId: "yo" })).toBe(true)
+      expect(puedeVerCita(profesional, { businessId: NEGOCIO, memberId: "colega" })).toBe(false)
+      expect(puedeVerCita(profesional, { businessId: NEGOCIO, memberId: null })).toBe(false)
+    })
+
+    it("nadie ve una cita de otro negocio, aunque el memberId coincida", () => {
+      expect(puedeVerCita(dueño, { businessId: OTRO_NEGOCIO, memberId: null })).toBe(false)
+      expect(puedeVerCita(profesional, { businessId: OTRO_NEGOCIO, memberId: "yo" })).toBe(false)
+    })
+  })
+
+  describe("puedeDeshacerLlegada", () => {
+    const suya = { businessId: NEGOCIO, memberId: "yo" }
+    const deUnaColega = { businessId: NEGOCIO, memberId: "colega" }
+    const sinAsignar = { businessId: NEGOCIO, memberId: null }
+
+    it("dueño y encargado deshacen la llegada de cualquier reserva del negocio", () => {
+      for (const quien of [dueño, encargado]) {
+        expect(puedeDeshacerLlegada(quien, deUnaColega)).toBe(true)
+        expect(puedeDeshacerLlegada(quien, sinAsignar)).toBe(true)
+      }
+    })
+
+    it("el profesional, sólo la de una reserva suya", () => {
+      expect(puedeDeshacerLlegada(profesional, suya)).toBe(true)
+      expect(puedeDeshacerLlegada(profesional, sinAsignar)).toBe(false)
+    })
+
+    it("ver la atención no alcanza: la reserva de una colega no la deshace, aunque tenga una línea en la atención", () => {
+      expect(puedeDeshacerLlegada(profesional, deUnaColega)).toBe(false)
+    })
+
+    it("nadie deshace la llegada de una reserva de otro negocio", () => {
+      expect(puedeDeshacerLlegada(dueño, { businessId: OTRO_NEGOCIO, memberId: null })).toBe(false)
+      expect(puedeDeshacerLlegada(profesional, { businessId: OTRO_NEGOCIO, memberId: "yo" })).toBe(false)
+    })
+
+    it("sin la reserva no se sabe de quién es: dueño y encargado sí, el profesional no", () => {
+      expect(puedeDeshacerLlegada(dueño, null)).toBe(true)
+      expect(puedeDeshacerLlegada(encargado, null)).toBe(true)
+      expect(puedeDeshacerLlegada(profesional, null)).toBe(false)
+    })
+  })
+
+  describe("profesionalParaLinea", () => {
+    const aMiembro = { memberId: "colega", byOwner: false }
+    const alDueño = { memberId: null, byOwner: true }
+
+    it.each([
+      ["dueño anota a un miembro", dueño, aMiembro, aMiembro],
+      ["dueño se anota a sí mismo", dueño, alDueño, alDueño],
+      ["encargado anota al dueño", encargado, alDueño, alDueño],
+      ["encargado anota a un miembro", encargado, aMiembro, aMiembro],
+      ["profesional pide a un colega: termina siendo él", profesional, aMiembro, { memberId: "yo", byOwner: false }],
+      ["profesional pide al dueño: termina siendo él, nunca del dueño", profesional, alDueño, { memberId: "yo", byOwner: false }],
+    ])("%s", (_caso, quien, pedido, esperado) => {
+      expect(profesionalParaLinea(quien, pedido)).toEqual(esperado)
+    })
+
+    it("al dueño se lo marca con byOwner, nunca con un memberId nulo", () => {
+      // Aunque pida un memberId junto con byOwner, la línea del dueño no lleva memberId.
+      expect(profesionalParaLinea(dueño, { memberId: "colega", byOwner: true })).toEqual(alDueño)
+    })
+  })
+
+  describe("whereDeAtenciones", () => {
+    it("dueño y encargado ven todas las del negocio, siempre acotadas al negocio", () => {
+      expect(whereDeAtenciones(dueño)).toEqual({ AND: [{ businessId: NEGOCIO }, {}] })
+      expect(whereDeAtenciones(encargado)).toEqual({ AND: [{ businessId: NEGOCIO }, {}] })
+    })
+
+    it("el profesional ve las que tienen una línea suya o nacieron de una cita suya", () => {
+      expect(whereDeAtenciones(profesional)).toEqual({
+        AND: [
+          {
+            businessId: NEGOCIO,
+            OR: [{ services: { some: { memberId: "yo" } } }, { appointment: { is: { memberId: "yo" } } }],
+          },
+          {},
+        ],
+      })
+    })
+
+    it("un `extra` con su propio OR o AND no pisa el filtro del profesional", () => {
+      const extra = { OR: [{ status: "en-espera" }], AND: [{ businessId: NEGOCIO }] }
+
+      const filtroDelProfesional = (whereDeAtenciones(profesional).AND as unknown[])[0]
+
+      expect(whereDeAtenciones(profesional, extra)).toEqual({ AND: [filtroDelProfesional, extra] })
+    })
+  })
+
+  describe("whereDeLineas y whereDePagos", () => {
+    it("dueño y encargado ven todas las líneas de su negocio; el profesional, sólo las suyas", () => {
+      const delNegocioPorLaAtencion = { visit: { is: { businessId: NEGOCIO } } }
+
+      expect(whereDeLineas(dueño)).toEqual({ AND: [delNegocioPorLaAtencion, {}] })
+      expect(whereDeLineas(encargado, { visitId: "v-1" })).toEqual({ AND: [delNegocioPorLaAtencion, { visitId: "v-1" }] })
+      expect(whereDeLineas(profesional)).toEqual({ AND: [{ ...delNegocioPorLaAtencion, memberId: "yo" }, {}] })
+    })
+
+    it("los pagos son facturación: dueño y encargado los ven, el profesional ninguno", () => {
+      expect(whereDePagos(dueño)).toEqual({ AND: [{ visit: { is: { businessId: NEGOCIO } } }, {}] })
+      expect(whereDePagos(encargado)).toEqual({ AND: [{ visit: { is: { businessId: NEGOCIO } } }, {}] })
+      expect(whereDePagos(profesional)).toEqual({ AND: [NADA, {}] })
+    })
   })
 })

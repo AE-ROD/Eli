@@ -21,7 +21,7 @@ export interface CitaDelDia {
   startTime: string
   endTime: string
   status: string
-  patient: { id: string; name: string } | null
+  customer: { id: string; name: string } | null
 }
 
 export type SegmentoDia =
