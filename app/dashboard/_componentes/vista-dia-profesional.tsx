@@ -10,7 +10,7 @@ import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { TarjetaCita } from "@/components/panel/tarjeta-cita"
 import { cn } from "@/lib/utils"
 import { LineaDeTiempoDia, citaParaTarjeta } from "./linea-de-tiempo-dia"
-import { formatoDuracion, minutosLibresEnFranjas, type CitaDelDia } from "@/lib/horario-dia"
+import { formatearTiempoLibre, minutosLibresEnFranjas, type CitaDelDia } from "@/lib/horario-dia"
 import type { EstadisticasDelPanel } from "../_datos"
 
 /**
@@ -128,7 +128,7 @@ export function VistaDiaProfesional({ estadisticas }: VistaDiaProfesionalProps) 
         titulo={tituloResumen(citasHoy)}
         subtitulo={
           <span className="tabular-nums">
-            {minutosLibres > 0 ? `${formatoDuracion(minutosLibres)} sin reservar hoy` : "Tu agenda de hoy está completa"}
+            {minutosLibres > 0 ? `${formatearTiempoLibre(minutosLibres)} sin reservar hoy` : "Tu agenda de hoy está completa"}
           </span>
         }
         icono={{ figura: CalendarClock, color: "azul" }}

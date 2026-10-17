@@ -3,13 +3,15 @@ import {
   comoTexto,
   diasDeLaSemanaDe,
   limitesDelMesDe,
-  correr,
+  desplazarFecha,
   formatearHora,
   horaConArticulo,
   zonaDelDispositivo,
   duracionEnMinutos,
   duracionParaMostrar,
   esHoy,
+  diaParaLeer,
+  horasEnPunto,
   formatearDuracionDeServicio,
   deTexto,
   rangoDelDia,
@@ -68,17 +70,17 @@ describe("limitesDelMesDe", () => {
   })
 })
 
-describe("correr", () => {
+describe("desplazarFecha", () => {
   it("mueve por día, por semana y por mes", () => {
     const base = new Date(2026, 2, 11)
-    expect(comoTexto(correr(base, "dia", 1))).toBe("2026-03-12")
-    expect(comoTexto(correr(base, "semana", -1))).toBe("2026-03-04")
-    expect(comoTexto(correr(base, "mes", 1))).toBe("2026-04-11")
+    expect(comoTexto(desplazarFecha(base, "dia", 1))).toBe("2026-03-12")
+    expect(comoTexto(desplazarFecha(base, "semana", -1))).toBe("2026-03-04")
+    expect(comoTexto(desplazarFecha(base, "mes", 1))).toBe("2026-04-11")
   })
 
   it("no modifica la fecha que recibe", () => {
     const original = new Date(2026, 2, 11)
-    correr(original, "mes", 3)
+    desplazarFecha(original, "mes", 3)
     expect(comoTexto(original)).toBe("2026-03-11")
   })
 })
@@ -291,5 +293,24 @@ describe("tiempoDesde", () => {
 
   it("un instante ilegible no rompe: se lee como recién", () => {
     expect(tiempoDesde("no es una fecha", ahora)).toBe("recién")
+  })
+})
+
+describe("diaParaLeer", () => {
+  it("dice el día entero, sin el año", () => {
+    expect(diaParaLeer(new Date(2026, 9, 7))).toBe("miércoles, 7 de octubre")
+  })
+})
+
+describe("horasEnPunto", () => {
+  it("va de la primera hora a la anterior a la última, con ceros a la izquierda", () => {
+    expect(horasEnPunto(8, 11)).toEqual(["08:00", "09:00", "10:00"])
+  })
+
+  it("la jornada de la agenda, de 8 a 20, son doce franjas", () => {
+    const horas = horasEnPunto(8, 20)
+    expect(horas).toHaveLength(12)
+    expect(horas[0]).toBe("08:00")
+    expect(horas[11]).toBe("19:00")
   })
 })

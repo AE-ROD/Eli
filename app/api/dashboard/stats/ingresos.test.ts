@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import type { NextRequest } from "next/server"
-import { NEGOCIO, OTRO_NEGOCIO, atencion, datosBase, pago, sesiones } from "@/app/api/atenciones/_pruebas/datos"
+import { NEGOCIO, OTRO_NEGOCIO, atencion, datosBase, pago, sesiones } from "@/pruebas/datos"
 import { crearBaseDeEstadisticas } from "./_pruebas/base-de-estadisticas"
 
 /**

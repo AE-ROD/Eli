@@ -27,8 +27,8 @@ export async function POST(
   if (!negocio) return NextResponse.json({ error: "Negocio no encontrado" }, { status: 404 })
 
   try {
-    const body = await request.json()
-    const datos = reservaSchema.parse(body)
+    const cuerpo = await request.json()
+    const datos = reservaSchema.parse(cuerpo)
 
     const servicio = await prisma.service.findFirst({
       where: { id: datos.servicioId, businessId: negocio.id, active: true },

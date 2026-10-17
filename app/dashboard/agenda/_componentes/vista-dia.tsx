@@ -1,15 +1,13 @@
 "use client"
 
 import { TarjetaCita, type CitaEnTarjeta } from "@/components/panel/tarjeta-cita"
-import { formatearHora, duracionParaMostrar } from "@/lib/fechas"
+import { formatearHora, duracionParaMostrar, horasEnPunto } from "@/lib/fechas"
 import { nombreDeCliente, type Cita } from "../_datos"
 
 const HORA_INICIO = 8
 const HORA_FIN = 20
 
-const horasDelDia = Array.from({ length: HORA_FIN - HORA_INICIO }, (_, i) =>
-  `${(i + HORA_INICIO).toString().padStart(2, "0")}:00`
-)
+const horasDelDia = horasEnPunto(HORA_INICIO, HORA_FIN)
 
 const estadosValidos = ["pendiente", "confirmada", "en-progreso", "completada", "cancelada"] as const
 

@@ -6,10 +6,10 @@ import { prisma } from "@/lib/prisma"
 import { transicionPermitida } from "@/lib/atenciones"
 import { ESTADOS_DE_RESERVA } from "@/lib/llegadas"
 import { actorDeSesion, puedeAnular } from "@/lib/permisos"
+import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
 import {
   ErrorDeAtencion,
   buscarAtencion,
-  cuerpoDelPedido,
   leerAtencion,
   nombreEnElNegocio,
   respuestaDeError,

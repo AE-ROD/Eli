@@ -19,11 +19,11 @@ import {
   whereDeAtenciones,
   type Actor,
 } from "@/lib/permisos"
+import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
 import {
-  cuerpoDelPedido,
   formatearAtencion,
   leerRango,
-  nombreDeCliente,
+  nombreCompletoDeCliente,
   respuestaDeError,
   seleccionDeAtencion,
 } from "@/lib/tablero"
@@ -186,7 +186,7 @@ export async function GET(request: NextRequest) {
       titulo: cita.title,
       servicioId: cita.serviceId,
       precio: cita.price,
-      cliente: cita.customer ? { id: cita.customer.id, nombre: nombreDeCliente(cita.customer) } : null,
+      cliente: cita.customer ? { id: cita.customer.id, nombre: nombreCompletoDeCliente(cita.customer) } : null,
       profesional: cita.member ? { id: cita.member.id, nombre: cita.member.user.name } : null,
     })),
     atenciones: atenciones.map((atencion) => formatearAtencion(actor, atencion)),

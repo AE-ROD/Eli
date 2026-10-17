@@ -23,8 +23,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json()
-    const datos = registroSchema.parse(body)
+    const cuerpo = await request.json()
+    const datos = registroSchema.parse(cuerpo)
 
     const usuarioExistente = await prisma.user.findUnique({
       where: { email: datos.email },

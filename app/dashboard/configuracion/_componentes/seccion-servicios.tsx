@@ -184,7 +184,7 @@ export function SeccionServicios({ serviciosIniciales }: SeccionServiciosProps) 
             guardando={guardando}
             aviso={avisoDelModal}
             modoEdicion={!!servicioEditando}
-            onFormChange={(campo, valor) => setForm((previo) => ({ ...previo, [campo]: valor }))}
+            onCambiarCampo={(campo, valor) => setForm((previo) => ({ ...previo, [campo]: valor }))}
             onSubmit={guardar}
             onCerrar={cerrarModal}
           />

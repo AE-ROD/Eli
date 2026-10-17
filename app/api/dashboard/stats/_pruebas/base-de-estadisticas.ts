@@ -1,10 +1,10 @@
 import { vi } from "vitest"
-import { crearBaseFalsa, type NombreDeModelo } from "@/app/api/atenciones/_pruebas/base-falsa"
+import { crearBaseFalsa, type NombreDeModelo } from "@/pruebas/base-falsa"
 
 type Registro = Record<string, unknown>
 
 /**
- * La base falsa del tablero (`app/api/atenciones/_pruebas/`) con lo que pide
+ * La base falsa del tablero (`pruebas/`) con lo que pide
  * `/api/dashboard/stats` y el tablero no usa, como `base-de-clientes.ts`:
  *
  * - `aggregate` con `_sum`, que filtra con el mismo `where` que el resto de

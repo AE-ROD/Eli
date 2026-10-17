@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { Prisma } from "@prisma/client"
-import { crearBaseFalsa } from "@/app/api/atenciones/_pruebas/base-falsa"
-import { NEGOCIO, OTRO_NEGOCIO, atencion, centavos, datosBase, linea } from "@/app/api/atenciones/_pruebas/datos"
+import { crearBaseFalsa } from "@/pruebas/base-falsa"
+import { NEGOCIO, OTRO_NEGOCIO, atencion, centavos, datosBase, linea } from "@/pruebas/datos"
 import type { Actor } from "@/lib/permisos"
 
 /**

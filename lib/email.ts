@@ -1,4 +1,5 @@
 import { Resend } from "resend"
+import { nombreDelRol } from "@/lib/nombres-de-roles"
 
 const FROM = process.env.RESEND_FROM_EMAIL ?? "Eli <no-reply@eli.app>"
 
@@ -255,7 +256,7 @@ export interface DatosInvitacionTrabajador {
 }
 
 export function enviarInvitacionTrabajador(datos: DatosInvitacionTrabajador) {
-  const rol = datos.rol === "admin" ? "Encargado" : "Profesional"
+  const rol = nombreDelRol(datos.rol)
 
   return enviar({
     para: datos.emailTrabajador,

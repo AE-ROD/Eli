@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import type { NextRequest } from "next/server"
+import { pedidoFalso } from "@/pruebas/pedidos"
 
 const mockGetServerSession = vi.fn()
 
@@ -32,12 +32,6 @@ const sesionProfesional = {
 const sesionEncargadoNegocio2 = {
   user: { id: "admin-2", role: "admin", businessId: "negocio-2", businessName: "Otro negocio", memberId: "member-admin-2" },
 }
-
-const fakeRequest = (body: unknown): NextRequest =>
-  ({
-    headers: new Headers(),
-    json: async () => body,
-  }) as unknown as NextRequest
 
 describe("GET /api/configuracion/servicios", () => {
   beforeEach(() => vi.clearAllMocks())
@@ -109,7 +103,7 @@ describe("POST /api/configuracion/servicios", () => {
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
     prismaMock.service.create.mockResolvedValueOnce({ id: "srv-1", ...payload, businessId: "negocio-1" })
 
-    const res = await POST(fakeRequest(payload))
+    const res = await POST(pedidoFalso(payload))
 
     expect(res.status).toBe(201)
   })
@@ -120,7 +114,7 @@ describe("POST /api/configuracion/servicios", () => {
     mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
     prismaMock.service.create.mockResolvedValueOnce({ id: "srv-2", ...payload, businessId: "negocio-1" })
 
-    const res = await POST(fakeRequest(payload))
+    const res = await POST(pedidoFalso(payload))
 
     expect(res.status).toBe(201)
   })
@@ -131,7 +125,7 @@ describe("POST /api/configuracion/servicios", () => {
     mockGetServerSession.mockResolvedValueOnce(sesionEncargadoNegocio2)
     prismaMock.service.create.mockResolvedValueOnce({ id: "srv-3", ...payload, businessId: "negocio-2" })
 
-    await POST(fakeRequest(payload))
+    await POST(pedidoFalso(payload))
 
     const argumentos = prismaMock.service.create.mock.calls[0][0]
     expect(argumentos.data.businessId).toBe("negocio-2")
@@ -142,7 +136,7 @@ describe("POST /api/configuracion/servicios", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
 
-    const res = await POST(fakeRequest(payload))
+    const res = await POST(pedidoFalso(payload))
 
     expect(res.status).toBe(401)
     expect(prismaMock.service.create).not.toHaveBeenCalled()
@@ -153,7 +147,7 @@ describe("POST /api/configuracion/servicios", () => {
 
     mockGetServerSession.mockResolvedValueOnce(null)
 
-    const res = await POST(fakeRequest(payload))
+    const res = await POST(pedidoFalso(payload))
 
     expect(res.status).toBe(401)
   })

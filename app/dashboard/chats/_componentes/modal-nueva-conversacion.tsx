@@ -16,7 +16,7 @@ interface ModalNuevaConversacionProps {
    * tapada.
    */
   aviso: string
-  onFormChange: (campo: keyof DatosDeNuevaConversacion, valor: string) => void
+  onCambiarCampo: (campo: keyof DatosDeNuevaConversacion, valor: string) => void
   onSubmit: (e: React.SyntheticEvent<HTMLFormElement>) => void
   onCerrar: () => void
 }
@@ -25,7 +25,7 @@ export function ModalNuevaConversacion({
   form,
   guardando,
   aviso,
-  onFormChange,
+  onCambiarCampo,
   onSubmit,
   onCerrar,
 }: ModalNuevaConversacionProps) {
@@ -36,7 +36,7 @@ export function ModalNuevaConversacion({
           etiqueta="Nombre del cliente"
           placeholder="Nombre completo"
           value={form.nombre}
-          onChange={(e) => onFormChange("nombre", e.target.value)}
+          onChange={(e) => onCambiarCampo("nombre", e.target.value)}
           icono={<User className="h-4 w-4" />}
           required
         />
@@ -45,7 +45,7 @@ export function ModalNuevaConversacion({
           type="tel"
           placeholder="+52 555 123 4567"
           value={form.telefono}
-          onChange={(e) => onFormChange("telefono", e.target.value)}
+          onChange={(e) => onCambiarCampo("telefono", e.target.value)}
           icono={<Phone className="h-4 w-4" />}
         />
         {aviso && <Aviso>{aviso}</Aviso>}

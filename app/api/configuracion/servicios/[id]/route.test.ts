@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import type { NextRequest } from "next/server"
+import { pedidoFalso } from "@/pruebas/pedidos"
 
 const mockGetServerSession = vi.fn()
 
@@ -29,12 +29,6 @@ const sesionEncargadoNegocio2 = {
   user: { id: "admin-2", role: "admin", businessId: "negocio-2", businessName: "Otro negocio", memberId: "member-admin-2" },
 }
 
-const fakeRequest = (body: unknown): NextRequest =>
-  ({
-    headers: new Headers(),
-    json: async () => body,
-  }) as unknown as NextRequest
-
 const paramsCon = (id: string) => ({ params: Promise.resolve({ id }) })
 
 describe("PUT /api/configuracion/servicios/[id]", () => {
@@ -47,7 +41,7 @@ describe("PUT /api/configuracion/servicios/[id]", () => {
     prismaMock.service.findFirst.mockResolvedValueOnce({ id: "srv-1", businessId: "negocio-1" })
     prismaMock.service.update.mockResolvedValueOnce({ id: "srv-1", name: "Nuevo nombre" })
 
-    const res = await PUT(fakeRequest({ name: "Nuevo nombre" }), paramsCon("srv-1"))
+    const res = await PUT(pedidoFalso({ name: "Nuevo nombre" }), paramsCon("srv-1"))
 
     expect(res.status).toBe(200)
   })
@@ -58,7 +52,7 @@ describe("PUT /api/configuracion/servicios/[id]", () => {
     mockGetServerSession.mockResolvedValueOnce(sesionEncargadoNegocio2)
     prismaMock.service.findFirst.mockResolvedValueOnce(null)
 
-    await PUT(fakeRequest({ name: "x" }), paramsCon("srv-1"))
+    await PUT(pedidoFalso({ name: "x" }), paramsCon("srv-1"))
 
     const argumentos = prismaMock.service.findFirst.mock.calls[0][0]
     expect(argumentos.where.businessId).toBe("negocio-2")
@@ -72,7 +66,7 @@ describe("PUT /api/configuracion/servicios/[id]", () => {
     // nunca lo encuentra, así que Prisma devuelve null.
     prismaMock.service.findFirst.mockResolvedValueOnce(null)
 
-    const res = await PUT(fakeRequest({ name: "x" }), paramsCon("srv-1"))
+    const res = await PUT(pedidoFalso({ name: "x" }), paramsCon("srv-1"))
 
     expect(res.status).toBe(404)
     expect(prismaMock.service.update).not.toHaveBeenCalled()
@@ -83,7 +77,7 @@ describe("PUT /api/configuracion/servicios/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
 
-    const res = await PUT(fakeRequest({ name: "x" }), paramsCon("srv-1"))
+    const res = await PUT(pedidoFalso({ name: "x" }), paramsCon("srv-1"))
 
     expect(res.status).toBe(401)
     expect(prismaMock.service.findFirst).not.toHaveBeenCalled()
@@ -94,7 +88,7 @@ describe("PUT /api/configuracion/servicios/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(null)
 
-    const res = await PUT(fakeRequest({ name: "x" }), paramsCon("srv-1"))
+    const res = await PUT(pedidoFalso({ name: "x" }), paramsCon("srv-1"))
 
     expect(res.status).toBe(401)
   })
@@ -110,7 +104,7 @@ describe("DELETE /api/configuracion/servicios/[id]", () => {
     prismaMock.service.findFirst.mockResolvedValueOnce({ id: "srv-1", businessId: "negocio-1" })
     prismaMock.service.delete.mockResolvedValueOnce({ id: "srv-1" })
 
-    const res = await DELETE(fakeRequest(undefined), paramsCon("srv-1"))
+    const res = await DELETE(pedidoFalso(undefined), paramsCon("srv-1"))
 
     expect(res.status).toBe(200)
   })
@@ -121,7 +115,7 @@ describe("DELETE /api/configuracion/servicios/[id]", () => {
     mockGetServerSession.mockResolvedValueOnce(sesionEncargadoNegocio2)
     prismaMock.service.findFirst.mockResolvedValueOnce(null)
 
-    const res = await DELETE(fakeRequest(undefined), paramsCon("srv-1"))
+    const res = await DELETE(pedidoFalso(undefined), paramsCon("srv-1"))
 
     expect(res.status).toBe(404)
     expect(prismaMock.service.delete).not.toHaveBeenCalled()
@@ -132,7 +126,7 @@ describe("DELETE /api/configuracion/servicios/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
 
-    const res = await DELETE(fakeRequest(undefined), paramsCon("srv-1"))
+    const res = await DELETE(pedidoFalso(undefined), paramsCon("srv-1"))
 
     expect(res.status).toBe(401)
     expect(prismaMock.service.findFirst).not.toHaveBeenCalled()
@@ -143,7 +137,7 @@ describe("DELETE /api/configuracion/servicios/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(null)
 
-    const res = await DELETE(fakeRequest(undefined), paramsCon("srv-1"))
+    const res = await DELETE(pedidoFalso(undefined), paramsCon("srv-1"))
 
     expect(res.status).toBe(401)
   })

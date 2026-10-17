@@ -4,8 +4,8 @@ import { TarjetaCita, type CitaEnTarjeta } from "@/components/panel/tarjeta-cita
 import { formatearHora, duracionEnMinutos } from "@/lib/fechas"
 import {
   citasFueraDeFranjas,
-  formatoDuracion,
-  formatoHHMM,
+  formatearTiempoLibre,
+  minutosAHora,
   segmentosDeFranja,
   type CitaDelDia,
   type FranjaHorario,
@@ -69,7 +69,7 @@ export function LineaDeTiempoDia({ franjas, citas }: LineaDeTiempoDiaProps) {
                   className="flex items-start gap-3"
                 >
                   <span className="w-11 shrink-0 pt-3 text-right text-xs text-texto-2 tabular-nums">
-                    {formatoHHMM(segmento.inicioMin)}
+                    {minutosAHora(segmento.inicioMin)}
                   </span>
                   <div className="min-w-0 flex-1">
                     {segmento.tipo === "cita" ? (
@@ -77,7 +77,7 @@ export function LineaDeTiempoDia({ franjas, citas }: LineaDeTiempoDiaProps) {
                     ) : (
                       <div className={CLASE_HUECO}>
                         <p className="text-xs text-texto-2">
-                          Hueco · {formatoDuracion(segmento.finMin - segmento.inicioMin)} sin reservar
+                          Hueco · {formatearTiempoLibre(segmento.finMin - segmento.inicioMin)} sin reservar
                         </p>
                       </div>
                     )}

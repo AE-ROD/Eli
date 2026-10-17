@@ -48,7 +48,7 @@ interface PropsDeEntra {
 }
 
 /** Una fila que sube y aparece, como algo que acaba de llegar. */
-export function Entra({ retraso = 0, className, children }: PropsDeEntra) {
+export function AparecerAlEntrar({ retraso = 0, className, children }: PropsDeEntra) {
   return (
     <motion.div
       className={className}

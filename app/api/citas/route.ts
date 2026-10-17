@@ -80,8 +80,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json()
-    const datos = citaSchema.parse(body)
+    const cuerpo = await request.json()
+    const datos = citaSchema.parse(cuerpo)
 
     const cliente = await prisma.customer.findFirst({
       where: { id: datos.customerId, businessId: actor.businessId },

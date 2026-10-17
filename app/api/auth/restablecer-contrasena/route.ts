@@ -15,8 +15,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json()
-    const { token, contrasena } = schema.parse(body)
+    const cuerpo = await request.json()
+    const { token, contrasena } = schema.parse(cuerpo)
 
     const resetToken = await prisma.passwordResetToken.findUnique({ where: { token } })
 

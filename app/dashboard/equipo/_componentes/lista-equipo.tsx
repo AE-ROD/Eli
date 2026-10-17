@@ -8,6 +8,7 @@ import { Insignia } from "@/components/comunes/insignia"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
+import { nombreDelRol } from "@/lib/nombres-de-roles"
 import { cn } from "@/lib/utils"
 import type { InvitacionPendiente, MiembroDelEquipo } from "../_datos"
 
@@ -20,11 +21,6 @@ const FILA_DE_PERSONA =
   "grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 px-4 py-3.5 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-x-4 sm:px-5"
 const LUGAR_DEL_AVATAR = "row-span-2 self-start sm:row-span-1 sm:self-center"
 const LUGAR_DEL_ROL = "col-start-2 justify-self-start sm:col-start-3 sm:justify-self-end"
-
-/** Los nombres de los roles, los mismos que en el resto del producto. */
-function nombreDelRol(rol: string) {
-  return rol === "admin" ? "Encargado" : "Profesional"
-}
 
 /** El encargado lleva el turquesa del equipo; el profesional, gris. El nombre del rol va siempre escrito. */
 function InsigniaDelRol({ rol }: { rol: string }) {

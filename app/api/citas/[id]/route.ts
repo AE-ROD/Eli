@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { actorDeSesion, whereDeAgenda, type Actor } from "@/lib/permisos"
 
-const citaUpdateSchema = z.object({
+const edicionDeCitaSchema = z.object({
   title: z.string().min(2).optional(),
   startTime: z.string().datetime().optional(),
   endTime: z.string().datetime().optional(),
@@ -66,8 +66,8 @@ export async function PUT(
   }
 
   try {
-    const body = await request.json()
-    const datos = citaUpdateSchema.parse(body)
+    const cuerpo = await request.json()
+    const datos = edicionDeCitaSchema.parse(cuerpo)
 
     // Por `existente.id`, no por `id`: si alguien borra la verificación de
     // arriba, `existente` queda sin declarar y el build falla. La garantía deja

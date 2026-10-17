@@ -15,7 +15,7 @@ interface ModalNuevoClienteProps {
    * y no en la página: mientras el modal está abierto, la página queda tapada.
    */
   aviso: string
-  onFormChange: (campo: keyof DatosDeNuevoCliente, valor: string) => void
+  onCambiarCampo: (campo: keyof DatosDeNuevoCliente, valor: string) => void
   onSubmit: (e: React.SyntheticEvent<HTMLFormElement>) => void
   onCerrar: () => void
 }
@@ -30,7 +30,7 @@ export function ModalNuevoCliente({
   form,
   guardando,
   aviso,
-  onFormChange,
+  onCambiarCampo,
   onSubmit,
   onCerrar,
 }: ModalNuevoClienteProps) {
@@ -43,7 +43,7 @@ export function ModalNuevoCliente({
           etiqueta="Nombre completo"
           placeholder="Nombre del cliente"
           value={form.nombre}
-          onChange={(e) => onFormChange("nombre", e.target.value)}
+          onChange={(e) => onCambiarCampo("nombre", e.target.value)}
           icono={<User className="size-4" aria-hidden="true" strokeWidth={1.75} />}
           required
         />
@@ -52,7 +52,7 @@ export function ModalNuevoCliente({
           type="email"
           placeholder="email@ejemplo.com"
           value={form.email}
-          onChange={(e) => onFormChange("email", e.target.value)}
+          onChange={(e) => onCambiarCampo("email", e.target.value)}
           icono={<Mail className="size-4" aria-hidden="true" strokeWidth={1.75} />}
         />
         <CampoFormulario
@@ -60,7 +60,7 @@ export function ModalNuevoCliente({
           type="tel"
           placeholder="+52 555 123 4567"
           value={form.telefono}
-          onChange={(e) => onFormChange("telefono", e.target.value)}
+          onChange={(e) => onCambiarCampo("telefono", e.target.value)}
           icono={<Phone className="size-4" aria-hidden="true" strokeWidth={1.75} />}
         />
 

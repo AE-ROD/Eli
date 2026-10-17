@@ -61,8 +61,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json()
-    const { nombre, email, rol } = invitarSchema.parse(body)
+    const cuerpo = await request.json()
+    const { nombre, email, rol } = invitarSchema.parse(cuerpo)
 
     // Los correos se comparan sin distinguir mayúsculas: para el servidor de
     // correo `Ana@x.com` y `ana@x.com` son la misma casilla, y si acá se

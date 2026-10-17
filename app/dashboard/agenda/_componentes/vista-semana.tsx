@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { esHoy, duracionParaMostrar, formatearHora } from "@/lib/fechas"
+import { esHoy, duracionParaMostrar, formatearHora, diaParaLeer, horasEnPunto } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
 import { diasSemana } from "./controles-de-agenda"
 import { estiloDeEstado } from "./estados-de-cita"
@@ -12,14 +12,7 @@ const HORA_FIN = 20
 const ALTURA_HORA = 64 // px por hora: la clase `h-16` de cada franja
 const ANCHO_DE_LAS_HORAS = 56 // px de la columna de las horas: la clase `w-14`
 
-const horasDelDia = Array.from({ length: HORA_FIN - HORA_INICIO }, (_, i) =>
-  `${(i + HORA_INICIO).toString().padStart(2, "0")}:00`
-)
-
-/** `martes, 6 de octubre`: el día de cada cita en su nombre accesible. */
-function diaParaLeer(fecha: Date): string {
-  return fecha.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
-}
+const horasDelDia = horasEnPunto(HORA_INICIO, HORA_FIN)
 
 interface VistaSemanaProps {
   dias: Date[]

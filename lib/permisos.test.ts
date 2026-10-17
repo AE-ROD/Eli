@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest"
+import { coincideConWhere } from "@/pruebas/where-simple"
 import {
   actorDeSesion,
   mismoNegocio,
@@ -282,24 +283,6 @@ describe("falla cerrado", () => {
     expect(puedeEditarHorarioDe(roto, yoMismo)).toBe(false)
   })
 
-  /**
-   * Mismo helper que `app/api/citas/route.test.ts`: entiende `AND`, igualdad
-   * simple y `{ in: [...] }`. Se reusa acá para comprobar, contra datos
-   * fake, que la negación de un profesional sin `memberId` sobrevive incluso
-   * cuando `extra` trae su propio `AND` (el bug de F-002 con `AND`).
-   */
-  function coincide(item: Record<string, unknown>, where: Record<string, unknown>): boolean {
-    return Object.entries(where).every(([clave, valor]) => {
-      if (clave === "AND") {
-        return (valor as Record<string, unknown>[]).every((sub) => coincide(item, sub))
-      }
-      if (valor && typeof valor === "object" && "in" in (valor as Record<string, unknown>)) {
-        return ((valor as { in: unknown[] }).in).includes(item[clave])
-      }
-      return item[clave] === valor
-    })
-  }
-
   it("un `extra` con su propio AND no le abre a un profesional sin memberId las citas del negocio", () => {
     const roto = actor("worker", null)
     const citasFake = [
@@ -313,7 +296,7 @@ describe("falla cerrado", () => {
     // como elementos separados del AND exterior y ninguno pisa al otro.
     const where = whereDeAgenda(roto, { AND: [{ businessId: NEGOCIO }] })
 
-    expect(citasFake.filter((c) => coincide(c, where))).toHaveLength(0)
+    expect(citasFake.filter((c) => coincideConWhere(c, where))).toHaveLength(0)
   })
 })
 

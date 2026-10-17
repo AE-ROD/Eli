@@ -107,8 +107,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json()
-    const datos = clienteSchema.parse(body)
+    const cuerpo = await request.json()
+    const datos = clienteSchema.parse(cuerpo)
 
     const cliente = await prisma.customer.create({
       data: {

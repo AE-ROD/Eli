@@ -57,15 +57,6 @@ export function respuestaDeError(error: unknown, contexto: string): NextResponse
   return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
 }
 
-/**
- * El cuerpo JSON del pedido, o `undefined` si no vino o no es JSON. Así un
- * cuerpo roto lo rechaza zod con un 400, en vez de lanzar un `SyntaxError`
- * que termina en 500.
- */
-export async function cuerpoDelPedido(request: Request): Promise<unknown> {
-  return request.json().catch(() => undefined)
-}
-
 // ─── Rango de fechas ─────────────────────────────────────────────────────────
 
 const instanteSchema = z.string().datetime({ offset: true })
@@ -442,6 +433,6 @@ export function formatearAtencion(actor: Actor, atencion: AtencionLeida) {
 }
 
 /** Nombre y apellido, como lo escribe el recordatorio por correo. */
-export function nombreDeCliente(cliente: { name: string; lastName: string | null }): string {
+export function nombreCompletoDeCliente(cliente: { name: string; lastName: string | null }): string {
   return [cliente.name, cliente.lastName].filter(Boolean).join(" ")
 }

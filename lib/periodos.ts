@@ -1,4 +1,4 @@
-import { correr, deTexto, diasDeLaSemanaDe, rangoDelDia } from "@/lib/fechas"
+import { desplazarFecha, deTexto, diasDeLaSemanaDe, rangoDelDia } from "@/lib/fechas"
 
 /**
  * Los períodos que se eligen en los reportes (docs/PRODUCTO.md, sección 8) y
@@ -43,7 +43,7 @@ const MS_POR_DIA = 24 * 60 * 60 * 1000
  */
 export function rangoDePeriodo(periodo: PeriodoFijo, hoy: Date): { desde: Date; hasta: Date } {
   if (periodo === "hoy") return rangoDelDia(hoy)
-  if (periodo === "ayer") return rangoDelDia(correr(hoy, "dia", -1))
+  if (periodo === "ayer") return rangoDelDia(desplazarFecha(hoy, "dia", -1))
   if (periodo === "semana") {
     const dias = diasDeLaSemanaDe(hoy)
     return { desde: rangoDelDia(dias[0]).desde, hasta: rangoDelDia(dias[6]).hasta }

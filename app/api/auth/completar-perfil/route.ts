@@ -20,8 +20,8 @@ export async function POST(request: NextRequest) {
   const userId = (session!.user as any).id
 
   try {
-    const body = await request.json()
-    const { nombreNegocio, tipoNegocio, teamSize } = schema.parse(body)
+    const cuerpo = await request.json()
+    const { nombreNegocio, tipoNegocio, teamSize } = schema.parse(cuerpo)
 
     const existente = await prisma.business.findFirst({ where: { userId } })
     if (existente) {

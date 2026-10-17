@@ -55,7 +55,7 @@ interface PanelDetalleClienteProps {
    */
   avisoDeNotas: string
   onCerrar: () => void
-  onNotasChange: (notas: string) => void
+  onCambiarNotas: (notas: string) => void
   onNotasBlur: () => void
 }
 
@@ -75,7 +75,7 @@ export function PanelDetalleCliente({
   guardandoNotas,
   avisoDeNotas,
   onCerrar,
-  onNotasChange,
+  onCambiarNotas,
   onNotasBlur,
 }: PanelDetalleClienteProps) {
   const idDelNombre = useId()
@@ -199,7 +199,7 @@ export function PanelDetalleCliente({
         <textarea
           id={idDelCampoDeNotas}
           value={notas}
-          onChange={(e) => onNotasChange(e.target.value)}
+          onChange={(e) => onCambiarNotas(e.target.value)}
           onBlur={onNotasBlur}
           placeholder="Agregar notas sobre el cliente..."
           aria-describedby={idDeLaAyuda}

@@ -164,7 +164,7 @@ export default function PaginaChats() {
             form={nuevaConversacion}
             guardando={guardando}
             aviso={avisoDelModal}
-            onFormChange={(campo, valor) => setNuevaConversacion((previa) => ({ ...previa, [campo]: valor }))}
+            onCambiarCampo={(campo, valor) => setNuevaConversacion((previa) => ({ ...previa, [campo]: valor }))}
             onSubmit={guardarNuevaConversacion}
             onCerrar={() => setModalAbierto(false)}
           />

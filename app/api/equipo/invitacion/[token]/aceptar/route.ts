@@ -34,8 +34,8 @@ export async function POST(
   }
 
   try {
-    const body = await request.json()
-    const { contrasena } = schema.parse(body)
+    const cuerpo = await request.json()
+    const { contrasena } = schema.parse(cuerpo)
 
     // Una invitación no crea ni pisa credenciales de una cuenta que ya existe:
     // ese caso solo puede sumar la membresía, y solo si quien acepta ya

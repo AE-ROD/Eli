@@ -8,6 +8,7 @@ import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { Esqueleto } from "@/components/comunes/esqueleto"
 import { CuadroDeIcono, IconoDeModulo } from "@/components/comunes/icono-de-modulo"
 import { signIn } from "next-auth/react"
+import { nombreDelRol } from "@/lib/nombres-de-roles"
 import { leerInvitacion, aceptarInvitacion, type Invitacion } from "../../_datos"
 import { AvisoDeError } from "../../_componentes/aviso-de-error"
 import { borrarSiEs, CONTRASENA_CORTA, CONTRASENAS_DISTINTAS } from "../../_componentes/errores-de-validacion"
@@ -174,7 +175,7 @@ export default function PaginaUnirse() {
         <div>
           <dt className="text-texto-2">Tu rol</dt>
           {/* Los nombres del producto, los mismos del correo de la invitación. */}
-          <dd className="mt-1 font-medium">{invitacion?.rol === "admin" ? "Encargado" : "Profesional"}</dd>
+          <dd className="mt-1 font-medium">{nombreDelRol(invitacion?.rol)}</dd>
         </div>
       </dl>
 

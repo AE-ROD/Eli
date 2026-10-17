@@ -30,7 +30,7 @@ export async function GET() {
   return NextResponse.json(conversaciones)
 }
 
-const nuevaConvSchema = z.object({
+const nuevaConversacionSchema = z.object({
   customerName: z.string().min(2),
   customerPhone: z.string().optional(),
 })
@@ -42,8 +42,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json()
-    const datos = nuevaConvSchema.parse(body)
+    const cuerpo = await request.json()
+    const datos = nuevaConversacionSchema.parse(cuerpo)
 
     const conversacion = await prisma.conversation.create({
       data: {

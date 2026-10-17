@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { crearBaseFalsa } from "@/app/api/atenciones/_pruebas/base-falsa"
+import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import {
   NEGOCIO,
   OTRO_NEGOCIO,
@@ -11,7 +11,7 @@ import {
   pago,
   pedido,
   sesiones,
-} from "@/app/api/atenciones/_pruebas/datos"
+} from "@/pruebas/datos"
 
 const mockGetServerSession = vi.fn()
 

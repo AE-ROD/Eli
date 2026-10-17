@@ -7,7 +7,7 @@
  * que no aparecen o que se leen corridas.
  */
 
-import { formatoDuracion } from "@/lib/horario-dia"
+import { formatearTiempoLibre } from "@/lib/horario-dia"
 
 /** Lo que se está mirando de una vez: un día, una semana o un mes. */
 export type UnidadDeTiempo = "dia" | "semana" | "mes"
@@ -67,7 +67,7 @@ const MINUTOS_POR_DIA = 24 * 60
 export function tiempoDesde(iso: string, ahora: number): string {
   const minutos = Math.floor((ahora - new Date(iso).getTime()) / 60000)
   if (!(minutos >= 1)) return "recién"
-  if (minutos < MINUTOS_POR_DIA) return `hace ${formatoDuracion(minutos)}`
+  if (minutos < MINUTOS_POR_DIA) return `hace ${formatearTiempoLibre(minutos)}`
   const dias = Math.floor(minutos / MINUTOS_POR_DIA)
   return dias === 1 ? "hace 1 día" : `hace ${dias} días`
 }
@@ -99,7 +99,7 @@ export function limitesDelMesDe(fecha: Date): { desde: Date; hasta: Date } {
 }
 
 /** Mueve la fecha según lo que se esté mirando: un día, una semana o un mes. */
-export function correr(fecha: Date, unidad: UnidadDeTiempo, pasos: number): Date {
+export function desplazarFecha(fecha: Date, unidad: UnidadDeTiempo, pasos: number): Date {
   const movida = new Date(fecha)
   if (unidad === "dia") movida.setDate(movida.getDate() + pasos)
   else if (unidad === "semana") movida.setDate(movida.getDate() + pasos * 7)
@@ -161,11 +161,21 @@ export function esHoy(fecha: Date): boolean {
   return fecha.toDateString() === new Date().toDateString()
 }
 
+/** `miércoles, 7 de octubre`: el nombre entero de un día, para el lector de pantalla. */
+export function diaParaLeer(fecha: Date): string {
+  return fecha.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
+}
+
+/** Las horas en punto de `desde` (incluida) a `hasta` (excluida): `["08:00", …, "19:00"]`. */
+export function horasEnPunto(desde: number, hasta: number): string[] {
+  return Array.from({ length: hasta - desde }, (_, i) => `${(i + desde).toString().padStart(2, "0")}:00`)
+}
+
 /**
  * Cuánto dura un servicio del catálogo, escrito corto: `45 min`, `1h`,
  * `1h 30min`. Es el formato de la lista de servicios y de la página pública de
  * reservas; el tiempo libre del profesional se escribe con otro
- * (`formatoDuracion`, en `horario-dia.ts`).
+ * (`formatearTiempoLibre`, en `horario-dia.ts`).
  */
 export function formatearDuracionDeServicio(minutos: number): string {
   if (minutos < 60) return `${minutos} min`

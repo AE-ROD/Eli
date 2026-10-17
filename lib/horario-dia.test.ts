@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest"
 import {
   citasFueraDeFranjas,
-  formatoDuracion,
-  formatoHHMM,
+  formatearTiempoLibre,
+  horaAMinutos,
+  minutosAHora,
   minutosLibresEnFranjas,
   segmentosDeFranja,
   type CitaDelDia,
@@ -186,28 +187,40 @@ describe("minutosLibresEnFranjas", () => {
   })
 })
 
-describe("formatoDuracion", () => {
+describe("formatearTiempoLibre", () => {
   it("muestra solo minutos cuando no llega a la hora", () => {
-    expect(formatoDuracion(45)).toBe("45 min")
+    expect(formatearTiempoLibre(45)).toBe("45 min")
   })
 
   it("muestra solo horas cuando es exacto", () => {
-    expect(formatoDuracion(120)).toBe("2 h")
+    expect(formatearTiempoLibre(120)).toBe("2 h")
   })
 
   it("combina horas y minutos", () => {
-    expect(formatoDuracion(125)).toBe("2 h 5 min")
+    expect(formatearTiempoLibre(125)).toBe("2 h 5 min")
   })
 
   it("cero o negativo se lee como sin tiempo libre", () => {
-    expect(formatoDuracion(0)).toBe("0 min")
-    expect(formatoDuracion(-10)).toBe("0 min")
+    expect(formatearTiempoLibre(0)).toBe("0 min")
+    expect(formatearTiempoLibre(-10)).toBe("0 min")
   })
 })
 
-describe("formatoHHMM", () => {
+describe("minutosAHora", () => {
   it("formatea minutos desde medianoche como HH:MM", () => {
-    expect(formatoHHMM(540)).toBe("09:00")
-    expect(formatoHHMM(60)).toBe("01:00")
+    expect(minutosAHora(540)).toBe("09:00")
+    expect(minutosAHora(60)).toBe("01:00")
+  })
+})
+
+describe("horaAMinutos", () => {
+  it("convierte HH:MM en minutos desde la medianoche", () => {
+    expect(horaAMinutos("00:00")).toBe(0)
+    expect(horaAMinutos("09:30")).toBe(570)
+    expect(horaAMinutos("23:59")).toBe(1439)
+  })
+
+  it("es la inversa de minutosAHora", () => {
+    expect(minutosAHora(horaAMinutos("07:05"))).toBe("07:05")
   })
 })

@@ -34,7 +34,7 @@ interface ModalServicioProps {
    */
   aviso: string
   modoEdicion: boolean
-  onFormChange: (campo: keyof DatosDeServicio, valor: string | number) => void
+  onCambiarCampo: (campo: keyof DatosDeServicio, valor: string | number) => void
   onSubmit: (e: React.SyntheticEvent<HTMLFormElement>) => void
   onCerrar: () => void
 }
@@ -44,7 +44,7 @@ export function ModalServicio({
   guardando,
   aviso,
   modoEdicion,
-  onFormChange,
+  onCambiarCampo,
   onSubmit,
   onCerrar,
 }: ModalServicioProps) {
@@ -63,7 +63,7 @@ export function ModalServicio({
           etiqueta="Nombre del servicio"
           placeholder="Ej: Corte de cabello, Arreglo de barba, Manicura..."
           value={form.name}
-          onChange={(e) => onFormChange("name", e.target.value)}
+          onChange={(e) => onCambiarCampo("name", e.target.value)}
           icono={<Scissors className="h-4 w-4" />}
           required
         />
@@ -75,7 +75,7 @@ export function ModalServicio({
           <textarea
             id={idDeLaDescripcion}
             value={form.description}
-            onChange={(e) => onFormChange("description", e.target.value)}
+            onChange={(e) => onCambiarCampo("description", e.target.value)}
             placeholder="Describe brevemente el servicio..."
             className={cn(CAMPO, "h-24 resize-none")}
           />
@@ -105,7 +105,7 @@ export function ModalServicio({
                     name={nombreDeLaDuracion}
                     value={valor}
                     checked={elegida}
-                    onChange={() => onFormChange("duration", valor)}
+                    onChange={() => onCambiarCampo("duration", valor)}
                     className="sr-only"
                   />
                   {etiqueta}
@@ -120,7 +120,7 @@ export function ModalServicio({
           type="number"
           placeholder="0.00"
           value={form.price}
-          onChange={(e) => onFormChange("price", e.target.value)}
+          onChange={(e) => onCambiarCampo("price", e.target.value)}
           icono={<DollarSign className="h-4 w-4" />}
         />
 

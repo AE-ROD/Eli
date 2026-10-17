@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
+import { horaAMinutos, minutosAHora } from "@/lib/horario-dia"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 
 const FALTA_LA_FECHA = "Falta la fecha (AAAA-MM-DD)"
@@ -24,18 +25,16 @@ const parametrosSchema = z.object({
     .max(64, "El servicio (servicioId) no es válido"),
 })
 
-function generarSlots(
+function horariosLibres(
   horaInicio: string,
   horaFin: string,
   duracion: number,
   citasOcupadas: { startTime: Date; endTime: Date }[]
 ): string[] {
-  const [hIni, mIni] = horaInicio.split(":").map(Number)
-  const [hFin, mFin] = horaFin.split(":").map(Number)
-  const inicioMin = hIni * 60 + mIni
-  const finMin = hFin * 60 + mFin
+  const inicioMin = horaAMinutos(horaInicio)
+  const finMin = horaAMinutos(horaFin)
 
-  const slots: string[] = []
+  const horarios: string[] = []
 
   for (let min = inicioMin; min + duracion <= finMin; min += duracion) {
     const slotInicio = min
@@ -48,13 +47,11 @@ function generarSlots(
     })
 
     if (!ocupado) {
-      const h = Math.floor(min / 60).toString().padStart(2, "0")
-      const m = (min % 60).toString().padStart(2, "0")
-      slots.push(`${h}:${m}`)
+      horarios.push(minutosAHora(min))
     }
   }
 
-  return slots
+  return horarios
 }
 
 export async function GET(
@@ -122,14 +119,13 @@ export async function GET(
   const ahora = new Date()
   const esHoy = fechaObj.toDateString() === ahora.toDateString()
 
-  const slots = generarSlots(horario.startTime, horario.endTime, servicio.duration, citasDelDia)
+  const horarios = horariosLibres(horario.startTime, horario.endTime, servicio.duration, citasDelDia)
     .filter((slot) => {
       if (!esHoy) return true
-      const [h, m] = slot.split(":").map(Number)
-      const slotMin = h * 60 + m
+      const slotMin = horaAMinutos(slot)
       const ahoraMin = ahora.getHours() * 60 + ahora.getMinutes()
       return slotMin > ahoraMin
     })
 
-  return NextResponse.json({ slots })
+  return NextResponse.json({ slots: horarios })
 }

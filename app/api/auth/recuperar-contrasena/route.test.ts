@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import type { NextRequest } from "next/server"
+import { pedidoFalso } from "@/pruebas/pedidos"
 
 const mockVerificarLimite = vi.fn()
 const mockEnviarRecuperacion = vi.fn()
@@ -20,9 +20,6 @@ const prismaMock = {
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
 
-const fakeRequest = (body: unknown): NextRequest =>
-  ({ json: () => Promise.resolve(body), headers: new Headers() }) as unknown as NextRequest
-
 const usuario = { id: "usuario-1", email: "ana@example.com", name: "Ana", password: "hash" }
 
 describe("POST /api/auth/recuperar-contrasena", () => {
@@ -39,7 +36,7 @@ describe("POST /api/auth/recuperar-contrasena", () => {
 
     mockVerificarLimite.mockResolvedValueOnce({ permitido: false, restantes: 0 })
 
-    const res = await POST(fakeRequest({ email: "ana@example.com" }))
+    const res = await POST(pedidoFalso({ email: "ana@example.com" }))
 
     expect(res.status).toBe(429)
     expect(mockVerificarLimite).toHaveBeenCalledWith("auth", "203.0.113.7")
@@ -50,7 +47,7 @@ describe("POST /api/auth/recuperar-contrasena", () => {
   it("manda un enlace que apunta a la página /restablecer-contrasena/<token>", async () => {
     const { POST } = await import("./route")
 
-    const res = await POST(fakeRequest({ email: "ana@example.com" }))
+    const res = await POST(pedidoFalso({ email: "ana@example.com" }))
 
     expect(res.status).toBe(200)
     expect(mockEnviarRecuperacion).toHaveBeenCalledWith(
@@ -64,11 +61,11 @@ describe("POST /api/auth/recuperar-contrasena", () => {
   it("con un correo sin cuenta responde lo mismo que con uno que existe: no revela quién tiene cuenta", async () => {
     const { POST } = await import("./route")
 
-    const conCuenta = await POST(fakeRequest({ email: "ana@example.com" }))
+    const conCuenta = await POST(pedidoFalso({ email: "ana@example.com" }))
     const cuerpoConCuenta = await conCuenta.json()
 
     prismaMock.user.findUnique.mockResolvedValueOnce(null)
-    const sinCuenta = await POST(fakeRequest({ email: "nadie@example.com" }))
+    const sinCuenta = await POST(pedidoFalso({ email: "nadie@example.com" }))
 
     expect(sinCuenta.status).toBe(conCuenta.status)
     expect(await sinCuenta.json()).toEqual(cuerpoConCuenta)
@@ -82,7 +79,7 @@ describe("POST /api/auth/recuperar-contrasena", () => {
 
     prismaMock.user.findUnique.mockResolvedValueOnce({ ...usuario, password: "" })
 
-    const res = await POST(fakeRequest({ email: "ana@example.com" }))
+    const res = await POST(pedidoFalso({ email: "ana@example.com" }))
 
     expect(res.status).toBe(200)
     expect(mockEnviarRecuperacion).not.toHaveBeenCalled()
@@ -91,7 +88,7 @@ describe("POST /api/auth/recuperar-contrasena", () => {
   it("rechaza un correo inválido con 400", async () => {
     const { POST } = await import("./route")
 
-    const res = await POST(fakeRequest({ email: "no-es-un-correo" }))
+    const res = await POST(pedidoFalso({ email: "no-es-un-correo" }))
 
     expect(res.status).toBe(400)
     expect(prismaMock.user.findUnique).not.toHaveBeenCalled()

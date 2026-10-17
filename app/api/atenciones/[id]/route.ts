@@ -7,10 +7,10 @@ import { prisma } from "@/lib/prisma"
 import { MAXIMO_DE_LINEAS_POR_ATENCION, esEstadoActivo, sePuedeDeshacerLaLlegada } from "@/lib/atenciones"
 import { lineasPedidasSchema, resolverLineas } from "@/lib/lineas-de-atencion"
 import { actorDeSesion, puedeDeshacerLlegada, whereDeLineas, type Actor } from "@/lib/permisos"
+import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
 import {
   ErrorDeAtencion,
   buscarAtencion,
-  cuerpoDelPedido,
   leerAtencion,
   lineasDeLaAtencion,
   respuestaDeError,

@@ -13,7 +13,7 @@ vi.mock("@/lib/rate-limit", () => ({
   verificarLimite: (...args: unknown[]) => mockVerificarLimite(...args),
 }))
 
-const fakeRequest = (pathname: string, method = "GET"): NextRequest =>
+const pedidoFalso = (pathname: string, method = "GET"): NextRequest =>
   ({
     method,
     url: `http://localhost${pathname}`,
@@ -33,7 +33,7 @@ describe("proxy — rate limit de los endpoints del panel", () => {
 
     mockVerificarLimite.mockResolvedValueOnce({ permitido: false, restantes: 0 })
 
-    const res = await proxy(fakeRequest("/api/clientes"))
+    const res = await proxy(pedidoFalso("/api/clientes"))
     const data = await res.json()
 
     expect(res.status).toBe(429)
@@ -48,7 +48,7 @@ describe("proxy — rate limit de los endpoints del panel", () => {
 
     mockGetToken.mockResolvedValueOnce({ id: "usuario-42", businessId: "negocio-1" })
 
-    await proxy(fakeRequest("/api/citas"))
+    await proxy(pedidoFalso("/api/citas"))
 
     expect(mockVerificarLimite).toHaveBeenCalledWith("panelLectura", "usuario:usuario-42")
   })
@@ -57,10 +57,10 @@ describe("proxy — rate limit de los endpoints del panel", () => {
     const { default: proxy } = await import("./proxy")
 
     mockGetToken.mockResolvedValueOnce({ id: "empleado-a", businessId: "negocio-1" })
-    await proxy(fakeRequest("/api/citas"))
+    await proxy(pedidoFalso("/api/citas"))
 
     mockGetToken.mockResolvedValueOnce({ id: "empleado-b", businessId: "negocio-1" })
-    await proxy(fakeRequest("/api/citas"))
+    await proxy(pedidoFalso("/api/citas"))
 
     const claves = mockVerificarLimite.mock.calls.map((llamada) => llamada[1])
     expect(claves[0]).not.toBe(claves[1])
@@ -69,17 +69,17 @@ describe("proxy — rate limit de los endpoints del panel", () => {
   it("usa el límite de escritura (más bajo) en POST/PUT/DELETE y el de lectura en GET", async () => {
     const { default: proxy } = await import("./proxy")
 
-    await proxy(fakeRequest("/api/clientes", "GET"))
+    await proxy(pedidoFalso("/api/clientes", "GET"))
     expect(mockVerificarLimite).toHaveBeenLastCalledWith("panelLectura", expect.any(String))
 
-    await proxy(fakeRequest("/api/clientes", "POST"))
+    await proxy(pedidoFalso("/api/clientes", "POST"))
     expect(mockVerificarLimite).toHaveBeenLastCalledWith("panelEscritura", expect.any(String))
   })
 
   it("deja pasar cuando no se pasó el límite", async () => {
     const { default: proxy } = await import("./proxy")
 
-    const res = await proxy(fakeRequest("/api/equipo"))
+    const res = await proxy(pedidoFalso("/api/equipo"))
 
     expect(res.status).not.toBe(429)
   })
@@ -95,7 +95,7 @@ describe("proxy — rate limit de los endpoints del panel", () => {
   ])("no aplica el límite del panel a %s (tiene el suyo propio, o no corresponde)", async (ruta) => {
     const { default: proxy } = await import("./proxy")
 
-    await proxy(fakeRequest(ruta, "POST"))
+    await proxy(pedidoFalso(ruta, "POST"))
 
     expect(mockVerificarLimite).not.toHaveBeenCalledWith("panelLectura", expect.anything())
     expect(mockVerificarLimite).not.toHaveBeenCalledWith("panelEscritura", expect.anything())
@@ -107,7 +107,7 @@ describe("proxy — rate limit de los endpoints del panel", () => {
   it("PENDIENTE: /api/reservar/[slug] queda fuera del límite del panel y todavía no tiene uno propio", async () => {
     const { default: proxy } = await import("./proxy")
 
-    await proxy(fakeRequest("/api/reservar/mi-negocio", "GET"))
+    await proxy(pedidoFalso("/api/reservar/mi-negocio", "GET"))
 
     expect(mockVerificarLimite).not.toHaveBeenCalled()
   })
@@ -117,7 +117,7 @@ describe("proxy — rate limit de los endpoints del panel", () => {
 
     mockGetToken.mockResolvedValueOnce(null)
 
-    await proxy(fakeRequest("/api/clientes"))
+    await proxy(pedidoFalso("/api/clientes"))
 
     expect(mockVerificarLimite).toHaveBeenCalledWith("panelLectura", "ip:127.0.0.1")
   })

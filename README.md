@@ -109,13 +109,17 @@ lib/                          Lógica compartida, cada archivo con su test al la
   periodos.ts                 Rangos de fechas de los filtros de reportes
   dinero.ts                   Formato y lectura de montos
   fechas.ts                   Cálculos y formatos de fecha
-  horario-dia.ts              La jornada de un profesional: citas y huecos del día
+  horario-dia.ts              La jornada de un profesional: citas y huecos del día,
+                              y la conversión entre "HH:MM" y minutos
+  nombres-de-roles.ts         Cómo se escribe cada rol (Encargado, Profesional). Sólo
+                              la etiqueta: lo que puede hacer cada uno está en permisos.ts
   rubros.ts                   Los tres rubros que atiende Eli
   modulos.ts                  Los cinco módulos del panel: nombre, frase, ruta y color
   direccion-de-scroll.ts      Si el encabezado de la landing se muestra, se oculta o flota
   validaciones.ts             Esquemas zod compartidos: registro, reserva y contraseña.
                               El resto de los endpoints define el suyo en su route.ts
   peticiones.ts               Cómo la interfaz le pide cosas al servidor
+  cuerpo-del-pedido.ts        Leer el JSON de un pedido sin que uno roto termine en 500
   slug.ts                     La dirección pública de cada negocio
   utils.ts                    `cn`, para combinar clases de Tailwind
   tablero.ts                  (servidor) Leer y tomar atenciones dentro de un endpoint
@@ -125,6 +129,9 @@ lib/                          Lógica compartida, cada archivo con su test al la
   prisma.ts                   (servidor) Conexión a la base
   email.ts                    (servidor) Correos (Resend)
   rate-limit.ts               (servidor) Límite de peticiones (Upstash)
+pruebas/                      Ayudas compartidas de los tests: la base falsa en memoria
+                              con sus datos de ejemplo, pedidos y respuestas simulados.
+                              Fuera de app/: no es una ruta ni entra al build
 prisma/                       Esquema, migraciones y datos de ejemplo (seed.ts)
 proxy.ts                      Puerta de entrada: sesión y límite de peticiones (con su test)
 types/                        Tipos que extienden librerías (la sesión de NextAuth)

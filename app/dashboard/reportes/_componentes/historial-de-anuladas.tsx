@@ -7,7 +7,7 @@ import { formatearMonto } from "@/lib/dinero"
 import { formatearHora } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
 import type { FilaAnulada, ReporteDeAnuladas } from "../_datos"
-import { CELDA, ENCABEZADO_DE_COLUMNA, Medios, SinFilas, diaCorto } from "./historial-de-cobros"
+import { CLASES_DE_CELDA, ENCABEZADO_DE_COLUMNA, MediosDeLaFila, SinFilas, diaCorto } from "./historial-de-cobros"
 import { Paginador } from "./paginador"
 import { Cifra } from "./resumen-de-reporte"
 import { useIrALaSeccion } from "./usar-ir-a-la-seccion"
@@ -64,7 +64,7 @@ function Cobro({ fila }: { fila: FilaAnulada }) {
           </span>
         )}
       </p>
-      <Medios pagos={fila.pagos} />
+      <MediosDeLaFila pagos={fila.pagos} />
     </div>
   )
 }
@@ -146,24 +146,24 @@ export function HistorialDeAnuladas({ reporte, actualizando, onPagina }: Histori
             >
               {reporte.filas.map((fila) => (
                 <tr key={fila.id}>
-                  <td className={cn(CELDA, "whitespace-nowrap")}>
+                  <td className={cn(CLASES_DE_CELDA, "whitespace-nowrap")}>
                     <Momento iso={fila.anuladaEn} />
                   </td>
-                  <td className={cn(CELDA, "break-words")}>
+                  <td className={cn(CLASES_DE_CELDA, "break-words")}>
                     {/* El nombre se copia al anular y queda aunque la persona se vaya: sólo falta si no se registró. */}
                     {fila.anuladaPor ?? <span className="text-texto-2">Sin registro</span>}
                   </td>
-                  <td className={cn(CELDA, "font-medium break-words")}>{fila.cliente.nombre}</td>
-                  <td className={CELDA}>
+                  <td className={cn(CLASES_DE_CELDA, "font-medium break-words")}>{fila.cliente.nombre}</td>
+                  <td className={CLASES_DE_CELDA}>
                     <Servicios fila={fila} />
                   </td>
-                  <td className={cn(CELDA, "text-right font-semibold whitespace-nowrap tabular-nums")}>
+                  <td className={cn(CLASES_DE_CELDA, "text-right font-semibold whitespace-nowrap tabular-nums")}>
                     {formatearMonto(fila.total)}
                   </td>
-                  <td className={CELDA}>
+                  <td className={CLASES_DE_CELDA}>
                     <Cobro fila={fila} />
                   </td>
-                  <td className={cn(CELDA, "max-w-[16rem] break-words")}>
+                  <td className={cn(CLASES_DE_CELDA, "max-w-[16rem] break-words")}>
                     {fila.motivoDeAnulacion ?? <span className="text-texto-2">Sin motivo</span>}
                   </td>
                 </tr>

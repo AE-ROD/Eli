@@ -215,7 +215,7 @@ export default function PaginaClientes() {
                 guardandoNotas={guardandoNotas}
                 avisoDeNotas={avisoDeNotas?.clienteId === clienteSeleccionado.id ? avisoDeNotas.mensaje : ""}
                 onCerrar={() => setClienteSeleccionado(null)}
-                onNotasChange={setNotas}
+                onCambiarNotas={setNotas}
                 onNotasBlur={guardarNotas}
               />
             )}
@@ -229,7 +229,7 @@ export default function PaginaClientes() {
             form={nuevoCliente}
             guardando={guardando}
             aviso={avisoDelModal}
-            onFormChange={(campo, valor) => setNuevoCliente((previo) => ({ ...previo, [campo]: valor }))}
+            onCambiarCampo={(campo, valor) => setNuevoCliente((previo) => ({ ...previo, [campo]: valor }))}
             onSubmit={guardarNuevoCliente}
             onCerrar={() => setModalAbierto(false)}
           />

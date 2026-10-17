@@ -28,7 +28,8 @@ export type SegmentoDia =
   | { tipo: "cita"; inicioMin: number; finMin: number; cita: CitaDelDia }
   | { tipo: "hueco"; inicioMin: number; finMin: number }
 
-function minutosDeHHMM(hhmm: string): number {
+/** `"HH:MM"` → minutos desde la medianoche. No valida: `"9:5"` da 545 y un texto sin `:` da `NaN`. */
+export function horaAMinutos(hhmm: string): number {
   const [horas, minutos] = hhmm.split(":").map(Number)
   return horas * 60 + minutos
 }
@@ -45,7 +46,7 @@ function minutosDeInstante(iso: string): number {
  * En vez de adivinar, se trata como "no se puede calcular" en todo el módulo.
  */
 export function franjaValida(franja: FranjaHorario): boolean {
-  return minutosDeHHMM(franja.startTime) < minutosDeHHMM(franja.endTime)
+  return horaAMinutos(franja.startTime) < horaAMinutos(franja.endTime)
 }
 
 /** Intervalos [inicio, fin) fusionados: dos citas que se pisan no deben abrir un hueco fantasma entre ellas. */
@@ -81,8 +82,8 @@ function fusionarIntervalos(
 export function segmentosDeFranja(franja: FranjaHorario, citas: CitaDelDia[]): SegmentoDia[] {
   if (!franjaValida(franja)) return []
 
-  const inicioFranja = minutosDeHHMM(franja.startTime)
-  const finFranja = minutosDeHHMM(franja.endTime)
+  const inicioFranja = horaAMinutos(franja.startTime)
+  const finFranja = horaAMinutos(franja.endTime)
 
   const citasEnFranja = citas
     .map((cita) => {
@@ -136,8 +137,8 @@ export function citasFueraDeFranjas(franjas: FranjaHorario[], citas: CitaDelDia[
     const inicio = minutosDeInstante(cita.startTime)
     const fin = minutosDeInstante(cita.endTime)
     return !franjasValidas.some((franja) => {
-      const inicioFranja = minutosDeHHMM(franja.startTime)
-      const finFranja = minutosDeHHMM(franja.endTime)
+      const inicioFranja = horaAMinutos(franja.startTime)
+      const finFranja = horaAMinutos(franja.endTime)
       return fin > inicioFranja && inicio < finFranja
     })
   })
@@ -163,7 +164,7 @@ export function minutosLibresEnFranjas(franjas: FranjaHorario[], citas: CitaDelD
   }, 0)
 }
 
-export function formatoDuracion(minutos: number): string {
+export function formatearTiempoLibre(minutos: number): string {
   if (minutos <= 0) return "0 min"
   const horas = Math.floor(minutos / 60)
   const resto = minutos % 60
@@ -172,7 +173,8 @@ export function formatoDuracion(minutos: number): string {
   return `${horas} h ${resto} min`
 }
 
-export function formatoHHMM(minutos: number): string {
+/** Minutos desde la medianoche → `"HH:MM"`, con ceros a la izquierda. */
+export function minutosAHora(minutos: number): string {
   const horas = String(Math.floor(minutos / 60)).padStart(2, "0")
   const restoMin = String(minutos % 60).padStart(2, "0")
   return `${horas}:${restoMin}`
