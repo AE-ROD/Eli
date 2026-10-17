@@ -27,7 +27,7 @@ interface HorarioPublico {
   endTime: string
 }
 
-interface FormularioReservaProps {
+interface PropsDeFormularioReserva {
   slug: string
   nombreNegocio: string
   servicios: ServicioPublico[]
@@ -43,7 +43,7 @@ type Paso = 1 | 2 | 3
  */
 const FUNDIDO = { duration: DURACION.pildora, ease: CURVA.fundido }
 
-export function FormularioReserva({ slug, nombreNegocio, servicios, horarios }: FormularioReservaProps) {
+export function FormularioReserva({ slug, nombreNegocio, servicios, horarios }: PropsDeFormularioReserva) {
   const [paso, setPaso] = useState<Paso>(1)
   const [servicioSeleccionado, setServicioSeleccionado] = useState<ServicioPublico | null>(null)
   const [fecha, setFecha] = useState("")

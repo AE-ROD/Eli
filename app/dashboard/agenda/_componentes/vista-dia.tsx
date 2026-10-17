@@ -27,7 +27,7 @@ function paraTarjeta(cita: Cita): CitaEnTarjeta {
   }
 }
 
-interface VistaDiaProps {
+interface PropsDeVistaDia {
   fecha: Date
   citas: Cita[]
   onSeleccionar: (cita: Cita) => void
@@ -38,7 +38,7 @@ interface VistaDiaProps {
  * desplaza dentro de la tarjeta; el relleno deja lugar al anillo del foco de
  * las tarjetas, que esa caja recortaría.
  */
-export function VistaDia({ fecha, citas, onSeleccionar }: VistaDiaProps) {
+export function VistaDia({ fecha, citas, onSeleccionar }: PropsDeVistaDia) {
   const citasDelDia = citas.filter((cita) =>
     new Date(cita.startTime).toDateString() === fecha.toDateString()
   )

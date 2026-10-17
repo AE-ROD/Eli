@@ -40,7 +40,7 @@ export function filaVacia(catalogo: Catalogo, clave: string): FilaDeServicio {
   return { clave, servicioId: "", profesional: unico, precio: "" }
 }
 
-interface EditorDeServiciosProps {
+interface PropsDeEditorDeServicios {
   filas: FilaDeServicio[]
   catalogo: Catalogo
   /** Dueño y encargado eligen quién hace cada servicio; el profesional no, quedan a su nombre. */
@@ -66,7 +66,7 @@ export function EditorDeServicios({
   errores,
   deshabilitado = false,
   onCambiar,
-}: EditorDeServiciosProps) {
+}: PropsDeEditorDeServicios) {
   const idBase = useId()
   const botonAgregar = useRef<HTMLButtonElement>(null)
   const totalCentavos = totalDeFilasEnCentavos(filas)

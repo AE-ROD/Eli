@@ -18,13 +18,13 @@ export interface MiembroHorario {
   role: string
 }
 
-interface SelectorHorarioMiembroProps {
+interface PropsDeSelectorHorarioMiembro {
   horariosDelDueño: HorarioDelDia[]
   miembros: MiembroHorario[]
   nombreDelDueño: string
 }
 
-export function SelectorHorarioMiembro({ horariosDelDueño, miembros, nombreDelDueño }: SelectorHorarioMiembroProps) {
+export function SelectorHorarioMiembro({ horariosDelDueño, miembros, nombreDelDueño }: PropsDeSelectorHorarioMiembro) {
   // null = owner; string = memberId del trabajador
   const [seleccionado, setSeleccionado] = useState<string | null>(null)
   const [horariosActivos, setHorariosActivos] = useState<HorarioDelDia[]>(horariosDelDueño)

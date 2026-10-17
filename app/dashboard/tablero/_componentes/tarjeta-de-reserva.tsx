@@ -15,7 +15,7 @@ export interface PropsDeArrastre {
   onDragEnd: () => void
 }
 
-interface TarjetaDeReservaProps {
+interface PropsDeTarjetaDeReserva {
   reserva: Reserva
   /**
    * Cómo se nombra la reserva en su botón, para el lector de pantalla: el
@@ -40,7 +40,7 @@ interface TarjetaDeReservaProps {
  * falla porque el tablero quedó viejo y la reserva sigue ahí, el foco vuelve a
  * ella después de recargar.
  */
-export function TarjetaDeReserva({ reserva, quien, atrasada, enCurso, arrastre, onLlego }: TarjetaDeReservaProps) {
+export function TarjetaDeReserva({ reserva, quien, atrasada, enCurso, arrastre, onLlego }: PropsDeTarjetaDeReserva) {
   const idDelNombre = useId()
 
   return (

@@ -4,7 +4,7 @@ import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import type { ColorDeModulo } from "@/lib/modulos"
 import { cn } from "@/lib/utils"
 
-interface TarjetaEstadisticaProps {
+interface PropsDeTarjetaEstadistica {
   titulo: string
   valor: string | number
   icono: LucideIcon
@@ -19,7 +19,7 @@ interface TarjetaEstadisticaProps {
 }
 
 /** Una cifra del inicio, en grande, con lo que mide arriba y de qué está hecha abajo. No es un enlace: no se eleva. */
-export function TarjetaEstadistica({ titulo, valor, icono, color, procedencia }: TarjetaEstadisticaProps) {
+export function TarjetaEstadistica({ titulo, valor, icono, color, procedencia }: PropsDeTarjetaEstadistica) {
   return (
     <div className={cn(TARJETA_DEL_PANEL, "flex h-full flex-col p-5 sm:p-6")}>
       <div className="flex items-start justify-between gap-3">

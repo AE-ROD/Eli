@@ -16,7 +16,7 @@ import { CuadroDeSeccion } from "@/components/panel/icono-de-seccion"
 import { seccionDeLaRuta } from "@/components/panel/secciones-del-panel"
 import { cn } from "@/lib/utils"
 
-interface BarraSuperiorProps {
+interface PropsDeBarraSuperior {
   titulo: string
   subtitulo?: string
   accionPrincipal?: {
@@ -43,7 +43,7 @@ const BOTON_DE_LA_FILA =
  * vuelve a ese botón cuando el cajón se cierra, y si hubiera quedado arriba,
  * fuera de la vista, la página saltaba al principio.
  */
-export function BarraSuperior({ titulo, subtitulo, accionPrincipal, mostrarBusqueda = true }: BarraSuperiorProps) {
+export function BarraSuperior({ titulo, subtitulo, accionPrincipal, mostrarBusqueda = true }: PropsDeBarraSuperior) {
   const seccion = seccionDeLaRuta(usePathname())
   const IconoDeLaAccion = accionPrincipal?.icono ?? Plus
 

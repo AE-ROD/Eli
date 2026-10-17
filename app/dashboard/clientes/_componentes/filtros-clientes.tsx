@@ -12,7 +12,7 @@ const VISTAS = [
   { id: "lista", texto: "Ver en lista", icono: List },
 ] as const
 
-interface FiltrosClientesProps {
+interface PropsDeFiltrosClientes {
   busqueda: string
   onBusqueda: (v: string) => void
   etiquetaActiva: string
@@ -34,7 +34,7 @@ export function FiltrosClientes({
   onEtiqueta,
   vista,
   onVista,
-}: FiltrosClientesProps) {
+}: PropsDeFiltrosClientes) {
   const idDelBuscador = useId()
 
   return (

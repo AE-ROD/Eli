@@ -7,13 +7,13 @@ import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
 
-interface EnlaceDeReservasProps {
+interface PropsDeEnlaceDeReservas {
   /** El slug del negocio: la página pública es `/reservar/<slug>`. */
   slug: string
 }
 
 /** El enlace público de reservas del negocio, para copiarlo o abrirlo. */
-export function EnlaceDeReservas({ slug }: EnlaceDeReservasProps) {
+export function EnlaceDeReservas({ slug }: PropsDeEnlaceDeReservas) {
   const idDelTitulo = useId()
   const [copiado, setCopiado] = useState(false)
   const enlace =

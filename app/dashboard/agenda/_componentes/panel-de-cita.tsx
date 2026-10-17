@@ -21,7 +21,7 @@ function formatearFecha(iso: string) {
   return new Date(iso).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
 }
 
-interface PanelDeCitaProps {
+interface PropsDePanelDeCita {
   cita: Cita
   onCerrar: () => void
   onCambiarEstado: (id: string, estado: string) => void
@@ -35,7 +35,7 @@ interface PanelDeCitaProps {
  * Al cerrarlo, el foco vuelve a la cita que lo abrió; si no, el botón de
  * cerrar desaparecía con el foco adentro y el teclado volvía al principio.
  */
-export function PanelDeCita({ cita, onCerrar, onCambiarEstado }: PanelDeCitaProps) {
+export function PanelDeCita({ cita, onCerrar, onCambiarEstado }: PropsDePanelDeCita) {
   const idDelTitulo = useId()
   const panel = useRef<HTMLElement>(null)
   const titulo = useRef<HTMLHeadingElement>(null)

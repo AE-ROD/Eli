@@ -41,7 +41,7 @@ const BOTON_DE_ICONO =
 const ANCHO_EXPANDIDA = "w-64 lg:w-60"
 const ANCHO_COLAPSADA = "w-[76px]"
 
-interface BarraLateralProps {
+interface PropsDeBarraLateral {
   usuario?: {
     nombre: string
     email: string
@@ -54,7 +54,7 @@ interface BarraLateralProps {
   puedeVerEquipo?: boolean
 }
 
-export function BarraLateral({ usuario, esOwner, diasTrialRestantes, puedeVerEquipo }: BarraLateralProps) {
+export function BarraLateral({ usuario, esOwner, diasTrialRestantes, puedeVerEquipo }: PropsDeBarraLateral) {
   const { abrirPrecios } = usePrecios()
   const pathname = usePathname()
   const { cajonAbierto, cerrarCajon, cerrarCajonParaIrA, colapsada, alternarColapso, enfocarBotonMenu } =

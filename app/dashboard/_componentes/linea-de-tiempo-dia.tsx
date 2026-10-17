@@ -11,7 +11,7 @@ import {
   type FranjaHorario,
 } from "@/lib/horario-dia"
 
-interface LineaDeTiempoDiaProps {
+interface PropsDeLineaDeTiempoDia {
   franjas: FranjaHorario[]
   citas: CitaDelDia[]
 }
@@ -42,7 +42,7 @@ export function citaParaTarjeta(cita: CitaDelDia): CitaEnTarjeta {
 const CLASE_HUECO =
   "rounded-[20px] border-[1.5px] border-dashed border-borde bg-[repeating-linear-gradient(45deg,var(--color-superficie)_0px,var(--color-superficie)_6px,transparent_6px,transparent_14px)] px-3 py-3 squircle"
 
-export function LineaDeTiempoDia({ franjas, citas }: LineaDeTiempoDiaProps) {
+export function LineaDeTiempoDia({ franjas, citas }: PropsDeLineaDeTiempoDia) {
   const fueraDeHorario = citasFueraDeFranjas(franjas, citas)
 
   return (

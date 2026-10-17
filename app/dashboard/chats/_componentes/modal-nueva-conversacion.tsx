@@ -7,7 +7,7 @@ import { Aviso } from "@/components/panel/aviso"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import type { DatosDeNuevaConversacion } from "../_datos"
 
-interface ModalNuevaConversacionProps {
+interface PropsDeModalNuevaConversacion {
   form: DatosDeNuevaConversacion
   guardando: boolean
   /**
@@ -28,7 +28,7 @@ export function ModalNuevaConversacion({
   onCambiarCampo,
   onSubmit,
   onCerrar,
-}: ModalNuevaConversacionProps) {
+}: PropsDeModalNuevaConversacion) {
   return (
     <MarcoDeModal titulo="Nueva conversación" antetitulo="Chats" bloqueado={guardando} alCerrar={onCerrar}>
       <form onSubmit={onSubmit} className="space-y-5">

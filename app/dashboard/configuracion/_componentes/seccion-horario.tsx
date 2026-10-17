@@ -19,7 +19,7 @@ const HORARIO_INICIAL: HorarioDelDia[] = DIAS.map((_, i) => ({
   active: i >= 1 && i <= 5, // Lun-Vie activos por defecto
 }))
 
-interface SeccionHorarioProps {
+interface PropsDeSeccionHorario {
   horariosIniciales: HorarioDelDia[]
   /** De quién es el horario. Sin él, el propio de quien está en sesión. */
   memberId?: string | null
@@ -38,7 +38,7 @@ function semanaCompleta(guardados: HorarioDelDia[]): HorarioDelDia[] {
   })
 }
 
-export function SeccionHorario({ horariosIniciales, memberId, titulo }: SeccionHorarioProps) {
+export function SeccionHorario({ horariosIniciales, memberId, titulo }: PropsDeSeccionHorario) {
   const idDelTitulo = useId()
   const [horarios, setHorarios] = useState<HorarioDelDia[]>(() => semanaCompleta(horariosIniciales))
   const [guardando, setGuardando] = useState(false)

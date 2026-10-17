@@ -120,7 +120,7 @@ function enfocar(destino: HTMLElement) {
 const comoTarjeta = (arrastrada: Arrastrada): TarjetaDelTablero =>
   arrastrada.tipo === "reserva" ? { tipo: "reserva" } : { tipo: "atencion", estado: arrastrada.atencion.estado }
 
-interface ColumnaProps {
+interface PropsDeColumna {
   id: ColumnaId
   titulo: string
   cantidad: number
@@ -147,7 +147,7 @@ function Columna({
   onDragLeave,
   onDrop,
   children,
-}: ColumnaProps) {
+}: PropsDeColumna) {
   const idDelTitulo = useId()
 
   return (
@@ -189,7 +189,7 @@ function Columna({
   )
 }
 
-interface TableroDeColumnasProps {
+interface PropsDeTableroDeColumnas {
   tablero: Tablero
   actor: Actor | null
   /** El mismo instante para todas las tarjetas, en milisegundos. */
@@ -226,7 +226,7 @@ export function TableroDeColumnas({
   onCobrar,
   onEditar,
   onAnular,
-}: TableroDeColumnasProps) {
+}: PropsDeTableroDeColumnas) {
   const punteroFino = usePunteroFino()
   const [arrastrada, setArrastrada] = useState<Arrastrada | null>(null)
   const [encima, setEncima] = useState<ColumnaId | null>(null)

@@ -3,7 +3,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 
-interface PaginadorProps {
+interface PropsDePaginador {
   /** Qué se pagina, para el nombre de la navegación: "Páginas del historial". */
   nombre: string
   pagina: number
@@ -24,7 +24,7 @@ interface PaginadorProps {
  * misma página. Lo mismo en la primera y la última página, para que llegar a
  * la última con "Siguiente" no deje el foco suelto.
  */
-export function Paginador({ nombre, pagina, paginas, actualizando, onPagina }: PaginadorProps) {
+export function Paginador({ nombre, pagina, paginas, actualizando, onPagina }: PropsDePaginador) {
   if (paginas <= 1) return null
 
   const sinAnterior = pagina <= 1 || actualizando

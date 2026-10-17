@@ -9,13 +9,13 @@ import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
 import type { EstadisticasDelPanel } from "../_datos"
 
-interface ResumenDeClientesProps {
+interface PropsDeResumenDeClientes {
   /** Nulo mientras cargan. */
   estadisticas: EstadisticasDelPanel | null
 }
 
 /** Cuántos clientes tiene el negocio y cuántos se sumaron este mes. */
-export function ResumenDeClientes({ estadisticas }: ResumenDeClientesProps) {
+export function ResumenDeClientes({ estadisticas }: PropsDeResumenDeClientes) {
   const idDelTitulo = useId()
 
   return (

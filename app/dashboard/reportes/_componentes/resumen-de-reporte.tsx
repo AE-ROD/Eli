@@ -112,7 +112,7 @@ const SIN_DESGLOSE_POR_MEDIO = "No se puede repartir por medio de pago cuando fi
 const SIN_DESGLOSE_POR_PROFESIONAL = "No se puede repartir por profesional cuando filtras por medio de pago."
 const SIN_DESGLOSE_POR_SERVICIO = "No se puede repartir por servicio cuando filtras por medio de pago."
 
-interface ResumenDeReporteProps {
+interface PropsDeResumenDeReporte {
   reporte: Reporte
   /**
    * El título de la cifra principal, que dice qué se sumó según los filtros
@@ -129,7 +129,7 @@ interface ResumenDeReporteProps {
  * Los ingresos van primero y, entre sm y xl, a lo ancho: con tres tarjetas por
  * fila un monto largo no entraba en las de una tableta.
  */
-export function ResumenDeReporte({ reporte, rotuloDeIngresos }: ResumenDeReporteProps) {
+export function ResumenDeReporte({ reporte, rotuloDeIngresos }: PropsDeResumenDeReporte) {
   const { resumen, alcance } = reporte
   const propio = alcance === "propio"
 

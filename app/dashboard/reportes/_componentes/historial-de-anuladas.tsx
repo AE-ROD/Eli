@@ -69,7 +69,7 @@ function Cobro({ fila }: { fila: FilaAnulada }) {
   )
 }
 
-interface HistorialDeAnuladasProps {
+interface PropsDeHistorialDeAnuladas {
   reporte: ReporteDeAnuladas
   /** Mientras llega otra página u otro período. */
   actualizando: boolean
@@ -81,7 +81,7 @@ interface HistorialDeAnuladasProps {
  * historial como anulada"): quién lo anuló, cuándo y por qué, si se había
  * cobrado, el total y cómo se había pagado. Sólo para dueño y encargado.
  */
-export function HistorialDeAnuladas({ reporte, actualizando, onPagina }: HistorialDeAnuladasProps) {
+export function HistorialDeAnuladas({ reporte, actualizando, onPagina }: PropsDeHistorialDeAnuladas) {
   const idDelTitulo = useId()
   const { pagina, paginas, total: cantidad } = reporte
   const { seccion, irA } = useIrALaSeccion(onPagina, actualizando, reporte)

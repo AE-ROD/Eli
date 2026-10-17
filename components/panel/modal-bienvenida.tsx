@@ -35,7 +35,7 @@ const PASOS = [
   },
 ]
 
-interface ModalBienvenidaProps {
+interface PropsDeModalBienvenida {
   nombreNegocio: string
   slug: string
 }
@@ -49,7 +49,7 @@ interface ModalBienvenidaProps {
  * Al cambiar de paso el foco se queda en el botón que se apretó, para seguir
  * con Enter; el paso nuevo se anuncia al lector de pantalla.
  */
-export function ModalBienvenida({ nombreNegocio, slug }: ModalBienvenidaProps) {
+export function ModalBienvenida({ nombreNegocio, slug }: PropsDeModalBienvenida) {
   const [visible, setVisible] = useState(false)
   const [paso, setPaso] = useState(0)
   const [cambioDePaso, setCambioDePaso] = useState(false)

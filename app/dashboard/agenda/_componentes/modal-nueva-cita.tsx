@@ -30,7 +30,7 @@ const LETRAS_PARA_BUSCAR = 2
 const ANILLO_HACIA_ADENTRO =
   "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--anillo) focus-visible:bg-(--halo)"
 
-interface ModalNuevaCitaProps {
+interface PropsDeModalNuevaCita {
   form: DatosDeNuevaCita
   guardando: boolean
   /**
@@ -53,7 +53,7 @@ export function ModalNuevaCita({
   onCambiarCampo,
   onSubmit,
   onCerrar,
-}: ModalNuevaCitaProps) {
+}: PropsDeModalNuevaCita) {
   const [busquedaCliente, setBusquedaCliente] = useState("")
   const [sugerencias, setSugerencias] = useState<ClienteSugerido[]>([])
   const [nombreCliente, setNombreCliente] = useState("")

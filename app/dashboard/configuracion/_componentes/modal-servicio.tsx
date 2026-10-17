@@ -25,7 +25,7 @@ const DURACIONES = [
 const ANILLO_DE_LA_OPCION =
   "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-(--anillo) has-focus-visible:shadow-[0_0_0_6px_var(--halo)]"
 
-interface ModalServicioProps {
+interface PropsDeModalServicio {
   form: DatosDeServicio
   guardando: boolean
   /**
@@ -47,7 +47,7 @@ export function ModalServicio({
   onCambiarCampo,
   onSubmit,
   onCerrar,
-}: ModalServicioProps) {
+}: PropsDeModalServicio) {
   const idDeLaDescripcion = useId()
   const nombreDeLaDuracion = useId()
 

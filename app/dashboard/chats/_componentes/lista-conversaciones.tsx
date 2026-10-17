@@ -17,7 +17,7 @@ function formatearHoraRelativa(iso: string): string {
   return new Date(iso).toLocaleDateString("es-ES", { day: "numeric", month: "short" })
 }
 
-interface ListaConversacionesProps {
+interface PropsDeListaConversaciones {
   conversaciones: Conversacion[]
   busqueda: string
   onBusqueda: (busqueda: string) => void
@@ -41,7 +41,7 @@ export function ListaConversaciones({
   onNueva,
   enfocarId,
   className,
-}: ListaConversacionesProps) {
+}: PropsDeListaConversaciones) {
   const prefijo = useId()
   const idDe = (conversacion: string) => `${prefijo}-${conversacion}`
 

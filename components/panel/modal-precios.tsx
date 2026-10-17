@@ -86,7 +86,7 @@ const PLANES = [
 
 type Periodo = "mensual" | "anual"
 
-interface ModalPreciosProps {
+interface PropsDeModalPrecios {
   abierto: boolean
   onCerrar: () => void
   diasTrialRestantes?: number
@@ -105,7 +105,7 @@ function CuadroGris({ icono: Icono, className }: { icono: LucideIcon; className?
   )
 }
 
-export function ModalPrecios({ abierto, onCerrar, diasTrialRestantes, onSeleccionarPlan }: ModalPreciosProps) {
+export function ModalPrecios({ abierto, onCerrar, diasTrialRestantes, onSeleccionarPlan }: PropsDeModalPrecios) {
   const [periodo, setPeriodo] = useState<Periodo>("anual")
 
   return (

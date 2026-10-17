@@ -11,13 +11,13 @@ import {
 } from "@/components/comunes/estilos-de-campo"
 import { cn } from "@/lib/utils"
 
-interface CampoFormularioProps extends InputHTMLAttributes<HTMLInputElement> {
+interface PropsDeCampoFormulario extends InputHTMLAttributes<HTMLInputElement> {
   etiqueta: string
   error?: string
   icono?: ReactNode
 }
 
-export const CampoFormulario = forwardRef<HTMLInputElement, CampoFormularioProps>(
+export const CampoFormulario = forwardRef<HTMLInputElement, PropsDeCampoFormulario>(
   ({ etiqueta, error, icono, type, className, id, ...props }, ref) => {
     const [mostrarContrasena, setMostrarContrasena] = useState(false)
     const esContrasena = type === "password"

@@ -7,7 +7,7 @@ import type { Cita } from "../_datos"
 
 const cuantasCitas = (cantidad: number) => (cantidad === 1 ? "1 cita" : `${cantidad} citas`)
 
-interface VistaMesProps {
+interface PropsDeVistaMes {
   fechaActual: Date
   citas: Cita[]
   onElegirDia: (fecha: Date) => void
@@ -24,7 +24,7 @@ interface VistaMesProps {
  * una baldosa gris con el número arriba y la cantidad escrita abajo, y la de
  * hoy, en el azul de la Agenda.
  */
-export function VistaMes({ fechaActual, citas, onElegirDia }: VistaMesProps) {
+export function VistaMes({ fechaActual, citas, onElegirDia }: PropsDeVistaMes) {
   const primerDia = new Date(fechaActual.getFullYear(), fechaActual.getMonth(), 1)
   // Cuántas celdas de la grilla quedan antes del día 1: la semana empieza en domingo.
   const celdasAntesDelPrimero = primerDia.getDay()

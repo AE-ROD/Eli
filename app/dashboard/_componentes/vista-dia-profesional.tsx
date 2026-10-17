@@ -19,7 +19,7 @@ import type { EstadisticasDelPanel } from "../_datos"
  */
 type EstadisticasDelProfesional = Pick<EstadisticasDelPanel, "citasHoy" | "citasHoyLista" | "horarioHoy">
 
-interface VistaDiaProfesionalProps {
+interface PropsDeVistaDiaProfesional {
   /** Nulo mientras cargan. */
   estadisticas: EstadisticasDelProfesional | null
 }
@@ -77,7 +77,7 @@ function AvisoHorario({ titulo, children }: { titulo: string; children: ReactNod
   )
 }
 
-export function VistaDiaProfesional({ estadisticas }: VistaDiaProfesionalProps) {
+export function VistaDiaProfesional({ estadisticas }: PropsDeVistaDiaProfesional) {
   const idDelTitulo = useId()
 
   if (!estadisticas) {

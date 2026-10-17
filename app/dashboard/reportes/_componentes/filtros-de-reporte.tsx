@@ -26,7 +26,7 @@ export interface FiltrosElegidos {
   medio: string
 }
 
-interface FiltrosDeReporteProps {
+interface PropsDeFiltrosDeReporte {
   filtros: FiltrosElegidos
   /** Nulas mientras cargan o si no se pudieron cargar: los selectores quedan en "Todos". */
   opciones: OpcionesDeFiltro | null
@@ -71,7 +71,7 @@ export function FiltrosDeReporte({
   actualizando = false,
   onCambiar,
   onReintentarOpciones,
-}: FiltrosDeReporteProps) {
+}: PropsDeFiltrosDeReporte) {
   const idBase = useId()
   const id = (campo: string) => `${idBase}-${campo}`
   const delNegocio = alcance === "negocio"

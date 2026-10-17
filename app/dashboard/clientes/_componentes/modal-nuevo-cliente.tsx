@@ -7,7 +7,7 @@ import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import type { DatosDeNuevoCliente } from "../_datos"
 import { Aviso } from "@/components/panel/aviso"
 
-interface ModalNuevoClienteProps {
+interface PropsDeModalNuevoCliente {
   form: DatosDeNuevoCliente
   guardando: boolean
   /**
@@ -33,7 +33,7 @@ export function ModalNuevoCliente({
   onCambiarCampo,
   onSubmit,
   onCerrar,
-}: ModalNuevoClienteProps) {
+}: PropsDeModalNuevoCliente) {
   return (
     <MarcoDeModal titulo="Nuevo cliente" bloqueado={guardando} alCerrar={onCerrar}>
       <form onSubmit={onSubmit} className="space-y-5">

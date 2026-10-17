@@ -42,7 +42,7 @@ function fechaDeLaCita(iso: string): string {
   return new Date(iso).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })
 }
 
-interface PanelDetalleClienteProps {
+interface PropsDePanelDetalleCliente {
   cliente: ClienteEnTarjeta
   /** Sus últimas citas, de la más reciente a la más vieja. */
   citas: CitaDeCliente[]
@@ -77,7 +77,7 @@ export function PanelDetalleCliente({
   onCerrar,
   onCambiarNotas,
   onNotasBlur,
-}: PanelDetalleClienteProps) {
+}: PropsDePanelDetalleCliente) {
   const idDelNombre = useId()
   const idDelHistorial = useId()
   const idDeNotas = useId()

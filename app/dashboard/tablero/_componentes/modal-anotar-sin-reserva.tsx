@@ -45,7 +45,7 @@ const ANILLO_DE_LA_OPCION =
 const ANILLO_HACIA_ADENTRO =
   "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--anillo) focus-visible:bg-(--halo)"
 
-interface ModalAnotarSinReservaProps {
+interface PropsDeModalAnotarSinReserva {
   catalogo: Catalogo
   eligeProfesional: boolean
   /** El profesional anota a su nombre: sin al menos un servicio, la atención no sería de nadie. */
@@ -72,7 +72,7 @@ export function ModalAnotarSinReserva({
   guardando,
   onAnotar,
   onCerrar,
-}: ModalAnotarSinReservaProps) {
+}: PropsDeModalAnotarSinReserva) {
   const idBase = useId()
   const botonCambiar = useRef<HTMLButtonElement>(null)
   const campoNombre = useRef<HTMLInputElement>(null)

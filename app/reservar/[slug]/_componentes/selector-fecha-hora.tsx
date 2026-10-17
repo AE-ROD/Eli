@@ -31,7 +31,7 @@ export function fechaParaLeer(fecha: Date): string {
  */
 const ELEGIDO = "bg-azul font-semibold text-navy inset-ring-2 inset-ring-navy"
 
-interface SelectorFechaHoraProps {
+interface PropsDeSelectorFechaHora {
   slug: string
   servicioId: string
   diasDisponibles: number[] // dayOfWeek con horario activo
@@ -49,7 +49,7 @@ export function SelectorFechaHora({
   horaSeleccionada,
   onFecha,
   onHora,
-}: SelectorFechaHoraProps) {
+}: PropsDeSelectorFechaHora) {
   const hoy = new Date()
   hoy.setHours(0, 0, 0, 0)
 

@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils"
 
-interface LogoEliProps {
+interface PropsDeLogoEli {
   className?: string
   tamaño?: "sm" | "md" | "lg" | "xl"
   /** En blanco, para ir sobre navy. */
@@ -16,7 +16,7 @@ const clasesPorTamaño = {
   xl: "text-6xl",
 }
 
-export function LogoEli({ className, tamaño = "md", invertido = false }: LogoEliProps) {
+export function LogoEli({ className, tamaño = "md", invertido = false }: PropsDeLogoEli) {
   return (
     <span
       // Geist, la sans del sistema. Antes pedía DM Sans, que nunca se cargó y

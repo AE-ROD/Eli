@@ -12,7 +12,7 @@ import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { cn } from "@/lib/utils"
 import { invitarAlEquipo } from "../_datos"
 
-interface ModalInvitarProps {
+interface PropsDeModalInvitar {
   abierto: boolean
   onCerrar: () => void
   onInvitado: () => void
@@ -38,7 +38,7 @@ const roles: readonly { id: "worker" | "admin"; nombre: string; descripcion: str
   },
 ]
 
-export function ModalInvitar({ abierto, onCerrar, onInvitado }: ModalInvitarProps) {
+export function ModalInvitar({ abierto, onCerrar, onInvitado }: PropsDeModalInvitar) {
   const [nombre, setNombre] = useState("")
   const [email, setEmail] = useState("")
   const [rol, setRol] = useState<"worker" | "admin">("worker")

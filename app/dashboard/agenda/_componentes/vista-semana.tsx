@@ -14,7 +14,7 @@ const ANCHO_DE_LAS_HORAS = 56 // px de la columna de las horas: la clase `w-14`
 
 const horasDelDia = horasEnPunto(HORA_INICIO, HORA_FIN)
 
-interface VistaSemanaProps {
+interface PropsDeVistaSemana {
   dias: Date[]
   citas: Cita[]
   onSeleccionar: (cita: Cita) => void
@@ -32,7 +32,7 @@ interface VistaSemanaProps {
  * del borde: así las esquinas del área que se desplaza siguen la curva de la
  * tarjeta y no asoman.
  */
-export function VistaSemana({ dias, citas, onSeleccionar }: VistaSemanaProps) {
+export function VistaSemana({ dias, citas, onSeleccionar }: PropsDeVistaSemana) {
   const caja = useRef<HTMLDivElement>(null)
   const indiceDeHoy = dias.findIndex(esHoy)
   const primerDia = dias[0]?.toDateString()

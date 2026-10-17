@@ -83,7 +83,7 @@ export function SinFilas({ icono, titulo, children }: { icono: typeof Receipt; t
   )
 }
 
-interface HistorialDeCobrosProps {
+interface PropsDeHistorialDeCobros {
   reporte: Reporte
   /** Mientras llega otra página o el resultado de otros filtros. */
   actualizando: boolean
@@ -110,7 +110,7 @@ export function HistorialDeCobros({
   onAnular,
   enfocarTitulo = false,
   onTituloEnfocado,
-}: HistorialDeCobrosProps) {
+}: PropsDeHistorialDeCobros) {
   const idDelTitulo = useId()
   const titulo = useRef<HTMLHeadingElement>(null)
   const delNegocio = reporte.alcance === "negocio"

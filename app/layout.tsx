@@ -39,7 +39,7 @@ export default function LayoutRaiz({
   return (
     // Las variables de las fuentes van en el <html> y no en el <body>: los
     // tokens de `app/globals.css` se declaran en :root y las leen desde ahí.
-    <html lang="es" className={`${geist.variable} ${fraunces.variable} bg-background`}>
+    <html lang="es" className={`${geist.variable} ${fraunces.variable} bg-crema`}>
       <body className="font-sans antialiased">
         <Proveedores>{children}</Proveedores>
         {process.env.NODE_ENV === 'production' && <Analytics />}

@@ -27,13 +27,13 @@ function InsigniaDelRol({ rol }: { rol: string }) {
   return <Insignia tono={rol === "admin" ? "turquesa" : "gris"}>{nombreDelRol(rol)}</Insignia>
 }
 
-interface ListaEquipoProps {
+interface PropsDeListaEquipo {
   miembros: MiembroDelEquipo[]
   invitaciones: InvitacionPendiente[]
   cargando: boolean
 }
 
-export function ListaEquipo({ miembros, invitaciones, cargando }: ListaEquipoProps) {
+export function ListaEquipo({ miembros, invitaciones, cargando }: PropsDeListaEquipo) {
   if (cargando) return <ListaCargando />
 
   if (miembros.length === 0 && invitaciones.length === 0) {

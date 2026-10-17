@@ -47,13 +47,11 @@ no se repiten:
 El fuerte es el fondo del ícono del módulo activo; el suave, fondos,
 insignias y el halo del foco. El texto sobre cualquiera de los dos es navy.
 
-Los nombres semánticos de shadcn que usa el panel apuntan a la paleta:
-`background` = crema · `foreground` = navy · `primary` = navy (con
-`primary-foreground` blanco) · `secondary`, `muted` y `accent` = superficie ·
-`muted-foreground` = texto-2 · `card` y `popover` = blanco · `border` = borde ·
-`input` = texto-2 · `ring` = navy · `destructive` = error. Por eso el panel
-cambió de aspecto sin tocar sus archivos. En código nuevo, mejor los nombres
-propios.
+Los nombres semánticos de shadcn (`background`, `foreground`, `primary`,
+`muted`, `border`, `ring`…) se retiraron de `app/globals.css`: lo poco que los
+usaba pasó a los nombres propios con el mismo valor (`crema`, `navy`, `borde`).
+Se usan sólo los nombres de esta paleta. De shadcn quedan los radios
+`rounded-sm`/`md`/`lg`/`xl` (8, 10, 12 y 16 px), que el panel todavía usa.
 
 No hay modo oscuro. Las clases `dark:` no se activan nunca.
 
@@ -194,8 +192,8 @@ Fuera de `comunes/`:
 
 De shadcn no queda ningún componente ni su configuración (`components/ui/` y
 `components.json` se retiraron): `Boton` y `CampoFormulario` reemplazan a
-sus primitivas. Sólo siguen sus nombres semánticos de color, que se cuentan
-arriba.
+sus primitivas. Tampoco quedan sus nombres semánticos de color; sólo sus
+radios, que se cuentan arriba.
 
 **Cómo se escriben las variantes.** Con class-variance-authority (`cva`) más
 `cn`: `cva` junta las clases de cada combinación (la variante y el tamaño del
