@@ -4,10 +4,10 @@ Cómo se ve Eli y de dónde sale cada decisión visual. Los tokens viven en
 `app/globals.css`; los componentes base, en `components/comunes/`. La landing
 y el panel usan los mismos.
 
-> **`mockup-landing.html` es la dirección anterior** (terracota, DM Serif
-> Display, grano de papel) y quedó **reemplazada** por este sistema. Se
-> conserva como referencia histórica, no como diseño vigente. Las seis
-> exploraciones que llevaron a ese mockup siguen en el historial:
+> **El mockup de la dirección anterior** (terracota, DM Serif Display, grano
+> de papel) quedó **reemplazado** por este sistema y ya no está en el repo.
+> Vive en el historial: `git show 811d178:docs/diseno/mockup-landing.html`.
+> Las seis exploraciones que llevaron a ese mockup, también:
 > `git show 06aed7a --stat`.
 
 La idea que ordena todo: **claridad y confianza con el dinero**. Exacto,
@@ -192,8 +192,10 @@ Fuera de `comunes/`:
 - `components/panel/`: las piezas del panel, que se cuentan más abajo, en
   "El panel".
 
-Las primitivas de shadcn (`components/ui/button` e `input`) se retiraron:
-las reemplazan `Boton` y `CampoFormulario`.
+De shadcn no queda ningún componente ni su configuración (`components/ui/` y
+`components.json` se retiraron): `Boton` y `CampoFormulario` reemplazan a
+sus primitivas. Sólo siguen sus nombres semánticos de color, que se cuentan
+arriba.
 
 **Cómo se escriben las variantes.** Con class-variance-authority (`cva`) más
 `cn`: `cva` junta las clases de cada combinación (la variante y el tamaño del

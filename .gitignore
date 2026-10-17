@@ -1,11 +1,4 @@
-# v0 sandbox internal files
-__v0_runtime_loader.js
-__v0_devtools.tsx
-__v0_jsx-dev-runtime.ts
-.snowflake/
-.v0-trash/
 .vercel/
-next.user-config.*
 
 # Environment variables
 .env
@@ -16,6 +9,6 @@ node_modules
 .next/
 .DS_Store
 tsconfig.tsbuildinfo
-/lib/generated/prisma
+next-env.d.ts
 skills-lock.json
 .superpowers/

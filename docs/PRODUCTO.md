@@ -238,6 +238,7 @@ Nada de esto bloquea el trabajo actual, pero cada punto se decide antes de const
 |---|---|
 | **Precio** | Monto de la suscripción, si los límites por plan se aplican en v1 y duración de la prueba gratuita (con o sin tarjeta). |
 | **Funciones nuevas** | El resto del listado de ideas por incorporar, con qué problema resuelve cada una y si es imprescindible para vender. |
+| **Dinero** | Ya decidido: `Decimal` como formato único (como en comisiones / F-015). Hoy conviven Float (`Service.price`, `Appointment.price`) y centavos Int (tablero); migrarlos es una tarea aparte que cambia el esquema y se ensaya primero en una base de desarrollo, nunca directo en producción. |
 | **Comisiones en el tablero** | Integrar la rama `comisiones` sobre las líneas de atención (sección 3.6). |
 | **Turnos y zona horaria** | Si cada negocio define sus propios turnos y su zona horaria, en vez de los turnos fijos y la hora del dispositivo (sección 8). |
 | **Corregir un cobro** | Hoy lo cobrado se anula, también días después desde Reportes. Falta decidir si el dueño puede reabrirlo y corregirlo, y con qué registro. |
