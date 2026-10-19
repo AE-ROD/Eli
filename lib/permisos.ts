@@ -68,6 +68,26 @@ export const puedeVerIngresosDelNegocio = gestionaElNegocio
 /** Dinero. El encargado gestiona la operación pero no define cuánto cobra cada uno. */
 export const puedeEditarComisiones = esDueño
 
+/** Plan y período de prueba de Eli: los paga el dueño, así que sólo él ve el aviso y los planes. */
+export const puedeGestionarSuscripcion = esDueño
+
+/**
+ * Elegir a qué profesional va una cita. Es la otra cara de `memberIdParaCita`:
+ * a quien no puede, el servidor lo asigna a sí mismo mande lo que mande.
+ */
+export const puedeAsignarCitasAOtros = gestionaElNegocio
+
+/**
+ * El inicio del panel muestra el día propio (F-014) en vez del tablero del
+ * negocio. Es para quien no ve toda la agenda: el profesional.
+ *
+ * Sin actor devuelve `false` y no `true`: así se comportaba la comparación a
+ * mano que reemplaza (`role === "worker"`). No abre datos: el tablero del
+ * negocio se llena desde `/api/dashboard/stats`, que sin actor responde 401.
+ */
+export const veElPanelDeSuDia = (actor: Actor | null): boolean =>
+  !!actor && !puedeVerTodaLaAgenda(actor)
+
 /**
  * A quién se asigna una cita. El profesional no elige: termina siempre
  * asignado a sí mismo, mande lo que mande. Dueño y encargado gestionan el

@@ -48,13 +48,14 @@ interface PropsDeBarraLateral {
     imagenUrl?: string
     negocio: string
   }
-  esOwner?: boolean
+  /** Sólo el dueño ve el aviso de prueba y los planes. Resuelto en el servidor. */
+  puedeGestionarSuscripcion?: boolean
   diasTrialRestantes?: number
   /** Dueño y encargado gestionan el equipo; el profesional no ve el enlace. Resuelto en el servidor. */
   puedeVerEquipo?: boolean
 }
 
-export function BarraLateral({ usuario, esOwner, diasTrialRestantes, puedeVerEquipo }: PropsDeBarraLateral) {
+export function BarraLateral({ usuario, puedeGestionarSuscripcion, diasTrialRestantes, puedeVerEquipo }: PropsDeBarraLateral) {
   const { abrirPrecios } = usePrecios()
   const pathname = usePathname()
   const { cajonAbierto, cerrarCajon, cerrarCajonParaIrA, colapsada, alternarColapso, enfocarBotonMenu } =
@@ -121,7 +122,7 @@ export function BarraLateral({ usuario, esOwner, diasTrialRestantes, puedeVerEqu
     }
   }, [cajonAbierto, cerrarCajon, enfocarBotonMenu])
 
-  const hayPrueba = esOwner && diasTrialRestantes !== undefined && diasTrialRestantes <= 3
+  const hayPrueba = puedeGestionarSuscripcion && diasTrialRestantes !== undefined && diasTrialRestantes <= 3
   const textoDeLaPrueba =
     diasTrialRestantes !== undefined && diasTrialRestantes > 0
       ? `${diasTrialRestantes} día${diasTrialRestantes !== 1 ? "s" : ""} de prueba`
