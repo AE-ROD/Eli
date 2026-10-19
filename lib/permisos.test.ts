@@ -196,6 +196,15 @@ describe("a quién se asigna una cita", () => {
   it("un profesional sin memberId deja la cita sin asignar, no en otro", () => {
     expect(memberIdParaCita(actor("worker", null), "colega")).toBeNull()
   })
+
+  it("un rol desconocido termina asignado a sí mismo", () => {
+    // El tipo no lo permite, pero en runtime un token viejo podría traerlo:
+    // quien no puede asignar a otros no elige, aunque no sea "worker".
+    const desconocido = { rol: "gerente", businessId: NEGOCIO, memberId: "yo" } as unknown as Actor
+
+    expect(memberIdParaCita(desconocido, "colega")).toBe("yo")
+    expect(memberIdParaCita(desconocido, null)).toBe("yo")
+  })
 })
 
 describe("sobre un miembro concreto", () => {
