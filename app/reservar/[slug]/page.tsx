@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 import { CalendarX2 } from "lucide-react"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Tarjeta } from "@/components/comunes/tarjeta"
+import { horarioSemanalDeAtencion } from "@/lib/horario-de-atencion"
 import { prisma } from "@/lib/prisma"
 import { EncabezadoDeReserva } from "./_componentes/encabezado-de-reserva"
 import { FormularioReserva } from "./_componentes/formulario-reserva"
@@ -45,10 +46,12 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
         select: { id: true, name: true, description: true, duration: true, price: true },
         orderBy: { createdAt: "asc" },
       },
+      // Generales y de miembros: `horarioSemanalDeAtencion` decide cuál manda
+      // cada día, con la misma regla que la disponibilidad y `confirmar`.
       workSchedules: {
         where: { active: true },
-        select: { dayOfWeek: true, startTime: true, endTime: true },
-        orderBy: { dayOfWeek: "asc" },
+        select: { dayOfWeek: true, memberId: true, startTime: true, endTime: true },
+        orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
       },
     },
   })
@@ -75,7 +78,7 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
         slug={negocio.slug}
         nombreNegocio={negocio.name}
         servicios={negocio.services}
-        horarios={negocio.workSchedules}
+        horarios={horarioSemanalDeAtencion(negocio.workSchedules)}
       />
     </MarcoDeReserva>
   )

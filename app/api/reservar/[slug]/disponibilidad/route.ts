@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { horaAMinutos, minutosAHora } from "@/lib/horario-dia"
+import { franjasDeAtencion } from "@/lib/horario-de-atencion"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 
 const FALTA_LA_FECHA = "Falta la fecha (AAAA-MM-DD)"
@@ -92,12 +93,17 @@ export async function GET(
   const fechaObj = new Date(fecha)
   const diaSemana = fechaObj.getDay()
 
-  const horario = await prisma.workSchedule.findFirst({
+  // Todas las filas activas del día, generales y de miembros: cuál manda lo
+  // decide `franjasDeAtencion` (lib/horario-de-atencion.ts), la misma regla
+  // que usan la página pública y `confirmar`.
+  const filasDelDia = await prisma.workSchedule.findMany({
     where: { businessId: negocio.id, dayOfWeek: diaSemana, active: true },
-    select: { startTime: true, endTime: true },
+    select: { memberId: true, startTime: true, endTime: true },
+    orderBy: { startTime: "asc" },
   })
+  const franjas = franjasDeAtencion(filasDelDia)
 
-  if (!horario) {
+  if (franjas.length === 0) {
     return NextResponse.json({ slots: [], mensaje: "No hay atención ese día" })
   }
 
@@ -119,7 +125,8 @@ export async function GET(
   const ahora = new Date()
   const esHoy = fechaObj.toDateString() === ahora.toDateString()
 
-  const horarios = horariosLibres(horario.startTime, horario.endTime, servicio.duration, citasDelDia)
+  const horarios = franjas
+    .flatMap((franja) => horariosLibres(franja.startTime, franja.endTime, servicio.duration, citasDelDia))
     .filter((slot) => {
       if (!esHoy) return true
       const slotMin = horaAMinutos(slot)
