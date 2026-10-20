@@ -288,4 +288,13 @@ describe("POST /api/citas — largos, tipos y horario", () => {
     expect(res.status).toBe(201)
     expect(prismaMock.appointment.create).toHaveBeenCalled()
   })
+
+  it("la cita del panel queda con el origen por defecto (\"panel\"), aunque el cuerpo pida \"reserva-publica\"", async () => {
+    const res = await crear({ ...citaValida, source: "reserva-publica" })
+
+    expect(res.status).toBe(201)
+    const { data } = prismaMock.appointment.create.mock.calls[0][0]
+    // Sin `source`, Postgres pone el default "panel": los topes de la reserva pública no la cuentan.
+    expect(data).not.toHaveProperty("source")
+  })
 })

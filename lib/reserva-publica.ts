@@ -52,11 +52,10 @@ export function yaPasoLaHora(fecha: string, hora: string, ahora: Date, zona: str
 // por IP (`lib/rate-limit.ts`) se esquiva rotando IPs. Estos topes cuentan en
 // la base, por negocio.
 //
-// Qué es una reserva pública: la cita no guarda su origen (agregar la columna
-// pide una migración). Hoy sólo `confirmar` crea citas con `serviceId`; el
-// panel (`app/api/citas`) las crea sin servicio. Por eso "reserva pública" es
-// "cita con `serviceId`" (`WHERE_RESERVA_PUBLICA`). Si el panel empieza a
-// guardar el servicio, esta regla deja de distinguirlas: hace falta la columna.
+// Qué es una reserva pública: una cita con `source: "reserva-publica"`, que
+// sólo `confirmar` escribe; el panel (`app/api/citas`) deja el default
+// "panel". Antes se la reconocía por tener `serviceId`, y eso se rompía si el
+// panel guardaba el servicio o si se borraba el servicio (queda en null).
 
 /**
  * De dónde viene una cita (`Appointment.source`): la crea el equipo en el
@@ -81,8 +80,11 @@ export const MENSAJE_TOPE_POR_CONTACTO = `Ya tienes ${MAX_RESERVAS_FUTURAS_POR_C
 export const MENSAJE_TOPE_POR_NEGOCIO =
   "Este negocio recibió demasiadas reservas en línea en las últimas horas. Intenta más tarde o contáctalo directamente."
 
+/** El origen con que `confirmar` crea las citas. */
+export const ORIGEN_RESERVA_PUBLICA: OrigenDeCita = "reserva-publica"
+
 /** El filtro de cita que identifica una reserva pública (ver arriba). */
-export const WHERE_RESERVA_PUBLICA = { serviceId: { not: null } }
+export const WHERE_RESERVA_PUBLICA = { source: ORIGEN_RESERVA_PUBLICA }
 
 /** El email para comparar: sin espacios alrededor y en minúsculas. Vacío → `null`. */
 export function normalizarEmail(email: string | null | undefined): string | null {
