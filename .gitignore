@@ -1,8 +1,20 @@
 .vercel/
 
-# Environment variables
-.env
-.env*.local
+# Variables de entorno: todas, salvo la plantilla sin secretos.
+.env*
+!.env.example
+
+# Llaves, certificados y volcados de base: nunca al repo.
+*.pem
+*.key
+*.p12
+*.dump
+*.sql.gz
+*.bak
+
+# Evidencias y capturas de pruebas o auditorías: pueden traer datos reales.
+evidencias/
+capturas/
 
 # Common ignores
 node_modules
