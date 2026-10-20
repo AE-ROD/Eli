@@ -305,3 +305,28 @@ describe("POST /api/equipo — largos", () => {
     expect(prismaMock.workerInvitation.create.mock.calls[0][0].data.email).toBe("ana.perez@x.com")
   })
 })
+
+describe("POST /api/equipo — errores internos", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it("un error de Prisma responde 500 y en el log sólo quedan su nombre y su código, sin datos", async () => {
+    const { POST } = await import("./route")
+    const log = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.user.findFirst.mockRejectedValueOnce(
+      Object.assign(new Error("Invalid `prisma.user.findFirst()` where email = ana@x.com"), {
+        name: "PrismaClientKnownRequestError",
+        code: "P2010",
+        meta: { email: "ana@x.com" },
+      })
+    )
+
+    const res = await POST(pedidoFalso({ nombre: "Ana", email: "ana@x.com", rol: "worker" }))
+
+    expect(res.status).toBe(500)
+    expect(log).toHaveBeenCalledWith(expect.any(String), { name: "PrismaClientKnownRequestError", code: "P2010" })
+    expect(JSON.stringify(log.mock.calls)).not.toContain("ana@x.com")
+    log.mockRestore()
+  })
+})

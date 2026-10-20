@@ -352,4 +352,25 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
       data: { acceptedAt: expect.any(Date) },
     })
   })
+
+  it("un error de Prisma responde 500 y en el log sólo quedan su nombre y su código, sin datos", async () => {
+    const { POST } = await import("./route")
+    const log = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    prismaMock.workerInvitation.findUnique.mockResolvedValueOnce(invitacionBase)
+    prismaMock.user.findFirst.mockRejectedValueOnce(
+      Object.assign(new Error(`Invalid \`prisma.user.findFirst()\` where email = ${invitacionBase.email}`), {
+        name: "PrismaClientKnownRequestError",
+        code: "P2010",
+        meta: { email: invitacionBase.email },
+      })
+    )
+
+    const res = await POST(pedidoFalso({ contrasena: "unaClaveSegura1" }), { params: params() })
+
+    expect(res.status).toBe(500)
+    expect(log).toHaveBeenCalledWith(expect.any(String), { name: "PrismaClientKnownRequestError", code: "P2010" })
+    expect(JSON.stringify(log.mock.calls)).not.toContain(invitacionBase.email)
+    log.mockRestore()
+  })
 })

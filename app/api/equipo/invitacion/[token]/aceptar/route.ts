@@ -8,6 +8,7 @@ import bcrypt from "bcryptjs"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { hashDeToken } from "@/lib/tokens"
 import { contrasenaNuevaSchema, normalizarEmail } from "@/lib/validaciones"
+import { registrarError } from "@/lib/registro-de-errores"
 
 // `contrasena`, igual que el registro y el restablecimiento de contraseña.
 const schema = z.object({
@@ -155,7 +156,7 @@ export async function POST(
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
     }
-    console.error(error)
+    registrarError("aceptando la invitación", error)
     return NextResponse.json({ error: "Error interno" }, { status: 500 })
   }
 }
