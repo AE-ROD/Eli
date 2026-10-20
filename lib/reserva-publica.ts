@@ -6,7 +6,7 @@
  */
 
 import { horaAMinutos } from "@/lib/horario-dia"
-import { diasEntre, fechaYMinutosEn } from "@/lib/zona-horaria"
+import { diaDeLaSemana, diasEntre, esFechaCalendario, fechaYMinutosEn } from "@/lib/zona-horaria"
 
 /**
  * Hasta cuántos días después de hoy (en el reloj del negocio) se puede
@@ -32,6 +32,20 @@ export function fechaNoReservable(fecha: string, ahora: Date, zona: string): Fec
   if (dias < 0) return "pasada"
   if (dias > DIAS_MAXIMOS_DE_ANTICIPACION) return "muy-lejana"
   return null
+}
+
+/**
+ * Si el calendario de la página pública ofrece el día `fecha`: que el negocio
+ * atienda ese día de la semana (`diasConAtencion`, 0 domingo a 6 sábado) y
+ * que no sea ni pasado ni más allá de `DIAS_MAXIMOS_DE_ANTICIPACION`, con
+ * "hoy" en el reloj del negocio y no en el del navegador. Es la regla de
+ * `fechaNoReservable`, la misma con la que `confirmar` rechaza: el calendario
+ * no ofrece un día que después se rechazaría. No lanza: una fecha inválida
+ * no se ofrece.
+ */
+export function esDiaReservable(fecha: string, diasConAtencion: readonly number[], ahora: Date, zona: string): boolean {
+  if (!esFechaCalendario(fecha)) return false
+  return fechaNoReservable(fecha, ahora, zona) === null && diasConAtencion.includes(diaDeLaSemana(fecha))
 }
 
 /**
