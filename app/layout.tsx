@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { connection } from 'next/server'
 import { Fraunces, Geist } from 'next/font/google'
-import { Analytics } from '@vercel/analytics/next'
+import { Analitica } from '@/components/analitica'
 import { Proveedores } from '@/components/proveedores'
 import './globals.css'
 
@@ -49,7 +49,7 @@ export default async function LayoutRaiz({
     <html lang="es" className={`${geist.variable} ${fraunces.variable} bg-crema`}>
       <body className="font-sans antialiased">
         <Proveedores>{children}</Proveedores>
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+        {process.env.NODE_ENV === 'production' && <Analitica />}
       </body>
     </html>
   )
