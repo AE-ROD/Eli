@@ -737,3 +737,32 @@ describe("POST /api/reservar/[slug]/confirmar: con qué cliente queda la reserva
     expect(base.buscar("customer", { id: clienteId })[0]).toMatchObject({ businessId: NEGOCIO })
   })
 })
+
+/**
+ * Datos inválidos en la reserva pública: un `error` legible y nada más.
+ * Antes iban los issues crudos de zod en `detalles` (M10/F-06).
+ */
+describe("POST /api/reservar/[slug]/confirmar: datos inválidos", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    relojEn("2026-10-01T12:00:00.000Z")
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 9 })
+    escenario([franja({ dayOfWeek: 4, startTime: "09:00", endTime: "13:00" })])
+  })
+
+  it.each([
+    ["un nombre de más de 100 caracteres", { nombre: "a".repeat(101) }, /nombre/i],
+    ["comentarios de más de 1000 caracteres", { comentarios: "a".repeat(1001) }, /comentarios/i],
+    ["un email inválido", { email: "no-es-un-email" }, /email|correo/i],
+  ])("%s: 400 con un error legible, sin detalles crudos ni crear nada", async (_caso, cambio, mensaje) => {
+    const { POST } = await import("./route")
+
+    const respuesta = await POST(pedidoFalso({ ...reserva("10:00", "2026-10-15"), ...cambio }), conSlug)
+    const cuerpo = await respuesta.json()
+
+    expect(respuesta.status).toBe(400)
+    expect(Object.keys(cuerpo)).toEqual(["error"])
+    expect(cuerpo.error).toMatch(mensaje)
+    expect(citasCreadas()).toHaveLength(0)
+  })
+})
