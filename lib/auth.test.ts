@@ -205,6 +205,52 @@ async function authorize(credenciales: Record<string, string>) {
   return (proveedor.options?.authorize ?? proveedor.authorize)(credenciales)
 }
 
+describe("entrar con Google (M1)", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  async function entrarConGoogle(profile: Record<string, unknown>) {
+    const { signIn } = await callbacks()
+    return signIn!({
+      user: { id: "g-1", name: "Carla", email: "carla@x.com" },
+      account: cuentaGoogle,
+      profile: { email: "carla@x.com", ...profile },
+    } as unknown as Parameters<NonNullable<typeof signIn>>[0])
+  }
+
+  it("rechaza un email que Google no verificó, sin buscar ni crear la cuenta", async () => {
+    expect(await entrarConGoogle({ email_verified: false })).toBe(false)
+    expect(await entrarConGoogle({})).toBe(false)
+    expect(prismaMock.user.findUnique).not.toHaveBeenCalled()
+    expect(prismaMock.user.create).not.toHaveBeenCalled()
+  })
+
+  it("no vincula una cuenta con contraseña: manda a entrar con correo y contraseña", async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce({ id: "usuario-1", email: "carla@x.com", password: "hash-bcrypt" })
+
+    const resultado = await entrarConGoogle({ email_verified: true })
+
+    expect(resultado).toBe("/iniciar-sesion?error=CuentaConContrasena")
+    expect(prismaMock.user.create).not.toHaveBeenCalled()
+  })
+
+  it("una cuenta creada con Google (sin contraseña) sigue entrando igual", async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce({ id: "usuario-1", email: "carla@x.com", password: "" })
+
+    expect(await entrarConGoogle({ email_verified: true })).toBe(true)
+    expect(prismaMock.user.create).not.toHaveBeenCalled()
+  })
+
+  it("un email verificado sin cuenta crea la cuenta sin contraseña", async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce(null)
+    prismaMock.user.create.mockResolvedValueOnce({ id: "nuevo" })
+
+    expect(await entrarConGoogle({ email_verified: true })).toBe(true)
+    expect(prismaMock.user.create).toHaveBeenCalledWith({
+      data: { name: "Carla", email: "carla@x.com", password: "" },
+    })
+  })
+})
+
 describe("emails de cuenta normalizados en el login (B4)", () => {
   beforeEach(() => vi.clearAllMocks())
 

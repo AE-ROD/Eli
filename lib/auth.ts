@@ -55,6 +55,9 @@ function perfilDe(usuario: UsuarioConNegocio) {
  */
 export const REVALIDAR_CADA_MS = 5 * 60 * 1000
 
+/** El código que la pantalla de iniciar sesión traduce (`errores-de-acceso.ts`). */
+const ERROR_CUENTA_CON_CONTRASENA = "CuentaConContrasena"
+
 /** Siete días: lo que dura una sesión sin volver a entrar. */
 const DURACION_DE_SESION_S = 7 * 24 * 60 * 60
 
@@ -125,13 +128,23 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    // Crea el usuario la primera vez que entra con Google.
-    async signIn({ user, account }) {
+    // Crea el usuario la primera vez que entra con Google (M1, PRODUCTO.md, sección 5).
+    async signIn({ user, account, profile }) {
       if (account?.provider !== "google") return true
+
+      // Sin email verificado, Google no prueba que quien entra sea dueño de la
+      // casilla: con eso bastaba para tomar la cuenta de otro.
+      if ((profile as { email_verified?: unknown } | undefined)?.email_verified !== true) return false
 
       try {
         const email = normalizarEmail(user.email!)
         const existente = await prisma.user.findUnique({ where: { email } })
+
+        // Una cuenta con contraseña no se vincula a Google: quien controle ese
+        // Gmail no pasa a ser dueño de una cuenta que se creó con correo y
+        // contraseña. Se le dice cómo entrar en vez de un error genérico.
+        if (existente?.password) return `/iniciar-sesion?error=${ERROR_CUENTA_CON_CONTRASENA}`
+
         if (!existente) {
           // Sin contraseña: este usuario sólo puede entrar por Google.
           await prisma.user.create({
