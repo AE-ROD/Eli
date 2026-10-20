@@ -8,6 +8,7 @@ import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { enviarInvitacionTrabajador } from "@/lib/email"
 import { actorDeSesion, puedeGestionarEquipo } from "@/lib/permisos"
 import { generarToken } from "@/lib/tokens"
+import { normalizarEmail } from "@/lib/validaciones"
 
 // GET /api/equipo — lista de miembros del negocio
 export async function GET() {
@@ -50,7 +51,8 @@ export async function GET() {
 
 const invitarSchema = z.object({
   nombre: campoNombre(),
-  email: campoEmail(),
+  // Normalizado (B4): es el email con el que se va a crear la cuenta.
+  email: campoEmail().transform(normalizarEmail),
   rol: z.enum(["worker", "admin"]).default("worker"),
 })
 

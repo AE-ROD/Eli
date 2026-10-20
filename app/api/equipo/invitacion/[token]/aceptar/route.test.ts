@@ -207,6 +207,19 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     })
   })
 
+  it("la cuenta nueva se crea con el email normalizado, aunque la invitación sea de antes de normalizar", async () => {
+    const { POST } = await import("./route")
+
+    prismaMock.workerInvitation.findUnique.mockResolvedValueOnce({ ...invitacionBase, email: " Carla@Uno.TEST " })
+    prismaMock.user.findFirst.mockResolvedValueOnce(null)
+    prismaMock.user.create.mockResolvedValueOnce({ id: "user-nuevo", email: "carla@uno.test" })
+
+    const res = await POST(pedidoFalso({ contrasena: "unaClaveSegura1" }), { params: params() })
+
+    expect(res.status).toBe(200)
+    expect(prismaMock.user.create.mock.calls[0][0].data.email).toBe("carla@uno.test")
+  })
+
   it("la contraseña viaja como `contrasena`, igual que en el registro: con la clave vieja no se crea nada", async () => {
     const { POST } = await import("./route")
 

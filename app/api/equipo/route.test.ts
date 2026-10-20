@@ -289,4 +289,19 @@ describe("POST /api/equipo — largos", () => {
     expect(res.status).toBe(201)
     expect(prismaMock.workerInvitation.create.mock.calls[0][0].data).toMatchObject({ name: "Ana", email: "ana@x.com" })
   })
+
+  it("guarda el email de la invitación en minúsculas: es el de la cuenta que se va a crear", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.user.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.create.mockResolvedValueOnce({ id: "inv-10" })
+    prismaMock.business.findUnique.mockResolvedValueOnce({ name: "Mi negocio" })
+
+    const res = await POST(pedidoFalso({ nombre: "Ana", email: " Ana.Perez@X.COM " }))
+
+    expect(res.status).toBe(201)
+    expect(prismaMock.workerInvitation.create.mock.calls[0][0].data.email).toBe("ana.perez@x.com")
+  })
 })

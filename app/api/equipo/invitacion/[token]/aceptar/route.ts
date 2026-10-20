@@ -7,6 +7,7 @@ import { z } from "zod"
 import bcrypt from "bcryptjs"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { hashDeToken } from "@/lib/tokens"
+import { normalizarEmail } from "@/lib/validaciones"
 
 // `contrasena`, igual que el registro y el restablecimiento de contraseña.
 const schema = z.object({
@@ -69,7 +70,7 @@ export async function POST(
     // buscar exacto acá y comparar en minúsculas allá dejaba que una invitación
     // a `ana@x.com` no viera la cuenta `Ana@x.com` y creara una segunda.
     const usuarioExistente = await prisma.user.findFirst({
-      where: { email: { equals: invitacion.email, mode: "insensitive" } },
+      where: { email: { equals: normalizarEmail(invitacion.email), mode: "insensitive" } },
     })
 
     if (usuarioExistente) {
@@ -78,7 +79,7 @@ export async function POST(
 
       // Contra el correo de la cuenta encontrada, no el de la invitación: es el
       // que identifica a la persona que tiene que demostrar ser dueña de él.
-      if (!emailSesion || emailSesion.toLowerCase() !== usuarioExistente.email.toLowerCase()) {
+      if (!emailSesion || normalizarEmail(emailSesion) !== normalizarEmail(usuarioExistente.email)) {
         return NextResponse.json(
           {
             error: "Iniciá sesión con ese correo para aceptar la invitación",
@@ -122,7 +123,8 @@ export async function POST(
       const usuario = await tx.user.create({
         data: {
           name: invitacion.name,
-          email: invitacion.email,
+          // Normalizado (B4), también si la invitación es de antes de normalizar.
+          email: normalizarEmail(invitacion.email),
           password: hashDeContrasena,
         },
       })

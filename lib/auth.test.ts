@@ -193,3 +193,60 @@ describe("sesiones revocables (lib/auth.ts, callback jwt)", () => {
     expect(prismaMock.user.findUnique).not.toHaveBeenCalled()
   })
 })
+
+const cuentaGoogle = { provider: "google", type: "oauth", providerAccountId: "g-1" }
+
+async function authorize(credenciales: Record<string, string>) {
+  const { authOptions } = await import("./auth")
+  const proveedor = authOptions.providers.find((p) => p.id === "credentials") as unknown as {
+    options?: { authorize: (c: Record<string, string>) => Promise<unknown> }
+    authorize: (c: Record<string, string>) => Promise<unknown>
+  }
+  return (proveedor.options?.authorize ?? proveedor.authorize)(credenciales)
+}
+
+describe("emails de cuenta normalizados en el login (B4)", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it("credenciales: busca la cuenta por el email sin espacios y en minúsculas", async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce(null)
+
+    await authorize({ email: "  Carla@X.COM ", password: "loquesea1" })
+
+    expect(prismaMock.user.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { email: "carla@x.com" } })
+    )
+  })
+
+  it("Google: busca y crea la cuenta con el email normalizado", async () => {
+    const { signIn } = await callbacks()
+    prismaMock.user.findUnique.mockResolvedValueOnce(null)
+    prismaMock.user.create.mockResolvedValueOnce({ id: "nuevo" })
+
+    const resultado = await signIn!({
+      user: { id: "g-1", name: "Carla", email: "Carla@X.com" },
+      account: cuentaGoogle,
+      profile: { email: "Carla@X.com", email_verified: true },
+    } as unknown as Parameters<NonNullable<typeof signIn>>[0])
+
+    expect(resultado).toBe(true)
+    expect(prismaMock.user.findUnique).toHaveBeenCalledWith({ where: { email: "carla@x.com" } })
+    expect(prismaMock.user.create.mock.calls[0][0].data.email).toBe("carla@x.com")
+  })
+
+  it("Google: el token se arma buscando por el email normalizado", async () => {
+    const { jwt } = await callbacks()
+    prismaMock.user.findUnique.mockResolvedValueOnce(null)
+
+    await jwt!({
+      token: { email: "Carla@X.com" },
+      user: { id: "g-1", email: "Carla@X.com" },
+      account: cuentaGoogle,
+      trigger: "signIn",
+    } as unknown as Parameters<NonNullable<typeof jwt>>[0])
+
+    expect(prismaMock.user.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { email: "carla@x.com" } })
+    )
+  })
+})

@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 import { prisma } from "@/lib/prisma"
 import type { Rol } from "@/lib/permisos"
+import { normalizarEmail } from "@/lib/validaciones"
 import bcrypt from "bcryptjs"
 
 /** El usuario con lo necesario para saber en qué negocio entra y con qué rol. */
@@ -108,7 +109,7 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
 
-        const usuario = await buscarUsuario({ email: credentials.email })
+        const usuario = await buscarUsuario({ email: normalizarEmail(credentials.email) })
 
         // Quien se registró con Google no tiene contraseña que comparar.
         if (!usuario?.password) return null
@@ -129,7 +130,7 @@ export const authOptions: NextAuthOptions = {
       if (account?.provider !== "google") return true
 
       try {
-        const email = user.email!
+        const email = normalizarEmail(user.email!)
         const existente = await prisma.user.findUnique({ where: { email } })
         if (!existente) {
           // Sin contraseña: este usuario sólo puede entrar por Google.
@@ -149,7 +150,7 @@ export const authOptions: NextAuthOptions = {
       // Al entrar con Google el token se arma desde la base: es la única
       // fuente confiable del rol y el negocio.
       if (account?.provider === "google") {
-        const usuario = await buscarUsuario({ email: token.email! })
+        const usuario = await buscarUsuario({ email: normalizarEmail(token.email!) })
         if (usuario) Object.assign(token, { id: usuario.id }, perfilDe(usuario))
         return Object.assign(token, { emitidoEn: ahora, revalidadoEn: ahora })
       }
