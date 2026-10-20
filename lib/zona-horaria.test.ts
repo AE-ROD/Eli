@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import {
   ZONA_POR_DEFECTO,
   diaDeLaSemana,
+  diasEntre,
   esFechaCalendario,
   esHoraDelDia,
   esZonaValida,
@@ -90,6 +91,25 @@ describe("sumarDias", () => {
     expect(sumarDias("2026-10-31", 1)).toBe("2026-11-01")
     expect(sumarDias("2026-12-31", 1)).toBe("2027-01-01")
     expect(sumarDias("2026-03-01", -1)).toBe("2026-02-28")
+  })
+})
+
+describe("diasEntre", () => {
+  it("cuenta días calendario, cruzando meses, años y cambios de hora", () => {
+    expect(diasEntre("2026-10-19", "2026-10-19")).toBe(0)
+    expect(diasEntre("2026-10-19", "2026-10-20")).toBe(1)
+    expect(diasEntre("2026-10-20", "2026-10-19")).toBe(-1)
+    expect(diasEntre("2026-10-01", "2026-12-30")).toBe(90)
+    expect(diasEntre("2026-10-19", "2027-01-17")).toBe(90)
+    // Santiago cambia de hora el 4/4 y el 5/9: no importa, es calendario.
+    expect(diasEntre("2026-04-01", "2026-04-10")).toBe(9)
+    expect(diasEntre("2026-09-01", "2026-09-10")).toBe(9)
+    expect(diasEntre("2028-02-28", "2028-03-01")).toBe(2)
+  })
+
+  it("lanza RangeError con una fecha no aceptable", () => {
+    expect(() => diasEntre("2026-02-30", "2026-03-01")).toThrow(RangeError)
+    expect(() => diasEntre("2026-03-01", "9999-01-01")).toThrow(RangeError)
   })
 })
 

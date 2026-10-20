@@ -6,6 +6,7 @@ import { reservaSchema } from "@/lib/validaciones"
 import { horaAMinutos } from "@/lib/horario-dia"
 import { cabeEnAtencion, franjasDeAtencion } from "@/lib/horario-de-atencion"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
+import { MENSAJE_FECHA_MUY_LEJANA, MENSAJE_HORA_PASADA, fechaNoReservable, yaPasoLaHora } from "@/lib/reserva-publica"
 import { diaDeLaSemana, existeLaHora, instanteEn, zonaDelNegocio } from "@/lib/zona-horaria"
 
 export async function POST(
@@ -53,6 +54,17 @@ export async function POST(
         { error: "Ese horario está fuera de la atención del negocio. Elige otra hora." },
         { status: 409 }
       )
+    }
+
+    // Ni horas que ya pasaron ni fechas a más de `DIAS_MAXIMOS_DE_ANTICIPACION`
+    // días, en el reloj del negocio: la misma regla con la que `disponibilidad`
+    // ofrece las horas (`lib/reserva-publica.ts`).
+    const ahora = new Date()
+    if (yaPasoLaHora(datos.fecha, datos.hora, ahora, zona)) {
+      return NextResponse.json({ error: MENSAJE_HORA_PASADA }, { status: 409 })
+    }
+    if (fechaNoReservable(datos.fecha, ahora, zona) === "muy-lejana") {
+      return NextResponse.json({ error: MENSAJE_FECHA_MUY_LEJANA }, { status: 409 })
     }
 
     const startTime = instanteEn(datos.fecha, datos.hora, zona)

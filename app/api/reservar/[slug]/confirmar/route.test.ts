@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import type { NextRequest } from "next/server"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
@@ -61,9 +61,25 @@ async function confirmar(hora: string, fecha = FECHA) {
 
 const citasCreadas = () => base.buscar("appointment")
 
+/**
+ * El reloj del servidor, fijo: confirmar rechaza horas que ya pasaron y
+ * fechas a más de 90 días, así que cada grupo de tests fija un "ahora" cerca
+ * de las fechas que usa. Sólo se finge `Date`: las promesas siguen reales.
+ */
+function relojEn(instante: string) {
+  vi.useFakeTimers({ toFake: ["Date"] })
+  vi.setSystemTime(new Date(instante))
+}
+
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 describe("POST /api/reservar/[slug]/confirmar: la hora tiene que caer en el horario de atención", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Seis días antes del lunes 7 de enero de 2030.
+    relojEn("2030-01-01T12:00:00.000Z")
     mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 9 })
   })
 
@@ -163,6 +179,8 @@ describe("POST /api/reservar/[slug]/confirmar: el día y la hora del negocio", (
 
   beforeEach(() => {
     vi.clearAllMocks()
+    // 1 de octubre de 2026: el 19 está 18 días después.
+    relojEn("2026-10-01T12:00:00.000Z")
     mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 9 })
   })
 
@@ -199,6 +217,7 @@ describe("POST /api/reservar/[slug]/confirmar: el día y la hora del negocio", (
 
   it("en invierno Santiago está en UTC-4: las 10:00 del 13/7/2026 (lunes) son las 14:00 UTC", async () => {
     escenario([franja({ dayOfWeek: LUNES, startTime: "09:00", endTime: "13:00" })])
+    relojEn("2026-07-01T12:00:00.000Z")
 
     expect((await confirmar("10:00", "2026-07-13")).status).toBe(201)
     expect((citasCreadas()[0].startTime as Date).toISOString()).toBe("2026-07-13T14:00:00.000Z")
@@ -248,6 +267,8 @@ describe("POST /api/reservar/[slug]/confirmar: fechas fuera del rango de años",
 
   beforeEach(() => {
     vi.clearAllMocks()
+    // Un mes antes del último día aceptado: así 9998-12-31 cae dentro de los 90 días.
+    relojEn("9998-12-01T12:00:00.000Z")
     mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 9 })
     escenario(TODOS_LOS_DIAS.map((dayOfWeek) => franja({ dayOfWeek, startTime: "09:00", endTime: "13:00" })))
   })
@@ -272,6 +293,7 @@ describe("POST /api/reservar/[slug]/confirmar: fechas fuera del rango de años",
 describe("POST /api/reservar/[slug]/confirmar: el día del salto del horario de verano", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    relojEn("2026-09-01T12:00:00.000Z")
     mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 9 })
     // Domingo 2026-09-06 en Santiago: de 00:00 a 00:59 el reloj no pasa.
     escenario([franja({ dayOfWeek: 0, startTime: "00:00", endTime: "02:00" })])
@@ -288,5 +310,85 @@ describe("POST /api/reservar/[slug]/confirmar: el día del salto del horario de 
   it("01:00 sí existe: crea la cita a las 04:00 UTC (UTC-3 desde el salto)", async () => {
     expect((await confirmar("01:00", "2026-09-06")).status).toBe(201)
     expect((citasCreadas()[0].startTime as Date).toISOString()).toBe("2026-09-06T04:00:00.000Z")
+  })
+})
+
+/**
+ * Sólo se reserva desde ahora hasta 90 días después, en el reloj del negocio
+ * (A3). Antes se aceptaba cualquier fecha del año 1900 al 9998: se podían
+ * cargar citas en el pasado o llenar la agenda de años futuros.
+ * Esperados a mano: el 19/10/2026 a las 13:30 UTC son las 10:30 en Santiago
+ * (UTC-3); del 1/10/2026 al 30/12/2026 hay 90 días (30 + 30 + 30).
+ */
+describe("POST /api/reservar/[slug]/confirmar: ni en el pasado ni a más de 90 días", () => {
+  const TODOS_LOS_DIAS = [0, 1, 2, 3, 4, 5, 6]
+  const todaLaSemana = () => escenario(TODOS_LOS_DIAS.map((dayOfWeek) => franja({ dayOfWeek, startTime: "09:00", endTime: "13:00" })))
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 9 })
+    todaLaSemana()
+  })
+
+  describe("hoy, lunes 19/10/2026 a las 10:30 del negocio", () => {
+    beforeEach(() => relojEn("2026-10-19T13:30:00.000Z"))
+
+    it.each([
+      ["una hora de hoy que ya pasó", "10:00", "2026-10-19"],
+      ["la hora en curso", "10:30", "2026-10-19"],
+      ["ayer", "11:00", "2026-10-18"],
+      ["hace años", "11:00", "2020-01-06"],
+    ])("%s: 409 'ya pasó', sin crear nada", async (_caso, hora, fecha) => {
+      const { status, cuerpo } = await confirmar(hora, fecha)
+
+      expect(status).toBe(409)
+      expect(cuerpo.error).toMatch(/ya pasó/)
+      expect(citasCreadas()).toHaveLength(0)
+      expect(base.buscar("customer", { name: "Lucía" })).toHaveLength(0)
+    })
+
+    it("una hora de hoy que todavía no llega (11:00): crea la cita", async () => {
+      expect((await confirmar("11:00", "2026-10-19")).status).toBe(201)
+      expect((citasCreadas()[0].startTime as Date).toISOString()).toBe("2026-10-19T14:00:00.000Z")
+    })
+
+    it("lo que ofrece disponibilidad hoy es exactamente lo que acepta confirmar", async () => {
+      const { GET } = await import("../disponibilidad/route")
+      const respuesta = await GET(
+        {
+          url: "http://localhost/api/reservar/salon-uno/disponibilidad?fecha=2026-10-19&servicioId=s-corte",
+          headers: new Headers(),
+        } as unknown as NextRequest,
+        conSlug
+      )
+      const { slots } = await respuesta.json()
+      expect(slots).toEqual(["11:00", "12:00"])
+
+      for (const hora of ["09:00", "10:00", "10:30", "11:00", "12:00"]) {
+        todaLaSemana()
+        const { status } = await confirmar(hora, "2026-10-19")
+        expect({ hora, status }).toEqual({ hora, status: slots.includes(hora) ? 201 : 409 })
+      }
+    })
+  })
+
+  describe("hoy, 1/10/2026", () => {
+    beforeEach(() => relojEn("2026-10-01T12:00:00.000Z"))
+
+    it("a 90 días justos (30/12/2026): crea la cita", async () => {
+      expect((await confirmar("10:00", "2026-12-30")).status).toBe(201)
+    })
+
+    it.each([
+      ["a 91 días", "2026-12-31"],
+      ["años después", "2030-01-07"],
+    ])("%s: 409 con el límite de 90 días, sin crear nada", async (_caso, fecha) => {
+      const { status, cuerpo } = await confirmar("10:00", fecha)
+
+      expect(status).toBe(409)
+      expect(cuerpo.error).toMatch(/90 días/)
+      expect(citasCreadas()).toHaveLength(0)
+      expect(base.buscar("customer", { name: "Lucía" })).toHaveLength(0)
+    })
   })
 })
