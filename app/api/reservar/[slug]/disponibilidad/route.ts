@@ -4,14 +4,14 @@ import { prisma } from "@/lib/prisma"
 import { horaAMinutos, minutosAHora } from "@/lib/horario-dia"
 import { franjasDeAtencion } from "@/lib/horario-de-atencion"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
-import { diaDeLaSemana, fechaYMinutosEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
+import { diaDeLaSemana, esFechaCalendario, existeLaHora, fechaYMinutosEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 
 const FALTA_LA_FECHA = "Falta la fecha (AAAA-MM-DD)"
 const FALTA_EL_SERVICIO = "Falta el servicio (servicioId)"
 
 /**
- * Lo que llega por la URL, validado antes de tocar la base. `date()` exige un
- * día que exista, con formato AAAA-MM-DD: con `fecha=xyz` (o `2026-02-30`),
+ * Lo que llega por la URL, validado antes de tocar la base. `esFechaCalendario` exige un
+ * día que exista, de 1900 a 9998, con formato AAAA-MM-DD: con `fecha=xyz` (o `2026-02-30`),
  * `new Date` daba una fecha inválida, el día de la semana salía `NaN` y la
  * consulta del horario terminaba en un 500. `servicioId` es un id (`cuid()`
  * en el esquema, de 25 caracteres): el tope corta un texto arbitrario antes de
@@ -20,7 +20,10 @@ const FALTA_EL_SERVICIO = "Falta el servicio (servicioId)"
 const parametrosSchema = z.object({
   fecha: z
     .string({ required_error: FALTA_LA_FECHA, invalid_type_error: FALTA_LA_FECHA })
-    .date("La fecha no es válida: tiene que ser un día real, con el formato AAAA-MM-DD"),
+    // La regla de fecha aceptable es una sola (`esFechaCalendario`): con
+    // `.date()` pasaban años como 0050 o 9999 que el cálculo del día no
+    // acepta, y terminaban en un 500.
+    .refine(esFechaCalendario, "La fecha no es válida: tiene que ser un día real, con el formato AAAA-MM-DD"),
   servicioId: z
     .string({ required_error: FALTA_EL_SERVICIO, invalid_type_error: FALTA_EL_SERVICIO })
     .min(1, FALTA_EL_SERVICIO)
@@ -140,6 +143,10 @@ export async function GET(
   const horarios = franjas
     .flatMap((franja) => horariosLibres(franja.startTime, franja.endTime, servicio.duration, ocupados))
     .filter((slot) => !esHoy || horaAMinutos(slot) > ahora.minutos)
+    // El día del salto del horario de verano, las horas que el reloj se
+    // salta no se ofrecen: `confirmar` las rechaza (si no, se guardaban en la
+    // hora siguiente y la ofrecida seguía libre).
+    .filter((slot) => existeLaHora(fecha, slot, zona))
 
   return NextResponse.json({ slots: horarios })
 }

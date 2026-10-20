@@ -241,3 +241,52 @@ describe("POST /api/reservar/[slug]/confirmar: el día y la hora del negocio", (
     expect(citasCreadas()).toHaveLength(0)
   })
 })
+
+/** Fechas aceptadas: años 1900 a 9998 (lib/zona-horaria.ts). Fuera de eso, el mismo 409 que una fecha imposible. */
+describe("POST /api/reservar/[slug]/confirmar: fechas fuera del rango de años", () => {
+  const TODOS_LOS_DIAS = [0, 1, 2, 3, 4, 5, 6]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 9 })
+    escenario(TODOS_LOS_DIAS.map((dayOfWeek) => franja({ dayOfWeek, startTime: "09:00", endTime: "13:00" })))
+  })
+
+  it.each(["0000-01-01", "0050-06-15", "0999-12-31", "1899-12-31", "9999-12-31"])("%s: 409 fuera de la atención, sin crear nada", async (fecha) => {
+    const { status, cuerpo } = await confirmar("10:00", fecha)
+
+    expect(status).toBe(409)
+    expect(cuerpo.error).toMatch(/fuera de la atención/)
+    expect(citasCreadas()).toHaveLength(0)
+    expect(base.buscar("customer", { name: "Lucía" })).toHaveLength(0)
+  })
+
+  it("9998-12-31 (jueves, último día aceptado): crea la cita a las 13:00 UTC (10:00 en Santiago, UTC-3 en diciembre)", async () => {
+    escenario([franja({ dayOfWeek: 4, startTime: "09:00", endTime: "13:00" })])
+
+    expect((await confirmar("10:00", "9998-12-31")).status).toBe(201)
+    expect((citasCreadas()[0].startTime as Date).toISOString()).toBe("9998-12-31T13:00:00.000Z")
+  })
+})
+
+describe("POST /api/reservar/[slug]/confirmar: el día del salto del horario de verano", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 9 })
+    // Domingo 2026-09-06 en Santiago: de 00:00 a 00:59 el reloj no pasa.
+    escenario([franja({ dayOfWeek: 0, startTime: "00:00", endTime: "02:00" })])
+  })
+
+  it("00:00 no existe ese día: 409 fuera de la atención, sin crear nada", async () => {
+    const { status, cuerpo } = await confirmar("00:00", "2026-09-06")
+
+    expect(status).toBe(409)
+    expect(cuerpo.error).toMatch(/fuera de la atención/)
+    expect(citasCreadas()).toHaveLength(0)
+  })
+
+  it("01:00 sí existe: crea la cita a las 04:00 UTC (UTC-3 desde el salto)", async () => {
+    expect((await confirmar("01:00", "2026-09-06")).status).toBe(201)
+    expect((citasCreadas()[0].startTime as Date).toISOString()).toBe("2026-09-06T04:00:00.000Z")
+  })
+})

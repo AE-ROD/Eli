@@ -312,3 +312,61 @@ describe("GET /api/reservar/[slug]/disponibilidad: el día y la hora del negocio
     expect(await horasDe("2026-10-19")).toEqual({ slots: ["09:00", "10:00", "11:00"] })
   })
 })
+
+/**
+ * Fechas aceptadas: años 1900 a 9998 (lib/zona-horaria.ts). Con `.date()`
+ * pasaban 0050 (que `Date.UTC` lee como 1950) o 9999-12-31 (sin día
+ * siguiente escribible) y el cálculo del día lanzaba: 500 público.
+ */
+describe("GET /api/reservar/[slug]/disponibilidad: fechas fuera del rango de años", () => {
+  const TODOS_LOS_DIAS = [0, 1, 2, 3, 4, 5, 6]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 59 })
+    // Atiende todos los días: si la fecha pasara, habría horas que calcular.
+    escenario(TODOS_LOS_DIAS.map((dayOfWeek) => franja({ dayOfWeek, startTime: "09:00", endTime: "11:00" })))
+  })
+
+  it.each(["0000-01-01", "0050-06-15", "0999-12-31", "1899-12-31", "9999-12-31"])("%s: 400 con el mensaje de fecha inválida, sin tocar la base", async (fecha) => {
+    const { GET } = await import("./route")
+
+    const res = await GET(pedidoFalso(`?fecha=${fecha}&servicioId=s-corte`), conSlug)
+    const data = await res.json()
+
+    expect(res.status).toBe(400)
+    expect(data.error).toMatch(/fecha/i)
+    expect(data.error).toMatch(/AAAA-MM-DD/)
+    expectSinConsultas()
+  })
+
+  it("9998-12-31 (jueves, último día aceptado): 200 con las horas del jueves", async () => {
+    escenario([
+      franja({ dayOfWeek: 4, startTime: "09:00", endTime: "11:00" }),
+      franja({ dayOfWeek: 5, startTime: "15:00", endTime: "17:00" }),
+    ])
+    const { GET } = await import("./route")
+
+    const res = await GET(pedidoFalso("?fecha=9998-12-31&servicioId=s-corte"), conSlug)
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ slots: ["09:00", "10:00"] })
+  })
+})
+
+describe("GET /api/reservar/[slug]/disponibilidad: el día del salto del horario de verano", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 59 })
+  })
+
+  it("Santiago, domingo 2026-09-06 (00:00–00:59 no existen): con franja 00:00–02:00 sólo ofrece la 01:00", async () => {
+    escenario([franja({ dayOfWeek: 0, startTime: "00:00", endTime: "02:00" })])
+    const { GET } = await import("./route")
+
+    const res = await GET(pedidoFalso("?fecha=2026-09-06&servicioId=s-corte"), conSlug)
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ slots: ["01:00"] })
+  })
+})

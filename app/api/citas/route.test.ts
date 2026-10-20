@@ -202,6 +202,16 @@ describe("GET /api/citas: el día pedido es el del negocio", () => {
     expect(rangoPedido().lt.toISOString()).toBe("2026-10-19T15:00:00.000Z")
   })
 
+  it("?fecha=9998-12-31, el último día aceptado: de 9998-12-31T03:00Z a 9999-01-01T03:00Z", async () => {
+    conCitasDeLaSemana()
+
+    const res = await pedir("?fecha=9998-12-31")
+
+    expect(res.status).toBe(200)
+    expect(rangoPedido().gte.toISOString()).toBe("9998-12-31T03:00:00.000Z")
+    expect(rangoPedido().lt.toISOString()).toBe("9999-01-01T03:00:00.000Z")
+  })
+
   it("con una zona guardada inválida, usa America/Santiago", async () => {
     zonaDelNegocio = "Marte/Olympus"
     conCitasDeLaSemana()
@@ -211,7 +221,19 @@ describe("GET /api/citas: el día pedido es el del negocio", () => {
     expect(rangoPedido().gte.toISOString()).toBe("2026-10-19T03:00:00.000Z")
   })
 
-  it.each(["?fecha=xyz", "?fecha=2026-02-30", "?desde=2026-10-19&hasta=nada"])(
+  it.each([
+    "?fecha=xyz",
+    "?fecha=2026-02-30",
+    "?desde=2026-10-19&hasta=nada",
+    // Fuera del rango de años aceptado (1900 a 9998, lib/zona-horaria.ts).
+    "?fecha=0000-01-01",
+    "?fecha=0050-06-15",
+    "?fecha=0999-12-31",
+    "?fecha=1899-12-31",
+    "?fecha=9999-12-31",
+    "?desde=2026-10-19&hasta=9999-12-31",
+    "?desde=0050-06-15&hasta=2026-10-19",
+  ])(
     "%s: 400 sin consultar citas",
     async (query) => {
       const res = await pedir(query)

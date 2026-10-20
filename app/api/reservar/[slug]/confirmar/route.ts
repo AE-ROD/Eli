@@ -6,7 +6,7 @@ import { reservaSchema } from "@/lib/validaciones"
 import { horaAMinutos } from "@/lib/horario-dia"
 import { cabeEnAtencion, franjasDeAtencion } from "@/lib/horario-de-atencion"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
-import { diaDeLaSemana, esFechaCalendario, esHoraDelDia, instanteEn, zonaDelNegocio } from "@/lib/zona-horaria"
+import { diaDeLaSemana, existeLaHora, instanteEn, zonaDelNegocio } from "@/lib/zona-horaria"
 
 export async function POST(
   request: NextRequest,
@@ -39,19 +39,22 @@ export async function POST(
     })
     if (!servicio) return NextResponse.json({ error: "Servicio no disponible" }, { status: 404 })
 
-    // Un día que no existe ("2026-02-30") o una hora fuera de 00:00–23:59
-    // no es un horario de atención de nadie.
-    if (!esFechaCalendario(datos.fecha) || !esHoraDelDia(datos.hora)) {
+    // La fecha y la hora son las del reloj del negocio (`Business.timezone`):
+    // la cita se guarda en el instante UTC que les corresponde ahí, no en el
+    // de la zona del servidor.
+    const zona = zonaDelNegocio(negocio.timezone)
+
+    // Un día que no existe ("2026-02-30") o fuera de los años aceptados, una
+    // hora fuera de 00:00–23:59, o una que el reloj del negocio se salta por
+    // el horario de verano, no es un horario de atención de nadie. Es la
+    // misma regla con la que `disponibilidad` descarta horas.
+    if (!existeLaHora(datos.fecha, datos.hora, zona)) {
       return NextResponse.json(
         { error: "Ese horario está fuera de la atención del negocio. Elige otra hora." },
         { status: 409 }
       )
     }
 
-    // La fecha y la hora son las del reloj del negocio (`Business.timezone`):
-    // la cita se guarda en el instante UTC que les corresponde ahí, no en el
-    // de la zona del servidor.
-    const zona = zonaDelNegocio(negocio.timezone)
     const startTime = instanteEn(datos.fecha, datos.hora, zona)
     const endTime = new Date(startTime.getTime() + servicio.duration * 60000)
 

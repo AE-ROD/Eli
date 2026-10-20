@@ -5,6 +5,7 @@ import {
   esFechaCalendario,
   esHoraDelDia,
   esZonaValida,
+  existeLaHora,
   fechaYMinutosEn,
   instanteEn,
   rangoDelDiaEn,
@@ -162,5 +163,71 @@ describe("fechaYMinutosEn", () => {
   it("es el inverso de instanteEn fuera de los cambios de hora", () => {
     const instante = instanteEn("2026-10-19", "17:45", TOKIO)
     expect(fechaYMinutosEn(instante, TOKIO)).toEqual({ fecha: "2026-10-19", minutos: 17 * 60 + 45 })
+  })
+})
+
+/**
+ * Rango de años aceptado: 1900 a 9998 (ver `AÑO_MINIMO`/`AÑO_MAXIMO`). Los
+ * años 0000–0099 los reinterpreta `Date.UTC` como 1900–1999, y 9999-12-31 no
+ * tiene día siguiente escribible como "AAAA-MM-DD": ambos se rechazan antes de
+ * calcular nada.
+ */
+describe("rango de años de una fecha calendario", () => {
+  it.each(["0000-01-01", "0050-06-15", "0999-12-31", "1899-12-31", "9999-12-31"])(
+    "%s no es aceptable y las funciones que reciben fechas lanzan RangeError",
+    (fecha) => {
+      expect(esFechaCalendario(fecha)).toBe(false)
+      expect(() => diaDeLaSemana(fecha)).toThrow(RangeError)
+      expect(() => instanteEn(fecha, "10:00", "UTC")).toThrow(RangeError)
+      expect(() => rangoDelDiaEn(fecha, SANTIAGO)).toThrow(RangeError)
+      expect(() => sumarDias(fecha, 1)).toThrow(RangeError)
+    }
+  )
+
+  it("1900-01-01 es el primer día aceptado: lunes, y su rango en UTC y Tokio", () => {
+    expect(esFechaCalendario("1900-01-01")).toBe(true)
+    expect(diaDeLaSemana("1900-01-01")).toBe(1)
+    expect(rangoDelDiaEn("1900-01-01", "UTC").desde.toISOString()).toBe("1900-01-01T00:00:00.000Z")
+    expect(rangoDelDiaEn("1900-01-01", TOKIO).desde.toISOString()).toBe("1899-12-31T15:00:00.000Z")
+  })
+
+  it("9998-12-31 es el último día aceptado: jueves, y su rango termina en 9999-01-01", () => {
+    expect(esFechaCalendario("9998-12-31")).toBe(true)
+    expect(diaDeLaSemana("9998-12-31")).toBe(4)
+    const enUtc = rangoDelDiaEn("9998-12-31", "UTC")
+    expect(enUtc.desde.toISOString()).toBe("9998-12-31T00:00:00.000Z")
+    expect(enUtc.hasta.toISOString()).toBe("9999-01-01T00:00:00.000Z")
+    const enSantiago = rangoDelDiaEn("9998-12-31", SANTIAGO)
+    expect(enSantiago.desde.toISOString()).toBe("9998-12-31T03:00:00.000Z")
+    expect(enSantiago.hasta.toISOString()).toBe("9999-01-01T03:00:00.000Z")
+    expect(instanteEn("9998-12-31", "10:00", SANTIAGO).toISOString()).toBe("9998-12-31T13:00:00.000Z")
+  })
+
+  it("sumarDias no puede salir del rango aceptado", () => {
+    expect(() => sumarDias("9998-12-31", 1)).toThrow(RangeError)
+    expect(() => sumarDias("1900-01-01", -1)).toThrow(RangeError)
+  })
+})
+
+describe("existeLaHora", () => {
+  it("Santiago, 6/9/2026: de 00:00 a 00:59 no existen; la 01:00 sí", () => {
+    expect(existeLaHora("2026-09-06", "00:00", SANTIAGO)).toBe(false)
+    expect(existeLaHora("2026-09-06", "00:59", SANTIAGO)).toBe(false)
+    expect(existeLaHora("2026-09-06", "01:00", SANTIAGO)).toBe(true)
+  })
+
+  it("las horas duplicadas (4/4/2026 23:30 en Santiago) existen", () => {
+    expect(existeLaHora("2026-04-04", "23:30", SANTIAGO)).toBe(true)
+  })
+
+  it("un día común existe entero, en cualquier zona", () => {
+    expect(existeLaHora("2026-10-19", "00:00", SANTIAGO)).toBe(true)
+    expect(existeLaHora("2026-09-06", "00:30", BOGOTA)).toBe(true)
+    expect(existeLaHora("2026-09-06", "00:30", TOKIO)).toBe(true)
+  })
+
+  it("fecha u hora inválidas: false, sin lanzar", () => {
+    expect(existeLaHora("9999-12-31", "10:00", SANTIAGO)).toBe(false)
+    expect(existeLaHora("2026-10-19", "24:00", SANTIAGO)).toBe(false)
   })
 })

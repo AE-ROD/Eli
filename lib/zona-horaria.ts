@@ -62,10 +62,27 @@ interface Calendario {
   dia: number
 }
 
+/**
+ * Años que se aceptan en una fecha calendario: 1900 a 9998. La única
+ * definición de "fecha aceptable"; la usan todos los endpoints a través de
+ * `esFechaCalendario`.
+ * - Desde 1900: `Date.UTC` lee los años 0 a 99 como 1900–1999 (0050 sería
+ *   1950), y en esas épocas las zonas IANA usan la hora media local, con
+ *   desfases de segundos. Algunas la usan hasta después de 1900 (Santiago,
+ *   hasta 1910): ahí las horas pueden correrse unos segundos, sin lanzar.
+ *   Nadie reserva en esos años; lo que importa es que no rompan.
+ * - Hasta 9998: el rango de un día necesita el día siguiente, y "10000-01-01"
+ *   ya no es "AAAA-MM-DD". Con 9998, el siguiente del último día aceptado
+ *   (9999-01-01) todavía se escribe y se calcula.
+ */
+export const AÑO_MINIMO = 1900
+export const AÑO_MAXIMO = 9998
+
 function leerFecha(fecha: string): Calendario | null {
   const partes = FORMA_DE_FECHA.exec(fecha)
   if (!partes) return null
   const [año, mes, dia] = [Number(partes[1]), Number(partes[2]), Number(partes[3])]
+  if (año < AÑO_MINIMO || año > AÑO_MAXIMO) return null
   const comprobada = new Date(Date.UTC(año, mes - 1, dia))
   const existe =
     comprobada.getUTCFullYear() === año && comprobada.getUTCMonth() === mes - 1 && comprobada.getUTCDate() === dia
@@ -84,7 +101,12 @@ function comoTexto({ año, mes, dia }: Calendario): string {
   return `${String(año).padStart(4, "0")}-${dosCifras(mes)}-${dosCifras(dia)}`
 }
 
-/** Si el texto es "AAAA-MM-DD" y ese día existe (rechaza "2026-02-30"). */
+/**
+ * Si el texto es "AAAA-MM-DD", ese día existe (rechaza "2026-02-30") y su año
+ * va de `AÑO_MINIMO` a `AÑO_MAXIMO`. Las funciones que reciben una fecha
+ * lanzan `RangeError` con lo que esto rechaza: quien recibe fechas de afuera
+ * pregunta acá primero.
+ */
 export function esFechaCalendario(fecha: string): boolean {
   return leerFecha(fecha) !== null
 }
@@ -104,11 +126,20 @@ export function diaDeLaSemana(fecha: string): number {
   return new Date(Date.UTC(año, mes - 1, dia)).getUTCDay()
 }
 
-/** La fecha calendario `dias` días después (o antes, si es negativo). */
-export function sumarDias(fecha: string, dias: number): string {
-  const { año, mes, dia } = fechaValidaOLanza(fecha)
+/** El día calendario `dias` días después, sin validar el rango de años (uso interno). */
+function moverCalendario({ año, mes, dia }: Calendario, dias: number): Calendario {
   const movida = new Date(Date.UTC(año, mes - 1, dia + dias))
-  return comoTexto({ año: movida.getUTCFullYear(), mes: movida.getUTCMonth() + 1, dia: movida.getUTCDate() })
+  return { año: movida.getUTCFullYear(), mes: movida.getUTCMonth() + 1, dia: movida.getUTCDate() }
+}
+
+/**
+ * La fecha calendario `dias` días después (o antes, si es negativo). Lanza
+ * `RangeError` si la de entrada o la resultante no es aceptable.
+ */
+export function sumarDias(fecha: string, dias: number): string {
+  const resultado = comoTexto(moverCalendario(fechaValidaOLanza(fecha), dias))
+  fechaValidaOLanza(resultado)
+  return resultado
 }
 
 // ─── Instantes y hora de pared ───────────────────────────────────────────────
@@ -166,11 +197,19 @@ function desfaseEn(instante: number, zona: string): number {
  * cae en el default, como en `zonaDelNegocio`.
  */
 export function instanteEn(fecha: string, hora: string, zona: string): Date {
-  const { año, mes, dia } = fechaValidaOLanza(fecha)
+  const calendario = fechaValidaOLanza(fecha)
   const partes = FORMA_DE_HORA.exec(hora)
   if (!partes) throw new RangeError(`Hora inválida: ${hora}`)
-  const z = zonaDelNegocio(zona)
-  const pared = Date.UTC(año, mes - 1, dia, Number(partes[1]), Number(partes[2]))
+  return instanteDePared(calendario, Number(partes[1]), Number(partes[2]), zonaDelNegocio(zona))
+}
+
+/**
+ * `instanteEn` sobre un calendario ya leído. Sólo recibe años de 1900 en
+ * adelante (`leerFecha` o el día siguiente de uno aceptado): `Date.UTC` no
+ * reinterpreta ninguno.
+ */
+function instanteDePared({ año, mes, dia }: Calendario, hora: number, minuto: number, z: string): Date {
+  const pared = Date.UTC(año, mes - 1, dia, hora, minuto)
 
   // Los desfases de la víspera y del día siguiente cubren cualquier cambio de
   // hora cerca de esa hora (ninguna zona cambia dos veces en 48 horas).
@@ -192,7 +231,11 @@ export function instanteEn(fecha: string, hora: string, zona: string): Date {
  * 24 horas.
  */
 export function rangoDelDiaEn(fecha: string, zona: string): { desde: Date; hasta: Date } {
-  return { desde: instanteEn(fecha, "00:00", zona), hasta: instanteEn(sumarDias(fecha, 1), "00:00", zona) }
+  const dia = fechaValidaOLanza(fecha)
+  const z = zonaDelNegocio(zona)
+  // El día siguiente no se valida: del 9998-12-31 es el 9999-01-01, fuera de
+  // lo que se acepta de afuera pero perfectamente calculable.
+  return { desde: instanteDePared(dia, 0, 0, z), hasta: instanteDePared(moverCalendario(dia, 1), 0, 0, z) }
 }
 
 /**
@@ -203,4 +246,18 @@ export function rangoDelDiaEn(fecha: string, zona: string): { desde: Date; hasta
 export function fechaYMinutosEn(instante: Date, zona: string): { fecha: string; minutos: number } {
   const p = paredEn(instante.getTime(), zonaDelNegocio(zona))
   return { fecha: comoTexto(p), minutos: p.hora * 60 + p.minuto }
+}
+
+/**
+ * Si el reloj de la zona marca alguna vez esa hora ese día. No la marca en
+ * el salto del horario de verano (Santiago, 6/9/2026 de 00:00 a 00:59):
+ * `instanteEn` la correría a la hora siguiente, así que ni se ofrece ni se
+ * acepta, y lo ofrecido y lo guardado coinciden. Las horas duplicadas sí
+ * existen. No lanza: fecha u hora inválidas dan `false`.
+ */
+export function existeLaHora(fecha: string, hora: string, zona: string): boolean {
+  if (!esFechaCalendario(fecha) || !esHoraDelDia(hora)) return false
+  const vuelta = fechaYMinutosEn(instanteEn(fecha, hora, zona), zona)
+  const [h, m] = hora.split(":").map(Number)
+  return vuelta.fecha === fecha && vuelta.minutos === h * 60 + m
 }
