@@ -15,7 +15,6 @@ import { usePrecios } from "@/components/panel/contexto-precios"
 import { CuadroDeSeccion } from "@/components/panel/icono-de-seccion"
 import {
   SECCION_DE_AYUDA,
-  SECCION_DE_CHATS,
   SECCION_DE_CONFIGURACION,
   SECCION_DE_INICIO,
   SECCIONES_DE_MODULOS,
@@ -65,14 +64,14 @@ export function BarraLateral({ usuario, puedeGestionarSuscripcion, diasTrialRest
 
   /**
    * El orden es el de la referencia aprobada: el inicio, los módulos en el
-   * orden del día de trabajo (`lib/modulos.ts`) y chats; abajo, aparte,
-   * configuración y ayuda. Tablero y reportes son para todos los roles: cada
+   * orden del día de trabajo (`lib/modulos.ts`); abajo, aparte,
+   * configuración y ayuda. Chats está escondido hasta que exista WhatsApp
+   * (`secciones-del-panel.ts`). Tablero y reportes son para todos los roles: cada
    * endpoint ya recorta lo que ve cada uno. Equipo, sólo para quien lo gestiona.
    */
   const principales: SeccionDelPanel[] = [
     SECCION_DE_INICIO,
     ...SECCIONES_DE_MODULOS.filter((seccion) => seccion.id !== "equipo" || puedeVerEquipo),
-    SECCION_DE_CHATS,
   ]
   const secundarias: SeccionDelPanel[] = [SECCION_DE_CONFIGURACION, SECCION_DE_AYUDA]
 

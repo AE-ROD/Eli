@@ -21,8 +21,8 @@ describe("seccionDeLaRuta", () => {
     expect(seccionDeLaRuta("/dashboard/reportes/")?.id).toBe("reportes")
   })
 
-  it("chats, configuración y ayuda son secciones neutras", () => {
-    for (const ruta of ["/dashboard/chats", "/dashboard/configuracion", "/dashboard/ayuda"]) {
+  it("configuración y ayuda son secciones neutras", () => {
+    for (const ruta of ["/dashboard/configuracion", "/dashboard/ayuda"]) {
       const seccion = seccionDeLaRuta(ruta)
       expect(seccion).not.toBeNull()
       expect(seccion?.modulo).toBeUndefined()
@@ -31,7 +31,12 @@ describe("seccionDeLaRuta", () => {
 
   it("una ruta que sólo empieza igual no es de la sección", () => {
     expect(seccionDeLaRuta("/dashboard/agendas")).toBeNull()
-    expect(seccionDeLaRuta("/dashboard/chatsx")).toBeNull()
+    expect(seccionDeLaRuta("/dashboard/configuracionx")).toBeNull()
+  })
+
+  it("chats no es una sección mientras está escondido", () => {
+    expect(seccionDeLaRuta("/dashboard/chats")).toBeNull()
+    expect(seccionDeLaRuta("/dashboard/chats/123")).toBeNull()
   })
 
   it("fuera del panel no hay sección", () => {
@@ -46,10 +51,16 @@ describe("SECCIONES_DEL_PANEL", () => {
     expect(SECCIONES_DEL_PANEL.map((seccion) => seccion.id)).toEqual([
       "inicio",
       ...MODULOS.map((modulo) => modulo.id),
-      "chats",
       "configuracion",
       "ayuda",
     ])
+  })
+
+  it("no llevan a chats: está escondido hasta que exista WhatsApp", () => {
+    for (const seccion of SECCIONES_DEL_PANEL) {
+      expect(seccion.ruta.startsWith("/dashboard/chats")).toBe(false)
+      expect(seccion.nombre).not.toMatch(/chat/i)
+    }
   })
 
   it("no repiten ruta", () => {
