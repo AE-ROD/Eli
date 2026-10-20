@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import {
   DIAS_MAXIMOS_DE_ANTICIPACION,
   compartenContacto,
+  esDiaReservable,
   esElMismoCliente,
   fechaNoReservable,
   normalizarEmail,
@@ -42,6 +43,37 @@ describe("fechaNoReservable", () => {
     const ahora = new Date("2026-10-19T02:00:00.000Z")
     expect(fechaNoReservable("2026-10-18", ahora, SANTIAGO)).toBeNull()
     expect(fechaNoReservable("2026-10-18", ahora, "UTC")).toBe("pasada")
+  })
+})
+
+describe("esDiaReservable: qué días ofrece el calendario público", () => {
+  const TODOS_LOS_DIAS = [0, 1, 2, 3, 4, 5, 6]
+  /** Escrito a mano: el 19/10/2026 es lunes. */
+  const SOLO_LUNES = [1]
+
+  it.each([
+    ["hoy (lunes 19/10/2026)", "2026-10-19", true],
+    ["ayer", "2026-10-18", false],
+    ["a 90 días (domingo 17/1/2027), el último de la ventana", "2027-01-17", true],
+    ["a 91 días (lunes 18/1/2027)", "2027-01-18", false],
+    ["a un año", "2027-10-19", false],
+  ])("con atención todos los días, %s → %s", (_caso, fecha, esperado) => {
+    expect(esDiaReservable(fecha, TODOS_LOS_DIAS, LUNES_10_30_SANTIAGO, SANTIAGO)).toBe(esperado)
+  })
+
+  it("sólo los días de la semana con atención", () => {
+    expect(esDiaReservable("2026-10-26", SOLO_LUNES, LUNES_10_30_SANTIAGO, SANTIAGO)).toBe(true)
+    expect(esDiaReservable("2026-10-20", SOLO_LUNES, LUNES_10_30_SANTIAGO, SANTIAGO)).toBe(false)
+  })
+
+  it("'hoy' es el del negocio, no el del navegador: a las 02:00 UTC del 19, en Santiago todavía es el 18", () => {
+    const ahora = new Date("2026-10-19T02:00:00.000Z")
+    expect(esDiaReservable("2026-10-18", TODOS_LOS_DIAS, ahora, SANTIAGO)).toBe(true)
+    expect(esDiaReservable("2026-10-18", TODOS_LOS_DIAS, ahora, "UTC")).toBe(false)
+  })
+
+  it.each([["2026-02-30"], ["9999-01-01"], ["no es fecha"]])("una fecha inválida (%s) no se ofrece y no lanza", (fecha) => {
+    expect(esDiaReservable(fecha, TODOS_LOS_DIAS, LUNES_10_30_SANTIAGO, SANTIAGO)).toBe(false)
   })
 })
 

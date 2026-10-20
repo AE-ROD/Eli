@@ -5,7 +5,9 @@ import { ChevronLeft, ChevronRight, Clock } from "lucide-react"
 import { BotonIcono } from "@/components/comunes/boton-icono"
 import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
 import { Esqueleto } from "@/components/comunes/esqueleto"
-import { comoTexto } from "@/lib/fechas"
+import { comoTexto, deTexto } from "@/lib/fechas"
+import { esDiaReservable } from "@/lib/reserva-publica"
+import { fechaYMinutosEn } from "@/lib/zona-horaria"
 import { cn } from "@/lib/utils"
 import { leerDisponibilidad } from "../_datos"
 
@@ -36,6 +38,7 @@ interface PropsDeSelectorFechaHora {
   slug: string
   servicioId: string
   diasDisponibles: number[] // dayOfWeek con horario activo
+  zona: string // la del negocio: "hoy" y la ventana de reserva se cuentan en su reloj
   fechaSeleccionada: string // YYYY-MM-DD
   horaSeleccionada: string  // HH:MM
   onFecha: (fecha: string) => void
@@ -46,13 +49,17 @@ export function SelectorFechaHora({
   slug,
   servicioId,
   diasDisponibles,
+  zona,
   fechaSeleccionada,
   horaSeleccionada,
   onFecha,
   onHora,
 }: PropsDeSelectorFechaHora) {
-  const hoy = new Date()
-  hoy.setHours(0, 0, 0, 0)
+  // "Hoy" es el del negocio, no el del navegador: quien reserva desde otra
+  // zona ve los mismos días que `confirmar` acepta. Como medianoche local,
+  // para armar la grilla con los mismos `Date` que las celdas.
+  const ahora = new Date()
+  const hoy = deTexto(fechaYMinutosEn(ahora, zona).fecha) ?? new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate())
 
   const [mesActual, setMesActual] = useState(new Date(hoy.getFullYear(), hoy.getMonth(), 1))
   const [horasLibres, setHorasLibres] = useState<string[]>([])
@@ -128,11 +135,11 @@ export function SelectorFechaHora({
             const diaNum = i - celdasAntesDelPrimero + 1
             const fecha = new Date(mesActual.getFullYear(), mesActual.getMonth(), diaNum)
             const esDelMes = fecha.getMonth() === mesActual.getMonth() && diaNum > 0
-            const esPasado = fecha < hoy
-            const disponible = esDelMes && !esPasado && diasDisponibles.includes(fecha.getDay())
             // `toISOString` pasa la medianoche local a UTC: al este de Greenwich
             // (Madrid, Tokio) daba el día anterior al que se tocó.
             const iso = comoTexto(fecha)
+            // Ni días pasados ni más allá de la ventana de reserva: la regla de `confirmar`.
+            const disponible = esDelMes && esDiaReservable(iso, diasDisponibles, ahora, zona)
             const seleccionado = iso === fechaSeleccionada
             const esHoy = fecha.toDateString() === hoy.toDateString()
 

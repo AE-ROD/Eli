@@ -170,6 +170,11 @@ model Appointment {
   startTime        DateTime
   endTime          DateTime
   status           String   @default("pendiente") // pendiente, confirmada, en-progreso, completada, cancelada
+  // Quién creó la cita: "panel" (el equipo del negocio) o "reserva-publica"
+  // (la página /reservar/[slug]). Los topes anti-abuso de la reserva pública
+  // cuentan por esta columna (`lib/reserva-publica.ts`). En la base, una CHECK
+  // la limita a esos dos valores (migración `origen_de_las_citas`).
+  source           String   @default("panel")
   notes            String?  // notas internas del profesional
   clientComments   String?  // comentarios del cliente al reservar
   price            Float?
