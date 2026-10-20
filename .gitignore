@@ -24,3 +24,6 @@ tsconfig.tsbuildinfo
 next-env.d.ts
 skills-lock.json
 .superpowers/
+
+# Lo genera y reescribe `next dev` (instrucciones de Next para asistentes de IA)
+AGENTS.md
