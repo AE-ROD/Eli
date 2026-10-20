@@ -111,3 +111,78 @@ describe("proxy — rate limit de los endpoints del panel", () => {
     expect(mockVerificarLimite).toHaveBeenCalledWith("panelLectura", "ip:127.0.0.1")
   })
 })
+
+describe("proxy — Content-Security-Policy con nonce", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetToken.mockResolvedValue({ id: "usuario-1", businessId: "negocio-1" })
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 100 })
+  })
+
+  const nonceDe = (csp: string | null) => csp?.match(/'nonce-([^']+)'/)?.[1]
+
+  it.each(["/", "/iniciar-sesion", "/reservar/mi-negocio", "/dashboard", "/api/citas"])(
+    "pone la CSP con nonce en la respuesta de %s",
+    async (ruta) => {
+      const { default: proxy } = await import("./proxy")
+      const res = await proxy(pedidoFalso(ruta))
+      const csp = res.headers.get("content-security-policy")
+      expect(csp).toContain("frame-ancestors 'none'")
+      expect(nonceDe(csp)).toBeTruthy()
+    }
+  )
+
+  it("genera un nonce distinto en cada petición", async () => {
+    const { default: proxy } = await import("./proxy")
+    const a = await proxy(pedidoFalso("/"))
+    const b = await proxy(pedidoFalso("/"))
+    expect(nonceDe(a.headers.get("content-security-policy"))).not.toBe(
+      nonceDe(b.headers.get("content-security-policy"))
+    )
+  })
+
+  it("también va en las redirecciones y en los 429", async () => {
+    const { default: proxy } = await import("./proxy")
+
+    mockGetToken.mockResolvedValueOnce(null)
+    const redireccion = await proxy(pedidoFalso("/dashboard"))
+    expect(redireccion.status).toBe(307)
+    expect(redireccion.headers.get("content-security-policy")).toContain("'nonce-")
+
+    mockVerificarLimite.mockResolvedValueOnce({ permitido: false, restantes: 0 })
+    const limitada = await proxy(pedidoFalso("/api/clientes"))
+    expect(limitada.status).toBe(429)
+    expect(limitada.headers.get("content-security-policy")).toContain("'nonce-")
+  })
+
+  it("las páginas públicas sólo suman la CSP: sin sesión no redirigen ni consultan el token", async () => {
+    const { default: proxy } = await import("./proxy")
+    mockGetToken.mockResolvedValue(null)
+
+    for (const ruta of ["/", "/iniciar-sesion", "/crear-cuenta", "/reservar/mi-negocio", "/dashboardx"]) {
+      const res = await proxy(pedidoFalso(ruta))
+      expect(res.headers.get("location")).toBeNull()
+    }
+    expect(mockGetToken).not.toHaveBeenCalled()
+    expect(mockVerificarLimite).not.toHaveBeenCalled()
+  })
+
+  it("el panel sigue redirigiendo igual que antes", async () => {
+    const { default: proxy } = await import("./proxy")
+
+    mockGetToken.mockResolvedValueOnce(null)
+    expect((await proxy(pedidoFalso("/dashboard/agenda"))).headers.get("location")).toBe(
+      "http://localhost/iniciar-sesion"
+    )
+
+    mockGetToken.mockResolvedValueOnce({ id: "u", businessId: null })
+    expect((await proxy(pedidoFalso("/dashboard"))).headers.get("location")).toBe(
+      "http://localhost/completar-perfil"
+    )
+
+    mockGetToken.mockResolvedValueOnce({ id: "u", businessId: "n" })
+    expect((await proxy(pedidoFalso("/completar-perfil"))).headers.get("location")).toBe(
+      "http://localhost/dashboard"
+    )
+  })
+})
