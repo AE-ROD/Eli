@@ -15,6 +15,15 @@ const citasFake = [
   { id: "cita-colega", businessId: "negocio-1", memberId: "member-colega", customerId: "c-2" },
   /** Sin profesional asignado: `memberId` es opcional en el esquema, así que existen de verdad. */
   { id: "cita-sin-profesional", businessId: "negocio-1", memberId: null, customerId: "c-3" },
+  /** Con su horario, para validar un cambio de sólo el inicio o sólo el fin contra lo guardado. */
+  {
+    id: "cita-con-horario",
+    businessId: "negocio-1",
+    memberId: "member-worker-1",
+    customerId: "c-1",
+    startTime: new Date("2026-10-20T13:00:00.000Z"),
+    endTime: new Date("2026-10-20T13:30:00.000Z"),
+  },
 ]
 
 const prismaMock = {
@@ -320,5 +329,43 @@ describe("DELETE /api/citas/[id]", () => {
     mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
     const resEncargado = await DELETE(pedidoFalso(), params("cita-sin-profesional"))
     expect(resEncargado.status).toBe(200)
+  })
+})
+
+describe("PUT /api/citas/[id] — largos, tipos y horario", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it.each([
+    ["un título de 121 caracteres", { title: "a".repeat(121) }, "El título no puede tener más de 120 caracteres"],
+    ["unas notas de 2001 caracteres", { notes: "a".repeat(2001) }, "Las notas no pueden tener más de 2000 caracteres"],
+    ["un precio de más de 10.000.000", { price: 10_000_001 }, "El precio no puede ser mayor que 10.000.000"],
+    ["un estado que no existe", { status: "borrada" }, "Datos inválidos"],
+    [
+      "inicio y fin invertidos",
+      { startTime: "2026-10-20T15:00:00.000Z", endTime: "2026-10-20T14:00:00.000Z" },
+      "La cita tiene que terminar después de empezar",
+    ],
+    ["sólo un fin anterior al inicio guardado", { endTime: "2026-10-20T12:00:00.000Z" }, "La cita tiene que terminar después de empezar"],
+    ["sólo un inicio posterior al fin guardado", { startTime: "2026-10-20T14:00:00.000Z" }, "La cita tiene que terminar después de empezar"],
+  ])("rechaza %s: 400 con un error legible, sin `detalles`, y no escribe", async (_caso, cuerpo, mensaje) => {
+    const { PUT } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    const res = await PUT(pedidoFalso(cuerpo), params("cita-con-horario"))
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: mensaje })
+    expect(prismaMock.appointment.update).not.toHaveBeenCalled()
+  })
+
+  it("mover sólo el fin a más tarde, contra el inicio guardado, pasa", async () => {
+    const { PUT } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    const res = await PUT(pedidoFalso({ endTime: "2026-10-20T14:00:00.000Z" }), params("cita-con-horario"))
+
+    expect(res.status).toBe(200)
   })
 })

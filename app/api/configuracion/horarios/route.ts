@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { horaAMinutos } from "@/lib/horario-dia"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { diaDeLaSemana } from "@/lib/campos-del-panel"
+import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, mismoNegocio, puedeEditarHorarioDe, type Actor, type Miembro } from "@/lib/permisos"
 
 type Objetivo = { ok: true; miembro: Miembro | null } | { ok: false; status: 404 | 401 }
@@ -77,9 +79,12 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(horarios)
 }
 
+/** Hasta 4 franjas por día, los 7 días. */
+const FRANJAS_MAXIMAS = 7 * 4
+
 const horarioSchema = z.array(
   z.object({
-    dayOfWeek: z.number().min(0).max(6),
+    dayOfWeek: diaDeLaSemana(),
     startTime: z.string().regex(/^\d{2}:\d{2}$/),
     endTime: z.string().regex(/^\d{2}:\d{2}$/),
     active: z.boolean(),
@@ -91,7 +96,7 @@ const horarioSchema = z.array(
     message: "La hora de inicio debe ser anterior a la hora de fin",
     path: ["endTime"],
   })
-)
+).max(FRANJAS_MAXIMAS, `No puede haber más de ${FRANJAS_MAXIMAS} franjas en un horario`)
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -126,7 +131,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(resultado)
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: "Datos inválidos", detalles: error.errors }, { status: 400 })
+      return respuestaDeDatosInvalidos(error)
     }
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }

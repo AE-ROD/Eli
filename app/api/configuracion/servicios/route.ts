@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { descripcion, duracion, nombre, precio } from "@/lib/campos-del-panel"
+import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, puedeGestionarServicios } from "@/lib/permisos"
 
 export async function GET() {
@@ -23,10 +25,10 @@ export async function GET() {
 }
 
 const servicioSchema = z.object({
-  name: z.string().min(2),
-  description: z.string().optional(),
-  duration: z.number().min(15).max(480),
-  price: z.number().min(0).optional(),
+  name: nombre(),
+  description: descripcion().optional(),
+  duration: duracion(),
+  price: precio().optional(),
 })
 
 export async function POST(request: NextRequest) {
@@ -52,7 +54,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(servicio, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: "Datos inválidos", detalles: error.errors }, { status: 400 })
+      return respuestaDeDatosInvalidos(error)
     }
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }

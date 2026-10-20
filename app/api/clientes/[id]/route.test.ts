@@ -448,3 +448,35 @@ describe("PUT y DELETE /api/clientes/[id] — qué puede la profesional", () => 
     expect(base.buscar("customer", { id: "c-beto" })).toEqual([])
   })
 })
+
+describe("PUT /api/clientes/[id] — largos y tipos", () => {
+  it.each([
+    ["un nombre de 101 caracteres", { name: "a".repeat(101) }, "El nombre no puede tener más de 100 caracteres"],
+    ["un teléfono de 31 caracteres", { phone: "1".repeat(31) }, "El teléfono no puede tener más de 30 caracteres"],
+    ["un email que no es email", { email: "ana-arroba-correo" }, "El email no es válido"],
+    ["unas notas de 2001 caracteres", { notes: "a".repeat(2001) }, "Las notas no pueden tener más de 2000 caracteres"],
+    ["21 etiquetas", { tags: Array.from({ length: 21 }, (_, i) => `e${i}`) }, "No puede haber más de 20 etiquetas"],
+    ["etiquetas que no son una lista", { tags: "VIP" }, "Datos inválidos"],
+  ])("rechaza %s: 400 con un error legible, sin `detalles`, y la base queda igual", async (_caso, cuerpo, mensaje) => {
+    const { PUT } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const antes = base.volcado()
+
+    const res = await PUT(pedido(URL_DE_MARIA, cuerpo), conId("c-maria"))
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: mensaje })
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("la profesional que manda unas notas demasiado largas recibe 400, no 401: lo que manda es suyo", async () => {
+    const { PUT } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+
+    const res = await PUT(pedido(URL_DE_MARIA, { notes: "a".repeat(2001) }), conId("c-maria"))
+
+    expect(res.status).toBe(400)
+  })
+})

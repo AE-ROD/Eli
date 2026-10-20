@@ -271,3 +271,54 @@ describe("POST /api/configuracion/horarios", () => {
     expect(prismaMock.$transaction).not.toHaveBeenCalled()
   })
 })
+
+describe("POST /api/configuracion/horarios — largos y tipos", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const franja = (datos: Record<string, unknown> = {}) => ({
+    dayOfWeek: 1,
+    startTime: "09:00",
+    endTime: "18:00",
+    active: true,
+    ...datos,
+  })
+
+  /** 7 días con 4 franjas cada uno: el máximo que tiene sentido. */
+  const semanaCompleta = Array.from({ length: 7 }, (_, dia) =>
+    ["08:00", "11:00", "14:00", "17:00"].map((inicio, i) =>
+      franja({ dayOfWeek: dia, startTime: inicio, endTime: ["10:00", "13:00", "16:00", "19:00"][i] })
+    )
+  ).flat()
+
+  it.each([
+    ["un día 2.5", [franja({ dayOfWeek: 2.5 })], "El día de la semana tiene que ser un número entero del 0 al 6"],
+    ["un día -1", [franja({ dayOfWeek: -1 })], "El día de la semana tiene que ser un número entero del 0 al 6"],
+    ["un día 7", [franja({ dayOfWeek: 7 })], "El día de la semana tiene que ser un número entero del 0 al 6"],
+    ["29 franjas", [...semanaCompleta, franja()], "No puede haber más de 28 franjas en un horario"],
+    ["una hora con otro formato", [franja({ startTime: "9:00" })], "Datos inválidos"],
+    ["una franja invertida", [franja({ startTime: "18:00", endTime: "09:00" })], "La hora de inicio debe ser anterior a la hora de fin"],
+  ])("rechaza %s: 400 (no 500) con un error legible, sin `detalles`, y no escribe", async (_caso, cuerpo, mensaje) => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+
+    const res = await POST(pedidoFalso("/api/configuracion/horarios", cuerpo))
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: mensaje })
+    expect(prismaMock.$transaction).not.toHaveBeenCalled()
+  })
+
+  it("acepta 28 franjas, 4 por día", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+    prismaMock.$transaction.mockResolvedValueOnce(undefined)
+    prismaMock.workSchedule.findMany.mockResolvedValueOnce(semanaCompleta)
+
+    const res = await POST(pedidoFalso("/api/configuracion/horarios", semanaCompleta))
+
+    expect(res.status).toBe(200)
+    expect(prismaMock.workSchedule.createMany.mock.calls[0][0].data).toHaveLength(28)
+  })
+})
