@@ -662,3 +662,78 @@ describe("POST /api/reservar/[slug]/confirmar: dos confirmaciones al mismo tiemp
     expect(transaccion).toHaveBeenCalledTimes(1)
   })
 })
+
+/**
+ * Con qué cliente queda la reserva (M6). Antes se colgaba de cualquier
+ * cliente del negocio con el mismo email O la misma cédula, sin mirar el
+ * nombre: con la cédula de otra persona, la reserva (y el historial) quedaba
+ * a su nombre. Ahora sólo se reutiliza un cliente si coinciden el email
+ * (sin mayúsculas ni espacios) Y el nombre completo (sin tildes ni
+ * mayúsculas). La cédula sola nunca vincula.
+ */
+describe("POST /api/reservar/[slug]/confirmar: con qué cliente queda la reserva", () => {
+  const TODOS_LOS_DIAS = [0, 1, 2, 3, 4, 5, 6]
+  const LUCIA = { id: "c-lucia", businessId: NEGOCIO, name: "Lucía", lastName: "Pérez", email: "Lucia@Correo.test", cedula: "11.111.111-1", phone: null }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    relojEn("2026-10-01T12:00:00.000Z")
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 9 })
+    escenario(TODOS_LOS_DIAS.map((dayOfWeek) => franja({ dayOfWeek, startTime: "09:00", endTime: "13:00" })))
+    const volcado = base.volcado()
+    base.reiniciar({ ...volcado, customer: [...volcado.customer, LUCIA] })
+  })
+
+  async function reservarComo(persona: Record<string, string>) {
+    const { POST } = await import("./route")
+    const res = await POST(pedidoFalso({ ...reserva("10:00", "2026-10-15"), ...persona }), conSlug)
+    expect(res.status).toBe(201)
+    const [cita] = citasCreadas()
+    return cita.customerId as string
+  }
+
+  const clientesDelNegocio = () => base.buscar("customer", { businessId: NEGOCIO })
+
+  it("el mismo email (con otras mayúsculas) y el mismo nombre (sin tildes, en mayúsculas): reutiliza el cliente", async () => {
+    const antes = clientesDelNegocio().length
+
+    const clienteId = await reservarComo({ nombre: "LUCIA", apellido: "perez", email: "lucia@correo.TEST" })
+
+    expect(clienteId).toBe("c-lucia")
+    expect(clientesDelNegocio()).toHaveLength(antes)
+  })
+
+  it("el mismo email (escrito igual) con otro nombre: crea un cliente nuevo y no toca el existente", async () => {
+    const clienteId = await reservarComo({ nombre: "Marta", apellido: "Rojas", email: "Lucia@Correo.test" })
+
+    expect(clienteId).not.toBe("c-lucia")
+    expect(base.buscar("customer", { id: clienteId })[0]).toMatchObject({ name: "Marta", lastName: "Rojas", businessId: NEGOCIO })
+    expect(base.buscar("customer", { id: "c-lucia" })[0]).toMatchObject({ name: "Lucía", lastName: "Pérez", email: "Lucia@Correo.test" })
+  })
+
+  it("la misma cédula y el mismo nombre, sin email: crea un cliente nuevo (la cédula sola nunca vincula)", async () => {
+    const clienteId = await reservarComo({ nombre: "Lucía", apellido: "Pérez", cedula: "11.111.111-1" })
+
+    expect(clienteId).not.toBe("c-lucia")
+    expect(base.buscar("customer", { id: clienteId })[0]).toMatchObject({ name: "Lucía", cedula: "11.111.111-1" })
+  })
+
+  it("la misma cédula con otro email: crea un cliente nuevo", async () => {
+    const clienteId = await reservarComo({ nombre: "Lucía", apellido: "Pérez", cedula: "11.111.111-1", email: "otra@correo.test" })
+
+    expect(clienteId).not.toBe("c-lucia")
+  })
+
+  it("un cliente de otro negocio con el mismo email y nombre nunca se reutiliza", async () => {
+    const volcado = base.volcado()
+    base.reiniciar({
+      ...volcado,
+      customer: volcado.customer.filter((c) => c.id !== "c-lucia").concat({ ...LUCIA, id: "c-lucia-ajena", businessId: OTRO_NEGOCIO }),
+    })
+
+    const clienteId = await reservarComo({ nombre: "Lucía", apellido: "Pérez", email: "lucia@correo.test" })
+
+    expect(clienteId).not.toBe("c-lucia-ajena")
+    expect(base.buscar("customer", { id: clienteId })[0]).toMatchObject({ businessId: NEGOCIO })
+  })
+})

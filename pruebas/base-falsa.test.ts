@@ -49,6 +49,16 @@ describe("base falsa: lo que entiende", () => {
     expect(await prisma.visit.findMany({ where: { id: { in: [] } } })).toEqual([])
   })
 
+  it("`mode: insensitive` compara textos sin mayúsculas, con equals e in", async () => {
+    const porEquals = await prisma.appointment.findMany({ where: { title: { equals: "CORTE", mode: "insensitive" } } })
+    const porIn = await prisma.appointment.findMany({ where: { title: { in: ["color"], mode: "insensitive" } } })
+    const sinMode = await prisma.appointment.findMany({ where: { title: { equals: "CORTE" } } })
+
+    expect(porEquals.map((c) => c.id)).toEqual(["cita-1"])
+    expect(porIn.map((c) => c.id)).toEqual(["cita-2"])
+    expect(sinMode).toEqual([])
+  })
+
   it("filtros por relación: some, is y is null", async () => {
     const conLineaDeM1 = await prisma.visit.findMany({ where: { services: { some: { memberId: "m1" } } } })
     const deCitaDeM1 = await prisma.visit.findMany({ where: { appointment: { is: { memberId: "m1" } } } })

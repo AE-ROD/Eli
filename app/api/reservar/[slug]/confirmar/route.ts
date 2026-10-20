@@ -16,6 +16,7 @@ import {
   MENSAJE_TOPE_POR_NEGOCIO,
   WHERE_RESERVA_PUBLICA,
   compartenContacto,
+  esElMismoCliente,
   fechaNoReservable,
   normalizarEmail,
   normalizarTelefono,
@@ -113,17 +114,19 @@ async function reservar(
     }
   }
 
-  // Buscar o crear cliente
-  let cliente = await tx.customer.findFirst({
-    where: {
-      businessId: negocioId,
-      OR: [
-        ...(datos.email ? [{ email: datos.email }] : []),
-        ...(datos.cedula ? [{ cedula: datos.cedula }] : []),
-      ],
-    },
-    select: { id: true },
-  })
+  // Se reutiliza un cliente del negocio sólo si coinciden el email y el
+  // nombre completo, normalizados (`esElMismoCliente`); si no, uno nuevo. La
+  // cédula sola nunca vincula: con la de otra persona, la reserva quedaba en
+  // su historial (M6).
+  const email = normalizarEmail(datos.email)
+  const candidatos = email
+    ? await tx.customer.findMany({
+        where: { businessId: negocioId, email: { equals: email, mode: "insensitive" } },
+        select: { id: true, name: true, lastName: true, email: true },
+        orderBy: { createdAt: "asc" },
+      })
+    : []
+  let cliente: { id: string } | undefined = candidatos.find((candidato) => esElMismoCliente(candidato, datos))
 
   if (!cliente) {
     cliente = await tx.customer.create({
@@ -131,7 +134,7 @@ async function reservar(
         name: datos.nombre,
         lastName: datos.apellido,
         cedula: datos.cedula || null,
-        email: datos.email || null,
+        email,
         phone: datos.telefono || null,
         businessId: negocioId,
       },

@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest"
 import {
   DIAS_MAXIMOS_DE_ANTICIPACION,
   compartenContacto,
+  esElMismoCliente,
   fechaNoReservable,
   normalizarEmail,
+  normalizarNombre,
   normalizarTelefono,
   yaPasoLaHora,
 } from "./reserva-publica"
@@ -102,5 +104,39 @@ describe("compartenContacto", () => {
 
   it("un cliente sin email ni teléfono no comparte contacto con nadie", () => {
     expect(compartenContacto({ email: null, phone: null }, { email: "", telefono: "" })).toBe(false)
+  })
+})
+
+describe("normalizarNombre", () => {
+  it.each([
+    ["  LUCÍA   Pérez ", "lucia perez"],
+    ["Güemes Muñoz", "guemes munoz"],
+    ["", ""],
+    [null, ""],
+  ])("%j → %j", (nombre, esperado) => {
+    expect(normalizarNombre(nombre)).toBe(esperado)
+  })
+})
+
+describe("esElMismoCliente", () => {
+  const LUCIA = { name: "Lucía", lastName: "Pérez", email: "Lucia@Correo.test" }
+
+  it.each([
+    ["el mismo email y nombre, escritos distinto", { nombre: "LUCIA", apellido: "perez", email: " lucia@correo.TEST " }, true],
+    ["el mismo email con otro nombre", { nombre: "Marta", apellido: "Rojas", email: "lucia@correo.test" }, false],
+    ["el mismo nombre con otro email", { nombre: "Lucía", apellido: "Pérez", email: "otra@correo.test" }, false],
+    ["el mismo nombre sin email", { nombre: "Lucía", apellido: "Pérez", email: "" }, false],
+    ["el mismo nombre de pila con otro apellido", { nombre: "Lucía", apellido: "Rojas", email: "lucia@correo.test" }, false],
+  ])("%s → %s", (_caso, reserva, esperado) => {
+    expect(esElMismoCliente(LUCIA, reserva)).toBe(esperado)
+  })
+
+  it("un cliente sin email nunca es el mismo", () => {
+    expect(esElMismoCliente({ ...LUCIA, email: null }, { nombre: "Lucía", apellido: "Pérez", email: "" })).toBe(false)
+  })
+
+  it("un cliente sin apellido sólo coincide si la reserva trae el nombre completo igual", () => {
+    const sinApellido = { name: "Lucía Pérez", lastName: null, email: "lucia@correo.test" }
+    expect(esElMismoCliente(sinApellido, { nombre: "Lucia", apellido: "Perez", email: "lucia@correo.test" })).toBe(true)
   })
 })

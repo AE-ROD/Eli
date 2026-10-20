@@ -86,6 +86,34 @@ export function normalizarTelefono(telefono: string | null | undefined): string 
   return digitos.length >= DIGITOS_MINIMOS_DE_TELEFONO ? digitos : null
 }
 
+/**
+ * Un nombre para comparar: sin tildes ni diéresis, en minúsculas y con un
+ * solo espacio entre palabras. "  LUCÍA  Pérez" y "lucia perez" son iguales.
+ */
+export function normalizarNombre(nombre: string | null | undefined): string {
+  return (nombre ?? "")
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ")
+}
+
+/**
+ * Si la reserva es de un cliente que el negocio ya tiene: el mismo email
+ * (normalizado) Y el mismo nombre completo (normalizado). Antes bastaba el
+ * email o la cédula, y una reserva con datos ajenos quedaba colgada del
+ * historial de otra persona (M6). La cédula no participa: sola nunca vincula.
+ */
+export function esElMismoCliente(
+  cliente: { name: string; lastName: string | null; email: string | null },
+  reserva: { nombre: string; apellido: string; email?: string | null }
+): boolean {
+  const email = normalizarEmail(reserva.email)
+  if (!email || normalizarEmail(cliente.email) !== email) return false
+  return normalizarNombre(`${cliente.name} ${cliente.lastName ?? ""}`) === normalizarNombre(`${reserva.nombre} ${reserva.apellido}`)
+}
+
 export interface Contacto {
   email: string | null | undefined
   telefono: string | null | undefined
