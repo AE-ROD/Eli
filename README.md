@@ -85,7 +85,8 @@ app/                          Pantallas y endpoints (App Router de Next.js)
     page.tsx                  Inicio del panel
     tablero/                  El día en columnas: llegadas, atención y cobro
     reportes/                 Historial de lo cobrado, con filtros
-    agenda/  clientes/  chats/  configuracion/  equipo/
+    agenda/  clientes/  configuracion/  equipo/
+    chats/                    Escondido: redirige al inicio hasta que exista WhatsApp
   reservar/[slug]/            Página pública donde el cliente final reserva
   api/                        Endpoints: cada carpeta es una URL bajo /api
 components/

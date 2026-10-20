@@ -206,13 +206,14 @@ ejemplo más completo, con variantes compuestas.
 
 Las pantallas de adentro usan las piezas de `comunes/` con un lenguaje más
 denso: tarjetas blancas de radio 32 sobre crema, el título de cada tarjeta en
-serif a 24px y el pastel del módulo de cada pantalla. Inicio, chats,
-configuración y ayuda no son un módulo y van en gris. Lo que comparten las
+serif a 24px y el pastel del módulo de cada pantalla. Inicio,
+configuración y ayuda no son un módulo y van en gris (Chats está escondido
+hasta que exista WhatsApp). Lo que comparten las
 pantallas vive en `components/panel/`:
 
 | Archivo | Qué es |
 |---|---|
-| `secciones-del-panel.ts` | Las secciones del panel (inicio, los cinco módulos de `lib/modulos.ts`, chats, configuración y ayuda), con nombre, ruta y módulo, y `seccionDeLaRuta(ruta)`, que dice de qué sección es una página. De acá salen los enlaces de la barra lateral, el antetítulo de cada página y el halo del foco: una sección nueva se agrega acá |
+| `secciones-del-panel.ts` | Las secciones del panel (inicio, los cinco módulos de `lib/modulos.ts`, configuración y ayuda), con nombre, ruta y módulo, y `seccionDeLaRuta(ruta)`, que dice de qué sección es una página. De acá salen los enlaces de la barra lateral, el antetítulo de cada página y el halo del foco: una sección nueva se agrega acá |
 | `icono-de-seccion.tsx` | `CuadroDeSeccion`: el ícono de una sección en su cuadro. El de un módulo es `IconoDeModulo`, en su pastel fuerte; el de las demás, gris. De 32px en la barra lateral y de 20px en el antetítulo |
 | `barra-lateral.tsx`, `contexto-barra-lateral.tsx` | La isla de la izquierda desde lg (240px, 76 colapsada, con la sección actual en la píldora de su pastel y `aria-current`) y, por debajo, el cajón del teléfono con su manejo del foco |
 | `barra-superior.tsx` | `BarraSuperior`: el encabezado de cada página (antetítulo con la sección de la ruta, título en serif, subtítulo, búsqueda y acción principal) y, por debajo de lg, la fila fija con el botón del menú |
