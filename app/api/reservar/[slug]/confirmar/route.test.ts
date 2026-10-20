@@ -499,10 +499,10 @@ describe("POST /api/reservar/[slug]/confirmar: topes anti-abuso", () => {
   })
 
   describe("por negocio: 50 reservas públicas en 24 horas como máximo", () => {
-    /** `cantidad` reservas públicas de distintos clientes, creadas `horasAtras` horas antes de AHORA. */
+    /** `cantidad` reservas públicas pendientes, creadas `horasAtras` horas antes de AHORA. */
     function reservasCreadasHace(cantidad: number, horasAtras: number) {
       const creada = new Date(new Date(AHORA).getTime() - horasAtras * 3_600_000)
-      return Array.from({ length: cantidad }, () => cita("c-maria", { createdAt: creada, status: "cancelada" }))
+      return Array.from({ length: cantidad }, () => cita("c-maria", { createdAt: creada }))
     }
 
     it("el tope es 50", async () => {
@@ -510,7 +510,7 @@ describe("POST /api/reservar/[slug]/confirmar: topes anti-abuso", () => {
       expect(MAX_RESERVAS_PUBLICAS_POR_DIA).toBe(50)
     })
 
-    it("con 50 creadas en las últimas 24 h (aunque estén canceladas): 429, sin crear nada", async () => {
+    it("con 50 creadas en las últimas 24 h: 429, sin crear nada", async () => {
       conDatos([], reservasCreadasHace(50, 23))
 
       const { status, cuerpo } = await reservarCon({ email: "nueva@correo.test" })
@@ -518,6 +518,23 @@ describe("POST /api/reservar/[slug]/confirmar: topes anti-abuso", () => {
       expect(status).toBe(429)
       expect(cuerpo.error).toMatch(/demasiadas reservas/i)
       expect(citasCreadas()).toHaveLength(50)
+    })
+
+    it("cancelar libera el cupo: con 50 la siguiente da 429; canceladas 5, la siguiente da 201", async () => {
+      conDatos([], reservasCreadasHace(50, 23))
+
+      expect((await reservarCon({ email: "nueva@correo.test" })).status).toBe(429)
+
+      // La dueña cancela cinco de las falsas.
+      const volcado = base.volcado()
+      const aCancelar = new Set(volcado.appointment.slice(0, 5).map((c) => c.id))
+      base.reiniciar({
+        ...volcado,
+        appointment: volcado.appointment.map((c) => (aCancelar.has(c.id) ? { ...c, status: "cancelada" } : c)),
+      })
+
+      expect((await reservarCon({ email: "nueva@correo.test" })).status).toBe(201)
+      expect(citasCreadas()).toHaveLength(51)
     })
 
     it("con 49 en las últimas 24 h y otras de hace 25 h: pasa", async () => {

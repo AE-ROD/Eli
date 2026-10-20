@@ -61,7 +61,12 @@ export function yaPasoLaHora(fecha: string, hora: string, ahora: Date, zona: str
 /** Cuántas reservas futuras no canceladas puede tener un mismo email o teléfono en un negocio. */
 export const MAX_RESERVAS_FUTURAS_POR_CONTACTO = 3
 
-/** Cuántas reservas públicas puede recibir un negocio en 24 horas (contando las ya canceladas). */
+/**
+ * Cuántas reservas públicas no canceladas puede recibir un negocio en 24
+ * horas. Las canceladas no cuentan: si contaran, quien llegara al tope con
+ * reservas falsas dejaba al negocio sin reserva en línea por 24 horas aunque
+ * la dueña las cancelara.
+ */
 export const MAX_RESERVAS_PUBLICAS_POR_DIA = 50
 
 export const MENSAJE_TOPE_POR_CONTACTO = `Ya tienes ${MAX_RESERVAS_FUTURAS_POR_CONTACTO} reservas pendientes en este negocio. Para pedir otra, contáctalo directamente.`
