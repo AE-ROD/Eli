@@ -8,6 +8,7 @@ import bcrypt from "bcryptjs"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { hashDeToken } from "@/lib/tokens"
 import { contrasenaNuevaSchema, normalizarEmail } from "@/lib/validaciones"
+import { registrarError } from "@/lib/registro-de-errores"
 
 // `contrasena`, igual que el registro y el restablecimiento de contraseña.
 const schema = z.object({
@@ -75,11 +76,18 @@ export async function POST(
 
     if (usuarioExistente) {
       const session = await getServerSession(authOptions)
+      const idSesion = session?.user?.id
       const emailSesion = session?.user?.email
 
-      // Contra el correo de la cuenta encontrada, no el de la invitación: es el
-      // que identifica a la persona que tiene que demostrar ser dueña de él.
-      if (!emailSesion || normalizarEmail(emailSesion) !== normalizarEmail(usuarioExistente.email)) {
+      // La sesión tiene que ser la de esa cuenta: por id, que una sesión
+      // revocada ya no tiene, y además por correo contra el de la cuenta
+      // encontrada (no el de la invitación). El correo solo no alcanza.
+      if (
+        !idSesion ||
+        idSesion !== usuarioExistente.id ||
+        !emailSesion ||
+        normalizarEmail(emailSesion) !== normalizarEmail(usuarioExistente.email)
+      ) {
         return NextResponse.json(
           {
             error: "Iniciá sesión con ese correo para aceptar la invitación",
@@ -148,7 +156,7 @@ export async function POST(
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
     }
-    console.error(error)
+    registrarError("aceptando la invitación", error)
     return NextResponse.json({ error: "Error interno" }, { status: 500 })
   }
 }

@@ -72,6 +72,19 @@ function quitarNegocio(token: JWT): JWT {
 }
 
 /**
+ * Una sesión revocada deja de identificar a nadie: sin `id` ni negocio, y
+ * tampoco con el email, el nombre o la foto, que de otro modo seguirían
+ * llegando a `session.user` y bastarían para lo que identifica por correo.
+ */
+function revocar(token: JWT): JWT {
+  token.id = ""
+  delete token.email
+  delete token.name
+  delete token.picture
+  return quitarNegocio(token)
+}
+
+/**
  * Rearma el token desde la base. Si el usuario ya no existe, o el token se
  * emitió antes de que se cerraran sus sesiones (restablecer la contraseña),
  * el token deja también de identificarlo: sin `id`, ni completar-perfil lo
@@ -86,10 +99,7 @@ async function revalidar(token: JWT, ahora: number): Promise<JWT> {
     !usuario ||
     (!!usuario.sesionesValidasDesde && (token.emitidoEn ?? 0) < usuario.sesionesValidasDesde.getTime())
 
-  if (revocada) {
-    token.id = ""
-    return quitarNegocio(token)
-  }
+  if (revocada) return revocar(token)
 
   Object.assign(token, { id: usuario.id, email: usuario.email }, perfilDe(usuario))
   return token.businessId ? token : quitarNegocio(token)
@@ -181,6 +191,11 @@ export const authOptions: NextAuthOptions = {
           revalidadoEn: ahora,
         })
       }
+
+      // Vida máxima absoluta: NextAuth renueva la cookie en cada uso, así que
+      // sin esto una sesión activa no vencería nunca. Se cuenta desde que se
+      // emitió; un token sin fecha de emisión cuenta como emitido en 0.
+      if (ahora - (token.emitidoEn ?? 0) > DURACION_DE_SESION_S * 1000) return revocar(token)
 
       // Al completar el perfil ("update") se rearma en el acto; en cualquier
       // otra lectura, si pasaron más de 5 minutos desde la última revisión.

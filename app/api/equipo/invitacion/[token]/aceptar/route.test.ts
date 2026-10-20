@@ -156,7 +156,7 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
       invitacionEnMemoria()
       prismaMock.user.findFirst.mockResolvedValue(cuentaExistente)
       prismaMock.businessMember.findUnique.mockResolvedValue(null)
-      mockGetServerSession.mockResolvedValue({ user: { email: cuentaExistente.email } })
+      mockGetServerSession.mockResolvedValue({ user: { id: cuentaExistente.id, email: cuentaExistente.email } })
 
       const [a, b] = await Promise.all([
         POST(pedidoFalso({}), { params: params() }),
@@ -296,7 +296,7 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     prismaMock.workerInvitation.findUnique.mockResolvedValueOnce(invitacionBase)
     prismaMock.user.findFirst.mockResolvedValueOnce(cuentaExistente)
     // El atacante está logueado con su propia cuenta, no con la de la víctima.
-    mockGetServerSession.mockResolvedValueOnce({ user: { email: "atacante@mi-negocio.com" } })
+    mockGetServerSession.mockResolvedValueOnce({ user: { id: "user-atacante", email: "atacante@mi-negocio.com" } })
 
     const res = await POST(pedidoFalso({ contrasena: "loQueElijaElAtacante1" }), { params: params() })
     const data = await res.json()
@@ -308,13 +308,32 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     expect(prismaMock.workerInvitation.updateMany).not.toHaveBeenCalled()
   })
 
+  it.each([
+    ["revocada (sin id)", { id: "", email: cuentaExistente.email }],
+    ["de otro usuario con el mismo correo en el token", { id: "user-otro", email: cuentaExistente.email }],
+  ])("email con cuenta existente y sesión %s: el correo solo no alcanza, no crea nada", async (_caso, user) => {
+    const { POST } = await import("./route")
+
+    prismaMock.workerInvitation.findUnique.mockResolvedValueOnce(invitacionBase)
+    prismaMock.user.findFirst.mockResolvedValueOnce(cuentaExistente)
+    mockGetServerSession.mockResolvedValueOnce({ user })
+
+    const res = await POST(pedidoFalso({}), { params: params() })
+    const data = await res.json()
+
+    expect(res.status).toBe(401)
+    expect(data.requiereSesion).toBe(true)
+    expect(prismaMock.businessMember.create).not.toHaveBeenCalled()
+    expect(prismaMock.workerInvitation.updateMany).not.toHaveBeenCalled()
+  })
+
   it("email con cuenta existente y sesión propia: solo suma la membresía, no toca password ni name", async () => {
     const { POST } = await import("./route")
 
     prismaMock.workerInvitation.findUnique.mockResolvedValueOnce(invitacionBase)
     prismaMock.user.findFirst.mockResolvedValueOnce(cuentaExistente)
     prismaMock.businessMember.findUnique.mockResolvedValueOnce(null)
-    mockGetServerSession.mockResolvedValueOnce({ user: { email: cuentaExistente.email } })
+    mockGetServerSession.mockResolvedValueOnce({ user: { id: cuentaExistente.id, email: cuentaExistente.email } })
 
     const res = await POST(pedidoFalso({}), { params: params() })
     const data = await res.json()
@@ -332,5 +351,26 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
       where: { id: invitacionBase.id, acceptedAt: null, expiresAt: { gt: expect.any(Date) } },
       data: { acceptedAt: expect.any(Date) },
     })
+  })
+
+  it("un error de Prisma responde 500 y en el log sólo quedan su nombre y su código, sin datos", async () => {
+    const { POST } = await import("./route")
+    const log = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    prismaMock.workerInvitation.findUnique.mockResolvedValueOnce(invitacionBase)
+    prismaMock.user.findFirst.mockRejectedValueOnce(
+      Object.assign(new Error(`Invalid \`prisma.user.findFirst()\` where email = ${invitacionBase.email}`), {
+        name: "PrismaClientKnownRequestError",
+        code: "P2010",
+        meta: { email: invitacionBase.email },
+      })
+    )
+
+    const res = await POST(pedidoFalso({ contrasena: "unaClaveSegura1" }), { params: params() })
+
+    expect(res.status).toBe(500)
+    expect(log).toHaveBeenCalledWith(expect.any(String), { name: "PrismaClientKnownRequestError", code: "P2010" })
+    expect(JSON.stringify(log.mock.calls)).not.toContain(invitacionBase.email)
+    log.mockRestore()
   })
 })

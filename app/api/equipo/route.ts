@@ -9,6 +9,7 @@ import { enviarInvitacionTrabajador } from "@/lib/email"
 import { actorDeSesion, puedeGestionarEquipo } from "@/lib/permisos"
 import { generarToken } from "@/lib/tokens"
 import { normalizarEmail } from "@/lib/validaciones"
+import { registrarError } from "@/lib/registro-de-errores"
 
 // GET /api/equipo — lista de miembros del negocio
 export async function GET() {
@@ -140,7 +141,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return respuestaDeDatosInvalidos(error)
     }
-    console.error(error)
+    registrarError("invitando al equipo", error)
     return NextResponse.json({ error: "Error interno" }, { status: 500 })
   }
 }
