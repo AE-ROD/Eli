@@ -81,11 +81,13 @@ async function reservar(
   if (conflicto) return { tipo: "rechazada", error: HORARIO_TOMADO, status: 409 }
 
   // Topes anti-abuso (`lib/reserva-publica.ts`): cuántas reservas públicas
-  // recibió el negocio en 24 horas, y cuántas futuras tiene este contacto.
+  // recibió el negocio en 24 horas (sin las canceladas: cancelar libera
+  // el cupo), y cuántas futuras tiene este contacto.
   const reservasDelDia = await tx.appointment.count({
     where: {
       businessId: negocioId,
       ...WHERE_RESERVA_PUBLICA,
+      status: { not: "cancelada" },
       createdAt: { gte: new Date(ahora.getTime() - MS_POR_DIA) },
     },
   })
