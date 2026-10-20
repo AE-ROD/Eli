@@ -105,6 +105,26 @@ describe("POST /api/auth/restablecer-contrasena", () => {
     expect(prismaMock.user.update).not.toHaveBeenCalled()
   })
 
+  it.each([
+    ["73 caracteres", "a".repeat(73)],
+    ["40 eñes: 40 caracteres pero 80 bytes", "ñ".repeat(40)],
+  ])("una contraseña de más de 72 bytes (%s) se rechaza con 400: bcrypt ignoraría el resto", async (_caso, contrasena) => {
+    const { POST } = await import("./route")
+
+    const res = await POST(pedidoFalso({ token: "token-abc", contrasena }))
+
+    expect(res.status).toBe(400)
+    expect(prismaMock.user.update).not.toHaveBeenCalled()
+  })
+
+  it("72 bytes justos se aceptan", async () => {
+    const { POST } = await import("./route")
+
+    const res = await POST(pedidoFalso({ token: "token-abc", contrasena: "ñ".repeat(36) }))
+
+    expect(res.status).toBe(200)
+  })
+
   it("una contraseña corta se rechaza con 400", async () => {
     const { POST } = await import("./route")
 

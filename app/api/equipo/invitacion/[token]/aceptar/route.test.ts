@@ -220,6 +220,22 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     expect(prismaMock.user.create.mock.calls[0][0].data.email).toBe("carla@uno.test")
   })
 
+  it.each([
+    ["73 caracteres", "a".repeat(73)],
+    ["40 eñes: 40 caracteres pero 80 bytes", "ñ".repeat(40)],
+  ])("una contraseña de más de 72 bytes (%s) se rechaza con 400 y no se crea nada", async (_caso, contrasena) => {
+    const { POST } = await import("./route")
+
+    // El cuerpo se valida antes de buscar la cuenta: no hace falta preparar `findFirst`.
+    prismaMock.workerInvitation.findUnique.mockResolvedValueOnce(invitacionBase)
+
+    const res = await POST(pedidoFalso({ contrasena }), { params: params() })
+
+    expect(res.status).toBe(400)
+    expect(prismaMock.user.create).not.toHaveBeenCalled()
+    expect(prismaMock.workerInvitation.updateMany).not.toHaveBeenCalled()
+  })
+
   it("la contraseña viaja como `contrasena`, igual que en el registro: con la clave vieja no se crea nada", async () => {
     const { POST } = await import("./route")
 

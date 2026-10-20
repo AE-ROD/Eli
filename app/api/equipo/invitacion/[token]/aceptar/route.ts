@@ -7,11 +7,11 @@ import { z } from "zod"
 import bcrypt from "bcryptjs"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { hashDeToken } from "@/lib/tokens"
-import { normalizarEmail } from "@/lib/validaciones"
+import { contrasenaNuevaSchema, normalizarEmail } from "@/lib/validaciones"
 
 // `contrasena`, igual que el registro y el restablecimiento de contraseña.
 const schema = z.object({
-  contrasena: z.string().min(8).optional(),
+  contrasena: contrasenaNuevaSchema.optional(),
 })
 
 const INVITACION_INVALIDA = () =>
