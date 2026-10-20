@@ -74,18 +74,19 @@ const limitadores: Record<TipoLimite, Ratelimit | null> = {
 /**
  * Qué hacer si Upstash falla en ejecución (error o timeout).
  *
- * Los tipos sensibles —login, registro/recuperación/invitaciones, reserva
- * pública y escrituras del panel— fallan CERRADO: si no se puede contar, no se
+ * Los tipos que un anónimo puede abusar —login, registro/recuperación/
+ * invitaciones y reserva pública— fallan CERRADO: si no se puede contar, no se
  * deja pasar, porque una caída del proveedor no puede abrir la puerta a fuerza
- * bruta ni a reservas en masa. Sólo las lecturas (página pública de horas
- * libres y GET del panel) fallan abiertas: cortarlas tumbaría la app entera
- * por una caída ajena y no permiten abuso caro.
+ * bruta ni a reservas en masa. El resto falla abierto: las lecturas (página
+ * pública de horas libres y GET del panel) y también las escrituras del panel,
+ * que exigen sesión y ya están acotadas por usuario y por permisos; cortarlas
+ * dejaría a un negocio sin cobrar ni agendar por una caída ajena.
  */
 const fallaAbiertoSiUpstashFalla: Record<TipoLimite, boolean> = {
   login: false,
   auth: false,
   reserva: false,
-  panelEscritura: false,
+  panelEscritura: true,
   lecturaPublica: true,
   panelLectura: true,
 }

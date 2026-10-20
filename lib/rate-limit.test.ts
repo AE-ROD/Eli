@@ -32,8 +32,8 @@ describe("verificarLimite cuando Upstash está configurado pero falla", () => {
     vi.restoreAllMocks()
   })
 
-  it.each(["login", "auth", "reserva", "panelEscritura"] as const)(
-    "falla CERRADO para %s si Upstash tira un error: un tipo sensible no queda sin tope",
+  it.each(["login", "auth", "reserva"] as const)(
+    "falla CERRADO para %s si Upstash tira un error: lo que un anónimo puede abusar no queda sin tope",
     async (tipo) => {
       vi.spyOn(console, "error").mockImplementation(() => {})
       const { verificarLimite } = await import("./rate-limit")
@@ -42,8 +42,8 @@ describe("verificarLimite cuando Upstash está configurado pero falla", () => {
     },
   )
 
-  it.each(["lecturaPublica", "panelLectura"] as const)(
-    "falla abierto para %s si Upstash tira un error: una lectura no se corta por una caída del proveedor",
+  it.each(["lecturaPublica", "panelLectura", "panelEscritura"] as const)(
+    "falla abierto para %s si Upstash tira un error: ni una lectura ni una escritura con sesión se cortan por una caída del proveedor",
     async (tipo) => {
       vi.spyOn(console, "error").mockImplementation(() => {})
       const { verificarLimite } = await import("./rate-limit")
