@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import type { NextRequest } from "next/server"
+import { Prisma } from "@prisma/client"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
 
@@ -536,5 +537,128 @@ describe("POST /api/reservar/[slug]/confirmar: topes anti-abuso", () => {
 
       expect((await reservarCon({ email: "nueva@correo.test" })).status).toBe(201)
     })
+  })
+})
+
+/**
+ * Doble reserva por carrera (A4). El chequeo de choque y la creación del
+ * cliente y la cita iban sueltos: dos confirmaciones al mismo tiempo veían
+ * las dos el horario libre y creaban las dos su cita.
+ *
+ * La base falsa corre las transacciones a la vez, sin aislamiento. Postgres
+ * con `Serializable` hace que dos transacciones concurrentes den lo mismo que
+ * una detrás de la otra (y aborta con P2034 a la que no puede ordenar). El
+ * test de carrera lo modela poniendo en fila las transacciones: si el chequeo
+ * o la creación quedaran fuera de la transacción, la fila no los protegería y
+ * las dos reservas pasarían. Que el nivel pedido sea `Serializable` y que el
+ * P2034 se reintente se prueba aparte.
+ */
+describe("POST /api/reservar/[slug]/confirmar: dos confirmaciones al mismo tiempo", () => {
+  const TODOS_LOS_DIAS = [0, 1, 2, 3, 4, 5, 6]
+
+  type FuncionDeTransaccion = (tx: unknown) => Promise<unknown>
+  type Transaccion = (fn: FuncionDeTransaccion, opciones?: unknown) => Promise<unknown>
+  const transaccion = base.prisma.$transaction as unknown as ReturnType<typeof vi.fn<Transaccion>>
+  const original = transaccion.getMockImplementation() as Transaccion
+
+  const errorDeSerializacion = () =>
+    new Prisma.PrismaClientKnownRequestError("Transaction failed due to a write conflict or a deadlock. Please retry your transaction", {
+      code: "P2034",
+      clientVersion: "test",
+    })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    relojEn("2026-10-01T12:00:00.000Z")
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 9 })
+    escenario(TODOS_LOS_DIAS.map((dayOfWeek) => franja({ dayOfWeek, startTime: "09:00", endTime: "13:00" })))
+  })
+
+  afterEach(() => {
+    transaccion.mockImplementation(original)
+  })
+
+  it("con las transacciones en fila (lo que garantiza Serializable), sólo una de las dos reserva", async () => {
+    let fila: Promise<unknown> = Promise.resolve()
+    transaccion.mockImplementation((fn, opciones) => {
+      const turno = fila.then(() => original(fn, opciones))
+      fila = turno.catch(() => undefined)
+      return turno
+    })
+    const { POST } = await import("./route")
+
+    const respuestas = await Promise.all([
+      POST(pedidoFalso({ ...reserva("10:00", "2026-10-15"), email: "una@correo.test" }), conSlug),
+      POST(pedidoFalso({ ...reserva("10:00", "2026-10-15"), nombre: "Marta", email: "otra@correo.test" }), conSlug),
+    ])
+
+    expect(respuestas.map((respuesta) => respuesta.status).sort()).toEqual([201, 409])
+    const rechazada = respuestas.find((respuesta) => respuesta.status === 409)!
+    expect((await rechazada.json()).error).toBe("El horario ya no está disponible")
+    expect(citasCreadas()).toHaveLength(1)
+    // La rechazada tampoco deja un cliente suelto.
+    expect(base.buscar("customer", { email: "una@correo.test" }).length + base.buscar("customer", { email: "otra@correo.test" }).length).toBe(1)
+  })
+
+  it("pide el nivel Serializable, y el chequeo y las escrituras van por el cliente de la transacción", async () => {
+    const porLaTransaccion: string[] = []
+    transaccion.mockImplementation((fn, opciones) =>
+      original((tx) => {
+        const espia = new Proxy(tx as Record<string, Record<string, (...args: unknown[]) => unknown>>, {
+          get(destino, modelo: string) {
+            const delegado = destino[modelo]
+            return new Proxy(delegado, {
+              get(objetivo, operacion: string) {
+                return (...args: unknown[]) => {
+                  porLaTransaccion.push(`${modelo}.${operacion}`)
+                  return objetivo[operacion](...args)
+                }
+              },
+            })
+          },
+        })
+        return fn(espia)
+      }, opciones)
+    )
+
+    expect((await confirmar("10:00", "2026-10-15")).status).toBe(201)
+
+    expect(transaccion).toHaveBeenCalledTimes(1)
+    expect(transaccion).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable" })
+    expect(porLaTransaccion).toEqual(
+      expect.arrayContaining(["appointment.findFirst", "appointment.count", "customer.create", "appointment.create"])
+    )
+  })
+
+  it("un conflicto de serialización (P2034) se reintenta: al segundo intento, reserva", async () => {
+    transaccion.mockImplementationOnce(async () => {
+      throw errorDeSerializacion()
+    })
+
+    expect((await confirmar("10:00", "2026-10-15")).status).toBe(201)
+    expect(transaccion).toHaveBeenCalledTimes(2)
+    expect(citasCreadas()).toHaveLength(1)
+  })
+
+  it("si el conflicto persiste, se rinde a los 3 intentos con 409 'El horario ya no está disponible'", async () => {
+    transaccion.mockImplementation(async () => {
+      throw errorDeSerializacion()
+    })
+
+    const { status, cuerpo } = await confirmar("10:00", "2026-10-15")
+
+    expect(status).toBe(409)
+    expect(cuerpo.error).toBe("El horario ya no está disponible")
+    expect(transaccion).toHaveBeenCalledTimes(3)
+    expect(citasCreadas()).toHaveLength(0)
+  })
+
+  it("otro error de la base no se reintenta: 500", async () => {
+    transaccion.mockImplementation(async () => {
+      throw new Error("se cayó la conexión")
+    })
+
+    expect((await confirmar("10:00", "2026-10-15")).status).toBe(500)
+    expect(transaccion).toHaveBeenCalledTimes(1)
   })
 })
