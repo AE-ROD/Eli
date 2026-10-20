@@ -3,14 +3,16 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { emailOVacio, etiquetas, nombre, notas, telefono } from "@/lib/campos-del-panel"
+import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, whereDeAgenda, whereDeClientes } from "@/lib/permisos"
 
 const clienteSchema = z.object({
-  name: z.string().min(2),
-  email: z.string().email().optional().or(z.literal("")),
-  phone: z.string().optional().or(z.literal("")),
-  tags: z.array(z.string()).optional(),
-  notes: z.string().optional().or(z.literal("")),
+  name: nombre(),
+  email: emailOVacio().optional(),
+  phone: telefono().optional(),
+  tags: etiquetas().optional(),
+  notes: notas().optional(),
 })
 
 /**
@@ -124,10 +126,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(cliente, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Datos inválidos", detalles: error.errors },
-        { status: 400 }
-      )
+      return respuestaDeDatosInvalidos(error)
     }
     console.error("Error creando cliente:", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })

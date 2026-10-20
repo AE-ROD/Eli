@@ -21,6 +21,7 @@ const prismaMock = {
     findMany: vi.fn((args: { where: Record<string, unknown> }) =>
       Promise.resolve(citasFake.filter((c) => coincideConWhere(c, args.where)))
     ),
+    create: vi.fn((args: { data: Record<string, unknown> }) => Promise.resolve({ id: "cita-nueva", ...args.data })),
   },
   customer: { findFirst: vi.fn() },
   businessMember: { findFirst: vi.fn() },
@@ -243,4 +244,48 @@ describe("GET /api/citas: el día pedido es el del negocio", () => {
       expect(prismaMock.appointment.findMany).not.toHaveBeenCalled()
     }
   )
+})
+
+describe("POST /api/citas — largos, tipos y horario", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    prismaMock.customer.findFirst.mockResolvedValue({ id: "c-1", businessId: "negocio-1" })
+  })
+
+  const citaValida = {
+    title: "Corte",
+    startTime: "2026-10-20T13:00:00.000Z",
+    endTime: "2026-10-20T13:30:00.000Z",
+    customerId: "c-1",
+  }
+
+  const crear = async (cuerpo: Record<string, unknown>) => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    return POST({ url: "http://localhost/api/citas", json: () => Promise.resolve(cuerpo) } as unknown as NextRequest)
+  }
+
+  it.each([
+    ["un título de 121 caracteres", { title: "a".repeat(121) }, "El título no puede tener más de 120 caracteres"],
+    ["unas notas de 2001 caracteres", { notes: "a".repeat(2001) }, "Las notas no pueden tener más de 2000 caracteres"],
+    ["un precio de 0", { price: 0 }, "El precio tiene que ser mayor que 0"],
+    ["un precio negativo", { price: -5 }, "El precio tiene que ser mayor que 0"],
+    ["un precio de más de 10.000.000", { price: 10_000_001 }, "El precio no puede ser mayor que 10.000.000"],
+    ["un fin igual al inicio", { endTime: "2026-10-20T13:00:00.000Z" }, "La cita tiene que terminar después de empezar"],
+    ["un fin antes del inicio", { endTime: "2026-10-20T12:00:00.000Z" }, "La cita tiene que terminar después de empezar"],
+    ["una fecha que no es fecha", { startTime: "mañana" }, "La fecha de inicio no es válida"],
+  ])("rechaza %s: 400 con un error legible, sin `detalles`, y no crea nada", async (_caso, campos, mensaje) => {
+    const res = await crear({ ...citaValida, ...campos })
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: mensaje })
+    expect(prismaMock.appointment.create).not.toHaveBeenCalled()
+  })
+
+  it("acepta los bordes: título de 120, notas de 2000 y precio de 10.000.000", async () => {
+    const res = await crear({ ...citaValida, title: "a".repeat(120), notes: "a".repeat(2000), price: 10_000_000 })
+
+    expect(res.status).toBe(201)
+    expect(prismaMock.appointment.create).toHaveBeenCalled()
+  })
 })

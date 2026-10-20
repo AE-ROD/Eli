@@ -21,6 +21,9 @@ import {
   puedeDeshacerLlegada,
   puedeVerAnuladas,
   puedeVerCita,
+  puedeUsarChats,
+  puedeEditarDatosDeCliente,
+  puedeBorrarCliente,
   memberIdParaCita,
   profesionalParaLinea,
   whereDeAgenda,
@@ -96,6 +99,11 @@ describe("jerarquía de roles", () => {
     ["gestionar la suscripción", puedeGestionarSuscripcion, true, false, false],
     ["asignar citas a otros", puedeAsignarCitasAOtros, true, true, false],
     ["ver el panel de su día", veElPanelDeSuDia, false, false, true],
+    // Escondido hasta WhatsApp (PRODUCTO.md, sección 10): nadie, ni el dueño.
+    ["usar los chats", puedeUsarChats, false, false, false],
+    // El profesional ve y crea clientes, y escribe sus notas; los datos y el borrado no (PRODUCTO.md, sección 10).
+    ["editar los datos de un cliente", puedeEditarDatosDeCliente, true, true, false],
+    ["borrar un cliente", puedeBorrarCliente, true, true, false],
   ])("%s — dueño/encargado/profesional", (_que, puede, esperaDueño, esperaEncargado, esperaProfesional) => {
     expect(puede(dueño)).toBe(esperaDueño)
     expect(puede(encargado)).toBe(esperaEncargado)
@@ -262,6 +270,9 @@ describe("falla cerrado", () => {
     // Sin actor no se elige el panel del día: así era la comparación a mano que
     // reemplaza. El tablero del negocio igual se llena desde un endpoint que da 401.
     expect(veElPanelDeSuDia(null)).toBe(false)
+    expect(puedeUsarChats(null)).toBe(false)
+    expect(puedeEditarDatosDeCliente(null)).toBe(false)
+    expect(puedeBorrarCliente(null)).toBe(false)
   })
 
   it("un rol desconocido no gestiona la suscripción ni asigna citas a otros", () => {

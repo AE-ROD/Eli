@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { email as campoEmail, nombre as campoNombre } from "@/lib/campos-del-panel"
+import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { enviarInvitacionTrabajador } from "@/lib/email"
 import { actorDeSesion, puedeGestionarEquipo } from "@/lib/permisos"
 
@@ -46,8 +48,8 @@ export async function GET() {
 }
 
 const invitarSchema = z.object({
-  nombre: z.string().min(2),
-  email: z.string().email(),
+  nombre: campoNombre(),
+  email: campoEmail(),
   rol: z.enum(["worker", "admin"]).default("worker"),
 })
 
@@ -126,7 +128,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ invitacion: invitacionSinToken }, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
+      return respuestaDeDatosInvalidos(error)
     }
     console.error(error)
     return NextResponse.json({ error: "Error interno" }, { status: 500 })
