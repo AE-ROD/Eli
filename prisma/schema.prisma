@@ -15,6 +15,11 @@ model User {
   password      String
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  /// Las sesiones iniciadas antes de este momento ya no valen: lo pone
+  /// restablecer la contraseña. `lib/auth.ts` lo revisa cada 5 minutos. Null es
+  /// "nunca se cerraron". Columna en camelCase y sin `@map`, como el resto del
+  /// modelo (`createdAt`, `updatedAt`).
+  sesionesValidasDesde DateTime?
 
   business    Business?
   memberships BusinessMember[]
@@ -75,7 +80,9 @@ model WorkerInvitation {
   email      String
   name       String
   role       String    @default("worker")
-  token      String    @unique @default(cuid())
+  /// sha256 del token del enlace (lib/tokens.ts); el token en claro no se
+  /// guarda. La columna sigue llamándose `token` para no renombrarla.
+  tokenHash  String    @unique @map("token")
   expiresAt  DateTime
   acceptedAt DateTime?
   createdAt  DateTime  @default(now())
@@ -88,7 +95,8 @@ model PasswordResetToken {
   id        String    @id @default(cuid())
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token     String    @unique @default(cuid())
+  /// sha256 del token del enlace (lib/tokens.ts), como `WorkerInvitation.tokenHash`.
+  tokenHash String    @unique @map("token")
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
+import { hashDeToken } from "@/lib/tokens"
 
 // GET /api/equipo/invitacion/[token] — consultar datos de la invitación (público).
 // Lo pide cualquiera que tenga el enlace, así que responde sólo lo que la
@@ -21,8 +22,9 @@ export async function GET(
 
   const { token } = await params
 
+  // La base guarda el hash del token (lib/tokens.ts), no el token del enlace.
   const invitacion = await prisma.workerInvitation.findUnique({
-    where: { token },
+    where: { tokenHash: hashDeToken(token) },
     include: { business: { select: { name: true } } },
   })
 

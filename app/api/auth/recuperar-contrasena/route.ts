@@ -4,6 +4,7 @@ import { z } from "zod"
 import { enviarRecuperacionContrasena } from "@/lib/email"
 import { recuperarContrasenaSchema as schema } from "@/lib/validaciones"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
+import { generarToken } from "@/lib/tokens"
 
 const MENSAJE_GENERICO = {
   mensaje: "Si existe una cuenta con ese correo, te enviamos un enlace para restablecer tu contraseña.",
@@ -29,12 +30,15 @@ export async function POST(request: NextRequest) {
 
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000) // 1 hora
 
-    const resetToken = await prisma.passwordResetToken.create({
-      data: { userId: usuario.id, expiresAt },
+    // A la base va sólo el hash; el token en claro, sólo al enlace del correo.
+    const { token, tokenHash } = generarToken()
+    await prisma.passwordResetToken.create({
+      data: { userId: usuario.id, tokenHash, expiresAt },
+      select: { id: true },
     })
 
     const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000"
-    const enlaceRestablecer = `${baseUrl}/restablecer-contrasena/${resetToken.token}`
+    const enlaceRestablecer = `${baseUrl}/restablecer-contrasena/${token}`
 
     await enviarRecuperacionContrasena({
       emailUsuario: usuario.email,

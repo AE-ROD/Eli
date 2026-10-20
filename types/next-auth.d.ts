@@ -30,11 +30,16 @@ declare module "next-auth" {
 
 declare module "next-auth/jwt" {
   interface JWT {
+    /** Vacío si la sesión se revocó (usuario borrado o contraseña restablecida). */
     id: string
     role?: Rol
     businessId?: string | null
     businessName?: string | null
     businessSlug?: string | null
     memberId?: string | null
+    /** Cuándo se inició esta sesión (ms). Se compara con `User.sesionesValidasDesde`. */
+    emitidoEn?: number
+    /** Última vez que el token se contrastó con la base (ms). Ver `REVALIDAR_CADA_MS`. */
+    revalidadoEn?: number
   }
 }

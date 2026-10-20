@@ -7,6 +7,8 @@ import { email as campoEmail, nombre as campoNombre } from "@/lib/campos-del-pan
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { enviarInvitacionTrabajador } from "@/lib/email"
 import { actorDeSesion, puedeGestionarEquipo } from "@/lib/permisos"
+import { generarToken } from "@/lib/tokens"
+import { normalizarEmail } from "@/lib/validaciones"
 
 // GET /api/equipo — lista de miembros del negocio
 export async function GET() {
@@ -49,7 +51,8 @@ export async function GET() {
 
 const invitarSchema = z.object({
   nombre: campoNombre(),
-  email: campoEmail(),
+  // Normalizado (B4): es el email con el que se va a crear la cuenta.
+  email: campoEmail().transform(normalizarEmail),
   rol: z.enum(["worker", "admin"]).default("worker"),
 })
 
@@ -88,12 +91,17 @@ export async function POST(request: NextRequest) {
 
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 días
 
+    // A la base va sólo el hash (lib/tokens.ts); el token en claro existe
+    // únicamente en el enlace del correo y no se responde al cliente.
+    const { token, tokenHash } = generarToken()
+
     const invitacion = await prisma.workerInvitation.create({
       data: {
         businessId: actor.businessId,
         email,
         name: nombre,
         role: rol,
+        tokenHash,
         expiresAt,
       },
       select: {
@@ -103,12 +111,11 @@ export async function POST(request: NextRequest) {
         role: true,
         expiresAt: true,
         createdAt: true,
-        token: true, // usado solo para armar el enlace del correo, no se responde al cliente
       },
     })
 
     const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000"
-    const enlaceAceptar = `${baseUrl}/unirse/${invitacion.token}`
+    const enlaceAceptar = `${baseUrl}/unirse/${token}`
 
     const negocio = await prisma.business.findUnique({
       where: { id: actor.businessId },
@@ -123,9 +130,12 @@ export async function POST(request: NextRequest) {
       enlaceAceptar,
     }).catch(() => null)
 
-    const { token: _token, ...invitacionSinToken } = invitacion
-
-    return NextResponse.json({ invitacion: invitacionSinToken }, { status: 201 })
+    // Campo por campo: ni el hash del token puede colarse en la respuesta.
+    const { id, name, email: emailInvitado, role, expiresAt: vence, createdAt } = invitacion
+    return NextResponse.json(
+      { invitacion: { id, name, email: emailInvitado, role, expiresAt: vence, createdAt } },
+      { status: 201 }
+    )
   } catch (error) {
     if (error instanceof z.ZodError) {
       return respuestaDeDatosInvalidos(error)
