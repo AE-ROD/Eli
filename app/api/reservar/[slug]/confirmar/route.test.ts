@@ -392,3 +392,149 @@ describe("POST /api/reservar/[slug]/confirmar: ni en el pasado ni a más de 90 d
     })
   })
 })
+
+/**
+ * Topes de la reserva pública (A3/M7). El límite por IP no alcanza: con IPs
+ * rotativas se podía llenar la agenda de un negocio. Una reserva pública es
+ * una cita con `serviceId` (el panel crea citas sin servicio; ver
+ * `lib/reserva-publica.ts`).
+ * Reloj: 1/10/2026 a las 12:00 UTC (09:00 en Santiago).
+ */
+describe("POST /api/reservar/[slug]/confirmar: topes anti-abuso", () => {
+  const TODOS_LOS_DIAS = [0, 1, 2, 3, 4, 5, 6]
+  const AHORA = "2026-10-01T12:00:00.000Z"
+
+  let numero = 1
+  /** Una cita del negocio 1 del cliente `customerId`, por defecto pública, futura y pendiente. */
+  const cita = (customerId: string, datos: Record<string, unknown> = {}) => ({
+    id: `cita-tope-${numero++}`,
+    businessId: NEGOCIO,
+    customerId,
+    serviceId: "s-corte",
+    title: "Corte",
+    status: "pendiente",
+    startTime: new Date("2026-10-20T13:00:00.000Z"),
+    endTime: new Date("2026-10-20T14:00:00.000Z"),
+    createdAt: new Date("2026-09-01T12:00:00.000Z"),
+    ...datos,
+  })
+
+  function conDatos(customer: Record<string, unknown>[], appointment: Record<string, unknown>[]) {
+    const volcado = base.volcado()
+    base.reiniciar({ ...volcado, customer: [...volcado.customer, ...customer], appointment })
+  }
+
+  async function reservarCon(contacto: { email?: string; telefono?: string }, hora = "10:00", fecha = "2026-10-15") {
+    const { POST } = await import("./route")
+    const res = await POST(pedidoFalso({ ...reserva(hora, fecha), ...contacto }), conSlug)
+    return { status: res.status, cuerpo: await res.json() }
+  }
+
+  const LUCIA = { id: "c-lucia", businessId: NEGOCIO, name: "Lucía", lastName: "Pérez", email: "lucia@correo.test", phone: "+56 9 1234 5678" }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    relojEn(AHORA)
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 9 })
+    escenario(TODOS_LOS_DIAS.map((dayOfWeek) => franja({ dayOfWeek, startTime: "09:00", endTime: "13:00" })))
+  })
+
+  describe("por contacto: 3 reservas futuras como máximo", () => {
+    it("el tope es 3", async () => {
+      const { MAX_RESERVAS_FUTURAS_POR_CONTACTO } = await import("@/lib/reserva-publica")
+      expect(MAX_RESERVAS_FUTURAS_POR_CONTACTO).toBe(3)
+    })
+
+    it("con 3 futuras del mismo email (escrito distinto): 429, sin crear nada", async () => {
+      conDatos([LUCIA], [cita("c-lucia"), cita("c-lucia"), cita("c-lucia")])
+      const clientesAntes = base.buscar("customer").length
+
+      const { status, cuerpo } = await reservarCon({ email: "Lucia@Correo.TEST" })
+
+      expect(status).toBe(429)
+      expect(cuerpo.error).toMatch(/3 reservas/)
+      expect(citasCreadas()).toHaveLength(3)
+      expect(base.buscar("customer")).toHaveLength(clientesAntes)
+    })
+
+    it("con 3 futuras del mismo teléfono (escrito distinto, sin código de país): 429", async () => {
+      conDatos([LUCIA], [cita("c-lucia"), cita("c-lucia"), cita("c-lucia")])
+
+      const { status } = await reservarCon({ telefono: "9 1234-5678" })
+
+      expect(status).toBe(429)
+      expect(citasCreadas()).toHaveLength(3)
+    })
+
+    it("con 2 futuras: la tercera pasa", async () => {
+      conDatos([LUCIA], [cita("c-lucia"), cita("c-lucia")])
+
+      expect((await reservarCon({ email: "lucia@correo.test" })).status).toBe(201)
+      expect(citasCreadas()).toHaveLength(3)
+    })
+
+    it("no cuentan las canceladas, las pasadas, las del panel (sin servicio) ni las de otro negocio", async () => {
+      const AJENA = { ...LUCIA, id: "c-lucia-ajena", businessId: OTRO_NEGOCIO }
+      conDatos(
+        [LUCIA, AJENA],
+        [
+          cita("c-lucia", { status: "cancelada" }),
+          cita("c-lucia", { startTime: new Date("2026-09-20T13:00:00.000Z"), endTime: new Date("2026-09-20T14:00:00.000Z") }),
+          cita("c-lucia", { serviceId: null }),
+          cita("c-lucia-ajena", { businessId: OTRO_NEGOCIO, serviceId: "s-ajeno" }),
+          cita("c-lucia-ajena", { businessId: OTRO_NEGOCIO, serviceId: "s-ajeno" }),
+          cita("c-lucia-ajena", { businessId: OTRO_NEGOCIO, serviceId: "s-ajeno" }),
+        ]
+      )
+
+      expect((await reservarCon({ email: "lucia@correo.test", telefono: "+56912345678" })).status).toBe(201)
+    })
+
+    it("otro contacto no se ve afectado", async () => {
+      conDatos([LUCIA], [cita("c-lucia"), cita("c-lucia"), cita("c-lucia")])
+
+      expect((await reservarCon({ email: "otra@correo.test", telefono: "+56 9 8765 4321" })).status).toBe(201)
+    })
+  })
+
+  describe("por negocio: 50 reservas públicas en 24 horas como máximo", () => {
+    /** `cantidad` reservas públicas de distintos clientes, creadas `horasAtras` horas antes de AHORA. */
+    function reservasCreadasHace(cantidad: number, horasAtras: number) {
+      const creada = new Date(new Date(AHORA).getTime() - horasAtras * 3_600_000)
+      return Array.from({ length: cantidad }, () => cita("c-maria", { createdAt: creada, status: "cancelada" }))
+    }
+
+    it("el tope es 50", async () => {
+      const { MAX_RESERVAS_PUBLICAS_POR_DIA } = await import("@/lib/reserva-publica")
+      expect(MAX_RESERVAS_PUBLICAS_POR_DIA).toBe(50)
+    })
+
+    it("con 50 creadas en las últimas 24 h (aunque estén canceladas): 429, sin crear nada", async () => {
+      conDatos([], reservasCreadasHace(50, 23))
+
+      const { status, cuerpo } = await reservarCon({ email: "nueva@correo.test" })
+
+      expect(status).toBe(429)
+      expect(cuerpo.error).toMatch(/demasiadas reservas/i)
+      expect(citasCreadas()).toHaveLength(50)
+    })
+
+    it("con 49 en las últimas 24 h y otras de hace 25 h: pasa", async () => {
+      conDatos([], [...reservasCreadasHace(49, 23), ...reservasCreadasHace(10, 25)])
+
+      expect((await reservarCon({ email: "nueva@correo.test" })).status).toBe(201)
+    })
+
+    it("no cuentan las citas del panel (sin servicio) ni las de otro negocio", async () => {
+      conDatos(
+        [],
+        [
+          ...reservasCreadasHace(30, 1).map((c) => ({ ...c, serviceId: null })),
+          ...reservasCreadasHace(30, 1).map((c) => ({ ...c, businessId: OTRO_NEGOCIO, serviceId: "s-ajeno", customerId: "c-ajeno" })),
+        ]
+      )
+
+      expect((await reservarCon({ email: "nueva@correo.test" })).status).toBe(201)
+    })
+  })
+})

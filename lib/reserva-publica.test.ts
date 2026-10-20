@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest"
-import { DIAS_MAXIMOS_DE_ANTICIPACION, fechaNoReservable, yaPasoLaHora } from "./reserva-publica"
+import {
+  DIAS_MAXIMOS_DE_ANTICIPACION,
+  compartenContacto,
+  fechaNoReservable,
+  normalizarEmail,
+  normalizarTelefono,
+  yaPasoLaHora,
+} from "./reserva-publica"
 
 /**
  * Esperados a mano, independientes de la zona de la máquina: el 19/10/2026 a
@@ -50,5 +57,50 @@ describe("yaPasoLaHora", () => {
   it("con el reloj de Tokio, a las 13:30 UTC del 19 ya son las 22:30", () => {
     expect(yaPasoLaHora("2026-10-19", "22:00", LUNES_10_30_SANTIAGO, TOKIO)).toBe(true)
     expect(yaPasoLaHora("2026-10-19", "23:00", LUNES_10_30_SANTIAGO, TOKIO)).toBe(false)
+  })
+})
+
+describe("normalizarEmail", () => {
+  it.each([
+    ["  Lucia@Correo.TEST ", "lucia@correo.test"],
+    ["lucia@correo.test", "lucia@correo.test"],
+    ["", null],
+    ["   ", null],
+    [null, null],
+    [undefined, null],
+  ])("%j → %j", (email, esperado) => {
+    expect(normalizarEmail(email)).toBe(esperado)
+  })
+})
+
+describe("normalizarTelefono", () => {
+  it.each([
+    ["+56 9 1234 5678", "56912345678"],
+    ["9 1234-5678", "912345678"],
+    ["(2) 2345 6789", "223456789"],
+    ["1234567", null],
+    ["", null],
+    [null, null],
+  ])("%j → %j", (telefono, esperado) => {
+    expect(normalizarTelefono(telefono)).toBe(esperado)
+  })
+})
+
+describe("compartenContacto", () => {
+  const LUCIA = { email: "Lucia@Correo.test", phone: "+56 9 1234 5678" }
+
+  it.each([
+    ["el mismo email, escrito distinto", { email: " lucia@correo.TEST", telefono: undefined }, true],
+    ["el mismo teléfono, sin código de país", { email: undefined, telefono: "912345678" }, true],
+    ["el mismo teléfono, con otro formato", { email: "otra@correo.test", telefono: "+56912345678" }, true],
+    ["otro email y otro teléfono", { email: "otra@correo.test", telefono: "+56 9 8765 4321" }, false],
+    ["sin contacto", { email: "", telefono: "" }, false],
+    ["un teléfono demasiado corto no identifica", { email: undefined, telefono: "5678" }, false],
+  ])("%s → %s", (_caso, contacto, esperado) => {
+    expect(compartenContacto(LUCIA, contacto)).toBe(esperado)
+  })
+
+  it("un cliente sin email ni teléfono no comparte contacto con nadie", () => {
+    expect(compartenContacto({ email: null, phone: null }, { email: "", telefono: "" })).toBe(false)
   })
 })

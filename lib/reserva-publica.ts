@@ -45,3 +45,62 @@ export function yaPasoLaHora(fecha: string, hora: string, ahora: Date, zona: str
   if (dias !== 0) return dias < 0
   return horaAMinutos(hora) <= hoy.minutos
 }
+
+// ─── Topes anti-abuso ────────────────────────────────────────────────────────
+//
+// La página pública no pide cuenta: cualquiera puede reservar, y el límite
+// por IP (`lib/rate-limit.ts`) se esquiva rotando IPs. Estos topes cuentan en
+// la base, por negocio.
+//
+// Qué es una reserva pública: la cita no guarda su origen (agregar la columna
+// pide una migración). Hoy sólo `confirmar` crea citas con `serviceId`; el
+// panel (`app/api/citas`) las crea sin servicio. Por eso "reserva pública" es
+// "cita con `serviceId`" (`WHERE_RESERVA_PUBLICA`). Si el panel empieza a
+// guardar el servicio, esta regla deja de distinguirlas: hace falta la columna.
+
+/** Cuántas reservas futuras no canceladas puede tener un mismo email o teléfono en un negocio. */
+export const MAX_RESERVAS_FUTURAS_POR_CONTACTO = 3
+
+/** Cuántas reservas públicas puede recibir un negocio en 24 horas (contando las ya canceladas). */
+export const MAX_RESERVAS_PUBLICAS_POR_DIA = 50
+
+export const MENSAJE_TOPE_POR_CONTACTO = `Ya tienes ${MAX_RESERVAS_FUTURAS_POR_CONTACTO} reservas pendientes en este negocio. Para pedir otra, contáctalo directamente.`
+export const MENSAJE_TOPE_POR_NEGOCIO =
+  "Este negocio recibió demasiadas reservas en línea en las últimas horas. Intenta más tarde o contáctalo directamente."
+
+/** El filtro de cita que identifica una reserva pública (ver arriba). */
+export const WHERE_RESERVA_PUBLICA = { serviceId: { not: null } }
+
+/** El email para comparar: sin espacios alrededor y en minúsculas. Vacío → `null`. */
+export function normalizarEmail(email: string | null | undefined): string | null {
+  const limpio = email?.trim().toLowerCase()
+  return limpio ? limpio : null
+}
+
+/** Mínimo de dígitos para que un teléfono identifique a alguien: con menos, "123" sería de muchos. */
+const DIGITOS_MINIMOS_DE_TELEFONO = 8
+
+/** El teléfono para comparar: sólo sus dígitos. Con menos de 8, `null`: no identifica a nadie. */
+export function normalizarTelefono(telefono: string | null | undefined): string | null {
+  const digitos = (telefono ?? "").replace(/\D/g, "")
+  return digitos.length >= DIGITOS_MINIMOS_DE_TELEFONO ? digitos : null
+}
+
+export interface Contacto {
+  email: string | null | undefined
+  telefono: string | null | undefined
+}
+
+/**
+ * Si el cliente guardado tiene el mismo email o el mismo teléfono que el
+ * contacto, normalizados. Dos teléfonos son el mismo si son iguales o si uno
+ * es el otro con el código de país adelante ("56912345678" y "912345678").
+ */
+export function compartenContacto(cliente: { email: string | null; phone: string | null }, contacto: Contacto): boolean {
+  const email = normalizarEmail(contacto.email)
+  if (email && normalizarEmail(cliente.email) === email) return true
+  const telefono = normalizarTelefono(contacto.telefono)
+  const delCliente = normalizarTelefono(cliente.phone)
+  if (!telefono || !delCliente) return false
+  return telefono.endsWith(delCliente) || delCliente.endsWith(telefono)
+}

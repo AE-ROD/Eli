@@ -6,7 +6,22 @@ import { reservaSchema } from "@/lib/validaciones"
 import { horaAMinutos } from "@/lib/horario-dia"
 import { cabeEnAtencion, franjasDeAtencion } from "@/lib/horario-de-atencion"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
-import { MENSAJE_FECHA_MUY_LEJANA, MENSAJE_HORA_PASADA, fechaNoReservable, yaPasoLaHora } from "@/lib/reserva-publica"
+import {
+  MAX_RESERVAS_FUTURAS_POR_CONTACTO,
+  MAX_RESERVAS_PUBLICAS_POR_DIA,
+  MENSAJE_FECHA_MUY_LEJANA,
+  MENSAJE_HORA_PASADA,
+  MENSAJE_TOPE_POR_CONTACTO,
+  MENSAJE_TOPE_POR_NEGOCIO,
+  WHERE_RESERVA_PUBLICA,
+  compartenContacto,
+  fechaNoReservable,
+  normalizarEmail,
+  normalizarTelefono,
+  yaPasoLaHora,
+} from "@/lib/reserva-publica"
+
+const MS_POR_DIA = 24 * 60 * 60 * 1000
 import { diaDeLaSemana, existeLaHora, instanteEn, zonaDelNegocio } from "@/lib/zona-horaria"
 
 export async function POST(
@@ -103,6 +118,40 @@ export async function POST(
     })
     if (conflicto) {
       return NextResponse.json({ error: "El horario ya no está disponible" }, { status: 409 })
+    }
+
+    // Topes anti-abuso (`lib/reserva-publica.ts`): cuántas reservas públicas
+    // recibió el negocio en 24 horas, y cuántas futuras tiene este contacto.
+    const reservasDelDia = await prisma.appointment.count({
+      where: {
+        businessId: negocio.id,
+        ...WHERE_RESERVA_PUBLICA,
+        createdAt: { gte: new Date(ahora.getTime() - MS_POR_DIA) },
+      },
+    })
+    if (reservasDelDia >= MAX_RESERVAS_PUBLICAS_POR_DIA) {
+      return NextResponse.json({ error: MENSAJE_TOPE_POR_NEGOCIO }, { status: 429 })
+    }
+
+    const contacto = { email: datos.email, telefono: datos.telefono }
+    if (normalizarEmail(contacto.email) || normalizarTelefono(contacto.telefono)) {
+      // El email y el teléfono guardados pueden estar escritos de cualquier
+      // forma: se comparan normalizados acá, sobre las reservas públicas
+      // futuras del negocio. Son acotadas: a lo sumo 50 por día y a no más
+      // de 90 días de hoy. Sólo se traen el email y el teléfono.
+      const futuras = await prisma.appointment.findMany({
+        where: {
+          businessId: negocio.id,
+          ...WHERE_RESERVA_PUBLICA,
+          status: { not: "cancelada" },
+          startTime: { gte: ahora },
+        },
+        select: { customer: { select: { email: true, phone: true } } },
+      })
+      const delContacto = futuras.filter((cita) => cita.customer && compartenContacto(cita.customer, contacto))
+      if (delContacto.length >= MAX_RESERVAS_FUTURAS_POR_CONTACTO) {
+        return NextResponse.json({ error: MENSAJE_TOPE_POR_CONTACTO }, { status: 429 })
+      }
     }
 
     // Buscar o crear cliente
