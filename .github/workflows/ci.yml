@@ -6,6 +6,15 @@ on:
   pull_request:
     branches: [main]
 
+# Mínimo privilegio: el workflow sólo lee el código. Sin esto, el GITHUB_TOKEN
+# hereda los permisos por defecto del repo, que pueden incluir escritura.
+permissions:
+  contents: read
+
+# PENDIENTE: fijar actions/checkout y actions/setup-node a un SHA de commit
+# (no a la etiqueta @v4, que quien publica la acción puede mover). Requiere
+# consultar en GitHub el SHA de cada versión; queda para otra tarea.
+
 env:
   DATABASE_URL: "postgresql://user:pass@localhost:5432/eli"
   DIRECT_URL: "postgresql://user:pass@localhost:5432/eli"
