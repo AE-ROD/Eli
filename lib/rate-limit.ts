@@ -18,12 +18,21 @@ function esProduccion(): boolean {
   return process.env.NODE_ENV === "production"
 }
 
+/**
+ * Cuánto se espera a Upstash antes de darlo por caído. La librería trae 5 s
+ * por defecto y, al vencer, deja pasar la petición (`success: true` con
+ * `reason: "timeout"`); acá se acorta para no colgar el login ni la reserva, y
+ * `verificarLimite` trata ese vencimiento como un error más.
+ */
+const TIMEOUT_UPSTASH_MS = 1500
+
 function crearLimitador(prefix: string, tokens: number, ventana: `${number} ${"s" | "m" | "h"}`) {
   if (!redis) return null
   return new Ratelimit({
     redis,
     limiter: Ratelimit.slidingWindow(tokens, ventana),
     prefix: `eli:${prefix}`,
+    timeout: TIMEOUT_UPSTASH_MS,
   })
 }
 
@@ -62,10 +71,48 @@ const limitadores: Record<TipoLimite, Ratelimit | null> = {
   panelEscritura: limitadorPanelEscritura,
 }
 
+/**
+ * Qué hacer si Upstash falla en ejecución (error o timeout).
+ *
+ * Los tipos sensibles —login, registro/recuperación/invitaciones, reserva
+ * pública y escrituras del panel— fallan CERRADO: si no se puede contar, no se
+ * deja pasar, porque una caída del proveedor no puede abrir la puerta a fuerza
+ * bruta ni a reservas en masa. Sólo las lecturas (página pública de horas
+ * libres y GET del panel) fallan abiertas: cortarlas tumbaría la app entera
+ * por una caída ajena y no permiten abuso caro.
+ */
+const fallaAbiertoSiUpstashFalla: Record<TipoLimite, boolean> = {
+  login: false,
+  auth: false,
+  reserva: false,
+  panelEscritura: false,
+  lecturaPublica: true,
+  panelLectura: true,
+}
+
+function primerValor(cabecera: string | null): string | null {
+  const valor = cabecera?.split(",")[0].trim()
+  return valor ? valor : null
+}
+
+/**
+ * IP del cliente para el rate limit.
+ *
+ * SUPONE QUE EL DESPLIEGUE ESTÁ DETRÁS DE VERCEL. Vercel fija
+ * `x-vercel-forwarded-for` y `x-real-ip` con la IP real y sobrescribe lo que
+ * mande el cliente; `x-forwarded-for`, en cambio, puede traer valores que el
+ * cliente inventó, así que sólo se usa como último recurso. Si algún día se
+ * despliega en otro lado (o detrás de otro proxy), esta función debe revisarse:
+ * sin un proxy de confianza que fije estas cabeceras, cualquiera elige su IP
+ * y se salta el límite.
+ */
 export function obtenerIp(request: NextRequest | { headers: Headers }): string {
-  const forwardedFor = request.headers.get("x-forwarded-for")
-  if (forwardedFor) return forwardedFor.split(",")[0].trim()
-  return request.headers.get("x-real-ip") ?? "127.0.0.1"
+  return (
+    primerValor(request.headers.get("x-vercel-forwarded-for")) ??
+    primerValor(request.headers.get("x-real-ip")) ??
+    primerValor(request.headers.get("x-forwarded-for")) ??
+    "127.0.0.1"
+  )
 }
 
 export interface ResultadoLimite {
@@ -83,8 +130,7 @@ export interface ResultadoLimite {
  *   local ni los tests por no tener Upstash configurado.
  *
  * Si Upstash está configurado pero falla en tiempo de ejecución (caída, cuota
- * agotada, etc.) se deja pasar la petición (fail-open): una caída transitoria
- * de un proveedor externo no debe tumbar el login de todo el mundo.
+ * agotada, timeout) depende del tipo: ver `fallaAbiertoSiUpstashFalla`.
  */
 export async function verificarLimite(tipo: TipoLimite, identificador: string): Promise<ResultadoLimite> {
   const limitador = limitadores[tipo]
@@ -108,9 +154,15 @@ export async function verificarLimite(tipo: TipoLimite, identificador: string): 
 
   try {
     const resultado = await limitador.limit(identificador)
+    if (resultado.reason === "timeout") throw new Error(`Upstash no respondió en ${TIMEOUT_UPSTASH_MS} ms`)
     return { permitido: resultado.success, restantes: resultado.remaining }
   } catch (error) {
-    console.error("[rate-limit] Error consultando Upstash, se deja pasar la petición:", error)
-    return { permitido: true, restantes: Infinity }
+    const abierto = fallaAbiertoSiUpstashFalla[tipo]
+    console.error(
+      `[rate-limit] Error consultando Upstash para "${tipo}": ` +
+        (abierto ? "se deja pasar la petición (fail-open)." : "se bloquea la petición (fail-closed)."),
+      error,
+    )
+    return abierto ? { permitido: true, restantes: Infinity } : { permitido: false, restantes: 0 }
   }
 }

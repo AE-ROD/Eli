@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi, type Mock } from "vitest"
+import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from "vitest"
 
 vi.mock("@upstash/redis", () => ({
   Redis: vi.fn().mockImplementation(() => ({})),
@@ -10,7 +10,7 @@ vi.mock("@upstash/ratelimit", () => {
     static creados: Ratelimit[] = []
     static slidingWindow = vi.fn((tokens: number, ventana: string) => ({ tokens, ventana }))
     limit = vi.fn().mockRejectedValue(new Error("Upstash no responde"))
-    constructor(readonly config: { prefix: string; limiter: unknown }) {
+    constructor(readonly config: { prefix: string; limiter: unknown; timeout?: number }) {
       Ratelimit.creados.push(this)
     }
   }
@@ -18,7 +18,7 @@ vi.mock("@upstash/ratelimit", () => {
 })
 
 interface RatelimitFalso {
-  creados: { config: { prefix: string; limiter: unknown }; limit: Mock }[]
+  creados: { config: { prefix: string; limiter: unknown; timeout?: number }; limit: Mock }[]
 }
 
 describe("verificarLimite cuando Upstash está configurado pero falla", () => {
@@ -28,10 +28,52 @@ describe("verificarLimite cuando Upstash está configurado pero falla", () => {
     vi.resetModules()
   })
 
-  it("deja pasar (fail-open) si Upstash tira un error", async () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it.each(["login", "auth", "reserva", "panelEscritura"] as const)(
+    "falla CERRADO para %s si Upstash tira un error: un tipo sensible no queda sin tope",
+    async (tipo) => {
+      vi.spyOn(console, "error").mockImplementation(() => {})
+      const { verificarLimite } = await import("./rate-limit")
+      const resultado = await verificarLimite(tipo, "127.0.0.1")
+      expect(resultado).toEqual({ permitido: false, restantes: 0 })
+    },
+  )
+
+  it.each(["lecturaPublica", "panelLectura"] as const)(
+    "falla abierto para %s si Upstash tira un error: una lectura no se corta por una caída del proveedor",
+    async (tipo) => {
+      vi.spyOn(console, "error").mockImplementation(() => {})
+      const { verificarLimite } = await import("./rate-limit")
+      const resultado = await verificarLimite(tipo, "127.0.0.1")
+      expect(resultado.permitido).toBe(true)
+    },
+  )
+
+  it("si Upstash no contesta a tiempo (reason: timeout) se trata como un error: login queda cerrado", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    const { Ratelimit } = (await import("@upstash/ratelimit")) as unknown as { Ratelimit: RatelimitFalso }
+    Ratelimit.creados.length = 0
     const { verificarLimite } = await import("./rate-limit")
-    const resultado = await verificarLimite("login", "127.0.0.1")
-    expect(resultado.permitido).toBe(true)
+    for (const limitador of Ratelimit.creados) {
+      limitador.limit.mockResolvedValue({ success: true, remaining: 0, reason: "timeout" })
+    }
+    expect(await verificarLimite("login", "127.0.0.1")).toEqual({ permitido: false, restantes: 0 })
+    expect((await verificarLimite("panelLectura", "127.0.0.1")).permitido).toBe(true)
+  })
+
+  it("configura un timeout corto en cada limitador, no los 5 s que trae la librería", async () => {
+    const { Ratelimit } = (await import("@upstash/ratelimit")) as unknown as { Ratelimit: RatelimitFalso }
+    Ratelimit.creados.length = 0
+    await import("./rate-limit")
+    expect(Ratelimit.creados.length).toBeGreaterThan(0)
+    for (const limitador of Ratelimit.creados) {
+      const { timeout } = limitador.config as { timeout?: number }
+      expect(timeout).toBeGreaterThan(0)
+      expect(timeout).toBeLessThanOrEqual(2000)
+    }
   })
 
   it("la lectura pública cuenta en su propio balde, de 60 por minuto: no gasta el de las reservas (20 por hora)", async () => {
@@ -89,6 +131,22 @@ describe("verificarLimite sin Upstash configurado, fuera de producción", () => 
 })
 
 describe("obtenerIp", () => {
+  it("prefiere x-vercel-forwarded-for, que fija Vercel y el cliente no puede inyectar", async () => {
+    const { obtenerIp } = await import("./rate-limit")
+    const headers = new Headers({
+      "x-vercel-forwarded-for": "8.8.4.4",
+      "x-real-ip": "9.9.9.9",
+      "x-forwarded-for": "1.2.3.4, 5.6.7.8",
+    })
+    expect(obtenerIp({ headers })).toBe("8.8.4.4")
+  })
+
+  it("sin x-vercel-forwarded-for usa x-real-ip antes que un x-forwarded-for que pudo venir del cliente", async () => {
+    const { obtenerIp } = await import("./rate-limit")
+    const headers = new Headers({ "x-real-ip": "9.9.9.9", "x-forwarded-for": "1.2.3.4, 5.6.7.8" })
+    expect(obtenerIp({ headers })).toBe("9.9.9.9")
+  })
+
   it("toma la primera IP de x-forwarded-for", async () => {
     const { obtenerIp } = await import("./rate-limit")
     const headers = new Headers({ "x-forwarded-for": "1.2.3.4, 5.6.7.8" })
