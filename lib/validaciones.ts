@@ -53,13 +53,24 @@ const opcionalHasta = (campo: string, maximo: number) =>
     .max(maximo, `${campo} puede tener hasta ${maximo} caracteres`)
     .optional()
 
+/**
+ * Una contraseña nueva: de 8 caracteres a 72 **bytes** en UTF-8. bcrypt
+ * ignora lo que pasa de 72 bytes, así que una contraseña más larga se
+ * guardaría truncada sin avisar; con tildes o eñes, 72 caracteres pueden ser
+ * más de 72 bytes, por eso se cuenta en bytes y no en caracteres.
+ */
+export const contrasenaNuevaSchema = z
+  .string({ required_error: "Falta la contraseña", invalid_type_error: "La contraseña no es válida" })
+  .min(8, "La contraseña tiene que tener al menos 8 caracteres")
+  .refine(
+    (contrasena) => new TextEncoder().encode(contrasena).length <= 72,
+    "La contraseña es demasiado larga: hasta 72 caracteres (menos si usa tildes o símbolos)"
+  )
+
 export const registroSchema = z.object({
   nombre: nombreSchema("nombre"),
   email: emailDeCuentaSchema,
-  contrasena: z
-    .string({ required_error: "Falta la contraseña", invalid_type_error: "La contraseña no es válida" })
-    .min(8, "La contraseña tiene que tener al menos 8 caracteres")
-    .max(72, "La contraseña puede tener hasta 72 caracteres"),
+  contrasena: contrasenaNuevaSchema,
   nombreNegocio: z
     .string({ required_error: "Falta el nombre del negocio", invalid_type_error: "El nombre del negocio no es válido" })
     .trim()
@@ -88,20 +99,6 @@ export const reservaSchema = z.object({
 export const recuperarContrasenaSchema = z.object({
   email: emailDeCuentaSchema,
 })
-
-/**
- * Una contraseña nueva: de 8 caracteres a 72 **bytes** en UTF-8. bcrypt
- * ignora lo que pasa de 72 bytes, así que una contraseña más larga se
- * guardaría truncada sin avisar; con tildes o eñes, 72 caracteres pueden ser
- * más de 72 bytes, por eso se cuenta en bytes y no en caracteres.
- */
-export const contrasenaNuevaSchema = z
-  .string({ required_error: "Falta la contraseña", invalid_type_error: "La contraseña no es válida" })
-  .min(8, "La contraseña tiene que tener al menos 8 caracteres")
-  .refine(
-    (contrasena) => new TextEncoder().encode(contrasena).length <= 72,
-    "La contraseña es demasiado larga: hasta 72 caracteres (menos si usa tildes o símbolos)"
-  )
 
 export const restablecerContrasenaSchema = z.object({
   token: z.string().min(1),
