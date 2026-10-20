@@ -75,11 +75,18 @@ export async function POST(
 
     if (usuarioExistente) {
       const session = await getServerSession(authOptions)
+      const idSesion = session?.user?.id
       const emailSesion = session?.user?.email
 
-      // Contra el correo de la cuenta encontrada, no el de la invitación: es el
-      // que identifica a la persona que tiene que demostrar ser dueña de él.
-      if (!emailSesion || normalizarEmail(emailSesion) !== normalizarEmail(usuarioExistente.email)) {
+      // La sesión tiene que ser la de esa cuenta: por id, que una sesión
+      // revocada ya no tiene, y además por correo contra el de la cuenta
+      // encontrada (no el de la invitación). El correo solo no alcanza.
+      if (
+        !idSesion ||
+        idSesion !== usuarioExistente.id ||
+        !emailSesion ||
+        normalizarEmail(emailSesion) !== normalizarEmail(usuarioExistente.email)
+      ) {
         return NextResponse.json(
           {
             error: "Iniciá sesión con ese correo para aceptar la invitación",

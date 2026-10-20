@@ -127,6 +127,24 @@ describe("sesiones revocables (lib/auth.ts, callback jwt)", () => {
     expect(token.id).toBeFalsy()
   })
 
+  it.each([
+    ["el usuario se borró", null],
+    ["la contraseña se restableció después de emitir el token", usuarioMiembro("worker", { sesionesValidasDesde: new Date(AHORA - 1 * MINUTO) })],
+  ])("al revocar (%s) el token tampoco conserva email, nombre ni foto", async (_caso, usuario) => {
+    prismaMock.user.findUnique.mockResolvedValueOnce(usuario)
+
+    const { token } = await leerSesion(
+      tokenDeProfesional(6, { name: "Carla", picture: "https://foto/carla.png" })
+    )
+
+    // Con el email adentro, cualquier endpoint que identifique por correo
+    // (aceptar una invitación) seguía reconociendo a la persona.
+    expect(token.id).toBeFalsy()
+    expect(token.email).toBeFalsy()
+    expect(token.name).toBeFalsy()
+    expect(token.picture).toBeFalsy()
+  })
+
   it("restablecer la contraseña cierra las sesiones emitidas antes", async () => {
     // El token se emitió hace 30 minutos; la contraseña se cambió hace 10.
     prismaMock.user.findUnique.mockResolvedValueOnce(
