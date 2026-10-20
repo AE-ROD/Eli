@@ -69,6 +69,9 @@ describe("sesiones revocables (lib/auth.ts, callback jwt)", () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    // Un test cuyo token se revoca antes de llegar a la base deja su
+    // `mockResolvedValueOnce` sin consumir: que no se filtre al siguiente.
+    prismaMock.user.findUnique.mockReset()
   })
 
   it("la sesión dura como máximo 7 días", async () => {
@@ -169,13 +172,38 @@ describe("sesiones revocables (lib/auth.ts, callback jwt)", () => {
     expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-1" })
   })
 
-  it("un token de antes de este cambio (sin marcas) se revalida en la primera petición", async () => {
-    prismaMock.user.findUnique.mockResolvedValueOnce(usuarioMiembro("worker", { memberships: [] }))
+  it("un token de antes de este cambio (sin fecha de emisión) cuenta como emitido en 0: vencido y revocado", async () => {
 
-    const { actor } = await leerSesion(tokenDeProfesional(0, { emitidoEn: undefined, revalidadoEn: undefined }))
+    const { token, actor } = await leerSesion(
+      tokenDeProfesional(0, { emitidoEn: undefined, revalidadoEn: undefined })
+    )
 
-    expect(prismaMock.user.findUnique).toHaveBeenCalled()
+    // Sin fecha de emisión no se puede saber cuánto vivió: falla cerrado.
     expect(actor).toBeNull()
+    expect(token.id).toBeFalsy()
+  })
+
+  it("vida máxima absoluta: pasados los 7 días desde que se emitió, se revoca aunque se haya ido renovando", async () => {
+    const sieteDiasYUnMinuto = 7 * 24 * 60 + 1
+
+    const { token, actor } = await leerSesion(
+      tokenDeProfesional(sieteDiasYUnMinuto, { revalidadoEn: AHORA - 1 * MINUTO })
+    )
+
+    expect(actor).toBeNull()
+    expect(token.id).toBeFalsy()
+    expect(token.email).toBeFalsy()
+  })
+
+  it("vida máxima absoluta: con menos de 7 días desde la emisión sigue valiendo", async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce(usuarioMiembro("worker"))
+    const sieteDiasMenosUnMinuto = 7 * 24 * 60 - 1
+
+    const { actor } = await leerSesion(
+      tokenDeProfesional(sieteDiasMenosUnMinuto, { revalidadoEn: AHORA - 6 * MINUTO })
+    )
+
+    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-1" })
   })
 
   it("un token sin fecha de emisión no sobrevive a un restablecimiento", async () => {

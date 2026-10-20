@@ -192,6 +192,11 @@ export const authOptions: NextAuthOptions = {
         })
       }
 
+      // Vida máxima absoluta: NextAuth renueva la cookie en cada uso, así que
+      // sin esto una sesión activa no vencería nunca. Se cuenta desde que se
+      // emitió; un token sin fecha de emisión cuenta como emitido en 0.
+      if (ahora - (token.emitidoEn ?? 0) > DURACION_DE_SESION_S * 1000) return revocar(token)
+
       // Al completar el perfil ("update") se rearma en el acto; en cualquier
       // otra lectura, si pasaron más de 5 minutos desde la última revisión.
       const vencido = !token.revalidadoEn || ahora - token.revalidadoEn >= REVALIDAR_CADA_MS
