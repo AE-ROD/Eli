@@ -340,3 +340,111 @@ describe("DELETE /api/clientes/[id]", () => {
     expect(base.volcado()).toEqual(antes)
   })
 })
+
+/**
+ * Decisión del dueño (PRODUCTO.md, sección 10): la profesional ve los
+ * clientes, los crea y anota en sus notas. Cambiar los datos del cliente y
+ * borrarlo es de dueño y encargado. Para un cliente ajeno sigue siendo 404:
+ * primero se pregunta si existe en el negocio, después si se puede.
+ */
+describe("PUT y DELETE /api/clientes/[id] — qué puede la profesional", () => {
+  const profesionales = [
+    ["la profesional", sesiones.carla],
+    ["un profesional sin memberId", sesiones.sinMiembro],
+  ] as const
+
+  it.each([
+    ["el nombre", { name: "Beto Cambiado" }],
+    ["el email", { email: "otro@correo.test" }],
+    ["el teléfono", { phone: "+56 9 0000 0000" }],
+    ["las etiquetas", { tags: ["VIP"] }],
+    ["un dato junto con las notas", { notes: "Viene los martes", name: "Beto Cambiado" }],
+  ])("la profesional no cambia %s: 401 como el resto del panel, y la base queda igual", async (_que, cuerpo) => {
+    const { PUT } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+    const antes = base.volcado()
+
+    const res = await PUT(pedido(URL_DE_MARIA, cuerpo), conId("c-beto"))
+
+    expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({ error: "No autorizado" })
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it.each(profesionales)("%s que edita datos de un cliente ajeno recibe 404, no 401: no se entera de que existe", async (_quien, sesion) => {
+    const { PUT } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesion)
+    const antes = base.volcado()
+
+    const res = await PUT(pedido(URL_DE_MARIA, { name: "Hackeada" }), conId("c-ajeno"))
+
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: "Cliente no encontrado" })
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("la profesional sí guarda sólo las notas, y nada más cambia", async () => {
+    const { PUT } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+
+    const res = await PUT(pedido(URL_DE_MARIA, { notes: "Alérgica al amoníaco" }), conId("c-maria"))
+
+    expect(res.status).toBe(200)
+    expect(base.buscar("customer", { id: "c-maria" })[0]).toMatchObject({
+      name: "María",
+      lastName: "González",
+      notes: "Alérgica al amoníaco",
+    })
+  })
+
+  it.each([
+    ["la dueña", sesiones.dueña],
+    ["el encargado", sesiones.encargado],
+  ])("%s edita los datos del cliente", async (_quien, sesion) => {
+    const { PUT } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesion)
+
+    const res = await PUT(pedido(URL_DE_MARIA, { name: "Beto Cambiado", tags: ["VIP"] }), conId("c-beto"))
+
+    expect(res.status).toBe(200)
+    expect(base.buscar("customer", { id: "c-beto" })[0]).toMatchObject({ name: "Beto Cambiado", tags: ["VIP"] })
+  })
+
+  it.each(profesionales)("%s no borra un cliente del negocio: 401, y el cliente sigue", async (_quien, sesion) => {
+    const { DELETE } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesion)
+
+    const res = await DELETE(pedido(URL_DE_MARIA), conId("c-maria"))
+
+    expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({ error: "No autorizado" })
+    expect(base.buscar("customer", { id: "c-maria" })).toHaveLength(1)
+  })
+
+  it.each(profesionales)("%s que borra un cliente ajeno recibe 404, no 401", async (_quien, sesion) => {
+    const { DELETE } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesion)
+
+    const res = await DELETE(pedido(URL_DE_MARIA), conId("c-ajeno"))
+
+    expect(res.status).toBe(404)
+    expect(base.buscar("customer", { id: "c-ajeno" })).toHaveLength(1)
+  })
+
+  it("el encargado sí borra un cliente del negocio", async () => {
+    const { DELETE } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.encargado)
+
+    const res = await DELETE(pedido(URL_DE_MARIA), conId("c-beto"))
+
+    expect(res.status).toBe(200)
+    expect(base.buscar("customer", { id: "c-beto" })).toEqual([])
+  })
+})

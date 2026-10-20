@@ -98,6 +98,16 @@ export const veElPanelDeSuDia = (actor: Actor | null): boolean =>
 export const puedeUsarChats = (_actor: Actor | null): boolean => false
 
 /**
+ * Clientes (PRODUCTO.md, sección 10, decidido). Todo rol los ve y los crea:
+ * el profesional los necesita para anotar a quien llega. También escribe sus
+ * notas. Cambiar los datos (nombre, teléfono, email, etiquetas...) y borrar
+ * un cliente es de dueño y encargado. Que el cliente sea del negocio lo
+ * verifica el endpoint antes, con `whereDeClientes`: lo ajeno es 404.
+ */
+export const puedeEditarDatosDeCliente = gestionaElNegocio
+export const puedeBorrarCliente = gestionaElNegocio
+
+/**
  * A quién se asigna una cita. Sólo quien puede asignar citas a otros (dueño y
  * encargado) elige: se respeta lo pedido, incluido `null` ("sin asignar").
  * Cualquier otro —el profesional, o un rol desconocido— no elige: termina

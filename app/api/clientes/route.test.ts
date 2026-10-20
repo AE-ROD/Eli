@@ -464,6 +464,19 @@ describe("POST /api/clientes", () => {
     })
   })
 
+  it("la profesional también crea clientes: los necesita para anotar a quien llega (PRODUCTO.md, sección 10)", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+
+    const res = await POST(fakePost({ name: "Carla Díaz" }))
+
+    expect(res.status).toBe(201)
+    expect(prismaMock.customer.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ name: "Carla Díaz", businessId: "negocio-1" }),
+    })
+  })
+
   it("el cuerpo no elige el negocio: un `businessId` ajeno se ignora", async () => {
     const { POST } = await import("./route")
 
