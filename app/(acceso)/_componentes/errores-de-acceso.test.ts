@@ -6,6 +6,10 @@ describe("mensajeDeErrorDeAcceso", () => {
     expect(mensajeDeErrorDeAcceso("CuentaConContrasena")).toBe("Esta cuenta usa correo y contraseña. Entra con ellos.")
   })
 
+  it("una sesión revocada que el proxy cerró: le pide volver a entrar", () => {
+    expect(mensajeDeErrorDeAcceso("SesionCerrada")).toBe("Tu sesión se cerró. Vuelve a entrar.")
+  })
+
   it("cualquier otro error de NextAuth sigue con el mensaje genérico de Google", () => {
     expect(mensajeDeErrorDeAcceso("AccessDenied")).toBe(
       "No se pudo iniciar sesión con Google. Verifica que tu cuenta esté habilitada."
