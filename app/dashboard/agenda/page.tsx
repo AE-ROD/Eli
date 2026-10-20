@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useId } from "react"
 import { useSession } from "next-auth/react"
+import { actorDeSesion, puedeAsignarCitasAOtros } from "@/lib/permisos"
 import { AnimatePresence } from "framer-motion"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { desplazarFecha, comoTexto, diasDeLaSemanaDe, type UnidadDeTiempo } from "@/lib/fechas"
@@ -33,7 +34,7 @@ function resumen(cargando: boolean, cantidad: number): string {
 
 export default function PaginaAgenda() {
   const { data: sesion } = useSession()
-  const puedeAsignarProfesional = sesion?.user.role === "owner" || sesion?.user.role === "admin"
+  const puedeAsignarProfesional = puedeAsignarCitasAOtros(actorDeSesion(sesion))
 
   const [fecha, setFecha] = useState(new Date())
   const [modo, setModo] = useState<UnidadDeTiempo>("semana")

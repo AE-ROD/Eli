@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
+import { actorDeSesion, veElPanelDeSuDia } from "@/lib/permisos"
 import { Aviso } from "@/components/panel/aviso"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
@@ -35,7 +36,7 @@ export default function PaginaPanel() {
   // Mientras no se sabe el rol no se elige ninguna rama: evita el parpadeo de
   // mostrarle a un profesional el tablero de administración por un instante.
   const rolConocido = estadoSesion !== "loading"
-  const esWorker = sesion?.user?.role === "worker"
+  const verPanelDeSuDia = veElPanelDeSuDia(actorDeSesion(sesion))
   const slugDelNegocio = sesion?.user?.businessSlug ?? ""
 
   useEffect(() => {
@@ -69,7 +70,7 @@ export default function PaginaPanel() {
           <div aria-busy="true" className={cn(TARJETA_DEL_PANEL, "p-8 text-center text-sm text-texto-2")}>
             Cargando...
           </div>
-        ) : esWorker ? (
+        ) : verPanelDeSuDia ? (
           !sinEstadisticas && <VistaDiaProfesional estadisticas={estadisticas} />
         ) : (
           <>

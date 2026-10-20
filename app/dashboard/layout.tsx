@@ -6,7 +6,7 @@ import { ContenidoDelPanel } from "@/components/panel/contenido-del-panel"
 import { ModalBienvenida } from "@/components/panel/modal-bienvenida"
 import { ProveedorDePrecios } from "@/components/panel/contexto-precios"
 import { ProveedorDeBarraLateral } from "@/components/panel/contexto-barra-lateral"
-import { actorDeSesion, puedeGestionarEquipo } from "@/lib/permisos"
+import { actorDeSesion, puedeGestionarEquipo, puedeGestionarSuscripcion } from "@/lib/permisos"
 
 /** Cuántos días dura la prueba gratis, contados desde que se creó el negocio. */
 const DIAS_DE_PRUEBA = 3
@@ -28,13 +28,14 @@ export default async function LayoutDelPanel({
 
   const businessName = session?.user?.businessName ?? ""
   const businessSlug = session?.user?.businessSlug ?? ""
-  const esOwner = session?.user?.role === "owner"
   const businessId = session?.user?.businessId ?? ""
-  const puedeVerEquipo = puedeGestionarEquipo(actorDeSesion(session))
+  const actor = actorDeSesion(session)
+  const puedeVerEquipo = puedeGestionarEquipo(actor)
+  const verSuscripcion = puedeGestionarSuscripcion(actor)
 
-  // Calcular días de trial restantes (solo para owners)
+  // Calcular días de prueba restantes (sólo para quien paga el plan)
   let diasTrialRestantes: number | undefined
-  if (esOwner && businessId) {
+  if (verSuscripcion && businessId) {
     const negocio = await prisma.business.findUnique({
       where: { id: businessId },
       select: { createdAt: true },
@@ -53,7 +54,7 @@ export default async function LayoutDelPanel({
         <div className="min-h-dvh bg-crema text-navy">
           <BarraLateral
             usuario={usuario}
-            esOwner={esOwner}
+            puedeGestionarSuscripcion={verSuscripcion}
             diasTrialRestantes={diasTrialRestantes}
             puedeVerEquipo={puedeVerEquipo}
           />
