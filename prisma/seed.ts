@@ -1,15 +1,19 @@
 /**
  * Datos de ejemplo para desarrollo.
  *
- * La única base configurada hoy es producción, así que el seed **no borra nada**
- * y exige confirmación explícita:
+ * La única base configurada hoy es producción, así que el seed **no borra nada**,
+ * exige confirmación explícita y sólo corre contra localhost/127.0.0.1 o un host
+ * listado en SEED_HOSTS_PERMITIDOS (ver `guarda-del-seed.mjs`):
  *
  *     SEED_CONFIRMO=si node prisma/seed.ts
  *
  * Es idempotente: correrlo dos veces no duplica nada.
  */
+// Primero el .env, para que la guarda vea la misma DATABASE_URL que usará Prisma.
+import "dotenv/config"
 import { PrismaClient } from "@prisma/client"
 import bcrypt from "bcryptjs"
+import { verificarQueElSeedPuedeCorrer } from "./guarda-del-seed.mjs"
 
 const prisma = new PrismaClient()
 
@@ -26,9 +30,7 @@ async function crearUsuario(nombre: string, email: string) {
 }
 
 async function main() {
-  if (process.env.SEED_CONFIRMO !== "si") {
-    throw new Error("Seed cancelado. Corré con SEED_CONFIRMO=si si la base es de desarrollo.")
-  }
+  verificarQueElSeedPuedeCorrer(process.env)
 
   const dueño = await crearUsuario("Ana Dueña", "duena@demo.eli")
 
