@@ -1,4 +1,5 @@
 import { NextAuthOptions } from "next-auth"
+import type { JWT } from "next-auth/jwt"
 import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 import { prisma } from "@/lib/prisma"
@@ -44,8 +45,54 @@ function perfilDe(usuario: UsuarioConNegocio) {
   }
 }
 
+/**
+ * Cada cuánto el token se vuelve a contrastar con la base. Con JWT no hay
+ * sesión en el servidor que borrar: sin esta revisión, un miembro eliminado o
+ * una contraseña restablecida dejaban la sesión vieja viva hasta que venciera.
+ * Cinco minutos es el máximo que alguien conserva un acceso que ya perdió, a
+ * cambio de una consulta cada cinco minutos por sesión y no una por petición.
+ */
+export const REVALIDAR_CADA_MS = 5 * 60 * 1000
+
+/** Siete días: lo que dura una sesión sin volver a entrar. */
+const DURACION_DE_SESION_S = 7 * 24 * 60 * 60
+
+/** Sin negocio no hay rol ni membresía: `actorDeSesion` devuelve null (401) y el proxy manda a completar el perfil. */
+function quitarNegocio(token: JWT): JWT {
+  token.role = undefined
+  token.businessId = null
+  token.businessName = null
+  token.businessSlug = null
+  token.memberId = null
+  return token
+}
+
+/**
+ * Rearma el token desde la base. Si el usuario ya no existe, o el token se
+ * emitió antes de que se cerraran sus sesiones (restablecer la contraseña),
+ * el token deja también de identificarlo: sin `id`, ni completar-perfil lo
+ * acepta. Un token de antes de este cambio no trae `emitidoEn` y cuenta como
+ * emitido en 0, así que no sobrevive a un restablecimiento.
+ */
+async function revalidar(token: JWT, ahora: number): Promise<JWT> {
+  token.revalidadoEn = ahora
+  const usuario = token.id ? await buscarUsuario({ id: token.id }) : null
+
+  const revocada =
+    !usuario ||
+    (!!usuario.sesionesValidasDesde && (token.emitidoEn ?? 0) < usuario.sesionesValidasDesde.getTime())
+
+  if (revocada) {
+    token.id = ""
+    return quitarNegocio(token)
+  }
+
+  Object.assign(token, { id: usuario.id, email: usuario.email }, perfilDe(usuario))
+  return token.businessId ? token : quitarNegocio(token)
+}
+
 export const authOptions: NextAuthOptions = {
-  session: { strategy: "jwt" },
+  session: { strategy: "jwt", maxAge: DURACION_DE_SESION_S },
   pages: { signIn: "/iniciar-sesion" },
   providers: [
     GoogleProvider({
@@ -97,28 +144,34 @@ export const authOptions: NextAuthOptions = {
     },
 
     async jwt({ token, user, account, trigger }) {
-      // Al completar el perfil ("update") o al entrar con Google, el token se
-      // rearma desde la base: es la única fuente confiable del rol y el negocio.
-      const recargar =
-        trigger === "update" ? { id: token.id } : account?.provider === "google" ? { email: token.email! } : null
+      const ahora = Date.now()
 
-      if (recargar) {
-        const usuario = await buscarUsuario(recargar)
+      // Al entrar con Google el token se arma desde la base: es la única
+      // fuente confiable del rol y el negocio.
+      if (account?.provider === "google") {
+        const usuario = await buscarUsuario({ email: token.email! })
         if (usuario) Object.assign(token, { id: usuario.id }, perfilDe(usuario))
-        return token
+        return Object.assign(token, { emitidoEn: ahora, revalidadoEn: ahora })
       }
 
       // Primer login con credenciales: lo que devolvió `authorize`.
       if (user) {
-        Object.assign(token, {
+        return Object.assign(token, {
           id: user.id,
           role: user.role,
           businessId: user.businessId,
           businessName: user.businessName,
           businessSlug: user.businessSlug,
           memberId: user.memberId,
+          emitidoEn: ahora,
+          revalidadoEn: ahora,
         })
       }
+
+      // Al completar el perfil ("update") se rearma en el acto; en cualquier
+      // otra lectura, si pasaron más de 5 minutos desde la última revisión.
+      const vencido = !token.revalidadoEn || ahora - token.revalidadoEn >= REVALIDAR_CADA_MS
+      if (trigger === "update" || vencido) return revalidar(token, ahora)
 
       return token
     },
