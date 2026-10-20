@@ -58,6 +58,14 @@ export function yaPasoLaHora(fecha: string, hora: string, ahora: Date, zona: str
 // "cita con `serviceId`" (`WHERE_RESERVA_PUBLICA`). Si el panel empieza a
 // guardar el servicio, esta regla deja de distinguirlas: hace falta la columna.
 
+/**
+ * De dónde viene una cita (`Appointment.source`): la crea el equipo en el
+ * panel o el cliente en la página pública. La base los limita a estos dos
+ * con una CHECK (migración `origen_de_las_citas`).
+ */
+export const ORIGENES_DE_CITA = ["panel", "reserva-publica"] as const
+export type OrigenDeCita = (typeof ORIGENES_DE_CITA)[number]
+
 /** Cuántas reservas futuras no canceladas puede tener un mismo email o teléfono en un negocio. */
 export const MAX_RESERVAS_FUTURAS_POR_CONTACTO = 3
 
