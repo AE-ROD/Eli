@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
-import { ESTADOS_DE_CITA, MENSAJE_DE_HORARIO_INVERTIDO, notas, precio, terminaDespuesDeEmpezar, titulo } from "@/lib/campos-del-panel"
+import { ESTADOS_DE_CITA, MENSAJE_DE_HORARIO_INVERTIDO, notas, precioDeCita, terminaDespuesDeEmpezar, titulo } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, memberIdParaCita, whereDeAgenda } from "@/lib/permisos"
 import { esFechaCalendario, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
@@ -15,7 +15,7 @@ const citaSchema = z
     endTime: z.string().datetime("La fecha de fin no es válida"),
     status: z.enum(ESTADOS_DE_CITA).optional(),
     notes: notas().optional(),
-    price: precio().optional(),
+    price: precioDeCita().optional(),
     customerId: z.string(),
     memberId: z.string().nullable().optional(),
   })

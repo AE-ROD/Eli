@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
-import { descripcion, duracion, nombre, precio } from "@/lib/campos-del-panel"
+import { descripcion, duracion, nombre, precioDeServicio } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, puedeGestionarServicios } from "@/lib/permisos"
 
@@ -28,7 +28,7 @@ const servicioSchema = z.object({
   name: nombre(),
   description: descripcion().optional(),
   duration: duracion(),
-  price: precio().optional(),
+  price: precioDeServicio().optional(),
 })
 
 export async function POST(request: NextRequest) {

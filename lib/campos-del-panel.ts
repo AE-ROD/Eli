@@ -59,19 +59,28 @@ export const etiquetas = () =>
     .array(z.string().trim().max(30, "Cada etiqueta puede tener hasta 30 caracteres"))
     .max(20, "No puede haber más de 20 etiquetas")
 
-/** Un precio en unidades: mayor que 0 y hasta 10.000.000. */
-export const precio = () =>
-  z
-    .number()
-    .positive("El precio tiene que ser mayor que 0")
-    .max(10_000_000, "El precio no puede ser mayor que 10.000.000")
+const PRECIO_MAXIMO = "El precio no puede ser mayor que 10.000.000"
 
-/** Duración de un servicio, en minutos enteros: de 5 a 480 (ocho horas). */
+/**
+ * El precio de una cita, en unidades: mayor que 0 (así era antes) y hasta
+ * 10.000.000. Una cita sin precio no manda el campo.
+ */
+export const precioDeCita = () =>
+  z.number().positive("El precio tiene que ser mayor que 0").max(10_000_000, PRECIO_MAXIMO)
+
+/**
+ * El precio de un servicio: desde 0, porque un servicio gratis es válido
+ * (así era antes), y hasta 10.000.000.
+ */
+export const precioDeServicio = () =>
+  z.number().min(0, "El precio no puede ser negativo").max(10_000_000, PRECIO_MAXIMO)
+
+/** Duración de un servicio, en minutos enteros: de 15 (el mínimo de antes) a 480 (ocho horas). */
 export const duracion = () =>
   z
     .number()
     .int("La duración tiene que ser un número entero de minutos")
-    .min(5, "La duración tiene que ser de al menos 5 minutos")
+    .min(15, "La duración tiene que ser de al menos 15 minutos")
     .max(480, "La duración no puede pasar de 480 minutos")
 
 export const ESTADOS_DE_CITA = ["pendiente", "confirmada", "en-progreso", "completada", "cancelada"] as const
