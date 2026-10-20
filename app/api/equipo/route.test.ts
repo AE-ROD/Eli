@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { pedidoFalso } from "@/pruebas/pedidos"
+import { createHash } from "node:crypto"
 
 const mockGetServerSession = vi.fn()
 
@@ -142,6 +143,38 @@ describe("POST /api/equipo", () => {
     expect(res.status).toBe(201)
     expect(data.invitacion).not.toHaveProperty("token")
     expect(JSON.stringify(data)).not.toContain("token-secreto")
+  })
+
+  it("guarda sólo el hash del token; el token en claro va únicamente en el enlace del correo", async () => {
+    const { POST } = await import("./route")
+    const { enviarInvitacionTrabajador } = await import("@/lib/email")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.user.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.create.mockResolvedValueOnce({
+      id: "inv-2",
+      name: "Ana",
+      email: "ana@x.com",
+      role: "worker",
+      expiresAt: new Date(),
+      createdAt: new Date(),
+    })
+    prismaMock.business.findUnique.mockResolvedValueOnce({ name: "Mi negocio" })
+
+    const res = await POST(pedidoFalso({ nombre: "Ana", email: "ana@x.com", rol: "worker" }))
+
+    expect(res.status).toBe(201)
+    const enlace: string = vi.mocked(enviarInvitacionTrabajador).mock.calls[0][0].enlaceAceptar
+    const tokenDelEnlace = enlace.split("/unirse/")[1]
+    const argumentosCrear = prismaMock.workerInvitation.create.mock.calls[0][0]
+
+    expect(tokenDelEnlace).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect(argumentosCrear.data.tokenHash).toBe(createHash("sha256").update(tokenDelEnlace).digest("hex"))
+    expect(JSON.stringify(argumentosCrear)).not.toContain(tokenDelEnlace)
+    // Ni siquiera el hash se pide de vuelta: no hay forma de que llegue a la respuesta.
+    expect(argumentosCrear.select.tokenHash).toBeUndefined()
+    expect(JSON.stringify(await res.json())).not.toContain(tokenDelEnlace)
   })
 
   it("un encargado (admin) puede invitar", async () => {

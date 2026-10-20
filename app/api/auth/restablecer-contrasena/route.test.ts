@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { pedidoFalso } from "@/pruebas/pedidos"
+import { createHash } from "node:crypto"
 
 const mockVerificarLimite = vi.fn()
 const mockHash = vi.fn()
@@ -69,6 +70,29 @@ describe("POST /api/auth/restablecer-contrasena", () => {
       where: { id: "enlace-1", usedAt: null, expiresAt: { gt: expect.any(Date) } },
       data: { usedAt: expect.any(Date) },
     })
+  })
+
+  it("busca el enlace por el hash del token, no por el token en claro", async () => {
+    const { POST } = await import("./route")
+
+    const res = await POST(pedidoFalso({ token: "token-abc", contrasena: "nuevaClave1" }))
+
+    expect(res.status).toBe(200)
+    expect(prismaMock.passwordResetToken.findUnique).toHaveBeenCalledWith({
+      where: { tokenHash: createHash("sha256").update("token-abc").digest("hex") },
+    })
+  })
+
+  it("un enlace de antes del cambio (un cuid) sigue funcionando: la migración guardó su hash", async () => {
+    const { POST } = await import("./route")
+    const cuid = "clx9k2m8a0000qz8h3f7d2b1c"
+
+    const res = await POST(pedidoFalso({ token: cuid, contrasena: "nuevaClave1" }))
+
+    expect(res.status).toBe(200)
+    expect(prismaMock.passwordResetToken.findUnique.mock.calls[0][0].where.tokenHash).toBe(
+      createHash("sha256").update(cuid, "utf8").digest("hex")
+    )
   })
 
   it("el cuerpo de antes, con `password`, ya no sirve: 400 y no se toca nada", async () => {

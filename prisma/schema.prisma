@@ -80,7 +80,9 @@ model WorkerInvitation {
   email      String
   name       String
   role       String    @default("worker")
-  token      String    @unique @default(cuid())
+  /// sha256 del token del enlace (lib/tokens.ts); el token en claro no se
+  /// guarda. La columna sigue llamándose `token` para no renombrarla.
+  tokenHash  String    @unique @map("token")
   expiresAt  DateTime
   acceptedAt DateTime?
   createdAt  DateTime  @default(now())
@@ -93,7 +95,8 @@ model PasswordResetToken {
   id        String    @id @default(cuid())
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token     String    @unique @default(cuid())
+  /// sha256 del token del enlace (lib/tokens.ts), como `WorkerInvitation.tokenHash`.
+  tokenHash String    @unique @map("token")
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())

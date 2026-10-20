@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs"
 import { restablecerContrasenaSchema as schema } from "@/lib/validaciones"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import type { Prisma } from "@prisma/client"
+import { hashDeToken } from "@/lib/tokens"
 
 const ENLACE_INVALIDO = () => NextResponse.json({ error: "Enlace inválido o expirado" }, { status: 410 })
 
@@ -21,7 +22,8 @@ export async function POST(request: NextRequest) {
     const cuerpo = await request.json()
     const { token, contrasena } = schema.parse(cuerpo)
 
-    const resetToken = await prisma.passwordResetToken.findUnique({ where: { token } })
+    // La base guarda el hash (lib/tokens.ts): se busca por el hash del enlace.
+    const resetToken = await prisma.passwordResetToken.findUnique({ where: { tokenHash: hashDeToken(token) } })
 
     if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
       return ENLACE_INVALIDO()

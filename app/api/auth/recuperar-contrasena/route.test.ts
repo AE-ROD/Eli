@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { pedidoFalso } from "@/pruebas/pedidos"
+import { createHash } from "node:crypto"
 
 const mockVerificarLimite = vi.fn()
 const mockEnviarRecuperacion = vi.fn()
@@ -53,9 +54,26 @@ describe("POST /api/auth/recuperar-contrasena", () => {
     expect(mockEnviarRecuperacion).toHaveBeenCalledWith(
       expect.objectContaining({
         emailUsuario: "ana@example.com",
-        enlaceRestablecer: expect.stringMatching(/\/restablecer-contrasena\/token-abc$/),
+        enlaceRestablecer: expect.stringMatching(/\/restablecer-contrasena\/[A-Za-z0-9_-]{43}$/),
       })
     )
+  })
+
+  it("lo que se guarda es el hash del token del enlace, nunca el token en claro", async () => {
+    const { POST } = await import("./route")
+
+    const res = await POST(pedidoFalso({ email: "ana@example.com" }))
+
+    expect(res.status).toBe(200)
+    const enlace: string = mockEnviarRecuperacion.mock.calls[0][0].enlaceRestablecer
+    const tokenDelEnlace = enlace.split("/restablecer-contrasena/")[1]
+    const guardado = prismaMock.passwordResetToken.create.mock.calls[0][0].data
+
+    // 32 bytes al azar en base64url, no un cuid predecible.
+    expect(tokenDelEnlace).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect(guardado.tokenHash).toBe(createHash("sha256").update(tokenDelEnlace).digest("hex"))
+    expect(JSON.stringify(guardado)).not.toContain(tokenDelEnlace)
+    expect(JSON.stringify(await res.json())).not.toContain(tokenDelEnlace)
   })
 
   it("con un correo sin cuenta responde lo mismo que con uno que existe: no revela quién tiene cuenta", async () => {

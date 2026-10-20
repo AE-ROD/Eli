@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { pedidoFalso } from "@/pruebas/pedidos"
 import bcrypt from "bcryptjs"
+import { createHash } from "node:crypto"
 
 const mockGetServerSession = vi.fn()
 
@@ -19,6 +20,7 @@ const prismaMock = {
   workerInvitation: {
     findUnique: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
   user: {
     findFirst: vi.fn(),
@@ -63,6 +65,7 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     prismaMock.$transaction.mockImplementation(async (fn: (tx: typeof prismaMock) => unknown) => fn(prismaMock))
+    prismaMock.workerInvitation.updateMany.mockResolvedValue({ count: 1 })
   })
 
   it("responde 410 si la invitación no existe, venció o ya fue aceptada", async () => {
@@ -87,6 +90,98 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     expect(res3.status).toBe(410)
   })
 
+  it("busca la invitación por el hash del token del enlace", async () => {
+    const { POST } = await import("./route")
+
+    prismaMock.workerInvitation.findUnique.mockResolvedValueOnce(null)
+    await POST(pedidoFalso({ contrasena: "cualquiera1" }), { params: params() })
+
+    expect(prismaMock.workerInvitation.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { tokenHash: createHash("sha256").update("token-valido").digest("hex") } })
+    )
+  })
+
+  describe("un solo uso", () => {
+    // Las implementaciones de acá son permanentes: no pueden filtrarse a los
+    // demás tests, que usan las de una sola vez.
+    afterEach(() => {
+      prismaMock.workerInvitation.findUnique.mockReset()
+      prismaMock.workerInvitation.update.mockReset()
+      prismaMock.workerInvitation.updateMany.mockReset()
+      prismaMock.user.findFirst.mockReset()
+      prismaMock.user.create.mockReset()
+      prismaMock.businessMember.findUnique.mockReset()
+      mockGetServerSession.mockReset()
+    })
+    /**
+     * La invitación vive en memoria: `findUnique` devuelve cómo está ahora y
+     * `updateMany` con `acceptedAt: null` es atómico, como en Postgres (el
+     * segundo UPDATE espera el bloqueo de fila y vuelve a evaluar el WHERE).
+     */
+    function invitacionEnMemoria() {
+      const fila = { ...invitacionBase, acceptedAt: null as Date | null }
+      prismaMock.workerInvitation.findUnique.mockImplementation(async () => ({ ...fila }))
+      prismaMock.workerInvitation.update.mockImplementation(async ({ data }: { data: { acceptedAt: Date } }) => {
+        fila.acceptedAt = data.acceptedAt
+        return fila
+      })
+      prismaMock.workerInvitation.updateMany.mockImplementation(
+        async ({ where, data }: { where: { id: string; acceptedAt: null }; data: { acceptedAt: Date } }) => {
+          if (where.id !== fila.id || fila.acceptedAt !== where.acceptedAt) return { count: 0 }
+          fila.acceptedAt = data.acceptedAt
+          return { count: 1 }
+        }
+      )
+      return fila
+    }
+
+    it("aceptar dos veces a la vez con cuenta nueva: una vale y la otra falla, y se crea un solo usuario", async () => {
+      const { POST } = await import("./route")
+      invitacionEnMemoria()
+      prismaMock.user.findFirst.mockResolvedValue(null)
+      prismaMock.user.create.mockResolvedValue({ id: "user-nuevo", email: invitacionBase.email })
+
+      const [a, b] = await Promise.all([
+        POST(pedidoFalso({ contrasena: "unaClaveSegura1" }), { params: params() }),
+        POST(pedidoFalso({ contrasena: "otraClaveSegura1" }), { params: params() }),
+      ])
+
+      expect([a.status, b.status].sort()).toEqual([200, 410])
+      expect(prismaMock.user.create).toHaveBeenCalledTimes(1)
+      expect(prismaMock.businessMember.create).toHaveBeenCalledTimes(1)
+    })
+
+    it("aceptar dos veces a la vez con la cuenta existente: una vale y la otra falla", async () => {
+      const { POST } = await import("./route")
+      invitacionEnMemoria()
+      prismaMock.user.findFirst.mockResolvedValue(cuentaExistente)
+      prismaMock.businessMember.findUnique.mockResolvedValue(null)
+      mockGetServerSession.mockResolvedValue({ user: { email: cuentaExistente.email } })
+
+      const [a, b] = await Promise.all([
+        POST(pedidoFalso({}), { params: params() }),
+        POST(pedidoFalso({}), { params: params() }),
+      ])
+
+      expect([a.status, b.status].sort()).toEqual([200, 410])
+      expect(prismaMock.businessMember.create).toHaveBeenCalledTimes(1)
+    })
+
+    it("aceptar una invitación ya aceptada falla con 410", async () => {
+      const { POST } = await import("./route")
+      const fila = invitacionEnMemoria()
+      prismaMock.user.findFirst.mockResolvedValue(null)
+      prismaMock.user.create.mockResolvedValue({ id: "user-nuevo", email: invitacionBase.email })
+
+      const primera = await POST(pedidoFalso({ contrasena: "unaClaveSegura1" }), { params: params() })
+      const segunda = await POST(pedidoFalso({ contrasena: "unaClaveSegura1" }), { params: params() })
+
+      expect(primera.status).toBe(200)
+      expect(fila.acceptedAt).toBeInstanceOf(Date)
+      expect(segunda.status).toBe(410)
+    })
+  })
+
   it("email sin cuenta: crea el usuario con la contraseña elegida y la membresía", async () => {
     const { POST } = await import("./route")
 
@@ -106,8 +201,8 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     expect(prismaMock.businessMember.create).toHaveBeenCalledWith({
       data: { businessId: invitacionBase.businessId, userId: "user-nuevo", role: invitacionBase.role },
     })
-    expect(prismaMock.workerInvitation.update).toHaveBeenCalledWith({
-      where: { id: invitacionBase.id },
+    expect(prismaMock.workerInvitation.updateMany).toHaveBeenCalledWith({
+      where: { id: invitacionBase.id, acceptedAt: null, expiresAt: { gt: expect.any(Date) } },
       data: { acceptedAt: expect.any(Date) },
     })
   })
@@ -123,7 +218,7 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     expect(res.status).toBe(400)
     expect(prismaMock.user.create).not.toHaveBeenCalled()
     expect(prismaMock.businessMember.create).not.toHaveBeenCalled()
-    expect(prismaMock.workerInvitation.update).not.toHaveBeenCalled()
+    expect(prismaMock.workerInvitation.updateMany).not.toHaveBeenCalled()
   })
 
   it("la cuenta existente se reconoce aunque el correo venga con otras mayúsculas", async () => {
@@ -162,7 +257,7 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     expect(data.requiereSesion).toBe(true)
     expect(prismaMock.user.create).not.toHaveBeenCalled()
     expect(prismaMock.businessMember.create).not.toHaveBeenCalled()
-    expect(prismaMock.workerInvitation.update).not.toHaveBeenCalled()
+    expect(prismaMock.workerInvitation.updateMany).not.toHaveBeenCalled()
     expect(prismaMock.$transaction).not.toHaveBeenCalled()
   })
 
@@ -181,7 +276,7 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     expect(data.requiereSesion).toBe(true)
     expect(prismaMock.user.create).not.toHaveBeenCalled()
     expect(prismaMock.businessMember.create).not.toHaveBeenCalled()
-    expect(prismaMock.workerInvitation.update).not.toHaveBeenCalled()
+    expect(prismaMock.workerInvitation.updateMany).not.toHaveBeenCalled()
   })
 
   it("email con cuenta existente y sesión propia: solo suma la membresía, no toca password ni name", async () => {
@@ -204,8 +299,8 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     expect(prismaMock.businessMember.create).toHaveBeenCalledWith({
       data: { businessId: invitacionBase.businessId, userId: cuentaExistente.id, role: invitacionBase.role },
     })
-    expect(prismaMock.workerInvitation.update).toHaveBeenCalledWith({
-      where: { id: invitacionBase.id },
+    expect(prismaMock.workerInvitation.updateMany).toHaveBeenCalledWith({
+      where: { id: invitacionBase.id, acceptedAt: null, expiresAt: { gt: expect.any(Date) } },
       data: { acceptedAt: expect.any(Date) },
     })
   })
