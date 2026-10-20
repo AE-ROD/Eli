@@ -124,3 +124,69 @@ describe("restablecerContrasenaSchema", () => {
     ).toBe(false)
   })
 })
+
+/**
+ * Largos máximos (M10/F-06). Sin tope, la página pública y el registro
+ * guardaban textos de cualquier largo (megas en un nombre o un comentario).
+ * La contraseña, hasta 72: bcrypt ignora lo que sigue.
+ */
+describe("largos máximos", () => {
+  const reservaValida = { servicioId: "clx123", fecha: "2026-08-15", hora: "14:30", nombre: "Juan", apellido: "Pérez" }
+  const registroValido = {
+    nombre: "Ana",
+    email: "ana@example.com",
+    contrasena: "password123",
+    nombreNegocio: "Spa Ana",
+    tipoNegocio: "salon",
+  }
+  const texto = (largo: number) => "a".repeat(largo)
+  /** Un email válido de `largo` caracteres. */
+  const emailDe = (largo: number) => `${texto(largo - "@ejemplo.cl".length)}@ejemplo.cl`
+
+  describe("reservaSchema", () => {
+    it.each([
+      ["nombre", 100],
+      ["apellido", 100],
+      ["cedula", 30],
+      ["telefono", 30],
+      ["comentarios", 1000],
+      ["servicioId", 64],
+    ])("%s: acepta %i caracteres y rechaza uno más", (campo, maximo) => {
+      expect(reservaSchema.safeParse({ ...reservaValida, [campo]: texto(maximo) }).success).toBe(true)
+      expect(reservaSchema.safeParse({ ...reservaValida, [campo]: texto(maximo + 1) }).success).toBe(false)
+    })
+
+    it("email: rechaza más de 254 caracteres", () => {
+      expect(reservaSchema.safeParse({ ...reservaValida, email: emailDe(60) }).success).toBe(true)
+      expect(reservaSchema.safeParse({ ...reservaValida, email: emailDe(255) }).success).toBe(false)
+    })
+
+    it("nombre y apellido se guardan sin espacios alrededor, y sólo espacios no cuenta como nombre", () => {
+      const resultado = reservaSchema.parse({ ...reservaValida, nombre: "  Juan  ", apellido: " Pérez " })
+      expect(resultado).toMatchObject({ nombre: "Juan", apellido: "Pérez" })
+      expect(reservaSchema.safeParse({ ...reservaValida, nombre: "     " }).success).toBe(false)
+    })
+  })
+
+  describe("registroSchema", () => {
+    it.each([
+      ["nombre", 100],
+      ["nombreNegocio", 80],
+      ["contrasena", 72],
+    ])("%s: acepta %i caracteres y rechaza uno más", (campo, maximo) => {
+      expect(registroSchema.safeParse({ ...registroValido, [campo]: texto(maximo) }).success).toBe(true)
+      expect(registroSchema.safeParse({ ...registroValido, [campo]: texto(maximo + 1) }).success).toBe(false)
+    })
+
+    it("email: rechaza más de 254 caracteres", () => {
+      expect(registroSchema.safeParse({ ...registroValido, email: emailDe(60) }).success).toBe(true)
+      expect(registroSchema.safeParse({ ...registroValido, email: emailDe(255) }).success).toBe(false)
+    })
+
+    it("los mensajes de error están en español", () => {
+      const resultado = registroSchema.safeParse({ ...registroValido, nombreNegocio: texto(81) })
+      expect(resultado.success).toBe(false)
+      expect(resultado.error?.issues[0].message).toMatch(/nombre del negocio/i)
+    })
+  })
+})

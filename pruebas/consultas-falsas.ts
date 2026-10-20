@@ -150,14 +150,21 @@ function coincideRelacion(tablas: Tablas, rel: Relacion, registro: Registro, con
   return otro !== null && cumple(otro, condicion)
 }
 
-function coincideCampo(valor: unknown, condicion: unknown, ruta: string): boolean {
-  if (condicion === null) return valor === null
+function coincideCampo(guardado: unknown, condicion: unknown, ruta: string): boolean {
+  if (condicion === null) return guardado === null
   if (!esObjetoPlano(condicion)) {
     if (Array.isArray(condicion)) return falla(`igualdad contra una lista en ${ruta}`)
-    return iguales(valor, condicion)
+    return iguales(guardado, condicion)
   }
 
-  return Object.entries(condicion).every(([operador, argumento]) => {
+  // `mode: "insensitive"` (Postgres): los textos se comparan sin mayúsculas.
+  const { mode, ...operaciones } = condicion
+  if (mode !== undefined && mode !== "insensitive" && mode !== "default") return falla(`mode ${String(mode)} no soportado en ${ruta}`)
+  const sinMayusculas = (texto: unknown) => (mode === "insensitive" && typeof texto === "string" ? texto.toLowerCase() : texto)
+  const valor = sinMayusculas(guardado)
+
+  return Object.entries(operaciones).every(([operador, original]) => {
+    const argumento = Array.isArray(original) ? original.map(sinMayusculas) : sinMayusculas(original)
     if (argumento === undefined) return true
     if (!OPERADORES_DE_CAMPO.has(operador)) return falla(`operador ${operador} no soportado en ${ruta}`)
     // Como en SQL: comparar contra NULL no da verdadero (salvo `not: null`).

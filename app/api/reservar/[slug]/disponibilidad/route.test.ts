@@ -64,6 +64,20 @@ function expectSinConsultas() {
   expect(base.prisma.appointment.findMany).not.toHaveBeenCalled()
 }
 
+/**
+ * El reloj del servidor, fijo: disponibilidad no ofrece fechas pasadas ni a
+ * más de 90 días, así que cada grupo fija un "ahora" cerca de las fechas que
+ * pide. Sólo se finge `Date`.
+ */
+function relojEn(instante: string) {
+  vi.useFakeTimers({ toFake: ["Date"] })
+  vi.setSystemTime(new Date(instante))
+}
+
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 async function horasDelDia() {
   const { GET } = await import("./route")
   const res = await GET(pedidoFalso(URL_DEL_DIA), conSlug)
@@ -74,6 +88,8 @@ async function horasDelDia() {
 describe("GET /api/reservar/[slug]/disponibilidad", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Seis días antes del lunes 7 de enero de 2030.
+    relojEn("2030-01-01T12:00:00.000Z")
     mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 59 })
     escenario([franja({ startTime: "09:00", endTime: "12:00" })])
   })
@@ -144,6 +160,7 @@ describe("GET /api/reservar/[slug]/disponibilidad", () => {
 describe("GET /api/reservar/[slug]/disponibilidad: de qué horario salen las horas", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    relojEn("2030-01-01T12:00:00.000Z")
     mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 59 })
   })
 
@@ -323,6 +340,8 @@ describe("GET /api/reservar/[slug]/disponibilidad: fechas fuera del rango de añ
 
   beforeEach(() => {
     vi.clearAllMocks()
+    // Un mes antes del último día aceptado: así 9998-12-31 cae dentro de los 90 días.
+    relojEn("9998-12-01T12:00:00.000Z")
     mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 59 })
     // Atiende todos los días: si la fecha pasara, habría horas que calcular.
     escenario(TODOS_LOS_DIAS.map((dayOfWeek) => franja({ dayOfWeek, startTime: "09:00", endTime: "11:00" })))
@@ -357,6 +376,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: fechas fuera del rango de añ
 describe("GET /api/reservar/[slug]/disponibilidad: el día del salto del horario de verano", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    relojEn("2026-09-01T12:00:00.000Z")
     mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 59 })
   })
 
@@ -368,5 +388,63 @@ describe("GET /api/reservar/[slug]/disponibilidad: el día del salto del horario
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ slots: ["01:00"] })
+  })
+})
+
+/**
+ * Sólo se ofrecen horas desde ahora hasta 90 días después, en el reloj del
+ * negocio (A3), con la misma regla que aplica `confirmar`. Esperados a mano:
+ * el 19/10/2026 a las 13:30 UTC son las 10:30 en Santiago; del 1/10/2026 al
+ * 30/12/2026 hay 90 días.
+ */
+describe("GET /api/reservar/[slug]/disponibilidad: ni en el pasado ni a más de 90 días", () => {
+  const TODOS_LOS_DIAS = [0, 1, 2, 3, 4, 5, 6]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 59 })
+    escenario(TODOS_LOS_DIAS.map((dayOfWeek) => franja({ dayOfWeek, startTime: "09:00", endTime: "11:00" })))
+  })
+
+  async function respuestaDe(fecha: string) {
+    const { GET } = await import("./route")
+    const res = await GET(pedidoFalso(`?fecha=${fecha}&servicioId=s-corte`), conSlug)
+    return { status: res.status, cuerpo: await res.json() }
+  }
+
+  it.each([
+    ["ayer", "2026-10-18"],
+    ["hace años", "2020-01-06"],
+  ])("%s: sin horas y con el motivo, sin leer horarios ni citas", async (_caso, fecha) => {
+    relojEn("2026-10-19T13:30:00.000Z")
+
+    const { status, cuerpo } = await respuestaDe(fecha)
+
+    expect(status).toBe(200)
+    expect(cuerpo.slots).toEqual([])
+    expect(cuerpo.mensaje).toMatch(/ya pasó/)
+    expect(base.prisma.workSchedule.findMany).not.toHaveBeenCalled()
+    expect(base.prisma.appointment.findMany).not.toHaveBeenCalled()
+  })
+
+  it("a 90 días justos (30/12/2026): ofrece las horas", async () => {
+    relojEn("2026-10-01T12:00:00.000Z")
+
+    expect(await respuestaDe("2026-12-30")).toEqual({ status: 200, cuerpo: { slots: ["09:00", "10:00"] } })
+  })
+
+  it.each([
+    ["a 91 días", "2026-12-31"],
+    ["años después", "2030-01-07"],
+  ])("%s: sin horas y con el límite de 90 días, sin leer horarios ni citas", async (_caso, fecha) => {
+    relojEn("2026-10-01T12:00:00.000Z")
+
+    const { status, cuerpo } = await respuestaDe(fecha)
+
+    expect(status).toBe(200)
+    expect(cuerpo.slots).toEqual([])
+    expect(cuerpo.mensaje).toMatch(/90 días/)
+    expect(base.prisma.workSchedule.findMany).not.toHaveBeenCalled()
+    expect(base.prisma.appointment.findMany).not.toHaveBeenCalled()
   })
 })
