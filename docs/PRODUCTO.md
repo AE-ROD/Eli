@@ -151,6 +151,8 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 - Aplicación móvil nativa
 - Multi-sucursal
 
+**Zona horaria del negocio.** Cada negocio tiene su zona horaria (IANA, por defecto `America/Santiago`). En ella se leen sus horarios de atención y sus días: qué día de la semana es una fecha, qué horas ofrece la página pública (y cuáles ya pasaron hoy), en qué instante se guarda la cita reservada y qué citas trae la vista Día, Semana y Mes de la agenda. Si la zona guardada no es válida, se usa la de por defecto. Con el cambio de horario, una hora que no existe se corre hacia adelante lo que dura el salto y una que ocurre dos veces se toma la primera vez. **Todavía no hay pantalla para cambiarla** (sección 10).
+
 ---
 
 ## 7. Tablero de atenciones
@@ -240,7 +242,7 @@ Nada de esto bloquea el trabajo actual, pero cada punto se decide antes de const
 | **Funciones nuevas** | El resto del listado de ideas por incorporar, con qué problema resuelve cada una y si es imprescindible para vender. |
 | **Dinero** | Ya decidido: `Decimal` como formato único (como en comisiones / F-015). Hoy conviven Float (`Service.price`, `Appointment.price`) y centavos Int (tablero); migrarlos es una tarea aparte que cambia el esquema y se ensaya primero en una base de desarrollo, nunca directo en producción. |
 | **Comisiones en el tablero** | Integrar la rama `comisiones` sobre las líneas de atención (sección 3.6). |
-| **Turnos y zona horaria** | Si cada negocio define sus propios turnos y su zona horaria, en vez de los turnos fijos y la hora del dispositivo (sección 8). |
+| **Turnos y zona horaria** | Ya decidido: la zona horaria es **por negocio**, con `America/Santiago` por defecto (sección 6); la usan la reserva pública y la agenda. Falta: la pantalla para que el dueño la cambie, si los reportes, el inicio y "Llegó" pasan a usarla en vez de la zona del dispositivo (secciones 7 y 8), y si cada negocio define sus propios turnos. |
 | **Corregir un cobro** | Hoy lo cobrado se anula, también días después desde Reportes. Falta decidir si el dueño puede reabrirlo y corregirlo, y con qué registro. |
 | **Roles** | Si hace falta un super administrador de la plataforma, y si el cliente final puede crear cuenta para ver su historial y reprogramar. |
 | **Clientes y el profesional** | Qué puede cambiar el profesional en la ficha de un cliente: sólo las notas, o también los datos, y si borrar queda sólo para dueño y encargado. Hoy el servidor deja a cualquier rol editar y borrar cualquier cliente del negocio (sección 5 dice que el profesional los ve; no dice que los edite). |

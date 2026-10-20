@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { horaAMinutos, minutosAHora } from "@/lib/horario-dia"
 import { franjasDeAtencion } from "@/lib/horario-de-atencion"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
+import { diaDeLaSemana, fechaYMinutosEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 
 const FALTA_LA_FECHA = "Falta la fecha (AAAA-MM-DD)"
 const FALTA_EL_SERVICIO = "Falta el servicio (servicioId)"
@@ -26,12 +27,25 @@ const parametrosSchema = z.object({
     .max(64, "El servicio (servicioId) no es válido"),
 })
 
-function horariosLibres(
-  horaInicio: string,
-  horaFin: string,
-  duracion: number,
-  citasOcupadas: { startTime: Date; endTime: Date }[]
-): string[] {
+/** Una cita ocupada, en minutos del día pedido y en la hora del negocio: [inicio, fin). */
+interface Ocupado {
+  inicio: number
+  fin: number
+}
+
+/**
+ * Las citas del día como minutos de ese día en la zona del negocio. Una que
+ * termina después de la medianoche ocupa hasta el final del día.
+ */
+function minutosOcupados(fecha: string, citas: { startTime: Date; endTime: Date }[], zona: string): Ocupado[] {
+  return citas.map((cita) => {
+    const inicio = fechaYMinutosEn(cita.startTime, zona)
+    const fin = fechaYMinutosEn(cita.endTime, zona)
+    return { inicio: inicio.fecha === fecha ? inicio.minutos : 0, fin: fin.fecha === fecha ? fin.minutos : 24 * 60 }
+  })
+}
+
+function horariosLibres(horaInicio: string, horaFin: string, duracion: number, ocupados: Ocupado[]): string[] {
   const inicioMin = horaAMinutos(horaInicio)
   const finMin = horaAMinutos(horaFin)
 
@@ -41,11 +55,7 @@ function horariosLibres(
     const slotInicio = min
     const slotFin = min + duracion
 
-    const ocupado = citasOcupadas.some((cita) => {
-      const citaIni = cita.startTime.getHours() * 60 + cita.startTime.getMinutes()
-      const citaFin = cita.endTime.getHours() * 60 + cita.endTime.getMinutes()
-      return slotInicio < citaFin && slotFin > citaIni
-    })
+    const ocupado = ocupados.some((cita) => slotInicio < cita.fin && slotFin > cita.inicio)
 
     if (!ocupado) {
       horarios.push(minutosAHora(min))
@@ -80,7 +90,7 @@ export async function GET(
 
   const negocio = await prisma.business.findUnique({
     where: { slug },
-    select: { id: true },
+    select: { id: true, timezone: true },
   })
   if (!negocio) return NextResponse.json({ error: "Negocio no encontrado" }, { status: 404 })
 
@@ -90,8 +100,11 @@ export async function GET(
   })
   if (!servicio) return NextResponse.json({ error: "Servicio no encontrado" }, { status: 404 })
 
-  const fechaObj = new Date(fecha)
-  const diaSemana = fechaObj.getDay()
+  // El día, las horas y "hoy" son los del negocio (`Business.timezone`), no
+  // los del servidor: `new Date("AAAA-MM-DD").getDay()` daba el día anterior
+  // al oeste de UTC, y en Vercel (UTC) las horas quedaban corridas.
+  const zona = zonaDelNegocio(negocio.timezone)
+  const diaSemana = diaDeLaSemana(fecha)
 
   // Todas las filas activas del día, generales y de miembros: cuál manda lo
   // decide `franjasDeAtencion` (lib/horario-de-atencion.ts), la misma regla
@@ -107,32 +120,26 @@ export async function GET(
     return NextResponse.json({ slots: [], mensaje: "No hay atención ese día" })
   }
 
-  const inicioDia = new Date(fecha)
-  inicioDia.setHours(0, 0, 0, 0)
-  const finDia = new Date(fecha)
-  finDia.setHours(23, 59, 59, 999)
+  const dia = rangoDelDiaEn(fecha, zona)
 
   const citasDelDia = await prisma.appointment.findMany({
     where: {
       businessId: negocio.id,
-      startTime: { gte: inicioDia, lte: finDia },
+      startTime: { gte: dia.desde, lt: dia.hasta },
       status: { notIn: ["cancelada"] },
     },
     select: { startTime: true, endTime: true },
   })
 
-  // No mostrar slots en el pasado si la fecha es hoy
-  const ahora = new Date()
-  const esHoy = fechaObj.toDateString() === ahora.toDateString()
+  const ocupados = minutosOcupados(fecha, citasDelDia, zona)
+
+  // Si la fecha es hoy para el negocio, no ofrecer horas que ya pasaron en su reloj.
+  const ahora = fechaYMinutosEn(new Date(), zona)
+  const esHoy = ahora.fecha === fecha
 
   const horarios = franjas
-    .flatMap((franja) => horariosLibres(franja.startTime, franja.endTime, servicio.duration, citasDelDia))
-    .filter((slot) => {
-      if (!esHoy) return true
-      const slotMin = horaAMinutos(slot)
-      const ahoraMin = ahora.getHours() * 60 + ahora.getMinutes()
-      return slotMin > ahoraMin
-    })
+    .flatMap((franja) => horariosLibres(franja.startTime, franja.endTime, servicio.duration, ocupados))
+    .filter((slot) => !esHoy || horaAMinutos(slot) > ahora.minutos)
 
   return NextResponse.json({ slots: horarios })
 }

@@ -24,7 +24,13 @@ const prismaMock = {
   },
   customer: { findFirst: vi.fn() },
   businessMember: { findFirst: vi.fn() },
+  business: {
+    findUnique: vi.fn((_args: { where: { id: string } }) => Promise.resolve({ timezone: zonaDelNegocio })),
+  },
 }
+
+/** La zona guardada del negocio del actor en cada test (`Business.timezone`). */
+let zonaDelNegocio = "America/Santiago"
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
 
@@ -102,4 +108,117 @@ describe("GET /api/citas", () => {
     expect(res.status).toBe(401)
     expect(prismaMock.appointment.findMany).not.toHaveBeenCalled()
   })
+})
+
+/**
+ * `?fecha=` y `?desde=&hasta=` son días calendario del negocio. Los
+ * instantes esperados están escritos a mano (Santiago en octubre es UTC-3,
+ * Tokio UTC+9): la suite corre con TZ=UTC, TZ=America/Santiago y
+ * TZ=Asia/Tokyo.
+ */
+describe("GET /api/citas: el día pedido es el del negocio", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    zonaDelNegocio = "America/Santiago"
+  })
+
+  const citasDeLaSemana = [
+    // Domingo 18, 23:30 en Santiago (02:30 UTC del lunes).
+    { id: "domingo-noche", businessId: "negocio-1", startTime: new Date("2026-10-19T02:30:00.000Z") },
+    // Lunes 19, 00:30 en Santiago.
+    { id: "lunes-temprano", businessId: "negocio-1", startTime: new Date("2026-10-19T03:30:00.000Z") },
+    // Lunes 19, 22:00 en Santiago (01:00 UTC del martes).
+    { id: "lunes-noche", businessId: "negocio-1", startTime: new Date("2026-10-20T01:00:00.000Z") },
+    // Martes 20, 10:00 en Santiago.
+    { id: "martes", businessId: "negocio-1", startTime: new Date("2026-10-20T13:00:00.000Z") },
+  ]
+
+  type Rango = { gte: Date; lt: Date }
+
+  /** El rango de `startTime` dentro del `{ AND: [filtroDeAgenda, extra] }` de `whereDeAgenda`. */
+  function rangoDe(where: Record<string, unknown>): Rango | undefined {
+    const partes = (where.AND as Record<string, unknown>[] | undefined) ?? []
+    return partes.map((parte) => parte.startTime as Rango | undefined).find(Boolean)
+  }
+
+  /** Lo que la base devolvería con el rango que arma el endpoint. */
+  function conCitasDeLaSemana() {
+    prismaMock.appointment.findMany.mockImplementationOnce((args: { where: Record<string, unknown> }) => {
+      const rango = rangoDe(args.where)
+      return Promise.resolve(
+        citasDeLaSemana.filter((c) => !rango || (c.startTime >= rango.gte && c.startTime < rango.lt)) as never
+      )
+    })
+  }
+
+  const rangoPedido = (): Rango =>
+    rangoDe((prismaMock.appointment.findMany.mock.calls[0][0] as { where: Record<string, unknown> }).where)!
+
+  async function pedir(query: string) {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    return GET(pedidoFalso(`http://localhost/api/citas${query}`))
+  }
+
+  it("?fecha=2026-10-19 devuelve las del lunes 19 en Santiago, no las del domingo ni las del martes", async () => {
+    conCitasDeLaSemana()
+
+    const res = await pedir("?fecha=2026-10-19")
+    const data = await res.json()
+
+    expect(rangoPedido().gte.toISOString()).toBe("2026-10-19T03:00:00.000Z")
+    expect(rangoPedido().lt.toISOString()).toBe("2026-10-20T03:00:00.000Z")
+    expect(data.map((c: { id: string }) => c.id)).toEqual(["lunes-temprano", "lunes-noche"])
+  })
+
+  it("la zona se lee del negocio del actor, no de un parámetro", async () => {
+    conCitasDeLaSemana()
+
+    await pedir("?fecha=2026-10-19")
+
+    expect(prismaMock.business.findUnique).toHaveBeenCalledWith({
+      where: { id: "negocio-1" },
+      select: { timezone: true },
+    })
+  })
+
+  it("?desde=2026-10-19&hasta=2026-10-20 cubre del lunes a las 00:00 al miércoles a las 00:00, en Santiago", async () => {
+    conCitasDeLaSemana()
+
+    const data = await (await pedir("?desde=2026-10-19&hasta=2026-10-20")).json()
+
+    expect(rangoPedido().gte.toISOString()).toBe("2026-10-19T03:00:00.000Z")
+    expect(rangoPedido().lt.toISOString()).toBe("2026-10-21T03:00:00.000Z")
+    expect(data.map((c: { id: string }) => c.id)).toEqual(["lunes-temprano", "lunes-noche", "martes"])
+  })
+
+  it("con otra zona guardada (Asia/Tokyo), el lunes 19 va de las 15:00 UTC del domingo a las 15:00 UTC del lunes", async () => {
+    zonaDelNegocio = "Asia/Tokyo"
+    conCitasDeLaSemana()
+
+    await pedir("?fecha=2026-10-19")
+
+    expect(rangoPedido().gte.toISOString()).toBe("2026-10-18T15:00:00.000Z")
+    expect(rangoPedido().lt.toISOString()).toBe("2026-10-19T15:00:00.000Z")
+  })
+
+  it("con una zona guardada inválida, usa America/Santiago", async () => {
+    zonaDelNegocio = "Marte/Olympus"
+    conCitasDeLaSemana()
+
+    await pedir("?fecha=2026-10-19")
+
+    expect(rangoPedido().gte.toISOString()).toBe("2026-10-19T03:00:00.000Z")
+  })
+
+  it.each(["?fecha=xyz", "?fecha=2026-02-30", "?desde=2026-10-19&hasta=nada"])(
+    "%s: 400 sin consultar citas",
+    async (query) => {
+      const res = await pedir(query)
+
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toMatch(/AAAA-MM-DD/)
+      expect(prismaMock.appointment.findMany).not.toHaveBeenCalled()
+    }
+  )
 })

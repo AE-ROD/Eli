@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Clock } from "lucide-react"
 import { BotonIcono } from "@/components/comunes/boton-icono"
 import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
 import { Esqueleto } from "@/components/comunes/esqueleto"
+import { comoTexto } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
 import { leerDisponibilidad } from "../_datos"
 
@@ -129,7 +130,9 @@ export function SelectorFechaHora({
             const esDelMes = fecha.getMonth() === mesActual.getMonth() && diaNum > 0
             const esPasado = fecha < hoy
             const disponible = esDelMes && !esPasado && diasDisponibles.includes(fecha.getDay())
-            const iso = fecha.toISOString().split("T")[0]
+            // `toISOString` pasa la medianoche local a UTC: al este de Greenwich
+            // (Madrid, Tokio) daba el día anterior al que se tocó.
+            const iso = comoTexto(fecha)
             const seleccionado = iso === fechaSeleccionada
             const esHoy = fecha.toDateString() === hoy.toDateString()
 
