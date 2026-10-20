@@ -89,6 +89,15 @@ export const veElPanelDeSuDia = (actor: Actor | null): boolean =>
   !!actor && !puedeVerTodaLaAgenda(actor)
 
 /**
+ * Chats está escondido hasta que exista un canal real (WhatsApp; ver
+ * PRODUCTO.md, sección 10): hoy los mensajes no le llegan al cliente. Que el
+ * panel no lo muestre no alcanza, porque la API seguía respondiendo a
+ * cualquier sesión. Mientras tanto, nadie lo usa, ni el dueño. Pide el actor
+ * para que el día que vuelva se decida por rol sin tocar los endpoints.
+ */
+export const puedeUsarChats = (_actor: Actor | null): boolean => false
+
+/**
  * A quién se asigna una cita. Sólo quien puede asignar citas a otros (dueño y
  * encargado) elige: se respeta lo pedido, incluido `null` ("sin asignar").
  * Cualquier otro —el profesional, o un rol desconocido— no elige: termina
