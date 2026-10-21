@@ -89,15 +89,17 @@ export const veElPanelDeSuDia = (actor: Actor | null): boolean =>
   !!actor && !puedeVerTodaLaAgenda(actor)
 
 /**
- * A quién se asigna una cita. El profesional no elige: termina siempre
- * asignado a sí mismo, mande lo que mande. Dueño y encargado gestionan el
- * negocio, así que se respeta lo pedido, incluido `null` ("sin asignar").
+ * A quién se asigna una cita. Sólo quien puede asignar citas a otros (dueño y
+ * encargado) elige: se respeta lo pedido, incluido `null` ("sin asignar").
+ * Cualquier otro —el profesional, o un rol desconocido— no elige: termina
+ * asignado a sí mismo, mande lo que mande (o sin asignar si no tiene
+ * `memberId`). Falla cerrado: se pregunta quién puede, no quién no puede.
  *
  * Pide un `Actor` y no `Actor | null` a propósito: sin sesión no hay cita, y
  * el endpoint ya cortó con 401 antes de llegar acá.
  */
 export function memberIdParaCita(actor: Actor, memberIdPedido: string | null): string | null {
-  return actor.rol === "worker" ? actor.memberId : memberIdPedido
+  return puedeAsignarCitasAOtros(actor) ? memberIdPedido : actor.memberId
 }
 
 /** Nadie se cambia el rol a sí mismo: evita autoascensos y quedarse sin acceso. */
