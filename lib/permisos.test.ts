@@ -6,6 +6,9 @@ import {
   puedeGestionarEquipo,
   puedeCambiarRolDe,
   puedeEditarComisiones,
+  puedeGestionarSuscripcion,
+  puedeAsignarCitasAOtros,
+  veElPanelDeSuDia,
   puedeVerIngresosDelNegocio,
   puedeVerLiquidacionDe,
   puedeVerTodaLaAgenda,
@@ -90,6 +93,9 @@ describe("jerarquía de roles", () => {
     ["anotar líneas a nombre de otros", puedeAsignarLineasAOtros, true, true, false],
     ["anotar a alguien sin reserva", puedeAnotarSinReserva, true, true, true],
     ["ver el historial de anuladas", puedeVerAnuladas, true, true, false],
+    ["gestionar la suscripción", puedeGestionarSuscripcion, true, false, false],
+    ["asignar citas a otros", puedeAsignarCitasAOtros, true, true, false],
+    ["ver el panel de su día", veElPanelDeSuDia, false, false, true],
   ])("%s — dueño/encargado/profesional", (_que, puede, esperaDueño, esperaEncargado, esperaProfesional) => {
     expect(puede(dueño)).toBe(esperaDueño)
     expect(puede(encargado)).toBe(esperaEncargado)
@@ -242,6 +248,29 @@ describe("falla cerrado", () => {
     expect(puedeDeshacerLlegada(null, { businessId: NEGOCIO, memberId: "yo" })).toBe(false)
     expect(puedeVerAnuladas(null)).toBe(false)
     expect(puedeVerCita(null, { businessId: NEGOCIO, memberId: "yo" })).toBe(false)
+    expect(puedeGestionarSuscripcion(null)).toBe(false)
+    expect(puedeAsignarCitasAOtros(null)).toBe(false)
+    // Sin actor no se elige el panel del día: así era la comparación a mano que
+    // reemplaza. El tablero del negocio igual se llena desde un endpoint que da 401.
+    expect(veElPanelDeSuDia(null)).toBe(false)
+  })
+
+  it("un rol desconocido no gestiona la suscripción ni asigna citas a otros", () => {
+    // El tipo no lo permite, pero en runtime un token viejo podría traerlo.
+    const desconocido = { rol: "gerente", businessId: NEGOCIO, memberId: "yo" } as unknown as Actor
+
+    expect(puedeGestionarSuscripcion(desconocido)).toBe(false)
+    expect(puedeAsignarCitasAOtros(desconocido)).toBe(false)
+    // El panel del día es la vista restringida: un rol desconocido cae ahí.
+    expect(veElPanelDeSuDia(desconocido)).toBe(true)
+  })
+
+  it("una sesión con rol desconocido no produce actor: nada se habilita", () => {
+    const sinActor = actorDeSesion({ user: { role: "gerente", businessId: NEGOCIO } } as never)
+
+    expect(puedeGestionarSuscripcion(sinActor)).toBe(false)
+    expect(puedeAsignarCitasAOtros(sinActor)).toBe(false)
+    expect(veElPanelDeSuDia(sinActor)).toBe(false)
   })
 
   it("un profesional sin memberId no deshace llegadas ni ve citas sin asignar", () => {

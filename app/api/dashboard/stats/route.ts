@@ -6,6 +6,7 @@ import { deCentavos } from "@/lib/atenciones"
 import {
   actorDeSesion,
   puedeVerIngresosDelNegocio,
+  veElPanelDeSuDia,
   whereDeAgenda,
   whereDeAtenciones,
   whereDePagos,
@@ -68,7 +69,7 @@ export async function GET(request: NextRequest) {
   // El horario del día es para que el profesional dibuje su línea de tiempo
   // (F-014). Dueño y encargado administran el negocio, no su propio día: no
   // les agregamos una clave que su vista no usa.
-  const esWorker = actor.rol === "worker"
+  const conHorarioDeHoy = veElPanelDeSuDia(actor)
   const businessId = actor.businessId
 
   const hoy = new Date()
@@ -127,7 +128,7 @@ export async function GET(request: NextRequest) {
       // este endpoint sólo conoce el horario del actor, jamás el de un colega.
       // Es exactamente la rama "propio" de `resolverObjetivo()` en ese archivo,
       // sin re-implementar otra forma de resolverlo.
-      esWorker && actor.memberId
+      conHorarioDeHoy && actor.memberId
         ? prisma.workSchedule.findMany({
             where: {
               businessId,
@@ -182,7 +183,7 @@ export async function GET(request: NextRequest) {
     // un rango por defecto ni un array vacío como placeholder. El front debe
     // poder leer "sin horario cargado hoy" a partir de la ausencia de la clave,
     // igual que hace con `ingresosMes` y `tendencias.ingresos`.
-    ...(esWorker && franjasHoy.length > 0 && { horarioHoy: franjasHoy }),
+    ...(conHorarioDeHoy && franjasHoy.length > 0 && { horarioHoy: franjasHoy }),
     tendencias,
   })
 }
