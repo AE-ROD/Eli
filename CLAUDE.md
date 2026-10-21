@@ -30,12 +30,12 @@ historial: `git show e28b487 --stat` los lista, y
    antes de leer o escribir (404, nunca 403). Los permisos se preguntan a
    `lib/permisos.ts` y fallan cerrados.
 
-2. **Toda tarea nace de una feature.** Ya no hay carpeta de fichas: el alcance
-   se acuerda en el chat antes de escribir código, y sigue valiendo que no se
-   empieza sin saber qué entra y qué no.
+2. **Toda tarea nace de un alcance acordado.** No hay fichas: el alcance se
+   acuerda en el chat (o en un issue de GitHub) antes de escribir código, y no
+   se empieza sin saber qué entra y qué no.
 
 3. **No amplíes el alcance.** Haces lo acordado y nada más. Lo que detectes de
-   más va a "Fuera de alcance detectado"; no lo implementas.
+   más se reporta al final y se propone como issue de GitHub; no lo implementas.
 
 4. **No inventes dependencias ni configuración.** Librería nueva, variable de
    entorno o servicio externo: se proponen y se espera aprobación.
@@ -45,10 +45,10 @@ historial: `git show e28b487 --stat` los lista, y
    como deuda documentada: el aislamiento hoy es de capa de aplicación y debe ser
    impecable justamente porque no hay una segunda barrera detrás.
 
-6. **Deja rastro.** Al terminar reportas archivos tocados, decisiones y
-   pendientes. Lo que cambie el producto (reglas, alcance, lo que queda por
-   decidir) se anota en `docs/PRODUCTO.md`; el porqué de cada cambio, en el
-   mensaje del commit.
+6. **Deja rastro.** El porqué de cada cambio va en el mensaje del commit; el
+   resumen (qué cambió, cómo se verificó, qué queda) en la descripción del PR.
+   Lo que cambie el producto se anota en `docs/PRODUCTO.md`. Los pendientes
+   son issues de GitHub, no notas en el chat.
 
 ---
 
@@ -104,9 +104,9 @@ es quemar tokens sin avanzar.
 ### Ciclo completo de una tarea
 
 ```
-alcance acordado en el chat → rama → agentes (loop con techo)
+alcance acordado (chat o issue) → rama → agentes (loop con techo)
       → lint, tipos, tests y build en verde → commit → qa → revisor
-      → push (con permiso) → [aprobación humana] → merge
+      → push y PR (con permiso) → [aprobación humana] → merge → issues cerrados
 ```
 
 Antes de cada commit: `npx tsc --noEmit`, `npm run lint`, `npm test` y
