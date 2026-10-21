@@ -7,11 +7,15 @@ import { MODULOS, type ModuloId } from "@/lib/modulos"
  * contenido (que pone el halo del foco). Así el nombre y el color de cada una
  * salen de un solo lugar, y los de los módulos, de `lib/modulos.ts`.
  *
- * Las secciones de un módulo llevan su pastel; las demás (inicio, chats,
+ * Las secciones de un módulo llevan su pastel; las demás (inicio,
  * configuración y ayuda) van en neutro.
+ *
+ * Chats no está: se escondió hasta que exista un canal real (WhatsApp), porque
+ * hoy los mensajes no le llegan al cliente. `/dashboard/chats` redirige al
+ * inicio; la pantalla y la API siguen en el repo.
  */
 
-export type IdDeSeccion = "inicio" | ModuloId | "chats" | "configuracion" | "ayuda"
+export type IdDeSeccion = "inicio" | ModuloId | "configuracion" | "ayuda"
 
 export interface SeccionDelPanel {
   id: IdDeSeccion
@@ -31,8 +35,6 @@ export const SECCIONES_DE_MODULOS: readonly SeccionDelPanel[] = MODULOS.map((mod
   modulo: modulo.id,
 }))
 
-export const SECCION_DE_CHATS: SeccionDelPanel = { id: "chats", nombre: "Chats", ruta: "/dashboard/chats" }
-
 export const SECCION_DE_CONFIGURACION: SeccionDelPanel = {
   id: "configuracion",
   nombre: "Configuración",
@@ -46,7 +48,6 @@ export const SECCION_DE_AYUDA: SeccionDelPanel = { id: "ayuda", nombre: "Ayuda",
 export const SECCIONES_DEL_PANEL: readonly SeccionDelPanel[] = [
   SECCION_DE_INICIO,
   ...SECCIONES_DE_MODULOS,
-  SECCION_DE_CHATS,
   SECCION_DE_CONFIGURACION,
   SECCION_DE_AYUDA,
 ]
