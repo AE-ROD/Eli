@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
+import { Prisma } from "@prisma/client"
 import { pedidoFalso } from "@/pruebas/pedidos"
 
 const mockGetServerSession = vi.fn()
@@ -140,6 +141,44 @@ describe("DELETE /api/configuracion/servicios/[id]", () => {
     const res = await DELETE(pedidoFalso(undefined), paramsCon("srv-1"))
 
     expect(res.status).toBe(401)
+  })
+})
+
+describe("DELETE /api/configuracion/servicios/[id] — servicio con comisiones", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it("si la base lo impide por las comisiones configuradas (P2003), responde 409 con cómo seguir", async () => {
+    const { DELETE } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    prismaMock.service.findFirst.mockResolvedValueOnce({ id: "srv-1", businessId: "negocio-1" })
+    prismaMock.service.delete.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError("Foreign key constraint violated", {
+        code: "P2003",
+        clientVersion: "test",
+      })
+    )
+
+    const res = await DELETE(pedidoFalso(undefined), paramsCon("srv-1"))
+
+    expect(res.status).toBe(409)
+    const cuerpo = await res.json()
+    expect(cuerpo.error).toContain("comisiones configuradas")
+    expect(cuerpo.error).toContain("Desactivalo")
+  })
+
+  it("cualquier otro error de la base no se disfraza de 409", async () => {
+    const { DELETE } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    prismaMock.service.findFirst.mockResolvedValueOnce({ id: "srv-1", businessId: "negocio-1" })
+    const otroError = new Prisma.PrismaClientKnownRequestError("Record not found", {
+      code: "P2025",
+      clientVersion: "test",
+    })
+    prismaMock.service.delete.mockRejectedValueOnce(otroError)
+
+    await expect(DELETE(pedidoFalso(undefined), paramsCon("srv-1"))).rejects.toBe(otroError)
   })
 })
 
