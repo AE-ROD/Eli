@@ -3,19 +3,26 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { ESTADOS_DE_CITA, MENSAJE_DE_HORARIO_INVERTIDO, notas, precioDeCita, terminaDespuesDeEmpezar, titulo } from "@/lib/campos-del-panel"
+import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, memberIdParaCita, whereDeAgenda } from "@/lib/permisos"
 import { esFechaCalendario, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 
-const citaSchema = z.object({
-  title: z.string().min(2),
-  startTime: z.string().datetime(),
-  endTime: z.string().datetime(),
-  status: z.enum(["pendiente", "confirmada", "en-progreso", "completada", "cancelada"]).optional(),
-  notes: z.string().optional().or(z.literal("")),
-  price: z.number().positive().optional(),
-  customerId: z.string(),
-  memberId: z.string().nullable().optional(),
-})
+const citaSchema = z
+  .object({
+    title: titulo(),
+    startTime: z.string().datetime("La fecha de inicio no es válida"),
+    endTime: z.string().datetime("La fecha de fin no es válida"),
+    status: z.enum(ESTADOS_DE_CITA).optional(),
+    notes: notas().optional(),
+    price: precioDeCita().optional(),
+    customerId: z.string(),
+    memberId: z.string().nullable().optional(),
+  })
+  .refine((cita) => terminaDespuesDeEmpezar(new Date(cita.startTime), new Date(cita.endTime)), {
+    message: MENSAJE_DE_HORARIO_INVERTIDO,
+    path: ["endTime"],
+  })
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -130,10 +137,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(cita, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Datos inválidos", detalles: error.errors },
-        { status: 400 }
-      )
+      return respuestaDeDatosInvalidos(error)
     }
     console.error("Error creando cita:", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })

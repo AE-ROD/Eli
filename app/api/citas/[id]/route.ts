@@ -3,15 +3,17 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { ESTADOS_DE_CITA, MENSAJE_DE_HORARIO_INVERTIDO, notas, precioDeCita, terminaDespuesDeEmpezar, titulo } from "@/lib/campos-del-panel"
+import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, whereDeAgenda, type Actor } from "@/lib/permisos"
 
 const edicionDeCitaSchema = z.object({
-  title: z.string().min(2).optional(),
-  startTime: z.string().datetime().optional(),
-  endTime: z.string().datetime().optional(),
-  status: z.enum(["pendiente", "confirmada", "en-progreso", "completada", "cancelada"]).optional(),
-  notes: z.string().optional().or(z.literal("")),
-  price: z.number().positive().optional(),
+  title: titulo().optional(),
+  startTime: z.string().datetime("La fecha de inicio no es válida").optional(),
+  endTime: z.string().datetime("La fecha de fin no es válida").optional(),
+  status: z.enum(ESTADOS_DE_CITA).optional(),
+  notes: notas().optional(),
+  price: precioDeCita().optional(),
 })
 
 /**
@@ -69,6 +71,17 @@ export async function PUT(
     const cuerpo = await request.json()
     const datos = edicionDeCitaSchema.parse(cuerpo)
 
+    // Se compara lo que queda después del cambio: si se mueve sólo el inicio
+    // o sólo el fin, contra lo guardado. Antes una cita podía quedar
+    // terminando antes de empezar.
+    if (datos.startTime || datos.endTime) {
+      const inicio = datos.startTime ? new Date(datos.startTime) : existente.startTime
+      const fin = datos.endTime ? new Date(datos.endTime) : existente.endTime
+      if (!terminaDespuesDeEmpezar(inicio, fin)) {
+        return NextResponse.json({ error: MENSAJE_DE_HORARIO_INVERTIDO }, { status: 400 })
+      }
+    }
+
     // Por `existente.id`, no por `id`: si alguien borra la verificación de
     // arriba, `existente` queda sin declarar y el build falla. La garantía deja
     // de depender de que el próximo lea las dos líneas en orden.
@@ -90,10 +103,7 @@ export async function PUT(
     return NextResponse.json(cita)
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Datos inválidos", detalles: error.errors },
-        { status: 400 }
-      )
+      return respuestaDeDatosInvalidos(error)
     }
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }

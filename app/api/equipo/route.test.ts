@@ -220,3 +220,40 @@ describe("POST /api/equipo", () => {
     expect(res.status).toBe(401)
   })
 })
+
+describe("POST /api/equipo — largos", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it.each([
+    ["un nombre de 101 caracteres", { nombre: "a".repeat(101), email: "ana@x.com" }, "El nombre no puede tener más de 100 caracteres"],
+    ["un nombre de puros espacios", { nombre: "    ", email: "ana@x.com" }, "El nombre tiene que tener al menos 2 caracteres"],
+    ["un email de 255 caracteres", { nombre: "Ana", email: `${"a".repeat(249)}@x.com` }, "El email no puede tener más de 254 caracteres"],
+    ["un email que no es email", { nombre: "Ana", email: "ana" }, "El email no es válido"],
+    ["un rol que no existe", { nombre: "Ana", email: "ana@x.com", rol: "owner" }, "Datos inválidos"],
+  ])("rechaza %s: 400 con un error legible y no invita", async (_caso, cuerpo, mensaje) => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    const res = await POST(pedidoFalso(cuerpo))
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: mensaje })
+    expect(prismaMock.workerInvitation.create).not.toHaveBeenCalled()
+  })
+
+  it("guarda el nombre y el email sin los espacios de las puntas", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.user.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.create.mockResolvedValueOnce({ id: "inv-9", token: "t" })
+    prismaMock.business.findUnique.mockResolvedValueOnce({ name: "Mi negocio" })
+
+    const res = await POST(pedidoFalso({ nombre: "  Ana  ", email: "  ana@x.com  " }))
+
+    expect(res.status).toBe(201)
+    expect(prismaMock.workerInvitation.create.mock.calls[0][0].data).toMatchObject({ name: "Ana", email: "ana@x.com" })
+  })
+})

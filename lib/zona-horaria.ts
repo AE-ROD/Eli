@@ -142,6 +142,18 @@ export function sumarDias(fecha: string, dias: number): string {
   return resultado
 }
 
+/**
+ * Cuántos días calendario van de `desde` a `hasta` (negativo si `hasta` es
+ * anterior). Aritmética de calendario, como `diaDeLaSemana`: no depende de
+ * ninguna zona ni del horario de verano. Lanza `RangeError` si alguna de las
+ * dos no es aceptable.
+ */
+export function diasEntre(desde: string, hasta: string): number {
+  const a = fechaValidaOLanza(desde)
+  const b = fechaValidaOLanza(hasta)
+  return (Date.UTC(b.año, b.mes - 1, b.dia) - Date.UTC(a.año, a.mes - 1, a.dia)) / MS_POR_DIA
+}
+
 // ─── Instantes y hora de pared ───────────────────────────────────────────────
 
 interface Pared extends Calendario {

@@ -70,9 +70,16 @@ En el `.env`, `DATABASE_URL` y `DIRECT_URL` pasan a
 SEED_CONFIRMO=si npm run prisma:seed
 ```
 
+El seed se niega a correr si falta `SEED_CONFIRMO=si` **o** si el host de
+`DATABASE_URL` no es `localhost` ni `127.0.0.1`. Para sembrar una base de
+desarrollo remota, su host tiene que estar en `SEED_HOSTS_PERMITIDOS` (lista
+separada por comas, p. ej. `SEED_HOSTS_PERMITIDOS=mi-base-de-desarrollo.example`).
+Nunca pongas ahí el host de producción.
+
 Quedan un negocio de ejemplo y tres cuentas —`duena@demo.eli`,
-`encargado@demo.eli`, `profesional@demo.eli`, contraseña `demo1234`— una por
-rol, que es la forma corta de ver qué cambia con cada uno.
+`encargado@demo.eli`, `profesional@demo.eli`, una por rol, que es la forma
+corta de ver qué cambia con cada uno. La contraseña la imprime el seed al
+terminar (está en `prisma/seed.ts`).
 
 ## Cómo está organizado
 

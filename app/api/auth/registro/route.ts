@@ -64,10 +64,8 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Datos inválidos", detalles: error.errors },
-        { status: 400 }
-      )
+      // Público: el primer mensaje, legible, y no los issues crudos de zod.
+      return NextResponse.json({ error: error.errors[0]?.message ?? "Datos inválidos" }, { status: 400 })
     }
     console.error("Error en registro:", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })

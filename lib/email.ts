@@ -83,7 +83,16 @@ function asunto(partes: TemplateStringsArray, ...valores: unknown[]): AsuntoSegu
   return { __marca: "AsuntoSeguro", valor: texto }
 }
 
+/** Nombre fijo de cada correo, para los logs: nunca lleva datos de personas. */
+type TipoCorreo =
+  | "confirmacion-cliente"
+  | "aviso-profesional"
+  | "recordatorio"
+  | "recuperacion-contrasena"
+  | "invitacion-trabajador"
+
 interface Correo {
+  tipo: TipoCorreo
   para: string
   asunto: AsuntoSeguro
   /** Siempre un texto fijo que escribimos nosotros, nunca un dato de persona. */
@@ -98,10 +107,12 @@ interface Correo {
 }
 
 /** Sin clave configurada no se envía nada, igual que el rate limit sin Upstash. */
-async function enviar({ para, asunto: asuntoSeguro, titulo, intro, detalle, destacado, boton, cierre }: Correo) {
+async function enviar({ tipo, para, asunto: asuntoSeguro, titulo, intro, detalle, destacado, boton, cierre }: Correo) {
   const api = resend()
   if (!api) {
-    console.warn(`[email] RESEND_API_KEY no configurada: no se envió "${asuntoSeguro.valor}".`)
+    // Sólo el tipo: el asunto lleva nombres de clientes o negocios y `para`
+    // es un correo personal, y los logs no son lugar para datos personales.
+    console.warn(`[email] RESEND_API_KEY no configurada: no se envió un correo de tipo "${tipo}".`)
     return null
   }
 
@@ -162,6 +173,7 @@ export interface DatosConfirmacionCliente {
 
 export function enviarConfirmacionCliente(datos: DatosConfirmacionCliente) {
   return enviar({
+    tipo: "confirmacion-cliente",
     para: datos.emailCliente,
     asunto: asunto`✅ Cita confirmada — ${datos.nombreNegocio}`,
     titulo: "¡Tu cita está confirmada!",
@@ -196,6 +208,7 @@ export function enviarAvisoProfesional(datos: DatosAvisoProfesional) {
   if (datos.comentarios) detalle.push(["Comentarios", datos.comentarios])
 
   return enviar({
+    tipo: "aviso-profesional",
     para: datos.emailProfesional,
     asunto: asunto`📅 Nueva reserva — ${datos.nombreCliente}`,
     titulo: "Nueva reserva recibida",
@@ -217,6 +230,7 @@ export interface DatosRecordatorio {
 
 export function enviarRecordatorio(datos: DatosRecordatorio) {
   return enviar({
+    tipo: "recordatorio",
     para: datos.emailCliente,
     asunto: asunto`🔔 Recordatorio — Tu cita es mañana`,
     titulo: "Tu cita es mañana 👋",
@@ -238,6 +252,7 @@ export interface DatosRecuperacionContrasena {
 
 export function enviarRecuperacionContrasena(datos: DatosRecuperacionContrasena) {
   return enviar({
+    tipo: "recuperacion-contrasena",
     para: datos.emailUsuario,
     asunto: asunto`🔑 Restablece tu contraseña — Eli`,
     titulo: "Restablece tu contraseña",
@@ -259,6 +274,7 @@ export function enviarInvitacionTrabajador(datos: DatosInvitacionTrabajador) {
   const rol = nombreDelRol(datos.rol)
 
   return enviar({
+    tipo: "invitacion-trabajador",
     para: datos.emailTrabajador,
     asunto: asunto`Te invitaron a unirte a ${datos.nombreNegocio} en Eli`,
     titulo: "Tienes una invitación",

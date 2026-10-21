@@ -2,16 +2,19 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { actorDeSesion, puedeUsarChats } from "@/lib/permisos"
 import { z } from "zod"
 
 export async function GET() {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.businessId) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  const actor = actorDeSesion(await getServerSession(authOptions))
+  // Escondido hasta WhatsApp: 404 a todos, sin sesión incluida, para no
+  // revelar que la ruta existe. Va antes de tocar la base.
+  if (!actor || !puedeUsarChats(actor)) {
+    return NextResponse.json({ error: "No encontrado" }, { status: 404 })
   }
 
   const conversaciones = await prisma.conversation.findMany({
-    where: { businessId: session.user.businessId },
+    where: { businessId: actor.businessId },
     select: {
       id: true,
       customerName: true,
@@ -36,9 +39,11 @@ const nuevaConversacionSchema = z.object({
 })
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.businessId) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  const actor = actorDeSesion(await getServerSession(authOptions))
+  // Escondido hasta WhatsApp: 404 a todos, sin sesión incluida, para no
+  // revelar que la ruta existe. Va antes de tocar la base.
+  if (!actor || !puedeUsarChats(actor)) {
+    return NextResponse.json({ error: "No encontrado" }, { status: 404 })
   }
 
   try {
@@ -49,7 +54,7 @@ export async function POST(request: NextRequest) {
       data: {
         customerName: datos.customerName,
         customerPhone: datos.customerPhone ?? null,
-        businessId: session.user.businessId,
+        businessId: actor.businessId,
       },
       select: {
         id: true,

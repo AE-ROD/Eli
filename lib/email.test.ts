@@ -261,3 +261,36 @@ describe("lib/email — inyección de encabezados en el asunto", () => {
     expect(enviarMock.mock.calls[2][0].subject).toBe("🔑 Restablece tu contraseña — Eli")
   })
 })
+
+describe("lib/email — sin RESEND_API_KEY el aviso no filtra datos personales", () => {
+  beforeEach(() => {
+    vi.stubEnv("RESEND_API_KEY", "")
+    vi.resetModules()
+    enviarMock.mockClear()
+  })
+
+  it("avisa sólo el tipo de correo: ni el asunto (con el nombre del cliente) ni el destinatario", async () => {
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const { enviarAvisoProfesional } = await import("./email")
+
+    const resultado = await enviarAvisoProfesional({
+      emailProfesional: "carla.privada@ejemplo.com",
+      nombreNegocio: "Salón Secreto",
+      nombreCliente: "María González",
+      servicio: "Corte",
+      fecha: "2026-09-10",
+      hora: "10:00",
+    })
+
+    expect(resultado).toBeNull()
+    expect(enviarMock).not.toHaveBeenCalled()
+    expect(aviso).toHaveBeenCalledTimes(1)
+    const texto = aviso.mock.calls[0].map(String).join(" ")
+    expect(texto).toContain("aviso-profesional")
+    expect(texto).not.toContain("María")
+    expect(texto).not.toContain("González")
+    expect(texto).not.toContain("carla.privada@ejemplo.com")
+    expect(texto).not.toContain("Nueva reserva")
+    aviso.mockRestore()
+  })
+})

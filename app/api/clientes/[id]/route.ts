@@ -3,14 +3,23 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
-import { actorDeSesion, whereDeAgenda, whereDeClientes, type Actor } from "@/lib/permisos"
+import { emailOVacio, etiquetas, nombre, notas, telefono } from "@/lib/campos-del-panel"
+import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
+import {
+  actorDeSesion,
+  puedeBorrarCliente,
+  puedeEditarDatosDeCliente,
+  whereDeAgenda,
+  whereDeClientes,
+  type Actor,
+} from "@/lib/permisos"
 
 const edicionDeClienteSchema = z.object({
-  name: z.string().min(2).optional(),
-  email: z.string().email().optional().or(z.literal("")),
-  phone: z.string().optional().or(z.literal("")),
-  tags: z.array(z.string()).optional(),
-  notes: z.string().optional().or(z.literal("")),
+  name: nombre().optional(),
+  email: emailOVacio().optional(),
+  phone: telefono().optional(),
+  tags: etiquetas().optional(),
+  notes: notas().optional(),
 })
 
 /**
@@ -96,6 +105,14 @@ export async function PUT(
     const cuerpo = await request.json()
     const datos = edicionDeClienteSchema.parse(cuerpo)
 
+    // Las notas las escribe cualquiera; el resto de los datos, sólo dueño y
+    // encargado. Se mira lo que quedó del esquema: una clave que no conoce
+    // (`businessId`) ya se descartó y no llega a la base.
+    const tocaDatos = Object.keys(datos).some((campo) => campo !== "notes")
+    if (tocaDatos && !puedeEditarDatosDeCliente(actor)) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+    }
+
     // Por `existente.id`, no por `id`: si alguien borra la verificación de
     // arriba, `existente` queda sin declarar y el build falla. La garantía deja
     // de depender de que el próximo lea las dos líneas en orden.
@@ -113,10 +130,7 @@ export async function PUT(
     return NextResponse.json(cliente)
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Datos inválidos", detalles: error.errors },
-        { status: 400 }
-      )
+      return respuestaDeDatosInvalidos(error)
     }
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
@@ -136,6 +150,11 @@ export async function DELETE(
   const existente = await verificarCliente(actor, id)
   if (!existente) {
     return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 })
+  }
+
+  // Después de verificar que es del negocio: para un cliente ajeno, 404.
+  if (!puedeBorrarCliente(actor)) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
   // Por `existente.id`, por lo mismo que en el PUT.

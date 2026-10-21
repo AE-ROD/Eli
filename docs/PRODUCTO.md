@@ -126,7 +126,7 @@ Precio, límites por plan y prueba gratuita: pendientes (sección 10).
 |---|---|
 | **Dueño** | Todo, incluidos los porcentajes de comisión |
 | **Encargado** | Equipo, agenda, horarios, clientes y cobros del tablero. Sin acceso a configuración de comisiones |
-| **Profesional** | Su agenda, sus atenciones y su propia liquidación. Ve los clientes del negocio (los necesita para anotar a quien llega), pero en su historial sólo sus propias citas |
+| **Profesional** | Su agenda, sus atenciones y su propia liquidación. Ve los clientes del negocio y los crea (los necesita para anotar a quien llega), pero en su historial sólo sus propias citas. De la ficha edita sólo las notas (sección 10) |
 | **Cliente final** | Reserva desde la página pública, sin cuenta |
 
 El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisiones de por medio, cuánto factura el local es información del dueño.
@@ -245,7 +245,7 @@ Nada de esto bloquea el trabajo actual, pero cada punto se decide antes de const
 | **Turnos y zona horaria** | Ya decidido: la zona horaria es **por negocio**, con `America/Santiago` por defecto (sección 6); la usan la reserva pública y la agenda. Falta: la pantalla para que el dueño la cambie, si los reportes, el inicio y "Llegó" pasan a usarla en vez de la zona del dispositivo (secciones 7 y 8), y si cada negocio define sus propios turnos. |
 | **Corregir un cobro** | Hoy lo cobrado se anula, también días después desde Reportes. Falta decidir si el dueño puede reabrirlo y corregirlo, y con qué registro. |
 | **Roles** | Si hace falta un super administrador de la plataforma, y si el cliente final puede crear cuenta para ver su historial y reprogramar. |
-| **Clientes y el profesional** | Qué puede cambiar el profesional en la ficha de un cliente: sólo las notas, o también los datos, y si borrar queda sólo para dueño y encargado. Hoy el servidor deja a cualquier rol editar y borrar cualquier cliente del negocio (sección 5 dice que el profesional los ve; no dice que los edite). |
+| **Clientes y el profesional** | Ya decidido: el profesional ve los clientes del negocio, puede crearlos (los necesita para anotar a quien llega) y editar sólo sus **notas**. Cambiar los datos (nombre, teléfono, email, etiquetas...) y borrar un cliente es de dueño y encargado. El servidor lo aplica con `puedeEditarDatosDeCliente` y `puedeBorrarCliente` (`lib/permisos.ts`). |
 | **Chats** | Chats: escondido del panel hasta que exista un canal real (WhatsApp). Hoy los mensajes no le llegan al cliente, todos se guardan como 'del negocio' sin autor y la conversación no está ligada a la ficha del cliente. El código y las tablas se conservan. |
 | **Branding** | Nombre definitivo (mantener *Eli* o cambiar), dominio, y tono: cercano o sobrio. |
 | **No funcionales** | Móvil primero (un barbero gestiona desde el teléfono); zonas horarias y país; sólo español o también inglés; política de privacidad y retención de datos de clientes. Mientras no existan los términos y la política de privacidad, crear cuenta no muestra la línea "aceptas los Términos y la Política de privacidad": enlazaba a páginas que no existen. Vuelve cuando estén. |

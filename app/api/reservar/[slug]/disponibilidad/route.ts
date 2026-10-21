@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { horaAMinutos, minutosAHora } from "@/lib/horario-dia"
 import { franjasDeAtencion } from "@/lib/horario-de-atencion"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
+import { MENSAJE_FECHA_MUY_LEJANA, MENSAJE_FECHA_PASADA, fechaNoReservable, yaPasoLaHora } from "@/lib/reserva-publica"
 import { diaDeLaSemana, esFechaCalendario, existeLaHora, fechaYMinutosEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 
 const FALTA_LA_FECHA = "Falta la fecha (AAAA-MM-DD)"
@@ -107,6 +108,20 @@ export async function GET(
   // los del servidor: `new Date("AAAA-MM-DD").getDay()` daba el día anterior
   // al oeste de UTC, y en Vercel (UTC) las horas quedaban corridas.
   const zona = zonaDelNegocio(negocio.timezone)
+  const ahora = new Date()
+
+  // Ni días pasados ni a más de `DIAS_MAXIMOS_DE_ANTICIPACION` de hoy en el
+  // reloj del negocio (`lib/reserva-publica.ts`, la misma regla que
+  // `confirmar`). La fecha es válida, sólo que no se reserva: sin horas y con
+  // el motivo, como un día sin atención.
+  const noReservable = fechaNoReservable(fecha, ahora, zona)
+  if (noReservable) {
+    return NextResponse.json({
+      slots: [],
+      mensaje: noReservable === "pasada" ? MENSAJE_FECHA_PASADA : MENSAJE_FECHA_MUY_LEJANA,
+    })
+  }
+
   const diaSemana = diaDeLaSemana(fecha)
 
   // Todas las filas activas del día, generales y de miembros: cuál manda lo
@@ -136,13 +151,10 @@ export async function GET(
 
   const ocupados = minutosOcupados(fecha, citasDelDia, zona)
 
-  // Si la fecha es hoy para el negocio, no ofrecer horas que ya pasaron en su reloj.
-  const ahora = fechaYMinutosEn(new Date(), zona)
-  const esHoy = ahora.fecha === fecha
-
   const horarios = franjas
     .flatMap((franja) => horariosLibres(franja.startTime, franja.endTime, servicio.duration, ocupados))
-    .filter((slot) => !esHoy || horaAMinutos(slot) > ahora.minutos)
+    // Si la fecha es hoy para el negocio, no ofrecer horas que ya pasaron en su reloj.
+    .filter((slot) => !yaPasoLaHora(fecha, slot, ahora, zona))
     // El día del salto del horario de verano, las horas que el reloj se
     // salta no se ofrecen: `confirmar` las rechaza (si no, se guardaban en la
     // hora siguiente y la ofrecida seguía libre).

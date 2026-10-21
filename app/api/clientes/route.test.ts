@@ -464,6 +464,19 @@ describe("POST /api/clientes", () => {
     })
   })
 
+  it("la profesional también crea clientes: los necesita para anotar a quien llega (PRODUCTO.md, sección 10)", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+
+    const res = await POST(fakePost({ name: "Carla Díaz" }))
+
+    expect(res.status).toBe(201)
+    expect(prismaMock.customer.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ name: "Carla Díaz", businessId: "negocio-1" }),
+    })
+  })
+
   it("el cuerpo no elige el negocio: un `businessId` ajeno se ignora", async () => {
     const { POST } = await import("./route")
 
@@ -484,5 +497,62 @@ describe("POST /api/clientes", () => {
 
     expect(res.status).toBe(401)
     expect(prismaMock.customer.create).not.toHaveBeenCalled()
+  })
+})
+
+describe("POST /api/clientes — largos y tipos", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it.each([
+    ["un nombre de 101 caracteres", { name: "a".repeat(101) }, "El nombre no puede tener más de 100 caracteres"],
+    ["un nombre de puros espacios", { name: "     " }, "El nombre tiene que tener al menos 2 caracteres"],
+    ["un teléfono de 31 caracteres", { name: "Ana", phone: "1".repeat(31) }, "El teléfono no puede tener más de 30 caracteres"],
+    ["un email de 255 caracteres", { name: "Ana", email: `${"a".repeat(243)}@correo.test` }, "El email no puede tener más de 254 caracteres"],
+    ["un email que no es email", { name: "Ana", email: "ana-arroba-correo" }, "El email no es válido"],
+    ["unas notas de 2001 caracteres", { name: "Ana", notes: "a".repeat(2001) }, "Las notas no pueden tener más de 2000 caracteres"],
+    ["21 etiquetas", { name: "Ana", tags: Array.from({ length: 21 }, (_, i) => `e${i}`) }, "No puede haber más de 20 etiquetas"],
+    ["una etiqueta de 31 caracteres", { name: "Ana", tags: ["a".repeat(31)] }, "Cada etiqueta puede tener hasta 30 caracteres"],
+  ])("rechaza %s: 400 con un error legible, sin `detalles`, y no crea nada", async (_caso, cuerpo, mensaje) => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    const res = await POST(fakePost(cuerpo))
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: mensaje })
+    expect(prismaMock.customer.create).not.toHaveBeenCalled()
+  })
+
+  it("acepta los bordes y guarda el texto sin los espacios de las puntas", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    const res = await POST(
+      fakePost({
+        name: `  ${"a".repeat(100)}  `,
+        phone: "1".repeat(30),
+        email: `${"a".repeat(242)}@correo.test`,
+        notes: "a".repeat(2000),
+        tags: Array.from({ length: 20 }, () => "b".repeat(30)),
+      })
+    )
+
+    expect(res.status).toBe(201)
+    const { data } = prismaMock.customer.create.mock.calls[0][0]
+    expect(data.name).toBe("a".repeat(100))
+    expect(data.email).toHaveLength(254)
+  })
+
+  it("un email vacío sigue siendo \"sin email\"", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    const res = await POST(fakePost({ name: "Ana", email: "", phone: "" }))
+
+    expect(res.status).toBe(201)
+    expect(prismaMock.customer.create.mock.calls[0][0].data).toMatchObject({ email: null, phone: null })
   })
 })
