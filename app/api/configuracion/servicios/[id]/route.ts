@@ -77,9 +77,9 @@ export async function DELETE(
   try {
     await prisma.service.delete({ where: { id } })
   } catch (error) {
-    // El servicio tiene comisiones configuradas y la base lo impide (Restrict,
-    // F-003): borrarlo se llevaría por delante porcentajes que sólo el dueño
-    // puede tocar. Se retira con `active`, sin perder el historial.
+    // El servicio tiene comisiones configuradas y la base lo impide (la FK de
+    // porcentajes_comision es Restrict): borrarlo se llevaría por delante
+    // porcentajes que sólo el dueño puede tocar. Se retira con `active`, sin perder el historial.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
       return NextResponse.json(
         {

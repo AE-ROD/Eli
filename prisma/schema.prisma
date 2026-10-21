@@ -219,11 +219,10 @@ model Appointment {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
-  // Comisión congelada al completar la cita (lo decide una futura feature de
-  // cálculo, todavía sin ficha creada -- no confundir con F-005, que ya
-  // existe y es "el encargado gestiona el equipo"). Se escriben una sola vez y
-  // no se recalculan: cambiar un porcentaje después no puede alterar una cita
-  // ya liquidada. Opcionales sin valor por defecto a propósito, por la misma
+  // Comisión congelada al completar la cita. Todavía no hay código que la
+  // calcule: estas columnas son sólo el lugar donde va a quedar. Se escriben
+  // una sola vez y no se recalculan: cambiar un porcentaje después no puede
+  // alterar una cita ya liquidada. Opcionales sin valor por defecto a propósito, por la misma
   // razón que en BusinessMember/CommissionRate: `null` tiene que poder
   // significar "todavía no tiene comisión resuelta", nunca "0".
   //
@@ -246,9 +245,9 @@ model Appointment {
   // sin ser un tamaño arbitrario/desperdiciado (Postgres sólo ocupa espacio
   // por los dígitos que el valor realmente tiene, no por la precisión
   // declarada). `Appointment.price` y `Service.price` **no** se tocan acá:
-  // siguen en `Float` a propósito (ver F-015, ya en backlog) porque ya tienen
-  // datos en producción y los usan 43 lugares del código; ese es un cambio de
-  // otra escala y con otro plan de prueba (sobre una base con datos, no vacía).
+  // siguen en `Float` a propósito porque ya tienen datos en producción y los
+  // usa mucho código; pasarlos a `Decimal` es un cambio de otra escala y con
+  // otro plan de prueba (sobre una base con datos, no vacía).
   //
   // `commissionPercent` (acá y en BusinessMember/CommissionRate) se queda en
   // `Float`, a propósito y no por descuido: un porcentaje es un valor
@@ -260,7 +259,7 @@ model Appointment {
   // decimales para el porcentaje). Pasarlo a `Decimal` tampoco evitaría la
   // mezcla de tipos al calcular (`price` sigue siendo `Float`): esa conversión
   // haría falta igual en el momento del cálculo, la tenga `percent` el tipo
-  // que tenga. Ver nota de "Fuera de alcance" sobre esa mezcla.
+  // que tenga, y la tiene que resolver quien escriba ese cálculo.
   commissionPercent Float? // porcentaje ya resuelto por la cascada al momento del cálculo -- rango 0-100 vía CHECK
   commissionAmount  Decimal?  @db.Decimal(12, 2) // monto resultante, sobre el precio total sin descontar insumos
   commissionAt      DateTime? // cuándo se calculó y congeló
@@ -270,8 +269,8 @@ model Appointment {
 
   @@index([businessId])
   @@index([businessId, startTime])
-  // Consulta de liquidación: businessId + memberId + status + rango de fechas
-  // (futura feature de cálculo/liquidación, hoy sin ficha).
+  // Consulta de liquidación: businessId + memberId + status + rango de fechas.
+  // La liquidación todavía no existe; el índice se crea junto con las columnas.
   @@index([businessId, memberId, startTime])
   @@index([customerId])
   @@index([memberId])
@@ -452,7 +451,7 @@ model CommissionRate {
  * Ninguna de las dos relaciones usa la FK compuesta de `CommissionRate`
  * (`(id, businessId)`): una FK compuesta con `onDelete: SetNull` anula TODAS
  * las columnas de la constraint a la vez, incluida `businessId` -- y
- * `businessId` acá es NOT NULL (regla 1 de arquitectura: toda fila debe poder
+ * `businessId` acá es NOT NULL (aislamiento entre negocios: toda fila debe poder
  * filtrarse por negocio), así que esa combinación o rompe el insert o vuelve
  * la fila invisible para cualquier consulta multi-tenant. Quedan como FK
  * simples contra `.id`; el negocio se resuelve siempre escribiendo el
