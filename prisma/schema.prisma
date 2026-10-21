@@ -235,8 +235,8 @@ model Appointment {
   // `commissionAmount` es `Decimal`, no `Float`: es dinero que se va a sumar
   // sobre decenas de citas en cada liquidación mensual, y el punto flotante
   // acumula error de redondeo en cada suma -- eso son disputas con gente que
-  // cobra por su trabajo. Se decide ahora porque la tabla tiene cero filas
-  // (recién creada en esta misma migración) y esa ventana no se repite:
+  // cobra por su trabajo. Se decide ahora porque la columna nace vacía
+  // (se agrega en esta misma migración) y esa ventana no se repite:
   // convertir un `Float` a `Decimal` con datos ya cargados es una migración
   // aparte, con `USING` y riesgo de reescritura de tabla. `Decimal(12, 2)`:
   // 2 decimales es la escala universal para dinero (centavos/céntimos), y 12
