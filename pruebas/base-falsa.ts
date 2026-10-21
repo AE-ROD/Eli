@@ -76,6 +76,7 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
   }),
   visitService: () => ({ serviceId: null, memberId: null, byOwner: false }),
   visitPayment: () => ({ createdAt: new Date() }),
+  workSchedule: () => ({ memberId: null, active: true }),
 }
 
 /** Campos `@unique` (además de `id`) que la base hace respetar. */
@@ -96,6 +97,7 @@ function tablasVacias(): Tablas {
     visit: [],
     visitService: [],
     visitPayment: [],
+    workSchedule: [],
   }
 }
 
@@ -236,6 +238,7 @@ export function crearBaseFalsa() {
     visit: delegado("visit"),
     visitService: delegado("visitService"),
     visitPayment: delegado("visitPayment"),
+    workSchedule: delegado("workSchedule"),
   }
 
   const prisma = {

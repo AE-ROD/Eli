@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { enviarConfirmacionCliente, enviarAvisoProfesional } from "@/lib/email"
 import { reservaSchema } from "@/lib/validaciones"
+import { horaAMinutos } from "@/lib/horario-dia"
+import { cabeEnAtencion, franjasDeAtencion } from "@/lib/horario-de-atencion"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 
 export async function POST(
@@ -38,6 +40,25 @@ export async function POST(
     // Calcular startTime y endTime
     const startTime = new Date(`${datos.fecha}T${datos.hora}:00`)
     const endTime = new Date(startTime.getTime() + servicio.duration * 60000)
+
+    // La hora tiene que caer entera dentro del horario de atención de ese día,
+    // con la misma regla que ofrece las horas (`franjasDeAtencion`). El día de
+    // la semana se saca igual que en `disponibilidad/route.ts` y la hora se
+    // compara en minutos como texto "HH:MM", igual que las franjas: así lo que
+    // se ofrece y lo que se acepta no pueden dar distinto.
+    const diaSemana = new Date(datos.fecha).getDay()
+    const filasDelDia = await prisma.workSchedule.findMany({
+      where: { businessId: negocio.id, dayOfWeek: diaSemana, active: true },
+      select: { memberId: true, startTime: true, endTime: true },
+      orderBy: { startTime: "asc" },
+    })
+    const inicioMin = horaAMinutos(datos.hora)
+    if (!cabeEnAtencion(franjasDeAtencion(filasDelDia), inicioMin, inicioMin + servicio.duration)) {
+      return NextResponse.json(
+        { error: "Ese horario está fuera de la atención del negocio. Elige otra hora." },
+        { status: 409 }
+      )
+    }
 
     // Verificar que el slot sigue libre
     const conflicto = await prisma.appointment.findFirst({

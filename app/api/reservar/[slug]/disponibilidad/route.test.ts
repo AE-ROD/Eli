@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { NextRequest } from "next/server"
+import { crearBaseFalsa } from "@/pruebas/base-falsa"
+import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
 
 const mockVerificarLimite = vi.fn()
 
@@ -8,39 +10,75 @@ vi.mock("@/lib/rate-limit", () => ({
   verificarLimite: (...args: unknown[]) => mockVerificarLimite(...args),
 }))
 
-const prismaMock = {
-  business: { findUnique: vi.fn() },
-  service: { findFirst: vi.fn() },
-  workSchedule: { findFirst: vi.fn() },
-  appointment: { findMany: vi.fn() },
-}
+const base = crearBaseFalsa()
 
-vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
+vi.mock("@/lib/prisma", () => ({ prisma: base.prisma }))
 
 /** Un lunes lejano: nunca es "hoy", así que no se filtran horas pasadas. */
 const FECHA = "2030-01-07"
+
+/**
+ * El día de la semana y las horas del día, calculados igual que el endpoint
+ * (`new Date(fecha).getDay()` y `setHours` en la zona del servidor). El
+ * cálculo de zona horaria se corrige en otra tarea; acá el test sólo tiene que
+ * ver el mismo día que ve el endpoint, corra donde corra.
+ */
+const DIA = new Date(FECHA).getDay()
+const OTRO_DIA = (DIA + 1) % 7
+function aLas(hora: number): Date {
+  const instante = new Date(FECHA)
+  instante.setHours(hora, 0, 0, 0)
+  return instante
+}
 
 const pedidoFalso = (query: string): NextRequest =>
   ({ url: `http://localhost/api/reservar/salon-uno/disponibilidad${query}`, headers: new Headers() }) as unknown as NextRequest
 
 const conSlug = { params: Promise.resolve({ slug: "salon-uno" }) }
 
+const URL_DEL_DIA = `?fecha=${FECHA}&servicioId=s-corte`
+
+type Fila = { memberId?: string | null; startTime: string; endTime: string; dayOfWeek?: number; active?: boolean; businessId?: string }
+
+let siguiente = 1
+const franja = ({ memberId = null, dayOfWeek = DIA, businessId = NEGOCIO, ...resto }: Fila) => ({
+  id: `h-${siguiente++}`,
+  businessId,
+  memberId,
+  dayOfWeek,
+  ...resto,
+})
+
+function escenario(horarios: ReturnType<typeof franja>[]) {
+  const datos = datosBase()
+  base.reiniciar({
+    ...datos,
+    // Corte de 60 minutos: los turnos caen en horas redondas.
+    service: datos.service.map((s) => (s.id === "s-corte" ? { ...s, duration: 60 } : s)),
+    workSchedule: horarios,
+  })
+}
+
 /** Ningún pedido rechazado tiene que llegar a la base. */
 function expectSinConsultas() {
-  expect(prismaMock.business.findUnique).not.toHaveBeenCalled()
-  expect(prismaMock.service.findFirst).not.toHaveBeenCalled()
-  expect(prismaMock.workSchedule.findFirst).not.toHaveBeenCalled()
-  expect(prismaMock.appointment.findMany).not.toHaveBeenCalled()
+  expect(base.prisma.business.findUnique).not.toHaveBeenCalled()
+  expect(base.prisma.service.findFirst).not.toHaveBeenCalled()
+  expect(base.prisma.workSchedule.findMany).not.toHaveBeenCalled()
+  expect(base.prisma.appointment.findMany).not.toHaveBeenCalled()
+}
+
+async function horasDelDia() {
+  const { GET } = await import("./route")
+  const res = await GET(pedidoFalso(URL_DEL_DIA), conSlug)
+  expect(res.status).toBe(200)
+  return res.json()
 }
 
 describe("GET /api/reservar/[slug]/disponibilidad", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 59 })
-    prismaMock.business.findUnique.mockResolvedValue({ id: "negocio-1" })
-    prismaMock.service.findFirst.mockResolvedValue({ duration: 60 })
-    prismaMock.workSchedule.findFirst.mockResolvedValue({ startTime: "09:00", endTime: "12:00" })
-    prismaMock.appointment.findMany.mockResolvedValue([])
+    escenario([franja({ startTime: "09:00", endTime: "12:00" })])
   })
 
   it("está limitado por IP con el límite de lectura pública: pasado el tope, 429 sin tocar la base", async () => {
@@ -59,9 +97,12 @@ describe("GET /api/reservar/[slug]/disponibilidad", () => {
     const { GET } = await import("./route")
 
     // Ocupada de 10 a 11 (hora del servidor, igual que la cuenta de los turnos).
-    prismaMock.appointment.findMany.mockResolvedValueOnce([
-      { startTime: new Date(2030, 0, 7, 10, 0), endTime: new Date(2030, 0, 7, 11, 0) },
-    ])
+    base.reiniciar({
+      ...base.volcado(),
+      appointment: [
+        { id: "cita-1", businessId: NEGOCIO, title: "Corte", status: "confirmada", startTime: aLas(10), endTime: aLas(11) },
+      ],
+    })
 
     const res = await GET(pedidoFalso(`?fecha=${FECHA}&servicioId=s-corte`), conSlug)
 
@@ -100,5 +141,53 @@ describe("GET /api/reservar/[slug]/disponibilidad", () => {
     expect(res.status).toBe(400)
     expect(data.error).toMatch(/servicio/i)
     expectSinConsultas()
+  })
+})
+
+describe("GET /api/reservar/[slug]/disponibilidad: de qué horario salen las horas", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 59 })
+  })
+
+  it("con horario general y uno de profesional distintos el mismo día, las horas salen del general", async () => {
+    // El del profesional va primero en la tabla: antes, `findFirst` sin filtro
+    // de `memberId` ni orden podía tomarlo a él.
+    escenario([
+      franja({ memberId: "m-carla", startTime: "14:00", endTime: "16:00" }),
+      franja({ startTime: "09:00", endTime: "11:00" }),
+    ])
+
+    expect(await horasDelDia()).toEqual({ slots: ["09:00", "10:00"] })
+  })
+
+  it("sin horario general ese día, las horas salen de la unión de los horarios de los profesionales", async () => {
+    escenario([
+      franja({ memberId: "m-pedro", startTime: "15:00", endTime: "17:00" }),
+      franja({ memberId: "m-carla", startTime: "09:00", endTime: "11:00" }),
+      // El general existe, pero para otro día: no cuenta para éste.
+      franja({ dayOfWeek: OTRO_DIA, startTime: "08:00", endTime: "20:00" }),
+    ])
+
+    expect(await horasDelDia()).toEqual({ slots: ["09:00", "10:00", "15:00", "16:00"] })
+  })
+
+  it("con dos franjas generales el mismo día, ofrece las horas de ambas", async () => {
+    escenario([
+      franja({ startTime: "15:00", endTime: "17:00" }),
+      franja({ startTime: "09:00", endTime: "11:00" }),
+    ])
+
+    expect(await horasDelDia()).toEqual({ slots: ["09:00", "10:00", "15:00", "16:00"] })
+  })
+
+  it("no usa franjas inactivas ni las de otro negocio", async () => {
+    escenario([
+      franja({ startTime: "09:00", endTime: "11:00", active: false }),
+      franja({ businessId: OTRO_NEGOCIO, startTime: "09:00", endTime: "11:00" }),
+      franja({ businessId: OTRO_NEGOCIO, memberId: "m-ajeno", startTime: "12:00", endTime: "13:00" }),
+    ])
+
+    expect(await horasDelDia()).toEqual({ slots: [], mensaje: "No hay atención ese día" })
   })
 })

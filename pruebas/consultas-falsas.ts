@@ -22,6 +22,7 @@ export type NombreDeModelo =
   | "visit"
   | "visitService"
   | "visitPayment"
+  | "workSchedule"
 
 export type Tablas = Record<NombreDeModelo, Registro[]>
 
@@ -66,6 +67,7 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     service: uno("service", "serviceId"),
   },
   visitPayment: { visit: uno("visit", "visitId") },
+  workSchedule: { business: uno("business", "businessId"), member: uno("businessMember", "memberId") },
 }
 
 const OPERADORES_DE_CAMPO = new Set(["equals", "in", "notIn", "not", "gt", "gte", "lt", "lte"])
