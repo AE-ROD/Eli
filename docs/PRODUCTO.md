@@ -131,6 +131,13 @@ Precio, límites por plan y prueba gratuita: pendientes (sección 10).
 
 El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisiones de por medio, cuánto factura el local es información del dueño.
 
+### Cuentas (decidido)
+
+- **Una cuenta entra de una sola forma.** La que se creó con Google entra con Google; la que se creó con correo y contraseña (registro o invitación al equipo) entra con correo y contraseña. Si alguien intenta entrar con Google usando el correo de una cuenta con contraseña, Eli **no las vincula**: lo manda a iniciar sesión con el mensaje "Esta cuenta usa correo y contraseña. Entra con ellos.". Vincularlas sola le daría la cuenta a quien controle ese Gmail sin conocer la contraseña. Google además tiene que dar el correo como verificado.
+- **El correo de una cuenta no distingue mayúsculas ni espacios en las puntas**: se guarda y se busca en minúsculas.
+- **Las sesiones duran 7 días** y se revisan contra la base cada 5 minutos: a quien sacan del equipo o le cambian el rol, el cambio le llega en ese plazo. **Restablecer la contraseña cierra todas las sesiones abiertas** de esa cuenta.
+- **Los enlaces de recuperar contraseña e invitación son de un solo uso** y la base guarda sólo su huella (hash), no el enlace.
+
 ---
 
 ## 6. Alcance de v1

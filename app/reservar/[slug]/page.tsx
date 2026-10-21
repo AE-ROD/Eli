@@ -5,6 +5,7 @@ import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Tarjeta } from "@/components/comunes/tarjeta"
 import { horarioSemanalDeAtencion } from "@/lib/horario-de-atencion"
 import { prisma } from "@/lib/prisma"
+import { zonaDelNegocio } from "@/lib/zona-horaria"
 import { EncabezadoDeReserva } from "./_componentes/encabezado-de-reserva"
 import { FormularioReserva } from "./_componentes/formulario-reserva"
 
@@ -41,6 +42,8 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
       name: true,
       type: true,
       slug: true,
+      // El calendario cuenta "hoy" y la ventana de reserva en este reloj.
+      timezone: true,
       services: {
         where: { active: true },
         select: { id: true, name: true, description: true, duration: true, price: true },
@@ -77,6 +80,7 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
       <FormularioReserva
         slug={negocio.slug}
         nombreNegocio={negocio.name}
+        zona={zonaDelNegocio(negocio.timezone)}
         servicios={negocio.services}
         horarios={horarioSemanalDeAtencion(negocio.workSchedules)}
       />

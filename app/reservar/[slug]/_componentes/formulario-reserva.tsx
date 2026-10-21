@@ -30,6 +30,8 @@ interface HorarioPublico {
 interface PropsDeFormularioReserva {
   slug: string
   nombreNegocio: string
+  /** La zona del negocio (IANA): el calendario cuenta "hoy" en su reloj. */
+  zona: string
   servicios: ServicioPublico[]
   horarios: HorarioPublico[]
 }
@@ -43,7 +45,7 @@ type Paso = 1 | 2 | 3
  */
 const FUNDIDO = { duration: DURACION.pildora, ease: CURVA.fundido }
 
-export function FormularioReserva({ slug, nombreNegocio, servicios, horarios }: PropsDeFormularioReserva) {
+export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horarios }: PropsDeFormularioReserva) {
   const [paso, setPaso] = useState<Paso>(1)
   const [servicioSeleccionado, setServicioSeleccionado] = useState<ServicioPublico | null>(null)
   const [fecha, setFecha] = useState("")
@@ -195,6 +197,7 @@ export function FormularioReserva({ slug, nombreNegocio, servicios, horarios }: 
                   slug={slug}
                   servicioId={servicioSeleccionado!.id}
                   diasDisponibles={diasDisponibles}
+                  zona={zona}
                   fechaSeleccionada={fecha}
                   horaSeleccionada={hora}
                   onFecha={setFecha}

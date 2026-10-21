@@ -92,7 +92,12 @@ describe("POST /api/reservar/[slug]/confirmar: la hora tiene que caer en el hora
     expect(status).toBe(201)
     expect(cuerpo).toMatchObject({ mensaje: "Reserva confirmada" })
     expect(citasCreadas()).toHaveLength(1)
-    expect(citasCreadas()[0]).toMatchObject({ businessId: NEGOCIO, serviceId: "s-corte", status: "pendiente" })
+    expect(citasCreadas()[0]).toMatchObject({
+      businessId: NEGOCIO,
+      serviceId: "s-corte",
+      status: "pendiente",
+      source: "reserva-publica",
+    })
   })
 
   it.each([
@@ -397,8 +402,8 @@ describe("POST /api/reservar/[slug]/confirmar: ni en el pasado ni a más de 90 d
 /**
  * Topes de la reserva pública (A3/M7). El límite por IP no alcanza: con IPs
  * rotativas se podía llenar la agenda de un negocio. Una reserva pública es
- * una cita con `serviceId` (el panel crea citas sin servicio; ver
- * `lib/reserva-publica.ts`).
+ * una cita con `source: "reserva-publica"`, tenga o no servicio: el panel
+ * también puede guardar uno (ver `lib/reserva-publica.ts`).
  * Reloj: 1/10/2026 a las 12:00 UTC (09:00 en Santiago).
  */
 describe("POST /api/reservar/[slug]/confirmar: topes anti-abuso", () => {
@@ -412,6 +417,7 @@ describe("POST /api/reservar/[slug]/confirmar: topes anti-abuso", () => {
     businessId: NEGOCIO,
     customerId,
     serviceId: "s-corte",
+    source: "reserva-publica",
     title: "Corte",
     status: "pendiente",
     startTime: new Date("2026-10-20T13:00:00.000Z"),
@@ -474,14 +480,14 @@ describe("POST /api/reservar/[slug]/confirmar: topes anti-abuso", () => {
       expect(citasCreadas()).toHaveLength(3)
     })
 
-    it("no cuentan las canceladas, las pasadas, las del panel (sin servicio) ni las de otro negocio", async () => {
+    it("no cuentan las canceladas, las pasadas, las del panel ni las de otro negocio", async () => {
       const AJENA = { ...LUCIA, id: "c-lucia-ajena", businessId: OTRO_NEGOCIO }
       conDatos(
         [LUCIA, AJENA],
         [
           cita("c-lucia", { status: "cancelada" }),
           cita("c-lucia", { startTime: new Date("2026-09-20T13:00:00.000Z"), endTime: new Date("2026-09-20T14:00:00.000Z") }),
-          cita("c-lucia", { serviceId: null }),
+          cita("c-lucia", { source: "panel", serviceId: null }),
           cita("c-lucia-ajena", { businessId: OTRO_NEGOCIO, serviceId: "s-ajeno" }),
           cita("c-lucia-ajena", { businessId: OTRO_NEGOCIO, serviceId: "s-ajeno" }),
           cita("c-lucia-ajena", { businessId: OTRO_NEGOCIO, serviceId: "s-ajeno" }),
@@ -489,6 +495,18 @@ describe("POST /api/reservar/[slug]/confirmar: topes anti-abuso", () => {
       )
 
       expect((await reservarCon({ email: "lucia@correo.test", telefono: "+56912345678" })).status).toBe(201)
+    })
+
+    it("tres citas del panel CON servicio no cuentan: el origen decide, no el servicio", async () => {
+      conDatos([LUCIA], [cita("c-lucia", { source: "panel" }), cita("c-lucia", { source: "panel" }), cita("c-lucia", { source: "panel" })])
+
+      expect((await reservarCon({ email: "lucia@correo.test" })).status).toBe(201)
+    })
+
+    it("tres reservas públicas que perdieron el servicio (borrado: queda en null) siguen contando", async () => {
+      conDatos([LUCIA], [cita("c-lucia", { serviceId: null }), cita("c-lucia", { serviceId: null }), cita("c-lucia", { serviceId: null })])
+
+      expect((await reservarCon({ email: "lucia@correo.test" })).status).toBe(429)
     })
 
     it("otro contacto no se ve afectado", async () => {
@@ -543,16 +561,28 @@ describe("POST /api/reservar/[slug]/confirmar: topes anti-abuso", () => {
       expect((await reservarCon({ email: "nueva@correo.test" })).status).toBe(201)
     })
 
-    it("no cuentan las citas del panel (sin servicio) ni las de otro negocio", async () => {
+    it("no cuentan las citas del panel ni las de otro negocio", async () => {
       conDatos(
         [],
         [
-          ...reservasCreadasHace(30, 1).map((c) => ({ ...c, serviceId: null })),
+          ...reservasCreadasHace(30, 1).map((c) => ({ ...c, source: "panel", serviceId: null })),
           ...reservasCreadasHace(30, 1).map((c) => ({ ...c, businessId: OTRO_NEGOCIO, serviceId: "s-ajeno", customerId: "c-ajeno" })),
         ]
       )
 
       expect((await reservarCon({ email: "nueva@correo.test" })).status).toBe(201)
+    })
+
+    it("50 citas del panel CON servicio en 24 h no cuentan: el origen decide, no el servicio", async () => {
+      conDatos([], reservasCreadasHace(50, 1).map((c) => ({ ...c, source: "panel" })))
+
+      expect((await reservarCon({ email: "nueva@correo.test" })).status).toBe(201)
+    })
+
+    it("50 reservas públicas que perdieron el servicio (borrado: queda en null) siguen contando", async () => {
+      conDatos([], reservasCreadasHace(50, 1).map((c) => ({ ...c, serviceId: null })))
+
+      expect((await reservarCon({ email: "nueva@correo.test" })).status).toBe(429)
     })
   })
 })

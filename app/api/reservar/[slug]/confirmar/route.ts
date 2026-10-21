@@ -14,6 +14,7 @@ import {
   MENSAJE_HORA_PASADA,
   MENSAJE_TOPE_POR_CONTACTO,
   MENSAJE_TOPE_POR_NEGOCIO,
+  ORIGEN_RESERVA_PUBLICA,
   WHERE_RESERVA_PUBLICA,
   compartenContacto,
   esElMismoCliente,
@@ -148,6 +149,8 @@ async function reservar(
     data: {
       title: servicio.name,
       serviceId: servicio.id,
+      // Lo que cuentan los topes (`WHERE_RESERVA_PUBLICA`).
+      source: ORIGEN_RESERVA_PUBLICA,
       startTime,
       endTime,
       status: "pendiente",

@@ -6,7 +6,7 @@
  */
 
 import { horaAMinutos } from "@/lib/horario-dia"
-import { diasEntre, fechaYMinutosEn } from "@/lib/zona-horaria"
+import { diaDeLaSemana, diasEntre, esFechaCalendario, fechaYMinutosEn } from "@/lib/zona-horaria"
 
 /**
  * Hasta cuántos días después de hoy (en el reloj del negocio) se puede
@@ -35,6 +35,20 @@ export function fechaNoReservable(fecha: string, ahora: Date, zona: string): Fec
 }
 
 /**
+ * Si el calendario de la página pública ofrece el día `fecha`: que el negocio
+ * atienda ese día de la semana (`diasConAtencion`, 0 domingo a 6 sábado) y
+ * que no sea ni pasado ni más allá de `DIAS_MAXIMOS_DE_ANTICIPACION`, con
+ * "hoy" en el reloj del negocio y no en el del navegador. Es la regla de
+ * `fechaNoReservable`, la misma con la que `confirmar` rechaza: el calendario
+ * no ofrece un día que después se rechazaría. No lanza: una fecha inválida
+ * no se ofrece.
+ */
+export function esDiaReservable(fecha: string, diasConAtencion: readonly number[], ahora: Date, zona: string): boolean {
+  if (!esFechaCalendario(fecha)) return false
+  return fechaNoReservable(fecha, ahora, zona) === null && diasConAtencion.includes(diaDeLaSemana(fecha))
+}
+
+/**
  * Si la hora `hora` ("HH:MM") de `fecha` ya pasó en el reloj de la zona. La
  * hora en curso cuenta como pasada: a las 10:30 ya no se reserva a las 10:30.
  * Es la regla con la que `disponibilidad` siempre filtró las horas de hoy.
@@ -52,11 +66,18 @@ export function yaPasoLaHora(fecha: string, hora: string, ahora: Date, zona: str
 // por IP (`lib/rate-limit.ts`) se esquiva rotando IPs. Estos topes cuentan en
 // la base, por negocio.
 //
-// Qué es una reserva pública: la cita no guarda su origen (agregar la columna
-// pide una migración). Hoy sólo `confirmar` crea citas con `serviceId`; el
-// panel (`app/api/citas`) las crea sin servicio. Por eso "reserva pública" es
-// "cita con `serviceId`" (`WHERE_RESERVA_PUBLICA`). Si el panel empieza a
-// guardar el servicio, esta regla deja de distinguirlas: hace falta la columna.
+// Qué es una reserva pública: una cita con `source: "reserva-publica"`, que
+// sólo `confirmar` escribe; el panel (`app/api/citas`) deja el default
+// "panel". Antes se la reconocía por tener `serviceId`, y eso se rompía si el
+// panel guardaba el servicio o si se borraba el servicio (queda en null).
+
+/**
+ * De dónde viene una cita (`Appointment.source`): la crea el equipo en el
+ * panel o el cliente en la página pública. La base los limita a estos dos
+ * con una CHECK (migración `origen_de_las_citas`).
+ */
+export const ORIGENES_DE_CITA = ["panel", "reserva-publica"] as const
+export type OrigenDeCita = (typeof ORIGENES_DE_CITA)[number]
 
 /** Cuántas reservas futuras no canceladas puede tener un mismo email o teléfono en un negocio. */
 export const MAX_RESERVAS_FUTURAS_POR_CONTACTO = 3
@@ -73,8 +94,11 @@ export const MENSAJE_TOPE_POR_CONTACTO = `Ya tienes ${MAX_RESERVAS_FUTURAS_POR_C
 export const MENSAJE_TOPE_POR_NEGOCIO =
   "Este negocio recibió demasiadas reservas en línea en las últimas horas. Intenta más tarde o contáctalo directamente."
 
+/** El origen con que `confirmar` crea las citas. */
+export const ORIGEN_RESERVA_PUBLICA: OrigenDeCita = "reserva-publica"
+
 /** El filtro de cita que identifica una reserva pública (ver arriba). */
-export const WHERE_RESERVA_PUBLICA = { serviceId: { not: null } }
+export const WHERE_RESERVA_PUBLICA = { source: ORIGEN_RESERVA_PUBLICA }
 
 /** El email para comparar: sin espacios alrededor y en minúsculas. Vacío → `null`. */
 export function normalizarEmail(email: string | null | undefined): string | null {

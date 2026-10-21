@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { NextRequest } from "next/server"
+import { createHash } from "node:crypto"
 
 const mockVerificarLimite = vi.fn()
 
@@ -61,6 +62,16 @@ describe("GET /api/equipo/invitacion/[token]", () => {
     expect(res.status).toBe(404)
     expect(mockVerificarLimite).toHaveBeenCalledTimes(1)
     expect(mockVerificarLimite).toHaveBeenCalledWith("auth", "203.0.113.7")
+  })
+
+  it("busca la invitación por el hash del token del enlace", async () => {
+    const { GET } = await import("./route")
+
+    await GET(pedidoFalso(), conToken("token-valido"))
+
+    expect(prismaMock.workerInvitation.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { tokenHash: createHash("sha256").update("token-valido").digest("hex") } })
+    )
   })
 
   it("dentro del límite responde lo que muestra la pantalla de aceptar, y nada más", async () => {

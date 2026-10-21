@@ -197,6 +197,15 @@ Cada vista del panel se arma igual:
 - **Resend:** falta verificar el dominio (SPF/DKIM) o los correos caen en spam.
 - **Pagos online:** Stripe no está integrado y los precios todavía no están
   definidos.
+- **Content-Security-Policy con nonce.** `proxy.ts` arma la CSP en cada
+  petición con un nonce nuevo (`lib/csp.ts`) y el layout raíz fuerza el render
+  por petición (`connection()`): sin eso las páginas saldrían del build sin
+  nonce y el navegador les bloquearía el JS. **Cualquier script, estilo, fuente,
+  imagen o servicio de terceros nuevo (analítica, chat, mapas, pagos, CDN) hay
+  que agregarlo a propósito en `lib/csp.ts`**, con un test; si no, el
+  navegador lo bloquea en producción. No se vuelve a poner una CSP en
+  `next.config.mjs`: dos CSP se aplican a la vez y la estática, sin nonce,
+  rompería los scripts de Next.
 
 ## Cómo se trabaja acá
 

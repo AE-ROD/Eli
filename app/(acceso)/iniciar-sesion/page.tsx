@@ -7,6 +7,7 @@ import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { AccesoConGoogle } from "../_componentes/acceso-con-google"
 import { AvisoDeError } from "../_componentes/aviso-de-error"
+import { mensajeDeErrorDeAcceso } from "../_componentes/errores-de-acceso"
 import { MarcoDeAcceso, PreguntaConEnlace } from "../_componentes/marco-de-acceso"
 
 export default function PaginaIniciarSesion() {
@@ -19,9 +20,10 @@ export default function PaginaIniciarSesion() {
   // Se lee del navegador y no con useSearchParams: ese hook obliga a envolver
   // la página en un <Suspense> o el prerender falla.
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).has("error")) {
+    const mensaje = mensajeDeErrorDeAcceso(new URLSearchParams(window.location.search).get("error"))
+    if (mensaje) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- responde al redirect de OAuth, no a un valor de render
-      setError("No se pudo iniciar sesión con Google. Verifica que tu cuenta esté habilitada.")
+      setError(mensaje)
     }
   }, [])
 

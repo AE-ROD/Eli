@@ -40,6 +40,8 @@ describe("POST /api/auth/registro: datos inválidos", () => {
 
   it.each([
     ["una contraseña de más de 72 caracteres", { contrasena: "a".repeat(73) }, /contraseña/i],
+    // 40 caracteres pero 80 bytes en UTF-8: bcrypt la truncaría sin avisar
+    ["una contraseña de más de 72 bytes aunque tenga menos de 72 caracteres", { contrasena: "ñ".repeat(40) }, /contraseña/i],
     ["un nombre de negocio de más de 80 caracteres", { nombreNegocio: "a".repeat(81) }, /nombre del negocio/i],
     ["un email inválido", { email: "no-es-un-email" }, /email|correo/i],
   ])("%s: 400 con un error legible, sin detalles crudos ni tocar la base", async (_caso, cambio, mensaje) => {

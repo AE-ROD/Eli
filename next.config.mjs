@@ -1,16 +1,14 @@
 /**
  * Cabeceras de seguridad para todas las rutas (páginas y API).
  *
- * La CSP es a propósito SÓLO `frame-ancestors 'none'` (que nadie embeba Eli en
- * un iframe: clickjacking; X-Frame-Options cubre a navegadores viejos). Una CSP
- * completa (script-src, style-src, connect-src...) queda PENDIENTE: Next.js
- * inyecta scripts inline para hidratar, hay estilos inline y scripts de
- * terceros (Vercel Analytics), así que exige nonces generados en el proxy y
- * probar cada pantalla. Puesta a ciegas rompería la app en producción.
+ * La Content-Security-Policy NO va acá: lleva un nonce distinto por petición,
+ * así que la arma `proxy.ts` con `lib/csp.ts`. Ponerla también acá mandaría dos
+ * CSP y el navegador aplicaría las dos a la vez (la estática, sin nonce,
+ * bloquearía los scripts de Next). X-Frame-Options sigue acá para navegadores
+ * viejos y para lo que no pasa por el proxy (assets estáticos).
  */
 const cabecerasDeSeguridad = [
   { key: "X-Frame-Options", value: "DENY" },
-  { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },

@@ -48,6 +48,7 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
   appointment: () => ({
     serviceId: null,
     status: "pendiente",
+    source: "panel",
     notes: null,
     clientComments: null,
     price: null,
