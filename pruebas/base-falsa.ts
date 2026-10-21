@@ -32,7 +32,7 @@ export type { NombreDeModelo, Tablas } from "./consultas-falsas"
 /** Los defaults del esquema: todo campo existe en el registro, aunque sea en null. */
 const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
   user: () => ({ password: "", createdAt: new Date(), updatedAt: new Date() }),
-  business: () => ({ type: "salon", teamSize: 1, createdAt: new Date(), updatedAt: new Date() }),
+  business: () => ({ type: "salon", teamSize: 1, timezone: "America/Santiago", createdAt: new Date(), updatedAt: new Date() }),
   businessMember: () => ({ role: "worker", createdAt: new Date() }),
   customer: () => ({
     lastName: null,

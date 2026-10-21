@@ -29,6 +29,9 @@ model Business {
   type      String
   slug      String   @unique
   teamSize  Int      @default(1)
+  /// Zona IANA del negocio: en ella se leen sus horarios "HH:MM" y sus días
+  /// (lib/zona-horaria.ts). Todavía no hay pantalla para cambiarla.
+  timezone  String   @default("America/Santiago")
   userId    String   @unique
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())

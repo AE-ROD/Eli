@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { actorDeSesion, memberIdParaCita, whereDeAgenda } from "@/lib/permisos"
+import { esFechaCalendario, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 
 const citaSchema = z.object({
   title: z.string().min(2),
@@ -29,27 +30,30 @@ export async function GET(request: NextRequest) {
   const hasta = searchParams.get("hasta")
   const customerId = searchParams.get("customerId")
 
-  let fechaInicio: Date | undefined
-  let fechaFin: Date | undefined
+  // `fecha`, `desde` y `hasta` son días calendario ("AAAA-MM-DD") del
+  // negocio: el rango va de las 00:00 del primero a las 00:00 del día
+  // siguiente al último, en la zona del negocio del actor. Con
+  // `new Date(fecha)` + `setHours` era la medianoche de la zona del servidor
+  // sobre un día leído en UTC: al oeste de UTC salía el día anterior.
+  const [primerDia, ultimoDia] = desde && hasta ? [desde, hasta] : fecha ? [fecha, fecha] : [null, null]
+  let rango: { gte: Date; lt: Date } | undefined
 
-  if (desde && hasta) {
-    fechaInicio = new Date(desde)
-    fechaInicio.setHours(0, 0, 0, 0)
-    fechaFin = new Date(hasta)
-    fechaFin.setHours(23, 59, 59, 999)
-  } else if (fecha) {
-    fechaInicio = new Date(fecha)
-    fechaInicio.setHours(0, 0, 0, 0)
-    fechaFin = new Date(fecha)
-    fechaFin.setHours(23, 59, 59, 999)
+  if (primerDia && ultimoDia) {
+    if (!esFechaCalendario(primerDia) || !esFechaCalendario(ultimoDia)) {
+      return NextResponse.json({ error: "La fecha no es válida: tiene que ser un día real, con el formato AAAA-MM-DD" }, { status: 400 })
+    }
+    const negocio = await prisma.business.findUnique({
+      where: { id: actor.businessId },
+      select: { timezone: true },
+    })
+    const zona = zonaDelNegocio(negocio?.timezone)
+    rango = { gte: rangoDelDiaEn(primerDia, zona).desde, lt: rangoDelDiaEn(ultimoDia, zona).hasta }
   }
 
   const citas = await prisma.appointment.findMany({
     where: whereDeAgenda(actor, {
       ...(customerId && { customerId }),
-      ...(fechaInicio && fechaFin && {
-        startTime: { gte: fechaInicio, lte: fechaFin },
-      }),
+      ...(rango && { startTime: rango }),
     }),
     select: {
       id: true,

@@ -22,20 +22,16 @@ vi.mock("@/lib/prisma", () => ({ prisma: base.prisma }))
 /** Un lunes lejano. */
 const FECHA = "2030-01-07"
 
-/**
- * El día de la semana calculado igual que el endpoint (`new Date(fecha)
- * .getDay()`, zona del servidor). La zona horaria se corrige en otra tarea:
- * acá el test sólo tiene que ver el mismo día que ve el endpoint.
- */
-const DIA = new Date(FECHA).getDay()
-const OTRO_DIA = (DIA + 1) % 7
+/** Escritos a mano, nunca con la misma cuenta que el endpoint: el 7 de enero de 2030 es lunes. */
+const DIA = 1
+const OTRO_DIA = 2
 
 const pedidoFalso = (cuerpo: unknown): NextRequest =>
   ({ headers: new Headers(), json: async () => cuerpo }) as unknown as NextRequest
 
 const conSlug = { params: Promise.resolve({ slug: "salon-uno" }) }
 
-const reserva = (hora: string) => ({ servicioId: "s-corte", fecha: FECHA, hora, nombre: "Lucía", apellido: "Pérez" })
+const reserva = (hora: string, fecha = FECHA) => ({ servicioId: "s-corte", fecha, hora, nombre: "Lucía", apellido: "Pérez" })
 
 let siguiente = 1
 type Fila = { memberId?: string | null; startTime: string; endTime: string; dayOfWeek?: number; active?: boolean; businessId?: string }
@@ -57,9 +53,9 @@ function escenario(horarios: ReturnType<typeof franja>[]) {
   })
 }
 
-async function confirmar(hora: string) {
+async function confirmar(hora: string, fecha = FECHA) {
   const { POST } = await import("./route")
-  const res = await POST(pedidoFalso(reserva(hora)), conSlug)
+  const res = await POST(pedidoFalso(reserva(hora, fecha)), conSlug)
   return { status: res.status, cuerpo: await res.json() }
 }
 
@@ -153,5 +149,144 @@ describe("POST /api/reservar/[slug]/confirmar: la hora tiene que caer en el hora
     expect(status).toBe(409)
     expect(cuerpo.error).toBe("El horario ya no está disponible")
     expect(citasCreadas()).toHaveLength(1)
+  })
+})
+
+/**
+ * El día de la semana y el instante de la cita salen de la zona del negocio.
+ * Todo esperado está escrito a mano: la suite corre con TZ=UTC,
+ * TZ=America/Santiago y TZ=Asia/Tokyo.
+ */
+describe("POST /api/reservar/[slug]/confirmar: el día y la hora del negocio", () => {
+  const LUNES = 1
+  const DOMINGO = 0
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 9 })
+  })
+
+  function conZona(zona: string) {
+    const volcado = base.volcado()
+    base.reiniciar({
+      ...volcado,
+      business: volcado.business.map((n) => (n.id === NEGOCIO ? { ...n, timezone: zona } : n)),
+    })
+  }
+
+  it("2026-10-19 es lunes: con atención sólo el lunes, acepta", async () => {
+    escenario([franja({ dayOfWeek: LUNES, startTime: "09:00", endTime: "13:00" })])
+
+    expect((await confirmar("10:00", "2026-10-19")).status).toBe(201)
+  })
+
+  it("2026-10-19 es lunes: con atención sólo el domingo, rechaza", async () => {
+    escenario([franja({ dayOfWeek: DOMINGO, startTime: "09:00", endTime: "13:00" })])
+
+    expect((await confirmar("10:00", "2026-10-19")).status).toBe(409)
+    expect(citasCreadas()).toHaveLength(0)
+  })
+
+  it("guarda la cita en el instante UTC de las 10:00 de Santiago (UTC-3 en octubre)", async () => {
+    escenario([franja({ dayOfWeek: LUNES, startTime: "09:00", endTime: "13:00" })])
+
+    expect((await confirmar("10:00", "2026-10-19")).status).toBe(201)
+
+    const [cita] = citasCreadas()
+    expect((cita.startTime as Date).toISOString()).toBe("2026-10-19T13:00:00.000Z")
+    expect((cita.endTime as Date).toISOString()).toBe("2026-10-19T14:00:00.000Z")
+  })
+
+  it("en invierno Santiago está en UTC-4: las 10:00 del 13/7/2026 (lunes) son las 14:00 UTC", async () => {
+    escenario([franja({ dayOfWeek: LUNES, startTime: "09:00", endTime: "13:00" })])
+
+    expect((await confirmar("10:00", "2026-07-13")).status).toBe(201)
+    expect((citasCreadas()[0].startTime as Date).toISOString()).toBe("2026-07-13T14:00:00.000Z")
+  })
+
+  it("con otra zona guardada (Asia/Tokyo), las 10:00 del negocio son las 01:00 UTC", async () => {
+    escenario([franja({ dayOfWeek: LUNES, startTime: "09:00", endTime: "13:00" })])
+    conZona("Asia/Tokyo")
+
+    expect((await confirmar("10:00", "2026-10-19")).status).toBe(201)
+    expect((citasCreadas()[0].startTime as Date).toISOString()).toBe("2026-10-19T01:00:00.000Z")
+  })
+
+  it("una cita existente a las 13:00 UTC ocupa las 10:00 del negocio en Santiago", async () => {
+    escenario([franja({ dayOfWeek: LUNES, startTime: "09:00", endTime: "13:00" })])
+    base.reiniciar({
+      ...base.volcado(),
+      appointment: [
+        {
+          id: "cita-1",
+          businessId: NEGOCIO,
+          title: "Corte",
+          status: "confirmada",
+          startTime: new Date("2026-10-19T13:00:00.000Z"),
+          endTime: new Date("2026-10-19T14:00:00.000Z"),
+        },
+      ],
+    })
+
+    const { status, cuerpo } = await confirmar("10:00", "2026-10-19")
+    expect(status).toBe(409)
+    expect(cuerpo.error).toBe("El horario ya no está disponible")
+    expect((await confirmar("11:00", "2026-10-19")).status).toBe(201)
+  })
+
+  it("un día que no existe (2026-02-30): 409 sin crear nada", async () => {
+    escenario([franja({ dayOfWeek: LUNES, startTime: "09:00", endTime: "13:00" })])
+
+    expect((await confirmar("10:00", "2026-02-30")).status).toBe(409)
+    expect(citasCreadas()).toHaveLength(0)
+  })
+})
+
+/** Fechas aceptadas: años 1900 a 9998 (lib/zona-horaria.ts). Fuera de eso, el mismo 409 que una fecha imposible. */
+describe("POST /api/reservar/[slug]/confirmar: fechas fuera del rango de años", () => {
+  const TODOS_LOS_DIAS = [0, 1, 2, 3, 4, 5, 6]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 9 })
+    escenario(TODOS_LOS_DIAS.map((dayOfWeek) => franja({ dayOfWeek, startTime: "09:00", endTime: "13:00" })))
+  })
+
+  it.each(["0000-01-01", "0050-06-15", "0999-12-31", "1899-12-31", "9999-12-31"])("%s: 409 fuera de la atención, sin crear nada", async (fecha) => {
+    const { status, cuerpo } = await confirmar("10:00", fecha)
+
+    expect(status).toBe(409)
+    expect(cuerpo.error).toMatch(/fuera de la atención/)
+    expect(citasCreadas()).toHaveLength(0)
+    expect(base.buscar("customer", { name: "Lucía" })).toHaveLength(0)
+  })
+
+  it("9998-12-31 (jueves, último día aceptado): crea la cita a las 13:00 UTC (10:00 en Santiago, UTC-3 en diciembre)", async () => {
+    escenario([franja({ dayOfWeek: 4, startTime: "09:00", endTime: "13:00" })])
+
+    expect((await confirmar("10:00", "9998-12-31")).status).toBe(201)
+    expect((citasCreadas()[0].startTime as Date).toISOString()).toBe("9998-12-31T13:00:00.000Z")
+  })
+})
+
+describe("POST /api/reservar/[slug]/confirmar: el día del salto del horario de verano", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 9 })
+    // Domingo 2026-09-06 en Santiago: de 00:00 a 00:59 el reloj no pasa.
+    escenario([franja({ dayOfWeek: 0, startTime: "00:00", endTime: "02:00" })])
+  })
+
+  it("00:00 no existe ese día: 409 fuera de la atención, sin crear nada", async () => {
+    const { status, cuerpo } = await confirmar("00:00", "2026-09-06")
+
+    expect(status).toBe(409)
+    expect(cuerpo.error).toMatch(/fuera de la atención/)
+    expect(citasCreadas()).toHaveLength(0)
+  })
+
+  it("01:00 sí existe: crea la cita a las 04:00 UTC (UTC-3 desde el salto)", async () => {
+    expect((await confirmar("01:00", "2026-09-06")).status).toBe(201)
+    expect((citasCreadas()[0].startTime as Date).toISOString()).toBe("2026-09-06T04:00:00.000Z")
   })
 })
