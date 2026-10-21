@@ -14,7 +14,7 @@ import { Aviso } from "@/components/panel/aviso"
 
 let pagosAgregados = 0
 
-interface ModalCobroProps {
+interface PropsDeModalCobro {
   /**
    * La atención como se la conoce. Si el servidor rechaza el cobro porque el
    * total cambió, la pantalla la reemplaza por la recién leída: el total y la
@@ -47,7 +47,7 @@ function totalEnCentavosDe(atencion: Atencion): number {
  * en centavos, y "Cobrar" se habilita sólo cuando los pagos dan el total
  * exacto: con la misma regla que aplica el servidor (`errorDeCobro`).
  */
-export function ModalCobro({ atencion, mediosDePago, aviso, guardando, onCobrar, onCambiarPagos, onCerrar }: ModalCobroProps) {
+export function ModalCobro({ atencion, mediosDePago, aviso, guardando, onCobrar, onCambiarPagos, onCerrar }: PropsDeModalCobro) {
   const idBase = useId()
   const botonAgregar = useRef<HTMLButtonElement>(null)
   const totalCentavos = totalEnCentavosDe(atencion)

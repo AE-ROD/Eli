@@ -21,7 +21,7 @@ export interface ClienteEnTarjeta {
   etiqueta?: "VIP" | "Frecuente" | "Nuevo" | "Inactivo"
 }
 
-interface TarjetaClienteProps {
+interface PropsDeTarjetaCliente {
   cliente: ClienteEnTarjeta
   /** Si es el que está abierto en la ficha de al lado. La ficha se ve desde `lg`, y la marca también. */
   seleccionado?: boolean
@@ -96,7 +96,7 @@ export function EtiquetaDeCliente({
  * van debajo del nombre; ancha, en la lista, todo va en una fila. Un nombre o
  * un correo largos se cortan en renglones y no ensanchan la página.
  */
-export function TarjetaCliente({ cliente, seleccionado = false, onClick }: TarjetaClienteProps) {
+export function TarjetaCliente({ cliente, seleccionado = false, onClick }: PropsDeTarjetaCliente) {
   return (
     <button
       type="button"

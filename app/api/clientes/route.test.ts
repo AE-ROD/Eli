@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { NextRequest } from "next/server"
-import { ordenar, proyectar, type Registro, type Tablas } from "@/app/api/atenciones/_pruebas/consultas-falsas"
+import { ordenar, proyectar, type Registro, type Tablas } from "@/pruebas/consultas-falsas"
 // Registra `customer.appointments` en la base falsa: sin la relación,
 // `proyectar` no sabe leer el historial anidado y lanza.
 import "./_pruebas/base-de-clientes"

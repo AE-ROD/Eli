@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import type { NextRequest } from "next/server"
+import { pedidoFalso } from "@/pruebas/pedidos"
 import { RUBROS } from "@/lib/rubros"
 
 const mockGetServerSession = vi.fn()
@@ -22,9 +22,6 @@ vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
 
 const sesion = { user: { id: "usuario-1", email: "ana@example.com" } }
 
-const fakeRequest = (body: Record<string, unknown>): NextRequest =>
-  ({ json: () => Promise.resolve(body) }) as unknown as NextRequest
-
 describe("POST /api/auth/completar-perfil", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -39,7 +36,7 @@ describe("POST /api/auth/completar-perfil", () => {
   it.each(RUBROS.map((rubro) => rubro.id))("crea el negocio con el rubro %s del catálogo", async (tipoNegocio) => {
     const { POST } = await import("./route")
 
-    const res = await POST(fakeRequest({ nombreNegocio: "Salón María", tipoNegocio }))
+    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio }))
 
     expect(res.status).toBe(200)
     expect(prismaMock.business.create).toHaveBeenCalledWith({
@@ -52,7 +49,7 @@ describe("POST /api/auth/completar-perfil", () => {
     async (tipoNegocio) => {
       const { POST } = await import("./route")
 
-      const res = await POST(fakeRequest({ nombreNegocio: "Salón María", tipoNegocio }))
+      const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio }))
 
       expect(res.status).toBe(400)
       expect(prismaMock.business.create).not.toHaveBeenCalled()
@@ -62,7 +59,7 @@ describe("POST /api/auth/completar-perfil", () => {
   it("sin rubro tampoco crea el negocio", async () => {
     const { POST } = await import("./route")
 
-    const res = await POST(fakeRequest({ nombreNegocio: "Salón María" }))
+    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María" }))
 
     expect(res.status).toBe(400)
     expect(prismaMock.business.create).not.toHaveBeenCalled()
@@ -73,7 +70,7 @@ describe("POST /api/auth/completar-perfil", () => {
 
     mockGetServerSession.mockResolvedValueOnce(null)
 
-    const res = await POST(fakeRequest({ nombreNegocio: "Salón María", tipoNegocio: "salon" }))
+    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon" }))
 
     expect(res.status).toBe(401)
     expect(prismaMock.business.findFirst).not.toHaveBeenCalled()

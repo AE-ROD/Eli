@@ -8,6 +8,9 @@ import { ProveedorDePrecios } from "@/components/panel/contexto-precios"
 import { ProveedorDeBarraLateral } from "@/components/panel/contexto-barra-lateral"
 import { actorDeSesion, puedeGestionarEquipo } from "@/lib/permisos"
 
+/** Cuántos días dura la prueba gratis, contados desde que se creó el negocio. */
+const DIAS_DE_PRUEBA = 3
+
 export default async function LayoutDelPanel({
   children,
 }: {
@@ -37,10 +40,10 @@ export default async function LayoutDelPanel({
       select: { createdAt: true },
     })
     if (negocio) {
-      const trialFin = new Date(negocio.createdAt.getTime() + 3 * 24 * 60 * 60 * 1000)
+      const finDeLaPrueba = new Date(negocio.createdAt.getTime() + DIAS_DE_PRUEBA * 24 * 60 * 60 * 1000)
       const ahora = new Date()
-      const diff = Math.ceil((trialFin.getTime() - ahora.getTime()) / (1000 * 60 * 60 * 24))
-      diasTrialRestantes = Math.max(0, diff)
+      const diasDePruebaRestantes = Math.ceil((finDeLaPrueba.getTime() - ahora.getTime()) / (1000 * 60 * 60 * 24))
+      diasTrialRestantes = Math.max(0, diasDePruebaRestantes)
     }
   }
 

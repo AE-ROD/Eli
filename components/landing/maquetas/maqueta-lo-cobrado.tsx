@@ -8,7 +8,7 @@ import {
   Barra,
   CabeceraDeMaqueta,
   Columna,
-  Entra,
+  AparecerAlEntrar,
   MarcoDeMaqueta,
   PieDeMaqueta,
   Segmentos,
@@ -131,7 +131,7 @@ export function MaquetaAnuladas() {
       <CabeceraDeMaqueta titulo="Anuladas">
         <Insignia>1 esta semana</Insignia>
       </CabeceraDeMaqueta>
-      <Entra retraso={0.15} className="mt-3 rounded-[14px] bg-superficie p-3">
+      <AparecerAlEntrar retraso={0.15} className="mt-3 rounded-[14px] bg-superficie p-3">
         <div className="flex items-center justify-between gap-2.5">
           <span className="font-semibold">Cobro de Laura Paz</span>
           <span className="font-semibold text-texto-2 line-through">$15.000</span>
@@ -145,7 +145,7 @@ export function MaquetaAnuladas() {
           <dt className="text-texto-2">Por qué</dt>
           <dd>El mismo pago se registró dos veces.</dd>
         </dl>
-      </Entra>
+      </AparecerAlEntrar>
       <PieDeMaqueta icono={<RotateCcw />}>Lo cobrado no se reescribe: el registro queda.</PieDeMaqueta>
     </MarcoDeMaqueta>
   )

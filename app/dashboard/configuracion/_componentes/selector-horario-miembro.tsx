@@ -6,6 +6,7 @@ import { LoaderCircle } from "lucide-react"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { Aviso } from "@/components/panel/aviso"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { nombreDelRol } from "@/lib/nombres-de-roles"
 import { cn } from "@/lib/utils"
 import { SeccionHorario } from "./seccion-horario"
 import { leerHorario, type HorarioDelDia } from "../_datos"
@@ -17,21 +18,16 @@ export interface MiembroHorario {
   role: string
 }
 
-interface SelectorHorarioMiembroProps {
-  horariosOwner: HorarioDelDia[]
+interface PropsDeSelectorHorarioMiembro {
+  horariosDelDueño: HorarioDelDia[]
   miembros: MiembroHorario[]
-  nombreOwner: string
+  nombreDelDueño: string
 }
 
-/** El rol de cada uno con el nombre del producto, como en Equipo. */
-function nombreDelRol(rol: string) {
-  return rol === "admin" ? "Encargado" : "Profesional"
-}
-
-export function SelectorHorarioMiembro({ horariosOwner, miembros, nombreOwner }: SelectorHorarioMiembroProps) {
+export function SelectorHorarioMiembro({ horariosDelDueño, miembros, nombreDelDueño }: PropsDeSelectorHorarioMiembro) {
   // null = owner; string = memberId del trabajador
   const [seleccionado, setSeleccionado] = useState<string | null>(null)
-  const [horariosActivos, setHorariosActivos] = useState<HorarioDelDia[]>(horariosOwner)
+  const [horariosActivos, setHorariosActivos] = useState<HorarioDelDia[]>(horariosDelDueño)
   const [cargando, setCargando] = useState(false)
   const [aviso, setAviso] = useState("")
   // El fundido es para el cambio de persona: lo primero que se pinta (que
@@ -39,7 +35,7 @@ export function SelectorHorarioMiembro({ horariosOwner, miembros, nombreOwner }:
   const [cambioDePersona, setCambioDePersona] = useState(false)
 
   const pestañas = [
-    { id: null, nombre: nombreOwner, sufijo: "(tú)" },
+    { id: null, nombre: nombreDelDueño, sufijo: "(tú)" },
     ...miembros.map((miembro) => ({
       id: miembro.id,
       nombre: miembro.nombre,
@@ -56,7 +52,7 @@ export function SelectorHorarioMiembro({ horariosOwner, miembros, nombreOwner }:
     setCambioDePersona(true)
 
     if (memberId === null) {
-      setHorariosActivos(horariosOwner)
+      setHorariosActivos(horariosDelDueño)
       return
     }
 

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
+import { coincideConWhere } from "@/pruebas/where-simple"
 import type { NextRequest } from "next/server"
 
 const mockGetServerSession = vi.fn()
@@ -8,24 +9,6 @@ vi.mock("next-auth", () => ({
 }))
 
 vi.mock("@/lib/auth", () => ({ authOptions: {} }))
-
-/**
- * Mismo helper que `app/api/citas/route.test.ts`: entiende las formas de
- * `where` que produce `lib/permisos` (`AND`, igualdad simple, `{ in: [...] }`),
- * para que el mock de Prisma filtre de verdad en vez de sólo inspeccionar el
- * argumento.
- */
-function coincide(item: Record<string, unknown>, where: Record<string, unknown>): boolean {
-  return Object.entries(where).every(([clave, valor]) => {
-    if (clave === "AND") {
-      return (valor as Record<string, unknown>[]).every((sub) => coincide(item, sub))
-    }
-    if (valor && typeof valor === "object" && "in" in (valor as Record<string, unknown>)) {
-      return ((valor as { in: unknown[] }).in).includes(item[clave])
-    }
-    return item[clave] === valor
-  })
-}
 
 const citasFake = [
   { id: "cita-mia", businessId: "negocio-1", memberId: "member-worker-1", customerId: "c-1" },
@@ -37,7 +20,7 @@ const citasFake = [
 const prismaMock = {
   appointment: {
     findFirst: vi.fn((args: { where: Record<string, unknown> }) =>
-      Promise.resolve(citasFake.find((c) => coincide(c, args.where)) ?? null)
+      Promise.resolve(citasFake.find((c) => coincideConWhere(c, args.where)) ?? null)
     ),
     update: vi.fn((args: { where: { id: string }; data: Record<string, unknown> }) => {
       const cita = citasFake.find((c) => c.id === args.where.id)
@@ -90,7 +73,7 @@ const sesionEncargado = {
   },
 }
 
-const fakeRequest = (body?: Record<string, unknown>): NextRequest =>
+const pedidoFalso = (body?: Record<string, unknown>): NextRequest =>
   ({
     url: "http://localhost/api/citas/cita-colega",
     json: () => Promise.resolve(body ?? {}),
@@ -106,7 +89,7 @@ describe("GET /api/citas/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
 
-    const res = await GET(fakeRequest(), params("cita-colega"))
+    const res = await GET(pedidoFalso(), params("cita-colega"))
 
     expect(res.status).toBe(404)
     const data = await res.json()
@@ -118,7 +101,7 @@ describe("GET /api/citas/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
 
-    const res = await GET(fakeRequest(), params("cita-mia"))
+    const res = await GET(pedidoFalso(), params("cita-mia"))
 
     expect(res.status).toBe(200)
     const data = await res.json()
@@ -130,7 +113,7 @@ describe("GET /api/citas/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
 
-    const res = await GET(fakeRequest(), params("cita-colega"))
+    const res = await GET(pedidoFalso(), params("cita-colega"))
 
     expect(res.status).toBe(200)
   })
@@ -140,7 +123,7 @@ describe("GET /api/citas/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
 
-    const res = await GET(fakeRequest(), params("cita-colega"))
+    const res = await GET(pedidoFalso(), params("cita-colega"))
 
     expect(res.status).toBe(200)
   })
@@ -150,7 +133,7 @@ describe("GET /api/citas/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesionalSinMember)
 
-    const res = await GET(fakeRequest(), params("cita-mia"))
+    const res = await GET(pedidoFalso(), params("cita-mia"))
 
     expect(res.status).toBe(404)
   })
@@ -160,7 +143,7 @@ describe("GET /api/citas/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
 
-    const res = await GET(fakeRequest(), params("cita-sin-profesional"))
+    const res = await GET(pedidoFalso(), params("cita-sin-profesional"))
 
     expect(res.status).toBe(404)
   })
@@ -169,11 +152,11 @@ describe("GET /api/citas/[id]", () => {
     const { GET } = await import("./route")
 
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
-    const resDueño = await GET(fakeRequest(), params("cita-sin-profesional"))
+    const resDueño = await GET(pedidoFalso(), params("cita-sin-profesional"))
     expect(resDueño.status).toBe(200)
 
     mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
-    const resEncargado = await GET(fakeRequest(), params("cita-sin-profesional"))
+    const resEncargado = await GET(pedidoFalso(), params("cita-sin-profesional"))
     expect(resEncargado.status).toBe(200)
   })
 })
@@ -186,7 +169,7 @@ describe("PUT /api/citas/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
 
-    const res = await PUT(fakeRequest({ title: "Hackeada" }), params("cita-colega"))
+    const res = await PUT(pedidoFalso({ title: "Hackeada" }), params("cita-colega"))
 
     expect(res.status).toBe(404)
     expect(prismaMock.appointment.update).not.toHaveBeenCalled()
@@ -197,7 +180,7 @@ describe("PUT /api/citas/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
 
-    const res = await PUT(fakeRequest({ title: "Actualizada" }), params("cita-mia"))
+    const res = await PUT(pedidoFalso({ title: "Actualizada" }), params("cita-mia"))
 
     expect(res.status).toBe(200)
     expect(prismaMock.appointment.update).toHaveBeenCalledWith(
@@ -210,7 +193,7 @@ describe("PUT /api/citas/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
 
-    const res = await PUT(fakeRequest({ title: "Editada por el dueño" }), params("cita-colega"))
+    const res = await PUT(pedidoFalso({ title: "Editada por el dueño" }), params("cita-colega"))
 
     expect(res.status).toBe(200)
   })
@@ -220,7 +203,7 @@ describe("PUT /api/citas/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
 
-    const res = await PUT(fakeRequest({ title: "Editada por el encargado" }), params("cita-colega"))
+    const res = await PUT(pedidoFalso({ title: "Editada por el encargado" }), params("cita-colega"))
 
     expect(res.status).toBe(200)
   })
@@ -230,7 +213,7 @@ describe("PUT /api/citas/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesionalSinMember)
 
-    const res = await PUT(fakeRequest({ title: "x" }), params("cita-mia"))
+    const res = await PUT(pedidoFalso({ title: "x" }), params("cita-mia"))
 
     expect(res.status).toBe(404)
     expect(prismaMock.appointment.update).not.toHaveBeenCalled()
@@ -241,7 +224,7 @@ describe("PUT /api/citas/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
 
-    const res = await PUT(fakeRequest({ title: "xx" }), params("cita-sin-profesional"))
+    const res = await PUT(pedidoFalso({ title: "xx" }), params("cita-sin-profesional"))
 
     expect(res.status).toBe(404)
     expect(prismaMock.appointment.update).not.toHaveBeenCalled()
@@ -251,11 +234,11 @@ describe("PUT /api/citas/[id]", () => {
     const { PUT } = await import("./route")
 
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
-    const resDueño = await PUT(fakeRequest({ title: "xx" }), params("cita-sin-profesional"))
+    const resDueño = await PUT(pedidoFalso({ title: "xx" }), params("cita-sin-profesional"))
     expect(resDueño.status).toBe(200)
 
     mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
-    const resEncargado = await PUT(fakeRequest({ title: "yy" }), params("cita-sin-profesional"))
+    const resEncargado = await PUT(pedidoFalso({ title: "yy" }), params("cita-sin-profesional"))
     expect(resEncargado.status).toBe(200)
   })
 })
@@ -268,7 +251,7 @@ describe("DELETE /api/citas/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
 
-    const res = await DELETE(fakeRequest(), params("cita-colega"))
+    const res = await DELETE(pedidoFalso(), params("cita-colega"))
 
     expect(res.status).toBe(404)
     expect(prismaMock.appointment.delete).not.toHaveBeenCalled()
@@ -279,7 +262,7 @@ describe("DELETE /api/citas/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
 
-    const res = await DELETE(fakeRequest(), params("cita-mia"))
+    const res = await DELETE(pedidoFalso(), params("cita-mia"))
 
     expect(res.status).toBe(200)
     expect(prismaMock.appointment.delete).toHaveBeenCalledWith({ where: { id: "cita-mia" } })
@@ -290,7 +273,7 @@ describe("DELETE /api/citas/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
 
-    const res = await DELETE(fakeRequest(), params("cita-colega"))
+    const res = await DELETE(pedidoFalso(), params("cita-colega"))
 
     expect(res.status).toBe(200)
   })
@@ -300,7 +283,7 @@ describe("DELETE /api/citas/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
 
-    const res = await DELETE(fakeRequest(), params("cita-colega"))
+    const res = await DELETE(pedidoFalso(), params("cita-colega"))
 
     expect(res.status).toBe(200)
   })
@@ -310,7 +293,7 @@ describe("DELETE /api/citas/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesionalSinMember)
 
-    const res = await DELETE(fakeRequest(), params("cita-mia"))
+    const res = await DELETE(pedidoFalso(), params("cita-mia"))
 
     expect(res.status).toBe(404)
     expect(prismaMock.appointment.delete).not.toHaveBeenCalled()
@@ -321,7 +304,7 @@ describe("DELETE /api/citas/[id]", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
 
-    const res = await DELETE(fakeRequest(), params("cita-sin-profesional"))
+    const res = await DELETE(pedidoFalso(), params("cita-sin-profesional"))
 
     expect(res.status).toBe(404)
     expect(prismaMock.appointment.delete).not.toHaveBeenCalled()
@@ -331,11 +314,11 @@ describe("DELETE /api/citas/[id]", () => {
     const { DELETE } = await import("./route")
 
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
-    const resDueño = await DELETE(fakeRequest(), params("cita-sin-profesional"))
+    const resDueño = await DELETE(pedidoFalso(), params("cita-sin-profesional"))
     expect(resDueño.status).toBe(200)
 
     mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
-    const resEncargado = await DELETE(fakeRequest(), params("cita-sin-profesional"))
+    const resEncargado = await DELETE(pedidoFalso(), params("cita-sin-profesional"))
     expect(resEncargado.status).toBe(200)
   })
 })

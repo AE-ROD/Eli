@@ -1,21 +1,16 @@
 "use client"
 
-import { esHoy } from "@/lib/fechas"
+import { esHoy, diaParaLeer } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
 import { diasSemana } from "./controles-de-agenda"
 import type { Cita } from "../_datos"
 
-/** `miércoles, 7 de octubre`: el nombre de cada día para el lector de pantalla. */
-function diaParaLeer(fecha: Date): string {
-  return fecha.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
-}
-
 const cuantasCitas = (cantidad: number) => (cantidad === 1 ? "1 cita" : `${cantidad} citas`)
 
-interface VistaMesProps {
+interface PropsDeVistaMes {
   fechaActual: Date
   citas: Cita[]
-  onDiaClick: (fecha: Date) => void
+  onElegirDia: (fecha: Date) => void
 }
 
 /**
@@ -29,7 +24,7 @@ interface VistaMesProps {
  * una baldosa gris con el número arriba y la cantidad escrita abajo, y la de
  * hoy, en el azul de la Agenda.
  */
-export function VistaMes({ fechaActual, citas, onDiaClick }: VistaMesProps) {
+export function VistaMes({ fechaActual, citas, onElegirDia }: PropsDeVistaMes) {
   const primerDia = new Date(fechaActual.getFullYear(), fechaActual.getMonth(), 1)
   // Cuántas celdas de la grilla quedan antes del día 1: la semana empieza en domingo.
   const celdasAntesDelPrimero = primerDia.getDay()
@@ -63,7 +58,7 @@ export function VistaMes({ fechaActual, citas, onDiaClick }: VistaMesProps) {
             <button
               key={i}
               type="button"
-              onClick={() => onDiaClick(fecha)}
+              onClick={() => onElegirDia(fecha)}
               aria-label={`${diaParaLeer(fecha)}, ${citasDelDia.length > 0 ? cuantasCitas(citasDelDia.length) : "sin citas"}`}
               aria-current={hoy ? "date" : undefined}
               className={cn(

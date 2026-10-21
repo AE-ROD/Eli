@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import type { NextRequest } from "next/server"
+import { pedidoFalso } from "@/pruebas/pedidos"
 import bcrypt from "bcryptjs"
 
 const mockGetServerSession = vi.fn()
@@ -57,12 +57,6 @@ const cuentaExistente = {
   password: "hash-original-de-la-victima",
 }
 
-const fakeRequest = (body: unknown): NextRequest =>
-  ({
-    headers: new Headers(),
-    json: async () => body,
-  }) as unknown as NextRequest
-
 const params = (token = "token-valido") => Promise.resolve({ token })
 
 describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
@@ -75,21 +69,21 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     const { POST } = await import("./route")
 
     prismaMock.workerInvitation.findUnique.mockResolvedValueOnce(null)
-    const res1 = await POST(fakeRequest({ contrasena: "cualquiera1" }), { params: params() })
+    const res1 = await POST(pedidoFalso({ contrasena: "cualquiera1" }), { params: params() })
     expect(res1.status).toBe(410)
 
     prismaMock.workerInvitation.findUnique.mockResolvedValueOnce({
       ...invitacionBase,
       acceptedAt: new Date(),
     })
-    const res2 = await POST(fakeRequest({ contrasena: "cualquiera1" }), { params: params() })
+    const res2 = await POST(pedidoFalso({ contrasena: "cualquiera1" }), { params: params() })
     expect(res2.status).toBe(410)
 
     prismaMock.workerInvitation.findUnique.mockResolvedValueOnce({
       ...invitacionBase,
       expiresAt: new Date(Date.now() - 1000),
     })
-    const res3 = await POST(fakeRequest({ contrasena: "cualquiera1" }), { params: params() })
+    const res3 = await POST(pedidoFalso({ contrasena: "cualquiera1" }), { params: params() })
     expect(res3.status).toBe(410)
   })
 
@@ -100,7 +94,7 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     prismaMock.user.findFirst.mockResolvedValueOnce(null)
     prismaMock.user.create.mockResolvedValueOnce({ id: "user-nuevo", email: invitacionBase.email })
 
-    const res = await POST(fakeRequest({ contrasena: "unaClaveSegura1" }), { params: params() })
+    const res = await POST(pedidoFalso({ contrasena: "unaClaveSegura1" }), { params: params() })
     const data = await res.json()
 
     expect(res.status).toBe(200)
@@ -124,7 +118,7 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     prismaMock.workerInvitation.findUnique.mockResolvedValueOnce(invitacionBase)
     prismaMock.user.findFirst.mockResolvedValueOnce(null)
 
-    const res = await POST(fakeRequest({ password: "unaClaveSegura1" }), { params: params() })
+    const res = await POST(pedidoFalso({ password: "unaClaveSegura1" }), { params: params() })
 
     expect(res.status).toBe(400)
     expect(prismaMock.user.create).not.toHaveBeenCalled()
@@ -142,7 +136,7 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     })
     mockGetServerSession.mockResolvedValueOnce(null)
 
-    const res = await POST(fakeRequest({ contrasena: "loQueElijaElAtacante1" }), { params: params() })
+    const res = await POST(pedidoFalso({ contrasena: "loQueElijaElAtacante1" }), { params: params() })
 
     // Sin este reconocimiento caería al camino de cuenta nueva y crearía una
     // segunda cuenta para la misma persona, con el nombre que eligió el que invita.
@@ -161,7 +155,7 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     prismaMock.user.findFirst.mockResolvedValueOnce(cuentaExistente)
     mockGetServerSession.mockResolvedValueOnce(null)
 
-    const res = await POST(fakeRequest({ contrasena: "loQueElijaElAtacante1" }), { params: params() })
+    const res = await POST(pedidoFalso({ contrasena: "loQueElijaElAtacante1" }), { params: params() })
     const data = await res.json()
 
     expect(res.status).toBe(401)
@@ -180,7 +174,7 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     // El atacante está logueado con su propia cuenta, no con la de la víctima.
     mockGetServerSession.mockResolvedValueOnce({ user: { email: "atacante@mi-negocio.com" } })
 
-    const res = await POST(fakeRequest({ contrasena: "loQueElijaElAtacante1" }), { params: params() })
+    const res = await POST(pedidoFalso({ contrasena: "loQueElijaElAtacante1" }), { params: params() })
     const data = await res.json()
 
     expect(res.status).toBe(401)
@@ -198,7 +192,7 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     prismaMock.businessMember.findUnique.mockResolvedValueOnce(null)
     mockGetServerSession.mockResolvedValueOnce({ user: { email: cuentaExistente.email } })
 
-    const res = await POST(fakeRequest({}), { params: params() })
+    const res = await POST(pedidoFalso({}), { params: params() })
     const data = await res.json()
 
     expect(res.status).toBe(200)

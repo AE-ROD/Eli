@@ -28,8 +28,8 @@ export async function POST(
   }
 
   try {
-    const body = await request.json()
-    const { content } = mensajeSchema.parse(body)
+    const cuerpo = await request.json()
+    const { content } = mensajeSchema.parse(cuerpo)
 
     const [mensaje] = await prisma.$transaction([
       prisma.message.create({

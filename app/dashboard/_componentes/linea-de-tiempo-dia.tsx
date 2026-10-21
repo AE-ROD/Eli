@@ -4,14 +4,14 @@ import { TarjetaCita, type CitaEnTarjeta } from "@/components/panel/tarjeta-cita
 import { formatearHora, duracionEnMinutos } from "@/lib/fechas"
 import {
   citasFueraDeFranjas,
-  formatoDuracion,
-  formatoHHMM,
+  formatearTiempoLibre,
+  minutosAHora,
   segmentosDeFranja,
   type CitaDelDia,
   type FranjaHorario,
 } from "@/lib/horario-dia"
 
-interface LineaDeTiempoDiaProps {
+interface PropsDeLineaDeTiempoDia {
   franjas: FranjaHorario[]
   citas: CitaDelDia[]
 }
@@ -42,7 +42,7 @@ export function citaParaTarjeta(cita: CitaDelDia): CitaEnTarjeta {
 const CLASE_HUECO =
   "rounded-[20px] border-[1.5px] border-dashed border-borde bg-[repeating-linear-gradient(45deg,var(--color-superficie)_0px,var(--color-superficie)_6px,transparent_6px,transparent_14px)] px-3 py-3 squircle"
 
-export function LineaDeTiempoDia({ franjas, citas }: LineaDeTiempoDiaProps) {
+export function LineaDeTiempoDia({ franjas, citas }: PropsDeLineaDeTiempoDia) {
   const fueraDeHorario = citasFueraDeFranjas(franjas, citas)
 
   return (
@@ -69,7 +69,7 @@ export function LineaDeTiempoDia({ franjas, citas }: LineaDeTiempoDiaProps) {
                   className="flex items-start gap-3"
                 >
                   <span className="w-11 shrink-0 pt-3 text-right text-xs text-texto-2 tabular-nums">
-                    {formatoHHMM(segmento.inicioMin)}
+                    {minutosAHora(segmento.inicioMin)}
                   </span>
                   <div className="min-w-0 flex-1">
                     {segmento.tipo === "cita" ? (
@@ -77,7 +77,7 @@ export function LineaDeTiempoDia({ franjas, citas }: LineaDeTiempoDiaProps) {
                     ) : (
                       <div className={CLASE_HUECO}>
                         <p className="text-xs text-texto-2">
-                          Hueco · {formatoDuracion(segmento.finMin - segmento.inicioMin)} sin reservar
+                          Hueco · {formatearTiempoLibre(segmento.finMin - segmento.inicioMin)} sin reservar
                         </p>
                       </div>
                     )}

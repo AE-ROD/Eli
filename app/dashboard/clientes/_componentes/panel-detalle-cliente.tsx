@@ -42,7 +42,7 @@ function fechaDeLaCita(iso: string): string {
   return new Date(iso).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })
 }
 
-interface PanelDetalleClienteProps {
+interface PropsDePanelDetalleCliente {
   cliente: ClienteEnTarjeta
   /** Sus últimas citas, de la más reciente a la más vieja. */
   citas: CitaDeCliente[]
@@ -55,7 +55,7 @@ interface PanelDetalleClienteProps {
    */
   avisoDeNotas: string
   onCerrar: () => void
-  onNotasChange: (notas: string) => void
+  onCambiarNotas: (notas: string) => void
   onNotasBlur: () => void
 }
 
@@ -75,9 +75,9 @@ export function PanelDetalleCliente({
   guardandoNotas,
   avisoDeNotas,
   onCerrar,
-  onNotasChange,
+  onCambiarNotas,
   onNotasBlur,
-}: PanelDetalleClienteProps) {
+}: PropsDePanelDetalleCliente) {
   const idDelNombre = useId()
   const idDelHistorial = useId()
   const idDeNotas = useId()
@@ -199,7 +199,7 @@ export function PanelDetalleCliente({
         <textarea
           id={idDelCampoDeNotas}
           value={notas}
-          onChange={(e) => onNotasChange(e.target.value)}
+          onChange={(e) => onCambiarNotas(e.target.value)}
           onBlur={onNotasBlur}
           placeholder="Agregar notas sobre el cliente..."
           aria-describedby={idDeLaAyuda}

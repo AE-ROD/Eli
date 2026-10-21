@@ -29,7 +29,7 @@ function mensajeParaBurbuja(mensaje: Mensaje): MensajeEnBurbuja {
   }
 }
 
-interface AreaChatProps {
+interface PropsDeAreaChat {
   conversacion: Conversacion
   mensajes: Mensaje[]
   cargando: boolean
@@ -45,7 +45,7 @@ interface AreaChatProps {
   className?: string
 }
 
-export function AreaChat({ conversacion, mensajes, cargando, onEnviar, onVolver, enfocarAlAbrir, className }: AreaChatProps) {
+export function AreaChat({ conversacion, mensajes, cargando, onEnviar, onVolver, enfocarAlAbrir, className }: PropsDeAreaChat) {
   const idDelTitulo = useId()
   const [texto, setTexto] = useState("")
   const [enviando, setEnviando] = useState(false)

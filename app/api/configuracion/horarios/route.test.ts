@@ -29,7 +29,7 @@ const sesionProfesional = {
   user: { id: "worker-1", role: "worker", businessId: "negocio-1", businessName: "Mi negocio", memberId: "member-worker-1" },
 }
 
-const fakeRequest = (url: string, body?: unknown): NextRequest =>
+const pedidoFalso = (url: string, body?: unknown): NextRequest =>
   ({
     headers: new Headers(),
     nextUrl: new URL(url, "http://localhost"),
@@ -44,7 +44,7 @@ describe("GET /api/configuracion/horarios", () => {
 
     mockGetServerSession.mockResolvedValueOnce(null)
 
-    const res = await GET(fakeRequest("/api/configuracion/horarios"))
+    const res = await GET(pedidoFalso("/api/configuracion/horarios"))
 
     expect(res.status).toBe(401)
   })
@@ -55,7 +55,7 @@ describe("GET /api/configuracion/horarios", () => {
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
     prismaMock.workSchedule.findMany.mockResolvedValueOnce([])
 
-    const res = await GET(fakeRequest("/api/configuracion/horarios"))
+    const res = await GET(pedidoFalso("/api/configuracion/horarios"))
 
     expect(res.status).toBe(200)
     const argumentos = prismaMock.workSchedule.findMany.mock.calls[0][0]
@@ -68,7 +68,7 @@ describe("GET /api/configuracion/horarios", () => {
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
     prismaMock.workSchedule.findMany.mockResolvedValueOnce([])
 
-    const res = await GET(fakeRequest("/api/configuracion/horarios"))
+    const res = await GET(pedidoFalso("/api/configuracion/horarios"))
 
     expect(res.status).toBe(200)
     const argumentos = prismaMock.workSchedule.findMany.mock.calls[0][0]
@@ -85,7 +85,7 @@ describe("GET /api/configuracion/horarios", () => {
     })
     prismaMock.workSchedule.findMany.mockResolvedValueOnce([])
 
-    const res = await GET(fakeRequest("/api/configuracion/horarios?memberId=member-worker-1"))
+    const res = await GET(pedidoFalso("/api/configuracion/horarios?memberId=member-worker-1"))
 
     expect(res.status).toBe(200)
     const argumentos = prismaMock.workSchedule.findMany.mock.calls[0][0]
@@ -101,7 +101,7 @@ describe("GET /api/configuracion/horarios", () => {
       businessId: "negocio-1",
     })
 
-    const res = await GET(fakeRequest("/api/configuracion/horarios?memberId=member-admin-1"))
+    const res = await GET(pedidoFalso("/api/configuracion/horarios?memberId=member-admin-1"))
 
     expect(res.status).toBe(401)
     expect(prismaMock.workSchedule.findMany).not.toHaveBeenCalled()
@@ -117,7 +117,7 @@ describe("GET /api/configuracion/horarios", () => {
       businessId: "negocio-2",
     })
 
-    const res = await GET(fakeRequest("/api/configuracion/horarios?memberId=member-otro-negocio"))
+    const res = await GET(pedidoFalso("/api/configuracion/horarios?memberId=member-otro-negocio"))
 
     expect(res.status).toBe(404)
     expect(prismaMock.workSchedule.findMany).not.toHaveBeenCalled()
@@ -129,7 +129,7 @@ describe("GET /api/configuracion/horarios", () => {
     mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
     prismaMock.businessMember.findUnique.mockResolvedValueOnce(null)
 
-    const res = await GET(fakeRequest("/api/configuracion/horarios?memberId=no-existe"))
+    const res = await GET(pedidoFalso("/api/configuracion/horarios?memberId=no-existe"))
 
     expect(res.status).toBe(404)
   })
@@ -145,7 +145,7 @@ describe("POST /api/configuracion/horarios", () => {
 
     mockGetServerSession.mockResolvedValueOnce(null)
 
-    const res = await POST(fakeRequest("/api/configuracion/horarios", horarios))
+    const res = await POST(pedidoFalso("/api/configuracion/horarios", horarios))
 
     expect(res.status).toBe(401)
   })
@@ -161,7 +161,7 @@ describe("POST /api/configuracion/horarios", () => {
     prismaMock.$transaction.mockResolvedValueOnce(undefined)
     prismaMock.workSchedule.findMany.mockResolvedValueOnce(horarios)
 
-    const res = await POST(fakeRequest("/api/configuracion/horarios?memberId=member-worker-1", horarios))
+    const res = await POST(pedidoFalso("/api/configuracion/horarios?memberId=member-worker-1", horarios))
 
     expect(res.status).toBe(200)
     const argumentosCreate = prismaMock.workSchedule.createMany.mock.calls[0][0]
@@ -175,7 +175,7 @@ describe("POST /api/configuracion/horarios", () => {
     prismaMock.$transaction.mockResolvedValueOnce(undefined)
     prismaMock.workSchedule.findMany.mockResolvedValueOnce(horarios)
 
-    const res = await POST(fakeRequest("/api/configuracion/horarios", horarios))
+    const res = await POST(pedidoFalso("/api/configuracion/horarios", horarios))
 
     expect(res.status).toBe(200)
     // El nombre viejo de este test decía "el horario general" y sólo miraba el
@@ -196,7 +196,7 @@ describe("POST /api/configuracion/horarios", () => {
       user: { ...sesionProfesional.user, memberId: null },
     })
 
-    const res = await POST(fakeRequest("/api/configuracion/horarios", horarios))
+    const res = await POST(pedidoFalso("/api/configuracion/horarios", horarios))
 
     expect(res.status).toBe(401)
     expect(prismaMock.$transaction).not.toHaveBeenCalled()
@@ -212,7 +212,7 @@ describe("POST /api/configuracion/horarios", () => {
       businessId: "negocio-1",
     })
 
-    const res = await POST(fakeRequest("/api/configuracion/horarios?memberId=member-admin-1", horarios))
+    const res = await POST(pedidoFalso("/api/configuracion/horarios?memberId=member-admin-1", horarios))
 
     expect(res.status).toBe(401)
     expect(prismaMock.$transaction).not.toHaveBeenCalled()
@@ -225,7 +225,7 @@ describe("POST /api/configuracion/horarios", () => {
     prismaMock.$transaction.mockResolvedValueOnce(undefined)
     prismaMock.workSchedule.findMany.mockResolvedValueOnce(horarios)
 
-    const res = await POST(fakeRequest("/api/configuracion/horarios", horarios))
+    const res = await POST(pedidoFalso("/api/configuracion/horarios", horarios))
 
     expect(res.status).toBe(200)
     const argumentosCreate = prismaMock.workSchedule.createMany.mock.calls[0][0]
@@ -241,7 +241,7 @@ describe("POST /api/configuracion/horarios", () => {
       businessId: "negocio-2",
     })
 
-    const res = await POST(fakeRequest("/api/configuracion/horarios?memberId=member-otro-negocio", horarios))
+    const res = await POST(pedidoFalso("/api/configuracion/horarios?memberId=member-otro-negocio", horarios))
 
     expect(res.status).toBe(404)
     expect(prismaMock.$transaction).not.toHaveBeenCalled()
@@ -253,7 +253,7 @@ describe("POST /api/configuracion/horarios", () => {
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
     const horarioInvertido = [{ dayOfWeek: 1, startTime: "22:00", endTime: "02:00", active: true }]
 
-    const res = await POST(fakeRequest("/api/configuracion/horarios", horarioInvertido))
+    const res = await POST(pedidoFalso("/api/configuracion/horarios", horarioInvertido))
 
     expect(res.status).toBe(400)
     expect(prismaMock.$transaction).not.toHaveBeenCalled()
@@ -265,7 +265,7 @@ describe("POST /api/configuracion/horarios", () => {
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
     const horarioIgual = [{ dayOfWeek: 1, startTime: "09:00", endTime: "09:00", active: true }]
 
-    const res = await POST(fakeRequest("/api/configuracion/horarios", horarioIgual))
+    const res = await POST(pedidoFalso("/api/configuracion/horarios", horarioIgual))
 
     expect(res.status).toBe(400)
     expect(prismaMock.$transaction).not.toHaveBeenCalled()

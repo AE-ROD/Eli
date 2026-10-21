@@ -17,7 +17,7 @@ export interface CitaEnTarjeta {
   notas?: string
 }
 
-interface TarjetaCitaProps {
+interface PropsDeTarjetaCita {
   cita: CitaEnTarjeta
   compacta?: boolean
   onClick?: () => void
@@ -72,7 +72,7 @@ function Contenedor({ onClick, className, children }: { onClick?: () => void; cl
  * va en listas sobre blanco (el inicio, la agenda del día, el historial de un
  * cliente), sobre el gris de superficie; la completa es una tarjeta blanca.
  */
-export function TarjetaCita({ cita, compacta = false, onClick }: TarjetaCitaProps) {
+export function TarjetaCita({ cita, compacta = false, onClick }: PropsDeTarjetaCita) {
   if (compacta) {
     return (
       <Contenedor

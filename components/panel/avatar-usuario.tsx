@@ -5,7 +5,7 @@ import { FONDO_FUERTE } from "@/components/comunes/colores-de-modulo"
 import type { ColorDeModulo } from "@/lib/modulos"
 import { cn } from "@/lib/utils"
 
-interface AvatarUsuarioProps {
+interface PropsDeAvatarUsuario {
   nombre: string
   imagenUrl?: string
   tamaño?: "xs" | "sm" | "md" | "lg" | "xl"
@@ -56,7 +56,7 @@ function obtenerColorFondo(nombre: string): string {
  * repite el nombre para el lector de pantalla. Todo es `span` para que pueda
  * ir dentro de un botón (una tarjeta que se abre).
  */
-export function AvatarUsuario({ nombre, imagenUrl, tamaño = "md", enLinea }: AvatarUsuarioProps) {
+export function AvatarUsuario({ nombre, imagenUrl, tamaño = "md", enLinea }: PropsDeAvatarUsuario) {
   return (
     <span className="relative block shrink-0">
       {imagenUrl ? (

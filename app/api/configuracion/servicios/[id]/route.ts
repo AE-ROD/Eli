@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { actorDeSesion, puedeGestionarServicios } from "@/lib/permisos"
 
-const servicioUpdateSchema = z.object({
+const edicionDeServicioSchema = z.object({
   name: z.string().min(2).optional(),
   description: z.string().optional().nullable(),
   duration: z.number().min(15).max(480).optional(),
@@ -34,8 +34,8 @@ export async function PUT(
   }
 
   try {
-    const body = await request.json()
-    const datos = servicioUpdateSchema.parse(body)
+    const cuerpo = await request.json()
+    const datos = edicionDeServicioSchema.parse(cuerpo)
 
     const servicio = await prisma.service.update({
       where: { id },

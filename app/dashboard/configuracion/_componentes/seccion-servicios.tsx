@@ -28,11 +28,11 @@ const SERVICIO_EN_BLANCO: DatosDeServicio = { name: "", description: "", duratio
 const BOTON_DE_ICONO =
   "grid size-11 shrink-0 place-items-center rounded-[14px] text-navy squircle anillo-foco transition-colors duration-150 ease-suave hover:bg-superficie"
 
-interface SeccionServiciosProps {
+interface PropsDeSeccionServicios {
   serviciosIniciales: Servicio[]
 }
 
-export function SeccionServicios({ serviciosIniciales }: SeccionServiciosProps) {
+export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios) {
   const idDelTitulo = useId()
   const [servicios, setServicios] = useState<Servicio[]>(serviciosIniciales)
   const [modalAbierto, setModalAbierto] = useState(false)
@@ -184,7 +184,7 @@ export function SeccionServicios({ serviciosIniciales }: SeccionServiciosProps) 
             guardando={guardando}
             aviso={avisoDelModal}
             modoEdicion={!!servicioEditando}
-            onFormChange={(campo, valor) => setForm((previo) => ({ ...previo, [campo]: valor }))}
+            onCambiarCampo={(campo, valor) => setForm((previo) => ({ ...previo, [campo]: valor }))}
             onSubmit={guardar}
             onCerrar={cerrarModal}
           />

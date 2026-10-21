@@ -7,7 +7,7 @@ import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { cn } from "@/lib/utils"
 import { TarjetaCliente, type ClienteEnTarjeta } from "./tarjeta-cliente"
 
-interface ListaClientesProps {
+interface PropsDeListaClientes {
   clientes: ClienteEnTarjeta[]
   cargando: boolean
   cargandoMas: boolean
@@ -63,7 +63,7 @@ export function ListaClientes({
   seleccionadoId,
   onSeleccionar,
   onCargarMas,
-}: ListaClientesProps) {
+}: PropsDeListaClientes) {
   return (
     <div className="@container">
       {cargando ? (

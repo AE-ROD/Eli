@@ -38,8 +38,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json()
-    const datos = servicioSchema.parse(body)
+    const cuerpo = await request.json()
+    const datos = servicioSchema.parse(cuerpo)
 
     const servicio = await prisma.service.create({
       data: {

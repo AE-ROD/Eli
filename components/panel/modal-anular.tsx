@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils"
 /** El servidor acepta hasta 500 caracteres de motivo. */
 const LARGO_MAXIMO_DEL_MOTIVO = 500
 
-interface ModalAnularProps {
+interface PropsDeModalAnular {
   atencion: AtencionParaAnular
   /** Por qué no se pudo anular, si falló. */
   aviso: string
@@ -25,7 +25,7 @@ interface ModalAnularProps {
  * el tablero (antes o después de cobrar) y el historial de reportes, donde el
  * dueño anula cobros de días anteriores.
  */
-export function ModalAnular({ atencion, aviso, guardando, onAnular, onCerrar }: ModalAnularProps) {
+export function ModalAnular({ atencion, aviso, guardando, onAnular, onCerrar }: PropsDeModalAnular) {
   const idDelMotivo = useId()
   const [motivo, setMotivo] = useState("")
   const cobrada = atencion.estado === "finalizada"

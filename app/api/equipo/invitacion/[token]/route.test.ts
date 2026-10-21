@@ -27,7 +27,7 @@ const invitacionVigente = {
   business: { name: "Salón Uno" },
 }
 
-const fakeRequest = (): NextRequest => ({ headers: new Headers() }) as unknown as NextRequest
+const pedidoFalso = (): NextRequest => ({ headers: new Headers() }) as unknown as NextRequest
 
 const conToken = (token: string) => ({ params: Promise.resolve({ token }) })
 
@@ -43,7 +43,7 @@ describe("GET /api/equipo/invitacion/[token]", () => {
 
     mockVerificarLimite.mockResolvedValueOnce({ permitido: false, restantes: 0 })
 
-    const res = await GET(fakeRequest(), conToken("token-valido"))
+    const res = await GET(pedidoFalso(), conToken("token-valido"))
 
     expect(res.status).toBe(429)
     expect(typeof (await res.json()).error).toBe("string")
@@ -56,7 +56,7 @@ describe("GET /api/equipo/invitacion/[token]", () => {
 
     prismaMock.workerInvitation.findUnique.mockResolvedValueOnce(null)
 
-    const res = await GET(fakeRequest(), conToken("token-inventado"))
+    const res = await GET(pedidoFalso(), conToken("token-inventado"))
 
     expect(res.status).toBe(404)
     expect(mockVerificarLimite).toHaveBeenCalledTimes(1)
@@ -66,7 +66,7 @@ describe("GET /api/equipo/invitacion/[token]", () => {
   it("dentro del límite responde lo que muestra la pantalla de aceptar, y nada más", async () => {
     const { GET } = await import("./route")
 
-    const res = await GET(fakeRequest(), conToken("token-valido"))
+    const res = await GET(pedidoFalso(), conToken("token-valido"))
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({

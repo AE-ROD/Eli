@@ -9,7 +9,7 @@ import {
   BotonDeMaqueta,
   CabeceraDeMaqueta,
   Circulo,
-  Entra,
+  AparecerAlEntrar,
   FilaDeMaqueta,
   MarcoDeMaqueta,
   PasosDeReserva,
@@ -44,7 +44,7 @@ export function MaquetaVisitaCompartida() {
       <p className="mt-0.5 text-xs text-texto-2">Visita de hoy · 10:30</p>
       <Separador />
       {SERVICIOS_DE_LA_VISITA.map((linea, indice) => (
-        <Entra
+        <AparecerAlEntrar
           key={linea.servicio}
           retraso={linea.retraso}
           className={cn("flex items-center justify-between gap-2.5", indice > 0 && "mt-2.5")}
@@ -57,7 +57,7 @@ export function MaquetaVisitaCompartida() {
             </span>
           </span>
           <span className="font-semibold">{linea.monto}</span>
-        </Entra>
+        </AparecerAlEntrar>
       ))}
       <Separador />
       <div className="flex items-center justify-between gap-2.5">
@@ -81,12 +81,12 @@ export function MaquetaFilaDeEspera() {
         <TextoDeFila titulo="Matías Soto" detalle="Barba · llegó 10:02" />
         <Insignia>Reserva</Insignia>
       </FilaDeMaqueta>
-      <Entra retraso={0.3}>
+      <AparecerAlEntrar retraso={0.3}>
         <FilaDeMaqueta className="mt-2">
           <TextoDeFila titulo="Tomás Rivas" detalle="Corte · llegó 10:12" />
           <Insignia tono="naranja">Sin reserva</Insignia>
         </FilaDeMaqueta>
-      </Entra>
+      </AparecerAlEntrar>
     </MarcoDeMaqueta>
   )
 }
@@ -152,12 +152,12 @@ export function MaquetaDiaSolo() {
           <span className="text-xs text-texto-2">{cita.servicio}</span>
         </div>
       ))}
-      <Entra retraso={0.2}>
+      <AparecerAlEntrar retraso={0.2}>
         <div className="mt-3 flex items-center justify-between gap-2 rounded-[12px] bg-lima-suave px-3 py-2.5 font-semibold">
           <span>Cobrado hoy</span>
           <span>$86.000</span>
         </div>
-      </Entra>
+      </AparecerAlEntrar>
     </MarcoDeMaqueta>
   )
 }

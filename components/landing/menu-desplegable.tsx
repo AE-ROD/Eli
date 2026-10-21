@@ -184,13 +184,13 @@ export function MenuDesplegable({ oculto, className }: PropsDeMenuDesplegable) {
 
   const abrir = (menu: IdDeMenu, fijado: boolean) => {
     cancelarCierre()
-    const x = (menu === "producto" ? itemProducto : itemOficios).current?.offsetLeft ?? 0
+    const izquierdaDelItem = (menu === "producto" ? itemProducto : itemOficios).current?.offsetLeft ?? 0
     setEstado((previo) => ({
       abierto: menu,
       ultimo: menu,
       fijado,
       entreMenus: previo.abierto !== null && previo.abierto !== menu,
-      x,
+      x: izquierdaDelItem,
     }))
   }
 

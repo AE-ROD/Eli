@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
+import { json, simularRespuesta } from "@/pruebas/respuestas"
 import { zonaDelDispositivo } from "@/lib/fechas"
 import { marcarLlegada } from "./_datos"
 
@@ -7,16 +8,6 @@ vi.mock("@/lib/fechas", async (importarOriginal) => {
   const original = await importarOriginal<typeof import("@/lib/fechas")>()
   return { ...original, zonaDelDispositivo: vi.fn(() => "America/Santiago") }
 })
-
-/** Simula la respuesta que daría el servidor, sin red de por medio. */
-function simularRespuesta(respuesta: Response) {
-  const fetchFalso = vi.fn().mockResolvedValue(respuesta)
-  vi.stubGlobal("fetch", fetchFalso)
-  return fetchFalso
-}
-
-const json = (cuerpo: unknown, status = 200) =>
-  new Response(JSON.stringify(cuerpo), { status, headers: { "Content-Type": "application/json" } })
 
 /** El cuerpo JSON con que se llamó a `fetch`. */
 const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>

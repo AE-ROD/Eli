@@ -7,7 +7,7 @@ import {
   BotonDeMaqueta,
   CabeceraDeMaqueta,
   Circulo,
-  Entra,
+  AparecerAlEntrar,
   FilaDeMaqueta,
   MarcoDeMaqueta,
   PieDeMaqueta,
@@ -34,13 +34,13 @@ export function MaquetaReservasDeHoy() {
         <Insignia>3</Insignia>
       </CabeceraDeMaqueta>
       {RESERVAS_DE_HOY.map((reserva) => (
-        <Entra key={reserva.hora} retraso={reserva.retraso}>
+        <AparecerAlEntrar key={reserva.hora} retraso={reserva.retraso}>
           <FilaDeMaqueta className="mt-2">
             <span className="w-10 shrink-0 font-semibold tabular-nums">{reserva.hora}</span>
             <TextoDeFila titulo={reserva.cliente} detalle={reserva.servicio} />
             <Insignia tono={reserva.nueva ? "naranja" : "gris"}>{reserva.nueva ? "Nueva" : "Reserva"}</Insignia>
           </FilaDeMaqueta>
-        </Entra>
+        </AparecerAlEntrar>
       ))}
       <PieDeMaqueta icono={<Link2 />}>Entran desde tu página de reservas</PieDeMaqueta>
     </MarcoDeMaqueta>
@@ -74,12 +74,12 @@ export function MaquetaAnotarVisita() {
         <TextoDeFila titulo="Valentina Medina" detalle="Peinado · llegó 10:58" />
         <Insignia>Reserva</Insignia>
       </FilaDeMaqueta>
-      <Entra retraso={0.9}>
+      <AparecerAlEntrar retraso={0.9}>
         <FilaDeMaqueta className="mt-2">
           <TextoDeFila titulo="Paula" detalle="Corte · llegó 11:05" />
           <Insignia tono="naranja">Sin reserva</Insignia>
         </FilaDeMaqueta>
-      </Entra>
+      </AparecerAlEntrar>
     </MarcoDeMaqueta>
   )
 }
@@ -102,12 +102,12 @@ export function MaquetaVistaDeProfesional() {
       </div>
       <Separador />
       {MIS_SERVICIOS.map((servicio) => (
-        <Entra key={servicio.servicio} retraso={servicio.retraso}>
+        <AparecerAlEntrar key={servicio.servicio} retraso={servicio.retraso}>
           <FilaDeMaqueta className="mt-2">
             <TextoDeFila titulo={servicio.cliente} detalle={servicio.servicio} />
             <span className="font-semibold">{servicio.precio}</span>
           </FilaDeMaqueta>
-        </Entra>
+        </AparecerAlEntrar>
       ))}
       <PieDeMaqueta icono={<Eye />}>Lo de otros profesionales no aparece en su vista</PieDeMaqueta>
     </MarcoDeMaqueta>

@@ -60,7 +60,7 @@ function volverAdentro(nodo: HTMLElement, ultimoEnfocado: HTMLElement | null) {
   ;(destino ?? nodo).focus({ preventScroll: true })
 }
 
-interface MarcoDeModalProps {
+interface PropsDeMarcoDeModal {
   titulo: string
   /**
    * Lo que se lee después del título, también para el lector de pantalla
@@ -108,7 +108,7 @@ export function MarcoDeModal({
   antetitulo,
   alCerrar,
   children,
-}: MarcoDeModalProps) {
+}: PropsDeMarcoDeModal) {
   const idDelTitulo = useId()
   const idDeLaDescripcion = useId()
   const panel = useRef<HTMLDivElement>(null)

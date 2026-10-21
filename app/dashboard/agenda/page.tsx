@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useId } from "react"
 import { useSession } from "next-auth/react"
 import { AnimatePresence } from "framer-motion"
 import { BarraSuperior } from "@/components/panel/barra-superior"
-import { correr, comoTexto, diasDeLaSemanaDe, type UnidadDeTiempo } from "@/lib/fechas"
+import { desplazarFecha, comoTexto, diasDeLaSemanaDe, type UnidadDeTiempo } from "@/lib/fechas"
 import { leerCitas, crearCita, cambiarEstadoDeCita, type Cita, type DatosDeNuevaCita } from "./_datos"
 import { Aviso } from "@/components/panel/aviso"
 import { ControlesDeAgenda } from "./_componentes/controles-de-agenda"
@@ -113,8 +113,8 @@ export default function PaginaAgenda() {
               fechaActual={fecha}
               vista={modo}
               idDelTitulo={idDelPeriodo}
-              onAnterior={() => setFecha((actual) => correr(actual, modo, -1))}
-              onSiguiente={() => setFecha((actual) => correr(actual, modo, 1))}
+              onAnterior={() => setFecha((actual) => desplazarFecha(actual, modo, -1))}
+              onSiguiente={() => setFecha((actual) => desplazarFecha(actual, modo, 1))}
               onHoy={() => setFecha(new Date())}
               onVista={setModo}
             />
@@ -129,7 +129,7 @@ export default function PaginaAgenda() {
               <VistaMes
                 fechaActual={fecha}
                 citas={citas}
-                onDiaClick={(dia) => {
+                onElegirDia={(dia) => {
                   setFecha(dia)
                   setModo("dia")
                 }}
@@ -156,7 +156,7 @@ export default function PaginaAgenda() {
             guardando={guardando}
             aviso={avisoDelModal}
             puedeAsignarProfesional={puedeAsignarProfesional}
-            onFormChange={(campo, valor) => setNuevaCita((previa) => ({ ...previa, [campo]: valor }))}
+            onCambiarCampo={(campo, valor) => setNuevaCita((previa) => ({ ...previa, [campo]: valor }))}
             onSubmit={guardarNuevaCita}
             onCerrar={() => setModalAbierto(false)}
           />

@@ -13,7 +13,7 @@ const VISTAS: { id: VistaDeReporte; texto: string }[] = [
 /** El id de la pestaña de cada vista: el panel lo nombra en `aria-labelledby`. */
 export const idDePestaña = (idBase: string, vista: VistaDeReporte) => `${idBase}-pestana-${vista}`
 
-interface SelectorDeVistaProps {
+interface PropsDeSelectorDeVista {
   /** Base de los ids de las pestañas y del panel. */
   idBase: string
   idDelPanel: string
@@ -30,7 +30,7 @@ interface SelectorDeVistaProps {
  * los segmentos de los formularios. Cada pestaña mide 40 px y el `::after` la
  * lleva a 44 para el dedo.
  */
-export function SelectorDeVista({ idBase, idDelPanel, vista, onCambiar }: SelectorDeVistaProps) {
+export function SelectorDeVista({ idBase, idDelPanel, vista, onCambiar }: PropsDeSelectorDeVista) {
   const lista = useRef<HTMLDivElement>(null)
 
   const elegir = (otra: VistaDeReporte) => {

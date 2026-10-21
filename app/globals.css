@@ -9,9 +9,9 @@
  */
 
 /*
- * No hay modo oscuro: el producto se ve siempre sobre crema. Las clases
- * `dark:` (las traen los componentes de shadcn) quedan atadas a una clase
- * `.dark` que nada pone; sin esto se activarían con el modo oscuro del sistema.
+ * No hay modo oscuro: el producto se ve siempre sobre crema. Si alguna clase
+ * `dark:` llega al código, queda atada a una clase `.dark` que nada pone; sin
+ * esto se activaría con el modo oscuro del sistema.
  */
 @custom-variant dark (&:is(.dark *));
 
@@ -83,30 +83,10 @@
 }
 
 /*
- * Los nombres semánticos de shadcn que usa el panel (`bg-primary`,
- * `text-muted-foreground`…), apuntados a la paleta nueva: así el panel cambia
- * de aspecto sin tocar sus archivos.
+ * Los radios `rounded-sm`, `-md`, `-lg` y `-xl` del panel (8, 10, 12 y 16px),
+ * calculados desde `--radius`. Reemplazan a los de Tailwind.
  */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -114,26 +94,6 @@
 }
 
 :root {
-  --background: var(--color-crema);
-  --foreground: var(--color-navy);
-  --card: var(--color-tarjeta);
-  --card-foreground: var(--color-navy);
-  --popover: var(--color-tarjeta);
-  --popover-foreground: var(--color-navy);
-  --primary: var(--color-navy);
-  --primary-foreground: #ffffff;
-  --secondary: var(--color-superficie);
-  --secondary-foreground: var(--color-navy);
-  --muted: var(--color-superficie);
-  --muted-foreground: var(--color-texto-2);
-  --accent: var(--color-superficie);
-  --accent-foreground: var(--color-navy);
-  --destructive: var(--color-error);
-  --destructive-foreground: #ffffff;
-  --border: var(--color-borde);
-  /* El borde de los campos: el gris de texto secundario sí llega al 3:1. */
-  --input: var(--color-texto-2);
-  --ring: var(--color-navy);
   --radius: 0.75rem;
   /* El halo del foco. Cada módulo lo cambia por su pastel con `halo-<módulo>`. */
   --halo: var(--color-azul-suave);
@@ -281,7 +241,7 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-borde outline-navy/50;
   }
   html {
     /*
@@ -331,7 +291,7 @@
     }
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-crema text-navy;
     -webkit-font-smoothing: antialiased;
   }
 

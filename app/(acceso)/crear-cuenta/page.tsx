@@ -25,7 +25,7 @@ export default function PaginaCrearCuenta() {
   const [paso, setPaso] = useState(1)
   const [tipoNegocio, setTipoNegocio] = useState<RubroId | "">("")
   const [error, setError] = useState("")
-  const [formData, setFormData] = useState({
+  const [formulario, setFormulario] = useState({
     nombre: "",
     email: "",
     contrasena: "",
@@ -34,7 +34,7 @@ export default function PaginaCrearCuenta() {
   })
 
   const actualizarCampo = (campo: string, valor: string) => {
-    setFormData((prev) => ({ ...prev, [campo]: valor }))
+    setFormulario((prev) => ({ ...prev, [campo]: valor }))
   }
 
   const manejarEnvio = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -42,11 +42,11 @@ export default function PaginaCrearCuenta() {
     setError("")
 
     if (paso === 1) {
-      if (formData.contrasena !== formData.confirmarContrasena) {
+      if (formulario.contrasena !== formulario.confirmarContrasena) {
         setError(CONTRASENAS_DISTINTAS)
         return
       }
-      if (formData.contrasena.length < 8) {
+      if (formulario.contrasena.length < 8) {
         setError(CONTRASENA_CORTA)
         return
       }
@@ -62,10 +62,10 @@ export default function PaginaCrearCuenta() {
     setCargando(true)
 
     const registro = await crearCuenta({
-      nombre: formData.nombre,
-      email: formData.email,
-      contrasena: formData.contrasena,
-      nombreNegocio: formData.nombreNegocio,
+      nombre: formulario.nombre,
+      email: formulario.email,
+      contrasena: formulario.contrasena,
+      nombreNegocio: formulario.nombreNegocio,
       tipoNegocio,
     })
 
@@ -79,8 +79,8 @@ export default function PaginaCrearCuenta() {
     // diferencia de `crearCuenta`, que devuelve el error.
     try {
       const inicioDeSesion = await signIn("credentials", {
-        email: formData.email,
-        password: formData.contrasena,
+        email: formulario.email,
+        password: formulario.contrasena,
         redirect: false,
       })
 
@@ -131,7 +131,7 @@ export default function PaginaCrearCuenta() {
               type="text"
               autoComplete="name"
               placeholder="Por ejemplo, María González"
-              value={formData.nombre}
+              value={formulario.nombre}
               onChange={(e) => actualizarCampo("nombre", e.target.value)}
               required
             />
@@ -141,7 +141,7 @@ export default function PaginaCrearCuenta() {
               type="email"
               autoComplete="email"
               placeholder="tu@correo.com"
-              value={formData.email}
+              value={formulario.email}
               onChange={(e) => actualizarCampo("email", e.target.value)}
               required
             />
@@ -151,7 +151,7 @@ export default function PaginaCrearCuenta() {
               type="password"
               autoComplete="new-password"
               placeholder="Al menos 8 caracteres"
-              value={formData.contrasena}
+              value={formulario.contrasena}
               onChange={(e) => {
                 actualizarCampo("contrasena", e.target.value)
                 setError(borrarSiEs(CONTRASENA_CORTA))
@@ -164,7 +164,7 @@ export default function PaginaCrearCuenta() {
               etiqueta="Repite la contraseña"
               type="password"
               autoComplete="new-password"
-              value={formData.confirmarContrasena}
+              value={formulario.confirmarContrasena}
               onChange={(e) => {
                 actualizarCampo("confirmarContrasena", e.target.value)
                 setError(borrarSiEs(CONTRASENAS_DISTINTAS))
@@ -175,7 +175,7 @@ export default function PaginaCrearCuenta() {
           </>
         ) : (
           <CamposDelNegocio
-            nombre={formData.nombreNegocio}
+            nombre={formulario.nombreNegocio}
             alCambiarNombre={(nombre) => actualizarCampo("nombreNegocio", nombre)}
             rubro={tipoNegocio}
             alElegirRubro={(rubro) => {

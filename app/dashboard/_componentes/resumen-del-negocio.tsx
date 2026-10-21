@@ -7,13 +7,13 @@ import { formatearMonto } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
 import { puedeVerIngresos, type EstadisticasDelPanel } from "../_datos"
 
-interface ResumenDelNegocioProps {
+interface PropsDeResumenDelNegocio {
   /** Nulo mientras cargan. */
   estadisticas: EstadisticasDelPanel | null
 }
 
 /** Las cifras del día y del mes en una lista corta, una por renglón, con el pastel del módulo de cada una. */
-export function ResumenDelNegocio({ estadisticas }: ResumenDelNegocioProps) {
+export function ResumenDelNegocio({ estadisticas }: PropsDeResumenDelNegocio) {
   const idDelTitulo = useId()
   const conIngresos = puedeVerIngresos(estadisticas)
 

@@ -13,7 +13,7 @@ export interface ServicioPublico {
   price: number | null
 }
 
-interface SelectorServicioProps {
+interface PropsDeSelectorServicio {
   servicios: ServicioPublico[]
   seleccionado: ServicioPublico | null
   onSeleccionar: (servicio: ServicioPublico) => void
@@ -29,7 +29,7 @@ interface SelectorServicioProps {
  * enfocar. El de reposo es del gris de texto secundario, como el de los
  * campos: el gris de los bordes decorativos no se distingue sobre blanco.
  */
-export function SelectorServicio({ servicios, seleccionado, onSeleccionar }: SelectorServicioProps) {
+export function SelectorServicio({ servicios, seleccionado, onSeleccionar }: PropsDeSelectorServicio) {
   return (
     <ul className="grid gap-3 md:grid-cols-2">
       {servicios.map((servicio) => {

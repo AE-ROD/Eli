@@ -30,7 +30,7 @@ const LETRAS_PARA_BUSCAR = 2
 const ANILLO_HACIA_ADENTRO =
   "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--anillo) focus-visible:bg-(--halo)"
 
-interface ModalNuevaCitaProps {
+interface PropsDeModalNuevaCita {
   form: DatosDeNuevaCita
   guardando: boolean
   /**
@@ -40,7 +40,7 @@ interface ModalNuevaCitaProps {
   aviso: string
   /** Sólo owner y admin asignan profesional; el worker no ve el selector. */
   puedeAsignarProfesional: boolean
-  onFormChange: (campo: keyof DatosDeNuevaCita, valor: string) => void
+  onCambiarCampo: (campo: keyof DatosDeNuevaCita, valor: string) => void
   onSubmit: (e: React.SyntheticEvent<HTMLFormElement>) => void
   onCerrar: () => void
 }
@@ -50,10 +50,10 @@ export function ModalNuevaCita({
   guardando,
   aviso,
   puedeAsignarProfesional,
-  onFormChange,
+  onCambiarCampo,
   onSubmit,
   onCerrar,
-}: ModalNuevaCitaProps) {
+}: PropsDeModalNuevaCita) {
   const [busquedaCliente, setBusquedaCliente] = useState("")
   const [sugerencias, setSugerencias] = useState<ClienteSugerido[]>([])
   const [nombreCliente, setNombreCliente] = useState("")
@@ -105,7 +105,7 @@ export function ModalNuevaCita({
   }, [busquedaCliente])
 
   function seleccionarCliente(cliente: ClienteSugerido, conTeclado: boolean) {
-    onFormChange("clienteId", cliente.id)
+    onCambiarCampo("clienteId", cliente.id)
     setNombreCliente(cliente.nombre)
     setBusquedaCliente(cliente.nombre)
     setMostrarSugerencias(false)
@@ -158,7 +158,7 @@ export function ModalNuevaCita({
               onChange={(e) => {
                 setBusquedaCliente(e.target.value)
                 if (nombreCliente && e.target.value !== nombreCliente) {
-                  onFormChange("clienteId", "")
+                  onCambiarCampo("clienteId", "")
                   setNombreCliente("")
                 }
               }}
@@ -218,7 +218,7 @@ export function ModalNuevaCita({
           etiqueta="Servicio"
           placeholder="Ej: Corte, Color, Manicura..."
           value={form.servicio}
-          onChange={(e) => onFormChange("servicio", e.target.value)}
+          onChange={(e) => onCambiarCampo("servicio", e.target.value)}
           icono={<Scissors className="size-4" aria-hidden="true" strokeWidth={1.75} />}
           required
         />
@@ -227,7 +227,7 @@ export function ModalNuevaCita({
           etiqueta="Fecha"
           type="date"
           value={form.fecha}
-          onChange={(e) => onFormChange("fecha", e.target.value)}
+          onChange={(e) => onCambiarCampo("fecha", e.target.value)}
           icono={<Calendar className="size-4" aria-hidden="true" strokeWidth={1.75} />}
           required
         />
@@ -237,7 +237,7 @@ export function ModalNuevaCita({
             etiqueta="Hora inicio"
             type="time"
             value={form.horaInicio}
-            onChange={(e) => onFormChange("horaInicio", e.target.value)}
+            onChange={(e) => onCambiarCampo("horaInicio", e.target.value)}
             icono={<Clock className="size-4" aria-hidden="true" strokeWidth={1.75} />}
             required
           />
@@ -245,7 +245,7 @@ export function ModalNuevaCita({
             etiqueta="Hora fin"
             type="time"
             value={form.horaFin}
-            onChange={(e) => onFormChange("horaFin", e.target.value)}
+            onChange={(e) => onCambiarCampo("horaFin", e.target.value)}
             icono={<Clock className="size-4" aria-hidden="true" strokeWidth={1.75} />}
             required
           />
@@ -256,7 +256,7 @@ export function ModalNuevaCita({
           type="number"
           placeholder="0.00"
           value={form.precio}
-          onChange={(e) => onFormChange("precio", e.target.value)}
+          onChange={(e) => onCambiarCampo("precio", e.target.value)}
           icono={<DollarSign className="size-4" aria-hidden="true" strokeWidth={1.75} />}
         />
 
@@ -266,7 +266,7 @@ export function ModalNuevaCita({
           <Selector
             etiqueta="Profesional"
             value={form.memberId}
-            onChange={(e) => onFormChange("memberId", e.target.value)}
+            onChange={(e) => onCambiarCampo("memberId", e.target.value)}
             opciones={profesionales.map((profesional) => ({ valor: profesional.id, texto: profesional.nombre }))}
           >
             <option value="">Sin asignar</option>
@@ -281,7 +281,7 @@ export function ModalNuevaCita({
           <textarea
             id={idDeNotas}
             value={form.notas}
-            onChange={(e) => onFormChange("notas", e.target.value)}
+            onChange={(e) => onCambiarCampo("notas", e.target.value)}
             placeholder="Observaciones, instrucciones..."
             className={cn(CAMPO, "h-24 resize-none px-4 py-3 text-base")}
           />

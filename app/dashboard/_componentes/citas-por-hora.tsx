@@ -9,13 +9,13 @@ import { formatearHora } from "@/lib/fechas"
 import type { CitaDelDia } from "@/lib/horario-dia"
 import { cn } from "@/lib/utils"
 
-interface CitasPorHoraProps {
+interface PropsDeCitasPorHora {
   /** Nulo mientras cargan las cifras del panel. */
   citas: CitaDelDia[] | null
 }
 
 /** Las citas de hoy en fila por hora de inicio: quién viene y a qué. */
-export function CitasPorHora({ citas }: CitasPorHoraProps) {
+export function CitasPorHora({ citas }: PropsDeCitasPorHora) {
   const idDelTitulo = useId()
 
   return (

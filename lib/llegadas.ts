@@ -11,7 +11,7 @@ import {
   whereDeClientes,
   type Actor,
 } from "@/lib/permisos"
-import { ErrorDeAtencion, formatearAtencion, nombreDeCliente, seleccionDeAtencion } from "@/lib/tablero"
+import { ErrorDeAtencion, formatearAtencion, nombreCompletoDeCliente, seleccionDeAtencion } from "@/lib/tablero"
 
 /**
  * Cómo entra alguien al tablero de atenciones: con reserva (la cita "llegó")
@@ -210,7 +210,7 @@ export async function registrarLlegada(actor: Actor, usuarioId: string | null, {
       data: {
         businessId: actor.businessId,
         customerId: cita.customerId,
-        customerName: cita.customer ? nombreDeCliente(cita.customer) : CLIENTE_SIN_FICHA,
+        customerName: cita.customer ? nombreCompletoDeCliente(cita.customer) : CLIENTE_SIN_FICHA,
         appointmentId: cita.id,
         createdById: usuarioId,
         ...(linea && { services: { create: [linea] } }),
@@ -269,7 +269,7 @@ export async function anotarSinReserva(actor: Actor, usuarioId: string | null, d
       data: {
         businessId: actor.businessId,
         customerId: cliente.id,
-        customerName: nombreDeCliente(cliente),
+        customerName: nombreCompletoDeCliente(cliente),
         notes: datos.notas || null,
         createdById: usuarioId,
         ...(lineas.length > 0 && { services: { create: lineas } }),

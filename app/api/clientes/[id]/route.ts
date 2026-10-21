@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { actorDeSesion, whereDeAgenda, whereDeClientes, type Actor } from "@/lib/permisos"
 
-const clienteUpdateSchema = z.object({
+const edicionDeClienteSchema = z.object({
   name: z.string().min(2).optional(),
   email: z.string().email().optional().or(z.literal("")),
   phone: z.string().optional().or(z.literal("")),
@@ -93,8 +93,8 @@ export async function PUT(
   }
 
   try {
-    const body = await request.json()
-    const datos = clienteUpdateSchema.parse(body)
+    const cuerpo = await request.json()
+    const datos = edicionDeClienteSchema.parse(cuerpo)
 
     // Por `existente.id`, no por `id`: si alguien borra la verificación de
     // arriba, `existente` queda sin declarar y el build falla. La garantía deja

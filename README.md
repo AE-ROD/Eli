@@ -92,8 +92,13 @@ components/
   comunes/                    Componentes base del diseño: botones, campos, tarjetas, secciones, logo
   panel/                      Estructura del panel: barras, avatar, tarjeta de cita, modales
   landing/                    Secciones de la página de inicio
+  movimiento/                 Tiempos de animación y patrones de movimiento de la landing
   proveedores.tsx             Sesión de NextAuth y MotionConfig (movimiento reducido) para toda la app
-lib/                          Lógica compartida, cada archivo con su test al lado.
+lib/                          Lógica compartida, cada archivo con su test al lado,
+                              salvo cuatro: llegadas.ts y lineas-de-atencion.ts se
+                              prueban a través de los tests de app/api/atenciones/,
+                              y auth.ts y prisma.ts, que sólo conectan la sesión y
+                              la base, los tests de ruta los reemplazan por mocks.
                               Los marcados (servidor) usan la base o la sesión:
                               nunca se importan desde un componente de cliente.
   permisos.ts                 Quién puede ver y hacer qué. Toda consulta pasa por acá
@@ -104,10 +109,17 @@ lib/                          Lógica compartida, cada archivo con su test al la
   periodos.ts                 Rangos de fechas de los filtros de reportes
   dinero.ts                   Formato y lectura de montos
   fechas.ts                   Cálculos y formatos de fecha
-  horario-dia.ts              La jornada de un profesional: citas y huecos del día
+  horario-dia.ts              La jornada de un profesional: citas y huecos del día,
+                              y la conversión entre "HH:MM" y minutos
+  nombres-de-roles.ts         Cómo se escribe cada rol (Encargado, Profesional). Sólo
+                              la etiqueta: lo que puede hacer cada uno está en permisos.ts
   rubros.ts                   Los tres rubros que atiende Eli
-  validaciones.ts             Lo que aceptan los endpoints (zod)
+  modulos.ts                  Los cinco módulos del panel: nombre, frase, ruta y color
+  direccion-de-scroll.ts      Si el encabezado de la landing se muestra, se oculta o flota
+  validaciones.ts             Esquemas zod compartidos: registro, reserva y contraseña.
+                              El resto de los endpoints define el suyo en su route.ts
   peticiones.ts               Cómo la interfaz le pide cosas al servidor
+  cuerpo-del-pedido.ts        Leer el JSON de un pedido sin que uno roto termine en 500
   slug.ts                     La dirección pública de cada negocio
   utils.ts                    `cn`, para combinar clases de Tailwind
   tablero.ts                  (servidor) Leer y tomar atenciones dentro de un endpoint
@@ -117,10 +129,17 @@ lib/                          Lógica compartida, cada archivo con su test al la
   prisma.ts                   (servidor) Conexión a la base
   email.ts                    (servidor) Correos (Resend)
   rate-limit.ts               (servidor) Límite de peticiones (Upstash)
-prisma/                       Esquema, migraciones y datos de ejemplo
-proxy.ts                      Puerta de entrada: sesión y límite de peticiones
+pruebas/                      Ayudas compartidas de los tests: la base falsa en memoria
+                              con sus datos de ejemplo, pedidos y respuestas simulados.
+                              Fuera de app/: no es una ruta ni entra al build
+prisma/                       Esquema, migraciones y datos de ejemplo (seed.ts)
+proxy.ts                      Puerta de entrada: sesión y límite de peticiones (con su test)
 types/                        Tipos que extienden librerías (la sesión de NextAuth)
+public/images/                El logo
 docs/                         Producto (PRODUCTO.md) y sistema de diseño (diseno/)
+prisma.config.ts              Dónde están el esquema y las migraciones, y el comando del seed
+vercel.json                   El cron diario de recordatorios
+.github/workflows/ci.yml      CI: lint, tipos, tests y build en cada PR a main
 ```
 
 Cada vista del panel se arma igual:
@@ -138,7 +157,6 @@ Cada vista del panel se arma igual:
   inglés queda sólo donde lo impone una herramienta:
   - los archivos especiales de Next (`page.tsx`, `layout.tsx`, `route.ts`,
     `proxy.ts`);
-  - las primitivas de shadcn;
   - el esquema de Prisma, cuyos modelos y columnas ya existen en producción.
 - **Archivos y carpetas** en kebab-case: `modal-nueva-cita.tsx`.
 - **Componentes** en PascalCase y en español: `ModalNuevaCita`. La página de

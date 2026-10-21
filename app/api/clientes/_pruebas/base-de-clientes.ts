@@ -1,11 +1,11 @@
 import { vi } from "vitest"
 import { Prisma } from "@prisma/client"
-import { crearBaseFalsa } from "@/app/api/atenciones/_pruebas/base-falsa"
-import { RELACIONES } from "@/app/api/atenciones/_pruebas/consultas-falsas"
-import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/app/api/atenciones/_pruebas/datos"
+import { crearBaseFalsa } from "@/pruebas/base-falsa"
+import { RELACIONES } from "@/pruebas/consultas-falsas"
+import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
 
 /**
- * La base falsa del tablero (`app/api/atenciones/_pruebas/`) con lo que piden
+ * La base falsa del tablero (`pruebas/`) con lo que piden
  * los endpoints de clientes y el tablero no usaba. Se extiende desde acá
  * porque esa carpeta es de otra ficha.
  *

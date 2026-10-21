@@ -20,7 +20,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
 /** Un lunes lejano: nunca es "hoy", así que no se filtran horas pasadas. */
 const FECHA = "2030-01-07"
 
-const fakeRequest = (query: string): NextRequest =>
+const pedidoFalso = (query: string): NextRequest =>
   ({ url: `http://localhost/api/reservar/salon-uno/disponibilidad${query}`, headers: new Headers() }) as unknown as NextRequest
 
 const conSlug = { params: Promise.resolve({ slug: "salon-uno" }) }
@@ -48,7 +48,7 @@ describe("GET /api/reservar/[slug]/disponibilidad", () => {
 
     mockVerificarLimite.mockResolvedValueOnce({ permitido: false, restantes: 0 })
 
-    const res = await GET(fakeRequest(`?fecha=${FECHA}&servicioId=s-corte`), conSlug)
+    const res = await GET(pedidoFalso(`?fecha=${FECHA}&servicioId=s-corte`), conSlug)
 
     expect(res.status).toBe(429)
     expect(mockVerificarLimite).toHaveBeenCalledWith("lecturaPublica", "203.0.113.7")
@@ -63,7 +63,7 @@ describe("GET /api/reservar/[slug]/disponibilidad", () => {
       { startTime: new Date(2030, 0, 7, 10, 0), endTime: new Date(2030, 0, 7, 11, 0) },
     ])
 
-    const res = await GET(fakeRequest(`?fecha=${FECHA}&servicioId=s-corte`), conSlug)
+    const res = await GET(pedidoFalso(`?fecha=${FECHA}&servicioId=s-corte`), conSlug)
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ slots: ["09:00", "11:00"] })
@@ -78,7 +78,7 @@ describe("GET /api/reservar/[slug]/disponibilidad", () => {
   ])("%s: 400 con un mensaje claro sobre la fecha, sin tocar la base", async (_caso, query) => {
     const { GET } = await import("./route")
 
-    const res = await GET(fakeRequest(query), conSlug)
+    const res = await GET(pedidoFalso(query), conSlug)
     const data = await res.json()
 
     expect(res.status).toBe(400)
@@ -94,7 +94,7 @@ describe("GET /api/reservar/[slug]/disponibilidad", () => {
   ])("%s: 400 con un mensaje claro sobre el servicio, sin tocar la base", async (_caso, query) => {
     const { GET } = await import("./route")
 
-    const res = await GET(fakeRequest(query), conSlug)
+    const res = await GET(pedidoFalso(query), conSlug)
     const data = await res.json()
 
     expect(res.status).toBe(400)

@@ -12,7 +12,7 @@ import type { CitaDelDia } from "@/lib/horario-dia"
 import { cn } from "@/lib/utils"
 import { citaParaTarjeta } from "./linea-de-tiempo-dia"
 
-interface CitasDeHoyProps {
+interface PropsDeCitasDeHoy {
   /** Nulo mientras cargan las cifras del panel. */
   citas: CitaDelDia[] | null
   className?: string
@@ -24,7 +24,7 @@ function resumen(citas: CitaDelDia[] | null): string {
 }
 
 /** La lista de citas de hoy, con el atajo a la agenda. */
-export function CitasDeHoy({ citas, className }: CitasDeHoyProps) {
+export function CitasDeHoy({ citas, className }: PropsDeCitasDeHoy) {
   const idDelTitulo = useId()
 
   return (

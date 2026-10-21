@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import type { NextRequest } from "next/server"
+import { pedidoFalso } from "@/pruebas/pedidos"
 
 const mockVerificarLimite = vi.fn()
 const mockHash = vi.fn()
@@ -20,9 +20,6 @@ const prismaMock = {
 }
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
-
-const fakeRequest = (body: unknown): NextRequest =>
-  ({ json: () => Promise.resolve(body), headers: new Headers() }) as unknown as NextRequest
 
 const enlaceVigente = {
   id: "enlace-1",
@@ -46,7 +43,7 @@ describe("POST /api/auth/restablecer-contrasena", () => {
 
     mockVerificarLimite.mockResolvedValueOnce({ permitido: false, restantes: 0 })
 
-    const res = await POST(fakeRequest({ token: "token-abc", contrasena: "nuevaClave1" }))
+    const res = await POST(pedidoFalso({ token: "token-abc", contrasena: "nuevaClave1" }))
 
     expect(res.status).toBe(429)
     expect(mockVerificarLimite).toHaveBeenCalledWith("auth", "203.0.113.7")
@@ -57,7 +54,7 @@ describe("POST /api/auth/restablecer-contrasena", () => {
   it("la contraseña viaja en `contrasena`: se guarda hasheada y el enlace queda usado", async () => {
     const { POST } = await import("./route")
 
-    const res = await POST(fakeRequest({ token: "token-abc", contrasena: "nuevaClave1" }))
+    const res = await POST(pedidoFalso({ token: "token-abc", contrasena: "nuevaClave1" }))
 
     expect(res.status).toBe(200)
     expect(prismaMock.user.update).toHaveBeenCalledWith({
@@ -73,7 +70,7 @@ describe("POST /api/auth/restablecer-contrasena", () => {
   it("el cuerpo de antes, con `password`, ya no sirve: 400 y no se toca nada", async () => {
     const { POST } = await import("./route")
 
-    const res = await POST(fakeRequest({ token: "token-abc", password: "nuevaClave1" }))
+    const res = await POST(pedidoFalso({ token: "token-abc", password: "nuevaClave1" }))
 
     expect(res.status).toBe(400)
     expect(prismaMock.passwordResetToken.findUnique).not.toHaveBeenCalled()
@@ -83,7 +80,7 @@ describe("POST /api/auth/restablecer-contrasena", () => {
   it("una contraseña corta se rechaza con 400", async () => {
     const { POST } = await import("./route")
 
-    const res = await POST(fakeRequest({ token: "token-abc", contrasena: "corta" }))
+    const res = await POST(pedidoFalso({ token: "token-abc", contrasena: "corta" }))
 
     expect(res.status).toBe(400)
     expect(prismaMock.user.update).not.toHaveBeenCalled()
@@ -94,7 +91,7 @@ describe("POST /api/auth/restablecer-contrasena", () => {
 
     prismaMock.passwordResetToken.findUnique.mockResolvedValueOnce({ ...enlaceVigente, usedAt: new Date() })
 
-    const res = await POST(fakeRequest({ token: "token-abc", contrasena: "nuevaClave1" }))
+    const res = await POST(pedidoFalso({ token: "token-abc", contrasena: "nuevaClave1" }))
 
     expect(res.status).toBe(410)
     expect(prismaMock.user.update).not.toHaveBeenCalled()
@@ -108,7 +105,7 @@ describe("POST /api/auth/restablecer-contrasena", () => {
       expiresAt: new Date(Date.now() - 1000),
     })
 
-    const res = await POST(fakeRequest({ token: "token-abc", contrasena: "nuevaClave1" }))
+    const res = await POST(pedidoFalso({ token: "token-abc", contrasena: "nuevaClave1" }))
 
     expect(res.status).toBe(410)
     expect(prismaMock.user.update).not.toHaveBeenCalled()

@@ -1,5 +1,5 @@
 {
-  "name": "my-project",
+  "name": "eli",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -14,12 +14,8 @@
     "prisma:seed": "node prisma/seed.ts",
     "prisma:studio": "prisma studio"
   },
-  "prisma": {
-    "seed": "node prisma/seed.ts"
-  },
   "dependencies": {
     "@prisma/client": "^6.19.3",
-    "@radix-ui/react-slot": "1.2.4",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.0",
     "@vercel/analytics": "1.6.1",
@@ -39,7 +35,6 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.0",
-    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",

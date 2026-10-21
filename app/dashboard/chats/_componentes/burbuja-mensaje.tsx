@@ -14,12 +14,12 @@ export interface MensajeEnBurbuja {
   tipo?: "texto" | "imagen" | "archivo"
 }
 
-interface BurbujaMensajeProps {
+interface PropsDeBurbujaMensaje {
   mensaje: MensajeEnBurbuja
 }
 
 /** Los del negocio, a la derecha en navy; los del cliente, a la izquierda en gris. */
-export function BurbujaMensaje({ mensaje }: BurbujaMensajeProps) {
+export function BurbujaMensaje({ mensaje }: PropsDeBurbujaMensaje) {
   return (
     <div className={cn("flex", mensaje.esPropio ? "justify-end" : "justify-start")}>
       <div

@@ -22,7 +22,7 @@ const VISTAS: { id: UnidadDeTiempo; texto: string }[] = [
   { id: "mes", texto: "Mes" },
 ]
 
-interface ControlesDeAgendaProps {
+interface PropsDeControlesDeAgenda {
   fechaActual: Date
   vista: UnidadDeTiempo
   /** El `id` del título del período: la tarjeta del calendario se nombra con él. */
@@ -54,7 +54,7 @@ export function ControlesDeAgenda({
   onSiguiente,
   onHoy,
   onVista,
-}: ControlesDeAgendaProps) {
+}: PropsDeControlesDeAgenda) {
   const pasos = PASOS[vista]
 
   return (

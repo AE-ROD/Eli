@@ -26,7 +26,7 @@ function filasIniciales(atencion: Atencion, catalogo: Catalogo): FilaDeServicio[
   return [filaVacia(catalogo, "fila-inicial")]
 }
 
-interface ModalServiciosProps {
+interface PropsDeModalServicios {
   atencion: Atencion
   catalogo: Catalogo
   eligeProfesional: boolean
@@ -57,7 +57,7 @@ export function ModalServicios({
   guardando,
   onGuardar,
   onCerrar,
-}: ModalServiciosProps) {
+}: PropsDeModalServicios) {
   // Las filas se toman una sola vez, al abrir: la recarga del tablero cada
   // 30 segundos no pisa lo que se está escribiendo. Si la atención cambió
   // entretanto, el servidor responde 409 y el tablero se recarga.

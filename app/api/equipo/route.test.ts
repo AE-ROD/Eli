@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import type { NextRequest } from "next/server"
+import { pedidoFalso } from "@/pruebas/pedidos"
 
 const mockGetServerSession = vi.fn()
 
@@ -39,12 +39,6 @@ const sesionProfesional = {
 const sesionEncargadoNegocio2 = {
   user: { id: "admin-2", role: "admin", businessId: "negocio-2", businessName: "Otro negocio", memberId: "member-admin-2" },
 }
-
-const fakeRequest = (body: unknown): NextRequest =>
-  ({
-    headers: new Headers(),
-    json: async () => body,
-  }) as unknown as NextRequest
 
 describe("GET /api/equipo", () => {
   beforeEach(() => vi.clearAllMocks())
@@ -142,7 +136,7 @@ describe("POST /api/equipo", () => {
     })
     prismaMock.business.findUnique.mockResolvedValueOnce({ name: "Mi negocio" })
 
-    const res = await POST(fakeRequest({ nombre: "Ana", email: "ana@x.com", rol: "worker" }))
+    const res = await POST(pedidoFalso({ nombre: "Ana", email: "ana@x.com", rol: "worker" }))
     const data = await res.json()
 
     expect(res.status).toBe(201)
@@ -167,7 +161,7 @@ describe("POST /api/equipo", () => {
     })
     prismaMock.business.findUnique.mockResolvedValueOnce({ name: "Mi negocio" })
 
-    const res = await POST(fakeRequest({ nombre: "Ana", email: "ana@x.com", rol: "worker" }))
+    const res = await POST(pedidoFalso({ nombre: "Ana", email: "ana@x.com", rol: "worker" }))
 
     expect(res.status).toBe(201)
   })
@@ -191,7 +185,7 @@ describe("POST /api/equipo", () => {
     })
     prismaMock.business.findUnique.mockResolvedValueOnce({ name: "Otro negocio" })
 
-    const res = await POST(fakeRequest({ nombre: "Ana", email: "ana@x.com", rol: "worker" }))
+    const res = await POST(pedidoFalso({ nombre: "Ana", email: "ana@x.com", rol: "worker" }))
     expect(res.status).toBe(201)
 
     const argumentosUsuario = prismaMock.user.findFirst.mock.calls[0][0]
@@ -210,7 +204,7 @@ describe("POST /api/equipo", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
 
-    const res = await POST(fakeRequest({ nombre: "Ana", email: "ana@x.com", rol: "worker" }))
+    const res = await POST(pedidoFalso({ nombre: "Ana", email: "ana@x.com", rol: "worker" }))
 
     expect(res.status).toBe(401)
     expect(prismaMock.workerInvitation.create).not.toHaveBeenCalled()
@@ -221,7 +215,7 @@ describe("POST /api/equipo", () => {
 
     mockGetServerSession.mockResolvedValueOnce(null)
 
-    const res = await POST(fakeRequest({ nombre: "Ana", email: "ana@x.com", rol: "worker" }))
+    const res = await POST(pedidoFalso({ nombre: "Ana", email: "ana@x.com", rol: "worker" }))
 
     expect(res.status).toBe(401)
   })

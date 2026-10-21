@@ -42,7 +42,7 @@ function medioDelCobro(pagos: PagoRegistrado[]): string {
   return [...new Set(pagos.map((pago) => pago.nombreMedio))].join(" + ")
 }
 
-interface TarjetaDeAtencionProps {
+interface PropsDeTarjetaDeAtencion {
   atencion: Atencion
   /**
    * Cómo se nombra la atención en sus botones, para el lector de pantalla:
@@ -85,7 +85,7 @@ export function TarjetaDeAtencion({
   onCobrar,
   onEditar,
   onAnular,
-}: TarjetaDeAtencionProps) {
+}: PropsDeTarjetaDeAtencion) {
   const idDelNombre = useId()
   const momento = momentoDe(atencion, ahora)
   const principal = accionPrincipal(actor, atencion.estado)

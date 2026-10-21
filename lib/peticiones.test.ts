@@ -1,15 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
+import { json, simularRespuesta } from "@/pruebas/respuestas"
 import { pedir, pedirConCodigo, pedirConCuerpo, leerCuerpo, conJson, SIN_CONEXION } from "./peticiones"
-
-/** Simula la respuesta que daría el servidor, sin red de por medio. */
-function simularRespuesta(respuesta: Response) {
-  const fetchFalso = vi.fn().mockResolvedValue(respuesta)
-  vi.stubGlobal("fetch", fetchFalso)
-  return fetchFalso
-}
-
-const json = (cuerpo: unknown, status = 200) =>
-  new Response(JSON.stringify(cuerpo), { status, headers: { "Content-Type": "application/json" } })
 
 afterEach(() => {
   vi.unstubAllGlobals()

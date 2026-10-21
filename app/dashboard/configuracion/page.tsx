@@ -40,14 +40,14 @@ export default async function PaginaConfiguracion() {
       })
     : []
 
-  const miembrosFormateados = miembros.map((m: (typeof miembros)[number]) => ({
+  const miembrosParaElSelector = miembros.map((m: (typeof miembros)[number]) => ({
     id: m.id,
     nombre: m.user.name,
     email: m.user.email,
     role: m.role,
   }))
 
-  const tieneEquipo = miembrosFormateados.length > 0
+  const tieneEquipo = miembrosParaElSelector.length > 0
   const nombreActor = session?.user?.name ?? "Yo"
 
   return (
@@ -61,9 +61,9 @@ export default async function PaginaConfiguracion() {
         {/* Horario: quien gestiona el negocio y tiene equipo → selector de tabs; el resto → directo */}
         {puedeEditarHorarioDeOtros && tieneEquipo ? (
           <SelectorHorarioMiembro
-            horariosOwner={horariosActuales}
-            miembros={miembrosFormateados}
-            nombreOwner={nombreActor}
+            horariosDelDueño={horariosActuales}
+            miembros={miembrosParaElSelector}
+            nombreDelDueño={nombreActor}
           />
         ) : (
           <SeccionHorario

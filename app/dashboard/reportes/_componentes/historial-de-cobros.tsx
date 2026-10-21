@@ -22,7 +22,7 @@ export function diaCorto(iso: string): string {
 const nombreDeTurno = (id: string) => TURNOS.find((turno) => turno.id === id)?.nombre ?? id
 
 /** Las celdas de los historiales: arriba, con el mismo relleno; la primera y la última, con el de la tarjeta. */
-export const CELDA = "px-3 py-3.5 align-top first:pl-5 last:pr-5 sm:first:pl-6 sm:last:pr-6"
+export const CLASES_DE_CELDA = "px-3 py-3.5 align-top first:pl-5 last:pr-5 sm:first:pl-6 sm:last:pr-6"
 export const ENCABEZADO_DE_COLUMNA = "px-3 py-3 text-xs font-medium text-texto-2 first:pl-5 last:pr-5 sm:first:pl-6 sm:last:pr-6"
 
 /**
@@ -57,7 +57,7 @@ function Servicios({ fila, resaltar }: { fila: FilaDeReporte; resaltar: boolean 
   )
 }
 
-export function Medios({ pagos }: { pagos: FilaDeReporte["pagos"] }) {
+export function MediosDeLaFila({ pagos }: { pagos: FilaDeReporte["pagos"] }) {
   if (!pagos || pagos.length === 0) return <span className="text-texto-2">Sin pago (cortesía)</span>
   const dividido = pagos.length > 1
   return (
@@ -83,7 +83,7 @@ export function SinFilas({ icono, titulo, children }: { icono: typeof Receipt; t
   )
 }
 
-interface HistorialDeCobrosProps {
+interface PropsDeHistorialDeCobros {
   reporte: Reporte
   /** Mientras llega otra página o el resultado de otros filtros. */
   actualizando: boolean
@@ -110,7 +110,7 @@ export function HistorialDeCobros({
   onAnular,
   enfocarTitulo = false,
   onTituloEnfocado,
-}: HistorialDeCobrosProps) {
+}: PropsDeHistorialDeCobros) {
   const idDelTitulo = useId()
   const titulo = useRef<HTMLHeadingElement>(null)
   const delNegocio = reporte.alcance === "negocio"
@@ -200,31 +200,31 @@ export function HistorialDeCobros({
             >
               {reporte.filas.map((fila) => (
                 <tr key={fila.id}>
-                  <td className={cn(CELDA, "whitespace-nowrap")}>
+                  <td className={cn(CLASES_DE_CELDA, "whitespace-nowrap")}>
                     <time dateTime={fila.cobradaEn}>
                       <span className="block font-medium">{diaCorto(fila.cobradaEn)}</span>
                       <span className="block text-texto-2 tabular-nums">{formatearHora(fila.cobradaEn)}</span>
                     </time>
                   </td>
-                  <td className={cn(CELDA, "whitespace-nowrap")}>
+                  <td className={cn(CLASES_DE_CELDA, "whitespace-nowrap")}>
                     <Insignia>{nombreDeTurno(fila.turno)}</Insignia>
                   </td>
-                  <td className={cn(CELDA, "font-medium break-words")}>{fila.cliente.nombre}</td>
-                  <td className={CELDA}>
+                  <td className={cn(CLASES_DE_CELDA, "font-medium break-words")}>{fila.cliente.nombre}</td>
+                  <td className={CLASES_DE_CELDA}>
                     <Servicios fila={fila} resaltar={resaltarCoincidencias} />
                   </td>
                   {delNegocio && (
                     <>
-                      <td className={cn(CELDA, "text-right font-semibold whitespace-nowrap tabular-nums")}>
+                      <td className={cn(CLASES_DE_CELDA, "text-right font-semibold whitespace-nowrap tabular-nums")}>
                         {fila.total !== undefined ? formatearMonto(fila.total) : "—"}
                       </td>
-                      <td className={CELDA}>
-                        <Medios pagos={fila.pagos} />
+                      <td className={CLASES_DE_CELDA}>
+                        <MediosDeLaFila pagos={fila.pagos} />
                       </td>
                     </>
                   )}
                   {anula && (
-                    <td className={cn(CELDA, "py-2.5 text-right")}>
+                    <td className={cn(CLASES_DE_CELDA, "py-2.5 text-right")}>
                       <Boton
                         variante="fantasma"
                         tamano="sm"

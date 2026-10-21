@@ -4,7 +4,7 @@ import type { ButtonHTMLAttributes, ReactNode } from "react"
 import { Boton } from "@/components/comunes/boton"
 import { cn } from "@/lib/utils"
 
-interface BotonPrimarioProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface PropsDeBotonPrimario extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode
   variante?: "primario" | "secundario" | "fantasma" | "peligro"
   tamaño?: "sm" | "md" | "lg"
@@ -34,7 +34,7 @@ export function BotonPrimario({
   anchoCompleto = false,
   className,
   ...props
-}: BotonPrimarioProps) {
+}: PropsDeBotonPrimario) {
   return (
     <Boton
       {...props}

@@ -4,10 +4,10 @@ Cómo se ve Eli y de dónde sale cada decisión visual. Los tokens viven en
 `app/globals.css`; los componentes base, en `components/comunes/`. La landing
 y el panel usan los mismos.
 
-> **`mockup-landing.html` es la dirección anterior** (terracota, DM Serif
-> Display, grano de papel) y quedó **reemplazada** por este sistema. Se
-> conserva como referencia histórica, no como diseño vigente. Las seis
-> exploraciones que llevaron a ese mockup siguen en el historial:
+> **El mockup de la dirección anterior** (terracota, DM Serif Display, grano
+> de papel) quedó **reemplazado** por este sistema y ya no está en el repo.
+> Vive en el historial: `git show 811d178:docs/diseno/mockup-landing.html`.
+> Las seis exploraciones que llevaron a ese mockup, también:
 > `git show 06aed7a --stat`.
 
 La idea que ordena todo: **claridad y confianza con el dinero**. Exacto,
@@ -47,13 +47,11 @@ no se repiten:
 El fuerte es el fondo del ícono del módulo activo; el suave, fondos,
 insignias y el halo del foco. El texto sobre cualquiera de los dos es navy.
 
-Los nombres semánticos de shadcn que usa el panel apuntan a la paleta:
-`background` = crema · `foreground` = navy · `primary` = navy (con
-`primary-foreground` blanco) · `secondary`, `muted` y `accent` = superficie ·
-`muted-foreground` = texto-2 · `card` y `popover` = blanco · `border` = borde ·
-`input` = texto-2 · `ring` = navy · `destructive` = error. Por eso el panel
-cambió de aspecto sin tocar sus archivos. En código nuevo, mejor los nombres
-propios.
+Los nombres semánticos de shadcn (`background`, `foreground`, `primary`,
+`muted`, `border`, `ring`…) se retiraron de `app/globals.css`: lo poco que los
+usaba pasó a los nombres propios con el mismo valor (`crema`, `navy`, `borde`).
+Se usan sólo los nombres de esta paleta. De shadcn quedan los radios
+`rounded-sm`/`md`/`lg`/`xl` (8, 10, 12 y 16 px), que el panel todavía usa.
 
 No hay modo oscuro. Las clases `dark:` no se activan nunca.
 
@@ -192,8 +190,10 @@ Fuera de `comunes/`:
 - `components/panel/`: las piezas del panel, que se cuentan más abajo, en
   "El panel".
 
-Las primitivas de shadcn (`components/ui/button` e `input`) se retiraron:
-las reemplazan `Boton` y `CampoFormulario`.
+De shadcn no queda ningún componente ni su configuración (`components/ui/` y
+`components.json` se retiraron): `Boton` y `CampoFormulario` reemplazan a
+sus primitivas. Tampoco quedan sus nombres semánticos de color; sólo sus
+radios, que se cuentan arriba.
 
 **Cómo se escriben las variantes.** Con class-variance-authority (`cva`) más
 `cn`: `cva` junta las clases de cada combinación (la variante y el tamaño del

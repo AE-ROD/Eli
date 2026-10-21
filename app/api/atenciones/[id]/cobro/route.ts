@@ -12,10 +12,10 @@ import {
   transicionPermitida,
 } from "@/lib/atenciones"
 import { actorDeSesion, puedeCobrar } from "@/lib/permisos"
+import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
 import {
   ErrorDeAtencion,
   buscarAtencion,
-  cuerpoDelPedido,
   leerAtencion,
   lineasDeLaAtencion,
   nombreEnElNegocio,

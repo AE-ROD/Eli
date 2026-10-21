@@ -93,13 +93,13 @@ function tarjetasDe(estadisticas: EstadisticasDelPanel): Tarjeta[] {
   ]
 }
 
-interface EstadisticasDelNegocioProps {
+interface PropsDeEstadisticasDelNegocio {
   /** Nulo mientras cargan. */
   estadisticas: EstadisticasDelPanel | null
 }
 
 /** Las tarjetas de arriba del panel: citas de hoy, clientes e ingresos del mes. */
-export function EstadisticasDelNegocio({ estadisticas }: EstadisticasDelNegocioProps) {
+export function EstadisticasDelNegocio({ estadisticas }: PropsDeEstadisticasDelNegocio) {
   const tarjetas = estadisticas ? tarjetasDe(estadisticas) : TARJETAS_CARGANDO
 
   return (
