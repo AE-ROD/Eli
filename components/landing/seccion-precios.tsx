@@ -312,7 +312,7 @@ function TarjetaEquipo() {
           color="turquesa"
           insignia="Para el negocio con equipo"
           nombre="Equipo"
-          bajada="Tú, tu encargado y tus profesionales, cada uno con su rol y su agenda."
+          bajada="Tú, tu encargado y tus profesionales, cada uno con su rol."
           precio={PRECIO_EQUIPO}
           nota={`IVA incluido · ${PERSONAS_INCLUIDAS_EQUIPO} personas que atienden`}
         />

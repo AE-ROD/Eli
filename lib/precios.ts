@@ -23,6 +23,12 @@ export const PRECIO_PERSONA_ADICIONAL = 4990
 /** Días de prueba gratis, sin tarjeta, contados desde que se crea el negocio. */
 export const DIAS_DE_PRUEBA = 7
 
+/**
+ * El día de la prueba desde el que el dueño ve el aviso en la barra lateral:
+ * el quinto, para que le queden tres días para actuar antes de que termine.
+ */
+export const DIA_DEL_AVISO_DE_PRUEBA = 5
+
 export type PlanId = "independiente" | "equipo"
 
 export interface CalculoDePrecio {

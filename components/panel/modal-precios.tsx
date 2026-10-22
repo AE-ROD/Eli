@@ -129,7 +129,7 @@ export function ModalPrecios({ abierto, onCerrar, diasTrialRestantes }: PropsDeM
               nota={`IVA incluido · ${PERSONAS_INCLUIDAS_EQUIPO} personas que atienden · +${adicional}/mes por cada persona más`}
               fondo="bg-turquesa-suave"
             >
-              <p>Tú, tu encargado y tus profesionales, cada uno con su rol y su agenda.</p>
+              <p>Tú, tu encargado y tus profesionales, cada uno con su rol.</p>
               <dl className="mt-3 flex flex-col gap-1.5">
                 {ROLES.map(({ rol, texto }) => (
                   <div key={rol}>
