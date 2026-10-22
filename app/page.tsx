@@ -18,6 +18,7 @@ const SeccionOficios = dynamic(() => import("@/components/landing/seccion-oficio
 const SeccionFunciones = dynamic(() =>
   import("@/components/landing/seccion-funciones").then((m) => m.SeccionFunciones)
 )
+const SeccionPrecios = dynamic(() => import("@/components/landing/seccion-precios").then((m) => m.SeccionPrecios))
 const SeccionCierre = dynamic(() => import("@/components/landing/seccion-cierre").then((m) => m.SeccionCierre))
 
 export default function PaginaLanding() {
@@ -42,6 +43,7 @@ export default function PaginaLanding() {
         <SeccionReportes />
         <SeccionOficios />
         <SeccionFunciones />
+        <SeccionPrecios />
         <SeccionCierre />
       </main>
       <PieDePagina />

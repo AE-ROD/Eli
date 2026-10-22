@@ -24,10 +24,22 @@ interface PropsDeTarjeta {
   /** La etiqueta que la envuelve. Por defecto, `div`. */
   como?: "div" | "article" | "li" | "section"
   className?: string
+  /** El `id` de su titular, para nombrar un `article` o una `section`. */
+  "aria-labelledby"?: string
   children: ReactNode
 }
 
 /** Blanca, con radio de tarjeta y sombra suave. El relleno lo pone quien la usa. */
-export function Tarjeta({ interactiva = false, como: Etiqueta = "div", className, children }: PropsDeTarjeta) {
-  return <Etiqueta className={cn(variantesDeTarjeta({ interactiva }), className)}>{children}</Etiqueta>
+export function Tarjeta({
+  interactiva = false,
+  como: Etiqueta = "div",
+  className,
+  "aria-labelledby": etiquetadaPor,
+  children,
+}: PropsDeTarjeta) {
+  return (
+    <Etiqueta aria-labelledby={etiquetadaPor} className={cn(variantesDeTarjeta({ interactiva }), className)}>
+      {children}
+    </Etiqueta>
+  )
 }
