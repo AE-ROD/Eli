@@ -18,21 +18,14 @@ interface Props {
   diasTrialRestantes?: number
 }
 
+/** El modal de precios del panel. Todavía no hay cobro: sólo muestra los planes. */
 export function ProveedorDePrecios({ children, diasTrialRestantes }: Props) {
   const [abierto, setAbierto] = useState(false)
 
   return (
     <PreciosContext.Provider value={{ abrirPrecios: () => setAbierto(true) }}>
       {children}
-      <ModalPrecios
-        abierto={abierto}
-        onCerrar={() => setAbierto(false)}
-        diasTrialRestantes={diasTrialRestantes}
-        onSeleccionarPlan={(planId, periodo) => {
-          // TODO: conectar con Stripe Checkout
-          console.log("Plan seleccionado:", planId, periodo)
-        }}
-      />
+      <ModalPrecios abierto={abierto} onCerrar={() => setAbierto(false)} diasTrialRestantes={diasTrialRestantes} />
     </PreciosContext.Provider>
   )
 }
