@@ -195,8 +195,10 @@ Cada vista del panel se arma igual:
 - **Vercel Hobby prohíbe el uso comercial.** Antes de cobrar hay que pasar a Pro
   o mover el despliegue.
 - **Resend:** falta verificar el dominio (SPF/DKIM) o los correos caen en spam.
-- **Pagos online:** Stripe no está integrado y los precios todavía no están
-  definidos.
+- **Pagos online:** los precios están decididos (`docs/PRODUCTO.md`, sección 4,
+  y `lib/precios.ts`), pero todavía no se cobra. Falta elegir la pasarela:
+  Flow quedó descartado (su cargo automático es sólo para empresas) y Mercado
+  Pago está en evaluación.
 - **Content-Security-Policy con nonce.** `proxy.ts` arma la CSP en cada
   petición con un nonce nuevo (`lib/csp.ts`) y el layout raíz fuerza el render
   por petición (`connection()`): sin eso las páginas saldrían del build sin
