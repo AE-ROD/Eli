@@ -3,6 +3,7 @@
 # Variables de entorno: todas, salvo la plantilla sin secretos.
 .env*
 !.env.example
+env.txt
 
 # Llaves, certificados y volcados de base: nunca al repo.
 *.pem

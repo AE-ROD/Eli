@@ -7,9 +7,8 @@ import { ModalBienvenida } from "@/components/panel/modal-bienvenida"
 import { ProveedorDePrecios } from "@/components/panel/contexto-precios"
 import { ProveedorDeBarraLateral } from "@/components/panel/contexto-barra-lateral"
 import { actorDeSesion, puedeGestionarEquipo, puedeGestionarSuscripcion } from "@/lib/permisos"
-
-/** Cuántos días dura la prueba gratis, contados desde que se creó el negocio. */
-const DIAS_DE_PRUEBA = 3
+// Cuántos días dura la prueba gratis, contados desde que se creó el negocio.
+import { DIAS_DE_PRUEBA } from "@/lib/precios"
 
 export default async function LayoutDelPanel({
   children,

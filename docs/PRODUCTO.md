@@ -114,7 +114,20 @@ CommissionChange (quién, cuándo, antes, después) → auditoría
 
 No se cobra comisión sobre las reservas. Eli **administra** el dinero del negocio, no lo toca. Cobrarle un porcentaje a quien usa Eli justamente para repartir porcentajes sería contradictorio, y además obligaría a procesar pagos de terceros.
 
-Precio, límites por plan y prueba gratuita: pendientes (sección 10).
+### Precios (decidido)
+
+En pesos chilenos, **con IVA incluido** y **cobro sólo mensual** (no hay plan anual). Los dos planes traen todas las funciones; lo único que cambia es cuántas personas atienden.
+
+| Plan | Precio | Para quién |
+|---|---|---|
+| **Independiente** | $9.990/mes | Sólo el dueño atiende |
+| **Equipo** | $34.990/mes con 5 personas que atienden incluidas, y **+$4.990/mes por cada persona adicional** | Negocios con equipo |
+
+- **Prueba gratis de 7 días, sin tarjeta**, contados desde que se crea el negocio.
+- **Quién cuenta como persona que atiende:** los profesionales siempre, y el dueño si atiende. El encargado no cuenta, salvo que el dueño le active que también atiende; ese interruptor llega junto con el cobro.
+- **Los cambios en el equipo se cobran desde el mes siguiente**, sin cobros a medio mes.
+- Los valores viven en `lib/precios.ts`: la landing, su calculadora y el modal de precios del panel leen de ahí.
+- **Pasarela de pago: pendiente** (sección 10). Hoy no se cobra nada: el panel muestra los planes y avisa que activarlos llega pronto.
 
 **Regla firme:** no se vende ninguna función que no exista. La versión anterior listaba "reportes exportables" en planes pagos sin haberlos construido — eso es motivo directo de reembolso.
 
@@ -245,7 +258,8 @@ Nada de esto bloquea el trabajo actual, pero cada punto se decide antes de const
 
 | Tema | Qué falta decidir |
 |---|---|
-| **Precio** | Monto de la suscripción, si los límites por plan se aplican en v1 y duración de la prueba gratuita (con o sin tarjeta). |
+| **Cobro** | Los precios ya están decididos (sección 4). Falta la pasarela de pago: Flow quedó descartado (su cargo automático es sólo para empresas) y Mercado Pago está en evaluación. Con el cobro llegan también el interruptor "también atiende" del encargado, qué pasa al terminar la prueba sin plan y cómo el sistema lleva la cuenta de las personas que atienden. |
+| **Códigos promocionales** | Idea aprobada, sin construir. Primero, códigos que alargan la prueba gratis (no dependen de la pasarela); el descuento sobre el primer mes, después de que el cobro funcione. Reglas: uno por negocio y una sola vez, con vencimiento y cupo, no acumulables, sólo los aplica el dueño, validados en el servidor con rate limit y con sus condiciones visibles al aplicarlos. Falta decidir: si el descuento es porcentaje o monto fijo y si cubre las personas adicionales, dónde se ingresa (al crear la cuenta o al activar el plan) y quién crea los códigos (en v1, por SQL). |
 | **Funciones nuevas** | El resto del listado de ideas por incorporar, con qué problema resuelve cada una y si es imprescindible para vender. |
 | **Dinero** | Ya decidido: `Decimal` como formato único (como en comisiones / F-015). Hoy conviven Float (`Service.price`, `Appointment.price`) y centavos Int (tablero); migrarlos es una tarea aparte que cambia el esquema y se ensaya primero en una base de desarrollo, nunca directo en producción. |
 | **Comisiones en el tablero** | Integrar la rama `comisiones` sobre las líneas de atención (sección 3.6). |

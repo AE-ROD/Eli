@@ -247,6 +247,7 @@ fundidos. Donde piden un ícono, va ya en su cuadro (`CuadroDeIcono` o
 | `tarjetas-expandibles.tsx` | `TarjetasExpandibles`: cuatro tarjetas en fila; la activa crece y muestra su línea de pasos. Por debajo de xl se apilan, abiertas | `tarjetas` (justo cuatro: `id`, `icono`, `titulo`, `corto`, `largo`, `pasos`) |
 | `carrusel-de-historias.tsx` | `CarruselDeHistorias`: una tarjeta grande y las demás historias como píldoras a los lados. Avanza solo cada 5 s, con botón de pausa | `historias` (`id`, `oficio`, `titulo`, `texto`, `color`, `escena`), `etiqueta` |
 | `marquesina.tsx` | `Marquesina`: una fila de palabras que se desplaza sin fin. Se detiene con el cursor encima, fuera de pantalla y con su botón de pausa | `palabras`, `etiqueta` |
+| `pila-de-tarjetas.tsx` | `PilaDeTarjetas`: tarjetas que quedan fijas una debajo de otra, cada una un paso más abajo (debajo del encabezado si está flotante); mientras la siguiente pasa encima, la de abajo se achica levemente, sube 8px y se vela con navy. Una tarjeta más alta que la ventana queda fija recién cuando se ve su final. Con movimiento reducido y en ventanas de menos de 640px de alto, tarjetas apiladas comunes | `tarjetas` (`id`, `contenido`: la tarjeta entera, con `rounded-tarjeta`) |
 | `grilla-de-iconos.tsx` | `GrillaDeIconos`: tiles grises unidos por puentes cóncavos | `tiles` (`id`, `titulo`, `icono`) |
 | `usar-direccion-de-scroll.ts` | `useDireccionDeScroll()`: el estado del encabezado (`arriba`, `oculto` o `flotante`); la regla está en `lib/direccion-de-scroll.ts` | — |
 | `usar-coincide-media.ts` | `useCoincideMedia(consulta, enServidor?)`: si la ventana cumple una media query. Mientras hidrata vale lo mismo que el HTML del servidor; es para cuando la consulta decide el marcado (para elegir sólo una curva alcanza `useReducedMotion`) | — |
@@ -347,7 +348,10 @@ reservar, porcentaje de ocupación, bloquear horarios, comisiones calculadas
 solas, pagos en línea, WhatsApp u otras integraciones, app nativa.
 
 **Tampoco:** testimonios, nombres de negocios reales, logos de clientes, cifras
-de marketing ("+500 salones") ni precios de planes, que no están definidos.
+de marketing ("+500 salones").
+
+Los precios de los planes sí se muestran, siempre leídos de `lib/precios.ts`,
+nunca escritos a mano en la pantalla.
 
 Una pantalla que promete algo que al hacer clic no pasa es el mismo problema
 que los datos inventados.

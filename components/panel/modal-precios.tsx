@@ -1,119 +1,95 @@
 "use client"
 
-import { useState } from "react"
 import { AnimatePresence } from "framer-motion"
-import { Check, X as XIcon, Zap, Users, Building2, Clock, Star, ArrowRight, Sparkles, type LucideIcon } from "lucide-react"
-import { BotonPrimario } from "@/components/comunes/boton-primario"
+import { Sparkles, UserRound, Users, type LucideIcon } from "lucide-react"
+import type { ReactNode } from "react"
+import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Insignia } from "@/components/comunes/insignia"
+import { Aviso } from "@/components/panel/aviso"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
+import type { ColorDeModulo } from "@/lib/modulos"
+import {
+  DIAS_DE_PRUEBA,
+  formatearPesos,
+  PERSONAS_INCLUIDAS_EQUIPO,
+  PRECIO_EQUIPO,
+  PRECIO_INDEPENDIENTE,
+  PRECIO_PERSONA_ADICIONAL,
+} from "@/lib/precios"
 import { cn } from "@/lib/utils"
 
 /*
- * Ojo: los planes, los precios y las promesas de abajo son los de antes del
- * rediseño, que no salen de ninguna decisión del dueño (`docs/PRODUCTO.md`,
- * sección 10: el precio está pendiente). El rediseño sólo cambió cómo se ven.
+ * Los mismos dos planes y los mismos textos que la sección de precios de la
+ * landing (`components/landing/seccion-precios.tsx`), en corto. Los montos
+ * salen de `lib/precios.ts`. Todavía no hay cobro: no hay botón para elegir
+ * un plan, sólo el aviso de que llega.
  */
 
-const VALOR_ELI = [
-  { icono: Clock, texto: "Ahorra 2–4 horas por semana en coordinación de citas" },
-  { icono: Zap, texto: "Cero doble-reservas — el sistema bloquea horarios automáticamente" },
-  { icono: Users, texto: "Tus clientes llegan con recordatorio por email, no te olvidan" },
-  { icono: Star, texto: "Página profesional de reservas — sin WhatsApp, sin llamadas" },
-]
-
-const PLANES = [
-  {
-    id: "starter",
-    nombre: "Starter",
-    icono: Zap,
-    descripcion: "Para profesionales independientes",
-    mensual: 12,
-    anual: 99,
-    ahorroAnual: 45,
-    destacado: false,
-    features: [
-      { texto: "1 profesional", incluido: true },
-      { texto: "Agenda y calendario completo", incluido: true },
-      { texto: "Página pública de reservas", incluido: true },
-      { texto: "Gestión de clientes", incluido: true },
-      { texto: "Emails de confirmación automáticos", incluido: true },
-      { texto: "Recordatorios 24h antes de la cita", incluido: true },
-      { texto: "Modal de onboarding guiado", incluido: true },
-      { texto: "Equipo de trabajadores", incluido: false },
-    ],
-  },
-  {
-    id: "equipo",
-    nombre: "Equipo",
-    icono: Users,
-    descripcion: "Para negocios con hasta 5 personas",
-    mensual: 29,
-    anual: 239,
-    ahorroAnual: 109,
-    destacado: true,
-    features: [
-      { texto: "Hasta 5 trabajadores", incluido: true },
-      { texto: "Agenda y calendario completo", incluido: true },
-      { texto: "Página pública de reservas", incluido: true },
-      { texto: "Gestión de clientes", incluido: true },
-      { texto: "Emails de confirmación automáticos", incluido: true },
-      { texto: "Recordatorios 24h antes de la cita", incluido: true },
-      { texto: "Horarios independientes por trabajador", incluido: true },
-      { texto: "Panel de equipo e invitaciones", incluido: true },
-    ],
-  },
-  {
-    id: "pro",
-    nombre: "Pro",
-    icono: Building2,
-    descripcion: "Para salones con equipo grande",
-    mensual: 59,
-    anual: 479,
-    ahorroAnual: 229,
-    destacado: false,
-    features: [
-      { texto: "Trabajadores ilimitados", incluido: true },
-      { texto: "Agenda y calendario completo", incluido: true },
-      { texto: "Página pública de reservas", incluido: true },
-      { texto: "Gestión de clientes", incluido: true },
-      { texto: "Emails de confirmación automáticos", incluido: true },
-      { texto: "Recordatorios 24h antes de la cita", incluido: true },
-      { texto: "Horarios independientes por trabajador", incluido: true },
-      { texto: "Panel de equipo e invitaciones", incluido: true },
-    ],
-  },
-]
-
-type Periodo = "mensual" | "anual"
+const ROLES = [
+  { rol: "Dueño", texto: "Ve todo el negocio. El plan y el pago son solo tuyos." },
+  { rol: "Encargado", texto: "Organiza la agenda, los servicios y el equipo. No cuenta como persona que atiende." },
+  { rol: "Profesional", texto: "Ve su agenda, sus citas y lo que lleva cobrado. Siempre cuenta." },
+] as const
 
 interface PropsDeModalPrecios {
   abierto: boolean
   onCerrar: () => void
   diasTrialRestantes?: number
-  onSeleccionarPlan?: (planId: string, periodo: Periodo) => void
 }
 
-/** Un ícono en un cuadro gris: los planes no son un módulo, no llevan pastel. */
-function CuadroGris({ icono: Icono, className }: { icono: LucideIcon; className?: string }) {
+/** Un plan en corto: ícono, insignia, nombre, precio y lo que lo distingue. */
+function Plan({
+  id,
+  icono,
+  color,
+  insignia,
+  nombre,
+  precio,
+  nota,
+  fondo,
+  children,
+}: {
+  id: string
+  icono: LucideIcon
+  color: ColorDeModulo
+  insignia: string
+  nombre: string
+  precio: number
+  nota: string
+  fondo: string
+  children: ReactNode
+}) {
   return (
-    <span
-      aria-hidden="true"
-      className={cn("grid size-10 shrink-0 place-items-center rounded-[12px] bg-superficie text-navy squircle", className)}
-    >
-      <Icono className="size-5" strokeWidth={1.75} />
-    </span>
+    <li className={cn("flex flex-col rounded-panel p-5 squircle", fondo)}>
+      <div className="flex flex-wrap items-center gap-2.5">
+        <CuadroDeIcono icono={icono} color={color} activo />
+        <Insignia className="bg-tarjeta">{insignia}</Insignia>
+      </div>
+      <h3 id={id} className="mt-4 font-serif text-[1.75rem] leading-[1.1] font-medium tracking-[-0.5px]">
+        {nombre}
+      </h3>
+      <p className="mt-3 flex items-baseline gap-1">
+        <span className="text-[2.25rem] leading-none font-medium tracking-[-1px] tabular-nums">
+          {formatearPesos(precio)}
+        </span>
+        <span>/mes</span>
+      </p>
+      {/* Navy y no gris: el texto secundario no llega al contraste AA sobre el azul suave. */}
+      <p className="mt-1.5 text-[13px]">{nota}</p>
+      <div className="mt-4 text-sm leading-snug">{children}</div>
+    </li>
   )
 }
 
-export function ModalPrecios({ abierto, onCerrar, diasTrialRestantes, onSeleccionarPlan }: PropsDeModalPrecios) {
-  const [periodo, setPeriodo] = useState<Periodo>("anual")
+export function ModalPrecios({ abierto, onCerrar, diasTrialRestantes }: PropsDeModalPrecios) {
+  const adicional = formatearPesos(PRECIO_PERSONA_ADICIONAL)
 
   return (
     <AnimatePresence>
       {abierto && (
         <MarcoDeModal
-          titulo="Eli trabaja para que tú no tengas que hacerlo"
-          descripcion="Deja de coordinar citas por WhatsApp. Empieza gratis 3 días, sin tarjeta."
+          titulo="Dos planes. Las mismas funciones."
+          descripcion="Lo único que cambia es cuántas personas atienden. En pesos chilenos, con IVA incluido."
           ancho="xl"
           alCerrar={onCerrar}
         >
@@ -127,111 +103,53 @@ export function ModalPrecios({ abierto, onCerrar, diasTrialRestantes, onSeleccio
             </p>
           )}
 
-          {/* Valor que entrega */}
-          <ul className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {VALOR_ELI.map((valor) => (
-              <li key={valor.texto} className="flex items-start gap-3 rounded-[20px] bg-superficie p-3 squircle sm:flex-col">
-                <CuadroGris icono={valor.icono} className="size-9 bg-tarjeta" />
-                <span className="text-[13px] leading-snug text-texto-2">{valor.texto}</span>
-              </li>
-            ))}
+          <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Plan
+              id="modal-plan-independiente"
+              icono={UserRound}
+              color="azul"
+              insignia="Para quien atiende solo"
+              nombre="Independiente"
+              precio={PRECIO_INDEPENDIENTE}
+              nota="IVA incluido"
+              fondo="bg-azul-suave"
+            >
+              <p>Tu agenda, tu página de reservas, el tablero del día y los reportes. Todo Eli, para ti.</p>
+              <p className="mt-3">
+                ¿Sumas a alguien? Te pasas a Equipo y tu agenda, tus clientes y tu historial siguen ahí.
+              </p>
+            </Plan>
+            <Plan
+              id="modal-plan-equipo"
+              icono={Users}
+              color="turquesa"
+              insignia="Para el negocio con equipo"
+              nombre="Equipo"
+              precio={PRECIO_EQUIPO}
+              nota={`IVA incluido · ${PERSONAS_INCLUIDAS_EQUIPO} personas que atienden · +${adicional}/mes por cada persona más`}
+              fondo="bg-turquesa-suave"
+            >
+              <p>Tú, tu encargado y tus profesionales, cada uno con su rol.</p>
+              <dl className="mt-3 flex flex-col gap-1.5">
+                {ROLES.map(({ rol, texto }) => (
+                  <div key={rol}>
+                    <dt className="inline font-semibold">{rol}: </dt>
+                    <dd className="inline">{texto}</dd>
+                  </div>
+                ))}
+              </dl>
+            </Plan>
           </ul>
 
-          {/* Mensual o anual: dos botones, el elegido en navy */}
-          <div className="mb-8 flex flex-wrap items-center justify-center gap-3">
-            <div role="group" aria-label="Período de facturación" className="inline-flex rounded-full bg-superficie p-1">
-              {(["mensual", "anual"] as const).map((opcion) => (
-                <button
-                  key={opcion}
-                  type="button"
-                  aria-pressed={periodo === opcion}
-                  onClick={() => setPeriodo(opcion)}
-                  className={cn(
-                    "h-10 rounded-full px-5 text-sm font-medium anillo-foco transition-colors duration-150 ease-suave",
-                    periodo === opcion ? "bg-navy text-white" : "text-navy hover:bg-tarjeta"
-                  )}
-                >
-                  {opcion === "mensual" ? "Mensual" : "Anual"}
-                </button>
-              ))}
-            </div>
-            <Insignia>Ahorra hasta 32%</Insignia>
-          </div>
+          <p className="mt-5 text-center text-[13px] text-texto-2">
+            Los dos planes traen todo Eli, sin funciones bloqueadas. Los cambios en tu equipo se cobran desde el mes
+            siguiente, sin cobros a medio mes.
+          </p>
 
-          {/* Planes */}
-          <ul className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {PLANES.map((plan) => {
-              const precio = periodo === "mensual" ? plan.mensual : Math.round(plan.anual / 12)
-              const precioTotal = periodo === "anual" ? plan.anual : null
-
-              return (
-                <li
-                  key={plan.id}
-                  className={cn(
-                    "relative flex flex-col rounded-panel p-5 squircle",
-                    plan.destacado ? "bg-superficie inset-ring-2 inset-ring-navy" : "bg-tarjeta inset-ring-1 inset-ring-borde"
-                  )}
-                >
-                  {plan.destacado && (
-                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-navy px-3 py-1 text-xs font-semibold whitespace-nowrap text-white">
-                      Más popular
-                    </span>
-                  )}
-
-                  {/* Cabecera del plan */}
-                  <div className="mb-4 flex items-center gap-3">
-                    <CuadroGris icono={plan.icono} className={plan.destacado ? "bg-tarjeta" : undefined} />
-                    <div className="min-w-0">
-                      <h3 className="font-semibold">{plan.nombre}</h3>
-                      <p className="text-[13px] text-texto-2">{plan.descripcion}</p>
-                    </div>
-                  </div>
-
-                  {/* Precio */}
-                  <div className="mb-5">
-                    <p className="flex items-end gap-1">
-                      <span className="text-[2rem] leading-none font-medium tracking-[-1px] tabular-nums">${precio}</span>
-                      <span className="mb-0.5 text-sm text-texto-2">USD/mes</span>
-                    </p>
-                    {precioTotal && (
-                      <p className="mt-1.5 text-[13px] text-texto-2">
-                        ${precioTotal} USD/año · ahorras ${plan.ahorroAnual}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Lo que incluye: lo que no, tachado y con una cruz, no sólo más claro. */}
-                  <ul className="mb-6 flex-1 space-y-2">
-                    {plan.features.map((feature) => (
-                      <li key={feature.texto} className="flex items-start gap-2 text-[13px] leading-snug">
-                        {feature.incluido ? (
-                          <Check className="mt-0.5 size-4 shrink-0 text-navy" aria-hidden="true" strokeWidth={2} />
-                        ) : (
-                          <XIcon className="mt-0.5 size-4 shrink-0 text-texto-2" aria-hidden="true" strokeWidth={2} />
-                        )}
-                        <span className={feature.incluido ? "text-navy" : "text-texto-2 line-through"}>
-                          {!feature.incluido && <span className="sr-only">No incluye: </span>}
-                          {feature.texto}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  <BotonPrimario
-                    anchoCompleto
-                    variante={plan.destacado ? "primario" : "secundario"}
-                    icono={<ArrowRight className="size-4" aria-hidden="true" />}
-                    iconoDerecha
-                    onClick={() => onSeleccionarPlan?.(plan.id, periodo)}
-                  >
-                    Elegir {plan.nombre}
-                  </BotonPrimario>
-                </li>
-              )
-            })}
-          </ul>
-
-          <p className="mt-6 text-center text-[13px] text-texto-2">3 días de prueba gratuita sin tarjeta · Cancela cuando quieras</p>
+          <Aviso tono="info" className="mt-5">
+            Muy pronto vas a poder activar tu plan desde aquí. Mientras tanto, tu prueba de {DIAS_DE_PRUEBA} días es
+            gratis y sin tarjeta.
+          </Aviso>
         </MarcoDeModal>
       )}
     </AnimatePresence>

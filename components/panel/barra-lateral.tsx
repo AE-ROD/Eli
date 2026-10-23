@@ -22,6 +22,7 @@ import {
   type SeccionDelPanel,
 } from "@/components/panel/secciones-del-panel"
 import { moduloPorId } from "@/lib/modulos"
+import { DIA_DEL_AVISO_DE_PRUEBA, DIAS_DE_PRUEBA } from "@/lib/precios"
 import { cn } from "@/lib/utils"
 
 /** Lo que se puede enfocar con Tab dentro del cajón. */
@@ -121,7 +122,11 @@ export function BarraLateral({ usuario, puedeGestionarSuscripcion, diasTrialRest
     }
   }, [cajonAbierto, cerrarCajon, enfocarBotonMenu])
 
-  const hayPrueba = puedeGestionarSuscripcion && diasTrialRestantes !== undefined && diasTrialRestantes <= 3
+  // Del quinto día en adelante quedan 3 o menos (los días restantes se redondean hacia arriba).
+  const hayPrueba =
+    puedeGestionarSuscripcion &&
+    diasTrialRestantes !== undefined &&
+    diasTrialRestantes <= DIAS_DE_PRUEBA - DIA_DEL_AVISO_DE_PRUEBA + 1
   const textoDeLaPrueba =
     diasTrialRestantes !== undefined && diasTrialRestantes > 0
       ? `${diasTrialRestantes} día${diasTrialRestantes !== 1 ? "s" : ""} de prueba`
