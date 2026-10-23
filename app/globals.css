@@ -312,3 +312,30 @@
     }
   }
 }
+
+/*
+ * El afiche del QR del local (`app/dashboard/_componentes/qr-del-local.tsx`).
+ * Vive en un portal al final del <body> y no se ve en pantalla. Al tocar
+ * "Imprimir afiche", <html> lleva `data-imprimiendo-afiche` mientras dura la
+ * impresión: entonces la hoja impresa es sólo el afiche, sin el panel. Fuera
+ * de las capas a propósito, para ganarle a cualquier utilidad de display.
+ */
+[data-afiche] {
+  display: none;
+}
+
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  html[data-imprimiendo-afiche] body > :not([data-afiche]) {
+    display: none !important;
+  }
+
+  html[data-imprimiendo-afiche] [data-afiche] {
+    display: block;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}

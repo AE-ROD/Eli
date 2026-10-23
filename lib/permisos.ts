@@ -72,6 +72,18 @@ export const puedeEditarComisiones = esDueño
 export const puedeGestionarSuscripcion = esDueño
 
 /**
+ * La lista "Deja tu negocio listo" del inicio y marcar el enlace como
+ * compartido: es la puesta en marcha de la prueba, que es del dueño.
+ */
+export const veLaListaDeInicio = esDueño
+
+/**
+ * El enlace de invitación a otros negocios y su estado: el premio son días de
+ * la prueba de Eli, que es del dueño (`puedeGestionarSuscripcion`).
+ */
+export const puedeInvitarNegocios = esDueño
+
+/**
  * Elegir a qué profesional va una cita. Es la otra cara de `memberIdParaCita`:
  * a quien no puede, el servidor lo asigna a sí mismo mande lo que mande.
  */

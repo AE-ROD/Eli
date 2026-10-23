@@ -813,3 +813,73 @@ describe("POST /api/reservar/[slug]/confirmar: datos inválidos", () => {
     expect(citasCreadas()).toHaveLength(0)
   })
 })
+
+/**
+ * Referidos (`docs/PRODUCTO.md`, sección 4): el negocio 1 llegó por el enlace
+ * del negocio 2. Su primera reserva pública le suma 7 días a la prueba del 2,
+ * una sola vez; y si eso falla, la reserva se confirma igual.
+ */
+describe("POST /api/reservar/[slug]/confirmar: el premio a quien invitó", () => {
+  const FIN_DEL_2 = new Date("2030-01-05T12:00:00.000Z")
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    relojEn("2030-01-01T12:00:00.000Z")
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 9 })
+    const datos = datosBase()
+    base.reiniciar({
+      ...datos,
+      business: [
+        { ...datos.business[0], invitadoPorId: OTRO_NEGOCIO, pruebaTerminaEl: new Date("2030-01-03T12:00:00.000Z") },
+        { ...datos.business[1], pruebaTerminaEl: FIN_DEL_2 },
+      ],
+      workSchedule: [franja({ startTime: "09:00", endTime: "18:00" })],
+    })
+  })
+
+  const negocio = (id: string) => base.buscar("business", { id })[0]
+
+  it("la primera reserva pública del invitado suma 7 días a quien lo invitó", async () => {
+    expect((await confirmar("10:00")).status).toBe(201)
+
+    expect(negocio(NEGOCIO).referidoContabilizadoAt).toBeInstanceOf(Date)
+    expect(negocio(OTRO_NEGOCIO).extensionPorReferidoAt).toBeInstanceOf(Date)
+    expect(negocio(OTRO_NEGOCIO).pruebaTerminaEl).toEqual(new Date("2030-01-12T12:00:00.000Z"))
+    // El invitado no gana días por haber sido invitado.
+    expect(negocio(NEGOCIO).pruebaTerminaEl).toEqual(new Date("2030-01-03T12:00:00.000Z"))
+  })
+
+  it("la segunda reserva no suma de nuevo", async () => {
+    await confirmar("10:00")
+    await confirmar("12:00")
+
+    expect(citasCreadas()).toHaveLength(2)
+    expect(negocio(OTRO_NEGOCIO).pruebaTerminaEl).toEqual(new Date("2030-01-12T12:00:00.000Z"))
+  })
+
+  it("si contabilizar falla, la reserva se confirma igual y queda para la próxima", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {})
+    base.prisma.business.updateMany.mockRejectedValueOnce(new Error("se cayó la base"))
+
+    const { status } = await confirmar("10:00")
+
+    expect(status).toBe(201)
+    expect(citasCreadas()).toHaveLength(1)
+    expect(negocio(NEGOCIO).referidoContabilizadoAt).toBeNull()
+    expect(negocio(OTRO_NEGOCIO).pruebaTerminaEl).toEqual(FIN_DEL_2)
+    error.mockRestore()
+  })
+
+  it("un negocio que nadie invitó no toca a ningún otro", async () => {
+    const datos = datosBase()
+    base.reiniciar({
+      ...datos,
+      business: [datos.business[0], { ...datos.business[1], pruebaTerminaEl: FIN_DEL_2 }],
+      workSchedule: [franja({ startTime: "09:00", endTime: "18:00" })],
+    })
+
+    expect((await confirmar("10:00")).status).toBe(201)
+    expect(base.prisma.business.updateMany).not.toHaveBeenCalled()
+    expect(negocio(OTRO_NEGOCIO).pruebaTerminaEl).toEqual(FIN_DEL_2)
+  })
+})

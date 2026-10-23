@@ -23,6 +23,7 @@ const PREFIJOS_SIN_LIMITE_DE_PANEL = [
   "/api/cron", // Lo llama Vercel con un secreto, no una persona
   "/api/reservar", // Página pública de reservas, sin sesión
   "/api/equipo/invitacion", // Aceptar invitación: por token, antes de tener sesión
+  "/api/correos/baja", // Baja de los correos de prueba: por token firmado, sin sesión; su propio límite por IP
 ]
 
 function esRutaDePanel(pathname: string): boolean {

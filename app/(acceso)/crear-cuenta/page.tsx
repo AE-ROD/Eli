@@ -6,7 +6,7 @@ import { signIn } from "next-auth/react"
 import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import type { RubroId } from "@/lib/rubros"
-import { crearCuenta } from "../_datos"
+import { crearCuenta, recordarInvitacion } from "../_datos"
 import { AccesoConGoogle } from "../_componentes/acceso-con-google"
 import { AvisoDeError } from "../_componentes/aviso-de-error"
 import { CamposDelNegocio } from "../_componentes/campos-del-negocio"
@@ -18,6 +18,15 @@ import {
 } from "../_componentes/errores-de-validacion"
 import { IndicadorDePasos } from "../_componentes/indicador-de-pasos"
 import { MarcoDeAcceso, PreguntaConEnlace } from "../_componentes/marco-de-acceso"
+
+/**
+ * El código de `?invita=` si se llegó por el enlace de invitación de otro
+ * negocio. Se lee de la URL al enviar, no al dibujar: así la página no
+ * necesita `useSearchParams` ni un `Suspense` alrededor.
+ */
+function codigoDeInvitacion(): string | undefined {
+  return new URLSearchParams(window.location.search).get("invita") ?? undefined
+}
 
 export default function PaginaCrearCuenta() {
   const router = useRouter()
@@ -67,6 +76,7 @@ export default function PaginaCrearCuenta() {
       contrasena: formulario.contrasena,
       nombreNegocio: formulario.nombreNegocio,
       tipoNegocio,
+      invita: codigoDeInvitacion(),
     })
 
     if (!registro.ok) {
@@ -95,6 +105,15 @@ export default function PaginaCrearCuenta() {
       setError("Error de conexión. Inténtalo de nuevo.")
       setCargando(false)
     }
+  }
+
+  // Con Google el negocio se crea a la vuelta, en completar-perfil: el código
+  // de invitación se deja antes en una cookie del servidor. Si eso falla, se
+  // sigue igual: la cuenta se crea, sólo que sin invitación.
+  const registrarseConGoogle = async () => {
+    const invita = codigoDeInvitacion()
+    if (invita) await recordarInvitacion(invita)
+    await signIn("google", { callbackUrl: "/dashboard" })
   }
 
   // Lo que se valida acá va debajo de su campo; lo que responde el servidor, arriba del botón.
@@ -205,7 +224,7 @@ export default function PaginaCrearCuenta() {
       </form>
 
       {pasoUno && (
-        <AccesoConGoogle alElegir={() => signIn("google", { callbackUrl: "/dashboard" })}>
+        <AccesoConGoogle alElegir={registrarseConGoogle}>
           Registrarse con Google
         </AccesoConGoogle>
       )}

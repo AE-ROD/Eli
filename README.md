@@ -20,11 +20,11 @@ Necesita un `.env` con:
 |---|---|
 | `DATABASE_URL` | Postgres (Neon), conexión con pool. |
 | `DIRECT_URL` | Postgres directo. Sólo lo usan las migraciones. |
-| `NEXTAUTH_URL` / `NEXTAUTH_SECRET` | Sesiones. |
+| `NEXTAUTH_URL` / `NEXTAUTH_SECRET` | Sesiones. `NEXTAUTH_URL` arma los enlaces de los correos; de `NEXTAUTH_SECRET` se deriva la firma del enlace de baja de los correos de prueba. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Entrar con Google. |
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Correos. Sin esto no se envían, pero nada se rompe. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Rate limiting. En desarrollo, sin esto queda desactivado. **En producción es obligatorio:** sin él el límite falla cerrado y todo endpoint responde 429. |
-| `CRON_SECRET` | Protege el cron de recordatorios. |
+| `CRON_SECRET` | Protege los crons (recordatorios y correos del ciclo de prueba). |
 
 ## Comandos
 
@@ -81,6 +81,29 @@ Quedan un negocio de ejemplo y tres cuentas —`duena@demo.eli`,
 corta de ver qué cambia con cada uno. La contraseña la imprime el seed al
 terminar (está en `prisma/seed.ts`).
 
+
+## Migraciones en producción
+
+Las migraciones nuevas se aplican a mano con `psql` contra `DIRECT_URL`
+(`-v ON_ERROR_STOP=1 -f prisma/migrations/<carpeta>/migration.sql`) y después
+se marcan como aplicadas para que Prisma no las vuelva a correr:
+
+```bash
+npx prisma migrate resolve --applied <carpeta>
+```
+
+### `20261022120000_ganchos_de_activacion`
+
+Rompe la compatibilidad en los dos sentidos: el código viejo falla al crear
+negocios con la migración aplicada (`pruebaTerminaEl` y `codigoInvitacion` son
+NOT NULL sin default) y el código nuevo falla sin ella. Por eso:
+
+1. Dejar el despliegue del código nuevo construido y listo para promover.
+2. En una ventana tranquila (sin registros en curso), aplicar la migración. Va
+   envuelta en `BEGIN; … COMMIT;`: si falla, no queda nada a medias.
+3. Inmediatamente después, promover el despliegue del código nuevo.
+4. `npx prisma migrate resolve --applied 20261022120000_ganchos_de_activacion`.
+
 ## Cómo está organizado
 
 ```
@@ -123,6 +146,11 @@ lib/                          Lógica compartida, cada archivo con su test al la
                               la etiqueta: lo que puede hacer cada uno está en permisos.ts
   rubros.ts                   Los tres rubros que atiende Eli
   modulos.ts                  Los cinco módulos del panel: nombre, frase, ruta y color
+  correos-de-prueba.ts        Qué correo del ciclo de prueba le toca hoy a un negocio
+  baja-de-correos.ts          El token firmado del enlace "Dejar de recibir estos correos"
+  cron.ts                     La autorización de los crons (CRON_SECRET)
+  enviar-correo-de-prueba.ts  (servidor) Manda un correo del ciclo de prueba, con su
+                              candado en CorreoDeCuenta para no repetirlo
   direccion-de-scroll.ts      Si el encabezado de la landing se muestra, se oculta o flota
   validaciones.ts             Esquemas zod compartidos: registro, reserva y contraseña.
                               El resto de los endpoints define el suyo en su route.ts
@@ -146,7 +174,8 @@ types/                        Tipos que extienden librerías (la sesión de Next
 public/images/                El logo
 docs/                         Producto (PRODUCTO.md) y sistema de diseño (diseno/)
 prisma.config.ts              Dónde están el esquema y las migraciones, y el comando del seed
-vercel.json                   El cron diario de recordatorios
+vercel.json                   Los crons diarios: recordatorios (9:00 UTC) y correos del
+                              ciclo de prueba (13:00 UTC, ~10:00 en Chile)
 .github/workflows/ci.yml      CI: lint, tipos, tests y build en cada PR a main
 ```
 

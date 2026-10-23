@@ -10,10 +10,15 @@ import { cn } from "@/lib/utils"
 interface PropsDeEnlaceDeReservas {
   /** El slug del negocio: la página pública es `/reservar/<slug>`. */
   slug: string
+  /**
+   * Después de copiar (para la lista de inicio: el enlace ya se compartió).
+   * Lo que haga no frena ni deshace el copiado.
+   */
+  alCopiar?: () => void
 }
 
 /** El enlace público de reservas del negocio, para copiarlo o abrirlo. */
-export function EnlaceDeReservas({ slug }: PropsDeEnlaceDeReservas) {
+export function EnlaceDeReservas({ slug, alCopiar }: PropsDeEnlaceDeReservas) {
   const idDelTitulo = useId()
   const [copiado, setCopiado] = useState(false)
   const enlace =
@@ -23,10 +28,16 @@ export function EnlaceDeReservas({ slug }: PropsDeEnlaceDeReservas) {
     await navigator.clipboard.writeText(enlace)
     setCopiado(true)
     setTimeout(() => setCopiado(false), 2000)
+    alCopiar?.()
   }
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    // `id`: a dónde lleva el paso "Comparte tu enlace" de la lista de inicio.
+    <section
+      id="enlace-de-reservas"
+      aria-labelledby={idDelTitulo}
+      className={cn(TARJETA_DEL_PANEL, "scroll-mt-24 p-5 sm:p-6")}
+    >
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo="Tu enlace de reservas"

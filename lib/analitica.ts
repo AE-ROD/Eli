@@ -1,11 +1,12 @@
 import type { BeforeSendEvent } from "@vercel/analytics/next"
 
 /**
- * Rutas cuyo segundo segmento es un token de un solo uso: el enlace de
- * restablecer la contraseña y el de unirse a un equipo. Sólo esas, y sólo en
- * la raíz: `/dashboard/unirse/x` o `/unirse-ahora/x` no son el enlace.
+ * Rutas cuyo segundo segmento es un token: el enlace de restablecer la
+ * contraseña, el de unirse a un equipo y el de dejar de recibir correos (este
+ * no vence y lleva el id del usuario). Sólo esas, y sólo en la raíz:
+ * `/dashboard/unirse/x` o `/unirse-ahora/x` no son el enlace.
  */
-const RUTAS_CON_TOKEN = /^\/(restablecer-contrasena|unirse)\/[^/]+/
+const RUTAS_CON_TOKEN = /^\/(restablecer-contrasena|unirse|baja-de-correos)\/[^/]+/
 
 /**
  * La URL que se le manda a Vercel Analytics, con el token reemplazado por

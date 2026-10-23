@@ -7,6 +7,8 @@ import { reservaSchema } from "@/lib/validaciones"
 import { horaAMinutos } from "@/lib/horario-dia"
 import { cabeEnAtencion, franjasDeAtencion } from "@/lib/horario-de-atencion"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
+import { contabilizarReferido } from "@/lib/referidos"
+import { registrarError } from "@/lib/registro-de-errores"
 import {
   MAX_RESERVAS_FUTURAS_POR_CONTACTO,
   MAX_RESERVAS_PUBLICAS_POR_DIA,
@@ -183,6 +185,8 @@ export async function POST(
       id: true,
       name: true,
       timezone: true,
+      invitadoPorId: true,
+      referidoContabilizadoAt: true,
       user: { select: { email: true } },
     },
   })
@@ -263,6 +267,17 @@ export async function POST(
       return NextResponse.json({ error: resultado.error }, { status: resultado.status })
     }
     const cita = resultado.cita
+
+    // Referidos (`docs/PRODUCTO.md`, sección 4): la primera reserva pública de
+    // un negocio invitado le suma días a la prueba de quien lo invitó. Va
+    // después de la reserva y aparte: si falla, la cita ya está creada y el
+    // cliente no se entera; la próxima reserva lo vuelve a intentar.
+    // `contabilizarReferido` es idempotente ante dos reservas simultáneas.
+    if (negocio.invitadoPorId && !negocio.referidoContabilizadoAt) {
+      await contabilizarReferido(negocio.id, ahora).catch((error) => {
+        registrarError("contabilizando el referido", error)
+      })
+    }
 
     // Enviar emails en paralelo (sin bloquear la respuesta si fallan)
     const emailsPromises: Promise<unknown>[] = []

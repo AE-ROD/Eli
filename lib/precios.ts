@@ -24,6 +24,12 @@ export const PRECIO_PERSONA_ADICIONAL = 4990
 export const DIAS_DE_PRUEBA = 7
 
 /**
+ * Días que suma a la prueba de quien invita la primera reserva pública de un
+ * negocio invitado. Se dan una sola vez en total por negocio.
+ */
+export const DIAS_EXTRA_POR_REFERIDO = 7
+
+/**
  * El día de la prueba desde el que el dueño ve el aviso en la barra lateral:
  * el quinto, para que le queden tres días para actuar antes de que termine.
  */

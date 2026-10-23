@@ -38,9 +38,13 @@ export async function leerDisponibilidad(
   return resultado.ok ? { ok: true, datos: resultado.datos.slots } : resultado
 }
 
-/** Los campos opcionales vacíos no se mandan: el servidor los guarda como nulos. */
-export async function confirmarReserva(slug: string, datos: DatosDeReserva): Promise<Resultado> {
-  return pedir(
+/**
+ * Los campos opcionales vacíos no se mandan: el servidor los guarda como nulos.
+ * Devuelve el id de la cita creada, que ya venía en la respuesta: es el UID
+ * estable del evento de calendario (`lib/calendario.ts`).
+ */
+export async function confirmarReserva(slug: string, datos: DatosDeReserva): Promise<Resultado<{ citaId: string }>> {
+  return pedir<{ citaId: string }>(
     `/api/reservar/${slug}/confirmar`,
     "Error al confirmar la reserva",
     conJson("POST", {

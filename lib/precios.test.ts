@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import {
   calcularPrecio,
   DIAS_DE_PRUEBA,
+  DIAS_EXTRA_POR_REFERIDO,
   formatearPesos,
   PERSONAS_INCLUIDAS_EQUIPO,
   PRECIO_EQUIPO,
@@ -16,6 +17,7 @@ describe("los precios decididos", () => {
     expect(PERSONAS_INCLUIDAS_EQUIPO).toBe(5)
     expect(PRECIO_PERSONA_ADICIONAL).toBe(4990)
     expect(DIAS_DE_PRUEBA).toBe(7)
+    expect(DIAS_EXTRA_POR_REFERIDO).toBe(7)
   })
 })
 

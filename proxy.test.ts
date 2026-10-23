@@ -93,6 +93,8 @@ describe("proxy — rate limit de los endpoints del panel", () => {
     "/api/reservar/mi-negocio/disponibilidad",
     "/api/equipo/invitacion/token-123",
     "/api/equipo/invitacion/token-123/aceptar",
+    "/api/cron/correos-de-prueba",
+    "/api/correos/baja",
   ])("no aplica el límite del panel a %s (tiene el suyo propio, o no corresponde)", async (ruta) => {
     const { default: proxy } = await import("./proxy")
 
@@ -160,7 +162,7 @@ describe("proxy — Content-Security-Policy con nonce", () => {
     const { default: proxy } = await import("./proxy")
     mockGetToken.mockResolvedValue(null)
 
-    for (const ruta of ["/", "/iniciar-sesion", "/crear-cuenta", "/reservar/mi-negocio", "/dashboardx"]) {
+    for (const ruta of ["/", "/iniciar-sesion", "/crear-cuenta", "/reservar/mi-negocio", "/dashboardx", "/baja-de-correos/abc.def"]) {
       const res = await proxy(pedidoFalso(ruta))
       expect(res.headers.get("location")).toBeNull()
     }

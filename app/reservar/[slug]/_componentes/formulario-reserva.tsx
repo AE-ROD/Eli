@@ -16,6 +16,8 @@ import { formatearDuracionDeServicio } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
 import { EncabezadoDeReserva } from "./encabezado-de-reserva"
 import { IndicadorDePasos, PASOS_DE_RESERVA } from "./indicador-de-pasos"
+import { AgregarAlCalendario } from "./agregar-al-calendario"
+import { InvitacionAEli } from "./pie-de-eli"
 import { ResumenDeReserva } from "./resumen-de-reserva"
 import { SelectorServicio, type ServicioPublico } from "./selector-servicio"
 import { SelectorFechaHora } from "./selector-fecha-hora"
@@ -57,7 +59,9 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
   const [telefono, setTelefono] = useState("")
   const [comentarios, setComentarios] = useState("")
   const [enviando, setEnviando] = useState(false)
-  const [confirmado, setConfirmado] = useState(false)
+  /** El id de la cita creada: con él, la reserva está confirmada. */
+  const [citaId, setCitaId] = useState<string | null>(null)
+  const confirmado = citaId !== null
   const [error, setError] = useState("")
 
   const idDeComentarios = useId()
@@ -86,7 +90,7 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
     })
     setEnviando(false)
 
-    if (resultado.ok) setConfirmado(true)
+    if (resultado.ok) setCitaId(resultado.datos.citaId)
     else setError(resultado.error)
   }
 
@@ -106,7 +110,7 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
     titulo.current?.focus()
   }, [pantalla])
 
-  if (confirmado) {
+  if (confirmado && servicioSeleccionado) {
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={FUNDIDO}>
         <EncabezadoDeReserva
@@ -118,7 +122,7 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
         <Tarjeta className="mx-auto mt-8 max-w-xl px-6 py-8 sm:p-10 md:mt-12">
           <div className="flex items-center gap-4">
             <CuadroDeIcono icono={CalendarCheck} color="azul" tamano="lg" activo />
-            <p className="titulo-3 min-w-0 break-words text-navy">{servicioSeleccionado?.name}</p>
+            <p className="titulo-3 min-w-0 break-words text-navy">{servicioSeleccionado.name}</p>
           </div>
           <ResumenDeReserva
             className="mt-6 border-t border-borde pt-3"
@@ -127,7 +131,20 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
             hora={hora}
             sinServicio
           />
+          <AgregarAlCalendario
+            className="mt-7"
+            cita={{
+              id: citaId,
+              servicio: servicioSeleccionado.name,
+              negocio: nombreNegocio,
+              fecha,
+              hora,
+              duracionMinutos: servicioSeleccionado.duration,
+              zona,
+            }}
+          />
         </Tarjeta>
+        <InvitacionAEli />
       </motion.div>
     )
   }
