@@ -1,27 +1,8 @@
 import Link from "next/link"
 import { ArrowUpRight } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
+import { MarcaDeEli } from "@/components/comunes/marca-de-eli"
 import { DIAS_DE_PRUEBA } from "@/lib/precios"
-import { cn } from "@/lib/utils"
-
-/**
- * La "e" de Eli en su cuadro navy: la firma chica de la página de reservas.
- * Decorativa: siempre va al lado del nombre escrito.
- */
-export function MarcaDeEli({ invertida = false, className }: { invertida?: boolean; className?: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "inline-grid size-6 shrink-0 place-items-center rounded-[8px] font-serif text-sm leading-none font-medium squircle",
-        invertida ? "bg-white text-navy" : "bg-navy text-white",
-        className
-      )}
-    >
-      e
-    </span>
-  )
-}
 
 /**
  * El pie de todas las pantallas de la reserva: una línea discreta que dice que

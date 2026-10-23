@@ -58,23 +58,32 @@ export default async function PaginaConfiguracion() {
       />
 
       <div className="max-w-3xl space-y-6 px-4 pt-6 pb-10 sm:px-6">
-        {/* Horario: quien gestiona el negocio y tiene equipo → selector de tabs; el resto → directo */}
-        {puedeEditarHorarioDeOtros && tieneEquipo ? (
-          <SelectorHorarioMiembro
-            horariosDelDueño={horariosActuales}
-            miembros={miembrosParaElSelector}
-            nombreDelDueño={nombreActor}
-          />
-        ) : (
-          <SeccionHorario
-            horariosIniciales={horariosActuales}
-            memberId={memberIdPropio}
-            titulo={esDueño(actor) ? "Mi horario" : "Mi horario de atención"}
-          />
-        )}
+        {/*
+          Horario: quien gestiona el negocio y tiene equipo → selector de tabs; el resto → directo.
+          Los `id` son a dónde llevan los pasos de la lista de inicio del panel.
+        */}
+        <div id="horario" className="scroll-mt-24">
+          {puedeEditarHorarioDeOtros && tieneEquipo ? (
+            <SelectorHorarioMiembro
+              horariosDelDueño={horariosActuales}
+              miembros={miembrosParaElSelector}
+              nombreDelDueño={nombreActor}
+            />
+          ) : (
+            <SeccionHorario
+              horariosIniciales={horariosActuales}
+              memberId={memberIdPropio}
+              titulo={esDueño(actor) ? "Mi horario" : "Mi horario de atención"}
+            />
+          )}
+        </div>
 
         {/* Servicios: dueño y encargado, no el profesional */}
-        {puedeGestionarServicios(actor) && <SeccionServicios serviciosIniciales={servicios} />}
+        {puedeGestionarServicios(actor) && (
+          <div id="servicios" className="scroll-mt-24">
+            <SeccionServicios serviciosIniciales={servicios} />
+          </div>
+        )}
       </div>
     </div>
   )

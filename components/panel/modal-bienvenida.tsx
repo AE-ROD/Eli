@@ -7,6 +7,7 @@ import { Boton } from "@/components/comunes/boton"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
+import { marcarEnlaceCompartido } from "@/lib/lista-de-inicio"
 import { cn } from "@/lib/utils"
 
 const STORAGE_KEY = "eli_onboarding_completado"
@@ -38,6 +39,8 @@ const PASOS = [
 interface PropsDeModalBienvenida {
   nombreNegocio: string
   slug: string
+  /** Si copiar el enlace cuenta para la lista de inicio (sólo el dueño la tiene). */
+  marcarAlCopiar?: boolean
 }
 
 /**
@@ -49,7 +52,7 @@ interface PropsDeModalBienvenida {
  * Al cambiar de paso el foco se queda en el botón que se apretó, para seguir
  * con Enter; el paso nuevo se anuncia al lector de pantalla.
  */
-export function ModalBienvenida({ nombreNegocio, slug }: PropsDeModalBienvenida) {
+export function ModalBienvenida({ nombreNegocio, slug, marcarAlCopiar = false }: PropsDeModalBienvenida) {
   const [visible, setVisible] = useState(false)
   const [paso, setPaso] = useState(0)
   const [cambioDePaso, setCambioDePaso] = useState(false)
@@ -82,6 +85,8 @@ export function ModalBienvenida({ nombreNegocio, slug }: PropsDeModalBienvenida)
     await navigator.clipboard.writeText(enlace)
     setCopiado(true)
     setTimeout(() => setCopiado(false), 2000)
+    // Sin esperarla: si falla, el enlace ya está copiado.
+    if (marcarAlCopiar) void marcarEnlaceCompartido()
   }
 
   const irAlPaso = (nuevo: number) => {

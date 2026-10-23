@@ -6,7 +6,7 @@ import { ContenidoDelPanel } from "@/components/panel/contenido-del-panel"
 import { ModalBienvenida } from "@/components/panel/modal-bienvenida"
 import { ProveedorDePrecios } from "@/components/panel/contexto-precios"
 import { ProveedorDeBarraLateral } from "@/components/panel/contexto-barra-lateral"
-import { actorDeSesion, puedeGestionarEquipo, puedeGestionarSuscripcion } from "@/lib/permisos"
+import { actorDeSesion, puedeGestionarEquipo, puedeGestionarSuscripcion, veLaListaDeInicio } from "@/lib/permisos"
 
 export default async function LayoutDelPanel({
   children,
@@ -57,7 +57,11 @@ export default async function LayoutDelPanel({
           />
           <ContenidoDelPanel>{children}</ContenidoDelPanel>
           {businessName && businessSlug && (
-            <ModalBienvenida nombreNegocio={businessName} slug={businessSlug} />
+            <ModalBienvenida
+              nombreNegocio={businessName}
+              slug={businessSlug}
+              marcarAlCopiar={veLaListaDeInicio(actor)}
+            />
           )}
         </div>
       </ProveedorDeBarraLateral>
