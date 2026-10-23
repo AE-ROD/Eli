@@ -108,3 +108,82 @@ describe("POST /api/auth/registro: bienvenida", () => {
     expect(mockAfter).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * El enlace de invitación (`?invita=`): con un código de otro negocio, el
+ * negocio nuevo queda invitado por él. Cualquier otra cosa se ignora en
+ * silencio y la cuenta se crea igual, con la misma respuesta: el registro no
+ * dice si un código existe.
+ */
+describe("POST /api/auth/registro: invitación", () => {
+  const QUIEN_INVITA = { id: "negocio-anfitrion", userId: "usuario-anfitrion" }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 4 })
+    mockPrisma.user.findUnique.mockResolvedValue(null)
+    mockPrisma.business.findUnique.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
+      where.codigoInvitacion === "ab12cd34ef" ? QUIEN_INVITA : null
+    )
+    mockPrisma.user.create.mockResolvedValue({
+      id: "usuario-1",
+      name: "Ana",
+      email: "ana@example.com",
+      business: { id: "negocio-1" },
+    })
+  })
+
+  const negocioCreado = () => mockPrisma.user.create.mock.calls[0][0].data.business.create
+
+  it("con un código válido, el negocio nuevo queda invitado por el dueño del código", async () => {
+    const { POST } = await import("./route")
+
+    const respuesta = await POST(pedidoFalso({ ...registroValido, invita: "AB12CD34EF" }))
+
+    expect(respuesta.status).toBe(200)
+    expect(negocioCreado().invitadoPorId).toBe("negocio-anfitrion")
+  })
+
+  it("el negocio invitado empieza con la prueba normal, sin días extra", async () => {
+    const { POST } = await import("./route")
+
+    await POST(pedidoFalso({ ...registroValido, invita: "ab12cd34ef" }))
+
+    const { createdAt, pruebaTerminaEl } = negocioCreado()
+    expect(pruebaTerminaEl.getTime() - createdAt.getTime()).toBe(7 * 24 * 60 * 60 * 1000)
+  })
+
+  it("con un código que no existe, la cuenta se crea igual y sin invitación", async () => {
+    const { POST } = await import("./route")
+
+    const respuesta = await POST(pedidoFalso({ ...registroValido, invita: "qq12cd34ef" }))
+
+    expect(respuesta.status).toBe(200)
+    expect(negocioCreado().invitadoPorId).toBeNull()
+  })
+
+  it.each([
+    ["mal formado", "no-es-un-codigo"],
+    ["un objeto", { $ne: null }],
+    ["un número", 12345],
+  ])("con un código %s, la cuenta se crea igual y ni se busca", async (_caso, invita) => {
+    const { POST } = await import("./route")
+
+    const respuesta = await POST(pedidoFalso({ ...registroValido, invita }))
+
+    expect(respuesta.status).toBe(200)
+    expect(negocioCreado().invitadoPorId).toBeNull()
+    expect(mockPrisma.business.findUnique).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ codigoInvitacion: expect.anything() }) })
+    )
+  })
+
+  it("responde lo mismo con un código que existe y con uno que no", async () => {
+    const { POST } = await import("./route")
+
+    const conCodigo = await (await POST(pedidoFalso({ ...registroValido, invita: "ab12cd34ef" }))).json()
+    const sinCodigo = await (await POST(pedidoFalso({ ...registroValido, invita: "qq12cd34ef" }))).json()
+
+    expect(conCodigo).toEqual(sinCodigo)
+  })
+})

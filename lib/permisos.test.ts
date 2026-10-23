@@ -8,6 +8,7 @@ import {
   puedeEditarComisiones,
   puedeGestionarSuscripcion,
   veLaListaDeInicio,
+  puedeInvitarNegocios,
   puedeAsignarCitasAOtros,
   veElPanelDeSuDia,
   puedeVerIngresosDelNegocio,
@@ -99,6 +100,7 @@ describe("jerarquía de roles", () => {
     ["ver el historial de anuladas", puedeVerAnuladas, true, true, false],
     ["gestionar la suscripción", puedeGestionarSuscripcion, true, false, false],
     ["ver la lista de inicio", veLaListaDeInicio, true, false, false],
+    ["invitar a otros negocios", puedeInvitarNegocios, true, false, false],
     ["asignar citas a otros", puedeAsignarCitasAOtros, true, true, false],
     ["ver el panel de su día", veElPanelDeSuDia, false, false, true],
     // Escondido hasta WhatsApp (PRODUCTO.md, sección 10): nadie, ni el dueño.
@@ -269,6 +271,7 @@ describe("falla cerrado", () => {
     expect(puedeVerCita(null, { businessId: NEGOCIO, memberId: "yo" })).toBe(false)
     expect(puedeGestionarSuscripcion(null)).toBe(false)
     expect(veLaListaDeInicio(null)).toBe(false)
+    expect(puedeInvitarNegocios(null)).toBe(false)
     expect(puedeAsignarCitasAOtros(null)).toBe(false)
     // Sin actor no se elige el panel del día: así era la comparación a mano que
     // reemplaza. El tablero del negocio igual se llena desde un endpoint que da 401.

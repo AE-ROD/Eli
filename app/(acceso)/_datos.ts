@@ -18,6 +18,11 @@ export interface DatosDeRegistro {
   contrasena: string
   nombreNegocio: string
   tipoNegocio: RubroId
+  /**
+   * El código del enlace de invitación (`?invita=`), tal como vino. El
+   * servidor lo valida y, si no corresponde a un negocio, lo ignora.
+   */
+  invita?: string
 }
 
 /** Crea la cuenta y su negocio. No inicia sesión: eso lo hace la pantalla después. */
@@ -30,6 +35,15 @@ export interface DatosDelNegocio {
   tipoNegocio: RubroId
   /** Cuántas personas trabajan en el negocio, contando a quien se registra. */
   teamSize: number
+}
+
+/**
+ * Guarda el código de invitación en una cookie del servidor antes de ir a
+ * Google, para que completar-perfil lo encuentre a la vuelta. Responde igual
+ * exista o no el código; si falla, se sigue a Google sin él.
+ */
+export async function recordarInvitacion(codigo: string): Promise<Resultado> {
+  return pedir("/api/referidos/invitacion", "No se pudo guardar la invitación", conJson("POST", { codigo }))
 }
 
 /** El último paso de quien entró con Google: todavía no tiene negocio. */

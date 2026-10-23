@@ -10,6 +10,7 @@ import { verificarLimite } from "@/lib/rate-limit"
 import { generarSlug } from "@/lib/slug"
 import { finDeLaPrueba, generarCodigoInvitacion } from "@/lib/prueba"
 import { enviarBienvenida } from "@/lib/enviar-correo-de-prueba"
+import { COOKIE_DE_INVITACION, borrarCookieDeInvitacion, negocioQueInvita } from "@/lib/referidos"
 
 const schema = z.object({
   nombreNegocio: z.string().min(2).max(80),
@@ -61,6 +62,11 @@ export async function POST(request: NextRequest) {
       slug = `${slugBase}-${contador++}`
     }
 
+    // El código de invitación que crear-cuenta guardó antes de ir a Google
+    // (`/api/referidos/invitacion`). Inexistente, mal formado o el del propio
+    // usuario se ignora y el negocio se crea igual.
+    const invitadoPorId = await negocioQueInvita(request.cookies?.get(COOKIE_DE_INVITACION)?.value, userId)
+
     // La prueba se cuenta desde este mismo instante, que es también el `createdAt`.
     const ahora = new Date()
     const negocio = await prisma.business.create({
@@ -73,6 +79,7 @@ export async function POST(request: NextRequest) {
         createdAt: ahora,
         pruebaTerminaEl: finDeLaPrueba(ahora),
         codigoInvitacion: generarCodigoInvitacion(),
+        invitadoPorId,
       },
     })
 
@@ -80,7 +87,10 @@ export async function POST(request: NextRequest) {
     // (el cron reintenta la bienvenida).
     after(() => enviarBienvenida(negocio.id))
 
-    return NextResponse.json(negocio)
+    const respuesta = NextResponse.json(negocio)
+    // Ya se usó: no queda dando vueltas en el navegador.
+    borrarCookieDeInvitacion(respuesta)
+    return respuesta
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })

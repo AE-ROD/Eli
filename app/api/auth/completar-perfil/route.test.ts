@@ -235,3 +235,60 @@ describe("POST /api/auth/completar-perfil", () => {
     }
   )
 })
+
+/**
+ * El camino de Google: crear-cuenta dejó el código en la cookie
+ * (`/api/referidos/invitacion`) y completar-perfil lo lee al crear el negocio.
+ */
+describe("POST /api/auth/completar-perfil: invitación", () => {
+  const QUIEN_INVITA = { id: "negocio-anfitrion", userId: "usuario-anfitrion" }
+
+  /** Un pedido con la cookie de invitación, si se pasa. */
+  const conCookie = (valor?: string) => {
+    const pedido = pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: RUBROS[0].id })
+    const cookies = { get: (nombre: string) => (nombre === "eli-invita" && valor !== undefined ? { value: valor } : undefined) }
+    return Object.assign(pedido, { cookies })
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetServerSession.mockResolvedValue(sesion)
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 4 })
+    prismaMock.business.findFirst.mockResolvedValue(null)
+    prismaMock.business.findUnique.mockImplementation(async ({ where }: { where: Record<string, unknown> }) => {
+      if (where.codigoInvitacion === "ab12cd34ef") return QUIEN_INVITA
+      // El código del propio usuario: no puede invitarse a sí mismo.
+      if (where.codigoInvitacion === "yo12cd34ef") return { id: "negocio-viejo", userId: "usuario-1" }
+      return null
+    })
+    prismaMock.business.create.mockImplementation((args: { data: Record<string, unknown> }) =>
+      Promise.resolve({ id: "negocio-1", ...args.data })
+    )
+  })
+
+  const negocioCreado = () => prismaMock.business.create.mock.calls[0][0].data
+
+  it("con un código válido en la cookie, queda invitado y la cookie se vence", async () => {
+    const { POST } = await import("./route")
+
+    const res = await POST(conCookie("ab12cd34ef"))
+
+    expect(res.status).toBe(200)
+    expect(negocioCreado().invitadoPorId).toBe("negocio-anfitrion")
+    expect(res.headers.get("set-cookie")).toMatch(/eli-invita=;.*Max-Age=0/i)
+  })
+
+  it.each([
+    ["sin cookie", undefined],
+    ["con un código que no existe", "qq12cd34ef"],
+    ["con un código mal formado", "<script>"],
+    ["con el código del propio usuario", "yo12cd34ef"],
+  ])("%s: el negocio se crea igual, sin invitación", async (_caso, valor) => {
+    const { POST } = await import("./route")
+
+    const res = await POST(conCookie(valor))
+
+    expect(res.status).toBe(200)
+    expect(negocioCreado().invitadoPorId).toBeNull()
+  })
+})

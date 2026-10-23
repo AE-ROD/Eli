@@ -78,6 +78,12 @@ export const puedeGestionarSuscripcion = esDueño
 export const veLaListaDeInicio = esDueño
 
 /**
+ * El enlace de invitación a otros negocios y su estado: el premio son días de
+ * la prueba de Eli, que es del dueño (`puedeGestionarSuscripcion`).
+ */
+export const puedeInvitarNegocios = esDueño
+
+/**
  * Elegir a qué profesional va una cita. Es la otra cara de `memberIdParaCita`:
  * a quien no puede, el servidor lo asigna a sí mismo mande lo que mande.
  */

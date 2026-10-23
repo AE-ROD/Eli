@@ -7,6 +7,7 @@ import { registroSchema } from "@/lib/validaciones"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { finDeLaPrueba, generarCodigoInvitacion } from "@/lib/prueba"
 import { enviarBienvenida } from "@/lib/enviar-correo-de-prueba"
+import { negocioQueInvita } from "@/lib/referidos"
 
 async function slugUnico(base: string): Promise<string> {
   let slug = generarSlug(base)
@@ -39,6 +40,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // El código del enlace de invitación, si vino (`?invita=` de crear-cuenta).
+    // Inexistente o mal formado se ignora y la cuenta se crea igual: el
+    // registro no dice si un código existe. Es un usuario nuevo, así que el
+    // negocio que invita nunca es el suyo.
+    const invitadoPorId = await negocioQueInvita((cuerpo as { invita?: unknown } | null)?.invita)
+
     const passwordHash = await bcrypt.hash(datos.contrasena, 12)
     const slug = await slugUnico(datos.nombreNegocio)
     // La prueba se cuenta desde este mismo instante, que es también el `createdAt`.
@@ -57,6 +64,7 @@ export async function POST(request: NextRequest) {
             createdAt: ahora,
             pruebaTerminaEl: finDeLaPrueba(ahora),
             codigoInvitacion: generarCodigoInvitacion(),
+            invitadoPorId,
           },
         },
       },
