@@ -8,6 +8,7 @@ import { z } from "zod"
 import { tipoNegocioSchema } from "@/lib/validaciones"
 import { verificarLimite } from "@/lib/rate-limit"
 import { generarSlug } from "@/lib/slug"
+import { finDeLaPrueba, generarCodigoInvitacion } from "@/lib/prueba"
 
 const schema = z.object({
   nombreNegocio: z.string().min(2).max(80),
@@ -59,6 +60,8 @@ export async function POST(request: NextRequest) {
       slug = `${slugBase}-${contador++}`
     }
 
+    // La prueba se cuenta desde este mismo instante, que es también el `createdAt`.
+    const ahora = new Date()
     const negocio = await prisma.business.create({
       data: {
         name: nombreNegocio,
@@ -66,6 +69,9 @@ export async function POST(request: NextRequest) {
         slug,
         teamSize,
         userId,
+        createdAt: ahora,
+        pruebaTerminaEl: finDeLaPrueba(ahora),
+        codigoInvitacion: generarCodigoInvitacion(),
       },
     })
 

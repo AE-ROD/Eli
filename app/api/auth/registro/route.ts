@@ -5,6 +5,7 @@ import { z } from "zod"
 import { generarSlug } from "@/lib/slug"
 import { registroSchema } from "@/lib/validaciones"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
+import { finDeLaPrueba, generarCodigoInvitacion } from "@/lib/prueba"
 
 async function slugUnico(base: string): Promise<string> {
   let slug = generarSlug(base)
@@ -39,6 +40,8 @@ export async function POST(request: NextRequest) {
 
     const passwordHash = await bcrypt.hash(datos.contrasena, 12)
     const slug = await slugUnico(datos.nombreNegocio)
+    // La prueba se cuenta desde este mismo instante, que es también el `createdAt`.
+    const ahora = new Date()
 
     const usuario = await prisma.user.create({
       data: {
@@ -50,6 +53,9 @@ export async function POST(request: NextRequest) {
             name: datos.nombreNegocio,
             type: datos.tipoNegocio,
             slug,
+            createdAt: ahora,
+            pruebaTerminaEl: finDeLaPrueba(ahora),
+            codigoInvitacion: generarCodigoInvitacion(),
           },
         },
       },

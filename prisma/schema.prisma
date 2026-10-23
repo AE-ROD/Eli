@@ -20,6 +20,9 @@ model User {
   /// "nunca se cerraron". Columna en camelCase y sin `@map`, como el resto del
   /// modelo (`createdAt`, `updatedAt`).
   sesionesValidasDesde DateTime?
+  /// Baja de los correos del ciclo de prueba (bienvenida, consejo, avisos de
+  /// fin). No afecta los correos de la cuenta (recuperar contraseña, etc.).
+  correosDesactivados  Boolean   @default(false)
 
   business          Business?
   memberships       BusinessMember[]
@@ -45,6 +48,32 @@ model Business {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Cuándo termina la prueba gratis. Lo fija el código al crear el negocio
+  /// (`finDeLaPrueba` en `lib/prueba.ts`) y lo corre un referido. Sin default a
+  /// propósito: un `now()` mentiría; la migración rellenó createdAt + 7 días.
+  pruebaTerminaEl         DateTime
+  /// Si el negocio recibe los correos del ciclo de prueba. Los negocios que ya
+  /// existían al agregarse quedaron en false (la migración): no se les manda una
+  /// bienvenida tardía.
+  recibeCorreosDePrueba   Boolean   @default(true)
+  /// Cuándo se copió por primera vez el enlace de reservas (lista "Deja tu
+  /// negocio listo").
+  enlaceCompartidoAt      DateTime?
+  /// Código del enlace de invitación: aleatorio, no adivinable y distinto del
+  /// slug. Lo genera `generarCodigoInvitacion` (`lib/prueba.ts`).
+  codigoInvitacion        String    @unique
+  /// El negocio que invitó a éste, si llegó por un enlace de invitación.
+  invitadoPorId           String?
+  invitadoPor             Business? @relation("Referidos", fields: [invitadoPorId], references: [id], onDelete: SetNull)
+  /// En el invitado: cuándo su primera reserva pública contó para quien lo
+  /// invitó. No null = ya contó, y no vuelve a contar.
+  referidoContabilizadoAt DateTime?
+  /// En quien invita: cuándo recibió sus días extra por un referido. Se dan una
+  /// sola vez en total por negocio.
+  extensionPorReferidoAt  DateTime?
+
+  invitados         Business[]         @relation("Referidos")
+  correosDeCuenta   CorreoDeCuenta[]
   customers         Customer[]
   appointments      Appointment[]
   services          Service[]
@@ -56,7 +85,22 @@ model Business {
   commissionRates   CommissionRate[]
   commissionChanges CommissionChange[]
 
+  @@index([invitadoPorId])
   @@map("negocios")
+}
+
+/// Un correo del ciclo de prueba ya enviado a un negocio ("bienvenida",
+/// "consejo", "quedan-3-dias", "termina-hoy"). El único por (negocio, tipo)
+/// impide registrar, y por lo tanto mandar, dos veces el mismo.
+model CorreoDeCuenta {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  tipo       String
+  enviadoAt  DateTime @default(now())
+
+  @@unique([businessId, tipo])
+  @@map("correos_de_cuenta")
 }
 
 model BusinessMember {

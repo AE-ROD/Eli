@@ -62,6 +62,18 @@ describe("POST /api/auth/completar-perfil", () => {
     })
   })
 
+  it("fija el fin de la prueba DIAS_DE_PRUEBA días después de crearlo, y un código de invitación al azar", async () => {
+    const { POST } = await import("./route")
+
+    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: RUBROS[0].id }))
+
+    expect(res.status).toBe(200)
+    const { createdAt, pruebaTerminaEl, codigoInvitacion, slug } = prismaMock.business.create.mock.calls[0][0].data
+    expect(pruebaTerminaEl.getTime() - createdAt.getTime()).toBe(7 * 24 * 60 * 60 * 1000)
+    expect(codigoInvitacion).toMatch(/^[0-9a-hjkmnp-tv-z]{10}$/)
+    expect(codigoInvitacion).not.toBe(slug)
+  })
+
   it.each(["salud", "fitness", "otro", "peluqueria-canina", ""])(
     "rechaza el rubro %j, que no está en el catálogo: 400 y no se crea el negocio",
     async (tipoNegocio) => {

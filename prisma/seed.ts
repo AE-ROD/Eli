@@ -13,6 +13,7 @@
 import "dotenv/config"
 import { PrismaClient } from "@prisma/client"
 import bcrypt from "bcryptjs"
+import { randomBytes } from "node:crypto"
 import { verificarQueElSeedPuedeCorrer } from "./guarda-del-seed.mjs"
 
 const prisma = new PrismaClient()
@@ -37,7 +38,17 @@ async function main() {
   const negocio = await prisma.business.upsert({
     where: { slug: SLUG },
     update: {},
-    create: { name: "Salón Demo", type: "salon", slug: SLUG, teamSize: 3, userId: dueño.id },
+    create: {
+      name: "Salón Demo",
+      type: "salon",
+      slug: SLUG,
+      teamSize: 3,
+      userId: dueño.id,
+      // Lo mismo que `lib/prueba.ts`, escrito acá porque el seed corre con
+      // `node` y no resuelve el alias `@/`: 7 días de prueba y un código al azar.
+      pruebaTerminaEl: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      codigoInvitacion: randomBytes(5).toString("hex"),
+    },
   })
 
   const equipo = [

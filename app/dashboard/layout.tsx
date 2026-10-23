@@ -7,8 +7,6 @@ import { ModalBienvenida } from "@/components/panel/modal-bienvenida"
 import { ProveedorDePrecios } from "@/components/panel/contexto-precios"
 import { ProveedorDeBarraLateral } from "@/components/panel/contexto-barra-lateral"
 import { actorDeSesion, puedeGestionarEquipo, puedeGestionarSuscripcion } from "@/lib/permisos"
-// Cuántos días dura la prueba gratis, contados desde que se creó el negocio.
-import { DIAS_DE_PRUEBA } from "@/lib/precios"
 
 export default async function LayoutDelPanel({
   children,
@@ -37,12 +35,12 @@ export default async function LayoutDelPanel({
   if (verSuscripcion && businessId) {
     const negocio = await prisma.business.findUnique({
       where: { id: businessId },
-      select: { createdAt: true },
+      select: { pruebaTerminaEl: true },
     })
     if (negocio) {
-      const finDeLaPrueba = new Date(negocio.createdAt.getTime() + DIAS_DE_PRUEBA * 24 * 60 * 60 * 1000)
+      // El fin está guardado (un referido lo corre); ya no se deriva de createdAt.
       const ahora = new Date()
-      const diasDePruebaRestantes = Math.ceil((finDeLaPrueba.getTime() - ahora.getTime()) / (1000 * 60 * 60 * 24))
+      const diasDePruebaRestantes = Math.ceil((negocio.pruebaTerminaEl.getTime() - ahora.getTime()) / (1000 * 60 * 60 * 24))
       diasTrialRestantes = Math.max(0, diasDePruebaRestantes)
     }
   }
