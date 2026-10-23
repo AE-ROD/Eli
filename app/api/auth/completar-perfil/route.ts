@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse, after } from "next/server"
 import { getServerSession } from "next-auth"
 import { randomBytes } from "node:crypto"
 import { Prisma } from "@prisma/client"
@@ -9,6 +9,7 @@ import { tipoNegocioSchema } from "@/lib/validaciones"
 import { verificarLimite } from "@/lib/rate-limit"
 import { generarSlug } from "@/lib/slug"
 import { finDeLaPrueba, generarCodigoInvitacion } from "@/lib/prueba"
+import { enviarBienvenida } from "@/lib/enviar-correo-de-prueba"
 
 const schema = z.object({
   nombreNegocio: z.string().min(2).max(80),
@@ -74,6 +75,10 @@ export async function POST(request: NextRequest) {
         codigoInvitacion: generarCodigoInvitacion(),
       },
     })
+
+    // Después de responder: si el correo falla, el negocio igual queda creado
+    // (el cron reintenta la bienvenida).
+    after(() => enviarBienvenida(negocio.id))
 
     return NextResponse.json(negocio)
   } catch (error) {

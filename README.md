@@ -20,11 +20,11 @@ Necesita un `.env` con:
 |---|---|
 | `DATABASE_URL` | Postgres (Neon), conexión con pool. |
 | `DIRECT_URL` | Postgres directo. Sólo lo usan las migraciones. |
-| `NEXTAUTH_URL` / `NEXTAUTH_SECRET` | Sesiones. |
+| `NEXTAUTH_URL` / `NEXTAUTH_SECRET` | Sesiones. `NEXTAUTH_URL` arma los enlaces de los correos; de `NEXTAUTH_SECRET` se deriva la firma del enlace de baja de los correos de prueba. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Entrar con Google. |
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Correos. Sin esto no se envían, pero nada se rompe. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Rate limiting. En desarrollo, sin esto queda desactivado. **En producción es obligatorio:** sin él el límite falla cerrado y todo endpoint responde 429. |
-| `CRON_SECRET` | Protege el cron de recordatorios. |
+| `CRON_SECRET` | Protege los crons (recordatorios y correos del ciclo de prueba). |
 
 ## Comandos
 
@@ -123,6 +123,11 @@ lib/                          Lógica compartida, cada archivo con su test al la
                               la etiqueta: lo que puede hacer cada uno está en permisos.ts
   rubros.ts                   Los tres rubros que atiende Eli
   modulos.ts                  Los cinco módulos del panel: nombre, frase, ruta y color
+  correos-de-prueba.ts        Qué correo del ciclo de prueba le toca hoy a un negocio
+  baja-de-correos.ts          El token firmado del enlace "Dejar de recibir estos correos"
+  cron.ts                     La autorización de los crons (CRON_SECRET)
+  enviar-correo-de-prueba.ts  (servidor) Manda un correo del ciclo de prueba, con su
+                              candado en CorreoDeCuenta para no repetirlo
   direccion-de-scroll.ts      Si el encabezado de la landing se muestra, se oculta o flota
   validaciones.ts             Esquemas zod compartidos: registro, reserva y contraseña.
                               El resto de los endpoints define el suyo en su route.ts
@@ -146,7 +151,8 @@ types/                        Tipos que extienden librerías (la sesión de Next
 public/images/                El logo
 docs/                         Producto (PRODUCTO.md) y sistema de diseño (diseno/)
 prisma.config.ts              Dónde están el esquema y las migraciones, y el comando del seed
-vercel.json                   El cron diario de recordatorios
+vercel.json                   Los crons diarios: recordatorios (9:00 UTC) y correos del
+                              ciclo de prueba (13:00 UTC, ~10:00 en Chile)
 .github/workflows/ci.yml      CI: lint, tipos, tests y build en cada PR a main
 ```
 

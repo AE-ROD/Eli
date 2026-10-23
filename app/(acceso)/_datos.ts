@@ -109,3 +109,11 @@ export async function aceptarInvitacion(token: string, contrasena: string): Prom
   // Un 204 no trae cuerpo: sin decir lo contrario, la cuenta es nueva.
   return { ok: true, datos: { cuentaNueva: resultado.datos?.cuentaNueva !== false } }
 }
+
+/**
+ * Apaga los correos del ciclo de prueba del dueño del token. El servidor
+ * responde lo mismo sea cual sea el token: un ok no confirma que existía.
+ */
+export async function darDeBajaLosCorreos(token: string): Promise<Resultado> {
+  return pedir("/api/correos/baja", "No se pudo completar, intenta de nuevo", conJson("POST", { token }))
+}

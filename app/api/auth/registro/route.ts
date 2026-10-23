@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse, after } from "next/server"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
@@ -6,6 +6,7 @@ import { generarSlug } from "@/lib/slug"
 import { registroSchema } from "@/lib/validaciones"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { finDeLaPrueba, generarCodigoInvitacion } from "@/lib/prueba"
+import { enviarBienvenida } from "@/lib/enviar-correo-de-prueba"
 
 async function slugUnico(base: string): Promise<string> {
   let slug = generarSlug(base)
@@ -61,6 +62,11 @@ export async function POST(request: NextRequest) {
       },
       include: { business: true },
     })
+
+    // Después de responder: el registro no espera al correo, y si el correo
+    // falla la cuenta igual queda creada (el cron reintenta la bienvenida).
+    const businessId = usuario.business?.id
+    if (businessId) after(() => enviarBienvenida(businessId))
 
     return NextResponse.json({
       id: usuario.id,

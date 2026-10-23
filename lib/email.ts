@@ -1,5 +1,13 @@
 import { Resend } from "resend"
 import { nombreDelRol } from "@/lib/nombres-de-roles"
+import {
+  DIAS_DE_PRUEBA,
+  PERSONAS_INCLUIDAS_EQUIPO,
+  PRECIO_EQUIPO,
+  PRECIO_INDEPENDIENTE,
+  PRECIO_PERSONA_ADICIONAL,
+  formatearPesos,
+} from "@/lib/precios"
 
 const FROM = process.env.RESEND_FROM_EMAIL ?? "Eli <no-reply@eli.app>"
 
@@ -90,6 +98,13 @@ type TipoCorreo =
   | "recordatorio"
   | "recuperacion-contrasena"
   | "invitacion-trabajador"
+  | TipoCorreoDePrueba
+
+/**
+ * Los correos del ciclo de prueba al dueño de un negocio. Cada uno se manda
+ * una sola vez por negocio: el nombre es el `tipo` de `CorreoDeCuenta`.
+ */
+export type TipoCorreoDePrueba = "bienvenida" | "consejo" | "quedan-3-dias" | "termina-hoy"
 
 interface Correo {
   tipo: TipoCorreo
@@ -98,57 +113,142 @@ interface Correo {
   /** Siempre un texto fijo que escribimos nosotros, nunca un dato de persona. */
   titulo: string
   intro: HtmlSeguro
+  /** Pasos numerados, de texto fijo: lo que hay que hacer, en orden. */
+  pasos?: Array<{ titulo: string; texto: string }>
   /** Pares etiqueta/valor de la tarjeta destacada. Se escapan acá adentro, no en el llamador. */
   detalle?: Array<[string, string]>
   destacado?: boolean
   /** `texto` es siempre fijo; `enlace` lo arma el servidor. */
   boton?: { texto: string; enlace: string }
   cierre?: HtmlSeguro
+  /**
+   * Enlace "Dejar de recibir estos correos", sólo en los del ciclo de prueba.
+   * Lo arma el servidor (`lib/baja-de-correos.ts`).
+   */
+  enlaceDeBaja?: string
 }
 
+/*
+ * La marca de Eli en un correo (`docs/diseno/README.md`): fondo crema, tarjeta
+ * blanca con borde, texto navy y secundario, botón navy y radios generosos.
+ * Los clientes de correo no cargan Geist ni Fraunces: el texto va en la pila
+ * sans del sistema y los titulares en Georgia, que es el eco más cercano de
+ * Fraunces que tienen todos. Todo con estilos en línea y tablas, que es lo
+ * único que Outlook y Gmail respetan igual.
+ */
+const COLOR = {
+  crema: "#FCFBF8",
+  superficie: "#F5F3EE",
+  tarjeta: "#FFFFFF",
+  navy: "#071A31",
+  texto2: "#5F6D77",
+  borde: "#E7E3DA",
+  azulSuave: "#D5E8FE",
+} as const
+
+const FUENTE = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+const FUENTE_TITULAR = "Georgia, 'Times New Roman', Times, serif"
+
+/** El HTML completo del correo. Todo lo que no es fijo llega escapado o como `HtmlSeguro`. */
+function armarHtml({ asunto: asuntoSeguro, titulo, intro, pasos, detalle, destacado, boton, cierre, enlaceDeBaja }: Correo): string {
+  const parrafo = `margin: 0; font-family: ${FUENTE}; font-size: 16px; line-height: 1.55; color: ${COLOR.texto2};`
+
+  const bloquePasos = pasos?.length
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 28px;">
+        ${pasos
+          .map(
+            (paso, i) => `<tr>
+              <td valign="top" width="40" style="padding: 0 0 16px;">
+                <div style="width: 28px; height: 28px; line-height: 28px; border-radius: 14px; background: ${COLOR.superficie}; color: ${COLOR.navy}; font-family: ${FUENTE}; font-size: 14px; font-weight: 600; text-align: center;">${i + 1}</div>
+              </td>
+              <td valign="top" style="padding: 2px 0 16px;">
+                <p style="margin: 0 0 2px; font-family: ${FUENTE}; font-size: 16px; line-height: 1.4; font-weight: 600; color: ${COLOR.navy};">${escaparHtml(paso.titulo)}</p>
+                <p style="${parrafo} font-size: 15px;">${escaparHtml(paso.texto)}</p>
+              </td>
+            </tr>`,
+          )
+          .join("")}
+      </table>`
+    : ""
+
+  const bloqueDetalle = detalle?.length
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 28px;">
+        <tr><td style="background: ${destacado ? COLOR.azulSuave : COLOR.superficie}; border-radius: 20px; padding: 20px 24px;">
+          ${detalle
+            .map(
+              ([etiqueta, valor]) =>
+                `<p style="margin: 0 0 6px; font-family: ${FUENTE}; font-size: 15px; line-height: 1.5; color: ${COLOR.navy};"><strong>${escaparHtml(etiqueta)}:</strong> ${escaparHtml(valor)}</p>`,
+            )
+            .join("")}
+        </td></tr>
+      </table>`
+    : ""
+
+  const bloqueBoton = boton
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 8px;">
+        <tr><td style="background: ${COLOR.navy}; border-radius: 16px;">
+          <a href="${escaparHtml(boton.enlace)}" style="display: inline-block; padding: 14px 26px; border-radius: 16px; font-family: ${FUENTE}; font-size: 16px; font-weight: 600; line-height: 1.2; color: #FFFFFF; text-decoration: none;">${escaparHtml(boton.texto)}</a>
+        </td></tr>
+      </table>`
+    : ""
+
+  const bloqueCierre = cierre ? `<p style="${parrafo} font-size: 15px; margin-top: 24px;">${cierre.valor}</p>` : ""
+
+  const bloqueBaja = enlaceDeBaja
+    ? `<p style="margin: 8px 0 0; font-family: ${FUENTE}; font-size: 12px; line-height: 1.5; color: ${COLOR.texto2};"><a href="${escaparHtml(enlaceDeBaja)}" style="color: ${COLOR.texto2}; text-decoration: underline;">Dejar de recibir estos correos</a></p>`
+    : ""
+
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>${escaparHtml(asuntoSeguro.valor)}</title>
+</head>
+<body style="margin: 0; padding: 0; background: ${COLOR.crema};">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background: ${COLOR.crema};">
+  <tr><td align="center" style="padding: 32px 12px 40px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 560px;">
+      <tr><td style="padding: 0 12px 20px; font-family: ${FUENTE_TITULAR}; font-size: 30px; line-height: 1; font-weight: 500; letter-spacing: -0.5px; color: ${COLOR.navy};">Eli</td></tr>
+      <tr><td style="background: ${COLOR.tarjeta}; border: 1px solid ${COLOR.borde}; border-radius: 32px; padding: 40px 32px;">
+        <h1 style="margin: 0 0 12px; font-family: ${FUENTE_TITULAR}; font-size: 28px; line-height: 1.2; font-weight: 500; letter-spacing: -0.5px; color: ${COLOR.navy};">${escaparHtml(titulo)}</h1>
+        <p style="${parrafo} margin-bottom: 28px;">${intro.valor}</p>
+        ${bloquePasos}
+        ${bloqueDetalle}
+        ${bloqueBoton}
+        ${bloqueCierre}
+      </td></tr>
+      <tr><td style="padding: 24px 12px 0;">
+        <p style="margin: 0; font-family: ${FUENTE}; font-size: 12px; line-height: 1.5; color: ${COLOR.texto2};">Enviado por Eli · Agenda y cobros para tu negocio</p>
+        ${bloqueBaja}
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`
+}
+
+/** Lo que devuelve un envío: la respuesta de Resend, o `null` si no hay clave configurada. */
+export type ResultadoDeEnvio = Awaited<ReturnType<Resend["emails"]["send"]>> | null
+
 /** Sin clave configurada no se envía nada, igual que el rate limit sin Upstash. */
-async function enviar({ tipo, para, asunto: asuntoSeguro, titulo, intro, detalle, destacado, boton, cierre }: Correo) {
+async function enviar(correo: Correo): Promise<ResultadoDeEnvio> {
   const api = resend()
   if (!api) {
     // Sólo el tipo: el asunto lleva nombres de clientes o negocios y `para`
     // es un correo personal, y los logs no son lugar para datos personales.
-    console.warn(`[email] RESEND_API_KEY no configurada: no se envió un correo de tipo "${tipo}".`)
+    console.warn(`[email] RESEND_API_KEY no configurada: no se envió un correo de tipo "${correo.tipo}".`)
     return null
   }
 
-  const tarjeta = destacado
-    ? "background: #f0f7ff; border-left: 4px solid #3b82f6;"
-    : "background: #f5f5f5;"
-
   return api.emails.send({
     from: FROM,
-    to: para,
-    subject: asuntoSeguro.valor,
-    html: `
-      <div style="font-family: sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px; background: #fff;">
-        <h1 style="font-size: 24px; font-weight: 700; color: #111; margin-bottom: 8px;">${titulo}</h1>
-        <p style="color: #555; margin-bottom: 24px;">${intro.valor}</p>
-        ${
-          detalle?.length
-            ? `<div style="${tarjeta} border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-                 ${detalle
-                   .map(
-                     ([etiqueta, valor]) =>
-                       `<p style="margin: 0 0 8px; color: #111;"><strong>${escaparHtml(etiqueta)}:</strong> ${escaparHtml(valor)}</p>`,
-                   )
-                   .join("")}
-               </div>`
-            : ""
-        }
-        ${
-          boton
-            ? `<a href="${boton.enlace}" style="display: inline-block; background: #3b82f6; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 15px;">${escaparHtml(boton.texto)}</a>`
-            : ""
-        }
-        ${cierre ? `<p style="color: #555; font-size: 14px; margin-top: 24px;">${cierre.valor}</p>` : ""}
-        <p style="color: #999; font-size: 12px; margin-top: 32px;">Enviado por Eli · Sistema de agendamiento</p>
-      </div>
-    `,
+    to: correo.para,
+    subject: correo.asunto.valor,
+    html: armarHtml(correo),
   })
 }
 
@@ -175,7 +275,7 @@ export function enviarConfirmacionCliente(datos: DatosConfirmacionCliente) {
   return enviar({
     tipo: "confirmacion-cliente",
     para: datos.emailCliente,
-    asunto: asunto`✅ Cita confirmada — ${datos.nombreNegocio}`,
+    asunto: asunto`Cita confirmada — ${datos.nombreNegocio}`,
     titulo: "¡Tu cita está confirmada!",
     intro: html`Hola <strong>${datos.nombreCliente}</strong>, te esperamos en <strong>${datos.nombreNegocio}</strong>.`,
     detalle: [
@@ -210,7 +310,7 @@ export function enviarAvisoProfesional(datos: DatosAvisoProfesional) {
   return enviar({
     tipo: "aviso-profesional",
     para: datos.emailProfesional,
-    asunto: asunto`📅 Nueva reserva — ${datos.nombreCliente}`,
+    asunto: asunto`Nueva reserva — ${datos.nombreCliente}`,
     titulo: "Nueva reserva recibida",
     intro: html`Tienes una nueva cita en <strong>${datos.nombreNegocio}</strong>.`,
     detalle,
@@ -232,8 +332,8 @@ export function enviarRecordatorio(datos: DatosRecordatorio) {
   return enviar({
     tipo: "recordatorio",
     para: datos.emailCliente,
-    asunto: asunto`🔔 Recordatorio — Tu cita es mañana`,
-    titulo: "Tu cita es mañana 👋",
+    asunto: asunto`Recordatorio — Tu cita es mañana`,
+    titulo: "Tu cita es mañana",
     intro: html`Hola <strong>${datos.nombreCliente}</strong>, te recordamos que tienes una cita mañana en <strong>${datos.nombreNegocio}</strong>.`,
     detalle: [
       ["Servicio", datos.servicio],
@@ -254,7 +354,7 @@ export function enviarRecuperacionContrasena(datos: DatosRecuperacionContrasena)
   return enviar({
     tipo: "recuperacion-contrasena",
     para: datos.emailUsuario,
-    asunto: asunto`🔑 Restablece tu contraseña — Eli`,
+    asunto: asunto`Restablece tu contraseña — Eli`,
     titulo: "Restablece tu contraseña",
     intro: html`Hola <strong>${datos.nombreUsuario}</strong>, recibimos una solicitud para restablecer tu contraseña.`,
     boton: { texto: "Crear nueva contraseña", enlace: datos.enlaceRestablecer },
@@ -287,4 +387,115 @@ export function enviarInvitacionTrabajador(datos: DatosInvitacionTrabajador) {
     boton: { texto: "Aceptar invitación", enlace: datos.enlaceAceptar },
     cierre: html`Este enlace expira en 7 días. Si no esperabas esta invitación, ignora este correo.`,
   })
+}
+
+// ─── Ciclo de prueba ─────────────────────────────────────────────────────────
+
+export interface DatosCorreoDePrueba {
+  emailDueno: string
+  nombreDueno: string
+  nombreNegocio: string
+  /** `${NEXTAUTH_URL}/dashboard`. */
+  enlacePanel: string
+  /** `${NEXTAUTH_URL}/reservar/${slug}`: la página pública de reservas. */
+  enlaceReservas: string
+  /** La página de baja con el token del dueño (`lib/baja-de-correos.ts`). */
+  enlaceDeBaja: string
+  /** Último día de la prueba, "AAAA-MM-DD" en la zona del negocio. */
+  ultimoDia: string
+  /** Días calendario que faltan para `ultimoDia` (0 = hoy). */
+  diasRestantes: number
+}
+
+/**
+ * "sábado 24 de octubre" de una fecha calendario. Se lee en UTC a propósito:
+ * la fecha ya viene calculada en la zona del negocio, y leerla en la zona
+ * del servidor podría correrla un día.
+ */
+function diaLegible(fecha: string): string {
+  const [año, mes, dia] = fecha.split("-").map(Number)
+  return new Date(Date.UTC(año, mes - 1, dia)).toLocaleDateString("es-CL", {
+    timeZone: "UTC",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  })
+}
+
+/** Los dos planes, de `lib/precios.ts`. Sólo dice cuánto costaría: todavía no se cobra. */
+function detalleDePlanes(): Array<[string, string]> {
+  return [
+    ["Independiente", `${formatearPesos(PRECIO_INDEPENDIENTE)} al mes, si atiendes solo`],
+    [
+      "Equipo",
+      `${formatearPesos(PRECIO_EQUIPO)} al mes con ${PERSONAS_INCLUIDAS_EQUIPO} personas que atienden, y ${formatearPesos(PRECIO_PERSONA_ADICIONAL)} por cada persona adicional`,
+    ],
+  ]
+}
+
+/** Lo honesto mientras no exista el cobro: no hay nada que pagar todavía. */
+const SIN_COBRO_TODAVIA = html`Todavía no se cobra nada y no tienes que hacer nada por ahora. Muy pronto vas a poder activar tu plan desde el panel. Los precios incluyen IVA.`
+
+function correoDePrueba(tipo: TipoCorreoDePrueba, datos: DatosCorreoDePrueba): Correo {
+  const base = { tipo, para: datos.emailDueno, enlaceDeBaja: datos.enlaceDeBaja }
+
+  switch (tipo) {
+    case "bienvenida":
+      return {
+        ...base,
+        asunto: asunto`Te damos la bienvenida a Eli`,
+        titulo: "Tu negocio ya está en Eli",
+        intro: html`Hola <strong>${datos.nombreDueno}</strong>, <strong>${datos.nombreNegocio}</strong> ya tiene su espacio en Eli. Tienes ${DIAS_DE_PRUEBA} días de prueba gratis, sin tarjeta. Para empezar a recibir reservas, te faltan tres pasos:`,
+        pasos: [
+          { titulo: "Define tu horario", texto: "Los días y las horas en que atiendes. Tus clientes sólo ven horas libres dentro de ese horario." },
+          { titulo: "Agrega tus servicios", texto: "Qué ofreces, cuánto dura y cuánto cuesta." },
+          { titulo: "Comparte tu enlace de reservas", texto: "Tus clientes eligen el servicio y la hora, y la cita aparece en tu agenda." },
+        ],
+        boton: { texto: "Ir a mi panel", enlace: datos.enlacePanel },
+      }
+
+    case "consejo":
+      return {
+        ...base,
+        asunto: asunto`Un consejo para recibir tus primeras reservas`,
+        titulo: "Pon tu enlace donde ya te buscan",
+        intro: html`Hola <strong>${datos.nombreDueno}</strong>, la forma más rápida de llenar tu agenda es que tus clientes reserven solos. Pega tu enlace de reservas en la biografía de Instagram y compártelo por WhatsApp: en tu estado, o como respuesta cuando alguien te pregunte por una hora.`,
+        detalle: [["Tu enlace", datos.enlaceReservas]],
+        boton: { texto: "Ver mi página de reservas", enlace: datos.enlaceReservas },
+        cierre: html`Cada reserva que llegue por ahí aparece en tu agenda, sin que tengas que anotarla.`,
+      }
+
+    case "quedan-3-dias":
+      return {
+        ...base,
+        asunto:
+          datos.diasRestantes === 1
+            ? asunto`Mañana termina tu prueba de Eli`
+            : asunto`Te quedan ${datos.diasRestantes} días de prueba en Eli`,
+        titulo: "Tu prueba gratis termina pronto",
+        intro: html`Hola <strong>${datos.nombreDueno}</strong>, la prueba gratis de <strong>${datos.nombreNegocio}</strong> termina el ${diaLegible(datos.ultimoDia)}. Hasta ese día puedes seguir usando todas las funciones. Estos son los planes:`,
+        detalle: detalleDePlanes(),
+        boton: { texto: "Ir a mi panel", enlace: datos.enlacePanel },
+        cierre: SIN_COBRO_TODAVIA,
+      }
+
+    case "termina-hoy":
+      return {
+        ...base,
+        asunto: asunto`Hoy termina tu prueba de Eli`,
+        titulo: "Hoy termina tu prueba gratis",
+        intro: html`Hola <strong>${datos.nombreDueno}</strong>, hoy es el último día de la prueba gratis de <strong>${datos.nombreNegocio}</strong>. Gracias por probar Eli. Estos son los planes:`,
+        detalle: detalleDePlanes(),
+        boton: { texto: "Ir a mi panel", enlace: datos.enlacePanel },
+        cierre: SIN_COBRO_TODAVIA,
+      }
+  }
+}
+
+/**
+ * Manda uno de los correos del ciclo de prueba al dueño. No decide si toca ni
+ * lleva la cuenta de lo enviado: eso es de `lib/enviar-correo-de-prueba.ts`.
+ */
+export function enviarCorreoDePrueba(tipo: TipoCorreoDePrueba, datos: DatosCorreoDePrueba) {
+  return enviar(correoDePrueba(tipo, datos))
 }

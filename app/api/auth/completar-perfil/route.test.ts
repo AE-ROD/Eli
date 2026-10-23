@@ -28,6 +28,20 @@ vi.mock("@/lib/rate-limit", () => ({
   verificarLimite: (...args: unknown[]) => mockVerificarLimite(...args),
 }))
 
+const mockAfter = vi.fn()
+const mockEnviarBienvenida = vi.fn()
+
+// `after` de verdad exige estar dentro de un pedido de Next: acá se guarda la
+// tarea para ver qué se programó, sin correrla sola.
+vi.mock("next/server", async (original) => ({
+  ...(await original<typeof import("next/server")>()),
+  after: (tarea: () => unknown) => mockAfter(tarea),
+}))
+
+vi.mock("@/lib/enviar-correo-de-prueba", () => ({
+  enviarBienvenida: (...args: unknown[]) => mockEnviarBienvenida(...args),
+}))
+
 /** El error que lanza Prisma cuando un `@unique` choca: lo arma a mano para no depender de la base. */
 function choqueDeUnico(campo: string) {
   return new Prisma.PrismaClientKnownRequestError(`Unique constraint failed on the fields: (\`${campo}\`)`, {
@@ -60,6 +74,28 @@ describe("POST /api/auth/completar-perfil", () => {
     expect(prismaMock.business.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ type: tipoNegocio, userId: "usuario-1" }),
     })
+  })
+
+  it("programa la bienvenida del negocio nuevo para después de responder", async () => {
+    const { POST } = await import("./route")
+
+    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: RUBROS[0].id }))
+
+    expect(res.status).toBe(200)
+    expect(mockAfter).toHaveBeenCalledTimes(1)
+    expect(mockEnviarBienvenida).not.toHaveBeenCalled()
+    await mockAfter.mock.calls[0][0]()
+    expect(mockEnviarBienvenida).toHaveBeenCalledWith("negocio-1")
+  })
+
+  it("si el negocio no se crea (P2002), no programa ninguna bienvenida", async () => {
+    const { POST } = await import("./route")
+    prismaMock.business.create.mockRejectedValueOnce(choqueDeUnico("userId"))
+
+    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: RUBROS[0].id }))
+
+    expect(res.status).toBe(409)
+    expect(mockAfter).not.toHaveBeenCalled()
   })
 
   it("fija el fin de la prueba DIAS_DE_PRUEBA días después de crearlo, y un código de invitación al azar", async () => {
