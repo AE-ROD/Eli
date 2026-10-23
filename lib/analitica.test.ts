@@ -11,6 +11,7 @@ describe("redactarUrlDeAnalitica", () => {
     ["https://eli.app/restablecer-contrasena/abc123", "https://eli.app/restablecer-contrasena/[token]"],
     ["https://eli.app/unirse/tok_XYZ-9", "https://eli.app/unirse/[token]"],
     ["https://eli.app/unirse/tok/", "https://eli.app/unirse/[token]/"],
+    ["https://eli.app/baja-de-correos/dXNy.firma", "https://eli.app/baja-de-correos/[token]"],
     [
       "https://eli.app/restablecer-contrasena/abc?desde=mail#arriba",
       "https://eli.app/restablecer-contrasena/[token]?desde=mail#arriba",
