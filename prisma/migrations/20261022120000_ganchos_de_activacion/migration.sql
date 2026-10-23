@@ -3,6 +3,13 @@
 -- sus índices. Las columnas NOT NULL sin default verdadero se agregan nullable,
 -- se rellenan y recién después se cierran.
 
+-- Va entera en una transacción explícita: si algo falla a mitad (p. ej. el
+-- índice único de "codigoInvitacion" choca), no queda aplicada a medias. Se
+-- aplica con psql (`-v ON_ERROR_STOP=1`), que corta en el primer error y
+-- Postgres deshace la transacción. Orden de despliegue: README.md, sección
+-- "Migraciones en producción".
+BEGIN;
+
 -- ─── Usuarios: baja de los correos del ciclo de prueba ──────────────────────
 
 ALTER TABLE "usuarios" ADD COLUMN "correosDesactivados" BOOLEAN NOT NULL DEFAULT false;
@@ -74,3 +81,5 @@ CREATE UNIQUE INDEX "correos_de_cuenta_businessId_tipo_key" ON "correos_de_cuent
 
 -- AddForeignKey
 ALTER TABLE "correos_de_cuenta" ADD CONSTRAINT "correos_de_cuenta_businessId_fkey" FOREIGN KEY ("businessId") REFERENCES "negocios"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+COMMIT;

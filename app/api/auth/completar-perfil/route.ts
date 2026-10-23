@@ -10,6 +10,7 @@ import { verificarLimite } from "@/lib/rate-limit"
 import { generarSlug } from "@/lib/slug"
 import { finDeLaPrueba, generarCodigoInvitacion } from "@/lib/prueba"
 import { enviarBienvenida } from "@/lib/enviar-correo-de-prueba"
+import { registrarError } from "@/lib/registro-de-errores"
 import { COOKIE_DE_INVITACION, borrarCookieDeInvitacion, negocioQueInvita } from "@/lib/referidos"
 
 const schema = z.object({
@@ -69,19 +70,43 @@ export async function POST(request: NextRequest) {
 
     // La prueba se cuenta desde este mismo instante, que es también el `createdAt`.
     const ahora = new Date()
-    const negocio = await prisma.business.create({
-      data: {
-        name: nombreNegocio,
-        type: tipoNegocio,
-        slug,
-        teamSize,
-        userId,
-        createdAt: ahora,
-        pruebaTerminaEl: finDeLaPrueba(ahora),
-        codigoInvitacion: generarCodigoInvitacion(),
-        invitadoPorId,
-      },
-    })
+    const crear = (invitadoPor: string | null) =>
+      prisma.business.create({
+        data: {
+          name: nombreNegocio,
+          type: tipoNegocio,
+          slug,
+          teamSize,
+          userId,
+          createdAt: ahora,
+          pruebaTerminaEl: finDeLaPrueba(ahora),
+          codigoInvitacion: generarCodigoInvitacion(),
+          invitadoPorId: invitadoPor,
+        },
+        // Lo único que necesita quien llama. El registro completo trae el
+        // `invitadoPorId` (el id de otro negocio), el código de invitación y
+        // el `userId`, que no tienen por qué salir en la respuesta.
+        select: { id: true, slug: true, name: true },
+      })
+
+    let negocio
+    try {
+      negocio = await crear(invitadoPorId)
+    } catch (error) {
+      // El negocio que invita se borró entre la búsqueda y el `create`: la
+      // clave foránea de `invitadoPorId` falla (P2003). La invitación se
+      // pierde, pero el negocio se crea igual. Si el P2003 era por otra
+      // clave, el reintento vuelve a fallar y cae en el 500 de abajo.
+      if (
+        invitadoPorId &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2003"
+      ) {
+        negocio = await crear(null)
+      } else {
+        throw error
+      }
+    }
 
     // Después de responder: si el correo falla, el negocio igual queda creado
     // (el cron reintenta la bienvenida).
@@ -105,7 +130,7 @@ export async function POST(request: NextRequest) {
         : "No se pudo crear el negocio, intenta de nuevo"
       return NextResponse.json({ error: mensaje }, { status: 409 })
     }
-    console.error("Error completando perfil:", error)
+    registrarError("completando perfil", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { NextRequest } from "next/server"
+import { Prisma } from "@prisma/client"
 
 const mockVerificarLimite = vi.fn()
 
@@ -185,5 +186,38 @@ describe("POST /api/auth/registro: invitación", () => {
     const sinCodigo = await (await POST(pedidoFalso({ ...registroValido, invita: "qq12cd34ef" }))).json()
 
     expect(conCodigo).toEqual(sinCodigo)
+  })
+
+  it("si el negocio que invita se borró antes del create (P2003), se reintenta una vez sin invitación", async () => {
+    const { POST } = await import("./route")
+    mockPrisma.user.create.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError("Foreign key constraint violated", {
+        code: "P2003",
+        clientVersion: "test",
+        meta: { constraint: "negocios_invitadoPorId_fkey" },
+      })
+    )
+
+    const respuesta = await POST(pedidoFalso({ ...registroValido, invita: "ab12cd34ef" }))
+
+    expect(respuesta.status).toBe(200)
+    expect(mockPrisma.user.create).toHaveBeenCalledTimes(2)
+    expect(mockPrisma.user.create.mock.calls[0][0].data.business.create.invitadoPorId).toBe("negocio-anfitrion")
+    expect(mockPrisma.user.create.mock.calls[1][0].data.business.create.invitadoPorId).toBeNull()
+  })
+
+  it("un error inesperado da 500 y al log va sólo el nombre y el código, no el error completo", async () => {
+    const { POST } = await import("./route")
+    const consola = vi.spyOn(console, "error").mockImplementation(() => {})
+    mockPrisma.user.create.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError("ana@example.com ya existe", { code: "P2002", clientVersion: "test" })
+    )
+
+    const respuesta = await POST(pedidoFalso(registroValido))
+
+    expect(respuesta.status).toBe(500)
+    expect(mockPrisma.user.create).toHaveBeenCalledTimes(1)
+    expect(consola).toHaveBeenCalledWith("Error en registro:", { name: "PrismaClientKnownRequestError", code: "P2002" })
+    consola.mockRestore()
   })
 })

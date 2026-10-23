@@ -81,6 +81,29 @@ Quedan un negocio de ejemplo y tres cuentas —`duena@demo.eli`,
 corta de ver qué cambia con cada uno. La contraseña la imprime el seed al
 terminar (está en `prisma/seed.ts`).
 
+
+## Migraciones en producción
+
+Las migraciones nuevas se aplican a mano con `psql` contra `DIRECT_URL`
+(`-v ON_ERROR_STOP=1 -f prisma/migrations/<carpeta>/migration.sql`) y después
+se marcan como aplicadas para que Prisma no las vuelva a correr:
+
+```bash
+npx prisma migrate resolve --applied <carpeta>
+```
+
+### `20261022120000_ganchos_de_activacion`
+
+Rompe la compatibilidad en los dos sentidos: el código viejo falla al crear
+negocios con la migración aplicada (`pruebaTerminaEl` y `codigoInvitacion` son
+NOT NULL sin default) y el código nuevo falla sin ella. Por eso:
+
+1. Dejar el despliegue del código nuevo construido y listo para promover.
+2. En una ventana tranquila (sin registros en curso), aplicar la migración. Va
+   envuelta en `BEGIN; … COMMIT;`: si falla, no queda nada a medias.
+3. Inmediatamente después, promover el despliegue del código nuevo.
+4. `npx prisma migrate resolve --applied 20261022120000_ganchos_de_activacion`.
+
 ## Cómo está organizado
 
 ```

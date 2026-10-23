@@ -8,6 +8,7 @@ import { horaAMinutos } from "@/lib/horario-dia"
 import { cabeEnAtencion, franjasDeAtencion } from "@/lib/horario-de-atencion"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { contabilizarReferido } from "@/lib/referidos"
+import { registrarError } from "@/lib/registro-de-errores"
 import {
   MAX_RESERVAS_FUTURAS_POR_CONTACTO,
   MAX_RESERVAS_PUBLICAS_POR_DIA,
@@ -274,7 +275,7 @@ export async function POST(
     // `contabilizarReferido` es idempotente ante dos reservas simultáneas.
     if (negocio.invitadoPorId && !negocio.referidoContabilizadoAt) {
       await contabilizarReferido(negocio.id, ahora).catch((error) => {
-        console.error("Error contabilizando el referido:", error)
+        registrarError("contabilizando el referido", error)
       })
     }
 
