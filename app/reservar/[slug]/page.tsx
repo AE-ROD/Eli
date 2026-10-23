@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
 import { EncabezadoDeReserva } from "./_componentes/encabezado-de-reserva"
 import { FormularioReserva } from "./_componentes/formulario-reserva"
+import { PieDeEli } from "./_componentes/pie-de-eli"
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -19,7 +20,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 /**
  * El marco de la página: fondo crema y una columna centrada. Es la página de
- * cada negocio, no la de Eli, así que no lleva el encabezado de la landing.
+ * cada negocio, no la de Eli, así que no lleva el encabezado de la landing;
+ * sólo, al final de cada pantalla, el pie discreto "Reservas con Eli".
  * `halo-agenda` le da al foco de todo lo de adentro el halo azul de la Agenda.
  *
  * 8px a los lados en el teléfono, como las islas: con el relleno de la
@@ -28,7 +30,10 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 function MarcoDeReserva({ children }: { children: ReactNode }) {
   return (
     <main className="min-h-dvh bg-crema halo-agenda">
-      <div className="mx-auto w-full max-w-[52rem] px-2 py-10 sm:px-4 md:px-6 md:py-16">{children}</div>
+      <div className="mx-auto w-full max-w-[52rem] px-2 pt-10 pb-6 sm:px-4 md:px-6 md:pt-16 md:pb-10">
+        {children}
+        <PieDeEli />
+      </div>
     </main>
   )
 }

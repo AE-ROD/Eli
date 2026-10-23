@@ -19,8 +19,10 @@ interface PropsDeEncabezadoDeReserva {
  * bajada, centrados. Lleva `<h1>` y no el `<h2>` de `EncabezadoDeSeccion`
  * porque es el título de la página, no el de una sección.
  *
- * La página es del negocio y no de Eli: el titular es el nombre del negocio
- * y no hay logo ni encabezado de la landing.
+ * La página es del negocio: el titular es su nombre y no hay logo ni
+ * encabezado de la landing arriba. Eli firma abajo, discreto, con `PieDeEli`
+ * en todas las pantallas, y en la confirmación invita a probarlo
+ * (`InvitacionAEli`).
  */
 export function EncabezadoDeReserva({ antetitulo, titulo, bajada, ref }: PropsDeEncabezadoDeReserva) {
   return (
