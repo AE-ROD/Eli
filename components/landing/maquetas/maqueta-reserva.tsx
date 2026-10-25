@@ -74,7 +74,7 @@ export function MaquetaReserva({ activa }: PropsDeMaqueta) {
         </div>
 
         <div className="mt-2.5 flex items-center justify-between">
-          <span className="font-semibold">Octubre 2026</span>
+          <span className="font-semibold">Octubre de 2026</span>
           <span className="flex gap-1 text-texto-2">
             <ChevronLeft className="size-3.5" strokeWidth={1.75} />
             <ChevronRight className="size-3.5" strokeWidth={1.75} />

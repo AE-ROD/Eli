@@ -71,7 +71,7 @@ const TURNOS = [
 
 export function MaquetaTurnos() {
   return (
-    <MarcoDeMaqueta etiqueta="Maqueta: lo cobrado por turno: mañana $96.000, tarde $184.000 y noche $132.000">
+    <MarcoDeMaqueta etiqueta="Maqueta: lo cobrado por turno (mañana $96.000, tarde $184.000 y noche $132.000)">
       <CabeceraDeMaqueta titulo="Por turno">
         <span className="text-xs text-texto-2">Del 5 al 11 de octubre</span>
       </CabeceraDeMaqueta>
@@ -105,7 +105,7 @@ const POR_PROFESIONAL: readonly {
 
 export function MaquetaPorProfesional() {
   return (
-    <MarcoDeMaqueta etiqueta="Maqueta: lo cobrado por profesional: Lucía Pérez, Carla y Ana">
+    <MarcoDeMaqueta etiqueta="Maqueta: lo cobrado por profesional (Lucía Pérez, Carla y Ana)">
       <Segmentos opciones={["Profesional", "Servicio", "Medio de pago"]} elegida="Profesional" />
       {POR_PROFESIONAL.map((profesional) => (
         <div key={profesional.nombre} className="mt-3.5 flex items-center gap-2.5">

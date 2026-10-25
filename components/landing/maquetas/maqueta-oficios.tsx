@@ -99,7 +99,7 @@ const SERVICIOS_DEL_SPA = [
 
 export function MaquetaElegirServicio() {
   return (
-    <MarcoDeMaqueta etiqueta="Maqueta: página de reservas con Uñas esculpidas elegido">
+    <MarcoDeMaqueta etiqueta="Maqueta: página de reservas con el servicio Uñas esculpidas elegido">
       <CabeceraDeMaqueta titulo="Elige tu servicio">
         <span className="text-xs text-texto-2">Paso 1 de 3</span>
       </CabeceraDeMaqueta>

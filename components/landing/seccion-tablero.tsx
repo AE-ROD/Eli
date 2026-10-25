@@ -35,7 +35,7 @@ const ITEMS: readonly ItemDeListaFija[] = [
       <CuadroDeIcono icono={Eye} color="naranja" />
     ),
     titulo: "Cada profesional ve lo suyo",
-    texto: "Cada servicio de la visita lleva su profesional y su precio, y cada profesional ve sólo lo que le toca.",
+    texto: "Cada servicio de la visita lleva su profesional y su precio, y cada profesional ve solo lo que le toca.",
     visual: <MaquetaVistaDeProfesional />,
   },
   {
