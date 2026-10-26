@@ -452,3 +452,43 @@ describe("lib/email — correos del ciclo de prueba", () => {
     }
   })
 })
+
+describe("lib/email — correos de soporte", () => {
+  beforeEach(() => {
+    vi.stubEnv("RESEND_API_KEY", "clave-de-prueba")
+    vi.resetModules()
+    enviarMock.mockClear()
+  })
+
+  it("el aviso a soporte escapa lo que escribió la persona, limpia el asunto y pone el Reply-To", async () => {
+    const { enviarSolicitudASoporte } = await import("./email")
+
+    await enviarSolicitudASoporte({
+      para: "soporte@eli.test",
+      responderA: "ana@ejemplo.com",
+      numero: "#000007",
+      tipo: "Falla",
+      area: "Agenda",
+      asunto: "Hola\r\nBcc: otro@ejemplo.com",
+      detalle: [["Descripción", '<img src=x onerror="alert(1)">']],
+    })
+
+    const enviado = enviarMock.mock.calls[0][0]
+    expect(enviado.to).toBe("soporte@eli.test")
+    expect(enviado.replyTo).toBe("ana@ejemplo.com")
+    expect(enviado.subject).toBe("[Soporte #000007] Falla · Agenda — HolaBcc: otro@ejemplo.com")
+    expect(enviado.html).not.toContain("<img src=x")
+    expect(enviado.html).toContain("&lt;img")
+  })
+
+  it("el acuse no promete plazos y sin casilla no lleva Reply-To", async () => {
+    const { enviarAcuseDeSoporte } = await import("./email")
+
+    await enviarAcuseDeSoporte({ para: "ana@ejemplo.com", responderA: null, numero: "#000007", detalle: [["Caso", "#000007"]] })
+
+    const enviado = enviarMock.mock.calls[0][0]
+    expect(enviado.subject).toBe("Recibimos tu solicitud #000007")
+    expect(enviado).not.toHaveProperty("replyTo")
+    expect(enviado.html).not.toMatch(/\b(horas|días hábiles|24|48)\b/)
+  })
+})

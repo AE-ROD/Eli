@@ -32,7 +32,7 @@ describe("verificarLimite cuando Upstash está configurado pero falla", () => {
     vi.restoreAllMocks()
   })
 
-  it.each(["login", "auth", "reserva"] as const)(
+  it.each(["login", "auth", "reserva", "soporte", "acuseDeSoporte"] as const)(
     "falla CERRADO para %s si Upstash tira un error: lo que un anónimo puede abusar no queda sin tope",
     async (tipo) => {
       vi.spyOn(console, "error").mockImplementation(() => {})

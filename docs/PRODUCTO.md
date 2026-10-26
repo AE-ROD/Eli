@@ -163,7 +163,7 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 - **Reportes** de lo atendido y cobrado, con filtros (sección 8)
 - Equipo con los tres roles reales
 - **Comisiones: ciclo completo** (configurar, calcular, liquidar, auditar)
-- Elegir profesional al reservar
+- Elegir profesional al reservar — **pendiente, todavía no está construido**: hoy la página pública no lo ofrece y la reserva llega sin profesional asignado.
 - Página pública de reservas
 - Recordatorios automáticos por correo
 
@@ -174,6 +174,14 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 - Multi-sucursal
 
 **Zona horaria del negocio.** Cada negocio tiene su zona horaria (IANA, por defecto `America/Santiago`). En ella se leen sus horarios de atención y sus días: qué día de la semana es una fecha, qué horas ofrece la página pública (y cuáles ya pasaron hoy), en qué instante se guarda la cita reservada y qué citas trae la vista Día, Semana y Mes de la agenda. Si la zona guardada no es válida, se usa la de por defecto. Con el cambio de horario, una hora que no existe se corre hacia adelante lo que dura el salto y una que ocurre dos veces se toma la primera vez. **Todavía no hay pantalla para cambiarla** (sección 10).
+
+**Centro de soporte.** Las personas piden ayuda desde `/dashboard/ayuda` (con sesión) y `/soporte` (pública, sin sesión); las dos usan el mismo centro de ayuda y mandan a `POST /api/soporte`.
+
+- **Tipos:** falla ("Algo no funciona"), reclamo y consulta ("Busco información"), cada una sobre un área (Agenda, Reservas en línea, Tablero del día, Clientes, Reportes, Equipo, Cuenta y plan u Otro). Antes del formulario se muestran las preguntas frecuentes (`lib/preguntas-frecuentes.ts`); en una falla, las que responden problemas típicos de esa área.
+- **Número de caso:** cada solicitud se guarda (`SolicitudDeSoporte`) con un número correlativo que se muestra como `#000123`. Con sesión, quién escribe y de qué negocio salen de la sesión; sin sesión se piden nombre y correo y no se vincula negocio.
+- **Correos:** el aviso completo va a la casilla de `SOPORTE_EMAIL` (sin ella, la solicitud se guarda igual y sólo queda un aviso en el log). A quien escribe le llega un acuse mínimo: sólo número, tipo y área, nunca el texto que escribió, para que nadie use el formulario para mandar texto propio a terceros. El acuse tiene tope por correo de destino; al pasarlo la solicitud se guarda y llega a soporte, sólo no sale el acuse.
+- **Límites:** 5 solicitudes por hora, por usuario con sesión o por IP sin sesión; cuerpo de hasta 32 KB; campo trampa para bots.
+- **Todavía no hay vista de administración:** las solicitudes se leen en la casilla de soporte o en la base. Responder, cambiar el estado o listarlas desde Eli queda pendiente.
 
 ---
 

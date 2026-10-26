@@ -59,8 +59,26 @@ const limitadorPanelLectura = crearLimitador("panel-lectura", 200, "1 m")
 // fila es más caro que leerla, así que el tope es menor que el de lectura,
 // pero sigue siendo generoso frente al uso real de un negocio.
 const limitadorPanelEscritura = crearLimitador("panel-escritura", 60, "1 m")
+// Solicitudes de soporte (/api/soporte): 5 por hora, por usuario si hay
+// sesión (así un local con wifi compartido no se bloquea entre sí) y por IP
+// si no. Cada una manda dos correos (a soporte y el acuse), así
+// que el tope es bajo: nadie reporta más de un puñado de fallas por hora.
+const limitadorSoporte = crearLimitador("soporte", 5, "1 h")
+// Acuses de soporte: 2 por hora por correo de destino. El de `soporte` cuenta
+// por quien envía; este, por quien recibe. Sin él, alguien que rota IPs podía
+// mandarle acuses en serie a la casilla de un tercero. Al pasarse, la
+// solicitud se guarda igual y sólo se omite el acuse (ver /api/soporte).
+const limitadorAcuseDeSoporte = crearLimitador("soporte-acuse", 2, "1 h")
 
-export type TipoLimite = "login" | "auth" | "reserva" | "lecturaPublica" | "panelLectura" | "panelEscritura"
+export type TipoLimite =
+  | "login"
+  | "auth"
+  | "reserva"
+  | "lecturaPublica"
+  | "panelLectura"
+  | "panelEscritura"
+  | "soporte"
+  | "acuseDeSoporte"
 
 const limitadores: Record<TipoLimite, Ratelimit | null> = {
   login: limitadorLogin,
@@ -69,13 +87,16 @@ const limitadores: Record<TipoLimite, Ratelimit | null> = {
   lecturaPublica: limitadorLecturaPublica,
   panelLectura: limitadorPanelLectura,
   panelEscritura: limitadorPanelEscritura,
+  soporte: limitadorSoporte,
+  acuseDeSoporte: limitadorAcuseDeSoporte,
 }
 
 /**
  * Qué hacer si Upstash falla en ejecución (error o timeout).
  *
  * Los tipos que un anónimo puede abusar —login, registro/recuperación/
- * invitaciones y reserva pública— fallan CERRADO: si no se puede contar, no se
+ * invitaciones, reserva pública y solicitudes de soporte (cada una manda
+ * correos a una dirección que escribe quien la envía)— fallan CERRADO: si no se puede contar, no se
  * deja pasar, porque una caída del proveedor no puede abrir la puerta a fuerza
  * bruta ni a reservas en masa. El resto falla abierto: las lecturas (página
  * pública de horas libres y GET del panel) y también las escrituras del panel,
@@ -86,6 +107,9 @@ const fallaAbiertoSiUpstashFalla: Record<TipoLimite, boolean> = {
   login: false,
   auth: false,
   reserva: false,
+  soporte: false,
+  // Cerrado sólo omite el acuse: la solicitud se guarda igual.
+  acuseDeSoporte: false,
   panelEscritura: true,
   lecturaPublica: true,
   panelLectura: true,

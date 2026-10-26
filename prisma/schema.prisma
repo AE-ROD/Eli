@@ -30,6 +30,7 @@ model User {
   commissionChanges CommissionChange[] // cambios de porcentaje que este usuario (siempre dueño) aplicó.
   // Relación opcional (ver CommissionChange.changedById): la auditoría no
   // puede depender de que el usuario siga existiendo.
+  solicitudesDeSoporte SolicitudDeSoporte[] // relación opcional: la solicitud queda si se borra el usuario.
 
   @@map("usuarios")
 }
@@ -84,6 +85,7 @@ model Business {
   visits            Visit[]
   commissionRates   CommissionRate[]
   commissionChanges CommissionChange[]
+  solicitudesDeSoporte SolicitudDeSoporte[]
 
   @@index([invitadoPorId])
   @@map("negocios")
@@ -565,4 +567,37 @@ model Message {
 
   @@index([conversationId])
   @@map("mensajes")
+}
+
+/// Una solicitud de soporte (falla, reclamo o consulta) hecha desde
+/// /dashboard/ayuda o desde la página pública /soporte. Se guarda antes de
+/// mandar los correos: si el envío falla, el caso queda igual. Los valores
+/// válidos de `tipo` y `area` están en `lib/soporte.ts`.
+model SolicitudDeSoporte {
+  id           String    @id @default(cuid())
+  /// Número de caso que ve la persona ("#000123", `formatearNumeroDeCaso`).
+  numero       Int       @unique @default(autoincrement())
+  tipo         String
+  area         String
+  asunto       String
+  descripcion  String
+  /// Texto libre: en qué pantalla o URL pasó.
+  dondeOcurrio String?
+  /// Con sesión salen de la cuenta, no del formulario; sin sesión los escribe
+  /// la persona.
+  nombre       String
+  email        String
+  /// Con sesión, el negocio de la sesión (nunca uno que mande el cliente). Si
+  /// se borra el negocio o el usuario, la solicitud queda sin el vínculo.
+  businessId   String?
+  business     Business? @relation(fields: [businessId], references: [id], onDelete: SetNull)
+  userId       String?
+  user         User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  estado       String    @default("recibida")
+  userAgent    String?
+  createdAt    DateTime  @default(now())
+
+  @@index([businessId])
+  @@index([userId])
+  @@map("solicitudes_de_soporte")
 }
