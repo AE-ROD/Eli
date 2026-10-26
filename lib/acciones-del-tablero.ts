@@ -289,7 +289,7 @@ function momentoDelCobro(iso: string): string {
   const fecha = new Date(iso)
   const dia = esHoy(fecha)
     ? "hoy"
-    : `el ${fecha.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}`
+    : `el ${fecha.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}`
   return `${dia} a ${horaConArticulo(iso)}`
 }
 

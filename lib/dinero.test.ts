@@ -7,15 +7,16 @@ describe("formatearMonto", () => {
     expect(formatearMonto(0)).toBe("$0")
   })
 
-  it("coincide con el formato que ya usaban las vistas (`$` + toLocaleString es-ES)", () => {
-    for (const monto of [8000, 25000, 1234567, 999]) {
-      expect(formatearMonto(monto)).toBe(`$${monto.toLocaleString("es-ES")}`)
-    }
+  it("separa los miles a la chilena, también en números de cuatro cifras", () => {
+    expect(formatearMonto(8000)).toBe("$8.000")
+    expect(formatearMonto(15000)).toBe("$15.000")
+    expect(formatearMonto(1234567)).toBe("$1.234.567")
+    expect(formatearMonto(999)).toBe("$999")
   })
 
   it("con centavos muestra siempre dos decimales", () => {
     expect(formatearMonto(10.5)).toBe("$10,50")
-    expect(formatearMonto(1234.05)).toBe(`$${(1234.05).toLocaleString("es-ES", { minimumFractionDigits: 2 })}`)
+    expect(formatearMonto(1234.05)).toBe("$1.234,05")
   })
 
   it("no arrastra el error de sumar decimales sueltos", () => {

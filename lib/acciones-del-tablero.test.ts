@@ -555,7 +555,7 @@ describe("consecuenciasDeAnular", () => {
     const hoy = new Date()
     hoy.setHours(9, 15, 0, 0)
     expect(consecuenciasDeAnular({ estado: "finalizada", cliente, total: 8000.5, cobradaEn: hoy.toISOString() })).toMatch(
-      /^Se cobró hoy a las 09:15, por \$8000,50\./
+      /^Se cobró hoy a las 09:15, por \$8\.000,50\./
     )
   })
 

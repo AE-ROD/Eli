@@ -61,7 +61,7 @@ export function ModalServicio({
       <form onSubmit={onSubmit} className="space-y-5">
         <CampoFormulario
           etiqueta="Nombre del servicio"
-          placeholder="Ej: Corte de cabello, Arreglo de barba, Manicura..."
+          placeholder="Ej.: Corte de cabello, Arreglo de barba, Manicura..."
           value={form.name}
           onChange={(e) => onCambiarCampo("name", e.target.value)}
           icono={<Scissors className="h-4 w-4" />}

@@ -274,7 +274,7 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
                 <CampoFormulario
                   etiqueta="Teléfono (opcional)"
                   type="tel"
-                  placeholder="+52 555 123 4567"
+                  placeholder="+56 9 1234 5678"
                   autoComplete="tel"
                   value={telefono}
                   onChange={(e) => setTelefono(e.target.value)}

@@ -90,7 +90,7 @@ export async function POST(
       ) {
         return NextResponse.json(
           {
-            error: "Iniciá sesión con ese correo para aceptar la invitación",
+            error: "Inicia sesión con ese correo para aceptar la invitación",
             requiereSesion: true,
           },
           { status: 401 }

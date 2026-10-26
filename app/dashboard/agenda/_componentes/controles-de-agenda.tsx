@@ -35,7 +35,7 @@ interface PropsDeControlesDeAgenda {
 
 function formatoFecha(fecha: Date, vista: UnidadDeTiempo): string {
   if (vista === "dia") {
-    return fecha.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
+    return fecha.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
   }
   return `${meses[fecha.getMonth()]} ${fecha.getFullYear()}`
 }

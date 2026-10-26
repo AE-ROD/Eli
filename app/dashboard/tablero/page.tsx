@@ -67,7 +67,7 @@ type ModalDeServicios = Extract<ModalAbierto, { tipo: "servicios" }>
 
 /** `Martes, 6 de octubre`, con mayúscula inicial. */
 function fechaLarga(instante: number): string {
-  const fecha = new Date(instante).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
+  const fecha = new Date(instante).toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
   return fecha.charAt(0).toUpperCase() + fecha.slice(1)
 }
 

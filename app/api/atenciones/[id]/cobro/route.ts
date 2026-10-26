@@ -68,7 +68,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { pagos } = cobroSchema.parse(await cuerpoDelPedido(request))
 
     if (!transicionPermitida(existente.status, "finalizada")) {
-      throw new ErrorDeAtencion(409, "Sólo se cobra una atención que está por cobrar.")
+      throw new ErrorDeAtencion(409, "Solo se cobra una atención que está por cobrar.")
     }
 
     const usuarioId = session?.user?.id ?? null

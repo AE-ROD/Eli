@@ -216,7 +216,7 @@ export function ModalNuevaCita({
 
         <CampoFormulario
           etiqueta="Servicio"
-          placeholder="Ej: Corte, Color, Manicura..."
+          placeholder="Ej.: Corte, Color, Manicura..."
           value={form.servicio}
           onChange={(e) => onCambiarCampo("servicio", e.target.value)}
           icono={<Scissors className="size-4" aria-hidden="true" strokeWidth={1.75} />}

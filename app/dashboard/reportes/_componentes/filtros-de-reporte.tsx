@@ -159,7 +159,7 @@ export function FiltrosDeReporte({
       </fieldset>
 
       {soloPeriodo ? (
-        <p className="text-sm text-texto-2">Lo anulado se filtra sólo por período, por la fecha en que se anuló.</p>
+        <p className="text-sm text-texto-2">Lo anulado se filtra solo por período, por la fecha en que se anuló.</p>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Selector

@@ -37,7 +37,7 @@ describe("marcarLlegada", () => {
   })
 
   it("una reserva de otro día vuelve con el mensaje del servidor, como un tablero que quedó viejo", async () => {
-    const mensaje = "Esta reserva no es de hoy: sólo se marca la llegada de las reservas del día."
+    const mensaje = "Esta reserva no es de hoy: solo se marca la llegada de las reservas del día."
     simularRespuesta(json({ error: mensaje }, 409))
 
     expect(await marcarLlegada("cita-1")).toEqual({ ok: false, error: mensaje, motivo: "desactualizada" })
