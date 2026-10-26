@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { email as campoEmail, nombre as campoNombre } from "@/lib/campos-del-panel"
+import { nombre as campoNombre } from "@/lib/campos-del-panel"
 
 /**
  * Soporte: lo que comparten `POST /api/soporte` y las pantallas de ayuda
@@ -28,7 +28,6 @@ export const AREAS = [
 export type TipoDeSolicitud = (typeof TIPOS)[number]["valor"]
 export type AreaDeSoporte = (typeof AREAS)[number]["valor"]
 
-const VALORES_DE_TIPO = TIPOS.map((t) => t.valor) as [TipoDeSolicitud, ...TipoDeSolicitud[]]
 const VALORES_DE_AREA = AREAS.map((a) => a.valor) as [AreaDeSoporte, ...AreaDeSoporte[]]
 
 export function etiquetaDeTipo(tipo: string): string {
@@ -54,35 +53,89 @@ export const LIMITES = {
  */
 export const CAMPO_TRAMPA = "sitio_web"
 
-/** Lo que se pide siempre, haya sesión o no. */
-export const esquemaDeSolicitud = z.object({
-  tipo: z.enum(VALORES_DE_TIPO, {
-    errorMap: () => ({ message: "Elige si es una falla, un reclamo o una consulta" }),
-  }),
-  area: z.enum(VALORES_DE_AREA, { errorMap: () => ({ message: "Elige un área" }) }),
-  asunto: z
-    .string({ required_error: "Escribe un asunto", invalid_type_error: "Escribe un asunto" })
-    .trim()
-    .min(LIMITES.asunto.min, `El asunto tiene que tener al menos ${LIMITES.asunto.min} caracteres`)
-    .max(LIMITES.asunto.max, `El asunto no puede tener más de ${LIMITES.asunto.max} caracteres`),
-  descripcion: z
-    .string({ required_error: "Cuéntanos qué pasó", invalid_type_error: "Cuéntanos qué pasó" })
-    .trim()
-    .min(LIMITES.descripcion.min, `La descripción tiene que tener al menos ${LIMITES.descripcion.min} caracteres`)
-    .max(LIMITES.descripcion.max, `La descripción no puede tener más de ${LIMITES.descripcion.max} caracteres`),
-  dondeOcurrio: z
-    .string({ invalid_type_error: "Dónde ocurrió tiene que ser un texto" })
-    .trim()
-    .max(LIMITES.dondeOcurrio.max, `Dónde ocurrió no puede tener más de ${LIMITES.dondeOcurrio.max} caracteres`)
-    .optional()
-    .nullable()
-    .transform((valor) => (valor ? valor : null)),
-})
+/**
+ * Los mensajes de validación, con las mismas palabras que las etiquetas del
+ * formulario de cada camino (`components/soporte/formulario-de-soporte.tsx`):
+ * con el campo vacío se pide el dato ("Cuéntanos en pocas palabras qué
+ * pasó"), no se describe la regla. Son los mismos en el servidor y en la
+ * pantalla porque salen de estos esquemas.
+ */
+const MENSAJES_VACIO: Record<TipoDeSolicitud, { asunto: string; descripcion: string }> = {
+  falla: {
+    asunto: "Cuéntanos en pocas palabras qué pasó",
+    descripcion: "Cuéntanos el detalle de lo que pasó",
+  },
+  reclamo: {
+    asunto: "Cuéntanos en pocas palabras de qué se trata",
+    descripcion: "Cuéntanos qué pasó",
+  },
+  consulta: {
+    asunto: "Escribe tu pregunta en pocas palabras",
+    descripcion: "Cuéntanos un poco más sobre tu pregunta",
+  },
+}
 
-/** Sin sesión, además, quién escribe: nombre y email obligatorios. */
+/** Texto obligatorio: vacío pide el dato; corto o largo, dice cuánto falta o sobra. */
+function textoObligatorio(vacio: string, min: number, max: number, corto: string) {
+  return z
+    .string({ required_error: vacio, invalid_type_error: vacio })
+    .trim()
+    .min(1, vacio)
+    .min(min, corto)
+    .max(max, `Usa como máximo ${max} caracteres`)
+}
+
+function esquemaDelCamino<T extends TipoDeSolicitud>(tipo: T) {
+  const vacio = MENSAJES_VACIO[tipo]
+  return z.object({
+    tipo: z.literal(tipo),
+    area: z.enum(VALORES_DE_AREA, { errorMap: () => ({ message: "Elige un área" }) }),
+    asunto: textoObligatorio(
+      vacio.asunto,
+      LIMITES.asunto.min,
+      LIMITES.asunto.max,
+      `Escribe al menos ${LIMITES.asunto.min} caracteres`,
+    ),
+    descripcion: textoObligatorio(
+      vacio.descripcion,
+      LIMITES.descripcion.min,
+      LIMITES.descripcion.max,
+      `Cuéntanos un poco más (al menos ${LIMITES.descripcion.min} caracteres)`,
+    ),
+    dondeOcurrio: z
+      .string({ invalid_type_error: "Dónde ocurrió tiene que ser un texto" })
+      .trim()
+      .max(LIMITES.dondeOcurrio.max, `Usa como máximo ${LIMITES.dondeOcurrio.max} caracteres`)
+      .optional()
+      .nullable()
+      .transform((valor) => (valor ? valor : null)),
+  })
+}
+
+/**
+ * Lo que se pide siempre, haya sesión o no. Una unión por `tipo` para que
+ * cada camino pida el asunto y la descripción con sus propias palabras; con
+ * un `tipo` válido se informan todos los campos que fallan a la vez.
+ */
+export const esquemaDeSolicitud = z.discriminatedUnion(
+  "tipo",
+  [esquemaDelCamino("falla"), esquemaDelCamino("reclamo"), esquemaDelCamino("consulta")],
+  { errorMap: () => ({ message: "Elige si es una falla, un reclamo o una consulta" }) },
+)
+
+/** Sin sesión, además, quién escribe: nombre y correo obligatorios. */
 export const esquemaDeContacto = z.object({
-  nombre: z.string({ required_error: "Escribe tu nombre", invalid_type_error: "Escribe tu nombre" }).pipe(campoNombre()),
-  email: z.string({ required_error: "Escribe tu email", invalid_type_error: "Escribe tu email" }).pipe(campoEmail()),
+  nombre: z
+    .string({ required_error: "Escribe tu nombre", invalid_type_error: "Escribe tu nombre" })
+    .trim()
+    .min(1, "Escribe tu nombre")
+    .pipe(campoNombre()),
+  email: z
+    .string({ required_error: "Escribe tu correo", invalid_type_error: "Escribe tu correo" })
+    .trim()
+    .min(1, "Escribe tu correo")
+    .max(LIMITES.email.max, `Usa como máximo ${LIMITES.email.max} caracteres`)
+    .email("Escribe un correo válido"),
 })
 
 export type DatosDeSolicitud = z.infer<typeof esquemaDeSolicitud>

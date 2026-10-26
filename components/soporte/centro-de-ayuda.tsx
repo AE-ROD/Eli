@@ -12,8 +12,8 @@ import { BuscadorDePreguntas } from "@/components/soporte/buscador-de-preguntas"
 import { BORRADOR_VACIO, FormularioDeSoporte, type Borrador } from "@/components/soporte/formulario-de-soporte"
 import { IconoDeArea } from "@/components/soporte/icono-de-area"
 import { FiltroDeAreas, SelectorDeArea } from "@/components/soporte/selector-de-area"
-import { buscarPreguntas, preguntasDeArea, type PreguntaFrecuente } from "@/lib/preguntas-frecuentes"
-import { AREAS, etiquetaDeArea, type AreaDeSoporte, type TipoDeSolicitud } from "@/lib/soporte"
+import { buscarPreguntas, preguntasParaFallas, type PreguntaFrecuente } from "@/lib/preguntas-frecuentes"
+import { AREAS, LIMITES, etiquetaDeArea, type AreaDeSoporte, type TipoDeSolicitud } from "@/lib/soporte"
 import { cn } from "@/lib/utils"
 
 /**
@@ -24,9 +24,14 @@ import { cn } from "@/lib/utils"
  * información (consulta). Cada camino tiene tres pasos:
  *
  * - falla y reclamo: qué necesitas → el área → el formulario (la falla
- *   muestra antes las preguntas frecuentes de esa área);
+ *   muestra antes las preguntas de esa área que responden problemas típicos);
  * - consulta: qué necesitas → las preguntas frecuentes → el formulario, si no
  *   encontró la respuesta.
+ *
+ * Una búsqueda sin resultados en el inicio lleva directo al formulario
+ * ("Escríbenos"): ese camino tiene dos pasos. Por eso se lleva el historial
+ * real de pasos: "Atrás" vuelve a donde se venía y el indicador cuenta los
+ * pasos que se recorrieron, sin saltarse ninguno.
  *
  * Al cambiar de paso el contenido entra con un fundido y el foco va al título
  * nuevo: el botón que se apretó ya no existe, y sin esto el foco caería al
@@ -85,7 +90,10 @@ interface PropsDeCentroDeAyuda {
 }
 
 export function CentroDeAyuda({ conSesion, emailDeSesion }: PropsDeCentroDeAyuda) {
-  const [paso, setPaso] = useState<Paso>("inicio")
+  /** Los pasos recorridos, el actual al final. Nunca está vacío. */
+  const [historial, setHistorial] = useState<readonly Paso[]>(["inicio"])
+  const paso = historial[historial.length - 1]
+  const irA = (siguiente: Paso) => setHistorial((anterior) => [...anterior, siguiente])
   const [tipo, setTipo] = useState<TipoDeSolicitud | null>(null)
   const [area, setArea] = useState<AreaDeSoporte | null>(null)
   const [consulta, setConsulta] = useState("")
@@ -119,29 +127,28 @@ export function CentroDeAyuda({ conSesion, emailDeSesion }: PropsDeCentroDeAyuda
     // Otro camino empieza sin área; lo escrito, en cambio, se conserva.
     if (elegido !== tipo) setArea(null)
     setTipo(elegido)
-    if (elegido === "consulta") {
-      setPaso("preguntas")
-    } else {
-      setPaso("area")
-    }
+    irA(elegido === "consulta" ? "preguntas" : "area")
   }
 
   const elegirArea = (elegida: AreaDeSoporte) => {
     setArea(elegida)
-    setPaso("formulario")
+    irA("formulario")
   }
 
-  /** De las preguntas frecuentes al formulario, con el área del filtro si había una. */
+  /**
+   * De una búsqueda (en el inicio o en las preguntas frecuentes) al
+   * formulario, con el área del filtro si había una. Lo que se buscó pasa a
+   * ser la pregunta, salvo que ya hubiera algo escrito: eso no se pisa.
+   */
   const escribirnos = () => {
     setTipo("consulta")
     setArea(filtro)
-    setPaso("formulario")
+    const buscado = consulta.trim().slice(0, LIMITES.asunto.max)
+    if (buscado && !borrador.asunto.trim()) setBorrador({ ...borrador, asunto: buscado })
+    irA("formulario")
   }
 
-  const atras = () => {
-    if (paso === "formulario") setPaso(tipo === "consulta" ? "preguntas" : "area")
-    else setPaso("inicio")
-  }
+  const atras = () => setHistorial((anterior) => (anterior.length > 1 ? anterior.slice(0, -1) : anterior))
 
   const volverAlInicio = () => {
     setTipo(null)
@@ -149,14 +156,14 @@ export function CentroDeAyuda({ conSesion, emailDeSesion }: PropsDeCentroDeAyuda
     setFiltro(null)
     setConsulta("")
     setNumero("")
-    setPaso("inicio")
+    setHistorial(["inicio"])
   }
 
   const alEnviar = (numeroDeCaso: string) => {
     setNumero(numeroDeCaso)
     setEmailDeRespuesta(conSesion ? emailDeSesion : borrador.email.trim() || undefined)
     setBorrador(BORRADOR_VACIO)
-    setPaso("listo")
+    irA("listo")
   }
 
   const titulo = (texto: ReactNode) => (
@@ -165,7 +172,10 @@ export function CentroDeAyuda({ conSesion, emailDeSesion }: PropsDeCentroDeAyuda
     </TituloDelPaso>
   )
 
-  const numeroDePaso = paso === "inicio" ? 1 : paso === "formulario" ? 3 : 2
+  // El paso en que va es cuántos recorrió; el total, 3, salvo que haya llegado
+  // al formulario directo desde el inicio (un camino de 2).
+  const numeroDePaso = historial.length
+  const totalDePasos = paso === "formulario" ? historial.length : 3
 
   return (
     <motion.section
@@ -180,6 +190,7 @@ export function CentroDeAyuda({ conSesion, emailDeSesion }: PropsDeCentroDeAyuda
           camino={NOMBRE_DEL_CAMINO[tipo]}
           area={paso === "formulario" && tipo !== "consulta" ? area : null}
           numeroDePaso={numeroDePaso}
+          totalDePasos={totalDePasos}
           alVolver={atras}
         />
       )}
@@ -270,11 +281,13 @@ function EncabezadoDelCamino({
   camino,
   area,
   numeroDePaso,
+  totalDePasos,
   alVolver,
 }: {
   camino: string
   area: AreaDeSoporte | null
   numeroDePaso: number
+  totalDePasos: number
   alVolver: () => void
 }) {
   return (
@@ -299,11 +312,11 @@ function EncabezadoDelCamino({
           )}
           <span aria-hidden="true">·</span>
           <span>
-            Paso {numeroDePaso} de 3
+            Paso {numeroDePaso} de {totalDePasos}
           </span>
         </Antetitulo>
         <div aria-hidden="true" className="flex gap-1">
-          {[1, 2, 3].map((indice) => (
+          {Array.from({ length: totalDePasos }, (_, i) => i + 1).map((indice) => (
             <span key={indice} className={cn("h-1.5 w-6 rounded-full", indice <= numeroDePaso ? "bg-navy" : "bg-borde")} />
           ))}
         </div>
@@ -327,6 +340,7 @@ function PasoDeInicio({
 }) {
   const resultados = useMemo(() => buscarPreguntas(consulta), [consulta])
   const buscando = consulta.trim() !== ""
+  const prefijo = useId()
 
   return (
     <div>
@@ -360,9 +374,16 @@ function PasoDeInicio({
       <ul className="mt-8 grid gap-3 md:grid-cols-3">
         {OPCIONES.map((opcion) => (
           <li key={opcion.tipo}>
+            {/*
+              El nombre del botón es sólo el título; la descripción va aparte
+              (`aria-describedby`). Juntos, el lector leía "Algo no funcionaUn
+              error…", sin pausa entre los dos.
+            */}
             <button
               type="button"
               onClick={() => alElegir(opcion.tipo)}
+              aria-labelledby={`${prefijo}-${opcion.tipo}-titulo`}
+              aria-describedby={`${prefijo}-${opcion.tipo}-texto`}
               className={cn(
                 "group flex h-full min-h-24 w-full items-center gap-4 rounded-panel bg-tarjeta p-5 text-left shadow-sm squircle anillo-foco",
                 "transition-[box-shadow,translate] duration-200 ease-suave hover:-translate-y-0.5 hover:shadow-md",
@@ -376,8 +397,12 @@ function PasoDeInicio({
                 <opcion.icono strokeWidth={1.75} />
               </span>
               <span className="min-w-0 flex-1 md:flex-none">
-                <span className="block text-lg font-medium text-navy">{opcion.titulo}</span>
-                <span className="mt-1 block text-sm text-pretty text-texto-2">{opcion.texto}</span>
+                <span id={`${prefijo}-${opcion.tipo}-titulo`} className="block text-lg font-medium text-navy">
+                  {opcion.titulo}
+                </span>
+                <span id={`${prefijo}-${opcion.tipo}-texto`} className="mt-1 block text-sm text-pretty text-texto-2">
+                  {opcion.texto}
+                </span>
               </span>
               <ArrowRight
                 aria-hidden="true"
@@ -514,7 +539,7 @@ function PasoDeFormulario({
   emailDeSesion?: string
   alEnviar: (numero: string) => void
 }) {
-  const sugeridas = tipo === "falla" && area ? preguntasDeArea(area, 3) : []
+  const sugeridas = tipo === "falla" && area ? preguntasParaFallas(area, 3) : []
   const idDeSugeridas = useId()
 
   return (

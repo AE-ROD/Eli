@@ -59,10 +59,16 @@ const limitadorPanelLectura = crearLimitador("panel-lectura", 200, "1 m")
 // fila es más caro que leerla, así que el tope es menor que el de lectura,
 // pero sigue siendo generoso frente al uso real de un negocio.
 const limitadorPanelEscritura = crearLimitador("panel-escritura", 60, "1 m")
-// Solicitudes de soporte (/api/soporte): 5 por hora, por IP y además por
-// usuario si hay sesión. Cada una manda dos correos (a soporte y el acuse), así
+// Solicitudes de soporte (/api/soporte): 5 por hora, por usuario si hay
+// sesión (así un local con wifi compartido no se bloquea entre sí) y por IP
+// si no. Cada una manda dos correos (a soporte y el acuse), así
 // que el tope es bajo: nadie reporta más de un puñado de fallas por hora.
 const limitadorSoporte = crearLimitador("soporte", 5, "1 h")
+// Acuses de soporte: 2 por hora por correo de destino. El de `soporte` cuenta
+// por quien envía; este, por quien recibe. Sin él, alguien que rota IPs podía
+// mandarle acuses en serie a la casilla de un tercero. Al pasarse, la
+// solicitud se guarda igual y sólo se omite el acuse (ver /api/soporte).
+const limitadorAcuseDeSoporte = crearLimitador("soporte-acuse", 2, "1 h")
 
 export type TipoLimite =
   | "login"
@@ -72,6 +78,7 @@ export type TipoLimite =
   | "panelLectura"
   | "panelEscritura"
   | "soporte"
+  | "acuseDeSoporte"
 
 const limitadores: Record<TipoLimite, Ratelimit | null> = {
   login: limitadorLogin,
@@ -81,6 +88,7 @@ const limitadores: Record<TipoLimite, Ratelimit | null> = {
   panelLectura: limitadorPanelLectura,
   panelEscritura: limitadorPanelEscritura,
   soporte: limitadorSoporte,
+  acuseDeSoporte: limitadorAcuseDeSoporte,
 }
 
 /**
@@ -100,6 +108,8 @@ const fallaAbiertoSiUpstashFalla: Record<TipoLimite, boolean> = {
   auth: false,
   reserva: false,
   soporte: false,
+  // Cerrado sólo omite el acuse: la solicitud se guarda igual.
+  acuseDeSoporte: false,
   panelEscritura: true,
   lecturaPublica: true,
   panelLectura: true,

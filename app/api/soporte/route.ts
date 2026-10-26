@@ -1,10 +1,11 @@
+import { randomInt } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { actorDeSesion } from "@/lib/permisos"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope } from "@/lib/cuerpo-del-pedido"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { registrarError } from "@/lib/registro-de-errores"
 import { enviarAcuseDeSoporte, enviarSolicitudASoporte, type ResultadoDeEnvio } from "@/lib/email"
@@ -20,6 +21,14 @@ import {
 const DEMASIADAS = { error: "Enviaste varias solicitudes seguidas. Espera un rato e intenta de nuevo." }
 
 /**
+ * Tope del cuerpo. Lo más largo que acepta el esquema (descripción de 4000,
+ * asunto, dónde ocurrió, nombre y correo) no llega a 10 KB ni con todo en
+ * caracteres de 3 bytes; 32 KB deja margen sin cargar en memoria un cuerpo
+ * de megas.
+ */
+const TOPE_DEL_CUERPO = 32 * 1024
+
+/**
  * POST /api/soporte — una solicitud de soporte (falla, reclamo o consulta).
  *
  * La usan /dashboard/ayuda (con sesión) y /soporte (pública, sin sesión).
@@ -32,8 +41,15 @@ const DEMASIADAS = { error: "Enviaste varias solicitudes seguidas. Espera un rat
  *
  * Como se puede llamar sin sesión y manda correos, tiene los mismos resguardos
  * que `/api/referidos/invitacion` (JSON obligatorio y `Origin` propio), su
- * propio límite (`soporte`: 5 por hora por IP y, con sesión, también por
- * usuario) y un campo trampa para bots.
+ * tope de tamaño del cuerpo (413), su propio límite y un campo trampa para
+ * bots.
+ *
+ * Límites: con sesión se cuenta sólo por usuario (`soporte`, 5 por hora), así
+ * las personas de un mismo local, detrás del mismo wifi, no se bloquean entre
+ * ellas; sin sesión, por IP. Además, el acuse tiene su tope por correo de
+ * destino (`acuseDeSoporte`, 2 por hora): al pasarlo, la solicitud se guarda
+ * y llega a soporte igual, sólo no se manda el acuse. Así una persona real no
+ * pierde su reporte, y quien rota IPs no puede llenarle la casilla a otro.
  */
 export async function POST(request: NextRequest) {
   const tipoDeContenido = request.headers.get("content-type") ?? ""
@@ -44,27 +60,31 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Origen no permitido" }, { status: 403 })
   }
 
-  const porIp = await verificarLimite("soporte", `ip:${obtenerIp(request)}`)
-  if (!porIp.permitido) return NextResponse.json(DEMASIADAS, { status: 429 })
-
-  const cuerpo = await cuerpoDelPedido(request)
-  if (!cuerpo || typeof cuerpo !== "object" || Array.isArray(cuerpo)) {
-    return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
-  }
-
-  // Campo trampa lleno: es un bot. Se le responde como si hubiera salido bien,
-  // sin guardar ni mandar nada, para que no aprenda a esquivarlo.
-  const trampa = (cuerpo as Record<string, unknown>)[CAMPO_TRAMPA]
-  if (typeof trampa === "string" ? trampa.trim() !== "" : trampa !== undefined && trampa !== null) {
-    return NextResponse.json({ numero: formatearNumeroDeCaso(0) }, { status: 200 })
+  const leido = await cuerpoConTope(request, TOPE_DEL_CUERPO)
+  if (leido.excedido) {
+    return NextResponse.json({ error: "La solicitud es demasiado larga." }, { status: 413 })
   }
 
   const session = await getServerSession(authOptions)
   const userIdDeSesion = typeof session?.user?.id === "string" && session.user.id ? session.user.id : null
 
-  if (userIdDeSesion) {
-    const porUsuario = await verificarLimite("soporte", `usuario:${userIdDeSesion}`)
-    if (!porUsuario.permitido) return NextResponse.json(DEMASIADAS, { status: 429 })
+  const limite = await verificarLimite(
+    "soporte",
+    userIdDeSesion ? `usuario:${userIdDeSesion}` : `ip:${obtenerIp(request)}`,
+  )
+  if (!limite.permitido) return NextResponse.json(DEMASIADAS, { status: 429 })
+
+  const cuerpo = leido.cuerpo
+  if (!cuerpo || typeof cuerpo !== "object" || Array.isArray(cuerpo)) {
+    return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
+  }
+
+  // Campo trampa lleno: es un bot. Se le responde exactamente como a una
+  // persona (201 y un número de caso con la forma de uno real, al azar y no
+  // correlativo), sin guardar ni mandar nada, para que no aprenda a esquivarlo.
+  const trampa = (cuerpo as Record<string, unknown>)[CAMPO_TRAMPA]
+  if (typeof trampa === "string" ? trampa.trim() !== "" : trampa !== undefined && trampa !== null) {
+    return NextResponse.json({ numero: formatearNumeroDeCaso(randomInt(1_000, 100_000)) }, { status: 201 })
   }
 
   const solicitud = esquemaDeSolicitud.safeParse(cuerpo)
@@ -75,6 +95,16 @@ export async function POST(request: NextRequest) {
     const usuario = userIdDeSesion
       ? await prisma.user.findUnique({ where: { id: userIdDeSesion }, select: { id: true, name: true, email: true } })
       : null
+
+    // La sesión es de un usuario que ya no existe (se borró después de
+    // entrar): no se toma como anónima, porque el formulario con sesión no
+    // pide nombre ni correo y la persona vería un error que no entiende.
+    if (userIdDeSesion && !usuario) {
+      return NextResponse.json(
+        { error: "Tu sesión ya no es válida. Vuelve a iniciar sesión para escribirnos." },
+        { status: 401 },
+      )
+    }
 
     let contacto: { nombre: string; email: string }
     if (usuario) {
@@ -93,6 +123,11 @@ export async function POST(request: NextRequest) {
     const negocio: NegocioDeLaSolicitud | null = negocioEncontrado
       ? { id: negocioEncontrado.id, nombre: negocioEncontrado.name }
       : null
+
+    // El tope del acuse se consulta antes de guardar, pero no corta nada: si
+    // ese correo ya recibió sus acuses de la hora, la solicitud se guarda y se
+    // avisa a soporte igual; sólo no sale el acuse.
+    const acuse = await verificarLimite("acuseDeSoporte", `email:${contacto.email.trim().toLowerCase()}`)
 
     const guardada = await prisma.solicitudDeSoporte.create({
       data: {
@@ -123,10 +158,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { aSoporte, acuse } = correosDeSolicitud(guardada, negocio, casilla)
+    if (!acuse.permitido) {
+      console.warn(`[soporte] Caso ${guardada.numero}: ese correo ya recibió sus acuses de la hora; no se manda otro.`)
+    }
+
+    const correos = correosDeSolicitud(guardada, negocio, casilla)
+    const { aSoporte } = correos
     await Promise.all([
       aSoporte ? enviarSinPerder("enviando el aviso a soporte", () => enviarSolicitudASoporte(aSoporte)) : null,
-      enviarSinPerder("enviando el acuse de soporte", () => enviarAcuseDeSoporte(acuse)),
+      acuse.permitido
+        ? enviarSinPerder("enviando el acuse de soporte", () => enviarAcuseDeSoporte(correos.acuse))
+        : null,
     ])
 
     return NextResponse.json({ numero: formatearNumeroDeCaso(guardada.numero) }, { status: 201 })

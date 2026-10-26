@@ -5,6 +5,7 @@ import {
   buscarPreguntas,
   normalizarTexto,
   preguntasDeArea,
+  preguntasParaFallas,
   type PreguntaFrecuente,
 } from "./preguntas-frecuentes"
 
@@ -89,5 +90,35 @@ describe("PREGUNTAS_FRECUENTES", () => {
       const texto = [pregunta.pregunta, ...pregunta.respuesta].join(" ")
       expect(texto, pregunta.id).not.toMatch(/\bsólo\b/i)
     }
+  })
+})
+
+describe("preguntasParaFallas", () => {
+  it("devuelve solo las marcadas para fallas, del área, hasta las pedidas", () => {
+    const ejemplo: PreguntaFrecuente[] = [
+      { id: "uso", area: "agenda", pregunta: "¿Cómo agendo?", respuesta: ["Así."], palabrasClave: [] },
+      { id: "f1", area: "agenda", pregunta: "No veo la cita", respuesta: ["Revisa."], palabrasClave: [], paraFallas: true },
+      { id: "f2", area: "tablero", pregunta: "No puedo cobrar", respuesta: ["Revisa."], palabrasClave: [], paraFallas: true },
+      { id: "f3", area: "agenda", pregunta: "No encuentro", respuesta: ["Revisa."], palabrasClave: [], paraFallas: true },
+    ]
+    expect(preguntasParaFallas("agenda", 3, ejemplo).map((p) => p.id)).toEqual(["f1", "f3"])
+    expect(preguntasParaFallas("agenda", 1, ejemplo).map((p) => p.id)).toEqual(["f1"])
+  })
+
+  it("en el catálogo real, cada área con problemas típicos sugiere al menos uno, y Otro ninguno", () => {
+    for (const area of AREAS) {
+      const sugeridas = preguntasParaFallas(area.valor)
+      expect(sugeridas.length, area.valor).toBeLessThanOrEqual(3)
+      if (area.valor === "otro") expect(sugeridas).toEqual([])
+      else expect(sugeridas.length, area.valor).toBeGreaterThanOrEqual(1)
+    }
+  })
+
+  it("no sugiere las de uso: en Agenda no aparece cómo agendar ni las vistas", () => {
+    const ids = preguntasParaFallas("agenda").map((p) => p.id)
+    expect(ids).not.toContain("agenda-nueva-cita")
+    expect(ids).not.toContain("agenda-vistas")
+    expect(preguntasParaFallas("reservas").map((p) => p.id)).toContain("reservas-sin-horas")
+    expect(preguntasParaFallas("cuenta-y-plan").map((p) => p.id)).toContain("cuenta-no-llega-recuperacion")
   })
 })

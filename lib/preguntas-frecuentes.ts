@@ -30,6 +30,12 @@ export interface PreguntaFrecuente {
   respuesta: readonly string[]
   /** Otras formas de decirlo que la búsqueda también encuentra ("contraseña" → "clave"). */
   palabrasClave: readonly string[]
+  /**
+   * Si responde a un problema típico ("no aparecen horas", "no me llega el
+   * correo"), no a cómo se usa algo. Son las que se sugieren en el camino
+   * "Algo no funciona", antes del formulario.
+   */
+  paraFallas?: true
 }
 
 export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
@@ -39,7 +45,7 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
     area: "agenda",
     pregunta: "¿Cómo agendo una cita desde el panel?",
     respuesta: [
-      "En Agenda, toca \"Nueva cita\". Elige el servicio, la fecha, la hora de inicio y de término y el profesional que atiende. El precio es opcional.",
+      "En Agenda, toca \"Nueva cita\". Escribe el servicio, elige el cliente, la fecha y la hora de inicio y de término. El dueño y el encargado eligen además el profesional que atiende. El precio es opcional.",
       "Las reservas que tus clientes hacen desde tu página pública aparecen solas en la agenda.",
     ],
     palabrasClave: ["agendar", "crear cita", "reservar", "turno", "hora"],
@@ -81,6 +87,28 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
     ],
     palabrasClave: ["permisos", "rol", "ver citas", "profesional"],
   },
+  {
+    id: "agenda-no-veo-cita",
+    area: "agenda",
+    pregunta: "No veo una cita en la agenda",
+    respuesta: [
+      "Revisa la vista (Día, Semana o Mes) y la fecha en que estás parado: con las flechas pasas al día, la semana o el mes anterior o siguiente.",
+      "Si eres profesional, ves solo las citas asignadas a ti. Las reservas que llegan desde tu página pública quedan sin asignar, así que no aparecen en tu agenda; el dueño y el encargado ven todas.",
+    ],
+    palabrasClave: ["no aparece", "no veo", "falta", "cita perdida", "reserva", "profesional"],
+    paraFallas: true,
+  },
+  {
+    id: "agenda-no-encuentro-cliente",
+    area: "agenda",
+    pregunta: "Al crear una cita no encuentro al cliente",
+    respuesta: [
+      "En \"Nueva cita\" el cliente se elige de la lista: escribe al menos 2 letras de su nombre, correo o teléfono y tócalo cuando aparezca.",
+      "Si no aparece, todavía no está en Clientes. Agrégalo en Clientes con \"Nuevo cliente\" y vuelve a crear la cita.",
+    ],
+    palabrasClave: ["no aparece", "buscar cliente", "nueva cita", "no encuentro", "no me deja"],
+    paraFallas: true,
+  },
 
   // ─── Reservas en línea ─────────────────────────────────────────────────────
   {
@@ -112,6 +140,7 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
       `Tampoco se ofrecen las horas que ya pasaron, las que ya están tomadas ni los días a más de ${DIAS_MAXIMOS_DE_ANTICIPACION} días desde hoy.`,
     ],
     palabrasClave: ["no aparecen horas", "disponibilidad", "horario", "servicios", "sin horarios"],
+    paraFallas: true,
   },
   {
     id: "reservas-aviso",
@@ -121,6 +150,17 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
       "Te llega un correo con el cliente, el servicio, la fecha y la hora. La cita aparece en la Agenda y, el día que corresponde, en \"Reservas de hoy\" del Tablero.",
     ],
     palabrasClave: ["notificación", "aviso", "nueva reserva", "correo"],
+  },
+  {
+    id: "reservas-no-llega-aviso",
+    area: "reservas",
+    pregunta: "No me llega el correo cuando alguien reserva",
+    respuesta: [
+      "El aviso va al correo de la cuenta del dueño del negocio. Revisa la carpeta de spam o correo no deseado.",
+      "Aunque el correo no llegue, la reserva queda guardada: la ves en la Agenda y, el día que corresponde, en \"Reservas de hoy\" del Tablero.",
+    ],
+    palabrasClave: ["no llega", "no me llega", "spam", "aviso", "correo", "notificación"],
+    paraFallas: true,
   },
   {
     id: "reservas-cancelar-cliente",
@@ -170,6 +210,7 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
       "Mientras la atención no haya empezado, se deshace y la reserva vuelve a su columna. Si ya empezó, hay que anularla: queda el registro de quién, cuándo y por qué.",
     ],
     palabrasClave: ["deshacer", "error", "llegada", "anular"],
+    paraFallas: true,
   },
   {
     id: "tablero-corregir-cobro",
@@ -180,6 +221,7 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
       "Antes de cobrar, en cambio, los servicios y los precios se pueden corregir.",
     ],
     palabrasClave: ["anular cobro", "error", "corregir", "devolución", "editar"],
+    paraFallas: true,
   },
   {
     id: "tablero-quien-cobra",
@@ -189,6 +231,7 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
       "Cobran el dueño y el encargado. Un profesional lleva sus atenciones hasta Por cobrar, y el cobro lo registra el dueño o el encargado.",
     ],
     palabrasClave: ["permisos", "rol", "cobrar", "profesional", "no me deja"],
+    paraFallas: true,
   },
 
   // ─── Clientes ──────────────────────────────────────────────────────────────
@@ -221,6 +264,16 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
     ],
     palabrasClave: ["ficha", "notas", "historial", "visitas"],
   },
+  {
+    id: "clientes-no-puedo-editar",
+    area: "clientes",
+    pregunta: "No puedo cambiar los datos de un cliente",
+    respuesta: [
+      "Cambiar los datos de un cliente (nombre, teléfono, correo, etiquetas) y borrarlo lo hacen el dueño y el encargado. Un profesional, en la ficha, puede editar solo las notas.",
+    ],
+    palabrasClave: ["editar cliente", "no me deja", "permisos", "borrar cliente", "profesional"],
+    paraFallas: true,
+  },
 
   // ─── Reportes ──────────────────────────────────────────────────────────────
   {
@@ -242,6 +295,7 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
       "Revisa también los filtros: el período, el turno o un profesional elegido pueden estar dejándola fuera. Y si el cobro se anuló, aparece en Anuladas.",
     ],
     palabrasClave: ["no aparece", "falta", "ingresos", "no suma", "anuladas"],
+    paraFallas: true,
   },
   {
     id: "reportes-turnos",
@@ -289,6 +343,18 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
       "Si el enlace venció o no aparece, escríbenos desde aquí y lo revisamos.",
     ],
     palabrasClave: ["no llega", "spam", "correo", "invitación", "vencida"],
+    paraFallas: true,
+  },
+  {
+    id: "equipo-invitacion-pendiente",
+    area: "equipo",
+    pregunta: "Me dice que ya existe una invitación pendiente",
+    respuesta: [
+      "Ya invitaste a ese correo y la persona todavía no creó su cuenta. Pídele que busque el correo de la invitación, también en spam.",
+      "Si el enlace venció, hoy no se puede invitar de nuevo al mismo correo desde el panel: escríbenos desde aquí y lo revisamos.",
+    ],
+    palabrasClave: ["invitación pendiente", "volver a invitar", "reenviar", "no me deja", "vencida"],
+    paraFallas: true,
   },
   {
     id: "equipo-roles",
@@ -357,6 +423,7 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
       "Si creaste tu cuenta con Google, no tienes contraseña en Eli: entra con el botón de Google.",
     ],
     palabrasClave: ["clave", "contraseña", "recuperar", "restablecer", "no puedo entrar", "login"],
+    paraFallas: true,
   },
   {
     id: "cuenta-google",
@@ -366,6 +433,18 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
       "Cada cuenta entra de una sola forma: la que se creó con correo y contraseña entra con ellos, y la que se creó con Google, con Google. Usa la forma con la que creaste tu cuenta.",
     ],
     palabrasClave: ["google", "gmail", "iniciar sesión", "no puedo entrar", "login"],
+    paraFallas: true,
+  },
+  {
+    id: "cuenta-no-llega-recuperacion",
+    area: "cuenta-y-plan",
+    pregunta: "No me llega el correo para recuperar la contraseña",
+    respuesta: [
+      "Revisa la carpeta de spam o correo no deseado, y que escribiste el mismo correo con el que creaste tu cuenta.",
+      "Si creaste tu cuenta con Google, no te llega ningún correo: no tienes contraseña en Eli. Entra con el botón de Google.",
+    ],
+    palabrasClave: ["no llega", "no me llega", "recuperar", "contraseña", "clave", "spam", "correo"],
+    paraFallas: true,
   },
 
   // ─── Otro ──────────────────────────────────────────────────────────────────
@@ -467,7 +546,20 @@ export function buscarPreguntas(consulta: string, opciones: OpcionesDeBusqueda =
   return conPuntaje.map(({ pregunta }) => pregunta)
 }
 
-/** Las primeras `cuantas` preguntas de un área: las de "Antes de escribirnos, revisa esto". */
+/** Las primeras `cuantas` preguntas de un área, en su orden. */
 export function preguntasDeArea(area: AreaDeSoporte, cuantas = 3): PreguntaFrecuente[] {
   return PREGUNTAS_FRECUENTES.filter((pregunta) => pregunta.area === area).slice(0, cuantas)
+}
+
+/**
+ * Las de "Antes de escribirnos, revisa esto" en el camino "Algo no funciona":
+ * hasta `cuantas` preguntas del área marcadas `paraFallas`. Un área sin
+ * problemas típicos documentados (Otro) no sugiere ninguna.
+ */
+export function preguntasParaFallas(
+  area: AreaDeSoporte,
+  cuantas = 3,
+  preguntas: readonly PreguntaFrecuente[] = PREGUNTAS_FRECUENTES,
+): PreguntaFrecuente[] {
+  return preguntas.filter((pregunta) => pregunta.area === area && pregunta.paraFallas).slice(0, cuantas)
 }

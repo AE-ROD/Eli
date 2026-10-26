@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { correosDeSolicitud, esquemaDeSolicitud, formatearNumeroDeCaso } from "./soporte"
+import { correosDeSolicitud, esquemaDeContacto, esquemaDeSolicitud, formatearNumeroDeCaso } from "./soporte"
 
 describe("formatearNumeroDeCaso", () => {
   it.each([
@@ -29,6 +29,33 @@ describe("esquemaDeSolicitud", () => {
 
   it("exige asunto y descripción", () => {
     expect(esquemaDeSolicitud.safeParse({ tipo: "falla", area: "otro" }).success).toBe(false)
+  })
+
+  it("con todo vacío informa cada campo a la vez, pidiendo el dato con las palabras del camino", () => {
+    const resultado = esquemaDeSolicitud.safeParse({ tipo: "reclamo", asunto: "", descripcion: "" })
+    expect(resultado.success).toBe(false)
+    const primeros = new Map<string, string>()
+    for (const issue of resultado.error!.issues) {
+      const campo = String(issue.path[0])
+      if (!primeros.has(campo)) primeros.set(campo, issue.message)
+    }
+    expect(Object.fromEntries(primeros)).toEqual({
+      area: "Elige un área",
+      asunto: "Cuéntanos en pocas palabras de qué se trata",
+      descripcion: "Cuéntanos qué pasó",
+    })
+  })
+})
+
+describe("esquemaDeContacto", () => {
+  it.each([
+    [{ nombre: "", email: "ana@ejemplo.com" }, "Escribe tu nombre"],
+    [{ nombre: "Ana", email: "" }, "Escribe tu correo"],
+    [{ nombre: "Ana", email: "ana" }, "Escribe un correo válido"],
+  ])("%o → %s", (datos, mensaje) => {
+    const resultado = esquemaDeContacto.safeParse(datos)
+    expect(resultado.success).toBe(false)
+    expect(resultado.error!.issues[0].message).toBe(mensaje)
   })
 })
 

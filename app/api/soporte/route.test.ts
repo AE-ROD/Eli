@@ -27,11 +27,15 @@ const mockPrisma = {
 }
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }))
 
-/** Un pedido como el que manda el formulario: JSON, desde el mismo host. */
+/**
+ * Un pedido como el que manda el formulario: JSON, desde el mismo host. El
+ * cuerpo va como un stream de verdad, que es lo que lee `cuerpoConTope`; un
+ * `string` se manda tal cual (para probar tamaños), lo demás como JSON.
+ */
 const pedido = (cuerpo: unknown, cabeceras: Record<string, string> = {}) =>
   ({
     headers: new Headers({ "content-type": "application/json", host: "eli.test", "user-agent": "Prueba/1.0", ...cabeceras }),
-    json: async () => cuerpo,
+    body: new Response(typeof cuerpo === "string" ? cuerpo : JSON.stringify(cuerpo)).body,
   }) as unknown as NextRequest
 
 const enviar = async (cuerpo: unknown, cabeceras?: Record<string, string>) => {
@@ -103,8 +107,10 @@ describe("POST /api/soporte", () => {
 
     it.each([
       ["sin nombre", { ...valida, email: "ana@ejemplo.com" }, "Escribe tu nombre"],
-      ["sin email", { ...valida, nombre: "Ana" }, "Escribe tu email"],
-      ["email inválido", { ...anonima, email: "no-es-email" }, "El email no es válido"],
+      ["nombre vacío", { ...anonima, nombre: "   " }, "Escribe tu nombre"],
+      ["sin correo", { ...valida, nombre: "Ana" }, "Escribe tu correo"],
+      ["correo vacío", { ...anonima, email: "" }, "Escribe tu correo"],
+      ["correo inválido", { ...anonima, email: "no-es-email" }, "Escribe un correo válido"],
     ])("%s: 400 y no guarda", async (_caso, cuerpo, mensaje) => {
       const respuesta = await enviar(cuerpo)
 
@@ -121,11 +127,11 @@ describe("POST /api/soporte", () => {
       expect(data.userId).toBeNull()
     })
 
-    it("cuenta el límite sólo por IP", async () => {
+    it("cuenta el límite de solicitudes sólo por IP", async () => {
       await enviar(anonima)
 
-      expect(mockVerificarLimite).toHaveBeenCalledTimes(1)
-      expect(mockVerificarLimite).toHaveBeenCalledWith("soporte", "ip:203.0.113.7")
+      const deSolicitudes = mockVerificarLimite.mock.calls.filter(([tipo]) => tipo === "soporte")
+      expect(deSolicitudes).toEqual([["soporte", "ip:203.0.113.7"]])
     })
   })
 
@@ -164,11 +170,30 @@ describe("POST /api/soporte", () => {
       expect(respuesta.status).toBe(201)
     })
 
-    it("cuenta el límite por IP y además por usuario", async () => {
+    it("cuenta el límite de solicitudes sólo por usuario, no por IP: un wifi compartido no bloquea al local", async () => {
       await enviar(valida)
 
-      expect(mockVerificarLimite).toHaveBeenCalledWith("soporte", "ip:203.0.113.7")
-      expect(mockVerificarLimite).toHaveBeenCalledWith("soporte", "usuario:usuario-1")
+      const deSolicitudes = mockVerificarLimite.mock.calls.filter(([tipo]) => tipo === "soporte")
+      expect(deSolicitudes).toEqual([["soporte", "usuario:usuario-1"]])
+    })
+
+    it("con la IP agotada por otros, el usuario con sesión igual puede escribir", async () => {
+      mockVerificarLimite.mockImplementation(async (_tipo: string, clave: string) =>
+        clave.startsWith("ip:") ? { permitido: false, restantes: 0 } : { permitido: true, restantes: 4 },
+      )
+
+      expect((await enviar(valida)).status).toBe(201)
+    })
+
+    it("usuario de la sesión que ya no existe: 401 con mensaje claro y no guarda", async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null)
+
+      const respuesta = await enviar(valida)
+
+      expect(respuesta.status).toBe(401)
+      expect((await respuesta.json()).error).toMatch(/sesión/)
+      expect(mockPrisma.solicitudDeSoporte.create).not.toHaveBeenCalled()
+      expect(mockEnviarAcuseDeSoporte).not.toHaveBeenCalled()
     })
 
     it("límite por usuario agotado: 429 y no guarda", async () => {
@@ -205,19 +230,24 @@ describe("POST /api/soporte", () => {
   describe("validación", () => {
     it.each([
       ["tipo desconocido", { ...anonima, tipo: "queja" }, "Elige si es una falla, un reclamo o una consulta"],
+      ["sin tipo", { ...anonima, tipo: undefined }, "Elige si es una falla, un reclamo o una consulta"],
       ["área desconocida", { ...anonima, area: "cocina" }, "Elige un área"],
-      ["asunto largo", { ...anonima, asunto: "a".repeat(121) }, "El asunto no puede tener más de 120 caracteres"],
-      ["descripción corta", { ...anonima, descripcion: "corta" }, "La descripción tiene que tener al menos 10 caracteres"],
+      ["sin área", { ...anonima, area: undefined }, "Elige un área"],
+      ["falla sin asunto", { ...anonima, asunto: "  " }, "Cuéntanos en pocas palabras qué pasó"],
+      ["reclamo sin asunto", { ...anonima, tipo: "reclamo", asunto: "" }, "Cuéntanos en pocas palabras de qué se trata"],
+      ["consulta sin asunto", { ...anonima, tipo: "consulta", asunto: "" }, "Escribe tu pregunta en pocas palabras"],
+      ["asunto corto", { ...anonima, asunto: "ab" }, "Escribe al menos 3 caracteres"],
+      ["asunto largo", { ...anonima, asunto: "a".repeat(121) }, "Usa como máximo 120 caracteres"],
+      ["falla sin descripción", { ...anonima, descripcion: "" }, "Cuéntanos el detalle de lo que pasó"],
+      ["reclamo sin descripción", { ...anonima, tipo: "reclamo", descripcion: "" }, "Cuéntanos qué pasó"],
       [
-        "descripción larga",
-        { ...anonima, descripcion: "a".repeat(4001) },
-        "La descripción no puede tener más de 4000 caracteres",
+        "consulta sin descripción",
+        { ...anonima, tipo: "consulta", descripcion: "" },
+        "Cuéntanos un poco más sobre tu pregunta",
       ],
-      [
-        "dónde ocurrió largo",
-        { ...anonima, dondeOcurrio: "a".repeat(301) },
-        "Dónde ocurrió no puede tener más de 300 caracteres",
-      ],
+      ["descripción corta", { ...anonima, descripcion: "corta" }, "Cuéntanos un poco más (al menos 10 caracteres)"],
+      ["descripción larga", { ...anonima, descripcion: "a".repeat(4001) }, "Usa como máximo 4000 caracteres"],
+      ["dónde ocurrió largo", { ...anonima, dondeOcurrio: "a".repeat(301) }, "Usa como máximo 300 caracteres"],
     ])("%s: 400 con mensaje en español", async (_caso, cuerpo, mensaje) => {
       const respuesta = await enviar(cuerpo)
 
@@ -239,11 +269,13 @@ describe("POST /api/soporte", () => {
   })
 
   describe("campo trampa", () => {
-    it("con valor: 200 falso, sin guardar ni enviar correos", async () => {
+    it("con valor: 201 falso con un número creíble, sin guardar ni enviar correos", async () => {
       const respuesta = await enviar({ ...anonima, sitio_web: "https://spam.example" })
 
-      expect(respuesta.status).toBe(200)
-      expect(await respuesta.json()).toHaveProperty("numero")
+      expect(respuesta.status).toBe(201)
+      const { numero } = await respuesta.json()
+      expect(numero).toMatch(/^#\d{6}$/)
+      expect(numero).not.toBe("#000000")
       expect(mockPrisma.solicitudDeSoporte.create).not.toHaveBeenCalled()
       expect(mockEnviarSolicitudASoporte).not.toHaveBeenCalled()
       expect(mockEnviarAcuseDeSoporte).not.toHaveBeenCalled()
@@ -311,6 +343,36 @@ describe("POST /api/soporte", () => {
       expect(aviso).toHaveBeenCalled()
     })
 
+    it("pide el tope del acuse por el correo de destino, normalizado", async () => {
+      await enviar({ ...anonima, email: "  Ana@Ejemplo.com " })
+
+      expect(mockVerificarLimite).toHaveBeenCalledWith("acuseDeSoporte", "email:ana@ejemplo.com")
+    })
+
+    it("tope del acuse agotado: guarda, avisa a soporte y responde 201, pero no manda el acuse", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {})
+      mockVerificarLimite.mockImplementation(async (tipo: string) =>
+        tipo === "acuseDeSoporte" ? { permitido: false, restantes: 0 } : { permitido: true, restantes: 4 },
+      )
+
+      const respuesta = await enviar(anonima)
+
+      expect(respuesta.status).toBe(201)
+      expect(mockPrisma.solicitudDeSoporte.create).toHaveBeenCalledTimes(1)
+      expect(mockEnviarSolicitudASoporte).toHaveBeenCalledTimes(1)
+      expect(mockEnviarAcuseDeSoporte).not.toHaveBeenCalled()
+    })
+
+    it("con sesión, el tope del acuse se cuenta por el correo de la cuenta", async () => {
+      mockGetServerSession.mockResolvedValue(sesion)
+      mockPrisma.user.findUnique.mockResolvedValue({ id: "usuario-1", name: "Dueña", email: "duena@ejemplo.com" })
+      mockPrisma.business.findUnique.mockResolvedValue({ id: "negocio-1", name: "Mi negocio" })
+
+      await enviar({ ...valida, email: "otra@ejemplo.com" })
+
+      expect(mockVerificarLimite).toHaveBeenCalledWith("acuseDeSoporte", "email:duena@ejemplo.com")
+    })
+
     it("si falla guardar: 500 y no manda correos", async () => {
       vi.spyOn(console, "error").mockImplementation(() => {})
       mockPrisma.solicitudDeSoporte.create.mockRejectedValue(new Error("base caída"))
@@ -336,6 +398,27 @@ describe("POST /api/soporte", () => {
 
     it("con Origin propio: pasa", async () => {
       expect((await enviar(anonima, { origin: "https://eli.test" })).status).toBe(201)
+    })
+
+    it("Content-Length de más de 32 KB: 413 sin leer el cuerpo ni contar el límite", async () => {
+      const respuesta = await enviar(anonima, { "content-length": String(32 * 1024 + 1) })
+
+      expect(respuesta.status).toBe(413)
+      expect(mockVerificarLimite).not.toHaveBeenCalled()
+      expect(mockPrisma.solicitudDeSoporte.create).not.toHaveBeenCalled()
+    })
+
+    it("sin Content-Length pero con un cuerpo de más de 32 KB: 413", async () => {
+      const grande = JSON.stringify({ ...anonima, descripcion: "a".repeat(40 * 1024) })
+
+      const respuesta = await enviar(grande)
+
+      expect(respuesta.status).toBe(413)
+      expect(mockPrisma.solicitudDeSoporte.create).not.toHaveBeenCalled()
+    })
+
+    it("JSON roto: 400", async () => {
+      expect((await enviar("{no es json")).status).toBe(400)
     })
 
     it("límite por IP agotado: 429 y no guarda", async () => {
