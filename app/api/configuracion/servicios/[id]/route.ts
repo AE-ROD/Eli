@@ -84,7 +84,7 @@ export async function DELETE(
       return NextResponse.json(
         {
           error:
-            "Este servicio tiene comisiones configuradas. Desactivalo en vez de borrarlo, o pedile al dueño que quite esas comisiones primero.",
+            "Este servicio tiene comisiones configuradas. Desactívalo en vez de borrarlo, o pídele al dueño que quite esas comisiones primero.",
         },
         { status: 409 }
       )

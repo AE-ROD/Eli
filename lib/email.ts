@@ -259,7 +259,7 @@ async function enviar(correo: Correo): Promise<ResultadoDeEnvio> {
 }
 
 function fechaLegible(fechaISO: string): string {
-  return new Date(fechaISO).toLocaleDateString("es-ES", {
+  return new Date(fechaISO).toLocaleDateString("es-CL", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -321,7 +321,7 @@ export function enviarAvisoProfesional(datos: DatosAvisoProfesional) {
     intro: html`Tienes una nueva cita en <strong>${datos.nombreNegocio}</strong>.`,
     detalle,
     destacado: true,
-    cierre: html`Revisa tu calendario en el dashboard para ver todos los detalles.`,
+    cierre: html`Revisa tu calendario en tu panel para ver todos los detalles.`,
   })
 }
 
@@ -338,7 +338,7 @@ export function enviarRecordatorio(datos: DatosRecordatorio) {
   return enviar({
     tipo: "recordatorio",
     para: datos.emailCliente,
-    asunto: asunto`Recordatorio — Tu cita es mañana`,
+    asunto: asunto`Recordatorio — tu cita es mañana`,
     titulo: "Tu cita es mañana",
     intro: html`Hola <strong>${datos.nombreCliente}</strong>, te recordamos que tienes una cita mañana en <strong>${datos.nombreNegocio}</strong>.`,
     detalle: [
@@ -453,7 +453,7 @@ function correoDePrueba(tipo: TipoCorreoDePrueba, datos: DatosCorreoDePrueba): C
         titulo: "Tu negocio ya está en Eli",
         intro: html`Hola <strong>${datos.nombreDueno}</strong>, <strong>${datos.nombreNegocio}</strong> ya tiene su espacio en Eli. Tienes ${DIAS_DE_PRUEBA} días de prueba gratis, sin tarjeta. Para empezar a recibir reservas, te faltan tres pasos:`,
         pasos: [
-          { titulo: "Define tu horario", texto: "Los días y las horas en que atiendes. Tus clientes sólo ven horas libres dentro de ese horario." },
+          { titulo: "Define tu horario", texto: "Los días y las horas en que atiendes. Tus clientes solo ven horas libres dentro de ese horario." },
           { titulo: "Agrega tus servicios", texto: "Qué ofreces, cuánto dura y cuánto cuesta." },
           { titulo: "Comparte tu enlace de reservas", texto: "Tus clientes eligen el servicio y la hora, y la cita aparece en tu agenda." },
         ],

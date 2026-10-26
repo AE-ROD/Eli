@@ -16,7 +16,7 @@ import { useIrALaSeccion } from "./usar-ir-a-la-seccion"
 
 /** `mar, 6 oct`: el día del cobro, corto, en la hora de quien mira. */
 export function diaCorto(iso: string): string {
-  return new Date(iso).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" })
+  return new Date(iso).toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "short" })
 }
 
 const nombreDeTurno = (id: string) => TURNOS.find((turno) => turno.id === id)?.nombre ?? id

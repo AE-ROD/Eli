@@ -69,7 +69,7 @@ const MOMENTOS: CuatroTarjetas = [
     ),
     corto: "Cada servicio, con su profesional.",
     largo:
-      "Una visita puede tener varios servicios, y cada uno lleva su profesional y su precio. Cada profesional ve sólo lo suyo.",
+      "Una visita puede tener varios servicios, y cada uno lleva su profesional y su precio. Cada profesional ve solo lo suyo.",
     pasos: [
       paso("Color · Lucía", "turquesa", Sparkles),
       paso("Corte · Carla", "turquesa", Scissors),

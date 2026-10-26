@@ -18,7 +18,7 @@ const FUNDIDO = { duration: DURACION.sombra, ease: CURVA.suave }
 
 /** `lunes, 8 de marzo`: el día de la cita, sin la hora. */
 function formatearFecha(iso: string) {
-  return new Date(iso).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
+  return new Date(iso).toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
 }
 
 interface PropsDePanelDeCita {

@@ -26,7 +26,7 @@ function procedenciaDeCitas(estadisticas: EstadisticasDelPanel): string | undefi
   if (!estadisticas.proximaCita) return "Ninguna agendada todavía."
 
   const cuando = new Date(estadisticas.proximaCita.startTime)
-  const dia = cuando.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
+  const dia = cuando.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
   return `La próxima es el ${dia} a las ${formatearHora(estadisticas.proximaCita.startTime)}.`
 }
 

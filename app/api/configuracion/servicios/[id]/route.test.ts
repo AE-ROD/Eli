@@ -164,7 +164,7 @@ describe("DELETE /api/configuracion/servicios/[id] — servicio con comisiones",
     expect(res.status).toBe(409)
     const cuerpo = await res.json()
     expect(cuerpo.error).toContain("comisiones configuradas")
-    expect(cuerpo.error).toContain("Desactivalo")
+    expect(cuerpo.error).toContain("Desactívalo")
   })
 
   it("cualquier otro error de la base no se disfraza de 409", async () => {

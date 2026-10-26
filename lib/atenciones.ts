@@ -186,7 +186,7 @@ export function totalEnCentavos(lineas: readonly { priceCents: number }[]): numb
 
 /** Para los mensajes de error: `$25.000`, `$0,3`. */
 function comoMonto(centavos: number): string {
-  return `$${deCentavos(centavos).toLocaleString("es-ES", { maximumFractionDigits: 2 })}`
+  return `$${deCentavos(centavos).toLocaleString("es-CL", { maximumFractionDigits: 2 })}`
 }
 
 /** Por qué el total de una atención no se puede guardar ni cobrar, o `null` si está bien. */

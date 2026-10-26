@@ -1,27 +1,24 @@
 import { aCentavos } from "@/lib/atenciones"
 
 /**
- * Cómo se escribe y cómo se lee un monto en pantalla. Hasta ahora cada vista
- * armaba el suyo con `$` + `toLocaleString("es-ES")` (configuración de
- * servicios, reservar, agenda, clientes, inicio): éste es ese mismo formato en
- * un solo lugar, para que el tablero, el cobro y los reportes no inventen
- * cada uno el propio.
+ * Cómo se escribe y cómo se lee un monto en pantalla, en un solo lugar, para
+ * que el tablero, el cobro y los reportes no inventen cada uno el propio.
+ * Formato chileno (`es-CL`): el producto es chileno y cobra en pesos.
  *
  * No hay moneda configurada en ningún lado: el `$` es el que ya usa toda la
  * app, y no se elige una moneda que el negocio no eligió.
  */
 
 /** El mismo idioma de formato que el resto de la app. */
-const IDIOMA = "es-ES"
+const IDIOMA = "es-CL"
 
 /**
- * `$8000`, `$25.000`, `$10,50`, `-$500`.
+ * `$8.000`, `$25.000`, `$10,50`, `-$500`.
  *
  * - Sin decimales si el monto es entero, como se veía siempre. Con dos si
  *   tiene centavos: `$10,5` se lee como un error de tipeo.
- * - `es-ES` no separa los miles en números de cuatro cifras (`8000`, pero
- *   `25.000`). Es lo que la app ya mostraba en cada precio; cambiarlo sólo
- *   acá dejaría al tablero distinto de la agenda.
+ * - `es-CL` separa los miles también en números de cuatro cifras (`8.000`),
+ *   como se escriben los pesos en Chile. (`es-ES` dejaba `8000`.)
  * - Los centavos se miran en enteros (`aCentavos`), así un `0.1 + 0.2` se
  *   escribe `$0,30` y no arrastra el error de la suma.
  */

@@ -12,9 +12,9 @@ function formatearHoraRelativa(iso: string): string {
   const segundos = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
   if (segundos < 60) return "Ahora"
   if (segundos < 3600) return `${Math.floor(segundos / 60)}m`
-  if (segundos < 86400) return new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
+  if (segundos < 86400) return new Date(iso).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
   if (segundos < 604800) return ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"][new Date(iso).getDay()]
-  return new Date(iso).toLocaleDateString("es-ES", { day: "numeric", month: "short" })
+  return new Date(iso).toLocaleDateString("es-CL", { day: "numeric", month: "short" })
 }
 
 interface PropsDeListaConversaciones {

@@ -113,7 +113,7 @@ export function desplazarFecha(fecha: Date, unidad: UnidadDeTiempo, pasos: numbe
  * como `"HH:MM"` sin fecha ni zona y no pasan por acá.
  */
 export function formatearHora(iso: string): string {
-  return new Date(iso).toLocaleTimeString("es-ES", {
+  return new Date(iso).toLocaleTimeString("es-CL", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -163,7 +163,7 @@ export function esHoy(fecha: Date): boolean {
 
 /** `miércoles, 7 de octubre`: el nombre entero de un día, para el lector de pantalla. */
 export function diaParaLeer(fecha: Date): string {
-  return fecha.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
+  return fecha.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
 }
 
 /** Las horas en punto de `desde` (incluida) a `hasta` (excluida): `["08:00", …, "19:00"]`. */

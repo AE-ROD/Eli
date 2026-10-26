@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useId } from "react"
-import { Search, User, Scissors, Calendar, Clock, DollarSign, Check } from "lucide-react"
+import { Search, User, Scissors, Calendar, Clock, Check } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
@@ -216,7 +216,7 @@ export function ModalNuevaCita({
 
         <CampoFormulario
           etiqueta="Servicio"
-          placeholder="Ej: Corte, Color, Manicura..."
+          placeholder="Ej.: Corte, Color, Manicura..."
           value={form.servicio}
           onChange={(e) => onCambiarCampo("servicio", e.target.value)}
           icono={<Scissors className="size-4" aria-hidden="true" strokeWidth={1.75} />}
@@ -253,11 +253,16 @@ export function ModalNuevaCita({
 
         <CampoFormulario
           etiqueta="Precio (opcional)"
-          type="number"
-          placeholder="0.00"
+          // Texto y no número, como el precio del tablero: en un `type="number"`
+          // "8.000" llegaba como 8. Lo escrito lo lee `leerMonto`.
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          placeholder="0"
           value={form.precio}
           onChange={(e) => onCambiarCampo("precio", e.target.value)}
-          icono={<DollarSign className="size-4" aria-hidden="true" strokeWidth={1.75} />}
+          icono={<span className="text-sm" aria-hidden="true">$</span>}
+          className="tabular-nums"
         />
 
         {puedeAsignarProfesional && avisoDeEquipo && <Aviso>{avisoDeEquipo}</Aviso>}

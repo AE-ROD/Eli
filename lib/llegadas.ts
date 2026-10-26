@@ -200,7 +200,7 @@ export async function registrarLlegada(actor: Actor, usuarioId: string | null, {
     throw new ErrorDeAtencion(409, "La reserva está cancelada o ya se completó")
   }
   if (!esDeHoy(cita.startTime, new Date(), zona)) {
-    throw new ErrorDeAtencion(409, "Esta reserva no es de hoy: sólo se marca la llegada de las reservas del día.")
+    throw new ErrorDeAtencion(409, "Esta reserva no es de hoy: solo se marca la llegada de las reservas del día.")
   }
 
   const linea = await lineaDeLaReserva(actor, cita)

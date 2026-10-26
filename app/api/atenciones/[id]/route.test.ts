@@ -794,7 +794,7 @@ describe("DELETE /api/atenciones/[id]: deshacer una llegada", () => {
     const { status, data } = await deshacer(sesiones.dueña, "v-recien-llegada")
 
     expect(status).toBe(409)
-    expect(data.error).toBe("Sólo se deshace la llegada de una reserva que todavía no empezó a atenderse; lo demás se anula.")
+    expect(data.error).toBe("Solo se deshace la llegada de una reserva que todavía no empezó a atenderse; lo demás se anula.")
     expect(base.buscar("visit", { id: "v-recien-llegada" })[0]).toMatchObject({ status: "en-espera", startedAt: expect.any(Date) })
     expect(lineasDe("v-recien-llegada")).toHaveLength(1)
     expect(citaGuardada("cita-recien-llegada").status).toBe("en-progreso")

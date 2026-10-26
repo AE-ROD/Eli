@@ -91,7 +91,7 @@ const MIS_SERVICIOS = [
 
 export function MaquetaVistaDeProfesional() {
   return (
-    <MarcoDeMaqueta etiqueta="Maqueta: la vista de Carla, profesional, con sólo sus servicios del día">
+    <MarcoDeMaqueta etiqueta="Maqueta: la vista de Carla, profesional, con solo sus servicios del día">
       <div className="flex items-center gap-2.5">
         <Avatar color="turquesa">C</Avatar>
         <span>

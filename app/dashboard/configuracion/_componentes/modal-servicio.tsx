@@ -1,7 +1,7 @@
 "use client"
 
 import { useId } from "react"
-import { Scissors, DollarSign } from "lucide-react"
+import { Scissors } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
@@ -61,7 +61,7 @@ export function ModalServicio({
       <form onSubmit={onSubmit} className="space-y-5">
         <CampoFormulario
           etiqueta="Nombre del servicio"
-          placeholder="Ej: Corte de cabello, Arreglo de barba, Manicura..."
+          placeholder="Ej.: Corte de cabello, Arreglo de barba, Manicura..."
           value={form.name}
           onChange={(e) => onCambiarCampo("name", e.target.value)}
           icono={<Scissors className="h-4 w-4" />}
@@ -117,11 +117,16 @@ export function ModalServicio({
 
         <CampoFormulario
           etiqueta="Precio (opcional)"
-          type="number"
-          placeholder="0.00"
+          // Texto y no número, como el precio del tablero: en un `type="number"`
+          // "8.000" llegaba como 8. Lo escrito lo lee `leerMonto`.
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          placeholder="0"
           value={form.price}
           onChange={(e) => onCambiarCampo("price", e.target.value)}
-          icono={<DollarSign className="h-4 w-4" />}
+          icono={<span className="text-sm" aria-hidden="true">$</span>}
+          className="tabular-nums"
         />
 
         {aviso && <Aviso>{aviso}</Aviso>}

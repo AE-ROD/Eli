@@ -85,7 +85,7 @@ export function ModalServicios({
             <span className="min-w-0">{requisito}</span>
           </span>
         ) : eligeProfesional ? undefined : (
-          "Ves y cambias sólo tus servicios; los de tus compañeros no se tocan. Quedan a tu nombre."
+          "Ves y cambias solo tus servicios; los de tus compañeros no se tocan. Quedan a tu nombre."
         )
       }
       ancho="lg"

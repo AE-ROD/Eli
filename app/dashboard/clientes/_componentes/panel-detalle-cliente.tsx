@@ -39,7 +39,7 @@ function mapearCitaParaTarjeta(cita: CitaDeCliente, nombreCliente: string): Cita
 
 /** `6 de octubre de 2026`: el día de una cita del historial. La tarjeta dice la hora, no el día. */
 function fechaDeLaCita(iso: string): string {
-  return new Date(iso).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })
+  return new Date(iso).toLocaleDateString("es-CL", { day: "numeric", month: "long", year: "numeric" })
 }
 
 interface PropsDePanelDetalleCliente {

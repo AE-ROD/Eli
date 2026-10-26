@@ -43,7 +43,7 @@ export function ModalNuevaConversacion({
         <CampoFormulario
           etiqueta="Teléfono (opcional)"
           type="tel"
-          placeholder="+52 555 123 4567"
+          placeholder="+56 9 1234 5678"
           value={form.telefono}
           onChange={(e) => onCambiarCampo("telefono", e.target.value)}
           icono={<Phone className="h-4 w-4" />}

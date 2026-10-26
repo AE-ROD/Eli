@@ -28,7 +28,7 @@ import { InvitarNegocios } from "./_componentes/invitar-negocios"
 
 /** `Lunes, 8 de marzo de 2026`, con mayúscula inicial. */
 function fechaDeHoy(): string {
-  const fecha = new Date().toLocaleDateString("es-ES", {
+  const fecha = new Date().toLocaleDateString("es-CL", {
     weekday: "long",
     year: "numeric",
     month: "long",

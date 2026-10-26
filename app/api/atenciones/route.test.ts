@@ -526,7 +526,7 @@ describe("POST /api/atenciones con { citaId }: sólo reservas de hoy", () => {
   /** Las 12:00 del 6 de octubre en Santiago (UTC-3); en Tokio (UTC+9) ya son las 00:00 del 7. */
   const AHORA = hoyA("15:00")
   const aHoras = (horas: number) => new Date(AHORA.getTime() + horas * 60 * 60 * 1000)
-  const NO_ES_DE_HOY = "Esta reserva no es de hoy: sólo se marca la llegada de las reservas del día."
+  const NO_ES_DE_HOY = "Esta reserva no es de hoy: solo se marca la llegada de las reservas del día."
 
   async function llegarA(startTime: Date, extra: Record<string, unknown> = {}) {
     const { POST } = await import("./route")

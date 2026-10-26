@@ -55,7 +55,7 @@ const HISTORIAS: readonly Historia[] = [
     oficio: "Si tienes equipo",
     titulo: "Cada uno, con su rol",
     texto:
-      "Dueño, encargado y profesional. Invitas a tu equipo con un enlace; cada profesional ve sólo lo suyo y cobran el dueño y el encargado.",
+      "Dueño, encargado y profesional. Invitas a tu equipo con un enlace; cada profesional ve solo lo suyo y cobran el dueño y el encargado.",
     color: "turquesa",
     escena: <MaquetaEquipo />,
   },

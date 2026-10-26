@@ -251,7 +251,7 @@ describe("lib/email — inyección de encabezados en el asunto", () => {
       fecha: "2026-09-10",
       hora: "10:00",
     })
-    expect(enviarMock.mock.calls[1][0].subject).toBe("Recordatorio — Tu cita es mañana")
+    expect(enviarMock.mock.calls[1][0].subject).toBe("Recordatorio — tu cita es mañana")
 
     await enviarRecuperacionContrasena({
       emailUsuario: "usuario@ejemplo.com",

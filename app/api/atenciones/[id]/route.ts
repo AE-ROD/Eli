@@ -163,7 +163,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     if (!sePuedeDeshacerLaLlegada(existente)) {
       throw new ErrorDeAtencion(
         409,
-        "Sólo se deshace la llegada de una reserva que todavía no empezó a atenderse; lo demás se anula."
+        "Solo se deshace la llegada de una reserva que todavía no empezó a atenderse; lo demás se anula."
       )
     }
     const citaId = existente.appointmentId
