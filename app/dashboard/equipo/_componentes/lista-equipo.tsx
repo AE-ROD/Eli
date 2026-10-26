@@ -1,7 +1,8 @@
 "use client"
 
 import { useId, type ReactNode } from "react"
-import { Clock, Mail, UsersRound } from "lucide-react"
+import { Clock, Mail, RotateCw, UsersRound, X } from "lucide-react"
+import { Boton } from "@/components/comunes/boton"
 import { Esqueleto } from "@/components/comunes/esqueleto"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Insignia } from "@/components/comunes/insignia"
@@ -27,13 +28,32 @@ function InsigniaDelRol({ rol }: { rol: string }) {
   return <Insignia tono={rol === "admin" ? "turquesa" : "gris"}>{nombreDelRol(rol)}</Insignia>
 }
 
+/** `2 de noviembre`: el día en que vence el enlace. */
+function diaDeVencimiento(iso: string): string {
+  return new Date(iso).toLocaleDateString("es-ES", { day: "numeric", month: "long" })
+}
+
 interface PropsDeListaEquipo {
   miembros: MiembroDelEquipo[]
   invitaciones: InvitacionPendiente[]
   cargando: boolean
+  /** El instante contra el que se mira si una invitación venció: lo fija la página al cargar. */
+  ahora: number
+  /** La invitación que se está reenviando, para mostrar su botón trabajando. */
+  reenviandoId: string | null
+  alReenviar: (invitacion: InvitacionPendiente) => void
+  alAnular: (invitacion: InvitacionPendiente) => void
 }
 
-export function ListaEquipo({ miembros, invitaciones, cargando }: PropsDeListaEquipo) {
+export function ListaEquipo({
+  miembros,
+  invitaciones,
+  cargando,
+  ahora,
+  reenviandoId,
+  alReenviar,
+  alAnular,
+}: PropsDeListaEquipo) {
   if (cargando) return <ListaCargando />
 
   if (miembros.length === 0 && invitaciones.length === 0) {
@@ -74,21 +94,51 @@ export function ListaEquipo({ miembros, invitaciones, cargando }: PropsDeListaEq
       {invitaciones.length > 0 && (
         <SeccionDeLaLista titulo="Invitaciones pendientes" cantidad={invitaciones.length}>
           <ul className={cn(TARJETA_DEL_PANEL, "divide-y divide-borde")}>
-            {invitaciones.map((invitacion) => (
-              <li key={invitacion.id} className={FILA_DE_PERSONA}>
-                <span
-                  aria-hidden="true"
-                  className={cn(LUGAR_DEL_AVATAR, "grid size-10 place-items-center rounded-full bg-superficie text-texto-2")}
-                >
-                  <Clock className="size-5" strokeWidth={1.75} />
-                </span>
-                <DatosDeLaPersona nombre={invitacion.name} email={invitacion.email} />
-                <div className={cn(LUGAR_DEL_ROL, "flex items-center gap-2 sm:flex-col sm:items-end sm:gap-1")}>
-                  <InsigniaDelRol rol={invitacion.role} />
-                  <p className="text-xs text-texto-2">Pendiente</p>
-                </div>
-              </li>
-            ))}
+            {invitaciones.map((invitacion) => {
+              const vencida = new Date(invitacion.expiresAt).getTime() <= ahora
+              return (
+                <li key={invitacion.id} className={FILA_DE_PERSONA}>
+                  <span
+                    aria-hidden="true"
+                    className={cn(LUGAR_DEL_AVATAR, "grid size-10 place-items-center rounded-full bg-superficie text-texto-2")}
+                  >
+                    <Clock className="size-5" strokeWidth={1.75} />
+                  </span>
+                  <DatosDeLaPersona nombre={invitacion.name} email={invitacion.email} />
+                  <div className={cn(LUGAR_DEL_ROL, "flex items-center gap-2 sm:flex-col sm:items-end sm:gap-1")}>
+                    <InsigniaDelRol rol={invitacion.role} />
+                    {vencida ? (
+                      <Insignia tono="gris">Vencida</Insignia>
+                    ) : (
+                      <p className="text-xs text-texto-2">Vence el {diaDeVencimiento(invitacion.expiresAt)}</p>
+                    )}
+                  </div>
+                  <div className="col-start-2 flex flex-wrap gap-2 sm:col-span-2 sm:col-start-2">
+                    <Boton
+                      variante={vencida ? "secundario" : "fantasma"}
+                      tamano="sm"
+                      icono={<RotateCw className="size-4" aria-hidden="true" />}
+                      cargando={reenviandoId === invitacion.id}
+                      disabled={reenviandoId !== null}
+                      onClick={() => alReenviar(invitacion)}
+                      aria-label={`Reenviar la invitación de ${invitacion.name}`}
+                    >
+                      Reenviar
+                    </Boton>
+                    <Boton
+                      variante="fantasma"
+                      tamano="sm"
+                      className="text-error hover:text-error"
+                      icono={<X className="size-4" aria-hidden="true" />}
+                      onClick={() => alAnular(invitacion)}
+                      aria-label={`Anular la invitación de ${invitacion.name}`}
+                    >
+                      Anular
+                    </Boton>
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         </SeccionDeLaLista>
       )}

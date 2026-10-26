@@ -8,6 +8,8 @@ import type { DatosDeNuevoCliente } from "../_datos"
 import { Aviso } from "@/components/panel/aviso"
 
 interface PropsDeModalNuevoCliente {
+  /** Con `editando`, el mismo formulario cambia los datos de un cliente que ya existe. */
+  editando?: boolean
   form: DatosDeNuevoCliente
   guardando: boolean
   /**
@@ -21,12 +23,14 @@ interface PropsDeModalNuevoCliente {
 }
 
 /**
- * Un cliente nuevo: nombre, correo y teléfono. El marco (`MarcoDeModal`) lo
+ * Un cliente nuevo, o uno que se edita (`editando`): nombre, correo y
+ * teléfono. Al editar, vaciar el correo o el teléfono los borra. El marco (`MarcoDeModal`) lo
  * hace un diálogo de verdad: se anuncia con su título, el foco entra al
  * nombre y no sale hasta cerrarlo, Escape o la X lo cierran salvo mientras
  * guarda, y al cerrarse el foco vuelve al botón que lo abrió.
  */
 export function ModalNuevoCliente({
+  editando = false,
   form,
   guardando,
   aviso,
@@ -35,7 +39,7 @@ export function ModalNuevoCliente({
   onCerrar,
 }: PropsDeModalNuevoCliente) {
   return (
-    <MarcoDeModal titulo="Nuevo cliente" bloqueado={guardando} alCerrar={onCerrar}>
+    <MarcoDeModal titulo={editando ? "Editar cliente" : "Nuevo cliente"} bloqueado={guardando} alCerrar={onCerrar}>
       <form onSubmit={onSubmit} className="space-y-5">
         {/* Al abrir, el foco va al nombre. `MarcoDeModal` anota antes quién lo abrió. */}
         <CampoFormulario
@@ -71,7 +75,7 @@ export function ModalNuevoCliente({
             Cancelar
           </Boton>
           <Boton type="submit" className="w-full" cargando={guardando}>
-            Guardar cliente
+            {editando ? "Guardar cambios" : "Guardar cliente"}
           </Boton>
         </div>
       </form>

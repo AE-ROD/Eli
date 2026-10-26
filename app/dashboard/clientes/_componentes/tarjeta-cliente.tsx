@@ -3,6 +3,7 @@
 import { CalendarDays, Mail, Phone } from "lucide-react"
 import { Insignia } from "@/components/comunes/insignia"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
+import { fechaRelativa } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
 import type { Cliente } from "../_datos"
 
@@ -17,7 +18,10 @@ export interface ClienteEnTarjeta {
   telefono: string
   imagenUrl?: string
   visitas: number
+  /** `Hace 3 días`, o `Sin visitas`. */
   ultimaVisita: string
+  /** `En 3 días`, si tiene una cita por delante. */
+  proximaCita?: string
   etiqueta?: "VIP" | "Frecuente" | "Nuevo" | "Inactivo"
 }
 
@@ -30,41 +34,33 @@ interface PropsDeTarjetaCliente {
 
 const ETIQUETAS_VALIDAS = ["VIP", "Frecuente", "Nuevo", "Inactivo"] as const
 
-/** `Hoy`, `Ayer`, `Hace 3 días`, `Hace 2 semanas`, `Hace 4 meses`. */
-function formatearFechaRelativa(iso: string): string {
-  const dias = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
-  if (dias === 0) return "Hoy"
-  if (dias === 1) return "Ayer"
-  if (dias < 7) return `Hace ${dias} días`
-  if (dias < 14) return "Hace 1 semana"
-  if (dias < 30) return `Hace ${Math.floor(dias / 7)} semanas`
-  if (dias < 60) return "Hace 1 mes"
-  return `Hace ${Math.floor(dias / 30)} meses`
-}
-
 /** `1 visita`, `3 visitas`. */
 function visitasEnTexto(visitas: number): string {
   return visitas === 1 ? "1 visita" : `${visitas} visitas`
 }
 
 /**
- * Del cliente que devuelve el servidor a lo que muestra la tarjeta. Las citas
- * vienen de la más reciente a la más vieja, así que la primera es la última
- * visita. De las etiquetas, se muestra la primera que la tarjeta sabe pintar.
+ * Del cliente que devuelve el servidor a lo que muestra la tarjeta. Las
+ * visitas, la última y la próxima las resuelve el servidor (una visita es una
+ * atención cobrada); acá sólo se escriben. De las etiquetas, se muestra la
+ * primera que la tarjeta sabe pintar.
  */
 export function clienteParaTarjeta(cliente: Cliente): ClienteEnTarjeta {
+  // Un solo argumento a propósito: se usa como `lista.map(clienteParaTarjeta)`,
+  // y un segundo parámetro recibiría el índice.
+  const ahora = Date.now()
   const etiqueta = cliente.tags.find((etiquetaDelCliente) =>
     (ETIQUETAS_VALIDAS as readonly string[]).includes(etiquetaDelCliente)
   ) as ClienteEnTarjeta["etiqueta"]
-  const ultimaCita = cliente.appointments[0]
   return {
     id: cliente.id,
     nombre: cliente.name,
     // "Correo", como en el formulario del cliente nuevo y en el resto del producto.
     email: cliente.email ?? "Sin correo",
     telefono: cliente.phone ?? "Sin teléfono",
-    visitas: cliente.appointments.length,
-    ultimaVisita: ultimaCita ? formatearFechaRelativa(ultimaCita.startTime) : "Sin visitas",
+    visitas: cliente.visitas,
+    ultimaVisita: cliente.ultimaVisita ? fechaRelativa(cliente.ultimaVisita, ahora) : "Sin visitas",
+    proximaCita: cliente.proximaCita ? fechaRelativa(cliente.proximaCita, ahora) : undefined,
     etiqueta,
   }
 }
@@ -135,6 +131,7 @@ export function TarjetaCliente({ cliente, seleccionado = false, onClick }: Props
             {visitasEnTexto(cliente.visitas)}
           </span>
           <span>Última: {cliente.ultimaVisita}</span>
+          {cliente.proximaCita && <span>Próxima: {cliente.proximaCita}</span>}
         </span>
       </span>
     </button>

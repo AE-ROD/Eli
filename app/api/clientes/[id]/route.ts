@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { emailOVacio, etiquetas, nombre, notas, telefono } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
+import { clienteNoEliminado, datosDeClienteEliminado } from "@/lib/clientes-eliminados"
 import {
   actorDeSesion,
   puedeBorrarCliente,
@@ -23,12 +24,19 @@ const edicionDeClienteSchema = z.object({
 })
 
 /**
+ * El cliente del negocio con ese id, si no se eliminó. Uno eliminado responde
+ * como uno que no existe: no se lee, no se edita (editarlo le devolvería un
+ * nombre) y no se vuelve a eliminar.
+ */
+const delNegocioYVigente = (actor: Actor, id: string) => whereDeClientes(actor, { AND: [{ id }, clienteNoEliminado] })
+
+/**
  * Pide un `Actor`, no `Actor | null`, como `verificarCita` en
  * `app/api/citas/[id]/route.ts`: sin sesión no hay cliente, y el handler ya
  * cortó con 401. Así el compilador obliga a poner la guarda primero.
  */
 async function verificarCliente(actor: Actor, id: string) {
-  return prisma.customer.findFirst({ where: whereDeClientes(actor, { id }), select: { id: true } })
+  return prisma.customer.findFirst({ where: delNegocioYVigente(actor, id), select: { id: true } })
 }
 
 export async function GET(
@@ -46,7 +54,7 @@ export async function GET(
   // notas internas y los comentarios del cliente. Del cliente se devuelve lo
   // mismo que antes.
   const cliente = await prisma.customer.findFirst({
-    where: whereDeClientes(actor, { id }),
+    where: delNegocioYVigente(actor, id),
     select: {
       id: true,
       name: true,
@@ -157,8 +165,12 @@ export async function DELETE(
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
-  // Por `existente.id`, por lo mismo que en el PUT.
-  await prisma.customer.delete({ where: { id: existente.id } })
+  // Eliminar es anonimizar (decisión del dueño, PRODUCTO.md, sección 10): se
+  // borran los datos personales y la fila queda, con sus citas y sus
+  // atenciones, para que la agenda y los reportes no cambien. Es una sola
+  // escritura: no queda un cliente a medio borrar. Por `existente.id`, por lo
+  // mismo que en el PUT.
+  await prisma.customer.update({ where: { id: existente.id }, data: datosDeClienteEliminado(), select: { id: true } })
 
   return NextResponse.json({ mensaje: "Cliente eliminado" })
 }

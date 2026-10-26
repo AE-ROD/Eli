@@ -9,17 +9,23 @@ import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
  * los endpoints de clientes y el tablero no usaba. Se extiende desde acá
  * porque esa carpeta es de otra ficha.
  *
- * La relación `customer.appointments` existe en el esquema real. Se registra
+ * Las relaciones `customer.appointments` y `customer.visits` existen en el esquema real. Se registra
  * al importar este archivo y vale sólo para los archivos de test que lo
  * importan, porque vitest aísla los módulos de cada archivo. Con ella, el
  * historial anidado se filtra de verdad con el `where` de `whereDeAgenda`, y
  * un operador que la base no entienda sigue lanzando (F-018).
  */
 RELACIONES.customer.appointments = { modelo: "appointment", tipo: "muchos", local: "id", remoto: "customerId" }
+// Igual con las atenciones: el listado cuenta las visitas cobradas de cada cliente.
+RELACIONES.customer.visits = { modelo: "visit", tipo: "muchos", local: "id", remoto: "customerId" }
 
 type Registro = Record<string, unknown>
 
-/** La base falsa, más `customer.delete`, que el tablero no usa. */
+/**
+ * La base falsa, más `customer.delete`, que el tablero no usa. Eliminar un
+ * cliente ya no lo borra (lo anonimiza), pero si alguien vuelve al `delete`,
+ * los tests de "las citas siguen" lo notan: la base falsa borra de verdad.
+ */
 export function crearBaseDeClientes() {
   const base = crearBaseFalsa()
 

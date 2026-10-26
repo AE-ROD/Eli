@@ -70,7 +70,7 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
   workSchedule: { business: uno("business", "businessId"), member: uno("businessMember", "memberId") },
 }
 
-const OPERADORES_DE_CAMPO = new Set(["equals", "in", "notIn", "not", "gt", "gte", "lt", "lte"])
+const OPERADORES_DE_CAMPO = new Set(["equals", "in", "notIn", "not", "gt", "gte", "lt", "lte", "has"])
 
 export function falla(mensaje: string): never {
   throw new Error(`base falsa: ${mensaje}`)
@@ -113,7 +113,11 @@ export function coincide(tablas: Tablas, modelo: NombreDeModelo, registro: Regis
       if (!Array.isArray(condicion)) return falla(`OR sin lista en ${modelo}`)
       return condicion.some((parte) => coincide(tablas, modelo, registro, parte))
     }
-    if (clave === "NOT") return falla(`NOT no está implementado (${modelo})`)
+    // Como Prisma: con una lista, ninguna de las condiciones se cumple.
+    if (clave === "NOT") {
+      const partes = Array.isArray(condicion) ? condicion : [condicion]
+      return !partes.some((parte) => coincide(tablas, modelo, registro, parte))
+    }
 
     const rel = RELACIONES[modelo][clave]
     if (rel) return coincideRelacion(tablas, rel, registro, condicion, `${modelo}.${clave}`)
@@ -167,6 +171,11 @@ function coincideCampo(guardado: unknown, condicion: unknown, ruta: string): boo
     const argumento = Array.isArray(original) ? original.map(sinMayusculas) : sinMayusculas(original)
     if (argumento === undefined) return true
     if (!OPERADORES_DE_CAMPO.has(operador)) return falla(`operador ${operador} no soportado en ${ruta}`)
+    // `has`, de las listas de Postgres (`String[]`): la lista guardada contiene el valor.
+    if (operador === "has") {
+      if (!Array.isArray(guardado)) return falla(`has sobre un campo que no es una lista en ${ruta}`)
+      return guardado.some((elemento) => iguales(sinMayusculas(elemento), argumento))
+    }
     // Como en SQL: comparar contra NULL no da verdadero (salvo `not: null`).
     if (operador === "not") return argumento === null ? valor !== null : valor !== null && !iguales(valor, argumento)
     if (operador === "equals") return argumento === null ? valor === null : iguales(valor, argumento)
@@ -221,6 +230,10 @@ export function proyectar(tablas: Tablas, modelo: NombreDeModelo, registro: Regi
     if (!esObjetoPlano(opciones.select)) return falla(`select inválido en ${modelo}`)
     for (const [clave, pedido] of Object.entries(opciones.select)) {
       if (!pedido) continue
+      if (clave === "_count") {
+        salida._count = contar(tablas, modelo, registro, pedido)
+        continue
+      }
       const rel = RELACIONES[modelo][clave]
       if (rel) salida[clave] = resolver(tablas, rel, registro, pedido)
       else if (clave in registro) salida[clave] = registro[clave]
@@ -240,6 +253,25 @@ export function proyectar(tablas: Tablas, modelo: NombreDeModelo, registro: Regi
     }
   }
   return salida
+}
+
+/**
+ * `_count: { select: { relacion: true | { where } } }`: cuántos registros
+ * relacionados hay, con el `where` de cada uno si lo trae. Sólo relaciones a
+ * muchos, como en Prisma.
+ */
+function contar(tablas: Tablas, modelo: NombreDeModelo, registro: Registro, pedido: unknown): Registro {
+  if (!esObjetoPlano(pedido) || !esObjetoPlano(pedido.select)) return falla(`_count sin select en ${modelo}`)
+  const cuentas: Registro = {}
+  for (const [clave, opciones] of Object.entries(pedido.select)) {
+    if (!opciones) continue
+    const rel = RELACIONES[modelo][clave]
+    if (!rel || rel.tipo !== "muchos") return falla(`_count de algo que no es una relación a muchos: ${modelo}.${clave}`)
+    const otros = relacionados(tablas, rel, registro)
+    const where = esObjetoPlano(opciones) ? opciones.where : undefined
+    cuentas[clave] = otros.filter((otro) => coincide(tablas, rel.modelo, otro, where)).length
+  }
+  return cuentas
 }
 
 function resolver(tablas: Tablas, rel: Relacion, registro: Registro, pedido: unknown): unknown {

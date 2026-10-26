@@ -1,9 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import type { NextRequest } from "next/server"
-import { ordenar, proyectar, type Registro, type Tablas } from "@/pruebas/consultas-falsas"
+import { coincide as coincideEnLaBase, ordenar, proyectar, type Registro, type Tablas } from "@/pruebas/consultas-falsas"
 // Registra `customer.appointments` en la base falsa: sin la relación,
 // `proyectar` no sabe leer el historial anidado y lanza.
 import "./_pruebas/base-de-clientes"
+import { MARCA_DE_CLIENTE_ELIMINADO, NOMBRE_DE_CLIENTE_ELIMINADO } from "@/lib/clientes-eliminados"
 
 const mockGetServerSession = vi.fn()
 
@@ -15,7 +16,7 @@ vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
 /**
  * Filtro mínimo que entiende las formas de `where` que produce el listado:
- * `AND`, `OR`, igualdad simple, y las condiciones de la búsqueda (`contains`
+ * `AND`, `OR`, `NOT` (los clientes eliminados), igualdad simple, y las condiciones de la búsqueda (`contains`
  * sin distinguir mayúsculas, `has` sobre la lista de etiquetas). Alcanza para
  * que el mock de Prisma filtre de verdad según lo que el endpoint le pasa, en
  * vez de limitarse a inspeccionar el argumento.
@@ -31,6 +32,9 @@ function coincide(item: Record<string, unknown>, where: Record<string, unknown>)
     }
     if (clave === "OR") {
       return (valor as Record<string, unknown>[]).some((sub) => coincide(item, sub))
+    }
+    if (clave === "NOT") {
+      return !coincide(item, valor as Record<string, unknown>)
     }
     if (valor && typeof valor === "object") {
       const condicion = valor as Record<string, unknown>
@@ -114,12 +118,28 @@ const citasFake: Registro[] = [
   cita("cita-ajena", "cliente-ajeno", "member-ajeno", "03", { businessId: "negocio-2" }),
 ]
 
+/** Una atención del negocio 1, cobrada, salvo lo que se pise. */
+function atencionCobrada(id: string, customerId: string, dia: string, datos: Registro = {}): Registro {
+  return {
+    id,
+    businessId: "negocio-1",
+    customerId,
+    customerName: "x",
+    appointmentId: null,
+    status: "finalizada",
+    arrivedAt: new Date(`2026-09-${dia}T13:00:00.000Z`),
+    ...datos,
+  }
+}
+
+const atencionesFake: Registro[] = []
+
 const tablas: Tablas = {
   user: [],
   business: [],
   businessMember: [],
   service: [],
-  visit: [],
+  visit: atencionesFake,
   visitService: [],
   visitPayment: [],
   workSchedule: [],
@@ -149,6 +169,23 @@ const prismaMock = {
     ),
   },
 }
+
+/**
+ * Las próximas citas: el `where` lo resuelve la base falsa, que lanza ante lo
+ * que no entiende. `distinct` no lo aplica: el endpoint se queda con la
+ * primera de cada cliente por su cuenta.
+ */
+const appointmentMock = {
+  findMany: vi.fn((args: { where: unknown; orderBy?: unknown; select?: unknown }) =>
+    Promise.resolve(
+      ordenar(
+        citasFake.filter((c) => coincideEnLaBase(tablas, "appointment", c, args.where)),
+        args.orderBy
+      ).map((c) => proyectar(tablas, "appointment", c, args))
+    )
+  ),
+}
+Object.assign(prismaMock, { appointment: appointmentMock })
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
 
@@ -388,6 +425,193 @@ describe("GET /api/clientes — el historial de citas de cada cliente", () => {
       expect(Object.keys(citaDelHistorial).sort()).toEqual(["endTime", "id", "price", "startTime", "status", "title"])
     }
     expect(JSON.stringify(data)).not.toMatch(/Nota interna|Pidió que no la llamen/)
+  })
+})
+
+/**
+ * Lo que se agrega sólo para estos tests y se saca al terminar: el resto del
+ * archivo cuenta clientes e historiales exactos.
+ */
+function conFilasExtra(extra: { clientes?: Registro[]; citas?: Registro[]; atenciones?: Registro[] }) {
+  const listas: [Registro[], Registro[]][] = [
+    [clientesFake, extra.clientes ?? []],
+    [citasFake, extra.citas ?? []],
+    [atencionesFake, extra.atenciones ?? []],
+  ]
+  beforeEach(() => {
+    for (const [lista, filas] of listas) lista.push(...filas)
+  })
+  afterEach(() => {
+    for (const [lista, filas] of listas) {
+      for (const fila of filas) lista.splice(lista.indexOf(fila), 1)
+    }
+  })
+}
+
+interface ClienteConVisitas {
+  id: string
+  visitas: number
+  ultimaVisita: string | null
+  proximaCita: string | null
+}
+
+const resumenDe = (clientes: ClienteConVisitas[], id: string) => {
+  const cliente = clientes.find((c) => c.id === id)
+  return cliente && { visitas: cliente.visitas, ultimaVisita: cliente.ultimaVisita, proximaCita: cliente.proximaCita }
+}
+
+describe("GET /api/clientes — los clientes eliminados", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  conFilasExtra({
+    clientes: [
+      {
+        id: "cliente-eliminado",
+        businessId: "negocio-1",
+        name: NOMBRE_DE_CLIENTE_ELIMINADO,
+        lastName: null,
+        email: null,
+        phone: null,
+        tags: [MARCA_DE_CLIENTE_ELIMINADO],
+        notes: null,
+        createdAt: creadoEl(3),
+      },
+    ],
+  })
+
+  it("no aparecen en la lista ni cuentan en el total", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    const data = await (await GET(fakeGet())).json()
+
+    expect(ids(data.clientes)).toEqual(["cliente-1", "cliente-2"])
+    expect(data.total).toBe(2)
+  })
+
+  it("tampoco en los buscadores de \"Nueva cita\" y \"Anotar sin reserva\", ni buscándolos por su nombre", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const porNombre = await (await GET(fakeGet("?q=eliminado&limite=8"))).json()
+
+    expect(porNombre.clientes).toEqual([])
+    expect(porNombre.total).toBe(0)
+  })
+})
+
+describe("GET /api/clientes — visitas, última visita y próxima cita", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  conFilasExtra({
+    atenciones: [
+      // Cobrada, de una reserva de `member-worker-1`.
+      atencionCobrada("v-propia", "cliente-1", "01", { appointmentId: "cita-propia" }),
+      // Cobrada, sin reserva: la más reciente de las cobradas.
+      atencionCobrada("v-sin-reserva", "cliente-1", "10"),
+      // Más nuevas, pero no son visitas: una anulada y una que sigue abierta.
+      atencionCobrada("v-anulada", "cliente-1", "20", { status: "anulada" }),
+      atencionCobrada("v-abierta", "cliente-1", "25", { status: "en-espera" }),
+      // Inconsistente a propósito: de otro negocio, pero apunta a `cliente-1`.
+      atencionCobrada("v-cruzada", "cliente-1", "28", { businessId: "negocio-2" }),
+    ],
+    citas: [
+      cita("futura-del-colega", "cliente-1", "member-worker-2", "01", {
+        status: "pendiente",
+        startTime: new Date("2099-01-10T13:00:00.000Z"),
+        endTime: new Date("2099-01-10T13:30:00.000Z"),
+      }),
+      // Más cercana, pero cancelada: no es la próxima.
+      cita("futura-cancelada", "cliente-1", "member-worker-1", "01", {
+        status: "cancelada",
+        startTime: new Date("2099-01-05T13:00:00.000Z"),
+        endTime: new Date("2099-01-05T13:30:00.000Z"),
+      }),
+      cita("futura-propia", "cliente-1", "member-worker-1", "01", {
+        status: "confirmada",
+        startTime: new Date("2099-02-01T13:00:00.000Z"),
+        endTime: new Date("2099-02-01T13:30:00.000Z"),
+      }),
+      // De otro negocio, más cercana que todas: no se cuela.
+      cita("futura-cruzada", "cliente-1", "member-ajeno", "01", {
+        businessId: "negocio-2",
+        status: "pendiente",
+        startTime: new Date("2099-01-01T13:00:00.000Z"),
+        endTime: new Date("2099-01-01T13:30:00.000Z"),
+      }),
+    ],
+  })
+
+  it("visitas son las atenciones cobradas del negocio, no las citas; la última es la cobrada más reciente; la próxima, la cita futura en pie más cercana", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    const data = await (await GET(fakeGet())).json()
+
+    expect(resumenDe(data.clientes, "cliente-1")).toEqual({
+      visitas: 2,
+      ultimaVisita: "2026-09-10T13:00:00.000Z",
+      proximaCita: "2099-01-10T13:00:00.000Z",
+    })
+  })
+
+  it("las visitas no se cortan en cinco como el historial: se cuentan en la base", async () => {
+    const { GET } = await import("./route")
+
+    const muchas = Array.from({ length: 7 }, (_, i) => atencionCobrada(`v-extra-${i}`, "cliente-2", String(i + 1).padStart(2, "0")))
+    atencionesFake.push(...muchas)
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    const data = await (await GET(fakeGet())).json()
+    atencionesFake.splice(atencionesFake.indexOf(muchas[0]), muchas.length)
+
+    expect(resumenDe(data.clientes, "cliente-2")?.visitas).toBe(7)
+  })
+
+  it("sin atenciones cobradas ni citas futuras: cero visitas, y ni última ni próxima", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    const data = await (await GET(fakeGet())).json()
+
+    expect(resumenDe(data.clientes, "cliente-2")).toEqual({ visitas: 0, ultimaVisita: null, proximaCita: null })
+  })
+
+  it("el profesional cuenta sólo sus atenciones y ve sólo su próxima cita, como en el historial", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+    const delProfesional = await (await GET(fakeGet())).json()
+
+    mockGetServerSession.mockResolvedValueOnce(sesionColega)
+    const delColega = await (await GET(fakeGet())).json()
+
+    expect(resumenDe(delProfesional.clientes, "cliente-1")).toEqual({
+      visitas: 1,
+      ultimaVisita: "2026-09-01T13:00:00.000Z",
+      proximaCita: "2099-02-01T13:00:00.000Z",
+    })
+    expect(resumenDe(delColega.clientes, "cliente-1")).toEqual({
+      visitas: 0,
+      ultimaVisita: null,
+      proximaCita: "2099-01-10T13:00:00.000Z",
+    })
+  })
+
+  it("no devuelve los datos crudos de las atenciones: sólo el resumen", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    const data = await (await GET(fakeGet())).json()
+
+    for (const cliente of data.clientes) {
+      expect(cliente).not.toHaveProperty("visits")
+      expect(cliente).not.toHaveProperty("_count")
+    }
   })
 })
 

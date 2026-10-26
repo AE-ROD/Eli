@@ -1,10 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { motion } from "framer-motion"
+import { AnimatePresence, motion } from "framer-motion"
 import { LoaderCircle } from "lucide-react"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { Aviso } from "@/components/panel/aviso"
+import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { nombreDelRol } from "@/lib/nombres-de-roles"
 import { cn } from "@/lib/utils"
@@ -27,7 +28,15 @@ interface PropsDeSelectorHorarioMiembro {
 export function SelectorHorarioMiembro({ horariosDelDueño, miembros, nombreDelDueño }: PropsDeSelectorHorarioMiembro) {
   // null = owner; string = memberId del trabajador
   const [seleccionado, setSeleccionado] = useState<string | null>(null)
+  // El del dueño viene del servidor una sola vez: lo que se guarda después se
+  // anota acá, o volver a su pestaña mostraría el de antes (y, si no tenía
+  // nada, el aviso de "todavía no está guardado").
+  const [horariosDelDueñoActuales, setHorariosDelDueñoActuales] = useState<HorarioDelDia[]>(horariosDelDueño)
   const [horariosActivos, setHorariosActivos] = useState<HorarioDelDia[]>(horariosDelDueño)
+  // Si la sección abierta tiene cambios sin guardar (K2), y a qué pestaña se
+  // quería ir cuando se preguntó si descartarlos.
+  const [pendiente, setPendiente] = useState(false)
+  const [destinoPendiente, setDestinoPendiente] = useState<{ id: string | null } | null>(null)
   const [cargando, setCargando] = useState(false)
   const [aviso, setAviso] = useState("")
   // El fundido es para el cambio de persona: lo primero que se pinta (que
@@ -47,12 +56,22 @@ export function SelectorHorarioMiembro({ horariosDelDueño, miembros, nombreDelD
     // Tocar la pestaña que ya está abierta sólo vuelve a pedir si la última vez
     // falló: es la forma de reintentar. Si cargó bien (o está cargando), nada.
     if (memberId === seleccionado && !aviso) return
+    // Con cambios sin guardar, primero se pregunta: cambiar de persona los descarta.
+    if (pendiente) {
+      setDestinoPendiente({ id: memberId })
+      return
+    }
+    await abrirPestaña(memberId)
+  }
+
+  const abrirPestaña = async (memberId: string | null) => {
     setSeleccionado(memberId)
     setAviso("")
+    setPendiente(false)
     setCambioDePersona(true)
 
     if (memberId === null) {
-      setHorariosActivos(horariosDelDueño)
+      setHorariosActivos(horariosDelDueñoActuales)
       return
     }
 
@@ -68,6 +87,19 @@ export function SelectorHorarioMiembro({ horariosDelDueño, miembros, nombreDelD
   }
 
   const pestañaActiva = pestañas.find((pestaña) => pestaña.id === seleccionado)
+
+  /** Lo que se acaba de guardar es lo que se muestra si se vuelve a esta pestaña. */
+  const alGuardar = (horarios: HorarioDelDia[]) => {
+    setHorariosActivos(horarios)
+    if (seleccionado === null) setHorariosDelDueñoActuales(horarios)
+  }
+
+  const descartarYCambiar = () => {
+    if (!destinoPendiente) return
+    const destino = destinoPendiente.id
+    setDestinoPendiente(null)
+    void abrirPestaña(destino)
+  }
 
   return (
     <div className="space-y-4">
@@ -113,9 +145,25 @@ export function SelectorHorarioMiembro({ horariosDelDueño, miembros, nombreDelD
             horariosIniciales={horariosActivos}
             memberId={seleccionado}
             titulo={seleccionado === null ? "Mi horario" : `Horario de ${pestañaActiva?.nombre}`}
+            alCambiarPendiente={setPendiente}
+            alGuardar={alGuardar}
           />
         </motion.div>
       )}
+
+      <AnimatePresence>
+        {destinoPendiente && (
+          <ModalConfirmar
+            titulo="¿Descartar los cambios sin guardar?"
+            descripcion={`Cambiaste el horario de ${seleccionado === null ? nombreDelDueño : pestañaActiva?.nombre ?? "esta persona"} y no lo guardaste. Si cambias de persona, esos cambios se pierden.`}
+            textoConfirmar="Descartar cambios"
+            textoCancelar="Seguir editando"
+            peligro
+            onConfirmar={descartarYCambiar}
+            onCerrar={() => setDestinoPendiente(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

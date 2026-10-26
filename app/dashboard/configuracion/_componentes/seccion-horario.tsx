@@ -1,6 +1,6 @@
 "use client"
 
-import { useId, useState } from "react"
+import { useEffect, useId, useState } from "react"
 import { Clock, Save } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { Interruptor } from "@/components/comunes/interruptor"
@@ -24,11 +24,17 @@ interface PropsDeSeccionHorario {
   /** De quién es el horario. Sin él, el propio de quien está en sesión. */
   memberId?: string | null
   titulo?: string
+  /** Avisa si hay cambios sin guardar: el selector de personas pregunta antes de descartarlos. */
+  alCambiarPendiente?: (pendiente: boolean) => void
+  /** Lo que quedó guardado, para que quien lo contiene no vuelva a mostrar lo de antes. */
+  alGuardar?: (horarios: HorarioDelDia[]) => void
 }
 
 /**
  * Los siete días, aunque la base tenga guardados sólo algunos: los que faltan
- * se muestran como no laborables. Sin nada guardado, el horario de ejemplo.
+ * se muestran como no laborables. Sin nada guardado, el horario de ejemplo
+ * (lunes a viernes de 9 a 18), que es sólo una propuesta: la página pública
+ * no ofrece horas hasta que se guarda, y la sección lo dice.
  */
 function semanaCompleta(guardados: HorarioDelDia[]): HorarioDelDia[] {
   if (guardados.length === 0) return HORARIO_INICIAL
@@ -38,12 +44,28 @@ function semanaCompleta(guardados: HorarioDelDia[]): HorarioDelDia[] {
   })
 }
 
-export function SeccionHorario({ horariosIniciales, memberId, titulo }: PropsDeSeccionHorario) {
+export function SeccionHorario({
+  horariosIniciales,
+  memberId,
+  titulo,
+  alCambiarPendiente,
+  alGuardar,
+}: PropsDeSeccionHorario) {
   const idDelTitulo = useId()
   const [horarios, setHorarios] = useState<HorarioDelDia[]>(() => semanaCompleta(horariosIniciales))
+  // Lo último que está en la base, para saber si hay cambios sin guardar.
+  const [enLaBase, setEnLaBase] = useState<HorarioDelDia[]>(() => semanaCompleta(horariosIniciales))
+  // Sin nada guardado, lo que se ve es el ejemplo: parece configurado, pero
+  // la página pública no ofrece ninguna hora (K1).
+  const [nuncaGuardado, setNuncaGuardado] = useState(horariosIniciales.length === 0)
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
   const [aviso, setAviso] = useState("")
+
+  const pendiente = JSON.stringify(horarios) !== JSON.stringify(enLaBase)
+  useEffect(() => {
+    alCambiarPendiente?.(pendiente)
+  }, [pendiente, alCambiarPendiente])
 
   const alternarDia = (dia: number) => {
     setHorarios((previos) =>
@@ -68,8 +90,11 @@ export function SeccionHorario({ horariosIniciales, memberId, titulo }: PropsDeS
     // Un horario rechazado (por ejemplo, con la hora de fin antes que la de
     // inicio) tiene que decirlo: si no, el botón vuelve a "Guardar" y parece un
     // clic perdido.
-    if (resultado.ok) setGuardado(true)
-    else setAviso(resultado.error)
+    if (!resultado.ok) return setAviso(resultado.error)
+    setGuardado(true)
+    setNuncaGuardado(false)
+    setEnLaBase(horarios)
+    alGuardar?.(horarios)
   }
 
   return (
@@ -85,9 +110,11 @@ export function SeccionHorario({ horariosIniciales, memberId, titulo }: PropsDeS
             icono={<Save className="h-4 w-4" />}
             cargando={guardando}
             onClick={guardar}
-            variante={guardado ? "secundario" : "primario"}
+            variante={guardado && !pendiente ? "secundario" : "primario"}
+            // Sin nada guardado, el botón se destaca: es lo único que falta para que se reserve.
+            className={cn(nuncaGuardado && "ring-2 ring-naranja ring-offset-2")}
           >
-            {guardado ? "Guardado" : "Guardar"}
+            {nuncaGuardado ? "Guardar horario" : guardado && !pendiente ? "Guardado" : "Guardar"}
           </BotonPrimario>
         }
       />
@@ -96,6 +123,14 @@ export function SeccionHorario({ horariosIniciales, memberId, titulo }: PropsDeS
         {guardado ? "Horario guardado" : ""}
       </p>
 
+      {nuncaGuardado && (
+        <Aviso tono="atencion" titulo="Este horario todavía no está guardado" className="mt-5">
+          Tus clientes no ven horas hasta que lo guardes. Revisa los días y las horas, y toca &ldquo;Guardar horario&rdquo;.
+        </Aviso>
+      )}
+      {!nuncaGuardado && pendiente && !guardando && (
+        <p className="mt-3 text-sm text-texto-2">Tienes cambios sin guardar.</p>
+      )}
       {aviso && <Aviso className="mt-5">{aviso}</Aviso>}
 
       {/*

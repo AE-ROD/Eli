@@ -101,11 +101,49 @@ describe("base falsa: lo que entiende", () => {
   })
 })
 
+describe("base falsa: NOT, has y _count", () => {
+  it("NOT descarta lo que cumple la condición; con una lista, lo que cumple cualquiera", async () => {
+    const sinBeto = await prisma.visit.findMany({ where: { NOT: { customerName: "Beto" } } })
+    const ninguna = await prisma.visit.findMany({ where: { NOT: [{ customerName: "Beto" }, { customerName: "María" }] } })
+
+    expect(sinBeto.map((v) => v.id)).toEqual(["v1"])
+    expect(ninguna).toEqual([])
+  })
+
+  it("has mira si la lista guardada contiene el valor", async () => {
+    await prisma.customer.createMany({
+      data: [
+        { id: "c1", businessId: "n1", name: "Con", tags: ["VIP", "Nuevo"] },
+        { id: "c2", businessId: "n1", name: "Sin", tags: [] },
+      ],
+    })
+
+    const conVip = await prisma.customer.findMany({ where: { tags: { has: "VIP" } } })
+    const sinVip = await prisma.customer.findMany({ where: { NOT: { tags: { has: "VIP" } } } })
+
+    expect(conVip.map((c) => c.id)).toEqual(["c1"])
+    expect(sinVip.map((c) => c.id)).toEqual(["c2"])
+  })
+
+  it("_count cuenta los relacionados, con su where", async () => {
+    const [atencion] = await prisma.visit.findMany({
+      where: { id: "v1" },
+      select: { id: true, _count: { select: { services: true, payments: { where: { method: "efectivo" } } } } },
+    })
+
+    expect(atencion).toEqual({ id: "v1", _count: { services: 2, payments: 0 } })
+  })
+
+  it("_count de algo que no es una relación a muchos lanza", async () => {
+    await expect(prisma.visit.findMany({ select: { _count: { select: { business: true } } } })).rejects.toThrow(/base falsa/)
+  })
+})
+
 describe("base falsa: lanza ante lo que no entiende (F-018)", () => {
   it.each([
     ["un operador desconocido", { customerName: { contains: "Mar" } }],
     ["un campo que no existe", { nombre: "María" }],
-    ["NOT", { NOT: [{ status: "anulada" }] }],
+    ["has sobre un campo que no es una lista", { customerName: { has: "María" } }],
     ["un operador de relación desconocido", { services: { algunos: { memberId: "m1" } } }],
     ["OR sin lista", { OR: { status: "anulada" } }],
   ])("%s", async (_caso, where) => {

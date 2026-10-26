@@ -16,6 +16,7 @@ import {
   deTexto,
   rangoDelDia,
   tiempoDesde,
+  fechaRelativa,
 } from "./fechas"
 
 describe("comoTexto", () => {
@@ -312,5 +313,43 @@ describe("horasEnPunto", () => {
     expect(horas).toHaveLength(12)
     expect(horas[0]).toBe("08:00")
     expect(horas[11]).toBe("19:00")
+  })
+})
+
+describe("fechaRelativa", () => {
+  // Las fechas se arman en la zona del dispositivo, como las cuenta la función.
+  const ahora = new Date(2026, 9, 26, 18, 0).getTime()
+  const el = (mes: number, dia: number, hora = 10) => new Date(2026, mes, dia, hora, 0).toISOString()
+
+  it.each([
+    ["el mismo día, más temprano", el(9, 26, 8), "Hoy"],
+    ["el mismo día, más tarde", el(9, 26, 21), "Hoy"],
+    ["ayer a la mañana", el(9, 25), "Ayer"],
+    ["hace 3 días", el(9, 23), "Hace 3 días"],
+    ["hace 6 días", el(9, 20), "Hace 6 días"],
+    ["hace 10 días", el(9, 16), "Hace 1 semana"],
+    ["hace 20 días", el(9, 6), "Hace 2 semanas"],
+    ["hace 45 días", el(8, 11), "Hace 1 mes"],
+    ["hace 4 meses", el(5, 20), "Hace 4 meses"],
+  ])("en el pasado: %s → %s", (_caso, iso, esperado) => {
+    expect(fechaRelativa(iso, ahora)).toBe(esperado)
+  })
+
+  it.each([
+    ["mañana a la mañana, aunque falten menos de 24 horas", el(9, 27, 9), "Mañana"],
+    ["en 3 días", el(9, 29), "En 3 días"],
+    ["en 6 días", el(10, 1), "En 6 días"],
+    ["en 10 días", el(10, 5), "En 1 semana"],
+    ["en 20 días", el(10, 15), "En 2 semanas"],
+    ["en 45 días", el(11, 10), "En 1 mes"],
+  ])("en el futuro: %s → %s", (_caso, iso, esperado) => {
+    expect(fechaRelativa(iso, ahora)).toBe(esperado)
+  })
+
+  it("nunca dice un número negativo", () => {
+    for (let dias = -400; dias <= 400; dias += 1) {
+      const iso = new Date(2026, 9, 26 + dias, 12, 0).toISOString()
+      expect(fechaRelativa(iso, ahora)).not.toMatch(/-/)
+    }
   })
 })

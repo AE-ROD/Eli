@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { crearBaseDeClientes, escenarioDeClientes } from "../_pruebas/base-de-clientes"
-import { NEGOCIO, conId, pedido, sesiones } from "@/pruebas/datos"
+import { NEGOCIO, atencion, conId, pago, pedido, sesiones } from "@/pruebas/datos"
+import { MARCA_DE_CLIENTE_ELIMINADO, NOMBRE_DE_CLIENTE_ELIMINADO } from "@/lib/clientes-eliminados"
 
 const mockGetServerSession = vi.fn()
 
@@ -302,17 +303,99 @@ describe("DELETE /api/clientes/[id]", () => {
     expect(base.buscar("customer", { id: "c-ajeno" })).toHaveLength(1)
   })
 
-  it("un cliente del propio negocio sí se borra", async () => {
+  it("un cliente del propio negocio se elimina anonimizándolo: sin ningún dato personal, y el ajeno igual que antes", async () => {
     const { DELETE } = await import("./route")
 
+    base.reiniciar({
+      ...escenarioDeClientes(),
+      customer: escenarioDeClientes().customer.map((cliente) =>
+        cliente.id === "c-maria"
+          ? {
+              ...cliente,
+              cedula: "12.345.678-9",
+              email: "maria@correo.test",
+              phone: "+56 9 1234 5678",
+              notes: "Alérgica al amoníaco",
+              tags: ["VIP", "Frecuente"],
+            }
+          : cliente
+      ),
+    })
     mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const ajenoAntes = base.buscar("customer", { id: "c-ajeno" })
 
     const res = await DELETE(pedido(URL_DE_MARIA), conId("c-maria"))
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ mensaje: "Cliente eliminado" })
-    expect(base.buscar("customer", { id: "c-maria" })).toEqual([])
-    expect(base.buscar("customer", { id: "c-ajeno" })).toHaveLength(1)
+    expect(base.buscar("customer", { id: "c-maria" })[0]).toMatchObject({
+      id: "c-maria",
+      businessId: NEGOCIO,
+      name: NOMBRE_DE_CLIENTE_ELIMINADO,
+      lastName: null,
+      cedula: null,
+      email: null,
+      phone: null,
+      notes: null,
+      tags: [MARCA_DE_CLIENTE_ELIMINADO],
+    })
+    expect(JSON.stringify(base.buscar("customer", { id: "c-maria" }))).not.toMatch(/María|González|maria@|1234|amoníaco|VIP|12\.345/)
+    expect(base.buscar("customer", { id: "c-ajeno" })).toEqual(ajenoAntes)
+  })
+
+  it("sus citas y sus atenciones quedan, atadas al cliente eliminado: la agenda y los reportes no cambian", async () => {
+    const { DELETE } = await import("./route")
+
+    base.reiniciar({
+      ...escenarioDeClientes(),
+      visit: [
+        atencion("v-cobrada", { status: "finalizada", appointmentId: "cita-carla", paidAt: new Date("2026-09-01T14:00:00.000Z"), totalCents: 800000 }),
+      ],
+      visitPayment: [pago("p-1", "v-cobrada", "efectivo", 8000)],
+    })
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const citasAntes = base.buscar("appointment", { customerId: "c-maria" })
+    const atencionesAntes = base.buscar("visit", { customerId: "c-maria" })
+    const pagosAntes = base.buscar("visitPayment", {})
+
+    const res = await DELETE(pedido(URL_DE_MARIA), conId("c-maria"))
+
+    expect(res.status).toBe(200)
+    expect(citasAntes).toHaveLength(5)
+    expect(base.buscar("appointment", { customerId: "c-maria" })).toEqual(citasAntes)
+    expect(atencionesAntes).toHaveLength(1)
+    expect(base.buscar("visit", { customerId: "c-maria" })).toEqual(atencionesAntes)
+    expect(base.buscar("visitPayment", {})).toEqual(pagosAntes)
+  })
+
+  it("un cliente eliminado ya no se lee, no se edita ni se vuelve a eliminar: responde como uno que no existe", async () => {
+    const { DELETE, GET, PUT } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    await DELETE(pedido(URL_DE_MARIA), conId("c-maria"))
+    const despuesDeEliminar = base.volcado()
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const resLeer = await GET(pedido(URL_DE_MARIA), conId("c-maria"))
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const resEditar = await PUT(pedido(URL_DE_MARIA, { name: "María de vuelta", tags: [] }), conId("c-maria"))
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const resEliminar = await DELETE(pedido(URL_DE_MARIA), conId("c-maria"))
+
+    expect([resLeer.status, resEditar.status, resEliminar.status]).toEqual([404, 404, 404])
+    expect(base.volcado()).toEqual(despuesDeEliminar)
+  })
+
+  it("nadie pone la marca de eliminado a mano: 400, y el cliente sigue igual", async () => {
+    const { PUT } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const antes = base.volcado()
+
+    const res = await PUT(pedido(URL_DE_MARIA, { tags: [MARCA_DE_CLIENTE_ELIMINADO] }), conId("c-maria"))
+
+    expect(res.status).toBe(400)
+    expect(base.volcado()).toEqual(antes)
   })
 
   it("un id que no existe responde igual que uno de otro negocio", async () => {
@@ -418,12 +501,13 @@ describe("PUT y DELETE /api/clientes/[id] — qué puede la profesional", () => 
     const { DELETE } = await import("./route")
 
     mockGetServerSession.mockResolvedValueOnce(sesion)
+    const antes = base.volcado()
 
     const res = await DELETE(pedido(URL_DE_MARIA), conId("c-maria"))
 
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({ error: "No autorizado" })
-    expect(base.buscar("customer", { id: "c-maria" })).toHaveLength(1)
+    expect(base.volcado()).toEqual(antes)
   })
 
   it.each(profesionales)("%s que borra un cliente ajeno recibe 404, no 401", async (_quien, sesion) => {
@@ -437,7 +521,7 @@ describe("PUT y DELETE /api/clientes/[id] — qué puede la profesional", () => 
     expect(base.buscar("customer", { id: "c-ajeno" })).toHaveLength(1)
   })
 
-  it("el encargado sí borra un cliente del negocio", async () => {
+  it("el encargado sí elimina un cliente del negocio", async () => {
     const { DELETE } = await import("./route")
 
     mockGetServerSession.mockResolvedValueOnce(sesiones.encargado)
@@ -445,7 +529,7 @@ describe("PUT y DELETE /api/clientes/[id] — qué puede la profesional", () => 
     const res = await DELETE(pedido(URL_DE_MARIA), conId("c-beto"))
 
     expect(res.status).toBe(200)
-    expect(base.buscar("customer", { id: "c-beto" })).toEqual([])
+    expect(base.buscar("customer", { id: "c-beto" })[0]).toMatchObject({ name: NOMBRE_DE_CLIENTE_ELIMINADO, tags: [MARCA_DE_CLIENTE_ELIMINADO] })
   })
 })
 

@@ -5,9 +5,15 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { email as campoEmail, nombre as campoNombre } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
-import { enviarInvitacionTrabajador } from "@/lib/email"
 import { actorDeSesion, puedeGestionarEquipo } from "@/lib/permisos"
-import { generarToken } from "@/lib/tokens"
+import { verificarLimite } from "@/lib/rate-limit"
+import {
+  CAMPOS_DE_INVITACION,
+  claveDeReenvio,
+  enlaceNuevo,
+  estaVencida,
+  mandarCorreoDeInvitacion,
+} from "@/lib/invitaciones-de-equipo"
 import { normalizarEmail } from "@/lib/validaciones"
 import { registrarError } from "@/lib/registro-de-errores"
 
@@ -34,14 +40,7 @@ export async function GET() {
     }),
     prisma.workerInvitation.findMany({
       where: { businessId: actor.businessId, acceptedAt: null },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        expiresAt: true,
-        createdAt: true,
-      },
+      select: CAMPOS_DE_INVITACION,
       orderBy: { createdAt: "desc" },
       take: 200,
     }),
@@ -83,58 +82,84 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Este usuario ya es miembro del negocio" }, { status: 409 })
     }
 
+    // La más nueva de las que nadie aceptó. Si está vigente, no se manda otra:
+    // se ofrece reenviarla. Si venció, se reemplaza (enlace y vencimiento
+    // nuevos) en vez de bloquear ese correo para siempre, que es lo que
+    // pasaba cuando acá no se miraba `expiresAt`.
     const invitacionPendiente = await prisma.workerInvitation.findFirst({
       where: { businessId: actor.businessId, email: mismoEmail, acceptedAt: null },
+      orderBy: { expiresAt: "desc" },
+      select: { id: true, expiresAt: true, createdAt: true },
     })
-    if (invitacionPendiente) {
-      return NextResponse.json({ error: "Ya existe una invitación pendiente para este correo" }, { status: 409 })
+    if (invitacionPendiente && !estaVencida(invitacionPendiente)) {
+      return NextResponse.json(
+        {
+          error: "Ya hay una invitación vigente para este correo. Puedes reenviarla.",
+          invitacionId: invitacionPendiente.id,
+          expiresAt: invitacionPendiente.expiresAt,
+        },
+        { status: 409 }
+      )
     }
 
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 días
+    // Reemplazar una vencida manda un correo a una casilla que ya recibió
+    // otro: cuenta en el mismo límite que reenviar.
+    if (invitacionPendiente) {
+      const { permitido } = await verificarLimite("reenvioDeInvitacion", claveDeReenvio(actor.businessId, email))
+      if (!permitido) {
+        return NextResponse.json(
+          { error: "Ya se mandaron varias invitaciones a este correo. Espera un rato e intenta de nuevo." },
+          { status: 429 }
+        )
+      }
+    }
 
     // A la base va sólo el hash (lib/tokens.ts); el token en claro existe
     // únicamente en el enlace del correo y no se responde al cliente.
-    const { token, tokenHash } = generarToken()
+    const { token, tokenHash, expiresAt } = enlaceNuevo()
 
-    const invitacion = await prisma.workerInvitation.create({
-      data: {
-        businessId: actor.businessId,
-        email,
-        name: nombre,
-        role: rol,
-        tokenHash,
-        expiresAt,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        expiresAt: true,
-        createdAt: true,
-      },
-    })
+    let invitacion: { id: string; name: string; email: string; role: string; expiresAt: Date; createdAt: Date }
+    if (invitacionPendiente) {
+      // Acotada por negocio y por "sin aceptar" también al escribir: si
+      // alguien la aceptó entretanto, no se le cambia el enlace.
+      const { count } = await prisma.workerInvitation.updateMany({
+        where: { id: invitacionPendiente.id, businessId: actor.businessId, acceptedAt: null },
+        data: { name: nombre, email, role: rol, tokenHash, expiresAt },
+      })
+      if (count === 0) {
+        return NextResponse.json({ error: "La invitación cambió mientras tanto. Recarga la página." }, { status: 409 })
+      }
+      invitacion = { id: invitacionPendiente.id, name: nombre, email, role: rol, expiresAt, createdAt: invitacionPendiente.createdAt }
+    } else {
+      invitacion = await prisma.workerInvitation.create({
+        data: {
+          businessId: actor.businessId,
+          email,
+          name: nombre,
+          role: rol,
+          tokenHash,
+          expiresAt,
+        },
+        select: CAMPOS_DE_INVITACION,
+      })
+    }
 
-    const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000"
-    const enlaceAceptar = `${baseUrl}/unirse/${token}`
-
-    const negocio = await prisma.business.findUnique({
-      where: { id: actor.businessId },
-      select: { name: true },
-    })
-
-    await enviarInvitacionTrabajador({
-      emailTrabajador: email,
-      nombreTrabajador: nombre,
-      nombreNegocio: negocio?.name ?? session?.user.businessName ?? "",
+    await mandarCorreoDeInvitacion({
+      token,
+      businessId: actor.businessId,
+      nombreDeRespaldo: session?.user.businessName ?? "",
+      email,
+      nombre,
       rol,
-      enlaceAceptar,
-    }).catch(() => null)
+    })
 
     // Campo por campo: ni el hash del token puede colarse en la respuesta.
     const { id, name, email: emailInvitado, role, expiresAt: vence, createdAt } = invitacion
     return NextResponse.json(
-      { invitacion: { id, name, email: emailInvitado, role, expiresAt: vence, createdAt } },
+      {
+        invitacion: { id, name, email: emailInvitado, role, expiresAt: vence, createdAt },
+        reemplazoUnaVencida: Boolean(invitacionPendiente),
+      },
       { status: 201 }
     )
   } catch (error) {

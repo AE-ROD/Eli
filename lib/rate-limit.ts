@@ -69,6 +69,11 @@ const limitadorSoporte = crearLimitador("soporte", 5, "1 h")
 // mandarle acuses en serie a la casilla de un tercero. Al pasarse, la
 // solicitud se guarda igual y sólo se omite el acuse (ver /api/soporte).
 const limitadorAcuseDeSoporte = crearLimitador("soporte-acuse", 2, "1 h")
+// Reenviar una invitación al equipo (o reemplazar una vencida): 3 por hora por
+// negocio y correo de destino. Cada reenvío manda un correo a una casilla de
+// otra persona; el límite del panel (60 por minuto) dejaría llenarle la
+// bandeja. Tres alcanzan para "no le llegó, reenviala" un par de veces.
+const limitadorReenvioDeInvitacion = crearLimitador("reenvio-invitacion", 3, "1 h")
 
 export type TipoLimite =
   | "login"
@@ -79,6 +84,7 @@ export type TipoLimite =
   | "panelEscritura"
   | "soporte"
   | "acuseDeSoporte"
+  | "reenvioDeInvitacion"
 
 const limitadores: Record<TipoLimite, Ratelimit | null> = {
   login: limitadorLogin,
@@ -89,6 +95,7 @@ const limitadores: Record<TipoLimite, Ratelimit | null> = {
   panelEscritura: limitadorPanelEscritura,
   soporte: limitadorSoporte,
   acuseDeSoporte: limitadorAcuseDeSoporte,
+  reenvioDeInvitacion: limitadorReenvioDeInvitacion,
 }
 
 /**
@@ -110,6 +117,9 @@ const fallaAbiertoSiUpstashFalla: Record<TipoLimite, boolean> = {
   soporte: false,
   // Cerrado sólo omite el acuse: la solicitud se guarda igual.
   acuseDeSoporte: false,
+  // Cerrado como el acuse: manda correos a una dirección ajena. Exige sesión
+  // de dueño o encargado, así que una caída sólo demora un reenvío.
+  reenvioDeInvitacion: false,
   panelEscritura: true,
   lecturaPublica: true,
   panelLectura: true,
