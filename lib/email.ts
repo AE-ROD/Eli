@@ -8,6 +8,7 @@ import {
   PRECIO_PERSONA_ADICIONAL,
   formatearPesos,
 } from "@/lib/precios"
+import type { DatosAcuseDeSoporte, DatosAvisoASoporte } from "@/lib/soporte"
 
 const FROM = process.env.RESEND_FROM_EMAIL ?? "Eli <no-reply@eli.app>"
 
@@ -98,6 +99,8 @@ type TipoCorreo =
   | "recordatorio"
   | "recuperacion-contrasena"
   | "invitacion-trabajador"
+  | "aviso-a-soporte"
+  | "acuse-de-soporte"
   | TipoCorreoDePrueba
 
 /**
@@ -126,6 +129,8 @@ interface Correo {
    * Lo arma el servidor (`lib/baja-de-correos.ts`).
    */
   enlaceDeBaja?: string
+  /** Reply-To: a quién le llega si se responde el correo. */
+  responderA?: string
 }
 
 /*
@@ -177,7 +182,7 @@ function armarHtml({ asunto: asuntoSeguro, titulo, intro, pasos, detalle, destac
           ${detalle
             .map(
               ([etiqueta, valor]) =>
-                `<p style="margin: 0 0 6px; font-family: ${FUENTE}; font-size: 15px; line-height: 1.5; color: ${COLOR.navy};"><strong>${escaparHtml(etiqueta)}:</strong> ${escaparHtml(valor)}</p>`,
+                `<p style="margin: 0 0 6px; font-family: ${FUENTE}; font-size: 15px; line-height: 1.5; color: ${COLOR.navy}; white-space: pre-wrap;"><strong>${escaparHtml(etiqueta)}:</strong> ${escaparHtml(valor)}</p>`,
             )
             .join("")}
         </td></tr>
@@ -249,6 +254,7 @@ async function enviar(correo: Correo): Promise<ResultadoDeEnvio> {
     to: correo.para,
     subject: correo.asunto.valor,
     html: armarHtml(correo),
+    ...(correo.responderA ? { replyTo: correo.responderA } : {}),
   })
 }
 
@@ -498,4 +504,40 @@ function correoDePrueba(tipo: TipoCorreoDePrueba, datos: DatosCorreoDePrueba): C
  */
 export function enviarCorreoDePrueba(tipo: TipoCorreoDePrueba, datos: DatosCorreoDePrueba) {
   return enviar(correoDePrueba(tipo, datos))
+}
+
+// ─── Soporte ─────────────────────────────────────────────────────────────────
+
+/**
+ * El aviso a la casilla de soporte (`SOPORTE_EMAIL`) con todos los datos de la
+ * solicitud. Responderlo le contesta directo a quien la mandó.
+ */
+export function enviarSolicitudASoporte(datos: DatosAvisoASoporte) {
+  return enviar({
+    tipo: "aviso-a-soporte",
+    para: datos.para,
+    responderA: datos.responderA,
+    asunto: asunto`[Soporte ${datos.numero}] ${datos.tipo} · ${datos.area} — ${datos.asunto}`,
+    titulo: "Nueva solicitud de soporte",
+    intro: html`Llegó la solicitud <strong>${datos.numero}</strong>. Responde este correo para contestarle directo a quien la envió.`,
+    detalle: datos.detalle,
+    destacado: true,
+  })
+}
+
+/**
+ * El acuse a quien mandó la solicitud. Sin plazos de respuesta, y sin el texto
+ * que escribió la persona (ver `correosDeSolicitud` en `lib/soporte.ts`).
+ */
+export function enviarAcuseDeSoporte(datos: DatosAcuseDeSoporte) {
+  return enviar({
+    tipo: "acuse-de-soporte",
+    para: datos.para,
+    ...(datos.responderA ? { responderA: datos.responderA } : {}),
+    asunto: asunto`Recibimos tu solicitud ${datos.numero}`,
+    titulo: "Recibimos tu solicitud",
+    intro: html`Hola, tu solicitud quedó registrada con el número <strong>${datos.numero}</strong>. Guárdalo por si necesitas mencionarla.`,
+    detalle: datos.detalle,
+    cierre: html`Te vamos a responder por correo a esta misma dirección. Si no enviaste esta solicitud, puedes ignorar este correo.`,
+  })
 }

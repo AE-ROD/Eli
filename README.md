@@ -23,6 +23,7 @@ Necesita un `.env` con:
 | `NEXTAUTH_URL` / `NEXTAUTH_SECRET` | Sesiones. `NEXTAUTH_URL` arma los enlaces de los correos; de `NEXTAUTH_SECRET` se deriva la firma del enlace de baja de los correos de prueba. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Entrar con Google. |
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Correos. Sin esto no se envían, pero nada se rompe. |
+| `SOPORTE_EMAIL` | Casilla que recibe las solicitudes de soporte (`/soporte` y `/dashboard/ayuda`). Sin esto la solicitud se guarda igual y el usuario recibe su acuse, pero no llega aviso a soporte. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Rate limiting. En desarrollo, sin esto queda desactivado. **En producción es obligatorio:** sin él el límite falla cerrado y todo endpoint responde 429. |
 | `CRON_SECRET` | Protege los crons (recordatorios y correos del ciclo de prueba). |
 
@@ -103,6 +104,13 @@ NOT NULL sin default) y el código nuevo falla sin ella. Por eso:
    envuelta en `BEGIN; … COMMIT;`: si falla, no queda nada a medias.
 3. Inmediatamente después, promover el despliegue del código nuevo.
 4. `npx prisma migrate resolve --applied 20261022120000_ganchos_de_activacion`.
+
+### `20261026120000_solicitudes_de_soporte`
+
+Aditiva: sólo crea la tabla `solicitudes_de_soporte`. El código viejo no la
+usa, así que se puede aplicar antes de desplegar; el código nuevo la necesita
+para `POST /api/soporte`. Orden: aplicar la migración, desplegar, y
+`npx prisma migrate resolve --applied 20261026120000_solicitudes_de_soporte`.
 
 ## Cómo está organizado
 
