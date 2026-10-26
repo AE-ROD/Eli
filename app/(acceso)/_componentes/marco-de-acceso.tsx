@@ -110,6 +110,13 @@ export function MarcoDeAcceso({
             {pie}
           </div>
         )}
+
+        {/* En toda pantalla de acceso: quien no puede entrar encuentra ayuda sin tener sesión. */}
+        <div className={cn("flex flex-wrap items-center justify-center gap-x-2 px-4 text-center text-sm text-texto-2", pie ? "mt-1" : "mt-6")}>
+          <PreguntaConEnlace pregunta="¿Necesitas ayuda?" href="/soporte">
+            Centro de ayuda
+          </PreguntaConEnlace>
+        </div>
       </main>
     </div>
   )

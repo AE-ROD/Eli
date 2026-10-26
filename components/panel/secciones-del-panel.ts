@@ -41,7 +41,7 @@ export const SECCION_DE_CONFIGURACION: SeccionDelPanel = {
   ruta: "/dashboard/configuracion",
 }
 
-/** Lleva a una página que todavía no existe: queda en la barra hasta que el dueño decida. */
+/** El centro de ayuda: preguntas frecuentes y el formulario de soporte (`components/soporte/`). */
 export const SECCION_DE_AYUDA: SeccionDelPanel = { id: "ayuda", nombre: "Ayuda", ruta: "/dashboard/ayuda" }
 
 /** Todas, en el orden de la barra lateral. */

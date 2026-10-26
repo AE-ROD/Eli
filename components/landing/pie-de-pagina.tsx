@@ -17,6 +17,7 @@ const ENLACES_DE_OFICIOS: Enlace[] = OFICIOS.map((oficio) => ({ texto: oficio.no
 const ENLACES_DE_CUENTA: Enlace[] = [
   { texto: "Iniciar sesión", href: "/iniciar-sesion" },
   { texto: "Crear cuenta", href: "/crear-cuenta" },
+  { texto: "Ayuda y soporte", href: "/soporte" },
 ]
 
 /**
