@@ -5,8 +5,17 @@ import { useSession } from "next-auth/react"
 import { actorDeSesion, puedeAsignarCitasAOtros } from "@/lib/permisos"
 import { AnimatePresence } from "framer-motion"
 import { BarraSuperior } from "@/components/panel/barra-superior"
-import { desplazarFecha, comoTexto, diasDeLaSemanaDe, type UnidadDeTiempo } from "@/lib/fechas"
-import { leerCitas, crearCita, cambiarEstadoDeCita, type Cita, type DatosDeNuevaCita } from "./_datos"
+import { desplazarFecha, diasDeLaSemanaDe, type UnidadDeTiempo } from "@/lib/fechas"
+import type { FranjaDelDia } from "@/lib/horario-de-atencion"
+import {
+  leerCitas,
+  crearCita,
+  cambiarEstadoDeCita,
+  citaEnBlanco,
+  leerHorarioDeAtencion,
+  type Cita,
+  type DatosDeNuevaCita,
+} from "./_datos"
 import { Aviso } from "@/components/panel/aviso"
 import { ControlesDeAgenda } from "./_componentes/controles-de-agenda"
 import { VistaSemana } from "./_componentes/vista-semana"
@@ -14,17 +23,7 @@ import { VistaDia } from "./_componentes/vista-dia"
 import { VistaMes } from "./_componentes/vista-mes"
 import { PanelDeCita } from "./_componentes/panel-de-cita"
 import { ModalNuevaCita } from "./_componentes/modal-nueva-cita"
-
-const CITA_EN_BLANCO: DatosDeNuevaCita = {
-  clienteId: "",
-  servicio: "",
-  fecha: comoTexto(new Date()),
-  horaInicio: "09:00",
-  horaFin: "10:00",
-  precio: "",
-  notas: "",
-  memberId: "",
-}
+import { ModalMoverCita } from "./_componentes/modal-mover-cita"
 
 function resumen(cargando: boolean, cantidad: number): string {
   if (cargando) return "Cargando..."
@@ -46,19 +45,33 @@ export default function PaginaAgenda() {
   const [modalAbierto, setModalAbierto] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [avisoDelModal, setAvisoDelModal] = useState("")
-  const [nuevaCita, setNuevaCita] = useState<DatosDeNuevaCita>(CITA_EN_BLANCO)
+  const [nuevaCita, setNuevaCita] = useState<DatosDeNuevaCita>(() => citaEnBlanco(new Date()))
+  const [citaAMover, setCitaAMover] = useState<Cita | null>(null)
+  const [horario, setHorario] = useState<FranjaDelDia[]>([])
   const idDelPeriodo = useId()
 
   const recargar = useCallback(async (fecha: Date, modo: UnidadDeTiempo) => {
     setCargando(true)
     const resultado = await leerCitas(fecha, modo)
-    if (resultado.ok) setCitas(resultado.datos)
-    else setAviso(resultado.error)
+    if (resultado.ok) {
+      setCitas(resultado.datos)
+      // El detalle abierto muestra la cita como quedó (por ejemplo, después de
+      // moverla); si ya no está en el período que se mira, se cierra.
+      setCitaAbierta((abierta) => (abierta ? (resultado.datos.find((cita) => cita.id === abierta.id) ?? null) : null))
+    } else setAviso(resultado.error)
     setCargando(false)
   }, [])
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- recarga cuando cambia lo que se está mirando
   useEffect(() => { recargar(fecha, modo) }, [fecha, modo, recargar])
+
+  // Si el horario no carga, la agenda se dibuja igual de 8 a 20 y con las
+  // horas de las citas que haya: no hace falta avisar.
+  useEffect(() => {
+    leerHorarioDeAtencion().then((resultado) => {
+      if (resultado.ok) setHorario(resultado.datos)
+    })
+  }, [])
 
   const cambiarEstado = async (id: string, estado: string) => {
     setAviso("")
@@ -69,8 +82,12 @@ export default function PaginaAgenda() {
     setCitaAbierta((abierta) => (abierta?.id === id ? { ...abierta, status: estado } : abierta))
   }
 
+  // Cada vez que se abre, un borrador nuevo del día que se está mirando. Si
+  // se conservaba el anterior, el buscador volvía vacío con el cliente de
+  // antes todavía elegido por debajo (A1).
   const abrirModal = () => {
     setAvisoDelModal("")
+    setNuevaCita(citaEnBlanco(fecha))
     setModalAbierto(true)
   }
 
@@ -88,7 +105,6 @@ export default function PaginaAgenda() {
     if (!resultado.ok) return setAvisoDelModal(resultado.error)
 
     setModalAbierto(false)
-    setNuevaCita(CITA_EN_BLANCO)
     recargar(fecha, modo)
   }
 
@@ -121,10 +137,10 @@ export default function PaginaAgenda() {
             />
 
             {modo === "semana" && (
-              <VistaSemana dias={diasDeLaSemanaDe(fecha)} citas={citas} onSeleccionar={setCitaAbierta} />
+              <VistaSemana dias={diasDeLaSemanaDe(fecha)} citas={citas} horario={horario} onSeleccionar={setCitaAbierta} />
             )}
             {modo === "dia" && (
-              <VistaDia fecha={fecha} citas={citas} onSeleccionar={setCitaAbierta} />
+              <VistaDia fecha={fecha} citas={citas} horario={horario} onSeleccionar={setCitaAbierta} />
             )}
             {modo === "mes" && (
               <VistaMes
@@ -144,6 +160,7 @@ export default function PaginaAgenda() {
                 cita={citaAbierta}
                 onCerrar={() => setCitaAbierta(null)}
                 onCambiarEstado={cambiarEstado}
+                onMover={setCitaAMover}
               />
             )}
           </AnimatePresence>
@@ -160,6 +177,20 @@ export default function PaginaAgenda() {
             onCambiarCampo={(campo, valor) => setNuevaCita((previa) => ({ ...previa, [campo]: valor }))}
             onSubmit={guardarNuevaCita}
             onCerrar={() => setModalAbierto(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {citaAMover && (
+          <ModalMoverCita
+            cita={citaAMover}
+            puedeAsignarProfesional={puedeAsignarProfesional}
+            onMovida={() => {
+              setCitaAMover(null)
+              recargar(fecha, modo)
+            }}
+            onCerrar={() => setCitaAMover(null)}
           />
         )}
       </AnimatePresence>

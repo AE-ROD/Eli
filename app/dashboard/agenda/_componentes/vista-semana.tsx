@@ -2,26 +2,36 @@
 
 import { useEffect, useRef } from "react"
 import { esHoy, duracionParaMostrar, formatearHora, diaParaLeer, horasEnPunto } from "@/lib/fechas"
+import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import { cn } from "@/lib/utils"
 import { diasSemana } from "./controles-de-agenda"
 import { estiloDeEstado } from "./estados-de-cita"
 import { nombreDeCliente, type Cita } from "../_datos"
+import { columnasDeSolape, rangoDeHoras, tramoDeCita, tramosDeFranjas } from "../_disposicion"
 
-const HORA_INICIO = 8
-const HORA_FIN = 20
 const ALTURA_HORA = 64 // px por hora: la clase `h-16` de cada franja
 const ANCHO_DE_LAS_HORAS = 56 // px de la columna de las horas: la clase `w-14`
+const ALTURA_MINIMA = 24 // px: una cita corta se dibuja al menos así de alta
+const SEPARACION = 4 // px que se le restan al alto de cada cita
 
-const horasDelDia = horasEnPunto(HORA_INICIO, HORA_FIN)
+/**
+ * Lo que ocupa en pantalla la cita más corta, en minutos: con eso se decide
+ * si dos citas se pisan a la vista aunque no se pisen en el tiempo.
+ */
+const DURACION_VISUAL_MINIMA = Math.ceil(((ALTURA_MINIMA + SEPARACION) / ALTURA_HORA) * 60)
 
 interface PropsDeVistaSemana {
   dias: Date[]
   citas: Cita[]
+  /** El horario de atención del negocio, de toda la semana: amplía las horas que se dibujan. */
+  horario: FranjaDelDia[]
   onSeleccionar: (cita: Cita) => void
 }
 
 /**
- * La semana en columnas, de 8 a 20. Se desplaza dentro de la tarjeta, en
+ * La semana en columnas, como mínimo de 8 a 20 y ampliada para que entren el
+ * horario de atención y cualquier cita fuera de ese rango. Las citas que se
+ * pisan van lado a lado, repartidas en columnas (`columnasDeSolape`). Se desplaza dentro de la tarjeta, en
  * alto y en ancho: en el teléfono los siete días no entran y cada uno guarda
  * un ancho donde el nombre se lee, en vez de apretarse hasta la inicial. La
  * fila de los días y la columna de las horas quedan fijas al desplazarse.
@@ -32,10 +42,20 @@ interface PropsDeVistaSemana {
  * del borde: así las esquinas del área que se desplaza siguen la curva de la
  * tarjeta y no asoman.
  */
-export function VistaSemana({ dias, citas, onSeleccionar }: PropsDeVistaSemana) {
+export function VistaSemana({ dias, citas, horario, onSeleccionar }: PropsDeVistaSemana) {
   const caja = useRef<HTMLDivElement>(null)
   const indiceDeHoy = dias.findIndex(esHoy)
   const primerDia = dias[0]?.toDateString()
+
+  const citasPorDia = dias.map((dia) =>
+    citas.filter((cita) => new Date(cita.startTime).toDateString() === dia.toDateString())
+  )
+  const diasDeLaSemanaVisibles = new Set(dias.map((dia) => dia.getDay()))
+  const { desde, hasta } = rangoDeHoras([
+    ...tramosDeFranjas(horario.filter((franja) => diasDeLaSemanaVisibles.has(franja.dayOfWeek))),
+    ...citasPorDia.flat().map(tramoDeCita),
+  ])
+  const horasDelDia = horasEnPunto(desde, hasta)
 
   // Sólo de costado, y sólo al cambiar de semana: el alto queda donde estaba.
   // Si la semana entra entera, el navegador deja el desplazamiento en cero.
@@ -90,8 +110,10 @@ export function VistaSemana({ dias, citas, onSeleccionar }: PropsDeVistaSemana) 
 
           {/* Columnas por día */}
           {dias.map((dia, indiceDia) => {
-            const citasDelDia = citas.filter(
-              (cita) => new Date(cita.startTime).toDateString() === dia.toDateString()
+            const citasDelDia = citasPorDia[indiceDia]
+            const lugares = columnasDeSolape(
+              citasDelDia.map((cita) => ({ id: cita.id, ...tramoDeCita(cita) })),
+              DURACION_VISUAL_MINIMA
             )
 
             return (
@@ -106,27 +128,33 @@ export function VistaSemana({ dias, citas, onSeleccionar }: PropsDeVistaSemana) 
 
                 {/* Citas */}
                 {citasDelDia.map((cita) => {
-                  const inicio = new Date(cita.startTime)
-                  const hora = inicio.getHours()
-                  const minutos = inicio.getMinutes()
-                  if (hora < HORA_INICIO || hora >= HORA_FIN) return null
-                  const distanciaArriba = (hora - HORA_INICIO) * ALTURA_HORA + (minutos / 60) * ALTURA_HORA
+                  const { inicioMin } = tramoDeCita(cita)
+                  const distanciaArriba = ((inicioMin - desde * 60) / 60) * ALTURA_HORA
                   const duracion = duracionParaMostrar(cita.startTime, cita.endTime)
-                  const altura = Math.max((duracion / 60) * ALTURA_HORA - 4, 24)
+                  const altura = Math.max((duracion / 60) * ALTURA_HORA - SEPARACION, ALTURA_MINIMA)
                   const estado = estiloDeEstado(cita.status)
+                  const { columna, columnas } = lugares.get(cita.id) ?? { columna: 0, columnas: 1 }
+                  // Sola, 4 px de cada lado; compartiendo, 2 px, que el ancho es poco.
+                  const margen = columnas > 1 ? 2 : 4
+                  const ancho = 100 / columnas
 
                   return (
                     <button
                       key={cita.id}
                       type="button"
                       // La posición y el alto salen de la hora y la duración de cada cita.
-                      style={{ top: distanciaArriba, height: altura }}
+                      style={{
+                        top: distanciaArriba,
+                        height: altura,
+                        left: `calc(${columna * ancho}% + ${margen}px)`,
+                        width: `calc(${ancho}% - ${margen * 2}px)`,
+                      }}
                       onClick={() => onSeleccionar(cita)}
                       // Lo que la grilla dice con el lugar y el color, dicho para el lector de
                       // pantalla. Empieza por lo que se ve, para que también lo encuentre la voz.
                       aria-label={`${nombreDeCliente(cita)}, ${cita.title}, ${diaParaLeer(dia)}, de ${formatearHora(cita.startTime)} a ${formatearHora(cita.endTime)}, ${estado.texto}`}
                       className={cn(
-                        "absolute inset-x-1 overflow-hidden rounded-[10px] border-l-[3px] px-1.5 py-1 text-left",
+                        "absolute overflow-hidden rounded-[10px] border-l-[3px] px-1.5 py-1 text-left",
                         "anillo-foco transition-shadow duration-200 ease-suave hover:z-10 hover:shadow-md focus-visible:z-10",
                         estado.bloque
                       )}
