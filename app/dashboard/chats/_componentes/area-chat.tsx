@@ -23,7 +23,7 @@ function mensajeParaBurbuja(mensaje: Mensaje): MensajeEnBurbuja {
   return {
     id: mensaje.id,
     texto: mensaje.content,
-    hora: new Date(mensaje.createdAt).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit", hour12: false }),
+    hora: new Date(mensaje.createdAt).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
     esPropio: mensaje.fromBusiness,
     leido: mensaje.fromBusiness,
   }

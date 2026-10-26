@@ -9,6 +9,7 @@
  */
 
 import { comoTexto, diasDeLaSemanaDe, limitesDelMesDe, type UnidadDeTiempo } from "@/lib/fechas"
+import { leerMonto } from "@/lib/dinero"
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
 
 export interface Cita {
@@ -83,7 +84,24 @@ export async function cambiarEstadoDeCita(id: string, estado: string): Promise<R
   return pedir(`/api/citas/${id}`, "No se pudo cambiar el estado", conJson("PUT", { status: estado }))
 }
 
+/**
+ * El precio opcional de la cita, como lo escribieron: vacío es sin precio.
+ * Lo lee `leerMonto`, así "8.000", "8000" y "8.000,50" son el monto que se
+ * quiso escribir (con `parseFloat`, "8.000" era 8). Lo que no se puede leer
+ * sin adivinar es un error, nunca una cita guardada sin precio o con otro.
+ */
+export function precioDeLaCita(texto: string): Resultado<number | undefined> {
+  if (!texto.trim()) return { ok: true, datos: undefined }
+  const precio = leerMonto(texto)
+  return precio === null
+    ? { ok: false, error: "No se entiende el precio. Escríbelo así: 8000 o 8000,50." }
+    : { ok: true, datos: precio }
+}
+
 export async function crearCita(datos: DatosDeNuevaCita): Promise<Resultado> {
+  const precio = precioDeLaCita(datos.precio)
+  if (!precio.ok) return precio
+
   const inicio = new Date(`${datos.fecha}T${datos.horaInicio}:00`)
   const fin = new Date(`${datos.fecha}T${datos.horaFin}:00`)
 
@@ -95,7 +113,7 @@ export async function crearCita(datos: DatosDeNuevaCita): Promise<Resultado> {
       startTime: inicio.toISOString(),
       endTime: fin.toISOString(),
       customerId: datos.clienteId,
-      price: datos.precio ? parseFloat(datos.precio) : undefined,
+      price: precio.datos,
       notes: datos.notas || undefined,
       memberId: datos.memberId || null,
     })

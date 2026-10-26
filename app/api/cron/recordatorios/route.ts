@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
         nombreNegocio: cita.business.name,
         servicio: cita.title,
         fecha: cita.startTime.toISOString().split("T")[0],
-        hora: cita.startTime.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit", hour12: false }),
+        hora: cita.startTime.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
       })
     })
   )

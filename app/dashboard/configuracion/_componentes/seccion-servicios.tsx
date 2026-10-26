@@ -9,7 +9,7 @@ import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
-import { formatearMonto } from "@/lib/dinero"
+import { formatearMonto, montoParaEscribir } from "@/lib/dinero"
 import { formatearDuracionDeServicio } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
 import { ModalServicio } from "./modal-servicio"
@@ -55,7 +55,7 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
       name: servicio.name,
       description: servicio.description ?? "",
       duration: servicio.duration,
-      price: servicio.price?.toString() ?? "",
+      price: servicio.price == null ? "" : montoParaEscribir(servicio.price),
     })
     setAvisoDelModal("")
     setModalAbierto(true)
