@@ -228,7 +228,7 @@ export default function PaginaClientes() {
     const nombre = aEliminar.nombre
     if (clienteSeleccionado?.id === aEliminar.id) setClienteSeleccionado(null)
     setAEliminar(null)
-    setAvisoListo(`Se eliminaron los datos de ${nombre}. Sus citas y cobros siguen en la agenda y en los reportes.`)
+    setAvisoListo(`Se eliminaron los datos de ${nombre}. Sus citas y cobros siguen en la agenda y en los reportes, a nombre de "Cliente eliminado".`)
     cargarClientes(busqueda, etiquetaActiva, 1)
   }
 
@@ -327,12 +327,14 @@ export default function PaginaClientes() {
             <div className="space-y-3 text-sm text-texto-2">
               <div>
                 <p className="font-medium text-navy">Se borra</p>
-                <p className="mt-1">Su nombre, correo, teléfono, cédula, notas y etiquetas. Deja de aparecer en Clientes y en los buscadores.</p>
+                <p className="mt-1">
+                  Su nombre, correo, teléfono, cédula, notas y etiquetas; su nombre en cada cobro, que pasa a decir &ldquo;Cliente eliminado&rdquo;; y las notas y comentarios de sus citas y atenciones. Deja de aparecer en Clientes y en los buscadores.
+                </p>
               </div>
               <div>
                 <p className="font-medium text-navy">Queda</p>
                 <p className="mt-1">
-                  Sus citas y sus cobros, a nombre de &ldquo;Cliente eliminado&rdquo;, para que la agenda y los reportes no cambien. Los cobros ya registrados conservan el nombre con que se anotaron.
+                  Sus citas y sus cobros, con sus fechas, servicios, profesionales y montos, para que la agenda y los reportes sumen lo mismo.
                 </p>
               </div>
             </div>

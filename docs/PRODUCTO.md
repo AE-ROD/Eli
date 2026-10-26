@@ -189,7 +189,13 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 ### Clientes
 
 - **Visitas:** una visita es una **atención cobrada** del tablero (sección 7), con o sin reserva. Una cita futura, cancelada o marcada completada en la agenda sin pasar por el cobro no cuenta. La tarjeta y la ficha muestran cuántas visitas tiene, cuándo fue la última y, si tiene una cita pendiente o confirmada por delante, cuándo es la próxima ("En 3 días"). El profesional cuenta sólo sus atenciones, como ve sólo sus citas.
-- **Editar y eliminar** son de dueño y encargado, desde la ficha. **Eliminar es anonimizar**: se borran nombre (queda "Cliente eliminado"), correo, teléfono, cédula, notas y etiquetas, y el cliente deja de aparecer en Clientes y en los buscadores de "Nueva cita" y "Anotar sin reserva". Sus citas y cobros quedan, atados al cliente eliminado, para que la agenda y los reportes no cambien; los cobros conservan el nombre con que se anotaron. No se deshace.
+- **Editar y eliminar** son de dueño y encargado, desde la ficha. **Eliminar es anonimizar**, para cumplir el derecho a supresión: no queda ningún dato personal del cliente en ninguna tabla. No se deshace. Exactamente:
+  - **En la ficha del cliente:** el nombre pasa a "Cliente eliminado"; apellido, correo, teléfono, cédula y notas quedan vacíos; las etiquetas se borran (queda sólo una marca interna que lo identifica como eliminado).
+  - **En sus citas:** se borran las notas internas y los comentarios que dejó al reservar.
+  - **En sus atenciones:** el nombre guardado pasa a "Cliente eliminado" y se borran las notas y el motivo de anulación (quién y cuándo anuló se conservan).
+  - **No cambia:** fechas, horarios, servicios, profesionales, precios, líneas y pagos. Las citas y los cobros siguen atados al cliente eliminado, así que la agenda, las comisiones y los totales de los reportes suman lo mismo.
+  - Deja de aparecer en Clientes, en los buscadores de "Nueva cita" y "Anotar sin reserva", y en las cifras de clientes del inicio (total y nuevos del mes).
+  - Todo se hace junto: si algo falla, no se borra nada.
 
 ### Horario
 

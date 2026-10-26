@@ -5,7 +5,13 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { emailOVacio, etiquetas, nombre, notas, telefono } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
-import { clienteNoEliminado, datosDeClienteEliminado } from "@/lib/clientes-eliminados"
+import { registrarError } from "@/lib/registro-de-errores"
+import {
+  clienteNoEliminado,
+  datosDeClienteEliminado,
+  textosDeAtencionDeClienteEliminado,
+  textosDeCitaDeClienteEliminado,
+} from "@/lib/clientes-eliminados"
 import {
   actorDeSesion,
   puedeBorrarCliente,
@@ -165,12 +171,30 @@ export async function DELETE(
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
-  // Eliminar es anonimizar (decisión del dueño, PRODUCTO.md, sección 10): se
-  // borran los datos personales y la fila queda, con sus citas y sus
-  // atenciones, para que la agenda y los reportes no cambien. Es una sola
-  // escritura: no queda un cliente a medio borrar. Por `existente.id`, por lo
-  // mismo que en el PUT.
-  await prisma.customer.update({ where: { id: existente.id }, data: datosDeClienteEliminado(), select: { id: true } })
+  // Eliminar es anonimizar (decisión del dueño, PRODUCTO.md, sección 6): es
+  // el derecho a supresión, así que no queda ningún dato personal del cliente
+  // en ninguna tabla. Se borran sus datos, la copia de su nombre en cada
+  // atención y los textos libres de sus citas y atenciones. Montos, fechas,
+  // servicios y profesionales no se tocan: la agenda y los totales de los
+  // reportes no cambian. Todo o nada, en una transacción: no queda un cliente
+  // a medio borrar. Por `existente.id`, por lo mismo que en el PUT, y cada
+  // escritura acotada al negocio de la sesión.
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.customer.update({ where: { id: existente.id }, data: datosDeClienteEliminado(), select: { id: true } })
+      await tx.appointment.updateMany({
+        where: { customerId: existente.id, businessId: actor.businessId },
+        data: textosDeCitaDeClienteEliminado(),
+      })
+      await tx.visit.updateMany({
+        where: { customerId: existente.id, businessId: actor.businessId },
+        data: textosDeAtencionDeClienteEliminado(),
+      })
+    })
+  } catch (error) {
+    registrarError("eliminando un cliente", error)
+    return NextResponse.json({ error: "No se pudo eliminar el cliente" }, { status: 500 })
+  }
 
   return NextResponse.json({ mensaje: "Cliente eliminado" })
 }

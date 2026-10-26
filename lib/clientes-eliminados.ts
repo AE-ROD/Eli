@@ -1,9 +1,10 @@
 import type { Prisma } from "@prisma/client"
 
 /**
- * Borrar un cliente es anonimizarlo (decisión del dueño): se borran sus datos
- * personales, pero la fila queda para que sus citas y sus cobros sigan atados
- * a algo y los reportes no cambien.
+ * Borrar un cliente es anonimizarlo (decisión del dueño, por el derecho a
+ * supresión): no queda ningún dato personal suyo en ninguna tabla, pero la
+ * fila queda para que sus citas y sus cobros sigan atados a algo y los
+ * reportes no cambien.
  *
  * Sin columna nueva (no hay migración): un cliente eliminado se reconoce por
  * una etiqueta reservada, `MARCA_DE_CLIENTE_ELIMINADO`, que nadie puede poner
@@ -39,6 +40,30 @@ export function datosDeClienteEliminado() {
     notes: null,
     tags: [MARCA_DE_CLIENTE_ELIMINADO],
   } satisfies Prisma.CustomerUpdateInput
+}
+
+/**
+ * Lo que se borra de cada cita del cliente: los dos textos libres, que pueden
+ * tener datos suyos (una alergia, un teléfono, "su hija Ana"). El título es
+ * el servicio y queda, como el horario, el precio y el profesional.
+ */
+export function textosDeCitaDeClienteEliminado() {
+  return { notes: null, clientComments: null } satisfies Prisma.AppointmentUpdateManyMutationInput
+}
+
+/**
+ * Lo que se borra de cada atención del cliente: la copia de su nombre (que
+ * existe para que el historial se lea aunque el cliente se borre), las notas
+ * y el motivo de anulación, que son texto libre. Quién y cuándo anuló queda;
+ * montos, pagos, líneas y fechas no se tocan, así que los reportes suman lo
+ * mismo.
+ */
+export function textosDeAtencionDeClienteEliminado() {
+  return {
+    customerName: NOMBRE_DE_CLIENTE_ELIMINADO,
+    notes: null,
+    voidReason: null,
+  } satisfies Prisma.VisitUpdateManyMutationInput
 }
 
 /**

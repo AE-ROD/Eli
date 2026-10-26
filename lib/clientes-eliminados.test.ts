@@ -4,6 +4,8 @@ import {
   NOMBRE_DE_CLIENTE_ELIMINADO,
   datosDeClienteEliminado,
   esEtiquetaReservada,
+  textosDeAtencionDeClienteEliminado,
+  textosDeCitaDeClienteEliminado,
 } from "./clientes-eliminados"
 import { etiquetas } from "./campos-del-panel"
 
@@ -17,6 +19,20 @@ describe("datosDeClienteEliminado", () => {
       phone: null,
       notes: null,
       tags: [MARCA_DE_CLIENTE_ELIMINADO],
+    })
+  })
+})
+
+describe("lo que se borra de sus citas y atenciones", () => {
+  it("de cada cita, los dos textos libres: ni el horario, ni el precio, ni el profesional", () => {
+    expect(textosDeCitaDeClienteEliminado()).toEqual({ notes: null, clientComments: null })
+  })
+
+  it("de cada atención, la copia del nombre, las notas y el motivo de anulación: nada de dinero", () => {
+    expect(textosDeAtencionDeClienteEliminado()).toEqual({
+      customerName: NOMBRE_DE_CLIENTE_ELIMINADO,
+      notes: null,
+      voidReason: null,
     })
   })
 })

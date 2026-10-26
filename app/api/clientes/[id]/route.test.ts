@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { crearBaseDeClientes, escenarioDeClientes } from "../_pruebas/base-de-clientes"
-import { NEGOCIO, atencion, conId, pago, pedido, sesiones } from "@/pruebas/datos"
+import { NEGOCIO, atencion, conId, linea, pago, pedido, sesiones } from "@/pruebas/datos"
 import { MARCA_DE_CLIENTE_ELIMINADO, NOMBRE_DE_CLIENTE_ELIMINADO } from "@/lib/clientes-eliminados"
 
 const mockGetServerSession = vi.fn()
@@ -343,29 +343,105 @@ describe("DELETE /api/clientes/[id]", () => {
     expect(base.buscar("customer", { id: "c-ajeno" })).toEqual(ajenoAntes)
   })
 
-  it("sus citas y sus atenciones quedan, atadas al cliente eliminado: la agenda y los reportes no cambian", async () => {
-    const { DELETE } = await import("./route")
+  /** Las filas del negocio 1 que apuntan a María: lo que la eliminación tiene que dejar sin datos suyos. */
+  const lodeMaria = () => ({
+    cliente: base.buscar("customer", { id: "c-maria" }),
+    citas: base.buscar("appointment", { customerId: "c-maria", businessId: NEGOCIO }),
+    atenciones: base.buscar("visit", { customerId: "c-maria", businessId: NEGOCIO }),
+  })
 
+  const conAtencionDeMaria = () =>
     base.reiniciar({
       ...escenarioDeClientes(),
       visit: [
-        atencion("v-cobrada", { status: "finalizada", appointmentId: "cita-carla", paidAt: new Date("2026-09-01T14:00:00.000Z"), totalCents: 800000 }),
+        atencion("v-cobrada", {
+          status: "finalizada",
+          appointmentId: "cita-carla",
+          paidAt: new Date("2026-09-01T14:00:00.000Z"),
+          totalCents: 800000,
+          notes: "Vino con su hija Ana",
+        }),
+        atencion("v-anulada", {
+          status: "anulada",
+          voidedAt: new Date("2026-09-02T14:00:00.000Z"),
+          voidedById: "u-duena",
+          voidedByName: "Ana Dueña",
+          voidReason: "María se fue antes, llamar al +56 9 1234 5678",
+        }),
       ],
+      visitService: [linea("l-1", "v-cobrada")],
       visitPayment: [pago("p-1", "v-cobrada", "efectivo", 8000)],
     })
+
+  it("no queda ningún dato personal suyo en ninguna tabla: ni en la ficha, ni en sus citas, ni en sus atenciones", async () => {
+    const { DELETE } = await import("./route")
+
+    conAtencionDeMaria()
     mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
-    const citasAntes = base.buscar("appointment", { customerId: "c-maria" })
-    const atencionesAntes = base.buscar("visit", { customerId: "c-maria" })
-    const pagosAntes = base.buscar("visitPayment", {})
 
     const res = await DELETE(pedido(URL_DE_MARIA), conId("c-maria"))
 
     expect(res.status).toBe(200)
-    expect(citasAntes).toHaveLength(5)
-    expect(base.buscar("appointment", { customerId: "c-maria" })).toEqual(citasAntes)
-    expect(atencionesAntes).toHaveLength(1)
-    expect(base.buscar("visit", { customerId: "c-maria" })).toEqual(atencionesAntes)
+    const despues = lodeMaria()
+    expect(despues.citas).toHaveLength(4)
+    expect(despues.atenciones).toHaveLength(2)
+    expect(JSON.stringify(despues)).not.toMatch(
+      /María|González|Nota interna|Prefiere la tarde|foto de referencia|Reservé por la web|hija Ana|1234 5678/
+    )
+    for (const cita of despues.citas) expect(cita).toMatchObject({ notes: null, clientComments: null })
+    for (const atencionDeMaria of despues.atenciones) {
+      expect(atencionDeMaria).toMatchObject({ customerName: NOMBRE_DE_CLIENTE_ELIMINADO, notes: null, voidReason: null })
+    }
+  })
+
+  it("montos, fechas, servicios, profesionales y pagos no cambian: los reportes suman lo mismo", async () => {
+    const { DELETE } = await import("./route")
+
+    conAtencionDeMaria()
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const antes = lodeMaria()
+    const lineasAntes = base.buscar("visitService", {})
+    const pagosAntes = base.buscar("visitPayment", {})
+
+    await DELETE(pedido(URL_DE_MARIA), conId("c-maria"))
+
+    const despues = lodeMaria()
+    const sinTextos = (fila: Record<string, unknown>) => {
+      const { notes: _notas, clientComments: _comentarios, customerName: _nombre, voidReason: _motivo, updatedAt: _cambio, ...resto } = fila
+      return resto
+    }
+    expect(despues.citas.map(sinTextos)).toEqual(antes.citas.map(sinTextos))
+    expect(despues.atenciones.map(sinTextos)).toEqual(antes.atenciones.map(sinTextos))
+    expect(base.buscar("visitService", {})).toEqual(lineasAntes)
     expect(base.buscar("visitPayment", {})).toEqual(pagosAntes)
+  })
+
+  it("las escrituras se acotan al negocio: una cita de otro negocio que apunte al cliente no se toca", async () => {
+    const { DELETE } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const cruzadaAntes = base.buscar("appointment", { id: "cita-cruzada" })
+
+    await DELETE(pedido(URL_DE_MARIA), conId("c-maria"))
+
+    expect(base.buscar("appointment", { id: "cita-cruzada" })).toEqual(cruzadaAntes)
+  })
+
+  it("es todo o nada: si una escritura falla, no queda un cliente a medio borrar", async () => {
+    const { DELETE } = await import("./route")
+
+    conAtencionDeMaria()
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    vi.mocked(base.prisma.visit.updateMany).mockRejectedValueOnce(new Error("se cayó la base"))
+    const log = vi.spyOn(console, "error").mockImplementation(() => {})
+    const antes = base.volcado()
+
+    const res = await DELETE(pedido(URL_DE_MARIA), conId("c-maria"))
+
+    expect(res.status).toBe(500)
+    expect(await res.json()).toEqual({ error: "No se pudo eliminar el cliente" })
+    expect(base.volcado()).toEqual(antes)
+    log.mockRestore()
   })
 
   it("un cliente eliminado ya no se lee, no se edita ni se vuelve a eliminar: responde como uno que no existe", async () => {
