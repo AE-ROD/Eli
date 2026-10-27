@@ -38,7 +38,15 @@ const prismaMock = {
     delete: vi.fn((args: { where: { id: string } }) =>
       Promise.resolve(citasFake.find((c) => c.id === args.where.id))
     ),
+    // Las advertencias al mover: acá no hay otras citas con qué chocar.
+    findMany: vi.fn(() => Promise.resolve([])),
   },
+  // Mover una cita pregunta si tiene una atención en el Tablero, el horario y
+  // la zona del negocio. Los escenarios de mover viven en `mover.test.ts`.
+  visit: { findFirst: vi.fn(() => Promise.resolve(null)) },
+  business: { findUnique: vi.fn(() => Promise.resolve({ timezone: "America/Santiago" })) },
+  workSchedule: { findMany: vi.fn(() => Promise.resolve([])) },
+  businessMember: { findFirst: vi.fn(() => Promise.resolve(null)) },
 }
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))

@@ -9,6 +9,7 @@ import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { formatearMonto } from "@/lib/dinero"
 import { formatearHora, duracionParaMostrar } from "@/lib/fechas"
+import { sePuedeMover } from "@/lib/mover-cita"
 import { cn } from "@/lib/utils"
 import { nombreDeCliente, type Cita } from "../_datos"
 import { estiloDeEstado } from "./estados-de-cita"
@@ -25,6 +26,8 @@ interface PropsDePanelDeCita {
   cita: Cita
   onCerrar: () => void
   onCambiarEstado: (id: string, estado: string) => void
+  /** Abre el modal para cambiar la fecha, la hora y (si se puede) el profesional. */
+  onMover: (cita: Cita) => void
 }
 
 /**
@@ -35,7 +38,7 @@ interface PropsDePanelDeCita {
  * Al cerrarlo, el foco vuelve a la cita que lo abrió; si no, el botón de
  * cerrar desaparecía con el foco adentro y el teclado volvía al principio.
  */
-export function PanelDeCita({ cita, onCerrar, onCambiarEstado }: PropsDePanelDeCita) {
+export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover }: PropsDePanelDeCita) {
   const idDelTitulo = useId()
   const panel = useRef<HTMLElement>(null)
   const titulo = useRef<HTMLHeadingElement>(null)
@@ -68,6 +71,7 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado }: PropsDePanelDeC
 
   const puedeCompletarse = cita.status !== "completada" && cita.status !== "cancelada"
   const puedeCancelarse = cita.status !== "cancelada"
+  const puedeMoverse = sePuedeMover(cita.status)
 
   return (
     <motion.aside
@@ -130,8 +134,13 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado }: PropsDePanelDeC
         )}
       </div>
 
-      {(puedeCompletarse || puedeCancelarse) && (
+      {(puedeCompletarse || puedeCancelarse || puedeMoverse) && (
         <div className="grid gap-2 px-1 pb-1">
+          {puedeMoverse && (
+            <Boton tamano="sm" variante="secundario" className="w-full" onClick={() => onMover(cita)}>
+              Cambiar fecha y hora
+            </Boton>
+          )}
           {puedeCompletarse && (
             <Boton tamano="sm" className="w-full" onClick={() => onCambiarEstado(cita.id, "completada")}>
               Marcar completada

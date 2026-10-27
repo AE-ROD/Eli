@@ -54,9 +54,10 @@ export function ModalNuevaCita({
   onSubmit,
   onCerrar,
 }: PropsDeModalNuevaCita) {
-  const [busquedaCliente, setBusquedaCliente] = useState("")
+  // El buscador arranca diciendo el cliente del borrador, si hay uno elegido:
+  // lo que se ve y lo que se guarda son lo mismo desde que se abre (A1).
+  const [busquedaCliente, setBusquedaCliente] = useState(form.clienteNombre)
   const [sugerencias, setSugerencias] = useState<ClienteSugerido[]>([])
-  const [nombreCliente, setNombreCliente] = useState("")
   const [mostrarSugerencias, setMostrarSugerencias] = useState(false)
   const [profesionales, setProfesionales] = useState<Profesional[]>([])
   const [avisoDeBusqueda, setAvisoDeBusqueda] = useState("")
@@ -106,7 +107,7 @@ export function ModalNuevaCita({
 
   function seleccionarCliente(cliente: ClienteSugerido, conTeclado: boolean) {
     onCambiarCampo("clienteId", cliente.id)
-    setNombreCliente(cliente.nombre)
+    onCambiarCampo("clienteNombre", cliente.nombre)
     setBusquedaCliente(cliente.nombre)
     setMostrarSugerencias(false)
     // Con teclado, la fila elegida sale de la pantalla con la lista y el foco
@@ -118,7 +119,7 @@ export function ModalNuevaCita({
 
   // Ya se eligió de la lista y lo escrito sigue siendo ese nombre: la lista no
   // se vuelve a abrir con el mismo cliente cuando llega la búsqueda de su nombre.
-  const clienteElegido = nombreCliente !== "" && busquedaCliente === nombreCliente
+  const clienteElegido = form.clienteId !== "" && busquedaCliente === form.clienteNombre
   const listaVisible = mostrarSugerencias && sugerencias.length > 0 && !clienteElegido
 
   // Lo que dice la línea de debajo del buscador. Se anuncia al cambiar.
@@ -157,9 +158,11 @@ export function ModalNuevaCita({
               aria-describedby={avisoDeBusqueda ? `${idDelEstado} ${idDelAvisoDeBusqueda}` : idDelEstado}
               onChange={(e) => {
                 setBusquedaCliente(e.target.value)
-                if (nombreCliente && e.target.value !== nombreCliente) {
+                // Escribir otra cosa que el nombre elegido deja la cita sin
+                // cliente: si no, se guardaba para el anterior sin que se viera.
+                if (form.clienteId && e.target.value !== form.clienteNombre) {
                   onCambiarCampo("clienteId", "")
-                  setNombreCliente("")
+                  onCambiarCampo("clienteNombre", "")
                 }
               }}
               className={cn(CAMPO, "h-12 pl-11 text-base", clienteElegido && "pr-11")}
