@@ -8,6 +8,7 @@ const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
 
 const CITA: DatosDeNuevaCita = {
   clienteId: "cliente-1",
+  clienteNombre: "Ana",
   servicio: "Corte",
   fecha: "2026-10-20",
   horaInicio: "10:00",
