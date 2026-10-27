@@ -253,6 +253,16 @@ export function crearBaseFalsa() {
     visitService: delegado("visitService"),
     visitPayment: delegado("visitPayment"),
     workSchedule: delegado("workSchedule"),
+    /**
+     * Sólo para candados (`SELECT … FOR UPDATE`): en memoria no hay
+     * concurrencia que ordenar, así que no devuelve nada. Queda registrado
+     * para que un test compruebe que se pidió, con qué valores y dentro de la
+     * transacción. Cualquier otra consulta cruda lanza: no se sabe leerla.
+     */
+    $queryRaw: vi.fn(async (partes: TemplateStringsArray, ..._valores: unknown[]) => {
+      if (!partes.join("?").includes("FOR UPDATE")) return falla(`$queryRaw sólo para candados: ${partes.join("?")}`)
+      return []
+    }),
   }
 
   const prisma = {

@@ -195,11 +195,12 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 - **Visitas:** una visita es una **atención cobrada** del tablero (sección 7), con o sin reserva. Una cita futura, cancelada o marcada completada en la agenda sin pasar por el cobro no cuenta. La tarjeta y la ficha muestran cuántas visitas tiene, cuándo fue la última y, si tiene una cita pendiente o confirmada por delante, cuándo es la próxima ("En 3 días"). El profesional cuenta sólo sus atenciones, como ve sólo sus citas.
 - **Editar y eliminar** son de dueño y encargado, desde la ficha. **Eliminar es anonimizar**, para cumplir el derecho a supresión: no queda ningún dato personal del cliente en ninguna tabla. No se deshace. Exactamente:
   - **En la ficha del cliente:** el nombre pasa a "Cliente eliminado"; apellido, correo, teléfono, cédula y notas quedan vacíos; las etiquetas se borran (queda sólo una marca interna que lo identifica como eliminado).
-  - **En sus citas:** se borran las notas internas y los comentarios que dejó al reservar.
+  - **En sus citas:** se borran las notas internas y los comentarios que dejó al reservar. Si la cita tiene un servicio del catálogo, su título vuelve a ser el nombre del servicio (el título es texto libre y alguien pudo escribir ahí algo del cliente). **Límite:** una cita sin servicio del catálogo conserva su título tal cual, porque no hay con qué reemplazarlo.
   - **En sus atenciones:** el nombre guardado pasa a "Cliente eliminado" y se borran las notas y el motivo de anulación (quién y cuándo anuló se conservan).
   - **No cambia:** fechas, horarios, servicios, profesionales, precios, líneas y pagos. Las citas y los cobros siguen atados al cliente eliminado, así que la agenda, las comisiones y los totales de los reportes suman lo mismo.
   - Deja de aparecer en Clientes, en los buscadores de "Nueva cita" y "Anotar sin reserva", y en las cifras de clientes del inicio (total y nuevos del mes).
-  - Todo se hace junto: si algo falla, no se borra nada.
+  - Todo se hace junto: si algo falla, no se borra nada. Una edición, una cita nueva o una atención que se anota mientras se elimina no pueden devolverle sus datos: lo editado o lo nuevo de un cliente eliminado responde "no encontrado", y una llegada de su reserva queda a nombre de "Cliente eliminado".
+  - **Pendiente:** los chats (`Conversation` y sus mensajes, hoy apagados) guardan nombre y teléfono sin enlace a la ficha del cliente, así que eliminarlo no los toca; hay que atarlos al cliente antes de volver a encenderlos. Y los correos que ya se le enviaron (recordatorios, confirmaciones) quedan en el historial del proveedor de correo (Resend), fuera de la base de Eli.
 
 ### Horario
 

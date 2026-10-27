@@ -12,6 +12,27 @@ import {
   type Actor,
 } from "@/lib/permisos"
 import { ErrorDeAtencion, formatearAtencion, nombreCompletoDeCliente, seleccionDeAtencion } from "@/lib/tablero"
+import { clienteNoEliminado } from "@/lib/clientes-eliminados"
+
+/**
+ * Traba la fila del cliente hasta que termine la transacción (`FOR UPDATE`).
+ *
+ * La atención guarda una copia del nombre del cliente. Si se lee el nombre y
+ * después se crea la atención, una eliminación (anonimización) confirmada
+ * entre medio deja la atención nueva con el nombre real: su `updateMany` de
+ * atenciones ya corrió y no la vio. Con la fila trabada, las dos operaciones
+ * se ordenan: si la eliminación llegó primero, acá se espera a que termine y
+ * se lee el cliente ya anonimizado; si llegó después, su primera escritura
+ * (la ficha) espera a que esta atención exista, y su `updateMany` la alcanza.
+ *
+ * Se eligió el candado y no "crear y después revisar la marca" porque con
+ * READ COMMITTED esa revisión también puede correr antes de que la
+ * eliminación confirme, y la ventana seguiría abierta. Va parametrizado
+ * (`$queryRaw` con plantilla): el id nunca se pega en el SQL.
+ */
+async function trabarCliente(tx: Prisma.TransactionClient, actor: Actor, clienteId: string): Promise<void> {
+  await tx.$queryRaw`SELECT id FROM clientes WHERE id = ${clienteId} AND "businessId" = ${actor.businessId} FOR UPDATE`
+}
 
 /**
  * Cómo entra alguien al tablero de atenciones: con reserva (la cita "llegó")
@@ -187,7 +208,6 @@ export async function registrarLlegada(actor: Actor, usuarioId: string | null, {
       serviceId: true,
       memberId: true,
       customerId: true,
-      customer: { select: { name: true, lastName: true } },
       service: { select: { id: true, name: true, price: true, active: true } },
       member: { select: { user: { select: { name: true } } } },
       visit: { select: { id: true } },
@@ -206,18 +226,33 @@ export async function registrarLlegada(actor: Actor, usuarioId: string | null, {
   const linea = await lineaDeLaReserva(actor, cita)
 
   try {
-    const atencion = await prisma.visit.create({
-      data: {
-        businessId: actor.businessId,
-        customerId: cita.customerId,
-        customerName: cita.customer ? nombreCompletoDeCliente(cita.customer) : CLIENTE_SIN_FICHA,
-        appointmentId: cita.id,
-        createdById: usuarioId,
-        ...(linea && { services: { create: [linea] } }),
-      },
-      select: seleccionDeAtencion(actor),
+    return await prisma.$transaction(async (tx) => {
+      // El nombre que se copia es el de ahora, con la fila trabada
+      // (`trabarCliente`): si el cliente se eliminó, ya dice "Cliente
+      // eliminado". La reserva sigue siendo válida: llegó alguien a su hora.
+      let nombre = CLIENTE_SIN_FICHA
+      if (cita.customerId) {
+        await trabarCliente(tx, actor, cita.customerId)
+        const cliente = await tx.customer.findFirst({
+          where: whereDeClientes(actor, { id: cita.customerId }),
+          select: { name: true, lastName: true },
+        })
+        if (cliente) nombre = nombreCompletoDeCliente(cliente)
+      }
+
+      const atencion = await tx.visit.create({
+        data: {
+          businessId: actor.businessId,
+          customerId: cita.customerId,
+          customerName: nombre,
+          appointmentId: cita.id,
+          createdById: usuarioId,
+          ...(linea && { services: { create: [linea] } }),
+        },
+        select: seleccionDeAtencion(actor),
+      })
+      return formatearAtencion(actor, atencion)
     })
-    return formatearAtencion(actor, atencion)
   } catch (error) {
     // Dos personas marcaron "Llegó" a la vez: `appointmentId` es único, así
     // que la segunda choca acá en vez de crear una atención duplicada.
@@ -226,6 +261,19 @@ export async function registrarLlegada(actor: Actor, usuarioId: string | null, {
     }
     throw error
   }
+}
+
+/**
+ * El cliente elegido para anotar sin reserva, con su fila trabada
+ * (`trabarCliente`) y sólo si no se eliminó: a un cliente eliminado no se le
+ * cuelgan atenciones nuevas, responde como uno que no existe.
+ */
+async function clienteVigenteTrabado(tx: Prisma.TransactionClient, actor: Actor, clienteId: string) {
+  await trabarCliente(tx, actor, clienteId)
+  return tx.customer.findFirst({
+    where: whereDeClientes(actor, { AND: [{ id: clienteId }, clienteNoEliminado] }),
+    select: { id: true, name: true, lastName: true },
+  })
 }
 
 /**
@@ -253,10 +301,7 @@ export async function anotarSinReserva(actor: Actor, usuarioId: string | null, d
           select: { id: true, name: true, lastName: true },
         })
       : datos.clienteId
-        ? await tx.customer.findFirst({
-            where: whereDeClientes(actor, { id: datos.clienteId }),
-            select: { id: true, name: true, lastName: true },
-          })
+        ? await clienteVigenteTrabado(tx, actor, datos.clienteId)
         : null
     if (!cliente) throw new ErrorDeAtencion(404, "Cliente no encontrado")
 
