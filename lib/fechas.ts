@@ -73,6 +73,41 @@ export function tiempoDesde(iso: string, ahora: number): string {
 }
 
 /**
+ * Cuánto falta o cuánto pasó hasta un día, en palabras: `Hoy`, `Ayer`,
+ * `Hace 3 días`, `Hace 2 semanas`, `Hace 4 meses`; y hacia adelante
+ * `Mañana`, `En 3 días`, `En 1 semana`, `En 2 meses`. Nunca un número
+ * negativo: una fecha futura se dice con "En", no con "Hace -6 días".
+ *
+ * Cuenta días de calendario en la zona del dispositivo, no bloques de 24
+ * horas: una cita de mañana a las 10 vista hoy a las 18 es `Mañana`, aunque
+ * falten menos de 24 horas. `ahora` lo pasa quien llama, como en `tiempoDesde`.
+ */
+export function fechaRelativa(iso: string, ahora: number): string {
+  const inicioDelDia = (instante: number) => {
+    const fecha = new Date(instante)
+    return new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate()).getTime()
+  }
+  // `round` y no `floor`: con el cambio de horario un día dura 23 o 25 horas.
+  const dias = Math.round((inicioDelDia(new Date(iso).getTime()) - inicioDelDia(ahora)) / 86_400_000)
+  if (dias === 0) return "Hoy"
+  if (dias === -1) return "Ayer"
+  if (dias === 1) return "Mañana"
+
+  const cantidad = Math.abs(dias)
+  const lapso =
+    cantidad < 7
+      ? `${cantidad} días`
+      : cantidad < 14
+        ? "1 semana"
+        : cantidad < 30
+          ? `${Math.floor(cantidad / 7)} semanas`
+          : cantidad < 60
+            ? "1 mes"
+            : `${Math.floor(cantidad / 30)} meses`
+  return dias < 0 ? `Hace ${lapso}` : `En ${lapso}`
+}
+
+/**
  * Los siete días de la semana que contiene a `fecha`, de domingo a sábado.
  *
  * Usa `comoTexto` y no `toISOString()` a propósito: `toISOString` convierte a

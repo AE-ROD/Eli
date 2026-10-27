@@ -2,10 +2,15 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { AnimatePresence } from "framer-motion"
+import { useSession } from "next-auth/react"
 import { BarraSuperior } from "@/components/panel/barra-superior"
+import { ModalConfirmar } from "@/components/panel/modal-confirmar"
+import { actorDeSesion, puedeBorrarCliente, puedeEditarDatosDeCliente } from "@/lib/permisos"
 import {
   leerClientes,
   crearCliente,
+  editarCliente,
+  eliminarCliente,
   guardarNotasDeCliente,
   type Cliente,
   type DatosDeNuevoCliente,
@@ -31,6 +36,11 @@ function conNotas(clientesPorId: Record<string, Cliente>, clienteId: string, not
 }
 
 export default function PaginaClientes() {
+  const { data: sesion } = useSession()
+  const actor = actorDeSesion(sesion)
+  const puedeEditar = puedeEditarDatosDeCliente(actor)
+  const puedeEliminar = puedeBorrarCliente(actor)
+
   const [clientes, setClientes] = useState<ClienteEnTarjeta[]>([])
   // Lo que devolvió el servidor de cada cliente de la lista: el panel de
   // detalle saca de acá el historial y las notas, que la tarjeta no guarda.
@@ -59,6 +69,13 @@ export default function PaginaClientes() {
   // ese guardado falla, el aviso no debe aparecer bajo las notas del nuevo.
   const [avisoDeNotas, setAvisoDeNotas] = useState<{ clienteId: string; mensaje: string } | null>(null)
   const [nuevoCliente, setNuevoCliente] = useState<DatosDeNuevoCliente>(CLIENTE_EN_BLANCO)
+  // El mismo modal del cliente nuevo, con los datos del que se edita.
+  const [editandoId, setEditandoId] = useState<string | null>(null)
+  // El cliente que se está por eliminar, con su modal de confirmación.
+  const [aEliminar, setAEliminar] = useState<ClienteEnTarjeta | null>(null)
+  const [eliminando, setEliminando] = useState(false)
+  const [avisoDeEliminar, setAvisoDeEliminar] = useState("")
+  const [avisoListo, setAvisoListo] = useState("")
 
   const esperaDeBusqueda = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -147,23 +164,71 @@ export default function PaginaClientes() {
 
   const abrirModal = () => {
     setAvisoDelModal("")
+    setEditandoId(null)
+    setNuevoCliente(CLIENTE_EN_BLANCO)
     setModalAbierto(true)
+  }
+
+  /** Abre el formulario con los datos guardados del cliente. Lo que dice "Sin correo" no es un correo. */
+  const abrirEdicion = (cliente: ClienteEnTarjeta) => {
+    const guardado = clientesPorId[cliente.id]
+    setAvisoDelModal("")
+    setEditandoId(cliente.id)
+    setNuevoCliente({ nombre: cliente.nombre, email: guardado?.email ?? "", telefono: guardado?.phone ?? "" })
+    setModalAbierto(true)
+  }
+
+  const cerrarModal = () => {
+    setModalAbierto(false)
+    setEditandoId(null)
+    setNuevoCliente(CLIENTE_EN_BLANCO)
   }
 
   const guardarNuevoCliente = async (evento: React.SyntheticEvent<HTMLFormElement>) => {
     evento.preventDefault()
 
     setAvisoDelModal("")
+    setAvisoListo("")
     setGuardando(true)
-    const resultado = await crearCliente(nuevoCliente)
+    const resultado = editandoId ? await editarCliente(editandoId, nuevoCliente) : await crearCliente(nuevoCliente)
     setGuardando(false)
 
     // El aviso va dentro del modal, que sigue abierto con lo que se cargó: en
     // la página quedaría tapado por el velo del modal.
     if (!resultado.ok) return setAvisoDelModal(resultado.error)
 
-    setModalAbierto(false)
-    setNuevoCliente(CLIENTE_EN_BLANCO)
+    // Al editar, la ficha abierta muestra los datos nuevos: se arma de nuevo
+    // cuando vuelve la lista, pero mientras tanto no se queda con los viejos.
+    if (editandoId && clienteSeleccionado?.id === editandoId) {
+      setClienteSeleccionado({
+        ...clienteSeleccionado,
+        nombre: nuevoCliente.nombre.trim(),
+        email: nuevoCliente.email.trim() || "Sin correo",
+        telefono: nuevoCliente.telefono.trim() || "Sin teléfono",
+      })
+    }
+    cerrarModal()
+    cargarClientes(busqueda, etiquetaActiva, 1)
+  }
+
+  const pedirEliminar = (cliente: ClienteEnTarjeta) => {
+    setAvisoDeEliminar("")
+    setAEliminar(cliente)
+  }
+
+  const confirmarEliminar = async () => {
+    if (!aEliminar) return
+    setAvisoDeEliminar("")
+    setEliminando(true)
+    const resultado = await eliminarCliente(aEliminar.id)
+    setEliminando(false)
+
+    if (!resultado.ok) return setAvisoDeEliminar(resultado.error)
+
+    const nombre = aEliminar.nombre
+    if (clienteSeleccionado?.id === aEliminar.id) setClienteSeleccionado(null)
+    setAEliminar(null)
+    setAvisoListo(`Se eliminaron los datos de ${nombre}. Sus citas y cobros siguen en la agenda y en los reportes, a nombre de "Cliente eliminado".`)
     cargarClientes(busqueda, etiquetaActiva, 1)
   }
 
@@ -179,6 +244,11 @@ export default function PaginaClientes() {
 
       <div className="space-y-4 px-4 pt-6 pb-10 sm:space-y-6 sm:px-6">
         {aviso && <Aviso>{aviso}</Aviso>}
+        {avisoListo && (
+          <Aviso tono="listo" rol="status">
+            {avisoListo}
+          </Aviso>
+        )}
 
         <FiltrosClientes
           busqueda={busqueda}
@@ -214,6 +284,10 @@ export default function PaginaClientes() {
                 notas={notas}
                 guardandoNotas={guardandoNotas}
                 avisoDeNotas={avisoDeNotas?.clienteId === clienteSeleccionado.id ? avisoDeNotas.mensaje : ""}
+                puedeEditar={puedeEditar}
+                puedeEliminar={puedeEliminar}
+                onEditar={() => abrirEdicion(clienteSeleccionado)}
+                onEliminar={() => pedirEliminar(clienteSeleccionado)}
                 onCerrar={() => setClienteSeleccionado(null)}
                 onCambiarNotas={setNotas}
                 onNotasBlur={guardarNotas}
@@ -226,13 +300,45 @@ export default function PaginaClientes() {
       <AnimatePresence>
         {modalAbierto && (
           <ModalNuevoCliente
+            editando={editandoId !== null}
             form={nuevoCliente}
             guardando={guardando}
             aviso={avisoDelModal}
             onCambiarCampo={(campo, valor) => setNuevoCliente((previo) => ({ ...previo, [campo]: valor }))}
             onSubmit={guardarNuevoCliente}
-            onCerrar={() => setModalAbierto(false)}
+            onCerrar={cerrarModal}
           />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {aEliminar && (
+          <ModalConfirmar
+            titulo={`¿Eliminar a ${aEliminar.nombre}?`}
+            descripcion="Se borran sus datos personales y no se pueden recuperar."
+            textoConfirmar="Eliminar cliente"
+            textoCancelar="No eliminar"
+            peligro
+            trabajando={eliminando}
+            aviso={avisoDeEliminar}
+            onConfirmar={confirmarEliminar}
+            onCerrar={() => setAEliminar(null)}
+          >
+            <div className="space-y-3 text-sm text-texto-2">
+              <div>
+                <p className="font-medium text-navy">Se borra</p>
+                <p className="mt-1">
+                  Su nombre, correo, teléfono, cédula, notas y etiquetas; su nombre en cada cobro, que pasa a decir &ldquo;Cliente eliminado&rdquo;; y las notas y comentarios de sus citas y atenciones. Deja de aparecer en Clientes y en los buscadores.
+                </p>
+              </div>
+              <div>
+                <p className="font-medium text-navy">Queda</p>
+                <p className="mt-1">
+                  Sus citas y sus cobros, con sus fechas, servicios, profesionales y montos, para que la agenda y los reportes sumen lo mismo.
+                </p>
+              </div>
+            </div>
+          </ModalConfirmar>
         )}
       </AnimatePresence>
     </div>

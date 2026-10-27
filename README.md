@@ -165,6 +165,8 @@ lib/                          Lógica compartida, cada archivo con su test al la
   peticiones.ts               Cómo la interfaz le pide cosas al servidor
   cuerpo-del-pedido.ts        Leer el JSON de un pedido sin que uno roto termine en 500
   slug.ts                     La dirección pública de cada negocio
+  clientes-eliminados.ts      Eliminar un cliente es anonimizarlo: qué se borra y cómo
+                              se lo reconoce sin columna nueva (una etiqueta reservada)
   utils.ts                    `cn`, para combinar clases de Tailwind
   tablero.ts                  (servidor) Leer y tomar atenciones dentro de un endpoint
   lineas-de-atencion.ts       (servidor) Validar y guardar las líneas de una atención
@@ -173,6 +175,8 @@ lib/                          Lógica compartida, cada archivo con su test al la
   prisma.ts                   (servidor) Conexión a la base
   email.ts                    (servidor) Correos (Resend)
   rate-limit.ts               (servidor) Límite de peticiones (Upstash)
+  invitaciones-de-equipo.ts   (servidor) Vigencia, enlace nuevo y correo de una
+                              invitación al equipo (invitar, reemplazar una vencida, reenviar)
 pruebas/                      Ayudas compartidas de los tests: la base falsa en memoria
                               con sus datos de ejemplo, pedidos y respuestas simulados.
                               Fuera de app/: no es una ruta ni entra al build

@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef } from "react"
 import { motion } from "framer-motion"
-import { CalendarDays, Clock, Mail, Phone, X } from "lucide-react"
+import { CalendarClock, CalendarDays, Clock, Mail, Pencil, Phone, Trash2, X } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
@@ -54,6 +54,15 @@ interface PropsDePanelDetalleCliente {
    * la vista.
    */
   avisoDeNotas: string
+  /**
+   * Si quien mira puede cambiar los datos y eliminar al cliente (dueño y
+   * encargado, `puedeEditarDatosDeCliente` y `puedeBorrarCliente`). El
+   * servidor lo vuelve a verificar: esto sólo decide qué botones se ven.
+   */
+  puedeEditar: boolean
+  puedeEliminar: boolean
+  onEditar: () => void
+  onEliminar: () => void
   onCerrar: () => void
   onCambiarNotas: (notas: string) => void
   onNotasBlur: () => void
@@ -74,6 +83,10 @@ export function PanelDetalleCliente({
   notas,
   guardandoNotas,
   avisoDeNotas,
+  puedeEditar,
+  puedeEliminar,
+  onEditar,
+  onEliminar,
   onCerrar,
   onCambiarNotas,
   onNotasBlur,
@@ -154,6 +167,12 @@ export function PanelDetalleCliente({
             <Clock className="mt-0.5 size-4 shrink-0 text-texto-2" aria-hidden="true" strokeWidth={1.75} />
             <span className="text-texto-2">Última visita: {cliente.ultimaVisita}</span>
           </li>
+          {cliente.proximaCita && (
+            <li className="flex items-start gap-3">
+              <CalendarClock className="mt-0.5 size-4 shrink-0 text-texto-2" aria-hidden="true" strokeWidth={1.75} />
+              <span className="text-texto-2">Próxima cita: {cliente.proximaCita}</span>
+            </li>
+          )}
         </ul>
 
         <div className="mt-4 grid grid-cols-2 gap-2">
@@ -164,6 +183,27 @@ export function PanelDetalleCliente({
             Enviar mensaje
           </Boton>
         </div>
+
+        {(puedeEditar || puedeEliminar) && (
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {puedeEditar && (
+              <Boton variante="fantasma" tamano="sm" className="w-full" icono={<Pencil className="size-4" aria-hidden="true" />} onClick={onEditar}>
+                Editar
+              </Boton>
+            )}
+            {puedeEliminar && (
+              <Boton
+                variante="fantasma"
+                tamano="sm"
+                className="w-full text-error hover:text-error"
+                icono={<Trash2 className="size-4" aria-hidden="true" />}
+                onClick={onEliminar}
+              >
+                Eliminar cliente
+              </Boton>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Historial, con la tarjeta compacta de las citas */}

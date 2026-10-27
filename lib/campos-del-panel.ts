@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { esEtiquetaReservada } from "./clientes-eliminados"
 
 /**
  * Los campos que comparten los esquemas de los endpoints del panel (citas,
@@ -53,10 +54,20 @@ export const titulo = () =>
     .min(2, "El título tiene que tener al menos 2 caracteres")
     .max(120, maximo("El título", 120))
 
-/** Hasta 20 etiquetas de hasta 30 caracteres cada una. */
+/**
+ * Hasta 20 etiquetas de hasta 30 caracteres cada una. La marca de cliente
+ * eliminado (`lib/clientes-eliminados.ts`) no se acepta: la pone sólo el
+ * borrado.
+ */
 export const etiquetas = () =>
   z
-    .array(z.string().trim().max(30, "Cada etiqueta puede tener hasta 30 caracteres"))
+    .array(
+      z
+        .string()
+        .trim()
+        .max(30, "Cada etiqueta puede tener hasta 30 caracteres")
+        .refine((etiqueta) => !esEtiquetaReservada(etiqueta), "Esa etiqueta está reservada")
+    )
     .max(20, "No puede haber más de 20 etiquetas")
 
 const PRECIO_MAXIMO = "El precio no puede ser mayor que 10.000.000"

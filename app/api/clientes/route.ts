@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { emailOVacio, etiquetas, nombre, notas, telefono } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
-import { actorDeSesion, whereDeAgenda, whereDeClientes } from "@/lib/permisos"
+import { actorDeSesion, whereDeAgenda, whereDeAtenciones, whereDeClientes, type Actor } from "@/lib/permisos"
+import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 
 const clienteSchema = z.object({
   name: nombre(),
@@ -44,18 +45,33 @@ export async function GET(request: NextRequest) {
   })
   const skip = (pagina - 1) * limite
 
+  // Los eliminados (anonimizados) no aparecen ni en la lista ni en los
+  // buscadores de "Nueva cita" y "Anotar sin reserva", que usan este mismo
+  // listado.
   const where = whereDeClientes(actor, {
-    ...(busqueda && {
-      OR: [
-        { name: { contains: busqueda, mode: "insensitive" as const } },
-        { email: { contains: busqueda, mode: "insensitive" as const } },
-        { phone: { contains: busqueda, mode: "insensitive" as const } },
-      ],
-    }),
-    ...(etiqueta && { tags: { has: etiqueta } }),
+    AND: [
+      clienteNoEliminado,
+      {
+        ...(busqueda && {
+          OR: [
+            { name: { contains: busqueda, mode: "insensitive" as const } },
+            { email: { contains: busqueda, mode: "insensitive" as const } },
+            { phone: { contains: busqueda, mode: "insensitive" as const } },
+          ],
+        }),
+        ...(etiqueta && { tags: { has: etiqueta } }),
+      },
+    ],
   })
 
-  const [clientes, total] = await Promise.all([
+  // Una visita es una atención cobrada (PRODUCTO.md, sección 7: la atención
+  // es la visita del cliente al local, con o sin reserva). Una cita futura,
+  // cancelada o marcada completada sin pasar por el cobro no es una visita.
+  // Con el filtro del actor: el profesional cuenta sólo las suyas, igual que
+  // ve sólo sus citas en el historial.
+  const visitasCobradas = whereDeAtenciones(actor, { status: "finalizada" })
+
+  const [encontrados, total] = await Promise.all([
     prisma.customer.findMany({
       where,
       select: {
@@ -85,6 +101,13 @@ export async function GET(request: NextRequest) {
             price: true,
           },
         },
+        visits: {
+          where: visitasCobradas,
+          orderBy: { arrivedAt: "desc" },
+          take: 1,
+          select: { arrivedAt: true },
+        },
+        _count: { select: { visits: { where: visitasCobradas } } },
       },
       orderBy: { createdAt: "desc" },
       take: limite,
@@ -93,12 +116,54 @@ export async function GET(request: NextRequest) {
     prisma.customer.count({ where }),
   ])
 
+  const proximas = await proximasCitas(
+    actor,
+    encontrados.map((cliente) => cliente.id)
+  )
+
+  // `visitas`, `ultimaVisita` y `proximaCita` ya resueltos: la pantalla no
+  // vuelve a contar sobre el historial, que trae sólo las últimas cinco citas.
+  const clientes = encontrados.map(({ visits, _count, ...cliente }) => ({
+    ...cliente,
+    visitas: _count.visits,
+    ultimaVisita: visits[0]?.arrivedAt ?? null,
+    proximaCita: proximas.get(cliente.id) ?? null,
+  }))
+
   return NextResponse.json({
     clientes,
     total,
     pagina,
     paginas: Math.ceil(total / limite),
   })
+}
+
+/**
+ * La próxima cita de cada cliente: la más cercana que todavía no empezó y
+ * sigue en pie (pendiente o confirmada). Con el filtro de agenda del actor,
+ * como el historial. Una sola consulta para toda la página; `distinct` deja
+ * la primera de cada cliente y el `Map` se queda con ésa aunque la base
+ * devolviera más.
+ */
+async function proximasCitas(actor: Actor, clienteIds: string[]): Promise<Map<string, Date>> {
+  const proximas = new Map<string, Date>()
+  if (clienteIds.length === 0) return proximas
+
+  const citas = await prisma.appointment.findMany({
+    where: whereDeAgenda(actor, {
+      customerId: { in: clienteIds },
+      startTime: { gt: new Date() },
+      status: { in: ["pendiente", "confirmada"] },
+    }),
+    orderBy: { startTime: "asc" },
+    distinct: ["customerId"],
+    select: { customerId: true, startTime: true },
+  })
+
+  for (const cita of citas) {
+    if (cita.customerId && !proximas.has(cita.customerId)) proximas.set(cita.customerId, cita.startTime)
+  }
+  return proximas
 }
 
 export async function POST(request: NextRequest) {

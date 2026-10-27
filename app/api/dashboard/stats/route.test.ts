@@ -121,6 +121,21 @@ describe("GET /api/dashboard/stats", () => {
     expect(data.tendencias.clientes).toBe(20)
   })
 
+  it("los clientes eliminados (anonimizados) no cuentan: ni en el total, ni al cierre del mes pasado, ni en los nuevos", async () => {
+    const { GET } = await import("./route")
+    const { MARCA_DE_CLIENTE_ELIMINADO } = await import("@/lib/clientes-eliminados")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    await GET(pedidoFalso())
+
+    const consultas = prismaMock.customer.count.mock.calls.map((llamada) => llamada[0].where)
+    expect(consultas).toHaveLength(3)
+    for (const where of consultas) {
+      expect(where).toMatchObject({ NOT: { tags: { has: MARCA_DE_CLIENTE_ELIMINADO } } })
+    }
+  })
+
   it("sin citas hoy, dice cuándo es la próxima en vez de un cero mudo", async () => {
     const { GET } = await import("./route")
 

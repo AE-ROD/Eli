@@ -10,7 +10,7 @@ import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Aviso } from "@/components/panel/aviso"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { cn } from "@/lib/utils"
-import { invitarAlEquipo } from "../_datos"
+import { invitarAlEquipo, reenviarInvitacion } from "../_datos"
 
 interface PropsDeModalInvitar {
   abierto: boolean
@@ -43,6 +43,8 @@ export function ModalInvitar({ abierto, onCerrar, onInvitado }: PropsDeModalInvi
   const [email, setEmail] = useState("")
   const [rol, setRol] = useState<"worker" | "admin">("worker")
   const [error, setError] = useState("")
+  // Si el correo ya tenía una invitación vigente: la que se ofrece reenviar.
+  const [vigenteId, setVigenteId] = useState<string | null>(null)
   const [exito, setExito] = useState(false)
   const [enviando, setEnviando] = useState(false)
 
@@ -51,6 +53,7 @@ export function ModalInvitar({ abierto, onCerrar, onInvitado }: PropsDeModalInvi
     setEmail("")
     setRol("worker")
     setError("")
+    setVigenteId(null)
     setExito(false)
     setEnviando(false)
   }
@@ -63,18 +66,33 @@ export function ModalInvitar({ abierto, onCerrar, onInvitado }: PropsDeModalInvi
   const enviar = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
+    setVigenteId(null)
     setEnviando(true)
 
     const resultado = await invitarAlEquipo({ nombre, email, rol })
 
     if (!resultado.ok) {
       setError(resultado.error)
+      setVigenteId(resultado.invitacionVigenteId)
       setEnviando(false)
       return
     }
 
     setExito(true)
     setEnviando(false)
+    onInvitado()
+  }
+
+  /** La invitación vigente de ese correo, con un enlace nuevo: lo que ofrece el error. */
+  const reenviarLaVigente = async () => {
+    if (!vigenteId) return
+    setError("")
+    setEnviando(true)
+    const resultado = await reenviarInvitacion(vigenteId)
+    setEnviando(false)
+    if (!resultado.ok) return setError(resultado.error)
+    setVigenteId(null)
+    setExito(true)
     onInvitado()
   }
 
@@ -121,7 +139,19 @@ export function ModalInvitar({ abierto, onCerrar, onInvitado }: PropsDeModalInvi
 
               <EleccionDeRol elegido={rol} alElegir={setRol} />
 
-              {error && <Aviso>{error}</Aviso>}
+              {error && (
+                <Aviso
+                  accion={
+                    vigenteId && (
+                      <BotonPrimario type="button" tamaño="sm" variante="secundario" onClick={reenviarLaVigente}>
+                        Reenviar invitación
+                      </BotonPrimario>
+                    )
+                  }
+                >
+                  {error}
+                </Aviso>
+              )}
 
               <BotonPrimario type="submit" anchoCompleto cargando={enviando} icono={<Mail className="h-4 w-4" />}>
                 Enviar invitación

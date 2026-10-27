@@ -14,9 +14,14 @@ vi.mock("@/lib/email", () => ({
   enviarInvitacionTrabajador: vi.fn().mockResolvedValue(undefined),
 }))
 
+const mockVerificarLimite = vi.fn(async (..._args: unknown[]) => ({ permitido: true, restantes: 2 }))
+vi.mock("@/lib/rate-limit", () => ({
+  verificarLimite: (...args: unknown[]) => mockVerificarLimite(...args),
+}))
+
 const prismaMock = {
   businessMember: { findMany: vi.fn() },
-  workerInvitation: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
+  workerInvitation: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
   user: { findFirst: vi.fn() },
   business: { findUnique: vi.fn() },
 }
@@ -328,5 +333,137 @@ describe("POST /api/equipo — errores internos", () => {
     expect(log).toHaveBeenCalledWith(expect.any(String), { name: "PrismaClientKnownRequestError", code: "P2010" })
     expect(JSON.stringify(log.mock.calls)).not.toContain("ana@x.com")
     log.mockRestore()
+  })
+})
+
+describe("POST /api/equipo — una invitación anterior sin aceptar", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const DIA = 24 * 60 * 60 * 1000
+
+  it("si está vigente no manda otra: 409, y el error ofrece reenviarla con su id", async () => {
+    const { POST } = await import("./route")
+    const { enviarInvitacionTrabajador } = await import("@/lib/email")
+
+    const vence = new Date(Date.now() + 3 * DIA)
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.user.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.findFirst.mockResolvedValueOnce({ id: "inv-vigente", expiresAt: vence, createdAt: new Date() })
+
+    const res = await POST(pedidoFalso({ nombre: "Ana", email: "ana@x.com", rol: "worker" }))
+    const data = await res.json()
+
+    expect(res.status).toBe(409)
+    expect(data).toEqual({
+      error: "Ya hay una invitación vigente para este correo. Puedes reenviarla.",
+      invitacionId: "inv-vigente",
+      expiresAt: vence.toISOString(),
+    })
+    expect(prismaMock.workerInvitation.create).not.toHaveBeenCalled()
+    expect(prismaMock.workerInvitation.updateMany).not.toHaveBeenCalled()
+    expect(enviarInvitacionTrabajador).not.toHaveBeenCalled()
+  })
+
+  it("si está vencida la reemplaza: la misma fila, con enlace, vencimiento, nombre y rol nuevos, y manda el correo", async () => {
+    const { POST } = await import("./route")
+    const { enviarInvitacionTrabajador } = await import("@/lib/email")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargadoNegocio2)
+    prismaMock.user.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.findFirst.mockResolvedValueOnce({
+      id: "inv-vencida",
+      expiresAt: new Date(Date.now() - DIA),
+      createdAt: new Date("2026-01-01"),
+    })
+    prismaMock.workerInvitation.updateMany.mockResolvedValueOnce({ count: 1 })
+    prismaMock.business.findUnique.mockResolvedValueOnce({ name: "Otro negocio" })
+
+    const res = await POST(pedidoFalso({ nombre: "Ana Nueva", email: "ana@x.com", rol: "admin" }))
+    const data = await res.json()
+
+    expect(res.status).toBe(201)
+    expect(data.reemplazoUnaVencida).toBe(true)
+    expect(data.invitacion).toMatchObject({ id: "inv-vencida", name: "Ana Nueva", role: "admin" })
+    expect(prismaMock.workerInvitation.create).not.toHaveBeenCalled()
+
+    const { where, data: escrito } = prismaMock.workerInvitation.updateMany.mock.calls[0][0]
+    // Acotado al negocio de la sesión y a "sin aceptar" también al escribir.
+    expect(where).toEqual({ id: "inv-vencida", businessId: "negocio-2", acceptedAt: null })
+    expect(escrito).toMatchObject({ name: "Ana Nueva", role: "admin", email: "ana@x.com" })
+    expect(escrito.expiresAt.getTime()).toBeGreaterThan(Date.now() + 6.9 * DIA)
+
+    const enlace: string = vi.mocked(enviarInvitacionTrabajador).mock.calls[0][0].enlaceAceptar
+    const token = enlace.split("/unirse/")[1]
+    expect(escrito.tokenHash).toBe(createHash("sha256").update(token).digest("hex"))
+    expect(JSON.stringify(data)).not.toContain(token)
+  })
+
+  it("la búsqueda de la anterior mira la más nueva del negocio: si ésa venció, todas vencieron", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.user.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.create.mockResolvedValueOnce({ id: "inv-1" })
+    prismaMock.business.findUnique.mockResolvedValueOnce({ name: "Mi negocio" })
+
+    await POST(pedidoFalso({ nombre: "Ana", email: "ana@x.com" }))
+
+    const argumentos = prismaMock.workerInvitation.findFirst.mock.calls[0][0]
+    expect(argumentos.where).toMatchObject({ businessId: "negocio-1", acceptedAt: null })
+    expect(argumentos.orderBy).toEqual({ expiresAt: "desc" })
+  })
+
+  it("reemplazar una vencida cuenta en el límite de reenvíos: pasado, 429 y no escribe ni manda nada", async () => {
+    const { POST } = await import("./route")
+    const { enviarInvitacionTrabajador } = await import("@/lib/email")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.user.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.findFirst.mockResolvedValueOnce({
+      id: "inv-vencida",
+      expiresAt: new Date(Date.now() - DIA),
+      createdAt: new Date(),
+    })
+    mockVerificarLimite.mockResolvedValueOnce({ permitido: false, restantes: 0 })
+
+    const res = await POST(pedidoFalso({ nombre: "Ana", email: "Ana@X.com" }))
+
+    expect(res.status).toBe(429)
+    expect(mockVerificarLimite).toHaveBeenCalledWith("reenvioDeInvitacion", "negocio-1:ana@x.com")
+    expect(prismaMock.workerInvitation.updateMany).not.toHaveBeenCalled()
+    expect(enviarInvitacionTrabajador).not.toHaveBeenCalled()
+  })
+
+  it("si la aceptaron justo entre la lectura y el reemplazo, no se le cambia el enlace: 409", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.user.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.findFirst.mockResolvedValueOnce({
+      id: "inv-vencida",
+      expiresAt: new Date(Date.now() - DIA),
+      createdAt: new Date(),
+    })
+    prismaMock.workerInvitation.updateMany.mockResolvedValueOnce({ count: 0 })
+
+    const res = await POST(pedidoFalso({ nombre: "Ana", email: "ana@x.com" }))
+
+    expect(res.status).toBe(409)
+  })
+
+  it("una invitación nueva, sin ninguna anterior, no pasa por el límite de reenvíos", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.user.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.create.mockResolvedValueOnce({ id: "inv-1" })
+    prismaMock.business.findUnique.mockResolvedValueOnce({ name: "Mi negocio" })
+
+    const res = await POST(pedidoFalso({ nombre: "Ana", email: "ana@x.com" }))
+
+    expect(res.status).toBe(201)
+    expect(mockVerificarLimite).not.toHaveBeenCalled()
   })
 })

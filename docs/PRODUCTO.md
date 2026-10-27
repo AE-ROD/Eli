@@ -152,6 +152,7 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 - **El correo de una cuenta no distingue mayúsculas ni espacios en las puntas**: se guarda y se busca en minúsculas.
 - **Las sesiones duran 7 días** y se revisan contra la base cada 5 minutos: a quien sacan del equipo o le cambian el rol, el cambio le llega en ese plazo. **Restablecer la contraseña cierra todas las sesiones abiertas** de esa cuenta.
 - **Los enlaces de recuperar contraseña e invitación son de un solo uso** y la base guarda sólo su huella (hash), no el enlace.
+- **Las invitaciones al equipo vencen a los 7 días.** En Equipo, cada invitación pendiente dice "Vence el …" o "Vencida", y dueño y encargado pueden **reenviarla** (enlace nuevo y 7 días más; el enlace anterior deja de servir) o **anularla**, con confirmación. Invitar de nuevo un correo con una invitación vencida la reemplaza; si está vigente, se ofrece reenviarla. Reenviar a un mismo correo tiene tope: 3 por hora.
 
 ---
 
@@ -186,6 +187,23 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 - **Correos:** el aviso completo va a la casilla de `SOPORTE_EMAIL` (sin ella, la solicitud se guarda igual y sólo queda un aviso en el log). A quien escribe le llega un acuse mínimo: sólo número, tipo y área, nunca el texto que escribió, para que nadie use el formulario para mandar texto propio a terceros. El acuse tiene tope por correo de destino; al pasarlo la solicitud se guarda y llega a soporte, sólo no sale el acuse.
 - **Límites:** 5 solicitudes por hora, por usuario con sesión o por IP sin sesión; cuerpo de hasta 32 KB; campo trampa para bots.
 - **Todavía no hay vista de administración:** las solicitudes se leen en la casilla de soporte o en la base. Responder, cambiar el estado o listarlas desde Eli queda pendiente.
+
+---
+
+### Clientes
+
+- **Visitas:** una visita es una **atención cobrada** del tablero (sección 7), con o sin reserva. Una cita futura, cancelada o marcada completada en la agenda sin pasar por el cobro no cuenta. La tarjeta y la ficha muestran cuántas visitas tiene, cuándo fue la última y, si tiene una cita pendiente o confirmada por delante, cuándo es la próxima ("En 3 días"). El profesional cuenta sólo sus atenciones, como ve sólo sus citas.
+- **Editar y eliminar** son de dueño y encargado, desde la ficha. **Eliminar es anonimizar**, para cumplir el derecho a supresión: no queda ningún dato personal del cliente en ninguna tabla. No se deshace. Exactamente:
+  - **En la ficha del cliente:** el nombre pasa a "Cliente eliminado"; apellido, correo, teléfono, cédula y notas quedan vacíos; las etiquetas se borran (queda sólo una marca interna que lo identifica como eliminado).
+  - **En sus citas:** se borran las notas internas y los comentarios que dejó al reservar.
+  - **En sus atenciones:** el nombre guardado pasa a "Cliente eliminado" y se borran las notas y el motivo de anulación (quién y cuándo anuló se conservan).
+  - **No cambia:** fechas, horarios, servicios, profesionales, precios, líneas y pagos. Las citas y los cobros siguen atados al cliente eliminado, así que la agenda, las comisiones y los totales de los reportes suman lo mismo.
+  - Deja de aparecer en Clientes, en los buscadores de "Nueva cita" y "Anotar sin reserva", y en las cifras de clientes del inicio (total y nuevos del mes).
+  - Todo se hace junto: si algo falla, no se borra nada.
+
+### Horario
+
+- Sin un horario guardado, la página pública no ofrece horas. Configuración muestra un ejemplo (lunes a viernes de 9 a 18), pero avisa que **todavía no está guardado** y destaca el botón para guardarlo. Cambiar de persona con cambios sin guardar pregunta antes de descartarlos.
 
 ---
 

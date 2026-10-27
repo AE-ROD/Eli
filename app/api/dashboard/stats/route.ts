@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { deCentavos } from "@/lib/atenciones"
 import {
   actorDeSesion,
@@ -106,10 +107,12 @@ export async function GET(request: NextRequest) {
         // Listado sin agregar: siempre con tope (reglas/01-arquitectura.md).
         take: 200,
       }),
-      prisma.customer.count({ where: { businessId } }),
-      prisma.customer.count({ where: { businessId, createdAt: { lt: inicioMes } } }),
+      // Sin los eliminados (anonimizados), en las tres: no son clientes del
+      // negocio aunque su fila siga por sus citas y cobros.
+      prisma.customer.count({ where: { businessId, ...clienteNoEliminado } }),
+      prisma.customer.count({ where: { businessId, createdAt: { lt: inicioMes }, ...clienteNoEliminado } }),
       // De qué está hecha la cifra de clientes: cuántos entraron este mes.
-      prisma.customer.count({ where: { businessId, createdAt: { gte: inicioMes } } }),
+      prisma.customer.count({ where: { businessId, createdAt: { gte: inicioMes }, ...clienteNoEliminado } }),
       // La facturación es del negocio: no se calcula siquiera si el actor no
       // puede verla. `atencionesCobradasMes` dice sobre cuántas atenciones
       // está hecha la suma.

@@ -104,6 +104,22 @@ describe("proxy — rate limit de los endpoints del panel", () => {
     expect(mockVerificarLimite).not.toHaveBeenCalledWith("panelEscritura", expect.anything())
   })
 
+  it.each([
+    ["DELETE", "/api/equipo/pendientes/inv-1"],
+    ["POST", "/api/equipo/pendientes/inv-1/reenviar"],
+    ["PUT", "/api/clientes/c-1"],
+    ["DELETE", "/api/clientes/c-1"],
+  ])("%s %s lleva el límite de escritura del panel: no cae en la excepción de /api/equipo/invitacion", async (metodo, ruta) => {
+    const { default: proxy } = await import("./proxy")
+
+    mockVerificarLimite.mockResolvedValueOnce({ permitido: false, restantes: 0 })
+
+    const res = await proxy(pedidoFalso(ruta, metodo))
+
+    expect(mockVerificarLimite).toHaveBeenCalledWith("panelEscritura", "usuario:usuario-1")
+    expect(res.status).toBe(429)
+  })
+
   it("sin sesión, cuenta por IP en vez de romper la petición", async () => {
     const { default: proxy } = await import("./proxy")
 

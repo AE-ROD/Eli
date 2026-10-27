@@ -29,6 +29,12 @@ export interface Cliente {
   notes: string | null
   createdAt: string
   appointments: CitaDeCliente[]
+  /** Atenciones cobradas: las cuenta el servidor, no el historial (que trae cinco). */
+  visitas: number
+  /** Cuándo llegó a su última atención cobrada, o `null` si nunca vino. */
+  ultimaVisita: string | null
+  /** Su próxima cita pendiente o confirmada, o `null` si no tiene. */
+  proximaCita: string | null
 }
 
 /** Una página del listado, y cuántos clientes hay en total con ese filtro. */
@@ -46,6 +52,7 @@ export interface FiltroDeClientes {
   pagina: number
 }
 
+/** Lo que se escribe en el formulario de un cliente, nuevo o editado. */
 export interface DatosDeNuevoCliente {
   nombre: string
   email: string
@@ -77,4 +84,24 @@ export async function crearCliente(datos: DatosDeNuevoCliente): Promise<Resultad
 
 export async function guardarNotasDeCliente(id: string, notas: string): Promise<Resultado> {
   return pedir(`/api/clientes/${id}`, "No se pudieron guardar las notas", conJson("PUT", { notes: notas }))
+}
+
+/**
+ * Cambia el nombre, el correo y el teléfono. Un campo vacío borra el dato
+ * (salvo el nombre, que es obligatorio). Sólo dueño y encargado.
+ */
+export async function editarCliente(id: string, datos: DatosDeNuevoCliente): Promise<Resultado> {
+  return pedir(
+    `/api/clientes/${id}`,
+    "No se pudo guardar el cliente",
+    conJson("PUT", { name: datos.nombre, email: datos.email, phone: datos.telefono })
+  )
+}
+
+/**
+ * Elimina al cliente: borra sus datos personales y deja sus citas y cobros,
+ * para que los reportes no cambien. Sólo dueño y encargado.
+ */
+export async function eliminarCliente(id: string): Promise<Resultado> {
+  return pedir(`/api/clientes/${id}`, "No se pudo eliminar el cliente", { method: "DELETE" })
 }

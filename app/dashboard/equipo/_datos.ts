@@ -6,7 +6,7 @@
  * la pantalla está obligada a decidir qué mostrar cuando algo falla.
  */
 
-import { pedir, conJson, type Resultado } from "@/lib/peticiones"
+import { pedir, pedirConCuerpo, conJson, type Resultado } from "@/lib/peticiones"
 
 export interface MiembroDelEquipo {
   id: string
@@ -40,7 +40,37 @@ export async function leerEquipo(): Promise<Resultado<Equipo>> {
   return pedir<Equipo>("/api/equipo", "No se pudo cargar el equipo")
 }
 
-/** Crea la invitación y le manda el correo con el enlace a la persona invitada. */
-export async function invitarAlEquipo(datos: DatosDeInvitacion): Promise<Resultado> {
-  return pedir("/api/equipo", "Error al enviar la invitación", conJson("POST", datos))
+/**
+ * Por qué no se pudo invitar. Si el correo ya tiene una invitación vigente,
+ * trae su id para ofrecer reenviarla en vez de crear otra.
+ */
+export type ResultadoDeInvitar = { ok: true } | { ok: false; error: string; invitacionVigenteId: string | null }
+
+/**
+ * Crea la invitación y le manda el correo con el enlace a la persona invitada.
+ * Si ese correo tenía una invitación vencida, el servidor la reemplaza.
+ */
+export async function invitarAlEquipo(datos: DatosDeInvitacion): Promise<ResultadoDeInvitar> {
+  const resultado = await pedirConCuerpo("/api/equipo", "Error al enviar la invitación", conJson("POST", datos))
+  if (resultado.ok) return { ok: true }
+  const cuerpo = resultado.cuerpo
+  const invitacionVigenteId =
+    resultado.codigo === 409 &&
+    typeof cuerpo === "object" &&
+    cuerpo !== null &&
+    "invitacionId" in cuerpo &&
+    typeof cuerpo.invitacionId === "string"
+      ? cuerpo.invitacionId
+      : null
+  return { ok: false, error: resultado.error, invitacionVigenteId }
+}
+
+/** Manda de nuevo la invitación, con un enlace y siete días nuevos. El enlace anterior deja de servir. */
+export async function reenviarInvitacion(id: string): Promise<Resultado> {
+  return pedir(`/api/equipo/pendientes/${id}/reenviar`, "No se pudo reenviar la invitación", { method: "POST" })
+}
+
+/** Anula la invitación: el enlace deja de servir. */
+export async function anularInvitacion(id: string): Promise<Resultado> {
+  return pedir(`/api/equipo/pendientes/${id}`, "No se pudo anular la invitación", { method: "DELETE" })
 }

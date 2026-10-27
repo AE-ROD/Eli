@@ -5,6 +5,13 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { emailOVacio, etiquetas, nombre, notas, telefono } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
+import { registrarError } from "@/lib/registro-de-errores"
+import {
+  clienteNoEliminado,
+  datosDeClienteEliminado,
+  textosDeAtencionDeClienteEliminado,
+  textosDeCitaDeClienteEliminado,
+} from "@/lib/clientes-eliminados"
 import {
   actorDeSesion,
   puedeBorrarCliente,
@@ -23,12 +30,19 @@ const edicionDeClienteSchema = z.object({
 })
 
 /**
+ * El cliente del negocio con ese id, si no se eliminó. Uno eliminado responde
+ * como uno que no existe: no se lee, no se edita (editarlo le devolvería un
+ * nombre) y no se vuelve a eliminar.
+ */
+const delNegocioYVigente = (actor: Actor, id: string) => whereDeClientes(actor, { AND: [{ id }, clienteNoEliminado] })
+
+/**
  * Pide un `Actor`, no `Actor | null`, como `verificarCita` en
  * `app/api/citas/[id]/route.ts`: sin sesión no hay cliente, y el handler ya
  * cortó con 401. Así el compilador obliga a poner la guarda primero.
  */
 async function verificarCliente(actor: Actor, id: string) {
-  return prisma.customer.findFirst({ where: whereDeClientes(actor, { id }), select: { id: true } })
+  return prisma.customer.findFirst({ where: delNegocioYVigente(actor, id), select: { id: true } })
 }
 
 export async function GET(
@@ -46,7 +60,7 @@ export async function GET(
   // notas internas y los comentarios del cliente. Del cliente se devuelve lo
   // mismo que antes.
   const cliente = await prisma.customer.findFirst({
-    where: whereDeClientes(actor, { id }),
+    where: delNegocioYVigente(actor, id),
     select: {
       id: true,
       name: true,
@@ -157,8 +171,30 @@ export async function DELETE(
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
-  // Por `existente.id`, por lo mismo que en el PUT.
-  await prisma.customer.delete({ where: { id: existente.id } })
+  // Eliminar es anonimizar (decisión del dueño, PRODUCTO.md, sección 6): es
+  // el derecho a supresión, así que no queda ningún dato personal del cliente
+  // en ninguna tabla. Se borran sus datos, la copia de su nombre en cada
+  // atención y los textos libres de sus citas y atenciones. Montos, fechas,
+  // servicios y profesionales no se tocan: la agenda y los totales de los
+  // reportes no cambian. Todo o nada, en una transacción: no queda un cliente
+  // a medio borrar. Por `existente.id`, por lo mismo que en el PUT, y cada
+  // escritura acotada al negocio de la sesión.
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.customer.update({ where: { id: existente.id }, data: datosDeClienteEliminado(), select: { id: true } })
+      await tx.appointment.updateMany({
+        where: { customerId: existente.id, businessId: actor.businessId },
+        data: textosDeCitaDeClienteEliminado(),
+      })
+      await tx.visit.updateMany({
+        where: { customerId: existente.id, businessId: actor.businessId },
+        data: textosDeAtencionDeClienteEliminado(),
+      })
+    })
+  } catch (error) {
+    registrarError("eliminando un cliente", error)
+    return NextResponse.json({ error: "No se pudo eliminar el cliente" }, { status: 500 })
+  }
 
   return NextResponse.json({ mensaje: "Cliente eliminado" })
 }
