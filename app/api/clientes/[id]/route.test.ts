@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { crearBaseDeClientes, escenarioDeClientes } from "../_pruebas/base-de-clientes"
 import { NEGOCIO, atencion, conId, linea, pago, pedido, sesiones } from "@/pruebas/datos"
-import { MARCA_DE_CLIENTE_ELIMINADO, NOMBRE_DE_CLIENTE_ELIMINADO } from "@/lib/clientes-eliminados"
+import { MARCA_DE_CLIENTE_ELIMINADO, NOMBRE_DE_CLIENTE_ELIMINADO, datosDeClienteEliminado } from "@/lib/clientes-eliminados"
 
 const mockGetServerSession = vi.fn()
 
@@ -460,6 +460,52 @@ describe("DELETE /api/clientes/[id]", () => {
 
     expect([resLeer.status, resEditar.status, resEliminar.status]).toEqual([404, 404, 404])
     expect(base.volcado()).toEqual(despuesDeEliminar)
+  })
+
+  it("un PUT que llega mientras se elimina no le devuelve datos al cliente anonimizado: 404, y queda anonimizado", async () => {
+    const { PUT } = await import("./route")
+
+    // La eliminación se confirma entre la verificación del PUT y su escritura.
+    const escribir = base.prisma.customer.updateMany.getMockImplementation()!
+    base.prisma.customer.updateMany.mockImplementationOnce(async (args) => {
+      await base.prisma.customer.update({ where: { id: "c-maria" }, data: datosDeClienteEliminado() })
+      return escribir(args)
+    })
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const res = await PUT(
+      pedido(URL_DE_MARIA, { name: "María", email: "maria@correo.test", phone: "+56 9 1234 5678", tags: ["VIP"] }),
+      conId("c-maria")
+    )
+
+    expect(res.status).toBe(404)
+    expect(base.buscar("customer", { id: "c-maria" })[0]).toMatchObject({
+      name: NOMBRE_DE_CLIENTE_ELIMINADO,
+      email: null,
+      phone: null,
+      tags: [MARCA_DE_CLIENTE_ELIMINADO],
+    })
+  })
+
+  it("el título de sus citas con servicio vuelve a ser el nombre del servicio; sin servicio, queda", async () => {
+    const { DELETE } = await import("./route")
+
+    base.reiniciar({
+      ...escenarioDeClientes(),
+      appointment: escenarioDeClientes().appointment.map((cita) =>
+        cita.id === "cita-carla"
+          ? { ...cita, serviceId: "s-corte", title: "Corte para María González" }
+          : cita.id === "cita-pedro"
+            ? { ...cita, serviceId: null, title: "Color (sin servicio del catálogo)" }
+            : cita
+      ),
+    })
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    await DELETE(pedido(URL_DE_MARIA), conId("c-maria"))
+
+    expect(base.buscar("appointment", { id: "cita-carla" })[0].title).toBe("Corte")
+    expect(base.buscar("appointment", { id: "cita-pedro" })[0].title).toBe("Color (sin servicio del catálogo)")
   })
 
   it("nadie pone la marca de eliminado a mano: 400, y el cliente sigue igual", async () => {

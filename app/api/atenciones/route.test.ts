@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, atencion, centavos, datosBase, linea, pago, pedido, sesiones } from "@/pruebas/datos"
+import { NOMBRE_DE_CLIENTE_ELIMINADO, datosDeClienteEliminado } from "@/lib/clientes-eliminados"
 
 const mockGetServerSession = vi.fn()
 
@@ -846,5 +847,82 @@ describe("POST /api/atenciones sin reserva", () => {
 
     expect(res.status).toBe(401)
     expect(base.volcado()).toEqual(antes)
+  })
+})
+
+/**
+ * La atención copia el nombre del cliente. Si la eliminación (anonimización)
+ * de ese cliente se confirma mientras se crea la atención, la copia no puede
+ * quedar con el nombre real: la fila del cliente se traba (`FOR UPDATE`)
+ * antes de leer el nombre. La base en memoria no tiene concurrencia, así que
+ * la eliminación "llega" justo cuando se pide el candado, que es lo que
+ * pasaría en Postgres si la eliminación confirmara mientras se espera.
+ */
+describe("POST /api/atenciones y un cliente que se elimina", () => {
+  const URL = "http://localhost/api/atenciones"
+
+  const eliminarAMaria = () =>
+    base.prisma.customer.update({
+      where: { id: "c-maria" },
+      data: datosDeClienteEliminado(),
+    })
+
+  it("al llegar una reserva, el nombre se lee con la fila del cliente trabada, dentro de la transacción y antes de crear la atención", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const res = await POST(pedido(URL, { citaId: "cita-carla" }))
+
+    expect(res.status).toBe(201)
+    const [partes, ...valores] = base.prisma.$queryRaw.mock.calls[0]
+    expect(partes.join("?")).toMatch(/FOR UPDATE/)
+    expect(valores).toEqual(["c-maria", NEGOCIO])
+    expect(base.prisma.$transaction).toHaveBeenCalled()
+    expect(base.prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      base.prisma.visit.create.mock.invocationCallOrder[0]
+    )
+  })
+
+  it("si la eliminación se confirma mientras se marca la llegada, la atención nace con \"Cliente eliminado\", no con el nombre real", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    base.prisma.$queryRaw.mockImplementationOnce(async () => {
+      await eliminarAMaria()
+      return []
+    })
+
+    const res = await POST(pedido(URL, { citaId: "cita-carla" }))
+    const data = await res.json()
+
+    expect(res.status).toBe(201)
+    expect(base.buscar("visit", { id: data.id })[0].customerName).toBe(NOMBRE_DE_CLIENTE_ELIMINADO)
+    expect(JSON.stringify(base.buscar("visit", { appointmentId: "cita-carla" }))).not.toMatch(/María|González/)
+  })
+
+  it("sin reserva, un cliente ya eliminado da 404 y no escribe nada: no se le cuelgan atenciones nuevas", async () => {
+    const { POST } = await import("./route")
+    await eliminarAMaria()
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const antes = base.volcado()
+
+    const res = await POST(pedido(URL, { clienteId: "c-maria" }))
+
+    expect(res.status).toBe(404)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("sin reserva, si la eliminación se confirma mientras se anota, da 404 y no queda ninguna atención", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    base.prisma.$queryRaw.mockImplementationOnce(async () => {
+      await eliminarAMaria()
+      return []
+    })
+    const atencionesAntes = base.buscar("visit", {})
+
+    const res = await POST(pedido(URL, { clienteId: "c-maria" }))
+
+    expect(res.status).toBe(404)
+    expect(base.buscar("visit", {})).toEqual(atencionesAntes)
   })
 })

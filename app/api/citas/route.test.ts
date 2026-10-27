@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { coincideConWhere } from "@/pruebas/where-simple"
 import type { NextRequest } from "next/server"
 import { whereDeAgenda, type Actor } from "@/lib/permisos"
+import { coincide, type Tablas } from "@/pruebas/consultas-falsas"
+import { MARCA_DE_CLIENTE_ELIMINADO, NOMBRE_DE_CLIENTE_ELIMINADO } from "@/lib/clientes-eliminados"
 
 const mockGetServerSession = vi.fn()
 
@@ -296,5 +298,52 @@ describe("POST /api/citas — largos, tipos y horario", () => {
     const { data } = prismaMock.appointment.create.mock.calls[0][0]
     // Sin `source`, Postgres pone el default "panel": los topes de la reserva pública no la cuentan.
     expect(data).not.toHaveProperty("source")
+  })
+})
+
+describe("POST /api/citas — un cliente eliminado", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  /** El `where` del cliente lo evalúa la base falsa, que lanza ante lo que no entiende. */
+  const clientes = [
+    { id: "c-vigente", businessId: "negocio-1", name: "Ana", tags: [] },
+    { id: "c-eliminado", businessId: "negocio-1", name: NOMBRE_DE_CLIENTE_ELIMINADO, tags: [MARCA_DE_CLIENTE_ELIMINADO] },
+    { id: "c-ajeno", businessId: "negocio-2", name: "Ana", tags: [] },
+  ]
+  const tablas = { customer: clientes } as unknown as Tablas
+
+  const crearPara = async (customerId: string) => {
+    const { POST } = await import("./route")
+    prismaMock.customer.findFirst.mockImplementationOnce(async (args: { where: unknown }) =>
+      clientes.find((cliente) => coincide(tablas, "customer", cliente, args.where)) ?? null
+    )
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    return POST({
+      url: "http://localhost/api/citas",
+      json: () =>
+        Promise.resolve({
+          title: "Corte",
+          startTime: "2026-10-20T13:00:00.000Z",
+          endTime: "2026-10-20T13:30:00.000Z",
+          customerId,
+        }),
+    } as unknown as NextRequest)
+  }
+
+  it.each([
+    ["eliminado", "c-eliminado"],
+    ["de otro negocio", "c-ajeno"],
+  ])("con un cliente %s: 404 y no crea la cita", async (_caso, customerId) => {
+    const res = await crearPara(customerId)
+
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: "Cliente no encontrado" })
+    expect(prismaMock.appointment.create).not.toHaveBeenCalled()
+  })
+
+  it("con un cliente vigente del negocio, sí", async () => {
+    const res = await crearPara("c-vigente")
+
+    expect(res.status).toBe(201)
   })
 })

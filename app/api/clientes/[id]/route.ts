@@ -130,8 +130,14 @@ export async function PUT(
     // Por `existente.id`, no por `id`: si alguien borra la verificación de
     // arriba, `existente` queda sin declarar y el build falla. La garantía deja
     // de depender de que el próximo lea las dos líneas en orden.
-    const cliente = await prisma.customer.update({
-      where: { id: existente.id },
+    //
+    // `updateMany` con el mismo filtro de la verificación (del negocio y no
+    // eliminado), no `update` por id: si una eliminación se confirma entre la
+    // verificación y esta escritura, un `update` le devolvería el correo o el
+    // teléfono al cliente anonimizado, o le pisaría la marca. Postgres vuelve
+    // a evaluar el `where` sobre la fila ya eliminada, no la toca y es 404.
+    const { count } = await prisma.customer.updateMany({
+      where: delNegocioYVigente(actor, existente.id),
       data: {
         ...(datos.name && { name: datos.name }),
         ...(datos.email !== undefined && { email: datos.email || null }),
@@ -140,6 +146,15 @@ export async function PUT(
         ...(datos.notes !== undefined && { notes: datos.notes || null }),
       },
     })
+    if (count === 0) {
+      return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 })
+    }
+
+    // Se relee con el mismo filtro: la respuesta es el cliente tal como quedó.
+    const cliente = await prisma.customer.findFirst({ where: delNegocioYVigente(actor, existente.id) })
+    if (!cliente) {
+      return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 })
+    }
 
     return NextResponse.json(cliente)
   } catch (error) {
@@ -186,6 +201,18 @@ export async function DELETE(
         where: { customerId: existente.id, businessId: actor.businessId },
         data: textosDeCitaDeClienteEliminado(),
       })
+      // El título de la cita es texto libre. Si la cita tiene servicio, vuelve
+      // a ser su nombre, por si alguien escribió ahí algo del cliente. Sin
+      // servicio no hay con qué reemplazarlo y queda (PRODUCTO.md, sección 6).
+      const conServicio = await tx.appointment.findMany({
+        where: { customerId: existente.id, businessId: actor.businessId, serviceId: { not: null } },
+        select: { id: true, title: true, service: { select: { name: true } } },
+      })
+      for (const cita of conServicio) {
+        if (cita.service && cita.title !== cita.service.name) {
+          await tx.appointment.update({ where: { id: cita.id }, data: { title: cita.service.name }, select: { id: true } })
+        }
+      }
       await tx.visit.updateMany({
         where: { customerId: existente.id, businessId: actor.businessId },
         data: textosDeAtencionDeClienteEliminado(),

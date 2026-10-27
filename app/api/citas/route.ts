@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { ESTADOS_DE_CITA, MENSAJE_DE_HORARIO_INVERTIDO, notas, precioDeCita, terminaDespuesDeEmpezar, titulo } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
-import { actorDeSesion, memberIdParaCita, whereDeAgenda } from "@/lib/permisos"
+import { actorDeSesion, memberIdParaCita, whereDeAgenda, whereDeClientes } from "@/lib/permisos"
+import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { esFechaCalendario, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 
 const citaSchema = z
@@ -95,7 +96,9 @@ export async function POST(request: NextRequest) {
     const datos = citaSchema.parse(cuerpo)
 
     const cliente = await prisma.customer.findFirst({
-      where: { id: datos.customerId, businessId: actor.businessId },
+      // Un cliente eliminado (anonimizado) responde como uno que no existe:
+      // no se le cuelgan citas nuevas.
+      where: whereDeClientes(actor, { AND: [{ id: datos.customerId }, clienteNoEliminado] }),
     })
 
     if (!cliente) {
