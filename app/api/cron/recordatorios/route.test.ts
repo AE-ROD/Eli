@@ -21,9 +21,10 @@ const AHORA = new Date("2026-10-06T13:00:00.000Z")
 /** Miércoles 7 a las 10:00 en Santiago: mañana para el negocio. */
 const citaDeMañana = {
   id: "cita-1",
+  businessId: "negocio-1",
   startTime: new Date("2026-10-07T13:00:00.000Z"),
   title: "Corte",
-  customer: { name: "María", lastName: "González", email: "maria@example.com" },
+  customer: { name: "María", lastName: "González", email: "maria@example.com", businessId: "negocio-1" },
   business: { name: "Salón Uno", timezone: "America/Santiago" },
 }
 
@@ -172,7 +173,7 @@ describe("GET /api/cron/recordatorios", () => {
       // y el miércoles 16:30 en Auckland (hoy).
       const startTime = new Date("2026-10-07T03:30:00.000Z")
       const enSantiago = { ...citaDeMañana, startTime }
-      const enAuckland = { ...citaDeMañana, id: "auckland", startTime, business: { name: "Salón Dos", timezone: "Pacific/Auckland" } }
+      const enAuckland = { ...citaDeMañana, id: "auckland", startTime, businessId: "negocio-2", customer: { ...citaDeMañana.customer, businessId: "negocio-2" }, business: { name: "Salón Dos", timezone: "Pacific/Auckland" } }
       prismaMock.appointment.findMany.mockResolvedValue([enSantiago, enAuckland])
       const { GET } = await import("./route")
 
@@ -180,6 +181,33 @@ describe("GET /api/cron/recordatorios", () => {
 
       expect(mockEnviarRecordatorio).toHaveBeenCalledTimes(1)
       expect(mockEnviarRecordatorio).toHaveBeenCalledWith(expect.objectContaining({ nombreNegocio: "Salón Uno", hora: "00:30" }))
+    })
+
+    it("pide el negocio de la cita y el de su cliente, para compararlos", async () => {
+      const { GET } = await import("./route")
+
+      await GET(autorizada())
+
+      const { select } = prismaMock.appointment.findMany.mock.calls[0][0]
+      expect(select.businessId).toBe(true)
+      expect(select.customer.select.businessId).toBe(true)
+    })
+
+    it("si el cliente es de otro negocio que la cita, no envía ni la marca: la cuenta como omitida", async () => {
+      const cruzada = { ...citaDeMañana, id: "cruzada", customer: { ...citaDeMañana.customer, businessId: "negocio-ajeno" } }
+      prismaMock.appointment.findMany.mockResolvedValue([cruzada, citaDeMañana])
+      const espia = vi.spyOn(console, "error").mockImplementation(() => {})
+      const { GET } = await import("./route")
+
+      const res = await GET(autorizada())
+
+      expect(await res.json()).toMatchObject({ total: 1, enviados: 1, fallidos: 0, omitidas: 1 })
+      expect(mockEnviarRecordatorio).toHaveBeenCalledTimes(1)
+      expect(prismaMock.appointment.updateMany).toHaveBeenCalledTimes(1)
+      expect(prismaMock.appointment.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "cita-1", reminderSentAt: null } }))
+      // Se registra sólo el id: ni el correo ni el nombre del cliente.
+      expect(espia).toHaveBeenCalledWith(expect.stringContaining("omitido"), { citaId: "cruzada" })
+      espia.mockRestore()
     })
 
     it("marca reminderSentAt antes de enviar, y sólo si seguía vacío", async () => {

@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
-import { ESTADOS_DE_CITA, MENSAJE_DE_HORARIO_INVERTIDO, notas, precioDeCita, terminaDespuesDeEmpezar, titulo } from "@/lib/campos-del-panel"
+import { ESTADOS_AL_CREAR, MENSAJE_DE_ESTADO_AL_CREAR, MENSAJE_DE_HORARIO_INVERTIDO, notas, precioDeCita, terminaDespuesDeEmpezar, titulo } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, memberIdParaCita, whereDeAgenda, whereDeClientes } from "@/lib/permisos"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
@@ -16,7 +16,9 @@ const citaSchema = z
     title: titulo(),
     startTime: z.string().datetime("La fecha de inicio no es válida"),
     endTime: z.string().datetime("La fecha de fin no es válida"),
-    status: z.enum(ESTADOS_DE_CITA).optional(),
+    // Sólo los estados iniciales: los demás se marcan sobre la cita, con las
+    // reglas del PUT (`ESTADOS_AL_CREAR` explica por qué).
+    status: z.enum(ESTADOS_AL_CREAR, { errorMap: () => ({ message: MENSAJE_DE_ESTADO_AL_CREAR }) }).optional(),
     notes: notas().optional(),
     price: precioDeCita().optional(),
     customerId: z.string(),
@@ -127,8 +129,9 @@ export async function POST(request: NextRequest) {
     const status = datos.status ?? "pendiente"
 
     // Como al mover: un choque, un bloqueo o quedar fuera del horario no
-    // impiden agendar desde el panel, pero se avisan primero. Una cita que
-    // nace cancelada o "no vino" no ocupa el horario: no hay qué advertir.
+    // impiden agendar desde el panel, pero se avisan primero. Hoy toda cita
+    // nueva ocupa el horario (`ESTADOS_AL_CREAR`); la guarda queda por si se
+    // suma un estado inicial que no lo ocupe.
     if (!datos.confirmarAdvertencias && ocupaElHorario(status)) {
       const advertencias = await advertenciasDeAgenda(prisma, {
         businessId: actor.businessId,
