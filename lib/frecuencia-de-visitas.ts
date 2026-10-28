@@ -32,6 +32,13 @@ export const FACTOR_SE_VA = 1.5
  */
 export const DIAS_DE_HISTORIAL = 730
 
+/**
+ * Días que un cliente que se va queda fuera de la lista después de
+ * "Escribirle", contando el día del contacto: la lista es de pendientes, no de
+ * a quién ya se le habló. No lo decidió el dueño: es una propuesta.
+ */
+export const DIAS_OCULTO_TRAS_CONTACTO = 14
+
 export type OrigenDelCiclo = "propio" | "servicio"
 
 export interface Ciclo {
