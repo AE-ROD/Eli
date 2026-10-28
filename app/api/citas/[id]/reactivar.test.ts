@@ -5,6 +5,7 @@ import {
   MENSAJE_CANCELADA_A_OTRO,
   MENSAJE_CANCELADA_PASADA,
   MENSAJE_CERRADA_A_OTRO,
+  MENSAJE_CITA_CAMBIO,
   MENSAJE_CON_ATENCION,
   MENSAJE_EN_CAJA,
   MENSAJE_EN_LIQUIDACION,
@@ -222,6 +223,28 @@ describe("PUT /api/citas/[id] — reactivar", () => {
       const res = await cambiar(sesiones.dueña, "completada", { status: estado })
       expect(res.status).toBe(409)
       expect((await res.json()).error).toBe(MENSAJE_CERRADA_A_OTRO)
+    })
+
+    it("si otro la cambia mientras se reactiva, no se pisa su cambio: 409", async () => {
+      const original = base.prisma.appointment.findFirst.getMockImplementation()!
+      base.prisma.appointment.findFirst.mockImplementationOnce(async (args) => {
+        const leida = await original(args)
+        await base.prisma.appointment.updateMany({ where: { id: "completada" }, data: { status: "no-asistio" } })
+        return leida
+      })
+
+      const res = await cambiar(sesiones.dueña, "completada", { status: "confirmada" })
+
+      expect(res.status).toBe(409)
+      expect((await res.json()).error).toBe(MENSAJE_CITA_CAMBIO)
+      expect(estadoDe("completada").status).toBe("no-asistio")
+    })
+
+    it("reactivada, responde la cita con su cliente", async () => {
+      const res = await cambiar(sesiones.dueña, "completada", { status: "confirmada" })
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({ id: "completada", status: "confirmada", customer: { id: "c-maria" } })
     })
 
     it("con una atención cobrada: 409, hay que anularla primero", async () => {

@@ -34,6 +34,8 @@ export const MENSAJE_CON_ATENCION =
 export const MENSAJE_EN_CAJA = "La atención de esta cita ya entró en un cierre de caja: no se puede reactivar. Corrígelo con un ajuste"
 export const MENSAJE_EN_LIQUIDACION =
   "La atención de esta cita ya entró en una liquidación: no se puede reactivar. Corrígelo con un ajuste"
+/** Otro cambió la cita entre que se leyó y se reactivó: no se pisa su cambio. */
+export const MENSAJE_CITA_CAMBIO = "La cita cambió mientras la reactivabas. Recarga y vuelve a intentarlo"
 
 export type DecisionDeReactivacion =
   /** El cambio no saca la cita de un estado cerrado: no es una reactivación. */
