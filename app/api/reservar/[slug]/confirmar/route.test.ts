@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server"
 import { Prisma } from "@prisma/client"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 
 const mockVerificarLimite = vi.fn()
 
@@ -28,7 +29,7 @@ const DIA = 1
 const OTRO_DIA = 2
 
 const pedidoFalso = (cuerpo: unknown): NextRequest =>
-  ({ headers: new Headers(), json: async () => cuerpo }) as unknown as NextRequest
+  ({ headers: new Headers(), body: cuerpoDePrueba(cuerpo) }) as unknown as NextRequest
 
 const conSlug = { params: Promise.resolve({ slug: "salon-uno" }) }
 
@@ -908,5 +909,28 @@ describe("POST /api/reservar/[slug]/confirmar: el premio a quien invitó", () =>
     expect((await confirmar("10:00")).status).toBe(201)
     expect(base.prisma.business.updateMany).not.toHaveBeenCalled()
     expect(negocio(OTRO_NEGOCIO).pruebaTerminaEl).toEqual(FIN_DEL_2)
+  })
+})
+
+describe("POST /api/reservar/[slug]/confirmar: tope del cuerpo (GHSA-mrhx-c7xc-m3w5)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    relojEn("2030-01-01T12:00:00.000Z")
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 9 })
+    escenario([franja({ startTime: "09:00", endTime: "13:00" })])
+  })
+
+  it("una reserva con un cuerpo de más de 100 KB da 413 y no crea nada", async () => {
+    const { POST } = await import("./route")
+
+    const res = await POST(pedidoFalso({ ...reserva("12:00"), relleno: "x".repeat(200 * 1024) }), conSlug)
+
+    expect(res.status).toBe(413)
+    expect(await res.json()).toEqual({ error: "El pedido es demasiado grande." })
+    expect(citasCreadas()).toHaveLength(0)
+  })
+
+  it("la misma reserva, de tamaño normal, se sigue creando", async () => {
+    expect((await confirmar("12:00")).status).toBe(201)
   })
 })

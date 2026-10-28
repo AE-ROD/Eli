@@ -291,3 +291,36 @@ describe("proxy — sesión revocada", () => {
     expect(res.headers.get("location")).toBeNull()
   })
 })
+
+describe("proxy — tope del cuerpo de la API (GHSA-mrhx-c7xc-m3w5)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetToken.mockResolvedValue({ id: "usuario-1", businessId: "negocio-1" })
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 100 })
+  })
+
+  const conLargo = (pathname: string, largo: number): NextRequest => {
+    const pedido = pedidoFalso(pathname, "POST")
+    pedido.headers.set("content-length", String(largo))
+    return pedido
+  }
+
+  it("un Content-Length sobre el techo da 413 antes del rate limit, en el panel y en lo público", async () => {
+    const { default: proxy } = await import("./proxy")
+
+    for (const ruta of ["/api/clientes", "/api/reservar/salon-uno/confirmar"]) {
+      const res = await proxy(conLargo(ruta, 6 * 1024 * 1024))
+      expect(res.status).toBe(413)
+      expect(await res.json()).toEqual({ error: "El pedido es demasiado grande." })
+    }
+    expect(mockVerificarLimite).not.toHaveBeenCalled()
+  })
+
+  it("bajo el techo deja pasar (el tope fino lo pone cada endpoint)", async () => {
+    const { default: proxy } = await import("./proxy")
+
+    const res = await proxy(conLargo("/api/clientes/importar", 3 * 1024 * 1024))
+
+    expect(res.status).toBe(200)
+  })
+})

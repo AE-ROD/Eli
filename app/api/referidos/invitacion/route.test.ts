@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { NextRequest } from "next/server"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 
 const mockPrisma = { business: { findUnique: vi.fn() } }
 
@@ -9,7 +10,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }))
 const pedido = (cuerpo: unknown, cabeceras: Record<string, string> = {}) =>
   ({
     headers: new Headers({ "content-type": "application/json", host: "eli.test", ...cabeceras }),
-    json: async () => cuerpo,
+    body: cuerpoDePrueba(cuerpo),
   }) as unknown as NextRequest
 
 const enviar = async (cuerpo: unknown, cabeceras?: Record<string, string>) => {

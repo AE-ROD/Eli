@@ -13,6 +13,7 @@ import { finDeLaPrueba, generarCodigoInvitacion } from "@/lib/prueba"
 import { enviarBienvenida } from "@/lib/enviar-correo-de-prueba"
 import { registrarError } from "@/lib/registro-de-errores"
 import { COOKIE_DE_INVITACION, borrarCookieDeInvitacion, negocioQueInvita } from "@/lib/referidos"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 const schema = z.object({
   nombreNegocio: z.string().min(2).max(80),
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const cuerpo = await request.json()
+    const cuerpo = await leerJsonConTope(request)
     const { nombreNegocio, tipoNegocio, teamSize } = schema.parse(cuerpo)
 
     const existente = await prisma.business.findFirst({ where: { userId } })
@@ -121,6 +122,7 @@ export async function POST(request: NextRequest) {
     borrarCookieDeInvitacion(respuesta)
     return respuesta
   } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
     }

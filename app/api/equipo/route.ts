@@ -16,6 +16,7 @@ import {
 } from "@/lib/invitaciones-de-equipo"
 import { normalizarEmail } from "@/lib/validaciones"
 import { registrarError } from "@/lib/registro-de-errores"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 // GET /api/equipo — lista de miembros del negocio
 export async function GET() {
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const cuerpo = await request.json()
+    const cuerpo = await leerJsonConTope(request)
     const { nombre, email, rol } = invitarSchema.parse(cuerpo)
 
     // Los correos se comparan sin distinguir mayúsculas: para el servidor de
@@ -163,6 +164,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       return respuestaDeDatosInvalidos(error)
     }

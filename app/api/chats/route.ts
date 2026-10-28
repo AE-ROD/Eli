@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { actorDeSesion, puedeUsarChats } from "@/lib/permisos"
 import { z } from "zod"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 export async function GET() {
   const actor = actorDeSesion(await getServerSession(authOptions))
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const cuerpo = await request.json()
+    const cuerpo = await leerJsonConTope(request)
     const datos = nuevaConversacionSchema.parse(cuerpo)
 
     const conversacion = await prisma.conversation.create({
@@ -67,6 +68,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(conversacion, { status: 201 })
   } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Datos inválidos", detalles: error.errors }, { status: 400 })
     }

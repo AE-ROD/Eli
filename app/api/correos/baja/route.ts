@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { usuarioDelTokenDeBaja } from "@/lib/baja-de-correos"
 import { registrarError } from "@/lib/registro-de-errores"
 
@@ -30,7 +30,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Demasiados intentos, intenta más tarde" }, { status: 429 })
   }
 
-  const cuerpo = await cuerpoDelPedido(request)
+  const recibido = await cuerpoConTope(request)
+  if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+  const cuerpo = recibido.cuerpo
   const token = typeof cuerpo === "object" && cuerpo !== null ? (cuerpo as { token?: unknown }).token : undefined
   const userId = usuarioDelTokenDeBaja(token)
 

@@ -20,6 +20,7 @@ import {
   whereDeClientes,
   type Actor,
 } from "@/lib/permisos"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 const edicionDeClienteSchema = z.object({
   name: nombre().optional(),
@@ -134,7 +135,7 @@ export async function PUT(
   }
 
   try {
-    const cuerpo = await request.json()
+    const cuerpo = await leerJsonConTope(request)
     const datos = edicionDeClienteSchema.parse(cuerpo)
 
     // Las notas las escribe cualquiera; el resto de los datos, sólo dueño y
@@ -177,6 +178,7 @@ export async function PUT(
 
     return NextResponse.json(cliente)
   } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       return respuestaDeDatosInvalidos(error)
     }

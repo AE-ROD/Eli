@@ -16,6 +16,7 @@ import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, memberIdParaCita, whereDeAgenda, type Actor } from "@/lib/permisos"
 import { MENSAJE_CITA_CERRADA, MENSAJE_CITA_CON_ATENCION, sePuedeMover } from "@/lib/mover-cita"
 import { advertenciasDeAgenda } from "@/lib/advertencias-de-agenda"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 const edicionDeCitaSchema = z.object({
   title: titulo().optional(),
@@ -90,7 +91,7 @@ export async function PUT(
   }
 
   try {
-    const cuerpo = await request.json()
+    const cuerpo = await leerJsonConTope(request)
     const datos = edicionDeCitaSchema.parse(cuerpo)
 
     // Se compara lo que queda después del cambio: si se mueve sólo el inicio
@@ -201,6 +202,7 @@ export async function PUT(
 
     return NextResponse.json(cita)
   } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       return respuestaDeDatosInvalidos(error)
     }

@@ -212,6 +212,7 @@ async function reservar(
   return { tipo: "creada", cita }
 }
 import { existeLaHora, instanteEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 export async function POST(
   request: NextRequest,
@@ -240,7 +241,7 @@ export async function POST(
   if (!negocio) return NextResponse.json({ error: "Negocio no encontrado" }, { status: 404 })
 
   try {
-    const cuerpo = await request.json()
+    const cuerpo = await leerJsonConTope(request)
     const datos = reservaSchema.parse(cuerpo)
 
     const servicio = await prisma.service.findFirst({
@@ -389,6 +390,7 @@ export async function POST(
       { status: 201 }
     )
   } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       // Público: el primer mensaje, legible, y no los issues crudos de zod.
       return NextResponse.json({ error: error.errors[0]?.message ?? "Datos inválidos" }, { status: 400 })

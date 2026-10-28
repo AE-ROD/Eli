@@ -19,7 +19,7 @@ import {
   whereDeAtenciones,
   type Actor,
 } from "@/lib/permisos"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import {
   formatearAtencion,
   leerRango,
@@ -211,7 +211,9 @@ export async function POST(request: NextRequest) {
   const usuarioId = session?.user?.id ?? null
 
   try {
-    const cuerpo = await cuerpoDelPedido(request)
+    const recibido = await cuerpoConTope(request)
+    if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+    const cuerpo = recibido.cuerpo
 
     // Con `citaId` es una reserva que llegó (y la zona de quien la marca, para
     // saber si es de hoy); sin él, alguien sin reserva.

@@ -5,6 +5,7 @@ import { coincide as coincideEnLaBase, ordenar, proyectar, type Registro, type T
 // `proyectar` no sabe leer el historial anidado y lanza.
 import "./_pruebas/base-de-clientes"
 import { MARCA_DE_CLIENTE_ELIMINADO, NOMBRE_DE_CLIENTE_ELIMINADO } from "@/lib/clientes-eliminados"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 
 const mockGetServerSession = vi.fn()
 
@@ -250,7 +251,8 @@ const fakeGet = (query = ""): NextRequest =>
 const fakePost = (body: Record<string, unknown>): NextRequest =>
   ({
     url: "http://localhost/api/clientes",
-    json: () => Promise.resolve(body),
+    headers: new Headers(),
+    body: cuerpoDePrueba(body),
   }) as unknown as NextRequest
 
 describe("GET /api/clientes", () => {
@@ -885,5 +887,33 @@ describe("POST /api/clientes — teléfono en E.164 y consentimiento de WhatsApp
     const { data } = prismaMock.customer.create.mock.calls[0][0]
     expect(data.whatsappConsentSource).toBe("panel")
     expect((data.whatsappConsentAt as Date).getFullYear()).toBeGreaterThan(2020)
+  })
+})
+
+describe("POST /api/clientes: tope del cuerpo (GHSA-mrhx-c7xc-m3w5)", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it("un cuerpo de más de 100 KB da 413 sin crear nada", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    const res = await POST(fakePost({ name: "Ana", tags: Array.from({ length: 30_000 }, () => "etiqueta") }))
+
+    expect(res.status).toBe(413)
+    expect(await res.json()).toEqual({ error: "El pedido es demasiado grande." })
+    expect(prismaMock.customer.create).not.toHaveBeenCalled()
+  })
+
+  it("un Content-Length declarado de más da 413 sin leer el cuerpo", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const pedido = {
+      url: "http://localhost/api/clientes",
+      headers: new Headers({ "content-length": String(50 * 1024 * 1024) }),
+      body: cuerpoDePrueba({ name: "Ana" }),
+    } as unknown as NextRequest
+
+    expect((await POST(pedido)).status).toBe(413)
+    expect(prismaMock.customer.create).not.toHaveBeenCalled()
   })
 })

@@ -9,6 +9,7 @@ import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { hashDeToken } from "@/lib/tokens"
 import { contrasenaNuevaSchema, normalizarEmail } from "@/lib/validaciones"
 import { registrarError } from "@/lib/registro-de-errores"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 // `contrasena`, igual que el registro y el restablecimiento de contraseña.
 const schema = z.object({
@@ -61,7 +62,7 @@ export async function POST(
   }
 
   try {
-    const cuerpo = await request.json()
+    const cuerpo = await leerJsonConTope(request)
     const { contrasena } = schema.parse(cuerpo)
 
     // Una invitación no crea ni pisa credenciales de una cuenta que ya existe:
@@ -150,6 +151,7 @@ export async function POST(
 
     return NextResponse.json({ ok: true, email: resultado.email, cuentaNueva: true })
   } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof InvitacionYaUsada) {
       return INVITACION_INVALIDA()
     }

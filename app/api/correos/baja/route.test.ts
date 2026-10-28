@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { NextRequest } from "next/server"
 import { tokenDeBaja } from "@/lib/baja-de-correos"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 
 const mockVerificarLimite = vi.fn()
 
@@ -13,12 +14,9 @@ const prismaMock = { user: { updateMany: vi.fn() } }
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
 
-/** Un pedido cuyo cuerpo puede no ser JSON: `json()` lanza, como el de verdad. */
+/** Un pedido con cuerpo JSON; un string va tal cual, para probar uno que no es JSON. */
 function pedido(cuerpo: unknown): NextRequest {
-  return {
-    headers: new Headers(),
-    json: async () => (typeof cuerpo === "function" ? (cuerpo as () => never)() : cuerpo),
-  } as unknown as NextRequest
+  return { headers: new Headers(), body: cuerpoDePrueba(cuerpo) } as unknown as NextRequest
 }
 
 describe("POST /api/correos/baja", () => {
@@ -50,11 +48,7 @@ describe("POST /api/correos/baja", () => {
     const invalido = await POST(pedido({ token: "no-es-un-token" }))
     const ajeno = await POST(pedido({ token: `${Buffer.from("usuario-2").toString("base64url")}.${tokenDeBaja("usuario-1").split(".")[1]}` }))
     const sinToken = await POST(pedido({}))
-    const sinJson = await POST(
-      pedido(() => {
-        throw new SyntaxError("no es JSON")
-      }),
-    )
+    const sinJson = await POST(pedido("no es JSON"))
 
     const respuestas = [valido, borrado, invalido, ajeno, sinToken, sinJson]
     const cuerpos = await Promise.all(respuestas.map((respuesta) => respuesta.text()))
