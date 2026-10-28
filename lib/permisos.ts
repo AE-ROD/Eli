@@ -179,6 +179,17 @@ export const puedeGestionarBloqueoDe = (actor: Actor | null, miembro: Miembro | 
   return !!miembro && !!actor.memberId && actor.memberId === miembro.id
 }
 
+/**
+ * Qué servicios hace cada profesional (`MemberService`; sin filas = hace
+ * todos). Es operación, como el catálogo de servicios: dueño y encargado, de
+ * cualquier miembro del negocio. El profesional no se los define a sí mismo:
+ * decide qué se le ofrece a sus clientes en la reserva pública. El miembro
+ * tiene que ser del negocio del actor: el endpoint lo lee de la base y lo
+ * ajeno responde 404 antes de preguntar acá.
+ */
+export const puedeDefinirServiciosDe = (actor: Actor | null, miembro: Miembro): boolean =>
+  gestionaElNegocio(actor) && mismoNegocio(actor, miembro.businessId)
+
 // ─── Tablero de atenciones (docs/PRODUCTO.md, sección 7) ─────────────────────
 
 /** Todas las atenciones con todas sus líneas, pagos y totales. El profesional ve lo suyo. */

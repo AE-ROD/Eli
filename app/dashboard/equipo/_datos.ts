@@ -74,3 +74,37 @@ export async function reenviarInvitacion(id: string): Promise<Resultado> {
 export async function anularInvitacion(id: string): Promise<Resultado> {
   return pedir(`/api/equipo/pendientes/${id}`, "No se pudo anular la invitación", { method: "DELETE" })
 }
+
+/** Un servicio del catálogo, lo justo para elegir cuáles hace un profesional. */
+export interface ServicioDelCatalogo {
+  id: string
+  name: string
+  active: boolean
+}
+
+/** Qué servicios hace un profesional: todos (sin acotar) o sólo los de la lista. */
+export type ServiciosDelMiembro = { todos: true; serviceIds: string[] } | { todos: false; serviceIds: string[] }
+
+/** El catálogo de servicios del negocio, activos e inactivos. */
+export async function leerCatalogoDeServicios(): Promise<Resultado<ServicioDelCatalogo[]>> {
+  return pedir<ServicioDelCatalogo[]>("/api/configuracion/servicios", "No se pudieron cargar los servicios")
+}
+
+export async function leerServiciosDelMiembro(memberId: string): Promise<Resultado<ServiciosDelMiembro>> {
+  return pedir<ServiciosDelMiembro>(
+    `/api/equipo/miembros/${encodeURIComponent(memberId)}/servicios`,
+    "No se pudieron cargar los servicios de esta persona"
+  )
+}
+
+/** Guarda qué servicios hace: `null` es "todos". */
+export async function guardarServiciosDelMiembro(
+  memberId: string,
+  serviceIds: string[] | null
+): Promise<Resultado<ServiciosDelMiembro>> {
+  return pedir<ServiciosDelMiembro>(
+    `/api/equipo/miembros/${encodeURIComponent(memberId)}/servicios`,
+    "No se pudieron guardar los servicios",
+    conJson("PUT", serviceIds === null ? { todos: true } : { todos: false, serviceIds })
+  )
+}

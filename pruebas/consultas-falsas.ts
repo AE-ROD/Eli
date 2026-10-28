@@ -24,6 +24,7 @@ export type NombreDeModelo =
   | "visitPayment"
   | "workSchedule"
   | "timeBlock"
+  | "memberService"
 
 export type Tablas = Record<NombreDeModelo, Registro[]>
 
@@ -44,7 +45,11 @@ const muchos = (modelo: NombreDeModelo, remoto: string): Relacion => ({ modelo, 
 export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
   user: {},
   business: { user: uno("user", "userId") },
-  businessMember: { user: uno("user", "userId"), business: uno("business", "businessId") },
+  businessMember: {
+    user: uno("user", "userId"),
+    business: uno("business", "businessId"),
+    memberServices: muchos("memberService", "memberId"),
+  },
   customer: {},
   service: {},
   appointment: {
@@ -70,6 +75,11 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
   visitPayment: { visit: uno("visit", "visitId") },
   workSchedule: { business: uno("business", "businessId"), member: uno("businessMember", "memberId") },
   timeBlock: { business: uno("business", "businessId"), member: uno("businessMember", "memberId") },
+  memberService: {
+    business: uno("business", "businessId"),
+    member: uno("businessMember", "memberId"),
+    service: uno("service", "serviceId"),
+  },
 }
 
 const OPERADORES_DE_CAMPO = new Set(["equals", "in", "notIn", "not", "gt", "gte", "lt", "lte", "has"])

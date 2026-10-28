@@ -17,6 +17,7 @@ import {
   puedeVerTodaLaAgenda,
   puedeEditarHorarioDe,
   puedeGestionarBloqueoDe,
+  puedeDefinirServiciosDe,
   puedeVerTodoElTablero,
   puedeCobrar,
   puedeAsignarLineasAOtros,
@@ -525,6 +526,29 @@ describe("tablero de atenciones", () => {
       expect(whereDePagos(encargado)).toEqual({ AND: [{ visit: { is: { businessId: NEGOCIO } } }, {}] })
       expect(whereDePagos(profesional)).toEqual({ AND: [NADA, {}] })
     })
+  })
+})
+
+describe("servicios que hace cada profesional", () => {
+  it("dueño y encargado los definen para cualquiera del negocio", () => {
+    for (const quien of [dueño, encargado]) {
+      expect(puedeDefinirServiciosDe(quien, miembro)).toBe(true)
+      expect(puedeDefinirServiciosDe(quien, yoMismo)).toBe(true)
+    }
+  })
+
+  it("el profesional no los define, ni los suyos", () => {
+    expect(puedeDefinirServiciosDe(profesional, yoMismo)).toBe(false)
+    expect(puedeDefinirServiciosDe(profesional, miembro)).toBe(false)
+  })
+
+  it("nadie los define para un miembro de otro negocio", () => {
+    expect(puedeDefinirServiciosDe(dueño, ajeno)).toBe(false)
+    expect(puedeDefinirServiciosDe(encargado, ajeno)).toBe(false)
+  })
+
+  it("falla cerrado sin actor", () => {
+    expect(puedeDefinirServiciosDe(null, miembro)).toBe(false)
   })
 })
 

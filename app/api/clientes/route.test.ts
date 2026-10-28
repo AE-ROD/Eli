@@ -145,6 +145,7 @@ const tablas: Tablas = {
   visitPayment: [],
   workSchedule: [],
   timeBlock: [],
+  memberService: [],
   customer: clientesFake,
   appointment: citasFake,
 }
