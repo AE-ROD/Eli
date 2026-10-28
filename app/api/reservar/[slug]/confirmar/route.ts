@@ -172,15 +172,22 @@ async function reservar(
   } else if (conConsentimiento && reutilizado) {
     // El cliente se reutilizó por email + nombre, no por teléfono: el
     // consentimiento sólo vale si el número es el suyo. Sin teléfono
-    // guardado, se guarda el dado junto con el consentimiento; con otro
+    // guardado (null o en blanco), se guarda el dado junto con el
+    // consentimiento, o solo si ya tenía uno previo, que no se pisa; con otro
     // número, no se registra ni se pisa (`consentimientoSobreClienteExistente`).
-    // El teléfono va en el where para que no cambie entre la lectura y la
-    // escritura.
+    // El teléfono y el consentimiento leídos van en el where para que no
+    // cambien entre la lectura y la escritura.
     const accion = consentimientoSobreClienteExistente(reutilizado.phone, datos.telefono)
     if (accion === "guardar-telefono") {
+      const yaConsintio = reutilizado.whatsappConsentAt !== null
       await tx.customer.updateMany({
-        where: { id: cliente.id, businessId: negocioId, phone: null, whatsappConsentAt: null },
-        data: { phone: datos.telefono, ...consentimiento },
+        where: {
+          id: cliente.id,
+          businessId: negocioId,
+          phone: reutilizado.phone,
+          whatsappConsentAt: yaConsintio ? reutilizado.whatsappConsentAt : null,
+        },
+        data: yaConsintio ? { phone: datos.telefono } : { phone: datos.telefono, ...consentimiento },
       })
     } else if (accion === "registrar") {
       await tx.customer.updateMany({

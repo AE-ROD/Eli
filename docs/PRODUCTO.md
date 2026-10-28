@@ -249,7 +249,7 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 ### Teléfono y WhatsApp en la reserva
 
 - El teléfono, opcional, se valida y se guarda como en el panel (`+56912345678`); uno que no se puede leer como chileno es un error que dice cómo escribirlo.
-- Con teléfono aparece "Quiero recibir recordatorios por WhatsApp", sin marcar. Marcado guarda el consentimiento con su fecha y que vino de la reserva pública; no reemplaza uno anterior, y sin marcar no borra uno dado en el local. Todavía no se mandan mensajes por WhatsApp (sección 10).
+- Con teléfono aparece "Quiero recibir recordatorios por WhatsApp", sin marcar. Marcado guarda el consentimiento con su fecha y que vino de la reserva pública; no reemplaza uno anterior, y sin marcar no borra uno dado en el local. Si la reserva es de un cliente que ya existía (mismo correo y nombre) y no tenía teléfono, marcado le completa el número dado, aunque ya tuviera un consentimiento previo; si tenía otro número, no se pisa. Todavía no se mandan mensajes por WhatsApp (sección 10).
 
 ### Horario
 

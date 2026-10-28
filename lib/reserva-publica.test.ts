@@ -180,8 +180,10 @@ describe("consentimientoSobreClienteExistente", () => {
     expect(consentimientoSobreClienteExistente(null, undefined)).toBe("nada")
   })
 
-  it("el cliente no tiene teléfono: se guarda el dado", () => {
+  it("el cliente no tiene teléfono (null o en blanco): se guarda el dado", () => {
     expect(consentimientoSobreClienteExistente(null, "+56912345678")).toBe("guardar-telefono")
+    expect(consentimientoSobreClienteExistente("", "+56912345678")).toBe("guardar-telefono")
+    expect(consentimientoSobreClienteExistente("   ", "+56912345678")).toBe("guardar-telefono")
   })
 
   it("el mismo número, escrito de otra forma: se registra", () => {
@@ -189,9 +191,9 @@ describe("consentimientoSobreClienteExistente", () => {
     expect(consentimientoSobreClienteExistente("+56912345678", "+56912345678")).toBe("registrar")
   })
 
-  it("otro número, uno ilegible o vacío guardado: nada (no se pisa)", () => {
+  it("otro número o uno ilegible guardado: nada (no se pisa)", () => {
     expect(consentimientoSobreClienteExistente("+56987654321", "+56912345678")).toBe("nada")
     expect(consentimientoSobreClienteExistente("+1 415 555 0100", "+56912345678")).toBe("nada")
-    expect(consentimientoSobreClienteExistente("", "+56912345678")).toBe("nada")
+    expect(consentimientoSobreClienteExistente("hola", "+56912345678")).toBe("nada")
   })
 })

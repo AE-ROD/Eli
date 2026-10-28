@@ -170,12 +170,26 @@ describe("consentimiento de WhatsApp", () => {
     expect(lucias()[0]).toMatchObject({ id: "c-lucia", phone: "+56912345678", whatsappConsentAt: AHORA, whatsappConsentSource: "reserva-publica" })
   })
 
-  it("cliente reutilizado sin teléfono pero con consentimiento previo: no se toca", async () => {
+  it("cliente reutilizado sin teléfono pero con consentimiento previo: se completa el teléfono y el consentimiento queda", async () => {
     escenario([
       { id: "c-lucia", businessId: NEGOCIO, name: "Lucía", lastName: "Pérez", email: "lucia@correo.test", whatsappConsentAt: ANTES, whatsappConsentSource: "panel" },
     ])
     await reservar({ email: "lucia@correo.test", telefono: "912345678", whatsappConsentimiento: true })
-    expect(lucias()[0]).toMatchObject({ phone: null, whatsappConsentAt: ANTES, whatsappConsentSource: "panel" })
+    expect(lucias()).toHaveLength(1)
+    expect(lucias()[0]).toMatchObject({ id: "c-lucia", phone: "+56912345678", whatsappConsentAt: ANTES, whatsappConsentSource: "panel" })
+  })
+
+  it("cliente reutilizado con el teléfono guardado vacío: se guarda el dado junto con el consentimiento", async () => {
+    escenario([{ id: "c-lucia", businessId: NEGOCIO, name: "Lucía", lastName: "Pérez", email: "lucia@correo.test", phone: "" }])
+    await reservar({ email: "lucia@correo.test", telefono: "9 1234 5678", whatsappConsentimiento: true })
+    expect(lucias()).toHaveLength(1)
+    expect(lucias()[0]).toMatchObject({ id: "c-lucia", phone: "+56912345678", whatsappConsentAt: AHORA, whatsappConsentSource: "reserva-publica" })
+  })
+
+  it("cliente reutilizado con un teléfono ilegible guardado: no se pisa", async () => {
+    escenario([{ id: "c-lucia", businessId: NEGOCIO, name: "Lucía", lastName: "Pérez", email: "lucia@correo.test", phone: "llamar al local" }])
+    await reservar({ email: "lucia@correo.test", telefono: "912345678", whatsappConsentimiento: true })
+    expect(lucias()[0]).toMatchObject({ id: "c-lucia", phone: "llamar al local", whatsappConsentAt: null })
   })
 
   it("un valor que no es sí/no: 400", async () => {

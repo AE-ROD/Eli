@@ -148,12 +148,14 @@ export function esElMismoCliente(
  * Qué hacer con el consentimiento de WhatsApp marcado en la reserva cuando el
  * cliente ya existía (se reutilizó por email + nombre, no por teléfono):
  *
- * - `"guardar-telefono"`: el cliente no tiene teléfono. Se guarda el dado
- *   (E.164) junto con el consentimiento.
+ * - `"guardar-telefono"`: el cliente no tiene teléfono (null, o un texto
+ *   vacío). Se guarda el dado (E.164) junto con el consentimiento; si ya
+ *   tenía uno previo, se completa sólo el teléfono y el consentimiento queda
+ *   como estaba.
  * - `"registrar"`: el teléfono guardado es el mismo que el dado (ambos en
  *   E.164). El consentimiento vale para ese número.
- * - `"nada"`: no hay teléfono en la reserva, o el guardado es otro (o no se
- *   puede leer como chileno). El consentimiento se dio para un número que no
+ * - `"nada"`: no hay teléfono en la reserva, o el guardado es otro (o uno
+ *   escrito que no se puede leer como chileno). El consentimiento se dio para un número que no
  *   es el del cliente: no se registra ni se pisa su teléfono.
  *
  * `telefonoDado` viene ya en E.164 (`reservaSchema`) o null.
@@ -164,9 +166,9 @@ export function consentimientoSobreClienteExistente(
 ): "guardar-telefono" | "registrar" | "nada" {
   const dado = aE164Chile(telefonoDado)
   if (!dado) return "nada"
-  // Sólo null: es lo que el `updateMany` exige en el where (`phone: null`).
-  // Un texto vacío o ilegible guardado cae en "nada": no se pisa.
-  if (telefonoGuardado === null || telefonoGuardado === undefined) return "guardar-telefono"
+  // Sin teléfono es null o un texto en blanco: no hay número que pisar. Uno
+  // escrito pero ilegible cae en "nada": es un dato que alguien cargó.
+  if (telefonoGuardado === null || telefonoGuardado === undefined || telefonoGuardado.trim() === "") return "guardar-telefono"
   return aE164Chile(telefonoGuardado) === dado ? "registrar" : "nada"
 }
 
