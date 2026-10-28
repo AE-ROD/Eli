@@ -13,6 +13,7 @@ import {
   whereDePagos,
   type Actor,
 } from "@/lib/permisos"
+import { ESTADOS_QUE_LIBERAN } from "@/lib/ocupacion"
 import { esZonaHorariaValida, iniciosDeMesEn } from "@/lib/reportes"
 
 /**
@@ -93,7 +94,10 @@ export async function GET(request: NextRequest) {
         // profesional además de por negocio.
         where: whereDeAgenda(actor, {
           startTime: { gte: hoy, lt: manana },
-          status: { not: "cancelada" },
+          // Ni las canceladas ni las "No vino": no son citas que haya que
+          // atender, y su hora quedó libre (lib/ocupacion.ts). Contarlas
+          // inflaba "citas de hoy" y tapaba huecos en la línea de tiempo.
+          status: { notIn: [...ESTADOS_QUE_LIBERAN] },
         }),
         select: {
           id: true,
@@ -155,7 +159,7 @@ export async function GET(request: NextRequest) {
       ? await prisma.appointment.findFirst({
           where: whereDeAgenda(actor, {
             startTime: { gte: manana },
-            status: { not: "cancelada" },
+            status: { notIn: [...ESTADOS_QUE_LIBERAN] },
           }),
           select: { id: true, title: true, startTime: true },
           orderBy: { startTime: "asc" },

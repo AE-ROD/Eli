@@ -10,13 +10,13 @@ import {
   type SegmentoDia,
 } from "./horario-dia"
 
-function cita(id: string, startHHMM: string, endHHMM: string): CitaDelDia {
+function cita(id: string, startHHMM: string, endHHMM: string, status = "confirmada"): CitaDelDia {
   return {
     id,
     title: "Corte",
     startTime: `2026-09-07T${startHHMM}:00`,
     endTime: `2026-09-07T${endHHMM}:00`,
-    status: "confirmada",
+    status,
     customer: null,
   }
 }
@@ -222,5 +222,20 @@ describe("horaAMinutos", () => {
 
   it("es la inversa de minutosAHora", () => {
     expect(minutosAHora(horaAMinutos("07:05"))).toBe("07:05")
+  })
+})
+
+describe("citas que no ocupan su hora", () => {
+  const franja = { startTime: "09:00", endTime: "12:00" }
+
+  it("una cita \"No vino\" o cancelada no tapa el hueco ni se dibuja", () => {
+    const citas = [cita("vino", "09:00", "10:00"), cita("no", "10:00", "11:00", "no-asistio"), cita("c", "11:00", "12:00", "cancelada")]
+
+    expect(idsDeCitasEnSegmentos(segmentosDeFranja(franja, citas))).toEqual(["vino"])
+    expect(minutosLibresEnFranjas([franja], citas)).toBe(120)
+  })
+
+  it("una cita \"No vino\" fuera del horario no aparece como fuera de horario", () => {
+    expect(citasFueraDeFranjas([franja], [cita("no", "15:00", "16:00", "no-asistio")])).toEqual([])
   })
 })
