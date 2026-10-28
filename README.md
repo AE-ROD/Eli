@@ -123,7 +123,7 @@ puede aplicar antes de desplegar. Orden: aplicar la migración, desplegar, y
 ### `20261028120000_etapa_2_la_plata_del_equipo`
 
 Aditiva: columnas nuevas con default o nullable en `negocios` (período de
-liquidación), `miembros_negocio` (retención de honorarios), `atencion_servicios`
+liquidación), `atencion_servicios`
 (tipo de línea, producto, comisión congelada por línea y liquidación) y
 `cambios_comision` (producto); un único `(id, businessId)` en `atenciones`; las
 tablas nuevas `productos`, `atencion_propinas`, `liquidaciones`,

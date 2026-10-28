@@ -7,7 +7,6 @@
 -- Lo que agrega:
 --   negocios: tipo de período de liquidación (default 'mensual') y día de
 --     inicio de la semana (default 1 = lunes).
---   miembros_negocio: si el local retiene honorarios (default 'no-se-retiene').
 --   atenciones: único (id, businessId), para las FK compuestas.
 --   atencion_servicios: tipo de línea (servicio/producto), producto,
 --     comisión congelada por línea (%, monto, cuándo) y la liquidación que la
@@ -28,9 +27,6 @@ BEGIN;
 -- AlterTable
 ALTER TABLE "negocios" ADD COLUMN     "liquidacionInicioSemana" INTEGER NOT NULL DEFAULT 1,
 ADD COLUMN     "liquidacionPeriodo" TEXT NOT NULL DEFAULT 'mensual';
-
--- AlterTable
-ALTER TABLE "miembros_negocio" ADD COLUMN     "retencionHonorarios" TEXT NOT NULL DEFAULT 'no-se-retiene';
 
 -- AlterTable
 ALTER TABLE "atencion_servicios" ADD COLUMN     "commissionAt" TIMESTAMP(3),
@@ -91,9 +87,6 @@ CREATE TABLE "liquidaciones" (
     "adelantosCents" INTEGER NOT NULL,
     "ajustesCents" INTEGER NOT NULL,
     "brutoCents" INTEGER NOT NULL,
-    "retencionModo" TEXT NOT NULL DEFAULT 'no-se-retiene',
-    "retencionPorcentaje" DOUBLE PRECISION,
-    "retencionCents" INTEGER NOT NULL DEFAULT 0,
     "totalCents" INTEGER NOT NULL,
     "cerradaAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "cerradaPorId" TEXT NOT NULL,
@@ -248,9 +241,6 @@ ALTER TABLE "cambios_comision" ADD CONSTRAINT "cambios_comision_productId_fkey" 
 ALTER TABLE "negocios" ADD CONSTRAINT "negocios_liquidacionPeriodo_check" CHECK ("liquidacionPeriodo" IN ('semanal', 'quincenal', 'mensual'));
 ALTER TABLE "negocios" ADD CONSTRAINT "negocios_liquidacionInicioSemana_check" CHECK ("liquidacionInicioSemana" >= 0 AND "liquidacionInicioSemana" <= 6);
 
--- miembros_negocio
-ALTER TABLE "miembros_negocio" ADD CONSTRAINT "miembros_negocio_retencionHonorarios_check" CHECK ("retencionHonorarios" IN ('no-se-retiene', 'retiene-el-local'));
-
 -- productos: null es "sin configurar", no 0.
 ALTER TABLE "productos" ADD CONSTRAINT "productos_priceCents_check" CHECK ("priceCents" IS NULL OR ("priceCents" >= 0 AND "priceCents" <= 2000000000));
 ALTER TABLE "productos" ADD CONSTRAINT "productos_commissionPercent_check" CHECK ("commissionPercent" IS NULL OR ("commissionPercent" >= 0 AND "commissionPercent" <= 100));
@@ -281,17 +271,20 @@ ALTER TABLE "atencion_propinas" ADD CONSTRAINT "atencion_propinas_duena_sin_liqu
 ALTER TABLE "liquidaciones" ADD CONSTRAINT "liquidaciones_periodo_check" CHECK ("periodo" IN ('semanal', 'quincenal', 'mensual'));
 ALTER TABLE "liquidaciones" ADD CONSTRAINT "liquidaciones_rango_check" CHECK ("hasta" >= "desde");
 ALTER TABLE "liquidaciones" ADD CONSTRAINT "liquidaciones_estado_check" CHECK ("estado" IN ('cerrada', 'pagada', 'anulada'));
-ALTER TABLE "liquidaciones" ADD CONSTRAINT "liquidaciones_retencionModo_check" CHECK ("retencionModo" IN ('no-se-retiene', 'retiene-el-local'));
-ALTER TABLE "liquidaciones" ADD CONSTRAINT "liquidaciones_retencionPorcentaje_check" CHECK ("retencionPorcentaje" IS NULL OR ("retencionPorcentaje" >= 0 AND "retencionPorcentaje" <= 100));
 ALTER TABLE "liquidaciones" ADD CONSTRAINT "liquidaciones_montos_check"
 CHECK ("comisionServiciosCents" >= 0 AND "comisionServiciosCents" <= 2000000000
    AND "comisionProductosCents" >= 0 AND "comisionProductosCents" <= 2000000000
    AND "propinasCents" >= 0 AND "propinasCents" <= 2000000000
    AND "adelantosCents" >= 0 AND "adelantosCents" <= 2000000000
    AND "ajustesCents" >= -2000000000 AND "ajustesCents" <= 2000000000
-   AND "brutoCents" >= -2000000000 AND "brutoCents" <= 2000000000
-   AND "retencionCents" >= 0 AND "retencionCents" <= 2000000000
+   AND "brutoCents" >= 0 AND "brutoCents" <= 2000000000
    AND "totalCents" >= 0 AND "totalCents" <= 2000000000);
+-- El total sale del snapshot y no se puede escribir mal: bruto (comisiones +
+-- propinas) menos adelantos y vales, más ajustes con signo.
+ALTER TABLE "liquidaciones" ADD CONSTRAINT "liquidaciones_bruto_check"
+CHECK ("brutoCents"::BIGINT = "comisionServiciosCents"::BIGINT + "comisionProductosCents" + "propinasCents");
+ALTER TABLE "liquidaciones" ADD CONSTRAINT "liquidaciones_total_check"
+CHECK ("totalCents"::BIGINT = "brutoCents"::BIGINT - "adelantosCents" + "ajustesCents");
 -- El estado y su fecha van juntos: no hay "pagada" sin cuándo, ni al revés.
 ALTER TABLE "liquidaciones" ADD CONSTRAINT "liquidaciones_pagada_check" CHECK (("estado" = 'pagada') = ("pagadaAt" IS NOT NULL));
 ALTER TABLE "liquidaciones" ADD CONSTRAINT "liquidaciones_anulada_check" CHECK (("estado" = 'anulada') = ("anuladaAt" IS NOT NULL));

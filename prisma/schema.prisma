@@ -162,12 +162,6 @@ model BusinessMember {
   especialidad String?
   fotoUrl      String?
 
-  /// Si el local retiene la boleta de honorarios de este profesional:
-  /// "no-se-retiene" | "retiene-el-local" (CHECK de la migración). La tasa y
-  /// el cálculo viven sólo en `lib/retencion-de-honorarios.ts`, para poder
-  /// quitarlo sin tocar el resto. Lo configura la dueña.
-  retencionHonorarios String @default("no-se-retiene")
-
   workSchedules     WorkSchedule[]
   appointments      Appointment[]
   visitServices     VisitService[]
@@ -621,12 +615,8 @@ model Liquidacion {
   propinasCents          Int
   adelantosCents         Int // adelantos y vales: descuentan
   ajustesCents           Int // con signo
-  brutoCents             Int
-  /// Snapshot de `BusinessMember.retencionHonorarios` al cerrar.
-  retencionModo          String         @default("no-se-retiene")
-  retencionPorcentaje    Float?
-  retencionCents         Int            @default(0)
-  totalCents             Int // ≥ 0 (CHECK): no se cierra en negativo
+  brutoCents             Int // comisiones + propinas
+  totalCents             Int // bruto − adelantos ± ajustes; ≥ 0 (CHECK): no se cierra en negativo
   cerradaAt              DateTime       @default(now())
   cerradaPorId           String
   cerradaPorNombre       String
