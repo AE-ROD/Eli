@@ -33,6 +33,8 @@ export interface DatosDeReserva {
   cedula: string
   email: string
   telefono: string
+  /** "Quiero recibir recordatorios por WhatsApp". */
+  whatsapp: boolean
   comentarios: string
 }
 
@@ -90,6 +92,8 @@ export async function confirmarReserva(
       cedula: datos.cedula || undefined,
       email: datos.email || undefined,
       telefono: datos.telefono || undefined,
+      // Sólo con teléfono: sin número no hay a dónde escribir.
+      whatsappConsentimiento: datos.telefono ? datos.whatsapp : undefined,
       comentarios: datos.comentarios || undefined,
     })
   )

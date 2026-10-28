@@ -14,6 +14,7 @@ import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { contabilizarReferido } from "@/lib/referidos"
 import { registrarError } from "@/lib/registro-de-errores"
 import { generarToken } from "@/lib/tokens"
+import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import {
   MAX_RESERVAS_FUTURAS_POR_CONTACTO,
   MAX_RESERVAS_PUBLICAS_POR_DIA,
@@ -134,12 +135,21 @@ async function reservar(
   const email = normalizarEmail(datos.email)
   const conEseEmail = email
     ? await tx.customer.findMany({
-        where: { businessId: negocioId, email: { equals: email, mode: "insensitive" } },
-        select: { id: true, name: true, lastName: true, email: true },
+        // Un cliente eliminado (anonimizado) nunca se reutiliza.
+        where: { AND: [{ businessId: negocioId, email: { equals: email, mode: "insensitive" } }, clienteNoEliminado] },
+        select: { id: true, name: true, lastName: true, email: true, whatsappConsentAt: true },
         orderBy: { createdAt: "asc" },
       })
     : []
   let cliente: { id: string } | undefined = conEseEmail.find((guardado) => esElMismoCliente(guardado, datos))
+
+  // Consentimiento para recordatorios por WhatsApp (PRODUCTO.md §10): se
+  // registra cuándo y por dónde. Marcado, se guarda si no había uno; uno
+  // previo (dado en el local, por ejemplo) no se pisa. Sin marcar no borra
+  // nada.
+  const consentimiento = datos.whatsappConsentimiento
+    ? { whatsappConsentAt: ahora, whatsappConsentSource: ORIGEN_RESERVA_PUBLICA }
+    : {}
 
   if (!cliente) {
     cliente = await tx.customer.create({
@@ -148,10 +158,17 @@ async function reservar(
         lastName: datos.apellido,
         cedula: datos.cedula || null,
         email,
-        phone: datos.telefono || null,
+        // Ya en E.164 (`telefonoChileno` en `reservaSchema`).
+        phone: datos.telefono ?? null,
+        ...consentimiento,
         businessId: negocioId,
       },
       select: { id: true },
+    })
+  } else if (datos.whatsappConsentimiento) {
+    await tx.customer.updateMany({
+      where: { id: cliente.id, businessId: negocioId, whatsappConsentAt: null },
+      data: consentimiento,
     })
   }
 

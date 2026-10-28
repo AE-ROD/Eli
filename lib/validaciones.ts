@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { IDS_DE_RUBROS } from "@/lib/rubros"
+import { telefonoChileno } from "@/lib/campos-del-panel"
 
 /**
  * El rubro de un negocio nuevo: sólo ids del catálogo (`lib/rubros.ts`). Antes
@@ -92,7 +93,12 @@ export const reservaSchema = z.object({
   // Vacío es "sin email". No con `.or(z.literal(""))`: la unión fallida da
   // un "Invalid input" genérico en vez del mensaje del email.
   email: z.preprocess((valor) => (valor === "" ? undefined : valor), emailSchema.optional()),
-  telefono: opcionalHasta("El teléfono", 30),
+  // En E.164 (`+569XXXXXXXX`) o null si vino vacío; lo que no se puede leer
+  // como un número chileno es un 400 con el formato esperado.
+  telefono: z.preprocess((valor) => (valor === undefined || valor === null ? "" : valor), telefonoChileno()),
+  // "Quiero recibir recordatorios por WhatsApp". Opcional: sin marcar no
+  // borra un consentimiento que el cliente ya dio en el local.
+  whatsappConsentimiento: z.boolean({ invalid_type_error: "El consentimiento de WhatsApp no es válido" }).optional(),
   comentarios: opcionalHasta("Los comentarios", 1000),
   // Sin él, vacío o null: "cualquiera disponible" (lo asigna el servidor).
   profesionalId: z

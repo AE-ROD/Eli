@@ -71,6 +71,7 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
   const [cedula, setCedula] = useState("")
   const [email, setEmail] = useState("")
   const [telefono, setTelefono] = useState("")
+  const [whatsapp, setWhatsapp] = useState(false)
   const [comentarios, setComentarios] = useState("")
   const [enviando, setEnviando] = useState(false)
   /** El id de la cita creada: con él, la reserva está confirmada. */
@@ -137,6 +138,7 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
       cedula,
       email,
       telefono,
+      whatsapp,
       comentarios,
     })
     setEnviando(false)
@@ -368,6 +370,18 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
                   value={telefono}
                   onChange={(e) => setTelefono(e.target.value)}
                 />
+                {/* Sólo con teléfono: sin número no hay a dónde escribir. Nada viene marcado. */}
+                {telefono.trim() && (
+                  <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-navy sm:col-span-2">
+                    <input
+                      type="checkbox"
+                      checked={whatsapp}
+                      onChange={(e) => setWhatsapp(e.target.checked)}
+                      className="size-4 shrink-0 accent-navy anillo-foco"
+                    />
+                    Quiero recibir recordatorios por WhatsApp
+                  </label>
+                )}
                 <div className="sm:col-span-2">
                   <CampoFormulario
                     etiqueta="Correo electrónico (opcional)"
