@@ -9,6 +9,13 @@ import type { BeforeSendEvent } from "@vercel/analytics/next"
 const RUTAS_CON_TOKEN = /^\/(restablecer-contrasena|unirse|baja-de-correos)\/[^/]+/
 
 /**
+ * El enlace para cancelar o reagendar una cita sin cuenta
+ * (`/reservar/<slug>/cita/<token>`): el token es el cuarto segmento. El slug
+ * es público y se deja.
+ */
+const ENLACE_DE_GESTION_DE_CITA = /^\/reservar\/([^/]+)\/cita\/[^/]+/
+
+/**
  * La URL que se le manda a Vercel Analytics, con el token reemplazado por
  * `[token]`. El token está vivo mientras no se use: no debe quedar en un
  * servicio de terceros. `null` si la URL no se puede leer.
@@ -20,7 +27,9 @@ export function redactarUrlDeAnalitica(url: string): string | null {
   } catch {
     return null
   }
-  leida.pathname = leida.pathname.replace(RUTAS_CON_TOKEN, "/$1/[token]")
+  leida.pathname = leida.pathname
+    .replace(RUTAS_CON_TOKEN, "/$1/[token]")
+    .replace(ENLACE_DE_GESTION_DE_CITA, "/reservar/$1/cita/[token]")
   // `URL` escapa los corchetes del pathname; en el panel de Analytics se leen mejor sin escapar.
   return leida.toString().replace("/%5Btoken%5D", "/[token]")
 }

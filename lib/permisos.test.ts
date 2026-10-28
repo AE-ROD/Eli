@@ -18,6 +18,7 @@ import {
   puedeEditarHorarioDe,
   puedeGestionarBloqueoDe,
   puedeDefinirServiciosDe,
+  puedeEditarPlazoDeCambios,
   puedeVerTodoElTablero,
   puedeCobrar,
   puedeAsignarLineasAOtros,
@@ -549,6 +550,15 @@ describe("servicios que hace cada profesional", () => {
 
   it("falla cerrado sin actor", () => {
     expect(puedeDefinirServiciosDe(null, miembro)).toBe(false)
+  })
+})
+
+describe("plazo para cancelar o reagendar", () => {
+  it("dueño y encargado; el profesional no, y sin actor tampoco", () => {
+    expect(puedeEditarPlazoDeCambios(dueño)).toBe(true)
+    expect(puedeEditarPlazoDeCambios(encargado)).toBe(true)
+    expect(puedeEditarPlazoDeCambios(profesional)).toBe(false)
+    expect(puedeEditarPlazoDeCambios(null)).toBe(false)
   })
 })
 

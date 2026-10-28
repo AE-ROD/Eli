@@ -12,6 +12,7 @@ describe("redactarUrlDeAnalitica", () => {
     ["https://eli.app/unirse/tok_XYZ-9", "https://eli.app/unirse/[token]"],
     ["https://eli.app/unirse/tok/", "https://eli.app/unirse/[token]/"],
     ["https://eli.app/baja-de-correos/dXNy.firma", "https://eli.app/baja-de-correos/[token]"],
+    ["https://eli.app/reservar/salon-uno/cita/Ab_9-xyz", "https://eli.app/reservar/salon-uno/cita/[token]"],
     [
       "https://eli.app/restablecer-contrasena/abc?desde=mail#arriba",
       "https://eli.app/restablecer-contrasena/[token]?desde=mail#arriba",
@@ -26,6 +27,7 @@ describe("redactarUrlDeAnalitica", () => {
     "https://eli.app/restablecer-contrasena",
     "https://eli.app/recuperar-contrasena",
     "https://eli.app/reservar/mi-negocio",
+    "https://eli.app/reservar/mi-negocio?profesional=m-1",
     "https://eli.app/unirse-ahora/algo",
     "https://eli.app/dashboard/unirse/algo",
   ])("no toca otras rutas: %s", (url) => {

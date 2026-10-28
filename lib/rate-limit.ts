@@ -82,6 +82,11 @@ const limitadorImportacion = crearLimitador("importacion-clientes", 5, "1 h")
 // miles de filas de una vez; el límite de lectura del panel (200 por minuto)
 // dejaría descargar la base entera en bucle.
 const limitadorExportacion = crearLimitador("exportacion", 20, "1 h")
+// El enlace para cancelar o reagendar una cita sin cuenta: 60 por hora por
+// token (se cuenta por el hash, nunca por el token en claro). Además del de
+// IP de cada pedido: mirar la cita y recorrer días para reagendar son unas
+// pocas consultas, y un enlace filtrado no se puede usar en bucle.
+const limitadorGestionDeCita = crearLimitador("gestion-cita", 60, "1 h")
 
 export type TipoLimite =
   | "login"
@@ -95,6 +100,7 @@ export type TipoLimite =
   | "reenvioDeInvitacion"
   | "importacionDeClientes"
   | "exportacion"
+  | "gestionDeCita"
 
 const limitadores: Record<TipoLimite, Ratelimit | null> = {
   login: limitadorLogin,
@@ -108,6 +114,7 @@ const limitadores: Record<TipoLimite, Ratelimit | null> = {
   reenvioDeInvitacion: limitadorReenvioDeInvitacion,
   importacionDeClientes: limitadorImportacion,
   exportacion: limitadorExportacion,
+  gestionDeCita: limitadorGestionDeCita,
 }
 
 /**
@@ -135,6 +142,8 @@ const fallaAbiertoSiUpstashFalla: Record<TipoLimite, boolean> = {
   // Cerrado: es una escritura masiva, y una caída del proveedor sólo demora
   // una importación que se puede hacer después.
   importacionDeClientes: false,
+  // Cerrado: sin sesión, y cancela o mueve citas.
+  gestionDeCita: false,
   // Abierto, como las lecturas del panel: exige sesión de dueño o encargado y
   // cortarla dejaría al negocio sin sus datos por una caída ajena.
   exportacion: true,

@@ -63,6 +63,7 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
   const [profesionales, setProfesionales] = useState<ProfesionalPublico[]>([])
   const [profesionalId, setProfesionalId] = useState<string | null>(profesionalDeLaUrl)
   const [profesionalAsignado, setProfesionalAsignado] = useState<string | null>(null)
+  const [enlaceDeGestion, setEnlaceDeGestion] = useState<string | null>(null)
   const [fecha, setFecha] = useState("")
   const [hora, setHora] = useState("")
   const [nombre, setNombre] = useState("")
@@ -142,6 +143,7 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
 
     if (resultado.ok) {
       setProfesionalAsignado(resultado.datos.profesional?.nombre ?? null)
+      setEnlaceDeGestion(resultado.datos.enlaceDeGestion ?? null)
       setCitaId(resultado.datos.citaId)
     }
     else setError(resultado.error)
@@ -197,6 +199,15 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
               zona,
             }}
           />
+          {enlaceDeGestion && (
+            <p className="mt-6 text-sm text-texto-2">
+              ¿Necesitas cancelar o cambiar la hora?{" "}
+              <a href={enlaceDeGestion} className="font-medium text-navy underline underline-offset-4 anillo-foco">
+                Gestiona tu cita acá
+              </a>
+              . Guarda este enlace{email ? "; también te lo mandamos por correo" : ""}.
+            </p>
+          )}
         </Tarjeta>
         <InvitacionAEli />
       </motion.div>

@@ -13,6 +13,7 @@ import {
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { contabilizarReferido } from "@/lib/referidos"
 import { registrarError } from "@/lib/registro-de-errores"
+import { generarToken } from "@/lib/tokens"
 import {
   MAX_RESERVAS_FUTURAS_POR_CONTACTO,
   MAX_RESERVAS_PUBLICAS_POR_DIA,
@@ -52,6 +53,8 @@ interface Reserva {
   candidatos: Candidato[]
   /** El día de la reserva en el reloj del negocio: para repartir por citas del día. */
   dia: { desde: Date; hasta: Date }
+  /** sha256 del token del enlace para cancelar o reagendar: a la base va sólo esto. */
+  manageTokenHash: string
 }
 
 /** P2034: Postgres no pudo ordenar la transacción con otra concurrente; hay que reintentarla. */
@@ -75,7 +78,7 @@ async function reservarEnTransaccion(reserva: Reserva): Promise<Resultado> {
 /** Lo que se lee y escribe dentro de la transacción. Lo que rechaza no escribe nada. */
 async function reservar(
   tx: Prisma.TransactionClient,
-  { negocioId, servicio, datos, startTime, endTime, ahora, candidatos, dia }: Reserva
+  { negocioId, servicio, datos, startTime, endTime, ahora, candidatos, dia, manageTokenHash }: Reserva
 ): Promise<Resultado> {
   // A quién va, re-verificado dentro de la transacción con la misma regla con
   // la que `disponibilidad` ofreció la hora (`lib/agenda-publica.ts`): sus
@@ -165,6 +168,7 @@ async function reservar(
       price: servicio.price,
       customerId: cliente.id,
       memberId: asignacion.memberId,
+      manageTokenHash,
       businessId: negocioId,
     },
     select: { id: true, memberId: true },
@@ -190,7 +194,9 @@ export async function POST(
     select: {
       id: true,
       name: true,
+      slug: true,
       timezone: true,
+      cancelacionHorasAntes: true,
       invitadoPorId: true,
       referidoContabilizadoAt: true,
       user: { select: { email: true } },
@@ -264,6 +270,7 @@ export async function POST(
     // al mismo tiempo veían las dos el horario libre y creaban las dos su
     // cita. Postgres aborta con P2034 a la que no puede ordenar; se reintenta
     // y, si sigue chocando, el horario se da por tomado.
+    const enlace = generarToken()
     const resultado = await reservarEnTransaccion({
       negocioId: negocio.id,
       servicio,
@@ -273,6 +280,7 @@ export async function POST(
       ahora,
       candidatos,
       dia: rangoDelDiaEn(datos.fecha, zona),
+      manageTokenHash: enlace.tokenHash,
     })
     if (resultado.tipo === "rechazada") {
       return NextResponse.json({ error: resultado.error }, { status: resultado.status })
@@ -295,6 +303,12 @@ export async function POST(
       ? (reserva.profesionales.find((candidato) => candidato.id === cita.memberId) ?? null)
       : null
 
+    // El enlace para cancelar o reagendar sin cuenta (`lib/gestion-de-cita.ts`).
+    // Lleva el token en claro: va en el correo del cliente y en la respuesta a
+    // quien acaba de reservar (que sin correo no tendría otra forma de verlo).
+    const rutaDeGestion = `/reservar/${encodeURIComponent(negocio.slug)}/cita/${enlace.token}`
+    const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000"
+
     // Enviar emails en paralelo (sin bloquear la respuesta si fallan)
     const emailsPromises: Promise<unknown>[] = []
 
@@ -309,6 +323,8 @@ export async function POST(
           hora: datos.hora,
           duracion: servicio.duration,
           profesional: profesional?.nombre ?? null,
+          enlaceDeGestion: `${baseUrl}${rutaDeGestion}`,
+          plazoHoras: negocio.cancelacionHorasAntes,
         }).catch(() => null)
       )
     }
@@ -331,6 +347,7 @@ export async function POST(
     return NextResponse.json(
       {
         citaId: cita.id,
+        enlaceDeGestion: rutaDeGestion,
         profesional: profesional ? { id: profesional.id, nombre: profesional.nombre } : null,
         mensaje: "Reserva confirmada",
       },

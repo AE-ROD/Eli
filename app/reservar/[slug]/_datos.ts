@@ -61,6 +61,13 @@ export async function leerDisponibilidad(
   return resultado.ok ? { ok: true, datos: resultado.datos.slots } : resultado
 }
 
+export interface ReservaConfirmada {
+  citaId: string
+  profesional: { id: string; nombre: string } | null
+  /** La ruta para cancelar o reagendar sin cuenta (lleva el token). */
+  enlaceDeGestion: string
+}
+
 /**
  * Los campos opcionales vacíos no se mandan: el servidor los guarda como nulos.
  * Devuelve el id de la cita creada, que ya venía en la respuesta: es el UID
@@ -69,8 +76,8 @@ export async function leerDisponibilidad(
 export async function confirmarReserva(
   slug: string,
   datos: DatosDeReserva
-): Promise<Resultado<{ citaId: string; profesional: { id: string; nombre: string } | null }>> {
-  return pedir<{ citaId: string; profesional: { id: string; nombre: string } | null }>(
+): Promise<Resultado<ReservaConfirmada>> {
+  return pedir<ReservaConfirmada>(
     `/api/reservar/${encodeURIComponent(slug)}/confirmar`,
     "Error al confirmar la reserva",
     conJson("POST", {

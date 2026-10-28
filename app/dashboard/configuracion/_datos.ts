@@ -97,3 +97,12 @@ export async function activarODesactivarServicio(id: string, activo: boolean): P
 export async function borrarServicio(id: string): Promise<Resultado> {
   return pedir(`/api/configuracion/servicios/${id}`, "No se pudo borrar el servicio", { method: "DELETE" })
 }
+
+/** Hasta cuántas horas antes el cliente puede cancelar o reagendar con su enlace (0 a 72). */
+export async function guardarPlazoDeCambios(horas: number): Promise<Resultado<{ horas: number }>> {
+  return pedir<{ horas: number }>(
+    "/api/configuracion/plazo-de-cambios",
+    "No se pudo guardar el plazo",
+    conJson("PUT", { horas })
+  )
+}

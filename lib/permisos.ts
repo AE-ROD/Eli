@@ -190,6 +190,13 @@ export const puedeGestionarBloqueoDe = (actor: Actor | null, miembro: Miembro | 
 export const puedeDefinirServiciosDe = (actor: Actor | null, miembro: Miembro): boolean =>
   gestionaElNegocio(actor) && mismoNegocio(actor, miembro.businessId)
 
+/**
+ * Hasta cuántas horas antes el cliente puede cancelar o reagendar con su
+ * enlace (`Business.cancelacionHorasAntes`). Es una regla del negocio con sus
+ * clientes, como los servicios: dueño y encargado.
+ */
+export const puedeEditarPlazoDeCambios = gestionaElNegocio
+
 // ─── Tablero de atenciones (docs/PRODUCTO.md, sección 7) ─────────────────────
 
 /** Todas las atenciones con todas sus líneas, pagos y totales. El profesional ve lo suyo. */

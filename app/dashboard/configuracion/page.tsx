@@ -6,7 +6,15 @@ import { BarraSuperior } from "@/components/panel/barra-superior"
 import { SeccionHorario } from "./_componentes/seccion-horario"
 import { SeccionServicios } from "./_componentes/seccion-servicios"
 import { SelectorHorarioMiembro } from "./_componentes/selector-horario-miembro"
-import { actorDeSesion, esDueño, gestionaElNegocio, puedeEditarHorarioDe, puedeGestionarServicios } from "@/lib/permisos"
+import { SeccionPlazoDeCambios } from "./_componentes/seccion-plazo-de-cambios"
+import {
+  actorDeSesion,
+  esDueño,
+  gestionaElNegocio,
+  puedeEditarHorarioDe,
+  puedeEditarPlazoDeCambios,
+  puedeGestionarServicios,
+} from "@/lib/permisos"
 
 export default async function PaginaConfiguracion() {
   const session = await getServerSession(authOptions)
@@ -83,6 +91,20 @@ export default async function PaginaConfiguracion() {
           <div id="servicios" className="scroll-mt-24">
             <SeccionServicios serviciosIniciales={servicios} />
           </div>
+        )}
+
+        {/* Plazo del enlace para cancelar o reagendar: dueño y encargado */}
+        {puedeEditarPlazoDeCambios(actor) && (
+          <SeccionPlazoDeCambios
+            horasIniciales={
+              (
+                await prisma.business.findUnique({
+                  where: { id: actor.businessId },
+                  select: { cancelacionHorasAntes: true },
+                })
+              )?.cancelacionHorasAntes ?? 24
+            }
+          />
         )}
       </div>
     </div>
