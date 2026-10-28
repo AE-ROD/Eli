@@ -156,6 +156,29 @@ describe("GET /api/comisiones", () => {
     expect(cuerpo.productos.map((p: { id: string }) => p.id).sort()).toEqual(["p-cera", "p-shampoo", "p-viejo"])
     expect(cuerpo.productos.find((p: { id: string }) => p.id === "p-cera").porcentaje).toBeNull()
   })
+
+  it("lo cobrado antes de \"Liquidar desde\" (en la zona del negocio) no cuenta como pendiente", async () => {
+    const datos = base.volcado()
+    base.reiniciar({
+      ...datos,
+      business: base
+        .buscar("business")
+        .map((b) => (b.id === NEGOCIO ? { ...b, timezone: "America/Santiago", liquidacionDesde: new Date("2026-10-07T00:00:00.000Z") } : b)),
+      visit: [
+        ...base.buscar("visit"),
+        // 6 de octubre a las 23:59 en Santiago (UTC-3): antes del borde.
+        atencion("v-antes", { status: "finalizada", paidAt: new Date("2026-10-07T02:59:00.000Z") }),
+        // 7 de octubre a las 00:00: ya cuenta.
+        atencion("v-justo", { status: "finalizada", paidAt: new Date("2026-10-07T03:00:00.000Z") }),
+      ],
+      visitService: [...base.buscar("visitService"), linea("l-antes", "v-antes"), linea("l-justo", "v-justo")],
+    })
+
+    const cuerpo = await (await leer(sesiones.dueña)).json()
+
+    // Las dos de v-cobrada (6 de octubre) y l-antes quedan fuera; l-justo cuenta.
+    expect(cuerpo.miembros.find((m: { id: string }) => m.id === "m-carla").pendientes).toBe(1)
+  })
 })
 
 describe("PUT /api/comisiones/miembros/[id]", () => {

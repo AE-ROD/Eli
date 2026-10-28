@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { actorDeSesion, puedeEditarComisiones, whereDeProductos } from "@/lib/permisos"
+import { leerNegocioParaLiquidar } from "@/lib/liquidacion"
+import { inicioDelPeriodoEn } from "@/lib/periodos-de-liquidacion"
 
 /**
  * Cuántas líneas pendientes se cuentan como máximo. Es un aviso ("tiene N
@@ -17,7 +19,8 @@ const TOPE_DE_PENDIENTES = 5000
  *
  * - `miembros`: cada profesional del equipo con su % por defecto (null = sin
  *   configurar), sus excepciones por servicio y cuántas líneas suyas ya
- *   cobradas esperan un % (comisión pendiente).
+ *   cobradas esperan un % (comisión pendiente). Con "Liquidar desde" fijado,
+ *   lo cobrado antes no cuenta: nunca va a entrar a una liquidación.
  * - `servicios`: el catálogo, para elegir dónde poner una excepción.
  * - `productos`: el % de cada producto, sólo para leer (se edita en
  *   Configuración › Productos).
@@ -30,6 +33,12 @@ export async function GET() {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
   const businessId = actor.businessId
+
+  // Desde cuándo lo cobrado se liquida, con el mismo corte que la vista
+  // previa (`vistaPrevia` en lib/liquidacion.ts). Sin fecha fijada todavía,
+  // cuenta todo lo cobrado.
+  const { zona, liquidarDesde } = await leerNegocioParaLiquidar(prisma, businessId)
+  const cobradaDesde = liquidarDesde ? inicioDelPeriodoEn(liquidarDesde, zona) : null
 
   const [miembros, servicios, productos, pendientes] = await Promise.all([
     prisma.businessMember.findMany({
@@ -58,13 +67,13 @@ export async function GET() {
     }),
     // Líneas cobradas de alguien del equipo que todavía no tienen comisión:
     // las de la dueña nunca llevan, y las de quien dejó el equipo no tienen a
-    // quién liquidarse.
+    // quién liquidarse. Lo cobrado antes de "Liquidar desde", tampoco.
     prisma.visitService.findMany({
       where: {
         memberId: { not: null },
         byOwner: false,
         commissionAt: null,
-        visit: { is: { businessId, status: "finalizada" } },
+        visit: { is: { businessId, status: "finalizada", ...(cobradaDesde && { paidAt: { gte: cobradaDesde } }) } },
       },
       select: { memberId: true },
       take: TOPE_DE_PENDIENTES + 1,
