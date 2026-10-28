@@ -390,10 +390,18 @@ export async function vistaPrevia(
     ...movimientos.map((m) => fechaDeColumna(m.fecha)),
   ].sort()
 
+  const primerPendiente = fechas[0] ?? null
+  // Sin liquidaciones previas, la primera empieza en el período de lo más
+  // antiguo pendiente (o el de hoy), pero nunca antes de "Liquidar desde":
+  // así no hay que cerrar uno por uno los períodos vacíos entre el corte y
+  // lo primero que hay para liquidar. Termina con su período.
+  const primeraDesde = (): string => {
+    const delPendiente = proximoPeriodo({ ultimaHasta: null, primerPendiente, hoy, config }).desde
+    return delPendiente > liquidarDesde ? delPendiente : liquidarDesde
+  }
   const periodo = proximoPeriodo({
-    // La primera empieza justo en "Liquidar desde" y termina con su período.
-    ultimaHasta: ultima ? fechaDeColumna(ultima.hasta) : sumarDias(liquidarDesde, -1),
-    primerPendiente: fechas[0] ?? null,
+    ultimaHasta: ultima ? fechaDeColumna(ultima.hasta) : sumarDias(primeraDesde(), -1),
+    primerPendiente,
     hoy,
     config,
   })

@@ -619,6 +619,58 @@ describe("Liquidar desde", () => {
     expect(ids(siguiente.lineas)).toEqual(["l-borde-nov"])
   })
 
+  describe("la primera liquidación de alguien", () => {
+    const sinPendientes = { visitService: [], propinaDeAtencion: [], movimientoDeLiquidacion: [] }
+
+    it("con un corte viejo, empieza en el período de lo más antiguo pendiente, no en el corte", async () => {
+      // Agosto y septiembre no tienen nada: no hay que cerrarlos uno por uno.
+      conFecha("2026-08-10")
+      enSesion(sesiones.dueña)
+      const cuerpo = await (await vista()).json()
+      expect(cuerpo.periodo).toMatchObject({ desde: "2026-10-01", hasta: "2026-10-31" })
+      expect((await cerrar({ miembroId: "m-carla", desde: "2026-10-01" })).status).toBe(201)
+      expect((await (await vista()).json()).periodo.desde).toBe("2026-11-01")
+    })
+
+    it("si el corte cae dentro del período de lo pendiente, empieza en el corte", async () => {
+      conFecha("2026-10-05")
+      enSesion(sesiones.dueña)
+      expect((await (await vista()).json()).periodo).toMatchObject({ desde: "2026-10-05", hasta: "2026-10-31" })
+    })
+
+    it("sin nada pendiente, el período de hoy; o el corte, si es posterior", async () => {
+      conFecha("2026-08-10", sinPendientes)
+      enSesion(sesiones.dueña)
+      expect((await (await vista()).json()).periodo).toMatchObject({ desde: "2026-11-01", hasta: "2026-11-30" })
+
+      conFecha("2026-11-02", sinPendientes)
+      expect((await (await vista()).json()).periodo).toMatchObject({ desde: "2026-11-02", hasta: "2026-11-30" })
+    })
+
+    it("un corte futuro: empieza en el corte y todavía no se cierra", async () => {
+      conFecha("2026-11-10", sinPendientes)
+      enSesion(sesiones.dueña)
+      const cuerpo = await (await vista()).json()
+      expect(cuerpo.periodo).toMatchObject({ desde: "2026-11-10", hasta: "2026-11-30" })
+      expect(cuerpo.noSePuedeCerrar).toMatch(/todavía no empieza/)
+    })
+
+    it("con período semanal, la semana de lo más antiguo pendiente", async () => {
+      const datos = escenario()
+      base.reiniciar({
+        ...datos,
+        business: datos.business.map((b) =>
+          b.id === NEGOCIO
+            ? { ...b, liquidacionPeriodo: "semanal", liquidacionInicioSemana: 1, liquidacionDesde: dia("2026-09-02") }
+            : b
+        ),
+      })
+      enSesion(sesiones.dueña)
+      // Lo más antiguo de Carla es del martes 6 de octubre: la semana del lunes 5.
+      expect((await (await vista()).json()).periodo).toMatchObject({ desde: "2026-10-05", hasta: "2026-10-11" })
+    })
+  })
+
   it("solo la dueña la fija; encargado y profesional 401", async () => {
     conFecha(null)
     for (const sesion of [sesiones.encargado, sesiones.carla, sesiones.sinMiembro]) {

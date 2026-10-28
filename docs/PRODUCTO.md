@@ -130,7 +130,7 @@ Cada negocio liquida al equipo con un período que elige sólo la dueña: **sema
 
 **Liquidar desde.** Antes de la primera liquidación la dueña elige "Liquidar desde" (por defecto hoy, en la zona del negocio). Lo cobrado antes de esa fecha, sus propinas y los adelantos, vales y ajustes con fecha anterior nunca entran a una liquidación ni cuentan como pendientes de % (ni en Comisiones ni en Mi plata); un adelanto, vale o ajuste nuevo no se puede registrar con fecha anterior. Así lo que ya se pagó por fuera de Eli no se paga dos veces. Mientras no esté fijada no se puede ver la vista previa ni cerrar. Se puede cambiar sólo mientras no haya liquidaciones no anuladas; un cambio y un cierre no pasan a la vez.
 
-**Qué cubre.** La liquidación de cada profesional va desde el día siguiente a su última liquidación no anulada (la primera, desde "Liquidar desde") hasta el fin del período que contiene ese día, en la zona del negocio. Incluye sus servicios y productos cobrados y todavía sin liquidar (lo atrasado se arrastra), sus propinas, sus adelantos y vales (descuentan) y los ajustes (con signo y motivo).
+**Qué cubre.** La liquidación de cada profesional va desde el día siguiente a su última liquidación no anulada (la primera, desde el inicio del período de lo más antiguo que tiene pendiente, o del de hoy si no tiene nada, pero nunca antes de "Liquidar desde") hasta el fin del período que contiene ese día, en la zona del negocio. Incluye sus servicios y productos cobrados y todavía sin liquidar (lo atrasado se arrastra), sus propinas, sus adelantos y vales (descuentan) y los ajustes (con signo y motivo).
 
 **Total = comisiones + propinas − adelantos y vales + ajustes.**
 
