@@ -329,6 +329,11 @@ CREATE UNIQUE INDEX "liquidaciones_businessId_memberId_desde_viva_key" ON "liqui
 -- liquidación la libera) y congelar una pendiente en la misma UPDATE que la
 -- incluye en una liquidación. Lo que no se puede es pasarla de una
 -- liquidación a otra: primero se anula la que la tiene.
+-- Las reglas de línea liquidada se saltan solo si su atención ya no existe:
+-- al borrar el negocio entero, la cascada de `miembros_negocio` pone
+-- `memberId` en NULL en líneas cuya atención ya se borró en la misma
+-- cascada, y eso no debe hacer fallar el borrado. Es la misma excepción que
+-- el trigger BEFORE DELETE de abajo; con la atención viva, nunca aplica.
 CREATE FUNCTION atencion_servicios_comision_inmutable() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
@@ -347,13 +352,14 @@ BEGIN
     OR NEW."commissionPercent" IS DISTINCT FROM OLD."commissionPercent"
     OR NEW."commissionCents" IS DISTINCT FROM OLD."commissionCents"
     OR NEW."commissionAt" IS DISTINCT FROM OLD."commissionAt"
-  ) THEN
+  ) AND EXISTS (SELECT 1 FROM "atenciones" WHERE "id" = OLD."visitId") THEN
     RAISE EXCEPTION 'atencion_servicios %: la línea está en una liquidación; corrígela con un ajuste', OLD."id"
       USING ERRCODE = 'check_violation';
   END IF;
 
   IF OLD."liquidacionId" IS NOT NULL AND NEW."liquidacionId" IS NOT NULL
-     AND NEW."liquidacionId" <> OLD."liquidacionId" THEN
+     AND NEW."liquidacionId" <> OLD."liquidacionId"
+     AND EXISTS (SELECT 1 FROM "atenciones" WHERE "id" = OLD."visitId") THEN
     RAISE EXCEPTION 'atencion_servicios %: la línea ya está en otra liquidación', OLD."id"
       USING ERRCODE = 'check_violation';
   END IF;
@@ -370,9 +376,10 @@ FOR EACH ROW EXECUTE FUNCTION atencion_servicios_comision_inmutable();
 -- ─── Trigger: una línea liquidada no se borra ───────────────────────────────
 -- Lo que entró en una liquidación ya se le pagó (o se le va a pagar) a
 -- alguien: borrar la línea dejaría la liquidación sin respaldo. Se anula la
--- liquidación primero. La excepción es el borrado en cascada desde su
--- atención (borrar el negocio entero): cuando la cascada llega a la línea,
--- la atención ya no existe, y eso se deja pasar.
+-- liquidación primero. La excepción es el borrado en cascada (borrar el
+-- negocio entero): cuando la cascada llega a la línea, su atención ya no
+-- existe, y eso se deja pasar. El trigger de arriba usa la misma excepción
+-- para el `memberId` que la cascada de miembros pone en NULL.
 CREATE FUNCTION atencion_servicios_liquidada_no_se_borra() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
