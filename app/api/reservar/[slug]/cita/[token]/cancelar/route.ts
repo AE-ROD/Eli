@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { enviarAvisoDeCambioDelCliente } from "@/lib/email"
 import { ESTADOS_GESTIONABLES, dentroDelPlazo, mensajeFueraDePlazo } from "@/lib/gestion-de-cita"
+import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
 import { abrirEnlace, fechaYHora, noEncontrada, nombreDelCliente, type Params } from "../_comun"
 
 /**
@@ -31,6 +32,9 @@ export async function POST(request: NextRequest, contexto: Params) {
     data: { status: "cancelada", canceladaPor: "cliente", canceladaEn: ahora },
   })
   if (count === 0) return noEncontrada()
+
+  // La hora quedó libre: a la lista de espera de ese día, después de responder.
+  programarAvisoDeHoraLiberada({ businessId: cita.businessId, inicio: cita.startTime })
 
   const { fecha, hora } = fechaYHora(cita.startTime, zona)
   await enviarAvisoDeCambioDelCliente({
