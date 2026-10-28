@@ -6,6 +6,8 @@ import {
   diasSinVenir,
   estaVencido,
   fechaDeVisita,
+  frecuenciaDelFormulario,
+  frecuenciaDeServicio,
   frecuenciasPorCliente,
   medianaDeDias,
   seEstaYendo,
@@ -142,3 +144,25 @@ describe("frecuenciasPorCliente", () => {
     expect(resultado.get("c1")?.ciclo).toBeNull()
   })
 })
+
+describe("frecuencia del servicio", () => {
+  it("acepta de 7 a 365 enteros, o null", () => {
+    expect(frecuenciaDeServicio().safeParse(7).success).toBe(true)
+    expect(frecuenciaDeServicio().safeParse(365).success).toBe(true)
+    expect(frecuenciaDeServicio().safeParse(null).success).toBe(true)
+    expect(frecuenciaDeServicio().safeParse(6).success).toBe(false)
+    expect(frecuenciaDeServicio().safeParse(366).success).toBe(false)
+    expect(frecuenciaDeServicio().safeParse(21.5).success).toBe(false)
+  })
+
+  it("del formulario: vacío es null, un número en rango pasa, lo demás es un error legible", () => {
+    expect(frecuenciaDelFormulario("")).toEqual({ ok: true, valor: null })
+    expect(frecuenciaDelFormulario("  ")).toEqual({ ok: true, valor: null })
+    expect(frecuenciaDelFormulario(" 28 ")).toEqual({ ok: true, valor: 28 })
+    for (const malo of ["6", "366", "21,5", "21.5", "-30", "tres", "1e2"]) {
+      const resultado = frecuenciaDelFormulario(malo)
+      expect(resultado.ok).toBe(false)
+    }
+  })
+})
+

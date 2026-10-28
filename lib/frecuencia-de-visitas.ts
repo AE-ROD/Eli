@@ -1,3 +1,4 @@
+import { z } from "zod"
 import { diasEntre, fechaYMinutosEn } from "@/lib/zona-horaria"
 
 /**
@@ -38,6 +39,38 @@ export const DIAS_DE_HISTORIAL = 730
  * a quién ya se le habló. No lo decidió el dueño: es una propuesta.
  */
 export const DIAS_OCULTO_TRAS_CONTACTO = 14
+
+/** Lo que acepta `Service.frecuenciaDias` (el CHECK de la base): de una semana a un año. */
+export const FRECUENCIA_MINIMA_DIAS = 7
+export const FRECUENCIA_MAXIMA_DIAS = 365
+
+/**
+ * "Cada cuántos días vuelve un cliente por este servicio", del formulario de
+ * servicios. Opcional: null la borra. Los límites son los del CHECK, para que
+ * la base nunca rechace lo que el formulario dejó pasar.
+ */
+export const frecuenciaDeServicio = () =>
+  z
+    .number()
+    .int("La frecuencia tiene que ser un número entero de días")
+    .min(FRECUENCIA_MINIMA_DIAS, `La frecuencia tiene que ser de al menos ${FRECUENCIA_MINIMA_DIAS} días`)
+    .max(FRECUENCIA_MAXIMA_DIAS, `La frecuencia no puede pasar de ${FRECUENCIA_MAXIMA_DIAS} días`)
+    .nullable()
+
+/**
+ * Lo escrito en el campo "Cada cuántos días vuelve" del modal de servicio, en
+ * lo que se manda: vacío es null (sin frecuencia). Un texto que no es un
+ * entero de 7 a 365 es un error legible, no un servicio guardado con otra cosa.
+ */
+export function frecuenciaDelFormulario(texto: string): { ok: true; valor: number | null } | { ok: false; error: string } {
+  const limpio = texto.trim()
+  if (!limpio) return { ok: true, valor: null }
+  const resultado = frecuenciaDeServicio().safeParse(/^\d+$/.test(limpio) ? Number(limpio) : Number.NaN)
+  if (!resultado.success) {
+    return { ok: false, error: `La frecuencia tiene que ser un número de días entre ${FRECUENCIA_MINIMA_DIAS} y ${FRECUENCIA_MAXIMA_DIAS}.` }
+  }
+  return { ok: true, valor: resultado.data }
+}
 
 export type OrigenDelCiclo = "propio" | "servicio"
 
