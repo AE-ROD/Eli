@@ -203,6 +203,8 @@ export interface DatosDePaginaPublica {
   comuna: string
   whatsapp: string
   instagram: string
+  /** El enlace para dejar una reseña en Google (#77). Vacío lo borra. */
+  enlaceResenas: string
   color: string
   mediosDePago: string[]
   especialidades: EspecialidadDeMiembro[]
@@ -214,6 +216,7 @@ export interface PaginaPublicaGuardada {
   comuna: string | null
   whatsapp: string | null
   instagram: string | null
+  enlaceResenas: string | null
   color: string | null
   mediosDePago: string[]
 }

@@ -64,6 +64,7 @@ export default async function PaginaConfiguracion() {
         comuna: true,
         whatsapp: true,
         instagram: true,
+        enlaceResenas: true,
         color: true,
         mediosDePago: true,
         cancelacionHorasAntes: true,
@@ -137,6 +138,7 @@ export default async function PaginaConfiguracion() {
                 comuna: pagina.comuna ?? "",
                 whatsapp: mostrarTelefono(pagina.whatsapp),
                 instagram: usuarioDeInstagram ? `@${usuarioDeInstagram}` : "",
+                enlaceResenas: pagina.enlaceResenas ?? "",
                 color: colorDelNegocio(pagina.color).clave,
                 mediosDePago: pagina.mediosDePago,
                 // Sólo quienes aparecen en "Equipo" de la página pública.
