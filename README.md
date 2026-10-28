@@ -161,6 +161,7 @@ lib/                          Lógica compartida, cada archivo con su test al la
   nombres-de-roles.ts         Cómo se escribe cada rol (Encargado, Profesional). Sólo
                               la etiqueta: lo que puede hacer cada uno está en permisos.ts
   rubros.ts                   Los tres rubros que atiende Eli
+  servicios-de-ejemplo.ts     Los servicios con que nace un negocio, según su rubro
   modulos.ts                  Los cinco módulos del panel: nombre, frase, ruta y color
   correos-de-prueba.ts        Qué correo del ciclo de prueba le toca hoy a un negocio
   baja-de-correos.ts          El token firmado del enlace "Dejar de recibir estos correos"

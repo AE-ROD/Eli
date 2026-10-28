@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { pedidoFalso } from "@/pruebas/pedidos"
 import { Prisma } from "@prisma/client"
 import { RUBROS } from "@/lib/rubros"
+import { serviciosDeEjemplo } from "@/lib/servicios-de-ejemplo"
 
 const mockGetServerSession = vi.fn()
 
@@ -89,6 +90,19 @@ describe("POST /api/auth/completar-perfil", () => {
       expect.objectContaining({ data: expect.objectContaining({ type: tipoNegocio, userId: "usuario-1" }) })
     )
   })
+
+  it.each(RUBROS.map((rubro) => rubro.id))(
+    "el negocio de rubro %s nace con sus servicios de ejemplo, en la misma escritura",
+    async (tipoNegocio) => {
+      const { POST } = await import("./route")
+
+      const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio }))
+
+      expect(res.status).toBe(200)
+      expect(prismaMock.business.create).toHaveBeenCalledTimes(1)
+      expect(prismaMock.business.create.mock.calls[0][0].data.services).toEqual({ create: serviciosDeEjemplo(tipoNegocio) })
+    }
+  )
 
   it("programa la bienvenida del negocio nuevo para después de responder", async () => {
     const { POST } = await import("./route")

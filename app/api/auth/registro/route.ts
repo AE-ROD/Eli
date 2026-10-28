@@ -10,6 +10,7 @@ import { finDeLaPrueba, generarCodigoInvitacion } from "@/lib/prueba"
 import { enviarBienvenida } from "@/lib/enviar-correo-de-prueba"
 import { negocioQueInvita } from "@/lib/referidos"
 import { registrarError } from "@/lib/registro-de-errores"
+import { serviciosDeEjemplo } from "@/lib/servicios-de-ejemplo"
 
 async function slugUnico(base: string): Promise<string> {
   let slug = generarSlug(base)
@@ -68,6 +69,10 @@ export async function POST(request: NextRequest) {
               pruebaTerminaEl: finDeLaPrueba(ahora),
               codigoInvitacion: generarCodigoInvitacion(),
               invitadoPorId: invitadoPor,
+              // Servicios de ejemplo del rubro, para no arrancar con la
+              // página de reservas vacía. En la misma escritura anidada: sin
+              // negocio no quedan servicios sueltos, y al revés.
+              services: { create: serviciosDeEjemplo(datos.tipoNegocio) },
             },
           },
         },
