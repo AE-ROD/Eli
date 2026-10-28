@@ -1,3 +1,5 @@
+import type { MetadataRoute } from "next"
+
 /**
  * Eli instalable en el teléfono (issue #81): lo que comparten el manifest
  * (`app/manifest.ts`), los íconos (`app/iconos/[nombre]/route.tsx`), el
@@ -40,6 +42,37 @@ export type NombreDeIcono = keyof typeof ICONOS_DE_LA_APP
 
 export function esNombreDeIcono(nombre: string): nombre is NombreDeIcono {
   return Object.hasOwn(ICONOS_DE_LA_APP, nombre)
+}
+
+/** Dónde se sirve el manifest; sólo lo enlaza el layout del panel. */
+export const RUTA_DEL_MANIFEST = "/manifest.webmanifest"
+
+/**
+ * El manifest que sirve `app/manifest.webmanifest/route.ts`. La app instalada
+ * es el panel: arranca en `/dashboard`, a pantalla completa (sin la barra del
+ * navegador). El alcance queda en `/` para que el inicio de sesión, al que el
+ * panel manda si la sesión venció, siga dentro de la app.
+ */
+export function manifestDeLaApp(): MetadataRoute.Manifest {
+  return {
+    id: INICIO_DE_LA_APP,
+    name: "Eli",
+    short_name: "Eli",
+    description: "Tu agenda, tus clientes y tu equipo, en el teléfono.",
+    lang: "es",
+    start_url: INICIO_DE_LA_APP,
+    scope: "/",
+    display: "standalone",
+    background_color: COLORES_DE_LA_APP.fondo,
+    theme_color: COLORES_DE_LA_APP.fondo,
+    icons: [
+      { src: "/iconos/icono-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/iconos/icono-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      // El mismo dibujo: el nombre ocupa el centro, dentro de la zona segura
+      // del 80% que Android respeta al recortarlo en círculo o gota.
+      { src: "/iconos/icono-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+    ],
+  }
 }
 
 /** Dónde se recuerda que la persona cerró la pista. Es por dispositivo. */

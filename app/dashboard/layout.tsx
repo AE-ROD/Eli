@@ -8,7 +8,7 @@ import { ModalBienvenida } from "@/components/panel/modal-bienvenida"
 import { ProveedorDePrecios } from "@/components/panel/contexto-precios"
 import { ProveedorDeBarraLateral } from "@/components/panel/contexto-barra-lateral"
 import { AppInstalable } from "@/components/panel/app-instalable"
-import { COLORES_DE_LA_APP } from "@/lib/pwa"
+import { COLORES_DE_LA_APP, RUTA_DEL_MANIFEST } from "@/lib/pwa"
 import { actorDeSesion, puedeGestionarEquipo, puedeGestionarSuscripcion, veLaListaDeInicio } from "@/lib/permisos"
 
 /**
@@ -16,8 +16,11 @@ import { actorDeSesion, puedeGestionarEquipo, puedeGestionarSuscripcion, veLaLis
  * inicio" lee estas etiquetas: el nombre bajo el ícono, abrir sin la barra de
  * Safari y la barra de estado con el texto oscuro sobre el crema del panel.
  * `icons` reemplaza entero al del layout raíz, por eso repite el favicon.
+ * El manifest se enlaza sólo acá: la landing, la reserva y el login no
+ * ofrecen instalar Eli.
  */
 export const metadata: Metadata = {
+  manifest: RUTA_DEL_MANIFEST,
   appleWebApp: { capable: true, title: "Eli", statusBarStyle: "default" },
   icons: { icon: "/images/logo-eli.png", apple: "/iconos/apple-icon.png" },
   // Next 16 escribe `capable` como `mobile-web-app-capable`; las versiones de

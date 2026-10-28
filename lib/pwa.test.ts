@@ -1,12 +1,15 @@
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import { describe, it, expect } from "vitest"
-import manifest from "@/app/manifest"
+import { existsSync, statSync } from "node:fs"
+import { GET as manifestServido } from "@/app/manifest.webmanifest/route"
 import { GET as icono } from "@/app/iconos/[nombre]/route"
 import {
   CLAVE_PISTA_CERRADA,
   COLORES_DE_LA_APP,
   ICONOS_DE_LA_APP,
+  RUTA_DEL_MANIFEST,
+  manifestDeLaApp,
   esIos,
   guardarPistaCerrada,
   leerPistaCerrada,
@@ -34,7 +37,7 @@ const situacion = (cambios: Partial<SituacionDelDispositivo>): SituacionDelDispo
 })
 
 describe("manifest de Eli instalable", () => {
-  const datos = manifest()
+  const datos = manifestDeLaApp()
 
   it("arranca en el panel, a pantalla completa", () => {
     expect(datos.start_url).toBe("/dashboard")
@@ -63,6 +66,31 @@ describe("manifest de Eli instalable", () => {
     expect(token("navy")).toBe(COLORES_DE_LA_APP.marca)
     expect(datos.background_color).toBe(COLORES_DE_LA_APP.fondo)
     expect(datos.theme_color).toBe(COLORES_DE_LA_APP.fondo)
+  })
+})
+
+describe("dónde se enlaza el manifest", () => {
+  const raiz = path.join(__dirname, "..")
+  const leer = (archivo: string) => readFileSync(path.join(raiz, archivo), "utf8")
+
+  it("se sirve en /manifest.webmanifest como manifest", async () => {
+    const respuesta = manifestServido()
+    expect(respuesta.headers.get("content-type")).toContain("application/manifest+json")
+    expect(await respuesta.json()).toEqual(manifestDeLaApp())
+    expect(RUTA_DEL_MANIFEST).toBe("/manifest.webmanifest")
+  })
+
+  it("no usa la convención app/manifest.*, que Next enlazaría en todas las páginas (la landing incluida)", () => {
+    for (const extension of ["ts", "tsx", "js", "json", "webmanifest"]) {
+      // `app/manifest.webmanifest/` sí existe, pero es la carpeta del route handler.
+      const ruta = path.join(raiz, "app", `manifest.${extension}`)
+      expect(existsSync(ruta) && statSync(ruta).isFile()).toBe(false)
+    }
+  })
+
+  it("sólo el layout del panel lo enlaza; el raíz (landing, reserva, login) no", () => {
+    expect(leer("app/layout.tsx")).not.toMatch(/manifest/i)
+    expect(leer("app/dashboard/layout.tsx")).toMatch(/manifest:\s*RUTA_DEL_MANIFEST/)
   })
 })
 
