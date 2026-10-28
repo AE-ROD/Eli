@@ -1,7 +1,7 @@
 "use client"
 
 import { useId } from "react"
-import { Scissors } from "lucide-react"
+import { Scissors, Tag } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
@@ -34,6 +34,8 @@ interface PropsDeModalServicio {
    */
   aviso: string
   modoEdicion: boolean
+  /** Las categorías que ya usa el catálogo, para sugerirlas al escribir. */
+  categorias: string[]
   onCambiarCampo: (campo: keyof DatosDeServicio, valor: string | number) => void
   onSubmit: (e: React.SyntheticEvent<HTMLFormElement>) => void
   onCerrar: () => void
@@ -44,11 +46,13 @@ export function ModalServicio({
   guardando,
   aviso,
   modoEdicion,
+  categorias,
   onCambiarCampo,
   onSubmit,
   onCerrar,
 }: PropsDeModalServicio) {
   const idDeLaDescripcion = useId()
+  const idDeLasCategorias = useId()
   const nombreDeLaDuracion = useId()
 
   return (
@@ -67,6 +71,23 @@ export function ModalServicio({
           icono={<Scissors className="h-4 w-4" />}
           required
         />
+
+        {/* Agrupa los servicios en la página pública; los sin categoría van a "Otros". */}
+        <CampoFormulario
+          etiqueta="Categoría (opcional)"
+          placeholder="Ej.: Corte, Color, Uñas..."
+          value={form.category}
+          onChange={(e) => onCambiarCampo("category", e.target.value)}
+          icono={<Tag className="h-4 w-4" />}
+          list={idDeLasCategorias}
+          maxLength={40}
+          autoComplete="off"
+        />
+        <datalist id={idDeLasCategorias}>
+          {categorias.map((categoria) => (
+            <option key={categoria} value={categoria} />
+          ))}
+        </datalist>
 
         <div>
           <label htmlFor={idDeLaDescripcion} className={ETIQUETA}>

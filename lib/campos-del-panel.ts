@@ -153,3 +153,18 @@ export const diaDeLaSemana = () => {
   const mensaje = "El día de la semana tiene que ser un número entero del 0 al 6"
   return z.number().int(mensaje).min(0, mensaje).max(6, mensaje)
 }
+
+/**
+ * Un texto opcional con tope: vacío (o sólo espacios) se guarda como `null`,
+ * no como "". Para los datos de la página pública y la categoría de un
+ * servicio, que se muestran sólo si hay algo escrito.
+ */
+export const textoOpcional = (campo: string, n: number) =>
+  z
+    .string()
+    .trim()
+    .max(n, maximo(campo, n))
+    .transform((valor) => (valor === "" ? null : valor))
+
+/** La categoría de un servicio ("Corte", "Color"): agrupa en la página pública. Hasta 40. */
+export const categoriaDeServicio = () => textoOpcional("La categoría", 40)
