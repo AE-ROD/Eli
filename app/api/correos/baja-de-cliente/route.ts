@@ -4,6 +4,7 @@ import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { cuerpoConTope } from "@/lib/cuerpo-del-pedido"
 import { clienteDelTokenDeBaja } from "@/lib/baja-de-clientes"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
+import { datosDeBajaPromocional } from "@/lib/envios-a-clientes"
 import { registrarError } from "@/lib/registro-de-errores"
 
 /**
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
       // respuesta es la misma. Uno eliminado (anonimizado) no se toca.
       await prisma.customer.updateMany({
         where: { AND: [{ id: customerId }, clienteNoEliminado] },
-        data: { correoPromoConsentAt: null, correoPromoConsentSource: null, correoPromoBajaAt: new Date() },
+        data: datosDeBajaPromocional(),
       })
     } catch (error) {
       registrarError("dando de baja a un cliente de los correos", error)
