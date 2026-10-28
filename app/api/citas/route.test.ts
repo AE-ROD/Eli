@@ -30,6 +30,10 @@ const prismaMock = {
   business: {
     findUnique: vi.fn((_args: { where: { id: string } }) => Promise.resolve({ timezone: zonaDelNegocio })),
   },
+  // Las advertencias al crear (choque, bloqueo, horario): acá no hay nada con
+  // qué chocar. Los escenarios viven en `crear.test.ts`.
+  workSchedule: { findMany: vi.fn(() => Promise.resolve([])) },
+  timeBlock: { findMany: vi.fn(() => Promise.resolve([])) },
 }
 
 /** La zona guardada del negocio del actor en cada test (`Business.timezone`). */

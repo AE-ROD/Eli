@@ -62,6 +62,35 @@ export function tramoDeCita(cita: { startTime: string; endTime: string }): Tramo
 }
 
 /**
+ * La parte de un tramo [inicio, fin) que cae en el día `dia`, en minutos desde
+ * su medianoche y en la hora local del navegador; `null` si no lo toca. Para
+ * los bloqueos, que pueden durar varios días: cada día dibuja su pedazo.
+ * Tocar la medianoche no es caer en el día (un bloqueo que termina a las
+ * 00:00 no se dibuja en el día siguiente).
+ */
+export function tramoEnElDia(tramo: { startTime: string; endTime: string }, dia: Date): TramoEnMinutos | null {
+  const inicio = new Date(tramo.startTime)
+  const fin = new Date(tramo.endTime)
+  const comienzo = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate())
+  const siguiente = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate() + 1)
+  if (!(fin > comienzo) || !(inicio < siguiente) || !(fin > inicio)) return null
+  const inicioMin = inicio <= comienzo ? 0 : inicio.getHours() * 60 + inicio.getMinutes()
+  const finMin = fin >= siguiente ? MINUTOS_DEL_DIA : fin.getHours() * 60 + fin.getMinutes()
+  return { inicioMin, finMin }
+}
+
+/**
+ * Un tramo del día recortado a las horas que se dibujan, [desde, hasta) en
+ * horas; `null` si queda fuera. Un bloqueo de día entero no estira la grilla
+ * de 0 a 24: se recorta a lo que ya se muestra.
+ */
+export function recortarAHoras(tramo: TramoEnMinutos, desde: number, hasta: number): TramoEnMinutos | null {
+  const inicioMin = Math.max(tramo.inicioMin, desde * 60)
+  const finMin = Math.min(tramo.finMin, hasta * 60)
+  return finMin > inicioMin ? { inicioMin, finMin } : null
+}
+
+/**
  * Las citas agrupadas por la hora en que empiezan, una entrada por cada hora
  * de [desde, hasta), en orden. Todas las citas de una hora, no sólo la
  * primera. Una cita fuera del rango no se pierde en silencio: el rango se arma

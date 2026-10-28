@@ -164,6 +164,13 @@ lib/                          Lógica compartida, cada archivo con su test al la
   servicios-de-ejemplo.ts     Los servicios con que nace un negocio, según su rubro
   modulos.ts                  Los cinco módulos del panel: nombre, frase, ruta y color
   correos-de-prueba.ts        Qué correo del ciclo de prueba le toca hoy a un negocio
+  recordatorios.ts            Qué cita recibe el recordatorio "es mañana" (en la zona
+                              del negocio) y con qué fecha y hora
+  ocupacion.ts                Qué ocupa el horario de un profesional o del negocio: citas
+                              activas y bloqueos. La base se le pasa (sirve en un `tx`)
+  mover-cita.ts               Las advertencias de agendar en el panel: choque, bloqueo,
+                              fuera de horario (cálculo puro)
+  advertencias-de-agenda.ts   Lee y arma esas advertencias al crear o mover una cita
   baja-de-correos.ts          El token firmado del enlace "Dejar de recibir estos correos"
   cron.ts                     La autorización de los crons (CRON_SECRET)
   enviar-correo-de-prueba.ts  (servidor) Manda un correo del ciclo de prueba, con su
@@ -202,8 +209,9 @@ types/                        Tipos que extienden librerías (la sesión de Next
 public/images/                El logo
 docs/                         Producto (PRODUCTO.md) y sistema de diseño (diseno/)
 prisma.config.ts              Dónde están el esquema y las migraciones, y el comando del seed
-vercel.json                   Los crons diarios: recordatorios (9:00 UTC) y correos del
-                              ciclo de prueba (13:00 UTC, ~10:00 en Chile)
+vercel.json                   Los crons diarios (el plan Hobby no permite más de uno al
+                              día): recordatorios y correos del ciclo de prueba, ambos
+                              a las 13:00 UTC (~10:00 en Chile)
 .github/workflows/ci.yml      CI: lint, tipos, tests y build en cada PR a main
 ```
 

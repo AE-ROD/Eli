@@ -144,6 +144,7 @@ const tablas: Tablas = {
   visitService: [],
   visitPayment: [],
   workSchedule: [],
+  timeBlock: [],
   customer: clientesFake,
   appointment: citasFake,
 }
@@ -613,6 +614,43 @@ describe("GET /api/clientes — visitas, última visita y próxima cita", () => 
       expect(cliente).not.toHaveProperty("visits")
       expect(cliente).not.toHaveProperty("_count")
     }
+  })
+})
+
+describe("GET /api/clientes — inasistencias (\"No vino\")", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  conFilasExtra({
+    citas: [
+      cita("no-vino-1", "cliente-2", "member-worker-1", "02", { status: "no-asistio" }),
+      cita("no-vino-2", "cliente-2", "member-worker-2", "04", { status: "no-asistio" }),
+      // Cancelada no es inasistencia: avisó.
+      cita("cancelada", "cliente-2", "member-worker-1", "06", { status: "cancelada" }),
+      // Inconsistente a propósito: de otro negocio, pero apunta a `cliente-2`.
+      cita("no-vino-cruzada", "cliente-2", "member-ajeno", "08", { businessId: "negocio-2", status: "no-asistio" }),
+    ],
+  })
+
+  const inasistenciasDe = (clientes: { id: string; inasistencias: number }[], id: string) =>
+    clientes.find((cliente) => cliente.id === id)?.inasistencias
+
+  it("cuenta las citas marcadas 'no vino' del negocio: ni las canceladas ni las de otro negocio", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const data = await (await GET(fakeGet())).json()
+
+    expect(inasistenciasDe(data.clientes, "cliente-2")).toBe(2)
+    expect(inasistenciasDe(data.clientes, "cliente-1")).toBe(0)
+  })
+
+  it("el profesional cuenta sólo las suyas, como en el historial", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+    const data = await (await GET(fakeGet())).json()
+
+    expect(inasistenciasDe(data.clientes, "cliente-2")).toBe(1)
   })
 })
 

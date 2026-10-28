@@ -2,17 +2,22 @@
 
 import { useState, useEffect, useCallback, useId } from "react"
 import { useSession } from "next-auth/react"
-import { actorDeSesion, puedeAsignarCitasAOtros } from "@/lib/permisos"
+import { actorDeSesion, gestionaElNegocio, puedeAsignarCitasAOtros, puedeGestionarBloqueoDe } from "@/lib/permisos"
+import type { Advertencia } from "@/lib/mover-cita"
+import { Ban } from "lucide-react"
+import { Boton } from "@/components/comunes/boton"
 import { AnimatePresence } from "framer-motion"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { desplazarFecha, diasDeLaSemanaDe, type UnidadDeTiempo } from "@/lib/fechas"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import {
   leerCitas,
+  leerBloqueos,
   crearCita,
   cambiarEstadoDeCita,
   citaEnBlanco,
   leerHorarioDeAtencion,
+  type Bloqueo,
   type Cita,
   type DatosDeNuevaCita,
 } from "./_datos"
@@ -24,6 +29,8 @@ import { VistaMes } from "./_componentes/vista-mes"
 import { PanelDeCita } from "./_componentes/panel-de-cita"
 import { ModalNuevaCita } from "./_componentes/modal-nueva-cita"
 import { ModalMoverCita } from "./_componentes/modal-mover-cita"
+import { ModalBloquearHorario } from "./_componentes/modal-bloquear-horario"
+import { ModalBloqueo } from "./_componentes/modal-bloqueo"
 
 function resumen(cargando: boolean, cantidad: number): string {
   if (cargando) return "Cargando..."
@@ -33,7 +40,13 @@ function resumen(cargando: boolean, cantidad: number): string {
 
 export default function PaginaAgenda() {
   const { data: sesion } = useSession()
-  const puedeAsignarProfesional = puedeAsignarCitasAOtros(actorDeSesion(sesion))
+  const actor = actorDeSesion(sesion)
+  const puedeAsignarProfesional = puedeAsignarCitasAOtros(actor)
+  // Dueño y encargado bloquean a cualquiera o a todo el negocio; el
+  // profesional, su agenda. Sin `memberId`, nada (no ve el botón).
+  const bloqueaATodos = gestionaElNegocio(actor)
+  const miembroPropio = actor?.memberId ? { id: actor.memberId, businessId: actor.businessId } : null
+  const puedeBloquear = bloqueaATodos || puedeGestionarBloqueoDe(actor, miembroPropio)
 
   const [fecha, setFecha] = useState(new Date())
   const [modo, setModo] = useState<UnidadDeTiempo>("semana")
@@ -48,11 +61,21 @@ export default function PaginaAgenda() {
   const [nuevaCita, setNuevaCita] = useState<DatosDeNuevaCita>(() => citaEnBlanco(new Date()))
   const [citaAMover, setCitaAMover] = useState<Cita | null>(null)
   const [horario, setHorario] = useState<FranjaDelDia[]>([])
+  const [bloqueos, setBloqueos] = useState<Bloqueo[]>([])
+  const [advertenciasDeNuevaCita, setAdvertenciasDeNuevaCita] = useState<Advertencia[]>([])
+  const [bloquearAbierto, setBloquearAbierto] = useState(false)
+  const [bloqueoAbierto, setBloqueoAbierto] = useState<Bloqueo | null>(null)
   const idDelPeriodo = useId()
 
   const recargar = useCallback(async (fecha: Date, modo: UnidadDeTiempo) => {
     setCargando(true)
-    const resultado = await leerCitas(fecha, modo)
+    const [resultado, deBloqueos] = await Promise.all([leerCitas(fecha, modo), leerBloqueos(fecha, modo)])
+    // Si los bloqueos no cargan, la agenda se muestra igual, sin las franjas, y se avisa.
+    if (deBloqueos.ok) setBloqueos(deBloqueos.datos)
+    else {
+      setBloqueos([])
+      setAviso(deBloqueos.error)
+    }
     if (resultado.ok) {
       setCitas(resultado.datos)
       // El detalle abierto muestra la cita como quedó (por ejemplo, después de
@@ -87,22 +110,26 @@ export default function PaginaAgenda() {
   // antes todavía elegido por debajo (A1).
   const abrirModal = () => {
     setAvisoDelModal("")
+    setAdvertenciasDeNuevaCita([])
     setNuevaCita(citaEnBlanco(fecha))
     setModalAbierto(true)
   }
 
-  const guardarNuevaCita = async (evento: React.SyntheticEvent<HTMLFormElement>) => {
-    evento.preventDefault()
+  // `confirmar`: el segundo envío, después de ver las advertencias (choque,
+  // bloqueo, fuera de horario). Guarda igual, como al mover.
+  const guardarNuevaCita = async (confirmar: boolean) => {
     if (!nuevaCita.clienteId) return
 
     setAvisoDelModal("")
     setGuardando(true)
-    const resultado = await crearCita(nuevaCita)
+    const resultado = await crearCita(nuevaCita, { confirmar })
     setGuardando(false)
 
     // El aviso va dentro del modal, que sigue abierto con lo que se cargó: en
     // la página quedaría tapado por el velo del modal.
-    if (!resultado.ok) return setAvisoDelModal(resultado.error)
+    if (resultado.tipo === "advertencias") return setAdvertenciasDeNuevaCita(resultado.advertencias)
+    setAdvertenciasDeNuevaCita([])
+    if (resultado.tipo === "error") return setAvisoDelModal(resultado.error)
 
     setModalAbierto(false)
     recargar(fecha, modo)
@@ -118,6 +145,19 @@ export default function PaginaAgenda() {
 
       <div className="space-y-4 px-4 pt-6 pb-10 sm:space-y-6 sm:px-6">
         {aviso && <Aviso>{aviso}</Aviso>}
+
+        {puedeBloquear && (
+          <div className="flex justify-end">
+            <Boton
+              variante="secundario"
+              tamano="sm"
+              icono={<Ban aria-hidden="true" strokeWidth={1.75} />}
+              onClick={() => setBloquearAbierto(true)}
+            >
+              Bloquear horario
+            </Boton>
+          </div>
+        )}
 
         {/* El calendario en una tarjeta blanca y, desde lg, el detalle de la cita elegida al lado. */}
         <div className="flex items-start gap-6">
@@ -137,10 +177,24 @@ export default function PaginaAgenda() {
             />
 
             {modo === "semana" && (
-              <VistaSemana dias={diasDeLaSemanaDe(fecha)} citas={citas} horario={horario} onSeleccionar={setCitaAbierta} />
+              <VistaSemana
+                dias={diasDeLaSemanaDe(fecha)}
+                citas={citas}
+                horario={horario}
+                bloqueos={bloqueos}
+                onSeleccionar={setCitaAbierta}
+                onSeleccionarBloqueo={setBloqueoAbierto}
+              />
             )}
             {modo === "dia" && (
-              <VistaDia fecha={fecha} citas={citas} horario={horario} onSeleccionar={setCitaAbierta} />
+              <VistaDia
+                fecha={fecha}
+                citas={citas}
+                horario={horario}
+                bloqueos={bloqueos}
+                onSeleccionar={setCitaAbierta}
+                onSeleccionarBloqueo={setBloqueoAbierto}
+              />
             )}
             {modo === "mes" && (
               <VistaMes
@@ -173,10 +227,51 @@ export default function PaginaAgenda() {
             form={nuevaCita}
             guardando={guardando}
             aviso={avisoDelModal}
+            advertencias={advertenciasDeNuevaCita}
+            onGuardarIgual={() => guardarNuevaCita(true)}
             puedeAsignarProfesional={puedeAsignarProfesional}
-            onCambiarCampo={(campo, valor) => setNuevaCita((previa) => ({ ...previa, [campo]: valor }))}
-            onSubmit={guardarNuevaCita}
+            onCambiarCampo={(campo, valor) => {
+              setNuevaCita((previa) => ({ ...previa, [campo]: valor }))
+              // Las advertencias eran de lo de antes.
+              setAdvertenciasDeNuevaCita([])
+            }}
+            onSubmit={(evento) => {
+              evento.preventDefault()
+              guardarNuevaCita(false)
+            }}
             onCerrar={() => setModalAbierto(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {bloquearAbierto && (
+          <ModalBloquearHorario
+            dia={fecha}
+            eligeAQuien={bloqueaATodos}
+            memberIdPropio={actor?.memberId ?? null}
+            onCreado={() => {
+              setBloquearAbierto(false)
+              recargar(fecha, modo)
+            }}
+            onCerrar={() => setBloquearAbierto(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {bloqueoAbierto && (
+          <ModalBloqueo
+            bloqueo={bloqueoAbierto}
+            puedeQuitar={puedeGestionarBloqueoDe(
+              actor,
+              bloqueoAbierto.memberId && actor ? { id: bloqueoAbierto.memberId, businessId: actor.businessId } : null
+            )}
+            onQuitado={() => {
+              setBloqueoAbierto(null)
+              recargar(fecha, modo)
+            }}
+            onCerrar={() => setBloqueoAbierto(null)}
           />
         )}
       </AnimatePresence>

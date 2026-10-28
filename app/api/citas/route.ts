@@ -8,6 +8,8 @@ import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, memberIdParaCita, whereDeAgenda, whereDeClientes } from "@/lib/permisos"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { esFechaCalendario, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
+import { advertenciasDeAgenda } from "@/lib/advertencias-de-agenda"
+import { ocupaElHorario } from "@/lib/ocupacion"
 
 const citaSchema = z
   .object({
@@ -19,6 +21,8 @@ const citaSchema = z
     price: precioDeCita().optional(),
     customerId: z.string(),
     memberId: z.string().nullable().optional(),
+    /** Segundo envío: quien agenda ya vio las advertencias (choque, bloqueo, horario) y guarda igual. */
+    confirmarAdvertencias: z.boolean().optional(),
   })
   .refine((cita) => terminaDespuesDeEmpezar(new Date(cita.startTime), new Date(cita.endTime)), {
     message: MENSAJE_DE_HORARIO_INVERTIDO,
@@ -119,12 +123,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const tramo = { startTime: new Date(datos.startTime), endTime: new Date(datos.endTime) }
+    const status = datos.status ?? "pendiente"
+
+    // Como al mover: un choque, un bloqueo o quedar fuera del horario no
+    // impiden agendar desde el panel, pero se avisan primero. Una cita que
+    // nace cancelada o "no vino" no ocupa el horario: no hay qué advertir.
+    if (!datos.confirmarAdvertencias && ocupaElHorario(status)) {
+      const advertencias = await advertenciasDeAgenda(prisma, {
+        businessId: actor.businessId,
+        citaId: null,
+        tramo,
+        memberId,
+      })
+      if (advertencias.length > 0) {
+        return NextResponse.json(
+          { error: advertencias.map((advertencia) => advertencia.mensaje).join(" "), advertencias },
+          { status: 409 }
+        )
+      }
+    }
+
     const cita = await prisma.appointment.create({
       data: {
         title: datos.title,
-        startTime: new Date(datos.startTime),
-        endTime: new Date(datos.endTime),
-        status: datos.status ?? "pendiente",
+        startTime: tramo.startTime,
+        endTime: tramo.endTime,
+        status,
         notes: datos.notes || null,
         price: datos.price ?? null,
         customerId: datos.customerId,

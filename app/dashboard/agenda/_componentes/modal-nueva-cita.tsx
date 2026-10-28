@@ -17,6 +17,7 @@ import {
   type Profesional,
 } from "../_datos"
 import { Aviso } from "@/components/panel/aviso"
+import type { Advertencia } from "@/lib/mover-cita"
 
 /** Con menos letras no se busca. */
 const LETRAS_PARA_BUSCAR = 2
@@ -38,6 +39,13 @@ interface PropsDeModalNuevaCita {
    * no en la página: mientras el modal está abierto, la página queda tapada.
    */
   aviso: string
+  /**
+   * Lo que el servidor advirtió del primer envío (choque, bloqueo, fuera de
+   * horario). Con advertencias, el botón pasa a "Guardar igual": como al
+   * mover una cita. Cambiar un campo las descarta (lo hace la página).
+   */
+  advertencias: Advertencia[]
+  onGuardarIgual: () => void
   /** Sólo owner y admin asignan profesional; el worker no ve el selector. */
   puedeAsignarProfesional: boolean
   onCambiarCampo: (campo: keyof DatosDeNuevaCita, valor: string) => void
@@ -49,11 +57,14 @@ export function ModalNuevaCita({
   form,
   guardando,
   aviso,
+  advertencias,
+  onGuardarIgual,
   puedeAsignarProfesional,
   onCambiarCampo,
   onSubmit,
   onCerrar,
 }: PropsDeModalNuevaCita) {
+  const hayAdvertencias = advertencias.length > 0
   // El buscador arranca diciendo el cliente del borrador, si hay uno elegido:
   // lo que se ve y lo que se guarda son lo mismo desde que se abre (A1).
   const [busquedaCliente, setBusquedaCliente] = useState(form.clienteNombre)
@@ -297,13 +308,29 @@ export function ModalNuevaCita({
 
         {aviso && <Aviso>{aviso}</Aviso>}
 
+        {hayAdvertencias && (
+          <Aviso tono="atencion" rol="alert" titulo="¿Guardar igual?">
+            {advertencias.map((advertencia) => (
+              <span key={advertencia.tipo} className="block">
+                {advertencia.mensaje}
+              </span>
+            ))}
+          </Aviso>
+        )}
+
         <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">
           <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={onCerrar}>
             Cancelar
           </Boton>
-          <Boton type="submit" className="w-full" cargando={guardando}>
-            Guardar cita
-          </Boton>
+          {hayAdvertencias ? (
+            <Boton type="button" className="w-full" cargando={guardando} onClick={onGuardarIgual}>
+              Guardar igual
+            </Boton>
+          ) : (
+            <Boton type="submit" className="w-full" cargando={guardando}>
+              Guardar cita
+            </Boton>
+          )}
         </div>
       </form>
     </MarcoDeModal>

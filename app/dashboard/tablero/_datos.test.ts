@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
 import { zonaDelDispositivo } from "@/lib/fechas"
-import { marcarLlegada } from "./_datos"
+import { marcarLlegada, marcarNoVino } from "./_datos"
 
 // La zona del dispositivo, fija: la del proceso de los tests depende de la máquina.
 vi.mock("@/lib/fechas", async (importarOriginal) => {
@@ -41,5 +41,24 @@ describe("marcarLlegada", () => {
     simularRespuesta(json({ error: mensaje }, 409))
 
     expect(await marcarLlegada("cita-1")).toEqual({ ok: false, error: mensaje, motivo: "desactualizada" })
+  })
+})
+
+describe("marcarNoVino", () => {
+  it("pide a la cita el estado 'no-asistio'", async () => {
+    const fetchFalso = simularRespuesta(json({ id: "cita-1", status: "no-asistio" }))
+
+    const resultado = await marcarNoVino("cita-1")
+
+    expect(resultado.ok).toBe(true)
+    expect(fetchFalso).toHaveBeenCalledWith("/api/citas/cita-1", expect.objectContaining({ method: "PUT" }))
+    expect(cuerpoEnviado(fetchFalso)).toEqual({ status: "no-asistio" })
+  })
+
+  it("si ya llegó o cambió, vuelve como un tablero viejo, con el mensaje del servidor", async () => {
+    const mensaje = "El cliente ya llegó: la cita tiene una atención en el Tablero."
+    simularRespuesta(json({ error: mensaje }, 409))
+
+    expect(await marcarNoVino("cita-1")).toEqual({ ok: false, error: mensaje, motivo: "desactualizada" })
   })
 })

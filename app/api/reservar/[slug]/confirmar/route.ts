@@ -9,6 +9,7 @@ import { cabeEnAtencion, franjasDeAtencion } from "@/lib/horario-de-atencion"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { contabilizarReferido } from "@/lib/referidos"
 import { registrarError } from "@/lib/registro-de-errores"
+import { ESTADOS_QUE_LIBERAN } from "@/lib/ocupacion"
 import {
   MAX_RESERVAS_FUTURAS_POR_CONTACTO,
   MAX_RESERVAS_PUBLICAS_POR_DIA,
@@ -72,7 +73,8 @@ async function reservar(
   const conflicto = await tx.appointment.findFirst({
     where: {
       businessId: negocioId,
-      status: { notIn: ["cancelada"] },
+      // Canceladas y "no vino" liberan el horario (`lib/ocupacion.ts`).
+      status: { notIn: [...ESTADOS_QUE_LIBERAN] },
       OR: [
         { startTime: { gte: startTime, lt: endTime } },
         { endTime: { gt: startTime, lte: endTime } },

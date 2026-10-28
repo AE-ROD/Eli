@@ -164,6 +164,21 @@ export const puedeEditarHorarioDe = (actor: Actor | null, miembro: Miembro | nul
   return !!actor.memberId && actor.memberId === miembro?.id
 }
 
+/**
+ * Bloqueos de horario (`TimeBlock`: almuerzo, trámite, feriado). Son
+ * operación, como los horarios: dueño y encargado bloquean a cualquiera y a
+ * todo el negocio (`miembro` en null); el profesional, sólo su propia agenda.
+ * Un profesional sin `memberId` no bloquea nada (falla cerrado). El miembro
+ * tiene que ser del negocio del actor: el endpoint lo lee de la base y lo
+ * ajeno responde 404 antes de preguntar acá.
+ */
+export const puedeGestionarBloqueoDe = (actor: Actor | null, miembro: Miembro | null): boolean => {
+  if (!actor) return false
+  if (miembro && !mismoNegocio(actor, miembro.businessId)) return false
+  if (gestionaElNegocio(actor)) return true
+  return !!miembro && !!actor.memberId && actor.memberId === miembro.id
+}
+
 // ─── Tablero de atenciones (docs/PRODUCTO.md, sección 7) ─────────────────────
 
 /** Todas las atenciones con todas sus líneas, pagos y totales. El profesional ve lo suyo. */
@@ -372,6 +387,27 @@ function filtroDeLineas(actor: Actor | null): Prisma.VisitServiceWhereInput {
 function filtroDePagos(actor: Actor | null): Prisma.VisitPaymentWhereInput {
   if (!actor || !puedeVerIngresosDelNegocio(actor)) return NADA
   return { visit: { is: { businessId: actor.businessId } } }
+}
+
+/**
+ * Los bloqueos que ve el actor: dueño y encargado, todos los del negocio; el
+ * profesional, los suyos y los de todo el negocio (`memberId` null), que
+ * también le cierran la agenda. Sin `memberId`, sólo los de todo el negocio.
+ * No se exporta, igual que `filtroDeAgenda`.
+ */
+function filtroDeBloqueos(actor: Actor | null): Prisma.TimeBlockWhereInput {
+  if (!actor) return NADA
+  if (puedeVerTodaLaAgenda(actor)) return { businessId: actor.businessId }
+  if (!actor.memberId) return { businessId: actor.businessId, memberId: null }
+  return { businessId: actor.businessId, OR: [{ memberId: actor.memberId }, { memberId: null }] }
+}
+
+/** Igual que `whereDeAgenda`, para consultas de bloqueos de horario. */
+export function whereDeBloqueos(
+  actor: Actor | null,
+  extra: Prisma.TimeBlockWhereInput = {}
+): Prisma.TimeBlockWhereInput {
+  return { AND: [filtroDeBloqueos(actor), extra] }
 }
 
 /** Igual que `whereDeAgenda`, para consultas de atenciones. */

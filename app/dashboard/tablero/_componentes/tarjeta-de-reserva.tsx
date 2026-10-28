@@ -30,17 +30,19 @@ interface PropsDeTarjetaDeReserva {
   enCurso: boolean
   arrastre: PropsDeArrastre
   onLlego: () => void
+  /** Marcar que no vino. Se ofrece sólo cuando está atrasada: antes de su hora, si avisó, se cancela. */
+  onNoVino: () => void
 }
 
 /**
  * Una cita de hoy que todavía no llegó: hora, cliente, servicio y profesional,
- * y el botón "Llegó".
+ * y el botón "Llegó". Atrasada, también "No vino".
  *
  * La tarjeta se puede enfocar desde el código (`data-reserva`): si "Llegó"
  * falla porque el tablero quedó viejo y la reserva sigue ahí, el foco vuelve a
  * ella después de recargar.
  */
-export function TarjetaDeReserva({ reserva, quien, atrasada, enCurso, arrastre, onLlego }: PropsDeTarjetaDeReserva) {
+export function TarjetaDeReserva({ reserva, quien, atrasada, enCurso, arrastre, onLlego, onNoVino }: PropsDeTarjetaDeReserva) {
   const idDelNombre = useId()
 
   return (
@@ -64,16 +66,30 @@ export function TarjetaDeReserva({ reserva, quien, atrasada, enCurso, arrastre, 
         {reserva.titulo} <span className="text-texto-2">· {reserva.profesional?.nombre ?? "Sin profesional asignado"}</span>
       </p>
 
-      <Boton
-        variante="secundario"
-        tamano="sm"
-        onClick={onLlego}
-        cargando={enCurso}
-        aria-label={enCurso ? `Marcando la llegada: ${quien}` : `Llegó: ${quien}`}
-        className="w-full"
-      >
-        Llegó
-      </Boton>
+      <div className="flex gap-2">
+        <Boton
+          variante="secundario"
+          tamano="sm"
+          onClick={onLlego}
+          cargando={enCurso}
+          aria-label={enCurso ? `Guardando: ${quien}` : `Llegó: ${quien}`}
+          className="w-full"
+        >
+          Llegó
+        </Boton>
+        {atrasada && (
+          <Boton
+            variante="fantasma"
+            tamano="sm"
+            onClick={onNoVino}
+            disabled={enCurso}
+            aria-label={`No vino: ${quien}`}
+            className="w-full"
+          >
+            No vino
+          </Boton>
+        )}
+      </div>
     </article>
   )
 }

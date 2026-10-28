@@ -2,12 +2,13 @@
 
 import { useEffect, useId, useRef } from "react"
 import { motion } from "framer-motion"
-import { CalendarClock, CalendarDays, Clock, Mail, Pencil, Phone, Trash2, X } from "lucide-react"
+import { CalendarClock, CalendarDays, CalendarX, Clock, Mail, Pencil, Phone, Trash2, X } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { CAMPO } from "@/components/panel/estilos"
 import { TarjetaCita, type CitaEnTarjeta } from "@/components/panel/tarjeta-cita"
+import { ESTADOS_DE_CITA } from "@/lib/campos-del-panel"
 import { formatearMonto } from "@/lib/dinero"
 import { formatearHora, duracionParaMostrar } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
@@ -22,8 +23,7 @@ const FUNDIDO = { duration: DURACION.sombra, ease: CURVA.suave }
 const BLOQUE = "rounded-[24px] bg-tarjeta p-4 shadow-sm squircle"
 
 function mapearCitaParaTarjeta(cita: CitaDeCliente, nombreCliente: string): CitaEnTarjeta {
-  const estadosValidos = ["pendiente", "confirmada", "en-progreso", "completada", "cancelada"] as const
-  const estado = estadosValidos.includes(cita.status as (typeof estadosValidos)[number])
+  const estado = (ESTADOS_DE_CITA as readonly string[]).includes(cita.status)
     ? (cita.status as CitaEnTarjeta["estado"])
     : "pendiente"
   return {
@@ -162,6 +162,16 @@ export function PanelDetalleCliente({
           <li className="flex items-start gap-3">
             <CalendarDays className="mt-0.5 size-4 shrink-0 text-texto-2" aria-hidden="true" strokeWidth={1.75} />
             <span>{cliente.visitas === 1 ? "1 visita registrada" : `${cliente.visitas} visitas registradas`}</span>
+          </li>
+          <li className="flex items-start gap-3">
+            <CalendarX className="mt-0.5 size-4 shrink-0 text-texto-2" aria-hidden="true" strokeWidth={1.75} />
+            <span className={cliente.inasistencias > 0 ? undefined : "text-texto-2"}>
+              {cliente.inasistencias === 0
+                ? "Sin inasistencias"
+                : cliente.inasistencias === 1
+                  ? "1 vez no vino"
+                  : `${cliente.inasistencias} veces no vino`}
+            </span>
           </li>
           <li className="flex items-start gap-3">
             <Clock className="mt-0.5 size-4 shrink-0 text-texto-2" aria-hidden="true" strokeWidth={1.75} />

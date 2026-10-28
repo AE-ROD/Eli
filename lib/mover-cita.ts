@@ -1,12 +1,15 @@
 /**
- * Las advertencias al mover una cita (cambiar su fecha, su hora o su
- * profesional). No bloquean: el endpoint las devuelve y quien mueve decide si
- * guarda igual (`confirmarAdvertencias`). Es cálculo puro: entra lo que ya
- * trajo la base y salen los mensajes.
+ * Las advertencias al crear o mover una cita en el panel (su fecha, su hora o
+ * su profesional). No bloquean: el endpoint las devuelve y quien agenda
+ * decide si guarda igual (`confirmarAdvertencias`). Es cálculo puro: entra lo
+ * que ya trajo la base y salen los mensajes.
  *
- * Dos advertencias:
- * - **choque**: el profesional ya tiene otra cita que se pisa con el nuevo
- *   horario. Sin profesional asignado no hay con quién chocar.
+ * Tres advertencias:
+ * - **choque**: el profesional ya tiene otra cita activa que se pisa con el
+ *   horario (`lib/ocupacion.ts`: canceladas y "no vino" no ocupan). Sin
+ *   profesional asignado no hay con quién chocar.
+ * - **bloqueo**: el horario cae en un bloqueo del profesional o de todo el
+ *   negocio (`TimeBlock`).
  * - **fuera de horario**: el tramo no cabe entero en el horario de atención
  *   del profesional ese día. Si el profesional cargó horario propio (en
  *   cualquier día), manda el suyo; si no, el del negocio, con la misma regla
@@ -20,11 +23,14 @@
 import { franjasDeAtencion, cabeEnAtencion, type FilaDeHorarioSemanal } from "@/lib/horario-de-atencion"
 import { minutosAHora, type FranjaHorario } from "@/lib/horario-dia"
 import { diaDeLaSemana, fechaYMinutosEn } from "@/lib/zona-horaria"
+import type { BloqueoQueOcupa, Tramo } from "@/lib/ocupacion"
 
-/** Estados con los que una cita ya no se mueve: lo que pasó, pasó. */
-export const ESTADOS_QUE_NO_SE_MUEVEN = ["cancelada", "completada"] as const
+export type { Tramo } from "@/lib/ocupacion"
 
-export const MENSAJE_CITA_CERRADA = "Una cita cancelada o completada no se puede mover"
+/** Estados con los que una cita ya no se mueve: lo que pasó, pasó. Si no vino y quiere otra hora, es otra cita. */
+export const ESTADOS_QUE_NO_SE_MUEVEN = ["cancelada", "completada", "no-asistio"] as const
+
+export const MENSAJE_CITA_CERRADA = "Una cita cancelada, completada o de alguien que no vino no se puede mover"
 export const MENSAJE_CITA_CON_ATENCION =
   "Esta cita ya tiene una atención en el Tablero: no se puede mover. Si fue un error, deshaz la llegada primero"
 
@@ -32,16 +38,11 @@ export function sePuedeMover(estado: string): boolean {
   return !(ESTADOS_QUE_NO_SE_MUEVEN as readonly string[]).includes(estado)
 }
 
-export type TipoDeAdvertencia = "choque" | "fuera-de-horario"
+export type TipoDeAdvertencia = "choque" | "bloqueo" | "fuera-de-horario"
 
 export interface Advertencia {
   tipo: TipoDeAdvertencia
   mensaje: string
-}
-
-export interface Tramo {
-  startTime: Date
-  endTime: Date
 }
 
 /** `10:00 a 11:00`, en el reloj del negocio. */
@@ -57,11 +58,6 @@ function enumerar(partes: string[]): string {
   return `${partes.slice(0, -1).join(", ")} y ${partes[partes.length - 1]}`
 }
 
-/** Si dos tramos se pisan. Tocarse (una termina 10:00, la otra empieza 10:00) no es pisarse. */
-export function sePisan(a: Tramo, b: Tramo): boolean {
-  return a.startTime.getTime() < b.endTime.getTime() && b.startTime.getTime() < a.endTime.getTime()
-}
-
 /** "Carla ya tiene una cita de 10:00 a 11:00." — o `null` si no hay choque. */
 export function advertenciaDeChoque(nombre: string, choques: Tramo[], zona: string): Advertencia | null {
   if (choques.length === 0) return null
@@ -72,6 +68,50 @@ export function advertenciaDeChoque(nombre: string, choques: Tramo[], zona: stri
       ? `${nombre} ya tiene una cita ${tramos[0]}.`
       : `${nombre} ya tiene citas ${enumerar(tramos)}.`
   return { tipo: "choque", mensaje }
+}
+
+/** `20/10 13:00`: día y hora en el reloj del negocio. */
+function diaYHora(instante: Date, zona: string): string {
+  const { fecha, minutos } = fechaYMinutosEn(instante, zona)
+  const [, mes, dia] = fecha.split("-")
+  return `${dia}/${mes} ${minutosAHora(minutos)}`
+}
+
+/**
+ * `de 13:00 a 14:00 (Almuerzo)`, o `del 20/10 09:00 al 22/10 18:00` si dura
+ * más de un día: un bloqueo para leer, con su motivo si tiene.
+ */
+function bloqueoParaLeer(bloqueo: BloqueoQueOcupa, zona: string): string {
+  const motivo = bloqueo.motivo?.trim()
+  const mismoDia = fechaYMinutosEn(bloqueo.startTime, zona).fecha === fechaYMinutosEn(bloqueo.endTime, zona).fecha
+  const cuando = mismoDia
+    ? `de ${tramoParaLeer(bloqueo, zona)}`
+    : `del ${diaYHora(bloqueo.startTime, zona)} al ${diaYHora(bloqueo.endTime, zona)}`
+  return `${cuando}${motivo ? ` (${motivo})` : ""}`
+}
+
+/**
+ * "Carla tiene bloqueado de 13:00 a 14:00 (Almuerzo)." y "El negocio tiene
+ * bloqueado de 09:00 a 18:00 (Feriado)." — o `null` si no cae en ningún bloqueo.
+ * `nombre` es el del profesional de la cita (null si va sin asignar).
+ */
+export function advertenciaDeBloqueo(
+  nombre: string | null,
+  bloqueos: BloqueoQueOcupa[],
+  zona: string
+): Advertencia | null {
+  if (bloqueos.length === 0) return null
+  const ordenados = [...bloqueos].sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
+  const delNegocio = ordenados.filter((bloqueo) => bloqueo.memberId === null)
+  const propios = ordenados.filter((bloqueo) => bloqueo.memberId !== null)
+  const frases: string[] = []
+  if (propios.length > 0) {
+    frases.push(`${nombre ?? "El profesional"} tiene bloqueado ${enumerar(propios.map((b) => bloqueoParaLeer(b, zona)))}.`)
+  }
+  if (delNegocio.length > 0) {
+    frases.push(`El negocio tiene bloqueado ${enumerar(delNegocio.map((b) => bloqueoParaLeer(b, zona)))}.`)
+  }
+  return { tipo: "bloqueo", mensaje: frases.join(" ") }
 }
 
 /**
