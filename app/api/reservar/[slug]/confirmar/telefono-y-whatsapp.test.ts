@@ -7,7 +7,10 @@ import { MENSAJE_DE_TELEFONO_ILEGIBLE } from "@/lib/telefono"
 
 /**
  * El teléfono de la reserva pública se guarda en E.164 y el consentimiento
- * de WhatsApp se registra sin pisar uno previo (P8, parte pública).
+ * de WhatsApp se registra en un cliente nuevo (P8, parte pública). Sobre un
+ * cliente que ya existía (reutilizado por email + nombre) la reserva nunca
+ * escribe el teléfono ni el consentimiento: lo dado queda como nota de la
+ * cita para que el local lo confirme (#115).
  */
 
 const mockVerificarLimite = vi.fn()
@@ -50,6 +53,9 @@ async function reservar(extra: Registro, hora = "10:00") {
 }
 
 const lucias = () => base.buscar("customer", { name: "Lucía", businessId: NEGOCIO })
+const notaDeLaCita = () => base.buscar("appointment")[0]?.notes
+
+const LUCIA = { id: "c-lucia", businessId: NEGOCIO, name: "Lucía", lastName: "Pérez", email: "lucia@correo.test" }
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -99,11 +105,12 @@ describe("consentimiento de WhatsApp", () => {
     expect(lucias()[0]).toMatchObject({ whatsappConsentAt: null, whatsappConsentSource: null })
   })
 
-  it("marcado, en un cliente que ya existía sin consentimiento: se registra", async () => {
-    escenario([{ id: "c-lucia", businessId: NEGOCIO, name: "Lucía", lastName: "Pérez", email: "lucia@correo.test" }])
-    await reservar({ email: "lucia@correo.test", telefono: "912345678", whatsappConsentimiento: true })
+  it("marcado, en un cliente nuevo: guarda el teléfono y el consentimiento, sin nota en la cita", async () => {
+    escenario()
+    expect((await reservar({ email: "lucia@correo.test", telefono: "9 1234 5678", whatsappConsentimiento: true })).status).toBe(201)
     expect(lucias()).toHaveLength(1)
-    expect(lucias()[0]).toMatchObject({ id: "c-lucia", whatsappConsentAt: AHORA, whatsappConsentSource: "reserva-publica" })
+    expect(lucias()[0]).toMatchObject({ phone: "+56912345678", whatsappConsentAt: AHORA, whatsappConsentSource: "reserva-publica" })
+    expect(notaDeLaCita()).toBeNull()
   })
 
   it("marcado, no pisa uno previo (dado en el local)", async () => {
@@ -144,56 +151,68 @@ describe("consentimiento de WhatsApp", () => {
     expect(lucias()[0]).toMatchObject({ phone: null, whatsappConsentAt: null, whatsappConsentSource: null })
   })
 
-  it("marcado sin teléfono, en un cliente que ya existía con teléfono: no se registra", async () => {
-    escenario([{ id: "c-lucia", businessId: NEGOCIO, name: "Lucía", lastName: "Pérez", email: "lucia@correo.test", phone: "+56912345678" }])
-    expect((await reservar({ email: "lucia@correo.test", whatsappConsentimiento: true })).status).toBe(201)
-    expect(lucias()[0]).toMatchObject({ id: "c-lucia", phone: "+56912345678", whatsappConsentAt: null })
-  })
-
-  it("cliente reutilizado con el mismo teléfono (escrito de otra forma): se registra", async () => {
-    escenario([{ id: "c-lucia", businessId: NEGOCIO, name: "Lucía", lastName: "Pérez", email: "lucia@correo.test", phone: "9 1234 5678" }])
-    await reservar({ email: "lucia@correo.test", telefono: "+56 9 1234 5678", whatsappConsentimiento: true })
-    expect(lucias()).toHaveLength(1)
-    expect(lucias()[0]).toMatchObject({ id: "c-lucia", phone: "9 1234 5678", whatsappConsentAt: AHORA, whatsappConsentSource: "reserva-publica" })
-  })
-
-  it("cliente reutilizado con otro teléfono: ni consentimiento ni se pisa su número", async () => {
-    escenario([{ id: "c-lucia", businessId: NEGOCIO, name: "Lucía", lastName: "Pérez", email: "lucia@correo.test", phone: "+56987654321" }])
-    expect((await reservar({ email: "lucia@correo.test", telefono: "912345678", whatsappConsentimiento: true })).status).toBe(201)
-    expect(lucias()).toHaveLength(1)
-    expect(lucias()[0]).toMatchObject({ id: "c-lucia", phone: "+56987654321", whatsappConsentAt: null, whatsappConsentSource: null })
-  })
-
-  it("cliente reutilizado sin teléfono: se guarda el dado en E.164 junto con el consentimiento", async () => {
-    escenario([{ id: "c-lucia", businessId: NEGOCIO, name: "Lucía", lastName: "Pérez", email: "lucia@correo.test" }])
-    await reservar({ email: "lucia@correo.test", telefono: "9 1234 5678", whatsappConsentimiento: true })
-    expect(lucias()[0]).toMatchObject({ id: "c-lucia", phone: "+56912345678", whatsappConsentAt: AHORA, whatsappConsentSource: "reserva-publica" })
-  })
-
-  it("cliente reutilizado sin teléfono pero con consentimiento previo: se completa el teléfono y el consentimiento queda", async () => {
-    escenario([
-      { id: "c-lucia", businessId: NEGOCIO, name: "Lucía", lastName: "Pérez", email: "lucia@correo.test", whatsappConsentAt: ANTES, whatsappConsentSource: "panel" },
-    ])
-    await reservar({ email: "lucia@correo.test", telefono: "912345678", whatsappConsentimiento: true })
-    expect(lucias()).toHaveLength(1)
-    expect(lucias()[0]).toMatchObject({ id: "c-lucia", phone: "+56912345678", whatsappConsentAt: ANTES, whatsappConsentSource: "panel" })
-  })
-
-  it("cliente reutilizado con el teléfono guardado vacío: se guarda el dado junto con el consentimiento", async () => {
-    escenario([{ id: "c-lucia", businessId: NEGOCIO, name: "Lucía", lastName: "Pérez", email: "lucia@correo.test", phone: "" }])
-    await reservar({ email: "lucia@correo.test", telefono: "9 1234 5678", whatsappConsentimiento: true })
-    expect(lucias()).toHaveLength(1)
-    expect(lucias()[0]).toMatchObject({ id: "c-lucia", phone: "+56912345678", whatsappConsentAt: AHORA, whatsappConsentSource: "reserva-publica" })
-  })
-
-  it("cliente reutilizado con un teléfono ilegible guardado: no se pisa", async () => {
-    escenario([{ id: "c-lucia", businessId: NEGOCIO, name: "Lucía", lastName: "Pérez", email: "lucia@correo.test", phone: "llamar al local" }])
-    await reservar({ email: "lucia@correo.test", telefono: "912345678", whatsappConsentimiento: true })
-    expect(lucias()[0]).toMatchObject({ id: "c-lucia", phone: "llamar al local", whatsappConsentAt: null })
-  })
-
   it("un valor que no es sí/no: 400", async () => {
     escenario()
     expect((await reservar({ whatsappConsentimiento: "sí" })).status).toBe(400)
+  })
+})
+
+describe("cliente que ya existía (mismo correo y nombre): la reserva no le escribe teléfono ni consentimiento", () => {
+  const sinTelefono = [
+    ["sin teléfono", {}],
+    ["con el teléfono en blanco", { phone: "  " }],
+    ["sin teléfono y con consentimiento previo", { whatsappConsentAt: ANTES, whatsappConsentSource: "panel" }],
+    ["con el teléfono vacío y consentimiento previo", { phone: "", whatsappConsentAt: ANTES, whatsappConsentSource: "panel" }],
+  ] as const
+
+  it.each(sinTelefono)("%s: el cliente no cambia y el número queda en la nota de la cita", async (_caso, extra) => {
+    escenario([{ ...LUCIA, ...extra }])
+    const antes = { ...lucias()[0] }
+    expect((await reservar({ email: "lucia@correo.test", telefono: "9 8765 4321", whatsappConsentimiento: true })).status).toBe(201)
+    expect(lucias()).toHaveLength(1)
+    expect(lucias()[0]).toEqual(antes)
+    expect(notaDeLaCita()).toContain("+56987654321")
+    expect(notaDeLaCita()).toContain("WhatsApp")
+    expect(base.buscar("appointment")[0]).toMatchObject({ customerId: "c-lucia" })
+  })
+
+  it("sin marcar WhatsApp: tampoco guarda el número, que queda en la nota", async () => {
+    escenario([LUCIA])
+    const antes = { ...lucias()[0] }
+    await reservar({ email: "lucia@correo.test", telefono: "912345678" })
+    expect(lucias()[0]).toEqual(antes)
+    expect(notaDeLaCita()).toContain("+56912345678")
+    expect(notaDeLaCita()).not.toContain("WhatsApp")
+  })
+
+  it("con el mismo teléfono (escrito de otra forma): no registra el consentimiento, lo anota", async () => {
+    escenario([{ ...LUCIA, phone: "9 1234 5678" }])
+    await reservar({ email: "lucia@correo.test", telefono: "+56 9 1234 5678", whatsappConsentimiento: true })
+    expect(lucias()[0]).toMatchObject({ phone: "9 1234 5678", whatsappConsentAt: null, whatsappConsentSource: null })
+    expect(notaDeLaCita()).toContain("WhatsApp")
+  })
+
+  it("con el mismo teléfono y sin marcar WhatsApp: sin nota", async () => {
+    escenario([{ ...LUCIA, phone: "+56912345678" }])
+    await reservar({ email: "lucia@correo.test", telefono: "912345678" })
+    expect(notaDeLaCita()).toBeNull()
+  })
+
+  it("con otro teléfono o uno ilegible guardado: no se pisa", async () => {
+    escenario([
+      { ...LUCIA, phone: "+56987654321" },
+      { ...LUCIA, id: "c-lucia-2", email: "otra@correo.test", phone: "llamar al local" },
+    ])
+    await reservar({ email: "lucia@correo.test", telefono: "912345678", whatsappConsentimiento: true })
+    await reservar({ email: "otra@correo.test", telefono: "912345678", whatsappConsentimiento: true }, "11:00")
+    expect(base.buscar("customer", { id: "c-lucia" })[0]).toMatchObject({ phone: "+56987654321", whatsappConsentAt: null })
+    expect(base.buscar("customer", { id: "c-lucia-2" })[0]).toMatchObject({ phone: "llamar al local", whatsappConsentAt: null })
+  })
+
+  it("marcado sin teléfono: ni consentimiento ni nota", async () => {
+    escenario([{ ...LUCIA, phone: "+56912345678" }])
+    expect((await reservar({ email: "lucia@correo.test", whatsappConsentimiento: true })).status).toBe(201)
+    expect(lucias()[0]).toMatchObject({ phone: "+56912345678", whatsappConsentAt: null })
+    expect(notaDeLaCita()).toBeNull()
   })
 })
