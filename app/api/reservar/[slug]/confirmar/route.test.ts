@@ -259,6 +259,25 @@ describe("POST /api/reservar/[slug]/confirmar: el día y la hora del negocio", (
     expect((await confirmar("11:00", "2026-10-19")).status).toBe(201)
   })
 
+  it.each(["cancelada", "no-asistio"])("una cita %s no ocupa el horario: se puede reservar encima", async (status) => {
+    escenario([franja({ dayOfWeek: LUNES, startTime: "09:00", endTime: "13:00" })])
+    base.reiniciar({
+      ...base.volcado(),
+      appointment: [
+        {
+          id: "cita-1",
+          businessId: NEGOCIO,
+          title: "Corte",
+          status,
+          startTime: new Date("2026-10-19T13:00:00.000Z"),
+          endTime: new Date("2026-10-19T14:00:00.000Z"),
+        },
+      ],
+    })
+
+    expect((await confirmar("10:00", "2026-10-19")).status).toBe(201)
+  })
+
   it("un día que no existe (2026-02-30): 409 sin crear nada", async () => {
     escenario([franja({ dayOfWeek: LUNES, startTime: "09:00", endTime: "13:00" })])
 

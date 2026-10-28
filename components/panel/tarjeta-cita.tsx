@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 import { Clock, Timer } from "lucide-react"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { cn } from "@/lib/utils"
+import type { EstadoDeCita } from "@/lib/campos-del-panel"
 
 export interface CitaEnTarjeta {
   id: string
@@ -13,7 +14,7 @@ export interface CitaEnTarjeta {
   horaInicio: string
   horaFin: string
   duracion: number // en minutos
-  estado: "pendiente" | "confirmada" | "en-progreso" | "completada" | "cancelada"
+  estado: EstadoDeCita
   notas?: string
 }
 
@@ -34,6 +35,7 @@ const ESTADOS: Record<CitaEnTarjeta["estado"], { texto: string; clases: string }
   "en-progreso": { texto: "En progreso", clases: "bg-naranja-suave text-navy" },
   completada: { texto: "Completada", clases: "bg-lima-suave text-navy" },
   cancelada: { texto: "Cancelada", clases: "bg-error/8 text-error" },
+  "no-asistio": { texto: "No vino", clases: "bg-navy/8 text-navy" },
 }
 
 function EstadoDeLaCita({ estado }: { estado: CitaEnTarjeta["estado"] }) {

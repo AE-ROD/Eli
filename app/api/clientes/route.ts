@@ -107,7 +107,15 @@ export async function GET(request: NextRequest) {
           take: 1,
           select: { arrivedAt: true },
         },
-        _count: { select: { visits: { where: visitasCobradas } } },
+        _count: {
+          select: {
+            visits: { where: visitasCobradas },
+            // "No vino": las citas que el negocio marcó como inasistencia. Con
+            // el filtro de agenda, como el historial: el profesional cuenta
+            // sólo las suyas.
+            appointments: { where: whereDeAgenda(actor, { status: "no-asistio" }) },
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
       take: limite,
@@ -121,11 +129,12 @@ export async function GET(request: NextRequest) {
     encontrados.map((cliente) => cliente.id)
   )
 
-  // `visitas`, `ultimaVisita` y `proximaCita` ya resueltos: la pantalla no
+  // `visitas`, `inasistencias`, `ultimaVisita` y `proximaCita` ya resueltos: la pantalla no
   // vuelve a contar sobre el historial, que trae sólo las últimas cinco citas.
   const clientes = encontrados.map(({ visits, _count, ...cliente }) => ({
     ...cliente,
     visitas: _count.visits,
+    inasistencias: _count.appointments,
     ultimaVisita: visits[0]?.arrivedAt ?? null,
     proximaCita: proximas.get(cliente.id) ?? null,
   }))

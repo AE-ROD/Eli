@@ -18,6 +18,8 @@ export interface ClienteEnTarjeta {
   telefono: string
   imagenUrl?: string
   visitas: number
+  /** Cuántas veces no vino a una cita (las marcadas "No vino"). */
+  inasistencias: number
   /** `Hace 3 días`, o `Sin visitas`. */
   ultimaVisita: string
   /** `En 3 días`, si tiene una cita por delante. */
@@ -59,6 +61,8 @@ export function clienteParaTarjeta(cliente: Cliente): ClienteEnTarjeta {
     email: cliente.email ?? "Sin correo",
     telefono: cliente.phone ?? "Sin teléfono",
     visitas: cliente.visitas,
+    // `?? 0`: una respuesta vieja, sin el campo, no muestra "undefined".
+    inasistencias: cliente.inasistencias ?? 0,
     ultimaVisita: cliente.ultimaVisita ? fechaRelativa(cliente.ultimaVisita, ahora) : "Sin visitas",
     proximaCita: cliente.proximaCita ? fechaRelativa(cliente.proximaCita, ahora) : undefined,
     etiqueta,

@@ -200,6 +200,7 @@ interface PropsDeTableroDeColumnas {
   foco: DestinoDelFoco | null
   onFocoAplicado: () => void
   onLlego: (reserva: Reserva) => void
+  onNoVino: (reserva: Reserva) => void
   onDeshacerLlegada: (atencion: Atencion) => void
   onMover: (atencion: Atencion, hacia: EstadoActivo) => void
   onCobrar: (atencion: Atencion) => void
@@ -221,6 +222,7 @@ export function TableroDeColumnas({
   foco,
   onFocoAplicado,
   onLlego,
+  onNoVino,
   onDeshacerLlegada,
   onMover,
   onCobrar,
@@ -348,6 +350,7 @@ export function TableroDeColumnas({
                   enCurso={enCurso.has(reserva.id)}
                   arrastre={arrastreDe({ tipo: "reserva", reserva }, reserva.id)}
                   onLlego={() => onLlego(reserva)}
+                  onNoVino={() => onNoVino(reserva)}
                 />
               ))}
             </Columna>

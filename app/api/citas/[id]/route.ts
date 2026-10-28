@@ -3,7 +3,15 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
-import { ESTADOS_DE_CITA, MENSAJE_DE_HORARIO_INVERTIDO, notas, precioDeCita, terminaDespuesDeEmpezar, titulo } from "@/lib/campos-del-panel"
+import {
+  ESTADOS_DE_CITA,
+  MENSAJE_DE_HORARIO_INVERTIDO,
+  notas,
+  precioDeCita,
+  puedeMarcarseNoVino,
+  terminaDespuesDeEmpezar,
+  titulo,
+} from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, memberIdParaCita, whereDeAgenda, type Actor } from "@/lib/permisos"
 import { MENSAJE_CITA_CERRADA, MENSAJE_CITA_CON_ATENCION, sePuedeMover } from "@/lib/mover-cita"
@@ -24,6 +32,11 @@ const edicionDeCitaSchema = z.object({
   /** Segundo envío: quien mueve ya vio las advertencias y guarda igual. */
   confirmarAdvertencias: z.boolean().optional(),
 })
+
+/** Por qué no se puede marcar "No vino". */
+const NO_VINO_SIN_ESPERA = "Sólo se marca \"no vino\" en una cita pendiente o confirmada"
+const NO_VINO_ANTES_DE_HORA = "Todavía no es la hora de la cita: si avisó que no viene, cancélala"
+const NO_VINO_PERO_LLEGO = "El cliente ya llegó: la cita tiene una atención en el Tablero. Si fue un error, deshaz la llegada primero"
 
 /**
  * Pide un `Actor`, no `Actor | null`: sin sesión no hay cita, y el handler ya
@@ -104,6 +117,25 @@ export async function PUT(
       })
       if (!miembro) {
         return NextResponse.json({ error: "Miembro no encontrado" }, { status: 404 })
+      }
+    }
+
+    // "No vino" sólo para una reserva que seguía esperando, cuya hora ya
+    // llegó y cuyo cliente no está en el Tablero: si no, el contador de
+    // inasistencias de la ficha mentiría.
+    if (datos.status === "no-asistio" && existente.status !== "no-asistio") {
+      if (!puedeMarcarseNoVino(existente.status)) {
+        return NextResponse.json({ error: NO_VINO_SIN_ESPERA }, { status: 409 })
+      }
+      if (existente.startTime.getTime() > Date.now()) {
+        return NextResponse.json({ error: NO_VINO_ANTES_DE_HORA }, { status: 409 })
+      }
+      const llego = await prisma.visit.findFirst({
+        where: { appointmentId: existente.id, businessId: actor.businessId, status: { not: "anulada" } },
+        select: { id: true },
+      })
+      if (llego) {
+        return NextResponse.json({ error: NO_VINO_PERO_LLEGO }, { status: 409 })
       }
     }
 

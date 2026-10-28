@@ -31,6 +31,8 @@ export interface Cliente {
   appointments: CitaDeCliente[]
   /** Atenciones cobradas: las cuenta el servidor, no el historial (que trae cinco). */
   visitas: number
+  /** Citas marcadas "No vino": también las cuenta el servidor. */
+  inasistencias: number
   /** Cuándo llegó a su última atención cobrada, o `null` si nunca vino. */
   ultimaVisita: string | null
   /** Su próxima cita pendiente o confirmada, o `null` si no tiene. */

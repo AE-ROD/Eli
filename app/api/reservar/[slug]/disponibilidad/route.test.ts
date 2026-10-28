@@ -106,6 +106,18 @@ describe("GET /api/reservar/[slug]/disponibilidad", () => {
     expectSinConsultas()
   })
 
+  it.each(["cancelada", "no-asistio"])("una cita %s no ocupa: su hora se vuelve a ofrecer", async (status) => {
+    const { GET } = await import("./route")
+    base.reiniciar({
+      ...base.volcado(),
+      appointment: [{ id: "cita-1", businessId: NEGOCIO, title: "Corte", status, startTime: aLas(10), endTime: aLas(11) }],
+    })
+
+    const res = await GET(pedidoFalso(`?fecha=${FECHA}&servicioId=s-corte`), conSlug)
+
+    expect(await res.json()).toEqual({ slots: ["09:00", "10:00", "11:00"] })
+  })
+
   it("con una fecha y un servicio válidos devuelve las horas libres del día", async () => {
     const { GET } = await import("./route")
 

@@ -6,6 +6,7 @@ import { franjasDeAtencion } from "@/lib/horario-de-atencion"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { MENSAJE_FECHA_MUY_LEJANA, MENSAJE_FECHA_PASADA, fechaNoReservable, yaPasoLaHora } from "@/lib/reserva-publica"
 import { diaDeLaSemana, esFechaCalendario, existeLaHora, fechaYMinutosEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
+import { ESTADOS_QUE_LIBERAN } from "@/lib/ocupacion"
 
 const FALTA_LA_FECHA = "Falta la fecha (AAAA-MM-DD)"
 const FALTA_EL_SERVICIO = "Falta el servicio (servicioId)"
@@ -144,7 +145,8 @@ export async function GET(
     where: {
       businessId: negocio.id,
       startTime: { gte: dia.desde, lt: dia.hasta },
-      status: { notIn: ["cancelada"] },
+      // Canceladas y "no vino" liberan el horario (`lib/ocupacion.ts`).
+      status: { notIn: [...ESTADOS_QUE_LIBERAN] },
     },
     select: { startTime: true, endTime: true },
   })

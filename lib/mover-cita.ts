@@ -27,10 +27,10 @@ import type { BloqueoQueOcupa, Tramo } from "@/lib/ocupacion"
 
 export type { Tramo } from "@/lib/ocupacion"
 
-/** Estados con los que una cita ya no se mueve: lo que pasó, pasó. */
-export const ESTADOS_QUE_NO_SE_MUEVEN = ["cancelada", "completada"] as const
+/** Estados con los que una cita ya no se mueve: lo que pasó, pasó. Si no vino y quiere otra hora, es otra cita. */
+export const ESTADOS_QUE_NO_SE_MUEVEN = ["cancelada", "completada", "no-asistio"] as const
 
-export const MENSAJE_CITA_CERRADA = "Una cita cancelada o completada no se puede mover"
+export const MENSAJE_CITA_CERRADA = "Una cita cancelada, completada o de alguien que no vino no se puede mover"
 export const MENSAJE_CITA_CON_ATENCION =
   "Esta cita ya tiene una atención en el Tablero: no se puede mover. Si fue un error, deshaz la llegada primero"
 

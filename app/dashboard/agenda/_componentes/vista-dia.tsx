@@ -1,15 +1,14 @@
 "use client"
 
 import { TarjetaCita, type CitaEnTarjeta } from "@/components/panel/tarjeta-cita"
+import { ESTADOS_DE_CITA } from "@/lib/campos-del-panel"
 import { formatearHora, duracionParaMostrar } from "@/lib/fechas"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import { aQuienBloquea, nombreDeCliente, type Bloqueo, type Cita } from "../_datos"
 import { citasPorHora, rangoDeHoras, recortarAHoras, tramoDeCita, tramoEnElDia, tramosDeFranjas } from "../_disposicion"
 
-const estadosValidos = ["pendiente", "confirmada", "en-progreso", "completada", "cancelada"] as const
-
 function paraTarjeta(cita: Cita): CitaEnTarjeta {
-  const estado = (estadosValidos as readonly string[]).includes(cita.status)
+  const estado = (ESTADOS_DE_CITA as readonly string[]).includes(cita.status)
     ? (cita.status as CitaEnTarjeta["estado"])
     : "pendiente"
   return {

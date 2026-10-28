@@ -94,7 +94,24 @@ export const duracion = () =>
     .min(15, "La duración tiene que ser de al menos 15 minutos")
     .max(480, "La duración no puede pasar de 480 minutos")
 
-export const ESTADOS_DE_CITA = ["pendiente", "confirmada", "en-progreso", "completada", "cancelada"] as const
+/**
+ * Los estados de una cita. "no-asistio" es "No vino": el cliente no llegó.
+ * Como "cancelada", libera el horario (`lib/ocupacion.ts`); a diferencia de
+ * ella, cuenta como inasistencia en la ficha del cliente.
+ */
+export const ESTADOS_DE_CITA = ["pendiente", "confirmada", "en-progreso", "completada", "cancelada", "no-asistio"] as const
+
+export type EstadoDeCita = (typeof ESTADOS_DE_CITA)[number]
+
+/**
+ * Desde qué estados se marca "No vino": una reserva que seguía esperando.
+ * En progreso el cliente ya llegó; completada, cancelada o ya marcada, no.
+ */
+const ESTADOS_QUE_PUEDEN_NO_VENIR: readonly string[] = ["pendiente", "confirmada"]
+
+export function puedeMarcarseNoVino(estado: string): boolean {
+  return ESTADOS_QUE_PUEDEN_NO_VENIR.includes(estado)
+}
 
 export const MENSAJE_DE_HORARIO_INVERTIDO = "La cita tiene que terminar después de empezar"
 
