@@ -58,6 +58,11 @@ export default async function PaginaLiquidaciones() {
   ])
 
   const resumenes = historial.map(formatearResumen)
+  // Lo de antes de "Liquidar desde" no entra en ninguna liquidación (la vista
+  // previa lo deja afuera): tampoco se muestra como pendiente.
+  const movimientosPendientes = pendientes
+    .map(formatearMovimiento)
+    .filter((movimiento) => !liquidarDesde || movimiento.fecha >= liquidarDesde)
   const equipo: MiembroParaLiquidar[] = miembros.map((miembro) => {
     // El historial viene de la más nueva a la más vieja: la primera viva es la última.
     const ultima = resumenes.find((l) => l.memberId === miembro.id && l.estado !== "anulada")
@@ -84,7 +89,7 @@ export default async function PaginaLiquidaciones() {
         <SeccionEquipo miembros={equipo} puedeCerrar={puedeCerrarLiquidacion(actor) && !!liquidarDesde} />
         <SeccionMovimientos
           miembros={equipo.map(({ id, nombre }) => ({ id, nombre }))}
-          pendientes={pendientes.map(formatearMovimiento)}
+          pendientes={movimientosPendientes}
           tipos={TIPOS_DE_MOVIMIENTO.filter((tipo) => puedeManejarMovimiento(actor, tipo))}
           hoy={hoy}
         />

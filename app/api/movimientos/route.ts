@@ -14,7 +14,7 @@ import {
   formatearMovimiento,
   puedeManejarMovimiento,
 } from "@/lib/movimientos"
-import { fechaDelNegocio, fechaParaColumna } from "@/lib/periodos-de-liquidacion"
+import { fechaDelNegocio, fechaParaColumna, fechaParaLeer } from "@/lib/periodos-de-liquidacion"
 import { esFechaCalendario } from "@/lib/zona-horaria"
 
 const MAXIMO_DE_LA_LISTA = 300
@@ -60,7 +60,9 @@ const movimientoSchema = z.object({
  * Registra un adelanto o un vale (dueña y encargado) o un ajuste (sólo la
  * dueña, con motivo, con signo y opcionalmente la atención que corrige). El
  * monto llega en unidades y se guarda en centavos. Sin fecha, hoy en la
- * zona del negocio. Miembro o atención de otro negocio: 404.
+ * zona del negocio. Una fecha anterior a "Liquidar desde" (si está fijada)
+ * es 400: nunca entraría en una liquidación. Miembro o atención de otro
+ * negocio: 404.
  */
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -101,7 +103,16 @@ export async function POST(request: NextRequest) {
         if (!atencion) throw new ErrorDeLiquidacion(404, "Atención no encontrada")
       }
 
-      const { zona } = await leerNegocioParaLiquidar(tx, actor.businessId)
+      const { zona, liquidarDesde } = await leerNegocioParaLiquidar(tx, actor.businessId)
+      const fecha = cuerpo.fecha ?? fechaDelNegocio(new Date(), zona)
+      // La vista previa sólo toma movimientos desde "Liquidar desde": uno
+      // anterior quedaría pendiente para siempre.
+      if (liquidarDesde && fecha < liquidarDesde) {
+        throw new ErrorDeLiquidacion(
+          400,
+          `La fecha no puede ser anterior a "Liquidar desde" (${fechaParaLeer(liquidarDesde)}).`
+        )
+      }
       return tx.movimientoDeLiquidacion.create({
         data: {
           businessId: actor.businessId,
@@ -109,7 +120,7 @@ export async function POST(request: NextRequest) {
           memberName: miembro.user.name,
           tipo: cuerpo.tipo,
           montoCents: aCentavos(cuerpo.monto),
-          fecha: fechaParaColumna(cuerpo.fecha ?? fechaDelNegocio(new Date(), zona)),
+          fecha: fechaParaColumna(fecha),
           motivo,
           visitId: cuerpo.atencionId ?? null,
           createdById: firma.id,
