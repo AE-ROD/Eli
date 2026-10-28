@@ -160,6 +160,9 @@ export const MAXIMO_DE_LINEAS_POR_ATENCION = 20
 /** Más medios que esto en un solo cobro no es un pago dividido, es un error de carga. */
 export const MAXIMO_DE_PAGOS = 20
 
+/** Propinas por cobro (#66): más que esto no es una propina repartida, es un error de carga. */
+export const MAXIMO_DE_PROPINAS = 5
+
 /**
  * Si el monto se escribe con hasta dos decimales. Un precio de 10,005 no es
  * un monto que se pueda cobrar: redondearlo en silencio cambiaría lo cobrado

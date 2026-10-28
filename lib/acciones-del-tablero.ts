@@ -1,5 +1,6 @@
 import {
   ESTADOS_ACTIVOS,
+  MAXIMO_DE_PROPINAS,
   MONTO_MAXIMO,
   PROFESIONAL_DUEÑO,
   aCentavos,
@@ -18,6 +19,7 @@ import {
 } from "@/lib/atenciones"
 import type { EstadoDeComision } from "@/lib/comisiones"
 import { formatearMonto, leerMonto, montoParaEscribir } from "@/lib/dinero"
+import { esMedioDePago } from "@/lib/medios-de-pago"
 import { esHoy, horaConArticulo } from "@/lib/fechas"
 import { esDueño, puedeAnular, puedeCobrar, puedeDeshacerLlegada, type Actor } from "@/lib/permisos"
 
@@ -640,4 +642,68 @@ export function errorDeMontoDePago(texto: string): string | null {
     return `Tiene que ser mayor que cero, hasta ${formatearMonto(MONTO_MAXIMO)}, con hasta dos decimales.`
   }
   return null
+}
+
+// ─── Propinas (#66) ──────────────────────────────────────────────────────────
+
+/** Una propina del cobro tal como está escrita: a quién, cuánto (texto) y con qué medio. */
+export interface FilaDePropina {
+  clave: string
+  /** Id de miembro, `duenio`, o vacío si falta elegir. */
+  profesional: string
+  monto: string
+  medio: string
+}
+
+/** Lo que se manda por cada propina; es el contrato de `POST /api/atenciones/[id]/cobro`. */
+export interface PropinaPedida {
+  profesional: string
+  monto: number
+  medio: string
+}
+
+export type PropinasDesdeFilas =
+  | { ok: true; propinas: PropinaPedida[] }
+  | { ok: false; error: string }
+
+/**
+ * Las propinas listas para mandar, o qué les falta, con la misma regla que el
+ * servidor (`errorDePropinas`): a quién va, un monto mayor que cero con hasta
+ * dos decimales y un medio del catálogo. Sin filas no hay propina, y está bien.
+ */
+export function propinasDesdeFilas(filas: readonly FilaDePropina[]): PropinasDesdeFilas {
+  if (filas.length > MAXIMO_DE_PROPINAS) return { ok: false, error: `Hasta ${MAXIMO_DE_PROPINAS} propinas por cobro.` }
+  if (filas.some((fila) => !fila.profesional)) return { ok: false, error: "Elige a quién va cada propina." }
+  if (filas.some((fila) => !esMedioDePago(fila.medio))) {
+    return { ok: false, error: "Hay una propina con un medio de pago que no existe." }
+  }
+  const propinas = filas.map((fila) => ({ profesional: fila.profesional, monto: leerMonto(fila.monto) ?? Number.NaN, medio: fila.medio }))
+  if (propinas.some((propina) => !esMontoDePagoValido(propina.monto))) {
+    return { ok: false, error: "Cada propina tiene que ser mayor que cero y con hasta dos decimales." }
+  }
+  return { ok: true, propinas }
+}
+
+/** La suma de las propinas que ya se leen, en centavos: para mostrarla aparte del total. */
+export function totalDePropinasEnCentavos(filas: readonly FilaDePropina[]): number {
+  return filas.reduce((suma, fila) => {
+    const monto = leerMonto(fila.monto)
+    return monto !== null && esMontoDePagoValido(monto) ? suma + aCentavos(monto) : suma
+  }, 0)
+}
+
+/**
+ * La propina que se agrega al apretar "Agregar propina": para quien hizo los
+ * servicios si fue una sola persona (el caso de todos los días), y en
+ * efectivo. Si la atendieron varios, a quién va se elige.
+ */
+export function filaDePropinaSugerida(
+  lineas: readonly Pick<LineaGuardada, "profesional">[],
+  profesionales: readonly { id: string }[],
+  medios: readonly { id: string }[],
+  clave: string
+): FilaDePropina {
+  const quienes = [...new Set(lineas.map((linea) => linea.profesional.id).filter((id): id is string => id !== null))]
+  const unico = quienes.length === 1 && profesionales.some((profesional) => profesional.id === quienes[0]) ? quienes[0] : ""
+  return { clave, profesional: unico, monto: "", medio: medios[0]?.id ?? "" }
 }

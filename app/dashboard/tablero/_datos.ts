@@ -10,7 +10,7 @@
  */
 
 import type { EstadoActivo, PagoPedido } from "@/lib/atenciones"
-import type { LineaGuardada, LineaPedida, ReservaDeOrigen } from "@/lib/acciones-del-tablero"
+import type { LineaGuardada, LineaPedida, PropinaPedida, ReservaDeOrigen } from "@/lib/acciones-del-tablero"
 import { rangoDelDia, zonaDelDispositivo } from "@/lib/fechas"
 import { conJson, pedir, pedirConCodigo, type Resultado, type ResultadoConCodigo } from "@/lib/peticiones"
 
@@ -26,6 +26,16 @@ export type LineaDeServicio = LineaGuardada
 
 export interface PagoRegistrado {
   id: string
+  medio: string
+  nombreMedio: string
+  monto: number
+}
+
+/** Una propina registrada al cobrar (#66): aparte del total, para quien la recibe. */
+export interface PropinaRegistrada {
+  id: string
+  /** Id de miembro o `duenio`; `null` si quien la recibió dejó el equipo. */
+  profesional: { id: string | null; nombre: string }
   medio: string
   nombreMedio: string
   monto: number
@@ -62,6 +72,8 @@ export interface Atencion {
    */
   total?: number
   pagos?: PagoRegistrado[]
+  /** Sólo para dueño y encargado, como los pagos. No suman al total. */
+  propinas?: PropinaRegistrada[]
 }
 
 /** Una cita de hoy que todavía no llegó. Que esté atrasada lo calcula la pantalla con su reloj. */
@@ -276,10 +288,21 @@ export async function moverAtencion(id: string, estado: EstadoActivo): Promise<R
   )
 }
 
-/** Cobra la atención: los pagos tienen que sumar el total. Con total cero, sin pagos. */
-export async function cobrarAtencion(id: string, pagos: PagoPedido[]): Promise<ResultadoDeAccion<Atencion>> {
+/**
+ * Cobra la atención: los pagos tienen que sumar el total (con total cero, sin
+ * pagos). Las propinas van aparte y no cuentan para el total.
+ */
+export async function cobrarAtencion(
+  id: string,
+  pagos: PagoPedido[],
+  propinas: PropinaPedida[] = []
+): Promise<ResultadoDeAccion<Atencion>> {
   return conMotivo(
-    await pedirConCodigo<Atencion>(`${urlDeAtencion(id)}/cobro`, "No se pudo registrar el cobro", conJson("POST", { pagos }))
+    await pedirConCodigo<Atencion>(
+      `${urlDeAtencion(id)}/cobro`,
+      "No se pudo registrar el cobro",
+      conJson("POST", { pagos, ...(propinas.length > 0 && { propinas }) })
+    )
   )
 }
 

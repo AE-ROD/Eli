@@ -11,9 +11,10 @@ import {
   requisitoFaltante,
   transicionPermitida,
 } from "@/lib/atenciones"
-import { actorDeSesion, puedeCobrar } from "@/lib/permisos"
+import { actorDeSesion, puedeCobrar, puedeRegistrarPropina } from "@/lib/permisos"
 import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
 import { congelarComisiones } from "@/lib/lineas-de-atencion"
+import { errorDePropinas, propinasPedidasSchema, resolverPropinas } from "@/lib/propinas"
 import {
   ErrorDeAtencion,
   buscarAtencion,
@@ -34,6 +35,11 @@ const cobroSchema = z.object({
   pagos: z
     .array(z.object({ medio: z.string(), monto: z.number() }))
     .max(MAXIMO_DE_PAGOS),
+  /**
+   * Aparte de los pagos (#66): los pagos siguen sumando exactamente el total,
+   * y las propinas van a su tabla. Hasta `MAXIMO_DE_PROPINAS`.
+   */
+  propinas: propinasPedidasSchema.default([]),
 })
 
 /**
@@ -67,7 +73,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   try {
-    const { pagos } = cobroSchema.parse(await cuerpoDelPedido(request))
+    const { pagos, propinas } = cobroSchema.parse(await cuerpoDelPedido(request))
+
+    // Hoy registra propinas quien cobra; si alguna vez no, falla cerrado.
+    if (propinas.length > 0 && !puedeRegistrarPropina(actor)) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+    }
+    const errorDeLasPropinas = errorDePropinas(propinas)
+    if (errorDeLasPropinas) throw new ErrorDeAtencion(400, errorDeLasPropinas)
 
     if (!transicionPermitida(existente.status, "finalizada")) {
       throw new ErrorDeAtencion(409, "Solo se cobra una atención que está por cobrar.")
@@ -126,6 +139,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         data: { totalCents: totalCentavos },
       })
       if (count === 0) throw new ErrorDeAtencion(409, "La atención cambió mientras tanto: vuelve a cargar el tablero.")
+
+      // Las propinas, a nombre de quien las recibe (de la base, nunca del
+      // cuerpo). Un miembro ajeno da 404 y no se escribe nada.
+      const resueltas = await resolverPropinas(tx, actor, propinas)
+      if (resueltas.length > 0) {
+        await tx.propinaDeAtencion.createMany({
+          data: resueltas.map((propina) => ({ ...propina, businessId: actor.businessId, visitId: existente.id })),
+        })
+      }
 
       // La comisión de cada línea, congelada con los % de este momento (#65).
       // Sin % queda pendiente (null, nunca 0) y el cobro no se frena: la

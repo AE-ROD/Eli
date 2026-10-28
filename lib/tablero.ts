@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma"
 import {
   MAXIMO_DE_LINEAS_POR_ATENCION,
   MAXIMO_DE_PAGOS,
+  MAXIMO_DE_PROPINAS,
+  PROFESIONAL_DUEÑO,
   deCentavos,
   errorDeCantidadDeLineas,
   errorDeTotal,
@@ -20,6 +22,7 @@ import {
   whereDeAtenciones,
   whereDeLineas,
   whereDePagos,
+  whereDePropinas,
   type Actor,
 } from "@/lib/permisos"
 
@@ -118,6 +121,16 @@ const SELECCION_DE_LINEA = {
   commissionAt: true,
 } satisfies Prisma.VisitServiceSelect
 
+/** De una propina (#66), lo que viaja al tablero. */
+const SELECCION_DE_PROPINA = {
+  id: true,
+  memberId: true,
+  byOwner: true,
+  professionalName: true,
+  method: true,
+  amountCents: true,
+} satisfies Prisma.PropinaDeAtencionSelect
+
 const SELECCION_DE_PAGO = {
   id: true,
   method: true,
@@ -151,6 +164,21 @@ function pagosQueVe(actor: Actor) {
     orderBy: { createdAt: "asc" },
     take: MAXIMO_DE_PAGOS,
   } satisfies Prisma.Visit$paymentsArgs
+}
+
+/**
+ * Las propinas de la atención que ve el actor (`whereDePropinas`): dueña y
+ * encargado, todas; el profesional, las suyas. Al tablero sólo viajan a
+ * quien ve los pagos (`formatearAtencion`). El `take` es el tope de
+ * `lib/propinas.ts`: nunca se escriben más al cobrar.
+ */
+function propinasQueVe(actor: Actor) {
+  return {
+    where: whereDePropinas(actor),
+    select: SELECCION_DE_PROPINA,
+    orderBy: { createdAt: "asc" },
+    take: MAXIMO_DE_PROPINAS,
+  } satisfies Prisma.Visit$propinasArgs
 }
 
 /** De la reserva de origen, lo que precarga el editor cuando la atención todavía no tiene líneas. */
@@ -188,6 +216,7 @@ export function seleccionDeAtencion(actor: Actor) {
     totalCents: puedeVerTodoElTablero(actor),
     services: lineasQueVe(actor),
     payments: pagosQueVe(actor),
+    propinas: propinasQueVe(actor),
     appointment: { select: SELECCION_DE_RESERVA },
   } satisfies Prisma.VisitSelect
 }
@@ -215,6 +244,7 @@ export function seleccionParaReporte(actor: Actor) {
 type AtencionLeida = Prisma.VisitGetPayload<{ select: ReturnType<typeof seleccionDeAtencion> }>
 type LineaLeida = AtencionLeida["services"][number]
 type PagoLeido = AtencionLeida["payments"][number]
+type PropinaLeida = AtencionLeida["propinas"][number]
 type ReservaLeida = NonNullable<AtencionLeida["appointment"]>
 
 /**
@@ -406,6 +436,17 @@ export function formatearPago(pago: PagoLeido) {
   }
 }
 
+/** La propina como viaja: en unidades, con el profesional como en las líneas (`duenio` para la dueña). */
+export function formatearPropina(propina: PropinaLeida) {
+  return {
+    id: propina.id,
+    profesional: { id: propina.byOwner ? PROFESIONAL_DUEÑO : propina.memberId, nombre: propina.professionalName },
+    medio: propina.method,
+    nombreMedio: nombreDeMedio(propina.method),
+    monto: deCentavos(propina.amountCents),
+  }
+}
+
 /**
  * El total que ve dueño o encargado, en unidades: el congelado al cobrar, o
  * mientras está abierta, la suma viva de sus líneas.
@@ -463,6 +504,8 @@ export function formatearAtencion(actor: Actor, atencion: AtencionLeida) {
     ...visible,
     total: totalVisible(atencion),
     pagos: atencion.payments.map(formatearPago),
+    // Aparte del total (#66): no son ingreso del negocio.
+    propinas: atencion.propinas.map(formatearPropina),
   }
 }
 

@@ -1,18 +1,29 @@
 "use client"
 
 import { useId, useRef, useState, type FormEvent, type ReactNode } from "react"
-import { CircleAlert, CircleCheck, CircleDashed, Plus, Trash2, type LucideIcon } from "lucide-react"
+import { CircleAlert, CircleCheck, CircleDashed, HandCoins, Plus, Trash2, type LucideIcon } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, ETIQUETA } from "@/components/panel/estilos"
-import { MAXIMO_DE_PAGOS, aCentavos, deCentavos, type PagoPedido } from "@/lib/atenciones"
-import { errorDeMontoDePago, estadoDelCobro, filaDePagoSugerida, type FilaDePago } from "@/lib/acciones-del-tablero"
+import { MAXIMO_DE_PAGOS, MAXIMO_DE_PROPINAS, aCentavos, deCentavos, type PagoPedido } from "@/lib/atenciones"
+import {
+  errorDeMontoDePago,
+  estadoDelCobro,
+  filaDePagoSugerida,
+  filaDePropinaSugerida,
+  propinasDesdeFilas,
+  totalDePropinasEnCentavos,
+  type FilaDePago,
+  type FilaDePropina,
+  type PropinaPedida,
+} from "@/lib/acciones-del-tablero"
 import { formatearMonto } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
 import type { Atencion } from "../_datos"
 import { Aviso } from "@/components/panel/aviso"
 
 let pagosAgregados = 0
+let propinasAgregadas = 0
 
 interface PropsDeModalCobro {
   /**
@@ -22,10 +33,12 @@ interface PropsDeModalCobro {
    */
   atencion: Atencion
   mediosDePago: { id: string; nombre: string }[]
+  /** A quién puede ir una propina: los miembros y la dueña (`duenio`). */
+  profesionales: { id: string; nombre: string }[]
   /** Por qué no se pudo cobrar, si falló. */
   aviso: string
   guardando: boolean
-  onCobrar: (pagos: PagoPedido[]) => void
+  onCobrar: (pagos: PagoPedido[], propinas: PropinaPedida[]) => void
   /** Se tocó un pago: el aviso del intento anterior ya no es de lo que se ve. */
   onCambiarPagos: () => void
   onCerrar: () => void
@@ -47,9 +60,19 @@ function totalEnCentavosDe(atencion: Atencion): number {
  * en centavos, y "Cobrar" se habilita sólo cuando los pagos dan el total
  * exacto: con la misma regla que aplica el servidor (`errorDeCobro`).
  */
-export function ModalCobro({ atencion, mediosDePago, aviso, guardando, onCobrar, onCambiarPagos, onCerrar }: PropsDeModalCobro) {
+export function ModalCobro({
+  atencion,
+  mediosDePago,
+  profesionales,
+  aviso,
+  guardando,
+  onCobrar,
+  onCambiarPagos,
+  onCerrar,
+}: PropsDeModalCobro) {
   const idBase = useId()
   const botonAgregar = useRef<HTMLButtonElement>(null)
+  const botonAgregarPropina = useRef<HTMLButtonElement>(null)
   const totalCentavos = totalEnCentavosDe(atencion)
 
   // Arranca con todo en el primer medio, que es el caso de todos los días.
@@ -58,8 +81,12 @@ export function ModalCobro({ atencion, mediosDePago, aviso, guardando, onCobrar,
     totalCentavos > 0 ? [filaDePagoSugerida(mediosDePago, [], totalCentavos, "pago-inicial")] : []
   )
 
+  // Las propinas (#66) arrancan vacías: son opcionales y van aparte del total.
+  const [propinas, setPropinas] = useState<FilaDePropina[]>([])
+
   const cobro = estadoDelCobro(totalCentavos, filas)
-  const listo = cobro.error === null
+  const deLasPropinas = propinasDesdeFilas(propinas)
+  const listo = cobro.error === null && deLasPropinas.ok
   const hayMontoInvalido = filas.some((fila) => errorDeMontoDePago(fila.monto) !== null)
 
   const cambiarFila = (clave: string, cambios: Partial<FilaDePago>) => {
@@ -83,9 +110,28 @@ export function ModalCobro({ atencion, mediosDePago, aviso, guardando, onCobrar,
     requestAnimationFrame(() => botonAgregar.current?.focus())
   }
 
+  const cambiarPropina = (clave: string, cambios: Partial<FilaDePropina>) => {
+    setPropinas((previas) => previas.map((fila) => (fila.clave === clave ? { ...fila, ...cambios } : fila)))
+    onCambiarPagos()
+  }
+
+  const agregarPropina = () => {
+    propinasAgregadas += 1
+    const clave = `propina-${propinasAgregadas}`
+    setPropinas((previas) => [...previas, filaDePropinaSugerida(atencion.lineas, profesionales, mediosDePago, clave)])
+    onCambiarPagos()
+    requestAnimationFrame(() => document.getElementById(`${idBase}-${clave}-monto`)?.focus())
+  }
+
+  const quitarPropina = (clave: string) => {
+    setPropinas((previas) => previas.filter((fila) => fila.clave !== clave))
+    onCambiarPagos()
+    requestAnimationFrame(() => botonAgregarPropina.current?.focus())
+  }
+
   const cobrar = (evento: FormEvent<HTMLFormElement>) => {
     evento.preventDefault()
-    if (listo) onCobrar(cobro.pagos)
+    if (listo && deLasPropinas.ok) onCobrar(cobro.pagos, deLasPropinas.propinas)
   }
 
   const nombreDeMedio = (id: string) => mediosDePago.find((medio) => medio.id === id)?.nombre ?? "medio"
@@ -212,6 +258,125 @@ export function ModalCobro({ atencion, mediosDePago, aviso, guardando, onCobrar,
         </fieldset>
 
         {/*
+          Propinas (#66): aparte del total y de los pagos. Van 100 % a quien
+          la recibe y se le pagan en la liquidación; no son ingreso del local.
+        */}
+        <fieldset className="space-y-3">
+          <legend className="mb-1 text-sm font-semibold">Propinas</legend>
+          <p className="text-[13px] text-texto-2">Opcional. No suman al total: van completas a quien las recibe.</p>
+
+          {propinas.map((fila, indice) => {
+            const numero = indice + 1
+            const error = errorDeMontoDePago(fila.monto)
+            const id = (campo: string) => `${idBase}-${fila.clave}-${campo}`
+            return (
+              <div
+                key={fila.clave}
+                role="group"
+                aria-label={`Propina ${numero}`}
+                className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 rounded-[20px] bg-superficie p-3 squircle sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:gap-3"
+              >
+                <div className="col-span-2 sm:col-span-1">
+                  <label htmlFor={id("profesional")} className={ETIQUETA}>
+                    Para
+                  </label>
+                  <select
+                    id={id("profesional")}
+                    value={fila.profesional}
+                    disabled={guardando}
+                    required
+                    onChange={(evento) => cambiarPropina(fila.clave, { profesional: evento.target.value })}
+                    className={CAMPO}
+                  >
+                    <option value="">Elegir</option>
+                    {profesionales.map((profesional) => (
+                      <option key={profesional.id} value={profesional.id}>
+                        {profesional.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor={id("monto")} className={ETIQUETA}>
+                    Monto
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-texto-2" aria-hidden="true">
+                      $
+                    </span>
+                    <input
+                      id={id("monto")}
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      value={fila.monto}
+                      disabled={guardando}
+                      required
+                      aria-invalid={error ? true : undefined}
+                      aria-describedby={error ? id("error") : undefined}
+                      onChange={(evento) => cambiarPropina(fila.clave, { monto: evento.target.value })}
+                      className={cn(CAMPO, "pl-7 tabular-nums", error && CAMPO_CON_ERROR)}
+                    />
+                  </div>
+                  {error && (
+                    <p id={id("error")} className={ERROR_DE_CAMPO}>
+                      {error}
+                    </p>
+                  )}
+                </div>
+                <div className="col-start-1 sm:col-start-auto">
+                  <label htmlFor={id("medio")} className={ETIQUETA}>
+                    Medio
+                  </label>
+                  <select
+                    id={id("medio")}
+                    value={fila.medio}
+                    disabled={guardando}
+                    onChange={(evento) => cambiarPropina(fila.clave, { medio: evento.target.value })}
+                    className={CAMPO}
+                  >
+                    {mediosDePago.map((medio) => (
+                      <option key={medio.id} value={medio.id}>
+                        {medio.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <Boton
+                  variante="fantasma"
+                  onClick={() => quitarPropina(fila.clave)}
+                  disabled={guardando}
+                  aria-label={`Quitar la propina ${numero}`}
+                  title="Quitar"
+                  className="col-start-2 row-start-2 mt-6.5 size-11 px-0 text-texto-2 hover:bg-error/8 hover:text-error sm:col-start-auto sm:row-start-auto"
+                >
+                  <Trash2 aria-hidden="true" className="size-[18px]" strokeWidth={1.75} />
+                </Boton>
+              </div>
+            )
+          })}
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Boton
+              ref={botonAgregarPropina}
+              variante="secundario"
+              tamano="sm"
+              onClick={agregarPropina}
+              disabled={guardando || propinas.length >= MAXIMO_DE_PROPINAS || mediosDePago.length === 0}
+            >
+              <HandCoins aria-hidden="true" className="size-4" strokeWidth={2} />
+              Agregar propina
+            </Boton>
+            {propinas.length > 0 && (
+              <p className="text-sm" aria-live="polite">
+                <span className="text-texto-2">Propinas:</span>{" "}
+                <span className="font-semibold tabular-nums">{formatearMonto(deCentavos(totalDePropinasEnCentavos(propinas)))}</span>
+              </p>
+            )}
+          </div>
+        </fieldset>
+
+        {/*
           En vivo, para que se lea mientras se escribe: cuánto falta o sobra.
           Con ícono además del color, como los errores.
         */}
@@ -234,6 +399,12 @@ export function ModalCobro({ atencion, mediosDePago, aviso, guardando, onCobrar,
           {cobro.diferenciaCentavos === 0 && cobro.error !== null && !hayMontoInvalido && (
             <EstadoDelCobro icono={CircleAlert} error>
               {cobro.error}
+            </EstadoDelCobro>
+          )}
+          {/* Lo que les falta a las propinas, salvo un monto ilegible, que ya lo dice su campo. */}
+          {!deLasPropinas.ok && !propinas.some((fila) => errorDeMontoDePago(fila.monto) !== null) && (
+            <EstadoDelCobro icono={CircleAlert} error>
+              {deLasPropinas.error}
             </EstadoDelCobro>
           )}
         </div>

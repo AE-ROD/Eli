@@ -16,6 +16,7 @@ import {
   textoDeMovimiento,
   type ColumnaDeAtencion,
   type LineaPedida,
+  type PropinaPedida,
 } from "@/lib/acciones-del-tablero"
 import {
   actorDeSesion,
@@ -419,9 +420,9 @@ export default function PaginaTablero() {
       recargar()
     })
 
-  const cobrarCon = (atencion: Atencion, pagos: PagoPedido[]) =>
+  const cobrarCon = (atencion: Atencion, pagos: PagoPedido[], propinas: PropinaPedida[]) =>
     desdeUnModal(async () => {
-      const resultado = await cobrarAtencion(atencion.id, pagos)
+      const resultado = await cobrarAtencion(atencion.id, pagos, propinas)
 
       if (resultado.ok) {
         ponerAtencion(resultado.datos)
@@ -609,9 +610,10 @@ export default function PaginaTablero() {
             key={`cobro-${modal.atencion.id}`}
             atencion={modal.atencion}
             mediosDePago={tablero.catalogo.mediosDePago}
+            profesionales={tablero.catalogo.profesionales}
             aviso={avisoDelModal}
             guardando={guardando}
-            onCobrar={(pagos) => cobrarCon(modal.atencion, pagos)}
+            onCobrar={(pagos, propinas) => cobrarCon(modal.atencion, pagos, propinas)}
             onCambiarPagos={() => setAvisoDelModal("")}
             onCerrar={cerrarModal}
           />
