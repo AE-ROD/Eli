@@ -31,6 +31,7 @@ import {
   puedeEditarDatosDeCliente,
   puedeBorrarCliente,
   puedeImportarExportarClientes,
+  puedeEditarPaginaDelNegocio,
   memberIdParaCita,
   profesionalParaLinea,
   whereDeAgenda,
@@ -115,6 +116,8 @@ describe("jerarquía de roles", () => {
     ["editar los datos de un cliente", puedeEditarDatosDeCliente, true, true, false],
     ["borrar un cliente", puedeBorrarCliente, true, true, false],
     ["importar y exportar clientes en CSV", puedeImportarExportarClientes, true, true, false],
+    // La página pública es la cara del negocio: el profesional la ve, no la edita.
+    ["editar la página pública del negocio", puedeEditarPaginaDelNegocio, true, true, false],
   ])("%s — dueño/encargado/profesional", (_que, puede, esperaDueño, esperaEncargado, esperaProfesional) => {
     expect(puede(dueño)).toBe(esperaDueño)
     expect(puede(encargado)).toBe(esperaEncargado)
@@ -287,6 +290,7 @@ describe("falla cerrado", () => {
     expect(puedeEditarDatosDeCliente(null)).toBe(false)
     expect(puedeBorrarCliente(null)).toBe(false)
     expect(puedeImportarExportarClientes(null)).toBe(false)
+    expect(puedeEditarPaginaDelNegocio(null)).toBe(false)
   })
 
   it("un rol desconocido no gestiona la suscripción ni asigna citas a otros", () => {
@@ -296,6 +300,7 @@ describe("falla cerrado", () => {
     expect(puedeGestionarSuscripcion(desconocido)).toBe(false)
     expect(veLaListaDeInicio(desconocido)).toBe(false)
     expect(puedeAsignarCitasAOtros(desconocido)).toBe(false)
+    expect(puedeEditarPaginaDelNegocio(desconocido)).toBe(false)
     // El panel del día es la vista restringida: un rol desconocido cae ahí.
     expect(veElPanelDeSuDia(desconocido)).toBe(true)
   })

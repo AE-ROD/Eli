@@ -28,6 +28,8 @@ export interface Servicio {
   description: string | null
   duration: number
   price: number | null
+  /** Agrupa los servicios en la página pública. `null` va a "Otros". */
+  category: string | null
   active: boolean
 }
 
@@ -37,6 +39,8 @@ export interface DatosDeServicio {
   description: string
   duration: number
   price: string
+  /** Vacío es "sin categoría": se manda `null` y el servidor la borra. */
+  category: string
 }
 
 /**
@@ -63,7 +67,12 @@ export async function guardarHorario(memberId: string | null, horarios: HorarioD
  * guardado sin precio o con otro.
  */
 export function cuerpoDeServicio(datos: DatosDeServicio) {
-  const base = { name: datos.name, description: datos.description || undefined, duration: datos.duration }
+  const base = {
+    name: datos.name,
+    description: datos.description || undefined,
+    duration: datos.duration,
+    category: datos.category.trim() || null,
+  }
   if (!datos.price.trim()) return { ok: true as const, datos: { ...base, price: undefined } }
   const precio = leerMonto(datos.price)
   return precio === null
@@ -96,6 +105,50 @@ export async function activarODesactivarServicio(id: string, activo: boolean): P
 
 export async function borrarServicio(id: string): Promise<Resultado> {
   return pedir(`/api/configuracion/servicios/${id}`, "No se pudo borrar el servicio", { method: "DELETE" })
+}
+
+/** La especialidad de un profesional en la página pública ("Colorista"). */
+export interface EspecialidadDeMiembro {
+  memberId: string
+  nombre: string
+  especialidad: string
+}
+
+/**
+ * Lo que se edita de la página pública del negocio. Los textos van como se
+ * escriben: el servidor les quita los espacios, normaliza el WhatsApp y el
+ * Instagram, y guarda lo vacío como "sin dato".
+ */
+export interface DatosDePaginaPublica {
+  address: string
+  comuna: string
+  whatsapp: string
+  instagram: string
+  color: string
+  mediosDePago: string[]
+  especialidades: EspecialidadDeMiembro[]
+}
+
+/** Lo que el servidor devuelve ya guardado (normalizado). */
+export interface PaginaPublicaGuardada {
+  address: string | null
+  comuna: string | null
+  whatsapp: string | null
+  instagram: string | null
+  color: string | null
+  mediosDePago: string[]
+}
+
+export async function guardarPaginaPublica(datos: DatosDePaginaPublica): Promise<Resultado<PaginaPublicaGuardada>> {
+  const { especialidades, ...resto } = datos
+  return pedir<PaginaPublicaGuardada>(
+    "/api/configuracion/pagina",
+    "No se pudo guardar la página",
+    conJson("PUT", {
+      ...resto,
+      especialidades: especialidades.map(({ memberId, especialidad }) => ({ memberId, especialidad })),
+    })
+  )
 }
 
 /** Hasta cuántas horas antes el cliente puede cancelar o reagendar con su enlace (0 a 72). */

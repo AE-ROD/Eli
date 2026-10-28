@@ -121,6 +121,19 @@ export const ESTADOS_DE_CITA = ["pendiente", "confirmada", "en-progreso", "compl
 export type EstadoDeCita = (typeof ESTADOS_DE_CITA)[number]
 
 /**
+ * Con qué estado puede nacer una cita creada desde el panel. Los demás son
+ * consecuencias de lo que pasa después y tienen sus reglas al editar
+ * (`app/api/citas/[id]`): "No vino" sólo desde una cita que esperaba y cuya
+ * hora pasó, "en progreso" y "completada" vienen del Tablero, y "cancelada"
+ * se marca sobre una cita que existía. Crear directo en ellos se saltaba esas
+ * reglas (y, con "no-asistio", inflaba el contador de inasistencias).
+ */
+export const ESTADOS_AL_CREAR = ["pendiente", "confirmada"] as const
+
+export const MENSAJE_DE_ESTADO_AL_CREAR =
+  "Una cita nueva sólo puede quedar pendiente o confirmada: los demás estados se marcan después, sobre la cita"
+
+/**
  * Desde qué estados se marca "No vino": una reserva que seguía esperando.
  * En progreso el cliente ya llegó; completada, cancelada o ya marcada, no.
  */
@@ -140,3 +153,18 @@ export const diaDeLaSemana = () => {
   const mensaje = "El día de la semana tiene que ser un número entero del 0 al 6"
   return z.number().int(mensaje).min(0, mensaje).max(6, mensaje)
 }
+
+/**
+ * Un texto opcional con tope: vacío (o sólo espacios) se guarda como `null`,
+ * no como "". Para los datos de la página pública y la categoría de un
+ * servicio, que se muestran sólo si hay algo escrito.
+ */
+export const textoOpcional = (campo: string, n: number) =>
+  z
+    .string()
+    .trim()
+    .max(n, maximo(campo, n))
+    .transform((valor) => (valor === "" ? null : valor))
+
+/** La categoría de un servicio ("Corte", "Color"): agrupa en la página pública. Hasta 40. */
+export const categoriaDeServicio = () => textoOpcional("La categoría", 40)

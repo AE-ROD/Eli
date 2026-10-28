@@ -4,17 +4,21 @@ import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { SeccionHorario } from "./_componentes/seccion-horario"
+import { SeccionPaginaPublica } from "./_componentes/seccion-pagina-publica"
 import { SeccionServicios } from "./_componentes/seccion-servicios"
 import { SelectorHorarioMiembro } from "./_componentes/selector-horario-miembro"
 import { SeccionPlazoDeCambios } from "./_componentes/seccion-plazo-de-cambios"
+import { apareceEnLaPagina, colorDelNegocio, normalizarInstagram } from "@/lib/pagina-del-negocio"
 import {
   actorDeSesion,
   esDueño,
   gestionaElNegocio,
   puedeEditarHorarioDe,
+  puedeEditarPaginaDelNegocio,
   puedeEditarPlazoDeCambios,
   puedeGestionarServicios,
 } from "@/lib/permisos"
+import { mostrarTelefono } from "@/lib/telefono"
 
 export default async function PaginaConfiguracion() {
   const session = await getServerSession(authOptions)
@@ -25,7 +29,7 @@ export default async function PaginaConfiguracion() {
   // general del negocio); encargado y profesional tienen su propio memberId.
   const memberIdPropio = actor.memberId
 
-  const [horariosActuales, servicios] = await Promise.all([
+  const [horariosActuales, servicios, pagina] = await Promise.all([
     prisma.workSchedule.findMany({
       where: { businessId: actor.businessId, memberId: memberIdPropio },
       orderBy: { dayOfWeek: "asc" },
@@ -33,6 +37,25 @@ export default async function PaginaConfiguracion() {
     prisma.service.findMany({
       where: { businessId: actor.businessId },
       orderBy: { createdAt: "asc" },
+    }),
+    // La página pública: todo rol la ve; sólo dueño y encargado la editan.
+    prisma.business.findUnique({
+      where: { id: actor.businessId },
+      select: {
+        name: true,
+        slug: true,
+        address: true,
+        comuna: true,
+        whatsapp: true,
+        instagram: true,
+        color: true,
+        mediosDePago: true,
+        cancelacionHorasAntes: true,
+        members: {
+          select: { id: true, role: true, especialidad: true, user: { select: { name: true } } },
+          orderBy: { createdAt: "asc" },
+        },
+      },
     }),
   ])
 
@@ -56,6 +79,7 @@ export default async function PaginaConfiguracion() {
   }))
 
   const tieneEquipo = miembrosParaElSelector.length > 0
+  const usuarioDeInstagram = normalizarInstagram(pagina?.instagram)
   const nombreActor = session?.user?.name ?? "Yo"
 
   return (
@@ -86,6 +110,32 @@ export default async function PaginaConfiguracion() {
           )}
         </div>
 
+        {pagina && (
+          <div id="pagina" className="scroll-mt-24">
+            <SeccionPaginaPublica
+              slug={pagina.slug}
+              nombreDelNegocio={pagina.name}
+              soloLectura={!puedeEditarPaginaDelNegocio(actor)}
+              inicial={{
+                address: pagina.address ?? "",
+                comuna: pagina.comuna ?? "",
+                whatsapp: mostrarTelefono(pagina.whatsapp),
+                instagram: usuarioDeInstagram ? `@${usuarioDeInstagram}` : "",
+                color: colorDelNegocio(pagina.color).clave,
+                mediosDePago: pagina.mediosDePago,
+                // Sólo quienes aparecen en "Equipo" de la página pública.
+                especialidades: pagina.members
+                  .filter((miembro) => apareceEnLaPagina(miembro.role))
+                  .map((miembro) => ({
+                    memberId: miembro.id,
+                    nombre: miembro.user.name,
+                    especialidad: miembro.especialidad ?? "",
+                  })),
+              }}
+            />
+          </div>
+        )}
+
         {/* Servicios: dueño y encargado, no el profesional */}
         {puedeGestionarServicios(actor) && (
           <div id="servicios" className="scroll-mt-24">
@@ -95,16 +145,7 @@ export default async function PaginaConfiguracion() {
 
         {/* Plazo del enlace para cancelar o reagendar: dueño y encargado */}
         {puedeEditarPlazoDeCambios(actor) && (
-          <SeccionPlazoDeCambios
-            horasIniciales={
-              (
-                await prisma.business.findUnique({
-                  where: { id: actor.businessId },
-                  select: { cancelacionHorasAntes: true },
-                })
-              )?.cancelacionHorasAntes ?? 24
-            }
-          />
+          <SeccionPlazoDeCambios horasIniciales={pagina?.cancelacionHorasAntes ?? 24} />
         )}
       </div>
     </div>

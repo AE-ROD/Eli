@@ -156,9 +156,56 @@ describe("POST /api/citas: advertencias al crear", () => {
     expect((await res.json()).advertencias[0].tipo).toBe("choque")
   })
 
-  it("una cita que nace cancelada no ocupa el horario: no advierte", async () => {
-    const res = await crear(sesiones.dueña, nueva("2026-10-20", "10:00", "11:00", { status: "cancelada" }))
+  it("una cita que nace confirmada también advierte del choque", async () => {
+    const res = await crear(sesiones.dueña, nueva("2026-10-20", "10:00", "11:00", { status: "confirmada" }))
+
+    expect(res.status).toBe(409)
+    expect(citasDeMaria()).toHaveLength(0)
+  })
+})
+
+describe("POST /api/citas: con qué estado puede nacer una cita", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    escenario()
+  })
+
+  it.each(["pendiente", "confirmada"])("nace %s: se crea con ese estado", async (status) => {
+    const res = await crear(sesiones.dueña, nueva("2026-10-20", "11:00", "12:00", { status }))
 
     expect(res.status).toBe(201)
+    expect(citasDeMaria()).toEqual([expect.objectContaining({ status })])
+  })
+
+  it("sin estado, nace pendiente", async () => {
+    const res = await crear(sesiones.dueña, nueva("2026-10-20", "11:00", "12:00"))
+
+    expect(res.status).toBe(201)
+    expect(citasDeMaria()).toEqual([expect.objectContaining({ status: "pendiente" })])
+  })
+
+  // "No vino" al crear se saltaba las reglas del PUT (hora pasada, sin
+  // atención en el Tablero) e inflaba el contador de inasistencias.
+  it.each(["no-asistio", "completada", "en-progreso", "cancelada"])(
+    "nace %s: 400 con un mensaje claro y no se crea",
+    async (status) => {
+      const res = await crear(
+        sesiones.dueña,
+        nueva("2026-10-20", "11:00", "12:00", { status, confirmarAdvertencias: true })
+      )
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({
+        error: "Una cita nueva sólo puede quedar pendiente o confirmada: los demás estados se marcan después, sobre la cita",
+      })
+      expect(citasDeMaria()).toHaveLength(0)
+    }
+  )
+
+  it("un estado que no existe: 400 con el mismo mensaje", async () => {
+    const res = await crear(sesiones.dueña, nueva("2026-10-20", "11:00", "12:00", { status: "inventado" }))
+
+    expect(res.status).toBe(400)
+    expect(citasDeMaria()).toHaveLength(0)
   })
 })

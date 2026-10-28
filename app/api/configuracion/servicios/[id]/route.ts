@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
 import { z } from "zod"
-import { descripcion, duracion, nombre, precioDeServicio } from "@/lib/campos-del-panel"
+import { categoriaDeServicio, descripcion, duracion, nombre, precioDeServicio } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, puedeGestionarServicios } from "@/lib/permisos"
 
@@ -14,6 +14,7 @@ const edicionDeServicioSchema = z.object({
   duration: duracion().optional(),
   price: precioDeServicio().optional().nullable(),
   active: z.boolean().optional(),
+  category: categoriaDeServicio().optional().nullable(),
 })
 
 export async function PUT(

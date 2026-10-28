@@ -129,6 +129,15 @@ export const puedeBorrarCliente = gestionaElNegocio
 export const puedeImportarExportarClientes = gestionaElNegocio
 
 /**
+ * La mini página pública del negocio (`/reservar/[slug]`): dirección, comuna,
+ * WhatsApp, Instagram, color, medios de pago y la especialidad de cada
+ * profesional. Es la cara del negocio, así que la editan dueño y encargado;
+ * el profesional la ve en Configuración sin poder cambiarla. La categoría de
+ * cada servicio va con el catálogo (`puedeGestionarServicios`).
+ */
+export const puedeEditarPaginaDelNegocio = gestionaElNegocio
+
+/**
  * A quién se asigna una cita. Sólo quien puede asignar citas a otros (dueño y
  * encargado) elige: se respeta lo pedido, incluido `null` ("sin asignar").
  * Cualquier otro —el profesional, o un rol desconocido— no elige: termina

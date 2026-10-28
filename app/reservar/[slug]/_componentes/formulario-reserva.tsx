@@ -172,6 +172,7 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={FUNDIDO}>
         <EncabezadoDeReserva
           ref={titulo}
+          nivel={2}
           antetitulo={nombreNegocio}
           titulo="¡Reserva confirmada!"
           bajada={`Te esperamos, ${nombre}. ¡Hasta pronto!`}
@@ -222,9 +223,11 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
 
   return (
     <div>
+      {/* La mini página ya lleva el <h1> con el nombre del negocio. */}
       <EncabezadoDeReserva
-        antetitulo="Reserva tu cita"
-        titulo={nombreNegocio}
+        nivel={2}
+        antetitulo={nombreNegocio}
+        titulo="Reserva tu hora"
         bajada="Elige el servicio, el día y la hora, y deja tus datos."
       />
 
@@ -462,12 +465,12 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
  */
 function TituloDelPaso({ paso, children, ref }: { paso: Paso; children: ReactNode; ref: Ref<HTMLHeadingElement> }) {
   return (
-    <h2 ref={ref} tabIndex={-1} className="titulo-3 text-navy outline-none">
+    <h3 ref={ref} tabIndex={-1} className="titulo-3 text-navy outline-none">
       <span className="sr-only">
         Paso {paso} de {PASOS_DE_RESERVA.length}:{" "}
       </span>
       {children}
-    </h2>
+    </h3>
   )
 }
 

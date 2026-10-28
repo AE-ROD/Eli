@@ -229,4 +229,19 @@ describe("PUT /api/configuracion/servicios/[id] — largos y tipos", () => {
 
     expect(res.status).toBe(200)
   })
+
+  it("la categoría se cambia y, vacía o en null, se borra", async () => {
+    const { PUT } = await import("./route")
+
+    for (const [enviada, guardada] of [["Color", "Color"], ["", null], [null, null]] as const) {
+      mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+      prismaMock.service.findFirst.mockResolvedValueOnce({ id: "srv-1", businessId: "negocio-1" })
+      prismaMock.service.update.mockResolvedValueOnce({ id: "srv-1" })
+
+      const res = await PUT(pedidoFalso({ category: enviada }), paramsCon("srv-1"))
+
+      expect(res.status).toBe(200)
+      expect(prismaMock.service.update.mock.calls.at(-1)![0].data.category).toBe(guardada)
+    }
+  })
 })
