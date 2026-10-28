@@ -275,7 +275,7 @@ export function MenuDesplegable({ oculto, className }: PropsDeMenuDesplegable) {
                 ))}
               </ul>
               <div className="mt-1 flex items-center justify-between gap-3 border-t border-borde px-3 pt-1">
-                <p className="hidden text-sm text-texto-2 lg:block">Todo en un mismo lugar, del primer turno al cierre.</p>
+                <p className="hidden text-sm text-texto-2 lg:block">Todo en un mismo lugar, de la primera reserva al cierre.</p>
                 <Boton href="#funciones" variante="enlace" tamano="sm" onClick={cerrar}>
                   Lo que trae Eli
                 </Boton>

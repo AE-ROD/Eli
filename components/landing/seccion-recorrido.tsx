@@ -6,22 +6,22 @@ import { MaquetaReserva } from "@/components/landing/maquetas/maqueta-reserva"
 import { MaquetaTablero } from "@/components/landing/maquetas/maqueta-tablero"
 import { EscenarioConScroll, type PasoDelEscenario } from "@/components/movimiento/escenario-con-scroll"
 
-/** El día de un negocio con Eli, en el orden en que pasa: la reserva, la clienta, el tablero y el cobro. */
+/** El día de un negocio con Eli, en el orden en que pasa: la reserva, el cliente, el tablero y el cobro. */
 const PASOS: readonly PasoDelEscenario[] = [
   {
     id: "agenda",
     modulo: "agenda",
-    titulo: "Reservan solas",
+    titulo: "Reservan solos",
     texto:
-      "Cada negocio tiene su página de reservas. La clienta elige el servicio, el día y la hora, y deja sus datos.",
+      "Cada negocio tiene su página de reservas. El cliente elige el servicio, el día y la hora, y deja sus datos.",
     puntos: ["Servicio, día y hora, y sus datos", "Recordatorio por correo antes de la cita", "La cita entra a la agenda con su precio"],
     maqueta: (activa) => <MaquetaReserva activa={activa} />,
   },
   {
     id: "clientes",
     modulo: "clientes",
-    titulo: "Cada clienta, con su historia",
-    texto: "Cada clienta tiene su ficha con sus datos, tus notas y el historial de sus visitas.",
+    titulo: "Cada cliente, con su historia",
+    texto: "Cada cliente tiene su ficha con sus datos, tus notas y el historial de sus visitas.",
     puntos: ["Datos de contacto", "Notas que quedan guardadas", "Visitas con servicio, profesional y precio"],
     maqueta: (activa) => <MaquetaCliente activa={activa} />,
   },

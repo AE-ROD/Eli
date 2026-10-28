@@ -26,9 +26,9 @@ const HISTORIAS: readonly Historia[] = [
   {
     id: "barberia",
     oficio: "Barbería",
-    titulo: "Con reserva o sin ella, a la misma fila",
+    titulo: "Con reserva o sin ella, en la misma fila",
     texto:
-      "Lo que se reserva en tu página entra solo al tablero. Quien llega sin reserva se anota en el momento, y «Llegó» trae cargado lo reservado.",
+      "Las reservas de tu página entran solas al tablero. Quien llega sin reserva se anota en el momento, y «Llegó» trae cargado lo reservado.",
     color: "azul",
     escena: <MaquetaFilaDeEspera />,
   },
@@ -37,16 +37,16 @@ const HISTORIAS: readonly Historia[] = [
     oficio: "Spa de uñas",
     titulo: "Que reserven desde tu página",
     texto:
-      "La clienta elige el servicio, el día y la hora, y deja sus datos. Antes de la cita le llega un recordatorio por correo.",
+      "El cliente elige el servicio, el día y la hora, y deja sus datos. Antes de la cita le llega un recordatorio por correo.",
     color: "naranja",
     escena: <MaquetaElegirServicio />,
   },
   {
     id: "solo",
     oficio: "Si trabajas solo",
-    titulo: "Tu agenda, tus clientas y tu caja",
+    titulo: "Tu agenda, tus clientes y tu caja",
     texto:
-      "Las citas del día, la ficha de cada clienta con sus notas y lo que cobraste, cuadrado al centavo. Todo en un mismo lugar.",
+      "Las citas del día, la ficha de cada cliente con sus notas y lo que cobraste, cuadrado al centavo. Todo en un mismo lugar.",
     color: "lima",
     escena: <MaquetaDiaSolo />,
   },
