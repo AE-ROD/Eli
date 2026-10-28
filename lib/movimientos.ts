@@ -2,7 +2,6 @@ import type { Prisma } from "@prisma/client"
 import { MONTO_MAXIMO, tieneCentavosExactos } from "@/lib/atenciones"
 import { puedeRegistrarAdelanto, puedeRegistrarAjuste, type Actor } from "@/lib/permisos"
 import { fechaDeColumna } from "@/lib/periodos-de-liquidacion"
-import type { TipoDeMovimiento } from "@/lib/liquidacion"
 
 /**
  * Adelantos, vales y ajustes de un profesional (`MovimientoDeLiquidacion`):
@@ -13,6 +12,13 @@ import type { TipoDeMovimiento } from "@/lib/liquidacion"
  */
 
 export const TIPOS_DE_MOVIMIENTO = ["adelanto", "vale", "ajuste"] as const
+export type TipoDeMovimiento = (typeof TIPOS_DE_MOVIMIENTO)[number]
+
+export const NOMBRES_DE_MOVIMIENTO: Record<TipoDeMovimiento, string> = {
+  adelanto: "Adelanto",
+  vale: "Vale",
+  ajuste: "Ajuste",
+}
 
 export const esTipoDeMovimiento = (valor: unknown): valor is TipoDeMovimiento =>
   typeof valor === "string" && (TIPOS_DE_MOVIMIENTO as readonly string[]).includes(valor)

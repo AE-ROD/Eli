@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { comisionParaCongelar, type PorcentajesVigentes } from "@/lib/comisiones"
 import { nombreDeMedio } from "@/lib/medios-de-pago"
+import { NOMBRES_DE_MOVIMIENTO, type TipoDeMovimiento } from "@/lib/movimientos"
 import { whereDeLiquidaciones, type Actor } from "@/lib/permisos"
 import { registrarError } from "@/lib/registro-de-errores"
 import { nombreEnElNegocio } from "@/lib/tablero"
@@ -19,6 +20,8 @@ import {
   type ConfiguracionDePeriodo,
   type TipoDePeriodo,
 } from "@/lib/periodos-de-liquidacion"
+
+export type { TipoDeMovimiento }
 
 /**
  * La liquidación de un profesional (#68): qué se le debe por un período,
@@ -143,7 +146,6 @@ export async function porcentajesVigentesDe(db: Db, businessId: string, memberId
 
 export type EstadoDeLineaEnLiquidacion = "congelada" | "se-congelara" | "sin-porcentaje"
 export type TipoDeLinea = "servicio" | "producto"
-export type TipoDeMovimiento = "adelanto" | "vale" | "ajuste"
 
 export interface LineaEnLiquidacion {
   id: string
@@ -764,12 +766,6 @@ export const NOMBRES_DE_ESTADO: Record<EstadoDeLiquidacion, string> = {
   cerrada: "Cerrada, por pagar",
   pagada: "Pagada",
   anulada: "Anulada",
-}
-
-export const NOMBRES_DE_MOVIMIENTO: Record<TipoDeMovimiento, string> = {
-  adelanto: "Adelanto",
-  vale: "Vale",
-  ajuste: "Ajuste",
 }
 
 /**
