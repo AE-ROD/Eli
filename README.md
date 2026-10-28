@@ -120,6 +120,21 @@ Aditiva: columnas nuevas nullable o con default en `negocios`,
 puede aplicar antes de desplegar. Orden: aplicar la migración, desplegar, y
 `npx prisma migrate resolve --applied 20261027120000_etapa_1_antes_de_vender`.
 
+### `20261028120000_etapa_2_la_plata_del_equipo`
+
+Aditiva: columnas nuevas con default o nullable en `negocios` (período de
+liquidación), `miembros_negocio` (retención de honorarios), `atencion_servicios`
+(tipo de línea, producto, comisión congelada por línea y liquidación) y
+`cambios_comision` (producto); un único `(id, businessId)` en `atenciones`; las
+tablas nuevas `productos`, `atencion_propinas`, `liquidaciones`,
+`movimientos_de_liquidacion` y `cierres_de_caja`; CHECKs, un índice único
+parcial y el trigger `atencion_servicios_comision_inmutable`, escritos a mano.
+No reescribe filas: las existentes cumplen los CHECKs nuevos con sus defaults.
+El código viejo no usa nada de esto, así que se aplica **antes** de desplegar.
+La aplica el dueño, nunca un agente (la única base configurada es producción).
+Orden: aplicar la migración, desplegar, y
+`npx prisma migrate resolve --applied 20261028120000_etapa_2_la_plata_del_equipo`.
+
 ## Cómo está organizado
 
 ```

@@ -94,6 +94,15 @@ model Business {
   /// reagendar con su enlace. Default 24; lo cambia el negocio.
   cancelacionHorasAntes Int @default(24)
 
+  // ─── La plata del equipo (etapa 2) ──────────────────────────────────────
+  /// Cada cuánto se liquida al equipo: "semanal" | "quincenal" | "mensual".
+  /// Lo elige sólo la dueña (`puedeConfigurarLiquidacion`). Un CHECK de la
+  /// migración limita los valores. Cambiarlo sólo afecta lo que viene.
+  liquidacionPeriodo      String @default("mensual")
+  /// En el período semanal, qué día empieza la semana (0 = domingo … 6 =
+  /// sábado, como `WorkSchedule.dayOfWeek`). Default lunes. CHECK 0..6.
+  liquidacionInicioSemana Int    @default(1)
+
   invitados         Business[]         @relation("Referidos")
   correosDeCuenta   CorreoDeCuenta[]
   customers         Customer[]
@@ -109,6 +118,11 @@ model Business {
   solicitudesDeSoporte SolicitudDeSoporte[]
   memberServices    MemberService[]
   timeBlocks        TimeBlock[]
+  productos         Producto[]
+  propinas          PropinaDeAtencion[]
+  liquidaciones     Liquidacion[]
+  movimientosDeLiquidacion MovimientoDeLiquidacion[]
+  cierresDeCaja     CierreDeCaja[]
 
   @@index([invitadoPorId])
   @@map("negocios")
@@ -148,6 +162,12 @@ model BusinessMember {
   especialidad String?
   fotoUrl      String?
 
+  /// Si el local retiene la boleta de honorarios de este profesional:
+  /// "no-se-retiene" | "retiene-el-local" (CHECK de la migración). La tasa y
+  /// el cálculo viven sólo en `lib/retencion-de-honorarios.ts`, para poder
+  /// quitarlo sin tocar el resto. Lo configura la dueña.
+  retencionHonorarios String @default("no-se-retiene")
+
   workSchedules     WorkSchedule[]
   appointments      Appointment[]
   visitServices     VisitService[]
@@ -159,6 +179,9 @@ model BusinessMember {
   // Servicios que hace este profesional. Sin filas = hace todos.
   memberServices    MemberService[]
   timeBlocks        TimeBlock[]
+  propinas          PropinaDeAtencion[]
+  liquidaciones     Liquidacion[]
+  movimientosDeLiquidacion MovimientoDeLiquidacion[]
 
   @@unique([businessId, userId])
   // Habilita la FK compuesta de CommissionRate (memberId, businessId): sin
@@ -304,6 +327,12 @@ model Appointment {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
+  // SIN USO desde la etapa 2: la comisión se congela por línea, en
+  // `VisitService` (commissionPercent/commissionCents/commissionAt), porque una
+  // cita puede tener varias líneas de distintos profesionales. Estas columnas
+  // quedan vacías y no se borran (borrarlas es una migración destructiva que
+  // no hace falta). Lo que sigue es su diseño original.
+  //
   // Comisión congelada al completar la cita. Todavía no hay código que la
   // calcule: estas columnas son sólo el lugar donde va a quedar. Se escriben
   // una sola vez y no se recalculan: cambiar un porcentaje después no puede
@@ -428,7 +457,12 @@ model Visit {
 
   services VisitService[]
   payments VisitPayment[]
+  propinas PropinaDeAtencion[]
+  movimientosDeLiquidacion MovimientoDeLiquidacion[]
 
+  // Habilita las FK compuestas (visitId, businessId) de las propinas y de los
+  // movimientos de liquidación, como en BusinessMember.
+  @@unique([id, businessId])
   @@index([businessId, status])
   @@index([businessId, paidAt])
   @@index([customerId])
@@ -455,8 +489,33 @@ model VisitService {
   professionalName String // copia del nombre de quien la hizo
   priceCents       Int // centavos enteros, como `Visit.totalCents`
 
+  /// "servicio" | "producto" (CHECK). Una línea de producto lleva `productId`
+  /// y no `serviceId`; una de servicio, al revés (CHECK). `serviceName` guarda
+  /// el nombre copiado en los dos casos. Un producto vendido dos veces son dos
+  /// líneas: no hay cantidad.
+  tipo      String    @default("servicio")
+  productId String?
+  product   Producto? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  // Comisión congelada por línea al cobrar (#65). Reemplaza a las columnas
+  // de `citas`, que quedan sin uso. Los tres en null = pendiente (sin % al
+  // cobrar), nunca 0; los tres juntos o ninguno (CHECK). Las líneas `byOwner`
+  // nunca llevan comisión (CHECK). Una vez congelada no cambia: lo impide el
+  // trigger `atencion_servicios_comision_inmutable` de la migración.
+  commissionPercent Float? // 0-100 vía CHECK
+  commissionCents   Int? // 0..priceCents vía CHECK
+  commissionAt      DateTime?
+
+  /// La liquidación que ya pagó esta línea. Con valor, el trigger impide
+  /// cambiarle precio, profesional o comisión. FK simple: la línea no tiene
+  /// `businessId` propio (va por la atención).
+  liquidacionId String?
+  liquidacion   Liquidacion? @relation(fields: [liquidacionId], references: [id], onDelete: NoAction)
+
   @@index([visitId])
   @@index([memberId])
+  @@index([productId])
+  @@index([memberId, liquidacionId])
   @@map("atencion_servicios")
 }
 
@@ -472,6 +531,192 @@ model VisitPayment {
 
   @@index([visitId])
   @@map("atencion_pagos")
+}
+
+/**
+ * Un producto que vende el negocio (shampoo, cera). Sin inventario: sólo el
+ * nombre, el precio sugerido y el % de comisión de quien lo vende. El catálogo
+ * lo gestionan dueña y encargado; el % sólo la dueña (`lib/permisos.ts`).
+ * `commissionPercent` null es "sin configurar", no 0, como en BusinessMember.
+ */
+model Producto {
+  id                String   @id @default(cuid())
+  businessId        String
+  business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name              String
+  priceCents        Int? // centavos; 0..2e9 vía CHECK
+  commissionPercent Float? // 0-100 vía CHECK; null = pendiente
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  visitServices     VisitService[]
+  commissionChanges CommissionChange[]
+
+  @@unique([id, businessId])
+  @@index([businessId])
+  @@map("productos")
+}
+
+/**
+ * Una propina de una atención (#66). Tabla propia y no `VisitPayment`: la
+ * propina no es ingreso del negocio, así que no puede sumar en el tablero ni
+ * en los reportes. Va 100 % al profesional y se paga en la liquidación; la de
+ * la dueña (`byOwner`) no entra a ninguna (CHECK).
+ *
+ * FK compuestas contra (id, businessId), como CommissionRate: Postgres rechaza
+ * una propina que mezcle la atención o el miembro de otro negocio. Los
+ * miembros con NO ACTION y no SetNull: SetNull en una compuesta anularía
+ * también `businessId`.
+ */
+model PropinaDeAtencion {
+  id               String          @id @default(cuid())
+  businessId       String
+  business         Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  visitId          String
+  visit            Visit           @relation(fields: [visitId, businessId], references: [id, businessId], onDelete: Cascade)
+  memberId         String?
+  member           BusinessMember? @relation(fields: [memberId, businessId], references: [id, businessId], onDelete: NoAction)
+  /// Como en `VisitService`: la dueña no es miembro. O `byOwner` o `memberId`, nunca los dos ni ninguno (CHECK).
+  byOwner          Boolean         @default(false)
+  professionalName String // copia del nombre
+  method           String // id de `lib/medios-de-pago.ts`
+  amountCents      Int // > 0 y ≤ 2e9 vía CHECK
+  liquidacionId    String?
+  liquidacion      Liquidacion?    @relation(fields: [liquidacionId, businessId], references: [id, businessId], onDelete: NoAction)
+  createdAt        DateTime        @default(now())
+
+  @@index([visitId])
+  @@index([businessId, memberId, liquidacionId])
+  @@map("atencion_propinas")
+}
+
+/**
+ * Lo que se le paga a un profesional por un período (#68), congelado al
+ * cerrar: los montos son un snapshot y no se recalculan. Las líneas, propinas
+ * y movimientos incluidos quedan marcados con su `liquidacionId`. Anularla
+ * (sólo cerrada, no pagada) los libera.
+ *
+ * `desde` y `hasta` son días del negocio (incluidos los dos), en su `zona`.
+ * Una sola liquidación no anulada por (negocio, miembro, desde): índice único
+ * parcial escrito a mano en la migración. Los ids de `User` (cerradaPorId…)
+ * van sin FK, como `Visit.paidById`, con el nombre copiado al lado.
+ */
+model Liquidacion {
+  id                     String         @id @default(cuid())
+  businessId             String
+  business               Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  memberId               String
+  member                 BusinessMember @relation(fields: [memberId, businessId], references: [id, businessId], onDelete: NoAction)
+  memberName             String
+  /// "semanal" | "quincenal" | "mensual" (CHECK), el vigente al cerrar.
+  periodo                String
+  desde                  DateTime       @db.Date
+  hasta                  DateTime       @db.Date
+  zona                   String
+  /// "cerrada" | "pagada" | "anulada" (CHECK).
+  estado                 String         @default("cerrada")
+  comisionServiciosCents Int
+  comisionProductosCents Int
+  propinasCents          Int
+  adelantosCents         Int // adelantos y vales: descuentan
+  ajustesCents           Int // con signo
+  brutoCents             Int
+  /// Snapshot de `BusinessMember.retencionHonorarios` al cerrar.
+  retencionModo          String         @default("no-se-retiene")
+  retencionPorcentaje    Float?
+  retencionCents         Int            @default(0)
+  totalCents             Int // ≥ 0 (CHECK): no se cierra en negativo
+  cerradaAt              DateTime       @default(now())
+  cerradaPorId           String
+  cerradaPorNombre       String
+  pagadaAt               DateTime?
+  pagadaPorId            String?
+  pagadaPorNombre        String?
+  medioDePago            String?
+  anuladaAt              DateTime?
+  anuladaPorId           String?
+  anuladaPorNombre       String?
+  motivoAnulacion        String?
+  nota                   String?
+
+  lineas      VisitService[]
+  propinas    PropinaDeAtencion[]
+  movimientos MovimientoDeLiquidacion[]
+
+  @@unique([id, businessId])
+  @@index([businessId, memberId, desde])
+  @@map("liquidaciones")
+}
+
+/**
+ * Adelantos y vales (descuentan) y ajustes (con signo, con motivo) de un
+ * profesional, que entran en su próxima liquidación. Adelantos y vales los
+ * registran dueña y encargado; ajustes, sólo la dueña. No se borran: se
+ * anulan, y uno anulado no puede estar en una liquidación (CHECK).
+ */
+model MovimientoDeLiquidacion {
+  id               String         @id @default(cuid())
+  businessId       String
+  business         Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  memberId         String
+  member           BusinessMember @relation(fields: [memberId, businessId], references: [id, businessId], onDelete: NoAction)
+  memberName       String
+  /// "adelanto" | "vale" | "ajuste" (CHECK).
+  tipo             String
+  /// Adelanto y vale: > 0. Ajuste: ≠ 0, con signo. Tope 2e9 (CHECK).
+  montoCents       Int
+  fecha            DateTime       @db.Date
+  /// Obligatorio para un ajuste (lo exige la app).
+  motivo           String?
+  /// La atención que corrige un ajuste, si corrige una.
+  visitId          String?
+  visit            Visit?         @relation(fields: [visitId, businessId], references: [id, businessId], onDelete: NoAction)
+  liquidacionId    String?
+  liquidacion      Liquidacion?   @relation(fields: [liquidacionId, businessId], references: [id, businessId], onDelete: NoAction)
+  anuladoAt        DateTime?
+  anuladoPorId     String?
+  anuladoPorNombre String?
+  createdById      String
+  createdByName    String
+  createdAt        DateTime       @default(now())
+
+  @@index([businessId, memberId, liquidacionId])
+  @@map("movimientos_de_liquidacion")
+}
+
+/**
+ * Un cierre de caja (#71). Cubre (desde, hasta]: desde es el `hasta` del
+ * cierre anterior (o el inicio del día del negocio) y hasta, el momento del
+ * cierre. Varios por día. Los montos son un snapshot; un cierre no se edita.
+ * Las CHECK de la migración garantizan esperado = fondo + cobrado + propinas
+ * y diferencia = contado − esperado. `desglose`: otros medios, informativo.
+ */
+model CierreDeCaja {
+  id                    String   @id @default(cuid())
+  businessId            String
+  business              Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  desde                 DateTime
+  hasta                 DateTime
+  /// El día del negocio del cierre, en su `zona`.
+  fecha                 DateTime @db.Date
+  zona                  String
+  fondoInicialCents     Int
+  efectivoCobradoCents  Int
+  propinasEfectivoCents Int
+  efectivoEsperadoCents Int
+  efectivoContadoCents  Int
+  diferenciaCents       Int
+  desglose              Json     @default("{}")
+  /// Obligatoria si la diferencia no es 0 (lo exige la app).
+  nota                  String?
+  cerradoPorId          String
+  cerradoPorNombre      String
+  createdAt             DateTime @default(now())
+
+  @@unique([businessId, hasta])
+  @@index([businessId, desde])
+  @@map("cierres_de_caja")
 }
 
 /**
@@ -619,10 +864,14 @@ model CommissionChange {
   member     BusinessMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
   memberName String // snapshot del nombre del profesional al momento del cambio
 
-  scope       String // "default" | "service" -- explícito, no inferido de serviceId (ver comentario del modelo)
+  scope       String // "default" | "service" | "product" -- explícito, no inferido de serviceId (ver comentario del modelo)
   serviceId   String?
   service     Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   serviceName String? // snapshot; sólo aplica cuando scope = "service"
+  // Como serviceId/serviceName, para el % de un producto (scope = "product").
+  productId   String?
+  product     Producto? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName String? // snapshot; sólo aplica cuando scope = "product"
 
   changedById    String?
   changedBy      User?   @relation(fields: [changedById], references: [id], onDelete: SetNull)
