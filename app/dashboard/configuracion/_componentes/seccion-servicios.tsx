@@ -22,7 +22,7 @@ import {
   type Servicio,
 } from "../_datos"
 
-const SERVICIO_EN_BLANCO: DatosDeServicio = { name: "", description: "", duration: 30, price: "" }
+const SERVICIO_EN_BLANCO: DatosDeServicio = { name: "", description: "", duration: 30, price: "", category: "" }
 
 /** Los botones de sólo ícono de cada servicio: 44 × 44, lo mínimo para un dedo. */
 const BOTON_DE_ICONO =
@@ -56,6 +56,7 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
       description: servicio.description ?? "",
       duration: servicio.duration,
       price: servicio.price == null ? "" : montoParaEscribir(servicio.price),
+      category: servicio.category ?? "",
     })
     setAvisoDelModal("")
     setModalAbierto(true)
@@ -135,6 +136,7 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
               <div className="min-w-48 flex-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <p className="font-medium break-words">{servicio.name}</p>
+                  {servicio.category && <Insignia>{servicio.category}</Insignia>}
                   {!servicio.active && <Insignia>Inactivo</Insignia>}
                 </div>
                 {servicio.description && (
@@ -181,6 +183,7 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
         {modalAbierto && (
           <ModalServicio
             form={form}
+            categorias={[...new Set(servicios.map((servicio) => servicio.category?.trim()).filter((categoria): categoria is string => !!categoria))]}
             guardando={guardando}
             aviso={avisoDelModal}
             modoEdicion={!!servicioEditando}
