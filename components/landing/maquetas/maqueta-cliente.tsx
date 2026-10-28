@@ -28,7 +28,7 @@ const VISITAS = [
   { fecha: "2 jul", servicio: "Peinado", profesionales: "Ana", monto: "$18.000" },
 ]
 
-/** La ficha de una clienta: sus datos, una nota y sus últimas visitas. Los datos son de ejemplo. */
+/** La ficha de un cliente: sus datos, una nota y sus últimas visitas. Los datos son de ejemplo. */
 export function MaquetaCliente({ activa }: PropsDeMaqueta) {
   return (
     <motion.div

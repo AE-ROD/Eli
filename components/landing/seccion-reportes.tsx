@@ -26,7 +26,7 @@ const ITEMS: readonly ItemDeListaFija[] = [
       <CuadroDeIcono icono={Clock} color="lima" />
     ),
     titulo: "Por turno: mañana, tarde o noche",
-    texto: "Mañana es antes de las 12, tarde de 12 a 18 y noche desde las 18. Ves qué parte del día mueve más.",
+    texto: "Mañana es antes de las 12:00, tarde de 12:00 a 18:00 y noche desde las 18:00. Ves qué parte del día mueve más.",
     visual: <MaquetaTurnos />,
   },
   {
@@ -45,7 +45,7 @@ const ITEMS: readonly ItemDeListaFija[] = [
       <CuadroDeIcono icono={RotateCcw} color="lima" />
     ),
     titulo: "Las anuladas, con quién, cuándo y por qué",
-    texto: "Lo cobrado no se reescribe. Si hubo un error se anula, y el registro queda a la vista.",
+    texto: "Lo cobrado no se reescribe. Si hubo un error, se anula y el registro queda a la vista.",
     visual: <MaquetaAnuladas />,
   },
 ]

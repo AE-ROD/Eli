@@ -41,9 +41,9 @@ const MOMENTOS: CuatroTarjetas = [
     icono: (
       <CuadroDeIcono icono={CalendarDays} color="azul" tamano="lg" />
     ),
-    corto: "La clienta reserva sola, desde tu página.",
+    corto: "Tus clientes reservan solos, desde tu página.",
     largo:
-      "En la página de reservas de tu negocio elige el servicio, el día y la hora, y deja sus datos. Antes de la cita le llega un recordatorio por correo.",
+      "En la página de reservas de tu negocio eligen el servicio, el día y la hora, y dejan sus datos. Antes de la cita les llega un recordatorio por correo.",
     pasos: [paso("Servicio", "azul", List), paso("Día y hora", "azul", Clock), paso("Sus datos", "azul", User)],
   },
   {
@@ -84,7 +84,7 @@ const MOMENTOS: CuatroTarjetas = [
     ),
     corto: "Pago dividido, cuadrado al centavo.",
     largo:
-      "Cobran el dueño o el encargado, y el pago se divide entre efectivo, tarjetas, transferencia o billetera digital. Si hubo un error se anula: queda quién, cuándo y por qué.",
+      "Cobran el dueño o el encargado, y el pago se divide entre efectivo, tarjetas, transferencia o billetera digital. Si hubo un error, se anula: queda quién, cuándo y por qué.",
     pasos: [
       paso("Efectivo $20.000", "lima", Banknote),
       paso("Débito $17.000", "lima", CreditCard),

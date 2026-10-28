@@ -64,9 +64,9 @@ export function MaquetaSemana() {
 }
 
 const TURNOS = [
-  { nombre: "Mañana", rango: "antes de las 12", monto: "$96.000", fraccion: 96 / 184 },
-  { nombre: "Tarde", rango: "de 12 a 18", monto: "$184.000", fraccion: 1 },
-  { nombre: "Noche", rango: "desde las 18", monto: "$132.000", fraccion: 132 / 184 },
+  { nombre: "Mañana", rango: "antes de las 12:00", monto: "$96.000", fraccion: 96 / 184 },
+  { nombre: "Tarde", rango: "de 12:00 a 18:00", monto: "$184.000", fraccion: 1 },
+  { nombre: "Noche", rango: "desde las 18:00", monto: "$132.000", fraccion: 132 / 184 },
 ] as const
 
 export function MaquetaTurnos() {
