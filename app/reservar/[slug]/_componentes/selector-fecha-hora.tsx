@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useId } from "react"
+import { useState, useEffect, useId, type ReactNode } from "react"
 import { ChevronLeft, ChevronRight, Clock } from "lucide-react"
 import { BotonIcono } from "@/components/comunes/boton-icono"
 import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
@@ -45,6 +45,12 @@ interface PropsDeSelectorFechaHora {
   horaSeleccionada: string  // HH:MM
   onFecha: (fecha: string) => void
   onHora: (hora: string) => void
+  /**
+   * Lo que se ofrece cuando el día elegido no tiene horas libres: en la
+   * reserva, "Avísame si se libera una hora" (#74). Sin él, sólo el aviso de
+   * que no hay horas (reagendar).
+   */
+  sinHoras?: (fecha: string) => ReactNode
 }
 
 export function SelectorFechaHora({
@@ -56,6 +62,7 @@ export function SelectorFechaHora({
   horaSeleccionada,
   onFecha,
   onHora,
+  sinHoras,
 }: PropsDeSelectorFechaHora) {
   // "Hoy" es el del negocio, no el del navegador: quien reserva desde otra
   // zona ve los mismos días que `confirmar` acepta. Como medianoche local,
@@ -63,7 +70,12 @@ export function SelectorFechaHora({
   const ahora = new Date()
   const hoy = deTexto(fechaYMinutosEn(ahora, zona).fecha) ?? new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate())
 
-  const [mesActual, setMesActual] = useState(new Date(hoy.getFullYear(), hoy.getMonth(), 1))
+  // Abre en el mes del día ya elegido (el enlace de un aviso de la lista de
+  // espera llega con la fecha puesta); si no, en el de hoy.
+  const [mesActual, setMesActual] = useState(() => {
+    const inicial = (fechaSeleccionada && deTexto(fechaSeleccionada)) || hoy
+    return new Date(inicial.getFullYear(), inicial.getMonth(), 1)
+  })
   const [horasLibres, setHorasLibres] = useState<string[]>([])
   const [cargandoHoras, setCargandoHoras] = useState(false)
   const [aviso, setAviso] = useState("")
@@ -203,7 +215,8 @@ export function SelectorFechaHora({
           >
             {estadoDeHoras === "sin-dia" && "Elige un día para ver los horarios libres."}
             {estadoDeHoras === "cargando" && "Cargando horarios…"}
-            {estadoDeHoras === "sin-horas" && "No hay horarios disponibles para este día. Prueba con otro."}
+            {estadoDeHoras === "sin-horas" &&
+              (sinHoras ? "No hay horarios disponibles para este día." : "No hay horarios disponibles para este día. Prueba con otro.")}
             {estadoDeHoras === "con-horas" &&
               `${horasLibres.length} ${horasLibres.length === 1 ? "horario libre" : "horarios libres"}.`}
           </p>
@@ -221,6 +234,8 @@ export function SelectorFechaHora({
               <ErrorDeCampo id={idDelAviso}>{aviso}</ErrorDeCampo>
             </div>
           )}
+
+          {estadoDeHoras === "sin-horas" && sinHoras && <div className="mt-4">{sinHoras(fechaSeleccionada)}</div>}
 
           {estadoDeHoras === "con-horas" && (
             <div role="group" aria-label="Horarios libres" className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-3">
