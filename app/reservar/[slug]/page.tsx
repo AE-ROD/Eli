@@ -6,15 +6,28 @@ import { Tarjeta } from "@/components/comunes/tarjeta"
 import { horarioSemanalDeAtencion } from "@/lib/horario-de-atencion"
 import { prisma } from "@/lib/prisma"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
+import { descripcionParaCompartir } from "@/lib/pagina-del-negocio"
+import { leerPaginaDelNegocio } from "./_pagina/datos-de-la-pagina"
+import { ANCLA_DE_RESERVA, MiniPagina } from "./_pagina/mini-pagina"
 import { EncabezadoDeReserva } from "./_componentes/encabezado-de-reserva"
 import { FormularioReserva } from "./_componentes/formulario-reserva"
 import { PieDeEli } from "./_componentes/pie-de-eli"
 
+/**
+ * Título y descripción al compartir el enlace (WhatsApp, redes, buscadores).
+ * La imagen la pone `opengraph-image.tsx`, en esta misma carpeta.
+ */
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const negocio = await prisma.business.findUnique({ where: { slug }, select: { name: true } })
+  const pagina = await leerPaginaDelNegocio(slug)
+  if (!pagina) return { title: "Negocio no encontrado" }
+  const titulo = pagina.comuna ? `${pagina.nombre} · ${pagina.comuna}` : pagina.nombre
+  const descripcion = descripcionParaCompartir(pagina.nombre, pagina.comuna)
   return {
-    title: negocio ? `Reservar cita — ${negocio.name}` : "Negocio no encontrado",
+    title: `Reservar cita — ${titulo}`,
+    description: descripcion,
+    openGraph: { title: titulo, description: descripcion, type: "website", locale: "es_CL" },
+    twitter: { card: "summary_large_image", title: titulo, description: descripcion },
   }
 }
 
@@ -64,11 +77,16 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
     },
   })
 
-  if (!negocio) notFound()
+  // La mini página del negocio va arriba; el flujo de reserva, debajo, en `#reservar`.
+  const pagina = await leerPaginaDelNegocio(slug)
+  if (!negocio || !pagina) notFound()
+  const miniPagina = <MiniPagina pagina={pagina} ahora={new Date()} />
 
   if (negocio.services.length === 0) {
     return (
       <MarcoDeReserva>
+        {miniPagina}
+        <div id={ANCLA_DE_RESERVA} className="mt-10 scroll-mt-6 md:mt-14">
         <EncabezadoDeReserva antetitulo="Reserva tu cita" titulo={negocio.name} />
         <Tarjeta className="mx-auto mt-8 flex max-w-xl flex-col items-center gap-5 px-6 py-10 text-center sm:px-10 md:mt-12">
           <CuadroDeIcono icono={CalendarX2} color="azul" tamano="lg" />
@@ -76,12 +94,15 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
             Este negocio aún no tiene servicios disponibles para reservar.
           </p>
         </Tarjeta>
+        </div>
       </MarcoDeReserva>
     )
   }
 
   return (
     <MarcoDeReserva>
+      {miniPagina}
+      <div id={ANCLA_DE_RESERVA} className="mt-10 scroll-mt-6 md:mt-14">
       <FormularioReserva
         slug={negocio.slug}
         nombreNegocio={negocio.name}
@@ -89,6 +110,7 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
         servicios={negocio.services}
         horarios={horarioSemanalDeAtencion(negocio.workSchedules)}
       />
+      </div>
     </MarcoDeReserva>
   )
 }

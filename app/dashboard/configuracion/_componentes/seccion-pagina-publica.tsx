@@ -258,7 +258,7 @@ function Campo({ etiqueta, valor, alCambiar, maximo, placeholder, tipo = "text",
         maxLength={maximo}
         placeholder={placeholder}
         autoComplete={autoComplete}
-        className={cn(CAMPO, "disabled:bg-superficie disabled:text-texto-2")}
+        className={cn(CAMPO, "disabled:cursor-default disabled:bg-superficie disabled:text-texto-2 disabled:opacity-100")}
       />
     </div>
   )

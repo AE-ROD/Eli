@@ -208,16 +208,18 @@ const DIAS_DESDE_EL_LUNES = [
 
 /**
  * La semana de lunes a domingo, con las franjas de cada día escritas
- * ("10:00–14:00 y 15:00–20:00") o "Cerrado". Recibe el horario ya resuelto
- * por `horarioSemanalDeAtencion`.
+ * ("10:00–14:00", "15:00–20:00"); un día sin franjas, vacío: la pantalla
+ * dice "Cerrado". Una franja por renglón: en el teléfono, dos en una línea no
+ * entran. Recibe el horario ya resuelto por `horarioSemanalDeAtencion`.
  */
-export function horarioParaMostrar(franjas: FranjaDelDia[]): { dayOfWeek: number; dia: string; horas: string }[] {
-  return DIAS_DESDE_EL_LUNES.map(({ dayOfWeek, nombre }) => {
-    const delDia = franjas
+export function horarioParaMostrar(franjas: FranjaDelDia[]): { dayOfWeek: number; dia: string; franjas: string[] }[] {
+  return DIAS_DESDE_EL_LUNES.map(({ dayOfWeek, nombre }) => ({
+    dayOfWeek,
+    dia: nombre,
+    franjas: franjas
       .filter((franja) => franja.dayOfWeek === dayOfWeek)
-      .map((franja) => `${franja.startTime}–${franja.endTime}`)
-    return { dayOfWeek, dia: nombre, horas: delDia.length > 0 ? delDia.join(" y ") : "Cerrado" }
-  })
+      .map((franja) => `${franja.startTime}–${franja.endTime}`),
+  }))
 }
 
 /** La descripción de la página al compartirla (buscadores, WhatsApp, redes), con la comuna si la hay. */

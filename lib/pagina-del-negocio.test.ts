@@ -191,17 +191,17 @@ describe("mediosParaMostrar", () => {
 })
 
 describe("horarioParaMostrar", () => {
-  it("de lunes a domingo, con las franjas de cada día o Cerrado", () => {
+  it("de lunes a domingo, con las franjas de cada día (vacío si no atiende)", () => {
     const semana = horarioParaMostrar([
       { dayOfWeek: 1, startTime: "10:00", endTime: "14:00" },
       { dayOfWeek: 1, startTime: "15:00", endTime: "20:00" },
       { dayOfWeek: 6, startTime: "10:00", endTime: "14:00" },
     ])
     expect(semana.map((dia) => dia.dia)).toEqual(["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
-    expect(semana[0].horas).toBe("10:00–14:00 y 15:00–20:00")
-    expect(semana[1].horas).toBe("Cerrado")
-    expect(semana[5].horas).toBe("10:00–14:00")
-    expect(semana[6].horas).toBe("Cerrado")
+    expect(semana[0].franjas).toEqual(["10:00–14:00", "15:00–20:00"])
+    expect(semana[1].franjas).toEqual([])
+    expect(semana[5].franjas).toEqual(["10:00–14:00"])
+    expect(semana[6].franjas).toEqual([])
   })
 })
 
