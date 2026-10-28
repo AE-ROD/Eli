@@ -20,6 +20,7 @@ import { formatearMonto } from "@/lib/dinero"
 import { nombreDeMedio } from "@/lib/medios-de-pago"
 import { actorDeSesion, puedeCerrarCaja, puedeVerCierresDeCaja, whereDeCierresDeCaja } from "@/lib/permisos"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
+import { tomarCandadoDeCaja } from "@/lib/bloqueos-de-dinero"
 import { nombreEnElNegocio } from "@/lib/tablero"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
 
@@ -177,7 +178,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const resultado = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`caja:${actor.businessId}`}))`
+      await tomarCandadoDeCaja(tx, actor.businessId)
 
       const ahora = new Date()
       const ultimo = await tx.cierreDeCaja.findFirst({

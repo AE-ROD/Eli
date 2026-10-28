@@ -174,7 +174,8 @@ describe("/api/caja", () => {
       await cerrar(sesiones.dueña, { desde: INICIO_DEL_DIA, fondoInicial: 10000, contado: 20000 })
       expect(base.prisma.$transaction).toHaveBeenCalledTimes(1)
       const [partes, ...valores] = base.prisma.$executeRaw.mock.calls[0]
-      expect(partes.join("?")).toContain("pg_advisory_xact_lock")
+      // Exclusivo, con la misma clave que cobrar y anular toman compartida.
+      expect(partes.join("?")).toBe("SELECT pg_advisory_xact_lock(hashtext(?))")
       expect(valores).toEqual([`caja:${NEGOCIO}`])
     })
 

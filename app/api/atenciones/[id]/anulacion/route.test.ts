@@ -306,7 +306,7 @@ describe("POST /api/atenciones/[id]/anulacion: lo ya rendido no se anula (#65)",
     expect(base.volcado()).toEqual(antes)
   })
 
-  it("toma el candado de liquidación de cada profesional de la atención, en orden, antes de anularla", async () => {
+  it("toma el candado de liquidación de cada profesional, en orden, y el de la caja compartido, antes de anularla", async () => {
     const datos = escenario()
     base.reiniciar({
       ...datos,
@@ -325,16 +325,16 @@ describe("POST /api/atenciones/[id]/anulacion: lo ya rendido no se anula (#65)",
     const res = await anular(sesiones.dueña, "v-cobrada")
 
     expect(res.status).toBe(200)
-    const candados = base.prisma.$executeRaw.mock.calls.map(([partes, ...valores]) => {
-      expect(partes.join("?")).toContain("pg_advisory_xact_lock")
-      return valores
-    })
+    const candados = base.prisma.$executeRaw.mock.calls.map(([partes, ...valores]) => [partes.join("?"), ...valores])
+    const liquidacion = "SELECT pg_advisory_xact_lock(hashtext(?), hashtext(?))"
     expect(candados).toEqual([
-      [NEGOCIO, "m-carla"],
-      [NEGOCIO, "m-encargado"],
-      [NEGOCIO, "m-pedro"],
+      [liquidacion, NEGOCIO, "m-carla"],
+      [liquidacion, NEGOCIO, "m-encargado"],
+      [liquidacion, NEGOCIO, "m-pedro"],
+      // El de la caja, compartido, con la clave del cierre de caja.
+      ["SELECT pg_advisory_xact_lock_shared(hashtext(?))", `caja:${NEGOCIO}`],
     ])
-    // Antes de tomar la atención y de mirar si ya está liquidada.
+    // Antes de tomar la atención y de mirar si ya está liquidada o en caja.
     const ultimoCandado = Math.max(...base.prisma.$executeRaw.mock.invocationCallOrder)
     expect(ultimoCandado).toBeLessThan(base.prisma.visit.updateMany.mock.invocationCallOrder[0])
   })

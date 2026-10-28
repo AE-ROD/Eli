@@ -181,6 +181,24 @@ describe("POST /api/atenciones/[id]/cobro: el cobro", () => {
     ])
   })
 
+  it("espera el candado de la caja (compartido) y recién entonces fija la hora del cobro", async () => {
+    // Un cierre de caja en curso tiene el candado exclusivo: el cobro espera,
+    // y su hora queda después del cierre, no adentro de lo que ya se contó.
+    const despues = new Date("2026-10-06T15:00:05.000Z")
+    base.prisma.$executeRaw.mockImplementationOnce(async () => {
+      vi.setSystemTime(despues)
+      return 0
+    })
+
+    const res = await cobrar(sesiones.dueña, "v-mixta", { pagos: [{ medio: "efectivo", monto: 33000 }] })
+
+    expect(res.status).toBe(200)
+    const [partes, ...valores] = base.prisma.$executeRaw.mock.calls[0]
+    expect(partes.join("?")).toBe("SELECT pg_advisory_xact_lock_shared(hashtext(?))")
+    expect(valores).toEqual([`caja:${NEGOCIO}`])
+    expect(atencionGuardada("v-mixta").paidAt).toEqual(despues)
+  })
+
   it("la cita pasa a completada sin que se le escriba el precio: el total es de toda la visita, no de esa cita", async () => {
     await cobrar(sesiones.dueña, "v-mixta", { pagos: [{ medio: "efectivo", monto: 33000 }] })
 

@@ -13,6 +13,23 @@ import type { Prisma } from "@prisma/client"
 
 export type MotivoDeBloqueo = "liquidacion" | "caja"
 
+/**
+ * Candado de la caja del negocio. El cierre lo toma exclusivo; cobrar y anular
+ * lo toman compartido (entre ellos no se esperan) ANTES de fijar `paidAt` o de
+ * mirar si la atención ya entró en un cierre. Así un cobro no queda con una
+ * hora que cae dentro de un cierre que no lo contó, ni una anulación pasa en
+ * medio de un cierre que la está sumando. La clave es la misma en los dos:
+ * `hashtext('caja:' || businessId)`.
+ */
+export async function tomarCandadoDeCaja(tx: Prisma.TransactionClient, businessId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`caja:${businessId}`}))`
+}
+
+/** El mismo candado que `tomarCandadoDeCaja`, compartido: para cobrar y anular. */
+export async function tomarCandadoDeCajaCompartido(tx: Prisma.TransactionClient, businessId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock_shared(hashtext(${`caja:${businessId}`}))`
+}
+
 export interface AtencionBloqueada {
   motivo: MotivoDeBloqueo
 }

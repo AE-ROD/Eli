@@ -13,6 +13,7 @@ import {
 } from "@/lib/atenciones"
 import { actorDeSesion, puedeCobrar, puedeRegistrarPropina } from "@/lib/permisos"
 import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { tomarCandadoDeCajaCompartido } from "@/lib/bloqueos-de-dinero"
 import { congelarComisiones } from "@/lib/lineas-de-atencion"
 import { errorDePropinas, propinasPedidasSchema, resolverPropinas } from "@/lib/propinas"
 import {
@@ -90,6 +91,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const nombre = await nombreEnElNegocio(prisma, actor, usuarioId)
 
     const atencion = await prisma.$transaction(async (tx) => {
+      // Antes de fijar la hora del cobro: si la caja se está cerrando, se
+      // espera a que termine, y la hora queda después de ese cierre.
+      await tomarCandadoDeCajaCompartido(tx, actor.businessId)
       const ahora = new Date()
       // Primero se toma la fila: un segundo cobro de la misma atención (un
       // doble clic) encuentra que ya no está por cobrar y no registra nada,
