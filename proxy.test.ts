@@ -291,3 +291,45 @@ describe("proxy — sesión revocada", () => {
     expect(res.headers.get("location")).toBeNull()
   })
 })
+
+describe("proxy — Eli instalable (manifest, íconos, service worker)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetToken.mockResolvedValue(null)
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 100 })
+  })
+
+  /** Como Next: cada entrada del matcher, anclada a la ruta entera. */
+  const pasaPorElProxy = async (ruta: string) => {
+    const { config } = await import("./proxy")
+    return config.matcher.some((patron) => {
+      if (patron.endsWith("/:path*")) return ruta.startsWith(patron.replace("/:path*", ""))
+      return new RegExp(`^${patron}$`).test(ruta)
+    })
+  }
+
+  it.each(["/manifest.webmanifest", "/sw.js", "/iconos/icono-192.png", "/iconos/icono-512.png", "/iconos/apple-icon.png"])(
+    "%s no pasa por el proxy: el navegador lo pide sin sesión",
+    async (ruta) => {
+      expect(await pasaPorElProxy(ruta)).toBe(false)
+    }
+  )
+
+  it("la página sin conexión pasa sólo por la CSP, sin pedir sesión", async () => {
+    expect(await pasaPorElProxy("/offline.html")).toBe(true)
+    const { default: proxy } = await import("./proxy")
+    const res = await proxy(pedidoFalso("/offline.html"))
+
+    expect(res.headers.get("location")).toBeNull()
+    expect(res.headers.get("content-security-policy")).toContain("style-src 'self' 'unsafe-inline'")
+  })
+
+  it("la CSP deja registrar el service worker del mismo sitio", async () => {
+    const { default: proxy } = await import("./proxy")
+    const csp = (await proxy(pedidoFalso("/dashboard"))).headers.get("content-security-policy") ?? ""
+    // Sin `worker-src` el navegador usa `script-src` y, sin éste, `default-src`;
+    // el registro de un SW no lleva nonce, así que lo que cuenta es `'self'`.
+    expect(csp).not.toContain("worker-src")
+    expect(csp).toMatch(/script-src 'self'/)
+  })
+})
