@@ -116,6 +116,19 @@ describe("GET /api/reservar/[slug]/profesionales", () => {
     expect(JSON.stringify(cuerpo)).not.toMatch(/@|worker|admin/)
   })
 
+  it("la foto sale saneada: sólo rutas del mismo sitio", async () => {
+    const datos = datosBase()
+    escenario({
+      businessMember: datos.businessMember.map((miembro) =>
+        miembro.id === "m-carla" ? { ...miembro, fotoUrl: "https://ajeno.test/carla.jpg" } : miembro.id === "m-pedro" ? { ...miembro, fotoUrl: "/fotos/pedro.jpg" } : miembro
+      ),
+    })
+
+    const { cuerpo } = await profesionales()
+
+    expect(cuerpo.profesionales.map((profesional: { fotoUrl: string | null }) => profesional.fotoUrl)).toEqual([null, "/fotos/pedro.jpg"])
+  })
+
   it("no muestra a los de otro negocio", async () => {
     escenario()
     const { cuerpo } = await profesionales("salon-dos")

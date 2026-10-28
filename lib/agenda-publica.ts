@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client"
 import { cabeEnAtencion, franjasDeAtencion, type FilaDeHorarioSemanal } from "@/lib/horario-de-atencion"
 import { horaAMinutos, minutosAHora, type FranjaHorario } from "@/lib/horario-dia"
 import { franjasParaElDia } from "@/lib/mover-cita"
+import { imagenPublica } from "@/lib/pagina-del-negocio"
 import { ESTADOS_QUE_LIBERAN, estaLibre, leerOcupacion, type Ocupacion, type Tramo } from "@/lib/ocupacion"
 import { yaPasoLaHora } from "@/lib/reserva-publica"
 import { diaDeLaSemana, existeLaHora, instanteEn, rangoDelDiaEn } from "@/lib/zona-horaria"
@@ -44,6 +45,7 @@ export interface ProfesionalQueAtiende {
   id: string
   nombre: string
   especialidad: string | null
+  /** Ya saneada con `imagenPublica`: sólo una ruta del mismo sitio, o null. */
   fotoUrl: string | null
   /** Los servicios que hace; vacío = todos. */
   serviceIds: string[]
@@ -70,7 +72,9 @@ export async function leerProfesionalesQueAtienden(
     id: miembro.id,
     nombre: miembro.user.name.trim(),
     especialidad: miembro.especialidad,
-    fotoUrl: miembro.fotoUrl,
+    // Se sanea acá, igual que en la mini página, para que ningún consumidor
+    // público devuelva una URL externa o con otro esquema.
+    fotoUrl: imagenPublica(miembro.fotoUrl),
     serviceIds: miembro.memberServices.map((fila) => fila.serviceId),
   }))
 }

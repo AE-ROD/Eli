@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import {
   DIAS_MAXIMOS_DE_ANTICIPACION,
   compartenContacto,
+  consentimientoSobreClienteExistente,
   esDiaReservable,
   esElMismoCliente,
   fechaNoReservable,
@@ -170,5 +171,27 @@ describe("esElMismoCliente", () => {
   it("un cliente sin apellido sólo coincide si la reserva trae el nombre completo igual", () => {
     const sinApellido = { name: "Lucía Pérez", lastName: null, email: "lucia@correo.test" }
     expect(esElMismoCliente(sinApellido, { nombre: "Lucia", apellido: "Perez", email: "lucia@correo.test" })).toBe(true)
+  })
+})
+
+describe("consentimientoSobreClienteExistente", () => {
+  it("sin teléfono en la reserva: nada", () => {
+    expect(consentimientoSobreClienteExistente("+56912345678", null)).toBe("nada")
+    expect(consentimientoSobreClienteExistente(null, undefined)).toBe("nada")
+  })
+
+  it("el cliente no tiene teléfono: se guarda el dado", () => {
+    expect(consentimientoSobreClienteExistente(null, "+56912345678")).toBe("guardar-telefono")
+  })
+
+  it("el mismo número, escrito de otra forma: se registra", () => {
+    expect(consentimientoSobreClienteExistente("9 1234 5678", "+56912345678")).toBe("registrar")
+    expect(consentimientoSobreClienteExistente("+56912345678", "+56912345678")).toBe("registrar")
+  })
+
+  it("otro número, uno ilegible o vacío guardado: nada (no se pisa)", () => {
+    expect(consentimientoSobreClienteExistente("+56987654321", "+56912345678")).toBe("nada")
+    expect(consentimientoSobreClienteExistente("+1 415 555 0100", "+56912345678")).toBe("nada")
+    expect(consentimientoSobreClienteExistente("", "+56912345678")).toBe("nada")
   })
 })

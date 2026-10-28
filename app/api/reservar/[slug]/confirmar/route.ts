@@ -25,6 +25,7 @@ import {
   ORIGEN_RESERVA_PUBLICA,
   WHERE_RESERVA_PUBLICA,
   compartenContacto,
+  consentimientoSobreClienteExistente,
   esElMismoCliente,
   fechaNoReservable,
   normalizarEmail,
@@ -137,17 +138,20 @@ async function reservar(
     ? await tx.customer.findMany({
         // Un cliente eliminado (anonimizado) nunca se reutiliza.
         where: { AND: [{ businessId: negocioId, email: { equals: email, mode: "insensitive" } }, clienteNoEliminado] },
-        select: { id: true, name: true, lastName: true, email: true, whatsappConsentAt: true },
+        select: { id: true, name: true, lastName: true, email: true, phone: true, whatsappConsentAt: true },
         orderBy: { createdAt: "asc" },
       })
     : []
-  let cliente: { id: string } | undefined = conEseEmail.find((guardado) => esElMismoCliente(guardado, datos))
+  const reutilizado = conEseEmail.find((guardado) => esElMismoCliente(guardado, datos))
+  let cliente: { id: string } | undefined = reutilizado
 
   // Consentimiento para recordatorios por WhatsApp (PRODUCTO.md §10): se
   // registra cuándo y por dónde. Marcado, se guarda si no había uno; uno
   // previo (dado en el local, por ejemplo) no se pisa. Sin marcar no borra
-  // nada.
-  const consentimiento = datos.whatsappConsentimiento
+  // nada. Sin teléfono se ignora: el consentimiento es para un número, y la
+  // página sólo muestra la casilla cuando se escribió uno.
+  const conConsentimiento = datos.whatsappConsentimiento === true && Boolean(datos.telefono)
+  const consentimiento = conConsentimiento
     ? { whatsappConsentAt: ahora, whatsappConsentSource: ORIGEN_RESERVA_PUBLICA }
     : {}
 
@@ -165,11 +169,25 @@ async function reservar(
       },
       select: { id: true },
     })
-  } else if (datos.whatsappConsentimiento) {
-    await tx.customer.updateMany({
-      where: { id: cliente.id, businessId: negocioId, whatsappConsentAt: null },
-      data: consentimiento,
-    })
+  } else if (conConsentimiento && reutilizado) {
+    // El cliente se reutilizó por email + nombre, no por teléfono: el
+    // consentimiento sólo vale si el número es el suyo. Sin teléfono
+    // guardado, se guarda el dado junto con el consentimiento; con otro
+    // número, no se registra ni se pisa (`consentimientoSobreClienteExistente`).
+    // El teléfono va en el where para que no cambie entre la lectura y la
+    // escritura.
+    const accion = consentimientoSobreClienteExistente(reutilizado.phone, datos.telefono)
+    if (accion === "guardar-telefono") {
+      await tx.customer.updateMany({
+        where: { id: cliente.id, businessId: negocioId, phone: null, whatsappConsentAt: null },
+        data: { phone: datos.telefono, ...consentimiento },
+      })
+    } else if (accion === "registrar") {
+      await tx.customer.updateMany({
+        where: { id: cliente.id, businessId: negocioId, phone: reutilizado.phone, whatsappConsentAt: null },
+        data: consentimiento,
+      })
+    }
   }
 
   const cita = await tx.appointment.create({

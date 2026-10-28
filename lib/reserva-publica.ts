@@ -6,6 +6,7 @@
  */
 
 import { horaAMinutos } from "@/lib/horario-dia"
+import { aE164Chile } from "@/lib/telefono"
 import { diaDeLaSemana, diasEntre, esFechaCalendario, fechaYMinutosEn } from "@/lib/zona-horaria"
 
 /**
@@ -141,6 +142,32 @@ export function esElMismoCliente(
   const email = normalizarEmail(reserva.email)
   if (!email || normalizarEmail(cliente.email) !== email) return false
   return normalizarNombre(`${cliente.name} ${cliente.lastName ?? ""}`) === normalizarNombre(`${reserva.nombre} ${reserva.apellido}`)
+}
+
+/**
+ * Qué hacer con el consentimiento de WhatsApp marcado en la reserva cuando el
+ * cliente ya existía (se reutilizó por email + nombre, no por teléfono):
+ *
+ * - `"guardar-telefono"`: el cliente no tiene teléfono. Se guarda el dado
+ *   (E.164) junto con el consentimiento.
+ * - `"registrar"`: el teléfono guardado es el mismo que el dado (ambos en
+ *   E.164). El consentimiento vale para ese número.
+ * - `"nada"`: no hay teléfono en la reserva, o el guardado es otro (o no se
+ *   puede leer como chileno). El consentimiento se dio para un número que no
+ *   es el del cliente: no se registra ni se pisa su teléfono.
+ *
+ * `telefonoDado` viene ya en E.164 (`reservaSchema`) o null.
+ */
+export function consentimientoSobreClienteExistente(
+  telefonoGuardado: string | null | undefined,
+  telefonoDado: string | null | undefined
+): "guardar-telefono" | "registrar" | "nada" {
+  const dado = aE164Chile(telefonoDado)
+  if (!dado) return "nada"
+  // Sólo null: es lo que el `updateMany` exige en el where (`phone: null`).
+  // Un texto vacío o ilegible guardado cae en "nada": no se pisa.
+  if (telefonoGuardado === null || telefonoGuardado === undefined) return "guardar-telefono"
+  return aE164Chile(telefonoGuardado) === dado ? "registrar" : "nada"
 }
 
 export interface Contacto {

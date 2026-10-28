@@ -97,7 +97,8 @@ export const reservaSchema = z.object({
   // como un número chileno es un 400 con el formato esperado.
   telefono: z.preprocess((valor) => (valor === undefined || valor === null ? "" : valor), telefonoChileno()),
   // "Quiero recibir recordatorios por WhatsApp". Opcional: sin marcar no
-  // borra un consentimiento que el cliente ya dio en el local.
+  // borra un consentimiento que el cliente ya dio en el local. Sin teléfono,
+  // `confirmar` lo ignora (no hay número al que mandar).
   whatsappConsentimiento: z.boolean({ invalid_type_error: "El consentimiento de WhatsApp no es válido" }).optional(),
   comentarios: opcionalHasta("Los comentarios", 1000),
   // Sin él, vacío o null: "cualquiera disponible" (lo asigna el servidor).

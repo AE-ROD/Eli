@@ -28,6 +28,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       id: profesional.id,
       nombre: profesional.nombre,
       especialidad: profesional.especialidad,
+      // Ya saneada en `leerProfesionalesQueAtienden` (`imagenPublica`).
       fotoUrl: profesional.fotoUrl,
       servicioIds: profesional.serviceIds.length === 0 ? null : profesional.serviceIds,
     })),
