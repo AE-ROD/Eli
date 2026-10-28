@@ -201,6 +201,14 @@ export function diaParaLeer(fecha: Date): string {
   return fecha.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
 }
 
+/**
+ * `2 de noviembre`: el día y el mes de un instante ISO, en hora local. En
+ * es-CL, como el resto del panel.
+ */
+export function diaYMes(iso: string): string {
+  return new Date(iso).toLocaleDateString("es-CL", { day: "numeric", month: "long" })
+}
+
 /** Las horas en punto de `desde` (incluida) a `hasta` (excluida): `["08:00", …, "19:00"]`. */
 export function horasEnPunto(desde: number, hasta: number): string[] {
   return Array.from({ length: hasta - desde }, (_, i) => `${(i + desde).toString().padStart(2, "0")}:00`)

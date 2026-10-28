@@ -9,6 +9,7 @@ import { Insignia } from "@/components/comunes/insignia"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
+import { diaYMes } from "@/lib/fechas"
 import { nombreDelRol } from "@/lib/nombres-de-roles"
 import { cn } from "@/lib/utils"
 import type { InvitacionPendiente, MiembroDelEquipo } from "../_datos"
@@ -26,11 +27,6 @@ const LUGAR_DEL_ROL = "col-start-2 justify-self-start sm:col-start-3 sm:justify-
 /** El encargado lleva el turquesa del equipo; el profesional, gris. El nombre del rol va siempre escrito. */
 function InsigniaDelRol({ rol }: { rol: string }) {
   return <Insignia tono={rol === "admin" ? "turquesa" : "gris"}>{nombreDelRol(rol)}</Insignia>
-}
-
-/** `2 de noviembre`: el día en que vence el enlace. */
-function diaDeVencimiento(iso: string): string {
-  return new Date(iso).toLocaleDateString("es-ES", { day: "numeric", month: "long" })
 }
 
 interface PropsDeListaEquipo {
@@ -124,7 +120,7 @@ export function ListaEquipo({
                     {vencida ? (
                       <Insignia tono="gris">Vencida</Insignia>
                     ) : (
-                      <p className="text-xs text-texto-2">Vence el {diaDeVencimiento(invitacion.expiresAt)}</p>
+                      <p className="text-xs text-texto-2">Vence el {diaYMes(invitacion.expiresAt)}</p>
                     )}
                   </div>
                   <div className="col-start-2 flex flex-wrap gap-2 sm:col-span-2 sm:col-start-2">
