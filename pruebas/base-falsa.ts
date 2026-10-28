@@ -1,6 +1,7 @@
 import { vi } from "vitest"
 import { Prisma } from "@prisma/client"
 import {
+  COMPUESTAS,
   RELACIONES,
   coincide,
   esObjetoPlano,
@@ -44,10 +45,18 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     referidoContabilizadoAt: null,
     extensionPorReferidoAt: null,
     cancelacionHorasAntes: 24,
+    liquidacionPeriodo: "mensual",
+    liquidacionInicioSemana: 1,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
-  businessMember: () => ({ role: "worker", especialidad: null, fotoUrl: null, createdAt: new Date() }),
+  businessMember: () => ({
+    role: "worker",
+    especialidad: null,
+    fotoUrl: null,
+    commissionPercent: null,
+    createdAt: new Date(),
+  }),
   customer: () => ({
     lastName: null,
     cedula: null,
@@ -95,15 +104,85 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     paidByName: null,
     voidedByName: null,
   }),
-  visitService: () => ({ serviceId: null, memberId: null, byOwner: false }),
+  visitService: () => ({
+    serviceId: null,
+    memberId: null,
+    byOwner: false,
+    tipo: "servicio",
+    productId: null,
+    commissionPercent: null,
+    commissionCents: null,
+    commissionAt: null,
+    liquidacionId: null,
+  }),
   visitPayment: () => ({ createdAt: new Date() }),
   workSchedule: () => ({ memberId: null, active: true }),
   timeBlock: () => ({ memberId: null, motivo: null, createdById: null, createdAt: new Date() }),
   memberService: () => ({ createdAt: new Date() }),
+  commissionRate: () => ({ createdAt: new Date(), updatedAt: new Date() }),
+  commissionChange: () => ({
+    memberId: null,
+    serviceId: null,
+    serviceName: null,
+    productId: null,
+    productName: null,
+    changedById: null,
+    previousPercent: null,
+    newPercent: null,
+    createdAt: new Date(),
+  }),
+  producto: () => ({ priceCents: null, commissionPercent: null, active: true, createdAt: new Date(), updatedAt: new Date() }),
+  propinaDeAtencion: () => ({ memberId: null, byOwner: false, liquidacionId: null, createdAt: new Date() }),
+  liquidacion: () => ({
+    estado: "cerrada",
+    cerradaAt: new Date(),
+    pagadaAt: null,
+    pagadaPorId: null,
+    pagadaPorNombre: null,
+    medioDePago: null,
+    anuladaAt: null,
+    anuladaPorId: null,
+    anuladaPorNombre: null,
+    motivoAnulacion: null,
+    nota: null,
+  }),
+  movimientoDeLiquidacion: () => ({
+    motivo: null,
+    visitId: null,
+    liquidacionId: null,
+    anuladoAt: null,
+    anuladoPorId: null,
+    anuladoPorNombre: null,
+    createdAt: new Date(),
+  }),
+  cierreDeCaja: () => ({ desglose: {}, nota: null, createdAt: new Date() }),
 }
 
-/** Campos `@unique` (además de `id`) que la base hace respetar. */
-const UNICOS: Partial<Record<NombreDeModelo, string[]>> = { visit: ["appointmentId"], appointment: ["manageTokenHash"] }
+/** Campos `Json` del esquema: aceptan un objeto como valor (cualquier otro objeto es una escritura anidada). */
+const CAMPOS_JSON: Partial<Record<NombreDeModelo, string[]>> = { cierreDeCaja: ["desglose"] }
+const esJson = (modelo: NombreDeModelo, campo: string) => (CAMPOS_JSON[modelo] ?? []).includes(campo)
+
+/**
+ * Únicos (además de `id`) que la base hace respetar: simples o compuestos, y
+ * parciales con `si` (el índice sólo cubre las filas que la cumplen). Una fila
+ * con algún campo en null no choca, como en Postgres.
+ */
+interface Unico {
+  campos: string[]
+  si?: (registro: Registro) => boolean
+}
+const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
+  visit: [{ campos: ["appointmentId"] }],
+  appointment: [{ campos: ["manageTokenHash"] }],
+  commissionRate: [{ campos: ["memberId", "serviceId"] }],
+  memberService: [{ campos: ["memberId", "serviceId"] }],
+  cierreDeCaja: [{ campos: ["businessId", "hasta"] }],
+  // `liquidaciones_businessId_memberId_desde_viva_key`: sólo las no anuladas.
+  liquidacion: [{ campos: ["businessId", "memberId", "desde"], si: (registro) => registro.estado !== "anulada" }],
+}
+
+/** Consultas crudas que la base falsa acepta: sólo candados, que en memoria no tienen nada que ordenar. */
+const CANDADOS = ["FOR UPDATE", "pg_advisory_xact_lock"]
 
 function errorDePrisma(code: string, mensaje: string) {
   return new Prisma.PrismaClientKnownRequestError(mensaje, { code, clientVersion: "base-falsa" })
@@ -113,6 +192,13 @@ function tablasVacias(): Tablas {
   return {
     user: [],
     business: [],
+    commissionRate: [],
+    commissionChange: [],
+    producto: [],
+    propinaDeAtencion: [],
+    liquidacion: [],
+    movimientoDeLiquidacion: [],
+    cierreDeCaja: [],
     businessMember: [],
     customer: [],
     service: [],
@@ -141,16 +227,20 @@ export function crearBaseFalsa() {
       if (rel.tipo !== "uno" || rel.remoto !== "id") continue
       const valor = registro[rel.local]
       if (valor === null || valor === undefined) continue
-      if (!tablas[rel.modelo].some((otro) => otro.id === valor)) {
-        throw errorDePrisma("P2003", `FK rota: ${modelo}.${clave} → ${String(valor)}`)
+      const otro = tablas[rel.modelo].find((candidato) => candidato.id === valor)
+      if (!otro) throw errorDePrisma("P2003", `FK rota: ${modelo}.${clave} → ${String(valor)}`)
+      // FK compuesta (id, businessId): el otro tiene que ser del mismo negocio.
+      if ((COMPUESTAS[modelo] ?? []).includes(clave) && otro.businessId !== registro.businessId) {
+        throw errorDePrisma("P2003", `FK compuesta rota: ${modelo}.${clave} → ${String(valor)} es de otro negocio`)
       }
     }
-    for (const campo of UNICOS[modelo] ?? []) {
-      const valor = registro[campo]
-      if (valor === null || valor === undefined) continue
-      if (tablas[modelo].some((otro) => otro !== registro && iguales(otro[campo], valor))) {
-        throw errorDePrisma("P2002", `Unique constraint failed: ${modelo}.${campo}`)
-      }
+    for (const { campos, si } of UNICOS[modelo] ?? []) {
+      if (campos.some((campo) => registro[campo] === null || registro[campo] === undefined)) continue
+      if (si && !si(registro)) continue
+      const choca = tablas[modelo].some(
+        (otro) => otro !== registro && (!si || si(otro)) && campos.every((campo) => iguales(otro[campo], registro[campo]))
+      )
+      if (choca) throw errorDePrisma("P2002", `Unique constraint failed: ${modelo}.${campos.join("_")}`)
     }
   }
 
@@ -158,7 +248,9 @@ export function crearBaseFalsa() {
     if (!esObjetoPlano(datos)) return falla(`data inválido en ${modelo}`)
     for (const [clave, valor] of Object.entries(datos)) {
       if (valor === undefined) continue
-      if (esObjetoPlano(valor)) return falla(`escritura anidada u operación atómica no soportada: ${modelo}.${clave}`)
+      if (esObjetoPlano(valor) && !esJson(modelo, clave)) {
+        return falla(`escritura anidada u operación atómica no soportada: ${modelo}.${clave}`)
+      }
       if (!(clave in registro)) return falla(`el campo ${modelo}.${clave} no existe`)
       registro[clave] = valor
     }
@@ -174,7 +266,7 @@ export function crearBaseFalsa() {
       if (valor === undefined) continue
       const rel = RELACIONES[modelo][clave]
       if (!rel) {
-        if (esObjetoPlano(valor)) return falla(`valor anidado en un campo: ${modelo}.${clave}`)
+        if (esObjetoPlano(valor) && !esJson(modelo, clave)) return falla(`valor anidado en un campo: ${modelo}.${clave}`)
         escalares[clave] = valor
         continue
       }
@@ -236,6 +328,20 @@ export function crearBaseFalsa() {
         verificarClaves(modelo, registro)
         return salida(registro, args)
       }),
+      upsert: vi.fn(async (args: Args & { create?: unknown; update?: unknown }) => {
+        const [registro] = filtrar(modelo, args.where)
+        if (!registro) return salida(crear(modelo, args.create), args)
+        aplicar(modelo, registro, args.update)
+        verificarClaves(modelo, registro)
+        return salida(registro, args)
+      }),
+      delete: vi.fn(async (args: Args) => {
+        const [registro] = filtrar(modelo, args.where)
+        if (!registro) throw errorDePrisma("P2025", `No existe el registro a borrar en ${modelo}`)
+        const copiaDeSalida = salida(registro, args)
+        tablas[modelo] = tablas[modelo].filter((otro) => otro !== registro)
+        return copiaDeSalida
+      }),
       updateMany: vi.fn(async (args: Args) => {
         const registros = filtrar(modelo, args.where)
         for (const registro of registros) {
@@ -266,15 +372,30 @@ export function crearBaseFalsa() {
     workSchedule: delegado("workSchedule"),
     timeBlock: delegado("timeBlock"),
     memberService: delegado("memberService"),
+    commissionRate: delegado("commissionRate"),
+    commissionChange: delegado("commissionChange"),
+    producto: delegado("producto"),
+    propinaDeAtencion: delegado("propinaDeAtencion"),
+    liquidacion: delegado("liquidacion"),
+    movimientoDeLiquidacion: delegado("movimientoDeLiquidacion"),
+    cierreDeCaja: delegado("cierreDeCaja"),
     /**
-     * Sólo para candados (`SELECT … FOR UPDATE`): en memoria no hay
-     * concurrencia que ordenar, así que no devuelve nada. Queda registrado
-     * para que un test compruebe que se pidió, con qué valores y dentro de la
-     * transacción. Cualquier otra consulta cruda lanza: no se sabe leerla.
+     * Sólo para candados (`SELECT … FOR UPDATE` o `pg_advisory_xact_lock`): en
+     * memoria no hay concurrencia que ordenar, así que no devuelve nada. Queda
+     * registrado para que un test compruebe que se pidió, con qué valores y
+     * dentro de la transacción. Cualquier otra consulta cruda lanza: no se
+     * sabe leerla.
      */
     $queryRaw: vi.fn(async (partes: TemplateStringsArray, ..._valores: unknown[]) => {
-      if (!partes.join("?").includes("FOR UPDATE")) return falla(`$queryRaw sólo para candados: ${partes.join("?")}`)
+      const sql = partes.join("?")
+      if (!CANDADOS.some((candado) => sql.includes(candado))) return falla(`$queryRaw sólo para candados: ${sql}`)
       return []
+    }),
+    /** Como `$queryRaw`, sólo para `pg_advisory_xact_lock`. Devuelve filas afectadas: 0. */
+    $executeRaw: vi.fn(async (partes: TemplateStringsArray, ..._valores: unknown[]) => {
+      const sql = partes.join("?")
+      if (!sql.includes("pg_advisory_xact_lock")) return falla(`$executeRaw sólo para candados: ${sql}`)
+      return 0
     }),
   }
 

@@ -40,6 +40,26 @@ import {
   whereDeLineas,
   whereDePagos,
   whereDeBloqueos,
+  puedeVerHistorialDeComisiones,
+  puedeGestionarProductos,
+  puedeFijarComisionDeProducto,
+  puedeRegistrarPropina,
+  puedeConfigurarLiquidacion,
+  puedeVerLiquidacionesDelEquipo,
+  puedeCerrarLiquidacion,
+  puedePagarLiquidacion,
+  puedeAnularLiquidacion,
+  puedeRegistrarAjuste,
+  puedeRegistrarAdelanto,
+  veMiPlata,
+  puedeCerrarCaja,
+  puedeVerCierresDeCaja,
+  puedeReactivarCita,
+  whereDeLiquidaciones,
+  whereDeMovimientos,
+  whereDePropinas,
+  whereDeCierresDeCaja,
+  whereDeProductos,
   type Actor,
   type Rol,
 } from "./permisos"
@@ -629,6 +649,161 @@ describe("bloqueos de horario", () => {
       expect(visibles(profesional, { OR: [{ memberId: "colega" }] })).toEqual([])
       expect(visibles(dueño, { businessId: OTRO_NEGOCIO })).toEqual([])
       expect(visibles(profesional, { id: "b-colega" })).toEqual([])
+    })
+  })
+})
+
+describe("la plata del equipo", () => {
+  type Permiso = (quien: Actor | null) => boolean
+  /** Lo que la tabla de permisos de la etapa 2 dice que puede cada rol: [dueña, encargado, profesional]. */
+  const TABLA: [string, Permiso, [boolean, boolean, boolean]][] = [
+    ["puedeEditarComisiones", puedeEditarComisiones, [true, false, false]],
+    ["puedeVerHistorialDeComisiones", puedeVerHistorialDeComisiones, [true, false, false]],
+    ["puedeGestionarProductos", puedeGestionarProductos, [true, true, false]],
+    ["puedeFijarComisionDeProducto", puedeFijarComisionDeProducto, [true, false, false]],
+    ["puedeRegistrarPropina", puedeRegistrarPropina, [true, true, false]],
+    ["puedeConfigurarLiquidacion", puedeConfigurarLiquidacion, [true, false, false]],
+    ["puedeVerLiquidacionesDelEquipo", puedeVerLiquidacionesDelEquipo, [true, true, false]],
+    ["puedeCerrarLiquidacion", puedeCerrarLiquidacion, [true, false, false]],
+    ["puedePagarLiquidacion", puedePagarLiquidacion, [true, false, false]],
+    ["puedeAnularLiquidacion", puedeAnularLiquidacion, [true, false, false]],
+    ["puedeRegistrarAjuste", puedeRegistrarAjuste, [true, false, false]],
+    ["puedeRegistrarAdelanto", puedeRegistrarAdelanto, [true, true, false]],
+    ["veMiPlata", veMiPlata, [false, true, true]],
+    ["puedeCerrarCaja", puedeCerrarCaja, [true, true, false]],
+    ["puedeVerCierresDeCaja", puedeVerCierresDeCaja, [true, true, false]],
+    ["puedeVerIngresosDelNegocio", puedeVerIngresosDelNegocio, [true, true, false]],
+    ["puedeReactivarCita", puedeReactivarCita, [true, true, false]],
+  ]
+
+  it.each(TABLA)("%s sigue la tabla por rol", (_nombre, permiso, [deDueña, deEncargado, deProfesional]) => {
+    expect(permiso(dueño)).toBe(deDueña)
+    expect(permiso(encargado)).toBe(deEncargado)
+    expect(permiso(profesional)).toBe(deProfesional)
+  })
+
+  it.each(TABLA)("%s falla cerrado sin actor", (_nombre, permiso) => {
+    expect(permiso(null)).toBe(false)
+  })
+
+  it("Mi plata: la dueña con memberId la ve (si atiende); un profesional sin memberId, no", () => {
+    expect(veMiPlata(actor("owner", "m-duena"))).toBe(true)
+    expect(veMiPlata(actor("worker", null))).toBe(false)
+    expect(veMiPlata(actor("admin", null))).toBe(false)
+  })
+
+  it("puedeVerLiquidacionDe: gestión ve la de cualquiera del negocio; el profesional, sólo la suya", () => {
+    for (const quien of [dueño, encargado]) {
+      expect(puedeVerLiquidacionDe(quien, miembro)).toBe(true)
+      expect(puedeVerLiquidacionDe(quien, yoMismo)).toBe(true)
+      expect(puedeVerLiquidacionDe(quien, ajeno)).toBe(false)
+    }
+    expect(puedeVerLiquidacionDe(profesional, yoMismo)).toBe(true)
+    expect(puedeVerLiquidacionDe(profesional, miembro)).toBe(false)
+    expect(puedeVerLiquidacionDe(actor("worker", "colega"), ajeno)).toBe(false)
+    expect(puedeVerLiquidacionDe(actor("worker", null), yoMismo)).toBe(false)
+    expect(puedeVerLiquidacionDe(null, yoMismo)).toBe(false)
+  })
+
+  describe("whereDeLiquidaciones, whereDeMovimientos y whereDePropinas", () => {
+    const filas = [
+      { id: "mia", businessId: NEGOCIO, memberId: "yo" },
+      { id: "colega", businessId: NEGOCIO, memberId: "colega" },
+      { id: "de-la-duena", businessId: NEGOCIO, memberId: null },
+      { id: "ajena", businessId: OTRO_NEGOCIO, memberId: "yo" },
+    ]
+    const FILTROS = [
+      ["liquidacion", whereDeLiquidaciones],
+      ["movimientoDeLiquidacion", whereDeMovimientos],
+      ["propinaDeAtencion", whereDePropinas],
+    ] as const
+
+    for (const [modelo, filtro] of FILTROS) {
+      // `coincide` de la base falsa entiende OR y lanza ante lo que no conoce.
+      const tablas = { [modelo]: filas } as unknown as Tablas
+      const visibles = (quien: Actor | null, extra = {}) =>
+        filas
+          .filter((fila) => coincide(tablas, modelo, fila, (filtro as (a: Actor | null, e: object) => object)(quien, extra)))
+          .map((fila) => fila.id)
+
+      describe(modelo, () => {
+        it("dueña y encargado ven todo lo del negocio, nada de otro", () => {
+          expect(visibles(dueño)).toEqual(["mia", "colega", "de-la-duena"])
+          expect(visibles(encargado)).toEqual(["mia", "colega", "de-la-duena"])
+        })
+
+        it("el profesional ve sólo lo suyo", () => {
+          expect(visibles(profesional)).toEqual(["mia"])
+        })
+
+        it("falla cerrado: sin actor o profesional sin memberId, nada", () => {
+          expect(visibles(null)).toEqual([])
+          expect(visibles(actor("worker", null))).toEqual([])
+        })
+
+        it("el dueño de otro negocio no ve nada de éste", () => {
+          expect(visibles({ rol: "owner", businessId: OTRO_NEGOCIO, memberId: null })).toEqual(["ajena"])
+        })
+
+        it("lo que agrega el endpoint no anula el filtro (id, memberId, businessId, OR, AND)", () => {
+          expect(visibles(profesional, { id: "colega" })).toEqual([])
+          expect(visibles(profesional, { memberId: "colega" })).toEqual([])
+          expect(visibles(profesional, { OR: [{ memberId: "colega" }] })).toEqual([])
+          expect(visibles(profesional, { AND: [{ id: "colega" }] })).toEqual([])
+          expect(visibles(dueño, { businessId: OTRO_NEGOCIO })).toEqual([])
+          expect(visibles(null, { id: "mia" })).toEqual([])
+          expect(visibles(actor("worker", null), { id: "mia" })).toEqual([])
+        })
+      })
+    }
+  })
+
+  describe("whereDeCierresDeCaja", () => {
+    const cierres = [
+      { id: "c-1", businessId: NEGOCIO },
+      { id: "c-ajeno", businessId: OTRO_NEGOCIO },
+    ]
+    const tablas = { cierreDeCaja: cierres } as unknown as Tablas
+    const visibles = (quien: Actor | null, extra = {}) =>
+      cierres.filter((c) => coincide(tablas, "cierreDeCaja", c, whereDeCierresDeCaja(quien, extra))).map((c) => c.id)
+
+    it("sólo dueña y encargado, y sólo los del negocio", () => {
+      expect(visibles(dueño)).toEqual(["c-1"])
+      expect(visibles(encargado)).toEqual(["c-1"])
+    })
+
+    it("el profesional y sin actor no ven ninguno, ni pidiendo uno por id", () => {
+      expect(visibles(profesional)).toEqual([])
+      expect(visibles(null)).toEqual([])
+      expect(visibles(profesional, { id: "c-1" })).toEqual([])
+    })
+
+    it("lo que agrega el endpoint no anula el filtro", () => {
+      expect(visibles(dueño, { businessId: OTRO_NEGOCIO })).toEqual([])
+      expect(visibles(dueño, { id: "c-ajeno" })).toEqual([])
+      expect(visibles(encargado, { OR: [{ id: "c-ajeno" }] })).toEqual([])
+    })
+  })
+
+  describe("whereDeProductos", () => {
+    const productos = [
+      { id: "p-1", businessId: NEGOCIO },
+      { id: "p-ajeno", businessId: OTRO_NEGOCIO },
+    ]
+    const tablas = { producto: productos } as unknown as Tablas
+    const visibles = (quien: Actor | null, extra = {}) =>
+      productos.filter((p) => coincide(tablas, "producto", p, whereDeProductos(quien, extra))).map((p) => p.id)
+
+    it("todo rol ve el catálogo de su negocio (el profesional anota lo que vende)", () => {
+      expect(visibles(dueño)).toEqual(["p-1"])
+      expect(visibles(encargado)).toEqual(["p-1"])
+      expect(visibles(profesional)).toEqual(["p-1"])
+    })
+
+    it("sin actor nada, y un producto ajeno nunca", () => {
+      expect(visibles(null)).toEqual([])
+      expect(visibles(dueño, { id: "p-ajeno" })).toEqual([])
+      expect(visibles(profesional, { businessId: OTRO_NEGOCIO })).toEqual([])
     })
   })
 })

@@ -315,6 +315,74 @@ export function profesionalParaLinea(actor: Actor, pedido: ProfesionalDeLinea): 
   return { memberId: pedido.memberId, byOwner: false }
 }
 
+// ─── La plata del equipo (etapa 2) ───────────────────────────────────────────
+//
+// El reparto es de la dueña: porcentajes, período, cerrar, pagar y
+// anular liquidaciones, ajustes. El encargado opera la caja: cobra, registra
+// propinas, adelantos y vales, cierra la caja y gestiona el catálogo de
+// productos (sin su %). El profesional ve lo suyo y nada más.
+
+/** El historial de cambios de porcentaje (`CommissionChange`). Como fijarlos: sólo la dueña. */
+export const puedeVerHistorialDeComisiones = esDueño
+
+/** Catálogo de productos: nombre, precio y activo. El % de comisión de cada uno, no. */
+export const puedeGestionarProductos = gestionaElNegocio
+
+/**
+ * El % de comisión de un producto. Es comisión: sólo la dueña, como
+ * `puedeEditarComisiones`. Un % que mande el encargado se rechaza, no se ignora
+ * en silencio.
+ */
+export const puedeFijarComisionDeProducto = puedeEditarComisiones
+
+/** Las propinas se anotan al cobrar, así que las registra quien cobra. */
+export const puedeRegistrarPropina = puedeCobrar
+
+/** Tipo de período de liquidación del negocio (y su día de inicio de semana). */
+export const puedeConfigurarLiquidacion = esDueño
+
+/**
+ * Las liquidaciones de todo el equipo (la sección Liquidaciones). El
+ * profesional ve las suyas desde Mi plata; una puntual, con
+ * `puedeVerLiquidacionDe`.
+ */
+export const puedeVerLiquidacionesDelEquipo = gestionaElNegocio
+
+/** Cerrar una liquidación: congela lo que se le paga a alguien. Sólo la dueña. */
+export const puedeCerrarLiquidacion = esDueño
+
+/** Marcar pagada una liquidación cerrada. Sólo la dueña. */
+export const puedePagarLiquidacion = esDueño
+
+/** Anular una liquidación cerrada y no pagada (libera lo que incluía). Sólo la dueña. */
+export const puedeAnularLiquidacion = esDueño
+
+/** Ajustes con signo a lo que se le paga a alguien. Sólo la dueña. */
+export const puedeRegistrarAjuste = esDueño
+
+/** Adelantos y vales: plata que sale de la caja hacia alguien del equipo. Dueña y encargado. */
+export const puedeRegistrarAdelanto = gestionaElNegocio
+
+/**
+ * Mi plata: lo que ganó quien atiende. Es para quien tiene `memberId`
+ * (encargado y profesional); la dueña no es miembro y no la ve. Sin actor,
+ * no (falla cerrado).
+ */
+export const veMiPlata = (actor: Actor | null): boolean => !!actor?.memberId
+
+/** Cerrar la caja: es la caja del día, como cobrar. Dueña y encargado. */
+export const puedeCerrarCaja = puedeCobrar
+
+/** Ver los cierres de caja (montos de todo el negocio). Dueña y encargado. */
+export const puedeVerCierresDeCaja = gestionaElNegocio
+
+/**
+ * Reactivar una cita cancelada o devolver a confirmada una completada o
+ * marcada como no asistió. Dueña y encargado; el profesional no saca una cita
+ * de esos estados.
+ */
+export const puedeReactivarCita = gestionaElNegocio
+
 // ─── Filtros para consultas ──────────────────────────────────────────────────
 
 /**
@@ -459,4 +527,76 @@ export function whereDePagos(
   extra: Prisma.VisitPaymentWhereInput = {}
 ): Prisma.VisitPaymentWhereInput {
   return { AND: [filtroDePagos(actor), extra] }
+}
+
+/**
+ * Lo del dinero de cada profesional (liquidaciones, movimientos, propinas):
+ * dueña y encargado ven todo el negocio; el profesional, sólo lo suyo; sin
+ * `memberId`, nada. Una sola regla para las tres tablas, que tienen
+ * `businessId` y `memberId` propios. No se exporta, igual que `filtroDeAgenda`.
+ */
+function filtroDePlataDelEquipo(actor: Actor | null): { businessId: string; memberId?: string } | typeof NADA {
+  if (!actor) return NADA
+  if (gestionaElNegocio(actor)) return { businessId: actor.businessId }
+  if (!actor.memberId) return NADA
+  return { businessId: actor.businessId, memberId: actor.memberId }
+}
+
+/** Igual que `whereDeAgenda`, para liquidaciones. */
+export function whereDeLiquidaciones(
+  actor: Actor | null,
+  extra: Prisma.LiquidacionWhereInput = {}
+): Prisma.LiquidacionWhereInput {
+  return { AND: [filtroDePlataDelEquipo(actor), extra] }
+}
+
+/** Igual que `whereDeAgenda`, para adelantos, vales y ajustes. */
+export function whereDeMovimientos(
+  actor: Actor | null,
+  extra: Prisma.MovimientoDeLiquidacionWhereInput = {}
+): Prisma.MovimientoDeLiquidacionWhereInput {
+  return { AND: [filtroDePlataDelEquipo(actor), extra] }
+}
+
+/**
+ * Igual que `whereDeAgenda`, para propinas. Las de la dueña (`byOwner`,
+ * `memberId` null) sólo las ve la gestión.
+ */
+export function whereDePropinas(
+  actor: Actor | null,
+  extra: Prisma.PropinaDeAtencionWhereInput = {}
+): Prisma.PropinaDeAtencionWhereInput {
+  return { AND: [filtroDePlataDelEquipo(actor), extra] }
+}
+
+/** Los cierres de caja son montos de todo el negocio: sólo quien los puede ver. */
+function filtroDeCierresDeCaja(actor: Actor | null): Prisma.CierreDeCajaWhereInput {
+  if (!actor || !puedeVerCierresDeCaja(actor)) return NADA
+  return { businessId: actor.businessId }
+}
+
+/** Igual que `whereDeAgenda`, para cierres de caja. */
+export function whereDeCierresDeCaja(
+  actor: Actor | null,
+  extra: Prisma.CierreDeCajaWhereInput = {}
+): Prisma.CierreDeCajaWhereInput {
+  return { AND: [filtroDeCierresDeCaja(actor), extra] }
+}
+
+/**
+ * El catálogo de productos es del negocio: todo rol lo ve, porque el
+ * profesional anota en el tablero lo que vendió. Quién ve el % de comisión de
+ * cada producto lo decide el `select` del endpoint, no este filtro.
+ */
+function filtroDeProductos(actor: Actor | null): Prisma.ProductoWhereInput {
+  if (!actor) return NADA
+  return { businessId: actor.businessId }
+}
+
+/** Igual que `whereDeAgenda`, para productos. */
+export function whereDeProductos(
+  actor: Actor | null,
+  extra: Prisma.ProductoWhereInput = {}
+): Prisma.ProductoWhereInput {
+  return { AND: [filtroDeProductos(actor), extra] }
 }

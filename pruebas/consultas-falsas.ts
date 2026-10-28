@@ -25,6 +25,13 @@ export type NombreDeModelo =
   | "workSchedule"
   | "timeBlock"
   | "memberService"
+  | "commissionRate"
+  | "commissionChange"
+  | "producto"
+  | "propinaDeAtencion"
+  | "liquidacion"
+  | "movimientoDeLiquidacion"
+  | "cierreDeCaja"
 
 export type Tablas = Record<NombreDeModelo, Registro[]>
 
@@ -49,9 +56,11 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     user: uno("user", "userId"),
     business: uno("business", "businessId"),
     memberServices: muchos("memberService", "memberId"),
+    commissionRates: muchos("commissionRate", "memberId"),
+    liquidaciones: muchos("liquidacion", "memberId"),
   },
   customer: {},
-  service: {},
+  service: { commissionRates: muchos("commissionRate", "serviceId") },
   appointment: {
     customer: uno("customer", "customerId"),
     member: uno("businessMember", "memberId"),
@@ -66,11 +75,14 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     appointment: uno("appointment", "appointmentId"),
     services: muchos("visitService", "visitId"),
     payments: muchos("visitPayment", "visitId"),
+    propinas: muchos("propinaDeAtencion", "visitId"),
   },
   visitService: {
     visit: uno("visit", "visitId"),
     member: uno("businessMember", "memberId"),
     service: uno("service", "serviceId"),
+    product: uno("producto", "productId"),
+    liquidacion: uno("liquidacion", "liquidacionId"),
   },
   visitPayment: { visit: uno("visit", "visitId") },
   workSchedule: { business: uno("business", "businessId"), member: uno("businessMember", "memberId") },
@@ -80,6 +92,53 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     member: uno("businessMember", "memberId"),
     service: uno("service", "serviceId"),
   },
+  commissionRate: {
+    business: uno("business", "businessId"),
+    member: uno("businessMember", "memberId"),
+    service: uno("service", "serviceId"),
+  },
+  commissionChange: {
+    business: uno("business", "businessId"),
+    member: uno("businessMember", "memberId"),
+    service: uno("service", "serviceId"),
+    product: uno("producto", "productId"),
+  },
+  producto: { business: uno("business", "businessId"), visitServices: muchos("visitService", "productId") },
+  propinaDeAtencion: {
+    business: uno("business", "businessId"),
+    visit: uno("visit", "visitId"),
+    member: uno("businessMember", "memberId"),
+    liquidacion: uno("liquidacion", "liquidacionId"),
+  },
+  liquidacion: {
+    business: uno("business", "businessId"),
+    member: uno("businessMember", "memberId"),
+    lineas: muchos("visitService", "liquidacionId"),
+    propinas: muchos("propinaDeAtencion", "liquidacionId"),
+    movimientos: muchos("movimientoDeLiquidacion", "liquidacionId"),
+  },
+  movimientoDeLiquidacion: {
+    business: uno("business", "businessId"),
+    member: uno("businessMember", "memberId"),
+    visit: uno("visit", "visitId"),
+    liquidacion: uno("liquidacion", "liquidacionId"),
+  },
+  cierreDeCaja: { business: uno("business", "businessId") },
+}
+
+/**
+ * Las relaciones que en la base son FK compuestas contra `(id, businessId)`:
+ * además de existir, el otro registro tiene que ser del mismo negocio. Así un
+ * test que escribe una propina con la atención de otro negocio falla con P2003,
+ * como en Postgres.
+ */
+export const COMPUESTAS: Partial<Record<NombreDeModelo, string[]>> = {
+  commissionRate: ["member", "service"],
+  memberService: ["member", "service"],
+  timeBlock: ["member"],
+  propinaDeAtencion: ["visit", "member", "liquidacion"],
+  liquidacion: ["member"],
+  movimientoDeLiquidacion: ["member", "visit", "liquidacion"],
 }
 
 const OPERADORES_DE_CAMPO = new Set(["equals", "in", "notIn", "not", "gt", "gte", "lt", "lte", "has"])
@@ -133,6 +192,17 @@ export function coincide(tablas: Tablas, modelo: NombreDeModelo, registro: Regis
 
     const rel = RELACIONES[modelo][clave]
     if (rel) return coincideRelacion(tablas, rel, registro, condicion, `${modelo}.${clave}`)
+    // Clave de un único compuesto, como la arma Prisma: `memberId_serviceId: { memberId, serviceId }`.
+    if (!(clave in registro) && clave.includes("_") && esObjetoPlano(condicion)) {
+      const campos = clave.split("_")
+      if (Object.keys(condicion).sort().join() !== [...campos].sort().join()) {
+        return falla(`clave compuesta ${modelo}.${clave} con otros campos: ${Object.keys(condicion).join()}`)
+      }
+      return campos.every((campo) => {
+        if (!(campo in registro)) return falla(`el campo ${modelo}.${campo} no existe`)
+        return coincideCampo(registro[campo], condicion[campo], `${modelo}.${campo}`)
+      })
+    }
     if (!(clave in registro)) return falla(`el campo ${modelo}.${clave} no existe`)
     return coincideCampo(registro[clave], condicion, `${modelo}.${clave}`)
   })

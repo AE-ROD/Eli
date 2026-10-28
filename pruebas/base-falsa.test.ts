@@ -160,3 +160,98 @@ describe("base falsa: lanza ante lo que no entiende (F-018)", () => {
     ).rejects.toThrow(/base falsa/)
   })
 })
+
+describe("base falsa: lo de la etapa 2", () => {
+  beforeEach(() => {
+    base.reiniciar({
+      business: [
+        { id: "n1", name: "Uno", slug: "uno", userId: "u1" },
+        { id: "n2", name: "Dos", slug: "dos", userId: "u2" },
+      ],
+      user: [
+        { id: "u1", name: "Ana", email: "a@test" },
+        { id: "u2", name: "Otro", email: "o@test" },
+      ],
+      businessMember: [
+        { id: "m1", businessId: "n1", userId: "u1" },
+        { id: "m2", businessId: "n2", userId: "u2" },
+      ],
+      service: [{ id: "s1", businessId: "n1", name: "Corte" }],
+      visit: [
+        { id: "v1", businessId: "n1", customerName: "María" },
+        { id: "v2", businessId: "n2", customerName: "Beto" },
+      ],
+    })
+  })
+
+  it("los modelos nuevos traen los defaults del esquema", async () => {
+    const linea = await prisma.visitService.create({
+      data: { visitId: "v1", serviceName: "Corte", memberId: "m1", professionalName: "Ana", priceCents: 1000 },
+    })
+    const liquidacion = await prisma.liquidacion.create({
+      data: { businessId: "n1", memberId: "m1", memberName: "Ana", desde: new Date("2026-10-01"), hasta: new Date("2026-10-31") },
+    })
+
+    expect(linea).toMatchObject({ tipo: "servicio", productId: null, commissionPercent: null, commissionCents: null, commissionAt: null, liquidacionId: null })
+    expect(liquidacion).toMatchObject({ estado: "cerrada", pagadaAt: null, anuladaAt: null })
+    expect(base.buscar("business", { id: "n1" })[0]).toMatchObject({ liquidacionPeriodo: "mensual", liquidacionInicioSemana: 1 })
+    expect(base.buscar("businessMember", { id: "m1" })[0]).toMatchObject({ commissionPercent: null })
+  })
+
+  it("una FK compuesta rechaza la atención o el miembro de otro negocio (P2003)", async () => {
+    const atencionAjena = prisma.propinaDeAtencion.create({
+      data: { businessId: "n1", visitId: "v2", memberId: "m1", professionalName: "Ana", method: "efectivo", amountCents: 100 },
+    })
+    const miembroAjeno = prisma.propinaDeAtencion.create({
+      data: { businessId: "n1", visitId: "v1", memberId: "m2", professionalName: "Otro", method: "efectivo", amountCents: 100 },
+    })
+
+    await expect(atencionAjena).rejects.toMatchObject({ code: "P2003" })
+    await expect(miembroAjeno).rejects.toMatchObject({ code: "P2003" })
+  })
+
+  it("una sola liquidación viva por (negocio, miembro, desde); una anulada no cuenta", async () => {
+    const datos = { businessId: "n1", memberId: "m1", memberName: "Ana", desde: new Date("2026-10-01"), hasta: new Date("2026-10-31") }
+    const primera = await prisma.liquidacion.create({ data: datos })
+
+    await expect(prisma.liquidacion.create({ data: datos })).rejects.toMatchObject({ code: "P2002" })
+
+    await prisma.liquidacion.update({ where: { id: primera.id }, data: { estado: "anulada", anuladaAt: new Date() } })
+    await expect(prisma.liquidacion.create({ data: datos })).resolves.toMatchObject({ estado: "cerrada" })
+  })
+
+  it("un cierre de caja por (negocio, hasta), y su desglose es JSON", async () => {
+    const datos = {
+      businessId: "n1",
+      desde: new Date("2026-10-28T11:00:00Z"),
+      hasta: new Date("2026-10-28T23:00:00Z"),
+      fecha: new Date("2026-10-28"),
+      zona: "America/Santiago",
+      desglose: { "tarjeta-debito": 5000 },
+    }
+    await expect(prisma.cierreDeCaja.create({ data: datos })).resolves.toMatchObject({ desglose: { "tarjeta-debito": 5000 } })
+    await expect(prisma.cierreDeCaja.create({ data: datos })).rejects.toMatchObject({ code: "P2002" })
+  })
+
+  it("único compuesto: CommissionRate por (memberId, serviceId), con upsert, delete y la clave de Prisma", async () => {
+    const donde = { memberId_serviceId: { memberId: "m1", serviceId: "s1" } }
+    await prisma.commissionRate.upsert({ where: donde, create: { businessId: "n1", memberId: "m1", serviceId: "s1", percent: 40 }, update: { percent: 40 } })
+    await prisma.commissionRate.upsert({ where: donde, create: { businessId: "n1", memberId: "m1", serviceId: "s1", percent: 50 }, update: { percent: 50 } })
+
+    expect(base.buscar("commissionRate").map((fila) => fila.percent)).toEqual([50])
+    await expect(
+      prisma.commissionRate.create({ data: { businessId: "n1", memberId: "m1", serviceId: "s1", percent: 10 } })
+    ).rejects.toMatchObject({ code: "P2002" })
+
+    await prisma.commissionRate.delete({ where: donde })
+    expect(base.buscar("commissionRate")).toEqual([])
+    await expect(prisma.commissionRate.delete({ where: donde })).rejects.toMatchObject({ code: "P2025" })
+  })
+
+  it("acepta el candado pg_advisory_xact_lock y sigue lanzando ante otra consulta cruda", async () => {
+    const sql = (partes: TemplateStringsArray, ...valores: unknown[]) => [partes, ...valores] as const
+    await expect(prisma.$executeRaw(...sql`SELECT pg_advisory_xact_lock(${1}, ${2})`)).resolves.toBe(0)
+    await expect(prisma.$queryRaw(...sql`SELECT pg_advisory_xact_lock(${1}, ${2})`)).resolves.toEqual([])
+    await expect(prisma.$executeRaw(...sql`DELETE FROM liquidaciones`)).rejects.toThrow(/base falsa/)
+  })
+})

@@ -146,6 +146,13 @@ const tablas: Tablas = {
   workSchedule: [],
   timeBlock: [],
   memberService: [],
+  commissionRate: [],
+  commissionChange: [],
+  producto: [],
+  propinaDeAtencion: [],
+  liquidacion: [],
+  movimientoDeLiquidacion: [],
+  cierreDeCaja: [],
   customer: clientesFake,
   appointment: citasFake,
 }
