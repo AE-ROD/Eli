@@ -73,7 +73,8 @@ const SELECCION = {
   startTime: true,
   endTime: true,
   customer: { select: { name: true, lastName: true } },
-  member: { select: { user: { select: { name: true } } } },
+  // El correo, para avisarle si el cliente cancela o reagenda. Nunca viaja al cliente.
+  member: { select: { user: { select: { name: true, email: true } } } },
   service: { select: { id: true, name: true, duration: true, active: true } },
   business: {
     select: { id: true, name: true, slug: true, timezone: true, cancelacionHorasAntes: true, user: { select: { email: true } } },

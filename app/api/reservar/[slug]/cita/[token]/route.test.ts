@@ -220,10 +220,22 @@ describe("cancelar", () => {
       canceladaEn: new Date("2030-01-02T12:00:00.000Z"),
     })
     expect(correos.cambio).toHaveBeenCalledWith(
-      expect.objectContaining({ tipo: "cancelo", emailNegocio: "duena@uno.test", fecha: FECHA, hora: "10:00" })
+      expect.objectContaining({
+        tipo: "cancelo",
+        emailNegocio: "duena@uno.test",
+        emailProfesional: "carla@uno.test",
+        fecha: FECHA,
+        hora: "10:00",
+      })
     )
     // Ya cancelada, el enlace deja de servir.
     expect((await ver()).status).toBe(404)
+  })
+
+  it("una cita sin profesional sólo avisa al negocio", async () => {
+    escenario({ cita: { memberId: null } })
+    expect((await cancelar()).status).toBe(200)
+    expect(correos.cambio).toHaveBeenCalledWith(expect.objectContaining({ emailNegocio: "duena@uno.test", emailProfesional: null }))
   })
 
   it("fuera del plazo: 409 con el motivo, sin tocar la cita", async () => {
@@ -245,7 +257,25 @@ describe("reagendar", () => {
     expect(cuerpo).toMatchObject({ fecha: "2030-01-08", hora: "11:00", profesional: "Carla Profesional" })
     expect(laCita()).toMatchObject({ startTime: aLas("11:00", "2030-01-08"), endTime: aLas("12:00", "2030-01-08"), memberId: "m-carla", status: "pendiente" })
     expect(correos.cambio).toHaveBeenCalledWith(
-      expect.objectContaining({ tipo: "reagendo", fechaAnterior: FECHA, horaAnterior: "10:00", fecha: "2030-01-08", hora: "11:00" })
+      expect.objectContaining({
+        tipo: "reagendo",
+        emailProfesional: "carla@uno.test",
+        fechaAnterior: FECHA,
+        horaAnterior: "10:00",
+        fecha: "2030-01-08",
+        hora: "11:00",
+      })
+    )
+  })
+
+  it("una cita sin profesional que al reagendar queda con uno: el aviso le llega a ese", async () => {
+    escenario({ cita: { memberId: null } })
+    const { status, cuerpo } = await reagendar("2030-01-08", "11:00")
+    expect(status).toBe(200)
+    const correoDe: Record<string, string> = { "Carla Profesional": "carla@uno.test", "Pedro Profesional": "pedro@uno.test" }
+    expect(correoDe[cuerpo.profesional]).toBeDefined()
+    expect(correos.cambio).toHaveBeenCalledWith(
+      expect.objectContaining({ emailNegocio: "duena@uno.test", emailProfesional: correoDe[cuerpo.profesional] })
     )
   })
 

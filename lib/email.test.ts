@@ -512,3 +512,40 @@ describe("lib/email — correos de soporte", () => {
     expect(enviado.html).not.toMatch(/\b(horas|días hábiles|24|48)\b/)
   })
 })
+
+describe("lib/email — aviso de cambio del cliente", () => {
+  beforeEach(() => {
+    vi.stubEnv("RESEND_API_KEY", "clave-de-prueba")
+    vi.resetModules()
+    enviarMock.mockClear()
+  })
+
+  const aviso = {
+    tipo: "cancelo" as const,
+    emailNegocio: "duena@uno.test",
+    nombreNegocio: "Salón Uno",
+    nombreCliente: "María",
+    servicio: "Corte",
+    profesional: "Carla",
+    fecha: "2030-01-07",
+    hora: "10:00",
+  }
+
+  it("le llega al dueño y, aparte, al profesional de la cita", async () => {
+    const { enviarAvisoDeCambioDelCliente } = await import("./email")
+
+    await enviarAvisoDeCambioDelCliente({ ...aviso, emailProfesional: "carla@uno.test" })
+
+    expect(enviarMock.mock.calls.map(([correo]) => correo.to)).toEqual(["duena@uno.test", "carla@uno.test"])
+    expect(enviarMock.mock.calls[1][0].html).toContain("canceló su cita")
+  })
+
+  it("sin profesional, o si el profesional es el mismo dueño, va un solo correo", async () => {
+    const { enviarAvisoDeCambioDelCliente } = await import("./email")
+
+    await enviarAvisoDeCambioDelCliente({ ...aviso, emailProfesional: null })
+    await enviarAvisoDeCambioDelCliente({ ...aviso, emailProfesional: " Duena@Uno.test " })
+
+    expect(enviarMock.mock.calls.map(([correo]) => correo.to)).toEqual(["duena@uno.test", "duena@uno.test"])
+  })
+})
