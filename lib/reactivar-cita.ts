@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client"
-import { atencionBloqueada } from "@/lib/bloqueos-de-dinero"
+import { atencionBloqueada, tomarCandadoDeCajaCompartido } from "@/lib/bloqueos-de-dinero"
+import { tomarCandadosDeLaAtencion } from "@/lib/liquidacion"
 
 /**
  * Reactivar una cita: sacarla de un estado cerrado (cancelada, completada o
@@ -14,6 +15,7 @@ import { atencionBloqueada } from "@/lib/bloqueos-de-dinero"
  *   atención viva en el Tablero (una anulada no cuenta).
  * - Si esa atención ya entró en un cierre de caja o en una liquidación, la
  *   plata ya se rindió: 409 "corrígelo con un ajuste" (`atencionBloqueada`).
+ *   Antes de mirarlo se toman los mismos candados que la anulación (#101).
  *
  * Mover una cita cerrada sigue sin poderse (`sePuedeMover`): primero se
  * reactiva, después se mueve.
@@ -81,7 +83,8 @@ export function decidirReactivacion({ desde, hacia, inicio, ahora, puede }: Pedi
 /**
  * Por qué la atención de la cita impide reactivarla, o `null` si no tiene
  * una viva. Va dentro de la transacción que reactiva, con el `businessId` de
- * la sesión: la atención de otro negocio no existe para éste.
+ * la sesión: la atención de otro negocio no existe para éste. Si hay una
+ * viva, toma los candados de liquidación y de caja antes de mirarla.
  */
 export async function problemaConLaAtencion(
   tx: Prisma.TransactionClient,
@@ -93,6 +96,13 @@ export async function problemaConLaAtencion(
     select: { id: true, status: true },
   })
   if (!atencion || atencion.status === "anulada") return null
+
+  // Los mismos candados que la anulación, en el mismo orden: primero los de
+  // liquidación de quienes atendieron, después el de la caja compartido. Un
+  // cierre (de liquidación o de caja) que esté incluyendo esta atención
+  // termina antes, y entonces `atencionBloqueada` lo ve.
+  await tomarCandadosDeLaAtencion(tx, businessId, atencion.id)
+  await tomarCandadoDeCajaCompartido(tx, businessId)
 
   const bloqueo = await atencionBloqueada(tx, businessId, atencion.id)
   if (bloqueo?.motivo === "liquidacion") return MENSAJE_EN_LIQUIDACION
