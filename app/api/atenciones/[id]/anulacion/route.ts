@@ -4,6 +4,7 @@ import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { transicionPermitida } from "@/lib/atenciones"
+import { atencionBloqueada, type MotivoDeBloqueo } from "@/lib/bloqueos-de-dinero"
 import { ESTADOS_DE_RESERVA } from "@/lib/llegadas"
 import { actorDeSesion, puedeAnular } from "@/lib/permisos"
 import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
@@ -15,6 +16,12 @@ import {
   respuestaDeError,
   tomarAtencion,
 } from "@/lib/tablero"
+
+/** Por qué no se anula una atención ya rendida, como lo lee quien anula. */
+const MENSAJE_DE_BLOQUEO: Record<MotivoDeBloqueo, string> = {
+  liquidacion: "Esta atención ya está en una liquidación cerrada: no se anula, corrígelo con un ajuste.",
+  caja: "Esta atención ya entró en un cierre de caja: no se anula, corrígelo con un ajuste.",
+}
 
 const anulacionSchema = z.object({
   motivo: z.string().trim().max(500).optional(),
@@ -70,6 +77,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         voidedByName: nombre,
         voidReason: motivo || null,
       })
+
+      // Con la fila ya tomada: lo que entró en una liquidación cerrada o en
+      // un cierre de caja ya se rindió, y no se anula (#65, #68, #71). Se
+      // corrige con un ajuste en la liquidación.
+      const bloqueo = await atencionBloqueada(tx, actor.businessId, existente.id)
+      if (bloqueo) throw new ErrorDeAtencion(409, MENSAJE_DE_BLOQUEO[bloqueo.motivo])
 
       if (existente.appointmentId && existente.status !== "finalizada") {
         await tx.appointment.updateMany({

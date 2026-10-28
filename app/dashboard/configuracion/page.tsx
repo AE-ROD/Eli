@@ -6,6 +6,7 @@ import { BarraSuperior } from "@/components/panel/barra-superior"
 import { SeccionHorario } from "./_componentes/seccion-horario"
 import { SeccionPaginaPublica } from "./_componentes/seccion-pagina-publica"
 import { SeccionServicios } from "./_componentes/seccion-servicios"
+import { SeccionProductos } from "./_componentes/seccion-productos"
 import { SelectorHorarioMiembro } from "./_componentes/selector-horario-miembro"
 import { SeccionPlazoDeCambios } from "./_componentes/seccion-plazo-de-cambios"
 import { apareceEnLaPagina, colorDelNegocio, normalizarInstagram } from "@/lib/pagina-del-negocio"
@@ -16,8 +17,12 @@ import {
   puedeEditarHorarioDe,
   puedeEditarPaginaDelNegocio,
   puedeEditarPlazoDeCambios,
+  puedeFijarComisionDeProducto,
+  puedeGestionarProductos,
   puedeGestionarServicios,
+  whereDeProductos,
 } from "@/lib/permisos"
+import { formatearProducto } from "@/lib/productos"
 import { mostrarTelefono } from "@/lib/telefono"
 
 export default async function PaginaConfiguracion() {
@@ -29,7 +34,10 @@ export default async function PaginaConfiguracion() {
   // general del negocio); encargado y profesional tienen su propio memberId.
   const memberIdPropio = actor.memberId
 
-  const [horariosActuales, servicios, pagina] = await Promise.all([
+  // El % de cada producto sólo se le pide a la base para la dueña.
+  const conPorcentaje = puedeFijarComisionDeProducto(actor)
+
+  const [horariosActuales, servicios, productos, pagina] = await Promise.all([
     prisma.workSchedule.findMany({
       where: { businessId: actor.businessId, memberId: memberIdPropio },
       orderBy: { dayOfWeek: "asc" },
@@ -38,6 +46,14 @@ export default async function PaginaConfiguracion() {
       where: { businessId: actor.businessId },
       orderBy: { createdAt: "asc" },
     }),
+    puedeGestionarProductos(actor)
+      ? prisma.producto.findMany({
+          where: whereDeProductos(actor),
+          select: { id: true, name: true, priceCents: true, active: true, commissionPercent: conPorcentaje },
+          orderBy: { createdAt: "asc" },
+          take: 200,
+        })
+      : Promise.resolve([]),
     // La página pública: todo rol la ve; sólo dueño y encargado la editan.
     prisma.business.findUnique({
       where: { id: actor.businessId },
@@ -140,6 +156,16 @@ export default async function PaginaConfiguracion() {
         {puedeGestionarServicios(actor) && (
           <div id="servicios" className="scroll-mt-24">
             <SeccionServicios serviciosIniciales={servicios} />
+          </div>
+        )}
+
+        {/* Productos (#67): dueña y encargado; el % de comisión, sólo la dueña */}
+        {puedeGestionarProductos(actor) && (
+          <div id="productos" className="scroll-mt-24">
+            <SeccionProductos
+              productosIniciales={productos.map((producto) => formatearProducto(producto, conPorcentaje))}
+              conPorcentaje={conPorcentaje}
+            />
           </div>
         )}
 

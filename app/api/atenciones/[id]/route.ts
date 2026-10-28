@@ -82,7 +82,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         // quien edita nunca vio, y el reemplazo se las llevaría.
         const reemplazadas = await tx.visitService.findMany({
           where: reemplazables,
-          select: { serviceId: true },
+          select: { serviceId: true, productId: true },
           take: MAXIMO_DE_LINEAS_POR_ATENCION + 1,
         })
         if (reemplazadas.length > MAXIMO_DE_LINEAS_POR_ATENCION) {
@@ -92,12 +92,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           )
         }
 
-        const nuevas = await resolverLineas(
-          tx,
-          actor,
-          datos.lineas,
-          reemplazadas.map((linea) => linea.serviceId)
-        )
+        const nuevas = await resolverLineas(tx, actor, datos.lineas, reemplazadas)
         await tx.visitService.deleteMany({ where: reemplazables })
         if (nuevas.length > 0) {
           await tx.visitService.createMany({ data: nuevas.map((linea) => ({ ...linea, visitId: existente.id })) })

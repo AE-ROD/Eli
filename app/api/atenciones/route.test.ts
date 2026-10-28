@@ -147,10 +147,14 @@ describe("GET /api/atenciones", () => {
     expect(cobrada.pagos).toEqual([{ id: "p-cobrada-hoy", medio: "efectivo", nombreMedio: "Efectivo", monto: 8000 }])
     expect(mixta.lineas[1]).toEqual({
       id: "l-mixta-pedro",
+      tipo: "servicio",
       servicioId: "s-color",
+      productoId: null,
       servicio: "Color",
       profesional: { id: "m-pedro", nombre: "Pedro Profesional" },
       precio: 25000,
+      // Abierta: todavía no se cobró, así que nada está congelado.
+      comision: { estado: "pendiente" },
     })
   })
 
@@ -178,6 +182,21 @@ describe("GET /api/atenciones", () => {
       "transferencia",
       "billetera-digital",
     ])
+  })
+
+  it("el catálogo trae los productos activos del negocio, sin su % de comisión, también a la profesional (#67)", async () => {
+    const { GET } = await import("./route")
+    for (const sesion of [sesiones.dueña, sesiones.carla]) {
+      mockGetServerSession.mockResolvedValueOnce(sesion)
+
+      const { catalogo } = await (await GET(pedido(URL_DEL_DIA))).json()
+
+      // Ni el inactivo (Tónico) ni el del otro negocio; el precio en unidades.
+      expect(catalogo.productos).toEqual([
+        { id: "p-cera", nombre: "Cera", precio: 8000 },
+        { id: "p-shampoo", nombre: "Shampoo", precio: 12000 },
+      ])
+    }
   })
 
   it("la profesional ve sus reservas y sus atenciones, no las de un colega", async () => {

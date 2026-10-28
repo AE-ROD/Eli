@@ -1,7 +1,8 @@
 import type { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { MAXIMO_DE_LINEAS_POR_ATENCION, PROFESIONAL_DUEÑO, aCentavos, esPrecioValido } from "@/lib/atenciones"
-import { profesionalParaLinea, type Actor, type ProfesionalDeLinea } from "@/lib/permisos"
+import { comisionParaCongelar, porcentajeDeLinea, type PorcentajesVigentes } from "@/lib/comisiones"
+import { profesionalParaLinea, whereDeProductos, type Actor, type ProfesionalDeLinea } from "@/lib/permisos"
 import { ErrorDeAtencion } from "@/lib/tablero"
 
 /**
@@ -11,19 +12,26 @@ import { ErrorDeAtencion } from "@/lib/tablero"
  * nombre de un colega con el precio que quisiera y el historial lo creería.
  */
 
-export const lineaPedidaSchema = z.object({
-  servicioId: z.string().min(1),
-  /**
-   * Id de miembro, o `duenio` para el dueño. Para el profesional se ignora:
-   * la línea queda a su nombre igual (`profesionalParaLinea`).
-   */
-  profesional: z.string().min(1).optional(),
-  /** En unidades, con hasta dos decimales. Si no viene, el precio del catálogo. */
-  precio: z
-    .number()
-    .refine(esPrecioValido, "El precio tiene que ser cero o más, sin pasar del tope, con hasta dos decimales")
-    .optional(),
-})
+export const lineaPedidaSchema = z
+  .object({
+    /** Una línea es de un servicio o de un producto (#67): uno de los dos, nunca ambos. */
+    servicioId: z.string().min(1).optional(),
+    productoId: z.string().min(1).optional(),
+    /**
+     * Id de miembro, o `duenio` para el dueño. Para el profesional se ignora:
+     * la línea queda a su nombre igual (`profesionalParaLinea`). En un
+     * producto es quien lo vendió.
+     */
+    profesional: z.string().min(1).optional(),
+    /** En unidades, con hasta dos decimales. Si no viene, el precio del catálogo. */
+    precio: z
+      .number()
+      .refine(esPrecioValido, "El precio tiene que ser cero o más, sin pasar del tope, con hasta dos decimales")
+      .optional(),
+  })
+  .refine((linea) => (linea.servicioId === undefined) !== (linea.productoId === undefined), {
+    message: "Cada línea es un servicio o un producto: indica uno de los dos",
+  })
 
 /**
  * Un pedido no trae más líneas de las que puede tener una atención: corta lo
@@ -37,9 +45,16 @@ export const lineasPedidasSchema = z.array(lineaPedidaSchema).max(MAXIMO_DE_LINE
 
 export type LineaPedida = z.infer<typeof lineaPedidaSchema>
 
-/** Una línea lista para insertar, salvo el `visitId`. El precio, en centavos como se guarda. */
+/**
+ * Una línea lista para insertar, salvo el `visitId`. El precio, en centavos
+ * como se guarda. Una de producto lleva `tipo` y `productId`, y `serviceId`
+ * en null (lo exige un CHECK); `serviceName` guarda el nombre copiado en los
+ * dos casos. Sin `tipo`, la base la guarda como servicio.
+ */
 export interface LineaResuelta {
-  serviceId: string
+  serviceId: string | null
+  tipo?: "servicio" | "producto"
+  productId?: string | null
   serviceName: string
   memberId: string | null
   byOwner: boolean
@@ -54,22 +69,52 @@ function profesionalPedido(valor: string | undefined): ProfesionalDeLinea {
 
 const sinRepetidos = (valores: string[]) => [...new Set(valores)]
 
+/** Lo que ya tenía la atención entre las líneas que el pedido reemplaza: qué servicio o producto era cada una. */
+export interface LineaReemplazada {
+  serviceId: string | null
+  productId: string | null
+}
+
+/**
+ * Cuántas líneas de cada servicio o producto había entre las que se
+ * reemplazan: son las que se pueden conservar aunque ya no esté activo.
+ */
+function contarConservables(reemplazadas: readonly LineaReemplazada[]) {
+  const servicios = new Map<string, number>()
+  const productos = new Map<string, number>()
+  for (const linea of reemplazadas) {
+    if (linea.serviceId) servicios.set(linea.serviceId, (servicios.get(linea.serviceId) ?? 0) + 1)
+    if (linea.productId) productos.set(linea.productId, (productos.get(linea.productId) ?? 0) + 1)
+  }
+  return { servicios, productos }
+}
+
+/** Gasta una de las conservables de `id`; `false` si no quedaba ninguna. */
+function gastarConservable(conservables: Map<string, number>, id: string): boolean {
+  const quedan = conservables.get(id) ?? 0
+  if (quedan === 0) return false
+  conservables.set(id, quedan - 1)
+  return true
+}
+
 /**
  * Valida las líneas contra el negocio del actor y arma lo que se guarda.
  *
  * - El profesional de cada línea pasa por `profesionalParaLinea`: el
  *   profesional queda siempre a su nombre, aunque pida otro o pida al dueño.
+ *   En un producto, es quien lo vendió.
  * - Toda línea nace con alguien que la hizo. Sin profesional no habría a
  *   quién atribuirle la comisión, y el tablero no podría avanzar.
- * - Servicio y miembro tienen que ser del negocio: uno ajeno o inexistente da
- *   404, igual que en el resto de los endpoints, y no confirma nada.
+ * - Servicio, producto y miembro tienen que ser del negocio: uno ajeno o
+ *   inexistente da 404, igual que en el resto de los endpoints, y no
+ *   confirma nada.
  * - Una línea nueva no puede ser de un servicio que el negocio dejó de
- *   ofrecer (400). Sí puede quedarse una que ya estaba: si no, una atención
- *   abierta con un servicio que se desactivó no se podría volver a guardar,
- *   ni siquiera para reasignar quién lo hizo. El pedido no trae ids de
- *   líneas, así que "ya estaba" se cuenta por servicio: se conservan tantas
- *   de ese servicio como había entre las que el pedido reemplaza
- *   (`serviciosReemplazados`).
+ *   ofrecer ni de un producto que dejó de vender (400). Sí puede quedarse una
+ *   que ya estaba: si no, una atención abierta con algo que se desactivó no
+ *   se podría volver a guardar, ni siquiera para reasignar quién lo hizo. El
+ *   pedido no trae ids de líneas, así que "ya estaba" se cuenta por servicio
+ *   o producto: se conservan tantas como había entre las que el pedido
+ *   reemplaza (`reemplazadas`).
  * - Sin precio en el cuerpo se usa el del catálogo; si el catálogo tampoco
  *   tiene uno que se pueda cobrar, se pide en vez de inventar un cero que se
  *   cobraría como cortesía.
@@ -78,7 +123,7 @@ export async function resolverLineas(
   db: Prisma.TransactionClient,
   actor: Actor,
   pedidas: readonly LineaPedida[],
-  serviciosReemplazados: readonly (string | null)[] = []
+  reemplazadas: readonly LineaReemplazada[] = []
 ): Promise<LineaResuelta[]> {
   if (pedidas.length === 0) return []
 
@@ -87,16 +132,26 @@ export async function resolverLineas(
     throw new ErrorDeAtencion(400, "Cada servicio necesita a alguien que lo haga.")
   }
 
-  const idsDeServicios = sinRepetidos(pedidas.map((pedida) => pedida.servicioId))
+  const idsDeServicios = sinRepetidos(pedidas.flatMap((pedida) => (pedida.servicioId ? [pedida.servicioId] : [])))
+  const idsDeProductos = sinRepetidos(pedidas.flatMap((pedida) => (pedida.productoId ? [pedida.productoId] : [])))
   const idsDeMiembros = sinRepetidos(asignaciones.flatMap((asignada) => (asignada.memberId ? [asignada.memberId] : [])))
   const llevaAlDueño = asignaciones.some((asignada) => asignada.byOwner)
 
-  const [servicios, miembros, negocio] = await Promise.all([
-    db.service.findMany({
-      where: { businessId: actor.businessId, id: { in: idsDeServicios } },
-      select: { id: true, name: true, price: true, active: true },
-      take: idsDeServicios.length,
-    }),
+  const [servicios, productos, miembros, negocio] = await Promise.all([
+    idsDeServicios.length === 0
+      ? Promise.resolve([])
+      : db.service.findMany({
+          where: { businessId: actor.businessId, id: { in: idsDeServicios } },
+          select: { id: true, name: true, price: true, active: true },
+          take: idsDeServicios.length,
+        }),
+    idsDeProductos.length === 0
+      ? Promise.resolve([])
+      : db.producto.findMany({
+          where: whereDeProductos(actor, { id: { in: idsDeProductos } }),
+          select: { id: true, name: true, priceCents: true, active: true },
+          take: idsDeProductos.length,
+        }),
     idsDeMiembros.length === 0
       ? Promise.resolve([])
       : db.businessMember.findMany({
@@ -109,31 +164,50 @@ export async function resolverLineas(
       : Promise.resolve(null),
   ])
 
-  // Cuántas líneas de cada servicio había: son las que se pueden conservar
-  // aunque el servicio ya no esté activo.
-  const conservables = new Map<string, number>()
-  for (const id of serviciosReemplazados) {
-    if (id) conservables.set(id, (conservables.get(id) ?? 0) + 1)
-  }
+  const conservables = contarConservables(reemplazadas)
 
   const resueltas: LineaResuelta[] = []
   for (const [i, pedida] of pedidas.entries()) {
     const asignada = asignaciones[i]
 
-    const servicio = servicios.find((s) => s.id === pedida.servicioId)
-    if (!servicio) throw new ErrorDeAtencion(404, "Servicio no encontrado")
-
-    if (!servicio.active) {
-      const quedan = conservables.get(servicio.id) ?? 0
-      if (quedan === 0) {
-        throw new ErrorDeAtencion(400, `«${servicio.name}» ya no se ofrece: elige otro servicio.`)
-      }
-      conservables.set(servicio.id, quedan - 1)
-    }
-
     const nombreProfesional = asignada.byOwner
       ? negocio?.user.name
       : miembros.find((m) => m.id === asignada.memberId)?.user.name
+
+    if (pedida.productoId) {
+      const producto = productos.find((p) => p.id === pedida.productoId)
+      if (!producto) throw new ErrorDeAtencion(404, "Producto no encontrado")
+      if (!producto.active && !gastarConservable(conservables.productos, producto.id)) {
+        throw new ErrorDeAtencion(400, `«${producto.name}» ya no se vende: elige otro producto.`)
+      }
+      if (nombreProfesional === undefined) throw new ErrorDeAtencion(404, "Profesional no encontrado")
+
+      // En el catálogo el precio del producto ya está en centavos.
+      const priceCents = pedida.precio !== undefined ? aCentavos(pedida.precio) : producto.priceCents
+      if (priceCents === null) {
+        throw new ErrorDeAtencion(400, `«${producto.name}» no tiene precio en el catálogo: indica cuánto se cobra.`)
+      }
+
+      resueltas.push({
+        serviceId: null,
+        tipo: "producto",
+        productId: producto.id,
+        serviceName: producto.name,
+        memberId: asignada.memberId,
+        byOwner: asignada.byOwner,
+        professionalName: nombreProfesional,
+        priceCents,
+      })
+      continue
+    }
+
+    const servicio = servicios.find((s) => s.id === pedida.servicioId)
+    if (!servicio) throw new ErrorDeAtencion(404, "Servicio no encontrado")
+
+    if (!servicio.active && !gastarConservable(conservables.servicios, servicio.id)) {
+      throw new ErrorDeAtencion(400, `«${servicio.name}» ya no se ofrece: elige otro servicio.`)
+    }
+
     if (nombreProfesional === undefined) throw new ErrorDeAtencion(404, "Profesional no encontrado")
 
     const precio = pedida.precio ?? servicio.price
@@ -156,4 +230,102 @@ export async function resolverLineas(
     })
   }
   return resueltas
+}
+
+// ─── Comisión congelada al cobrar (#65) ──────────────────────────────────────
+
+/**
+ * Congela la comisión de cada línea de la atención con los % vigentes, dentro
+ * de la transacción del cobro y después de tomar la fila (`tomarAtencion`):
+ * un segundo cobro no llega acá, así que nada se congela dos veces. Lo
+ * congelado no se recalcula nunca: cambiar un % después no toca lo cobrado
+ * (en la base lo impide además el trigger `atencion_servicios_comision_inmutable`).
+ *
+ * La cascada es la de `lib/comisiones.ts`. Lo que devuelve "pendiente" (falta
+ * el %) queda con las tres columnas en null, nunca en 0, y el cobro sigue: se
+ * cuenta para avisar. Lo de la dueña o de un ex-miembro no lleva comisión.
+ *
+ * Los % se leen siempre acotados al negocio: un `CommissionRate` o un
+ * producto de otro negocio nunca entra a la cascada.
+ *
+ * Devuelve cuántas líneas quedaron pendientes de %.
+ */
+export async function congelarComisiones(
+  tx: Prisma.TransactionClient,
+  businessId: string,
+  visitId: string,
+  ahora: Date
+): Promise<{ pendientes: number }> {
+  const deLaAtencion = { visitId, visit: { is: { businessId } } }
+  const lineas = await tx.visitService.findMany({
+    where: { ...deLaAtencion, commissionAt: null },
+    select: {
+      id: true,
+      tipo: true,
+      byOwner: true,
+      memberId: true,
+      serviceId: true,
+      productId: true,
+      priceCents: true,
+    },
+    orderBy: { id: "asc" },
+    take: MAXIMO_DE_LINEAS_POR_ATENCION,
+  })
+  if (lineas.length === 0) return { pendientes: 0 }
+
+  const paraCascada = lineas.map((linea) => ({ ...linea, tipo: linea.tipo === "producto" ? ("producto" as const) : ("servicio" as const) }))
+  const deMiembros = paraCascada.filter((linea) => !linea.byOwner && linea.memberId)
+  const idsDeMiembros = sinRepetidos(deMiembros.flatMap((linea) => (linea.memberId ? [linea.memberId] : [])))
+  const idsDeServicios = sinRepetidos(deMiembros.flatMap((linea) => (linea.serviceId ? [linea.serviceId] : [])))
+  const idsDeProductos = sinRepetidos(deMiembros.flatMap((linea) => (linea.productId ? [linea.productId] : [])))
+
+  const [miembros, excepciones, productos] = await Promise.all([
+    idsDeMiembros.length === 0
+      ? Promise.resolve([])
+      : tx.businessMember.findMany({
+          where: { businessId, id: { in: idsDeMiembros } },
+          select: { id: true, commissionPercent: true },
+          take: idsDeMiembros.length,
+        }),
+    idsDeMiembros.length === 0 || idsDeServicios.length === 0
+      ? Promise.resolve([])
+      : tx.commissionRate.findMany({
+          where: { businessId, memberId: { in: idsDeMiembros }, serviceId: { in: idsDeServicios } },
+          select: { memberId: true, serviceId: true, percent: true },
+          take: idsDeMiembros.length * idsDeServicios.length,
+        }),
+    idsDeProductos.length === 0
+      ? Promise.resolve([])
+      : tx.producto.findMany({
+          where: { businessId, id: { in: idsDeProductos } },
+          select: { id: true, commissionPercent: true },
+          take: idsDeProductos.length,
+        }),
+  ])
+
+  const porExcepcion = new Map<string, Map<string, number>>()
+  for (const tasa of excepciones) {
+    const delMiembro = porExcepcion.get(tasa.memberId) ?? new Map<string, number>()
+    delMiembro.set(tasa.serviceId, tasa.percent)
+    porExcepcion.set(tasa.memberId, delMiembro)
+  }
+  const vigentes: PorcentajesVigentes = {
+    porMiembro: new Map(miembros.map((miembro) => [miembro.id, miembro.commissionPercent])),
+    excepciones: porExcepcion,
+    porProducto: new Map(productos.map((producto) => [producto.id, producto.commissionPercent])),
+  }
+
+  let pendientes = 0
+  for (const linea of paraCascada) {
+    if (porcentajeDeLinea(linea, vigentes).tipo === "pendiente") pendientes += 1
+    const comision = comisionParaCongelar(linea, vigentes, ahora)
+    if (!comision.commissionAt) continue
+    // Sólo si sigue sin congelar y es de este negocio: nunca se pisa una
+    // comisión ya congelada.
+    await tx.visitService.updateMany({
+      where: { AND: [{ id: linea.id, commissionAt: null }, deLaAtencion] },
+      data: comision,
+    })
+  }
+  return { pendientes }
 }
