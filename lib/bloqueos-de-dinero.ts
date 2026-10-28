@@ -30,6 +30,19 @@ export async function tomarCandadoDeCajaCompartido(tx: Prisma.TransactionClient,
   await tx.$executeRaw`SELECT pg_advisory_xact_lock_shared(hashtext(${`caja:${businessId}`}))`
 }
 
+/**
+ * La hora de la base en este instante, para fijar `paidAt` y el `hasta` de
+ * un cierre DESPUÉS de tomar el candado de la caja. No `new Date()`: con dos
+ * instancias de relojes desfasados, un cobro podía quedar con una hora
+ * dentro de un cierre que no lo contó. `clock_timestamp()` y no `now()`:
+ * `now()` es el inicio de la transacción, antes de esperar el candado.
+ */
+export async function horaDeLaBase(tx: Prisma.TransactionClient): Promise<Date> {
+  const [fila] = await tx.$queryRaw<{ ahora: Date }[]>`SELECT clock_timestamp() AS ahora`
+  if (!(fila?.ahora instanceof Date)) throw new Error("La base no devolvió la hora")
+  return fila.ahora
+}
+
 export interface AtencionBloqueada {
   motivo: MotivoDeBloqueo
 }

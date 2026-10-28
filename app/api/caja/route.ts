@@ -20,7 +20,7 @@ import { formatearMonto } from "@/lib/dinero"
 import { nombreDeMedio } from "@/lib/medios-de-pago"
 import { actorDeSesion, puedeCerrarCaja, puedeVerCierresDeCaja, whereDeCierresDeCaja } from "@/lib/permisos"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
-import { tomarCandadoDeCaja } from "@/lib/bloqueos-de-dinero"
+import { horaDeLaBase, tomarCandadoDeCaja } from "@/lib/bloqueos-de-dinero"
 import { nombreEnElNegocio } from "@/lib/tablero"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
 
@@ -180,7 +180,9 @@ export async function POST(request: NextRequest) {
     const resultado = await prisma.$transaction(async (tx) => {
       await tomarCandadoDeCaja(tx, actor.businessId)
 
-      const ahora = new Date()
+      // La hora de la base, después del candado: la misma fuente que usa el
+      // cobro para `paidAt`, aunque las instancias tengan relojes desfasados.
+      const ahora = await horaDeLaBase(tx)
       const ultimo = await tx.cierreDeCaja.findFirst({
         where: whereDeCierresDeCaja(actor),
         select: { hasta: true },

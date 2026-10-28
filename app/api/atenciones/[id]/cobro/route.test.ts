@@ -199,6 +199,22 @@ describe("POST /api/atenciones/[id]/cobro: el cobro", () => {
     expect(atencionGuardada("v-mixta").paidAt).toEqual(despues)
   })
 
+  it("la hora del cobro es la de la base, leída después del candado, no la de esta instancia", async () => {
+    // Esta instancia atrasa: la base dice 15:00:07Z y el proceso, otra hora.
+    const deLaBase = new Date("2026-10-06T15:00:07.000Z")
+    base.prisma.$queryRaw.mockImplementationOnce(async () => [{ ahora: deLaBase }])
+
+    const res = await cobrar(sesiones.dueña, "v-mixta", { pagos: [{ medio: "efectivo", monto: 33000 }] })
+
+    expect(res.status).toBe(200)
+    expect(atencionGuardada("v-mixta").paidAt).toEqual(deLaBase)
+    const [partes] = base.prisma.$queryRaw.mock.calls[0]
+    expect(partes.join("?")).toBe("SELECT clock_timestamp() AS ahora")
+    expect(base.prisma.$queryRaw.mock.invocationCallOrder[0]).toBeGreaterThan(
+      base.prisma.$executeRaw.mock.invocationCallOrder[0]
+    )
+  })
+
   it("la cita pasa a completada sin que se le escriba el precio: el total es de toda la visita, no de esa cita", async () => {
     await cobrar(sesiones.dueña, "v-mixta", { pagos: [{ medio: "efectivo", monto: 33000 }] })
 

@@ -179,6 +179,21 @@ describe("/api/caja", () => {
       expect(valores).toEqual([`caja:${NEGOCIO}`])
     })
 
+    it("el hasta es la hora de la base, leída después del candado, no la de esta instancia", async () => {
+      // Esta instancia atrasa: la base dice 20:00:07Z y el proceso, 20:00Z.
+      const deLaBase = new Date("2026-10-20T20:00:07.000Z")
+      base.prisma.$queryRaw.mockImplementationOnce(async () => [{ ahora: deLaBase }])
+      const res = await cerrar(sesiones.dueña, { desde: INICIO_DEL_DIA, fondoInicial: 10000, contado: 20000 })
+      expect(res.status).toBe(201)
+      expect((await res.json()).hasta).toBe(deLaBase.toISOString())
+      expect(cierresDelNegocio()[0].hasta).toEqual(deLaBase)
+      const [partes] = base.prisma.$queryRaw.mock.calls[0]
+      expect(partes.join("?")).toBe("SELECT clock_timestamp() AS ahora")
+      expect(base.prisma.$queryRaw.mock.invocationCallOrder[0]).toBeGreaterThan(
+        base.prisma.$executeRaw.mock.invocationCallOrder[0]
+      )
+    })
+
     it("con diferencia y sin nota: 400; con nota, se guarda", async () => {
       const sinNota = await cerrar(sesiones.encargado, { desde: INICIO_DEL_DIA, fondoInicial: 10000, contado: 19500 })
       expect(sinNota.status).toBe(400)
