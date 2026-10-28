@@ -8,13 +8,14 @@ import { whereDeLiquidaciones, type Actor } from "@/lib/permisos"
 import { registrarError } from "@/lib/registro-de-errores"
 import { nombreEnElNegocio } from "@/lib/tablero"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
-import { zonaDelNegocio } from "@/lib/zona-horaria"
+import { sumarDias, zonaDelNegocio } from "@/lib/zona-horaria"
 import {
   configuracionDelNegocio,
   fechaDeColumna,
   fechaDelNegocio,
   fechaParaColumna,
   finDelPeriodoEn,
+  inicioDelPeriodoEn,
   periodoParaLeer,
   proximoPeriodo,
   type ConfiguracionDePeriodo,
@@ -30,8 +31,9 @@ export type { TipoDeMovimiento }
  *
  * Qué entra en la próxima liquidación de alguien (`vistaPrevia`):
  * - sus líneas de atenciones finalizadas, sin liquidar, cobradas antes del
- *   fin del período (en la zona del negocio). Sin límite hacia atrás: lo
- *   atrasado se arrastra;
+ *   fin del período (en la zona del negocio). Hacia atrás, hasta "Liquidar
+ *   desde" (`Business.liquidacionDesde`): lo atrasado desde ahí se arrastra,
+ *   lo anterior nunca entra;
  * - sus propinas de esas atenciones (si la atención se anuló, deja de contar);
  * - sus adelantos y vales (descuentan) y ajustes (con signo), sin liquidar ni
  *   anular, con fecha hasta el fin del período. Se pueden dejar afuera de a
@@ -112,12 +114,18 @@ export async function tomarCandadoDeLiquidacion(tx: Db, businessId: string, memb
 export interface NegocioParaLiquidar {
   zona: string
   config: ConfiguracionDePeriodo
+  /** "Liquidar desde" (día del negocio), o `null` si la dueña todavía no lo fijó. */
+  liquidarDesde: string | null
 }
+
+/** El 409 de vista previa y cierre mientras la dueña no fijó "Liquidar desde". */
+export const FALTA_LIQUIDAR_DESDE =
+  "Antes de liquidar, la dueña tiene que elegir desde qué fecha se liquida (Liquidaciones → Período)."
 
 export async function leerNegocioParaLiquidar(db: Db, businessId: string): Promise<NegocioParaLiquidar> {
   const negocio = await db.business.findUnique({
     where: { id: businessId },
-    select: { timezone: true, liquidacionPeriodo: true, liquidacionInicioSemana: true },
+    select: { timezone: true, liquidacionPeriodo: true, liquidacionInicioSemana: true, liquidacionDesde: true },
   })
   return {
     zona: zonaDelNegocio(negocio?.timezone),
@@ -125,6 +133,7 @@ export async function leerNegocioParaLiquidar(db: Db, businessId: string): Promi
       liquidacionPeriodo: negocio?.liquidacionPeriodo,
       liquidacionInicioSemana: negocio?.liquidacionInicioSemana,
     }),
+    liquidarDesde: negocio?.liquidacionDesde ? fechaDeColumna(negocio.liquidacionDesde) : null,
   }
 }
 
@@ -275,8 +284,11 @@ export async function vistaPrevia(
   })
   if (!miembro) return null
 
-  const { zona, config } = await leerNegocioParaLiquidar(db, businessId)
+  const { zona, config, liquidarDesde } = await leerNegocioParaLiquidar(db, businessId)
+  if (!liquidarDesde) throw new ErrorDeLiquidacion(409, FALTA_LIQUIDAR_DESDE)
   const hoy = fechaDelNegocio(ahora, zona)
+  // Lo cobrado antes de "Liquidar desde" (en la zona del negocio) nunca entra.
+  const inicio = inicioDelPeriodoEn(liquidarDesde, zona)
 
   const [ultima, lineas, propinas, movimientos] = await Promise.all([
     db.liquidacion.findFirst({
@@ -289,7 +301,7 @@ export async function vistaPrevia(
         memberId,
         byOwner: false,
         liquidacionId: null,
-        visit: { is: { businessId, status: "finalizada", paidAt: { not: null } } },
+        visit: { is: { businessId, status: "finalizada", paidAt: { gte: inicio } } },
       },
       select: {
         id: true,
@@ -307,7 +319,12 @@ export async function vistaPrevia(
       orderBy: { id: "asc" },
     }),
     db.propinaDeAtencion.findMany({
-      where: { businessId, memberId, liquidacionId: null, visit: { is: { businessId, status: "finalizada" } } },
+      where: {
+        businessId,
+        memberId,
+        liquidacionId: null,
+        visit: { is: { businessId, status: "finalizada", paidAt: { gte: inicio } } },
+      },
       select: {
         id: true,
         visitId: true,
@@ -319,7 +336,7 @@ export async function vistaPrevia(
       orderBy: { id: "asc" },
     }),
     db.movimientoDeLiquidacion.findMany({
-      where: { businessId, memberId, liquidacionId: null, anuladoAt: null },
+      where: { businessId, memberId, liquidacionId: null, anuladoAt: null, fecha: { gte: fechaParaColumna(liquidarDesde) } },
       select: { id: true, tipo: true, montoCents: true, fecha: true, motivo: true },
       orderBy: [{ fecha: "asc" }, { createdAt: "asc" }],
     }),
@@ -333,7 +350,8 @@ export async function vistaPrevia(
   ].sort()
 
   const periodo = proximoPeriodo({
-    ultimaHasta: ultima ? fechaDeColumna(ultima.hasta) : null,
+    // La primera empieza justo en "Liquidar desde" y termina con su período.
+    ultimaHasta: ultima ? fechaDeColumna(ultima.hasta) : sumarDias(liquidarDesde, -1),
     primerPendiente: fechas[0] ?? null,
     hoy,
     config,

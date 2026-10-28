@@ -47,6 +47,7 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     cancelacionHorasAntes: 24,
     liquidacionPeriodo: "mensual",
     liquidacionInicioSemana: 1,
+    liquidacionDesde: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),

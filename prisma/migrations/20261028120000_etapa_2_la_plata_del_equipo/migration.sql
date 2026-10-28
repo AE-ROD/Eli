@@ -26,7 +26,8 @@
 BEGIN;
 -- AlterTable
 ALTER TABLE "negocios" ADD COLUMN     "liquidacionInicioSemana" INTEGER NOT NULL DEFAULT 1,
-ADD COLUMN     "liquidacionPeriodo" TEXT NOT NULL DEFAULT 'mensual';
+ADD COLUMN     "liquidacionPeriodo" TEXT NOT NULL DEFAULT 'mensual',
+ADD COLUMN     "liquidacionDesde" DATE;
 
 -- AlterTable
 ALTER TABLE "atencion_servicios" ADD COLUMN     "commissionAt" TIMESTAMP(3),

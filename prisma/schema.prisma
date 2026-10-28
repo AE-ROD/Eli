@@ -102,6 +102,11 @@ model Business {
   /// En el período semanal, qué día empieza la semana (0 = domingo … 6 =
   /// sábado, como `WorkSchedule.dayOfWeek`). Default lunes. CHECK 0..6.
   liquidacionInicioSemana Int    @default(1)
+  /// Desde qué día (del negocio, en su zona) se liquida: lo cobrado antes y
+  /// los movimientos con fecha anterior nunca entran a una liquidación. Lo
+  /// fija la dueña antes de la primera; null = todavía no se liquida. Se
+  /// puede cambiar sólo mientras no haya liquidaciones no anuladas.
+  liquidacionDesde        DateTime? @db.Date
 
   invitados         Business[]         @relation("Referidos")
   correosDeCuenta   CorreoDeCuenta[]

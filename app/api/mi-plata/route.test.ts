@@ -163,6 +163,22 @@ describe("GET /api/mi-plata", () => {
     expect(plata.periodo).toMatchObject({ tipo: "semanal", desde: "2026-10-18", hasta: "2026-10-24" })
   })
 
+  it("lo anterior a Liquidar desde no espera porcentaje ni se descuenta", async () => {
+    base.reiniciar({
+      ...base.volcado(),
+      business: base.volcado().business.map((b) =>
+        b.id === NEGOCIO ? { ...b, liquidacionDesde: new Date("2026-10-22T00:00:00.000Z") } : b
+      ),
+    })
+    const { GET } = await import("./route")
+    enSesion(sesiones.carla)
+    const plata = await (await GET()).json()
+    expect(plata.esperanPorcentaje).toBe(0)
+    expect(plata.adelantos).toEqual({ totalCents: 0, lista: [] })
+    // Lo ganado no depende de la fecha: es lo que cobró.
+    expect(plata.hoy.totalCents).toBe(centavos(5200))
+  })
+
   it("cada profesional ve lo suyo; la dueña y quien no tiene memberId: 401", async () => {
     const { GET } = await import("./route")
     enSesion(sesiones.pedro)

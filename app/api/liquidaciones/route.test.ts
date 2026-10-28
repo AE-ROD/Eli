@@ -39,6 +39,8 @@ function escenario() {
   const datos = datosBase()
   return {
     ...datos,
+    // La dueña liquida desde el 1 de octubre.
+    business: datos.business.map((b) => (b.id === NEGOCIO ? { ...b, liquidacionDesde: dia("2026-10-01") } : b)),
     businessMember: datos.businessMember.map((m) => (m.id === "m-carla" ? { ...m, commissionPercent: 40 } : m)),
     visit: [
       cobrada("v-congelada", "2026-10-06T15:00:00.000Z"),
@@ -77,6 +79,8 @@ function escenario() {
     ],
   }
 }
+
+const dia = (fecha: string) => new Date(`${fecha}T00:00:00.000Z`)
 
 function movimiento(id: string, tipo: string, montoCents: number, fecha: string, datos: Record<string, unknown> = {}) {
   return {
@@ -332,11 +336,15 @@ describe("POST /api/liquidaciones (cerrar)", () => {
   it("con período semanal, el corte es la semana", async () => {
     base.reiniciar({
       ...escenario(),
-      business: datosBase().business.map((b) => (b.id === NEGOCIO ? { ...b, liquidacionPeriodo: "semanal", liquidacionInicioSemana: 1 } : b)),
+      business: datosBase().business.map((b) =>
+        b.id === NEGOCIO
+          ? { ...b, liquidacionPeriodo: "semanal", liquidacionInicioSemana: 1, liquidacionDesde: dia("2026-10-05") }
+          : b
+      ),
     })
     enSesion(sesiones.dueña)
     const cuerpo = await (await vista()).json()
-    // Lo más antiguo pendiente es del martes 6 de octubre: la semana del lunes 5 al domingo 11.
+    // Liquida desde el lunes 5: la semana del lunes 5 al domingo 11.
     expect(cuerpo.periodo).toMatchObject({ tipo: "semanal", desde: "2026-10-05", hasta: "2026-10-11" })
     expect(cuerpo.lineas.map((l: { id: string }) => l.id).sort()).toEqual(["l-congelada", "l-pendiente", "l-shampoo"])
     expect(cuerpo.movimientos.map((m: { id: string }) => m.id)).toEqual(["mv-adelanto"])
@@ -518,5 +526,100 @@ describe("/api/liquidaciones/configuracion", () => {
     expect(await (await GET()).json()).toEqual({ periodo: "mensual", inicioSemana: 1 })
     enSesion(sesiones.carla)
     expect((await GET()).status).toBe(401)
+  })
+})
+
+describe("Liquidar desde", () => {
+  const conFecha = (fecha: string | null, extra: Record<string, unknown[]> = {}) => {
+    const datos = escenario()
+    base.reiniciar({
+      ...datos,
+      ...extra,
+      business: datos.business.map((b) => (b.id === NEGOCIO ? { ...b, liquidacionDesde: fecha ? dia(fecha) : null } : b)),
+    })
+  }
+  const fijar = async (cuerpo: unknown) => {
+    const { PUT } = await import("./liquidar-desde/route")
+    return PUT(pedido(`${URL}/liquidar-desde`, cuerpo))
+  }
+
+  it("sin fecha fijada, vista previa y cierre responden 409 y no escriben nada", async () => {
+    conFecha(null)
+    enSesion(sesiones.dueña)
+    const res = await vista()
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toMatch(/desde qué fecha/)
+    const antes = base.volcado()
+    expect((await cerrar({ miembroId: "m-carla", desde: "2026-10-01" })).status).toBe(409)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("lo cobrado antes del borde (en la zona del negocio) no entra, ni bloquea por falta de %", async () => {
+    const datos = escenario()
+    conFecha("2026-10-07", {
+      visit: [
+        ...datos.visit,
+        // 6 de octubre a las 23:59 en Santiago (UTC-3): antes del borde.
+        cobrada("v-antes", "2026-10-07T02:59:00.000Z"),
+        // 7 de octubre a las 00:00: ya cuenta.
+        cobrada("v-justo", "2026-10-07T03:00:00.000Z"),
+      ],
+      visitService: [
+        ...datos.visitService,
+        linea("l-antes", "v-antes"),
+        // Producto sin %: antes del borde no frena el cierre.
+        lineaDeProducto("l-cera-antes", "v-antes", { productId: "p-cera", serviceName: "Cera" }),
+        linea("l-justo", "v-justo"),
+      ],
+      propinaDeAtencion: [...datos.propinaDeAtencion, propina("pr-antes", "v-antes"), propina("pr-justo", "v-justo")],
+      movimientoDeLiquidacion: [
+        ...datos.movimientoDeLiquidacion,
+        movimiento("mv-antes", "vale", centavos(400), "2026-10-06"),
+        movimiento("mv-justo", "vale", centavos(400), "2026-10-07"),
+      ],
+    })
+    enSesion(sesiones.dueña)
+    const cuerpo = await (await vista()).json()
+    expect(cuerpo.periodo).toMatchObject({ desde: "2026-10-07", hasta: "2026-10-31" })
+    const ids = (lista: { id: string }[]) => lista.map((x) => x.id).sort()
+    expect(ids(cuerpo.lineas)).toEqual(["l-borde-oct", "l-justo", "l-pendiente", "l-shampoo"])
+    expect(ids(cuerpo.propinas)).toEqual(["pr-justo"])
+    expect(ids(cuerpo.movimientos)).toEqual(["mv-adelanto", "mv-ajuste", "mv-justo"])
+    expect(cuerpo.sinPorcentaje).toBe(0)
+    expect(cuerpo.noSePuedeCerrar).toBeNull()
+
+    expect((await cerrar({ miembroId: "m-carla", desde: "2026-10-07" })).status).toBe(201)
+    for (const id of ["l-antes", "l-cera-antes", "l-congelada"]) expect(lineaGuardada(id).liquidacionId).toBeNull()
+    // Y tampoco entra después: la siguiente es noviembre.
+    const siguiente = await (await vista()).json()
+    expect(siguiente.periodo.desde).toBe("2026-11-01")
+    expect(ids(siguiente.lineas)).toEqual(["l-borde-nov"])
+  })
+
+  it("solo la dueña la fija; encargado y profesional 401", async () => {
+    conFecha(null)
+    for (const sesion of [sesiones.encargado, sesiones.carla, sesiones.sinMiembro]) {
+      enSesion(sesion)
+      expect((await fijar({ fecha: "2026-10-01" })).status).toBe(401)
+    }
+    enSesion(sesiones.dueña)
+    expect((await fijar({ fecha: "2026-02-30" })).status).toBe(400)
+    expect((await fijar({ fecha: "2026-10-01" })).status).toBe(200)
+    expect(base.buscar("business", { id: NEGOCIO })[0].liquidacionDesde).toEqual(dia("2026-10-01"))
+    expect(base.buscar("business", { id: OTRO_NEGOCIO })[0].liquidacionDesde).toBeNull()
+  })
+
+  it("con una liquidación no anulada ya no se cambia (409); anulada, sí", async () => {
+    enSesion(sesiones.dueña)
+    const { id } = await (await cerrar({ miembroId: "m-carla", desde: "2026-10-01" })).json()
+    const res = await fijar({ fecha: "2026-09-01" })
+    expect(res.status).toBe(409)
+    expect(base.buscar("business", { id: NEGOCIO })[0].liquidacionDesde).toEqual(dia("2026-10-01"))
+    // La misma fecha no es un cambio.
+    expect((await fijar({ fecha: "2026-10-01" })).status).toBe(200)
+
+    const { POST } = await import("./[id]/anulacion/route")
+    await POST(pedido(URL, { motivo: "Otra fecha" }), conId(id))
+    expect((await fijar({ fecha: "2026-09-01" })).status).toBe(200)
   })
 })
