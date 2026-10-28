@@ -242,7 +242,7 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 ### Cancelar o reagendar sin cuenta
 
 - El correo de confirmación trae "Cancelar o cambiar mi cita" (y la pantalla de reserva confirmada, el mismo enlace, para quien no dejó correo). Abre una página con la cita: negocio, servicio, profesional, día y hora en la zona del negocio.
-- **Cancelar** la deja cancelada por el cliente, con la hora, y libera el horario. **Reagendar** ofrece otras horas libres del mismo servicio y profesional, con las reglas de la reserva. En los dos casos se le avisa por correo al dueño y, si la cita tiene profesional, también a él (un correo aparte; si el profesional es el mismo dueño, uno solo).
+- **Cancelar** la deja cancelada por el cliente, con la hora, y libera el horario. **Reagendar** ofrece otras horas libres del mismo servicio y profesional, con las reglas de la reserva; el calendario sólo deja elegir los días de la semana en que ese profesional atiende (si la cita no tiene profesional, alguno de los que hacen el servicio). En los dos casos se le avisa por correo al dueño y, si la cita tiene profesional, también a él (un correo aparte; si el profesional es el mismo dueño, uno solo).
 - **Plazo:** hasta 24 horas antes por defecto; dueño y encargado lo cambian en Configuración → "Plazo para cancelar o reagendar (horas)", de 0 a 72. Pasado el plazo la página muestra la cita y dice que hay que contactar al local.
 - Un enlace inválido, de una cita cancelada, pasada o ya atendida dice "Este enlace no sirve", sin más detalle. La base guarda sólo una huella del enlace (no el enlace), y cada enlace tiene su propio límite de uso además del de la IP.
 

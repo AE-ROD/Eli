@@ -12,9 +12,6 @@ import { EncabezadoDeReserva } from "../../../_componentes/encabezado-de-reserva
 import { SelectorFechaHora, fechaParaLeer } from "../../../_componentes/selector-fecha-hora"
 import { cancelarCita, leerCita, leerHorasParaReagendar, reagendarCita, type CitaDelEnlace } from "../_datos"
 
-/** Todos los días: el servidor dice cuáles no tienen atención para este profesional. */
-const TODOS_LOS_DIAS = [0, 1, 2, 3, 4, 5, 6]
-
 type Vista =
   | { tipo: "cargando" }
   | { tipo: "no-sirve" }
@@ -186,11 +183,16 @@ export function GestionDeCita({ slug, token }: { slug: string; token: string }) 
             <p className="mt-1 text-sm text-texto-2">
               Mismo servicio{cita.profesional ? `, con ${cita.profesional}` : ""}.
             </p>
+            {cita.diasConAtencion.length === 0 && (
+              <p className="mt-3 rounded-campo bg-superficie px-4 py-3 text-sm text-texto-2">
+                No hay días con atención para cambiarla por acá. Contacta directamente a {cita.negocio.nombre}.
+              </p>
+            )}
             <div className="mt-6">
               <SelectorFechaHora
                 cargarHoras={cargarHoras}
                 claveDeHoras={token}
-                diasDisponibles={TODOS_LOS_DIAS}
+                diasDisponibles={cita.diasConAtencion}
                 zona={cita.zona}
                 fechaSeleccionada={fecha}
                 horaSeleccionada={hora}

@@ -159,7 +159,36 @@ describe("GET: ver la cita", () => {
       plazoHoras: 24,
       sePuedeCambiar: true,
       sePuedeReagendar: true,
+      // El negocio atiende los siete días y Carla no cargó horario propio.
+      diasConAtencion: [0, 1, 2, 3, 4, 5, 6],
     })
+  })
+
+  it("los días con atención son los del profesional de la cita, con la regla de disponibilidad", async () => {
+    escenario()
+    base.reiniciar({
+      ...base.volcado(),
+      workSchedule: [
+        ...base.volcado().workSchedule,
+        { id: "h-carla", businessId: NEGOCIO, memberId: "m-carla", dayOfWeek: 3, startTime: "15:00", endTime: "18:00" },
+      ],
+    })
+    expect((await ver()).cuerpo.diasConAtencion).toEqual([3])
+    // Un día que el calendario deshabilita es uno en que el servidor no ofrece horas.
+    expect((await horas("2030-01-08")).cuerpo).toEqual({ slots: [], mensaje: "No hay atención ese día" })
+  })
+
+  it("sin poder reagendar (fuera de plazo o servicio desactivado) no ofrece días", async () => {
+    escenario()
+    relojEn("2030-01-07T00:00:00.000Z")
+    expect((await ver()).cuerpo.diasConAtencion).toEqual([])
+    escenario()
+    base.reiniciar({
+      ...base.volcado(),
+      service: base.volcado().service.map((s: Registro) => (s.id === "s-corte" ? { ...s, active: false } : s)),
+    })
+    relojEn("2030-01-02T12:00:00.000Z")
+    expect((await ver()).cuerpo.diasConAtencion).toEqual([])
   })
 
   it("fuera de plazo se ve, pero dice que ya no se puede cambiar", async () => {

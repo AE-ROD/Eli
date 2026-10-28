@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { candidatosDelDia, candidatosQueCubren, haceElServicio, horasDeLaFranja } from "./agenda-publica"
+import { candidatosDelDia, candidatosQueCubren, diasConAtencion, haceElServicio, horasDeLaFranja } from "./agenda-publica"
 
 /** Las reglas puras. Lo que lee la base se prueba en `app/api/reservar/[slug]/por-profesional.test.ts`. */
 
@@ -52,6 +52,23 @@ describe("candidatosDelDia", () => {
 
   it("con profesionales pero ninguno hace el servicio: nadie (no se cae al carril del negocio)", () => {
     expect(candidatosDelDia([fila(null, "09:00", "12:00")], true, [], FECHA)).toEqual([])
+  })
+})
+
+describe("diasConAtencion", () => {
+  it("sin profesionales: los días del horario del negocio", () => {
+    expect(diasConAtencion([fila(null, "09:00", "12:00"), fila(null, "15:00", "18:00", 5)], false, [])).toEqual([1, 5])
+  })
+
+  it("con un profesional que cargó horario propio: sólo sus días, no los del negocio", () => {
+    const filas = [fila(null, "09:00", "12:00"), fila(null, "09:00", "12:00", 2), fila("m-carla", "15:00", "17:00", 3)]
+    expect(diasConAtencion(filas, true, ["m-carla"])).toEqual([3])
+    // Pedro no cargó: los del negocio. Entre los dos, la unión.
+    expect(diasConAtencion(filas, true, ["m-carla", "m-pedro"])).toEqual([1, 2, 3])
+  })
+
+  it("con profesionales pero ninguno hace el servicio: ningún día", () => {
+    expect(diasConAtencion([fila(null, "09:00", "12:00")], true, [])).toEqual([])
   })
 })
 

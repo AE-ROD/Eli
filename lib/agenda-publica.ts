@@ -101,7 +101,15 @@ export function candidatosDelDia(
   profesionales: string[],
   fecha: string
 ): Candidato[] {
-  const dia = diaDeLaSemana(fecha)
+  return candidatosDelDiaDeLaSemana(filasDeLaSemana, hayProfesionales, profesionales, diaDeLaSemana(fecha))
+}
+
+function candidatosDelDiaDeLaSemana(
+  filasDeLaSemana: FilaDeHorarioSemanal[],
+  hayProfesionales: boolean,
+  profesionales: string[],
+  dia: number
+): Candidato[] {
   if (!hayProfesionales) {
     return [{ memberId: null, franjas: franjasDeAtencion(filasDeLaSemana.filter((fila) => fila.dayOfWeek === dia)) }]
   }
@@ -109,6 +117,23 @@ export function candidatosDelDia(
     memberId,
     franjas: franjasParaElDia(filasDeLaSemana, memberId, dia)?.franjas ?? [],
   }))
+}
+
+/**
+ * Los días de la semana (0 domingo a 6 sábado) en que algún candidato tiene
+ * horario: los que el calendario deja elegir. Es la misma regla con que
+ * `disponibilidad` responde "No hay atención ese día", día por día.
+ */
+export function diasConAtencion(
+  filasDeLaSemana: FilaDeHorarioSemanal[],
+  hayProfesionales: boolean,
+  profesionales: string[]
+): number[] {
+  return [0, 1, 2, 3, 4, 5, 6].filter((dia) =>
+    candidatosDelDiaDeLaSemana(filasDeLaSemana, hayProfesionales, profesionales, dia).some(
+      (candidato) => candidato.franjas.length > 0
+    )
+  )
 }
 
 /** Las horas de inicio de un tramo de `duracion` minutos dentro de una franja, cada `duracion` minutos desde que abre. */
@@ -260,17 +285,18 @@ export type CandidatosDeLaReserva =
   | { tipo: "ok"; candidatos: Candidato[]; profesionales: ProfesionalQueAtiende[] }
   | { tipo: "profesional-no-disponible" }
 
+type ConsultaDeLaReserva = { businessId: string; serviceId: string; profesionalId: string | null }
+
 /**
- * Los candidatos de una reserva: los profesionales que atienden y hacen el
- * servicio (sólo el elegido, si el cliente eligió uno), con su horario de
- * ese día. Un profesional que no existe, es de otro negocio, no atiende o no
- * hace el servicio da `profesional-no-disponible`, sin distinguir por qué.
+ * Lo que define quién puede tomar una reserva, para cualquier día: los
+ * profesionales que atienden, el horario semanal y los elegidos (los que
+ * hacen el servicio, o sólo el pedido). `null` si el pedido no está entre
+ * los que lo hacen.
  */
-export async function candidatosDeLaReserva(
+async function leerLaReserva(
   db: Pick<Prisma.TransactionClient, "businessMember" | "workSchedule">,
-  consulta: { businessId: string; serviceId: string; profesionalId: string | null; fecha: string }
-): Promise<CandidatosDeLaReserva> {
-  const { businessId, serviceId, profesionalId, fecha } = consulta
+  { businessId, serviceId, profesionalId }: ConsultaDeLaReserva
+) {
   const [profesionales, filas] = await Promise.all([
     leerProfesionalesQueAtienden(db, businessId),
     db.workSchedule.findMany({
@@ -283,11 +309,39 @@ export async function candidatosDeLaReserva(
   let elegidos = queLoHacen
   if (profesionalId) {
     elegidos = queLoHacen.filter((profesional) => profesional.id === profesionalId)
-    if (elegidos.length === 0) return { tipo: "profesional-no-disponible" }
+    if (elegidos.length === 0) return null
   }
+  return { profesionales, filas, elegidos: elegidos.map((profesional) => profesional.id) }
+}
+
+/**
+ * Los candidatos de una reserva: los profesionales que atienden y hacen el
+ * servicio (sólo el elegido, si el cliente eligió uno), con su horario de
+ * ese día. Un profesional que no existe, es de otro negocio, no atiende o no
+ * hace el servicio da `profesional-no-disponible`, sin distinguir por qué.
+ */
+export async function candidatosDeLaReserva(
+  db: Pick<Prisma.TransactionClient, "businessMember" | "workSchedule">,
+  consulta: ConsultaDeLaReserva & { fecha: string }
+): Promise<CandidatosDeLaReserva> {
+  const reserva = await leerLaReserva(db, consulta)
+  if (!reserva) return { tipo: "profesional-no-disponible" }
   return {
     tipo: "ok",
-    profesionales,
-    candidatos: candidatosDelDia(filas, profesionales.length > 0, elegidos.map((profesional) => profesional.id), fecha),
+    profesionales: reserva.profesionales,
+    candidatos: candidatosDelDia(reserva.filas, reserva.profesionales.length > 0, reserva.elegidos, consulta.fecha),
   }
+}
+
+/**
+ * Los días de la semana en que esta reserva tiene atención (`diasConAtencion`).
+ * Vacío si el profesional pedido no está disponible: no hay día que ofrecer.
+ */
+export async function diasConAtencionDeLaReserva(
+  db: Pick<Prisma.TransactionClient, "businessMember" | "workSchedule">,
+  consulta: ConsultaDeLaReserva
+): Promise<number[]> {
+  const reserva = await leerLaReserva(db, consulta)
+  if (!reserva) return []
+  return diasConAtencion(reserva.filas, reserva.profesionales.length > 0, reserva.elegidos)
 }
