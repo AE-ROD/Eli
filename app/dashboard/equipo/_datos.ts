@@ -12,6 +12,8 @@ export interface MiembroDelEquipo {
   id: string
   role: string
   createdAt: string
+  /** La que se muestra en la página pública ("Colorista"); null si no tiene. */
+  especialidad: string | null
   user: { id: string; name: string; email: string }
 }
 
@@ -106,5 +108,17 @@ export async function guardarServiciosDelMiembro(
     `/api/equipo/miembros/${encodeURIComponent(memberId)}/servicios`,
     "No se pudieron guardar los servicios",
     conJson("PUT", serviceIds === null ? { todos: true } : { todos: false, serviceIds })
+  )
+}
+
+/** Guarda la especialidad de la página pública. Vacía la borra. Devuelve la que quedó. */
+export async function guardarEspecialidadDelMiembro(
+  memberId: string,
+  especialidad: string
+): Promise<Resultado<{ especialidad: string | null }>> {
+  return pedir<{ especialidad: string | null }>(
+    `/api/equipo/miembros/${encodeURIComponent(memberId)}/especialidad`,
+    "No se pudo guardar la especialidad",
+    conJson("PUT", { especialidad })
   )
 }

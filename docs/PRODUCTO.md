@@ -228,7 +228,7 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 - **Servicios** agrupados por categoría (los sin categoría van a "Otros"), con duración y precio; **horario** de lunes a domingo; **ubicación**; **medios de pago** del catálogo de cobro.
 - **Color:** una paleta cerrada de 7 tonos del sistema de diseño (Cielo, Durazno, Lavanda, Pistacho, Menta, Arena, Noche); la marca de Eli no cambia. Cada uno pasa contraste AA con su texto. Un valor desconocido usa Cielo.
 - **Al compartir el enlace:** título con nombre y comuna, descripción y una imagen generada (nombre, comuna, iniciales en el color del negocio).
-- **Se edita** en Configuración → "Tu página pública": dirección, comuna, WhatsApp, Instagram (usuario o enlace del perfil), color con vista previa, medios de pago y especialidad de cada profesional. Dueño y encargado; el profesional la ve sin poder cambiarla. La categoría de cada servicio se pone en Servicios.
+- **Se edita** en Configuración → "Tu página pública": dirección, comuna, WhatsApp, Instagram (usuario o enlace del perfil), color con vista previa, medios de pago y especialidad de cada profesional (que también se edita desde Equipo → "Especialidad", junto a "Servicios que hace"). Dueño y encargado; el profesional la ve sin poder cambiarla. La categoría de cada servicio se pone en Servicios.
 - **Fotos: próximamente.** Logo, portada y fotos de profesionales se muestran si existen y son del mismo sitio, pero no hay forma de subirlas ni se pueden pegar URLs (sección 10).
 
 ### Reserva por profesional

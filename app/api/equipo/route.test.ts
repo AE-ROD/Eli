@@ -100,6 +100,18 @@ describe("GET /api/equipo", () => {
     expect(argumentosInvitaciones.where.businessId).toBe("negocio-2")
   })
 
+  it("cada miembro trae su especialidad, para editarla desde Equipo", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.businessMember.findMany.mockResolvedValueOnce([])
+    prismaMock.workerInvitation.findMany.mockResolvedValueOnce([])
+
+    await GET()
+
+    expect(prismaMock.businessMember.findMany.mock.calls[0][0].select.especialidad).toBe(true)
+  })
+
   it("un profesional (worker) recibe 401", async () => {
     const { GET } = await import("./route")
 

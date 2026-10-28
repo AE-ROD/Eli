@@ -33,6 +33,8 @@ export async function GET() {
         id: true,
         role: true,
         createdAt: true,
+        // La de la página pública: se edita desde Equipo.
+        especialidad: true,
         user: { select: { id: true, name: true, email: true } },
       },
       orderBy: { createdAt: "asc" },
