@@ -2,13 +2,13 @@ import { describe, it, expect } from "vitest"
 import {
   DIAS_MAXIMOS_DE_ANTICIPACION,
   compartenContacto,
-  consentimientoSobreClienteExistente,
   esDiaReservable,
   esElMismoCliente,
   fechaNoReservable,
   normalizarEmail,
   normalizarNombre,
   normalizarTelefono,
+  notaDeContactoPorConfirmar,
   yaPasoLaHora,
 } from "./reserva-publica"
 
@@ -174,24 +174,30 @@ describe("esElMismoCliente", () => {
   })
 })
 
-describe("consentimientoSobreClienteExistente", () => {
-  it("sin teléfono en la reserva: nada", () => {
-    expect(consentimientoSobreClienteExistente("+56912345678", null)).toBe("nada")
-    expect(consentimientoSobreClienteExistente(null, undefined)).toBe("nada")
+describe("notaDeContactoPorConfirmar", () => {
+  it("sin teléfono en la reserva: nada que anotar", () => {
+    expect(notaDeContactoPorConfirmar(null, null, true)).toBeNull()
+    expect(notaDeContactoPorConfirmar("+56912345678", undefined, false)).toBeNull()
   })
 
-  it("el cliente no tiene teléfono: se guarda el dado", () => {
-    expect(consentimientoSobreClienteExistente(null, "+56912345678")).toBe("guardar-telefono")
+  it("el mismo número, sin pedir WhatsApp: nada que anotar", () => {
+    expect(notaDeContactoPorConfirmar("9 1234 5678", "+56912345678", false)).toBeNull()
   })
 
-  it("el mismo número, escrito de otra forma: se registra", () => {
-    expect(consentimientoSobreClienteExistente("9 1234 5678", "+56912345678")).toBe("registrar")
-    expect(consentimientoSobreClienteExistente("+56912345678", "+56912345678")).toBe("registrar")
+  it("el cliente no tiene teléfono (null o en blanco), otro o uno ilegible: se anota el número", () => {
+    for (const guardado of [null, "", "   ", "+56987654321", "llamar al local"]) {
+      const nota = notaDeContactoPorConfirmar(guardado, "+56912345678", false)
+      expect(nota).toContain("+56912345678")
+      expect(nota).not.toContain("WhatsApp")
+    }
   })
 
-  it("otro número, uno ilegible o vacío guardado: nada (no se pisa)", () => {
-    expect(consentimientoSobreClienteExistente("+56987654321", "+56912345678")).toBe("nada")
-    expect(consentimientoSobreClienteExistente("+1 415 555 0100", "+56912345678")).toBe("nada")
-    expect(consentimientoSobreClienteExistente("", "+56912345678")).toBe("nada")
+  it("pidió WhatsApp: se anota, con el número sólo si no es el guardado", () => {
+    const mismo = notaDeContactoPorConfirmar("+56912345678", "+56912345678", true)
+    expect(mismo).toContain("WhatsApp")
+    expect(mismo).not.toContain("+56912345678")
+    const otro = notaDeContactoPorConfirmar(null, "+56912345678", true)
+    expect(otro).toContain("WhatsApp")
+    expect(otro).toContain("+56912345678")
   })
 })

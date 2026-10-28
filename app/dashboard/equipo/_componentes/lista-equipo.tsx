@@ -1,7 +1,7 @@
 "use client"
 
 import { useId, type ReactNode } from "react"
-import { Clock, ListChecks, Mail, RotateCw, UsersRound, X } from "lucide-react"
+import { BadgeCheck, Clock, ListChecks, Mail, RotateCw, UsersRound, X } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { Esqueleto } from "@/components/comunes/esqueleto"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
@@ -9,7 +9,9 @@ import { Insignia } from "@/components/comunes/insignia"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
+import { diaYMes } from "@/lib/fechas"
 import { nombreDelRol } from "@/lib/nombres-de-roles"
+import { apareceEnLaPagina } from "@/lib/pagina-del-negocio"
 import { cn } from "@/lib/utils"
 import type { InvitacionPendiente, MiembroDelEquipo } from "../_datos"
 
@@ -28,11 +30,6 @@ function InsigniaDelRol({ rol }: { rol: string }) {
   return <Insignia tono={rol === "admin" ? "turquesa" : "gris"}>{nombreDelRol(rol)}</Insignia>
 }
 
-/** `2 de noviembre`: el día en que vence el enlace. */
-function diaDeVencimiento(iso: string): string {
-  return new Date(iso).toLocaleDateString("es-ES", { day: "numeric", month: "long" })
-}
-
 interface PropsDeListaEquipo {
   miembros: MiembroDelEquipo[]
   invitaciones: InvitacionPendiente[]
@@ -45,6 +42,8 @@ interface PropsDeListaEquipo {
   alAnular: (invitacion: InvitacionPendiente) => void
   /** Abre "Servicios que hace" de un miembro. */
   alEditarServicios: (miembro: MiembroDelEquipo) => void
+  /** Abre "Especialidad" de un miembro que aparece en la página pública. */
+  alEditarEspecialidad: (miembro: MiembroDelEquipo) => void
 }
 
 export function ListaEquipo({
@@ -56,6 +55,7 @@ export function ListaEquipo({
   alReenviar,
   alAnular,
   alEditarServicios,
+  alEditarEspecialidad,
 }: PropsDeListaEquipo) {
   if (cargando) return <ListaCargando />
 
@@ -84,11 +84,15 @@ export function ListaEquipo({
                 <span className={LUGAR_DEL_AVATAR}>
                   <AvatarUsuario nombre={miembro.user.name} tamaño="md" />
                 </span>
-                <DatosDeLaPersona nombre={miembro.user.name} email={miembro.user.email} />
+                <DatosDeLaPersona
+                  nombre={miembro.user.name}
+                  email={miembro.user.email}
+                  especialidad={apareceEnLaPagina(miembro.role) ? miembro.especialidad : null}
+                />
                 <div className={LUGAR_DEL_ROL}>
                   <InsigniaDelRol rol={miembro.role} />
                 </div>
-                <div className="col-start-2 sm:col-span-2 sm:col-start-2">
+                <div className="col-start-2 flex flex-wrap gap-2 sm:col-span-2 sm:col-start-2">
                   <Boton
                     variante="fantasma"
                     tamano="sm"
@@ -98,6 +102,18 @@ export function ListaEquipo({
                   >
                     Servicios que hace
                   </Boton>
+                  {/* Sólo quien aparece en la página pública tiene una especialidad que mostrar. */}
+                  {apareceEnLaPagina(miembro.role) && (
+                    <Boton
+                      variante="fantasma"
+                      tamano="sm"
+                      icono={<BadgeCheck className="size-4" aria-hidden="true" />}
+                      onClick={() => alEditarEspecialidad(miembro)}
+                      aria-label={`Especialidad de ${miembro.user.name}`}
+                    >
+                      Especialidad
+                    </Boton>
+                  )}
                 </div>
               </li>
             ))}
@@ -124,7 +140,7 @@ export function ListaEquipo({
                     {vencida ? (
                       <Insignia tono="gris">Vencida</Insignia>
                     ) : (
-                      <p className="text-xs text-texto-2">Vence el {diaDeVencimiento(invitacion.expiresAt)}</p>
+                      <p className="text-xs text-texto-2">Vence el {diaYMes(invitacion.expiresAt)}</p>
                     )}
                   </div>
                   <div className="col-start-2 flex flex-wrap gap-2 sm:col-span-2 sm:col-start-2">
@@ -177,11 +193,17 @@ function SeccionDeLaLista({ titulo, cantidad, children }: { titulo: string; cant
   )
 }
 
-/** El nombre y el correo, enteros aunque sean largos: bajan de renglón antes que salirse de la fila. */
-function DatosDeLaPersona({ nombre, email }: { nombre: string; email: string }) {
+/**
+ * El nombre y el correo, enteros aunque sean largos: bajan de renglón antes
+ * que salirse de la fila. La especialidad, si tiene, al lado del nombre.
+ */
+function DatosDeLaPersona({ nombre, email, especialidad }: { nombre: string; email: string; especialidad?: string | null }) {
   return (
     <div className="min-w-0 flex-1">
-      <p className="font-medium break-words">{nombre}</p>
+      <p className="font-medium break-words">
+        {nombre}
+        {especialidad && <span className="font-normal text-texto-2"> · {especialidad}</span>}
+      </p>
       <p className="mt-0.5 flex items-start gap-1.5 text-sm text-texto-2">
         <Mail className="mt-[3px] size-3.5 shrink-0" aria-hidden="true" strokeWidth={1.75} />
         <span className="min-w-0 break-all">{email}</span>

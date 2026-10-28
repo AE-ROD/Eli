@@ -25,11 +25,11 @@ import {
   ORIGEN_RESERVA_PUBLICA,
   WHERE_RESERVA_PUBLICA,
   compartenContacto,
-  consentimientoSobreClienteExistente,
   esElMismoCliente,
   fechaNoReservable,
   normalizarEmail,
   normalizarTelefono,
+  notaDeContactoPorConfirmar,
   yaPasoLaHora,
 } from "@/lib/reserva-publica"
 
@@ -138,7 +138,7 @@ async function reservar(
     ? await tx.customer.findMany({
         // Un cliente eliminado (anonimizado) nunca se reutiliza.
         where: { AND: [{ businessId: negocioId, email: { equals: email, mode: "insensitive" } }, clienteNoEliminado] },
-        select: { id: true, name: true, lastName: true, email: true, phone: true, whatsappConsentAt: true },
+        select: { id: true, name: true, lastName: true, email: true, phone: true },
         orderBy: { createdAt: "asc" },
       })
     : []
@@ -146,15 +146,17 @@ async function reservar(
   let cliente: { id: string } | undefined = reutilizado
 
   // Consentimiento para recordatorios por WhatsApp (PRODUCTO.md §10): se
-  // registra cuándo y por dónde. Marcado, se guarda si no había uno; uno
-  // previo (dado en el local, por ejemplo) no se pisa. Sin marcar no borra
-  // nada. Sin teléfono se ignora: el consentimiento es para un número, y la
-  // página sólo muestra la casilla cuando se escribió uno.
+  // registra cuándo y por dónde. Sin teléfono se ignora: el consentimiento es
+  // para un número, y la página sólo muestra la casilla cuando se escribió uno.
   const conConsentimiento = datos.whatsappConsentimiento === true && Boolean(datos.telefono)
-  const consentimiento = conConsentimiento
-    ? { whatsappConsentAt: ahora, whatsappConsentSource: ORIGEN_RESERVA_PUBLICA }
-    : {}
 
+  // Un cliente nuevo guarda el teléfono y el consentimiento dados. Uno que ya
+  // existía (reutilizado por email + nombre) no recibe ninguno de los dos:
+  // quien conoce el email y el nombre de otra persona dejaba su propio número
+  // en la ficha y recibía los recordatorios de sus citas, también las que
+  // agenda el local. Lo dado queda como nota interna de la cita, para que el
+  // local lo confirme a mano en la ficha (`notaDeContactoPorConfirmar`).
+  let notaDeContacto: string | null = null
   if (!cliente) {
     cliente = await tx.customer.create({
       data: {
@@ -164,30 +166,13 @@ async function reservar(
         email,
         // Ya en E.164 (`telefonoChileno` en `reservaSchema`).
         phone: datos.telefono ?? null,
-        ...consentimiento,
+        ...(conConsentimiento && { whatsappConsentAt: ahora, whatsappConsentSource: ORIGEN_RESERVA_PUBLICA }),
         businessId: negocioId,
       },
       select: { id: true },
     })
-  } else if (conConsentimiento && reutilizado) {
-    // El cliente se reutilizó por email + nombre, no por teléfono: el
-    // consentimiento sólo vale si el número es el suyo. Sin teléfono
-    // guardado, se guarda el dado junto con el consentimiento; con otro
-    // número, no se registra ni se pisa (`consentimientoSobreClienteExistente`).
-    // El teléfono va en el where para que no cambie entre la lectura y la
-    // escritura.
-    const accion = consentimientoSobreClienteExistente(reutilizado.phone, datos.telefono)
-    if (accion === "guardar-telefono") {
-      await tx.customer.updateMany({
-        where: { id: cliente.id, businessId: negocioId, phone: null, whatsappConsentAt: null },
-        data: { phone: datos.telefono, ...consentimiento },
-      })
-    } else if (accion === "registrar") {
-      await tx.customer.updateMany({
-        where: { id: cliente.id, businessId: negocioId, phone: reutilizado.phone, whatsappConsentAt: null },
-        data: consentimiento,
-      })
-    }
+  } else if (reutilizado) {
+    notaDeContacto = notaDeContactoPorConfirmar(reutilizado.phone, datos.telefono, conConsentimiento)
   }
 
   const cita = await tx.appointment.create({
@@ -200,6 +185,7 @@ async function reservar(
       endTime,
       status: "pendiente",
       clientComments: datos.comentarios || null,
+      notes: notaDeContacto,
       price: servicio.price,
       customerId: cliente.id,
       memberId: asignacion.memberId,

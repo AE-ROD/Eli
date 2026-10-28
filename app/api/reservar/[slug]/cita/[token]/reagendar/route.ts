@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { asignarCandidatoLibre, candidatosDeLaReserva, candidatosQueCubren, tramoDeLaReserva } from "@/lib/agenda-publica"
 import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
 import { enviarAvisoDeCambioDelCliente } from "@/lib/email"
-import { ESTADOS_GESTIONABLES, dentroDelPlazo, mensajeFueraDePlazo } from "@/lib/gestion-de-cita"
+import { ESTADOS_GESTIONABLES, dentroDelPlazo, mensajeFueraDePlazo, type CitaDelEnlace } from "@/lib/gestion-de-cita"
 import {
   MENSAJE_FECHA_MUY_LEJANA,
   MENSAJE_HORA_PASADA,
@@ -21,6 +21,21 @@ const reagendarSchema = z.object({
 
 const FUERA_DE_ATENCION = "Ese horario está fuera de la atención. Elige otra hora."
 const HORARIO_TOMADO = "El horario ya no está disponible"
+
+/**
+ * El correo del profesional que queda con la cita. Si es el mismo de antes ya
+ * vino con ella; si la cita no tenía profesional y el reagendado le asignó
+ * uno, se lee, acotado al negocio de la cita.
+ */
+async function correoDelProfesional(cita: CitaDelEnlace, memberId: string | null): Promise<string | null> {
+  if (!memberId) return null
+  if (memberId === cita.memberId) return cita.member?.user?.email ?? null
+  const miembro = await prisma.businessMember.findFirst({
+    where: { id: memberId, businessId: cita.businessId },
+    select: { user: { select: { email: true } } },
+  })
+  return miembro?.user?.email ?? null
+}
 
 type Resultado = { tipo: "movida"; memberId: string | null } | { tipo: "rechazada"; error: string; status: number }
 
@@ -105,9 +120,11 @@ export async function POST(request: NextRequest, contexto: Params) {
     ? (reserva.profesionales.find((candidato) => candidato.id === resultado.memberId)?.nombre ?? null)
     : null
   const antes = fechaYHora(cita.startTime, zona)
+  const emailProfesional = await correoDelProfesional(cita, resultado.memberId)
   await enviarAvisoDeCambioDelCliente({
     tipo: "reagendo",
     emailNegocio: cita.business.user.email,
+    emailProfesional,
     nombreNegocio: cita.business.name,
     nombreCliente: nombreDelCliente(cita),
     servicio: servicio.name,

@@ -10,6 +10,8 @@
  * en la zona local del navegador — igual que ya hace `page.tsx`.
  */
 
+import { ocupaElHorario } from "@/lib/ocupacion"
+
 export interface FranjaHorario {
   startTime: string
   endTime: string
@@ -69,6 +71,14 @@ function fusionarIntervalos(
 }
 
 /**
+ * Las citas que ocupan su hora: una cancelada o una "No vino" dejó libre ese
+ * tramo (`lib/ocupacion.ts`), así que no se dibuja ni tapa un hueco.
+ */
+function citasQueOcupan(citas: CitaDelDia[]): CitaDelDia[] {
+  return citas.filter((cita) => ocupaElHorario(cita.status))
+}
+
+/**
  * Segmentos de una franja: toda cita que se solapa con ella (aunque se pise
  * con otra, aunque quede anidada dentro de otra, aunque dure cero minutos) en
  * su hora real recortada sólo a los bordes de la franja — nunca al cursor de
@@ -85,7 +95,7 @@ export function segmentosDeFranja(franja: FranjaHorario, citas: CitaDelDia[]): S
   const inicioFranja = horaAMinutos(franja.startTime)
   const finFranja = horaAMinutos(franja.endTime)
 
-  const citasEnFranja = citas
+  const citasEnFranja = citasQueOcupan(citas)
     .map((cita) => {
       const inicioReal = minutosDeInstante(cita.startTime)
       const finReal = minutosDeInstante(cita.endTime)
@@ -133,7 +143,7 @@ export function segmentosDeFranja(franja: FranjaHorario, citas: CitaDelDia[]): S
 export function citasFueraDeFranjas(franjas: FranjaHorario[], citas: CitaDelDia[]): CitaDelDia[] {
   const franjasValidas = franjas.filter(franjaValida)
 
-  return citas.filter((cita) => {
+  return citasQueOcupan(citas).filter((cita) => {
     const inicio = minutosDeInstante(cita.startTime)
     const fin = minutosDeInstante(cita.endTime)
     return !franjasValidas.some((franja) => {

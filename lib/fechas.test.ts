@@ -17,6 +17,7 @@ import {
   rangoDelDia,
   tiempoDesde,
   fechaRelativa,
+  diaYMes,
 } from "./fechas"
 
 describe("comoTexto", () => {
@@ -351,5 +352,13 @@ describe("fechaRelativa", () => {
       const iso = new Date(2026, 9, 26 + dias, 12, 0).toISOString()
       expect(fechaRelativa(iso, ahora)).not.toMatch(/-/)
     }
+  })
+})
+
+describe("diaYMes", () => {
+  it("escribe el día y el mes en es-CL, como el resto del panel", () => {
+    const iso = new Date(2026, 10, 2, 15, 0).toISOString()
+    expect(diaYMes(iso)).toBe(new Date(2026, 10, 2).toLocaleDateString("es-CL", { day: "numeric", month: "long" }))
+    expect(diaYMes(iso)).toMatch(/^2 de noviembre$/)
   })
 })

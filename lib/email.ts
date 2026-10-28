@@ -354,6 +354,12 @@ export function enviarAvisoProfesional(datos: DatosAvisoProfesional) {
 export interface DatosAvisoDeCambioDelCliente {
   tipo: "cancelo" | "reagendo"
   emailNegocio: string
+  /**
+   * El correo del profesional de la cita, si tiene uno asignado: le llega el
+   * mismo aviso, aparte. Si es el del dueño (el dueño que atiende), no se
+   * manda dos veces.
+   */
+  emailProfesional?: string | null
   nombreNegocio: string
   nombreCliente: string
   servicio: string
@@ -366,7 +372,21 @@ export interface DatosAvisoDeCambioDelCliente {
   horaAnterior?: string
 }
 
-/** Aviso al negocio: el cliente canceló o reagendó con su enlace. */
+/**
+ * A quién va el aviso de cambio: el dueño y, si la cita tiene profesional con
+ * otro correo, también él. Sin repetir una casilla escrita con otras mayúsculas.
+ */
+export function destinatariosDelAvisoDeCambio(emailNegocio: string, emailProfesional?: string | null): string[] {
+  const profesional = emailProfesional?.trim()
+  if (!profesional || profesional.toLowerCase() === emailNegocio.trim().toLowerCase()) return [emailNegocio]
+  return [emailNegocio, profesional]
+}
+
+/**
+ * Aviso al negocio y al profesional de la cita: el cliente canceló o reagendó
+ * con su enlace. Un correo por destinatario, para que ninguno vea la casilla
+ * del otro.
+ */
 export function enviarAvisoDeCambioDelCliente(datos: DatosAvisoDeCambioDelCliente) {
   const reagendo = datos.tipo === "reagendo"
   const detalle: Array<[string, string]> = [["Cliente", datos.nombreCliente], ["Servicio", datos.servicio]]
@@ -378,9 +398,8 @@ export function enviarAvisoDeCambioDelCliente(datos: DatosAvisoDeCambioDelClient
     detalle.push(["Fecha", fechaLegible(datos.fecha)], ["Hora", datos.hora])
   }
 
-  return enviar({
+  const correo = {
     tipo: reagendo ? "aviso-reagendada" : "aviso-cancelada",
-    para: datos.emailNegocio,
     asunto: reagendo ? asunto`Cita reagendada — ${datos.nombreCliente}` : asunto`Cita cancelada — ${datos.nombreCliente}`,
     titulo: reagendo ? "Un cliente cambió su cita" : "Un cliente canceló su cita",
     intro: reagendo
@@ -389,7 +408,10 @@ export function enviarAvisoDeCambioDelCliente(datos: DatosAvisoDeCambioDelClient
     detalle,
     destacado: true,
     cierre: html`Revisa tu agenda en el panel.`,
-  })
+  } satisfies Omit<Correo, "para">
+
+  const destinatarios = destinatariosDelAvisoDeCambio(datos.emailNegocio, datos.emailProfesional)
+  return Promise.all(destinatarios.map((para) => enviar({ ...correo, para })))
 }
 
 export interface DatosRecordatorio {

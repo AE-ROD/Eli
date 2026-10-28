@@ -16,6 +16,7 @@ import {
 import { ListaEquipo } from "./_componentes/lista-equipo"
 import { ModalInvitar } from "./_componentes/modal-invitar"
 import { ModalServiciosDelMiembro } from "./_componentes/modal-servicios-del-miembro"
+import { ModalEspecialidadDelMiembro } from "./_componentes/modal-especialidad-del-miembro"
 
 export default function PaginaEquipo() {
   const [miembros, setMiembros] = useState<MiembroDelEquipo[]>([])
@@ -31,6 +32,7 @@ export default function PaginaEquipo() {
   const [anulando, setAnulando] = useState(false)
   const [avisoDeAnular, setAvisoDeAnular] = useState("")
   const [serviciosDe, setServiciosDe] = useState<MiembroDelEquipo | null>(null)
+  const [especialidadDe, setEspecialidadDe] = useState<MiembroDelEquipo | null>(null)
 
   const cargar = async () => {
     setCargando(true)
@@ -109,6 +111,10 @@ export default function PaginaEquipo() {
             setAvisoListo("")
             setServiciosDe(miembro)
           }}
+          alEditarEspecialidad={(miembro) => {
+            setAvisoListo("")
+            setEspecialidadDe(miembro)
+          }}
         />
       </div>
 
@@ -135,6 +141,21 @@ export default function PaginaEquipo() {
             alCerrar={() => setServiciosDe(null)}
             alGuardar={(texto) => {
               setServiciosDe(null)
+              setAvisoListo(texto)
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {especialidadDe && (
+          <ModalEspecialidadDelMiembro
+            miembro={especialidadDe}
+            alCerrar={() => setEspecialidadDe(null)}
+            alGuardar={(especialidad, texto) => {
+              const id = especialidadDe.id
+              setMiembros((actuales) => actuales.map((miembro) => (miembro.id === id ? { ...miembro, especialidad } : miembro)))
+              setEspecialidadDe(null)
               setAvisoListo(texto)
             }}
           />

@@ -145,29 +145,42 @@ export function esElMismoCliente(
 }
 
 /**
- * Qué hacer con el consentimiento de WhatsApp marcado en la reserva cuando el
- * cliente ya existía (se reutilizó por email + nombre, no por teléfono):
+ * La nota interna que deja en la cita una reserva pública de un cliente que
+ * ya existía (reutilizado por email + nombre), o `null` si no hay nada que
+ * avisar.
  *
- * - `"guardar-telefono"`: el cliente no tiene teléfono. Se guarda el dado
- *   (E.164) junto con el consentimiento.
- * - `"registrar"`: el teléfono guardado es el mismo que el dado (ambos en
- *   E.164). El consentimiento vale para ese número.
- * - `"nada"`: no hay teléfono en la reserva, o el guardado es otro (o no se
- *   puede leer como chileno). El consentimiento se dio para un número que no
- *   es el del cliente: no se registra ni se pisa su teléfono.
+ * La reserva pública nunca escribe el teléfono ni el consentimiento de
+ * WhatsApp de un cliente existente: quien conoce el email y el nombre de otra
+ * persona podía dejar su propio número en la ficha y recibir los
+ * recordatorios de sus citas. Lo dado queda en la cita, visible para el
+ * local, que lo confirma a mano en la ficha del cliente:
  *
- * `telefonoDado` viene ya en E.164 (`reservaSchema`) o null.
+ * - un teléfono distinto del guardado (o el cliente no tenía uno, o el
+ *   guardado no se puede leer como chileno): se anota el número.
+ * - el pedido de recordatorios por WhatsApp: se anota, sea o no el mismo
+ *   número.
+ *
+ * Sin teléfono en la reserva no hay nada que anotar: el consentimiento es
+ * para un número. `telefonoDado` viene ya en E.164 (`reservaSchema`) o null.
  */
-export function consentimientoSobreClienteExistente(
+export function notaDeContactoPorConfirmar(
   telefonoGuardado: string | null | undefined,
-  telefonoDado: string | null | undefined
-): "guardar-telefono" | "registrar" | "nada" {
+  telefonoDado: string | null | undefined,
+  pidioWhatsapp: boolean
+): string | null {
   const dado = aE164Chile(telefonoDado)
-  if (!dado) return "nada"
-  // Sólo null: es lo que el `updateMany` exige en el where (`phone: null`).
-  // Un texto vacío o ilegible guardado cae en "nada": no se pisa.
-  if (telefonoGuardado === null || telefonoGuardado === undefined) return "guardar-telefono"
-  return aE164Chile(telefonoGuardado) === dado ? "registrar" : "nada"
+  if (!dado) return null
+  const esElGuardado = aE164Chile(telefonoGuardado) === dado
+  if (esElGuardado && !pidioWhatsapp) return null
+  const partes: string[] = []
+  if (!esElGuardado) {
+    partes.push(`Teléfono dado al reservar: ${dado}. No se guardó en la ficha del cliente.`)
+  }
+  if (pidioWhatsapp) {
+    partes.push("Pidió recordatorios por WhatsApp. El consentimiento no se registró.")
+  }
+  partes.push("Confírmalo con el cliente y actualiza su ficha.")
+  return partes.join(" ")
 }
 
 export interface Contacto {

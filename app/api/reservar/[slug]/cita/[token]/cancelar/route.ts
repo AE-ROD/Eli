@@ -36,6 +36,7 @@ export async function POST(request: NextRequest, contexto: Params) {
   await enviarAvisoDeCambioDelCliente({
     tipo: "cancelo",
     emailNegocio: cita.business.user.email,
+    emailProfesional: cita.member?.user?.email ?? null,
     nombreNegocio: cita.business.name,
     nombreCliente: nombreDelCliente(cita),
     servicio: cita.service?.name ?? cita.title,

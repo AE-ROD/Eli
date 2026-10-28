@@ -158,6 +158,20 @@ describe("GET /api/dashboard/stats", () => {
     expect(llamada.where.AND[0]).toEqual({ businessId: "negocio-1" })
   })
 
+  it("ni las citas canceladas ni las \"No vino\" cuentan en las de hoy ni como próxima", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    await GET(pedidoFalso())
+
+    const deHoy = prismaMock.appointment.findMany.mock.calls[0][0] as { where: { AND: unknown[] } }
+    const proxima = prismaMock.appointment.findFirst.mock.calls[0][0] as { where: { AND: unknown[] } }
+    for (const where of [deHoy.where, proxima.where]) {
+      expect(where.AND[1]).toMatchObject({ status: { notIn: ["cancelada", "no-asistio"] } })
+    }
+  })
+
   it("con citas hoy no se busca la próxima", async () => {
     const { GET } = await import("./route")
 

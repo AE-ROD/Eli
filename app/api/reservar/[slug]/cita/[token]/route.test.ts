@@ -159,7 +159,36 @@ describe("GET: ver la cita", () => {
       plazoHoras: 24,
       sePuedeCambiar: true,
       sePuedeReagendar: true,
+      // El negocio atiende los siete días y Carla no cargó horario propio.
+      diasConAtencion: [0, 1, 2, 3, 4, 5, 6],
     })
+  })
+
+  it("los días con atención son los del profesional de la cita, con la regla de disponibilidad", async () => {
+    escenario()
+    base.reiniciar({
+      ...base.volcado(),
+      workSchedule: [
+        ...base.volcado().workSchedule,
+        { id: "h-carla", businessId: NEGOCIO, memberId: "m-carla", dayOfWeek: 3, startTime: "15:00", endTime: "18:00" },
+      ],
+    })
+    expect((await ver()).cuerpo.diasConAtencion).toEqual([3])
+    // Un día que el calendario deshabilita es uno en que el servidor no ofrece horas.
+    expect((await horas("2030-01-08")).cuerpo).toEqual({ slots: [], mensaje: "No hay atención ese día" })
+  })
+
+  it("sin poder reagendar (fuera de plazo o servicio desactivado) no ofrece días", async () => {
+    escenario()
+    relojEn("2030-01-07T00:00:00.000Z")
+    expect((await ver()).cuerpo.diasConAtencion).toEqual([])
+    escenario()
+    base.reiniciar({
+      ...base.volcado(),
+      service: base.volcado().service.map((s: Registro) => (s.id === "s-corte" ? { ...s, active: false } : s)),
+    })
+    relojEn("2030-01-02T12:00:00.000Z")
+    expect((await ver()).cuerpo.diasConAtencion).toEqual([])
   })
 
   it("fuera de plazo se ve, pero dice que ya no se puede cambiar", async () => {
@@ -220,10 +249,22 @@ describe("cancelar", () => {
       canceladaEn: new Date("2030-01-02T12:00:00.000Z"),
     })
     expect(correos.cambio).toHaveBeenCalledWith(
-      expect.objectContaining({ tipo: "cancelo", emailNegocio: "duena@uno.test", fecha: FECHA, hora: "10:00" })
+      expect.objectContaining({
+        tipo: "cancelo",
+        emailNegocio: "duena@uno.test",
+        emailProfesional: "carla@uno.test",
+        fecha: FECHA,
+        hora: "10:00",
+      })
     )
     // Ya cancelada, el enlace deja de servir.
     expect((await ver()).status).toBe(404)
+  })
+
+  it("una cita sin profesional sólo avisa al negocio", async () => {
+    escenario({ cita: { memberId: null } })
+    expect((await cancelar()).status).toBe(200)
+    expect(correos.cambio).toHaveBeenCalledWith(expect.objectContaining({ emailNegocio: "duena@uno.test", emailProfesional: null }))
   })
 
   it("fuera del plazo: 409 con el motivo, sin tocar la cita", async () => {
@@ -245,7 +286,25 @@ describe("reagendar", () => {
     expect(cuerpo).toMatchObject({ fecha: "2030-01-08", hora: "11:00", profesional: "Carla Profesional" })
     expect(laCita()).toMatchObject({ startTime: aLas("11:00", "2030-01-08"), endTime: aLas("12:00", "2030-01-08"), memberId: "m-carla", status: "pendiente" })
     expect(correos.cambio).toHaveBeenCalledWith(
-      expect.objectContaining({ tipo: "reagendo", fechaAnterior: FECHA, horaAnterior: "10:00", fecha: "2030-01-08", hora: "11:00" })
+      expect.objectContaining({
+        tipo: "reagendo",
+        emailProfesional: "carla@uno.test",
+        fechaAnterior: FECHA,
+        horaAnterior: "10:00",
+        fecha: "2030-01-08",
+        hora: "11:00",
+      })
+    )
+  })
+
+  it("una cita sin profesional que al reagendar queda con uno: el aviso le llega a ese", async () => {
+    escenario({ cita: { memberId: null } })
+    const { status, cuerpo } = await reagendar("2030-01-08", "11:00")
+    expect(status).toBe(200)
+    const correoDe: Record<string, string> = { "Carla Profesional": "carla@uno.test", "Pedro Profesional": "pedro@uno.test" }
+    expect(correoDe[cuerpo.profesional]).toBeDefined()
+    expect(correos.cambio).toHaveBeenCalledWith(
+      expect.objectContaining({ emailNegocio: "duena@uno.test", emailProfesional: correoDe[cuerpo.profesional] })
     )
   })
 
