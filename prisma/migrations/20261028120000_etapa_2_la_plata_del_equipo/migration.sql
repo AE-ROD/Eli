@@ -402,7 +402,9 @@ FOR EACH ROW EXECUTE FUNCTION atencion_servicios_liquidada_no_se_borra();
 -- `atencion_servicios` no tiene `businessId` propio, así que las FK a
 -- `productos` y `liquidaciones` no pueden ser compuestas como las de
 -- `atencion_propinas`. Esto cubre ese hueco: una línea nunca apunta a un
--- producto ni a una liquidación de otro negocio.
+-- producto ni a una liquidación de otro negocio. Sólo mira cuando cambia
+-- la atención, el producto o la liquidación, y no estorba a la cascada que
+-- borra un negocio entero.
 CREATE FUNCTION atencion_servicios_mismo_negocio() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -412,14 +414,23 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  IF TG_OP = 'UPDATE'
-     AND NEW."visitId" = OLD."visitId"
-     AND NEW."productId" IS NOT DISTINCT FROM OLD."productId"
-     AND NEW."liquidacionId" IS NOT DISTINCT FROM OLD."liquidacionId" THEN
-    RETURN NEW;
+  -- En INSERT no se lee OLD: el IF de afuera separa los dos casos.
+  IF TG_OP = 'UPDATE' THEN
+    IF NEW."visitId" = OLD."visitId"
+       AND NEW."productId" IS NOT DISTINCT FROM OLD."productId"
+       AND NEW."liquidacionId" IS NOT DISTINCT FROM OLD."liquidacionId" THEN
+      RETURN NEW;
+    END IF;
   END IF;
 
   SELECT "businessId" INTO negocio FROM "atenciones" WHERE "id" = NEW."visitId";
+
+  -- En un UPDATE sin atención estamos dentro de una cascada (borrar el
+  -- negocio): la línea se va a borrar igual, no hay negocio con qué
+  -- comparar. En un INSERT no pasa: la FK a `atenciones` ya lo rechaza.
+  IF negocio IS NULL AND TG_OP = 'UPDATE' THEN
+    RETURN NEW;
+  END IF;
 
   IF NEW."productId" IS NOT NULL AND NOT EXISTS (
     SELECT 1 FROM "productos" WHERE "id" = NEW."productId" AND "businessId" = negocio
