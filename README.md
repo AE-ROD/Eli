@@ -112,6 +112,14 @@ usa, así que se puede aplicar antes de desplegar; el código nuevo la necesita
 para `POST /api/soporte`. Orden: aplicar la migración, desplegar, y
 `npx prisma migrate resolve --applied 20261026120000_solicitudes_de_soporte`.
 
+### `20261027120000_etapa_1_antes_de_vender`
+
+Aditiva: columnas nuevas nullable o con default en `negocios`,
+`miembros_negocio`, `clientes`, `servicios` y `citas`, y las tablas nuevas
+`member_services` y `time_blocks`. El código viejo no las usa, así que se
+puede aplicar antes de desplegar. Orden: aplicar la migración, desplegar, y
+`npx prisma migrate resolve --applied 20261027120000_etapa_1_antes_de_vender`.
+
 ## Cómo está organizado
 
 ```
