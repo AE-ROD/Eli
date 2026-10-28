@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { actorDeSesion, puedeUsarChats } from "@/lib/permisos"
 import { z } from "zod"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 const mensajeSchema = z.object({
   content: z.string().min(1),
@@ -31,7 +32,7 @@ export async function POST(
   }
 
   try {
-    const cuerpo = await request.json()
+    const cuerpo = await leerJsonConTope(request)
     const { content } = mensajeSchema.parse(cuerpo)
 
     const [mensaje] = await prisma.$transaction([
@@ -47,6 +48,7 @@ export async function POST(
 
     return NextResponse.json(mensaje, { status: 201 })
   } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
     }

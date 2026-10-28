@@ -4,7 +4,7 @@ import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { textoOpcional, telefonoChileno } from "@/lib/campos-del-panel"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { IDS_DE_MEDIOS_DE_PAGO } from "@/lib/medios-de-pago"
 import { CLAVES_DE_COLOR, normalizarInstagram } from "@/lib/pagina-del-negocio"
 import { actorDeSesion, puedeEditarPaginaDelNegocio } from "@/lib/permisos"
@@ -76,7 +76,9 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
-  const leido = paginaSchema.safeParse(await cuerpoDelPedido(request))
+  const recibido = await cuerpoConTope(request)
+  if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+  const leido = paginaSchema.safeParse(recibido.cuerpo)
   if (!leido.success) return respuestaDeDatosInvalidos(leido.error)
   const { especialidades, ...datosDelNegocio } = leido.data
 

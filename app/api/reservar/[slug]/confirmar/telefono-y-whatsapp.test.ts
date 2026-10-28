@@ -4,6 +4,7 @@ import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
 import { MARCA_DE_CLIENTE_ELIMINADO } from "@/lib/clientes-eliminados"
 import { MENSAJE_DE_TELEFONO_ILEGIBLE } from "@/lib/telefono"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 
 /**
  * El teléfono de la reserva pública se guarda en E.164 y el consentimiento
@@ -43,7 +44,7 @@ function escenario(clientes: Registro[] = []) {
 async function reservar(extra: Registro, hora = "10:00") {
   const { POST } = await import("./route")
   const cuerpo = { servicioId: "s-corte", fecha: "2030-01-07", hora, nombre: "Lucía", apellido: "Pérez", ...extra }
-  const respuesta = await POST({ headers: new Headers(), json: async () => cuerpo } as unknown as NextRequest, {
+  const respuesta = await POST({ headers: new Headers(), body: cuerpoDePrueba(cuerpo) } as unknown as NextRequest, {
     params: Promise.resolve({ slug: "salon-uno" }),
   })
   return { status: respuesta.status, cuerpo: await respuesta.json() }

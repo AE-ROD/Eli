@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { coincideConWhere } from "@/pruebas/where-simple"
 import type { NextRequest } from "next/server"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 
 const mockGetServerSession = vi.fn()
 
@@ -94,7 +95,8 @@ const sesionEncargado = {
 const pedidoFalso = (body?: Record<string, unknown>): NextRequest =>
   ({
     url: "http://localhost/api/citas/cita-colega",
-    json: () => Promise.resolve(body ?? {}),
+    headers: new Headers(),
+    body: cuerpoDePrueba(body ?? {}),
   }) as unknown as NextRequest
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) })

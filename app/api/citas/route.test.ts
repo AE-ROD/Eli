@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server"
 import { whereDeAgenda, type Actor } from "@/lib/permisos"
 import { coincide, type Tablas } from "@/pruebas/consultas-falsas"
 import { MARCA_DE_CLIENTE_ELIMINADO, NOMBRE_DE_CLIENTE_ELIMINADO } from "@/lib/clientes-eliminados"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 
 const mockGetServerSession = vi.fn()
 
@@ -268,7 +269,7 @@ describe("POST /api/citas — largos, tipos y horario", () => {
   const crear = async (cuerpo: Record<string, unknown>) => {
     const { POST } = await import("./route")
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
-    return POST({ url: "http://localhost/api/citas", json: () => Promise.resolve(cuerpo) } as unknown as NextRequest)
+    return POST({ url: "http://localhost/api/citas", headers: new Headers(), body: cuerpoDePrueba(cuerpo) } as unknown as NextRequest)
   }
 
   it.each([
@@ -324,13 +325,13 @@ describe("POST /api/citas — un cliente eliminado", () => {
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
     return POST({
       url: "http://localhost/api/citas",
-      json: () =>
-        Promise.resolve({
-          title: "Corte",
-          startTime: "2026-10-20T13:00:00.000Z",
-          endTime: "2026-10-20T13:30:00.000Z",
-          customerId,
-        }),
+      headers: new Headers(),
+      body: cuerpoDePrueba({
+        title: "Corte",
+        startTime: "2026-10-20T13:00:00.000Z",
+        endTime: "2026-10-20T13:30:00.000Z",
+        customerId,
+      }),
     } as unknown as NextRequest)
   }
 

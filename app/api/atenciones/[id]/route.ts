@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma"
 import { MAXIMO_DE_LINEAS_POR_ATENCION, esEstadoActivo, sePuedeDeshacerLaLlegada } from "@/lib/atenciones"
 import { lineasPedidasSchema, resolverLineas } from "@/lib/lineas-de-atencion"
 import { actorDeSesion, puedeDeshacerLlegada, whereDeLineas, type Actor } from "@/lib/permisos"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import {
   ErrorDeAtencion,
   buscarAtencion,
@@ -61,7 +61,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   try {
-    const datos = edicionSchema.parse(await cuerpoDelPedido(request))
+    const recibido = await cuerpoConTope(request)
+    if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+    const datos = edicionSchema.parse(recibido.cuerpo)
 
     if (!esEstadoActivo(existente.status)) {
       throw new ErrorDeAtencion(409, "Una atención finalizada o anulada ya no se edita.")

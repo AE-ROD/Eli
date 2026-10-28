@@ -3,6 +3,7 @@ import { getToken } from "next-auth/jwt"
 import type { NextRequest } from "next/server"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { construirCsp, generarNonce } from "@/lib/csp"
+import { respuestaDeCuerpoDemasiadoGrande, TOPE_DE_CUALQUIER_PEDIDO } from "@/lib/cuerpo-del-pedido"
 
 /**
  * Prefijos de `/api` que NO llevan el límite genérico del panel: cada uno ya
@@ -95,6 +96,15 @@ export default async function proxy(req: NextRequest) {
  */
 async function decidir(req: NextRequest, continuar: () => NextResponse): Promise<NextResponse> {
   const pathname = req.nextUrl.pathname
+
+  // Primera barrera contra cuerpos absurdos (GHSA-mrhx-c7xc-m3w5): si el
+  // `Content-Length` declarado ya pasa el techo de toda la API, ni se llega al
+  // endpoint. Es sólo la cabecera; el tope real, también para cuerpos sin
+  // cabecera o que mienten, lo pone cada endpoint al leer
+  // (`lib/cuerpo-del-pedido.ts`).
+  if (pathname.startsWith("/api/") && Number(req.headers.get("content-length") ?? "0") > TOPE_DE_CUALQUIER_PEDIDO) {
+    return respuestaDeCuerpoDemasiadoGrande()
+  }
 
   // Rate limiting sobre el intento de login por credenciales, antes de que NextAuth lo procese
   if (pathname === "/api/auth/callback/credentials") {

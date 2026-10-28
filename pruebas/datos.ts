@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server"
+import { cuerpoDePrueba } from "./pedidos"
 
 /**
  * El negocio de prueba de los tests del tablero y de los reportes: dueña,
@@ -108,10 +109,7 @@ export function datosBase() {
 
 /** Un pedido con lo que leen estos endpoints: la URL y, si hay, el cuerpo JSON. */
 export function pedido(url: string, cuerpo?: unknown): NextRequest {
-  return {
-    url,
-    json: () => (cuerpo === undefined ? Promise.reject(new SyntaxError("Unexpected end of JSON input")) : Promise.resolve(cuerpo)),
-  } as unknown as NextRequest
+  return { url, headers: new Headers(), body: cuerpoDePrueba(cuerpo) } as unknown as NextRequest
 }
 
 export const conId = (id: string) => ({ params: Promise.resolve({ id }) })

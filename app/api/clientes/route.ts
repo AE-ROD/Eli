@@ -7,6 +7,7 @@ import { emailOVacio, etiquetas, nombre, notas, telefonoChileno } from "@/lib/ca
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, whereDeAgenda, whereDeAtenciones, whereDeClientes, type Actor } from "@/lib/permisos"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 const clienteSchema = z.object({
   name: nombre(),
@@ -186,7 +187,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const cuerpo = await request.json()
+    const cuerpo = await leerJsonConTope(request)
     const datos = clienteSchema.parse(cuerpo)
 
     const cliente = await prisma.customer.create({
@@ -205,6 +206,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(cliente, { status: 201 })
   } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       return respuestaDeDatosInvalidos(error)
     }

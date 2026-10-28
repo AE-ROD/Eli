@@ -4,7 +4,7 @@ import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { actorDeSesion, puedeGestionarBloqueoDe, whereDeBloqueos, type Miembro } from "@/lib/permisos"
 import { esFechaCalendario, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 
@@ -92,7 +92,9 @@ export async function POST(request: NextRequest) {
   }
 
   // Un JSON roto llega como `undefined` y zod lo rechaza con un 400.
-  const validado = bloqueoSchema.safeParse(await cuerpoDelPedido(request))
+  const recibido = await cuerpoConTope(request)
+  if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+  const validado = bloqueoSchema.safeParse(recibido.cuerpo)
   if (!validado.success) return respuestaDeDatosInvalidos(validado.error)
   const datos = validado.data
 

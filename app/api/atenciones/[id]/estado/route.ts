@@ -12,7 +12,7 @@ import {
   transicionPermitida,
 } from "@/lib/atenciones"
 import { actorDeSesion } from "@/lib/permisos"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import {
   ErrorDeAtencion,
   buscarAtencion,
@@ -56,7 +56,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   try {
-    const { estado: destino } = movimientoSchema.parse(await cuerpoDelPedido(request))
+    const recibido = await cuerpoConTope(request)
+    if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+    const { estado: destino } = movimientoSchema.parse(recibido.cuerpo)
     const desde = existente.status
 
     if (!esEstadoActivo(desde) || !transicionPermitida(desde, destino)) {

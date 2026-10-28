@@ -7,6 +7,7 @@ import { z } from "zod"
 import { categoriaDeServicio, descripcion, duracion, nombre, precioDeServicio } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, puedeGestionarServicios } from "@/lib/permisos"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 const edicionDeServicioSchema = z.object({
   name: nombre().optional(),
@@ -38,7 +39,7 @@ export async function PUT(
   }
 
   try {
-    const cuerpo = await request.json()
+    const cuerpo = await leerJsonConTope(request)
     const datos = edicionDeServicioSchema.parse(cuerpo)
 
     const servicio = await prisma.service.update({
@@ -48,6 +49,7 @@ export async function PUT(
 
     return NextResponse.json(servicio)
   } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       return respuestaDeDatosInvalidos(error)
     }

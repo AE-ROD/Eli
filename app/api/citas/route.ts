@@ -10,6 +10,7 @@ import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { esFechaCalendario, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 import { advertenciasDeAgenda } from "@/lib/advertencias-de-agenda"
 import { ocupaElHorario } from "@/lib/ocupacion"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 const citaSchema = z
   .object({
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const cuerpo = await request.json()
+    const cuerpo = await leerJsonConTope(request)
     const datos = citaSchema.parse(cuerpo)
 
     const cliente = await prisma.customer.findFirst({
@@ -167,6 +168,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(cita, { status: 201 })
   } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       return respuestaDeDatosInvalidos(error)
     }
