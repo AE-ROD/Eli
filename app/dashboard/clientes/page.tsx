@@ -21,8 +21,9 @@ import { ListaClientes } from "./_componentes/lista-clientes"
 import { PanelDetalleCliente } from "./_componentes/panel-detalle-cliente"
 import { ModalNuevoCliente } from "./_componentes/modal-nuevo-cliente"
 import { clienteParaTarjeta, type ClienteEnTarjeta } from "./_componentes/tarjeta-cliente"
+import { mostrarTelefono } from "@/lib/telefono"
 
-const CLIENTE_EN_BLANCO: DatosDeNuevoCliente = { nombre: "", email: "", telefono: "" }
+const CLIENTE_EN_BLANCO: DatosDeNuevoCliente = { nombre: "", email: "", telefono: "", aceptaWhatsapp: false }
 
 /** `1 cliente registrado`, `12 clientes registrados`. */
 function cuantosClientes(total: number): string {
@@ -174,7 +175,13 @@ export default function PaginaClientes() {
     const guardado = clientesPorId[cliente.id]
     setAvisoDelModal("")
     setEditandoId(cliente.id)
-    setNuevoCliente({ nombre: cliente.nombre, email: guardado?.email ?? "", telefono: guardado?.phone ?? "" })
+    setNuevoCliente({
+      nombre: cliente.nombre,
+      email: guardado?.email ?? "",
+      // Como se muestra, no en E.164: es lo que la persona reconoce y corrige.
+      telefono: mostrarTelefono(guardado?.phone),
+      aceptaWhatsapp: !!guardado?.whatsappConsentAt,
+    })
     setModalAbierto(true)
   }
 
@@ -204,7 +211,7 @@ export default function PaginaClientes() {
         ...clienteSeleccionado,
         nombre: nuevoCliente.nombre.trim(),
         email: nuevoCliente.email.trim() || "Sin correo",
-        telefono: nuevoCliente.telefono.trim() || "Sin teléfono",
+        telefono: mostrarTelefono(nuevoCliente.telefono) || "Sin teléfono",
       })
     }
     cerrarModal()
@@ -305,6 +312,7 @@ export default function PaginaClientes() {
             guardando={guardando}
             aviso={avisoDelModal}
             onCambiarCampo={(campo, valor) => setNuevoCliente((previo) => ({ ...previo, [campo]: valor }))}
+            onCambiarWhatsapp={(acepta) => setNuevoCliente((previo) => ({ ...previo, aceptaWhatsapp: acepta }))}
             onSubmit={guardarNuevoCliente}
             onCerrar={cerrarModal}
           />

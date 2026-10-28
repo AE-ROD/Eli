@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { esEtiquetaReservada } from "./clientes-eliminados"
+import { MENSAJE_DE_TELEFONO_ILEGIBLE, aE164Chile } from "./telefono"
 
 /**
  * Los campos que comparten los esquemas de los endpoints del panel (citas,
@@ -22,6 +23,22 @@ export const nombre = () =>
     .max(100, maximo("El nombre", 100))
 
 export const telefono = () => z.string().trim().max(30, maximo("El teléfono", 30))
+
+/**
+ * El teléfono de un cliente, ya en E.164 (`lib/telefono.ts`). Vacío es "sin
+ * teléfono" y sale `null`; lo que no se puede leer como un número chileno es
+ * un error con el formato esperado, no un dato que se guarda a medias.
+ */
+export const telefonoChileno = () =>
+  telefono().transform((valor, contexto) => {
+    if (valor === "") return null
+    const e164 = aE164Chile(valor)
+    if (!e164) {
+      contexto.addIssue({ code: z.ZodIssueCode.custom, message: MENSAJE_DE_TELEFONO_ILEGIBLE })
+      return z.NEVER
+    }
+    return e164
+  })
 
 /**
  * Email de hasta 254 caracteres (el máximo que admite una casilla). Para un

@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
-import { emailOVacio, etiquetas, nombre, notas, telefono } from "@/lib/campos-del-panel"
+import { emailOVacio, etiquetas, nombre, notas, telefonoChileno } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { registrarError } from "@/lib/registro-de-errores"
 import {
@@ -24,9 +24,15 @@ import {
 const edicionDeClienteSchema = z.object({
   name: nombre().optional(),
   email: emailOVacio().optional(),
-  phone: telefono().optional(),
+  phone: telefonoChileno().optional(),
   tags: etiquetas().optional(),
   notes: notas().optional(),
+  /**
+   * "Acepta recibir mensajes por WhatsApp". Marcarlo registra cuándo y por
+   * dónde (el panel); desmarcarlo lo borra. Mandarlo marcado cuando ya estaba
+   * marcado no cambia la fecha ni el origen: el consentimiento es el primero.
+   */
+  whatsappConsent: z.boolean().optional(),
 })
 
 /**
@@ -42,7 +48,17 @@ const delNegocioYVigente = (actor: Actor, id: string) => whereDeClientes(actor, 
  * cortó con 401. Así el compilador obliga a poner la guarda primero.
  */
 async function verificarCliente(actor: Actor, id: string) {
-  return prisma.customer.findFirst({ where: delNegocioYVigente(actor, id), select: { id: true } })
+  return prisma.customer.findFirst({
+    where: delNegocioYVigente(actor, id),
+    select: { id: true, whatsappConsentAt: true },
+  })
+}
+
+/** Lo que cambia en el consentimiento de WhatsApp según lo que se marcó y lo que ya había. */
+function cambioDeConsentimiento(marcado: boolean | undefined, yaTenia: boolean) {
+  if (marcado === undefined) return {}
+  if (!marcado) return { whatsappConsentAt: null, whatsappConsentSource: null }
+  return yaTenia ? {} : { whatsappConsentAt: new Date(), whatsappConsentSource: "panel" }
 }
 
 export async function GET(
@@ -70,6 +86,8 @@ export async function GET(
       phone: true,
       tags: true,
       notes: true,
+      whatsappConsentAt: true,
+      whatsappConsentSource: true,
       businessId: true,
       createdAt: true,
       updatedAt: true,
@@ -141,9 +159,10 @@ export async function PUT(
       data: {
         ...(datos.name && { name: datos.name }),
         ...(datos.email !== undefined && { email: datos.email || null }),
-        ...(datos.phone !== undefined && { phone: datos.phone || null }),
+        ...(datos.phone !== undefined && { phone: datos.phone }),
         ...(datos.tags !== undefined && { tags: datos.tags }),
         ...(datos.notes !== undefined && { notes: datos.notes || null }),
+        ...cambioDeConsentimiento(datos.whatsappConsent, existente.whatsappConsentAt !== null),
       },
     })
     if (count === 0) {

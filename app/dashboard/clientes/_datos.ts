@@ -27,6 +27,8 @@ export interface Cliente {
   phone: string | null
   tags: string[]
   notes: string | null
+  /** Cuándo aceptó recibir mensajes por WhatsApp, o `null` si no lo aceptó. */
+  whatsappConsentAt: string | null
   createdAt: string
   appointments: CitaDeCliente[]
   /** Atenciones cobradas: las cuenta el servidor, no el historial (que trae cinco). */
@@ -57,6 +59,8 @@ export interface DatosDeNuevoCliente {
   nombre: string
   email: string
   telefono: string
+  /** "Acepta recibir mensajes por WhatsApp". El servidor anota cuándo y que fue desde el panel. */
+  aceptaWhatsapp: boolean
 }
 
 /** Cuántos clientes trae cada página: seis filas de tres en la grilla. */
@@ -78,6 +82,7 @@ export async function crearCliente(datos: DatosDeNuevoCliente): Promise<Resultad
       name: datos.nombre,
       email: datos.email || undefined,
       phone: datos.telefono || undefined,
+      whatsappConsent: datos.aceptaWhatsapp,
     })
   )
 }
@@ -87,14 +92,20 @@ export async function guardarNotasDeCliente(id: string, notas: string): Promise<
 }
 
 /**
- * Cambia el nombre, el correo y el teléfono. Un campo vacío borra el dato
- * (salvo el nombre, que es obligatorio). Sólo dueño y encargado.
+ * Cambia el nombre, el correo, el teléfono y el consentimiento de WhatsApp. Un
+ * campo vacío borra el dato (salvo el nombre, que es obligatorio). Sólo dueño
+ * y encargado.
  */
 export async function editarCliente(id: string, datos: DatosDeNuevoCliente): Promise<Resultado> {
   return pedir(
     `/api/clientes/${id}`,
     "No se pudo guardar el cliente",
-    conJson("PUT", { name: datos.nombre, email: datos.email, phone: datos.telefono })
+    conJson("PUT", {
+      name: datos.nombre,
+      email: datos.email,
+      phone: datos.telefono,
+      whatsappConsent: datos.aceptaWhatsapp,
+    })
   )
 }
 

@@ -71,6 +71,9 @@ export function pago(id: string, visitId: string, method: string, monto: number)
 }
 
 /** Lo que tiene todo escenario: personas, negocios, servicios y clientes. */
+/** Las columnas del consentimiento de WhatsApp de un cliente que no lo dio. */
+const SIN_CONSENTIMIENTO = { whatsappConsentAt: null, whatsappConsentSource: null }
+
 export function datosBase() {
   return {
     user: [
@@ -99,9 +102,9 @@ export function datosBase() {
       { id: "s-ajeno", businessId: OTRO_NEGOCIO, name: "Corte", price: 9000 },
     ],
     customer: [
-      { id: "c-maria", businessId: NEGOCIO, name: "María", lastName: "González" },
-      { id: "c-beto", businessId: NEGOCIO, name: "Beto", lastName: null },
-      { id: "c-ajeno", businessId: OTRO_NEGOCIO, name: "María", lastName: "González" },
+      { id: "c-maria", businessId: NEGOCIO, name: "María", lastName: "González", ...SIN_CONSENTIMIENTO },
+      { id: "c-beto", businessId: NEGOCIO, name: "Beto", lastName: null, ...SIN_CONSENTIMIENTO },
+      { id: "c-ajeno", businessId: OTRO_NEGOCIO, name: "María", lastName: "González", ...SIN_CONSENTIMIENTO },
     ],
   }
 }

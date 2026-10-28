@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
-import { emailOVacio, etiquetas, nombre, notas, telefono } from "@/lib/campos-del-panel"
+import { emailOVacio, etiquetas, nombre, notas, telefonoChileno } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, whereDeAgenda, whereDeAtenciones, whereDeClientes, type Actor } from "@/lib/permisos"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
@@ -11,9 +11,11 @@ import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 const clienteSchema = z.object({
   name: nombre(),
   email: emailOVacio().optional(),
-  phone: telefono().optional(),
+  phone: telefonoChileno().optional(),
   tags: etiquetas().optional(),
   notes: notas().optional(),
+  /** "Acepta recibir mensajes por WhatsApp", marcado en el formulario del panel. */
+  whatsappConsent: z.boolean().optional(),
 })
 
 /**
@@ -82,6 +84,7 @@ export async function GET(request: NextRequest) {
         phone: true,
         tags: true,
         notes: true,
+        whatsappConsentAt: true,
         createdAt: true,
         // El cliente es del negocio, pero sus citas son agenda: el profesional
         // ve en el historial sólo las suyas, no las de sus colegas ni lo que
@@ -181,9 +184,12 @@ export async function POST(request: NextRequest) {
       data: {
         name: datos.name,
         email: datos.email || null,
-        phone: datos.phone || null,
+        phone: datos.phone ?? null,
         tags: datos.tags ?? [],
         notes: datos.notes || null,
+        // El consentimiento se registra con cuándo y por dónde se dio. Sin
+        // marcar, no hay consentimiento: queda en null.
+        ...(datos.whatsappConsent && { whatsappConsentAt: new Date(), whatsappConsentSource: "panel" }),
         businessId: actor.businessId,
       },
     })

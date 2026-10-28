@@ -4,6 +4,7 @@ import { CalendarDays, Mail, Phone } from "lucide-react"
 import { Insignia } from "@/components/comunes/insignia"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { fechaRelativa } from "@/lib/fechas"
+import { mostrarTelefono } from "@/lib/telefono"
 import { cn } from "@/lib/utils"
 import type { Cliente } from "../_datos"
 
@@ -57,7 +58,7 @@ export function clienteParaTarjeta(cliente: Cliente): ClienteEnTarjeta {
     nombre: cliente.name,
     // "Correo", como en el formulario del cliente nuevo y en el resto del producto.
     email: cliente.email ?? "Sin correo",
-    telefono: cliente.phone ?? "Sin teléfono",
+    telefono: mostrarTelefono(cliente.phone) || "Sin teléfono",
     visitas: cliente.visitas,
     ultimaVisita: cliente.ultimaVisita ? fechaRelativa(cliente.ultimaVisita, ahora) : "Sin visitas",
     proximaCita: cliente.proximaCita ? fechaRelativa(cliente.proximaCita, ahora) : undefined,

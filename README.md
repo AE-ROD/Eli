@@ -173,6 +173,8 @@ lib/                          Lógica compartida, cada archivo con su test al la
   peticiones.ts               Cómo la interfaz le pide cosas al servidor
   cuerpo-del-pedido.ts        Leer el JSON de un pedido sin que uno roto termine en 500
   slug.ts                     La dirección pública de cada negocio
+  telefono.ts                 Teléfonos chilenos: a E.164 para guardar y con espacios
+                              para mostrar
   clientes-eliminados.ts      Eliminar un cliente es anonimizarlo: qué se borra y cómo
                               se lo reconoce sin columna nueva (una etiqueta reservada)
   utils.ts                    `cn`, para combinar clases de Tailwind
