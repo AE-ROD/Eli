@@ -29,6 +29,7 @@ import {
   type ServicioDeLaReserva,
 } from "@/lib/servicios-de-la-reserva"
 import { existeLaHora, instanteEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { recibiraRecordatorio } from "@/lib/recordatorios"
 import {
   MAX_RESERVAS_FUTURAS_POR_CONTACTO,
@@ -331,7 +332,7 @@ export async function POST(
   if (!negocio) return NextResponse.json({ error: "Negocio no encontrado" }, { status: 404 })
 
   try {
-    const cuerpo = await request.json()
+    const cuerpo = await leerJsonConTope(request)
     const datos = reservaSchema.parse(cuerpo)
 
     // Todos del negocio y activos, o el mismo 404 sin decir cuál falló. La
@@ -517,6 +518,7 @@ export async function POST(
       { status: 201 }
     )
   } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       // Público: el primer mensaje, legible, y no los issues crudos de zod.
       return NextResponse.json({ error: error.errors[0]?.message ?? "Datos inválidos" }, { status: 400 })

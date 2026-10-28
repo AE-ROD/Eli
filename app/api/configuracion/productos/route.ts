@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import {
   actorDeSesion,
@@ -62,7 +62,9 @@ export async function POST(request: NextRequest) {
 
   let datos: z.infer<typeof productoNuevoSchema>
   try {
-    datos = productoNuevoSchema.parse(await cuerpoDelPedido(request))
+    const recibido = await cuerpoConTope(request)
+    if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+    datos = productoNuevoSchema.parse(recibido.cuerpo)
   } catch (error) {
     if (error instanceof z.ZodError) return respuestaDeDatosInvalidos(error)
     throw error

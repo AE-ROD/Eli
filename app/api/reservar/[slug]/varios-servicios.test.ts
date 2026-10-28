@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import type { NextRequest } from "next/server"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
 import { generarToken } from "@/lib/tokens"
@@ -72,7 +73,7 @@ function escenario(extra: { appointment?: Registro[]; appointmentService?: Regis
 
 const conSlug = (slug = "salon-uno") => ({ params: Promise.resolve({ slug }) })
 const pedido = (url: string, cuerpo?: unknown) =>
-  ({ url, headers: new Headers(), json: async () => cuerpo }) as unknown as NextRequest
+  ({ url, headers: new Headers(), body: cuerpoDePrueba(cuerpo) }) as unknown as NextRequest
 
 async function horas(consulta: string, slug = "salon-uno") {
   const { GET } = await import("./disponibilidad/route")

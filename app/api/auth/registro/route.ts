@@ -11,6 +11,7 @@ import { enviarBienvenida } from "@/lib/enviar-correo-de-prueba"
 import { negocioQueInvita } from "@/lib/referidos"
 import { registrarError } from "@/lib/registro-de-errores"
 import { serviciosDeEjemplo } from "@/lib/servicios-de-ejemplo"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 async function slugUnico(base: string): Promise<string> {
   let slug = generarSlug(base)
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const cuerpo = await request.json()
+    const cuerpo = await leerJsonConTope(request)
     const datos = registroSchema.parse(cuerpo)
 
     const usuarioExistente = await prisma.user.findUnique({
@@ -110,6 +111,7 @@ export async function POST(request: NextRequest) {
       businessId: usuario.business?.id,
     })
   } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       // Público: el primer mensaje, legible, y no los issues crudos de zod.
       return NextResponse.json({ error: error.errors[0]?.message ?? "Datos inválidos" }, { status: 400 })

@@ -6,6 +6,7 @@ import { restablecerContrasenaSchema as schema } from "@/lib/validaciones"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import type { Prisma } from "@prisma/client"
 import { hashDeToken } from "@/lib/tokens"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 const ENLACE_INVALIDO = () => NextResponse.json({ error: "Enlace inválido o expirado" }, { status: 410 })
 
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const cuerpo = await request.json()
+    const cuerpo = await leerJsonConTope(request)
     const { token, contrasena } = schema.parse(cuerpo)
 
     // La base guarda el hash (lib/tokens.ts): se busca por el hash del enlace.
@@ -63,6 +64,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ mensaje: "Contraseña actualizada" })
   } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
     }

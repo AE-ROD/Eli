@@ -16,7 +16,7 @@ import {
   primerCobroDeOtroDia,
   type DesgloseDeCaja,
 } from "@/lib/caja"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { formatearMonto } from "@/lib/dinero"
 import { nombreDeMedio } from "@/lib/medios-de-pago"
 import { actorDeSesion, puedeCerrarCaja, puedeVerCierresDeCaja, whereDeCierresDeCaja } from "@/lib/permisos"
@@ -175,7 +175,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
-  const datos = cierreSchema.safeParse(await cuerpoDelPedido(request))
+  const recibido = await cuerpoConTope(request)
+  if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+  const datos = cierreSchema.safeParse(recibido.cuerpo)
   if (!datos.success) return respuestaDeDatosInvalidos(datos.error)
   const visto = new Date(datos.data.desde)
   const nota = datos.data.nota || null

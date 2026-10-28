@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { esFechaCalendario } from "@/lib/zona-horaria"
 import { actorDeSesion, puedeCerrarLiquidacion, whereDeLiquidaciones } from "@/lib/permisos"
 import {
@@ -62,7 +62,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const cuerpo = cierreSchema.parse(await cuerpoDelPedido(request))
+    const recibido = await cuerpoConTope(request)
+    if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+    const cuerpo = cierreSchema.parse(recibido.cuerpo)
     const firma = await quienFirma(prisma, actor, session?.user?.id)
     if (!firma) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 

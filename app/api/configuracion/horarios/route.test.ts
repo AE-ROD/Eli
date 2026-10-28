@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { NextRequest } from "next/server"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 
 const mockGetServerSession = vi.fn()
 
@@ -33,7 +34,7 @@ const pedidoFalso = (url: string, body?: unknown): NextRequest =>
   ({
     headers: new Headers(),
     nextUrl: new URL(url, "http://localhost"),
-    json: async () => body,
+    body: cuerpoDePrueba(body),
   }) as unknown as NextRequest
 
 describe("GET /api/configuracion/horarios", () => {

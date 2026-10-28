@@ -10,6 +10,7 @@ import { actorDeSesion, puedeEditarConsentimientoPromocional, whereDeAgenda, whe
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { LLEGADA_DE_LA_CITA, conLlegada } from "@/lib/por-confirmar"
 import { datosDeConsentimientoPromocional } from "@/lib/envios-a-clientes"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 const clienteSchema = z.object({
   name: nombre(),
@@ -209,7 +210,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const cuerpo = await request.json()
+    const cuerpo = await leerJsonConTope(request)
     const datos = clienteSchema.parse(cuerpo)
 
     // Cualquiera del equipo crea un cliente, pero el consentimiento promocional
@@ -236,6 +237,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(cliente, { status: 201 })
   } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       return respuestaDeDatosInvalidos(error)
     }

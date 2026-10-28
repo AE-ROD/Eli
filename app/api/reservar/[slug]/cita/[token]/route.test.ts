@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
 import { generarToken, hashDeToken } from "@/lib/tokens"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 
 /**
  * El enlace para cancelar o reagendar sin cuenta (P6): lo crea confirmar,
@@ -77,7 +78,7 @@ function escenario({ cita = {}, otras = [] as Registro[], negocio = {} as Regist
 
 const params = (token = TOKEN, slug = "salon-uno") => ({ params: Promise.resolve({ slug, token }) })
 const pedido = (url = "http://localhost/x", cuerpo?: unknown) =>
-  ({ url, headers: new Headers(), json: async () => cuerpo }) as unknown as NextRequest
+  ({ url, headers: new Headers(), body: cuerpoDePrueba(cuerpo) }) as unknown as NextRequest
 
 async function ver(token = TOKEN, slug = "salon-uno") {
   const { GET } = await import("./route")
@@ -126,7 +127,7 @@ describe("confirmar crea el enlace", () => {
     escenario()
     const { POST } = await import("../../confirmar/route")
     const cuerpo = { servicioId: "s-corte", fecha: "2030-01-08", hora: "09:00", nombre: "Ana", apellido: "Ríos", email: "ana@correo.test" }
-    const respuesta = await POST({ headers: new Headers(), json: async () => cuerpo } as unknown as NextRequest, {
+    const respuesta = await POST({ headers: new Headers(), body: cuerpoDePrueba(cuerpo) } as unknown as NextRequest, {
       params: Promise.resolve({ slug: "salon-uno" }),
     })
     expect(respuesta.status).toBe(201)

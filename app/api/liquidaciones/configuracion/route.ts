@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { actorDeSesion, puedeConfigurarLiquidacion, puedeVerLiquidacionesDelEquipo } from "@/lib/permisos"
 import { leerNegocioParaLiquidar, respuestaDeErrorDePlata } from "@/lib/liquidacion"
 import { TIPOS_DE_PERIODO } from "@/lib/periodos-de-liquidacion"
@@ -42,7 +42,9 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
   try {
-    const { periodo, inicioSemana } = configuracionSchema.parse(await cuerpoDelPedido(request))
+    const recibido = await cuerpoConTope(request)
+    if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+    const { periodo, inicioSemana } = configuracionSchema.parse(recibido.cuerpo)
     await prisma.business.update({
       where: { id: actor.businessId },
       data: { liquidacionPeriodo: periodo, liquidacionInicioSemana: inicioSemana },

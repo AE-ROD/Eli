@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { normalizarCodigoInvitacion } from "@/lib/prueba"
 import { borrarCookieDeInvitacion, guardarCookieDeInvitacion } from "@/lib/referidos"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 /**
  * Guarda el código de un enlace de invitación antes de que crear-cuenta mande
@@ -29,9 +30,10 @@ export async function POST(request: NextRequest) {
 
   let codigo: string | null = null
   try {
-    const cuerpo = (await request.json()) as { codigo?: unknown } | null
+    const cuerpo = (await leerJsonConTope(request)) as { codigo?: unknown } | null
     codigo = normalizarCodigoInvitacion(cuerpo?.codigo)
-  } catch {
+  } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     codigo = null
   }
 

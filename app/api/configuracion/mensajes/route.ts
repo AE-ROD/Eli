@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { contarEnviosDelMes } from "@/lib/envios-a-clientes"
 import { esEnlaceDeResenasValido } from "@/lib/pagina-del-negocio"
 import { actorDeSesion, puedeActivarMensajesAClientes, puedeVerMensajesAClientes } from "@/lib/permisos"
@@ -75,7 +75,9 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
-  const leido = cambiosSchema.safeParse(await cuerpoDelPedido(request))
+  const recibido = await cuerpoConTope(request)
+  if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+  const leido = cambiosSchema.safeParse(recibido.cuerpo)
   if (!leido.success) return respuestaDeDatosInvalidos(leido.error)
   const { listaDeEsperaActiva, avisoDeVueltaActivo, pideResenas } = leido.data
 
