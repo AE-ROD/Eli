@@ -7,7 +7,7 @@
  * cuando unas notas no se guardan.
  */
 
-import { pedir, conJson, type Resultado } from "@/lib/peticiones"
+import { pedir, conJson, leerCuerpo, SIN_CONEXION, type Resultado } from "@/lib/peticiones"
 
 /** Una cita del historial de un cliente: el listado trae las últimas cinco. */
 export interface CitaDeCliente {
@@ -115,4 +115,72 @@ export async function editarCliente(id: string, datos: DatosDeNuevoCliente): Pro
  */
 export async function eliminarCliente(id: string): Promise<Resultado> {
   return pedir(`/api/clientes/${id}`, "No se pudo eliminar el cliente", { method: "DELETE" })
+}
+
+/** Una fila del CSV que no se importó, con su número en la planilla (la cabecera es la 1). */
+export interface FilaOmitida {
+  fila: number
+  motivo: string
+}
+
+/** Lo que responde el servidor al importar un CSV. */
+export interface ResumenDeImportacion {
+  creados: number
+  duplicados: FilaOmitida[]
+  errores: FilaOmitida[]
+}
+
+/**
+ * Manda el CSV (ya en texto) y qué columna es cada dato. El servidor vuelve a
+ * leerlo y valida todo: lo que se vio en la vista previa no se da por bueno.
+ */
+export async function importarClientes(
+  csv: string,
+  mapeo: Partial<Record<string, number>>
+): Promise<Resultado<ResumenDeImportacion>> {
+  return pedir("/api/clientes/importar", "No se pudo importar el archivo", conJson("POST", { csv, mapeo }))
+}
+
+/** El nombre que manda el servidor en `Content-Disposition`, o el de respaldo. */
+function nombreDelAdjunto(respuesta: Response, respaldo: string): string {
+  const cabecera = respuesta.headers.get("Content-Disposition") ?? ""
+  return /filename="([^"]+)"/.exec(cabecera)?.[1] ?? respaldo
+}
+
+/**
+ * Pide una planilla y la descarga en el navegador. Con `fetch` y no con un
+ * enlace: si el servidor dice que no (un rango inválido, el límite de
+ * descargas), la pantalla muestra el motivo en vez de abrir un JSON.
+ */
+async function descargar(url: string, respaldo: string, errorPorDefecto: string): Promise<Resultado> {
+  try {
+    const respuesta = await fetch(url)
+    if (!respuesta.ok) {
+      const cuerpo = (await leerCuerpo(respuesta)) as { error?: unknown } | null
+      return { ok: false, error: typeof cuerpo?.error === "string" ? cuerpo.error : errorPorDefecto }
+    }
+    const archivo = await respuesta.blob()
+    const enlace = document.createElement("a")
+    enlace.href = URL.createObjectURL(archivo)
+    enlace.download = nombreDelAdjunto(respuesta, respaldo)
+    document.body.appendChild(enlace)
+    enlace.click()
+    enlace.remove()
+    // Después del clic: el navegador ya tomó el archivo.
+    setTimeout(() => URL.revokeObjectURL(enlace.href), 0)
+    return { ok: true, datos: undefined }
+  } catch {
+    return { ok: false, error: SIN_CONEXION }
+  }
+}
+
+/** Todos los clientes del negocio, en CSV para Excel. Sólo dueño y encargado. */
+export async function exportarClientes(): Promise<Resultado> {
+  return descargar("/api/clientes/exportar", "clientes.csv", "No se pudo descargar la planilla de clientes")
+}
+
+/** Las atenciones que llegaron entre dos días (incluidos, "AAAA-MM-DD"), en CSV. Sólo dueño y encargado. */
+export async function exportarAtenciones(desde: string, hasta: string): Promise<Resultado> {
+  const parametros = new URLSearchParams({ desde, hasta })
+  return descargar(`/api/atenciones/exportar?${parametros}`, "atenciones.csv", "No se pudo descargar la planilla de atenciones")
 }

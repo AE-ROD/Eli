@@ -54,6 +54,8 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     phone: null,
     tags: [],
     notes: null,
+    whatsappConsentAt: null,
+    whatsappConsentSource: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),

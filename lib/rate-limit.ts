@@ -74,6 +74,14 @@ const limitadorAcuseDeSoporte = crearLimitador("soporte-acuse", 2, "1 h")
 // otra persona; el límite del panel (60 por minuto) dejaría llenarle la
 // bandeja. Tres alcanzan para "no le llegó, reenviala" un par de veces.
 const limitadorReenvioDeInvitacion = crearLimitador("reenvio-invitacion", 3, "1 h")
+// Importar clientes desde un CSV: 5 por hora por negocio. Cada una lee la base
+// de clientes entera y puede escribir hasta 5.000 filas; nadie importa su base
+// más de un par de veces (la primera, y la que corrige lo que falló).
+const limitadorImportacion = crearLimitador("importacion-clientes", 5, "1 h")
+// Exportar clientes o atenciones a CSV: 20 por hora por negocio. Cada una lee
+// miles de filas de una vez; el límite de lectura del panel (200 por minuto)
+// dejaría descargar la base entera en bucle.
+const limitadorExportacion = crearLimitador("exportacion", 20, "1 h")
 
 export type TipoLimite =
   | "login"
@@ -85,6 +93,8 @@ export type TipoLimite =
   | "soporte"
   | "acuseDeSoporte"
   | "reenvioDeInvitacion"
+  | "importacionDeClientes"
+  | "exportacion"
 
 const limitadores: Record<TipoLimite, Ratelimit | null> = {
   login: limitadorLogin,
@@ -96,6 +106,8 @@ const limitadores: Record<TipoLimite, Ratelimit | null> = {
   soporte: limitadorSoporte,
   acuseDeSoporte: limitadorAcuseDeSoporte,
   reenvioDeInvitacion: limitadorReenvioDeInvitacion,
+  importacionDeClientes: limitadorImportacion,
+  exportacion: limitadorExportacion,
 }
 
 /**
@@ -120,6 +132,12 @@ const fallaAbiertoSiUpstashFalla: Record<TipoLimite, boolean> = {
   // Cerrado como el acuse: manda correos a una dirección ajena. Exige sesión
   // de dueño o encargado, así que una caída sólo demora un reenvío.
   reenvioDeInvitacion: false,
+  // Cerrado: es una escritura masiva, y una caída del proveedor sólo demora
+  // una importación que se puede hacer después.
+  importacionDeClientes: false,
+  // Abierto, como las lecturas del panel: exige sesión de dueño o encargado y
+  // cortarla dejaría al negocio sin sus datos por una caída ajena.
+  exportacion: true,
   panelEscritura: true,
   lecturaPublica: true,
   panelLectura: true,

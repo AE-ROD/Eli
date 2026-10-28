@@ -26,6 +26,7 @@ import {
   puedeUsarChats,
   puedeEditarDatosDeCliente,
   puedeBorrarCliente,
+  puedeImportarExportarClientes,
   memberIdParaCita,
   profesionalParaLinea,
   whereDeAgenda,
@@ -108,6 +109,7 @@ describe("jerarquía de roles", () => {
     // El profesional ve y crea clientes, y escribe sus notas; los datos y el borrado no (PRODUCTO.md, sección 10).
     ["editar los datos de un cliente", puedeEditarDatosDeCliente, true, true, false],
     ["borrar un cliente", puedeBorrarCliente, true, true, false],
+    ["importar y exportar clientes en CSV", puedeImportarExportarClientes, true, true, false],
   ])("%s — dueño/encargado/profesional", (_que, puede, esperaDueño, esperaEncargado, esperaProfesional) => {
     expect(puede(dueño)).toBe(esperaDueño)
     expect(puede(encargado)).toBe(esperaEncargado)
@@ -279,6 +281,7 @@ describe("falla cerrado", () => {
     expect(puedeUsarChats(null)).toBe(false)
     expect(puedeEditarDatosDeCliente(null)).toBe(false)
     expect(puedeBorrarCliente(null)).toBe(false)
+    expect(puedeImportarExportarClientes(null)).toBe(false)
   })
 
   it("un rol desconocido no gestiona la suscripción ni asigna citas a otros", () => {

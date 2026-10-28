@@ -120,6 +120,15 @@ export const puedeEditarDatosDeCliente = gestionaElNegocio
 export const puedeBorrarCliente = gestionaElNegocio
 
 /**
+ * Importar clientes desde un CSV y exportar a CSV los clientes y las
+ * atenciones. Dueño y encargado. El profesional crea clientes de a uno (para
+ * anotar a quien llega), pero no carga ni se lleva la base entera: la
+ * exportación trae los datos de contacto de todos y, en las atenciones, lo
+ * cobrado, que es facturación del negocio (`puedeVerIngresosDelNegocio`).
+ */
+export const puedeImportarExportarClientes = gestionaElNegocio
+
+/**
  * A quién se asigna una cita. Sólo quien puede asignar citas a otros (dueño y
  * encargado) elige: se respeta lo pedido, incluido `null` ("sin asignar").
  * Cualquier otro —el profesional, o un rol desconocido— no elige: termina

@@ -5,7 +5,14 @@ import { AnimatePresence } from "framer-motion"
 import { useSession } from "next-auth/react"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
-import { actorDeSesion, puedeBorrarCliente, puedeEditarDatosDeCliente } from "@/lib/permisos"
+import { Download, Upload } from "lucide-react"
+import { Boton } from "@/components/comunes/boton"
+import {
+  actorDeSesion,
+  puedeBorrarCliente,
+  puedeEditarDatosDeCliente,
+  puedeImportarExportarClientes,
+} from "@/lib/permisos"
 import {
   leerClientes,
   crearCliente,
@@ -20,6 +27,7 @@ import { FiltrosClientes } from "./_componentes/filtros-clientes"
 import { ListaClientes } from "./_componentes/lista-clientes"
 import { PanelDetalleCliente } from "./_componentes/panel-detalle-cliente"
 import { ModalNuevoCliente } from "./_componentes/modal-nuevo-cliente"
+import { ModalExportar } from "./_componentes/modal-exportar"
 import { clienteParaTarjeta, type ClienteEnTarjeta } from "./_componentes/tarjeta-cliente"
 import { mostrarTelefono } from "@/lib/telefono"
 
@@ -41,6 +49,7 @@ export default function PaginaClientes() {
   const actor = actorDeSesion(sesion)
   const puedeEditar = puedeEditarDatosDeCliente(actor)
   const puedeEliminar = puedeBorrarCliente(actor)
+  const puedeImportarExportar = puedeImportarExportarClientes(actor)
 
   const [clientes, setClientes] = useState<ClienteEnTarjeta[]>([])
   // Lo que devolvió el servidor de cada cliente de la lista: el panel de
@@ -77,6 +86,7 @@ export default function PaginaClientes() {
   const [eliminando, setEliminando] = useState(false)
   const [avisoDeEliminar, setAvisoDeEliminar] = useState("")
   const [avisoListo, setAvisoListo] = useState("")
+  const [exportando, setExportando] = useState(false)
 
   const esperaDeBusqueda = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -257,6 +267,29 @@ export default function PaginaClientes() {
           </Aviso>
         )}
 
+        {/* Cargar y llevarse la base: dueño y encargado. El servidor lo vuelve a verificar. */}
+        {puedeImportarExportar && (
+          <div className="flex flex-wrap gap-3">
+            <Boton
+              href="/dashboard/clientes/importar"
+              variante="secundario"
+              tamano="sm"
+              icono={<Upload aria-hidden="true" strokeWidth={1.75} />}
+            >
+              Importar CSV
+            </Boton>
+            <Boton
+              type="button"
+              variante="secundario"
+              tamano="sm"
+              icono={<Download aria-hidden="true" strokeWidth={1.75} />}
+              onClick={() => setExportando(true)}
+            >
+              Exportar
+            </Boton>
+          </div>
+        )}
+
         <FiltrosClientes
           busqueda={busqueda}
           onBusqueda={setBusqueda}
@@ -318,6 +351,8 @@ export default function PaginaClientes() {
           />
         )}
       </AnimatePresence>
+
+      <AnimatePresence>{exportando && <ModalExportar alCerrar={() => setExportando(false)} />}</AnimatePresence>
 
       <AnimatePresence>
         {aEliminar && (

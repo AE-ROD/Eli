@@ -175,6 +175,11 @@ lib/                          Lógica compartida, cada archivo con su test al la
   slug.ts                     La dirección pública de cada negocio
   telefono.ts                 Teléfonos chilenos: a E.164 para guardar y con espacios
                               para mostrar
+  csv.ts                      Leer y escribir CSV sin librerías: separador, BOM,
+                              comillas y celdas a salvo de fórmulas
+  importar-clientes.ts        Importar clientes de un CSV: qué columna es cada dato,
+                              validar cada fila y descartar repetidos
+  exportar.ts                 Las planillas que se descargan: clientes y atenciones
   clientes-eliminados.ts      Eliminar un cliente es anonimizarlo: qué se borra y cómo
                               se lo reconoce sin columna nueva (una etiqueta reservada)
   utils.ts                    `cn`, para combinar clases de Tailwind
