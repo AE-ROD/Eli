@@ -188,6 +188,8 @@ export function diaEn(instante: Date, zona: string): { desde: Date; hasta: Date 
 
 export interface LineaParaReporte {
   serviceId: string | null
+  /** El producto de una línea de producto (#67); en una de servicio, null o ausente. */
+  productId?: string | null
   serviceName: string
   memberId: string | null
   byOwner: boolean
@@ -239,12 +241,14 @@ export function hayFiltrosDeLinea(filtros: FiltrosDeLinea): boolean {
  * un corte y otra persona el color. Sin filtros de línea, toda línea cumple.
  */
 export function lineaCumpleFiltros(
-  linea: Pick<LineaParaReporte, "serviceId" | "memberId" | "byOwner">,
+  linea: Pick<LineaParaReporte, "serviceId" | "productId" | "memberId" | "byOwner">,
   filtros: FiltrosDeLinea
 ): boolean {
   return (
     (!filtros.profesional || idDeProfesional(linea) === filtros.profesional) &&
-    (!filtros.servicio || linea.serviceId === filtros.servicio)
+    // El filtro de servicio también elige un producto: su id va en el mismo
+    // lugar del desglose (`grupoDeServicio`).
+    (!filtros.servicio || (linea.serviceId ?? linea.productId) === filtros.servicio)
   )
 }
 
@@ -317,8 +321,14 @@ function grupoDeProfesional(linea: LineaParaReporte): { clave: string; id: strin
   return { clave: `ex-miembro:${linea.professionalName}`, id: null }
 }
 
+/**
+ * Las líneas de producto (#67) se agrupan por su producto, aparte de los
+ * servicios: sin `serviceId`, antes caían todas juntas por nombre, como si
+ * fueran servicios borrados del catálogo.
+ */
 function grupoDeServicio(linea: LineaParaReporte): { clave: string; id: string | null } {
   if (linea.serviceId) return { clave: `servicio:${linea.serviceId}`, id: linea.serviceId }
+  if (linea.productId) return { clave: `producto:${linea.productId}`, id: linea.productId }
   return { clave: `sin-catalogo:${linea.serviceName}`, id: null }
 }
 

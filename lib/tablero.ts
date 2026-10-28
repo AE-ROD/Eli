@@ -12,6 +12,7 @@ import {
   totalEnCentavos,
   type LineaDeAtencion,
 } from "@/lib/atenciones"
+import { estadoDeComision } from "@/lib/comisiones"
 import { nombreDeMedio } from "@/lib/medios-de-pago"
 import {
   puedeVerCita,
@@ -110,6 +111,11 @@ const SELECCION_DE_LINEA = {
   byOwner: true,
   professionalName: true,
   priceCents: true,
+  tipo: true,
+  productId: true,
+  commissionPercent: true,
+  commissionCents: true,
+  commissionAt: true,
 } satisfies Prisma.VisitServiceSelect
 
 const SELECCION_DE_PAGO = {
@@ -351,15 +357,43 @@ export async function leerAtencion(db: Prisma.TransactionClient, actor: Actor, i
 
 // ─── Cómo viaja ──────────────────────────────────────────────────────────────
 
-/** En la base va en centavos; por la API, en unidades con hasta dos decimales. */
-export function formatearLinea(linea: LineaLeida) {
+/**
+ * En la base va en centavos; por la API, en unidades con hasta dos decimales.
+ * `servicio` es el nombre copiado en los dos tipos de línea: el del servicio
+ * o el del producto (#67). Sin comisión: eso lo agrega `formatearAtencion`,
+ * que sabe quién mira.
+ */
+export function formatearLinea(linea: Omit<LineaLeida, "commissionPercent" | "commissionCents" | "commissionAt">) {
   return {
     id: linea.id,
+    tipo: linea.tipo === "producto" ? ("producto" as const) : ("servicio" as const),
     servicioId: linea.serviceId,
+    productoId: linea.productId,
     servicio: linea.serviceName,
     // `id` en null: quien la hizo ya no está en el equipo (el nombre quedó copiado).
     profesional: { id: idDeProfesional(linea), nombre: linea.professionalName },
     precio: deCentavos(linea.priceCents),
+  }
+}
+
+/**
+ * La comisión de una línea como la ve `actor` (#65): en qué está
+ * (`congelada`, `pendiente` de %, `no-aplica`) y, si está congelada, su % y
+ * su monto. El % y el monto sólo para quien ve todo el tablero o para quien
+ * hizo la línea: un profesional nunca recibe los de una línea ajena (la base
+ * ya no se las devuelve, `whereDeLineas`; esto lo corta igual).
+ */
+export function comisionDeLinea(
+  actor: Actor,
+  linea: Pick<LineaLeida, "memberId" | "byOwner" | "commissionPercent" | "commissionCents" | "commissionAt">
+) {
+  const estado = estadoDeComision(linea)
+  const propia = !!actor.memberId && linea.memberId === actor.memberId
+  if (estado !== "congelada" || !(puedeVerTodoElTablero(actor) || propia)) return { estado }
+  return {
+    estado,
+    porcentaje: linea.commissionPercent,
+    monto: linea.commissionCents === null ? null : deCentavos(linea.commissionCents),
   }
 }
 
@@ -420,7 +454,7 @@ export function formatearAtencion(actor: Actor, atencion: AtencionLeida) {
     cobradaEn: atencion.paidAt,
     anuladaEn: atencion.voidedAt,
     motivoDeAnulacion: atencion.voidReason,
-    lineas: atencion.services.map(formatearLinea),
+    lineas: atencion.services.map((linea) => ({ ...formatearLinea(linea), comision: comisionDeLinea(actor, linea) })),
   }
 
   if (!puedeVerTodoElTablero(actor)) return visible

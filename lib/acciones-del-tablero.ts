@@ -351,12 +351,19 @@ export function destinosDeArrastre(actor: Actor | null, tarjeta: TarjetaDelTable
 
 // ─── Editor de servicios ─────────────────────────────────────────────────────
 
-/** Una fila del editor de servicios tal como está escrita: el precio todavía es texto. */
+/**
+ * Una fila del editor de servicios tal como está escrita: el precio todavía
+ * es texto. Una fila es de un servicio o, con `tipo: "producto"`, de un
+ * producto vendido (#67); sin `tipo`, de un servicio.
+ */
 export interface FilaDeServicio {
   /** Para la `key` de React: el id de la línea, o uno nuevo si la fila se agregó. */
   clave: string
-  /** Vacío si falta elegirlo, o si el servicio de la línea se borró del catálogo. */
+  tipo?: "servicio" | "producto"
+  /** Vacío si falta elegirlo, o si el servicio de la línea se borró del catálogo. En un producto, vacío. */
   servicioId: string
+  /** Sólo en un producto: vacío si falta elegirlo. */
+  productoId?: string
   /** Id de miembro, `duenio`, o vacío si falta elegir. No cuenta si quien edita no elige profesional. */
   profesional: string
   precio: string
@@ -365,13 +372,21 @@ export interface FilaDeServicio {
   profesionalOriginal?: string
 }
 
-/** Una línea de una atención, como la devuelve el endpoint. */
+/**
+ * Una línea de una atención, como la devuelve el endpoint. `servicio` es el
+ * nombre copiado, del servicio o del producto.
+ */
 export interface LineaGuardada extends LineaEnPantalla {
   id: string
+  tipo?: "servicio" | "producto"
   servicioId: string | null
+  productoId?: string | null
   servicio: string
   profesional: { id: string | null; nombre: string }
 }
+
+/** Si la fila o la línea es de un producto. */
+export const esDeProducto = (linea: { tipo?: string }): boolean => linea.tipo === "producto"
 
 /**
  * La línea guardada como fila para editarla. Un profesional que dejó el
@@ -381,7 +396,8 @@ export interface LineaGuardada extends LineaEnPantalla {
 export function filaDesdeLinea(linea: LineaGuardada): FilaDeServicio {
   return {
     clave: linea.id,
-    servicioId: linea.servicioId ?? "",
+    ...(esDeProducto(linea) && { tipo: "producto" as const, productoId: linea.productoId ?? "" }),
+    servicioId: esDeProducto(linea) ? "" : (linea.servicioId ?? ""),
     profesional: linea.profesional.id ?? "",
     precio: montoParaEscribir(linea.precio),
     servicioOriginal: linea.servicio,
@@ -403,6 +419,8 @@ export interface ReservaDeOrigen {
 export interface CatalogoParaFilas {
   /** Sólo los activos. */
   servicios: readonly { id: string; nombre: string; precio: number | null }[]
+  /** Los productos que se venden (#67), sólo los activos. Puede faltar: un catálogo sin productos. */
+  productos?: readonly { id: string; nombre: string; precio: number | null }[]
   /** A quién se le puede asignar una línea. */
   profesionales: readonly { id: string; nombre: string }[]
 }
@@ -451,9 +469,10 @@ function unicoConEseNombre<T extends { nombre: string }>(servicios: readonly T[]
   return conEseNombre.length === 1 ? conEseNombre[0] : undefined
 }
 
-/** Lo que se manda por cada línea; es el contrato de `PUT /api/atenciones/[id]`. */
+/** Lo que se manda por cada línea; es el contrato de `PUT /api/atenciones/[id]`. Uno de `servicioId` o `productoId`. */
 export interface LineaPedida {
-  servicioId: string
+  servicioId?: string
+  productoId?: string
   profesional?: string
   precio: number
 }
@@ -475,7 +494,9 @@ const MONTO_ILEGIBLE = "Escríbelo así: 8000 o 8000,50."
  */
 export function erroresDeFila(fila: FilaDeServicio, eligeProfesional: boolean): ErroresDeFila {
   const errores: ErroresDeFila = {}
-  if (!fila.servicioId) errores.servicio = "Elige el servicio."
+  if (esDeProducto(fila) ? !fila.productoId : !fila.servicioId) {
+    errores.servicio = esDeProducto(fila) ? "Elige el producto." : "Elige el servicio."
+  }
   if (eligeProfesional && !fila.profesional) errores.profesional = "Elige quién lo hace."
 
   const precio = leerMonto(fila.precio)
@@ -508,7 +529,7 @@ export function lineasDesdeFilas(filas: readonly FilaDeServicio[], eligeProfesio
   return {
     ok: true,
     lineas: filas.map((fila) => ({
-      servicioId: fila.servicioId,
+      ...(esDeProducto(fila) ? { productoId: fila.productoId ?? "" } : { servicioId: fila.servicioId }),
       ...(eligeProfesional && { profesional: fila.profesional }),
       // Ya validado: sin errores, el precio se lee.
       precio: leerMonto(fila.precio) ?? 0,

@@ -373,6 +373,29 @@ describe("editor de servicios", () => {
     expect(resultado).toEqual({ ok: false, errores: { mala: { precio: "Escribe el precio." } } })
   })
 
+  it("una fila de producto (#67) manda productoId y no servicioId, y sin elegir dice qué falta", () => {
+    const deProducto = fila({ tipo: "producto", servicioId: "", productoId: "p-shampoo", precio: "12000" })
+    expect(lineasDesdeFilas([deProducto], true)).toEqual({
+      ok: true,
+      lineas: [{ productoId: "p-shampoo", profesional: "m-carla", precio: 12000 }],
+    })
+    expect(erroresDeFila({ ...deProducto, productoId: "" }, true)).toEqual({ servicio: "Elige el producto." })
+  })
+
+  it("filaDesdeLinea de una línea de producto la vuelve a dar como producto", () => {
+    expect(
+      filaDesdeLinea({
+        id: "l2",
+        tipo: "producto",
+        servicioId: null,
+        productoId: "p-cera",
+        servicio: "Cera",
+        profesional: { id: "m-pedro", nombre: "Pedro" },
+        precio: 8000,
+      })
+    ).toMatchObject({ clave: "l2", tipo: "producto", productoId: "p-cera", servicioId: "", profesional: "m-pedro", precio: "8000" })
+  })
+
   it("sin filas es una lista vacía: dueño y encargado pueden anotar sin servicios", () => {
     expect(lineasDesdeFilas([], true)).toEqual({ ok: true, lineas: [] })
   })

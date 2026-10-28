@@ -85,10 +85,19 @@ export interface ServicioDelCatalogo {
   precio: number | null
 }
 
+/** Un producto que se vende en el local (#67). Sin su % de comisión: eso es de la dueña. */
+export interface ProductoDelCatalogo {
+  id: string
+  nombre: string
+  precio: number | null
+}
+
 /** Lo que se puede elegir en el tablero: ya viene recortado según quién mira. */
 export interface Catalogo {
   /** Sólo los activos. */
   servicios: ServicioDelCatalogo[]
+  /** Sólo los activos. */
+  productos: ProductoDelCatalogo[]
   /** Los miembros y el dueño (`id: "duenio"`); al profesional, sólo él. */
   profesionales: { id: string; nombre: string }[]
   mediosDePago: { id: string; nombre: string }[]
