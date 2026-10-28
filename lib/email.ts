@@ -258,8 +258,14 @@ async function enviar(correo: Correo): Promise<ResultadoDeEnvio> {
   })
 }
 
+/**
+ * "AAAA-MM-DD" es una fecha calendario: `new Date` la lee como la medianoche
+ * UTC, así que se escribe en UTC. Con la zona del servidor, al oeste de UTC
+ * salía el día anterior.
+ */
 function fechaLegible(fechaISO: string): string {
   return new Date(fechaISO).toLocaleDateString("es-CL", {
+    timeZone: "UTC",
     weekday: "long",
     day: "numeric",
     month: "long",
