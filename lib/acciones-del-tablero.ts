@@ -16,9 +16,10 @@ import {
   type LineaDeAtencion,
   type PagoPedido,
 } from "@/lib/atenciones"
+import type { EstadoDeComision } from "@/lib/comisiones"
 import { formatearMonto, leerMonto, montoParaEscribir } from "@/lib/dinero"
 import { esHoy, horaConArticulo } from "@/lib/fechas"
-import { puedeAnular, puedeCobrar, puedeDeshacerLlegada, type Actor } from "@/lib/permisos"
+import { esDueño, puedeAnular, puedeCobrar, puedeDeshacerLlegada, type Actor } from "@/lib/permisos"
 
 /**
  * El tablero de atenciones (docs/PRODUCTO.md, sección 7) visto desde la
@@ -383,6 +384,12 @@ export interface LineaGuardada extends LineaEnPantalla {
   productoId?: string | null
   servicio: string
   profesional: { id: string | null; nombre: string }
+  /**
+   * La comisión de la línea (#65): congelada al cobrar, pendiente de % o no
+   * aplica. El % y el monto llegan sólo a quien ve todo el tablero o a quien
+   * hizo la línea.
+   */
+  comision?: { estado: EstadoDeComision; porcentaje?: number | null; monto?: number | null }
 }
 
 /** Si la fila o la línea es de un producto. */
@@ -543,6 +550,31 @@ export function totalDeFilasEnCentavos(filas: readonly FilaDeServicio[]): number
     const precio = leerMonto(fila.precio)
     return precio !== null && esPrecioValido(precio) ? suma + aCentavos(precio) : suma
   }, 0)
+}
+
+// ─── Comisiones (#65) ────────────────────────────────────────────────────────
+
+/** Si una línea cobrada quedó sin % de comisión: no se le puede liquidar hasta que alguien lo fije. */
+export function quedoSinPorcentaje(atencion: { estado: string }, linea: Pick<LineaGuardada, "comision">): boolean {
+  return atencion.estado === "finalizada" && linea.comision?.estado === "pendiente"
+}
+
+/**
+ * Lo que se le dice a quien acaba de cobrar si alguna línea quedó sin % de
+ * comisión, o `null` si no. El cobro no se frena por eso: se avisa para que
+ * alguien lo fije antes de liquidar. La dueña lo fija ella; el encargado se
+ * lo avisa.
+ */
+export function avisoDeComisionesPendientes(
+  actor: Actor | null,
+  atencion: { estado: string; lineas: readonly Pick<LineaGuardada, "comision">[] }
+): string | null {
+  const pendientes = atencion.lineas.filter((linea) => quedoSinPorcentaje(atencion, linea)).length
+  if (pendientes === 0) return null
+  const cuantos = pendientes === 1 ? "1 servicio" : `${pendientes} servicios`
+  return esDueño(actor)
+    ? `${cuantos} sin porcentaje de comisión: configúralo en Comisiones antes de liquidar.`
+    : `${cuantos} sin porcentaje de comisión: avísale a la dueña.`
 }
 
 // ─── Cobro ───────────────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { MAXIMO_DE_LINEAS_POR_ATENCION, PROFESIONAL_DUEÑO, aCentavos, esPrecioValido } from "@/lib/atenciones"
+import { comisionParaCongelar, porcentajeDeLinea, type PorcentajesVigentes } from "@/lib/comisiones"
 import { profesionalParaLinea, whereDeProductos, type Actor, type ProfesionalDeLinea } from "@/lib/permisos"
 import { ErrorDeAtencion } from "@/lib/tablero"
 
@@ -229,4 +230,102 @@ export async function resolverLineas(
     })
   }
   return resueltas
+}
+
+// ─── Comisión congelada al cobrar (#65) ──────────────────────────────────────
+
+/**
+ * Congela la comisión de cada línea de la atención con los % vigentes, dentro
+ * de la transacción del cobro y después de tomar la fila (`tomarAtencion`):
+ * un segundo cobro no llega acá, así que nada se congela dos veces. Lo
+ * congelado no se recalcula nunca: cambiar un % después no toca lo cobrado
+ * (en la base lo impide además el trigger `atencion_servicios_comision_inmutable`).
+ *
+ * La cascada es la de `lib/comisiones.ts`. Lo que devuelve "pendiente" (falta
+ * el %) queda con las tres columnas en null, nunca en 0, y el cobro sigue: se
+ * cuenta para avisar. Lo de la dueña o de un ex-miembro no lleva comisión.
+ *
+ * Los % se leen siempre acotados al negocio: un `CommissionRate` o un
+ * producto de otro negocio nunca entra a la cascada.
+ *
+ * Devuelve cuántas líneas quedaron pendientes de %.
+ */
+export async function congelarComisiones(
+  tx: Prisma.TransactionClient,
+  businessId: string,
+  visitId: string,
+  ahora: Date
+): Promise<{ pendientes: number }> {
+  const deLaAtencion = { visitId, visit: { is: { businessId } } }
+  const lineas = await tx.visitService.findMany({
+    where: { ...deLaAtencion, commissionAt: null },
+    select: {
+      id: true,
+      tipo: true,
+      byOwner: true,
+      memberId: true,
+      serviceId: true,
+      productId: true,
+      priceCents: true,
+    },
+    orderBy: { id: "asc" },
+    take: MAXIMO_DE_LINEAS_POR_ATENCION,
+  })
+  if (lineas.length === 0) return { pendientes: 0 }
+
+  const paraCascada = lineas.map((linea) => ({ ...linea, tipo: linea.tipo === "producto" ? ("producto" as const) : ("servicio" as const) }))
+  const deMiembros = paraCascada.filter((linea) => !linea.byOwner && linea.memberId)
+  const idsDeMiembros = sinRepetidos(deMiembros.flatMap((linea) => (linea.memberId ? [linea.memberId] : [])))
+  const idsDeServicios = sinRepetidos(deMiembros.flatMap((linea) => (linea.serviceId ? [linea.serviceId] : [])))
+  const idsDeProductos = sinRepetidos(deMiembros.flatMap((linea) => (linea.productId ? [linea.productId] : [])))
+
+  const [miembros, excepciones, productos] = await Promise.all([
+    idsDeMiembros.length === 0
+      ? Promise.resolve([])
+      : tx.businessMember.findMany({
+          where: { businessId, id: { in: idsDeMiembros } },
+          select: { id: true, commissionPercent: true },
+          take: idsDeMiembros.length,
+        }),
+    idsDeMiembros.length === 0 || idsDeServicios.length === 0
+      ? Promise.resolve([])
+      : tx.commissionRate.findMany({
+          where: { businessId, memberId: { in: idsDeMiembros }, serviceId: { in: idsDeServicios } },
+          select: { memberId: true, serviceId: true, percent: true },
+          take: idsDeMiembros.length * idsDeServicios.length,
+        }),
+    idsDeProductos.length === 0
+      ? Promise.resolve([])
+      : tx.producto.findMany({
+          where: { businessId, id: { in: idsDeProductos } },
+          select: { id: true, commissionPercent: true },
+          take: idsDeProductos.length,
+        }),
+  ])
+
+  const porExcepcion = new Map<string, Map<string, number>>()
+  for (const tasa of excepciones) {
+    const delMiembro = porExcepcion.get(tasa.memberId) ?? new Map<string, number>()
+    delMiembro.set(tasa.serviceId, tasa.percent)
+    porExcepcion.set(tasa.memberId, delMiembro)
+  }
+  const vigentes: PorcentajesVigentes = {
+    porMiembro: new Map(miembros.map((miembro) => [miembro.id, miembro.commissionPercent])),
+    excepciones: porExcepcion,
+    porProducto: new Map(productos.map((producto) => [producto.id, producto.commissionPercent])),
+  }
+
+  let pendientes = 0
+  for (const linea of paraCascada) {
+    if (porcentajeDeLinea(linea, vigentes).tipo === "pendiente") pendientes += 1
+    const comision = comisionParaCongelar(linea, vigentes, ahora)
+    if (!comision.commissionAt) continue
+    // Sólo si sigue sin congelar y es de este negocio: nunca se pisa una
+    // comisión ya congelada.
+    await tx.visitService.updateMany({
+      where: { AND: [{ id: linea.id, commissionAt: null }, deLaAtencion] },
+      data: comision,
+    })
+  }
+  return { pendientes }
 }

@@ -13,6 +13,7 @@ import {
 } from "@/lib/atenciones"
 import { actorDeSesion, puedeCobrar } from "@/lib/permisos"
 import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { congelarComisiones } from "@/lib/lineas-de-atencion"
 import {
   ErrorDeAtencion,
   buscarAtencion,
@@ -39,7 +40,8 @@ const cobroSchema = z.object({
  * Cobra una atención que está por cobrar. Todo en una transacción: los pagos,
  * la atención finalizada con su total congelado y quién cobró (el id y una
  * copia del nombre, para que el historial lo diga aunque después deje el
- * negocio), y la cita de origen completada. O pasa todo, o nada.
+ * negocio), la comisión de cada línea congelada (#65) y la cita de origen
+ * completada. O pasa todo, o nada.
  *
  * A la cita no se le escribe el precio. Ese total incluye las líneas de la
  * dueña y de los colegas, y el profesional dueño de la cita la ve en la
@@ -75,11 +77,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const nombre = await nombreEnElNegocio(prisma, actor, usuarioId)
 
     const atencion = await prisma.$transaction(async (tx) => {
+      const ahora = new Date()
       // Primero se toma la fila: un segundo cobro de la misma atención (un
-      // doble clic) encuentra que ya no está por cobrar y no registra nada.
+      // doble clic) encuentra que ya no está por cobrar y no registra nada,
+      // ni congela otra vez.
       await tomarAtencion(tx, actor, existente.id, "por-cobrar", {
         status: "finalizada",
-        paidAt: new Date(),
+        paidAt: ahora,
         paidById: usuarioId,
         paidByName: nombre,
       })
@@ -122,6 +126,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         data: { totalCents: totalCentavos },
       })
       if (count === 0) throw new ErrorDeAtencion(409, "La atención cambió mientras tanto: vuelve a cargar el tablero.")
+
+      // La comisión de cada línea, congelada con los % de este momento (#65).
+      // Sin % queda pendiente (null, nunca 0) y el cobro no se frena: la
+      // atención vuelve con cada línea en `pendiente` y el tablero avisa.
+      await congelarComisiones(tx, actor.businessId, existente.id, ahora)
 
       if (existente.appointmentId) {
         await tx.appointment.updateMany({

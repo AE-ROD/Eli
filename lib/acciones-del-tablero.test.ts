@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest"
 import { aCentavos } from "./atenciones"
 import type { Actor } from "./permisos"
 import {
+  avisoDeComisionesPendientes,
+  quedoSinPorcentaje,
   COLUMNAS_DEL_TABLERO,
   accionAlSoltar,
   accionPrincipal,
@@ -725,5 +727,32 @@ describe("cobro", () => {
       medio: "efectivo",
       monto: "",
     })
+  })
+})
+
+describe("avisoDeComisionesPendientes (#65)", () => {
+  const dueña: Actor = { rol: "owner", businessId: "negocio-1", memberId: null }
+  const encargado: Actor = { rol: "admin", businessId: "negocio-1", memberId: "m-encargado" }
+  const cobrada = (...estados: ("congelada" | "pendiente" | "no-aplica")[]) => ({
+    estado: "finalizada",
+    lineas: estados.map((estado) => ({ comision: { estado } })),
+  })
+
+  it("sin líneas pendientes no hay aviso", () => {
+    expect(avisoDeComisionesPendientes(encargado, cobrada("congelada", "no-aplica"))).toBeNull()
+  })
+
+  it("el encargado le avisa a la dueña; la dueña lo configura ella", () => {
+    expect(avisoDeComisionesPendientes(encargado, cobrada("pendiente", "congelada", "pendiente"))).toBe(
+      "2 servicios sin porcentaje de comisión: avísale a la dueña."
+    )
+    expect(avisoDeComisionesPendientes(dueña, cobrada("pendiente"))).toBe(
+      "1 servicio sin porcentaje de comisión: configúralo en Comisiones antes de liquidar."
+    )
+  })
+
+  it("una atención abierta no avisa: todavía no se congeló nada", () => {
+    expect(avisoDeComisionesPendientes(dueña, { ...cobrada("pendiente"), estado: "por-cobrar" })).toBeNull()
+    expect(quedoSinPorcentaje({ estado: "por-cobrar" }, { comision: { estado: "pendiente" } })).toBe(false)
   })
 })

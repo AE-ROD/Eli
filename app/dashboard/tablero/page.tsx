@@ -11,6 +11,7 @@ import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { esEstadoActivo, type EstadoActivo, type PagoPedido } from "@/lib/atenciones"
 import { formatearMonto } from "@/lib/dinero"
 import {
+  avisoDeComisionesPendientes,
   requisitoParaPasarA,
   textoDeMovimiento,
   type ColumnaDeAtencion,
@@ -100,6 +101,8 @@ export default function PaginaTablero() {
   /** El instante de la última recarga: contra él se mide lo atrasado y el "hace cuánto". */
   const [ahora, setAhora] = useState(0)
   const [aviso, setAviso] = useState("")
+  /** Lo que conviene saber después de cobrar, sin ser un error: líneas que quedaron sin % de comisión (#65). */
+  const [avisoDeCobro, setAvisoDeCobro] = useState("")
   const [enCurso, setEnCurso] = useState<ReadonlySet<string>>(() => new Set())
   /** Adonde va el foco cuando se dibuje lo que cambió (ver `DestinoDelFoco`). */
   const [foco, setFoco] = useState<DestinoDelFoco | null>(null)
@@ -232,6 +235,7 @@ export default function PaginaTablero() {
 
   const abrirModal = (abierto: ModalAbierto) => {
     setAviso("")
+    setAvisoDeCobro("")
     setAvisoDelModal("")
     setGuardando(false)
     setModal(abierto)
@@ -422,6 +426,7 @@ export default function PaginaTablero() {
       if (resultado.ok) {
         ponerAtencion(resultado.datos)
         cerrarModal()
+        setAvisoDeCobro(avisoDeComisionesPendientes(actor, resultado.datos) ?? "")
         seguirA(resultado.datos)
         recargar()
         return
@@ -453,6 +458,12 @@ export default function PaginaTablero() {
   const anular = (atencion: Atencion, motivo: string) =>
     desdeUnModal(async () => {
       const resultado = await anularAtencion(atencion.id, motivo)
+      // Un 409 también es "ya entró en una liquidación o en un cierre de
+      // caja": se recarga igual, pero con el mensaje del servidor, que dice
+      // cómo se corrige (con un ajuste) en vez de "la atención cambió".
+      if (!resultado.ok && resultado.motivo === "desactualizada" && resultado.error.includes("ajuste")) {
+        return tableroDesactualizado(tarjetaDe(atencion), resultado.error)
+      }
       if (!resultado.ok) return falloEnModal(resultado, atencion)
 
       // Las anuladas no tienen columna: sale del tablero, y el foco va al
@@ -500,6 +511,12 @@ export default function PaginaTablero() {
         {aviso && (
           <Aviso tono="error" rol="alert">
             {aviso}
+          </Aviso>
+        )}
+
+        {avisoDeCobro && (
+          <Aviso tono="atencion" rol="status">
+            {avisoDeCobro}
           </Aviso>
         )}
 

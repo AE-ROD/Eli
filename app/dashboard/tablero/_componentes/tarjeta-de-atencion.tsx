@@ -5,7 +5,13 @@ import { ArrowLeft, Ban, Check, Pencil, Undo2 } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { Insignia } from "@/components/comunes/insignia"
 import { nombreDeEstado, type EstadoActivo } from "@/lib/atenciones"
-import { accionPrincipal, accionesSecundarias, faltaAsignar, ofreceDeshacerLlegada } from "@/lib/acciones-del-tablero"
+import {
+  accionPrincipal,
+  accionesSecundarias,
+  faltaAsignar,
+  ofreceDeshacerLlegada,
+  quedoSinPorcentaje,
+} from "@/lib/acciones-del-tablero"
 import { formatearMonto } from "@/lib/dinero"
 import { formatearHora, tiempoDesde } from "@/lib/fechas"
 import type { Actor } from "@/lib/permisos"
@@ -117,6 +123,15 @@ export function TarjetaDeAtencion({
                   <span className="sr-only"> (ya no está en el equipo)</span>{" "}
                   <Insignia tono="naranja" className="h-5 px-2 align-middle">
                     Falta asignar
+                  </Insignia>
+                </>
+              )}
+              {/* Cobrada sin % de comisión (#65): queda pendiente hasta que la dueña lo fije. */}
+              {quedoSinPorcentaje(atencion, linea) && (
+                <>
+                  <span className="sr-only"> (sin porcentaje de comisión)</span>{" "}
+                  <Insignia tono="naranja" className="h-5 px-2 align-middle">
+                    Sin %
                   </Insignia>
                 </>
               )}
