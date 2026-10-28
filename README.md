@@ -135,6 +135,19 @@ La aplica el dueño, nunca un agente (la única base configurada es producción)
 Orden: aplicar la migración, desplegar, y
 `npx prisma migrate resolve --applied 20261028120000_etapa_2_la_plata_del_equipo`.
 
+### `20261029120000_etapa_3_avisos_por_correo`
+
+Aditiva: columnas nuevas con default o nullable en `negocios` (enlace de
+reseñas e interruptores de los mensajes a clientes), `servicios`
+(`frecuenciaDias`) y `clientes` (consentimiento promocional por correo y su
+baja); un único `(id, businessId)` en `clientes`; las tablas nuevas
+`lista_de_espera` y `envios_a_clientes`, y CHECKs escritos a mano. No reescribe
+filas: las existentes cumplen los CHECKs nuevos con sus defaults. El código
+viejo no usa nada de esto, así que se aplica **antes** de desplegar. La aplica
+el dueño, nunca un agente (la única base configurada es producción). Orden:
+aplicar la migración, desplegar, y
+`npx prisma migrate resolve --applied 20261029120000_etapa_3_avisos_por_correo`.
+
 ## Cómo está organizado
 
 ```

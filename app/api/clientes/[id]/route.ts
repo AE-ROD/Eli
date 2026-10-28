@@ -9,6 +9,7 @@ import { registrarError } from "@/lib/registro-de-errores"
 import {
   clienteNoEliminado,
   datosDeClienteEliminado,
+  inscripcionesDeClienteEliminado,
   textosDeAtencionDeClienteEliminado,
   textosDeCitaDeClienteEliminado,
 } from "@/lib/clientes-eliminados"
@@ -50,7 +51,7 @@ const delNegocioYVigente = (actor: Actor, id: string) => whereDeClientes(actor, 
 async function verificarCliente(actor: Actor, id: string) {
   return prisma.customer.findFirst({
     where: delNegocioYVigente(actor, id),
-    select: { id: true, whatsappConsentAt: true },
+    select: { id: true, email: true, whatsappConsentAt: true },
   })
 }
 
@@ -215,6 +216,10 @@ export async function DELETE(
   // escritura acotada al negocio de la sesión.
   try {
     await prisma.$transaction(async (tx) => {
+      // Antes de anonimizar: la lista de espera es por email.
+      await tx.inscripcionEnEspera.deleteMany({
+        where: inscripcionesDeClienteEliminado(actor.businessId, existente.email),
+      })
       await tx.customer.update({ where: { id: existente.id }, data: datosDeClienteEliminado(), select: { id: true } })
       await tx.appointment.updateMany({
         where: { customerId: existente.id, businessId: actor.businessId },

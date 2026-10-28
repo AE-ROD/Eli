@@ -383,6 +383,45 @@ export const puedeVerCierresDeCaja = gestionaElNegocio
  */
 export const puedeReactivarCita = gestionaElNegocio
 
+// ─── Avisos por correo a clientes (etapa 3) ──────────────────────────────────
+//
+// Encender los mensajes a clientes es de la dueña (con WhatsApp van a costar);
+// el encargado ve los interruptores y el contador en solo lectura. La lista de
+// espera y los clientes que se están yendo son operación: dueña y encargado.
+// El profesional no ve ninguno de los dos, por el mismo criterio que exportar:
+// son contactos de toda la base.
+
+/** "Clientes que se están yendo" (#76): dueña y encargado. */
+export const puedeVerClientesQueSeVan = gestionaElNegocio
+
+/** "Escribirle" a un cliente que se está yendo (wa.me o mailto, registrado). Quien lo ve. */
+export const puedeEscribirAClienteQueSeVa = puedeVerClientesQueSeVan
+
+/**
+ * Encender o apagar la lista de espera, "te toca" y las reseñas. Sólo la
+ * dueña; el encargado los ve sin poder cambiarlos (`puedeVerMensajesAClientes`).
+ */
+export const puedeActivarMensajesAClientes = esDueño
+
+/** Ver los interruptores y el contador "Mensajes de este mes". Dueña y encargado. */
+export const puedeVerMensajesAClientes = gestionaElNegocio
+
+/** El enlace de reseñas de Google es parte de la página del negocio. */
+export const puedeEditarEnlaceDeResenas = puedeEditarPaginaDelNegocio
+
+/** Ver quién está en la lista de espera de un día. Dueña y encargado. */
+export const puedeVerListaDeEspera = gestionaElNegocio
+
+/** Quitar a alguien de la lista de espera. Dueña y encargado. */
+export const puedeQuitarDeListaDeEspera = gestionaElNegocio
+
+/**
+ * Marcar o desmarcar en la ficha el consentimiento promocional por correo
+ * (desmarcarlo es la baja pedida en el local). Es un dato del cliente: quien
+ * edita sus datos.
+ */
+export const puedeEditarConsentimientoPromocional = puedeEditarDatosDeCliente
+
 // ─── Filtros para consultas ──────────────────────────────────────────────────
 
 /**
@@ -567,6 +606,23 @@ export function whereDePropinas(
   extra: Prisma.PropinaDeAtencionWhereInput = {}
 ): Prisma.PropinaDeAtencionWhereInput {
   return { AND: [filtroDePlataDelEquipo(actor), extra] }
+}
+
+/**
+ * La lista de espera tiene contactos de personas que quizá no son clientes:
+ * sólo quien la puede ver. No se exporta, igual que `filtroDeAgenda`.
+ */
+function filtroDeListaDeEspera(actor: Actor | null): Prisma.InscripcionEnEsperaWhereInput {
+  if (!actor || !puedeVerListaDeEspera(actor)) return NADA
+  return { businessId: actor.businessId }
+}
+
+/** Igual que `whereDeAgenda`, para la lista de espera. */
+export function whereDeListaDeEspera(
+  actor: Actor | null,
+  extra: Prisma.InscripcionEnEsperaWhereInput = {}
+): Prisma.InscripcionEnEsperaWhereInput {
+  return { AND: [filtroDeListaDeEspera(actor), extra] }
 }
 
 /** Los cierres de caja son montos de todo el negocio: sólo quien los puede ver. */

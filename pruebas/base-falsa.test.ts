@@ -255,3 +255,75 @@ describe("base falsa: lo de la etapa 2", () => {
     await expect(prisma.$executeRaw(...sql`DELETE FROM liquidaciones`)).rejects.toThrow(/base falsa/)
   })
 })
+
+describe("base falsa: lo de la etapa 3", () => {
+  beforeEach(() => {
+    base.reiniciar({
+      business: [
+        { id: "n1", name: "Uno", slug: "uno", userId: "u1" },
+        { id: "n2", name: "Dos", slug: "dos", userId: "u2" },
+      ],
+      user: [
+        { id: "u1", name: "Ana", email: "a@test" },
+        { id: "u2", name: "Otro", email: "o@test" },
+      ],
+      service: [
+        { id: "s1", businessId: "n1", name: "Corte" },
+        { id: "s2", businessId: "n2", name: "Corte" },
+      ],
+      customer: [{ id: "c1", businessId: "n1", name: "María" }],
+    })
+  })
+
+  const inscripcion = (datos: Record<string, unknown> = {}) => ({
+    businessId: "n1",
+    serviceId: "s1",
+    fecha: "2026-11-02",
+    nombre: "María",
+    apellido: "González",
+    email: "maria@test",
+    tokenHash: "hash-1",
+    ...datos,
+  })
+
+  it("los modelos y columnas nuevos traen los defaults del esquema", async () => {
+    const creada = await prisma.inscripcionEnEspera.create({ data: inscripcion() })
+    const envio = await prisma.envioAClientes.create({
+      data: { businessId: "n1", tipo: "te-toca", canal: "correo", categoria: "promocional", referencia: "r1" },
+    })
+
+    expect(creada).toMatchObject({ estado: "activa", avisos: 0, memberId: null, ultimoAvisoAt: null, resueltaAt: null })
+    expect(envio).toMatchObject({ customerId: null, esperaId: null })
+    expect(base.buscar("business", { id: "n1" })[0]).toMatchObject({
+      enlaceResenas: null,
+      listaDeEsperaActiva: true,
+      avisoDeVueltaActivo: false,
+      pideResenas: false,
+    })
+    expect(base.buscar("customer", { id: "c1" })[0]).toMatchObject({
+      correoPromoConsentAt: null,
+      correoPromoConsentSource: null,
+      correoPromoBajaAt: null,
+    })
+    expect(base.buscar("service", { id: "s1" })[0]).toMatchObject({ frecuenciaDias: null })
+  })
+
+  it("la FK compuesta del servicio impide una inscripción con el servicio de otro negocio (P2003)", async () => {
+    await expect(prisma.inscripcionEnEspera.create({ data: inscripcion({ serviceId: "s2" }) })).rejects.toMatchObject({
+      code: "P2003",
+    })
+  })
+
+  it("el candado: un solo envío por (negocio, tipo, referencia); otro negocio no choca", async () => {
+    const envio = { businessId: "n1", tipo: "resena", canal: "correo", categoria: "promocional", referencia: "c1:2026-10-27" }
+    await prisma.envioAClientes.create({ data: envio })
+
+    await expect(prisma.envioAClientes.create({ data: envio })).rejects.toMatchObject({ code: "P2002" })
+    await expect(prisma.envioAClientes.create({ data: { ...envio, businessId: "n2" } })).resolves.toBeTruthy()
+  })
+
+  it("el token de salir de la lista es único", async () => {
+    await prisma.inscripcionEnEspera.create({ data: inscripcion() })
+    await expect(prisma.inscripcionEnEspera.create({ data: inscripcion() })).rejects.toMatchObject({ code: "P2002" })
+  })
+})

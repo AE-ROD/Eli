@@ -60,6 +60,15 @@ import {
   whereDePropinas,
   whereDeCierresDeCaja,
   whereDeProductos,
+  puedeVerClientesQueSeVan,
+  puedeEscribirAClienteQueSeVa,
+  puedeActivarMensajesAClientes,
+  puedeVerMensajesAClientes,
+  puedeEditarEnlaceDeResenas,
+  puedeVerListaDeEspera,
+  puedeQuitarDeListaDeEspera,
+  puedeEditarConsentimientoPromocional,
+  whereDeListaDeEspera,
   type Actor,
   type Rol,
 } from "./permisos"
@@ -804,6 +813,62 @@ describe("la plata del equipo", () => {
       expect(visibles(null)).toEqual([])
       expect(visibles(dueño, { id: "p-ajeno" })).toEqual([])
       expect(visibles(profesional, { businessId: OTRO_NEGOCIO })).toEqual([])
+    })
+  })
+})
+
+describe("avisos por correo a clientes (etapa 3)", () => {
+  type Permiso = (quien: Actor | null) => boolean
+  /** Decisiones c y d del dueño: [dueña, encargado, profesional]. */
+  const TABLA: [string, Permiso, [boolean, boolean, boolean]][] = [
+    ["puedeVerClientesQueSeVan", puedeVerClientesQueSeVan, [true, true, false]],
+    ["puedeEscribirAClienteQueSeVa", puedeEscribirAClienteQueSeVa, [true, true, false]],
+    ["puedeActivarMensajesAClientes", puedeActivarMensajesAClientes, [true, false, false]],
+    ["puedeVerMensajesAClientes", puedeVerMensajesAClientes, [true, true, false]],
+    ["puedeEditarEnlaceDeResenas", puedeEditarEnlaceDeResenas, [true, true, false]],
+    ["puedeVerListaDeEspera", puedeVerListaDeEspera, [true, true, false]],
+    ["puedeQuitarDeListaDeEspera", puedeQuitarDeListaDeEspera, [true, true, false]],
+    ["puedeEditarConsentimientoPromocional", puedeEditarConsentimientoPromocional, [true, true, false]],
+  ]
+
+  it.each(TABLA)("%s sigue la tabla por rol", (_nombre, permiso, [deDueña, deEncargado, deProfesional]) => {
+    expect(permiso(dueño)).toBe(deDueña)
+    expect(permiso(encargado)).toBe(deEncargado)
+    expect(permiso(profesional)).toBe(deProfesional)
+  })
+
+  it.each(TABLA)("%s falla cerrado sin actor", (_nombre, permiso) => {
+    expect(permiso(null)).toBe(false)
+  })
+
+  describe("whereDeListaDeEspera", () => {
+    const inscripciones = [
+      { id: "i-1", businessId: NEGOCIO, email: "ana@test" },
+      { id: "i-ajena", businessId: OTRO_NEGOCIO, email: "ana@test" },
+    ]
+    const tablas = { inscripcionEnEspera: inscripciones } as unknown as Tablas
+    const visibles = (quien: Actor | null, extra = {}) =>
+      inscripciones
+        .filter((i) => coincide(tablas, "inscripcionEnEspera", i, whereDeListaDeEspera(quien, extra)))
+        .map((i) => i.id)
+
+    it("sólo dueña y encargado, y sólo las del negocio", () => {
+      expect(visibles(dueño)).toEqual(["i-1"])
+      expect(visibles(encargado)).toEqual(["i-1"])
+    })
+
+    it("el profesional y sin actor no ven ninguna, ni pidiendo una por id", () => {
+      expect(visibles(profesional)).toEqual([])
+      expect(visibles(null)).toEqual([])
+      expect(visibles(profesional, { id: "i-1" })).toEqual([])
+    })
+
+    it("lo que agrega el endpoint no anula el filtro (businessId, id, email, OR, AND)", () => {
+      expect(visibles(dueño, { businessId: OTRO_NEGOCIO })).toEqual([])
+      expect(visibles(dueño, { id: "i-ajena" })).toEqual([])
+      expect(visibles(encargado, { email: "ana@test" })).toEqual(["i-1"])
+      expect(visibles(encargado, { OR: [{ id: "i-ajena" }] })).toEqual([])
+      expect(visibles(dueño, { AND: [{ businessId: OTRO_NEGOCIO }] })).toEqual([])
     })
   })
 })

@@ -87,6 +87,16 @@ const limitadorExportacion = crearLimitador("exportacion", 20, "1 h")
 // IP de cada pedido: mirar la cita y recorrer días para reagendar son unas
 // pocas consultas, y un enlace filtrado no se puede usar en bucle.
 const limitadorGestionDeCita = crearLimitador("gestion-cita", 60, "1 h")
+// Inscribirse en la lista de espera de un negocio: 5 por hora por negocio y
+// email (además del de `reserva` por IP). Cada inscripción puede terminar en
+// correos a esa casilla, que la escribe un anónimo: no se puede llenar la
+// bandeja de un tercero rotando IPs.
+const limitadorListaDeEspera = crearLimitador("lista-de-espera", 5, "1 h")
+// Bajas por token, sin sesión: "Dejar de recibir estos correos" de un cliente
+// y "Salir de la lista de espera". 30 por 10 minutos por IP. Generoso a
+// propósito: la baja en un clic de Gmail y Apple (RFC 8058) llega desde los
+// servidores del proveedor, y varias personas pueden salir por la misma IP.
+const limitadorBajaPorToken = crearLimitador("baja-por-token", 30, "10 m")
 
 export type TipoLimite =
   | "login"
@@ -101,6 +111,8 @@ export type TipoLimite =
   | "importacionDeClientes"
   | "exportacion"
   | "gestionDeCita"
+  | "listaDeEspera"
+  | "bajaPorToken"
 
 const limitadores: Record<TipoLimite, Ratelimit | null> = {
   login: limitadorLogin,
@@ -115,6 +127,8 @@ const limitadores: Record<TipoLimite, Ratelimit | null> = {
   importacionDeClientes: limitadorImportacion,
   exportacion: limitadorExportacion,
   gestionDeCita: limitadorGestionDeCita,
+  listaDeEspera: limitadorListaDeEspera,
+  bajaPorToken: limitadorBajaPorToken,
 }
 
 /**
@@ -144,6 +158,10 @@ const fallaAbiertoSiUpstashFalla: Record<TipoLimite, boolean> = {
   importacionDeClientes: false,
   // Cerrado: sin sesión, y cancela o mueve citas.
   gestionDeCita: false,
+  // Cerrado: sin sesión, y termina en correos a una casilla que escribe un anónimo.
+  listaDeEspera: false,
+  // Cerrado: sin sesión, y escribe en la base. Una caída sólo demora una baja.
+  bajaPorToken: false,
   // Abierto, como las lecturas del panel: exige sesión de dueño o encargado y
   // cortarla dejaría al negocio sin sus datos por una caída ajena.
   exportacion: true,

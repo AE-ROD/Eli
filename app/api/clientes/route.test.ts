@@ -153,6 +153,8 @@ const tablas: Tablas = {
   liquidacion: [],
   movimientoDeLiquidacion: [],
   cierreDeCaja: [],
+  inscripcionEnEspera: [],
+  envioAClientes: [],
   customer: clientesFake,
   appointment: citasFake,
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { crearBaseDeClientes, escenarioDeClientes } from "../_pruebas/base-de-clientes"
-import { NEGOCIO, atencion, conId, linea, pago, pedido, sesiones } from "@/pruebas/datos"
+import { NEGOCIO, OTRO_NEGOCIO, atencion, conId, linea, pago, pedido, sesiones } from "@/pruebas/datos"
 import { MARCA_DE_CLIENTE_ELIMINADO, NOMBRE_DE_CLIENTE_ELIMINADO, datosDeClienteEliminado } from "@/lib/clientes-eliminados"
 
 const mockGetServerSession = vi.fn()
@@ -427,6 +427,46 @@ describe("DELETE /api/clientes/[id]", () => {
     await DELETE(pedido(URL_DE_MARIA), conId("c-maria"))
 
     expect(base.buscar("appointment", { id: "cita-cruzada" })).toEqual(cruzadaAntes)
+  })
+
+  it("limpia sus consentimientos y borra sus inscripciones en la lista de espera; las de otro negocio no", async () => {
+    const { DELETE } = await import("./route")
+
+    const escenario = escenarioDeClientes()
+    base.reiniciar({
+      ...escenario,
+      customer: escenario.customer.map((cliente) =>
+        cliente.id === "c-maria"
+          ? {
+              ...cliente,
+              email: "Maria@Correo.test",
+              whatsappConsentAt: new Date("2026-09-01"),
+              whatsappConsentSource: "panel",
+              correoPromoConsentAt: new Date("2026-09-01"),
+              correoPromoConsentSource: "reserva-publica",
+              correoPromoBajaAt: new Date("2026-08-01"),
+            }
+          : cliente
+      ),
+      inscripcionEnEspera: [
+        { id: "i-maria", businessId: NEGOCIO, serviceId: "s-corte", fecha: "2026-11-02", nombre: "María", apellido: "González", email: "maria@correo.test", tokenHash: "h1" },
+        { id: "i-beto", businessId: NEGOCIO, serviceId: "s-corte", fecha: "2026-11-02", nombre: "Beto", apellido: "Soto", email: "beto@correo.test", tokenHash: "h2" },
+        { id: "i-ajena", businessId: OTRO_NEGOCIO, serviceId: "s-ajeno", fecha: "2026-11-02", nombre: "María", apellido: "González", email: "maria@correo.test", tokenHash: "h3" },
+      ],
+    })
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const res = await DELETE(pedido(URL_DE_MARIA), conId("c-maria"))
+
+    expect(res.status).toBe(200)
+    expect(base.buscar("customer", { id: "c-maria" })[0]).toMatchObject({
+      whatsappConsentAt: null,
+      whatsappConsentSource: null,
+      correoPromoConsentAt: null,
+      correoPromoConsentSource: null,
+      correoPromoBajaAt: null,
+    })
+    expect(base.buscar("inscripcionEnEspera").map((i) => i.id)).toEqual(["i-beto", "i-ajena"])
   })
 
   it("es todo o nada: si una escritura falla, no queda un cliente a medio borrar", async () => {
