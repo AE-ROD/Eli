@@ -302,7 +302,7 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
     area: "reportes",
     pregunta: "¿Cómo se cuentan los turnos mañana, tarde y noche?",
     respuesta: [
-      "Mañana es antes de las 12, tarde de 12 a 18 y noche desde las 18. El día y el turno se calculan con la hora del dispositivo con que miras el reporte.",
+      "Mañana es antes de las 12:00, tarde de 12:00 a 18:00 y noche desde las 18:00. El día y el turno se calculan con la hora del dispositivo con que miras el reporte.",
     ],
     palabrasClave: ["turno", "mañana", "tarde", "noche", "horario", "zona horaria"],
   },
