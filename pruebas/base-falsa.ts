@@ -67,6 +67,10 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     price: null,
     customerId: null,
     memberId: null,
+    manageTokenHash: null,
+    canceladaPor: null,
+    canceladaEn: null,
+    reminderSentAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
@@ -91,6 +95,7 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
   visitService: () => ({ serviceId: null, memberId: null, byOwner: false }),
   visitPayment: () => ({ createdAt: new Date() }),
   workSchedule: () => ({ memberId: null, active: true }),
+  timeBlock: () => ({ memberId: null, motivo: null, createdById: null, createdAt: new Date() }),
 }
 
 /** Campos `@unique` (además de `id`) que la base hace respetar. */
@@ -112,6 +117,7 @@ function tablasVacias(): Tablas {
     visitService: [],
     visitPayment: [],
     workSchedule: [],
+    timeBlock: [],
   }
 }
 
@@ -253,6 +259,7 @@ export function crearBaseFalsa() {
     visitService: delegado("visitService"),
     visitPayment: delegado("visitPayment"),
     workSchedule: delegado("workSchedule"),
+    timeBlock: delegado("timeBlock"),
     /**
      * Sólo para candados (`SELECT … FOR UPDATE`): en memoria no hay
      * concurrencia que ordenar, así que no devuelve nada. Queda registrado

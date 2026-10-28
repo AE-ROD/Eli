@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { citasPorHora, columnasDeSolape, rangoDeHoras, tramoDeCita, tramosDeFranjas } from "./_disposicion"
+import { citasPorHora, columnasDeSolape, rangoDeHoras, recortarAHoras, tramoDeCita, tramoEnElDia, tramosDeFranjas } from "./_disposicion"
 
 const h = (hora: number, minutos = 0) => hora * 60 + minutos
 
@@ -158,5 +158,35 @@ describe("columnasDeSolape", () => {
     const tramos = Array.from({ length: 6 }, (_, i) => ({ id: `c${i}`, inicioMin: h(9 + (i % 3)), finMin: h(10 + (i % 3)) }))
     const mapa = columnasDeSolape(tramos)
     expect(mapa.size).toBe(6)
+  })
+})
+
+describe("tramoEnElDia", () => {
+  const dia20 = new Date(2026, 9, 20)
+
+  it("un bloqueo dentro del día: sus minutos", () => {
+    expect(tramoEnElDia({ startTime: local(13), endTime: local(14) }, dia20)).toEqual({ inicioMin: h(13), finMin: h(14) })
+  })
+
+  it("uno que viene del día anterior empieza a la medianoche; uno que sigue al otro día llega al final", () => {
+    expect(tramoEnElDia({ startTime: local(22, 0, 19), endTime: local(2) }, dia20)).toEqual({ inicioMin: 0, finMin: h(2) })
+    expect(tramoEnElDia({ startTime: local(22), endTime: local(2, 0, 21) }, dia20)).toEqual({ inicioMin: h(22), finMin: 24 * 60 })
+    expect(tramoEnElDia({ startTime: local(9, 0, 19), endTime: local(9, 0, 22) }, dia20)).toEqual({ inicioMin: 0, finMin: 24 * 60 })
+  })
+
+  it("no toca el día: null; terminar justo a la medianoche no es caer en el día siguiente", () => {
+    expect(tramoEnElDia({ startTime: local(10, 0, 21), endTime: local(11, 0, 21) }, dia20)).toBeNull()
+    expect(tramoEnElDia({ startTime: local(22, 0, 19), endTime: local(0) }, dia20)).toBeNull()
+  })
+})
+
+describe("recortarAHoras", () => {
+  it("un bloqueo de día entero se recorta a las horas que se dibujan", () => {
+    expect(recortarAHoras({ inicioMin: 0, finMin: 24 * 60 }, 8, 20)).toEqual({ inicioMin: h(8), finMin: h(20) })
+  })
+
+  it("lo que queda fuera de las horas dibujadas: null", () => {
+    expect(recortarAHoras({ inicioMin: h(5), finMin: h(7) }, 8, 20)).toBeNull()
+    expect(recortarAHoras({ inicioMin: h(20), finMin: h(22) }, 8, 20)).toBeNull()
   })
 })

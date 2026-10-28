@@ -321,6 +321,81 @@ describe("PUT /api/citas/[id]: mover una cita", () => {
     })
   })
 
+  describe("bloqueos y 'no vino'", () => {
+    const conBloqueos = (...bloqueos: Record<string, unknown>[]) =>
+      base.reiniciar({ ...base.volcado(), timeBlock: bloqueos })
+    const bloqueo = (id: string, memberId: string | null, fecha: string, inicio: string, fin: string, datos = {}) => ({
+      id,
+      businessId: NEGOCIO,
+      memberId,
+      startTime: santiago(fecha, inicio),
+      endTime: santiago(fecha, fin),
+      ...datos,
+    })
+
+    it("avisa si cae en un bloqueo del profesional, con su motivo", async () => {
+      conBloqueos(bloqueo("b-carla", "m-carla", "2026-10-20", "13:00", "14:00", { motivo: "Almuerzo" }))
+
+      const res = await put(sesiones.dueña, "cita-carla", mover("2026-10-20", "13:30", "14:00"))
+
+      expect(res.status).toBe(409)
+      expect((await res.json()).advertencias).toEqual([
+        { tipo: "bloqueo", mensaje: "Carla Profesional tiene bloqueado de 13:00 a 14:00 (Almuerzo)." },
+      ])
+    })
+
+    it("avisa si cae en un bloqueo de todo el negocio, aunque la cita no tenga profesional", async () => {
+      conBloqueos(bloqueo("b-negocio", null, "2026-10-20", "12:00", "18:00", { motivo: "Capacitación" }))
+
+      const res = await put(sesiones.dueña, "cita-carla", mover("2026-10-20", "12:00", "12:30", { memberId: "" }))
+
+      expect(res.status).toBe(409)
+      expect((await res.json()).advertencias).toEqual([
+        { tipo: "bloqueo", mensaje: "El negocio tiene bloqueado de 12:00 a 18:00 (Capacitación)." },
+      ])
+    })
+
+    it("con el segundo envío confirmado, guarda igual sobre un bloqueo", async () => {
+      conBloqueos(bloqueo("b-carla", "m-carla", "2026-10-20", "13:00", "14:00"))
+
+      const res = await put(sesiones.dueña, "cita-carla", mover("2026-10-20", "13:00", "13:30", { confirmarAdvertencias: true }))
+
+      expect(res.status).toBe(200)
+      expect(guardada("cita-carla").startTime).toEqual(santiago("2026-10-20", "13:00"))
+    })
+
+    it("el bloqueo de otro profesional no la toca", async () => {
+      conBloqueos(bloqueo("b-pedro", "m-pedro", "2026-10-20", "13:00", "14:00"))
+
+      const res = await put(sesiones.dueña, "cita-carla", mover("2026-10-20", "13:00", "13:30"))
+
+      expect(res.status).toBe(200)
+    })
+
+    it("el bloqueo de otro negocio no la toca, aunque diga el mismo profesional", async () => {
+      // Dato sucio a propósito: sólo el `businessId` lo separa.
+      conBloqueos({ ...bloqueo("b-ajeno", "m-carla", "2026-10-20", "13:00", "14:00"), businessId: OTRO_NEGOCIO })
+
+      const res = await put(sesiones.dueña, "cita-carla", mover("2026-10-20", "13:00", "13:30"))
+
+      expect(res.status).toBe(200)
+    })
+
+    it("una cita de alguien que no vino libera el horario: no choca", async () => {
+      base.reiniciar({
+        ...base.volcado(),
+        appointment: [
+          ...base.volcado().appointment,
+          cita("cita-no-vino", "m-carla", "2026-10-21", "16:00", "17:00", { status: "no-asistio" }),
+        ],
+      })
+
+      const res = await put(sesiones.dueña, "cita-carla", mover("2026-10-21", "16:00", "17:00"))
+
+      expect(res.status).toBe(200)
+    })
+  })
+
   describe("qué citas se mueven", () => {
     it.each(["cita-carla-cancelada", "cita-completada"])("%s no se mueve: 409", async (id) => {
       const antes = base.volcado()

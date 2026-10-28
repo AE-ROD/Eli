@@ -165,6 +165,11 @@ lib/                          Lógica compartida, cada archivo con su test al la
   correos-de-prueba.ts        Qué correo del ciclo de prueba le toca hoy a un negocio
   recordatorios.ts            Qué cita recibe el recordatorio "es mañana" (en la zona
                               del negocio) y con qué fecha y hora
+  ocupacion.ts                Qué ocupa el horario de un profesional o del negocio: citas
+                              activas y bloqueos. La base se le pasa (sirve en un `tx`)
+  mover-cita.ts               Las advertencias de agendar en el panel: choque, bloqueo,
+                              fuera de horario (cálculo puro)
+  advertencias-de-agenda.ts   Lee y arma esas advertencias al crear o mover una cita
   baja-de-correos.ts          El token firmado del enlace "Dejar de recibir estos correos"
   cron.ts                     La autorización de los crons (CRON_SECRET)
   enviar-correo-de-prueba.ts  (servidor) Manda un correo del ciclo de prueba, con su

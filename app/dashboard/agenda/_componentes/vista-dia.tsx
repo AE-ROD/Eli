@@ -3,8 +3,8 @@
 import { TarjetaCita, type CitaEnTarjeta } from "@/components/panel/tarjeta-cita"
 import { formatearHora, duracionParaMostrar } from "@/lib/fechas"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
-import { nombreDeCliente, type Cita } from "../_datos"
-import { citasPorHora, rangoDeHoras, tramoDeCita, tramosDeFranjas } from "../_disposicion"
+import { aQuienBloquea, nombreDeCliente, type Bloqueo, type Cita } from "../_datos"
+import { citasPorHora, rangoDeHoras, recortarAHoras, tramoDeCita, tramoEnElDia, tramosDeFranjas } from "../_disposicion"
 
 const estadosValidos = ["pendiente", "confirmada", "en-progreso", "completada", "cancelada"] as const
 
@@ -29,7 +29,10 @@ interface PropsDeVistaDia {
   citas: Cita[]
   /** El horario de atención del negocio, de toda la semana: amplía las horas que se dibujan. */
   horario: FranjaDelDia[]
+  /** Bloqueos de horario: cada uno aparece en la hora en que empieza (o en la primera que se ve). */
+  bloqueos: Bloqueo[]
   onSeleccionar: (cita: Cita) => void
+  onSeleccionarBloqueo: (bloqueo: Bloqueo) => void
 }
 
 /**
@@ -39,7 +42,7 @@ interface PropsDeVistaDia {
  * dentro de la tarjeta; el relleno deja lugar al anillo del foco de las
  * tarjetas, que esa caja recortaría.
  */
-export function VistaDia({ fecha, citas, horario, onSeleccionar }: PropsDeVistaDia) {
+export function VistaDia({ fecha, citas, horario, bloqueos, onSeleccionar, onSeleccionarBloqueo }: PropsDeVistaDia) {
   const citasDelDia = citas.filter((cita) =>
     new Date(cita.startTime).toDateString() === fecha.toDateString()
   )
@@ -47,18 +50,49 @@ export function VistaDia({ fecha, citas, horario, onSeleccionar }: PropsDeVistaD
   const { desde, hasta } = rangoDeHoras([...tramosDeFranjas(franjasDelDia), ...citasDelDia.map(tramoDeCita)])
   const horas = citasPorHora(citasDelDia, (cita) => tramoDeCita(cita).inicioMin, desde, hasta)
 
+  // Cada bloqueo, recortado al día y a las horas que se muestran.
+  const bloqueosDelDia = bloqueos.flatMap((bloqueo) => {
+    const enElDia = tramoEnElDia(bloqueo, fecha)
+    const visible = enElDia && recortarAHoras(enElDia, desde, hasta)
+    return visible ? [{ bloqueo, ...visible }] : []
+  })
+
   return (
     <ol className="max-h-[calc(100dvh-17.5rem)] min-h-96 space-y-2 overflow-y-auto px-3 pt-2.5 pb-4 sm:px-5 sm:pb-5">
       {horas.map(({ hora, citas: citasEnHora }) => {
         const etiqueta = `${String(hora).padStart(2, "0")}:00`
+        const empiezanAca = bloqueosDelDia.filter(({ inicioMin }) => Math.floor(inicioMin / 60) === hora)
+        const cubierta = bloqueosDelDia.some(({ inicioMin, finMin }) => inicioMin < (hora + 1) * 60 && finMin > hora * 60)
         return (
           <li key={hora} className="flex items-start gap-3">
             <span className="w-12 shrink-0 pt-3.5 text-right text-xs text-texto-2 tabular-nums">{etiqueta}</span>
-            {citasEnHora.length > 0 ? (
+            {citasEnHora.length > 0 || empiezanAca.length > 0 ? (
               <div className="min-w-0 flex-1 space-y-2">
+                {empiezanAca.map(({ bloqueo }) => (
+                  <button
+                    key={bloqueo.id}
+                    type="button"
+                    onClick={() => onSeleccionarBloqueo(bloqueo)}
+                    className="flex min-h-12 w-full items-center justify-between gap-3 rounded-[20px] border border-dashed border-texto-2/40 bg-borde/60 px-4 py-2 text-left text-sm text-texto-2 squircle anillo-foco"
+                  >
+                    <span className="min-w-0 break-words">
+                      <span className="font-medium">Bloqueado</span>
+                      {` · ${aQuienBloquea(bloqueo)}`}
+                      {bloqueo.motivo && ` · ${bloqueo.motivo}`}
+                    </span>
+                    <span className="shrink-0 text-xs tabular-nums">
+                      {formatearHora(bloqueo.startTime)} – {formatearHora(bloqueo.endTime)}
+                    </span>
+                  </button>
+                ))}
                 {citasEnHora.map((cita) => (
                   <TarjetaCita key={cita.id} cita={paraTarjeta(cita)} compacta onClick={() => onSeleccionar(cita)} />
                 ))}
+              </div>
+            ) : cubierta ? (
+              // Una hora del medio de un bloqueo: gris, sin texto; el bloqueo se lee en su primera hora.
+              <div className="h-12 min-w-0 flex-1 rounded-[20px] bg-borde/60 squircle">
+                <span className="sr-only">Bloqueado</span>
               </div>
             ) : (
               // El hueco no se toca: sólo marca que esa hora está libre.

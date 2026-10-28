@@ -46,6 +46,7 @@ const prismaMock = {
   visit: { findFirst: vi.fn(() => Promise.resolve(null)) },
   business: { findUnique: vi.fn(() => Promise.resolve({ timezone: "America/Santiago" })) },
   workSchedule: { findMany: vi.fn(() => Promise.resolve([])) },
+  timeBlock: { findMany: vi.fn(() => Promise.resolve([])) },
   businessMember: { findFirst: vi.fn(() => Promise.resolve(null)) },
 }
 
