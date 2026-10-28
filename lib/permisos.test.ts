@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { coincideConWhere } from "@/pruebas/where-simple"
+import { coincide, type Tablas } from "@/pruebas/consultas-falsas"
 import {
   actorDeSesion,
   mismoNegocio,
@@ -15,6 +16,9 @@ import {
   puedeVerLiquidacionDe,
   puedeVerTodaLaAgenda,
   puedeEditarHorarioDe,
+  puedeGestionarBloqueoDe,
+  puedeDefinirServiciosDe,
+  puedeEditarPlazoDeCambios,
   puedeVerTodoElTablero,
   puedeCobrar,
   puedeAsignarLineasAOtros,
@@ -26,6 +30,8 @@ import {
   puedeUsarChats,
   puedeEditarDatosDeCliente,
   puedeBorrarCliente,
+  puedeImportarExportarClientes,
+  puedeEditarPaginaDelNegocio,
   memberIdParaCita,
   profesionalParaLinea,
   whereDeAgenda,
@@ -33,6 +39,7 @@ import {
   whereDeAtenciones,
   whereDeLineas,
   whereDePagos,
+  whereDeBloqueos,
   type Actor,
   type Rol,
 } from "./permisos"
@@ -108,6 +115,9 @@ describe("jerarquía de roles", () => {
     // El profesional ve y crea clientes, y escribe sus notas; los datos y el borrado no (PRODUCTO.md, sección 10).
     ["editar los datos de un cliente", puedeEditarDatosDeCliente, true, true, false],
     ["borrar un cliente", puedeBorrarCliente, true, true, false],
+    ["importar y exportar clientes en CSV", puedeImportarExportarClientes, true, true, false],
+    // La página pública es la cara del negocio: el profesional la ve, no la edita.
+    ["editar la página pública del negocio", puedeEditarPaginaDelNegocio, true, true, false],
   ])("%s — dueño/encargado/profesional", (_que, puede, esperaDueño, esperaEncargado, esperaProfesional) => {
     expect(puede(dueño)).toBe(esperaDueño)
     expect(puede(encargado)).toBe(esperaEncargado)
@@ -279,6 +289,8 @@ describe("falla cerrado", () => {
     expect(puedeUsarChats(null)).toBe(false)
     expect(puedeEditarDatosDeCliente(null)).toBe(false)
     expect(puedeBorrarCliente(null)).toBe(false)
+    expect(puedeImportarExportarClientes(null)).toBe(false)
+    expect(puedeEditarPaginaDelNegocio(null)).toBe(false)
   })
 
   it("un rol desconocido no gestiona la suscripción ni asigna citas a otros", () => {
@@ -288,6 +300,7 @@ describe("falla cerrado", () => {
     expect(puedeGestionarSuscripcion(desconocido)).toBe(false)
     expect(veLaListaDeInicio(desconocido)).toBe(false)
     expect(puedeAsignarCitasAOtros(desconocido)).toBe(false)
+    expect(puedeEditarPaginaDelNegocio(desconocido)).toBe(false)
     // El panel del día es la vista restringida: un rol desconocido cae ahí.
     expect(veElPanelDeSuDia(desconocido)).toBe(true)
   })
@@ -518,6 +531,104 @@ describe("tablero de atenciones", () => {
       expect(whereDePagos(dueño)).toEqual({ AND: [{ visit: { is: { businessId: NEGOCIO } } }, {}] })
       expect(whereDePagos(encargado)).toEqual({ AND: [{ visit: { is: { businessId: NEGOCIO } } }, {}] })
       expect(whereDePagos(profesional)).toEqual({ AND: [NADA, {}] })
+    })
+  })
+})
+
+describe("servicios que hace cada profesional", () => {
+  it("dueño y encargado los definen para cualquiera del negocio", () => {
+    for (const quien of [dueño, encargado]) {
+      expect(puedeDefinirServiciosDe(quien, miembro)).toBe(true)
+      expect(puedeDefinirServiciosDe(quien, yoMismo)).toBe(true)
+    }
+  })
+
+  it("el profesional no los define, ni los suyos", () => {
+    expect(puedeDefinirServiciosDe(profesional, yoMismo)).toBe(false)
+    expect(puedeDefinirServiciosDe(profesional, miembro)).toBe(false)
+  })
+
+  it("nadie los define para un miembro de otro negocio", () => {
+    expect(puedeDefinirServiciosDe(dueño, ajeno)).toBe(false)
+    expect(puedeDefinirServiciosDe(encargado, ajeno)).toBe(false)
+  })
+
+  it("falla cerrado sin actor", () => {
+    expect(puedeDefinirServiciosDe(null, miembro)).toBe(false)
+  })
+})
+
+describe("plazo para cancelar o reagendar", () => {
+  it("dueño y encargado; el profesional no, y sin actor tampoco", () => {
+    expect(puedeEditarPlazoDeCambios(dueño)).toBe(true)
+    expect(puedeEditarPlazoDeCambios(encargado)).toBe(true)
+    expect(puedeEditarPlazoDeCambios(profesional)).toBe(false)
+    expect(puedeEditarPlazoDeCambios(null)).toBe(false)
+  })
+})
+
+describe("bloqueos de horario", () => {
+  it("dueño y encargado bloquean a cualquiera del negocio y a todo el negocio", () => {
+    for (const quien of [dueño, encargado]) {
+      expect(puedeGestionarBloqueoDe(quien, miembro)).toBe(true)
+      expect(puedeGestionarBloqueoDe(quien, yoMismo)).toBe(true)
+      expect(puedeGestionarBloqueoDe(quien, null)).toBe(true)
+    }
+  })
+
+  it("el profesional sólo bloquea su propia agenda: ni la de un colega ni la del negocio", () => {
+    expect(puedeGestionarBloqueoDe(profesional, yoMismo)).toBe(true)
+    expect(puedeGestionarBloqueoDe(profesional, miembro)).toBe(false)
+    expect(puedeGestionarBloqueoDe(profesional, null)).toBe(false)
+  })
+
+  it("nadie bloquea a un miembro de otro negocio", () => {
+    expect(puedeGestionarBloqueoDe(dueño, ajeno)).toBe(false)
+    expect(puedeGestionarBloqueoDe(encargado, ajeno)).toBe(false)
+    expect(puedeGestionarBloqueoDe(actor("worker", "colega"), ajeno)).toBe(false)
+  })
+
+  it("falla cerrado: sin actor, o profesional sin memberId, no bloquea nada", () => {
+    expect(puedeGestionarBloqueoDe(null, null)).toBe(false)
+    expect(puedeGestionarBloqueoDe(null, yoMismo)).toBe(false)
+    const suelto = actor("worker", null)
+    expect(puedeGestionarBloqueoDe(suelto, null)).toBe(false)
+    expect(puedeGestionarBloqueoDe(suelto, yoMismo)).toBe(false)
+  })
+
+  describe("whereDeBloqueos", () => {
+    const bloqueos = [
+      { id: "b-mio", businessId: NEGOCIO, memberId: "yo" },
+      { id: "b-colega", businessId: NEGOCIO, memberId: "colega" },
+      { id: "b-negocio", businessId: NEGOCIO, memberId: null },
+      { id: "b-ajeno", businessId: OTRO_NEGOCIO, memberId: "yo" },
+      { id: "b-ajeno-negocio", businessId: OTRO_NEGOCIO, memberId: null },
+    ]
+    const tablas = { timeBlock: bloqueos } as unknown as Tablas
+    const visibles = (quien: Actor | null, extra = {}) =>
+      bloqueos.filter((b) => coincide(tablas, "timeBlock", b, whereDeBloqueos(quien, extra))).map((b) => b.id)
+
+    it("dueño y encargado ven todos los del negocio, ninguno de otro", () => {
+      expect(visibles(dueño)).toEqual(["b-mio", "b-colega", "b-negocio"])
+      expect(visibles(encargado)).toEqual(["b-mio", "b-colega", "b-negocio"])
+    })
+
+    it("el profesional ve los suyos y los de todo el negocio, no los de un colega", () => {
+      expect(visibles(profesional)).toEqual(["b-mio", "b-negocio"])
+    })
+
+    it("un profesional sin memberId sólo ve los de todo el negocio", () => {
+      expect(visibles(actor("worker", null))).toEqual(["b-negocio"])
+    })
+
+    it("sin actor no ve nada", () => {
+      expect(visibles(null)).toEqual([])
+    })
+
+    it("lo que agrega el endpoint no anula el filtro (ni con OR, ni con businessId)", () => {
+      expect(visibles(profesional, { OR: [{ memberId: "colega" }] })).toEqual([])
+      expect(visibles(dueño, { businessId: OTRO_NEGOCIO })).toEqual([])
+      expect(visibles(profesional, { id: "b-colega" })).toEqual([])
     })
   })
 })

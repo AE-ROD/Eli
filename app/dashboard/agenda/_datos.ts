@@ -137,14 +137,17 @@ export interface DatosDeMoverCita {
 }
 
 /**
- * Mover una cita: guardada, o las advertencias del servidor (choque con otra
- * cita del profesional, fuera de su horario) para que quien mueve decida.
- * `confirmar` es el segundo envío, después de verlas: guarda igual.
+ * Crear o mover una cita: guardada, o las advertencias del servidor (choque
+ * con otra cita del profesional, un bloqueo, fuera de su horario) para que
+ * quien agenda decida. `confirmar` es el segundo envío, después de verlas:
+ * guarda igual.
  */
-export type ResultadoDeMover =
+export type ResultadoConAdvertencias =
   | { tipo: "guardada" }
   | { tipo: "advertencias"; advertencias: Advertencia[] }
   | { tipo: "error"; error: string }
+
+export type ResultadoDeMover = ResultadoConAdvertencias
 
 function sonAdvertencias(valor: unknown): valor is Advertencia[] {
   return (
@@ -177,6 +180,11 @@ export async function moverCita(
       ...(opciones.confirmar && { confirmarAdvertencias: true }),
     })
   )
+  return conAdvertencias(resultado)
+}
+
+/** Lee la respuesta de crear o mover: guardada, advertencias (409 con su lista) o error. */
+function conAdvertencias(resultado: Awaited<ReturnType<typeof pedirConCuerpo>>): ResultadoConAdvertencias {
   if (resultado.ok) return { tipo: "guardada" }
 
   const advertencias = (resultado.cuerpo as { advertencias?: unknown } | null)?.advertencias
@@ -191,14 +199,26 @@ export async function leerHorarioDeAtencion(): Promise<Resultado<FranjaDelDia[]>
   return pedir<FranjaDelDia[]>("/api/citas/horario-de-atencion", "No se pudo cargar el horario de atención")
 }
 
-export async function crearCita(datos: DatosDeNuevaCita): Promise<Resultado> {
+/**
+ * Crear una cita. Si choca con otra del profesional, cae en un bloqueo o
+ * queda fuera del horario, el servidor no la guarda y devuelve las
+ * advertencias; `confirmar` es el segundo envío, que guarda igual (como al
+ * mover).
+ */
+export async function crearCita(
+  datos: DatosDeNuevaCita,
+  opciones: { confirmar: boolean } = { confirmar: false }
+): Promise<ResultadoConAdvertencias> {
   const precio = precioDeLaCita(datos.precio)
-  if (!precio.ok) return precio
+  if (!precio.ok) return { tipo: "error", error: precio.error }
 
   const inicio = new Date(`${datos.fecha}T${datos.horaInicio}:00`)
   const fin = new Date(`${datos.fecha}T${datos.horaFin}:00`)
+  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) {
+    return { tipo: "error", error: "La fecha o la hora no son válidas" }
+  }
 
-  return pedir(
+  const resultado = await pedirConCuerpo(
     "/api/citas",
     "No se pudo crear la cita",
     conJson("POST", {
@@ -209,8 +229,78 @@ export async function crearCita(datos: DatosDeNuevaCita): Promise<Resultado> {
       price: precio.datos,
       notes: datos.notas || undefined,
       memberId: datos.memberId || null,
+      ...(opciones.confirmar && { confirmarAdvertencias: true }),
     })
   )
+  return conAdvertencias(resultado)
+}
+
+// ─── Bloqueos de horario ─────────────────────────────────────────────────────
+
+/** Un bloqueo de horario como lo devuelve el servidor. `memberId` null: todo el negocio. */
+export interface Bloqueo {
+  id: string
+  memberId: string | null
+  startTime: string
+  endTime: string
+  motivo: string | null
+  member: { user: { name: string | null } | null } | null
+}
+
+/** De quién es el bloqueo, para leerlo: el profesional o "Todo el negocio". */
+export function aQuienBloquea(bloqueo: Bloqueo): string {
+  if (!bloqueo.memberId) return "Todo el negocio"
+  return bloqueo.member?.user?.name?.trim() || "Profesional"
+}
+
+/** Los días que se están mirando, para pedir los bloqueos que los tocan. */
+function diasVisibles(fecha: Date, modo: UnidadDeTiempo): string {
+  if (modo === "dia") return `desde=${comoTexto(fecha)}&hasta=${comoTexto(fecha)}`
+  return rangoVisible(fecha, modo)
+}
+
+export async function leerBloqueos(fecha: Date, modo: UnidadDeTiempo): Promise<Resultado<Bloqueo[]>> {
+  return pedir<Bloqueo[]>(`/api/bloqueos?${diasVisibles(fecha, modo)}`, "No se pudieron cargar los bloqueos")
+}
+
+/** El borrador de un bloqueo: de quién (vacío: todo el negocio), desde y hasta en hora local, y el motivo. */
+export interface DatosDeNuevoBloqueo {
+  memberId: string
+  fechaDesde: string
+  horaDesde: string
+  fechaHasta: string
+  horaHasta: string
+  motivo: string
+}
+
+/** Un bloqueo vacío para el día `dia`, de 13:00 a 14:00, a nombre de `memberId` ("" es todo el negocio). */
+export function bloqueoEnBlanco(dia: Date, memberId: string): DatosDeNuevoBloqueo {
+  const fecha = comoTexto(dia)
+  return { memberId, fechaDesde: fecha, horaDesde: "13:00", fechaHasta: fecha, horaHasta: "14:00", motivo: "" }
+}
+
+export async function crearBloqueo(datos: DatosDeNuevoBloqueo): Promise<Resultado> {
+  const inicio = new Date(`${datos.fechaDesde}T${datos.horaDesde}:00`)
+  const fin = new Date(`${datos.fechaHasta}T${datos.horaHasta}:00`)
+  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) {
+    return { ok: false, error: "La fecha o la hora no son válidas" }
+  }
+  if (fin <= inicio) return { ok: false, error: "El bloqueo tiene que terminar después de empezar" }
+
+  return pedir(
+    "/api/bloqueos",
+    "No se pudo bloquear el horario",
+    conJson("POST", {
+      memberId: datos.memberId || null,
+      startTime: inicio.toISOString(),
+      endTime: fin.toISOString(),
+      ...(datos.motivo.trim() && { motivo: datos.motivo.trim() }),
+    })
+  )
+}
+
+export async function quitarBloqueo(id: string): Promise<Resultado> {
+  return pedir(`/api/bloqueos/${encodeURIComponent(id)}`, "No se pudo quitar el bloqueo", { method: "DELETE" })
 }
 
 /** El equipo, para el selector de profesional. Sólo lo pide quien puede asignar. */

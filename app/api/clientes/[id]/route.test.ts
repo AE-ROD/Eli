@@ -194,7 +194,7 @@ describe("GET /api/clientes/[id]", () => {
     expect(JSON.stringify(cliente)).not.toMatch(/Nota interna|Prefiere la tarde|Reservé por la web/)
   })
 
-  it("del cliente se sigue devolviendo lo mismo que antes del `select`: sólo cambió el historial", async () => {
+  it("del cliente se devuelve lo de antes del `select` y el consentimiento de WhatsApp: sólo cambió el historial", async () => {
     const { GET } = await import("./route")
 
     mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
@@ -214,6 +214,8 @@ describe("GET /api/clientes/[id]", () => {
       "phone",
       "tags",
       "updatedAt",
+      "whatsappConsentAt",
+      "whatsappConsentSource",
     ])
     expect(cliente).toMatchObject({ id: "c-maria", name: "María", lastName: "González", businessId: NEGOCIO })
   })
@@ -684,5 +686,80 @@ describe("PUT /api/clientes/[id] — largos y tipos", () => {
     const res = await PUT(pedido(URL_DE_MARIA, { notes: "a".repeat(2001) }), conId("c-maria"))
 
     expect(res.status).toBe(400)
+  })
+})
+
+describe("PUT /api/clientes/[id] — teléfono en E.164 y consentimiento de WhatsApp", () => {
+  const maria = () => base.buscar("customer", { id: "c-maria" })[0]
+
+  it("guarda el teléfono en E.164", async () => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const res = await PUT(pedido(URL_DE_MARIA, { phone: "9 8765 4321" }), conId("c-maria"))
+
+    expect(res.status).toBe(200)
+    expect(maria().phone).toBe("+56987654321")
+  })
+
+  it("un teléfono vacío lo borra", async () => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    await PUT(pedido(URL_DE_MARIA, { phone: "" }), conId("c-maria"))
+
+    expect(maria().phone).toBeNull()
+  })
+
+  it("un teléfono ilegible es 400 con un mensaje claro y la base queda igual", async () => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const antes = base.volcado()
+
+    const res = await PUT(pedido(URL_DE_MARIA, { phone: "1234" }), conId("c-maria"))
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/No pudimos leer el teléfono/)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("marcar el consentimiento registra cuándo y que fue desde el panel; desmarcarlo lo borra", async () => {
+    const { PUT } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    await PUT(pedido(URL_DE_MARIA, { whatsappConsent: true }), conId("c-maria"))
+    expect(maria().whatsappConsentSource).toBe("panel")
+    expect(maria().whatsappConsentAt).toBeInstanceOf(Date)
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    await PUT(pedido(URL_DE_MARIA, { whatsappConsent: false }), conId("c-maria"))
+    expect(maria().whatsappConsentAt).toBeNull()
+    expect(maria().whatsappConsentSource).toBeNull()
+  })
+
+  it("volver a mandarlo marcado no pisa el consentimiento que ya había (ni su fecha ni su origen)", async () => {
+    const { PUT } = await import("./route")
+    const original = new Date("2026-01-01T12:00:00.000Z")
+    await base.prisma.customer.updateMany({
+      where: { id: "c-maria" },
+      data: { whatsappConsentAt: original, whatsappConsentSource: "reserva-publica" },
+    })
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    await PUT(pedido(URL_DE_MARIA, { name: "María", whatsappConsent: true }), conId("c-maria"))
+
+    expect(maria().whatsappConsentAt).toEqual(original)
+    expect(maria().whatsappConsentSource).toBe("reserva-publica")
+  })
+
+  it("la profesional no cambia el consentimiento: es un dato del cliente, no una nota", async () => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+    const antes = base.volcado()
+
+    const res = await PUT(pedido(URL_DE_MARIA, { whatsappConsent: true }), conId("c-maria"))
+
+    expect(res.status).toBe(401)
+    expect(base.volcado()).toEqual(antes)
   })
 })

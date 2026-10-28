@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { tipoNegocioSchema } from "@/lib/validaciones"
+import { serviciosDeEjemplo } from "@/lib/servicios-de-ejemplo"
 import { verificarLimite } from "@/lib/rate-limit"
 import { generarSlug } from "@/lib/slug"
 import { finDeLaPrueba, generarCodigoInvitacion } from "@/lib/prueba"
@@ -82,6 +83,9 @@ export async function POST(request: NextRequest) {
           pruebaTerminaEl: finDeLaPrueba(ahora),
           codigoInvitacion: generarCodigoInvitacion(),
           invitadoPorId: invitadoPor,
+          // Los servicios de ejemplo del rubro, como en el registro con correo
+          // (`/api/auth/registro`), en la misma escritura anidada.
+          services: { create: serviciosDeEjemplo(tipoNegocio) },
         },
         // Lo único que necesita quien llama. El registro completo trae el
         // `invitadoPorId` (el id de otro negocio), el código de invitación y

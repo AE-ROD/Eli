@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useId, useRef, type ReactNode } from "react"
+import { useEffect, useId, useRef, useState, type ReactNode } from "react"
 import { motion } from "framer-motion"
 import { X } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
@@ -10,6 +10,7 @@ import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { formatearMonto } from "@/lib/dinero"
 import { formatearHora, duracionParaMostrar } from "@/lib/fechas"
 import { sePuedeMover } from "@/lib/mover-cita"
+import { puedeMarcarseNoVino } from "@/lib/campos-del-panel"
 import { cn } from "@/lib/utils"
 import { nombreDeCliente, type Cita } from "../_datos"
 import { estiloDeEstado } from "./estados-de-cita"
@@ -44,6 +45,8 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover }: PropsD
   const titulo = useRef<HTMLHeadingElement>(null)
   const abridor = useRef<HTMLElement | null>(null)
   const ultimaVista = useRef({ id: cita.id, estado: cita.status })
+  // La hora a la que se abrió el panel: con ella se decide si ya pasó la de la cita.
+  const [abiertoEn] = useState(() => Date.now())
   const estado = estiloDeEstado(cita.status)
   const duracion = duracionParaMostrar(cita.startTime, cita.endTime)
 
@@ -69,9 +72,13 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover }: PropsD
     if (destino?.isConnected) destino.focus({ preventScroll: true })
   }
 
-  const puedeCompletarse = cita.status !== "completada" && cita.status !== "cancelada"
-  const puedeCancelarse = cita.status !== "cancelada"
+  const cerrada = cita.status === "cancelada" || cita.status === "no-asistio"
+  const puedeCompletarse = cita.status !== "completada" && !cerrada
+  const puedeCancelarse = !cerrada
   const puedeMoverse = sePuedeMover(cita.status)
+  // "No vino" cuando ya pasó la hora de empezar: antes, si avisó, se cancela.
+  // El servidor lo vuelve a verificar (y que no haya llegado al Tablero).
+  const puedeNoVenir = puedeMarcarseNoVino(cita.status) && new Date(cita.startTime).getTime() <= abiertoEn
 
   return (
     <motion.aside
@@ -134,7 +141,7 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover }: PropsD
         )}
       </div>
 
-      {(puedeCompletarse || puedeCancelarse || puedeMoverse) && (
+      {(puedeCompletarse || puedeCancelarse || puedeMoverse || puedeNoVenir) && (
         <div className="grid gap-2 px-1 pb-1">
           {puedeMoverse && (
             <Boton tamano="sm" variante="secundario" className="w-full" onClick={() => onMover(cita)}>
@@ -144,6 +151,11 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover }: PropsD
           {puedeCompletarse && (
             <Boton tamano="sm" className="w-full" onClick={() => onCambiarEstado(cita.id, "completada")}>
               Marcar completada
+            </Boton>
+          )}
+          {puedeNoVenir && (
+            <Boton tamano="sm" variante="secundario" className="w-full" onClick={() => onCambiarEstado(cita.id, "no-asistio")}>
+              No vino
             </Boton>
           )}
           {puedeCancelarse && (

@@ -17,7 +17,8 @@ interface PropsDeModalNuevoCliente {
    * y no en la página: mientras el modal está abierto, la página queda tapada.
    */
   aviso: string
-  onCambiarCampo: (campo: keyof DatosDeNuevoCliente, valor: string) => void
+  onCambiarCampo: (campo: "nombre" | "email" | "telefono", valor: string) => void
+  onCambiarWhatsapp: (acepta: boolean) => void
   onSubmit: (e: React.SyntheticEvent<HTMLFormElement>) => void
   onCerrar: () => void
 }
@@ -35,6 +36,7 @@ export function ModalNuevoCliente({
   guardando,
   aviso,
   onCambiarCampo,
+  onCambiarWhatsapp,
   onSubmit,
   onCerrar,
 }: PropsDeModalNuevoCliente) {
@@ -67,6 +69,17 @@ export function ModalNuevoCliente({
           onChange={(e) => onCambiarCampo("telefono", e.target.value)}
           icono={<Phone className="size-4" aria-hidden="true" strokeWidth={1.75} />}
         />
+
+        {/* Casilla nativa: el lector de pantalla la anuncia como tal y la etiqueta la marca. */}
+        <label className="flex cursor-pointer items-start gap-3 text-sm text-navy">
+          <input
+            type="checkbox"
+            checked={form.aceptaWhatsapp}
+            onChange={(e) => onCambiarWhatsapp(e.target.checked)}
+            className="anillo-foco mt-0.5 size-4 shrink-0 cursor-pointer accent-navy"
+          />
+          <span>Acepta recibir mensajes por WhatsApp</span>
+        </label>
 
         {aviso && <Aviso>{aviso}</Aviso>}
 

@@ -6,8 +6,8 @@ import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import { cn } from "@/lib/utils"
 import { diasSemana } from "./controles-de-agenda"
 import { estiloDeEstado } from "./estados-de-cita"
-import { nombreDeCliente, type Cita } from "../_datos"
-import { columnasDeSolape, rangoDeHoras, tramoDeCita, tramosDeFranjas } from "../_disposicion"
+import { aQuienBloquea, nombreDeCliente, type Bloqueo, type Cita } from "../_datos"
+import { columnasDeSolape, rangoDeHoras, recortarAHoras, tramoDeCita, tramoEnElDia, tramosDeFranjas } from "../_disposicion"
 
 const ALTURA_HORA = 64 // px por hora: la clase `h-16` de cada franja
 const ANCHO_DE_LAS_HORAS = 56 // px de la columna de las horas: la clase `w-14`
@@ -25,7 +25,10 @@ interface PropsDeVistaSemana {
   citas: Cita[]
   /** El horario de atención del negocio, de toda la semana: amplía las horas que se dibujan. */
   horario: FranjaDelDia[]
+  /** Bloqueos de horario del período: franjas grises detrás de las citas. */
+  bloqueos: Bloqueo[]
   onSeleccionar: (cita: Cita) => void
+  onSeleccionarBloqueo: (bloqueo: Bloqueo) => void
 }
 
 /**
@@ -42,7 +45,7 @@ interface PropsDeVistaSemana {
  * del borde: así las esquinas del área que se desplaza siguen la curva de la
  * tarjeta y no asoman.
  */
-export function VistaSemana({ dias, citas, horario, onSeleccionar }: PropsDeVistaSemana) {
+export function VistaSemana({ dias, citas, horario, bloqueos, onSeleccionar, onSeleccionarBloqueo }: PropsDeVistaSemana) {
   const caja = useRef<HTMLDivElement>(null)
   const indiceDeHoy = dias.findIndex(esHoy)
   const primerDia = dias[0]?.toDateString()
@@ -125,6 +128,33 @@ export function VistaSemana({ dias, citas, horario, onSeleccionar }: PropsDeVist
                 {horasDelDia.map((hora) => (
                   <div key={hora} aria-hidden="true" className="h-16 border-b border-borde" />
                 ))}
+
+                {/*
+                  Bloqueos: franjas grises a todo el ancho, detrás de las citas.
+                  Uno de varios días dibuja su pedazo en cada uno, recortado a
+                  las horas que se muestran (no estira la grilla).
+                */}
+                {bloqueos.map((bloqueo) => {
+                  const enElDia = tramoEnElDia(bloqueo, dia)
+                  const visible = enElDia && recortarAHoras(enElDia, desde, hasta)
+                  if (!visible) return null
+                  const arriba = ((visible.inicioMin - desde * 60) / 60) * ALTURA_HORA
+                  const alto = Math.max(((visible.finMin - visible.inicioMin) / 60) * ALTURA_HORA - SEPARACION, ALTURA_MINIMA)
+                  const quien = aQuienBloquea(bloqueo)
+                  return (
+                    <button
+                      key={bloqueo.id}
+                      type="button"
+                      style={{ top: arriba, height: alto, left: 2, right: 2 }}
+                      onClick={() => onSeleccionarBloqueo(bloqueo)}
+                      aria-label={`Bloqueado: ${quien}${bloqueo.motivo ? `, ${bloqueo.motivo}` : ""}, ${diaParaLeer(dia)}, de ${formatearHora(bloqueo.startTime)} a ${formatearHora(bloqueo.endTime)}`}
+                      className="absolute overflow-hidden rounded-[10px] border border-dashed border-texto-2/40 bg-borde/60 px-1.5 py-1 text-left text-texto-2 anillo-foco transition-shadow duration-200 ease-suave hover:shadow-md focus-visible:z-10"
+                    >
+                      <span className="block truncate text-xs font-medium">{bloqueo.motivo || "Bloqueado"}</span>
+                      {alto > 32 && <span className="block truncate text-xs">{quien}</span>}
+                    </button>
+                  )
+                })}
 
                 {/* Citas */}
                 {citasDelDia.map((cita) => {

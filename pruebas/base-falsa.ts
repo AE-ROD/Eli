@@ -43,10 +43,11 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     invitadoPorId: null,
     referidoContabilizadoAt: null,
     extensionPorReferidoAt: null,
+    cancelacionHorasAntes: 24,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
-  businessMember: () => ({ role: "worker", createdAt: new Date() }),
+  businessMember: () => ({ role: "worker", especialidad: null, fotoUrl: null, createdAt: new Date() }),
   customer: () => ({
     lastName: null,
     cedula: null,
@@ -54,6 +55,8 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     phone: null,
     tags: [],
     notes: null,
+    whatsappConsentAt: null,
+    whatsappConsentSource: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
@@ -67,6 +70,10 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     price: null,
     customerId: null,
     memberId: null,
+    manageTokenHash: null,
+    canceladaPor: null,
+    canceladaEn: null,
+    reminderSentAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
@@ -91,10 +98,12 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
   visitService: () => ({ serviceId: null, memberId: null, byOwner: false }),
   visitPayment: () => ({ createdAt: new Date() }),
   workSchedule: () => ({ memberId: null, active: true }),
+  timeBlock: () => ({ memberId: null, motivo: null, createdById: null, createdAt: new Date() }),
+  memberService: () => ({ createdAt: new Date() }),
 }
 
 /** Campos `@unique` (además de `id`) que la base hace respetar. */
-const UNICOS: Partial<Record<NombreDeModelo, string[]>> = { visit: ["appointmentId"] }
+const UNICOS: Partial<Record<NombreDeModelo, string[]>> = { visit: ["appointmentId"], appointment: ["manageTokenHash"] }
 
 function errorDePrisma(code: string, mensaje: string) {
   return new Prisma.PrismaClientKnownRequestError(mensaje, { code, clientVersion: "base-falsa" })
@@ -112,6 +121,8 @@ function tablasVacias(): Tablas {
     visitService: [],
     visitPayment: [],
     workSchedule: [],
+    timeBlock: [],
+    memberService: [],
   }
 }
 
@@ -253,6 +264,8 @@ export function crearBaseFalsa() {
     visitService: delegado("visitService"),
     visitPayment: delegado("visitPayment"),
     workSchedule: delegado("workSchedule"),
+    timeBlock: delegado("timeBlock"),
+    memberService: delegado("memberService"),
     /**
      * Sólo para candados (`SELECT … FOR UPDATE`): en memoria no hay
      * concurrencia que ordenar, así que no devuelve nada. Queda registrado

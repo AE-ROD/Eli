@@ -4,7 +4,8 @@
  * (`components/panel/tarjeta-cita.tsx`), así una cita se lee igual en la
  * agenda, en el inicio y en el historial de un cliente: gris la pendiente,
  * azul la confirmada, el naranja del tablero la que se está atendiendo, el
- * lima de lo cobrado la completada y el rojo de error la cancelada.
+ * lima de lo cobrado la completada, el rojo de error la cancelada y un gris
+ * navy la de quien no vino.
  *
  * El texto va en navy, que pasa el contraste sobre todos los pasteles, salvo
  * en la cancelada. El estado también se dice en palabras (la insignia, el
@@ -46,6 +47,11 @@ const ESTILOS = {
     texto: "Cancelada",
     insignia: "bg-error/8 text-error",
     bloque: "bg-error/6 border-l-error text-error",
+  },
+  "no-asistio": {
+    texto: "No vino",
+    insignia: "bg-navy/8 text-navy",
+    bloque: "bg-navy/6 border-l-navy text-navy",
   },
 } satisfies Record<string, EstiloDeEstado>
 

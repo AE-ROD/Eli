@@ -32,6 +32,7 @@ import {
   guardarServicios,
   leerTablero,
   marcarLlegada,
+  marcarNoVino,
   moverAtencion,
   type Atencion,
   type DatosSinReserva,
@@ -288,6 +289,25 @@ export default function PaginaTablero() {
       recargar()
     })
 
+  /** La reserva no llegó: sale de "Reservas de hoy" y la cita queda "No vino". */
+  const noVino = (reserva: Reserva) =>
+    enTarjeta(reserva.id, async () => {
+      setAviso("")
+      const resultado = await marcarNoVino(reserva.id)
+
+      if (!resultado.ok) {
+        // Ya llegó, la cancelaron o la movieron: el mensaje del servidor dice cuál.
+        if (resultado.motivo === "desactualizada") {
+          return tableroDesactualizado({ columna: "reservas" }, conRecarga(resultado.error))
+        }
+        return setAviso(resultado.error)
+      }
+
+      setTablero((previo) => previo && { ...previo, reservas: previo.reservas.filter((otra) => otra.id !== reserva.id) })
+      setFoco({ columna: "reservas" })
+      recargar()
+    })
+
   /** La llegada se marcó por error: la atención se borra y la reserva vuelve a "Reservas de hoy". */
   const deshacer = (atencion: Atencion) =>
     enTarjeta(atencion.id, async () => {
@@ -526,6 +546,7 @@ export default function PaginaTablero() {
             foco={foco}
             onFocoAplicado={focoAplicado}
             onLlego={llego}
+            onNoVino={noVino}
             onDeshacerLlegada={deshacer}
             onMover={mover}
             onCobrar={cobrar}

@@ -120,6 +120,24 @@ export const puedeEditarDatosDeCliente = gestionaElNegocio
 export const puedeBorrarCliente = gestionaElNegocio
 
 /**
+ * Importar clientes desde un CSV y exportar a CSV los clientes y las
+ * atenciones. Dueño y encargado. El profesional crea clientes de a uno (para
+ * anotar a quien llega), pero no carga ni se lleva la base entera: la
+ * exportación trae los datos de contacto de todos y, en las atenciones, lo
+ * cobrado, que es facturación del negocio (`puedeVerIngresosDelNegocio`).
+ */
+export const puedeImportarExportarClientes = gestionaElNegocio
+
+/**
+ * La mini página pública del negocio (`/reservar/[slug]`): dirección, comuna,
+ * WhatsApp, Instagram, color, medios de pago y la especialidad de cada
+ * profesional. Es la cara del negocio, así que la editan dueño y encargado;
+ * el profesional la ve en Configuración sin poder cambiarla. La categoría de
+ * cada servicio va con el catálogo (`puedeGestionarServicios`).
+ */
+export const puedeEditarPaginaDelNegocio = gestionaElNegocio
+
+/**
  * A quién se asigna una cita. Sólo quien puede asignar citas a otros (dueño y
  * encargado) elige: se respeta lo pedido, incluido `null` ("sin asignar").
  * Cualquier otro —el profesional, o un rol desconocido— no elige: termina
@@ -154,6 +172,39 @@ export const puedeEditarHorarioDe = (actor: Actor | null, miembro: Miembro | nul
   if (gestionaElNegocio(actor)) return true
   return !!actor.memberId && actor.memberId === miembro?.id
 }
+
+/**
+ * Bloqueos de horario (`TimeBlock`: almuerzo, trámite, feriado). Son
+ * operación, como los horarios: dueño y encargado bloquean a cualquiera y a
+ * todo el negocio (`miembro` en null); el profesional, sólo su propia agenda.
+ * Un profesional sin `memberId` no bloquea nada (falla cerrado). El miembro
+ * tiene que ser del negocio del actor: el endpoint lo lee de la base y lo
+ * ajeno responde 404 antes de preguntar acá.
+ */
+export const puedeGestionarBloqueoDe = (actor: Actor | null, miembro: Miembro | null): boolean => {
+  if (!actor) return false
+  if (miembro && !mismoNegocio(actor, miembro.businessId)) return false
+  if (gestionaElNegocio(actor)) return true
+  return !!miembro && !!actor.memberId && actor.memberId === miembro.id
+}
+
+/**
+ * Qué servicios hace cada profesional (`MemberService`; sin filas = hace
+ * todos). Es operación, como el catálogo de servicios: dueño y encargado, de
+ * cualquier miembro del negocio. El profesional no se los define a sí mismo:
+ * decide qué se le ofrece a sus clientes en la reserva pública. El miembro
+ * tiene que ser del negocio del actor: el endpoint lo lee de la base y lo
+ * ajeno responde 404 antes de preguntar acá.
+ */
+export const puedeDefinirServiciosDe = (actor: Actor | null, miembro: Miembro): boolean =>
+  gestionaElNegocio(actor) && mismoNegocio(actor, miembro.businessId)
+
+/**
+ * Hasta cuántas horas antes el cliente puede cancelar o reagendar con su
+ * enlace (`Business.cancelacionHorasAntes`). Es una regla del negocio con sus
+ * clientes, como los servicios: dueño y encargado.
+ */
+export const puedeEditarPlazoDeCambios = gestionaElNegocio
 
 // ─── Tablero de atenciones (docs/PRODUCTO.md, sección 7) ─────────────────────
 
@@ -363,6 +414,27 @@ function filtroDeLineas(actor: Actor | null): Prisma.VisitServiceWhereInput {
 function filtroDePagos(actor: Actor | null): Prisma.VisitPaymentWhereInput {
   if (!actor || !puedeVerIngresosDelNegocio(actor)) return NADA
   return { visit: { is: { businessId: actor.businessId } } }
+}
+
+/**
+ * Los bloqueos que ve el actor: dueño y encargado, todos los del negocio; el
+ * profesional, los suyos y los de todo el negocio (`memberId` null), que
+ * también le cierran la agenda. Sin `memberId`, sólo los de todo el negocio.
+ * No se exporta, igual que `filtroDeAgenda`.
+ */
+function filtroDeBloqueos(actor: Actor | null): Prisma.TimeBlockWhereInput {
+  if (!actor) return NADA
+  if (puedeVerTodaLaAgenda(actor)) return { businessId: actor.businessId }
+  if (!actor.memberId) return { businessId: actor.businessId, memberId: null }
+  return { businessId: actor.businessId, OR: [{ memberId: actor.memberId }, { memberId: null }] }
+}
+
+/** Igual que `whereDeAgenda`, para consultas de bloqueos de horario. */
+export function whereDeBloqueos(
+  actor: Actor | null,
+  extra: Prisma.TimeBlockWhereInput = {}
+): Prisma.TimeBlockWhereInput {
+  return { AND: [filtroDeBloqueos(actor), extra] }
 }
 
 /** Igual que `whereDeAgenda`, para consultas de atenciones. */

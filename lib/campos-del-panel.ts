@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { esEtiquetaReservada } from "./clientes-eliminados"
+import { MENSAJE_DE_TELEFONO_ILEGIBLE, aE164Chile } from "./telefono"
 
 /**
  * Los campos que comparten los esquemas de los endpoints del panel (citas,
@@ -22,6 +23,22 @@ export const nombre = () =>
     .max(100, maximo("El nombre", 100))
 
 export const telefono = () => z.string().trim().max(30, maximo("El teléfono", 30))
+
+/**
+ * El teléfono de un cliente, ya en E.164 (`lib/telefono.ts`). Vacío es "sin
+ * teléfono" y sale `null`; lo que no se puede leer como un número chileno es
+ * un error con el formato esperado, no un dato que se guarda a medias.
+ */
+export const telefonoChileno = () =>
+  telefono().transform((valor, contexto) => {
+    if (valor === "") return null
+    const e164 = aE164Chile(valor)
+    if (!e164) {
+      contexto.addIssue({ code: z.ZodIssueCode.custom, message: MENSAJE_DE_TELEFONO_ILEGIBLE })
+      return z.NEVER
+    }
+    return e164
+  })
 
 /**
  * Email de hasta 254 caracteres (el máximo que admite una casilla). Para un
@@ -94,7 +111,37 @@ export const duracion = () =>
     .min(15, "La duración tiene que ser de al menos 15 minutos")
     .max(480, "La duración no puede pasar de 480 minutos")
 
-export const ESTADOS_DE_CITA = ["pendiente", "confirmada", "en-progreso", "completada", "cancelada"] as const
+/**
+ * Los estados de una cita. "no-asistio" es "No vino": el cliente no llegó.
+ * Como "cancelada", libera el horario (`lib/ocupacion.ts`); a diferencia de
+ * ella, cuenta como inasistencia en la ficha del cliente.
+ */
+export const ESTADOS_DE_CITA = ["pendiente", "confirmada", "en-progreso", "completada", "cancelada", "no-asistio"] as const
+
+export type EstadoDeCita = (typeof ESTADOS_DE_CITA)[number]
+
+/**
+ * Con qué estado puede nacer una cita creada desde el panel. Los demás son
+ * consecuencias de lo que pasa después y tienen sus reglas al editar
+ * (`app/api/citas/[id]`): "No vino" sólo desde una cita que esperaba y cuya
+ * hora pasó, "en progreso" y "completada" vienen del Tablero, y "cancelada"
+ * se marca sobre una cita que existía. Crear directo en ellos se saltaba esas
+ * reglas (y, con "no-asistio", inflaba el contador de inasistencias).
+ */
+export const ESTADOS_AL_CREAR = ["pendiente", "confirmada"] as const
+
+export const MENSAJE_DE_ESTADO_AL_CREAR =
+  "Una cita nueva sólo puede quedar pendiente o confirmada: los demás estados se marcan después, sobre la cita"
+
+/**
+ * Desde qué estados se marca "No vino": una reserva que seguía esperando.
+ * En progreso el cliente ya llegó; completada, cancelada o ya marcada, no.
+ */
+const ESTADOS_QUE_PUEDEN_NO_VENIR: readonly string[] = ["pendiente", "confirmada"]
+
+export function puedeMarcarseNoVino(estado: string): boolean {
+  return ESTADOS_QUE_PUEDEN_NO_VENIR.includes(estado)
+}
 
 export const MENSAJE_DE_HORARIO_INVERTIDO = "La cita tiene que terminar después de empezar"
 
@@ -106,3 +153,18 @@ export const diaDeLaSemana = () => {
   const mensaje = "El día de la semana tiene que ser un número entero del 0 al 6"
   return z.number().int(mensaje).min(0, mensaje).max(6, mensaje)
 }
+
+/**
+ * Un texto opcional con tope: vacío (o sólo espacios) se guarda como `null`,
+ * no como "". Para los datos de la página pública y la categoría de un
+ * servicio, que se muestran sólo si hay algo escrito.
+ */
+export const textoOpcional = (campo: string, n: number) =>
+  z
+    .string()
+    .trim()
+    .max(n, maximo(campo, n))
+    .transform((valor) => (valor === "" ? null : valor))
+
+/** La categoría de un servicio ("Corte", "Color"): agrupa en la página pública. Hasta 40. */
+export const categoriaDeServicio = () => textoOpcional("La categoría", 40)

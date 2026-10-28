@@ -1,7 +1,7 @@
 "use client"
 
 import { useId, type ReactNode } from "react"
-import { Clock, Mail, RotateCw, UsersRound, X } from "lucide-react"
+import { Clock, ListChecks, Mail, RotateCw, UsersRound, X } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { Esqueleto } from "@/components/comunes/esqueleto"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
@@ -43,6 +43,8 @@ interface PropsDeListaEquipo {
   reenviandoId: string | null
   alReenviar: (invitacion: InvitacionPendiente) => void
   alAnular: (invitacion: InvitacionPendiente) => void
+  /** Abre "Servicios que hace" de un miembro. */
+  alEditarServicios: (miembro: MiembroDelEquipo) => void
 }
 
 export function ListaEquipo({
@@ -53,6 +55,7 @@ export function ListaEquipo({
   reenviandoId,
   alReenviar,
   alAnular,
+  alEditarServicios,
 }: PropsDeListaEquipo) {
   if (cargando) return <ListaCargando />
 
@@ -84,6 +87,17 @@ export function ListaEquipo({
                 <DatosDeLaPersona nombre={miembro.user.name} email={miembro.user.email} />
                 <div className={LUGAR_DEL_ROL}>
                   <InsigniaDelRol rol={miembro.role} />
+                </div>
+                <div className="col-start-2 sm:col-span-2 sm:col-start-2">
+                  <Boton
+                    variante="fantasma"
+                    tamano="sm"
+                    icono={<ListChecks className="size-4" aria-hidden="true" />}
+                    onClick={() => alEditarServicios(miembro)}
+                    aria-label={`Servicios que hace ${miembro.user.name}`}
+                  >
+                    Servicios que hace
+                  </Boton>
                 </div>
               </li>
             ))}

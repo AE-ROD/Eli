@@ -6,7 +6,7 @@ import { crearServicio, cuerpoDeServicio, editarServicio, type DatosDeServicio }
 const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
   JSON.parse(String((fetchFalso.mock.calls[0][1] as RequestInit).body))
 
-const SERVICIO: DatosDeServicio = { name: "Corte", description: "", duration: 30, price: "" }
+const SERVICIO: DatosDeServicio = { name: "Corte", description: "", duration: 30, price: "", category: "" }
 
 const precioLeido = (texto: string) => {
   const cuerpo = cuerpoDeServicio({ ...SERVICIO, price: texto })
@@ -25,11 +25,16 @@ describe("cuerpoDeServicio", () => {
     expect(precioLeido("25.000")).toBe(25000)
   })
 
-  it("precio y descripción vacíos no se mandan", () => {
+  it("precio y descripción vacíos no se mandan; la categoría vacía se borra", () => {
     expect(cuerpoDeServicio(SERVICIO)).toEqual({
       ok: true,
-      datos: { name: "Corte", description: undefined, duration: 30, price: undefined },
+      datos: { name: "Corte", description: undefined, duration: 30, price: undefined, category: null },
     })
+  })
+
+  it("la categoría se manda sin los espacios de las puntas", () => {
+    const cuerpo = cuerpoDeServicio({ ...SERVICIO, category: "  Color " })
+    expect(cuerpo.ok && cuerpo.datos.category).toBe("Color")
   })
 
   it("un precio que no se puede leer sin adivinar es un error, no otro precio", () => {

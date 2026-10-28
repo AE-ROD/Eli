@@ -40,7 +40,7 @@ async function trabarCliente(tx: Prisma.TransactionClient, actor: Actor, cliente
  * de la ruta se quede en lo HTTP.
  */
 
-/** Las citas que todavía pueden "llegar": ni canceladas ni completadas. */
+/** Las citas que todavía pueden "llegar": ni canceladas, ni completadas, ni de alguien que no vino. */
 export const ESTADOS_DE_RESERVA = ["pendiente", "confirmada", "en-progreso"]
 
 /** Si la cita ya no tiene su ficha de cliente, la atención igual necesita un nombre que mostrar. */
@@ -217,7 +217,7 @@ export async function registrarLlegada(actor: Actor, usuarioId: string | null, {
   if (!cita) throw new ErrorDeAtencion(404, "Cita no encontrada")
   if (cita.visit) throw new ErrorDeAtencion(409, "Esta reserva ya está en el tablero")
   if (!ESTADOS_DE_RESERVA.includes(cita.status)) {
-    throw new ErrorDeAtencion(409, "La reserva está cancelada o ya se completó")
+    throw new ErrorDeAtencion(409, "La reserva está cancelada, marcada como \"no vino\" o ya se completó")
   }
   if (!esDeHoy(cita.startTime, new Date(), zona)) {
     throw new ErrorDeAtencion(409, "Esta reserva no es de hoy: solo se marca la llegada de las reservas del día.")

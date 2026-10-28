@@ -229,6 +229,26 @@ describe("lib/email — inyección de encabezados en el asunto", () => {
     expect(subject).toBe("Cita confirmada — NegocioMalicioso")
   })
 
+  it("la fecha del correo es el día calendario recibido, sin importar la zona del servidor", async () => {
+    const zonaAntes = process.env.TZ
+    process.env.TZ = "America/Santiago"
+    try {
+      const { enviarRecordatorio } = await import("./email")
+      await enviarRecordatorio({
+        emailCliente: "cliente@ejemplo.com",
+        nombreCliente: "Ana Pérez",
+        nombreNegocio: "Peluquería Sol",
+        servicio: "Corte",
+        fecha: "2026-09-10",
+        hora: "10:00",
+      })
+      const html = enviarMock.mock.calls[0][0].html as string
+      expect(html).toContain("10 de septiembre de 2026")
+    } finally {
+      process.env.TZ = zonaAntes
+    }
+  })
+
   it("un asunto normal llega tal cual, sin emojis (la guía de diseño no los usa)", async () => {
     const { enviarConfirmacionCliente, enviarRecordatorio, enviarRecuperacionContrasena } = await import("./email")
 

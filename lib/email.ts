@@ -96,6 +96,8 @@ function asunto(partes: TemplateStringsArray, ...valores: unknown[]): AsuntoSegu
 type TipoCorreo =
   | "confirmacion-cliente"
   | "aviso-profesional"
+  | "aviso-cancelada"
+  | "aviso-reagendada"
   | "recordatorio"
   | "recuperacion-contrasena"
   | "invitacion-trabajador"
@@ -258,8 +260,14 @@ async function enviar(correo: Correo): Promise<ResultadoDeEnvio> {
   })
 }
 
+/**
+ * "AAAA-MM-DD" es una fecha calendario: `new Date` la lee como la medianoche
+ * UTC, así que se escribe en UTC. Con la zona del servidor, al oeste de UTC
+ * salía el día anterior.
+ */
 function fechaLegible(fechaISO: string): string {
   return new Date(fechaISO).toLocaleDateString("es-CL", {
+    timeZone: "UTC",
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -275,22 +283,37 @@ export interface DatosConfirmacionCliente {
   fecha: string
   hora: string
   duracion: number
+  /** Quién atiende, si la reserva quedó asignada. */
+  profesional?: string | null
+  /**
+   * El enlace para cancelar o reagendar sin cuenta (lleva el token en claro:
+   * sólo viaja en este correo). Sin él, el correo dice que se contacte al local.
+   */
+  enlaceDeGestion?: string | null
+  /** Hasta cuántas horas antes se puede cambiar con el enlace. */
+  plazoHoras?: number
 }
 
 export function enviarConfirmacionCliente(datos: DatosConfirmacionCliente) {
+  const detalle: Array<[string, string]> = [["Servicio", datos.servicio]]
+  if (datos.profesional) detalle.push(["Con", datos.profesional])
+  detalle.push(["Fecha", fechaLegible(datos.fecha)], ["Hora", datos.hora], ["Duración", `${datos.duracion} minutos`])
   return enviar({
     tipo: "confirmacion-cliente",
     para: datos.emailCliente,
     asunto: asunto`Cita confirmada — ${datos.nombreNegocio}`,
     titulo: "¡Tu cita está confirmada!",
     intro: html`Hola <strong>${datos.nombreCliente}</strong>, te esperamos en <strong>${datos.nombreNegocio}</strong>.`,
-    detalle: [
-      ["Servicio", datos.servicio],
-      ["Fecha", fechaLegible(datos.fecha)],
-      ["Hora", datos.hora],
-      ["Duración", `${datos.duracion} minutos`],
-    ],
-    cierre: html`Si necesitas cancelar o cambiar tu cita, contáctanos con anticipación.`,
+    detalle,
+    ...(datos.enlaceDeGestion
+      ? {
+          boton: { texto: "Cancelar o cambiar mi cita", enlace: datos.enlaceDeGestion },
+          cierre:
+            datos.plazoHoras && datos.plazoHoras > 0
+              ? html`Puedes cancelar o cambiar tu cita con el botón hasta ${datos.plazoHoras} ${datos.plazoHoras === 1 ? "hora" : "horas"} antes. Después, contacta directamente al local.`
+              : html`Puedes cancelar o cambiar tu cita con el botón hasta la hora de la cita.`,
+        }
+      : { cierre: html`Si necesitas cancelar o cambiar tu cita, contáctanos con anticipación.` }),
   })
 }
 
@@ -302,12 +325,15 @@ export interface DatosAvisoProfesional {
   fecha: string
   hora: string
   comentarios?: string | null
+  /** A quién quedó asignada; sin dar, no se muestra. */
+  profesional?: string | null
 }
 
 export function enviarAvisoProfesional(datos: DatosAvisoProfesional) {
   const detalle: Array<[string, string]> = [
     ["Cliente", datos.nombreCliente],
     ["Servicio", datos.servicio],
+    ...(datos.profesional ? [["Profesional", datos.profesional] as [string, string]] : []),
     ["Fecha", fechaLegible(datos.fecha)],
     ["Hora", datos.hora],
   ]
@@ -322,6 +348,47 @@ export function enviarAvisoProfesional(datos: DatosAvisoProfesional) {
     detalle,
     destacado: true,
     cierre: html`Revisa tu calendario en tu panel para ver todos los detalles.`,
+  })
+}
+
+export interface DatosAvisoDeCambioDelCliente {
+  tipo: "cancelo" | "reagendo"
+  emailNegocio: string
+  nombreNegocio: string
+  nombreCliente: string
+  servicio: string
+  profesional?: string | null
+  /** La fecha y hora de la cita (la nueva, si reagendó), en el reloj del negocio. */
+  fecha: string
+  hora: string
+  /** Si reagendó: la que tenía antes. */
+  fechaAnterior?: string
+  horaAnterior?: string
+}
+
+/** Aviso al negocio: el cliente canceló o reagendó con su enlace. */
+export function enviarAvisoDeCambioDelCliente(datos: DatosAvisoDeCambioDelCliente) {
+  const reagendo = datos.tipo === "reagendo"
+  const detalle: Array<[string, string]> = [["Cliente", datos.nombreCliente], ["Servicio", datos.servicio]]
+  if (datos.profesional) detalle.push(["Profesional", datos.profesional])
+  if (reagendo && datos.fechaAnterior && datos.horaAnterior) {
+    detalle.push(["Antes", `${fechaLegible(datos.fechaAnterior)}, ${datos.horaAnterior}`])
+    detalle.push(["Ahora", `${fechaLegible(datos.fecha)}, ${datos.hora}`])
+  } else {
+    detalle.push(["Fecha", fechaLegible(datos.fecha)], ["Hora", datos.hora])
+  }
+
+  return enviar({
+    tipo: reagendo ? "aviso-reagendada" : "aviso-cancelada",
+    para: datos.emailNegocio,
+    asunto: reagendo ? asunto`Cita reagendada — ${datos.nombreCliente}` : asunto`Cita cancelada — ${datos.nombreCliente}`,
+    titulo: reagendo ? "Un cliente cambió su cita" : "Un cliente canceló su cita",
+    intro: reagendo
+      ? html`<strong>${datos.nombreCliente}</strong> cambió la hora de su cita en <strong>${datos.nombreNegocio}</strong> desde su enlace.`
+      : html`<strong>${datos.nombreCliente}</strong> canceló su cita en <strong>${datos.nombreNegocio}</strong> desde su enlace. El horario quedó libre.`,
+    detalle,
+    destacado: true,
+    cierre: html`Revisa tu agenda en el panel.`,
   })
 }
 

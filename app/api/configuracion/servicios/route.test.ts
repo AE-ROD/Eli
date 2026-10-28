@@ -167,6 +167,7 @@ describe("POST /api/configuracion/servicios — largos y tipos", () => {
     ["un precio negativo", { price: -1 }, "El precio no puede ser negativo"],
     ["un precio de más de 10.000.000", { price: 10_000_001 }, "El precio no puede ser mayor que 10.000.000"],
     ["una duración que no es número", { duration: "30" }, "Datos inválidos"],
+    ["una categoría de 41 caracteres", { category: "a".repeat(41) }, "La categoría no puede tener más de 40 caracteres"],
   ])("rechaza %s: 400 con un error legible, sin `detalles`, y no crea nada", async (_caso, campos, mensaje) => {
     const { POST } = await import("./route")
 
@@ -186,6 +187,7 @@ describe("POST /api/configuracion/servicios — largos y tipos", () => {
     ["duración de 480", { duration: 480 }],
     ["precio de 10.000.000", { price: 10_000_000 }],
     ["nombre de 100 y descripción de 2000", { name: "a".repeat(100), description: "a".repeat(2000) }],
+    ["categoría de 40", { category: "a".repeat(40) }],
   ])("acepta el borde: %s", async (_caso, campos) => {
     const { POST } = await import("./route")
 
@@ -195,5 +197,23 @@ describe("POST /api/configuracion/servicios — largos y tipos", () => {
     const res = await POST(pedidoFalso({ ...valido, ...campos }))
 
     expect(res.status).toBe(201)
+  })
+})
+
+describe("POST /api/configuracion/servicios — categoría", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it("guarda la categoría sin espacios de más, y vacía como null", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.service.create.mockResolvedValueOnce({ id: "srv-1" })
+    await POST(pedidoFalso({ name: "Corte", duration: 30, category: "  Corte " }))
+    expect(prismaMock.service.create.mock.calls[0][0].data.category).toBe("Corte")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.service.create.mockResolvedValueOnce({ id: "srv-2" })
+    await POST(pedidoFalso({ name: "Corte", duration: 30, category: "   " }))
+    expect(prismaMock.service.create.mock.calls[1][0].data.category).toBeNull()
   })
 })

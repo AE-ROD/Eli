@@ -4,6 +4,7 @@ import { CalendarDays, Mail, Phone } from "lucide-react"
 import { Insignia } from "@/components/comunes/insignia"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { fechaRelativa } from "@/lib/fechas"
+import { mostrarTelefono } from "@/lib/telefono"
 import { cn } from "@/lib/utils"
 import type { Cliente } from "../_datos"
 
@@ -18,6 +19,8 @@ export interface ClienteEnTarjeta {
   telefono: string
   imagenUrl?: string
   visitas: number
+  /** Cuántas veces no vino a una cita (las marcadas "No vino"). */
+  inasistencias: number
   /** `Hace 3 días`, o `Sin visitas`. */
   ultimaVisita: string
   /** `En 3 días`, si tiene una cita por delante. */
@@ -57,8 +60,10 @@ export function clienteParaTarjeta(cliente: Cliente): ClienteEnTarjeta {
     nombre: cliente.name,
     // "Correo", como en el formulario del cliente nuevo y en el resto del producto.
     email: cliente.email ?? "Sin correo",
-    telefono: cliente.phone ?? "Sin teléfono",
+    telefono: mostrarTelefono(cliente.phone) || "Sin teléfono",
     visitas: cliente.visitas,
+    // `?? 0`: una respuesta vieja, sin el campo, no muestra "undefined".
+    inasistencias: cliente.inasistencias ?? 0,
     ultimaVisita: cliente.ultimaVisita ? fechaRelativa(cliente.ultimaVisita, ahora) : "Sin visitas",
     proximaCita: cliente.proximaCita ? fechaRelativa(cliente.proximaCita, ahora) : undefined,
     etiqueta,

@@ -51,6 +51,8 @@ En salones, barberías y spas de uñas, quien atiende se lleva un porcentaje del
 
 Si un dueño no puede cerrar el mes con Eli, el diferenciador no existe.
 
+**Cambiarse no cuesta.** Quien viene de Agenda Pro (u otra agenda) sube su base de clientes desde el CSV que exporta, y el negocio nace con servicios de ejemplo de su rubro: no arranca en blanco (sección 6).
+
 ---
 
 ## 3. Modelo de comisiones
@@ -164,19 +166,27 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 - **Reportes** de lo atendido y cobrado, con filtros (sección 8)
 - Equipo con los tres roles reales
 - **Comisiones: ciclo completo** (configurar, calcular, liquidar, auditar)
-- Elegir profesional al reservar — **pendiente, todavía no está construido**: hoy la página pública no lo ofrece y la reserva llega sin profesional asignado.
+- Elegir profesional al reservar, o "cualquiera disponible" (abajo)
 - Página pública de reservas
-- Recordatorios automáticos por correo
+- Recordatorios automáticos por correo: uno por cita, el día anterior en la zona del negocio (abajo)
 
 **No entra:**
 - Cobro online al cliente final
-- Reportes exportables
+- Reportes exportables (sí se descargan en CSV los clientes y las atenciones de un rango: ver Clientes)
 - Aplicación móvil nativa
 - Multi-sucursal
 
 **Zona horaria del negocio.** Cada negocio tiene su zona horaria (IANA, por defecto `America/Santiago`). En ella se leen sus horarios de atención y sus días: qué día de la semana es una fecha, qué horas ofrece la página pública (y cuáles ya pasaron hoy), en qué instante se guarda la cita reservada y qué citas trae la vista Día, Semana y Mes de la agenda. Si la zona guardada no es válida, se usa la de por defecto. Con el cambio de horario, una hora que no existe se corre hacia adelante lo que dura el salto y una que ocurre dos veces se toma la primera vez. **Todavía no hay pantalla para cambiarla** (sección 10).
 
-**Mover una cita.** Desde el detalle de la cita, "Cambiar fecha y hora": fecha, hora de inicio, hora de fin y, para dueño y encargado, el profesional. El profesional mueve sólo sus citas y no las reasigna. Si el nuevo horario choca con otra cita del mismo profesional (las canceladas no cuentan) o queda fuera de su horario de atención —el suyo si cargó uno propio, si no el del negocio—, Eli avisa ("Carla ya tiene una cita de 10:00 a 11:00") y pregunta si se guarda igual: avisa, no bloquea. Si el negocio no cargó ningún horario, no avisa por horario. No se mueven las citas canceladas ni completadas, ni las que ya tienen una atención en el Tablero (salvo que esté anulada).
+**Crear y mover una cita.** Desde el detalle de la cita, "Cambiar fecha y hora": fecha, hora de inicio, hora de fin y, para dueño y encargado, el profesional. El profesional mueve sólo sus citas y no las reasigna. Al crear o al mover, si el horario choca con otra cita del mismo profesional (las canceladas y las de "No vino" no cuentan), cae en un bloqueo del profesional o de todo el negocio, o queda fuera de su horario de atención —el suyo si cargó uno propio, si no el del negocio—, Eli avisa ("Carla ya tiene una cita de 10:00 a 11:00", "Carla tiene bloqueado de 13:00 a 14:00 (Almuerzo)") y pregunta si se guarda igual: en el panel avisa, no bloquea. Si el negocio no cargó ningún horario, no avisa por horario. No se mueven las citas canceladas, completadas ni de "No vino", ni las que ya tienen una atención en el Tablero (salvo que esté anulada).
+
+**Bloqueos de horario.** "Bloquear horario" en la agenda cierra un tramo (almuerzo, trámite, feriado), con fecha y hora de inicio y de fin y un motivo opcional. Dueño y encargado bloquean a cualquier profesional o a todo el negocio; el profesional, sólo su propia agenda. En las vistas Día y Semana se ven como franjas grises; tocarlas muestra el detalle y, a quien puede, "Quitar bloqueo". El profesional ve los suyos y los de todo el negocio. Una cita encima de un bloqueo pide confirmación (arriba). La página pública no ofrece horas sobre un bloqueo (abajo).
+
+**"No vino".** Una reserva pendiente o confirmada cuya hora ya pasó se marca "No vino": desde el detalle de la cita en la agenda o, si está atrasada, desde su tarjeta en "Reservas de hoy" del Tablero. No se puede si el cliente ya está en el Tablero (hay que deshacer la llegada) ni antes de la hora (si avisó, se cancela). Libera el horario como una cancelada, no se mueve, no recibe recordatorio y suma en la ficha del cliente (abajo). Hoy no se deshace desde la pantalla (sección 10).
+
+**Recordatorios.** Un correo al cliente con email, una vez por cita, el día anterior en la zona del negocio, con la fecha y la hora de allá. No sale para las canceladas, las completadas ni las de "No vino". Lo manda un cron diario a las 13:00 UTC (~10:00 en Chile): el plan Hobby de Vercel no permite más de uno al día. Una cita creada después de esa hora para el día siguiente no recibe recordatorio.
+
+**Servicios de ejemplo.** Un negocio nuevo (registro con correo o con Google) nace con 5 servicios comunes de su rubro, con duración, precio de referencia en pesos y categoría (`lib/servicios-de-ejemplo.ts`): corte, brushing y color en un salón; corte, barba y corte infantil en una barbería; manicure, esmaltado permanente, acrílicas y pedicure en un spa de uñas. Se crean junto con el negocio (si uno falla, no se crea ninguno de los dos) y se editan o borran como cualquier otro. Un rubro que el catálogo no conoce nace sin servicios.
 
 **Horas de la agenda.** Las vistas Día y Semana muestran como mínimo de 8 a 20, y se amplían para incluir el horario de atención del negocio y cualquier cita fuera de ese rango. La vista Día lista todas las citas de cada hora; en la Semana, las que se pisan se dibujan lado a lado.
 
@@ -193,6 +203,7 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 ### Clientes
 
 - **Visitas:** una visita es una **atención cobrada** del tablero (sección 7), con o sin reserva. Una cita futura, cancelada o marcada completada en la agenda sin pasar por el cobro no cuenta. La tarjeta y la ficha muestran cuántas visitas tiene, cuándo fue la última y, si tiene una cita pendiente o confirmada por delante, cuándo es la próxima ("En 3 días"). El profesional cuenta sólo sus atenciones, como ve sólo sus citas.
+- **Inasistencias:** la ficha muestra cuántas veces no vino (citas marcadas "No vino"; las canceladas no cuentan). El profesional cuenta sólo las suyas.
 - **Editar y eliminar** son de dueño y encargado, desde la ficha. **Eliminar es anonimizar**, para cumplir el derecho a supresión: no queda ningún dato personal del cliente en ninguna tabla. No se deshace. Exactamente:
   - **En la ficha del cliente:** el nombre pasa a "Cliente eliminado"; apellido, correo, teléfono, cédula y notas quedan vacíos; las etiquetas se borran (queda sólo una marca interna que lo identifica como eliminado).
   - **En sus citas:** se borran las notas internas y los comentarios que dejó al reservar. Si la cita tiene un servicio del catálogo, su título vuelve a ser el nombre del servicio (el título es texto libre y alguien pudo escribir ahí algo del cliente). **Límite:** una cita sin servicio del catálogo conserva su título tal cual, porque no hay con qué reemplazarlo.
@@ -201,6 +212,44 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
   - Deja de aparecer en Clientes, en los buscadores de "Nueva cita" y "Anotar sin reserva", y en las cifras de clientes del inicio (total y nuevos del mes).
   - Todo se hace junto: si algo falla, no se borra nada. Una edición, una cita nueva o una atención que se anota mientras se elimina no pueden devolverle sus datos: lo editado o lo nuevo de un cliente eliminado responde "no encontrado", y una llegada de su reserva queda a nombre de "Cliente eliminado".
   - **Pendiente:** los chats (`Conversation` y sus mensajes, hoy apagados) guardan nombre y teléfono sin enlace a la ficha del cliente, así que eliminarlo no los toca; hay que atarlos al cliente antes de volver a encenderlos. Y los correos que ya se le enviaron (recordatorios, confirmaciones) quedan en el historial del proveedor de correo (Resend), fuera de la base de Eli.
+
+- **Teléfono:** se guarda en formato internacional (`+56912345678`) y se muestra con espacios (`+56 9 1234 5678`). Se acepta escrito de cualquier forma común ("9 1234 5678", "56912345678", un fijo "2 2345 6789"); uno que no se puede leer como número chileno es un error que dice cómo escribirlo. Los teléfonos guardados antes de este cambio no se reescribieron: se muestran igual de ordenados si se pueden leer.
+- **Consentimiento de WhatsApp:** "Acepta recibir mensajes por WhatsApp" en el formulario del cliente (dueño y encargado). Marcarlo guarda cuándo y que fue desde el panel; desmarcarlo lo borra. Sin marcar, el cliente no tiene consentimiento.
+- **Importar CSV** (Clientes → Importar CSV, dueño y encargado): un archivo de hasta 2 MB y 5.000 filas, separado por coma, punto y coma o tabulación, en UTF-8 o en el formato de Excel. Muestra las primeras filas y sugiere qué columna es cada dato por su título (Nombre, Apellido, Teléfono/Celular, Correo/Email, Notas, Acepta WhatsApp); nombre y apellido se juntan. **No crea repetidos:** una fila con el teléfono o el correo de un cliente que ya está en el negocio, o de una fila anterior del archivo, se omite. Al final dice cuántos se crearon, cuántos se omitieron por repetidos y cuáles tuvieron errores, con el número de fila y el motivo. Los importados no tienen consentimiento de WhatsApp salvo que el archivo traiga esa columna y diga que sí. Hasta 5 importaciones por hora por negocio.
+- **Exportar** (dueño y encargado): los clientes del negocio, o las atenciones que llegaron entre dos días (hasta un año), en un CSV que abre Excel en español. Los clientes eliminados y sus atenciones no salen. Una celda que empieza con `=`, `+`, `-` o `@` lleva una comilla adelante para que la planilla no la ejecute como fórmula; al reimportar el archivo se quita. Hasta 20 descargas por hora por negocio.
+
+### Página pública del negocio
+
+`/reservar/<slug>` muestra primero al negocio y debajo el flujo de reserva (`#reservar`):
+
+- **Cabecera:** el color elegido (o su portada), el logo o sus iniciales, nombre, comuna y "Abierto ahora · cierra a las 20:00" / "Cerrado · abre mañana a las 10:00", calculado con el horario de atención en la zona del negocio. Quien atiende de noche carga dos franjas (hasta las 23:59 y desde las 00:00) y se leen como una. Sin horario no se muestra estado.
+- **Botones:** Reservar, WhatsApp, Instagram y Cómo llegar (Google Maps o Waze, con dirección y comuna). Cada uno aparece sólo si hay dato; Cómo llegar pide dirección.
+- **Equipo:** los profesionales (el encargado no, porque no cuenta como persona que atiende), con foto o iniciales, especialidad y "Reservar con <nombre>", que abre la reserva con ese profesional elegido.
+- **Servicios** agrupados por categoría (los sin categoría van a "Otros"), con duración y precio; **horario** de lunes a domingo; **ubicación**; **medios de pago** del catálogo de cobro.
+- **Color:** una paleta cerrada de 7 tonos del sistema de diseño (Cielo, Durazno, Lavanda, Pistacho, Menta, Arena, Noche); la marca de Eli no cambia. Cada uno pasa contraste AA con su texto. Un valor desconocido usa Cielo.
+- **Al compartir el enlace:** título con nombre y comuna, descripción y una imagen generada (nombre, comuna, iniciales en el color del negocio).
+- **Se edita** en Configuración → "Tu página pública": dirección, comuna, WhatsApp, Instagram (usuario o enlace del perfil), color con vista previa, medios de pago y especialidad de cada profesional. Dueño y encargado; el profesional la ve sin poder cambiarla. La categoría de cada servicio se pone en Servicios.
+- **Fotos: próximamente.** Logo, portada y fotos de profesionales se muestran si existen y son del mismo sitio, pero no hay forma de subirlas ni se pueden pegar URLs (sección 10).
+
+### Reserva por profesional
+
+- **Quién atiende:** los profesionales (rol `worker`) que hacen el servicio. Cada uno hace todos los servicios hasta que dueño o encargado lo acotan en Equipo → "Servicios que hace" (casillas o "Todos los servicios"). El encargado y el dueño no se ofrecen (sección 10).
+- **Elegir:** después del servicio, "¿Con quién?": "Cualquiera disponible" o una persona. Con una, se ven sólo sus horas libres; con cualquiera, toda hora en que al menos uno está libre, y al confirmar la cita va al libre con menos citas ese día (si empatan, siempre el mismo). Si en el instante de confirmar nadie quedó libre, "El horario ya no está disponible". `?profesional=<id>` en el enlace (el "Reservar con <nombre>" de la página) lo deja elegido y muestra sólo sus servicios; un id que no es de un profesional del negocio se ignora.
+- **Qué ocupa a un profesional:** sus citas pendientes o confirmadas (las canceladas y las de "No vino" no), sus bloqueos y los de todo el negocio, y las citas **sin profesional asignado**, que ocupan a todos: así las reservas de antes de esto (que llegaron sin profesional) siguen bloqueando su hora. Su horario es el propio si cargó uno; si no, el del negocio.
+- **Negocio sin profesionales** (el dueño solo, o con un encargado): funciona como siempre, un solo carril con el horario del negocio, ocupado por cualquier cita activa y por los bloqueos de todo el negocio. La cita llega sin profesional asignado.
+- La página nunca ofrece una hora que después rechazaría: ofrecer y confirmar usan la misma regla.
+
+### Cancelar o reagendar sin cuenta
+
+- El correo de confirmación trae "Cancelar o cambiar mi cita" (y la pantalla de reserva confirmada, el mismo enlace, para quien no dejó correo). Abre una página con la cita: negocio, servicio, profesional, día y hora en la zona del negocio.
+- **Cancelar** la deja cancelada por el cliente, con la hora, y libera el horario. **Reagendar** ofrece otras horas libres del mismo servicio y profesional, con las reglas de la reserva. En los dos casos se le avisa al negocio por correo.
+- **Plazo:** hasta 24 horas antes por defecto; dueño y encargado lo cambian en Configuración → "Plazo para cancelar o reagendar (horas)", de 0 a 72. Pasado el plazo la página muestra la cita y dice que hay que contactar al local.
+- Un enlace inválido, de una cita cancelada, pasada o ya atendida dice "Este enlace no sirve", sin más detalle. La base guarda sólo una huella del enlace (no el enlace), y cada enlace tiene su propio límite de uso además del de la IP.
+
+### Teléfono y WhatsApp en la reserva
+
+- El teléfono, opcional, se valida y se guarda como en el panel (`+56912345678`); uno que no se puede leer como chileno es un error que dice cómo escribirlo.
+- Con teléfono aparece "Quiero recibir recordatorios por WhatsApp", sin marcar. Marcado guarda el consentimiento con su fecha y que vino de la reserva pública; no reemplaza uno anterior, y sin marcar no borra uno dado en el local. Todavía no se mandan mensajes por WhatsApp (sección 10).
 
 ### Horario
 
@@ -298,10 +347,14 @@ Nada de esto bloquea el trabajo actual, pero cada punto se decide antes de const
 | **Funciones nuevas** | El resto del listado de ideas por incorporar, con qué problema resuelve cada una y si es imprescindible para vender. |
 | **Dinero** | Ya decidido: `Decimal` como formato único (como en comisiones / F-015). Hoy conviven Float (`Service.price`, `Appointment.price`) y centavos Int (tablero); migrarlos es una tarea aparte que cambia el esquema y se ensaya primero en una base de desarrollo, nunca directo en producción. |
 | **Comisiones en el tablero** | Integrar la rama `comisiones` sobre las líneas de atención (sección 3.6). |
-| **Turnos y zona horaria** | Ya decidido: la zona horaria es **por negocio**, con `America/Santiago` por defecto (sección 6); la usan la reserva pública y la agenda. Falta: la pantalla para que el dueño la cambie, si los reportes, el inicio y "Llegó" pasan a usarla en vez de la zona del dispositivo (secciones 7 y 8), y si cada negocio define sus propios turnos. |
+| **Turnos y zona horaria** | Ya decidido: la zona horaria es **por negocio**, con `America/Santiago` por defecto (sección 6); la usan la reserva pública, la agenda y los recordatorios. Falta: la pantalla para que el dueño la cambie, si los reportes, el inicio y "Llegó" pasan a usarla en vez de la zona del dispositivo (secciones 7 y 8), y si cada negocio define sus propios turnos. |
+| **Agenda: bloqueos y "No vino"** | Falta decidir si "No vino" se puede deshacer desde la pantalla (hoy sólo cambiando el estado por la API) y si muchas inasistencias deben tener alguna consecuencia (aviso, pedir confirmación). Con el plan Pro de Vercel, el recordatorio podría salir a una hora fija en la zona de cada negocio. |
+| **Página pública: fotos** | La página ya muestra logo, portada y fotos del equipo si existen, pero no hay subida: falta aprobar el almacenamiento (propuesto Cloudflare R2), y con él abrir la CSP (`img-src`) a ese origen. Hasta entonces se usa el color y las iniciales. También falta decidir si el encargado que atiende aparece en "Equipo" (llega con el interruptor "también atiende"). |
 | **Corregir un cobro** | Hoy lo cobrado se anula, también días después desde Reportes. Falta decidir si el dueño puede reabrirlo y corregirlo, y con qué registro. |
-| **Roles** | Si hace falta un super administrador de la plataforma, y si el cliente final puede crear cuenta para ver su historial y reprogramar. |
-| **Clientes y el profesional** | Ya decidido: el profesional ve los clientes del negocio, puede crearlos (los necesita para anotar a quien llega) y editar sólo sus **notas**. Cambiar los datos (nombre, teléfono, email, etiquetas...) y borrar un cliente es de dueño y encargado. El servidor lo aplica con `puedeEditarDatosDeCliente` y `puedeBorrarCliente` (`lib/permisos.ts`). |
+| **Roles** | Si hace falta un super administrador de la plataforma, y si el cliente final puede crear cuenta para ver su historial (cancelar y reagendar ya se hace sin cuenta, con el enlace del correo). |
+| **Reserva por profesional** | Hoy sólo se ofrecen los profesionales: el dueño que también atiende y el encargado con "también atiende" entran con ese interruptor (fila Cobro). Las citas sin profesional asignado ocupan a todos; falta decidir si el panel ofrece asignarlas. Al reagendar se mantiene el profesional; cambiarlo desde el enlace no está. El aviso de cancelación o cambio va al correo del dueño, no al del profesional. |
+| **Clientes y el profesional** | Ya decidido: el profesional ve los clientes del negocio, puede crearlos (los necesita para anotar a quien llega) y editar sólo sus **notas**. Cambiar los datos (nombre, teléfono, email, etiquetas...) y borrar un cliente es de dueño y encargado. El servidor lo aplica con `puedeEditarDatosDeCliente` y `puedeBorrarCliente` (`lib/permisos.ts`). Importar y exportar clientes y atenciones en CSV también es de dueño y encargado (`puedeImportarExportarClientes`). |
+| **Clientes: datos pendientes** | La exportación de atenciones excluye las de clientes eliminados, así que su total puede no coincidir con Reportes: decidir si se incluyen (ya anonimizadas, como "Cliente eliminado"). Los teléfonos guardados antes de normalizar no se migraron a `+56`. El cliente no tiene fecha de nacimiento, así que la importación no la lee. Fuera de la ficha de clientes (agenda, tablero) el teléfono se muestra todavía como está guardado. |
 | **Chats** | Chats: escondido del panel hasta que exista un canal real (WhatsApp). Hoy los mensajes no le llegan al cliente, todos se guardan como 'del negocio' sin autor y la conversación no está ligada a la ficha del cliente. El código y las tablas se conservan. |
 | **Branding** | Nombre definitivo (mantener *Eli* o cambiar), dominio, y tono: cercano o sobrio. |
 | **Deuda: referido propio (B1)** | Un dueño puede ganar los 7 días extra creando una segunda cuenta con su enlace y reservando en ella. Acotado: se da una sola vez por negocio y todavía no hay cobro. Mitigación futura: contar el referido sólo cuando la cita se marca atendida, o exigir correo verificado. |

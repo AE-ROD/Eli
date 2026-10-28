@@ -11,8 +11,19 @@
 
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
 
+/** Quien atiende, tal como lo muestra la página pública. `servicioIds` en null: hace todos. */
+export interface ProfesionalPublico {
+  id: string
+  nombre: string
+  especialidad: string | null
+  fotoUrl: string | null
+  servicioIds: string[] | null
+}
+
 export interface DatosDeReserva {
   servicioId: string
+  /** `null`: cualquiera disponible (lo asigna el servidor). */
+  profesionalId: string | null
   /** `YYYY-MM-DD`. */
   fecha: string
   /** `HH:MM`. */
@@ -22,20 +33,41 @@ export interface DatosDeReserva {
   cedula: string
   email: string
   telefono: string
+  /** "Quiero recibir recordatorios por WhatsApp". */
+  whatsapp: boolean
   comentarios: string
 }
 
-/** Las horas de inicio libres (`HH:MM`) para ese servicio ese día. */
+/** Los profesionales que atienden. Si no se pudo leer, la reserva sigue con "cualquiera". */
+export async function leerProfesionales(slug: string): Promise<Resultado<ProfesionalPublico[]>> {
+  const resultado = await pedir<{ profesionales: ProfesionalPublico[] }>(
+    `/api/reservar/${encodeURIComponent(slug)}/profesionales`,
+    "No se pudo cargar el equipo"
+  )
+  return resultado.ok ? { ok: true, datos: resultado.datos.profesionales } : resultado
+}
+
+/** Las horas de inicio libres (`HH:MM`) para ese servicio ese día, con ese profesional o con cualquiera (`null`). */
 export async function leerDisponibilidad(
   slug: string,
   fecha: string,
-  servicioId: string
+  servicioId: string,
+  profesionalId: string | null
 ): Promise<Resultado<string[]>> {
+  const consulta = new URLSearchParams({ fecha, servicioId })
+  if (profesionalId) consulta.set("profesionalId", profesionalId)
   const resultado = await pedir<{ slots: string[] }>(
-    `/api/reservar/${slug}/disponibilidad?fecha=${fecha}&servicioId=${servicioId}`,
+    `/api/reservar/${encodeURIComponent(slug)}/disponibilidad?${consulta}`,
     "No se pudieron cargar los horarios disponibles"
   )
   return resultado.ok ? { ok: true, datos: resultado.datos.slots } : resultado
+}
+
+export interface ReservaConfirmada {
+  citaId: string
+  profesional: { id: string; nombre: string } | null
+  /** La ruta para cancelar o reagendar sin cuenta (lleva el token). */
+  enlaceDeGestion: string
 }
 
 /**
@@ -43,12 +75,16 @@ export async function leerDisponibilidad(
  * Devuelve el id de la cita creada, que ya venía en la respuesta: es el UID
  * estable del evento de calendario (`lib/calendario.ts`).
  */
-export async function confirmarReserva(slug: string, datos: DatosDeReserva): Promise<Resultado<{ citaId: string }>> {
-  return pedir<{ citaId: string }>(
-    `/api/reservar/${slug}/confirmar`,
+export async function confirmarReserva(
+  slug: string,
+  datos: DatosDeReserva
+): Promise<Resultado<ReservaConfirmada>> {
+  return pedir<ReservaConfirmada>(
+    `/api/reservar/${encodeURIComponent(slug)}/confirmar`,
     "Error al confirmar la reserva",
     conJson("POST", {
       servicioId: datos.servicioId,
+      profesionalId: datos.profesionalId ?? undefined,
       fecha: datos.fecha,
       hora: datos.hora,
       nombre: datos.nombre,
@@ -56,6 +92,8 @@ export async function confirmarReserva(slug: string, datos: DatosDeReserva): Pro
       cedula: datos.cedula || undefined,
       email: datos.email || undefined,
       telefono: datos.telefono || undefined,
+      // Sólo con teléfono: sin número no hay a dónde escribir.
+      whatsappConsentimiento: datos.telefono ? datos.whatsapp : undefined,
       comentarios: datos.comentarios || undefined,
     })
   )

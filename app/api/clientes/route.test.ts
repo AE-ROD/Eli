@@ -67,10 +67,10 @@ function paginarComoPrisma<T>(lista: T[], { skip = 0, take }: { skip?: number; t
 const creadoEl = (dia: number) => new Date(Date.UTC(2026, 0, dia))
 
 const clientesFake: Registro[] = [
-  { id: "cliente-1", businessId: "negocio-1", name: "Ana", lastName: "Pérez", email: "ana@example.com", phone: null, tags: ["vip"], notes: null, createdAt: creadoEl(1) },
-  { id: "cliente-2", businessId: "negocio-1", name: "Beto Soto", lastName: null, email: null, phone: "+56 9 1111 1111", tags: [], notes: null, createdAt: creadoEl(2) },
+  { id: "cliente-1", businessId: "negocio-1", name: "Ana", lastName: "Pérez", email: "ana@example.com", phone: null, tags: ["vip"], notes: null, whatsappConsentAt: null, createdAt: creadoEl(1) },
+  { id: "cliente-2", businessId: "negocio-1", name: "Beto Soto", lastName: null, email: null, phone: "+56 9 1111 1111", tags: [], notes: null, whatsappConsentAt: null, createdAt: creadoEl(2) },
   /** Se llama igual que `cliente-1` y tiene su misma etiqueta: sólo el negocio los distingue. */
-  { id: "cliente-ajeno", businessId: "negocio-2", name: "Ana", lastName: "Pérez", email: "ana@otro.com", phone: null, tags: ["vip"], notes: null, createdAt: creadoEl(1) },
+  { id: "cliente-ajeno", businessId: "negocio-2", name: "Ana", lastName: "Pérez", email: "ana@otro.com", phone: null, tags: ["vip"], notes: null, whatsappConsentAt: null, createdAt: creadoEl(1) },
   /** Un negocio con sesenta clientes, para probar la paginación contra el tope de 50. */
   ...Array.from({ length: 60 }, (_, i) => ({
     id: `cliente-grande-${i + 1}`,
@@ -81,6 +81,7 @@ const clientesFake: Registro[] = [
     phone: null,
     tags: [],
     notes: null,
+    whatsappConsentAt: null,
     createdAt: creadoEl(i + 1),
   })),
 ]
@@ -143,6 +144,8 @@ const tablas: Tablas = {
   visitService: [],
   visitPayment: [],
   workSchedule: [],
+  timeBlock: [],
+  memberService: [],
   customer: clientesFake,
   appointment: citasFake,
 }
@@ -615,6 +618,43 @@ describe("GET /api/clientes — visitas, última visita y próxima cita", () => 
   })
 })
 
+describe("GET /api/clientes — inasistencias (\"No vino\")", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  conFilasExtra({
+    citas: [
+      cita("no-vino-1", "cliente-2", "member-worker-1", "02", { status: "no-asistio" }),
+      cita("no-vino-2", "cliente-2", "member-worker-2", "04", { status: "no-asistio" }),
+      // Cancelada no es inasistencia: avisó.
+      cita("cancelada", "cliente-2", "member-worker-1", "06", { status: "cancelada" }),
+      // Inconsistente a propósito: de otro negocio, pero apunta a `cliente-2`.
+      cita("no-vino-cruzada", "cliente-2", "member-ajeno", "08", { businessId: "negocio-2", status: "no-asistio" }),
+    ],
+  })
+
+  const inasistenciasDe = (clientes: { id: string; inasistencias: number }[], id: string) =>
+    clientes.find((cliente) => cliente.id === id)?.inasistencias
+
+  it("cuenta las citas marcadas 'no vino' del negocio: ni las canceladas ni las de otro negocio", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const data = await (await GET(fakeGet())).json()
+
+    expect(inasistenciasDe(data.clientes, "cliente-2")).toBe(2)
+    expect(inasistenciasDe(data.clientes, "cliente-1")).toBe(0)
+  })
+
+  it("el profesional cuenta sólo las suyas, como en el historial", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+    const data = await (await GET(fakeGet())).json()
+
+    expect(inasistenciasDe(data.clientes, "cliente-2")).toBe(1)
+  })
+})
+
 describe("GET /api/clientes — paginación", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -756,7 +796,7 @@ describe("POST /api/clientes — largos y tipos", () => {
     const res = await POST(
       fakePost({
         name: `  ${"a".repeat(100)}  `,
-        phone: "1".repeat(30),
+        phone: "  +56 (9) 1234-5678  ",
         email: `${"a".repeat(242)}@correo.test`,
         notes: "a".repeat(2000),
         tags: Array.from({ length: 20 }, () => "b".repeat(30)),
@@ -767,6 +807,7 @@ describe("POST /api/clientes — largos y tipos", () => {
     const { data } = prismaMock.customer.create.mock.calls[0][0]
     expect(data.name).toBe("a".repeat(100))
     expect(data.email).toHaveLength(254)
+    expect(data.phone).toBe("+56912345678")
   })
 
   it("un email vacío sigue siendo \"sin email\"", async () => {
@@ -778,5 +819,71 @@ describe("POST /api/clientes — largos y tipos", () => {
 
     expect(res.status).toBe(201)
     expect(prismaMock.customer.create.mock.calls[0][0].data).toMatchObject({ email: null, phone: null })
+  })
+})
+
+describe("POST /api/clientes — teléfono en E.164 y consentimiento de WhatsApp", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it.each(["9 1234 5678", "+56 9 1234 5678", "56912345678", "912345678"])(
+    "guarda %j como +56912345678",
+    async (escrito) => {
+      const { POST } = await import("./route")
+      mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+      const res = await POST(fakePost({ name: "Ana", phone: escrito }))
+
+      expect(res.status).toBe(201)
+      expect(prismaMock.customer.create.mock.calls[0][0].data.phone).toBe("+56912345678")
+    }
+  )
+
+  it.each(["12345", "+54 9 11 1234 5678", "llámame"])(
+    "un teléfono que no se puede leer (%j) es 400 con un mensaje claro y no crea nada",
+    async (escrito) => {
+      const { POST } = await import("./route")
+      mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+      const res = await POST(fakePost({ name: "Ana", phone: escrito }))
+
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toMatch(/No pudimos leer el teléfono/)
+      expect(prismaMock.customer.create).not.toHaveBeenCalled()
+    }
+  )
+
+  it("marcado, registra cuándo y que fue desde el panel", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    const antes = Date.now()
+    await POST(fakePost({ name: "Ana", whatsappConsent: true }))
+
+    const { data } = prismaMock.customer.create.mock.calls[0][0]
+    expect(data.whatsappConsentSource).toBe("panel")
+    expect(data.whatsappConsentAt).toBeInstanceOf(Date)
+    expect((data.whatsappConsentAt as Date).getTime()).toBeGreaterThanOrEqual(antes)
+  })
+
+  it.each([["sin marcar", false], ["sin mandarlo", undefined]])("%s, no hay consentimiento", async (_caso, valor) => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    await POST(fakePost({ name: "Ana", ...(valor !== undefined && { whatsappConsent: valor }) }))
+
+    const { data } = prismaMock.customer.create.mock.calls[0][0]
+    expect(data.whatsappConsentAt).toBeUndefined()
+    expect(data.whatsappConsentSource).toBeUndefined()
+  })
+
+  it("el origen del consentimiento no lo elige el cuerpo", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    await POST(fakePost({ name: "Ana", whatsappConsent: true, whatsappConsentSource: "reserva-publica", whatsappConsentAt: "2020-01-01" }))
+
+    const { data } = prismaMock.customer.create.mock.calls[0][0]
+    expect(data.whatsappConsentSource).toBe("panel")
+    expect((data.whatsappConsentAt as Date).getFullYear()).toBeGreaterThan(2020)
   })
 })

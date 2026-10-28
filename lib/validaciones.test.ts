@@ -148,12 +148,19 @@ describe("largos máximos", () => {
       ["nombre", 100],
       ["apellido", 100],
       ["cedula", 30],
-      ["telefono", 30],
       ["comentarios", 1000],
       ["servicioId", 64],
     ])("%s: acepta %i caracteres y rechaza uno más", (campo, maximo) => {
       expect(reservaSchema.safeParse({ ...reservaValida, [campo]: texto(maximo) }).success).toBe(true)
       expect(reservaSchema.safeParse({ ...reservaValida, [campo]: texto(maximo + 1) }).success).toBe(false)
+    })
+
+    it("telefono: se guarda en E.164; lo ilegible o de más de 30 caracteres se rechaza; vacío es null", () => {
+      expect(reservaSchema.parse({ ...reservaValida, telefono: "9 1234 5678" }).telefono).toBe("+56912345678")
+      expect(reservaSchema.parse({ ...reservaValida, telefono: "" }).telefono).toBeNull()
+      expect(reservaSchema.parse({ ...reservaValida }).telefono).toBeNull()
+      expect(reservaSchema.safeParse({ ...reservaValida, telefono: "123" }).success).toBe(false)
+      expect(reservaSchema.safeParse({ ...reservaValida, telefono: `+56 9 1234 5678${" ".repeat(20)}x` }).success).toBe(false)
     })
 
     it("email: rechaza más de 254 caracteres", () => {

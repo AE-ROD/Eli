@@ -3,18 +3,19 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
-import { ESTADOS_DE_CITA, MENSAJE_DE_HORARIO_INVERTIDO, notas, precioDeCita, terminaDespuesDeEmpezar, titulo } from "@/lib/campos-del-panel"
+import {
+  ESTADOS_DE_CITA,
+  MENSAJE_DE_HORARIO_INVERTIDO,
+  notas,
+  precioDeCita,
+  puedeMarcarseNoVino,
+  terminaDespuesDeEmpezar,
+  titulo,
+} from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, memberIdParaCita, whereDeAgenda, type Actor } from "@/lib/permisos"
-import {
-  MENSAJE_CITA_CERRADA,
-  MENSAJE_CITA_CON_ATENCION,
-  advertenciaDeChoque,
-  advertenciaDeHorario,
-  sePuedeMover,
-  type Advertencia,
-} from "@/lib/mover-cita"
-import { zonaDelNegocio } from "@/lib/zona-horaria"
+import { MENSAJE_CITA_CERRADA, MENSAJE_CITA_CON_ATENCION, sePuedeMover } from "@/lib/mover-cita"
+import { advertenciasDeAgenda } from "@/lib/advertencias-de-agenda"
 
 const edicionDeCitaSchema = z.object({
   title: titulo().optional(),
@@ -32,56 +33,10 @@ const edicionDeCitaSchema = z.object({
   confirmarAdvertencias: z.boolean().optional(),
 })
 
-/**
- * Las advertencias de mover la cita a `tramo` con `memberId`: choques con
- * otras citas del mismo profesional y horario de atención. Todo se lee del
- * negocio del actor; la cita que se mueve no choca consigo misma.
- */
-async function advertenciasAlMover(
-  actor: Actor,
-  citaId: string,
-  tramo: { startTime: Date; endTime: Date },
-  memberId: string | null
-): Promise<Advertencia[]> {
-  const [negocio, filas, miembro] = await Promise.all([
-    prisma.business.findUnique({ where: { id: actor.businessId }, select: { timezone: true } }),
-    prisma.workSchedule.findMany({
-      where: { businessId: actor.businessId, active: true },
-      select: { memberId: true, dayOfWeek: true, startTime: true, endTime: true },
-    }),
-    memberId
-      ? prisma.businessMember.findFirst({
-          where: { id: memberId, businessId: actor.businessId },
-          select: { user: { select: { name: true } } },
-        })
-      : null,
-  ])
-  const zona = zonaDelNegocio(negocio?.timezone)
-  const nombre = miembro?.user?.name?.trim() || "El profesional"
-
-  // Mismo criterio de choque que la reserva pública: sólo las canceladas
-  // liberan el horario.
-  const choques = memberId
-    ? await prisma.appointment.findMany({
-        where: {
-          businessId: actor.businessId,
-          memberId,
-          id: { not: citaId },
-          status: { not: "cancelada" },
-          startTime: { lt: tramo.endTime },
-          endTime: { gt: tramo.startTime },
-        },
-        select: { startTime: true, endTime: true },
-        orderBy: { startTime: "asc" },
-        take: 10,
-      })
-    : []
-
-  return [
-    advertenciaDeChoque(nombre, choques, zona),
-    advertenciaDeHorario(tramo, filas, memberId, memberId ? nombre : null, zona),
-  ].filter((advertencia): advertencia is Advertencia => advertencia !== null)
-}
+/** Por qué no se puede marcar "No vino". */
+const NO_VINO_SIN_ESPERA = "Sólo se marca \"no vino\" en una cita pendiente o confirmada"
+const NO_VINO_ANTES_DE_HORA = "Todavía no es la hora de la cita: si avisó que no viene, cancélala"
+const NO_VINO_PERO_LLEGO = "El cliente ya llegó: la cita tiene una atención en el Tablero. Si fue un error, deshaz la llegada primero"
 
 /**
  * Pide un `Actor`, no `Actor | null`: sin sesión no hay cita, y el handler ya
@@ -165,6 +120,25 @@ export async function PUT(
       }
     }
 
+    // "No vino" sólo para una reserva que seguía esperando, cuya hora ya
+    // llegó y cuyo cliente no está en el Tablero: si no, el contador de
+    // inasistencias de la ficha mentiría.
+    if (datos.status === "no-asistio" && existente.status !== "no-asistio") {
+      if (!puedeMarcarseNoVino(existente.status)) {
+        return NextResponse.json({ error: NO_VINO_SIN_ESPERA }, { status: 409 })
+      }
+      if (existente.startTime.getTime() > Date.now()) {
+        return NextResponse.json({ error: NO_VINO_ANTES_DE_HORA }, { status: 409 })
+      }
+      const llego = await prisma.visit.findFirst({
+        where: { appointmentId: existente.id, businessId: actor.businessId, status: { not: "anulada" } },
+        select: { id: true },
+      })
+      if (llego) {
+        return NextResponse.json({ error: NO_VINO_PERO_LLEGO }, { status: 409 })
+      }
+    }
+
     // Sólo cuenta como mover si se pidió cambiar el horario o el profesional y
     // algo de eso es distinto de lo guardado: un cambio de estado no se mueve.
     const pideMover = datos.startTime !== undefined || datos.endTime !== undefined || datos.memberId !== undefined
@@ -191,7 +165,12 @@ export async function PUT(
       }
 
       if (!datos.confirmarAdvertencias) {
-        const advertencias = await advertenciasAlMover(actor, existente.id, { startTime: inicio, endTime: fin }, memberId)
+        const advertencias = await advertenciasDeAgenda(prisma, {
+          businessId: actor.businessId,
+          citaId: existente.id,
+          tramo: { startTime: inicio, endTime: fin },
+          memberId,
+        })
         if (advertencias.length > 0) {
           return NextResponse.json(
             { error: advertencias.map((advertencia) => advertencia.mensaje).join(" "), advertencias },

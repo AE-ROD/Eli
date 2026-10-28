@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
-import { descripcion, duracion, nombre, precioDeServicio } from "@/lib/campos-del-panel"
+import { categoriaDeServicio, descripcion, duracion, nombre, precioDeServicio } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, puedeGestionarServicios } from "@/lib/permisos"
 
@@ -29,6 +29,8 @@ const servicioSchema = z.object({
   description: descripcion().optional(),
   duration: duracion(),
   price: precioDeServicio().optional(),
+  // Agrupa los servicios en la página pública; vacío es "sin categoría".
+  category: categoriaDeServicio().optional(),
 })
 
 export async function POST(request: NextRequest) {

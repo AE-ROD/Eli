@@ -15,6 +15,7 @@ import {
 } from "./_datos"
 import { ListaEquipo } from "./_componentes/lista-equipo"
 import { ModalInvitar } from "./_componentes/modal-invitar"
+import { ModalServiciosDelMiembro } from "./_componentes/modal-servicios-del-miembro"
 
 export default function PaginaEquipo() {
   const [miembros, setMiembros] = useState<MiembroDelEquipo[]>([])
@@ -29,6 +30,7 @@ export default function PaginaEquipo() {
   const [aAnular, setAAnular] = useState<InvitacionPendiente | null>(null)
   const [anulando, setAnulando] = useState(false)
   const [avisoDeAnular, setAvisoDeAnular] = useState("")
+  const [serviciosDe, setServiciosDe] = useState<MiembroDelEquipo | null>(null)
 
   const cargar = async () => {
     setCargando(true)
@@ -103,6 +105,10 @@ export default function PaginaEquipo() {
           reenviandoId={reenviandoId}
           alReenviar={reenviar}
           alAnular={pedirAnular}
+          alEditarServicios={(miembro) => {
+            setAvisoListo("")
+            setServiciosDe(miembro)
+          }}
         />
       </div>
 
@@ -118,6 +124,19 @@ export default function PaginaEquipo() {
             aviso={avisoDeAnular}
             onConfirmar={confirmarAnular}
             onCerrar={() => setAAnular(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {serviciosDe && (
+          <ModalServiciosDelMiembro
+            miembro={serviciosDe}
+            alCerrar={() => setServiciosDe(null)}
+            alGuardar={(texto) => {
+              setServiciosDe(null)
+              setAvisoListo(texto)
+            }}
           />
         )}
       </AnimatePresence>

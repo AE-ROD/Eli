@@ -32,7 +32,7 @@ describe("verificarLimite cuando Upstash está configurado pero falla", () => {
     vi.restoreAllMocks()
   })
 
-  it.each(["login", "auth", "reserva", "soporte", "acuseDeSoporte", "reenvioDeInvitacion"] as const)(
+  it.each(["login", "auth", "reserva", "soporte", "acuseDeSoporte", "reenvioDeInvitacion", "importacionDeClientes", "gestionDeCita"] as const)(
     "falla CERRADO para %s si Upstash tira un error: lo que un anónimo puede abusar no queda sin tope",
     async (tipo) => {
       vi.spyOn(console, "error").mockImplementation(() => {})
@@ -42,7 +42,7 @@ describe("verificarLimite cuando Upstash está configurado pero falla", () => {
     },
   )
 
-  it.each(["lecturaPublica", "panelLectura", "panelEscritura"] as const)(
+  it.each(["lecturaPublica", "panelLectura", "panelEscritura", "exportacion"] as const)(
     "falla abierto para %s si Upstash tira un error: ni una lectura ni una escritura con sesión se cortan por una caída del proveedor",
     async (tipo) => {
       vi.spyOn(console, "error").mockImplementation(() => {})
@@ -101,6 +101,36 @@ describe("verificarLimite cuando Upstash está configurado pero falla", () => {
     expect(usados).toHaveLength(1)
     expect(usados[0].config).toMatchObject({ prefix: "eli:reenvio-invitacion", limiter: { tokens: 3, ventana: "1 h" } })
     expect(usados[0].limit).toHaveBeenCalledWith("negocio-1:ana@x.com")
+  })
+})
+
+describe("los baldes del CSV de clientes", () => {
+  beforeEach(() => {
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://fake.upstash.io")
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "fake-token")
+    vi.resetModules()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it.each([
+    ["importacionDeClientes", "eli:importacion-clientes", 5],
+    ["exportacion", "eli:exportacion", 20],
+    ["gestionDeCita", "eli:gestion-cita", 60],
+  ] as const)("%s cuenta en su propio balde (%s), de %i por hora", async (tipo, prefijo, tokens) => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    const { Ratelimit } = (await import("@upstash/ratelimit")) as unknown as { Ratelimit: RatelimitFalso }
+    Ratelimit.creados.length = 0
+    const { verificarLimite } = await import("./rate-limit")
+
+    await verificarLimite(tipo, "negocio-1")
+
+    const usados = Ratelimit.creados.filter((limitador) => limitador.limit.mock.calls.length > 0)
+    expect(usados).toHaveLength(1)
+    expect(usados[0].config).toMatchObject({ prefix: prefijo, limiter: { tokens, ventana: "1 h" } })
+    expect(usados[0].limit).toHaveBeenCalledWith("negocio-1")
   })
 })
 

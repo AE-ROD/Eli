@@ -192,6 +192,22 @@ export async function marcarLlegada(citaId: string): Promise<ResultadoDeAccion<A
 }
 
 /**
+ * La reserva no llegó: la cita queda "No vino" (`no-asistio`), sale de
+ * "Reservas de hoy", libera su horario y cuenta en la ficha del cliente. El
+ * servidor sólo lo acepta en una reserva pendiente o confirmada cuya hora ya
+ * pasó y que no esté en el tablero: si no, 409 con el motivo.
+ */
+export async function marcarNoVino(citaId: string): Promise<ResultadoDeAccion<unknown>> {
+  return conMotivo(
+    await pedirConCodigo<unknown>(
+      `/api/citas/${encodeURIComponent(citaId)}`,
+      "No se pudo marcar que no vino",
+      conJson("PUT", { status: "no-asistio" })
+    )
+  )
+}
+
+/**
  * Deshace una llegada marcada por error: la atención en espera se borra y la
  * reserva vuelve a "Reservas de hoy". Si ya empezó, o no nació de una
  * reserva, el servidor responde 409 con un mensaje: eso se anula.

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { NextRequest } from "next/server"
 import { Prisma } from "@prisma/client"
+import { RUBROS } from "@/lib/rubros"
+import { serviciosDeEjemplo } from "@/lib/servicios-de-ejemplo"
 
 const mockVerificarLimite = vi.fn()
 
@@ -98,6 +100,22 @@ describe("POST /api/auth/registro: bienvenida", () => {
     await mockAfter.mock.calls[0][0]()
     expect(mockEnviarBienvenida).toHaveBeenCalledWith("negocio-1")
   })
+
+  it.each(RUBROS.map((rubro) => rubro.id))(
+    "el negocio de rubro %s nace con sus servicios de ejemplo, en la misma escritura que la cuenta",
+    async (tipoNegocio) => {
+      const { POST } = await import("./route")
+
+      const respuesta = await POST(pedidoFalso({ ...registroValido, tipoNegocio }))
+
+      expect(respuesta.status).toBe(200)
+      // Una sola llamada: usuario, negocio y servicios van anidados, todo o nada.
+      expect(mockPrisma.user.create).toHaveBeenCalledTimes(1)
+      const negocio = mockPrisma.user.create.mock.calls[0][0].data.business.create
+      expect(negocio.services).toEqual({ create: serviciosDeEjemplo(tipoNegocio) })
+      expect(negocio.services.create.length).toBeGreaterThanOrEqual(4)
+    }
+  )
 
   it("con el correo ya registrado no programa nada", async () => {
     const { POST } = await import("./route")
