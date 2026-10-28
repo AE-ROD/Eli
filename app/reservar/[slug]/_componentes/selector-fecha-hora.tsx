@@ -8,8 +8,8 @@ import { Esqueleto } from "@/components/comunes/esqueleto"
 import { comoTexto, deTexto } from "@/lib/fechas"
 import { esDiaReservable } from "@/lib/reserva-publica"
 import { fechaYMinutosEn } from "@/lib/zona-horaria"
+import type { Resultado } from "@/lib/peticiones"
 import { cn } from "@/lib/utils"
-import { leerDisponibilidad } from "../_datos"
 
 const DIAS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"]
 const DIAS_LARGOS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"]
@@ -35,8 +35,10 @@ export function fechaParaLeer(fecha: Date): string {
 const ELEGIDO = "bg-azul font-semibold text-navy inset-ring-2 inset-ring-navy"
 
 interface PropsDeSelectorFechaHora {
-  slug: string
-  servicioId: string
+  /** Las horas libres de un día. La reserva y el reagendar las piden a endpoints distintos. */
+  cargarHoras: (fecha: string) => Promise<Resultado<string[]>>
+  /** Cambia cuando cambia lo que define las horas (servicio, profesional): se vuelven a pedir. */
+  claveDeHoras: string
   diasDisponibles: number[] // dayOfWeek con horario activo
   zona: string // la del negocio: "hoy" y la ventana de reserva se cuentan en su reloj
   fechaSeleccionada: string // YYYY-MM-DD
@@ -46,8 +48,8 @@ interface PropsDeSelectorFechaHora {
 }
 
 export function SelectorFechaHora({
-  slug,
-  servicioId,
+  cargarHoras,
+  claveDeHoras,
   diasDisponibles,
   zona,
   fechaSeleccionada,
@@ -68,21 +70,27 @@ export function SelectorFechaHora({
   const idDelAviso = useId()
 
   useEffect(() => {
-    if (!fechaSeleccionada || !servicioId) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- arranca la carga de horas cuando cambia la fecha o el servicio
+    if (!fechaSeleccionada) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- arranca la carga de horas cuando cambia la fecha, el servicio o el profesional
     setCargandoHoras(true)
     setHorasLibres([])
     setAviso("")
     onHora("")
-    leerDisponibilidad(slug, fechaSeleccionada, servicioId).then((resultado) => {
+    let vigente = true
+    cargarHoras(fechaSeleccionada).then((resultado) => {
+      // Si mientras tanto cambió el día o el profesional, esta respuesta ya no vale.
+      if (!vigente) return
       // Un pedido que falló no es un día sin horas libres: se dice qué pasó
       // en vez de mostrar "No hay horarios disponibles".
       if (resultado.ok) setHorasLibres(resultado.datos)
       else setAviso(resultado.error)
       setCargandoHoras(false)
     })
+    return () => {
+      vigente = false
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fechaSeleccionada, servicioId])
+  }, [fechaSeleccionada, claveDeHoras])
 
   const primerDia = new Date(mesActual.getFullYear(), mesActual.getMonth(), 1)
   // Cuántas celdas de la grilla quedan antes del día 1: la semana empieza en domingo.

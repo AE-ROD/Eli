@@ -116,14 +116,16 @@ describe("POST /api/reservar/[slug]/confirmar: la hora tiene que caer en el hora
     expect(base.buscar("customer", { name: "Lucía" })).toHaveLength(0)
   })
 
-  it("con horario general, una hora que sólo cubre el horario de un profesional se rechaza", async () => {
+  it("un profesional con horario propio atiende en el suyo: la hora fuera del general va a él", async () => {
     escenario([
       franja({ startTime: "09:00", endTime: "13:00" }),
       franja({ memberId: "m-carla", startTime: "15:00", endTime: "19:00" }),
     ])
 
-    expect((await confirmar("16:00")).status).toBe(409)
-    expect(citasCreadas()).toHaveLength(0)
+    expect((await confirmar("16:00")).status).toBe(201)
+    expect(citasCreadas()[0].memberId).toBe("m-carla")
+    // A las 20 no atiende nadie.
+    expect((await confirmar("20:00")).status).toBe(409)
   })
 
   it("sin horario general ese día, vale el de los profesionales", async () => {
@@ -162,15 +164,17 @@ describe("POST /api/reservar/[slug]/confirmar: la hora tiene que caer en el hora
     expect(citasCreadas()).toHaveLength(0)
   })
 
-  it("dentro del horario pero con la hora ocupada: sigue respondiendo el 409 de siempre", async () => {
+  it("dentro del horario pero con la hora ocupada por todos: sigue respondiendo el 409 de siempre", async () => {
     escenario([franja({ startTime: "09:00", endTime: "13:00" })])
 
+    // Dos profesionales: la hora se llena con dos reservas, y la tercera choca.
+    expect((await confirmar("10:00")).status).toBe(201)
     expect((await confirmar("10:00")).status).toBe(201)
     const { status, cuerpo } = await confirmar("10:00")
 
     expect(status).toBe(409)
     expect(cuerpo.error).toBe("El horario ya no está disponible")
-    expect(citasCreadas()).toHaveLength(1)
+    expect(citasCreadas()).toHaveLength(2)
   })
 })
 
@@ -654,8 +658,12 @@ describe("POST /api/reservar/[slug]/confirmar: dos confirmaciones al mismo tiemp
     const { POST } = await import("./route")
 
     const respuestas = await Promise.all([
-      POST(pedidoFalso({ ...reserva("10:00", "2026-10-15"), email: "una@correo.test" }), conSlug),
-      POST(pedidoFalso({ ...reserva("10:00", "2026-10-15"), nombre: "Marta", email: "otra@correo.test" }), conSlug),
+      // Las dos con la misma profesional: hay una sola hora que repartir.
+      POST(pedidoFalso({ ...reserva("10:00", "2026-10-15"), profesionalId: "m-carla", email: "una@correo.test" }), conSlug),
+      POST(
+        pedidoFalso({ ...reserva("10:00", "2026-10-15"), profesionalId: "m-carla", nombre: "Marta", email: "otra@correo.test" }),
+        conSlug
+      ),
     ])
 
     expect(respuestas.map((respuesta) => respuesta.status).sort()).toEqual([201, 409])
@@ -692,7 +700,7 @@ describe("POST /api/reservar/[slug]/confirmar: dos confirmaciones al mismo tiemp
     expect(transaccion).toHaveBeenCalledTimes(1)
     expect(transaccion).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable" })
     expect(porLaTransaccion).toEqual(
-      expect.arrayContaining(["appointment.findFirst", "appointment.count", "customer.create", "appointment.create"])
+      expect.arrayContaining(["appointment.findMany", "timeBlock.findMany", "appointment.count", "customer.create", "appointment.create"])
     )
   })
 

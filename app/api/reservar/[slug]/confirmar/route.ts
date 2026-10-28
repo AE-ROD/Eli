@@ -4,12 +4,15 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { enviarConfirmacionCliente, enviarAvisoProfesional } from "@/lib/email"
 import { reservaSchema } from "@/lib/validaciones"
-import { horaAMinutos } from "@/lib/horario-dia"
-import { cabeEnAtencion, franjasDeAtencion } from "@/lib/horario-de-atencion"
+import {
+  asignarCandidatoLibre,
+  candidatosDeLaReserva,
+  candidatosQueCubren,
+  type Candidato,
+} from "@/lib/agenda-publica"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { contabilizarReferido } from "@/lib/referidos"
 import { registrarError } from "@/lib/registro-de-errores"
-import { ESTADOS_QUE_LIBERAN } from "@/lib/ocupacion"
 import {
   MAX_RESERVAS_FUTURAS_POR_CONTACTO,
   MAX_RESERVAS_PUBLICAS_POR_DIA,
@@ -35,7 +38,7 @@ const INTENTOS_ANTE_CONFLICTO = 3
 const HORARIO_TOMADO = "El horario ya no está disponible"
 
 type Resultado =
-  | { tipo: "creada"; cita: { id: string } }
+  | { tipo: "creada"; cita: { id: string; memberId: string | null } }
   | { tipo: "rechazada"; error: string; status: number }
 
 interface Reserva {
@@ -45,6 +48,10 @@ interface Reserva {
   startTime: Date
   endTime: Date
   ahora: Date
+  /** Quienes pueden tomarla: atienden, hacen el servicio y su horario cubre la hora. */
+  candidatos: Candidato[]
+  /** El día de la reserva en el reloj del negocio: para repartir por citas del día. */
+  dia: { desde: Date; hasta: Date }
 }
 
 /** P2034: Postgres no pudo ordenar la transacción con otra concurrente; hay que reintentarla. */
@@ -68,22 +75,18 @@ async function reservarEnTransaccion(reserva: Reserva): Promise<Resultado> {
 /** Lo que se lee y escribe dentro de la transacción. Lo que rechaza no escribe nada. */
 async function reservar(
   tx: Prisma.TransactionClient,
-  { negocioId, servicio, datos, startTime, endTime, ahora }: Reserva
+  { negocioId, servicio, datos, startTime, endTime, ahora, candidatos, dia }: Reserva
 ): Promise<Resultado> {
-  const conflicto = await tx.appointment.findFirst({
-    where: {
-      businessId: negocioId,
-      // Canceladas y "no vino" liberan el horario (`lib/ocupacion.ts`).
-      status: { notIn: [...ESTADOS_QUE_LIBERAN] },
-      OR: [
-        { startTime: { gte: startTime, lt: endTime } },
-        { endTime: { gt: startTime, lte: endTime } },
-        { startTime: { lte: startTime }, endTime: { gte: endTime } },
-      ],
-    },
-    select: { id: true },
+  // A quién va, re-verificado dentro de la transacción con la misma regla con
+  // la que `disponibilidad` ofreció la hora (`lib/agenda-publica.ts`): sus
+  // citas activas, las sin asignar y los bloqueos suyos y del negocio.
+  const asignacion = await asignarCandidatoLibre(tx, {
+    businessId: negocioId,
+    candidatos,
+    tramo: { startTime, endTime },
+    dia,
   })
-  if (conflicto) return { tipo: "rechazada", error: HORARIO_TOMADO, status: 409 }
+  if (!asignacion.libre) return { tipo: "rechazada", error: HORARIO_TOMADO, status: 409 }
 
   // Topes anti-abuso (`lib/reserva-publica.ts`): cuántas reservas públicas
   // recibió el negocio en 24 horas (sin las canceladas: cancelar libera
@@ -126,14 +129,14 @@ async function reservar(
   // cédula sola nunca vincula: con la de otra persona, la reserva quedaba en
   // su historial (M6).
   const email = normalizarEmail(datos.email)
-  const candidatos = email
+  const conEseEmail = email
     ? await tx.customer.findMany({
         where: { businessId: negocioId, email: { equals: email, mode: "insensitive" } },
         select: { id: true, name: true, lastName: true, email: true },
         orderBy: { createdAt: "asc" },
       })
     : []
-  let cliente: { id: string } | undefined = candidatos.find((candidato) => esElMismoCliente(candidato, datos))
+  let cliente: { id: string } | undefined = conEseEmail.find((guardado) => esElMismoCliente(guardado, datos))
 
   if (!cliente) {
     cliente = await tx.customer.create({
@@ -161,14 +164,15 @@ async function reservar(
       clientComments: datos.comentarios || null,
       price: servicio.price,
       customerId: cliente.id,
+      memberId: asignacion.memberId,
       businessId: negocioId,
     },
-    select: { id: true },
+    select: { id: true, memberId: true },
   })
 
   return { tipo: "creada", cita }
 }
-import { diaDeLaSemana, existeLaHora, instanteEn, zonaDelNegocio } from "@/lib/zona-horaria"
+import { existeLaHora, instanteEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 
 export async function POST(
   request: NextRequest,
@@ -233,19 +237,22 @@ export async function POST(
     const startTime = instanteEn(datos.fecha, datos.hora, zona)
     const endTime = new Date(startTime.getTime() + servicio.duration * 60000)
 
-    // La hora tiene que caer entera dentro del horario de atención de ese día,
-    // con la misma regla que ofrece las horas (`franjasDeAtencion`). El día de
-    // la semana se saca igual que en `disponibilidad/route.ts` y la hora se
-    // compara en minutos como texto "HH:MM", igual que las franjas: así lo que
-    // se ofrece y lo que se acepta no pueden dar distinto.
-    const diaSemana = diaDeLaSemana(datos.fecha)
-    const filasDelDia = await prisma.workSchedule.findMany({
-      where: { businessId: negocio.id, dayOfWeek: diaSemana, active: true },
-      select: { memberId: true, startTime: true, endTime: true },
-      orderBy: { startTime: "asc" },
+    // Quién puede tomarla (`lib/agenda-publica.ts`), con la misma regla que
+    // `disponibilidad`: profesionales que atienden y hacen el servicio (sólo
+    // el elegido, si eligió), y de ellos los que tienen la hora entera dentro
+    // de su horario. Un negocio sin profesionales es un solo carril con el
+    // horario del negocio, como siempre.
+    const reserva = await candidatosDeLaReserva(prisma, {
+      businessId: negocio.id,
+      serviceId: servicio.id,
+      profesionalId: datos.profesionalId || null,
+      fecha: datos.fecha,
     })
-    const inicioMin = horaAMinutos(datos.hora)
-    if (!cabeEnAtencion(franjasDeAtencion(filasDelDia), inicioMin, inicioMin + servicio.duration)) {
+    if (reserva.tipo === "profesional-no-disponible") {
+      return NextResponse.json({ error: "Ese profesional no está disponible para este servicio" }, { status: 404 })
+    }
+    const candidatos = candidatosQueCubren(reserva.candidatos, datos.hora, servicio.duration)
+    if (candidatos.length === 0) {
       return NextResponse.json(
         { error: "Ese horario está fuera de la atención del negocio. Elige otra hora." },
         { status: 409 }
@@ -264,6 +271,8 @@ export async function POST(
       startTime,
       endTime,
       ahora,
+      candidatos,
+      dia: rangoDelDiaEn(datos.fecha, zona),
     })
     if (resultado.tipo === "rechazada") {
       return NextResponse.json({ error: resultado.error }, { status: resultado.status })
@@ -281,6 +290,11 @@ export async function POST(
       })
     }
 
+    // Sólo lo que se muestra del profesional: su id y su nombre.
+    const profesional = cita.memberId
+      ? (reserva.profesionales.find((candidato) => candidato.id === cita.memberId) ?? null)
+      : null
+
     // Enviar emails en paralelo (sin bloquear la respuesta si fallan)
     const emailsPromises: Promise<unknown>[] = []
 
@@ -294,6 +308,7 @@ export async function POST(
           fecha: datos.fecha,
           hora: datos.hora,
           duracion: servicio.duration,
+          profesional: profesional?.nombre ?? null,
         }).catch(() => null)
       )
     }
@@ -307,12 +322,20 @@ export async function POST(
         fecha: datos.fecha,
         hora: datos.hora,
         comentarios: datos.comentarios,
+        profesional: profesional?.nombre ?? null,
       }).catch(() => null)
     )
 
     await Promise.all(emailsPromises)
 
-    return NextResponse.json({ citaId: cita.id, mensaje: "Reserva confirmada" }, { status: 201 })
+    return NextResponse.json(
+      {
+        citaId: cita.id,
+        profesional: profesional ? { id: profesional.id, nombre: profesional.nombre } : null,
+        mensaje: "Reserva confirmada",
+      },
+      { status: 201 }
+    )
   } catch (error) {
     if (error instanceof z.ZodError) {
       // Público: el primer mensaje, legible, y no los issues crudos de zod.

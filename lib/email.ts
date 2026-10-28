@@ -281,21 +281,21 @@ export interface DatosConfirmacionCliente {
   fecha: string
   hora: string
   duracion: number
+  /** Quién atiende, si la reserva quedó asignada. */
+  profesional?: string | null
 }
 
 export function enviarConfirmacionCliente(datos: DatosConfirmacionCliente) {
+  const detalle: Array<[string, string]> = [["Servicio", datos.servicio]]
+  if (datos.profesional) detalle.push(["Con", datos.profesional])
+  detalle.push(["Fecha", fechaLegible(datos.fecha)], ["Hora", datos.hora], ["Duración", `${datos.duracion} minutos`])
   return enviar({
     tipo: "confirmacion-cliente",
     para: datos.emailCliente,
     asunto: asunto`Cita confirmada — ${datos.nombreNegocio}`,
     titulo: "¡Tu cita está confirmada!",
     intro: html`Hola <strong>${datos.nombreCliente}</strong>, te esperamos en <strong>${datos.nombreNegocio}</strong>.`,
-    detalle: [
-      ["Servicio", datos.servicio],
-      ["Fecha", fechaLegible(datos.fecha)],
-      ["Hora", datos.hora],
-      ["Duración", `${datos.duracion} minutos`],
-    ],
+    detalle,
     cierre: html`Si necesitas cancelar o cambiar tu cita, contáctanos con anticipación.`,
   })
 }
@@ -308,12 +308,15 @@ export interface DatosAvisoProfesional {
   fecha: string
   hora: string
   comentarios?: string | null
+  /** A quién quedó asignada; sin dar, no se muestra. */
+  profesional?: string | null
 }
 
 export function enviarAvisoProfesional(datos: DatosAvisoProfesional) {
   const detalle: Array<[string, string]> = [
     ["Cliente", datos.nombreCliente],
     ["Servicio", datos.servicio],
+    ...(datos.profesional ? [["Profesional", datos.profesional] as [string, string]] : []),
     ["Fecha", fechaLegible(datos.fecha)],
     ["Hora", datos.hora],
   ]

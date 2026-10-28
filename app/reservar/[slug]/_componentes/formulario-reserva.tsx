@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useId, useRef, useState } from "react"
+import { useCallback, useEffect, useId, useRef, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import type { ReactNode, Ref } from "react"
 import { motion } from "framer-motion"
 import { ArrowLeft, ArrowRight, CalendarCheck, Check } from "lucide-react"
@@ -21,7 +22,8 @@ import { InvitacionAEli } from "./pie-de-eli"
 import { ResumenDeReserva } from "./resumen-de-reserva"
 import { SelectorServicio, type ServicioPublico } from "./selector-servicio"
 import { SelectorFechaHora } from "./selector-fecha-hora"
-import { confirmarReserva } from "../_datos"
+import { SelectorProfesional } from "./selector-profesional"
+import { confirmarReserva, leerDisponibilidad, leerProfesionales, type ProfesionalPublico } from "../_datos"
 
 interface HorarioPublico {
   dayOfWeek: number
@@ -47,9 +49,20 @@ type Paso = 1 | 2 | 3
  */
 const FUNDIDO = { duration: DURACION.pildora, ease: CURVA.fundido }
 
+/** Lo hace el profesional: sin servicios definidos, hace todos. */
+const haceElServicio = (profesional: ProfesionalPublico, servicioId: string) =>
+  profesional.servicioIds === null || profesional.servicioIds.includes(servicioId)
+
 export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horarios }: PropsDeFormularioReserva) {
   const [paso, setPaso] = useState<Paso>(1)
   const [servicioSeleccionado, setServicioSeleccionado] = useState<ServicioPublico | null>(null)
+  // `?profesional=<id>` (el "Reservar con …" de la mini página) lo deja
+  // elegido de entrada. Si no es de este negocio, no aparece en la lista y se
+  // ignora: el servidor igual lo rechazaría.
+  const profesionalDeLaUrl = useSearchParams().get("profesional")
+  const [profesionales, setProfesionales] = useState<ProfesionalPublico[]>([])
+  const [profesionalId, setProfesionalId] = useState<string | null>(profesionalDeLaUrl)
+  const [profesionalAsignado, setProfesionalAsignado] = useState<string | null>(null)
   const [fecha, setFecha] = useState("")
   const [hora, setHora] = useState("")
   const [nombre, setNombre] = useState("")
@@ -70,6 +83,42 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
 
   const diasDisponibles = horarios.map((horario) => horario.dayOfWeek)
 
+  // El equipo se pide al montar. Si falla, la reserva sigue: sin elegir con
+  // quién, el servidor asigna (o es un negocio sin equipo).
+  useEffect(() => {
+    let vigente = true
+    leerProfesionales(slug).then((resultado) => {
+      if (!vigente || !resultado.ok) return
+      setProfesionales(resultado.datos)
+      // Un profesional de la URL que no existe no queda elegido.
+      setProfesionalId((actual) => (actual && resultado.datos.some((p) => p.id === actual) ? actual : null))
+    })
+    return () => {
+      vigente = false
+    }
+  }, [slug])
+
+  const profesionalElegido = profesionales.find((profesional) => profesional.id === profesionalId) ?? null
+  // Con un profesional elegido, sólo los servicios que hace.
+  const serviciosVisibles = profesionalElegido
+    ? servicios.filter((servicio) => haceElServicio(profesionalElegido, servicio.id))
+    : servicios
+  const profesionalesDelServicio = servicioSeleccionado
+    ? profesionales.filter((profesional) => haceElServicio(profesional, servicioSeleccionado.id))
+    : []
+
+  const elegirServicio = (servicio: ServicioPublico) => {
+    setServicioSeleccionado(servicio)
+    // Si el profesional elegido no hace este servicio, vuelve a "cualquiera".
+    if (profesionalElegido && !haceElServicio(profesionalElegido, servicio.id)) setProfesionalId(null)
+  }
+
+  const servicioId = servicioSeleccionado?.id ?? ""
+  const cargarHoras = useCallback(
+    (dia: string) => leerDisponibilidad(slug, dia, servicioId, profesionalId),
+    [slug, servicioId, profesionalId]
+  )
+
   const puedeAvanzarPaso1 = !!servicioSeleccionado
   const puedeAvanzarPaso2 = !!fecha && !!hora
   const puedeEnviar = !!nombre && !!apellido
@@ -79,6 +128,7 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
     setError("")
     const resultado = await confirmarReserva(slug, {
       servicioId: servicioSeleccionado!.id,
+      profesionalId,
       fecha,
       hora,
       nombre,
@@ -90,7 +140,10 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
     })
     setEnviando(false)
 
-    if (resultado.ok) setCitaId(resultado.datos.citaId)
+    if (resultado.ok) {
+      setProfesionalAsignado(resultado.datos.profesional?.nombre ?? null)
+      setCitaId(resultado.datos.citaId)
+    }
     else setError(resultado.error)
   }
 
@@ -129,6 +182,7 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
             servicio={servicioSeleccionado}
             fecha={fecha}
             hora={hora}
+            profesional={profesionalAsignado}
             sinServicio
           />
           <AgregarAlCalendario
@@ -182,11 +236,25 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
               <TituloDelPaso ref={titulo} paso={1}>
                 ¿Qué servicio necesitas?
               </TituloDelPaso>
+              {profesionalElegido && (
+                <p className="mt-3 flex flex-wrap items-center gap-x-2 text-sm text-texto-2">
+                  <span>
+                    Reservando con <strong className="font-medium text-navy">{profesionalElegido.nombre}</strong>.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setProfesionalId(null)}
+                    className="font-medium text-navy underline underline-offset-4 anillo-foco"
+                  >
+                    Ver todos los servicios
+                  </button>
+                </p>
+              )}
               <div className="mt-5">
                 <SelectorServicio
-                  servicios={servicios}
+                  servicios={serviciosVisibles}
                   seleccionado={servicioSeleccionado}
-                  onSeleccionar={setServicioSeleccionado}
+                  onSeleccionar={elegirServicio}
                 />
               </div>
               <BarraDeAcciones>
@@ -209,10 +277,20 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
                 ¿Cuándo quieres venir?
               </TituloDelPaso>
               {servicioSeleccionado && <ServicioElegido servicio={servicioSeleccionado} />}
+              {/* Sin equipo (el dueño solo) no hay a quién elegir: no se muestra. */}
+              {profesionalesDelServicio.length > 0 && (
+                <div className="mt-6">
+                  <SelectorProfesional
+                    profesionales={profesionalesDelServicio}
+                    elegido={profesionalId}
+                    onElegir={setProfesionalId}
+                  />
+                </div>
+              )}
               <div className="mt-6">
                 <SelectorFechaHora
-                  slug={slug}
-                  servicioId={servicioSeleccionado!.id}
+                  cargarHoras={cargarHoras}
+                  claveDeHoras={`${servicioId}|${profesionalId ?? ""}`}
                   diasDisponibles={diasDisponibles}
                   zona={zona}
                   fechaSeleccionada={fecha}
@@ -310,7 +388,13 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
                 <h3 id={idDelResumen} className="font-medium text-navy">
                   Resumen de tu reserva
                 </h3>
-                <ResumenDeReserva className="mt-4" servicio={servicioSeleccionado} fecha={fecha} hora={hora} />
+                <ResumenDeReserva
+                  className="mt-4"
+                  servicio={servicioSeleccionado}
+                  fecha={fecha}
+                  hora={hora}
+                  profesional={profesionalElegido?.nombre ?? (profesionalesDelServicio.length > 0 ? "Cualquiera disponible" : null)}
+                />
               </section>
 
               {error && (

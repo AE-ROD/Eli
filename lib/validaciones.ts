@@ -94,6 +94,11 @@ export const reservaSchema = z.object({
   email: z.preprocess((valor) => (valor === "" ? undefined : valor), emailSchema.optional()),
   telefono: opcionalHasta("El teléfono", 30),
   comentarios: opcionalHasta("Los comentarios", 1000),
+  // Sin él, vacío o null: "cualquiera disponible" (lo asigna el servidor).
+  profesionalId: z
+    .string({ invalid_type_error: "El profesional no es válido" })
+    .max(64, "El profesional no es válido")
+    .nullish(),
 })
 
 export const recuperarContrasenaSchema = z.object({

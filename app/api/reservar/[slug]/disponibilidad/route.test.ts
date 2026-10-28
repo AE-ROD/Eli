@@ -176,7 +176,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: de qué horario salen las hor
     mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 59 })
   })
 
-  it("con horario general y uno de profesional distintos el mismo día, las horas salen del general", async () => {
+  it("con horario general y uno de profesional distintos el mismo día: el profesional ofrece el suyo y el resto el general", async () => {
     // El del profesional va primero en la tabla: antes, `findFirst` sin filtro
     // de `memberId` ni orden podía tomarlo a él.
     escenario([
@@ -184,7 +184,8 @@ describe("GET /api/reservar/[slug]/disponibilidad: de qué horario salen las hor
       franja({ startTime: "09:00", endTime: "11:00" }),
     ])
 
-    expect(await horasDelDia()).toEqual({ slots: ["09:00", "10:00"] })
+    // Pedro no cargó horario propio: atiende en el general.
+    expect(await horasDelDia()).toEqual({ slots: ["09:00", "10:00", "14:00", "15:00"] })
   })
 
   it("sin horario general ese día, las horas salen de la unión de los horarios de los profesionales", async () => {
