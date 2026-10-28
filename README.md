@@ -171,6 +171,10 @@ lib/                          Lógica compartida, cada archivo con su test al la
   mover-cita.ts               Las advertencias de agendar en el panel: choque, bloqueo,
                               fuera de horario (cálculo puro)
   advertencias-de-agenda.ts   Lee y arma esas advertencias al crear o mover una cita
+  agenda-publica.ts           La reserva pública por profesional: quién atiende, horas
+                              libres y a quién se asigna (la base se le pasa)
+  gestion-de-cita.ts          El enlace para cancelar o reagendar sin cuenta: token,
+                              plazo y qué cita se puede gestionar
   baja-de-correos.ts          El token firmado del enlace "Dejar de recibir estos correos"
   cron.ts                     La autorización de los crons (CRON_SECRET)
   enviar-correo-de-prueba.ts  (servidor) Manda un correo del ciclo de prueba, con su
