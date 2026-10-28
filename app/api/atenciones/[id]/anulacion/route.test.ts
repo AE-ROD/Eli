@@ -1,6 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
-import { NEGOCIO, OTRO_NEGOCIO, atencion, centavos, conId, datosBase, linea, pago, pedido, sesiones } from "@/pruebas/datos"
+import {
+  NEGOCIO,
+  OTRO_NEGOCIO,
+  atencion,
+  centavos,
+  conId,
+  datosBase,
+  linea,
+  lineaDeLaDueña,
+  pago,
+  pedido,
+  propina,
+  sesiones,
+} from "@/pruebas/datos"
 
 const mockGetServerSession = vi.fn()
 
@@ -291,6 +304,39 @@ describe("POST /api/atenciones/[id]/anulacion: lo ya rendido no se anula (#65)",
     expect(res.status).toBe(409)
     expect((await res.json()).error).toBe("Esta atención ya entró en un cierre de caja: no se anula, corrígelo con un ajuste.")
     expect(base.volcado()).toEqual(antes)
+  })
+
+  it("toma el candado de liquidación de cada profesional de la atención, en orden, antes de anularla", async () => {
+    const datos = escenario()
+    base.reiniciar({
+      ...datos,
+      visitService: [
+        ...datos.visitService,
+        linea("l-cobrada-pedro", "v-cobrada", { memberId: "m-pedro", professionalName: "Pedro" }),
+        lineaDeLaDueña("l-cobrada-duena", "v-cobrada"),
+      ],
+      propinaDeAtencion: [
+        propina("pr-encargado", "v-cobrada", { memberId: "m-encargado" }),
+        propina("pr-carla", "v-cobrada"),
+        propina("pr-ajena", "v-ajena", { businessId: OTRO_NEGOCIO, memberId: "m-ajeno" }),
+      ],
+    })
+
+    const res = await anular(sesiones.dueña, "v-cobrada")
+
+    expect(res.status).toBe(200)
+    const candados = base.prisma.$executeRaw.mock.calls.map(([partes, ...valores]) => {
+      expect(partes.join("?")).toContain("pg_advisory_xact_lock")
+      return valores
+    })
+    expect(candados).toEqual([
+      [NEGOCIO, "m-carla"],
+      [NEGOCIO, "m-encargado"],
+      [NEGOCIO, "m-pedro"],
+    ])
+    // Antes de tomar la atención y de mirar si ya está liquidada.
+    const ultimoCandado = Math.max(...base.prisma.$executeRaw.mock.invocationCallOrder)
+    expect(ultimoCandado).toBeLessThan(base.prisma.visit.updateMany.mock.invocationCallOrder[0])
   })
 
   it("un cierre que terminó antes del cobro no la bloquea", async () => {

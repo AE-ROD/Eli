@@ -109,6 +109,28 @@ export async function tomarCandadoDeLiquidacion(tx: Db, businessId: string, memb
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${businessId}), hashtext(${memberId}))`
 }
 
+/**
+ * Toma el candado de liquidación de cada profesional con líneas o propinas en
+ * la atención, en orden estable (por id) para que dos transacciones que toman
+ * varios no se crucen en un deadlock. Lo usa la anulación de una atención
+ * antes de mirar si ya está liquidada: así no puede pasar en medio de un
+ * cierre que la está incluyendo.
+ */
+export async function tomarCandadosDeLaAtencion(tx: Db, businessId: string, visitId: string): Promise<void> {
+  const [lineas, propinas] = await Promise.all([
+    tx.visitService.findMany({
+      where: { visitId, visit: { is: { businessId } }, memberId: { not: null } },
+      select: { memberId: true },
+    }),
+    tx.propinaDeAtencion.findMany({
+      where: { visitId, businessId, memberId: { not: null } },
+      select: { memberId: true },
+    }),
+  ])
+  const miembros = [...new Set([...lineas, ...propinas].map((f) => f.memberId as string))].sort()
+  for (const memberId of miembros) await tomarCandadoDeLiquidacion(tx, businessId, memberId)
+}
+
 // ─── El negocio y los porcentajes ────────────────────────────────────────────
 
 export interface NegocioParaLiquidar {
@@ -482,7 +504,9 @@ export async function cerrarLiquidacion(
     select: { id: true },
   })
 
-  const deEstaPersona = { memberId, liquidacionId: null, visit: { is: { businessId } } }
+  // Sólo lo de atenciones que siguen cobradas: si una se anuló entre la
+  // vista previa y acá, el conteo no cuadra y el cierre responde 409.
+  const deEstaPersona = { memberId, liquidacionId: null, visit: { is: { businessId, status: "finalizada" } } }
 
   const yaCongeladas = vista.lineas.filter((l) => l.estado === "congelada").map((l) => l.id)
   if (yaCongeladas.length > 0) {
@@ -511,7 +535,13 @@ export async function cerrarLiquidacion(
   const propinas = vista.propinas.map((p) => p.id)
   if (propinas.length > 0) {
     const { count } = await tx.propinaDeAtencion.updateMany({
-      where: { id: { in: propinas }, businessId, memberId, liquidacionId: null },
+      where: {
+        id: { in: propinas },
+        businessId,
+        memberId,
+        liquidacionId: null,
+        visit: { is: { businessId, status: "finalizada" } },
+      },
       data: { liquidacionId: creada.id },
     })
     if (count !== propinas.length) throw new ErrorDeLiquidacion(409, CAMBIO_A_MITAD)

@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { transicionPermitida } from "@/lib/atenciones"
 import { atencionBloqueada, type MotivoDeBloqueo } from "@/lib/bloqueos-de-dinero"
+import { tomarCandadosDeLaAtencion } from "@/lib/liquidacion"
 import { ESTADOS_DE_RESERVA } from "@/lib/llegadas"
 import { actorDeSesion, puedeAnular } from "@/lib/permisos"
 import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
@@ -68,6 +69,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const nombre = await nombreEnElNegocio(prisma, actor, usuarioId)
 
     const atencion = await prisma.$transaction(async (tx) => {
+      // Primero los candados de liquidación de quienes atendieron: un cierre
+      // que la esté incluyendo termina antes, y entonces el bloqueo de abajo
+      // lo ve; o esta anulación termina antes y el cierre ya no la toma.
+      await tomarCandadosDeLaAtencion(tx, actor.businessId, existente.id)
+
       // Sobre el mismo estado con que se decidió el permiso: si entretanto la
       // cobraron, el encargado ya no puede anularla y esto no matchea.
       await tomarAtencion(tx, actor, existente.id, existente.status, {

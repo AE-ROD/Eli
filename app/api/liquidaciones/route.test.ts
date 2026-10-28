@@ -274,6 +274,27 @@ describe("POST /api/liquidaciones (cerrar)", () => {
     expect(base.buscar("liquidacion")).toHaveLength(1)
   })
 
+  it.each([
+    ["una línea pendiente", "v-pendiente"],
+    ["una línea congelada y su propina", "v-congelada"],
+  ])("si anulan la atención de %s a mitad del cierre: 409, y nada queda liquidado", async (_, visitId) => {
+    // En Postgres la anulación espera el candado del cierre; si igual llega a
+    // escribir entre la vista previa y las marcas, el cierre no la toma.
+    const crear = base.prisma.liquidacion.create.getMockImplementation()!
+    base.prisma.liquidacion.create.mockImplementationOnce(async (args) => {
+      await base.prisma.visit.updateMany({ where: { id: visitId }, data: { status: "anulada" } })
+      return crear(args)
+    })
+    enSesion(sesiones.dueña)
+
+    const res = await cerrar({ miembroId: "m-carla", desde: "2026-10-01" })
+
+    expect(res.status).toBe(409)
+    expect(base.buscar("liquidacion")).toEqual([])
+    expect(base.buscar("visitService").filter((l) => l.liquidacionId !== null && l.liquidacionId !== undefined)).toEqual([])
+    expect(base.buscar("propinaDeAtencion").filter((p) => p.liquidacionId)).toEqual([])
+  })
+
   it("una línea no entra en dos liquidaciones: la siguiente es noviembre, con lo de noviembre", async () => {
     enSesion(sesiones.dueña)
     await cerrar({ miembroId: "m-carla", desde: "2026-10-01" })
