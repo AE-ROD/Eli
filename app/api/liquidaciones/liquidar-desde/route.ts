@@ -5,7 +5,12 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
 import { actorDeSesion, puedeConfigurarLiquidacion } from "@/lib/permisos"
-import { ErrorDeLiquidacion, leerNegocioParaLiquidar, respuestaDeErrorDePlata } from "@/lib/liquidacion"
+import {
+  ErrorDeLiquidacion,
+  leerNegocioParaLiquidar,
+  respuestaDeErrorDePlata,
+  tomarCandadoDeLiquidacionesDelNegocio,
+} from "@/lib/liquidacion"
 import { fechaParaColumna } from "@/lib/periodos-de-liquidacion"
 import { esFechaCalendario } from "@/lib/zona-horaria"
 
@@ -20,7 +25,9 @@ const liquidarDesdeSchema = z.object({
  * antes y los movimientos con fecha anterior nunca entran a una liquidación:
  * así lo que ya se pagó por fuera de Eli no se paga dos veces. Sólo la dueña.
  * Se puede cambiar mientras no haya ninguna liquidación no anulada; después,
- * 409 (cambiarla movería lo que ya se cerró).
+ * 409 (cambiarla movería lo que ya se cerró). Toma exclusivo el candado de
+ * liquidaciones del negocio, que cada cierre toma compartido: un cierre en
+ * curso termina antes y el conteo de abajo ya lo ve.
  */
 export async function PUT(request: NextRequest) {
   const actor = actorDeSesion(await getServerSession(authOptions))
@@ -31,6 +38,9 @@ export async function PUT(request: NextRequest) {
   try {
     const { fecha } = liquidarDesdeSchema.parse(await cuerpoDelPedido(request))
     await prisma.$transaction(async (tx) => {
+      // Antes de leer nada: lo que se mira abajo ya incluye cualquier cierre
+      // que estuviera en curso.
+      await tomarCandadoDeLiquidacionesDelNegocio(tx, actor.businessId, "exclusivo")
       const { liquidarDesde } = await leerNegocioParaLiquidar(tx, actor.businessId)
       if (liquidarDesde === fecha) return
       const vivas = await tx.liquidacion.count({ where: { businessId: actor.businessId, estado: { not: "anulada" } } })

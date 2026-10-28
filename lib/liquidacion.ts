@@ -110,6 +110,25 @@ export async function tomarCandadoDeLiquidacion(tx: Db, businessId: string, memb
 }
 
 /**
+ * Candado de liquidaciones del negocio entero. Lo toma exclusivo el cambio de
+ * "Liquidar desde" (`app/api/liquidaciones/liquidar-desde`), y compartido cada
+ * cierre, antes del de su miembro: entre cierres no se esperan, pero ninguno
+ * pasa a la vez que un cambio de fecha. Así la fecha no cambia en medio de un
+ * cierre que la está usando, ni se cambia justo cuando se acaba de cerrar la
+ * primera liquidación. La clave es `hashtext('liquidaciones:' || businessId)`,
+ * de un solo número: no choca con la de negocio + miembro.
+ */
+export async function tomarCandadoDeLiquidacionesDelNegocio(
+  tx: Db,
+  businessId: string,
+  modo: "exclusivo" | "compartido"
+): Promise<void> {
+  const clave = `liquidaciones:${businessId}`
+  if (modo === "exclusivo") await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${clave}))`
+  else await tx.$executeRaw`SELECT pg_advisory_xact_lock_shared(hashtext(${clave}))`
+}
+
+/**
  * Toma el candado de liquidación de cada profesional con líneas o propinas en
  * la atención, en orden estable (por id) para que dos transacciones que toman
  * varios no se crucen en un deadlock. Lo usa la anulación de una atención
@@ -471,6 +490,9 @@ export async function cerrarLiquidacion(
   }
 ): Promise<string> {
   const { businessId, memberId, ahora } = opciones
+  // Primero el del negocio, compartido: un cambio de "Liquidar desde" en
+  // curso termina antes, y la vista previa de abajo ya lee la fecha nueva.
+  await tomarCandadoDeLiquidacionesDelNegocio(tx, businessId, "compartido")
   await tomarCandadoDeLiquidacion(tx, businessId, memberId)
 
   const vista = await vistaPrevia(tx, { businessId, memberId, excluirMovimientos: opciones.excluirMovimientos, ahora })

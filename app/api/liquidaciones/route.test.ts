@@ -231,11 +231,13 @@ describe("POST /api/liquidaciones (cerrar)", () => {
       "mv-ajuste",
     ])
 
-    // Pide el candado por negocio y miembro.
-    expect(base.prisma.$executeRaw).toHaveBeenCalledTimes(1)
-    const [partes, ...valores] = base.prisma.$executeRaw.mock.calls[0]
-    expect((partes as TemplateStringsArray).join("?")).toContain("pg_advisory_xact_lock")
-    expect(valores).toEqual([NEGOCIO, "m-carla"])
+    // Pide el candado del negocio compartido (contra "Liquidar desde") y
+    // después el de negocio y miembro.
+    const candados = base.prisma.$executeRaw.mock.calls.map(([partes, ...valores]) => [partes.join("?"), ...valores])
+    expect(candados).toEqual([
+      ["SELECT pg_advisory_xact_lock_shared(hashtext(?))", `liquidaciones:${NEGOCIO}`],
+      ["SELECT pg_advisory_xact_lock(hashtext(?), hashtext(?))", NEGOCIO, "m-carla"],
+    ])
   })
 
   it("una atención incluida queda bloqueada para anular", async () => {
@@ -628,6 +630,54 @@ describe("Liquidar desde", () => {
     expect((await fijar({ fecha: "2026-10-01" })).status).toBe(200)
     expect(base.buscar("business", { id: NEGOCIO })[0].liquidacionDesde).toEqual(dia("2026-10-01"))
     expect(base.buscar("business", { id: OTRO_NEGOCIO })[0].liquidacionDesde).toBeNull()
+  })
+
+  it("toma exclusivo el candado de liquidaciones del negocio antes de leer nada", async () => {
+    conFecha(null)
+    enSesion(sesiones.dueña)
+    expect((await fijar({ fecha: "2026-10-01" })).status).toBe(200)
+    const candados = base.prisma.$executeRaw.mock.calls.map(([partes, ...valores]) => [partes.join("?"), ...valores])
+    expect(candados).toEqual([["SELECT pg_advisory_xact_lock(hashtext(?))", `liquidaciones:${NEGOCIO}`]])
+    const candado = base.prisma.$executeRaw.mock.invocationCallOrder[0]
+    expect(candado).toBeLessThan(base.prisma.business.findUnique.mock.invocationCallOrder[0])
+    expect(candado).toBeLessThan(base.prisma.liquidacion.count.mock.invocationCallOrder[0])
+  })
+
+  it("si un cierre termina mientras espera el candado, lo ve: 409 y la fecha no cambia", async () => {
+    enSesion(sesiones.dueña)
+    // En Postgres el PUT espera al cierre que tiene el candado compartido; se
+    // simula haciendo que el cierre entre justo cuando el PUT pide el candado.
+    const original = base.prisma.$executeRaw.getMockImplementation()!
+    base.prisma.$executeRaw.mockImplementationOnce(async (...args: Parameters<typeof original>) => {
+      await base.prisma.liquidacion.create({
+        data: {
+          id: "liq-en-curso",
+          businessId: NEGOCIO,
+          memberId: "m-carla",
+          memberName: "Carla Profesional",
+          periodo: "mensual",
+          desde: dia("2026-10-01"),
+          hasta: dia("2026-10-31"),
+          zona: "America/Santiago",
+          estado: "cerrada",
+          comisionServiciosCents: 0,
+          comisionProductosCents: 0,
+          propinasCents: 0,
+          adelantosCents: 0,
+          ajustesCents: 0,
+          brutoCents: 0,
+          totalCents: 0,
+          cerradaPorId: "u-duena",
+          cerradaPorNombre: "Ana Dueña",
+        },
+      })
+      return original(...args)
+    })
+
+    const res = await fijar({ fecha: "2026-09-01" })
+
+    expect(res.status).toBe(409)
+    expect(base.buscar("business", { id: NEGOCIO })[0].liquidacionDesde).toEqual(dia("2026-10-01"))
   })
 
   it("con una liquidación no anulada ya no se cambia (409); anulada, sí", async () => {
