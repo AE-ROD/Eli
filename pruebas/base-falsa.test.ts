@@ -270,6 +270,118 @@ describe("base falsa: lo de la etapa 2", () => {
   })
 })
 
+describe("base falsa: el trigger atencion_servicios_comision_inmutable (#116)", () => {
+  const congelada = { commissionPercent: 40, commissionCents: 400, commissionAt: new Date("2026-10-06T15:00:00Z") }
+  const periodo = { memberId: "m1", memberName: "Ana", desde: new Date("2026-10-01"), hasta: new Date("2026-10-31") }
+
+  beforeEach(() => {
+    base.reiniciar({
+      business: [{ id: "n1", name: "Uno", slug: "uno", userId: "u1" }],
+      user: [{ id: "u1", name: "Ana", email: "a@test" }],
+      businessMember: [
+        { id: "m1", businessId: "n1", userId: "u1" },
+        { id: "m2", businessId: "n1", userId: "u1" },
+      ],
+      visit: [{ id: "v1", businessId: "n1", customerName: "María", status: "finalizada", paidAt: new Date(10) }],
+      liquidacion: [
+        { id: "liq-1", businessId: "n1", ...periodo },
+        { id: "liq-2", businessId: "n1", ...periodo, estado: "anulada", anuladaAt: new Date() },
+      ],
+      visitService: [
+        { id: "pendiente", visitId: "v1", serviceName: "Corte", memberId: "m1", professionalName: "Ana", priceCents: 1000 },
+        { id: "congelada", visitId: "v1", serviceName: "Corte", memberId: "m1", professionalName: "Ana", priceCents: 1000, ...congelada },
+        {
+          id: "liquidada",
+          visitId: "v1",
+          serviceName: "Color",
+          memberId: "m1",
+          professionalName: "Ana",
+          priceCents: 1000,
+          ...congelada,
+          liquidacionId: "liq-1",
+        },
+      ],
+    })
+  })
+
+  const rechazo = /23514/
+
+  it("una comisión congelada no cambia: ni el %, ni el monto, ni cuándo, ni vuelve a pendiente", async () => {
+    const cambios = [
+      { commissionPercent: 50 },
+      { commissionCents: 500 },
+      { commissionAt: new Date("2026-10-07T15:00:00Z") },
+      { commissionPercent: null, commissionCents: null, commissionAt: null },
+    ]
+    for (const data of cambios) {
+      await expect(prisma.visitService.update({ where: { id: "congelada" }, data })).rejects.toThrow(/ya está congelada/)
+    }
+    expect(base.buscar("visitService", { id: "congelada" })[0]).toMatchObject(congelada)
+  })
+
+  it("escribir lo mismo que ya tiene no es un cambio; otros campos de una congelada sí se pueden tocar", async () => {
+    await expect(prisma.visitService.update({ where: { id: "congelada" }, data: { ...congelada } })).resolves.toBeTruthy()
+    await expect(prisma.visitService.update({ where: { id: "congelada" }, data: { priceCents: 1200 } })).resolves.toMatchObject({
+      priceCents: 1200,
+    })
+  })
+
+  it("una pendiente se congela, y se congela e incluye en la misma escritura", async () => {
+    await expect(
+      prisma.visitService.update({ where: { id: "pendiente" }, data: { ...congelada, liquidacionId: "liq-1" } })
+    ).resolves.toMatchObject({ commissionPercent: 40, liquidacionId: "liq-1" })
+  })
+
+  it("una línea liquidada no cambia de precio ni de profesional", async () => {
+    for (const data of [{ priceCents: 2000 }, { memberId: "m2" }, { memberId: null }]) {
+      await expect(prisma.visitService.update({ where: { id: "liquidada" }, data })).rejects.toThrow(/corrígela con un ajuste/)
+    }
+  })
+
+  it("una línea liquidada no pasa a otra liquidación, pero sí se suelta al anular", async () => {
+    await expect(prisma.visitService.update({ where: { id: "liquidada" }, data: { liquidacionId: "liq-2" } })).rejects.toThrow(
+      /ya está en otra liquidación/
+    )
+    await expect(prisma.visitService.update({ where: { id: "liquidada" }, data: { liquidacionId: null } })).resolves.toMatchObject({
+      liquidacionId: null,
+    })
+  })
+
+  it("rige también en upsert y en updateMany, y updateMany no escribe ninguna fila si una falla", async () => {
+    await expect(
+      prisma.visitService.upsert({ where: { id: "congelada" }, create: {}, update: { commissionPercent: 10 } })
+    ).rejects.toThrow(rechazo)
+
+    await expect(prisma.visitService.updateMany({ where: { visitId: "v1" }, data: { priceCents: 3000 } })).rejects.toThrow(rechazo)
+    expect(base.buscar("visitService").map((linea) => linea.priceCents)).toEqual([1000, 1000, 1000])
+  })
+
+  it("un rechazo dentro de una transacción la deshace entera", async () => {
+    await expect(
+      prisma.$transaction(async (tx: typeof prisma) => {
+        await tx.visitService.update({ where: { id: "pendiente" }, data: { priceCents: 1500 } })
+        await tx.visitService.update({ where: { id: "liquidada" }, data: { memberId: "m2" } })
+      })
+    ).rejects.toThrow(rechazo)
+    expect(base.buscar("visitService", { id: "pendiente" })[0]).toMatchObject({ priceCents: 1000 })
+  })
+
+  it("la excepción del borrado en cascada: sin su atención, la línea liquidada suelta al profesional", async () => {
+    await prisma.visit.delete({ where: { id: "v1" } })
+
+    // La base falsa no hace cascadas y revisa todas las FK en cada UPDATE (Postgres
+    // sólo las que cambian), así que la línea huérfana la frena la FK a su atención
+    // (P2003). Lo que importa acá es que el trigger la dejó pasar: no es un 23514.
+    const suelta = prisma.visitService.update({ where: { id: "liquidada" }, data: { memberId: null } })
+    await expect(suelta).rejects.toMatchObject({ code: "P2003" })
+    await expect(suelta).rejects.not.toThrow(rechazo)
+    // Lo congelado sigue sin cambiar, con o sin atención: esa regla no tiene excepción.
+    await expect(prisma.visitService.update({ where: { id: "liquidada" }, data: { commissionPercent: 1 } })).rejects.toThrow(
+      /ya está congelada/
+    )
+  })
+})
+
 describe("base falsa: lo de la etapa 3", () => {
   beforeEach(() => {
     base.reiniciar({
