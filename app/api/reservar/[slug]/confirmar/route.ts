@@ -14,6 +14,7 @@ import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { contabilizarReferido } from "@/lib/referidos"
 import { registrarError } from "@/lib/registro-de-errores"
 import { generarToken } from "@/lib/tokens"
+import { leerHoraValle, preciosConHoraValle } from "@/lib/hora-valle"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { datosDeConsentimientoPromocional } from "@/lib/envios-a-clientes"
 import { marcarReservo } from "@/lib/lista-de-espera"
@@ -370,6 +371,14 @@ export async function POST(
     const startTime = instanteEn(datos.fecha, datos.hora, zona)
     const endTime = new Date(startTime.getTime() + resumen.duracion * 60000)
 
+    // Hora valle (#89c): si el negocio la encendió y la hora de inicio cae en
+    // una franja, cada servicio no excluido va rebajado (`lib/hora-valle.ts`).
+    // Se calcula acá, en el servidor; lo que mande el navegador no se usa.
+    // A la cita y a sus filas van los precios YA rebajados.
+    const precios = preciosConHoraValle(servicios, startTime, zona, await leerHoraValle(prisma, negocio.id))
+    const serviciosConPrecio = servicios.map((servicio, i) => ({ ...servicio, price: precios.precios[i] }))
+    const resumenConPrecio = { ...resumen, precio: precios.total }
+
     // Quién puede tomarla (`lib/agenda-publica.ts`), con la misma regla que
     // `disponibilidad`: profesionales que atienden y hacen todos los servicios (sólo
     // el elegido, si eligió), y de ellos los que tienen la hora entera dentro
@@ -400,8 +409,8 @@ export async function POST(
     const enlace = generarToken()
     const resultado = await reservarEnTransaccion({
       negocioId: negocio.id,
-      servicios,
-      resumen,
+      servicios: serviciosConPrecio,
+      resumen: resumenConPrecio,
       datos,
       startTime,
       endTime,

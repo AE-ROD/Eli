@@ -12,7 +12,8 @@ import {
   fechaNoReservable,
   yaPasoLaHora,
 } from "@/lib/reserva-publica"
-import { serviciosDeLaCita } from "@/lib/servicios-de-la-reserva"
+import { leerHoraValle, precioAlReagendar } from "@/lib/hora-valle"
+import { leerServiciosDeLaReserva, serviciosDeLaCita } from "@/lib/servicios-de-la-reserva"
 import { existeLaHora, rangoDelDiaEn } from "@/lib/zona-horaria"
 import { abrirEnlace, enTransaccionSerializable, fechaYHora, noEncontrada, nombreDelCliente, type Params } from "../_comun"
 
@@ -24,7 +25,9 @@ const reagendarSchema = z.object({
 const FUERA_DE_ATENCION = "Ese horario está fuera de la atención. Elige otra hora."
 const HORARIO_TOMADO = "El horario ya no está disponible"
 
-type Resultado = { tipo: "movida"; memberId: string | null } | { tipo: "rechazada"; error: string; status: number }
+type Resultado =
+  | { tipo: "movida"; memberId: string | null; precio: number | null }
+  | { tipo: "rechazada"; error: string; status: number }
 
 /**
  * POST /api/reservar/[slug]/cita/[token]/reagendar — mueve la cita a otra
@@ -75,6 +78,14 @@ export async function POST(request: NextRequest, contexto: Params) {
 
   const tramo = tramoDeLaReserva(fecha, hora, duracion, zona)
 
+  // Hora valle (#89c): si la hora nueva tiene otro % que la de antes, el
+  // precio se recalcula sobre el catálogo de hoy (`precioAlReagendar`); si
+  // no (siempre, con la opción apagada), la cita conserva el suyo. Las citas
+  // de antes, sin filas, se recalculan sobre su servicio de siempre.
+  const horaValle = await leerHoraValle(prisma, cita.businessId)
+  const catalogo = horaValle.activa ? await leerServiciosDeLaReserva(prisma, cita.businessId, servicios.ids) : null
+  const precioNuevo = catalogo ? precioAlReagendar(catalogo, cita.startTime, tramo.startTime, zona, horaValle) : null
+
   const resultado = await enTransaccionSerializable<Resultado>(
     async (tx) => {
       const asignacion = await asignarCandidatoLibre(tx, {
@@ -94,10 +105,25 @@ export async function POST(request: NextRequest, contexto: Params) {
           status: { in: [...ESTADOS_GESTIONABLES] },
           startTime: cita.startTime,
         },
-        data: { startTime: tramo.startTime, endTime: tramo.endTime, memberId: asignacion.memberId },
+        data: {
+          startTime: tramo.startTime,
+          endTime: tramo.endTime,
+          memberId: asignacion.memberId,
+          ...(precioNuevo && { price: precioNuevo.total }),
+        },
       })
       if (count === 0) return { tipo: "rechazada", error: "", status: 404 }
-      return { tipo: "movida", memberId: asignacion.memberId }
+      // Y cada fila con su precio nuevo, en la misma transacción. Los precios
+      // vienen en el orden de los servicios, que es el de las filas.
+      if (precioNuevo) {
+        for (const [indice, fila] of cita.servicios.entries()) {
+          await tx.appointmentService.updateMany({
+            where: { appointmentId: cita.id, businessId: cita.businessId, orden: fila.orden },
+            data: { price: precioNuevo.precios[indice] },
+          })
+        }
+      }
+      return { tipo: "movida", memberId: asignacion.memberId, precio: precioNuevo ? precioNuevo.total : cita.price }
     },
     () => ({ tipo: "rechazada", error: HORARIO_TOMADO, status: 409 })
   )
@@ -126,5 +152,5 @@ export async function POST(request: NextRequest, contexto: Params) {
     horaAnterior: antes.hora,
   }).catch(() => null)
 
-  return NextResponse.json({ mensaje: "Cita reagendada", fecha, hora, profesional })
+  return NextResponse.json({ mensaje: "Cita reagendada", fecha, hora, profesional, precio: resultado.precio })
 }

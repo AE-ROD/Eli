@@ -19,6 +19,9 @@ export async function GET(request: NextRequest, contexto: Params) {
     negocio: { nombre: cita.business.name },
     // Con varios servicios (#89a), los nombres unidos y la duración total.
     servicio: { nombre: servicios.nombre, duracion: servicios.duracion },
+    // Lo que cuesta hoy: al reagendar a una hora con otro precio (hora valle,
+    // #89c), la pantalla muestra los dos antes de confirmar.
+    precio: cita.price,
     profesional: cita.member?.user?.name?.trim() || null,
     ...fechaYHora(cita.startTime, zona),
     zona,

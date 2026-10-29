@@ -29,6 +29,8 @@ export interface ServicioDeLaReserva {
   name: string
   duration: number
   price: number | null
+  /** Fuera de la rebaja de hora valle (#89c). */
+  excluidoDeHoraValle?: boolean
 }
 
 /**
@@ -44,7 +46,7 @@ export async function leerServiciosDeLaReserva(
   if (ids.length === 0 || ids.length > MAX_SERVICIOS_POR_RESERVA || new Set(ids).size !== ids.length) return null
   const encontrados = await db.service.findMany({
     where: { id: { in: ids }, businessId, active: true },
-    select: { id: true, name: true, duration: true, price: true },
+    select: { id: true, name: true, duration: true, price: true, excluidoDeHoraValle: true },
   })
   const enOrden = ids.map((id) => encontrados.find((servicio) => servicio.id === id))
   if (enOrden.some((servicio) => !servicio)) return null

@@ -87,6 +87,8 @@ const SELECCION = {
   status: true,
   startTime: true,
   endTime: true,
+  // El precio de hoy: al reagendar se compara con el de la hora nueva (#89c).
+  price: true,
   customer: { select: { name: true, lastName: true } },
   member: { select: { user: { select: { name: true } } } },
   service: { select: { id: true, name: true, duration: true, active: true } },

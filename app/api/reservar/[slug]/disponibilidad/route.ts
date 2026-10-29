@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { candidatosDeLaReserva, horasLibresDelDia } from "@/lib/agenda-publica"
+import { horasConRebaja, leerHoraValle } from "@/lib/hora-valle"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { MENSAJE_FECHA_MUY_LEJANA, MENSAJE_FECHA_PASADA, fechaNoReservable } from "@/lib/reserva-publica"
 import { leerServiciosDeLaReserva, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
@@ -132,5 +133,10 @@ export async function GET(
     ahora,
   })
 
-  return NextResponse.json({ slots })
+  // Hora valle (#89c): `slots` sigue siendo la lista de horas, como siempre
+  // (la página de antes sólo lee eso). Sólo si el negocio la encendió y
+  // alguna hora cuesta menos, va además `valle`: esas horas con su precio
+  // total rebajado y el normal. El precio lo vuelve a calcular `confirmar`.
+  const valle = horasConRebaja(servicios, fecha, slots, zona, await leerHoraValle(prisma, negocio.id))
+  return NextResponse.json(valle.length > 0 ? { slots, valle } : { slots })
 }
