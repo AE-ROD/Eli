@@ -39,6 +39,8 @@ function escenario() {
   const datos = datosBase()
   return {
     ...datos,
+    // La dueña liquida desde el 1 de octubre.
+    business: datos.business.map((b) => (b.id === NEGOCIO ? { ...b, liquidacionDesde: dia("2026-10-01") } : b)),
     businessMember: datos.businessMember.map((m) => (m.id === "m-carla" ? { ...m, commissionPercent: 40 } : m)),
     visit: [
       cobrada("v-congelada", "2026-10-06T15:00:00.000Z"),
@@ -77,6 +79,8 @@ function escenario() {
     ],
   }
 }
+
+const dia = (fecha: string) => new Date(`${fecha}T00:00:00.000Z`)
 
 function movimiento(id: string, tipo: string, montoCents: number, fecha: string, datos: Record<string, unknown> = {}) {
   return {
@@ -227,11 +231,13 @@ describe("POST /api/liquidaciones (cerrar)", () => {
       "mv-ajuste",
     ])
 
-    // Pide el candado por negocio y miembro.
-    expect(base.prisma.$executeRaw).toHaveBeenCalledTimes(1)
-    const [partes, ...valores] = base.prisma.$executeRaw.mock.calls[0]
-    expect((partes as TemplateStringsArray).join("?")).toContain("pg_advisory_xact_lock")
-    expect(valores).toEqual([NEGOCIO, "m-carla"])
+    // Pide el candado del negocio compartido (contra "Liquidar desde") y
+    // después el de negocio y miembro.
+    const candados = base.prisma.$executeRaw.mock.calls.map(([partes, ...valores]) => [partes.join("?"), ...valores])
+    expect(candados).toEqual([
+      ["SELECT pg_advisory_xact_lock_shared(hashtext(?))", `liquidaciones:${NEGOCIO}`],
+      ["SELECT pg_advisory_xact_lock(hashtext(?), hashtext(?))", NEGOCIO, "m-carla"],
+    ])
   })
 
   it("una atención incluida queda bloqueada para anular", async () => {
@@ -268,6 +274,27 @@ describe("POST /api/liquidaciones (cerrar)", () => {
     ])
     expect(respuestas.map((r) => r.status).sort()).toEqual([201, 409])
     expect(base.buscar("liquidacion")).toHaveLength(1)
+  })
+
+  it.each([
+    ["una línea pendiente", "v-pendiente"],
+    ["una línea congelada y su propina", "v-congelada"],
+  ])("si anulan la atención de %s a mitad del cierre: 409, y nada queda liquidado", async (_, visitId) => {
+    // En Postgres la anulación espera el candado del cierre; si igual llega a
+    // escribir entre la vista previa y las marcas, el cierre no la toma.
+    const crear = base.prisma.liquidacion.create.getMockImplementation()!
+    base.prisma.liquidacion.create.mockImplementationOnce(async (args) => {
+      await base.prisma.visit.updateMany({ where: { id: visitId }, data: { status: "anulada" } })
+      return crear(args)
+    })
+    enSesion(sesiones.dueña)
+
+    const res = await cerrar({ miembroId: "m-carla", desde: "2026-10-01" })
+
+    expect(res.status).toBe(409)
+    expect(base.buscar("liquidacion")).toEqual([])
+    expect(base.buscar("visitService").filter((l) => l.liquidacionId !== null && l.liquidacionId !== undefined)).toEqual([])
+    expect(base.buscar("propinaDeAtencion").filter((p) => p.liquidacionId)).toEqual([])
   })
 
   it("una línea no entra en dos liquidaciones: la siguiente es noviembre, con lo de noviembre", async () => {
@@ -332,11 +359,15 @@ describe("POST /api/liquidaciones (cerrar)", () => {
   it("con período semanal, el corte es la semana", async () => {
     base.reiniciar({
       ...escenario(),
-      business: datosBase().business.map((b) => (b.id === NEGOCIO ? { ...b, liquidacionPeriodo: "semanal", liquidacionInicioSemana: 1 } : b)),
+      business: datosBase().business.map((b) =>
+        b.id === NEGOCIO
+          ? { ...b, liquidacionPeriodo: "semanal", liquidacionInicioSemana: 1, liquidacionDesde: dia("2026-10-05") }
+          : b
+      ),
     })
     enSesion(sesiones.dueña)
     const cuerpo = await (await vista()).json()
-    // Lo más antiguo pendiente es del martes 6 de octubre: la semana del lunes 5 al domingo 11.
+    // Liquida desde el lunes 5: la semana del lunes 5 al domingo 11.
     expect(cuerpo.periodo).toMatchObject({ tipo: "semanal", desde: "2026-10-05", hasta: "2026-10-11" })
     expect(cuerpo.lineas.map((l: { id: string }) => l.id).sort()).toEqual(["l-congelada", "l-pendiente", "l-shampoo"])
     expect(cuerpo.movimientos.map((m: { id: string }) => m.id)).toEqual(["mv-adelanto"])
@@ -518,5 +549,200 @@ describe("/api/liquidaciones/configuracion", () => {
     expect(await (await GET()).json()).toEqual({ periodo: "mensual", inicioSemana: 1 })
     enSesion(sesiones.carla)
     expect((await GET()).status).toBe(401)
+  })
+})
+
+describe("Liquidar desde", () => {
+  const conFecha = (fecha: string | null, extra: Record<string, unknown[]> = {}) => {
+    const datos = escenario()
+    base.reiniciar({
+      ...datos,
+      ...extra,
+      business: datos.business.map((b) => (b.id === NEGOCIO ? { ...b, liquidacionDesde: fecha ? dia(fecha) : null } : b)),
+    })
+  }
+  const fijar = async (cuerpo: unknown) => {
+    const { PUT } = await import("./liquidar-desde/route")
+    return PUT(pedido(`${URL}/liquidar-desde`, cuerpo))
+  }
+
+  it("sin fecha fijada, vista previa y cierre responden 409 y no escriben nada", async () => {
+    conFecha(null)
+    enSesion(sesiones.dueña)
+    const res = await vista()
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toMatch(/desde qué fecha/)
+    const antes = base.volcado()
+    expect((await cerrar({ miembroId: "m-carla", desde: "2026-10-01" })).status).toBe(409)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("lo cobrado antes del borde (en la zona del negocio) no entra, ni bloquea por falta de %", async () => {
+    const datos = escenario()
+    conFecha("2026-10-07", {
+      visit: [
+        ...datos.visit,
+        // 6 de octubre a las 23:59 en Santiago (UTC-3): antes del borde.
+        cobrada("v-antes", "2026-10-07T02:59:00.000Z"),
+        // 7 de octubre a las 00:00: ya cuenta.
+        cobrada("v-justo", "2026-10-07T03:00:00.000Z"),
+      ],
+      visitService: [
+        ...datos.visitService,
+        linea("l-antes", "v-antes"),
+        // Producto sin %: antes del borde no frena el cierre.
+        lineaDeProducto("l-cera-antes", "v-antes", { productId: "p-cera", serviceName: "Cera" }),
+        linea("l-justo", "v-justo"),
+      ],
+      propinaDeAtencion: [...datos.propinaDeAtencion, propina("pr-antes", "v-antes"), propina("pr-justo", "v-justo")],
+      movimientoDeLiquidacion: [
+        ...datos.movimientoDeLiquidacion,
+        movimiento("mv-antes", "vale", centavos(400), "2026-10-06"),
+        movimiento("mv-justo", "vale", centavos(400), "2026-10-07"),
+      ],
+    })
+    enSesion(sesiones.dueña)
+    const cuerpo = await (await vista()).json()
+    expect(cuerpo.periodo).toMatchObject({ desde: "2026-10-07", hasta: "2026-10-31" })
+    const ids = (lista: { id: string }[]) => lista.map((x) => x.id).sort()
+    expect(ids(cuerpo.lineas)).toEqual(["l-borde-oct", "l-justo", "l-pendiente", "l-shampoo"])
+    expect(ids(cuerpo.propinas)).toEqual(["pr-justo"])
+    expect(ids(cuerpo.movimientos)).toEqual(["mv-adelanto", "mv-ajuste", "mv-justo"])
+    expect(cuerpo.sinPorcentaje).toBe(0)
+    expect(cuerpo.noSePuedeCerrar).toBeNull()
+
+    expect((await cerrar({ miembroId: "m-carla", desde: "2026-10-07" })).status).toBe(201)
+    for (const id of ["l-antes", "l-cera-antes", "l-congelada"]) expect(lineaGuardada(id).liquidacionId).toBeNull()
+    // Y tampoco entra después: la siguiente es noviembre.
+    const siguiente = await (await vista()).json()
+    expect(siguiente.periodo.desde).toBe("2026-11-01")
+    expect(ids(siguiente.lineas)).toEqual(["l-borde-nov"])
+  })
+
+  describe("la primera liquidación de alguien", () => {
+    const sinPendientes = { visitService: [], propinaDeAtencion: [], movimientoDeLiquidacion: [] }
+
+    it("con un corte viejo, empieza en el período de lo más antiguo pendiente, no en el corte", async () => {
+      // Agosto y septiembre no tienen nada: no hay que cerrarlos uno por uno.
+      conFecha("2026-08-10")
+      enSesion(sesiones.dueña)
+      const cuerpo = await (await vista()).json()
+      expect(cuerpo.periodo).toMatchObject({ desde: "2026-10-01", hasta: "2026-10-31" })
+      expect((await cerrar({ miembroId: "m-carla", desde: "2026-10-01" })).status).toBe(201)
+      expect((await (await vista()).json()).periodo.desde).toBe("2026-11-01")
+    })
+
+    it("si el corte cae dentro del período de lo pendiente, empieza en el corte", async () => {
+      conFecha("2026-10-05")
+      enSesion(sesiones.dueña)
+      expect((await (await vista()).json()).periodo).toMatchObject({ desde: "2026-10-05", hasta: "2026-10-31" })
+    })
+
+    it("sin nada pendiente, el período de hoy; o el corte, si es posterior", async () => {
+      conFecha("2026-08-10", sinPendientes)
+      enSesion(sesiones.dueña)
+      expect((await (await vista()).json()).periodo).toMatchObject({ desde: "2026-11-01", hasta: "2026-11-30" })
+
+      conFecha("2026-11-02", sinPendientes)
+      expect((await (await vista()).json()).periodo).toMatchObject({ desde: "2026-11-02", hasta: "2026-11-30" })
+    })
+
+    it("un corte futuro: empieza en el corte y todavía no se cierra", async () => {
+      conFecha("2026-11-10", sinPendientes)
+      enSesion(sesiones.dueña)
+      const cuerpo = await (await vista()).json()
+      expect(cuerpo.periodo).toMatchObject({ desde: "2026-11-10", hasta: "2026-11-30" })
+      expect(cuerpo.noSePuedeCerrar).toMatch(/todavía no empieza/)
+    })
+
+    it("con período semanal, la semana de lo más antiguo pendiente", async () => {
+      const datos = escenario()
+      base.reiniciar({
+        ...datos,
+        business: datos.business.map((b) =>
+          b.id === NEGOCIO
+            ? { ...b, liquidacionPeriodo: "semanal", liquidacionInicioSemana: 1, liquidacionDesde: dia("2026-09-02") }
+            : b
+        ),
+      })
+      enSesion(sesiones.dueña)
+      // Lo más antiguo de Carla es del martes 6 de octubre: la semana del lunes 5.
+      expect((await (await vista()).json()).periodo).toMatchObject({ desde: "2026-10-05", hasta: "2026-10-11" })
+    })
+  })
+
+  it("solo la dueña la fija; encargado y profesional 401", async () => {
+    conFecha(null)
+    for (const sesion of [sesiones.encargado, sesiones.carla, sesiones.sinMiembro]) {
+      enSesion(sesion)
+      expect((await fijar({ fecha: "2026-10-01" })).status).toBe(401)
+    }
+    enSesion(sesiones.dueña)
+    expect((await fijar({ fecha: "2026-02-30" })).status).toBe(400)
+    expect((await fijar({ fecha: "2026-10-01" })).status).toBe(200)
+    expect(base.buscar("business", { id: NEGOCIO })[0].liquidacionDesde).toEqual(dia("2026-10-01"))
+    expect(base.buscar("business", { id: OTRO_NEGOCIO })[0].liquidacionDesde).toBeNull()
+  })
+
+  it("toma exclusivo el candado de liquidaciones del negocio antes de leer nada", async () => {
+    conFecha(null)
+    enSesion(sesiones.dueña)
+    expect((await fijar({ fecha: "2026-10-01" })).status).toBe(200)
+    const candados = base.prisma.$executeRaw.mock.calls.map(([partes, ...valores]) => [partes.join("?"), ...valores])
+    expect(candados).toEqual([["SELECT pg_advisory_xact_lock(hashtext(?))", `liquidaciones:${NEGOCIO}`]])
+    const candado = base.prisma.$executeRaw.mock.invocationCallOrder[0]
+    expect(candado).toBeLessThan(base.prisma.business.findUnique.mock.invocationCallOrder[0])
+    expect(candado).toBeLessThan(base.prisma.liquidacion.count.mock.invocationCallOrder[0])
+  })
+
+  it("si un cierre termina mientras espera el candado, lo ve: 409 y la fecha no cambia", async () => {
+    enSesion(sesiones.dueña)
+    // En Postgres el PUT espera al cierre que tiene el candado compartido; se
+    // simula haciendo que el cierre entre justo cuando el PUT pide el candado.
+    const original = base.prisma.$executeRaw.getMockImplementation()!
+    base.prisma.$executeRaw.mockImplementationOnce(async (...args: Parameters<typeof original>) => {
+      await base.prisma.liquidacion.create({
+        data: {
+          id: "liq-en-curso",
+          businessId: NEGOCIO,
+          memberId: "m-carla",
+          memberName: "Carla Profesional",
+          periodo: "mensual",
+          desde: dia("2026-10-01"),
+          hasta: dia("2026-10-31"),
+          zona: "America/Santiago",
+          estado: "cerrada",
+          comisionServiciosCents: 0,
+          comisionProductosCents: 0,
+          propinasCents: 0,
+          adelantosCents: 0,
+          ajustesCents: 0,
+          brutoCents: 0,
+          totalCents: 0,
+          cerradaPorId: "u-duena",
+          cerradaPorNombre: "Ana Dueña",
+        },
+      })
+      return original(...args)
+    })
+
+    const res = await fijar({ fecha: "2026-09-01" })
+
+    expect(res.status).toBe(409)
+    expect(base.buscar("business", { id: NEGOCIO })[0].liquidacionDesde).toEqual(dia("2026-10-01"))
+  })
+
+  it("con una liquidación no anulada ya no se cambia (409); anulada, sí", async () => {
+    enSesion(sesiones.dueña)
+    const { id } = await (await cerrar({ miembroId: "m-carla", desde: "2026-10-01" })).json()
+    const res = await fijar({ fecha: "2026-09-01" })
+    expect(res.status).toBe(409)
+    expect(base.buscar("business", { id: NEGOCIO })[0].liquidacionDesde).toEqual(dia("2026-10-01"))
+    // La misma fecha no es un cambio.
+    expect((await fijar({ fecha: "2026-10-01" })).status).toBe(200)
+
+    const { POST } = await import("./[id]/anulacion/route")
+    await POST(pedido(URL, { motivo: "Otra fecha" }), conId(id))
+    expect((await fijar({ fecha: "2026-09-01" })).status).toBe(200)
   })
 })

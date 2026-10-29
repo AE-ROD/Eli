@@ -47,6 +47,7 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     cancelacionHorasAntes: 24,
     liquidacionPeriodo: "mensual",
     liquidacionInicioSemana: 1,
+    liquidacionDesde: null,
     enlaceResenas: null,
     listaDeEsperaActiva: true,
     avisoDeVueltaActivo: false,
@@ -416,11 +417,14 @@ export function crearBaseFalsa() {
      * Sólo para candados (`SELECT … FOR UPDATE` o `pg_advisory_xact_lock`): en
      * memoria no hay concurrencia que ordenar, así que no devuelve nada. Queda
      * registrado para que un test compruebe que se pidió, con qué valores y
-     * dentro de la transacción. Cualquier otra consulta cruda lanza: no se
-     * sabe leerla.
+     * dentro de la transacción. También responde la hora de la base
+     * (`SELECT clock_timestamp() AS ahora`) con `new Date()`, que los tests
+     * controlan con el reloj falso de vitest. Cualquier otra consulta cruda
+     * lanza: no se sabe leerla.
      */
     $queryRaw: vi.fn(async (partes: TemplateStringsArray, ..._valores: unknown[]) => {
       const sql = partes.join("?")
+      if (sql.trim() === "SELECT clock_timestamp() AS ahora") return [{ ahora: new Date() }]
       if (!CANDADOS.some((candado) => sql.includes(candado))) return falla(`$queryRaw sólo para candados: ${sql}`)
       return []
     }),

@@ -1,6 +1,6 @@
 -- Etapa 2 "La plata del equipo": una sola migración para toda la etapa.
 -- Aditiva y sin pérdida: agrega columnas nullable o con default, crea tablas
--- nuevas con sus índices y claves foráneas, CHECKs y un trigger. No toca ni
+-- nuevas con sus índices y claves foráneas, CHECKs y triggers. No toca ni
 -- reescribe filas existentes, así que el código viejo sigue funcionando con
 -- ella aplicada.
 --
@@ -26,7 +26,8 @@
 BEGIN;
 -- AlterTable
 ALTER TABLE "negocios" ADD COLUMN     "liquidacionInicioSemana" INTEGER NOT NULL DEFAULT 1,
-ADD COLUMN     "liquidacionPeriodo" TEXT NOT NULL DEFAULT 'mensual';
+ADD COLUMN     "liquidacionPeriodo" TEXT NOT NULL DEFAULT 'mensual',
+ADD COLUMN     "liquidacionDesde" DATE;
 
 -- AlterTable
 ALTER TABLE "atencion_servicios" ADD COLUMN     "commissionAt" TIMESTAMP(3),
@@ -326,7 +327,13 @@ CREATE UNIQUE INDEX "liquidaciones_businessId_memberId_desde_viva_key" ON "liqui
 -- liquidación no cambia de precio, de profesional ni de comisión: lo pagado
 -- se corrige con un ajuste. Sí se puede quitar `liquidacionId` (anular la
 -- liquidación la libera) y congelar una pendiente en la misma UPDATE que la
--- incluye en una liquidación.
+-- incluye en una liquidación. Lo que no se puede es pasarla de una
+-- liquidación a otra: primero se anula la que la tiene.
+-- Las reglas de línea liquidada se saltan solo si su atención ya no existe:
+-- al borrar el negocio entero, la cascada de `miembros_negocio` pone
+-- `memberId` en NULL en líneas cuya atención ya se borró en la misma
+-- cascada, y eso no debe hacer fallar el borrado. Es la misma excepción que
+-- el trigger BEFORE DELETE de abajo; con la atención viva, nunca aplica.
 CREATE FUNCTION atencion_servicios_comision_inmutable() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
@@ -345,8 +352,15 @@ BEGIN
     OR NEW."commissionPercent" IS DISTINCT FROM OLD."commissionPercent"
     OR NEW."commissionCents" IS DISTINCT FROM OLD."commissionCents"
     OR NEW."commissionAt" IS DISTINCT FROM OLD."commissionAt"
-  ) THEN
+  ) AND EXISTS (SELECT 1 FROM "atenciones" WHERE "id" = OLD."visitId") THEN
     RAISE EXCEPTION 'atencion_servicios %: la línea está en una liquidación; corrígela con un ajuste', OLD."id"
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF OLD."liquidacionId" IS NOT NULL AND NEW."liquidacionId" IS NOT NULL
+     AND NEW."liquidacionId" <> OLD."liquidacionId"
+     AND EXISTS (SELECT 1 FROM "atenciones" WHERE "id" = OLD."visitId") THEN
+    RAISE EXCEPTION 'atencion_servicios %: la línea ya está en otra liquidación', OLD."id"
       USING ERRCODE = 'check_violation';
   END IF;
 
@@ -357,5 +371,87 @@ $$;
 CREATE TRIGGER atencion_servicios_comision_inmutable
 BEFORE UPDATE ON "atencion_servicios"
 FOR EACH ROW EXECUTE FUNCTION atencion_servicios_comision_inmutable();
+
+
+-- ─── Trigger: una línea liquidada no se borra ───────────────────────────────
+-- Lo que entró en una liquidación ya se le pagó (o se le va a pagar) a
+-- alguien: borrar la línea dejaría la liquidación sin respaldo. Se anula la
+-- liquidación primero. La excepción es el borrado en cascada (borrar el
+-- negocio entero): cuando la cascada llega a la línea, su atención ya no
+-- existe, y eso se deja pasar. El trigger de arriba usa la misma excepción
+-- para el `memberId` que la cascada de miembros pone en NULL.
+CREATE FUNCTION atencion_servicios_liquidada_no_se_borra() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD."liquidacionId" IS NOT NULL
+     AND EXISTS (SELECT 1 FROM "atenciones" WHERE "id" = OLD."visitId") THEN
+    RAISE EXCEPTION 'atencion_servicios %: la línea está en una liquidación; no se borra', OLD."id"
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN OLD;
+END;
+$$;
+
+CREATE TRIGGER atencion_servicios_liquidada_no_se_borra
+BEFORE DELETE ON "atencion_servicios"
+FOR EACH ROW EXECUTE FUNCTION atencion_servicios_liquidada_no_se_borra();
+
+
+-- ─── Trigger: producto y liquidación, del mismo negocio que la atención ────
+-- `atencion_servicios` no tiene `businessId` propio, así que las FK a
+-- `productos` y `liquidaciones` no pueden ser compuestas como las de
+-- `atencion_propinas`. Esto cubre ese hueco: una línea nunca apunta a un
+-- producto ni a una liquidación de otro negocio. Sólo mira cuando cambia
+-- la atención, el producto o la liquidación, y no estorba a la cascada que
+-- borra un negocio entero.
+CREATE FUNCTION atencion_servicios_mismo_negocio() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  negocio TEXT;
+BEGIN
+  IF NEW."productId" IS NULL AND NEW."liquidacionId" IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  -- En INSERT no se lee OLD: el IF de afuera separa los dos casos.
+  IF TG_OP = 'UPDATE' THEN
+    IF NEW."visitId" = OLD."visitId"
+       AND NEW."productId" IS NOT DISTINCT FROM OLD."productId"
+       AND NEW."liquidacionId" IS NOT DISTINCT FROM OLD."liquidacionId" THEN
+      RETURN NEW;
+    END IF;
+  END IF;
+
+  SELECT "businessId" INTO negocio FROM "atenciones" WHERE "id" = NEW."visitId";
+
+  -- En un UPDATE sin atención estamos dentro de una cascada (borrar el
+  -- negocio): la línea se va a borrar igual, no hay negocio con qué
+  -- comparar. En un INSERT no pasa: la FK a `atenciones` ya lo rechaza.
+  IF negocio IS NULL AND TG_OP = 'UPDATE' THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW."productId" IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM "productos" WHERE "id" = NEW."productId" AND "businessId" = negocio
+  ) THEN
+    RAISE EXCEPTION 'atencion_servicios %: el producto es de otro negocio', NEW."id"
+      USING ERRCODE = 'foreign_key_violation';
+  END IF;
+
+  IF NEW."liquidacionId" IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM "liquidaciones" WHERE "id" = NEW."liquidacionId" AND "businessId" = negocio
+  ) THEN
+    RAISE EXCEPTION 'atencion_servicios %: la liquidación es de otro negocio', NEW."id"
+      USING ERRCODE = 'foreign_key_violation';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER atencion_servicios_mismo_negocio
+BEFORE INSERT OR UPDATE ON "atencion_servicios"
+FOR EACH ROW EXECUTE FUNCTION atencion_servicios_mismo_negocio();
 
 COMMIT;

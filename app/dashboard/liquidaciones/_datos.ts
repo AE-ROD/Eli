@@ -70,3 +70,11 @@ export function registrarMovimiento(datos: {
 export function anularMovimiento(id: string): Promise<Resultado<MovimientoParaMostrar>> {
   return pedir<MovimientoParaMostrar>(`/api/movimientos/${cod(id)}/anulacion`, "No se pudo anular", { method: "POST" })
 }
+
+export function guardarLiquidarDesde(fecha: string): Promise<Resultado<{ liquidarDesde: string }>> {
+  return pedir<{ liquidarDesde: string }>(
+    "/api/liquidaciones/liquidar-desde",
+    "No se pudo guardar la fecha",
+    conJson("PUT", { fecha })
+  )
+}

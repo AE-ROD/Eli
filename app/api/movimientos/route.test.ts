@@ -137,6 +137,26 @@ describe("POST /api/movimientos", () => {
     expect(base.buscar("movimientoDeLiquidacion")).toHaveLength(5)
   })
 
+  it("con \"Liquidar desde\" fijado, una fecha anterior es 400; ese mismo día se acepta", async () => {
+    const datos = escenario()
+    base.reiniciar({
+      ...datos,
+      business: datos.business.map((b) =>
+        b.id === NEGOCIO ? { ...b, liquidacionDesde: new Date("2026-10-15T00:00:00.000Z") } : b
+      ),
+    })
+    enSesion(sesiones.dueña)
+    const antes = await registrar({ miembroId: "m-carla", tipo: "vale", monto: 100, fecha: "2026-10-14" })
+    expect(antes.status).toBe(400)
+    expect((await antes.json()).error).toMatch(/Liquidar desde.*15 oct 2026/)
+    expect(base.buscar("movimientoDeLiquidacion")).toHaveLength(5)
+
+    const mismoDia = await registrar({ miembroId: "m-carla", tipo: "vale", monto: 100, fecha: "2026-10-15" })
+    expect(mismoDia.status).toBe(201)
+    // Sin fecha es hoy (1 nov), posterior al corte.
+    expect((await registrar({ miembroId: "m-carla", tipo: "vale", monto: 100 })).status).toBe(201)
+  })
+
   it.each([
     [{ tipo: "adelanto", monto: 0 }, /mayor que/],
     [{ tipo: "vale", monto: -100 }, /mayor que/],

@@ -3,6 +3,7 @@ import { SELECCION_DE_RESUMEN, formatearResumen, leerNegocioParaLiquidar, type R
 import type { TipoDeMovimiento } from "@/lib/movimientos"
 import {
   fechaDeColumna,
+  fechaParaColumna,
   fechaDelNegocio,
   finDelPeriodoEn,
   inicioDelPeriodoEn,
@@ -71,7 +72,7 @@ export async function calcularMiPlata(
   })
   if (!miembro) return null
 
-  const { zona, config } = await leerNegocioParaLiquidar(db, businessId)
+  const { zona, config, liquidarDesde } = await leerNegocioParaLiquidar(db, businessId)
   const hoy = fechaDelNegocio(ahora, zona)
   const semana = periodoQueContiene(hoy, { periodo: "semanal", inicioSemana: config.inicioSemana })
   const periodo = periodoQueContiene(hoy, config)
@@ -100,11 +101,25 @@ export async function calcularMiPlata(
         byOwner: false,
         commissionAt: null,
         liquidacionId: null,
-        visit: { is: { businessId, status: "finalizada" } },
+        // Lo cobrado antes de "Liquidar desde" no se va a liquidar: no espera nada.
+        visit: {
+          is: {
+            businessId,
+            status: "finalizada",
+            ...(liquidarDesde ? { paidAt: { gte: inicioDelPeriodoEn(liquidarDesde, zona) } } : {}),
+          },
+        },
       },
     }),
     db.movimientoDeLiquidacion.findMany({
-      where: { businessId, memberId, tipo: { in: ["adelanto", "vale"] }, liquidacionId: null, anuladoAt: null },
+      where: {
+        businessId,
+        memberId,
+        tipo: { in: ["adelanto", "vale"] },
+        liquidacionId: null,
+        anuladoAt: null,
+        ...(liquidarDesde ? { fecha: { gte: fechaParaColumna(liquidarDesde) } } : {}),
+      },
       select: { id: true, tipo: true, montoCents: true, fecha: true, motivo: true },
       orderBy: [{ fecha: "desc" }, { createdAt: "desc" }],
     }),

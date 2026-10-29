@@ -8,13 +8,14 @@ import { whereDeLiquidaciones, type Actor } from "@/lib/permisos"
 import { registrarError } from "@/lib/registro-de-errores"
 import { nombreEnElNegocio } from "@/lib/tablero"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
-import { zonaDelNegocio } from "@/lib/zona-horaria"
+import { sumarDias, zonaDelNegocio } from "@/lib/zona-horaria"
 import {
   configuracionDelNegocio,
   fechaDeColumna,
   fechaDelNegocio,
   fechaParaColumna,
   finDelPeriodoEn,
+  inicioDelPeriodoEn,
   periodoParaLeer,
   proximoPeriodo,
   type ConfiguracionDePeriodo,
@@ -30,8 +31,9 @@ export type { TipoDeMovimiento }
  *
  * Qué entra en la próxima liquidación de alguien (`vistaPrevia`):
  * - sus líneas de atenciones finalizadas, sin liquidar, cobradas antes del
- *   fin del período (en la zona del negocio). Sin límite hacia atrás: lo
- *   atrasado se arrastra;
+ *   fin del período (en la zona del negocio). Hacia atrás, hasta "Liquidar
+ *   desde" (`Business.liquidacionDesde`): lo atrasado desde ahí se arrastra,
+ *   lo anterior nunca entra;
  * - sus propinas de esas atenciones (si la atención se anuló, deja de contar);
  * - sus adelantos y vales (descuentan) y ajustes (con signo), sin liquidar ni
  *   anular, con fecha hasta el fin del período. Se pueden dejar afuera de a
@@ -107,17 +109,64 @@ export async function tomarCandadoDeLiquidacion(tx: Db, businessId: string, memb
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${businessId}), hashtext(${memberId}))`
 }
 
+/**
+ * Candado de liquidaciones del negocio entero. Lo toma exclusivo el cambio de
+ * "Liquidar desde" (`app/api/liquidaciones/liquidar-desde`), y compartido cada
+ * cierre, antes del de su miembro: entre cierres no se esperan, pero ninguno
+ * pasa a la vez que un cambio de fecha. Así la fecha no cambia en medio de un
+ * cierre que la está usando, ni se cambia justo cuando se acaba de cerrar la
+ * primera liquidación. La clave es `hashtext('liquidaciones:' || businessId)`,
+ * de un solo número: no choca con la de negocio + miembro.
+ */
+export async function tomarCandadoDeLiquidacionesDelNegocio(
+  tx: Db,
+  businessId: string,
+  modo: "exclusivo" | "compartido"
+): Promise<void> {
+  const clave = `liquidaciones:${businessId}`
+  if (modo === "exclusivo") await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${clave}))`
+  else await tx.$executeRaw`SELECT pg_advisory_xact_lock_shared(hashtext(${clave}))`
+}
+
+/**
+ * Toma el candado de liquidación de cada profesional con líneas o propinas en
+ * la atención, en orden estable (por id) para que dos transacciones que toman
+ * varios no se crucen en un deadlock. Lo usa la anulación de una atención
+ * antes de mirar si ya está liquidada: así no puede pasar en medio de un
+ * cierre que la está incluyendo.
+ */
+export async function tomarCandadosDeLaAtencion(tx: Db, businessId: string, visitId: string): Promise<void> {
+  const [lineas, propinas] = await Promise.all([
+    tx.visitService.findMany({
+      where: { visitId, visit: { is: { businessId } }, memberId: { not: null } },
+      select: { memberId: true },
+    }),
+    tx.propinaDeAtencion.findMany({
+      where: { visitId, businessId, memberId: { not: null } },
+      select: { memberId: true },
+    }),
+  ])
+  const miembros = [...new Set([...lineas, ...propinas].map((f) => f.memberId as string))].sort()
+  for (const memberId of miembros) await tomarCandadoDeLiquidacion(tx, businessId, memberId)
+}
+
 // ─── El negocio y los porcentajes ────────────────────────────────────────────
 
 export interface NegocioParaLiquidar {
   zona: string
   config: ConfiguracionDePeriodo
+  /** "Liquidar desde" (día del negocio), o `null` si la dueña todavía no lo fijó. */
+  liquidarDesde: string | null
 }
+
+/** El 409 de vista previa y cierre mientras la dueña no fijó "Liquidar desde". */
+export const FALTA_LIQUIDAR_DESDE =
+  "Antes de liquidar, la dueña tiene que elegir desde qué fecha se liquida (Liquidaciones → Período)."
 
 export async function leerNegocioParaLiquidar(db: Db, businessId: string): Promise<NegocioParaLiquidar> {
   const negocio = await db.business.findUnique({
     where: { id: businessId },
-    select: { timezone: true, liquidacionPeriodo: true, liquidacionInicioSemana: true },
+    select: { timezone: true, liquidacionPeriodo: true, liquidacionInicioSemana: true, liquidacionDesde: true },
   })
   return {
     zona: zonaDelNegocio(negocio?.timezone),
@@ -125,6 +174,7 @@ export async function leerNegocioParaLiquidar(db: Db, businessId: string): Promi
       liquidacionPeriodo: negocio?.liquidacionPeriodo,
       liquidacionInicioSemana: negocio?.liquidacionInicioSemana,
     }),
+    liquidarDesde: negocio?.liquidacionDesde ? fechaDeColumna(negocio.liquidacionDesde) : null,
   }
 }
 
@@ -275,8 +325,11 @@ export async function vistaPrevia(
   })
   if (!miembro) return null
 
-  const { zona, config } = await leerNegocioParaLiquidar(db, businessId)
+  const { zona, config, liquidarDesde } = await leerNegocioParaLiquidar(db, businessId)
+  if (!liquidarDesde) throw new ErrorDeLiquidacion(409, FALTA_LIQUIDAR_DESDE)
   const hoy = fechaDelNegocio(ahora, zona)
+  // Lo cobrado antes de "Liquidar desde" (en la zona del negocio) nunca entra.
+  const inicio = inicioDelPeriodoEn(liquidarDesde, zona)
 
   const [ultima, lineas, propinas, movimientos] = await Promise.all([
     db.liquidacion.findFirst({
@@ -289,7 +342,7 @@ export async function vistaPrevia(
         memberId,
         byOwner: false,
         liquidacionId: null,
-        visit: { is: { businessId, status: "finalizada", paidAt: { not: null } } },
+        visit: { is: { businessId, status: "finalizada", paidAt: { gte: inicio } } },
       },
       select: {
         id: true,
@@ -307,7 +360,12 @@ export async function vistaPrevia(
       orderBy: { id: "asc" },
     }),
     db.propinaDeAtencion.findMany({
-      where: { businessId, memberId, liquidacionId: null, visit: { is: { businessId, status: "finalizada" } } },
+      where: {
+        businessId,
+        memberId,
+        liquidacionId: null,
+        visit: { is: { businessId, status: "finalizada", paidAt: { gte: inicio } } },
+      },
       select: {
         id: true,
         visitId: true,
@@ -319,7 +377,7 @@ export async function vistaPrevia(
       orderBy: { id: "asc" },
     }),
     db.movimientoDeLiquidacion.findMany({
-      where: { businessId, memberId, liquidacionId: null, anuladoAt: null },
+      where: { businessId, memberId, liquidacionId: null, anuladoAt: null, fecha: { gte: fechaParaColumna(liquidarDesde) } },
       select: { id: true, tipo: true, montoCents: true, fecha: true, motivo: true },
       orderBy: [{ fecha: "asc" }, { createdAt: "asc" }],
     }),
@@ -332,9 +390,18 @@ export async function vistaPrevia(
     ...movimientos.map((m) => fechaDeColumna(m.fecha)),
   ].sort()
 
+  const primerPendiente = fechas[0] ?? null
+  // Sin liquidaciones previas, la primera empieza en el período de lo más
+  // antiguo pendiente (o el de hoy), pero nunca antes de "Liquidar desde":
+  // así no hay que cerrar uno por uno los períodos vacíos entre el corte y
+  // lo primero que hay para liquidar. Termina con su período.
+  const primeraDesde = (): string => {
+    const delPendiente = proximoPeriodo({ ultimaHasta: null, primerPendiente, hoy, config }).desde
+    return delPendiente > liquidarDesde ? delPendiente : liquidarDesde
+  }
   const periodo = proximoPeriodo({
-    ultimaHasta: ultima ? fechaDeColumna(ultima.hasta) : null,
-    primerPendiente: fechas[0] ?? null,
+    ultimaHasta: ultima ? fechaDeColumna(ultima.hasta) : sumarDias(primeraDesde(), -1),
+    primerPendiente,
     hoy,
     config,
   })
@@ -431,6 +498,9 @@ export async function cerrarLiquidacion(
   }
 ): Promise<string> {
   const { businessId, memberId, ahora } = opciones
+  // Primero el del negocio, compartido: un cambio de "Liquidar desde" en
+  // curso termina antes, y la vista previa de abajo ya lee la fecha nueva.
+  await tomarCandadoDeLiquidacionesDelNegocio(tx, businessId, "compartido")
   await tomarCandadoDeLiquidacion(tx, businessId, memberId)
 
   const vista = await vistaPrevia(tx, { businessId, memberId, excluirMovimientos: opciones.excluirMovimientos, ahora })
@@ -464,7 +534,9 @@ export async function cerrarLiquidacion(
     select: { id: true },
   })
 
-  const deEstaPersona = { memberId, liquidacionId: null, visit: { is: { businessId } } }
+  // Sólo lo de atenciones que siguen cobradas: si una se anuló entre la
+  // vista previa y acá, el conteo no cuadra y el cierre responde 409.
+  const deEstaPersona = { memberId, liquidacionId: null, visit: { is: { businessId, status: "finalizada" } } }
 
   const yaCongeladas = vista.lineas.filter((l) => l.estado === "congelada").map((l) => l.id)
   if (yaCongeladas.length > 0) {
@@ -493,7 +565,13 @@ export async function cerrarLiquidacion(
   const propinas = vista.propinas.map((p) => p.id)
   if (propinas.length > 0) {
     const { count } = await tx.propinaDeAtencion.updateMany({
-      where: { id: { in: propinas }, businessId, memberId, liquidacionId: null },
+      where: {
+        id: { in: propinas },
+        businessId,
+        memberId,
+        liquidacionId: null,
+        visit: { is: { businessId, status: "finalizada" } },
+      },
       data: { liquidacionId: creada.id },
     })
     if (count !== propinas.length) throw new ErrorDeLiquidacion(409, CAMBIO_A_MITAD)

@@ -17,7 +17,7 @@ import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, memberIdParaCita, puedeReactivarCita, whereDeAgenda, type Actor } from "@/lib/permisos"
 import { MENSAJE_CITA_CERRADA, MENSAJE_CITA_CON_ATENCION, sePuedeMover } from "@/lib/mover-cita"
 import { advertenciasDeAgenda } from "@/lib/advertencias-de-agenda"
-import { decidirReactivacion, problemaConLaAtencion } from "@/lib/reactivar-cita"
+import { MENSAJE_CITA_CAMBIO, decidirReactivacion, problemaConLaAtencion } from "@/lib/reactivar-cita"
 import { ocupaElHorario } from "@/lib/ocupacion"
 import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
 
@@ -248,10 +248,21 @@ export async function PUT(
 
     // La atención se revisa en la misma transacción que reactiva: un cobro o
     // un cierre de caja que entre entretanto no se cuela.
+    // Y sólo si la cita sigue en el estado con que se decidió reactivarla, y
+    // en este negocio: si otro la cambió entretanto, 409 y no se pisa.
     const resultado = await prisma.$transaction(async (tx) => {
       const problema = await problemaConLaAtencion(tx, actor.businessId, existente.id)
       if (problema) return { problema }
-      return { cita: await tx.appointment.update(actualizacion) }
+      const { count } = await tx.appointment.updateMany({
+        where: { id: existente.id, businessId: actor.businessId, status: existente.status },
+        data: actualizacion.data,
+      })
+      if (count === 0) return { problema: MENSAJE_CITA_CAMBIO }
+      const cita = await tx.appointment.findFirst({
+        where: { id: existente.id, businessId: actor.businessId },
+        include: actualizacion.include,
+      })
+      return { cita }
     })
     if ("problema" in resultado) return NextResponse.json({ error: resultado.problema }, { status: 409 })
     return NextResponse.json(resultado.cita)

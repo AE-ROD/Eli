@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest"
+import { describe, it, expect, beforeEach, vi } from "vitest"
 import { Prisma } from "@prisma/client"
 import { crearBaseFalsa } from "./base-falsa"
 
@@ -253,6 +253,20 @@ describe("base falsa: lo de la etapa 2", () => {
     await expect(prisma.$executeRaw(...sql`SELECT pg_advisory_xact_lock(${1}, ${2})`)).resolves.toBe(0)
     await expect(prisma.$queryRaw(...sql`SELECT pg_advisory_xact_lock(${1}, ${2})`)).resolves.toEqual([])
     await expect(prisma.$executeRaw(...sql`DELETE FROM liquidaciones`)).rejects.toThrow(/base falsa/)
+  })
+
+  it("responde la hora de la base con el reloj del test, y sólo con esa consulta exacta", async () => {
+    const sql = (partes: TemplateStringsArray, ...valores: unknown[]) => [partes, ...valores] as const
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date("2026-10-06T15:00:00.000Z"))
+    try {
+      await expect(prisma.$queryRaw(...sql`SELECT clock_timestamp() AS ahora`)).resolves.toEqual([
+        { ahora: new Date("2026-10-06T15:00:00.000Z") },
+      ])
+    } finally {
+      vi.useRealTimers()
+    }
+    await expect(prisma.$queryRaw(...sql`SELECT now() AS ahora`)).rejects.toThrow(/base falsa/)
   })
 })
 

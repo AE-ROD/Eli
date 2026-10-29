@@ -66,10 +66,15 @@ Modelo **profesional × servicio con herencia**. Resolución en cascada, del má
 | 1 | Porcentaje de **ese profesional en ese servicio** | Juan cobra 50% en Color |
 | 2 | Porcentaje **por defecto del profesional** | Juan cobra 70% en todo lo demás |
 | 3 | Sin configurar | La línea queda **pendiente de configurar** |
+| — | **Producto** | El % del producto, para quien lo vendió (si no tiene, pendiente) |
+
+La línea de la dueña no lleva comisión: no se la paga a sí misma.
 
 **El caso 3 nunca asume cero en silencio.** Una comisión sin configurar es un error de configuración, no una comisión de $0. Se muestra como pendiente y se le avisa al dueño; si no, se liquida de menos sin que nadie lo note.
 
 **Por qué con herencia:** el dueño configura un porcentaje por persona y listo. Sólo define excepciones donde realmente las hay. No tiene que llenar una matriz de todos los profesionales por todos los servicios el primer día.
+
+**Dónde se configura.** La dueña fija en **Comisiones** el % por defecto de cada profesional y sus excepciones por servicio. Vacío es "sin configurar" (no es 0 %): lo cobrado queda pendiente hasta que se configure, y cada profesional muestra cuántos servicios suyos esperan %. Lo cobrado antes de "Liquidar desde" (3.7) no cuenta como pendiente: nunca va a entrar a una liquidación. El % de los productos se ve ahí y se edita en Configuración › Productos. Cada cambio queda en el historial (quién, cuándo, de cuánto a cuánto), incluidos los de quienes ya dejaron el equipo. El encargado y el profesional no ven esta sección.
 
 ### 3.2 Base de cálculo
 
@@ -93,6 +98,11 @@ Si el dueño le cambia el porcentaje a Juan hoy, **las atenciones de los meses a
 
 El encargado gestiona la operación: equipo, agenda, horarios. **No define cuánto cobra cada uno.** Sí registra cobros en el tablero: es la caja del día y así lo decidió el dueño. Ver más permisos se puede abrir después; cerrarlos después es incómodo.
 
+- **Productos:** el catálogo lo gestionan dueña y encargado; el % de cada producto, sólo la dueña (si lo manda el encargado, se rechaza).
+- **Propinas:** las registra quien cobra (dueña y encargado).
+- **Liquidaciones:** el período y "Liquidar desde" los elige sólo la dueña; la vista previa, cerrar, marcar pagada y anular, también. Adelantos y vales: dueña y encargado; ajustes: sólo la dueña (3.8).
+- El profesional ve el % y el monto sólo de sus propias líneas.
+
 ### 3.5 Auditoría
 
 Todo cambio de porcentaje deja registro: **quién, cuándo, de qué valor a qué valor.** Es dinero — sin historial, una discusión entre dueño y profesional no se puede resolver.
@@ -100,13 +110,43 @@ Todo cambio de porcentaje deja registro: **quién, cuándo, de qué valor a qué
 ### 3.6 Modelo de datos
 
 ```
-BusinessMember.commissionPercent   Float?   → porcentaje por defecto del profesional
+BusinessMember.commissionPercent   Float?   → % por defecto del profesional
 CommissionRate (memberId, serviceId, percent) → excepción puntual
-VisitService.commissionPercent/Amount         → congelado al cobrar, en cada línea
-CommissionChange (quién, cuándo, antes, después) → auditoría
+Producto.commissionPercent         Float?   → % de quien vende ese producto
+VisitService.commissionPercent/commissionCents/commissionAt
+                                            → congelado al cobrar, en cada línea
+                                              (null = pendiente, nunca 0);
+                                              tipo 'servicio' | 'producto'
+PropinaDeAtencion                           → propinas, aparte de los pagos
+CommissionChange (scope default | service | product; quién, cuándo, antes, después)
+                                            → auditoría
 ```
 
-> La rama `comisiones` (sin fusionar, nacida de `main`) guarda el congelado en la cita. Al integrarla hay que moverlo a las líneas de la atención.
+Las columnas de comisión de `citas` (`commissionPercent`, `commissionAmount`, `commissionAt`) quedan sin uso: la comisión vive en la línea de la atención.
+
+### 3.7 Liquidaciones
+
+Cada negocio liquida al equipo con un período que elige sólo la dueña: **semanal** (con el día en que empieza la semana), **quincenal** (1 al 15 y 16 a fin de mes) o **mensual** (por defecto). Cambiar el período sólo afecta lo que viene.
+
+**Liquidar desde.** Antes de la primera liquidación la dueña elige "Liquidar desde" (por defecto hoy, en la zona del negocio). Lo cobrado antes de esa fecha, sus propinas y los adelantos, vales y ajustes con fecha anterior nunca entran a una liquidación ni cuentan como pendientes de % (ni en Comisiones ni en Mi plata); un adelanto, vale o ajuste nuevo no se puede registrar con fecha anterior. Así lo que ya se pagó por fuera de Eli no se paga dos veces. Mientras no esté fijada no se puede ver la vista previa ni cerrar. Se puede cambiar sólo mientras no haya liquidaciones no anuladas; un cambio y un cierre no pasan a la vez.
+
+**Qué cubre.** La liquidación de cada profesional va desde el día siguiente a su última liquidación no anulada (la primera, desde el inicio del período de lo más antiguo que tiene pendiente, o del de hoy si no tiene nada, pero nunca antes de "Liquidar desde") hasta el fin del período que contiene ese día, en la zona del negocio. Incluye sus servicios y productos cobrados y todavía sin liquidar (lo atrasado se arrastra), sus propinas, sus adelantos y vales (descuentan) y los ajustes (con signo y motivo).
+
+**Total = comisiones + propinas − adelantos y vales + ajustes.**
+
+La dueña ve una **vista previa** sin guardar. Lo que no tenía % al cobrar dice "se congelará al X %" y se congela al cerrar. No se cierra mientras haya líneas sin % configurado ni con el total negativo (los adelantos se pueden dejar para la siguiente). Cerrar, **marcar pagada** (con medio, quién y cuándo) y **anular** son de la dueña. Se anula sólo una cerrada no pagada: libera lo que incluía, y lo ya congelado queda congelado. Una atención incluida en una liquidación no se anula ni se reactiva su cita: se corrige con un ajuste.
+
+### 3.8 Adelantos, vales y ajustes
+
+Adelantos y vales los registran dueña y encargado; los ajustes, sólo la dueña y con motivo. No se borran: se anulan, mientras no estén en una liquidación.
+
+### 3.9 Comprobante
+
+Cada liquidación tiene un comprobante en el panel que se imprime o se guarda como PDF desde el navegador y se descarga en CSV. Compartir manda un resumen y el enlace interno: no hay enlace público. El profesional ve sólo los suyos.
+
+### 3.10 Mi plata
+
+Quien atiende (tiene un lugar en el equipo; la dueña no) ve lo que lleva ganado hoy, esta semana y en el período en curso: comisión ya calculada más propinas, por día de cobro en la zona del negocio. También cuántos servicios esperan porcentaje (sin monto), sus adelantos y vales por descontar y sus liquidaciones con comprobante. Nunca ve totales del negocio ni lo de otros.
 
 ---
 
@@ -165,14 +205,17 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 - **Tablero de atenciones**, con y sin reserva, y registro de cobros (sección 7)
 - **Reportes** de lo atendido y cobrado, con filtros (sección 8)
 - Equipo con los tres roles reales
-- **Comisiones: ciclo completo** (configurar, calcular, liquidar, auditar)
+- **Comisiones: ciclo completo** (configurar, calcular, liquidar, auditar), con liquidaciones, comprobantes y Mi plata (sección 3)
+- **Productos y propinas** en el tablero, y **cierre de caja** (sección 7)
 - Elegir profesional al reservar, o "cualquiera disponible" (abajo)
 - Página pública de reservas
 - Recordatorios automáticos por correo: uno por cita, el día anterior en la zona del negocio (abajo)
 
 **No entra:**
 - Cobro online al cliente final
-- Reportes exportables (sí se descargan en CSV los clientes y las atenciones de un rango: ver Clientes)
+- Reportes exportables (sí se descargan en CSV los clientes y las atenciones de un rango, ver Clientes, y el comprobante de cada liquidación)
+- Inventario de productos
+- Retención de honorarios en la liquidación (decisión del dueño, sección 10)
 - Aplicación móvil nativa
 - Multi-sucursal
 
@@ -182,7 +225,9 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 
 **Bloqueos de horario.** "Bloquear horario" en la agenda cierra un tramo (almuerzo, trámite, feriado), con fecha y hora de inicio y de fin y un motivo opcional. Dueño y encargado bloquean a cualquier profesional o a todo el negocio; el profesional, sólo su propia agenda. En las vistas Día y Semana se ven como franjas grises; tocarlas muestra el detalle y, a quien puede, "Quitar bloqueo". El profesional ve los suyos y los de todo el negocio. Una cita encima de un bloqueo pide confirmación (arriba). La página pública no ofrece horas sobre un bloqueo (abajo).
 
-**"No vino".** Una reserva pendiente o confirmada cuya hora ya pasó se marca "No vino": desde el detalle de la cita en la agenda o, si está atrasada, desde su tarjeta en "Reservas de hoy" del Tablero. No se puede si el cliente ya está en el Tablero (hay que deshacer la llegada) ni antes de la hora (si avisó, se cancela). Libera el horario como una cancelada, no se mueve, no recibe recordatorio y suma en la ficha del cliente (abajo). Hoy no se deshace desde la pantalla (sección 10).
+**"No vino".** Una reserva pendiente o confirmada cuya hora ya pasó se marca "No vino": desde el detalle de la cita en la agenda o, si está atrasada, desde su tarjeta en "Reservas de hoy" del Tablero. No se puede si el cliente ya está en el Tablero (hay que deshacer la llegada) ni antes de la hora (si avisó, se cancela). Libera el horario como una cancelada, no se mueve, no recibe recordatorio y suma en la ficha del cliente (abajo). Se deshace reactivando la cita (abajo).
+
+**Reactivar una cita.** Dueña y encargado pueden reactivar una cita cancelada (si todavía no empieza; se avisa si choca y se puede confirmar igual) o devolver a confirmada una completada o de "No vino", si no tiene una atención viva en el Tablero. Si esa atención ya entró en un cierre de caja o en una liquidación, no se reactiva: se corrige con un ajuste. El profesional no saca una cita de cancelada, completada o "No vino". Una completada ya no se cancela directo. Si otro cambia la cita mientras se reactiva, no se pisa su cambio.
 
 **Recordatorios.** Un correo al cliente con email, una vez por cita, el día anterior en la zona del negocio, con la fecha y la hora de allá. No sale para las canceladas, las completadas ni las de "No vino". Lo manda un cron diario a las 13:00 UTC (~10:00 en Chile): el plan Hobby de Vercel no permite más de uno al día. Una cita creada después de esa hora para el día siguiente no recibe recordatorio.
 
@@ -275,9 +320,15 @@ Una **atención** es la visita de un cliente al local, con o sin reserva. El tab
 
 **El dueño también atiende.** El dueño no es miembro del equipo, así que sus líneas se marcan aparte como suyas y no generan comisión. Si quien hizo una línea deja el equipo, la línea conserva su nombre en el historial. Si todavía no se cobró, alguien tiene que reasignarla antes de cobrar.
 
+**Productos.** Además de servicios, una atención puede llevar productos del catálogo (un shampoo, una cera), a nombre de quien los vendió. Sin inventario ni cantidad: dos unidades son dos líneas. Un producto inactivo no se agrega. Cuentan para el total y para el tope de 20 líneas. La página pública y la agenda no los muestran.
+
+**La comisión se calcula al cobrar.** Cada línea guarda su % y su monto (sección 3.3). Una línea sin % no frena el cobro: queda pendiente y se avisa "… sin porcentaje de comisión: avísale a la dueña".
+
+**Propinas.** Se anotan al cobrar, hasta 5 por cobro, para quien atendió. No suman al total ni a los ingresos (los pagos siguen sumando exactamente el total). Van completas al profesional y se le pagan en la liquidación; la de la dueña no entra a ninguna.
+
 **Pago dividido.** Medios fijos: efectivo, tarjeta de débito, tarjeta de crédito, transferencia y billetera digital. Un cobro se puede repartir entre varios medios. La suma tiene que coincidir con el total al centavo: se calcula en centavos enteros, nunca con decimales sueltos.
 
-**Lo cobrado no se reescribe.** Una vez finalizada, la atención no se edita. Si hubo un error, el dueño la anula, también días después desde Reportes: queda en el historial de anuladas (quién, cuándo y por qué) y deja de sumar. El nombre de quien cobró y de quien anuló se guarda con la atención, y se conserva aunque esa persona deje el negocio. Si alguien se va sin ser atendido, también se anula.
+**Lo cobrado no se reescribe.** Una vez finalizada, la atención no se edita. Si hubo un error, el dueño la anula, también días después desde Reportes: queda en el historial de anuladas (quién, cuándo y por qué) y deja de sumar. **Lo rendido no se anula:** una atención que ya entró en una liquidación no anulada o en un cierre de caja se corrige con un ajuste en la liquidación. Si un cierre (de caja o de liquidación) está en curso, cobrar, anular y reactivar una cita esperan a que termine: así no se cuela nada a mitad de un cierre. El nombre de quien cobró y de quien anuló se guarda con la atención, y se conserva aunque esa persona deje el negocio. Si alguien se va sin ser atendido, también se anula.
 
 **La agenda se entera sola.** Al empezar la atención de alguien con reserva, su cita pasa a "en progreso"; al cobrarla, a "completada". El precio de la cita no cambia: lo cobrado vive en la atención, y el total puede incluir servicios de otros profesionales que quien atendió la cita no debe ver. Una cita marcada como completada en la agenda sin pasar por el cobro **no suma ingresos**: no hay registro de cuánto se cobró ni cómo. Si se anula la atención de una reserva antes de cobrarla, la cita queda cancelada (salvo que alguien ya la haya completado o cancelado a mano en la agenda: esa decisión no se pisa) y atada a esa atención; si la persona vuelve ese día, se la anota sin reserva.
 
@@ -291,6 +342,12 @@ Una **atención** es la visita de un cliente al local, con o sin reserva. El tab
 | Anular antes de cobrar | ✅ | ✅ | ❌ |
 | Anular algo ya cobrado | ✅ | ❌ | ❌ |
 | Ver las anuladas | ✅ | ✅ | ❌ |
+| Registrar propinas | ✅ | ✅ | ❌ |
+| Cerrar la caja y ver los cierres | ✅ | ✅ | ❌ |
+
+### Cierre de caja
+
+Dueña y encargado cierran la caja cuantas veces quieran al día. Cada cierre cubre desde el anterior (el primero, desde el inicio del día en la zona del negocio) hasta el momento de cerrar. **Esperado = fondo inicial + efectivo cobrado + propinas en efectivo**; se anota lo contado y la diferencia, con nota obligatoria si no cuadra. Los otros medios se muestran sólo como referencia. Los adelantos pagados desde la caja no cuentan en esta versión. Un cierre no se edita, y lo cobrado dentro de un cierre ya no se anula ni se reactiva su cita.
 
 ---
 
@@ -303,7 +360,7 @@ El historial de todo lo atendido y cobrado. Cada fila es una atención finalizad
 - turno: mañana (antes de las 12), tarde (de 12 a 18) o noche (desde las 18);
 - profesional, servicio y medio de pago.
 
-**Resumen del período:** ingresos, cantidad de atenciones, ticket promedio, y desglose por medio de pago, por profesional y por servicio.
+**Resumen del período:** ingresos, cantidad de atenciones, ticket promedio, y desglose por medio de pago, por profesional y por servicio. Los productos se desglosan por producto, y el filtro de servicio también elige un producto. Las propinas no son ingresos.
 
 **Las cifras siguen al filtro.** Con un filtro de profesional o de servicio, los ingresos son la suma de los servicios que cumplen el filtro, no la atención entera: "Carla" muestra lo que generó Carla. Con un filtro de medio de pago, son lo que entró por ese medio. Si se combinan medio y profesional o servicio, el medio sólo decide qué atenciones entran (las que tienen algún pago con ese medio), y las cifras son los servicios que cumplen el filtro. Un pago no se puede atribuir a un servicio, así que el desglose que no corresponde no se muestra; en la tabla, las líneas que cumplen el filtro se destacan.
 
@@ -312,6 +369,8 @@ El historial de todo lo atendido y cobrado. Cada fila es una atención finalizad
 **Quién ve qué.** Dueño y encargado ven todo el negocio. El profesional ve sólo sus propias líneas (lo que él atendió y cuánto sumó), sin los totales del negocio ni los medios de pago.
 
 El día y el turno se calculan en la zona horaria del dispositivo de quien mira. Alcanza mientras el negocio y su equipo estén en el mismo huso; ver sección 10.
+
+**Llenar horas** (pestaña aparte, dueña y encargado), en la zona del negocio: ocupación por profesional (citas dentro de su horario, menos bloqueos), clientes nuevos y que volvieron, tasa de "No vino", y la comparación con el período anterior de igual largo.
 
 ---
 
@@ -346,11 +405,12 @@ Nada de esto bloquea el trabajo actual, pero cada punto se decide antes de const
 | **Wallet** | En espera. Apple Wallet exige el Apple Developer Program pagado (los intermediarios gratis firman con certificados ajenos, contra la licencia de Apple). Google Wallet sería gratis y acepta personas naturales, pero pide cuenta de emisor con aprobación manual de Google, sirve sólo en Android y manda datos de la reserva a Google (EE. UU.), lo que debe declararse en la política de privacidad. Mientras tanto, la reserva se agrega al calendario (.ics y Google Calendar). |
 | **Funciones nuevas** | El resto del listado de ideas por incorporar, con qué problema resuelve cada una y si es imprescindible para vender. |
 | **Dinero** | Ya decidido: `Decimal` como formato único (como en comisiones / F-015). Hoy conviven Float (`Service.price`, `Appointment.price`) y centavos Int (tablero); migrarlos es una tarea aparte que cambia el esquema y se ensaya primero en una base de desarrollo, nunca directo en producción. |
-| **Comisiones en el tablero** | Integrar la rama `comisiones` sobre las líneas de atención (sección 3.6). |
+| **Dinero ya rendido** | Ya decidido (etapa 2): lo que entró en un cierre de caja o en una liquidación no anulada no se anula ni se reactiva su cita; se corrige con un ajuste. Cobrar, anular y reactivar esperan al cierre en curso, y "Liquidar desde" no cambia en medio de un cierre (secciones 3.7, 6 y 7). |
+| **Retención de honorarios** | Fuera, por decisión del dueño: la liquidación no retiene impuestos ni calcula boletas de honorarios. |
 | **Turnos y zona horaria** | Ya decidido: la zona horaria es **por negocio**, con `America/Santiago` por defecto (sección 6); la usan la reserva pública, la agenda y los recordatorios. Falta: la pantalla para que el dueño la cambie, si los reportes, el inicio y "Llegó" pasan a usarla en vez de la zona del dispositivo (secciones 7 y 8), y si cada negocio define sus propios turnos. |
-| **Agenda: bloqueos y "No vino"** | Falta decidir si "No vino" se puede deshacer desde la pantalla (hoy sólo cambiando el estado por la API) y si muchas inasistencias deben tener alguna consecuencia (aviso, pedir confirmación). Con el plan Pro de Vercel, el recordatorio podría salir a una hora fija en la zona de cada negocio. |
+| **Agenda: bloqueos y "No vino"** | Ya decidido: "No vino" se deshace reactivando la cita (dueña y encargado, sección 6). Falta decidir si muchas inasistencias deben tener alguna consecuencia (aviso, pedir confirmación). Con el plan Pro de Vercel, el recordatorio podría salir a una hora fija en la zona de cada negocio. |
 | **Página pública: fotos** | La página ya muestra logo, portada y fotos del equipo si existen, pero no hay subida: falta aprobar el almacenamiento (propuesto Cloudflare R2), y con él abrir la CSP (`img-src`) a ese origen. Hasta entonces se usa el color y las iniciales. También falta decidir si el encargado que atiende aparece en "Equipo" (llega con el interruptor "también atiende"). |
-| **Corregir un cobro** | Hoy lo cobrado se anula, también días después desde Reportes. Falta decidir si el dueño puede reabrirlo y corregirlo, y con qué registro. |
+| **Corregir un cobro** | Hoy lo cobrado se anula, también días después desde Reportes, salvo que ya haya entrado en un cierre de caja o en una liquidación: entonces se corrige con un ajuste. Falta decidir si el dueño puede reabrirlo y corregirlo, y con qué registro. |
 | **Roles** | Si hace falta un super administrador de la plataforma, y si el cliente final puede crear cuenta para ver su historial (cancelar y reagendar ya se hace sin cuenta, con el enlace del correo). |
 | **Reserva por profesional** | Hoy sólo se ofrecen los profesionales: el dueño que también atiende y el encargado con "también atiende" entran con ese interruptor (fila Cobro). Las citas sin profesional asignado ocupan a todos; falta decidir si el panel ofrece asignarlas. Al reagendar se mantiene el profesional; cambiarlo desde el enlace no está. El aviso de cancelación o cambio va al correo del dueño, no al del profesional. |
 | **Clientes y el profesional** | Ya decidido: el profesional ve los clientes del negocio, puede crearlos (los necesita para anotar a quien llega) y editar sólo sus **notas**. Cambiar los datos (nombre, teléfono, email, etiquetas...) y borrar un cliente es de dueño y encargado. El servidor lo aplica con `puedeEditarDatosDeCliente` y `puedeBorrarCliente` (`lib/permisos.ts`). Importar y exportar clientes y atenciones en CSV también es de dueño y encargado (`puedeImportarExportarClientes`). |
