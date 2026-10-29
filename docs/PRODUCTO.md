@@ -293,6 +293,7 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 - El correo de confirmación trae "Cancelar o cambiar mi cita" (y la pantalla de reserva confirmada, el mismo enlace, para quien no dejó correo). Abre una página con la cita: negocio, servicio, profesional, día y hora en la zona del negocio.
 - **Cancelar** la deja cancelada por el cliente, con la hora, y libera el horario. **Reagendar** ofrece otras horas libres del mismo servicio y profesional, con las reglas de la reserva. En los dos casos se le avisa al negocio por correo.
 - **Plazo:** hasta 24 horas antes por defecto; dueño y encargado lo cambian en Configuración → "Plazo para cancelar o reagendar (horas)", de 0 a 72. Pasado el plazo la página muestra la cita y dice que hay que contactar al local.
+- **El plazo se dice antes de reservar:** la cabecera de la página pública y el resumen del paso de confirmar muestran "Puedes cancelar o cambiar hasta 24 horas antes." (con el plazo del negocio; con 0 horas, "hasta el momento de la cita"). Es el mismo plazo que después aplica el enlace.
 - Un enlace inválido, de una cita cancelada, pasada o ya atendida dice "Este enlace no sirve", sin más detalle. La base guarda sólo una huella del enlace (no el enlace), y cada enlace tiene su propio límite de uso además del de la IP.
 
 ### Teléfono y WhatsApp en la reserva

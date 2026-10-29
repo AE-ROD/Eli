@@ -41,6 +41,12 @@ interface PropsDeFormularioReserva {
   horarios: HorarioPublico[]
   /** Si el negocio ofrece "Avísame si se libera una hora" (#74). */
   listaDeEsperaActiva: boolean
+  /**
+   * "Puedes cancelar o cambiar hasta 24 horas antes.", dicho antes de
+   * confirmar (#83). Viene armado del servidor (`plazoParaQuienReserva`):
+   * `lib/gestion-de-cita.ts` usa `node:crypto` y no entra al cliente.
+   */
+  plazoDeCambios: string
 }
 
 type Paso = 1 | 2 | 3
@@ -63,6 +69,7 @@ export function FormularioReserva({
   servicios,
   horarios,
   listaDeEsperaActiva,
+  plazoDeCambios,
 }: PropsDeFormularioReserva) {
   const parametros = useSearchParams()
   // `?servicio=<id>&fecha=AAAA-MM-DD` (el enlace del aviso de la lista de
@@ -470,6 +477,9 @@ export function FormularioReserva({
                   hora={hora}
                   profesional={profesionalElegido?.nombre ?? (profesionalesDelServicio.length > 0 ? "Cualquiera disponible" : null)}
                 />
+                <p className="mt-4 border-t border-borde pt-3 text-sm text-texto-2">
+                  {plazoDeCambios}
+                </p>
               </section>
 
               {error && (

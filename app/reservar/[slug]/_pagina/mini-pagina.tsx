@@ -1,13 +1,14 @@
 import Image from "next/image"
 import { useId } from "react"
 import type { ReactNode } from "react"
-import { CalendarCheck, Clock, Instagram, MapPin, MessageCircle, Navigation, Wallet } from "lucide-react"
+import { CalendarCheck, CalendarClock, Clock, Instagram, MapPin, MessageCircle, Navigation, Wallet } from "lucide-react"
 import { Boton, clasesDeBoton } from "@/components/comunes/boton"
 import { CLASES_DEL_LOCAL } from "@/components/comunes/colores-del-local"
 import { Tarjeta } from "@/components/comunes/tarjeta"
 import { estadoDeAtencion, textoDeEstado } from "@/lib/abierto-ahora"
 import { formatearMonto } from "@/lib/dinero"
 import { formatearDuracionDeServicio } from "@/lib/fechas"
+import { plazoParaQuienReserva } from "@/lib/gestion-de-cita"
 import { CATEGORIA_SIN_NOMBRE, horarioParaMostrar, iniciales, serviciosPorCategoria } from "@/lib/pagina-del-negocio"
 import { cn } from "@/lib/utils"
 import type { PaginaDelNegocio, ProfesionalPublico } from "./datos-de-la-pagina"
@@ -121,6 +122,12 @@ function Cabecera({ pagina, ahora }: PropsDeMiniPagina) {
             </Boton>
           )}
         </div>
+
+        {/* El plazo para cancelar o cambiar, dicho antes de reservar (#83). */}
+        <p className="mt-4 flex items-start gap-2 text-sm text-texto-2">
+          <CalendarClock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          {plazoParaQuienReserva(pagina.plazoDeCambiosHoras)}
+        </p>
       </div>
     </Tarjeta>
   )

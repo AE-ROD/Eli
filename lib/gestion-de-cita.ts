@@ -41,11 +41,25 @@ export function esGestionable(cita: { status: string; startTime: Date }, ahora: 
 
 /** Si todavía está dentro del plazo para cancelar o reagendar. Un plazo raro en la base se lee como el de por defecto. */
 export function dentroDelPlazo(inicio: Date, horasAntes: number, ahora: Date): boolean {
-  const plazo =
-    Number.isInteger(horasAntes) && horasAntes >= PLAZO_MINIMO_HORAS && horasAntes <= PLAZO_MAXIMO_HORAS
-      ? horasAntes
-      : PLAZO_POR_DEFECTO_HORAS
-  return inicio.getTime() - ahora.getTime() >= plazo * 60 * 60 * 1000
+  return inicio.getTime() - ahora.getTime() >= plazoValido(horasAntes) * 60 * 60 * 1000
+}
+
+/** El plazo con que se decide: uno raro en la base se lee como el de por defecto. */
+function plazoValido(horasAntes: number): number {
+  return Number.isInteger(horasAntes) && horasAntes >= PLAZO_MINIMO_HORAS && horasAntes <= PLAZO_MAXIMO_HORAS
+    ? horasAntes
+    : PLAZO_POR_DEFECTO_HORAS
+}
+
+/**
+ * El plazo dicho ANTES de reservar (#83), en la mini página y en el paso de
+ * confirmar: lo mismo que después aplica `dentroDelPlazo`, incluido leer un
+ * plazo raro como el de por defecto.
+ */
+export function plazoParaQuienReserva(horasAntes: number): string {
+  const plazo = plazoValido(horasAntes)
+  if (plazo === 0) return "Puedes cancelar o cambiar tu hora hasta el momento de la cita."
+  return `Puedes cancelar o cambiar hasta ${plazo} ${plazo === 1 ? "hora" : "horas"} antes.`
 }
 
 export function mensajeFueraDePlazo(horasAntes: number): string {
