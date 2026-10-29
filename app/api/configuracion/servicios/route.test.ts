@@ -70,6 +70,18 @@ describe("GET /api/configuracion/servicios", () => {
     expect(argumentos.where.businessId).toBe("negocio-2")
   })
 
+  it("devuelve la frecuencia de cada servicio, para que el modal la muestre al editar (#75)", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.service.findMany.mockResolvedValueOnce([{ id: "s1", name: "Corte", frecuenciaDias: 30 }])
+
+    const res = await GET()
+
+    expect(prismaMock.service.findMany.mock.calls[0][0].select).toBeUndefined()
+    expect((await res.json())[0].frecuenciaDias).toBe(30)
+  })
+
   it("un profesional (worker) recibe 401", async () => {
     const { GET } = await import("./route")
 

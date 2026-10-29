@@ -6,7 +6,7 @@ import { cambiarMensajesAClientes, crearServicio, cuerpoDeProducto, cuerpoDeServ
 const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
   JSON.parse(String((fetchFalso.mock.calls[0][1] as RequestInit).body))
 
-const SERVICIO: DatosDeServicio = { name: "Corte", description: "", duration: 30, price: "", category: "" }
+const SERVICIO: DatosDeServicio = { name: "Corte", description: "", duration: 30, price: "", category: "", frecuenciaDias: "" }
 
 const precioLeido = (texto: string) => {
   const cuerpo = cuerpoDeServicio({ ...SERVICIO, price: texto })
@@ -28,7 +28,7 @@ describe("cuerpoDeServicio", () => {
   it("precio y descripción vacíos no se mandan; la categoría vacía se borra", () => {
     expect(cuerpoDeServicio(SERVICIO)).toEqual({
       ok: true,
-      datos: { name: "Corte", description: undefined, duration: 30, price: undefined, category: null },
+      datos: { name: "Corte", description: undefined, duration: 30, price: undefined, category: null, frecuenciaDias: null },
     })
   })
 
@@ -42,6 +42,27 @@ describe("cuerpoDeServicio", () => {
       ok: false,
       error: expect.stringContaining("No se entiende el precio"),
     })
+  })
+})
+
+describe("cuerpoDeServicio: frecuencia (#75)", () => {
+  it("una frecuencia escrita se manda como número de días", () => {
+    const cuerpo = cuerpoDeServicio({ ...SERVICIO, frecuenciaDias: " 30 " })
+    expect(cuerpo.ok && cuerpo.datos.frecuenciaDias).toBe(30)
+  })
+
+  it("vacía se manda como null, para que al editar se borre", () => {
+    const cuerpo = cuerpoDeServicio({ ...SERVICIO, frecuenciaDias: "" })
+    expect(cuerpo.ok && cuerpo.datos.frecuenciaDias).toBeNull()
+  })
+
+  it("fuera de 7 a 365 días es un error, no se manda otra cosa", () => {
+    for (const texto of ["6", "366", "0"]) {
+      expect(cuerpoDeServicio({ ...SERVICIO, frecuenciaDias: texto })).toEqual({
+        ok: false,
+        error: expect.stringContaining("entre 7 y 365"),
+      })
+    }
   })
 })
 
@@ -60,6 +81,26 @@ describe("crearServicio y editarServicio", () => {
     await editarServicio("s1", { ...SERVICIO, price: "8.000,50" })
 
     expect(cuerpoEnviado(fetchFalso).price).toBe(8000.5)
+  })
+
+  it("crear y editar mandan la frecuencia; editar con el campo vacío manda null", async () => {
+    const alCrear = simularRespuesta(json({ id: "s1" }, 201))
+    await crearServicio({ ...SERVICIO, frecuenciaDias: "45" })
+    expect(cuerpoEnviado(alCrear).frecuenciaDias).toBe(45)
+    vi.unstubAllGlobals()
+
+    const alEditar = simularRespuesta(json({ id: "s1" }))
+    await editarServicio("s1", { ...SERVICIO, frecuenciaDias: "" })
+    expect(cuerpoEnviado(alEditar)).toHaveProperty("frecuenciaDias", null)
+  })
+
+  it("con una frecuencia fuera de rango no llama al servidor", async () => {
+    const fetchFalso = simularRespuesta(json({ id: "s1" }))
+
+    const resultado = await crearServicio({ ...SERVICIO, frecuenciaDias: "400" })
+
+    expect(resultado.ok).toBe(false)
+    expect(fetchFalso).not.toHaveBeenCalled()
   })
 
   it("con un precio ilegible no llama al servidor y devuelve el motivo", async () => {

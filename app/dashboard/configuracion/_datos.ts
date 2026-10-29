@@ -10,6 +10,7 @@
  */
 
 import { leerMonto } from "@/lib/dinero"
+import { frecuenciaDelFormulario } from "@/lib/frecuencia-de-visitas"
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
 
 /** Un día del horario semanal: si se atiende y de qué hora a qué hora. */
@@ -30,6 +31,8 @@ export interface Servicio {
   price: number | null
   /** Agrupa los servicios en la página pública. `null` va a "Otros". */
   category: string | null
+  /** Cada cuántos días vuelve un cliente por este servicio (#75). `null` es sin frecuencia. */
+  frecuenciaDias: number | null
   active: boolean
 }
 
@@ -41,6 +44,8 @@ export interface DatosDeServicio {
   price: string
   /** Vacío es "sin categoría": se manda `null` y el servidor la borra. */
   category: string
+  /** "Cada cuántos días vuelve", como texto del campo. Vacío es `null`: se borra. */
+  frecuenciaDias: string
 }
 
 /**
@@ -64,14 +69,18 @@ export async function guardarHorario(memberId: string | null, horarios: HorarioD
  * se mandan. El precio lo lee `leerMonto`, así "8.000", "8000" y "8.000,50"
  * son el monto que se quiso escribir (con `parseFloat`, "8.000" era 8). Un
  * precio que no se puede leer sin adivinar es un error, no un servicio
- * guardado sin precio o con otro.
+ * guardado sin precio o con otro. La frecuencia, igual: vacía es `null` (se
+ * borra) y una que no es un entero de 7 a 365 es un error, no se manda.
  */
 export function cuerpoDeServicio(datos: DatosDeServicio) {
+  const f = frecuenciaDelFormulario(datos.frecuenciaDias)
+  if (!f.ok) return f
   const base = {
     name: datos.name,
     description: datos.description || undefined,
     duration: datos.duration,
     category: datos.category.trim() || null,
+    frecuenciaDias: f.valor,
   }
   if (!datos.price.trim()) return { ok: true as const, datos: { ...base, price: undefined } }
   const precio = leerMonto(datos.price)
