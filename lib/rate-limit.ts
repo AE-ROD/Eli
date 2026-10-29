@@ -103,6 +103,21 @@ const limitadorListaDeEsperaPorEmail = crearLimitador("lista-de-espera-email", 1
 // propósito: la baja en un clic de Gmail y Apple (RFC 8058) llega desde los
 // servidores del proveedor, y varias personas pueden salir por la misma IP.
 const limitadorBajaPorToken = crearLimitador("baja-por-token", 30, "10 m")
+// Anotarse en la fila virtual de un negocio (#85), sin sesión. Dos baldes, y
+// el endpoint consulta los dos:
+// - por IP: 5 por hora. Nadie se anota más de un par de veces (se anota, sale
+//   por error, vuelve). Varias personas en el wifi del local suman, pero cinco
+//   alcanzan para el ritmo de una fila real; el tope del negocio corta antes.
+// - por negocio: 60 por hora. Una fila de 15 a la vez no recibe 60 personas
+//   nuevas en una hora; lo que pase de ahí es alguien llenándola con nombres
+//   inventados rotando IPs.
+const limitadorFilaVirtual = crearLimitador("fila-virtual", 5, "1 h")
+const limitadorFilaVirtualPorNegocio = crearLimitador("fila-virtual-negocio", 60, "1 h")
+// Mirar la posición en la fila desde el celular (polling), por hash del token:
+// 240 por hora. Generoso a propósito: el celular pregunta cada ~20 s durante
+// una espera que puede pasar de una hora, y cortarlo dejaría a la persona sin
+// saber cuándo le toca. A un enlace filtrado lo deja en una consulta cada 15 s.
+const limitadorPosicionEnFila = crearLimitador("fila-posicion", 240, "1 h")
 
 export type TipoLimite =
   | "login"
@@ -120,6 +135,9 @@ export type TipoLimite =
   | "listaDeEspera"
   | "listaDeEsperaPorEmail"
   | "bajaPorToken"
+  | "filaVirtual"
+  | "filaVirtualPorNegocio"
+  | "posicionEnFila"
 
 const limitadores: Record<TipoLimite, Ratelimit | null> = {
   login: limitadorLogin,
@@ -137,6 +155,9 @@ const limitadores: Record<TipoLimite, Ratelimit | null> = {
   listaDeEspera: limitadorListaDeEspera,
   listaDeEsperaPorEmail: limitadorListaDeEsperaPorEmail,
   bajaPorToken: limitadorBajaPorToken,
+  filaVirtual: limitadorFilaVirtual,
+  filaVirtualPorNegocio: limitadorFilaVirtualPorNegocio,
+  posicionEnFila: limitadorPosicionEnFila,
 }
 
 /**
@@ -172,6 +193,12 @@ const fallaAbiertoSiUpstashFalla: Record<TipoLimite, boolean> = {
   listaDeEsperaPorEmail: false,
   // Cerrado: sin sesión, y escribe en la base. Una caída sólo demora una baja.
   bajaPorToken: false,
+  // Cerrado: sin sesión, y escribe en la base y en la pantalla del local.
+  filaVirtual: false,
+  filaVirtualPorNegocio: false,
+  // Cerrado: sin sesión. Una caída del proveedor deja a la persona sin
+  // actualizar su posición unos segundos; el siguiente intento la trae.
+  posicionEnFila: false,
   // Abierto, como las lecturas del panel: exige sesión de dueño o encargado y
   // cortarla dejaría al negocio sin sus datos por una caída ajena.
   exportacion: true,

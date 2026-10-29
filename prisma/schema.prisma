@@ -119,6 +119,18 @@ model Business {
   avisoDeVueltaActivo Boolean @default(false)
   pideResenas         Boolean @default(false)
 
+  // ─── Reservas seguras y fila virtual (etapa 4) ──────────────────────────
+  /// Con cuántas faltas ("no-asistio" de los últimos 365 días, por email o
+  /// teléfono normalizado del contacto en este negocio) una reserva pública
+  /// entra por confirmar (#84). Null = apagado (el default). CHECK 1..20. Lo
+  /// configura sólo la dueña (`puedeConfigurarPorConfirmar`).
+  porConfirmarTrasFaltas Int?
+  /// Fila virtual (#85): si el negocio acepta que se anoten en `/fila/[slug]`.
+  /// La enciende sólo la dueña (`puedeActivarFilaVirtual`).
+  filaVirtualActiva      Boolean @default(false)
+  /// Cuántas personas puede haber esperando en la fila a la vez. CHECK 1..100.
+  filaVirtualTope        Int     @default(15)
+
   invitados         Business[]         @relation("Referidos")
   correosDeCuenta   CorreoDeCuenta[]
   customers         Customer[]
@@ -341,6 +353,13 @@ model Appointment {
   // cuentan por esta columna (`lib/reserva-publica.ts`). En la base, una CHECK
   // la limita a esos dos valores (migración `origen_de_las_citas`).
   source           String   @default("panel")
+  // Etapa 4 (#84): la reserva pública entró por confirmar porque el contacto
+  // tenía `Business.porConfirmarTrasFaltas` faltas o más. Se fija al crearla y
+  // no cambia: no es un estado. Toda reserva pública nace "pendiente", así que
+  // el status solo no distingue; "por confirmar" es esta marca con status
+  // "pendiente" (`estaPorConfirmar` en `lib/por-confirmar.ts`). La confirman o
+  // cancelan dueña y encargado (`puedeResolverPorConfirmar`).
+  confirmacionPorFaltas Boolean @default(false)
   notes            String?  // notas internas del profesional
   clientComments   String?  // comentarios del cliente al reservar
   price            Float?
@@ -484,6 +503,24 @@ model Visit {
   paidByName    String?
   voidedByName  String?
 
+  // ─── Fila virtual (etapa 4, #85) ────────────────────────────────────────
+  // Quien se anota desde `/fila/[slug]` es una atención "en-espera" más, con
+  // `origen` "fila": así el Tablero la atiende igual que a quien llega sin
+  // reserva. El nombre va en `customerName` (no hay cliente). Una CHECK
+  // limita `origen` a "tablero" | "fila" y obliga a que las columnas fila*
+  // estén todas en null fuera de la fila, y token, fecha y número dentro.
+  origen         String    @default("tablero")
+  /// Hash del token del enlace del celular (nunca el token en claro).
+  filaTokenHash  String?   @unique
+  /// Correo opcional para el aviso "queda 1 persona adelante".
+  filaEmail      String?
+  /// Día del negocio, en su zona, "YYYY-MM-DD": el número de turno se cuenta por día.
+  filaFecha      String?
+  /// Número de turno del día en el negocio (1, 2, 3…). Único por (negocio, día).
+  filaNumero     Int?
+  /// Cuándo se mandó el aviso "queda 1 persona adelante". No null = ya avisada.
+  filaAvisadaAt  DateTime?
+
   services VisitService[]
   payments VisitPayment[]
   propinas PropinaDeAtencion[]
@@ -495,6 +532,9 @@ model Visit {
   @@index([businessId, status])
   @@index([businessId, paidAt])
   @@index([customerId])
+  // Numerar sin repetir y listar la fila del día de un negocio. En Postgres
+  // las filas con null no chocan, así que las atenciones del Tablero no cuentan.
+  @@unique([businessId, filaFecha, filaNumero])
   @@map("atenciones")
 }
 

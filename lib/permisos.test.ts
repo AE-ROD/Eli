@@ -69,6 +69,10 @@ import {
   puedeQuitarDeListaDeEspera,
   puedeEditarConsentimientoPromocional,
   whereDeListaDeEspera,
+  puedeConfigurarPorConfirmar,
+  puedeActivarFilaVirtual,
+  puedeResolverPorConfirmar,
+  puedeVerPantallaDeFila,
   type Actor,
   type Rol,
 } from "./permisos"
@@ -870,5 +874,28 @@ describe("avisos por correo a clientes (etapa 3)", () => {
       expect(visibles(encargado, { OR: [{ id: "i-ajena" }] })).toEqual([])
       expect(visibles(dueño, { AND: [{ businessId: OTRO_NEGOCIO }] })).toEqual([])
     })
+  })
+})
+
+describe("reservas seguras y fila virtual (etapa 4)", () => {
+  type Permiso = (quien: Actor | null) => boolean
+  /** [dueña, encargado, profesional]. */
+  const TABLA: [string, Permiso, [boolean, boolean, boolean]][] = [
+    ["puedeConfigurarPorConfirmar", puedeConfigurarPorConfirmar, [true, false, false]],
+    ["puedeActivarFilaVirtual", puedeActivarFilaVirtual, [true, false, false]],
+    ["puedeResolverPorConfirmar", puedeResolverPorConfirmar, [true, true, false]],
+    ["puedeVerPantallaDeFila", puedeVerPantallaDeFila, [true, true, false]],
+  ]
+
+  it.each(TABLA)("%s sigue la tabla por rol", (_nombre, permiso, [deDueña, deEncargado, deProfesional]) => {
+    expect(permiso(dueño)).toBe(deDueña)
+    expect(permiso(encargado)).toBe(deEncargado)
+    expect(permiso(profesional)).toBe(deProfesional)
+  })
+
+  it.each(TABLA)("%s falla cerrado sin actor y con un rol desconocido", (_nombre, permiso) => {
+    const desconocido = { rol: "gerente", businessId: NEGOCIO, memberId: "yo" } as unknown as Actor
+    expect(permiso(null)).toBe(false)
+    expect(permiso(desconocido)).toBe(false)
   })
 })

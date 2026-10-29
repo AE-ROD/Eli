@@ -52,6 +52,9 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     listaDeEsperaActiva: true,
     avisoDeVueltaActivo: false,
     pideResenas: false,
+    porConfirmarTrasFaltas: null,
+    filaVirtualActiva: false,
+    filaVirtualTope: 15,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
@@ -90,6 +93,7 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     serviceId: null,
     status: "pendiente",
     source: "panel",
+    confirmacionPorFaltas: false,
     notes: null,
     clientComments: null,
     price: null,
@@ -119,6 +123,12 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     voidedById: null,
     paidByName: null,
     voidedByName: null,
+    origen: "tablero",
+    filaTokenHash: null,
+    filaEmail: null,
+    filaFecha: null,
+    filaNumero: null,
+    filaAvisadaAt: null,
   }),
   visitService: () => ({
     serviceId: null,
@@ -199,7 +209,7 @@ interface Unico {
   si?: (registro: Registro) => boolean
 }
 const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
-  visit: [{ campos: ["appointmentId"] }],
+  visit: [{ campos: ["appointmentId"] }, { campos: ["filaTokenHash"] }, { campos: ["businessId", "filaFecha", "filaNumero"] }],
   appointment: [{ campos: ["manageTokenHash"] }],
   commissionRate: [{ campos: ["memberId", "serviceId"] }],
   memberService: [{ campos: ["memberId", "serviceId"] }],

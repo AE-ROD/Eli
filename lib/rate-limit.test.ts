@@ -32,7 +32,7 @@ describe("verificarLimite cuando Upstash está configurado pero falla", () => {
     vi.restoreAllMocks()
   })
 
-  it.each(["login", "auth", "reserva", "soporte", "acuseDeSoporte", "reenvioDeInvitacion", "importacionDeClientes", "gestionDeCita", "listaDeEspera", "listaDeEsperaPorEmail", "bajaPorToken"] as const)(
+  it.each(["login", "auth", "reserva", "soporte", "acuseDeSoporte", "reenvioDeInvitacion", "importacionDeClientes", "gestionDeCita", "listaDeEspera", "listaDeEsperaPorEmail", "bajaPorToken", "filaVirtual", "filaVirtualPorNegocio", "posicionEnFila"] as const)(
     "falla CERRADO para %s si Upstash tira un error: lo que un anónimo puede abusar no queda sin tope",
     async (tipo) => {
       vi.spyOn(console, "error").mockImplementation(() => {})
@@ -120,6 +120,9 @@ describe("los baldes del CSV de clientes", () => {
     ["exportacion", "eli:exportacion", 20],
     ["gestionDeCita", "eli:gestion-cita", 60],
     ["listaDeEspera", "eli:lista-de-espera", 5],
+    ["filaVirtual", "eli:fila-virtual", 5],
+    ["filaVirtualPorNegocio", "eli:fila-virtual-negocio", 60],
+    ["posicionEnFila", "eli:fila-posicion", 240],
   ] as const)("%s cuenta en su propio balde (%s), de %i por hora", async (tipo, prefijo, tokens) => {
     vi.spyOn(console, "error").mockImplementation(() => {})
     const { Ratelimit } = (await import("@upstash/ratelimit")) as unknown as { Ratelimit: RatelimitFalso }

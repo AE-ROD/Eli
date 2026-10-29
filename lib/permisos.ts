@@ -422,6 +422,40 @@ export const puedeQuitarDeListaDeEspera = gestionaElNegocio
  */
 export const puedeEditarConsentimientoPromocional = puedeEditarDatosDeCliente
 
+// ─── Reservas seguras y fila virtual (etapa 4) ───────────────────────────────
+//
+// Las dos configuraciones son de la dueña: deciden a quién se le pide
+// confirmación y cuánta gente se anota sola. Lo diario (confirmar o cancelar
+// una reserva por confirmar, mirar la pantalla de la fila) es operación: dueña
+// y encargado.
+
+/** Con cuántas faltas una reserva pública entra por confirmar (#84). Sólo la dueña. */
+export const puedeConfigurarPorConfirmar = esDueño
+
+/** Encender o apagar la fila virtual y fijar su tope (#85). Sólo la dueña. */
+export const puedeActivarFilaVirtual = esDueño
+
+/**
+ * Confirmar o cancelar una reserva que entró por confirmar por faltas
+ * (`Appointment.confirmacionPorFaltas` con status "pendiente"). Dueña y
+ * encargado: aceptar a un cliente que viene faltando es una decisión del
+ * negocio, como reactivar una cita (`puedeReactivarCita`). El profesional no:
+ * es el más interesado en llenar su agenda, y la marca existe justamente para
+ * que lo decida alguien con la vista de todo el negocio. Una reserva pendiente
+ * SIN la marca sigue como hasta ahora (la confirma quien la ve). Que la cita
+ * sea del negocio lo verifica el endpoint antes, con `whereDeAgenda`.
+ */
+export const puedeResolverPorConfirmar = gestionaElNegocio
+
+/**
+ * La pantalla de la fila en el local (ruta del panel, a pantalla completa):
+ * número de turno, nombre con inicial y QR, sin correo ni teléfono. Dueña y
+ * encargado. El profesional no: la fila es de todo el negocio y él no ve el
+ * Tablero entero (`puedeVerTodoElTablero`); la pantalla la deja abierta en el
+ * equipo del local quien gestiona el negocio. Falla cerrado.
+ */
+export const puedeVerPantallaDeFila = gestionaElNegocio
+
 // ─── Filtros para consultas ──────────────────────────────────────────────────
 
 /**
