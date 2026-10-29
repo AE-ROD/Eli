@@ -15,8 +15,18 @@ export type OrigenDeAtencion = (typeof ORIGENES_DE_ATENCION)[number]
 export const TOPE_DE_FILA_MINIMO = 1
 export const TOPE_DE_FILA_MAXIMO = 100
 
+/**
+ * El largo máximo del nombre con que alguien se anota. Más corto que el de un
+ * cliente (100): es para llamarlo en el local y verlo en la pantalla, y lo
+ * escribe un anónimo.
+ */
+export const LARGO_MAXIMO_NOMBRE_EN_FILA = 40
+
 /** Cómo se anula la atención de quien sale de la fila desde su celular. */
 export const MOTIVO_SALIO_DE_LA_FILA = "Salió de la fila desde su celular"
+
+/** Cómo se anulan las atenciones en espera cuando el local vacía la fila del día. */
+export const MOTIVO_FILA_VACIADA = "El local vació la fila del día"
 
 /** Cada cuánto pregunta el celular por su posición, y la pantalla del local por la fila. */
 export const POLLING_DEL_CELULAR_MS = 20_000
@@ -67,6 +77,15 @@ export function nombreParaPantalla(nombre: string): string {
   const [primera, segunda] = palabras
   if (!segunda) return primera
   return `${primera} ${segunda.charAt(0).toLocaleUpperCase("es-CL")}.`
+}
+
+/**
+ * La primera palabra del nombre con que se anotó, para el correo "ya casi es
+ * tu turno": como `nombreParaPantalla`, nunca el nombre completo (lo escribió
+ * un anónimo y le llega a la casilla que dejó).
+ */
+export function primerNombre(nombre: string): string {
+  return nombre.trim().split(/\s+/).filter(Boolean)[0] ?? ""
 }
 
 /**

@@ -73,6 +73,7 @@ import {
   puedeActivarFilaVirtual,
   puedeResolverPorConfirmar,
   puedeVerPantallaDeFila,
+  puedeVaciarFilaVirtual,
   type Actor,
   type Rol,
 } from "./permisos"
@@ -885,6 +886,7 @@ describe("reservas seguras y fila virtual (etapa 4)", () => {
     ["puedeActivarFilaVirtual", puedeActivarFilaVirtual, [true, false, false]],
     ["puedeResolverPorConfirmar", puedeResolverPorConfirmar, [true, true, false]],
     ["puedeVerPantallaDeFila", puedeVerPantallaDeFila, [true, true, false]],
+    ["puedeVaciarFilaVirtual", puedeVaciarFilaVirtual, [true, true, false]],
   ]
 
   it.each(TABLA)("%s sigue la tabla por rol", (_nombre, permiso, [deDueña, deEncargado, deProfesional]) => {

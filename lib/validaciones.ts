@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { IDS_DE_RUBROS } from "@/lib/rubros"
 import { telefonoChileno } from "@/lib/campos-del-panel"
+import { LARGO_MAXIMO_NOMBRE_EN_FILA } from "@/lib/fila-virtual"
 
 /**
  * El rubro de un negocio nuevo: sólo ids del catálogo (`lib/rubros.ts`). Antes
@@ -146,6 +147,9 @@ export const restablecerContrasenaSchema = z.object({
  * aviso "ya casi es tu turno". Vacío es "sin correo".
  */
 export const filaVirtualSchema = z.object({
-  nombre: nombreSchema("nombre"),
+  nombre: nombreSchema("nombre").max(
+    LARGO_MAXIMO_NOMBRE_EN_FILA,
+    `El nombre puede tener hasta ${LARGO_MAXIMO_NOMBRE_EN_FILA} caracteres`
+  ),
   email: z.preprocess((valor) => (valor === "" || valor === null ? undefined : valor), emailSchema.optional()),
 })

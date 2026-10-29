@@ -12,9 +12,11 @@ import { MOTIVO_SALIO_DE_LA_FILA } from "@/lib/fila-virtual"
  */
 
 const mockVerificarLimite = vi.fn()
+const mockQuedaLimite = vi.fn()
 vi.mock("@/lib/rate-limit", () => ({
   obtenerIp: () => "203.0.113.7",
   verificarLimite: (...args: unknown[]) => mockVerificarLimite(...args),
+  quedaLimite: (...args: unknown[]) => mockQuedaLimite(...args),
 }))
 
 const correos = vi.hoisted(() => ({
@@ -120,6 +122,7 @@ beforeEach(() => {
   vi.setSystemTime(AHORA)
   tareas.length = 0
   mockVerificarLimite.mockResolvedValue({ permitido: true })
+  mockQuedaLimite.mockResolvedValue({ permitido: true })
   correos.aviso.mockResolvedValue({ data: { id: "correo" }, error: null })
   escenario()
 })
@@ -241,12 +244,60 @@ describe("POST /api/reservar/[slug]/fila: anotarse", () => {
   it("cuenta por IP y por negocio; si cualquiera se pasa, 429 sin crear nada", async () => {
     await anotarse()
     expect(mockVerificarLimite).toHaveBeenCalledWith("filaVirtual", "203.0.113.7")
+    expect(mockQuedaLimite).toHaveBeenCalledWith("filaVirtualPorNegocio", NEGOCIO)
     expect(mockVerificarLimite).toHaveBeenCalledWith("filaVirtualPorNegocio", NEGOCIO)
 
     mockVerificarLimite.mockResolvedValueOnce({ permitido: false })
     expect((await anotarse({ nombre: "Por IP" })).status).toBe(429)
-    mockVerificarLimite.mockResolvedValueOnce({ permitido: true }).mockResolvedValueOnce({ permitido: false })
+    mockQuedaLimite.mockResolvedValueOnce({ permitido: false })
     expect((await anotarse({ nombre: "Por Negocio" })).status).toBe(429)
+    expect(deLaFila()).toHaveLength(1)
+  })
+
+  it("el balde del negocio sólo se descuenta cuando la persona quedó anotada, no en los rechazos", async () => {
+    const descuentosDelNegocio = () =>
+      mockVerificarLimite.mock.calls.filter(([tipo]) => tipo === "filaVirtualPorNegocio").length
+
+    // Local cerrado: no se descuenta.
+    vi.setSystemTime(DE_NOCHE)
+    for (let i = 0; i < 5; i++) expect((await anotarse({ nombre: `Cerrado ${i}` })).status).toBe(409)
+    expect(descuentosDelNegocio()).toBe(0)
+
+    // Fila llena: tampoco.
+    vi.setSystemTime(AHORA)
+    escenario({ negocio: { filaVirtualTope: 1 }, visitas: [enFila("a", 1)] })
+    for (let i = 0; i < 5; i++) expect((await anotarse({ nombre: `Llena ${i}` })).status).toBe(409)
+    expect(descuentosDelNegocio()).toBe(0)
+
+    // Datos inválidos y negocio sin fila: ni se pregunta.
+    expect((await anotarse({ nombre: "J" })).status).toBe(400)
+    expect((await anotarse({ nombre: "Juan" }, "no-existe")).status).toBe(404)
+    expect(descuentosDelNegocio()).toBe(0)
+
+    // Anotada: una vez.
+    escenario()
+    expect((await anotarse()).status).toBe(201)
+    expect(descuentosDelNegocio()).toBe(1)
+  })
+
+  it("al anotarse se programa el aviso: quien queda con 0 o 1 adelante y dejó correo lo recibe", async () => {
+    escenario({ visitas: [enFila("a", 1)] })
+    await anotarse({ nombre: "Bea Segunda", email: "bea@correo.test" })
+    expect(tareas).toHaveLength(1)
+    await correrTareas()
+    expect(correos.aviso).toHaveBeenCalledTimes(1)
+    expect(correos.aviso.mock.calls[0][0]).toMatchObject({ emailCliente: "bea@correo.test", nombreCliente: "Bea", numero: 2 })
+
+    // Un rechazo no programa nada.
+    tareas.length = 0
+    escenario({ negocio: { filaVirtualTope: 1 }, visitas: [enFila("a", 1)] })
+    await anotarse({ nombre: "No Entra", email: "no@correo.test" })
+    expect(tareas).toHaveLength(0)
+  })
+
+  it("un nombre de más de 40 caracteres: 400 sin crear nada", async () => {
+    expect((await anotarse({ nombre: "a".repeat(41) })).status).toBe(400)
+    expect((await anotarse({ nombre: "a".repeat(40) })).status).toBe(201)
     expect(deLaFila()).toHaveLength(1)
   })
 })
@@ -322,6 +373,8 @@ describe("POST /api/reservar/[slug]/fila/[token]: salir de la fila", () => {
     const primero = await anotarse({ nombre: "Ana Primera" })
     const segundo = await anotarse({ nombre: "Bea Segunda" })
     expect((await miTurno(tokenDe(segundo.cuerpo.enlace))).cuerpo.adelante).toBe(1)
+    // Las de anotarse no importan acá.
+    tareas.length = 0
 
     expect(await salir(tokenDe(primero.cuerpo.enlace))).toEqual({ status: 200, cuerpo: { mensaje: "Listo. Saliste de la fila." } })
     const anulada = deLaFila().find((v) => v.customerName === "Ana Primera")
@@ -335,6 +388,7 @@ describe("POST /api/reservar/[slug]/fila/[token]: salir de la fila", () => {
 
   it("salir dos veces responde lo mismo y no programa otro aviso", async () => {
     const { cuerpo } = await anotarse()
+    tareas.length = 0
     await salir(tokenDe(cuerpo.enlace))
     expect((await salir(tokenDe(cuerpo.enlace))).status).toBe(200)
     expect(tareas).toHaveLength(1)
@@ -373,7 +427,8 @@ describe("aviso por correo cuando queda 1 persona adelante", () => {
     expect(correos.aviso).toHaveBeenCalledTimes(1)
     expect(correos.aviso).toHaveBeenCalledWith({
       emailCliente: "b@correo.test",
-      nombreCliente: "Bea <b>Dos</b>",
+      // Sólo el primer nombre.
+      nombreCliente: "Bea",
       nombreNegocio: "Salón Uno",
       numero: 2,
     })

@@ -310,6 +310,15 @@ export async function cobrarAtencion(
   )
 }
 
+/** "Vaciar la fila de hoy" (#85): anula a todos los que esperan en la fila virtual del día. */
+export async function vaciarFilaDeHoy(): Promise<ResultadoDeAccion<{ anuladas: number }>> {
+  return conMotivo(
+    await pedirConCodigo<{ anuladas: number }>("/api/fila-virtual/vaciar", "No se pudo vaciar la fila", {
+      method: "POST",
+    })
+  )
+}
+
 /** Anula la atención. Queda en el historial como anulada y deja de sumar. */
 export async function anularAtencion(id: string, motivo: string): Promise<ResultadoDeAccion<Atencion>> {
   return conMotivo(

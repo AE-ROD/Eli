@@ -103,15 +103,17 @@ const limitadorListaDeEsperaPorEmail = crearLimitador("lista-de-espera-email", 1
 // propósito: la baja en un clic de Gmail y Apple (RFC 8058) llega desde los
 // servidores del proveedor, y varias personas pueden salir por la misma IP.
 const limitadorBajaPorToken = crearLimitador("baja-por-token", 30, "10 m")
-// Anotarse en la fila virtual de un negocio (#85), sin sesión. Dos baldes, y
-// el endpoint consulta los dos:
-// - por IP: 5 por hora. Nadie se anota más de un par de veces (se anota, sale
-//   por error, vuelve). Varias personas en el wifi del local suman, pero cinco
-//   alcanzan para el ritmo de una fila real; el tope del negocio corta antes.
+// Anotarse en la fila virtual de un negocio (#85), sin sesión. Dos baldes:
+// - por IP: 10 por hora, descontado en cada intento. Nadie se anota más de un
+//   par de veces (se anota, sale por error, vuelve), pero los clientes en el
+//   wifi del local comparten IP y suman; el tope del negocio corta antes.
 // - por negocio: 60 por hora. Una fila de 15 a la vez no recibe 60 personas
 //   nuevas en una hora; lo que pase de ahí es alguien llenándola con nombres
-//   inventados rotando IPs.
-const limitadorFilaVirtual = crearLimitador("fila-virtual", 5, "1 h")
+//   inventados rotando IPs. Se descuenta SÓLO cuando la persona quedó
+//   anotada (`quedaLimite` antes, `verificarLimite` después): si cada intento
+//   rechazado (local cerrado, fila llena) lo gastara, unas pocas IPs lo
+//   agotarían y dejarían a la gente real sin poder anotarse una hora.
+const limitadorFilaVirtual = crearLimitador("fila-virtual", 10, "1 h")
 const limitadorFilaVirtualPorNegocio = crearLimitador("fila-virtual-negocio", 60, "1 h")
 // Mirar la posición en la fila desde el celular (polling), por hash del token:
 // 240 por hora. Generoso a propósito: el celular pregunta cada ~20 s durante
@@ -251,35 +253,65 @@ export interface ResultadoLimite {
  */
 export async function verificarLimite(tipo: TipoLimite, identificador: string): Promise<ResultadoLimite> {
   const limitador = limitadores[tipo]
-
-  if (!limitador) {
-    if (!avisoMostrado) {
-      console.error(
-        "[rate-limit] CONFIGURACIÓN FALTANTE: UPSTASH_REDIS_REST_URL/TOKEN no están definidos. " +
-          (esProduccion()
-            ? "Entorno de PRODUCCIÓN: se bloquean las peticiones hasta que se configure (fail-closed)."
-            : "Entorno de desarrollo: se deja pasar sin límite (fail-open).")
-      )
-      avisoMostrado = true
-    }
-
-    if (esProduccion()) {
-      return { permitido: false, restantes: 0 }
-    }
-    return { permitido: true, restantes: Infinity }
-  }
+  if (!limitador) return sinLimitador()
 
   try {
     const resultado = await limitador.limit(identificador)
     if (resultado.reason === "timeout") throw new Error(`Upstash no respondió en ${TIMEOUT_UPSTASH_MS} ms`)
     return { permitido: resultado.success, restantes: resultado.remaining }
   } catch (error) {
-    const abierto = fallaAbiertoSiUpstashFalla[tipo]
-    console.error(
-      `[rate-limit] Error consultando Upstash para "${tipo}": ` +
-        (abierto ? "se deja pasar la petición (fail-open)." : "se bloquea la petición (fail-closed)."),
-      error,
-    )
-    return abierto ? { permitido: true, restantes: Infinity } : { permitido: false, restantes: 0 }
+    return siUpstashFalla(tipo, error)
   }
+}
+
+/**
+ * Si al balde le queda cupo, SIN descontar nada: para los que se cobran sólo
+ * cuando la acción tuvo éxito (se pregunta antes y se descuenta con
+ * `verificarLimite` después). Sin Upstash y ante una falla, lo mismo que
+ * `verificarLimite`. Entre la pregunta y el descuento pueden pasar varios a
+ * la vez: el balde se puede pasar por unos pocos, no más.
+ */
+export async function quedaLimite(tipo: TipoLimite, identificador: string): Promise<ResultadoLimite> {
+  const limitador = limitadores[tipo]
+  if (!limitador) return sinLimitador()
+
+  // `getRemaining` no tiene el `timeout` de `limit`: se le pone el mismo acá.
+  let reloj: ReturnType<typeof setTimeout> | undefined
+  try {
+    const { remaining } = await Promise.race([
+      limitador.getRemaining(identificador),
+      new Promise<never>((_, rechazar) => {
+        reloj = setTimeout(() => rechazar(new Error(`Upstash no respondió en ${TIMEOUT_UPSTASH_MS} ms`)), TIMEOUT_UPSTASH_MS)
+      }),
+    ])
+    return { permitido: remaining > 0, restantes: remaining }
+  } catch (error) {
+    return siUpstashFalla(tipo, error)
+  } finally {
+    clearTimeout(reloj)
+  }
+}
+
+function siUpstashFalla(tipo: TipoLimite, error: unknown): ResultadoLimite {
+  const abierto = fallaAbiertoSiUpstashFalla[tipo]
+  console.error(
+    `[rate-limit] Error consultando Upstash para "${tipo}": ` +
+      (abierto ? "se deja pasar la petición (fail-open)." : "se bloquea la petición (fail-closed)."),
+    error,
+  )
+  return abierto ? { permitido: true, restantes: Infinity } : { permitido: false, restantes: 0 }
+}
+
+/** Sin Upstash configurado: cerrado en producción, abierto en desarrollo y en los tests. */
+function sinLimitador(): ResultadoLimite {
+  if (!avisoMostrado) {
+    console.error(
+      "[rate-limit] CONFIGURACIÓN FALTANTE: UPSTASH_REDIS_REST_URL/TOKEN no están definidos. " +
+        (esProduccion()
+          ? "Entorno de PRODUCCIÓN: se bloquean las peticiones hasta que se configure (fail-closed)."
+          : "Entorno de desarrollo: se deja pasar sin límite (fail-open).")
+    )
+    avisoMostrado = true
+  }
+  return esProduccion() ? { permitido: false, restantes: 0 } : { permitido: true, restantes: Infinity }
 }

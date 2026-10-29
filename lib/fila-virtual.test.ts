@@ -5,7 +5,9 @@ import {
   minutosEstimados,
   minutosPorPersona,
   nombreParaPantalla,
+  primerNombre,
 } from "@/lib/fila-virtual"
+import { filaVirtualSchema } from "@/lib/validaciones"
 
 describe("minutosPorPersona", () => {
   it("es el promedio de la duración de los servicios activos", () => {
@@ -46,6 +48,24 @@ describe("nombreParaPantalla", () => {
   it("una sola palabra queda tal cual; vacío, vacío", () => {
     expect(nombreParaPantalla("Beto")).toBe("Beto")
     expect(nombreParaPantalla("   ")).toBe("")
+  })
+})
+
+describe("primerNombre", () => {
+  it("sólo la primera palabra, sin espacios de más", () => {
+    expect(primerNombre("Juan Pérez Soto")).toBe("Juan")
+    expect(primerNombre("  maría   josé ")).toBe("maría")
+    expect(primerNombre("Beto")).toBe("Beto")
+    expect(primerNombre("   ")).toBe("")
+  })
+})
+
+describe("filaVirtualSchema: el nombre", () => {
+  it("acepta hasta 40 caracteres y rechaza 41", () => {
+    expect(filaVirtualSchema.safeParse({ nombre: "a".repeat(40) }).success).toBe(true)
+    const largo = filaVirtualSchema.safeParse({ nombre: "a".repeat(41) })
+    expect(largo.success).toBe(false)
+    expect(largo.error?.issues[0]?.message).toBe("El nombre puede tener hasta 40 caracteres")
   })
 })
 

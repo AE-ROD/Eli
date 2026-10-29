@@ -9,6 +9,7 @@ import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Tarjeta } from "@/components/comunes/tarjeta"
 import { EncabezadoDeReserva } from "@/app/reservar/[slug]/_componentes/encabezado-de-reserva"
+import { LARGO_MAXIMO_NOMBRE_EN_FILA } from "@/lib/fila-virtual"
 import { pedir, conJson } from "@/lib/peticiones"
 
 interface PropsDeAnotarse {
@@ -87,7 +88,7 @@ export function AnotarseEnLaFila({ slug, nombreNegocio, abierto, esperando, llen
               name="nombre"
               autoComplete="name"
               required
-              maxLength={100}
+              maxLength={LARGO_MAXIMO_NOMBRE_EN_FILA}
               value={nombre}
               onChange={(evento) => setNombre(evento.target.value)}
               placeholder="Como quieres que te llamen"

@@ -148,6 +148,10 @@ export function FormularioFilaVirtual({ slug, activaInicial, topeInicial }: Prop
             <MonitorPlay aria-hidden="true" className="size-4" strokeWidth={2} />
             Abrir la pantalla de la fila
           </Link>
+          <p className="mt-2 text-sm text-texto-2">
+            La pantalla usa la sesión de quien la abre: en el televisor o la tablet del local queda abierto el panel de esa
+            cuenta. Déjala en pantalla completa y no dejes el panel a mano de los clientes en ese equipo.
+          </p>
         </div>
       )}
 

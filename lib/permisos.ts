@@ -456,6 +456,14 @@ export const puedeResolverPorConfirmar = gestionaElNegocio
  */
 export const puedeVerPantallaDeFila = gestionaElNegocio
 
+/**
+ * "Vaciar la fila de hoy": anula de una vez a todos los que esperan en la
+ * fila virtual del día (si alguien la llenó con nombres inventados, o al
+ * cerrar). Dueña y encargado, los mismos que ven la fila entera. El
+ * profesional no: la fila es de todo el negocio. Falla cerrado.
+ */
+export const puedeVaciarFilaVirtual = gestionaElNegocio
+
 // ─── Filtros para consultas ──────────────────────────────────────────────────
 
 /**

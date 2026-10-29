@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { cuerpoConTope } from "@/lib/cuerpo-del-pedido"
 import { anotarseEnLaFila, negocioDeLaFila } from "@/lib/fila-virtual-servidor"
-import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
+import { obtenerIp, quedaLimite, verificarLimite } from "@/lib/rate-limit"
 import { registrarError } from "@/lib/registro-de-errores"
 import { filaVirtualSchema } from "@/lib/validaciones"
 
@@ -9,8 +9,12 @@ import { filaVirtualSchema } from "@/lib/validaciones"
  * POST /api/reservar/[slug]/fila — anotarse en la fila virtual del negocio
  * (#85). Público y sin sesión, fuera del límite del panel (`proxy.ts`).
  *
- * - Límites que fallan cerrado: `filaVirtual` por IP y
- *   `filaVirtualPorNegocio` por negocio, los dos con 429.
+ * - Límites que fallan cerrado, los dos con 429: `filaVirtual` por IP, que
+ *   se descuenta en cada intento, y `filaVirtualPorNegocio` por negocio, que
+ *   se descuenta SÓLO cuando la persona quedó anotada: antes sólo se
+ *   pregunta si queda cupo (`quedaLimite`). Si cada rechazo (local cerrado,
+ *   fila llena) lo gastara, unas pocas IPs lo agotarían y dejarían a la
+ *   gente real sin poder anotarse una hora.
  * - Negocio inexistente o con la fila apagada: el mismo 404, sin decir cuál.
  * - Local cerrado en este momento, o fila llena (tope del negocio): 409 con
  *   el motivo, que la persona puede leer en el local.
@@ -42,7 +46,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const negocio = await negocioDeLaFila(slug)
   if (!negocio?.filaVirtualActiva) return NO_ENCONTRADO()
 
-  const porNegocio = await verificarLimite("filaVirtualPorNegocio", negocio.id)
+  const porNegocio = await quedaLimite("filaVirtualPorNegocio", negocio.id)
   if (!porNegocio.permitido) return DEMASIADAS()
 
   try {
@@ -53,6 +57,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       case "llena":
         return NextResponse.json({ error: MENSAJE_LLENA }, { status: 409 })
       case "anotada":
+        // Ya quedó anotada: recién ahora cuenta para el balde del negocio.
+        await verificarLimite("filaVirtualPorNegocio", negocio.id)
         return NextResponse.json(
           {
             numero: resultado.numero,

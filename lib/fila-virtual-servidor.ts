@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { estadoDeAtencion } from "@/lib/abierto-ahora"
 import { enviarAvisoFilaVirtual } from "@/lib/email"
 import {
+  MOTIVO_FILA_VACIADA,
   MOTIVO_SALIO_DE_LA_FILA,
   ORIGEN_FILA,
   TOPE_DE_FILA_MAXIMO,
@@ -11,6 +12,7 @@ import {
   minutosEstimados,
   minutosPorPersona,
   nombreParaPantalla,
+  primerNombre,
 } from "@/lib/fila-virtual"
 import { horarioSemanalDeAtencion } from "@/lib/horario-de-atencion"
 import { whereDeAtenciones, type Actor } from "@/lib/permisos"
@@ -123,7 +125,7 @@ export async function anotarseEnLaFila(
 
   for (let intento = 1; ; intento++) {
     try {
-      return await prisma.$transaction(async (tx) => {
+      const resultado = await prisma.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`fila:${negocio.id}`}))`
 
         const esperando = await tx.visit.count({ where: deLaFila(negocio.id, filaFecha, EN_ESPERA) })
@@ -153,6 +155,10 @@ export async function anotarseEnLaFila(
         })
         return { tipo: "anotada" as const, token, numero }
       })
+      // Quien queda con 0 o 1 personas adelante ya está para el aviso "ya
+      // casi es tu turno": si no, recién le llegaría cuando la fila se mueva.
+      if (resultado.tipo === "anotada") programarAvisoDeFila(negocio.id)
+      return resultado
     } catch (error) {
       const choco = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
       if (!choco || intento >= INTENTOS_DE_NUMERAR) throw error
@@ -295,6 +301,33 @@ export async function leerPantallaDeLaFila(actor: Actor, ahora = new Date()): Pr
   }
 }
 
+/**
+ * "Vaciar la fila de hoy": anula todas las atenciones en espera de origen
+ * fila del día, en el negocio de la sesión. Las que ya se atienden o
+ * terminaron, las de otros días y las llegadas por el Tablero no se tocan.
+ * Quien llama ya preguntó `puedeVaciarFilaVirtual`. Devuelve cuántas anuló.
+ * No hay a quién avisar: ya no queda nadie esperando.
+ */
+export async function vaciarLaFilaDeHoy(
+  actor: Actor,
+  quien: { id: string | null; nombre: string | null },
+  ahora = new Date()
+): Promise<number | null> {
+  const negocio = await prisma.business.findUnique({ where: { id: actor.businessId }, select: { timezone: true } })
+  if (!negocio) return null
+  const { count } = await prisma.visit.updateMany({
+    where: whereDeAtenciones(actor, deLaFila(actor.businessId, hoyEn(negocio.timezone, ahora), EN_ESPERA)),
+    data: {
+      status: "anulada",
+      voidedAt: ahora,
+      voidedById: quien.id,
+      voidedByName: quien.nombre,
+      voidReason: MOTIVO_FILA_VACIADA,
+    },
+  })
+  return count
+}
+
 // ─── Aviso "ya casi es tu turno" ─────────────────────────────────────────────
 
 /**
@@ -336,7 +369,8 @@ export async function avisarFilaVirtual(businessId: string, ahora = new Date()):
       try {
         const resultado = await enviarAvisoFilaVirtual({
           emailCliente: turno.filaEmail,
-          nombreCliente: turno.customerName,
+          // Sólo el primer nombre: lo escribió un anónimo y va en un correo.
+          nombreCliente: primerNombre(turno.customerName),
           nombreNegocio: negocio.name,
           numero: turno.filaNumero ?? 0,
         })
@@ -364,7 +398,8 @@ export async function avisarFilaVirtual(businessId: string, ahora = new Date()):
 /**
  * Programa el aviso para después de responder (`after` de Next): quien mueve
  * la fila no espera el correo. Se llama cuando alguien de la fila deja de
- * esperar (pasa a atención, sale o se anula). Nunca lanza.
+ * esperar (pasa a atención, sale o se anula) y cuando alguien se anota (por
+ * si quedó con 0 o 1 adelante). Nunca lanza.
  */
 export function programarAvisoDeFila(businessId: string): void {
   try {
