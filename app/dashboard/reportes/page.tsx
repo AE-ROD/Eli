@@ -243,6 +243,15 @@ export default function PaginaReportes() {
       return
     }
 
+    // Ya entró en una liquidación o en un cierre de caja: no se anula, y el
+    // mensaje del servidor dice cómo se corrige (con un ajuste). Lo que se ve
+    // sigue siendo cierto: no se recarga.
+    if (resultado.corregirConAjuste) {
+      cerrarAnular()
+      setMensaje({ texto: resultado.error, error: true })
+      return
+    }
+
     // 404 o 409: el cobro cambió entretanto (otro ya lo anuló). Lo que se ve
     // está viejo: se cierra, se dice y se recarga.
     if (resultado.codigo === 404 || resultado.codigo === 409) {

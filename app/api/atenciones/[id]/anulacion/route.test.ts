@@ -279,9 +279,10 @@ describe("POST /api/atenciones/[id]/anulacion: lo ya rendido no se anula (#65)",
     const res = await anular(sesiones.dueña, "v-cobrada", { motivo: "error" })
 
     expect(res.status).toBe(409)
-    expect((await res.json()).error).toBe(
-      "Esta atención ya está en una liquidación cerrada: no se anula, corrígelo con un ajuste."
-    )
+    expect(await res.json()).toEqual({
+      error: "Esta atención ya está en una liquidación cerrada: no se anula, corrígelo con un ajuste.",
+      codigo: "corregir-con-ajuste",
+    })
     expect(base.volcado()).toEqual(antes)
   })
 
@@ -302,7 +303,10 @@ describe("POST /api/atenciones/[id]/anulacion: lo ya rendido no se anula (#65)",
     const res = await anular(sesiones.dueña, "v-cobrada")
 
     expect(res.status).toBe(409)
-    expect((await res.json()).error).toBe("Esta atención ya entró en un cierre de caja: no se anula, corrígelo con un ajuste.")
+    expect(await res.json()).toEqual({
+      error: "Esta atención ya entró en un cierre de caja: no se anula, corrígelo con un ajuste.",
+      codigo: "corregir-con-ajuste",
+    })
     expect(base.volcado()).toEqual(antes)
   })
 

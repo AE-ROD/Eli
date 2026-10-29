@@ -459,10 +459,10 @@ export default function PaginaTablero() {
   const anular = (atencion: Atencion, motivo: string) =>
     desdeUnModal(async () => {
       const resultado = await anularAtencion(atencion.id, motivo)
-      // Un 409 también es "ya entró en una liquidación o en un cierre de
-      // caja": se recarga igual, pero con el mensaje del servidor, que dice
-      // cómo se corrige (con un ajuste) en vez de "la atención cambió".
-      if (!resultado.ok && resultado.motivo === "desactualizada" && resultado.error.includes("ajuste")) {
+      // Ya entró en una liquidación o en un cierre de caja: se recarga igual,
+      // pero con el mensaje del servidor, que dice cómo se corrige (con un
+      // ajuste) en vez de "la atención cambió".
+      if (!resultado.ok && resultado.motivo === "corregir-con-ajuste") {
         return tableroDesactualizado(tarjetaDe(atencion), resultado.error)
       }
       if (!resultado.ok) return falloEnModal(resultado, atencion)
