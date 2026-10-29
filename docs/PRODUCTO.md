@@ -43,7 +43,7 @@ Booksy, Fresha, Calendly y Agenda Pro compiten en **agendar**. Ninguna resuelve 
 
 En salones, barberías y spas de uñas, quien atiende se lleva un porcentaje del servicio y el negocio retiene el resto. Hoy eso se hace con planilla, calculadora o memoria — y a fin de mes genera discusiones, errores y desconfianza.
 
-**Eli lo resuelve dentro del mismo sistema donde ya vive la cita.** No hay que exportar nada ni recalcular a mano: si la cita se completó, la comisión ya está calculada.
+**Eli lo resuelve dentro del mismo sistema donde ya vive la cita.** No hay que exportar nada ni recalcular a mano: al cobrar la atención, la comisión de cada línea queda calculada y congelada (sección 3.3). Si a esa línea le falta el %, queda pendiente, nunca en cero, y se congela al cerrar la liquidación (3.7).
 
 **Esto no es una función más: es el centro del producto.** Y eso fija el estándar — no alcanza con configurar un porcentaje. Hay que cubrir el ciclo completo:
 
@@ -74,7 +74,7 @@ La línea de la dueña no lleva comisión: no se la paga a sí misma.
 
 **Por qué con herencia:** el dueño configura un porcentaje por persona y listo. Sólo define excepciones donde realmente las hay. No tiene que llenar una matriz de todos los profesionales por todos los servicios el primer día.
 
-**Dónde se configura.** La dueña fija en **Comisiones** el % por defecto de cada profesional y sus excepciones por servicio. Vacío es "sin configurar" (no es 0 %): lo cobrado queda pendiente hasta que se configure, y cada profesional muestra cuántos servicios suyos esperan %. Lo cobrado antes de "Liquidar desde" (3.7) no cuenta como pendiente: nunca va a entrar a una liquidación. El % de los productos se ve ahí y se edita en Configuración › Productos. Cada cambio queda en el historial (quién, cuándo, de cuánto a cuánto), incluidos los de quienes ya dejaron el equipo. El encargado y el profesional no ven esta sección.
+**Dónde se configura.** La dueña fija en **Comisiones** el % por defecto de cada profesional y sus excepciones por servicio. Vacío es "sin configurar" (no es 0 %): lo cobrado queda pendiente hasta que se configure, y cada profesional muestra cuántos servicios suyos esperan %. Lo cobrado antes de "Liquidar desde" (3.7) no cuenta como pendiente: nunca va a entrar a una liquidación. El % de los productos se ve ahí y se edita en Configuración › Productos. Cada cambio queda en el historial (quién, cuándo, de cuánto a cuánto), incluidos los de quienes ya dejaron el equipo; el historial se filtra por profesional, y también por quien ya se fue (por el nombre que tenía, así que dos ex-miembros que se llamaban igual salen juntos). El encargado y el profesional no ven esta sección.
 
 ### 3.2 Base de cálculo
 
@@ -371,7 +371,7 @@ Una **atención** es la visita de un cliente al local, con o sin reserva. El tab
 
 ### Cierre de caja
 
-Dueña y encargado cierran la caja cuantas veces quieran al día. Cada cierre cubre desde el anterior (el primero, desde el inicio del día en la zona del negocio) hasta el momento de cerrar. **Esperado = fondo inicial + efectivo cobrado + propinas en efectivo**; se anota lo contado y la diferencia, con nota obligatoria si no cuadra. Los otros medios se muestran sólo como referencia. Los adelantos pagados desde la caja no cuentan en esta versión. Un cierre no se edita, y lo cobrado dentro de un cierre ya no se anula ni se reactiva su cita.
+Dueña y encargado cierran la caja cuantas veces quieran al día. Cada cierre cubre desde el anterior (el primero, desde el inicio del día en la zona del negocio) hasta el momento de cerrar. Si la caja arrastra cobros de días anteriores (no se cerró después de ellos), la pantalla de cierre lo avisa y dice desde qué día: el cierre los incluye igual, para no dejar huecos. **Esperado = fondo inicial + efectivo cobrado + propinas en efectivo**; se anota lo contado y la diferencia, con nota obligatoria si no cuadra. Los otros medios se muestran sólo como referencia. Los adelantos pagados desde la caja no cuentan en esta versión. Un cierre no se edita, y lo cobrado dentro de un cierre ya no se anula ni se reactiva su cita.
 
 ---
 

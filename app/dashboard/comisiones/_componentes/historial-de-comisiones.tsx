@@ -11,7 +11,13 @@ import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
 import { Paginador } from "../../reportes/_componentes/paginador"
-import { formatearPorcentaje, leerHistorial, type CambioDeComision, type HistorialDeComisiones } from "../_datos"
+import {
+  formatearPorcentaje,
+  leerHistorial,
+  type CambioDeComision,
+  type FiltroDeHistorial,
+  type HistorialDeComisiones,
+} from "../_datos"
 
 interface PropsDeHistorial {
   miembros: { id: string; nombre: string }[]
@@ -32,9 +38,22 @@ function sobreQue(cambio: CambioDeComision): string {
 }
 
 /**
+ * El valor del selector: vacío es todo el equipo, un id es un profesional y
+ * `ex:` + nombre es alguien que ya se fue. Un id es un cuid: nunca empieza
+ * con `ex:`.
+ */
+const PREFIJO_EX = "ex:"
+
+function filtroDelSelector(valor: string): FiltroDeHistorial {
+  if (valor.startsWith(PREFIJO_EX)) return { exMiembro: valor.slice(PREFIJO_EX.length) }
+  return valor ? { miembro: valor } : {}
+}
+
+/**
  * El historial de cambios de % (#35): quién, cuándo, de cuánto a cuánto. Sin
  * filtro trae también a quienes ya no están en el equipo, con el nombre que
- * tenían al cambiarse.
+ * tenían al cambiarse, y a ellos también se los puede elegir en el filtro
+ * (#119).
  */
 export function HistorialDeComisionesTarjeta({ miembros, version }: PropsDeHistorial) {
   const idDelTitulo = useId()
@@ -47,7 +66,7 @@ export function HistorialDeComisionesTarjeta({ miembros, version }: PropsDeHisto
 
   useEffect(() => {
     let vigente = true
-    leerHistorial(miembro, pagina).then((resultado) => {
+    leerHistorial(filtroDelSelector(miembro), pagina).then((resultado) => {
       if (!vigente) return
       setCargando(false)
       if (resultado.ok) {
@@ -83,7 +102,14 @@ export function HistorialDeComisionesTarjeta({ miembros, version }: PropsDeHisto
               setMiembro(evento.target.value)
               setPagina(1)
             }}
-            opciones={[{ valor: "", texto: "Todo el equipo" }, ...miembros.map((m) => ({ valor: m.id, texto: m.nombre }))]}
+            opciones={[
+              { valor: "", texto: "Todo el equipo" },
+              ...miembros.map((m) => ({ valor: m.id, texto: m.nombre })),
+              ...(historial?.exMiembros ?? []).map((nombre) => ({
+                valor: `${PREFIJO_EX}${nombre}`,
+                texto: `${nombre} (ya no está en el equipo)`,
+              })),
+            ]}
           />
         </div>
 

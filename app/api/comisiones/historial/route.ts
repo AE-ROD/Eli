@@ -8,21 +8,38 @@ import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 
 const POR_PAGINA = 50
 
-const consultaSchema = z.object({
-  /** Un cuid; 64 sobra y corta un parámetro absurdo. */
-  miembro: z.string().min(1).max(64).optional(),
-  pagina: z.coerce.number().int().min(1).max(10_000).default(1),
-})
+/** Cuántos ex-miembros se ofrecen para filtrar; un negocio real no llega ni cerca. */
+const TOPE_DE_EX_MIEMBROS = 200
+
+const consultaSchema = z
+  .object({
+    /** Un cuid; 64 sobra y corta un parámetro absurdo. */
+    miembro: z.string().min(1).max(64).optional(),
+    /** El nombre copiado de alguien que ya no está en el equipo (#119). */
+    exMiembro: z.string().trim().min(1).max(200).optional(),
+    pagina: z.coerce.number().int().min(1).max(10_000).default(1),
+  })
+  .refine((consulta) => !(consulta.miembro && consulta.exMiembro), {
+    message: "Elige un profesional o un ex-miembro, no los dos",
+    path: ["exMiembro"],
+  })
 
 /**
  * GET /api/comisiones/historial?miembro=&pagina= — los cambios de % de
  * comisión (`CommissionChange`, #35): quién cambió qué, de cuánto a cuánto y
  * cuándo, del más reciente al más viejo. Sólo la dueña.
  *
- * Sin `miembro` trae todo el negocio, incluidos los cambios de quienes ya no
+ * Sin filtro trae todo el negocio, incluidos los cambios de quienes ya no
  * están en el equipo: su `memberId` quedó en null al irse, pero el nombre se
  * copió al auditar (`memberName`) y se sigue leyendo. Con `miembro`, sólo los
  * de ese profesional, que tiene que ser del negocio (si no, 404).
+ *
+ * Con `exMiembro`, sólo los de quien ya se fue con ese nombre (#119, #30): sin
+ * id que los una, el nombre copiado es lo único que queda. Siempre dentro del
+ * negocio y sólo entre filas sin miembro, así que nunca trae los de alguien
+ * que sigue en el equipo con el mismo nombre; dos ex-miembros que se llamaban
+ * igual sí salen juntos. `exMiembros` es la lista para elegir: los nombres de
+ * quienes ya no están y tienen cambios en este negocio.
  */
 export async function GET(request: NextRequest) {
   const actor = actorDeSesion(await getServerSession(authOptions))
@@ -35,7 +52,7 @@ export async function GET(request: NextRequest) {
   )
   const consulta = consultaSchema.safeParse(parametros)
   if (!consulta.success) return respuestaDeDatosInvalidos(consulta.error)
-  const { miembro, pagina } = consulta.data
+  const { miembro, exMiembro, pagina } = consulta.data
 
   if (miembro) {
     const existe = await prisma.businessMember.findFirst({
@@ -45,8 +62,9 @@ export async function GET(request: NextRequest) {
     if (!existe) return NextResponse.json({ error: "Profesional no encontrado" }, { status: 404 })
   }
 
-  const where = { AND: [{ businessId: actor.businessId }, miembro ? { memberId: miembro } : {}] }
-  const [total, cambios] = await Promise.all([
+  const filtro = miembro ? { memberId: miembro } : exMiembro ? { memberId: null, memberName: exMiembro } : {}
+  const where = { AND: [{ businessId: actor.businessId }, filtro] }
+  const [total, cambios, exMiembros] = await Promise.all([
     prisma.commissionChange.count({ where }),
     prisma.commissionChange.findMany({
       where,
@@ -66,6 +84,13 @@ export async function GET(request: NextRequest) {
       skip: (pagina - 1) * POR_PAGINA,
       take: POR_PAGINA,
     }),
+    prisma.commissionChange.findMany({
+      where: { businessId: actor.businessId, memberId: null },
+      select: { memberName: true },
+      distinct: ["memberName"],
+      orderBy: { memberName: "asc" },
+      take: TOPE_DE_EX_MIEMBROS,
+    }),
   ])
 
   return NextResponse.json({
@@ -83,5 +108,6 @@ export async function GET(request: NextRequest) {
     total,
     pagina,
     paginas: Math.max(1, Math.ceil(total / POR_PAGINA)),
+    exMiembros: exMiembros.map((fila) => fila.memberName),
   })
 }

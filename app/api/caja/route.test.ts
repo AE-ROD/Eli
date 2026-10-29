@@ -138,9 +138,69 @@ describe("/api/caja", () => {
           otrosMedios: [{ medio: "tarjeta-debito", nombre: "Tarjeta de débito", monto: 5000 }],
           propinasOtrosMedios: [{ medio: "transferencia", nombre: "Transferencia", monto: 1000 }],
         },
+        cobrosDesde: null,
       })
       // El cierre del otro negocio no aparece.
       expect(cuerpo.cierres).toEqual([])
+    })
+
+    describe("aviso de días sin cerrar (#120)", () => {
+      /** Un cierre anterior de este negocio que terminó en `hasta`. */
+      const cerradoHasta = (hasta: string) =>
+        base.prisma.cierreDeCaja.create({
+          data: {
+            businessId: NEGOCIO,
+            desde: new Date("2026-10-17T03:00:00.000Z"),
+            hasta: new Date(hasta),
+            fecha: new Date(hasta.slice(0, 10)),
+            zona: "America/Santiago",
+            fondoInicialCents: 0,
+            efectivoCobradoCents: 0,
+            propinasEfectivoCents: 0,
+            efectivoEsperadoCents: 0,
+            efectivoContadoCents: 0,
+            diferenciaCents: 0,
+            cerradoPorId: "u-duena",
+            cerradoPorNombre: "Ana Dueña",
+          },
+        })
+
+      it("si la caja arrastra cobros de días anteriores, dice desde cuál; el cálculo cubre todo igual", async () => {
+        // Cerrada el 18 a las 20:00 (Santiago); `v-ayer` se cobró el 19 a las 23:00.
+        await cerradoHasta("2026-10-18T23:00:00.000Z")
+        const cuerpo = await (await leer(sesiones.dueña)).json()
+        expect(cuerpo.abierta.cobrosDesde).toBe("2026-10-20T02:00:00.000Z")
+        expect(cuerpo.abierta.desde).toBe("2026-10-18T23:00:00.000Z")
+        expect(cuerpo.abierta.efectivoCobrado).toBe(12000)
+      })
+
+      it("quien cierra de noche y no vende hasta el otro día no recibe aviso", async () => {
+        // Cerrada el 19 a las 23:30, después de `v-ayer`: lo abierto es sólo de hoy.
+        await cerradoHasta("2026-10-20T02:30:00.000Z")
+        const cuerpo = await (await leer(sesiones.dueña)).json()
+        expect(cuerpo.abierta.cobrosDesde).toBeNull()
+      })
+
+      it("no cuentan los cobros anulados ni los de otro negocio", async () => {
+        await cerradoHasta("2026-10-20T02:30:00.000Z")
+        await base.prisma.visit.create({
+          data: atencion("v-ajena-ayer", {
+            businessId: OTRO_NEGOCIO,
+            customerId: "c-ajeno",
+            status: "finalizada",
+            paidAt: new Date("2026-10-20T02:45:00.000Z"),
+          }),
+        })
+        await base.prisma.visit.create({
+          data: atencion("v-anulada-ayer", {
+            status: "anulada",
+            paidAt: new Date("2026-10-20T02:50:00.000Z"),
+            voidedAt: new Date("2026-10-20T13:00:00.000Z"),
+          }),
+        })
+        const cuerpo = await (await leer(sesiones.dueña)).json()
+        expect(cuerpo.abierta.cobrosDesde).toBeNull()
+      })
     })
   })
 
