@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
-import { crearServicio, cuerpoDeProducto, cuerpoDeServicio, editarServicio, leerPorcentaje, type DatosDeServicio } from "./_datos"
+import { cambiarMensajesAClientes, crearServicio, cuerpoDeProducto, cuerpoDeServicio, editarServicio, leerPorcentaje, type DatosDeServicio } from "./_datos"
 
 /** El cuerpo JSON con que se llamó a `fetch`. */
 const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
@@ -99,5 +99,27 @@ describe("productos (#67): cuerpoDeProducto y leerPorcentaje", () => {
     expect(leerPorcentaje("-1").ok).toBe(false)
     expect(leerPorcentaje("33,333").ok).toBe(false)
     expect(leerPorcentaje("abc").ok).toBe(false)
+  })
+})
+
+describe("cambiarMensajesAClientes", () => {
+  it("manda sólo lo que cambia, por PUT, a la ruta de mensajes", async () => {
+    const fetchFalso = simularRespuesta(json({ interruptores: { listaDeEsperaActiva: true, avisoDeVueltaActivo: false, pideResenas: true } }))
+
+    const resultado = await cambiarMensajesAClientes({ pideResenas: true })
+
+    expect(fetchFalso.mock.calls[0][0]).toBe("/api/configuracion/mensajes")
+    expect((fetchFalso.mock.calls[0][1] as RequestInit).method).toBe("PUT")
+    expect(cuerpoEnviado(fetchFalso)).toEqual({ pideResenas: true })
+    expect(resultado).toEqual({ ok: true, datos: { interruptores: { listaDeEsperaActiva: true, avisoDeVueltaActivo: false, pideResenas: true } } })
+  })
+
+  it("el 400 sin enlace vuelve con el mensaje del servidor", async () => {
+    simularRespuesta(json({ error: "Para pedir reseñas, primero agrega el enlace" }, 400))
+
+    expect(await cambiarMensajesAClientes({ pideResenas: true })).toEqual({
+      ok: false,
+      error: "Para pedir reseñas, primero agrega el enlace",
+    })
   })
 })

@@ -13,6 +13,8 @@ import {
   enlaceDeWhatsapp,
   enlacesDeMapa,
   esColorDelLocal,
+  esEnlaceDeResenasValido,
+  normalizarEnlaceDeResenas,
   horarioParaMostrar,
   imagenPublica,
   iniciales,
@@ -209,5 +211,45 @@ describe("descripcionParaCompartir", () => {
   it("nombra la comuna si la hay", () => {
     expect(descripcionParaCompartir("Salón Ana", "Ñuñoa")).toContain("Salón Ana, en Ñuñoa")
     expect(descripcionParaCompartir("Salón Ana", null)).not.toContain(", en")
+  })
+})
+
+describe("normalizarEnlaceDeResenas (#77)", () => {
+  it.each([
+    "https://g.page/r/CQx1abc/review",
+    "https://maps.app.goo.gl/AbC123xyz",
+    "https://www.google.com/maps/place/Salon+Ana/@-33.4,-70.6,17z",
+    "https://google.com/maps?cid=123",
+    "https://search.google.com/local/writereview?placeid=ChIJ123",
+  ])("acepta %s", (enlace) => {
+    expect(normalizarEnlaceDeResenas(`  ${enlace}  `)).toBe(new URL(enlace).toString())
+    expect(esEnlaceDeResenasValido(enlace)).toBe(true)
+  })
+
+  it("normaliza el dominio a minúsculas", () => {
+    expect(normalizarEnlaceDeResenas("https://G.PAGE/r/abc/review")).toBe("https://g.page/r/abc/review")
+  })
+
+  it.each([
+    ["vacío", ""],
+    ["nada", null],
+    ["http", "http://g.page/r/abc/review"],
+    ["otro dominio", "https://evil.com/maps"],
+    ["un dominio que sólo empieza parecido", "https://google.com.evil.com/maps"],
+    ["un subdominio ajeno con el nombre", "https://g.page.evil.com/r/abc"],
+    ["otro dominio de Google", "https://www.google.cl/maps"],
+    ["google.com fuera de Maps", "https://www.google.com/search?q=salon"],
+    ["una ruta que sólo empieza con maps", "https://www.google.com/mapsx"],
+    ["search.google.com fuera de reseñas", "https://search.google.com/local/reviews?placeid=1"],
+    ["g.page sin ruta", "https://g.page/"],
+    ["con usuario", "https://alguien@g.page/r/abc"],
+    ["con puerto", "https://g.page:8443/r/abc"],
+    ["con espacios en medio", "https://g.page/r/a bc"],
+    ["javascript:", "javascript:alert(1)"],
+    ["sin esquema", "g.page/r/abc/review"],
+    ["demasiado largo", `https://g.page/r/${"a".repeat(500)}`],
+  ])("rechaza %s", (_caso, enlace) => {
+    expect(normalizarEnlaceDeResenas(enlace)).toBeNull()
+    expect(esEnlaceDeResenasValido(enlace)).toBe(false)
   })
 })

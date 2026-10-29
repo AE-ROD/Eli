@@ -165,4 +165,72 @@ describe("PUT /api/configuracion/pagina", () => {
     expect(argumentos.data).not.toHaveProperty("businessId")
     expect(argumentos.data).not.toHaveProperty("id")
   })
+
+  describe("enlace de reseñas de Google (#77)", () => {
+    it("si no viene, no se toca (ni el enlace ni el interruptor)", async () => {
+      const { PUT } = await import("./route")
+      mockGetServerSession.mockResolvedValueOnce(sesion("owner", "negocio-1", null))
+      prismaMock.businessMember.findMany.mockResolvedValueOnce([{ id: "m-1" }])
+
+      expect((await PUT(pedidoFalso(PAGINA))).status).toBe(200)
+      const data = prismaMock.business.update.mock.calls[0][0].data
+      expect(data).not.toHaveProperty("enlaceResenas")
+      expect(data).not.toHaveProperty("pideResenas")
+    })
+
+    it("dueña y encargado guardan uno de Google, normalizado, sobre su negocio", async () => {
+      const { PUT } = await import("./route")
+      for (const rol of ["owner", "admin"]) {
+        vi.clearAllMocks()
+        prismaMock.business.update.mockImplementation(async ({ data }) => data)
+        prismaMock.$transaction.mockImplementation(async (operaciones: Promise<unknown>[]) => Promise.all(operaciones))
+        mockGetServerSession.mockResolvedValueOnce(sesion(rol, "negocio-1", rol === "owner" ? null : "m-9"))
+
+        const respuesta = await PUT(pedidoFalso({ ...PAGINA, especialidades: [], enlaceResenas: "  https://G.page/r/abc/review " }))
+
+        expect(respuesta.status).toBe(200)
+        const argumentos = prismaMock.business.update.mock.calls[0][0]
+        expect(argumentos.where).toEqual({ id: "negocio-1" })
+        expect(argumentos.data.enlaceResenas).toBe("https://g.page/r/abc/review")
+        expect(argumentos.data).not.toHaveProperty("pideResenas")
+        expect(argumentos.select.enlaceResenas).toBe(true)
+      }
+    })
+
+    it("borrarlo lo deja en null y apaga 'pedir reseña'", async () => {
+      const { PUT } = await import("./route")
+      mockGetServerSession.mockResolvedValueOnce(sesion("owner", "negocio-1", null))
+
+      const respuesta = await PUT(pedidoFalso({ ...PAGINA, especialidades: [], enlaceResenas: "  " }))
+
+      expect(respuesta.status).toBe(200)
+      expect(prismaMock.business.update.mock.calls[0][0].data).toMatchObject({ enlaceResenas: null, pideResenas: false })
+    })
+
+    it.each([
+      ["http", "http://g.page/r/abc/review"],
+      ["otro sitio", "https://evil.com/maps"],
+      ["un dominio parecido", "https://google.com.evil.com/maps"],
+      ["Google fuera de Maps", "https://www.google.com/search?q=x"],
+    ])("rechaza %s con 400 y un mensaje claro, sin escribir", async (_caso, enlace) => {
+      const { PUT } = await import("./route")
+      mockGetServerSession.mockResolvedValueOnce(sesion("owner", "negocio-1", null))
+
+      const respuesta = await PUT(pedidoFalso({ ...PAGINA, enlaceResenas: enlace }))
+
+      expect(respuesta.status).toBe(400)
+      expect((await respuesta.json()).error).toContain("tiene que ser de Google")
+      expect(prismaMock.$transaction).not.toHaveBeenCalled()
+    })
+
+    it("el profesional no lo puede cambiar: 401", async () => {
+      const { PUT } = await import("./route")
+      mockGetServerSession.mockResolvedValueOnce(sesion("worker"))
+
+      const respuesta = await PUT(pedidoFalso({ ...PAGINA, enlaceResenas: "https://g.page/r/abc/review" }))
+
+      expect(respuesta.status).toBe(401)
+      expect(prismaMock.business.update).not.toHaveBeenCalled()
+    })
+  })
 })

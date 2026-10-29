@@ -122,6 +122,54 @@ export function enlacesDeMapa(
   }
 }
 
+// ─── Reseñas en Google (#77) ─────────────────────────────────────────────────
+
+/** El largo máximo que se acepta para el enlace de reseñas. */
+export const LARGO_MAXIMO_DE_ENLACE_DE_RESENAS = 500
+
+/**
+ * Dónde puede apuntar el enlace de reseñas: sólo a Google, por https. Por
+ * dominio exacto (no "termina en"), y en google.com y search.google.com sólo
+ * las rutas de Maps y de escribir una reseña. Este enlace va en un correo que
+ * sale con el nombre del negocio y de Eli: una dirección libre lo convertiría
+ * en un canal para mandar a cualquiera a cualquier sitio.
+ */
+const DESTINOS_DE_RESENAS: { host: string; ruta: (ruta: string) => boolean }[] = [
+  { host: "g.page", ruta: (ruta) => ruta.length > 1 },
+  { host: "maps.app.goo.gl", ruta: (ruta) => ruta.length > 1 },
+  { host: "google.com", ruta: (ruta) => ruta === "/maps" || ruta.startsWith("/maps/") },
+  { host: "www.google.com", ruta: (ruta) => ruta === "/maps" || ruta.startsWith("/maps/") },
+  { host: "search.google.com", ruta: (ruta) => ruta === "/local/writereview" || ruta === "/local/writereview/" },
+]
+
+/**
+ * El enlace de reseñas de Google normalizado, o `null` si no es uno. Acepta
+ * https y los destinos de `DESTINOS_DE_RESENAS` (g.page,
+ * maps.app.goo.gl, google.com/maps, search.google.com/local/writereview);
+ * nada más: ni http, ni usuario o puerto en la dirección, ni espacios, ni
+ * otro dominio de Google. La usan el endpoint al guardar y el cron al enviar
+ * (un enlace guardado antes de una regla nueva no sale).
+ */
+export function normalizarEnlaceDeResenas(texto: string | null | undefined): string | null {
+  const limpio = (texto ?? "").trim()
+  if (!limpio || limpio.length > LARGO_MAXIMO_DE_ENLACE_DE_RESENAS || /\s/.test(limpio)) return null
+  let url: URL
+  try {
+    url = new URL(limpio)
+  } catch {
+    return null
+  }
+  if (url.protocol !== "https:" || url.username || url.password || url.port) return null
+  const destino = DESTINOS_DE_RESENAS.find((opcion) => opcion.host === url.hostname)
+  if (!destino || !destino.ruta(url.pathname)) return null
+  return url.toString()
+}
+
+/** Si lo guardado es un enlace de reseñas que se puede mandar. */
+export function esEnlaceDeResenasValido(guardado: string | null | undefined): guardado is string {
+  return normalizarEnlaceDeResenas(guardado) !== null
+}
+
 // ─── Imágenes ────────────────────────────────────────────────────────────────
 
 /**
