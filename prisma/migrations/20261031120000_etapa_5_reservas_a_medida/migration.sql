@@ -105,15 +105,22 @@ ALTER TABLE "franjas_de_hora_valle" ADD CONSTRAINT "franjas_de_hora_valle_porcen
 -- businessId), así que esto lo cubre un trigger. Con serviceId en null (o
 -- puesto en null por la cascada al borrar el servicio) no hay nada que
 -- comparar.
-CREATE FUNCTION cita_servicios_mismo_negocio() RETURNS trigger
-LANGUAGE plpgsql AS $$
+--
+-- Mismo estilo que los triggers de la etapa 2 (`atencion_servicios_*`), pero
+-- con la tabla calificada con su esquema y el `search_path` fijo: así la
+-- función no depende del `search_path` de quien escribe la fila, y nadie
+-- puede hacerla mirar otra tabla "servicios" puesta antes en el camino.
+CREATE FUNCTION "public"."cita_servicios_mismo_negocio"() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
 BEGIN
   IF NEW."serviceId" IS NULL THEN
     RETURN NEW;
   END IF;
 
   IF NOT EXISTS (
-    SELECT 1 FROM "servicios" WHERE "id" = NEW."serviceId" AND "businessId" = NEW."businessId"
+    SELECT 1 FROM "public"."servicios" WHERE "id" = NEW."serviceId" AND "businessId" = NEW."businessId"
   ) THEN
     RAISE EXCEPTION 'cita_servicios %: el servicio es de otro negocio', NEW."id"
       USING ERRCODE = 'foreign_key_violation';
@@ -124,7 +131,7 @@ END;
 $$;
 
 CREATE TRIGGER cita_servicios_mismo_negocio
-BEFORE INSERT OR UPDATE OF "serviceId", "businessId" ON "cita_servicios"
-FOR EACH ROW EXECUTE FUNCTION cita_servicios_mismo_negocio();
+BEFORE INSERT OR UPDATE OF "serviceId", "businessId" ON "public"."cita_servicios"
+FOR EACH ROW EXECUTE FUNCTION "public"."cita_servicios_mismo_negocio"();
 
 COMMIT;

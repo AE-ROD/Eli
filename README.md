@@ -162,6 +162,12 @@ de desplegar. La aplica el dueño, nunca un agente (la única base configurada
 es producción). Orden: aplicar la migración, desplegar, y
 `npx prisma migrate resolve --applied 20261031120000_etapa_5_reservas_a_medida`.
 
+Ojo con el bloqueo: `CREATE UNIQUE INDEX "citas_id_businessId_key"` corre
+dentro de la transacción de la migración (no es `CONCURRENTLY`), así que
+mientras se construye el índice bloquea las escrituras en `citas` (reservas
+nuevas, reagendar, cancelar, "Llegó"). Con las tablas de hoy dura poco y es
+aceptable, pero conviene aplicarla fuera del horario de atención.
+
 ## Cómo está organizado
 
 ```
