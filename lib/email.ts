@@ -106,6 +106,7 @@ type TipoCorreo =
   | "aviso-lista-de-espera"
   | "te-toca"
   | "pedir-resena"
+  | "aviso-fila-virtual"
   | TipoCorreoDePrueba
 
 /**
@@ -746,5 +747,34 @@ export function enviarPedirResena(datos: DatosPedirResena) {
     cierre: html`Te escribimos porque aceptaste recibir avisos y novedades de ${datos.nombreNegocio}. Puedes dejar de recibirlos cuando quieras.`,
     enlaceDeBaja: datos.enlaceDeBaja,
     bajaEnUnClic: datos.enlaceDeBajaEnUnClic,
+  })
+}
+
+export interface DatosAvisoFilaVirtual {
+  emailCliente: string
+  /** El nombre con que se anotó en la fila. */
+  nombreCliente: string
+  nombreNegocio: string
+  /** Su número de turno del día. */
+  numero: number
+}
+
+/**
+ * "Ya casi es tu turno" (#85): a quien se anotó en la fila virtual con su
+ * correo, cuando queda 1 persona adelante (o ninguna). De servicio: lo pidió
+ * al anotarse, y se manda una sola vez por turno. Sin enlace al turno: la
+ * base guarda sólo el hash del token del celular, así que el correo no puede
+ * reconstruirlo; la persona ya tiene la página abierta en su teléfono.
+ */
+export function enviarAvisoFilaVirtual(datos: DatosAvisoFilaVirtual) {
+  return enviar({
+    tipo: "aviso-fila-virtual",
+    para: datos.emailCliente,
+    asunto: asunto`Ya casi es tu turno — ${datos.nombreNegocio}`,
+    titulo: "Ya casi es tu turno",
+    intro: html`Hola <strong>${datos.nombreCliente}</strong>, en <strong>${datos.nombreNegocio}</strong> ya casi es tu turno: queda a lo más una persona antes que tú.`,
+    detalle: [["Tu número", String(datos.numero)]],
+    destacado: true,
+    cierre: html`Acércate al local para no perderlo. Si ya no puedes ir, sal de la fila desde la página de tu turno.`,
   })
 }
