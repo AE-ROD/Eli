@@ -241,3 +241,43 @@ export async function guardarPlazoDeCambios(horas: number): Promise<Resultado<{ 
     conJson("PUT", { horas })
   )
 }
+
+// ─── Mensajes a clientes (#74, #75, #77, #78) ────────────────────────────────
+
+/** Los interruptores de los mensajes automáticos del negocio. */
+export interface InterruptoresDeMensajes {
+  listaDeEsperaActiva: boolean
+  avisoDeVueltaActivo: boolean
+  pideResenas: boolean
+}
+
+/** Lo enviado en el mes, como lo cuenta `contarEnviosDelMes` (`lib/envios-a-clientes.ts`). */
+export interface MensajesDelMes {
+  /** "AAAA-MM" en la zona del negocio. */
+  mes: string
+  total: number
+  porCategoria: Record<string, number>
+  porTipo: Record<string, number>
+  porCanal: Record<string, number>
+}
+
+/** Lo que la sección "Mensajes a clientes" muestra al entrar (`GET /api/configuracion/mensajes`). */
+export interface EstadoDeMensajes {
+  interruptores: InterruptoresDeMensajes
+  /** Si hay guardado un enlace de reseñas de Google válido: sin él no se puede pedir reseña. */
+  tieneEnlaceDeResenas: boolean
+  /** Sólo la dueña los enciende o apaga; el encargado los ve. */
+  puedeCambiar: boolean
+  mes: MensajesDelMes
+}
+
+/** Cambia uno o más interruptores. Devuelve cómo quedaron los tres. */
+export async function cambiarMensajesAClientes(
+  cambios: Partial<InterruptoresDeMensajes>
+): Promise<Resultado<{ interruptores: InterruptoresDeMensajes }>> {
+  return pedir<{ interruptores: InterruptoresDeMensajes }>(
+    "/api/configuracion/mensajes",
+    "No se pudo guardar el cambio",
+    conJson("PUT", cambios)
+  )
+}
