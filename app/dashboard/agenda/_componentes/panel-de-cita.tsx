@@ -135,7 +135,9 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover, onReacti
     ((cita.status === "cancelada" && new Date(cita.startTime).getTime() > ahora) ||
       cita.status === "completada" ||
       cita.status === "no-asistio")
-  const textoDeReactivar = cita.status === "cancelada" ? "Reactivar cita" : "Devolver a confirmada"
+  // "No vino" marcado por error se deshace acá (#96): vuelve a confirmada, con las reglas de reactivar.
+  const textoDeReactivar =
+    cita.status === "cancelada" ? "Reactivar cita" : cita.status === "no-asistio" ? "Deshacer «No vino»" : "Devolver a confirmada"
 
   const pedirReactivar = async (confirmar: boolean) => {
     if (reactivando) return
