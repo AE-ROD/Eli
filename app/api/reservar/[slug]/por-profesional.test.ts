@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import type { NextRequest } from "next/server"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
+import { enviarAvisoProfesional } from "@/lib/email"
 
 /**
  * La reserva pública por profesional (P5): la lista pública de quiénes
@@ -324,5 +325,38 @@ describe("confirmar por profesional", () => {
     // Y una ofrecida se acepta.
     const [primera] = (await horas("")).cuerpo.slots
     expect((await confirmar(primera)).status).toBe(201)
+  })
+})
+
+describe("aviso de nueva reserva al profesional (#114)", () => {
+  const avisados = () =>
+    vi.mocked(enviarAvisoProfesional).mock.calls.map(([datos]) => datos.emailProfesional).sort()
+
+  it("con profesional elegido: al dueño y a él", async () => {
+    escenario()
+    expect((await confirmar("10:00", { profesionalId: "m-pedro" })).status).toBe(201)
+    expect(avisados()).toEqual(["duena@uno.test", "pedro@uno.test"])
+  })
+
+  it("con cualquiera: al dueño y al que quedó asignado", async () => {
+    escenario({ appointment: [cita("c-1", "m-carla", "09:00")] })
+    expect((await confirmar("10:00")).cuerpo.profesional.id).toBe("m-pedro")
+    expect(avisados()).toEqual(["duena@uno.test", "pedro@uno.test"])
+  })
+
+  it("si el profesional es el mismo usuario del dueño, va una sola vez", async () => {
+    const datos = datosBase()
+    escenario({
+      businessMember: datos.businessMember.map((miembro) => (miembro.id === "m-pedro" ? { ...miembro, userId: "u-duena" } : miembro)),
+    })
+    expect((await confirmar("10:00", { profesionalId: "m-pedro" })).status).toBe(201)
+    expect(avisados()).toEqual(["duena@uno.test"])
+  })
+
+  it("negocio sin profesionales: sólo al dueño", async () => {
+    const datos = datosBase()
+    escenario({ businessMember: datos.businessMember.filter((miembro) => miembro.role !== "worker") })
+    expect((await confirmar("10:00")).status).toBe(201)
+    expect(avisados()).toEqual(["duena@uno.test"])
   })
 })
