@@ -5,7 +5,7 @@ import { candidatosDeLaReserva, horasLibresDelDia } from "@/lib/agenda-publica"
 import { dentroDelPlazo, mensajeFueraDePlazo } from "@/lib/gestion-de-cita"
 import { MENSAJE_FECHA_MUY_LEJANA, MENSAJE_FECHA_PASADA, fechaNoReservable } from "@/lib/reserva-publica"
 import { horasConOtroPrecio, leerHoraValle } from "@/lib/hora-valle"
-import { leerServiciosDeLaReserva, serviciosDeLaCita } from "@/lib/servicios-de-la-reserva"
+import { duracionAlReagendar, leerServiciosDeLaReserva, serviciosDeLaCita } from "@/lib/servicios-de-la-reserva"
 import { esFechaCalendario } from "@/lib/zona-horaria"
 import { abrirEnlace, type Params } from "../_comun"
 
@@ -18,7 +18,8 @@ const fechaSchema = z
  * las que se puede mover la cita: mismos servicios y mismo profesional (o
  * cualquiera, si la cita no tenía), con la misma regla que la reserva
  * (`lib/agenda-publica.ts`). Con varios servicios (#89a), el bloque entero:
- * la duración total copiada al reservar. La propia cita no se ocupa a sí misma.
+ * la duración total copiada al reservar, o la que tiene hoy si es mayor. La
+ * propia cita no se ocupa a sí misma.
  */
 export async function GET(request: NextRequest, contexto: Params) {
   const enlace = await abrirEnlace(request, contexto, "lecturaPublica")
@@ -33,7 +34,8 @@ export async function GET(request: NextRequest, contexto: Params) {
     return NextResponse.json({ slots: [], mensaje: mensajeFueraDePlazo(plazo) })
   }
   const servicios = serviciosDeLaCita(cita)
-  if (!servicios.activos || servicios.duracion === null) {
+  const duracion = duracionAlReagendar(cita, servicios)
+  if (!servicios.activos || duracion === null) {
     return NextResponse.json({ slots: [], mensaje: "Este servicio ya no se reserva por acá. Contacta al local." })
   }
 
@@ -61,22 +63,21 @@ export async function GET(request: NextRequest, contexto: Params) {
     businessId: cita.businessId,
     zona,
     fecha: fecha.data,
-    duracion: servicios.duracion,
+    duracion,
     candidatos,
     ahora,
     ignorarCitaId: cita.id,
   })
 
   // Hora valle (#89c): `slots` no cambia de forma. Si en alguna hora la cita
-  // quedaría con otro precio que el de hoy (pasa de normal a valle o al
-  // revés), va además `precios`, para mostrarlo antes de confirmar. Con la
-  // opción apagada, nunca. `reagendar` lo vuelve a calcular.
+  // quedaría con otro precio que el guardado (`precioAlReagendar`), va además
+  // `precios`, para mostrarlo antes de confirmar. Con la opción apagada, o con
+  // un precio editado a mano en el panel, nunca. `reagendar` lo vuelve a
+  // calcular.
   const horaValle = await leerHoraValle(prisma, cita.businessId)
   if (horaValle.activa) {
     const catalogo = await leerServiciosDeLaReserva(prisma, cita.businessId, servicios.ids)
-    const precios = catalogo
-      ? horasConOtroPrecio(catalogo, cita.startTime, cita.price, fecha.data, slots, zona, horaValle)
-      : []
+    const precios = horasConOtroPrecio(cita, catalogo, fecha.data, slots, zona, horaValle)
     if (precios.length > 0) return NextResponse.json({ slots, precios })
   }
   return NextResponse.json({ slots })

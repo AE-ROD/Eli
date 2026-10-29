@@ -156,3 +156,48 @@ export function serviciosDeLaCita(cita: CitaConSusServicios): ServiciosDeLaCita 
     activos: !!cita.service?.active,
   }
 }
+
+/**
+ * Minutos que ocupa el bloque al reagendar por el enlace. Con filas, la mayor
+ * entre su suma y lo que la cita dura hoy (`endTime - startTime`): si en el
+ * panel se alargó la cita, moverla no la acorta en silencio ni la deja pisar
+ * la cita siguiente. Sin filas (las de antes), la duración de su servicio,
+ * como siempre.
+ */
+export function duracionAlReagendar(
+  cita: { startTime: Date; endTime: Date; servicios?: unknown[] },
+  servicios: Pick<ServiciosDeLaCita, "duracion">
+): number | null {
+  if (servicios.duracion === null) return null
+  if (!cita.servicios || cita.servicios.length === 0) return servicios.duracion
+  const guardada = Math.ceil((cita.endTime.getTime() - cita.startTime.getTime()) / 60_000)
+  return Math.max(servicios.duracion, guardada)
+}
+
+/** Cuánto pueden diferir dos precios y contar como el mismo: 1 peso, por redondeos. */
+export const TOLERANCIA_DE_PRECIO = 1
+
+/** Si dos precios son el mismo, con `TOLERANCIA_DE_PRECIO`. Dos `null` también lo son. */
+export function mismoPrecio(a: number | null, b: number | null): boolean {
+  if (a === null || b === null) return a === b
+  return Math.abs(a - b) <= TOLERANCIA_DE_PRECIO
+}
+
+/** La suma de los precios conocidos de las filas, como `resumenDeLaReserva`; `null` si ninguna tiene. */
+export function sumaDeLasFilas(filas: { price: number | null }[]): number | null {
+  const conPrecio = filas.filter((fila): fila is { price: number } => fila.price !== null)
+  return conPrecio.length === 0 ? null : conPrecio.reduce((total, fila) => total + fila.price, 0)
+}
+
+/**
+ * Si el precio de una cita con filas se editó a mano en el panel: al
+ * reservar, `price` es la suma de las filas (`resumenDeLaReserva`), y el
+ * panel cambia `price` sin tocar las filas. Si ya no coinciden (con
+ * `TOLERANCIA_DE_PRECIO`), manda lo que decidió el negocio y las filas
+ * quedaron viejas. Sin filas no hay con qué comparar: `false`.
+ */
+export function precioEditadoAMano(cita: { price: number | null; servicios?: { price: number | null }[] }): boolean {
+  const filas = cita.servicios ?? []
+  if (filas.length === 0) return false
+  return !mismoPrecio(cita.price, sumaDeLasFilas(filas))
+}

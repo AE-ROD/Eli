@@ -8,7 +8,8 @@ import { generarToken } from "@/lib/tokens"
  * Precios de hora valle en la reserva pública (#89c). Es opcional: apagada,
  * nada cambia. Encendida, la disponibilidad marca las horas con rebaja,
  * `confirmar` recalcula en el servidor y guarda los precios ya rebajados, y
- * reagendar por el enlace recalcula si la hora nueva tiene otro %.
+ * reagendar por el enlace pone el catálogo de hoy con el % de la hora nueva,
+ * salvo que el precio se haya editado a mano en el panel.
  */
 
 const mockVerificarLimite = vi.fn()
@@ -231,15 +232,48 @@ describe("reagendar por el enlace con hora valle", () => {
     expect(preciosDeLasFilas("c-lucia")).toEqual([8000])
   })
 
-  it("entre dos horas del mismo %: conserva el precio con que se reservó", async () => {
-    escenario({ appointment: [cita("10:00", 6000)], appointmentService: [fila(6000)] })
+  it("entre dos horas del mismo % y la configuración de hoy: el mismo precio, sin aviso", async () => {
+    escenario({ appointment: [cita("10:00", 6400)], appointmentService: [fila(6400)] })
     expect((await horasParaReagendar()).precios).toEqual([
-      { hora: "09:00", precio: 8000, precioNormal: 6000, porcentaje: 0 },
-      { hora: "12:00", precio: 8000, precioNormal: 6000, porcentaje: 0 },
+      { hora: "09:00", precio: 8000, precioNormal: 6400, porcentaje: 0 },
+      { hora: "12:00", precio: 8000, precioNormal: 6400, porcentaje: 0 },
     ])
     await reagendar("11:00")
-    expect(laCita().price).toBe(6000)
-    expect(preciosDeLasFilas("c-lucia")).toEqual([6000])
+    expect(laCita().price).toBe(6400)
+    expect(preciosDeLasFilas("c-lucia")).toEqual([6400])
+  })
+
+  it("H2: una rebaja que ya no existe no se lleva a otra hora: catálogo de hoy con el % de la hora nueva", async () => {
+    // Reservada a las 10:00 cuando la franja era de 25% (6000); hoy es de 20%.
+    escenario({ appointment: [cita("10:00", 6000)], appointmentService: [fila(6000)] })
+    // Todas las horas tienen otro precio que el guardado: se avisa en cada una.
+    expect((await horasParaReagendar()).precios).toEqual([
+      { hora: "09:00", precio: 8000, precioNormal: 6000, porcentaje: 0 },
+      { hora: "10:00", precio: 6400, precioNormal: 6000, porcentaje: 20 },
+      { hora: "11:00", precio: 6400, precioNormal: 6000, porcentaje: 20 },
+      { hora: "12:00", precio: 8000, precioNormal: 6000, porcentaje: 0 },
+    ])
+    await reagendar("12:00")
+    expect(laCita().price).toBe(8000)
+    expect(preciosDeLasFilas("c-lucia")).toEqual([8000])
+  })
+
+  it("H3: un precio editado a mano en el panel nunca lo toca reagendar, ni avisa", async () => {
+    // La dueña le dejó el corte en 5000 en el panel; la fila sigue en 8000.
+    escenario({ appointment: [cita("09:00", 5000)], appointmentService: [fila(8000)] })
+    expect((await horasParaReagendar()).precios).toBeUndefined()
+    const aValle = await reagendar("10:00")
+    expect(aValle.status).toBe(200)
+    expect(aValle.cuerpo.precio).toBe(5000)
+    expect(laCita().price).toBe(5000)
+    expect(preciosDeLasFilas("c-lucia")).toEqual([8000])
+  })
+
+  it("una cita de antes, sin filas, con un precio que no es el de su servicio: no se toca", async () => {
+    escenario({ appointment: [cita("09:00", 7000)] })
+    expect((await horasParaReagendar()).precios).toBeUndefined()
+    expect((await reagendar("10:00")).status).toBe(200)
+    expect(laCita().price).toBe(7000)
   })
 
   it("apagada: el precio no cambia y no hay `precios`", async () => {

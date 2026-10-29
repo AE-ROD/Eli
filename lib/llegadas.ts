@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { aCentavos, errorDeTotal, esPrecioValido, mismoNombreDeServicio, totalEnCentavos } from "@/lib/atenciones"
 import { lineasPedidasSchema, resolverLineas, type LineaResuelta } from "@/lib/lineas-de-atencion"
+import { precioEditadoAMano } from "@/lib/servicios-de-la-reserva"
 import { diaEn, esZonaHorariaValida } from "@/lib/reportes"
 import {
   profesionalParaLinea,
@@ -152,9 +153,18 @@ async function servicioDeLaReserva(actor: Actor, cita: CitaQueLlega) {
  * se borró o se desactivó, ninguno: precargar una parte cobraría de menos
  * sin que nadie lo decidiera. Sin filas (la cita de antes), el de siempre,
  * con el precio de la cita o el del catálogo.
+ *
+ * Si la cita tiene filas pero su precio se editó a mano en el panel
+ * (`precioEditadoAMano`: `price` ya no es la suma de las filas), tampoco: las
+ * filas cobrarían el precio viejo, y repartir el precio nuevo entre los
+ * servicios (o cargarlo entero al primero) sería inventar cuánto vale cada
+ * uno, y eso mueve comisiones y reportes por servicio. Es lo más seguro: la
+ * atención llega sin líneas y el editor se abre con la reserva, que muestra
+ * el precio de la cita, para que alguien las anote.
  */
 async function serviciosQueLlegan(actor: Actor, cita: CitaQueLlega): Promise<ServicioQueLlega[] | null> {
   if (cita.servicios.length > 0) {
+    if (precioEditadoAMano(cita)) return null
     const resueltos: ServicioQueLlega[] = []
     for (const fila of cita.servicios) {
       if (!fila.service?.active || fila.service.businessId !== actor.businessId) return null

@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest"
 import { haceLosServicios } from "./agenda-publica"
-import { resumenDeLaReserva, serviciosDeLaCita } from "./servicios-de-la-reserva"
+import {
+  duracionAlReagendar,
+  mismoPrecio,
+  precioEditadoAMano,
+  resumenDeLaReserva,
+  serviciosDeLaCita,
+} from "./servicios-de-la-reserva"
 import { reservaSchema } from "./validaciones"
 
 const corte = { name: "Corte", duration: 60, price: 8000 }
@@ -91,5 +97,53 @@ describe("reservaSchema con varios servicios", () => {
     ["un id larguísimo", { servicioIds: ["x".repeat(65)] }],
   ])("%s: no pasa", (_caso, extra) => {
     expect(reservaSchema.safeParse({ ...datos, ...extra }).success).toBe(false)
+  })
+})
+
+describe("precioEditadoAMano", () => {
+  it("con filas: editado si `price` no es la suma de las filas, con 1 peso de tolerancia", () => {
+    const filas = [{ price: 8000 }, { price: 25000 }]
+    expect(precioEditadoAMano({ price: 33000, servicios: filas })).toBe(false)
+    expect(precioEditadoAMano({ price: 33001, servicios: filas })).toBe(false)
+    expect(precioEditadoAMano({ price: 32999, servicios: filas })).toBe(false)
+    expect(precioEditadoAMano({ price: 30000, servicios: filas })).toBe(true)
+    expect(precioEditadoAMano({ price: null, servicios: filas })).toBe(true)
+  })
+
+  it("las filas sin precio no suman, como al reservar", () => {
+    expect(precioEditadoAMano({ price: 8000, servicios: [{ price: 8000 }, { price: null }] })).toBe(false)
+    expect(precioEditadoAMano({ price: null, servicios: [{ price: null }] })).toBe(false)
+    expect(precioEditadoAMano({ price: 5000, servicios: [{ price: null }] })).toBe(true)
+  })
+
+  it("sin filas no hay con qué comparar", () => {
+    expect(precioEditadoAMano({ price: 1 })).toBe(false)
+    expect(precioEditadoAMano({ price: 1, servicios: [] })).toBe(false)
+  })
+
+  it("mismoPrecio", () => {
+    expect(mismoPrecio(null, null)).toBe(true)
+    expect(mismoPrecio(null, 0)).toBe(false)
+    expect(mismoPrecio(100, 101)).toBe(true)
+    expect(mismoPrecio(100, 102)).toBe(false)
+  })
+})
+
+describe("duracionAlReagendar", () => {
+  const inicio = new Date("2030-01-07T12:00:00Z")
+  const hasta = (minutos: number) => new Date(inicio.getTime() + minutos * 60_000)
+
+  it("con filas: la mayor entre su suma y lo que dura hoy la cita", () => {
+    const filas = [{}, {}]
+    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(90), servicios: filas }, { duracion: 90 })).toBe(90)
+    // Alargada en el panel: no se acorta al moverla.
+    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(120), servicios: filas }, { duracion: 90 })).toBe(120)
+    // Acortada en el panel: manda la suma.
+    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(60), servicios: filas }, { duracion: 90 })).toBe(90)
+  })
+
+  it("sin filas, la de su servicio, como siempre; sin duración, null", () => {
+    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(120), servicios: [] }, { duracion: 60 })).toBe(60)
+    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(120) }, { duracion: null })).toBeNull()
   })
 })

@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client"
 import { z } from "zod"
+import { mismoPrecio, precioEditadoAMano } from "@/lib/servicios-de-la-reserva"
 import { diaDeLaSemana, esHoraDelDia, fechaYMinutosEn, instanteEn } from "@/lib/zona-horaria"
 
 /**
@@ -17,6 +18,9 @@ import { diaDeLaSemana, esHoraDelDia, fechaYMinutosEn, instanteEn } from "@/lib/
  * - Si varias franjas aplican, manda la de mayor %.
  * - Sólo la reserva pública (y reagendar por el enlace) usan esto. Las citas
  *   del panel no se rebajan solas.
+ * - Al reagendar por el enlace (`precioAlReagendar`): un precio editado a
+ *   mano en el panel no se toca nunca; si no, el precio nuevo es el del
+ *   catálogo de hoy con el % de la hora nueva.
  *
  * Redondeo: cada servicio rebajado se redondea a peso entero
  * (`Math.round`, la mitad hacia arriba: $8.333,5 → $8.334) y el total es la
@@ -129,24 +133,54 @@ export function preciosConHoraValle(
   }
 }
 
+/** Lo que hace falta de la cita guardada para saber si su precio se recalcula al reagendar. */
+export interface PrecioGuardadoDeLaCita {
+  price: number | null
+  /** Las filas de `AppointmentService`; vacío o ausente en las citas de antes. */
+  servicios?: { price: number | null }[]
+}
+
 /**
- * Al reagendar por el enlace: el precio nuevo, o `null` si no cambia. Sólo se
- * recalcula si el % de la hora nueva es distinto del de la hora de antes (con
- * la configuración de hoy). Así, con la opción apagada o entre dos horas del
- * mismo %, la cita conserva el precio con que se reservó. Si cambia, se
- * calcula sobre los precios del catálogo de hoy (los copiados en la cita ya
- * vienen rebajados y no se puede volver atrás sin error de redondeo).
+ * Si al reagendar por el enlace el precio de la cita sigue al catálogo (y se
+ * recalcula) o lo decidió el negocio (y no se toca):
+ *
+ * - Con filas: sigue al catálogo mientras `price` sea la suma de las filas.
+ *   Si no lo es, se editó a mano en el panel (`precioEditadoAMano`).
+ * - Sin filas (las citas de antes de #89a, que se reservaron antes de que
+ *   existiera la hora valle, a precio de catálogo): sigue al catálogo si
+ *   `price` es hoy el precio de su servicio. Si no (el negocio lo cambió en el
+ *   panel, o el catálogo cambió desde entonces), no se toca: no hay cómo
+ *   saber cuál de las dos pasó.
+ *
+ * Los precios se comparan con `TOLERANCIA_DE_PRECIO` (1 peso).
+ */
+export function precioSigueAlCatalogo(cita: PrecioGuardadoDeLaCita, serviciosDelCatalogo: ServicioConPrecio[]): boolean {
+  if (cita.servicios && cita.servicios.length > 0) return !precioEditadoAMano(cita)
+  return serviciosDelCatalogo.length === 1 && cita.price !== null && mismoPrecio(cita.price, serviciosDelCatalogo[0].price)
+}
+
+/**
+ * Al reagendar por el enlace: el precio nuevo, o `null` si no se toca.
+ *
+ * - Apagada la opción: `null`, la cita conserva su precio (apagada, nada
+ *   cambia).
+ * - Precio decidido por el negocio (`precioSigueAlCatalogo` en falso):
+ *   `null`, reagendar nunca lo toca.
+ * - Si no: SIEMPRE el precio del catálogo de hoy con el % de la hora nueva,
+ *   con la configuración de hoy. No se deriva un "antes" de la configuración
+ *   actual: si la rebaja con que se reservó ya no existe, mover la cita a una
+ *   hora punta la deja a precio normal, no se la lleva. Quien elige la hora ve
+ *   antes el precio nuevo si difiere del guardado (`horasConOtroPrecio`).
  */
 export function precioAlReagendar(
-  serviciosDelCatalogo: ServicioConPrecio[],
-  inicioAnterior: Date,
+  cita: PrecioGuardadoDeLaCita,
+  serviciosDelCatalogo: ServicioConPrecio[] | null,
   inicioNuevo: Date,
   zona: string,
   configuracion: ConfiguracionDeHoraValle
 ): PreciosConHoraValle | null {
-  const antes = porcentajeDeHoraValle(inicioAnterior, zona, configuracion)
-  const despues = porcentajeDeHoraValle(inicioNuevo, zona, configuracion)
-  if (antes === despues) return null
+  if (!configuracion.activa || !serviciosDelCatalogo) return null
+  if (!precioSigueAlCatalogo(cita, serviciosDelCatalogo)) return null
   return preciosConHoraValle(serviciosDelCatalogo, inicioNuevo, zona, configuracion)
 }
 
@@ -185,23 +219,22 @@ export function horasConRebaja(
 
 /**
  * Al reagendar: las horas en que la cita quedaría con otro precio que el que
- * tiene hoy (`precioActual`), según `precioAlReagendar`. Vacío si no cambia
- * en ninguna (siempre, con la opción apagada).
+ * tiene guardado, según `precioAlReagendar`. Vacío si no cambia en ninguna
+ * (siempre, con la opción apagada o con un precio decidido por el negocio).
  */
 export function horasConOtroPrecio(
-  serviciosDelCatalogo: ServicioConPrecio[],
-  inicioAnterior: Date,
-  precioActual: number | null,
+  cita: PrecioGuardadoDeLaCita,
+  serviciosDelCatalogo: ServicioConPrecio[] | null,
   fecha: string,
   horas: string[],
   zona: string,
   configuracion: ConfiguracionDeHoraValle
 ): PrecioDeLaHora[] {
-  if (!configuracion.activa) return []
+  if (!configuracion.activa || !serviciosDelCatalogo) return []
   return horas.flatMap((hora) => {
-    const nuevo = precioAlReagendar(serviciosDelCatalogo, inicioAnterior, instanteEn(fecha, hora, zona), zona, configuracion)
-    return nuevo && nuevo.total !== precioActual
-      ? [{ hora, precio: nuevo.total, precioNormal: precioActual, porcentaje: nuevo.porcentaje }]
+    const nuevo = precioAlReagendar(cita, serviciosDelCatalogo, instanteEn(fecha, hora, zona), zona, configuracion)
+    return nuevo && nuevo.total !== cita.price
+      ? [{ hora, precio: nuevo.total, precioNormal: cita.price, porcentaje: nuevo.porcentaje }]
       : []
   })
 }

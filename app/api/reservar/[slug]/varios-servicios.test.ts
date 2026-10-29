@@ -326,6 +326,24 @@ describe("el enlace de gestión con varios servicios", () => {
     expect(filasDe("c-lucia")).toHaveLength(2)
   })
 
+  it("H4: si en el panel se alargó la cita, el bloque al reagendar es el de hoy, no la suma", async () => {
+    // Las filas suman 90 min; la cita dura 2 horas (alargada en el panel).
+    conCitaDeDos()
+    await base.prisma.appointment.update({ where: { id: "c-lucia" }, data: { endTime: aLas("11:00") } })
+    const { GET } = await import("./cita/[token]/disponibilidad/route")
+    const cuerpo = await (await GET(pedido("http://localhost/x?fecha=2030-01-08"), params)).json()
+    // De 9 a 13, en bloques de 120 min (con la suma serían 9:00 y 10:30).
+    expect(cuerpo.slots).toEqual(["09:00", "11:00"])
+
+    const { POST } = await import("./cita/[token]/reagendar/route")
+    // 11:30 + 90 cabe antes de las 13:00; 11:30 + 120, no.
+    expect((await POST(pedido("http://localhost/x", { fecha: "2030-01-08", hora: "11:30" }), params)).status).toBe(409)
+    const respuesta = await POST(pedido("http://localhost/x", { fecha: "2030-01-08", hora: "09:00" }), params)
+    expect(respuesta.status).toBe(200)
+    const [cita] = base.buscar("appointment", { id: "c-lucia" })
+    expect(cita.endTime).toEqual(aLas("11:00", "2030-01-08"))
+  })
+
   it("si un servicio se desactivó o se borró, sólo se cancela", async () => {
     conCitaDeDos()
     await base.prisma.service.update({ where: { id: "s-color" }, data: { active: false } })

@@ -13,7 +13,7 @@ import {
   yaPasoLaHora,
 } from "@/lib/reserva-publica"
 import { leerHoraValle, precioAlReagendar } from "@/lib/hora-valle"
-import { leerServiciosDeLaReserva, serviciosDeLaCita } from "@/lib/servicios-de-la-reserva"
+import { duracionAlReagendar, leerServiciosDeLaReserva, serviciosDeLaCita } from "@/lib/servicios-de-la-reserva"
 import { existeLaHora, rangoDelDiaEn } from "@/lib/zona-horaria"
 import { abrirEnlace, enTransaccionSerializable, fechaYHora, noEncontrada, nombreDelCliente, type Params } from "../_comun"
 
@@ -33,7 +33,7 @@ type Resultado =
  * POST /api/reservar/[slug]/cita/[token]/reagendar — mueve la cita a otra
  * hora libre de los mismos servicios y profesional, dentro del plazo del
  * negocio. Con varios servicios (#89a) se mueve el bloque entero, con la
- * duración total copiada al reservar.
+ * duración total copiada al reservar (o la que tiene hoy, si es mayor).
  * Las mismas reglas que confirmar una reserva nueva: horario, choques y
  * bloqueos, re-verificados dentro de una transacción `Serializable`.
  */
@@ -53,7 +53,8 @@ export async function POST(request: NextRequest, contexto: Params) {
     return NextResponse.json({ error: mensajeFueraDePlazo(plazo) }, { status: 409 })
   }
   const servicios = serviciosDeLaCita(cita)
-  const duracion = servicios.duracion
+  // La mayor entre la suma de las filas y lo que dura hoy (`duracionAlReagendar`).
+  const duracion = duracionAlReagendar(cita, servicios)
   if (!servicios.activos || duracion === null) {
     return NextResponse.json({ error: "Este servicio ya no se reserva por acá. Contacta al local." }, { status: 409 })
   }
@@ -78,13 +79,14 @@ export async function POST(request: NextRequest, contexto: Params) {
 
   const tramo = tramoDeLaReserva(fecha, hora, duracion, zona)
 
-  // Hora valle (#89c): si la hora nueva tiene otro % que la de antes, el
-  // precio se recalcula sobre el catálogo de hoy (`precioAlReagendar`); si
-  // no (siempre, con la opción apagada), la cita conserva el suyo. Las citas
-  // de antes, sin filas, se recalculan sobre su servicio de siempre.
+  // Hora valle (#89c), `precioAlReagendar`: con la opción encendida, el
+  // precio nuevo es el del catálogo de hoy con el % de la hora nueva. Apagada,
+  // o si el negocio editó el precio a mano en el panel, la cita conserva el
+  // suyo. Las citas de antes, sin filas, sólo si su precio es el de su
+  // servicio de siempre.
   const horaValle = await leerHoraValle(prisma, cita.businessId)
   const catalogo = horaValle.activa ? await leerServiciosDeLaReserva(prisma, cita.businessId, servicios.ids) : null
-  const precioNuevo = catalogo ? precioAlReagendar(catalogo, cita.startTime, tramo.startTime, zona, horaValle) : null
+  const precioNuevo = precioAlReagendar(cita, catalogo, tramo.startTime, zona, horaValle)
 
   const resultado = await enTransaccionSerializable<Resultado>(
     async (tx) => {

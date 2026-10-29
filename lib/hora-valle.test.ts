@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest"
 import {
   HORA_VALLE_APAGADA,
   configuracionDeHoraValleSchema,
+  horasConOtroPrecio,
   porcentajeDeHoraValle,
   precioAlReagendar,
+  precioSigueAlCatalogo,
   preciosConHoraValle,
   rebajar,
   type ConfiguracionDeHoraValle,
@@ -116,16 +118,57 @@ describe("preciosConHoraValle", () => {
 describe("precioAlReagendar", () => {
   const LUNES_9 = new Date("2030-01-07T12:00:00Z")
   const LUNES_10 = new Date("2030-01-07T13:00:00Z")
-  const LUNES_1030 = new Date("2030-01-07T13:30:00Z")
+  const CATALOGO = [{ price: 8000 }]
+  /** Una cita de un servicio con su fila, como la deja la reserva pública. */
+  const conFila = (price: number | null, fila: number | null = price) => ({ price, servicios: [{ price: fila }] })
 
-  it("apagada o mismo %: no cambia (null)", () => {
-    expect(precioAlReagendar([{ price: 8000 }], LUNES_9, LUNES_10, SANTIAGO, HORA_VALLE_APAGADA)).toBeNull()
-    expect(precioAlReagendar([{ price: 8000 }], LUNES_10, LUNES_1030, SANTIAGO, CONFIG)).toBeNull()
+  it("apagada: no cambia (null), ni con un catálogo distinto", () => {
+    expect(precioAlReagendar(conFila(8000), CATALOGO, LUNES_10, SANTIAGO, HORA_VALLE_APAGADA)).toBeNull()
+    expect(precioAlReagendar(conFila(7000), CATALOGO, LUNES_10, SANTIAGO, HORA_VALLE_APAGADA)).toBeNull()
   })
 
-  it("de normal a valle baja; de valle a normal vuelve al precio del catálogo", () => {
-    expect(precioAlReagendar([{ price: 8000 }], LUNES_9, LUNES_10, SANTIAGO, CONFIG)).toMatchObject({ total: 6400, precios: [6400] })
-    expect(precioAlReagendar([{ price: 8000 }], LUNES_10, LUNES_9, SANTIAGO, CONFIG)).toMatchObject({ total: 8000, hayRebaja: false })
+  it("encendida: siempre el catálogo de hoy con el % de la hora nueva", () => {
+    expect(precioAlReagendar(conFila(8000), CATALOGO, LUNES_10, SANTIAGO, CONFIG)).toMatchObject({ total: 6400, precios: [6400] })
+    expect(precioAlReagendar(conFila(6400), CATALOGO, LUNES_9, SANTIAGO, CONFIG)).toMatchObject({ total: 8000, hayRebaja: false })
+  })
+
+  it("H2: una rebaja que ya no existe no se lleva a la hora nueva", () => {
+    // Reservada a las 10:00 con 50% (4000) cuando la franja era otra; hoy esa
+    // hora tiene 20%. Antes se derivaba "antes = 20%, después = 0%" y, si los
+    // dos daban 0, se conservaban los 4000. Ahora: catálogo de hoy.
+    const reservadaConOtraRebaja = conFila(4000)
+    expect(precioAlReagendar(reservadaConOtraRebaja, CATALOGO, LUNES_9, SANTIAGO, CONFIG)?.total).toBe(8000)
+    expect(precioAlReagendar(reservadaConOtraRebaja, CATALOGO, LUNES_10, SANTIAGO, CONFIG)?.total).toBe(6400)
+  })
+
+  it("H3: un precio editado a mano en el panel (no es la suma de las filas) nunca se toca", () => {
+    expect(precioAlReagendar(conFila(5000, 8000), CATALOGO, LUNES_10, SANTIAGO, CONFIG)).toBeNull()
+    expect(precioAlReagendar(conFila(9000, 8000), CATALOGO, LUNES_9, SANTIAGO, CONFIG)).toBeNull()
+    expect(precioAlReagendar(conFila(null, 8000), CATALOGO, LUNES_10, SANTIAGO, CONFIG)).toBeNull()
+  })
+
+  it("1 peso de diferencia con las filas no cuenta como editado", () => {
+    expect(precioSigueAlCatalogo(conFila(8001, 8000), CATALOGO)).toBe(true)
+    expect(precioSigueAlCatalogo(conFila(8002, 8000), CATALOGO)).toBe(false)
+  })
+
+  it("una cita de antes, sin filas: sólo si su precio es el de su servicio de siempre", () => {
+    expect(precioAlReagendar({ price: 8000 }, CATALOGO, LUNES_10, SANTIAGO, CONFIG)?.total).toBe(6400)
+    expect(precioAlReagendar({ price: 8000, servicios: [] }, CATALOGO, LUNES_10, SANTIAGO, CONFIG)?.total).toBe(6400)
+    // Otro precio: el panel o un catálogo que cambió. No se sabe cuál: no se toca.
+    expect(precioAlReagendar({ price: 7000 }, CATALOGO, LUNES_10, SANTIAGO, CONFIG)).toBeNull()
+    expect(precioAlReagendar({ price: null }, CATALOGO, LUNES_10, SANTIAGO, CONFIG)).toBeNull()
+  })
+
+  it("sin catálogo (algún servicio ya no está): null", () => {
+    expect(precioAlReagendar(conFila(8000), null, LUNES_10, SANTIAGO, CONFIG)).toBeNull()
+  })
+
+  it("horasConOtroPrecio: sólo las horas cuyo precio difiere del guardado, y ninguna si se editó a mano", () => {
+    expect(horasConOtroPrecio(conFila(8000), CATALOGO, "2030-01-07", ["09:00", "10:00"], SANTIAGO, CONFIG)).toEqual([
+      { hora: "10:00", precio: 6400, precioNormal: 8000, porcentaje: 20 },
+    ])
+    expect(horasConOtroPrecio(conFila(5000, 8000), CATALOGO, "2030-01-07", ["09:00", "10:00"], SANTIAGO, CONFIG)).toEqual([])
   })
 })
 

@@ -556,10 +556,14 @@ describe("POST /api/atenciones con { citaId }: qué línea se precarga", () => {
       ...datos,
     })
 
-    async function llegarConFilas(filas: Record<string, unknown>[], servicios?: Record<string, unknown>[]) {
+    async function llegarConFilas(
+      filas: Record<string, unknown>[],
+      servicios?: Record<string, unknown>[],
+      cita: Record<string, unknown> = {}
+    ) {
       const { POST } = await import("./route")
       const datos = datosBase()
-      base.reiniciar({ ...datos, service: servicios ?? datos.service, appointment: [deDos], appointmentService: filas })
+      base.reiniciar({ ...datos, service: servicios ?? datos.service, appointment: [{ ...deDos, ...cita }], appointmentService: filas })
       mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
       const res = await POST(pedido(URL, { citaId: "cita-dos" }))
       return { status: res.status, data: await res.json() }
@@ -583,10 +587,15 @@ describe("POST /api/atenciones con { citaId }: qué línea se precarga", () => {
     })
 
     it("una fila sin precio copiado toma el del catálogo", async () => {
-      const { data } = await llegarConFilas([
-        fila(1, { serviceId: "s-corte", serviceName: "Corte", duration: 60, price: null }),
-        fila(2, { serviceId: "s-color", serviceName: "Color", duration: 30, price: 25000 }),
-      ])
+      // Al reservar, la cita guarda la suma de lo que tenía precio: 25000.
+      const { data } = await llegarConFilas(
+        [
+          fila(1, { serviceId: "s-corte", serviceName: "Corte", duration: 60, price: null }),
+          fila(2, { serviceId: "s-color", serviceName: "Color", duration: 30, price: 25000 }),
+        ],
+        undefined,
+        { price: 25000 }
+      )
       expect(data.lineas.map((linea: { precio: number }) => linea.precio)).toEqual([8000, 25000])
     })
 
@@ -601,6 +610,33 @@ describe("POST /api/atenciones con { citaId }: qué línea se precarga", () => {
       ])
       expect(status).toBe(201)
       expect(data.lineas).toEqual([])
+    })
+
+    it("H1: si la dueña editó el precio en el panel (ya no es la suma de las filas), no precarga las filas viejas", async () => {
+      const filas = [
+        fila(1, { serviceId: "s-corte", serviceName: "Corte", duration: 60, price: 8000 }),
+        fila(2, { serviceId: "s-color", serviceName: "Color", duration: 30, price: 22000 }),
+      ]
+      const { status, data } = await llegarConFilas(filas, undefined, { price: 25000 })
+
+      expect(status).toBe(201)
+      // Ni las filas (cobrarían 30000) ni una línea inventada: el editor se
+      // abre con la reserva, que trae el precio que decidió la dueña.
+      expect(data.lineas).toEqual([])
+      expect(data.reserva).toMatchObject({ precio: 25000 })
+      expect(base.buscar("visitService", { visitId: data.id })).toEqual([])
+    })
+
+    it("1 peso de diferencia con la suma (redondeo) no cuenta como editado", async () => {
+      const { data } = await llegarConFilas(
+        [
+          fila(1, { serviceId: "s-corte", serviceName: "Corte", duration: 60, price: 8000 }),
+          fila(2, { serviceId: "s-color", serviceName: "Color", duration: 30, price: 22000 }),
+        ],
+        undefined,
+        { price: 30001 }
+      )
+      expect(data.lineas.map((linea: { precio: number }) => linea.precio)).toEqual([8000, 22000])
     })
 
     it("una cita vieja sin filas sigue como hoy: una línea, con el precio de la cita", async () => {
