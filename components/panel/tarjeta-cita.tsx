@@ -18,6 +18,8 @@ export interface CitaEnTarjeta {
   notas?: string
   /** Pendiente porque entró por confirmar tras faltas (#84): se lee "Por confirmar". */
   porConfirmar?: boolean
+  /** Sin profesional asignado habiendo equipo (#103): ocupa la hora de todos, y se marca para asignarla. */
+  sinProfesional?: boolean
 }
 
 interface PropsDeTarjetaCita {
@@ -42,6 +44,15 @@ const ESTADOS: Record<CitaEnTarjeta["estado"], { texto: string; clases: string }
 
 /** Una pendiente que el local tiene que confirmar (#84): el gris de la pendiente, con borde, y dicho en palabras. */
 const POR_CONFIRMAR = { texto: "Por confirmar", clases: "bg-tarjeta text-navy ring-1 ring-inset ring-navy" }
+
+/** "Sin profesional", en el naranja del tablero y con borde punteado: se distingue sin depender del color. */
+function MarcaSinProfesional() {
+  return (
+    <span className="inline-flex h-5 shrink-0 items-center rounded-full border border-dashed border-navy/40 bg-naranja-suave px-2 text-[11px] leading-none font-medium whitespace-nowrap text-navy">
+      Sin profesional
+    </span>
+  )
+}
 
 function EstadoDeLaCita({ estado, porConfirmar = false }: { estado: CitaEnTarjeta["estado"]; porConfirmar?: boolean }) {
   // El endpoint no restringe el string: un estado desconocido se muestra tal cual, sin color.
@@ -108,6 +119,7 @@ export function TarjetaCita({ cita, compacta = false, onClick }: PropsDeTarjetaC
         <span className="flex shrink-0 flex-col items-end gap-1">
           <span className="text-sm font-medium tabular-nums">{cita.horaInicio}</span>
           <EstadoDeLaCita estado={cita.estado} porConfirmar={cita.porConfirmar} />
+          {cita.sinProfesional && <MarcaSinProfesional />}
         </span>
       </Contenedor>
     )
@@ -129,7 +141,10 @@ export function TarjetaCita({ cita, compacta = false, onClick }: PropsDeTarjetaC
             <span className="block truncate text-sm text-texto-2">{cita.servicio}</span>
           </span>
         </span>
-        <EstadoDeLaCita estado={cita.estado} porConfirmar={cita.porConfirmar} />
+        <span className="flex shrink-0 flex-col items-end gap-1">
+          <EstadoDeLaCita estado={cita.estado} porConfirmar={cita.porConfirmar} />
+          {cita.sinProfesional && <MarcaSinProfesional />}
+        </span>
       </span>
 
       <span className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-borde pt-3 text-sm text-texto-2">

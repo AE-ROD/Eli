@@ -12,7 +12,7 @@ import { comoTexto, diasDeLaSemanaDe, limitesDelMesDe, type UnidadDeTiempo } fro
 import { leerMonto } from "@/lib/dinero"
 import { pedir, pedirConCuerpo, conJson, type Resultado } from "@/lib/peticiones"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
-import type { Advertencia } from "@/lib/mover-cita"
+import { sePuedeMover, type Advertencia } from "@/lib/mover-cita"
 import { estaPorConfirmar } from "@/lib/por-confirmar"
 import { isoEn } from "./_hora-del-negocio"
 
@@ -34,6 +34,8 @@ export interface Cita {
   customer: { id: string; name: string; email: string | null; phone: string | null } | null
   /** A qué profesional está asignada. Nulo: sin asignar (o el dueño, que no es miembro). */
   memberId?: string | null
+  /** El profesional asignado, con su nombre para el detalle. */
+  member?: { id: string; user: { name: string | null } | null } | null
   /** Entró por confirmar tras faltas (#84). Con status "pendiente", está por confirmar (`estaPorConfirmar`). */
   confirmacionPorFaltas?: boolean
   /** El cliente ya llegó: tiene una atención no anulada en el Tablero. */
@@ -102,6 +104,28 @@ export interface Profesional {
   id: string
   nombre: string
   rol: string
+}
+
+/** Si en el equipo hay alguien que atiende (rol profesional): sólo entonces una cita sin asignar es un pendiente. */
+export function hayProfesionales(equipo: Profesional[]): boolean {
+  return equipo.some((miembro) => miembro.rol === "worker")
+}
+
+/**
+ * Si la agenda destaca la cita por no tener profesional (#103). Una sin
+ * asignar ocupa la hora de todos en la reserva pública, así que vale la pena
+ * asignarla; pero sólo si hay profesionales a quien (en un negocio sin
+ * equipo toda cita va sin asignar y no es un problema) y si todavía se puede
+ * cambiar: una cancelada, completada o de "No vino" ya no ocupa ni se mueve.
+ */
+export function destacaSinProfesional(cita: Pick<Cita, "memberId" | "status">, conProfesionales: boolean): boolean {
+  return conProfesionales && !cita.memberId && sePuedeMover(cita.status)
+}
+
+/** El nombre del profesional de la cita, o `null` si no tiene. */
+export function nombreDelProfesional(cita: Pick<Cita, "memberId" | "member">): string | null {
+  if (!cita.memberId) return null
+  return cita.member?.user?.name?.trim() || "Profesional"
 }
 
 /** Un cliente que coincide con lo que se escribe en el buscador de la cita nueva. */
@@ -199,6 +223,27 @@ export async function moverCita(
       ...(opciones.asignaProfesional && { memberId: datos.memberId || null }),
       ...(opciones.confirmar && { confirmarAdvertencias: true }),
     })
+  )
+  return conAdvertencias(resultado)
+}
+
+/**
+ * Asignarle profesional a una cita sin asignar (#103), sin tocar su horario:
+ * se manda sólo `memberId`, así el horario guardado queda exacto (no pasa
+ * por la fecha y la hora escritas). El servidor lo trata como mover: si el
+ * profesional ya tiene algo a esa hora, devuelve las advertencias, y
+ * `confirmar` es el segundo envío. Sólo lo ofrece la pantalla a quien puede
+ * asignar; al resto el servidor lo dejaría en sí mismo.
+ */
+export async function asignarProfesional(
+  id: string,
+  memberId: string,
+  opciones: { confirmar: boolean }
+): Promise<ResultadoDeMover> {
+  const resultado = await pedirConCuerpo(
+    `/api/citas/${encodeURIComponent(id)}`,
+    "No se pudo asignar el profesional",
+    conJson("PUT", { memberId, ...(opciones.confirmar && { confirmarAdvertencias: true }) })
   )
   return conAdvertencias(resultado)
 }

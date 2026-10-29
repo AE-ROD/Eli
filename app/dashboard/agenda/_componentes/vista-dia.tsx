@@ -4,12 +4,12 @@ import { TarjetaCita, type CitaEnTarjeta } from "@/components/panel/tarjeta-cita
 import { ESTADOS_DE_CITA } from "@/lib/campos-del-panel"
 import { duracionParaMostrar } from "@/lib/fechas"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
-import { aQuienBloquea, citaPorConfirmar, nombreDeCliente, type Bloqueo, type Cita } from "../_datos"
+import { aQuienBloquea, citaPorConfirmar, destacaSinProfesional, nombreDeCliente, type Bloqueo, type Cita } from "../_datos"
 import { citasPorHora, rangoDeHoras, recortarAHoras, tramoDeCita, tramoEnElDia, tramosDeFranjas } from "../_disposicion"
 import { caeEnElDia, horaEn } from "../_hora-del-negocio"
 import { useZonaDelNegocio } from "./zona-del-negocio"
 
-function paraTarjeta(cita: Cita, zona: string): CitaEnTarjeta {
+function paraTarjeta(cita: Cita, zona: string, conProfesionales: boolean): CitaEnTarjeta {
   const estado = (ESTADOS_DE_CITA as readonly string[]).includes(cita.status)
     ? (cita.status as CitaEnTarjeta["estado"])
     : "pendiente"
@@ -23,6 +23,7 @@ function paraTarjeta(cita: Cita, zona: string): CitaEnTarjeta {
     estado,
     notas: cita.notes ?? undefined,
     porConfirmar: citaPorConfirmar(cita),
+    sinProfesional: destacaSinProfesional(cita, conProfesionales),
   }
 }
 
@@ -35,6 +36,8 @@ interface PropsDeVistaDia {
   bloqueos: Bloqueo[]
   onSeleccionar: (cita: Cita) => void
   onSeleccionarBloqueo: (bloqueo: Bloqueo) => void
+  /** Si hay profesionales a quien asignar: entonces las citas sin profesional se marcan (#103). */
+  destacarSinProfesional?: boolean
 }
 
 /**
@@ -44,7 +47,15 @@ interface PropsDeVistaDia {
  * dentro de la tarjeta; el relleno deja lugar al anillo del foco de las
  * tarjetas, que esa caja recortaría.
  */
-export function VistaDia({ fecha, citas, horario, bloqueos, onSeleccionar, onSeleccionarBloqueo }: PropsDeVistaDia) {
+export function VistaDia({
+  fecha,
+  citas,
+  horario,
+  bloqueos,
+  onSeleccionar,
+  onSeleccionarBloqueo,
+  destacarSinProfesional = false,
+}: PropsDeVistaDia) {
   const zona = useZonaDelNegocio()
   // El día y las horas, en la zona del negocio (#99).
   const citasDelDia = citas.filter((cita) => caeEnElDia(cita.startTime, fecha, zona))
@@ -91,7 +102,7 @@ export function VistaDia({ fecha, citas, horario, bloqueos, onSeleccionar, onSel
                   </button>
                 ))}
                 {citasEnHora.map((cita) => (
-                  <TarjetaCita key={cita.id} cita={paraTarjeta(cita, zona)} compacta onClick={() => onSeleccionar(cita)} />
+                  <TarjetaCita key={cita.id} cita={paraTarjeta(cita, zona, destacarSinProfesional)} compacta onClick={() => onSeleccionar(cita)} />
                 ))}
               </div>
             ) : cubierta ? (

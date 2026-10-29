@@ -9,6 +9,7 @@ import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { Aviso } from "@/components/panel/aviso"
 import type { Advertencia } from "@/lib/mover-cita"
 import {
+  asignarProfesional,
   leerProfesionales,
   moverCita,
   nombreDeCliente,
@@ -23,6 +24,12 @@ interface PropsDeModalMoverCita {
   cita: Cita
   /** Sólo dueño y encargado reasignan; el profesional no ve el selector. */
   puedeAsignarProfesional: boolean
+  /**
+   * Sólo elegir el profesional de una cita sin asignar (#103): no se ofrecen
+   * la fecha ni las horas, y se manda sólo el profesional
+   * (`asignarProfesional`). Un choque se avisa igual que al mover.
+   */
+  soloAsignar?: boolean
   onMovida: () => void
   onCerrar: () => void
 }
@@ -34,7 +41,13 @@ interface PropsDeModalMoverCita {
  * confirmado. Cambiar cualquier campo descarta la advertencia, que era de lo
  * de antes.
  */
-export function ModalMoverCita({ cita, puedeAsignarProfesional, onMovida, onCerrar }: PropsDeModalMoverCita) {
+export function ModalMoverCita({
+  cita,
+  puedeAsignarProfesional,
+  soloAsignar = false,
+  onMovida,
+  onCerrar,
+}: PropsDeModalMoverCita) {
   // Fecha y horas en la zona del negocio, como se muestran y se guardan (#99).
   const zona = useZonaDelNegocio()
   const [form, setForm] = useState<DatosDeMoverCita>(() => ({
@@ -66,11 +79,13 @@ export function ModalMoverCita({ cita, puedeAsignarProfesional, onMovida, onCerr
   const guardar = async (confirmar: boolean) => {
     setError("")
     setGuardando(true)
-    const resultado = await moverCita(cita.id, form, zona, {
-      confirmar,
-      // Si el equipo no cargó, no se manda el profesional: se deja el que tenía.
-      asignaProfesional: puedeAsignarProfesional && profesionales.length > 0,
-    })
+    const resultado = soloAsignar
+      ? await asignarProfesional(cita.id, form.memberId, { confirmar })
+      : await moverCita(cita.id, form, zona, {
+          confirmar,
+          // Si el equipo no cargó, no se manda el profesional: se deja el que tenía.
+          asignaProfesional: puedeAsignarProfesional && profesionales.length > 0,
+        })
     setGuardando(false)
 
     if (resultado.tipo === "guardada") return onMovida()
@@ -80,9 +95,16 @@ export function ModalMoverCita({ cita, puedeAsignarProfesional, onMovida, onCerr
   }
 
   const hayAdvertencias = advertencias.length > 0
+  // Asignando, sin el equipo cargado o sin elegir a nadie no hay nada que guardar.
+  const faltaElegir = soloAsignar && (profesionales.length === 0 || !form.memberId)
 
   return (
-    <MarcoDeModal titulo="Cambiar fecha y hora" antetitulo={nombreDeCliente(cita)} bloqueado={guardando} alCerrar={onCerrar}>
+    <MarcoDeModal
+      titulo={soloAsignar ? "Asignar profesional" : "Cambiar fecha y hora"}
+      antetitulo={nombreDeCliente(cita)}
+      bloqueado={guardando}
+      alCerrar={onCerrar}
+    >
       <form
         onSubmit={(evento) => {
           evento.preventDefault()
@@ -90,33 +112,37 @@ export function ModalMoverCita({ cita, puedeAsignarProfesional, onMovida, onCerr
         }}
         className="space-y-5"
       >
-        <CampoFormulario
-          etiqueta="Fecha"
-          type="date"
-          value={form.fecha}
-          onChange={(e) => cambiar("fecha", e.target.value)}
-          icono={<Calendar className="size-4" aria-hidden="true" strokeWidth={1.75} />}
-          required
-        />
+        {!soloAsignar && (
+          <>
+            <CampoFormulario
+              etiqueta="Fecha"
+              type="date"
+              value={form.fecha}
+              onChange={(e) => cambiar("fecha", e.target.value)}
+              icono={<Calendar className="size-4" aria-hidden="true" strokeWidth={1.75} />}
+              required
+            />
 
-        <div className="grid grid-cols-2 gap-3">
-          <CampoFormulario
-            etiqueta="Hora inicio"
-            type="time"
-            value={form.horaInicio}
-            onChange={(e) => cambiar("horaInicio", e.target.value)}
-            icono={<Clock className="size-4" aria-hidden="true" strokeWidth={1.75} />}
-            required
-          />
-          <CampoFormulario
-            etiqueta="Hora fin"
-            type="time"
-            value={form.horaFin}
-            onChange={(e) => cambiar("horaFin", e.target.value)}
-            icono={<Clock className="size-4" aria-hidden="true" strokeWidth={1.75} />}
-            required
-          />
-        </div>
+            <div className="grid grid-cols-2 gap-3">
+              <CampoFormulario
+                etiqueta="Hora inicio"
+                type="time"
+                value={form.horaInicio}
+                onChange={(e) => cambiar("horaInicio", e.target.value)}
+                icono={<Clock className="size-4" aria-hidden="true" strokeWidth={1.75} />}
+                required
+              />
+              <CampoFormulario
+                etiqueta="Hora fin"
+                type="time"
+                value={form.horaFin}
+                onChange={(e) => cambiar("horaFin", e.target.value)}
+                icono={<Clock className="size-4" aria-hidden="true" strokeWidth={1.75} />}
+                required
+              />
+            </div>
+          </>
+        )}
 
         {puedeAsignarProfesional && avisoDeEquipo && <Aviso>{avisoDeEquipo}</Aviso>}
 
@@ -152,8 +178,8 @@ export function ModalMoverCita({ cita, puedeAsignarProfesional, onMovida, onCerr
               Guardar igual
             </Boton>
           ) : (
-            <Boton type="submit" className="w-full" cargando={guardando}>
-              Guardar cambios
+            <Boton type="submit" className="w-full" cargando={guardando} disabled={faltaElegir}>
+              {soloAsignar ? "Asignar" : "Guardar cambios"}
             </Boton>
           )}
         </div>

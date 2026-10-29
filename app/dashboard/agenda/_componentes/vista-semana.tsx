@@ -6,7 +6,7 @@ import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import { cn } from "@/lib/utils"
 import { diasSemana } from "./controles-de-agenda"
 import { estiloDeEstado } from "./estados-de-cita"
-import { aQuienBloquea, citaPorConfirmar, nombreDeCliente, type Bloqueo, type Cita } from "../_datos"
+import { aQuienBloquea, citaPorConfirmar, destacaSinProfesional, nombreDeCliente, type Bloqueo, type Cita } from "../_datos"
 import { columnasDeSolape, rangoDeHoras, recortarAHoras, tramoDeCita, tramoEnElDia, tramosDeFranjas } from "../_disposicion"
 import { caeEnElDia, esHoyEn, horaEn } from "../_hora-del-negocio"
 import { useZonaDelNegocio } from "./zona-del-negocio"
@@ -31,6 +31,8 @@ interface PropsDeVistaSemana {
   bloqueos: Bloqueo[]
   onSeleccionar: (cita: Cita) => void
   onSeleccionarBloqueo: (bloqueo: Bloqueo) => void
+  /** Si hay profesionales a quien asignar: entonces las citas sin profesional se marcan (#103). */
+  destacarSinProfesional?: boolean
 }
 
 /**
@@ -47,7 +49,15 @@ interface PropsDeVistaSemana {
  * del borde: así las esquinas del área que se desplaza siguen la curva de la
  * tarjeta y no asoman.
  */
-export function VistaSemana({ dias, citas, horario, bloqueos, onSeleccionar, onSeleccionarBloqueo }: PropsDeVistaSemana) {
+export function VistaSemana({
+  dias,
+  citas,
+  horario,
+  bloqueos,
+  onSeleccionar,
+  onSeleccionarBloqueo,
+  destacarSinProfesional = false,
+}: PropsDeVistaSemana) {
   const caja = useRef<HTMLDivElement>(null)
   // Días, horas y "hoy", en la zona del negocio (#99).
   const zona = useZonaDelNegocio()
@@ -168,6 +178,7 @@ export function VistaSemana({ dias, citas, horario, bloqueos, onSeleccionar, onS
                   const duracion = duracionParaMostrar(cita.startTime, cita.endTime)
                   const altura = Math.max((duracion / 60) * ALTURA_HORA - SEPARACION, ALTURA_MINIMA)
                   const estado = estiloDeEstado(cita.status, citaPorConfirmar(cita))
+                  const sinProfesional = destacaSinProfesional(cita, destacarSinProfesional)
                   const { columna, columnas } = lugares.get(cita.id) ?? { columna: 0, columnas: 1 }
                   // Sola, 4 px de cada lado; compartiendo, 2 px, que el ancho es poco.
                   const margen = columnas > 1 ? 2 : 4
@@ -187,11 +198,13 @@ export function VistaSemana({ dias, citas, horario, bloqueos, onSeleccionar, onS
                       onClick={() => onSeleccionar(cita)}
                       // Lo que la grilla dice con el lugar y el color, dicho para el lector de
                       // pantalla. Empieza por lo que se ve, para que también lo encuentre la voz.
-                      aria-label={`${nombreDeCliente(cita)}, ${cita.title}, ${diaParaLeer(dia)}, de ${horaEn(cita.startTime, zona)} a ${horaEn(cita.endTime, zona)}, ${estado.texto}`}
+                      aria-label={`${nombreDeCliente(cita)}, ${cita.title}, ${diaParaLeer(dia)}, de ${horaEn(cita.startTime, zona)} a ${horaEn(cita.endTime, zona)}, ${estado.texto}${sinProfesional ? ", sin profesional" : ""}`}
                       className={cn(
                         "absolute overflow-hidden rounded-[10px] border-l-[3px] px-1.5 py-1 text-left",
                         "anillo-foco transition-shadow duration-200 ease-suave hover:z-10 hover:shadow-md focus-visible:z-10",
-                        estado.bloque
+                        estado.bloque,
+                        // Sin profesional (#103): un borde punteado alrededor, además de dicho en el nombre accesible.
+                        sinProfesional && "outline-2 -outline-offset-2 outline-dashed outline-naranja"
                       )}
                     >
                       {/* La cancelada, además del rojo, tachada: se distingue sin el color. */}
@@ -204,6 +217,7 @@ export function VistaSemana({ dias, citas, horario, bloqueos, onSeleccionar, onS
                         {nombreDeCliente(cita)}
                       </span>
                       {altura > 32 && <span className="block truncate text-xs">{cita.title}</span>}
+                      {sinProfesional && altura > 48 && <span className="block truncate text-xs font-medium">Sin profesional</span>}
                     </button>
                   )
                 })}

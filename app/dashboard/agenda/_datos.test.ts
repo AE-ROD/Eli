@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
-import { aQuienBloquea, citaPorConfirmar, crearBloqueo, crearCita, moverCita, precioDeLaCita, quitarBloqueo, type Bloqueo, type DatosDeNuevaCita } from "./_datos"
+import { aQuienBloquea, asignarProfesional, citaPorConfirmar, crearBloqueo, crearCita, destacaSinProfesional, hayProfesionales, moverCita, nombreDelProfesional, precioDeLaCita, quitarBloqueo, type Bloqueo, type DatosDeNuevaCita } from "./_datos"
 
 /** El cuerpo JSON con que se llamó a `fetch`. */
 const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
@@ -196,5 +196,51 @@ describe("moverCita", () => {
 
     expect(fetchFalso.mock.calls[0][0]).toBe("/api/citas/c1")
     expect(cuerpoEnviado(fetchFalso)).toEqual({ startTime: "2026-10-20T13:00:00.000Z", endTime: "2026-10-20T14:00:00.000Z" })
+  })
+})
+
+describe("citas sin profesional (#103)", () => {
+  it("hay profesionales si alguien del equipo tiene rol profesional; un encargado solo no cuenta", () => {
+    expect(hayProfesionales([{ id: "m1", nombre: "Carla", rol: "worker" }])).toBe(true)
+    expect(hayProfesionales([{ id: "m2", nombre: "Enzo", rol: "admin" }])).toBe(false)
+    expect(hayProfesionales([])).toBe(false)
+  })
+
+  it("se destaca la sin asignar que todavía se puede cambiar, sólo si hay a quién asignarla", () => {
+    expect(destacaSinProfesional({ memberId: null, status: "pendiente" }, true)).toBe(true)
+    expect(destacaSinProfesional({ memberId: undefined, status: "confirmada" }, true)).toBe(true)
+    expect(destacaSinProfesional({ memberId: "m1", status: "pendiente" }, true)).toBe(false)
+    expect(destacaSinProfesional({ memberId: null, status: "pendiente" }, false)).toBe(false)
+    for (const cerrada of ["cancelada", "completada", "no-asistio"]) {
+      expect(destacaSinProfesional({ memberId: null, status: cerrada }, true)).toBe(false)
+    }
+  })
+
+  it("el nombre del profesional, o null sin asignar", () => {
+    expect(nombreDelProfesional({ memberId: "m1", member: { id: "m1", user: { name: "Carla" } } })).toBe("Carla")
+    expect(nombreDelProfesional({ memberId: "m1", member: { id: "m1", user: { name: " " } } })).toBe("Profesional")
+    expect(nombreDelProfesional({ memberId: null, member: null })).toBeNull()
+  })
+})
+
+describe("asignarProfesional (#103)", () => {
+  it("manda sólo el profesional: el horario guardado no se toca", async () => {
+    const fetchFalso = simularRespuesta(json({ id: "c1" }))
+
+    expect(await asignarProfesional("c1", "m-carla", { confirmar: false })).toEqual({ tipo: "guardada" })
+
+    expect(fetchFalso.mock.calls[0][0]).toBe("/api/citas/c1")
+    expect((fetchFalso.mock.calls[0][1] as RequestInit).method).toBe("PUT")
+    expect(cuerpoEnviado(fetchFalso)).toEqual({ memberId: "m-carla" })
+  })
+
+  it("si choca, devuelve las advertencias; 'asignar igual' manda confirmarAdvertencias", async () => {
+    const advertencias = [{ tipo: "choque", mensaje: "Carla ya tiene una cita de 10:00 a 11:00." }]
+    simularRespuesta(json({ error: advertencias[0].mensaje, advertencias }, 409))
+    expect(await asignarProfesional("c1", "m-carla", { confirmar: false })).toEqual({ tipo: "advertencias", advertencias })
+
+    const segundo = simularRespuesta(json({ id: "c1" }))
+    await asignarProfesional("c1", "m-carla", { confirmar: true })
+    expect(cuerpoEnviado(segundo)).toEqual({ memberId: "m-carla", confirmarAdvertencias: true })
   })
 })
