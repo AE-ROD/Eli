@@ -194,7 +194,7 @@ describe("GET /api/clientes/[id]", () => {
     expect(JSON.stringify(cliente)).not.toMatch(/Nota interna|Prefiere la tarde|Reservé por la web/)
   })
 
-  it("del cliente se devuelve lo de antes del `select` y el consentimiento de WhatsApp: sólo cambió el historial", async () => {
+  it("del cliente se devuelve lo de antes del `select` y los consentimientos de WhatsApp y de correo: sólo cambió el historial", async () => {
     const { GET } = await import("./route")
 
     mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
@@ -205,6 +205,9 @@ describe("GET /api/clientes/[id]", () => {
       "appointments",
       "businessId",
       "cedula",
+      "correoPromoBajaAt",
+      "correoPromoConsentAt",
+      "correoPromoConsentSource",
       "createdAt",
       "email",
       "id",
@@ -800,6 +803,86 @@ describe("PUT /api/clientes/[id] — teléfono en E.164 y consentimiento de What
     const res = await PUT(pedido(URL_DE_MARIA, { whatsappConsent: true }), conId("c-maria"))
 
     expect(res.status).toBe(401)
+    expect(base.volcado()).toEqual(antes)
+  })
+})
+
+describe("PUT /api/clientes/[id] — consentimiento promocional por correo", () => {
+  const maria = () => base.buscar("customer", { id: "c-maria" })[0]
+
+  it("marcarlo registra cuándo y que fue en el panel; desmarcarlo es una baja con fecha", async () => {
+    const { PUT } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    expect((await PUT(pedido(URL_DE_MARIA, { correoPromoConsent: true }), conId("c-maria"))).status).toBe(200)
+    expect(maria().correoPromoConsentSource).toBe("panel")
+    expect(maria().correoPromoConsentAt).toBeInstanceOf(Date)
+    expect(maria().correoPromoBajaAt).toBeNull()
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.encargado)
+    expect((await PUT(pedido(URL_DE_MARIA, { correoPromoConsent: false }), conId("c-maria"))).status).toBe(200)
+    expect(maria().correoPromoConsentAt).toBeNull()
+    expect(maria().correoPromoConsentSource).toBeNull()
+    expect(maria().correoPromoBajaAt).toBeInstanceOf(Date)
+  })
+
+  it("volver a marcarlo después de una baja vuelve a dar el consentimiento, con fecha y origen nuevos", async () => {
+    const { PUT } = await import("./route")
+    await base.prisma.customer.updateMany({
+      where: { id: "c-maria" },
+      data: { correoPromoConsentAt: null, correoPromoConsentSource: null, correoPromoBajaAt: new Date("2026-01-01") },
+    })
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    await PUT(pedido(URL_DE_MARIA, { correoPromoConsent: true }), conId("c-maria"))
+
+    expect(maria().correoPromoConsentSource).toBe("panel")
+    expect((maria().correoPromoConsentAt as Date).getFullYear()).toBeGreaterThanOrEqual(2026)
+  })
+
+  it("mandarlo marcado cuando ya estaba no pisa la fecha ni el origen de la reserva pública", async () => {
+    const { PUT } = await import("./route")
+    const original = new Date("2026-02-01T12:00:00.000Z")
+    await base.prisma.customer.updateMany({
+      where: { id: "c-maria" },
+      data: { correoPromoConsentAt: original, correoPromoConsentSource: "reserva-publica" },
+    })
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    await PUT(pedido(URL_DE_MARIA, { name: "María", correoPromoConsent: true }), conId("c-maria"))
+
+    expect(maria().correoPromoConsentAt).toEqual(original)
+    expect(maria().correoPromoConsentSource).toBe("reserva-publica")
+  })
+
+  it("desmarcarlo cuando no lo tenía no inventa una baja", async () => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    await PUT(pedido(URL_DE_MARIA, { correoPromoConsent: false }), conId("c-maria"))
+
+    expect(maria().correoPromoBajaAt).toBeNull()
+  })
+
+  it("la profesional no lo cambia: 401 y la base queda igual", async () => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+    const antes = base.volcado()
+
+    const res = await PUT(pedido(URL_DE_MARIA, { correoPromoConsent: true }), conId("c-maria"))
+
+    expect(res.status).toBe(401)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("en un cliente de otro negocio es 404 y no se escribe nada", async () => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const antes = base.volcado()
+
+    const res = await PUT(pedido("http://localhost/api/clientes/c-ajeno", { correoPromoConsent: true }), conId("c-ajeno"))
+
+    expect(res.status).toBe(404)
     expect(base.volcado()).toEqual(antes)
   })
 })

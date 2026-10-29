@@ -5,8 +5,9 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { emailOVacio, etiquetas, nombre, notas, telefonoChileno } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
-import { actorDeSesion, whereDeAgenda, whereDeAtenciones, whereDeClientes, type Actor } from "@/lib/permisos"
+import { actorDeSesion, puedeEditarConsentimientoPromocional, whereDeAgenda, whereDeAtenciones, whereDeClientes, type Actor } from "@/lib/permisos"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
+import { datosDeConsentimientoPromocional } from "@/lib/envios-a-clientes"
 
 const clienteSchema = z.object({
   name: nombre(),
@@ -16,6 +17,8 @@ const clienteSchema = z.object({
   notes: notas().optional(),
   /** "Acepta recibir mensajes por WhatsApp", marcado en el formulario del panel. */
   whatsappConsent: z.boolean().optional(),
+  /** "Quiere recibir avisos y novedades por correo" (promocional), marcado en el panel. */
+  correoPromoConsent: z.boolean().optional(),
 })
 
 /**
@@ -85,6 +88,7 @@ export async function GET(request: NextRequest) {
         tags: true,
         notes: true,
         whatsappConsentAt: true,
+        correoPromoConsentAt: true,
         createdAt: true,
         // El cliente es del negocio, pero sus citas son agenda: el profesional
         // ve en el historial sólo las suyas, no las de sus colegas ni lo que
@@ -189,6 +193,12 @@ export async function POST(request: NextRequest) {
     const cuerpo = await request.json()
     const datos = clienteSchema.parse(cuerpo)
 
+    // Cualquiera del equipo crea un cliente, pero el consentimiento promocional
+    // lo registra quien edita los datos del cliente. Falla cerrado.
+    if (datos.correoPromoConsent && !puedeEditarConsentimientoPromocional(actor)) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+    }
+
     const cliente = await prisma.customer.create({
       data: {
         name: datos.name,
@@ -199,6 +209,7 @@ export async function POST(request: NextRequest) {
         // El consentimiento se registra con cuándo y por dónde se dio. Sin
         // marcar, no hay consentimiento: queda en null.
         ...(datos.whatsappConsent && { whatsappConsentAt: new Date(), whatsappConsentSource: "panel" }),
+        ...(datos.correoPromoConsent && datosDeConsentimientoPromocional("panel")),
         businessId: actor.businessId,
       },
     })

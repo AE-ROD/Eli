@@ -67,10 +67,10 @@ function paginarComoPrisma<T>(lista: T[], { skip = 0, take }: { skip?: number; t
 const creadoEl = (dia: number) => new Date(Date.UTC(2026, 0, dia))
 
 const clientesFake: Registro[] = [
-  { id: "cliente-1", businessId: "negocio-1", name: "Ana", lastName: "Pérez", email: "ana@example.com", phone: null, tags: ["vip"], notes: null, whatsappConsentAt: null, createdAt: creadoEl(1) },
-  { id: "cliente-2", businessId: "negocio-1", name: "Beto Soto", lastName: null, email: null, phone: "+56 9 1111 1111", tags: [], notes: null, whatsappConsentAt: null, createdAt: creadoEl(2) },
+  { id: "cliente-1", businessId: "negocio-1", name: "Ana", lastName: "Pérez", email: "ana@example.com", phone: null, tags: ["vip"], notes: null, whatsappConsentAt: null, correoPromoConsentAt: null, createdAt: creadoEl(1) },
+  { id: "cliente-2", businessId: "negocio-1", name: "Beto Soto", lastName: null, email: null, phone: "+56 9 1111 1111", tags: [], notes: null, whatsappConsentAt: null, correoPromoConsentAt: null, createdAt: creadoEl(2) },
   /** Se llama igual que `cliente-1` y tiene su misma etiqueta: sólo el negocio los distingue. */
-  { id: "cliente-ajeno", businessId: "negocio-2", name: "Ana", lastName: "Pérez", email: "ana@otro.com", phone: null, tags: ["vip"], notes: null, whatsappConsentAt: null, createdAt: creadoEl(1) },
+  { id: "cliente-ajeno", businessId: "negocio-2", name: "Ana", lastName: "Pérez", email: "ana@otro.com", phone: null, tags: ["vip"], notes: null, whatsappConsentAt: null, correoPromoConsentAt: null, createdAt: creadoEl(1) },
   /** Un negocio con sesenta clientes, para probar la paginación contra el tope de 50. */
   ...Array.from({ length: 60 }, (_, i) => ({
     id: `cliente-grande-${i + 1}`,
@@ -82,6 +82,7 @@ const clientesFake: Registro[] = [
     tags: [],
     notes: null,
     whatsappConsentAt: null,
+    correoPromoConsentAt: null,
     createdAt: creadoEl(i + 1),
   })),
 ]
@@ -895,4 +896,33 @@ describe("POST /api/clientes — teléfono en E.164 y consentimiento de WhatsApp
     expect(data.whatsappConsentSource).toBe("panel")
     expect((data.whatsappConsentAt as Date).getFullYear()).toBeGreaterThan(2020)
   })
+
+  it("el consentimiento promocional por correo, marcado, registra cuándo y que fue desde el panel; sin marcar, no hay", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    await POST(fakePost({ name: "Ana", correoPromoConsent: true, correoPromoConsentSource: "reserva-publica" }))
+    const marcado = prismaMock.customer.create.mock.calls[0][0].data
+    expect(marcado.correoPromoConsentSource).toBe("panel")
+    expect(marcado.correoPromoConsentAt).toBeInstanceOf(Date)
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    await POST(fakePost({ name: "Beto", correoPromoConsent: false }))
+    const sinMarcar = prismaMock.customer.create.mock.calls[1][0].data
+    expect(sinMarcar.correoPromoConsentAt).toBeUndefined()
+    expect(sinMarcar.correoPromoConsentSource).toBeUndefined()
+  })
+
+  it("la profesional crea clientes, pero no con el consentimiento promocional: 401 y no crea nada", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce({
+      user: { id: "u-carla", role: "worker", businessId: "negocio-1", businessName: "Salón", memberId: "m-carla" },
+    })
+
+    const res = await POST(fakePost({ name: "Ana", correoPromoConsent: true }))
+
+    expect(res.status).toBe(401)
+    expect(prismaMock.customer.create).not.toHaveBeenCalled()
+  })
 })
+
