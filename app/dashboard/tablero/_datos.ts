@@ -319,6 +319,18 @@ export async function cobrarAtencion(
 }
 
 /**
+ * Antes de cobrar (#118): los ids de las líneas que quedarían sin % de
+ * comisión si se cobrara ahora. Sólo para avisar; el cobro no se frena.
+ */
+export async function leerLineasSinPorcentaje(id: string): Promise<Resultado<string[]>> {
+  const resultado = await pedir<{ lineasSinPorcentaje: string[] }>(
+    `${urlDeAtencion(id)}/cobro`,
+    "No se pudo saber qué servicios quedarán sin porcentaje de comisión"
+  )
+  return resultado.ok ? { ok: true, datos: resultado.datos.lineasSinPorcentaje } : resultado
+}
+
+/**
  * Anula la atención. Queda en el historial como anulada y deja de sumar. Si
  * ya se rindió (liquidación o cierre de caja), el servidor lo dice con un
  * código, no con el texto (#117).

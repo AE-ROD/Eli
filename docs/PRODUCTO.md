@@ -344,7 +344,7 @@ Una **atención** es la visita de un cliente al local, con o sin reserva. El tab
 
 **Productos.** Además de servicios, una atención puede llevar productos del catálogo (un shampoo, una cera), a nombre de quien los vendió. Sin inventario ni cantidad: dos unidades son dos líneas. Un producto inactivo no se agrega. Cuentan para el total y para el tope de 20 líneas. La página pública y la agenda no los muestran.
 
-**La comisión se calcula al cobrar.** Cada línea guarda su % y su monto (sección 3.3). Una línea sin % no frena el cobro: queda pendiente y se avisa "… sin porcentaje de comisión: avísale a la dueña".
+**La comisión se calcula al cobrar.** Cada línea guarda su % y su monto (sección 3.3). Una línea sin % no frena el cobro: queda pendiente. Se avisa antes de cobrar (en el cobro, las líneas que quedarán sin % llevan "Sin %" y un aviso dice cuántas) y otra vez después ("… sin porcentaje de comisión: avísale a la dueña").
 
 **Propinas.** Se anotan al cobrar, hasta 5 por cobro, para quien atendió. No suman al total ni a los ingresos (los pagos siguen sumando exactamente el total). Van completas al profesional y se le pagan en la liquidación; la de la dueña no entra a ninguna.
 
