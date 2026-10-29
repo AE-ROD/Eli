@@ -7,7 +7,6 @@ import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { Selector } from "@/components/comunes/selector"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { Aviso } from "@/components/panel/aviso"
-import { comoTexto } from "@/lib/fechas"
 import type { Advertencia } from "@/lib/mover-cita"
 import {
   leerProfesionales,
@@ -17,12 +16,8 @@ import {
   type DatosDeMoverCita,
   type Profesional,
 } from "../_datos"
-
-/** `09:05`, en la hora local, como lo entrega un `<input type="time">`. */
-function horaLocal(iso: string): string {
-  const fecha = new Date(iso)
-  return `${String(fecha.getHours()).padStart(2, "0")}:${String(fecha.getMinutes()).padStart(2, "0")}`
-}
+import { fechaEn, horaEn } from "../_hora-del-negocio"
+import { useZonaDelNegocio } from "./zona-del-negocio"
 
 interface PropsDeModalMoverCita {
   cita: Cita
@@ -40,10 +35,12 @@ interface PropsDeModalMoverCita {
  * de antes.
  */
 export function ModalMoverCita({ cita, puedeAsignarProfesional, onMovida, onCerrar }: PropsDeModalMoverCita) {
+  // Fecha y horas en la zona del negocio, como se muestran y se guardan (#99).
+  const zona = useZonaDelNegocio()
   const [form, setForm] = useState<DatosDeMoverCita>(() => ({
-    fecha: comoTexto(new Date(cita.startTime)),
-    horaInicio: horaLocal(cita.startTime),
-    horaFin: horaLocal(cita.endTime),
+    fecha: fechaEn(cita.startTime, zona),
+    horaInicio: horaEn(cita.startTime, zona),
+    horaFin: horaEn(cita.endTime, zona),
     memberId: cita.memberId ?? "",
   }))
   const [guardando, setGuardando] = useState(false)
@@ -69,7 +66,7 @@ export function ModalMoverCita({ cita, puedeAsignarProfesional, onMovida, onCerr
   const guardar = async (confirmar: boolean) => {
     setError("")
     setGuardando(true)
-    const resultado = await moverCita(cita.id, form, {
+    const resultado = await moverCita(cita.id, form, zona, {
       confirmar,
       // Si el equipo no cargó, no se manda el profesional: se deja el que tenía.
       asignaProfesional: puedeAsignarProfesional && profesionales.length > 0,

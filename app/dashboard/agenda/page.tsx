@@ -32,6 +32,8 @@ import { ModalMoverCita } from "./_componentes/modal-mover-cita"
 import { ModalBloquearHorario } from "./_componentes/modal-bloquear-horario"
 import { ModalBloqueo } from "./_componentes/modal-bloqueo"
 import { ListaDeEsperaDelDia } from "./_componentes/lista-de-espera-del-dia"
+import { useZonaDelNegocio } from "./_componentes/zona-del-negocio"
+import { hoyEn } from "./_hora-del-negocio"
 
 function resumen(cargando: boolean, cantidad: number): string {
   if (cargando) return "Cargando..."
@@ -49,7 +51,9 @@ export default function PaginaAgenda() {
   const miembroPropio = actor?.memberId ? { id: actor.memberId, businessId: actor.businessId } : null
   const puedeBloquear = bloqueaATodos || puedeGestionarBloqueoDe(actor, miembroPropio)
 
-  const [fecha, setFecha] = useState(new Date())
+  // "Hoy" es el del negocio, no el del navegador (#99).
+  const zona = useZonaDelNegocio()
+  const [fecha, setFecha] = useState(() => hoyEn(zona))
   const [modo, setModo] = useState<UnidadDeTiempo>("semana")
   const [citas, setCitas] = useState<Cita[]>([])
   const [cargando, setCargando] = useState(true)
@@ -59,7 +63,7 @@ export default function PaginaAgenda() {
   const [modalAbierto, setModalAbierto] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [avisoDelModal, setAvisoDelModal] = useState("")
-  const [nuevaCita, setNuevaCita] = useState<DatosDeNuevaCita>(() => citaEnBlanco(new Date()))
+  const [nuevaCita, setNuevaCita] = useState<DatosDeNuevaCita>(() => citaEnBlanco(hoyEn(zona)))
   const [citaAMover, setCitaAMover] = useState<Cita | null>(null)
   const [horario, setHorario] = useState<FranjaDelDia[]>([])
   const [bloqueos, setBloqueos] = useState<Bloqueo[]>([])
@@ -127,7 +131,7 @@ export default function PaginaAgenda() {
 
     setAvisoDelModal("")
     setGuardando(true)
-    const resultado = await crearCita(nuevaCita, { confirmar })
+    const resultado = await crearCita(nuevaCita, zona, { confirmar })
     setGuardando(false)
 
     // El aviso va dentro del modal, que sigue abierto con lo que se cargó: en
@@ -177,7 +181,7 @@ export default function PaginaAgenda() {
               idDelTitulo={idDelPeriodo}
               onAnterior={() => setFecha((actual) => desplazarFecha(actual, modo, -1))}
               onSiguiente={() => setFecha((actual) => desplazarFecha(actual, modo, 1))}
-              onHoy={() => setFecha(new Date())}
+              onHoy={() => setFecha(hoyEn(zona))}
               onVista={setModo}
             />
 

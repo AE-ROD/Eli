@@ -1,9 +1,11 @@
 "use client"
 
-import { esHoy, diaParaLeer } from "@/lib/fechas"
+import { diaParaLeer } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
 import { diasSemana } from "./controles-de-agenda"
 import type { Cita } from "../_datos"
+import { caeEnElDia, esHoyEn } from "../_hora-del-negocio"
+import { useZonaDelNegocio } from "./zona-del-negocio"
 
 const cuantasCitas = (cantidad: number) => (cantidad === 1 ? "1 cita" : `${cantidad} citas`)
 
@@ -25,6 +27,8 @@ interface PropsDeVistaMes {
  * hoy, en el azul de la Agenda.
  */
 export function VistaMes({ fechaActual, citas, onElegirDia }: PropsDeVistaMes) {
+  // Qué día es cada cita y cuál es hoy, en la zona del negocio (#99).
+  const zona = useZonaDelNegocio()
   const primerDia = new Date(fechaActual.getFullYear(), fechaActual.getMonth(), 1)
   // Cuántas celdas de la grilla quedan antes del día 1: la semana empieza en domingo.
   const celdasAntesDelPrimero = primerDia.getDay()
@@ -51,8 +55,8 @@ export function VistaMes({ fechaActual, citas, onElegirDia }: PropsDeVistaMes) {
           // Las celdas de otros meses guardan su lugar: la grilla tiene siempre seis filas y no salta.
           if (!esDelMes) return <span key={i} aria-hidden="true" className="min-h-11 @lg:min-h-24" />
 
-          const citasDelDia = citas.filter((cita) => new Date(cita.startTime).toDateString() === fecha.toDateString())
-          const hoy = esHoy(fecha)
+          const citasDelDia = citas.filter((cita) => caeEnElDia(cita.startTime, fecha, zona))
+          const hoy = esHoyEn(fecha, zona)
 
           return (
             <button

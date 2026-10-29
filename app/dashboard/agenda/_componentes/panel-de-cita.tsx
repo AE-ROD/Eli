@@ -9,7 +9,7 @@ import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { formatearMonto } from "@/lib/dinero"
-import { formatearHora, duracionParaMostrar } from "@/lib/fechas"
+import { duracionParaMostrar } from "@/lib/fechas"
 import { sePuedeMover, type Advertencia } from "@/lib/mover-cita"
 import { puedeMarcarseNoVino } from "@/lib/campos-del-panel"
 import { actorDeSesion, puedeReactivarCita, puedeResolverPorConfirmar } from "@/lib/permisos"
@@ -19,14 +19,11 @@ import { cn } from "@/lib/utils"
 import { citaPorConfirmar, nombreDeCliente, type Cita } from "../_datos"
 import { estiloDeEstado } from "./estados-de-cita"
 import { useAhora } from "./usar-ahora"
+import { useZonaDelNegocio } from "./zona-del-negocio"
+import { diaLargoEn, horaEn } from "../_hora-del-negocio"
 
 /** Un fundido corto al abrir y al cerrar: el panel no se desliza. */
 const FUNDIDO = { duration: DURACION.sombra, ease: CURVA.suave }
-
-/** `lunes, 8 de marzo`: el día de la cita, sin la hora. */
-function formatearFecha(iso: string) {
-  return new Date(iso).toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
-}
 
 interface PropsDePanelDeCita {
   cita: Cita
@@ -72,6 +69,8 @@ async function reactivar(id: string, confirmar: boolean) {
  */
 export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover, onReactivada }: PropsDePanelDeCita) {
   const { data: sesion } = useSession()
+  // El día y las horas de la cita, en la zona del negocio (#99).
+  const zona = useZonaDelNegocio()
   const reactiva = puedeReactivarCita(actorDeSesion(sesion))
   // Por confirmar tras faltas (#84): la confirman o la cancelan dueña y
   // encargado. Al profesional el servidor le responde 401 a cualquier cambio
@@ -192,11 +191,11 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover, onReacti
         <dl className="mt-4 divide-y divide-borde border-t border-borde text-sm">
           <Dato termino="Fecha">
             {/* `first-letter` y no `capitalize`, que ponía mayúscula en cada palabra. */}
-            <span className="block first-letter:uppercase">{formatearFecha(cita.startTime)}</span>
+            <span className="block first-letter:uppercase">{diaLargoEn(cita.startTime, zona)}</span>
           </Dato>
           <Dato termino="Horario">
             <span className="tabular-nums">
-              {formatearHora(cita.startTime)} – {formatearHora(cita.endTime)}
+              {horaEn(cita.startTime, zona)} – {horaEn(cita.endTime, zona)}
             </span>
           </Dato>
           <Dato termino="Duración">{duracion} minutos</Dato>

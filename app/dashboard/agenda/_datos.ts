@@ -14,6 +14,7 @@ import { pedir, pedirConCuerpo, conJson, type Resultado } from "@/lib/peticiones
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import type { Advertencia } from "@/lib/mover-cita"
 import { estaPorConfirmar } from "@/lib/por-confirmar"
+import { isoEn } from "./_hora-del-negocio"
 
 export interface Cita {
   id: string
@@ -144,7 +145,7 @@ export function precioDeLaCita(texto: string): Resultado<number | undefined> {
     : { ok: true, datos: precio }
 }
 
-/** A dónde se mueve una cita: fecha y horas locales, y el profesional (vacío: sin asignar). */
+/** A dónde se mueve una cita: fecha y horas del negocio, y el profesional (vacío: sin asignar). */
 export interface DatosDeMoverCita {
   fecha: string
   horaInicio: string
@@ -173,23 +174,26 @@ function sonAdvertencias(valor: unknown): valor is Advertencia[] {
   )
 }
 
+/**
+ * `zona`: la del negocio (#99). Las horas que se escriben son las del
+ * negocio, no las del navegador de quien agenda.
+ */
 export async function moverCita(
   id: string,
   datos: DatosDeMoverCita,
+  zona: string,
   opciones: { confirmar: boolean; asignaProfesional: boolean }
 ): Promise<ResultadoDeMover> {
-  const inicio = new Date(`${datos.fecha}T${datos.horaInicio}:00`)
-  const fin = new Date(`${datos.fecha}T${datos.horaFin}:00`)
-  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) {
-    return { tipo: "error", error: "La fecha o la hora no son válidas" }
-  }
+  const inicio = isoEn(datos.fecha, datos.horaInicio, zona)
+  const fin = isoEn(datos.fecha, datos.horaFin, zona)
+  if (!inicio || !fin) return { tipo: "error", error: "La fecha o la hora no son válidas" }
 
   const resultado = await pedirConCuerpo(
     `/api/citas/${id}`,
     "No se pudo mover la cita",
     conJson("PUT", {
-      startTime: inicio.toISOString(),
-      endTime: fin.toISOString(),
+      startTime: inicio,
+      endTime: fin,
       // Sólo quien puede asignar manda el profesional; al otro el servidor lo
       // dejaría igual en sí mismo.
       ...(opciones.asignaProfesional && { memberId: datos.memberId || null }),
@@ -223,24 +227,24 @@ export async function leerHorarioDeAtencion(): Promise<Resultado<FranjaDelDia[]>
  */
 export async function crearCita(
   datos: DatosDeNuevaCita,
+  zona: string,
   opciones: { confirmar: boolean } = { confirmar: false }
 ): Promise<ResultadoConAdvertencias> {
   const precio = precioDeLaCita(datos.precio)
   if (!precio.ok) return { tipo: "error", error: precio.error }
 
-  const inicio = new Date(`${datos.fecha}T${datos.horaInicio}:00`)
-  const fin = new Date(`${datos.fecha}T${datos.horaFin}:00`)
-  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) {
-    return { tipo: "error", error: "La fecha o la hora no son válidas" }
-  }
+  // En la hora del negocio, no en la del navegador (#99).
+  const inicio = isoEn(datos.fecha, datos.horaInicio, zona)
+  const fin = isoEn(datos.fecha, datos.horaFin, zona)
+  if (!inicio || !fin) return { tipo: "error", error: "La fecha o la hora no son válidas" }
 
   const resultado = await pedirConCuerpo(
     "/api/citas",
     "No se pudo crear la cita",
     conJson("POST", {
       title: datos.servicio,
-      startTime: inicio.toISOString(),
-      endTime: fin.toISOString(),
+      startTime: inicio,
+      endTime: fin,
       customerId: datos.clienteId,
       price: precio.datos,
       notes: datos.notas || undefined,
@@ -279,7 +283,7 @@ export async function leerBloqueos(fecha: Date, modo: UnidadDeTiempo): Promise<R
   return pedir<Bloqueo[]>(`/api/bloqueos?${diasVisibles(fecha, modo)}`, "No se pudieron cargar los bloqueos")
 }
 
-/** El borrador de un bloqueo: de quién (vacío: todo el negocio), desde y hasta en hora local, y el motivo. */
+/** El borrador de un bloqueo: de quién (vacío: todo el negocio), desde y hasta en hora del negocio, y el motivo. */
 export interface DatosDeNuevoBloqueo {
   memberId: string
   fechaDesde: string
@@ -295,21 +299,20 @@ export function bloqueoEnBlanco(dia: Date, memberId: string): DatosDeNuevoBloque
   return { memberId, fechaDesde: fecha, horaDesde: "13:00", fechaHasta: fecha, horaHasta: "14:00", motivo: "" }
 }
 
-export async function crearBloqueo(datos: DatosDeNuevoBloqueo): Promise<Resultado> {
-  const inicio = new Date(`${datos.fechaDesde}T${datos.horaDesde}:00`)
-  const fin = new Date(`${datos.fechaHasta}T${datos.horaHasta}:00`)
-  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) {
-    return { ok: false, error: "La fecha o la hora no son válidas" }
-  }
-  if (fin <= inicio) return { ok: false, error: "El bloqueo tiene que terminar después de empezar" }
+/** `zona`: la del negocio (#99); el bloqueo se escribe en su hora, como las citas. */
+export async function crearBloqueo(datos: DatosDeNuevoBloqueo, zona: string): Promise<Resultado> {
+  const inicio = isoEn(datos.fechaDesde, datos.horaDesde, zona)
+  const fin = isoEn(datos.fechaHasta, datos.horaHasta, zona)
+  if (!inicio || !fin) return { ok: false, error: "La fecha o la hora no son válidas" }
+  if (new Date(fin) <= new Date(inicio)) return { ok: false, error: "El bloqueo tiene que terminar después de empezar" }
 
   return pedir(
     "/api/bloqueos",
     "No se pudo bloquear el horario",
     conJson("POST", {
       memberId: datos.memberId || null,
-      startTime: inicio.toISOString(),
-      endTime: fin.toISOString(),
+      startTime: inicio,
+      endTime: fin,
       ...(datos.motivo.trim() && { motivo: datos.motivo.trim() }),
     })
   )
