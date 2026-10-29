@@ -43,7 +43,7 @@ Booksy, Fresha, Calendly y Agenda Pro compiten en **agendar**. Ninguna resuelve 
 
 En salones, barberías y spas de uñas, quien atiende se lleva un porcentaje del servicio y el negocio retiene el resto. Hoy eso se hace con planilla, calculadora o memoria — y a fin de mes genera discusiones, errores y desconfianza.
 
-**Eli lo resuelve dentro del mismo sistema donde ya vive la cita.** No hay que exportar nada ni recalcular a mano: si la cita se completó, la comisión ya está calculada.
+**Eli lo resuelve dentro del mismo sistema donde ya vive la cita.** No hay que exportar nada ni recalcular a mano: al cobrar la atención, la comisión de cada línea queda calculada y congelada (sección 3.3). Si a esa línea le falta el %, queda pendiente, nunca en cero, y se congela al cerrar la liquidación (3.7).
 
 **Esto no es una función más: es el centro del producto.** Y eso fija el estándar — no alcanza con configurar un porcentaje. Hay que cubrir el ciclo completo:
 
