@@ -17,6 +17,7 @@ import { generarToken } from "@/lib/tokens"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { datosDeConsentimientoPromocional } from "@/lib/envios-a-clientes"
 import { marcarReservo } from "@/lib/lista-de-espera"
+import { existeLaHora, instanteEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 import {
   MAX_RESERVAS_FUTURAS_POR_CONTACTO,
   MAX_RESERVAS_PUBLICAS_POR_DIA,
@@ -227,7 +228,6 @@ async function reservar(
 
   return { tipo: "creada", cita }
 }
-import { existeLaHora, instanteEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 
 export async function POST(
   request: NextRequest,
