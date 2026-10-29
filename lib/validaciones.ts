@@ -139,3 +139,13 @@ export const restablecerContrasenaSchema = z.object({
   token: z.string().min(1),
   contrasena: contrasenaNuevaSchema,
 })
+
+/**
+ * Anotarse en la fila virtual (#85): el nombre, obligatorio, como se lo dice
+ * la persona al local ("Juan Pérez"), y el correo, opcional, sólo para el
+ * aviso "ya casi es tu turno". Vacío es "sin correo".
+ */
+export const filaVirtualSchema = z.object({
+  nombre: nombreSchema("nombre"),
+  email: z.preprocess((valor) => (valor === "" || valor === null ? undefined : valor), emailSchema.optional()),
+})

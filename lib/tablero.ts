@@ -102,7 +102,8 @@ export function leerRango(searchParams: URLSearchParams, maximoMs: number, cuant
 export function buscarAtencion(actor: Actor, id: string) {
   return prisma.visit.findFirst({
     where: whereDeAtenciones(actor, { id }),
-    select: { id: true, businessId: true, status: true, appointmentId: true, startedAt: true },
+    // `origen`: si deja de esperar alguien de la fila virtual, se avisa al que sigue (#85).
+    select: { id: true, businessId: true, status: true, appointmentId: true, startedAt: true, origen: true },
   })
 }
 
@@ -213,6 +214,8 @@ export function seleccionDeAtencion(actor: Actor) {
     paidAt: true,
     voidedAt: true,
     voidReason: true,
+    // El número de turno de quien se anotó en la fila virtual (#85); null si no.
+    filaNumero: true,
     totalCents: puedeVerTodoElTablero(actor),
     services: lineasQueVe(actor),
     payments: pagosQueVe(actor),
@@ -495,6 +498,7 @@ export function formatearAtencion(actor: Actor, atencion: AtencionLeida) {
     cobradaEn: atencion.paidAt,
     anuladaEn: atencion.voidedAt,
     motivoDeAnulacion: atencion.voidReason,
+    turno: atencion.filaNumero,
     lineas: atencion.services.map((linea) => ({ ...formatearLinea(linea), comision: comisionDeLinea(actor, linea) })),
   }
 

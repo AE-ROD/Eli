@@ -211,6 +211,7 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 - Página pública de reservas
 - Recordatorios automáticos por correo: uno por cita, el día anterior en la zona del negocio (abajo)
 - **Avisos a clientes por correo:** lista de espera, "Te toca volver" y pedir reseña en Google, más la lista de clientes que se están yendo para escribirles a mano (abajo, "Mensajes a clientes")
+- **Fila virtual** para atender por orden de llegada: el cliente se anota desde el celular y el local la muestra en una pantalla (sección 7, "Fila virtual")
 
 **No entra:**
 - Cobro online al cliente final
@@ -375,6 +376,18 @@ Una **atención** es la visita de un cliente al local, con o sin reserva. El tab
 | Ver las anuladas | ✅ | ✅ | ❌ |
 | Registrar propinas | ✅ | ✅ | ❌ |
 | Cerrar la caja y ver los cierres | ✅ | ✅ | ❌ |
+
+### Fila virtual
+
+Para los locales que atienden por orden de llegada (barberías, sobre todo). El cliente se anota desde su celular, espera donde quiera y vuelve cuando le toca.
+
+- **Quién la enciende.** Sólo la dueña, en Configuración › Fila virtual: encendida o apagada (viene apagada) y el **máximo de personas esperando** a la vez, de 1 a 100 (viene en 15). Ahí mismo ve el enlace para anotarse. Apagarla no saca a nadie: quienes ya esperan siguen en el Tablero; sólo impide que se anoten más.
+- **Cómo se anota el cliente.** En `/fila/<su-página>` (el enlace o el QR de la pantalla del local) escribe su nombre y, si quiere, su correo. Sólo mientras el local está abierto según su horario de atención y su zona horaria; fuera de horario la página lo dice. Si ya hay tantas personas esperando como el máximo, la fila está "llena por ahora". Con la fila apagada, la página no existe. Toma el número siguiente del día (1, 2, 3…; cada día empieza en 1 y un número nunca se repite, aunque alguien haya salido).
+- **Qué ve en el celular.** Su número en grande, cuántas personas tiene adelante y un tiempo estimado, que se actualizan solos cada 20 segundos. La estimación es personas adelante × la duración promedio de los servicios activos del negocio (entre 5 y 120 minutos por persona; 20 si no hay servicios), redondeada a 5 minutos: es una cota gruesa, no cuenta que varios profesionales atienden a la vez. No ve nombres ni datos de nadie más. Puede **salir de la fila**: su atención queda anulada. Cuando lo empiezan a atender, la página dice "Es tu turno". El enlace es personal (lleva un código que sólo existe en ese enlace).
+- **En el Tablero.** Quien se anota entra en "En espera" como cualquier llegada sin reserva, con su número ("Turno 7"). Se atiende, se cobra o se anula igual que las demás (anular a quien no vino es "se fue sin ser atendido").
+- **Pantalla del local.** Dueña y encargado la abren desde el Tablero ("Pantalla de la fila", cuando está encendida). Es para un televisor o una tablet: tapa el panel, tiene botón de pantalla completa y se actualiza sola cada 15 segundos. Muestra quién se está atendiendo y la fila de espera, con el número y el nombre con la inicial del apellido ("Juan P."), nunca el correo ni el teléfono, y en grande el QR y el enlace para anotarse. El profesional no la ve.
+- **Aviso "ya casi es tu turno".** A quien dejó su correo le llega un correo una sola vez, cuando queda con una persona adelante (o con ninguna, si salieron dos a la vez). Sale cuando alguien de la fila deja de esperar: pasa a atención, sale o lo anulan. Es de servicio (lo pidió al anotarse) y no trae enlace a su turno: Eli no guarda el código del enlace, sólo una huella. Si el envío falla, se reintenta en el siguiente movimiento de la fila.
+- **Límites.** Desde una misma conexión, 5 anotaciones por hora; por negocio, 60 por hora. Mirar el turno, unas 4 consultas por minuto por enlace.
 
 ### Cierre de caja
 

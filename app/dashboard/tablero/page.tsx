@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { AnimatePresence } from "framer-motion"
-import { CircleAlert, RefreshCw, UserPlus } from "lucide-react"
+import Link from "next/link"
+import { CircleAlert, MonitorPlay, RefreshCw, UserPlus } from "lucide-react"
 import { BarraSuperior } from "@/components/panel/barra-superior"
-import { Boton } from "@/components/comunes/boton"
+import { Boton, clasesDeBoton } from "@/components/comunes/boton"
 import { ModalAnular } from "@/components/panel/modal-anular"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { esEstadoActivo, type EstadoActivo, type PagoPedido } from "@/lib/atenciones"
@@ -509,6 +510,17 @@ export default function PaginaTablero() {
       />
 
       <div className="space-y-4 px-4 pb-8 pt-4 sm:px-6 sm:pt-6">
+        {/* La fila virtual encendida (#85): su pantalla para el televisor o la tablet del local. */}
+        {listo && tablero.filaVirtual && (
+          <Link
+            href="/dashboard/fila"
+            className={clasesDeBoton({ variante: "secundario", tamano: "sm" })}
+          >
+            <MonitorPlay aria-hidden="true" className="size-4" strokeWidth={2} />
+            Pantalla de la fila
+          </Link>
+        )}
+
         {aviso && (
           <Aviso tono="error" rol="alert">
             {aviso}

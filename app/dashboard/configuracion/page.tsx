@@ -11,6 +11,7 @@ import { SelectorHorarioMiembro } from "./_componentes/selector-horario-miembro"
 import { SeccionPlazoDeCambios } from "./_componentes/seccion-plazo-de-cambios"
 import { SeccionPorConfirmar } from "./_componentes/seccion-por-confirmar"
 import { SeccionMensajesAClientes } from "./_componentes/seccion-mensajes-a-clientes"
+import { SeccionFilaVirtual } from "./_componentes/seccion-fila-virtual"
 import { contarEnviosDelMes } from "@/lib/envios-a-clientes"
 import { apareceEnLaPagina, colorDelNegocio, esEnlaceDeResenasValido, normalizarInstagram } from "@/lib/pagina-del-negocio"
 import {
@@ -206,6 +207,8 @@ export default async function PaginaConfiguracion() {
             />
           </div>
         )}
+
+        <SeccionFilaVirtual actor={actor} />
       </div>
     </div>
   )
