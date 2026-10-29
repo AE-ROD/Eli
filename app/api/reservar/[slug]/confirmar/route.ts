@@ -29,7 +29,6 @@ import {
   ORIGEN_RESERVA_PUBLICA,
   WHERE_RESERVA_PUBLICA,
   compartenContacto,
-  type Contacto,
   consentimientoSobreClienteExistente,
   esElMismoCliente,
   fechaNoReservable,
@@ -206,14 +205,17 @@ async function reservar(
     }
   }
 
-  // Reservas por confirmar (#84): con la regla encendida, si el contacto
-  // (email o teléfono, normalizados) llega a N faltas en este negocio en el
+  // Reservas por confirmar (#84): con la regla encendida, si el correo de
+  // quien reserva (normalizado) llega a N faltas en este negocio en el
   // último año, la cita nace marcada y el local la confirma o la cancela.
   // Quien reserva ve la misma respuesta que cualquiera: la marca sólo cambia
-  // el correo y el panel.
+  // el correo y el panel. Sólo por el correo, nunca por el teléfono: el
+  // correo de confirmación ("el local la confirmará") llega a esa misma
+  // casilla, así que no le revela nada a un tercero. Con el teléfono de otra
+  // persona y un correo propio, ese correo contaba si el teléfono faltó.
   const confirmacionPorFaltas =
     porConfirmarTrasFaltas !== null &&
-    (await faltasDelContacto(tx, { negocioId, contacto, ahora })) >= porConfirmarTrasFaltas
+    (await faltasDelCorreo(tx, { negocioId, email, ahora, umbral: porConfirmarTrasFaltas })) >= porConfirmarTrasFaltas
 
   const cita = await tx.appointment.create({
     data: {
@@ -244,28 +246,32 @@ async function reservar(
 }
 
 /**
- * Cuántas citas "no vino" tiene el contacto en este negocio en los últimos
- * `DIAS_EN_QUE_CUENTAN_LAS_FALTAS` días. Sólo las de este negocio y de
- * clientes no eliminados. El email y el teléfono guardados pueden estar
- * escritos de cualquier forma: se comparan normalizados acá, con la misma
- * regla que el tope por contacto (`compartenContacto`). Sólo se traen el
- * email y el teléfono. Sin email ni teléfono no hay a quién contarle faltas.
+ * Cuántas citas "no vino" tiene ese correo en este negocio en los últimos
+ * `DIAS_EN_QUE_CUENTAN_LAS_FALTAS` días, contando hasta `umbral`: sólo hace
+ * falta saber si llega. Sólo las de este negocio y de clientes no eliminados
+ * cuyo email es el mismo, sin mayúsculas (`emailSchema` ya guarda el email
+ * sin espacios en las puntas). El filtro va en la consulta y con `take`:
+ * dentro de la transacción `Serializable` no se traen todas las faltas del
+ * año. Sin correo no hay a quién contarle faltas.
  */
-async function faltasDelContacto(
+async function faltasDelCorreo(
   tx: Prisma.TransactionClient,
-  { negocioId, contacto, ahora }: { negocioId: string; contacto: Contacto; ahora: Date }
+  { negocioId, email, ahora, umbral }: { negocioId: string; email: string | null; ahora: Date; umbral: number }
 ): Promise<number> {
-  if (!normalizarEmail(contacto.email) && !normalizarTelefono(contacto.telefono)) return 0
+  if (!email) return 0
   const faltas = await tx.appointment.findMany({
     where: {
       businessId: negocioId,
       status: "no-asistio",
       startTime: { gte: new Date(ahora.getTime() - DIAS_EN_QUE_CUENTAN_LAS_FALTAS * MS_POR_DIA) },
-      customer: { AND: [{ businessId: negocioId }, clienteNoEliminado] },
+      customer: {
+        AND: [{ businessId: negocioId, email: { equals: email, mode: "insensitive" } }, clienteNoEliminado],
+      },
     },
-    select: { customer: { select: { email: true, phone: true } } },
+    select: { id: true },
+    take: umbral,
   })
-  return faltas.filter((falta) => falta.customer && compartenContacto(falta.customer, contacto)).length
+  return faltas.length
 }
 
 export async function POST(

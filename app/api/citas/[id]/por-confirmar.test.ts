@@ -114,6 +114,34 @@ describe("PUT /api/citas/[id]: una reserva por confirmar (#84)", () => {
     expect(mockAvisar).not.toHaveBeenCalled()
   })
 
+  it("dos 'Confirmar' a la vez: la cita queda confirmada y al cliente le llega UN correo", async () => {
+    const [una, otra] = await Promise.all([
+      cambiar(sesiones.dueña, "por-confirmar", { status: "confirmada" }),
+      cambiar(sesiones.encargado, "por-confirmar", { status: "confirmada" }),
+    ])
+    expect([una.status, otra.status]).toEqual([200, 200])
+    expect(estadoDe("por-confirmar")).toBe("confirmada")
+    expect(mockAvisar).toHaveBeenCalledTimes(1)
+  })
+
+  it("si otro la resolvió entre la lectura y la escritura: no se pisa ni se avisa", async () => {
+    const leida = base.buscar("appointment", { id: "por-confirmar" })[0]
+    // Ya la confirmó otro; esta petición la leyó todavía pendiente.
+    base.prisma.appointment.update({ where: { id: "por-confirmar" }, data: { status: "confirmada" } })
+    base.prisma.appointment.findFirst.mockResolvedValueOnce({ ...leida, status: "pendiente" })
+    const confirmar = await cambiar(sesiones.dueña, "por-confirmar", { status: "confirmada" })
+    expect(confirmar.status).toBe(200)
+    expect(confirmar.cuerpo.status).toBe("confirmada")
+    expect(mockAvisar).not.toHaveBeenCalled()
+
+    // Y si pedía cancelarla: 409, sigue confirmada.
+    base.prisma.appointment.findFirst.mockResolvedValueOnce({ ...leida, status: "pendiente" })
+    const cancelar = await cambiar(sesiones.encargado, "por-confirmar", { status: "cancelada" })
+    expect(cancelar.status).toBe(409)
+    expect(estadoDe("por-confirmar")).toBe("confirmada")
+    expect(mockAvisar).not.toHaveBeenCalled()
+  })
+
   it("una de otro negocio: 404 para el dueño ajeno y para la dueña", async () => {
     expect((await cambiar(sesiones.dueñoAjeno, "por-confirmar", { status: "confirmada" })).status).toBe(404)
     expect((await cambiar(sesiones.dueña, "ajena", { status: "confirmada" })).status).toBe(404)

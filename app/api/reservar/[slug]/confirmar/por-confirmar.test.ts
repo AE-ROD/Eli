@@ -85,13 +85,13 @@ function escenario({ umbral, clientes = [], citas = [] }: Escenario) {
   })
 }
 
-/** La que faltó: mismo correo, escrito distinto, y un teléfono con otro formato. */
+/** La que faltó: mismo correo, con otras mayúsculas, y un teléfono con otro formato. */
 const faltona = {
   id: "c-faltona",
   businessId: NEGOCIO,
   name: "Lucía",
   lastName: "Pérez",
-  email: "  LUCIA@correo.test ",
+  email: "LUCIA@Correo.test",
   phone: "9 8765 4321",
 }
 
@@ -173,12 +173,22 @@ describe("POST /api/reservar/[slug]/confirmar: reservas por confirmar tras falta
     expect(mockConfirmacion.mock.calls[0][0]).toMatchObject({ porConfirmar: false })
   })
 
-  it("cuenta por teléfono normalizado aunque el correo sea otro", async () => {
+  it("el teléfono de alguien con faltas y otro correo: cita sin marca y correo normal (no es un oráculo)", async () => {
+    escenario({ umbral: 1, clientes: [faltona], citas: [falta("c-faltona", 10), falta("c-faltona", 20)] })
+
+    await confirmar("10:00", { email: "atacante@correo.test", telefono: "+56987654321" })
+
+    expect(citaCreada().confirmacionPorFaltas).toBe(false)
+    expect(mockConfirmacion.mock.calls[0][0]).toMatchObject({ emailCliente: "atacante@correo.test", porConfirmar: false })
+    expect(mockAviso.mock.calls[0][0]).toMatchObject({ porConfirmar: false })
+  })
+
+  it("sólo con teléfono, aunque ese teléfono haya faltado, no hay correo al que contarle faltas", async () => {
     escenario({ umbral: 1, clientes: [faltona], citas: [falta("c-faltona", 10)] })
 
-    await confirmar("10:00", { email: "otra@correo.test", telefono: "+56987654321" })
+    await confirmar("10:00", { telefono: "+56987654321" })
 
-    expect(citaCreada().confirmacionPorFaltas).toBe(true)
+    expect(citaCreada().confirmacionPorFaltas).toBe(false)
   })
 
   it("sin correo ni teléfono no hay faltas que contar", async () => {
@@ -187,6 +197,20 @@ describe("POST /api/reservar/[slug]/confirmar: reservas por confirmar tras falta
     await confirmar("10:00", {})
 
     expect(citaCreada().confirmacionPorFaltas).toBe(false)
+  })
+
+  it("el conteo filtra por correo en la consulta y trae a lo más el umbral", async () => {
+    const muchas = Array.from({ length: 8 }, (_, i) => falta("c-faltona", 10 + i))
+    escenario({ umbral: 3, clientes: [faltona], citas: muchas })
+
+    await confirmar("10:00")
+
+    expect(citaCreada().confirmacionPorFaltas).toBe(true)
+    const consulta = base.prisma.appointment.findMany.mock.calls
+      .map(([args]) => args as { where?: { status?: unknown }; take?: number } | undefined)
+      .find((args) => args?.where?.status === "no-asistio")
+    expect(consulta?.take).toBe(3)
+    expect(JSON.stringify(consulta?.where)).toContain('"email":{"equals":"lucia@correo.test","mode":"insensitive"}')
   })
 
   it("sólo cuentan las faltas del último año (365 días)", async () => {

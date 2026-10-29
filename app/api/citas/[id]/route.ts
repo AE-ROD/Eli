@@ -251,12 +251,37 @@ export async function PUT(
       },
     } satisfies Prisma.AppointmentUpdateArgs
 
-    if (reactivacion.tipo !== "reactivar") {
-      const cita = await prisma.appointment.update(actualizacion)
+    // Resolver una por confirmar (#84) es condicional: sólo si sigue
+    // pendiente, en este negocio. Dos "Confirmar" a la vez pasaban los dos y
+    // al cliente le llegaban dos correos; ahora sólo el que la cambió avisa.
+    // El otro ve cómo quedó: si quedó como pedía, 200 sin otro correo; si
+    // otro la resolvió distinto, 409.
+    if (resuelvePorConfirmar && reactivacion.tipo !== "reactivar") {
+      const { count } = await prisma.appointment.updateMany({
+        where: { id: existente.id, businessId: actor.businessId, status: "pendiente", confirmacionPorFaltas: true },
+        data: actualizacion.data,
+      })
+      const cita = await prisma.appointment.findFirst({
+        where: { id: existente.id, businessId: actor.businessId },
+        include: actualizacion.include,
+      })
+      if (!cita) return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 })
+      if (count !== 1) {
+        if (cita.status === datos.status) return NextResponse.json(cita)
+        return NextResponse.json({ error: MENSAJE_CITA_CAMBIO }, { status: 409 })
+      }
       // Confirmada por el local: se le avisa al cliente, después de responder.
-      if (resuelvePorConfirmar && datos.status === "confirmada") {
+      if (datos.status === "confirmada") {
         avisarReservaConfirmadaPorElLocal({ businessId: actor.businessId, citaId: existente.id })
       }
+      if (!ocupaElHorario(cita.status) || seMueve) {
+        programarAvisoDeHoraLiberada({ businessId: actor.businessId, inicio: existente.startTime })
+      }
+      return NextResponse.json(cita)
+    }
+
+    if (reactivacion.tipo !== "reactivar") {
+      const cita = await prisma.appointment.update(actualizacion)
       // Si dejó libre su horario (se canceló, o se movió de hora o de
       // profesional), a la lista de espera de ese día, después de responder.
       const libera = datos.status !== undefined && !ocupaElHorario(datos.status)
