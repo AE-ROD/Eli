@@ -112,7 +112,17 @@ export function TarjetaDeAtencion({
     >
       <MomentoDeTarjeta iso={momento.iso}>{momento.texto}</MomentoDeTarjeta>
 
-      <NombreDeTarjeta id={idDelNombre}>{atencion.cliente.nombre}</NombreDeTarjeta>
+      <NombreDeTarjeta id={idDelNombre}>
+        {/* Quien se anotó en la fila virtual (#85) llega con su número: es el que ve en su celular y en la pantalla. */}
+        {atencion.turno !== null && atencion.turno !== undefined && (
+          <Insignia tono="azul" className="mr-1.5 h-5 px-2 align-middle tabular-nums">
+            <span className="sr-only">Fila virtual, turno </span>
+            <span aria-hidden="true">Turno </span>
+            {atencion.turno}
+          </Insignia>
+        )}
+        {atencion.cliente.nombre}
+      </NombreDeTarjeta>
 
       {atencion.lineas.length > 0 ? (
         <ul className="flex flex-col gap-1" aria-label="Servicios">

@@ -63,6 +63,8 @@ export interface Atencion {
   cobradaEn: string | null
   anuladaEn: string | null
   motivoDeAnulacion: string | null
+  /** El número de turno de quien se anotó en la fila virtual (#85); `null` si llegó por otro lado. */
+  turno: number | null
   /** Al profesional le llegan sólo las suyas. */
   lineas: LineaDeServicio[]
   /**
@@ -121,6 +123,8 @@ export interface Tablero {
   catalogo: Catalogo
   /** Había más atenciones de las que el servidor manda de una vez: algunas no se ven. */
   truncado: boolean
+  /** La fila virtual está encendida y quien mira puede abrir su pantalla (#85). */
+  filaVirtual?: boolean
 }
 
 /** Un cliente que coincide con lo que se escribe en el buscador. */

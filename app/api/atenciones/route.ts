@@ -15,6 +15,7 @@ import {
   actorDeSesion,
   puedeAnotarSinReserva,
   puedeAsignarLineasAOtros,
+  puedeVerPantallaDeFila,
   whereDeAgenda,
   whereDeAtenciones,
   whereDeProductos,
@@ -166,7 +167,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: rango.error }, { status: 400 })
   }
 
-  const [reservas, { atenciones, truncado }, servicios, productos, profesionales] = await Promise.all([
+  const [reservas, { atenciones, truncado }, servicios, productos, profesionales, negocio] = await Promise.all([
     buscarReservas(actor, rango.desde, rango.hasta),
     buscarAtenciones(actor, rango.desde, rango.hasta),
     prisma.service.findMany({
@@ -184,6 +185,11 @@ export async function GET(request: NextRequest) {
       take: 200,
     }),
     profesionalesAsignables(actor),
+    // Si la fila virtual está encendida (#85): el Tablero ofrece abrir su
+    // pantalla. Sólo a quien puede verla.
+    puedeVerPantallaDeFila(actor)
+      ? prisma.business.findUnique({ where: { id: actor.businessId }, select: { filaVirtualActiva: true } })
+      : Promise.resolve(null),
   ])
 
   return NextResponse.json({
@@ -210,6 +216,7 @@ export async function GET(request: NextRequest) {
       mediosDePago: MEDIOS_DE_PAGO,
     },
     truncado,
+    filaVirtual: negocio?.filaVirtualActiva === true,
   })
 }
 
