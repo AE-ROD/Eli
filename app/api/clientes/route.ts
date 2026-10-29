@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { emailOVacio, etiquetas, nombre, notas, telefonoChileno } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
-import { actorDeSesion, whereDeAgenda, whereDeAtenciones, whereDeClientes, type Actor } from "@/lib/permisos"
+import { actorDeSesion, puedeEditarConsentimientoPromocional, whereDeAgenda, whereDeAtenciones, whereDeClientes, type Actor } from "@/lib/permisos"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { datosDeConsentimientoPromocional } from "@/lib/envios-a-clientes"
 
@@ -192,6 +192,12 @@ export async function POST(request: NextRequest) {
   try {
     const cuerpo = await request.json()
     const datos = clienteSchema.parse(cuerpo)
+
+    // Cualquiera del equipo crea un cliente, pero el consentimiento promocional
+    // lo registra quien edita los datos del cliente. Falla cerrado.
+    if (datos.correoPromoConsent && !puedeEditarConsentimientoPromocional(actor)) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+    }
 
     const cliente = await prisma.customer.create({
       data: {

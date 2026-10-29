@@ -912,4 +912,17 @@ describe("POST /api/clientes — teléfono en E.164 y consentimiento de WhatsApp
     expect(sinMarcar.correoPromoConsentAt).toBeUndefined()
     expect(sinMarcar.correoPromoConsentSource).toBeUndefined()
   })
+
+  it("la profesional crea clientes, pero no con el consentimiento promocional: 401 y no crea nada", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce({
+      user: { id: "u-carla", role: "worker", businessId: "negocio-1", businessName: "Salón", memberId: "m-carla" },
+    })
+
+    const res = await POST(fakePost({ name: "Ana", correoPromoConsent: true }))
+
+    expect(res.status).toBe(401)
+    expect(prismaMock.customer.create).not.toHaveBeenCalled()
+  })
 })
+

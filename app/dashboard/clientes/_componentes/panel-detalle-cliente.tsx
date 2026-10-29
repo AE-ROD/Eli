@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef } from "react"
 import { motion } from "framer-motion"
-import { CalendarClock, CalendarDays, CalendarX, Clock, Mail, Pencil, Phone, Trash2, X } from "lucide-react"
+import { CalendarClock, CalendarDays, CalendarX, Clock, Mail, MailCheck, MailX, Pencil, Phone, Trash2, X } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
@@ -46,6 +46,8 @@ interface PropsDePanelDetalleCliente {
   cliente: ClienteEnTarjeta
   /** Sus últimas citas, de la más reciente a la más vieja. */
   citas: CitaDeCliente[]
+  /** Si tiene el consentimiento vigente para avisos y novedades por correo ("te toca", reseñas). */
+  avisosPorCorreo?: boolean
   notas: string
   guardandoNotas: boolean
   /**
@@ -80,6 +82,7 @@ interface PropsDePanelDetalleCliente {
 export function PanelDetalleCliente({
   cliente,
   citas,
+  avisosPorCorreo = false,
   notas,
   guardandoNotas,
   avisoDeNotas,
@@ -171,6 +174,16 @@ export function PanelDetalleCliente({
                 : cliente.inasistencias === 1
                   ? "1 vez no vino"
                   : `${cliente.inasistencias} veces no vino`}
+            </span>
+          </li>
+          <li className="flex items-start gap-3">
+            {avisosPorCorreo ? (
+              <MailCheck className="mt-0.5 size-4 shrink-0 text-texto-2" aria-hidden="true" strokeWidth={1.75} />
+            ) : (
+              <MailX className="mt-0.5 size-4 shrink-0 text-texto-2" aria-hidden="true" strokeWidth={1.75} />
+            )}
+            <span className={avisosPorCorreo ? undefined : "text-texto-2"}>
+              {avisosPorCorreo ? "Recibe avisos y novedades por correo" : "No recibe avisos ni novedades por correo"}
             </span>
           </li>
           <li className="flex items-start gap-3">

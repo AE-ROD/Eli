@@ -19,6 +19,14 @@ interface PropsDeModalNuevoCliente {
   aviso: string
   onCambiarCampo: (campo: "nombre" | "email" | "telefono", valor: string) => void
   onCambiarWhatsapp: (acepta: boolean) => void
+  /** Para la casilla de avisos por correo: "… de <negocio> por correo". */
+  nombreNegocio?: string
+  /**
+   * La casilla de avisos y novedades por correo (consentimiento promocional).
+   * Sin esto no se dibuja: la marca sólo quien edita los datos del cliente
+   * (`puedeEditarConsentimientoPromocional`).
+   */
+  onCambiarCorreoPromo?: (acepta: boolean) => void
   onSubmit: (e: React.SyntheticEvent<HTMLFormElement>) => void
   onCerrar: () => void
 }
@@ -37,6 +45,8 @@ export function ModalNuevoCliente({
   aviso,
   onCambiarCampo,
   onCambiarWhatsapp,
+  nombreNegocio = "",
+  onCambiarCorreoPromo,
   onSubmit,
   onCerrar,
 }: PropsDeModalNuevoCliente) {
@@ -80,6 +90,25 @@ export function ModalNuevoCliente({
           />
           <span>Acepta recibir mensajes por WhatsApp</span>
         </label>
+
+        {/*
+          Sin marcar por defecto (como en la reserva pública). Desmarcarla en
+          un cliente que la tenía es darlo de baja: deja de recibir "te toca"
+          y los pedidos de reseña.
+        */}
+        {onCambiarCorreoPromo && (
+          <label className="flex cursor-pointer items-start gap-3 text-sm text-navy">
+            <input
+              type="checkbox"
+              checked={form.aceptaCorreoPromo}
+              onChange={(e) => onCambiarCorreoPromo(e.target.checked)}
+              className="anillo-foco mt-0.5 size-4 shrink-0 cursor-pointer accent-navy"
+            />
+            <span>
+              Quiere recibir avisos y novedades{nombreNegocio.trim() ? ` de ${nombreNegocio.trim()}` : ""} por correo
+            </span>
+          </label>
+        )}
 
         {aviso && <Aviso>{aviso}</Aviso>}
 
