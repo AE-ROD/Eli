@@ -299,6 +299,16 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 - La lista de espera sigue siendo de un servicio: con varios elegidos, se anota el primero.
 - Las citas del panel siguen con un servicio escrito a mano; elegir varios del catálogo desde el panel queda pendiente.
 
+### Precios de hora valle
+
+- **Qué es:** una opción del negocio para llenar las horas tranquilas: un **% de rebaja** por día de la semana y franja horaria (por ejemplo, martes de 10:00 a 12:00, 15% menos), para todo el negocio. **Viene apagada**; apagada, nada cambia.
+- **Configurar:** Configuración → "Precios de hora valle". Sólo la dueña (el encargado y el profesional no la ven; el servidor les responde 401). Enciende o apaga la opción, arma las franjas (de 5% a 90%, hasta 21, sin que se pisen dos del mismo día) y marca los **servicios sin rebaja**, que cuestan lo mismo a cualquier hora.
+- **Cuándo aplica:** si la cita **empieza** dentro de la franja, en el reloj del negocio (la hora de inicio cuenta; no importa a qué hora termine). Si dos franjas aplican, manda la de mayor %. Con varios servicios, se rebaja cada uno que no esté excluido ni sin precio.
+- **Redondeo:** cada servicio rebajado se redondea al peso (la mitad hacia arriba) y el total es la suma de esos precios, así la cita y sus servicios suman lo mismo.
+- **En la página de reservas:** las horas valle muestran su precio y el % ("$6.400 −20%"); el resumen muestra el precio normal tachado y el rebajado. La mini página dice "Precios más bajos en horas valle" (sin listar las franjas). El precio lo vuelve a calcular Eli al confirmar, nunca con lo que manda el navegador, y la cita guarda el precio ya rebajado.
+- **Al reagendar por el enlace:** si la hora nueva tiene otro % que la de antes (de normal a valle o al revés), el precio se recalcula con el catálogo de hoy y la pantalla lo muestra antes de confirmar el cambio. Si el % es el mismo (siempre, con la opción apagada), la cita conserva su precio.
+- **Citas del panel:** no se rebajan solas; el precio lo pone quien la anota.
+
 ### Cancelar o reagendar sin cuenta
 
 - El correo de confirmación trae "Cancelar o cambiar mi cita" (y la pantalla de reserva confirmada, el mismo enlace, para quien no dejó correo). Abre una página con la cita: negocio, servicio, profesional, día y hora en la zona del negocio.

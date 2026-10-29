@@ -10,6 +10,7 @@ import { SeccionProductos } from "./_componentes/seccion-productos"
 import { SelectorHorarioMiembro } from "./_componentes/selector-horario-miembro"
 import { SeccionPlazoDeCambios } from "./_componentes/seccion-plazo-de-cambios"
 import { SeccionPorConfirmar } from "./_componentes/seccion-por-confirmar"
+import { SeccionHoraValle } from "./_componentes/seccion-hora-valle"
 import { SeccionMensajesAClientes } from "./_componentes/seccion-mensajes-a-clientes"
 import { SeccionFilaVirtual } from "./_componentes/seccion-fila-virtual"
 import { contarEnviosDelMes } from "@/lib/envios-a-clientes"
@@ -190,6 +191,7 @@ export default async function PaginaConfiguracion() {
           <SeccionPlazoDeCambios horasIniciales={pagina?.cancelacionHorasAntes ?? 24} />
         )}
         <SeccionPorConfirmar actor={actor} />
+        <SeccionHoraValle actor={actor} />
 
         {pagina && mensajesDelMes && (
           <div id="mensajes" className="scroll-mt-24">

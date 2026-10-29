@@ -59,6 +59,8 @@ export interface PaginaDelNegocio {
   horario: FranjaDelDia[]
   /** Hasta cuántas horas antes se puede cancelar o cambiar (`Business.cancelacionHorasAntes`), dicho antes de reservar (#83). */
   plazoDeCambiosHoras: number
+  /** Si hay precios de hora valle (#89c): encendida y con alguna franja. */
+  horaValle: boolean
 }
 
 const textoONull = (texto: string | null) => (texto ?? "").trim() || null
@@ -79,6 +81,9 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
       coverUrl: true,
       mediosDePago: true,
       cancelacionHorasAntes: true,
+      horaValleActiva: true,
+      // Basta saber si hay alguna: la página no lista las franjas.
+      franjasDeHoraValle: { select: { id: true }, take: 1 },
       members: {
         select: { id: true, role: true, especialidad: true, fotoUrl: true, user: { select: { name: true } } },
         orderBy: { createdAt: "asc" },
@@ -124,5 +129,6 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
     servicios: negocio.services,
     horario: horarioSemanalDeAtencion(negocio.workSchedules),
     plazoDeCambiosHoras: negocio.cancelacionHorasAntes,
+    horaValle: negocio.horaValleActiva && negocio.franjasDeHoraValle.length > 0,
   }
 })

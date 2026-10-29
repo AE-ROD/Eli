@@ -20,6 +20,7 @@ import { EncabezadoDeReserva } from "./encabezado-de-reserva"
 import { IndicadorDePasos, PASOS_DE_RESERVA } from "./indicador-de-pasos"
 import { AgregarAlCalendario } from "./agregar-al-calendario"
 import { InvitacionAEli } from "./pie-de-eli"
+import type { PrecioDeLaHora } from "@/lib/hora-valle"
 import { ResumenDeReserva } from "./resumen-de-reserva"
 import { SelectorServicio, type ServicioPublico } from "./selector-servicio"
 import { SelectorFechaHora, fechaParaLeer } from "./selector-fecha-hora"
@@ -117,6 +118,12 @@ export function FormularioReserva({
   const [enlaceDeGestion, setEnlaceDeGestion] = useState<string | null>(null)
   const [fecha, setFecha] = useState(conFechaDeLaUrl ? fechaDeLaUrl : "")
   const [hora, setHora] = useState("")
+  // Con hora valle (#89c), el precio de la hora elegida; `null` si es el de siempre.
+  const [precioDeLaHora, setPrecioDeLaHora] = useState<PrecioDeLaHora | null>(null)
+  const elegirHora = (nueva: string, precio: PrecioDeLaHora | null) => {
+    setHora(nueva)
+    setPrecioDeLaHora(precio)
+  }
   const [nombre, setNombre] = useState("")
   const [apellido, setApellido] = useState("")
   const [cedula, setCedula] = useState("")
@@ -170,7 +177,7 @@ export function FormularioReserva({
     // Si el profesional elegido no hace el que se suma, vuelve a "cualquiera".
     if (!yaEstaba && profesionalElegido && !haceElServicio(profesionalElegido, servicio.id)) setProfesionalId(null)
     // Otra combinación es otra duración: la hora elegida puede no caber.
-    setHora("")
+    elegirHora("", null)
   }
 
   const servicioIds = seleccionados.map((servicio) => servicio.id)
@@ -248,6 +255,7 @@ export function FormularioReserva({
             fecha={fecha}
             hora={hora}
             profesional={profesionalAsignado}
+            precioDeLaHora={precioDeLaHora}
             sinServicio
           />
           <AgregarAlCalendario
@@ -383,7 +391,7 @@ export function FormularioReserva({
                   fechaSeleccionada={fecha}
                   horaSeleccionada={hora}
                   onFecha={setFecha}
-                  onHora={setHora}
+                  onHora={elegirHora}
                   sinHoras={
                     listaDeEsperaActiva && servicioSeleccionado
                       ? (dia) => (
@@ -520,6 +528,7 @@ export function FormularioReserva({
                   servicio={servicioSeleccionado}
                   fecha={fecha}
                   hora={hora}
+                  precioDeLaHora={precioDeLaHora}
                   profesional={profesionalElegido?.nombre ?? (profesionalesDelServicio.length > 0 ? "Cualquiera disponible" : null)}
                 />
                 <p className="mt-4 border-t border-borde pt-3 text-sm text-texto-2">

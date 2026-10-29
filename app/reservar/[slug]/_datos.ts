@@ -10,7 +10,9 @@
  * horas libres y un pedido que no llegó no son lo mismo, y no deben verse igual.
  */
 
+import type { PrecioDeLaHora } from "@/lib/hora-valle"
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
+import type { HorasDelDia } from "./_componentes/selector-fecha-hora"
 
 /** Quien atiende, tal como lo muestra la página pública. `servicioIds` en null: hace todos. */
 export interface ProfesionalPublico {
@@ -54,21 +56,24 @@ export async function leerProfesionales(slug: string): Promise<Resultado<Profesi
 /**
  * Las horas de inicio libres (`HH:MM`) para esos servicios seguidos ese día,
  * con ese profesional o con cualquiera (`null`). El servidor calcula la
- * duración: acá sólo van los ids.
+ * duración: acá sólo van los ids. Con hora valle (#89c), las horas rebajadas
+ * traen su precio (`valle`); el que vale es el que calcula `confirmar`.
  */
 export async function leerDisponibilidad(
   slug: string,
   fecha: string,
   servicioIds: string[],
   profesionalId: string | null
-): Promise<Resultado<string[]>> {
+): Promise<Resultado<HorasDelDia>> {
   const consulta = new URLSearchParams({ fecha, servicioIds: servicioIds.join(",") })
   if (profesionalId) consulta.set("profesionalId", profesionalId)
-  const resultado = await pedir<{ slots: string[] }>(
+  const resultado = await pedir<{ slots: string[]; valle?: PrecioDeLaHora[] }>(
     `/api/reservar/${encodeURIComponent(slug)}/disponibilidad?${consulta}`,
     "No se pudieron cargar los horarios disponibles"
   )
-  return resultado.ok ? { ok: true, datos: resultado.datos.slots } : resultado
+  return resultado.ok
+    ? { ok: true, datos: { horas: resultado.datos.slots, precios: resultado.datos.valle ?? [] } }
+    : resultado
 }
 
 export interface ReservaConfirmada {

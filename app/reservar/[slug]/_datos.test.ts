@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { confirmarReserva, inscribirEnListaDeEspera, salirDeLaListaDeEspera } from "./_datos"
+import { confirmarReserva, inscribirEnListaDeEspera, leerDisponibilidad, salirDeLaListaDeEspera } from "./_datos"
 
 /** Lo que la página pública manda al servidor para los consentimientos y la lista de espera. */
 
@@ -47,6 +47,25 @@ describe("confirmarReserva", () => {
     expect(cuerpo()).not.toHaveProperty("servicioId")
     expect(cuerpo()).not.toHaveProperty("precio")
     expect(cuerpo()).not.toHaveProperty("duracion")
+  })
+})
+
+describe("leerDisponibilidad (#89c)", () => {
+  it("sin `valle` (apagada, o un servidor de antes): las horas y ningún precio", async () => {
+    mockFetch.mockResolvedValue(new Response(JSON.stringify({ slots: ["09:00", "10:00"] }), { status: 200 }))
+    expect(await leerDisponibilidad("uno", "2030-01-07", ["s1"], null)).toEqual({
+      ok: true,
+      datos: { horas: ["09:00", "10:00"], precios: [] },
+    })
+  })
+
+  it("con `valle`: las horas rebajadas con su precio", async () => {
+    const valle = [{ hora: "10:00", precio: 6400, precioNormal: 8000, porcentaje: 20 }]
+    mockFetch.mockResolvedValue(new Response(JSON.stringify({ slots: ["09:00", "10:00"], valle }), { status: 200 }))
+    expect(await leerDisponibilidad("uno", "2030-01-07", ["s1"], null)).toEqual({
+      ok: true,
+      datos: { horas: ["09:00", "10:00"], precios: valle },
+    })
   })
 })
 

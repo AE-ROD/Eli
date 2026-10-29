@@ -1,7 +1,7 @@
 import Image from "next/image"
 import { useId } from "react"
 import type { ReactNode } from "react"
-import { CalendarCheck, CalendarClock, Clock, Instagram, MapPin, MessageCircle, Navigation, Wallet } from "lucide-react"
+import { CalendarCheck, CalendarClock, Clock, Instagram, MapPin, MessageCircle, Navigation, Percent, Wallet } from "lucide-react"
 import { Boton, clasesDeBoton } from "@/components/comunes/boton"
 import { CLASES_DEL_LOCAL } from "@/components/comunes/colores-del-local"
 import { Tarjeta } from "@/components/comunes/tarjeta"
@@ -128,6 +128,13 @@ function Cabecera({ pagina, ahora }: PropsDeMiniPagina) {
           <CalendarClock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           {plazoParaQuienReserva(pagina.plazoDeCambiosHoras)}
         </p>
+        {/* Hora valle (#89c): sólo que existe; los precios se ven al elegir la hora. */}
+        {pagina.horaValle && (
+          <p className="mt-2 flex items-start gap-2 text-sm text-texto-2">
+            <Percent className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            Precios más bajos en horas valle: los verás al elegir la hora.
+          </p>
+        )}
       </div>
     </Tarjeta>
   )

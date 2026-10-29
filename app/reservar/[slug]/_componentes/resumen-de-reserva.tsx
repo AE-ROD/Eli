@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import { formatearMonto } from "@/lib/dinero"
 import { deTexto, formatearDuracionDeServicio } from "@/lib/fechas"
+import type { PrecioDeLaHora } from "@/lib/hora-valle"
 import { cn } from "@/lib/utils"
 import { fechaParaLeer } from "./selector-fecha-hora"
 import type { ServicioPublico } from "./selector-servicio"
@@ -17,6 +18,11 @@ interface PropsDeResumenDeReserva {
   hora: string
   /** Con quién; `null` o sin dar, no se muestra la fila. */
   profesional?: string | null
+  /**
+   * El precio de la hora elegida, si es de hora valle (#89c): se muestra el
+   * normal tachado y el rebajado. El que vale lo calcula el servidor.
+   */
+  precioDeLaHora?: PrecioDeLaHora | null
   /** Sin la fila del servicio, cuando ya está escrito arriba (la reserva confirmada). */
   sinServicio?: boolean
   className?: string
@@ -27,8 +33,21 @@ interface PropsDeResumenDeReserva {
  * La fecha se escribe con palabras ("jueves 15 de octubre") en vez de
  * `2026-10-15`; si no se pudiera leer, queda como llegó.
  */
-export function ResumenDeReserva({ servicio, fecha, hora, profesional, sinServicio = false, className }: PropsDeResumenDeReserva) {
+export function ResumenDeReserva({
+  servicio,
+  fecha,
+  hora,
+  profesional,
+  precioDeLaHora,
+  sinServicio = false,
+  className,
+}: PropsDeResumenDeReserva) {
   const dia = deTexto(fecha)
+  const rebajado =
+    precioDeLaHora && precioDeLaHora.precio !== null && precioDeLaHora.precioNormal !== null &&
+    precioDeLaHora.precio < precioDeLaHora.precioNormal
+      ? { precio: precioDeLaHora.precio, normal: precioDeLaHora.precioNormal, porcentaje: precioDeLaHora.porcentaje }
+      : null
   return (
     <dl className={cn("divide-y divide-borde text-sm", className)}>
       {servicio && !sinServicio && <Fila termino="Servicio">{servicio.name}</Fila>}
@@ -38,7 +57,20 @@ export function ResumenDeReserva({ servicio, fecha, hora, profesional, sinServic
       <Fila termino="Hora">{hora}</Fila>
       {servicio?.price != null && (
         <Fila termino="Precio">
-          {formatearMonto(servicio.price)}
+          {rebajado ? (
+            <>
+              <s className="mr-2 font-normal text-texto-2">
+                <span className="sr-only">Precio normal: </span>
+                {formatearMonto(rebajado.normal)}
+              </s>
+              {formatearMonto(rebajado.precio)}
+              <span className="mt-0.5 block text-xs font-normal text-texto-2">
+                Hora valle: {rebajado.porcentaje}% menos
+              </span>
+            </>
+          ) : (
+            formatearMonto(servicio.price)
+          )}
           {servicio.precioIncompleto ? " + a consultar" : ""}
         </Fila>
       )}
