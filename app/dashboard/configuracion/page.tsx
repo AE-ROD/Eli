@@ -9,6 +9,7 @@ import { SeccionServicios } from "./_componentes/seccion-servicios"
 import { SeccionProductos } from "./_componentes/seccion-productos"
 import { SelectorHorarioMiembro } from "./_componentes/selector-horario-miembro"
 import { SeccionPlazoDeCambios } from "./_componentes/seccion-plazo-de-cambios"
+import { SeccionPorConfirmar } from "./_componentes/seccion-por-confirmar"
 import { SeccionMensajesAClientes } from "./_componentes/seccion-mensajes-a-clientes"
 import { contarEnviosDelMes } from "@/lib/envios-a-clientes"
 import { apareceEnLaPagina, colorDelNegocio, esEnlaceDeResenasValido, normalizarInstagram } from "@/lib/pagina-del-negocio"
@@ -187,6 +188,7 @@ export default async function PaginaConfiguracion() {
         {puedeEditarPlazoDeCambios(actor) && (
           <SeccionPlazoDeCambios horasIniciales={pagina?.cancelacionHorasAntes ?? 24} />
         )}
+        <SeccionPorConfirmar actor={actor} />
 
         {pagina && mensajesDelMes && (
           <div id="mensajes" className="scroll-mt-24">

@@ -189,7 +189,15 @@ describe("GET /api/clientes/[id]", () => {
 
     expect(cliente.appointments).toHaveLength(4)
     for (const citaDelHistorial of cliente.appointments) {
-      expect(Object.keys(citaDelHistorial).sort()).toEqual(["endTime", "id", "price", "startTime", "status", "title"])
+      expect(Object.keys(citaDelHistorial).sort()).toEqual([
+        "confirmacionPorFaltas",
+        "endTime",
+        "id",
+        "price",
+        "startTime",
+        "status",
+        "title",
+      ])
     }
     expect(JSON.stringify(cliente)).not.toMatch(/Nota interna|Prefiere la tarde|Reservé por la web/)
   })

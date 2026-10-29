@@ -17,6 +17,8 @@ export interface CitaDeCliente {
   endTime: string
   status: string
   price: number | null
+  /** Entró por confirmar tras faltas (#84): con status "pendiente" se lee "Por confirmar". */
+  confirmacionPorFaltas?: boolean
 }
 
 /** Un cliente tal como lo devuelve el servidor, con sus últimas citas. */

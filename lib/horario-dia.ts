@@ -22,6 +22,8 @@ export interface CitaDelDia {
   endTime: string
   status: string
   customer: { id: string; name: string } | null
+  /** Entró por confirmar tras faltas (#84): con status "pendiente" se lee "Por confirmar". */
+  confirmacionPorFaltas?: boolean
 }
 
 export type SegmentoDia =

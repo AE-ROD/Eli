@@ -4,7 +4,7 @@ import { TarjetaCita, type CitaEnTarjeta } from "@/components/panel/tarjeta-cita
 import { ESTADOS_DE_CITA } from "@/lib/campos-del-panel"
 import { formatearHora, duracionParaMostrar } from "@/lib/fechas"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
-import { aQuienBloquea, nombreDeCliente, type Bloqueo, type Cita } from "../_datos"
+import { aQuienBloquea, citaPorConfirmar, nombreDeCliente, type Bloqueo, type Cita } from "../_datos"
 import { citasPorHora, rangoDeHoras, recortarAHoras, tramoDeCita, tramoEnElDia, tramosDeFranjas } from "../_disposicion"
 
 function paraTarjeta(cita: Cita): CitaEnTarjeta {
@@ -20,6 +20,7 @@ function paraTarjeta(cita: Cita): CitaEnTarjeta {
     duracion: duracionParaMostrar(cita.startTime, cita.endTime),
     estado,
     notas: cita.notes ?? undefined,
+    porConfirmar: citaPorConfirmar(cita),
   }
 }
 

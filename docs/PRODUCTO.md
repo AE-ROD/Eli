@@ -296,6 +296,14 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 - **El plazo se dice antes de reservar:** la cabecera de la página pública y el resumen del paso de confirmar muestran "Puedes cancelar o cambiar hasta 24 horas antes." (con el plazo del negocio; con 0 horas, "hasta el momento de la cita"). Es el mismo plazo que después aplica el enlace.
 - Un enlace inválido, de una cita cancelada, pasada o ya atendida dice "Este enlace no sirve", sin más detalle. La base guarda sólo una huella del enlace (no el enlace), y cada enlace tiene su propio límite de uso además del de la IP.
 
+### Reservas por confirmar tras faltas
+
+- **Qué es:** si quien reserva por la página pública faltó ("No vino") N veces o más en el último año (365 días) en ese negocio, la reserva entra **por confirmar**: ocupa la hora como cualquier otra, pero el local decide si la acepta. Las faltas se buscan por el correo y por el teléfono, normalizados, sólo entre las citas de ese negocio y de clientes no eliminados.
+- **Configurar:** Configuración → "Reservas por confirmar". Sólo la dueña: lo enciende o lo apaga y elige N, de 1 a 20 (al encenderlo se propone 2). Viene apagado.
+- **Quien reserva no ve nada distinto:** la pantalla y la respuesta de la reserva son idénticas con o sin faltas, para no revelarle a quien escribió un correo o un teléfono si ese contacto faltó. Sólo su correo cambia: "Recibimos tu reserva; el local la confirmará y te avisaremos por correo". El aviso al negocio dice que es una reserva por confirmar.
+- **Resolver:** en la agenda se ve como "Por confirmar" (también en el inicio y en el historial del cliente). La dueña y el encargado la **confirman** (pasa a confirmada y al cliente le llega un correo) o la **cancelan**. El profesional la ve, pero no le puede cambiar el estado ni borrarla (el servidor responde 401); sí puede moverla o escribirle notas. La marca queda en la cita como registro de por qué se pidió.
+- **Sin cobro:** no se pide abono. Un abono para quien ya faltó espera a la pasarela de pago.
+
 ### Teléfono y WhatsApp en la reserva
 
 - El teléfono, opcional, se valida y se guarda como en el panel (`+56912345678`); uno que no se puede leer como chileno es un error que dice cómo escribirlo.
@@ -431,7 +439,7 @@ Nada de esto bloquea el trabajo actual, pero cada punto se decide antes de const
 | **Dinero ya rendido** | Ya decidido (etapa 2): lo que entró en un cierre de caja o en una liquidación no anulada no se anula ni se reactiva su cita; se corrige con un ajuste. Cobrar, anular y reactivar esperan al cierre en curso, y "Liquidar desde" no cambia en medio de un cierre (secciones 3.7, 6 y 7). |
 | **Retención de honorarios** | Fuera, por decisión del dueño: la liquidación no retiene impuestos ni calcula boletas de honorarios. |
 | **Turnos y zona horaria** | Ya decidido: la zona horaria es **por negocio**, con `America/Santiago` por defecto (sección 6); la usan la reserva pública, la agenda y los recordatorios. Falta: la pantalla para que el dueño la cambie, si los reportes, el inicio y "Llegó" pasan a usarla en vez de la zona del dispositivo (secciones 7 y 8), y si cada negocio define sus propios turnos. |
-| **Agenda: bloqueos y "No vino"** | Ya decidido: "No vino" se deshace reactivando la cita (dueña y encargado, sección 6). Falta decidir si muchas inasistencias deben tener alguna consecuencia (aviso, pedir confirmación). Con el plan Pro de Vercel, el recordatorio podría salir a una hora fija en la zona de cada negocio. |
+| **Agenda: bloqueos y "No vino"** | Ya decidido: "No vino" se deshace reactivando la cita (dueña y encargado, sección 6). Muchas inasistencias ya tienen consecuencia: la reserva entra por confirmar (sección 6, "Reservas por confirmar tras faltas"). Con el plan Pro de Vercel, el recordatorio podría salir a una hora fija en la zona de cada negocio. |
 | **Página pública: fotos** | La página ya muestra logo, portada y fotos del equipo si existen, pero no hay subida: falta aprobar el almacenamiento (propuesto Cloudflare R2), y con él abrir la CSP (`img-src`) a ese origen. Hasta entonces se usa el color y las iniciales. También falta decidir si el encargado que atiende aparece en "Equipo" (llega con el interruptor "también atiende"). |
 | **Corregir un cobro** | Hoy lo cobrado se anula, también días después desde Reportes, salvo que ya haya entrado en un cierre de caja o en una liquidación: entonces se corrige con un ajuste. Falta decidir si el dueño puede reabrirlo y corregirlo, y con qué registro. |
 | **Roles** | Si hace falta un super administrador de la plataforma, y si el cliente final puede crear cuenta para ver su historial (cancelar y reagendar ya se hace sin cuenta, con el enlace del correo). |

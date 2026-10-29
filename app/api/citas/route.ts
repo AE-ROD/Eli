@@ -81,6 +81,8 @@ export async function GET(request: NextRequest) {
       customer: { select: { id: true, name: true, email: true, phone: true } },
       memberId: true,
       member: { select: { id: true, role: true, user: { select: { id: true, name: true } } } },
+      // "Por confirmar" en la agenda (#84).
+      confirmacionPorFaltas: true,
     },
     orderBy: { startTime: "asc" },
     // Siempre con tope: con un rango amplio, sin él se traía el histórico entero.

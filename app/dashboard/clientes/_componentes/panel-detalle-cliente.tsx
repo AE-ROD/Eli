@@ -11,6 +11,7 @@ import { TarjetaCita, type CitaEnTarjeta } from "@/components/panel/tarjeta-cita
 import { ESTADOS_DE_CITA } from "@/lib/campos-del-panel"
 import { formatearMonto } from "@/lib/dinero"
 import { formatearHora, duracionParaMostrar } from "@/lib/fechas"
+import { estaPorConfirmar } from "@/lib/por-confirmar"
 import { cn } from "@/lib/utils"
 import { Aviso } from "@/components/panel/aviso"
 import { EtiquetaDeCliente, type ClienteEnTarjeta } from "./tarjeta-cliente"
@@ -34,6 +35,7 @@ function mapearCitaParaTarjeta(cita: CitaDeCliente, nombreCliente: string): Cita
     horaFin: formatearHora(cita.endTime ?? cita.startTime),
     duracion: duracionParaMostrar(cita.startTime, cita.endTime ?? cita.startTime),
     estado,
+    porConfirmar: estaPorConfirmar({ status: cita.status, confirmacionPorFaltas: cita.confirmacionPorFaltas === true }),
   }
 }
 

@@ -14,12 +14,21 @@ import {
   titulo,
 } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
-import { actorDeSesion, memberIdParaCita, puedeReactivarCita, whereDeAgenda, type Actor } from "@/lib/permisos"
+import {
+  actorDeSesion,
+  memberIdParaCita,
+  puedeReactivarCita,
+  puedeResolverPorConfirmar,
+  whereDeAgenda,
+  type Actor,
+} from "@/lib/permisos"
 import { MENSAJE_CITA_CERRADA, MENSAJE_CITA_CON_ATENCION, sePuedeMover } from "@/lib/mover-cita"
 import { advertenciasDeAgenda } from "@/lib/advertencias-de-agenda"
 import { MENSAJE_CITA_CAMBIO, decidirReactivacion, problemaConLaAtencion } from "@/lib/reactivar-cita"
 import { ocupaElHorario } from "@/lib/ocupacion"
 import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
+import { estaPorConfirmar } from "@/lib/por-confirmar"
+import { avisarReservaConfirmadaPorElLocal } from "@/lib/aviso-de-reserva-confirmada"
 
 const edicionDeCitaSchema = z.object({
   title: titulo().optional(),
@@ -96,6 +105,13 @@ export async function PUT(
   try {
     const cuerpo = await request.json()
     const datos = edicionDeCitaSchema.parse(cuerpo)
+
+    // Una reserva por confirmar (#84) la confirma o la cancela sólo quien
+    // gestiona el negocio: cualquier otro cambio de estado, también.
+    const resuelvePorConfirmar = estaPorConfirmar(existente) && datos.status !== undefined && datos.status !== existente.status
+    if (resuelvePorConfirmar && !puedeResolverPorConfirmar(actor)) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+    }
 
     // Se compara lo que queda después del cambio: si se mueve sólo el inicio
     // o sólo el fin, contra lo guardado. Antes una cita podía quedar
@@ -237,6 +253,10 @@ export async function PUT(
 
     if (reactivacion.tipo !== "reactivar") {
       const cita = await prisma.appointment.update(actualizacion)
+      // Confirmada por el local: se le avisa al cliente, después de responder.
+      if (resuelvePorConfirmar && datos.status === "confirmada") {
+        avisarReservaConfirmadaPorElLocal({ businessId: actor.businessId, citaId: existente.id })
+      }
       // Si dejó libre su horario (se canceló, o se movió de hora o de
       // profesional), a la lista de espera de ese día, después de responder.
       const libera = datos.status !== undefined && !ocupaElHorario(datos.status)
@@ -288,6 +308,10 @@ export async function DELETE(
   const existente = await verificarCita(actor, id)
   if (!existente) {
     return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 })
+  }
+  // Borrarla también la resuelve (#84): sólo quien puede confirmarla o cancelarla.
+  if (estaPorConfirmar(existente) && !puedeResolverPorConfirmar(actor)) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
   await prisma.appointment.delete({ where: { id: existente.id } })

@@ -12,11 +12,11 @@ import { formatearMonto } from "@/lib/dinero"
 import { formatearHora, duracionParaMostrar } from "@/lib/fechas"
 import { sePuedeMover, type Advertencia } from "@/lib/mover-cita"
 import { puedeMarcarseNoVino } from "@/lib/campos-del-panel"
-import { actorDeSesion, puedeReactivarCita } from "@/lib/permisos"
+import { actorDeSesion, puedeReactivarCita, puedeResolverPorConfirmar } from "@/lib/permisos"
 import { conJson, pedirConCuerpo } from "@/lib/peticiones"
 import { Aviso } from "@/components/panel/aviso"
 import { cn } from "@/lib/utils"
-import { nombreDeCliente, type Cita } from "../_datos"
+import { citaPorConfirmar, nombreDeCliente, type Cita } from "../_datos"
 import { estiloDeEstado } from "./estados-de-cita"
 
 /** Un fundido corto al abrir y al cerrar: el panel no se desliza. */
@@ -72,6 +72,11 @@ async function reactivar(id: string, confirmar: boolean) {
 export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover, onReactivada }: PropsDePanelDeCita) {
   const { data: sesion } = useSession()
   const reactiva = puedeReactivarCita(actorDeSesion(sesion))
+  // Por confirmar tras faltas (#84): la confirman o la cancelan dueña y
+  // encargado. Al profesional el servidor le responde 401 a cualquier cambio
+  // de estado, así que no se le ofrece ninguno.
+  const porConfirmar = citaPorConfirmar(cita)
+  const resuelve = puedeResolverPorConfirmar(actorDeSesion(sesion))
   const [reactivando, setReactivando] = useState(false)
   const [advertencias, setAdvertencias] = useState<Advertencia[]>([])
   const [errorAlReactivar, setErrorAlReactivar] = useState("")
@@ -82,7 +87,7 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover, onReacti
   const ultimaVista = useRef({ id: cita.id, estado: cita.status })
   // La hora a la que se abrió el panel: con ella se decide si ya pasó la de la cita.
   const [abiertoEn] = useState(() => Date.now())
-  const estado = estiloDeEstado(cita.status)
+  const estado = estiloDeEstado(cita.status, porConfirmar)
   const duracion = duracionParaMostrar(cita.startTime, cita.endTime)
 
   // Lo que tiene el foco al abrir el panel, o al pasar a otra cita, es lo que lo abrió.
@@ -117,9 +122,11 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover, onReacti
   }
 
   const cerrada = cita.status === "cancelada" || cita.status === "no-asistio"
-  const puedeCompletarse = cita.status !== "completada" && !cerrada
+  // Por confirmar, primero se confirma: no se completa ni se marca "no vino" de una.
+  const puedeCompletarse = cita.status !== "completada" && !cerrada && !porConfirmar
   // Una completada ya no se cancela: si fue un error, se devuelve a confirmada.
-  const puedeCancelarse = !cerrada && cita.status !== "completada"
+  const puedeCancelarse = !cerrada && cita.status !== "completada" && (!porConfirmar || resuelve)
+  const puedeConfirmarse = porConfirmar && resuelve
   // Reactivar es de dueña y encargado. Una cancelada, sólo si no empezó; el
   // servidor vuelve a mirar todo (y que no tenga una atención cobrada).
   const puedeReactivarse =
@@ -143,7 +150,8 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover, onReacti
   const puedeMoverse = sePuedeMover(cita.status)
   // "No vino" cuando ya pasó la hora de empezar: antes, si avisó, se cancela.
   // El servidor lo vuelve a verificar (y que no haya llegado al Tablero).
-  const puedeNoVenir = puedeMarcarseNoVino(cita.status) && new Date(cita.startTime).getTime() <= abiertoEn
+  const puedeNoVenir =
+    puedeMarcarseNoVino(cita.status) && new Date(cita.startTime).getTime() <= abiertoEn && !porConfirmar
 
   return (
     <motion.aside
@@ -206,6 +214,14 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover, onReacti
         )}
       </div>
 
+      {porConfirmar && (
+        <Aviso tono="atencion" rol="status" titulo="Por confirmar">
+          {resuelve
+            ? "Este contacto faltó a citas anteriores. Confírmala si la aceptas, o cancélala: al confirmarla le avisamos por correo."
+            : "Este contacto faltó a citas anteriores: la confirma o la cancela la dueña o el encargado."}
+        </Aviso>
+      )}
+
       {errorAlReactivar && <Aviso>{errorAlReactivar}</Aviso>}
       {advertencias.length > 0 && (
         <Aviso tono="atencion" rol="status" titulo="Al reactivarla:">
@@ -217,8 +233,13 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover, onReacti
         </Aviso>
       )}
 
-      {(puedeCompletarse || puedeCancelarse || puedeMoverse || puedeNoVenir || puedeReactivarse) && (
+      {(puedeConfirmarse || puedeCompletarse || puedeCancelarse || puedeMoverse || puedeNoVenir || puedeReactivarse) && (
         <div className="grid gap-2 px-1 pb-1">
+          {puedeConfirmarse && (
+            <Boton tamano="sm" className="w-full" onClick={() => onCambiarEstado(cita.id, "confirmada")}>
+              Confirmar reserva
+            </Boton>
+          )}
           {puedeReactivarse && (
             <Boton
               tamano="sm"

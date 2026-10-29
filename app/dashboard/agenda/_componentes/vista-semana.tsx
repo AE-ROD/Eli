@@ -6,7 +6,7 @@ import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import { cn } from "@/lib/utils"
 import { diasSemana } from "./controles-de-agenda"
 import { estiloDeEstado } from "./estados-de-cita"
-import { aQuienBloquea, nombreDeCliente, type Bloqueo, type Cita } from "../_datos"
+import { aQuienBloquea, citaPorConfirmar, nombreDeCliente, type Bloqueo, type Cita } from "../_datos"
 import { columnasDeSolape, rangoDeHoras, recortarAHoras, tramoDeCita, tramoEnElDia, tramosDeFranjas } from "../_disposicion"
 
 const ALTURA_HORA = 64 // px por hora: la clase `h-16` de cada franja
@@ -162,7 +162,7 @@ export function VistaSemana({ dias, citas, horario, bloqueos, onSeleccionar, onS
                   const distanciaArriba = ((inicioMin - desde * 60) / 60) * ALTURA_HORA
                   const duracion = duracionParaMostrar(cita.startTime, cita.endTime)
                   const altura = Math.max((duracion / 60) * ALTURA_HORA - SEPARACION, ALTURA_MINIMA)
-                  const estado = estiloDeEstado(cita.status)
+                  const estado = estiloDeEstado(cita.status, citaPorConfirmar(cita))
                   const { columna, columnas } = lugares.get(cita.id) ?? { columna: 0, columnas: 1 }
                   // Sola, 4 px de cada lado; compartiendo, 2 px, que el ancho es poco.
                   const margen = columnas > 1 ? 2 : 4
