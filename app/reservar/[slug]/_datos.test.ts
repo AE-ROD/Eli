@@ -18,7 +18,7 @@ afterEach(() => {
 const cuerpo = () => JSON.parse(mockFetch.mock.calls[0][1].body as string)
 
 const reserva = {
-  servicioId: "s1",
+  servicioIds: ["s1"],
   profesionalId: null,
   fecha: "2030-01-07",
   hora: "09:00",
@@ -39,6 +39,14 @@ describe("confirmarReserva", () => {
     mockFetch.mockClear()
     await confirmarReserva("uno", { ...reserva, email: "lucia@correo.test" })
     expect(cuerpo().correoPromoConsentimiento).toBe(true)
+  })
+
+  it("manda los servicios en orden en servicioIds (#89a), sin precios ni duración", async () => {
+    await confirmarReserva("uno", { ...reserva, servicioIds: ["s2", "s1"] })
+    expect(cuerpo().servicioIds).toEqual(["s2", "s1"])
+    expect(cuerpo()).not.toHaveProperty("servicioId")
+    expect(cuerpo()).not.toHaveProperty("precio")
+    expect(cuerpo()).not.toHaveProperty("duracion")
   })
 })
 

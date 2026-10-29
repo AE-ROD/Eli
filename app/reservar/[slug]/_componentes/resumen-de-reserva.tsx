@@ -6,7 +6,11 @@ import { fechaParaLeer } from "./selector-fecha-hora"
 import type { ServicioPublico } from "./selector-servicio"
 
 interface PropsDeResumenDeReserva {
-  servicio: ServicioPublico | null
+  /**
+   * Con varios servicios (#89a), ya combinados: nombres unidos, duración y
+   * precio sumados. `precioIncompleto`: alguno no tiene precio publicado.
+   */
+  servicio: (ServicioPublico & { precioIncompleto?: boolean }) | null
   /** `AAAA-MM-DD`, como lo guarda el formulario. */
   fecha: string
   /** `HH:MM`. */
@@ -32,7 +36,12 @@ export function ResumenDeReserva({ servicio, fecha, hora, profesional, sinServic
       {profesional && <Fila termino="Con">{profesional}</Fila>}
       <Fila termino="Día">{dia ? fechaParaLeer(dia) : fecha}</Fila>
       <Fila termino="Hora">{hora}</Fila>
-      {servicio?.price != null && <Fila termino="Precio">{formatearMonto(servicio.price)}</Fila>}
+      {servicio?.price != null && (
+        <Fila termino="Precio">
+          {formatearMonto(servicio.price)}
+          {servicio.precioIncompleto ? " + a consultar" : ""}
+        </Fila>
+      )}
     </dl>
   )
 }

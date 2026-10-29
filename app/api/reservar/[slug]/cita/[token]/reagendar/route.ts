@@ -12,6 +12,7 @@ import {
   fechaNoReservable,
   yaPasoLaHora,
 } from "@/lib/reserva-publica"
+import { serviciosDeLaCita } from "@/lib/servicios-de-la-reserva"
 import { existeLaHora, rangoDelDiaEn } from "@/lib/zona-horaria"
 import { abrirEnlace, enTransaccionSerializable, fechaYHora, noEncontrada, nombreDelCliente, type Params } from "../_comun"
 
@@ -27,7 +28,9 @@ type Resultado = { tipo: "movida"; memberId: string | null } | { tipo: "rechazad
 
 /**
  * POST /api/reservar/[slug]/cita/[token]/reagendar — mueve la cita a otra
- * hora libre del mismo servicio y profesional, dentro del plazo del negocio.
+ * hora libre de los mismos servicios y profesional, dentro del plazo del
+ * negocio. Con varios servicios (#89a) se mueve el bloque entero, con la
+ * duración total copiada al reservar.
  * Las mismas reglas que confirmar una reserva nueva: horario, choques y
  * bloqueos, re-verificados dentro de una transacción `Serializable`.
  */
@@ -46,8 +49,9 @@ export async function POST(request: NextRequest, contexto: Params) {
   if (!dentroDelPlazo(cita.startTime, plazo, ahora)) {
     return NextResponse.json({ error: mensajeFueraDePlazo(plazo) }, { status: 409 })
   }
-  const servicio = cita.service
-  if (!servicio?.active) {
+  const servicios = serviciosDeLaCita(cita)
+  const duracion = servicios.duracion
+  if (!servicios.activos || duracion === null) {
     return NextResponse.json({ error: "Este servicio ya no se reserva por acá. Contacta al local." }, { status: 409 })
   }
 
@@ -59,17 +63,17 @@ export async function POST(request: NextRequest, contexto: Params) {
 
   const reserva = await candidatosDeLaReserva(prisma, {
     businessId: cita.businessId,
-    serviceId: servicio.id,
+    serviceIds: servicios.ids,
     profesionalId: cita.memberId,
     fecha,
   })
   if (reserva.tipo === "profesional-no-disponible") {
     return NextResponse.json({ error: "No hay horas para reagendar por acá. Contacta al local." }, { status: 409 })
   }
-  const candidatos = candidatosQueCubren(reserva.candidatos, hora, servicio.duration)
+  const candidatos = candidatosQueCubren(reserva.candidatos, hora, duracion)
   if (candidatos.length === 0) return NextResponse.json({ error: FUERA_DE_ATENCION }, { status: 409 })
 
-  const tramo = tramoDeLaReserva(fecha, hora, servicio.duration, zona)
+  const tramo = tramoDeLaReserva(fecha, hora, duracion, zona)
 
   const resultado = await enTransaccionSerializable<Resultado>(
     async (tx) => {
@@ -114,7 +118,7 @@ export async function POST(request: NextRequest, contexto: Params) {
     emailNegocio: cita.business.user.email,
     nombreNegocio: cita.business.name,
     nombreCliente: nombreDelCliente(cita),
-    servicio: servicio.name,
+    servicio: servicios.nombre,
     profesional,
     fecha,
     hora,

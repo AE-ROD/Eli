@@ -18,6 +18,13 @@ import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { datosDeConsentimientoPromocional } from "@/lib/envios-a-clientes"
 import { marcarReservo } from "@/lib/lista-de-espera"
 import { DIAS_EN_QUE_CUENTAN_LAS_FALTAS } from "@/lib/por-confirmar"
+import {
+  filasDeServicios,
+  leerServiciosDeLaReserva,
+  resumenDeLaReserva,
+  type ResumenDeLaReserva,
+  type ServicioDeLaReserva,
+} from "@/lib/servicios-de-la-reserva"
 import { existeLaHora, instanteEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 import {
   MAX_RESERVAS_FUTURAS_POR_CONTACTO,
@@ -50,7 +57,10 @@ type Resultado =
 
 interface Reserva {
   negocioId: string
-  servicio: { id: string; name: string; price: number | null }
+  /** Los servicios, en orden, leídos del catálogo del negocio (#89a). */
+  servicios: ServicioDeLaReserva[]
+  /** Nombre, duración y precio de la reserva entera, calculados en el servidor. */
+  resumen: ResumenDeLaReserva
   datos: z.infer<typeof reservaSchema>
   startTime: Date
   endTime: Date
@@ -86,7 +96,19 @@ async function reservarEnTransaccion(reserva: Reserva): Promise<Resultado> {
 /** Lo que se lee y escribe dentro de la transacción. Lo que rechaza no escribe nada. */
 async function reservar(
   tx: Prisma.TransactionClient,
-  { negocioId, servicio, datos, startTime, endTime, ahora, candidatos, dia, manageTokenHash, porConfirmarTrasFaltas }: Reserva
+  {
+    negocioId,
+    servicios,
+    resumen,
+    datos,
+    startTime,
+    endTime,
+    ahora,
+    candidatos,
+    dia,
+    manageTokenHash,
+    porConfirmarTrasFaltas,
+  }: Reserva
 ): Promise<Resultado> {
   // A quién va, re-verificado dentro de la transacción con la misma regla con
   // la que `disponibilidad` ofreció la hora (`lib/agenda-publica.ts`): sus
@@ -217,17 +239,21 @@ async function reservar(
     porConfirmarTrasFaltas !== null &&
     (await faltasDelCorreo(tx, { negocioId, email, ahora, umbral: porConfirmarTrasFaltas })) >= porConfirmarTrasFaltas
 
+  // Varios servicios (#89a): `serviceId` es el primero, por compatibilidad;
+  // el nombre, la duración (`endTime`) y el precio son los de la reserva
+  // entera; y cada servicio queda copiado en `AppointmentService`, en esta
+  // misma transacción: si algo falla, no queda una cita sin sus servicios.
   const cita = await tx.appointment.create({
     data: {
-      title: servicio.name,
-      serviceId: servicio.id,
+      title: resumen.titulo,
+      serviceId: servicios[0].id,
       // Lo que cuentan los topes (`WHERE_RESERVA_PUBLICA`).
       source: ORIGEN_RESERVA_PUBLICA,
       startTime,
       endTime,
       status: "pendiente",
       clientComments: datos.comentarios || null,
-      price: servicio.price,
+      price: resumen.precio,
       customerId: cliente.id,
       memberId: asignacion.memberId,
       manageTokenHash,
@@ -235,6 +261,9 @@ async function reservar(
       businessId: negocioId,
     },
     select: { id: true, memberId: true, confirmacionPorFaltas: true },
+  })
+  await tx.appointmentService.createMany({
+    data: filasDeServicios(negocioId, servicios).map((fila) => ({ ...fila, appointmentId: cita.id })),
   })
 
   // Lista de espera (#74): si estaba esperando ese día con este email, ya
@@ -305,10 +334,11 @@ export async function POST(
     const cuerpo = await request.json()
     const datos = reservaSchema.parse(cuerpo)
 
-    const servicio = await prisma.service.findFirst({
-      where: { id: datos.servicioId, businessId: negocio.id, active: true },
-    })
-    if (!servicio) return NextResponse.json({ error: "Servicio no disponible" }, { status: 404 })
+    // Todos del negocio y activos, o el mismo 404 sin decir cuál falló. La
+    // duración y el precio salen de acá, nunca de lo que mande el cliente.
+    const servicios = await leerServiciosDeLaReserva(prisma, negocio.id, datos.servicioIds)
+    if (!servicios) return NextResponse.json({ error: "Servicio no disponible" }, { status: 404 })
+    const resumen = resumenDeLaReserva(servicios)
 
     // La fecha y la hora son las del reloj del negocio (`Business.timezone`):
     // la cita se guarda en el instante UTC que les corresponde ahí, no en el
@@ -338,23 +368,23 @@ export async function POST(
     }
 
     const startTime = instanteEn(datos.fecha, datos.hora, zona)
-    const endTime = new Date(startTime.getTime() + servicio.duration * 60000)
+    const endTime = new Date(startTime.getTime() + resumen.duracion * 60000)
 
     // Quién puede tomarla (`lib/agenda-publica.ts`), con la misma regla que
-    // `disponibilidad`: profesionales que atienden y hacen el servicio (sólo
+    // `disponibilidad`: profesionales que atienden y hacen todos los servicios (sólo
     // el elegido, si eligió), y de ellos los que tienen la hora entera dentro
     // de su horario. Un negocio sin profesionales es un solo carril con el
     // horario del negocio, como siempre.
     const reserva = await candidatosDeLaReserva(prisma, {
       businessId: negocio.id,
-      serviceId: servicio.id,
+      serviceIds: servicios.map((servicio) => servicio.id),
       profesionalId: datos.profesionalId || null,
       fecha: datos.fecha,
     })
     if (reserva.tipo === "profesional-no-disponible") {
       return NextResponse.json({ error: "Ese profesional no está disponible para este servicio" }, { status: 404 })
     }
-    const candidatos = candidatosQueCubren(reserva.candidatos, datos.hora, servicio.duration)
+    const candidatos = candidatosQueCubren(reserva.candidatos, datos.hora, resumen.duracion)
     if (candidatos.length === 0) {
       return NextResponse.json(
         { error: "Ese horario está fuera de la atención del negocio. Elige otra hora." },
@@ -370,7 +400,8 @@ export async function POST(
     const enlace = generarToken()
     const resultado = await reservarEnTransaccion({
       negocioId: negocio.id,
-      servicio,
+      servicios,
+      resumen,
       datos,
       startTime,
       endTime,
@@ -416,10 +447,10 @@ export async function POST(
           emailCliente: datos.email,
           nombreCliente: `${datos.nombre} ${datos.apellido}`,
           nombreNegocio: negocio.name,
-          servicio: servicio.name,
+          servicio: resumen.titulo,
           fecha: datos.fecha,
           hora: datos.hora,
-          duracion: servicio.duration,
+          duracion: resumen.duracion,
           profesional: profesional?.nombre ?? null,
           enlaceDeGestion: `${baseUrl}${rutaDeGestion}`,
           plazoHoras: negocio.cancelacionHorasAntes,
@@ -434,7 +465,7 @@ export async function POST(
         emailProfesional: negocio.user.email,
         nombreNegocio: negocio.name,
         nombreCliente: `${datos.nombre} ${datos.apellido}`,
-        servicio: servicio.name,
+        servicio: resumen.titulo,
         fecha: datos.fecha,
         hora: datos.hora,
         comentarios: datos.comentarios,

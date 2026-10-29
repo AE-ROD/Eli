@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { candidatosDeLaReserva, horasLibresDelDia } from "@/lib/agenda-publica"
 import { dentroDelPlazo, mensajeFueraDePlazo } from "@/lib/gestion-de-cita"
 import { MENSAJE_FECHA_MUY_LEJANA, MENSAJE_FECHA_PASADA, fechaNoReservable } from "@/lib/reserva-publica"
+import { serviciosDeLaCita } from "@/lib/servicios-de-la-reserva"
 import { esFechaCalendario } from "@/lib/zona-horaria"
 import { abrirEnlace, type Params } from "../_comun"
 
@@ -13,9 +14,10 @@ const fechaSchema = z
 
 /**
  * GET /api/reservar/[slug]/cita/[token]/disponibilidad?fecha= — las horas a
- * las que se puede mover la cita: mismo servicio y mismo profesional (o
+ * las que se puede mover la cita: mismos servicios y mismo profesional (o
  * cualquiera, si la cita no tenía), con la misma regla que la reserva
- * (`lib/agenda-publica.ts`). La propia cita no se ocupa a sí misma.
+ * (`lib/agenda-publica.ts`). Con varios servicios (#89a), el bloque entero:
+ * la duración total copiada al reservar. La propia cita no se ocupa a sí misma.
  */
 export async function GET(request: NextRequest, contexto: Params) {
   const enlace = await abrirEnlace(request, contexto, "lecturaPublica")
@@ -29,7 +31,8 @@ export async function GET(request: NextRequest, contexto: Params) {
   if (!dentroDelPlazo(cita.startTime, plazo, ahora)) {
     return NextResponse.json({ slots: [], mensaje: mensajeFueraDePlazo(plazo) })
   }
-  if (!cita.service?.active) {
+  const servicios = serviciosDeLaCita(cita)
+  if (!servicios.activos || servicios.duracion === null) {
     return NextResponse.json({ slots: [], mensaje: "Este servicio ya no se reserva por acá. Contacta al local." })
   }
 
@@ -43,7 +46,7 @@ export async function GET(request: NextRequest, contexto: Params) {
 
   const reserva = await candidatosDeLaReserva(prisma, {
     businessId: cita.businessId,
-    serviceId: cita.service.id,
+    serviceIds: servicios.ids,
     profesionalId: cita.memberId,
     fecha: fecha.data,
   })
@@ -57,7 +60,7 @@ export async function GET(request: NextRequest, contexto: Params) {
     businessId: cita.businessId,
     zona,
     fecha: fecha.data,
-    duracion: cita.service.duration,
+    duracion: servicios.duracion,
     candidatos,
     ahora,
     ignorarCitaId: cita.id,

@@ -289,6 +289,16 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 - **Negocio sin profesionales** (el dueño solo, o con un encargado): funciona como siempre, un solo carril con el horario del negocio, ocupado por cualquier cita activa y por los bloqueos de todo el negocio. La cita llega sin profesional asignado.
 - La página nunca ofrece una hora que después rechazaría: ofrecer y confirmar usan la misma regla.
 
+### Varios servicios por reserva
+
+- En la reserva pública se pueden elegir **hasta 4 servicios** (por ejemplo, corte + color). Los hace **una sola persona, seguidos**, en un bloque continuo: la cita dura la suma de las duraciones y cuesta la suma de los precios. Se marcan tocando cada tarjeta; con más de uno, cada tarjeta lleva su número de orden y se ve el total (duración y precio). Si alguno no tiene precio publicado, se suma lo que hay y se dice "+ a consultar".
+- **Quién atiende:** sólo los profesionales que hacen **todos** los servicios elegidos. Si el elegido no hace uno que se suma, vuelve a "Cualquiera disponible".
+- Las horas ofrecidas son las del bloque entero, con las mismas reglas de siempre; la duración y el precio los calcula Eli con el catálogo del negocio, nunca con lo que manda el navegador.
+- La cita se ve en la agenda con los nombres unidos ("Corte + Color") y el precio total. Los correos y el recordatorio dicen todos los servicios. El enlace para cancelar o reagendar mueve el bloque entero; si alguno de los servicios se desactivó o se borró, sólo se puede cancelar.
+- **Al llegar** (Tablero), la atención nace con una línea por servicio, cada una con el precio con que se reservó. Si alguno ya no está en el catálogo o no tiene precio, no se precarga ninguna (una parte cobraría de menos) y el editor se abre con la reserva.
+- La lista de espera sigue siendo de un servicio: con varios elegidos, se anota el primero.
+- Las citas del panel siguen con un servicio escrito a mano; elegir varios del catálogo desde el panel queda pendiente.
+
 ### Cancelar o reagendar sin cuenta
 
 - El correo de confirmación trae "Cancelar o cambiar mi cita" (y la pantalla de reserva confirmada, el mismo enlace, para quien no dejó correo). Abre una página con la cita: negocio, servicio, profesional, día y hora en la zona del negocio.
@@ -349,7 +359,7 @@ Una **atención** es la visita de un cliente al local, con o sin reserva. El tab
 
 **Cada servicio con su profesional.** Una atención tiene una o más líneas: servicio, profesional que lo hizo y precio cobrado. El precio se copia del catálogo y se puede ajustar; el total es la suma de las líneas. Así se sabe cuánto generó cada profesional, que es la base de las comisiones (sección 3). Topes: hasta 20 servicios y $20.000.000 por atención; más que eso es un error de carga, o dos atenciones. Los servicios se cuentan sobre la atención entera, para todos, también el profesional: cuántos servicios hay no es dinero. El monto se valida al anotar o editar los servicios, al pasar a "Por cobrar" y al cobrar, no al empezar ni al volver atrás, para que una atención que se pasó se pueda corregir. Al profesional el monto se le mide sobre sus propios servicios, porque un rechazo no puede revelarle cuánto suman los de sus colegas; el cobro valida siempre la atención entera.
 
-**Al llegar, se precarga lo reservado.** "Llegó" sólo vale para reservas del día calendario de quien marca la llegada (si su dispositivo no informa una zona horaria que el servidor reconozca, para las que estén a menos de 24 horas de ahora). Si la cita tiene servicio y profesional, la atención nace con esa línea; si falta el profesional, el editor la propone y alguien lo elige. Un "Llegó" marcado por error se deshace mientras la atención no haya empezado, y la reserva vuelve a su columna. Si ya empezó, se anula: queda el rastro.
+**Al llegar, se precarga lo reservado.** "Llegó" sólo vale para reservas del día calendario de quien marca la llegada (si su dispositivo no informa una zona horaria que el servidor reconozca, para las que estén a menos de 24 horas de ahora). Si la cita tiene servicio y profesional, la atención nace con esa línea (con varios servicios, una por servicio; ver "Varios servicios por reserva"); si falta el profesional, el editor la propone y alguien lo elige. Un "Llegó" marcado por error se deshace mientras la atención no haya empezado, y la reserva vuelve a su columna. Si ya empezó, se anula: queda el rastro.
 
 **El dueño también atiende.** El dueño no es miembro del equipo, así que sus líneas se marcan aparte como suyas y no generan comisión. Si quien hizo una línea deja el equipo, la línea conserva su nombre en el historial. Si todavía no se cobró, alguien tiene que reasignarla antes de cobrar.
 

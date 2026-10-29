@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { enviarAvisoDeCambioDelCliente } from "@/lib/email"
 import { ESTADOS_GESTIONABLES, dentroDelPlazo, mensajeFueraDePlazo } from "@/lib/gestion-de-cita"
 import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
+import { serviciosDeLaCita } from "@/lib/servicios-de-la-reserva"
 import { abrirEnlace, fechaYHora, noEncontrada, nombreDelCliente, type Params } from "../_comun"
 
 /**
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest, contexto: Params) {
     emailNegocio: cita.business.user.email,
     nombreNegocio: cita.business.name,
     nombreCliente: nombreDelCliente(cita),
-    servicio: cita.service?.name ?? cita.title,
+    servicio: serviciosDeLaCita(cita).nombre,
     profesional: cita.member?.user?.name ?? null,
     fecha,
     hora,

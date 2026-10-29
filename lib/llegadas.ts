@@ -110,6 +110,19 @@ interface CitaQueLlega {
   memberId: string | null
   service: { id: string; name: string; price: number | null; active: boolean } | null
   member: { user: { name: string } } | null
+  /** Varios servicios (#89a), en orden. Vacío en las citas de antes y en las del panel. */
+  servicios: {
+    serviceId: string | null
+    price: number | null
+    service: { id: string; name: string; price: number | null; active: boolean; businessId: string } | null
+  }[]
+}
+
+/** Un servicio de la reserva ya resuelto contra el catálogo, con el precio que se le cobra. */
+interface ServicioQueLlega {
+  id: string
+  name: string
+  precio: number | null
 }
 
 /**
@@ -133,27 +146,47 @@ async function servicioDeLaReserva(actor: Actor, cita: CitaQueLlega) {
 }
 
 /**
- * La línea que se precarga al llegar una reserva, o `null` si la reserva no
- * dice lo suficiente:
+ * Los servicios de la reserva, con su precio, o `null` si alguno no se puede
+ * anotar. Con varios (#89a), los de `AppointmentService`, en orden, cada uno
+ * con el precio copiado al reservar (o el del catálogo si no tenía); si uno
+ * se borró o se desactivó, ninguno: precargar una parte cobraría de menos
+ * sin que nadie lo decidiera. Sin filas (la cita de antes), el de siempre,
+ * con el precio de la cita o el del catálogo.
+ */
+async function serviciosQueLlegan(actor: Actor, cita: CitaQueLlega): Promise<ServicioQueLlega[] | null> {
+  if (cita.servicios.length > 0) {
+    const resueltos: ServicioQueLlega[] = []
+    for (const fila of cita.servicios) {
+      if (!fila.service?.active || fila.service.businessId !== actor.businessId) return null
+      resueltos.push({ id: fila.service.id, name: fila.service.name, precio: fila.price ?? fila.service.price })
+    }
+    return resueltos
+  }
+  const servicio = await servicioDeLaReserva(actor, cita)
+  if (!servicio) return null
+  return [{ id: servicio.id, name: servicio.name, precio: cita.price ?? servicio.price }]
+}
+
+/**
+ * Las líneas que se precargan al llegar una reserva (una por servicio), o
+ * `null` si la reserva no dice lo suficiente:
  *
- * - El servicio, como lo encuentra `servicioDeLaReserva`.
+ * - Los servicios, como los encuentra `serviciosQueLlegan`.
  * - Quién lo hace: el profesional de la cita, o quien marca la llegada si es
  *   profesional (`profesionalParaLinea`, la misma regla que al anotar). Si
  *   queda sin nadie (dueño o encargado con una cita sin asignar), no se
  *   precarga: toda línea nace con su profesional, y el editor se abre con la
  *   reserva (`reserva` en la atención) para que alguien diga quién.
- * - El precio de la cita o, si no tiene, el del catálogo. Si falta no se
+ * - El precio de cada uno (ver `serviciosQueLlegan`). Si falta alguno no se
  *   inventa un cero, que se cobraría como cortesía sin que nadie lo decidiera.
  */
-async function lineaDeLaReserva(actor: Actor, cita: CitaQueLlega): Promise<LineaResuelta | null> {
+async function lineasDeLaReserva(actor: Actor, cita: CitaQueLlega): Promise<LineaResuelta[] | null> {
   const { memberId } = profesionalParaLinea(actor, { memberId: cita.memberId, byOwner: false })
   if (!memberId) return null
 
-  const servicio = await servicioDeLaReserva(actor, cita)
-  if (!servicio) return null
-
-  const precio = cita.price ?? servicio.price
-  if (precio === null || !esPrecioValido(precio)) return null
+  const servicios = await serviciosQueLlegan(actor, cita)
+  if (!servicios) return null
+  if (servicios.some(({ precio }) => precio === null || !esPrecioValido(precio))) return null
 
   // Con `whereDeAgenda`, el profesional sólo llega a sus propias citas: quien
   // hace la línea es casi siempre el de la cita, cuyo nombre ya vino. Si no,
@@ -169,14 +202,17 @@ async function lineaDeLaReserva(actor: Actor, cita: CitaQueLlega): Promise<Linea
         )?.user.name
   if (!nombre) return null
 
-  return {
+  const lineas = servicios.map((servicio) => ({
     serviceId: servicio.id,
     serviceName: servicio.name,
     memberId,
     byOwner: false,
     professionalName: nombre,
-    priceCents: aCentavos(precio),
-  }
+    priceCents: aCentavos(servicio.precio as number),
+  }))
+  // Son todas las líneas de la atención nueva: si su total no cabe, no se precargan.
+  if (errorDeTotal(totalEnCentavos(lineas))) return null
+  return lineas
 }
 
 /**
@@ -210,6 +246,18 @@ export async function registrarLlegada(actor: Actor, usuarioId: string | null, {
       customerId: true,
       service: { select: { id: true, name: true, price: true, active: true } },
       member: { select: { user: { select: { name: true } } } },
+      // Las filas y sus servicios, sólo del negocio: la FK compuesta y el
+      // trigger `cita_servicios_mismo_negocio` ya lo garantizan en la base,
+      // y acá se vuelve a pedir porque no hay RLS detrás.
+      servicios: {
+        where: { businessId: actor.businessId },
+        orderBy: { orden: "asc" },
+        select: {
+          serviceId: true,
+          price: true,
+          service: { select: { id: true, name: true, price: true, active: true, businessId: true } },
+        },
+      },
       visit: { select: { id: true } },
     },
   })
@@ -223,7 +271,7 @@ export async function registrarLlegada(actor: Actor, usuarioId: string | null, {
     throw new ErrorDeAtencion(409, "Esta reserva no es de hoy: solo se marca la llegada de las reservas del día.")
   }
 
-  const linea = await lineaDeLaReserva(actor, cita)
+  const lineas = await lineasDeLaReserva(actor, cita)
 
   try {
     return await prisma.$transaction(async (tx) => {
@@ -247,7 +295,7 @@ export async function registrarLlegada(actor: Actor, usuarioId: string | null, {
           customerName: nombre,
           appointmentId: cita.id,
           createdById: usuarioId,
-          ...(linea && { services: { create: [linea] } }),
+          ...(lineas && { services: { create: lineas } }),
         },
         select: seleccionDeAtencion(actor),
       })

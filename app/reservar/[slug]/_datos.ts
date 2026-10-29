@@ -22,7 +22,8 @@ export interface ProfesionalPublico {
 }
 
 export interface DatosDeReserva {
-  servicioId: string
+  /** Los servicios, en el orden en que se hacen (#89a): de 1 a 4. */
+  servicioIds: string[]
   /** `null`: cualquiera disponible (lo asigna el servidor). */
   profesionalId: string | null
   /** `YYYY-MM-DD`. */
@@ -50,14 +51,18 @@ export async function leerProfesionales(slug: string): Promise<Resultado<Profesi
   return resultado.ok ? { ok: true, datos: resultado.datos.profesionales } : resultado
 }
 
-/** Las horas de inicio libres (`HH:MM`) para ese servicio ese día, con ese profesional o con cualquiera (`null`). */
+/**
+ * Las horas de inicio libres (`HH:MM`) para esos servicios seguidos ese día,
+ * con ese profesional o con cualquiera (`null`). El servidor calcula la
+ * duración: acá sólo van los ids.
+ */
 export async function leerDisponibilidad(
   slug: string,
   fecha: string,
-  servicioId: string,
+  servicioIds: string[],
   profesionalId: string | null
 ): Promise<Resultado<string[]>> {
-  const consulta = new URLSearchParams({ fecha, servicioId })
+  const consulta = new URLSearchParams({ fecha, servicioIds: servicioIds.join(",") })
   if (profesionalId) consulta.set("profesionalId", profesionalId)
   const resultado = await pedir<{ slots: string[] }>(
     `/api/reservar/${encodeURIComponent(slug)}/disponibilidad?${consulta}`,
@@ -86,7 +91,7 @@ export async function confirmarReserva(
     `/api/reservar/${encodeURIComponent(slug)}/confirmar`,
     "Error al confirmar la reserva",
     conJson("POST", {
-      servicioId: datos.servicioId,
+      servicioIds: datos.servicioIds,
       profesionalId: datos.profesionalId ?? undefined,
       fecha: datos.fecha,
       hora: datos.hora,

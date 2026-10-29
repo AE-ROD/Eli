@@ -83,6 +83,11 @@ export function haceElServicio(profesional: Pick<ProfesionalQueAtiende, "service
   return profesional.serviceIds.length === 0 || profesional.serviceIds.includes(serviceId)
 }
 
+/** Si hace TODOS los servicios de una reserva con varios (#89a): uno solo que no haga lo deja fuera. */
+export function haceLosServicios(profesional: Pick<ProfesionalQueAtiende, "serviceIds">, serviceIds: string[]): boolean {
+  return serviceIds.length > 0 && serviceIds.every((serviceId) => haceElServicio(profesional, serviceId))
+}
+
 /** Quien puede tomar la reserva ese día y en qué franjas. `memberId` null = el carril único del negocio sin profesionales. */
 export interface Candidato {
   memberId: string | null
@@ -261,16 +266,18 @@ export type CandidatosDeLaReserva =
   | { tipo: "profesional-no-disponible" }
 
 /**
- * Los candidatos de una reserva: los profesionales que atienden y hacen el
- * servicio (sólo el elegido, si el cliente eligió uno), con su horario de
- * ese día. Un profesional que no existe, es de otro negocio, no atiende o no
- * hace el servicio da `profesional-no-disponible`, sin distinguir por qué.
+ * Los candidatos de una reserva: los profesionales que atienden y hacen
+ * TODOS los servicios (#89a; sólo el elegido, si el cliente eligió uno), con
+ * su horario de ese día. Un profesional que no existe, es de otro negocio, no
+ * atiende o no hace alguno de los servicios da `profesional-no-disponible`,
+ * sin distinguir por qué. Los servicios llegan ya validados como del negocio
+ * (`leerServiciosDeLaReserva`).
  */
 export async function candidatosDeLaReserva(
   db: Pick<Prisma.TransactionClient, "businessMember" | "workSchedule">,
-  consulta: { businessId: string; serviceId: string; profesionalId: string | null; fecha: string }
+  consulta: { businessId: string; serviceIds: string[]; profesionalId: string | null; fecha: string }
 ): Promise<CandidatosDeLaReserva> {
-  const { businessId, serviceId, profesionalId, fecha } = consulta
+  const { businessId, serviceIds, profesionalId, fecha } = consulta
   const [profesionales, filas] = await Promise.all([
     leerProfesionalesQueAtienden(db, businessId),
     db.workSchedule.findMany({
@@ -279,7 +286,7 @@ export async function candidatosDeLaReserva(
       orderBy: { startTime: "asc" },
     }),
   ])
-  const queLoHacen = profesionales.filter((profesional) => haceElServicio(profesional, serviceId))
+  const queLoHacen = profesionales.filter((profesional) => haceLosServicios(profesional, serviceIds))
   let elegidos = queLoHacen
   if (profesionalId) {
     elegidos = queLoHacen.filter((profesional) => profesional.id === profesionalId)

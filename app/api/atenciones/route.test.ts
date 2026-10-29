@@ -457,6 +457,7 @@ describe("POST /api/atenciones con { citaId }: llegó una reserva", () => {
       customer: { name: "María", lastName: "González" },
       service: null,
       member: { user: { name: "Carla Profesional" } },
+      servicios: [],
       visit: null,
     }))
     mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
@@ -538,6 +539,74 @@ describe("POST /api/atenciones con { citaId }: qué línea se precarga", () => {
     expect(status).toBe(201)
     expect(data.lineas).toEqual([])
     expect(data.reserva).toMatchObject({ titulo: datos.title, profesional: { id: "m-carla", nombre: "Carla Profesional" } })
+  })
+  describe("varios servicios por reserva (#89a)", () => {
+    const deDos = deLaAgenda("cita-dos", {
+      title: "Corte + Color",
+      serviceId: "s-corte",
+      memberId: "m-carla",
+      price: 30000,
+      source: "reserva-publica",
+    })
+    const fila = (orden: number, datos: Record<string, unknown>) => ({
+      id: `as-${orden}`,
+      appointmentId: "cita-dos",
+      businessId: NEGOCIO,
+      orden,
+      ...datos,
+    })
+
+    async function llegarConFilas(filas: Record<string, unknown>[], servicios?: Record<string, unknown>[]) {
+      const { POST } = await import("./route")
+      const datos = datosBase()
+      base.reiniciar({ ...datos, service: servicios ?? datos.service, appointment: [deDos], appointmentService: filas })
+      mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+      const res = await POST(pedido(URL, { citaId: "cita-dos" }))
+      return { status: res.status, data: await res.json() }
+    }
+
+    it("una línea por servicio, en orden, con el precio copiado al reservar (no el del catálogo)", async () => {
+      const { status, data } = await llegarConFilas([
+        fila(2, { serviceId: "s-color", serviceName: "Color", duration: 30, price: 22000 }),
+        fila(1, { serviceId: "s-corte", serviceName: "Corte", duration: 60, price: 8000 }),
+      ])
+
+      expect(status).toBe(201)
+      expect(data.lineas).toEqual([
+        expect.objectContaining({ servicioId: "s-corte", profesional: { id: "m-carla", nombre: "Carla Profesional" }, precio: 8000 }),
+        expect.objectContaining({ servicioId: "s-color", profesional: { id: "m-carla", nombre: "Carla Profesional" }, precio: 22000 }),
+      ])
+      expect(base.buscar("visitService", { visitId: data.id }).map((linea) => linea.priceCents)).toEqual([
+        centavos(8000),
+        centavos(22000),
+      ])
+    })
+
+    it("una fila sin precio copiado toma el del catálogo", async () => {
+      const { data } = await llegarConFilas([
+        fila(1, { serviceId: "s-corte", serviceName: "Corte", duration: 60, price: null }),
+        fila(2, { serviceId: "s-color", serviceName: "Color", duration: 30, price: 25000 }),
+      ])
+      expect(data.lineas.map((linea: { precio: number }) => linea.precio)).toEqual([8000, 25000])
+    })
+
+    it.each([
+      ["un servicio que se desactivó", [{ serviceId: "s-viejo", serviceName: "Alisado", duration: 30, price: 30000 }]],
+      ["un servicio que se borró del catálogo", [{ serviceId: null, serviceName: "Alisado", duration: 30, price: 30000 }]],
+      ["un servicio sin precio en ningún lado", [{ serviceId: "s-peinado", serviceName: "Peinado", duration: 30, price: null }]],
+    ])("con %s no precarga ninguna: una parte cobraría de menos", async (_caso, [otra]) => {
+      const { status, data } = await llegarConFilas([
+        fila(1, { serviceId: "s-corte", serviceName: "Corte", duration: 60, price: 8000 }),
+        fila(2, otra),
+      ])
+      expect(status).toBe(201)
+      expect(data.lineas).toEqual([])
+    })
+
+    it("una cita vieja sin filas sigue como hoy: una línea, con el precio de la cita", async () => {
+      const { data } = await llegarConFilas([])
+      expect(data.lineas).toEqual([expect.objectContaining({ servicioId: "s-corte", precio: 30000 })])
+    })
   })
 })
 
