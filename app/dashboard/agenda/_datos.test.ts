@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
-import { aQuienBloquea, crearBloqueo, crearCita, precioDeLaCita, quitarBloqueo, type Bloqueo, type DatosDeNuevaCita } from "./_datos"
+import { aQuienBloquea, citaPorConfirmar, crearBloqueo, crearCita, precioDeLaCita, quitarBloqueo, type Bloqueo, type DatosDeNuevaCita } from "./_datos"
 
 /** El cuerpo JSON con que se llamó a `fetch`. */
 const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
@@ -20,6 +20,15 @@ const CITA: DatosDeNuevaCita = {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+describe("citaPorConfirmar", () => {
+  it("pendiente con la marca: por confirmar; si el cliente ya llegó al Tablero, ya no", () => {
+    expect(citaPorConfirmar({ status: "pendiente", confirmacionPorFaltas: true })).toBe(true)
+    expect(citaPorConfirmar({ status: "pendiente", confirmacionPorFaltas: true, conAtencion: true })).toBe(false)
+    expect(citaPorConfirmar({ status: "confirmada", confirmacionPorFaltas: true })).toBe(false)
+    expect(citaPorConfirmar({ status: "pendiente" })).toBe(false)
+  })
 })
 
 describe("precioDeLaCita", () => {

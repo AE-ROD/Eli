@@ -35,11 +35,19 @@ export interface Cita {
   memberId?: string | null
   /** Entró por confirmar tras faltas (#84). Con status "pendiente", está por confirmar (`estaPorConfirmar`). */
   confirmacionPorFaltas?: boolean
+  /** El cliente ya llegó: tiene una atención no anulada en el Tablero. */
+  conAtencion?: boolean
 }
 
-/** Si la cita espera que el local la confirme o la cancele (#84). */
-export function citaPorConfirmar(cita: Pick<Cita, "status" | "confirmacionPorFaltas">): boolean {
-  return estaPorConfirmar({ status: cita.status, confirmacionPorFaltas: cita.confirmacionPorFaltas === true })
+/**
+ * Si la cita espera que el local la confirme o la cancele (#84). Si el cliente
+ * ya llegó al Tablero, ya no: está resuelta, y confirmarla no le manda correo.
+ */
+export function citaPorConfirmar(cita: Pick<Cita, "status" | "confirmacionPorFaltas" | "conAtencion">): boolean {
+  return (
+    cita.conAtencion !== true &&
+    estaPorConfirmar({ status: cita.status, confirmacionPorFaltas: cita.confirmacionPorFaltas === true })
+  )
 }
 
 /**

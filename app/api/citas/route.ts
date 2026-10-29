@@ -83,13 +83,18 @@ export async function GET(request: NextRequest) {
       member: { select: { id: true, role: true, user: { select: { id: true, name: true } } } },
       // "Por confirmar" en la agenda (#84).
       confirmacionPorFaltas: true,
+      // Sólo para saber si el cliente ya llegó: una por confirmar con
+      // atención viva en el Tablero ya está resuelta. No sale en la respuesta.
+      visit: { select: { status: true } },
     },
     orderBy: { startTime: "asc" },
     // Siempre con tope: con un rango amplio, sin él se traía el histórico entero.
     take: 500,
   })
 
-  return NextResponse.json(citas)
+  return NextResponse.json(
+    citas.map(({ visit, ...cita }) => ({ ...cita, conAtencion: visit ? visit.status !== "anulada" : false }))
+  )
 }
 
 export async function POST(request: NextRequest) {
