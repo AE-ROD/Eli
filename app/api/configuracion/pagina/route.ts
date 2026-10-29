@@ -12,7 +12,12 @@ import {
   normalizarEnlaceDeResenas,
   normalizarInstagram,
 } from "@/lib/pagina-del-negocio"
-import { actorDeSesion, puedeEditarEnlaceDeResenas, puedeEditarPaginaDelNegocio } from "@/lib/permisos"
+import {
+  actorDeSesion,
+  puedeActivarMensajesAClientes,
+  puedeEditarEnlaceDeResenas,
+  puedeEditarPaginaDelNegocio,
+} from "@/lib/permisos"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 
 /**
@@ -33,10 +38,15 @@ import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
  * opcional en el cuerpo: si no viene, no se toca. Sólo se acepta uno de Google
  * por https (`normalizarEnlaceDeResenas`). Borrarlo apaga también "pedir
  * reseña" (`pideResenas`): sin enlace no hay qué pedir, y el interruptor no
- * puede quedar encendido sin hacer nada.
+ * puede quedar encendido sin hacer nada. Por eso, si "pedir reseña" está
+ * encendido, borrar el enlace exige poder apagarlo (`puedeActivarMensajesAClientes`,
+ * la dueña): el encargado recibe 401 con un mensaje que lo explica.
  *
  * El límite de peticiones es el de escritura del panel (`proxy.ts`).
  */
+
+const MENSAJE_SOLO_LA_DUEÑA_APAGA_RESENAS =
+  "Pedir reseña está encendido y sólo la dueña puede apagarlo. Pídele que lo apague en Mensajes a clientes, o que borre ella el enlace."
 
 const MENSAJE_DE_INSTAGRAM = "No pudimos leer el Instagram. Escribe el usuario (@tu.salon) o pega el enlace del perfil"
 
@@ -112,6 +122,18 @@ export async function PUT(request: NextRequest) {
 
   if (enlaceResenas !== undefined && !puedeEditarEnlaceDeResenas(actor)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  }
+  // Borrar el enlace apaga "pedir reseña": si está encendido, sólo quien
+  // puede apagarlo en /api/configuracion/mensajes. Falla cerrado: si el
+  // negocio no aparece, tampoco se deja.
+  if (enlaceResenas === null && !puedeActivarMensajesAClientes(actor)) {
+    const actual = await prisma.business.findUnique({
+      where: { id: actor.businessId },
+      select: { pideResenas: true },
+    })
+    if (!actual || actual.pideResenas) {
+      return NextResponse.json({ error: MENSAJE_SOLO_LA_DUEÑA_APAGA_RESENAS }, { status: 401 })
+    }
   }
   const datosDelNegocio = {
     ...pagina,

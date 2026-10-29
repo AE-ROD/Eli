@@ -32,7 +32,7 @@ describe("verificarLimite cuando Upstash está configurado pero falla", () => {
     vi.restoreAllMocks()
   })
 
-  it.each(["login", "auth", "reserva", "soporte", "acuseDeSoporte", "reenvioDeInvitacion", "importacionDeClientes", "gestionDeCita", "listaDeEspera", "bajaPorToken"] as const)(
+  it.each(["login", "auth", "reserva", "soporte", "acuseDeSoporte", "reenvioDeInvitacion", "importacionDeClientes", "gestionDeCita", "listaDeEspera", "listaDeEsperaPorEmail", "bajaPorToken"] as const)(
     "falla CERRADO para %s si Upstash tira un error: lo que un anónimo puede abusar no queda sin tope",
     async (tipo) => {
       vi.spyOn(console, "error").mockImplementation(() => {})
@@ -132,6 +132,32 @@ describe("los baldes del CSV de clientes", () => {
     expect(usados).toHaveLength(1)
     expect(usados[0].config).toMatchObject({ prefix: prefijo, limiter: { tokens, ventana: "1 h" } })
     expect(usados[0].limit).toHaveBeenCalledWith("negocio-1")
+  })
+})
+
+describe("el balde de la lista de espera por email, en todos los negocios", () => {
+  beforeEach(() => {
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://fake.upstash.io")
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "fake-token")
+    vi.resetModules()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("listaDeEsperaPorEmail cuenta en su propio balde, de 10 por día, separado del de por negocio", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    const { Ratelimit } = (await import("@upstash/ratelimit")) as unknown as { Ratelimit: RatelimitFalso }
+    Ratelimit.creados.length = 0
+    const { verificarLimite } = await import("./rate-limit")
+
+    await verificarLimite("listaDeEsperaPorEmail", "hash-del-email")
+
+    const usados = Ratelimit.creados.filter((limitador) => limitador.limit.mock.calls.length > 0)
+    expect(usados).toHaveLength(1)
+    expect(usados[0].config).toMatchObject({ prefix: "eli:lista-de-espera-email", limiter: { tokens: 10, ventana: "24 h" } })
+    expect(usados[0].limit).toHaveBeenCalledWith("hash-del-email")
   })
 })
 

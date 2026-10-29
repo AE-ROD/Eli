@@ -283,6 +283,65 @@ describe("avisar cuando se libera una hora", () => {
     expect(inscripciones({ id: "i1" })[0]).toMatchObject({ avisos: 0, ultimoAvisoAt: null })
   })
 
+  it("si el correo salió pero el contador no se escribió, el próximo aviso sigue con el número siguiente", async () => {
+    const hace2Horas = new Date(AHORA.getTime() - 2 * 60 * 60_000)
+    const envio = (n: number, enviadoAt = hace2Horas) => ({
+      id: `e${n}`,
+      businessId: "n1",
+      esperaId: "i1",
+      tipo: "lista-de-espera",
+      canal: "correo",
+      categoria: "servicio",
+      referencia: `i1:${n}`,
+      enviadoAt,
+    })
+    // El aviso 1 salió y quedó registrado, pero `avisos` sigue en 0.
+    escenario({ inscripcionEnEspera: [inscripcion("i1")], envioAClientes: [envio(1)] })
+    await liberar("a9")
+    const resumen = await m.avisarHoraLiberada({ businessId: "n1", inicio: A_LAS_9 }, AHORA)
+    expect(resumen.enviados).toBe(1)
+    expect(envios().map((fila) => fila.referencia)).toEqual(["i1:1", "i1:2"])
+    expect(inscripciones({ id: "i1" })[0]).toMatchObject({ avisos: 2, ultimoAvisoAt: AHORA })
+  })
+
+  it("el máximo de avisos y la ventana se miran también en los envíos registrados, no sólo en el contador", async () => {
+    const envio = (n: number, enviadoAt: Date) => ({
+      id: `e${n}`,
+      businessId: "n1",
+      esperaId: "i1",
+      tipo: "lista-de-espera",
+      canal: "correo",
+      categoria: "servicio",
+      referencia: `i1:${n}`,
+      enviadoAt,
+    })
+    const antes = new Date("2026-10-27T12:00:00.000Z")
+    escenario({ inscripcionEnEspera: [inscripcion("i1")], envioAClientes: [envio(1, antes), envio(2, antes), envio(3, antes)] })
+    await liberar("a9")
+    await m.avisarHoraLiberada({ businessId: "n1", inicio: A_LAS_9 }, AHORA)
+    expect(enviarAviso).not.toHaveBeenCalled()
+
+    // Uno hace 5 minutos, con `ultimoAvisoAt` vacío: todavía dentro de la ventana.
+    escenario({ inscripcionEnEspera: [inscripcion("i1")], envioAClientes: [envio(1, new Date(AHORA.getTime() - 5 * 60_000))] })
+    await liberar("a9")
+    await m.avisarHoraLiberada({ businessId: "n1", inicio: A_LAS_9 }, AHORA)
+    expect(enviarAviso).not.toHaveBeenCalled()
+  })
+
+  it("el nombre del profesional se busca sólo entre los miembros del negocio", async () => {
+    escenario({
+      businessMember: [{ id: "m-carla", businessId: "n1", userId: "u-carla", role: "worker", createdAt: new Date("2026-01-01") }],
+      appointment: [cita("c9", A_LAS_9, { memberId: "m-carla" }), cita("c10", A_LAS_10, { memberId: "m-carla" })],
+      inscripcionEnEspera: [inscripcion("i-carla", { memberId: "m-carla" })],
+    })
+    await liberar("c9")
+    await m.avisarHoraLiberada({ businessId: "n1", inicio: A_LAS_9 }, AHORA)
+    expect(enviarAviso.mock.calls[0][0]).toMatchObject({ profesional: "Carla" })
+    const consultas = base.prisma.businessMember.findMany.mock.calls.map(([args]) => args as { where: Registro })
+    const delAviso = consultas.find((args) => JSON.stringify(args.where).includes("m-carla") && "in" in ((args.where.id as Registro) ?? {}))
+    expect(delAviso?.where).toMatchObject({ id: { in: ["m-carla"] }, businessId: "n1" })
+  })
+
   it("con profesional: sólo cuenta la hora libre de ese profesional", async () => {
     escenario({
       businessMember: [

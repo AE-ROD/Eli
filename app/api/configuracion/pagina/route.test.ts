@@ -10,7 +10,7 @@ vi.mock("next-auth", () => ({
 vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
 const prismaMock = {
-  business: { update: vi.fn() },
+  business: { update: vi.fn(), findUnique: vi.fn() },
   businessMember: { findMany: vi.fn(), updateMany: vi.fn() },
   $transaction: vi.fn(),
 }
@@ -205,6 +205,40 @@ describe("PUT /api/configuracion/pagina", () => {
 
       expect(respuesta.status).toBe(200)
       expect(prismaMock.business.update.mock.calls[0][0].data).toMatchObject({ enlaceResenas: null, pideResenas: false })
+    })
+
+    it("el encargado no lo borra si 'pedir reseña' está encendido: 401 con un mensaje claro, sin escribir", async () => {
+      const { PUT } = await import("./route")
+      mockGetServerSession.mockResolvedValueOnce(sesion("admin", "negocio-1", "m-9"))
+      prismaMock.business.findUnique.mockResolvedValueOnce({ pideResenas: true })
+
+      const respuesta = await PUT(pedidoFalso({ ...PAGINA, especialidades: [], enlaceResenas: "" }))
+
+      expect(respuesta.status).toBe(401)
+      expect((await respuesta.json()).error).toContain("sólo la dueña")
+      expect(prismaMock.business.findUnique).toHaveBeenCalledWith({ where: { id: "negocio-1" }, select: { pideResenas: true } })
+      expect(prismaMock.business.update).not.toHaveBeenCalled()
+      expect(prismaMock.$transaction).not.toHaveBeenCalled()
+    })
+
+    it("el encargado sí lo borra si 'pedir reseña' ya estaba apagado", async () => {
+      const { PUT } = await import("./route")
+      mockGetServerSession.mockResolvedValueOnce(sesion("admin", "negocio-1", "m-9"))
+      prismaMock.business.findUnique.mockResolvedValueOnce({ pideResenas: false })
+
+      const respuesta = await PUT(pedidoFalso({ ...PAGINA, especialidades: [], enlaceResenas: "" }))
+
+      expect(respuesta.status).toBe(200)
+      expect(prismaMock.business.update.mock.calls[0][0].data).toMatchObject({ enlaceResenas: null, pideResenas: false })
+    })
+
+    it("si el negocio no aparece, el encargado no lo borra (falla cerrado)", async () => {
+      const { PUT } = await import("./route")
+      mockGetServerSession.mockResolvedValueOnce(sesion("admin", "negocio-1", "m-9"))
+      prismaMock.business.findUnique.mockResolvedValueOnce(null)
+
+      expect((await PUT(pedidoFalso({ ...PAGINA, especialidades: [], enlaceResenas: "" }))).status).toBe(401)
+      expect(prismaMock.business.update).not.toHaveBeenCalled()
     })
 
     it.each([

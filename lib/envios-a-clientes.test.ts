@@ -263,6 +263,33 @@ describe("enviarAClientes: topes", () => {
     expect(enviar).not.toHaveBeenCalled()
   })
 
+  it("contar el tope e insertar el candado van en una transacción, bajo un candado del negocio", async () => {
+    yaEnviados(m.TOPE_PROMOCIONALES_POR_NEGOCIO_Y_DIA - 1, new Date("2026-10-28T12:00:00.000Z"))
+    expect(await m.enviarAClientes(teToca())).toBe("enviado")
+
+    expect(base.prisma.$transaction).toHaveBeenCalledTimes(1)
+    const [sql, llave] = base.prisma.$executeRaw.mock.calls[0] as [TemplateStringsArray, string]
+    expect(sql.join("?")).toContain("pg_advisory_xact_lock(hashtext(")
+    expect(llave).toBe("envios:n1")
+    // Primero el candado, después contar, después insertar.
+    const orden = (fn: { mock: { invocationCallOrder: number[] } }) => fn.mock.invocationCallOrder[0]
+    expect(orden(base.prisma.$executeRaw)).toBeLessThan(orden(base.prisma.envioAClientes.count))
+    expect(orden(base.prisma.envioAClientes.count)).toBeLessThan(orden(base.prisma.envioAClientes.create))
+  })
+
+  it("un promocional repetido choca dentro de la transacción y es 'ya-enviado', sin enviar", async () => {
+    expect(await m.enviarAClientes(teToca())).toBe("enviado")
+    expect(await m.enviarAClientes(teToca())).toBe("ya-enviado")
+    expect(enviar).toHaveBeenCalledTimes(1)
+    expect(envios()).toHaveLength(1)
+  })
+
+  it("la lista de espera (servicio) no cuenta el tope ni toma ese candado", async () => {
+    expect(await m.enviarAClientes(aviso())).toBe("enviado")
+    expect(base.prisma.$transaction).not.toHaveBeenCalled()
+    expect(base.prisma.$executeRaw).not.toHaveBeenCalled()
+  })
+
   it("uno menos del tope todavía pasa", async () => {
     yaEnviados(m.TOPE_PROMOCIONALES_POR_NEGOCIO_Y_DIA - 1, new Date("2026-10-28T12:00:00.000Z"))
     expect(await m.enviarAClientes(teToca())).toBe("enviado")

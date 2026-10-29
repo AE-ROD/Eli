@@ -21,8 +21,9 @@ import { registrarError } from "@/lib/registro-de-errores"
  *
  * Antes del candado, en este orden: el cupo de la corrida, que el cliente y la
  * inscripción sean del negocio, el consentimiento (promocionales) y el tope
- * diario por negocio (promocionales por correo). Nada de esto lanza, y a los
- * logs no va ningún dato personal.
+ * diario por negocio (promocionales por correo), que se cuenta en la misma
+ * transacción que inserta la fila, bajo un candado del negocio. Nada de esto
+ * lanza, y a los logs no va ningún dato personal.
  */
 
 // ─── Topes (decisión b del dueño) ────────────────────────────────────────────
@@ -174,11 +175,26 @@ function esPedidoValido(pedido: PedidoDeEnvio): boolean {
 }
 
 /** Promocionales por correo del negocio en su día de hoy. */
-async function promocionalesDeHoy(businessId: string, zona: string, ahora: Date): Promise<number> {
+async function promocionalesDeHoy(
+  db: Pick<Prisma.TransactionClient, "envioAClientes">,
+  businessId: string,
+  zona: string,
+  ahora: Date
+): Promise<number> {
   const { desde, hasta } = rangoDelDiaEn(fechaYMinutosEn(ahora, zona).fecha, zona)
-  return prisma.envioAClientes.count({
+  return db.envioAClientes.count({
     where: { businessId, categoria: "promocional", canal: "correo", enviadoAt: { gte: desde, lt: hasta } },
   })
+}
+
+/**
+ * El candado del tope diario de un negocio. Contar y escribir la fila del
+ * envío van bajo él, en la misma transacción: dos envíos a la vez con 49
+ * contados no pasan los dos el tope de 50. La llave es
+ * `hashtext('envios:' || businessId)`, como el de la caja (`lib/bloqueos-de-dinero.ts`).
+ */
+async function tomarCandadoDelTopeDiario(tx: Prisma.TransactionClient, businessId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`envios:${businessId}`}))`
 }
 
 export async function enviarAClientes(pedido: PedidoDeEnvio): Promise<ResultadoDeEnvioAClientes> {
@@ -220,16 +236,21 @@ export async function enviarAClientes(pedido: PedidoDeEnvio): Promise<ResultadoD
     // escribe la persona del negocio, que responde por él.
     if (categoria === "promocional" && canal !== "manual" && !cliente?.correoPromoConsentAt) return "sin-consentimiento"
 
+    const datos = { businessId, customerId, esperaId, tipo, canal, categoria, referencia, enviadoAt: ahora }
     if (categoria === "promocional" && canal === "correo") {
-      const enviadosHoy = await promocionalesDeHoy(businessId, zonaDelNegocio(pedido.zona), ahora)
-      if (enviadosHoy >= TOPE_PROMOCIONALES_POR_NEGOCIO_Y_DIA) return "tope"
+      const zona = zonaDelNegocio(pedido.zona)
+      const fila = await prisma.$transaction(async (tx) => {
+        await tomarCandadoDelTopeDiario(tx, businessId)
+        const enviadosHoy = await promocionalesDeHoy(tx, businessId, zona, ahora)
+        if (enviadosHoy >= TOPE_PROMOCIONALES_POR_NEGOCIO_Y_DIA) return null
+        return tx.envioAClientes.create({ data: datos, select: { id: true } })
+      })
+      if (!fila) return "tope"
+      candado = fila.id
+    } else {
+      const fila = await prisma.envioAClientes.create({ data: datos, select: { id: true } })
+      candado = fila.id
     }
-
-    const fila = await prisma.envioAClientes.create({
-      data: { businessId, customerId, esperaId, tipo, canal, categoria, referencia, enviadoAt: ahora },
-      select: { id: true },
-    })
-    candado = fila.id
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return "ya-enviado"
     registrarError(`registrando un envío a clientes "${tipo}"`, error)

@@ -92,6 +92,12 @@ const limitadorGestionDeCita = crearLimitador("gestion-cita", 60, "1 h")
 // correos a esa casilla, que la escribe un anónimo: no se puede llenar la
 // bandeja de un tercero rotando IPs.
 const limitadorListaDeEspera = crearLimitador("lista-de-espera", 5, "1 h")
+// Inscripciones de un mismo email en la lista de espera, sumando TODOS los
+// negocios: 10 por día. El de `listaDeEspera` cuenta por negocio, así que
+// alguien que rota IPs podía anotar la casilla de un tercero en la lista de
+// muchos negocios y llenarle la bandeja de avisos. Al pasarse, el endpoint
+// responde como un alta normal y no crea nada (no revela que el tope existe).
+const limitadorListaDeEsperaPorEmail = crearLimitador("lista-de-espera-email", 10, "24 h")
 // Bajas por token, sin sesión: "Dejar de recibir estos correos" de un cliente
 // y "Salir de la lista de espera". 30 por 10 minutos por IP. Generoso a
 // propósito: la baja en un clic de Gmail y Apple (RFC 8058) llega desde los
@@ -112,6 +118,7 @@ export type TipoLimite =
   | "exportacion"
   | "gestionDeCita"
   | "listaDeEspera"
+  | "listaDeEsperaPorEmail"
   | "bajaPorToken"
 
 const limitadores: Record<TipoLimite, Ratelimit | null> = {
@@ -128,6 +135,7 @@ const limitadores: Record<TipoLimite, Ratelimit | null> = {
   exportacion: limitadorExportacion,
   gestionDeCita: limitadorGestionDeCita,
   listaDeEspera: limitadorListaDeEspera,
+  listaDeEsperaPorEmail: limitadorListaDeEsperaPorEmail,
   bajaPorToken: limitadorBajaPorToken,
 }
 
@@ -160,6 +168,8 @@ const fallaAbiertoSiUpstashFalla: Record<TipoLimite, boolean> = {
   gestionDeCita: false,
   // Cerrado: sin sesión, y termina en correos a una casilla que escribe un anónimo.
   listaDeEspera: false,
+  // Cerrado por lo mismo: sin sesión, correos a una casilla ajena.
+  listaDeEsperaPorEmail: false,
   // Cerrado: sin sesión, y escribe en la base. Una caída sólo demora una baja.
   bajaPorToken: false,
   // Abierto, como las lecturas del panel: exige sesión de dueño o encargado y

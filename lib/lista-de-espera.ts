@@ -44,7 +44,11 @@ import { fechaYMinutosEn, zonaDelNegocio } from "@/lib/zona-horaria"
  * lo genera este módulo antes de crear la fila.
  */
 
-/** Inscripciones activas de un mismo email en un negocio; la siguiente da 429. */
+/**
+ * Inscripciones activas de un mismo email en un negocio. La siguiente no se
+ * crea, pero el endpoint responde lo mismo que a un alta (no revela si ese
+ * email ya espera en el negocio).
+ */
 export const INSCRIPCIONES_ACTIVAS_POR_EMAIL = 3
 
 /**
@@ -121,7 +125,6 @@ export function enlacesDelAviso(datos: {
 
 export const MENSAJE_SIN_ATENCION = "Ese día no hay atención para este servicio. Elige otro día."
 export const MENSAJE_HAY_HORAS = "Ese día todavía hay horas libres: elige una y reserva."
-export const MENSAJE_TOPE_DE_INSCRIPCIONES = `Ya estás esperando ${INSCRIPCIONES_ACTIVAS_POR_EMAIL} días en este negocio. Cuando se resuelva alguno, podrás anotarte en otro.`
 
 export interface DatosDeInscripcion {
   servicioId: string
@@ -303,6 +306,10 @@ export function programarAvisoDeHoraLiberada(liberada: HoraLiberada): void {
  *   `AVISOS_POR_EVENTO_LISTA_DE_ESPERA`, por orden de inscripción.
  * - El aviso n de una inscripción tiene la referencia `${esperaId}:${n}`: si
  *   dos eventos corren a la vez, el candado de `enviarAClientes` deja pasar uno.
+ *   `n` sale de los envíos ya registrados de la inscripción (el mayor más uno),
+ *   no sólo del contador `avisos`: si un correo salió pero falló la escritura
+ *   del contador, el siguiente evento no choca para siempre con el mismo `n`.
+ *   El contador y `ultimoAvisoAt` quedan como filtro rápido y para el panel.
  */
 export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Date()): Promise<ResumenDeTrabajo> {
   const resumen = resumenVacio()
@@ -336,11 +343,40 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
         email: true,
         avisos: true,
         service: { select: { name: true, duration: true, active: true } },
-        member: { select: { user: { select: { name: true } } } },
       },
       orderBy: { createdAt: "asc" },
       take: TOPE_DE_INSCRIPCIONES_POR_DIA,
     })
+    if (inscripciones.length === 0) return resumen
+
+    // El nombre del profesional, sólo de miembros de este negocio: aunque se
+    // colara una fila con un `memberId` ajeno, su nombre no sale en el correo.
+    const idsDeProfesionales = [...new Set(inscripciones.flatMap((fila) => (fila.memberId ? [fila.memberId] : [])))]
+    const profesionales = idsDeProfesionales.length
+      ? await prisma.businessMember.findMany({
+          where: { id: { in: idsDeProfesionales }, businessId: negocio.id },
+          select: { id: true, user: { select: { name: true } } },
+        })
+      : []
+    const nombreDelProfesional = new Map(profesionales.map((miembro) => [miembro.id, miembro.user?.name ?? null]))
+
+    // Los avisos ya registrados de cada inscripción: de acá salen el número
+    // del próximo y cuándo fue el último, aunque el contador se haya quedado atrás.
+    const previos = await prisma.envioAClientes.findMany({
+      where: { businessId: negocio.id, tipo: "lista-de-espera", esperaId: { in: inscripciones.map((fila) => fila.id) } },
+      select: { esperaId: true, referencia: true, enviadoAt: true },
+    })
+    const historial = new Map<string, { mayor: number; ultimo: Date | null }>()
+    for (const envio of previos) {
+      if (!envio.esperaId) continue
+      const actual = historial.get(envio.esperaId) ?? { mayor: 0, ultimo: null }
+      const numero = Number(envio.referencia.slice(envio.esperaId.length + 1))
+      if (envio.referencia.startsWith(`${envio.esperaId}:`) && Number.isInteger(numero) && numero > actual.mayor) {
+        actual.mayor = numero
+      }
+      if (!actual.ultimo || envio.enviadoAt > actual.ultimo) actual.ultimo = envio.enviadoAt
+      historial.set(envio.esperaId, actual)
+    }
 
     // Si hay hora libre se calcula una vez por servicio y profesional.
     const hayHora = new Map<string, boolean>()
@@ -378,12 +414,14 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
     for (const fila of inscripciones) {
       if (resumen.enviados >= AVISOS_POR_EVENTO_LISTA_DE_ESPERA) break
       resumen.revisados++
-      if (!fila.email || !(await tieneHoraLibre(fila))) {
+      const yaAvisado = historial.get(fila.id)
+      const numero = Math.max(fila.avisos, yaAvisado?.mayor ?? 0) + 1
+      const muyPronto = yaAvisado?.ultimo != null && yaAvisado.ultimo >= ventana
+      if (numero > AVISOS_POR_INSCRIPCION || muyPronto || !fila.email || !(await tieneHoraLibre(fila))) {
         resumen.omitidas++
         continue
       }
 
-      const numero = fila.avisos + 1
       const enlaces = enlacesDelAviso({
         slug: negocio.slug,
         esperaId: fila.id,
@@ -405,7 +443,7 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
             nombreCliente: `${fila.nombre} ${fila.apellido}`.trim(),
             nombreNegocio: negocio.name,
             servicio: fila.service?.name ?? "",
-            profesional: fila.member?.user?.name ?? null,
+            profesional: fila.memberId ? (nombreDelProfesional.get(fila.memberId) ?? null) : null,
             fecha,
             ...enlaces,
           }),
@@ -413,9 +451,11 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
 
       if (resultado === "enviado") {
         resumen.enviados++
-        // Sólo si nadie lo contó entretanto: el candado ya impidió el correo doble.
+        // Sólo hacia arriba: si otro evento ya contó uno mayor, no se pisa. Si
+        // esta escritura falla, el próximo evento igual calcula bien el número
+        // con los envíos registrados.
         await prisma.inscripcionEnEspera.updateMany({
-          where: { id: fila.id, businessId: negocio.id, avisos: fila.avisos },
+          where: { id: fila.id, businessId: negocio.id, avisos: { lt: numero } },
           data: { avisos: numero, ultimoAvisoAt: ahora },
         })
       } else if (resultado === "fallido") {

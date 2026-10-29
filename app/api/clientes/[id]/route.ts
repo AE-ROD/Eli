@@ -81,6 +81,29 @@ function cambioDeConsentimientoPromocional(marcado: boolean | undefined, yaTenia
   return marcado ? datosDeConsentimientoPromocional("panel") : datosDeBajaPromocional()
 }
 
+/** Dos correos son la misma casilla si sólo cambian mayúsculas o espacios a los lados. */
+function mismoCorreo(a: string | null | undefined, b: string | null | undefined): boolean {
+  return (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase()
+}
+
+/**
+ * El consentimiento promocional es de una casilla, no de la ficha: si el
+ * correo cambia, el que había no pasa al nuevo. Se mantiene sólo si en el
+ * mismo pedido se marca `correoPromoConsent: true` explícito (que ya exige
+ * `puedeEditarConsentimientoPromocional`), y entonces se registra de nuevo.
+ */
+function consentimientoAlCambiarElCorreo(
+  correoNuevo: string | undefined,
+  existente: { email: string | null; correoPromoConsentAt: Date | null },
+  marcado: boolean | undefined
+) {
+  if (correoNuevo === undefined || mismoCorreo(correoNuevo || null, existente.email)) {
+    return cambioDeConsentimientoPromocional(marcado, existente.correoPromoConsentAt !== null)
+  }
+  if (marcado === true) return datosDeConsentimientoPromocional("panel")
+  return existente.correoPromoConsentAt !== null ? datosDeBajaPromocional() : {}
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -189,7 +212,7 @@ export async function PUT(
         ...(datos.tags !== undefined && { tags: datos.tags }),
         ...(datos.notes !== undefined && { notes: datos.notes || null }),
         ...cambioDeConsentimiento(datos.whatsappConsent, existente.whatsappConsentAt !== null),
-        ...cambioDeConsentimientoPromocional(datos.correoPromoConsent, existente.correoPromoConsentAt !== null),
+        ...consentimientoAlCambiarElCorreo(datos.email, existente, datos.correoPromoConsent),
       },
     })
     if (count === 0) {

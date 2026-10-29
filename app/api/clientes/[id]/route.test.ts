@@ -855,6 +855,42 @@ describe("PUT /api/clientes/[id] — consentimiento promocional por correo", () 
     expect(maria().correoPromoConsentSource).toBe("reserva-publica")
   })
 
+  it("si cambia el correo, el consentimiento de la casilla anterior no pasa a la nueva", async () => {
+    const { PUT } = await import("./route")
+    const original = new Date("2026-02-01T12:00:00.000Z")
+    await base.prisma.customer.updateMany({
+      where: { id: "c-maria" },
+      data: { email: "maria@correo.test", correoPromoConsentAt: original, correoPromoConsentSource: "reserva-publica" },
+    })
+
+    // El mismo correo con otras mayúsculas no es un cambio: el consentimiento queda.
+    mockGetServerSession.mockResolvedValueOnce(sesiones.encargado)
+    expect((await PUT(pedido(URL_DE_MARIA, { email: "Maria@Correo.test" }), conId("c-maria"))).status).toBe(200)
+    expect(maria().correoPromoConsentAt).toEqual(original)
+
+    // Otro correo, sin marcar la casilla: se limpia.
+    mockGetServerSession.mockResolvedValueOnce(sesiones.encargado)
+    expect((await PUT(pedido(URL_DE_MARIA, { email: "otra@correo.test" }), conId("c-maria"))).status).toBe(200)
+    expect(maria().correoPromoConsentAt).toBeNull()
+    expect(maria().correoPromoConsentSource).toBeNull()
+    expect(maria().correoPromoBajaAt).toBeInstanceOf(Date)
+  })
+
+  it("si cambia el correo y se marca la casilla en el mismo pedido, el consentimiento es nuevo, desde el panel", async () => {
+    const { PUT } = await import("./route")
+    const original = new Date("2026-02-01T12:00:00.000Z")
+    await base.prisma.customer.updateMany({
+      where: { id: "c-maria" },
+      data: { email: "maria@correo.test", correoPromoConsentAt: original, correoPromoConsentSource: "reserva-publica" },
+    })
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const res = await PUT(pedido(URL_DE_MARIA, { email: "otra@correo.test", correoPromoConsent: true }), conId("c-maria"))
+    expect(res.status).toBe(200)
+    expect(maria().correoPromoConsentSource).toBe("panel")
+    expect(maria().correoPromoConsentAt).not.toEqual(original)
+  })
+
   it("desmarcarlo cuando no lo tenía no inventa una baja", async () => {
     const { PUT } = await import("./route")
     mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)

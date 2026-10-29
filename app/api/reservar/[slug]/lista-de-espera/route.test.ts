@@ -188,7 +188,8 @@ describe("inscribirse", () => {
     expect(filas()).toHaveLength(0)
   })
 
-  it("la cuarta inscripción activa del mismo email: 429", async () => {
+  it("la cuarta inscripción activa del mismo email: el mismo 201 que un alta, sin crear la fila", async () => {
+    const alta = await inscribirse()
     escenario({
       inscripciones: [
         inscripcion("i1", { fecha: "2030-01-08" }),
@@ -196,8 +197,18 @@ describe("inscribirse", () => {
         inscripcion("i3", { fecha: "2030-01-10" }),
       ],
     })
-    expect((await inscribirse()).status).toBe(429)
+    // No revela que ese email ya espera tres días en este negocio.
+    expect(await inscribirse()).toEqual(alta)
     expect(filas()).toHaveLength(3)
+  })
+
+  it("el tope por email en todos los negocios (hash, sin negocio): el mismo 201 que un alta, sin crear la fila", async () => {
+    const alta = await inscribirse()
+    expect(mockVerificarLimite).toHaveBeenCalledWith("listaDeEsperaPorEmail", hashDeToken("lucia@correo.test"))
+    escenario()
+    mockVerificarLimite.mockImplementation(async (tipo: string) => ({ permitido: tipo !== "listaDeEsperaPorEmail", restantes: 0 }))
+    expect(await inscribirse()).toEqual(alta)
+    expect(filas()).toHaveLength(0)
   })
 
   it("sin email o con datos inválidos: 400", async () => {
