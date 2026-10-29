@@ -369,7 +369,7 @@ Una **atención** es la visita de un cliente al local, con o sin reserva. El tab
 
 ### Cierre de caja
 
-Dueña y encargado cierran la caja cuantas veces quieran al día. Cada cierre cubre desde el anterior (el primero, desde el inicio del día en la zona del negocio) hasta el momento de cerrar. **Esperado = fondo inicial + efectivo cobrado + propinas en efectivo**; se anota lo contado y la diferencia, con nota obligatoria si no cuadra. Los otros medios se muestran sólo como referencia. Los adelantos pagados desde la caja no cuentan en esta versión. Un cierre no se edita, y lo cobrado dentro de un cierre ya no se anula ni se reactiva su cita.
+Dueña y encargado cierran la caja cuantas veces quieran al día. Cada cierre cubre desde el anterior (el primero, desde el inicio del día en la zona del negocio) hasta el momento de cerrar. Si la caja arrastra cobros de días anteriores (no se cerró después de ellos), la pantalla de cierre lo avisa y dice desde qué día: el cierre los incluye igual, para no dejar huecos. **Esperado = fondo inicial + efectivo cobrado + propinas en efectivo**; se anota lo contado y la diferencia, con nota obligatoria si no cuadra. Los otros medios se muestran sólo como referencia. Los adelantos pagados desde la caja no cuentan en esta versión. Un cierre no se edita, y lo cobrado dentro de un cierre ya no se anula ni se reactiva su cita.
 
 ---
 
