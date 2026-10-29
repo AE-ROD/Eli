@@ -126,7 +126,8 @@ describe("POST /api/atenciones/[id]/anulacion", () => {
       voidedByName: "Bruno Encargado",
       voidReason: "Se fue sin esperar",
     })
-    expect(citaGuardada("cita-abierta").status).toBe("cancelada")
+    // La canceló el negocio al anular (#121): quién y cuándo.
+    expect(citaGuardada("cita-abierta")).toMatchObject({ status: "cancelada", canceladaPor: "negocio", canceladaEn: AHORA })
     // No se borra nada: sigue ahí, anulada, con sus líneas.
     expect(base.buscar("visitService", { visitId: "v-por-cobrar" })).toHaveLength(1)
   })

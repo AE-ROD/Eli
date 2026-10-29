@@ -101,7 +101,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (existente.appointmentId && existente.status !== "finalizada") {
         await tx.appointment.updateMany({
           where: { id: existente.appointmentId, businessId: actor.businessId, status: { in: ESTADOS_DE_RESERVA } },
-          data: { status: "cancelada" },
+          // La cancela el negocio al anular (#121): queda quién y cuándo.
+          data: { status: "cancelada", canceladaPor: "negocio", canceladaEn: new Date() },
         })
       }
 
