@@ -243,6 +243,22 @@ describe("GET /api/atenciones/[id]/cobro: qué quedará sin % antes de cobrar (#
     expect(res.status).toBe(401)
   })
 
+  it("la profesional que pide la atención de un colega del mismo negocio: 404, no 401", async () => {
+    // Sólo de Pedro: Carla no la ve, así que para ella no existe.
+    base.reiniciar({
+      ...escenario(),
+      visit: [...escenario().visit, atencion("v2", { status: "por-cobrar" })],
+      visitService: [
+        ...escenario().visitService,
+        linea("l-de-pedro", "v2", { memberId: "m-pedro", professionalName: "Pedro Profesional" }),
+      ],
+    })
+
+    expect((await antesDeCobrar(sesiones.carla, "v2")).status).toBe(404)
+    // Existe: a Pedro, que la ve pero tampoco cobra, se le dice 401.
+    expect((await antesDeCobrar(sesiones.pedro, "v2")).status).toBe(401)
+  })
+
   it("sin sesión: 401", async () => {
     const res = await antesDeCobrar(null)
 

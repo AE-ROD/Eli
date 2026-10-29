@@ -439,6 +439,41 @@ describe("GET /api/comisiones/historial", () => {
       expect(cuerpo.total).toBe(0)
     })
 
+    /** El % de un producto también va sin miembro, pero es de todo el equipo, no de alguien que se fue. */
+    const deProducto = async () => {
+      // Import dinámico: `lib/productos` carga prisma, que acá es la base falsa del mock.
+      const { TODO_EL_EQUIPO } = await import("@/lib/productos")
+      await base.prisma.commissionChange.create({
+        data: {
+          id: "cc-producto",
+          businessId: NEGOCIO,
+          memberId: null,
+          memberName: TODO_EL_EQUIPO,
+          scope: "product",
+          productName: "Shampoo",
+          changedByName: "Ana Dueña",
+          changedByEmail: "duena@uno.test",
+          newPercent: 10,
+        },
+      })
+      return TODO_EL_EQUIPO
+    }
+
+    it("un cambio del % de un producto no cuenta como ex-miembro", async () => {
+      const todoElEquipo = await deProducto()
+
+      const cuerpo = await (await historial(sesiones.dueña)).json()
+      expect(cuerpo.exMiembros).toEqual(["Lucía Exprofesional"])
+      // Sin filtro sí sale en el historial.
+      expect(cuerpo.cambios.map((c: { id: string }) => c.id)).toContain("cc-producto")
+
+      const filtrado = await (
+        await historial(sesiones.dueña, `?exMiembro=${encodeURIComponent(todoElEquipo)}`)
+      ).json()
+      expect(filtrado.total).toBe(0)
+      expect(filtrado.cambios).toEqual([])
+    })
+
     it("el nombre de un ex-miembro de otro negocio no trae nada", async () => {
       await deExMiembro("cc-ajeno-ex", OTRO_NEGOCIO, "Zoe Del Otro")
       const cuerpo = await (await historial(sesiones.dueña, "?exMiembro=Zoe%20Del%20Otro")).json()

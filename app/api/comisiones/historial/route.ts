@@ -25,6 +25,14 @@ const consultaSchema = z
   })
 
 /**
+ * Los cambios de alguien que ya no está: sin miembro. Los del % de un producto
+ * también van sin miembro, pero porque son de todo el equipo (`memberName` es
+ * `TODO_EL_EQUIPO`, `lib/productos.ts`), no de alguien que se fue; se dejan
+ * fuera por `scope`, que es explícito, y no por el nombre copiado.
+ */
+const DE_EX_MIEMBROS = { memberId: null, scope: { not: "product" } }
+
+/**
  * GET /api/comisiones/historial?miembro=&pagina= — los cambios de % de
  * comisión (`CommissionChange`, #35): quién cambió qué, de cuánto a cuánto y
  * cuándo, del más reciente al más viejo. Sólo la dueña.
@@ -62,7 +70,7 @@ export async function GET(request: NextRequest) {
     if (!existe) return NextResponse.json({ error: "Profesional no encontrado" }, { status: 404 })
   }
 
-  const filtro = miembro ? { memberId: miembro } : exMiembro ? { memberId: null, memberName: exMiembro } : {}
+  const filtro = miembro ? { memberId: miembro } : exMiembro ? { ...DE_EX_MIEMBROS, memberName: exMiembro } : {}
   const where = { AND: [{ businessId: actor.businessId }, filtro] }
   const [total, cambios, exMiembros] = await Promise.all([
     prisma.commissionChange.count({ where }),
@@ -85,7 +93,7 @@ export async function GET(request: NextRequest) {
       take: POR_PAGINA,
     }),
     prisma.commissionChange.findMany({
-      where: { businessId: actor.businessId, memberId: null },
+      where: { businessId: actor.businessId, ...DE_EX_MIEMBROS },
       select: { memberName: true },
       distinct: ["memberName"],
       orderBy: { memberName: "asc" },
