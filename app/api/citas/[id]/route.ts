@@ -18,6 +18,8 @@ import { actorDeSesion, memberIdParaCita, puedeReactivarCita, whereDeAgenda, typ
 import { MENSAJE_CITA_CERRADA, MENSAJE_CITA_CON_ATENCION, sePuedeMover } from "@/lib/mover-cita"
 import { advertenciasDeAgenda } from "@/lib/advertencias-de-agenda"
 import { decidirReactivacion, problemaConLaAtencion } from "@/lib/reactivar-cita"
+import { ocupaElHorario } from "@/lib/ocupacion"
+import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
 
 const edicionDeCitaSchema = z.object({
   title: titulo().optional(),
@@ -234,7 +236,14 @@ export async function PUT(
     } satisfies Prisma.AppointmentUpdateArgs
 
     if (reactivacion.tipo !== "reactivar") {
-      return NextResponse.json(await prisma.appointment.update(actualizacion))
+      const cita = await prisma.appointment.update(actualizacion)
+      // Si dejó libre su horario (se canceló, o se movió de hora o de
+      // profesional), a la lista de espera de ese día, después de responder.
+      const libera = datos.status !== undefined && !ocupaElHorario(datos.status)
+      if (ocupaElHorario(existente.status) && (libera || seMueve)) {
+        programarAvisoDeHoraLiberada({ businessId: actor.businessId, inicio: existente.startTime })
+      }
+      return NextResponse.json(cita)
     }
 
     // La atención se revisa en la misma transacción que reactiva: un cobro o
@@ -271,6 +280,9 @@ export async function DELETE(
   }
 
   await prisma.appointment.delete({ where: { id: existente.id } })
+  if (ocupaElHorario(existente.status)) {
+    programarAvisoDeHoraLiberada({ businessId: actor.businessId, inicio: existente.startTime })
+  }
 
   return NextResponse.json({ mensaje: "Cita eliminada" })
 }
