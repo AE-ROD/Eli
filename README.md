@@ -150,6 +150,18 @@ el dueño, nunca un agente (la única base configurada es producción). Orden:
 aplicar la migración, desplegar, y
 `npx prisma migrate resolve --applied 20261029120000_etapa_3_avisos_por_correo`.
 
+### `20261031120000_etapa_5_reservas_a_medida`
+
+Aditiva: columnas nuevas con default en `negocios` (`horaValleActiva`) y
+`servicios` (`excluidoDeHoraValle`); un único `(id, businessId)` en `citas`; las
+tablas nuevas `cita_servicios` y `franjas_de_hora_valle`, CHECKs y el trigger
+`cita_servicios_mismo_negocio`, escritos a mano. No reescribe filas: las citas
+de antes quedan sin filas en `cita_servicios` y se siguen leyendo por
+`serviceId`. El código viejo no usa nada de esto, así que se aplica **antes**
+de desplegar. La aplica el dueño, nunca un agente (la única base configurada
+es producción). Orden: aplicar la migración, desplegar, y
+`npx prisma migrate resolve --applied 20261031120000_etapa_5_reservas_a_medida`.
+
 ## Cómo está organizado
 
 ```

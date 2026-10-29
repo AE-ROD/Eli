@@ -157,6 +157,8 @@ const tablas: Tablas = {
   cierreDeCaja: [],
   inscripcionEnEspera: [],
   envioAClientes: [],
+  appointmentService: [],
+  franjaDeHoraValle: [],
   customer: clientesFake,
   appointment: citasFake,
 }

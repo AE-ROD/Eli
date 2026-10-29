@@ -55,6 +55,7 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     porConfirmarTrasFaltas: null,
     filaVirtualActiva: false,
     filaVirtualTope: 15,
+    horaValleActiva: false,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
@@ -85,6 +86,7 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     duration: 30,
     price: null,
     frecuenciaDias: null,
+    excluidoDeHoraValle: false,
     active: true,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -193,6 +195,8 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     resueltaAt: null,
   }),
   envioAClientes: () => ({ customerId: null, esperaId: null, enviadoAt: new Date() }),
+  appointmentService: () => ({ serviceId: null, price: null, createdAt: new Date() }),
+  franjaDeHoraValle: () => ({ createdAt: new Date() }),
 }
 
 /** Campos `Json` del esquema: aceptan un objeto como valor (cualquier otro objeto es una escritura anidada). */
@@ -219,6 +223,15 @@ const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
   inscripcionEnEspera: [{ campos: ["tokenHash"] }],
   // El candado de los mensajes a clientes.
   envioAClientes: [{ campos: ["businessId", "tipo", "referencia"] }],
+  appointmentService: [{ campos: ["appointmentId", "orden"] }],
+}
+
+/**
+ * Borrados en cascada que la base hace solos (`onDelete: Cascade`), sólo los
+ * que un endpoint dispara: [modelo hijo, campo que apunta al borrado].
+ */
+const CASCADAS: Partial<Record<NombreDeModelo, [NombreDeModelo, string][]>> = {
+  appointment: [["appointmentService", "appointmentId"]],
 }
 
 /** Consultas crudas que la base falsa acepta: sólo candados, que en memoria no tienen nada que ordenar. */
@@ -241,6 +254,8 @@ function tablasVacias(): Tablas {
     cierreDeCaja: [],
     inscripcionEnEspera: [],
     envioAClientes: [],
+    appointmentService: [],
+    franjaDeHoraValle: [],
     businessMember: [],
     customer: [],
     service: [],
@@ -260,6 +275,14 @@ export function crearBaseFalsa() {
 
   const filtrar = (modelo: NombreDeModelo, where: unknown) =>
     tablas[modelo].filter((registro) => coincide(tablas, modelo, registro, where))
+
+  function borrar(modelo: NombreDeModelo, registros: Set<Registro>) {
+    tablas[modelo] = tablas[modelo].filter((registro) => !registros.has(registro))
+    for (const [hijo, campo] of CASCADAS[modelo] ?? []) {
+      const ids = new Set([...registros].map((registro) => registro.id))
+      borrar(hijo, new Set(tablas[hijo].filter((registro) => ids.has(registro[campo]))))
+    }
+  }
 
   // ─── Escritura ───────────────────────────────────────────────────────────
 
@@ -381,7 +404,7 @@ export function crearBaseFalsa() {
         const [registro] = filtrar(modelo, args.where)
         if (!registro) throw errorDePrisma("P2025", `No existe el registro a borrar en ${modelo}`)
         const copiaDeSalida = salida(registro, args)
-        tablas[modelo] = tablas[modelo].filter((otro) => otro !== registro)
+        borrar(modelo, new Set([registro]))
         return copiaDeSalida
       }),
       updateMany: vi.fn(async (args: Args) => {
@@ -393,9 +416,9 @@ export function crearBaseFalsa() {
         return { count: registros.length }
       }),
       deleteMany: vi.fn(async (args: Args = {}) => {
-        const borrar = new Set(filtrar(modelo, args.where))
-        tablas[modelo] = tablas[modelo].filter((registro) => !borrar.has(registro))
-        return { count: borrar.size }
+        const registros = new Set(filtrar(modelo, args.where))
+        borrar(modelo, registros)
+        return { count: registros.size }
       }),
     }
   }
@@ -423,6 +446,8 @@ export function crearBaseFalsa() {
     cierreDeCaja: delegado("cierreDeCaja"),
     inscripcionEnEspera: delegado("inscripcionEnEspera"),
     envioAClientes: delegado("envioAClientes"),
+    appointmentService: delegado("appointmentService"),
+    franjaDeHoraValle: delegado("franjaDeHoraValle"),
     /**
      * Sólo para candados (`SELECT … FOR UPDATE` o `pg_advisory_xact_lock`): en
      * memoria no hay concurrencia que ordenar, así que no devuelve nada. Queda

@@ -9,12 +9,12 @@ datasource db {
 }
 
 model User {
-  id            String   @id @default(cuid())
-  name          String
-  email         String   @unique
-  password      String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                   String    @id @default(cuid())
+  name                 String
+  email                String    @unique
+  password             String
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
   /// Las sesiones iniciadas antes de este momento ya no valen: lo pone
   /// restablecer la contraseña. `lib/auth.ts` lo revisa cada 5 minutos. Null es
   /// "nunca se cerraron". Columna en camelCase y sin `@map`, como el resto del
@@ -24,10 +24,10 @@ model User {
   /// fin). No afecta los correos de la cuenta (recuperar contraseña, etc.).
   correosDesactivados  Boolean   @default(false)
 
-  business          Business?
-  memberships       BusinessMember[]
-  resetTokens       PasswordResetToken[]
-  commissionChanges CommissionChange[] // cambios de porcentaje que este usuario (siempre dueño) aplicó.
+  business             Business?
+  memberships          BusinessMember[]
+  resetTokens          PasswordResetToken[]
+  commissionChanges    CommissionChange[] // cambios de porcentaje que este usuario (siempre dueño) aplicó.
   // Relación opcional (ver CommissionChange.changedById): la auditoría no
   // puede depender de que el usuario siga existiendo.
   solicitudesDeSoporte SolicitudDeSoporte[] // relación opcional: la solicitud queda si se borra el usuario.
@@ -76,32 +76,32 @@ model Business {
   // ─── Mini página pública (etapa 1) ──────────────────────────────────────
   // Datos que el negocio edita y que se muestran en /reservar/[slug]. Todos
   // opcionales: un negocio sin llenarlos se ve como hasta ahora.
-  address     String?
-  comuna      String?
+  address               String?
+  comuna                String?
   /// Número de WhatsApp del negocio, en E.164 (+56...). Lo valida la app.
-  whatsapp    String?
+  whatsapp              String?
   /// Usuario de Instagram, sin la URL.
-  instagram   String?
+  instagram             String?
   /// Clave de una paleta cerrada de colores; la lista válida está en la app,
   /// no en la base.
-  color       String?
-  logoUrl     String?
-  coverUrl    String?
+  color                 String?
+  logoUrl               String?
+  coverUrl              String?
   /// Ids de `lib/medios-de-pago.ts` que el negocio acepta, para mostrarlos en
   /// la página pública. Vacío = no se muestra nada.
-  mediosDePago String[] @default([])
+  mediosDePago          String[] @default([])
   /// Hasta cuántas horas antes de la cita el cliente puede cancelar o
   /// reagendar con su enlace. Default 24; lo cambia el negocio.
-  cancelacionHorasAntes Int @default(24)
+  cancelacionHorasAntes Int      @default(24)
 
   // ─── La plata del equipo (etapa 2) ──────────────────────────────────────
   /// Cada cuánto se liquida al equipo: "semanal" | "quincenal" | "mensual".
   /// Lo elige sólo la dueña (`puedeConfigurarLiquidacion`). Un CHECK de la
   /// migración limita los valores. Cambiarlo sólo afecta lo que viene.
-  liquidacionPeriodo      String @default("mensual")
+  liquidacionPeriodo      String    @default("mensual")
   /// En el período semanal, qué día empieza la semana (0 = domingo … 6 =
   /// sábado, como `WorkSchedule.dayOfWeek`). Default lunes. CHECK 0..6.
-  liquidacionInicioSemana Int    @default(1)
+  liquidacionInicioSemana Int       @default(1)
   /// Desde qué día (del negocio, en su zona) se liquida: lo cobrado antes y
   /// los movimientos con fecha anterior nunca entran a una liquidación. Lo
   /// fija la dueña antes de la primera; null = todavía no se liquida. Se
@@ -131,28 +131,36 @@ model Business {
   /// Cuántas personas puede haber esperando en la fila a la vez. CHECK 1..100.
   filaVirtualTope        Int     @default(15)
 
-  invitados         Business[]         @relation("Referidos")
-  correosDeCuenta   CorreoDeCuenta[]
-  customers         Customer[]
-  appointments      Appointment[]
-  services          Service[]
-  workSchedules     WorkSchedule[]
-  conversations     Conversation[]
-  members           BusinessMember[]
-  invitations       WorkerInvitation[]
-  visits            Visit[]
-  commissionRates   CommissionRate[]
-  commissionChanges CommissionChange[]
-  solicitudesDeSoporte SolicitudDeSoporte[]
-  memberServices    MemberService[]
-  timeBlocks        TimeBlock[]
-  productos         Producto[]
-  propinas          PropinaDeAtencion[]
-  liquidaciones     Liquidacion[]
+  // ─── Reservas a medida (etapa 5) ────────────────────────────────────────
+  /// Precios de hora valle (#89c): una opción del negocio, apagada por
+  /// defecto. Las franjas están en `FranjaDeHoraValle`. La configura sólo la
+  /// dueña (`puedeConfigurarHoraValle`).
+  horaValleActiva Boolean @default(false)
+
+  invitados                Business[]                @relation("Referidos")
+  correosDeCuenta          CorreoDeCuenta[]
+  customers                Customer[]
+  appointments             Appointment[]
+  services                 Service[]
+  workSchedules            WorkSchedule[]
+  conversations            Conversation[]
+  members                  BusinessMember[]
+  invitations              WorkerInvitation[]
+  visits                   Visit[]
+  commissionRates          CommissionRate[]
+  commissionChanges        CommissionChange[]
+  solicitudesDeSoporte     SolicitudDeSoporte[]
+  memberServices           MemberService[]
+  timeBlocks               TimeBlock[]
+  productos                Producto[]
+  propinas                 PropinaDeAtencion[]
+  liquidaciones            Liquidacion[]
   movimientosDeLiquidacion MovimientoDeLiquidacion[]
-  cierresDeCaja     CierreDeCaja[]
-  inscripcionesEnEspera InscripcionEnEspera[]
-  enviosAClientes   EnvioAClientes[]
+  cierresDeCaja            CierreDeCaja[]
+  inscripcionesEnEspera    InscripcionEnEspera[]
+  enviosAClientes          EnvioAClientes[]
+  serviciosDeCitas         AppointmentService[]
+  franjasDeHoraValle       FranjaDeHoraValle[]
 
   @@index([invitadoPorId])
   @@map("negocios")
@@ -192,21 +200,21 @@ model BusinessMember {
   especialidad String?
   fotoUrl      String?
 
-  workSchedules     WorkSchedule[]
-  appointments      Appointment[]
-  visitServices     VisitService[]
-  commissionRates   CommissionRate[]
+  workSchedules            WorkSchedule[]
+  appointments             Appointment[]
+  visitServices            VisitService[]
+  commissionRates          CommissionRate[]
   // Filas de auditoría donde este miembro es el auditado. La relación de
   // CommissionChange.member es simple (no compuesta) y SetNull: ver el
   // comentario en ese modelo.
-  commissionChanges CommissionChange[]
+  commissionChanges        CommissionChange[]
   // Servicios que hace este profesional. Sin filas = hace todos.
-  memberServices    MemberService[]
-  timeBlocks        TimeBlock[]
-  propinas          PropinaDeAtencion[]
-  liquidaciones     Liquidacion[]
+  memberServices           MemberService[]
+  timeBlocks               TimeBlock[]
+  propinas                 PropinaDeAtencion[]
+  liquidaciones            Liquidacion[]
   movimientosDeLiquidacion MovimientoDeLiquidacion[]
-  inscripcionesEnEspera InscripcionEnEspera[]
+  inscripcionesEnEspera    InscripcionEnEspera[]
 
   @@unique([businessId, userId])
   // Habilita la FK compuesta de CommissionRate (memberId, businessId): sin
@@ -252,14 +260,14 @@ model PasswordResetToken {
 }
 
 model Customer {
-  id        String   @id @default(cuid())
-  name      String
-  lastName  String?
-  cedula    String?
-  email     String?
-  phone     String?
-  tags      String[]
-  notes     String?
+  id         String   @id @default(cuid())
+  name       String
+  lastName   String?
+  cedula     String?
+  email      String?
+  phone      String?
+  tags       String[]
+  notes      String?
   businessId String
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   createdAt  DateTime @default(now())
@@ -280,8 +288,8 @@ model Customer {
   correoPromoConsentSource String?
   correoPromoBajaAt        DateTime?
 
-  appointments Appointment[]
-  visits       Visit[]
+  appointments    Appointment[]
+  visits          Visit[]
   enviosAClientes EnvioAClientes[]
 
   @@unique([id, businessId])
@@ -291,31 +299,35 @@ model Customer {
 }
 
 model Service {
-  id          String   @id @default(cuid())
-  businessId  String
-  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  name        String
-  description String?
-  duration    Int // en minutos: 15, 30, 45, 60, 90, 120...
-  price       Float?
+  id                  String   @id @default(cuid())
+  businessId          String
+  business            Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name                String
+  description         String?
+  duration            Int // en minutos: 15, 30, 45, 60, 90, 120...
+  price               Float?
   /// Categoría libre para agrupar en la página pública ("Corte", "Color").
-  category    String?
+  category            String?
   /// Cada cuántos días vuelve normalmente un cliente a este servicio, para
   /// "te toca" cuando el cliente no tiene ciclo propio. Null = no se avisa.
   /// CHECK 7..365 en la base.
-  frecuenciaDias Int?
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  frecuenciaDias      Int?
+  /// Hora valle (#89c): este servicio no se rebaja nunca, aunque la reserva
+  /// caiga en una franja.
+  excluidoDeHoraValle Boolean  @default(false)
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  appointments      Appointment[]
-  visitServices     VisitService[]
-  commissionRates   CommissionRate[]
+  appointments          Appointment[]
+  visitServices         VisitService[]
+  commissionRates       CommissionRate[]
   // Filas de auditoría con este servicio como excepción puntual. Relación
   // simple (no compuesta) y SetNull: ver el comentario en CommissionChange.
-  commissionChanges CommissionChange[]
-  memberServices    MemberService[]
+  commissionChanges     CommissionChange[]
+  memberServices        MemberService[]
   inscripcionesEnEspera InscripcionEnEspera[]
+  serviciosDeCitas      AppointmentService[]
 
   // Habilita la FK compuesta de CommissionRate (serviceId, businessId), igual
   // que en BusinessMember.
@@ -341,39 +353,39 @@ model WorkSchedule {
 }
 
 model Appointment {
-  id               String   @id @default(cuid())
-  serviceId        String?
-  service          Service? @relation(fields: [serviceId], references: [id])
-  title            String   // nombre del servicio como texto libre o copia del servicio
-  startTime        DateTime
-  endTime          DateTime
-  status           String   @default("pendiente") // pendiente, confirmada, en-progreso, completada, cancelada, no-asistio (sin CHECK: lo valida la app)
+  id                    String          @id @default(cuid())
+  serviceId             String?
+  service               Service?        @relation(fields: [serviceId], references: [id])
+  title                 String // nombre del servicio como texto libre o copia del servicio
+  startTime             DateTime
+  endTime               DateTime
+  status                String          @default("pendiente") // pendiente, confirmada, en-progreso, completada, cancelada, no-asistio (sin CHECK: lo valida la app)
   // Quién creó la cita: "panel" (el equipo del negocio) o "reserva-publica"
   // (la página /reservar/[slug]). Los topes anti-abuso de la reserva pública
   // cuentan por esta columna (`lib/reserva-publica.ts`). En la base, una CHECK
   // la limita a esos dos valores (migración `origen_de_las_citas`).
-  source           String   @default("panel")
+  source                String          @default("panel")
   // Etapa 4 (#84): la reserva pública entró por confirmar porque el contacto
   // tenía `Business.porConfirmarTrasFaltas` faltas o más. Se fija al crearla y
   // no cambia: no es un estado. Toda reserva pública nace "pendiente", así que
   // el status solo no distingue; "por confirmar" es esta marca con status
   // "pendiente" (`estaPorConfirmar` en `lib/por-confirmar.ts`). La confirman o
   // cancelan dueña y encargado (`puedeResolverPorConfirmar`).
-  confirmacionPorFaltas Boolean @default(false)
-  notes            String?  // notas internas del profesional
-  clientComments   String?  // comentarios del cliente al reservar
-  price            Float?
+  confirmacionPorFaltas Boolean         @default(false)
+  notes                 String? // notas internas del profesional
+  clientComments        String? // comentarios del cliente al reservar
+  price                 Float?
   // La columna sigue llamándose `patientId` en la base (de cuando Eli apuntaba a
   // consultorios). Renombrarla pide una migración sobre datos reales; el `@map`
   // deja el nombre claro en el código sin tocar la tabla.
-  customerId       String?         @map("patientId")
-  customer         Customer?       @relation(fields: [customerId], references: [id])
-  memberId         String?
-  member           BusinessMember? @relation(fields: [memberId], references: [id])
-  businessId       String
-  business         Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  customerId            String?         @map("patientId")
+  customer              Customer?       @relation(fields: [customerId], references: [id])
+  memberId              String?
+  member                BusinessMember? @relation(fields: [memberId], references: [id])
+  businessId            String
+  business              Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
 
   // SIN USO desde la etapa 2: la comisión se congela por línea, en
   // `VisitService` (commissionPercent/commissionCents/commissionAt), porque una
@@ -440,6 +452,12 @@ model Appointment {
   // La atención que nació de esta reserva, si el cliente ya llegó.
   visit Visit?
 
+  // Etapa 5 (#89a): los servicios de la cita, en orden. Las citas de antes
+  // no tienen filas y se leen por `serviceId`, como siempre.
+  servicios AppointmentService[]
+
+  // Habilita la FK compuesta (appointmentId, businessId) de AppointmentService.
+  @@unique([id, businessId])
   @@index([businessId])
   @@index([businessId, startTime])
   // Consulta de liquidación: businessId + memberId + status + rango de fechas.
@@ -448,6 +466,60 @@ model Appointment {
   @@index([customerId])
   @@index([memberId])
   @@map("citas")
+}
+
+/**
+ * Un servicio de una cita con varios (#89a, etapa 5): hasta 4, del mismo
+ * profesional y seguidos. Copia nombre, duración y precio al reservar: la cita
+ * se lee igual aunque el catálogo cambie o el servicio se borre. Las citas de
+ * antes no tienen filas acá; ahí manda `Appointment.serviceId`.
+ * La cita es FK compuesta (appointmentId, businessId): Postgres rechaza una
+ * fila que mezcle la cita de otro negocio, y se borra con ella. El servicio es
+ * FK simple con SetNull, como en `VisitService`: SetNull en una compuesta
+ * anularía también `businessId`. Que el servicio sea del negocio lo garantiza
+ * quien escribe (sólo se copian servicios leídos con el `businessId` de la
+ * reserva). CHECKs en la migración: orden 1..4, duración > 0, precio ≥ 0.
+ */
+model AppointmentService {
+  id            String      @id @default(cuid())
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId, businessId], references: [id, businessId], onDelete: Cascade)
+  businessId    String
+  business      Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  serviceId     String?
+  service       Service?    @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  /// Copias del catálogo al reservar.
+  serviceName   String
+  duration      Int // minutos
+  price         Float? // ya con la rebaja de hora valle, si la hubo
+  /// 1..4, en el orden en que se hacen.
+  orden         Int
+  createdAt     DateTime    @default(now())
+
+  @@unique([appointmentId, orden])
+  @@index([businessId])
+  @@index([serviceId])
+  @@map("cita_servicios")
+}
+
+/**
+ * Una franja de hora valle (#89c): un % de rebaja para las reservas públicas
+ * que EMPIEZAN dentro de [desde, hasta) ese día de la semana, en la zona del
+ * negocio. Sólo rige con `Business.horaValleActiva`. CHECKs en la migración:
+ * dayOfWeek 0..6, "HH:MM" válidos, desde < hasta, porcentaje 5..90.
+ */
+model FranjaDeHoraValle {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  dayOfWeek  Int // 0 = domingo … 6 = sábado, como WorkSchedule
+  desde      String // "HH:MM"
+  hasta      String // "HH:MM"
+  porcentaje Int // 5..90
+  createdAt  DateTime @default(now())
+
+  @@index([businessId, dayOfWeek])
+  @@map("franjas_de_hora_valle")
 }
 
 // ─── Tablero de atenciones (docs/PRODUCTO.md, sección 7) ────────────────────
@@ -509,32 +581,32 @@ model Visit {
   // reserva. El nombre va en `customerName` (no hay cliente). Una CHECK
   // limita `origen` a "tablero" | "fila" y obliga a que las columnas fila*
   // estén todas en null fuera de la fila, y token, fecha y número dentro.
-  origen         String    @default("tablero")
+  origen        String    @default("tablero")
   /// Hash del token del enlace del celular (nunca el token en claro).
-  filaTokenHash  String?   @unique
+  filaTokenHash String?   @unique
   /// Correo opcional para el aviso "queda 1 persona adelante".
-  filaEmail      String?
+  filaEmail     String?
   /// Día del negocio, en su zona, "YYYY-MM-DD": el número de turno se cuenta por día.
-  filaFecha      String?
+  filaFecha     String?
   /// Número de turno del día en el negocio (1, 2, 3…). Único por (negocio, día).
-  filaNumero     Int?
+  filaNumero    Int?
   /// Cuándo se mandó el aviso "queda 1 persona adelante". No null = ya avisada.
-  filaAvisadaAt  DateTime?
+  filaAvisadaAt DateTime?
 
-  services VisitService[]
-  payments VisitPayment[]
-  propinas PropinaDeAtencion[]
+  services                 VisitService[]
+  payments                 VisitPayment[]
+  propinas                 PropinaDeAtencion[]
   movimientosDeLiquidacion MovimientoDeLiquidacion[]
 
   // Habilita las FK compuestas (visitId, businessId) de las propinas y de los
   // movimientos de liquidación, como en BusinessMember.
   @@unique([id, businessId])
-  @@index([businessId, status])
-  @@index([businessId, paidAt])
-  @@index([customerId])
   // Numerar sin repetir y listar la fila del día de un negocio. En Postgres
   // las filas con null no chocan, así que las atenciones del Tablero no cuentan.
   @@unique([businessId, filaFecha, filaNumero])
+  @@index([businessId, status])
+  @@index([businessId, paidAt])
+  @@index([customerId])
   @@map("atenciones")
 }
 
@@ -632,7 +704,6 @@ model Producto {
  * propina no es ingreso del negocio, así que no puede sumar en el tablero ni
  * en los reportes. Va 100 % al profesional y se paga en la liquidación; la de
  * la dueña (`byOwner`) no entra a ninguna (CHECK).
- *
  * FK compuestas contra (id, businessId), como CommissionRate: Postgres rechaza
  * una propina que mezcle la atención o el miembro de otro negocio. Los
  * miembros con NO ACTION y no SetNull: SetNull en una compuesta anularía
@@ -665,7 +736,6 @@ model PropinaDeAtencion {
  * cerrar: los montos son un snapshot y no se recalculan. Las líneas, propinas
  * y movimientos incluidos quedan marcados con su `liquidacionId`. Anularla
  * (sólo cerrada, no pagada) los libera.
- *
  * `desde` y `hasta` son días del negocio (incluidos los dos), en su `zona`.
  * Una sola liquidación no anulada por (negocio, miembro, desde): índice único
  * parcial escrito a mano en la migración. Los ids de `User` (cerradaPorId…)
@@ -866,18 +936,18 @@ model MemberService {
  * bloqueo de todo el negocio.
  */
 model TimeBlock {
-  id         String          @id @default(cuid())
-  businessId String
-  business   Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  memberId   String?
-  member     BusinessMember? @relation(fields: [memberId, businessId], references: [id, businessId], onDelete: Cascade)
-  startTime  DateTime
-  endTime    DateTime
-  motivo     String?
+  id          String          @id @default(cuid())
+  businessId  String
+  business    Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  memberId    String?
+  member      BusinessMember? @relation(fields: [memberId, businessId], references: [id, businessId], onDelete: Cascade)
+  startTime   DateTime
+  endTime     DateTime
+  motivo      String?
   // Id de `User` SIN relación, como `Visit.createdById`: el registro de quién
   // lo creó no debe depender de que el usuario siga existiendo.
   createdById String?
-  createdAt  DateTime        @default(now())
+  createdAt   DateTime        @default(now())
 
   @@index([businessId, startTime])
   @@index([memberId, startTime])
@@ -931,7 +1001,7 @@ model CommissionChange {
 
   scope       String // "default" | "service" | "product" -- explícito, no inferido de serviceId (ver comentario del modelo)
   serviceId   String?
-  service     Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  service     Service?  @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   serviceName String? // snapshot; sólo aplica cuando scope = "service"
   // Como serviceId/serviceName, para el % de un producto (scope = "product").
   productId   String?
@@ -958,14 +1028,14 @@ model CommissionChange {
 }
 
 model Conversation {
-  id            String    @id @default(cuid())
+  id            String   @id @default(cuid())
   // Mismo caso que `Appointment.customerId`: las columnas conservan su nombre.
-  customerName  String    @map("patientName")
-  customerPhone String?   @map("patientPhone")
+  customerName  String   @map("patientName")
+  customerPhone String?  @map("patientPhone")
   businessId    String
-  business      Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   messages Message[]
 
