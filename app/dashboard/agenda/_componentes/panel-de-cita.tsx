@@ -18,6 +18,7 @@ import { Aviso } from "@/components/panel/aviso"
 import { cn } from "@/lib/utils"
 import { citaPorConfirmar, nombreDeCliente, type Cita } from "../_datos"
 import { estiloDeEstado } from "./estados-de-cita"
+import { useAhora } from "./usar-ahora"
 
 /** Un fundido corto al abrir y al cerrar: el panel no se desliza. */
 const FUNDIDO = { duration: DURACION.sombra, ease: CURVA.suave }
@@ -85,8 +86,8 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover, onReacti
   const titulo = useRef<HTMLHeadingElement>(null)
   const abridor = useRef<HTMLElement | null>(null)
   const ultimaVista = useRef({ id: cita.id, estado: cita.status })
-  // La hora a la que se abrió el panel: con ella se decide si ya pasó la de la cita.
-  const [abiertoEn] = useState(() => Date.now())
+  // Con esta hora se decide si ya pasó la de la cita: se renueva al pasar a otra y cada medio minuto (#100).
+  const ahora = useAhora(cita.id)
   const estado = estiloDeEstado(cita.status, porConfirmar)
   const duracion = duracionParaMostrar(cita.startTime, cita.endTime)
 
@@ -131,7 +132,7 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover, onReacti
   // servidor vuelve a mirar todo (y que no tenga una atención cobrada).
   const puedeReactivarse =
     reactiva &&
-    ((cita.status === "cancelada" && new Date(cita.startTime).getTime() > abiertoEn) ||
+    ((cita.status === "cancelada" && new Date(cita.startTime).getTime() > ahora) ||
       cita.status === "completada" ||
       cita.status === "no-asistio")
   const textoDeReactivar = cita.status === "cancelada" ? "Reactivar cita" : "Devolver a confirmada"
@@ -151,7 +152,7 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover, onReacti
   // "No vino" cuando ya pasó la hora de empezar: antes, si avisó, se cancela.
   // El servidor lo vuelve a verificar (y que no haya llegado al Tablero).
   const puedeNoVenir =
-    puedeMarcarseNoVino(cita.status) && new Date(cita.startTime).getTime() <= abiertoEn && !porConfirmar
+    puedeMarcarseNoVino(cita.status) && new Date(cita.startTime).getTime() <= ahora && !porConfirmar
 
   return (
     <motion.aside
