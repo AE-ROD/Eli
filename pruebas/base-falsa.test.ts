@@ -101,6 +101,24 @@ describe("base falsa: lo que entiende", () => {
   })
 })
 
+describe("base falsa: distinct", () => {
+  it("deja la primera fila de cada valor, en el orden pedido y antes de take", async () => {
+    await prisma.appointment.create({ data: { businessId: "n1", title: "Corte", startTime: new Date(5), endTime: new Date(6) } })
+    const titulos = await prisma.appointment.findMany({
+      select: { title: true },
+      distinct: ["title"],
+      orderBy: { title: "asc" },
+      take: 5,
+    })
+    expect(titulos).toEqual([{ title: "Color" }, { title: "Corte" }])
+  })
+
+  it("lanza ante un distinct que no entiende", async () => {
+    await expect(prisma.appointment.findMany({ distinct: "title" })).rejects.toThrow(/base falsa/)
+    await expect(prisma.appointment.findMany({ distinct: ["noExiste"] })).rejects.toThrow(/base falsa/)
+  })
+})
+
 describe("base falsa: NOT, has y _count", () => {
   it("NOT descarta lo que cumple la condición; con una lista, lo que cumple cualquiera", async () => {
     const sinBeto = await prisma.visit.findMany({ where: { NOT: { customerName: "Beto" } } })

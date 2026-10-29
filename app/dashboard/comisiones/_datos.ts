@@ -49,15 +49,30 @@ export interface HistorialDeComisiones {
   total: number
   pagina: number
   paginas: number
+  /** Los nombres de quienes ya no están en el equipo y tienen cambios: se pueden elegir en el filtro. */
+  exMiembros: string[]
+}
+
+/**
+ * El filtro del historial: todo el equipo (vacío), un profesional del equipo
+ * (por id) o alguien que ya se fue (por el nombre que quedó copiado, #119).
+ */
+export interface FiltroDeHistorial {
+  miembro?: string
+  exMiembro?: string
 }
 
 export async function leerComisiones(): Promise<Resultado<DatosDeComisiones>> {
   return pedir<DatosDeComisiones>("/api/comisiones", "No se pudieron cargar las comisiones")
 }
 
-export async function leerHistorial(miembro: string, pagina: number): Promise<Resultado<HistorialDeComisiones>> {
+export async function leerHistorial(
+  filtro: FiltroDeHistorial,
+  pagina: number
+): Promise<Resultado<HistorialDeComisiones>> {
   const parametros = new URLSearchParams({ pagina: String(pagina) })
-  if (miembro) parametros.set("miembro", miembro)
+  if (filtro.miembro) parametros.set("miembro", filtro.miembro)
+  else if (filtro.exMiembro) parametros.set("exMiembro", filtro.exMiembro)
   return pedir<HistorialDeComisiones>(`/api/comisiones/historial?${parametros}`, "No se pudo cargar el historial")
 }
 

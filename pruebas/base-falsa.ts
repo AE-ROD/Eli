@@ -381,16 +381,47 @@ export function crearBaseFalsa() {
     return registro
   }
 
+  /**
+   * `distinct` de Prisma: deja la primera fila (en el orden ya aplicado) de
+   * cada combinación de los campos, antes de `skip` y `take`. Sólo la forma
+   * de lista de campos escalares; cualquier otra cosa lanza.
+   */
+  function sinRepetidos(modelo: NombreDeModelo, lista: Registro[], distinct: unknown): Registro[] {
+    if (!Array.isArray(distinct) || distinct.length === 0 || !distinct.every((campo) => typeof campo === "string")) {
+      return falla(`distinct inválido en ${modelo}: sólo una lista de campos`)
+    }
+    for (const campo of distinct) {
+      if (RELACIONES[modelo][campo] || lista.some((fila) => !(campo in fila))) {
+        return falla(`distinct de un campo que no existe: ${modelo}.${campo}`)
+      }
+    }
+    const vistos = new Set<string>()
+    return lista.filter((fila) => {
+      const clave = JSON.stringify(distinct.map((campo) => fila[campo] ?? null))
+      if (vistos.has(clave)) return false
+      vistos.add(clave)
+      return true
+    })
+  }
+
   // ─── El cliente ──────────────────────────────────────────────────────────
 
   /** Lo que devuelve la base es una copia: el endpoint no puede tocar el estado por referencia. */
   const copia = <T>(valor: T): T => structuredClone(valor)
 
   function delegado(modelo: NombreDeModelo) {
-    type Args = Condicion & { where?: unknown; orderBy?: unknown; take?: number; skip?: number; data?: unknown }
+    type Args = Condicion & {
+      where?: unknown
+      orderBy?: unknown
+      take?: number
+      skip?: number
+      data?: unknown
+      distinct?: unknown
+    }
 
     const buscar = (args: Args = {}) => {
       let lista = ordenar(filtrar(modelo, args.where), args.orderBy)
+      if (args.distinct !== undefined) lista = sinRepetidos(modelo, lista, args.distinct)
       if (args.skip !== undefined) lista = lista.slice(args.skip)
       if (args.take !== undefined) lista = lista.slice(0, args.take)
       return lista
