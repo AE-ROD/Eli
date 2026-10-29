@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
-import { NEGOCIO, OTRO_NEGOCIO, conId, datosBase, pedido, sesiones } from "@/pruebas/datos"
+import { MENSAJE_CITA_CAMBIO } from "@/lib/reactivar-cita"
+import { NEGOCIO, OTRO_NEGOCIO, atencion, conId, datosBase, pedido, sesiones } from "@/pruebas/datos"
 
 /**
  * Reservas por confirmar (#84): una cita con `confirmacionPorFaltas` y status
@@ -59,6 +60,13 @@ beforeEach(() => {
       // Ya confirmada por el local: la marca queda como registro y no vuelve a pedir permiso.
       cita("ya-confirmada", { confirmacionPorFaltas: true, status: "confirmada" }),
       { ...cita("ajena", { confirmacionPorFaltas: true }), businessId: OTRO_NEGOCIO, customerId: "c-ajeno", memberId: "m-ajeno" },
+      // El cliente ya llegó al Tablero; en la otra, la atención se anuló.
+      cita("llego", { confirmacionPorFaltas: true }),
+      cita("llego-anulada", { confirmacionPorFaltas: true }),
+    ],
+    visit: [
+      atencion("v-llego", { appointmentId: "llego", status: "en-espera" }),
+      atencion("v-anulada", { appointmentId: "llego-anulada", status: "anulada" }),
     ],
   })
 })
@@ -140,6 +148,56 @@ describe("PUT /api/citas/[id]: una reserva por confirmar (#84)", () => {
     expect(cancelar.status).toBe(409)
     expect(estadoDe("por-confirmar")).toBe("confirmada")
     expect(mockAvisar).not.toHaveBeenCalled()
+  })
+
+  it("el perdedor de la carrera que traía además notas, precio u horario: 409, no 200 en silencio", async () => {
+    const leida = base.buscar("appointment", { id: "por-confirmar" })[0]
+    base.prisma.appointment.update({ where: { id: "por-confirmar" }, data: { status: "confirmada" } })
+    for (const extra of [{ notes: "Pagó abono" }, { price: 9000 }, { startTime: "2099-10-21T13:00:00.000Z", endTime: "2099-10-21T14:00:00.000Z", confirmarAdvertencias: true }]) {
+      base.prisma.appointment.findFirst.mockResolvedValueOnce({ ...leida, status: "pendiente" })
+      const respuesta = await cambiar(sesiones.dueña, "por-confirmar", { status: "confirmada", ...extra })
+      expect(respuesta.status).toBe(409)
+      expect(respuesta.cuerpo.error).toBe(MENSAJE_CITA_CAMBIO)
+    }
+    // Lo que perdió no quedó a medias: ni la nota ni el precio ni el horario.
+    expect(base.buscar("appointment", { id: "por-confirmar" })[0]).toMatchObject({
+      status: "confirmada",
+      startTime: FUTURA.startTime,
+    })
+    expect(base.buscar("appointment", { id: "por-confirmar" })[0].notes ?? null).toBeNull()
+    expect(base.buscar("appointment", { id: "por-confirmar" })[0].price ?? null).toBeNull()
+    expect(mockAvisar).not.toHaveBeenCalled()
+  })
+
+  it("si el cliente ya llegó al Tablero, confirmarla la confirma pero NO le manda el correo", async () => {
+    expect((await cambiar(sesiones.dueña, "llego", { status: "confirmada" })).status).toBe(200)
+    expect(estadoDe("llego")).toBe("confirmada")
+    expect(mockAvisar).not.toHaveBeenCalled()
+  })
+
+  it("si el cliente ya llegó al Tablero, cancelarla responde 409: primero se anula la atención", async () => {
+    const { status, cuerpo } = await cambiar(sesiones.encargado, "llego", { status: "cancelada" })
+    expect(status).toBe(409)
+    expect(cuerpo.error).toBe("Esta reserva ya tiene una atención en el Tablero: anúlala ahí primero")
+    expect(estadoDe("llego")).toBe("pendiente")
+  })
+
+  it("con la atención anulada, vuelve a ser una por confirmar cualquiera: se confirma con correo o se cancela", async () => {
+    expect((await cambiar(sesiones.dueña, "llego-anulada", { status: "confirmada" })).status).toBe(200)
+    expect(mockAvisar).toHaveBeenCalledWith({ businessId: NEGOCIO, citaId: "llego-anulada" })
+
+    base.prisma.appointment.update({ where: { id: "llego-anulada" }, data: { status: "pendiente" } })
+    expect((await cambiar(sesiones.encargado, "llego-anulada", { status: "cancelada" })).status).toBe(200)
+    expect(estadoDe("llego-anulada")).toBe("cancelada")
+  })
+
+  it("la atención se busca filtrando por el negocio de la sesión", async () => {
+    const { PUT } = await import("./route")
+    const visitas = base.prisma.visit.findFirst
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    await PUT(pedido("http://localhost/api/citas/por-confirmar", { status: "confirmada" }), conId("por-confirmar"))
+    expect(visitas).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ businessId: NEGOCIO }) }))
+    expect(mockAvisar).toHaveBeenCalledTimes(1)
   })
 
   it("una de otro negocio: 404 para el dueño ajeno y para la dueña", async () => {
