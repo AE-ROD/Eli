@@ -137,7 +137,10 @@ export function PanelDeCita({
   // Por confirmar, primero se confirma: no se completa ni se marca "no vino" de una.
   const puedeCompletarse = cita.status !== "completada" && !cerrada && !porConfirmar
   // Una completada ya no se cancela: si fue un error, se devuelve a confirmada.
-  const puedeCancelarse = !cerrada && cita.status !== "completada" && (!porConfirmar || resuelve)
+  // Si el cliente ya llegó (atención viva en el Tablero), tampoco: el servidor
+  // responde 409 y la atención se anula primero en el Tablero (#136).
+  const puedeCancelarse =
+    !cerrada && cita.status !== "completada" && cita.conAtencion !== true && (!porConfirmar || resuelve)
   const puedeConfirmarse = porConfirmar && resuelve
   // Reactivar es de dueña y encargado. Una cancelada, sólo si no empezó; el
   // servidor vuelve a mirar todo (y que no tenga una atención cobrada).

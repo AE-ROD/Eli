@@ -180,7 +180,7 @@ describe("PUT /api/citas/[id]: una reserva por confirmar (#84)", () => {
   it("si el cliente ya llegó al Tablero, cancelarla responde 409: primero se anula la atención", async () => {
     const { status, cuerpo } = await cambiar(sesiones.encargado, "llego", { status: "cancelada" })
     expect(status).toBe(409)
-    expect(cuerpo.error).toBe("Esta reserva ya tiene una atención en el Tablero: anúlala ahí primero")
+    expect(cuerpo.error).toBe("Esta cita ya tiene una atención en el Tablero: anúlala ahí primero")
     expect(estadoDe("llego")).toBe("pendiente")
   })
 
