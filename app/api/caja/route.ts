@@ -13,6 +13,7 @@ import {
   leerCaja,
   MENSAJE_CAJA_CAMBIO,
   MENSAJE_NOTA_OBLIGATORIA,
+  primerCobroDeOtroDia,
   type DesgloseDeCaja,
 } from "@/lib/caja"
 import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
@@ -94,8 +95,9 @@ async function zonaDe(businessId: string) {
 
 /**
  * GET /api/caja?pagina= — la caja abierta (desde el último cierre hasta
- * ahora: lo cobrado en efectivo, las propinas en efectivo y los otros
- * medios) y los cierres anteriores, del más nuevo al más viejo. Dueña y
+ * ahora: lo cobrado en efectivo, las propinas en efectivo, los otros medios
+ * y, si arrastra cobros de días anteriores sin cerrar, desde cuándo) y los
+ * cierres anteriores, del más nuevo al más viejo. Dueña y
  * encargado (`puedeVerCierresDeCaja`); el profesional, 401.
  */
 export async function GET(request: NextRequest) {
@@ -131,7 +133,10 @@ export async function GET(request: NextRequest) {
   ])
 
   const desde = inicioDelProximoCierre(ultimo?.hasta ?? null, ahora, zona)
-  const resumen = await leerCaja(prisma, actor.businessId, desde, ahora)
+  const [resumen, cobroDeOtroDia] = await Promise.all([
+    leerCaja(prisma, actor.businessId, desde, ahora),
+    primerCobroDeOtroDia(prisma, actor.businessId, desde, ahora, zona),
+  ])
 
   return NextResponse.json({
     zona,
@@ -142,6 +147,8 @@ export async function GET(request: NextRequest) {
       efectivoCobrado: deCentavos(resumen.efectivoCobradoCents),
       propinasEfectivo: deCentavos(resumen.propinasEfectivoCents),
       desglose: desgloseParaMostrar(resumen.desglose),
+      /** El cobro más antiguo de un día anterior a hoy, si la caja arrastra días sin cerrar (#120); si no, null. */
+      cobrosDesde: cobroDeOtroDia,
     },
     cierres: cierres.map(formatearCierre),
     total,

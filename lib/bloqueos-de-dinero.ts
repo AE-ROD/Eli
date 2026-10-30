@@ -14,6 +14,13 @@ import type { Prisma } from "@prisma/client"
 export type MotivoDeBloqueo = "liquidacion" | "caja"
 
 /**
+ * El `codigo` de la respuesta 409 "corrígelo con un ajuste" al anular una
+ * atención ya rendida (#117). La interfaz decide con esto, no con el texto
+ * del mensaje, que puede cambiar.
+ */
+export const CODIGO_CORREGIR_CON_AJUSTE = "corregir-con-ajuste"
+
+/**
  * Candado de la caja del negocio. El cierre lo toma exclusivo; cobrar y anular
  * lo toman compartido (entre ellos no se esperan) ANTES de fijar `paidAt` o de
  * mirar si la atención ya entró en un cierre. Así un cobro no queda con una

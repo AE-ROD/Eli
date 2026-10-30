@@ -43,7 +43,7 @@ Booksy, Fresha, Calendly y Agenda Pro compiten en **agendar**. Ninguna resuelve 
 
 En salones, barberías y spas de uñas, quien atiende se lleva un porcentaje del servicio y el negocio retiene el resto. Hoy eso se hace con planilla, calculadora o memoria — y a fin de mes genera discusiones, errores y desconfianza.
 
-**Eli lo resuelve dentro del mismo sistema donde ya vive la cita.** No hay que exportar nada ni recalcular a mano: si la cita se completó, la comisión ya está calculada.
+**Eli lo resuelve dentro del mismo sistema donde ya vive la cita.** No hay que exportar nada ni recalcular a mano: al cobrar la atención, la comisión de cada línea queda calculada y congelada (sección 3.3). Si a esa línea le falta el %, queda pendiente, nunca en cero, y se congela al cerrar la liquidación (3.7).
 
 **Esto no es una función más: es el centro del producto.** Y eso fija el estándar — no alcanza con configurar un porcentaje. Hay que cubrir el ciclo completo:
 
@@ -74,7 +74,7 @@ La línea de la dueña no lleva comisión: no se la paga a sí misma.
 
 **Por qué con herencia:** el dueño configura un porcentaje por persona y listo. Sólo define excepciones donde realmente las hay. No tiene que llenar una matriz de todos los profesionales por todos los servicios el primer día.
 
-**Dónde se configura.** La dueña fija en **Comisiones** el % por defecto de cada profesional y sus excepciones por servicio. Vacío es "sin configurar" (no es 0 %): lo cobrado queda pendiente hasta que se configure, y cada profesional muestra cuántos servicios suyos esperan %. Lo cobrado antes de "Liquidar desde" (3.7) no cuenta como pendiente: nunca va a entrar a una liquidación. El % de los productos se ve ahí y se edita en Configuración › Productos. Cada cambio queda en el historial (quién, cuándo, de cuánto a cuánto), incluidos los de quienes ya dejaron el equipo. El encargado y el profesional no ven esta sección.
+**Dónde se configura.** La dueña fija en **Comisiones** el % por defecto de cada profesional y sus excepciones por servicio. Vacío es "sin configurar" (no es 0 %): lo cobrado queda pendiente hasta que se configure, y cada profesional muestra cuántos servicios suyos esperan %. Lo cobrado antes de "Liquidar desde" (3.7) no cuenta como pendiente: nunca va a entrar a una liquidación. El % de los productos se ve ahí y se edita en Configuración › Productos. Cada cambio queda en el historial (quién, cuándo, de cuánto a cuánto), incluidos los de quienes ya dejaron el equipo; el historial se filtra por profesional, y también por quien ya se fue (por el nombre que tenía, así que dos ex-miembros que se llamaban igual salen juntos). El encargado y el profesional no ven esta sección.
 
 ### 3.2 Base de cálculo
 
@@ -232,6 +232,8 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 
 **"No vino".** Una reserva pendiente o confirmada cuya hora ya pasó se marca "No vino": desde el detalle de la cita en la agenda o, si está atrasada, desde su tarjeta en "Reservas de hoy" del Tablero. No se puede si el cliente ya está en el Tablero (hay que deshacer la llegada) ni antes de la hora (si avisó, se cancela). Libera el horario como una cancelada, no se mueve, no recibe recordatorio y suma en la ficha del cliente (abajo). Se deshace desde el detalle de la cita con "Deshacer «No vino»" (dueña y encargado), que la devuelve a confirmada con las reglas de reactivar (abajo).
 
+**Quién canceló.** Cada cita cancelada guarda quién la canceló y cuándo: el cliente, si fue desde su enlace; el negocio, si fue desde el panel o al anular en el Tablero la atención de una reserva sin cobrar. Volver a marcar "cancelada" una que ya lo estaba no cambia ni quién ni cuándo.
+
 **Reactivar una cita.** Dueña y encargado pueden reactivar una cita cancelada (si todavía no empieza; se avisa si choca y se puede confirmar igual) o devolver a confirmada una completada o de "No vino", si no tiene una atención viva en el Tablero. Si esa atención ya entró en un cierre de caja o en una liquidación, no se reactiva: se corrige con un ajuste. El profesional no saca una cita de cancelada, completada o "No vino". Una completada ya no se cancela directo. Si otro cambia la cita mientras se reactiva, no se pisa su cambio.
 
 **Recordatorios.** Un correo al cliente con email, una vez por cita, el día anterior en la zona del negocio, con la fecha y la hora de allá. No sale para las canceladas, las completadas ni las de "No vino". Lo manda un cron diario a las 13:00 UTC (~10:00 en Chile): el plan Hobby de Vercel no permite más de uno al día. Una cita creada después de esa hora para el día siguiente no recibe recordatorio. Las reservas públicas hechas antes de que existiera el enlace para cancelar o reagendar reciben ese enlace en el recordatorio (se crea al enviarlo; las que ya lo tienen lo traen en su correo de confirmación, y las citas del panel no tienen enlace).
@@ -379,7 +381,7 @@ Una **atención** es la visita de un cliente al local, con o sin reserva. El tab
 
 **Productos.** Además de servicios, una atención puede llevar productos del catálogo (un shampoo, una cera), a nombre de quien los vendió. Sin inventario ni cantidad: dos unidades son dos líneas. Un producto inactivo no se agrega. Cuentan para el total y para el tope de 20 líneas. La página pública y la agenda no los muestran.
 
-**La comisión se calcula al cobrar.** Cada línea guarda su % y su monto (sección 3.3). Una línea sin % no frena el cobro: queda pendiente y se avisa "… sin porcentaje de comisión: avísale a la dueña".
+**La comisión se calcula al cobrar.** Cada línea guarda su % y su monto (sección 3.3). Una línea sin % no frena el cobro: queda pendiente. Se avisa antes de cobrar (en el cobro, las líneas que quedarán sin % llevan "Sin %" y un aviso dice cuántas) y otra vez después ("… sin porcentaje de comisión: avísale a la dueña").
 
 **Propinas.** Se anotan al cobrar, hasta 5 por cobro, para quien atendió. No suman al total ni a los ingresos (los pagos siguen sumando exactamente el total). Van completas al profesional y se le pagan en la liquidación; la de la dueña no entra a ninguna.
 
@@ -417,7 +419,7 @@ Para los locales que atienden por orden de llegada (barberías, sobre todo). El 
 
 ### Cierre de caja
 
-Dueña y encargado cierran la caja cuantas veces quieran al día. Cada cierre cubre desde el anterior (el primero, desde el inicio del día en la zona del negocio) hasta el momento de cerrar. **Esperado = fondo inicial + efectivo cobrado + propinas en efectivo**; se anota lo contado y la diferencia, con nota obligatoria si no cuadra. Los otros medios se muestran sólo como referencia. Los adelantos pagados desde la caja no cuentan en esta versión. Un cierre no se edita, y lo cobrado dentro de un cierre ya no se anula ni se reactiva su cita.
+Dueña y encargado cierran la caja cuantas veces quieran al día. Cada cierre cubre desde el anterior (el primero, desde el inicio del día en la zona del negocio) hasta el momento de cerrar. Si la caja arrastra cobros de días anteriores (no se cerró después de ellos), la pantalla de cierre lo avisa y dice desde qué día: el cierre los incluye igual, para no dejar huecos. **Esperado = fondo inicial + efectivo cobrado + propinas en efectivo**; se anota lo contado y la diferencia, con nota obligatoria si no cuadra. Los otros medios se muestran sólo como referencia. Los adelantos pagados desde la caja no cuentan en esta versión. Un cierre no se edita, y lo cobrado dentro de un cierre ya no se anula ni se reactiva su cita.
 
 ---
 

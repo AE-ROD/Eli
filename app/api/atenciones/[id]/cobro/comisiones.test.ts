@@ -199,3 +199,69 @@ describe("GET /api/atenciones: la profesional y las comisiones (#65)", () => {
     expect(texto).not.toContain("l-duena")
   })
 })
+
+describe("GET /api/atenciones/[id]/cobro: qué quedará sin % antes de cobrar (#118)", () => {
+  async function antesDeCobrar(sesion: unknown, id = "v1") {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesion)
+    return GET(pedido(URL), conId(id))
+  }
+
+  it("dice qué líneas quedarían pendientes de % con los porcentajes de ahora, sin escribir nada", async () => {
+    const antes = base.volcado()
+
+    const res = await antesDeCobrar(sesiones.encargado)
+
+    expect(res.status).toBe(200)
+    // Pedro sin %, Cera sin %; la dueña no aplica; Carla y Shampoo tienen %.
+    expect((await res.json()).lineasSinPorcentaje.sort()).toEqual(["l-cera", "l-pedro"])
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("con el % recién configurado, la línea ya no se avisa", async () => {
+    base.reiniciar({
+      ...escenario(),
+      businessMember: escenario().businessMember.map((miembro) =>
+        miembro.id === "m-pedro" ? { ...miembro, commissionPercent: 30 } : miembro
+      ),
+    })
+
+    const res = await antesDeCobrar(sesiones.dueña)
+
+    expect((await res.json()).lineasSinPorcentaje).toEqual(["l-cera"])
+  })
+
+  it("la atención de otro negocio: 404", async () => {
+    const res = await antesDeCobrar(sesiones.dueñoAjeno)
+
+    expect(res.status).toBe(404)
+  })
+
+  it("la profesional que ve la atención pero no cobra: 401", async () => {
+    const res = await antesDeCobrar(sesiones.carla)
+
+    expect(res.status).toBe(401)
+  })
+
+  it("la profesional que pide la atención de un colega del mismo negocio: 404, no 401", async () => {
+    // Sólo de Pedro: Carla no la ve, así que para ella no existe.
+    base.reiniciar({
+      ...escenario(),
+      visit: [...escenario().visit, atencion("v2", { status: "por-cobrar" })],
+      visitService: [
+        ...escenario().visitService,
+        linea("l-de-pedro", "v2", { memberId: "m-pedro", professionalName: "Pedro Profesional" }),
+      ],
+    })
+
+    expect((await antesDeCobrar(sesiones.carla, "v2")).status).toBe(404)
+    // Existe: a Pedro, que la ve pero tampoco cobra, se le dice 401.
+    expect((await antesDeCobrar(sesiones.pedro, "v2")).status).toBe(401)
+  })
+
+  it("sin sesión: 401", async () => {
+    const res = await antesDeCobrar(null)
+
+    expect(res.status).toBe(401)
+  })
+})

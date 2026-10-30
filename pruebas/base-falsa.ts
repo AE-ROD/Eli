@@ -241,6 +241,17 @@ function errorDePrisma(code: string, mensaje: string) {
   return new Prisma.PrismaClientKnownRequestError(mensaje, { code, clientVersion: "base-falsa" })
 }
 
+/**
+ * Lo que un trigger de Postgres hace llegar a Prisma: un `RAISE EXCEPTION`
+ * (`check_violation`, 23514) no tiene código de Prisma, así que llega como
+ * error desconocido con el mensaje de la base.
+ */
+function errorDeTrigger(mensaje: string) {
+  return new Prisma.PrismaClientUnknownRequestError(`23514: ${mensaje}`, { clientVersion: "base-falsa" })
+}
+
+const distintos = (a: unknown, b: unknown) => !iguales(a ?? null, b ?? null)
+
 function tablasVacias(): Tablas {
   return {
     user: [],
@@ -309,6 +320,56 @@ export function crearBaseFalsa() {
     }
   }
 
+  /**
+   * El trigger `atencion_servicios_comision_inmutable` (migración
+   * `20261028120000_etapa_2_la_plata_del_equipo`), regla por regla: una
+   * comisión congelada no cambia; una línea en una liquidación no cambia de
+   * precio, profesional ni comisión, ni pasa a otra liquidación (sí se puede
+   * soltar, y congelar en la misma escritura que la incluye). Las dos reglas
+   * de línea liquidada se saltan si su atención ya no existe: es la excepción
+   * del borrado en cascada del negocio entero.
+   */
+  function comisionInmutable(viejo: Registro, nuevo: Registro) {
+    const id = String(viejo.id)
+    const cambiaComision = ["commissionPercent", "commissionCents", "commissionAt"].some((campo) =>
+      distintos(nuevo[campo], viejo[campo])
+    )
+    if (viejo.commissionAt !== null && viejo.commissionAt !== undefined && cambiaComision) {
+      throw errorDeTrigger(`atencion_servicios ${id}: la comisión ya está congelada`)
+    }
+
+    if (viejo.liquidacionId === null || viejo.liquidacionId === undefined) return
+    if (!tablas.visit.some((atencion) => atencion.id === viejo.visitId)) return
+
+    if (cambiaComision || distintos(nuevo.priceCents, viejo.priceCents) || distintos(nuevo.memberId, viejo.memberId)) {
+      throw errorDeTrigger(`atencion_servicios ${id}: la línea está en una liquidación; corrígela con un ajuste`)
+    }
+    if (nuevo.liquidacionId !== null && nuevo.liquidacionId !== undefined && nuevo.liquidacionId !== viejo.liquidacionId) {
+      throw errorDeTrigger(`atencion_servicios ${id}: la línea ya está en otra liquidación`)
+    }
+  }
+
+  /** Los triggers `BEFORE UPDATE` de la base de verdad que la falsa reproduce. */
+  const ANTES_DE_ACTUALIZAR: Partial<Record<NombreDeModelo, (viejo: Registro, nuevo: Registro) => void>> = {
+    visitService: comisionInmutable,
+  }
+
+  /**
+   * Un UPDATE de una fila: arma la fila nueva, la pasa por el trigger y recién
+   * entonces la escribe, como `BEFORE UPDATE`. Devuelve la escritura para que
+   * `updateMany` pueda revisar todas las filas antes de tocar ninguna (en
+   * Postgres la sentencia entera falla o pasa).
+   */
+  function prepararActualizacion(modelo: NombreDeModelo, registro: Registro, datos: unknown) {
+    const nuevo = { ...registro }
+    aplicar(modelo, nuevo, datos)
+    ANTES_DE_ACTUALIZAR[modelo]?.(registro, nuevo)
+    return () => {
+      Object.assign(registro, nuevo)
+      verificarClaves(modelo, registro)
+    }
+  }
+
   function aplicar(modelo: NombreDeModelo, registro: Registro, datos: unknown) {
     if (!esObjetoPlano(datos)) return falla(`data inválido en ${modelo}`)
     for (const [clave, valor] of Object.entries(datos)) {
@@ -353,16 +414,47 @@ export function crearBaseFalsa() {
     return registro
   }
 
+  /**
+   * `distinct` de Prisma: deja la primera fila (en el orden ya aplicado) de
+   * cada combinación de los campos, antes de `skip` y `take`. Sólo la forma
+   * de lista de campos escalares; cualquier otra cosa lanza.
+   */
+  function sinRepetidos(modelo: NombreDeModelo, lista: Registro[], distinct: unknown): Registro[] {
+    if (!Array.isArray(distinct) || distinct.length === 0 || !distinct.every((campo) => typeof campo === "string")) {
+      return falla(`distinct inválido en ${modelo}: sólo una lista de campos`)
+    }
+    for (const campo of distinct) {
+      if (RELACIONES[modelo][campo] || lista.some((fila) => !(campo in fila))) {
+        return falla(`distinct de un campo que no existe: ${modelo}.${campo}`)
+      }
+    }
+    const vistos = new Set<string>()
+    return lista.filter((fila) => {
+      const clave = JSON.stringify(distinct.map((campo) => fila[campo] ?? null))
+      if (vistos.has(clave)) return false
+      vistos.add(clave)
+      return true
+    })
+  }
+
   // ─── El cliente ──────────────────────────────────────────────────────────
 
   /** Lo que devuelve la base es una copia: el endpoint no puede tocar el estado por referencia. */
   const copia = <T>(valor: T): T => structuredClone(valor)
 
   function delegado(modelo: NombreDeModelo) {
-    type Args = Condicion & { where?: unknown; orderBy?: unknown; take?: number; skip?: number; data?: unknown }
+    type Args = Condicion & {
+      where?: unknown
+      orderBy?: unknown
+      take?: number
+      skip?: number
+      data?: unknown
+      distinct?: unknown
+    }
 
     const buscar = (args: Args = {}) => {
       let lista = ordenar(filtrar(modelo, args.where), args.orderBy)
+      if (args.distinct !== undefined) lista = sinRepetidos(modelo, lista, args.distinct)
       if (args.skip !== undefined) lista = lista.slice(args.skip)
       if (args.take !== undefined) lista = lista.slice(0, args.take)
       return lista
@@ -389,15 +481,13 @@ export function crearBaseFalsa() {
       update: vi.fn(async (args: Args) => {
         const [registro] = filtrar(modelo, args.where)
         if (!registro) throw errorDePrisma("P2025", `No existe el registro a actualizar en ${modelo}`)
-        aplicar(modelo, registro, args.data)
-        verificarClaves(modelo, registro)
+        prepararActualizacion(modelo, registro, args.data)()
         return salida(registro, args)
       }),
       upsert: vi.fn(async (args: Args & { create?: unknown; update?: unknown }) => {
         const [registro] = filtrar(modelo, args.where)
         if (!registro) return salida(crear(modelo, args.create), args)
-        aplicar(modelo, registro, args.update)
-        verificarClaves(modelo, registro)
+        prepararActualizacion(modelo, registro, args.update)()
         return salida(registro, args)
       }),
       delete: vi.fn(async (args: Args) => {
@@ -409,10 +499,8 @@ export function crearBaseFalsa() {
       }),
       updateMany: vi.fn(async (args: Args) => {
         const registros = filtrar(modelo, args.where)
-        for (const registro of registros) {
-          aplicar(modelo, registro, args.data)
-          verificarClaves(modelo, registro)
-        }
+        const escrituras = registros.map((registro) => prepararActualizacion(modelo, registro, args.data))
+        escrituras.forEach((escribir) => escribir())
         return { count: registros.length }
       }),
       deleteMany: vi.fn(async (args: Args = {}) => {

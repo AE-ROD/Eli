@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
 import { zonaDelDispositivo } from "@/lib/fechas"
-import { buscarClientes, marcarLlegada, marcarNoVino } from "./_datos"
+import { anularAtencion, buscarClientes, marcarLlegada, marcarNoVino } from "./_datos"
 
 // La zona del dispositivo, fija: la del proceso de los tests depende de la máquina.
 vi.mock("@/lib/fechas", async (importarOriginal) => {
@@ -86,5 +86,23 @@ describe("buscarClientes", () => {
         { id: "c3", nombre: "Ana", detalle: "12345" },
       ],
     })
+  })
+})
+
+describe("anularAtencion", () => {
+  it("una atención ya rendida se reconoce por el código del servidor, no por el texto (#117)", async () => {
+    const mensaje = "Esta atención ya entró en un cierre de caja: no se anula, corrígelo con un ajuste."
+    simularRespuesta(json({ error: mensaje, codigo: "corregir-con-ajuste" }, 409))
+
+    expect(await anularAtencion("v1", "")).toEqual({ ok: false, error: mensaje, motivo: "corregir-con-ajuste" })
+  })
+
+  it("un 409 sin ese código es un tablero viejo, aunque el texto diga «ajuste»", async () => {
+    simularRespuesta(json({ error: "Esta atención ya está anulada. Haz un ajuste." }, 409))
+
+    const resultado = await anularAtencion("v1", "")
+
+    expect(resultado.ok).toBe(false)
+    if (!resultado.ok) expect(resultado.motivo).toBe("desactualizada")
   })
 })

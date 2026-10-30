@@ -12,7 +12,16 @@
 import type { EstadoActivo, PagoPedido } from "@/lib/atenciones"
 import type { LineaGuardada, LineaPedida, PropinaPedida, ReservaDeOrigen } from "@/lib/acciones-del-tablero"
 import { rangoDelDia, zonaDelDispositivo } from "@/lib/fechas"
-import { conJson, pedir, pedirConCodigo, type Resultado, type ResultadoConCodigo } from "@/lib/peticiones"
+import { CODIGO_CORREGIR_CON_AJUSTE } from "@/lib/bloqueos-de-dinero"
+import {
+  codigoDelServidor,
+  conJson,
+  pedir,
+  pedirConCodigo,
+  pedirConCuerpo,
+  type Resultado,
+  type ResultadoConCodigo,
+} from "@/lib/peticiones"
 import { mostrarTelefono } from "@/lib/telefono"
 
 // ─── Lo que devuelve el servidor ─────────────────────────────────────────────
@@ -143,9 +152,12 @@ export interface ClienteEncontrado {
  *   no se ve (404). Lo que muestra la pantalla está viejo: hay que recargar.
  * - `falta-requisito`: el servidor dice que falta algo para avanzar (400),
  *   con el mensaje de qué.
+ * - `corregir-con-ajuste`: la atención ya entró en una liquidación o en un
+ *   cierre de caja (409 con `codigo: "corregir-con-ajuste"`): no cambió, no
+ *   se toca, y el mensaje dice cómo se corrige.
  * - `otro`: cualquier otro motivo; se muestra el mensaje y nada más.
  */
-export type MotivoDeFallo = "desactualizada" | "falta-requisito" | "otro"
+export type MotivoDeFallo = "desactualizada" | "falta-requisito" | "corregir-con-ajuste" | "otro"
 
 export type ResultadoDeAccion<T> = { ok: true; datos: T } | { ok: false; error: string; motivo: MotivoDeFallo }
 
@@ -321,13 +333,31 @@ export async function vaciarFilaDeHoy(): Promise<ResultadoDeAccion<{ anuladas: n
   )
 }
 
-/** Anula la atención. Queda en el historial como anulada y deja de sumar. */
-export async function anularAtencion(id: string, motivo: string): Promise<ResultadoDeAccion<Atencion>> {
-  return conMotivo(
-    await pedirConCodigo<Atencion>(
-      `${urlDeAtencion(id)}/anulacion`,
-      "No se pudo anular la atención",
-      conJson("POST", motivo.trim() ? { motivo: motivo.trim() } : {})
-    )
+/**
+ * Antes de cobrar (#118): los ids de las líneas que quedarían sin % de
+ * comisión si se cobrara ahora. Sólo para avisar; el cobro no se frena.
+ */
+export async function leerLineasSinPorcentaje(id: string): Promise<Resultado<string[]>> {
+  const resultado = await pedir<{ lineasSinPorcentaje: string[] }>(
+    `${urlDeAtencion(id)}/cobro`,
+    "No se pudo saber qué servicios quedarán sin porcentaje de comisión"
   )
+  return resultado.ok ? { ok: true, datos: resultado.datos.lineasSinPorcentaje } : resultado
+}
+
+/**
+ * Anula la atención. Queda en el historial como anulada y deja de sumar. Si
+ * ya se rindió (liquidación o cierre de caja), el servidor lo dice con un
+ * código, no con el texto (#117).
+ */
+export async function anularAtencion(id: string, motivo: string): Promise<ResultadoDeAccion<Atencion>> {
+  const resultado = await pedirConCuerpo<Atencion>(
+    `${urlDeAtencion(id)}/anulacion`,
+    "No se pudo anular la atención",
+    conJson("POST", motivo.trim() ? { motivo: motivo.trim() } : {})
+  )
+  if (!resultado.ok && codigoDelServidor(resultado.cuerpo) === CODIGO_CORREGIR_CON_AJUSTE) {
+    return { ok: false, error: resultado.error, motivo: "corregir-con-ajuste" }
+  }
+  return conMotivo(resultado)
 }

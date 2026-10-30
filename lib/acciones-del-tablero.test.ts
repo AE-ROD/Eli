@@ -6,6 +6,7 @@ import {
   propinasDesdeFilas,
   totalDePropinasEnCentavos,
   type FilaDePropina,
+  avisoAntesDeCobrar,
   avisoDeComisionesPendientes,
   quedoSinPorcentaje,
   COLUMNAS_DEL_TABLERO,
@@ -810,5 +811,20 @@ describe("propinas en el cobro (#66)", () => {
     expect(filaDePropinaSugerida([de("m-carla"), de("duenio")], profesionales, medios, "p1").profesional).toBe("")
     // Quien ya no está en el equipo no se sugiere.
     expect(filaDePropinaSugerida([de("m-ido")], profesionales, medios, "p1").profesional).toBe("")
+  })
+})
+
+describe("avisoAntesDeCobrar (#118)", () => {
+  it("sin líneas que queden sin %, no avisa", () => {
+    expect(avisoAntesDeCobrar(0)).toBeNull()
+  })
+
+  it("dice cuántas quedarán sin % y que se cobra igual", () => {
+    expect(avisoAntesDeCobrar(1)).toBe(
+      "1 servicio quedará sin porcentaje de comisión. Se cobra igual: queda pendiente hasta que se configure en Comisiones."
+    )
+    expect(avisoAntesDeCobrar(3)).toBe(
+      "3 servicios quedarán sin porcentaje de comisión. Se cobra igual: quedan pendientes hasta que se configuren en Comisiones."
+    )
   })
 })

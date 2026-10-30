@@ -1,12 +1,13 @@
 "use client"
 
-import { useId, useRef, useState, type FormEvent, type ReactNode } from "react"
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { CircleAlert, CircleCheck, CircleDashed, HandCoins, Plus, Trash2, type LucideIcon } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { MAXIMO_DE_PAGOS, MAXIMO_DE_PROPINAS, aCentavos, deCentavos, type PagoPedido } from "@/lib/atenciones"
 import {
+  avisoAntesDeCobrar,
   errorDeMontoDePago,
   estadoDelCobro,
   filaDePagoSugerida,
@@ -19,7 +20,8 @@ import {
 } from "@/lib/acciones-del-tablero"
 import { formatearMonto } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
-import type { Atencion } from "../_datos"
+import { Insignia } from "@/components/comunes/insignia"
+import { leerLineasSinPorcentaje, type Atencion } from "../_datos"
 import { Aviso } from "@/components/panel/aviso"
 
 let pagosAgregados = 0
@@ -83,6 +85,25 @@ export function ModalCobro({
 
   // Las propinas (#66) arrancan vacías: son opcionales y van aparte del total.
   const [propinas, setPropinas] = useState<FilaDePropina[]>([])
+
+  // Antes de cobrar (#118): qué líneas quedarían sin % de comisión. Se pide
+  // al abrir y cada vez que cambian las líneas; se guarda con la firma que lo
+  // pidió, para no mostrar lo de unas líneas que ya no son. Si no se puede
+  // saber, no se avisa: es un aviso, el cobro no depende de esto.
+  const firmaDeLineas = `${atencion.id}:${atencion.lineas.map((linea) => linea.id).join(",")}`
+  const [sinPorcentaje, setSinPorcentaje] = useState<{ firma: string; ids: string[] } | null>(null)
+  useEffect(() => {
+    let vigente = true
+    leerLineasSinPorcentaje(atencion.id).then((resultado) => {
+      if (vigente && resultado.ok) setSinPorcentaje({ firma: firmaDeLineas, ids: resultado.datos })
+    })
+    return () => {
+      vigente = false
+    }
+  }, [atencion.id, firmaDeLineas])
+  const idsSinPorcentaje = new Set(sinPorcentaje?.firma === firmaDeLineas ? sinPorcentaje.ids : [])
+  const lineasSinPorcentaje = atencion.lineas.filter((linea) => idsSinPorcentaje.has(linea.id)).length
+  const avisoDeComisiones = avisoAntesDeCobrar(lineasSinPorcentaje)
 
   const cobro = estadoDelCobro(totalCentavos, filas)
   const deLasPropinas = propinasDesdeFilas(propinas)
@@ -155,6 +176,14 @@ export function ModalCobro({
               <li key={linea.id} className="flex items-baseline justify-between gap-3 text-sm">
                 <span className="min-w-0 break-words">
                   {linea.servicio} <span className="text-texto-2">· {linea.profesional.nombre}</span>
+                  {idsSinPorcentaje.has(linea.id) && (
+                    <>
+                      <span className="sr-only"> (quedará sin porcentaje de comisión)</span>{" "}
+                      <Insignia tono="naranja" className="h-5 px-2 align-middle">
+                        Sin %
+                      </Insignia>
+                    </>
+                  )}
                 </span>
                 <span className="shrink-0 tabular-nums">{formatearMonto(linea.precio)}</span>
               </li>
@@ -165,6 +194,12 @@ export function ModalCobro({
             <span className="text-lg tabular-nums">{formatearMonto(deCentavos(totalCentavos))}</span>
           </p>
         </section>
+
+        {avisoDeComisiones && (
+          <Aviso tono="atencion" rol="status">
+            {avisoDeComisiones}
+          </Aviso>
+        )}
 
         <fieldset className="space-y-3">
           <legend className="mb-3 text-sm font-semibold">Cómo pagó</legend>
