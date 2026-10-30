@@ -157,6 +157,17 @@ describe("POST /api/movimientos", () => {
     expect((await registrar({ miembroId: "m-carla", tipo: "vale", monto: 100 })).status).toBe(201)
   })
 
+  it("lee \"Liquidar desde\" bajo el candado de liquidaciones del negocio, compartido", async () => {
+    enSesion(sesiones.dueña)
+    expect((await registrar({ miembroId: "m-carla", tipo: "vale", monto: 100 })).status).toBe(201)
+    const candados = base.prisma.$executeRaw.mock.calls.map(([partes, ...valores]) => [partes.join("?"), ...valores])
+    expect(candados).toEqual([["SELECT pg_advisory_xact_lock_shared(hashtext(?))", `liquidaciones:${NEGOCIO}`]])
+    // Antes de leer la fecha: un cambio en curso termina antes y se usa la nueva.
+    expect(base.prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      base.prisma.business.findUnique.mock.invocationCallOrder[0]
+    )
+  })
+
   it.each([
     [{ tipo: "adelanto", monto: 0 }, /mayor que/],
     [{ tipo: "vale", monto: -100 }, /mayor que/],
@@ -185,6 +196,25 @@ describe("GET /api/movimientos", () => {
     enSesion(sesiones.encargado)
     expect(await listar()).toEqual(["mv-ajuste", "mv-carla", "mv-liquidado", "mv-pedro"])
     expect(await listar("?pendientes=1&miembro=m-carla")).toEqual(["mv-ajuste", "mv-carla"])
+  })
+
+  it("?pendientes=1 aplica el corte de \"Liquidar desde\": lo anterior nunca se liquida, no está pendiente", async () => {
+    const datos = escenario()
+    base.reiniciar({
+      ...datos,
+      business: datos.business.map((b) =>
+        b.id === NEGOCIO ? { ...b, liquidacionDesde: new Date("2026-10-10T00:00:00.000Z") } : b
+      ),
+      movimientoDeLiquidacion: [
+        ...datos.movimientoDeLiquidacion,
+        movimiento("mv-anterior", { fecha: new Date("2026-10-09T00:00:00.000Z") }),
+      ],
+    })
+    enSesion(sesiones.encargado)
+    // El mismo día del corte entra; el anterior no.
+    expect(await listar("?pendientes=1&miembro=m-carla")).toEqual(["mv-ajuste", "mv-carla"])
+    // Sin `pendientes`, el historial sigue mostrándolo.
+    expect(await listar("?miembro=m-carla")).toEqual(["mv-ajuste", "mv-anterior", "mv-carla", "mv-liquidado"])
   })
 
   it("el profesional solo los suyos, aunque pida otro", async () => {

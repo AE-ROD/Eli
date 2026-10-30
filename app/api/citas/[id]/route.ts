@@ -25,6 +25,7 @@ import {
 import { MENSAJE_CITA_CERRADA, MENSAJE_CITA_CON_ATENCION, sePuedeMover } from "@/lib/mover-cita"
 import { advertenciasDeAgenda } from "@/lib/advertencias-de-agenda"
 import { MENSAJE_CITA_CAMBIO, decidirReactivacion, problemaConLaAtencion } from "@/lib/reactivar-cita"
+import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { ocupaElHorario } from "@/lib/ocupacion"
 import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
 import { estaPorConfirmar } from "@/lib/por-confirmar"
@@ -338,6 +339,17 @@ export async function PUT(
     const resultado = await prisma.$transaction(async (tx) => {
       const problema = await problemaConLaAtencion(tx, actor.businessId, existente.id)
       if (problema) return { problema }
+      // Las reglas con hora (una cancelada que ya pasó no vuelve) se miran de
+      // nuevo con la hora de la base, después de los candados: la misma
+      // fuente de hora que el cobro, la caja y la anulación.
+      const decision = decidirReactivacion({
+        desde: existente.status,
+        hacia: datos.status,
+        inicio: existente.startTime,
+        ahora: await horaDeLaBase(tx),
+        puede: puedeReactivarCita(actor),
+      })
+      if (decision.tipo === "rechazada") return { problema: decision.mensaje }
       const { count } = await tx.appointment.updateMany({
         where: { id: existente.id, businessId: actor.businessId, status: existente.status },
         data: actualizacion.data,

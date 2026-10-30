@@ -4,7 +4,7 @@ import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { transicionPermitida } from "@/lib/atenciones"
-import { atencionBloqueada, tomarCandadoDeCajaCompartido, type MotivoDeBloqueo } from "@/lib/bloqueos-de-dinero"
+import { atencionBloqueada, horaDeLaBase, tomarCandadoDeCajaCompartido, type MotivoDeBloqueo } from "@/lib/bloqueos-de-dinero"
 import { tomarCandadosDeLaAtencion } from "@/lib/liquidacion"
 import { ESTADOS_DE_RESERVA } from "@/lib/llegadas"
 import { ORIGEN_FILA } from "@/lib/fila-virtual"
@@ -78,12 +78,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Y el de la caja, compartido: un cierre de caja en curso termina antes
       // de que se mire si la atención entró en él.
       await tomarCandadoDeCajaCompartido(tx, actor.businessId)
+      // La hora de la anulación sale de la base, después de los candados, como
+      // el `paidAt` del cobro y el `hasta` de la caja: una sola fuente de hora
+      // aunque las instancias tengan relojes desfasados.
+      const ahora = await horaDeLaBase(tx)
 
       // Sobre el mismo estado con que se decidió el permiso: si entretanto la
       // cobraron, el encargado ya no puede anularla y esto no matchea.
       await tomarAtencion(tx, actor, existente.id, existente.status, {
         status: "anulada",
-        voidedAt: new Date(),
+        voidedAt: ahora,
         voidedById: usuarioId,
         voidedByName: nombre,
         voidReason: motivo || null,

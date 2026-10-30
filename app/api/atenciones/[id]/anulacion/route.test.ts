@@ -339,6 +339,21 @@ describe("POST /api/atenciones/[id]/anulacion: lo ya rendido no se anula (#65)",
     expect(ultimoCandado).toBeLessThan(base.prisma.visit.updateMany.mock.invocationCallOrder[0])
   })
 
+  it("la hora de la anulación es la de la base, leída después de los candados, no la de esta instancia", async () => {
+    const deLaBase = new Date("2026-10-06T15:00:07.000Z")
+    base.prisma.$queryRaw.mockImplementationOnce(async () => [{ ahora: deLaBase }])
+
+    const res = await anular(sesiones.dueña, "v-cobrada")
+
+    expect(res.status).toBe(200)
+    expect(base.buscar("visit", { id: "v-cobrada" })[0].voidedAt).toEqual(deLaBase)
+    const [partes] = base.prisma.$queryRaw.mock.calls[0]
+    expect(partes.join("?")).toBe("SELECT clock_timestamp() AS ahora")
+    expect(base.prisma.$queryRaw.mock.invocationCallOrder[0]).toBeGreaterThan(
+      Math.max(...base.prisma.$executeRaw.mock.invocationCallOrder)
+    )
+  })
+
   it("un cierre que terminó antes del cobro no la bloquea", async () => {
     base.reiniciar({ ...escenario(), cierreDeCaja: [cierreDeCaja("2026-10-06T11:00:00.000Z", "2026-10-06T13:59:59.000Z")] })
 

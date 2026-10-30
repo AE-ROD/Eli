@@ -624,12 +624,19 @@ export async function pagarLiquidacion(
  * Anula una liquidación cerrada y no pagada, y libera lo que incluía: sus
  * líneas, propinas y movimientos vuelven a estar pendientes para la próxima.
  * La comisión que se congeló al cerrarla queda congelada (no se descongela).
+ *
+ * Toma los mismos candados que el cierre y en el mismo orden: primero el del
+ * negocio, compartido, y después el del profesional. Así un cambio de
+ * "Liquidar desde" (que lo toma exclusivo y cuenta las liquidaciones vivas)
+ * espera a que la anulación termine y ya la ve anulada, en vez de responder
+ * 409 por una liquidación que se estaba anulando.
  */
 export async function anularLiquidacion(
   tx: Db,
   opciones: { businessId: string; id: string; motivo: string; anuladaPorId: string; anuladaPorNombre: string; ahora: Date }
 ): Promise<void> {
   const { businessId, id } = opciones
+  await tomarCandadoDeLiquidacionesDelNegocio(tx, businessId, "compartido")
   const liquidacion = await tx.liquidacion.findFirst({ where: { id, businessId }, select: { memberId: true } })
   if (!liquidacion) throw new ErrorDeLiquidacion(404, "Liquidación no encontrada")
   await tomarCandadoDeLiquidacion(tx, businessId, liquidacion.memberId)

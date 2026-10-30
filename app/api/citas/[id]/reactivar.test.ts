@@ -186,6 +186,17 @@ describe("PUT /api/citas/[id] — reactivar", () => {
       expect(estadoDe("cancelada-pasada").status).toBe("cancelada")
     })
 
+    it("la regla de \"ya pasó\" se vuelve a mirar con la hora de la base, dentro de la transacción", async () => {
+      // El proceso cree que falta para la cita; la base dice que ya empezó.
+      base.prisma.$queryRaw.mockImplementationOnce(async () => [{ ahora: new Date("2099-10-20T13:00:01.000Z") }])
+      const res = await cambiar(sesiones.dueña, "cancelada-futura", { status: "confirmada" })
+      expect(res.status).toBe(409)
+      expect((await res.json()).error).toBe(MENSAJE_CANCELADA_PASADA)
+      expect(estadoDe("cancelada-futura").status).toBe("cancelada")
+      const [partes] = base.prisma.$queryRaw.mock.calls[0]
+      expect(partes.join("?")).toBe("SELECT clock_timestamp() AS ahora")
+    })
+
     it.each(["completada", "no-asistio", "en-progreso"])("no pasa a %s: 409", async (estado) => {
       const res = await cambiar(sesiones.dueña, "cancelada-futura", { status: estado })
       expect(res.status).toBe(409)
