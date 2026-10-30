@@ -27,7 +27,7 @@ import { advertenciasDeAgenda } from "@/lib/advertencias-de-agenda"
 import { MENSAJE_CITA_CAMBIO, decidirReactivacion, problemaConLaAtencion } from "@/lib/reactivar-cita"
 import { ocupaElHorario } from "@/lib/ocupacion"
 import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
-import { estaPorConfirmar } from "@/lib/por-confirmar"
+import { estaPorConfirmar, mensajeDeReservaQueCambio } from "@/lib/por-confirmar"
 import { avisarReservaConfirmadaPorElLocal } from "@/lib/aviso-de-reserva-confirmada"
 
 const edicionDeCitaSchema = z.object({
@@ -50,8 +50,17 @@ const edicionDeCitaSchema = z.object({
 const NO_VINO_SIN_ESPERA = "Sólo se marca \"no vino\" en una cita pendiente o confirmada"
 const NO_VINO_ANTES_DE_HORA = "Todavía no es la hora de la cita: si avisó que no viene, cancélala"
 const NO_VINO_PERO_LLEGO = "El cliente ya llegó: la cita tiene una atención en el Tablero. Si fue un error, deshaz la llegada primero"
-/** Una por confirmar cuyo cliente ya llegó no se cancela desde la agenda (#84). */
-const MENSAJE_POR_CONFIRMAR_CON_ATENCION = "Esta reserva ya tiene una atención en el Tablero: anúlala ahí primero"
+/**
+ * Una cita cuyo cliente ya llegó (atención viva en el Tablero) no se cancela
+ * desde la agenda: la atención quedaría colgando de una cita cancelada. Vale
+ * para las por confirmar (#84) y para cualquier otra (#136).
+ */
+const MENSAJE_CANCELAR_CON_ATENCION = "Esta cita ya tiene una atención en el Tablero: anúlala ahí primero"
+
+/** La cita no tiene atención, o la que tuvo se anuló. Para condicionar la escritura que cancela. */
+const SIN_ATENCION_VIVA = {
+  OR: [{ visit: { is: null } }, { visit: { is: { status: "anulada" } } }],
+} satisfies Prisma.AppointmentWhereInput
 
 /**
  * Si el pedido sólo cambia el estado. `confirmarAdvertencias` no cuenta: no
@@ -234,7 +243,7 @@ export async function PUT(
       }
     }
 
-    // Una cancelada que vuelve ocupa otra vez su horario: se avisa si choca,
+    // Una cancelada o de "no vino" que vuelve ocupa otra vez su horario: se avisa si choca,
     // y quien reactiva decide (`confirmarAdvertencias`), como al mover. Si se
     // mueve a la vez, ya respondió 409 arriba (una cita cerrada no se mueve).
     if (reactivacion.tipo === "reactivar" && reactivacion.avisarChoques && !datos.confirmarAdvertencias) {
@@ -297,7 +306,7 @@ export async function PUT(
           businessId: actor.businessId,
           status: "pendiente",
           confirmacionPorFaltas: true,
-          ...(cancela && { OR: [{ visit: { is: null } }, { visit: { is: { status: "anulada" } } }] }),
+          ...(cancela && SIN_ATENCION_VIVA),
         },
         data: actualizacion.data,
       })
@@ -309,10 +318,10 @@ export async function PUT(
       if (count !== 1) {
         // Sigue por confirmar: lo único que pudo frenarla es su atención.
         if (cancela && estaPorConfirmar(cita)) {
-          return NextResponse.json({ error: MENSAJE_POR_CONFIRMAR_CON_ATENCION }, { status: 409 })
+          return NextResponse.json({ error: MENSAJE_CANCELAR_CON_ATENCION }, { status: 409 })
         }
         if (cita.status === datos.status && soloCambiaElEstado(datos)) return NextResponse.json(cita)
-        return NextResponse.json({ error: MENSAJE_CITA_CAMBIO }, { status: 409 })
+        return NextResponse.json({ error: mensajeDeReservaQueCambio(datos.status) }, { status: 409 })
       }
       // Confirmada por el local: se le avisa al cliente, después de responder,
       // salvo que ya esté en el local.
@@ -320,6 +329,27 @@ export async function PUT(
         avisarReservaConfirmadaPorElLocal({ businessId: actor.businessId, citaId: existente.id })
       }
       if (!ocupaElHorario(cita.status) || seMueve) {
+        programarAvisoDeHoraLiberada({ businessId: actor.businessId, inicio: existente.startTime })
+      }
+      return NextResponse.json(cita)
+    }
+
+    // Cancelar cualquier otra cita también es condicional (#136): si el
+    // cliente ya llegó, 409 y primero se anula la atención en el Tablero. La
+    // condición va en la misma escritura, como en las por confirmar: una
+    // llegada que entre entretanto no deja una cancelada con su atención viva.
+    if (reactivacion.tipo !== "reactivar" && datos.status === "cancelada" && existente.status !== "cancelada") {
+      const { count } = await prisma.appointment.updateMany({
+        where: { id: existente.id, businessId: actor.businessId, ...SIN_ATENCION_VIVA },
+        data: actualizacion.data,
+      })
+      const cita = await prisma.appointment.findFirst({
+        where: { id: existente.id, businessId: actor.businessId },
+        include: actualizacion.include,
+      })
+      if (!cita) return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 })
+      if (count !== 1) return NextResponse.json({ error: MENSAJE_CANCELAR_CON_ATENCION }, { status: 409 })
+      if (ocupaElHorario(existente.status)) {
         programarAvisoDeHoraLiberada({ businessId: actor.businessId, inicio: existente.startTime })
       }
       return NextResponse.json(cita)
@@ -347,14 +377,18 @@ export async function PUT(
         where: { id: existente.id, businessId: actor.businessId, status: existente.status },
         data: actualizacion.data,
       })
-      if (count === 0) return { problema: MENSAJE_CITA_CAMBIO }
+      if (count === 0) return { problema: { mensaje: MENSAJE_CITA_CAMBIO } }
       const cita = await tx.appointment.findFirst({
         where: { id: existente.id, businessId: actor.businessId },
         include: actualizacion.include,
       })
       return { cita }
     })
-    if ("problema" in resultado) return NextResponse.json({ error: resultado.problema }, { status: 409 })
+    // Con el código, si lo hay: "corregir-con-ajuste" (#134), como la anulación.
+    if (resultado.problema) {
+      const { mensaje, codigo } = resultado.problema
+      return NextResponse.json({ error: mensaje, ...(codigo && { codigo }) }, { status: 409 })
+    }
     return NextResponse.json(resultado.cita)
   } catch (error) {
     if (error instanceof z.ZodError) {

@@ -10,7 +10,8 @@
 
 import { comoTexto, diasDeLaSemanaDe, limitesDelMesDe, type UnidadDeTiempo } from "@/lib/fechas"
 import { leerMonto } from "@/lib/dinero"
-import { pedir, pedirConCuerpo, conJson, type Resultado } from "@/lib/peticiones"
+import { codigoDelServidor, pedir, pedirConCuerpo, conJson, type Resultado } from "@/lib/peticiones"
+import { CODIGO_CORREGIR_CON_AJUSTE } from "@/lib/bloqueos-de-dinero"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import { sePuedeMover, type Advertencia } from "@/lib/mover-cita"
 import { estaPorConfirmar } from "@/lib/por-confirmar"
@@ -40,6 +41,21 @@ export interface Cita {
   confirmacionPorFaltas?: boolean
   /** El cliente ya llegó: tiene una atención no anulada en el Tablero. */
   conAtencion?: boolean
+  /** Quién la canceló: "cliente" (su enlace) o "negocio" (el panel). Null si no está cancelada o es de antes de guardarlo. */
+  canceladaPor?: string | null
+  /** Cuándo se canceló, ISO. */
+  canceladaEn?: string | null
+}
+
+/**
+ * Quién canceló la cita, para el detalle (#134), o `null` si no está
+ * cancelada o no se sabe (las canceladas antes de guardarse el dato).
+ */
+export function quienCancelo(cita: Pick<Cita, "status" | "canceladaPor">): string | null {
+  if (cita.status !== "cancelada") return null
+  if (cita.canceladaPor === "cliente") return "El cliente"
+  if (cita.canceladaPor === "negocio") return "El negocio"
+  return null
 }
 
 /**
@@ -104,6 +120,23 @@ export interface Profesional {
   id: string
   nombre: string
   rol: string
+}
+
+/**
+ * Las opciones del selector de profesional al mover o asignar una cita: el
+ * equipo que atiende (`leerProfesionales`, #140) y, si la cita ya está con
+ * alguien que no está en esa lista (un encargado, de antes), también él, para
+ * que el selector diga con quién está y no "Sin asignar".
+ */
+export function opcionesDeProfesional(
+  equipo: Profesional[],
+  cita: Pick<Cita, "memberId" | "member">
+): { valor: string; texto: string }[] {
+  const opciones = equipo.map((miembro) => ({ valor: miembro.id, texto: miembro.nombre }))
+  if (cita.memberId && !equipo.some((miembro) => miembro.id === cita.memberId)) {
+    opciones.push({ valor: cita.memberId, texto: nombreDelProfesional(cita) ?? "Profesional" })
+  }
+  return opciones
 }
 
 /** Si en el equipo hay alguien que atiende (rol profesional): sólo entonces una cita sin asignar es un pendiente. */
@@ -259,6 +292,36 @@ function conAdvertencias(resultado: Awaited<ReturnType<typeof pedirConCuerpo>>):
   return { tipo: "error", error: resultado.error }
 }
 
+/** A qué estado vuelve una cita al reactivarla: una cancelada, o una completada o de alguien que no vino. */
+export const ESTADO_AL_REACTIVAR = "confirmada"
+
+/**
+ * Reactivar una cita: lista, las advertencias si al volver choca (como al
+ * mover; `confirmar` es el segundo envío, que guarda igual), o error. Si su
+ * atención ya entró en un cierre de caja o en una liquidación, el 409 trae el
+ * código "corregir-con-ajuste" (#134): no hay nada que reintentar, se corrige
+ * con un ajuste. Se decide con el código, no con el texto.
+ */
+export type ResultadoDeReactivar =
+  | { tipo: "lista" }
+  | { tipo: "advertencias"; advertencias: Advertencia[] }
+  | { tipo: "corregir-con-ajuste"; error: string }
+  | { tipo: "error"; error: string }
+
+export async function reactivarCita(id: string, opciones: { confirmar: boolean }): Promise<ResultadoDeReactivar> {
+  const resultado = await pedirConCuerpo(
+    `/api/citas/${encodeURIComponent(id)}`,
+    "No se pudo reactivar la cita",
+    conJson("PUT", { status: ESTADO_AL_REACTIVAR, ...(opciones.confirmar && { confirmarAdvertencias: true }) })
+  )
+  if (resultado.ok) return { tipo: "lista" }
+  if (codigoDelServidor(resultado.cuerpo) === CODIGO_CORREGIR_CON_AJUSTE) {
+    return { tipo: "corregir-con-ajuste", error: resultado.error }
+  }
+  const leido = conAdvertencias(resultado)
+  return leido.tipo === "guardada" ? { tipo: "lista" } : leido
+}
+
 /** El horario de atención del negocio, para que la agenda dibuje esas horas. */
 export async function leerHorarioDeAtencion(): Promise<Resultado<FranjaDelDia[]>> {
   return pedir<FranjaDelDia[]>("/api/citas/horario-de-atencion", "No se pudo cargar el horario de atención")
@@ -367,7 +430,7 @@ export async function quitarBloqueo(id: string): Promise<Resultado> {
   return pedir(`/api/bloqueos/${encodeURIComponent(id)}`, "No se pudo quitar el bloqueo", { method: "DELETE" })
 }
 
-/** El equipo, para el selector de profesional. Sólo lo pide quien puede asignar. */
+/** Quienes atienden (no el encargado), para el selector de profesional. Sólo lo pide quien puede asignar. */
 export async function leerProfesionales(): Promise<Resultado<Profesional[]>> {
   const resultado = await pedir<{ miembros: Profesional[] }>(
     "/api/equipo/miembros",

@@ -13,10 +13,18 @@ import { duracionParaMostrar } from "@/lib/fechas"
 import { sePuedeMover, type Advertencia } from "@/lib/mover-cita"
 import { puedeMarcarseNoVino } from "@/lib/campos-del-panel"
 import { actorDeSesion, puedeAsignarCitasAOtros, puedeReactivarCita, puedeResolverPorConfirmar } from "@/lib/permisos"
-import { conJson, pedirConCuerpo } from "@/lib/peticiones"
 import { Aviso } from "@/components/panel/aviso"
 import { cn } from "@/lib/utils"
-import { citaPorConfirmar, destacaSinProfesional, nombreDeCliente, nombreDelProfesional, type Cita } from "../_datos"
+import {
+  ESTADO_AL_REACTIVAR,
+  citaPorConfirmar,
+  destacaSinProfesional,
+  nombreDeCliente,
+  nombreDelProfesional,
+  quienCancelo,
+  reactivarCita,
+  type Cita,
+} from "../_datos"
 import { estiloDeEstado } from "./estados-de-cita"
 import { useAhora } from "./usar-ahora"
 import { useZonaDelNegocio } from "./zona-del-negocio"
@@ -37,30 +45,6 @@ interface PropsDePanelDeCita {
   onAsignar: (cita: Cita) => void
   /** Si hay profesionales a quien asignar: entonces se dice que la cita no tiene y se ofrece asignarla. */
   destacarSinProfesional?: boolean
-}
-
-/** A qué estado vuelve una cita al reactivarla: una cancelada, o una completada o de alguien que no vino. */
-const ESTADO_AL_REACTIVAR = "confirmada"
-
-function sonAdvertencias(valor: unknown): valor is Advertencia[] {
-  return Array.isArray(valor) && valor.length > 0 && valor.every((item) => typeof item?.mensaje === "string")
-}
-
-/**
- * Reactiva la cita (PUT de su estado). Si vuelve a ocupar un horario que
- * choca, el servidor responde 409 con las advertencias; `confirmar` es el
- * segundo envío, después de verlas.
- */
-async function reactivar(id: string, confirmar: boolean) {
-  const resultado = await pedirConCuerpo(
-    `/api/citas/${encodeURIComponent(id)}`,
-    "No se pudo reactivar la cita",
-    conJson("PUT", { status: ESTADO_AL_REACTIVAR, ...(confirmar && { confirmarAdvertencias: true }) })
-  )
-  if (resultado.ok) return { tipo: "lista" as const }
-  const advertencias = (resultado.cuerpo as { advertencias?: unknown } | null)?.advertencias
-  if (resultado.codigo === 409 && sonAdvertencias(advertencias)) return { tipo: "advertencias" as const, advertencias }
-  return { tipo: "error" as const, error: resultado.error }
 }
 
 /**
@@ -92,6 +76,8 @@ export function PanelDeCita({
   const [reactivando, setReactivando] = useState(false)
   const [advertencias, setAdvertencias] = useState<Advertencia[]>([])
   const [errorAlReactivar, setErrorAlReactivar] = useState("")
+  // La plata de su atención ya se rindió: no se reactiva, se corrige con un ajuste.
+  const [seCorrigeConAjuste, setSeCorrigeConAjuste] = useState(false)
   const idDelTitulo = useId()
   const panel = useRef<HTMLElement>(null)
   const titulo = useRef<HTMLHeadingElement>(null)
@@ -131,33 +117,44 @@ export function PanelDeCita({
     setVistaDelAviso(vista)
     setAdvertencias([])
     setErrorAlReactivar("")
+    setSeCorrigeConAjuste(false)
   }
 
   const cerrada = cita.status === "cancelada" || cita.status === "no-asistio"
   // Por confirmar, primero se confirma: no se completa ni se marca "no vino" de una.
   const puedeCompletarse = cita.status !== "completada" && !cerrada && !porConfirmar
   // Una completada ya no se cancela: si fue un error, se devuelve a confirmada.
-  const puedeCancelarse = !cerrada && cita.status !== "completada" && (!porConfirmar || resuelve)
+  // Si el cliente ya llegó (atención viva en el Tablero), tampoco: el servidor
+  // responde 409 y la atención se anula primero en el Tablero (#136).
+  const puedeCancelarse =
+    !cerrada && cita.status !== "completada" && cita.conAtencion !== true && (!porConfirmar || resuelve)
   const puedeConfirmarse = porConfirmar && resuelve
   // Reactivar es de dueña y encargado. Una cancelada, sólo si no empezó; el
   // servidor vuelve a mirar todo (y que no tenga una atención cobrada).
   const puedeReactivarse =
     reactiva &&
+    !seCorrigeConAjuste &&
     ((cita.status === "cancelada" && new Date(cita.startTime).getTime() > ahora) ||
       cita.status === "completada" ||
       cita.status === "no-asistio")
   // "No vino" marcado por error se deshace acá (#96): vuelve a confirmada, con las reglas de reactivar.
   const textoDeReactivar =
     cita.status === "cancelada" ? "Reactivar cita" : cita.status === "no-asistio" ? "Deshacer «No vino»" : "Devolver a confirmada"
+  // Si al volver choca (una cancelada o de "No vino" había soltado su hora, #140), el segundo envío guarda igual.
+  const textoDeReactivarIgual = cita.status === "no-asistio" ? "Deshacer igual" : "Reactivar igual"
 
   const pedirReactivar = async (confirmar: boolean) => {
     if (reactivando) return
     setReactivando(true)
     setErrorAlReactivar("")
-    const resultado = await reactivar(cita.id, confirmar)
+    const resultado = await reactivarCita(cita.id, { confirmar })
     setReactivando(false)
     if (resultado.tipo === "advertencias") return setAdvertencias(resultado.advertencias)
     setAdvertencias([])
+    if (resultado.tipo === "corregir-con-ajuste") {
+      setSeCorrigeConAjuste(true)
+      return setErrorAlReactivar(resultado.error)
+    }
     if (resultado.tipo === "error") return setErrorAlReactivar(resultado.error)
     onReactivada(cita.id, ESTADO_AL_REACTIVAR)
   }
@@ -168,6 +165,8 @@ export function PanelDeCita({
   const sinProfesional = destacaSinProfesional(cita, destacarSinProfesional)
   const asigna = sinProfesional && puedeAsignarCitasAOtros(actorDeSesion(sesion))
   const profesional = nombreDelProfesional(cita)
+  // Quién la canceló y cuándo (#134); nada en las canceladas de antes de guardarlo.
+  const canceladaPor = quienCancelo(cita)
   // "No vino" cuando ya pasó la hora de empezar: antes, si avisó, se cancela.
   // El servidor lo vuelve a verificar (y que no haya llegado al Tablero).
   const puedeNoVenir =
@@ -228,6 +227,14 @@ export function PanelDeCita({
               {estado.texto}
             </span>
           </Dato>
+          {canceladaPor && <Dato termino="Cancelada por">{canceladaPor}</Dato>}
+          {canceladaPor && cita.canceladaEn && (
+            <Dato termino="Cancelada el">
+              <span className="block first-letter:uppercase">
+                {diaLargoEn(cita.canceladaEn, zona)}, <span className="tabular-nums">{horaEn(cita.canceladaEn, zona)}</span>
+              </span>
+            </Dato>
+          )}
         </dl>
 
         {cita.notes && (
@@ -251,9 +258,16 @@ export function PanelDeCita({
         </Aviso>
       )}
 
-      {errorAlReactivar && <Aviso>{errorAlReactivar}</Aviso>}
+      {errorAlReactivar &&
+        (seCorrigeConAjuste ? (
+          <Aviso tono="atencion" rol="status" titulo="Se corrige con un ajuste">
+            {errorAlReactivar}
+          </Aviso>
+        ) : (
+          <Aviso>{errorAlReactivar}</Aviso>
+        ))}
       {advertencias.length > 0 && (
-        <Aviso tono="atencion" rol="status" titulo="Al reactivarla:">
+        <Aviso tono="atencion" rol="status" titulo={cita.status === "no-asistio" ? "Al volver a confirmarla:" : "Al reactivarla:"}>
           <ul className="list-disc space-y-1 pl-4">
             {advertencias.map((advertencia) => (
               <li key={advertencia.tipo}>{advertencia.mensaje}</li>
@@ -277,7 +291,7 @@ export function PanelDeCita({
               aria-busy={reactivando}
               onClick={() => pedirReactivar(advertencias.length > 0)}
             >
-              {advertencias.length > 0 ? "Reactivar igual" : textoDeReactivar}
+              {advertencias.length > 0 ? textoDeReactivarIgual : textoDeReactivar}
             </Boton>
           )}
           {asigna && (

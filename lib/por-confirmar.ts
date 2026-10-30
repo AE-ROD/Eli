@@ -25,3 +25,16 @@ export interface CitaPorConfirmar {
 export function estaPorConfirmar(cita: CitaPorConfirmar): boolean {
   return cita.confirmacionPorFaltas && cita.status === "pendiente"
 }
+
+/**
+ * Otro resolvió la reserva entre que se leyó y se guardó (o el pedido traía
+ * más cambios que se perderían): no se pisa. Uno por acción, para que el
+ * mensaje diga lo que la persona estaba haciendo.
+ */
+export const MENSAJE_CONFIRMACION_CAMBIO = "La reserva cambió mientras la confirmabas. Recarga y vuelve a intentarlo"
+export const MENSAJE_CANCELACION_CAMBIO = "La reserva cambió mientras la cancelabas. Recarga y vuelve a intentarlo"
+
+/** El mensaje del 409 de una por confirmar que cambió, según lo que se pedía. */
+export function mensajeDeReservaQueCambio(estadoPedido: string | undefined): string {
+  return estadoPedido === "cancelada" ? MENSAJE_CANCELACION_CAMBIO : MENSAJE_CONFIRMACION_CAMBIO
+}

@@ -125,6 +125,20 @@ describe("GET /api/citas", () => {
     expect(coincideConWhere({ businessId: "otro-negocio", memberId: null }, where)).toBe(false)
   })
 
+  it("trae quién canceló y cuándo, para el detalle de la agenda (#134)", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const canceladaEn = new Date("2026-10-28T13:30:00.000Z")
+    prismaMock.appointment.findMany.mockResolvedValueOnce([
+      { id: "cancelada", businessId: "negocio-1", status: "cancelada", canceladaPor: "cliente", canceladaEn, visit: null },
+    ] as never)
+
+    const data = await (await GET(pedidoFalso("http://localhost/api/citas"))).json()
+
+    expect((prismaMock.appointment.findMany.mock.calls[0][0] as { select?: unknown }).select).toMatchObject({ canceladaPor: true, canceladaEn: true })
+    expect(data[0]).toMatchObject({ canceladaPor: "cliente", canceladaEn: canceladaEn.toISOString() })
+  })
+
   it("sin sesión recibe 401", async () => {
     const { GET } = await import("./route")
 
