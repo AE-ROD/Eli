@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
-import { aQuienBloquea, asignarProfesional, citaPorConfirmar, crearBloqueo, crearCita, destacaSinProfesional, hayProfesionales, moverCita, nombreDelProfesional, opcionesDeProfesional, precioDeLaCita, quitarBloqueo, reactivarCita, type Bloqueo, type DatosDeNuevaCita } from "./_datos"
+import { aQuienBloquea, asignarProfesional, citaPorConfirmar, crearBloqueo, crearCita, destacaSinProfesional, hayProfesionales, moverCita, nombreDelProfesional, opcionesDeProfesional, precioDeLaCita, quienCancelo, quitarBloqueo, reactivarCita, type Bloqueo, type DatosDeNuevaCita } from "./_datos"
 
 /** El cuerpo JSON con que se llamó a `fetch`. */
 const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
@@ -288,5 +288,19 @@ describe("reactivarCita", () => {
     const mensaje = "La cita cambió mientras la reactivabas. Corrígelo con un ajuste"
     simularRespuesta(json({ error: mensaje }, 409))
     expect(await reactivarCita("c1", { confirmar: false })).toEqual({ tipo: "error", error: mensaje })
+  })
+})
+
+describe("quienCancelo", () => {
+  it("dice quién canceló una cancelada (#134)", () => {
+    expect(quienCancelo({ status: "cancelada", canceladaPor: "cliente" })).toBe("El cliente")
+    expect(quienCancelo({ status: "cancelada", canceladaPor: "negocio" })).toBe("El negocio")
+  })
+
+  it("nada si no se sabe o si ya no está cancelada", () => {
+    expect(quienCancelo({ status: "cancelada", canceladaPor: null })).toBeNull()
+    expect(quienCancelo({ status: "cancelada" })).toBeNull()
+    expect(quienCancelo({ status: "cancelada", canceladaPor: "otro" })).toBeNull()
+    expect(quienCancelo({ status: "confirmada", canceladaPor: "cliente" })).toBeNull()
   })
 })

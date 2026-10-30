@@ -41,6 +41,21 @@ export interface Cita {
   confirmacionPorFaltas?: boolean
   /** El cliente ya llegó: tiene una atención no anulada en el Tablero. */
   conAtencion?: boolean
+  /** Quién la canceló: "cliente" (su enlace) o "negocio" (el panel). Null si no está cancelada o es de antes de guardarlo. */
+  canceladaPor?: string | null
+  /** Cuándo se canceló, ISO. */
+  canceladaEn?: string | null
+}
+
+/**
+ * Quién canceló la cita, para el detalle (#134), o `null` si no está
+ * cancelada o no se sabe (las canceladas antes de guardarse el dato).
+ */
+export function quienCancelo(cita: Pick<Cita, "status" | "canceladaPor">): string | null {
+  if (cita.status !== "cancelada") return null
+  if (cita.canceladaPor === "cliente") return "El cliente"
+  if (cita.canceladaPor === "negocio") return "El negocio"
+  return null
 }
 
 /**

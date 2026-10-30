@@ -21,6 +21,7 @@ import {
   destacaSinProfesional,
   nombreDeCliente,
   nombreDelProfesional,
+  quienCancelo,
   reactivarCita,
   type Cita,
 } from "../_datos"
@@ -164,6 +165,8 @@ export function PanelDeCita({
   const sinProfesional = destacaSinProfesional(cita, destacarSinProfesional)
   const asigna = sinProfesional && puedeAsignarCitasAOtros(actorDeSesion(sesion))
   const profesional = nombreDelProfesional(cita)
+  // Quién la canceló y cuándo (#134); nada en las canceladas de antes de guardarlo.
+  const canceladaPor = quienCancelo(cita)
   // "No vino" cuando ya pasó la hora de empezar: antes, si avisó, se cancela.
   // El servidor lo vuelve a verificar (y que no haya llegado al Tablero).
   const puedeNoVenir =
@@ -224,6 +227,14 @@ export function PanelDeCita({
               {estado.texto}
             </span>
           </Dato>
+          {canceladaPor && <Dato termino="Cancelada por">{canceladaPor}</Dato>}
+          {canceladaPor && cita.canceladaEn && (
+            <Dato termino="Cancelada el">
+              <span className="block first-letter:uppercase">
+                {diaLargoEn(cita.canceladaEn, zona)}, <span className="tabular-nums">{horaEn(cita.canceladaEn, zona)}</span>
+              </span>
+            </Dato>
+          )}
         </dl>
 
         {cita.notes && (
