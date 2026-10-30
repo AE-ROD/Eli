@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import type { Prisma } from "@prisma/client"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -13,9 +14,10 @@ import {
   titulo,
 } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
-import { actorDeSesion, memberIdParaCita, whereDeAgenda, type Actor } from "@/lib/permisos"
+import { actorDeSesion, memberIdParaCita, puedeReactivarCita, whereDeAgenda, type Actor } from "@/lib/permisos"
 import { MENSAJE_CITA_CERRADA, MENSAJE_CITA_CON_ATENCION, sePuedeMover } from "@/lib/mover-cita"
 import { advertenciasDeAgenda } from "@/lib/advertencias-de-agenda"
+import { MENSAJE_CITA_CAMBIO, decidirReactivacion, problemaConLaAtencion } from "@/lib/reactivar-cita"
 
 const edicionDeCitaSchema = z.object({
   title: titulo().optional(),
@@ -120,6 +122,19 @@ export async function PUT(
       }
     }
 
+    // Sacar la cita de cancelada, completada o "no vino" es reactivarla:
+    // sólo dueña y encargado, y con sus reglas (`lib/reactivar-cita.ts`).
+    const reactivacion = decidirReactivacion({
+      desde: existente.status,
+      hacia: datos.status,
+      inicio: existente.startTime,
+      ahora: new Date(),
+      puede: puedeReactivarCita(actor),
+    })
+    if (reactivacion.tipo === "rechazada") {
+      return NextResponse.json({ error: reactivacion.mensaje }, { status: reactivacion.status })
+    }
+
     // "No vino" sólo para una reserva que seguía esperando, cuya hora ya
     // llegó y cuyo cliente no está en el Tablero: si no, el contador de
     // inasistencias de la ficha mentiría.
@@ -180,10 +195,28 @@ export async function PUT(
       }
     }
 
+    // Una cancelada que vuelve ocupa otra vez su horario: se avisa si choca,
+    // y quien reactiva decide (`confirmarAdvertencias`), como al mover. Si se
+    // mueve a la vez, ya respondió 409 arriba (una cita cerrada no se mueve).
+    if (reactivacion.tipo === "reactivar" && reactivacion.avisarChoques && !datos.confirmarAdvertencias) {
+      const advertencias = await advertenciasDeAgenda(prisma, {
+        businessId: actor.businessId,
+        citaId: existente.id,
+        tramo: { startTime: inicio, endTime: fin },
+        memberId,
+      })
+      if (advertencias.length > 0) {
+        return NextResponse.json(
+          { error: advertencias.map((advertencia) => advertencia.mensaje).join(" "), advertencias },
+          { status: 409 }
+        )
+      }
+    }
+
     // Por `existente.id`, no por `id`: si alguien borra la verificación de
     // arriba, `existente` queda sin declarar y el build falla. La garantía deja
     // de depender de que el próximo lea las dos líneas en orden.
-    const cita = await prisma.appointment.update({
+    const actualizacion = {
       where: { id: existente.id },
       data: {
         ...(datos.title && { title: datos.title }),
@@ -193,13 +226,37 @@ export async function PUT(
         ...(datos.status && { status: datos.status }),
         ...(datos.notes !== undefined && { notes: datos.notes || null }),
         ...(datos.price !== undefined && { price: datos.price }),
+        ...(reactivacion.tipo === "reactivar" && reactivacion.limpiarCancelacion && { canceladaPor: null, canceladaEn: null }),
       },
       include: {
         customer: { select: { id: true, name: true, email: true, phone: true } },
       },
-    })
+    } satisfies Prisma.AppointmentUpdateArgs
 
-    return NextResponse.json(cita)
+    if (reactivacion.tipo !== "reactivar") {
+      return NextResponse.json(await prisma.appointment.update(actualizacion))
+    }
+
+    // La atención se revisa en la misma transacción que reactiva: un cobro o
+    // un cierre de caja que entre entretanto no se cuela.
+    // Y sólo si la cita sigue en el estado con que se decidió reactivarla, y
+    // en este negocio: si otro la cambió entretanto, 409 y no se pisa.
+    const resultado = await prisma.$transaction(async (tx) => {
+      const problema = await problemaConLaAtencion(tx, actor.businessId, existente.id)
+      if (problema) return { problema }
+      const { count } = await tx.appointment.updateMany({
+        where: { id: existente.id, businessId: actor.businessId, status: existente.status },
+        data: actualizacion.data,
+      })
+      if (count === 0) return { problema: MENSAJE_CITA_CAMBIO }
+      const cita = await tx.appointment.findFirst({
+        where: { id: existente.id, businessId: actor.businessId },
+        include: actualizacion.include,
+      })
+      return { cita }
+    })
+    if ("problema" in resultado) return NextResponse.json({ error: resultado.problema }, { status: 409 })
+    return NextResponse.json(resultado.cita)
   } catch (error) {
     if (error instanceof z.ZodError) {
       return respuestaDeDatosInvalidos(error)

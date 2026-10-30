@@ -2,6 +2,12 @@ import { describe, it, expect } from "vitest"
 import { aCentavos } from "./atenciones"
 import type { Actor } from "./permisos"
 import {
+  filaDePropinaSugerida,
+  propinasDesdeFilas,
+  totalDePropinasEnCentavos,
+  type FilaDePropina,
+  avisoDeComisionesPendientes,
+  quedoSinPorcentaje,
   COLUMNAS_DEL_TABLERO,
   accionAlSoltar,
   accionPrincipal,
@@ -373,6 +379,29 @@ describe("editor de servicios", () => {
     expect(resultado).toEqual({ ok: false, errores: { mala: { precio: "Escribe el precio." } } })
   })
 
+  it("una fila de producto (#67) manda productoId y no servicioId, y sin elegir dice qué falta", () => {
+    const deProducto = fila({ tipo: "producto", servicioId: "", productoId: "p-shampoo", precio: "12000" })
+    expect(lineasDesdeFilas([deProducto], true)).toEqual({
+      ok: true,
+      lineas: [{ productoId: "p-shampoo", profesional: "m-carla", precio: 12000 }],
+    })
+    expect(erroresDeFila({ ...deProducto, productoId: "" }, true)).toEqual({ servicio: "Elige el producto." })
+  })
+
+  it("filaDesdeLinea de una línea de producto la vuelve a dar como producto", () => {
+    expect(
+      filaDesdeLinea({
+        id: "l2",
+        tipo: "producto",
+        servicioId: null,
+        productoId: "p-cera",
+        servicio: "Cera",
+        profesional: { id: "m-pedro", nombre: "Pedro" },
+        precio: 8000,
+      })
+    ).toMatchObject({ clave: "l2", tipo: "producto", productoId: "p-cera", servicioId: "", profesional: "m-pedro", precio: "8000" })
+  })
+
   it("sin filas es una lista vacía: dueño y encargado pueden anotar sin servicios", () => {
     expect(lineasDesdeFilas([], true)).toEqual({ ok: true, lineas: [] })
   })
@@ -702,5 +731,84 @@ describe("cobro", () => {
       medio: "efectivo",
       monto: "",
     })
+  })
+})
+
+describe("avisoDeComisionesPendientes (#65)", () => {
+  const dueña: Actor = { rol: "owner", businessId: "negocio-1", memberId: null }
+  const encargado: Actor = { rol: "admin", businessId: "negocio-1", memberId: "m-encargado" }
+  const cobrada = (...estados: ("congelada" | "pendiente" | "no-aplica")[]) => ({
+    estado: "finalizada",
+    lineas: estados.map((estado) => ({ comision: { estado } })),
+  })
+
+  it("sin líneas pendientes no hay aviso", () => {
+    expect(avisoDeComisionesPendientes(encargado, cobrada("congelada", "no-aplica"))).toBeNull()
+  })
+
+  it("el encargado le avisa a la dueña; la dueña lo configura ella", () => {
+    expect(avisoDeComisionesPendientes(encargado, cobrada("pendiente", "congelada", "pendiente"))).toBe(
+      "2 servicios sin porcentaje de comisión: avísale a la dueña."
+    )
+    expect(avisoDeComisionesPendientes(dueña, cobrada("pendiente"))).toBe(
+      "1 servicio sin porcentaje de comisión: configúralo en Comisiones antes de liquidar."
+    )
+  })
+
+  it("una atención abierta no avisa: todavía no se congeló nada", () => {
+    expect(avisoDeComisionesPendientes(dueña, { ...cobrada("pendiente"), estado: "por-cobrar" })).toBeNull()
+    expect(quedoSinPorcentaje({ estado: "por-cobrar" }, { comision: { estado: "pendiente" } })).toBe(false)
+  })
+})
+
+describe("propinas en el cobro (#66)", () => {
+  const propina = (cambios: Partial<FilaDePropina> = {}): FilaDePropina => ({
+    clave: "p1",
+    profesional: "m-carla",
+    monto: "2.000",
+    medio: "efectivo",
+    ...cambios,
+  })
+
+  it("sin propinas está listo: son opcionales", () => {
+    expect(propinasDesdeFilas([])).toEqual({ ok: true, propinas: [] })
+  })
+
+  it("lee el monto como se escribe y manda a quién, cuánto y con qué medio", () => {
+    expect(propinasDesdeFilas([propina(), propina({ clave: "p2", profesional: "duenio", monto: "1500,50", medio: "tarjeta-debito" })])).toEqual({
+      ok: true,
+      propinas: [
+        { profesional: "m-carla", monto: 2000, medio: "efectivo" },
+        { profesional: "duenio", monto: 1500.5, medio: "tarjeta-debito" },
+      ],
+    })
+  })
+
+  it("con la misma regla que el servidor: sin a quién, monto inválido, medio inexistente o más de 5, no", () => {
+    expect(propinasDesdeFilas([propina({ profesional: "" })]).ok).toBe(false)
+    expect(propinasDesdeFilas([propina({ monto: "" })]).ok).toBe(false)
+    expect(propinasDesdeFilas([propina({ monto: "0" })]).ok).toBe(false)
+    expect(propinasDesdeFilas([propina({ medio: "cheque" })]).ok).toBe(false)
+    expect(propinasDesdeFilas(Array.from({ length: 6 }, (_, i) => propina({ clave: `p${i}` }))).ok).toBe(false)
+  })
+
+  it("la suma en vivo va en centavos y sólo cuenta lo que se lee", () => {
+    expect(totalDePropinasEnCentavos([propina({ monto: "0,1" }), propina({ clave: "p2", monto: "0,2" }), propina({ clave: "p3", monto: "x" })])).toBe(30)
+  })
+
+  it("la sugerida va para quien hizo los servicios si fue una sola persona; si fueron varias, se elige", () => {
+    const profesionales = [{ id: "m-carla" }, { id: "m-pedro" }, { id: "duenio" }]
+    const medios = [{ id: "efectivo" }, { id: "tarjeta-debito" }]
+    const de = (id: string | null) => ({ profesional: { id, nombre: "x" } })
+
+    expect(filaDePropinaSugerida([de("m-carla"), de("m-carla")], profesionales, medios, "p1")).toEqual({
+      clave: "p1",
+      profesional: "m-carla",
+      monto: "",
+      medio: "efectivo",
+    })
+    expect(filaDePropinaSugerida([de("m-carla"), de("duenio")], profesionales, medios, "p1").profesional).toBe("")
+    // Quien ya no está en el equipo no se sugiere.
+    expect(filaDePropinaSugerida([de("m-ido")], profesionales, medios, "p1").profesional).toBe("")
   })
 })

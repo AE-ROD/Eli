@@ -1,6 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
-import { NEGOCIO, OTRO_NEGOCIO, atencion, centavos, conId, datosBase, linea, pago, pedido, sesiones } from "@/pruebas/datos"
+import {
+  NEGOCIO,
+  OTRO_NEGOCIO,
+  atencion,
+  centavos,
+  conId,
+  datosBase,
+  linea,
+  lineaDeLaDueña,
+  pago,
+  pedido,
+  propina,
+  sesiones,
+} from "@/pruebas/datos"
 
 const mockGetServerSession = vi.fn()
 
@@ -208,5 +221,127 @@ describe("POST /api/atenciones/[id]/anulacion", () => {
       anuladaPor: "Bruno Encargado",
       motivoDeAnulacion: "Se fue sin esperar",
     })
+  })
+})
+
+describe("POST /api/atenciones/[id]/anulacion: lo ya rendido no se anula (#65)", () => {
+  const liquidacion = (id: string, datos: Record<string, unknown> = {}) => ({
+    id,
+    businessId: NEGOCIO,
+    memberId: "m-carla",
+    memberName: "Carla Profesional",
+    periodo: "mensual",
+    desde: new Date("2026-10-01"),
+    hasta: new Date("2026-10-31"),
+    zona: "America/Santiago",
+    comisionServiciosCents: 0,
+    comisionProductosCents: 0,
+    propinasCents: 0,
+    adelantosCents: 0,
+    ajustesCents: 0,
+    brutoCents: 0,
+    totalCents: 0,
+    cerradaPorId: "u-duena",
+    cerradaPorNombre: "Ana Dueña",
+    ...datos,
+  })
+
+  const cierreDeCaja = (desde: string, hasta: string) => ({
+    id: "caja-1",
+    businessId: NEGOCIO,
+    desde: new Date(desde),
+    hasta: new Date(hasta),
+    fecha: new Date("2026-10-06"),
+    zona: "America/Santiago",
+    fondoInicialCents: 0,
+    efectivoCobradoCents: 0,
+    propinasEfectivoCents: 0,
+    efectivoEsperadoCents: 0,
+    efectivoContadoCents: 0,
+    diferenciaCents: 0,
+    cerradoPorId: "u-duena",
+    cerradoPorNombre: "Ana Dueña",
+  })
+
+  function conLaLineaEn(estado: string) {
+    const datos = escenario()
+    base.reiniciar({
+      ...datos,
+      liquidacion: [liquidacion("liq", { estado, ...(estado === "anulada" && { anuladaAt: new Date() }) })],
+      visitService: datos.visitService.map((l) => (l.id === "l-cobrada" ? { ...l, liquidacionId: "liq" } : l)),
+    })
+  }
+
+  it("una atención cuya línea está en una liquidación cerrada: 409 'corrígelo con un ajuste', y nada cambia", async () => {
+    conLaLineaEn("cerrada")
+    const antes = base.volcado()
+
+    const res = await anular(sesiones.dueña, "v-cobrada", { motivo: "error" })
+
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe(
+      "Esta atención ya está en una liquidación cerrada: no se anula, corrígelo con un ajuste."
+    )
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("una liquidación anulada libera la atención: se anula", async () => {
+    conLaLineaEn("anulada")
+
+    const res = await anular(sesiones.dueña, "v-cobrada")
+
+    expect(res.status).toBe(200)
+    expect(atencionGuardada("v-cobrada").status).toBe("anulada")
+  })
+
+  it("una atención cobrada dentro de un cierre de caja: 409, y nada cambia", async () => {
+    base.reiniciar({ ...escenario(), cierreDeCaja: [cierreDeCaja("2026-10-06T11:00:00.000Z", "2026-10-06T14:00:00.000Z")] })
+    const antes = base.volcado()
+
+    // Cobrada a las 14:00 en punto: el límite es del cierre que termina ahí.
+    const res = await anular(sesiones.dueña, "v-cobrada")
+
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe("Esta atención ya entró en un cierre de caja: no se anula, corrígelo con un ajuste.")
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("toma el candado de liquidación de cada profesional, en orden, y el de la caja compartido, antes de anularla", async () => {
+    const datos = escenario()
+    base.reiniciar({
+      ...datos,
+      visitService: [
+        ...datos.visitService,
+        linea("l-cobrada-pedro", "v-cobrada", { memberId: "m-pedro", professionalName: "Pedro" }),
+        lineaDeLaDueña("l-cobrada-duena", "v-cobrada"),
+      ],
+      propinaDeAtencion: [
+        propina("pr-encargado", "v-cobrada", { memberId: "m-encargado" }),
+        propina("pr-carla", "v-cobrada"),
+        propina("pr-ajena", "v-ajena", { businessId: OTRO_NEGOCIO, memberId: "m-ajeno" }),
+      ],
+    })
+
+    const res = await anular(sesiones.dueña, "v-cobrada")
+
+    expect(res.status).toBe(200)
+    const candados = base.prisma.$executeRaw.mock.calls.map(([partes, ...valores]) => [partes.join("?"), ...valores])
+    const liquidacion = "SELECT pg_advisory_xact_lock(hashtext(?), hashtext(?))"
+    expect(candados).toEqual([
+      [liquidacion, NEGOCIO, "m-carla"],
+      [liquidacion, NEGOCIO, "m-encargado"],
+      [liquidacion, NEGOCIO, "m-pedro"],
+      // El de la caja, compartido, con la clave del cierre de caja.
+      ["SELECT pg_advisory_xact_lock_shared(hashtext(?))", `caja:${NEGOCIO}`],
+    ])
+    // Antes de tomar la atención y de mirar si ya está liquidada o en caja.
+    const ultimoCandado = Math.max(...base.prisma.$executeRaw.mock.invocationCallOrder)
+    expect(ultimoCandado).toBeLessThan(base.prisma.visit.updateMany.mock.invocationCallOrder[0])
+  })
+
+  it("un cierre que terminó antes del cobro no la bloquea", async () => {
+    base.reiniciar({ ...escenario(), cierreDeCaja: [cierreDeCaja("2026-10-06T11:00:00.000Z", "2026-10-06T13:59:59.000Z")] })
+
+    expect((await anular(sesiones.dueña, "v-cobrada")).status).toBe(200)
   })
 })

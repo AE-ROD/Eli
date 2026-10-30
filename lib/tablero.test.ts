@@ -183,3 +183,43 @@ describe("nombreEnElNegocio", () => {
     expect(await nombreEnElNegocio(tx, dueña, null)).toBeNull()
   })
 })
+
+describe("comisionDeLinea (#65)", () => {
+  const congelada = {
+    memberId: "m-pedro",
+    byOwner: false,
+    commissionPercent: 40,
+    commissionCents: 320_000,
+    commissionAt: new Date("2026-10-06T15:00:00.000Z"),
+  }
+
+  it("dueña y encargado ven el % y el monto de cualquier línea congelada", async () => {
+    const { comisionDeLinea } = await import("./tablero")
+    for (const actor of [dueña, encargado]) {
+      expect(comisionDeLinea(actor, congelada)).toEqual({ estado: "congelada", porcentaje: 40, monto: 3200 })
+    }
+  })
+
+  it("la profesional nunca recibe el % ni el monto de una línea ajena: sólo el estado", async () => {
+    const { comisionDeLinea } = await import("./tablero")
+    expect(comisionDeLinea(carla, congelada)).toEqual({ estado: "congelada" })
+    expect(comisionDeLinea(carla, { ...congelada, memberId: "m-carla" })).toEqual({
+      estado: "congelada",
+      porcentaje: 40,
+      monto: 3200,
+    })
+  })
+
+  it("un profesional sin memberId no recibe nada de una línea de ex-miembro (memberId null no es suya)", async () => {
+    const { comisionDeLinea } = await import("./tablero")
+    const sinMiembro: Actor = { rol: "worker", businessId: NEGOCIO, memberId: null }
+    expect(comisionDeLinea(sinMiembro, { ...congelada, memberId: null })).toEqual({ estado: "congelada" })
+  })
+
+  it("pendiente y no aplica van sin cifras: pendiente nunca se muestra como 0", async () => {
+    const { comisionDeLinea } = await import("./tablero")
+    const sinCongelar = { ...congelada, commissionPercent: null, commissionCents: null, commissionAt: null }
+    expect(comisionDeLinea(dueña, sinCongelar)).toEqual({ estado: "pendiente" })
+    expect(comisionDeLinea(dueña, { ...sinCongelar, memberId: null, byOwner: true })).toEqual({ estado: "no-aplica" })
+  })
+})

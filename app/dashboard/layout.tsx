@@ -6,7 +6,16 @@ import { ContenidoDelPanel } from "@/components/panel/contenido-del-panel"
 import { ModalBienvenida } from "@/components/panel/modal-bienvenida"
 import { ProveedorDePrecios } from "@/components/panel/contexto-precios"
 import { ProveedorDeBarraLateral } from "@/components/panel/contexto-barra-lateral"
-import { actorDeSesion, puedeGestionarEquipo, puedeGestionarSuscripcion, veLaListaDeInicio } from "@/lib/permisos"
+import {
+  actorDeSesion,
+  puedeEditarComisiones,
+  puedeGestionarEquipo,
+  puedeGestionarSuscripcion,
+  puedeVerCierresDeCaja,
+  puedeVerLiquidacionesDelEquipo,
+  veLaListaDeInicio,
+  veMiPlata,
+} from "@/lib/permisos"
 
 export default async function LayoutDelPanel({
   children,
@@ -29,6 +38,12 @@ export default async function LayoutDelPanel({
   const actor = actorDeSesion(session)
   const puedeVerEquipo = puedeGestionarEquipo(actor)
   const verSuscripcion = puedeGestionarSuscripcion(actor)
+  const accesoALaPlata = {
+    miPlata: veMiPlata(actor),
+    caja: puedeVerCierresDeCaja(actor),
+    liquidaciones: puedeVerLiquidacionesDelEquipo(actor),
+    comisiones: puedeEditarComisiones(actor),
+  }
 
   // Calcular días de prueba restantes (sólo para quien paga el plan)
   let diasTrialRestantes: number | undefined
@@ -54,6 +69,7 @@ export default async function LayoutDelPanel({
             puedeGestionarSuscripcion={verSuscripcion}
             diasTrialRestantes={diasTrialRestantes}
             puedeVerEquipo={puedeVerEquipo}
+            accesoALaPlata={accesoALaPlata}
           />
           <ContenidoDelPanel>{children}</ContenidoDelPanel>
           {businessName && businessSlug && (

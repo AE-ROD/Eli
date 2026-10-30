@@ -107,6 +107,85 @@ export async function borrarServicio(id: string): Promise<Resultado> {
   return pedir(`/api/configuracion/servicios/${id}`, "No se pudo borrar el servicio", { method: "DELETE" })
 }
 
+// ─── Productos (#67) ─────────────────────────────────────────────────────────
+
+/** Un producto del catálogo como lo devuelve el servidor. `porcentaje` sólo le llega a la dueña. */
+export interface Producto {
+  id: string
+  nombre: string
+  /** En unidades; `null` si no tiene precio en el catálogo (se escribe al venderlo). */
+  precio: number | null
+  activo: boolean
+  /** % de comisión de quien lo vende. `null` es "sin configurar" (pendiente), no 0. Ausente si no se ve. */
+  porcentaje?: number | null
+}
+
+/** Lo que se carga en el modal de producto, como texto: así llega de los campos. */
+export interface DatosDeProducto {
+  nombre: string
+  precio: string
+  porcentaje: string
+}
+
+/** Lo que el texto de un % dice: vacío es "sin configurar" (null), nunca 0. */
+export function leerPorcentaje(texto: string): { ok: true; porcentaje: number | null } | { ok: false; error: string } {
+  const limpio = texto.trim().replace("%", "").trim()
+  if (limpio === "") return { ok: true, porcentaje: null }
+  const porcentaje = Number(limpio.replace(",", "."))
+  if (!Number.isFinite(porcentaje) || porcentaje < 0 || porcentaje > 100) {
+    return { ok: false, error: "El porcentaje tiene que ser un número entre 0 y 100." }
+  }
+  if (Math.abs(porcentaje * 100 - Math.round(porcentaje * 100)) > 1e-6) {
+    return { ok: false, error: "El porcentaje puede tener hasta dos decimales." }
+  }
+  return { ok: true, porcentaje }
+}
+
+/**
+ * Del formulario a lo que espera el servidor. El precio vacío es "sin precio"
+ * (`null`); el % sólo se manda si quien edita lo puede fijar: el servidor
+ * rechaza el % que manda el encargado, aunque sea el mismo.
+ */
+export function cuerpoDeProducto(datos: DatosDeProducto, conPorcentaje: boolean) {
+  const sinPrecio = datos.precio.trim() === ""
+  const precio = sinPrecio ? null : leerMonto(datos.precio)
+  if (!sinPrecio && precio === null) {
+    return { ok: false as const, error: "No se entiende el precio. Escríbelo así: 8000 o 8000,50." }
+  }
+  const base = { nombre: datos.nombre.trim(), precio }
+  if (!conPorcentaje) return { ok: true as const, datos: base }
+  const porcentaje = leerPorcentaje(datos.porcentaje)
+  if (!porcentaje.ok) return porcentaje
+  return { ok: true as const, datos: { ...base, porcentaje: porcentaje.porcentaje } }
+}
+
+/** Devuelve el producto tal como quedó guardado. */
+export async function crearProducto(datos: DatosDeProducto, conPorcentaje: boolean): Promise<Resultado<Producto>> {
+  const cuerpo = cuerpoDeProducto(datos, conPorcentaje)
+  if (!cuerpo.ok) return cuerpo
+  return pedir<Producto>("/api/configuracion/productos", "No se pudo crear el producto", conJson("POST", cuerpo.datos))
+}
+
+/** Devuelve el producto tal como quedó guardado. */
+export async function editarProducto(id: string, datos: DatosDeProducto, conPorcentaje: boolean): Promise<Resultado<Producto>> {
+  const cuerpo = cuerpoDeProducto(datos, conPorcentaje)
+  if (!cuerpo.ok) return cuerpo
+  return pedir<Producto>(
+    `/api/configuracion/productos/${encodeURIComponent(id)}`,
+    "No se pudo guardar el producto",
+    conJson("PUT", cuerpo.datos)
+  )
+}
+
+/** Un producto inactivo no se ofrece como línea nueva en el tablero. No se borran. */
+export async function activarODesactivarProducto(id: string, activo: boolean): Promise<Resultado<Producto>> {
+  return pedir<Producto>(
+    `/api/configuracion/productos/${encodeURIComponent(id)}`,
+    activo ? "No se pudo activar el producto" : "No se pudo desactivar el producto",
+    conJson("PUT", { activo })
+  )
+}
+
 /** La especialidad de un profesional en la página pública ("Colorista"). */
 export interface EspecialidadDeMiembro {
   memberId: string

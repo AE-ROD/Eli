@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
-import { crearServicio, cuerpoDeServicio, editarServicio, type DatosDeServicio } from "./_datos"
+import { crearServicio, cuerpoDeProducto, cuerpoDeServicio, editarServicio, leerPorcentaje, type DatosDeServicio } from "./_datos"
 
 /** El cuerpo JSON con que se llamó a `fetch`. */
 const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
@@ -69,5 +69,35 @@ describe("crearServicio y editarServicio", () => {
 
     expect(resultado.ok).toBe(false)
     expect(fetchFalso).not.toHaveBeenCalled()
+  })
+})
+
+describe("productos (#67): cuerpoDeProducto y leerPorcentaje", () => {
+  const PRODUCTO = { nombre: " Shampoo ", precio: "12.000", porcentaje: "12,5" }
+
+  it("sin poder fijar el %, no lo manda aunque esté escrito: el servidor lo rechazaría", () => {
+    expect(cuerpoDeProducto(PRODUCTO, false)).toEqual({ ok: true, datos: { nombre: "Shampoo", precio: 12000 } })
+  })
+
+  it("la dueña lo manda leído con coma; vacío es null (sin configurar), nunca 0", () => {
+    expect(cuerpoDeProducto(PRODUCTO, true)).toEqual({ ok: true, datos: { nombre: "Shampoo", precio: 12000, porcentaje: 12.5 } })
+    expect(cuerpoDeProducto({ ...PRODUCTO, porcentaje: "" }, true)).toEqual({
+      ok: true,
+      datos: { nombre: "Shampoo", precio: 12000, porcentaje: null },
+    })
+    expect(leerPorcentaje("0")).toEqual({ ok: true, porcentaje: 0 })
+    expect(leerPorcentaje("10 %")).toEqual({ ok: true, porcentaje: 10 })
+  })
+
+  it("el precio vacío es null; uno ilegible es un error y no se manda", () => {
+    expect(cuerpoDeProducto({ ...PRODUCTO, precio: "" }, false)).toEqual({ ok: true, datos: { nombre: "Shampoo", precio: null } })
+    expect(cuerpoDeProducto({ ...PRODUCTO, precio: "doce" }, false).ok).toBe(false)
+  })
+
+  it("un % fuera de 0-100 o con más de dos decimales es un error", () => {
+    expect(leerPorcentaje("101").ok).toBe(false)
+    expect(leerPorcentaje("-1").ok).toBe(false)
+    expect(leerPorcentaje("33,333").ok).toBe(false)
+    expect(leerPorcentaje("abc").ok).toBe(false)
   })
 })

@@ -31,6 +31,7 @@ import { ResumenDeReporte } from "./_componentes/resumen-de-reporte"
 import { HistorialDeCobros, diaCorto } from "./_componentes/historial-de-cobros"
 import { HistorialDeAnuladas, ResumenDeAnuladas } from "./_componentes/historial-de-anuladas"
 import { SelectorDeVista, idDePestaña, type VistaDeReporte } from "./_componentes/selector-de-vista"
+import { LlenarHoras } from "./_componentes/llenar-horas"
 
 const FILTROS_INICIALES: FiltrosElegidos = {
   periodo: "hoy",
@@ -52,6 +53,9 @@ function rangoElegido(filtros: FiltrosElegidos): RangoDePeriodo {
 type Respuesta =
   | { vista: "cobradas"; consulta: string; resultado: Resultado<Reporte> }
   | { vista: "anuladas"; consulta: string; resultado: Resultado<ReporteDeAnuladas> }
+
+/** Las vistas que usan los filtros y el pedido de esta página. "Llenar horas" trae los suyos. */
+type VistaDeCobros = Exclude<VistaDeReporte, "llenar-horas">
 
 /** Mientras llega el primer reporte: las cifras y el historial en gris, con su forma, sin números inventados. */
 function ReporteCargando() {
@@ -100,7 +104,10 @@ export default function PaginaReportes() {
   const idDelPanel = `${idBase}-panel`
   const [vistaElegida, setVistaElegida] = useState<VistaDeReporte>("cobradas")
   // Sin permiso para ver lo anulado no hay pestañas: siempre lo cobrado.
-  const vista: VistaDeReporte = verAnuladas ? vistaElegida : "cobradas"
+  const vistaVisible: VistaDeReporte = verAnuladas ? vistaElegida : "cobradas"
+  const llenarHoras = vistaVisible === "llenar-horas"
+  // Lo que piden los filtros y el historial: en "Llenar horas" queda lo último de lo cobrado, sin pedir.
+  const vista: VistaDeCobros = vistaVisible === "llenar-horas" ? "cobradas" : vistaVisible
 
   const [filtros, setFiltros] = useState<FiltrosElegidos>(FILTROS_INICIALES)
   const [pagina, setPagina] = useState(1)
@@ -147,6 +154,8 @@ export default function PaginaReportes() {
   const errorDeRango = rangoPropio && !rangoPropio.ok ? rangoPropio.error : ""
 
   useEffect(() => {
+    // "Llenar horas" pide lo suyo.
+    if (llenarHoras) return
     const rango = rangoElegido(filtros)
     // Un rango que no sirve no se pide: el error ya se ve junto a las fechas.
     if (!rango.ok) return
@@ -169,7 +178,7 @@ export default function PaginaReportes() {
     return () => {
       vigente = false
     }
-  }, [consulta, filtros, pagina, vista])
+  }, [consulta, filtros, pagina, vista, llenarHoras])
 
   const cargando = !errorDeRango && respuesta?.consulta !== consulta
   const errorDelReporte = !cargando && respuesta && !respuesta.resultado.ok ? respuesta.resultado.error : ""
@@ -252,13 +261,15 @@ export default function PaginaReportes() {
 
   // ─── Pantalla ─────────────────────────────────────────────────────────────
 
-  const subtitulo = !reporte
-    ? errorDelReporte
-      ? undefined
-      : "Cargando..."
-    : reporte.alcance === "propio"
-      ? "Lo que atendiste"
-      : "Lo atendido y cobrado en el tablero"
+  const subtitulo = llenarHoras
+    ? "Ocupación del equipo, clientes nuevos y quién no vino"
+    : !reporte
+      ? errorDelReporte
+        ? undefined
+        : "Cargando..."
+      : reporte.alcance === "propio"
+        ? "Lo que atendiste"
+        : "Lo atendido y cobrado en el tablero"
 
   // Con un rango que no sirve o un pedido que falló, lo último que llegó ya
   // no es lo de lo elegido: no se muestra como si lo fuera.
@@ -284,76 +295,81 @@ export default function PaginaReportes() {
 
       <div className="space-y-6 px-4 pb-8 pt-4 sm:px-6 sm:pt-6">
         {verAnuladas && (
-          <SelectorDeVista idBase={idBase} idDelPanel={idDelPanel} vista={vista} onCambiar={cambiarVista} />
+          <SelectorDeVista idBase={idBase} idDelPanel={idDelPanel} vista={vistaVisible} onCambiar={cambiarVista} />
         )}
 
         <div
           id={idDelPanel}
           role={verAnuladas ? "tabpanel" : undefined}
-          aria-labelledby={verAnuladas ? idDePestaña(idBase, vista) : undefined}
+          aria-labelledby={verAnuladas ? idDePestaña(idBase, vistaVisible) : undefined}
           className="space-y-6"
         >
-          <FiltrosDeReporte
-            filtros={filtros}
-            opciones={opciones}
-            errorDeOpciones={errorDeOpciones}
-            alcance={reporte?.alcance ?? null}
-            errorDeRango={errorDeRango}
-            soloPeriodo={vista === "anuladas"}
-            actualizando={actualizandoLoQueSeVe}
-            onCambiar={cambiarFiltros}
-            onReintentarOpciones={reintentarOpciones}
-          />
-
-          {errorDelReporte && (
-            <Aviso
-              tono="error"
-              rol="alert"
-              accion={
-                <Boton variante="secundario" tamano="sm" onClick={() => setReintentos((previos) => previos + 1)}>
-                  <RefreshCw aria-hidden="true" className="size-4" strokeWidth={2} />
-                  Reintentar
-                </Boton>
-              }
-            >
-              {errorDelReporte}
-            </Aviso>
-          )}
-
-          {mensaje && (
-            <Aviso tono={mensaje.error ? "error" : "listo"} rol={mensaje.error ? "alert" : "status"}>
-              {mensaje.texto}
-            </Aviso>
-          )}
-
-          {((vista === "cobradas" && !reporte) || (vista === "anuladas" && !anuladas)) && cargando && <ReporteCargando />}
-
-          {mostrarReporte && (
-            <div aria-busy={cargando} className="space-y-6">
-              {reporte.truncado && !cargando && <AvisoDeTruncado />}
-              <div className={cn("transition-opacity duration-200 ease-suave", cargando && "opacity-60")}>
-                <ResumenDeReporte reporte={reporte} rotuloDeIngresos={rotulo} />
-              </div>
-              <HistorialDeCobros
-                reporte={reporte}
-                actualizando={cargando}
-                onPagina={setPagina}
-                resaltarCoincidencias={filtros.profesional !== "" || filtros.servicio !== ""}
-                onAnular={anulaCobros ? abrirAnular : undefined}
-                enfocarTitulo={enfocarHistorial}
-                onTituloEnfocado={historialEnfocado}
+          {llenarHoras && <LlenarHoras />}
+          {!llenarHoras && (
+            <>
+              <FiltrosDeReporte
+                filtros={filtros}
+                opciones={opciones}
+                errorDeOpciones={errorDeOpciones}
+                alcance={reporte?.alcance ?? null}
+                errorDeRango={errorDeRango}
+                soloPeriodo={vista === "anuladas"}
+                actualizando={actualizandoLoQueSeVe}
+                onCambiar={cambiarFiltros}
+                onReintentarOpciones={reintentarOpciones}
               />
-            </div>
-          )}
 
-          {mostrarAnuladas && (
-            <div aria-busy={cargando} className="space-y-6">
-              {anuladas.truncado && !cargando && <AvisoDeTruncado />}
-              <div className={cn("transition-opacity duration-200 ease-suave", cargando && "opacity-60")}>
-                <ResumenDeAnuladas reporte={anuladas} />
-              </div>
-              <HistorialDeAnuladas reporte={anuladas} actualizando={cargando} onPagina={setPagina} />
-            </div>
+              {errorDelReporte && (
+                <Aviso
+                  tono="error"
+                  rol="alert"
+                  accion={
+                    <Boton variante="secundario" tamano="sm" onClick={() => setReintentos((previos) => previos + 1)}>
+                      <RefreshCw aria-hidden="true" className="size-4" strokeWidth={2} />
+                      Reintentar
+                    </Boton>
+                  }
+                >
+                  {errorDelReporte}
+                </Aviso>
+              )}
+
+              {mensaje && (
+                <Aviso tono={mensaje.error ? "error" : "listo"} rol={mensaje.error ? "alert" : "status"}>
+                  {mensaje.texto}
+                </Aviso>
+              )}
+
+              {((vista === "cobradas" && !reporte) || (vista === "anuladas" && !anuladas)) && cargando && <ReporteCargando />}
+
+              {mostrarReporte && (
+                <div aria-busy={cargando} className="space-y-6">
+                  {reporte.truncado && !cargando && <AvisoDeTruncado />}
+                  <div className={cn("transition-opacity duration-200 ease-suave", cargando && "opacity-60")}>
+                    <ResumenDeReporte reporte={reporte} rotuloDeIngresos={rotulo} />
+                  </div>
+                  <HistorialDeCobros
+                    reporte={reporte}
+                    actualizando={cargando}
+                    onPagina={setPagina}
+                    resaltarCoincidencias={filtros.profesional !== "" || filtros.servicio !== ""}
+                    onAnular={anulaCobros ? abrirAnular : undefined}
+                    enfocarTitulo={enfocarHistorial}
+                    onTituloEnfocado={historialEnfocado}
+                  />
+                </div>
+              )}
+
+              {mostrarAnuladas && (
+                <div aria-busy={cargando} className="space-y-6">
+                  {anuladas.truncado && !cargando && <AvisoDeTruncado />}
+                  <div className={cn("transition-opacity duration-200 ease-suave", cargando && "opacity-60")}>
+                    <ResumenDeAnuladas reporte={anuladas} />
+                  </div>
+                  <HistorialDeAnuladas reporte={anuladas} actualizando={cargando} onPagina={setPagina} />
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

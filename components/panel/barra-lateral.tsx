@@ -19,6 +19,8 @@ import {
   SECCION_DE_INICIO,
   SECCIONES_DE_MODULOS,
   seccionDeLaRuta,
+  seccionesDeLaPlata,
+  type AccesoALaPlata,
   type SeccionDelPanel,
 } from "@/components/panel/secciones-del-panel"
 import { moduloPorId } from "@/lib/modulos"
@@ -53,9 +55,20 @@ interface PropsDeBarraLateral {
   diasTrialRestantes?: number
   /** Dueño y encargado gestionan el equipo; el profesional no ve el enlace. Resuelto en el servidor. */
   puedeVerEquipo?: boolean
+  /**
+   * Qué secciones de la plata del equipo ve (Mi plata, Caja, Liquidaciones,
+   * Comisiones). Resuelto en el servidor con `lib/permisos.ts`; sin dato, ninguna.
+   */
+  accesoALaPlata?: AccesoALaPlata
 }
 
-export function BarraLateral({ usuario, puedeGestionarSuscripcion, diasTrialRestantes, puedeVerEquipo }: PropsDeBarraLateral) {
+export function BarraLateral({
+  usuario,
+  puedeGestionarSuscripcion,
+  diasTrialRestantes,
+  puedeVerEquipo,
+  accesoALaPlata,
+}: PropsDeBarraLateral) {
   const { abrirPrecios } = usePrecios()
   const pathname = usePathname()
   const { cajonAbierto, cerrarCajon, cerrarCajonParaIrA, colapsada, alternarColapso, enfocarBotonMenu } =
@@ -69,10 +82,12 @@ export function BarraLateral({ usuario, puedeGestionarSuscripcion, diasTrialRest
    * configuración y ayuda. Chats está escondido hasta que exista WhatsApp
    * (`secciones-del-panel.ts`). Tablero y reportes son para todos los roles: cada
    * endpoint ya recorta lo que ve cada uno. Equipo, sólo para quien lo gestiona.
+   * Después, las de la plata del equipo que le tocan a cada rol.
    */
   const principales: SeccionDelPanel[] = [
     SECCION_DE_INICIO,
     ...SECCIONES_DE_MODULOS.filter((seccion) => seccion.id !== "equipo" || puedeVerEquipo),
+    ...seccionesDeLaPlata(accesoALaPlata),
   ]
   const secundarias: SeccionDelPanel[] = [SECCION_DE_CONFIGURACION, SECCION_DE_AYUDA]
 

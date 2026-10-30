@@ -96,13 +96,17 @@ export default function PaginaAgenda() {
     })
   }, [])
 
+  /** La cita ya cambió de estado en el servidor: la agenda y el detalle la muestran así. */
+  const mostrarEstado = (id: string, estado: string) => {
+    setCitas((previas) => previas.map((cita) => (cita.id === id ? { ...cita, status: estado } : cita)))
+    setCitaAbierta((abierta) => (abierta?.id === id ? { ...abierta, status: estado } : abierta))
+  }
+
   const cambiarEstado = async (id: string, estado: string) => {
     setAviso("")
     const resultado = await cambiarEstadoDeCita(id, estado)
     if (!resultado.ok) return setAviso(resultado.error)
-
-    setCitas((previas) => previas.map((cita) => (cita.id === id ? { ...cita, status: estado } : cita)))
-    setCitaAbierta((abierta) => (abierta?.id === id ? { ...abierta, status: estado } : abierta))
+    mostrarEstado(id, estado)
   }
 
   // Cada vez que se abre, un borrador nuevo del día que se está mirando. Si
@@ -215,6 +219,7 @@ export default function PaginaAgenda() {
                 onCerrar={() => setCitaAbierta(null)}
                 onCambiarEstado={cambiarEstado}
                 onMover={setCitaAMover}
+                onReactivada={mostrarEstado}
               />
             )}
           </AnimatePresence>

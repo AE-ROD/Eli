@@ -1,5 +1,6 @@
 import {
   ESTADOS_ACTIVOS,
+  MAXIMO_DE_PROPINAS,
   MONTO_MAXIMO,
   PROFESIONAL_DUEÑO,
   aCentavos,
@@ -16,9 +17,11 @@ import {
   type LineaDeAtencion,
   type PagoPedido,
 } from "@/lib/atenciones"
+import type { EstadoDeComision } from "@/lib/comisiones"
 import { formatearMonto, leerMonto, montoParaEscribir } from "@/lib/dinero"
+import { esMedioDePago } from "@/lib/medios-de-pago"
 import { esHoy, horaConArticulo } from "@/lib/fechas"
-import { puedeAnular, puedeCobrar, puedeDeshacerLlegada, type Actor } from "@/lib/permisos"
+import { esDueño, puedeAnular, puedeCobrar, puedeDeshacerLlegada, type Actor } from "@/lib/permisos"
 
 /**
  * El tablero de atenciones (docs/PRODUCTO.md, sección 7) visto desde la
@@ -351,12 +354,19 @@ export function destinosDeArrastre(actor: Actor | null, tarjeta: TarjetaDelTable
 
 // ─── Editor de servicios ─────────────────────────────────────────────────────
 
-/** Una fila del editor de servicios tal como está escrita: el precio todavía es texto. */
+/**
+ * Una fila del editor de servicios tal como está escrita: el precio todavía
+ * es texto. Una fila es de un servicio o, con `tipo: "producto"`, de un
+ * producto vendido (#67); sin `tipo`, de un servicio.
+ */
 export interface FilaDeServicio {
   /** Para la `key` de React: el id de la línea, o uno nuevo si la fila se agregó. */
   clave: string
-  /** Vacío si falta elegirlo, o si el servicio de la línea se borró del catálogo. */
+  tipo?: "servicio" | "producto"
+  /** Vacío si falta elegirlo, o si el servicio de la línea se borró del catálogo. En un producto, vacío. */
   servicioId: string
+  /** Sólo en un producto: vacío si falta elegirlo. */
+  productoId?: string
   /** Id de miembro, `duenio`, o vacío si falta elegir. No cuenta si quien edita no elige profesional. */
   profesional: string
   precio: string
@@ -365,13 +375,27 @@ export interface FilaDeServicio {
   profesionalOriginal?: string
 }
 
-/** Una línea de una atención, como la devuelve el endpoint. */
+/**
+ * Una línea de una atención, como la devuelve el endpoint. `servicio` es el
+ * nombre copiado, del servicio o del producto.
+ */
 export interface LineaGuardada extends LineaEnPantalla {
   id: string
+  tipo?: "servicio" | "producto"
   servicioId: string | null
+  productoId?: string | null
   servicio: string
   profesional: { id: string | null; nombre: string }
+  /**
+   * La comisión de la línea (#65): congelada al cobrar, pendiente de % o no
+   * aplica. El % y el monto llegan sólo a quien ve todo el tablero o a quien
+   * hizo la línea.
+   */
+  comision?: { estado: EstadoDeComision; porcentaje?: number | null; monto?: number | null }
 }
+
+/** Si la fila o la línea es de un producto. */
+export const esDeProducto = (linea: { tipo?: string }): boolean => linea.tipo === "producto"
 
 /**
  * La línea guardada como fila para editarla. Un profesional que dejó el
@@ -381,7 +405,8 @@ export interface LineaGuardada extends LineaEnPantalla {
 export function filaDesdeLinea(linea: LineaGuardada): FilaDeServicio {
   return {
     clave: linea.id,
-    servicioId: linea.servicioId ?? "",
+    ...(esDeProducto(linea) && { tipo: "producto" as const, productoId: linea.productoId ?? "" }),
+    servicioId: esDeProducto(linea) ? "" : (linea.servicioId ?? ""),
     profesional: linea.profesional.id ?? "",
     precio: montoParaEscribir(linea.precio),
     servicioOriginal: linea.servicio,
@@ -403,6 +428,8 @@ export interface ReservaDeOrigen {
 export interface CatalogoParaFilas {
   /** Sólo los activos. */
   servicios: readonly { id: string; nombre: string; precio: number | null }[]
+  /** Los productos que se venden (#67), sólo los activos. Puede faltar: un catálogo sin productos. */
+  productos?: readonly { id: string; nombre: string; precio: number | null }[]
   /** A quién se le puede asignar una línea. */
   profesionales: readonly { id: string; nombre: string }[]
 }
@@ -451,9 +478,10 @@ function unicoConEseNombre<T extends { nombre: string }>(servicios: readonly T[]
   return conEseNombre.length === 1 ? conEseNombre[0] : undefined
 }
 
-/** Lo que se manda por cada línea; es el contrato de `PUT /api/atenciones/[id]`. */
+/** Lo que se manda por cada línea; es el contrato de `PUT /api/atenciones/[id]`. Uno de `servicioId` o `productoId`. */
 export interface LineaPedida {
-  servicioId: string
+  servicioId?: string
+  productoId?: string
   profesional?: string
   precio: number
 }
@@ -475,7 +503,9 @@ const MONTO_ILEGIBLE = "Escríbelo así: 8000 o 8000,50."
  */
 export function erroresDeFila(fila: FilaDeServicio, eligeProfesional: boolean): ErroresDeFila {
   const errores: ErroresDeFila = {}
-  if (!fila.servicioId) errores.servicio = "Elige el servicio."
+  if (esDeProducto(fila) ? !fila.productoId : !fila.servicioId) {
+    errores.servicio = esDeProducto(fila) ? "Elige el producto." : "Elige el servicio."
+  }
   if (eligeProfesional && !fila.profesional) errores.profesional = "Elige quién lo hace."
 
   const precio = leerMonto(fila.precio)
@@ -508,7 +538,7 @@ export function lineasDesdeFilas(filas: readonly FilaDeServicio[], eligeProfesio
   return {
     ok: true,
     lineas: filas.map((fila) => ({
-      servicioId: fila.servicioId,
+      ...(esDeProducto(fila) ? { productoId: fila.productoId ?? "" } : { servicioId: fila.servicioId }),
       ...(eligeProfesional && { profesional: fila.profesional }),
       // Ya validado: sin errores, el precio se lee.
       precio: leerMonto(fila.precio) ?? 0,
@@ -522,6 +552,31 @@ export function totalDeFilasEnCentavos(filas: readonly FilaDeServicio[]): number
     const precio = leerMonto(fila.precio)
     return precio !== null && esPrecioValido(precio) ? suma + aCentavos(precio) : suma
   }, 0)
+}
+
+// ─── Comisiones (#65) ────────────────────────────────────────────────────────
+
+/** Si una línea cobrada quedó sin % de comisión: no se le puede liquidar hasta que alguien lo fije. */
+export function quedoSinPorcentaje(atencion: { estado: string }, linea: Pick<LineaGuardada, "comision">): boolean {
+  return atencion.estado === "finalizada" && linea.comision?.estado === "pendiente"
+}
+
+/**
+ * Lo que se le dice a quien acaba de cobrar si alguna línea quedó sin % de
+ * comisión, o `null` si no. El cobro no se frena por eso: se avisa para que
+ * alguien lo fije antes de liquidar. La dueña lo fija ella; el encargado se
+ * lo avisa.
+ */
+export function avisoDeComisionesPendientes(
+  actor: Actor | null,
+  atencion: { estado: string; lineas: readonly Pick<LineaGuardada, "comision">[] }
+): string | null {
+  const pendientes = atencion.lineas.filter((linea) => quedoSinPorcentaje(atencion, linea)).length
+  if (pendientes === 0) return null
+  const cuantos = pendientes === 1 ? "1 servicio" : `${pendientes} servicios`
+  return esDueño(actor)
+    ? `${cuantos} sin porcentaje de comisión: configúralo en Comisiones antes de liquidar.`
+    : `${cuantos} sin porcentaje de comisión: avísale a la dueña.`
 }
 
 // ─── Cobro ───────────────────────────────────────────────────────────────────
@@ -587,4 +642,68 @@ export function errorDeMontoDePago(texto: string): string | null {
     return `Tiene que ser mayor que cero, hasta ${formatearMonto(MONTO_MAXIMO)}, con hasta dos decimales.`
   }
   return null
+}
+
+// ─── Propinas (#66) ──────────────────────────────────────────────────────────
+
+/** Una propina del cobro tal como está escrita: a quién, cuánto (texto) y con qué medio. */
+export interface FilaDePropina {
+  clave: string
+  /** Id de miembro, `duenio`, o vacío si falta elegir. */
+  profesional: string
+  monto: string
+  medio: string
+}
+
+/** Lo que se manda por cada propina; es el contrato de `POST /api/atenciones/[id]/cobro`. */
+export interface PropinaPedida {
+  profesional: string
+  monto: number
+  medio: string
+}
+
+export type PropinasDesdeFilas =
+  | { ok: true; propinas: PropinaPedida[] }
+  | { ok: false; error: string }
+
+/**
+ * Las propinas listas para mandar, o qué les falta, con la misma regla que el
+ * servidor (`errorDePropinas`): a quién va, un monto mayor que cero con hasta
+ * dos decimales y un medio del catálogo. Sin filas no hay propina, y está bien.
+ */
+export function propinasDesdeFilas(filas: readonly FilaDePropina[]): PropinasDesdeFilas {
+  if (filas.length > MAXIMO_DE_PROPINAS) return { ok: false, error: `Hasta ${MAXIMO_DE_PROPINAS} propinas por cobro.` }
+  if (filas.some((fila) => !fila.profesional)) return { ok: false, error: "Elige a quién va cada propina." }
+  if (filas.some((fila) => !esMedioDePago(fila.medio))) {
+    return { ok: false, error: "Hay una propina con un medio de pago que no existe." }
+  }
+  const propinas = filas.map((fila) => ({ profesional: fila.profesional, monto: leerMonto(fila.monto) ?? Number.NaN, medio: fila.medio }))
+  if (propinas.some((propina) => !esMontoDePagoValido(propina.monto))) {
+    return { ok: false, error: "Cada propina tiene que ser mayor que cero y con hasta dos decimales." }
+  }
+  return { ok: true, propinas }
+}
+
+/** La suma de las propinas que ya se leen, en centavos: para mostrarla aparte del total. */
+export function totalDePropinasEnCentavos(filas: readonly FilaDePropina[]): number {
+  return filas.reduce((suma, fila) => {
+    const monto = leerMonto(fila.monto)
+    return monto !== null && esMontoDePagoValido(monto) ? suma + aCentavos(monto) : suma
+  }, 0)
+}
+
+/**
+ * La propina que se agrega al apretar "Agregar propina": para quien hizo los
+ * servicios si fue una sola persona (el caso de todos los días), y en
+ * efectivo. Si la atendieron varios, a quién va se elige.
+ */
+export function filaDePropinaSugerida(
+  lineas: readonly Pick<LineaGuardada, "profesional">[],
+  profesionales: readonly { id: string }[],
+  medios: readonly { id: string }[],
+  clave: string
+): FilaDePropina {
+  const quienes = [...new Set(lineas.map((linea) => linea.profesional.id).filter((id): id is string => id !== null))]
+  const unico = quienes.length === 1 && profesionales.some((profesional) => profesional.id === quienes[0]) ? quienes[0] : ""
+  return { clave, profesional: unico, monto: "", medio: medios[0]?.id ?? "" }
 }

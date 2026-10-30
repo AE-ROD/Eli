@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { ESTADOS_ACTIVOS, PROFESIONAL_DUEÑO } from "@/lib/atenciones"
+import { ESTADOS_ACTIVOS, PROFESIONAL_DUEÑO, deCentavos } from "@/lib/atenciones"
 import {
   ESTADOS_DE_RESERVA,
   anotarSinReserva,
@@ -17,6 +17,7 @@ import {
   puedeAsignarLineasAOtros,
   whereDeAgenda,
   whereDeAtenciones,
+  whereDeProductos,
   type Actor,
 } from "@/lib/permisos"
 import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
@@ -165,12 +166,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: rango.error }, { status: 400 })
   }
 
-  const [reservas, { atenciones, truncado }, servicios, profesionales] = await Promise.all([
+  const [reservas, { atenciones, truncado }, servicios, productos, profesionales] = await Promise.all([
     buscarReservas(actor, rango.desde, rango.hasta),
     buscarAtenciones(actor, rango.desde, rango.hasta),
     prisma.service.findMany({
       where: { businessId: actor.businessId, active: true },
       select: { id: true, name: true, price: true },
+      orderBy: { name: "asc" },
+      take: 200,
+    }),
+    // Los productos que se venden hoy (#67): todo rol los ve, porque el
+    // profesional anota lo que vendió. Sin su %: eso es de la dueña.
+    prisma.producto.findMany({
+      where: whereDeProductos(actor, { active: true }),
+      select: { id: true, name: true, priceCents: true },
       orderBy: { name: "asc" },
       take: 200,
     }),
@@ -192,6 +201,11 @@ export async function GET(request: NextRequest) {
     atenciones: atenciones.map((atencion) => formatearAtencion(actor, atencion)),
     catalogo: {
       servicios: servicios.map((servicio) => ({ id: servicio.id, nombre: servicio.name, precio: servicio.price })),
+      productos: productos.map((producto) => ({
+        id: producto.id,
+        nombre: producto.name,
+        precio: producto.priceCents === null ? null : deCentavos(producto.priceCents),
+      })),
       profesionales,
       mediosDePago: MEDIOS_DE_PAGO,
     },
