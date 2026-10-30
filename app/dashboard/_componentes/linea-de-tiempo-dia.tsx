@@ -2,7 +2,7 @@
 
 import { TarjetaCita, type CitaEnTarjeta } from "@/components/panel/tarjeta-cita"
 import { formatearHora, duracionEnMinutos } from "@/lib/fechas"
-import { estaPorConfirmar } from "@/lib/por-confirmar"
+import { sigueSinConfirmar } from "@/lib/por-confirmar"
 import {
   citasFueraDeFranjas,
   formatearTiempoLibre,
@@ -32,7 +32,7 @@ export function citaParaTarjeta(cita: CitaDelDia): CitaEnTarjeta {
     // El endpoint no restringe el string a la unión de TarjetaCita; el estado
     // real siempre es uno de esos valores (columna `status` de Appointment).
     estado: cita.status as CitaEnTarjeta["estado"],
-    porConfirmar: estaPorConfirmar({ status: cita.status, confirmacionPorFaltas: cita.confirmacionPorFaltas === true }),
+    porConfirmar: sigueSinConfirmar(cita),
   }
 }
 

@@ -38,3 +38,36 @@ export const MENSAJE_CANCELACION_CAMBIO = "La reserva cambió mientras la cancel
 export function mensajeDeReservaQueCambio(estadoPedido: string | undefined): string {
   return estadoPedido === "cancelada" ? MENSAJE_CANCELACION_CAMBIO : MENSAJE_CONFIRMACION_CAMBIO
 }
+
+/**
+ * Lo que una pantalla sabe de la cita para decir "Por confirmar". Si el
+ * cliente ya llegó (`conAtencion`: tiene una atención no anulada en el
+ * Tablero), la reserva está resuelta aunque siga "pendiente". Puro.
+ */
+export interface CitaEnPantalla {
+  status: string
+  confirmacionPorFaltas?: boolean
+  conAtencion?: boolean
+}
+
+/** "Por confirmar" en pantalla: por confirmar y el cliente todavía no llegó. */
+export function sigueSinConfirmar(cita: CitaEnPantalla): boolean {
+  return (
+    cita.conAtencion !== true &&
+    estaPorConfirmar({ status: cita.status, confirmacionPorFaltas: cita.confirmacionPorFaltas === true })
+  )
+}
+
+/**
+ * Lo que se le pide a la base de la atención de una cita: sólo su estado,
+ * para calcular `conAtencion`. No sale en la respuesta (`conLlegada` lo quita).
+ */
+export const LLEGADA_DE_LA_CITA = { visit: { select: { status: true } } } as const
+
+/** Cambia la atención de la cita por `conAtencion`: si llegó (atención no anulada). La atención no se expone. */
+export function conLlegada<T extends { visit: { status: string } | null }>({
+  visit,
+  ...cita
+}: T): Omit<T, "visit"> & { conAtencion: boolean } {
+  return { ...cita, conAtencion: visit ? visit.status !== "anulada" : false }
+}
