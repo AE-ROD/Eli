@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
-import { aQuienBloquea, asignarProfesional, citaPorConfirmar, crearBloqueo, crearCita, destacaSinProfesional, hayProfesionales, moverCita, nombreDelProfesional, precioDeLaCita, quitarBloqueo, type Bloqueo, type DatosDeNuevaCita } from "./_datos"
+import { aQuienBloquea, asignarProfesional, citaPorConfirmar, crearBloqueo, crearCita, destacaSinProfesional, hayProfesionales, moverCita, nombreDelProfesional, opcionesDeProfesional, precioDeLaCita, quitarBloqueo, type Bloqueo, type DatosDeNuevaCita } from "./_datos"
 
 /** El cuerpo JSON con que se llamó a `fetch`. */
 const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
@@ -204,6 +204,18 @@ describe("citas sin profesional (#103)", () => {
     expect(hayProfesionales([{ id: "m1", nombre: "Carla", rol: "worker" }])).toBe(true)
     expect(hayProfesionales([{ id: "m2", nombre: "Enzo", rol: "admin" }])).toBe(false)
     expect(hayProfesionales([])).toBe(false)
+  })
+
+  it("el selector ofrece al equipo que atiende y, si la cita está con alguien de fuera de esa lista, también a él (#140)", () => {
+    const equipo = [{ id: "m1", nombre: "Carla", rol: "worker" }]
+    expect(opcionesDeProfesional(equipo, { memberId: "m1", member: null })).toEqual([{ valor: "m1", texto: "Carla" }])
+    expect(opcionesDeProfesional(equipo, { memberId: null, member: null })).toEqual([{ valor: "m1", texto: "Carla" }])
+    expect(
+      opcionesDeProfesional(equipo, { memberId: "m-enc", member: { id: "m-enc", user: { name: "Enzo" } } })
+    ).toEqual([
+      { valor: "m1", texto: "Carla" },
+      { valor: "m-enc", texto: "Enzo" },
+    ])
   })
 
   it("se destaca la sin asignar que todavía se puede cambiar, sólo si hay a quién asignarla", () => {

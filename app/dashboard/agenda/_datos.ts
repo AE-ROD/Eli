@@ -106,6 +106,23 @@ export interface Profesional {
   rol: string
 }
 
+/**
+ * Las opciones del selector de profesional al mover o asignar una cita: el
+ * equipo que atiende (`leerProfesionales`, #140) y, si la cita ya está con
+ * alguien que no está en esa lista (un encargado, de antes), también él, para
+ * que el selector diga con quién está y no "Sin asignar".
+ */
+export function opcionesDeProfesional(
+  equipo: Profesional[],
+  cita: Pick<Cita, "memberId" | "member">
+): { valor: string; texto: string }[] {
+  const opciones = equipo.map((miembro) => ({ valor: miembro.id, texto: miembro.nombre }))
+  if (cita.memberId && !equipo.some((miembro) => miembro.id === cita.memberId)) {
+    opciones.push({ valor: cita.memberId, texto: nombreDelProfesional(cita) ?? "Profesional" })
+  }
+  return opciones
+}
+
 /** Si en el equipo hay alguien que atiende (rol profesional): sólo entonces una cita sin asignar es un pendiente. */
 export function hayProfesionales(equipo: Profesional[]): boolean {
   return equipo.some((miembro) => miembro.rol === "worker")
@@ -367,7 +384,7 @@ export async function quitarBloqueo(id: string): Promise<Resultado> {
   return pedir(`/api/bloqueos/${encodeURIComponent(id)}`, "No se pudo quitar el bloqueo", { method: "DELETE" })
 }
 
-/** El equipo, para el selector de profesional. Sólo lo pide quien puede asignar. */
+/** Quienes atienden (no el encargado), para el selector de profesional. Sólo lo pide quien puede asignar. */
 export async function leerProfesionales(): Promise<Resultado<Profesional[]>> {
   const resultado = await pedir<{ miembros: Profesional[] }>(
     "/api/equipo/miembros",

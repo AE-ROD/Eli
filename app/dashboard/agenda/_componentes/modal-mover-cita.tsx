@@ -13,6 +13,7 @@ import {
   leerProfesionales,
   moverCita,
   nombreDeCliente,
+  opcionesDeProfesional,
   type Cita,
   type DatosDeMoverCita,
   type Profesional,
@@ -151,7 +152,7 @@ export function ModalMoverCita({
             etiqueta="Profesional"
             value={form.memberId}
             onChange={(e) => cambiar("memberId", e.target.value)}
-            opciones={profesionales.map((profesional) => ({ valor: profesional.id, texto: profesional.nombre }))}
+            opciones={opcionesDeProfesional(profesionales, cita)}
           >
             <option value="">Sin asignar</option>
           </Selector>
