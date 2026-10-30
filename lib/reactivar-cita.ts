@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client"
-import { atencionBloqueada, tomarCandadoDeCajaCompartido } from "@/lib/bloqueos-de-dinero"
+import { CODIGO_CORREGIR_CON_AJUSTE, atencionBloqueada, tomarCandadoDeCajaCompartido } from "@/lib/bloqueos-de-dinero"
 import { tomarCandadosDeLaAtencion } from "@/lib/liquidacion"
 import { ocupaElHorario } from "@/lib/ocupacion"
 
@@ -17,8 +17,10 @@ import { ocupaElHorario } from "@/lib/ocupacion"
  *   había dejado libre su horario: al volver se avisa si choca, como la
  *   cancelada (#140). La completada nunca lo soltó: no avisa.
  * - Si esa atención ya entró en un cierre de caja o en una liquidación, la
- *   plata ya se rindió: 409 "corrígelo con un ajuste" (`atencionBloqueada`).
- *   Antes de mirarlo se toman los mismos candados que la anulación (#101).
+ *   plata ya se rindió: 409 "corrígelo con un ajuste" (`atencionBloqueada`),
+ *   con `codigo: CODIGO_CORREGIR_CON_AJUSTE` como la anulación (#134): la
+ *   agenda decide con el código, no con el texto. Antes de mirarlo se toman
+ *   los mismos candados que la anulación (#101).
  *
  * Mover una cita cerrada sigue sin poderse (`sePuedeMover`): primero se
  * reactiva, después se mueve.
@@ -83,6 +85,12 @@ export function decidirReactivacion({ desde, hacia, inicio, ahora, puede }: Pedi
   return { tipo: "reactivar", avisarChoques: !ocupaElHorario(desde), limpiarCancelacion: false }
 }
 
+/** Por qué no se reactiva por su atención: el mensaje y, si la plata ya se rindió, el código estable. */
+export interface ProblemaConLaAtencion {
+  mensaje: string
+  codigo?: typeof CODIGO_CORREGIR_CON_AJUSTE
+}
+
 /**
  * Por qué la atención de la cita impide reactivarla, o `null` si no tiene
  * una viva. Va dentro de la transacción que reactiva, con el `businessId` de
@@ -93,7 +101,7 @@ export async function problemaConLaAtencion(
   tx: Prisma.TransactionClient,
   businessId: string,
   citaId: string
-): Promise<string | null> {
+): Promise<ProblemaConLaAtencion | null> {
   const atencion = await tx.visit.findFirst({
     where: { appointmentId: citaId, businessId },
     select: { id: true, status: true },
@@ -108,7 +116,7 @@ export async function problemaConLaAtencion(
   await tomarCandadoDeCajaCompartido(tx, businessId)
 
   const bloqueo = await atencionBloqueada(tx, businessId, atencion.id)
-  if (bloqueo?.motivo === "liquidacion") return MENSAJE_EN_LIQUIDACION
-  if (bloqueo?.motivo === "caja") return MENSAJE_EN_CAJA
-  return MENSAJE_CON_ATENCION
+  if (bloqueo?.motivo === "liquidacion") return { mensaje: MENSAJE_EN_LIQUIDACION, codigo: CODIGO_CORREGIR_CON_AJUSTE }
+  if (bloqueo?.motivo === "caja") return { mensaje: MENSAJE_EN_CAJA, codigo: CODIGO_CORREGIR_CON_AJUSTE }
+  return { mensaje: MENSAJE_CON_ATENCION }
 }

@@ -372,14 +372,18 @@ export async function PUT(
         where: { id: existente.id, businessId: actor.businessId, status: existente.status },
         data: actualizacion.data,
       })
-      if (count === 0) return { problema: MENSAJE_CITA_CAMBIO }
+      if (count === 0) return { problema: { mensaje: MENSAJE_CITA_CAMBIO } }
       const cita = await tx.appointment.findFirst({
         where: { id: existente.id, businessId: actor.businessId },
         include: actualizacion.include,
       })
       return { cita }
     })
-    if ("problema" in resultado) return NextResponse.json({ error: resultado.problema }, { status: 409 })
+    // Con el código, si lo hay: "corregir-con-ajuste" (#134), como la anulación.
+    if (resultado.problema) {
+      const { mensaje, codigo } = resultado.problema
+      return NextResponse.json({ error: mensaje, ...(codigo && { codigo }) }, { status: 409 })
+    }
     return NextResponse.json(resultado.cita)
   } catch (error) {
     if (error instanceof z.ZodError) {

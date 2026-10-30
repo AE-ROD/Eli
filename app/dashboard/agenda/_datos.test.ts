@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
-import { aQuienBloquea, asignarProfesional, citaPorConfirmar, crearBloqueo, crearCita, destacaSinProfesional, hayProfesionales, moverCita, nombreDelProfesional, opcionesDeProfesional, precioDeLaCita, quitarBloqueo, type Bloqueo, type DatosDeNuevaCita } from "./_datos"
+import { aQuienBloquea, asignarProfesional, citaPorConfirmar, crearBloqueo, crearCita, destacaSinProfesional, hayProfesionales, moverCita, nombreDelProfesional, opcionesDeProfesional, precioDeLaCita, quitarBloqueo, reactivarCita, type Bloqueo, type DatosDeNuevaCita } from "./_datos"
 
 /** El cuerpo JSON con que se llamó a `fetch`. */
 const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
@@ -254,5 +254,39 @@ describe("asignarProfesional (#103)", () => {
     const segundo = simularRespuesta(json({ id: "c1" }))
     await asignarProfesional("c1", "m-carla", { confirmar: true })
     expect(cuerpoEnviado(segundo)).toEqual({ memberId: "m-carla", confirmarAdvertencias: true })
+  })
+})
+
+describe("reactivarCita", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("lista: manda confirmada, sin confirmarAdvertencias en el primer envío", async () => {
+    const fetchFalso = simularRespuesta(json({ id: "c1", status: "confirmada" }))
+    expect(await reactivarCita("c1", { confirmar: false })).toEqual({ tipo: "lista" })
+    expect(cuerpoEnviado(fetchFalso)).toEqual({ status: "confirmada" })
+  })
+
+  it("si choca, devuelve las advertencias; 'igual' manda confirmarAdvertencias", async () => {
+    const advertencias = [{ tipo: "choque", mensaje: "Carla ya tiene una cita de 10:00 a 11:00." }]
+    simularRespuesta(json({ error: advertencias[0].mensaje, advertencias }, 409))
+    expect(await reactivarCita("c1", { confirmar: false })).toEqual({ tipo: "advertencias", advertencias })
+
+    const segundo = simularRespuesta(json({ id: "c1", status: "confirmada" }))
+    await reactivarCita("c1", { confirmar: true })
+    expect(cuerpoEnviado(segundo)).toEqual({ status: "confirmada", confirmarAdvertencias: true })
+  })
+
+  it("el 409 con código corregir-con-ajuste se reconoce por el código, con el mensaje del servidor (#134)", async () => {
+    const mensaje = "Un texto que puede cambiar"
+    simularRespuesta(json({ error: mensaje, codigo: "corregir-con-ajuste" }, 409))
+    expect(await reactivarCita("c1", { confirmar: false })).toEqual({ tipo: "corregir-con-ajuste", error: mensaje })
+  })
+
+  it("otro 409, aunque hable de ajustes, es un error común", async () => {
+    const mensaje = "La cita cambió mientras la reactivabas. Corrígelo con un ajuste"
+    simularRespuesta(json({ error: mensaje }, 409))
+    expect(await reactivarCita("c1", { confirmar: false })).toEqual({ tipo: "error", error: mensaje })
   })
 })

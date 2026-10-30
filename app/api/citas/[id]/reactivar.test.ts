@@ -282,7 +282,8 @@ describe("PUT /api/citas/[id] — reactivar", () => {
     it("con una atención cobrada: 409, hay que anularla primero", async () => {
       const res = await cambiar(sesiones.dueña, "cobrada", { status: "confirmada" })
       expect(res.status).toBe(409)
-      expect((await res.json()).error).toBe(MENSAJE_CON_ATENCION)
+      // Una atención viva sin rendir se anula: no lleva el código de ajuste.
+      expect(await res.json()).toEqual({ error: MENSAJE_CON_ATENCION })
       expect(estadoDe("cobrada").status).toBe("completada")
     })
 
@@ -295,14 +296,16 @@ describe("PUT /api/citas/[id] — reactivar", () => {
       const antes = base.volcado()
       const res = await cambiar(sesiones.dueña, "en-caja", { status: "confirmada" })
       expect(res.status).toBe(409)
-      expect((await res.json()).error).toBe(MENSAJE_EN_CAJA)
+      // Con el mismo código que la anulación: la agenda decide con él, no con el texto (#134).
+      expect(await res.json()).toEqual({ error: MENSAJE_EN_CAJA, codigo: "corregir-con-ajuste" })
       expect(base.volcado()).toEqual(antes)
     })
 
     it("con la atención en una liquidación cerrada: 409 corrígelo con un ajuste", async () => {
       const res = await cambiar(sesiones.dueña, "liquidada", { status: "confirmada" })
       expect(res.status).toBe(409)
-      expect((await res.json()).error).toBe(MENSAJE_EN_LIQUIDACION)
+      // Con el mismo código que la anulación: la agenda decide con él, no con el texto (#134).
+      expect(await res.json()).toEqual({ error: MENSAJE_EN_LIQUIDACION, codigo: "corregir-con-ajuste" })
     })
 
     it("toma los candados de liquidación (en orden) y el de la caja compartido antes de mirar si está bloqueada", async () => {

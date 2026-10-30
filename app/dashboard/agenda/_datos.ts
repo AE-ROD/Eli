@@ -10,7 +10,8 @@
 
 import { comoTexto, diasDeLaSemanaDe, limitesDelMesDe, type UnidadDeTiempo } from "@/lib/fechas"
 import { leerMonto } from "@/lib/dinero"
-import { pedir, pedirConCuerpo, conJson, type Resultado } from "@/lib/peticiones"
+import { codigoDelServidor, pedir, pedirConCuerpo, conJson, type Resultado } from "@/lib/peticiones"
+import { CODIGO_CORREGIR_CON_AJUSTE } from "@/lib/bloqueos-de-dinero"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import { sePuedeMover, type Advertencia } from "@/lib/mover-cita"
 import { estaPorConfirmar } from "@/lib/por-confirmar"
@@ -274,6 +275,36 @@ function conAdvertencias(resultado: Awaited<ReturnType<typeof pedirConCuerpo>>):
     return { tipo: "advertencias", advertencias }
   }
   return { tipo: "error", error: resultado.error }
+}
+
+/** A qué estado vuelve una cita al reactivarla: una cancelada, o una completada o de alguien que no vino. */
+export const ESTADO_AL_REACTIVAR = "confirmada"
+
+/**
+ * Reactivar una cita: lista, las advertencias si al volver choca (como al
+ * mover; `confirmar` es el segundo envío, que guarda igual), o error. Si su
+ * atención ya entró en un cierre de caja o en una liquidación, el 409 trae el
+ * código "corregir-con-ajuste" (#134): no hay nada que reintentar, se corrige
+ * con un ajuste. Se decide con el código, no con el texto.
+ */
+export type ResultadoDeReactivar =
+  | { tipo: "lista" }
+  | { tipo: "advertencias"; advertencias: Advertencia[] }
+  | { tipo: "corregir-con-ajuste"; error: string }
+  | { tipo: "error"; error: string }
+
+export async function reactivarCita(id: string, opciones: { confirmar: boolean }): Promise<ResultadoDeReactivar> {
+  const resultado = await pedirConCuerpo(
+    `/api/citas/${encodeURIComponent(id)}`,
+    "No se pudo reactivar la cita",
+    conJson("PUT", { status: ESTADO_AL_REACTIVAR, ...(opciones.confirmar && { confirmarAdvertencias: true }) })
+  )
+  if (resultado.ok) return { tipo: "lista" }
+  if (codigoDelServidor(resultado.cuerpo) === CODIGO_CORREGIR_CON_AJUSTE) {
+    return { tipo: "corregir-con-ajuste", error: resultado.error }
+  }
+  const leido = conAdvertencias(resultado)
+  return leido.tipo === "guardada" ? { tipo: "lista" } : leido
 }
 
 /** El horario de atención del negocio, para que la agenda dibuje esas horas. */
