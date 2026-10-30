@@ -152,6 +152,8 @@ export function PanelDeCita({
   // "No vino" marcado por error se deshace acá (#96): vuelve a confirmada, con las reglas de reactivar.
   const textoDeReactivar =
     cita.status === "cancelada" ? "Reactivar cita" : cita.status === "no-asistio" ? "Deshacer «No vino»" : "Devolver a confirmada"
+  // Si al volver choca (una cancelada o de "No vino" había soltado su hora, #140), el segundo envío guarda igual.
+  const textoDeReactivarIgual = cita.status === "no-asistio" ? "Deshacer igual" : "Reactivar igual"
 
   const pedirReactivar = async (confirmar: boolean) => {
     if (reactivando) return
@@ -256,7 +258,7 @@ export function PanelDeCita({
 
       {errorAlReactivar && <Aviso>{errorAlReactivar}</Aviso>}
       {advertencias.length > 0 && (
-        <Aviso tono="atencion" rol="status" titulo="Al reactivarla:">
+        <Aviso tono="atencion" rol="status" titulo={cita.status === "no-asistio" ? "Al volver a confirmarla:" : "Al reactivarla:"}>
           <ul className="list-disc space-y-1 pl-4">
             {advertencias.map((advertencia) => (
               <li key={advertencia.tipo}>{advertencia.mensaje}</li>
@@ -280,7 +282,7 @@ export function PanelDeCita({
               aria-busy={reactivando}
               onClick={() => pedirReactivar(advertencias.length > 0)}
             >
-              {advertencias.length > 0 ? "Reactivar igual" : textoDeReactivar}
+              {advertencias.length > 0 ? textoDeReactivarIgual : textoDeReactivar}
             </Boton>
           )}
           {asigna && (

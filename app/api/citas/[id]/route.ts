@@ -243,7 +243,7 @@ export async function PUT(
       }
     }
 
-    // Una cancelada que vuelve ocupa otra vez su horario: se avisa si choca,
+    // Una cancelada o de "no vino" que vuelve ocupa otra vez su horario: se avisa si choca,
     // y quien reactiva decide (`confirmarAdvertencias`), como al mover. Si se
     // mueve a la vez, ya respondió 409 arriba (una cita cerrada no se mueve).
     if (reactivacion.tipo === "reactivar" && reactivacion.avisarChoques && !datos.confirmarAdvertencias) {

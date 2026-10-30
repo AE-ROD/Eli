@@ -62,7 +62,12 @@ function escenario() {
       cita("cancelada-con-choque", { ...FUTURA, ...cancelada, memberId: "m-pedro" }),
       cita("de-pedro-activa", { ...FUTURA, memberId: "m-pedro", status: "confirmada" }),
       cita("completada", { status: "completada" }),
-      cita("no-vino", { status: "no-asistio" }),
+      // A otra hora que las demás de Carla: al volver no choca con nada.
+      cita("no-vino", { status: "no-asistio", startTime: new Date("2026-10-19T13:00:00.000Z"), endTime: new Date("2026-10-19T14:00:00.000Z") }),
+      // Pedro tiene otra cita a la hora de esta "no vino" y de esta completada.
+      cita("no-vino-con-choque", { status: "no-asistio", memberId: "m-pedro" }),
+      cita("completada-con-choque", { status: "completada", memberId: "m-pedro" }),
+      cita("de-pedro-pasada", { memberId: "m-pedro", status: "confirmada" }),
       cita("cobrada", { status: "completada" }),
       cita("cobrada-y-anulada", { status: "completada" }),
       cita("en-caja", { status: "completada" }),
@@ -223,6 +228,27 @@ describe("PUT /api/citas/[id] — reactivar", () => {
       const res = await cambiar(sesiones.encargado, id, { status: "confirmada" })
       expect(res.status).toBe(200)
       expect(estadoDe(id).status).toBe("confirmada")
+    })
+
+    it("una de \"no vino\" que choca avisa con 409 y no guarda; confirmando, guarda (#140)", async () => {
+      const res = await cambiar(sesiones.dueña, "no-vino-con-choque", { status: "confirmada" })
+      expect(res.status).toBe(409)
+      const cuerpo = await res.json()
+      expect(cuerpo.advertencias.map((a: { tipo: string }) => a.tipo)).toContain("choque")
+      expect(estadoDe("no-vino-con-choque").status).toBe("no-asistio")
+
+      const confirmada = await cambiar(sesiones.dueña, "no-vino-con-choque", {
+        status: "confirmada",
+        confirmarAdvertencias: true,
+      })
+      expect(confirmada.status).toBe(200)
+      expect(estadoDe("no-vino-con-choque").status).toBe("confirmada")
+    })
+
+    it("una completada nunca soltó su hora: vuelve sin avisar aunque se pise con otra", async () => {
+      const res = await cambiar(sesiones.dueña, "completada-con-choque", { status: "confirmada" })
+      expect(res.status).toBe(200)
+      expect(estadoDe("completada-con-choque").status).toBe("confirmada")
     })
 
     it.each(["pendiente", "cancelada", "en-progreso"])("no vuelve a %s: 409", async (estado) => {

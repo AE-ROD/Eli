@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client"
 import { atencionBloqueada, tomarCandadoDeCajaCompartido } from "@/lib/bloqueos-de-dinero"
 import { tomarCandadosDeLaAtencion } from "@/lib/liquidacion"
+import { ocupaElHorario } from "@/lib/ocupacion"
 
 /**
  * Reactivar una cita: sacarla de un estado cerrado (cancelada, completada o
@@ -12,7 +13,9 @@ import { tomarCandadosDeLaAtencion } from "@/lib/liquidacion"
  *   `advertenciasDeAgenda` y `confirmarAdvertencias`, como al mover). Se
  *   borra quién y cuándo la canceló.
  * - Completada o "no vino" → confirmada, sólo si la cita no tiene una
- *   atención viva en el Tablero (una anulada no cuenta).
+ *   atención viva en el Tablero (una anulada no cuenta). La de "no vino"
+ *   había dejado libre su horario: al volver se avisa si choca, como la
+ *   cancelada (#140). La completada nunca lo soltó: no avisa.
  * - Si esa atención ya entró en un cierre de caja o en una liquidación, la
  *   plata ya se rindió: 409 "corrígelo con un ajuste" (`atencionBloqueada`).
  *   Antes de mirarlo se toman los mismos candados que la anulación (#101).
@@ -77,7 +80,7 @@ export function decidirReactivacion({ desde, hacia, inicio, ahora, puede }: Pedi
   }
 
   if (hacia !== "confirmada") return { tipo: "rechazada", status: 409, mensaje: MENSAJE_CERRADA_A_OTRO }
-  return { tipo: "reactivar", avisarChoques: false, limpiarCancelacion: false }
+  return { tipo: "reactivar", avisarChoques: !ocupaElHorario(desde), limpiarCancelacion: false }
 }
 
 /**
