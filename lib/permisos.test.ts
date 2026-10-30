@@ -71,6 +71,7 @@ import {
   whereDeListaDeEspera,
   puedeConfigurarPorConfirmar,
   puedeActivarFilaVirtual,
+  puedeConfigurarHoraValle,
   puedeResolverPorConfirmar,
   puedeVerPantallaDeFila,
   puedeVaciarFilaVirtual,
@@ -899,5 +900,19 @@ describe("reservas seguras y fila virtual (etapa 4)", () => {
     const desconocido = { rol: "gerente", businessId: NEGOCIO, memberId: "yo" } as unknown as Actor
     expect(permiso(null)).toBe(false)
     expect(permiso(desconocido)).toBe(false)
+  })
+})
+
+describe("reservas a medida (etapa 5)", () => {
+  it("puedeConfigurarHoraValle: sólo la dueña", () => {
+    expect(puedeConfigurarHoraValle(dueño)).toBe(true)
+    expect(puedeConfigurarHoraValle(encargado)).toBe(false)
+    expect(puedeConfigurarHoraValle(profesional)).toBe(false)
+  })
+
+  it("puedeConfigurarHoraValle falla cerrado sin actor y con un rol desconocido", () => {
+    const desconocido = { rol: "gerente", businessId: NEGOCIO, memberId: "yo" } as unknown as Actor
+    expect(puedeConfigurarHoraValle(null)).toBe(false)
+    expect(puedeConfigurarHoraValle(desconocido)).toBe(false)
   })
 })

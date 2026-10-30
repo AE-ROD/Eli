@@ -152,6 +152,8 @@ describe("GET: ver la cita", () => {
     expect(cuerpo).toEqual({
       negocio: { nombre: "Salón Uno" },
       servicio: { nombre: "Corte", duracion: 60 },
+      // El precio de la cita (#89c); ésta no tiene.
+      precio: null,
       profesional: "Carla Profesional",
       fecha: FECHA,
       hora: "10:00",

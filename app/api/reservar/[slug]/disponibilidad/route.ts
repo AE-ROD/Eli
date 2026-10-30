@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { candidatosDeLaReserva, horasLibresDelDia } from "@/lib/agenda-publica"
+import { horasConRebaja, leerHoraValle } from "@/lib/hora-valle"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { MENSAJE_FECHA_MUY_LEJANA, MENSAJE_FECHA_PASADA, fechaNoReservable } from "@/lib/reserva-publica"
+import { leerServiciosDeLaReserva, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
+import { servicioIdsSchema } from "@/lib/validaciones"
 import { esFechaCalendario, zonaDelNegocio } from "@/lib/zona-horaria"
 
 const FALTA_LA_FECHA = "Falta la fecha (AAAA-MM-DD)"
@@ -16,6 +19,9 @@ const FALTA_EL_SERVICIO = "Falta el servicio (servicioId)"
  * consulta del horario terminaba en un 500. `servicioId` es un id (`cuid()`
  * en el esquema, de 25 caracteres): el tope corta un texto arbitrario antes de
  * mandarlo a la base.
+ *
+ * Varios servicios (#89a): `servicioIds=a,b,c` (hasta 4, sin repetir, en el
+ * orden en que se hacen). `servicioId` suelto sigue valiendo: es uno solo.
  */
 const parametrosSchema = z.object({
   fecha: z
@@ -25,9 +31,16 @@ const parametrosSchema = z.object({
     // acepta, y terminaban en un 500.
     .refine(esFechaCalendario, "La fecha no es válida: tiene que ser un día real, con el formato AAAA-MM-DD"),
   servicioId: z
-    .string({ required_error: FALTA_EL_SERVICIO, invalid_type_error: FALTA_EL_SERVICIO })
+    .string({ invalid_type_error: FALTA_EL_SERVICIO })
     .min(1, FALTA_EL_SERVICIO)
-    .max(64, "El servicio (servicioId) no es válido"),
+    .max(64, "El servicio (servicioId) no es válido")
+    .optional(),
+  servicioIds: z
+    .string({ invalid_type_error: FALTA_EL_SERVICIO })
+    .max(400, "Los servicios (servicioIds) no son válidos")
+    .transform((lista) => lista.split(","))
+    .pipe(servicioIdsSchema)
+    .optional(),
   // Opcional: sin él (o vacío) es "cualquiera disponible".
   profesionalId: z
     .string({ invalid_type_error: "El profesional no es válido" })
@@ -52,12 +65,17 @@ export async function GET(
   const parametros = parametrosSchema.safeParse({
     fecha: searchParams.get("fecha") ?? undefined,
     servicioId: searchParams.get("servicioId") ?? undefined,
+    servicioIds: searchParams.get("servicioIds") ?? undefined,
     profesionalId: searchParams.get("profesionalId") ?? undefined,
   })
   if (!parametros.success) {
     return NextResponse.json({ error: parametros.error.issues[0].message }, { status: 400 })
   }
   const { fecha, servicioId } = parametros.data
+  const servicioIds = parametros.data.servicioIds ?? (servicioId ? [servicioId] : null)
+  if (!servicioIds || (parametros.data.servicioIds && servicioId)) {
+    return NextResponse.json({ error: FALTA_EL_SERVICIO }, { status: 400 })
+  }
   const profesionalId = parametros.data.profesionalId || null
 
   const negocio = await prisma.business.findUnique({
@@ -66,11 +84,10 @@ export async function GET(
   })
   if (!negocio) return NextResponse.json({ error: "Negocio no encontrado" }, { status: 404 })
 
-  const servicio = await prisma.service.findFirst({
-    where: { id: servicioId, businessId: negocio.id, active: true },
-    select: { id: true, duration: true },
-  })
-  if (!servicio) return NextResponse.json({ error: "Servicio no encontrado" }, { status: 404 })
+  // Todos del negocio y activos, o el mismo 404 sin decir cuál falló.
+  const servicios = await leerServiciosDeLaReserva(prisma, negocio.id, servicioIds)
+  if (!servicios) return NextResponse.json({ error: "Servicio no encontrado" }, { status: 404 })
+  const { duracion } = resumenDeLaReserva(servicios)
 
   // El día, las horas y "hoy" son los del negocio (`Business.timezone`), no
   // los del servidor: `new Date("AAAA-MM-DD").getDay()` daba el día anterior
@@ -94,7 +111,7 @@ export async function GET(
   // regla con la que `confirmar` acepta y asigna.
   const reserva = await candidatosDeLaReserva(prisma, {
     businessId: negocio.id,
-    serviceId: servicio.id,
+    serviceIds: servicios.map((servicio) => servicio.id),
     profesionalId,
     fecha,
   })
@@ -111,10 +128,15 @@ export async function GET(
     businessId: negocio.id,
     zona,
     fecha,
-    duracion: servicio.duration,
+    duracion,
     candidatos,
     ahora,
   })
 
-  return NextResponse.json({ slots })
+  // Hora valle (#89c): `slots` sigue siendo la lista de horas, como siempre
+  // (la página de antes sólo lee eso). Sólo si el negocio la encendió y
+  // alguna hora cuesta menos, va además `valle`: esas horas con su precio
+  // total rebajado y el normal. El precio lo vuelve a calcular `confirmar`.
+  const valle = horasConRebaja(servicios, fecha, slots, zona, await leerHoraValle(prisma, negocio.id))
+  return NextResponse.json(valle.length > 0 ? { slots, valle } : { slots })
 }

@@ -34,6 +34,8 @@ export type NombreDeModelo =
   | "cierreDeCaja"
   | "inscripcionEnEspera"
   | "envioAClientes"
+  | "appointmentService"
+  | "franjaDeHoraValle"
 
 export type Tablas = Record<NombreDeModelo, Registro[]>
 
@@ -70,6 +72,7 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     business: uno("business", "businessId"),
     // La atención guarda la FK: del lado de la cita es la relación inversa.
     visit: uno("visit", "id", "appointmentId"),
+    servicios: muchos("appointmentService", "appointmentId"),
   },
   visit: {
     business: uno("business", "businessId"),
@@ -137,6 +140,12 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     customer: uno("customer", "customerId"),
     espera: uno("inscripcionEnEspera", "esperaId"),
   },
+  appointmentService: {
+    business: uno("business", "businessId"),
+    appointment: uno("appointment", "appointmentId"),
+    service: uno("service", "serviceId"),
+  },
+  franjaDeHoraValle: { business: uno("business", "businessId") },
 }
 
 /**
@@ -154,6 +163,10 @@ export const COMPUESTAS: Partial<Record<NombreDeModelo, string[]>> = {
   movimientoDeLiquidacion: ["member", "visit", "liquidacion"],
   // El servicio de una inscripción es FK compuesta; el profesional, simple.
   inscripcionEnEspera: ["service"],
+  // La cita es FK compuesta; el servicio, simple, pero el trigger
+  // `cita_servicios_mismo_negocio` exige que sea del mismo negocio: acá se
+  // emula igual que una compuesta.
+  appointmentService: ["appointment", "service"],
 }
 
 const OPERADORES_DE_CAMPO = new Set(["equals", "in", "notIn", "not", "gt", "gte", "lt", "lte", "has"])

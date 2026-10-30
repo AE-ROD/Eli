@@ -2,6 +2,7 @@ import { z } from "zod"
 import { IDS_DE_RUBROS } from "@/lib/rubros"
 import { telefonoChileno } from "@/lib/campos-del-panel"
 import { LARGO_MAXIMO_NOMBRE_EN_FILA } from "@/lib/fila-virtual"
+import { MAX_SERVICIOS_POR_RESERVA } from "@/lib/servicios-de-la-reserva"
 
 /**
  * El rubro de un negocio nuevo: sólo ids del catálogo (`lib/rubros.ts`). Antes
@@ -81,11 +82,28 @@ export const registroSchema = z.object({
   tipoNegocio: tipoNegocioSchema,
 })
 
-export const reservaSchema = z.object({
-  servicioId: z
-    .string({ required_error: "Falta el servicio", invalid_type_error: "El servicio no es válido" })
-    .min(1, "Falta el servicio")
-    .max(64, "El servicio no es válido"),
+/** Un id de servicio (`cuid()`, 25 caracteres): el tope corta un texto arbitrario antes de la base. */
+const servicioIdSchema = z
+  .string({ required_error: "Falta el servicio", invalid_type_error: "El servicio no es válido" })
+  .min(1, "Falta el servicio")
+  .max(64, "El servicio no es válido")
+
+/**
+ * Los servicios de una reserva (#89a): de 1 a `MAX_SERVICIOS_POR_RESERVA`,
+ * sin repetir, en el orden en que se hacen. Lo valida también
+ * `disponibilidad`, con la misma función.
+ */
+export const servicioIdsSchema = z
+  .array(servicioIdSchema, { invalid_type_error: "Los servicios no son válidos" })
+  .min(1, "Falta el servicio")
+  .max(MAX_SERVICIOS_POR_RESERVA, `Puedes elegir hasta ${MAX_SERVICIOS_POR_RESERVA} servicios por reserva`)
+  .refine((ids) => new Set(ids).size === ids.length, "Elegiste el mismo servicio dos veces")
+
+const camposDeReservaSchema = z.object({
+  // `servicioIds` (#89a) o, por compatibilidad con la página de antes,
+  // `servicioId` suelto. Uno de los dos, no ambos: ver `reservaSchema`.
+  servicioIds: servicioIdsSchema.optional(),
+  servicioId: servicioIdSchema.optional(),
   fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha no es válida: tiene que tener el formato AAAA-MM-DD"),
   hora: z.string().regex(/^\d{2}:\d{2}$/, "La hora no es válida: tiene que tener el formato HH:MM"),
   nombre: nombreSchema("nombre"),
@@ -117,19 +135,42 @@ export const reservaSchema = z.object({
 })
 
 /**
+ * La reserva pública. Sale siempre con `servicioIds` (1..4, sin repetir):
+ * un `servicioId` suelto es una reserva de un solo servicio. Sin ninguno, o
+ * con los dos, es un 400.
+ */
+export const reservaSchema = camposDeReservaSchema
+  .superRefine((datos, ctx) => {
+    if (datos.servicioIds === undefined && datos.servicioId === undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Falta el servicio", path: ["servicioIds"] })
+    }
+    if (datos.servicioIds !== undefined && datos.servicioId !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Manda los servicios en servicioIds, no también en servicioId",
+        path: ["servicioId"],
+      })
+    }
+  })
+  .transform(({ servicioId, servicioIds, ...resto }) => ({
+    ...resto,
+    servicioIds: servicioIds ?? (servicioId ? [servicioId] : []),
+  }))
+
+/**
  * "Avísame si se libera una hora" (#74): la inscripción en la lista de
  * espera de un día. El email es obligatorio (es por donde llega el aviso); el
  * teléfono, opcional, con la casilla de WhatsApp para cuando exista el canal.
  */
 export const listaDeEsperaSchema = z.object({
-  servicioId: reservaSchema.shape.servicioId,
-  profesionalId: reservaSchema.shape.profesionalId,
-  fecha: reservaSchema.shape.fecha,
+  servicioId: servicioIdSchema,
+  profesionalId: camposDeReservaSchema.shape.profesionalId,
+  fecha: camposDeReservaSchema.shape.fecha,
   nombre: nombreSchema("nombre"),
   apellido: nombreSchema("apellido"),
   email: emailSchema,
-  telefono: reservaSchema.shape.telefono,
-  whatsappConsentimiento: reservaSchema.shape.whatsappConsentimiento,
+  telefono: camposDeReservaSchema.shape.telefono,
+  whatsappConsentimiento: camposDeReservaSchema.shape.whatsappConsentimiento,
 })
 
 export const recuperarContrasenaSchema = z.object({

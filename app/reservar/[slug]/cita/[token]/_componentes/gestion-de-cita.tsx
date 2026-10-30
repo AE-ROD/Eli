@@ -7,7 +7,9 @@ import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
 import { Esqueleto } from "@/components/comunes/esqueleto"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Tarjeta } from "@/components/comunes/tarjeta"
+import { formatearMonto } from "@/lib/dinero"
 import { deTexto, formatearDuracionDeServicio } from "@/lib/fechas"
+import type { PrecioDeLaHora } from "@/lib/hora-valle"
 import { EncabezadoDeReserva } from "../../../_componentes/encabezado-de-reserva"
 import { SelectorFechaHora, fechaParaLeer } from "../../../_componentes/selector-fecha-hora"
 import { cancelarCita, leerCita, leerHorasParaReagendar, reagendarCita, type CitaDelEnlace } from "../_datos"
@@ -46,6 +48,12 @@ export function GestionDeCita({ slug, token }: { slug: string; token: string }) 
   const [modo, setModo] = useState<Modo>("ver")
   const [fecha, setFecha] = useState("")
   const [hora, setHora] = useState("")
+  // Hora valle (#89c): si a la hora elegida la cita queda con otro precio.
+  const [precioNuevo, setPrecioNuevo] = useState<PrecioDeLaHora | null>(null)
+  const elegirHora = (nueva: string, precio: PrecioDeLaHora | null) => {
+    setHora(nueva)
+    setPrecioNuevo(precio)
+  }
   const [trabajando, setTrabajando] = useState(false)
   const [error, setError] = useState("")
   const [aviso, setAviso] = useState("")
@@ -120,10 +128,19 @@ export function GestionDeCita({ slug, token }: { slug: string; token: string }) 
     const resultado = await reagendarCita(slug, token, fecha, hora)
     setTrabajando(false)
     if (!resultado.ok) return setError(resultado.error)
-    setVista({ tipo: "cita", cita: { ...cita, fecha: resultado.datos.fecha, hora: resultado.datos.hora, profesional: resultado.datos.profesional ?? cita.profesional } })
+    setVista({
+      tipo: "cita",
+      cita: {
+        ...cita,
+        fecha: resultado.datos.fecha,
+        hora: resultado.datos.hora,
+        profesional: resultado.datos.profesional ?? cita.profesional,
+        precio: resultado.datos.precio ?? cita.precio,
+      },
+    })
     setModo("ver")
     setFecha("")
-    setHora("")
+    elegirHora("", null)
     setAviso(`Listo: tu cita quedó el ${diaParaLeer(resultado.datos.fecha)} a las ${resultado.datos.hora}. Le avisamos al local.`)
     // El plazo se cuenta desde la cita nueva: se vuelve a leer.
     void cargar()
@@ -195,9 +212,24 @@ export function GestionDeCita({ slug, token }: { slug: string; token: string }) 
                 fechaSeleccionada={fecha}
                 horaSeleccionada={hora}
                 onFecha={setFecha}
-                onHora={setHora}
+                onHora={elegirHora}
               />
             </div>
+            {hora && precioNuevo && precioNuevo.precio !== null && (
+              <p role="status" className="mt-6 rounded-campo bg-azul-suave px-4 py-3 text-sm text-navy">
+                A esta hora el precio cambia:{" "}
+                {precioNuevo.precioNormal !== null && (
+                  <>
+                    <s className="text-texto-2">
+                      <span className="sr-only">antes </span>
+                      {formatearMonto(precioNuevo.precioNormal)}
+                    </s>{" "}
+                  </>
+                )}
+                <strong className="font-semibold">{formatearMonto(precioNuevo.precio)}</strong>
+                {precioNuevo.porcentaje > 0 ? ` (hora valle, ${precioNuevo.porcentaje}% menos).` : "."}
+              </p>
+            )}
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-end">
               <Boton variante="secundario" onClick={() => elegirModo("ver")} disabled={trabajando} className="w-full sm:w-auto">
                 Volver

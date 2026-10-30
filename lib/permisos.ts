@@ -435,6 +435,14 @@ export const puedeConfigurarPorConfirmar = esDueño
 /** Encender o apagar la fila virtual y fijar su tope (#85). Sólo la dueña. */
 export const puedeActivarFilaVirtual = esDueño
 
+// ─── Reservas a medida (etapa 5) ────────────────────────────────────────────
+
+/**
+ * Encender o apagar los precios de hora valle, sus franjas y qué servicios
+ * quedan fuera (#89c). Es precio, o sea dinero: sólo la dueña.
+ */
+export const puedeConfigurarHoraValle = esDueño
+
 /**
  * Confirmar o cancelar una reserva que entró por confirmar por faltas
  * (`Appointment.confirmacionPorFaltas` con status "pendiente"). Dueña y

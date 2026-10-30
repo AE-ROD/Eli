@@ -12,6 +12,8 @@ import {
   fechaNoReservable,
   yaPasoLaHora,
 } from "@/lib/reserva-publica"
+import { leerHoraValle, precioAlReagendar } from "@/lib/hora-valle"
+import { duracionAlReagendar, leerServiciosDeLaReserva, serviciosDeLaCita } from "@/lib/servicios-de-la-reserva"
 import { existeLaHora, rangoDelDiaEn } from "@/lib/zona-horaria"
 import { abrirEnlace, enTransaccionSerializable, fechaYHora, noEncontrada, nombreDelCliente, type Params } from "../_comun"
 
@@ -23,11 +25,15 @@ const reagendarSchema = z.object({
 const FUERA_DE_ATENCION = "Ese horario está fuera de la atención. Elige otra hora."
 const HORARIO_TOMADO = "El horario ya no está disponible"
 
-type Resultado = { tipo: "movida"; memberId: string | null } | { tipo: "rechazada"; error: string; status: number }
+type Resultado =
+  | { tipo: "movida"; memberId: string | null; precio: number | null }
+  | { tipo: "rechazada"; error: string; status: number }
 
 /**
  * POST /api/reservar/[slug]/cita/[token]/reagendar — mueve la cita a otra
- * hora libre del mismo servicio y profesional, dentro del plazo del negocio.
+ * hora libre de los mismos servicios y profesional, dentro del plazo del
+ * negocio. Con varios servicios (#89a) se mueve el bloque entero, con la
+ * duración total copiada al reservar (o la que tiene hoy, si es mayor).
  * Las mismas reglas que confirmar una reserva nueva: horario, choques y
  * bloqueos, re-verificados dentro de una transacción `Serializable`.
  */
@@ -46,8 +52,10 @@ export async function POST(request: NextRequest, contexto: Params) {
   if (!dentroDelPlazo(cita.startTime, plazo, ahora)) {
     return NextResponse.json({ error: mensajeFueraDePlazo(plazo) }, { status: 409 })
   }
-  const servicio = cita.service
-  if (!servicio?.active) {
+  const servicios = serviciosDeLaCita(cita)
+  // La mayor entre la suma de las filas y lo que dura hoy (`duracionAlReagendar`).
+  const duracion = duracionAlReagendar(cita, servicios)
+  if (!servicios.activos || duracion === null) {
     return NextResponse.json({ error: "Este servicio ya no se reserva por acá. Contacta al local." }, { status: 409 })
   }
 
@@ -59,17 +67,26 @@ export async function POST(request: NextRequest, contexto: Params) {
 
   const reserva = await candidatosDeLaReserva(prisma, {
     businessId: cita.businessId,
-    serviceId: servicio.id,
+    serviceIds: servicios.ids,
     profesionalId: cita.memberId,
     fecha,
   })
   if (reserva.tipo === "profesional-no-disponible") {
     return NextResponse.json({ error: "No hay horas para reagendar por acá. Contacta al local." }, { status: 409 })
   }
-  const candidatos = candidatosQueCubren(reserva.candidatos, hora, servicio.duration)
+  const candidatos = candidatosQueCubren(reserva.candidatos, hora, duracion)
   if (candidatos.length === 0) return NextResponse.json({ error: FUERA_DE_ATENCION }, { status: 409 })
 
-  const tramo = tramoDeLaReserva(fecha, hora, servicio.duration, zona)
+  const tramo = tramoDeLaReserva(fecha, hora, duracion, zona)
+
+  // Hora valle (#89c), `precioAlReagendar`: con la opción encendida, el
+  // precio nuevo es el del catálogo de hoy con el % de la hora nueva. Apagada,
+  // o si el negocio editó el precio a mano en el panel, la cita conserva el
+  // suyo. Las citas de antes, sin filas, sólo si su precio es el de su
+  // servicio de siempre.
+  const horaValle = await leerHoraValle(prisma, cita.businessId)
+  const catalogo = horaValle.activa ? await leerServiciosDeLaReserva(prisma, cita.businessId, servicios.ids) : null
+  const precioNuevo = precioAlReagendar(cita, catalogo, tramo.startTime, zona, horaValle)
 
   const resultado = await enTransaccionSerializable<Resultado>(
     async (tx) => {
@@ -90,10 +107,25 @@ export async function POST(request: NextRequest, contexto: Params) {
           status: { in: [...ESTADOS_GESTIONABLES] },
           startTime: cita.startTime,
         },
-        data: { startTime: tramo.startTime, endTime: tramo.endTime, memberId: asignacion.memberId },
+        data: {
+          startTime: tramo.startTime,
+          endTime: tramo.endTime,
+          memberId: asignacion.memberId,
+          ...(precioNuevo && { price: precioNuevo.total }),
+        },
       })
       if (count === 0) return { tipo: "rechazada", error: "", status: 404 }
-      return { tipo: "movida", memberId: asignacion.memberId }
+      // Y cada fila con su precio nuevo, en la misma transacción. Los precios
+      // vienen en el orden de los servicios, que es el de las filas.
+      if (precioNuevo) {
+        for (const [indice, fila] of cita.servicios.entries()) {
+          await tx.appointmentService.updateMany({
+            where: { appointmentId: cita.id, businessId: cita.businessId, orden: fila.orden },
+            data: { price: precioNuevo.precios[indice] },
+          })
+        }
+      }
+      return { tipo: "movida", memberId: asignacion.memberId, precio: precioNuevo ? precioNuevo.total : cita.price }
     },
     () => ({ tipo: "rechazada", error: HORARIO_TOMADO, status: 409 })
   )
@@ -114,7 +146,7 @@ export async function POST(request: NextRequest, contexto: Params) {
     emailNegocio: cita.business.user.email,
     nombreNegocio: cita.business.name,
     nombreCliente: nombreDelCliente(cita),
-    servicio: servicio.name,
+    servicio: servicios.nombre,
     profesional,
     fecha,
     hora,
@@ -122,5 +154,5 @@ export async function POST(request: NextRequest, contexto: Params) {
     horaAnterior: antes.hora,
   }).catch(() => null)
 
-  return NextResponse.json({ mensaje: "Cita reagendada", fecha, hora, profesional })
+  return NextResponse.json({ mensaje: "Cita reagendada", fecha, hora, profesional, precio: resultado.precio })
 }

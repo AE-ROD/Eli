@@ -14,11 +14,13 @@ import { Tarjeta } from "@/components/comunes/tarjeta"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { formatearMonto } from "@/lib/dinero"
 import { deTexto, formatearDuracionDeServicio } from "@/lib/fechas"
+import { MAX_SERVICIOS_POR_RESERVA, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
 import { cn } from "@/lib/utils"
 import { EncabezadoDeReserva } from "./encabezado-de-reserva"
 import { IndicadorDePasos, PASOS_DE_RESERVA } from "./indicador-de-pasos"
 import { AgregarAlCalendario } from "./agregar-al-calendario"
 import { InvitacionAEli } from "./pie-de-eli"
+import type { PrecioDeLaHora } from "@/lib/hora-valle"
 import { ResumenDeReserva } from "./resumen-de-reserva"
 import { SelectorServicio, type ServicioPublico } from "./selector-servicio"
 import { SelectorFechaHora, fechaParaLeer } from "./selector-fecha-hora"
@@ -62,6 +64,29 @@ const FUNDIDO = { duration: DURACION.pildora, ease: CURVA.fundido }
 const haceElServicio = (profesional: ProfesionalPublico, servicioId: string) =>
   profesional.servicioIds === null || profesional.servicioIds.includes(servicioId)
 
+/** Hace todos los elegidos (#89a): la reserva es con una sola persona. */
+const haceLosServicios = (profesional: ProfesionalPublico, elegidos: ServicioPublico[]) =>
+  elegidos.every((servicio) => haceElServicio(profesional, servicio.id))
+
+/**
+ * Los elegidos como si fueran un solo servicio, para el resumen, el
+ * calendario y la tarjeta del paso 2: los nombres unidos por " + ", la
+ * duración y el precio sumados (`resumenDeLaReserva`, la misma cuenta que
+ * hace el servidor, que es el que manda). `null` sin ninguno elegido.
+ */
+function comoUnServicio(elegidos: ServicioPublico[]): (ServicioPublico & { precioIncompleto: boolean }) | null {
+  if (elegidos.length === 0) return null
+  const resumen = resumenDeLaReserva(elegidos)
+  return {
+    id: elegidos.map((servicio) => servicio.id).join(","),
+    name: resumen.titulo,
+    description: null,
+    duration: resumen.duracion,
+    price: resumen.precio,
+    precioIncompleto: resumen.precioIncompleto,
+  }
+}
+
 export function FormularioReserva({
   slug,
   nombreNegocio,
@@ -80,7 +105,9 @@ export function FormularioReserva({
   const fechaDeLaUrl = parametros.get("fecha") ?? ""
   const conFechaDeLaUrl = servicioDeLaUrl !== null && deTexto(fechaDeLaUrl) !== null
   const [paso, setPaso] = useState<Paso>(servicioDeLaUrl ? 2 : 1)
-  const [servicioSeleccionado, setServicioSeleccionado] = useState<ServicioPublico | null>(servicioDeLaUrl)
+  // Varios servicios (#89a): en el orden en que se eligen, que es el orden en que se hacen.
+  const [seleccionados, setSeleccionados] = useState<ServicioPublico[]>(servicioDeLaUrl ? [servicioDeLaUrl] : [])
+  const servicioSeleccionado = comoUnServicio(seleccionados)
   // `?profesional=<id>` (el "Reservar con …" de la mini página, y el aviso de
   // la lista de espera) lo deja elegido de entrada. Si no es de este negocio,
   // no aparece en la lista y se ignora: el servidor igual lo rechazaría.
@@ -91,6 +118,12 @@ export function FormularioReserva({
   const [enlaceDeGestion, setEnlaceDeGestion] = useState<string | null>(null)
   const [fecha, setFecha] = useState(conFechaDeLaUrl ? fechaDeLaUrl : "")
   const [hora, setHora] = useState("")
+  // Con hora valle (#89c), el precio de la hora elegida; `null` si es el de siempre.
+  const [precioDeLaHora, setPrecioDeLaHora] = useState<PrecioDeLaHora | null>(null)
+  const elegirHora = (nueva: string, precio: PrecioDeLaHora | null) => {
+    setHora(nueva)
+    setPrecioDeLaHora(precio)
+  }
   const [nombre, setNombre] = useState("")
   const [apellido, setApellido] = useState("")
   const [cedula, setCedula] = useState("")
@@ -131,20 +164,27 @@ export function FormularioReserva({
   const serviciosVisibles = profesionalElegido
     ? servicios.filter((servicio) => haceElServicio(profesionalElegido, servicio.id))
     : servicios
-  const profesionalesDelServicio = servicioSeleccionado
-    ? profesionales.filter((profesional) => haceElServicio(profesional, servicioSeleccionado.id))
-    : []
+  // Con varios, sólo quienes hacen todos: los hace una sola persona, seguidos.
+  const profesionalesDelServicio =
+    seleccionados.length > 0 ? profesionales.filter((profesional) => haceLosServicios(profesional, seleccionados)) : []
 
-  const elegirServicio = (servicio: ServicioPublico) => {
-    setServicioSeleccionado(servicio)
-    // Si el profesional elegido no hace este servicio, vuelve a "cualquiera".
-    if (profesionalElegido && !haceElServicio(profesionalElegido, servicio.id)) setProfesionalId(null)
+  const alternarServicio = (servicio: ServicioPublico) => {
+    const yaEstaba = seleccionados.some((elegido) => elegido.id === servicio.id)
+    if (!yaEstaba && seleccionados.length >= MAX_SERVICIOS_POR_RESERVA) return
+    setSeleccionados(
+      yaEstaba ? seleccionados.filter((elegido) => elegido.id !== servicio.id) : [...seleccionados, servicio]
+    )
+    // Si el profesional elegido no hace el que se suma, vuelve a "cualquiera".
+    if (!yaEstaba && profesionalElegido && !haceElServicio(profesionalElegido, servicio.id)) setProfesionalId(null)
+    // Otra combinación es otra duración: la hora elegida puede no caber.
+    elegirHora("", null)
   }
 
-  const servicioId = servicioSeleccionado?.id ?? ""
+  const servicioIds = seleccionados.map((servicio) => servicio.id)
+  const claveDeServicios = servicioIds.join(",")
   const cargarHoras = useCallback(
-    (dia: string) => leerDisponibilidad(slug, dia, servicioId, profesionalId),
-    [slug, servicioId, profesionalId]
+    (dia: string) => leerDisponibilidad(slug, dia, claveDeServicios ? claveDeServicios.split(",") : [], profesionalId),
+    [slug, claveDeServicios, profesionalId]
   )
 
   const puedeAvanzarPaso1 = !!servicioSeleccionado
@@ -155,7 +195,7 @@ export function FormularioReserva({
     setEnviando(true)
     setError("")
     const resultado = await confirmarReserva(slug, {
-      servicioId: servicioSeleccionado!.id,
+      servicioIds,
       profesionalId,
       fecha,
       hora,
@@ -215,6 +255,7 @@ export function FormularioReserva({
             fecha={fecha}
             hora={hora}
             profesional={profesionalAsignado}
+            precioDeLaHora={precioDeLaHora}
             sinServicio
           />
           <AgregarAlCalendario
@@ -279,6 +320,9 @@ export function FormularioReserva({
               <TituloDelPaso ref={titulo} paso={1}>
                 ¿Qué servicio necesitas?
               </TituloDelPaso>
+              <p className="mt-2 text-sm text-texto-2">
+                Puedes elegir hasta {MAX_SERVICIOS_POR_RESERVA}: te los hace la misma persona, uno después del otro.
+              </p>
               {profesionalElegido && (
                 <p className="mt-3 flex flex-wrap items-center gap-x-2 text-sm text-texto-2">
                   <span>
@@ -296,10 +340,16 @@ export function FormularioReserva({
               <div className="mt-5">
                 <SelectorServicio
                   servicios={serviciosVisibles}
-                  seleccionado={servicioSeleccionado}
-                  onSeleccionar={elegirServicio}
+                  seleccionados={seleccionados}
+                  onAlternar={alternarServicio}
+                  tope={MAX_SERVICIOS_POR_RESERVA}
                 />
               </div>
+              {servicioSeleccionado && seleccionados.length > 1 && (
+                <div className="mt-5" aria-live="polite">
+                  <ServicioElegido servicio={servicioSeleccionado} cantidad={seleccionados.length} />
+                </div>
+              )}
               <BarraDeAcciones>
                 <Boton
                   icono={<ArrowRight />}
@@ -319,7 +369,9 @@ export function FormularioReserva({
               <TituloDelPaso ref={titulo} paso={2}>
                 ¿Cuándo quieres venir?
               </TituloDelPaso>
-              {servicioSeleccionado && <ServicioElegido servicio={servicioSeleccionado} />}
+              {servicioSeleccionado && (
+                <ServicioElegido servicio={servicioSeleccionado} cantidad={seleccionados.length} />
+              )}
               {/* Sin equipo (el dueño solo) no hay a quién elegir: no se muestra. */}
               {profesionalesDelServicio.length > 0 && (
                 <div className="mt-6">
@@ -333,21 +385,22 @@ export function FormularioReserva({
               <div className="mt-6">
                 <SelectorFechaHora
                   cargarHoras={cargarHoras}
-                  claveDeHoras={`${servicioId}|${profesionalId ?? ""}`}
+                  claveDeHoras={`${claveDeServicios}|${profesionalId ?? ""}`}
                   diasDisponibles={diasDisponibles}
                   zona={zona}
                   fechaSeleccionada={fecha}
                   horaSeleccionada={hora}
                   onFecha={setFecha}
-                  onHora={setHora}
+                  onHora={elegirHora}
                   sinHoras={
                     listaDeEsperaActiva && servicioSeleccionado
                       ? (dia) => (
                           <FormularioListaDeEspera
                             // Otro día, servicio o profesional es otra inscripción: empieza de cero.
-                            key={`${dia}|${servicioSeleccionado.id}|${profesionalId ?? ""}`}
+                            // La lista de espera sigue con un solo servicio: el primero (#89a).
+                            key={`${dia}|${seleccionados[0].id}|${profesionalId ?? ""}`}
                             slug={slug}
-                            servicioId={servicioSeleccionado.id}
+                            servicioId={seleccionados[0].id}
                             profesionalId={profesionalId}
                             fecha={dia}
                             fechaParaLeer={fechaParaLeer(deTexto(dia) ?? new Date())}
@@ -475,6 +528,7 @@ export function FormularioReserva({
                   servicio={servicioSeleccionado}
                   fecha={fecha}
                   hora={hora}
+                  precioDeLaHora={precioDeLaHora}
                   profesional={profesionalElegido?.nombre ?? (profesionalesDelServicio.length > 0 ? "Cualquiera disponible" : null)}
                 />
                 <p className="mt-4 border-t border-borde pt-3 text-sm text-texto-2">
@@ -531,16 +585,32 @@ function TituloDelPaso({ paso, children, ref }: { paso: Paso; children: ReactNod
   )
 }
 
-/** El servicio que se eligió en el paso 1, a la vista mientras se busca el día. */
-function ServicioElegido({ servicio }: { servicio: ServicioPublico }) {
+/**
+ * Lo que se eligió en el paso 1, a la vista mientras se busca el día. Con
+ * varios servicios, los nombres unidos y el total: duración y precio.
+ */
+function ServicioElegido({
+  servicio,
+  cantidad = 1,
+}: {
+  servicio: ServicioPublico & { precioIncompleto?: boolean }
+  cantidad?: number
+}) {
   return (
     <div className="mt-4 flex items-center justify-between gap-4 rounded-boton-lg bg-superficie px-4 py-3 squircle sm:px-5">
       <div className="min-w-0">
         <p className="font-medium break-words text-navy">{servicio.name}</p>
-        <p className="text-sm text-texto-2">{formatearDuracionDeServicio(servicio.duration)}</p>
+        <p className="text-sm text-texto-2">
+          {cantidad > 1 ? `${cantidad} servicios · en total ` : ""}
+          {formatearDuracionDeServicio(servicio.duration)}
+        </p>
       </div>
       {servicio.price != null && (
-        <p className="shrink-0 font-medium text-navy tabular-nums">{formatearMonto(servicio.price)}</p>
+        <p className="shrink-0 text-right font-medium text-navy tabular-nums">
+          {cantidad > 1 && <span className="block text-xs font-normal text-texto-2">Total</span>}
+          {formatearMonto(servicio.price)}
+          {servicio.precioIncompleto && <span className="block text-xs font-normal text-texto-2">+ a consultar</span>}
+        </p>
       )}
     </div>
   )

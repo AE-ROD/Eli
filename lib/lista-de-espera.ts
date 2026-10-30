@@ -174,7 +174,7 @@ export async function inscribirEnListaDeEspera(
   const memberId = datos.profesionalId || null
   const reserva = await candidatosDeLaReserva(prisma, {
     businessId: negocio.id,
-    serviceId: servicio.id,
+    serviceIds: [servicio.id],
     profesionalId: memberId,
     fecha: datos.fecha,
   })
@@ -388,7 +388,7 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
       if (fila.service?.active) {
         const reserva = await candidatosDeLaReserva(prisma, {
           businessId: negocio.id,
-          serviceId: fila.serviceId,
+          serviceIds: [fila.serviceId],
           profesionalId: fila.memberId,
           fecha,
         })

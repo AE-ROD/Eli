@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client"
+import { SELECCION_DE_SERVICIOS_DE_LA_CITA } from "@/lib/servicios-de-la-reserva"
 import { hashDeToken } from "@/lib/tokens"
 
 /**
@@ -86,9 +87,13 @@ const SELECCION = {
   status: true,
   startTime: true,
   endTime: true,
+  // El precio de hoy: al reagendar se compara con el de la hora nueva (#89c).
+  price: true,
   customer: { select: { name: true, lastName: true } },
   member: { select: { user: { select: { name: true } } } },
   service: { select: { id: true, name: true, duration: true, active: true } },
+  // Varios servicios (#89a): con filas, mandan ellas (`serviciosDeLaCita`).
+  servicios: SELECCION_DE_SERVICIOS_DE_LA_CITA,
   business: {
     select: { id: true, name: true, slug: true, timezone: true, cancelacionHorasAntes: true, user: { select: { email: true } } },
   },
