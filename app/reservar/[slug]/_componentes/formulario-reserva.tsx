@@ -13,7 +13,7 @@ import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Tarjeta } from "@/components/comunes/tarjeta"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { formatearMonto } from "@/lib/dinero"
-import { formatearDuracionDeServicio } from "@/lib/fechas"
+import { deTexto, formatearDuracionDeServicio } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
 import { EncabezadoDeReserva } from "./encabezado-de-reserva"
 import { IndicadorDePasos, PASOS_DE_RESERVA } from "./indicador-de-pasos"
@@ -21,7 +21,8 @@ import { AgregarAlCalendario } from "./agregar-al-calendario"
 import { InvitacionAEli } from "./pie-de-eli"
 import { ResumenDeReserva } from "./resumen-de-reserva"
 import { SelectorServicio, type ServicioPublico } from "./selector-servicio"
-import { SelectorFechaHora } from "./selector-fecha-hora"
+import { SelectorFechaHora, fechaParaLeer } from "./selector-fecha-hora"
+import { FormularioListaDeEspera } from "./formulario-lista-de-espera"
 import { SelectorProfesional } from "./selector-profesional"
 import { confirmarReserva, leerDisponibilidad, leerProfesionales, type ProfesionalPublico } from "../_datos"
 
@@ -38,6 +39,8 @@ interface PropsDeFormularioReserva {
   zona: string
   servicios: ServicioPublico[]
   horarios: HorarioPublico[]
+  /** Si el negocio ofrece "Avísame si se libera una hora" (#74). */
+  listaDeEsperaActiva: boolean
 }
 
 type Paso = 1 | 2 | 3
@@ -53,18 +56,33 @@ const FUNDIDO = { duration: DURACION.pildora, ease: CURVA.fundido }
 const haceElServicio = (profesional: ProfesionalPublico, servicioId: string) =>
   profesional.servicioIds === null || profesional.servicioIds.includes(servicioId)
 
-export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horarios }: PropsDeFormularioReserva) {
-  const [paso, setPaso] = useState<Paso>(1)
-  const [servicioSeleccionado, setServicioSeleccionado] = useState<ServicioPublico | null>(null)
-  // `?profesional=<id>` (el "Reservar con …" de la mini página) lo deja
-  // elegido de entrada. Si no es de este negocio, no aparece en la lista y se
-  // ignora: el servidor igual lo rechazaría.
-  const profesionalDeLaUrl = useSearchParams().get("profesional")
+export function FormularioReserva({
+  slug,
+  nombreNegocio,
+  zona,
+  servicios,
+  horarios,
+  listaDeEsperaActiva,
+}: PropsDeFormularioReserva) {
+  const parametros = useSearchParams()
+  // `?servicio=<id>&fecha=AAAA-MM-DD` (el enlace del aviso de la lista de
+  // espera) deja la reserva llenada: el servicio elegido y el día puesto, en
+  // el paso de la hora. Un servicio que no es de este negocio, o una fecha
+  // que no es un día, se ignoran.
+  const servicioDeLaUrl = servicios.find((servicio) => servicio.id === parametros.get("servicio")) ?? null
+  const fechaDeLaUrl = parametros.get("fecha") ?? ""
+  const conFechaDeLaUrl = servicioDeLaUrl !== null && deTexto(fechaDeLaUrl) !== null
+  const [paso, setPaso] = useState<Paso>(servicioDeLaUrl ? 2 : 1)
+  const [servicioSeleccionado, setServicioSeleccionado] = useState<ServicioPublico | null>(servicioDeLaUrl)
+  // `?profesional=<id>` (el "Reservar con …" de la mini página, y el aviso de
+  // la lista de espera) lo deja elegido de entrada. Si no es de este negocio,
+  // no aparece en la lista y se ignora: el servidor igual lo rechazaría.
+  const profesionalDeLaUrl = parametros.get("profesional")
   const [profesionales, setProfesionales] = useState<ProfesionalPublico[]>([])
   const [profesionalId, setProfesionalId] = useState<string | null>(profesionalDeLaUrl)
   const [profesionalAsignado, setProfesionalAsignado] = useState<string | null>(null)
   const [enlaceDeGestion, setEnlaceDeGestion] = useState<string | null>(null)
-  const [fecha, setFecha] = useState("")
+  const [fecha, setFecha] = useState(conFechaDeLaUrl ? fechaDeLaUrl : "")
   const [hora, setHora] = useState("")
   const [nombre, setNombre] = useState("")
   const [apellido, setApellido] = useState("")
@@ -72,6 +90,7 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
   const [email, setEmail] = useState("")
   const [telefono, setTelefono] = useState("")
   const [whatsapp, setWhatsapp] = useState(false)
+  const [correoPromo, setCorreoPromo] = useState(false)
   const [comentarios, setComentarios] = useState("")
   const [enviando, setEnviando] = useState(false)
   /** El id de la cita creada: con él, la reserva está confirmada. */
@@ -139,6 +158,7 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
       email,
       telefono,
       whatsapp,
+      correoPromo,
       comentarios,
     })
     setEnviando(false)
@@ -313,6 +333,21 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
                   horaSeleccionada={hora}
                   onFecha={setFecha}
                   onHora={setHora}
+                  sinHoras={
+                    listaDeEsperaActiva && servicioSeleccionado
+                      ? (dia) => (
+                          <FormularioListaDeEspera
+                            // Otro día, servicio o profesional es otra inscripción: empieza de cero.
+                            key={`${dia}|${servicioSeleccionado.id}|${profesionalId ?? ""}`}
+                            slug={slug}
+                            servicioId={servicioSeleccionado.id}
+                            profesionalId={profesionalId}
+                            fecha={dia}
+                            fechaParaLeer={fechaParaLeer(deTexto(dia) ?? new Date())}
+                          />
+                        )
+                      : undefined
+                  }
                 />
               </div>
               <BarraDeAcciones>
@@ -395,6 +430,18 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
                     onChange={(e) => setEmail(e.target.value)}
                   />
                 </div>
+                {/* Sólo con correo: el consentimiento es para esa casilla. Nada viene marcado. */}
+                {email.trim() && (
+                  <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-navy sm:col-span-2">
+                    <input
+                      type="checkbox"
+                      checked={correoPromo}
+                      onChange={(e) => setCorreoPromo(e.target.checked)}
+                      className="size-4 shrink-0 accent-navy anillo-foco"
+                    />
+                    Quiero recibir avisos y novedades de {nombreNegocio} por correo
+                  </label>
+                )}
                 {/* No hay área de texto en `components/comunes/`: se arma con las mismas clases que los campos. */}
                 <div className="space-y-2 sm:col-span-2">
                   <label htmlFor={idDeComentarios} className={CLASES_DE_ETIQUETA}>

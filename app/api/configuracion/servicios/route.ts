@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { categoriaDeServicio, descripcion, duracion, nombre, precioDeServicio } from "@/lib/campos-del-panel"
+import { frecuenciaDeServicio } from "@/lib/frecuencia-de-visitas"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, puedeGestionarServicios } from "@/lib/permisos"
 
@@ -31,6 +32,8 @@ const servicioSchema = z.object({
   price: precioDeServicio().optional(),
   // Agrupa los servicios en la página pública; vacío es "sin categoría".
   category: categoriaDeServicio().optional(),
+  // Cada cuántos días vuelve un cliente por este servicio ("te toca", #75). Opcional.
+  frecuenciaDias: frecuenciaDeServicio().optional(),
 })
 
 export async function POST(request: NextRequest) {
@@ -49,6 +52,7 @@ export async function POST(request: NextRequest) {
       data: {
         ...datos,
         price: datos.price ?? null,
+        frecuenciaDias: datos.frecuenciaDias ?? null,
         businessId: actor.businessId,
       },
     })

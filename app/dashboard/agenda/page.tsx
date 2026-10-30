@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useId } from "react"
 import { useSession } from "next-auth/react"
-import { actorDeSesion, gestionaElNegocio, puedeAsignarCitasAOtros, puedeGestionarBloqueoDe } from "@/lib/permisos"
+import { actorDeSesion, gestionaElNegocio, puedeAsignarCitasAOtros, puedeGestionarBloqueoDe, puedeVerListaDeEspera } from "@/lib/permisos"
 import type { Advertencia } from "@/lib/mover-cita"
 import { Ban } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
@@ -31,6 +31,7 @@ import { ModalNuevaCita } from "./_componentes/modal-nueva-cita"
 import { ModalMoverCita } from "./_componentes/modal-mover-cita"
 import { ModalBloquearHorario } from "./_componentes/modal-bloquear-horario"
 import { ModalBloqueo } from "./_componentes/modal-bloqueo"
+import { ListaDeEsperaDelDia } from "./_componentes/lista-de-espera-del-dia"
 
 function resumen(cargando: boolean, cantidad: number): string {
   if (cargando) return "Cargando..."
@@ -224,6 +225,8 @@ export default function PaginaAgenda() {
             )}
           </AnimatePresence>
         </div>
+
+        {modo === "dia" && puedeVerListaDeEspera(actor) && <ListaDeEsperaDelDia fecha={fecha} />}
       </div>
 
       <AnimatePresence>

@@ -29,6 +29,8 @@ export interface Cliente {
   notes: string | null
   /** Cuándo aceptó recibir mensajes por WhatsApp, o `null` si no lo aceptó. */
   whatsappConsentAt: string | null
+  /** Cuándo aceptó recibir avisos y novedades por correo, o `null` si no (o se dio de baja). */
+  correoPromoConsentAt: string | null
   createdAt: string
   appointments: CitaDeCliente[]
   /** Atenciones cobradas: las cuenta el servidor, no el historial (que trae cinco). */
@@ -63,6 +65,11 @@ export interface DatosDeNuevoCliente {
   telefono: string
   /** "Acepta recibir mensajes por WhatsApp". El servidor anota cuándo y que fue desde el panel. */
   aceptaWhatsapp: boolean
+  /**
+   * "Quiere recibir avisos y novedades por correo" (promocional: "te toca" y
+   * reseñas). Desmarcarlo en un cliente que lo tenía es darlo de baja.
+   */
+  aceptaCorreoPromo: boolean
 }
 
 /** Cuántos clientes trae cada página: seis filas de tres en la grilla. */
@@ -85,6 +92,8 @@ export async function crearCliente(datos: DatosDeNuevoCliente): Promise<Resultad
       email: datos.email || undefined,
       phone: datos.telefono || undefined,
       whatsappConsent: datos.aceptaWhatsapp,
+      // Sólo marcado: la profesional crea clientes, pero no da este consentimiento.
+      correoPromoConsent: datos.aceptaCorreoPromo || undefined,
     })
   )
 }
@@ -94,7 +103,8 @@ export async function guardarNotasDeCliente(id: string, notas: string): Promise<
 }
 
 /**
- * Cambia el nombre, el correo, el teléfono y el consentimiento de WhatsApp. Un
+ * Cambia el nombre, el correo, el teléfono y los consentimientos de WhatsApp y
+ * de avisos por correo. Un
  * campo vacío borra el dato (salvo el nombre, que es obligatorio). Sólo dueño
  * y encargado.
  */
@@ -107,6 +117,7 @@ export async function editarCliente(id: string, datos: DatosDeNuevoCliente): Pro
       email: datos.email,
       phone: datos.telefono,
       whatsappConsent: datos.aceptaWhatsapp,
+      correoPromoConsent: datos.aceptaCorreoPromo,
     })
   )
 }
@@ -185,4 +196,45 @@ export async function exportarClientes(): Promise<Resultado> {
 export async function exportarAtenciones(desde: string, hasta: string): Promise<Resultado> {
   const parametros = new URLSearchParams({ desde, hasta })
   return descargar(`/api/atenciones/exportar?${parametros}`, "atenciones.csv", "No se pudo descargar la planilla de atenciones")
+}
+
+// ─── Clientes que se están yendo (#76) ──────────────────────────────────────
+
+/** Un cliente que se está yendo, como lo devuelve `/api/clientes/se-van`. */
+export interface ClienteQueSeVa {
+  id: string
+  nombre: string
+  apellido: string | null
+  email: string | null
+  /** E.164 (`+56987654321`). */
+  telefono: string | null
+  /** "AAAA-MM-DD" de su última visita, en la zona del negocio. */
+  ultimaVisita: string
+  diasSinVenir: number
+  /** Cada cuántos días suele venir. */
+  ciclo: number
+  /** "propio": la mediana de sus visitas; "servicio": la frecuencia del servicio. */
+  origenDelCiclo: "propio" | "servicio"
+  ultimoServicio: string | null
+}
+
+export interface ListaDeQuienesSeVan {
+  clientes: ClienteQueSeVa[]
+  /** Cuántos son en total: la lista trae hasta 200. */
+  total: number
+  /** Cuántos días sale de la lista alguien después de "Escribirle". */
+  diasOcultoTrasContacto: number
+}
+
+/** Sólo dueña y encargado: a la profesional el servidor le responde 401. */
+export async function leerClientesQueSeVan(): Promise<Resultado<ListaDeQuienesSeVan>> {
+  return pedir<ListaDeQuienesSeVan>("/api/clientes/se-van", "No se pudo cargar la lista de clientes que se están yendo")
+}
+
+/**
+ * Anota que se le escribió (por WhatsApp o correo, a mano). Cuenta en
+ * "Mensajes de este mes" y saca la fila de la lista unos días.
+ */
+export async function registrarContacto(id: string): Promise<Resultado<{ vuelveALaListaEl: string }>> {
+  return pedir<{ vuelveALaListaEl: string }>(`/api/clientes/${id}/contacto`, "No se pudo anotar el contacto", { method: "POST" })
 }

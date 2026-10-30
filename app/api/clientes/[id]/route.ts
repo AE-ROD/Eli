@@ -6,15 +6,18 @@ import { z } from "zod"
 import { emailOVacio, etiquetas, nombre, notas, telefonoChileno } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { registrarError } from "@/lib/registro-de-errores"
+import { datosDeBajaPromocional, datosDeConsentimientoPromocional } from "@/lib/envios-a-clientes"
 import {
   clienteNoEliminado,
   datosDeClienteEliminado,
+  inscripcionesDeClienteEliminado,
   textosDeAtencionDeClienteEliminado,
   textosDeCitaDeClienteEliminado,
 } from "@/lib/clientes-eliminados"
 import {
   actorDeSesion,
   puedeBorrarCliente,
+  puedeEditarConsentimientoPromocional,
   puedeEditarDatosDeCliente,
   whereDeAgenda,
   whereDeClientes,
@@ -33,6 +36,13 @@ const edicionDeClienteSchema = z.object({
    * marcado no cambia la fecha ni el origen: el consentimiento es el primero.
    */
   whatsappConsent: z.boolean().optional(),
+  /**
+   * "Quiere recibir avisos y novedades por correo" (consentimiento
+   * promocional, "te toca" y reseñas). Marcarlo registra cuándo y que fue en
+   * el panel; desmarcarlo es la baja pedida en el local y deja la fecha de
+   * baja. Mandarlo igual a como estaba no cambia nada.
+   */
+  correoPromoConsent: z.boolean().optional(),
 })
 
 /**
@@ -50,7 +60,7 @@ const delNegocioYVigente = (actor: Actor, id: string) => whereDeClientes(actor, 
 async function verificarCliente(actor: Actor, id: string) {
   return prisma.customer.findFirst({
     where: delNegocioYVigente(actor, id),
-    select: { id: true, whatsappConsentAt: true },
+    select: { id: true, email: true, whatsappConsentAt: true, correoPromoConsentAt: true },
   })
 }
 
@@ -59,6 +69,39 @@ function cambioDeConsentimiento(marcado: boolean | undefined, yaTenia: boolean) 
   if (marcado === undefined) return {}
   if (!marcado) return { whatsappConsentAt: null, whatsappConsentSource: null }
   return yaTenia ? {} : { whatsappConsentAt: new Date(), whatsappConsentSource: "panel" }
+}
+
+/**
+ * Lo mismo para el consentimiento promocional por correo. Desmarcar uno que
+ * había es una baja (`datosDeBajaPromocional`, con fecha); desmarcar uno que
+ * no había no inventa una baja.
+ */
+function cambioDeConsentimientoPromocional(marcado: boolean | undefined, yaTenia: boolean) {
+  if (marcado === undefined || marcado === yaTenia) return {}
+  return marcado ? datosDeConsentimientoPromocional("panel") : datosDeBajaPromocional()
+}
+
+/** Dos correos son la misma casilla si sólo cambian mayúsculas o espacios a los lados. */
+function mismoCorreo(a: string | null | undefined, b: string | null | undefined): boolean {
+  return (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase()
+}
+
+/**
+ * El consentimiento promocional es de una casilla, no de la ficha: si el
+ * correo cambia, el que había no pasa al nuevo. Se mantiene sólo si en el
+ * mismo pedido se marca `correoPromoConsent: true` explícito (que ya exige
+ * `puedeEditarConsentimientoPromocional`), y entonces se registra de nuevo.
+ */
+function consentimientoAlCambiarElCorreo(
+  correoNuevo: string | undefined,
+  existente: { email: string | null; correoPromoConsentAt: Date | null },
+  marcado: boolean | undefined
+) {
+  if (correoNuevo === undefined || mismoCorreo(correoNuevo || null, existente.email)) {
+    return cambioDeConsentimientoPromocional(marcado, existente.correoPromoConsentAt !== null)
+  }
+  if (marcado === true) return datosDeConsentimientoPromocional("panel")
+  return existente.correoPromoConsentAt !== null ? datosDeBajaPromocional() : {}
 }
 
 export async function GET(
@@ -88,6 +131,9 @@ export async function GET(
       notes: true,
       whatsappConsentAt: true,
       whatsappConsentSource: true,
+      correoPromoConsentAt: true,
+      correoPromoConsentSource: true,
+      correoPromoBajaAt: true,
       businessId: true,
       createdAt: true,
       updatedAt: true,
@@ -144,6 +190,9 @@ export async function PUT(
     if (tocaDatos && !puedeEditarDatosDeCliente(actor)) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }
+    if (datos.correoPromoConsent !== undefined && !puedeEditarConsentimientoPromocional(actor)) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+    }
 
     // Por `existente.id`, no por `id`: si alguien borra la verificación de
     // arriba, `existente` queda sin declarar y el build falla. La garantía deja
@@ -163,6 +212,7 @@ export async function PUT(
         ...(datos.tags !== undefined && { tags: datos.tags }),
         ...(datos.notes !== undefined && { notes: datos.notes || null }),
         ...cambioDeConsentimiento(datos.whatsappConsent, existente.whatsappConsentAt !== null),
+        ...consentimientoAlCambiarElCorreo(datos.email, existente, datos.correoPromoConsent),
       },
     })
     if (count === 0) {
@@ -215,6 +265,10 @@ export async function DELETE(
   // escritura acotada al negocio de la sesión.
   try {
     await prisma.$transaction(async (tx) => {
+      // Antes de anonimizar: la lista de espera es por email.
+      await tx.inscripcionEnEspera.deleteMany({
+        where: inscripcionesDeClienteEliminado(actor.businessId, existente.email),
+      })
       await tx.customer.update({ where: { id: existente.id }, data: datosDeClienteEliminado(), select: { id: true } })
       await tx.appointment.updateMany({
         where: { customerId: existente.id, businessId: actor.businessId },

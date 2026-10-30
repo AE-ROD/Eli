@@ -4,10 +4,12 @@ import {
   NOMBRE_DE_CLIENTE_ELIMINADO,
   datosDeClienteEliminado,
   esEtiquetaReservada,
+  inscripcionesDeClienteEliminado,
   textosDeAtencionDeClienteEliminado,
   textosDeCitaDeClienteEliminado,
 } from "./clientes-eliminados"
 import { etiquetas } from "./campos-del-panel"
+import { coincide, type Tablas } from "@/pruebas/consultas-falsas"
 
 describe("datosDeClienteEliminado", () => {
   it("borra todo dato personal y deja sólo el nombre fijo y la marca", () => {
@@ -19,7 +21,33 @@ describe("datosDeClienteEliminado", () => {
       phone: null,
       notes: null,
       tags: [MARCA_DE_CLIENTE_ELIMINADO],
+      whatsappConsentAt: null,
+      whatsappConsentSource: null,
+      correoPromoConsentAt: null,
+      correoPromoConsentSource: null,
+      correoPromoBajaAt: null,
     })
+  })
+})
+
+describe("inscripcionesDeClienteEliminado", () => {
+  const tablas = {
+    inscripcionEnEspera: [
+      { id: "i-1", businessId: "n1", email: "maria@test" },
+      { id: "i-otra", businessId: "n1", email: "beto@test" },
+      { id: "i-ajena", businessId: "n2", email: "maria@test" },
+    ],
+  } as unknown as Tablas
+  const borradas = (where: object) =>
+    tablas.inscripcionEnEspera.filter((i) => coincide(tablas, "inscripcionEnEspera", i, where)).map((i) => i.id)
+
+  it("las de su email en su negocio, con el email normalizado; nunca las de otro negocio", () => {
+    expect(borradas(inscripcionesDeClienteEliminado("n1", "  Maria@Test "))).toEqual(["i-1"])
+  })
+
+  it("sin email no borra ninguna", () => {
+    expect(borradas(inscripcionesDeClienteEliminado("n1", null))).toEqual([])
+    expect(borradas(inscripcionesDeClienteEliminado("n1", "  "))).toEqual([])
   })
 })
 

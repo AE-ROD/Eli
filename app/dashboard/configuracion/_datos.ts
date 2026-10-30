@@ -10,6 +10,7 @@
  */
 
 import { leerMonto } from "@/lib/dinero"
+import { frecuenciaDelFormulario } from "@/lib/frecuencia-de-visitas"
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
 
 /** Un día del horario semanal: si se atiende y de qué hora a qué hora. */
@@ -30,6 +31,8 @@ export interface Servicio {
   price: number | null
   /** Agrupa los servicios en la página pública. `null` va a "Otros". */
   category: string | null
+  /** Cada cuántos días vuelve un cliente por este servicio (#75). `null` es sin frecuencia. */
+  frecuenciaDias: number | null
   active: boolean
 }
 
@@ -41,6 +44,8 @@ export interface DatosDeServicio {
   price: string
   /** Vacío es "sin categoría": se manda `null` y el servidor la borra. */
   category: string
+  /** "Cada cuántos días vuelve", como texto del campo. Vacío es `null`: se borra. */
+  frecuenciaDias: string
 }
 
 /**
@@ -64,14 +69,18 @@ export async function guardarHorario(memberId: string | null, horarios: HorarioD
  * se mandan. El precio lo lee `leerMonto`, así "8.000", "8000" y "8.000,50"
  * son el monto que se quiso escribir (con `parseFloat`, "8.000" era 8). Un
  * precio que no se puede leer sin adivinar es un error, no un servicio
- * guardado sin precio o con otro.
+ * guardado sin precio o con otro. La frecuencia, igual: vacía es `null` (se
+ * borra) y una que no es un entero de 7 a 365 es un error, no se manda.
  */
 export function cuerpoDeServicio(datos: DatosDeServicio) {
+  const f = frecuenciaDelFormulario(datos.frecuenciaDias)
+  if (!f.ok) return f
   const base = {
     name: datos.name,
     description: datos.description || undefined,
     duration: datos.duration,
     category: datos.category.trim() || null,
+    frecuenciaDias: f.valor,
   }
   if (!datos.price.trim()) return { ok: true as const, datos: { ...base, price: undefined } }
   const precio = leerMonto(datos.price)
@@ -203,6 +212,8 @@ export interface DatosDePaginaPublica {
   comuna: string
   whatsapp: string
   instagram: string
+  /** El enlace para dejar una reseña en Google (#77). Vacío lo borra. */
+  enlaceResenas: string
   color: string
   mediosDePago: string[]
   especialidades: EspecialidadDeMiembro[]
@@ -214,6 +225,7 @@ export interface PaginaPublicaGuardada {
   comuna: string | null
   whatsapp: string | null
   instagram: string | null
+  enlaceResenas: string | null
   color: string | null
   mediosDePago: string[]
 }
@@ -236,5 +248,45 @@ export async function guardarPlazoDeCambios(horas: number): Promise<Resultado<{ 
     "/api/configuracion/plazo-de-cambios",
     "No se pudo guardar el plazo",
     conJson("PUT", { horas })
+  )
+}
+
+// ─── Mensajes a clientes (#74, #75, #77, #78) ────────────────────────────────
+
+/** Los interruptores de los mensajes automáticos del negocio. */
+export interface InterruptoresDeMensajes {
+  listaDeEsperaActiva: boolean
+  avisoDeVueltaActivo: boolean
+  pideResenas: boolean
+}
+
+/** Lo enviado en el mes, como lo cuenta `contarEnviosDelMes` (`lib/envios-a-clientes.ts`). */
+export interface MensajesDelMes {
+  /** "AAAA-MM" en la zona del negocio. */
+  mes: string
+  total: number
+  porCategoria: Record<string, number>
+  porTipo: Record<string, number>
+  porCanal: Record<string, number>
+}
+
+/** Lo que la sección "Mensajes a clientes" muestra al entrar (`GET /api/configuracion/mensajes`). */
+export interface EstadoDeMensajes {
+  interruptores: InterruptoresDeMensajes
+  /** Si hay guardado un enlace de reseñas de Google válido: sin él no se puede pedir reseña. */
+  tieneEnlaceDeResenas: boolean
+  /** Sólo la dueña los enciende o apaga; el encargado los ve. */
+  puedeCambiar: boolean
+  mes: MensajesDelMes
+}
+
+/** Cambia uno o más interruptores. Devuelve cómo quedaron los tres. */
+export async function cambiarMensajesAClientes(
+  cambios: Partial<InterruptoresDeMensajes>
+): Promise<Resultado<{ interruptores: InterruptoresDeMensajes }>> {
+  return pedir<{ interruptores: InterruptoresDeMensajes }>(
+    "/api/configuracion/mensajes",
+    "No se pudo guardar el cambio",
+    conJson("PUT", cambios)
   )
 }

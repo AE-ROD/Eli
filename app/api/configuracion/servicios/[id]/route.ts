@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { categoriaDeServicio, descripcion, duracion, nombre, precioDeServicio } from "@/lib/campos-del-panel"
+import { frecuenciaDeServicio } from "@/lib/frecuencia-de-visitas"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, puedeGestionarServicios } from "@/lib/permisos"
 
@@ -15,6 +16,8 @@ const edicionDeServicioSchema = z.object({
   price: precioDeServicio().optional().nullable(),
   active: z.boolean().optional(),
   category: categoriaDeServicio().optional().nullable(),
+  // Cada cuántos días vuelve un cliente por este servicio ("te toca", #75). null la borra.
+  frecuenciaDias: frecuenciaDeServicio().optional(),
 })
 
 export async function PUT(

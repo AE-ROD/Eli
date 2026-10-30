@@ -245,3 +245,40 @@ describe("PUT /api/configuracion/servicios/[id] — largos y tipos", () => {
     }
   })
 })
+
+describe("PUT /api/configuracion/servicios/[id] — frecuencia de visitas", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it.each([
+    ["7 días", 7, 7],
+    ["365 días", 365, 365],
+    ["null (la borra)", null, null],
+  ])("acepta %s", async (_caso, enviada, guardada) => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    prismaMock.service.findFirst.mockResolvedValueOnce({ id: "srv-1", businessId: "negocio-1" })
+    prismaMock.service.update.mockResolvedValueOnce({ id: "srv-1" })
+
+    const res = await PUT(pedidoFalso({ frecuenciaDias: enviada }), paramsCon("srv-1"))
+
+    expect(res.status).toBe(200)
+    expect(prismaMock.service.update.mock.calls[0][0].data.frecuenciaDias).toBe(guardada)
+  })
+
+  it.each([
+    ["6 días", 6, "La frecuencia tiene que ser de al menos 7 días"],
+    ["366 días", 366, "La frecuencia no puede pasar de 365 días"],
+    ["21,5 días", 21.5, "La frecuencia tiene que ser un número entero de días"],
+  ])("rechaza %s: 400 y no escribe", async (_caso, enviada, mensaje) => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    prismaMock.service.findFirst.mockResolvedValueOnce({ id: "srv-1", businessId: "negocio-1" })
+
+    const res = await PUT(pedidoFalso({ frecuenciaDias: enviada }), paramsCon("srv-1"))
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: mensaje })
+    expect(prismaMock.service.update).not.toHaveBeenCalled()
+  })
+})
+

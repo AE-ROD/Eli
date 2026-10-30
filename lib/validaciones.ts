@@ -100,12 +100,35 @@ export const reservaSchema = z.object({
   // borra un consentimiento que el cliente ya dio en el local. Sin teléfono,
   // `confirmar` lo ignora (no hay número al que mandar).
   whatsappConsentimiento: z.boolean({ invalid_type_error: "El consentimiento de WhatsApp no es válido" }).optional(),
+  // "Quiero recibir avisos y novedades de <negocio> por correo" (#75). Sin
+  // marcar por defecto. `confirmar` sólo lo guarda en un cliente nuevo y con
+  // email: sobre uno reutilizado por email + nombre no escribe (quien conoce
+  // esos datos no puede dar el consentimiento por otro).
+  correoPromoConsentimiento: z
+    .boolean({ invalid_type_error: "El consentimiento de correos no es válido" })
+    .optional(),
   comentarios: opcionalHasta("Los comentarios", 1000),
   // Sin él, vacío o null: "cualquiera disponible" (lo asigna el servidor).
   profesionalId: z
     .string({ invalid_type_error: "El profesional no es válido" })
     .max(64, "El profesional no es válido")
     .nullish(),
+})
+
+/**
+ * "Avísame si se libera una hora" (#74): la inscripción en la lista de
+ * espera de un día. El email es obligatorio (es por donde llega el aviso); el
+ * teléfono, opcional, con la casilla de WhatsApp para cuando exista el canal.
+ */
+export const listaDeEsperaSchema = z.object({
+  servicioId: reservaSchema.shape.servicioId,
+  profesionalId: reservaSchema.shape.profesionalId,
+  fecha: reservaSchema.shape.fecha,
+  nombre: nombreSchema("nombre"),
+  apellido: nombreSchema("apellido"),
+  email: emailSchema,
+  telefono: reservaSchema.shape.telefono,
+  whatsappConsentimiento: reservaSchema.shape.whatsappConsentimiento,
 })
 
 export const recuperarContrasenaSchema = z.object({

@@ -62,6 +62,7 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
       slug: true,
       // El calendario cuenta "hoy" y la ventana de reserva en este reloj.
       timezone: true,
+      listaDeEsperaActiva: true,
       services: {
         where: { active: true },
         select: { id: true, name: true, description: true, duration: true, price: true },
@@ -109,6 +110,7 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
         zona={zonaDelNegocio(negocio.timezone)}
         servicios={negocio.services}
         horarios={horarioSemanalDeAtencion(negocio.workSchedules)}
+        listaDeEsperaActiva={negocio.listaDeEsperaActiva}
       />
       </div>
     </MarcoDeReserva>

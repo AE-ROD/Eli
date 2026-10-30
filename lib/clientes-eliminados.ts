@@ -27,8 +27,9 @@ export function esEtiquetaReservada(etiqueta: string): boolean {
 
 /**
  * Lo que se escribe al eliminar: el nombre fijo, los datos personales en null
- * y, de etiquetas, sólo la marca. Las relaciones (citas y atenciones) no se
- * tocan.
+ * (también los consentimientos, de WhatsApp y de correo promocional, con su
+ * fecha y origen: sin email ni teléfono no queda a quién escribirle) y, de
+ * etiquetas, sólo la marca. Las relaciones (citas y atenciones) no se tocan.
  */
 export function datosDeClienteEliminado() {
   return {
@@ -39,7 +40,28 @@ export function datosDeClienteEliminado() {
     phone: null,
     notes: null,
     tags: [MARCA_DE_CLIENTE_ELIMINADO],
+    whatsappConsentAt: null,
+    whatsappConsentSource: null,
+    correoPromoConsentAt: null,
+    correoPromoConsentSource: null,
+    correoPromoBajaAt: null,
   } satisfies Prisma.CustomerUpdateInput
+}
+
+/**
+ * Las inscripciones en la lista de espera que se borran al eliminar un
+ * cliente: las de su email en ese negocio (la lista es por email, no por
+ * cliente). Se borran enteras, no se anonimizan: no sostienen ningún reporte.
+ * Hay que leer el email ANTES de anonimizar. Sin email, ninguna: el filtro no
+ * matchea nada en vez de quedar sin email.
+ */
+export function inscripcionesDeClienteEliminado(
+  businessId: string,
+  email: string | null | undefined
+): Prisma.InscripcionEnEsperaWhereInput {
+  const normalizado = email?.trim().toLowerCase()
+  if (!normalizado) return { AND: [{ id: { in: [] } }] }
+  return { AND: [{ businessId }, { email: normalizado }] }
 }
 
 /**

@@ -1,6 +1,7 @@
 /**
  * Lo que la página pública de reservas le pide al servidor desde el navegador:
- * las horas libres de un día y la confirmación de la reserva. El negocio, sus
+ * las horas libres de un día, la confirmación de la reserva y la lista de
+ * espera. El negocio, sus
  * servicios y sus días de atención ya vienen resueltos por `page.tsx`, que es
  * de servidor y consulta la base directo.
  *
@@ -35,6 +36,8 @@ export interface DatosDeReserva {
   telefono: string
   /** "Quiero recibir recordatorios por WhatsApp". */
   whatsapp: boolean
+  /** "Quiero recibir avisos y novedades por correo". */
+  correoPromo: boolean
   comentarios: string
 }
 
@@ -94,7 +97,49 @@ export async function confirmarReserva(
       telefono: datos.telefono || undefined,
       // Sólo con teléfono: sin número no hay a dónde escribir.
       whatsappConsentimiento: datos.telefono ? datos.whatsapp : undefined,
+      // Sólo con email: es para esa casilla.
+      correoPromoConsentimiento: datos.email ? datos.correoPromo : undefined,
       comentarios: datos.comentarios || undefined,
     })
+  )
+}
+
+export interface DatosDeListaDeEspera {
+  servicioId: string
+  /** `null`: con cualquiera. */
+  profesionalId: string | null
+  /** `YYYY-MM-DD`. */
+  fecha: string
+  nombre: string
+  apellido: string
+  email: string
+  telefono: string
+  whatsapp: boolean
+}
+
+/** "Avísame si se libera una hora" (#74): anota en la lista de espera de ese día. */
+export async function inscribirEnListaDeEspera(slug: string, datos: DatosDeListaDeEspera): Promise<Resultado> {
+  return pedir(
+    `/api/reservar/${encodeURIComponent(slug)}/lista-de-espera`,
+    "No se pudo anotar en la lista de espera",
+    conJson("POST", {
+      servicioId: datos.servicioId,
+      profesionalId: datos.profesionalId ?? undefined,
+      fecha: datos.fecha,
+      nombre: datos.nombre,
+      apellido: datos.apellido,
+      email: datos.email,
+      telefono: datos.telefono || undefined,
+      whatsappConsentimiento: datos.telefono ? datos.whatsapp : undefined,
+    })
+  )
+}
+
+/** "Salir de la lista de espera", con el token del correo. */
+export async function salirDeLaListaDeEspera(slug: string, token: string): Promise<Resultado> {
+  return pedir(
+    `/api/reservar/${encodeURIComponent(slug)}/lista-de-espera/${encodeURIComponent(token)}`,
+    "No se pudo completar, intenta de nuevo",
+    { method: "POST" }
   )
 }

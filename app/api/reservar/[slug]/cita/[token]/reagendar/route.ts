@@ -5,6 +5,7 @@ import { asignarCandidatoLibre, candidatosDeLaReserva, candidatosQueCubren, tram
 import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
 import { enviarAvisoDeCambioDelCliente } from "@/lib/email"
 import { ESTADOS_GESTIONABLES, dentroDelPlazo, mensajeFueraDePlazo } from "@/lib/gestion-de-cita"
+import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
 import {
   MENSAJE_FECHA_MUY_LEJANA,
   MENSAJE_HORA_PASADA,
@@ -100,6 +101,9 @@ export async function POST(request: NextRequest, contexto: Params) {
   if (resultado.tipo === "rechazada") {
     return resultado.status === 404 ? noEncontrada() : NextResponse.json({ error: resultado.error }, { status: resultado.status })
   }
+
+  // La hora anterior quedó libre: a la lista de espera de ese día.
+  programarAvisoDeHoraLiberada({ businessId: cita.businessId, inicio: cita.startTime })
 
   const profesional = resultado.memberId
     ? (reserva.profesionales.find((candidato) => candidato.id === resultado.memberId)?.nombre ?? null)

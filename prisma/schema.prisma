@@ -108,6 +108,17 @@ model Business {
   /// puede cambiar sólo mientras no haya liquidaciones no anuladas.
   liquidacionDesde        DateTime? @db.Date
 
+  // ─── Avisos por correo a clientes (etapa 3) ─────────────────────────────
+  /// Enlace para dejar una reseña en Google. Lo valida la app (https y un
+  /// dominio de Google); null = no se piden reseñas aunque esté encendido.
+  enlaceResenas       String?
+  /// Interruptores de los mensajes a clientes. Los enciende sólo la dueña
+  /// (`puedeActivarMensajesAClientes`). La lista de espera es servicio y viene
+  /// encendida; "te toca" y las reseñas son promocionales y vienen apagadas.
+  listaDeEsperaActiva Boolean @default(true)
+  avisoDeVueltaActivo Boolean @default(false)
+  pideResenas         Boolean @default(false)
+
   invitados         Business[]         @relation("Referidos")
   correosDeCuenta   CorreoDeCuenta[]
   customers         Customer[]
@@ -128,6 +139,8 @@ model Business {
   liquidaciones     Liquidacion[]
   movimientosDeLiquidacion MovimientoDeLiquidacion[]
   cierresDeCaja     CierreDeCaja[]
+  inscripcionesEnEspera InscripcionEnEspera[]
+  enviosAClientes   EnvioAClientes[]
 
   @@index([invitadoPorId])
   @@map("negocios")
@@ -181,6 +194,7 @@ model BusinessMember {
   propinas          PropinaDeAtencion[]
   liquidaciones     Liquidacion[]
   movimientosDeLiquidacion MovimientoDeLiquidacion[]
+  inscripcionesEnEspera InscripcionEnEspera[]
 
   @@unique([businessId, userId])
   // Habilita la FK compuesta de CommissionRate (memberId, businessId): sin
@@ -245,9 +259,20 @@ model Customer {
   whatsappConsentAt     DateTime?
   whatsappConsentSource String?
 
+  /// Consentimiento para los correos promocionales del negocio ("te toca" y
+  /// pedir reseña): cuándo se dio y por dónde ("reserva-publica" | "panel",
+  /// CHECK en la base). Vigente = `correoPromoConsentAt` no null. La baja (en
+  /// un clic o pedida en el local) lo pone en null y anota `correoPromoBajaAt`;
+  /// volver a marcar la casilla lo da de nuevo, con fecha y origen nuevos.
+  correoPromoConsentAt     DateTime?
+  correoPromoConsentSource String?
+  correoPromoBajaAt        DateTime?
+
   appointments Appointment[]
   visits       Visit[]
+  enviosAClientes EnvioAClientes[]
 
+  @@unique([id, businessId])
   @@index([businessId])
   @@index([businessId, createdAt])
   @@map("clientes")
@@ -263,6 +288,10 @@ model Service {
   price       Float?
   /// Categoría libre para agrupar en la página pública ("Corte", "Color").
   category    String?
+  /// Cada cuántos días vuelve normalmente un cliente a este servicio, para
+  /// "te toca" cuando el cliente no tiene ciclo propio. Null = no se avisa.
+  /// CHECK 7..365 en la base.
+  frecuenciaDias Int?
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -274,6 +303,7 @@ model Service {
   // simple (no compuesta) y SetNull: ver el comentario en CommissionChange.
   commissionChanges CommissionChange[]
   memberServices    MemberService[]
+  inscripcionesEnEspera InscripcionEnEspera[]
 
   // Habilita la FK compuesta de CommissionRate (serviceId, businessId), igual
   // que en BusinessMember.
@@ -946,4 +976,80 @@ model SolicitudDeSoporte {
   @@index([businessId])
   @@index([userId])
   @@map("solicitudes_de_soporte")
+}
+
+/// "Avísame si se libera una hora" (#74): alguien que quería reservar un día
+/// sin horas libres. Se guarda por email, no por cliente: quien se inscribe
+/// puede no ser cliente todavía. El servicio es FK compuesta (id, businessId):
+/// la base impide una inscripción con el servicio de otro negocio. El
+/// profesional es FK simple y SetNull (null = "cualquiera"): que sea del mismo
+/// negocio lo verifica el código.
+///
+/// `estado`: "activa" | "reservo" | "expirada" | "salio" (CHECK). `fecha` es un
+/// día "AAAA-MM-DD" en la zona del negocio (CHECK de forma). `tokenHash` es el
+/// sha256 del token de "Salir de la lista" (`lib/tokens.ts`). El cron expira
+/// las de días pasados y borra sus datos personales.
+model InscripcionEnEspera {
+  id                String          @id @default(cuid())
+  businessId        String
+  business          Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  serviceId         String
+  service           Service         @relation(fields: [serviceId, businessId], references: [id, businessId], onDelete: Cascade)
+  memberId          String?
+  member            BusinessMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  fecha             String
+  nombre            String
+  apellido          String
+  /// Normalizado (minúsculas, sin espacios a los lados).
+  email             String
+  telefono          String?
+  whatsappConsentAt DateTime?
+  estado            String          @default("activa")
+  /// Cuántos avisos se le mandaron (tope en `lib/envios-a-clientes.ts`).
+  avisos            Int             @default(0)
+  ultimoAvisoAt     DateTime?
+  tokenHash         String          @unique
+  createdAt         DateTime        @default(now())
+  /// Cuándo dejó de estar activa (reservó, expiró o salió).
+  resueltaAt        DateTime?
+
+  envios EnvioAClientes[]
+
+  @@index([businessId, fecha, estado])
+  @@index([businessId, email])
+  @@map("lista_de_espera")
+}
+
+/// Cada mensaje a un cliente (#78): registro, candado y contador a la vez.
+/// El único (businessId, tipo, referencia) es el candado: la fila se inserta
+/// ANTES de enviar, y si ya existía, otro proceso lo mandó o lo está mandando
+/// (`lib/envios-a-clientes.ts`). Si el envío falla, la fila se borra.
+///
+/// Sin datos personales: ni el email ni el texto. `customerId` y `esperaId`
+/// son FK simples y SetNull (borrar el cliente o la inscripción no borra la
+/// cuenta del mes); que sean del mismo negocio lo verifica el código.
+/// `tipo`, `canal` y `categoria` los limitan CHECKs de la migración.
+model EnvioAClientes {
+  id         String               @id @default(cuid())
+  businessId String
+  business   Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerId String?
+  customer   Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  esperaId   String?
+  espera     InscripcionEnEspera? @relation(fields: [esperaId], references: [id], onDelete: SetNull)
+  /// "lista-de-espera" | "te-toca" | "resena" | "contacto-manual"
+  tipo       String
+  /// "correo" | "whatsapp" | "manual"
+  canal      String
+  /// "servicio" | "promocional"
+  categoria  String
+  /// Qué cosa se avisó, para no repetirla (ver `lib/envios-a-clientes.ts`).
+  referencia String
+  enviadoAt  DateTime             @default(now())
+
+  @@unique([businessId, tipo, referencia])
+  @@index([businessId, enviadoAt])
+  @@index([customerId, tipo, enviadoAt])
+  @@index([esperaId])
+  @@map("envios_a_clientes")
 }

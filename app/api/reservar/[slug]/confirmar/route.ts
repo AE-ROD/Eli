@@ -15,6 +15,9 @@ import { contabilizarReferido } from "@/lib/referidos"
 import { registrarError } from "@/lib/registro-de-errores"
 import { generarToken } from "@/lib/tokens"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
+import { datosDeConsentimientoPromocional } from "@/lib/envios-a-clientes"
+import { marcarReservo } from "@/lib/lista-de-espera"
+import { existeLaHora, instanteEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 import {
   MAX_RESERVAS_FUTURAS_POR_CONTACTO,
   MAX_RESERVAS_PUBLICAS_POR_DIA,
@@ -155,6 +158,14 @@ async function reservar(
     ? { whatsappConsentAt: ahora, whatsappConsentSource: ORIGEN_RESERVA_PUBLICA }
     : {}
 
+  // "Quiero recibir avisos y novedades por correo" (#75): sólo en un cliente
+  // nuevo y con email. Sobre un cliente reutilizado por email + nombre no se
+  // escribe, igual que el teléfono: quien conoce esos datos no puede dar ni
+  // renovar el consentimiento por otro. Ese cliente lo da en la ficha
+  // (`puedeEditarConsentimientoPromocional`) o en una reserva propia nueva.
+  const consentimientoPromocional =
+    datos.correoPromoConsentimiento === true && email ? datosDeConsentimientoPromocional("reserva-publica", ahora) : {}
+
   if (!cliente) {
     cliente = await tx.customer.create({
       data: {
@@ -165,6 +176,7 @@ async function reservar(
         // Ya en E.164 (`telefonoChileno` en `reservaSchema`).
         phone: datos.telefono ?? null,
         ...consentimiento,
+        ...consentimientoPromocional,
         businessId: negocioId,
       },
       select: { id: true },
@@ -209,9 +221,13 @@ async function reservar(
     select: { id: true, memberId: true },
   })
 
+  // Lista de espera (#74): si estaba esperando ese día con este email, ya
+  // reservó. En la misma transacción: si la cita no queda, la inscripción
+  // sigue activa.
+  await marcarReservo(tx, { businessId: negocioId, email, fecha: datos.fecha, ahora })
+
   return { tipo: "creada", cita }
 }
-import { existeLaHora, instanteEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 
 export async function POST(
   request: NextRequest,

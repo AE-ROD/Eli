@@ -32,6 +32,8 @@ export type NombreDeModelo =
   | "liquidacion"
   | "movimientoDeLiquidacion"
   | "cierreDeCaja"
+  | "inscripcionEnEspera"
+  | "envioAClientes"
 
 export type Tablas = Record<NombreDeModelo, Registro[]>
 
@@ -124,6 +126,17 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     liquidacion: uno("liquidacion", "liquidacionId"),
   },
   cierreDeCaja: { business: uno("business", "businessId") },
+  inscripcionEnEspera: {
+    business: uno("business", "businessId"),
+    service: uno("service", "serviceId"),
+    member: uno("businessMember", "memberId"),
+    envios: muchos("envioAClientes", "esperaId"),
+  },
+  envioAClientes: {
+    business: uno("business", "businessId"),
+    customer: uno("customer", "customerId"),
+    espera: uno("inscripcionEnEspera", "esperaId"),
+  },
 }
 
 /**
@@ -139,6 +152,8 @@ export const COMPUESTAS: Partial<Record<NombreDeModelo, string[]>> = {
   propinaDeAtencion: ["visit", "member", "liquidacion"],
   liquidacion: ["member"],
   movimientoDeLiquidacion: ["member", "visit", "liquidacion"],
+  // El servicio de una inscripción es FK compuesta; el profesional, simple.
+  inscripcionEnEspera: ["service"],
 }
 
 const OPERADORES_DE_CAMPO = new Set(["equals", "in", "notIn", "not", "gt", "gte", "lt", "lte", "has"])

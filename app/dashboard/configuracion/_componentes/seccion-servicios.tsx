@@ -22,7 +22,7 @@ import {
   type Servicio,
 } from "../_datos"
 
-const SERVICIO_EN_BLANCO: DatosDeServicio = { name: "", description: "", duration: 30, price: "", category: "" }
+const SERVICIO_EN_BLANCO: DatosDeServicio = { name: "", description: "", duration: 30, price: "", category: "", frecuenciaDias: "" }
 
 /** Los botones de sólo ícono de cada servicio: 44 × 44, lo mínimo para un dedo. */
 const BOTON_DE_ICONO =
@@ -57,6 +57,7 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
       duration: servicio.duration,
       price: servicio.price == null ? "" : montoParaEscribir(servicio.price),
       category: servicio.category ?? "",
+      frecuenciaDias: servicio.frecuenciaDias?.toString() ?? "",
     })
     setAvisoDelModal("")
     setModalAbierto(true)
@@ -190,6 +191,8 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
             onCambiarCampo={(campo, valor) => setForm((previo) => ({ ...previo, [campo]: valor }))}
             onSubmit={guardar}
             onCerrar={cerrarModal}
+            frecuenciaDias={form.frecuenciaDias}
+            onCambiarFrecuencia={(valor) => setForm((previo) => ({ ...previo, frecuenciaDias: valor }))}
           />
         )}
       </AnimatePresence>

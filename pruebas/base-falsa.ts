@@ -48,6 +48,10 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     liquidacionPeriodo: "mensual",
     liquidacionInicioSemana: 1,
     liquidacionDesde: null,
+    enlaceResenas: null,
+    listaDeEsperaActiva: true,
+    avisoDeVueltaActivo: false,
+    pideResenas: false,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
@@ -67,10 +71,21 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     notes: null,
     whatsappConsentAt: null,
     whatsappConsentSource: null,
+    correoPromoConsentAt: null,
+    correoPromoConsentSource: null,
+    correoPromoBajaAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
-  service: () => ({ description: null, duration: 30, price: null, active: true, createdAt: new Date(), updatedAt: new Date() }),
+  service: () => ({
+    description: null,
+    duration: 30,
+    price: null,
+    frecuenciaDias: null,
+    active: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
   appointment: () => ({
     serviceId: null,
     status: "pendiente",
@@ -157,6 +172,17 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     createdAt: new Date(),
   }),
   cierreDeCaja: () => ({ desglose: {}, nota: null, createdAt: new Date() }),
+  inscripcionEnEspera: () => ({
+    memberId: null,
+    telefono: null,
+    whatsappConsentAt: null,
+    estado: "activa",
+    avisos: 0,
+    ultimoAvisoAt: null,
+    createdAt: new Date(),
+    resueltaAt: null,
+  }),
+  envioAClientes: () => ({ customerId: null, esperaId: null, enviadoAt: new Date() }),
 }
 
 /** Campos `Json` del esquema: aceptan un objeto como valor (cualquier otro objeto es una escritura anidada). */
@@ -180,6 +206,9 @@ const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
   cierreDeCaja: [{ campos: ["businessId", "hasta"] }],
   // `liquidaciones_businessId_memberId_desde_viva_key`: sólo las no anuladas.
   liquidacion: [{ campos: ["businessId", "memberId", "desde"], si: (registro) => registro.estado !== "anulada" }],
+  inscripcionEnEspera: [{ campos: ["tokenHash"] }],
+  // El candado de los mensajes a clientes.
+  envioAClientes: [{ campos: ["businessId", "tipo", "referencia"] }],
 }
 
 /** Consultas crudas que la base falsa acepta: sólo candados, que en memoria no tienen nada que ordenar. */
@@ -200,6 +229,8 @@ function tablasVacias(): Tablas {
     liquidacion: [],
     movimientoDeLiquidacion: [],
     cierreDeCaja: [],
+    inscripcionEnEspera: [],
+    envioAClientes: [],
     businessMember: [],
     customer: [],
     service: [],
@@ -380,6 +411,8 @@ export function crearBaseFalsa() {
     liquidacion: delegado("liquidacion"),
     movimientoDeLiquidacion: delegado("movimientoDeLiquidacion"),
     cierreDeCaja: delegado("cierreDeCaja"),
+    inscripcionEnEspera: delegado("inscripcionEnEspera"),
+    envioAClientes: delegado("envioAClientes"),
     /**
      * Sólo para candados (`SELECT … FOR UPDATE` o `pg_advisory_xact_lock`): en
      * memoria no hay concurrencia que ordenar, así que no devuelve nada. Queda
