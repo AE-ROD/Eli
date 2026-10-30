@@ -42,10 +42,16 @@ import {
  */
 export class ErrorDeAtencion extends Error {
   readonly status: 400 | 404 | 409
+  /**
+   * Un código estable para que la interfaz reaccione sin buscar palabras en
+   * el mensaje (#117). Va en la respuesta como `codigo`, junto a `error`.
+   */
+  readonly codigo: string | undefined
 
-  constructor(status: 400 | 404 | 409, mensaje: string) {
+  constructor(status: 400 | 404 | 409, mensaje: string, codigo?: string) {
     super(mensaje)
     this.status = status
+    this.codigo = codigo
   }
 }
 
@@ -55,7 +61,10 @@ export function respuestaDeError(error: unknown, contexto: string): NextResponse
     return NextResponse.json({ error: "Datos inválidos", detalles: error.errors }, { status: 400 })
   }
   if (error instanceof ErrorDeAtencion) {
-    return NextResponse.json({ error: error.message }, { status: error.status })
+    return NextResponse.json(
+      { error: error.message, ...(error.codigo && { codigo: error.codigo }) },
+      { status: error.status }
+    )
   }
   console.error(`Error ${contexto}:`, error)
   return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })

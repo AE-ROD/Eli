@@ -126,7 +126,8 @@ describe("POST /api/atenciones/[id]/anulacion", () => {
       voidedByName: "Bruno Encargado",
       voidReason: "Se fue sin esperar",
     })
-    expect(citaGuardada("cita-abierta").status).toBe("cancelada")
+    // La canceló el negocio al anular (#121): quién y cuándo.
+    expect(citaGuardada("cita-abierta")).toMatchObject({ status: "cancelada", canceladaPor: "negocio", canceladaEn: AHORA })
     // No se borra nada: sigue ahí, anulada, con sus líneas.
     expect(base.buscar("visitService", { visitId: "v-por-cobrar" })).toHaveLength(1)
   })
@@ -279,9 +280,10 @@ describe("POST /api/atenciones/[id]/anulacion: lo ya rendido no se anula (#65)",
     const res = await anular(sesiones.dueña, "v-cobrada", { motivo: "error" })
 
     expect(res.status).toBe(409)
-    expect((await res.json()).error).toBe(
-      "Esta atención ya está en una liquidación cerrada: no se anula, corrígelo con un ajuste."
-    )
+    expect(await res.json()).toEqual({
+      error: "Esta atención ya está en una liquidación cerrada: no se anula, corrígelo con un ajuste.",
+      codigo: "corregir-con-ajuste",
+    })
     expect(base.volcado()).toEqual(antes)
   })
 
@@ -302,7 +304,10 @@ describe("POST /api/atenciones/[id]/anulacion: lo ya rendido no se anula (#65)",
     const res = await anular(sesiones.dueña, "v-cobrada")
 
     expect(res.status).toBe(409)
-    expect((await res.json()).error).toBe("Esta atención ya entró en un cierre de caja: no se anula, corrígelo con un ajuste.")
+    expect(await res.json()).toEqual({
+      error: "Esta atención ya entró en un cierre de caja: no se anula, corrígelo con un ajuste.",
+      codigo: "corregir-con-ajuste",
+    })
     expect(base.volcado()).toEqual(antes)
   })
 

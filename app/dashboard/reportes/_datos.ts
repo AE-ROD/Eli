@@ -5,7 +5,8 @@
  */
 
 import { rangoDelDia, zonaDelDispositivo } from "@/lib/fechas"
-import { conJson, pedir, pedirConCodigo, type Resultado, type ResultadoConCodigo } from "@/lib/peticiones"
+import { CODIGO_CORREGIR_CON_AJUSTE } from "@/lib/bloqueos-de-dinero"
+import { codigoDelServidor, conJson, pedir, pedirConCuerpo, type Resultado } from "@/lib/peticiones"
 import type { TurnoId } from "@/lib/reportes"
 
 // ─── Lo que devuelve el servidor ─────────────────────────────────────────────
@@ -182,16 +183,27 @@ export async function leerOpcionesDeFiltro(): Promise<Resultado<OpcionesDeFiltro
 
 /**
  * Anula un cobro del historial, de cualquier día: deja de sumar y pasa a lo
- * anulado. Sólo el dueño (`puedeAnular`); el servidor lo vuelve a mirar. Con
- * el código del fallo: un 404 o un 409 es que la atención cambió entretanto
- * (otro ya la anuló), y la pantalla recarga en vez de sólo avisar.
+ * anulado. Sólo el dueño (`puedeAnular`); el servidor lo vuelve a mirar.
+ *
+ * - `corregirConAjuste`: el cobro ya entró en una liquidación o en un cierre
+ *   de caja (409 con ese código, #117). No cambió nada: la pantalla muestra
+ *   el mensaje del servidor, que dice cómo se corrige.
+ * - Cualquier otro 404 o 409 es que la atención cambió entretanto (otro ya la
+ *   anuló), y la pantalla recarga en vez de sólo avisar.
  */
-export async function anularCobro(id: string, motivo: string): Promise<ResultadoConCodigo<unknown>> {
-  return pedirConCodigo<unknown>(
+export type ResultadoDeAnulacion =
+  | { ok: true; datos: unknown }
+  | { ok: false; error: string; codigo: number | null; corregirConAjuste: boolean }
+
+export async function anularCobro(id: string, motivo: string): Promise<ResultadoDeAnulacion> {
+  const resultado = await pedirConCuerpo<unknown>(
     `/api/atenciones/${encodeURIComponent(id)}/anulacion`,
     "No se pudo anular el cobro",
     conJson("POST", motivo.trim() ? { motivo: motivo.trim() } : {})
   )
+  if (resultado.ok) return resultado
+  const { error, codigo, cuerpo } = resultado
+  return { ok: false, error, codigo, corregirConAjuste: codigoDelServidor(cuerpo) === CODIGO_CORREGIR_CON_AJUSTE }
 }
 
 // ─── Llenar horas (#72) ──────────────────────────────────────────────────────

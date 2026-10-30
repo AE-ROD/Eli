@@ -115,6 +115,32 @@ function atencionesDelRango(businessId: string, desde: Date, hasta: Date): Prism
 }
 
 /**
+ * El cobro más antiguo de la caja abierta que es de un día anterior al de
+ * `ahora` en la zona del negocio, o null si todo lo cobrado es de hoy (#120).
+ * Sólo para avisar en pantalla que el cierre arrastra días sin cerrar: no
+ * cambia el cálculo, que siempre cubre `(desde, ahora]` sin huecos. Mira
+ * cobros y no sólo `desde`, para no avisar todos los días a quien cierra de
+ * noche y abre al otro día sin vender en el medio. Siempre del negocio
+ * `businessId` (el de la sesión).
+ */
+export async function primerCobroDeOtroDia(
+  db: Pick<Prisma.TransactionClient, "visit">,
+  businessId: string,
+  desde: Date,
+  ahora: Date,
+  zona: string
+): Promise<Date | null> {
+  const inicioDeHoy = rangoDelDiaEn(fechaYMinutosEn(ahora, zona).fecha, zona).desde
+  if (desde.getTime() >= inicioDeHoy.getTime()) return null
+  const primero = await db.visit.findFirst({
+    where: { businessId, status: "finalizada", paidAt: { gt: desde, lt: inicioDeHoy } },
+    select: { paidAt: true },
+    orderBy: { paidAt: "asc" },
+  })
+  return primero?.paidAt ?? null
+}
+
+/**
  * Lee de la base los pagos y propinas del rango, siempre del negocio
  * `businessId` (el de la sesión). Recibe la base, o el `tx` de la
  * transacción que cierra.

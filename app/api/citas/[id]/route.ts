@@ -266,6 +266,11 @@ export async function PUT(
         ...(datos.notes !== undefined && { notes: datos.notes || null }),
         ...(datos.price !== undefined && { price: datos.price }),
         ...(reactivacion.tipo === "reactivar" && reactivacion.limpiarCancelacion && { canceladaPor: null, canceladaEn: null }),
+        // Cancelarla desde el panel deja quién y cuándo, como el enlace del
+        // cliente (#121). Sólo al pasar a cancelada: re-enviar "cancelada"
+        // no pisa la hora ni el autor de la primera cancelación.
+        ...(datos.status === "cancelada" &&
+          existente.status !== "cancelada" && { canceladaPor: "negocio", canceladaEn: new Date() }),
       },
       include: {
         customer: { select: { id: true, name: true, email: true, phone: true } },

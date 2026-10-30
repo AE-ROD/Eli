@@ -386,4 +386,103 @@ describe("GET /api/comisiones/historial", () => {
     const cuerpo = await (await historial(sesiones.dueñoAjeno)).json()
     expect(cuerpo.cambios.map((c: { id: string }) => c.id)).toEqual(["cc-ajeno"])
   })
+
+  describe("filtrar por alguien que ya no está en el equipo (#119)", () => {
+    /** Un cambio de alguien que se fue: su memberId quedó en null y el nombre, copiado. */
+    const deExMiembro = (id: string, businessId: string, memberName: string) =>
+      base.prisma.commissionChange.create({
+        data: {
+          id,
+          businessId,
+          memberId: null,
+          memberName,
+          scope: "default",
+          changedByName: "Alguien",
+          changedByEmail: "alguien@test",
+          newPercent: 10,
+        },
+      })
+
+    it("ofrece a los ex-miembros del negocio para elegir, sin repetir y nunca los de otro", async () => {
+      await deExMiembro("cc-viejo-2", NEGOCIO, "Lucía Exprofesional")
+      await deExMiembro("cc-beto", NEGOCIO, "Beto Exprofesional")
+      await deExMiembro("cc-ajeno-ex", OTRO_NEGOCIO, "Zoe Del Otro")
+
+      const cuerpo = await (await historial(sesiones.dueña)).json()
+      expect(cuerpo.exMiembros).toEqual(["Beto Exprofesional", "Lucía Exprofesional"])
+
+      const delOtro = await (await historial(sesiones.dueñoAjeno)).json()
+      expect(delOtro.exMiembros).toEqual(["Zoe Del Otro"])
+    })
+
+    it("trae sólo los cambios de ese ex-miembro, del negocio", async () => {
+      await deExMiembro("cc-viejo-2", NEGOCIO, "Lucía Exprofesional")
+      await deExMiembro("cc-beto", NEGOCIO, "Beto Exprofesional")
+      await deExMiembro("cc-lucia-ajena", OTRO_NEGOCIO, "Lucía Exprofesional")
+      await fijarMiembro(sesiones.dueña, "m-carla", { porcentaje: 40 })
+
+      const res = await historial(sesiones.dueña, `?exMiembro=${encodeURIComponent("Lucía Exprofesional")}`)
+      expect(res.status).toBe(200)
+      const cuerpo = await res.json()
+      expect(cuerpo.total).toBe(2)
+      expect(cuerpo.cambios.map((c: { id: string }) => c.id).sort()).toEqual(["cc-viejo", "cc-viejo-2"])
+    })
+
+    it("no trae los cambios de alguien que sigue en el equipo aunque se llame igual", async () => {
+      await fijarMiembro(sesiones.dueña, "m-carla", { porcentaje: 40 })
+      const [deCarla] = base.buscar("commissionChange", { memberId: "m-carla" })
+
+      const cuerpo = await (
+        await historial(sesiones.dueña, `?exMiembro=${encodeURIComponent(String(deCarla.memberName))}`)
+      ).json()
+      expect(cuerpo.cambios).toEqual([])
+      expect(cuerpo.total).toBe(0)
+    })
+
+    /** El % de un producto también va sin miembro, pero es de todo el equipo, no de alguien que se fue. */
+    const deProducto = async () => {
+      // Import dinámico: `lib/productos` carga prisma, que acá es la base falsa del mock.
+      const { TODO_EL_EQUIPO } = await import("@/lib/productos")
+      await base.prisma.commissionChange.create({
+        data: {
+          id: "cc-producto",
+          businessId: NEGOCIO,
+          memberId: null,
+          memberName: TODO_EL_EQUIPO,
+          scope: "product",
+          productName: "Shampoo",
+          changedByName: "Ana Dueña",
+          changedByEmail: "duena@uno.test",
+          newPercent: 10,
+        },
+      })
+      return TODO_EL_EQUIPO
+    }
+
+    it("un cambio del % de un producto no cuenta como ex-miembro", async () => {
+      const todoElEquipo = await deProducto()
+
+      const cuerpo = await (await historial(sesiones.dueña)).json()
+      expect(cuerpo.exMiembros).toEqual(["Lucía Exprofesional"])
+      // Sin filtro sí sale en el historial.
+      expect(cuerpo.cambios.map((c: { id: string }) => c.id)).toContain("cc-producto")
+
+      const filtrado = await (
+        await historial(sesiones.dueña, `?exMiembro=${encodeURIComponent(todoElEquipo)}`)
+      ).json()
+      expect(filtrado.total).toBe(0)
+      expect(filtrado.cambios).toEqual([])
+    })
+
+    it("el nombre de un ex-miembro de otro negocio no trae nada", async () => {
+      await deExMiembro("cc-ajeno-ex", OTRO_NEGOCIO, "Zoe Del Otro")
+      const cuerpo = await (await historial(sesiones.dueña, "?exMiembro=Zoe%20Del%20Otro")).json()
+      expect(cuerpo.total).toBe(0)
+    })
+
+    it("pedir un profesional y un ex-miembro a la vez es 400", async () => {
+      const res = await historial(sesiones.dueña, "?miembro=m-carla&exMiembro=Luc%C3%ADa%20Exprofesional")
+      expect(res.status).toBe(400)
+    })
+  })
 })
