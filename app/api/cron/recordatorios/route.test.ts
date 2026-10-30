@@ -325,7 +325,7 @@ describe("GET /api/cron/recordatorios", () => {
       expect(mockEnviarRecordatorio.mock.calls[0][0]).not.toHaveProperty("enlaceDeGestion")
     })
 
-    it("si el envío falla, borra el hash que puso, junto con la marca", async () => {
+    it("si el envío falla, borra el hash que puso y la marca en una sola escritura", async () => {
       prismaMock.appointment.findMany.mockResolvedValue([sinEnlace])
       mockEnviarRecordatorio.mockResolvedValue({ data: null, error: { name: "rate_limit_exceeded", message: "x" } })
       const { GET } = await import("./route")
@@ -333,10 +333,29 @@ describe("GET /api/cron/recordatorios", () => {
       await GET(autorizada())
 
       const [[{ data }]] = llamadasQuePonenToken() as [[{ data: { manageTokenHash: string } }]]
+      // marcar, poner el token y una única limpieza: no hay una segunda escritura que pueda fallar sola.
+      expect(prismaMock.appointment.updateMany).toHaveBeenCalledTimes(3)
       expect(prismaMock.appointment.updateMany).toHaveBeenLastCalledWith({
-        where: { id: "cita-1", businessId: "negocio-1", manageTokenHash: data.manageTokenHash },
-        data: { manageTokenHash: null },
+        where: { id: "cita-1", businessId: "negocio-1", reminderSentAt: AHORA, manageTokenHash: data.manageTokenHash },
+        data: { reminderSentAt: null, manageTokenHash: null },
       })
+    })
+
+    it("si la limpieza falla, no deja un hash suelto: no hay escritura parcial que reintentar", async () => {
+      prismaMock.appointment.findMany.mockResolvedValue([sinEnlace])
+      mockEnviarRecordatorio.mockResolvedValue({ data: null, error: { name: "rate_limit_exceeded", message: "x" } })
+      prismaMock.appointment.updateMany
+        .mockResolvedValueOnce({ count: 1 })
+        .mockResolvedValueOnce({ count: 1 })
+        .mockRejectedValueOnce(new Error("caída"))
+      vi.spyOn(console, "error").mockImplementation(() => {})
+      const { GET } = await import("./route")
+
+      const res = await GET(autorizada())
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({ enviados: 0, fallidos: 1 })
+      expect(prismaMock.appointment.updateMany).toHaveBeenCalledTimes(3)
     })
   })
 })

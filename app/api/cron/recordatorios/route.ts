@@ -167,15 +167,24 @@ export async function GET(request: NextRequest) {
       }
       fallidos++
       try {
-        await prisma.appointment.updateMany({
-          where: { id: cita.id, reminderSentAt: ahora },
-          data: { reminderSentAt: null },
-        })
         if (enlaceNuevo) {
-          // Sólo el hash que puso esta corrida: si entretanto cambió, no se toca.
+          // Una sola escritura: liberar la marca y quitar el hash que puso esta
+          // corrida van juntos. Con dos, si fallara la segunda quedaría un hash
+          // cuyo token se perdió y el cliente nunca recibiría su enlace. Si el
+          // hash cambió entretanto, no se toca nada.
           await prisma.appointment.updateMany({
-            where: { id: cita.id, businessId: cita.businessId, manageTokenHash: enlaceNuevo.tokenHash },
-            data: { manageTokenHash: null },
+            where: {
+              id: cita.id,
+              businessId: cita.businessId,
+              reminderSentAt: ahora,
+              manageTokenHash: enlaceNuevo.tokenHash,
+            },
+            data: { reminderSentAt: null, manageTokenHash: null },
+          })
+        } else {
+          await prisma.appointment.updateMany({
+            where: { id: cita.id, reminderSentAt: ahora },
+            data: { reminderSentAt: null },
           })
         }
       } catch (error) {

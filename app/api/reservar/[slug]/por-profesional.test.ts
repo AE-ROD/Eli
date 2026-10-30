@@ -359,4 +359,27 @@ describe("aviso de nueva reserva al profesional (#114)", () => {
     expect((await confirmar("10:00")).status).toBe(201)
     expect(avisados()).toEqual(["duena@uno.test"])
   })
+
+  it("aislamiento: si la cita queda con un memberId de otro negocio, ese miembro no recibe aviso; sólo el dueño", async () => {
+    escenario()
+    // La cita vuelve de la base a nombre de m-ajeno (de OTRO_NEGOCIO): el
+    // correo se busca por id Y negocio, así que no aparece carla@dos.test.
+    const crearOriginal = vi.mocked(base.prisma.appointment.create).getMockImplementation()!
+    vi.mocked(base.prisma.appointment.create).mockImplementationOnce(async (args) => ({
+      ...(await crearOriginal(args)),
+      memberId: "m-ajeno",
+    }))
+
+    expect((await confirmar("10:00", { profesionalId: "m-pedro" })).status).toBe(201)
+    expect(avisados()).toEqual(["duena@uno.test"])
+  })
+
+  it("la respuesta 201 no expone correos de nadie", async () => {
+    escenario()
+    const { status, cuerpo } = await confirmar("10:00", { profesionalId: "m-pedro", email: "lucia@cliente.test" })
+
+    expect(status).toBe(201)
+    expect(avisados()).toEqual(["duena@uno.test", "pedro@uno.test"])
+    expect(JSON.stringify(cuerpo)).not.toContain("@")
+  })
 })

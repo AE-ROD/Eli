@@ -15,7 +15,10 @@ import { ProveedorDeZona } from "./_componentes/zona-del-negocio"
 export default async function LayoutDeLaAgenda({ children }: { children: ReactNode }) {
   const actor = actorDeSesion(await getServerSession(authOptions))
   const negocio = actor
-    ? await prisma.business.findUnique({ where: { id: actor.businessId }, select: { timezone: true } })
+    ? await prisma.business
+        .findUnique({ where: { id: actor.businessId }, select: { timezone: true } })
+        // Si la lectura falla, la agenda sigue con la zona por defecto.
+        .catch(() => null)
     : null
 
   return <ProveedorDeZona zona={zonaDelNegocio(negocio?.timezone)}>{children}</ProveedorDeZona>
