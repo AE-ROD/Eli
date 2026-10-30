@@ -190,6 +190,7 @@ describe("GET /api/clientes/[id]", () => {
     expect(cliente.appointments).toHaveLength(4)
     for (const citaDelHistorial of cliente.appointments) {
       expect(Object.keys(citaDelHistorial).sort()).toEqual([
+        "conAtencion",
         "confirmacionPorFaltas",
         "endTime",
         "id",
@@ -200,6 +201,29 @@ describe("GET /api/clientes/[id]", () => {
       ])
     }
     expect(JSON.stringify(cliente)).not.toMatch(/Nota interna|Prefiere la tarde|Reservé por la web/)
+  })
+
+  it("conAtencion: la cita por confirmar cuyo cliente ya llegó deja de estarlo; una atención anulada no cuenta", async () => {
+    const { GET } = await import("./route")
+    const datos = escenarioDeClientes()
+    base.reiniciar({
+      ...datos,
+      appointment: datos.appointment.map((c) => (c.id === "cita-publica" ? { ...c, confirmacionPorFaltas: true } : c)),
+      visit: [
+        atencion("v-llego", { appointmentId: "cita-publica" }),
+        atencion("v-anulada", { appointmentId: "cita-carla", status: "anulada" }),
+      ],
+    })
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const cliente = await (await GET(pedido(URL_DE_MARIA), conId("c-maria"))).json()
+
+    const porId = Object.fromEntries(
+      cliente.appointments.map((c: { id: string; conAtencion: boolean }) => [c.id, c.conAtencion])
+    )
+    expect(porId).toEqual({ "cita-publica": true, "cita-carla": false, "cita-pedro": false, "cita-pedro-otra": false })
+    // De la atención sólo viaja si llegó: ni su estado ni su id.
+    expect(JSON.stringify(cliente)).not.toMatch(/"visit"|v-llego|en-espera/)
   })
 
   it("del cliente se devuelve lo de antes del `select` y los consentimientos de WhatsApp y de correo: sólo cambió el historial", async () => {

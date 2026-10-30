@@ -7,6 +7,7 @@ import { transicionPermitida } from "@/lib/atenciones"
 import {
   CODIGO_CORREGIR_CON_AJUSTE,
   atencionBloqueada,
+  horaDeLaBase,
   tomarCandadoDeCajaCompartido,
   type MotivoDeBloqueo,
 } from "@/lib/bloqueos-de-dinero"
@@ -83,12 +84,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Y el de la caja, compartido: un cierre de caja en curso termina antes
       // de que se mire si la atención entró en él.
       await tomarCandadoDeCajaCompartido(tx, actor.businessId)
+      // La hora de la anulación sale de la base, después de los candados, como
+      // el `paidAt` del cobro y el `hasta` de la caja: una sola fuente de hora
+      // aunque las instancias tengan relojes desfasados.
+      const ahora = await horaDeLaBase(tx)
 
       // Sobre el mismo estado con que se decidió el permiso: si entretanto la
       // cobraron, el encargado ya no puede anularla y esto no matchea.
       await tomarAtencion(tx, actor, existente.id, existente.status, {
         status: "anulada",
-        voidedAt: new Date(),
+        voidedAt: ahora,
         voidedById: usuarioId,
         voidedByName: nombre,
         voidReason: motivo || null,
@@ -104,7 +109,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         await tx.appointment.updateMany({
           where: { id: existente.appointmentId, businessId: actor.businessId, status: { in: ESTADOS_DE_RESERVA } },
           // La cancela el negocio al anular (#121): queda quién y cuándo.
-          data: { status: "cancelada", canceladaPor: "negocio", canceladaEn: new Date() },
+          data: { status: "cancelada", canceladaPor: "negocio", canceladaEn: ahora },
         })
       }
 

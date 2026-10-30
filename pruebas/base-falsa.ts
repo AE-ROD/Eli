@@ -232,6 +232,14 @@ const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
  */
 const CASCADAS: Partial<Record<NombreDeModelo, [NombreDeModelo, string][]>> = {
   appointment: [["appointmentService", "appointmentId"]],
+  // Borrar una atención que esperaba (`app/api/atenciones/[id]`) se lleva sus
+  // líneas, pagos y propinas. Es también la excepción de los triggers de
+  // línea liquidada: cuando la cascada llega a la línea, la atención ya no está.
+  visit: [
+    ["visitService", "visitId"],
+    ["visitPayment", "visitId"],
+    ["propinaDeAtencion", "visitId"],
+  ],
 }
 
 /** Consultas crudas que la base falsa acepta: sólo candados, que en memoria no tienen nada que ordenar. */
@@ -287,7 +295,14 @@ export function crearBaseFalsa() {
   const filtrar = (modelo: NombreDeModelo, where: unknown) =>
     tablas[modelo].filter((registro) => coincide(tablas, modelo, registro, where))
 
+  /**
+   * Un DELETE: primero pasa cada fila por su trigger `BEFORE DELETE` (si una
+   * falla, no se borra ninguna, como una sentencia de Postgres), después la
+   * borra y sigue con las cascadas. Los hijos se revisan con el padre ya
+   * borrado, que es lo que ve el trigger dentro de la cascada.
+   */
   function borrar(modelo: NombreDeModelo, registros: Set<Registro>) {
+    for (const registro of registros) ANTES_DE_BORRAR[modelo]?.(registro)
     tablas[modelo] = tablas[modelo].filter((registro) => !registros.has(registro))
     for (const [hijo, campo] of CASCADAS[modelo] ?? []) {
       const ids = new Set([...registros].map((registro) => registro.id))
@@ -349,9 +364,78 @@ export function crearBaseFalsa() {
     }
   }
 
-  /** Los triggers `BEFORE UPDATE` de la base de verdad que la falsa reproduce. */
+  /**
+   * El trigger `atencion_servicios_mismo_negocio` (misma migración): la línea
+   * no tiene `businessId`, así que sus FK a `productos` y `liquidaciones` no
+   * pueden ser compuestas; el trigger exige que el producto y la liquidación
+   * sean del negocio de su atención, y también el profesional (su FK a
+   * `miembros_negocio` tampoco es compuesta). En un UPDATE sólo mira si cambia
+   * la atención, el profesional, el producto o la liquidación, y si la
+   * atención ya no existe (cascada del negocio) deja pasar. El NULL que pone
+   * la cascada al borrar a un miembro no se revisa. `viejo` es `null` en un
+   * INSERT.
+   */
+  function lineaDelMismoNegocio(viejo: Registro | null, nuevo: Registro) {
+    const id = String(nuevo.id)
+    const memberId = nuevo.memberId ?? null
+    const productId = nuevo.productId ?? null
+    const liquidacionId = nuevo.liquidacionId ?? null
+    if (memberId === null && productId === null && liquidacionId === null) return
+    if (
+      viejo &&
+      nuevo.visitId === viejo.visitId &&
+      !distintos(memberId, viejo.memberId) &&
+      !distintos(productId, viejo.productId) &&
+      !distintos(liquidacionId, viejo.liquidacionId)
+    ) {
+      return
+    }
+
+    const negocio = tablas.visit.find((atencion) => atencion.id === nuevo.visitId)?.businessId ?? null
+    if (negocio === null && viejo) return
+
+    // Con `negocio` en null (un INSERT sin atención), `"businessId" = NULL`
+    // no matchea nada en SQL: también se rechaza.
+    const delNegocio = (modelo: NombreDeModelo, otroId: unknown) =>
+      negocio !== null && tablas[modelo].some((otro) => otro.id === otroId && otro.businessId === negocio)
+    if (memberId !== null && !delNegocio("businessMember", memberId)) {
+      throw errorDePrisma("P2003", `atencion_servicios ${id}: el profesional es de otro negocio`)
+    }
+    if (productId !== null && !delNegocio("producto", productId)) {
+      throw errorDePrisma("P2003", `atencion_servicios ${id}: el producto es de otro negocio`)
+    }
+    if (liquidacionId !== null && !delNegocio("liquidacion", liquidacionId)) {
+      throw errorDePrisma("P2003", `atencion_servicios ${id}: la liquidación es de otro negocio`)
+    }
+  }
+
+  /**
+   * El trigger `atencion_servicios_liquidada_no_se_borra` (misma migración):
+   * una línea en una liquidación no se borra mientras su atención exista. Sin
+   * atención es la cascada del negocio entero (o de la atención), y pasa.
+   */
+  function lineaLiquidadaNoSeBorra(viejo: Registro) {
+    if (viejo.liquidacionId === null || viejo.liquidacionId === undefined) return
+    if (!tablas.visit.some((atencion) => atencion.id === viejo.visitId)) return
+    throw errorDeTrigger(`atencion_servicios ${String(viejo.id)}: la línea está en una liquidación; no se borra`)
+  }
+
+  /** Los triggers `BEFORE INSERT` de la base de verdad que la falsa reproduce. */
+  const ANTES_DE_INSERTAR: Partial<Record<NombreDeModelo, (nuevo: Registro) => void>> = {
+    visitService: (nuevo) => lineaDelMismoNegocio(null, nuevo),
+  }
+
+  /** Los triggers `BEFORE UPDATE` de la base de verdad que la falsa reproduce, en el orden de Postgres (alfabético). */
   const ANTES_DE_ACTUALIZAR: Partial<Record<NombreDeModelo, (viejo: Registro, nuevo: Registro) => void>> = {
-    visitService: comisionInmutable,
+    visitService: (viejo, nuevo) => {
+      comisionInmutable(viejo, nuevo)
+      lineaDelMismoNegocio(viejo, nuevo)
+    },
+  }
+
+  /** Los triggers `BEFORE DELETE` de la base de verdad que la falsa reproduce. */
+  const ANTES_DE_BORRAR: Partial<Record<NombreDeModelo, (viejo: Registro) => void>> = {
+    visitService: lineaLiquidadaNoSeBorra,
   }
 
   /**
@@ -403,6 +487,7 @@ export function crearBaseFalsa() {
     }
 
     const registro: Registro = { id: `${modelo}-${siguienteId++}`, ...POR_DEFECTO[modelo](), ...escalares }
+    ANTES_DE_INSERTAR[modelo]?.(registro)
     verificarClaves(modelo, registro)
     tablas[modelo].push(registro)
 

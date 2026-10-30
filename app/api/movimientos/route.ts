@@ -6,7 +6,13 @@ import { prisma } from "@/lib/prisma"
 import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
 import { aCentavos } from "@/lib/atenciones"
 import { actorDeSesion, whereDeMovimientos } from "@/lib/permisos"
-import { ErrorDeLiquidacion, leerNegocioParaLiquidar, quienFirma, respuestaDeErrorDePlata } from "@/lib/liquidacion"
+import {
+  ErrorDeLiquidacion,
+  leerNegocioParaLiquidar,
+  quienFirma,
+  respuestaDeErrorDePlata,
+  tomarCandadoDeLiquidacionesDelNegocio,
+} from "@/lib/liquidacion"
 import {
   SELECCION_DE_MOVIMIENTO,
   TIPOS_DE_MOVIMIENTO,
@@ -22,7 +28,9 @@ const MAXIMO_DE_LA_LISTA = 300
 /**
  * Adelantos, vales y ajustes. La gestión ve los del negocio (o los de
  * `?miembro=`); el profesional, sólo los suyos. `?pendientes=1`: sólo los que
- * todavía no entraron en una liquidación ni se anularon.
+ * todavía no entraron en una liquidación ni se anularon, y con fecha desde
+ * "Liquidar desde" si está fijada: lo anterior nunca entra en una liquidación
+ * (la vista previa aplica el mismo corte), así que no está pendiente.
  */
 export async function GET(request: NextRequest) {
   const actor = actorDeSesion(await getServerSession(authOptions))
@@ -32,10 +40,14 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const miembro = searchParams.get("miembro")
     const pendientes = searchParams.get("pendientes") === "1"
+    const { liquidarDesde } = pendientes
+      ? await leerNegocioParaLiquidar(prisma, actor.businessId)
+      : { liquidarDesde: null }
     const filas = await prisma.movimientoDeLiquidacion.findMany({
       where: whereDeMovimientos(actor, {
         ...(miembro ? { memberId: miembro } : {}),
         ...(pendientes ? { liquidacionId: null, anuladoAt: null } : {}),
+        ...(liquidarDesde ? { fecha: { gte: fechaParaColumna(liquidarDesde) } } : {}),
       }),
       select: SELECCION_DE_MOVIMIENTO,
       orderBy: [{ fecha: "desc" }, { createdAt: "desc" }],
@@ -103,6 +115,10 @@ export async function POST(request: NextRequest) {
         if (!atencion) throw new ErrorDeLiquidacion(404, "Atención no encontrada")
       }
 
+      // "Liquidar desde" se lee bajo el candado de liquidaciones del negocio,
+      // compartido (como cada cierre): un cambio de la fecha en curso termina
+      // antes, y el corte de abajo ya usa la nueva.
+      await tomarCandadoDeLiquidacionesDelNegocio(tx, actor.businessId, "compartido")
       const { zona, liquidarDesde } = await leerNegocioParaLiquidar(tx, actor.businessId)
       const fecha = cuerpo.fecha ?? fechaDelNegocio(new Date(), zona)
       // La vista previa sólo toma movimientos desde "Liquidar desde": uno

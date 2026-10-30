@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
-import { MENSAJE_CITA_CAMBIO } from "@/lib/reactivar-cita"
+import { MENSAJE_CANCELACION_CAMBIO, MENSAJE_CONFIRMACION_CAMBIO } from "@/lib/por-confirmar"
 import { NEGOCIO, OTRO_NEGOCIO, atencion, conId, datosBase, pedido, sesiones } from "@/pruebas/datos"
 
 /**
@@ -146,6 +146,7 @@ describe("PUT /api/citas/[id]: una reserva por confirmar (#84)", () => {
     base.prisma.appointment.findFirst.mockResolvedValueOnce({ ...leida, status: "pendiente" })
     const cancelar = await cambiar(sesiones.encargado, "por-confirmar", { status: "cancelada" })
     expect(cancelar.status).toBe(409)
+    expect(cancelar.cuerpo.error).toBe(MENSAJE_CANCELACION_CAMBIO)
     expect(estadoDe("por-confirmar")).toBe("confirmada")
     expect(mockAvisar).not.toHaveBeenCalled()
   })
@@ -157,7 +158,8 @@ describe("PUT /api/citas/[id]: una reserva por confirmar (#84)", () => {
       base.prisma.appointment.findFirst.mockResolvedValueOnce({ ...leida, status: "pendiente" })
       const respuesta = await cambiar(sesiones.dueña, "por-confirmar", { status: "confirmada", ...extra })
       expect(respuesta.status).toBe(409)
-      expect(respuesta.cuerpo.error).toBe(MENSAJE_CITA_CAMBIO)
+      // El mensaje habla de confirmar, no de reactivar (#136).
+      expect(respuesta.cuerpo.error).toBe(MENSAJE_CONFIRMACION_CAMBIO)
     }
     // Lo que perdió no quedó a medias: ni la nota ni el precio ni el horario.
     expect(base.buscar("appointment", { id: "por-confirmar" })[0]).toMatchObject({
@@ -178,7 +180,7 @@ describe("PUT /api/citas/[id]: una reserva por confirmar (#84)", () => {
   it("si el cliente ya llegó al Tablero, cancelarla responde 409: primero se anula la atención", async () => {
     const { status, cuerpo } = await cambiar(sesiones.encargado, "llego", { status: "cancelada" })
     expect(status).toBe(409)
-    expect(cuerpo.error).toBe("Esta reserva ya tiene una atención en el Tablero: anúlala ahí primero")
+    expect(cuerpo.error).toBe("Esta cita ya tiene una atención en el Tablero: anúlala ahí primero")
     expect(estadoDe("llego")).toBe("pendiente")
   })
 

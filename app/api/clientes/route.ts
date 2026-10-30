@@ -7,6 +7,7 @@ import { emailOVacio, etiquetas, nombre, notas, telefonoChileno } from "@/lib/ca
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, puedeEditarConsentimientoPromocional, whereDeAgenda, whereDeAtenciones, whereDeClientes, type Actor } from "@/lib/permisos"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
+import { LLEGADA_DE_LA_CITA, conLlegada } from "@/lib/por-confirmar"
 import { datosDeConsentimientoPromocional } from "@/lib/envios-a-clientes"
 
 const clienteSchema = z.object({
@@ -107,6 +108,8 @@ export async function GET(request: NextRequest) {
             status: true,
             price: true,
             confirmacionPorFaltas: true,
+            // Sólo para `conAtencion` (el cliente ya llegó): no sale en la respuesta.
+            ...LLEGADA_DE_LA_CITA,
           },
         },
         visits: {
@@ -141,6 +144,7 @@ export async function GET(request: NextRequest) {
   // vuelve a contar sobre el historial, que trae sólo las últimas cinco citas.
   const clientes = encontrados.map(({ visits, _count, ...cliente }) => ({
     ...cliente,
+    appointments: cliente.appointments.map(conLlegada),
     visitas: _count.visits,
     inasistencias: _count.appointments,
     ultimaVisita: visits[0]?.arrivedAt ?? null,

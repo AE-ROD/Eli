@@ -62,7 +62,12 @@ function escenario() {
       cita("cancelada-con-choque", { ...FUTURA, ...cancelada, memberId: "m-pedro" }),
       cita("de-pedro-activa", { ...FUTURA, memberId: "m-pedro", status: "confirmada" }),
       cita("completada", { status: "completada" }),
-      cita("no-vino", { status: "no-asistio" }),
+      // A otra hora que las demás de Carla: al volver no choca con nada.
+      cita("no-vino", { status: "no-asistio", startTime: new Date("2026-10-19T13:00:00.000Z"), endTime: new Date("2026-10-19T14:00:00.000Z") }),
+      // Pedro tiene otra cita a la hora de esta "no vino" y de esta completada.
+      cita("no-vino-con-choque", { status: "no-asistio", memberId: "m-pedro" }),
+      cita("completada-con-choque", { status: "completada", memberId: "m-pedro" }),
+      cita("de-pedro-pasada", { memberId: "m-pedro", status: "confirmada" }),
       cita("cobrada", { status: "completada" }),
       cita("cobrada-y-anulada", { status: "completada" }),
       cita("en-caja", { status: "completada" }),
@@ -186,6 +191,17 @@ describe("PUT /api/citas/[id] — reactivar", () => {
       expect(estadoDe("cancelada-pasada").status).toBe("cancelada")
     })
 
+    it("la regla de \"ya pasó\" se vuelve a mirar con la hora de la base, dentro de la transacción", async () => {
+      // El proceso cree que falta para la cita; la base dice que ya empezó.
+      base.prisma.$queryRaw.mockImplementationOnce(async () => [{ ahora: new Date("2099-10-20T13:00:01.000Z") }])
+      const res = await cambiar(sesiones.dueña, "cancelada-futura", { status: "confirmada" })
+      expect(res.status).toBe(409)
+      expect((await res.json()).error).toBe(MENSAJE_CANCELADA_PASADA)
+      expect(estadoDe("cancelada-futura").status).toBe("cancelada")
+      const [partes] = base.prisma.$queryRaw.mock.calls[0]
+      expect(partes.join("?")).toBe("SELECT clock_timestamp() AS ahora")
+    })
+
     it.each(["completada", "no-asistio", "en-progreso"])("no pasa a %s: 409", async (estado) => {
       const res = await cambiar(sesiones.dueña, "cancelada-futura", { status: estado })
       expect(res.status).toBe(409)
@@ -225,6 +241,27 @@ describe("PUT /api/citas/[id] — reactivar", () => {
       expect(estadoDe(id).status).toBe("confirmada")
     })
 
+    it("una de \"no vino\" que choca avisa con 409 y no guarda; confirmando, guarda (#140)", async () => {
+      const res = await cambiar(sesiones.dueña, "no-vino-con-choque", { status: "confirmada" })
+      expect(res.status).toBe(409)
+      const cuerpo = await res.json()
+      expect(cuerpo.advertencias.map((a: { tipo: string }) => a.tipo)).toContain("choque")
+      expect(estadoDe("no-vino-con-choque").status).toBe("no-asistio")
+
+      const confirmada = await cambiar(sesiones.dueña, "no-vino-con-choque", {
+        status: "confirmada",
+        confirmarAdvertencias: true,
+      })
+      expect(confirmada.status).toBe(200)
+      expect(estadoDe("no-vino-con-choque").status).toBe("confirmada")
+    })
+
+    it("una completada nunca soltó su hora: vuelve sin avisar aunque se pise con otra", async () => {
+      const res = await cambiar(sesiones.dueña, "completada-con-choque", { status: "confirmada" })
+      expect(res.status).toBe(200)
+      expect(estadoDe("completada-con-choque").status).toBe("confirmada")
+    })
+
     it.each(["pendiente", "cancelada", "en-progreso"])("no vuelve a %s: 409", async (estado) => {
       const res = await cambiar(sesiones.dueña, "completada", { status: estado })
       expect(res.status).toBe(409)
@@ -256,7 +293,8 @@ describe("PUT /api/citas/[id] — reactivar", () => {
     it("con una atención cobrada: 409, hay que anularla primero", async () => {
       const res = await cambiar(sesiones.dueña, "cobrada", { status: "confirmada" })
       expect(res.status).toBe(409)
-      expect((await res.json()).error).toBe(MENSAJE_CON_ATENCION)
+      // Una atención viva sin rendir se anula: no lleva el código de ajuste.
+      expect(await res.json()).toEqual({ error: MENSAJE_CON_ATENCION })
       expect(estadoDe("cobrada").status).toBe("completada")
     })
 
@@ -269,14 +307,16 @@ describe("PUT /api/citas/[id] — reactivar", () => {
       const antes = base.volcado()
       const res = await cambiar(sesiones.dueña, "en-caja", { status: "confirmada" })
       expect(res.status).toBe(409)
-      expect((await res.json()).error).toBe(MENSAJE_EN_CAJA)
+      // Con el mismo código que la anulación: la agenda decide con él, no con el texto (#134).
+      expect(await res.json()).toEqual({ error: MENSAJE_EN_CAJA, codigo: "corregir-con-ajuste" })
       expect(base.volcado()).toEqual(antes)
     })
 
     it("con la atención en una liquidación cerrada: 409 corrígelo con un ajuste", async () => {
       const res = await cambiar(sesiones.dueña, "liquidada", { status: "confirmada" })
       expect(res.status).toBe(409)
-      expect((await res.json()).error).toBe(MENSAJE_EN_LIQUIDACION)
+      // Con el mismo código que la anulación: la agenda decide con él, no con el texto (#134).
+      expect(await res.json()).toEqual({ error: MENSAJE_EN_LIQUIDACION, codigo: "corregir-con-ajuste" })
     })
 
     it("toma los candados de liquidación (en orden) y el de la caja compartido antes de mirar si está bloqueada", async () => {

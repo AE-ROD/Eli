@@ -385,11 +385,14 @@ describe("base falsa: el trigger atencion_servicios_comision_inmutable (#116)", 
   })
 
   it("la excepción del borrado en cascada: sin su atención, la línea liquidada suelta al profesional", async () => {
-    await prisma.visit.delete({ where: { id: "v1" } })
+    // El momento de la cascada en que la atención ya se borró y la línea todavía
+    // no: borrar la atención acá se llevaría la línea (la base falsa hace esa
+    // cascada), así que se carga la base en ese estado.
+    base.reiniciar({ ...base.volcado(), visit: [] })
 
-    // La base falsa no hace cascadas y revisa todas las FK en cada UPDATE (Postgres
-    // sólo las que cambian), así que la línea huérfana la frena la FK a su atención
-    // (P2003). Lo que importa acá es que el trigger la dejó pasar: no es un 23514.
+    // La base falsa revisa todas las FK en cada UPDATE (Postgres sólo las que
+    // cambian), así que la línea huérfana la frena la FK a su atención (P2003).
+    // Lo que importa acá es que el trigger la dejó pasar: no es un 23514.
     const suelta = prisma.visitService.update({ where: { id: "liquidada" }, data: { memberId: null } })
     await expect(suelta).rejects.toMatchObject({ code: "P2003" })
     await expect(suelta).rejects.not.toThrow(rechazo)
@@ -397,6 +400,127 @@ describe("base falsa: el trigger atencion_servicios_comision_inmutable (#116)", 
     await expect(prisma.visitService.update({ where: { id: "liquidada" }, data: { commissionPercent: 1 } })).rejects.toThrow(
       /ya está congelada/
     )
+  })
+})
+
+describe("base falsa: los triggers atencion_servicios_mismo_negocio y _liquidada_no_se_borra (#134)", () => {
+  const periodo = { memberName: "Ana", desde: new Date("2026-10-01"), hasta: new Date("2026-10-31") }
+  const linea = { serviceName: "Corte", professionalName: "Ana", priceCents: 1000 }
+
+  beforeEach(() => {
+    base.reiniciar({
+      business: [
+        { id: "n1", name: "Uno", slug: "uno", userId: "u1" },
+        { id: "n2", name: "Dos", slug: "dos", userId: "u2" },
+      ],
+      user: [
+        { id: "u1", name: "Ana", email: "a@test" },
+        { id: "u2", name: "Otro", email: "o@test" },
+      ],
+      businessMember: [
+        { id: "m1", businessId: "n1", userId: "u1" },
+        { id: "m2", businessId: "n2", userId: "u2" },
+      ],
+      producto: [
+        { id: "p1", businessId: "n1", name: "Cera" },
+        { id: "p2", businessId: "n2", name: "Cera ajena" },
+      ],
+      visit: [
+        { id: "v1", businessId: "n1", customerName: "María", status: "finalizada" },
+        { id: "v2", businessId: "n2", customerName: "Otra", status: "finalizada" },
+      ],
+      liquidacion: [
+        { id: "liq-1", businessId: "n1", memberId: "m1", ...periodo },
+        { id: "liq-2", businessId: "n2", memberId: "m2", ...periodo },
+      ],
+      visitService: [
+        { id: "suelta", visitId: "v1", memberId: "m1", ...linea },
+        { id: "liquidada", visitId: "v1", memberId: "m1", ...linea, liquidacionId: "liq-1" },
+      ],
+    })
+  })
+
+  describe("mismo negocio", () => {
+    it("al crear: el producto y la liquidación tienen que ser del negocio de la atención", async () => {
+      await expect(prisma.visitService.create({ data: { visitId: "v1", ...linea, productId: "p2" } })).rejects.toMatchObject({
+        code: "P2003",
+        message: expect.stringMatching(/producto es de otro negocio/),
+      })
+      await expect(
+        prisma.visitService.createMany({ data: [{ visitId: "v1", ...linea, liquidacionId: "liq-2" }] })
+      ).rejects.toThrow(/liquidación es de otro negocio/)
+      await expect(
+        prisma.visitService.create({ data: { visitId: "v1", ...linea, productId: "p1", liquidacionId: "liq-1" } })
+      ).resolves.toMatchObject({ productId: "p1" })
+      expect(base.buscar("visitService")).toHaveLength(3)
+    })
+
+    it("al actualizar: no se apunta a un producto o liquidación ajenos, ni se lleva la línea a una atención ajena", async () => {
+      for (const data of [{ productId: "p2" }, { liquidacionId: "liq-2" }]) {
+        await expect(prisma.visitService.update({ where: { id: "suelta" }, data })).rejects.toMatchObject({ code: "P2003" })
+      }
+      await prisma.visitService.update({ where: { id: "suelta" }, data: { productId: "p1" } })
+      // Sin profesional, para que lo que frene sea el producto.
+      await expect(prisma.visitService.update({ where: { id: "suelta" }, data: { visitId: "v2", memberId: null } })).rejects.toThrow(
+        /producto es de otro negocio/
+      )
+      await expect(
+        prisma.visitService.updateMany({ where: { id: "suelta" }, data: { liquidacionId: "liq-2" } })
+      ).rejects.toThrow(/liquidación es de otro negocio/)
+      expect(base.buscar("visitService", { id: "suelta" })[0]).toMatchObject({ visitId: "v1", memberId: "m1", productId: "p1", liquidacionId: null })
+    })
+
+    it("sólo mira si cambia la atención, el producto o la liquidación", async () => {
+      // Una línea que ya apunta a algo ajeno (no debería existir) no frena
+      // cambiar otro campo: el trigger no la vuelve a revisar.
+      base.reiniciar({ ...base.volcado(), visitService: [{ id: "rara", visitId: "v1", ...linea, productId: "p2" }] })
+      await expect(prisma.visitService.update({ where: { id: "rara" }, data: { serviceName: "Otro" } })).resolves.toBeTruthy()
+    })
+
+    it("el profesional también tiene que ser del negocio de la atención (26ff274)", async () => {
+      await expect(prisma.visitService.create({ data: { visitId: "v1", ...linea, memberId: "m2" } })).rejects.toMatchObject({
+        code: "P2003",
+        message: expect.stringMatching(/profesional es de otro negocio/),
+      })
+      await expect(prisma.visitService.update({ where: { id: "suelta" }, data: { memberId: "m2" } })).rejects.toThrow(
+        /profesional es de otro negocio/
+      )
+      await expect(prisma.visitService.update({ where: { id: "suelta" }, data: { visitId: "v2" } })).rejects.toThrow(
+        /profesional es de otro negocio/
+      )
+      expect(base.buscar("visitService", { id: "suelta" })[0]).toMatchObject({ visitId: "v1", memberId: "m1" })
+    })
+
+    it("el NULL de la cascada al borrar a un miembro pasa sin chequeo", async () => {
+      await expect(prisma.visitService.update({ where: { id: "suelta" }, data: { memberId: null } })).resolves.toMatchObject({
+        memberId: null,
+      })
+    })
+
+    it("en un UPDATE sin atención (cascada del negocio) deja pasar", async () => {
+      base.reiniciar({ ...base.volcado(), visit: [] })
+      // La FK a la atención la frena igual (P2003 de la FK, no del trigger).
+      const cambio = prisma.visitService.update({ where: { id: "suelta" }, data: { productId: "p2" } })
+      await expect(cambio).rejects.toThrow(/FK rota/)
+    })
+  })
+
+  describe("una línea liquidada no se borra", () => {
+    it("ni con delete ni con deleteMany; deleteMany no borra ninguna si una falla", async () => {
+      await expect(prisma.visitService.delete({ where: { id: "liquidada" } })).rejects.toThrow(/23514.*no se borra/)
+      await expect(prisma.visitService.deleteMany({ where: { visitId: "v1" } })).rejects.toThrow(/no se borra/)
+      expect(base.buscar("visitService").map((l) => l.id)).toEqual(["suelta", "liquidada"])
+    })
+
+    it("suelta (liquidación anulada y liberada) sí se borra", async () => {
+      await prisma.visitService.update({ where: { id: "liquidada" }, data: { liquidacionId: null } })
+      await expect(prisma.visitService.deleteMany({ where: { visitId: "v1" } })).resolves.toEqual({ count: 2 })
+    })
+
+    it("la excepción de la cascada: borrar la atención se lleva sus líneas, también la liquidada", async () => {
+      await prisma.visit.delete({ where: { id: "v1" } })
+      expect(base.buscar("visitService")).toEqual([])
+    })
   })
 })
 

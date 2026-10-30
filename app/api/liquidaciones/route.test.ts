@@ -490,6 +490,23 @@ describe("POST /api/liquidaciones/[id]/pago y /anulacion", () => {
     expect(base.buscar("liquidacion", { id })[0].estado).toBe("cerrada")
   })
 
+  it("anular toma el candado del negocio compartido y después el del profesional, como el cierre, antes de escribir", async () => {
+    const id = await cerrada()
+    vi.clearAllMocks()
+    enSesion(sesiones.dueña)
+    expect((await anular(id)).status).toBe(200)
+    const candados = base.prisma.$executeRaw.mock.calls.map(([partes, ...valores]) => [partes.join("?"), ...valores])
+    expect(candados).toEqual([
+      ["SELECT pg_advisory_xact_lock_shared(hashtext(?))", `liquidaciones:${NEGOCIO}`],
+      ["SELECT pg_advisory_xact_lock(hashtext(?), hashtext(?))", NEGOCIO, "m-carla"],
+    ])
+    // Un cambio de "Liquidar desde" en curso termina antes; uno que llega
+    // después espera a la anulación y ya la ve anulada.
+    expect(Math.max(...base.prisma.$executeRaw.mock.invocationCallOrder)).toBeLessThan(
+      base.prisma.liquidacion.updateMany.mock.invocationCallOrder[0]
+    )
+  })
+
   it("medio inexistente o sin motivo: 400", async () => {
     const id = await cerrada()
     expect((await pagar(id, { medio: "trueque" })).status).toBe(400)

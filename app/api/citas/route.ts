@@ -83,6 +83,9 @@ export async function GET(request: NextRequest) {
       member: { select: { id: true, role: true, user: { select: { id: true, name: true } } } },
       // "Por confirmar" en la agenda (#84).
       confirmacionPorFaltas: true,
+      // Quién canceló ("cliente" | "negocio") y cuándo, para el detalle (#134).
+      canceladaPor: true,
+      canceladaEn: true,
       // Sólo para saber si el cliente ya llegó: una por confirmar con
       // atención viva en el Tablero ya está resuelta. No sale en la respuesta.
       visit: { select: { status: true } },
