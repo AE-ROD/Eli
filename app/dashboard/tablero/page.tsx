@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { AnimatePresence } from "framer-motion"
-import { CircleAlert, RefreshCw, UserPlus } from "lucide-react"
+import Link from "next/link"
+import { CircleAlert, ListX, MonitorPlay, RefreshCw, UserPlus } from "lucide-react"
 import { BarraSuperior } from "@/components/panel/barra-superior"
-import { Boton } from "@/components/comunes/boton"
+import { Boton, clasesDeBoton } from "@/components/comunes/boton"
 import { ModalAnular } from "@/components/panel/modal-anular"
+import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { esEstadoActivo, type EstadoActivo, type PagoPedido } from "@/lib/atenciones"
 import { formatearMonto } from "@/lib/dinero"
@@ -23,6 +25,7 @@ import {
   puedeAnotarSinReserva,
   puedeAsignarLineasAOtros,
   puedeGestionarServicios,
+  puedeVaciarFilaVirtual,
   puedeVerTodoElTablero,
 } from "@/lib/permisos"
 import { cn } from "@/lib/utils"
@@ -36,6 +39,7 @@ import {
   marcarLlegada,
   marcarNoVino,
   moverAtencion,
+  vaciarFilaDeHoy,
   type Atencion,
   type DatosSinReserva,
   type MotivoDeFallo,
@@ -65,6 +69,7 @@ type ModalAbierto =
   | { tipo: "servicios"; atencion: Atencion; requisito: string | null; despues: Despues | null }
   | { tipo: "cobro"; atencion: Atencion }
   | { tipo: "anular"; atencion: Atencion }
+  | { tipo: "vaciar-fila"; personas: number }
 
 type ModalDeServicios = Extract<ModalAbierto, { tipo: "servicios" }>
 
@@ -475,6 +480,18 @@ export default function PaginaTablero() {
       recargar()
     })
 
+  /** "Vaciar la fila de hoy": anula a todos los que esperan en la fila virtual; los que ya se atienden siguen. */
+  const vaciarFila = () =>
+    desdeUnModal(async () => {
+      const resultado = await vaciarFilaDeHoy()
+      if (!resultado.ok) {
+        setGuardando(false)
+        return setAvisoDelModal(resultado.error)
+      }
+      cerrarModal()
+      recargar()
+    })
+
   const anotar = (datos: DatosSinReserva) =>
     desdeUnModal(async () => {
       const resultado = await anotarSinReserva(datos)
@@ -496,6 +513,12 @@ export default function PaginaTablero() {
 
   const listo = tablero !== null && estadoDeSesion !== "loading"
   const puedeAnotar = listo && puedeAnotarSinReserva(actor)
+  // Quienes esperan en la fila virtual (#85). Vaciarla se ofrece aunque la
+  // fila esté apagada: apagarla no saca a nadie.
+  const esperandoEnFila = listo
+    ? tablero.atenciones.filter((atencion) => atencion.turno !== null && atencion.estado === "en-espera").length
+    : 0
+  const puedeVaciarFila = esperandoEnFila > 0 && puedeVaciarFilaVirtual(actor)
 
   return (
     <div className="min-h-screen">
@@ -509,6 +532,31 @@ export default function PaginaTablero() {
       />
 
       <div className="space-y-4 px-4 pb-8 pt-4 sm:px-6 sm:pt-6">
+        {/* La fila virtual encendida (#85): su pantalla para el televisor o la tablet del local. */}
+        {listo && (tablero.filaVirtual || puedeVaciarFila) && (
+          <div className="flex flex-wrap gap-3">
+            {tablero.filaVirtual && (
+              <Link
+                href="/dashboard/fila"
+                className={clasesDeBoton({ variante: "secundario", tamano: "sm" })}
+              >
+                <MonitorPlay aria-hidden="true" className="size-4" strokeWidth={2} />
+                Pantalla de la fila
+              </Link>
+            )}
+            {puedeVaciarFila && (
+              <Boton
+                variante="fantasma"
+                tamano="sm"
+                onClick={() => abrirModal({ tipo: "vaciar-fila", personas: esperandoEnFila })}
+              >
+                <ListX aria-hidden="true" className="size-4" strokeWidth={2} />
+                Vaciar la fila de hoy
+              </Boton>
+            )}
+          </div>
+        )}
+
         {aviso && (
           <Aviso tono="error" rol="alert">
             {aviso}
@@ -626,6 +674,23 @@ export default function PaginaTablero() {
             aviso={avisoDelModal}
             guardando={guardando}
             onAnular={(motivo) => anular(modal.atencion, motivo)}
+            onCerrar={cerrarModal}
+          />
+        )}
+
+        {modal?.tipo === "vaciar-fila" && (
+          <ModalConfirmar
+            key="vaciar-fila"
+            titulo="¿Vaciar la fila de hoy?"
+            descripcion={`${
+              modal.personas === 1 ? "La persona que espera" : `Las ${modal.personas} personas que esperan`
+            } en la fila virtual ${modal.personas === 1 ? "queda" : "quedan"} fuera de la fila: su atención se anula y su celular dirá que ya no está en la fila. Quienes ya se están atendiendo siguen igual. No se deshace.`}
+            textoConfirmar="Vaciar la fila"
+            textoCancelar="Dejarla"
+            peligro
+            trabajando={guardando}
+            aviso={avisoDelModal}
+            onConfirmar={vaciarFila}
             onCerrar={cerrarModal}
           />
         )}

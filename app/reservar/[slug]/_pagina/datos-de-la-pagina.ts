@@ -57,6 +57,8 @@ export interface PaginaDelNegocio {
   equipo: ProfesionalPublico[]
   servicios: ServicioDeLaPagina[]
   horario: FranjaDelDia[]
+  /** Hasta cuántas horas antes se puede cancelar o cambiar (`Business.cancelacionHorasAntes`), dicho antes de reservar (#83). */
+  plazoDeCambiosHoras: number
 }
 
 const textoONull = (texto: string | null) => (texto ?? "").trim() || null
@@ -76,6 +78,7 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
       logoUrl: true,
       coverUrl: true,
       mediosDePago: true,
+      cancelacionHorasAntes: true,
       members: {
         select: { id: true, role: true, especialidad: true, fotoUrl: true, user: { select: { name: true } } },
         orderBy: { createdAt: "asc" },
@@ -120,5 +123,6 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
       })),
     servicios: negocio.services,
     horario: horarioSemanalDeAtencion(negocio.workSchedules),
+    plazoDeCambiosHoras: negocio.cancelacionHorasAntes,
   }
 })

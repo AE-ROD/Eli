@@ -631,3 +631,83 @@ describe("lib/email — mensajes a clientes (etapa 3)", () => {
     expect(enviarMock).not.toHaveBeenCalled()
   })
 })
+
+describe("lib/email — reservas por confirmar (#84)", () => {
+  beforeEach(() => {
+    vi.stubEnv("RESEND_API_KEY", "clave-de-prueba")
+    vi.resetModules()
+    enviarMock.mockClear()
+  })
+
+  const reserva = {
+    emailCliente: "cliente@ejemplo.com",
+    nombreCliente: "Lucía Pérez",
+    nombreNegocio: "Salón Uno",
+    servicio: "Corte",
+    fecha: "2026-09-10",
+    hora: "10:00",
+    duracion: 30,
+  }
+
+  it("la confirmación al cliente dice que el local la confirmará, sin hablar de faltas", async () => {
+    const { enviarConfirmacionCliente } = await import("./email")
+
+    await enviarConfirmacionCliente({ ...reserva, porConfirmar: true })
+
+    const { subject, html } = enviarMock.mock.calls[0][0]
+    expect(subject).toBe("Reserva recibida — Salón Uno")
+    expect(html).toContain("confirmará tu reserva")
+    expect(html).not.toMatch(/falt|no vino|inasist/i)
+    expect(html).not.toContain("¡Tu cita está confirmada!")
+  })
+
+  it("sin la marca, la confirmación es la de siempre", async () => {
+    const { enviarConfirmacionCliente } = await import("./email")
+
+    await enviarConfirmacionCliente(reserva)
+
+    const { subject, html } = enviarMock.mock.calls[0][0]
+    expect(subject).toBe("Cita confirmada — Salón Uno")
+    expect(html).toContain("¡Tu cita está confirmada!")
+    expect(html).not.toContain("confirmará tu reserva")
+  })
+
+  it("el aviso al negocio pide confirmarla o cancelarla en el panel", async () => {
+    const { enviarAvisoProfesional } = await import("./email")
+
+    await enviarAvisoProfesional({
+      emailProfesional: "duena@uno.test",
+      nombreNegocio: "Salón Uno",
+      nombreCliente: "Lucía Pérez",
+      servicio: "Corte",
+      fecha: "2026-09-10",
+      hora: "10:00",
+      porConfirmar: true,
+    })
+
+    const { subject, html } = enviarMock.mock.calls[0][0]
+    expect(subject).toBe("Reserva por confirmar — Lucía Pérez")
+    expect(html).toContain("confirmar la reserva o cancelarla")
+  })
+
+  it("el aviso de confirmada por el local escapa los datos y dice el día", async () => {
+    const { enviarReservaConfirmadaPorElLocal } = await import("./email")
+
+    await enviarReservaConfirmadaPorElLocal({
+      emailCliente: "cliente@ejemplo.com",
+      nombreCliente: "<b>Lucía</b>",
+      nombreNegocio: "Salón Uno",
+      servicio: "Corte",
+      fecha: "2026-09-10",
+      hora: "10:00",
+      profesional: "Carla",
+    })
+
+    const { subject, html, to } = enviarMock.mock.calls[0][0]
+    expect(to).toBe("cliente@ejemplo.com")
+    expect(subject).toBe("Reserva confirmada — Salón Uno")
+    expect(html).toContain("confirmó tu reserva")
+    expect(html).toContain("&lt;b&gt;Lucía&lt;/b&gt;")
+    expect(html).toContain("septiembre")
+  })
+})

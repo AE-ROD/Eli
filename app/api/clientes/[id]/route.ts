@@ -151,6 +151,7 @@ export async function GET(
           endTime: true,
           status: true,
           price: true,
+          confirmacionPorFaltas: true,
         },
       },
     },

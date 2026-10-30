@@ -12,6 +12,8 @@ import {
 } from "@/lib/bloqueos-de-dinero"
 import { tomarCandadosDeLaAtencion } from "@/lib/liquidacion"
 import { ESTADOS_DE_RESERVA } from "@/lib/llegadas"
+import { ORIGEN_FILA } from "@/lib/fila-virtual"
+import { programarAvisoDeFila } from "@/lib/fila-virtual-servidor"
 import { actorDeSesion, puedeAnular } from "@/lib/permisos"
 import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
 import {
@@ -108,6 +110,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       return leerAtencion(tx, actor, existente.id)
     })
+
+    // Se anuló a alguien que esperaba en la fila virtual: avisar al que sigue (#85).
+    if (existente.origen === ORIGEN_FILA && existente.status === "en-espera") programarAvisoDeFila(actor.businessId)
 
     return NextResponse.json(atencion)
   } catch (error) {

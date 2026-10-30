@@ -106,6 +106,8 @@ type TipoCorreo =
   | "aviso-lista-de-espera"
   | "te-toca"
   | "pedir-resena"
+  | "reserva-confirmada-por-el-local"
+  | "aviso-fila-virtual"
   | TipoCorreoDePrueba
 
 /**
@@ -322,6 +324,11 @@ export interface DatosConfirmacionCliente {
   enlaceDeGestion?: string | null
   /** Hasta cuántas horas antes se puede cambiar con el enlace. */
   plazoHoras?: number
+  /**
+   * La reserva entró por confirmar (#84): el correo dice que el local la
+   * confirmará, sin decir por qué. La pantalla de la reserva no lo dice.
+   */
+  porConfirmar?: boolean
 }
 
 export function enviarConfirmacionCliente(datos: DatosConfirmacionCliente) {
@@ -331,9 +338,17 @@ export function enviarConfirmacionCliente(datos: DatosConfirmacionCliente) {
   return enviar({
     tipo: "confirmacion-cliente",
     para: datos.emailCliente,
-    asunto: asunto`Cita confirmada — ${datos.nombreNegocio}`,
-    titulo: "¡Tu cita está confirmada!",
-    intro: html`Hola <strong>${datos.nombreCliente}</strong>, te esperamos en <strong>${datos.nombreNegocio}</strong>.`,
+    ...(datos.porConfirmar
+      ? {
+          asunto: asunto`Reserva recibida — ${datos.nombreNegocio}`,
+          titulo: "Recibimos tu reserva",
+          intro: html`Hola <strong>${datos.nombreCliente}</strong>, <strong>${datos.nombreNegocio}</strong> confirmará tu reserva y te avisaremos por correo cuando lo haga.`,
+        }
+      : {
+          asunto: asunto`Cita confirmada — ${datos.nombreNegocio}`,
+          titulo: "¡Tu cita está confirmada!",
+          intro: html`Hola <strong>${datos.nombreCliente}</strong>, te esperamos en <strong>${datos.nombreNegocio}</strong>.`,
+        }),
     detalle,
     ...(datos.enlaceDeGestion
       ? {
@@ -357,6 +372,8 @@ export interface DatosAvisoProfesional {
   comentarios?: string | null
   /** A quién quedó asignada; sin dar, no se muestra. */
   profesional?: string | null
+  /** Entró por confirmar (#84): el aviso pide confirmarla o cancelarla en el panel. */
+  porConfirmar?: boolean
 }
 
 export function enviarAvisoProfesional(datos: DatosAvisoProfesional) {
@@ -372,12 +389,43 @@ export function enviarAvisoProfesional(datos: DatosAvisoProfesional) {
   return enviar({
     tipo: "aviso-profesional",
     para: datos.emailProfesional,
-    asunto: asunto`Nueva reserva — ${datos.nombreCliente}`,
-    titulo: "Nueva reserva recibida",
+    asunto: datos.porConfirmar
+      ? asunto`Reserva por confirmar — ${datos.nombreCliente}`
+      : asunto`Nueva reserva — ${datos.nombreCliente}`,
+    titulo: datos.porConfirmar ? "Nueva reserva por confirmar" : "Nueva reserva recibida",
     intro: html`Tienes una nueva cita en <strong>${datos.nombreNegocio}</strong>.`,
     detalle,
     destacado: true,
-    cierre: html`Revisa tu calendario en tu panel para ver todos los detalles.`,
+    cierre: datos.porConfirmar
+      ? html`Este contacto faltó a citas anteriores. Entra a la agenda de tu panel para confirmar la reserva o cancelarla.`
+      : html`Revisa tu calendario en tu panel para ver todos los detalles.`,
+  })
+}
+
+export interface DatosReservaConfirmadaPorElLocal {
+  emailCliente: string
+  nombreCliente: string
+  nombreNegocio: string
+  servicio: string
+  /** `AAAA-MM-DD` y `HH:MM`, en el reloj del negocio. */
+  fecha: string
+  hora: string
+  profesional?: string | null
+}
+
+/** Al cliente: el local confirmó la reserva que había entrado por confirmar (#84). */
+export function enviarReservaConfirmadaPorElLocal(datos: DatosReservaConfirmadaPorElLocal) {
+  const detalle: Array<[string, string]> = [["Servicio", datos.servicio]]
+  if (datos.profesional) detalle.push(["Con", datos.profesional])
+  detalle.push(["Fecha", fechaLegible(datos.fecha)], ["Hora", datos.hora])
+  return enviar({
+    tipo: "reserva-confirmada-por-el-local",
+    para: datos.emailCliente,
+    asunto: asunto`Reserva confirmada — ${datos.nombreNegocio}`,
+    titulo: "¡Tu reserva está confirmada!",
+    intro: html`Hola <strong>${datos.nombreCliente}</strong>, <strong>${datos.nombreNegocio}</strong> confirmó tu reserva. Te esperamos.`,
+    detalle,
+    cierre: html`Si necesitas cancelar o cambiar tu cita, usa el enlace del correo de tu reserva o contacta al local.`,
   })
 }
 
@@ -746,5 +794,34 @@ export function enviarPedirResena(datos: DatosPedirResena) {
     cierre: html`Te escribimos porque aceptaste recibir avisos y novedades de ${datos.nombreNegocio}. Puedes dejar de recibirlos cuando quieras.`,
     enlaceDeBaja: datos.enlaceDeBaja,
     bajaEnUnClic: datos.enlaceDeBajaEnUnClic,
+  })
+}
+
+export interface DatosAvisoFilaVirtual {
+  emailCliente: string
+  /** El nombre con que se anotó en la fila. */
+  nombreCliente: string
+  nombreNegocio: string
+  /** Su número de turno del día. */
+  numero: number
+}
+
+/**
+ * "Ya casi es tu turno" (#85): a quien se anotó en la fila virtual con su
+ * correo, cuando queda 1 persona adelante (o ninguna). De servicio: lo pidió
+ * al anotarse, y se manda una sola vez por turno. Sin enlace al turno: la
+ * base guarda sólo el hash del token del celular, así que el correo no puede
+ * reconstruirlo; la persona ya tiene la página abierta en su teléfono.
+ */
+export function enviarAvisoFilaVirtual(datos: DatosAvisoFilaVirtual) {
+  return enviar({
+    tipo: "aviso-fila-virtual",
+    para: datos.emailCliente,
+    asunto: asunto`Ya casi es tu turno — ${datos.nombreNegocio}`,
+    titulo: "Ya casi es tu turno",
+    intro: html`Hola <strong>${datos.nombreCliente}</strong>, en <strong>${datos.nombreNegocio}</strong> ya casi es tu turno: queda a lo más una persona antes que tú.`,
+    detalle: [["Tu número", String(datos.numero)]],
+    destacado: true,
+    cierre: html`Acércate al local para no perderlo. Si ya no puedes ir, sal de la fila desde la página de tu turno.`,
   })
 }

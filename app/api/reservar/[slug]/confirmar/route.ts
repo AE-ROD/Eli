@@ -17,6 +17,7 @@ import { generarToken } from "@/lib/tokens"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { datosDeConsentimientoPromocional } from "@/lib/envios-a-clientes"
 import { marcarReservo } from "@/lib/lista-de-espera"
+import { DIAS_EN_QUE_CUENTAN_LAS_FALTAS } from "@/lib/por-confirmar"
 import { existeLaHora, instanteEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 import {
   MAX_RESERVAS_FUTURAS_POR_CONTACTO,
@@ -44,7 +45,7 @@ const INTENTOS_ANTE_CONFLICTO = 3
 const HORARIO_TOMADO = "El horario ya no está disponible"
 
 type Resultado =
-  | { tipo: "creada"; cita: { id: string; memberId: string | null } }
+  | { tipo: "creada"; cita: { id: string; memberId: string | null; confirmacionPorFaltas: boolean } }
   | { tipo: "rechazada"; error: string; status: number }
 
 interface Reserva {
@@ -60,6 +61,8 @@ interface Reserva {
   dia: { desde: Date; hasta: Date }
   /** sha256 del token del enlace para cancelar o reagendar: a la base va sólo esto. */
   manageTokenHash: string
+  /** `Business.porConfirmarTrasFaltas`: con cuántas faltas entra por confirmar (#84). Null: apagado. */
+  porConfirmarTrasFaltas: number | null
 }
 
 /** P2034: Postgres no pudo ordenar la transacción con otra concurrente; hay que reintentarla. */
@@ -83,7 +86,7 @@ async function reservarEnTransaccion(reserva: Reserva): Promise<Resultado> {
 /** Lo que se lee y escribe dentro de la transacción. Lo que rechaza no escribe nada. */
 async function reservar(
   tx: Prisma.TransactionClient,
-  { negocioId, servicio, datos, startTime, endTime, ahora, candidatos, dia, manageTokenHash }: Reserva
+  { negocioId, servicio, datos, startTime, endTime, ahora, candidatos, dia, manageTokenHash, porConfirmarTrasFaltas }: Reserva
 ): Promise<Resultado> {
   // A quién va, re-verificado dentro de la transacción con la misma regla con
   // la que `disponibilidad` ofreció la hora (`lib/agenda-publica.ts`): sus
@@ -202,6 +205,18 @@ async function reservar(
     }
   }
 
+  // Reservas por confirmar (#84): con la regla encendida, si el correo de
+  // quien reserva (normalizado) llega a N faltas en este negocio en el
+  // último año, la cita nace marcada y el local la confirma o la cancela.
+  // Quien reserva ve la misma respuesta que cualquiera: la marca sólo cambia
+  // el correo y el panel. Sólo por el correo, nunca por el teléfono: el
+  // correo de confirmación ("el local la confirmará") llega a esa misma
+  // casilla, así que no le revela nada a un tercero. Con el teléfono de otra
+  // persona y un correo propio, ese correo contaba si el teléfono faltó.
+  const confirmacionPorFaltas =
+    porConfirmarTrasFaltas !== null &&
+    (await faltasDelCorreo(tx, { negocioId, email, ahora, umbral: porConfirmarTrasFaltas })) >= porConfirmarTrasFaltas
+
   const cita = await tx.appointment.create({
     data: {
       title: servicio.name,
@@ -216,9 +231,10 @@ async function reservar(
       customerId: cliente.id,
       memberId: asignacion.memberId,
       manageTokenHash,
+      confirmacionPorFaltas,
       businessId: negocioId,
     },
-    select: { id: true, memberId: true },
+    select: { id: true, memberId: true, confirmacionPorFaltas: true },
   })
 
   // Lista de espera (#74): si estaba esperando ese día con este email, ya
@@ -227,6 +243,35 @@ async function reservar(
   await marcarReservo(tx, { businessId: negocioId, email, fecha: datos.fecha, ahora })
 
   return { tipo: "creada", cita }
+}
+
+/**
+ * Cuántas citas "no vino" tiene ese correo en este negocio en los últimos
+ * `DIAS_EN_QUE_CUENTAN_LAS_FALTAS` días, contando hasta `umbral`: sólo hace
+ * falta saber si llega. Sólo las de este negocio y de clientes no eliminados
+ * cuyo email es el mismo, sin mayúsculas (`emailSchema` ya guarda el email
+ * sin espacios en las puntas). El filtro va en la consulta y con `take`:
+ * dentro de la transacción `Serializable` no se traen todas las faltas del
+ * año. Sin correo no hay a quién contarle faltas.
+ */
+async function faltasDelCorreo(
+  tx: Prisma.TransactionClient,
+  { negocioId, email, ahora, umbral }: { negocioId: string; email: string | null; ahora: Date; umbral: number }
+): Promise<number> {
+  if (!email) return 0
+  const faltas = await tx.appointment.findMany({
+    where: {
+      businessId: negocioId,
+      status: "no-asistio",
+      startTime: { gte: new Date(ahora.getTime() - DIAS_EN_QUE_CUENTAN_LAS_FALTAS * MS_POR_DIA) },
+      customer: {
+        AND: [{ businessId: negocioId, email: { equals: email, mode: "insensitive" } }, clienteNoEliminado],
+      },
+    },
+    select: { id: true },
+    take: umbral,
+  })
+  return faltas.length
 }
 
 export async function POST(
@@ -248,6 +293,7 @@ export async function POST(
       slug: true,
       timezone: true,
       cancelacionHorasAntes: true,
+      porConfirmarTrasFaltas: true,
       invitadoPorId: true,
       referidoContabilizadoAt: true,
       user: { select: { email: true } },
@@ -332,6 +378,7 @@ export async function POST(
       candidatos,
       dia: rangoDelDiaEn(datos.fecha, zona),
       manageTokenHash: enlace.tokenHash,
+      porConfirmarTrasFaltas: negocio.porConfirmarTrasFaltas,
     })
     if (resultado.tipo === "rechazada") {
       return NextResponse.json({ error: resultado.error }, { status: resultado.status })
@@ -376,6 +423,8 @@ export async function POST(
           profesional: profesional?.nombre ?? null,
           enlaceDeGestion: `${baseUrl}${rutaDeGestion}`,
           plazoHoras: negocio.cancelacionHorasAntes,
+          // El correo sí lo dice: el local la confirmará (#84).
+          porConfirmar: cita.confirmacionPorFaltas,
         }).catch(() => null)
       )
     }
@@ -390,11 +439,14 @@ export async function POST(
         hora: datos.hora,
         comentarios: datos.comentarios,
         profesional: profesional?.nombre ?? null,
+        porConfirmar: cita.confirmacionPorFaltas,
       }).catch(() => null)
     )
 
     await Promise.all(emailsPromises)
 
+    // La respuesta es la misma con o sin la marca de por confirmar (#84): no
+    // le dice a quien escribió el correo o el teléfono si ese contacto faltó.
     return NextResponse.json(
       {
         citaId: cita.id,

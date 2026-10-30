@@ -102,6 +102,8 @@ export async function GET(request: NextRequest) {
           endTime: true,
           status: true,
           customer: { select: { id: true, name: true } },
+          // "Por confirmar" en la lista del día (#84).
+          confirmacionPorFaltas: true,
         },
         orderBy: { startTime: "asc" },
         // Listado sin agregar: siempre con tope (reglas/01-arquitectura.md).

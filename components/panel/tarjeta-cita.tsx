@@ -16,6 +16,8 @@ export interface CitaEnTarjeta {
   duracion: number // en minutos
   estado: EstadoDeCita
   notas?: string
+  /** Pendiente porque entró por confirmar tras faltas (#84): se lee "Por confirmar". */
+  porConfirmar?: boolean
 }
 
 interface PropsDeTarjetaCita {
@@ -38,9 +40,13 @@ const ESTADOS: Record<CitaEnTarjeta["estado"], { texto: string; clases: string }
   "no-asistio": { texto: "No vino", clases: "bg-navy/8 text-navy" },
 }
 
-function EstadoDeLaCita({ estado }: { estado: CitaEnTarjeta["estado"] }) {
+/** Una pendiente que el local tiene que confirmar (#84): el gris de la pendiente, con borde, y dicho en palabras. */
+const POR_CONFIRMAR = { texto: "Por confirmar", clases: "bg-tarjeta text-navy ring-1 ring-inset ring-navy" }
+
+function EstadoDeLaCita({ estado, porConfirmar = false }: { estado: CitaEnTarjeta["estado"]; porConfirmar?: boolean }) {
   // El endpoint no restringe el string: un estado desconocido se muestra tal cual, sin color.
-  const { texto, clases } = ESTADOS[estado] ?? { texto: estado, clases: "bg-borde text-navy" }
+  const { texto, clases } =
+    porConfirmar && estado === "pendiente" ? POR_CONFIRMAR : (ESTADOS[estado] ?? { texto: estado, clases: "bg-borde text-navy" })
   return (
     <span
       className={cn(
@@ -101,7 +107,7 @@ export function TarjetaCita({ cita, compacta = false, onClick }: PropsDeTarjetaC
         </span>
         <span className="flex shrink-0 flex-col items-end gap-1">
           <span className="text-sm font-medium tabular-nums">{cita.horaInicio}</span>
-          <EstadoDeLaCita estado={cita.estado} />
+          <EstadoDeLaCita estado={cita.estado} porConfirmar={cita.porConfirmar} />
         </span>
       </Contenedor>
     )
@@ -123,7 +129,7 @@ export function TarjetaCita({ cita, compacta = false, onClick }: PropsDeTarjetaC
             <span className="block truncate text-sm text-texto-2">{cita.servicio}</span>
           </span>
         </span>
-        <EstadoDeLaCita estado={cita.estado} />
+        <EstadoDeLaCita estado={cita.estado} porConfirmar={cita.porConfirmar} />
       </span>
 
       <span className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-borde pt-3 text-sm text-texto-2">

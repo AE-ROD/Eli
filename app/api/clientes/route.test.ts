@@ -101,6 +101,7 @@ function cita(id: string, customerId: string, memberId: string | null, dia: stri
     price: 8000,
     notes: null,
     clientComments: null,
+    confirmacionPorFaltas: false,
     ...datos,
   }
 }
@@ -435,7 +436,15 @@ describe("GET /api/clientes — el historial de citas de cada cliente", () => {
 
     expect(citas).toHaveLength(4)
     for (const citaDelHistorial of citas) {
-      expect(Object.keys(citaDelHistorial).sort()).toEqual(["endTime", "id", "price", "startTime", "status", "title"])
+      expect(Object.keys(citaDelHistorial).sort()).toEqual([
+        "confirmacionPorFaltas",
+        "endTime",
+        "id",
+        "price",
+        "startTime",
+        "status",
+        "title",
+      ])
     }
     expect(JSON.stringify(data)).not.toMatch(/Nota interna|Pidió que no la llamen/)
   })

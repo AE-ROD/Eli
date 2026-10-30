@@ -13,6 +13,7 @@ import { leerMonto } from "@/lib/dinero"
 import { pedir, pedirConCuerpo, conJson, type Resultado } from "@/lib/peticiones"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import type { Advertencia } from "@/lib/mover-cita"
+import { estaPorConfirmar } from "@/lib/por-confirmar"
 
 export interface Cita {
   id: string
@@ -32,6 +33,21 @@ export interface Cita {
   customer: { id: string; name: string; email: string | null; phone: string | null } | null
   /** A qué profesional está asignada. Nulo: sin asignar (o el dueño, que no es miembro). */
   memberId?: string | null
+  /** Entró por confirmar tras faltas (#84). Con status "pendiente", está por confirmar (`estaPorConfirmar`). */
+  confirmacionPorFaltas?: boolean
+  /** El cliente ya llegó: tiene una atención no anulada en el Tablero. */
+  conAtencion?: boolean
+}
+
+/**
+ * Si la cita espera que el local la confirme o la cancele (#84). Si el cliente
+ * ya llegó al Tablero, ya no: está resuelta, y confirmarla no le manda correo.
+ */
+export function citaPorConfirmar(cita: Pick<Cita, "status" | "confirmacionPorFaltas" | "conAtencion">): boolean {
+  return (
+    cita.conAtencion !== true &&
+    estaPorConfirmar({ status: cita.status, confirmacionPorFaltas: cita.confirmacionPorFaltas === true })
+  )
 }
 
 /**

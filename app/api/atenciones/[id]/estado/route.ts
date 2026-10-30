@@ -11,6 +11,8 @@ import {
   tiemposDeTransicion,
   transicionPermitida,
 } from "@/lib/atenciones"
+import { ORIGEN_FILA } from "@/lib/fila-virtual"
+import { programarAvisoDeFila } from "@/lib/fila-virtual-servidor"
 import { actorDeSesion } from "@/lib/permisos"
 import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
 import {
@@ -93,6 +95,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       return leerAtencion(tx, actor, existente.id)
     })
+
+    // Alguien de la fila virtual dejó de esperar: el que sigue puede haber
+    // quedado con 1 persona adelante (#85). Después de responder.
+    if (existente.origen === ORIGEN_FILA && desde === "en-espera") programarAvisoDeFila(actor.businessId)
 
     return NextResponse.json(atencion)
   } catch (error) {

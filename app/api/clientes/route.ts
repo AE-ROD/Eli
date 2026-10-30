@@ -106,6 +106,7 @@ export async function GET(request: NextRequest) {
             endTime: true,
             status: true,
             price: true,
+            confirmacionPorFaltas: true,
           },
         },
         visits: {

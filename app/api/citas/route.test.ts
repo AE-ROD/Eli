@@ -105,6 +105,26 @@ describe("GET /api/citas", () => {
     expect(citasFake.filter((c) => coincideConWhere(c, where))).toHaveLength(0)
   })
 
+  it("dice si el cliente ya llegó (atención no anulada) sin exponer la atención, y filtra por el negocio", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.appointment.findMany.mockResolvedValueOnce([
+      { id: "llego", businessId: "negocio-1", visit: { status: "en-espera" } },
+      { id: "anulada", businessId: "negocio-1", visit: { status: "anulada" } },
+      { id: "sin-atencion", businessId: "negocio-1", visit: null },
+    ] as never)
+
+    const data = await (await GET(pedidoFalso("http://localhost/api/citas"))).json()
+
+    expect(data).toEqual([
+      { id: "llego", businessId: "negocio-1", conAtencion: true },
+      { id: "anulada", businessId: "negocio-1", conAtencion: false },
+      { id: "sin-atencion", businessId: "negocio-1", conAtencion: false },
+    ])
+    const where = prismaMock.appointment.findMany.mock.calls[0][0].where
+    expect(coincideConWhere({ businessId: "otro-negocio", memberId: null }, where)).toBe(false)
+  })
+
   it("sin sesión recibe 401", async () => {
     const { GET } = await import("./route")
 
