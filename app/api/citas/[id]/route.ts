@@ -27,7 +27,7 @@ import { advertenciasDeAgenda } from "@/lib/advertencias-de-agenda"
 import { MENSAJE_CITA_CAMBIO, decidirReactivacion, problemaConLaAtencion } from "@/lib/reactivar-cita"
 import { ocupaElHorario } from "@/lib/ocupacion"
 import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
-import { estaPorConfirmar } from "@/lib/por-confirmar"
+import { estaPorConfirmar, mensajeDeReservaQueCambio } from "@/lib/por-confirmar"
 import { avisarReservaConfirmadaPorElLocal } from "@/lib/aviso-de-reserva-confirmada"
 
 const edicionDeCitaSchema = z.object({
@@ -307,7 +307,7 @@ export async function PUT(
           return NextResponse.json({ error: MENSAJE_POR_CONFIRMAR_CON_ATENCION }, { status: 409 })
         }
         if (cita.status === datos.status && soloCambiaElEstado(datos)) return NextResponse.json(cita)
-        return NextResponse.json({ error: MENSAJE_CITA_CAMBIO }, { status: 409 })
+        return NextResponse.json({ error: mensajeDeReservaQueCambio(datos.status) }, { status: 409 })
       }
       // Confirmada por el local: se le avisa al cliente, después de responder,
       // salvo que ya esté en el local.
