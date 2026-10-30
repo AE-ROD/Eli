@@ -16,7 +16,9 @@ import {
   crearCita,
   cambiarEstadoDeCita,
   citaEnBlanco,
+  hayProfesionales,
   leerHorarioDeAtencion,
+  leerProfesionales,
   type Bloqueo,
   type Cita,
   type DatosDeNuevaCita,
@@ -32,6 +34,8 @@ import { ModalMoverCita } from "./_componentes/modal-mover-cita"
 import { ModalBloquearHorario } from "./_componentes/modal-bloquear-horario"
 import { ModalBloqueo } from "./_componentes/modal-bloqueo"
 import { ListaDeEsperaDelDia } from "./_componentes/lista-de-espera-del-dia"
+import { useZonaDelNegocio } from "./_componentes/zona-del-negocio"
+import { hoyEn } from "./_hora-del-negocio"
 
 function resumen(cargando: boolean, cantidad: number): string {
   if (cargando) return "Cargando..."
@@ -49,7 +53,9 @@ export default function PaginaAgenda() {
   const miembroPropio = actor?.memberId ? { id: actor.memberId, businessId: actor.businessId } : null
   const puedeBloquear = bloqueaATodos || puedeGestionarBloqueoDe(actor, miembroPropio)
 
-  const [fecha, setFecha] = useState(new Date())
+  // "Hoy" es el del negocio, no el del navegador (#99).
+  const zona = useZonaDelNegocio()
+  const [fecha, setFecha] = useState(() => hoyEn(zona))
   const [modo, setModo] = useState<UnidadDeTiempo>("semana")
   const [citas, setCitas] = useState<Cita[]>([])
   const [cargando, setCargando] = useState(true)
@@ -59,8 +65,12 @@ export default function PaginaAgenda() {
   const [modalAbierto, setModalAbierto] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [avisoDelModal, setAvisoDelModal] = useState("")
-  const [nuevaCita, setNuevaCita] = useState<DatosDeNuevaCita>(() => citaEnBlanco(new Date()))
+  const [nuevaCita, setNuevaCita] = useState<DatosDeNuevaCita>(() => citaEnBlanco(hoyEn(zona)))
   const [citaAMover, setCitaAMover] = useState<Cita | null>(null)
+  // El modal de mover, sólo para elegir el profesional de una cita sin asignar (#103).
+  const [soloAsignar, setSoloAsignar] = useState(false)
+  // Si hay profesionales a quien asignar: sólo entonces se destacan las citas sin profesional.
+  const [conProfesionales, setConProfesionales] = useState(false)
   const [horario, setHorario] = useState<FranjaDelDia[]>([])
   const [bloqueos, setBloqueos] = useState<Bloqueo[]>([])
   const [advertenciasDeNuevaCita, setAdvertenciasDeNuevaCita] = useState<Advertencia[]>([])
@@ -97,6 +107,20 @@ export default function PaginaAgenda() {
     })
   }, [])
 
+  // Sólo quien asigna (dueña y encargado) lo pide. Si no carga, no se destaca
+  // nada: la agenda se ve como antes.
+  useEffect(() => {
+    if (!puedeAsignarProfesional) return
+    leerProfesionales().then((resultado) => {
+      if (resultado.ok) setConProfesionales(hayProfesionales(resultado.datos))
+    })
+  }, [puedeAsignarProfesional])
+
+  const abrirMover = (cita: Cita, asignar: boolean) => {
+    setSoloAsignar(asignar)
+    setCitaAMover(cita)
+  }
+
   /** La cita ya cambió de estado en el servidor: la agenda y el detalle la muestran así. */
   const mostrarEstado = (id: string, estado: string) => {
     setCitas((previas) => previas.map((cita) => (cita.id === id ? { ...cita, status: estado } : cita)))
@@ -127,7 +151,7 @@ export default function PaginaAgenda() {
 
     setAvisoDelModal("")
     setGuardando(true)
-    const resultado = await crearCita(nuevaCita, { confirmar })
+    const resultado = await crearCita(nuevaCita, zona, { confirmar })
     setGuardando(false)
 
     // El aviso va dentro del modal, que sigue abierto con lo que se cargó: en
@@ -177,7 +201,7 @@ export default function PaginaAgenda() {
               idDelTitulo={idDelPeriodo}
               onAnterior={() => setFecha((actual) => desplazarFecha(actual, modo, -1))}
               onSiguiente={() => setFecha((actual) => desplazarFecha(actual, modo, 1))}
-              onHoy={() => setFecha(new Date())}
+              onHoy={() => setFecha(hoyEn(zona))}
               onVista={setModo}
             />
 
@@ -189,6 +213,7 @@ export default function PaginaAgenda() {
                 bloqueos={bloqueos}
                 onSeleccionar={setCitaAbierta}
                 onSeleccionarBloqueo={setBloqueoAbierto}
+                destacarSinProfesional={conProfesionales}
               />
             )}
             {modo === "dia" && (
@@ -199,6 +224,7 @@ export default function PaginaAgenda() {
                 bloqueos={bloqueos}
                 onSeleccionar={setCitaAbierta}
                 onSeleccionarBloqueo={setBloqueoAbierto}
+                destacarSinProfesional={conProfesionales}
               />
             )}
             {modo === "mes" && (
@@ -219,7 +245,9 @@ export default function PaginaAgenda() {
                 cita={citaAbierta}
                 onCerrar={() => setCitaAbierta(null)}
                 onCambiarEstado={cambiarEstado}
-                onMover={setCitaAMover}
+                onMover={(cita) => abrirMover(cita, false)}
+                onAsignar={(cita) => abrirMover(cita, true)}
+                destacarSinProfesional={conProfesionales}
                 onReactivada={mostrarEstado}
               />
             )}
@@ -289,6 +317,7 @@ export default function PaginaAgenda() {
           <ModalMoverCita
             cita={citaAMover}
             puedeAsignarProfesional={puedeAsignarProfesional}
+            soloAsignar={soloAsignar}
             onMovida={() => {
               setCitaAMover(null)
               recargar(fecha, modo)
