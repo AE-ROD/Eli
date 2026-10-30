@@ -304,6 +304,27 @@ async function faltasDelCorreo(
   return faltas.length
 }
 
+const mismaCasilla = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+
+/**
+ * El correo del usuario del profesional al que quedó la cita, leído por id Y
+ * negocio: un `memberId` de otro negocio no da correo. Sin profesional, o si
+ * la lectura falla, null: la reserva ya está hecha y el dueño igual se entera.
+ */
+async function correoDelProfesional(negocioId: string, memberId: string | null): Promise<string | null> {
+  if (!memberId) return null
+  try {
+    const miembro = await prisma.businessMember.findFirst({
+      where: { id: memberId, businessId: negocioId },
+      select: { user: { select: { email: true } } },
+    })
+    return miembro?.user?.email || null
+  } catch (error) {
+    registrarError("leyendo el correo del profesional para el aviso de reserva", error)
+    return null
+  }
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
@@ -469,19 +490,29 @@ export async function POST(
       )
     }
 
-    emailsPromises.push(
-      enviarAvisoProfesional({
-        emailProfesional: negocio.user.email,
-        nombreNegocio: negocio.name,
-        nombreCliente: `${datos.nombre} ${datos.apellido}`,
-        servicio: resumen.titulo,
-        fecha: datos.fecha,
-        hora: datos.hora,
-        comentarios: datos.comentarios,
-        profesional: profesional?.nombre ?? null,
-        porConfirmar: cita.confirmacionPorFaltas,
-      }).catch(() => null)
-    )
+    // El aviso de nueva reserva va al dueño y, si la cita quedó a nombre de un
+    // profesional (elegido o asignado por "cualquiera"), también a él, con el
+    // correo de su usuario (#114). Una sola vez si es la misma casilla.
+    const avisados = [negocio.user.email]
+    const correoProfesional = await correoDelProfesional(negocio.id, cita.memberId)
+    if (correoProfesional && !avisados.some((correo) => mismaCasilla(correo, correoProfesional))) {
+      avisados.push(correoProfesional)
+    }
+    for (const emailProfesional of avisados) {
+      emailsPromises.push(
+        enviarAvisoProfesional({
+          emailProfesional,
+          nombreNegocio: negocio.name,
+          nombreCliente: `${datos.nombre} ${datos.apellido}`,
+          servicio: resumen.titulo,
+          fecha: datos.fecha,
+          hora: datos.hora,
+          comentarios: datos.comentarios,
+          profesional: profesional?.nombre ?? null,
+          porConfirmar: cita.confirmacionPorFaltas,
+        }).catch(() => null)
+      )
+    }
 
     await Promise.all(emailsPromises)
 
