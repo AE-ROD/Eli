@@ -19,6 +19,11 @@ function momento(iso: string, zona: string): string {
   return new Date(iso).toLocaleString("es-CL", { timeZone: zona, day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })
 }
 
+/** `lunes 20 de octubre` en la zona del negocio. */
+function dia(iso: string, zona: string): string {
+  return new Date(iso).toLocaleDateString("es-CL", { timeZone: zona, weekday: "long", day: "numeric", month: "long" })
+}
+
 /** `14:30` en la zona del negocio. */
 function hora(iso: string, zona: string): string {
   return new Date(iso).toLocaleTimeString("es-CL", { timeZone: zona, hour: "2-digit", minute: "2-digit" })
@@ -202,6 +207,13 @@ function CajaAbierta({ estado, onCerrada, onCambio }: PropsDeCajaAbierta) {
         subtitulo={`Desde el ${momento(abierta.desde, zona)} hasta ahora.`}
         icono={{ figura: Wallet }}
       />
+
+      {abierta.cobrosDesde && (
+        <Aviso tono="atencion" className="mt-4" titulo="Este cierre junta varios días">
+          La caja no se cerró después de los cobros del {dia(abierta.cobrosDesde, zona)}: este cierre los incluye junto
+          con los de hoy. Cuenta el efectivo de todos esos días.
+        </Aviso>
+      )}
 
       <dl className="mt-4 divide-y divide-borde border-y border-borde text-sm">
         <Renglon termino="Efectivo cobrado" valor={formatearMonto(abierta.efectivoCobrado)} />

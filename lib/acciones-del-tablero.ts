@@ -579,6 +579,17 @@ export function avisoDeComisionesPendientes(
     : `${cuantos} sin porcentaje de comisión: avísale a la dueña.`
 }
 
+/**
+ * Lo que se le dice a quien va a cobrar si alguna línea quedará sin % de
+ * comisión (#118), o `null` si ninguna. Es sólo un aviso: el cobro sigue.
+ */
+export function avisoAntesDeCobrar(cuantas: number): string | null {
+  if (cuantas <= 0) return null
+  return cuantas === 1
+    ? "1 servicio quedará sin porcentaje de comisión. Se cobra igual: queda pendiente hasta que se configure en Comisiones."
+    : `${cuantas} servicios quedarán sin porcentaje de comisión. Se cobra igual: quedan pendientes hasta que se configuren en Comisiones.`
+}
+
 // ─── Cobro ───────────────────────────────────────────────────────────────────
 
 /** Una fila del cobro tal como está escrita. */
