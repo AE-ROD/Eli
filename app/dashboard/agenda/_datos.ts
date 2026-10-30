@@ -13,7 +13,7 @@ import { leerMonto } from "@/lib/dinero"
 import { pedir, pedirConCuerpo, conJson, type Resultado } from "@/lib/peticiones"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import { sePuedeMover, type Advertencia } from "@/lib/mover-cita"
-import { estaPorConfirmar } from "@/lib/por-confirmar"
+import { sigueSinConfirmar } from "@/lib/por-confirmar"
 import { isoEn } from "./_hora-del-negocio"
 
 export interface Cita {
@@ -47,10 +47,7 @@ export interface Cita {
  * ya llegó al Tablero, ya no: está resuelta, y confirmarla no le manda correo.
  */
 export function citaPorConfirmar(cita: Pick<Cita, "status" | "confirmacionPorFaltas" | "conAtencion">): boolean {
-  return (
-    cita.conAtencion !== true &&
-    estaPorConfirmar({ status: cita.status, confirmacionPorFaltas: cita.confirmacionPorFaltas === true })
-  )
+  return sigueSinConfirmar(cita)
 }
 
 /**

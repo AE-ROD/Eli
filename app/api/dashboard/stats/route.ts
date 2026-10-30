@@ -14,6 +14,7 @@ import {
   type Actor,
 } from "@/lib/permisos"
 import { esZonaHorariaValida, iniciosDeMesEn } from "@/lib/reportes"
+import { LLEGADA_DE_LA_CITA, conLlegada } from "@/lib/por-confirmar"
 
 /**
  * Variación porcentual entre dos períodos comparables.
@@ -102,8 +103,10 @@ export async function GET(request: NextRequest) {
           endTime: true,
           status: true,
           customer: { select: { id: true, name: true } },
-          // "Por confirmar" en la lista del día (#84).
+          // "Por confirmar" en la lista del día (#84). Con la atención, sólo
+          // para saber si el cliente ya llegó (`conAtencion`), como la agenda.
           confirmacionPorFaltas: true,
+          ...LLEGADA_DE_LA_CITA,
         },
         orderBy: { startTime: "asc" },
         // Listado sin agregar: siempre con tope (reglas/01-arquitectura.md).
@@ -179,7 +182,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     citasHoy: citasHoy.length,
-    citasHoyLista: citasHoy,
+    citasHoyLista: citasHoy.map(conLlegada),
     ...(proximaCita && { proximaCita }),
     totalClientes,
     clientesNuevosMes,

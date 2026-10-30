@@ -7,6 +7,7 @@ import { emailOVacio, etiquetas, nombre, notas, telefonoChileno } from "@/lib/ca
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { registrarError } from "@/lib/registro-de-errores"
 import { datosDeBajaPromocional, datosDeConsentimientoPromocional } from "@/lib/envios-a-clientes"
+import { LLEGADA_DE_LA_CITA, conLlegada } from "@/lib/por-confirmar"
 import {
   clienteNoEliminado,
   datosDeClienteEliminado,
@@ -152,6 +153,8 @@ export async function GET(
           status: true,
           price: true,
           confirmacionPorFaltas: true,
+          // Sólo para `conAtencion`: no sale en la respuesta.
+          ...LLEGADA_DE_LA_CITA,
         },
       },
     },
@@ -161,7 +164,7 @@ export async function GET(
     return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 })
   }
 
-  return NextResponse.json(cliente)
+  return NextResponse.json({ ...cliente, appointments: cliente.appointments.map(conLlegada) })
 }
 
 export async function PUT(

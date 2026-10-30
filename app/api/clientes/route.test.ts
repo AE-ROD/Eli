@@ -439,6 +439,7 @@ describe("GET /api/clientes — el historial de citas de cada cliente", () => {
     expect(citas).toHaveLength(4)
     for (const citaDelHistorial of citas) {
       expect(Object.keys(citaDelHistorial).sort()).toEqual([
+        "conAtencion",
         "confirmacionPorFaltas",
         "endTime",
         "id",
@@ -449,6 +450,28 @@ describe("GET /api/clientes — el historial de citas de cada cliente", () => {
       ])
     }
     expect(JSON.stringify(data)).not.toMatch(/Nota interna|Pidió que no la llamen/)
+  })
+
+  it("conAtencion: la cita cuyo cliente ya llegó (atención no anulada) deja de estar por confirmar; la atención no viaja", async () => {
+    const { GET } = await import("./route")
+    const agregadas = [
+      atencionCobrada("v-llego", "cliente-1", "01", { appointmentId: "cita-propia", status: "en-espera" }),
+      atencionCobrada("v-anulada", "cliente-1", "05", { appointmentId: "cita-sin-asignar", status: "anulada" }),
+    ]
+    atencionesFake.push(...agregadas)
+    try {
+      mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+      const data = await (await GET(fakeGet())).json()
+      const citas = Object.fromEntries(
+        data.clientes
+          .flatMap((c: { appointments: { id: string; conAtencion: boolean }[] }) => c.appointments)
+          .map((a: { id: string; conAtencion: boolean }) => [a.id, a.conAtencion])
+      )
+      expect(citas).toMatchObject({ "cita-propia": true, "cita-sin-asignar": false, "cita-del-colega": false })
+      expect(JSON.stringify(data)).not.toMatch(/"visit"|en-espera|anulada/)
+    } finally {
+      atencionesFake.splice(0, atencionesFake.length)
+    }
   })
 })
 
