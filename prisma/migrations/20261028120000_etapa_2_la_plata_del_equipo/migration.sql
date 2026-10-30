@@ -398,25 +398,28 @@ BEFORE DELETE ON "atencion_servicios"
 FOR EACH ROW EXECUTE FUNCTION atencion_servicios_liquidada_no_se_borra();
 
 
--- ─── Trigger: producto y liquidación, del mismo negocio que la atención ────
+-- ─── Trigger: profesional, producto y liquidación, del mismo negocio ───────
 -- `atencion_servicios` no tiene `businessId` propio, así que las FK a
--- `productos` y `liquidaciones` no pueden ser compuestas como las de
--- `atencion_propinas`. Esto cubre ese hueco: una línea nunca apunta a un
--- producto ni a una liquidación de otro negocio. Sólo mira cuando cambia
--- la atención, el producto o la liquidación, y no estorba a la cascada que
--- borra un negocio entero.
+-- `miembros_negocio`, `productos` y `liquidaciones` no pueden ser compuestas
+-- como las de `atencion_propinas`. Esto cubre ese hueco: una línea nunca
+-- apunta a un profesional, un producto ni una liquidación de otro negocio
+-- (el profesional decide a quién va la comisión: uno ajeno la cobraría en su
+-- liquidación). Sólo mira cuando cambia la atención, el profesional, el
+-- producto o la liquidación, y no estorba a la cascada que borra un negocio
+-- entero ni a la que pone `memberId` en NULL al borrar a un miembro.
 CREATE FUNCTION atencion_servicios_mismo_negocio() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE
   negocio TEXT;
 BEGIN
-  IF NEW."productId" IS NULL AND NEW."liquidacionId" IS NULL THEN
+  IF NEW."memberId" IS NULL AND NEW."productId" IS NULL AND NEW."liquidacionId" IS NULL THEN
     RETURN NEW;
   END IF;
 
   -- En INSERT no se lee OLD: el IF de afuera separa los dos casos.
   IF TG_OP = 'UPDATE' THEN
     IF NEW."visitId" = OLD."visitId"
+       AND NEW."memberId" IS NOT DISTINCT FROM OLD."memberId"
        AND NEW."productId" IS NOT DISTINCT FROM OLD."productId"
        AND NEW."liquidacionId" IS NOT DISTINCT FROM OLD."liquidacionId" THEN
       RETURN NEW;
@@ -430,6 +433,13 @@ BEGIN
   -- comparar. En un INSERT no pasa: la FK a `atenciones` ya lo rechaza.
   IF negocio IS NULL AND TG_OP = 'UPDATE' THEN
     RETURN NEW;
+  END IF;
+
+  IF NEW."memberId" IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM "miembros_negocio" WHERE "id" = NEW."memberId" AND "businessId" = negocio
+  ) THEN
+    RAISE EXCEPTION 'atencion_servicios %: el profesional es de otro negocio', NEW."id"
+      USING ERRCODE = 'foreign_key_violation';
   END IF;
 
   IF NEW."productId" IS NOT NULL AND NOT EXISTS (
