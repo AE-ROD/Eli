@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma"
 import { enviarRecordatorio } from "@/lib/email"
 import { llamadaDeCronAutorizada } from "@/lib/cron"
 import { registrarError } from "@/lib/registro-de-errores"
+import { ESTADOS_GESTIONABLES } from "@/lib/gestion-de-cita"
+import { ORIGEN_RESERVA_PUBLICA } from "@/lib/reserva-publica"
+import { generarToken } from "@/lib/tokens"
 import {
   ESTADOS_SIN_RECORDATORIO,
   esDeMañana,
@@ -27,6 +30,12 @@ import {
  * garantiza que el cliente sea del mismo negocio que la cita. Si no coinciden,
  * no se envía (el correo saldría con el nombre de un negocio a un cliente de
  * otro): se omite, se cuenta en `omitidas` y se registra sólo el id de la cita.
+ *
+ * Reservas públicas de antes de la etapa 1 (#106): no tienen enlace para
+ * cancelar o reagendar (`manageTokenHash` null). Al recordarlas se les genera
+ * uno (a la base va sólo el hash, y sólo si seguía vacío: nunca se pisa uno
+ * existente) y el correo lo trae. Si el envío falla, el hash se borra junto
+ * con la marca: el token en claro no llegó a nadie, y el reintento genera otro.
  */
 
 export const maxDuration = 60
@@ -41,6 +50,31 @@ function nombreCompleto(cliente: { name: string; lastName: string | null }): str
   return cliente.lastName ? `${cliente.name} ${cliente.lastName}` : cliente.name
 }
 
+interface CitaParaEnlace {
+  id: string
+  businessId: string
+  status: string
+  source: string
+  manageTokenHash: string | null
+}
+
+/**
+ * Si la cita es una reserva pública gestionable sin enlace, le genera uno y
+ * guarda su hash sólo si seguía vacío (idempotente: dos corridas no se pisan,
+ * y un enlace existente nunca se reemplaza). Devuelve el token en claro para
+ * el correo, o null si no corresponde o si otro proceso ya le puso uno.
+ */
+async function enlaceParaCitaSinToken(cita: CitaParaEnlace): Promise<{ token: string; tokenHash: string } | null> {
+  if (cita.manageTokenHash || cita.source !== ORIGEN_RESERVA_PUBLICA) return null
+  if (!(ESTADOS_GESTIONABLES as readonly string[]).includes(cita.status)) return null
+  const enlace = generarToken()
+  const { count } = await prisma.appointment.updateMany({
+    where: { id: cita.id, businessId: cita.businessId, manageTokenHash: null },
+    data: { manageTokenHash: enlace.tokenHash },
+  })
+  return count === 1 ? enlace : null
+}
+
 export async function GET(request: NextRequest) {
   if (!llamadaDeCronAutorizada(request)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
@@ -49,6 +83,7 @@ export async function GET(request: NextRequest) {
   const inicio = Date.now()
   const ahora = new Date(inicio)
   const ventana = ventanaDeBusqueda(ahora)
+  const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000"
   let enviados = 0
   let fallidos = 0
   let omitidas = 0
@@ -68,8 +103,11 @@ export async function GET(request: NextRequest) {
         businessId: true,
         startTime: true,
         title: true,
+        status: true,
+        source: true,
+        manageTokenHash: true,
         customer: { select: { name: true, lastName: true, email: true, businessId: true } },
-        business: { select: { name: true, timezone: true } },
+        business: { select: { name: true, slug: true, timezone: true, cancelacionHorasAntes: true } },
       },
       orderBy: { startTime: "asc" },
       take: TOPE,
@@ -96,7 +134,9 @@ export async function GET(request: NextRequest) {
       if (marcada.count === 0) continue
 
       let enviado = false
+      let enlaceNuevo: { token: string; tokenHash: string } | null = null
       try {
+        enlaceNuevo = await enlaceParaCitaSinToken(cita)
         const { fecha, hora } = fechaYHoraEnElNegocio(cita.startTime, cita.business.timezone)
         const resultado = await enviarRecordatorio({
           emailCliente: cita.customer.email,
@@ -105,6 +145,12 @@ export async function GET(request: NextRequest) {
           servicio: cita.title,
           fecha,
           hora,
+          ...(enlaceNuevo
+            ? {
+                enlaceDeGestion: `${baseUrl}/reservar/${encodeURIComponent(cita.business.slug)}/cita/${enlaceNuevo.token}`,
+                plazoHoras: cita.business.cancelacionHorasAntes,
+              }
+            : {}),
         })
         if (resultado?.error) {
           // Sólo el código de Resend: su mensaje puede repetir el destinatario.
@@ -121,10 +167,26 @@ export async function GET(request: NextRequest) {
       }
       fallidos++
       try {
-        await prisma.appointment.updateMany({
-          where: { id: cita.id, reminderSentAt: ahora },
-          data: { reminderSentAt: null },
-        })
+        if (enlaceNuevo) {
+          // Una sola escritura: liberar la marca y quitar el hash que puso esta
+          // corrida van juntos. Con dos, si fallara la segunda quedaría un hash
+          // cuyo token se perdió y el cliente nunca recibiría su enlace. Si el
+          // hash cambió entretanto, no se toca nada.
+          await prisma.appointment.updateMany({
+            where: {
+              id: cita.id,
+              businessId: cita.businessId,
+              reminderSentAt: ahora,
+              manageTokenHash: enlaceNuevo.tokenHash,
+            },
+            data: { reminderSentAt: null, manageTokenHash: null },
+          })
+        } else {
+          await prisma.appointment.updateMany({
+            where: { id: cita.id, reminderSentAt: ahora },
+            data: { reminderSentAt: null },
+          })
+        }
       } catch (error) {
         registrarError("liberando un recordatorio", error)
       }

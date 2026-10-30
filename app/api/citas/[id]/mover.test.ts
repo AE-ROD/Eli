@@ -42,6 +42,8 @@ function escenario() {
     appointment: [
       cita("cita-carla", "m-carla", "2026-10-20", "10:00", "10:30"),
       cita("cita-pedro", "m-pedro", "2026-10-20", "11:00", "12:00"),
+      // Sin profesional (una reserva pública de antes), el martes de 11:30 a 12:00.
+      cita("cita-sin-asignar", null, "2026-10-20", "11:30", "12:00"),
       // Otra de Carla, el miércoles de 10 a 11: contra ésta choca.
       cita("cita-carla-miercoles", "m-carla", "2026-10-21", "10:00", "11:00"),
       // Cancelada el miércoles de 15 a 16: no ocupa el horario.
@@ -245,6 +247,30 @@ describe("PUT /api/citas/[id]: mover una cita", () => {
       const { advertencias } = await res.json()
       expect(advertencias.map((a: { tipo: string }) => a.tipo)).toEqual(["choque", "fuera-de-horario"])
       expect(advertencias[0].mensaje).toBe("Pedro Profesional ya tiene una cita de 11:00 a 12:00.")
+    })
+
+    it("asignar una cita sin profesional mandando sólo memberId: avisa del choque y no toca el horario (#103)", async () => {
+      const antes = base.volcado()
+      const res = await put(sesiones.dueña, "cita-sin-asignar", { memberId: "m-pedro" })
+
+      expect(res.status).toBe(409)
+      const { advertencias } = await res.json()
+      expect(advertencias[0].mensaje).toBe("Pedro Profesional ya tiene una cita de 11:00 a 12:00.")
+      expect(base.volcado()).toEqual(antes)
+
+      const confirmada = await put(sesiones.dueña, "cita-sin-asignar", { memberId: "m-pedro", confirmarAdvertencias: true })
+      expect(confirmada.status).toBe(200)
+      expect(guardada("cita-sin-asignar").memberId).toBe("m-pedro")
+      expect(guardada("cita-sin-asignar").startTime).toEqual(santiago("2026-10-20", "11:30"))
+      expect(guardada("cita-sin-asignar").endTime).toEqual(santiago("2026-10-20", "12:00"))
+    })
+
+    it("el profesional no llega a una cita sin asignar: 404 y nada cambia (#103)", async () => {
+      const antes = base.volcado()
+      const res = await put(sesiones.carla, "cita-sin-asignar", { memberId: "m-carla" })
+
+      expect(res.status).toBe(404)
+      expect(base.volcado()).toEqual(antes)
     })
 
     it("avisa si queda fuera del horario del negocio", async () => {

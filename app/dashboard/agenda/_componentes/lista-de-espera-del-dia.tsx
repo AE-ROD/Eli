@@ -9,6 +9,7 @@ import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { comoTexto } from "@/lib/fechas"
 import { pedir, type Resultado } from "@/lib/peticiones"
+import { aE164Chile, mostrarTelefono } from "@/lib/telefono"
 
 /** Una persona esperando, como la devuelve `GET /api/lista-de-espera`. */
 interface Inscripcion {
@@ -112,9 +113,9 @@ export function ListaDeEsperaDelDia({ fecha }: { fecha: Date }) {
                     {inscripcion.email}
                   </a>
                   {inscripcion.telefono && (
-                    <a href={`tel:${inscripcion.telefono}`} className="inline-flex items-center gap-1 underline-offset-4 hover:underline anillo-foco">
+                    <a href={`tel:${aE164Chile(inscripcion.telefono) ?? inscripcion.telefono}`} className="inline-flex items-center gap-1 underline-offset-4 hover:underline anillo-foco">
                       <Phone aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={1.75} />
-                      {inscripcion.telefono}
+                      {mostrarTelefono(inscripcion.telefono)}
                       {inscripcion.whatsapp && <span className="sr-only">(acepta WhatsApp)</span>}
                     </a>
                   )}

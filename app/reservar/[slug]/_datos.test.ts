@@ -91,6 +91,15 @@ describe("lista de espera", () => {
     })
   })
 
+  it("un 429 (por IP o por correo) llega al formulario con el texto del servidor (#133)", async () => {
+    const datos = { servicioId: "s1", profesionalId: null, fecha: "2030-01-07", nombre: "Lucía", apellido: "Pérez", email: "lucia@correo.test", telefono: "", whatsapp: false }
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: "Demasiadas solicitudes, intenta más tarde" }), { status: 429 }))
+    expect(await inscribirEnListaDeEspera("uno", datos)).toEqual({ ok: false, error: "Demasiadas solicitudes, intenta más tarde" })
+    // Sin cuerpo (un proxy): el texto propio de la acción, no uno del tope.
+    mockFetch.mockResolvedValueOnce(new Response("", { status: 429 }))
+    expect(await inscribirEnListaDeEspera("uno", datos)).toEqual({ ok: false, error: "No se pudo anotar en la lista de espera" })
+  })
+
   it("salir es un POST al token", async () => {
     await salirDeLaListaDeEspera("uno", "abc_-")
     expect(mockFetch).toHaveBeenCalledWith("/api/reservar/uno/lista-de-espera/abc_-", { method: "POST" })

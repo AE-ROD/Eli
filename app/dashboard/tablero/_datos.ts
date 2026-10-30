@@ -22,6 +22,7 @@ import {
   type Resultado,
   type ResultadoConCodigo,
 } from "@/lib/peticiones"
+import { mostrarTelefono } from "@/lib/telefono"
 
 // ─── Lo que devuelve el servidor ─────────────────────────────────────────────
 
@@ -198,7 +199,8 @@ export async function buscarClientes(texto: string): Promise<Resultado<ClienteEn
       id: cliente.id,
       // Nombre y apellido, como queda escrito en la atención: "María González".
       nombre: [cliente.name, cliente.lastName].filter(Boolean).join(" "),
-      detalle: cliente.phone ?? cliente.email ?? "",
+      // El teléfono como se lee en todo el panel ("+56 9 1234 5678"), no como se guarda.
+      detalle: mostrarTelefono(cliente.phone) || cliente.email || "",
     })),
   }
 }

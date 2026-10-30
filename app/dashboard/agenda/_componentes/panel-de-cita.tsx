@@ -9,23 +9,21 @@ import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { formatearMonto } from "@/lib/dinero"
-import { formatearHora, duracionParaMostrar } from "@/lib/fechas"
+import { duracionParaMostrar } from "@/lib/fechas"
 import { sePuedeMover, type Advertencia } from "@/lib/mover-cita"
 import { puedeMarcarseNoVino } from "@/lib/campos-del-panel"
-import { actorDeSesion, puedeReactivarCita, puedeResolverPorConfirmar } from "@/lib/permisos"
+import { actorDeSesion, puedeAsignarCitasAOtros, puedeReactivarCita, puedeResolverPorConfirmar } from "@/lib/permisos"
 import { conJson, pedirConCuerpo } from "@/lib/peticiones"
 import { Aviso } from "@/components/panel/aviso"
 import { cn } from "@/lib/utils"
-import { citaPorConfirmar, nombreDeCliente, type Cita } from "../_datos"
+import { citaPorConfirmar, destacaSinProfesional, nombreDeCliente, nombreDelProfesional, type Cita } from "../_datos"
 import { estiloDeEstado } from "./estados-de-cita"
+import { useAhora } from "./usar-ahora"
+import { useZonaDelNegocio } from "./zona-del-negocio"
+import { diaLargoEn, horaEn } from "../_hora-del-negocio"
 
 /** Un fundido corto al abrir y al cerrar: el panel no se desliza. */
 const FUNDIDO = { duration: DURACION.sombra, ease: CURVA.suave }
-
-/** `lunes, 8 de marzo`: el día de la cita, sin la hora. */
-function formatearFecha(iso: string) {
-  return new Date(iso).toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
-}
 
 interface PropsDePanelDeCita {
   cita: Cita
@@ -35,6 +33,10 @@ interface PropsDePanelDeCita {
   onMover: (cita: Cita) => void
   /** La cita ya se reactivó en el servidor: la agenda la muestra con su estado nuevo. */
   onReactivada: (id: string, estado: string) => void
+  /** Abre el modal para elegirle profesional a una cita sin asignar (#103). */
+  onAsignar: (cita: Cita) => void
+  /** Si hay profesionales a quien asignar: entonces se dice que la cita no tiene y se ofrece asignarla. */
+  destacarSinProfesional?: boolean
 }
 
 /** A qué estado vuelve una cita al reactivarla: una cancelada, o una completada o de alguien que no vino. */
@@ -69,8 +71,18 @@ async function reactivar(id: string, confirmar: boolean) {
  * Al cerrarlo, el foco vuelve a la cita que lo abrió; si no, el botón de
  * cerrar desaparecía con el foco adentro y el teclado volvía al principio.
  */
-export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover, onReactivada }: PropsDePanelDeCita) {
+export function PanelDeCita({
+  cita,
+  onCerrar,
+  onCambiarEstado,
+  onMover,
+  onReactivada,
+  onAsignar,
+  destacarSinProfesional = false,
+}: PropsDePanelDeCita) {
   const { data: sesion } = useSession()
+  // El día y las horas de la cita, en la zona del negocio (#99).
+  const zona = useZonaDelNegocio()
   const reactiva = puedeReactivarCita(actorDeSesion(sesion))
   // Por confirmar tras faltas (#84): la confirman o la cancelan dueña y
   // encargado. Al profesional el servidor le responde 401 a cualquier cambio
@@ -85,8 +97,8 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover, onReacti
   const titulo = useRef<HTMLHeadingElement>(null)
   const abridor = useRef<HTMLElement | null>(null)
   const ultimaVista = useRef({ id: cita.id, estado: cita.status })
-  // La hora a la que se abrió el panel: con ella se decide si ya pasó la de la cita.
-  const [abiertoEn] = useState(() => Date.now())
+  // Con esta hora se decide si ya pasó la de la cita: se renueva al pasar a otra y cada medio minuto (#100).
+  const ahora = useAhora(cita.id)
   const estado = estiloDeEstado(cita.status, porConfirmar)
   const duracion = duracionParaMostrar(cita.startTime, cita.endTime)
 
@@ -131,10 +143,12 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover, onReacti
   // servidor vuelve a mirar todo (y que no tenga una atención cobrada).
   const puedeReactivarse =
     reactiva &&
-    ((cita.status === "cancelada" && new Date(cita.startTime).getTime() > abiertoEn) ||
+    ((cita.status === "cancelada" && new Date(cita.startTime).getTime() > ahora) ||
       cita.status === "completada" ||
       cita.status === "no-asistio")
-  const textoDeReactivar = cita.status === "cancelada" ? "Reactivar cita" : "Devolver a confirmada"
+  // "No vino" marcado por error se deshace acá (#96): vuelve a confirmada, con las reglas de reactivar.
+  const textoDeReactivar =
+    cita.status === "cancelada" ? "Reactivar cita" : cita.status === "no-asistio" ? "Deshacer «No vino»" : "Devolver a confirmada"
 
   const pedirReactivar = async (confirmar: boolean) => {
     if (reactivando) return
@@ -148,10 +162,16 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover, onReacti
     onReactivada(cita.id, ESTADO_AL_REACTIVAR)
   }
   const puedeMoverse = sePuedeMover(cita.status)
+  // Sin profesional habiendo equipo (#103): se dice, y quien puede editarla
+  // (dueña y encargado, los que asignan) la asigna. El servidor vuelve a mirar
+  // el permiso y avisa si choca, como al mover.
+  const sinProfesional = destacaSinProfesional(cita, destacarSinProfesional)
+  const asigna = sinProfesional && puedeAsignarCitasAOtros(actorDeSesion(sesion))
+  const profesional = nombreDelProfesional(cita)
   // "No vino" cuando ya pasó la hora de empezar: antes, si avisó, se cancela.
   // El servidor lo vuelve a verificar (y que no haya llegado al Tablero).
   const puedeNoVenir =
-    puedeMarcarseNoVino(cita.status) && new Date(cita.startTime).getTime() <= abiertoEn && !porConfirmar
+    puedeMarcarseNoVino(cita.status) && new Date(cita.startTime).getTime() <= ahora && !porConfirmar
 
   return (
     <motion.aside
@@ -189,14 +209,15 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover, onReacti
         <dl className="mt-4 divide-y divide-borde border-t border-borde text-sm">
           <Dato termino="Fecha">
             {/* `first-letter` y no `capitalize`, que ponía mayúscula en cada palabra. */}
-            <span className="block first-letter:uppercase">{formatearFecha(cita.startTime)}</span>
+            <span className="block first-letter:uppercase">{diaLargoEn(cita.startTime, zona)}</span>
           </Dato>
           <Dato termino="Horario">
             <span className="tabular-nums">
-              {formatearHora(cita.startTime)} – {formatearHora(cita.endTime)}
+              {horaEn(cita.startTime, zona)} – {horaEn(cita.endTime, zona)}
             </span>
           </Dato>
           <Dato termino="Duración">{duracion} minutos</Dato>
+          {(profesional || sinProfesional) && <Dato termino="Profesional">{profesional ?? "Sin asignar"}</Dato>}
           {cita.price != null && (
             <Dato termino="Precio">
               <span className="tabular-nums">{formatearMonto(cita.price)}</span>
@@ -222,6 +243,14 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover, onReacti
         </Aviso>
       )}
 
+      {sinProfesional && (
+        <Aviso tono="atencion" rol="status" titulo="Sin profesional">
+          {asigna
+            ? "Mientras no tenga profesional, en la reserva pública ocupa la hora de todo el equipo. Asígnala para liberar a los demás."
+            : "Mientras no tenga profesional, en la reserva pública ocupa la hora de todo el equipo. La asigna la dueña o el encargado."}
+        </Aviso>
+      )}
+
       {errorAlReactivar && <Aviso>{errorAlReactivar}</Aviso>}
       {advertencias.length > 0 && (
         <Aviso tono="atencion" rol="status" titulo="Al reactivarla:">
@@ -233,7 +262,7 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover, onReacti
         </Aviso>
       )}
 
-      {(puedeConfirmarse || puedeCompletarse || puedeCancelarse || puedeMoverse || puedeNoVenir || puedeReactivarse) && (
+      {(puedeConfirmarse || asigna || puedeCompletarse || puedeCancelarse || puedeMoverse || puedeNoVenir || puedeReactivarse) && (
         <div className="grid gap-2 px-1 pb-1">
           {puedeConfirmarse && (
             <Boton tamano="sm" className="w-full" onClick={() => onCambiarEstado(cita.id, "confirmada")}>
@@ -249,6 +278,11 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover, onReacti
               onClick={() => pedirReactivar(advertencias.length > 0)}
             >
               {advertencias.length > 0 ? "Reactivar igual" : textoDeReactivar}
+            </Boton>
+          )}
+          {asigna && (
+            <Boton tamano="sm" className="w-full" onClick={() => onAsignar(cita)}>
+              Asignar profesional
             </Boton>
           )}
           {puedeMoverse && (

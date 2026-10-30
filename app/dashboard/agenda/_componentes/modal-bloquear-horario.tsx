@@ -14,6 +14,7 @@ import {
   type DatosDeNuevoBloqueo,
   type Profesional,
 } from "../_datos"
+import { useZonaDelNegocio } from "./zona-del-negocio"
 
 interface PropsDeModalBloquearHorario {
   /** El día que se está mirando: el bloqueo arranca ahí. */
@@ -40,6 +41,8 @@ export function ModalBloquearHorario({ dia, eligeAQuien, memberIdPropio, onCread
   const [form, setForm] = useState<DatosDeNuevoBloqueo>(() =>
     bloqueoEnBlanco(dia, eligeAQuien ? "" : (memberIdPropio ?? ""))
   )
+  // Las horas que se escriben son las del negocio (#99).
+  const zona = useZonaDelNegocio()
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState("")
   const [profesionales, setProfesionales] = useState<Profesional[]>([])
@@ -69,7 +72,7 @@ export function ModalBloquearHorario({ dia, eligeAQuien, memberIdPropio, onCread
     evento.preventDefault()
     setError("")
     setGuardando(true)
-    const resultado = await crearBloqueo(form)
+    const resultado = await crearBloqueo(form, zona)
     setGuardando(false)
     if (!resultado.ok) return setError(resultado.error)
     onCreado()

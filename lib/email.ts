@@ -477,6 +477,14 @@ export interface DatosRecordatorio {
   servicio: string
   fecha: string
   hora: string
+  /**
+   * El enlace para cancelar o reagendar sin cuenta, sólo para las reservas
+   * públicas de antes de la etapa 1, que no lo tenían (#106): se genera al
+   * mandar el recordatorio. Lleva el token en claro.
+   */
+  enlaceDeGestion?: string | null
+  /** Hasta cuántas horas antes se puede cambiar con el enlace. */
+  plazoHoras?: number
 }
 
 export function enviarRecordatorio(datos: DatosRecordatorio) {
@@ -491,7 +499,15 @@ export function enviarRecordatorio(datos: DatosRecordatorio) {
       ["Fecha", fechaLegible(datos.fecha)],
       ["Hora", datos.hora],
     ],
-    cierre: html`¡Te esperamos! Si no puedes asistir, por favor avísanos con anticipación.`,
+    ...(datos.enlaceDeGestion
+      ? {
+          boton: { texto: "Cancelar o cambiar mi cita", enlace: datos.enlaceDeGestion },
+          cierre:
+            datos.plazoHoras && datos.plazoHoras > 0
+              ? html`¡Te esperamos! Si no puedes asistir, cancela o cambia tu cita con el botón hasta ${datos.plazoHoras} ${datos.plazoHoras === 1 ? "hora" : "horas"} antes. Después, contacta directamente al local.`
+              : html`¡Te esperamos! Si no puedes asistir, cancela o cambia tu cita con el botón hasta la hora de la cita.`,
+        }
+      : { cierre: html`¡Te esperamos! Si no puedes asistir, por favor avísanos con anticipación.` }),
   })
 }
 

@@ -169,10 +169,11 @@ describe("inscribirse", () => {
   })
 
   it("sin cupo en cualquiera de los límites: 429 y nada", async () => {
+    const demasiadas = { status: 429, cuerpo: { error: "Demasiadas solicitudes, intenta más tarde" } }
     mockVerificarLimite.mockImplementation(async (tipo: string) => ({ permitido: tipo !== "listaDeEspera", restantes: 0 }))
-    expect((await inscribirse()).status).toBe(429)
+    expect(await inscribirse()).toEqual(demasiadas)
     mockVerificarLimite.mockImplementation(async (tipo: string) => ({ permitido: tipo !== "reserva", restantes: 0 }))
-    expect((await inscribirse()).status).toBe(429)
+    expect(await inscribirse()).toEqual(demasiadas)
     expect(filas()).toHaveLength(0)
   })
 

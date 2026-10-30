@@ -603,6 +603,21 @@ describe("lib/email — mensajes a clientes (etapa 3)", () => {
     expect(enviarMock.mock.calls[0][0]).not.toHaveProperty("headers")
   })
 
+  it("el recordatorio trae el botón de gestión sólo si viene el enlace (#106)", async () => {
+    const email = await import("./email")
+    const recordatorio = { emailCliente: "maria@test.com", nombreCliente: "María", nombreNegocio: "Salón Uno", servicio: "Corte", fecha: "2026-11-02", hora: "10:00" }
+
+    await email.enviarRecordatorio({ ...recordatorio, enlaceDeGestion: "https://eli.app/reservar/salon-uno/cita/abc", plazoHoras: 24 })
+    await email.enviarRecordatorio(recordatorio)
+
+    const [conEnlace, sinEnlace] = enviarMock.mock.calls.map(([envio]) => envio.html as string)
+    expect(conEnlace).toContain('href="https://eli.app/reservar/salon-uno/cita/abc"')
+    expect(conEnlace).toContain("Cancelar o cambiar mi cita")
+    expect(conEnlace).toContain("hasta 24 horas antes")
+    expect(sinEnlace).not.toContain("Cancelar o cambiar mi cita")
+    expect(sinEnlace).toContain("avísanos con anticipación")
+  })
+
   it("escapa los datos de personas y limpia el asunto", async () => {
     const email = await import("./email")
 

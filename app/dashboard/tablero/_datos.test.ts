@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
 import { zonaDelDispositivo } from "@/lib/fechas"
-import { anularAtencion, marcarLlegada, marcarNoVino } from "./_datos"
+import { anularAtencion, buscarClientes, marcarLlegada, marcarNoVino } from "./_datos"
 
 // La zona del dispositivo, fija: la del proceso de los tests depende de la máquina.
 vi.mock("@/lib/fechas", async (importarOriginal) => {
@@ -60,6 +60,32 @@ describe("marcarNoVino", () => {
     simularRespuesta(json({ error: mensaje }, 409))
 
     expect(await marcarNoVino("cita-1")).toEqual({ ok: false, error: mensaje, motivo: "desactualizada" })
+  })
+})
+
+describe("buscarClientes", () => {
+  it("muestra el teléfono con espacios, como en el resto del panel; sin teléfono, el correo", async () => {
+    simularRespuesta(
+      json({
+        clientes: [
+          { id: "c1", name: "María", lastName: "González", email: "m@x.cl", phone: "+56912345678" },
+          { id: "c2", name: "Pedro", lastName: null, email: "p@x.cl", phone: null },
+          { id: "c3", name: "Ana", lastName: null, email: null, phone: "12345" },
+        ],
+      })
+    )
+
+    const resultado = await buscarClientes("a")
+
+    expect(resultado).toEqual({
+      ok: true,
+      datos: [
+        { id: "c1", nombre: "María González", detalle: "+56 9 1234 5678" },
+        { id: "c2", nombre: "Pedro", detalle: "p@x.cl" },
+        // Uno que no se puede leer como chileno se muestra tal como está.
+        { id: "c3", nombre: "Ana", detalle: "12345" },
+      ],
+    })
   })
 })
 
