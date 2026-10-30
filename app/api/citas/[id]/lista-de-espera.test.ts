@@ -111,3 +111,31 @@ describe("DELETE", () => {
     expect(programar).not.toHaveBeenCalled()
   })
 })
+
+describe("PUT: quién canceló y cuándo (#121)", () => {
+  const cita = () => base.buscar("appointment", { id: "c1" })[0]
+
+  it("cancelar desde el panel guarda que la canceló el negocio, con la hora", async () => {
+    expect(await put("c1", { status: "cancelada" })).toBe(200)
+    expect(cita()).toMatchObject({ status: "cancelada", canceladaPor: "negocio", canceladaEn: AHORA })
+  })
+
+  it("re-enviar «cancelada» no pisa quién ni cuándo la canceló primero", async () => {
+    const antes = new Date("2029-12-31T10:00:00.000Z")
+    escenario({ status: "cancelada", canceladaPor: "cliente", canceladaEn: antes })
+
+    expect(await put("c1", { status: "cancelada" })).toBe(200)
+    expect(cita()).toMatchObject({ canceladaPor: "cliente", canceladaEn: antes })
+  })
+
+  it("confirmar no escribe cancelación", async () => {
+    expect(await put("c1", { status: "confirmada" })).toBe(200)
+    expect(cita().canceladaPor ?? null).toBeNull()
+    expect(cita().canceladaEn ?? null).toBeNull()
+  })
+
+  it("la cita de otro negocio: 404 y no se escribe", async () => {
+    expect(await put("c-ajena", { status: "cancelada" })).toBe(404)
+    expect(base.buscar("appointment", { id: "c-ajena" })[0].canceladaPor ?? null).toBeNull()
+  })
+})

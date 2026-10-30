@@ -39,7 +39,15 @@ export interface EstadoDeCaja {
   zona: string
   puedeCerrar: boolean
   /** Lo que lleva la caja desde el último cierre (o el inicio del día) hasta ahora. */
-  abierta: { desde: string; hasta: string; efectivoCobrado: number; propinasEfectivo: number; desglose: Desglose }
+  abierta: {
+    desde: string
+    hasta: string
+    efectivoCobrado: number
+    propinasEfectivo: number
+    desglose: Desglose
+    /** El cobro más antiguo de un día anterior a hoy: la caja arrastra días sin cerrar. Null si todo es de hoy. */
+    cobrosDesde: string | null
+  }
   cierres: CierreDeCaja[]
   total: number
   pagina: number

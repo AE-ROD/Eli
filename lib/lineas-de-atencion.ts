@@ -235,30 +235,15 @@ export async function resolverLineas(
 // ─── Comisión congelada al cobrar (#65) ──────────────────────────────────────
 
 /**
- * Congela la comisión de cada línea de la atención con los % vigentes, dentro
- * de la transacción del cobro y después de tomar la fila (`tomarAtencion`):
- * un segundo cobro no llega acá, así que nada se congela dos veces. Lo
- * congelado no se recalcula nunca: cambiar un % después no toca lo cobrado
- * (en la base lo impide además el trigger `atencion_servicios_comision_inmutable`).
- *
- * La cascada es la de `lib/comisiones.ts`. Lo que devuelve "pendiente" (falta
- * el %) queda con las tres columnas en null, nunca en 0, y el cobro sigue: se
- * cuenta para avisar. Lo de la dueña o de un ex-miembro no lleva comisión.
- *
- * Los % se leen siempre acotados al negocio: un `CommissionRate` o un
- * producto de otro negocio nunca entra a la cascada.
- *
- * Devuelve cuántas líneas quedaron pendientes de %.
+ * Las líneas todavía sin comisión congelada de la atención, con los % que
+ * les tocan hoy (la cascada de `lib/comisiones.ts`). Los % se leen siempre
+ * acotados al negocio: un `CommissionRate` o un producto de otro negocio
+ * nunca entra a la cascada. Sirve para congelar al cobrar y para avisar,
+ * antes de cobrar, qué líneas quedarían sin % (#118).
  */
-export async function congelarComisiones(
-  tx: Prisma.TransactionClient,
-  businessId: string,
-  visitId: string,
-  ahora: Date
-): Promise<{ pendientes: number }> {
-  const deLaAtencion = { visitId, visit: { is: { businessId } } }
-  const lineas = await tx.visitService.findMany({
-    where: { ...deLaAtencion, commissionAt: null },
+async function lineasSinCongelarConSusPorcentajes(db: Prisma.TransactionClient, businessId: string, visitId: string) {
+  const lineas = await db.visitService.findMany({
+    where: { visitId, visit: { is: { businessId } }, commissionAt: null },
     select: {
       id: true,
       tipo: true,
@@ -271,7 +256,7 @@ export async function congelarComisiones(
     orderBy: { id: "asc" },
     take: MAXIMO_DE_LINEAS_POR_ATENCION,
   })
-  if (lineas.length === 0) return { pendientes: 0 }
+  if (lineas.length === 0) return null
 
   const paraCascada = lineas.map((linea) => ({ ...linea, tipo: linea.tipo === "producto" ? ("producto" as const) : ("servicio" as const) }))
   const deMiembros = paraCascada.filter((linea) => !linea.byOwner && linea.memberId)
@@ -282,21 +267,21 @@ export async function congelarComisiones(
   const [miembros, excepciones, productos] = await Promise.all([
     idsDeMiembros.length === 0
       ? Promise.resolve([])
-      : tx.businessMember.findMany({
+      : db.businessMember.findMany({
           where: { businessId, id: { in: idsDeMiembros } },
           select: { id: true, commissionPercent: true },
           take: idsDeMiembros.length,
         }),
     idsDeMiembros.length === 0 || idsDeServicios.length === 0
       ? Promise.resolve([])
-      : tx.commissionRate.findMany({
+      : db.commissionRate.findMany({
           where: { businessId, memberId: { in: idsDeMiembros }, serviceId: { in: idsDeServicios } },
           select: { memberId: true, serviceId: true, percent: true },
           take: idsDeMiembros.length * idsDeServicios.length,
         }),
     idsDeProductos.length === 0
       ? Promise.resolve([])
-      : tx.producto.findMany({
+      : db.producto.findMany({
           where: { businessId, id: { in: idsDeProductos } },
           select: { id: true, commissionPercent: true },
           take: idsDeProductos.length,
@@ -314,9 +299,50 @@ export async function congelarComisiones(
     excepciones: porExcepcion,
     porProducto: new Map(productos.map((producto) => [producto.id, producto.commissionPercent])),
   }
+  return { lineas: paraCascada, vigentes }
+}
+
+/**
+ * Las líneas de la atención que, si se cobrara ahora, quedarían sin % de
+ * comisión (pendientes), por id y en el orden de la atención. Sólo avisa:
+ * el cobro no se frena por eso (#118). No escribe.
+ */
+export async function lineasQueQuedaranSinPorcentaje(
+  db: Prisma.TransactionClient,
+  businessId: string,
+  visitId: string
+): Promise<string[]> {
+  const leidas = await lineasSinCongelarConSusPorcentajes(db, businessId, visitId)
+  if (!leidas) return []
+  return leidas.lineas.filter((linea) => porcentajeDeLinea(linea, leidas.vigentes).tipo === "pendiente").map((linea) => linea.id)
+}
+
+/**
+ * Congela la comisión de cada línea de la atención con los % vigentes, dentro
+ * de la transacción del cobro y después de tomar la fila (`tomarAtencion`):
+ * un segundo cobro no llega acá, así que nada se congela dos veces. Lo
+ * congelado no se recalcula nunca: cambiar un % después no toca lo cobrado
+ * (en la base lo impide además el trigger `atencion_servicios_comision_inmutable`).
+ *
+ * La cascada es la de `lib/comisiones.ts`. Lo que devuelve "pendiente" (falta
+ * el %) queda con las tres columnas en null, nunca en 0, y el cobro sigue: se
+ * cuenta para avisar. Lo de la dueña o de un ex-miembro no lleva comisión.
+ *
+ * Devuelve cuántas líneas quedaron pendientes de %.
+ */
+export async function congelarComisiones(
+  tx: Prisma.TransactionClient,
+  businessId: string,
+  visitId: string,
+  ahora: Date
+): Promise<{ pendientes: number }> {
+  const leidas = await lineasSinCongelarConSusPorcentajes(tx, businessId, visitId)
+  if (!leidas) return { pendientes: 0 }
+  const { lineas, vigentes } = leidas
+  const deLaAtencion = { visitId, visit: { is: { businessId } } }
 
   let pendientes = 0
-  for (const linea of paraCascada) {
+  for (const linea of lineas) {
     if (porcentajeDeLinea(linea, vigentes).tipo === "pendiente") pendientes += 1
     const comision = comisionParaCongelar(linea, vigentes, ahora)
     if (!comision.commissionAt) continue

@@ -4,7 +4,12 @@ import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { transicionPermitida } from "@/lib/atenciones"
-import { atencionBloqueada, tomarCandadoDeCajaCompartido, type MotivoDeBloqueo } from "@/lib/bloqueos-de-dinero"
+import {
+  CODIGO_CORREGIR_CON_AJUSTE,
+  atencionBloqueada,
+  tomarCandadoDeCajaCompartido,
+  type MotivoDeBloqueo,
+} from "@/lib/bloqueos-de-dinero"
 import { tomarCandadosDeLaAtencion } from "@/lib/liquidacion"
 import { ESTADOS_DE_RESERVA } from "@/lib/llegadas"
 import { actorDeSesion, puedeAnular } from "@/lib/permisos"
@@ -91,12 +96,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // un cierre de caja ya se rindió, y no se anula (#65, #68, #71). Se
       // corrige con un ajuste en la liquidación.
       const bloqueo = await atencionBloqueada(tx, actor.businessId, existente.id)
-      if (bloqueo) throw new ErrorDeAtencion(409, MENSAJE_DE_BLOQUEO[bloqueo.motivo])
+      if (bloqueo) throw new ErrorDeAtencion(409, MENSAJE_DE_BLOQUEO[bloqueo.motivo], CODIGO_CORREGIR_CON_AJUSTE)
 
       if (existente.appointmentId && existente.status !== "finalizada") {
         await tx.appointment.updateMany({
           where: { id: existente.appointmentId, businessId: actor.businessId, status: { in: ESTADOS_DE_RESERVA } },
-          data: { status: "cancelada" },
+          // La cancela el negocio al anular (#121): queda quién y cuándo.
+          data: { status: "cancelada", canceladaPor: "negocio", canceladaEn: new Date() },
         })
       }
 

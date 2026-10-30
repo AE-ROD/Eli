@@ -14,7 +14,7 @@ import {
 import { actorDeSesion, puedeCobrar, puedeRegistrarPropina } from "@/lib/permisos"
 import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
 import { horaDeLaBase, tomarCandadoDeCajaCompartido } from "@/lib/bloqueos-de-dinero"
-import { congelarComisiones } from "@/lib/lineas-de-atencion"
+import { congelarComisiones, lineasQueQuedaranSinPorcentaje } from "@/lib/lineas-de-atencion"
 import { errorDePropinas, propinasPedidasSchema, resolverPropinas } from "@/lib/propinas"
 import {
   ErrorDeAtencion,
@@ -42,6 +42,35 @@ const cobroSchema = z.object({
    */
   propinas: propinasPedidasSchema.default([]),
 })
+
+/**
+ * Antes de cobrar (#118): qué líneas quedarían sin % de comisión si se
+ * cobrara ahora, por id. Es sólo un aviso para la caja; el cobro no se frena.
+ * Mismas reglas que cobrar: ajena 404, sin permiso de cobro 401.
+ */
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getServerSession(authOptions)
+  const actor = actorDeSesion(session)
+  if (!actor) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  }
+
+  const { id } = await params
+  const existente = await buscarAtencion(actor, id)
+  if (!existente) {
+    return NextResponse.json({ error: "Atención no encontrada" }, { status: 404 })
+  }
+  if (!puedeCobrar(actor)) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  }
+
+  try {
+    const lineasSinPorcentaje = await lineasQueQuedaranSinPorcentaje(prisma, actor.businessId, existente.id)
+    return NextResponse.json({ lineasSinPorcentaje })
+  } catch (error) {
+    return respuestaDeError(error, "leyendo las comisiones antes de cobrar")
+  }
+}
 
 /**
  * Cobra una atención que está por cobrar. Todo en una transacción: los pagos,
