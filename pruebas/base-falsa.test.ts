@@ -524,6 +524,143 @@ describe("base falsa: los triggers atencion_servicios_mismo_negocio y _liquidada
   })
 })
 
+describe("base falsa: las FK NO ACTION y RESTRICT no dejan borrar al padre (#146)", () => {
+  const periodo = { memberName: "Ana", desde: new Date("2026-10-01"), hasta: new Date("2026-10-31") }
+  const movimiento = { businessId: "n1", memberId: "m1", memberName: "Ana", tipo: "ajuste", montoCents: 500, fecha: new Date("2026-10-15"), motivo: "corrige" }
+
+  beforeEach(() => {
+    base.reiniciar({
+      business: [{ id: "n1", name: "Uno", slug: "uno", userId: "u1" }],
+      user: [
+        { id: "u1", name: "Ana", email: "a@test" },
+        { id: "u2", name: "Beto", email: "b@test" },
+      ],
+      businessMember: [
+        { id: "m1", businessId: "n1", userId: "u1" },
+        { id: "m2", businessId: "n1", userId: "u2" },
+      ],
+      service: [
+        { id: "s1", businessId: "n1", name: "Corte" },
+        { id: "s2", businessId: "n1", name: "Color" },
+      ],
+      commissionRate: [{ id: "cr1", businessId: "n1", memberId: "m1", serviceId: "s1", percent: 40 }],
+      visit: [
+        { id: "v1", businessId: "n1", customerName: "María", status: "finalizada" },
+        { id: "v2", businessId: "n1", customerName: "Beto", status: "finalizada" },
+      ],
+      liquidacion: [{ id: "liq-1", businessId: "n1", memberId: "m1", ...periodo }],
+      movimientoDeLiquidacion: [{ id: "mov-1", ...movimiento, visitId: "v1" }],
+    })
+  })
+
+  it("una atención con un movimiento de liquidación no se borra (P2003), ni con delete ni con deleteMany", async () => {
+    await expect(prisma.visit.delete({ where: { id: "v1" } })).rejects.toMatchObject({
+      code: "P2003",
+      message: expect.stringMatching(/movimientoDeLiquidacion\.visitId/),
+    })
+    await expect(prisma.visit.deleteMany({ where: { businessId: "n1" } })).rejects.toMatchObject({ code: "P2003" })
+    expect(base.buscar("visit").map((v) => v.id)).toEqual(["v1", "v2"])
+    // La que no tiene movimientos sí.
+    await expect(prisma.visit.delete({ where: { id: "v2" } })).resolves.toMatchObject({ id: "v2" })
+  })
+
+  it("al soltar el movimiento, la atención ya se borra", async () => {
+    await prisma.movimientoDeLiquidacion.update({ where: { id: "mov-1" }, data: { visitId: null } })
+    await expect(prisma.visit.delete({ where: { id: "v1" } })).resolves.toBeTruthy()
+  })
+
+  it("una liquidación referida por una línea, una propina o un movimiento no se borra", async () => {
+    const casos: [string, () => Promise<unknown>][] = [
+      [
+        "visitService",
+        () =>
+          prisma.visitService.create({
+            data: { visitId: "v2", serviceName: "Corte", professionalName: "Ana", priceCents: 1000, liquidacionId: "liq-1" },
+          }),
+      ],
+      [
+        "propinaDeAtencion",
+        () => prisma.propinaDeAtencion.create({
+            data: { businessId: "n1", visitId: "v2", memberId: "m1", professionalName: "Ana", method: "efectivo", amountCents: 100, liquidacionId: "liq-1" },
+          }),
+      ],
+      ["movimientoDeLiquidacion", () => prisma.movimientoDeLiquidacion.create({ data: { ...movimiento, liquidacionId: "liq-1" } })],
+    ]
+    for (const [hijo, crearHijo] of casos) {
+      base.reiniciar({ ...base.volcado(), visitService: [], propinaDeAtencion: [], movimientoDeLiquidacion: [] })
+      await crearHijo()
+      await expect(prisma.liquidacion.delete({ where: { id: "liq-1" } })).rejects.toThrow(new RegExp(`${hijo}\\.liquidacionId`))
+    }
+    base.reiniciar({ ...base.volcado(), visitService: [], propinaDeAtencion: [], movimientoDeLiquidacion: [] })
+    await expect(prisma.liquidacion.delete({ where: { id: "liq-1" } })).resolves.toBeTruthy()
+  })
+
+  it("un miembro con liquidaciones o movimientos no se borra; uno sin ellos sí", async () => {
+    await expect(prisma.businessMember.delete({ where: { id: "m1" } })).rejects.toMatchObject({ code: "P2003" })
+    await expect(prisma.businessMember.delete({ where: { id: "m2" } })).resolves.toBeTruthy()
+    expect(base.buscar("businessMember").map((m) => m.id)).toEqual(["m1"])
+  })
+
+  it("un servicio con porcentaje de comisión no se borra (RESTRICT)", async () => {
+    await expect(prisma.service.delete({ where: { id: "s1" } })).rejects.toMatchObject({
+      code: "P2003",
+      message: expect.stringMatching(/commissionRate\.serviceId/),
+    })
+    await expect(prisma.service.delete({ where: { id: "s2" } })).resolves.toBeTruthy()
+  })
+
+  it("si la sentencia falla, se revierte entera, cascadas incluidas", async () => {
+    // v1 tiene un movimiento, así que el deleteMany falla al final, cuando la
+    // cascada de v2 ya se había llevado su línea y su pago: vuelven.
+    base.reiniciar({
+      ...base.volcado(),
+      visitService: [{ id: "l2", visitId: "v2", serviceName: "Corte", professionalName: "Ana", priceCents: 1000 }],
+      visitPayment: [{ id: "p2", visitId: "v2", method: "efectivo", amountCents: 1000 }],
+    })
+    await expect(prisma.visit.deleteMany({})).rejects.toMatchObject({ code: "P2003" })
+    expect(base.buscar("visit")).toHaveLength(2)
+    expect(base.buscar("visitService").map((l) => l.id)).toEqual(["l2"])
+    expect(base.buscar("visitPayment").map((p) => p.id)).toEqual(["p2"])
+  })
+})
+
+describe("base falsa: createMany es todo o nada (#148)", () => {
+  const linea = { visitId: "v2", serviceName: "Corte", professionalName: "Ana", priceCents: 1000 }
+
+  it("si una fila falla un trigger, no queda ninguna", async () => {
+    base.reiniciar({
+      ...base.volcado(),
+      business: [...base.volcado().business, { id: "n2", name: "Dos", slug: "dos", userId: "u1" }],
+      businessMember: [...base.volcado().businessMember, { id: "m2", businessId: "n2", userId: "u1" }],
+    })
+    await expect(
+      prisma.visitService.createMany({ data: [{ ...linea, memberId: "m1" }, { ...linea, memberId: "m2" }] })
+    ).rejects.toThrow(/profesional es de otro negocio/)
+    expect(base.buscar("visitService", { visitId: "v2" })).toEqual([])
+  })
+
+  it("si una fila choca con un único o una FK, tampoco", async () => {
+    await expect(
+      prisma.visit.createMany({
+        data: [
+          { businessId: "n1", customerName: "Nueva" },
+          { businessId: "n1", customerName: "Repetida", appointmentId: "cita-1" },
+        ],
+      })
+    ).rejects.toMatchObject({ code: "P2002" })
+    await expect(
+      prisma.visitService.createMany({ data: [linea, { ...linea, visitId: "no-existe" }] })
+    ).rejects.toMatchObject({ code: "P2003" })
+    expect(base.buscar("visit").map((v) => v.id)).toEqual(["v1", "v2"])
+    expect(base.buscar("visitService", { visitId: "v2" })).toEqual([])
+  })
+
+  it("si todas pasan, quedan todas", async () => {
+    await expect(prisma.visitService.createMany({ data: [linea, linea] })).resolves.toEqual({ count: 2 })
+    expect(base.buscar("visitService", { visitId: "v2" })).toHaveLength(2)
+  })
+})
+
 describe("base falsa: lo de la etapa 3", () => {
   beforeEach(() => {
     base.reiniciar({
