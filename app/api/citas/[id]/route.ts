@@ -27,6 +27,7 @@ import { advertenciasDeAgenda } from "@/lib/advertencias-de-agenda"
 import { MENSAJE_CITA_CAMBIO, decidirReactivacion, problemaConLaAtencion } from "@/lib/reactivar-cita"
 import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { ocupaElHorario } from "@/lib/ocupacion"
+import { MENSAJE_MIEMBRO_NO_ATIENDE, atiendeCitas } from "@/lib/agenda-publica"
 import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
 import { estaPorConfirmar, mensajeDeReservaQueCambio } from "@/lib/por-confirmar"
 import { avisarReservaConfirmadaPorElLocal } from "@/lib/aviso-de-reserva-confirmada"
@@ -164,10 +165,14 @@ export async function PUT(
     if (memberId && memberId !== existente.memberId) {
       const miembro = await prisma.businessMember.findFirst({
         where: { id: memberId, businessId: actor.businessId },
-        select: { id: true },
+        select: { id: true, role: true },
       })
       if (!miembro) {
         return NextResponse.json({ error: "Miembro no encontrado" }, { status: 404 })
+      }
+      // Sólo al cambiar de miembro: una cita que ya era suya no se toca (#144).
+      if (!atiendeCitas(miembro.role)) {
+        return NextResponse.json({ error: MENSAJE_MIEMBRO_NO_ATIENDE }, { status: 400 })
       }
     }
 

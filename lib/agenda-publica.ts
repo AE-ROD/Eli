@@ -36,6 +36,18 @@ import { diaDeLaSemana, existeLaHora, instanteEn, rangoDelDiaEn } from "@/lib/zo
 
 export const ROLES_QUE_ATIENDEN = ["worker"] as const
 
+/**
+ * Si un miembro con este rol puede tener citas a su nombre. La misma regla
+ * del selector de profesional del panel (#140) y de la reserva pública: una
+ * cita del encargado quedaba en una agenda que nadie atiende (#144).
+ */
+export function atiendeCitas(role: string): boolean {
+  return (ROLES_QUE_ATIENDEN as readonly string[]).includes(role)
+}
+
+/** El 400 al asignar una cita (crear o reasignar) a un miembro que no atiende. */
+export const MENSAJE_MIEMBRO_NO_ATIENDE = "Esa persona no atiende citas: asígnala a un profesional del equipo o déjala sin asignar"
+
 /** Tope de profesionales que se leen: ningún local tiene cien. */
 const TOPE_DE_PROFESIONALES = 100
 
