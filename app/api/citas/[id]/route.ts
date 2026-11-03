@@ -262,6 +262,13 @@ export async function PUT(
       }
     }
 
+    // La hora de la cancelación sale de la base, como la de la anulación de
+    // la atención (que también cancela la cita): una sola fuente de hora
+    // aunque las instancias tengan relojes desfasados (#149). Sólo se pide
+    // cuando de verdad se cancela.
+    const canceladaEn =
+      datos.status === "cancelada" && existente.status !== "cancelada" ? await horaDeLaBase(prisma) : null
+
     // Por `existente.id`, no por `id`: si alguien borra la verificación de
     // arriba, `existente` queda sin declarar y el build falla. La garantía deja
     // de depender de que el próximo lea las dos líneas en orden.
@@ -279,8 +286,7 @@ export async function PUT(
         // Cancelarla desde el panel deja quién y cuándo, como el enlace del
         // cliente (#121). Sólo al pasar a cancelada: re-enviar "cancelada"
         // no pisa la hora ni el autor de la primera cancelación.
-        ...(datos.status === "cancelada" &&
-          existente.status !== "cancelada" && { canceladaPor: "negocio", canceladaEn: new Date() }),
+        ...(canceladaEn && { canceladaPor: "negocio", canceladaEn }),
       },
       include: {
         customer: { select: { id: true, name: true, email: true, phone: true } },
