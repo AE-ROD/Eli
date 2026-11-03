@@ -631,9 +631,17 @@ export function crearBaseFalsa() {
       findMany: vi.fn(async (args: Args = {}) => buscar(args).map((registro) => salida(registro, args))),
       count: vi.fn(async (args: Args = {}) => filtrar(modelo, args.where).length),
       create: vi.fn(async (args: Args) => salida(crear(modelo, args.data), args)),
+      // Un solo INSERT: si una fila falla un trigger, una FK o un único, no
+      // queda ninguna, como en Postgres.
       createMany: vi.fn(async (args: Args) => {
         const lista = Array.isArray(args.data) ? args.data : [args.data]
-        lista.forEach((datos) => crear(modelo, datos))
+        const antes = instantanea()
+        try {
+          lista.forEach((datos) => crear(modelo, datos))
+        } catch (error) {
+          tablas = antes
+          throw error
+        }
         return { count: lista.length }
       }),
       update: vi.fn(async (args: Args) => {

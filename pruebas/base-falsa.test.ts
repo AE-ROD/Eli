@@ -624,6 +624,43 @@ describe("base falsa: las FK NO ACTION y RESTRICT no dejan borrar al padre (#146
   })
 })
 
+describe("base falsa: createMany es todo o nada (#148)", () => {
+  const linea = { visitId: "v2", serviceName: "Corte", professionalName: "Ana", priceCents: 1000 }
+
+  it("si una fila falla un trigger, no queda ninguna", async () => {
+    base.reiniciar({
+      ...base.volcado(),
+      business: [...base.volcado().business, { id: "n2", name: "Dos", slug: "dos", userId: "u1" }],
+      businessMember: [...base.volcado().businessMember, { id: "m2", businessId: "n2", userId: "u1" }],
+    })
+    await expect(
+      prisma.visitService.createMany({ data: [{ ...linea, memberId: "m1" }, { ...linea, memberId: "m2" }] })
+    ).rejects.toThrow(/profesional es de otro negocio/)
+    expect(base.buscar("visitService", { visitId: "v2" })).toEqual([])
+  })
+
+  it("si una fila choca con un único o una FK, tampoco", async () => {
+    await expect(
+      prisma.visit.createMany({
+        data: [
+          { businessId: "n1", customerName: "Nueva" },
+          { businessId: "n1", customerName: "Repetida", appointmentId: "cita-1" },
+        ],
+      })
+    ).rejects.toMatchObject({ code: "P2002" })
+    await expect(
+      prisma.visitService.createMany({ data: [linea, { ...linea, visitId: "no-existe" }] })
+    ).rejects.toMatchObject({ code: "P2003" })
+    expect(base.buscar("visit").map((v) => v.id)).toEqual(["v1", "v2"])
+    expect(base.buscar("visitService", { visitId: "v2" })).toEqual([])
+  })
+
+  it("si todas pasan, quedan todas", async () => {
+    await expect(prisma.visitService.createMany({ data: [linea, linea] })).resolves.toEqual({ count: 2 })
+    expect(base.buscar("visitService", { visitId: "v2" })).toHaveLength(2)
+  })
+})
+
 describe("base falsa: lo de la etapa 3", () => {
   beforeEach(() => {
     base.reiniciar({
