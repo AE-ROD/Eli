@@ -14,9 +14,11 @@ import type { Prisma } from "@prisma/client"
 export type MotivoDeBloqueo = "liquidacion" | "caja"
 
 /**
- * El `codigo` de la respuesta 409 "corrígelo con un ajuste" al anular una
- * atención ya rendida (#117). La interfaz decide con esto, no con el texto
- * del mensaje, que puede cambiar.
+ * El `codigo` de la respuesta 409 "corrígelo con un ajuste". Sale en dos
+ * casos: al anular una atención ya rendida (#117) y al reactivar desde
+ * PUT /api/citas/[id] una cita cuya atención ya entró en un cierre de caja o
+ * en una liquidación (#134). La interfaz decide con esto, no con el texto del
+ * mensaje, que puede cambiar.
  */
 export const CODIGO_CORREGIR_CON_AJUSTE = "corregir-con-ajuste"
 
