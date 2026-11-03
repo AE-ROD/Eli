@@ -8,6 +8,7 @@ import { whereDeLiquidaciones, type Actor } from "@/lib/permisos"
 import { registrarError } from "@/lib/registro-de-errores"
 import { nombreEnElNegocio } from "@/lib/tablero"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
+import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { sumarDias, zonaDelNegocio } from "@/lib/zona-horaria"
 import {
   configuracionDelNegocio,
@@ -630,22 +631,26 @@ export async function pagarLiquidacion(
  * "Liquidar desde" (que lo toma exclusivo y cuenta las liquidaciones vivas)
  * espera a que la anulación termine y ya la ve anulada, en vez de responder
  * 409 por una liquidación que se estaba anulando.
+ *
+ * `anuladaAt` es la hora de la base leída DESPUÉS de los candados, no la de
+ * esta instancia, igual que el cobro, la caja y la anulación de atenciones.
  */
 export async function anularLiquidacion(
   tx: Db,
-  opciones: { businessId: string; id: string; motivo: string; anuladaPorId: string; anuladaPorNombre: string; ahora: Date }
+  opciones: { businessId: string; id: string; motivo: string; anuladaPorId: string; anuladaPorNombre: string }
 ): Promise<void> {
   const { businessId, id } = opciones
   await tomarCandadoDeLiquidacionesDelNegocio(tx, businessId, "compartido")
   const liquidacion = await tx.liquidacion.findFirst({ where: { id, businessId }, select: { memberId: true } })
   if (!liquidacion) throw new ErrorDeLiquidacion(404, "Liquidación no encontrada")
   await tomarCandadoDeLiquidacion(tx, businessId, liquidacion.memberId)
+  const ahora = await horaDeLaBase(tx)
 
   const { count } = await tx.liquidacion.updateMany({
     where: { id, businessId, estado: "cerrada" },
     data: {
       estado: "anulada",
-      anuladaAt: opciones.ahora,
+      anuladaAt: ahora,
       anuladaPorId: opciones.anuladaPorId,
       anuladaPorNombre: opciones.anuladaPorNombre,
       motivoAnulacion: opciones.motivo,
