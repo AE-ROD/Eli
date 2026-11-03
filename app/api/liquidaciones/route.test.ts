@@ -507,6 +507,26 @@ describe("POST /api/liquidaciones/[id]/pago y /anulacion", () => {
     )
   })
 
+  it("la hora de la anulación es la de la base, leída después de los candados, no la de esta instancia", async () => {
+    const id = await cerrada()
+    vi.clearAllMocks()
+    enSesion(sesiones.dueña)
+    const deLaBase = new Date("2026-10-06T15:00:07.000Z")
+    base.prisma.$queryRaw.mockImplementationOnce(async () => [{ ahora: deLaBase }])
+
+    expect((await anular(id)).status).toBe(200)
+
+    expect(base.buscar("liquidacion", { id })[0].anuladaAt).toEqual(deLaBase)
+    const [partes] = base.prisma.$queryRaw.mock.calls[0]
+    expect(partes.join("?")).toBe("SELECT clock_timestamp() AS ahora")
+    expect(base.prisma.$queryRaw.mock.invocationCallOrder[0]).toBeGreaterThan(
+      Math.max(...base.prisma.$executeRaw.mock.invocationCallOrder)
+    )
+    expect(base.prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      base.prisma.liquidacion.updateMany.mock.invocationCallOrder[0]
+    )
+  })
+
   it("medio inexistente o sin motivo: 400", async () => {
     const id = await cerrada()
     expect((await pagar(id, { medio: "trueque" })).status).toBe(400)

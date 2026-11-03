@@ -41,7 +41,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         motivo,
         anuladaPorId: firma.id,
         anuladaPorNombre: firma.nombre,
-        ahora: new Date(),
       })
     )
     return NextResponse.json(await leerLiquidacion(prisma, actor, id))
