@@ -242,6 +242,36 @@ const CASCADAS: Partial<Record<NombreDeModelo, [NombreDeModelo, string][]>> = {
   ],
 }
 
+/**
+ * Las FK que impiden borrar al padre mientras un hijo lo referencie, todas
+ * las del esquema con `onDelete: NoAction` o `Restrict` (sacadas de las
+ * migraciones): [modelo hijo, campo que apunta al borrado, regla]. En
+ * Postgres `RESTRICT` se revisa en el acto, antes de las cascadas, y `NO
+ * ACTION` al final de la sentencia, así que a éste no lo frena un hijo que la
+ * misma sentencia se llevó en cascada. Las dos dan P2003 en Prisma.
+ */
+type Regla = "restrict" | "no action"
+const RESTRICCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]>> = {
+  // `porcentajes_comision_serviceId_businessId_fkey`
+  service: [["commissionRate", "serviceId", "restrict"]],
+  // `movimientos_de_liquidacion_visitId_businessId_fkey`
+  visit: [["movimientoDeLiquidacion", "visitId", "no action"]],
+  // `atencion_servicios_liquidacionId_fkey`, `atencion_propinas_liquidacionId_businessId_fkey`
+  // y `movimientos_de_liquidacion_liquidacionId_businessId_fkey`
+  liquidacion: [
+    ["visitService", "liquidacionId", "no action"],
+    ["propinaDeAtencion", "liquidacionId", "no action"],
+    ["movimientoDeLiquidacion", "liquidacionId", "no action"],
+  ],
+  // `atencion_propinas_memberId_businessId_fkey`, `liquidaciones_memberId_businessId_fkey`
+  // y `movimientos_de_liquidacion_memberId_businessId_fkey`
+  businessMember: [
+    ["propinaDeAtencion", "memberId", "no action"],
+    ["liquidacion", "memberId", "no action"],
+    ["movimientoDeLiquidacion", "memberId", "no action"],
+  ],
+}
+
 /** Consultas crudas que la base falsa acepta: sólo candados, que en memoria no tienen nada que ordenar. */
 const CANDADOS = ["FOR UPDATE", "pg_advisory_xact_lock"]
 
@@ -296,17 +326,60 @@ export function crearBaseFalsa() {
     tablas[modelo].filter((registro) => coincide(tablas, modelo, registro, where))
 
   /**
-   * Un DELETE: primero pasa cada fila por su trigger `BEFORE DELETE` (si una
-   * falla, no se borra ninguna, como una sentencia de Postgres), después la
-   * borra y sigue con las cascadas. Los hijos se revisan con el padre ya
-   * borrado, que es lo que ve el trigger dentro de la cascada.
+   * Una copia de las tablas que sirve para deshacer una sentencia: las listas
+   * se copian (un INSERT las alarga) pero los registros no, porque ni el
+   * INSERT ni el DELETE tocan los que ya estaban.
    */
-  function borrar(modelo: NombreDeModelo, registros: Set<Registro>) {
+  const instantanea = (): Tablas =>
+    Object.fromEntries(Object.entries(tablas).map(([modelo, lista]) => [modelo, [...lista]])) as Tablas
+
+  /** P2003 si queda algún hijo de `modelo` que apunte a `ids` con la regla pedida. */
+  function revisarRestricciones(modelo: NombreDeModelo, ids: Set<unknown>, regla: Regla) {
+    for (const [hijo, campo, suRegla] of RESTRICCIONES[modelo] ?? []) {
+      if (suRegla !== regla) continue
+      const referido = tablas[hijo].find((registro) => ids.has(registro[campo]))
+      if (referido) {
+        throw errorDePrisma(
+          "P2003",
+          `Foreign key constraint violated: ${hijo}.${campo} → ${String(referido[campo])} impide borrar ${modelo}`
+        )
+      }
+    }
+  }
+
+  /**
+   * Una sentencia DELETE entera: borra con sus cascadas, revisa al final los
+   * `NO ACTION` de todo lo borrado y, si algo falla en cualquier punto,
+   * deja la base como estaba (Postgres revierte la sentencia completa).
+   */
+  function borrarSentencia(modelo: NombreDeModelo, registros: Set<Registro>) {
+    const antes = instantanea()
+    const borrados: [NombreDeModelo, Set<unknown>][] = []
+    try {
+      borrar(modelo, registros, borrados)
+      for (const [padre, ids] of borrados) revisarRestricciones(padre, ids, "no action")
+    } catch (error) {
+      tablas = antes
+      throw error
+    }
+  }
+
+  /**
+   * Un DELETE de un nivel: primero pasa cada fila por su trigger `BEFORE
+   * DELETE` y por los `RESTRICT` que la referencian, después la borra y sigue
+   * con las cascadas. Los hijos se revisan con el padre ya borrado, que es lo
+   * que ve el trigger dentro de la cascada. Anota lo borrado en `borrados`
+   * para los `NO ACTION` del final.
+   */
+  function borrar(modelo: NombreDeModelo, registros: Set<Registro>, borrados: [NombreDeModelo, Set<unknown>][]) {
+    if (registros.size === 0) return
     for (const registro of registros) ANTES_DE_BORRAR[modelo]?.(registro)
+    const ids = new Set([...registros].map((registro) => registro.id))
+    revisarRestricciones(modelo, ids, "restrict")
     tablas[modelo] = tablas[modelo].filter((registro) => !registros.has(registro))
+    borrados.push([modelo, ids])
     for (const [hijo, campo] of CASCADAS[modelo] ?? []) {
-      const ids = new Set([...registros].map((registro) => registro.id))
-      borrar(hijo, new Set(tablas[hijo].filter((registro) => ids.has(registro[campo]))))
+      borrar(hijo, new Set(tablas[hijo].filter((registro) => ids.has(registro[campo]))), borrados)
     }
   }
 
@@ -579,7 +652,7 @@ export function crearBaseFalsa() {
         const [registro] = filtrar(modelo, args.where)
         if (!registro) throw errorDePrisma("P2025", `No existe el registro a borrar en ${modelo}`)
         const copiaDeSalida = salida(registro, args)
-        borrar(modelo, new Set([registro]))
+        borrarSentencia(modelo, new Set([registro]))
         return copiaDeSalida
       }),
       updateMany: vi.fn(async (args: Args) => {
@@ -590,7 +663,7 @@ export function crearBaseFalsa() {
       }),
       deleteMany: vi.fn(async (args: Args = {}) => {
         const registros = new Set(filtrar(modelo, args.where))
-        borrar(modelo, registros)
+        borrarSentencia(modelo, registros)
         return { count: registros.size }
       }),
     }
