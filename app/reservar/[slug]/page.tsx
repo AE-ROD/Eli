@@ -3,7 +3,7 @@ import { notFound } from "next/navigation"
 import { CalendarX2 } from "lucide-react"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Tarjeta } from "@/components/comunes/tarjeta"
-import { plazoParaQuienReserva } from "@/lib/gestion-de-cita"
+import { plazoParaQuienReserva, plazoValido } from "@/lib/gestion-de-cita"
 import { prisma } from "@/lib/prisma"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
 import { descripcionParaCompartir } from "@/lib/pagina-del-negocio"
@@ -107,6 +107,7 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
         horarios={pagina.horario}
         listaDeEsperaActiva={negocio.listaDeEsperaActiva}
         plazoDeCambios={plazoParaQuienReserva(pagina.plazoDeCambiosHoras)}
+        plazoDeCambiosHoras={plazoValido(pagina.plazoDeCambiosHoras)}
       />
       </div>
     </MarcoDeReserva>

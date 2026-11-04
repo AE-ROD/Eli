@@ -7,7 +7,7 @@
 
 import { horaAMinutos } from "@/lib/horario-dia"
 import { aE164Chile } from "@/lib/telefono"
-import { diaDeLaSemana, diasEntre, esFechaCalendario, fechaYMinutosEn } from "@/lib/zona-horaria"
+import { diaDeLaSemana, diasEntre, esFechaCalendario, fechaYMinutosEn, instanteEn } from "@/lib/zona-horaria"
 
 /**
  * Hasta cuántos días después de hoy (en el reloj del negocio) se puede
@@ -59,6 +59,29 @@ export function yaPasoLaHora(fecha: string, hora: string, ahora: Date, zona: str
   const dias = diasEntre(hoy.fecha, fecha)
   if (dias !== 0) return dias < 0
   return horaAMinutos(hora) <= hoy.minutos
+}
+
+/**
+ * Si una hora elegida ya cae dentro del plazo para cancelar o cambiar
+ * (`plazoHoras`, ya validado con `plazoValido`): quien reserva con menos
+ * anticipación que el plazo no podrá cancelarla ni cambiarla por el enlace
+ * (QA#8). Es la regla de `dentroDelPlazo` (`lib/gestion-de-cita.ts`) al revés:
+ * falta MENOS que el plazo. Vive acá porque `gestion-de-cita` no entra al
+ * navegador. No lanza: una fecha u hora inválidas dan `false`.
+ */
+export function quedaSinCambiosPorElEnlace(fecha: string, hora: string, zona: string, plazoHoras: number, ahora: Date): boolean {
+  if (!esFechaCalendario(fecha) || !/^\d{2}:\d{2}$/.test(hora)) return false
+  try {
+    return instanteEn(fecha, hora, zona).getTime() - ahora.getTime() < plazoHoras * 60 * 60 * 1000
+  } catch {
+    return false
+  }
+}
+
+/** Lo que se dice antes de confirmar cuando la hora ya está dentro del plazo (QA#8). */
+export function avisoSinCambiosPorElEnlace(plazoHoras: number): string {
+  const plazo = `${plazoHoras} ${plazoHoras === 1 ? "hora" : "horas"}`
+  return `Tu hora es en menos de ${plazo}: una vez confirmada, no podrás cancelarla ni cambiarla por el enlace. Si lo necesitas, tendrás que contactar al local.`
 }
 
 // ─── Topes anti-abuso ────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ import { Tarjeta } from "@/components/comunes/tarjeta"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { formatearMonto } from "@/lib/dinero"
 import { deTexto, formatearDuracionDeServicio } from "@/lib/fechas"
+import { avisoSinCambiosPorElEnlace, quedaSinCambiosPorElEnlace } from "@/lib/reserva-publica"
 import { MAX_SERVICIOS_POR_RESERVA, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
 import { cn } from "@/lib/utils"
 import { EncabezadoDeReserva } from "./encabezado-de-reserva"
@@ -49,6 +50,12 @@ interface PropsDeFormularioReserva {
    * `lib/gestion-de-cita.ts` usa `node:crypto` y no entra al cliente.
    */
   plazoDeCambios: string
+  /**
+   * El mismo plazo en horas, ya validado (`plazoValido`): si la hora elegida
+   * ya cae dentro, el paso de confirmar avisa que no se podrá cancelar ni
+   * cambiar por el enlace (QA#8).
+   */
+  plazoDeCambiosHoras: number
 }
 
 type Paso = 1 | 2 | 3
@@ -95,6 +102,7 @@ export function FormularioReserva({
   horarios,
   listaDeEsperaActiva,
   plazoDeCambios,
+  plazoDeCambiosHoras,
 }: PropsDeFormularioReserva) {
   const parametros = useSearchParams()
   // `?servicio=<id>&fecha=AAAA-MM-DD` (el enlace del aviso de la lista de
@@ -531,9 +539,16 @@ export function FormularioReserva({
                   precioDeLaHora={precioDeLaHora}
                   profesional={profesionalElegido?.nombre ?? (profesionalesDelServicio.length > 0 ? "Cualquiera disponible" : null)}
                 />
-                <p className="mt-4 border-t border-borde pt-3 text-sm text-texto-2">
-                  {plazoDeCambios}
-                </p>
+                {quedaSinCambiosPorElEnlace(fecha, hora, zona, plazoDeCambiosHoras, new Date()) ? (
+                  // La hora ya está dentro del plazo: se dice antes de confirmar, no después en el enlace.
+                  <p className="mt-4 border-t border-borde pt-3 text-sm font-medium text-navy">
+                    {avisoSinCambiosPorElEnlace(plazoDeCambiosHoras)}
+                  </p>
+                ) : (
+                  <p className="mt-4 border-t border-borde pt-3 text-sm text-texto-2">
+                    {plazoDeCambios}
+                  </p>
+                )}
               </section>
 
               {error && (
