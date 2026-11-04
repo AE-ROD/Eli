@@ -495,14 +495,17 @@ export async function cerrarLiquidacion(
     nota: string | null
     cerradaPorId: string
     cerradaPorNombre: string
-    ahora: Date
   }
 ): Promise<string> {
-  const { businessId, memberId, ahora } = opciones
+  const { businessId, memberId } = opciones
   // Primero el del negocio, compartido: un cambio de "Liquidar desde" en
   // curso termina antes, y la vista previa de abajo ya lee la fecha nueva.
   await tomarCandadoDeLiquidacionesDelNegocio(tx, businessId, "compartido")
   await tomarCandadoDeLiquidacion(tx, businessId, memberId)
+  // La hora del cierre (`cerradaAt`, `commissionAt` y el "hoy" del período)
+  // es la de la base, leída DESPUÉS de los candados, no la de esta instancia
+  // (#152), igual que la anulación de la liquidación.
+  const ahora = await horaDeLaBase(tx)
 
   const vista = await vistaPrevia(tx, { businessId, memberId, excluirMovimientos: opciones.excluirMovimientos, ahora })
   if (!vista) throw new ErrorDeLiquidacion(404, "Profesional no encontrado")
@@ -599,17 +602,23 @@ function noEstaCerrada(estado: string, accion: "pagar" | "anular"): string {
   return "Esta liquidación ya no está cerrada."
 }
 
-/** Marca pagada una liquidación cerrada del negocio. 404 si no es del negocio; 409 si no está cerrada. */
+/**
+ * Marca pagada una liquidación cerrada del negocio. 404 si no es del negocio;
+ * 409 si no está cerrada. `pagadaAt` es la hora de la base, no la de esta
+ * instancia (#152): no hay candado que esperar, la escritura es un único
+ * updateMany condicional, así que se pide justo antes.
+ */
 export async function pagarLiquidacion(
   tx: Db,
-  opciones: { businessId: string; id: string; medio: string; pagadaPorId: string; pagadaPorNombre: string; ahora: Date }
+  opciones: { businessId: string; id: string; medio: string; pagadaPorId: string; pagadaPorNombre: string }
 ): Promise<void> {
   const { businessId, id } = opciones
+  const ahora = await horaDeLaBase(tx)
   const { count } = await tx.liquidacion.updateMany({
     where: { id, businessId, estado: "cerrada" },
     data: {
       estado: "pagada",
-      pagadaAt: opciones.ahora,
+      pagadaAt: ahora,
       pagadaPorId: opciones.pagadaPorId,
       pagadaPorNombre: opciones.pagadaPorNombre,
       medioDePago: opciones.medio,
