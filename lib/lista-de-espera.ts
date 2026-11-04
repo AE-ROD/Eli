@@ -2,7 +2,7 @@ import { createHmac, hkdfSync, randomUUID } from "node:crypto"
 import { after } from "next/server"
 import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { candidatosDeLaReserva, horasLibresDelDia } from "@/lib/agenda-publica"
+import { candidatosDeLaReserva, hayHorasPosiblesDelDia, horasLibresDelDia } from "@/lib/agenda-publica"
 import { enviarAvisoListaDeEspera } from "@/lib/email"
 import {
   AVISOS_POR_EVENTO_LISTA_DE_ESPERA,
@@ -193,6 +193,17 @@ export async function inscribirEnListaDeEspera(
     ahora,
   })
   if (libres.length > 0) return { tipo: "rechazada", error: MENSAJE_HAY_HORAS }
+  // Un día bloqueado entero (o con todas sus horas ya pasadas) tampoco va a
+  // liberar ninguna: es un día sin atención (QA#26).
+  const posibles = await hayHorasPosiblesDelDia(prisma, {
+    businessId: negocio.id,
+    zona,
+    fecha: datos.fecha,
+    duracion: servicio.duration,
+    candidatos,
+    ahora,
+  })
+  if (!posibles) return { tipo: "rechazada", error: MENSAJE_SIN_ATENCION }
 
   const esperaId = randomUUID()
   const tokenHash = hashDeToken(tokenDeInscripcion(esperaId))

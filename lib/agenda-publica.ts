@@ -237,6 +237,9 @@ export function tramoDeLaReserva(fecha: string, hora: string, duracion: number, 
  * Las horas libres de un día: la unión de las de cada candidato (con uno
  * solo, las suyas). Sin horas pasadas ni horas que el reloj se salta por el
  * horario de verano: `confirmar` las rechaza.
+ *
+ * Con `soloBloqueos`, las citas no cuentan: son las horas que el día podría
+ * llegar a ofrecer si se liberaran todas (`hayHorasPosiblesDelDia`).
  */
 export async function horasLibresDelDia(
   db: BaseDeAgendaPublica,
@@ -248,9 +251,10 @@ export async function horasLibresDelDia(
     candidatos: Candidato[]
     ahora: Date
     ignorarCitaId?: string | null
+    soloBloqueos?: boolean
   }
 ): Promise<string[]> {
-  const { businessId, zona, fecha, duracion, candidatos, ahora, ignorarCitaId } = consulta
+  const { businessId, zona, fecha, duracion, candidatos, ahora, ignorarCitaId, soloBloqueos = false } = consulta
   const dia = rangoDelDiaEn(fecha, zona)
   const libres = new Set<string>()
 
@@ -261,19 +265,36 @@ export async function horasLibresDelDia(
     const pendientes = horas.filter((hora) => !libres.has(hora))
     if (pendientes.length === 0) continue
 
-    const ocupacion = await ocupacionDelCandidato(db, {
+    const leida = await ocupacionDelCandidato(db, {
       businessId,
       memberId: candidato.memberId,
       desde: dia.desde,
       hasta: dia.hasta,
       ignorarCitaId,
     })
+    const ocupacion = soloBloqueos ? { citas: [], bloqueos: leida.bloqueos } : leida
     for (const hora of pendientes) {
       if (estaLibre(ocupacion, tramoDeLaReserva(fecha, hora, duracion, zona))) libres.add(hora)
     }
   }
 
   return [...libres].sort((a, b) => horaAMinutos(a) - horaAMinutos(b))
+}
+
+/**
+ * Si el día tiene alguna hora que podría liberarse: en horario, no pasada y
+ * fuera de los bloqueos, aunque hoy esté tomada por una cita. Un día cerrado,
+ * bloqueado entero o cuyas horas ya pasaron no tiene ninguna, y ahí no se
+ * ofrece la lista de espera: ninguna cancelación le va a abrir una hora
+ * (QA#26).
+ */
+export async function hayHorasPosiblesDelDia(
+  db: BaseDeAgendaPublica,
+  consulta: Omit<Parameters<typeof horasLibresDelDia>[1], "soloBloqueos" | "ignorarCitaId">
+): Promise<boolean> {
+  const candidatos = consulta.candidatos.filter((candidato) => candidato.franjas.length > 0)
+  if (candidatos.length === 0) return false
+  return (await horasLibresDelDia(db, { ...consulta, candidatos, soloBloqueos: true })).length > 0
 }
 
 /** Los candidatos cuyo horario cubre entero el tramo [inicio, inicio + duración) de esa hora. */

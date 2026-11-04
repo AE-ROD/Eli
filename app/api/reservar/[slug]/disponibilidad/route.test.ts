@@ -215,7 +215,53 @@ describe("GET /api/reservar/[slug]/disponibilidad: de qué horario salen las hor
       franja({ businessId: OTRO_NEGOCIO, memberId: "m-ajeno", startTime: "12:00", endTime: "13:00" }),
     ])
 
-    expect(await horasDelDia()).toEqual({ slots: [], mensaje: "No hay atención ese día" })
+    expect(await horasDelDia()).toEqual({ slots: [], mensaje: "No hay atención ese día", sinListaDeEspera: true })
+  })
+})
+
+/** QA#26: la lista de espera sólo se ofrece si algo se puede liberar. */
+describe("GET /api/reservar/[slug]/disponibilidad: cuándo no se ofrece la lista de espera", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    relojEn("2030-01-01T12:00:00.000Z")
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 59 })
+    escenario([franja({ startTime: "09:00", endTime: "11:00" })])
+  })
+
+  const cita = (id: string, desde: number, hasta: number) => ({
+    id,
+    businessId: NEGOCIO,
+    title: "Corte",
+    status: "confirmada",
+    startTime: aLas(desde),
+    endTime: aLas(hasta),
+  })
+
+  it("un día lleno de citas: sin horas, pero con lista de espera (una cancelación libera una)", async () => {
+    base.reiniciar({ ...base.volcado(), appointment: [cita("c-1", 9, 10), cita("c-2", 10, 11)] })
+    expect(await horasDelDia()).toEqual({ slots: [] })
+  })
+
+  it("un día bloqueado entero: sin horas y sin lista de espera", async () => {
+    base.reiniciar({
+      ...base.volcado(),
+      timeBlock: [{ id: "b-1", businessId: NEGOCIO, memberId: null, startTime: aLas(0), endTime: aLas(20) }],
+    })
+    expect(await horasDelDia()).toEqual({ slots: [], sinListaDeEspera: true })
+  })
+
+  it("un bloqueo de otro negocio no cuenta", async () => {
+    base.reiniciar({
+      ...base.volcado(),
+      appointment: [cita("c-1", 9, 10), cita("c-2", 10, 11)],
+      timeBlock: [{ id: "b-ajeno", businessId: OTRO_NEGOCIO, memberId: null, startTime: aLas(0), endTime: aLas(20) }],
+    })
+    expect(await horasDelDia()).toEqual({ slots: [] })
+  })
+
+  it("un día que el negocio no atiende: sin lista de espera", async () => {
+    escenario([franja({ dayOfWeek: OTRO_DIA, startTime: "09:00", endTime: "11:00" })])
+    expect(await horasDelDia()).toEqual({ slots: [], mensaje: "No hay atención ese día", sinListaDeEspera: true })
   })
 })
 

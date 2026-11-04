@@ -51,11 +51,19 @@ describe("confirmarReserva", () => {
 })
 
 describe("leerDisponibilidad (#89c)", () => {
+  it("QA#26: un día sin ninguna hora posible lo dice, para no ofrecer la lista de espera", async () => {
+    mockFetch.mockResolvedValue(new Response(JSON.stringify({ slots: [], sinListaDeEspera: true }), { status: 200 }))
+    expect(await leerDisponibilidad("uno", "2030-01-07", ["s1"], null)).toEqual({
+      ok: true,
+      datos: { horas: [], precios: [], sinListaDeEspera: true },
+    })
+  })
+
   it("sin `valle` (apagada, o un servidor de antes): las horas y ningún precio", async () => {
     mockFetch.mockResolvedValue(new Response(JSON.stringify({ slots: ["09:00", "10:00"] }), { status: 200 }))
     expect(await leerDisponibilidad("uno", "2030-01-07", ["s1"], null)).toEqual({
       ok: true,
-      datos: { horas: ["09:00", "10:00"], precios: [] },
+      datos: { horas: ["09:00", "10:00"], precios: [], sinListaDeEspera: false },
     })
   })
 
@@ -64,7 +72,7 @@ describe("leerDisponibilidad (#89c)", () => {
     mockFetch.mockResolvedValue(new Response(JSON.stringify({ slots: ["09:00", "10:00"], valle }), { status: 200 }))
     expect(await leerDisponibilidad("uno", "2030-01-07", ["s1"], null)).toEqual({
       ok: true,
-      datos: { horas: ["09:00", "10:00"], precios: valle },
+      datos: { horas: ["09:00", "10:00"], precios: valle, sinListaDeEspera: false },
     })
   })
 })
