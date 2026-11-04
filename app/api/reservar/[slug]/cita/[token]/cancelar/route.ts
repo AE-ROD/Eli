@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { enviarAvisoDeCambioDelCliente } from "@/lib/email"
 import { ESTADOS_GESTIONABLES, dentroDelPlazo, mensajeFueraDePlazo } from "@/lib/gestion-de-cita"
 import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
@@ -14,7 +15,13 @@ import { abrirEnlace, fechaYHora, noEncontrada, nombreDelCliente, type Params } 
 export async function POST(request: NextRequest, contexto: Params) {
   const enlace = await abrirEnlace(request, contexto, "reserva")
   if (enlace instanceof NextResponse) return enlace
-  const { cita, zona, ahora } = enlace
+  const { cita, zona } = enlace
+
+  // La hora de la base, no la de esta instancia (#152), y la misma para las
+  // dos cosas: decidir si sigue dentro del plazo y registrar `canceladaEn`.
+  // Así lo que se guarda es exactamente la hora con que se aceptó, y calza
+  // con las cancelaciones desde el panel y al anular la atención.
+  const ahora = await horaDeLaBase(prisma)
 
   const plazo = cita.business.cancelacionHorasAntes
   if (!dentroDelPlazo(cita.startTime, plazo, ahora)) {

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import {
   ESTADOS_ACTIVOS,
   esEstadoActivo,
@@ -69,9 +70,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const atencion = await prisma.$transaction(async (tx) => {
+      // `startedAt` y `readyAt` con la hora de la base, no la de esta
+      // instancia (#152), como `paidAt` al cobrarla. No hay candado que
+      // esperar antes: `tomarAtencion` es la escritura que bloquea la fila.
+      const ahora = await horaDeLaBase(tx)
       await tomarAtencion(tx, actor, existente.id, desde, {
         status: destino,
-        ...tiemposDeTransicion(desde, destino, new Date()),
+        ...tiemposDeTransicion(desde, destino, ahora),
       })
 
       // Todo después de tomar la fila: así nadie cambia las líneas en el
