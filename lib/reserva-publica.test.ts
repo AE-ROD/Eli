@@ -11,6 +11,7 @@ import {
   normalizarTelefono,
   yaPasoLaHora,
   avisoSinCambiosPorElEnlace,
+  avisoSinCambiosDespuesDeReservar,
   quedaSinCambiosPorElEnlace,
 } from "./reserva-publica"
 import { dentroDelPlazo } from "./gestion-de-cita"
@@ -225,5 +226,13 @@ describe("quedaSinCambiosPorElEnlace (QA#8)", () => {
   it("el aviso dice el plazo y que no se podrá cancelar ni cambiar", () => {
     expect(avisoSinCambiosPorElEnlace(24)).toMatch(/menos de 24 horas.*no podrás cancelarla ni cambiarla/)
     expect(avisoSinCambiosPorElEnlace(1)).toMatch(/menos de 1 hora:/)
+  })
+})
+
+describe("avisoSinCambiosDespuesDeReservar (QA#8)", () => {
+  it("dice el plazo y que se contacte al local", () => {
+    expect(avisoSinCambiosDespuesDeReservar(24)).toBe(
+      "Tu hora es en menos de 24 horas, así que no se puede cancelar ni cambiar por el enlace. Si lo necesitas, contacta directamente al local."
+    )
   })
 })

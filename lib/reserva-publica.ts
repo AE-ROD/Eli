@@ -84,6 +84,12 @@ export function avisoSinCambiosPorElEnlace(plazoHoras: number): string {
   return `Tu hora es en menos de ${plazo}: una vez confirmada, no podrás cancelarla ni cambiarla por el enlace. Si lo necesitas, tendrás que contactar al local.`
 }
 
+/** Lo mismo, en la pantalla de reserva confirmada: en vez de "Gestiona tu cita acá". */
+export function avisoSinCambiosDespuesDeReservar(plazoHoras: number): string {
+  const plazo = `${plazoHoras} ${plazoHoras === 1 ? "hora" : "horas"}`
+  return `Tu hora es en menos de ${plazo}, así que no se puede cancelar ni cambiar por el enlace. Si lo necesitas, contacta directamente al local.`
+}
+
 // ─── Topes anti-abuso ────────────────────────────────────────────────────────
 //
 // La página pública no pide cuenta: cualquiera puede reservar, y el límite

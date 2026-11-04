@@ -88,6 +88,8 @@ export interface ReservaConfirmada {
   profesional: { id: string; nombre: string } | null
   /** La ruta para cancelar o reagendar sin cuenta (lleva el token). */
   enlaceDeGestion: string
+  /** `false` si ya quedó dentro del plazo: el enlace no la deja cancelar ni cambiar (QA#8). */
+  sePuedeCambiar?: boolean
 }
 
 /**

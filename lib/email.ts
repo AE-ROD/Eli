@@ -325,6 +325,12 @@ export interface DatosConfirmacionCliente {
   /** Hasta cuántas horas antes se puede cambiar con el enlace. */
   plazoHoras?: number
   /**
+   * `false` si la cita ya quedó dentro del plazo al reservarla
+   * (`dentroDelPlazo`): el enlace no la dejaría cancelar ni cambiar, así que
+   * el correo no ofrece el botón y dice que se contacte al local (QA#8).
+   */
+  sePuedeCambiar?: boolean
+  /**
    * La reserva entró por confirmar (#84): el correo dice que el local la
    * confirmará, sin decir por qué. La pantalla de la reserva no lo dice.
    */
@@ -350,7 +356,11 @@ export function enviarConfirmacionCliente(datos: DatosConfirmacionCliente) {
           intro: html`Hola <strong>${datos.nombreCliente}</strong>, te esperamos en <strong>${datos.nombreNegocio}</strong>.`,
         }),
     detalle,
-    ...(datos.enlaceDeGestion
+    ...(datos.enlaceDeGestion && datos.sePuedeCambiar === false
+      ? {
+          cierre: html`Tu hora es en menos de ${datos.plazoHoras ?? 0} ${datos.plazoHoras === 1 ? "hora" : "horas"}, así que no se puede cancelar ni cambiar por el enlace. Si lo necesitas, contacta directamente al local.`,
+        }
+      : datos.enlaceDeGestion
       ? {
           boton: { texto: "Cancelar o cambiar mi cita", enlace: datos.enlaceDeGestion },
           cierre:

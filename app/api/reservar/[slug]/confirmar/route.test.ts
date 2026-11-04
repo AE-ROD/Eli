@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server"
 import { Prisma } from "@prisma/client"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
+import { enviarConfirmacionCliente } from "@/lib/email"
 
 const mockVerificarLimite = vi.fn()
 
@@ -374,6 +375,22 @@ describe("POST /api/reservar/[slug]/confirmar: ni en el pasado ni a más de 90 d
       expect(cuerpo.error).toMatch(/ya pasó/)
       expect(citasCreadas()).toHaveLength(0)
       expect(base.buscar("customer", { name: "Lucía" })).toHaveLength(0)
+    })
+
+    it("QA#8: reservada dentro del plazo (hoy, con 24 h), ni la respuesta ni el correo ofrecen cambiarla", async () => {
+      const { POST } = await import("./route")
+      const res = await POST(pedidoFalso({ ...reserva("11:00", "2026-10-19"), email: "lucia@correo.test" }), conSlug)
+      expect(res.status).toBe(201)
+      expect((await res.json()).sePuedeCambiar).toBe(false)
+      expect(vi.mocked(enviarConfirmacionCliente)).toHaveBeenCalledWith(
+        expect.objectContaining({ sePuedeCambiar: false, plazoHoras: 24 })
+      )
+    })
+
+    it("QA#8: justo en el plazo (mañana a la misma hora) o más allá, sí se puede cambiar", async () => {
+      expect((await confirmar("10:30", "2026-10-20")).cuerpo.sePuedeCambiar).toBe(true)
+      todaLaSemana()
+      expect((await confirmar("11:00", "2026-10-21")).cuerpo.sePuedeCambiar).toBe(true)
     })
 
     it("una hora de hoy que todavía no llega (11:00): crea la cita", async () => {

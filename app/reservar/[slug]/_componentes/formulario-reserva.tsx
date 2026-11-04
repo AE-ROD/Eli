@@ -14,7 +14,7 @@ import { Tarjeta } from "@/components/comunes/tarjeta"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { formatearMonto } from "@/lib/dinero"
 import { deTexto, formatearDuracionDeServicio } from "@/lib/fechas"
-import { avisoSinCambiosPorElEnlace, quedaSinCambiosPorElEnlace } from "@/lib/reserva-publica"
+import { avisoSinCambiosDespuesDeReservar, avisoSinCambiosPorElEnlace, quedaSinCambiosPorElEnlace } from "@/lib/reserva-publica"
 import { MAX_SERVICIOS_POR_RESERVA, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
 import { cn } from "@/lib/utils"
 import { EncabezadoDeReserva } from "./encabezado-de-reserva"
@@ -124,6 +124,8 @@ export function FormularioReserva({
   const [profesionalId, setProfesionalId] = useState<string | null>(profesionalDeLaUrl)
   const [profesionalAsignado, setProfesionalAsignado] = useState<string | null>(null)
   const [enlaceDeGestion, setEnlaceDeGestion] = useState<string | null>(null)
+  // Si la cita quedó dentro del plazo, el enlace ya no la deja cambiar (QA#8).
+  const [sePuedeCambiar, setSePuedeCambiar] = useState(true)
   const [fecha, setFecha] = useState(conFechaDeLaUrl ? fechaDeLaUrl : "")
   const [hora, setHora] = useState("")
   // Con hora valle (#89c), el precio de la hora elegida; `null` si es el de siempre.
@@ -221,6 +223,7 @@ export function FormularioReserva({
     if (resultado.ok) {
       setProfesionalAsignado(resultado.datos.profesional?.nombre ?? null)
       setEnlaceDeGestion(resultado.datos.enlaceDeGestion ?? null)
+      setSePuedeCambiar(resultado.datos.sePuedeCambiar !== false)
       setCitaId(resultado.datos.citaId)
     }
     else setError(resultado.error)
@@ -278,7 +281,10 @@ export function FormularioReserva({
               zona,
             }}
           />
-          {enlaceDeGestion && (
+          {enlaceDeGestion && !sePuedeCambiar && (
+            <p className="mt-6 text-sm text-texto-2">{avisoSinCambiosDespuesDeReservar(plazoDeCambiosHoras)}</p>
+          )}
+          {enlaceDeGestion && sePuedeCambiar && (
             <p className="mt-6 text-sm text-texto-2">
               ¿Necesitas cancelar o cambiar la hora?{" "}
               <a href={enlaceDeGestion} className="font-medium text-navy underline underline-offset-4 anillo-foco">
