@@ -244,6 +244,8 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 
 **Horas de la agenda.** Las vistas Día y Semana muestran como mínimo de 8 a 20, y se amplían para incluir el horario de atención del negocio y cualquier cita fuera de ese rango. La vista Día lista todas las citas de cada hora; en la Semana, las que se pisan se dibujan lado a lado.
 
+**Cómo se escriben horas y duraciones.** El panel escribe las horas en 24 h (`00:00`, `14:30`), también en la caja, el historial de comisiones y el comprobante de la liquidación. La duración de una cita, en el detalle y en su tarjeta, va en horas y minutos (`45 min`, `2 h`, `4 h 15 min`). Los campos para elegir una hora los dibuja el navegador según su idioma, así que en algunos equipos pueden verse con a. m./p. m.
+
 **Centro de soporte.** Las personas piden ayuda desde `/dashboard/ayuda` (con sesión) y `/soporte` (pública, sin sesión); las dos usan el mismo centro de ayuda y mandan a `POST /api/soporte`.
 
 - **Tipos:** falla ("Algo no funciona"), reclamo y consulta ("Busco información"), cada una sobre un área (Agenda, Reservas en línea, Tablero del día, Clientes, Reportes, Equipo, Cuenta y plan u Otro). Antes del formulario se muestran las preguntas frecuentes (`lib/preguntas-frecuentes.ts`); en una falla, las que responden problemas típicos de esa área.

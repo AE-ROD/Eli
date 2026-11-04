@@ -5,6 +5,7 @@ import {
   limitesDelMesDe,
   desplazarFecha,
   formatearHora,
+  HORA_24,
   horaConArticulo,
   zonaDelDispositivo,
   duracionEnMinutos,
@@ -105,6 +106,39 @@ describe("formatearHora", () => {
 
   it("después de medianoche empieza en 00, no en 24", () => {
     expect(formatearHora(instante(0, 30))).toBe("00:30")
+  })
+
+  it("QA#15: con la zona del negocio, medianoche es 00:00 y no \"12:00 a. m.\"", () => {
+    // 4 de noviembre de 2026 a las 00:00 en Santiago (UTC-3).
+    expect(formatearHora("2026-11-04T03:00:00.000Z", "America/Santiago")).toBe("00:00")
+    expect(formatearHora("2026-11-04T17:45:00.000Z", "America/Santiago")).toBe("14:45")
+  })
+})
+
+describe("HORA_24", () => {
+  // "es-CL" escribe 12 horas por defecto en ICU: es lo que se veía en la caja
+  // y en el comprobante de la liquidación.
+  const medianoche = new Date("2026-11-04T03:00:00.000Z")
+
+  it("una fecha con hora sale en 24 h: el comprobante y la caja", () => {
+    const comprobante = medianoche.toLocaleString("es-CL", {
+      timeZone: "America/Santiago",
+      dateStyle: "medium",
+      timeStyle: "short",
+      ...HORA_24,
+    })
+    const caja = medianoche.toLocaleString("es-CL", {
+      timeZone: "America/Santiago",
+      day: "numeric",
+      month: "long",
+      hour: "2-digit",
+      minute: "2-digit",
+      ...HORA_24,
+    })
+
+    expect(comprobante).toMatch(/00:00$/)
+    expect(caja).toBe("4 de noviembre, 00:00")
+    expect(`${comprobante} ${caja}`).not.toMatch(/a\.\s?m\.|p\.\s?m\./)
   })
 })
 

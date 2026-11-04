@@ -10,6 +10,7 @@ import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
+import { HORA_24 } from "@/lib/fechas"
 import { Paginador } from "../../reportes/_componentes/paginador"
 import {
   formatearPorcentaje,
@@ -27,7 +28,7 @@ interface PropsDeHistorial {
 
 /** `12 de octubre de 2026, 15:30`, en la hora del dispositivo. */
 function cuandoParaLeer(iso: string): string {
-  return new Date(iso).toLocaleString("es-CL", { dateStyle: "long", timeStyle: "short" })
+  return new Date(iso).toLocaleString("es-CL", { dateStyle: "long", timeStyle: "short", ...HORA_24 })
 }
 
 /** "el % por defecto", "Color" o "el producto Shampoo". */

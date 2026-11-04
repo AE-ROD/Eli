@@ -10,6 +10,7 @@ import { nombreDeMedio } from "@/lib/medios-de-pago"
 import { actorDeSesion, puedeAnularLiquidacion, puedePagarLiquidacion, puedeVerLiquidacionesDelEquipo } from "@/lib/permisos"
 import { fechaParaLeer } from "@/lib/periodos-de-liquidacion"
 import { cn } from "@/lib/utils"
+import { HORA_24 } from "@/lib/fechas"
 import { AccionesDelComprobante } from "../_componentes/acciones-del-comprobante"
 import { FilaDeTotal, InsigniaDeEstado, pesos, porcentaje } from "../_componentes/piezas"
 
@@ -31,7 +32,7 @@ const IMPRESION = `
 `
 
 const momento = (iso: string, zona: string) =>
-  new Date(iso).toLocaleString("es-CL", { timeZone: zona, dateStyle: "medium", timeStyle: "short" })
+  new Date(iso).toLocaleString("es-CL", { timeZone: zona, dateStyle: "medium", timeStyle: "short", ...HORA_24 })
 
 const CELDA = "py-2 pr-3 align-top"
 const CABECERA = "py-2 pr-3 text-left text-xs font-medium uppercase tracking-[0.04em] text-texto-2"
