@@ -125,7 +125,16 @@ export function candidatosDelDia(
   profesionales: string[],
   fecha: string
 ): Candidato[] {
-  const dia = diaDeLaSemana(fecha)
+  return candidatosDelDiaDeLaSemana(filasDeLaSemana, hayProfesionales, profesionales, diaDeLaSemana(fecha))
+}
+
+/** `candidatosDelDia` con el día de la semana (0 domingo a 6 sábado) en vez de la fecha. */
+function candidatosDelDiaDeLaSemana(
+  filasDeLaSemana: FilaDeHorarioSemanal[],
+  hayProfesionales: boolean,
+  profesionales: string[],
+  dia: number
+): Candidato[] {
   if (!hayProfesionales) {
     return [{ memberId: null, franjas: franjasDeAtencion(filasDeLaSemana.filter((fila) => fila.dayOfWeek === dia)) }]
   }
@@ -339,7 +348,43 @@ export async function candidatosDeLaReserva(
   db: Pick<Prisma.TransactionClient, "businessMember" | "workSchedule">,
   consulta: { businessId: string; serviceIds: string[]; profesionalId: string | null; fecha: string }
 ): Promise<CandidatosDeLaReserva> {
-  const { businessId, serviceIds, profesionalId, fecha } = consulta
+  const leidos = await leerQuienesPuedenTomarla(db, consulta)
+  if (leidos.tipo === "profesional-no-disponible") return leidos
+  const { profesionales, elegidos, filas } = leidos
+  return {
+    tipo: "ok",
+    profesionales,
+    candidatos: candidatosDelDia(filas, profesionales.length > 0, elegidos, consulta.fecha),
+  }
+}
+
+/**
+ * Los días de la semana (0 domingo a 6 sábado) en que alguno de los
+ * candidatos de la reserva tiene horario: con los mismos candidatos que
+ * `candidatosDeLaReserva`, para que el calendario de reagendar no deje elegir
+ * un día cerrado (QA#19). `null` si el profesional ya no puede tomarla.
+ */
+export async function diasConAtencionDeLaReserva(
+  db: Pick<Prisma.TransactionClient, "businessMember" | "workSchedule">,
+  consulta: { businessId: string; serviceIds: string[]; profesionalId: string | null }
+): Promise<number[] | null> {
+  const leidos = await leerQuienesPuedenTomarla(db, consulta)
+  if (leidos.tipo === "profesional-no-disponible") return null
+  const { profesionales, elegidos, filas } = leidos
+  return [0, 1, 2, 3, 4, 5, 6].filter((dia) =>
+    candidatosDelDiaDeLaSemana(filas, profesionales.length > 0, elegidos, dia).some((candidato) => candidato.franjas.length > 0)
+  )
+}
+
+/** Lo que leen `candidatosDeLaReserva` y `diasConAtencionDeLaReserva`: el equipo, los elegidos y el horario de la semana. */
+async function leerQuienesPuedenTomarla(
+  db: Pick<Prisma.TransactionClient, "businessMember" | "workSchedule">,
+  consulta: { businessId: string; serviceIds: string[]; profesionalId: string | null }
+): Promise<
+  | { tipo: "ok"; profesionales: ProfesionalQueAtiende[]; elegidos: string[]; filas: FilaDeHorarioSemanal[] }
+  | { tipo: "profesional-no-disponible" }
+> {
+  const { businessId, serviceIds, profesionalId } = consulta
   const [profesionales, filas] = await Promise.all([
     leerProfesionalesQueAtienden(db, businessId),
     db.workSchedule.findMany({
@@ -354,9 +399,5 @@ export async function candidatosDeLaReserva(
     elegidos = queLoHacen.filter((profesional) => profesional.id === profesionalId)
     if (elegidos.length === 0) return { tipo: "profesional-no-disponible" }
   }
-  return {
-    tipo: "ok",
-    profesionales,
-    candidatos: candidatosDelDia(filas, profesionales.length > 0, elegidos.map((profesional) => profesional.id), fecha),
-  }
+  return { tipo: "ok", profesionales, elegidos: elegidos.map((profesional) => profesional.id), filas }
 }

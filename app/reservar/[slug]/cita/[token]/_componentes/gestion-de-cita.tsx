@@ -14,7 +14,7 @@ import { EncabezadoDeReserva } from "../../../_componentes/encabezado-de-reserva
 import { SelectorFechaHora, fechaParaLeer } from "../../../_componentes/selector-fecha-hora"
 import { cancelarCita, leerCita, leerHorasParaReagendar, reagendarCita, type CitaDelEnlace } from "../_datos"
 
-/** Todos los días: el servidor dice cuáles no tienen atención para este profesional. */
+/** Si el servidor no dijo qué días atiende (ya no hay quién la tome), todos: la disponibilidad lo explica. */
 const TODOS_LOS_DIAS = [0, 1, 2, 3, 4, 5, 6]
 
 type Vista =
@@ -207,7 +207,7 @@ export function GestionDeCita({ slug, token }: { slug: string; token: string }) 
               <SelectorFechaHora
                 cargarHoras={cargarHoras}
                 claveDeHoras={token}
-                diasDisponibles={TODOS_LOS_DIAS}
+                diasDisponibles={cita.diasConAtencion && cita.diasConAtencion.length > 0 ? cita.diasConAtencion : TODOS_LOS_DIAS}
                 zona={cita.zona}
                 fechaSeleccionada={fecha}
                 horaSeleccionada={hora}

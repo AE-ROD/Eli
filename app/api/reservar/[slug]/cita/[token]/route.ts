@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
+import { diasConAtencionDeLaReserva } from "@/lib/agenda-publica"
 import { dentroDelPlazo } from "@/lib/gestion-de-cita"
+import { prisma } from "@/lib/prisma"
 import { serviciosDeLaCita } from "@/lib/servicios-de-la-reserva"
 import { abrirEnlace, fechaYHora, type Params } from "./_comun"
 
@@ -15,6 +17,17 @@ export async function GET(request: NextRequest, contexto: Params) {
 
   const plazoHoras = cita.business.cancelacionHorasAntes
   const servicios = serviciosDeLaCita(cita)
+  const sePuedeReagendar = servicios.activos && servicios.duracion !== null
+  // Los días en que alguien que puede tomarla atiende (QA#19): el calendario
+  // de reagendar no deja elegir los demás, como el de la reserva. `null` si
+  // ya no hay quién: el calendario ofrece todos y la disponibilidad lo dice.
+  const diasConAtencion = sePuedeReagendar
+    ? await diasConAtencionDeLaReserva(prisma, {
+        businessId: cita.businessId,
+        serviceIds: servicios.ids,
+        profesionalId: cita.memberId,
+      })
+    : null
   return NextResponse.json({
     negocio: { nombre: cita.business.name },
     // Con varios servicios (#89a), los nombres unidos y la duración total.
@@ -29,6 +42,7 @@ export async function GET(request: NextRequest, contexto: Params) {
     sePuedeCambiar: dentroDelPlazo(cita.startTime, plazoHoras, ahora),
     // Reagendar ofrece horas de los mismos servicios: si alguno se desactivó
     // o se borró, sólo se cancela.
-    sePuedeReagendar: servicios.activos && servicios.duracion !== null,
+    sePuedeReagendar,
+    diasConAtencion,
   })
 }
