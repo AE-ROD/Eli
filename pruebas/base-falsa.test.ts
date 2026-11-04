@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { Prisma } from "@prisma/client"
-import { crearBaseFalsa } from "./base-falsa"
+import { crearBaseFalsa, type NombreDeModelo } from "./base-falsa"
 
 /**
  * La base falsa sostiene los tests de aislamiento del tablero: si entendiera
@@ -524,6 +524,143 @@ describe("base falsa: los triggers atencion_servicios_mismo_negocio y _liquidada
   })
 })
 
+describe("base falsa: las FK NO ACTION y RESTRICT no dejan borrar al padre (#146)", () => {
+  const periodo = { memberName: "Ana", desde: new Date("2026-10-01"), hasta: new Date("2026-10-31") }
+  const movimiento = { businessId: "n1", memberId: "m1", memberName: "Ana", tipo: "ajuste", montoCents: 500, fecha: new Date("2026-10-15"), motivo: "corrige" }
+
+  beforeEach(() => {
+    base.reiniciar({
+      business: [{ id: "n1", name: "Uno", slug: "uno", userId: "u1" }],
+      user: [
+        { id: "u1", name: "Ana", email: "a@test" },
+        { id: "u2", name: "Beto", email: "b@test" },
+      ],
+      businessMember: [
+        { id: "m1", businessId: "n1", userId: "u1" },
+        { id: "m2", businessId: "n1", userId: "u2" },
+      ],
+      service: [
+        { id: "s1", businessId: "n1", name: "Corte" },
+        { id: "s2", businessId: "n1", name: "Color" },
+      ],
+      commissionRate: [{ id: "cr1", businessId: "n1", memberId: "m1", serviceId: "s1", percent: 40 }],
+      visit: [
+        { id: "v1", businessId: "n1", customerName: "María", status: "finalizada" },
+        { id: "v2", businessId: "n1", customerName: "Beto", status: "finalizada" },
+      ],
+      liquidacion: [{ id: "liq-1", businessId: "n1", memberId: "m1", ...periodo }],
+      movimientoDeLiquidacion: [{ id: "mov-1", ...movimiento, visitId: "v1" }],
+    })
+  })
+
+  it("una atención con un movimiento de liquidación no se borra (P2003), ni con delete ni con deleteMany", async () => {
+    await expect(prisma.visit.delete({ where: { id: "v1" } })).rejects.toMatchObject({
+      code: "P2003",
+      message: expect.stringMatching(/movimientoDeLiquidacion\.visitId/),
+    })
+    await expect(prisma.visit.deleteMany({ where: { businessId: "n1" } })).rejects.toMatchObject({ code: "P2003" })
+    expect(base.buscar("visit").map((v) => v.id)).toEqual(["v1", "v2"])
+    // La que no tiene movimientos sí.
+    await expect(prisma.visit.delete({ where: { id: "v2" } })).resolves.toMatchObject({ id: "v2" })
+  })
+
+  it("al soltar el movimiento, la atención ya se borra", async () => {
+    await prisma.movimientoDeLiquidacion.update({ where: { id: "mov-1" }, data: { visitId: null } })
+    await expect(prisma.visit.delete({ where: { id: "v1" } })).resolves.toBeTruthy()
+  })
+
+  it("una liquidación referida por una línea, una propina o un movimiento no se borra", async () => {
+    const casos: [string, () => Promise<unknown>][] = [
+      [
+        "visitService",
+        () =>
+          prisma.visitService.create({
+            data: { visitId: "v2", serviceName: "Corte", professionalName: "Ana", priceCents: 1000, liquidacionId: "liq-1" },
+          }),
+      ],
+      [
+        "propinaDeAtencion",
+        () => prisma.propinaDeAtencion.create({
+            data: { businessId: "n1", visitId: "v2", memberId: "m1", professionalName: "Ana", method: "efectivo", amountCents: 100, liquidacionId: "liq-1" },
+          }),
+      ],
+      ["movimientoDeLiquidacion", () => prisma.movimientoDeLiquidacion.create({ data: { ...movimiento, liquidacionId: "liq-1" } })],
+    ]
+    for (const [hijo, crearHijo] of casos) {
+      base.reiniciar({ ...base.volcado(), visitService: [], propinaDeAtencion: [], movimientoDeLiquidacion: [] })
+      await crearHijo()
+      await expect(prisma.liquidacion.delete({ where: { id: "liq-1" } })).rejects.toThrow(new RegExp(`${hijo}\\.liquidacionId`))
+    }
+    base.reiniciar({ ...base.volcado(), visitService: [], propinaDeAtencion: [], movimientoDeLiquidacion: [] })
+    await expect(prisma.liquidacion.delete({ where: { id: "liq-1" } })).resolves.toBeTruthy()
+  })
+
+  it("un miembro con liquidaciones o movimientos no se borra; uno sin ellos sí", async () => {
+    await expect(prisma.businessMember.delete({ where: { id: "m1" } })).rejects.toMatchObject({ code: "P2003" })
+    await expect(prisma.businessMember.delete({ where: { id: "m2" } })).resolves.toBeTruthy()
+    expect(base.buscar("businessMember").map((m) => m.id)).toEqual(["m1"])
+  })
+
+  it("un servicio con porcentaje de comisión no se borra (RESTRICT)", async () => {
+    await expect(prisma.service.delete({ where: { id: "s1" } })).rejects.toMatchObject({
+      code: "P2003",
+      message: expect.stringMatching(/commissionRate\.serviceId/),
+    })
+    await expect(prisma.service.delete({ where: { id: "s2" } })).resolves.toBeTruthy()
+  })
+
+  it("si la sentencia falla, se revierte entera, cascadas incluidas", async () => {
+    // v1 tiene un movimiento, así que el deleteMany falla al final, cuando la
+    // cascada de v2 ya se había llevado su línea y su pago: vuelven.
+    base.reiniciar({
+      ...base.volcado(),
+      visitService: [{ id: "l2", visitId: "v2", serviceName: "Corte", professionalName: "Ana", priceCents: 1000 }],
+      visitPayment: [{ id: "p2", visitId: "v2", method: "efectivo", amountCents: 1000 }],
+    })
+    await expect(prisma.visit.deleteMany({})).rejects.toMatchObject({ code: "P2003" })
+    expect(base.buscar("visit")).toHaveLength(2)
+    expect(base.buscar("visitService").map((l) => l.id)).toEqual(["l2"])
+    expect(base.buscar("visitPayment").map((p) => p.id)).toEqual(["p2"])
+  })
+})
+
+describe("base falsa: createMany es todo o nada (#148)", () => {
+  const linea = { visitId: "v2", serviceName: "Corte", professionalName: "Ana", priceCents: 1000 }
+
+  it("si una fila falla un trigger, no queda ninguna", async () => {
+    base.reiniciar({
+      ...base.volcado(),
+      business: [...base.volcado().business, { id: "n2", name: "Dos", slug: "dos", userId: "u1" }],
+      businessMember: [...base.volcado().businessMember, { id: "m2", businessId: "n2", userId: "u1" }],
+    })
+    await expect(
+      prisma.visitService.createMany({ data: [{ ...linea, memberId: "m1" }, { ...linea, memberId: "m2" }] })
+    ).rejects.toThrow(/profesional es de otro negocio/)
+    expect(base.buscar("visitService", { visitId: "v2" })).toEqual([])
+  })
+
+  it("si una fila choca con un único o una FK, tampoco", async () => {
+    await expect(
+      prisma.visit.createMany({
+        data: [
+          { businessId: "n1", customerName: "Nueva" },
+          { businessId: "n1", customerName: "Repetida", appointmentId: "cita-1" },
+        ],
+      })
+    ).rejects.toMatchObject({ code: "P2002" })
+    await expect(
+      prisma.visitService.createMany({ data: [linea, { ...linea, visitId: "no-existe" }] })
+    ).rejects.toMatchObject({ code: "P2003" })
+    expect(base.buscar("visit").map((v) => v.id)).toEqual(["v1", "v2"])
+    expect(base.buscar("visitService", { visitId: "v2" })).toEqual([])
+  })
+
+  it("si todas pasan, quedan todas", async () => {
+    await expect(prisma.visitService.createMany({ data: [linea, linea] })).resolves.toEqual({ count: 2 })
+    expect(base.buscar("visitService", { visitId: "v2" })).toHaveLength(2)
+  })
+})
+
 describe("base falsa: lo de la etapa 3", () => {
   beforeEach(() => {
     base.reiniciar({
@@ -593,5 +730,256 @@ describe("base falsa: lo de la etapa 3", () => {
   it("el token de salir de la lista es único", async () => {
     await prisma.inscripcionEnEspera.create({ data: inscripcion() })
     await expect(prisma.inscripcionEnEspera.create({ data: inscripcion() })).rejects.toMatchObject({ code: "P2002" })
+  })
+})
+
+describe("base falsa: ON DELETE SET NULL y las cascadas que faltaban (#151)", () => {
+  const periodo = { memberName: "Beto", desde: new Date("2026-10-01"), hasta: new Date("2026-10-31") }
+  const linea = { serviceName: "Corte", professionalName: "Beto", priceCents: 1000 }
+  const congelada = { commissionPercent: 40, commissionCents: 400, commissionAt: new Date("2026-10-20") }
+
+  // n1 es de u1 y tiene a m1 (u1) y m2 (u2); n2 es de u3, que vino invitado por n1.
+  // m2 es el profesional con todo lo que el borrado de un miembro toca. u4 sólo
+  // firmó un cambio de comisión: su borrado no arrastra a nadie más.
+  const datos = () => ({
+    business: [
+      { id: "n1", name: "Uno", slug: "uno", userId: "u1" },
+      { id: "n2", name: "Dos", slug: "dos", userId: "u3", invitadoPorId: "n1" },
+    ],
+    user: [
+      { id: "u1", name: "Ana", email: "a@test" },
+      { id: "u2", name: "Beto", email: "b@test" },
+      { id: "u3", name: "Caro", email: "c@test" },
+      { id: "u4", name: "Dani", email: "d@test" },
+    ],
+    businessMember: [
+      { id: "m1", businessId: "n1", userId: "u1" },
+      { id: "m2", businessId: "n1", userId: "u2" },
+      { id: "m3", businessId: "n2", userId: "u3" },
+    ],
+    customer: [
+      { id: "c1", businessId: "n1", name: "María" },
+      { id: "c3", businessId: "n2", name: "Otra" },
+    ],
+    service: [
+      { id: "s1", businessId: "n1", name: "Corte" },
+      { id: "s2", businessId: "n1", name: "Color" },
+      { id: "s3", businessId: "n2", name: "Corte" },
+    ],
+    producto: [{ id: "p1", businessId: "n1", name: "Cera" }],
+    appointment: [
+      { id: "cita-1", businessId: "n1", title: "Corte", startTime: new Date(1), endTime: new Date(2), memberId: "m2", customerId: "c1", serviceId: "s1" },
+    ],
+    appointmentService: [{ id: "as1", businessId: "n1", appointmentId: "cita-1", serviceId: "s1", serviceName: "Corte", duration: 30, orden: 0 }],
+    visit: [{ id: "v1", businessId: "n1", customerName: "María", customerId: "c1", appointmentId: "cita-1", status: "finalizada" }],
+    visitService: [{ id: "l1", visitId: "v1", ...linea, memberId: "m2", serviceId: "s1", productId: "p1" }],
+    commissionChange: [
+      { id: "cc1", businessId: "n1", scope: "service", memberId: "m2", memberName: "Beto", serviceId: "s1", productId: "p1", changedById: "u4", changedByName: "Dani", changedByEmail: "d@test" },
+    ],
+    inscripcionEnEspera: [{ id: "e1", businessId: "n1", serviceId: "s1", memberId: "m2", fecha: "2026-11-02", nombre: "María", apellido: "G", email: "m@test", tokenHash: "t1" }],
+    envioAClientes: [{ id: "env1", businessId: "n1", tipo: "te-toca", canal: "correo", categoria: "promocional", referencia: "r1", customerId: "c1", esperaId: "e1" }],
+    workSchedule: [
+      { id: "ws1", businessId: "n1", memberId: "m2", dayOfWeek: 1, startTime: "09:00", endTime: "18:00" },
+      { id: "ws2", businessId: "n1", memberId: "m1", dayOfWeek: 1, startTime: "09:00", endTime: "18:00" },
+    ],
+    timeBlock: [{ id: "tb1", businessId: "n1", memberId: "m2", startTime: new Date(5), endTime: new Date(6) }],
+    memberService: [
+      { id: "ms1", businessId: "n1", memberId: "m2", serviceId: "s2" },
+      { id: "ms2", businessId: "n1", memberId: "m1", serviceId: "s1" },
+    ],
+    commissionRate: [{ id: "cr1", businessId: "n1", memberId: "m2", serviceId: "s2", percent: 40 }],
+  })
+
+  beforeEach(() => base.reiniciar(datos()))
+
+  const fila = (modelo: NombreDeModelo, id: string) => base.buscar(modelo, { id })[0]
+
+  describe("SET NULL: borrar al padre deja al hijo con el campo en null y lo demás igual", () => {
+    // [padre, id del padre, [hijo, id del hijo, campo][]], todas las FK con SET NULL de las migraciones.
+    const casos: [NombreDeModelo, string, [NombreDeModelo, string, string][]][] = [
+      ["user", "u4", [["commissionChange", "cc1", "changedById"]]],
+      ["business", "n1", [["business", "n2", "invitadoPorId"]]],
+      [
+        "businessMember",
+        "m2",
+        [
+          ["appointment", "cita-1", "memberId"],
+          ["commissionChange", "cc1", "memberId"],
+          ["visitService", "l1", "memberId"],
+          ["inscripcionEnEspera", "e1", "memberId"],
+        ],
+      ],
+      [
+        "customer",
+        "c1",
+        [
+          ["appointment", "cita-1", "customerId"],
+          ["visit", "v1", "customerId"],
+          ["envioAClientes", "env1", "customerId"],
+        ],
+      ],
+      [
+        "service",
+        "s1",
+        [
+          ["appointment", "cita-1", "serviceId"],
+          ["commissionChange", "cc1", "serviceId"],
+          ["visitService", "l1", "serviceId"],
+          ["appointmentService", "as1", "serviceId"],
+        ],
+      ],
+      ["appointment", "cita-1", [["visit", "v1", "appointmentId"]]],
+      [
+        "producto",
+        "p1",
+        [
+          ["visitService", "l1", "productId"],
+          ["commissionChange", "cc1", "productId"],
+        ],
+      ],
+      ["inscripcionEnEspera", "e1", [["envioAClientes", "env1", "esperaId"]]],
+    ]
+
+    it.each(casos)("borrar %s %s", async (padre, id, hijos) => {
+      const antes = hijos.map(([hijo, idHijo]) => fila(hijo, idHijo))
+      const delegado = prisma[padre] as unknown as { delete: (args: unknown) => Promise<unknown> }
+      await delegado.delete({ where: { id } })
+
+      expect(base.buscar(padre, { id })).toEqual([])
+      hijos.forEach(([hijo, idHijo, campo], i) => {
+        expect(antes[i][campo]).not.toBeNull()
+        expect(fila(hijo, idHijo)).toEqual({ ...antes[i], [campo]: null })
+      })
+    })
+
+    it("también con deleteMany, en cada hijo de cada fila borrada", async () => {
+      base.reiniciar({
+        ...datos(),
+        visitService: [
+          { id: "l1", visitId: "v1", ...linea, serviceId: "s1" },
+          { id: "l2", visitId: "v1", ...linea, serviceId: "s2" },
+        ],
+        commissionRate: [],
+        memberService: [],
+      })
+      await prisma.service.deleteMany({ where: { businessId: "n1" } })
+      expect(base.buscar("visitService").map((l) => l.serviceId)).toEqual([null, null])
+    })
+  })
+
+  describe("cascadas", () => {
+    it("borrar un miembro se lleva sus horarios, porcentajes, servicios y bloqueos; los de otro quedan", async () => {
+      await prisma.businessMember.delete({ where: { id: "m2" } })
+      for (const modelo of ["workSchedule", "commissionRate", "memberService", "timeBlock"] as const) {
+        expect(base.buscar(modelo, { memberId: "m2" })).toEqual([])
+      }
+      expect(base.buscar("workSchedule").map((h) => h.id)).toEqual(["ws2"])
+      expect(base.buscar("memberService").map((s) => s.id)).toEqual(["ms2"])
+    })
+
+    it("borrar un servicio se lleva lo que el equipo hace de él y su lista de espera, y suelta el envío de esa lista", async () => {
+      await prisma.service.delete({ where: { id: "s1" } })
+      expect(base.buscar("memberService").map((s) => s.id)).toEqual(["ms1"])
+      expect(base.buscar("inscripcionEnEspera")).toEqual([])
+      // La cascada de la lista de espera dispara el SET NULL del envío, un nivel más abajo.
+      expect(fila("envioAClientes", "env1")).toMatchObject({ esperaId: null, customerId: "c1" })
+    })
+
+    it("borrar una cita se lleva sus servicios", async () => {
+      await prisma.appointment.delete({ where: { id: "cita-1" } })
+      expect(base.buscar("appointmentService")).toEqual([])
+    })
+
+    it("borrar un usuario se lleva sus negocios y sus membresías", async () => {
+      await prisma.user.delete({ where: { id: "u2" } })
+      expect(base.buscar("businessMember").map((m) => m.id)).toEqual(["m1", "m3"])
+      expect(base.buscar("user").map((u) => u.id)).toEqual(["u1", "u3", "u4"])
+
+      await prisma.user.delete({ where: { id: "u3" } })
+      expect(base.buscar("business").map((n) => n.id)).toEqual(["n1"])
+      expect(base.buscar("businessMember").map((m) => m.id)).toEqual(["m1"])
+      expect(base.buscar("service").map((s) => s.id)).toEqual(["s1", "s2"])
+    })
+
+    it("borrar un negocio entero se lleva todo lo suyo, aun con plata liquidada, y no toca al otro", async () => {
+      // Lo más difícil de borrar: una línea liquidada y congelada, su propina y su
+      // movimiento, un porcentaje de comisión sobre un servicio (RESTRICT) y un
+      // cierre de caja. En Postgres pasa porque cada RESTRICT / NO ACTION se
+      // revisa cuando ya corrió la cascada directa del negocio a ese hijo.
+      base.reiniciar({
+        ...datos(),
+        visitService: [
+          { id: "l1", visitId: "v1", ...linea, memberId: "m2", serviceId: "s1", productId: "p1", ...congelada, liquidacionId: "liq-1" },
+        ],
+        visitPayment: [{ id: "pago-1", visitId: "v1", method: "efectivo", amountCents: 1000 }],
+        liquidacion: [{ id: "liq-1", businessId: "n1", memberId: "m2", ...periodo }],
+        propinaDeAtencion: [
+          { id: "pr1", businessId: "n1", visitId: "v1", memberId: "m2", professionalName: "Beto", method: "efectivo", amountCents: 100, liquidacionId: "liq-1" },
+        ],
+        movimientoDeLiquidacion: [
+          { id: "mov-1", businessId: "n1", memberId: "m2", memberName: "Beto", tipo: "ajuste", montoCents: 500, fecha: new Date("2026-10-15"), visitId: "v1", liquidacionId: "liq-1" },
+        ],
+        cierreDeCaja: [{ id: "cierre-1", businessId: "n1", desde: new Date(1), hasta: new Date(2) }],
+        franjaDeHoraValle: [{ id: "f1", businessId: "n1", diaSemana: 1, desde: "10:00", hasta: "12:00", porcentaje: 20 }],
+      })
+
+      await prisma.business.delete({ where: { id: "n1" } })
+
+      const quedan = base.volcado()
+      for (const [modelo, filas] of Object.entries(quedan)) {
+        if (modelo === "user") continue
+        expect(filas.filter((f) => f.businessId === "n1" || f.visitId === "v1" || f.appointmentId === "cita-1"), modelo).toEqual([])
+      }
+      expect(quedan.business.map((n) => n.id)).toEqual(["n2"])
+      expect(fila("business", "n2")).toMatchObject({ invitadoPorId: null })
+      expect(quedan.businessMember.map((m) => m.id)).toEqual(["m3"])
+      expect(quedan.service.map((s) => s.id)).toEqual(["s3"])
+      expect(quedan.customer.map((c) => c.id)).toEqual(["c3"])
+      // El dueño no es parte del negocio: su cuenta queda.
+      expect(quedan.user).toHaveLength(4)
+    })
+  })
+
+  describe("los triggers de atencion_servicios con el SET NULL", () => {
+    it("borrar al profesional de una línea liquidada con su atención viva falla (23514) y no deja nada a medias", async () => {
+      base.reiniciar({
+        ...datos(),
+        visitService: [{ id: "l1", visitId: "v1", ...linea, memberId: "m2", ...congelada, liquidacionId: "liq-1" }],
+        liquidacion: [{ id: "liq-1", businessId: "n1", memberId: "m1", ...periodo }],
+      })
+      const antes = base.volcado()
+
+      await expect(prisma.businessMember.delete({ where: { id: "m2" } })).rejects.toThrow(/23514.*corrígela con un ajuste/)
+      // El SET NULL de la cita y la cascada de los horarios, que corrieron antes, se revierten.
+      expect(base.volcado()).toEqual(antes)
+    })
+
+    it("una línea con la comisión congelada pero sin liquidar suelta al profesional y conserva la comisión", async () => {
+      base.reiniciar({ ...datos(), visitService: [{ id: "l1", visitId: "v1", ...linea, memberId: "m2", ...congelada }] })
+      await prisma.businessMember.delete({ where: { id: "m2" } })
+      expect(fila("visitService", "l1")).toMatchObject({ memberId: null, ...congelada })
+    })
+
+    it("el producto de una línea liquidada sí se borra: el trigger no mira el producto", async () => {
+      base.reiniciar({
+        ...datos(),
+        visitService: [{ id: "l1", visitId: "v1", ...linea, memberId: "m2", productId: "p1", ...congelada, liquidacionId: "liq-1" }],
+        liquidacion: [{ id: "liq-1", businessId: "n1", memberId: "m2", ...periodo }],
+      })
+      await prisma.producto.delete({ where: { id: "p1" } })
+      expect(fila("visitService", "l1")).toMatchObject({ productId: null, memberId: "m2", liquidacionId: "liq-1" })
+    })
+
+    it("el SET NULL no revisa las otras FK de la fila: una línea que apunta a un producto ajeno no frena borrar el servicio", async () => {
+      // El trigger mismo_negocio sólo mira si cambia el profesional, el producto,
+      // la liquidación o la atención, y la base sólo revisa la FK que cambia.
+      base.reiniciar({
+        ...datos(),
+        producto: [{ id: "p3", businessId: "n2", name: "Ajena" }],
+        visitService: [{ id: "l1", visitId: "v1", ...linea, serviceId: "s1", productId: "p3" }],
+      })
+      await prisma.service.delete({ where: { id: "s1" } })
+      expect(fila("visitService", "l1")).toMatchObject({ serviceId: null, productId: "p3" })
+    })
   })
 })

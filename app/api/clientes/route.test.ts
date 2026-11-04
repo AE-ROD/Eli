@@ -184,6 +184,11 @@ const prismaMock = {
       Promise.resolve({ id: "cliente-nuevo", ...args.data })
     ),
   },
+  /** Sólo la hora de la base (`horaDeLaBase`); cualquier otra consulta cruda lanza. */
+  $queryRaw: vi.fn(async (partes: TemplateStringsArray) => {
+    if (partes.join("?").trim() === "SELECT clock_timestamp() AS ahora") return [{ ahora: new Date() }]
+    throw new Error(`$queryRaw no esperado: ${partes.join("?")}`)
+  }),
 }
 
 /**
@@ -794,6 +799,31 @@ describe("POST /api/clientes", () => {
 
     const { data } = prismaMock.customer.create.mock.calls[0][0]
     expect(data.businessId).toBe("negocio-1")
+  })
+
+  it("el consentimiento de WhatsApp se registra con la hora de la base, no la de esta instancia (#152)", async () => {
+    const { POST } = await import("./route")
+    const deLaBase = new Date("2026-11-04T12:00:07.000Z")
+    prismaMock.$queryRaw.mockImplementationOnce(async () => [{ ahora: deLaBase }])
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    const res = await POST(fakePost({ name: "Carla Díaz", whatsappConsent: true }))
+
+    expect(res.status).toBe(201)
+    const { data } = prismaMock.customer.create.mock.calls[0][0]
+    expect(data).toMatchObject({ whatsappConsentAt: deLaBase, whatsappConsentSource: "panel" })
+    expect(prismaMock.$queryRaw.mock.calls[0][0].join("?")).toBe("SELECT clock_timestamp() AS ahora")
+  })
+
+  it("sin marcar el consentimiento no se pide la hora ni se registra", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    expect((await POST(fakePost({ name: "Carla Díaz" }))).status).toBe(201)
+    expect(prismaMock.customer.create.mock.calls[0][0].data.whatsappConsentAt).toBeUndefined()
+    expect(prismaMock.$queryRaw).not.toHaveBeenCalled()
   })
 
   it("sin sesión recibe 401 y no crea nada", async () => {

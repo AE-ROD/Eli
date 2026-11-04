@@ -75,7 +75,6 @@ export async function POST(request: NextRequest) {
         nota: cuerpo.nota ? cuerpo.nota : null,
         cerradaPorId: firma.id,
         cerradaPorNombre: firma.nombre,
-        ahora: new Date(),
       })
       const creada = await tx.liquidacion.findFirst({ where: { id, businessId: actor.businessId }, select: SELECCION_DE_RESUMEN })
       if (!creada) throw new ErrorDeLiquidacion(409, "La liquidación no se pudo leer después de cerrarla.")

@@ -9,6 +9,7 @@ import {
   respuestaDeErrorDePlata,
   tomarCandadoDeLiquidacion,
 } from "@/lib/liquidacion"
+import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { SELECCION_DE_MOVIMIENTO, formatearMovimiento, puedeManejarMovimiento } from "@/lib/movimientos"
 
 /**
@@ -39,9 +40,12 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
 
     const anulado = await prisma.$transaction(async (tx) => {
       await tomarCandadoDeLiquidacion(tx, actor.businessId, movimiento.memberId)
+      // La hora de la base, leída después del candado, no la de esta
+      // instancia (#152): así no queda antes que un cierre que ya esperó.
+      const ahora = await horaDeLaBase(tx)
       const { count } = await tx.movimientoDeLiquidacion.updateMany({
         where: { id, businessId: actor.businessId, liquidacionId: null, anuladoAt: null },
-        data: { anuladoAt: new Date(), anuladoPorId: firma.id, anuladoPorNombre: firma.nombre },
+        data: { anuladoAt: ahora, anuladoPorId: firma.id, anuladoPorNombre: firma.nombre },
       })
       if (count !== 1) {
         const actual = await tx.movimientoDeLiquidacion.findFirst({

@@ -10,6 +10,7 @@ import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { esFechaCalendario, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 import { advertenciasDeAgenda } from "@/lib/advertencias-de-agenda"
 import { ocupaElHorario } from "@/lib/ocupacion"
+import { MENSAJE_MIEMBRO_NO_ATIENDE, atiendeCitas } from "@/lib/agenda-publica"
 
 const citaSchema = z
   .object({
@@ -129,9 +130,15 @@ export async function POST(request: NextRequest) {
     if (memberId) {
       const miembro = await prisma.businessMember.findFirst({
         where: { id: memberId, businessId: actor.businessId },
+        select: { id: true, role: true },
       })
       if (!miembro) {
         return NextResponse.json({ error: "Miembro no encontrado" }, { status: 404 })
+      }
+      // Del negocio pero no atiende (el encargado): la cita quedaría en una
+      // agenda que nadie atiende y fuera de la reserva pública (#144).
+      if (!atiendeCitas(miembro.role)) {
+        return NextResponse.json({ error: MENSAJE_MIEMBRO_NO_ATIENDE }, { status: 400 })
       }
     }
 

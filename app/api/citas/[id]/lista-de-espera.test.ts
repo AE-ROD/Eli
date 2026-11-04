@@ -120,6 +120,27 @@ describe("PUT: quién canceló y cuándo (#121)", () => {
     expect(cita()).toMatchObject({ status: "cancelada", canceladaPor: "negocio", canceladaEn: AHORA })
   })
 
+  it("la hora de la cancelación es la de la base, no la de esta instancia (#149)", async () => {
+    const deLaBase = new Date("2030-01-01T12:00:07.000Z")
+    base.prisma.$queryRaw.mockImplementationOnce(async () => [{ ahora: deLaBase }])
+
+    expect(await put("c1", { status: "cancelada" })).toBe(200)
+
+    expect(cita()).toMatchObject({ status: "cancelada", canceladaPor: "negocio", canceladaEn: deLaBase })
+    const [partes] = base.prisma.$queryRaw.mock.calls[0]
+    expect(partes.join("?")).toBe("SELECT clock_timestamp() AS ahora")
+  })
+
+  it("una por confirmar cancelada desde el panel también toma la hora de la base", async () => {
+    escenario({ status: "pendiente", confirmacionPorFaltas: true })
+    const deLaBase = new Date("2030-01-01T12:00:09.000Z")
+    base.prisma.$queryRaw.mockImplementationOnce(async () => [{ ahora: deLaBase }])
+
+    expect(await put("c1", { status: "cancelada" })).toBe(200)
+
+    expect(cita()).toMatchObject({ status: "cancelada", canceladaPor: "negocio", canceladaEn: deLaBase })
+  })
+
   it("re-enviar «cancelada» no pisa quién ni cuándo la canceló primero", async () => {
     const antes = new Date("2029-12-31T10:00:00.000Z")
     escenario({ status: "cancelada", canceladaPor: "cliente", canceladaEn: antes })

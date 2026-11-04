@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, atencion, conId, datosBase, pedido, sesiones } from "@/pruebas/datos"
 import { MENSAJE_CITA_CERRADA, MENSAJE_CITA_CON_ATENCION } from "@/lib/mover-cita"
+import { MENSAJE_MIEMBRO_NO_ATIENDE } from "@/lib/agenda-publica"
 
 const mockGetServerSession = vi.fn()
 
@@ -456,5 +457,89 @@ describe("PUT /api/citas/[id]: mover una cita", () => {
 
       expect(res.status).toBe(400)
     })
+  })
+})
+
+// La API aceptaba reasignar a cualquier miembro del negocio, aunque el
+// selector sólo ofrezca a quienes atienden (#140, #144).
+describe("PUT /api/citas/[id]: a quién se le puede reasignar", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    escenario()
+  })
+
+  /** Dato de antes de #144: una cita que ya quedó a nombre del encargado. */
+  function conCitaDelEncargado() {
+    base.reiniciar({
+      ...base.volcado(),
+      appointment: [...base.volcado().appointment, cita("cita-encargado", "m-encargado", "2026-10-21", "12:00", "12:30")],
+    })
+  }
+
+  it("a otro profesional del negocio: se reasigna", async () => {
+    const res = await put(sesiones.dueña, "cita-carla", { memberId: "m-pedro", confirmarAdvertencias: true })
+
+    expect(res.status).toBe(200)
+    expect(guardada("cita-carla").memberId).toBe("m-pedro")
+  })
+
+  it("al encargado, que no atiende: 400 con un mensaje claro y nada cambia", async () => {
+    const antes = base.volcado()
+    const res = await put(sesiones.dueña, "cita-carla", { memberId: "m-encargado", confirmarAdvertencias: true })
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: MENSAJE_MIEMBRO_NO_ATIENDE })
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("el encargado tampoco se la pasa a sí mismo: 400 y nada cambia", async () => {
+    const antes = base.volcado()
+    const res = await put(sesiones.encargado, "cita-carla", { memberId: "m-encargado", confirmarAdvertencias: true })
+
+    expect(res.status).toBe(400)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("una cita que ya era del encargado se sigue editando si no se cambia el miembro", async () => {
+    conCitaDelEncargado()
+
+    const res = await put(sesiones.dueña, "cita-encargado", {
+      ...mover("2026-10-21", "13:00", "13:30"),
+      memberId: "m-encargado",
+      confirmarAdvertencias: true,
+    })
+
+    expect(res.status).toBe(200)
+    expect(guardada("cita-encargado").memberId).toBe("m-encargado")
+    expect(guardada("cita-encargado").startTime).toEqual(santiago("2026-10-21", "13:00"))
+  })
+
+  it("una cita que ya era del encargado se pasa a un profesional o queda sin asignar", async () => {
+    conCitaDelEncargado()
+
+    const aPedro = await put(sesiones.dueña, "cita-encargado", { memberId: "m-pedro", confirmarAdvertencias: true })
+    expect(aPedro.status).toBe(200)
+    expect(guardada("cita-encargado").memberId).toBe("m-pedro")
+
+    const sinAsignar = await put(sesiones.dueña, "cita-encargado", { memberId: null, confirmarAdvertencias: true })
+    expect(sinAsignar.status).toBe(200)
+    expect(guardada("cita-encargado").memberId).toBeNull()
+  })
+
+  it("el dueño de otro negocio no reasigna una cita de éste al encargado: 404 y nada cambia", async () => {
+    const antes = base.volcado()
+    const res = await put(sesiones.dueñoAjeno, "cita-carla", { memberId: "m-encargado", confirmarAdvertencias: true })
+
+    expect(res.status).toBe(404)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("el dueño de otro negocio no asigna su propia cita al encargado de éste: 404, no 400", async () => {
+    const antes = base.volcado()
+    const res = await put(sesiones.dueñoAjeno, "cita-ajena", { memberId: "m-encargado", confirmarAdvertencias: true })
+
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: "Miembro no encontrado" })
+    expect(base.volcado()).toEqual(antes)
   })
 })

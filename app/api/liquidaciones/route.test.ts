@@ -240,6 +240,31 @@ describe("POST /api/liquidaciones (cerrar)", () => {
     ])
   })
 
+  it("la hora del cierre es la de la base, leída después de los candados, no la de esta instancia (#152)", async () => {
+    enSesion(sesiones.dueña)
+    const deLaBase = new Date("2026-11-03T15:00:07.000Z")
+    const delReloj = base.prisma.$queryRaw.getMockImplementation()!
+    base.prisma.$queryRaw.mockImplementation(async (partes: TemplateStringsArray, ...valores: unknown[]) =>
+      partes.join("?") === "SELECT clock_timestamp() AS ahora" ? [{ ahora: deLaBase }] : delReloj(partes, ...valores)
+    )
+
+    try {
+      expect((await cerrar({ miembroId: "m-carla", desde: "2026-10-01" })).status).toBe(201)
+    } finally {
+      base.prisma.$queryRaw.mockImplementation(delReloj)
+    }
+
+    const [guardada] = base.buscar("liquidacion")
+    expect(guardada.cerradaAt).toEqual(deLaBase)
+    expect(lineaGuardada("l-pendiente").commissionAt).toEqual(deLaBase)
+    const lecturas = base.prisma.$queryRaw.mock.calls
+      .map(([partes], i) => ({ sql: partes.join("?"), orden: base.prisma.$queryRaw.mock.invocationCallOrder[i] }))
+      .filter((l) => l.sql === "SELECT clock_timestamp() AS ahora")
+    expect(lecturas).toHaveLength(1)
+    expect(lecturas[0].orden).toBeGreaterThan(Math.max(...base.prisma.$executeRaw.mock.invocationCallOrder))
+    expect(lecturas[0].orden).toBeLessThan(base.prisma.liquidacion.create.mock.invocationCallOrder[0])
+  })
+
   it("una atención incluida queda bloqueada para anular", async () => {
     enSesion(sesiones.dueña)
     await cerrar({ miembroId: "m-carla", desde: "2026-10-01" })
@@ -467,6 +492,23 @@ describe("POST /api/liquidaciones/[id]/pago y /anulacion", () => {
     expect((await pagar(id)).status).toBe(409)
   })
 
+  it("la hora del pago es la de la base, no la de esta instancia (#152)", async () => {
+    const id = await cerrada()
+    vi.clearAllMocks()
+    enSesion(sesiones.dueña)
+    const deLaBase = new Date("2026-11-03T15:00:09.000Z")
+    base.prisma.$queryRaw.mockImplementationOnce(async () => [{ ahora: deLaBase }])
+
+    expect((await pagar(id)).status).toBe(200)
+
+    expect(base.buscar("liquidacion", { id })[0].pagadaAt).toEqual(deLaBase)
+    const [partes] = base.prisma.$queryRaw.mock.calls[0]
+    expect(partes.join("?")).toBe("SELECT clock_timestamp() AS ahora")
+    expect(base.prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      base.prisma.liquidacion.updateMany.mock.invocationCallOrder[0]
+    )
+  })
+
   it("pagada no se anula: 409", async () => {
     const id = await cerrada()
     await pagar(id)
@@ -503,6 +545,26 @@ describe("POST /api/liquidaciones/[id]/pago y /anulacion", () => {
     // Un cambio de "Liquidar desde" en curso termina antes; uno que llega
     // después espera a la anulación y ya la ve anulada.
     expect(Math.max(...base.prisma.$executeRaw.mock.invocationCallOrder)).toBeLessThan(
+      base.prisma.liquidacion.updateMany.mock.invocationCallOrder[0]
+    )
+  })
+
+  it("la hora de la anulación es la de la base, leída después de los candados, no la de esta instancia", async () => {
+    const id = await cerrada()
+    vi.clearAllMocks()
+    enSesion(sesiones.dueña)
+    const deLaBase = new Date("2026-10-06T15:00:07.000Z")
+    base.prisma.$queryRaw.mockImplementationOnce(async () => [{ ahora: deLaBase }])
+
+    expect((await anular(id)).status).toBe(200)
+
+    expect(base.buscar("liquidacion", { id })[0].anuladaAt).toEqual(deLaBase)
+    const [partes] = base.prisma.$queryRaw.mock.calls[0]
+    expect(partes.join("?")).toBe("SELECT clock_timestamp() AS ahora")
+    expect(base.prisma.$queryRaw.mock.invocationCallOrder[0]).toBeGreaterThan(
+      Math.max(...base.prisma.$executeRaw.mock.invocationCallOrder)
+    )
+    expect(base.prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
       base.prisma.liquidacion.updateMany.mock.invocationCallOrder[0]
     )
   })

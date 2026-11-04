@@ -8,6 +8,7 @@ import { whereDeLiquidaciones, type Actor } from "@/lib/permisos"
 import { registrarError } from "@/lib/registro-de-errores"
 import { nombreEnElNegocio } from "@/lib/tablero"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
+import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { sumarDias, zonaDelNegocio } from "@/lib/zona-horaria"
 import {
   configuracionDelNegocio,
@@ -494,14 +495,17 @@ export async function cerrarLiquidacion(
     nota: string | null
     cerradaPorId: string
     cerradaPorNombre: string
-    ahora: Date
   }
 ): Promise<string> {
-  const { businessId, memberId, ahora } = opciones
+  const { businessId, memberId } = opciones
   // Primero el del negocio, compartido: un cambio de "Liquidar desde" en
   // curso termina antes, y la vista previa de abajo ya lee la fecha nueva.
   await tomarCandadoDeLiquidacionesDelNegocio(tx, businessId, "compartido")
   await tomarCandadoDeLiquidacion(tx, businessId, memberId)
+  // La hora del cierre (`cerradaAt`, `commissionAt` y el "hoy" del período)
+  // es la de la base, leída DESPUÉS de los candados, no la de esta instancia
+  // (#152), igual que la anulación de la liquidación.
+  const ahora = await horaDeLaBase(tx)
 
   const vista = await vistaPrevia(tx, { businessId, memberId, excluirMovimientos: opciones.excluirMovimientos, ahora })
   if (!vista) throw new ErrorDeLiquidacion(404, "Profesional no encontrado")
@@ -598,17 +602,23 @@ function noEstaCerrada(estado: string, accion: "pagar" | "anular"): string {
   return "Esta liquidación ya no está cerrada."
 }
 
-/** Marca pagada una liquidación cerrada del negocio. 404 si no es del negocio; 409 si no está cerrada. */
+/**
+ * Marca pagada una liquidación cerrada del negocio. 404 si no es del negocio;
+ * 409 si no está cerrada. `pagadaAt` es la hora de la base, no la de esta
+ * instancia (#152): no hay candado que esperar, la escritura es un único
+ * updateMany condicional, así que se pide justo antes.
+ */
 export async function pagarLiquidacion(
   tx: Db,
-  opciones: { businessId: string; id: string; medio: string; pagadaPorId: string; pagadaPorNombre: string; ahora: Date }
+  opciones: { businessId: string; id: string; medio: string; pagadaPorId: string; pagadaPorNombre: string }
 ): Promise<void> {
   const { businessId, id } = opciones
+  const ahora = await horaDeLaBase(tx)
   const { count } = await tx.liquidacion.updateMany({
     where: { id, businessId, estado: "cerrada" },
     data: {
       estado: "pagada",
-      pagadaAt: opciones.ahora,
+      pagadaAt: ahora,
       pagadaPorId: opciones.pagadaPorId,
       pagadaPorNombre: opciones.pagadaPorNombre,
       medioDePago: opciones.medio,
@@ -630,22 +640,26 @@ export async function pagarLiquidacion(
  * "Liquidar desde" (que lo toma exclusivo y cuenta las liquidaciones vivas)
  * espera a que la anulación termine y ya la ve anulada, en vez de responder
  * 409 por una liquidación que se estaba anulando.
+ *
+ * `anuladaAt` es la hora de la base leída DESPUÉS de los candados, no la de
+ * esta instancia, igual que el cobro, la caja y la anulación de atenciones.
  */
 export async function anularLiquidacion(
   tx: Db,
-  opciones: { businessId: string; id: string; motivo: string; anuladaPorId: string; anuladaPorNombre: string; ahora: Date }
+  opciones: { businessId: string; id: string; motivo: string; anuladaPorId: string; anuladaPorNombre: string }
 ): Promise<void> {
   const { businessId, id } = opciones
   await tomarCandadoDeLiquidacionesDelNegocio(tx, businessId, "compartido")
   const liquidacion = await tx.liquidacion.findFirst({ where: { id, businessId }, select: { memberId: true } })
   if (!liquidacion) throw new ErrorDeLiquidacion(404, "Liquidación no encontrada")
   await tomarCandadoDeLiquidacion(tx, businessId, liquidacion.memberId)
+  const ahora = await horaDeLaBase(tx)
 
   const { count } = await tx.liquidacion.updateMany({
     where: { id, businessId, estado: "cerrada" },
     data: {
       estado: "anulada",
-      anuladaAt: opciones.ahora,
+      anuladaAt: ahora,
       anuladaPorId: opciones.anuladaPorId,
       anuladaPorNombre: opciones.anuladaPorNombre,
       motivoAnulacion: opciones.motivo,

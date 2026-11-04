@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { z } from "zod"
 import { emailOVacio, etiquetas, nombre, notas, telefonoChileno } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
@@ -211,9 +212,10 @@ export async function POST(request: NextRequest) {
         phone: datos.phone ?? null,
         tags: datos.tags ?? [],
         notes: datos.notes || null,
-        // El consentimiento se registra con cuándo y por dónde se dio. Sin
-        // marcar, no hay consentimiento: queda en null.
-        ...(datos.whatsappConsent && { whatsappConsentAt: new Date(), whatsappConsentSource: "panel" }),
+        // El consentimiento se registra con cuándo (la hora de la base, no la
+        // de esta instancia: #152) y por dónde se dio. Sin marcar, no hay
+        // consentimiento: queda en null.
+        ...(datos.whatsappConsent && { whatsappConsentAt: await horaDeLaBase(prisma), whatsappConsentSource: "panel" }),
         ...(datos.correoPromoConsent && datosDeConsentimientoPromocional("panel")),
         businessId: actor.businessId,
       },

@@ -239,6 +239,24 @@ describe("POST /api/movimientos/[id]/anulacion", () => {
     expect((await anular("mv-carla")).status).toBe(409)
   })
 
+  it("la hora de la anulación es la de la base, leída después del candado, no la de esta instancia (#152)", async () => {
+    enSesion(sesiones.encargado)
+    const deLaBase = new Date("2026-11-01T03:30:07.000Z")
+    base.prisma.$queryRaw.mockImplementationOnce(async () => [{ ahora: deLaBase }])
+
+    expect((await anular("mv-carla")).status).toBe(200)
+
+    expect(base.buscar("movimientoDeLiquidacion", { id: "mv-carla" })[0].anuladoAt).toEqual(deLaBase)
+    const [partes] = base.prisma.$queryRaw.mock.calls[0]
+    expect(partes.join("?")).toBe("SELECT clock_timestamp() AS ahora")
+    expect(base.prisma.$queryRaw.mock.invocationCallOrder[0]).toBeGreaterThan(
+      Math.max(...base.prisma.$executeRaw.mock.invocationCallOrder)
+    )
+    expect(base.prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      base.prisma.movimientoDeLiquidacion.updateMany.mock.invocationCallOrder[0]
+    )
+  })
+
   it("lo liquidado no se anula: 409", async () => {
     enSesion(sesiones.dueña)
     const res = await anular("mv-liquidado")
