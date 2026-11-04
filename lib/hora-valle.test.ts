@@ -8,6 +8,7 @@ import {
   precioSigueAlCatalogo,
   preciosConHoraValle,
   rebajar,
+  rebajaDeLaHora,
   type ConfiguracionDeHoraValle,
 } from "@/lib/hora-valle"
 
@@ -209,5 +210,27 @@ describe("configuracionDeHoraValleSchema", () => {
       Array.from({ length: n }, (_, i) => ({ dayOfWeek: i % 7, desde: `${String(8 + Math.floor(i / 7)).padStart(2, "0")}:00`, hasta: `${String(8 + Math.floor(i / 7)).padStart(2, "0")}:30`, porcentaje: 10 }))
     expect(valida(muchas(21))).toBe(true)
     expect(valida(muchas(22))).toBe(false)
+  })
+})
+
+describe("rebajaDeLaHora (QA#14)", () => {
+  it("Corte + Color con Color excluido: el % no es el del total, se dice el monto ahorrado", () => {
+    expect(rebajaDeLaHora({ precio: 31400, precioNormal: 33000, porcentaje: 20 })).toEqual({ porcentaje: 20, ahorro: 1600, enTodo: false })
+  })
+  it("un solo servicio rebajado: el % entero", () => {
+    expect(rebajaDeLaHora({ precio: 6400, precioNormal: 8000, porcentaje: 20 })).toEqual({ porcentaje: 20, ahorro: 1600, enTodo: true })
+  })
+  it("varios servicios rebajados, con el redondeo por servicio: sigue siendo el % entero", () => {
+    // $8.333 y $8.333 al 15%: cada uno $7.083,05 → $7.083; el total $14.166 vs $14.166,1 → $14.166.
+    const precios = preciosConHoraValle([{ price: 8333 }, { price: 8333 }], new Date("2030-01-07T13:00:00.000Z"), "America/Santiago", {
+      activa: true,
+      franjas: [{ dayOfWeek: 1, desde: "09:00", hasta: "12:00", porcentaje: 15 }],
+    })
+    expect(rebajaDeLaHora({ precio: precios.total, precioNormal: precios.totalNormal, porcentaje: precios.porcentaje })?.enTodo).toBe(true)
+  })
+  it("sin baja, sin %, o sin precio: nada", () => {
+    expect(rebajaDeLaHora({ precio: 8000, precioNormal: 8000, porcentaje: 20 })).toBeNull()
+    expect(rebajaDeLaHora({ precio: 8000, precioNormal: 6400, porcentaje: 0 })).toBeNull()
+    expect(rebajaDeLaHora({ precio: null, precioNormal: 8000, porcentaje: 20 })).toBeNull()
   })
 })
