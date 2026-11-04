@@ -201,6 +201,8 @@ async function reservar(
         email,
         // Ya en E.164 (`telefonoChileno` en `reservaSchema`).
         phone: datos.telefono ?? null,
+        // Explícito: la columna no tiene default y quedaba en NULL (ver `clienteNoEliminado`).
+        tags: [],
         ...consentimiento,
         ...consentimientoPromocional,
         businessId: negocioId,

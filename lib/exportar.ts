@@ -27,7 +27,8 @@ export interface ClienteParaExportar {
   cedula: string | null
   phone: string | null
   email: string | null
-  tags: string[]
+  /** NULL en la base si el cliente se creó sin etiquetas (reserva pública, "Anotar sin reserva"). */
+  tags: string[] | null
   notes: string | null
   whatsappConsentAt: Date | null
   createdAt: Date
@@ -61,7 +62,7 @@ export function filasDeClientes(clientes: readonly ClienteParaExportar[], zona: 
       cliente.cedula,
       cliente.phone,
       cliente.email,
-      cliente.tags.filter((etiqueta) => !esEtiquetaReservada(etiqueta)).join(", "),
+      (cliente.tags ?? []).filter((etiqueta) => !esEtiquetaReservada(etiqueta)).join(", "),
       cliente.notes,
       cliente.whatsappConsentAt ? "Sí" : "No",
       fechaYHora(cliente.whatsappConsentAt, zona),

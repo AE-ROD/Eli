@@ -354,6 +354,8 @@ export async function anotarSinReserva(actor: Actor, usuarioId: string | null, d
           data: {
             name: datos.clienteNuevo.nombre,
             phone: datos.clienteNuevo.telefono || null,
+            // Explícito: la columna no tiene default y quedaba en NULL (ver `clienteNoEliminado`).
+            tags: [],
             businessId: actor.businessId,
           },
           select: { id: true, name: true, lastName: true },

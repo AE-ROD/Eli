@@ -145,6 +145,9 @@ export async function GET(request: NextRequest) {
   // vuelve a contar sobre el historial, que trae sólo las últimas cinco citas.
   const clientes = encontrados.map(({ visits, _count, ...cliente }) => ({
     ...cliente,
+    // `tags` es NULL en la base si el cliente se creó sin etiquetas (reserva
+    // pública, "Anotar sin reserva"): la pantalla recibe siempre una lista.
+    tags: cliente.tags ?? [],
     appointments: cliente.appointments.map(conLlegada),
     visitas: _count.visits,
     inasistencias: _count.appointments,

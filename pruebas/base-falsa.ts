@@ -71,7 +71,9 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     cedula: null,
     email: null,
     phone: null,
-    tags: [],
+    // `tags TEXT[]` no tiene default en la migración: quien crea un cliente
+    // sin decir sus etiquetas lo deja en NULL, no en una lista vacía.
+    tags: null,
     notes: null,
     whatsappConsentAt: null,
     whatsappConsentSource: null,
