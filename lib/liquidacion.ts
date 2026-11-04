@@ -878,16 +878,28 @@ const enPesos = (centavos: number): number | string =>
 /**
  * Las filas del comprobante para `escribirCsv`, que protege cada celda
  * contra fórmulas: un cliente llamado "=HYPERLINK(...)" llega como texto.
+ *
+ * Anulada (QA#13, igual que el comprobante en pantalla): lo que incluía
+ * volvió a quedar pendiente, así que no se paga. Lo de cuando se cerró queda
+ * como "Total al cerrarse (anulada)" y el total a pagar es 0.
  */
 export function filasDelComprobante(detalle: DetalleDeLiquidacion): (string | number | null)[][] {
   const t = detalle.totales
   const vacia: (string | null)[] = []
+  const anulada = detalle.estado === "anulada"
   return [
     ["Liquidación", detalle.texto],
     ["Profesional", detalle.miembro],
     ["Período", `${detalle.desde} al ${detalle.hasta}`],
     ["Estado", NOMBRES_DE_ESTADO[detalle.estado]],
     ["Pagada con", detalle.medioDePagoTexto],
+    ...(anulada
+      ? [
+          ["Anulada por", detalle.anuladaPorNombre],
+          ["Motivo de la anulación", detalle.motivoAnulacion],
+          ["Nota", "Lo que incluía volvió a quedar pendiente para la próxima liquidación: no se paga."],
+        ]
+      : []),
     vacia,
     ["Fecha", "Cliente", "Detalle", "Tipo", "Precio", "% comisión", "Comisión"],
     ...detalle.lineas.map((l) => [
@@ -917,6 +929,11 @@ export function filasDelComprobante(detalle: DetalleDeLiquidacion): (string | nu
     ["Propinas", enPesos(t.propinasCents)],
     ["Adelantos y vales", enPesos(-t.adelantosCents)],
     ["Ajustes", enPesos(t.ajustesCents)],
-    ["Total a pagar", enPesos(t.totalCents)],
+    ...(anulada
+      ? [
+          ["Total al cerrarse (anulada)", enPesos(t.totalCents)],
+          ["Total a pagar", 0],
+        ]
+      : [["Total a pagar", enPesos(t.totalCents)]]),
   ]
 }
