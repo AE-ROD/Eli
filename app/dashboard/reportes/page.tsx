@@ -125,6 +125,8 @@ export default function PaginaReportes() {
   // Anular un cobro del historial (sólo el dueño).
   const [anulando, setAnulando] = useState<FilaDeReporte | null>(null)
   const [avisoDeAnular, setAvisoDeAnular] = useState("")
+  /** El servidor no lo deja anular (ya rendido): el modal lo dice y ya no ofrece anular (QA#12). */
+  const [rechazoDeAnular, setRechazoDeAnular] = useState("")
   const [guardandoAnulacion, setGuardandoAnulacion] = useState(false)
   /** Un ref y no sólo el estado: un doble clic llega antes de que se dibuje el botón ocupado. */
   const anulacionEnviada = useRef(false)
@@ -212,6 +214,7 @@ export default function PaginaReportes() {
   const abrirAnular = (fila: FilaDeReporte) => {
     setMensaje(null)
     setAvisoDeAnular("")
+    setRechazoDeAnular("")
     setGuardandoAnulacion(false)
     setAnulando(fila)
   }
@@ -219,6 +222,7 @@ export default function PaginaReportes() {
   const cerrarAnular = () => {
     setAnulando(null)
     setAvisoDeAnular("")
+    setRechazoDeAnular("")
     setGuardandoAnulacion(false)
   }
 
@@ -245,10 +249,11 @@ export default function PaginaReportes() {
 
     // Ya entró en una liquidación o en un cierre de caja: no se anula, y el
     // mensaje del servidor dice cómo se corrige (con un ajuste). Lo que se ve
-    // sigue siendo cierto: no se recarga.
+    // sigue siendo cierto: no se recarga. El modal sigue abierto con el
+    // motivo escrito y ya no ofrece anular, como en el Tablero.
     if (resultado.corregirConAjuste) {
-      cerrarAnular()
-      setMensaje({ texto: resultado.error, error: true })
+      setGuardandoAnulacion(false)
+      setRechazoDeAnular(resultado.error)
       return
     }
 
@@ -394,6 +399,7 @@ export default function PaginaReportes() {
               cobradaEn: anulando.cobradaEn,
             }}
             aviso={avisoDeAnular}
+            rechazo={rechazoDeAnular || undefined}
             guardando={guardandoAnulacion}
             onAnular={(motivo) => anular(anulando, motivo)}
             onCerrar={cerrarAnular}
