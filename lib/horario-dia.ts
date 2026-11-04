@@ -168,6 +168,11 @@ export function minutosLibresEnFranjas(franjas: FranjaHorario[], citas: CitaDelD
   }, 0)
 }
 
+/**
+ * Una cantidad de minutos para leer: `45 min`, `2 h`, `4 h 15 min`. Es el
+ * tiempo libre del día y también la duración de una cita en la agenda (una
+ * de cuatro servicios no se lee "255 minutos").
+ */
 export function formatearTiempoLibre(minutos: number): string {
   if (minutos <= 0) return "0 min"
   const horas = Math.floor(minutos / 60)

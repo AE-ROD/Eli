@@ -10,6 +10,7 @@ import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { formatearMonto } from "@/lib/dinero"
 import { duracionParaMostrar } from "@/lib/fechas"
+import { formatearTiempoLibre as formatearDuracion } from "@/lib/horario-dia"
 import { sePuedeMover, type Advertencia } from "@/lib/mover-cita"
 import { puedeMarcarseNoVino } from "@/lib/campos-del-panel"
 import { actorDeSesion, puedeAsignarCitasAOtros, puedeReactivarCita, puedeResolverPorConfirmar } from "@/lib/permisos"
@@ -215,7 +216,7 @@ export function PanelDeCita({
               {horaEn(cita.startTime, zona)} – {horaEn(cita.endTime, zona)}
             </span>
           </Dato>
-          <Dato termino="Duración">{duracion} minutos</Dato>
+          <Dato termino="Duración">{formatearDuracion(duracion)}</Dato>
           {(profesional || sinProfesional) && <Dato termino="Profesional">{profesional ?? "Sin asignar"}</Dato>}
           {cita.price != null && (
             <Dato termino="Precio">
