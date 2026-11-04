@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
 import {
+  avisoDeCierreAnticipado,
   configuracionDelNegocio,
   fechaDeColumna,
   fechaDelNegocio,
@@ -157,5 +158,21 @@ describe("columnas DATE y lectura", () => {
     expect(periodoParaLeer("2026-09-28", "2026-10-04")).toBe("28 sept al 4 oct 2026")
     expect(periodoParaLeer("2026-12-28", "2027-01-03")).toBe("28 dic 2026 al 3 ene 2027")
     expect(periodoParaLeer("2026-11-01", "2026-11-01")).toBe("1 nov 2026")
+  })
+})
+
+describe("avisoDeCierreAnticipado", () => {
+  const periodo = { desde: "2026-11-01", hasta: "2026-11-30" }
+  it("a mitad del período avisa cuándo termina", () => {
+    expect(avisoDeCierreAnticipado(periodo, "2026-11-04")).toBe(
+      "El período termina el 30 nov 2026: lo que se cobre de aquí a esa fecha queda para la próxima liquidación. ¿Cerrar igual?"
+    )
+  })
+  it("el último día también avisa: todavía se puede cobrar", () => {
+    expect(avisoDeCierreAnticipado(periodo, "2026-11-30")).toMatch(/^El período termina hoy \(30 nov 2026\)/)
+  })
+  it("con el período terminado no hay aviso", () => {
+    expect(avisoDeCierreAnticipado(periodo, "2026-12-01")).toBeNull()
+    expect(avisoDeCierreAnticipado(periodo, "2027-01-15")).toBeNull()
   })
 })

@@ -154,3 +154,17 @@ export function periodoParaLeer(desde: string, hasta: string): string {
   const inicio = desde.slice(0, 7) === hasta.slice(0, 7) ? String(diaA) : `${diaA} ${MESES[mesA - 1]}`
   return `${inicio} al ${fechaParaLeer(hasta)}`
 }
+
+/**
+ * Lo que se le dice a la dueña antes de cerrar una liquidación (QA#5): si el
+ * período todavía no termina (hoy es su último día o antes, en la zona del
+ * negocio), que el cierre es antes de tiempo y adónde va lo que se cobre de
+ * acá al fin; si ya terminó, `null`. Puro.
+ */
+export function avisoDeCierreAnticipado(periodo: { hasta: string }, hoy: string): string | null {
+  if (hoy > periodo.hasta) return null
+  const fin = fechaParaLeer(periodo.hasta)
+  return hoy === periodo.hasta
+    ? `El período termina hoy (${fin}): lo que se cobre más tarde hoy queda para la próxima liquidación. ¿Cerrar igual?`
+    : `El período termina el ${fin}: lo que se cobre de aquí a esa fecha queda para la próxima liquidación. ¿Cerrar igual?`
+}
