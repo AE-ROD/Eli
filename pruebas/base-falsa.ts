@@ -227,48 +227,107 @@ const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
 }
 
 /**
- * Borrados en cascada que la base hace solos (`onDelete: Cascade`), sólo los
- * que un endpoint dispara: [modelo hijo, campo que apunta al borrado].
+ * Lo que hace cada FK del esquema al borrar la fila a la que apunta, todas las
+ * de las migraciones (no sólo las que dispara un endpoint): [modelo hijo,
+ * campo que apunta al borrado, regla]. `cascade` borra al hijo, `set null`
+ * pone el campo en null y `restrict` / `no action` frenan el borrado con
+ * P2003 si queda algún hijo.
+ *
+ * Ninguna FK con SET NULL es compuesta: las compuestas `(id, businessId)` son
+ * todas CASCADE, RESTRICT o NO ACTION (una compuesta con SET NULL anularía
+ * también `businessId`, que es NOT NULL; ver `CommissionChange` en el
+ * esquema), así que SET NULL anula sólo el campo de la lista.
+ *
+ * Quedan fuera las tablas que la base falsa no tiene: `invitaciones`,
+ * `conversaciones`/`mensajes`, `tokens_recuperacion`, `correos_de_cuenta` y
+ * `solicitudes_de_soporte` (ésta con SET NULL a negocio y usuario).
+ *
+ * El orden de cada lista es el de creación de la FK en las migraciones. En
+ * Postgres cada FK es un trigger AFTER del padre y se disparan por orden de
+ * nombre (`RI_ConstraintTrigger_a_<oid>`); se toma el orden de creación como
+ * aproximación del orden de los oid (simplificación: no se reproduce la
+ * comparación como texto de esos nombres).
  */
-const CASCADAS: Partial<Record<NombreDeModelo, [NombreDeModelo, string][]>> = {
-  appointment: [["appointmentService", "appointmentId"]],
+type Regla = "cascade" | "set null" | "restrict" | "no action"
+const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]>> = {
+  user: [
+    ["business", "userId", "cascade"], // negocios_userId_fkey
+    ["businessMember", "userId", "cascade"], // miembros_negocio_userId_fkey
+    ["commissionChange", "changedById", "set null"], // cambios_comision_changedById_fkey
+  ],
+  business: [
+    ["customer", "businessId", "cascade"], // clientes_businessId_fkey
+    ["service", "businessId", "cascade"], // servicios_businessId_fkey
+    ["workSchedule", "businessId", "cascade"], // horarios_laborales_businessId_fkey
+    ["appointment", "businessId", "cascade"], // citas_businessId_fkey
+    ["businessMember", "businessId", "cascade"], // miembros_negocio_businessId_fkey
+    ["commissionRate", "businessId", "cascade"], // porcentajes_comision_businessId_fkey
+    ["commissionChange", "businessId", "cascade"], // cambios_comision_businessId_fkey
+    ["visit", "businessId", "cascade"], // atenciones_businessId_fkey
+    ["business", "invitadoPorId", "set null"], // negocios_invitadoPorId_fkey
+    ["memberService", "businessId", "cascade"], // member_services_businessId_fkey
+    ["timeBlock", "businessId", "cascade"], // time_blocks_businessId_fkey
+    ["producto", "businessId", "cascade"], // productos_businessId_fkey
+    ["propinaDeAtencion", "businessId", "cascade"], // atencion_propinas_businessId_fkey
+    ["liquidacion", "businessId", "cascade"], // liquidaciones_businessId_fkey
+    ["movimientoDeLiquidacion", "businessId", "cascade"], // movimientos_de_liquidacion_businessId_fkey
+    ["cierreDeCaja", "businessId", "cascade"], // cierres_de_caja_businessId_fkey
+    ["inscripcionEnEspera", "businessId", "cascade"], // lista_de_espera_businessId_fkey
+    ["envioAClientes", "businessId", "cascade"], // envios_a_clientes_businessId_fkey
+    ["appointmentService", "businessId", "cascade"], // cita_servicios_businessId_fkey
+    ["franjaDeHoraValle", "businessId", "cascade"], // franjas_de_hora_valle_businessId_fkey
+  ],
+  businessMember: [
+    ["workSchedule", "memberId", "cascade"], // horarios_laborales_memberId_fkey
+    ["appointment", "memberId", "set null"], // citas_memberId_fkey
+    ["commissionRate", "memberId", "cascade"], // porcentajes_comision_memberId_businessId_fkey
+    ["commissionChange", "memberId", "set null"], // cambios_comision_memberId_fkey
+    ["visitService", "memberId", "set null"], // atencion_servicios_memberId_fkey
+    ["memberService", "memberId", "cascade"], // member_services_memberId_businessId_fkey
+    ["timeBlock", "memberId", "cascade"], // time_blocks_memberId_businessId_fkey
+    ["propinaDeAtencion", "memberId", "no action"], // atencion_propinas_memberId_businessId_fkey
+    ["liquidacion", "memberId", "no action"], // liquidaciones_memberId_businessId_fkey
+    ["movimientoDeLiquidacion", "memberId", "no action"], // movimientos_de_liquidacion_memberId_businessId_fkey
+    ["inscripcionEnEspera", "memberId", "set null"], // lista_de_espera_memberId_fkey
+  ],
+  customer: [
+    ["appointment", "customerId", "set null"], // citas_patientId_fkey
+    ["visit", "customerId", "set null"], // atenciones_customerId_fkey
+    ["envioAClientes", "customerId", "set null"], // envios_a_clientes_customerId_fkey
+  ],
+  service: [
+    ["appointment", "serviceId", "set null"], // citas_serviceId_fkey
+    ["commissionRate", "serviceId", "restrict"], // porcentajes_comision_serviceId_businessId_fkey
+    ["commissionChange", "serviceId", "set null"], // cambios_comision_serviceId_fkey
+    ["visitService", "serviceId", "set null"], // atencion_servicios_serviceId_fkey
+    ["memberService", "serviceId", "cascade"], // member_services_serviceId_businessId_fkey
+    ["inscripcionEnEspera", "serviceId", "cascade"], // lista_de_espera_serviceId_businessId_fkey
+    ["appointmentService", "serviceId", "set null"], // cita_servicios_serviceId_fkey
+  ],
+  appointment: [
+    ["visit", "appointmentId", "set null"], // atenciones_appointmentId_fkey
+    ["appointmentService", "appointmentId", "cascade"], // cita_servicios_appointmentId_businessId_fkey
+  ],
   // Borrar una atención que esperaba (`app/api/atenciones/[id]`) se lleva sus
   // líneas, pagos y propinas. Es también la excepción de los triggers de
   // línea liquidada: cuando la cascada llega a la línea, la atención ya no está.
   visit: [
-    ["visitService", "visitId"],
-    ["visitPayment", "visitId"],
-    ["propinaDeAtencion", "visitId"],
+    ["visitService", "visitId", "cascade"], // atencion_servicios_visitId_fkey
+    ["visitPayment", "visitId", "cascade"], // atencion_pagos_visitId_fkey
+    ["propinaDeAtencion", "visitId", "cascade"], // atencion_propinas_visitId_businessId_fkey
+    ["movimientoDeLiquidacion", "visitId", "no action"], // movimientos_de_liquidacion_visitId_businessId_fkey
   ],
-}
-
-/**
- * Las FK que impiden borrar al padre mientras un hijo lo referencie, todas
- * las del esquema con `onDelete: NoAction` o `Restrict` (sacadas de las
- * migraciones): [modelo hijo, campo que apunta al borrado, regla]. En
- * Postgres `RESTRICT` se revisa en el acto, antes de las cascadas, y `NO
- * ACTION` al final de la sentencia, así que a éste no lo frena un hijo que la
- * misma sentencia se llevó en cascada. Las dos dan P2003 en Prisma.
- */
-type Regla = "restrict" | "no action"
-const RESTRICCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]>> = {
-  // `porcentajes_comision_serviceId_businessId_fkey`
-  service: [["commissionRate", "serviceId", "restrict"]],
-  // `movimientos_de_liquidacion_visitId_businessId_fkey`
-  visit: [["movimientoDeLiquidacion", "visitId", "no action"]],
-  // `atencion_servicios_liquidacionId_fkey`, `atencion_propinas_liquidacionId_businessId_fkey`
-  // y `movimientos_de_liquidacion_liquidacionId_businessId_fkey`
+  producto: [
+    ["visitService", "productId", "set null"], // atencion_servicios_productId_fkey
+    ["commissionChange", "productId", "set null"], // cambios_comision_productId_fkey
+  ],
   liquidacion: [
-    ["visitService", "liquidacionId", "no action"],
-    ["propinaDeAtencion", "liquidacionId", "no action"],
-    ["movimientoDeLiquidacion", "liquidacionId", "no action"],
+    ["visitService", "liquidacionId", "no action"], // atencion_servicios_liquidacionId_fkey
+    ["propinaDeAtencion", "liquidacionId", "no action"], // atencion_propinas_liquidacionId_businessId_fkey
+    ["movimientoDeLiquidacion", "liquidacionId", "no action"], // movimientos_de_liquidacion_liquidacionId_businessId_fkey
   ],
-  // `atencion_propinas_memberId_businessId_fkey`, `liquidaciones_memberId_businessId_fkey`
-  // y `movimientos_de_liquidacion_memberId_businessId_fkey`
-  businessMember: [
-    ["propinaDeAtencion", "memberId", "no action"],
-    ["liquidacion", "memberId", "no action"],
-    ["movimientoDeLiquidacion", "memberId", "no action"],
+  inscripcionEnEspera: [
+    ["envioAClientes", "esperaId", "set null"], // envios_a_clientes_esperaId_fkey
   ],
 }
 
@@ -326,38 +385,29 @@ export function crearBaseFalsa() {
     tablas[modelo].filter((registro) => coincide(tablas, modelo, registro, where))
 
   /**
-   * Una copia de las tablas que sirve para deshacer una sentencia: las listas
-   * se copian (un INSERT las alarga) pero los registros no, porque ni el
-   * INSERT ni el DELETE tocan los que ya estaban.
+   * Una copia de las tablas que sirve para deshacer una sentencia. Es
+   * profunda porque el SET NULL de un borrado cambia filas que ya estaban.
    */
-  const instantanea = (): Tablas =>
-    Object.fromEntries(Object.entries(tablas).map(([modelo, lista]) => [modelo, [...lista]])) as Tablas
-
-  /** P2003 si queda algún hijo de `modelo` que apunte a `ids` con la regla pedida. */
-  function revisarRestricciones(modelo: NombreDeModelo, ids: Set<unknown>, regla: Regla) {
-    for (const [hijo, campo, suRegla] of RESTRICCIONES[modelo] ?? []) {
-      if (suRegla !== regla) continue
-      const referido = tablas[hijo].find((registro) => ids.has(registro[campo]))
-      if (referido) {
-        throw errorDePrisma(
-          "P2003",
-          `Foreign key constraint violated: ${hijo}.${campo} → ${String(referido[campo])} impide borrar ${modelo}`
-        )
-      }
-    }
-  }
+  const instantanea = (): Tablas => structuredClone(tablas)
 
   /**
-   * Una sentencia DELETE entera: borra con sus cascadas, revisa al final los
-   * `NO ACTION` de todo lo borrado y, si algo falla en cualquier punto,
-   * deja la base como estaba (Postgres revierte la sentencia completa).
+   * Una sentencia DELETE entera, como la corre Postgres: cada FK es un
+   * trigger AFTER del padre, y los que encolan las cascadas (que corren sin
+   * disparar los suyos en el acto) se disparan después de los del nivel
+   * anterior. Por eso se recorre en anchura: primero todas las acciones de
+   * las filas borradas, en el orden de `ACCIONES`, y recién después las de lo
+   * que esas cascadas borraron. `RESTRICT` y `NO ACTION` se revisan cuando les
+   * toca su turno en la cola (sin diferir, en Postgres sólo los distingue que
+   * NO ACTION se puede diferir), así que no frena un hijo que otra acción
+   * anterior de la misma sentencia ya se llevó. Si algo falla en cualquier
+   * punto, la base queda como estaba: Postgres revierte la sentencia completa.
    */
   function borrarSentencia(modelo: NombreDeModelo, registros: Set<Registro>) {
     const antes = instantanea()
-    const borrados: [NombreDeModelo, Set<unknown>][] = []
+    const cola: (() => void)[] = []
     try {
-      borrar(modelo, registros, borrados)
-      for (const [padre, ids] of borrados) revisarRestricciones(padre, ids, "no action")
+      borrarFilas(modelo, registros, cola)
+      for (let siguiente = cola.shift(); siguiente; siguiente = cola.shift()) siguiente()
     } catch (error) {
       tablas = antes
       throw error
@@ -365,21 +415,41 @@ export function crearBaseFalsa() {
   }
 
   /**
-   * Un DELETE de un nivel: primero pasa cada fila por su trigger `BEFORE
-   * DELETE` y por los `RESTRICT` que la referencian, después la borra y sigue
-   * con las cascadas. Los hijos se revisan con el padre ya borrado, que es lo
-   * que ve el trigger dentro de la cascada. Anota lo borrado en `borrados`
-   * para los `NO ACTION` del final.
+   * Un DELETE de un nivel: pasa cada fila por su trigger `BEFORE DELETE`, la
+   * borra y encola, fila por fila, las acciones de las FK que la referencian.
+   * Los triggers de los hijos ven al padre ya borrado, como dentro de la
+   * cascada de Postgres.
    */
-  function borrar(modelo: NombreDeModelo, registros: Set<Registro>, borrados: [NombreDeModelo, Set<unknown>][]) {
+  function borrarFilas(modelo: NombreDeModelo, registros: Set<Registro>, cola: (() => void)[]) {
     if (registros.size === 0) return
     for (const registro of registros) ANTES_DE_BORRAR[modelo]?.(registro)
-    const ids = new Set([...registros].map((registro) => registro.id))
-    revisarRestricciones(modelo, ids, "restrict")
     tablas[modelo] = tablas[modelo].filter((registro) => !registros.has(registro))
-    borrados.push([modelo, ids])
-    for (const [hijo, campo] of CASCADAS[modelo] ?? []) {
-      borrar(hijo, new Set(tablas[hijo].filter((registro) => ids.has(registro[campo]))), borrados)
+    for (const registro of registros) {
+      for (const accion of ACCIONES[modelo] ?? []) cola.push(() => aplicarAccion(modelo, registro.id, accion, cola))
+    }
+  }
+
+  /** Lo que hace una FK con los hijos de la fila `id` de `padre`, que ya se borró. */
+  function aplicarAccion(padre: NombreDeModelo, id: unknown, [hijo, campo, regla]: [NombreDeModelo, string, Regla], cola: (() => void)[]) {
+    const referidos = tablas[hijo].filter((registro) => registro[campo] === id)
+    if (referidos.length === 0) return
+    if (regla === "cascade") return borrarFilas(hijo, new Set(referidos), cola)
+    if (regla === "set null") return anular(hijo, referidos, campo)
+    throw errorDePrisma("P2003", `Foreign key constraint violated: ${hijo}.${campo} → ${String(id)} impide borrar ${padre}`)
+  }
+
+  /**
+   * El UPDATE que hace un `ON DELETE SET NULL`: cada fila pasa por sus
+   * triggers `BEFORE UPDATE` (los de `atencion_servicios` sí se disparan con
+   * la cascada) y queda con el campo en null. No revisa las demás FK de la
+   * fila (Postgres sólo revisa las columnas que cambian, y un null no se
+   * revisa) ni toca `updatedAt`, que lo pone Prisma y no la base.
+   */
+  function anular(modelo: NombreDeModelo, registros: Registro[], campo: string) {
+    for (const registro of registros) {
+      const nuevo = { ...registro, [campo]: null }
+      ANTES_DE_ACTUALIZAR[modelo]?.(registro, nuevo)
+      Object.assign(registro, nuevo)
     }
   }
 
