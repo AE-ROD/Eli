@@ -1,5 +1,6 @@
 import { cache } from "react"
-import { horarioSemanalDeAtencion, type FranjaDelDia } from "@/lib/horario-de-atencion"
+import { atiendeCitas, horarioSemanalPublicado } from "@/lib/agenda-publica"
+import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import {
   apareceEnLaPagina,
   colorDelNegocio,
@@ -127,7 +128,12 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
         foto: imagenPublica(miembro.fotoUrl),
       })),
     servicios: negocio.services,
-    horario: horarioSemanalDeAtencion(negocio.workSchedules),
+    // El del negocio más el de quienes atienden (QA#4): la página no dice
+    // "cerrado" a una hora que la reserva ofrece.
+    horario: horarioSemanalPublicado(
+      negocio.workSchedules,
+      negocio.members.filter((miembro) => atiendeCitas(miembro.role)).map((miembro) => miembro.id)
+    ),
     plazoDeCambiosHoras: negocio.cancelacionHorasAntes,
     horaValle: negocio.horaValleActiva && negocio.franjasDeHoraValle.length > 0,
   }

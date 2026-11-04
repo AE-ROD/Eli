@@ -1,5 +1,12 @@
 import type { Prisma } from "@prisma/client"
-import { cabeEnAtencion, franjasDeAtencion, type FilaDeHorarioSemanal } from "@/lib/horario-de-atencion"
+import {
+  cabeEnAtencion,
+  franjasDeAtencion,
+  fusionarFranjas,
+  horarioSemanalDeAtencion,
+  type FilaDeHorarioSemanal,
+  type FranjaDelDia,
+} from "@/lib/horario-de-atencion"
 import { horaAMinutos, minutosAHora, type FranjaHorario } from "@/lib/horario-dia"
 import { franjasParaElDia } from "@/lib/mover-cita"
 import { imagenPublica } from "@/lib/pagina-del-negocio"
@@ -126,6 +133,34 @@ export function candidatosDelDia(
     memberId,
     franjas: franjasParaElDia(filasDeLaSemana, memberId, dia)?.franjas ?? [],
   }))
+}
+
+/**
+ * El horario que publica la página del negocio (la mini página, su "Abierto
+ * ahora" y los días que ofrece el calendario de la reserva), por día: el del
+ * negocio (`horarioSemanalDeAtencion`) más el de cada profesional que atiende
+ * (`franjasParaElDia`, el mismo con que se le ofrecen horas), fusionados.
+ *
+ * Antes la página mostraba sólo el del negocio, y un profesional con horario
+ * propio más largo (el negocio de 09:00 a 18:00 y Carla de 14:00 a 20:00)
+ * recibía reservas a horas que la página decía cerradas (QA#4). PRODUCTO.md
+ * fija que cada profesional atiende en su horario propio si lo cargó, así que
+ * no se recortan sus horas: se publica lo que de verdad se ofrece, sin
+ * esconder el horario que cargó el dueño. Así ninguna hora ofrecida queda
+ * fuera del horario publicado. Sin profesionales, es el del negocio.
+ *
+ * `profesionalIds` son los que atienden (`atiendeCitas`): el horario propio
+ * de un encargado no se publica, porque no recibe reservas.
+ */
+export function horarioSemanalPublicado(filas: FilaDeHorarioSemanal[], profesionalIds: string[]): FranjaDelDia[] {
+  const delNegocio = horarioSemanalDeAtencion(filas)
+  if (profesionalIds.length === 0) return delNegocio
+  return [0, 1, 2, 3, 4, 5, 6].flatMap((dayOfWeek) =>
+    fusionarFranjas([
+      ...delNegocio.filter((franja) => franja.dayOfWeek === dayOfWeek),
+      ...profesionalIds.flatMap((memberId) => franjasParaElDia(filas, memberId, dayOfWeek)?.franjas ?? []),
+    ]).map((franja) => ({ dayOfWeek, ...franja }))
+  )
 }
 
 /**

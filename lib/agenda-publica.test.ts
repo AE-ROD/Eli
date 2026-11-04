@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { candidatosDelDia, candidatosQueCubren, haceElServicio, horasDeLaFranja } from "./agenda-publica"
+import { candidatosDelDia, candidatosQueCubren, haceElServicio, horarioSemanalPublicado, horasDeLaFranja } from "./agenda-publica"
 
 /** Las reglas puras. Lo que lee la base se prueba en `app/api/reservar/[slug]/por-profesional.test.ts`. */
 
@@ -78,5 +78,46 @@ describe("candidatosQueCubren", () => {
     ]
     expect(candidatosQueCubren(candidatos, "10:00", 60).map((c) => c.memberId)).toEqual(["m-pedro"])
     expect(candidatosQueCubren(candidatos, "09:00", 60).map((c) => c.memberId)).toEqual(["m-carla", "m-pedro"])
+  })
+})
+
+describe("horarioSemanalPublicado (QA#4)", () => {
+  // El negocio atiende de lunes a sábado de 09:00 a 18:00; Carla, de 14:00 a 20:00.
+  const LUNES_A_SABADO = [1, 2, 3, 4, 5, 6]
+  const filas = [
+    ...LUNES_A_SABADO.map((dia) => fila(null, "09:00", "18:00", dia)),
+    ...LUNES_A_SABADO.map((dia) => fila("m-carla", "14:00", "20:00", dia)),
+  ]
+
+  it("publica hasta donde atiende el profesional: ninguna hora ofrecida queda fuera del horario de la página", () => {
+    const semana = horarioSemanalPublicado(filas, ["m-carla"])
+    expect(semana.filter((franja) => franja.dayOfWeek === LUNES)).toEqual([{ dayOfWeek: LUNES, startTime: "09:00", endTime: "20:00" }])
+    // El domingo sigue cerrado: nadie atiende.
+    expect(semana.map((franja) => franja.dayOfWeek)).toEqual(LUNES_A_SABADO)
+  })
+
+  it("sin profesionales, el del negocio", () => {
+    expect(horarioSemanalPublicado(filas, []).filter((franja) => franja.dayOfWeek === LUNES)).toEqual([
+      { dayOfWeek: LUNES, startTime: "09:00", endTime: "18:00" },
+    ])
+  })
+
+  it("el horario propio de quien no atiende (el encargado) no se publica", () => {
+    const conEncargado = [...filas, fila("m-encargado", "06:00", "23:00")]
+    expect(horarioSemanalPublicado(conEncargado, ["m-carla"]).filter((franja) => franja.dayOfWeek === LUNES)).toEqual([
+      { dayOfWeek: LUNES, startTime: "09:00", endTime: "20:00" },
+    ])
+  })
+
+  it("un profesional que atiende un día que el negocio no tiene suma ese día; uno con franjas separadas no se fusiona", () => {
+    const semana = horarioSemanalPublicado(
+      [fila(null, "09:00", "12:00"), fila("m-pedro", "15:00", "17:00"), fila("m-pedro", "10:00", "13:00", 0)],
+      ["m-pedro"]
+    )
+    expect(semana).toEqual([
+      { dayOfWeek: 0, startTime: "10:00", endTime: "13:00" },
+      { dayOfWeek: LUNES, startTime: "09:00", endTime: "12:00" },
+      { dayOfWeek: LUNES, startTime: "15:00", endTime: "17:00" },
+    ])
   })
 })

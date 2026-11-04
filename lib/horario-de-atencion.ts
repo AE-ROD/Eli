@@ -36,7 +36,8 @@ export interface FranjaDelDia extends FranjaHorario {
   dayOfWeek: number
 }
 
-function fusionar(franjas: FranjaHorario[]): FranjaHorario[] {
+/** Las franjas válidas, ordenadas y con las que se pisan o se tocan fusionadas. */
+export function fusionarFranjas(franjas: FranjaHorario[]): FranjaHorario[] {
   const intervalos = franjas
     .filter(franjaValida)
     .map((franja) => ({ inicio: horaAMinutos(franja.startTime), fin: horaAMinutos(franja.endTime) }))
@@ -58,9 +59,9 @@ function fusionar(franjas: FranjaHorario[]): FranjaHorario[] {
 
 /** Las franjas de atención de un día, a partir de las filas activas de ese día (generales y de miembros). */
 export function franjasDeAtencion(filasDelDia: FilaDeHorario[]): FranjaHorario[] {
-  const generales = fusionar(filasDelDia.filter((fila) => fila.memberId === null))
+  const generales = fusionarFranjas(filasDelDia.filter((fila) => fila.memberId === null))
   if (generales.length > 0) return generales
-  return fusionar(filasDelDia.filter((fila) => fila.memberId !== null))
+  return fusionarFranjas(filasDelDia.filter((fila) => fila.memberId !== null))
 }
 
 /** La misma regla aplicada a cada día de la semana. No devuelve `memberId`: esto va al navegador. */
