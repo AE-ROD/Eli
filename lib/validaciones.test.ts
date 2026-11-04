@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest"
 import {
   registroSchema,
   reservaSchema,
+  listaDeEsperaSchema,
+  filaVirtualSchema,
   recuperarContrasenaSchema,
   restablecerContrasenaSchema,
   tipoNegocioSchema,
@@ -195,5 +197,23 @@ describe("largos máximos", () => {
       expect(resultado.success).toBe(false)
       expect(resultado.error?.issues[0].message).toMatch(/nombre del negocio/i)
     })
+  })
+})
+
+describe("QA#22: la página pública dice \"correo\", no \"email\"", () => {
+  const reserva = { servicioId: "s-corte", fecha: "2030-01-07", hora: "10:00", nombre: "Lucía", apellido: "Pérez" }
+
+  it("reserva, lista de espera y fila virtual", () => {
+    const enReserva = reservaSchema.safeParse({ ...reserva, email: "lucia-arroba" })
+    expect(enReserva.success).toBe(false)
+    expect(enReserva.error?.issues[0].message).toBe("El correo no es válido")
+
+    const enLista = listaDeEsperaSchema.safeParse({ servicioId: "s-corte", fecha: "2030-01-07", nombre: "Lucía", apellido: "Pérez" })
+    expect(enLista.error?.issues[0].message).toBe("Falta el correo")
+    const invalidaEnLista = listaDeEsperaSchema.safeParse({ servicioId: "s-corte", fecha: "2030-01-07", nombre: "Lucía", apellido: "Pérez", email: "x" })
+    expect(invalidaEnLista.error?.issues[0].message).toBe("El correo no es válido")
+
+    const enFila = filaVirtualSchema.safeParse({ nombre: "Juan Pérez", email: "juan" })
+    expect(enFila.error?.issues[0].message).toBe("El correo no es válido")
   })
 })

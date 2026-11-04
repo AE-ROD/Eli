@@ -157,7 +157,7 @@ export async function inscribirEnListaDeEspera(
   ahora = new Date()
 ): Promise<ResultadoDeInscripcion> {
   const email = normalizarEmail(datos.email)
-  if (!email) return { tipo: "rechazada", error: "Falta el email" }
+  if (!email) return { tipo: "rechazada", error: "Falta el correo" }
 
   const servicio = await prisma.service.findFirst({
     where: { id: datos.servicioId, businessId: negocio.id, active: true },
