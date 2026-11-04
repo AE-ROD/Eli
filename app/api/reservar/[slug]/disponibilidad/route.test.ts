@@ -115,7 +115,7 @@ describe("GET /api/reservar/[slug]/disponibilidad", () => {
 
     const res = await GET(pedidoFalso(`?fecha=${FECHA}&servicioId=s-corte`), conSlug)
 
-    expect(await res.json()).toEqual({ slots: ["09:00", "10:00", "11:00"] })
+    expect(await res.json()).toEqual({ slots: ["09:00", "09:30", "10:00", "10:30", "11:00"] })
   })
 
   it("con una fecha y un servicio válidos devuelve las horas libres del día", async () => {
@@ -185,7 +185,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: de qué horario salen las hor
     ])
 
     // Pedro no cargó horario propio: atiende en el general.
-    expect(await horasDelDia()).toEqual({ slots: ["09:00", "10:00", "14:00", "15:00"] })
+    expect(await horasDelDia()).toEqual({ slots: ["09:00", "09:30", "10:00", "14:00", "14:30", "15:00"] })
   })
 
   it("sin horario general ese día, las horas salen de la unión de los horarios de los profesionales", async () => {
@@ -196,7 +196,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: de qué horario salen las hor
       franja({ dayOfWeek: OTRO_DIA, startTime: "08:00", endTime: "20:00" }),
     ])
 
-    expect(await horasDelDia()).toEqual({ slots: ["09:00", "10:00", "15:00", "16:00"] })
+    expect(await horasDelDia()).toEqual({ slots: ["09:00", "09:30", "10:00", "15:00", "15:30", "16:00"] })
   })
 
   it("con dos franjas generales el mismo día, ofrece las horas de ambas", async () => {
@@ -205,7 +205,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: de qué horario salen las hor
       franja({ startTime: "09:00", endTime: "11:00" }),
     ])
 
-    expect(await horasDelDia()).toEqual({ slots: ["09:00", "10:00", "15:00", "16:00"] })
+    expect(await horasDelDia()).toEqual({ slots: ["09:00", "09:30", "10:00", "15:00", "15:30", "16:00"] })
   })
 
   it("no usa franjas inactivas ni las de otro negocio", async () => {
@@ -278,7 +278,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: el día y la hora del negocio
       franja({ dayOfWeek: LUNES, startTime: "09:00", endTime: "12:00" }),
     ])
 
-    expect(await horasDe("2026-10-19")).toEqual({ slots: ["09:00", "10:00", "11:00"] })
+    expect(await horasDe("2026-10-19")).toEqual({ slots: ["09:00", "09:30", "10:00", "10:30", "11:00"] })
   })
 
   it("2026-10-24 es sábado: ofrece el horario del sábado, no el del viernes", async () => {
@@ -287,7 +287,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: el día y la hora del negocio
       franja({ dayOfWeek: SABADO, startTime: "10:00", endTime: "12:00" }),
     ])
 
-    expect(await horasDe("2026-10-24")).toEqual({ slots: ["10:00", "11:00"] })
+    expect(await horasDe("2026-10-24")).toEqual({ slots: ["10:00", "10:30", "11:00"] })
   })
 
   it("una cita del lunes a las 10:00 del negocio (13:00 UTC) bloquea el lunes 10:00 y no el martes", async () => {
@@ -298,7 +298,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: el día y la hora del negocio
     conCitas([{ id: "cita-lunes", startTime: "2026-10-19T13:00:00.000Z", endTime: "2026-10-19T14:00:00.000Z" }])
 
     expect(await horasDe("2026-10-19")).toEqual({ slots: ["09:00", "11:00"] })
-    expect(await horasDe("2026-10-20")).toEqual({ slots: ["09:00", "10:00", "11:00"] })
+    expect(await horasDe("2026-10-20")).toEqual({ slots: ["09:00", "09:30", "10:00", "10:30", "11:00"] })
   })
 
   it("una cita del lunes a las 21:30 del negocio (00:30 UTC del martes) es del lunes", async () => {
@@ -308,8 +308,8 @@ describe("GET /api/reservar/[slug]/disponibilidad: el día y la hora del negocio
     ])
     conCitas([{ id: "cita-noche", startTime: "2026-10-20T00:30:00.000Z", endTime: "2026-10-20T01:30:00.000Z" }])
 
-    expect(await horasDe("2026-10-19")).toEqual({ slots: ["20:00"] })
-    expect(await horasDe("2026-10-20")).toEqual({ slots: ["00:00", "01:00"] })
+    expect(await horasDe("2026-10-19")).toEqual({ slots: ["20:00", "20:30"] })
+    expect(await horasDe("2026-10-20")).toEqual({ slots: ["00:00", "00:30", "01:00"] })
   })
 
   it("con otra zona guardada (Asia/Tokyo), las 10:00 del negocio son las 01:00 UTC", async () => {
@@ -339,7 +339,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: el día y la hora del negocio
     vi.setSystemTime(new Date("2026-10-19T02:00:00.000Z"))
     escenario([franja({ dayOfWeek: LUNES, startTime: "09:00", endTime: "12:00" })])
 
-    expect(await horasDe("2026-10-19")).toEqual({ slots: ["09:00", "10:00", "11:00"] })
+    expect(await horasDe("2026-10-19")).toEqual({ slots: ["09:00", "09:30", "10:00", "10:30", "11:00"] })
   })
 })
 
@@ -382,7 +382,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: fechas fuera del rango de añ
     const res = await GET(pedidoFalso("?fecha=9998-12-31&servicioId=s-corte"), conSlug)
 
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ slots: ["09:00", "10:00"] })
+    expect(await res.json()).toEqual({ slots: ["09:00", "09:30", "10:00"] })
   })
 })
 
@@ -443,7 +443,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: ni en el pasado ni a más de 
   it("a 90 días justos (30/12/2026): ofrece las horas", async () => {
     relojEn("2026-10-01T12:00:00.000Z")
 
-    expect(await respuestaDe("2026-12-30")).toEqual({ status: 200, cuerpo: { slots: ["09:00", "10:00"] } })
+    expect(await respuestaDe("2026-12-30")).toEqual({ status: 200, cuerpo: { slots: ["09:00", "09:30", "10:00"] } })
   })
 
   it.each([

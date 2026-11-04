@@ -391,9 +391,9 @@ describe("POST /api/reservar/[slug]/confirmar: ni en el pasado ni a más de 90 d
         conSlug
       )
       const { slots } = await respuesta.json()
-      expect(slots).toEqual(["11:00", "12:00"])
+      expect(slots).toEqual(["11:00", "11:30", "12:00"])
 
-      for (const hora of ["09:00", "10:00", "10:30", "11:00", "12:00"]) {
+      for (const hora of ["09:00", "10:00", "10:30", "11:00", "11:30", "12:00"]) {
         todaLaSemana()
         const { status } = await confirmar(hora, "2026-10-19")
         expect({ hora, status }).toEqual({ hora, status: slots.includes(hora) ? 201 : 409 })

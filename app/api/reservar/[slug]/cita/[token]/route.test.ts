@@ -308,7 +308,7 @@ describe("reagendar", () => {
     escenario({
       otras: [{ id: "c-otra", businessId: NEGOCIO, title: "Color", memberId: "m-carla", startTime: aLas("09:00", "2030-01-08"), endTime: aLas("10:00", "2030-01-08") }],
     })
-    expect((await horas("2030-01-08")).cuerpo.slots).toEqual(["10:00", "11:00"])
+    expect((await horas("2030-01-08")).cuerpo.slots).toEqual(["10:00", "10:30", "11:00"])
     expect((await reagendar("2030-01-08", "09:00")).status).toBe(409)
     expect(laCita().startTime).toEqual(aLas("10:00"))
   })

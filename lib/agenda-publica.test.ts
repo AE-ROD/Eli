@@ -22,9 +22,24 @@ describe("haceElServicio", () => {
 })
 
 describe("horasDeLaFranja", () => {
-  it("cada `duracion` minutos desde que abre, sin pasarse del cierre", () => {
-    expect(horasDeLaFranja({ startTime: "09:00", endTime: "11:30" }, 60)).toEqual(["09:00", "10:00"])
+  it("cada 30 minutos desde que abre, sin pasarse del cierre", () => {
+    expect(horasDeLaFranja({ startTime: "09:00", endTime: "11:30" }, 60)).toEqual(["09:00", "09:30", "10:00", "10:30"])
     expect(horasDeLaFranja({ startTime: "09:00", endTime: "10:00" }, 30)).toEqual(["09:00", "09:30"])
+  })
+
+  it("QA#2: un servicio largo no salta de a su duración (Color de 90 min ofrece las 10:00, 12:00, 14:00…)", () => {
+    const horas = horasDeLaFranja({ startTime: "09:00", endTime: "18:00" }, 90)
+    expect(horas[0]).toBe("09:00")
+    expect(horas).toContain("12:00")
+    expect(horas).toContain("14:00")
+    expect(horas).toContain("16:00")
+    // La última que cabe entera antes del cierre: 16:30 + 90 = 18:00.
+    expect(horas[horas.length - 1]).toBe("16:30")
+    expect(horas).toHaveLength(16)
+  })
+
+  it("un servicio corto se ofrece cada su duración: uno de 15 min, cada 15", () => {
+    expect(horasDeLaFranja({ startTime: "09:00", endTime: "10:00" }, 15)).toEqual(["09:00", "09:15", "09:30", "09:45"])
   })
   it("una duración inválida no da horas", () => {
     expect(horasDeLaFranja({ startTime: "09:00", endTime: "10:00" }, 0)).toEqual([])

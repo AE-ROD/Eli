@@ -294,6 +294,7 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 - **Qué ocupa a un profesional:** sus citas pendientes o confirmadas (las canceladas y las de "No vino" no), sus bloqueos y los de todo el negocio, y las citas **sin profesional asignado**, que ocupan a todos: así las reservas de antes de esto (que llegaron sin profesional) siguen bloqueando su hora. Su horario es el propio si cargó uno; si no, el del negocio.
 - **Negocio sin profesionales** (el dueño solo, o con un encargado): funciona como siempre, un solo carril con el horario del negocio, ocupado por cualquier cita activa y por los bloqueos de todo el negocio. La cita llega sin profesional asignado.
 - **Aviso de nueva reserva:** le llega al dueño y, si la cita quedó a nombre de un profesional (elegido o asignado por "cualquiera"), también a ese profesional, al correo con que entra a Eli. Si es la misma casilla, llega una sola vez.
+- **Cada cuánto se ofrecen horas:** desde que abre cada franja, cada 30 minutos (o cada lo que dure el servicio, si dura menos de 30), siempre que el bloque entero quepa libre antes del cierre. Un servicio de 90 minutos ya no salta de hora y media en hora y media: ofrece 09:00, 09:30, 10:00… El enlace para reagendar ofrece las mismas.
 - La página nunca ofrece una hora que después rechazaría: ofrecer y confirmar usan la misma regla.
 
 ### Varios servicios por reserva

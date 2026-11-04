@@ -128,12 +128,27 @@ export function candidatosDelDia(
   }))
 }
 
-/** Las horas de inicio de un tramo de `duracion` minutos dentro de una franja, cada `duracion` minutos desde que abre. */
+/**
+ * Cada cuántos minutos, como mucho, se ofrece una hora de inicio. Antes el
+ * paso era la duración del servicio: con uno de 90 minutos sólo se ofrecían
+ * las 09:00, 10:30, 12:00…, y una cita a las 10:00 dejaba fuera las 11:30 y
+ * las 12:00 aunque estuvieran libres (QA#2). `confirmar` acepta cualquier
+ * hora que quepa, así que ofrecer más inicios no abre nada que después se
+ * rechace.
+ */
+export const PASO_MAXIMO_ENTRE_HORAS = 30
+
+/**
+ * Las horas de inicio de un tramo de `duracion` minutos dentro de una franja,
+ * desde que abre y cada `PASO_MAXIMO_ENTRE_HORAS` minutos (o cada `duracion`,
+ * si el servicio dura menos: uno de 15 minutos sigue ofreciéndose cada 15).
+ */
 export function horasDeLaFranja(franja: FranjaHorario, duracion: number): string[] {
   const horas: string[] = []
   if (!(duracion > 0)) return horas
+  const paso = Math.min(duracion, PASO_MAXIMO_ENTRE_HORAS)
   const fin = horaAMinutos(franja.endTime)
-  for (let minuto = horaAMinutos(franja.startTime); minuto + duracion <= fin; minuto += duracion) {
+  for (let minuto = horaAMinutos(franja.startTime); minuto + duracion <= fin; minuto += paso) {
     horas.push(minutosAHora(minuto))
   }
   return horas
