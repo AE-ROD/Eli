@@ -812,6 +812,19 @@ describe("PUT /api/clientes/[id] — teléfono en E.164 y consentimiento de What
     expect(maria().whatsappConsentSource).toBeNull()
   })
 
+  it("marcar el consentimiento lo registra con la hora de la base, no la de esta instancia (#152)", async () => {
+    const { PUT } = await import("./route")
+    const deLaBase = new Date("2026-11-04T12:00:07.000Z")
+    base.prisma.$queryRaw.mockImplementationOnce(async () => [{ ahora: deLaBase }])
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    expect((await PUT(pedido(URL_DE_MARIA, { whatsappConsent: true }), conId("c-maria"))).status).toBe(200)
+
+    expect(maria()).toMatchObject({ whatsappConsentAt: deLaBase, whatsappConsentSource: "panel" })
+    const [partes] = base.prisma.$queryRaw.mock.calls[0]
+    expect(partes.join("?")).toBe("SELECT clock_timestamp() AS ahora")
+  })
+
   it("volver a mandarlo marcado no pisa el consentimiento que ya había (ni su fecha ni su origen)", async () => {
     const { PUT } = await import("./route")
     const original = new Date("2026-01-01T12:00:00.000Z")

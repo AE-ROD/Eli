@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { z } from "zod"
 import { emailOVacio, etiquetas, nombre, notas, telefonoChileno } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
@@ -65,11 +66,15 @@ async function verificarCliente(actor: Actor, id: string) {
   })
 }
 
-/** Lo que cambia en el consentimiento de WhatsApp según lo que se marcó y lo que ya había. */
-function cambioDeConsentimiento(marcado: boolean | undefined, yaTenia: boolean) {
+/**
+ * Lo que cambia en el consentimiento de WhatsApp según lo que se marcó y lo
+ * que ya había. La hora, de la base y no de esta instancia (#152), y sólo se
+ * pide cuando de verdad se registra.
+ */
+async function cambioDeConsentimiento(marcado: boolean | undefined, yaTenia: boolean) {
   if (marcado === undefined) return {}
   if (!marcado) return { whatsappConsentAt: null, whatsappConsentSource: null }
-  return yaTenia ? {} : { whatsappConsentAt: new Date(), whatsappConsentSource: "panel" }
+  return yaTenia ? {} : { whatsappConsentAt: await horaDeLaBase(prisma), whatsappConsentSource: "panel" }
 }
 
 /**
@@ -215,7 +220,7 @@ export async function PUT(
         ...(datos.phone !== undefined && { phone: datos.phone }),
         ...(datos.tags !== undefined && { tags: datos.tags }),
         ...(datos.notes !== undefined && { notes: datos.notes || null }),
-        ...cambioDeConsentimiento(datos.whatsappConsent, existente.whatsappConsentAt !== null),
+        ...(await cambioDeConsentimiento(datos.whatsappConsent, existente.whatsappConsentAt !== null)),
         ...consentimientoAlCambiarElCorreo(datos.email, existente, datos.correoPromoConsent),
       },
     })

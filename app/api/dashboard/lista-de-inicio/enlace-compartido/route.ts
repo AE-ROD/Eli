@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { actorDeSesion, veLaListaDeInicio } from "@/lib/permisos"
 
 /**
@@ -19,9 +20,11 @@ export async function POST() {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
+  // La hora de la base, no la de esta instancia (#152).
+  const ahora = await horaDeLaBase(prisma)
   const { count } = await prisma.business.updateMany({
     where: { id: actor.businessId, enlaceCompartidoAt: null },
-    data: { enlaceCompartidoAt: new Date() },
+    data: { enlaceCompartidoAt: ahora },
   })
 
   return NextResponse.json({ marcado: count === 1 })
