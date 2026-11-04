@@ -68,7 +68,12 @@ type ModalAbierto =
   | { tipo: "anotar" }
   | { tipo: "servicios"; atencion: Atencion; requisito: string | null; despues: Despues | null }
   | { tipo: "cobro"; atencion: Atencion }
-  | { tipo: "anular"; atencion: Atencion }
+  /**
+   * `rechazo`: el servidor dijo que ya entró en una caja cerrada o en una
+   * liquidación (`corregir-con-ajuste`). El modal sigue abierto con lo escrito
+   * y dice cómo se corrige, en vez de cerrarse y perder el motivo (QA#12).
+   */
+  | { tipo: "anular"; atencion: Atencion; rechazo?: string }
   | { tipo: "vaciar-fila"; personas: number }
 
 type ModalDeServicios = Extract<ModalAbierto, { tipo: "servicios" }>
@@ -464,11 +469,14 @@ export default function PaginaTablero() {
   const anular = (atencion: Atencion, motivo: string) =>
     desdeUnModal(async () => {
       const resultado = await anularAtencion(atencion.id, motivo)
-      // Ya entró en una liquidación o en un cierre de caja: se recarga igual,
-      // pero con el mensaje del servidor, que dice cómo se corrige (con un
-      // ajuste) en vez de "la atención cambió".
+      // Ya entró en una liquidación o en un cierre de caja: la atención no
+      // cambió, no hay nada que recargar ni reintentar. El modal se queda con
+      // el motivo escrito y el mensaje del servidor, que dice cómo se corrige
+      // (con un ajuste), y ya no ofrece anular.
       if (!resultado.ok && resultado.motivo === "corregir-con-ajuste") {
-        return tableroDesactualizado(tarjetaDe(atencion), resultado.error)
+        setGuardando(false)
+        setModal({ tipo: "anular", atencion, rechazo: resultado.error })
+        return
       }
       if (!resultado.ok) return falloEnModal(resultado, atencion)
 
@@ -672,6 +680,7 @@ export default function PaginaTablero() {
             key={`anular-${modal.atencion.id}`}
             atencion={modal.atencion}
             aviso={avisoDelModal}
+            rechazo={modal.rechazo}
             guardando={guardando}
             onAnular={(motivo) => anular(modal.atencion, motivo)}
             onCerrar={cerrarModal}

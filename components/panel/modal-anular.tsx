@@ -15,6 +15,12 @@ interface PropsDeModalAnular {
   atencion: AtencionParaAnular
   /** Por qué no se pudo anular, si falló. */
   aviso: string
+  /**
+   * El servidor no la deja anular nunca más (ya entró en una caja cerrada o en
+   * una liquidación: código `corregir-con-ajuste`). Se muestra el mensaje, lo
+   * escrito queda a la vista (sólo lectura) y ya no se ofrece anular.
+   */
+  rechazo?: string
   guardando: boolean
   onAnular: (motivo: string) => void
   onCerrar: () => void
@@ -25,14 +31,14 @@ interface PropsDeModalAnular {
  * el tablero (antes o después de cobrar) y el historial de reportes, donde el
  * dueño anula cobros de días anteriores.
  */
-export function ModalAnular({ atencion, aviso, guardando, onAnular, onCerrar }: PropsDeModalAnular) {
+export function ModalAnular({ atencion, aviso, rechazo, guardando, onAnular, onCerrar }: PropsDeModalAnular) {
   const idDelMotivo = useId()
   const [motivo, setMotivo] = useState("")
   const cobrada = atencion.estado === "finalizada"
 
   const anular = (evento: FormEvent<HTMLFormElement>) => {
     evento.preventDefault()
-    onAnular(motivo)
+    if (!rechazo) onAnular(motivo)
   }
 
   return (
@@ -52,28 +58,37 @@ export function ModalAnular({ atencion, aviso, guardando, onAnular, onCerrar }: 
             value={motivo}
             maxLength={LARGO_MAXIMO_DEL_MOTIVO}
             disabled={guardando}
+            readOnly={!!rechazo}
             onChange={(evento) => setMotivo(evento.target.value)}
             placeholder={cobrada ? "Ej.: se cobró de más, se cargó a otro cliente…" : "Ej.: se fue sin ser atendido…"}
             className={cn(CAMPO, "h-24 resize-none")}
           />
         </div>
 
-        {aviso && <Aviso>{aviso}</Aviso>}
+        {rechazo ? (
+          <Aviso tono="atencion" rol="alert">
+            {rechazo}
+          </Aviso>
+        ) : (
+          aviso && <Aviso>{aviso}</Aviso>
+        )}
 
         {/* En el teléfono, uno debajo del otro y el que anula arriba: el que no se deshace no queda al alcance del pulgar por error. */}
         <div className="flex flex-col-reverse gap-3 sm:flex-row">
           <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar} disabled={guardando}>
-            No anular
+            {rechazo ? "Entendido" : "No anular"}
           </BotonPrimario>
-          <BotonPrimario
-            type="submit"
-            variante="peligro"
-            anchoCompleto
-            cargando={guardando}
-            aria-label={guardando ? "Anulando" : undefined}
-          >
-            {cobrada ? "Anular cobro" : "Anular atención"}
-          </BotonPrimario>
+          {!rechazo && (
+            <BotonPrimario
+              type="submit"
+              variante="peligro"
+              anchoCompleto
+              cargando={guardando}
+              aria-label={guardando ? "Anulando" : undefined}
+            >
+              {cobrada ? "Anular cobro" : "Anular atención"}
+            </BotonPrimario>
+          )}
         </div>
       </form>
     </MarcoDeModal>
