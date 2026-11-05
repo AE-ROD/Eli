@@ -48,7 +48,7 @@ const prismaMock = {
   business: { findUnique: vi.fn(() => Promise.resolve({ timezone: "America/Santiago" })) },
   workSchedule: { findMany: vi.fn(() => Promise.resolve([])) },
   timeBlock: { findMany: vi.fn(() => Promise.resolve([])) },
-  businessMember: { findFirst: vi.fn(() => Promise.resolve(null)) },
+  businessMember: { findFirst: vi.fn(() => Promise.resolve(null)), findMany: vi.fn(() => Promise.resolve([])) },
   // Las filas de `cita_servicios` (#138): estas citas son de texto libre, sin filas.
   appointmentService: { findMany: vi.fn(() => Promise.resolve([])) },
 }

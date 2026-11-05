@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client"
+import { leerHorarioDeQuienesAtienden } from "@/lib/agenda-publica"
 import { leerOcupacion } from "@/lib/ocupacion"
 import { advertenciaDeBloqueo, advertenciaDeChoque, advertenciaDeHorario, type Advertencia, type Tramo } from "@/lib/mover-cita"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
@@ -23,10 +24,8 @@ export async function advertenciasDeAgenda(
   const { businessId, citaId, tramo, memberId } = consulta
   const [negocio, filas, miembro, ocupacion] = await Promise.all([
     db.business.findUnique({ where: { id: businessId }, select: { timezone: true } }),
-    db.workSchedule.findMany({
-      where: { businessId, active: true },
-      select: { memberId: true, dayOfWeek: true, startTime: true, endTime: true },
-    }),
+    // Sin el horario personal de quien no atiende (#168).
+    leerHorarioDeQuienesAtienden(db, businessId),
     memberId
       ? db.businessMember.findFirst({
           where: { id: memberId, businessId },

@@ -103,8 +103,8 @@ export async function leerProfesionalesQueAtienden(
  * (`profesionales`, los de `leerProfesionalesQueAtienden`). Un día sin filas
  * generales usa la unión de las de los miembros (`franjasDeAtencion`), y ahí
  * entraba el horario de un encargado, que no recibe reservas: ese día salía
- * con atención en la página y en la reserva (#168). El panel, que no pasa
- * por acá, sigue leyendo todas.
+ * con atención en la página y en la reserva (#168). El panel lee lo mismo
+ * con `leerHorarioDeQuienesAtienden`.
  */
 export function filasDeQuienesAtienden<F extends { memberId: string | null }>(
   filas: F[],
@@ -112,6 +112,35 @@ export function filasDeQuienesAtienden<F extends { memberId: string | null }>(
 ): F[] {
   const atienden = new Set(profesionales.map((profesional) => profesional.id))
   return filas.filter((fila) => fila.memberId === null || atienden.has(fila.memberId))
+}
+
+/** Tope de filas de horario que se leen: siete días por persona, con margen. */
+const TOPE_DE_FILAS_DE_HORARIO = 500
+
+/**
+ * El horario activo del negocio que cuenta para saber cuándo atiende: las
+ * filas generales y las de quienes atienden (`filasDeQuienesAtienden`). Lo
+ * usan la fila virtual, las horas que dibuja la agenda y las advertencias de
+ * horario del panel: el horario personal de un encargado no abre el negocio
+ * un día sin horario general (#168).
+ */
+export async function leerHorarioDeQuienesAtienden(
+  db: Pick<Prisma.TransactionClient, "businessMember" | "workSchedule">,
+  businessId: string
+): Promise<FilaDeHorarioSemanal[]> {
+  const [atienden, filas] = await Promise.all([
+    db.businessMember.findMany({
+      where: { businessId, role: { in: [...ROLES_QUE_ATIENDEN] } },
+      select: { id: true },
+    }),
+    db.workSchedule.findMany({
+      where: { businessId, active: true },
+      select: { memberId: true, dayOfWeek: true, startTime: true, endTime: true },
+      orderBy: { startTime: "asc" },
+      take: TOPE_DE_FILAS_DE_HORARIO,
+    }),
+  ])
+  return filasDeQuienesAtienden(filas, atienden)
 }
 
 export function haceElServicio(profesional: Pick<ProfesionalQueAtiende, "serviceIds">, serviceId: string): boolean {

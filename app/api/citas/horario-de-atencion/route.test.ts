@@ -29,6 +29,9 @@ describe("GET /api/citas/horario-de-atencion", () => {
         { id: "h1", businessId: NEGOCIO, memberId: null, dayOfWeek: 1, startTime: "07:00", endTime: "13:00" },
         { id: "h2", businessId: NEGOCIO, memberId: null, dayOfWeek: 1, startTime: "15:00", endTime: "21:00" },
         { id: "h3", businessId: NEGOCIO, memberId: null, dayOfWeek: 2, startTime: "09:00", endTime: "18:00", active: false },
+        // Días sin horario general: el del encargado no cuenta, el de una profesional sí (#168).
+        { id: "h4", businessId: NEGOCIO, memberId: "m-encargado", dayOfWeek: 4, startTime: "08:00", endTime: "20:00" },
+        { id: "h5", businessId: NEGOCIO, memberId: "m-carla", dayOfWeek: 5, startTime: "10:00", endTime: "14:00" },
         { id: "h-ajeno", businessId: OTRO_NEGOCIO, memberId: null, dayOfWeek: 3, startTime: "05:00", endTime: "23:00" },
       ],
     })
@@ -46,6 +49,7 @@ describe("GET /api/citas/horario-de-atencion", () => {
       expect(await res.json()).toEqual([
         { dayOfWeek: 1, startTime: "07:00", endTime: "13:00" },
         { dayOfWeek: 1, startTime: "15:00", endTime: "21:00" },
+        { dayOfWeek: 5, startTime: "10:00", endTime: "14:00" },
       ])
     }
   })
