@@ -18,7 +18,7 @@ import {
   SECCION_DE_CONFIGURACION,
   SECCION_DE_INICIO,
   SECCIONES_DE_MODULOS,
-  seccionDeLaRuta,
+  seccionMarcadaEnLaBarra,
   seccionesDeLaPlata,
   type AccesoALaPlata,
   type SeccionDelPanel,
@@ -74,7 +74,6 @@ export function BarraLateral({
   const { cajonAbierto, cerrarCajon, cerrarCajonParaIrA, colapsada, alternarColapso, enfocarBotonMenu } =
     useBarraLateral()
   const refCajon = useRef<HTMLDivElement>(null)
-  const seccionActiva = seccionDeLaRuta(pathname)
 
   /**
    * El orden es el de la referencia aprobada: el inicio, los módulos en el
@@ -90,6 +89,7 @@ export function BarraLateral({
     ...seccionesDeLaPlata(accesoALaPlata),
   ]
   const secundarias: SeccionDelPanel[] = [SECCION_DE_CONFIGURACION, SECCION_DE_AYUDA]
+  const seccionActiva = seccionMarcadaEnLaBarra(pathname, [...principales, ...secundarias])
 
   // Mientras el cajón está abierto el foco vive adentro: entra al abrirse,
   // Tab y Shift+Tab dan la vuelta sin salir y Escape lo cierra. Al cerrarse
