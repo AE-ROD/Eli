@@ -618,6 +618,21 @@ describe("lib/email — mensajes a clientes (etapa 3)", () => {
     expect(sinEnlace).toContain("avísanos con anticipación")
   })
 
+  it("#164: dentro del plazo el recordatorio no ofrece cancelar ni cambiar, aunque venga el enlace", async () => {
+    const email = await import("./email")
+    const recordatorio = { emailCliente: "maria@test.com", nombreCliente: "María", nombreNegocio: "Salón Uno", servicio: "Corte", fecha: "2026-11-02", hora: "10:00" }
+
+    await email.enviarRecordatorio({ ...recordatorio, enlaceDeGestion: "https://eli.app/reservar/salon-uno/cita/abc", plazoHoras: 24, sePuedeCambiar: false })
+    await email.enviarRecordatorio({ ...recordatorio, sePuedeCambiar: false })
+
+    for (const [envio] of enviarMock.mock.calls) {
+      const html = envio.html as string
+      expect(html).not.toContain("Cancelar o cambiar mi cita")
+      expect(html).not.toContain("cita/abc")
+      expect(html).toContain("contacta directamente al local")
+    }
+  })
+
   it("escapa los datos de personas y limpia el asunto", async () => {
     const email = await import("./email")
 

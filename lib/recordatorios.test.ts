@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import {
+  seguroQueNoSalio,
   ESTADOS_SIN_RECORDATORIO,
   HORA_UTC_DEL_CRON,
   esDeMañana,
@@ -100,5 +101,20 @@ describe("recibiraRecordatorio (N4): la pantalla final promete el recordatorio s
     }
     const cron = vercel.crons.find((entrada) => entrada.path === "/api/cron/recordatorios")
     expect(cron?.schedule).toBe(`0 ${HORA_UTC_DEL_CRON} * * *`)
+  })
+})
+
+describe("seguroQueNoSalio (#140)", () => {
+  it("sin clave de Resend (null) o con un rechazo de Resend: no salió", () => {
+    expect(seguroQueNoSalio(null)).toBe(true)
+    for (const name of ["rate_limit_exceeded", "daily_quota_exceeded", "validation_error", "invalid_api_key"]) {
+      expect(seguroQueNoSalio({ error: { name } })).toBe(true)
+    }
+  })
+
+  it("un error ambiguo (red caída, error interno) o un envío aceptado: pudo salir", () => {
+    expect(seguroQueNoSalio({ error: { name: "application_error" } })).toBe(false)
+    expect(seguroQueNoSalio({ error: { name: "internal_server_error" } })).toBe(false)
+    expect(seguroQueNoSalio({ error: null })).toBe(false)
   })
 })

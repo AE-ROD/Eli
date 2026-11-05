@@ -53,6 +53,45 @@ export function fechaYHoraEnElNegocio(
 }
 
 /**
+ * Los errores de Resend con los que el correo seguro NO salió: rechazó el
+ * pedido antes de aceptarlo (datos, clave, permisos o cupo). Con cualquier
+ * otro (`application_error`, que es también el de una red caída,
+ * `internal_server_error`) o si el envío lanzó, el correo pudo haber
+ * llegado aunque la respuesta sea un error (#140).
+ */
+const RECHAZOS_DE_RESEND: readonly string[] = [
+  "validation_error",
+  "missing_required_field",
+  "invalid_parameter",
+  "invalid_from_address",
+  "invalid_attachment",
+  "invalid_idempotency_key",
+  "invalid_idempotent_request",
+  "invalid_region",
+  "missing_api_key",
+  "invalid_api_key",
+  "restricted_api_key",
+  "invalid_access",
+  "not_found",
+  "method_not_allowed",
+  "security_error",
+  "rate_limit_exceeded",
+  "daily_quota_exceeded",
+  "monthly_quota_exceeded",
+]
+
+/**
+ * Si un recordatorio que no se dio por enviado seguro no llegó a nadie: sin
+ * clave de Resend (`null`, no se intentó) o rechazado por Resend. Sólo
+ * entonces se puede borrar el enlace nuevo que llevaba: si el correo pudo
+ * llegar, borrarlo dejaba un enlace que da 404 (#140).
+ */
+export function seguroQueNoSalio(resultado: { error: { name: string } | null } | null): boolean {
+  if (resultado === null) return true
+  return resultado.error !== null && RECHAZOS_DE_RESEND.includes(resultado.error.name)
+}
+
+/**
  * La hora UTC en que corre el cron de recordatorios: la de `vercel.json`
  * ("0 13 * * *"). Un test compara las dos para que no se separen.
  */

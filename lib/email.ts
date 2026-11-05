@@ -495,6 +495,12 @@ export interface DatosRecordatorio {
   enlaceDeGestion?: string | null
   /** Hasta cuántas horas antes se puede cambiar con el enlace. */
   plazoHoras?: number
+  /**
+   * `false` si la cita ya está dentro del plazo (`dentroDelPlazo`): el
+   * enlace no la dejaría cancelar ni cambiar, así que no se ofrece el botón,
+   * como en la confirmación (#164).
+   */
+  sePuedeCambiar?: boolean
 }
 
 export function enviarRecordatorio(datos: DatosRecordatorio) {
@@ -509,7 +515,9 @@ export function enviarRecordatorio(datos: DatosRecordatorio) {
       ["Fecha", fechaLegible(datos.fecha)],
       ["Hora", datos.hora],
     ],
-    ...(datos.enlaceDeGestion
+    ...(datos.sePuedeCambiar === false
+      ? { cierre: html`¡Te esperamos! Si no puedes asistir, contacta directamente al local.` }
+      : datos.enlaceDeGestion
       ? {
           boton: { texto: "Cancelar o cambiar mi cita", enlace: datos.enlaceDeGestion },
           cierre:
