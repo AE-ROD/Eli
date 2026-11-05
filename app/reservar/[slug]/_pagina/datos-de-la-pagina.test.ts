@@ -117,6 +117,18 @@ describe("leerPaginaDelNegocio: de quiénes se publica el horario", () => {
     expect(await horarioDelLunes()).toEqual([{ dayOfWeek: LUNES, startTime: "09:00", endTime: "18:00" }])
   })
 
+  it("#168: un día sin horario general no hereda el del encargado (con o sin profesionales)", async () => {
+    const datos = datosBase()
+    escenario({ workSchedule: [franja("m-encargado", "06:00", "08:00")] })
+    expect(await horarioDelLunes()).toEqual([])
+
+    escenario({
+      businessMember: datos.businessMember.filter((miembro) => miembro.role !== "worker"),
+      workSchedule: [franja("m-encargado", "06:00", "08:00")],
+    })
+    expect(await horarioDelLunes()).toEqual([])
+  })
+
   it("no publica el del encargado ni el de profesionales más allá del tope que lee la reserva", async () => {
     const datos = datosBase()
     // 99 profesionales más, entrados después de Carla y Pedro: son 101 y el

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import {
   candidatosDelDia,
   candidatosQueOfrecen,
+  filasDeQuienesAtienden,
   diasConHorarioDelProfesional,
   haceElServicio,
   horarioSemanalPublicado,
@@ -74,6 +75,19 @@ describe("candidatosDelDia", () => {
 
   it("con profesionales pero ninguno hace el servicio: nadie (no se cae al carril del negocio)", () => {
     expect(candidatosDelDia([fila(null, "09:00", "12:00")], true, [], FECHA)).toEqual([])
+  })
+})
+
+describe("filasDeQuienesAtienden (#168)", () => {
+  it("deja las generales y las de quienes atienden; saca las de los demás miembros", () => {
+    const filas = [fila(null, "09:00", "13:00"), fila("m-carla", "15:00", "19:00"), fila("m-encargado", "08:00", "20:00")]
+    expect(filasDeQuienesAtienden(filas, [{ id: "m-carla" }])).toEqual([filas[0], filas[1]])
+    expect(filasDeQuienesAtienden(filas, [])).toEqual([filas[0]])
+  })
+
+  it("un día sin filas generales ya no hereda el horario de un encargado", () => {
+    const filas = filasDeQuienesAtienden([fila("m-encargado", "09:00", "13:00")], [])
+    expect(candidatosDelDia(filas, false, [], "2030-01-07")).toEqual([{ memberId: null, franjas: [] }])
   })
 })
 

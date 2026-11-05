@@ -97,6 +97,23 @@ export async function leerProfesionalesQueAtienden(
   }))
 }
 
+/**
+ * Las filas de horario que cuentan para la reserva pública: las generales
+ * del negocio (`memberId` null) y las de quienes atienden
+ * (`profesionales`, los de `leerProfesionalesQueAtienden`). Un día sin filas
+ * generales usa la unión de las de los miembros (`franjasDeAtencion`), y ahí
+ * entraba el horario de un encargado, que no recibe reservas: ese día salía
+ * con atención en la página y en la reserva (#168). El panel, que no pasa
+ * por acá, sigue leyendo todas.
+ */
+export function filasDeQuienesAtienden<F extends { memberId: string | null }>(
+  filas: F[],
+  profesionales: Pick<ProfesionalQueAtiende, "id">[]
+): F[] {
+  const atienden = new Set(profesionales.map((profesional) => profesional.id))
+  return filas.filter((fila) => fila.memberId === null || atienden.has(fila.memberId))
+}
+
 export function haceElServicio(profesional: Pick<ProfesionalQueAtiende, "serviceIds">, serviceId: string): boolean {
   return profesional.serviceIds.length === 0 || profesional.serviceIds.includes(serviceId)
 }
@@ -478,10 +495,12 @@ async function leerQuienesPuedenTomarla(
     }),
   ])
   const queLoHacen = profesionales.filter((profesional) => haceLosServicios(profesional, serviceIds))
+  // Sólo el horario general y el de quienes atienden (#168).
+  const filasQueCuentan = filasDeQuienesAtienden(filas, profesionales)
   let elegidos = queLoHacen
   if (profesionalId) {
     elegidos = queLoHacen.filter((profesional) => profesional.id === profesionalId)
     if (elegidos.length === 0) return { tipo: "profesional-no-disponible" }
   }
-  return { tipo: "ok", profesionales, elegidos: elegidos.map((profesional) => profesional.id), filas }
+  return { tipo: "ok", profesionales, elegidos: elegidos.map((profesional) => profesional.id), filas: filasQueCuentan }
 }
