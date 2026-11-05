@@ -311,6 +311,19 @@ describe("GET /api/clientes", () => {
     expect(data.clientes).toEqual([expect.objectContaining({ id: "cliente-1", name: "Ana", lastName: "Pérez" })])
   })
 
+  it("el buscador encuentra por el apellido guardado aparte (reservas públicas viejas) y por el que va en el nombre, sin cruzar de negocio (N2)", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const porApellidoAparte = await (await GET(fakeGet("?q=pérez&limite=8"))).json()
+    // `cliente-ajeno` también es "Ana Pérez", pero de otro negocio.
+    expect(ids(porApellidoAparte.clientes)).toEqual(["cliente-1"])
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const porApellidoEnElNombre = await (await GET(fakeGet("?q=soto&limite=8"))).json()
+    expect(ids(porApellidoEnElNombre.clientes)).toEqual(["cliente-2"])
+  })
+
   it("sin apellido cargado, viaja en null", async () => {
     const { GET } = await import("./route")
 

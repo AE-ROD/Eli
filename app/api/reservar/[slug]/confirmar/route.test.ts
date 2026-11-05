@@ -114,7 +114,7 @@ describe("POST /api/reservar/[slug]/confirmar: la hora tiene que caer en el hora
     expect(status).toBe(409)
     expect(cuerpo.error).toMatch(/fuera de la atención/)
     expect(citasCreadas()).toHaveLength(0)
-    expect(base.buscar("customer", { name: "Lucía" })).toHaveLength(0)
+    expect(base.buscar("customer", { name: "Lucía Pérez" })).toHaveLength(0)
   })
 
   it("un profesional con horario propio atiende en el suyo: la hora fuera del general va a él", async () => {
@@ -309,7 +309,7 @@ describe("POST /api/reservar/[slug]/confirmar: fechas fuera del rango de años",
     expect(status).toBe(409)
     expect(cuerpo.error).toMatch(/fuera de la atención/)
     expect(citasCreadas()).toHaveLength(0)
-    expect(base.buscar("customer", { name: "Lucía" })).toHaveLength(0)
+    expect(base.buscar("customer", { name: "Lucía Pérez" })).toHaveLength(0)
   })
 
   it("9998-12-31 (jueves, último día aceptado): crea la cita a las 13:00 UTC (10:00 en Santiago, UTC-3 en diciembre)", async () => {
@@ -374,7 +374,7 @@ describe("POST /api/reservar/[slug]/confirmar: ni en el pasado ni a más de 90 d
       expect(status).toBe(409)
       expect(cuerpo.error).toMatch(/ya pasó/)
       expect(citasCreadas()).toHaveLength(0)
-      expect(base.buscar("customer", { name: "Lucía" })).toHaveLength(0)
+      expect(base.buscar("customer", { name: "Lucía Pérez" })).toHaveLength(0)
     })
 
     it("QA#8: reservada dentro del plazo (hoy, con 24 h), ni la respuesta ni el correo ofrecen cambiarla", async () => {
@@ -434,7 +434,7 @@ describe("POST /api/reservar/[slug]/confirmar: ni en el pasado ni a más de 90 d
       expect(status).toBe(409)
       expect(cuerpo.error).toMatch(/90 días/)
       expect(citasCreadas()).toHaveLength(0)
-      expect(base.buscar("customer", { name: "Lucía" })).toHaveLength(0)
+      expect(base.buscar("customer", { name: "Lucía Pérez" })).toHaveLength(0)
     })
   })
 })
@@ -792,13 +792,33 @@ describe("POST /api/reservar/[slug]/confirmar: con qué cliente queda la reserva
 
     expect(clienteId).toBe("c-lucia")
     expect(clientesDelNegocio()).toHaveLength(antes)
+    // Reutilizado, no se le toca el nombre: queda como estaba guardado (N2).
+    expect(base.buscar("customer", { id: "c-lucia" })[0]).toMatchObject({ name: "Lucía", lastName: "Pérez" })
+  })
+
+  it("un cliente nuevo guarda el nombre completo en `name`, como el resto de la app, para que Clientes lo muestre y lo busque por el apellido (N2)", async () => {
+    const clienteId = await reservarComo({ nombre: "Ñandú José 🙂", apellido: "Peñaloza", email: "nandu@correo.test" })
+
+    expect(base.buscar("customer", { id: clienteId })[0]).toMatchObject({ name: "Ñandú José 🙂 Peñaloza", lastName: null, businessId: NEGOCIO })
+  })
+
+  it("con el nombre completo en `name`, la reserva siguiente con el mismo correo y nombre reutiliza ese cliente (N2)", async () => {
+    const primero = await reservarComo({ nombre: "Marta", apellido: "Rojas", email: "marta@correo.test" })
+    const antes = clientesDelNegocio().length
+
+    const { POST } = await import("./route")
+    const res = await POST(pedidoFalso({ ...reserva("11:00", "2026-10-16"), nombre: "marta", apellido: "ROJAS", email: "Marta@correo.test" }), conSlug)
+    expect(res.status).toBe(201)
+
+    expect(base.buscar("appointment", { customerId: primero })).toHaveLength(2)
+    expect(clientesDelNegocio()).toHaveLength(antes)
   })
 
   it("el mismo email (escrito igual) con otro nombre: crea un cliente nuevo y no toca el existente", async () => {
     const clienteId = await reservarComo({ nombre: "Marta", apellido: "Rojas", email: "Lucia@Correo.test" })
 
     expect(clienteId).not.toBe("c-lucia")
-    expect(base.buscar("customer", { id: clienteId })[0]).toMatchObject({ name: "Marta", lastName: "Rojas", businessId: NEGOCIO })
+    expect(base.buscar("customer", { id: clienteId })[0]).toMatchObject({ name: "Marta Rojas", lastName: null, businessId: NEGOCIO })
     expect(base.buscar("customer", { id: "c-lucia" })[0]).toMatchObject({ name: "Lucía", lastName: "Pérez", email: "Lucia@Correo.test" })
   })
 
@@ -806,7 +826,7 @@ describe("POST /api/reservar/[slug]/confirmar: con qué cliente queda la reserva
     const clienteId = await reservarComo({ nombre: "Lucía", apellido: "Pérez", cedula: "11.111.111-1" })
 
     expect(clienteId).not.toBe("c-lucia")
-    expect(base.buscar("customer", { id: clienteId })[0]).toMatchObject({ name: "Lucía", cedula: "11.111.111-1" })
+    expect(base.buscar("customer", { id: clienteId })[0]).toMatchObject({ name: "Lucía Pérez", cedula: "11.111.111-1" })
   })
 
   it("la misma cédula con otro email: crea un cliente nuevo", async () => {

@@ -62,6 +62,9 @@ export async function GET(request: NextRequest) {
         ...(busqueda && {
           OR: [
             { name: { contains: busqueda, mode: "insensitive" as const } },
+            // Las reservas públicas guardaban el apellido aparte (N2): sin
+            // esto, esos clientes no se encuentran por el apellido.
+            { lastName: { contains: busqueda, mode: "insensitive" as const } },
             { email: { contains: busqueda, mode: "insensitive" as const } },
             { phone: { contains: busqueda, mode: "insensitive" as const } },
           ],
