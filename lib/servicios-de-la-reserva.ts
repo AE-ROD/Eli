@@ -175,6 +175,44 @@ export function duracionAlReagendar(
   return Math.max(servicios.duracion, guardada)
 }
 
+/** Lo que acepta la base por fila (CHECK `cita_servicios_duration_check`): de 1 a 1440 minutos. */
+const DURACION_MAXIMA_DE_FILA = 1440
+
+/**
+ * Las duraciones de las filas de una cita repartidas para que sumen `total`
+ * (#138): cuando en el panel se le cambia la hora de fin, las filas siguen
+ * diciendo cuánto dura la cita. Se reparte en proporción a lo que duraba
+ * cada servicio, en minutos enteros y con al menos uno por fila; lo que sobra
+ * del redondeo va a las de mayor resto y, a igual resto, a la primera.
+ *
+ * `null` si no se puede: sin filas, o un total que no cabe en ellas (menos de
+ * un minuto por servicio, o más de lo que acepta la base por fila). Los
+ * precios no se tocan: lo que cuesta cada servicio no depende de cuánto dure.
+ */
+export function duracionesQueSuman(duraciones: number[], total: number): number[] | null {
+  const cuantas = duraciones.length
+  if (cuantas === 0 || !Number.isInteger(total) || total < cuantas) return null
+  const suma = duraciones.reduce((acumulado, duracion) => acumulado + duracion, 0)
+  if (suma === total) return [...duraciones]
+  // Un minuto para cada una y el resto en proporción.
+  const aRepartir = total - cuantas
+  const pesos = suma > 0 ? duraciones : duraciones.map(() => 1)
+  const sumaDePesos = pesos.reduce((acumulado, peso) => acumulado + peso, 0)
+  const exactas = pesos.map((peso) => (peso * aRepartir) / sumaDePesos)
+  const repartidas = exactas.map((exacta) => 1 + Math.floor(exacta))
+  let sobrante = total - repartidas.reduce((acumulado, duracion) => acumulado + duracion, 0)
+  const porResto = exactas
+    .map((exacta, indice) => ({ indice, resto: exacta - Math.floor(exacta) }))
+    .sort((a, b) => b.resto - a.resto || a.indice - b.indice)
+  for (const { indice } of porResto) {
+    if (sobrante <= 0) break
+    repartidas[indice] += 1
+    sobrante -= 1
+  }
+  if (repartidas.some((duracion) => duracion > DURACION_MAXIMA_DE_FILA)) return null
+  return repartidas
+}
+
 /** Cuánto pueden diferir dos precios y contar como el mismo: 1 peso, por redondeos. */
 export const TOLERANCIA_DE_PRECIO = 1
 
