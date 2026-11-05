@@ -52,7 +52,7 @@ const PASOS: readonly PasoDelEscenario[] = [
 /**
  * "Cómo funciona": el recorrido por los cuatro pasos del día. En escritorio
  * la tarjeta queda fija mientras se baja; "Saltar el recorrido" lleva a
- * "Un día con Eli", que es lo que sigue.
+ * "¿Cómo hacemos crecer tu negocio?", que es lo que sigue.
  */
 export function SeccionRecorrido() {
   return (
@@ -60,7 +60,7 @@ export function SeccionRecorrido() {
       <h2 id="recorrido-titulo" className="sr-only">
         Cómo funciona Eli, en cuatro pasos
       </h2>
-      <EscenarioConScroll pasos={PASOS} etiqueta="Pasos del recorrido" saltarA="un-dia" />
+      <EscenarioConScroll pasos={PASOS} etiqueta="Pasos del recorrido" saltarA="crecimiento" />
     </section>
   )
 }
