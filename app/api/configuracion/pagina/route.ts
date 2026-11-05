@@ -26,6 +26,8 @@ import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
  * el profesional recibe 401, como en el resto de la configuración.
  *
  * Se manda la página entera, no campo por campo: lo que llega vacío se borra.
+ * Las especialidades son la excepción: la pantalla manda sólo las que
+ * cambiaron, y un miembro que no viene en la lista no se toca (#113).
  * Siempre sobre el negocio de la sesión (nunca un id del cuerpo), y las
  * especialidades sólo de miembros de ese negocio: un id ajeno o inexistente
  * es 404 y no se guarda nada.
