@@ -132,7 +132,8 @@ describe("GET /api/dashboard/stats", () => {
     const consultas = prismaMock.customer.count.mock.calls.map((llamada) => llamada[0].where)
     expect(consultas).toHaveLength(3)
     for (const where of consultas) {
-      expect(where).toMatchObject(clienteNoEliminado)
+      expect(where.AND).toContainEqual(clienteNoEliminado)
+      expect(where.AND).toContainEqual(expect.objectContaining({ businessId: expect.any(String) }))
     }
   })
 
