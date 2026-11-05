@@ -261,6 +261,41 @@ describe("cancelar", () => {
   })
 })
 
+describe("el aviso del cambio llega también al profesional (#104)", () => {
+  const destinatarios = () => correos.cambio.mock.calls.map((llamada) => (llamada[0] as { emailNegocio: string }).emailNegocio).sort()
+
+  it("al cancelar: a la dueña y a la profesional de la cita, un correo a cada una", async () => {
+    escenario()
+    expect((await cancelar()).status).toBe(200)
+    expect(destinatarios()).toEqual(["carla@uno.test", "duena@uno.test"])
+  })
+
+  it("al reagendar con la misma profesional: a la dueña y a ella, una vez", async () => {
+    escenario()
+    expect((await reagendar("2030-01-08", "11:00")).status).toBe(200)
+    expect(destinatarios()).toEqual(["carla@uno.test", "duena@uno.test"])
+  })
+
+  it("una cita sin profesional que al reagendar queda con uno: a la dueña y al nuevo", async () => {
+    escenario({ cita: { memberId: null } })
+    expect((await reagendar("2030-01-08", "11:00")).status).toBe(200)
+    const nuevo = laCita().memberId === "m-carla" ? "carla@uno.test" : "pedro@uno.test"
+    expect(destinatarios()).toEqual([nuevo, "duena@uno.test"].sort())
+  })
+
+  it("sin profesional: sólo a la dueña", async () => {
+    escenario({ cita: { memberId: null } })
+    expect((await cancelar()).status).toBe(200)
+    expect(destinatarios()).toEqual(["duena@uno.test"])
+  })
+
+  it("un memberId de otro negocio no da correo", async () => {
+    escenario({ cita: { memberId: "m-ajeno" } })
+    expect((await cancelar()).status).toBe(200)
+    expect(destinatarios()).toEqual(["duena@uno.test"])
+  })
+})
+
 describe("cancelar: la hora es la de la base (#152)", () => {
   // La cita es el 7 a las 10:00 en Santiago (13:00Z); con 48 horas de plazo,
   // el límite es el 5 a las 13:00Z. El reloj de esta instancia y el de la base

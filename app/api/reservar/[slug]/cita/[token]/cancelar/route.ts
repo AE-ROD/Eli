@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { correosDelAviso } from "@/lib/avisos-al-negocio"
 import { enviarAvisoDeCambioDelCliente } from "@/lib/email"
 import { ESTADOS_GESTIONABLES, dentroDelPlazo, mensajeFueraDePlazo } from "@/lib/gestion-de-cita"
 import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
@@ -41,17 +42,23 @@ export async function POST(request: NextRequest, contexto: Params) {
   // La hora quedó libre: a la lista de espera de ese día, después de responder.
   programarAvisoDeHoraLiberada({ businessId: cita.businessId, inicio: cita.startTime })
 
+  // A la dueña y al profesional de la cita, como el aviso de reserva nueva (#104).
   const { fecha, hora } = fechaYHora(cita.startTime, zona)
-  await enviarAvisoDeCambioDelCliente({
-    tipo: "cancelo",
-    emailNegocio: cita.business.user.email,
-    nombreNegocio: cita.business.name,
-    nombreCliente: nombreDelCliente(cita),
-    servicio: serviciosDeLaCita(cita).nombre,
-    profesional: cita.member?.user?.name ?? null,
-    fecha,
-    hora,
-  }).catch(() => null)
+  const avisados = await correosDelAviso(cita.businessId, cita.business.user.email, [cita.memberId])
+  await Promise.all(
+    avisados.map((emailNegocio) =>
+      enviarAvisoDeCambioDelCliente({
+        tipo: "cancelo",
+        emailNegocio,
+        nombreNegocio: cita.business.name,
+        nombreCliente: nombreDelCliente(cita),
+        servicio: serviciosDeLaCita(cita).nombre,
+        profesional: cita.member?.user?.name ?? null,
+        fecha,
+        hora,
+      }).catch(() => null)
+    )
+  )
 
   return NextResponse.json({ mensaje: "Cita cancelada" })
 }
