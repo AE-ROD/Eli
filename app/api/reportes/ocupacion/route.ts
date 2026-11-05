@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { atiendeCitas, leerHorarioDeQuienesAtienden } from "@/lib/agenda-publica"
 import { actorDeSesion, puedeVerIngresosDelNegocio } from "@/lib/permisos"
 import {
   calcularInasistencia,
@@ -29,6 +30,12 @@ const consultaSchema = z.object({ desde: fecha, hasta: fecha })
  * horas" (#72): ocupación por profesional, clientes nuevos y recurrentes,
  * inasistencia y la comparación con el período anterior de igual largo. Los
  * días son del negocio (su zona), los dos incluidos, hasta 366.
+ *
+ * La ocupación es sólo de quienes atienden (`atiendeCitas`), contra el
+ * horario general y el de quienes atienden (`leerHorarioDeQuienesAtienden`):
+ * el encargado no suma capacidad, y su horario personal no le da horario a un
+ * profesional un día sin horario general (#168). La inasistencia sigue
+ * mirando todas las citas.
  *
  * Dueña y encargado (`puedeVerIngresosDelNegocio`); el profesional, 401.
  * Todas las consultas van acotadas al negocio de la sesión. El límite de
@@ -63,13 +70,10 @@ export async function GET(request: NextRequest) {
   const [miembros, filas, bloqueos, citas, cobradas] = await Promise.all([
     prisma.businessMember.findMany({
       where: { businessId },
-      select: { id: true, user: { select: { name: true } } },
+      select: { id: true, role: true, user: { select: { name: true } } },
       orderBy: { createdAt: "asc" },
     }),
-    prisma.workSchedule.findMany({
-      where: { businessId, active: true },
-      select: { memberId: true, dayOfWeek: true, startTime: true, endTime: true },
-    }),
+    leerHorarioDeQuienesAtienden(prisma, businessId),
     prisma.timeBlock.findMany({
       where: { businessId, startTime: { lt: fin }, endTime: { gt: inicioAnterior } },
       select: { memberId: true, startTime: true, endTime: true },
@@ -100,6 +104,9 @@ export async function GET(request: NextRequest) {
 
   const truncado = [bloqueos, citas, cobradas].some((lista) => lista.length > TOPE) || historia.length > TOPE * 5
   const equipo = miembros.map((miembro) => ({ id: miembro.id, nombre: miembro.user.name }))
+  const profesionales = miembros
+    .filter((miembro) => atiendeCitas(miembro.role))
+    .map((miembro) => ({ id: miembro.id, nombre: miembro.user.name }))
   const ahora = new Date()
 
   const enRango = (cita: CitaParaReporte, desdeInstante: Date, hastaInstante: Date) =>
@@ -116,7 +123,7 @@ export async function GET(request: NextRequest) {
         .map((atencion) => atencion.customerId as string)
     )
     return {
-      ocupacion: calcularOcupacion({ dias, zona, miembros: equipo, filas, bloqueos, citas: delPeriodo }),
+      ocupacion: calcularOcupacion({ dias, zona, miembros: profesionales, filas, bloqueos, citas: delPeriodo }),
       clientes: clasificarClientes(pagadas, conHistoria),
       inasistencia: calcularInasistencia(delPeriodo, equipo, ahora),
     }
