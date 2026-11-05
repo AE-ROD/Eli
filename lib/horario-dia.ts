@@ -21,7 +21,7 @@ export interface CitaDelDia {
   startTime: string
   endTime: string
   status: string
-  customer: { id: string; name: string } | null
+  customer: { id: string; name: string; lastName?: string | null } | null
   /** Entró por confirmar tras faltas (#84): con status "pendiente" se lee "Por confirmar". */
   confirmacionPorFaltas?: boolean
   /** El cliente ya llegó: tiene una atención no anulada en el Tablero. Ya no está "por confirmar". */

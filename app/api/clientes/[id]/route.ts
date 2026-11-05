@@ -215,7 +215,11 @@ export async function PUT(
     const { count } = await prisma.customer.updateMany({
       where: delNegocioYVigente(actor, existente.id),
       data: {
-        ...(datos.name && { name: datos.name }),
+        // El formulario muestra y devuelve el nombre completo (`name` +
+        // `lastName`): al guardarlo queda entero en `name`, como el resto de
+        // los clientes. Sin vaciar `lastName`, un cliente viejo de la reserva
+        // pública quedaba "Lucía Pérez Pérez".
+        ...(datos.name && { name: datos.name, lastName: null }),
         ...(datos.email !== undefined && { email: datos.email || null }),
         ...(datos.phone !== undefined && { phone: datos.phone }),
         ...(datos.tags !== undefined && { tags: datos.tags }),

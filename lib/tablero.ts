@@ -521,8 +521,3 @@ export function formatearAtencion(actor: Actor, atencion: AtencionLeida) {
     propinas: atencion.propinas.map(formatearPropina),
   }
 }
-
-/** Nombre y apellido, como lo escribe el recordatorio por correo. */
-export function nombreCompletoDeCliente(cliente: { name: string; lastName: string | null }): string {
-  return [cliente.name, cliente.lastName].filter(Boolean).join(" ")
-}

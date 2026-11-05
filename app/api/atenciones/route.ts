@@ -25,10 +25,10 @@ import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
 import {
   formatearAtencion,
   leerRango,
-  nombreCompletoDeCliente,
   respuestaDeError,
   seleccionDeAtencion,
 } from "@/lib/tablero"
+import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 
 /** El tablero muestra un día; con husos y cambios de hora, un día local cabe holgado en 48 h. */
 const RANGO_MAXIMO_MS = 48 * 60 * 60 * 1000

@@ -1,3 +1,4 @@
+import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import { NextResponse, type NextRequest } from "next/server"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
@@ -57,7 +58,7 @@ export function fechaYHora(instante: Date, zona: string): { fecha: string; hora:
 
 /** El nombre del cliente para el aviso al negocio. */
 export function nombreDelCliente(cita: CitaDelEnlace): string {
-  return [cita.customer?.name, cita.customer?.lastName].filter(Boolean).join(" ").trim() || "El cliente"
+  return (cita.customer && nombreCompletoDeCliente(cita.customer)) || "El cliente"
 }
 
 const INTENTOS_ANTE_CONFLICTO = 3

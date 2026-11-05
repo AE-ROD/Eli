@@ -304,3 +304,22 @@ describe("quienCancelo", () => {
     expect(quienCancelo({ status: "confirmada", canceladaPor: "cliente" })).toBeNull()
   })
 })
+
+describe("nombreDeCliente y buscarClientes: nombre y apellido (clientes viejos de la reserva pública)", () => {
+  it("la cita muestra `name` + `lastName`, o \"Sin cliente\"", async () => {
+    const { nombreDeCliente } = await import("./_datos")
+    type Cita = Parameters<typeof nombreDeCliente>[0]
+    const conApellido = { customer: { id: "c", name: "Lucía", lastName: "Pérez", email: null, phone: null } } as unknown as Cita
+    const sinApellido = { customer: { id: "c", name: "Lucía Pérez", email: null, phone: null } } as unknown as Cita
+    expect(nombreDeCliente(conApellido)).toBe("Lucía Pérez")
+    expect(nombreDeCliente(sinApellido)).toBe("Lucía Pérez")
+    expect(nombreDeCliente({ customer: null } as unknown as Cita)).toBe("Sin cliente")
+  })
+
+  it("el buscador de \"Nueva cita\" muestra el nombre completo", async () => {
+    const { buscarClientes } = await import("./_datos")
+    vi.stubGlobal("fetch", simularRespuesta(json({ clientes: [{ id: "c", name: "Lucía", lastName: "Pérez", email: "lucia@correo.test" }] })))
+    const resultado = await buscarClientes("lucía pérez")
+    expect(resultado).toEqual({ ok: true, datos: [{ id: "c", nombre: "Lucía Pérez", email: "lucia@correo.test" }] })
+  })
+})
