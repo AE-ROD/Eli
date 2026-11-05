@@ -7,6 +7,7 @@ import {
   precioAlReagendar,
   precioSigueAlCatalogo,
   preciosConHoraValle,
+  problemaDeLasFranjas,
   rebajar,
   rebajaDeLaHora,
   type ConfiguracionDeHoraValle,
@@ -210,6 +211,24 @@ describe("configuracionDeHoraValleSchema", () => {
       Array.from({ length: n }, (_, i) => ({ dayOfWeek: i % 7, desde: `${String(8 + Math.floor(i / 7)).padStart(2, "0")}:00`, hasta: `${String(8 + Math.floor(i / 7)).padStart(2, "0")}:30`, porcentaje: 10 }))
     expect(valida(muchas(21))).toBe(true)
     expect(valida(muchas(22))).toBe(false)
+  })
+})
+
+describe("problemaDeLasFranjas: lo que la pantalla revisa antes de guardar (#138)", () => {
+  const franja = { dayOfWeek: 1, desde: "10:00", hasta: "12:00", porcentaje: 20 }
+
+  it("sin problemas, null", () => {
+    expect(problemaDeLasFranjas([])).toBeNull()
+    expect(problemaDeLasFranjas([franja, { ...franja, desde: "12:00", hasta: "13:00" }])).toBeNull()
+  })
+
+  it("dos franjas del mismo día que se pisan: el mismo texto que el servidor", () => {
+    expect(problemaDeLasFranjas([franja, { ...franja, desde: "11:00", hasta: "13:00" }])).toBe("Dos franjas del mismo día se pisan")
+  })
+
+  it("una franja al revés o un % vacío: su mensaje", () => {
+    expect(problemaDeLasFranjas([{ ...franja, desde: "12:00", hasta: "10:00" }])).toBe("Cada franja tiene que terminar después de empezar")
+    expect(problemaDeLasFranjas([{ ...franja, porcentaje: Number.NaN }])).toMatch(/descuento/)
   })
 })
 

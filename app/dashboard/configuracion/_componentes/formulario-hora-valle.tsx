@@ -13,6 +13,7 @@ import {
   MAX_FRANJAS_DE_HORA_VALLE,
   PORCENTAJE_MAXIMO_DE_HORA_VALLE,
   PORCENTAJE_MINIMO_DE_HORA_VALLE,
+  problemaDeLasFranjas,
   type FranjaDeHoraValle,
 } from "@/lib/hora-valle"
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
@@ -135,6 +136,12 @@ export function FormularioHoraValle({
           <form
             onSubmit={(evento) => {
               evento.preventDefault()
+              // La misma validación que el servidor, antes de mandar (#138).
+              const problema = problemaDeLasFranjas(franjas)
+              if (problema) {
+                setAnuncio("")
+                return setError(problema)
+              }
               guardar(true, franjas)
             }}
             className="mt-6 space-y-4"
