@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { cuerpoConTope } from "@/lib/cuerpo-del-pedido"
 import { clienteDelTokenDeBaja } from "@/lib/baja-de-clientes"
@@ -58,7 +59,8 @@ export async function POST(request: NextRequest) {
       // respuesta es la misma. Uno eliminado (anonimizado) no se toca.
       await prisma.customer.updateMany({
         where: { AND: [{ id: customerId }, clienteNoEliminado] },
-        data: datosDeBajaPromocional(),
+        // La fecha de la baja, de la base (#154).
+        data: datosDeBajaPromocional(await horaDeLaBase(prisma)),
       })
     } catch (error) {
       registrarError("dando de baja a un cliente de los correos", error)

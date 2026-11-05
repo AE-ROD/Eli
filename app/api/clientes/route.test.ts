@@ -1100,6 +1100,18 @@ describe("POST /api/clientes — teléfono en E.164 y consentimiento de WhatsApp
     expect(sinMarcar.correoPromoConsentSource).toBeUndefined()
   })
 
+  it("#154: el consentimiento promocional se registra con la hora de la base, no la de esta instancia", async () => {
+    const { POST } = await import("./route")
+    const deLaBase = new Date("2026-11-04T12:00:07.000Z")
+    prismaMock.$queryRaw.mockImplementationOnce(async () => [{ ahora: deLaBase }])
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    expect((await POST(fakePost({ name: "Ana", correoPromoConsent: true }))).status).toBe(201)
+
+    expect(prismaMock.customer.create.mock.calls[0][0].data).toMatchObject({ correoPromoConsentAt: deLaBase })
+    expect(prismaMock.$queryRaw.mock.calls[0][0].join("?")).toBe("SELECT clock_timestamp() AS ahora")
+  })
+
   it("la profesional crea clientes, pero no con el consentimiento promocional: 401 y no crea nada", async () => {
     const { POST } = await import("./route")
     mockGetServerSession.mockResolvedValueOnce({

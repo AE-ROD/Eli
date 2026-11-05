@@ -80,11 +80,13 @@ async function cambioDeConsentimiento(marcado: boolean | undefined, yaTenia: boo
 /**
  * Lo mismo para el consentimiento promocional por correo. Desmarcar uno que
  * había es una baja (`datosDeBajaPromocional`, con fecha); desmarcar uno que
- * no había no inventa una baja.
+ * no había no inventa una baja. La hora, de la base como la de WhatsApp
+ * (#154), y sólo cuando se escribe.
  */
-function cambioDeConsentimientoPromocional(marcado: boolean | undefined, yaTenia: boolean) {
+async function cambioDeConsentimientoPromocional(marcado: boolean | undefined, yaTenia: boolean) {
   if (marcado === undefined || marcado === yaTenia) return {}
-  return marcado ? datosDeConsentimientoPromocional("panel") : datosDeBajaPromocional()
+  const ahora = await horaDeLaBase(prisma)
+  return marcado ? datosDeConsentimientoPromocional("panel", ahora) : datosDeBajaPromocional(ahora)
 }
 
 /** Dos correos son la misma casilla si sólo cambian mayúsculas o espacios a los lados. */
@@ -98,7 +100,7 @@ function mismoCorreo(a: string | null | undefined, b: string | null | undefined)
  * mismo pedido se marca `correoPromoConsent: true` explícito (que ya exige
  * `puedeEditarConsentimientoPromocional`), y entonces se registra de nuevo.
  */
-function consentimientoAlCambiarElCorreo(
+async function consentimientoAlCambiarElCorreo(
   correoNuevo: string | undefined,
   existente: { email: string | null; correoPromoConsentAt: Date | null },
   marcado: boolean | undefined
@@ -106,8 +108,8 @@ function consentimientoAlCambiarElCorreo(
   if (correoNuevo === undefined || mismoCorreo(correoNuevo || null, existente.email)) {
     return cambioDeConsentimientoPromocional(marcado, existente.correoPromoConsentAt !== null)
   }
-  if (marcado === true) return datosDeConsentimientoPromocional("panel")
-  return existente.correoPromoConsentAt !== null ? datosDeBajaPromocional() : {}
+  if (marcado === true) return datosDeConsentimientoPromocional("panel", await horaDeLaBase(prisma))
+  return existente.correoPromoConsentAt !== null ? datosDeBajaPromocional(await horaDeLaBase(prisma)) : {}
 }
 
 export async function GET(
@@ -225,7 +227,7 @@ export async function PUT(
         ...(datos.tags !== undefined && { tags: datos.tags }),
         ...(datos.notes !== undefined && { notes: datos.notes || null }),
         ...(await cambioDeConsentimiento(datos.whatsappConsent, existente.whatsappConsentAt !== null)),
-        ...consentimientoAlCambiarElCorreo(datos.email, existente, datos.correoPromoConsent),
+        ...(await consentimientoAlCambiarElCorreo(datos.email, existente, datos.correoPromoConsent)),
       },
     })
     if (count === 0) {

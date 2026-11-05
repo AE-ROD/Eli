@@ -306,6 +306,36 @@ describe("cancelar: la hora es la de la base (#152)", () => {
 
     expect(laCita()).toMatchObject({ status: "cancelada", canceladaPor: "cliente", canceladaEn: deLaBase })
   })
+
+  it("#154: reagendar decide el plazo con la hora de la base, no con la de esta instancia", async () => {
+    escenario({ negocio: { cancelacionHorasAntes: 48 } })
+    relojEn("2030-01-05T12:59:58.000Z")
+    laBaseDice("2030-01-05T13:00:01.000Z")
+
+    const { status, cuerpo } = await reagendar("2030-01-08", "09:00")
+
+    expect(status).toBe(409)
+    expect(cuerpo.error).toMatch(/48 horas antes/)
+    expect(laCita().startTime).toEqual(aLas("10:00"))
+  })
+
+  it("#154: y si para la base sigue dentro del plazo, reagenda aunque esta instancia vaya adelantada", async () => {
+    escenario({ negocio: { cancelacionHorasAntes: 48 } })
+    relojEn("2030-01-05T13:00:01.000Z")
+    laBaseDice("2030-01-05T12:59:58.000Z")
+
+    expect((await reagendar("2030-01-08", "09:00")).status).toBe(200)
+    expect(laCita().startTime).toEqual(aLas("09:00", "2030-01-08"))
+  })
+
+  it("#154: ver la cita y sus horas también usan la hora de la base", async () => {
+    escenario({ negocio: { cancelacionHorasAntes: 48 } })
+    relojEn("2030-01-05T12:59:58.000Z")
+    laBaseDice("2030-01-05T13:00:01.000Z")
+    expect((await ver()).cuerpo.sePuedeCambiar).toBe(false)
+    laBaseDice("2030-01-05T13:00:01.000Z")
+    expect((await horas("2030-01-08")).cuerpo.slots).toEqual([])
+  })
 })
 
 describe("reagendar", () => {

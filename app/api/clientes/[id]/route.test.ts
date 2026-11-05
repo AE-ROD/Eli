@@ -891,6 +891,22 @@ describe("PUT /api/clientes/[id] — consentimiento promocional por correo", () 
     expect(maria().correoPromoBajaAt).toBeInstanceOf(Date)
   })
 
+  it("#154: marcarlo y darlo de baja usan la hora de la base, no la de esta instancia", async () => {
+    const { PUT } = await import("./route")
+    const alMarcar = new Date("2026-11-04T12:00:07.000Z")
+    base.prisma.$queryRaw.mockImplementationOnce(async () => [{ ahora: alMarcar }])
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    expect((await PUT(pedido(URL_DE_MARIA, { correoPromoConsent: true }), conId("c-maria"))).status).toBe(200)
+    expect(maria().correoPromoConsentAt).toEqual(alMarcar)
+
+    const alBajar = new Date("2026-11-04T12:30:07.000Z")
+    base.prisma.$queryRaw.mockImplementationOnce(async () => [{ ahora: alBajar }])
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    expect((await PUT(pedido(URL_DE_MARIA, { correoPromoConsent: false }), conId("c-maria"))).status).toBe(200)
+    expect(maria().correoPromoBajaAt).toEqual(alBajar)
+    for (const [partes] of base.prisma.$queryRaw.mock.calls) expect(partes.join("?")).toBe("SELECT clock_timestamp() AS ahora")
+  })
+
   it("volver a marcarlo después de una baja vuelve a dar el consentimiento, con fecha y origen nuevos", async () => {
     const { PUT } = await import("./route")
     await base.prisma.customer.updateMany({

@@ -74,6 +74,16 @@ describe("POST /api/correos/baja-de-cliente", () => {
     expect(base.buscar("customer", { id: "c-beto" })[0]).toMatchObject({ ...consentido, correoPromoBajaAt: null })
   })
 
+  it("#154: la fecha de la baja es la hora de la base, no la de esta instancia", async () => {
+    const { POST } = await import("./route")
+    const deLaBase = new Date("2026-11-04T12:00:07.000Z")
+    base.prisma.$queryRaw.mockImplementationOnce(async () => [{ ahora: deLaBase }])
+
+    expect((await POST(conJson({ token: tokenDeBajaDeCliente("c-maria") }))).status).toBe(200)
+
+    expect(base.buscar("customer", { id: "c-maria" })[0].correoPromoBajaAt).toEqual(deLaBase)
+  })
+
   it("con la baja en un clic (RFC 8058): token en la consulta, cuerpo fijo", async () => {
     const { POST } = await import("./route")
 

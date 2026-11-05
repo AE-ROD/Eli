@@ -151,13 +151,18 @@ export const conConsentimientoPromocional: Prisma.CustomerWhereInput = { correoP
 
 export type OrigenDeConsentimiento = "reserva-publica" | "panel"
 
-/** Lo que se escribe al marcar la casilla (en la reserva pública o en la ficha). */
-export function datosDeConsentimientoPromocional(origen: OrigenDeConsentimiento, ahora = new Date()) {
+/**
+ * Lo que se escribe al marcar la casilla (en la reserva pública o en la
+ * ficha). `ahora` es obligatorio y, en el panel, la hora de la base
+ * (`horaDeLaBase`), como el consentimiento de WhatsApp de la misma ficha
+ * (#154): no la de esta instancia.
+ */
+export function datosDeConsentimientoPromocional(origen: OrigenDeConsentimiento, ahora: Date) {
   return { correoPromoConsentAt: ahora, correoPromoConsentSource: origen } satisfies Prisma.CustomerUpdateInput
 }
 
-/** Lo que se escribe en la baja (en un clic o pedida en el local): sin consentimiento, con fecha de baja. */
-export function datosDeBajaPromocional(ahora = new Date()) {
+/** Lo que se escribe en la baja (en un clic o pedida en el local): sin consentimiento, con fecha de baja (la de la base, #154). */
+export function datosDeBajaPromocional(ahora: Date) {
   return {
     correoPromoConsentAt: null,
     correoPromoConsentSource: null,

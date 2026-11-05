@@ -229,7 +229,7 @@ export async function POST(request: NextRequest) {
         // de esta instancia: #152) y por dónde se dio. Sin marcar, no hay
         // consentimiento: queda en null.
         ...(datos.whatsappConsent && { whatsappConsentAt: await horaDeLaBase(prisma), whatsappConsentSource: "panel" }),
-        ...(datos.correoPromoConsent && datosDeConsentimientoPromocional("panel")),
+        ...(datos.correoPromoConsent && datosDeConsentimientoPromocional("panel", await horaDeLaBase(prisma))),
         businessId: actor.businessId,
       },
     })
