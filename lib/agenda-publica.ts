@@ -176,6 +176,16 @@ export function horarioSemanalPublicado(filas: FilaDeHorarioSemanal[], profesion
 }
 
 /**
+ * Los días de la semana (0 domingo a 6 sábado) en que un profesional tiene
+ * horario efectivo (`franjasParaElDia`, el mismo con que se le ofrecen horas).
+ * El calendario de la reserva los usa para no dejar elegir un día en que
+ * quien atiende no trabaja (N3).
+ */
+export function diasConHorarioDelProfesional(filas: FilaDeHorarioSemanal[], memberId: string): number[] {
+  return [0, 1, 2, 3, 4, 5, 6].filter((dia) => (franjasParaElDia(filas, memberId, dia)?.franjas.length ?? 0) > 0)
+}
+
+/**
  * De quiénes se publica el horario propio (`horarioSemanalPublicado`): los
  * que la reserva de verdad puede ofrecer. Son los de
  * `leerProfesionalesQueAtienden` (rol que atiende, con su tope) que hacen al

@@ -21,6 +21,8 @@ export interface ProfesionalPublico {
   especialidad: string | null
   fotoUrl: string | null
   servicioIds: string[] | null
+  /** Los días de la semana (0 domingo a 6 sábado) en que atiende. */
+  diasConAtencion: number[]
 }
 
 export interface DatosDeReserva {

@@ -109,12 +109,35 @@ describe("GET /api/reservar/[slug]/profesionales", () => {
     expect(status).toBe(200)
     expect(cuerpo).toEqual({
       profesionales: [
-        { id: "m-carla", nombre: "Carla Profesional", especialidad: null, fotoUrl: null, servicioIds: null },
-        { id: "m-pedro", nombre: "Pedro Profesional", especialidad: null, fotoUrl: null, servicioIds: ["s-color"] },
+        { id: "m-carla", nombre: "Carla Profesional", especialidad: null, fotoUrl: null, servicioIds: null, diasConAtencion: [LUNES] },
+        { id: "m-pedro", nombre: "Pedro Profesional", especialidad: null, fotoUrl: null, servicioIds: ["s-color"], diasConAtencion: [LUNES] },
       ],
     })
     // Ni correos ni roles en la respuesta.
     expect(JSON.stringify(cuerpo)).not.toMatch(/@|worker|admin/)
+  })
+
+  it("N3: los días en que atiende cada uno, con su horario efectivo (el propio, o el del negocio) y sólo del negocio del slug", async () => {
+    escenario({
+      workSchedule: [
+        { id: "h-general", businessId: NEGOCIO, memberId: null, dayOfWeek: LUNES, startTime: "09:00", endTime: "12:00" },
+        { id: "h-general-v", businessId: NEGOCIO, memberId: null, dayOfWeek: 5, startTime: "09:00", endTime: "18:00" },
+        ...[1, 2, 3].map((dia) => ({ id: `h-carla-${dia}`, businessId: NEGOCIO, memberId: "m-carla", dayOfWeek: dia, startTime: "14:00", endTime: "20:00" })),
+        { id: "h-carla-inactivo", businessId: NEGOCIO, memberId: "m-carla", dayOfWeek: 6, startTime: "10:00", endTime: "14:00", active: false },
+        { id: "h-ajeno", businessId: OTRO_NEGOCIO, memberId: null, dayOfWeek: 0, startTime: "09:00", endTime: "12:00" },
+      ],
+    })
+
+    const { cuerpo } = await profesionales()
+
+    expect(cuerpo.profesionales.map((profesional: { id: string; diasConAtencion: number[] }) => [profesional.id, profesional.diasConAtencion])).toEqual([
+      // Carla, en su horario propio: ni el viernes del negocio ni su sábado inactivo.
+      ["m-carla", [1, 2, 3]],
+      // Pedro, sin horario propio, en el del negocio; los días sin horario
+      // general vale el de los miembros (`franjasDeAtencion`), igual que en
+      // la disponibilidad.
+      ["m-pedro", [LUNES, 2, 3, 5]],
+    ])
   })
 
   it("la foto sale saneada: sólo rutas del mismo sitio", async () => {

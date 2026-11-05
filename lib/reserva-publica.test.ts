@@ -3,6 +3,7 @@ import {
   DIAS_MAXIMOS_DE_ANTICIPACION,
   compartenContacto,
   consentimientoSobreClienteExistente,
+  diasDelCalendarioDeReserva,
   esDiaReservable,
   esElMismoCliente,
   fechaNoReservable,
@@ -234,5 +235,36 @@ describe("avisoSinCambiosDespuesDeReservar (QA#8)", () => {
     expect(avisoSinCambiosDespuesDeReservar(24)).toBe(
       "Tu hora es en menos de 24 horas, así que no se puede cancelar ni cambiar por el enlace. Si lo necesitas, contacta directamente al local."
     )
+  })
+})
+
+describe("diasDelCalendarioDeReserva (N3): el calendario sólo deja elegir días con atención", () => {
+  // El negocio publica L–M–X (sólo Carla atiende, con su horario propio).
+  const diasPublicados = [1, 2, 3]
+  const carla = { id: "m-carla", servicioIds: null, diasConAtencion: [1, 2, 3] }
+  const pedro = { id: "m-pedro", servicioIds: ["s-color"], diasConAtencion: [4, 5] }
+
+  it("con una sola profesional, sus días: ni viernes ni sábado", () => {
+    expect(diasDelCalendarioDeReserva({ diasPublicados, equipo: [carla], servicioIds: ["s-corte"], profesionalId: null })).toEqual([1, 2, 3])
+  })
+
+  it("con cualquiera, la unión de los que hacen todos los servicios elegidos", () => {
+    expect(diasDelCalendarioDeReserva({ diasPublicados, equipo: [carla, pedro], servicioIds: ["s-color"], profesionalId: null })).toEqual([1, 2, 3, 4, 5])
+    // Pedro no hace el corte: sus días no cuentan.
+    expect(diasDelCalendarioDeReserva({ diasPublicados, equipo: [carla, pedro], servicioIds: ["s-corte"], profesionalId: null })).toEqual([1, 2, 3])
+    expect(diasDelCalendarioDeReserva({ diasPublicados, equipo: [carla, pedro], servicioIds: ["s-color", "s-corte"], profesionalId: null })).toEqual([1, 2, 3])
+  })
+
+  it("con un profesional elegido, sólo los suyos", () => {
+    expect(diasDelCalendarioDeReserva({ diasPublicados, equipo: [carla, pedro], servicioIds: ["s-color"], profesionalId: "m-pedro" })).toEqual([4, 5])
+  })
+
+  it("si nadie hace los servicios, ningún día (la reserva tampoco ofrecería horas)", () => {
+    expect(diasDelCalendarioDeReserva({ diasPublicados, equipo: [pedro], servicioIds: ["s-corte"], profesionalId: null })).toEqual([])
+  })
+
+  it("sin equipo leído o sin profesionales, los días del horario publicado", () => {
+    expect(diasDelCalendarioDeReserva({ diasPublicados: [1, 1, 6], equipo: null, servicioIds: ["s-corte"], profesionalId: null })).toEqual([1, 6])
+    expect(diasDelCalendarioDeReserva({ diasPublicados: [1, 6], equipo: [], servicioIds: ["s-corte"], profesionalId: null })).toEqual([1, 6])
   })
 })

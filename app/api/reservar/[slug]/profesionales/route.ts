@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { leerProfesionalesQueAtienden } from "@/lib/agenda-publica"
+import { diasConHorarioDelProfesional, leerProfesionalesQueAtienden } from "@/lib/agenda-publica"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 
 /**
@@ -8,6 +8,10 @@ import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
  * pública y qué servicios hace cada uno. Público y sin sesión: sólo lo que se
  * muestra (id, nombre, especialidad, foto). Nada del correo, el teléfono, el
  * rol ni la comisión. `servicioIds` en null es "hace todos".
+ * `diasConAtencion` son los días de la semana en que atiende (su horario
+ * efectivo, el mismo con que la disponibilidad le ofrece horas): el
+ * calendario de la reserva no deja elegir los demás (N3). Es lo mismo que
+ * ya responde el calendario de reagendar; no se publican sus horas.
  *
  * Un negocio sin profesionales responde la lista vacía: la reserva sigue
  * funcionando sin elegir con quién (`lib/agenda-publica.ts`).
@@ -22,7 +26,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const negocio = await prisma.business.findUnique({ where: { slug }, select: { id: true } })
   if (!negocio) return NextResponse.json({ error: "Negocio no encontrado" }, { status: 404 })
 
-  const profesionales = await leerProfesionalesQueAtienden(prisma, negocio.id)
+  const [profesionales, filas] = await Promise.all([
+    leerProfesionalesQueAtienden(prisma, negocio.id),
+    prisma.workSchedule.findMany({
+      where: { businessId: negocio.id, active: true },
+      select: { memberId: true, dayOfWeek: true, startTime: true, endTime: true },
+      orderBy: { startTime: "asc" },
+    }),
+  ])
   return NextResponse.json({
     profesionales: profesionales.map((profesional) => ({
       id: profesional.id,
@@ -31,6 +42,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       // Ya saneada en `leerProfesionalesQueAtienden` (`imagenPublica`).
       fotoUrl: profesional.fotoUrl,
       servicioIds: profesional.serviceIds.length === 0 ? null : profesional.serviceIds,
+      diasConAtencion: diasConHorarioDelProfesional(filas, profesional.id),
     })),
   })
 }

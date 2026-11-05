@@ -49,6 +49,41 @@ export function esDiaReservable(fecha: string, diasConAtencion: readonly number[
   return fechaNoReservable(fecha, ahora, zona) === null && diasConAtencion.includes(diaDeLaSemana(fecha))
 }
 
+/** Quien atiende, como lo conoce el calendario de la reserva: qué servicios hace (null = todos) y qué días trabaja. */
+export interface ProfesionalDelCalendario {
+  id: string
+  servicioIds: string[] | null
+  diasConAtencion: number[]
+}
+
+/**
+ * Los días de la semana (0 domingo a 6 sábado) que el calendario de la
+ * reserva deja elegir, con los mismos candidatos que usa la disponibilidad
+ * (N3): el profesional elegido, o "cualquiera" de los que hacen todos los
+ * servicios elegidos, cada uno con sus días (`diasConHorarioDelProfesional`).
+ * Así no se ofrece un día que después responde "No hay atención ese día".
+ *
+ * Sin equipo (`null`: todavía no se leyó o no se pudo; o lista vacía: el
+ * negocio no tiene profesionales) valen los días del horario publicado, que
+ * en un negocio sin profesionales es el del negocio y en uno con ellos es
+ * la unión de los suyos.
+ */
+export function diasDelCalendarioDeReserva(consulta: {
+  diasPublicados: readonly number[]
+  equipo: readonly ProfesionalDelCalendario[] | null
+  servicioIds: readonly string[]
+  profesionalId: string | null
+}): number[] {
+  const { diasPublicados, equipo, servicioIds, profesionalId } = consulta
+  if (!equipo || equipo.length === 0) return [...new Set(diasPublicados)].sort((a, b) => a - b)
+  const quienes = equipo.filter(
+    (profesional) =>
+      (!profesionalId || profesional.id === profesionalId) &&
+      servicioIds.every((servicioId) => profesional.servicioIds === null || profesional.servicioIds.includes(servicioId))
+  )
+  return [...new Set(quienes.flatMap((profesional) => profesional.diasConAtencion))].sort((a, b) => a - b)
+}
+
 /**
  * Si la hora `hora` ("HH:MM") de `fecha` ya pasó en el reloj de la zona. La
  * hora en curso cuenta como pasada: a las 10:30 ya no se reserva a las 10:30.

@@ -14,7 +14,12 @@ import { Tarjeta } from "@/components/comunes/tarjeta"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { formatearMonto } from "@/lib/dinero"
 import { deTexto, formatearDuracionDeServicio } from "@/lib/fechas"
-import { avisoSinCambiosDespuesDeReservar, avisoSinCambiosPorElEnlace, quedaSinCambiosPorElEnlace } from "@/lib/reserva-publica"
+import {
+  avisoSinCambiosDespuesDeReservar,
+  avisoSinCambiosPorElEnlace,
+  diasDelCalendarioDeReserva,
+  quedaSinCambiosPorElEnlace,
+} from "@/lib/reserva-publica"
 import { MAX_SERVICIOS_POR_RESERVA, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
 import { cn } from "@/lib/utils"
 import { EncabezadoDeReserva } from "./encabezado-de-reserva"
@@ -121,6 +126,8 @@ export function FormularioReserva({
   // no aparece en la lista y se ignora: el servidor igual lo rechazaría.
   const profesionalDeLaUrl = parametros.get("profesional")
   const [profesionales, setProfesionales] = useState<ProfesionalPublico[]>([])
+  // Si ya se leyó el equipo: hasta entonces el calendario usa el horario publicado.
+  const [equipoLeido, setEquipoLeido] = useState(false)
   const [profesionalId, setProfesionalId] = useState<string | null>(profesionalDeLaUrl)
   const [profesionalAsignado, setProfesionalAsignado] = useState<string | null>(null)
   const [enlaceDeGestion, setEnlaceDeGestion] = useState<string | null>(null)
@@ -152,8 +159,6 @@ export function FormularioReserva({
   const idDelResumen = useId()
   const idDelError = useId()
 
-  const diasDisponibles = horarios.map((horario) => horario.dayOfWeek)
-
   // El equipo se pide al montar. Si falla, la reserva sigue: sin elegir con
   // quién, el servidor asigna (o es un negocio sin equipo).
   useEffect(() => {
@@ -161,6 +166,7 @@ export function FormularioReserva({
     leerProfesionales(slug).then((resultado) => {
       if (!vigente || !resultado.ok) return
       setProfesionales(resultado.datos)
+      setEquipoLeido(true)
       // Un profesional de la URL que no existe no queda elegido.
       setProfesionalId((actual) => (actual && resultado.datos.some((p) => p.id === actual) ? actual : null))
     })
@@ -191,6 +197,15 @@ export function FormularioReserva({
   }
 
   const servicioIds = seleccionados.map((servicio) => servicio.id)
+  // Los días con atención para estos servicios y este profesional (o
+  // cualquiera), los mismos que la disponibilidad (N3): no se puede elegir un
+  // día que después diga "No hay atención ese día".
+  const diasDisponibles = diasDelCalendarioDeReserva({
+    diasPublicados: horarios.map((horario) => horario.dayOfWeek),
+    equipo: equipoLeido ? profesionales : null,
+    servicioIds,
+    profesionalId,
+  })
   const claveDeServicios = servicioIds.join(",")
   const cargarHoras = useCallback(
     (dia: string) => leerDisponibilidad(slug, dia, claveDeServicios ? claveDeServicios.split(",") : [], profesionalId),

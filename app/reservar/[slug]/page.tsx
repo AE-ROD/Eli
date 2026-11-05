@@ -103,7 +103,7 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
         zona={zonaDelNegocio(negocio.timezone)}
         servicios={negocio.services}
         // El mismo horario que publica la mini página (QA#4): el que la
-        // reserva ofrece. El calendario ofrece sus días.
+        // reserva ofrece. El calendario lo usa hasta leer quién atiende.
         horarios={pagina.horario}
         listaDeEsperaActiva={negocio.listaDeEsperaActiva}
         plazoDeCambios={plazoParaQuienReserva(pagina.plazoDeCambiosHoras)}

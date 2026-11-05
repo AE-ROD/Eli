@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest"
-import { candidatosDelDia, candidatosQueCubren, haceElServicio, horarioSemanalPublicado, horasDeLaFranja } from "./agenda-publica"
+import {
+  candidatosDelDia,
+  candidatosQueCubren,
+  diasConHorarioDelProfesional,
+  haceElServicio,
+  horarioSemanalPublicado,
+  horasDeLaFranja,
+} from "./agenda-publica"
 
 /** Las reglas puras. Lo que lee la base se prueba en `app/api/reservar/[slug]/por-profesional.test.ts`. */
 
@@ -148,5 +155,25 @@ describe("horarioSemanalPublicado (QA#4)", () => {
       { dayOfWeek: LUNES, startTime: "09:00", endTime: "11:00" },
       { dayOfWeek: LUNES, startTime: "15:00", endTime: "17:00" },
     ])
+  })
+})
+
+describe("diasConHorarioDelProfesional (N3)", () => {
+  const filas = [
+    ...[1, 2, 3, 4, 5].map((dia) => fila(null, "09:00", "18:00", dia)),
+    fila(null, "10:00", "14:00", 6),
+    ...[1, 2, 3].map((dia) => fila("m-carla", "14:00", "20:00", dia)),
+  ]
+
+  it("con horario propio, sólo sus días", () => {
+    expect(diasConHorarioDelProfesional(filas, "m-carla")).toEqual([1, 2, 3])
+  })
+
+  it("sin horario propio, los del negocio", () => {
+    expect(diasConHorarioDelProfesional(filas, "m-pedro")).toEqual([1, 2, 3, 4, 5, 6])
+  })
+
+  it("sin ningún horario cargado, ninguno", () => {
+    expect(diasConHorarioDelProfesional([], "m-carla")).toEqual([])
   })
 })
