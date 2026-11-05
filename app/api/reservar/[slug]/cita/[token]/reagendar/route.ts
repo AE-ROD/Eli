@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { asignarCandidatoLibre, candidatosDeLaReserva, candidatosQueCubren, tramoDeLaReserva } from "@/lib/agenda-publica"
+import { asignarCandidatoLibre, candidatosDeLaReserva, candidatosQueOfrecen, tramoDeLaReserva } from "@/lib/agenda-publica"
 import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
 import { enviarAvisoDeCambioDelCliente } from "@/lib/email"
 import { ESTADOS_GESTIONABLES, dentroDelPlazo, mensajeFueraDePlazo } from "@/lib/gestion-de-cita"
@@ -74,7 +74,8 @@ export async function POST(request: NextRequest, contexto: Params) {
   if (reserva.tipo === "profesional-no-disponible") {
     return NextResponse.json({ error: "No hay horas para reagendar por acá. Contacta al local." }, { status: 409 })
   }
-  const candidatos = candidatosQueCubren(reserva.candidatos, hora, duracion)
+  // Sólo una hora de la grilla que ofrece la disponibilidad (#46).
+  const candidatos = candidatosQueOfrecen(reserva.candidatos, hora, duracion)
   if (candidatos.length === 0) return NextResponse.json({ error: FUERA_DE_ATENCION }, { status: 409 })
 
   const tramo = tramoDeLaReserva(fecha, hora, duracion, zona)

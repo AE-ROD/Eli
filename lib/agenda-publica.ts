@@ -1,6 +1,5 @@
 import type { Prisma } from "@prisma/client"
 import {
-  cabeEnAtencion,
   franjasDeAtencion,
   fusionarFranjas,
   horarioSemanalDeAtencion,
@@ -206,9 +205,8 @@ export function profesionalesConHorarioPublicado(
  * Cada cuántos minutos, como mucho, se ofrece una hora de inicio. Antes el
  * paso era la duración del servicio: con uno de 90 minutos sólo se ofrecían
  * las 09:00, 10:30, 12:00…, y una cita a las 10:00 dejaba fuera las 11:30 y
- * las 12:00 aunque estuvieran libres (QA#2). `confirmar` acepta cualquier
- * hora que quepa, así que ofrecer más inicios no abre nada que después se
- * rechace.
+ * las 12:00 aunque estuvieran libres (QA#2). `confirmar` y reagendar
+ * aceptan sólo estas horas (`candidatosQueOfrecen`, #46).
  */
 export const PASO_MAXIMO_ENTRE_HORAS = 30
 
@@ -355,10 +353,17 @@ export async function horasPosiblesEnElNegocio(
   return posibles ? "con-horas-posibles" : "sin-horas-posibles"
 }
 
-/** Los candidatos cuyo horario cubre entero el tramo [inicio, inicio + duración) de esa hora. */
-export function candidatosQueCubren(candidatos: Candidato[], hora: string, duracion: number): Candidato[] {
-  const inicio = horaAMinutos(hora)
-  return candidatos.filter((candidato) => cabeEnAtencion(candidato.franjas, inicio, inicio + duracion))
+/**
+ * Los candidatos que ofrecen esa hora: una de las de `horasDeLaFranja` en
+ * alguna de sus franjas, la misma grilla con que `horasLibresDelDia` las
+ * ofrece. Así el tramo [inicio, inicio + duración) cabe entero en su horario.
+ * Antes bastaba que cupiera, y `confirmar` aceptaba horas que la
+ * disponibilidad nunca ofreció, como las 09:17 (#46).
+ */
+export function candidatosQueOfrecen(candidatos: Candidato[], hora: string, duracion: number): Candidato[] {
+  return candidatos.filter((candidato) =>
+    candidato.franjas.some((franja) => horasDeLaFranja(franja, duracion).includes(hora))
+  )
 }
 
 export type Asignacion = { libre: true; memberId: string | null } | { libre: false }

@@ -117,6 +117,19 @@ describe("POST /api/reservar/[slug]/confirmar: la hora tiene que caer en el hora
     expect(base.buscar("customer", { name: "Lucía Pérez" })).toHaveLength(0)
   })
 
+  it("#46: una hora que cabe pero que la disponibilidad no ofrece (09:17): 409 sin crear nada", async () => {
+    escenario([franja({ startTime: "09:00", endTime: "13:00" })])
+
+    for (const hora of ["09:17", "10:45", "11:59"]) {
+      const { status, cuerpo } = await confirmar(hora)
+      expect(status).toBe(409)
+      expect(cuerpo.error).toMatch(/fuera de la atención/)
+    }
+    expect(citasCreadas()).toHaveLength(0)
+    // Las de la grilla (cada 30 minutos desde que abre) sí.
+    expect((await confirmar("10:30")).status).toBe(201)
+  })
+
   it("un profesional con horario propio atiende en el suyo: la hora fuera del general va a él", async () => {
     escenario([
       franja({ startTime: "09:00", endTime: "13:00" }),

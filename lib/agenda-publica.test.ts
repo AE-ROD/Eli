@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
   candidatosDelDia,
-  candidatosQueCubren,
+  candidatosQueOfrecen,
   diasConHorarioDelProfesional,
   haceElServicio,
   horarioSemanalPublicado,
@@ -77,14 +77,29 @@ describe("candidatosDelDia", () => {
   })
 })
 
-describe("candidatosQueCubren", () => {
+describe("candidatosQueOfrecen", () => {
+  const candidatos = [
+    { memberId: "m-carla", franjas: [{ startTime: "09:00", endTime: "10:30" }] },
+    { memberId: "m-pedro", franjas: [{ startTime: "09:00", endTime: "12:00" }] },
+  ]
+
   it("sólo los que tienen la hora entera en su horario", () => {
-    const candidatos = [
-      { memberId: "m-carla", franjas: [{ startTime: "09:00", endTime: "10:30" }] },
-      { memberId: "m-pedro", franjas: [{ startTime: "09:00", endTime: "12:00" }] },
-    ]
-    expect(candidatosQueCubren(candidatos, "10:00", 60).map((c) => c.memberId)).toEqual(["m-pedro"])
-    expect(candidatosQueCubren(candidatos, "09:00", 60).map((c) => c.memberId)).toEqual(["m-carla", "m-pedro"])
+    expect(candidatosQueOfrecen(candidatos, "10:00", 60).map((c) => c.memberId)).toEqual(["m-pedro"])
+    expect(candidatosQueOfrecen(candidatos, "09:00", 60).map((c) => c.memberId)).toEqual(["m-carla", "m-pedro"])
+  })
+
+  it("#46: una hora que cabe pero no está en la grilla que se ofrece no la toma nadie", () => {
+    expect(candidatosQueOfrecen(candidatos, "09:17", 60)).toEqual([])
+    expect(candidatosQueOfrecen(candidatos, "10:15", 30)).toEqual([])
+    // Un servicio de 15 minutos se ofrece cada 15: las 10:15 sí.
+    expect(candidatosQueOfrecen(candidatos, "10:15", 15).map((c) => c.memberId)).toEqual(["m-carla", "m-pedro"])
+  })
+
+  it("la grilla parte donde abre cada franja: con 09:00–13:00 y 15:10–19:00, las 15:10 y las 15:40 sí, las 15:30 no", () => {
+    const partido = [{ memberId: null, franjas: [{ startTime: "09:00", endTime: "13:00" }, { startTime: "15:10", endTime: "19:00" }] }]
+    expect(candidatosQueOfrecen(partido, "15:10", 60)).toHaveLength(1)
+    expect(candidatosQueOfrecen(partido, "15:40", 60)).toHaveLength(1)
+    expect(candidatosQueOfrecen(partido, "15:30", 60)).toEqual([])
   })
 })
 

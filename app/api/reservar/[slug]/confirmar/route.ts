@@ -8,7 +8,7 @@ import { reservaSchema } from "@/lib/validaciones"
 import {
   asignarCandidatoLibre,
   candidatosDeLaReserva,
-  candidatosQueCubren,
+  candidatosQueOfrecen,
   type Candidato,
 } from "@/lib/agenda-publica"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
@@ -412,8 +412,9 @@ export async function POST(
     // Quién puede tomarla (`lib/agenda-publica.ts`), con la misma regla que
     // `disponibilidad`: profesionales que atienden y hacen todos los servicios (sólo
     // el elegido, si eligió), y de ellos los que tienen la hora entera dentro
-    // de su horario. Un negocio sin profesionales es un solo carril con el
-    // horario del negocio, como siempre.
+    // de su horario, en una hora de la grilla que ofrece (`candidatosQueOfrecen`,
+    // #46: no las 09:17). Un negocio sin profesionales es un solo carril con
+    // el horario del negocio, como siempre.
     const reserva = await candidatosDeLaReserva(prisma, {
       businessId: negocio.id,
       serviceIds: servicios.map((servicio) => servicio.id),
@@ -423,7 +424,7 @@ export async function POST(
     if (reserva.tipo === "profesional-no-disponible") {
       return NextResponse.json({ error: "Ese profesional no está disponible para este servicio" }, { status: 404 })
     }
-    const candidatos = candidatosQueCubren(reserva.candidatos, datos.hora, resumen.duracion)
+    const candidatos = candidatosQueOfrecen(reserva.candidatos, datos.hora, resumen.duracion)
     if (candidatos.length === 0) {
       return NextResponse.json(
         { error: "Ese horario está fuera de la atención del negocio. Elige otra hora." },

@@ -350,6 +350,13 @@ describe("reagendar", () => {
     expect((await reagendar("2030-01-08", "15:00")).status).toBe(409)
   })
 
+  it("#46: una hora que cabe pero que la disponibilidad no ofrece (09:17): 409 sin mover la cita", async () => {
+    escenario()
+    expect((await horas("2030-01-08")).cuerpo.slots).not.toContain("09:17")
+    expect((await reagendar("2030-01-08", "09:17")).status).toBe(409)
+    expect(laCita().startTime).toEqual(aLas("10:00"))
+  })
+
   it("fuera del plazo: ni horas ni cambio", async () => {
     escenario()
     relojEn("2030-01-07T00:00:00.000Z")
