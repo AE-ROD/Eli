@@ -194,17 +194,37 @@ describe("POST /api/clientes/importar", () => {
     expect(prismaMock.customer.createMany.mock.calls.map(([args]) => args.data.length)).toEqual([500, 500, 200])
   })
 
-  it("si un lote falla, sus filas salen como error y los demás se guardan igual", async () => {
+  it("si un lote falla no se guarda ninguno (es una transacción) y todas las filas salen como error", async () => {
     const { POST } = await import("./route")
     mockGetServerSession.mockResolvedValueOnce(sesion("owner"))
     prismaMock.customer.createMany.mockRejectedValueOnce(new Error("se cayó la base"))
     const filas = Array.from({ length: 600 }, (_, i) => `Cliente ${i}`)
 
-    const cuerpo = await (await POST(pedido({ csv: ["Nombre", ...filas].join("\n"), mapeo: { nombre: 0 } }))).json()
+    const res = await POST(pedido({ csv: ["Nombre", ...filas].join("\n"), mapeo: { nombre: 0 } }))
+    const cuerpo = await res.json()
 
-    expect(cuerpo.creados).toBe(100)
-    expect(cuerpo.errores).toHaveLength(500)
+    expect(res.status).toBe(200)
+    expect(cuerpo.creados).toBe(0)
+    expect(cuerpo.errores).toHaveLength(600)
     expect(cuerpo.errores[0]).toEqual({ fila: 2, motivo: "No se pudo guardar. Vuelve a importar el archivo." })
+    // El segundo lote ni se intenta: la transacción ya se cayó.
+    expect(prismaMock.customer.createMany).toHaveBeenCalledTimes(1)
+  })
+
+  it("lee los existentes una sola vez por importación, con el candado tomado, aunque tenga varios lotes (#140)", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesion("owner"))
+    // El teléfono de un cliente que ya existe, en el tercer lote.
+    const filas = Array.from({ length: 1200 }, (_, i) => (i === 1100 ? "Repetido;9 1111 1111" : `Cliente ${i};`))
+
+    const cuerpo = await (await POST(pedido({ csv: ["Nombre;Teléfono", ...filas].join("\n"), mapeo: { nombre: 0, telefono: 1 } }))).json()
+
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1)
+    expect(prismaMock.customer.findMany).toHaveBeenCalledTimes(1)
+    expect(clavesDeCandado).toEqual(["importar:negocio-1"])
+    expect(prismaMock.customer.createMany.mock.calls.map(([args]) => args.data.length)).toEqual([500, 500, 199])
+    expect(cuerpo.creados).toBe(1199)
+    expect(cuerpo.duplicados).toEqual([{ fila: 1102, motivo: "Ya existe un cliente con ese teléfono" }])
   })
 
   it.each([
@@ -283,7 +303,7 @@ describe("POST /api/clientes/importar", () => {
     expect(prismaMock.customer.createMany).not.toHaveBeenCalled()
   })
 
-  it("cada lote toma el candado del negocio antes de leer los existentes (#94)", async () => {
+  it("toma el candado del negocio antes de leer los existentes (#94)", async () => {
     const { POST } = await import("./route")
     mockGetServerSession.mockResolvedValueOnce(sesion("owner"))
 
