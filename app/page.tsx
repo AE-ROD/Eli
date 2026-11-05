@@ -11,6 +11,9 @@ import { SeccionRecorrido } from "@/components/landing/seccion-recorrido"
 // entero, pero su JavaScript no demora que el encabezado y la portada
 // respondan. Es una página de cliente a propósito: si la importara un
 // componente de servidor, `next/dynamic` no separaría los paquetes.
+const SeccionCrecimiento = dynamic(() =>
+  import("@/components/landing/seccion-crecimiento").then((m) => m.SeccionCrecimiento)
+)
 const SeccionUnDia = dynamic(() => import("@/components/landing/seccion-un-dia").then((m) => m.SeccionUnDia))
 const SeccionTablero = dynamic(() => import("@/components/landing/seccion-tablero").then((m) => m.SeccionTablero))
 const SeccionReportes = dynamic(() => import("@/components/landing/seccion-reportes").then((m) => m.SeccionReportes))
@@ -38,6 +41,7 @@ export default function PaginaLanding() {
       <main id="contenido" className="flex flex-col gap-2 md:gap-6">
         <SeccionPortada />
         <SeccionRecorrido />
+        <SeccionCrecimiento />
         <SeccionUnDia />
         <SeccionTablero />
         <SeccionReportes />

@@ -470,6 +470,8 @@ Con el diferenciador definido, la identidad ya no debería comunicar "agenda bon
 
 La paleta y la tipografía de la landing ya están propuestas en `docs/diseno/README.md`.
 
+**Landing: «¿Cómo hacemos crecer tu negocio?».** Sección que va después del recorrido, con sólo dos puntos, los dos ya construidos: la agenda con su página de reservas incluida (las reservas entran solas) y los recordatorios por correo. Sin cifras, testimonios ni integraciones que Eli no tiene (WhatsApp, «Reserve with Google»): vale la regla firme de la sección 4.
+
 ---
 
 ## 10. Pendiente de definir
