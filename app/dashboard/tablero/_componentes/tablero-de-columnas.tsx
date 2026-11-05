@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from "react"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Esqueleto } from "@/components/comunes/esqueleto"
 import type { EstadoActivo } from "@/lib/atenciones"
 import {
@@ -49,6 +50,60 @@ const VACIO: Record<ColumnaId, string> = {
 const CONTENEDOR =
   "relative flex gap-3 overflow-x-auto snap-x snap-mandatory md:snap-none pb-3 -mx-4 px-4 scroll-px-4 sm:-mx-6 sm:px-6 sm:scroll-px-6"
 const ANCHO_DE_COLUMNA = "w-68 shrink-0 snap-start md:w-auto md:min-w-[196px] md:flex-1 md:shrink"
+
+/**
+ * Cuando las columnas no entran (QA#17: un escritorio de 1126 px con la barra
+ * lateral dejaba "Finalizado" afuera sin que se notara), un degradado en el
+ * borde que tiene más y, con mouse, dos flechas que desplazan una columna. La
+ * barra de desplazamiento sola no alcanza: en macOS no se ve hasta que se
+ * desplaza. Los degradados van sobre el borde de la caja, que llega hasta el
+ * borde del contenido (por eso el mismo margen negativo).
+ *
+ * Las flechas van en una fila propia sobre el tablero, no encima de las
+ * columnas: flotando sobre el borde tapaban el título y el contador de la
+ * columna de debajo ("Por cobrar" a 1126 px). La fila existe sólo mientras
+ * hay desborde, que no cambia al desplazarse (siempre queda algún lado con
+ * columnas afuera), así que el tablero no salta al usarlas.
+ */
+const DEGRADADO = "pointer-events-none absolute top-0 bottom-3 z-10 w-12 from-crema to-transparent transition-opacity duration-200 ease-suave"
+const FLECHA =
+  "grid size-9 place-items-center rounded-full bg-tarjeta text-navy shadow-sm squircle transition-opacity duration-200 ease-suave enabled:hover:bg-superficie disabled:opacity-40"
+
+/** Qué lados de la caja tienen columnas fuera de la vista. */
+interface Desborde {
+  izquierda: boolean
+  derecha: boolean
+}
+
+/**
+ * Sigue el desplazamiento de la caja y su tamaño (y el de lo que tiene
+ * adentro) para saber si hay columnas fuera de la vista a cada lado.
+ */
+function useDesborde(caja: { current: HTMLDivElement | null }): Desborde {
+  const [desborde, setDesborde] = useState<Desborde>({ izquierda: false, derecha: false })
+  useEffect(() => {
+    const nodo = caja.current
+    if (!nodo) return
+    const medir = () => {
+      const izquierda = nodo.scrollLeft > 1
+      const derecha = nodo.scrollLeft + nodo.clientWidth < nodo.scrollWidth - 1
+      setDesborde((previo) =>
+        previo.izquierda === izquierda && previo.derecha === derecha ? previo : { izquierda, derecha }
+      )
+    }
+    const cuadro = requestAnimationFrame(medir)
+    nodo.addEventListener("scroll", medir, { passive: true })
+    const observador = new ResizeObserver(medir)
+    observador.observe(nodo)
+    for (const hijo of Array.from(nodo.children)) observador.observe(hijo)
+    return () => {
+      cancelAnimationFrame(cuadro)
+      nodo.removeEventListener("scroll", medir)
+      observador.disconnect()
+    }
+  }, [caja])
+  return desborde
+}
 
 /**
  * Cada columna es una isla gris de radio 32, con 10 px de relleno: el anillo
@@ -234,6 +289,16 @@ export function TableroDeColumnas({
   const [encima, setEncima] = useState<ColumnaId | null>(null)
 
   const contenedor = useRef<HTMLDivElement>(null)
+  const desborde = useDesborde(contenedor)
+
+  /** Una columna hacia un lado: lo que mide la primera más el espacio entre columnas. */
+  const desplazar = (hacia: 1 | -1) => {
+    const nodo = contenedor.current
+    const columna = nodo?.firstElementChild
+    if (!nodo || !(columna instanceof HTMLElement)) return
+    const reducido = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    nodo.scrollBy({ left: hacia * (columna.offsetWidth + 12), behavior: reducido ? "auto" : "smooth" })
+  }
 
   // Después de dibujar lo que cambió: la tarjeta en su lugar nuevo o, si ya
   // no está, el título de la columna. Las tarjetas y los títulos se marcan
@@ -325,60 +390,97 @@ export function TableroDeColumnas({
     },
   })
 
+  const hayDesborde = desborde.izquierda || desborde.derecha
+
   return (
-    <div ref={contenedor} className={CONTENEDOR}>
-      {COLUMNAS_DEL_TABLERO.map(({ id: columna, titulo }) => {
-        const propsDeColumna = {
-          id: columna,
-          titulo,
-          vacio: VACIO[columna],
-          destinoValido: destinos.includes(columna),
-          arrastrando: arrastrada !== null,
-          encima: encima === columna,
-          ...eventosDeColumna(columna),
-        }
+    <div>
+      {/*
+        Para el mouse: con teclado el foco ya desplaza la caja hasta la
+        tarjeta, y en el teléfono se desliza con el dedo. Por eso fuera del
+        orden de Tab y escondidas del lector de pantalla.
+      */}
+      {hayDesborde && (
+        <div aria-hidden="true" className="mb-2 hidden justify-end gap-2 md:flex">
+          <button
+            type="button"
+            tabIndex={-1}
+            title="Ver las columnas de la izquierda"
+            disabled={!desborde.izquierda}
+            onClick={() => desplazar(-1)}
+            className={FLECHA}
+          >
+            <ChevronLeft className="size-5" strokeWidth={2} />
+          </button>
+          <button
+            type="button"
+            tabIndex={-1}
+            title="Ver las columnas de la derecha"
+            disabled={!desborde.derecha}
+            onClick={() => desplazar(1)}
+            className={FLECHA}
+          >
+            <ChevronRight className="size-5" strokeWidth={2} />
+          </button>
+        </div>
+      )}
+      <div className="relative">
+        <div aria-hidden="true" className={cn(DEGRADADO, "-left-4 bg-linear-to-r sm:-left-6", desborde.izquierda ? "opacity-100" : "opacity-0")} />
+        <div aria-hidden="true" className={cn(DEGRADADO, "-right-4 bg-linear-to-l sm:-right-6", desborde.derecha ? "opacity-100" : "opacity-0")} />
+        <div ref={contenedor} className={CONTENEDOR}>
+          {COLUMNAS_DEL_TABLERO.map(({ id: columna, titulo }) => {
+            const propsDeColumna = {
+              id: columna,
+              titulo,
+              vacio: VACIO[columna],
+              destinoValido: destinos.includes(columna),
+              arrastrando: arrastrada !== null,
+              encima: encima === columna,
+              ...eventosDeColumna(columna),
+            }
 
-        if (columna === "reservas") {
-          return (
-            <Columna key={columna} cantidad={tablero.reservas.length} {...propsDeColumna}>
-              {tablero.reservas.map((reserva) => (
-                <TarjetaDeReserva
-                  key={reserva.id}
-                  reserva={reserva}
-                  quien={nombresDeReservas.get(reserva.id) ?? reserva.cliente?.nombre ?? "Sin cliente"}
-                  atrasada={estaAtrasada(reserva.inicio, ahora)}
-                  enCurso={enCurso.has(reserva.id)}
-                  arrastre={arrastreDe({ tipo: "reserva", reserva }, reserva.id)}
-                  onLlego={() => onLlego(reserva)}
-                  onNoVino={() => onNoVino(reserva)}
-                />
-              ))}
-            </Columna>
-          )
-        }
+            if (columna === "reservas") {
+              return (
+                <Columna key={columna} cantidad={tablero.reservas.length} {...propsDeColumna}>
+                  {tablero.reservas.map((reserva) => (
+                    <TarjetaDeReserva
+                      key={reserva.id}
+                      reserva={reserva}
+                      quien={nombresDeReservas.get(reserva.id) ?? reserva.cliente?.nombre ?? "Sin cliente"}
+                      atrasada={estaAtrasada(reserva.inicio, ahora)}
+                      enCurso={enCurso.has(reserva.id)}
+                      arrastre={arrastreDe({ tipo: "reserva", reserva }, reserva.id)}
+                      onLlego={() => onLlego(reserva)}
+                      onNoVino={() => onNoVino(reserva)}
+                    />
+                  ))}
+                </Columna>
+              )
+            }
 
-        const atenciones = atencionesDeColumna(tablero.atenciones, columna)
-        return (
-          <Columna key={columna} cantidad={atenciones.length} {...propsDeColumna}>
-            {atenciones.map((atencion) => (
-              <TarjetaDeAtencion
-                key={atencion.id}
-                atencion={atencion}
-                quien={nombres.get(atencion.id) ?? nombreConHora(atencion)}
-                actor={actor}
-                ahora={ahora}
-                enCurso={enCurso.has(atencion.id)}
-                arrastre={arrastreDe({ tipo: "atencion", atencion }, atencion.id)}
-                onDeshacerLlegada={() => onDeshacerLlegada(atencion)}
-                onMover={(hacia) => onMover(atencion, hacia)}
-                onCobrar={() => onCobrar(atencion)}
-                onEditar={() => onEditar(atencion)}
-                onAnular={() => onAnular(atencion)}
-              />
-            ))}
-          </Columna>
-        )
-      })}
+            const atenciones = atencionesDeColumna(tablero.atenciones, columna)
+            return (
+              <Columna key={columna} cantidad={atenciones.length} {...propsDeColumna}>
+                {atenciones.map((atencion) => (
+                  <TarjetaDeAtencion
+                    key={atencion.id}
+                    atencion={atencion}
+                    quien={nombres.get(atencion.id) ?? nombreConHora(atencion)}
+                    actor={actor}
+                    ahora={ahora}
+                    enCurso={enCurso.has(atencion.id)}
+                    arrastre={arrastreDe({ tipo: "atencion", atencion }, atencion.id)}
+                    onDeshacerLlegada={() => onDeshacerLlegada(atencion)}
+                    onMover={(hacia) => onMover(atencion, hacia)}
+                    onCobrar={() => onCobrar(atencion)}
+                    onEditar={() => onEditar(atencion)}
+                    onAnular={() => onAnular(atencion)}
+                  />
+                ))}
+              </Columna>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }

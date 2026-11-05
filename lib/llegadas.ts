@@ -12,7 +12,8 @@ import {
   whereDeClientes,
   type Actor,
 } from "@/lib/permisos"
-import { ErrorDeAtencion, formatearAtencion, nombreCompletoDeCliente, seleccionDeAtencion } from "@/lib/tablero"
+import { ErrorDeAtencion, formatearAtencion, seleccionDeAtencion } from "@/lib/tablero"
+import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 
 /**
@@ -354,6 +355,8 @@ export async function anotarSinReserva(actor: Actor, usuarioId: string | null, d
           data: {
             name: datos.clienteNuevo.nombre,
             phone: datos.clienteNuevo.telefono || null,
+            // Explícito: la columna no tiene default y quedaba en NULL (ver `clienteNoEliminado`).
+            tags: [],
             businessId: actor.businessId,
           },
           select: { id: true, name: true, lastName: true },

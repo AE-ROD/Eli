@@ -26,27 +26,41 @@ vi.mock("@/lib/auth", () => ({ authOptions: {} }))
  * base falsa, que lanza ante cualquier operador que no conozca.
  */
 function coincide(item: Record<string, unknown>, where: Record<string, unknown>): boolean {
-  return Object.entries(where).every(([clave, valor]) => {
-    if (clave === "AND") {
-      return (valor as Record<string, unknown>[]).every((sub) => coincide(item, sub))
-    }
-    if (clave === "OR") {
-      return (valor as Record<string, unknown>[]).some((sub) => coincide(item, sub))
-    }
-    if (clave === "NOT") {
-      return !coincide(item, valor as Record<string, unknown>)
-    }
-    if (valor && typeof valor === "object") {
-      const condicion = valor as Record<string, unknown>
-      if ("contains" in condicion) {
-        return String(item[clave] ?? "").toLowerCase().includes(String(condicion.contains).toLowerCase())
+  return evaluar(item, where) === true
+}
+
+/**
+ * Como SQL, con tres valores: `null` es "desconocido". Hace falta para
+ * `tags`, que en la base es `TEXT[]` sin default: en un cliente creado sin
+ * etiquetas es NULL, y ahí `has` no es ni verdadero ni falso, y su `NOT`
+ * tampoco. Por eso esos clientes desaparecían del listado.
+ */
+function evaluar(item: Record<string, unknown>, where: Record<string, unknown>): boolean | null {
+  const y = (valores: (boolean | null)[]) => (valores.includes(false) ? false : valores.includes(null) ? null : true)
+  const o = (valores: (boolean | null)[]) => (valores.includes(true) ? true : valores.includes(null) ? null : false)
+  return y(
+    Object.entries(where).map(([clave, valor]): boolean | null => {
+      if (clave === "AND") return y((valor as Record<string, unknown>[]).map((sub) => evaluar(item, sub)))
+      if (clave === "OR") return o((valor as Record<string, unknown>[]).map((sub) => evaluar(item, sub)))
+      if (clave === "NOT") {
+        const negado = evaluar(item, valor as Record<string, unknown>)
+        return negado === null ? null : !negado
       }
-      if ("has" in condicion) {
-        return ((item[clave] as unknown[]) ?? []).includes(condicion.has)
+      if (valor && typeof valor === "object") {
+        const condicion = valor as Record<string, unknown>
+        if ("contains" in condicion) {
+          return String(item[clave] ?? "").toLowerCase().includes(String(condicion.contains).toLowerCase())
+        }
+        if ("has" in condicion) {
+          if (item[clave] === null) return null
+          return (item[clave] as unknown[]).includes(condicion.has)
+        }
+        if ("equals" in condicion && condicion.equals === null) return item[clave] === null
+        throw new Error(`condición no esperada en ${clave}: ${JSON.stringify(condicion)}`)
       }
-    }
-    return item[clave] === valor
-  })
+      return item[clave] === valor
+    })
+  )
 }
 
 /**
@@ -295,6 +309,71 @@ describe("GET /api/clientes", () => {
     const data = await (await GET(fakeGet("?q=ana"))).json()
 
     expect(data.clientes).toEqual([expect.objectContaining({ id: "cliente-1", name: "Ana", lastName: "Pérez" })])
+  })
+
+  it("el buscador encuentra por el apellido guardado aparte (reservas públicas viejas) y por el que va en el nombre, sin cruzar de negocio (N2)", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const porApellidoAparte = await (await GET(fakeGet("?q=pérez&limite=8"))).json()
+    // `cliente-ajeno` también es "Ana Pérez", pero de otro negocio.
+    expect(ids(porApellidoAparte.clientes)).toEqual(["cliente-1"])
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const porApellidoEnElNombre = await (await GET(fakeGet("?q=soto&limite=8"))).json()
+    expect(ids(porApellidoEnElNombre.clientes)).toEqual(["cliente-2"])
+  })
+
+  it("el nombre completo de un cliente con el apellido aparte se encuentra palabra por palabra, en cualquier orden y sin importar mayúsculas", async () => {
+    const { GET } = await import("./route")
+
+    for (const q of ["ana pérez", "  ANA   Pérez ", "pérez ana", "an pér"]) {
+      mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+      const data = await (await GET(fakeGet(`?q=${encodeURIComponent(q)}&limite=8`))).json()
+      expect(ids(data.clientes), q).toEqual(["cliente-1"])
+    }
+  })
+
+  it("buscar por nombre completo no trae al cliente de otro negocio con el mismo nombre y apellido", async () => {
+    const { GET } = await import("./route")
+
+    // `cliente-ajeno` (negocio-2) también es Ana Pérez.
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const delDueño = await (await GET(fakeGet("?q=ana%20p%C3%A9rez&limite=8"))).json()
+    expect(ids(delDueño.clientes)).toEqual(["cliente-1"])
+    expect(delDueño.total).toBe(1)
+
+    mockGetServerSession.mockResolvedValueOnce(sesionOtroNegocio)
+    const delOtro = await (await GET(fakeGet("?q=ana%20p%C3%A9rez&limite=8"))).json()
+    expect(ids(delOtro.clientes)).toEqual(["cliente-ajeno"])
+  })
+
+  it("cada palabra tiene que estar en el mismo cliente: palabras de clientes distintos no traen a ninguno", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const data = await (await GET(fakeGet("?q=ana%20soto&limite=8"))).json()
+    expect(data.clientes).toEqual([])
+  })
+
+  it("el nombre completo guardado entero en `name` también se encuentra por palabras", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const data = await (await GET(fakeGet("?q=soto%20beto&limite=8"))).json()
+    expect(ids(data.clientes)).toEqual(["cliente-2"])
+  })
+
+  it("correo y teléfono se siguen buscando con el texto entero", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const porCorreo = await (await GET(fakeGet("?q=ana%40example&limite=8"))).json()
+    expect(ids(porCorreo.clientes)).toEqual(["cliente-1"])
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const porTelefono = await (await GET(fakeGet("?q=1111%201111&limite=8"))).json()
+    expect(ids(porTelefono.clientes)).toEqual(["cliente-2"])
   })
 
   it("sin apellido cargado, viaja en null", async () => {
@@ -550,6 +629,50 @@ describe("GET /api/clientes — los clientes eliminados", () => {
 
     expect(porNombre.clientes).toEqual([])
     expect(porNombre.total).toBe(0)
+  })
+})
+
+describe("GET /api/clientes — clientes creados sin etiquetas (QA#1)", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  // Como los deja la reserva pública o "Anotar sin reserva" antes del
+  // arreglo: `tags` en NULL, porque la columna no tiene default.
+  conFilasExtra({
+    clientes: [
+      {
+        id: "cliente-de-la-pagina",
+        businessId: "negocio-1",
+        name: "Lucía",
+        lastName: "Rojas",
+        email: null,
+        phone: null,
+        tags: null,
+        notes: null,
+        whatsappConsentAt: null,
+        correoPromoConsentAt: null,
+        createdAt: creadoEl(4),
+      },
+    ],
+  })
+
+  it("aparece en la lista, cuenta en el total y llega con una lista de etiquetas vacía", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const data = await (await GET(fakeGet())).json()
+
+    expect(ids(data.clientes)).toEqual(["cliente-de-la-pagina", "cliente-2", "cliente-1"].sort())
+    expect(data.total).toBe(3)
+    expect(data.clientes.find((c: { id: string }) => c.id === "cliente-de-la-pagina").tags).toEqual([])
+  })
+
+  it("y la encuentra el buscador por su nombre", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const data = await (await GET(fakeGet("?q=luc&limite=8"))).json()
+
+    expect(ids(data.clientes)).toEqual(["cliente-de-la-pagina"])
   })
 })
 

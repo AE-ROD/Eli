@@ -115,7 +115,7 @@ describe("GET /api/reservar/[slug]/disponibilidad", () => {
 
     const res = await GET(pedidoFalso(`?fecha=${FECHA}&servicioId=s-corte`), conSlug)
 
-    expect(await res.json()).toEqual({ slots: ["09:00", "10:00", "11:00"] })
+    expect(await res.json()).toEqual({ slots: ["09:00", "09:30", "10:00", "10:30", "11:00"] })
   })
 
   it("con una fecha y un servicio válidos devuelve las horas libres del día", async () => {
@@ -185,7 +185,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: de qué horario salen las hor
     ])
 
     // Pedro no cargó horario propio: atiende en el general.
-    expect(await horasDelDia()).toEqual({ slots: ["09:00", "10:00", "14:00", "15:00"] })
+    expect(await horasDelDia()).toEqual({ slots: ["09:00", "09:30", "10:00", "14:00", "14:30", "15:00"] })
   })
 
   it("sin horario general ese día, las horas salen de la unión de los horarios de los profesionales", async () => {
@@ -196,7 +196,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: de qué horario salen las hor
       franja({ dayOfWeek: OTRO_DIA, startTime: "08:00", endTime: "20:00" }),
     ])
 
-    expect(await horasDelDia()).toEqual({ slots: ["09:00", "10:00", "15:00", "16:00"] })
+    expect(await horasDelDia()).toEqual({ slots: ["09:00", "09:30", "10:00", "15:00", "15:30", "16:00"] })
   })
 
   it("con dos franjas generales el mismo día, ofrece las horas de ambas", async () => {
@@ -205,7 +205,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: de qué horario salen las hor
       franja({ startTime: "09:00", endTime: "11:00" }),
     ])
 
-    expect(await horasDelDia()).toEqual({ slots: ["09:00", "10:00", "15:00", "16:00"] })
+    expect(await horasDelDia()).toEqual({ slots: ["09:00", "09:30", "10:00", "15:00", "15:30", "16:00"] })
   })
 
   it("no usa franjas inactivas ni las de otro negocio", async () => {
@@ -215,7 +215,114 @@ describe("GET /api/reservar/[slug]/disponibilidad: de qué horario salen las hor
       franja({ businessId: OTRO_NEGOCIO, memberId: "m-ajeno", startTime: "12:00", endTime: "13:00" }),
     ])
 
-    expect(await horasDelDia()).toEqual({ slots: [], mensaje: "No hay atención ese día" })
+    expect(await horasDelDia()).toEqual({ slots: [], mensaje: "No hay atención ese día", sinListaDeEspera: true })
+  })
+})
+
+/** QA#26: la lista de espera sólo se ofrece si algo se puede liberar. */
+describe("GET /api/reservar/[slug]/disponibilidad: cuándo no se ofrece la lista de espera", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    relojEn("2030-01-01T12:00:00.000Z")
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 59 })
+    escenario([franja({ startTime: "09:00", endTime: "11:00" })])
+  })
+
+  const cita = (id: string, desde: number, hasta: number) => ({
+    id,
+    businessId: NEGOCIO,
+    title: "Corte",
+    status: "confirmada",
+    startTime: aLas(desde),
+    endTime: aLas(hasta),
+  })
+
+  it("un día lleno de citas: sin horas, pero con lista de espera (una cancelación libera una)", async () => {
+    base.reiniciar({ ...base.volcado(), appointment: [cita("c-1", 9, 10), cita("c-2", 10, 11)] })
+    expect(await horasDelDia()).toEqual({ slots: [] })
+  })
+
+  it("un día bloqueado entero: sin horas y sin lista de espera", async () => {
+    base.reiniciar({
+      ...base.volcado(),
+      timeBlock: [{ id: "b-1", businessId: NEGOCIO, memberId: null, startTime: aLas(0), endTime: aLas(20) }],
+    })
+    expect(await horasDelDia()).toEqual({ slots: [], sinListaDeEspera: true })
+  })
+
+  it("un bloqueo de otro negocio no cuenta", async () => {
+    base.reiniciar({
+      ...base.volcado(),
+      appointment: [cita("c-1", 9, 10), cita("c-2", 10, 11)],
+      timeBlock: [{ id: "b-ajeno", businessId: OTRO_NEGOCIO, memberId: null, startTime: aLas(0), endTime: aLas(20) }],
+    })
+    expect(await horasDelDia()).toEqual({ slots: [] })
+  })
+
+  it("un día que el negocio no atiende: sin lista de espera", async () => {
+    escenario([franja({ dayOfWeek: OTRO_DIA, startTime: "09:00", endTime: "11:00" })])
+    expect(await horasDelDia()).toEqual({ slots: [], mensaje: "No hay atención ese día", sinListaDeEspera: true })
+  })
+
+  /**
+   * La bandera es del negocio, no del profesional elegido: con Carla elegida,
+   * un día bloqueado entero sólo para ella (vacaciones) responde lo mismo que
+   * uno sólo lleno, y su agenda personal no se deduce de la página pública.
+   */
+  async function horasConCarla() {
+    const { GET } = await import("./route")
+    const res = await GET(pedidoFalso(`${URL_DEL_DIA}&profesionalId=m-carla`), conSlug)
+    expect(res.status).toBe(200)
+    return res.json()
+  }
+
+  it("con un profesional bloqueado entero y otro disponible, no se marca: responde igual que un día lleno", async () => {
+    base.reiniciar({
+      ...base.volcado(),
+      timeBlock: [{ id: "b-carla", businessId: NEGOCIO, memberId: "m-carla", startTime: aLas(0), endTime: aLas(20) }],
+    })
+    const bloqueada = await horasConCarla()
+
+    base.reiniciar({
+      ...base.volcado(),
+      timeBlock: [],
+      appointment: [
+        { ...cita("c-1", 9, 10), memberId: "m-carla" },
+        { ...cita("c-2", 10, 11), memberId: "m-carla" },
+      ],
+    })
+    const llena = await horasConCarla()
+
+    expect(bloqueada).toEqual({ slots: [] })
+    expect(llena).toEqual(bloqueada)
+  })
+
+  it("bloqueado entero para todos los que hacen el servicio, uno por uno: se marca", async () => {
+    base.reiniciar({
+      ...base.volcado(),
+      timeBlock: [
+        { id: "b-carla", businessId: NEGOCIO, memberId: "m-carla", startTime: aLas(0), endTime: aLas(20) },
+        { id: "b-pedro", businessId: NEGOCIO, memberId: "m-pedro", startTime: aLas(0), endTime: aLas(20) },
+      ],
+    })
+    expect(await horasConCarla()).toEqual({ slots: [], sinListaDeEspera: true })
+  })
+
+  it("con un bloqueo de todo el negocio y un profesional elegido: se marca", async () => {
+    base.reiniciar({
+      ...base.volcado(),
+      timeBlock: [{ id: "b-1", businessId: NEGOCIO, memberId: null, startTime: aLas(0), endTime: aLas(20) }],
+    })
+    expect(await horasConCarla()).toEqual({ slots: [], sinListaDeEspera: true })
+  })
+
+  it("un día que el profesional elegido no trabaja pero otro sí: no se marca", async () => {
+    // Carla tiene horario propio, pero sólo el martes.
+    escenario([
+      franja({ memberId: "m-pedro", startTime: "09:00", endTime: "11:00" }),
+      franja({ memberId: "m-carla", dayOfWeek: OTRO_DIA, startTime: "09:00", endTime: "11:00" }),
+    ])
+    expect(await horasConCarla()).toEqual({ slots: [] })
   })
 })
 
@@ -278,7 +385,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: el día y la hora del negocio
       franja({ dayOfWeek: LUNES, startTime: "09:00", endTime: "12:00" }),
     ])
 
-    expect(await horasDe("2026-10-19")).toEqual({ slots: ["09:00", "10:00", "11:00"] })
+    expect(await horasDe("2026-10-19")).toEqual({ slots: ["09:00", "09:30", "10:00", "10:30", "11:00"] })
   })
 
   it("2026-10-24 es sábado: ofrece el horario del sábado, no el del viernes", async () => {
@@ -287,7 +394,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: el día y la hora del negocio
       franja({ dayOfWeek: SABADO, startTime: "10:00", endTime: "12:00" }),
     ])
 
-    expect(await horasDe("2026-10-24")).toEqual({ slots: ["10:00", "11:00"] })
+    expect(await horasDe("2026-10-24")).toEqual({ slots: ["10:00", "10:30", "11:00"] })
   })
 
   it("una cita del lunes a las 10:00 del negocio (13:00 UTC) bloquea el lunes 10:00 y no el martes", async () => {
@@ -298,7 +405,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: el día y la hora del negocio
     conCitas([{ id: "cita-lunes", startTime: "2026-10-19T13:00:00.000Z", endTime: "2026-10-19T14:00:00.000Z" }])
 
     expect(await horasDe("2026-10-19")).toEqual({ slots: ["09:00", "11:00"] })
-    expect(await horasDe("2026-10-20")).toEqual({ slots: ["09:00", "10:00", "11:00"] })
+    expect(await horasDe("2026-10-20")).toEqual({ slots: ["09:00", "09:30", "10:00", "10:30", "11:00"] })
   })
 
   it("una cita del lunes a las 21:30 del negocio (00:30 UTC del martes) es del lunes", async () => {
@@ -308,8 +415,8 @@ describe("GET /api/reservar/[slug]/disponibilidad: el día y la hora del negocio
     ])
     conCitas([{ id: "cita-noche", startTime: "2026-10-20T00:30:00.000Z", endTime: "2026-10-20T01:30:00.000Z" }])
 
-    expect(await horasDe("2026-10-19")).toEqual({ slots: ["20:00"] })
-    expect(await horasDe("2026-10-20")).toEqual({ slots: ["00:00", "01:00"] })
+    expect(await horasDe("2026-10-19")).toEqual({ slots: ["20:00", "20:30"] })
+    expect(await horasDe("2026-10-20")).toEqual({ slots: ["00:00", "00:30", "01:00"] })
   })
 
   it("con otra zona guardada (Asia/Tokyo), las 10:00 del negocio son las 01:00 UTC", async () => {
@@ -339,7 +446,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: el día y la hora del negocio
     vi.setSystemTime(new Date("2026-10-19T02:00:00.000Z"))
     escenario([franja({ dayOfWeek: LUNES, startTime: "09:00", endTime: "12:00" })])
 
-    expect(await horasDe("2026-10-19")).toEqual({ slots: ["09:00", "10:00", "11:00"] })
+    expect(await horasDe("2026-10-19")).toEqual({ slots: ["09:00", "09:30", "10:00", "10:30", "11:00"] })
   })
 })
 
@@ -382,7 +489,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: fechas fuera del rango de añ
     const res = await GET(pedidoFalso("?fecha=9998-12-31&servicioId=s-corte"), conSlug)
 
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ slots: ["09:00", "10:00"] })
+    expect(await res.json()).toEqual({ slots: ["09:00", "09:30", "10:00"] })
   })
 })
 
@@ -443,7 +550,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: ni en el pasado ni a más de 
   it("a 90 días justos (30/12/2026): ofrece las horas", async () => {
     relojEn("2026-10-01T12:00:00.000Z")
 
-    expect(await respuestaDe("2026-12-30")).toEqual({ status: 200, cuerpo: { slots: ["09:00", "10:00"] } })
+    expect(await respuestaDe("2026-12-30")).toEqual({ status: 200, cuerpo: { slots: ["09:00", "09:30", "10:00"] } })
   })
 
   it.each([

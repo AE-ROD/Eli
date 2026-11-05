@@ -66,6 +66,39 @@ describe("GET /api/atenciones/exportar", () => {
     ])
   })
 
+  it.each(["desde=2026-11-01&hasta=2026-11-04", "desde=2026-11-01&hasta=2026-11-05"])(
+    "QA#3: trae la atención cobrada de un cliente creado sin etiquetas (tags en NULL) con %s",
+    async (rango) => {
+      const datos = datosBase()
+      base.reiniciar({
+        ...datos,
+        // Como lo deja "Anotar sin reserva" o la reserva pública: sin etiquetas, `tags` en NULL.
+        customer: [...datos.customer, { id: "c-nueva", businessId: NEGOCIO, name: "Lucía", lastName: "Rojas", tags: null }],
+        visit: [
+          atencion("a-noviembre", {
+            customerId: "c-nueva",
+            customerName: "Lucía Rojas",
+            status: "finalizada",
+            totalCents: centavos(64000),
+            // 3 de noviembre a las 23:30 en Santiago (UTC-3): ya es el 4 en UTC.
+            arrivedAt: new Date("2026-11-04T02:30:00.000Z"),
+            paidAt: new Date("2026-11-04T02:45:00.000Z"),
+          }),
+        ],
+        visitService: [linea("l-nov", "a-noviembre", { priceCents: centavos(64000) })],
+      })
+      const { GET } = await import("./route")
+      mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+      const filas = leerCsv(await (await GET(pedido(rango))).text(), ";")
+
+      expect(filas).toEqual([
+        ["Llegada", "Cliente", "Estado", "Servicios", "Profesionales", "Total", "Cobrada el"],
+        ["2026-11-03 23:30", "Lucía Rojas", "Finalizada", "Corte", "Carla Profesional", "64000", "2026-11-03 23:45"],
+      ])
+    }
+  )
+
   it("el encargado también descarga", async () => {
     const { GET } = await import("./route")
     mockGetServerSession.mockResolvedValueOnce(sesiones.encargado)

@@ -46,7 +46,7 @@ export function dentroDelPlazo(inicio: Date, horasAntes: number, ahora: Date): b
 }
 
 /** El plazo con que se decide: uno raro en la base se lee como el de por defecto. */
-function plazoValido(horasAntes: number): number {
+export function plazoValido(horasAntes: number): number {
   return Number.isInteger(horasAntes) && horasAntes >= PLAZO_MINIMO_HORAS && horasAntes <= PLAZO_MAXIMO_HORAS
     ? horasAntes
     : PLAZO_POR_DEFECTO_HORAS

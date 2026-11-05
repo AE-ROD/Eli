@@ -726,3 +726,41 @@ describe("lib/email — reservas por confirmar (#84)", () => {
     expect(html).toContain("septiembre")
   })
 })
+
+describe("enviarConfirmacionCliente: reservada dentro del plazo (QA#8)", () => {
+  beforeEach(() => {
+    vi.stubEnv("RESEND_API_KEY", "clave-de-prueba")
+    vi.resetModules()
+    enviarMock.mockClear()
+  })
+
+  const datos = {
+    emailCliente: "cliente@ejemplo.com",
+    nombreCliente: "Ana",
+    nombreNegocio: "Salón",
+    servicio: "Corte",
+    fecha: "2026-09-10",
+    hora: "10:00",
+    duracion: 30,
+    enlaceDeGestion: "https://eli.test/reservar/salon/cita/token-de-prueba",
+    plazoHoras: 24,
+  }
+
+  it("sin botón para cancelar o cambiar: dice que se contacte al local", async () => {
+    const { enviarConfirmacionCliente } = await import("./email")
+    await enviarConfirmacionCliente({ ...datos, sePuedeCambiar: false })
+    const html = enviarMock.mock.calls[0][0].html as string
+    expect(html).not.toContain("token-de-prueba")
+    expect(html).not.toContain("Cancelar o cambiar mi cita")
+    expect(html).toContain("no se puede cancelar ni cambiar por el enlace")
+    expect(html).toContain("contacta directamente al local")
+  })
+
+  it("fuera del plazo, el botón de siempre", async () => {
+    const { enviarConfirmacionCliente } = await import("./email")
+    await enviarConfirmacionCliente({ ...datos, sePuedeCambiar: true })
+    const html = enviarMock.mock.calls[0][0].html as string
+    expect(html).toContain("token-de-prueba")
+    expect(html).toContain("Cancelar o cambiar mi cita")
+  })
+})

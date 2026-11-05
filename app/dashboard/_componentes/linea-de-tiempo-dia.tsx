@@ -3,6 +3,7 @@
 import { TarjetaCita, type CitaEnTarjeta } from "@/components/panel/tarjeta-cita"
 import { formatearHora, duracionEnMinutos } from "@/lib/fechas"
 import { sigueSinConfirmar } from "@/lib/por-confirmar"
+import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import {
   citasFueraDeFranjas,
   formatearTiempoLibre,
@@ -24,7 +25,7 @@ interface PropsDeLineaDeTiempoDia {
 export function citaParaTarjeta(cita: CitaDelDia): CitaEnTarjeta {
   return {
     id: cita.id,
-    nombreCliente: cita.customer?.name ?? "Sin cliente",
+    nombreCliente: cita.customer ? nombreCompletoDeCliente(cita.customer) : "Sin cliente",
     servicio: cita.title,
     horaInicio: formatearHora(cita.startTime),
     horaFin: formatearHora(cita.endTime),

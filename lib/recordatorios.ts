@@ -7,7 +7,8 @@
  * no en el del servidor: en Vercel (UTC) a las 22:00 de Santiago ya es el día
  * siguiente, y una cita de las 10:00 de pasado mañana caía en "mañana".
  *
- * El cron corre una vez al día (vercel.json; el plan Hobby no permite más).
+ * El cron corre una vez al día (vercel.json, a las `HORA_UTC_DEL_CRON`; el
+ * plan Hobby no permite más).
  * Cada cita se avisa una sola vez: `Appointment.reminderSentAt` es el candado
  * (se marca antes de enviar y se libera si el envío falla). Así una corrida
  * repetida, manual o del mismo día, no duplica nada.
@@ -49,4 +50,32 @@ export function fechaYHoraEnElNegocio(
 ): { fecha: string; hora: string } {
   const { fecha, minutos } = fechaYMinutosEn(inicio, zonaDelNegocio(zonaGuardada))
   return { fecha, hora: minutosAHora(minutos) }
+}
+
+/**
+ * La hora UTC en que corre el cron de recordatorios: la de `vercel.json`
+ * ("0 13 * * *"). Un test compara las dos para que no se separen.
+ */
+export const HORA_UTC_DEL_CRON = 13
+
+/**
+ * Si la cita que empieza en `inicio`, creada en `ahora`, va a recibir el
+ * recordatorio: alguna corrida del cron posterior a `ahora` y anterior al
+ * inicio (el cron sólo busca citas futuras, `ventanaDeBusqueda`) la ve como
+ * "de mañana" (`esDeMañana`, la misma regla con que el cron la elige). Una
+ * reserva hecha a las 22:40 para el día siguiente no la recibe: la corrida de
+ * ese día ya pasó y la siguiente cae el mismo día de la cita.
+ *
+ * Sólo mira el reloj: que la persona haya dejado correo y que el envío no
+ * falle es aparte.
+ */
+export function recibiraRecordatorio(inicio: Date, ahora: Date, zonaGuardada: string | null | undefined): boolean {
+  const corrida = new Date(
+    Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), ahora.getUTCDate(), HORA_UTC_DEL_CRON)
+  )
+  if (corrida <= ahora) corrida.setUTCDate(corrida.getUTCDate() + 1)
+  for (; corrida < inicio; corrida.setUTCDate(corrida.getUTCDate() + 1)) {
+    if (esDeMañana(inicio, corrida, zonaGuardada)) return true
+  }
+  return false
 }

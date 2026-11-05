@@ -168,6 +168,19 @@ describe("inscribirse", () => {
     expect(mockVerificarLimite).toHaveBeenCalledWith("listaDeEspera", `${NEGOCIO}:${hashDeToken("lucia@correo.test")}`)
   })
 
+  it("QA#26: un día bloqueado entero no admite lista de espera (ninguna cancelación le abre una hora)", async () => {
+    base.reiniciar({
+      ...base.volcado(),
+      appointment: [],
+      timeBlock: [{ id: "b-feriado", businessId: NEGOCIO, memberId: null, startTime: aLas("00:00"), endTime: aLas("23:59") }],
+    })
+    expect(await inscribirse()).toEqual({
+      status: 409,
+      cuerpo: { error: "Ese día no hay atención para este servicio. Elige otro día." },
+    })
+    expect(filas()).toHaveLength(0)
+  })
+
   it("sin cupo en cualquiera de los límites: 429 y nada", async () => {
     const demasiadas = { status: 429, cuerpo: { error: "Demasiadas solicitudes, intenta más tarde" } }
     mockVerificarLimite.mockImplementation(async (tipo: string) => ({ permitido: tipo !== "listaDeEspera", restantes: 0 }))
@@ -267,7 +280,7 @@ describe("confirmar: consentimiento de correos promocionales", () => {
 
   it("marcado, en un cliente nuevo con email: se guarda con fecha y origen", async () => {
     expect((await confirmar({ fecha: MARTES, correoPromoConsentimiento: true })).status).toBe(201)
-    const [lucia] = base.buscar("customer", { name: "Lucía" })
+    const [lucia] = base.buscar("customer", { name: "Lucía Pérez" })
     expect(lucia).toMatchObject({ correoPromoConsentAt: AHORA, correoPromoConsentSource: "reserva-publica" })
   })
 

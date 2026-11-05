@@ -7,6 +7,7 @@ import { Esqueleto } from "@/components/comunes/esqueleto"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Insignia } from "@/components/comunes/insignia"
 import { Tarjeta } from "@/components/comunes/tarjeta"
+import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import { Aviso } from "@/components/panel/aviso"
 import { leerClientesQueSeVan, registrarContacto, type ClienteQueSeVa } from "../_datos"
 import {
@@ -157,7 +158,7 @@ function FilaSeVa({
   nombreNegocio: string
   onEscribir: () => void
 }) {
-  const nombreCompleto = cliente.apellido ? `${cliente.nombre} ${cliente.apellido}` : cliente.nombre
+  const nombreCompleto = nombreCompletoDeCliente({ name: cliente.nombre, lastName: cliente.apellido })
   const mensaje = mensajeSugerido({ nombre: cliente.nombre, nombreNegocio, ultimoServicio: cliente.ultimoServicio })
   const whatsapp = enlaceDeWhatsapp(cliente.telefono, mensaje)
   const correo = enlaceDeCorreo(cliente.email, asuntoSugerido(nombreNegocio), mensaje)

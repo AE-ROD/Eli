@@ -14,6 +14,14 @@ import { Tarjeta } from "@/components/comunes/tarjeta"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { formatearMonto } from "@/lib/dinero"
 import { deTexto, formatearDuracionDeServicio } from "@/lib/fechas"
+import {
+  avisoSinCambiosDespuesDeReservar,
+  avisoSinCambiosPorElEnlace,
+  AVISO_DIA_SIN_ATENCION,
+  diasDelCalendarioDeReserva,
+  elDiaElegidoQuedoSinAtencion,
+  quedaSinCambiosPorElEnlace,
+} from "@/lib/reserva-publica"
 import { MAX_SERVICIOS_POR_RESERVA, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
 import { cn } from "@/lib/utils"
 import { EncabezadoDeReserva } from "./encabezado-de-reserva"
@@ -49,6 +57,12 @@ interface PropsDeFormularioReserva {
    * `lib/gestion-de-cita.ts` usa `node:crypto` y no entra al cliente.
    */
   plazoDeCambios: string
+  /**
+   * El mismo plazo en horas, ya validado (`plazoValido`): si la hora elegida
+   * ya cae dentro, el paso de confirmar avisa que no se podrá cancelar ni
+   * cambiar por el enlace (QA#8).
+   */
+  plazoDeCambiosHoras: number
 }
 
 type Paso = 1 | 2 | 3
@@ -95,6 +109,7 @@ export function FormularioReserva({
   horarios,
   listaDeEsperaActiva,
   plazoDeCambios,
+  plazoDeCambiosHoras,
 }: PropsDeFormularioReserva) {
   const parametros = useSearchParams()
   // `?servicio=<id>&fecha=AAAA-MM-DD` (el enlace del aviso de la lista de
@@ -113,9 +128,15 @@ export function FormularioReserva({
   // no aparece en la lista y se ignora: el servidor igual lo rechazaría.
   const profesionalDeLaUrl = parametros.get("profesional")
   const [profesionales, setProfesionales] = useState<ProfesionalPublico[]>([])
+  // Si ya se leyó el equipo: hasta entonces el calendario usa el horario publicado.
+  const [equipoLeido, setEquipoLeido] = useState(false)
   const [profesionalId, setProfesionalId] = useState<string | null>(profesionalDeLaUrl)
   const [profesionalAsignado, setProfesionalAsignado] = useState<string | null>(null)
   const [enlaceDeGestion, setEnlaceDeGestion] = useState<string | null>(null)
+  // Si la cita quedó dentro del plazo, el enlace ya no la deja cambiar (QA#8).
+  const [sePuedeCambiar, setSePuedeCambiar] = useState(true)
+  // Si el cron alcanza a mandar el recordatorio (N4): lo dice `confirmar`, con la hora del servidor.
+  const [conRecordatorio, setConRecordatorio] = useState(false)
   const [fecha, setFecha] = useState(conFechaDeLaUrl ? fechaDeLaUrl : "")
   const [hora, setHora] = useState("")
   // Con hora valle (#89c), el precio de la hora elegida; `null` si es el de siempre.
@@ -142,8 +163,6 @@ export function FormularioReserva({
   const idDelResumen = useId()
   const idDelError = useId()
 
-  const diasDisponibles = horarios.map((horario) => horario.dayOfWeek)
-
   // El equipo se pide al montar. Si falla, la reserva sigue: sin elegir con
   // quién, el servidor asigna (o es un negocio sin equipo).
   useEffect(() => {
@@ -151,6 +170,7 @@ export function FormularioReserva({
     leerProfesionales(slug).then((resultado) => {
       if (!vigente || !resultado.ok) return
       setProfesionales(resultado.datos)
+      setEquipoLeido(true)
       // Un profesional de la URL que no existe no queda elegido.
       setProfesionalId((actual) => (actual && resultado.datos.some((p) => p.id === actual) ? actual : null))
     })
@@ -181,6 +201,35 @@ export function FormularioReserva({
   }
 
   const servicioIds = seleccionados.map((servicio) => servicio.id)
+  // Los días con atención para estos servicios y este profesional (o
+  // cualquiera), los mismos que la disponibilidad (N3): no se puede elegir un
+  // día que después diga "No hay atención ese día".
+  const diasDisponibles = diasDelCalendarioDeReserva({
+    diasPublicados: horarios.map((horario) => horario.dayOfWeek),
+    equipo: equipoLeido ? profesionales : null,
+    servicioIds,
+    profesionalId,
+  })
+
+  // Si al cambiar de profesional o de servicios el día elegido deja de tener
+  // atención, se limpian el día y la hora, con un aviso: si no, quedaba
+  // elegido un día que el calendario ya no ofrece y que respondía "No hay
+  // atención ese día". Se ajusta al renderizar, cuando cambian los días.
+  const claveDeDias = diasDisponibles.join(",")
+  const [diasAnteriores, setDiasAnteriores] = useState(claveDeDias)
+  const [avisoDelDia, setAvisoDelDia] = useState("")
+  if (claveDeDias !== diasAnteriores) {
+    setDiasAnteriores(claveDeDias)
+    if (elDiaElegidoQuedoSinAtencion(fecha, diasDisponibles)) {
+      setFecha("")
+      elegirHora("", null)
+      setAvisoDelDia(AVISO_DIA_SIN_ATENCION)
+    }
+  }
+  const elegirFecha = (nueva: string) => {
+    setAvisoDelDia("")
+    setFecha(nueva)
+  }
   const claveDeServicios = servicioIds.join(",")
   const cargarHoras = useCallback(
     (dia: string) => leerDisponibilidad(slug, dia, claveDeServicios ? claveDeServicios.split(",") : [], profesionalId),
@@ -213,6 +262,8 @@ export function FormularioReserva({
     if (resultado.ok) {
       setProfesionalAsignado(resultado.datos.profesional?.nombre ?? null)
       setEnlaceDeGestion(resultado.datos.enlaceDeGestion ?? null)
+      setSePuedeCambiar(resultado.datos.sePuedeCambiar !== false)
+      setConRecordatorio(resultado.datos.recibiraRecordatorio === true)
       setCitaId(resultado.datos.citaId)
     }
     else setError(resultado.error)
@@ -260,6 +311,7 @@ export function FormularioReserva({
           />
           <AgregarAlCalendario
             className="mt-7"
+            conRecordatorio={conRecordatorio}
             cita={{
               id: citaId,
               servicio: servicioSeleccionado.name,
@@ -270,7 +322,10 @@ export function FormularioReserva({
               zona,
             }}
           />
-          {enlaceDeGestion && (
+          {enlaceDeGestion && !sePuedeCambiar && (
+            <p className="mt-6 text-sm text-texto-2">{avisoSinCambiosDespuesDeReservar(plazoDeCambiosHoras)}</p>
+          )}
+          {enlaceDeGestion && sePuedeCambiar && (
             <p className="mt-6 text-sm text-texto-2">
               ¿Necesitas cancelar o cambiar la hora?{" "}
               <a href={enlaceDeGestion} className="font-medium text-navy underline underline-offset-4 anillo-foco">
@@ -382,6 +437,9 @@ export function FormularioReserva({
                   />
                 </div>
               )}
+              <p role="status" className={cn("text-sm text-texto-2", avisoDelDia && "mt-6")}>
+                {avisoDelDia}
+              </p>
               <div className="mt-6">
                 <SelectorFechaHora
                   cargarHoras={cargarHoras}
@@ -390,7 +448,7 @@ export function FormularioReserva({
                   zona={zona}
                   fechaSeleccionada={fecha}
                   horaSeleccionada={hora}
-                  onFecha={setFecha}
+                  onFecha={elegirFecha}
                   onHora={elegirHora}
                   sinHoras={
                     listaDeEsperaActiva && servicioSeleccionado
@@ -531,9 +589,16 @@ export function FormularioReserva({
                   precioDeLaHora={precioDeLaHora}
                   profesional={profesionalElegido?.nombre ?? (profesionalesDelServicio.length > 0 ? "Cualquiera disponible" : null)}
                 />
-                <p className="mt-4 border-t border-borde pt-3 text-sm text-texto-2">
-                  {plazoDeCambios}
-                </p>
+                {quedaSinCambiosPorElEnlace(fecha, hora, zona, plazoDeCambiosHoras, new Date()) ? (
+                  // La hora ya está dentro del plazo: se dice antes de confirmar, no después en el enlace.
+                  <p className="mt-4 border-t border-borde pt-3 text-sm font-medium text-navy">
+                    {avisoSinCambiosPorElEnlace(plazoDeCambiosHoras)}
+                  </p>
+                ) : (
+                  <p className="mt-4 border-t border-borde pt-3 text-sm text-texto-2">
+                    {plazoDeCambios}
+                  </p>
+                )}
               </section>
 
               {error && (

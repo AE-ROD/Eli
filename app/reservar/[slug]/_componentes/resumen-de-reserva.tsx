@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 import { formatearMonto } from "@/lib/dinero"
 import { deTexto, formatearDuracionDeServicio } from "@/lib/fechas"
-import type { PrecioDeLaHora } from "@/lib/hora-valle"
+import { rebajaDeLaHora, type PrecioDeLaHora } from "@/lib/hora-valle"
 import { cn } from "@/lib/utils"
 import { fechaParaLeer } from "./selector-fecha-hora"
 import type { ServicioPublico } from "./selector-servicio"
@@ -46,7 +46,7 @@ export function ResumenDeReserva({
   const rebajado =
     precioDeLaHora && precioDeLaHora.precio !== null && precioDeLaHora.precioNormal !== null &&
     precioDeLaHora.precio < precioDeLaHora.precioNormal
-      ? { precio: precioDeLaHora.precio, normal: precioDeLaHora.precioNormal, porcentaje: precioDeLaHora.porcentaje }
+      ? { precio: precioDeLaHora.precio, normal: precioDeLaHora.precioNormal, rebaja: rebajaDeLaHora(precioDeLaHora) }
       : null
   return (
     <dl className={cn("divide-y divide-borde text-sm", className)}>
@@ -65,7 +65,12 @@ export function ResumenDeReserva({
               </s>
               {formatearMonto(rebajado.precio)}
               <span className="mt-0.5 block text-xs font-normal text-texto-2">
-                Hora valle: {rebajado.porcentaje}% menos
+                {/* Con un servicio sin rebaja, el % no es el del total: se dice el monto (QA#14). */}
+                {rebajado.rebaja?.enTodo
+                  ? `Hora valle: ${rebajado.rebaja.porcentaje}% menos`
+                  : rebajado.rebaja
+                    ? `Hora valle: ${formatearMonto(rebajado.rebaja.ahorro)} menos (${rebajado.rebaja.porcentaje}% en parte de los servicios)`
+                    : "Hora valle"}
               </span>
             </>
           ) : (

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react"
+import { Fragment, useCallback, useEffect, useState, useSyncExternalStore } from "react"
 import Link from "next/link"
 import QRCode from "qrcode"
 import { ArrowLeft, Maximize } from "lucide-react"
@@ -181,7 +181,23 @@ export function PantallaDeFila() {
                 )}
               </div>
               <p className="text-xl text-texto-2">Escanea el código o entra a</p>
-              <p className="font-mono text-2xl font-medium break-all lg:text-3xl">{enlaceCorto}</p>
+              {/*
+                Corta después de cada "/" (QA#18): con `break-all` partía a mitad
+                de palabra ("fil / a/salon-demo"). Un tramo que no entra solo
+                igual se corta, como último recurso, para no salirse.
+              */}
+              <p className="font-mono text-2xl font-medium break-words lg:text-3xl">
+                {enlaceCorto.split("/").map((tramo, indice) => (
+                  <Fragment key={indice}>
+                    {indice > 0 && (
+                      <>
+                        /<wbr />
+                      </>
+                    )}
+                    {tramo}
+                  </Fragment>
+                ))}
+              </p>
             </>
           )}
           <p className="mt-auto inline-flex items-center gap-2 pt-4 text-base text-texto-2">

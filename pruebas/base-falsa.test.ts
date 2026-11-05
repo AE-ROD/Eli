@@ -143,6 +143,23 @@ describe("base falsa: NOT, has y _count", () => {
     expect(sinVip.map((c) => c.id)).toEqual(["c2"])
   })
 
+  it("como Postgres, una lista en NULL no sale ni con has ni con su NOT: sólo con equals: null", async () => {
+    // Sin `tags`: la columna no tiene default y queda en NULL, como en la base de verdad.
+    await prisma.customer.create({ data: { id: "c-null", businessId: "n1", name: "Sin etiquetas" } })
+
+    const conVip = await prisma.customer.findMany({ where: { tags: { has: "VIP" } } })
+    const sinVip = await prisma.customer.findMany({ where: { NOT: { tags: { has: "VIP" } } } })
+    const enNull = await prisma.customer.findMany({ where: { tags: { equals: null } } })
+    const vigentes = await prisma.customer.findMany({
+      where: { OR: [{ tags: { equals: null } }, { NOT: { tags: { has: "VIP" } } }] },
+    })
+
+    expect(conVip).toEqual([])
+    expect(sinVip).toEqual([])
+    expect(enNull.map((c) => c.id)).toEqual(["c-null"])
+    expect(vigentes.map((c) => c.id)).toEqual(["c-null"])
+  })
+
   it("_count cuenta los relacionados, con su where", async () => {
     const [atencion] = await prisma.visit.findMany({
       where: { id: "v1" },

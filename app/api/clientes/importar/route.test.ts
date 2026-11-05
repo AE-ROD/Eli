@@ -11,7 +11,7 @@ vi.mock("@/lib/rate-limit", () => ({ verificarLimite: (...args: unknown[]) => mo
 
 vi.mock("@/lib/registro-de-errores", () => ({ registrarError: vi.fn() }))
 
-type Cliente = { businessId: string; phone: string | null; email: string | null; tags: string[] }
+type Cliente = { businessId: string; phone: string | null; email: string | null; tags: string[] | null }
 
 /** Clientes que ya están en la base: dos de este negocio, uno eliminado y uno ajeno. */
 let enLaBase: Cliente[] = []
@@ -24,8 +24,15 @@ let enLaBase: Cliente[] = []
 function cumple(cliente: Cliente, where: Record<string, unknown>): boolean {
   return Object.entries(where).every(([clave, valor]) => {
     if (clave === "AND") return (valor as Record<string, unknown>[]).every((sub) => cumple(cliente, sub))
+    if (clave === "OR") return (valor as Record<string, unknown>[]).some((sub) => cumple(cliente, sub))
     if (clave === "NOT") return !cumple(cliente, valor as Record<string, unknown>)
-    if (clave === "tags") return cliente.tags.includes((valor as { has: string }).has)
+    if (clave === "tags") {
+      const filtro = valor as { has?: string; equals?: null }
+      if ("equals" in filtro) return cliente.tags === null
+      // En SQL, `has` sobre una lista NULL es desconocido: ni ella ni su `NOT` la traen.
+      if (cliente.tags === null) throw new Error("has sobre tags NULL: el filtro debe preguntar antes por equals: null")
+      return cliente.tags.includes(filtro.has as string)
+    }
     if (clave === "businessId") return cliente.businessId === valor
     if (clave === "id") return false
     throw new Error(`where no esperado: ${clave}`)
@@ -96,7 +103,8 @@ beforeEach(() => {
   candados.clear()
   clavesDeCandado.length = 0
   enLaBase = [
-    { businessId: "negocio-1", phone: "9 1111 1111", email: null, tags: [] },
+    // Creado por la reserva pública o "Anotar sin reserva": `tags` en NULL. Igual cuenta como repetido.
+    { businessId: "negocio-1", phone: "9 1111 1111", email: null, tags: null },
     { businessId: "negocio-1", phone: null, email: "Existe@Correo.cl", tags: [] },
     // Eliminado: sin contacto, como lo deja la anonimización.
     { businessId: "negocio-1", phone: null, email: null, tags: [MARCA_DE_CLIENTE_ELIMINADO] },

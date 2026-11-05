@@ -143,15 +143,25 @@ export function desplazarFecha(fecha: Date, unidad: UnidadDeTiempo, pasos: numbe
 }
 
 /**
- * Hora local en formato 24h (`09:05`, `21:30`) a partir de un instante ISO.
- * Es para citas, que son instantes reales; los horarios laborales ya viajan
- * como `"HH:MM"` sin fecha ni zona y no pasan por acá.
+ * Lo que se suma a las opciones de `toLocaleString` / `toLocaleTimeString` en
+ * "es-CL" cuando el texto lleva hora: en ICU, "es-CL" escribe por defecto
+ * 12 horas ("12:00 a. m.") y Eli usa 24 h en todas partes. Es `hourCycle` y no
+ * `hour12: false`, que en algunos motores da "24:05" después de medianoche.
  */
-export function formatearHora(iso: string): string {
+export const HORA_24 = { hourCycle: "h23" } as const
+
+/**
+ * Hora en formato 24h (`09:05`, `21:30`) a partir de un instante ISO, en la
+ * zona del dispositivo o, si se pasa, en `zona` (la del negocio). Es para
+ * citas, cobros y cierres, que son instantes reales; los horarios laborales
+ * ya viajan como `"HH:MM"` sin fecha ni zona y no pasan por acá.
+ */
+export function formatearHora(iso: string, zona?: string): string {
   return new Date(iso).toLocaleTimeString("es-CL", {
+    ...(zona && { timeZone: zona }),
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
+    ...HORA_24,
   })
 }
 

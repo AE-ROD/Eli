@@ -49,7 +49,12 @@ async function reservar(extra: Registro, hora = "10:00") {
   return { status: respuesta.status, cuerpo: await respuesta.json() }
 }
 
-const lucias = () => base.buscar("customer", { name: "Lucía", businessId: NEGOCIO })
+// Una reserva nueva guarda el nombre completo en `name` (N2); una clienta
+// cargada antes puede tenerlo partido en `name` y `lastName`.
+const lucias = () =>
+  base
+    .buscar("customer", { businessId: NEGOCIO })
+    .filter((cliente) => [cliente.name, cliente.lastName].filter(Boolean).join(" ") === "Lucía Pérez")
 
 beforeEach(() => {
   vi.clearAllMocks()

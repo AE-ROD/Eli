@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
           startTime: true,
           endTime: true,
           status: true,
-          customer: { select: { id: true, name: true } },
+          customer: { select: { id: true, name: true, lastName: true } },
           // "Por confirmar" en la lista del día (#84). Con la atención, sólo
           // para saber si el cliente ya llegó (`conAtencion`), como la agenda.
           confirmacionPorFaltas: true,
@@ -113,11 +113,13 @@ export async function GET(request: NextRequest) {
         take: 200,
       }),
       // Sin los eliminados (anonimizados), en las tres: no son clientes del
-      // negocio aunque su fila siga por sus citas y cobros.
-      prisma.customer.count({ where: { businessId, ...clienteNoEliminado } }),
-      prisma.customer.count({ where: { businessId, createdAt: { lt: inicioMes }, ...clienteNoEliminado } }),
+      // negocio aunque su fila siga por sus citas y cobros. En `AND` y no con
+      // spread: `clienteNoEliminado` es un `OR` y un spread pisaría cualquier
+      // otro `OR` que se sume a la consulta (ver `whereDeAgenda`).
+      prisma.customer.count({ where: { AND: [{ businessId }, clienteNoEliminado] } }),
+      prisma.customer.count({ where: { AND: [{ businessId, createdAt: { lt: inicioMes } }, clienteNoEliminado] } }),
       // De qué está hecha la cifra de clientes: cuántos entraron este mes.
-      prisma.customer.count({ where: { businessId, createdAt: { gte: inicioMes }, ...clienteNoEliminado } }),
+      prisma.customer.count({ where: { AND: [{ businessId, createdAt: { gte: inicioMes } }, clienteNoEliminado] } }),
       // La facturación es del negocio: no se calcula siquiera si el actor no
       // puede verla. `atencionesCobradasMes` dice sobre cuántas atenciones
       // está hecha la suma.

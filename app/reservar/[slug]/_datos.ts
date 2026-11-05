@@ -21,6 +21,8 @@ export interface ProfesionalPublico {
   especialidad: string | null
   fotoUrl: string | null
   servicioIds: string[] | null
+  /** Los días de la semana (0 domingo a 6 sábado) en que atiende. */
+  diasConAtencion: number[]
 }
 
 export interface DatosDeReserva {
@@ -67,12 +69,19 @@ export async function leerDisponibilidad(
 ): Promise<Resultado<HorasDelDia>> {
   const consulta = new URLSearchParams({ fecha, servicioIds: servicioIds.join(",") })
   if (profesionalId) consulta.set("profesionalId", profesionalId)
-  const resultado = await pedir<{ slots: string[]; valle?: PrecioDeLaHora[] }>(
+  const resultado = await pedir<{ slots: string[]; valle?: PrecioDeLaHora[]; sinListaDeEspera?: boolean }>(
     `/api/reservar/${encodeURIComponent(slug)}/disponibilidad?${consulta}`,
     "No se pudieron cargar los horarios disponibles"
   )
   return resultado.ok
-    ? { ok: true, datos: { horas: resultado.datos.slots, precios: resultado.datos.valle ?? [] } }
+    ? {
+        ok: true,
+        datos: {
+          horas: resultado.datos.slots,
+          precios: resultado.datos.valle ?? [],
+          sinListaDeEspera: resultado.datos.sinListaDeEspera === true,
+        },
+      }
     : resultado
 }
 
@@ -81,6 +90,10 @@ export interface ReservaConfirmada {
   profesional: { id: string; nombre: string } | null
   /** La ruta para cancelar o reagendar sin cuenta (lleva el token). */
   enlaceDeGestion: string
+  /** `false` si ya quedó dentro del plazo: el enlace no la deja cancelar ni cambiar (QA#8). */
+  sePuedeCambiar?: boolean
+  /** Si va a llegar el recordatorio (N4): se dejó correo y el cron alcanza a mandarlo, con la hora del servidor. */
+  recibiraRecordatorio?: boolean
 }
 
 /**

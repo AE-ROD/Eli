@@ -281,6 +281,26 @@ describe("PUT /api/clientes/[id]", () => {
     expect(base.buscar("customer", { id: "c-maria" })[0]).toMatchObject({ name: "María José", notes: "Viene cada mes" })
   })
 
+  it("al guardar el nombre, queda entero en `name` y el apellido aparte se vacía: no se duplica (\"María González González\")", async () => {
+    const { PUT } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    // El formulario muestra y devuelve `name` + `lastName`.
+    const res = await PUT(pedido(URL_DE_MARIA, { name: "María González" }), conId("c-maria"))
+
+    expect(res.status).toBe(200)
+    expect(base.buscar("customer", { id: "c-maria" })[0]).toMatchObject({ name: "María González", lastName: null })
+  })
+
+  it("sin cambiar el nombre, el apellido aparte queda como estaba", async () => {
+    const { PUT } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    await PUT(pedido(URL_DE_MARIA, { notes: "Prefiere la tarde" }), conId("c-maria"))
+
+    expect(base.buscar("customer", { id: "c-maria" })[0]).toMatchObject({ name: "María", lastName: "González" })
+  })
+
   it("el cuerpo no puede mudar al cliente a otro negocio: `businessId` nunca llega a la base", async () => {
     const { PUT } = await import("./route")
 

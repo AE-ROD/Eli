@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 import { Clock, Timer } from "lucide-react"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { cn } from "@/lib/utils"
+import { formatearTiempoLibre as formatearDuracion } from "@/lib/horario-dia"
 import type { EstadoDeCita } from "@/lib/campos-del-panel"
 
 export interface CitaEnTarjeta {
@@ -113,7 +114,7 @@ export function TarjetaCita({ cita, compacta = false, onClick }: PropsDeTarjetaC
         <span className="min-w-0 flex-1 contain-inline-size">
           <span className="block truncate text-sm font-medium">{cita.nombreCliente}</span>
           <span className="mt-0.5 block truncate text-[13px] text-texto-2">
-            {cita.servicio} · {cita.duracion} min
+            {cita.servicio} · {formatearDuracion(cita.duracion)}
           </span>
         </span>
         <span className="flex shrink-0 flex-col items-end gap-1">
@@ -154,7 +155,7 @@ export function TarjetaCita({ cita, compacta = false, onClick }: PropsDeTarjetaC
         </span>
         <span className="flex items-center gap-1.5">
           <Timer className="size-4" aria-hidden="true" strokeWidth={1.75} />
-          {cita.duracion} minutos
+          {formatearDuracion(cita.duracion)}
         </span>
       </span>
 

@@ -10,13 +10,21 @@ import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { formatearMonto } from "@/lib/dinero"
+import { HORA_24, formatearHora } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
 import { Paginador } from "../../reportes/_componentes/paginador"
 import { cerrarCaja, cuentaEnPantalla, leerCaja, type CierreDeCaja, type Desglose, type EstadoDeCaja } from "../_datos"
 
 /** `20 de octubre, 14:30` en la zona del negocio. */
 function momento(iso: string, zona: string): string {
-  return new Date(iso).toLocaleString("es-CL", { timeZone: zona, day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })
+  return new Date(iso).toLocaleString("es-CL", {
+    timeZone: zona,
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    ...HORA_24,
+  })
 }
 
 /** `lunes 20 de octubre` en la zona del negocio. */
@@ -26,7 +34,7 @@ function dia(iso: string, zona: string): string {
 
 /** `14:30` en la zona del negocio. */
 function hora(iso: string, zona: string): string {
-  return new Date(iso).toLocaleTimeString("es-CL", { timeZone: zona, hour: "2-digit", minute: "2-digit" })
+  return formatearHora(iso, zona)
 }
 
 /** `+$500` / `-$500` / `$0`: la diferencia con su signo, que es lo que se lee primero. */

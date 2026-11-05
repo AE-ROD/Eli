@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest"
-import { ESTADOS_SIN_RECORDATORIO, esDeMañana, fechaYHoraEnElNegocio, ventanaDeBusqueda } from "./recordatorios"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+import {
+  ESTADOS_SIN_RECORDATORIO,
+  HORA_UTC_DEL_CRON,
+  esDeMañana,
+  fechaYHoraEnElNegocio,
+  recibiraRecordatorio,
+  ventanaDeBusqueda,
+} from "./recordatorios"
 
 /** Martes 6 de octubre de 2026, 23:00 en Santiago (UTC-3): en UTC ya es el miércoles. */
 const AHORA = new Date("2026-10-07T02:00:00.000Z")
@@ -48,5 +57,48 @@ describe("fechaYHoraEnElNegocio", () => {
 describe("ESTADOS_SIN_RECORDATORIO", () => {
   it("deja afuera las canceladas, las completadas y las de quien no vino", () => {
     expect([...ESTADOS_SIN_RECORDATORIO].sort()).toEqual(["cancelada", "completada", "no-asistio"])
+  })
+})
+
+describe("recibiraRecordatorio (N4): la pantalla final promete el recordatorio sólo si el cron lo va a enviar", () => {
+  const SANTIAGO = "America/Santiago"
+  // Noviembre en Santiago: UTC-3. El cron corre a las 13:00 UTC, las 10:00.
+  const enSantiago = (fechaYHora: string) => new Date(`${fechaYHora}:00.000-03:00`)
+
+  it("reservar a las 22:40 para el día siguiente: la corrida de ese día ya pasó, no llega", () => {
+    expect(recibiraRecordatorio(enSantiago("2026-11-05T15:00"), enSantiago("2026-11-04T22:40"), SANTIAGO)).toBe(false)
+  })
+
+  it("reservar antes de la corrida para el día siguiente: llega", () => {
+    expect(recibiraRecordatorio(enSantiago("2026-11-05T15:00"), enSantiago("2026-11-04T08:00"), SANTIAGO)).toBe(true)
+  })
+
+  it("justo después de la corrida, para mañana: no llega", () => {
+    expect(recibiraRecordatorio(enSantiago("2026-11-05T09:00"), enSantiago("2026-11-04T10:01"), SANTIAGO)).toBe(false)
+  })
+
+  it("para hoy: nunca llega", () => {
+    expect(recibiraRecordatorio(enSantiago("2026-11-04T18:00"), enSantiago("2026-11-04T08:00"), SANTIAGO)).toBe(false)
+  })
+
+  it("para pasado mañana o más adelante: llega con la corrida del día antes", () => {
+    expect(recibiraRecordatorio(enSantiago("2026-11-06T09:00"), enSantiago("2026-11-04T22:40"), SANTIAGO)).toBe(true)
+    expect(recibiraRecordatorio(enSantiago("2027-01-20T09:00"), enSantiago("2026-11-04T22:40"), SANTIAGO)).toBe(true)
+  })
+
+  it("coincide con lo que haría el cron: la corrida que la ve como de mañana es posterior a la reserva", () => {
+    const inicio = enSantiago("2026-11-06T09:00")
+    const corridaDelDiaAntes = new Date(Date.UTC(2026, 10, 5, HORA_UTC_DEL_CRON))
+    expect(esDeMañana(inicio, corridaDelDiaAntes, SANTIAGO)).toBe(true)
+    expect(recibiraRecordatorio(inicio, new Date(corridaDelDiaAntes.getTime() - 1), SANTIAGO)).toBe(true)
+    expect(recibiraRecordatorio(inicio, corridaDelDiaAntes, SANTIAGO)).toBe(false)
+  })
+
+  it("HORA_UTC_DEL_CRON es la del cron de recordatorios en vercel.json", () => {
+    const vercel = JSON.parse(readFileSync(join(process.cwd(), "vercel.json"), "utf8")) as {
+      crons: { path: string; schedule: string }[]
+    }
+    const cron = vercel.crons.find((entrada) => entrada.path === "/api/cron/recordatorios")
+    expect(cron?.schedule).toBe(`0 ${HORA_UTC_DEL_CRON} * * *`)
   })
 })

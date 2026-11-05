@@ -7,7 +7,7 @@ import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
 import { Esqueleto } from "@/components/comunes/esqueleto"
 import { formatearMonto } from "@/lib/dinero"
 import { comoTexto, deTexto } from "@/lib/fechas"
-import type { PrecioDeLaHora } from "@/lib/hora-valle"
+import { rebajaDeLaHora, type PrecioDeLaHora } from "@/lib/hora-valle"
 import { esDiaReservable } from "@/lib/reserva-publica"
 import { fechaYMinutosEn } from "@/lib/zona-horaria"
 import type { Resultado } from "@/lib/peticiones"
@@ -44,12 +44,24 @@ const ELEGIDO = "bg-azul font-semibold text-navy inset-ring-2 inset-ring-navy"
 export interface HorasDelDia {
   horas: string[]
   precios: PrecioDeLaHora[]
+  /**
+   * El día no tiene ninguna hora que se pueda liberar (cerrado, bloqueado
+   * entero o ya pasado): no se ofrece la lista de espera (QA#26).
+   */
+  sinListaDeEspera?: boolean
 }
 
-/** "−20%" sólo cuando la hora de verdad baja el precio. */
-function textoDeRebaja(precio: PrecioDeLaHora): string | null {
-  const baja = precio.precio !== null && precio.precioNormal !== null && precio.precio < precio.precioNormal
-  return baja && precio.porcentaje > 0 ? `−${precio.porcentaje}%` : null
+/**
+ * "−20%" sólo cuando la hora de verdad baja el precio, y el % entero. Si el %
+ * rebaja sólo parte de los servicios (uno está excluido), el monto ahorrado:
+ * "−$1.600" (QA#14). `lectura` es lo mismo para el lector de pantalla.
+ */
+function textoDeRebaja(precio: PrecioDeLaHora): { corto: string; lectura: string } | null {
+  const rebaja = rebajaDeLaHora(precio)
+  if (!rebaja) return null
+  return rebaja.enTodo
+    ? { corto: `−${rebaja.porcentaje}%`, lectura: `${rebaja.porcentaje}% menos` }
+    : { corto: `−${formatearMonto(rebaja.ahorro)}`, lectura: `${formatearMonto(rebaja.ahorro)} menos` }
 }
 
 interface PropsDeSelectorFechaHora {
@@ -97,6 +109,7 @@ export function SelectorFechaHora({
   })
   const [horasLibres, setHorasLibres] = useState<string[]>([])
   const [precios, setPrecios] = useState<Map<string, PrecioDeLaHora>>(new Map())
+  const [sinListaDeEspera, setSinListaDeEspera] = useState(false)
   const [cargandoHoras, setCargandoHoras] = useState(false)
   const [aviso, setAviso] = useState("")
   const idDelAviso = useId()
@@ -107,6 +120,7 @@ export function SelectorFechaHora({
     setCargandoHoras(true)
     setHorasLibres([])
     setPrecios(new Map())
+    setSinListaDeEspera(false)
     setAviso("")
     onHora("", null)
     let vigente = true
@@ -118,6 +132,7 @@ export function SelectorFechaHora({
       if (resultado.ok) {
         setHorasLibres(resultado.datos.horas)
         setPrecios(new Map(resultado.datos.precios.map((precio) => [precio.hora, precio])))
+        setSinListaDeEspera(resultado.datos.sinListaDeEspera === true)
       } else setAviso(resultado.error)
       setCargandoHoras(false)
     })
@@ -138,6 +153,8 @@ export function SelectorFechaHora({
   const nombreDelMes = `${MESES[mesActual.getMonth()]} ${mesActual.getFullYear()}`
 
   // Qué muestra la columna de horarios. Todo sale del estado de arriba.
+  // La lista de espera, sólo si el día tiene alguna hora que se pueda liberar.
+  const ofrecerSinHoras = sinHoras && !sinListaDeEspera ? sinHoras : undefined
   const estadoDeHoras = !fechaSeleccionada
     ? "sin-dia"
     : cargandoHoras
@@ -239,7 +256,7 @@ export function SelectorFechaHora({
             {estadoDeHoras === "sin-dia" && "Elige un día para ver los horarios libres."}
             {estadoDeHoras === "cargando" && "Cargando horarios…"}
             {estadoDeHoras === "sin-horas" &&
-              (sinHoras ? "No hay horarios disponibles para este día." : "No hay horarios disponibles para este día. Prueba con otro.")}
+              (ofrecerSinHoras ? "No hay horarios disponibles para este día." : "No hay horarios disponibles para este día. Prueba con otro.")}
             {estadoDeHoras === "con-horas" &&
               `${horasLibres.length} ${horasLibres.length === 1 ? "horario libre" : "horarios libres"}.`}
           </p>
@@ -258,7 +275,7 @@ export function SelectorFechaHora({
             </div>
           )}
 
-          {estadoDeHoras === "sin-horas" && sinHoras && <div className="mt-4">{sinHoras(fechaSeleccionada)}</div>}
+          {estadoDeHoras === "sin-horas" && ofrecerSinHoras && <div className="mt-4">{ofrecerSinHoras(fechaSeleccionada)}</div>}
 
           {estadoDeHoras === "con-horas" && (
             <div role="group" aria-label="Horarios libres" className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-3">
@@ -274,7 +291,7 @@ export function SelectorFechaHora({
                     onClick={() => onHora(hora, precio)}
                     aria-label={
                       precio && precio.precio !== null
-                        ? `${hora}, ${formatearMonto(precio.precio)}${rebaja ? `, ${precio.porcentaje}% menos` : ""}`
+                        ? `${hora}, ${formatearMonto(precio.precio)}${rebaja ? `, ${rebaja.lectura}` : ""}`
                         : undefined
                     }
                     className={cn(
@@ -289,7 +306,7 @@ export function SelectorFechaHora({
                     {precio && precio.precio !== null && (
                       <span aria-hidden="true" className="text-xs font-normal text-texto-2">
                         {formatearMonto(precio.precio)}
-                        {rebaja && <span className="ml-1 rounded-sm bg-lima-suave px-1 font-semibold text-navy">{rebaja}</span>}
+                        {rebaja && <span className="ml-1 rounded-sm bg-lima-suave px-1 font-semibold text-navy">{rebaja.corto}</span>}
                       </span>
                     )}
                   </button>

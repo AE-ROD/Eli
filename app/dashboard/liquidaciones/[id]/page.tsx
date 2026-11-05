@@ -10,6 +10,7 @@ import { nombreDeMedio } from "@/lib/medios-de-pago"
 import { actorDeSesion, puedeAnularLiquidacion, puedePagarLiquidacion, puedeVerLiquidacionesDelEquipo } from "@/lib/permisos"
 import { fechaParaLeer } from "@/lib/periodos-de-liquidacion"
 import { cn } from "@/lib/utils"
+import { HORA_24 } from "@/lib/fechas"
 import { AccionesDelComprobante } from "../_componentes/acciones-del-comprobante"
 import { FilaDeTotal, InsigniaDeEstado, pesos, porcentaje } from "../_componentes/piezas"
 
@@ -31,7 +32,7 @@ const IMPRESION = `
 `
 
 const momento = (iso: string, zona: string) =>
-  new Date(iso).toLocaleString("es-CL", { timeZone: zona, dateStyle: "medium", timeStyle: "short" })
+  new Date(iso).toLocaleString("es-CL", { timeZone: zona, dateStyle: "medium", timeStyle: "short", ...HORA_24 })
 
 const CELDA = "py-2 pr-3 align-top"
 const CABECERA = "py-2 pr-3 text-left text-xs font-medium uppercase tracking-[0.04em] text-texto-2"
@@ -55,6 +56,10 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
 
   const zona = detalle.zona
   const t = detalle.totales
+  // Anulada: lo que incluía volvió a quedar pendiente (por eso ya no se
+  // listan servicios) y no se paga. Los montos de cuando se cerró se ven
+  // tachados y el total a pagar queda en $0 (QA#13).
+  const anulada = detalle.estado === "anulada"
   const volverA = puedeVerLiquidacionesDelEquipo(actor) ? "/dashboard/liquidaciones" : "/dashboard/mi-plata"
 
   return (
@@ -69,7 +74,11 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
           <AccionesDelComprobante
             id={detalle.id}
             estado={detalle.estado}
-            resumen={`Liquidación de ${detalle.miembro}, ${detalle.texto}: ${pesos(t.totalCents)}`}
+            resumen={
+              anulada
+                ? `Liquidación de ${detalle.miembro}, ${detalle.texto}: anulada`
+                : `Liquidación de ${detalle.miembro}, ${detalle.texto}: ${pesos(t.totalCents)}`
+            }
             volverA={volverA}
             puedePagar={puedePagarLiquidacion(actor)}
             puedeAnular={puedeAnularLiquidacion(actor)}
@@ -126,7 +135,12 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
             <h3 id="titulo-servicios" className="font-medium">
               Servicios y productos
             </h3>
-            {detalle.lineas.length === 0 ? (
+            {anulada && detalle.lineas.length === 0 ? (
+              <p className="text-sm text-texto-2">
+                Anulada: los servicios, productos, propinas y movimientos que incluía volvieron a quedar pendientes para
+                la próxima liquidación.
+              </p>
+            ) : detalle.lineas.length === 0 ? (
               <p className="text-sm text-texto-2">No incluye servicios ni productos.</p>
             ) : (
               <div className="overflow-x-auto">
@@ -214,12 +228,23 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
               Totales
             </h3>
             <dl className="ml-auto max-w-sm space-y-2">
-              <FilaDeTotal concepto="Comisión por servicios" centavos={t.comisionServiciosCents} />
-              {t.comisionProductosCents !== 0 && <FilaDeTotal concepto="Comisión por productos" centavos={t.comisionProductosCents} />}
-              {t.propinasCents !== 0 && <FilaDeTotal concepto="Propinas" centavos={t.propinasCents} />}
-              {t.adelantosCents !== 0 && <FilaDeTotal concepto="Adelantos y vales" centavos={-t.adelantosCents} />}
-              {t.ajustesCents !== 0 && <FilaDeTotal concepto="Ajustes" centavos={t.ajustesCents} />}
-              <FilaDeTotal concepto="Total a pagar" centavos={t.totalCents} fuerte />
+              <FilaDeTotal concepto="Comisión por servicios" centavos={t.comisionServiciosCents} tachado={anulada} />
+              {t.comisionProductosCents !== 0 && (
+                <FilaDeTotal concepto="Comisión por productos" centavos={t.comisionProductosCents} tachado={anulada} />
+              )}
+              {t.propinasCents !== 0 && <FilaDeTotal concepto="Propinas" centavos={t.propinasCents} tachado={anulada} />}
+              {t.adelantosCents !== 0 && (
+                <FilaDeTotal concepto="Adelantos y vales" centavos={-t.adelantosCents} tachado={anulada} />
+              )}
+              {t.ajustesCents !== 0 && <FilaDeTotal concepto="Ajustes" centavos={t.ajustesCents} tachado={anulada} />}
+              {anulada ? (
+                <>
+                  <FilaDeTotal concepto="Total al cerrarse" centavos={t.totalCents} tachado />
+                  <FilaDeTotal concepto="Total a pagar (anulada)" centavos={0} fuerte />
+                </>
+              ) : (
+                <FilaDeTotal concepto="Total a pagar" centavos={t.totalCents} fuerte />
+              )}
             </dl>
           </section>
 

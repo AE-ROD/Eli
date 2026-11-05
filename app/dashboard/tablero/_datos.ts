@@ -9,6 +9,7 @@
  * HTTP se traducen acá: la pantalla decide por el motivo, no por el número.
  */
 
+import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import type { EstadoActivo, PagoPedido } from "@/lib/atenciones"
 import type { LineaGuardada, LineaPedida, PropinaPedida, ReservaDeOrigen } from "@/lib/acciones-del-tablero"
 import { rangoDelDia, zonaDelDispositivo } from "@/lib/fechas"
@@ -198,7 +199,7 @@ export async function buscarClientes(texto: string): Promise<Resultado<ClienteEn
     datos: resultado.datos.clientes.map((cliente) => ({
       id: cliente.id,
       // Nombre y apellido, como queda escrito en la atención: "María González".
-      nombre: [cliente.name, cliente.lastName].filter(Boolean).join(" "),
+      nombre: nombreCompletoDeCliente(cliente),
       // El teléfono como se lee en todo el panel ("+56 9 1234 5678"), no como se guarda.
       detalle: mostrarTelefono(cliente.phone) || cliente.email || "",
     })),

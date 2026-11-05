@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { enviarConfirmacionCliente, enviarAvisoProfesional } from "@/lib/email"
+import { dentroDelPlazo, plazoValido } from "@/lib/gestion-de-cita"
 import { reservaSchema } from "@/lib/validaciones"
 import {
   asignarCandidatoLibre,
@@ -27,6 +28,7 @@ import {
   type ServicioDeLaReserva,
 } from "@/lib/servicios-de-la-reserva"
 import { existeLaHora, instanteEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
+import { recibiraRecordatorio } from "@/lib/recordatorios"
 import {
   MAX_RESERVAS_FUTURAS_POR_CONTACTO,
   MAX_RESERVAS_PUBLICAS_POR_DIA,
@@ -195,12 +197,19 @@ async function reservar(
   if (!cliente) {
     cliente = await tx.customer.create({
       data: {
-        name: datos.nombre,
-        lastName: datos.apellido,
+        // Nombre completo en `name`, como el resto de la app (panel, anotar
+        // sin reserva): Clientes muestra y busca por `name`, y con el
+        // apellido aparte "Peñaloza" no encontraba a nadie (N2).
+        // `esElMismoCliente` compara `name` + `lastName`, así que da igual
+        // para reutilizarlo después.
+        name: `${datos.nombre} ${datos.apellido}`.trim(),
+        lastName: null,
         cedula: datos.cedula || null,
         email,
         // Ya en E.164 (`telefonoChileno` en `reservaSchema`).
         phone: datos.telefono ?? null,
+        // Explícito: la columna no tiene default y quedaba en NULL (ver `clienteNoEliminado`).
+        tags: [],
         ...consentimiento,
         ...consentimientoPromocional,
         businessId: negocioId,
@@ -445,6 +454,13 @@ export async function POST(
       return NextResponse.json({ error: resultado.error }, { status: resultado.status })
     }
     const cita = resultado.cita
+    // Si al reservar ya quedó dentro del plazo, el enlace no la dejará
+    // cancelar ni cambiar: ni la pantalla ni el correo lo ofrecen (QA#8).
+    const sePuedeCambiar = dentroDelPlazo(startTime, negocio.cancelacionHorasAntes, ahora)
+    // Si el recordatorio va a llegar (N4): sólo con correo, y si el cron
+    // alcanza a mandarlo, con la hora del servidor y no la del navegador
+    // (reservando tarde para mañana, no).
+    const conRecordatorio = normalizarEmail(datos.email) !== null && recibiraRecordatorio(startTime, ahora, zona)
 
     // Referidos (`docs/PRODUCTO.md`, sección 4): la primera reserva pública de
     // un negocio invitado le suma días a la prueba de quien lo invitó. Va
@@ -483,7 +499,8 @@ export async function POST(
           duracion: resumen.duracion,
           profesional: profesional?.nombre ?? null,
           enlaceDeGestion: `${baseUrl}${rutaDeGestion}`,
-          plazoHoras: negocio.cancelacionHorasAntes,
+          plazoHoras: plazoValido(negocio.cancelacionHorasAntes),
+          sePuedeCambiar,
           // El correo sí lo dice: el local la confirmará (#84).
           porConfirmar: cita.confirmacionPorFaltas,
         }).catch(() => null)
@@ -522,6 +539,8 @@ export async function POST(
       {
         citaId: cita.id,
         enlaceDeGestion: rutaDeGestion,
+        sePuedeCambiar,
+        recibiraRecordatorio: conRecordatorio,
         profesional: profesional ? { id: profesional.id, nombre: profesional.nombre } : null,
         mensaje: "Reserva confirmada",
       },

@@ -109,17 +109,19 @@ describe("disponibilidad con hora valle", () => {
     escenario({ activa: false })
     const { status, cuerpo } = await horas("servicioIds=s-corte")
     expect(status).toBe(200)
-    expect(cuerpo).toEqual({ slots: ["09:00", "10:00", "11:00", "12:00"] })
+    expect(cuerpo).toEqual({ slots: ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00"] })
   })
 
   it("encendida: `slots` igual y `valle` con las horas rebajadas y su precio", async () => {
     escenario()
     const { cuerpo } = await horas("servicioIds=s-corte")
-    expect(cuerpo.slots).toEqual(["09:00", "10:00", "11:00", "12:00"])
+    expect(cuerpo.slots).toEqual(["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00"])
     // La franja del otro negocio (9:00, 50%) no cuenta acá.
     expect(cuerpo.valle).toEqual([
       { hora: "10:00", precio: 6400, precioNormal: 8000, porcentaje: 20 },
+      { hora: "10:30", precio: 6400, precioNormal: 8000, porcentaje: 20 },
       { hora: "11:00", precio: 6400, precioNormal: 8000, porcentaje: 20 },
+      { hora: "11:30", precio: 6400, precioNormal: 8000, porcentaje: 20 },
     ])
   })
 
@@ -127,10 +129,14 @@ describe("disponibilidad con hora valle", () => {
     escenario()
     expect((await horas("servicioIds=s-color")).cuerpo.valle).toBeUndefined()
     expect((await horas("servicioIds=s-peinado")).cuerpo.valle).toBeUndefined()
-    // Corte + Color (120 min, de 9:00 u 11:00): sólo baja el corte.
+    // Corte + Color (120 min, de 9:00 a 11:00 cada media hora): sólo baja el corte.
     const { cuerpo } = await horas("servicioIds=s-corte,s-color")
-    expect(cuerpo.slots).toEqual(["09:00", "11:00"])
-    expect(cuerpo.valle).toEqual([{ hora: "11:00", precio: 31400, precioNormal: 33000, porcentaje: 20 }])
+    expect(cuerpo.slots).toEqual(["09:00", "09:30", "10:00", "10:30", "11:00"])
+    expect(cuerpo.valle).toEqual([
+      { hora: "10:00", precio: 31400, precioNormal: 33000, porcentaje: 20 },
+      { hora: "10:30", precio: 31400, precioNormal: 33000, porcentaje: 20 },
+      { hora: "11:00", precio: 31400, precioNormal: 33000, porcentaje: 20 },
+    ])
   })
 })
 
@@ -211,10 +217,12 @@ describe("reagendar por el enlace con hora valle", () => {
   it("las horas con otro precio vienen en `precios`, para mostrarlo antes de confirmar", async () => {
     escenario({ appointment: [cita("09:00", 8000)], appointmentService: [fila(8000)] })
     const cuerpo = await horasParaReagendar()
-    expect(cuerpo.slots).toEqual(["09:00", "10:00", "11:00", "12:00"])
+    expect(cuerpo.slots).toEqual(["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00"])
     expect(cuerpo.precios).toEqual([
       { hora: "10:00", precio: 6400, precioNormal: 8000, porcentaje: 20 },
+      { hora: "10:30", precio: 6400, precioNormal: 8000, porcentaje: 20 },
       { hora: "11:00", precio: 6400, precioNormal: 8000, porcentaje: 20 },
+      { hora: "11:30", precio: 6400, precioNormal: 8000, porcentaje: 20 },
     ])
   })
 
@@ -236,6 +244,7 @@ describe("reagendar por el enlace con hora valle", () => {
     escenario({ appointment: [cita("10:00", 6400)], appointmentService: [fila(6400)] })
     expect((await horasParaReagendar()).precios).toEqual([
       { hora: "09:00", precio: 8000, precioNormal: 6400, porcentaje: 0 },
+      { hora: "09:30", precio: 8000, precioNormal: 6400, porcentaje: 0 },
       { hora: "12:00", precio: 8000, precioNormal: 6400, porcentaje: 0 },
     ])
     await reagendar("11:00")
@@ -249,8 +258,11 @@ describe("reagendar por el enlace con hora valle", () => {
     // Todas las horas tienen otro precio que el guardado: se avisa en cada una.
     expect((await horasParaReagendar()).precios).toEqual([
       { hora: "09:00", precio: 8000, precioNormal: 6000, porcentaje: 0 },
+      { hora: "09:30", precio: 8000, precioNormal: 6000, porcentaje: 0 },
       { hora: "10:00", precio: 6400, precioNormal: 6000, porcentaje: 20 },
+      { hora: "10:30", precio: 6400, precioNormal: 6000, porcentaje: 20 },
       { hora: "11:00", precio: 6400, precioNormal: 6000, porcentaje: 20 },
+      { hora: "11:30", precio: 6400, precioNormal: 6000, porcentaje: 20 },
       { hora: "12:00", precio: 8000, precioNormal: 6000, porcentaje: 0 },
     ])
     await reagendar("12:00")

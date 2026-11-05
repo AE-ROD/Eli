@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
       notes: true,
       price: true,
       customerId: true,
-      customer: { select: { id: true, name: true, email: true, phone: true } },
+      customer: { select: { id: true, name: true, lastName: true, email: true, phone: true } },
       memberId: true,
       member: { select: { id: true, role: true, user: { select: { id: true, name: true } } } },
       // "Por confirmar" en la agenda (#84).
@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
         businessId: actor.businessId,
       },
       include: {
-        customer: { select: { id: true, name: true, email: true, phone: true } },
+        customer: { select: { id: true, name: true, lastName: true, email: true, phone: true } },
         member: { select: { id: true, role: true, user: { select: { id: true, name: true } } } },
       },
     })

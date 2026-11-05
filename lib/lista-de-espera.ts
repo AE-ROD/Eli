@@ -2,7 +2,7 @@ import { createHmac, hkdfSync, randomUUID } from "node:crypto"
 import { after } from "next/server"
 import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { candidatosDeLaReserva, horasLibresDelDia } from "@/lib/agenda-publica"
+import { candidatosDeLaReserva, horasLibresDelDia, horasPosiblesEnElNegocio } from "@/lib/agenda-publica"
 import { enviarAvisoListaDeEspera } from "@/lib/email"
 import {
   AVISOS_POR_EVENTO_LISTA_DE_ESPERA,
@@ -157,7 +157,7 @@ export async function inscribirEnListaDeEspera(
   ahora = new Date()
 ): Promise<ResultadoDeInscripcion> {
   const email = normalizarEmail(datos.email)
-  if (!email) return { tipo: "rechazada", error: "Falta el email" }
+  if (!email) return { tipo: "rechazada", error: "Falta el correo" }
 
   const servicio = await prisma.service.findFirst({
     where: { id: datos.servicioId, businessId: negocio.id, active: true },
@@ -180,19 +180,35 @@ export async function inscribirEnListaDeEspera(
   })
   if (reserva.tipo === "profesional-no-disponible") return { tipo: "no-encontrada" }
 
-  // Un día sin atención nunca va a liberar una hora; uno con horas libres no
-  // necesita lista. Es la misma cuenta que hace `disponibilidad`.
+  // Uno con horas libres no necesita lista. Es la misma cuenta que hace
+  // `disponibilidad`.
   const candidatos = reserva.candidatos.filter((candidato) => candidato.franjas.length > 0)
-  if (candidatos.length === 0) return { tipo: "rechazada", error: MENSAJE_SIN_ATENCION }
-  const libres = await horasLibresDelDia(prisma, {
+  const libres =
+    candidatos.length > 0
+      ? await horasLibresDelDia(prisma, {
+          businessId: negocio.id,
+          zona,
+          fecha: datos.fecha,
+          duracion: servicio.duration,
+          candidatos,
+          ahora,
+        })
+      : []
+  if (libres.length > 0) return { tipo: "rechazada", error: MENSAJE_HAY_HORAS }
+  // Un día sin atención, bloqueado entero o con todas sus horas ya pasadas
+  // nunca va a liberar una hora (QA#26). Se mira a nivel del negocio, no del
+  // profesional elegido: si no, este rechazo distinguía un día bloqueado sólo
+  // para esa persona (vacaciones, licencia) de uno lleno, y dejaba deducir su
+  // agenda personal (`horasPosiblesEnElNegocio`).
+  const delNegocio = await horasPosiblesEnElNegocio(prisma, {
     businessId: negocio.id,
-    zona,
+    serviceIds: [servicio.id],
     fecha: datos.fecha,
+    zona,
     duracion: servicio.duration,
-    candidatos,
     ahora,
   })
-  if (libres.length > 0) return { tipo: "rechazada", error: MENSAJE_HAY_HORAS }
+  if (delNegocio !== "con-horas-posibles") return { tipo: "rechazada", error: MENSAJE_SIN_ATENCION }
 
   const esperaId = randomUUID()
   const tokenHash = hashDeToken(tokenDeInscripcion(esperaId))
