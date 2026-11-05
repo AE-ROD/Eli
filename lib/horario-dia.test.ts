@@ -226,3 +226,19 @@ describe("horaAMinutos", () => {
     expect(minutosAHora(horaAMinutos("07:05"))).toBe("07:05")
   })
 })
+
+describe("citas que no ocupan su horario (#97)", () => {
+  const conEstado = (id: string, inicio: string, fin: string, status: string): CitaDelDia => ({ ...cita(id, inicio, fin), status })
+  const franja = { startTime: "09:00", endTime: "12:00" }
+
+  it.each(["no-asistio", "cancelada"])("una %s no se dibuja ni tapa un hueco", (status) => {
+    const citas = [cita("activa", "09:00", "10:00"), conEstado("libera", "10:00", "11:00", status)]
+
+    expect(idsDeCitasEnSegmentos(segmentosDeFranja(franja, citas))).toEqual(["activa"])
+    expect(minutosLibresEnFranjas([franja], citas)).toBe(120)
+  })
+
+  it("una de \"No vino\" fuera del horario tampoco sale como fuera de franjas", () => {
+    expect(citasFueraDeFranjas([franja], [conEstado("tarde", "18:00", "19:00", "no-asistio")])).toEqual([])
+  })
+})
