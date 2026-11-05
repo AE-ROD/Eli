@@ -54,14 +54,20 @@ const ANCHO_DE_COLUMNA = "w-68 shrink-0 snap-start md:w-auto md:min-w-[196px] md
 /**
  * Cuando las columnas no entran (QA#17: un escritorio de 1126 px con la barra
  * lateral dejaba "Finalizado" afuera sin que se notara), un degradado en el
- * borde que tiene más y, con mouse, una flecha que desplaza una columna. La
+ * borde que tiene más y, con mouse, dos flechas que desplazan una columna. La
  * barra de desplazamiento sola no alcanza: en macOS no se ve hasta que se
  * desplaza. Los degradados van sobre el borde de la caja, que llega hasta el
  * borde del contenido (por eso el mismo margen negativo).
+ *
+ * Las flechas van en una fila propia sobre el tablero, no encima de las
+ * columnas: flotando sobre el borde tapaban el título y el contador de la
+ * columna de debajo ("Por cobrar" a 1126 px). La fila existe sólo mientras
+ * hay desborde, que no cambia al desplazarse (siempre queda algún lado con
+ * columnas afuera), así que el tablero no salta al usarlas.
  */
 const DEGRADADO = "pointer-events-none absolute top-0 bottom-3 z-10 w-12 from-crema to-transparent transition-opacity duration-200 ease-suave"
 const FLECHA =
-  "pointer-events-auto absolute top-3 z-20 hidden size-10 place-items-center rounded-full bg-tarjeta text-navy shadow-md squircle transition-opacity duration-200 ease-suave hover:bg-superficie md:grid"
+  "grid size-9 place-items-center rounded-full bg-tarjeta text-navy shadow-sm squircle transition-opacity duration-200 ease-suave enabled:hover:bg-superficie disabled:opacity-40"
 
 /** Qué lados de la caja tienen columnas fuera de la vista. */
 interface Desborde {
@@ -384,92 +390,96 @@ export function TableroDeColumnas({
     },
   })
 
+  const hayDesborde = desborde.izquierda || desborde.derecha
+
   return (
-    <div className="relative">
-      <div aria-hidden="true" className={cn(DEGRADADO, "-left-4 bg-linear-to-r sm:-left-6", desborde.izquierda ? "opacity-100" : "opacity-0")} />
-      <div aria-hidden="true" className={cn(DEGRADADO, "-right-4 bg-linear-to-l sm:-right-6", desborde.derecha ? "opacity-100" : "opacity-0")} />
+    <div>
       {/*
         Para el mouse: con teclado el foco ya desplaza la caja hasta la
         tarjeta, y en el teléfono se desliza con el dedo. Por eso fuera del
         orden de Tab y escondidas del lector de pantalla.
       */}
-      {desborde.izquierda && (
-        <button
-          type="button"
-          tabIndex={-1}
-          aria-hidden="true"
-          title="Ver las columnas de la izquierda"
-          onClick={() => desplazar(-1)}
-          className={cn(FLECHA, "-left-2 sm:-left-3")}
-        >
-          <ChevronLeft className="size-5" strokeWidth={2} />
-        </button>
+      {hayDesborde && (
+        <div aria-hidden="true" className="mb-2 hidden justify-end gap-2 md:flex">
+          <button
+            type="button"
+            tabIndex={-1}
+            title="Ver las columnas de la izquierda"
+            disabled={!desborde.izquierda}
+            onClick={() => desplazar(-1)}
+            className={FLECHA}
+          >
+            <ChevronLeft className="size-5" strokeWidth={2} />
+          </button>
+          <button
+            type="button"
+            tabIndex={-1}
+            title="Ver las columnas de la derecha"
+            disabled={!desborde.derecha}
+            onClick={() => desplazar(1)}
+            className={FLECHA}
+          >
+            <ChevronRight className="size-5" strokeWidth={2} />
+          </button>
+        </div>
       )}
-      {desborde.derecha && (
-        <button
-          type="button"
-          tabIndex={-1}
-          aria-hidden="true"
-          title="Ver las columnas de la derecha"
-          onClick={() => desplazar(1)}
-          className={cn(FLECHA, "-right-2 sm:-right-3")}
-        >
-          <ChevronRight className="size-5" strokeWidth={2} />
-        </button>
-      )}
-      <div ref={contenedor} className={CONTENEDOR}>
-        {COLUMNAS_DEL_TABLERO.map(({ id: columna, titulo }) => {
-          const propsDeColumna = {
-            id: columna,
-            titulo,
-            vacio: VACIO[columna],
-            destinoValido: destinos.includes(columna),
-            arrastrando: arrastrada !== null,
-            encima: encima === columna,
-            ...eventosDeColumna(columna),
-          }
+      <div className="relative">
+        <div aria-hidden="true" className={cn(DEGRADADO, "-left-4 bg-linear-to-r sm:-left-6", desborde.izquierda ? "opacity-100" : "opacity-0")} />
+        <div aria-hidden="true" className={cn(DEGRADADO, "-right-4 bg-linear-to-l sm:-right-6", desborde.derecha ? "opacity-100" : "opacity-0")} />
+        <div ref={contenedor} className={CONTENEDOR}>
+          {COLUMNAS_DEL_TABLERO.map(({ id: columna, titulo }) => {
+            const propsDeColumna = {
+              id: columna,
+              titulo,
+              vacio: VACIO[columna],
+              destinoValido: destinos.includes(columna),
+              arrastrando: arrastrada !== null,
+              encima: encima === columna,
+              ...eventosDeColumna(columna),
+            }
 
-          if (columna === "reservas") {
+            if (columna === "reservas") {
+              return (
+                <Columna key={columna} cantidad={tablero.reservas.length} {...propsDeColumna}>
+                  {tablero.reservas.map((reserva) => (
+                    <TarjetaDeReserva
+                      key={reserva.id}
+                      reserva={reserva}
+                      quien={nombresDeReservas.get(reserva.id) ?? reserva.cliente?.nombre ?? "Sin cliente"}
+                      atrasada={estaAtrasada(reserva.inicio, ahora)}
+                      enCurso={enCurso.has(reserva.id)}
+                      arrastre={arrastreDe({ tipo: "reserva", reserva }, reserva.id)}
+                      onLlego={() => onLlego(reserva)}
+                      onNoVino={() => onNoVino(reserva)}
+                    />
+                  ))}
+                </Columna>
+              )
+            }
+
+            const atenciones = atencionesDeColumna(tablero.atenciones, columna)
             return (
-              <Columna key={columna} cantidad={tablero.reservas.length} {...propsDeColumna}>
-                {tablero.reservas.map((reserva) => (
-                  <TarjetaDeReserva
-                    key={reserva.id}
-                    reserva={reserva}
-                    quien={nombresDeReservas.get(reserva.id) ?? reserva.cliente?.nombre ?? "Sin cliente"}
-                    atrasada={estaAtrasada(reserva.inicio, ahora)}
-                    enCurso={enCurso.has(reserva.id)}
-                    arrastre={arrastreDe({ tipo: "reserva", reserva }, reserva.id)}
-                    onLlego={() => onLlego(reserva)}
-                    onNoVino={() => onNoVino(reserva)}
+              <Columna key={columna} cantidad={atenciones.length} {...propsDeColumna}>
+                {atenciones.map((atencion) => (
+                  <TarjetaDeAtencion
+                    key={atencion.id}
+                    atencion={atencion}
+                    quien={nombres.get(atencion.id) ?? nombreConHora(atencion)}
+                    actor={actor}
+                    ahora={ahora}
+                    enCurso={enCurso.has(atencion.id)}
+                    arrastre={arrastreDe({ tipo: "atencion", atencion }, atencion.id)}
+                    onDeshacerLlegada={() => onDeshacerLlegada(atencion)}
+                    onMover={(hacia) => onMover(atencion, hacia)}
+                    onCobrar={() => onCobrar(atencion)}
+                    onEditar={() => onEditar(atencion)}
+                    onAnular={() => onAnular(atencion)}
                   />
                 ))}
               </Columna>
             )
-          }
-
-          const atenciones = atencionesDeColumna(tablero.atenciones, columna)
-          return (
-            <Columna key={columna} cantidad={atenciones.length} {...propsDeColumna}>
-              {atenciones.map((atencion) => (
-                <TarjetaDeAtencion
-                  key={atencion.id}
-                  atencion={atencion}
-                  quien={nombres.get(atencion.id) ?? nombreConHora(atencion)}
-                  actor={actor}
-                  ahora={ahora}
-                  enCurso={enCurso.has(atencion.id)}
-                  arrastre={arrastreDe({ tipo: "atencion", atencion }, atencion.id)}
-                  onDeshacerLlegada={() => onDeshacerLlegada(atencion)}
-                  onMover={(hacia) => onMover(atencion, hacia)}
-                  onCobrar={() => onCobrar(atencion)}
-                  onEditar={() => onEditar(atencion)}
-                  onAnular={() => onAnular(atencion)}
-                />
-              ))}
-            </Columna>
-          )
-        })}
+          })}
+        </div>
       </div>
     </div>
   )
