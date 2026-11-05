@@ -1,5 +1,5 @@
 import { cache } from "react"
-import { atiendeCitas, horarioSemanalPublicado } from "@/lib/agenda-publica"
+import { horarioSemanalPublicado, leerProfesionalesQueAtienden, profesionalesConHorarioPublicado } from "@/lib/agenda-publica"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import {
   apareceEnLaPagina,
@@ -70,6 +70,7 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
   const negocio = await prisma.business.findUnique({
     where: { slug },
     select: {
+      id: true,
       name: true,
       slug: true,
       timezone: true,
@@ -103,6 +104,10 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
   })
   if (!negocio) return null
 
+  // Los mismos profesionales que la reserva puede ofrecer (rol, tope y
+  // servicios), para que el horario publicado calce con las horas ofrecidas.
+  const profesionales = await leerProfesionalesQueAtienden(prisma, negocio.id)
+
   const usuarioDeInstagram = normalizarInstagram(negocio.instagram)
   const enlaceDelPerfil = enlaceDeInstagram(negocio.instagram)
 
@@ -128,11 +133,15 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
         foto: imagenPublica(miembro.fotoUrl),
       })),
     servicios: negocio.services,
-    // El del negocio más el de quienes atienden (QA#4): la página no dice
-    // "cerrado" a una hora que la reserva ofrece.
+    // El del negocio más el de quienes la reserva ofrece (QA#4): la página no
+    // dice "cerrado" a una hora que la reserva ofrece, ni "abierto" por el
+    // horario de alguien que no puede recibir reservas.
     horario: horarioSemanalPublicado(
       negocio.workSchedules,
-      negocio.members.filter((miembro) => atiendeCitas(miembro.role)).map((miembro) => miembro.id)
+      profesionalesConHorarioPublicado(
+        profesionales,
+        negocio.services.map((servicio) => servicio.id)
+      )
     ),
     plazoDeCambiosHoras: negocio.cancelacionHorasAntes,
     horaValle: negocio.horaValleActiva && negocio.franjasDeHoraValle.length > 0,

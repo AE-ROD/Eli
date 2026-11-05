@@ -55,7 +55,14 @@ const muchos = (modelo: NombreDeModelo, remoto: string): Relacion => ({ modelo, 
 /** Sólo las relaciones que usan los endpoints. Una que falte acá, lanza. */
 export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
   user: {},
-  business: { user: uno("user", "userId") },
+  business: {
+    user: uno("user", "userId"),
+    // Las que lee la mini página pública (`leerPaginaDelNegocio`).
+    members: muchos("businessMember", "businessId"),
+    services: muchos("service", "businessId"),
+    workSchedules: muchos("workSchedule", "businessId"),
+    franjasDeHoraValle: muchos("franjaDeHoraValle", "businessId"),
+  },
   businessMember: {
     user: uno("user", "userId"),
     business: uno("business", "businessId"),

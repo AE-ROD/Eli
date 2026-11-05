@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { candidatosDeLaReserva, hayHorasPosiblesDelDia, horasLibresDelDia } from "@/lib/agenda-publica"
+import { candidatosDeLaReserva, horasLibresDelDia, horasPosiblesEnElNegocio } from "@/lib/agenda-publica"
 import { horasConRebaja, leerHoraValle } from "@/lib/hora-valle"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { MENSAJE_FECHA_MUY_LEJANA, MENSAJE_FECHA_PASADA, fechaNoReservable } from "@/lib/reserva-publica"
@@ -121,18 +121,31 @@ export async function GET(
   }
 
   const candidatos = reserva.candidatos.filter((candidato) => candidato.franjas.length > 0)
+  const consultaDelDia = { businessId: negocio.id, zona, fecha, duracion, candidatos, ahora }
+  const slots = candidatos.length > 0 ? await horasLibresDelDia(prisma, consultaDelDia) : []
+
   // `sinListaDeEspera`: el día no tiene ninguna hora que se pueda liberar
   // (cerrado, bloqueado entero o ya pasado), así que la página no ofrece
   // "Avísame si se libera una hora" (QA#26). La inscripción lo vuelve a
-  // comprobar (`inscribirEnListaDeEspera`).
-  if (candidatos.length === 0) {
-    return NextResponse.json({ slots: [], mensaje: "No hay atención ese día", sinListaDeEspera: true })
-  }
-
-  const consultaDelDia = { businessId: negocio.id, zona, fecha, duracion, candidatos, ahora }
-  const slots = await horasLibresDelDia(prisma, consultaDelDia)
-  if (slots.length === 0 && !(await hayHorasPosiblesDelDia(prisma, consultaDelDia))) {
-    return NextResponse.json({ slots, sinListaDeEspera: true })
+  // comprobar (`inscribirEnListaDeEspera`). Se mira a nivel del negocio y no
+  // del profesional elegido: si no, un día bloqueado sólo para esa persona
+  // se distinguía de uno lleno (`horasPosiblesEnElNegocio`). Así, con
+  // profesional, un día sin horas suyas responde igual sea cual sea el motivo.
+  if (slots.length === 0) {
+    const delNegocio = await horasPosiblesEnElNegocio(prisma, {
+      businessId: negocio.id,
+      serviceIds: servicios.map((servicio) => servicio.id),
+      fecha,
+      zona,
+      duracion,
+      ahora,
+    })
+    if (delNegocio === "con-horas-posibles") return NextResponse.json({ slots })
+    return NextResponse.json(
+      delNegocio === "sin-atencion"
+        ? { slots, mensaje: "No hay atención ese día", sinListaDeEspera: true }
+        : { slots, sinListaDeEspera: true }
+    )
   }
 
   // Hora valle (#89c): `slots` sigue siendo la lista de horas, como siempre

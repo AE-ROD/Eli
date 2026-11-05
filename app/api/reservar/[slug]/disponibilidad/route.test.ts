@@ -263,6 +263,67 @@ describe("GET /api/reservar/[slug]/disponibilidad: cuándo no se ofrece la lista
     escenario([franja({ dayOfWeek: OTRO_DIA, startTime: "09:00", endTime: "11:00" })])
     expect(await horasDelDia()).toEqual({ slots: [], mensaje: "No hay atención ese día", sinListaDeEspera: true })
   })
+
+  /**
+   * La bandera es del negocio, no del profesional elegido: con Carla elegida,
+   * un día bloqueado entero sólo para ella (vacaciones) responde lo mismo que
+   * uno sólo lleno, y su agenda personal no se deduce de la página pública.
+   */
+  async function horasConCarla() {
+    const { GET } = await import("./route")
+    const res = await GET(pedidoFalso(`${URL_DEL_DIA}&profesionalId=m-carla`), conSlug)
+    expect(res.status).toBe(200)
+    return res.json()
+  }
+
+  it("con un profesional bloqueado entero y otro disponible, no se marca: responde igual que un día lleno", async () => {
+    base.reiniciar({
+      ...base.volcado(),
+      timeBlock: [{ id: "b-carla", businessId: NEGOCIO, memberId: "m-carla", startTime: aLas(0), endTime: aLas(20) }],
+    })
+    const bloqueada = await horasConCarla()
+
+    base.reiniciar({
+      ...base.volcado(),
+      timeBlock: [],
+      appointment: [
+        { ...cita("c-1", 9, 10), memberId: "m-carla" },
+        { ...cita("c-2", 10, 11), memberId: "m-carla" },
+      ],
+    })
+    const llena = await horasConCarla()
+
+    expect(bloqueada).toEqual({ slots: [] })
+    expect(llena).toEqual(bloqueada)
+  })
+
+  it("bloqueado entero para todos los que hacen el servicio, uno por uno: se marca", async () => {
+    base.reiniciar({
+      ...base.volcado(),
+      timeBlock: [
+        { id: "b-carla", businessId: NEGOCIO, memberId: "m-carla", startTime: aLas(0), endTime: aLas(20) },
+        { id: "b-pedro", businessId: NEGOCIO, memberId: "m-pedro", startTime: aLas(0), endTime: aLas(20) },
+      ],
+    })
+    expect(await horasConCarla()).toEqual({ slots: [], sinListaDeEspera: true })
+  })
+
+  it("con un bloqueo de todo el negocio y un profesional elegido: se marca", async () => {
+    base.reiniciar({
+      ...base.volcado(),
+      timeBlock: [{ id: "b-1", businessId: NEGOCIO, memberId: null, startTime: aLas(0), endTime: aLas(20) }],
+    })
+    expect(await horasConCarla()).toEqual({ slots: [], sinListaDeEspera: true })
+  })
+
+  it("un día que el profesional elegido no trabaja pero otro sí: no se marca", async () => {
+    // Carla tiene horario propio, pero sólo el martes.
+    escenario([
+      franja({ memberId: "m-pedro", startTime: "09:00", endTime: "11:00" }),
+      franja({ memberId: "m-carla", dayOfWeek: OTRO_DIA, startTime: "09:00", endTime: "11:00" }),
+    ])
+    expect(await horasConCarla()).toEqual({ slots: [] })
+  })
 })
 
 /**

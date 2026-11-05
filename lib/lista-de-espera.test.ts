@@ -131,6 +131,54 @@ describe("inscribirse", () => {
     expect(inscripciones()).toHaveLength(0)
   })
 
+  /**
+   * El rechazo "sin atención" es del negocio, no del profesional elegido: si
+   * no, distinguía un día bloqueado entero sólo para Carla (vacaciones) de
+   * uno sólo lleno, y dejaba deducir su agenda personal.
+   */
+  describe("con profesional elegido, el día sin atención se mira a nivel del negocio", () => {
+    const EQUIPO = [
+      { id: "m-carla", businessId: "n1", userId: "u-carla", role: "worker", createdAt: new Date("2026-01-01") },
+      { id: "m-pedro", businessId: "n1", userId: "u1", role: "worker", createdAt: new Date("2026-01-02") },
+    ]
+    const TODO_EL_LUNES = { startTime: new Date("2026-11-02T03:00:00.000Z"), endTime: new Date("2026-11-03T03:00:00.000Z") }
+
+    it("bloqueada entera ella y Pedro disponible: se inscribe, igual que en un día lleno", async () => {
+      escenario({
+        businessMember: EQUIPO,
+        timeBlock: [{ id: "b-carla", businessId: "n1", memberId: "m-carla", ...TODO_EL_LUNES }],
+      })
+      expect(await m.inscribirEnListaDeEspera(NEGOCIO, datos({ profesionalId: "m-carla" }), AHORA)).toEqual({ tipo: "inscrita" })
+      expect(inscripciones()).toHaveLength(1)
+    })
+
+    it("con un bloqueo de todo el negocio: se rechaza como día sin atención", async () => {
+      escenario({
+        businessMember: EQUIPO,
+        timeBlock: [{ id: "b-todos", businessId: "n1", memberId: null, ...TODO_EL_LUNES }],
+      })
+      expect(await m.inscribirEnListaDeEspera(NEGOCIO, datos({ profesionalId: "m-carla" }), AHORA)).toEqual({
+        tipo: "rechazada",
+        error: m.MENSAJE_SIN_ATENCION,
+      })
+      expect(inscripciones()).toHaveLength(0)
+    })
+
+    it("bloqueados enteros todos los que hacen el servicio, uno por uno: se rechaza", async () => {
+      escenario({
+        businessMember: EQUIPO,
+        timeBlock: [
+          { id: "b-carla", businessId: "n1", memberId: "m-carla", ...TODO_EL_LUNES },
+          { id: "b-pedro", businessId: "n1", memberId: "m-pedro", ...TODO_EL_LUNES },
+        ],
+      })
+      expect(await m.inscribirEnListaDeEspera(NEGOCIO, datos({ profesionalId: "m-carla" }), AHORA)).toEqual({
+        tipo: "rechazada",
+        error: m.MENSAJE_SIN_ATENCION,
+      })
+    })
+  })
+
   it("la cuarta inscripción activa del mismo email en el negocio: tope", async () => {
     escenario({
       inscripcionEnEspera: [
