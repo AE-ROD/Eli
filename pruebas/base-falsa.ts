@@ -71,9 +71,9 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     cedula: null,
     email: null,
     phone: null,
-    // `tags TEXT[]` no tiene default en la migración: quien crea un cliente
-    // sin decir sus etiquetas lo deja en NULL, no en una lista vacía.
-    tags: null,
+    // Default `{}` desde la migración `cierre_de_la_v1` (#160). Un cliente de
+    // antes con NULL se carga diciendo `tags: null`.
+    tags: [],
     notes: null,
     whatsappConsentAt: null,
     whatsappConsentSource: null,
@@ -457,16 +457,32 @@ export function crearBaseFalsa() {
 
   // ─── Escritura ───────────────────────────────────────────────────────────
 
-  function verificarClaves(modelo: NombreDeModelo, registro: Registro) {
+  /**
+   * Las FK y los únicos de una fila. En un INSERT `anterior` no viene y se
+   * revisan todas las FK. En un UPDATE viene la fila como estaba, y sólo se
+   * revisan las FK cuyas columnas cambian (en una compuesta, también si cambia
+   * `businessId`): Postgres se salta las que quedan igual (#134). Así una fila
+   * que ya apuntaba a algo que no está (la de una cascada a medio camino)
+   * puede cambiar otro campo, como en la base de verdad.
+   */
+  function verificarClaves(modelo: NombreDeModelo, registro: Registro, anterior?: Registro) {
     for (const [clave, rel] of Object.entries(RELACIONES[modelo])) {
       // Sólo las FK que guarda este registro (las que apuntan a un `id`).
       if (rel.tipo !== "uno" || rel.remoto !== "id") continue
+      const compuesta = (COMPUESTAS[modelo] ?? []).includes(clave)
+      if (
+        anterior &&
+        !distintos(registro[rel.local], anterior[rel.local]) &&
+        !(compuesta && distintos(registro.businessId, anterior.businessId))
+      ) {
+        continue
+      }
       const valor = registro[rel.local]
       if (valor === null || valor === undefined) continue
       const otro = tablas[rel.modelo].find((candidato) => candidato.id === valor)
       if (!otro) throw errorDePrisma("P2003", `FK rota: ${modelo}.${clave} → ${String(valor)}`)
       // FK compuesta (id, businessId): el otro tiene que ser del mismo negocio.
-      if ((COMPUESTAS[modelo] ?? []).includes(clave) && otro.businessId !== registro.businessId) {
+      if (compuesta && otro.businessId !== registro.businessId) {
         throw errorDePrisma("P2003", `FK compuesta rota: ${modelo}.${clave} → ${String(valor)} es de otro negocio`)
       }
     }
@@ -474,7 +490,11 @@ export function crearBaseFalsa() {
       if (campos.some((campo) => registro[campo] === null || registro[campo] === undefined)) continue
       if (si && !si(registro)) continue
       const choca = tablas[modelo].some(
-        (otro) => otro !== registro && (!si || si(otro)) && campos.every((campo) => iguales(otro[campo], registro[campo]))
+        (otro) =>
+          otro !== registro &&
+          otro !== anterior &&
+          (!si || si(otro)) &&
+          campos.every((campo) => iguales(otro[campo], registro[campo]))
       )
       if (choca) throw errorDePrisma("P2002", `Unique constraint failed: ${modelo}.${campos.join("_")}`)
     }
@@ -587,15 +607,16 @@ export function crearBaseFalsa() {
    * Un UPDATE de una fila: arma la fila nueva, la pasa por el trigger y recién
    * entonces la escribe, como `BEFORE UPDATE`. Devuelve la escritura para que
    * `updateMany` pueda revisar todas las filas antes de tocar ninguna (en
-   * Postgres la sentencia entera falla o pasa).
+   * Postgres la sentencia entera falla o pasa). La escritura revisa FK y
+   * únicos antes de copiar: si fallan, la fila queda como estaba.
    */
   function prepararActualizacion(modelo: NombreDeModelo, registro: Registro, datos: unknown) {
     const nuevo = { ...registro }
     aplicar(modelo, nuevo, datos)
     ANTES_DE_ACTUALIZAR[modelo]?.(registro, nuevo)
     return () => {
+      verificarClaves(modelo, nuevo, registro)
       Object.assign(registro, nuevo)
-      verificarClaves(modelo, registro)
     }
   }
 
@@ -735,10 +756,18 @@ export function crearBaseFalsa() {
         borrarSentencia(modelo, new Set([registro]))
         return copiaDeSalida
       }),
+      // Una sola sentencia: si una fila falla una FK o un único, no queda
+      // ninguna cambiada, como en Postgres.
       updateMany: vi.fn(async (args: Args) => {
         const registros = filtrar(modelo, args.where)
         const escrituras = registros.map((registro) => prepararActualizacion(modelo, registro, args.data))
-        escrituras.forEach((escribir) => escribir())
+        const antes = instantanea()
+        try {
+          escrituras.forEach((escribir) => escribir())
+        } catch (error) {
+          tablas = antes
+          throw error
+        }
         return { count: registros.length }
       }),
       deleteMany: vi.fn(async (args: Args = {}) => {
