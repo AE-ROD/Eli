@@ -48,8 +48,13 @@ interface TurnoGuardado {
  * El turno se recuerda en este navegador (#155): si quien vuelve a abrir el
  * enlace general ya tiene uno vivo (esperando o en atención), ve su número y
  * el enlace a su turno en vez del formulario, para no ocupar dos lugares.
- * Puede igual anotar a otra persona (un hijo, un amigo) desde el mismo
- * teléfono. Sólo se muestra el número, nunca el nombre con que se anotó.
+ * Sólo se muestra el número, nunca el nombre con que se anotó.
+ *
+ * La acción principal es "Anotar a otra persona", y olvida el turno
+ * guardado: si la página quedó abierta en un equipo compartido (la tablet
+ * del local), quien llega después no entra al turno de otro, que muestra su
+ * nombre y deja sacarlo de la fila. Quien sí es el dueño del turno lo
+ * abre con "Ver mi turno", o desde el enlace que le quedó.
  */
 export function AnotarseEnLaFila({ slug, nombreNegocio, abierto, esperando, llena }: PropsDeAnotarse) {
   const router = useRouter()
@@ -59,7 +64,11 @@ export function AnotarseEnLaFila({ slug, nombreNegocio, abierto, esperando, llen
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState("")
   const [turnoGuardado, setTurnoGuardado] = useState<TurnoGuardado | null>(null)
-  const [otraPersona, setOtraPersona] = useState(false)
+
+  const anotarAOtraPersona = () => {
+    olvidarTurno(slug)
+    setTurnoGuardado(null)
+  }
 
   // El turno guardado se lee sólo en el navegador y se pregunta al servidor
   // si sigue vivo. Uno que terminó, salió o ya no existe se olvida. Si la
@@ -113,17 +122,17 @@ export function AnotarseEnLaFila({ slug, nombreNegocio, abierto, esperando, llen
       />
 
       <Tarjeta className="mx-auto mt-8 max-w-xl px-6 py-8 sm:p-10 md:mt-12">
-        {turnoGuardado && !otraPersona ? (
+        {turnoGuardado ? (
           <div className="flex flex-col items-center gap-4 text-center">
             <CuadroDeIcono icono={Ticket} color="azul" tamano="lg" />
             <p className="cuerpo-xl text-pretty text-texto-2">
-              Ya estás en la fila con el número <strong className="text-navy">{turnoGuardado.numero}</strong>.
+              Desde este teléfono ya se anotó el número <strong className="text-navy">{turnoGuardado.numero}</strong>.
             </p>
-            <Boton href={turnoGuardado.enlace} tamano="lg" className="w-full">
-              Ver mi turno
-            </Boton>
-            <Boton variante="fantasma" onClick={() => setOtraPersona(true)} className="w-full">
+            <Boton onClick={anotarAOtraPersona} tamano="lg" className="w-full">
               Anotar a otra persona
+            </Boton>
+            <Boton href={turnoGuardado.enlace} variante="secundario" className="w-full">
+              Ver mi turno
             </Boton>
           </div>
         ) : !abierto ? (
