@@ -216,9 +216,9 @@ describe("PUT /api/citas/[id]: una reserva por confirmar (#84)", () => {
     expect(mockAvisar).not.toHaveBeenCalled()
   })
 
-  it("ya confirmada, la marca queda como registro: el profesional la completa", async () => {
-    expect((await cambiar(sesiones.carla, "ya-confirmada", { status: "completada" })).status).toBe(200)
-    expect(estadoDe("ya-confirmada")).toBe("completada")
+  it("ya confirmada, la marca queda como registro: el profesional la cancela", async () => {
+    expect((await cambiar(sesiones.carla, "ya-confirmada", { status: "cancelada" })).status).toBe(200)
+    expect(estadoDe("ya-confirmada")).toBe("cancelada")
   })
 })
 

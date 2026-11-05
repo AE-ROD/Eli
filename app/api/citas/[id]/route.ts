@@ -53,6 +53,16 @@ const NO_VINO_SIN_ESPERA = "Sólo se marca \"no vino\" en una cita pendiente o c
 const NO_VINO_ANTES_DE_HORA = "Todavía no es la hora de la cita: si avisó que no viene, cancélala"
 const NO_VINO_PERO_LLEGO = "El cliente ya llegó: la cita tiene una atención en el Tablero. Si fue un error, deshaz la llegada primero"
 /**
+ * "En progreso" y "completada" son lo que pasa en el Tablero (#101): la cita
+ * pasa a en progreso cuando empieza su atención y a completada cuando se
+ * cobra (`lib/acciones-del-tablero.ts`, `app/api/atenciones`). Marcarlas a
+ * mano salta la llegada y el cobro: una completada sin cobro no suma ingresos
+ * ni visitas y deja la agenda diciendo algo que no pasó.
+ */
+const ESTADOS_DEL_TABLERO: readonly string[] = ["en-progreso", "completada"]
+const MENSAJE_ESTADO_DEL_TABLERO =
+  "«En progreso» y «Completada» se marcan desde el Tablero: al empezar la atención y al cobrarla"
+/**
  * Una cita cuyo cliente ya llegó (atención viva en el Tablero) no se cancela
  * desde la agenda: la atención quedaría colgando de una cita cancelada. Vale
  * para las por confirmar (#84) y para cualquier otra (#136).
@@ -187,6 +197,12 @@ export async function PUT(
     })
     if (reactivacion.tipo === "rechazada") {
       return NextResponse.json({ error: reactivacion.mensaje }, { status: reactivacion.status })
+    }
+
+    // A en progreso o completada sólo se llega por el Tablero (#101). Volver
+    // a mandar el estado que ya tiene no es un cambio: no se rechaza.
+    if (datos.status !== undefined && datos.status !== existente.status && ESTADOS_DEL_TABLERO.includes(datos.status)) {
+      return NextResponse.json({ error: MENSAJE_ESTADO_DEL_TABLERO }, { status: 409 })
     }
 
     // "No vino" sólo para una reserva que seguía esperando, cuya hora ya
