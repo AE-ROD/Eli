@@ -261,7 +261,11 @@ function ResumenDeLaCita({ cita, sinServicio = false, className }: { cita: CitaD
   if (!sinServicio) filas.push(["Servicio", cita.servicio.nombre])
   if (cita.servicio.duracion) filas.push(["Duración", formatearDuracionDeServicio(cita.servicio.duracion)])
   if (cita.profesional) filas.push(["Con", cita.profesional])
-  filas.push(["Día", diaParaLeer(cita.fecha)], ["Hora", cita.hora], ["Dónde", cita.negocio.nombre])
+  filas.push(["Día", diaParaLeer(cita.fecha)], ["Hora", cita.hora])
+  // El precio guardado en la cita (#156): el de hora valle si se reservó o
+  // reagendó en una, y el nuevo después de reagendar. Sin precio, no se muestra.
+  if (cita.precio !== null) filas.push(["Precio", formatearMonto(cita.precio)])
+  filas.push(["Dónde", cita.negocio.nombre])
   return (
     <dl className={["divide-y divide-borde text-sm", className].filter(Boolean).join(" ")}>
       {filas.map(([termino, valor]) => (

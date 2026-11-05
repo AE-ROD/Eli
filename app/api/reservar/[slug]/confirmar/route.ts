@@ -473,6 +473,10 @@ export async function POST(
           sePuedeCambiar,
           // El correo sí lo dice: el local la confirmará (#84).
           porConfirmar: cita.confirmacionPorFaltas,
+          // El precio guardado, con la rebaja de hora valle y el normal al lado si la tuvo (#138).
+          precio: precios.total,
+          precioNormal: precios.hayRebaja ? precios.totalNormal : null,
+          precioIncompleto: resumen.precioIncompleto,
         }).catch(() => null)
       )
     }
