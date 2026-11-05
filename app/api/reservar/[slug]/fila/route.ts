@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { cuerpoConTope } from "@/lib/cuerpo-del-pedido"
+import { enlaceDelTurno } from "@/lib/fila-virtual"
 import { anotarseEnLaFila, negocioDeLaFila } from "@/lib/fila-virtual-servidor"
 import { devolverLimite, obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { registrarError } from "@/lib/registro-de-errores"
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return NextResponse.json(
           {
             numero: resultado.numero,
-            enlace: `/fila/${encodeURIComponent(negocio.slug)}/${resultado.token}`,
+            enlace: enlaceDelTurno(negocio.slug, resultado.token),
           },
           { status: 201 }
         )

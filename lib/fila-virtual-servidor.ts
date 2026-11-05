@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { estadoDeAtencion } from "@/lib/abierto-ahora"
 import { enviarAvisoFilaVirtual } from "@/lib/email"
 import {
+  FORMA_DEL_TOKEN_DE_FILA,
   MOTIVO_FILA_VACIADA,
   MOTIVO_SALIO_DE_LA_FILA,
   ORIGEN_FILA,
@@ -42,12 +43,9 @@ const EN_ATENCION = "en-atencion"
 /** Cuántas veces se reintenta tomar un número cuando dos personas se anotan a la vez. */
 const INTENTOS_DE_NUMERAR = 3
 
-/** El token del celular: 32 bytes en base64url (`generarToken`). Lo demás no se busca en la base. */
-const FORMA_DEL_TOKEN = /^[A-Za-z0-9_-]{43}$/
-
 /** El hash que se busca en la base, o `null` si el texto no tiene la forma de un token. Nunca lanza. */
 export function hashDelTokenDeFila(token: unknown): string | null {
-  return typeof token === "string" && FORMA_DEL_TOKEN.test(token) ? hashDeToken(token) : null
+  return typeof token === "string" && FORMA_DEL_TOKEN_DE_FILA.test(token) ? hashDeToken(token) : null
 }
 
 /** El día de hoy del negocio, "AAAA-MM-DD" en su zona. */
