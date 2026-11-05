@@ -117,6 +117,19 @@ describe("POST /api/reservar/[slug]/confirmar: la hora tiene que caer en el hora
     expect(base.buscar("customer", { name: "Lucía Pérez" })).toHaveLength(0)
   })
 
+  it("#46: una hora que cabe pero que la disponibilidad no ofrece (09:17): 409 sin crear nada", async () => {
+    escenario([franja({ startTime: "09:00", endTime: "13:00" })])
+
+    for (const hora of ["09:17", "10:45", "11:59"]) {
+      const { status, cuerpo } = await confirmar(hora)
+      expect(status).toBe(409)
+      expect(cuerpo.error).toMatch(/fuera de la atención/)
+    }
+    expect(citasCreadas()).toHaveLength(0)
+    // Las de la grilla (cada 30 minutos desde que abre) sí.
+    expect((await confirmar("10:30")).status).toBe(201)
+  })
+
   it("un profesional con horario propio atiende en el suyo: la hora fuera del general va a él", async () => {
     escenario([
       franja({ startTime: "09:00", endTime: "13:00" }),
@@ -137,6 +150,26 @@ describe("POST /api/reservar/[slug]/confirmar: la hora tiene que caer en el hora
 
     expect((await confirmar("16:00")).status).toBe(201)
     expect((await confirmar("10:00")).status).toBe(409)
+  })
+
+  it("#168: sin horario general ese día, el horario de un encargado (no atiende) no lo abre", async () => {
+    escenario([
+      franja({ memberId: "m-encargado", startTime: "09:00", endTime: "13:00" }),
+      franja({ dayOfWeek: OTRO_DIA, startTime: "09:00", endTime: "13:00" }),
+    ])
+
+    expect((await confirmar("10:00")).status).toBe(409)
+    expect(citasCreadas()).toHaveLength(0)
+  })
+
+  it("#168: el del encargado tampoco se suma al de los profesionales", async () => {
+    escenario([
+      franja({ memberId: "m-carla", startTime: "15:00", endTime: "19:00" }),
+      franja({ memberId: "m-encargado", startTime: "09:00", endTime: "13:00" }),
+    ])
+
+    expect((await confirmar("10:00")).status).toBe(409)
+    expect((await confirmar("16:00")).status).toBe(201)
   })
 
   it("con dos franjas el mismo día, acepta en la segunda y rechaza en el hueco entre ambas", async () => {

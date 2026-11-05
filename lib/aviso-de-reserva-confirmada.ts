@@ -41,6 +41,7 @@ export async function enviarAvisoDeReservaConfirmada({ businessId, citaId }: Res
       select: {
         title: true,
         startTime: true,
+        price: true,
         customer: { select: { name: true, lastName: true, email: true } },
         member: { select: { user: { select: { name: true } } } },
         business: { select: { name: true, timezone: true } },
@@ -57,6 +58,7 @@ export async function enviarAvisoDeReservaConfirmada({ businessId, citaId }: Res
       fecha,
       hora,
       profesional: cita.member?.user.name ?? null,
+      precio: cita.price,
     })
     if (resultado?.error) {
       // Sólo el código de Resend: su mensaje puede repetir el destinatario.

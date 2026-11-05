@@ -1,6 +1,5 @@
 import type { Prisma } from "@prisma/client"
 import {
-  cabeEnAtencion,
   franjasDeAtencion,
   fusionarFranjas,
   horarioSemanalDeAtencion,
@@ -96,6 +95,23 @@ export async function leerProfesionalesQueAtienden(
     fotoUrl: imagenPublica(miembro.fotoUrl),
     serviceIds: miembro.memberServices.map((fila) => fila.serviceId),
   }))
+}
+
+/**
+ * Las filas de horario que cuentan para la reserva pública: las generales
+ * del negocio (`memberId` null) y las de quienes atienden
+ * (`profesionales`, los de `leerProfesionalesQueAtienden`). Un día sin filas
+ * generales usa la unión de las de los miembros (`franjasDeAtencion`), y ahí
+ * entraba el horario de un encargado, que no recibe reservas: ese día salía
+ * con atención en la página y en la reserva (#168). El panel, que no pasa
+ * por acá, sigue leyendo todas.
+ */
+export function filasDeQuienesAtienden<F extends { memberId: string | null }>(
+  filas: F[],
+  profesionales: Pick<ProfesionalQueAtiende, "id">[]
+): F[] {
+  const atienden = new Set(profesionales.map((profesional) => profesional.id))
+  return filas.filter((fila) => fila.memberId === null || atienden.has(fila.memberId))
 }
 
 export function haceElServicio(profesional: Pick<ProfesionalQueAtiende, "serviceIds">, serviceId: string): boolean {
@@ -206,9 +222,8 @@ export function profesionalesConHorarioPublicado(
  * Cada cuántos minutos, como mucho, se ofrece una hora de inicio. Antes el
  * paso era la duración del servicio: con uno de 90 minutos sólo se ofrecían
  * las 09:00, 10:30, 12:00…, y una cita a las 10:00 dejaba fuera las 11:30 y
- * las 12:00 aunque estuvieran libres (QA#2). `confirmar` acepta cualquier
- * hora que quepa, así que ofrecer más inicios no abre nada que después se
- * rechace.
+ * las 12:00 aunque estuvieran libres (QA#2). `confirmar` y reagendar
+ * aceptan sólo estas horas (`candidatosQueOfrecen`, #46).
  */
 export const PASO_MAXIMO_ENTRE_HORAS = 30
 
@@ -355,10 +370,17 @@ export async function horasPosiblesEnElNegocio(
   return posibles ? "con-horas-posibles" : "sin-horas-posibles"
 }
 
-/** Los candidatos cuyo horario cubre entero el tramo [inicio, inicio + duración) de esa hora. */
-export function candidatosQueCubren(candidatos: Candidato[], hora: string, duracion: number): Candidato[] {
-  const inicio = horaAMinutos(hora)
-  return candidatos.filter((candidato) => cabeEnAtencion(candidato.franjas, inicio, inicio + duracion))
+/**
+ * Los candidatos que ofrecen esa hora: una de las de `horasDeLaFranja` en
+ * alguna de sus franjas, la misma grilla con que `horasLibresDelDia` las
+ * ofrece. Así el tramo [inicio, inicio + duración) cabe entero en su horario.
+ * Antes bastaba que cupiera, y `confirmar` aceptaba horas que la
+ * disponibilidad nunca ofreció, como las 09:17 (#46).
+ */
+export function candidatosQueOfrecen(candidatos: Candidato[], hora: string, duracion: number): Candidato[] {
+  return candidatos.filter((candidato) =>
+    candidato.franjas.some((franja) => horasDeLaFranja(franja, duracion).includes(hora))
+  )
 }
 
 export type Asignacion = { libre: true; memberId: string | null } | { libre: false }
@@ -473,10 +495,12 @@ async function leerQuienesPuedenTomarla(
     }),
   ])
   const queLoHacen = profesionales.filter((profesional) => haceLosServicios(profesional, serviceIds))
+  // Sólo el horario general y el de quienes atienden (#168).
+  const filasQueCuentan = filasDeQuienesAtienden(filas, profesionales)
   let elegidos = queLoHacen
   if (profesionalId) {
     elegidos = queLoHacen.filter((profesional) => profesional.id === profesionalId)
     if (elegidos.length === 0) return { tipo: "profesional-no-disponible" }
   }
-  return { tipo: "ok", profesionales, elegidos: elegidos.map((profesional) => profesional.id), filas }
+  return { tipo: "ok", profesionales, elegidos: elegidos.map((profesional) => profesional.id), filas: filasQueCuentan }
 }

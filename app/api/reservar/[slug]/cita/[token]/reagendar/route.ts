@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { asignarCandidatoLibre, candidatosDeLaReserva, candidatosQueCubren, tramoDeLaReserva } from "@/lib/agenda-publica"
+import { asignarCandidatoLibre, candidatosDeLaReserva, candidatosQueOfrecen, tramoDeLaReserva } from "@/lib/agenda-publica"
 import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { correosDelAviso } from "@/lib/avisos-al-negocio"
 import { enviarAvisoDeCambioDelCliente } from "@/lib/email"
 import { ESTADOS_GESTIONABLES, dentroDelPlazo, mensajeFueraDePlazo } from "@/lib/gestion-de-cita"
 import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
@@ -74,7 +75,8 @@ export async function POST(request: NextRequest, contexto: Params) {
   if (reserva.tipo === "profesional-no-disponible") {
     return NextResponse.json({ error: "No hay horas para reagendar por acá. Contacta al local." }, { status: 409 })
   }
-  const candidatos = candidatosQueCubren(reserva.candidatos, hora, duracion)
+  // Sólo una hora de la grilla que ofrece la disponibilidad (#46).
+  const candidatos = candidatosQueOfrecen(reserva.candidatos, hora, duracion)
   if (candidatos.length === 0) return NextResponse.json({ error: FUERA_DE_ATENCION }, { status: 409 })
 
   const tramo = tramoDeLaReserva(fecha, hora, duracion, zona)
@@ -141,18 +143,26 @@ export async function POST(request: NextRequest, contexto: Params) {
     ? (reserva.profesionales.find((candidato) => candidato.id === resultado.memberId)?.nombre ?? null)
     : null
   const antes = fechaYHora(cita.startTime, zona)
-  await enviarAvisoDeCambioDelCliente({
-    tipo: "reagendo",
-    emailNegocio: cita.business.user.email,
-    nombreNegocio: cita.business.name,
-    nombreCliente: nombreDelCliente(cita),
-    servicio: servicios.nombre,
-    profesional,
-    fecha,
-    hora,
-    fechaAnterior: antes.fecha,
-    horaAnterior: antes.hora,
-  }).catch(() => null)
+  // A la dueña y al profesional (#104). Si cambió de profesional (la cita no
+  // tenía y se asignó al reagendar), a los dos: al de antes se le liberó la
+  // hora y al de ahora le llegó la cita.
+  const avisados = await correosDelAviso(cita.businessId, cita.business.user.email, [cita.memberId, resultado.memberId])
+  await Promise.all(
+    avisados.map((emailNegocio) =>
+      enviarAvisoDeCambioDelCliente({
+        tipo: "reagendo",
+        emailNegocio,
+        nombreNegocio: cita.business.name,
+        nombreCliente: nombreDelCliente(cita),
+        servicio: servicios.nombre,
+        profesional,
+        fecha,
+        hora,
+        fechaAnterior: antes.fecha,
+        horaAnterior: antes.hora,
+      }).catch(() => null)
+    )
+  )
 
   return NextResponse.json({ mensaje: "Cita reagendada", fecha, hora, profesional, precio: resultado.precio })
 }

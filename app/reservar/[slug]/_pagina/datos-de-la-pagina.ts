@@ -1,5 +1,10 @@
 import { cache } from "react"
-import { horarioSemanalPublicado, leerProfesionalesQueAtienden, profesionalesConHorarioPublicado } from "@/lib/agenda-publica"
+import {
+  filasDeQuienesAtienden,
+  horarioSemanalPublicado,
+  leerProfesionalesQueAtienden,
+  profesionalesConHorarioPublicado,
+} from "@/lib/agenda-publica"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import {
   apareceEnLaPagina,
@@ -136,8 +141,10 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
     // Exactamente el que la reserva ofrece (QA#4): con profesionales, la
     // unión de sus horarios efectivos (no el del negocio aparte, que prometía
     // horas y días que la reserva no tiene); sin ellos, el del negocio.
+    // Sin el horario propio de quien no atiende (un encargado), que abría
+    // días sin horario general (#168).
     horario: horarioSemanalPublicado(
-      negocio.workSchedules,
+      filasDeQuienesAtienden(negocio.workSchedules, profesionales),
       profesionales.length > 0
         ? profesionalesConHorarioPublicado(
             profesionales,

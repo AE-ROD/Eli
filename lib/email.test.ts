@@ -618,6 +618,21 @@ describe("lib/email — mensajes a clientes (etapa 3)", () => {
     expect(sinEnlace).toContain("avísanos con anticipación")
   })
 
+  it("#164: dentro del plazo el recordatorio no ofrece cancelar ni cambiar, aunque venga el enlace", async () => {
+    const email = await import("./email")
+    const recordatorio = { emailCliente: "maria@test.com", nombreCliente: "María", nombreNegocio: "Salón Uno", servicio: "Corte", fecha: "2026-11-02", hora: "10:00" }
+
+    await email.enviarRecordatorio({ ...recordatorio, enlaceDeGestion: "https://eli.app/reservar/salon-uno/cita/abc", plazoHoras: 24, sePuedeCambiar: false })
+    await email.enviarRecordatorio({ ...recordatorio, sePuedeCambiar: false })
+
+    for (const [envio] of enviarMock.mock.calls) {
+      const html = envio.html as string
+      expect(html).not.toContain("Cancelar o cambiar mi cita")
+      expect(html).not.toContain("cita/abc")
+      expect(html).toContain("contacta directamente al local")
+    }
+  })
+
   it("escapa los datos de personas y limpia el asunto", async () => {
     const email = await import("./email")
 
@@ -724,6 +739,40 @@ describe("lib/email — reservas por confirmar (#84)", () => {
     expect(html).toContain("confirmó tu reserva")
     expect(html).toContain("&lt;b&gt;Lucía&lt;/b&gt;")
     expect(html).toContain("septiembre")
+  })
+})
+
+describe("el precio en los correos al cliente (#138)", () => {
+  beforeEach(() => {
+    vi.stubEnv("RESEND_API_KEY", "clave-de-prueba")
+    vi.resetModules()
+    enviarMock.mockClear()
+  })
+
+  const confirmacion = { emailCliente: "ana@test.com", nombreCliente: "Ana", nombreNegocio: "Salón Uno", servicio: "Corte + Color", fecha: "2026-11-02", hora: "10:00", duracion: 90 }
+  const html = (i: number) => (enviarMock.mock.calls[i][0] as { html: string }).html
+
+  it("con hora valle: el precio rebajado y el normal", async () => {
+    const email = await import("./email")
+    await email.enviarConfirmacionCliente({ ...confirmacion, precio: 31400, precioNormal: 33000 })
+    expect(html(0)).toContain("$31.400 (hora valle; precio normal $33.000)")
+  })
+
+  it("sin rebaja: sólo el precio; con un servicio sin precio, '+ a consultar'; sin precio, ninguna fila", async () => {
+    const email = await import("./email")
+    await email.enviarConfirmacionCliente({ ...confirmacion, precio: 33000, precioNormal: null })
+    await email.enviarConfirmacionCliente({ ...confirmacion, precio: 8000, precioIncompleto: true })
+    await email.enviarConfirmacionCliente({ ...confirmacion, precio: null })
+    expect(html(0)).toContain("$33.000")
+    expect(html(0)).not.toContain("hora valle")
+    expect(html(1)).toContain("$8.000 + a consultar")
+    expect(html(2)).not.toContain("Precio")
+  })
+
+  it("la reserva confirmada por el local lleva el precio de la cita", async () => {
+    const email = await import("./email")
+    await email.enviarReservaConfirmadaPorElLocal({ emailCliente: "ana@test.com", nombreCliente: "Ana", nombreNegocio: "Salón Uno", servicio: "Corte", fecha: "2026-11-02", hora: "10:00", precio: 6400 })
+    expect(html(0)).toContain("$6.400")
   })
 })
 
