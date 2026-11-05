@@ -168,6 +168,59 @@ mientras se construye el índice bloquea las escrituras en `citas` (reservas
 nuevas, reagendar, cancelar, "Llegó"). Con las tablas de hoy dura poco y es
 aceptable, pero conviene aplicarla fuera del horario de atención.
 
+### `20261105120000_cierre_de_la_v1`
+
+Deudas de esquema de la v1: default `{}` en `clientes.tags` (y los NULL pasan a
+`{}`, la única escritura sobre filas existentes), CHECKs de dominio con los
+valores que la app ya usa, un índice en `citas("startTime")` para el cron de
+recordatorios, y las tres funciones trigger de la etapa 2 con `search_path`
+fijo. El código viejo y el nuevo funcionan con o sin ella: se aplica antes o
+después de desplegar. La aplica el dueño, nunca un agente.
+
+Las CHECKs van `NOT VALID`: crearlas no revisa las filas viejas, así que la
+migración no falla por un dato antiguo. Pero Postgres sí revisa la fila entera
+en cada UPDATE: una fila vieja con un valor fuera de la lista no se podría
+editar después. **Antes de aplicarla**, estas consultas (sólo lectura) tienen
+que volver con todos los conteos en 0; si alguna no, no aplicarla y avisar:
+
+```sql
+SELECT 'citas.status' AS columna, count(*) FROM "citas" WHERE "status" NOT IN ('pendiente', 'confirmada', 'en-progreso', 'completada', 'cancelada', 'no-asistio')
+UNION ALL SELECT 'citas.canceladaPor', count(*) FROM "citas" WHERE "canceladaPor" IS NOT NULL AND "canceladaPor" NOT IN ('cliente', 'negocio')
+UNION ALL SELECT 'clientes.whatsappConsentSource', count(*) FROM "clientes" WHERE "whatsappConsentSource" IS NOT NULL AND "whatsappConsentSource" NOT IN ('reserva-publica', 'panel', 'importacion')
+UNION ALL SELECT 'negocios.cancelacionHorasAntes', count(*) FROM "negocios" WHERE "cancelacionHorasAntes" < 0 OR "cancelacionHorasAntes" > 72
+UNION ALL SELECT 'negocios.type', count(*) FROM "negocios" WHERE "type" NOT IN ('salon', 'barberia', 'spa-de-unas', 'salud', 'fitness', 'otro')
+UNION ALL SELECT 'miembros_negocio.role', count(*) FROM "miembros_negocio" WHERE "role" NOT IN ('admin', 'worker')
+UNION ALL SELECT 'invitaciones.role', count(*) FROM "invitaciones" WHERE "role" NOT IN ('admin', 'worker')
+UNION ALL SELECT 'atencion_pagos.method', count(*) FROM "atencion_pagos" WHERE "method" NOT IN ('efectivo', 'tarjeta-debito', 'tarjeta-credito', 'transferencia', 'billetera-digital')
+UNION ALL SELECT 'horarios_laborales.dayOfWeek', count(*) FROM "horarios_laborales" WHERE "dayOfWeek" < 0 OR "dayOfWeek" > 6
+UNION ALL SELECT 'servicios.duration', count(*) FROM "servicios" WHERE "duration" <= 0;
+```
+
+Orden: correr las consultas, aplicar la migración, y
+`npx prisma migrate resolve --applied 20261105120000_cierre_de_la_v1`. El
+índice nuevo bloquea las escrituras en `citas` mientras se construye (como en
+la etapa 5): fuera del horario de atención. Con los conteos en 0 confirmados,
+cada CHECK se puede validar cuando se quiera con
+`ALTER TABLE "<tabla>" VALIDATE CONSTRAINT "<nombre>";` (opcional).
+
+### Teléfonos antiguos a `+56` (#92)
+
+Los teléfonos de clientes guardados antes de la etapa 1 siguen como se
+escribieron. `scripts/normalizar-telefonos.ts` los pasa al formato que usa la
+app (`+56912345678`) con la misma regla que el panel (`aE164Chile`). Por
+defecto sólo simula: cuenta cuántos cambiaría y cuántos no se pueden leer, sin
+mostrar teléfonos ni nombres. Lo corre el dueño:
+
+```bash
+node scripts/normalizar-telefonos.ts                         # simula, todos los negocios
+node scripts/normalizar-telefonos.ts --negocio <businessId>  # simula, un negocio
+node scripts/normalizar-telefonos.ts --aplicar               # escribe
+```
+
+Escribe de a lotes y sólo si el teléfono sigue igual que cuando lo leyó (si
+alguien lo editó mientras tanto, lo deja). Los que no se pueden leer como
+chilenos no se tocan: se corrigen a mano desde la ficha.
+
 ## Cómo está organizado
 
 ```
@@ -256,6 +309,8 @@ pruebas/                      Ayudas compartidas de los tests: la base falsa en 
                               con sus datos de ejemplo, pedidos y respuestas simulados.
                               Fuera de app/: no es una ruta ni entra al build
 prisma/                       Esquema, migraciones y datos de ejemplo (seed.ts)
+scripts/                      Tareas de mantenimiento que corre el dueño a mano
+                              (normalizar-telefonos.ts), con la lógica testeada
 proxy.ts                      Puerta de entrada: sesión y límite de peticiones (con su test)
 types/                        Tipos que extienden librerías (la sesión de NextAuth)
 public/images/                El logo

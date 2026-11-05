@@ -92,11 +92,14 @@ export function textosDeAtencionDeClienteEliminado() {
  * Condición para el `where` de clientes: los que no se eliminaron. Va dentro
  * de `whereDeClientes`, que es el que acota al negocio.
  *
- * `tags` es `TEXT[]` sin default en la base: un cliente creado sin decir sus
- * etiquetas (la reserva pública, "Anotar sin reserva") la tiene en NULL. En
- * SQL `NOT (NULL @> ...)` es NULL, no verdadero, así que con sólo el `NOT`
- * esos clientes desaparecían de Clientes, de los buscadores y de la
- * exportación de atenciones. Un NULL no tiene la marca: es un cliente vigente.
+ * `tags` es `TEXT[]` y los clientes creados sin decir sus etiquetas (la
+ * reserva pública, "Anotar sin reserva") quedaban en NULL. En SQL
+ * `NOT (NULL @> ...)` es NULL, no verdadero, así que con sólo el `NOT` esos
+ * clientes desaparecían de Clientes, de los buscadores y de la exportación de
+ * atenciones. Un NULL no tiene la marca: es un cliente vigente. La migración
+ * `cierre_de_la_v1` (#160) le puso default `{}` a la columna y pasó a `{}` los
+ * NULL; la rama del NULL queda igual, por si la migración todavía no se
+ * aplicó o algo escribe un NULL a mano.
  */
 export const clienteNoEliminado: Prisma.CustomerWhereInput = {
   OR: [{ tags: { equals: null } }, { NOT: { tags: { has: MARCA_DE_CLIENTE_ELIMINADO } } }],

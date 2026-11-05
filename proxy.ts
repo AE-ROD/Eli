@@ -124,6 +124,26 @@ async function decidir(req: NextRequest, continuar: () => NextResponse): Promise
     return continuar()
   }
 
+  // `update()` de la sesión (POST /api/auth/session): el callback `jwt` de
+  // `lib/auth.ts` revalida contra la base en cada uno, así que sin tope una
+  // sesión podía pedirlo en bucle (#49). Lleva el límite de escritura del
+  // panel, por sesión. El GET (el que el cliente de NextAuth pide solo, al
+  // volver a la pestaña) sigue sin tope, como el resto de /api/auth: cortarlo
+  // dejaría al panel sin sesión. Si se pasa, el `update()` del navegador
+  // devuelve null y la sesión que ya tenía queda igual.
+  if (pathname === "/api/auth/session" && req.method === "POST") {
+    const token = await getToken({ req })
+    const clave = token?.id ? `usuario:${token.id}` : `ip:${obtenerIp(req)}`
+    const { permitido } = await verificarLimite("panelEscritura", clave)
+    if (!permitido) {
+      return NextResponse.json(
+        { error: "Demasiadas solicitudes, esperá un momento e intentá de nuevo" },
+        { status: 429 }
+      )
+    }
+    return continuar()
+  }
+
   // Rate limit genérico de los endpoints autenticados del panel (citas,
   // clientes, configuración, equipo, chats, dashboard...). Se cuenta por
   // sesión, no sólo por IP: un salón con wifi compartido sale por una sola
