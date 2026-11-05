@@ -19,10 +19,10 @@ export const dynamic = "force-dynamic"
  */
 export default async function PaginaDeLaFila({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const negocio = await negocioDeLaFila(slug)
+  const ahora = new Date()
+  const negocio = await negocioDeLaFila(slug, ahora)
   if (!negocio?.filaVirtualActiva) notFound()
 
-  const ahora = new Date()
   const abierto = estaAbiertoAhora(negocio, ahora)
   const esperando = abierto ? await personasEsperando(negocio.id, negocio.timezone, ahora) : 0
 

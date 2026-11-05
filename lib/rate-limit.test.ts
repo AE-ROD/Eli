@@ -10,7 +10,6 @@ vi.mock("@upstash/ratelimit", () => {
     static creados: Ratelimit[] = []
     static slidingWindow = vi.fn((tokens: number, ventana: string) => ({ tokens, ventana }))
     limit = vi.fn().mockRejectedValue(new Error("Upstash no responde"))
-    getRemaining = vi.fn().mockRejectedValue(new Error("Upstash no responde"))
     constructor(readonly config: { prefix: string; limiter: unknown; timeout?: number }) {
       Ratelimit.creados.push(this)
     }
@@ -19,7 +18,7 @@ vi.mock("@upstash/ratelimit", () => {
 })
 
 interface RatelimitFalso {
-  creados: { config: { prefix: string; limiter: unknown; timeout?: number }; limit: Mock; getRemaining: Mock }[]
+  creados: { config: { prefix: string; limiter: unknown; timeout?: number }; limit: Mock }[]
 }
 
 describe("verificarLimite cuando Upstash está configurado pero falla", () => {
@@ -139,7 +138,7 @@ describe("los baldes del CSV de clientes", () => {
   })
 })
 
-describe("quedaLimite: preguntar si queda cupo sin descontar", () => {
+describe("devolverLimite: devolver al balde lo que se descontó (#136)", () => {
   beforeEach(() => {
     vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://fake.upstash.io")
     vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "fake-token")
@@ -159,34 +158,17 @@ describe("quedaLimite: preguntar si queda cupo sin descontar", () => {
     return { ...modulo, limitador }
   }
 
-  it("lee lo que queda con getRemaining y nunca llama a limit", async () => {
-    const { quedaLimite, limitador } = await balde("eli:fila-virtual-negocio")
-    limitador.getRemaining.mockResolvedValue({ remaining: 3, reset: 0 })
-    expect(await quedaLimite("filaVirtualPorNegocio", "negocio-1")).toEqual({ permitido: true, restantes: 3 })
-    limitador.getRemaining.mockResolvedValue({ remaining: 0, reset: 0 })
-    expect((await quedaLimite("filaVirtualPorNegocio", "negocio-1")).permitido).toBe(false)
-    expect(limitador.getRemaining).toHaveBeenCalledWith("negocio-1")
-    expect(limitador.limit).not.toHaveBeenCalled()
+  it("suma uno al balde con una tasa negativa, en la misma llave", async () => {
+    const { devolverLimite, limitador } = await balde("eli:fila-virtual-negocio")
+    limitador.limit.mockResolvedValue({ success: true, remaining: 5 })
+    await devolverLimite("filaVirtualPorNegocio", "negocio-1")
+    expect(limitador.limit).toHaveBeenCalledWith("negocio-1", { rate: -1 })
   })
 
-  it("si Upstash falla, falla cerrado para la fila, como verificarLimite", async () => {
+  it("si Upstash falla no lanza: el cupo queda gastado", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
-    const { quedaLimite } = await balde("eli:fila-virtual-negocio")
-    expect(await quedaLimite("filaVirtualPorNegocio", "negocio-1")).toEqual({ permitido: false, restantes: 0 })
-  })
-
-  it("si Upstash no contesta a tiempo, también cerrado", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {})
-    vi.useFakeTimers()
-    try {
-      const { quedaLimite, limitador } = await balde("eli:fila-virtual-negocio")
-      limitador.getRemaining.mockReturnValue(new Promise(() => {}))
-      const pendiente = quedaLimite("filaVirtualPorNegocio", "negocio-1")
-      await vi.advanceTimersByTimeAsync(2000)
-      expect(await pendiente).toEqual({ permitido: false, restantes: 0 })
-    } finally {
-      vi.useRealTimers()
-    }
+    const { devolverLimite } = await balde("eli:fila-virtual-negocio")
+    await expect(devolverLimite("filaVirtualPorNegocio", "negocio-1")).resolves.toBeUndefined()
   })
 })
 
