@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import type { Prisma } from "@prisma/client"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -10,11 +11,31 @@ import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { esFechaCalendario, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 import { advertenciasDeAgenda } from "@/lib/advertencias-de-agenda"
 import { ocupaElHorario } from "@/lib/ocupacion"
-import { MENSAJE_MIEMBRO_NO_ATIENDE, atiendeCitas } from "@/lib/agenda-publica"
+import { MENSAJE_MIEMBRO_NO_ATIENDE, atiendeCitas, haceLosServicios } from "@/lib/agenda-publica"
+import { servicioIdsSchema } from "@/lib/validaciones"
+import {
+  duracionesQueSuman,
+  filasDeServicios,
+  leerServiciosDeLaReserva,
+  resumenDeLaReserva,
+} from "@/lib/servicios-de-la-reserva"
+
+/** Servicios elegidos que no son del negocio, no existen o ya no se ofrecen. Sin decir cuál. */
+const MENSAJE_SERVICIO_NO_ENCONTRADO = "Servicio no encontrado"
+const MENSAJE_PROFESIONAL_NO_HACE = "Ese profesional no hace todos los servicios elegidos: elige otro o quítalos"
+const mensajeDeDuracionConServicios = (cuantos: number) =>
+  `Con ${cuantos} servicios, la cita tiene que durar al menos ${cuantos} minutos y no más de 24 horas por servicio`
 
 const citaSchema = z
   .object({
-    title: titulo(),
+    // Texto libre, para una cita sin servicio del catálogo. Con `servicioIds`
+    // el título sale de los servicios y éste no se usa.
+    title: titulo().optional(),
+    /**
+     * Servicios del catálogo (#159), en el orden en que se hacen: llenan
+     * título, precio y las filas de `cita_servicios`, como la reserva pública.
+     */
+    servicioIds: servicioIdsSchema.optional(),
     startTime: z.string().datetime("La fecha de inicio no es válida"),
     endTime: z.string().datetime("La fecha de fin no es válida"),
     // Sólo los estados iniciales: los demás se marcan sobre la cita, con las
@@ -26,6 +47,10 @@ const citaSchema = z
     memberId: z.string().nullable().optional(),
     /** Segundo envío: quien agenda ya vio las advertencias (choque, bloqueo, horario) y guarda igual. */
     confirmarAdvertencias: z.boolean().optional(),
+  })
+  .refine((cita) => cita.servicioIds !== undefined || cita.title !== undefined, {
+    message: "Escribe el servicio o elige uno del catálogo",
+    path: ["title"],
   })
   .refine((cita) => terminaDespuesDeEmpezar(new Date(cita.startTime), new Date(cita.endTime)), {
     message: MENSAJE_DE_HORARIO_INVERTIDO,
@@ -145,6 +170,39 @@ export async function POST(request: NextRequest) {
     const tramo = { startTime: new Date(datos.startTime), endTime: new Date(datos.endTime) }
     const status = datos.status ?? "pendiente"
 
+    // Con servicios del catálogo (#159): se leen del catálogo del negocio, en
+    // el servidor; lo que mande el navegador sobre nombres o duraciones no
+    // cuenta. Uno que no es del negocio, no existe o está inactivo: 404.
+    const servicios = datos.servicioIds
+      ? await leerServiciosDeLaReserva(prisma, actor.businessId, datos.servicioIds)
+      : null
+    if (datos.servicioIds && !servicios) {
+      return NextResponse.json({ error: MENSAJE_SERVICIO_NO_ENCONTRADO }, { status: 404 })
+    }
+    let duracionesDeLasFilas: number[] = []
+    if (servicios) {
+      // Si el profesional tiene acotado lo que hace (`MemberService`), tiene
+      // que hacerlos todos, como en la reserva pública. Sin filas, hace todos.
+      if (memberId) {
+        const queHace = await prisma.memberService.findMany({
+          where: { businessId: actor.businessId, memberId },
+          select: { serviceId: true },
+          take: 500,
+        })
+        if (!haceLosServicios({ serviceIds: queHace.map((fila) => fila.serviceId) }, servicios.map((servicio) => servicio.id))) {
+          return NextResponse.json({ error: MENSAJE_PROFESIONAL_NO_HACE }, { status: 400 })
+        }
+      }
+      // Las filas suman lo que dura la cita: si quien agenda la alargó o la
+      // acortó, se reparte (`duracionesQueSuman`), igual que al editarla.
+      const minutos = Math.ceil((tramo.endTime.getTime() - tramo.startTime.getTime()) / 60_000)
+      const duraciones = duracionesQueSuman(servicios.map((servicio) => servicio.duration), minutos)
+      if (!duraciones) {
+        return NextResponse.json({ error: mensajeDeDuracionConServicios(servicios.length) }, { status: 400 })
+      }
+      duracionesDeLasFilas = duraciones
+    }
+
     // Como al mover: un choque, un bloqueo o quedar fuera del horario no
     // impiden agendar desde el panel, pero se avisan primero. Hoy toda cita
     // nueva ocupa el horario (`ESTADOS_AL_CREAR`); la guarda queda por si se
@@ -164,14 +222,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const cita = await prisma.appointment.create({
+    const resumen = servicios ? resumenDeLaReserva(servicios) : null
+    const creacion = {
       data: {
-        title: datos.title,
+        // Con servicios, como la reserva pública: el título son sus nombres,
+        // `serviceId` el primero y el precio la suma, salvo que se haya
+        // escrito otro (el panel decide el precio, como al editarlo).
+        title: resumen ? resumen.titulo : (datos.title as string),
+        ...(servicios && { serviceId: servicios[0].id }),
         startTime: tramo.startTime,
         endTime: tramo.endTime,
         status,
         notes: datos.notes || null,
-        price: datos.price ?? null,
+        price: datos.price ?? resumen?.precio ?? null,
         customerId: datos.customerId,
         memberId,
         businessId: actor.businessId,
@@ -180,7 +243,23 @@ export async function POST(request: NextRequest) {
         customer: { select: { id: true, name: true, lastName: true, email: true, phone: true } },
         member: { select: { id: true, role: true, user: { select: { id: true, name: true } } } },
       },
-    })
+    } satisfies Prisma.AppointmentCreateArgs
+
+    // Con servicios, la cita y sus filas en la misma transacción, como en la
+    // reserva pública (`app/api/reservar/[slug]/confirmar`).
+    const cita = servicios
+      ? await prisma.$transaction(async (tx) => {
+          const creada = await tx.appointment.create(creacion)
+          await tx.appointmentService.createMany({
+            data: filasDeServicios(actor.businessId, servicios).map((fila, indice) => ({
+              ...fila,
+              duration: duracionesDeLasFilas[indice],
+              appointmentId: creada.id,
+            })),
+          })
+          return creada
+        })
+      : await prisma.appointment.create(creacion)
 
     return NextResponse.json(cita, { status: 201 })
   } catch (error) {

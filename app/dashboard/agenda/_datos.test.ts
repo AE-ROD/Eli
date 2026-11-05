@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
-import { aQuienBloquea, asignarProfesional, citaPorConfirmar, crearBloqueo, crearCita, destacaSinProfesional, hayProfesionales, moverCita, nombreDelProfesional, opcionesDeProfesional, precioDeLaCita, quienCancelo, quitarBloqueo, reactivarCita, type Bloqueo, type DatosDeNuevaCita } from "./_datos"
+import { aQuienBloquea, asignarProfesional, citaPorConfirmar, crearBloqueo, crearCita, destacaSinProfesional, hayProfesionales, moverCita, nombreDelProfesional, opcionesDeProfesional, precioDeLaCita, quienCancelo, serviciosParaElProfesional, idsDeServiciosElegidos, quitarBloqueo, reactivarCita, type Bloqueo, type DatosDeNuevaCita } from "./_datos"
 
 /** El cuerpo JSON con que se llamó a `fetch`. */
 const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
@@ -10,6 +10,7 @@ const CITA: DatosDeNuevaCita = {
   clienteId: "cliente-1",
   clienteNombre: "Ana",
   servicio: "Corte",
+  servicioIds: "",
   fecha: "2026-10-20",
   horaInicio: "10:00",
   horaFin: "10:30",
@@ -54,6 +55,24 @@ describe("precioDeLaCita", () => {
 })
 
 describe("crearCita", () => {
+  it("con servicios del catálogo manda sus ids y no el texto (#159)", async () => {
+    const fetchFalso = simularRespuesta(json({ id: "c1" }, 201))
+
+    await crearCita({ ...CITA, servicio: "lo escrito", servicioIds: "s-corte,s-color" }, ZONA)
+
+    expect(cuerpoEnviado(fetchFalso).servicioIds).toEqual(["s-corte", "s-color"])
+    expect(cuerpoEnviado(fetchFalso)).not.toHaveProperty("title")
+  })
+
+  it("sin servicios del catálogo manda el texto libre y no servicioIds", async () => {
+    const fetchFalso = simularRespuesta(json({ id: "c1" }, 201))
+
+    await crearCita(CITA, ZONA)
+
+    expect(cuerpoEnviado(fetchFalso).title).toBe("Corte")
+    expect(cuerpoEnviado(fetchFalso)).not.toHaveProperty("servicioIds")
+  })
+
   it("manda 8.000 como 8000", async () => {
     const fetchFalso = simularRespuesta(json({ id: "c1" }, 201))
 
@@ -321,5 +340,24 @@ describe("nombreDeCliente y buscarClientes: nombre y apellido (clientes viejos d
     vi.stubGlobal("fetch", simularRespuesta(json({ clientes: [{ id: "c", name: "Lucía", lastName: "Pérez", email: "lucia@correo.test" }] })))
     const resultado = await buscarClientes("lucía pérez")
     expect(resultado).toEqual({ ok: true, datos: [{ id: "c", nombre: "Lucía Pérez", email: "lucia@correo.test" }] })
+  })
+})
+
+describe("catálogo de la cita nueva (#159)", () => {
+  const servicio = (id: string) => ({ id, name: id, description: null, duration: 30, price: 1000 })
+  const catalogo = {
+    servicios: [servicio("s-corte"), servicio("s-color")],
+    serviciosPorProfesional: { "m-pedro": ["s-corte"] },
+  }
+
+  it("ofrece lo que hace el profesional si lo tiene acotado; si no, o sin asignar, todo", () => {
+    expect(serviciosParaElProfesional(catalogo, "m-pedro").map((s) => s.id)).toEqual(["s-corte"])
+    expect(serviciosParaElProfesional(catalogo, "m-carla").map((s) => s.id)).toEqual(["s-corte", "s-color"])
+    expect(serviciosParaElProfesional(catalogo, "").map((s) => s.id)).toEqual(["s-corte", "s-color"])
+  })
+
+  it("los ids elegidos, en orden; vacío es ninguno", () => {
+    expect(idsDeServiciosElegidos("s-color,s-corte")).toEqual(["s-color", "s-corte"])
+    expect(idsDeServiciosElegidos("")).toEqual([])
   })
 })
