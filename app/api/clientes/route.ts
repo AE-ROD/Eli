@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url)
-  const busqueda = searchParams.get("q") ?? ""
+  const busqueda = (searchParams.get("q") ?? "").trim()
   const etiqueta = searchParams.get("tag") ?? ""
   const { pagina, limite } = paginacionSchema.parse({
     pagina: searchParams.get("pagina") ?? undefined,
