@@ -92,7 +92,7 @@ export interface ReservaConfirmada {
   enlaceDeGestion: string
   /** `false` si ya quedó dentro del plazo: el enlace no la deja cancelar ni cambiar (QA#8). */
   sePuedeCambiar?: boolean
-  /** Si el cron alcanza a mandar el recordatorio (N4), calculado en el servidor con su hora. */
+  /** Si va a llegar el recordatorio (N4): se dejó correo y el cron alcanza a mandarlo, con la hora del servidor. */
   recibiraRecordatorio?: boolean
 }
 

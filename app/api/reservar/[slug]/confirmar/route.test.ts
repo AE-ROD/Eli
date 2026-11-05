@@ -393,13 +393,20 @@ describe("POST /api/reservar/[slug]/confirmar: ni en el pasado ni a más de 90 d
       expect((await confirmar("11:00", "2026-10-21")).cuerpo.sePuedeCambiar).toBe(true)
     })
 
-    it("N4: dice si el recordatorio alcanza a salir, con la hora del servidor (corrida de las 10:00)", async () => {
+    it("N4: dice si el recordatorio alcanza a salir, con la hora del servidor (corrida de las 10:00) y sólo con correo", async () => {
+      const { POST } = await import("./route")
+      const conCorreo = async (hora: string, fecha: string) => {
+        todaLaSemana()
+        const res = await POST(pedidoFalso({ ...reserva(hora, fecha), email: "lucia@correo.test" }), conSlug)
+        return (await res.json()).recibiraRecordatorio
+      }
       // Para hoy: nunca. Para mañana: la corrida de hoy ya pasó (son las 10:30). Pasado mañana: sí.
-      expect((await confirmar("11:00", "2026-10-19")).cuerpo.recibiraRecordatorio).toBe(false)
+      expect(await conCorreo("11:00", "2026-10-19")).toBe(false)
+      expect(await conCorreo("11:00", "2026-10-20")).toBe(false)
+      expect(await conCorreo("11:00", "2026-10-21")).toBe(true)
+      // Sin correo no hay recordatorio, aunque el cron alcance.
       todaLaSemana()
-      expect((await confirmar("11:00", "2026-10-20")).cuerpo.recibiraRecordatorio).toBe(false)
-      todaLaSemana()
-      expect((await confirmar("11:00", "2026-10-21")).cuerpo.recibiraRecordatorio).toBe(true)
+      expect((await confirmar("11:00", "2026-10-21")).cuerpo.recibiraRecordatorio).toBe(false)
     })
 
     it("una hora de hoy que todavía no llega (11:00): crea la cita", async () => {

@@ -452,9 +452,10 @@ export async function POST(
     // Si al reservar ya quedó dentro del plazo, el enlace no la dejará
     // cancelar ni cambiar: ni la pantalla ni el correo lo ofrecen (QA#8).
     const sePuedeCambiar = dentroDelPlazo(startTime, negocio.cancelacionHorasAntes, ahora)
-    // Si el cron de recordatorios alcanza a mandarlo (N4), con la hora del
-    // servidor y no la del navegador: reservando tarde para mañana, no.
-    const conRecordatorio = recibiraRecordatorio(startTime, ahora, zona)
+    // Si el recordatorio va a llegar (N4): sólo con correo, y si el cron
+    // alcanza a mandarlo, con la hora del servidor y no la del navegador
+    // (reservando tarde para mañana, no).
+    const conRecordatorio = normalizarEmail(datos.email) !== null && recibiraRecordatorio(startTime, ahora, zona)
 
     // Referidos (`docs/PRODUCTO.md`, sección 4): la primera reserva pública de
     // un negocio invitado le suma días a la prueba de quien lo invitó. Va
