@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { candidatosDeLaReserva, horasLibresDelDia } from "@/lib/agenda-publica"
+import { candidatosDeLaReserva, hayHorasPosiblesDelDia, horasLibresDelDia } from "@/lib/agenda-publica"
 import { horasConRebaja, leerHoraValle } from "@/lib/hora-valle"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { MENSAJE_FECHA_MUY_LEJANA, MENSAJE_FECHA_PASADA, fechaNoReservable } from "@/lib/reserva-publica"
@@ -104,6 +104,7 @@ export async function GET(
     return NextResponse.json({
       slots: [],
       mensaje: noReservable === "pasada" ? MENSAJE_FECHA_PASADA : MENSAJE_FECHA_MUY_LEJANA,
+      sinListaDeEspera: true,
     })
   }
 
@@ -120,18 +121,19 @@ export async function GET(
   }
 
   const candidatos = reserva.candidatos.filter((candidato) => candidato.franjas.length > 0)
+  // `sinListaDeEspera`: el día no tiene ninguna hora que se pueda liberar
+  // (cerrado, bloqueado entero o ya pasado), así que la página no ofrece
+  // "Avísame si se libera una hora" (QA#26). La inscripción lo vuelve a
+  // comprobar (`inscribirEnListaDeEspera`).
   if (candidatos.length === 0) {
-    return NextResponse.json({ slots: [], mensaje: "No hay atención ese día" })
+    return NextResponse.json({ slots: [], mensaje: "No hay atención ese día", sinListaDeEspera: true })
   }
 
-  const slots = await horasLibresDelDia(prisma, {
-    businessId: negocio.id,
-    zona,
-    fecha,
-    duracion,
-    candidatos,
-    ahora,
-  })
+  const consultaDelDia = { businessId: negocio.id, zona, fecha, duracion, candidatos, ahora }
+  const slots = await horasLibresDelDia(prisma, consultaDelDia)
+  if (slots.length === 0 && !(await hayHorasPosiblesDelDia(prisma, consultaDelDia))) {
+    return NextResponse.json({ slots, sinListaDeEspera: true })
+  }
 
   // Hora valle (#89c): `slots` sigue siendo la lista de horas, como siempre
   // (la página de antes sólo lee eso). Sólo si el negocio la encendió y

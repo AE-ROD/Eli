@@ -10,7 +10,12 @@ import {
   normalizarNombre,
   normalizarTelefono,
   yaPasoLaHora,
+  avisoSinCambiosPorElEnlace,
+  avisoSinCambiosDespuesDeReservar,
+  quedaSinCambiosPorElEnlace,
 } from "./reserva-publica"
+import { dentroDelPlazo } from "./gestion-de-cita"
+import { instanteEn } from "./zona-horaria"
 
 /**
  * Esperados a mano, independientes de la zona de la máquina: el 19/10/2026 a
@@ -193,5 +198,41 @@ describe("consentimientoSobreClienteExistente", () => {
     expect(consentimientoSobreClienteExistente("+56987654321", "+56912345678")).toBe("nada")
     expect(consentimientoSobreClienteExistente("+1 415 555 0100", "+56912345678")).toBe("nada")
     expect(consentimientoSobreClienteExistente("", "+56912345678")).toBe("nada")
+  })
+})
+
+describe("quedaSinCambiosPorElEnlace (QA#8)", () => {
+  // 2030-01-07 12:00 UTC son las 09:00 en Santiago (UTC-3 en enero).
+  const AHORA_QA8 = new Date("2030-01-07T12:00:00.000Z")
+  const ZONA = "America/Santiago"
+
+  it("una hora a menos del plazo ya no se puede cancelar ni cambiar por el enlace", () => {
+    expect(quedaSinCambiosPorElEnlace("2030-01-07", "18:00", ZONA, 24, AHORA_QA8)).toBe(true)
+    expect(quedaSinCambiosPorElEnlace("2030-01-08", "08:59", ZONA, 24, AHORA_QA8)).toBe(true)
+  })
+
+  it("justo en el plazo o más allá, sí (la misma regla que dentroDelPlazo)", () => {
+    expect(quedaSinCambiosPorElEnlace("2030-01-08", "09:00", ZONA, 24, AHORA_QA8)).toBe(false)
+    expect(dentroDelPlazo(instanteEn("2030-01-08", "09:00", ZONA), 24, AHORA_QA8)).toBe(true)
+    expect(dentroDelPlazo(instanteEn("2030-01-08", "08:59", ZONA), 24, AHORA_QA8)).toBe(false)
+  })
+
+  it("con plazo 0 nunca avisa; sin hora elegida o inválida, tampoco", () => {
+    expect(quedaSinCambiosPorElEnlace("2030-01-07", "09:30", ZONA, 0, AHORA_QA8)).toBe(false)
+    expect(quedaSinCambiosPorElEnlace("2030-01-07", "", ZONA, 24, AHORA_QA8)).toBe(false)
+    expect(quedaSinCambiosPorElEnlace("", "10:00", ZONA, 24, AHORA_QA8)).toBe(false)
+  })
+
+  it("el aviso dice el plazo y que no se podrá cancelar ni cambiar", () => {
+    expect(avisoSinCambiosPorElEnlace(24)).toMatch(/menos de 24 horas.*no podrás cancelarla ni cambiarla/)
+    expect(avisoSinCambiosPorElEnlace(1)).toMatch(/menos de 1 hora:/)
+  })
+})
+
+describe("avisoSinCambiosDespuesDeReservar (QA#8)", () => {
+  it("dice el plazo y que se contacte al local", () => {
+    expect(avisoSinCambiosDespuesDeReservar(24)).toBe(
+      "Tu hora es en menos de 24 horas, así que no se puede cancelar ni cambiar por el enlace. Si lo necesitas, contacta directamente al local."
+    )
   })
 })

@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { enviarConfirmacionCliente, enviarAvisoProfesional } from "@/lib/email"
+import { dentroDelPlazo, plazoValido } from "@/lib/gestion-de-cita"
 import { reservaSchema } from "@/lib/validaciones"
 import {
   asignarCandidatoLibre,
@@ -447,6 +448,9 @@ export async function POST(
       return NextResponse.json({ error: resultado.error }, { status: resultado.status })
     }
     const cita = resultado.cita
+    // Si al reservar ya quedó dentro del plazo, el enlace no la dejará
+    // cancelar ni cambiar: ni la pantalla ni el correo lo ofrecen (QA#8).
+    const sePuedeCambiar = dentroDelPlazo(startTime, negocio.cancelacionHorasAntes, ahora)
 
     // Referidos (`docs/PRODUCTO.md`, sección 4): la primera reserva pública de
     // un negocio invitado le suma días a la prueba de quien lo invitó. Va
@@ -485,7 +489,8 @@ export async function POST(
           duracion: resumen.duracion,
           profesional: profesional?.nombre ?? null,
           enlaceDeGestion: `${baseUrl}${rutaDeGestion}`,
-          plazoHoras: negocio.cancelacionHorasAntes,
+          plazoHoras: plazoValido(negocio.cancelacionHorasAntes),
+          sePuedeCambiar,
           // El correo sí lo dice: el local la confirmará (#84).
           porConfirmar: cita.confirmacionPorFaltas,
         }).catch(() => null)
@@ -524,6 +529,7 @@ export async function POST(
       {
         citaId: cita.id,
         enlaceDeGestion: rutaDeGestion,
+        sePuedeCambiar,
         profesional: profesional ? { id: profesional.id, nombre: profesional.nombre } : null,
         mensaje: "Reserva confirmada",
       },

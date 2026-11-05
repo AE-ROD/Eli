@@ -161,7 +161,29 @@ describe("GET: ver la cita", () => {
       plazoHoras: 24,
       sePuedeCambiar: true,
       sePuedeReagendar: true,
+      // El negocio atiende todos los días y Carla no cargó horario propio.
+      diasConAtencion: [0, 1, 2, 3, 4, 5, 6],
     })
+  })
+
+  it("QA#19: dice qué días se pueden elegir al reagendar: no los cerrados del negocio ni los que su profesional no atiende", async () => {
+    escenario()
+    // Domingo cerrado (no hay franja del domingo).
+    base.reiniciar({ ...base.volcado(), workSchedule: base.volcado().workSchedule.filter((fila) => fila.dayOfWeek !== 0) })
+    expect((await ver()).cuerpo.diasConAtencion).toEqual([1, 2, 3, 4, 5, 6])
+
+    // Carla cargó horario propio sólo lunes y miércoles: manda el suyo.
+    base.reiniciar({
+      ...base.volcado(),
+      workSchedule: [
+        ...base.volcado().workSchedule,
+        { id: "h-carla-1", businessId: NEGOCIO, memberId: "m-carla", dayOfWeek: 1, startTime: "14:00", endTime: "20:00" },
+        { id: "h-carla-3", businessId: NEGOCIO, memberId: "m-carla", dayOfWeek: 3, startTime: "14:00", endTime: "20:00" },
+        // El horario de otro negocio no cuenta.
+        { id: "h-ajeno", businessId: OTRO_NEGOCIO, memberId: null, dayOfWeek: 0, startTime: "09:00", endTime: "12:00" },
+      ],
+    })
+    expect((await ver()).cuerpo.diasConAtencion).toEqual([1, 3])
   })
 
   it("fuera de plazo se ve, pero dice que ya no se puede cambiar", async () => {
@@ -308,7 +330,7 @@ describe("reagendar", () => {
     escenario({
       otras: [{ id: "c-otra", businessId: NEGOCIO, title: "Color", memberId: "m-carla", startTime: aLas("09:00", "2030-01-08"), endTime: aLas("10:00", "2030-01-08") }],
     })
-    expect((await horas("2030-01-08")).cuerpo.slots).toEqual(["10:00", "11:00"])
+    expect((await horas("2030-01-08")).cuerpo.slots).toEqual(["10:00", "10:30", "11:00"])
     expect((await reagendar("2030-01-08", "09:00")).status).toBe(409)
     expect(laCita().startTime).toEqual(aLas("10:00"))
   })

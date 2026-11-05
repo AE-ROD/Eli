@@ -30,6 +30,18 @@ const emailSchema = z
   .email("El email no es válido")
 
 /**
+ * El correo de quien reserva, se anota en la lista de espera o en la fila
+ * virtual: las mismas reglas que `emailSchema`, con los mensajes en el
+ * vocabulario de la página pública, que dice "correo" (QA#22). Los de la
+ * cuenta siguen como estaban.
+ */
+const correoPublicoSchema = z
+  .string({ required_error: "Falta el correo", invalid_type_error: "El correo no es válido" })
+  .trim()
+  .max(LARGO_MAXIMO_EMAIL, `El correo puede tener hasta ${LARGO_MAXIMO_EMAIL} caracteres`)
+  .email("El correo no es válido")
+
+/**
  * El email de una cuenta (B4): sin espacios en las puntas y en minúsculas,
  * siempre, al guardarlo y al buscarlo. Para el servidor de correo `Ana@x.com`
  * y `ana@x.com` son la misma casilla; si acá fueran distintos, una persona
@@ -111,7 +123,7 @@ const camposDeReservaSchema = z.object({
   cedula: opcionalHasta("La cédula", 30),
   // Vacío es "sin email". No con `.or(z.literal(""))`: la unión fallida da
   // un "Invalid input" genérico en vez del mensaje del email.
-  email: z.preprocess((valor) => (valor === "" ? undefined : valor), emailSchema.optional()),
+  email: z.preprocess((valor) => (valor === "" ? undefined : valor), correoPublicoSchema.optional()),
   // En E.164 (`+569XXXXXXXX`) o null si vino vacío; lo que no se puede leer
   // como un número chileno es un 400 con el formato esperado.
   telefono: z.preprocess((valor) => (valor === undefined || valor === null ? "" : valor), telefonoChileno()),
@@ -168,7 +180,7 @@ export const listaDeEsperaSchema = z.object({
   fecha: camposDeReservaSchema.shape.fecha,
   nombre: nombreSchema("nombre"),
   apellido: nombreSchema("apellido"),
-  email: emailSchema,
+  email: correoPublicoSchema,
   telefono: camposDeReservaSchema.shape.telefono,
   whatsappConsentimiento: camposDeReservaSchema.shape.whatsappConsentimiento,
 })
@@ -192,5 +204,5 @@ export const filaVirtualSchema = z.object({
     LARGO_MAXIMO_NOMBRE_EN_FILA,
     `El nombre puede tener hasta ${LARGO_MAXIMO_NOMBRE_EN_FILA} caracteres`
   ),
-  email: z.preprocess((valor) => (valor === "" || valor === null ? undefined : valor), emailSchema.optional()),
+  email: z.preprocess((valor) => (valor === "" || valor === null ? undefined : valor), correoPublicoSchema.optional()),
 })

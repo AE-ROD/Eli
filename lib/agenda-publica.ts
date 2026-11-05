@@ -1,5 +1,12 @@
 import type { Prisma } from "@prisma/client"
-import { cabeEnAtencion, franjasDeAtencion, type FilaDeHorarioSemanal } from "@/lib/horario-de-atencion"
+import {
+  cabeEnAtencion,
+  franjasDeAtencion,
+  fusionarFranjas,
+  horarioSemanalDeAtencion,
+  type FilaDeHorarioSemanal,
+  type FranjaDelDia,
+} from "@/lib/horario-de-atencion"
 import { horaAMinutos, minutosAHora, type FranjaHorario } from "@/lib/horario-dia"
 import { franjasParaElDia } from "@/lib/mover-cita"
 import { imagenPublica } from "@/lib/pagina-del-negocio"
@@ -118,7 +125,16 @@ export function candidatosDelDia(
   profesionales: string[],
   fecha: string
 ): Candidato[] {
-  const dia = diaDeLaSemana(fecha)
+  return candidatosDelDiaDeLaSemana(filasDeLaSemana, hayProfesionales, profesionales, diaDeLaSemana(fecha))
+}
+
+/** `candidatosDelDia` con el día de la semana (0 domingo a 6 sábado) en vez de la fecha. */
+function candidatosDelDiaDeLaSemana(
+  filasDeLaSemana: FilaDeHorarioSemanal[],
+  hayProfesionales: boolean,
+  profesionales: string[],
+  dia: number
+): Candidato[] {
   if (!hayProfesionales) {
     return [{ memberId: null, franjas: franjasDeAtencion(filasDeLaSemana.filter((fila) => fila.dayOfWeek === dia)) }]
   }
@@ -128,12 +144,55 @@ export function candidatosDelDia(
   }))
 }
 
-/** Las horas de inicio de un tramo de `duracion` minutos dentro de una franja, cada `duracion` minutos desde que abre. */
+/**
+ * El horario que publica la página del negocio (la mini página, su "Abierto
+ * ahora" y los días que ofrece el calendario de la reserva), por día: el del
+ * negocio (`horarioSemanalDeAtencion`) más el de cada profesional que atiende
+ * (`franjasParaElDia`, el mismo con que se le ofrecen horas), fusionados.
+ *
+ * Antes la página mostraba sólo el del negocio, y un profesional con horario
+ * propio más largo (el negocio de 09:00 a 18:00 y Carla de 14:00 a 20:00)
+ * recibía reservas a horas que la página decía cerradas (QA#4). PRODUCTO.md
+ * fija que cada profesional atiende en su horario propio si lo cargó, así que
+ * no se recortan sus horas: se publica lo que de verdad se ofrece, sin
+ * esconder el horario que cargó el dueño. Así ninguna hora ofrecida queda
+ * fuera del horario publicado. Sin profesionales, es el del negocio.
+ *
+ * `profesionalIds` son los que atienden (`atiendeCitas`): el horario propio
+ * de un encargado no se publica, porque no recibe reservas.
+ */
+export function horarioSemanalPublicado(filas: FilaDeHorarioSemanal[], profesionalIds: string[]): FranjaDelDia[] {
+  const delNegocio = horarioSemanalDeAtencion(filas)
+  if (profesionalIds.length === 0) return delNegocio
+  return [0, 1, 2, 3, 4, 5, 6].flatMap((dayOfWeek) =>
+    fusionarFranjas([
+      ...delNegocio.filter((franja) => franja.dayOfWeek === dayOfWeek),
+      ...profesionalIds.flatMap((memberId) => franjasParaElDia(filas, memberId, dayOfWeek)?.franjas ?? []),
+    ]).map((franja) => ({ dayOfWeek, ...franja }))
+  )
+}
+
+/**
+ * Cada cuántos minutos, como mucho, se ofrece una hora de inicio. Antes el
+ * paso era la duración del servicio: con uno de 90 minutos sólo se ofrecían
+ * las 09:00, 10:30, 12:00…, y una cita a las 10:00 dejaba fuera las 11:30 y
+ * las 12:00 aunque estuvieran libres (QA#2). `confirmar` acepta cualquier
+ * hora que quepa, así que ofrecer más inicios no abre nada que después se
+ * rechace.
+ */
+export const PASO_MAXIMO_ENTRE_HORAS = 30
+
+/**
+ * Las horas de inicio de un tramo de `duracion` minutos dentro de una franja,
+ * desde que abre y cada `PASO_MAXIMO_ENTRE_HORAS` minutos (o cada `duracion`,
+ * si el servicio dura menos: uno de 15 minutos sigue ofreciéndose cada 15).
+ */
 export function horasDeLaFranja(franja: FranjaHorario, duracion: number): string[] {
   const horas: string[] = []
   if (!(duracion > 0)) return horas
+  const paso = Math.min(duracion, PASO_MAXIMO_ENTRE_HORAS)
   const fin = horaAMinutos(franja.endTime)
-  for (let minuto = horaAMinutos(franja.startTime); minuto + duracion <= fin; minuto += duracion) {
+  for (let minuto = horaAMinutos(franja.startTime); minuto + duracion <= fin; minuto += paso) {
     horas.push(minutosAHora(minuto))
   }
   return horas
@@ -178,6 +237,9 @@ export function tramoDeLaReserva(fecha: string, hora: string, duracion: number, 
  * Las horas libres de un día: la unión de las de cada candidato (con uno
  * solo, las suyas). Sin horas pasadas ni horas que el reloj se salta por el
  * horario de verano: `confirmar` las rechaza.
+ *
+ * Con `soloBloqueos`, las citas no cuentan: son las horas que el día podría
+ * llegar a ofrecer si se liberaran todas (`hayHorasPosiblesDelDia`).
  */
 export async function horasLibresDelDia(
   db: BaseDeAgendaPublica,
@@ -189,9 +251,10 @@ export async function horasLibresDelDia(
     candidatos: Candidato[]
     ahora: Date
     ignorarCitaId?: string | null
+    soloBloqueos?: boolean
   }
 ): Promise<string[]> {
-  const { businessId, zona, fecha, duracion, candidatos, ahora, ignorarCitaId } = consulta
+  const { businessId, zona, fecha, duracion, candidatos, ahora, ignorarCitaId, soloBloqueos = false } = consulta
   const dia = rangoDelDiaEn(fecha, zona)
   const libres = new Set<string>()
 
@@ -202,19 +265,36 @@ export async function horasLibresDelDia(
     const pendientes = horas.filter((hora) => !libres.has(hora))
     if (pendientes.length === 0) continue
 
-    const ocupacion = await ocupacionDelCandidato(db, {
+    const leida = await ocupacionDelCandidato(db, {
       businessId,
       memberId: candidato.memberId,
       desde: dia.desde,
       hasta: dia.hasta,
       ignorarCitaId,
     })
+    const ocupacion = soloBloqueos ? { citas: [], bloqueos: leida.bloqueos } : leida
     for (const hora of pendientes) {
       if (estaLibre(ocupacion, tramoDeLaReserva(fecha, hora, duracion, zona))) libres.add(hora)
     }
   }
 
   return [...libres].sort((a, b) => horaAMinutos(a) - horaAMinutos(b))
+}
+
+/**
+ * Si el día tiene alguna hora que podría liberarse: en horario, no pasada y
+ * fuera de los bloqueos, aunque hoy esté tomada por una cita. Un día cerrado,
+ * bloqueado entero o cuyas horas ya pasaron no tiene ninguna, y ahí no se
+ * ofrece la lista de espera: ninguna cancelación le va a abrir una hora
+ * (QA#26).
+ */
+export async function hayHorasPosiblesDelDia(
+  db: BaseDeAgendaPublica,
+  consulta: Omit<Parameters<typeof horasLibresDelDia>[1], "soloBloqueos" | "ignorarCitaId">
+): Promise<boolean> {
+  const candidatos = consulta.candidatos.filter((candidato) => candidato.franjas.length > 0)
+  if (candidatos.length === 0) return false
+  return (await horasLibresDelDia(db, { ...consulta, candidatos, soloBloqueos: true })).length > 0
 }
 
 /** Los candidatos cuyo horario cubre entero el tramo [inicio, inicio + duración) de esa hora. */
@@ -289,7 +369,43 @@ export async function candidatosDeLaReserva(
   db: Pick<Prisma.TransactionClient, "businessMember" | "workSchedule">,
   consulta: { businessId: string; serviceIds: string[]; profesionalId: string | null; fecha: string }
 ): Promise<CandidatosDeLaReserva> {
-  const { businessId, serviceIds, profesionalId, fecha } = consulta
+  const leidos = await leerQuienesPuedenTomarla(db, consulta)
+  if (leidos.tipo === "profesional-no-disponible") return leidos
+  const { profesionales, elegidos, filas } = leidos
+  return {
+    tipo: "ok",
+    profesionales,
+    candidatos: candidatosDelDia(filas, profesionales.length > 0, elegidos, consulta.fecha),
+  }
+}
+
+/**
+ * Los días de la semana (0 domingo a 6 sábado) en que alguno de los
+ * candidatos de la reserva tiene horario: con los mismos candidatos que
+ * `candidatosDeLaReserva`, para que el calendario de reagendar no deje elegir
+ * un día cerrado (QA#19). `null` si el profesional ya no puede tomarla.
+ */
+export async function diasConAtencionDeLaReserva(
+  db: Pick<Prisma.TransactionClient, "businessMember" | "workSchedule">,
+  consulta: { businessId: string; serviceIds: string[]; profesionalId: string | null }
+): Promise<number[] | null> {
+  const leidos = await leerQuienesPuedenTomarla(db, consulta)
+  if (leidos.tipo === "profesional-no-disponible") return null
+  const { profesionales, elegidos, filas } = leidos
+  return [0, 1, 2, 3, 4, 5, 6].filter((dia) =>
+    candidatosDelDiaDeLaSemana(filas, profesionales.length > 0, elegidos, dia).some((candidato) => candidato.franjas.length > 0)
+  )
+}
+
+/** Lo que leen `candidatosDeLaReserva` y `diasConAtencionDeLaReserva`: el equipo, los elegidos y el horario de la semana. */
+async function leerQuienesPuedenTomarla(
+  db: Pick<Prisma.TransactionClient, "businessMember" | "workSchedule">,
+  consulta: { businessId: string; serviceIds: string[]; profesionalId: string | null }
+): Promise<
+  | { tipo: "ok"; profesionales: ProfesionalQueAtiende[]; elegidos: string[]; filas: FilaDeHorarioSemanal[] }
+  | { tipo: "profesional-no-disponible" }
+> {
+  const { businessId, serviceIds, profesionalId } = consulta
   const [profesionales, filas] = await Promise.all([
     leerProfesionalesQueAtienden(db, businessId),
     db.workSchedule.findMany({
@@ -304,9 +420,5 @@ export async function candidatosDeLaReserva(
     elegidos = queLoHacen.filter((profesional) => profesional.id === profesionalId)
     if (elegidos.length === 0) return { tipo: "profesional-no-disponible" }
   }
-  return {
-    tipo: "ok",
-    profesionales,
-    candidatos: candidatosDelDia(filas, profesionales.length > 0, elegidos.map((profesional) => profesional.id), fecha),
-  }
+  return { tipo: "ok", profesionales, elegidos: elegidos.map((profesional) => profesional.id), filas }
 }

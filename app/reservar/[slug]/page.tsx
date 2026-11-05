@@ -3,8 +3,7 @@ import { notFound } from "next/navigation"
 import { CalendarX2 } from "lucide-react"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Tarjeta } from "@/components/comunes/tarjeta"
-import { plazoParaQuienReserva } from "@/lib/gestion-de-cita"
-import { horarioSemanalDeAtencion } from "@/lib/horario-de-atencion"
+import { plazoParaQuienReserva, plazoValido } from "@/lib/gestion-de-cita"
 import { prisma } from "@/lib/prisma"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
 import { descripcionParaCompartir } from "@/lib/pagina-del-negocio"
@@ -69,13 +68,6 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
         select: { id: true, name: true, description: true, duration: true, price: true },
         orderBy: { createdAt: "asc" },
       },
-      // Generales y de miembros: `horarioSemanalDeAtencion` decide cuál manda
-      // cada día, con la misma regla que la disponibilidad y `confirmar`.
-      workSchedules: {
-        where: { active: true },
-        select: { dayOfWeek: true, memberId: true, startTime: true, endTime: true },
-        orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
-      },
     },
   })
 
@@ -110,9 +102,12 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
         nombreNegocio={negocio.name}
         zona={zonaDelNegocio(negocio.timezone)}
         servicios={negocio.services}
-        horarios={horarioSemanalDeAtencion(negocio.workSchedules)}
+        // El mismo horario que publica la mini página (QA#4): el del negocio
+        // más el de quienes atienden. El calendario ofrece sus días.
+        horarios={pagina.horario}
         listaDeEsperaActiva={negocio.listaDeEsperaActiva}
         plazoDeCambios={plazoParaQuienReserva(pagina.plazoDeCambiosHoras)}
+        plazoDeCambiosHoras={plazoValido(pagina.plazoDeCambiosHoras)}
       />
       </div>
     </MarcoDeReserva>

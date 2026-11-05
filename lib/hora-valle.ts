@@ -198,6 +198,24 @@ export interface PrecioDeLaHora {
 }
 
 /**
+ * Cuánto baja de verdad una hora, para la etiqueta (QA#14). Con un servicio
+ * excluido (Corte + Color con Color sin rebaja), el % rebaja sólo una parte:
+ * "−20%" sobre $33.000 prometía $26.400 y el total era $31.400. `enTodo` dice
+ * si el total bajó el % entero (con hasta un peso de redondeo por servicio,
+ * de los 4 posibles); si no, la etiqueta muestra el monto ahorrado. No
+ * cambia ningún precio. `null` si no baja.
+ */
+export function rebajaDeLaHora(
+  precio: Pick<PrecioDeLaHora, "precio" | "precioNormal" | "porcentaje">
+): { porcentaje: number; ahorro: number; enTodo: boolean } | null {
+  if (precio.precio === null || precio.precioNormal === null || precio.porcentaje <= 0) return null
+  const ahorro = precio.precioNormal - precio.precio
+  if (ahorro <= 0) return null
+  const enTodo = Math.abs(rebajar(precio.precioNormal, precio.porcentaje) - precio.precio) <= 2
+  return { porcentaje: precio.porcentaje, ahorro, enTodo }
+}
+
+/**
  * Las horas (de ese día, en la zona del negocio) en que la reserva cuesta
  * menos por hora valle, con su precio. Vacío si está apagada o ninguna baja.
  */

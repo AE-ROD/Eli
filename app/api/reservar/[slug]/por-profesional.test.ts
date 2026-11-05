@@ -149,13 +149,13 @@ describe("disponibilidad por profesional", () => {
     escenario({ appointment: [cita("c-1", "m-carla", "10:00")] })
 
     expect((await horas("&profesionalId=m-carla")).cuerpo).toEqual({ slots: ["09:00", "11:00"] })
-    expect((await horas("&profesionalId=m-pedro")).cuerpo).toEqual({ slots: ["09:00", "10:00", "11:00"] })
+    expect((await horas("&profesionalId=m-pedro")).cuerpo).toEqual({ slots: ["09:00", "09:30", "10:00", "10:30", "11:00"] })
   })
 
   it("con cualquiera: la hora sigue libre mientras uno esté libre", async () => {
     escenario({ appointment: [cita("c-1", "m-carla", "10:00"), cita("c-2", "m-pedro", "11:00")] })
 
-    expect((await horas("")).cuerpo).toEqual({ slots: ["09:00", "10:00", "11:00"] })
+    expect((await horas("")).cuerpo).toEqual({ slots: ["09:00", "09:30", "10:00", "11:00"] })
   })
 
   it("con cualquiera: la hora se va cuando todos están ocupados", async () => {
@@ -174,7 +174,7 @@ describe("disponibilidad por profesional", () => {
   it("las citas canceladas no ocupan", async () => {
     escenario({ appointment: [cita("c-1", "m-carla", "10:00", { status: "cancelada" })] })
 
-    expect((await horas("&profesionalId=m-carla")).cuerpo).toEqual({ slots: ["09:00", "10:00", "11:00"] })
+    expect((await horas("&profesionalId=m-carla")).cuerpo).toEqual({ slots: ["09:00", "09:30", "10:00", "10:30", "11:00"] })
   })
 
   it("respeta el bloqueo del profesional y el de todo el negocio", async () => {
@@ -186,7 +186,7 @@ describe("disponibilidad por profesional", () => {
     })
 
     expect((await horas("&profesionalId=m-carla")).cuerpo).toEqual({ slots: ["10:00"] })
-    expect((await horas("&profesionalId=m-pedro")).cuerpo).toEqual({ slots: ["09:00", "10:00"] })
+    expect((await horas("&profesionalId=m-pedro")).cuerpo).toEqual({ slots: ["09:00", "09:30", "10:00"] })
   })
 
   it("sólo los que hacen el servicio: Pedro, que sólo hace color, no ofrece corte", async () => {
@@ -208,7 +208,7 @@ describe("disponibilidad por profesional", () => {
       ],
     })
 
-    expect((await horas("&profesionalId=m-carla")).cuerpo).toEqual({ slots: ["15:00", "16:00"] })
+    expect((await horas("&profesionalId=m-carla")).cuerpo).toEqual({ slots: ["15:00", "15:30", "16:00"] })
   })
 
   it("aislamiento: un profesional de otro negocio, el encargado o uno inventado son 404 indistinguibles", async () => {
@@ -224,7 +224,7 @@ describe("disponibilidad por profesional", () => {
   it("las citas de otro negocio no ocupan", async () => {
     escenario({ appointment: [{ ...cita("c-ajena", "m-ajeno", "10:00"), businessId: OTRO_NEGOCIO }] })
 
-    expect((await horas("&profesionalId=m-carla")).cuerpo).toEqual({ slots: ["09:00", "10:00", "11:00"] })
+    expect((await horas("&profesionalId=m-carla")).cuerpo).toEqual({ slots: ["09:00", "09:30", "10:00", "10:30", "11:00"] })
   })
 })
 

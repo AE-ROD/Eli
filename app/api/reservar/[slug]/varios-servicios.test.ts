@@ -108,17 +108,17 @@ afterEach(() => {
 describe("disponibilidad con varios servicios", () => {
   it("las horas son de un bloque de la suma de las duraciones", async () => {
     escenario()
-    // Corte + Color = 90 minutos: de 9 a 13 entran 9:00 y 10:30 (y 12:00 no).
+    // Corte + Color = 90 minutos: de 9 a 13, cada media hora hasta las 11:30 (12:00 ya no cabe).
     const { status, cuerpo } = await horas("servicioIds=s-corte,s-color&profesionalId=m-carla")
     expect(status).toBe(200)
-    expect(cuerpo.slots).toEqual(["09:00", "10:30"])
+    expect(cuerpo.slots).toEqual(["09:00", "09:30", "10:00", "10:30", "11:00", "11:30"])
   })
 
   it("servicioId suelto sigue valiendo: es uno solo", async () => {
     escenario()
     const { status, cuerpo } = await horas("servicioId=s-corte&profesionalId=m-carla")
     expect(status).toBe(200)
-    expect(cuerpo.slots).toEqual(["09:00", "10:00", "11:00", "12:00"])
+    expect(cuerpo.slots).toEqual(["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00"])
   })
 
   it("un profesional que no hace uno de los servicios queda fuera: elegido es 404", async () => {
@@ -310,7 +310,7 @@ describe("el enlace de gestión con varios servicios", () => {
     await base.prisma.service.update({ where: { id: "s-color" }, data: { duration: 120 } })
     const { GET } = await import("./cita/[token]/disponibilidad/route")
     const cuerpo = await (await GET(pedido("http://localhost/x?fecha=2030-01-08"), params)).json()
-    expect(cuerpo.slots).toEqual(["09:00", "10:30"])
+    expect(cuerpo.slots).toEqual(["09:00", "09:30", "10:00", "10:30", "11:00", "11:30"])
   })
 
   it("reagendar mueve el bloque entero: endTime = inicio + la suma", async () => {
@@ -332,8 +332,8 @@ describe("el enlace de gestión con varios servicios", () => {
     await base.prisma.appointment.update({ where: { id: "c-lucia" }, data: { endTime: aLas("11:00") } })
     const { GET } = await import("./cita/[token]/disponibilidad/route")
     const cuerpo = await (await GET(pedido("http://localhost/x?fecha=2030-01-08"), params)).json()
-    // De 9 a 13, en bloques de 120 min (con la suma serían 9:00 y 10:30).
-    expect(cuerpo.slots).toEqual(["09:00", "11:00"])
+    // De 9 a 13, en bloques de 120 min: hasta las 11:00 (con la suma, de 90, llegaría a las 11:30).
+    expect(cuerpo.slots).toEqual(["09:00", "09:30", "10:00", "10:30", "11:00"])
 
     const { POST } = await import("./cita/[token]/reagendar/route")
     // 11:30 + 90 cabe antes de las 13:00; 11:30 + 120, no.

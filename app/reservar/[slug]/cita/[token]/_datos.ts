@@ -21,6 +21,8 @@ export interface CitaDelEnlace {
   plazoHoras: number
   sePuedeCambiar: boolean
   sePuedeReagendar: boolean
+  /** Los días de la semana (0 domingo a 6 sábado) que se pueden elegir al reagendar; `null`: todos. */
+  diasConAtencion: number[] | null
 }
 
 const ruta = (slug: string, token: string, resto = "") =>
