@@ -15,6 +15,7 @@ import { sePuedeMover, type Advertencia } from "@/lib/mover-cita"
 import { puedeMarcarseNoVino } from "@/lib/campos-del-panel"
 import { actorDeSesion, puedeAsignarCitasAOtros, puedeReactivarCita, puedeResolverPorConfirmar } from "@/lib/permisos"
 import { Aviso } from "@/components/panel/aviso"
+import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { cn } from "@/lib/utils"
 import {
   ESTADO_AL_REACTIVAR,
@@ -29,6 +30,7 @@ import {
 import { estiloDeEstado } from "./estados-de-cita"
 import { useAhora } from "./usar-ahora"
 import { useZonaDelNegocio } from "./zona-del-negocio"
+import { useEsEscritorio } from "./usar-escritorio"
 import { diaLargoEn, horaEn } from "../_hora-del-negocio"
 
 /** Un fundido corto al abrir y al cerrar: el panel no se desliza. */
@@ -46,12 +48,22 @@ interface PropsDePanelDeCita {
   onAsignar: (cita: Cita) => void
   /** Si hay profesionales a quien asignar: entonces se dice que la cita no tiene y se ofrece asignarla. */
   destacarSinProfesional?: boolean
+  /**
+   * El error de la última acción sobre la cita. En el celular el detalle tapa
+   * la página y el aviso de arriba no se ve: se repite adentro.
+   */
+  aviso?: string
 }
 
 /**
  * El detalle de la cita elegida, al lado del calendario: una isla gris, como
  * las columnas del tablero, con los datos en una tarjeta blanca y las
  * acciones debajo. Desde `lg` queda fija al bajar por la página.
+ *
+ * Más angosto no cabe al lado: se abre encima, como diálogo (`MarcoDeModal`,
+ * que atrapa el foco y cierra con Escape), con los mismos datos y las mismas
+ * acciones (#136). Antes en el celular no se veía, y no se podía confirmar
+ * una reserva desde el teléfono.
  *
  * Al cerrarlo, el foco vuelve a la cita que lo abrió; si no, el botón de
  * cerrar desaparecía con el foco adentro y el teclado volvía al principio.
@@ -64,8 +76,10 @@ export function PanelDeCita({
   onReactivada,
   onAsignar,
   destacarSinProfesional = false,
+  aviso = "",
 }: PropsDePanelDeCita) {
   const { data: sesion } = useSession()
+  const escritorio = useEsEscritorio()
   // El día y las horas de la cita, en la zona del negocio (#99).
   const zona = useZonaDelNegocio()
   const reactiva = puedeReactivarCita(actorDeSesion(sesion))
@@ -80,7 +94,8 @@ export function PanelDeCita({
   // La plata de su atención ya se rindió: no se reactiva, se corrige con un ajuste.
   const [seCorrigeConAjuste, setSeCorrigeConAjuste] = useState(false)
   const idDelTitulo = useId()
-  const panel = useRef<HTMLElement>(null)
+  // El panel al lado del calendario o, en el celular, el contenido del diálogo.
+  const panel = useRef<HTMLDivElement>(null)
   const titulo = useRef<HTMLHeadingElement>(null)
   const abridor = useRef<HTMLElement | null>(null)
   const ultimaVista = useRef({ id: cita.id, estado: cita.status })
@@ -102,7 +117,8 @@ export function PanelDeCita({
     const cambioDeEstado = ultimaVista.current.id === cita.id && ultimaVista.current.estado !== cita.status
     ultimaVista.current = { id: cita.id, estado: cita.status }
     const sinFoco = !document.activeElement || document.activeElement === document.body
-    if (cambioDeEstado && sinFoco) titulo.current?.focus({ preventScroll: true })
+    // En el diálogo el título es el del marco: va al contenido.
+    if (cambioDeEstado && sinFoco) (titulo.current ?? panel.current)?.focus({ preventScroll: true })
   }, [cita.id, cita.status])
 
   const cerrar = () => {
@@ -173,31 +189,15 @@ export function PanelDeCita({
   const puedeNoVenir =
     puedeMarcarseNoVino(cita.status) && new Date(cita.startTime).getTime() <= ahora && !porConfirmar
 
-  return (
-    <motion.aside
-      ref={panel}
-      aria-labelledby={idDelTitulo}
-      className="hidden w-80 shrink-0 flex-col gap-3 rounded-panel bg-superficie p-3 text-navy squircle lg:sticky lg:top-6 lg:flex"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={FUNDIDO}
-    >
-      <div className="flex items-center justify-between gap-2 pl-3">
-        <h2 ref={titulo} id={idDelTitulo} tabIndex={-1} className="antetitulo rounded-md anillo-foco">
-          Detalle de cita
-        </h2>
-        <button
-          type="button"
-          onClick={cerrar}
-          aria-label="Cerrar el detalle"
-          className="grid size-11 shrink-0 place-items-center rounded-[14px] text-navy squircle anillo-foco transition-colors duration-150 ease-suave hover:bg-borde"
-        >
-          <X className="size-5" aria-hidden="true" strokeWidth={1.75} />
-        </button>
-      </div>
-
-      <div className="rounded-[24px] bg-tarjeta p-4 shadow-sm squircle">
+  const contenido = (
+    <>
+      <div
+        className={cn(
+          "rounded-[24px] bg-tarjeta p-4 squircle",
+          // Sobre la tarjeta blanca del diálogo, con borde en vez de sombra.
+          escritorio ? "shadow-sm" : "border border-borde"
+        )}
+      >
         <div className="flex items-center gap-3">
           <AvatarUsuario nombre={nombreDeCliente(cita)} tamaño="lg" />
           <div className="min-w-0">
@@ -240,6 +240,13 @@ export function PanelDeCita({
 
         {cita.notes && (
           <p className="mt-3 rounded-[16px] bg-superficie p-3 text-sm break-words text-texto-2 squircle">{cita.notes}</p>
+        )}
+        {/* Lo que el cliente escribió al reservar (#122): sólo se lee, y con su rótulo para no confundirlo con la nota del local. */}
+        {cita.clientComments && (
+          <div className="mt-3 rounded-[16px] bg-superficie p-3 text-sm squircle">
+            <p className="text-xs font-medium text-texto-2">El cliente escribió al reservar</p>
+            <p className="mt-1 break-words whitespace-pre-line">{cita.clientComments}</p>
+          </div>
         )}
       </div>
 
@@ -327,6 +334,45 @@ export function PanelDeCita({
           )}
         </div>
       )}
+    </>
+  )
+
+  if (!escritorio) {
+    return (
+      <MarcoDeModal titulo="Detalle de cita" antetitulo="Agenda" alCerrar={onCerrar}>
+        <div ref={panel} tabIndex={-1} className="flex flex-col gap-3 focus:outline-none">
+          {aviso && <Aviso>{aviso}</Aviso>}
+          {contenido}
+        </div>
+      </MarcoDeModal>
+    )
+  }
+
+  return (
+    <motion.aside
+      ref={panel}
+      aria-labelledby={idDelTitulo}
+      className="flex w-80 shrink-0 flex-col gap-3 rounded-panel bg-superficie p-3 text-navy squircle lg:sticky lg:top-6"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={FUNDIDO}
+    >
+      <div className="flex items-center justify-between gap-2 pl-3">
+        <h2 ref={titulo} id={idDelTitulo} tabIndex={-1} className="antetitulo rounded-md anillo-foco">
+          Detalle de cita
+        </h2>
+        <button
+          type="button"
+          onClick={cerrar}
+          aria-label="Cerrar el detalle"
+          className="grid size-11 shrink-0 place-items-center rounded-[14px] text-navy squircle anillo-foco transition-colors duration-150 ease-suave hover:bg-borde"
+        >
+          <X className="size-5" aria-hidden="true" strokeWidth={1.75} />
+        </button>
+      </div>
+
+      {contenido}
     </motion.aside>
   )
 }
