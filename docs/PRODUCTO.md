@@ -452,7 +452,7 @@ El historial de todo lo atendido y cobrado. Cada fila es una atención finalizad
 
 El día y el turno se calculan en la zona horaria del dispositivo de quien mira. Alcanza mientras el negocio y su equipo estén en el mismo huso; ver sección 10.
 
-**Llenar horas** (pestaña aparte, dueña y encargado), en la zona del negocio: ocupación por profesional (citas dentro de su horario, menos bloqueos), clientes nuevos y que volvieron, tasa de "No vino", y la comparación con el período anterior de igual largo.
+**Llenar horas** (pestaña aparte, dueña y encargado), en la zona del negocio: ocupación por profesional (citas dentro de su horario, menos bloqueos; sólo cuentan quienes atienden: el encargado no suma capacidad ni presta su horario a un profesional un día sin horario general), clientes nuevos y que volvieron, tasa de "No vino", y la comparación con el período anterior de igual largo.
 
 ---
 

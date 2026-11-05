@@ -119,9 +119,10 @@ describe("GET /api/reportes/ocupacion", () => {
     const encargado = cuerpo.ocupacion.porProfesional.find((p: { id: string }) => p.id === "m-encargado")
     expect(carla).toMatchObject({ minutosDisponibles: 900, minutosOcupados: 120 })
     expect(pedro).toMatchObject({ minutosDisponibles: 900, minutosOcupados: 60 })
-    expect(encargado).toMatchObject({ minutosDisponibles: 900, minutosOcupados: 0, ocupacion: 0 })
-    expect(cuerpo.ocupacion.porProfesional.map((p: { id: string }) => p.id)).not.toContain("m-ajeno")
-    expect(cuerpo.ocupacion.total).toMatchObject({ minutosDisponibles: 2700, minutosOcupados: 180 })
+    // El encargado no atiende: no suma capacidad (#168).
+    expect(encargado).toBeUndefined()
+    expect(cuerpo.ocupacion.porProfesional.map((p: { id: string }) => p.id)).toEqual(["m-carla", "m-pedro"])
+    expect(cuerpo.ocupacion.total).toMatchObject({ minutosDisponibles: 1800, minutosOcupados: 180 })
 
     expect(cuerpo.clientes).toEqual({ nuevos: 1, recurrentes: 1, sinFicha: 1 })
     expect(cuerpo.inasistencia.total).toEqual({ citas: 3, noVino: 1, tasa: 1 / 3 })
@@ -143,7 +144,7 @@ describe("GET /api/reportes/ocupacion", () => {
     // Antes María ya era recurrente; ahora 1 recurrente (María): 0 % de cambio.
     expect(cuerpo.comparacion.clientesRecurrentes).toEqual({ actual: 1, anterior: 1, cambio: 0 })
     // Antes sólo ocupó la completada del 13 (la del 12 no vino y libera el horario).
-    expect(cuerpo.comparacion.ocupacion.anterior).toBeCloseTo(60 / (3 * 600 * 5))
+    expect(cuerpo.comparacion.ocupacion.anterior).toBeCloseTo(60 / (2 * 600 * 5))
   })
 
   it("un período sin nada: 0 % y null, nunca NaN", async () => {
@@ -152,6 +153,45 @@ describe("GET /api/reportes/ocupacion", () => {
     expect(cuerpo.inasistencia.total.tasa).toBeNull()
     expect(cuerpo.clientes).toEqual({ nuevos: 0, recurrentes: 0, sinFicha: 0 })
     expect(JSON.stringify(cuerpo)).not.toContain("NaN")
+  })
+
+  it("un día sin horario general no hereda el horario del encargado, y su cita no suma (#168)", async () => {
+    // El sábado 24/10 no hay horario general; sólo el encargado cargó uno propio.
+    const antes = base.volcado()
+    base.reiniciar({
+      ...antes,
+      workSchedule: [
+        ...antes.workSchedule,
+        { id: "h-enc", businessId: NEGOCIO, memberId: "m-encargado", dayOfWeek: 6, startTime: "10:00", endTime: "14:00" },
+      ],
+      appointment: [...antes.appointment, cita("m-encargado", "2026-10-24", "10:00", "12:00")],
+    })
+    const cuerpo = await (await pedir(sesiones.dueña, "?desde=2026-10-24&hasta=2026-10-24")).json()
+    expect(cuerpo.ocupacion.porProfesional).toEqual([
+      { id: "m-carla", nombre: expect.any(String), minutosDisponibles: 0, minutosOcupados: 0, ocupacion: null },
+      { id: "m-pedro", nombre: expect.any(String), minutosDisponibles: 0, minutosOcupados: 0, ocupacion: null },
+    ])
+    expect(cuerpo.ocupacion.total).toEqual({ minutosDisponibles: 0, minutosOcupados: 0, ocupacion: null })
+  })
+
+  it("sin horario general ese día, cuenta el de quienes atienden y no el del encargado (#168)", async () => {
+    const antes = base.volcado()
+    base.reiniciar({
+      ...antes,
+      workSchedule: [
+        ...antes.workSchedule,
+        { id: "h-carla", businessId: NEGOCIO, memberId: "m-carla", dayOfWeek: 6, startTime: "10:00", endTime: "14:00" },
+        { id: "h-enc", businessId: NEGOCIO, memberId: "m-encargado", dayOfWeek: 6, startTime: "08:00", endTime: "20:00" },
+      ],
+      appointment: [...antes.appointment, cita("m-carla", "2026-10-24", "10:00", "11:00")],
+    })
+    const cuerpo = await (await pedir(sesiones.dueña, "?desde=2026-10-24&hasta=2026-10-24")).json()
+    const [carla, pedro] = cuerpo.ocupacion.porProfesional
+    expect(carla).toMatchObject({ id: "m-carla", minutosDisponibles: 240, minutosOcupados: 60 })
+    // Pedro no tiene horario propio y el sábado no hay general: usa el de
+    // quienes atienden (el de Carla, como la agenda y la reserva), nunca el
+    // del encargado, de 8 a 20.
+    expect(pedro).toMatchObject({ id: "m-pedro", minutosDisponibles: 240, minutosOcupados: 0 })
   })
 
   it("el dueño de otro negocio no ve nada de éste", async () => {
