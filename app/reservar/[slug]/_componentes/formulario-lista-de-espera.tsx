@@ -9,7 +9,8 @@ import { inscribirEnListaDeEspera } from "../_datos"
 
 interface PropsDeFormularioListaDeEspera {
   slug: string
-  servicioId: string
+  /** Los servicios elegidos, en orden: el día se revisa con todos (#162). */
+  servicioIds: string[]
   /** `null`: con cualquiera. */
   profesionalId: string | null
   /** El día sin horas, `YYYY-MM-DD`. */
@@ -27,7 +28,7 @@ interface PropsDeFormularioListaDeEspera {
  */
 export function FormularioListaDeEspera({
   slug,
-  servicioId,
+  servicioIds,
   profesionalId,
   fecha,
   fechaParaLeer,
@@ -68,7 +69,7 @@ export function FormularioListaDeEspera({
     setError("")
     setEnviando(true)
     const resultado = await inscribirEnListaDeEspera(slug, {
-      servicioId,
+      servicioIds,
       profesionalId,
       fecha,
       nombre,

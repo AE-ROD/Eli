@@ -2,7 +2,7 @@ import { createHmac, hkdfSync, randomUUID } from "node:crypto"
 import { after } from "next/server"
 import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { candidatosDeLaReserva, horasLibresDelDia, horasPosiblesEnElNegocio } from "@/lib/agenda-publica"
+import { candidatosDeLaReserva, hayHorasPosiblesDelDia, horasLibresDelDia, horasPosiblesEnElNegocio } from "@/lib/agenda-publica"
 import { enviarAvisoListaDeEspera } from "@/lib/email"
 import {
   AVISOS_POR_EVENTO_LISTA_DE_ESPERA,
@@ -14,6 +14,7 @@ import {
 } from "@/lib/envios-a-clientes"
 import { registrarError } from "@/lib/registro-de-errores"
 import { MENSAJE_FECHA_MUY_LEJANA, MENSAJE_FECHA_PASADA, fechaNoReservable, normalizarEmail } from "@/lib/reserva-publica"
+import { leerServiciosDeLaReserva, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
 import { hashDeToken } from "@/lib/tokens"
 import { fechaYMinutosEn, zonaDelNegocio } from "@/lib/zona-horaria"
 
@@ -22,7 +23,9 @@ import { fechaYMinutosEn, zonaDelNegocio } from "@/lib/zona-horaria"
  *
  * - **Inscribirse** (`inscribirEnListaDeEspera`): desde la reserva pública,
  *   para un día que no tiene horas libres de ese servicio (y profesional, si
- *   eligió). Sólo el día, sin franja (decisión f del dueño).
+ *   eligió). Sólo el día, sin franja (decisión f del dueño). Con varios
+ *   servicios (#89a) se guarda el primero, pero el día se revisa con todos y
+ *   la duración del bloque entero, como la página (#162).
  * - **Avisar** (`avisarHoraLiberada`): cuando una hora futura se libera
  *   (cancelar o reagendar desde el enlace del cliente, cancelar, mover o
  *   borrar desde el panel), se recalculan las horas libres de cada
@@ -127,7 +130,8 @@ export const MENSAJE_SIN_ATENCION = "Ese día no hay atención para este servici
 export const MENSAJE_HAY_HORAS = "Ese día todavía hay horas libres: elige una y reserva."
 
 export interface DatosDeInscripcion {
-  servicioId: string
+  /** Los servicios elegidos, en orden (1..4). Se guarda el primero. */
+  servicioIds: string[]
   profesionalId?: string | null
   fecha: string
   nombre: string
@@ -148,8 +152,17 @@ export type ResultadoDeInscripcion =
 /**
  * Anota a alguien en la lista de espera de un día. `negocio` es el del slug
  * (ya con la lista activa comprobada por quien llama). Todo lo demás se
- * verifica acá contra ese negocio: el servicio, el profesional y que ese día
+ * verifica acá contra ese negocio: los servicios, el profesional y que ese día
  * de verdad no tenga horas. Inscribirse dos veces a lo mismo no crea otra fila.
+ *
+ * Con varios servicios, el día se revisa como lo ofrece la página
+ * (`disponibilidad`): con todos y con la duración del bloque entero (#162).
+ * La fila guarda el primero (no hay dónde guardar los demás).
+ *
+ * Con profesional elegido que ese día no tiene ninguna hora posible (no
+ * trabaja, o está bloqueado entero) pero otro sí, se anota con "cualquiera"
+ * (#166): si no, el aviso se calculaba sólo para esa persona y nunca llegaba.
+ * La respuesta es la misma en los dos casos: no dice nada de su agenda.
  */
 export async function inscribirEnListaDeEspera(
   negocio: { id: string; timezone: string | null },
@@ -159,11 +172,12 @@ export async function inscribirEnListaDeEspera(
   const email = normalizarEmail(datos.email)
   if (!email) return { tipo: "rechazada", error: "Falta el correo" }
 
-  const servicio = await prisma.service.findFirst({
-    where: { id: datos.servicioId, businessId: negocio.id, active: true },
-    select: { id: true, duration: true },
-  })
-  if (!servicio) return { tipo: "no-encontrada" }
+  // Todos del negocio y activos, o el mismo 404 sin decir cuál falló.
+  const servicios = await leerServiciosDeLaReserva(prisma, negocio.id, datos.servicioIds)
+  if (!servicios) return { tipo: "no-encontrada" }
+  const serviceIds = servicios.map((servicio) => servicio.id)
+  const servicioId = serviceIds[0]
+  const { duracion } = resumenDeLaReserva(servicios)
 
   const zona = zonaDelNegocio(negocio.timezone)
   const noReservable = fechaNoReservable(datos.fecha, ahora, zona)
@@ -171,11 +185,11 @@ export async function inscribirEnListaDeEspera(
     return { tipo: "rechazada", error: noReservable === "pasada" ? MENSAJE_FECHA_PASADA : MENSAJE_FECHA_MUY_LEJANA }
   }
 
-  const memberId = datos.profesionalId || null
+  const elegido = datos.profesionalId || null
   const reserva = await candidatosDeLaReserva(prisma, {
     businessId: negocio.id,
-    serviceIds: [servicio.id],
-    profesionalId: memberId,
+    serviceIds,
+    profesionalId: elegido,
     fecha: datos.fecha,
   })
   if (reserva.tipo === "profesional-no-disponible") return { tipo: "no-encontrada" }
@@ -189,7 +203,7 @@ export async function inscribirEnListaDeEspera(
           businessId: negocio.id,
           zona,
           fecha: datos.fecha,
-          duracion: servicio.duration,
+          duracion,
           candidatos,
           ahora,
         })
@@ -202,13 +216,22 @@ export async function inscribirEnListaDeEspera(
   // agenda personal (`horasPosiblesEnElNegocio`).
   const delNegocio = await horasPosiblesEnElNegocio(prisma, {
     businessId: negocio.id,
-    serviceIds: [servicio.id],
+    serviceIds,
     fecha: datos.fecha,
     zona,
-    duracion: servicio.duration,
+    duracion,
     ahora,
   })
   if (delNegocio !== "con-horas-posibles") return { tipo: "rechazada", error: MENSAJE_SIN_ATENCION }
+
+  // El profesional elegido sin ninguna hora posible ese día (no trabaja o
+  // está bloqueado entero): la inscripción queda con "cualquiera" (#166),
+  // sin decirlo, para no revelar su agenda.
+  const memberId =
+    elegido &&
+    (await hayHorasPosiblesDelDia(prisma, { businessId: negocio.id, zona, fecha: datos.fecha, duracion, candidatos, ahora }))
+      ? elegido
+      : null
 
   const esperaId = randomUUID()
   const tokenHash = hashDeToken(tokenDeInscripcion(esperaId))
@@ -224,7 +247,7 @@ export async function inscribirEnListaDeEspera(
       select: { serviceId: true, memberId: true, fecha: true },
     })
     const repetida = activas.some(
-      (fila) => fila.serviceId === servicio.id && fila.memberId === memberId && fila.fecha === datos.fecha
+      (fila) => fila.serviceId === servicioId && fila.memberId === memberId && fila.fecha === datos.fecha
     )
     if (repetida) return { tipo: "inscrita" } as const
     if (activas.length >= INSCRIPCIONES_ACTIVAS_POR_EMAIL) return { tipo: "tope" } as const
@@ -233,7 +256,7 @@ export async function inscribirEnListaDeEspera(
       data: {
         id: esperaId,
         businessId: negocio.id,
-        serviceId: servicio.id,
+        serviceId: servicioId,
         memberId,
         fecha: datos.fecha,
         nombre: datos.nombre,

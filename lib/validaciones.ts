@@ -146,44 +146,61 @@ const camposDeReservaSchema = z.object({
     .nullish(),
 })
 
+/** `servicioIds` o `servicioId`, uno de los dos y no ambos (la reserva y la lista de espera). */
+function revisarServicios(
+  datos: { servicioIds?: string[]; servicioId?: string },
+  ctx: z.RefinementCtx
+) {
+  if (datos.servicioIds === undefined && datos.servicioId === undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Falta el servicio", path: ["servicioIds"] })
+  }
+  if (datos.servicioIds !== undefined && datos.servicioId !== undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Manda los servicios en servicioIds, no también en servicioId",
+      path: ["servicioId"],
+    })
+  }
+}
+
+/** Deja siempre `servicioIds`: un `servicioId` suelto es una lista de uno. */
+function juntarServicios<T extends { servicioIds?: string[]; servicioId?: string }>({
+  servicioId,
+  servicioIds,
+  ...resto
+}: T): Omit<T, "servicioId" | "servicioIds"> & { servicioIds: string[] } {
+  return { ...resto, servicioIds: servicioIds ?? (servicioId ? [servicioId] : []) }
+}
+
 /**
  * La reserva pública. Sale siempre con `servicioIds` (1..4, sin repetir):
  * un `servicioId` suelto es una reserva de un solo servicio. Sin ninguno, o
  * con los dos, es un 400.
  */
-export const reservaSchema = camposDeReservaSchema
-  .superRefine((datos, ctx) => {
-    if (datos.servicioIds === undefined && datos.servicioId === undefined) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Falta el servicio", path: ["servicioIds"] })
-    }
-    if (datos.servicioIds !== undefined && datos.servicioId !== undefined) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Manda los servicios en servicioIds, no también en servicioId",
-        path: ["servicioId"],
-      })
-    }
-  })
-  .transform(({ servicioId, servicioIds, ...resto }) => ({
-    ...resto,
-    servicioIds: servicioIds ?? (servicioId ? [servicioId] : []),
-  }))
+export const reservaSchema = camposDeReservaSchema.superRefine(revisarServicios).transform(juntarServicios)
 
 /**
  * "Avísame si se libera una hora" (#74): la inscripción en la lista de
  * espera de un día. El email es obligatorio (es por donde llega el aviso); el
  * teléfono, opcional, con la casilla de WhatsApp para cuando exista el canal.
+ * Los servicios, como en la reserva (#162): `servicioIds` con todos los
+ * elegidos, o un `servicioId` suelto (la página de antes). Sale siempre con
+ * `servicioIds`.
  */
-export const listaDeEsperaSchema = z.object({
-  servicioId: servicioIdSchema,
-  profesionalId: camposDeReservaSchema.shape.profesionalId,
-  fecha: camposDeReservaSchema.shape.fecha,
-  nombre: nombreSchema("nombre"),
-  apellido: nombreSchema("apellido"),
-  email: correoPublicoSchema,
-  telefono: camposDeReservaSchema.shape.telefono,
-  whatsappConsentimiento: camposDeReservaSchema.shape.whatsappConsentimiento,
-})
+export const listaDeEsperaSchema = z
+  .object({
+    servicioIds: camposDeReservaSchema.shape.servicioIds,
+    servicioId: camposDeReservaSchema.shape.servicioId,
+    profesionalId: camposDeReservaSchema.shape.profesionalId,
+    fecha: camposDeReservaSchema.shape.fecha,
+    nombre: nombreSchema("nombre"),
+    apellido: nombreSchema("apellido"),
+    email: correoPublicoSchema,
+    telefono: camposDeReservaSchema.shape.telefono,
+    whatsappConsentimiento: camposDeReservaSchema.shape.whatsappConsentimiento,
+  })
+  .superRefine(revisarServicios)
+  .transform(juntarServicios)
 
 export const recuperarContrasenaSchema = z.object({
   email: emailDeCuentaSchema,
