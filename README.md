@@ -168,6 +168,41 @@ mientras se construye el índice bloquea las escrituras en `citas` (reservas
 nuevas, reagendar, cancelar, "Llegó"). Con las tablas de hoy dura poco y es
 aceptable, pero conviene aplicarla fuera del horario de atención.
 
+### `20261105120000_cierre_de_la_v1`
+
+Deudas de esquema de la v1: default `{}` en `clientes.tags` (y los NULL pasan a
+`{}`, la única escritura sobre filas existentes), CHECKs de dominio con los
+valores que la app ya usa, un índice en `citas("startTime")` para el cron de
+recordatorios, y las tres funciones trigger de la etapa 2 con `search_path`
+fijo. El código viejo y el nuevo funcionan con o sin ella: se aplica antes o
+después de desplegar. La aplica el dueño, nunca un agente.
+
+Las CHECKs van `NOT VALID`: crearlas no revisa las filas viejas, así que la
+migración no falla por un dato antiguo. Pero Postgres sí revisa la fila entera
+en cada UPDATE: una fila vieja con un valor fuera de la lista no se podría
+editar después. **Antes de aplicarla**, estas consultas (sólo lectura) tienen
+que volver con todos los conteos en 0; si alguna no, no aplicarla y avisar:
+
+```sql
+SELECT 'citas.status' AS columna, count(*) FROM "citas" WHERE "status" NOT IN ('pendiente', 'confirmada', 'en-progreso', 'completada', 'cancelada', 'no-asistio')
+UNION ALL SELECT 'citas.canceladaPor', count(*) FROM "citas" WHERE "canceladaPor" IS NOT NULL AND "canceladaPor" NOT IN ('cliente', 'negocio')
+UNION ALL SELECT 'clientes.whatsappConsentSource', count(*) FROM "clientes" WHERE "whatsappConsentSource" IS NOT NULL AND "whatsappConsentSource" NOT IN ('reserva-publica', 'panel', 'importacion')
+UNION ALL SELECT 'negocios.cancelacionHorasAntes', count(*) FROM "negocios" WHERE "cancelacionHorasAntes" < 0 OR "cancelacionHorasAntes" > 72
+UNION ALL SELECT 'negocios.type', count(*) FROM "negocios" WHERE "type" NOT IN ('salon', 'barberia', 'spa-de-unas', 'salud', 'fitness', 'otro')
+UNION ALL SELECT 'miembros_negocio.role', count(*) FROM "miembros_negocio" WHERE "role" NOT IN ('admin', 'worker')
+UNION ALL SELECT 'invitaciones.role', count(*) FROM "invitaciones" WHERE "role" NOT IN ('admin', 'worker')
+UNION ALL SELECT 'atencion_pagos.method', count(*) FROM "atencion_pagos" WHERE "method" NOT IN ('efectivo', 'tarjeta-debito', 'tarjeta-credito', 'transferencia', 'billetera-digital')
+UNION ALL SELECT 'horarios_laborales.dayOfWeek', count(*) FROM "horarios_laborales" WHERE "dayOfWeek" < 0 OR "dayOfWeek" > 6
+UNION ALL SELECT 'servicios.duration', count(*) FROM "servicios" WHERE "duration" <= 0;
+```
+
+Orden: correr las consultas, aplicar la migración, y
+`npx prisma migrate resolve --applied 20261105120000_cierre_de_la_v1`. El
+índice nuevo bloquea las escrituras en `citas` mientras se construye (como en
+la etapa 5): fuera del horario de atención. Con los conteos en 0 confirmados,
+cada CHECK se puede validar cuando se quiera con
+`ALTER TABLE "<tabla>" VALIDATE CONSTRAINT "<nombre>";` (opcional).
+
 ## Cómo está organizado
 
 ```

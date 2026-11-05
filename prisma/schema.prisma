@@ -38,7 +38,7 @@ model User {
 model Business {
   id        String   @id @default(cuid())
   name      String
-  type      String
+  type      String // id de `lib/rubros.ts` (o uno viejo: salud, fitness, otro); CHECK en la base
   slug      String   @unique
   teamSize  Int      @default(1)
   /// Zona IANA del negocio: en ella se leen sus horarios "HH:MM" y sus días
@@ -91,7 +91,8 @@ model Business {
   /// la página pública. Vacío = no se muestra nada.
   mediosDePago          String[] @default([])
   /// Hasta cuántas horas antes de la cita el cliente puede cancelar o
-  /// reagendar con su enlace. Default 24; lo cambia el negocio.
+  /// reagendar con su enlace. Default 24; lo cambia el negocio, de 0 a 72
+  /// (CHECK en la base).
   cancelacionHorasAntes Int      @default(24)
 
   // ─── La plata del equipo (etapa 2) ──────────────────────────────────────
@@ -186,7 +187,7 @@ model BusinessMember {
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role       String   @default("worker") // "admin" | "worker"
+  role       String   @default("worker") // "admin" | "worker" (CHECK en la base)
   createdAt  DateTime @default(now())
 
   // Porcentaje por defecto de comisión (0-100) -- el rango lo garantiza un
@@ -233,7 +234,7 @@ model WorkerInvitation {
   business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   email      String
   name       String
-  role       String    @default("worker")
+  role       String    @default("worker") // "admin" | "worker" (CHECK en la base)
   /// sha256 del token del enlace (lib/tokens.ts); el token en claro no se
   /// guarda. La columna sigue llamándose `token` para no renombrarla.
   tokenHash  String    @unique @map("token")
@@ -266,7 +267,9 @@ model Customer {
   cedula     String?
   email      String?
   phone      String?
-  tags       String[]
+  /// Default `{}` desde la migración `cierre_de_la_v1`, que también pasó a
+  /// `{}` los NULL de antes (#160).
+  tags       String[] @default([])
   notes      String?
   businessId String
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
@@ -274,7 +277,7 @@ model Customer {
   updatedAt  DateTime @updatedAt
 
   /// Consentimiento para escribirle por WhatsApp: cuándo se dio y por dónde
-  /// ("reserva-publica" | "panel" | "importacion"; los valida la app). Null =
+  /// ("reserva-publica" | "panel" | "importacion"; CHECK en la base). Null =
   /// sin consentimiento registrado.
   whatsappConsentAt     DateTime?
   whatsappConsentSource String?
@@ -304,7 +307,7 @@ model Service {
   business            Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   name                String
   description         String?
-  duration            Int // en minutos: 15, 30, 45, 60, 90, 120...
+  duration            Int // en minutos: 15, 30, 45, 60, 90, 120... (CHECK > 0 en la base)
   price               Float?
   /// Categoría libre para agrupar en la página pública ("Corte", "Color").
   category            String?
@@ -342,7 +345,7 @@ model WorkSchedule {
   business   Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
   memberId   String?
   member     BusinessMember? @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  dayOfWeek  Int // 0=Domingo, 1=Lunes, 2=Martes, 3=Miércoles, 4=Jueves, 5=Viernes, 6=Sábado
+  dayOfWeek  Int // 0=Domingo, 1=Lunes, 2=Martes, 3=Miércoles, 4=Jueves, 5=Viernes, 6=Sábado (CHECK en la base)
   startTime  String // "09:00"
   endTime    String // "18:00"
   active     Boolean         @default(true)
@@ -359,7 +362,7 @@ model Appointment {
   title                 String // nombre del servicio como texto libre o copia del servicio
   startTime             DateTime
   endTime               DateTime
-  status                String          @default("pendiente") // pendiente, confirmada, en-progreso, completada, cancelada, no-asistio (sin CHECK: lo valida la app)
+  status                String          @default("pendiente") // pendiente, confirmada, en-progreso, completada, cancelada, no-asistio (`ESTADOS_DE_CITA`; CHECK en la base)
   // Quién creó la cita: "panel" (el equipo del negocio) o "reserva-publica"
   // (la página /reservar/[slug]). Los topes anti-abuso de la reserva pública
   // cuentan por esta columna (`lib/reserva-publica.ts`). En la base, una CHECK
@@ -442,7 +445,7 @@ model Appointment {
   // sha256 del token (lib/tokens.ts), nunca el token en claro, como en
   // `WorkerInvitation.tokenHash`. Null = la cita no tiene enlace.
   manageTokenHash String?   @unique
-  // Quién canceló: "cliente" | "negocio" (lo valida la app) y cuándo. Null en
+  // Quién canceló: "cliente" | "negocio" (CHECK en la base) y cuándo. Null en
   // las citas no canceladas y en las canceladas antes de existir la columna.
   canceladaPor    String?
   canceladaEn     DateTime?
@@ -460,6 +463,8 @@ model Appointment {
   @@unique([id, businessId])
   @@index([businessId])
   @@index([businessId, startTime])
+  // El cron de recordatorios busca por hora en todos los negocios.
+  @@index([startTime])
   // Consulta de liquidación: businessId + memberId + status + rango de fechas.
   // La liquidación todavía no existe; el índice se crea junto con las columnas.
   @@index([businessId, memberId, startTime])
@@ -666,7 +671,7 @@ model VisitPayment {
   id          String   @id @default(cuid())
   visitId     String
   visit       Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  method      String // id de `lib/medios-de-pago.ts`: efectivo, tarjeta-debito, ...
+  method      String // id de `lib/medios-de-pago.ts`: efectivo, tarjeta-debito, ... (CHECK en la base)
   amountCents Int // centavos enteros, como `Visit.totalCents`
   createdAt   DateTime @default(now())
 
