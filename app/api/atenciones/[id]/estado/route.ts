@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import {
   ESTADOS_ACTIVOS,
   esEstadoActivo,
@@ -11,6 +12,8 @@ import {
   tiemposDeTransicion,
   transicionPermitida,
 } from "@/lib/atenciones"
+import { ORIGEN_FILA } from "@/lib/fila-virtual"
+import { programarAvisoDeFila } from "@/lib/fila-virtual-servidor"
 import { actorDeSesion } from "@/lib/permisos"
 import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
 import {
@@ -67,9 +70,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const atencion = await prisma.$transaction(async (tx) => {
+      // `startedAt` y `readyAt` con la hora de la base, no la de esta
+      // instancia (#152), como `paidAt` al cobrarla. No hay candado que
+      // esperar antes: `tomarAtencion` es la escritura que bloquea la fila.
+      const ahora = await horaDeLaBase(tx)
       await tomarAtencion(tx, actor, existente.id, desde, {
         status: destino,
-        ...tiemposDeTransicion(desde, destino, new Date()),
+        ...tiemposDeTransicion(desde, destino, ahora),
       })
 
       // Todo después de tomar la fila: así nadie cambia las líneas en el
@@ -93,6 +100,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       return leerAtencion(tx, actor, existente.id)
     })
+
+    // Alguien de la fila virtual dejó de esperar: el que sigue puede haber
+    // quedado con 1 persona adelante (#85). Después de responder.
+    if (existente.origen === ORIGEN_FILA && desde === "en-espera") programarAvisoDeFila(actor.businessId)
 
     return NextResponse.json(atencion)
   } catch (error) {

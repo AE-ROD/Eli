@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server"
 import { Prisma } from "@prisma/client"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
+import { enviarConfirmacionCliente } from "@/lib/email"
 
 const mockVerificarLimite = vi.fn()
 
@@ -113,7 +114,7 @@ describe("POST /api/reservar/[slug]/confirmar: la hora tiene que caer en el hora
     expect(status).toBe(409)
     expect(cuerpo.error).toMatch(/fuera de la atención/)
     expect(citasCreadas()).toHaveLength(0)
-    expect(base.buscar("customer", { name: "Lucía" })).toHaveLength(0)
+    expect(base.buscar("customer", { name: "Lucía Pérez" })).toHaveLength(0)
   })
 
   it("un profesional con horario propio atiende en el suyo: la hora fuera del general va a él", async () => {
@@ -308,7 +309,7 @@ describe("POST /api/reservar/[slug]/confirmar: fechas fuera del rango de años",
     expect(status).toBe(409)
     expect(cuerpo.error).toMatch(/fuera de la atención/)
     expect(citasCreadas()).toHaveLength(0)
-    expect(base.buscar("customer", { name: "Lucía" })).toHaveLength(0)
+    expect(base.buscar("customer", { name: "Lucía Pérez" })).toHaveLength(0)
   })
 
   it("9998-12-31 (jueves, último día aceptado): crea la cita a las 13:00 UTC (10:00 en Santiago, UTC-3 en diciembre)", async () => {
@@ -373,7 +374,39 @@ describe("POST /api/reservar/[slug]/confirmar: ni en el pasado ni a más de 90 d
       expect(status).toBe(409)
       expect(cuerpo.error).toMatch(/ya pasó/)
       expect(citasCreadas()).toHaveLength(0)
-      expect(base.buscar("customer", { name: "Lucía" })).toHaveLength(0)
+      expect(base.buscar("customer", { name: "Lucía Pérez" })).toHaveLength(0)
+    })
+
+    it("QA#8: reservada dentro del plazo (hoy, con 24 h), ni la respuesta ni el correo ofrecen cambiarla", async () => {
+      const { POST } = await import("./route")
+      const res = await POST(pedidoFalso({ ...reserva("11:00", "2026-10-19"), email: "lucia@correo.test" }), conSlug)
+      expect(res.status).toBe(201)
+      expect((await res.json()).sePuedeCambiar).toBe(false)
+      expect(vi.mocked(enviarConfirmacionCliente)).toHaveBeenCalledWith(
+        expect.objectContaining({ sePuedeCambiar: false, plazoHoras: 24 })
+      )
+    })
+
+    it("QA#8: justo en el plazo (mañana a la misma hora) o más allá, sí se puede cambiar", async () => {
+      expect((await confirmar("10:30", "2026-10-20")).cuerpo.sePuedeCambiar).toBe(true)
+      todaLaSemana()
+      expect((await confirmar("11:00", "2026-10-21")).cuerpo.sePuedeCambiar).toBe(true)
+    })
+
+    it("N4: dice si el recordatorio alcanza a salir, con la hora del servidor (corrida de las 10:00) y sólo con correo", async () => {
+      const { POST } = await import("./route")
+      const conCorreo = async (hora: string, fecha: string) => {
+        todaLaSemana()
+        const res = await POST(pedidoFalso({ ...reserva(hora, fecha), email: "lucia@correo.test" }), conSlug)
+        return (await res.json()).recibiraRecordatorio
+      }
+      // Para hoy: nunca. Para mañana: la corrida de hoy ya pasó (son las 10:30). Pasado mañana: sí.
+      expect(await conCorreo("11:00", "2026-10-19")).toBe(false)
+      expect(await conCorreo("11:00", "2026-10-20")).toBe(false)
+      expect(await conCorreo("11:00", "2026-10-21")).toBe(true)
+      // Sin correo no hay recordatorio, aunque el cron alcance.
+      todaLaSemana()
+      expect((await confirmar("11:00", "2026-10-21")).cuerpo.recibiraRecordatorio).toBe(false)
     })
 
     it("una hora de hoy que todavía no llega (11:00): crea la cita", async () => {
@@ -391,9 +424,9 @@ describe("POST /api/reservar/[slug]/confirmar: ni en el pasado ni a más de 90 d
         conSlug
       )
       const { slots } = await respuesta.json()
-      expect(slots).toEqual(["11:00", "12:00"])
+      expect(slots).toEqual(["11:00", "11:30", "12:00"])
 
-      for (const hora of ["09:00", "10:00", "10:30", "11:00", "12:00"]) {
+      for (const hora of ["09:00", "10:00", "10:30", "11:00", "11:30", "12:00"]) {
         todaLaSemana()
         const { status } = await confirmar(hora, "2026-10-19")
         expect({ hora, status }).toEqual({ hora, status: slots.includes(hora) ? 201 : 409 })
@@ -417,7 +450,7 @@ describe("POST /api/reservar/[slug]/confirmar: ni en el pasado ni a más de 90 d
       expect(status).toBe(409)
       expect(cuerpo.error).toMatch(/90 días/)
       expect(citasCreadas()).toHaveLength(0)
-      expect(base.buscar("customer", { name: "Lucía" })).toHaveLength(0)
+      expect(base.buscar("customer", { name: "Lucía Pérez" })).toHaveLength(0)
     })
   })
 })
@@ -775,13 +808,33 @@ describe("POST /api/reservar/[slug]/confirmar: con qué cliente queda la reserva
 
     expect(clienteId).toBe("c-lucia")
     expect(clientesDelNegocio()).toHaveLength(antes)
+    // Reutilizado, no se le toca el nombre: queda como estaba guardado (N2).
+    expect(base.buscar("customer", { id: "c-lucia" })[0]).toMatchObject({ name: "Lucía", lastName: "Pérez" })
+  })
+
+  it("un cliente nuevo guarda el nombre completo en `name`, como el resto de la app, para que Clientes lo muestre y lo busque por el apellido (N2)", async () => {
+    const clienteId = await reservarComo({ nombre: "Ñandú José 🙂", apellido: "Peñaloza", email: "nandu@correo.test" })
+
+    expect(base.buscar("customer", { id: clienteId })[0]).toMatchObject({ name: "Ñandú José 🙂 Peñaloza", lastName: null, businessId: NEGOCIO })
+  })
+
+  it("con el nombre completo en `name`, la reserva siguiente con el mismo correo y nombre reutiliza ese cliente (N2)", async () => {
+    const primero = await reservarComo({ nombre: "Marta", apellido: "Rojas", email: "marta@correo.test" })
+    const antes = clientesDelNegocio().length
+
+    const { POST } = await import("./route")
+    const res = await POST(pedidoFalso({ ...reserva("11:00", "2026-10-16"), nombre: "marta", apellido: "ROJAS", email: "Marta@correo.test" }), conSlug)
+    expect(res.status).toBe(201)
+
+    expect(base.buscar("appointment", { customerId: primero })).toHaveLength(2)
+    expect(clientesDelNegocio()).toHaveLength(antes)
   })
 
   it("el mismo email (escrito igual) con otro nombre: crea un cliente nuevo y no toca el existente", async () => {
     const clienteId = await reservarComo({ nombre: "Marta", apellido: "Rojas", email: "Lucia@Correo.test" })
 
     expect(clienteId).not.toBe("c-lucia")
-    expect(base.buscar("customer", { id: clienteId })[0]).toMatchObject({ name: "Marta", lastName: "Rojas", businessId: NEGOCIO })
+    expect(base.buscar("customer", { id: clienteId })[0]).toMatchObject({ name: "Marta Rojas", lastName: null, businessId: NEGOCIO })
     expect(base.buscar("customer", { id: "c-lucia" })[0]).toMatchObject({ name: "Lucía", lastName: "Pérez", email: "Lucia@Correo.test" })
   })
 
@@ -789,7 +842,7 @@ describe("POST /api/reservar/[slug]/confirmar: con qué cliente queda la reserva
     const clienteId = await reservarComo({ nombre: "Lucía", apellido: "Pérez", cedula: "11.111.111-1" })
 
     expect(clienteId).not.toBe("c-lucia")
-    expect(base.buscar("customer", { id: clienteId })[0]).toMatchObject({ name: "Lucía", cedula: "11.111.111-1" })
+    expect(base.buscar("customer", { id: clienteId })[0]).toMatchObject({ name: "Lucía Pérez", cedula: "11.111.111-1" })
   })
 
   it("la misma cédula con otro email: crea un cliente nuevo", async () => {

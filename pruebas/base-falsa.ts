@@ -1,6 +1,7 @@
 import { vi } from "vitest"
 import { Prisma } from "@prisma/client"
 import {
+  COMPUESTAS,
   RELACIONES,
   coincide,
   esObjetoPlano,
@@ -44,27 +45,59 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     referidoContabilizadoAt: null,
     extensionPorReferidoAt: null,
     cancelacionHorasAntes: 24,
+    liquidacionPeriodo: "mensual",
+    liquidacionInicioSemana: 1,
+    liquidacionDesde: null,
+    enlaceResenas: null,
+    listaDeEsperaActiva: true,
+    avisoDeVueltaActivo: false,
+    pideResenas: false,
+    porConfirmarTrasFaltas: null,
+    filaVirtualActiva: false,
+    filaVirtualTope: 15,
+    horaValleActiva: false,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
-  businessMember: () => ({ role: "worker", especialidad: null, fotoUrl: null, createdAt: new Date() }),
+  businessMember: () => ({
+    role: "worker",
+    especialidad: null,
+    fotoUrl: null,
+    commissionPercent: null,
+    createdAt: new Date(),
+  }),
   customer: () => ({
     lastName: null,
     cedula: null,
     email: null,
     phone: null,
-    tags: [],
+    // `tags TEXT[]` no tiene default en la migración: quien crea un cliente
+    // sin decir sus etiquetas lo deja en NULL, no en una lista vacía.
+    tags: null,
     notes: null,
     whatsappConsentAt: null,
     whatsappConsentSource: null,
+    correoPromoConsentAt: null,
+    correoPromoConsentSource: null,
+    correoPromoBajaAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
-  service: () => ({ description: null, duration: 30, price: null, active: true, createdAt: new Date(), updatedAt: new Date() }),
+  service: () => ({
+    description: null,
+    duration: 30,
+    price: null,
+    frecuenciaDias: null,
+    excluidoDeHoraValle: false,
+    active: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
   appointment: () => ({
     serviceId: null,
     status: "pendiente",
     source: "panel",
+    confirmacionPorFaltas: false,
     notes: null,
     clientComments: null,
     price: null,
@@ -94,25 +127,245 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     voidedById: null,
     paidByName: null,
     voidedByName: null,
+    origen: "tablero",
+    filaTokenHash: null,
+    filaEmail: null,
+    filaFecha: null,
+    filaNumero: null,
+    filaAvisadaAt: null,
   }),
-  visitService: () => ({ serviceId: null, memberId: null, byOwner: false }),
+  visitService: () => ({
+    serviceId: null,
+    memberId: null,
+    byOwner: false,
+    tipo: "servicio",
+    productId: null,
+    commissionPercent: null,
+    commissionCents: null,
+    commissionAt: null,
+    liquidacionId: null,
+  }),
   visitPayment: () => ({ createdAt: new Date() }),
   workSchedule: () => ({ memberId: null, active: true }),
   timeBlock: () => ({ memberId: null, motivo: null, createdById: null, createdAt: new Date() }),
   memberService: () => ({ createdAt: new Date() }),
+  commissionRate: () => ({ createdAt: new Date(), updatedAt: new Date() }),
+  commissionChange: () => ({
+    memberId: null,
+    serviceId: null,
+    serviceName: null,
+    productId: null,
+    productName: null,
+    changedById: null,
+    previousPercent: null,
+    newPercent: null,
+    createdAt: new Date(),
+  }),
+  producto: () => ({ priceCents: null, commissionPercent: null, active: true, createdAt: new Date(), updatedAt: new Date() }),
+  propinaDeAtencion: () => ({ memberId: null, byOwner: false, liquidacionId: null, createdAt: new Date() }),
+  liquidacion: () => ({
+    estado: "cerrada",
+    cerradaAt: new Date(),
+    pagadaAt: null,
+    pagadaPorId: null,
+    pagadaPorNombre: null,
+    medioDePago: null,
+    anuladaAt: null,
+    anuladaPorId: null,
+    anuladaPorNombre: null,
+    motivoAnulacion: null,
+    nota: null,
+  }),
+  movimientoDeLiquidacion: () => ({
+    motivo: null,
+    visitId: null,
+    liquidacionId: null,
+    anuladoAt: null,
+    anuladoPorId: null,
+    anuladoPorNombre: null,
+    createdAt: new Date(),
+  }),
+  cierreDeCaja: () => ({ desglose: {}, nota: null, createdAt: new Date() }),
+  inscripcionEnEspera: () => ({
+    memberId: null,
+    telefono: null,
+    whatsappConsentAt: null,
+    estado: "activa",
+    avisos: 0,
+    ultimoAvisoAt: null,
+    createdAt: new Date(),
+    resueltaAt: null,
+  }),
+  envioAClientes: () => ({ customerId: null, esperaId: null, enviadoAt: new Date() }),
+  appointmentService: () => ({ serviceId: null, price: null, createdAt: new Date() }),
+  franjaDeHoraValle: () => ({ createdAt: new Date() }),
 }
 
-/** Campos `@unique` (además de `id`) que la base hace respetar. */
-const UNICOS: Partial<Record<NombreDeModelo, string[]>> = { visit: ["appointmentId"], appointment: ["manageTokenHash"] }
+/** Campos `Json` del esquema: aceptan un objeto como valor (cualquier otro objeto es una escritura anidada). */
+const CAMPOS_JSON: Partial<Record<NombreDeModelo, string[]>> = { cierreDeCaja: ["desglose"] }
+const esJson = (modelo: NombreDeModelo, campo: string) => (CAMPOS_JSON[modelo] ?? []).includes(campo)
+
+/**
+ * Únicos (además de `id`) que la base hace respetar: simples o compuestos, y
+ * parciales con `si` (el índice sólo cubre las filas que la cumplen). Una fila
+ * con algún campo en null no choca, como en Postgres.
+ */
+interface Unico {
+  campos: string[]
+  si?: (registro: Registro) => boolean
+}
+const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
+  visit: [{ campos: ["appointmentId"] }, { campos: ["filaTokenHash"] }, { campos: ["businessId", "filaFecha", "filaNumero"] }],
+  appointment: [{ campos: ["manageTokenHash"] }],
+  commissionRate: [{ campos: ["memberId", "serviceId"] }],
+  memberService: [{ campos: ["memberId", "serviceId"] }],
+  cierreDeCaja: [{ campos: ["businessId", "hasta"] }],
+  // `liquidaciones_businessId_memberId_desde_viva_key`: sólo las no anuladas.
+  liquidacion: [{ campos: ["businessId", "memberId", "desde"], si: (registro) => registro.estado !== "anulada" }],
+  inscripcionEnEspera: [{ campos: ["tokenHash"] }],
+  // El candado de los mensajes a clientes.
+  envioAClientes: [{ campos: ["businessId", "tipo", "referencia"] }],
+  appointmentService: [{ campos: ["appointmentId", "orden"] }],
+}
+
+/**
+ * Lo que hace cada FK del esquema al borrar la fila a la que apunta, todas las
+ * de las migraciones (no sólo las que dispara un endpoint): [modelo hijo,
+ * campo que apunta al borrado, regla]. `cascade` borra al hijo, `set null`
+ * pone el campo en null y `restrict` / `no action` frenan el borrado con
+ * P2003 si queda algún hijo.
+ *
+ * Ninguna FK con SET NULL es compuesta: las compuestas `(id, businessId)` son
+ * todas CASCADE, RESTRICT o NO ACTION (una compuesta con SET NULL anularía
+ * también `businessId`, que es NOT NULL; ver `CommissionChange` en el
+ * esquema), así que SET NULL anula sólo el campo de la lista.
+ *
+ * Quedan fuera las tablas que la base falsa no tiene: `invitaciones`,
+ * `conversaciones`/`mensajes`, `tokens_recuperacion`, `correos_de_cuenta` y
+ * `solicitudes_de_soporte` (ésta con SET NULL a negocio y usuario).
+ *
+ * El orden de cada lista es el de creación de la FK en las migraciones. En
+ * Postgres cada FK es un trigger AFTER del padre y se disparan por orden de
+ * nombre (`RI_ConstraintTrigger_a_<oid>`); se toma el orden de creación como
+ * aproximación del orden de los oid (simplificación: no se reproduce la
+ * comparación como texto de esos nombres).
+ */
+type Regla = "cascade" | "set null" | "restrict" | "no action"
+const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]>> = {
+  user: [
+    ["business", "userId", "cascade"], // negocios_userId_fkey
+    ["businessMember", "userId", "cascade"], // miembros_negocio_userId_fkey
+    ["commissionChange", "changedById", "set null"], // cambios_comision_changedById_fkey
+  ],
+  business: [
+    ["customer", "businessId", "cascade"], // clientes_businessId_fkey
+    ["service", "businessId", "cascade"], // servicios_businessId_fkey
+    ["workSchedule", "businessId", "cascade"], // horarios_laborales_businessId_fkey
+    ["appointment", "businessId", "cascade"], // citas_businessId_fkey
+    ["businessMember", "businessId", "cascade"], // miembros_negocio_businessId_fkey
+    ["commissionRate", "businessId", "cascade"], // porcentajes_comision_businessId_fkey
+    ["commissionChange", "businessId", "cascade"], // cambios_comision_businessId_fkey
+    ["visit", "businessId", "cascade"], // atenciones_businessId_fkey
+    ["business", "invitadoPorId", "set null"], // negocios_invitadoPorId_fkey
+    ["memberService", "businessId", "cascade"], // member_services_businessId_fkey
+    ["timeBlock", "businessId", "cascade"], // time_blocks_businessId_fkey
+    ["producto", "businessId", "cascade"], // productos_businessId_fkey
+    ["propinaDeAtencion", "businessId", "cascade"], // atencion_propinas_businessId_fkey
+    ["liquidacion", "businessId", "cascade"], // liquidaciones_businessId_fkey
+    ["movimientoDeLiquidacion", "businessId", "cascade"], // movimientos_de_liquidacion_businessId_fkey
+    ["cierreDeCaja", "businessId", "cascade"], // cierres_de_caja_businessId_fkey
+    ["inscripcionEnEspera", "businessId", "cascade"], // lista_de_espera_businessId_fkey
+    ["envioAClientes", "businessId", "cascade"], // envios_a_clientes_businessId_fkey
+    ["appointmentService", "businessId", "cascade"], // cita_servicios_businessId_fkey
+    ["franjaDeHoraValle", "businessId", "cascade"], // franjas_de_hora_valle_businessId_fkey
+  ],
+  businessMember: [
+    ["workSchedule", "memberId", "cascade"], // horarios_laborales_memberId_fkey
+    ["appointment", "memberId", "set null"], // citas_memberId_fkey
+    ["commissionRate", "memberId", "cascade"], // porcentajes_comision_memberId_businessId_fkey
+    ["commissionChange", "memberId", "set null"], // cambios_comision_memberId_fkey
+    ["visitService", "memberId", "set null"], // atencion_servicios_memberId_fkey
+    ["memberService", "memberId", "cascade"], // member_services_memberId_businessId_fkey
+    ["timeBlock", "memberId", "cascade"], // time_blocks_memberId_businessId_fkey
+    ["propinaDeAtencion", "memberId", "no action"], // atencion_propinas_memberId_businessId_fkey
+    ["liquidacion", "memberId", "no action"], // liquidaciones_memberId_businessId_fkey
+    ["movimientoDeLiquidacion", "memberId", "no action"], // movimientos_de_liquidacion_memberId_businessId_fkey
+    ["inscripcionEnEspera", "memberId", "set null"], // lista_de_espera_memberId_fkey
+  ],
+  customer: [
+    ["appointment", "customerId", "set null"], // citas_patientId_fkey
+    ["visit", "customerId", "set null"], // atenciones_customerId_fkey
+    ["envioAClientes", "customerId", "set null"], // envios_a_clientes_customerId_fkey
+  ],
+  service: [
+    ["appointment", "serviceId", "set null"], // citas_serviceId_fkey
+    ["commissionRate", "serviceId", "restrict"], // porcentajes_comision_serviceId_businessId_fkey
+    ["commissionChange", "serviceId", "set null"], // cambios_comision_serviceId_fkey
+    ["visitService", "serviceId", "set null"], // atencion_servicios_serviceId_fkey
+    ["memberService", "serviceId", "cascade"], // member_services_serviceId_businessId_fkey
+    ["inscripcionEnEspera", "serviceId", "cascade"], // lista_de_espera_serviceId_businessId_fkey
+    ["appointmentService", "serviceId", "set null"], // cita_servicios_serviceId_fkey
+  ],
+  appointment: [
+    ["visit", "appointmentId", "set null"], // atenciones_appointmentId_fkey
+    ["appointmentService", "appointmentId", "cascade"], // cita_servicios_appointmentId_businessId_fkey
+  ],
+  // Borrar una atención que esperaba (`app/api/atenciones/[id]`) se lleva sus
+  // líneas, pagos y propinas. Es también la excepción de los triggers de
+  // línea liquidada: cuando la cascada llega a la línea, la atención ya no está.
+  visit: [
+    ["visitService", "visitId", "cascade"], // atencion_servicios_visitId_fkey
+    ["visitPayment", "visitId", "cascade"], // atencion_pagos_visitId_fkey
+    ["propinaDeAtencion", "visitId", "cascade"], // atencion_propinas_visitId_businessId_fkey
+    ["movimientoDeLiquidacion", "visitId", "no action"], // movimientos_de_liquidacion_visitId_businessId_fkey
+  ],
+  producto: [
+    ["visitService", "productId", "set null"], // atencion_servicios_productId_fkey
+    ["commissionChange", "productId", "set null"], // cambios_comision_productId_fkey
+  ],
+  liquidacion: [
+    ["visitService", "liquidacionId", "no action"], // atencion_servicios_liquidacionId_fkey
+    ["propinaDeAtencion", "liquidacionId", "no action"], // atencion_propinas_liquidacionId_businessId_fkey
+    ["movimientoDeLiquidacion", "liquidacionId", "no action"], // movimientos_de_liquidacion_liquidacionId_businessId_fkey
+  ],
+  inscripcionEnEspera: [
+    ["envioAClientes", "esperaId", "set null"], // envios_a_clientes_esperaId_fkey
+  ],
+}
+
+/** Consultas crudas que la base falsa acepta: sólo candados, que en memoria no tienen nada que ordenar. */
+const CANDADOS = ["FOR UPDATE", "pg_advisory_xact_lock"]
 
 function errorDePrisma(code: string, mensaje: string) {
   return new Prisma.PrismaClientKnownRequestError(mensaje, { code, clientVersion: "base-falsa" })
 }
 
+/**
+ * Lo que un trigger de Postgres hace llegar a Prisma: un `RAISE EXCEPTION`
+ * (`check_violation`, 23514) no tiene código de Prisma, así que llega como
+ * error desconocido con el mensaje de la base.
+ */
+function errorDeTrigger(mensaje: string) {
+  return new Prisma.PrismaClientUnknownRequestError(`23514: ${mensaje}`, { clientVersion: "base-falsa" })
+}
+
+const distintos = (a: unknown, b: unknown) => !iguales(a ?? null, b ?? null)
+
 function tablasVacias(): Tablas {
   return {
     user: [],
     business: [],
+    commissionRate: [],
+    commissionChange: [],
+    producto: [],
+    propinaDeAtencion: [],
+    liquidacion: [],
+    movimientoDeLiquidacion: [],
+    cierreDeCaja: [],
+    inscripcionEnEspera: [],
+    envioAClientes: [],
+    appointmentService: [],
+    franjaDeHoraValle: [],
     businessMember: [],
     customer: [],
     service: [],
@@ -133,6 +386,75 @@ export function crearBaseFalsa() {
   const filtrar = (modelo: NombreDeModelo, where: unknown) =>
     tablas[modelo].filter((registro) => coincide(tablas, modelo, registro, where))
 
+  /**
+   * Una copia de las tablas que sirve para deshacer una sentencia. Es
+   * profunda porque el SET NULL de un borrado cambia filas que ya estaban.
+   */
+  const instantanea = (): Tablas => structuredClone(tablas)
+
+  /**
+   * Una sentencia DELETE entera, como la corre Postgres: cada FK es un
+   * trigger AFTER del padre, y los que encolan las cascadas (que corren sin
+   * disparar los suyos en el acto) se disparan después de los del nivel
+   * anterior. Por eso se recorre en anchura: primero todas las acciones de
+   * las filas borradas, en el orden de `ACCIONES`, y recién después las de lo
+   * que esas cascadas borraron. `RESTRICT` y `NO ACTION` se revisan cuando les
+   * toca su turno en la cola (sin diferir, en Postgres sólo los distingue que
+   * NO ACTION se puede diferir), así que no frena un hijo que otra acción
+   * anterior de la misma sentencia ya se llevó. Si algo falla en cualquier
+   * punto, la base queda como estaba: Postgres revierte la sentencia completa.
+   */
+  function borrarSentencia(modelo: NombreDeModelo, registros: Set<Registro>) {
+    const antes = instantanea()
+    const cola: (() => void)[] = []
+    try {
+      borrarFilas(modelo, registros, cola)
+      for (let siguiente = cola.shift(); siguiente; siguiente = cola.shift()) siguiente()
+    } catch (error) {
+      tablas = antes
+      throw error
+    }
+  }
+
+  /**
+   * Un DELETE de un nivel: pasa cada fila por su trigger `BEFORE DELETE`, la
+   * borra y encola, fila por fila, las acciones de las FK que la referencian.
+   * Los triggers de los hijos ven al padre ya borrado, como dentro de la
+   * cascada de Postgres.
+   */
+  function borrarFilas(modelo: NombreDeModelo, registros: Set<Registro>, cola: (() => void)[]) {
+    if (registros.size === 0) return
+    for (const registro of registros) ANTES_DE_BORRAR[modelo]?.(registro)
+    tablas[modelo] = tablas[modelo].filter((registro) => !registros.has(registro))
+    for (const registro of registros) {
+      for (const accion of ACCIONES[modelo] ?? []) cola.push(() => aplicarAccion(modelo, registro.id, accion, cola))
+    }
+  }
+
+  /** Lo que hace una FK con los hijos de la fila `id` de `padre`, que ya se borró. */
+  function aplicarAccion(padre: NombreDeModelo, id: unknown, [hijo, campo, regla]: [NombreDeModelo, string, Regla], cola: (() => void)[]) {
+    const referidos = tablas[hijo].filter((registro) => registro[campo] === id)
+    if (referidos.length === 0) return
+    if (regla === "cascade") return borrarFilas(hijo, new Set(referidos), cola)
+    if (regla === "set null") return anular(hijo, referidos, campo)
+    throw errorDePrisma("P2003", `Foreign key constraint violated: ${hijo}.${campo} → ${String(id)} impide borrar ${padre}`)
+  }
+
+  /**
+   * El UPDATE que hace un `ON DELETE SET NULL`: cada fila pasa por sus
+   * triggers `BEFORE UPDATE` (los de `atencion_servicios` sí se disparan con
+   * la cascada) y queda con el campo en null. No revisa las demás FK de la
+   * fila (Postgres sólo revisa las columnas que cambian, y un null no se
+   * revisa) ni toca `updatedAt`, que lo pone Prisma y no la base.
+   */
+  function anular(modelo: NombreDeModelo, registros: Registro[], campo: string) {
+    for (const registro of registros) {
+      const nuevo = { ...registro, [campo]: null }
+      ANTES_DE_ACTUALIZAR[modelo]?.(registro, nuevo)
+      Object.assign(registro, nuevo)
+    }
+  }
+
   // ─── Escritura ───────────────────────────────────────────────────────────
 
   function verificarClaves(modelo: NombreDeModelo, registro: Registro) {
@@ -141,16 +463,139 @@ export function crearBaseFalsa() {
       if (rel.tipo !== "uno" || rel.remoto !== "id") continue
       const valor = registro[rel.local]
       if (valor === null || valor === undefined) continue
-      if (!tablas[rel.modelo].some((otro) => otro.id === valor)) {
-        throw errorDePrisma("P2003", `FK rota: ${modelo}.${clave} → ${String(valor)}`)
+      const otro = tablas[rel.modelo].find((candidato) => candidato.id === valor)
+      if (!otro) throw errorDePrisma("P2003", `FK rota: ${modelo}.${clave} → ${String(valor)}`)
+      // FK compuesta (id, businessId): el otro tiene que ser del mismo negocio.
+      if ((COMPUESTAS[modelo] ?? []).includes(clave) && otro.businessId !== registro.businessId) {
+        throw errorDePrisma("P2003", `FK compuesta rota: ${modelo}.${clave} → ${String(valor)} es de otro negocio`)
       }
     }
-    for (const campo of UNICOS[modelo] ?? []) {
-      const valor = registro[campo]
-      if (valor === null || valor === undefined) continue
-      if (tablas[modelo].some((otro) => otro !== registro && iguales(otro[campo], valor))) {
-        throw errorDePrisma("P2002", `Unique constraint failed: ${modelo}.${campo}`)
-      }
+    for (const { campos, si } of UNICOS[modelo] ?? []) {
+      if (campos.some((campo) => registro[campo] === null || registro[campo] === undefined)) continue
+      if (si && !si(registro)) continue
+      const choca = tablas[modelo].some(
+        (otro) => otro !== registro && (!si || si(otro)) && campos.every((campo) => iguales(otro[campo], registro[campo]))
+      )
+      if (choca) throw errorDePrisma("P2002", `Unique constraint failed: ${modelo}.${campos.join("_")}`)
+    }
+  }
+
+  /**
+   * El trigger `atencion_servicios_comision_inmutable` (migración
+   * `20261028120000_etapa_2_la_plata_del_equipo`), regla por regla: una
+   * comisión congelada no cambia; una línea en una liquidación no cambia de
+   * precio, profesional ni comisión, ni pasa a otra liquidación (sí se puede
+   * soltar, y congelar en la misma escritura que la incluye). Las dos reglas
+   * de línea liquidada se saltan si su atención ya no existe: es la excepción
+   * del borrado en cascada del negocio entero.
+   */
+  function comisionInmutable(viejo: Registro, nuevo: Registro) {
+    const id = String(viejo.id)
+    const cambiaComision = ["commissionPercent", "commissionCents", "commissionAt"].some((campo) =>
+      distintos(nuevo[campo], viejo[campo])
+    )
+    if (viejo.commissionAt !== null && viejo.commissionAt !== undefined && cambiaComision) {
+      throw errorDeTrigger(`atencion_servicios ${id}: la comisión ya está congelada`)
+    }
+
+    if (viejo.liquidacionId === null || viejo.liquidacionId === undefined) return
+    if (!tablas.visit.some((atencion) => atencion.id === viejo.visitId)) return
+
+    if (cambiaComision || distintos(nuevo.priceCents, viejo.priceCents) || distintos(nuevo.memberId, viejo.memberId)) {
+      throw errorDeTrigger(`atencion_servicios ${id}: la línea está en una liquidación; corrígela con un ajuste`)
+    }
+    if (nuevo.liquidacionId !== null && nuevo.liquidacionId !== undefined && nuevo.liquidacionId !== viejo.liquidacionId) {
+      throw errorDeTrigger(`atencion_servicios ${id}: la línea ya está en otra liquidación`)
+    }
+  }
+
+  /**
+   * El trigger `atencion_servicios_mismo_negocio` (misma migración): la línea
+   * no tiene `businessId`, así que sus FK a `productos` y `liquidaciones` no
+   * pueden ser compuestas; el trigger exige que el producto y la liquidación
+   * sean del negocio de su atención, y también el profesional (su FK a
+   * `miembros_negocio` tampoco es compuesta). En un UPDATE sólo mira si cambia
+   * la atención, el profesional, el producto o la liquidación, y si la
+   * atención ya no existe (cascada del negocio) deja pasar. El NULL que pone
+   * la cascada al borrar a un miembro no se revisa. `viejo` es `null` en un
+   * INSERT.
+   */
+  function lineaDelMismoNegocio(viejo: Registro | null, nuevo: Registro) {
+    const id = String(nuevo.id)
+    const memberId = nuevo.memberId ?? null
+    const productId = nuevo.productId ?? null
+    const liquidacionId = nuevo.liquidacionId ?? null
+    if (memberId === null && productId === null && liquidacionId === null) return
+    if (
+      viejo &&
+      nuevo.visitId === viejo.visitId &&
+      !distintos(memberId, viejo.memberId) &&
+      !distintos(productId, viejo.productId) &&
+      !distintos(liquidacionId, viejo.liquidacionId)
+    ) {
+      return
+    }
+
+    const negocio = tablas.visit.find((atencion) => atencion.id === nuevo.visitId)?.businessId ?? null
+    if (negocio === null && viejo) return
+
+    // Con `negocio` en null (un INSERT sin atención), `"businessId" = NULL`
+    // no matchea nada en SQL: también se rechaza.
+    const delNegocio = (modelo: NombreDeModelo, otroId: unknown) =>
+      negocio !== null && tablas[modelo].some((otro) => otro.id === otroId && otro.businessId === negocio)
+    if (memberId !== null && !delNegocio("businessMember", memberId)) {
+      throw errorDePrisma("P2003", `atencion_servicios ${id}: el profesional es de otro negocio`)
+    }
+    if (productId !== null && !delNegocio("producto", productId)) {
+      throw errorDePrisma("P2003", `atencion_servicios ${id}: el producto es de otro negocio`)
+    }
+    if (liquidacionId !== null && !delNegocio("liquidacion", liquidacionId)) {
+      throw errorDePrisma("P2003", `atencion_servicios ${id}: la liquidación es de otro negocio`)
+    }
+  }
+
+  /**
+   * El trigger `atencion_servicios_liquidada_no_se_borra` (misma migración):
+   * una línea en una liquidación no se borra mientras su atención exista. Sin
+   * atención es la cascada del negocio entero (o de la atención), y pasa.
+   */
+  function lineaLiquidadaNoSeBorra(viejo: Registro) {
+    if (viejo.liquidacionId === null || viejo.liquidacionId === undefined) return
+    if (!tablas.visit.some((atencion) => atencion.id === viejo.visitId)) return
+    throw errorDeTrigger(`atencion_servicios ${String(viejo.id)}: la línea está en una liquidación; no se borra`)
+  }
+
+  /** Los triggers `BEFORE INSERT` de la base de verdad que la falsa reproduce. */
+  const ANTES_DE_INSERTAR: Partial<Record<NombreDeModelo, (nuevo: Registro) => void>> = {
+    visitService: (nuevo) => lineaDelMismoNegocio(null, nuevo),
+  }
+
+  /** Los triggers `BEFORE UPDATE` de la base de verdad que la falsa reproduce, en el orden de Postgres (alfabético). */
+  const ANTES_DE_ACTUALIZAR: Partial<Record<NombreDeModelo, (viejo: Registro, nuevo: Registro) => void>> = {
+    visitService: (viejo, nuevo) => {
+      comisionInmutable(viejo, nuevo)
+      lineaDelMismoNegocio(viejo, nuevo)
+    },
+  }
+
+  /** Los triggers `BEFORE DELETE` de la base de verdad que la falsa reproduce. */
+  const ANTES_DE_BORRAR: Partial<Record<NombreDeModelo, (viejo: Registro) => void>> = {
+    visitService: lineaLiquidadaNoSeBorra,
+  }
+
+  /**
+   * Un UPDATE de una fila: arma la fila nueva, la pasa por el trigger y recién
+   * entonces la escribe, como `BEFORE UPDATE`. Devuelve la escritura para que
+   * `updateMany` pueda revisar todas las filas antes de tocar ninguna (en
+   * Postgres la sentencia entera falla o pasa).
+   */
+  function prepararActualizacion(modelo: NombreDeModelo, registro: Registro, datos: unknown) {
+    const nuevo = { ...registro }
+    aplicar(modelo, nuevo, datos)
+    ANTES_DE_ACTUALIZAR[modelo]?.(registro, nuevo)
+    return () => {
+      Object.assign(registro, nuevo)
+      verificarClaves(modelo, registro)
     }
   }
 
@@ -158,7 +603,9 @@ export function crearBaseFalsa() {
     if (!esObjetoPlano(datos)) return falla(`data inválido en ${modelo}`)
     for (const [clave, valor] of Object.entries(datos)) {
       if (valor === undefined) continue
-      if (esObjetoPlano(valor)) return falla(`escritura anidada u operación atómica no soportada: ${modelo}.${clave}`)
+      if (esObjetoPlano(valor) && !esJson(modelo, clave)) {
+        return falla(`escritura anidada u operación atómica no soportada: ${modelo}.${clave}`)
+      }
       if (!(clave in registro)) return falla(`el campo ${modelo}.${clave} no existe`)
       registro[clave] = valor
     }
@@ -174,7 +621,7 @@ export function crearBaseFalsa() {
       if (valor === undefined) continue
       const rel = RELACIONES[modelo][clave]
       if (!rel) {
-        if (esObjetoPlano(valor)) return falla(`valor anidado en un campo: ${modelo}.${clave}`)
+        if (esObjetoPlano(valor) && !esJson(modelo, clave)) return falla(`valor anidado en un campo: ${modelo}.${clave}`)
         escalares[clave] = valor
         continue
       }
@@ -185,6 +632,7 @@ export function crearBaseFalsa() {
     }
 
     const registro: Registro = { id: `${modelo}-${siguienteId++}`, ...POR_DEFECTO[modelo](), ...escalares }
+    ANTES_DE_INSERTAR[modelo]?.(registro)
     verificarClaves(modelo, registro)
     tablas[modelo].push(registro)
 
@@ -196,16 +644,47 @@ export function crearBaseFalsa() {
     return registro
   }
 
+  /**
+   * `distinct` de Prisma: deja la primera fila (en el orden ya aplicado) de
+   * cada combinación de los campos, antes de `skip` y `take`. Sólo la forma
+   * de lista de campos escalares; cualquier otra cosa lanza.
+   */
+  function sinRepetidos(modelo: NombreDeModelo, lista: Registro[], distinct: unknown): Registro[] {
+    if (!Array.isArray(distinct) || distinct.length === 0 || !distinct.every((campo) => typeof campo === "string")) {
+      return falla(`distinct inválido en ${modelo}: sólo una lista de campos`)
+    }
+    for (const campo of distinct) {
+      if (RELACIONES[modelo][campo] || lista.some((fila) => !(campo in fila))) {
+        return falla(`distinct de un campo que no existe: ${modelo}.${campo}`)
+      }
+    }
+    const vistos = new Set<string>()
+    return lista.filter((fila) => {
+      const clave = JSON.stringify(distinct.map((campo) => fila[campo] ?? null))
+      if (vistos.has(clave)) return false
+      vistos.add(clave)
+      return true
+    })
+  }
+
   // ─── El cliente ──────────────────────────────────────────────────────────
 
   /** Lo que devuelve la base es una copia: el endpoint no puede tocar el estado por referencia. */
   const copia = <T>(valor: T): T => structuredClone(valor)
 
   function delegado(modelo: NombreDeModelo) {
-    type Args = Condicion & { where?: unknown; orderBy?: unknown; take?: number; skip?: number; data?: unknown }
+    type Args = Condicion & {
+      where?: unknown
+      orderBy?: unknown
+      take?: number
+      skip?: number
+      data?: unknown
+      distinct?: unknown
+    }
 
     const buscar = (args: Args = {}) => {
       let lista = ordenar(filtrar(modelo, args.where), args.orderBy)
+      if (args.distinct !== undefined) lista = sinRepetidos(modelo, lista, args.distinct)
       if (args.skip !== undefined) lista = lista.slice(args.skip)
       if (args.take !== undefined) lista = lista.slice(0, args.take)
       return lista
@@ -224,30 +703,48 @@ export function crearBaseFalsa() {
       findMany: vi.fn(async (args: Args = {}) => buscar(args).map((registro) => salida(registro, args))),
       count: vi.fn(async (args: Args = {}) => filtrar(modelo, args.where).length),
       create: vi.fn(async (args: Args) => salida(crear(modelo, args.data), args)),
+      // Un solo INSERT: si una fila falla un trigger, una FK o un único, no
+      // queda ninguna, como en Postgres.
       createMany: vi.fn(async (args: Args) => {
         const lista = Array.isArray(args.data) ? args.data : [args.data]
-        lista.forEach((datos) => crear(modelo, datos))
+        const antes = instantanea()
+        try {
+          lista.forEach((datos) => crear(modelo, datos))
+        } catch (error) {
+          tablas = antes
+          throw error
+        }
         return { count: lista.length }
       }),
       update: vi.fn(async (args: Args) => {
         const [registro] = filtrar(modelo, args.where)
         if (!registro) throw errorDePrisma("P2025", `No existe el registro a actualizar en ${modelo}`)
-        aplicar(modelo, registro, args.data)
-        verificarClaves(modelo, registro)
+        prepararActualizacion(modelo, registro, args.data)()
         return salida(registro, args)
+      }),
+      upsert: vi.fn(async (args: Args & { create?: unknown; update?: unknown }) => {
+        const [registro] = filtrar(modelo, args.where)
+        if (!registro) return salida(crear(modelo, args.create), args)
+        prepararActualizacion(modelo, registro, args.update)()
+        return salida(registro, args)
+      }),
+      delete: vi.fn(async (args: Args) => {
+        const [registro] = filtrar(modelo, args.where)
+        if (!registro) throw errorDePrisma("P2025", `No existe el registro a borrar en ${modelo}`)
+        const copiaDeSalida = salida(registro, args)
+        borrarSentencia(modelo, new Set([registro]))
+        return copiaDeSalida
       }),
       updateMany: vi.fn(async (args: Args) => {
         const registros = filtrar(modelo, args.where)
-        for (const registro of registros) {
-          aplicar(modelo, registro, args.data)
-          verificarClaves(modelo, registro)
-        }
+        const escrituras = registros.map((registro) => prepararActualizacion(modelo, registro, args.data))
+        escrituras.forEach((escribir) => escribir())
         return { count: registros.length }
       }),
       deleteMany: vi.fn(async (args: Args = {}) => {
-        const borrar = new Set(filtrar(modelo, args.where))
-        tablas[modelo] = tablas[modelo].filter((registro) => !borrar.has(registro))
-        return { count: borrar.size }
+        const registros = new Set(filtrar(modelo, args.where))
+        borrarSentencia(modelo, registros)
+        return { count: registros.size }
       }),
     }
   }
@@ -266,15 +763,37 @@ export function crearBaseFalsa() {
     workSchedule: delegado("workSchedule"),
     timeBlock: delegado("timeBlock"),
     memberService: delegado("memberService"),
+    commissionRate: delegado("commissionRate"),
+    commissionChange: delegado("commissionChange"),
+    producto: delegado("producto"),
+    propinaDeAtencion: delegado("propinaDeAtencion"),
+    liquidacion: delegado("liquidacion"),
+    movimientoDeLiquidacion: delegado("movimientoDeLiquidacion"),
+    cierreDeCaja: delegado("cierreDeCaja"),
+    inscripcionEnEspera: delegado("inscripcionEnEspera"),
+    envioAClientes: delegado("envioAClientes"),
+    appointmentService: delegado("appointmentService"),
+    franjaDeHoraValle: delegado("franjaDeHoraValle"),
     /**
-     * Sólo para candados (`SELECT … FOR UPDATE`): en memoria no hay
-     * concurrencia que ordenar, así que no devuelve nada. Queda registrado
-     * para que un test compruebe que se pidió, con qué valores y dentro de la
-     * transacción. Cualquier otra consulta cruda lanza: no se sabe leerla.
+     * Sólo para candados (`SELECT … FOR UPDATE` o `pg_advisory_xact_lock`): en
+     * memoria no hay concurrencia que ordenar, así que no devuelve nada. Queda
+     * registrado para que un test compruebe que se pidió, con qué valores y
+     * dentro de la transacción. También responde la hora de la base
+     * (`SELECT clock_timestamp() AS ahora`) con `new Date()`, que los tests
+     * controlan con el reloj falso de vitest. Cualquier otra consulta cruda
+     * lanza: no se sabe leerla.
      */
     $queryRaw: vi.fn(async (partes: TemplateStringsArray, ..._valores: unknown[]) => {
-      if (!partes.join("?").includes("FOR UPDATE")) return falla(`$queryRaw sólo para candados: ${partes.join("?")}`)
+      const sql = partes.join("?")
+      if (sql.trim() === "SELECT clock_timestamp() AS ahora") return [{ ahora: new Date() }]
+      if (!CANDADOS.some((candado) => sql.includes(candado))) return falla(`$queryRaw sólo para candados: ${sql}`)
       return []
+    }),
+    /** Como `$queryRaw`, sólo para `pg_advisory_xact_lock`. Devuelve filas afectadas: 0. */
+    $executeRaw: vi.fn(async (partes: TemplateStringsArray, ..._valores: unknown[]) => {
+      const sql = partes.join("?")
+      if (!sql.includes("pg_advisory_xact_lock")) return falla(`$executeRaw sólo para candados: ${sql}`)
+      return 0
     }),
   }
 

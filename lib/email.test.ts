@@ -512,3 +512,255 @@ describe("lib/email — correos de soporte", () => {
     expect(enviado.html).not.toMatch(/\b(horas|días hábiles|24|48)\b/)
   })
 })
+
+describe("lib/email — mensajes a clientes (etapa 3)", () => {
+  beforeEach(() => {
+    vi.stubEnv("RESEND_API_KEY", "clave-de-prueba")
+    vi.resetModules()
+    enviarMock.mockClear()
+  })
+
+  const BAJA = {
+    enlaceDeBaja: "https://eli.app/baja-de-correos/cliente/abc.def",
+    enlaceDeBajaEnUnClic: "https://eli.app/api/correos/baja-de-cliente?token=abc.def",
+  }
+
+  const teToca = {
+    emailCliente: "maria@test.com",
+    nombreCliente: "María",
+    nombreNegocio: "Salón Uno",
+    servicio: "Corte",
+    enlaceReservar: "https://eli.app/reservar/salon-uno",
+    ...BAJA,
+  }
+
+  const resena = {
+    emailCliente: "maria@test.com",
+    nombreCliente: "María",
+    nombreNegocio: "Salón Uno",
+    enlaceResenas: "https://g.page/r/abc/review",
+    ...BAJA,
+  }
+
+  const espera = {
+    emailCliente: "maria@test.com",
+    nombreCliente: "María",
+    nombreNegocio: "Salón Uno",
+    servicio: "Corte",
+    profesional: "Carla",
+    fecha: "2026-11-02",
+    enlaceReservar: "https://eli.app/reservar/salon-uno?servicio=s1&fecha=2026-11-02",
+    enlaceSalir: "https://eli.app/reservar/salon-uno/espera/tok",
+    enlaceSalirEnUnClic: "https://eli.app/api/reservar/salon-uno/lista-de-espera/tok",
+  }
+
+  it("te toca y la reseña llevan List-Unsubscribe de un clic (RFC 8058) y el pie de baja", async () => {
+    const email = await import("./email")
+
+    await email.enviarTeToca(teToca)
+    await email.enviarPedirResena(resena)
+
+    for (const [envio] of enviarMock.mock.calls) {
+      expect(envio.headers).toEqual({
+        "List-Unsubscribe": `<${BAJA.enlaceDeBajaEnUnClic}>`,
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+      })
+      expect(envio.html).toContain(`href="${BAJA.enlaceDeBaja}"`)
+      expect(envio.html).toContain("Dejar de recibir estos correos")
+      expect(envio.html).toContain("aceptaste recibir avisos y novedades")
+    }
+  })
+
+  it("el aviso de la lista de espera: botón a la reserva, el día legible y 'Salir de la lista' de un clic", async () => {
+    const email = await import("./email")
+
+    await email.enviarAvisoListaDeEspera(espera)
+
+    const envio = enviarMock.mock.calls[0][0]
+    expect(envio.headers).toEqual({
+      "List-Unsubscribe": `<${espera.enlaceSalirEnUnClic}>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    })
+    expect(envio.html).toContain("Salir de la lista de espera")
+    expect(envio.html).toContain(`href="${espera.enlaceSalir}"`)
+    expect(envio.html).toContain("https://eli.app/reservar/salon-uno?servicio=s1&amp;fecha=2026-11-02")
+    expect(envio.html).toContain("lunes, 2 de noviembre de 2026")
+    expect(envio.html).toContain("quien reserve primero")
+  })
+
+  it("los correos de siempre no llevan encabezados de baja", async () => {
+    const email = await import("./email")
+
+    await email.enviarRecordatorio({
+      emailCliente: "maria@test.com",
+      nombreCliente: "María",
+      nombreNegocio: "Salón Uno",
+      servicio: "Corte",
+      fecha: "2026-11-02",
+      hora: "10:00",
+    })
+
+    expect(enviarMock.mock.calls[0][0]).not.toHaveProperty("headers")
+  })
+
+  it("el recordatorio trae el botón de gestión sólo si viene el enlace (#106)", async () => {
+    const email = await import("./email")
+    const recordatorio = { emailCliente: "maria@test.com", nombreCliente: "María", nombreNegocio: "Salón Uno", servicio: "Corte", fecha: "2026-11-02", hora: "10:00" }
+
+    await email.enviarRecordatorio({ ...recordatorio, enlaceDeGestion: "https://eli.app/reservar/salon-uno/cita/abc", plazoHoras: 24 })
+    await email.enviarRecordatorio(recordatorio)
+
+    const [conEnlace, sinEnlace] = enviarMock.mock.calls.map(([envio]) => envio.html as string)
+    expect(conEnlace).toContain('href="https://eli.app/reservar/salon-uno/cita/abc"')
+    expect(conEnlace).toContain("Cancelar o cambiar mi cita")
+    expect(conEnlace).toContain("hasta 24 horas antes")
+    expect(sinEnlace).not.toContain("Cancelar o cambiar mi cita")
+    expect(sinEnlace).toContain("avísanos con anticipación")
+  })
+
+  it("escapa los datos de personas y limpia el asunto", async () => {
+    const email = await import("./email")
+
+    await email.enviarTeToca({ ...teToca, nombreCliente: "<script>x</script>", nombreNegocio: "Salón\r\nBcc: x@y.z", servicio: '"><img>' })
+    await email.enviarPedirResena({ ...resena, nombreCliente: "<b>Ana</b>", enlaceResenas: 'https://g.page/"onmouseover="x' })
+    await email.enviarAvisoListaDeEspera({ ...espera, servicio: "<i>Corte</i>", profesional: "<u>Carla</u>" })
+
+    const [teTocaEnviado, resenaEnviada, esperaEnviada] = enviarMock.mock.calls.map(([envio]) => envio)
+    expect(teTocaEnviado.subject).not.toMatch(/[\r\n]/)
+    expect(teTocaEnviado.html).not.toContain("<script>x")
+    expect(teTocaEnviado.html).not.toContain('"><img>')
+    expect(resenaEnviada.html).not.toContain("<b>Ana</b>")
+    expect(resenaEnviada.html).not.toContain('"onmouseover="x')
+    expect(esperaEnviada.html).not.toContain("<i>Corte</i>")
+    expect(esperaEnviada.html).not.toContain("<u>Carla</u>")
+  })
+
+  it.each([
+    ["con salto de línea", "https://eli.app/baja?t=a\r\nBcc: x@y.z"],
+    ["que se sale de los <>", "https://eli.app/baja?t=a>, <https://otro.test"],
+    ["sin http(s)", "javascript:alert(1)"],
+  ])("una URL de baja en un clic %s no se manda: lanza antes de llegar a Resend", async (_caso, url) => {
+    const email = await import("./email")
+
+    await expect(email.enviarTeToca({ ...teToca, enlaceDeBajaEnUnClic: url })).rejects.toThrow()
+    expect(enviarMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("lib/email — reservas por confirmar (#84)", () => {
+  beforeEach(() => {
+    vi.stubEnv("RESEND_API_KEY", "clave-de-prueba")
+    vi.resetModules()
+    enviarMock.mockClear()
+  })
+
+  const reserva = {
+    emailCliente: "cliente@ejemplo.com",
+    nombreCliente: "Lucía Pérez",
+    nombreNegocio: "Salón Uno",
+    servicio: "Corte",
+    fecha: "2026-09-10",
+    hora: "10:00",
+    duracion: 30,
+  }
+
+  it("la confirmación al cliente dice que el local la confirmará, sin hablar de faltas", async () => {
+    const { enviarConfirmacionCliente } = await import("./email")
+
+    await enviarConfirmacionCliente({ ...reserva, porConfirmar: true })
+
+    const { subject, html } = enviarMock.mock.calls[0][0]
+    expect(subject).toBe("Reserva recibida — Salón Uno")
+    expect(html).toContain("confirmará tu reserva")
+    expect(html).not.toMatch(/falt|no vino|inasist/i)
+    expect(html).not.toContain("¡Tu cita está confirmada!")
+  })
+
+  it("sin la marca, la confirmación es la de siempre", async () => {
+    const { enviarConfirmacionCliente } = await import("./email")
+
+    await enviarConfirmacionCliente(reserva)
+
+    const { subject, html } = enviarMock.mock.calls[0][0]
+    expect(subject).toBe("Cita confirmada — Salón Uno")
+    expect(html).toContain("¡Tu cita está confirmada!")
+    expect(html).not.toContain("confirmará tu reserva")
+  })
+
+  it("el aviso al negocio pide confirmarla o cancelarla en el panel", async () => {
+    const { enviarAvisoProfesional } = await import("./email")
+
+    await enviarAvisoProfesional({
+      emailProfesional: "duena@uno.test",
+      nombreNegocio: "Salón Uno",
+      nombreCliente: "Lucía Pérez",
+      servicio: "Corte",
+      fecha: "2026-09-10",
+      hora: "10:00",
+      porConfirmar: true,
+    })
+
+    const { subject, html } = enviarMock.mock.calls[0][0]
+    expect(subject).toBe("Reserva por confirmar — Lucía Pérez")
+    expect(html).toContain("confirmar la reserva o cancelarla")
+  })
+
+  it("el aviso de confirmada por el local escapa los datos y dice el día", async () => {
+    const { enviarReservaConfirmadaPorElLocal } = await import("./email")
+
+    await enviarReservaConfirmadaPorElLocal({
+      emailCliente: "cliente@ejemplo.com",
+      nombreCliente: "<b>Lucía</b>",
+      nombreNegocio: "Salón Uno",
+      servicio: "Corte",
+      fecha: "2026-09-10",
+      hora: "10:00",
+      profesional: "Carla",
+    })
+
+    const { subject, html, to } = enviarMock.mock.calls[0][0]
+    expect(to).toBe("cliente@ejemplo.com")
+    expect(subject).toBe("Reserva confirmada — Salón Uno")
+    expect(html).toContain("confirmó tu reserva")
+    expect(html).toContain("&lt;b&gt;Lucía&lt;/b&gt;")
+    expect(html).toContain("septiembre")
+  })
+})
+
+describe("enviarConfirmacionCliente: reservada dentro del plazo (QA#8)", () => {
+  beforeEach(() => {
+    vi.stubEnv("RESEND_API_KEY", "clave-de-prueba")
+    vi.resetModules()
+    enviarMock.mockClear()
+  })
+
+  const datos = {
+    emailCliente: "cliente@ejemplo.com",
+    nombreCliente: "Ana",
+    nombreNegocio: "Salón",
+    servicio: "Corte",
+    fecha: "2026-09-10",
+    hora: "10:00",
+    duracion: 30,
+    enlaceDeGestion: "https://eli.test/reservar/salon/cita/token-de-prueba",
+    plazoHoras: 24,
+  }
+
+  it("sin botón para cancelar o cambiar: dice que se contacte al local", async () => {
+    const { enviarConfirmacionCliente } = await import("./email")
+    await enviarConfirmacionCliente({ ...datos, sePuedeCambiar: false })
+    const html = enviarMock.mock.calls[0][0].html as string
+    expect(html).not.toContain("token-de-prueba")
+    expect(html).not.toContain("Cancelar o cambiar mi cita")
+    expect(html).toContain("no se puede cancelar ni cambiar por el enlace")
+    expect(html).toContain("contacta directamente al local")
+  })
+
+  it("fuera del plazo, el botón de siempre", async () => {
+    const { enviarConfirmacionCliente } = await import("./email")
+    await enviarConfirmacionCliente({ ...datos, sePuedeCambiar: true })
+    const html = enviarMock.mock.calls[0][0].html as string
+    expect(html).toContain("token-de-prueba")
+    expect(html).toContain("Cancelar o cambiar mi cita")
+  })
+})

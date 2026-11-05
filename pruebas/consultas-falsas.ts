@@ -25,6 +25,17 @@ export type NombreDeModelo =
   | "workSchedule"
   | "timeBlock"
   | "memberService"
+  | "commissionRate"
+  | "commissionChange"
+  | "producto"
+  | "propinaDeAtencion"
+  | "liquidacion"
+  | "movimientoDeLiquidacion"
+  | "cierreDeCaja"
+  | "inscripcionEnEspera"
+  | "envioAClientes"
+  | "appointmentService"
+  | "franjaDeHoraValle"
 
 export type Tablas = Record<NombreDeModelo, Registro[]>
 
@@ -44,14 +55,23 @@ const muchos = (modelo: NombreDeModelo, remoto: string): Relacion => ({ modelo, 
 /** Sólo las relaciones que usan los endpoints. Una que falte acá, lanza. */
 export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
   user: {},
-  business: { user: uno("user", "userId") },
+  business: {
+    user: uno("user", "userId"),
+    // Las que lee la mini página pública (`leerPaginaDelNegocio`).
+    members: muchos("businessMember", "businessId"),
+    services: muchos("service", "businessId"),
+    workSchedules: muchos("workSchedule", "businessId"),
+    franjasDeHoraValle: muchos("franjaDeHoraValle", "businessId"),
+  },
   businessMember: {
     user: uno("user", "userId"),
     business: uno("business", "businessId"),
     memberServices: muchos("memberService", "memberId"),
+    commissionRates: muchos("commissionRate", "memberId"),
+    liquidaciones: muchos("liquidacion", "memberId"),
   },
   customer: {},
-  service: {},
+  service: { commissionRates: muchos("commissionRate", "serviceId") },
   appointment: {
     customer: uno("customer", "customerId"),
     member: uno("businessMember", "memberId"),
@@ -59,6 +79,7 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     business: uno("business", "businessId"),
     // La atención guarda la FK: del lado de la cita es la relación inversa.
     visit: uno("visit", "id", "appointmentId"),
+    servicios: muchos("appointmentService", "appointmentId"),
   },
   visit: {
     business: uno("business", "businessId"),
@@ -66,11 +87,14 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     appointment: uno("appointment", "appointmentId"),
     services: muchos("visitService", "visitId"),
     payments: muchos("visitPayment", "visitId"),
+    propinas: muchos("propinaDeAtencion", "visitId"),
   },
   visitService: {
     visit: uno("visit", "visitId"),
     member: uno("businessMember", "memberId"),
     service: uno("service", "serviceId"),
+    product: uno("producto", "productId"),
+    liquidacion: uno("liquidacion", "liquidacionId"),
   },
   visitPayment: { visit: uno("visit", "visitId") },
   workSchedule: { business: uno("business", "businessId"), member: uno("businessMember", "memberId") },
@@ -80,6 +104,76 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     member: uno("businessMember", "memberId"),
     service: uno("service", "serviceId"),
   },
+  commissionRate: {
+    business: uno("business", "businessId"),
+    member: uno("businessMember", "memberId"),
+    service: uno("service", "serviceId"),
+  },
+  commissionChange: {
+    business: uno("business", "businessId"),
+    member: uno("businessMember", "memberId"),
+    service: uno("service", "serviceId"),
+    product: uno("producto", "productId"),
+  },
+  producto: { business: uno("business", "businessId"), visitServices: muchos("visitService", "productId") },
+  propinaDeAtencion: {
+    business: uno("business", "businessId"),
+    visit: uno("visit", "visitId"),
+    member: uno("businessMember", "memberId"),
+    liquidacion: uno("liquidacion", "liquidacionId"),
+  },
+  liquidacion: {
+    business: uno("business", "businessId"),
+    member: uno("businessMember", "memberId"),
+    lineas: muchos("visitService", "liquidacionId"),
+    propinas: muchos("propinaDeAtencion", "liquidacionId"),
+    movimientos: muchos("movimientoDeLiquidacion", "liquidacionId"),
+  },
+  movimientoDeLiquidacion: {
+    business: uno("business", "businessId"),
+    member: uno("businessMember", "memberId"),
+    visit: uno("visit", "visitId"),
+    liquidacion: uno("liquidacion", "liquidacionId"),
+  },
+  cierreDeCaja: { business: uno("business", "businessId") },
+  inscripcionEnEspera: {
+    business: uno("business", "businessId"),
+    service: uno("service", "serviceId"),
+    member: uno("businessMember", "memberId"),
+    envios: muchos("envioAClientes", "esperaId"),
+  },
+  envioAClientes: {
+    business: uno("business", "businessId"),
+    customer: uno("customer", "customerId"),
+    espera: uno("inscripcionEnEspera", "esperaId"),
+  },
+  appointmentService: {
+    business: uno("business", "businessId"),
+    appointment: uno("appointment", "appointmentId"),
+    service: uno("service", "serviceId"),
+  },
+  franjaDeHoraValle: { business: uno("business", "businessId") },
+}
+
+/**
+ * Las relaciones que en la base son FK compuestas contra `(id, businessId)`:
+ * además de existir, el otro registro tiene que ser del mismo negocio. Así un
+ * test que escribe una propina con la atención de otro negocio falla con P2003,
+ * como en Postgres.
+ */
+export const COMPUESTAS: Partial<Record<NombreDeModelo, string[]>> = {
+  commissionRate: ["member", "service"],
+  memberService: ["member", "service"],
+  timeBlock: ["member"],
+  propinaDeAtencion: ["visit", "member", "liquidacion"],
+  liquidacion: ["member"],
+  movimientoDeLiquidacion: ["member", "visit", "liquidacion"],
+  // El servicio de una inscripción es FK compuesta; el profesional, simple.
+  inscripcionEnEspera: ["service"],
+  // La cita es FK compuesta; el servicio, simple, pero el trigger
+  // `cita_servicios_mismo_negocio` exige que sea del mismo negocio: acá se
+  // emula igual que una compuesta.
+  appointmentService: ["appointment", "service"],
 }
 
 const OPERADORES_DE_CAMPO = new Set(["equals", "in", "notIn", "not", "gt", "gte", "lt", "lte", "has"])
@@ -111,33 +205,78 @@ export function relacionados(tablas: Tablas, rel: Relacion, registro: Registro):
 
 // ─── where ───────────────────────────────────────────────────────────────────
 
+/**
+ * Lo que da una condición en SQL: verdadero, falso o desconocido (`null`).
+ * Hace falta el tercer valor para las listas en NULL: `has` sobre una lista
+ * NULL da desconocido, y `NOT` de desconocido sigue siendo desconocido, así
+ * que la fila no sale ni con la condición ni con su negación. Es lo que hace
+ * Postgres con `NOT (tags @> ARRAY[...])` cuando `tags` es NULL.
+ */
+type Logico = boolean | null
+
+function y(valores: Logico[]): Logico {
+  if (valores.some((valor) => valor === false)) return false
+  return valores.some((valor) => valor === null) ? null : true
+}
+
+function o(valores: Logico[]): Logico {
+  if (valores.some((valor) => valor === true)) return true
+  return valores.some((valor) => valor === null) ? null : false
+}
+
+const no = (valor: Logico): Logico => (valor === null ? null : !valor)
+
+/** Si la fila sale con este `where`: sólo cuando la condición es verdadera, como en SQL. */
 export function coincide(tablas: Tablas, modelo: NombreDeModelo, registro: Registro, where: unknown): boolean {
+  return evaluar(tablas, modelo, registro, where) === true
+}
+
+function evaluar(tablas: Tablas, modelo: NombreDeModelo, registro: Registro, where: unknown): Logico {
   if (where === undefined) return true
   if (!esObjetoPlano(where)) return falla(`where inválido en ${modelo}: ${JSON.stringify(where)}`)
 
-  return Object.entries(where).every(([clave, condicion]) => {
-    if (condicion === undefined) return true
-    if (clave === "AND") {
-      const partes = Array.isArray(condicion) ? condicion : [condicion]
-      return partes.every((parte) => coincide(tablas, modelo, registro, parte))
-    }
-    if (clave === "OR") {
-      if (!Array.isArray(condicion)) return falla(`OR sin lista en ${modelo}`)
-      return condicion.some((parte) => coincide(tablas, modelo, registro, parte))
-    }
-    // Como Prisma: con una lista, ninguna de las condiciones se cumple.
-    if (clave === "NOT") {
-      const partes = Array.isArray(condicion) ? condicion : [condicion]
-      return !partes.some((parte) => coincide(tablas, modelo, registro, parte))
-    }
+  return y(
+    Object.entries(where).map(([clave, condicion]): Logico => {
+      if (condicion === undefined) return true
+      if (clave === "AND") {
+        const partes = Array.isArray(condicion) ? condicion : [condicion]
+        return y(partes.map((parte) => evaluar(tablas, modelo, registro, parte)))
+      }
+      if (clave === "OR") {
+        if (!Array.isArray(condicion)) return falla(`OR sin lista en ${modelo}`)
+        return o(condicion.map((parte) => evaluar(tablas, modelo, registro, parte)))
+      }
+      // Como Prisma: con una lista, ninguna de las condiciones se cumple.
+      if (clave === "NOT") {
+        const partes = Array.isArray(condicion) ? condicion : [condicion]
+        return no(o(partes.map((parte) => evaluar(tablas, modelo, registro, parte))))
+      }
 
-    const rel = RELACIONES[modelo][clave]
-    if (rel) return coincideRelacion(tablas, rel, registro, condicion, `${modelo}.${clave}`)
-    if (!(clave in registro)) return falla(`el campo ${modelo}.${clave} no existe`)
-    return coincideCampo(registro[clave], condicion, `${modelo}.${clave}`)
-  })
+      const rel = RELACIONES[modelo][clave]
+      if (rel) return coincideRelacion(tablas, rel, registro, condicion, `${modelo}.${clave}`)
+      // Clave de un único compuesto, como la arma Prisma: `memberId_serviceId: { memberId, serviceId }`.
+      if (!(clave in registro) && clave.includes("_") && esObjetoPlano(condicion)) {
+        const campos = clave.split("_")
+        if (Object.keys(condicion).sort().join() !== [...campos].sort().join()) {
+          return falla(`clave compuesta ${modelo}.${clave} con otros campos: ${Object.keys(condicion).join()}`)
+        }
+        return y(
+          campos.map((campo) => {
+            if (!(campo in registro)) return falla(`el campo ${modelo}.${campo} no existe`)
+            return coincideCampo(registro[campo], condicion[campo], `${modelo}.${campo}`)
+          })
+        )
+      }
+      if (!(clave in registro)) return falla(`el campo ${modelo}.${clave} no existe`)
+      return coincideCampo(registro[clave], condicion, `${modelo}.${clave}`)
+    })
+  )
 }
 
+/**
+ * Una relación es un `EXISTS` (o un join): el registro relacionado cuenta
+ * sólo si la condición es verdadera para él; desconocido es que no.
+ */
 function coincideRelacion(tablas: Tablas, rel: Relacion, registro: Registro, condicion: unknown, ruta: string): boolean {
   const otros = relacionados(tablas, rel, registro)
   const cumple = (otro: Registro, sub: unknown) => coincide(tablas, rel.modelo, otro, sub)
@@ -166,7 +305,7 @@ function coincideRelacion(tablas: Tablas, rel: Relacion, registro: Registro, con
   return otro !== null && cumple(otro, condicion)
 }
 
-function coincideCampo(guardado: unknown, condicion: unknown, ruta: string): boolean {
+function coincideCampo(guardado: unknown, condicion: unknown, ruta: string): Logico {
   if (condicion === null) return guardado === null
   if (!esObjetoPlano(condicion)) {
     if (Array.isArray(condicion)) return falla(`igualdad contra una lista en ${ruta}`)
@@ -179,31 +318,40 @@ function coincideCampo(guardado: unknown, condicion: unknown, ruta: string): boo
   const sinMayusculas = (texto: unknown) => (mode === "insensitive" && typeof texto === "string" ? texto.toLowerCase() : texto)
   const valor = sinMayusculas(guardado)
 
-  return Object.entries(operaciones).every(([operador, original]) => {
-    const argumento = Array.isArray(original) ? original.map(sinMayusculas) : sinMayusculas(original)
-    if (argumento === undefined) return true
-    if (!OPERADORES_DE_CAMPO.has(operador)) return falla(`operador ${operador} no soportado en ${ruta}`)
-    // `has`, de las listas de Postgres (`String[]`): la lista guardada contiene el valor.
-    if (operador === "has") {
-      if (!Array.isArray(guardado)) return falla(`has sobre un campo que no es una lista en ${ruta}`)
-      return guardado.some((elemento) => iguales(sinMayusculas(elemento), argumento))
-    }
-    // Como en SQL: comparar contra NULL no da verdadero (salvo `not: null`).
-    if (operador === "not") return argumento === null ? valor !== null : valor !== null && !iguales(valor, argumento)
-    if (operador === "equals") return argumento === null ? valor === null : iguales(valor, argumento)
-    if (operador === "in" || operador === "notIn") {
-      if (!Array.isArray(argumento)) return falla(`${operador} sin lista en ${ruta}`)
-      const esta = argumento.some((opcion) => iguales(valor, opcion))
-      return operador === "in" ? esta : valor !== null && !esta
-    }
-    if (valor === null) return false
-    const a = comparable(valor)
-    const b = comparable(argumento)
-    if (operador === "gt") return a > b
-    if (operador === "gte") return a >= b
-    if (operador === "lt") return a < b
-    return a <= b
-  })
+  return y(
+    Object.entries(operaciones).map(([operador, original]): Logico => {
+      const argumento = Array.isArray(original) ? original.map(sinMayusculas) : sinMayusculas(original)
+      if (argumento === undefined) return true
+      if (!OPERADORES_DE_CAMPO.has(operador)) return falla(`operador ${operador} no soportado en ${ruta}`)
+      // `has`, de las listas de Postgres (`String[]`): la lista guardada
+      // contiene el valor. Sobre una lista NULL (una columna `TEXT[]` sin
+      // default que nadie llenó) da desconocido, como `@>` en Postgres.
+      if (operador === "has") {
+        if (guardado === null) return null
+        if (!Array.isArray(guardado)) return falla(`has sobre un campo que no es una lista en ${ruta}`)
+        return guardado.some((elemento) => iguales(sinMayusculas(elemento), argumento))
+      }
+      // Como en SQL: comparar contra NULL no da verdadero (salvo `not: null`).
+      if (operador === "not") return argumento === null ? valor !== null : valor !== null && !iguales(valor, argumento)
+      if (operador === "equals") {
+        if (argumento === null) return valor === null
+        if (Array.isArray(argumento)) return falla(`equals contra una lista en ${ruta}`)
+        return iguales(valor, argumento)
+      }
+      if (operador === "in" || operador === "notIn") {
+        if (!Array.isArray(argumento)) return falla(`${operador} sin lista en ${ruta}`)
+        const esta = argumento.some((opcion) => iguales(valor, opcion))
+        return operador === "in" ? esta : valor !== null && !esta
+      }
+      if (valor === null) return false
+      const a = comparable(valor)
+      const b = comparable(argumento)
+      if (operador === "gt") return a > b
+      if (operador === "gte") return a >= b
+      if (operador === "lt") return a < b
+      return a <= b
+    })
+  )
 }
 
 // ─── orderBy ─────────────────────────────────────────────────────────────────

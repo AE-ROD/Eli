@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest"
-import { dentroDelPlazo, esGestionable, esTokenConForma, mensajeFueraDePlazo, whereDeCitaPorToken } from "./gestion-de-cita"
+import {
+  dentroDelPlazo,
+  esGestionable,
+  esTokenConForma,
+  mensajeFueraDePlazo,
+  plazoParaQuienReserva,
+  whereDeCitaPorToken,
+} from "./gestion-de-cita"
 import { generarToken, hashDeToken } from "./tokens"
 
 const AHORA = new Date("2030-01-01T12:00:00.000Z")
@@ -39,6 +46,20 @@ describe("dentroDelPlazo", () => {
   it("un plazo fuera de rango se lee como el de por defecto (24)", () => {
     expect(dentroDelPlazo(enHoras(30), 500, AHORA)).toBe(true)
     expect(dentroDelPlazo(enHoras(10), -3, AHORA)).toBe(false)
+  })
+})
+
+describe("plazoParaQuienReserva (#83)", () => {
+  it("dice las horas del plazo", () => {
+    expect(plazoParaQuienReserva(24)).toBe("Puedes cancelar o cambiar hasta 24 horas antes.")
+    expect(plazoParaQuienReserva(1)).toBe("Puedes cancelar o cambiar hasta 1 hora antes.")
+  })
+  it("con 0 horas, hasta el momento de la cita", () => {
+    expect(plazoParaQuienReserva(0)).toBe("Puedes cancelar o cambiar tu hora hasta el momento de la cita.")
+  })
+  it("un plazo fuera de rango se dice como el de por defecto, igual que se aplica", () => {
+    expect(plazoParaQuienReserva(500)).toBe("Puedes cancelar o cambiar hasta 24 horas antes.")
+    expect(plazoParaQuienReserva(-3)).toBe("Puedes cancelar o cambiar hasta 24 horas antes.")
   })
 })
 

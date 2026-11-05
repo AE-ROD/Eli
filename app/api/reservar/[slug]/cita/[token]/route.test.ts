@@ -152,6 +152,8 @@ describe("GET: ver la cita", () => {
     expect(cuerpo).toEqual({
       negocio: { nombre: "Salón Uno" },
       servicio: { nombre: "Corte", duracion: 60 },
+      // El precio de la cita (#89c); ésta no tiene.
+      precio: null,
       profesional: "Carla Profesional",
       fecha: FECHA,
       hora: "10:00",
@@ -159,7 +161,29 @@ describe("GET: ver la cita", () => {
       plazoHoras: 24,
       sePuedeCambiar: true,
       sePuedeReagendar: true,
+      // El negocio atiende todos los días y Carla no cargó horario propio.
+      diasConAtencion: [0, 1, 2, 3, 4, 5, 6],
     })
+  })
+
+  it("QA#19: dice qué días se pueden elegir al reagendar: no los cerrados del negocio ni los que su profesional no atiende", async () => {
+    escenario()
+    // Domingo cerrado (no hay franja del domingo).
+    base.reiniciar({ ...base.volcado(), workSchedule: base.volcado().workSchedule.filter((fila) => fila.dayOfWeek !== 0) })
+    expect((await ver()).cuerpo.diasConAtencion).toEqual([1, 2, 3, 4, 5, 6])
+
+    // Carla cargó horario propio sólo lunes y miércoles: manda el suyo.
+    base.reiniciar({
+      ...base.volcado(),
+      workSchedule: [
+        ...base.volcado().workSchedule,
+        { id: "h-carla-1", businessId: NEGOCIO, memberId: "m-carla", dayOfWeek: 1, startTime: "14:00", endTime: "20:00" },
+        { id: "h-carla-3", businessId: NEGOCIO, memberId: "m-carla", dayOfWeek: 3, startTime: "14:00", endTime: "20:00" },
+        // El horario de otro negocio no cuenta.
+        { id: "h-ajeno", businessId: OTRO_NEGOCIO, memberId: null, dayOfWeek: 0, startTime: "09:00", endTime: "12:00" },
+      ],
+    })
+    expect((await ver()).cuerpo.diasConAtencion).toEqual([1, 3])
   })
 
   it("fuera de plazo se ve, pero dice que ya no se puede cambiar", async () => {
@@ -237,6 +261,53 @@ describe("cancelar", () => {
   })
 })
 
+describe("cancelar: la hora es la de la base (#152)", () => {
+  // La cita es el 7 a las 10:00 en Santiago (13:00Z); con 48 horas de plazo,
+  // el límite es el 5 a las 13:00Z. El reloj de esta instancia y el de la base
+  // quedan a un par de segundos, uno a cada lado del límite.
+  const laBaseDice = (instante: string) => {
+    const ahora = new Date(instante)
+    base.prisma.$queryRaw.mockImplementationOnce(async () => [{ ahora }])
+    return ahora
+  }
+
+  it("guarda como `canceladaEn` la hora de la base, no la de esta instancia", async () => {
+    escenario()
+    const deLaBase = laBaseDice("2030-01-02T12:00:07.000Z")
+
+    expect((await cancelar()).status).toBe(200)
+
+    expect(laCita()).toMatchObject({ status: "cancelada", canceladaPor: "cliente", canceladaEn: deLaBase })
+    const [partes] = base.prisma.$queryRaw.mock.calls[0]
+    expect(partes.join("?")).toBe("SELECT clock_timestamp() AS ahora")
+    expect(base.prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      base.prisma.appointment.updateMany.mock.invocationCallOrder[0]
+    )
+  })
+
+  it("el plazo se decide con la misma hora de la base: si para ella ya pasó, 409 aunque esta instancia diga que no", async () => {
+    escenario({ negocio: { cancelacionHorasAntes: 48 } })
+    relojEn("2030-01-05T12:59:58.000Z")
+    laBaseDice("2030-01-05T13:00:01.000Z")
+
+    const { status, cuerpo } = await cancelar()
+
+    expect(status).toBe(409)
+    expect(cuerpo.error).toMatch(/48 horas antes/)
+    expect(laCita().status).toBe("pendiente")
+  })
+
+  it("y si para la base sigue dentro del plazo, se cancela con esa hora aunque esta instancia vaya adelantada", async () => {
+    escenario({ negocio: { cancelacionHorasAntes: 48 } })
+    relojEn("2030-01-05T13:00:01.000Z")
+    const deLaBase = laBaseDice("2030-01-05T12:59:58.000Z")
+
+    expect((await cancelar()).status).toBe(200)
+
+    expect(laCita()).toMatchObject({ status: "cancelada", canceladaPor: "cliente", canceladaEn: deLaBase })
+  })
+})
+
 describe("reagendar", () => {
   it("a una hora libre del mismo profesional: mueve la cita y avisa al negocio", async () => {
     escenario()
@@ -259,7 +330,7 @@ describe("reagendar", () => {
     escenario({
       otras: [{ id: "c-otra", businessId: NEGOCIO, title: "Color", memberId: "m-carla", startTime: aLas("09:00", "2030-01-08"), endTime: aLas("10:00", "2030-01-08") }],
     })
-    expect((await horas("2030-01-08")).cuerpo.slots).toEqual(["10:00", "11:00"])
+    expect((await horas("2030-01-08")).cuerpo.slots).toEqual(["10:00", "10:30", "11:00"])
     expect((await reagendar("2030-01-08", "09:00")).status).toBe(409)
     expect(laCita().startTime).toEqual(aLas("10:00"))
   })

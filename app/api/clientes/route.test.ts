@@ -26,27 +26,41 @@ vi.mock("@/lib/auth", () => ({ authOptions: {} }))
  * base falsa, que lanza ante cualquier operador que no conozca.
  */
 function coincide(item: Record<string, unknown>, where: Record<string, unknown>): boolean {
-  return Object.entries(where).every(([clave, valor]) => {
-    if (clave === "AND") {
-      return (valor as Record<string, unknown>[]).every((sub) => coincide(item, sub))
-    }
-    if (clave === "OR") {
-      return (valor as Record<string, unknown>[]).some((sub) => coincide(item, sub))
-    }
-    if (clave === "NOT") {
-      return !coincide(item, valor as Record<string, unknown>)
-    }
-    if (valor && typeof valor === "object") {
-      const condicion = valor as Record<string, unknown>
-      if ("contains" in condicion) {
-        return String(item[clave] ?? "").toLowerCase().includes(String(condicion.contains).toLowerCase())
+  return evaluar(item, where) === true
+}
+
+/**
+ * Como SQL, con tres valores: `null` es "desconocido". Hace falta para
+ * `tags`, que en la base es `TEXT[]` sin default: en un cliente creado sin
+ * etiquetas es NULL, y ahí `has` no es ni verdadero ni falso, y su `NOT`
+ * tampoco. Por eso esos clientes desaparecían del listado.
+ */
+function evaluar(item: Record<string, unknown>, where: Record<string, unknown>): boolean | null {
+  const y = (valores: (boolean | null)[]) => (valores.includes(false) ? false : valores.includes(null) ? null : true)
+  const o = (valores: (boolean | null)[]) => (valores.includes(true) ? true : valores.includes(null) ? null : false)
+  return y(
+    Object.entries(where).map(([clave, valor]): boolean | null => {
+      if (clave === "AND") return y((valor as Record<string, unknown>[]).map((sub) => evaluar(item, sub)))
+      if (clave === "OR") return o((valor as Record<string, unknown>[]).map((sub) => evaluar(item, sub)))
+      if (clave === "NOT") {
+        const negado = evaluar(item, valor as Record<string, unknown>)
+        return negado === null ? null : !negado
       }
-      if ("has" in condicion) {
-        return ((item[clave] as unknown[]) ?? []).includes(condicion.has)
+      if (valor && typeof valor === "object") {
+        const condicion = valor as Record<string, unknown>
+        if ("contains" in condicion) {
+          return String(item[clave] ?? "").toLowerCase().includes(String(condicion.contains).toLowerCase())
+        }
+        if ("has" in condicion) {
+          if (item[clave] === null) return null
+          return (item[clave] as unknown[]).includes(condicion.has)
+        }
+        if ("equals" in condicion && condicion.equals === null) return item[clave] === null
+        throw new Error(`condición no esperada en ${clave}: ${JSON.stringify(condicion)}`)
       }
-    }
-    return item[clave] === valor
-  })
+      return item[clave] === valor
+    })
+  )
 }
 
 /**
@@ -67,10 +81,10 @@ function paginarComoPrisma<T>(lista: T[], { skip = 0, take }: { skip?: number; t
 const creadoEl = (dia: number) => new Date(Date.UTC(2026, 0, dia))
 
 const clientesFake: Registro[] = [
-  { id: "cliente-1", businessId: "negocio-1", name: "Ana", lastName: "Pérez", email: "ana@example.com", phone: null, tags: ["vip"], notes: null, whatsappConsentAt: null, createdAt: creadoEl(1) },
-  { id: "cliente-2", businessId: "negocio-1", name: "Beto Soto", lastName: null, email: null, phone: "+56 9 1111 1111", tags: [], notes: null, whatsappConsentAt: null, createdAt: creadoEl(2) },
+  { id: "cliente-1", businessId: "negocio-1", name: "Ana", lastName: "Pérez", email: "ana@example.com", phone: null, tags: ["vip"], notes: null, whatsappConsentAt: null, correoPromoConsentAt: null, createdAt: creadoEl(1) },
+  { id: "cliente-2", businessId: "negocio-1", name: "Beto Soto", lastName: null, email: null, phone: "+56 9 1111 1111", tags: [], notes: null, whatsappConsentAt: null, correoPromoConsentAt: null, createdAt: creadoEl(2) },
   /** Se llama igual que `cliente-1` y tiene su misma etiqueta: sólo el negocio los distingue. */
-  { id: "cliente-ajeno", businessId: "negocio-2", name: "Ana", lastName: "Pérez", email: "ana@otro.com", phone: null, tags: ["vip"], notes: null, whatsappConsentAt: null, createdAt: creadoEl(1) },
+  { id: "cliente-ajeno", businessId: "negocio-2", name: "Ana", lastName: "Pérez", email: "ana@otro.com", phone: null, tags: ["vip"], notes: null, whatsappConsentAt: null, correoPromoConsentAt: null, createdAt: creadoEl(1) },
   /** Un negocio con sesenta clientes, para probar la paginación contra el tope de 50. */
   ...Array.from({ length: 60 }, (_, i) => ({
     id: `cliente-grande-${i + 1}`,
@@ -82,6 +96,7 @@ const clientesFake: Registro[] = [
     tags: [],
     notes: null,
     whatsappConsentAt: null,
+    correoPromoConsentAt: null,
     createdAt: creadoEl(i + 1),
   })),
 ]
@@ -100,6 +115,7 @@ function cita(id: string, customerId: string, memberId: string | null, dia: stri
     price: 8000,
     notes: null,
     clientComments: null,
+    confirmacionPorFaltas: false,
     ...datos,
   }
 }
@@ -146,6 +162,17 @@ const tablas: Tablas = {
   workSchedule: [],
   timeBlock: [],
   memberService: [],
+  commissionRate: [],
+  commissionChange: [],
+  producto: [],
+  propinaDeAtencion: [],
+  liquidacion: [],
+  movimientoDeLiquidacion: [],
+  cierreDeCaja: [],
+  inscripcionEnEspera: [],
+  envioAClientes: [],
+  appointmentService: [],
+  franjaDeHoraValle: [],
   customer: clientesFake,
   appointment: citasFake,
 }
@@ -171,6 +198,11 @@ const prismaMock = {
       Promise.resolve({ id: "cliente-nuevo", ...args.data })
     ),
   },
+  /** Sólo la hora de la base (`horaDeLaBase`); cualquier otra consulta cruda lanza. */
+  $queryRaw: vi.fn(async (partes: TemplateStringsArray) => {
+    if (partes.join("?").trim() === "SELECT clock_timestamp() AS ahora") return [{ ahora: new Date() }]
+    throw new Error(`$queryRaw no esperado: ${partes.join("?")}`)
+  }),
 }
 
 /**
@@ -277,6 +309,71 @@ describe("GET /api/clientes", () => {
     const data = await (await GET(fakeGet("?q=ana"))).json()
 
     expect(data.clientes).toEqual([expect.objectContaining({ id: "cliente-1", name: "Ana", lastName: "Pérez" })])
+  })
+
+  it("el buscador encuentra por el apellido guardado aparte (reservas públicas viejas) y por el que va en el nombre, sin cruzar de negocio (N2)", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const porApellidoAparte = await (await GET(fakeGet("?q=pérez&limite=8"))).json()
+    // `cliente-ajeno` también es "Ana Pérez", pero de otro negocio.
+    expect(ids(porApellidoAparte.clientes)).toEqual(["cliente-1"])
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const porApellidoEnElNombre = await (await GET(fakeGet("?q=soto&limite=8"))).json()
+    expect(ids(porApellidoEnElNombre.clientes)).toEqual(["cliente-2"])
+  })
+
+  it("el nombre completo de un cliente con el apellido aparte se encuentra palabra por palabra, en cualquier orden y sin importar mayúsculas", async () => {
+    const { GET } = await import("./route")
+
+    for (const q of ["ana pérez", "  ANA   Pérez ", "pérez ana", "an pér"]) {
+      mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+      const data = await (await GET(fakeGet(`?q=${encodeURIComponent(q)}&limite=8`))).json()
+      expect(ids(data.clientes), q).toEqual(["cliente-1"])
+    }
+  })
+
+  it("buscar por nombre completo no trae al cliente de otro negocio con el mismo nombre y apellido", async () => {
+    const { GET } = await import("./route")
+
+    // `cliente-ajeno` (negocio-2) también es Ana Pérez.
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const delDueño = await (await GET(fakeGet("?q=ana%20p%C3%A9rez&limite=8"))).json()
+    expect(ids(delDueño.clientes)).toEqual(["cliente-1"])
+    expect(delDueño.total).toBe(1)
+
+    mockGetServerSession.mockResolvedValueOnce(sesionOtroNegocio)
+    const delOtro = await (await GET(fakeGet("?q=ana%20p%C3%A9rez&limite=8"))).json()
+    expect(ids(delOtro.clientes)).toEqual(["cliente-ajeno"])
+  })
+
+  it("cada palabra tiene que estar en el mismo cliente: palabras de clientes distintos no traen a ninguno", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const data = await (await GET(fakeGet("?q=ana%20soto&limite=8"))).json()
+    expect(data.clientes).toEqual([])
+  })
+
+  it("el nombre completo guardado entero en `name` también se encuentra por palabras", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const data = await (await GET(fakeGet("?q=soto%20beto&limite=8"))).json()
+    expect(ids(data.clientes)).toEqual(["cliente-2"])
+  })
+
+  it("correo y teléfono se siguen buscando con el texto entero", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const porCorreo = await (await GET(fakeGet("?q=ana%40example&limite=8"))).json()
+    expect(ids(porCorreo.clientes)).toEqual(["cliente-1"])
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const porTelefono = await (await GET(fakeGet("?q=1111%201111&limite=8"))).json()
+    expect(ids(porTelefono.clientes)).toEqual(["cliente-2"])
   })
 
   it("sin apellido cargado, viaja en null", async () => {
@@ -425,9 +522,40 @@ describe("GET /api/clientes — el historial de citas de cada cliente", () => {
 
     expect(citas).toHaveLength(4)
     for (const citaDelHistorial of citas) {
-      expect(Object.keys(citaDelHistorial).sort()).toEqual(["endTime", "id", "price", "startTime", "status", "title"])
+      expect(Object.keys(citaDelHistorial).sort()).toEqual([
+        "conAtencion",
+        "confirmacionPorFaltas",
+        "endTime",
+        "id",
+        "price",
+        "startTime",
+        "status",
+        "title",
+      ])
     }
     expect(JSON.stringify(data)).not.toMatch(/Nota interna|Pidió que no la llamen/)
+  })
+
+  it("conAtencion: la cita cuyo cliente ya llegó (atención no anulada) deja de estar por confirmar; la atención no viaja", async () => {
+    const { GET } = await import("./route")
+    const agregadas = [
+      atencionCobrada("v-llego", "cliente-1", "01", { appointmentId: "cita-propia", status: "en-espera" }),
+      atencionCobrada("v-anulada", "cliente-1", "05", { appointmentId: "cita-sin-asignar", status: "anulada" }),
+    ]
+    atencionesFake.push(...agregadas)
+    try {
+      mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+      const data = await (await GET(fakeGet())).json()
+      const citas = Object.fromEntries(
+        data.clientes
+          .flatMap((c: { appointments: { id: string; conAtencion: boolean }[] }) => c.appointments)
+          .map((a: { id: string; conAtencion: boolean }) => [a.id, a.conAtencion])
+      )
+      expect(citas).toMatchObject({ "cita-propia": true, "cita-sin-asignar": false, "cita-del-colega": false })
+      expect(JSON.stringify(data)).not.toMatch(/"visit"|en-espera|anulada/)
+    } finally {
+      atencionesFake.splice(0, atencionesFake.length)
+    }
   })
 })
 
@@ -501,6 +629,50 @@ describe("GET /api/clientes — los clientes eliminados", () => {
 
     expect(porNombre.clientes).toEqual([])
     expect(porNombre.total).toBe(0)
+  })
+})
+
+describe("GET /api/clientes — clientes creados sin etiquetas (QA#1)", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  // Como los deja la reserva pública o "Anotar sin reserva" antes del
+  // arreglo: `tags` en NULL, porque la columna no tiene default.
+  conFilasExtra({
+    clientes: [
+      {
+        id: "cliente-de-la-pagina",
+        businessId: "negocio-1",
+        name: "Lucía",
+        lastName: "Rojas",
+        email: null,
+        phone: null,
+        tags: null,
+        notes: null,
+        whatsappConsentAt: null,
+        correoPromoConsentAt: null,
+        createdAt: creadoEl(4),
+      },
+    ],
+  })
+
+  it("aparece en la lista, cuenta en el total y llega con una lista de etiquetas vacía", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const data = await (await GET(fakeGet())).json()
+
+    expect(ids(data.clientes)).toEqual(["cliente-de-la-pagina", "cliente-2", "cliente-1"].sort())
+    expect(data.total).toBe(3)
+    expect(data.clientes.find((c: { id: string }) => c.id === "cliente-de-la-pagina").tags).toEqual([])
+  })
+
+  it("y la encuentra el buscador por su nombre", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const data = await (await GET(fakeGet("?q=luc&limite=8"))).json()
+
+    expect(ids(data.clientes)).toEqual(["cliente-de-la-pagina"])
   })
 })
 
@@ -752,6 +924,31 @@ describe("POST /api/clientes", () => {
     expect(data.businessId).toBe("negocio-1")
   })
 
+  it("el consentimiento de WhatsApp se registra con la hora de la base, no la de esta instancia (#152)", async () => {
+    const { POST } = await import("./route")
+    const deLaBase = new Date("2026-11-04T12:00:07.000Z")
+    prismaMock.$queryRaw.mockImplementationOnce(async () => [{ ahora: deLaBase }])
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    const res = await POST(fakePost({ name: "Carla Díaz", whatsappConsent: true }))
+
+    expect(res.status).toBe(201)
+    const { data } = prismaMock.customer.create.mock.calls[0][0]
+    expect(data).toMatchObject({ whatsappConsentAt: deLaBase, whatsappConsentSource: "panel" })
+    expect(prismaMock.$queryRaw.mock.calls[0][0].join("?")).toBe("SELECT clock_timestamp() AS ahora")
+  })
+
+  it("sin marcar el consentimiento no se pide la hora ni se registra", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    expect((await POST(fakePost({ name: "Carla Díaz" }))).status).toBe(201)
+    expect(prismaMock.customer.create.mock.calls[0][0].data.whatsappConsentAt).toBeUndefined()
+    expect(prismaMock.$queryRaw).not.toHaveBeenCalled()
+  })
+
   it("sin sesión recibe 401 y no crea nada", async () => {
     const { POST } = await import("./route")
 
@@ -886,4 +1083,33 @@ describe("POST /api/clientes — teléfono en E.164 y consentimiento de WhatsApp
     expect(data.whatsappConsentSource).toBe("panel")
     expect((data.whatsappConsentAt as Date).getFullYear()).toBeGreaterThan(2020)
   })
+
+  it("el consentimiento promocional por correo, marcado, registra cuándo y que fue desde el panel; sin marcar, no hay", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    await POST(fakePost({ name: "Ana", correoPromoConsent: true, correoPromoConsentSource: "reserva-publica" }))
+    const marcado = prismaMock.customer.create.mock.calls[0][0].data
+    expect(marcado.correoPromoConsentSource).toBe("panel")
+    expect(marcado.correoPromoConsentAt).toBeInstanceOf(Date)
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    await POST(fakePost({ name: "Beto", correoPromoConsent: false }))
+    const sinMarcar = prismaMock.customer.create.mock.calls[1][0].data
+    expect(sinMarcar.correoPromoConsentAt).toBeUndefined()
+    expect(sinMarcar.correoPromoConsentSource).toBeUndefined()
+  })
+
+  it("la profesional crea clientes, pero no con el consentimiento promocional: 401 y no crea nada", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce({
+      user: { id: "u-carla", role: "worker", businessId: "negocio-1", businessName: "Salón", memberId: "m-carla" },
+    })
+
+    const res = await POST(fakePost({ name: "Ana", correoPromoConsent: true }))
+
+    expect(res.status).toBe(401)
+    expect(prismaMock.customer.create).not.toHaveBeenCalled()
+  })
 })
+

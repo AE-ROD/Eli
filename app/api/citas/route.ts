@@ -10,6 +10,7 @@ import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { esFechaCalendario, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 import { advertenciasDeAgenda } from "@/lib/advertencias-de-agenda"
 import { ocupaElHorario } from "@/lib/ocupacion"
+import { MENSAJE_MIEMBRO_NO_ATIENDE, atiendeCitas } from "@/lib/agenda-publica"
 
 const citaSchema = z
   .object({
@@ -78,16 +79,26 @@ export async function GET(request: NextRequest) {
       notes: true,
       price: true,
       customerId: true,
-      customer: { select: { id: true, name: true, email: true, phone: true } },
+      customer: { select: { id: true, name: true, lastName: true, email: true, phone: true } },
       memberId: true,
       member: { select: { id: true, role: true, user: { select: { id: true, name: true } } } },
+      // "Por confirmar" en la agenda (#84).
+      confirmacionPorFaltas: true,
+      // Quién canceló ("cliente" | "negocio") y cuándo, para el detalle (#134).
+      canceladaPor: true,
+      canceladaEn: true,
+      // Sólo para saber si el cliente ya llegó: una por confirmar con
+      // atención viva en el Tablero ya está resuelta. No sale en la respuesta.
+      visit: { select: { status: true } },
     },
     orderBy: { startTime: "asc" },
     // Siempre con tope: con un rango amplio, sin él se traía el histórico entero.
     take: 500,
   })
 
-  return NextResponse.json(citas)
+  return NextResponse.json(
+    citas.map(({ visit, ...cita }) => ({ ...cita, conAtencion: visit ? visit.status !== "anulada" : false }))
+  )
 }
 
 export async function POST(request: NextRequest) {
@@ -119,9 +130,15 @@ export async function POST(request: NextRequest) {
     if (memberId) {
       const miembro = await prisma.businessMember.findFirst({
         where: { id: memberId, businessId: actor.businessId },
+        select: { id: true, role: true },
       })
       if (!miembro) {
         return NextResponse.json({ error: "Miembro no encontrado" }, { status: 404 })
+      }
+      // Del negocio pero no atiende (el encargado): la cita quedaría en una
+      // agenda que nadie atiende y fuera de la reserva pública (#144).
+      if (!atiendeCitas(miembro.role)) {
+        return NextResponse.json({ error: MENSAJE_MIEMBRO_NO_ATIENDE }, { status: 400 })
       }
     }
 
@@ -160,7 +177,7 @@ export async function POST(request: NextRequest) {
         businessId: actor.businessId,
       },
       include: {
-        customer: { select: { id: true, name: true, email: true, phone: true } },
+        customer: { select: { id: true, name: true, lastName: true, email: true, phone: true } },
         member: { select: { id: true, role: true, user: { select: { id: true, name: true } } } },
       },
     })

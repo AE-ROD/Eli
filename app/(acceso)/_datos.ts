@@ -131,3 +131,11 @@ export async function aceptarInvitacion(token: string, contrasena: string): Prom
 export async function darDeBajaLosCorreos(token: string): Promise<Resultado> {
   return pedir("/api/correos/baja", "No se pudo completar, intenta de nuevo", conJson("POST", { token }))
 }
+
+/**
+ * Da de baja a un cliente de los correos promocionales de su negocio ("te
+ * toca" y pedir reseña). El servidor responde lo mismo sea cual sea el token.
+ */
+export async function darDeBajaAlCliente(token: string): Promise<Resultado> {
+  return pedir("/api/correos/baja-de-cliente", "No se pudo completar, intenta de nuevo", conJson("POST", { token }))
+}

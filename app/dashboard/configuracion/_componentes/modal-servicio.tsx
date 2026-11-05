@@ -1,7 +1,7 @@
 "use client"
 
 import { useId } from "react"
-import { Scissors, Tag } from "lucide-react"
+import { CalendarClock, Scissors, Tag } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
@@ -9,6 +9,7 @@ import { Aviso } from "@/components/panel/aviso"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
+import { FRECUENCIA_MAXIMA_DIAS, FRECUENCIA_MINIMA_DIAS } from "@/lib/frecuencia-de-visitas"
 import type { DatosDeServicio } from "../_datos"
 
 const DURACIONES = [
@@ -39,6 +40,13 @@ interface PropsDeModalServicio {
   onCambiarCampo: (campo: keyof DatosDeServicio, valor: string | number) => void
   onSubmit: (e: React.SyntheticEvent<HTMLFormElement>) => void
   onCerrar: () => void
+  /**
+   * "Cada cuántos días vuelve" (`Service.frecuenciaDias`, #75), como texto del
+   * campo: vacío es sin frecuencia. Lo lee `frecuenciaDelFormulario`. El campo
+   * se dibuja sólo si viene `onCambiarFrecuencia`.
+   */
+  frecuenciaDias?: string
+  onCambiarFrecuencia?: (valor: string) => void
 }
 
 export function ModalServicio({
@@ -50,8 +58,11 @@ export function ModalServicio({
   onCambiarCampo,
   onSubmit,
   onCerrar,
+  frecuenciaDias = "",
+  onCambiarFrecuencia,
 }: PropsDeModalServicio) {
   const idDeLaDescripcion = useId()
+  const idDeAyudaDeFrecuencia = useId()
   const idDeLasCategorias = useId()
   const nombreDeLaDuracion = useId()
 
@@ -149,6 +160,27 @@ export function ModalServicio({
           icono={<span className="text-sm" aria-hidden="true">$</span>}
           className="tabular-nums"
         />
+
+        {onCambiarFrecuencia && (
+          <div className="space-y-1.5">
+            <CampoFormulario
+              etiqueta="Cada cuántos días vuelve un cliente (opcional)"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="Ej.: 30"
+              value={frecuenciaDias}
+              onChange={(e) => onCambiarFrecuencia(e.target.value.replace(/\D/g, "").slice(0, 3))}
+              icono={<CalendarClock className="h-4 w-4" />}
+              aria-describedby={idDeAyudaDeFrecuencia}
+              className="tabular-nums"
+            />
+            <p id={idDeAyudaDeFrecuencia} className="text-sm text-texto-2">
+              De {FRECUENCIA_MINIMA_DIAS} a {FRECUENCIA_MAXIMA_DIAS} días. Sirve para avisarle a quien todavía no tiene su
+              propio ritmo de visitas que ya le toca volver.
+            </p>
+          </div>
+        )}
 
         {aviso && <Aviso>{aviso}</Aviso>}
 

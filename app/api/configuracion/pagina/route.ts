@@ -6,8 +6,18 @@ import { prisma } from "@/lib/prisma"
 import { textoOpcional, telefonoChileno } from "@/lib/campos-del-panel"
 import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
 import { IDS_DE_MEDIOS_DE_PAGO } from "@/lib/medios-de-pago"
-import { CLAVES_DE_COLOR, normalizarInstagram } from "@/lib/pagina-del-negocio"
-import { actorDeSesion, puedeEditarPaginaDelNegocio } from "@/lib/permisos"
+import {
+  CLAVES_DE_COLOR,
+  LARGO_MAXIMO_DE_ENLACE_DE_RESENAS,
+  normalizarEnlaceDeResenas,
+  normalizarInstagram,
+} from "@/lib/pagina-del-negocio"
+import {
+  actorDeSesion,
+  puedeActivarMensajesAClientes,
+  puedeEditarEnlaceDeResenas,
+  puedeEditarPaginaDelNegocio,
+} from "@/lib/permisos"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 
 /**
@@ -24,8 +34,19 @@ import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
  * subida ni almacenamiento aprobado, y pegar una URL cualquiera dejaría a un
  * negocio mostrar lo que quiera desde donde quiera.
  *
+ * El enlace de reseñas de Google (#77, `puedeEditarEnlaceDeResenas`) es
+ * opcional en el cuerpo: si no viene, no se toca. Sólo se acepta uno de Google
+ * por https (`normalizarEnlaceDeResenas`). Borrarlo apaga también "pedir
+ * reseña" (`pideResenas`): sin enlace no hay qué pedir, y el interruptor no
+ * puede quedar encendido sin hacer nada. Por eso, si "pedir reseña" está
+ * encendido, borrar el enlace exige poder apagarlo (`puedeActivarMensajesAClientes`,
+ * la dueña): el encargado recibe 401 con un mensaje que lo explica.
+ *
  * El límite de peticiones es el de escritura del panel (`proxy.ts`).
  */
+
+const MENSAJE_SOLO_LA_DUEÑA_APAGA_RESENAS =
+  "Pedir reseña está encendido y sólo la dueña puede apagarlo. Pídele que lo apague en Mensajes a clientes, o que borre ella el enlace."
 
 const MENSAJE_DE_INSTAGRAM = "No pudimos leer el Instagram. Escribe el usuario (@tu.salon) o pega el enlace del perfil"
 
@@ -44,11 +65,30 @@ const instagram = () =>
       return usuario
     })
 
+const MENSAJE_DE_ENLACE_DE_RESENAS =
+  "El enlace de reseñas tiene que ser de Google y empezar con https:// (g.page, maps.app.goo.gl, google.com/maps o search.google.com/local/writereview)"
+
+const enlaceDeResenas = () =>
+  z
+    .string()
+    .trim()
+    .max(LARGO_MAXIMO_DE_ENLACE_DE_RESENAS, `El enlace de reseñas no puede tener más de ${LARGO_MAXIMO_DE_ENLACE_DE_RESENAS} caracteres`)
+    .transform((valor, contexto) => {
+      if (valor === "") return null
+      const enlace = normalizarEnlaceDeResenas(valor)
+      if (!enlace) {
+        contexto.addIssue({ code: z.ZodIssueCode.custom, message: MENSAJE_DE_ENLACE_DE_RESENAS })
+        return z.NEVER
+      }
+      return enlace
+    })
+
 const paginaSchema = z.object({
   address: textoOpcional("La dirección", 200),
   comuna: textoOpcional("La comuna", 80),
   whatsapp: telefonoChileno(),
   instagram: instagram(),
+  enlaceResenas: enlaceDeResenas().optional(),
   color: z.enum(CLAVES_DE_COLOR, { errorMap: () => ({ message: "Elige uno de los colores de la lista" }) }),
   mediosDePago: z
     .array(z.enum(IDS_DE_MEDIOS_DE_PAGO, { errorMap: () => ({ message: "Ese medio de pago no está en la lista" }) }))
@@ -78,7 +118,28 @@ export async function PUT(request: NextRequest) {
 
   const leido = paginaSchema.safeParse(await cuerpoDelPedido(request))
   if (!leido.success) return respuestaDeDatosInvalidos(leido.error)
-  const { especialidades, ...datosDelNegocio } = leido.data
+  const { especialidades, enlaceResenas, ...pagina } = leido.data
+
+  if (enlaceResenas !== undefined && !puedeEditarEnlaceDeResenas(actor)) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  }
+  // Borrar el enlace apaga "pedir reseña": si está encendido, sólo quien
+  // puede apagarlo en /api/configuracion/mensajes. Falla cerrado: si el
+  // negocio no aparece, tampoco se deja.
+  if (enlaceResenas === null && !puedeActivarMensajesAClientes(actor)) {
+    const actual = await prisma.business.findUnique({
+      where: { id: actor.businessId },
+      select: { pideResenas: true },
+    })
+    if (!actual || actual.pideResenas) {
+      return NextResponse.json({ error: MENSAJE_SOLO_LA_DUEÑA_APAGA_RESENAS }, { status: 401 })
+    }
+  }
+  const datosDelNegocio = {
+    ...pagina,
+    ...(enlaceResenas !== undefined && { enlaceResenas }),
+    ...(enlaceResenas === null && { pideResenas: false }),
+  }
 
   // Pertenencia antes de escribir: todos los miembros tienen que ser de este negocio.
   const ids = especialidades.map((fila) => fila.memberId)
@@ -96,7 +157,15 @@ export async function PUT(request: NextRequest) {
     prisma.business.update({
       where: { id: actor.businessId },
       data: datosDelNegocio,
-      select: { address: true, comuna: true, whatsapp: true, instagram: true, color: true, mediosDePago: true },
+      select: {
+        address: true,
+        comuna: true,
+        whatsapp: true,
+        instagram: true,
+        enlaceResenas: true,
+        color: true,
+        mediosDePago: true,
+      },
     }),
     // `updateMany` con el negocio en el where: aunque algo cambiara entre la
     // verificación y la escritura, nunca toca un miembro ajeno.

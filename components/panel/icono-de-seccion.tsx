@@ -1,4 +1,4 @@
-import { CircleHelp, House, SlidersHorizontal, type LucideIcon } from "lucide-react"
+import { Banknote, CircleHelp, House, Percent, ReceiptText, SlidersHorizontal, Wallet, type LucideIcon } from "lucide-react"
 import { FONDO_FUERTE } from "@/components/comunes/colores-de-modulo"
 import { ICONOS_DE_MODULO, IconoDeModulo } from "@/components/comunes/icono-de-modulo"
 import type { IdDeSeccion, SeccionDelPanel } from "@/components/panel/secciones-del-panel"
@@ -8,6 +8,10 @@ import { cn } from "@/lib/utils"
 /** El ícono de las secciones que no son un módulo; las de un módulo usan el suyo (`ICONOS_DE_MODULO`). */
 const ICONOS_SIN_MODULO: Record<Exclude<IdDeSeccion, ModuloId>, LucideIcon> = {
   inicio: House,
+  "mi-plata": Wallet,
+  caja: Banknote,
+  liquidaciones: ReceiptText,
+  comisiones: Percent,
   configuracion: SlidersHorizontal,
   ayuda: CircleHelp,
 }

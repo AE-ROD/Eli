@@ -153,8 +153,8 @@ describe("GET /api/reportes: dueña y encargado", () => {
       cliente: { id: "c-maria", nombre: "María González" },
       // Sin filtros de línea, todas coinciden.
       lineas: [
-        { id: "l-manana-carla", servicioId: "s-corte", servicio: "Corte", profesional: { id: "m-carla", nombre: "Carla Profesional" }, precio: 8000, coincide: true },
-        { id: "l-manana-duena", servicioId: "s-color", servicio: "Color", profesional: { id: "duenio", nombre: "Ana Dueña" }, precio: 25000, coincide: true },
+        { id: "l-manana-carla", tipo: "servicio", servicioId: "s-corte", productoId: null, servicio: "Corte", profesional: { id: "m-carla", nombre: "Carla Profesional" }, precio: 8000, coincide: true },
+        { id: "l-manana-duena", tipo: "servicio", servicioId: "s-color", productoId: null, servicio: "Color", profesional: { id: "duenio", nombre: "Ana Dueña" }, precio: 25000, coincide: true },
       ],
       total: 33000,
       pagos: [
@@ -368,7 +368,7 @@ describe("GET /api/reportes?anuladas=1: el historial de lo anulado", () => {
       estabaCobrada: true,
       cobradaEn: "2026-10-06T16:00:00.000Z",
       cliente: { id: "c-maria", nombre: "María González" },
-      lineas: [{ id: "l-anulada", servicioId: "s-corte", servicio: "Corte", profesional: { id: "m-carla", nombre: "Carla Profesional" }, precio: 8000 }],
+      lineas: [{ id: "l-anulada", tipo: "servicio", servicioId: "s-corte", productoId: null, servicio: "Corte", profesional: { id: "m-carla", nombre: "Carla Profesional" }, precio: 8000 }],
       total: 8000,
       pagos: [{ id: "p-anulada", medio: "efectivo", nombreMedio: "Efectivo", monto: 8000 }],
     })

@@ -441,6 +441,38 @@ describe("lineaCumpleFiltros", () => {
   })
 })
 
+describe("productos en el reporte (#67)", () => {
+  const conProductos = atencion({
+    totalCents: c(8000 + 12000 + 12000 + 9000),
+    lineas: [
+      linea({}),
+      linea({ serviceId: null, productId: "p-shampoo", serviceName: "Shampoo", priceCents: c(12000) }),
+      linea({ serviceId: null, productId: "p-shampoo", serviceName: "Shampoo", priceCents: c(12000) }),
+      // Otro producto que se llama igual que un servicio borrado: no se mezclan.
+      linea({ serviceId: null, productId: "p-cera", serviceName: "Cera", priceCents: c(9000) }),
+      linea({ serviceId: null, serviceName: "Cera", priceCents: c(1000) }),
+    ],
+  })
+
+  it("se agrupan por su producto, aparte de los servicios y de lo que salió del catálogo", () => {
+    const { porServicio } = resumirAtenciones([conProductos])
+
+    expect(porServicio?.map(({ clave, id, nombre, cantidad, monto }) => [clave, id, nombre, cantidad, monto])).toEqual([
+      ["producto:p-shampoo", "p-shampoo", "Shampoo", 2, 24000],
+      ["producto:p-cera", "p-cera", "Cera", 1, 9000],
+      ["servicio:s-corte", "s-corte", "Corte", 1, 8000],
+      ["sin-catalogo:Cera", null, "Cera", 1, 1000],
+    ])
+  })
+
+  it("el filtro de servicio también elige un producto por su id", () => {
+    const shampoo = linea({ serviceId: null, productId: "p-shampoo" })
+    expect(lineaCumpleFiltros(shampoo, { servicio: "p-shampoo" })).toBe(true)
+    expect(lineaCumpleFiltros(shampoo, { servicio: "s-corte" })).toBe(false)
+    expect(lineaCumpleFiltros(linea({}), { servicio: "p-shampoo" })).toBe(false)
+  })
+})
+
 describe("cumpleFiltros", () => {
   const zona = "America/Santiago"
   const variada = atencion({

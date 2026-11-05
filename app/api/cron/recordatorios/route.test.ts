@@ -264,4 +264,98 @@ describe("GET /api/cron/recordatorios", () => {
       })
     })
   })
+
+  describe("reservas públicas sin enlace de gestión (#106)", () => {
+    const autorizada = () => llamada({ authorization: `Bearer ${SECRETO}` })
+    const sinEnlace = {
+      ...citaDeMañana,
+      status: "pendiente",
+      source: "reserva-publica",
+      manageTokenHash: null,
+      business: { ...citaDeMañana.business, slug: "salon-uno", cancelacionHorasAntes: 24 },
+    }
+    const llamadasQuePonenToken = () =>
+      prismaMock.appointment.updateMany.mock.calls.filter(([args]) => "manageTokenHash" in (args as { data: object }).data && (args as { data: { manageTokenHash: unknown } }).data.manageTokenHash !== null)
+
+    it("genera un token, guarda sólo su hash si seguía vacío y manda el enlace", async () => {
+      prismaMock.appointment.findMany.mockResolvedValue([sinEnlace])
+      const { GET } = await import("./route")
+      const { hashDeToken } = await import("@/lib/tokens")
+
+      await GET(autorizada())
+
+      const [[{ where, data }]] = llamadasQuePonenToken() as [[{ where: object; data: { manageTokenHash: string } }]]
+      expect(where).toEqual({ id: "cita-1", businessId: "negocio-1", manageTokenHash: null })
+      const datos = mockEnviarRecordatorio.mock.calls[0][0] as { enlaceDeGestion: string; plazoHoras: number }
+      const token = datos.enlaceDeGestion.split("/cita/")[1]
+      expect(datos.enlaceDeGestion).toContain("/reservar/salon-uno/cita/")
+      expect(hashDeToken(token)).toBe(data.manageTokenHash)
+      expect(token).not.toBe(data.manageTokenHash)
+      expect(datos.plazoHoras).toBe(24)
+    })
+
+    it("con un enlace existente no lo pisa ni manda uno", async () => {
+      prismaMock.appointment.findMany.mockResolvedValue([{ ...sinEnlace, manageTokenHash: "hash-existente" }])
+      const { GET } = await import("./route")
+
+      await GET(autorizada())
+
+      expect(llamadasQuePonenToken()).toHaveLength(0)
+      expect(mockEnviarRecordatorio.mock.calls[0][0]).not.toHaveProperty("enlaceDeGestion")
+    })
+
+    it("si otro proceso le puso uno entretanto, sale sin enlace", async () => {
+      prismaMock.appointment.findMany.mockResolvedValue([sinEnlace])
+      prismaMock.appointment.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 })
+      const { GET } = await import("./route")
+
+      await GET(autorizada())
+
+      expect(mockEnviarRecordatorio).toHaveBeenCalledTimes(1)
+      expect(mockEnviarRecordatorio.mock.calls[0][0]).not.toHaveProperty("enlaceDeGestion")
+    })
+
+    it("las citas del panel no reciben enlace", async () => {
+      prismaMock.appointment.findMany.mockResolvedValue([{ ...sinEnlace, source: "panel" }])
+      const { GET } = await import("./route")
+
+      await GET(autorizada())
+
+      expect(llamadasQuePonenToken()).toHaveLength(0)
+      expect(mockEnviarRecordatorio.mock.calls[0][0]).not.toHaveProperty("enlaceDeGestion")
+    })
+
+    it("si el envío falla, borra el hash que puso y la marca en una sola escritura", async () => {
+      prismaMock.appointment.findMany.mockResolvedValue([sinEnlace])
+      mockEnviarRecordatorio.mockResolvedValue({ data: null, error: { name: "rate_limit_exceeded", message: "x" } })
+      const { GET } = await import("./route")
+
+      await GET(autorizada())
+
+      const [[{ data }]] = llamadasQuePonenToken() as [[{ data: { manageTokenHash: string } }]]
+      // marcar, poner el token y una única limpieza: no hay una segunda escritura que pueda fallar sola.
+      expect(prismaMock.appointment.updateMany).toHaveBeenCalledTimes(3)
+      expect(prismaMock.appointment.updateMany).toHaveBeenLastCalledWith({
+        where: { id: "cita-1", businessId: "negocio-1", reminderSentAt: AHORA, manageTokenHash: data.manageTokenHash },
+        data: { reminderSentAt: null, manageTokenHash: null },
+      })
+    })
+
+    it("si la limpieza falla, no deja un hash suelto: no hay escritura parcial que reintentar", async () => {
+      prismaMock.appointment.findMany.mockResolvedValue([sinEnlace])
+      mockEnviarRecordatorio.mockResolvedValue({ data: null, error: { name: "rate_limit_exceeded", message: "x" } })
+      prismaMock.appointment.updateMany
+        .mockResolvedValueOnce({ count: 1 })
+        .mockResolvedValueOnce({ count: 1 })
+        .mockRejectedValueOnce(new Error("caída"))
+      vi.spyOn(console, "error").mockImplementation(() => {})
+      const { GET } = await import("./route")
+
+      const res = await GET(autorizada())
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({ enviados: 0, fallidos: 1 })
+      expect(prismaMock.appointment.updateMany).toHaveBeenCalledTimes(3)
+    })
+  })
 })

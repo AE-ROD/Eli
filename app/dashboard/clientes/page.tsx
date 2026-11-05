@@ -11,7 +11,9 @@ import {
   actorDeSesion,
   puedeBorrarCliente,
   puedeEditarDatosDeCliente,
+  puedeEditarConsentimientoPromocional,
   puedeImportarExportarClientes,
+  puedeVerClientesQueSeVan,
 } from "@/lib/permisos"
 import {
   leerClientes,
@@ -28,10 +30,25 @@ import { ListaClientes } from "./_componentes/lista-clientes"
 import { PanelDetalleCliente } from "./_componentes/panel-detalle-cliente"
 import { ModalNuevoCliente } from "./_componentes/modal-nuevo-cliente"
 import { ModalExportar } from "./_componentes/modal-exportar"
+import { VistaSeVan } from "./_componentes/vista-se-van"
 import { clienteParaTarjeta, type ClienteEnTarjeta } from "./_componentes/tarjeta-cliente"
 import { mostrarTelefono } from "@/lib/telefono"
+import { cn } from "@/lib/utils"
 
-const CLIENTE_EN_BLANCO: DatosDeNuevoCliente = { nombre: "", email: "", telefono: "", aceptaWhatsapp: false }
+const CLIENTE_EN_BLANCO: DatosDeNuevoCliente = {
+  nombre: "",
+  email: "",
+  telefono: "",
+  aceptaWhatsapp: false,
+  aceptaCorreoPromo: false,
+}
+
+/** Las dos vistas de la página: todos los clientes, o los que se están yendo (#76). */
+const VISTAS_DE_CLIENTES = [
+  { id: "todos", texto: "Todos" },
+  { id: "se-van", texto: "Se están yendo" },
+] as const
+type VistaDeClientes = (typeof VISTAS_DE_CLIENTES)[number]["id"]
 
 /** `1 cliente registrado`, `12 clientes registrados`. */
 function cuantosClientes(total: number): string {
@@ -50,6 +67,10 @@ export default function PaginaClientes() {
   const puedeEditar = puedeEditarDatosDeCliente(actor)
   const puedeEliminar = puedeBorrarCliente(actor)
   const puedeImportarExportar = puedeImportarExportarClientes(actor)
+  const puedeVerSeVan = puedeVerClientesQueSeVan(actor)
+  const puedeMarcarCorreoPromo = puedeEditarConsentimientoPromocional(actor)
+  const nombreNegocio = sesion?.user?.businessName ?? ""
+  const [vistaDeClientes, setVistaDeClientes] = useState<VistaDeClientes>("todos")
 
   const [clientes, setClientes] = useState<ClienteEnTarjeta[]>([])
   // Lo que devolvió el servidor de cada cliente de la lista: el panel de
@@ -191,6 +212,7 @@ export default function PaginaClientes() {
       // Como se muestra, no en E.164: es lo que la persona reconoce y corrige.
       telefono: mostrarTelefono(guardado?.phone),
       aceptaWhatsapp: !!guardado?.whatsappConsentAt,
+      aceptaCorreoPromo: !!guardado?.correoPromoConsentAt,
     })
     setModalAbierto(true)
   }
@@ -267,74 +289,101 @@ export default function PaginaClientes() {
           </Aviso>
         )}
 
-        {/* Cargar y llevarse la base: dueño y encargado. El servidor lo vuelve a verificar. */}
-        {puedeImportarExportar && (
-          <div className="flex flex-wrap gap-3">
-            <Boton
-              href="/dashboard/clientes/importar"
-              variante="secundario"
-              tamano="sm"
-              icono={<Upload aria-hidden="true" strokeWidth={1.75} />}
-            >
-              Importar CSV
-            </Boton>
-            <Boton
-              type="button"
-              variante="secundario"
-              tamano="sm"
-              icono={<Download aria-hidden="true" strokeWidth={1.75} />}
-              onClick={() => setExportando(true)}
-            >
-              Exportar
-            </Boton>
+        {/* "Se están yendo" (#76): dueña y encargado. El servidor lo vuelve a verificar. */}
+        {puedeVerSeVan && (
+          <div role="group" aria-label="Qué clientes ver" className="flex w-full gap-1 rounded-full bg-superficie p-1 sm:w-fit">
+            {VISTAS_DE_CLIENTES.map(({ id, texto }) => (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={vistaDeClientes === id}
+                onClick={() => setVistaDeClientes(id)}
+                className={cn(
+                  "inline-flex min-h-11 flex-1 items-center justify-center rounded-full px-4 text-sm font-medium whitespace-nowrap anillo-foco transition-colors duration-150 ease-suave sm:flex-none",
+                  vistaDeClientes === id ? "bg-navy text-white" : "text-navy hover:bg-borde"
+                )}
+              >
+                {texto}
+              </button>
+            ))}
           </div>
         )}
 
-        <FiltrosClientes
-          busqueda={busqueda}
-          onBusqueda={setBusqueda}
-          etiquetaActiva={etiquetaActiva}
-          onEtiqueta={setEtiquetaActiva}
-          vista={vista}
-          onVista={setVista}
-        />
-
-        {/* La lista y, desde lg, la ficha del cliente elegido al lado. */}
-        <div className="flex items-start gap-6">
-          <div className="min-w-0 flex-1">
-            <ListaClientes
-              clientes={clientes}
-              cargando={cargando}
-              cargandoMas={cargandoMas}
-              vista={vista}
-              total={total}
-              pagina={pagina}
-              paginas={paginas}
-              seleccionadoId={clienteSeleccionado?.id}
-              onSeleccionar={seleccionarCliente}
-              onCargarMas={() => cargarClientes(busqueda, etiquetaActiva, pagina + 1, true)}
-            />
-          </div>
-
-          <AnimatePresence>
-            {clienteSeleccionado && (
-              <PanelDetalleCliente
-                cliente={clienteSeleccionado}
-                citas={clientesPorId[clienteSeleccionado.id]?.appointments ?? []}
-                notas={notas}
-                guardandoNotas={guardandoNotas}
-                avisoDeNotas={avisoDeNotas?.clienteId === clienteSeleccionado.id ? avisoDeNotas.mensaje : ""}
-                puedeEditar={puedeEditar}
-                puedeEliminar={puedeEliminar}
-                onEditar={() => abrirEdicion(clienteSeleccionado)}
-                onEliminar={() => pedirEliminar(clienteSeleccionado)}
-                onCerrar={() => setClienteSeleccionado(null)}
-                onCambiarNotas={setNotas}
-                onNotasBlur={guardarNotas}
-              />
+        {vistaDeClientes === "se-van" && puedeVerSeVan ? (
+          <VistaSeVan nombreNegocio={nombreNegocio} />
+        ) : (
+          <>
+            {/* Cargar y llevarse la base: dueño y encargado. El servidor lo vuelve a verificar. */}
+            {puedeImportarExportar && (
+              <div className="flex flex-wrap gap-3">
+                <Boton
+                  href="/dashboard/clientes/importar"
+                  variante="secundario"
+                  tamano="sm"
+                  icono={<Upload aria-hidden="true" strokeWidth={1.75} />}
+                >
+                  Importar CSV
+                </Boton>
+                <Boton
+                  type="button"
+                  variante="secundario"
+                  tamano="sm"
+                  icono={<Download aria-hidden="true" strokeWidth={1.75} />}
+                  onClick={() => setExportando(true)}
+                >
+                  Exportar
+                </Boton>
+              </div>
             )}
-          </AnimatePresence>
-        </div>
+
+            <FiltrosClientes
+              busqueda={busqueda}
+              onBusqueda={setBusqueda}
+              etiquetaActiva={etiquetaActiva}
+              onEtiqueta={setEtiquetaActiva}
+              vista={vista}
+              onVista={setVista}
+            />
+
+            {/* La lista y, desde lg, la ficha del cliente elegido al lado. */}
+            <div className="flex items-start gap-6">
+              <div className="min-w-0 flex-1">
+                <ListaClientes
+                  clientes={clientes}
+                  cargando={cargando}
+                  cargandoMas={cargandoMas}
+                  vista={vista}
+                  total={total}
+                  pagina={pagina}
+                  paginas={paginas}
+                  seleccionadoId={clienteSeleccionado?.id}
+                  onSeleccionar={seleccionarCliente}
+                  onCargarMas={() => cargarClientes(busqueda, etiquetaActiva, pagina + 1, true)}
+                />
+              </div>
+
+              <AnimatePresence>
+                {clienteSeleccionado && (
+                  <PanelDetalleCliente
+                    cliente={clienteSeleccionado}
+                    citas={clientesPorId[clienteSeleccionado.id]?.appointments ?? []}
+                  avisosPorCorreo={!!clientesPorId[clienteSeleccionado.id]?.correoPromoConsentAt}
+                    notas={notas}
+                    guardandoNotas={guardandoNotas}
+                    avisoDeNotas={avisoDeNotas?.clienteId === clienteSeleccionado.id ? avisoDeNotas.mensaje : ""}
+                    puedeEditar={puedeEditar}
+                    puedeEliminar={puedeEliminar}
+                    onEditar={() => abrirEdicion(clienteSeleccionado)}
+                    onEliminar={() => pedirEliminar(clienteSeleccionado)}
+                    onCerrar={() => setClienteSeleccionado(null)}
+                    onCambiarNotas={setNotas}
+                    onNotasBlur={guardarNotas}
+                  />
+                )}
+              </AnimatePresence>
+            </div>
+          </>
+        )}
       </div>
 
       <AnimatePresence>
@@ -346,6 +395,12 @@ export default function PaginaClientes() {
             aviso={avisoDelModal}
             onCambiarCampo={(campo, valor) => setNuevoCliente((previo) => ({ ...previo, [campo]: valor }))}
             onCambiarWhatsapp={(acepta) => setNuevoCliente((previo) => ({ ...previo, aceptaWhatsapp: acepta }))}
+            nombreNegocio={nombreNegocio}
+            onCambiarCorreoPromo={
+              puedeMarcarCorreoPromo
+                ? (acepta) => setNuevoCliente((previo) => ({ ...previo, aceptaCorreoPromo: acepta }))
+                : undefined
+            }
             onSubmit={guardarNuevoCliente}
             onCerrar={cerrarModal}
           />

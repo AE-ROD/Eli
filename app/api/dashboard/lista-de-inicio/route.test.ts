@@ -151,6 +151,18 @@ describe("POST /api/dashboard/lista-de-inicio/enlace-compartido", () => {
     expect(enlaceDe(OTRO_NEGOCIO)).toEqual(COMPARTIDO_ANTES)
   })
 
+  it("la fecha es la hora de la base, no la de esta instancia (#152)", async () => {
+    const deLaBase = new Date("2026-11-04T12:00:07.000Z")
+    base.prisma.$queryRaw.mockImplementationOnce(async () => [{ ahora: deLaBase }])
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    expect(await (await marcar()).json()).toEqual({ marcado: true })
+
+    expect(enlaceDe(NEGOCIO)).toEqual(deLaBase)
+    const [partes] = base.prisma.$queryRaw.mock.calls[0]
+    expect(partes.join("?")).toBe("SELECT clock_timestamp() AS ahora")
+  })
+
   it("marcar dos veces no cambia la fecha de la primera", async () => {
     mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
     await marcar()

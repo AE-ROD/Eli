@@ -2,11 +2,11 @@
 
 import { useId, useRef, type ReactNode } from "react"
 import Link from "next/link"
-import { Plus, Trash2, TriangleAlert } from "lucide-react"
+import { Package, Plus, Trash2, TriangleAlert } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { MAXIMO_DE_LINEAS_POR_ATENCION, deCentavos } from "@/lib/atenciones"
-import { totalDeFilasEnCentavos, type ErroresDeFila, type FilaDeServicio } from "@/lib/acciones-del-tablero"
+import { esDeProducto, totalDeFilasEnCentavos, type ErroresDeFila, type FilaDeServicio } from "@/lib/acciones-del-tablero"
 import { formatearMonto, montoParaEscribir } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
 import type { Catalogo } from "../_datos"
@@ -40,6 +40,11 @@ export function filaVacia(catalogo: Catalogo, clave: string): FilaDeServicio {
   return { clave, servicioId: "", profesional: unico, precio: "" }
 }
 
+/** Una fila de producto vacía (#67): quien lo vendió, como en un servicio. */
+function filaDeProductoVacia(catalogo: Catalogo, clave: string): FilaDeServicio {
+  return { ...filaVacia(catalogo, clave), tipo: "producto", productoId: "" }
+}
+
 interface PropsDeEditorDeServicios {
   filas: FilaDeServicio[]
   catalogo: Catalogo
@@ -70,10 +75,18 @@ export function EditorDeServicios({
   const idBase = useId()
   const botonAgregar = useRef<HTMLButtonElement>(null)
   const totalCentavos = totalDeFilasEnCentavos(filas)
+  // Un tablero viejo, cargado antes de que el servidor mandara productos, no los trae.
+  const productos = catalogo.productos ?? []
   const idDe = (clave: string, campo: string) => `${idBase}-${clave}-${campo}`
 
   const cambiarFila = (clave: string, cambios: Partial<FilaDeServicio>) =>
     onCambiar(filas.map((fila) => (fila.clave === clave ? { ...fila, ...cambios } : fila)))
+
+  /** Como `elegirServicio`: el precio del catálogo pisa lo escrito, y sin precio queda vacío. */
+  const elegirProducto = (fila: FilaDeServicio, productoId: string) => {
+    const precio = productos.find((producto) => producto.id === productoId)?.precio
+    cambiarFila(fila.clave, { productoId, precio: precio == null ? "" : montoParaEscribir(precio) })
+  }
 
   const elegirServicio = (fila: FilaDeServicio, servicioId: string) => {
     const precio = catalogo.servicios.find((servicio) => servicio.id === servicioId)?.precio
@@ -87,10 +100,10 @@ export function EditorDeServicios({
   // El foco sigue a lo que se hace: a la fila nueva al agregar, y al botón de
   // agregar al quitar una, porque el botón que se apretó desaparece con su
   // fila y el foco caería fuera del diálogo.
-  const agregar = () => {
+  const agregar = (deProducto = false) => {
     filasAgregadas += 1
     const clave = `nueva-${filasAgregadas}`
-    onCambiar([...filas, filaVacia(catalogo, clave)])
+    onCambiar([...filas, deProducto ? filaDeProductoVacia(catalogo, clave) : filaVacia(catalogo, clave)])
     requestAnimationFrame(() => document.getElementById(idDe(clave, "servicio"))?.focus())
   }
 
@@ -123,9 +136,14 @@ export function EditorDeServicios({
         const numero = indice + 1
         const deLaFila = errores[fila.clave] ?? {}
         const id = (campo: string) => idDe(fila.clave, campo)
+        const producto = esDeProducto(fila)
         const servicioEnCatalogo = catalogo.servicios.some((servicio) => servicio.id === fila.servicioId)
-        const nombreDelServicio =
-          catalogo.servicios.find((servicio) => servicio.id === fila.servicioId)?.nombre ?? fila.servicioOriginal
+        const productoEnCatalogo = productos.some((candidato) => candidato.id === fila.productoId)
+        const nombreDelServicio = producto
+          ? (productos.find((candidato) => candidato.id === fila.productoId)?.nombre ?? fila.servicioOriginal)
+          : (catalogo.servicios.find((servicio) => servicio.id === fila.servicioId)?.nombre ?? fila.servicioOriginal)
+        const elegido = producto ? fila.productoId : fila.servicioId
+        const loQueEs = producto ? "Producto" : "Servicio"
 
         return (
           // Cada servicio en un bloque gris: los campos blancos se recortan
@@ -134,40 +152,47 @@ export function EditorDeServicios({
             key={fila.clave}
             className="grid grid-cols-1 items-start gap-3 rounded-[20px] bg-superficie p-3 squircle sm:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.2fr)_auto] sm:p-4"
           >
-            <legend className="sr-only">Servicio {numero}</legend>
+            <legend className="sr-only">
+              {loQueEs} {numero}
+            </legend>
 
             <div className={cn(!eligeProfesional && "sm:col-span-2")}>
               <label htmlFor={id("servicio")} className={ETIQUETA}>
-                Servicio
+                {loQueEs}
               </label>
               <select
                 id={id("servicio")}
-                value={fila.servicioId}
+                value={elegido ?? ""}
                 disabled={deshabilitado}
                 required
                 aria-invalid={deLaFila.servicio ? true : undefined}
-                aria-describedby={deLaFila.servicio || (!fila.servicioId && fila.servicioOriginal) ? id("servicio-ayuda") : undefined}
-                onChange={(evento) => elegirServicio(fila, evento.target.value)}
+                aria-describedby={deLaFila.servicio || (!elegido && fila.servicioOriginal) ? id("servicio-ayuda") : undefined}
+                onChange={(evento) =>
+                  producto ? elegirProducto(fila, evento.target.value) : elegirServicio(fila, evento.target.value)
+                }
                 className={cn(CAMPO, deLaFila.servicio && CAMPO_CON_ERROR)}
               >
-                <option value="">Elegir servicio</option>
-                {catalogo.servicios.map((servicio) => (
-                  <option key={servicio.id} value={servicio.id}>
-                    {servicio.nombre}
+                <option value="">{producto ? "Elegir producto" : "Elegir servicio"}</option>
+                {(producto ? productos : catalogo.servicios).map((opcion) => (
+                  <option key={opcion.id} value={opcion.id}>
+                    {opcion.nombre}
                   </option>
                 ))}
-                {/* Un servicio desactivado no está en el catálogo, pero la línea lo tiene: se conserva. */}
-                {fila.servicioId && !servicioEnCatalogo && (
+                {/* Uno desactivado no está en el catálogo, pero la línea lo tiene: se conserva. */}
+                {!producto && fila.servicioId && !servicioEnCatalogo && (
                   <option value={fila.servicioId}>{fila.servicioOriginal ?? "Servicio"} (fuera del catálogo)</option>
+                )}
+                {producto && fila.productoId && !productoEnCatalogo && (
+                  <option value={fila.productoId}>{fila.servicioOriginal ?? "Producto"} (ya no se vende)</option>
                 )}
               </select>
               {deLaFila.servicio ? (
                 <p id={id("servicio-ayuda")} className={ERROR_DE_CAMPO}>
                   {deLaFila.servicio}
-                  {fila.servicioOriginal && !fila.servicioId && ` «${fila.servicioOriginal}» no está en el catálogo.`}
+                  {fila.servicioOriginal && !elegido && ` «${fila.servicioOriginal}» no está en el catálogo.`}
                 </p>
               ) : (
-                !fila.servicioId &&
+                !elegido &&
                 fila.servicioOriginal && (
                   <AyudaDeCampo id={id("servicio-ayuda")}>
                     «{fila.servicioOriginal}» no está en el catálogo: elige otro.
@@ -266,7 +291,7 @@ export function EditorDeServicios({
                 tamano="sm"
                 onClick={() => quitar(fila.clave)}
                 disabled={deshabilitado}
-                aria-label={`Quitar el servicio ${numero}${nombreDelServicio ? `: ${nombreDelServicio}` : ""}`}
+                aria-label={`Quitar el ${loQueEs.toLowerCase()} ${numero}${nombreDelServicio ? `: ${nombreDelServicio}` : ""}`}
                 title="Quitar"
                 className="text-texto-2 hover:bg-error/8 hover:text-error sm:mt-6.5 sm:size-11 sm:px-0 sm:after:hidden"
               >
@@ -279,16 +304,30 @@ export function EditorDeServicios({
       })}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Boton
-          ref={botonAgregar}
-          variante="secundario"
-          tamano="sm"
-          onClick={agregar}
-          disabled={deshabilitado || filas.length >= MAXIMO_DE_FILAS || catalogo.servicios.length === 0}
-        >
-          <Plus aria-hidden="true" className="size-4" strokeWidth={2} />
-          Agregar servicio
-        </Boton>
+        {/* El tope cuenta servicios y productos juntos: es el de líneas de la atención. */}
+        <div className="flex flex-wrap gap-2">
+          <Boton
+            ref={botonAgregar}
+            variante="secundario"
+            tamano="sm"
+            onClick={() => agregar()}
+            disabled={deshabilitado || filas.length >= MAXIMO_DE_FILAS || catalogo.servicios.length === 0}
+          >
+            <Plus aria-hidden="true" className="size-4" strokeWidth={2} />
+            Agregar servicio
+          </Boton>
+          {productos.length > 0 && (
+            <Boton
+              variante="secundario"
+              tamano="sm"
+              onClick={() => agregar(true)}
+              disabled={deshabilitado || filas.length >= MAXIMO_DE_FILAS}
+            >
+              <Package aria-hidden="true" className="size-4" strokeWidth={2} />
+              Agregar producto
+            </Boton>
+          )}
+        </div>
         <p className="text-sm" aria-live="polite">
           <span className="text-texto-2">{eligeProfesional ? "Total" : "Total de tus servicios"}:</span>{" "}
           <span className="text-base font-semibold tabular-nums">{formatearMonto(deCentavos(totalCentavos))}</span>

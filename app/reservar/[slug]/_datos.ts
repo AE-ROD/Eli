@@ -1,6 +1,7 @@
 /**
  * Lo que la página pública de reservas le pide al servidor desde el navegador:
- * las horas libres de un día y la confirmación de la reserva. El negocio, sus
+ * las horas libres de un día, la confirmación de la reserva y la lista de
+ * espera. El negocio, sus
  * servicios y sus días de atención ya vienen resueltos por `page.tsx`, que es
  * de servidor y consulta la base directo.
  *
@@ -9,7 +10,9 @@
  * horas libres y un pedido que no llegó no son lo mismo, y no deben verse igual.
  */
 
+import type { PrecioDeLaHora } from "@/lib/hora-valle"
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
+import type { HorasDelDia } from "./_componentes/selector-fecha-hora"
 
 /** Quien atiende, tal como lo muestra la página pública. `servicioIds` en null: hace todos. */
 export interface ProfesionalPublico {
@@ -18,10 +21,13 @@ export interface ProfesionalPublico {
   especialidad: string | null
   fotoUrl: string | null
   servicioIds: string[] | null
+  /** Los días de la semana (0 domingo a 6 sábado) en que atiende. */
+  diasConAtencion: number[]
 }
 
 export interface DatosDeReserva {
-  servicioId: string
+  /** Los servicios, en el orden en que se hacen (#89a): de 1 a 4. */
+  servicioIds: string[]
   /** `null`: cualquiera disponible (lo asigna el servidor). */
   profesionalId: string | null
   /** `YYYY-MM-DD`. */
@@ -35,6 +41,8 @@ export interface DatosDeReserva {
   telefono: string
   /** "Quiero recibir recordatorios por WhatsApp". */
   whatsapp: boolean
+  /** "Quiero recibir avisos y novedades por correo". */
+  correoPromo: boolean
   comentarios: string
 }
 
@@ -47,20 +55,34 @@ export async function leerProfesionales(slug: string): Promise<Resultado<Profesi
   return resultado.ok ? { ok: true, datos: resultado.datos.profesionales } : resultado
 }
 
-/** Las horas de inicio libres (`HH:MM`) para ese servicio ese día, con ese profesional o con cualquiera (`null`). */
+/**
+ * Las horas de inicio libres (`HH:MM`) para esos servicios seguidos ese día,
+ * con ese profesional o con cualquiera (`null`). El servidor calcula la
+ * duración: acá sólo van los ids. Con hora valle (#89c), las horas rebajadas
+ * traen su precio (`valle`); el que vale es el que calcula `confirmar`.
+ */
 export async function leerDisponibilidad(
   slug: string,
   fecha: string,
-  servicioId: string,
+  servicioIds: string[],
   profesionalId: string | null
-): Promise<Resultado<string[]>> {
-  const consulta = new URLSearchParams({ fecha, servicioId })
+): Promise<Resultado<HorasDelDia>> {
+  const consulta = new URLSearchParams({ fecha, servicioIds: servicioIds.join(",") })
   if (profesionalId) consulta.set("profesionalId", profesionalId)
-  const resultado = await pedir<{ slots: string[] }>(
+  const resultado = await pedir<{ slots: string[]; valle?: PrecioDeLaHora[]; sinListaDeEspera?: boolean }>(
     `/api/reservar/${encodeURIComponent(slug)}/disponibilidad?${consulta}`,
     "No se pudieron cargar los horarios disponibles"
   )
-  return resultado.ok ? { ok: true, datos: resultado.datos.slots } : resultado
+  return resultado.ok
+    ? {
+        ok: true,
+        datos: {
+          horas: resultado.datos.slots,
+          precios: resultado.datos.valle ?? [],
+          sinListaDeEspera: resultado.datos.sinListaDeEspera === true,
+        },
+      }
+    : resultado
 }
 
 export interface ReservaConfirmada {
@@ -68,6 +90,10 @@ export interface ReservaConfirmada {
   profesional: { id: string; nombre: string } | null
   /** La ruta para cancelar o reagendar sin cuenta (lleva el token). */
   enlaceDeGestion: string
+  /** `false` si ya quedó dentro del plazo: el enlace no la deja cancelar ni cambiar (QA#8). */
+  sePuedeCambiar?: boolean
+  /** Si va a llegar el recordatorio (N4): se dejó correo y el cron alcanza a mandarlo, con la hora del servidor. */
+  recibiraRecordatorio?: boolean
 }
 
 /**
@@ -83,7 +109,7 @@ export async function confirmarReserva(
     `/api/reservar/${encodeURIComponent(slug)}/confirmar`,
     "Error al confirmar la reserva",
     conJson("POST", {
-      servicioId: datos.servicioId,
+      servicioIds: datos.servicioIds,
       profesionalId: datos.profesionalId ?? undefined,
       fecha: datos.fecha,
       hora: datos.hora,
@@ -94,7 +120,49 @@ export async function confirmarReserva(
       telefono: datos.telefono || undefined,
       // Sólo con teléfono: sin número no hay a dónde escribir.
       whatsappConsentimiento: datos.telefono ? datos.whatsapp : undefined,
+      // Sólo con email: es para esa casilla.
+      correoPromoConsentimiento: datos.email ? datos.correoPromo : undefined,
       comentarios: datos.comentarios || undefined,
     })
+  )
+}
+
+export interface DatosDeListaDeEspera {
+  servicioId: string
+  /** `null`: con cualquiera. */
+  profesionalId: string | null
+  /** `YYYY-MM-DD`. */
+  fecha: string
+  nombre: string
+  apellido: string
+  email: string
+  telefono: string
+  whatsapp: boolean
+}
+
+/** "Avísame si se libera una hora" (#74): anota en la lista de espera de ese día. */
+export async function inscribirEnListaDeEspera(slug: string, datos: DatosDeListaDeEspera): Promise<Resultado> {
+  return pedir(
+    `/api/reservar/${encodeURIComponent(slug)}/lista-de-espera`,
+    "No se pudo anotar en la lista de espera",
+    conJson("POST", {
+      servicioId: datos.servicioId,
+      profesionalId: datos.profesionalId ?? undefined,
+      fecha: datos.fecha,
+      nombre: datos.nombre,
+      apellido: datos.apellido,
+      email: datos.email,
+      telefono: datos.telefono || undefined,
+      whatsappConsentimiento: datos.telefono ? datos.whatsapp : undefined,
+    })
+  )
+}
+
+/** "Salir de la lista de espera", con el token del correo. */
+export async function salirDeLaListaDeEspera(slug: string, token: string): Promise<Resultado> {
+  return pedir(
+    `/api/reservar/${encodeURIComponent(slug)}/lista-de-espera/${encodeURIComponent(token)}`,
+    "No se pudo completar, intenta de nuevo",
+    { method: "POST" }
   )
 }

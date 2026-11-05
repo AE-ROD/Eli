@@ -19,7 +19,7 @@ import {
   type ClienteAImportar,
   type FilaOmitida,
 } from "@/lib/importar-clientes"
-import { actorDeSesion, puedeImportarExportarClientes, whereDeClientes } from "@/lib/permisos"
+import { actorDeSesion, puedeImportarExportarClientes, whereDeClientes, type Actor } from "@/lib/permisos"
 
 /**
  * Importar clientes desde un CSV. La pantalla ya leyó el archivo (y lo pasó a
@@ -98,28 +98,20 @@ export async function POST(request: NextRequest) {
   const { candidatos, duplicados, errores } = prepararFilas(filas, mapeo)
 
   try {
-    // Los clientes del negocio que se pueden repetir. Los eliminados no: ya
-    // no tienen teléfono ni correo, y no se comparan con nadie.
-    const existentes = await prisma.customer.findMany({
-      where: whereDeClientes(actor, clienteNoEliminado),
-      select: { phone: true, email: true },
-    })
-    const { nuevos, duplicados: yaEstaban } = descartarExistentes(candidatos, existentes)
-
     const ahora = new Date()
     let creados = 0
+    const yaEstaban: FilaOmitida[] = []
     const noGuardados: FilaOmitida[] = []
-    for (let desde = 0; desde < nuevos.length; desde += CLIENTES_POR_LOTE) {
-      const lote = nuevos.slice(desde, desde + CLIENTES_POR_LOTE)
+    for (let desde = 0; desde < candidatos.length; desde += CLIENTES_POR_LOTE) {
+      const lote = candidatos.slice(desde, desde + CLIENTES_POR_LOTE)
       try {
-        const { count } = await prisma.customer.createMany({
-          data: lote.map((cliente) => datosDelCliente(cliente, actor.businessId, ahora)),
-        })
-        creados += count
+        const resultado = await guardarLote(actor, lote, ahora)
+        creados += resultado.creados
+        yaEstaban.push(...resultado.duplicados)
       } catch (error) {
-        // El lote no se escribió (es un solo `createMany`): sus filas se
-        // informan y los lotes que siguen se intentan igual. Volver a importar
-        // el mismo archivo no duplica lo que sí se guardó.
+        // El lote no se escribió (es una transacción): sus filas se informan
+        // y los lotes que siguen se intentan igual. Volver a importar el
+        // mismo archivo no duplica lo que sí se guardó.
         registrarError("importando un lote de clientes", error)
         noGuardados.push(...lote.map(({ fila }) => ({ fila, motivo: "No se pudo guardar. Vuelve a importar el archivo." })))
       }
@@ -134,6 +126,40 @@ export async function POST(request: NextRequest) {
     registrarError("importando clientes", error)
     return NextResponse.json({ error: "No se pudo importar el archivo" }, { status: 500 })
   }
+}
+
+/**
+ * Un lote, en una transacción serializada por negocio (#94): no hay una
+ * restricción única de teléfono ni de correo en la base, así que dos
+ * importaciones simultáneas del mismo negocio leían los mismos existentes y
+ * creaban los dos el mismo cliente. Con el candado (`hashtext('importar:' ||
+ * businessId)`, como el de la caja en `lib/bloqueos-de-dinero.ts`), la otra
+ * espera, y al entrar lee lo que la primera ya guardó. Los existentes se leen
+ * dentro, después de tomarlo. Los clientes eliminados no se comparan: ya no
+ * tienen teléfono ni correo.
+ */
+async function guardarLote(
+  actor: Actor,
+  lote: ClienteAImportar[],
+  ahora: Date
+): Promise<{ creados: number; duplicados: FilaOmitida[] }> {
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`importar:${actor.businessId}`}))`
+      const existentes = await tx.customer.findMany({
+        where: whereDeClientes(actor, clienteNoEliminado),
+        select: { phone: true, email: true },
+      })
+      const { nuevos, duplicados } = descartarExistentes(lote, existentes)
+      if (nuevos.length === 0) return { creados: 0, duplicados }
+      const { count } = await tx.customer.createMany({
+        data: nuevos.map((cliente) => datosDelCliente(cliente, actor.businessId, ahora)),
+      })
+      return { creados: count, duplicados }
+    },
+    // Puede esperar a que termine el lote de otra importación del negocio.
+    { timeout: 20_000 }
+  )
 }
 
 /**

@@ -198,6 +198,8 @@ describe("formatearTiempoLibre", () => {
 
   it("combina horas y minutos", () => {
     expect(formatearTiempoLibre(125)).toBe("2 h 5 min")
+    // QA#23: la cita de cuatro servicios.
+    expect(formatearTiempoLibre(255)).toBe("4 h 15 min")
   })
 
   it("cero o negativo se lee como sin tiempo libre", () => {

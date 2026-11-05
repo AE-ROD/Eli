@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { enviarConfirmacionCliente, enviarAvisoProfesional } from "@/lib/email"
+import { dentroDelPlazo, plazoValido } from "@/lib/gestion-de-cita"
 import { reservaSchema } from "@/lib/validaciones"
 import {
   asignarCandidatoLibre,
@@ -14,7 +15,20 @@ import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { contabilizarReferido } from "@/lib/referidos"
 import { registrarError } from "@/lib/registro-de-errores"
 import { generarToken } from "@/lib/tokens"
+import { leerHoraValle, preciosConHoraValle } from "@/lib/hora-valle"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
+import { datosDeConsentimientoPromocional } from "@/lib/envios-a-clientes"
+import { marcarReservo } from "@/lib/lista-de-espera"
+import { DIAS_EN_QUE_CUENTAN_LAS_FALTAS } from "@/lib/por-confirmar"
+import {
+  filasDeServicios,
+  leerServiciosDeLaReserva,
+  resumenDeLaReserva,
+  type ResumenDeLaReserva,
+  type ServicioDeLaReserva,
+} from "@/lib/servicios-de-la-reserva"
+import { existeLaHora, instanteEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
+import { recibiraRecordatorio } from "@/lib/recordatorios"
 import {
   MAX_RESERVAS_FUTURAS_POR_CONTACTO,
   MAX_RESERVAS_PUBLICAS_POR_DIA,
@@ -41,12 +55,15 @@ const INTENTOS_ANTE_CONFLICTO = 3
 const HORARIO_TOMADO = "El horario ya no está disponible"
 
 type Resultado =
-  | { tipo: "creada"; cita: { id: string; memberId: string | null } }
+  | { tipo: "creada"; cita: { id: string; memberId: string | null; confirmacionPorFaltas: boolean } }
   | { tipo: "rechazada"; error: string; status: number }
 
 interface Reserva {
   negocioId: string
-  servicio: { id: string; name: string; price: number | null }
+  /** Los servicios, en orden, leídos del catálogo del negocio (#89a). */
+  servicios: ServicioDeLaReserva[]
+  /** Nombre, duración y precio de la reserva entera, calculados en el servidor. */
+  resumen: ResumenDeLaReserva
   datos: z.infer<typeof reservaSchema>
   startTime: Date
   endTime: Date
@@ -57,6 +74,8 @@ interface Reserva {
   dia: { desde: Date; hasta: Date }
   /** sha256 del token del enlace para cancelar o reagendar: a la base va sólo esto. */
   manageTokenHash: string
+  /** `Business.porConfirmarTrasFaltas`: con cuántas faltas entra por confirmar (#84). Null: apagado. */
+  porConfirmarTrasFaltas: number | null
 }
 
 /** P2034: Postgres no pudo ordenar la transacción con otra concurrente; hay que reintentarla. */
@@ -80,7 +99,19 @@ async function reservarEnTransaccion(reserva: Reserva): Promise<Resultado> {
 /** Lo que se lee y escribe dentro de la transacción. Lo que rechaza no escribe nada. */
 async function reservar(
   tx: Prisma.TransactionClient,
-  { negocioId, servicio, datos, startTime, endTime, ahora, candidatos, dia, manageTokenHash }: Reserva
+  {
+    negocioId,
+    servicios,
+    resumen,
+    datos,
+    startTime,
+    endTime,
+    ahora,
+    candidatos,
+    dia,
+    manageTokenHash,
+    porConfirmarTrasFaltas,
+  }: Reserva
 ): Promise<Resultado> {
   // A quién va, re-verificado dentro de la transacción con la misma regla con
   // la que `disponibilidad` ofreció la hora (`lib/agenda-publica.ts`): sus
@@ -155,16 +186,32 @@ async function reservar(
     ? { whatsappConsentAt: ahora, whatsappConsentSource: ORIGEN_RESERVA_PUBLICA }
     : {}
 
+  // "Quiero recibir avisos y novedades por correo" (#75): sólo en un cliente
+  // nuevo y con email. Sobre un cliente reutilizado por email + nombre no se
+  // escribe, igual que el teléfono: quien conoce esos datos no puede dar ni
+  // renovar el consentimiento por otro. Ese cliente lo da en la ficha
+  // (`puedeEditarConsentimientoPromocional`) o en una reserva propia nueva.
+  const consentimientoPromocional =
+    datos.correoPromoConsentimiento === true && email ? datosDeConsentimientoPromocional("reserva-publica", ahora) : {}
+
   if (!cliente) {
     cliente = await tx.customer.create({
       data: {
-        name: datos.nombre,
-        lastName: datos.apellido,
+        // Nombre completo en `name`, como el resto de la app (panel, anotar
+        // sin reserva): Clientes muestra y busca por `name`, y con el
+        // apellido aparte "Peñaloza" no encontraba a nadie (N2).
+        // `esElMismoCliente` compara `name` + `lastName`, así que da igual
+        // para reutilizarlo después.
+        name: `${datos.nombre} ${datos.apellido}`.trim(),
+        lastName: null,
         cedula: datos.cedula || null,
         email,
         // Ya en E.164 (`telefonoChileno` en `reservaSchema`).
         phone: datos.telefono ?? null,
+        // Explícito: la columna no tiene default y quedaba en NULL (ver `clienteNoEliminado`).
+        tags: [],
         ...consentimiento,
+        ...consentimientoPromocional,
         businessId: negocioId,
       },
       select: { id: true },
@@ -190,28 +237,102 @@ async function reservar(
     }
   }
 
+  // Reservas por confirmar (#84): con la regla encendida, si el correo de
+  // quien reserva (normalizado) llega a N faltas en este negocio en el
+  // último año, la cita nace marcada y el local la confirma o la cancela.
+  // Quien reserva ve la misma respuesta que cualquiera: la marca sólo cambia
+  // el correo y el panel. Sólo por el correo, nunca por el teléfono: el
+  // correo de confirmación ("el local la confirmará") llega a esa misma
+  // casilla, así que no le revela nada a un tercero. Con el teléfono de otra
+  // persona y un correo propio, ese correo contaba si el teléfono faltó.
+  const confirmacionPorFaltas =
+    porConfirmarTrasFaltas !== null &&
+    (await faltasDelCorreo(tx, { negocioId, email, ahora, umbral: porConfirmarTrasFaltas })) >= porConfirmarTrasFaltas
+
+  // Varios servicios (#89a): `serviceId` es el primero, por compatibilidad;
+  // el nombre, la duración (`endTime`) y el precio son los de la reserva
+  // entera; y cada servicio queda copiado en `AppointmentService`, en esta
+  // misma transacción: si algo falla, no queda una cita sin sus servicios.
   const cita = await tx.appointment.create({
     data: {
-      title: servicio.name,
-      serviceId: servicio.id,
+      title: resumen.titulo,
+      serviceId: servicios[0].id,
       // Lo que cuentan los topes (`WHERE_RESERVA_PUBLICA`).
       source: ORIGEN_RESERVA_PUBLICA,
       startTime,
       endTime,
       status: "pendiente",
       clientComments: datos.comentarios || null,
-      price: servicio.price,
+      price: resumen.precio,
       customerId: cliente.id,
       memberId: asignacion.memberId,
       manageTokenHash,
+      confirmacionPorFaltas,
       businessId: negocioId,
     },
-    select: { id: true, memberId: true },
+    select: { id: true, memberId: true, confirmacionPorFaltas: true },
   })
+  await tx.appointmentService.createMany({
+    data: filasDeServicios(negocioId, servicios).map((fila) => ({ ...fila, appointmentId: cita.id })),
+  })
+
+  // Lista de espera (#74): si estaba esperando ese día con este email, ya
+  // reservó. En la misma transacción: si la cita no queda, la inscripción
+  // sigue activa.
+  await marcarReservo(tx, { businessId: negocioId, email, fecha: datos.fecha, ahora })
 
   return { tipo: "creada", cita }
 }
-import { existeLaHora, instanteEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
+
+/**
+ * Cuántas citas "no vino" tiene ese correo en este negocio en los últimos
+ * `DIAS_EN_QUE_CUENTAN_LAS_FALTAS` días, contando hasta `umbral`: sólo hace
+ * falta saber si llega. Sólo las de este negocio y de clientes no eliminados
+ * cuyo email es el mismo, sin mayúsculas (`emailSchema` ya guarda el email
+ * sin espacios en las puntas). El filtro va en la consulta y con `take`:
+ * dentro de la transacción `Serializable` no se traen todas las faltas del
+ * año. Sin correo no hay a quién contarle faltas.
+ */
+async function faltasDelCorreo(
+  tx: Prisma.TransactionClient,
+  { negocioId, email, ahora, umbral }: { negocioId: string; email: string | null; ahora: Date; umbral: number }
+): Promise<number> {
+  if (!email) return 0
+  const faltas = await tx.appointment.findMany({
+    where: {
+      businessId: negocioId,
+      status: "no-asistio",
+      startTime: { gte: new Date(ahora.getTime() - DIAS_EN_QUE_CUENTAN_LAS_FALTAS * MS_POR_DIA) },
+      customer: {
+        AND: [{ businessId: negocioId, email: { equals: email, mode: "insensitive" } }, clienteNoEliminado],
+      },
+    },
+    select: { id: true },
+    take: umbral,
+  })
+  return faltas.length
+}
+
+const mismaCasilla = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+
+/**
+ * El correo del usuario del profesional al que quedó la cita, leído por id Y
+ * negocio: un `memberId` de otro negocio no da correo. Sin profesional, o si
+ * la lectura falla, null: la reserva ya está hecha y el dueño igual se entera.
+ */
+async function correoDelProfesional(negocioId: string, memberId: string | null): Promise<string | null> {
+  if (!memberId) return null
+  try {
+    const miembro = await prisma.businessMember.findFirst({
+      where: { id: memberId, businessId: negocioId },
+      select: { user: { select: { email: true } } },
+    })
+    return miembro?.user?.email || null
+  } catch (error) {
+    registrarError("leyendo el correo del profesional para el aviso de reserva", error)
+    return null
+  }
+}
 
 export async function POST(
   request: NextRequest,
@@ -232,6 +353,7 @@ export async function POST(
       slug: true,
       timezone: true,
       cancelacionHorasAntes: true,
+      porConfirmarTrasFaltas: true,
       invitadoPorId: true,
       referidoContabilizadoAt: true,
       user: { select: { email: true } },
@@ -243,10 +365,11 @@ export async function POST(
     const cuerpo = await request.json()
     const datos = reservaSchema.parse(cuerpo)
 
-    const servicio = await prisma.service.findFirst({
-      where: { id: datos.servicioId, businessId: negocio.id, active: true },
-    })
-    if (!servicio) return NextResponse.json({ error: "Servicio no disponible" }, { status: 404 })
+    // Todos del negocio y activos, o el mismo 404 sin decir cuál falló. La
+    // duración y el precio salen de acá, nunca de lo que mande el cliente.
+    const servicios = await leerServiciosDeLaReserva(prisma, negocio.id, datos.servicioIds)
+    if (!servicios) return NextResponse.json({ error: "Servicio no disponible" }, { status: 404 })
+    const resumen = resumenDeLaReserva(servicios)
 
     // La fecha y la hora son las del reloj del negocio (`Business.timezone`):
     // la cita se guarda en el instante UTC que les corresponde ahí, no en el
@@ -276,23 +399,31 @@ export async function POST(
     }
 
     const startTime = instanteEn(datos.fecha, datos.hora, zona)
-    const endTime = new Date(startTime.getTime() + servicio.duration * 60000)
+    const endTime = new Date(startTime.getTime() + resumen.duracion * 60000)
+
+    // Hora valle (#89c): si el negocio la encendió y la hora de inicio cae en
+    // una franja, cada servicio no excluido va rebajado (`lib/hora-valle.ts`).
+    // Se calcula acá, en el servidor; lo que mande el navegador no se usa.
+    // A la cita y a sus filas van los precios YA rebajados.
+    const precios = preciosConHoraValle(servicios, startTime, zona, await leerHoraValle(prisma, negocio.id))
+    const serviciosConPrecio = servicios.map((servicio, i) => ({ ...servicio, price: precios.precios[i] }))
+    const resumenConPrecio = { ...resumen, precio: precios.total }
 
     // Quién puede tomarla (`lib/agenda-publica.ts`), con la misma regla que
-    // `disponibilidad`: profesionales que atienden y hacen el servicio (sólo
+    // `disponibilidad`: profesionales que atienden y hacen todos los servicios (sólo
     // el elegido, si eligió), y de ellos los que tienen la hora entera dentro
     // de su horario. Un negocio sin profesionales es un solo carril con el
     // horario del negocio, como siempre.
     const reserva = await candidatosDeLaReserva(prisma, {
       businessId: negocio.id,
-      serviceId: servicio.id,
+      serviceIds: servicios.map((servicio) => servicio.id),
       profesionalId: datos.profesionalId || null,
       fecha: datos.fecha,
     })
     if (reserva.tipo === "profesional-no-disponible") {
       return NextResponse.json({ error: "Ese profesional no está disponible para este servicio" }, { status: 404 })
     }
-    const candidatos = candidatosQueCubren(reserva.candidatos, datos.hora, servicio.duration)
+    const candidatos = candidatosQueCubren(reserva.candidatos, datos.hora, resumen.duracion)
     if (candidatos.length === 0) {
       return NextResponse.json(
         { error: "Ese horario está fuera de la atención del negocio. Elige otra hora." },
@@ -308,7 +439,8 @@ export async function POST(
     const enlace = generarToken()
     const resultado = await reservarEnTransaccion({
       negocioId: negocio.id,
-      servicio,
+      servicios: serviciosConPrecio,
+      resumen: resumenConPrecio,
       datos,
       startTime,
       endTime,
@@ -316,11 +448,19 @@ export async function POST(
       candidatos,
       dia: rangoDelDiaEn(datos.fecha, zona),
       manageTokenHash: enlace.tokenHash,
+      porConfirmarTrasFaltas: negocio.porConfirmarTrasFaltas,
     })
     if (resultado.tipo === "rechazada") {
       return NextResponse.json({ error: resultado.error }, { status: resultado.status })
     }
     const cita = resultado.cita
+    // Si al reservar ya quedó dentro del plazo, el enlace no la dejará
+    // cancelar ni cambiar: ni la pantalla ni el correo lo ofrecen (QA#8).
+    const sePuedeCambiar = dentroDelPlazo(startTime, negocio.cancelacionHorasAntes, ahora)
+    // Si el recordatorio va a llegar (N4): sólo con correo, y si el cron
+    // alcanza a mandarlo, con la hora del servidor y no la del navegador
+    // (reservando tarde para mañana, no).
+    const conRecordatorio = normalizarEmail(datos.email) !== null && recibiraRecordatorio(startTime, ahora, zona)
 
     // Referidos (`docs/PRODUCTO.md`, sección 4): la primera reserva pública de
     // un negocio invitado le suma días a la prueba de quien lo invitó. Va
@@ -353,36 +493,54 @@ export async function POST(
           emailCliente: datos.email,
           nombreCliente: `${datos.nombre} ${datos.apellido}`,
           nombreNegocio: negocio.name,
-          servicio: servicio.name,
+          servicio: resumen.titulo,
           fecha: datos.fecha,
           hora: datos.hora,
-          duracion: servicio.duration,
+          duracion: resumen.duracion,
           profesional: profesional?.nombre ?? null,
           enlaceDeGestion: `${baseUrl}${rutaDeGestion}`,
-          plazoHoras: negocio.cancelacionHorasAntes,
+          plazoHoras: plazoValido(negocio.cancelacionHorasAntes),
+          sePuedeCambiar,
+          // El correo sí lo dice: el local la confirmará (#84).
+          porConfirmar: cita.confirmacionPorFaltas,
         }).catch(() => null)
       )
     }
 
-    emailsPromises.push(
-      enviarAvisoProfesional({
-        emailProfesional: negocio.user.email,
-        nombreNegocio: negocio.name,
-        nombreCliente: `${datos.nombre} ${datos.apellido}`,
-        servicio: servicio.name,
-        fecha: datos.fecha,
-        hora: datos.hora,
-        comentarios: datos.comentarios,
-        profesional: profesional?.nombre ?? null,
-      }).catch(() => null)
-    )
+    // El aviso de nueva reserva va al dueño y, si la cita quedó a nombre de un
+    // profesional (elegido o asignado por "cualquiera"), también a él, con el
+    // correo de su usuario (#114). Una sola vez si es la misma casilla.
+    const avisados = [negocio.user.email]
+    const correoProfesional = await correoDelProfesional(negocio.id, cita.memberId)
+    if (correoProfesional && !avisados.some((correo) => mismaCasilla(correo, correoProfesional))) {
+      avisados.push(correoProfesional)
+    }
+    for (const emailProfesional of avisados) {
+      emailsPromises.push(
+        enviarAvisoProfesional({
+          emailProfesional,
+          nombreNegocio: negocio.name,
+          nombreCliente: `${datos.nombre} ${datos.apellido}`,
+          servicio: resumen.titulo,
+          fecha: datos.fecha,
+          hora: datos.hora,
+          comentarios: datos.comentarios,
+          profesional: profesional?.nombre ?? null,
+          porConfirmar: cita.confirmacionPorFaltas,
+        }).catch(() => null)
+      )
+    }
 
     await Promise.all(emailsPromises)
 
+    // La respuesta es la misma con o sin la marca de por confirmar (#84): no
+    // le dice a quien escribió el correo o el teléfono si ese contacto faltó.
     return NextResponse.json(
       {
         citaId: cita.id,
         enlaceDeGestion: rutaDeGestion,
+        sePuedeCambiar,
+        recibiraRecordatorio: conRecordatorio,
         profesional: profesional ? { id: profesional.id, nombre: profesional.nombre } : null,
         mensaje: "Reserva confirmada",
       },

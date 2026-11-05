@@ -1,6 +1,8 @@
 import { z } from "zod"
 import { IDS_DE_RUBROS } from "@/lib/rubros"
 import { telefonoChileno } from "@/lib/campos-del-panel"
+import { LARGO_MAXIMO_NOMBRE_EN_FILA } from "@/lib/fila-virtual"
+import { MAX_SERVICIOS_POR_RESERVA } from "@/lib/servicios-de-la-reserva"
 
 /**
  * El rubro de un negocio nuevo: sólo ids del catálogo (`lib/rubros.ts`). Antes
@@ -26,6 +28,18 @@ const emailSchema = z
   .trim()
   .max(LARGO_MAXIMO_EMAIL, `El email puede tener hasta ${LARGO_MAXIMO_EMAIL} caracteres`)
   .email("El email no es válido")
+
+/**
+ * El correo de quien reserva, se anota en la lista de espera o en la fila
+ * virtual: las mismas reglas que `emailSchema`, con los mensajes en el
+ * vocabulario de la página pública, que dice "correo" (QA#22). Los de la
+ * cuenta siguen como estaban.
+ */
+const correoPublicoSchema = z
+  .string({ required_error: "Falta el correo", invalid_type_error: "El correo no es válido" })
+  .trim()
+  .max(LARGO_MAXIMO_EMAIL, `El correo puede tener hasta ${LARGO_MAXIMO_EMAIL} caracteres`)
+  .email("El correo no es válido")
 
 /**
  * El email de una cuenta (B4): sin espacios en las puntas y en minúsculas,
@@ -80,11 +94,28 @@ export const registroSchema = z.object({
   tipoNegocio: tipoNegocioSchema,
 })
 
-export const reservaSchema = z.object({
-  servicioId: z
-    .string({ required_error: "Falta el servicio", invalid_type_error: "El servicio no es válido" })
-    .min(1, "Falta el servicio")
-    .max(64, "El servicio no es válido"),
+/** Un id de servicio (`cuid()`, 25 caracteres): el tope corta un texto arbitrario antes de la base. */
+const servicioIdSchema = z
+  .string({ required_error: "Falta el servicio", invalid_type_error: "El servicio no es válido" })
+  .min(1, "Falta el servicio")
+  .max(64, "El servicio no es válido")
+
+/**
+ * Los servicios de una reserva (#89a): de 1 a `MAX_SERVICIOS_POR_RESERVA`,
+ * sin repetir, en el orden en que se hacen. Lo valida también
+ * `disponibilidad`, con la misma función.
+ */
+export const servicioIdsSchema = z
+  .array(servicioIdSchema, { invalid_type_error: "Los servicios no son válidos" })
+  .min(1, "Falta el servicio")
+  .max(MAX_SERVICIOS_POR_RESERVA, `Puedes elegir hasta ${MAX_SERVICIOS_POR_RESERVA} servicios por reserva`)
+  .refine((ids) => new Set(ids).size === ids.length, "Elegiste el mismo servicio dos veces")
+
+const camposDeReservaSchema = z.object({
+  // `servicioIds` (#89a) o, por compatibilidad con la página de antes,
+  // `servicioId` suelto. Uno de los dos, no ambos: ver `reservaSchema`.
+  servicioIds: servicioIdsSchema.optional(),
+  servicioId: servicioIdSchema.optional(),
   fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha no es válida: tiene que tener el formato AAAA-MM-DD"),
   hora: z.string().regex(/^\d{2}:\d{2}$/, "La hora no es válida: tiene que tener el formato HH:MM"),
   nombre: nombreSchema("nombre"),
@@ -92,7 +123,7 @@ export const reservaSchema = z.object({
   cedula: opcionalHasta("La cédula", 30),
   // Vacío es "sin email". No con `.or(z.literal(""))`: la unión fallida da
   // un "Invalid input" genérico en vez del mensaje del email.
-  email: z.preprocess((valor) => (valor === "" ? undefined : valor), emailSchema.optional()),
+  email: z.preprocess((valor) => (valor === "" ? undefined : valor), correoPublicoSchema.optional()),
   // En E.164 (`+569XXXXXXXX`) o null si vino vacío; lo que no se puede leer
   // como un número chileno es un 400 con el formato esperado.
   telefono: z.preprocess((valor) => (valor === undefined || valor === null ? "" : valor), telefonoChileno()),
@@ -100,12 +131,58 @@ export const reservaSchema = z.object({
   // borra un consentimiento que el cliente ya dio en el local. Sin teléfono,
   // `confirmar` lo ignora (no hay número al que mandar).
   whatsappConsentimiento: z.boolean({ invalid_type_error: "El consentimiento de WhatsApp no es válido" }).optional(),
+  // "Quiero recibir avisos y novedades de <negocio> por correo" (#75). Sin
+  // marcar por defecto. `confirmar` sólo lo guarda en un cliente nuevo y con
+  // email: sobre uno reutilizado por email + nombre no escribe (quien conoce
+  // esos datos no puede dar el consentimiento por otro).
+  correoPromoConsentimiento: z
+    .boolean({ invalid_type_error: "El consentimiento de correos no es válido" })
+    .optional(),
   comentarios: opcionalHasta("Los comentarios", 1000),
   // Sin él, vacío o null: "cualquiera disponible" (lo asigna el servidor).
   profesionalId: z
     .string({ invalid_type_error: "El profesional no es válido" })
     .max(64, "El profesional no es válido")
     .nullish(),
+})
+
+/**
+ * La reserva pública. Sale siempre con `servicioIds` (1..4, sin repetir):
+ * un `servicioId` suelto es una reserva de un solo servicio. Sin ninguno, o
+ * con los dos, es un 400.
+ */
+export const reservaSchema = camposDeReservaSchema
+  .superRefine((datos, ctx) => {
+    if (datos.servicioIds === undefined && datos.servicioId === undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Falta el servicio", path: ["servicioIds"] })
+    }
+    if (datos.servicioIds !== undefined && datos.servicioId !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Manda los servicios en servicioIds, no también en servicioId",
+        path: ["servicioId"],
+      })
+    }
+  })
+  .transform(({ servicioId, servicioIds, ...resto }) => ({
+    ...resto,
+    servicioIds: servicioIds ?? (servicioId ? [servicioId] : []),
+  }))
+
+/**
+ * "Avísame si se libera una hora" (#74): la inscripción en la lista de
+ * espera de un día. El email es obligatorio (es por donde llega el aviso); el
+ * teléfono, opcional, con la casilla de WhatsApp para cuando exista el canal.
+ */
+export const listaDeEsperaSchema = z.object({
+  servicioId: servicioIdSchema,
+  profesionalId: camposDeReservaSchema.shape.profesionalId,
+  fecha: camposDeReservaSchema.shape.fecha,
+  nombre: nombreSchema("nombre"),
+  apellido: nombreSchema("apellido"),
+  email: correoPublicoSchema,
+  telefono: camposDeReservaSchema.shape.telefono,
+  whatsappConsentimiento: camposDeReservaSchema.shape.whatsappConsentimiento,
 })
 
 export const recuperarContrasenaSchema = z.object({
@@ -115,4 +192,17 @@ export const recuperarContrasenaSchema = z.object({
 export const restablecerContrasenaSchema = z.object({
   token: z.string().min(1),
   contrasena: contrasenaNuevaSchema,
+})
+
+/**
+ * Anotarse en la fila virtual (#85): el nombre, obligatorio, como se lo dice
+ * la persona al local ("Juan Pérez"), y el correo, opcional, sólo para el
+ * aviso "ya casi es tu turno". Vacío es "sin correo".
+ */
+export const filaVirtualSchema = z.object({
+  nombre: nombreSchema("nombre").max(
+    LARGO_MAXIMO_NOMBRE_EN_FILA,
+    `El nombre puede tener hasta ${LARGO_MAXIMO_NOMBRE_EN_FILA} caracteres`
+  ),
+  email: z.preprocess((valor) => (valor === "" || valor === null ? undefined : valor), correoPublicoSchema.optional()),
 })

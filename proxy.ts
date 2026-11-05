@@ -24,10 +24,19 @@ const PREFIJOS_SIN_LIMITE_DE_PANEL = [
   "/api/reservar", // Página pública de reservas, sin sesión
   "/api/equipo/invitacion", // Aceptar invitación: por token, antes de tener sesión
   "/api/correos/baja", // Baja de los correos de prueba: por token firmado, sin sesión; su propio límite por IP
+  "/api/correos/baja-de-cliente", // Baja de los correos promocionales de un cliente: por token firmado, sin sesión; su propio límite por IP
 ]
 
+/**
+ * El prefijo cubre la ruta y lo que cuelga de ella, por segmentos: con un
+ * `startsWith` a secas, "/api/correos/baja" cubría también cualquier
+ * "/api/correos/baja-lo-que-sea" por casualidad. Cada excepción se escribe
+ * entera, a la vista.
+ */
+const cubre = (pathname: string, prefijo: string) => pathname === prefijo || pathname.startsWith(`${prefijo}/`)
+
 function esRutaDePanel(pathname: string): boolean {
-  return pathname.startsWith("/api/") && !PREFIJOS_SIN_LIMITE_DE_PANEL.some((prefijo) => pathname.startsWith(prefijo))
+  return pathname.startsWith("/api/") && !PREFIJOS_SIN_LIMITE_DE_PANEL.some((prefijo) => cubre(pathname, prefijo))
 }
 
 /** Páginas que exigen sesión: las que el proxy cubría antes de sumar la CSP. */

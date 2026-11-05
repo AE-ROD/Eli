@@ -4,8 +4,14 @@ import { useId } from "react"
 import { ArrowLeft, Ban, Check, Pencil, Undo2 } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { Insignia } from "@/components/comunes/insignia"
-import { nombreDeEstado, type EstadoActivo } from "@/lib/atenciones"
-import { accionPrincipal, accionesSecundarias, faltaAsignar, ofreceDeshacerLlegada } from "@/lib/acciones-del-tablero"
+import { aCentavos, deCentavos, nombreDeEstado, type EstadoActivo } from "@/lib/atenciones"
+import {
+  accionPrincipal,
+  accionesSecundarias,
+  faltaAsignar,
+  ofreceDeshacerLlegada,
+  quedoSinPorcentaje,
+} from "@/lib/acciones-del-tablero"
 import { formatearMonto } from "@/lib/dinero"
 import { formatearHora, tiempoDesde } from "@/lib/fechas"
 import type { Actor } from "@/lib/permisos"
@@ -106,7 +112,17 @@ export function TarjetaDeAtencion({
     >
       <MomentoDeTarjeta iso={momento.iso}>{momento.texto}</MomentoDeTarjeta>
 
-      <NombreDeTarjeta id={idDelNombre}>{atencion.cliente.nombre}</NombreDeTarjeta>
+      <NombreDeTarjeta id={idDelNombre}>
+        {/* Quien se anotó en la fila virtual (#85) llega con su número: es el que ve en su celular y en la pantalla. */}
+        {atencion.turno !== null && atencion.turno !== undefined && (
+          <Insignia tono="azul" className="mr-1.5 h-5 px-2 align-middle tabular-nums">
+            <span className="sr-only">Fila virtual, turno </span>
+            <span aria-hidden="true">Turno </span>
+            {atencion.turno}
+          </Insignia>
+        )}
+        {atencion.cliente.nombre}
+      </NombreDeTarjeta>
 
       {atencion.lineas.length > 0 ? (
         <ul className="flex flex-col gap-1" aria-label="Servicios">
@@ -117,6 +133,15 @@ export function TarjetaDeAtencion({
                   <span className="sr-only"> (ya no está en el equipo)</span>{" "}
                   <Insignia tono="naranja" className="h-5 px-2 align-middle">
                     Falta asignar
+                  </Insignia>
+                </>
+              )}
+              {/* Cobrada sin % de comisión (#65): queda pendiente hasta que la dueña lo fije. */}
+              {quedoSinPorcentaje(atencion, linea) && (
+                <>
+                  <span className="sr-only"> (sin porcentaje de comisión)</span>{" "}
+                  <Insignia tono="naranja" className="h-5 px-2 align-middle">
+                    Sin %
                   </Insignia>
                 </>
               )}
@@ -156,6 +181,16 @@ export function TarjetaDeAtencion({
           <span className="min-w-0 break-words">
             {atencion.pagos.length > 0 && <span className="sr-only">Pagado con </span>}
             {medioDelCobro(atencion.pagos)}
+          </span>
+        </p>
+      )}
+
+      {/* Las propinas (#66), aparte del total: sólo para quien ve los pagos. */}
+      {cobrada && atencion.propinas !== undefined && atencion.propinas.length > 0 && (
+        <p className="flex items-baseline justify-between gap-2 text-[13px]">
+          <span className="text-texto-2">Propinas (aparte)</span>
+          <span className="font-medium tabular-nums [overflow-wrap:anywhere]">
+            {formatearMonto(deCentavos(atencion.propinas.reduce((suma, propina) => suma + aCentavos(propina.monto), 0)))}
           </span>
         </p>
       )}

@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
-import { crearServicio, cuerpoDeServicio, editarServicio, type DatosDeServicio } from "./_datos"
+import { cambiarMensajesAClientes, crearServicio, cuerpoDeProducto, cuerpoDeServicio, editarServicio, leerPorcentaje, type DatosDeServicio } from "./_datos"
 
 /** El cuerpo JSON con que se llamó a `fetch`. */
 const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
   JSON.parse(String((fetchFalso.mock.calls[0][1] as RequestInit).body))
 
-const SERVICIO: DatosDeServicio = { name: "Corte", description: "", duration: 30, price: "", category: "" }
+const SERVICIO: DatosDeServicio = { name: "Corte", description: "", duration: 30, price: "", category: "", frecuenciaDias: "" }
 
 const precioLeido = (texto: string) => {
   const cuerpo = cuerpoDeServicio({ ...SERVICIO, price: texto })
@@ -28,7 +28,7 @@ describe("cuerpoDeServicio", () => {
   it("precio y descripción vacíos no se mandan; la categoría vacía se borra", () => {
     expect(cuerpoDeServicio(SERVICIO)).toEqual({
       ok: true,
-      datos: { name: "Corte", description: undefined, duration: 30, price: undefined, category: null },
+      datos: { name: "Corte", description: undefined, duration: 30, price: undefined, category: null, frecuenciaDias: null },
     })
   })
 
@@ -42,6 +42,27 @@ describe("cuerpoDeServicio", () => {
       ok: false,
       error: expect.stringContaining("No se entiende el precio"),
     })
+  })
+})
+
+describe("cuerpoDeServicio: frecuencia (#75)", () => {
+  it("una frecuencia escrita se manda como número de días", () => {
+    const cuerpo = cuerpoDeServicio({ ...SERVICIO, frecuenciaDias: " 30 " })
+    expect(cuerpo.ok && cuerpo.datos.frecuenciaDias).toBe(30)
+  })
+
+  it("vacía se manda como null, para que al editar se borre", () => {
+    const cuerpo = cuerpoDeServicio({ ...SERVICIO, frecuenciaDias: "" })
+    expect(cuerpo.ok && cuerpo.datos.frecuenciaDias).toBeNull()
+  })
+
+  it("fuera de 7 a 365 días es un error, no se manda otra cosa", () => {
+    for (const texto of ["6", "366", "0"]) {
+      expect(cuerpoDeServicio({ ...SERVICIO, frecuenciaDias: texto })).toEqual({
+        ok: false,
+        error: expect.stringContaining("entre 7 y 365"),
+      })
+    }
   })
 })
 
@@ -62,6 +83,26 @@ describe("crearServicio y editarServicio", () => {
     expect(cuerpoEnviado(fetchFalso).price).toBe(8000.5)
   })
 
+  it("crear y editar mandan la frecuencia; editar con el campo vacío manda null", async () => {
+    const alCrear = simularRespuesta(json({ id: "s1" }, 201))
+    await crearServicio({ ...SERVICIO, frecuenciaDias: "45" })
+    expect(cuerpoEnviado(alCrear).frecuenciaDias).toBe(45)
+    vi.unstubAllGlobals()
+
+    const alEditar = simularRespuesta(json({ id: "s1" }))
+    await editarServicio("s1", { ...SERVICIO, frecuenciaDias: "" })
+    expect(cuerpoEnviado(alEditar)).toHaveProperty("frecuenciaDias", null)
+  })
+
+  it("con una frecuencia fuera de rango no llama al servidor", async () => {
+    const fetchFalso = simularRespuesta(json({ id: "s1" }))
+
+    const resultado = await crearServicio({ ...SERVICIO, frecuenciaDias: "400" })
+
+    expect(resultado.ok).toBe(false)
+    expect(fetchFalso).not.toHaveBeenCalled()
+  })
+
   it("con un precio ilegible no llama al servidor y devuelve el motivo", async () => {
     const fetchFalso = simularRespuesta(json({ id: "s1" }))
 
@@ -69,5 +110,57 @@ describe("crearServicio y editarServicio", () => {
 
     expect(resultado.ok).toBe(false)
     expect(fetchFalso).not.toHaveBeenCalled()
+  })
+})
+
+describe("productos (#67): cuerpoDeProducto y leerPorcentaje", () => {
+  const PRODUCTO = { nombre: " Shampoo ", precio: "12.000", porcentaje: "12,5" }
+
+  it("sin poder fijar el %, no lo manda aunque esté escrito: el servidor lo rechazaría", () => {
+    expect(cuerpoDeProducto(PRODUCTO, false)).toEqual({ ok: true, datos: { nombre: "Shampoo", precio: 12000 } })
+  })
+
+  it("la dueña lo manda leído con coma; vacío es null (sin configurar), nunca 0", () => {
+    expect(cuerpoDeProducto(PRODUCTO, true)).toEqual({ ok: true, datos: { nombre: "Shampoo", precio: 12000, porcentaje: 12.5 } })
+    expect(cuerpoDeProducto({ ...PRODUCTO, porcentaje: "" }, true)).toEqual({
+      ok: true,
+      datos: { nombre: "Shampoo", precio: 12000, porcentaje: null },
+    })
+    expect(leerPorcentaje("0")).toEqual({ ok: true, porcentaje: 0 })
+    expect(leerPorcentaje("10 %")).toEqual({ ok: true, porcentaje: 10 })
+  })
+
+  it("el precio vacío es null; uno ilegible es un error y no se manda", () => {
+    expect(cuerpoDeProducto({ ...PRODUCTO, precio: "" }, false)).toEqual({ ok: true, datos: { nombre: "Shampoo", precio: null } })
+    expect(cuerpoDeProducto({ ...PRODUCTO, precio: "doce" }, false).ok).toBe(false)
+  })
+
+  it("un % fuera de 0-100 o con más de dos decimales es un error", () => {
+    expect(leerPorcentaje("101").ok).toBe(false)
+    expect(leerPorcentaje("-1").ok).toBe(false)
+    expect(leerPorcentaje("33,333").ok).toBe(false)
+    expect(leerPorcentaje("abc").ok).toBe(false)
+  })
+})
+
+describe("cambiarMensajesAClientes", () => {
+  it("manda sólo lo que cambia, por PUT, a la ruta de mensajes", async () => {
+    const fetchFalso = simularRespuesta(json({ interruptores: { listaDeEsperaActiva: true, avisoDeVueltaActivo: false, pideResenas: true } }))
+
+    const resultado = await cambiarMensajesAClientes({ pideResenas: true })
+
+    expect(fetchFalso.mock.calls[0][0]).toBe("/api/configuracion/mensajes")
+    expect((fetchFalso.mock.calls[0][1] as RequestInit).method).toBe("PUT")
+    expect(cuerpoEnviado(fetchFalso)).toEqual({ pideResenas: true })
+    expect(resultado).toEqual({ ok: true, datos: { interruptores: { listaDeEsperaActiva: true, avisoDeVueltaActivo: false, pideResenas: true } } })
+  })
+
+  it("el 400 sin enlace vuelve con el mensaje del servidor", async () => {
+    simularRespuesta(json({ error: "Para pedir reseñas, primero agrega el enlace" }, 400))
+
+    expect(await cambiarMensajesAClientes({ pideResenas: true })).toEqual({
+      ok: false,
+      error: "Para pedir reseñas, primero agrega el enlace",
+    })
   })
 })

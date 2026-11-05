@@ -54,6 +54,16 @@ function mensajeDelServidor(cuerpo: unknown): string | null {
 }
 
 /**
+ * El `codigo` estable que mandó el servidor junto al error (por ejemplo
+ * `corregir-con-ajuste`), o `null` si no mandó uno. Es para decidir sin
+ * buscar palabras en el mensaje.
+ */
+export function codigoDelServidor(cuerpo: unknown): string | null {
+  if (typeof cuerpo !== "object" || cuerpo === null || !("codigo" in cuerpo)) return null
+  return typeof cuerpo.codigo === "string" && cuerpo.codigo !== "" ? cuerpo.codigo : null
+}
+
+/**
  * Hace el pedido y devuelve un `Resultado`. No lanza nunca.
  *
  * - Si la respuesta es ok, `datos` es el cuerpo JSON. Un 204 No Content es un

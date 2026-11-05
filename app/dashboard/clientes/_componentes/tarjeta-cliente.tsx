@@ -5,6 +5,7 @@ import { Insignia } from "@/components/comunes/insignia"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { fechaRelativa } from "@/lib/fechas"
 import { mostrarTelefono } from "@/lib/telefono"
+import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import { cn } from "@/lib/utils"
 import type { Cliente } from "../_datos"
 
@@ -57,7 +58,7 @@ export function clienteParaTarjeta(cliente: Cliente): ClienteEnTarjeta {
   ) as ClienteEnTarjeta["etiqueta"]
   return {
     id: cliente.id,
-    nombre: cliente.name,
+    nombre: nombreCompletoDeCliente(cliente),
     // "Correo", como en el formulario del cliente nuevo y en el resto del producto.
     email: cliente.email ?? "Sin correo",
     telefono: mostrarTelefono(cliente.phone) || "Sin teléfono",

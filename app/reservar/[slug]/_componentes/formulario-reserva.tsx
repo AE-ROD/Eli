@@ -13,15 +13,26 @@ import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Tarjeta } from "@/components/comunes/tarjeta"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { formatearMonto } from "@/lib/dinero"
-import { formatearDuracionDeServicio } from "@/lib/fechas"
+import { deTexto, formatearDuracionDeServicio } from "@/lib/fechas"
+import {
+  avisoSinCambiosDespuesDeReservar,
+  avisoSinCambiosPorElEnlace,
+  AVISO_DIA_SIN_ATENCION,
+  diasDelCalendarioDeReserva,
+  elDiaElegidoQuedoSinAtencion,
+  quedaSinCambiosPorElEnlace,
+} from "@/lib/reserva-publica"
+import { MAX_SERVICIOS_POR_RESERVA, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
 import { cn } from "@/lib/utils"
 import { EncabezadoDeReserva } from "./encabezado-de-reserva"
 import { IndicadorDePasos, PASOS_DE_RESERVA } from "./indicador-de-pasos"
 import { AgregarAlCalendario } from "./agregar-al-calendario"
 import { InvitacionAEli } from "./pie-de-eli"
+import type { PrecioDeLaHora } from "@/lib/hora-valle"
 import { ResumenDeReserva } from "./resumen-de-reserva"
 import { SelectorServicio, type ServicioPublico } from "./selector-servicio"
-import { SelectorFechaHora } from "./selector-fecha-hora"
+import { SelectorFechaHora, fechaParaLeer } from "./selector-fecha-hora"
+import { FormularioListaDeEspera } from "./formulario-lista-de-espera"
 import { SelectorProfesional } from "./selector-profesional"
 import { confirmarReserva, leerDisponibilidad, leerProfesionales, type ProfesionalPublico } from "../_datos"
 
@@ -38,6 +49,20 @@ interface PropsDeFormularioReserva {
   zona: string
   servicios: ServicioPublico[]
   horarios: HorarioPublico[]
+  /** Si el negocio ofrece "Avísame si se libera una hora" (#74). */
+  listaDeEsperaActiva: boolean
+  /**
+   * "Puedes cancelar o cambiar hasta 24 horas antes.", dicho antes de
+   * confirmar (#83). Viene armado del servidor (`plazoParaQuienReserva`):
+   * `lib/gestion-de-cita.ts` usa `node:crypto` y no entra al cliente.
+   */
+  plazoDeCambios: string
+  /**
+   * El mismo plazo en horas, ya validado (`plazoValido`): si la hora elegida
+   * ya cae dentro, el paso de confirmar avisa que no se podrá cancelar ni
+   * cambiar por el enlace (QA#8).
+   */
+  plazoDeCambiosHoras: number
 }
 
 type Paso = 1 | 2 | 3
@@ -53,25 +78,80 @@ const FUNDIDO = { duration: DURACION.pildora, ease: CURVA.fundido }
 const haceElServicio = (profesional: ProfesionalPublico, servicioId: string) =>
   profesional.servicioIds === null || profesional.servicioIds.includes(servicioId)
 
-export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horarios }: PropsDeFormularioReserva) {
-  const [paso, setPaso] = useState<Paso>(1)
-  const [servicioSeleccionado, setServicioSeleccionado] = useState<ServicioPublico | null>(null)
-  // `?profesional=<id>` (el "Reservar con …" de la mini página) lo deja
-  // elegido de entrada. Si no es de este negocio, no aparece en la lista y se
-  // ignora: el servidor igual lo rechazaría.
-  const profesionalDeLaUrl = useSearchParams().get("profesional")
+/** Hace todos los elegidos (#89a): la reserva es con una sola persona. */
+const haceLosServicios = (profesional: ProfesionalPublico, elegidos: ServicioPublico[]) =>
+  elegidos.every((servicio) => haceElServicio(profesional, servicio.id))
+
+/**
+ * Los elegidos como si fueran un solo servicio, para el resumen, el
+ * calendario y la tarjeta del paso 2: los nombres unidos por " + ", la
+ * duración y el precio sumados (`resumenDeLaReserva`, la misma cuenta que
+ * hace el servidor, que es el que manda). `null` sin ninguno elegido.
+ */
+function comoUnServicio(elegidos: ServicioPublico[]): (ServicioPublico & { precioIncompleto: boolean }) | null {
+  if (elegidos.length === 0) return null
+  const resumen = resumenDeLaReserva(elegidos)
+  return {
+    id: elegidos.map((servicio) => servicio.id).join(","),
+    name: resumen.titulo,
+    description: null,
+    duration: resumen.duracion,
+    price: resumen.precio,
+    precioIncompleto: resumen.precioIncompleto,
+  }
+}
+
+export function FormularioReserva({
+  slug,
+  nombreNegocio,
+  zona,
+  servicios,
+  horarios,
+  listaDeEsperaActiva,
+  plazoDeCambios,
+  plazoDeCambiosHoras,
+}: PropsDeFormularioReserva) {
+  const parametros = useSearchParams()
+  // `?servicio=<id>&fecha=AAAA-MM-DD` (el enlace del aviso de la lista de
+  // espera) deja la reserva llenada: el servicio elegido y el día puesto, en
+  // el paso de la hora. Un servicio que no es de este negocio, o una fecha
+  // que no es un día, se ignoran.
+  const servicioDeLaUrl = servicios.find((servicio) => servicio.id === parametros.get("servicio")) ?? null
+  const fechaDeLaUrl = parametros.get("fecha") ?? ""
+  const conFechaDeLaUrl = servicioDeLaUrl !== null && deTexto(fechaDeLaUrl) !== null
+  const [paso, setPaso] = useState<Paso>(servicioDeLaUrl ? 2 : 1)
+  // Varios servicios (#89a): en el orden en que se eligen, que es el orden en que se hacen.
+  const [seleccionados, setSeleccionados] = useState<ServicioPublico[]>(servicioDeLaUrl ? [servicioDeLaUrl] : [])
+  const servicioSeleccionado = comoUnServicio(seleccionados)
+  // `?profesional=<id>` (el "Reservar con …" de la mini página, y el aviso de
+  // la lista de espera) lo deja elegido de entrada. Si no es de este negocio,
+  // no aparece en la lista y se ignora: el servidor igual lo rechazaría.
+  const profesionalDeLaUrl = parametros.get("profesional")
   const [profesionales, setProfesionales] = useState<ProfesionalPublico[]>([])
+  // Si ya se leyó el equipo: hasta entonces el calendario usa el horario publicado.
+  const [equipoLeido, setEquipoLeido] = useState(false)
   const [profesionalId, setProfesionalId] = useState<string | null>(profesionalDeLaUrl)
   const [profesionalAsignado, setProfesionalAsignado] = useState<string | null>(null)
   const [enlaceDeGestion, setEnlaceDeGestion] = useState<string | null>(null)
-  const [fecha, setFecha] = useState("")
+  // Si la cita quedó dentro del plazo, el enlace ya no la deja cambiar (QA#8).
+  const [sePuedeCambiar, setSePuedeCambiar] = useState(true)
+  // Si el cron alcanza a mandar el recordatorio (N4): lo dice `confirmar`, con la hora del servidor.
+  const [conRecordatorio, setConRecordatorio] = useState(false)
+  const [fecha, setFecha] = useState(conFechaDeLaUrl ? fechaDeLaUrl : "")
   const [hora, setHora] = useState("")
+  // Con hora valle (#89c), el precio de la hora elegida; `null` si es el de siempre.
+  const [precioDeLaHora, setPrecioDeLaHora] = useState<PrecioDeLaHora | null>(null)
+  const elegirHora = (nueva: string, precio: PrecioDeLaHora | null) => {
+    setHora(nueva)
+    setPrecioDeLaHora(precio)
+  }
   const [nombre, setNombre] = useState("")
   const [apellido, setApellido] = useState("")
   const [cedula, setCedula] = useState("")
   const [email, setEmail] = useState("")
   const [telefono, setTelefono] = useState("")
   const [whatsapp, setWhatsapp] = useState(false)
+  const [correoPromo, setCorreoPromo] = useState(false)
   const [comentarios, setComentarios] = useState("")
   const [enviando, setEnviando] = useState(false)
   /** El id de la cita creada: con él, la reserva está confirmada. */
@@ -83,8 +163,6 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
   const idDelResumen = useId()
   const idDelError = useId()
 
-  const diasDisponibles = horarios.map((horario) => horario.dayOfWeek)
-
   // El equipo se pide al montar. Si falla, la reserva sigue: sin elegir con
   // quién, el servidor asigna (o es un negocio sin equipo).
   useEffect(() => {
@@ -92,6 +170,7 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
     leerProfesionales(slug).then((resultado) => {
       if (!vigente || !resultado.ok) return
       setProfesionales(resultado.datos)
+      setEquipoLeido(true)
       // Un profesional de la URL que no existe no queda elegido.
       setProfesionalId((actual) => (actual && resultado.datos.some((p) => p.id === actual) ? actual : null))
     })
@@ -105,20 +184,56 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
   const serviciosVisibles = profesionalElegido
     ? servicios.filter((servicio) => haceElServicio(profesionalElegido, servicio.id))
     : servicios
-  const profesionalesDelServicio = servicioSeleccionado
-    ? profesionales.filter((profesional) => haceElServicio(profesional, servicioSeleccionado.id))
-    : []
+  // Con varios, sólo quienes hacen todos: los hace una sola persona, seguidos.
+  const profesionalesDelServicio =
+    seleccionados.length > 0 ? profesionales.filter((profesional) => haceLosServicios(profesional, seleccionados)) : []
 
-  const elegirServicio = (servicio: ServicioPublico) => {
-    setServicioSeleccionado(servicio)
-    // Si el profesional elegido no hace este servicio, vuelve a "cualquiera".
-    if (profesionalElegido && !haceElServicio(profesionalElegido, servicio.id)) setProfesionalId(null)
+  const alternarServicio = (servicio: ServicioPublico) => {
+    const yaEstaba = seleccionados.some((elegido) => elegido.id === servicio.id)
+    if (!yaEstaba && seleccionados.length >= MAX_SERVICIOS_POR_RESERVA) return
+    setSeleccionados(
+      yaEstaba ? seleccionados.filter((elegido) => elegido.id !== servicio.id) : [...seleccionados, servicio]
+    )
+    // Si el profesional elegido no hace el que se suma, vuelve a "cualquiera".
+    if (!yaEstaba && profesionalElegido && !haceElServicio(profesionalElegido, servicio.id)) setProfesionalId(null)
+    // Otra combinación es otra duración: la hora elegida puede no caber.
+    elegirHora("", null)
   }
 
-  const servicioId = servicioSeleccionado?.id ?? ""
+  const servicioIds = seleccionados.map((servicio) => servicio.id)
+  // Los días con atención para estos servicios y este profesional (o
+  // cualquiera), los mismos que la disponibilidad (N3): no se puede elegir un
+  // día que después diga "No hay atención ese día".
+  const diasDisponibles = diasDelCalendarioDeReserva({
+    diasPublicados: horarios.map((horario) => horario.dayOfWeek),
+    equipo: equipoLeido ? profesionales : null,
+    servicioIds,
+    profesionalId,
+  })
+
+  // Si al cambiar de profesional o de servicios el día elegido deja de tener
+  // atención, se limpian el día y la hora, con un aviso: si no, quedaba
+  // elegido un día que el calendario ya no ofrece y que respondía "No hay
+  // atención ese día". Se ajusta al renderizar, cuando cambian los días.
+  const claveDeDias = diasDisponibles.join(",")
+  const [diasAnteriores, setDiasAnteriores] = useState(claveDeDias)
+  const [avisoDelDia, setAvisoDelDia] = useState("")
+  if (claveDeDias !== diasAnteriores) {
+    setDiasAnteriores(claveDeDias)
+    if (elDiaElegidoQuedoSinAtencion(fecha, diasDisponibles)) {
+      setFecha("")
+      elegirHora("", null)
+      setAvisoDelDia(AVISO_DIA_SIN_ATENCION)
+    }
+  }
+  const elegirFecha = (nueva: string) => {
+    setAvisoDelDia("")
+    setFecha(nueva)
+  }
+  const claveDeServicios = servicioIds.join(",")
   const cargarHoras = useCallback(
-    (dia: string) => leerDisponibilidad(slug, dia, servicioId, profesionalId),
-    [slug, servicioId, profesionalId]
+    (dia: string) => leerDisponibilidad(slug, dia, claveDeServicios ? claveDeServicios.split(",") : [], profesionalId),
+    [slug, claveDeServicios, profesionalId]
   )
 
   const puedeAvanzarPaso1 = !!servicioSeleccionado
@@ -129,7 +244,7 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
     setEnviando(true)
     setError("")
     const resultado = await confirmarReserva(slug, {
-      servicioId: servicioSeleccionado!.id,
+      servicioIds,
       profesionalId,
       fecha,
       hora,
@@ -139,6 +254,7 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
       email,
       telefono,
       whatsapp,
+      correoPromo,
       comentarios,
     })
     setEnviando(false)
@@ -146,6 +262,8 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
     if (resultado.ok) {
       setProfesionalAsignado(resultado.datos.profesional?.nombre ?? null)
       setEnlaceDeGestion(resultado.datos.enlaceDeGestion ?? null)
+      setSePuedeCambiar(resultado.datos.sePuedeCambiar !== false)
+      setConRecordatorio(resultado.datos.recibiraRecordatorio === true)
       setCitaId(resultado.datos.citaId)
     }
     else setError(resultado.error)
@@ -188,10 +306,12 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
             fecha={fecha}
             hora={hora}
             profesional={profesionalAsignado}
+            precioDeLaHora={precioDeLaHora}
             sinServicio
           />
           <AgregarAlCalendario
             className="mt-7"
+            conRecordatorio={conRecordatorio}
             cita={{
               id: citaId,
               servicio: servicioSeleccionado.name,
@@ -202,7 +322,10 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
               zona,
             }}
           />
-          {enlaceDeGestion && (
+          {enlaceDeGestion && !sePuedeCambiar && (
+            <p className="mt-6 text-sm text-texto-2">{avisoSinCambiosDespuesDeReservar(plazoDeCambiosHoras)}</p>
+          )}
+          {enlaceDeGestion && sePuedeCambiar && (
             <p className="mt-6 text-sm text-texto-2">
               ¿Necesitas cancelar o cambiar la hora?{" "}
               <a href={enlaceDeGestion} className="font-medium text-navy underline underline-offset-4 anillo-foco">
@@ -252,6 +375,9 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
               <TituloDelPaso ref={titulo} paso={1}>
                 ¿Qué servicio necesitas?
               </TituloDelPaso>
+              <p className="mt-2 text-sm text-texto-2">
+                Puedes elegir hasta {MAX_SERVICIOS_POR_RESERVA}: te los hace la misma persona, uno después del otro.
+              </p>
               {profesionalElegido && (
                 <p className="mt-3 flex flex-wrap items-center gap-x-2 text-sm text-texto-2">
                   <span>
@@ -269,10 +395,16 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
               <div className="mt-5">
                 <SelectorServicio
                   servicios={serviciosVisibles}
-                  seleccionado={servicioSeleccionado}
-                  onSeleccionar={elegirServicio}
+                  seleccionados={seleccionados}
+                  onAlternar={alternarServicio}
+                  tope={MAX_SERVICIOS_POR_RESERVA}
                 />
               </div>
+              {servicioSeleccionado && seleccionados.length > 1 && (
+                <div className="mt-5" aria-live="polite">
+                  <ServicioElegido servicio={servicioSeleccionado} cantidad={seleccionados.length} />
+                </div>
+              )}
               <BarraDeAcciones>
                 <Boton
                   icono={<ArrowRight />}
@@ -292,7 +424,9 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
               <TituloDelPaso ref={titulo} paso={2}>
                 ¿Cuándo quieres venir?
               </TituloDelPaso>
-              {servicioSeleccionado && <ServicioElegido servicio={servicioSeleccionado} />}
+              {servicioSeleccionado && (
+                <ServicioElegido servicio={servicioSeleccionado} cantidad={seleccionados.length} />
+              )}
               {/* Sin equipo (el dueño solo) no hay a quién elegir: no se muestra. */}
               {profesionalesDelServicio.length > 0 && (
                 <div className="mt-6">
@@ -303,16 +437,35 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
                   />
                 </div>
               )}
+              <p role="status" className={cn("text-sm text-texto-2", avisoDelDia && "mt-6")}>
+                {avisoDelDia}
+              </p>
               <div className="mt-6">
                 <SelectorFechaHora
                   cargarHoras={cargarHoras}
-                  claveDeHoras={`${servicioId}|${profesionalId ?? ""}`}
+                  claveDeHoras={`${claveDeServicios}|${profesionalId ?? ""}`}
                   diasDisponibles={diasDisponibles}
                   zona={zona}
                   fechaSeleccionada={fecha}
                   horaSeleccionada={hora}
-                  onFecha={setFecha}
-                  onHora={setHora}
+                  onFecha={elegirFecha}
+                  onHora={elegirHora}
+                  sinHoras={
+                    listaDeEsperaActiva && servicioSeleccionado
+                      ? (dia) => (
+                          <FormularioListaDeEspera
+                            // Otro día, servicio o profesional es otra inscripción: empieza de cero.
+                            // La lista de espera sigue con un solo servicio: el primero (#89a).
+                            key={`${dia}|${seleccionados[0].id}|${profesionalId ?? ""}`}
+                            slug={slug}
+                            servicioId={seleccionados[0].id}
+                            profesionalId={profesionalId}
+                            fecha={dia}
+                            fechaParaLeer={fechaParaLeer(deTexto(dia) ?? new Date())}
+                          />
+                        )
+                      : undefined
+                  }
                 />
               </div>
               <BarraDeAcciones>
@@ -395,6 +548,18 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
                     onChange={(e) => setEmail(e.target.value)}
                   />
                 </div>
+                {/* Sólo con correo: el consentimiento es para esa casilla. Nada viene marcado. */}
+                {email.trim() && (
+                  <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-navy sm:col-span-2">
+                    <input
+                      type="checkbox"
+                      checked={correoPromo}
+                      onChange={(e) => setCorreoPromo(e.target.checked)}
+                      className="size-4 shrink-0 accent-navy anillo-foco"
+                    />
+                    Quiero recibir avisos y novedades de {nombreNegocio} por correo
+                  </label>
+                )}
                 {/* No hay área de texto en `components/comunes/`: se arma con las mismas clases que los campos. */}
                 <div className="space-y-2 sm:col-span-2">
                   <label htmlFor={idDeComentarios} className={CLASES_DE_ETIQUETA}>
@@ -421,8 +586,19 @@ export function FormularioReserva({ slug, nombreNegocio, zona, servicios, horari
                   servicio={servicioSeleccionado}
                   fecha={fecha}
                   hora={hora}
+                  precioDeLaHora={precioDeLaHora}
                   profesional={profesionalElegido?.nombre ?? (profesionalesDelServicio.length > 0 ? "Cualquiera disponible" : null)}
                 />
+                {quedaSinCambiosPorElEnlace(fecha, hora, zona, plazoDeCambiosHoras, new Date()) ? (
+                  // La hora ya está dentro del plazo: se dice antes de confirmar, no después en el enlace.
+                  <p className="mt-4 border-t border-borde pt-3 text-sm font-medium text-navy">
+                    {avisoSinCambiosPorElEnlace(plazoDeCambiosHoras)}
+                  </p>
+                ) : (
+                  <p className="mt-4 border-t border-borde pt-3 text-sm text-texto-2">
+                    {plazoDeCambios}
+                  </p>
+                )}
               </section>
 
               {error && (
@@ -474,16 +650,32 @@ function TituloDelPaso({ paso, children, ref }: { paso: Paso; children: ReactNod
   )
 }
 
-/** El servicio que se eligió en el paso 1, a la vista mientras se busca el día. */
-function ServicioElegido({ servicio }: { servicio: ServicioPublico }) {
+/**
+ * Lo que se eligió en el paso 1, a la vista mientras se busca el día. Con
+ * varios servicios, los nombres unidos y el total: duración y precio.
+ */
+function ServicioElegido({
+  servicio,
+  cantidad = 1,
+}: {
+  servicio: ServicioPublico & { precioIncompleto?: boolean }
+  cantidad?: number
+}) {
   return (
     <div className="mt-4 flex items-center justify-between gap-4 rounded-boton-lg bg-superficie px-4 py-3 squircle sm:px-5">
       <div className="min-w-0">
         <p className="font-medium break-words text-navy">{servicio.name}</p>
-        <p className="text-sm text-texto-2">{formatearDuracionDeServicio(servicio.duration)}</p>
+        <p className="text-sm text-texto-2">
+          {cantidad > 1 ? `${cantidad} servicios · en total ` : ""}
+          {formatearDuracionDeServicio(servicio.duration)}
+        </p>
       </div>
       {servicio.price != null && (
-        <p className="shrink-0 font-medium text-navy tabular-nums">{formatearMonto(servicio.price)}</p>
+        <p className="shrink-0 text-right font-medium text-navy tabular-nums">
+          {cantidad > 1 && <span className="block text-xs font-normal text-texto-2">Total</span>}
+          {formatearMonto(servicio.price)}
+          {servicio.precioIncompleto && <span className="block text-xs font-normal text-texto-2">+ a consultar</span>}
+        </p>
       )}
     </div>
   )

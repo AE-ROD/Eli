@@ -3,24 +3,29 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { AnimatePresence } from "framer-motion"
-import { CircleAlert, RefreshCw, UserPlus } from "lucide-react"
+import Link from "next/link"
+import { CircleAlert, ListX, MonitorPlay, RefreshCw, UserPlus } from "lucide-react"
 import { BarraSuperior } from "@/components/panel/barra-superior"
-import { Boton } from "@/components/comunes/boton"
+import { Boton, clasesDeBoton } from "@/components/comunes/boton"
 import { ModalAnular } from "@/components/panel/modal-anular"
+import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { esEstadoActivo, type EstadoActivo, type PagoPedido } from "@/lib/atenciones"
 import { formatearMonto } from "@/lib/dinero"
 import {
+  avisoDeComisionesPendientes,
   requisitoParaPasarA,
   textoDeMovimiento,
   type ColumnaDeAtencion,
   type LineaPedida,
+  type PropinaPedida,
 } from "@/lib/acciones-del-tablero"
 import {
   actorDeSesion,
   puedeAnotarSinReserva,
   puedeAsignarLineasAOtros,
   puedeGestionarServicios,
+  puedeVaciarFilaVirtual,
   puedeVerTodoElTablero,
 } from "@/lib/permisos"
 import { cn } from "@/lib/utils"
@@ -34,6 +39,7 @@ import {
   marcarLlegada,
   marcarNoVino,
   moverAtencion,
+  vaciarFilaDeHoy,
   type Atencion,
   type DatosSinReserva,
   type MotivoDeFallo,
@@ -62,7 +68,13 @@ type ModalAbierto =
   | { tipo: "anotar" }
   | { tipo: "servicios"; atencion: Atencion; requisito: string | null; despues: Despues | null }
   | { tipo: "cobro"; atencion: Atencion }
-  | { tipo: "anular"; atencion: Atencion }
+  /**
+   * `rechazo`: el servidor dijo que ya entró en una caja cerrada o en una
+   * liquidación (`corregir-con-ajuste`). El modal sigue abierto con lo escrito
+   * y dice cómo se corrige, en vez de cerrarse y perder el motivo (QA#12).
+   */
+  | { tipo: "anular"; atencion: Atencion; rechazo?: string }
+  | { tipo: "vaciar-fila"; personas: number }
 
 type ModalDeServicios = Extract<ModalAbierto, { tipo: "servicios" }>
 
@@ -100,6 +112,8 @@ export default function PaginaTablero() {
   /** El instante de la última recarga: contra él se mide lo atrasado y el "hace cuánto". */
   const [ahora, setAhora] = useState(0)
   const [aviso, setAviso] = useState("")
+  /** Lo que conviene saber después de cobrar, sin ser un error: líneas que quedaron sin % de comisión (#65). */
+  const [avisoDeCobro, setAvisoDeCobro] = useState("")
   const [enCurso, setEnCurso] = useState<ReadonlySet<string>>(() => new Set())
   /** Adonde va el foco cuando se dibuje lo que cambió (ver `DestinoDelFoco`). */
   const [foco, setFoco] = useState<DestinoDelFoco | null>(null)
@@ -232,6 +246,7 @@ export default function PaginaTablero() {
 
   const abrirModal = (abierto: ModalAbierto) => {
     setAviso("")
+    setAvisoDeCobro("")
     setAvisoDelModal("")
     setGuardando(false)
     setModal(abierto)
@@ -415,13 +430,14 @@ export default function PaginaTablero() {
       recargar()
     })
 
-  const cobrarCon = (atencion: Atencion, pagos: PagoPedido[]) =>
+  const cobrarCon = (atencion: Atencion, pagos: PagoPedido[], propinas: PropinaPedida[]) =>
     desdeUnModal(async () => {
-      const resultado = await cobrarAtencion(atencion.id, pagos)
+      const resultado = await cobrarAtencion(atencion.id, pagos, propinas)
 
       if (resultado.ok) {
         ponerAtencion(resultado.datos)
         cerrarModal()
+        setAvisoDeCobro(avisoDeComisionesPendientes(actor, resultado.datos) ?? "")
         seguirA(resultado.datos)
         recargar()
         return
@@ -453,6 +469,15 @@ export default function PaginaTablero() {
   const anular = (atencion: Atencion, motivo: string) =>
     desdeUnModal(async () => {
       const resultado = await anularAtencion(atencion.id, motivo)
+      // Ya entró en una liquidación o en un cierre de caja: la atención no
+      // cambió, no hay nada que recargar ni reintentar. El modal se queda con
+      // el motivo escrito y el mensaje del servidor, que dice cómo se corrige
+      // (con un ajuste), y ya no ofrece anular.
+      if (!resultado.ok && resultado.motivo === "corregir-con-ajuste") {
+        setGuardando(false)
+        setModal({ tipo: "anular", atencion, rechazo: resultado.error })
+        return
+      }
       if (!resultado.ok) return falloEnModal(resultado, atencion)
 
       // Las anuladas no tienen columna: sale del tablero, y el foco va al
@@ -460,6 +485,18 @@ export default function PaginaTablero() {
       quitarAtencion(atencion.id)
       cerrarModal()
       setFoco({ columna: columnaDe(atencion) })
+      recargar()
+    })
+
+  /** "Vaciar la fila de hoy": anula a todos los que esperan en la fila virtual; los que ya se atienden siguen. */
+  const vaciarFila = () =>
+    desdeUnModal(async () => {
+      const resultado = await vaciarFilaDeHoy()
+      if (!resultado.ok) {
+        setGuardando(false)
+        return setAvisoDelModal(resultado.error)
+      }
+      cerrarModal()
       recargar()
     })
 
@@ -484,6 +521,12 @@ export default function PaginaTablero() {
 
   const listo = tablero !== null && estadoDeSesion !== "loading"
   const puedeAnotar = listo && puedeAnotarSinReserva(actor)
+  // Quienes esperan en la fila virtual (#85). Vaciarla se ofrece aunque la
+  // fila esté apagada: apagarla no saca a nadie.
+  const esperandoEnFila = listo
+    ? tablero.atenciones.filter((atencion) => atencion.turno !== null && atencion.estado === "en-espera").length
+    : 0
+  const puedeVaciarFila = esperandoEnFila > 0 && puedeVaciarFilaVirtual(actor)
 
   return (
     <div className="min-h-screen">
@@ -497,9 +540,40 @@ export default function PaginaTablero() {
       />
 
       <div className="space-y-4 px-4 pb-8 pt-4 sm:px-6 sm:pt-6">
+        {/* La fila virtual encendida (#85): su pantalla para el televisor o la tablet del local. */}
+        {listo && (tablero.filaVirtual || puedeVaciarFila) && (
+          <div className="flex flex-wrap gap-3">
+            {tablero.filaVirtual && (
+              <Link
+                href="/dashboard/fila"
+                className={clasesDeBoton({ variante: "secundario", tamano: "sm" })}
+              >
+                <MonitorPlay aria-hidden="true" className="size-4" strokeWidth={2} />
+                Pantalla de la fila
+              </Link>
+            )}
+            {puedeVaciarFila && (
+              <Boton
+                variante="fantasma"
+                tamano="sm"
+                onClick={() => abrirModal({ tipo: "vaciar-fila", personas: esperandoEnFila })}
+              >
+                <ListX aria-hidden="true" className="size-4" strokeWidth={2} />
+                Vaciar la fila de hoy
+              </Boton>
+            )}
+          </div>
+        )}
+
         {aviso && (
           <Aviso tono="error" rol="alert">
             {aviso}
+          </Aviso>
+        )}
+
+        {avisoDeCobro && (
+          <Aviso tono="atencion" rol="status">
+            {avisoDeCobro}
           </Aviso>
         )}
 
@@ -592,9 +666,10 @@ export default function PaginaTablero() {
             key={`cobro-${modal.atencion.id}`}
             atencion={modal.atencion}
             mediosDePago={tablero.catalogo.mediosDePago}
+            profesionales={tablero.catalogo.profesionales}
             aviso={avisoDelModal}
             guardando={guardando}
-            onCobrar={(pagos) => cobrarCon(modal.atencion, pagos)}
+            onCobrar={(pagos, propinas) => cobrarCon(modal.atencion, pagos, propinas)}
             onCambiarPagos={() => setAvisoDelModal("")}
             onCerrar={cerrarModal}
           />
@@ -605,8 +680,26 @@ export default function PaginaTablero() {
             key={`anular-${modal.atencion.id}`}
             atencion={modal.atencion}
             aviso={avisoDelModal}
+            rechazo={modal.rechazo}
             guardando={guardando}
             onAnular={(motivo) => anular(modal.atencion, motivo)}
+            onCerrar={cerrarModal}
+          />
+        )}
+
+        {modal?.tipo === "vaciar-fila" && (
+          <ModalConfirmar
+            key="vaciar-fila"
+            titulo="¿Vaciar la fila de hoy?"
+            descripcion={`${
+              modal.personas === 1 ? "La persona que espera" : `Las ${modal.personas} personas que esperan`
+            } en la fila virtual ${modal.personas === 1 ? "queda" : "quedan"} fuera de la fila: su atención se anula y su celular dirá que ya no está en la fila. Quienes ya se están atendiendo siguen igual. No se deshace.`}
+            textoConfirmar="Vaciar la fila"
+            textoCancelar="Dejarla"
+            peligro
+            trabajando={guardando}
+            aviso={avisoDelModal}
+            onConfirmar={vaciarFila}
             onCerrar={cerrarModal}
           />
         )}

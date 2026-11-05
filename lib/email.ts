@@ -103,6 +103,11 @@ type TipoCorreo =
   | "invitacion-trabajador"
   | "aviso-a-soporte"
   | "acuse-de-soporte"
+  | "aviso-lista-de-espera"
+  | "te-toca"
+  | "pedir-resena"
+  | "reserva-confirmada-por-el-local"
+  | "aviso-fila-virtual"
   | TipoCorreoDePrueba
 
 /**
@@ -127,10 +132,21 @@ interface Correo {
   boton?: { texto: string; enlace: string }
   cierre?: HtmlSeguro
   /**
-   * Enlace "Dejar de recibir estos correos", sólo en los del ciclo de prueba.
-   * Lo arma el servidor (`lib/baja-de-correos.ts`).
+   * Enlace del pie para dejar de recibir estos correos: los del ciclo de
+   * prueba (`lib/baja-de-correos.ts`), los promocionales a clientes
+   * (`lib/baja-de-clientes.ts`) y salir de la lista de espera. Lo arma el
+   * servidor.
    */
   enlaceDeBaja?: string
+  /** El texto de ese enlace, fijo. Por defecto "Dejar de recibir estos correos". */
+  textoDeBaja?: string
+  /**
+   * La URL de la baja en un clic (RFC 8058): con ella el correo lleva los
+   * encabezados `List-Unsubscribe` y `List-Unsubscribe-Post`, y Gmail y Apple
+   * muestran "Cancelar suscripción" junto al remitente. Tiene que aceptar un
+   * POST con el cuerpo `List-Unsubscribe=One-Click`. La arma el servidor.
+   */
+  bajaEnUnClic?: string
   /** Reply-To: a quién le llega si se responde el correo. */
   responderA?: string
 }
@@ -157,7 +173,7 @@ const FUENTE = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica
 const FUENTE_TITULAR = "Georgia, 'Times New Roman', Times, serif"
 
 /** El HTML completo del correo. Todo lo que no es fijo llega escapado o como `HtmlSeguro`. */
-function armarHtml({ asunto: asuntoSeguro, titulo, intro, pasos, detalle, destacado, boton, cierre, enlaceDeBaja }: Correo): string {
+function armarHtml({ asunto: asuntoSeguro, titulo, intro, pasos, detalle, destacado, boton, cierre, enlaceDeBaja, textoDeBaja }: Correo): string {
   const parrafo = `margin: 0; font-family: ${FUENTE}; font-size: 16px; line-height: 1.55; color: ${COLOR.texto2};`
 
   const bloquePasos = pasos?.length
@@ -202,7 +218,7 @@ function armarHtml({ asunto: asuntoSeguro, titulo, intro, pasos, detalle, destac
   const bloqueCierre = cierre ? `<p style="${parrafo} font-size: 15px; margin-top: 24px;">${cierre.valor}</p>` : ""
 
   const bloqueBaja = enlaceDeBaja
-    ? `<p style="margin: 8px 0 0; font-family: ${FUENTE}; font-size: 12px; line-height: 1.5; color: ${COLOR.texto2};"><a href="${escaparHtml(enlaceDeBaja)}" style="color: ${COLOR.texto2}; text-decoration: underline;">Dejar de recibir estos correos</a></p>`
+    ? `<p style="margin: 8px 0 0; font-family: ${FUENTE}; font-size: 12px; line-height: 1.5; color: ${COLOR.texto2};"><a href="${escaparHtml(enlaceDeBaja)}" style="color: ${COLOR.texto2}; text-decoration: underline;">${escaparHtml(textoDeBaja ?? "Dejar de recibir estos correos")}</a></p>`
     : ""
 
   return `<!DOCTYPE html>
@@ -241,8 +257,23 @@ function armarHtml({ asunto: asuntoSeguro, titulo, intro, pasos, detalle, destac
 /** Lo que devuelve un envío: la respuesta de Resend, o `null` si no hay clave configurada. */
 export type ResultadoDeEnvio = Awaited<ReturnType<Resend["emails"]["send"]>> | null
 
+/**
+ * Los encabezados de la baja en un clic (RFC 8058). La URL la arma el servidor,
+ * pero va a un encabezado: si trae algo que pueda cortarlo o salirse de los
+ * `<>` (espacios, saltos de línea, `<`, `>`, comas), no se manda el correo en
+ * vez de mandarlo sin una baja que funcione.
+ */
+function encabezadosDeBaja(url: string): Record<string, string> {
+  if (!/^https?:\/\/[^\s<>,]+$/.test(url)) throw new Error("URL de baja en un clic inválida")
+  return {
+    "List-Unsubscribe": `<${url}>`,
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  }
+}
+
 /** Sin clave configurada no se envía nada, igual que el rate limit sin Upstash. */
 async function enviar(correo: Correo): Promise<ResultadoDeEnvio> {
+  const headers = correo.bajaEnUnClic ? encabezadosDeBaja(correo.bajaEnUnClic) : undefined
   const api = resend()
   if (!api) {
     // Sólo el tipo: el asunto lleva nombres de clientes o negocios y `para`
@@ -257,6 +288,7 @@ async function enviar(correo: Correo): Promise<ResultadoDeEnvio> {
     subject: correo.asunto.valor,
     html: armarHtml(correo),
     ...(correo.responderA ? { replyTo: correo.responderA } : {}),
+    ...(headers ? { headers } : {}),
   })
 }
 
@@ -292,6 +324,17 @@ export interface DatosConfirmacionCliente {
   enlaceDeGestion?: string | null
   /** Hasta cuántas horas antes se puede cambiar con el enlace. */
   plazoHoras?: number
+  /**
+   * `false` si la cita ya quedó dentro del plazo al reservarla
+   * (`dentroDelPlazo`): el enlace no la dejaría cancelar ni cambiar, así que
+   * el correo no ofrece el botón y dice que se contacte al local (QA#8).
+   */
+  sePuedeCambiar?: boolean
+  /**
+   * La reserva entró por confirmar (#84): el correo dice que el local la
+   * confirmará, sin decir por qué. La pantalla de la reserva no lo dice.
+   */
+  porConfirmar?: boolean
 }
 
 export function enviarConfirmacionCliente(datos: DatosConfirmacionCliente) {
@@ -301,11 +344,23 @@ export function enviarConfirmacionCliente(datos: DatosConfirmacionCliente) {
   return enviar({
     tipo: "confirmacion-cliente",
     para: datos.emailCliente,
-    asunto: asunto`Cita confirmada — ${datos.nombreNegocio}`,
-    titulo: "¡Tu cita está confirmada!",
-    intro: html`Hola <strong>${datos.nombreCliente}</strong>, te esperamos en <strong>${datos.nombreNegocio}</strong>.`,
+    ...(datos.porConfirmar
+      ? {
+          asunto: asunto`Reserva recibida — ${datos.nombreNegocio}`,
+          titulo: "Recibimos tu reserva",
+          intro: html`Hola <strong>${datos.nombreCliente}</strong>, <strong>${datos.nombreNegocio}</strong> confirmará tu reserva y te avisaremos por correo cuando lo haga.`,
+        }
+      : {
+          asunto: asunto`Cita confirmada — ${datos.nombreNegocio}`,
+          titulo: "¡Tu cita está confirmada!",
+          intro: html`Hola <strong>${datos.nombreCliente}</strong>, te esperamos en <strong>${datos.nombreNegocio}</strong>.`,
+        }),
     detalle,
-    ...(datos.enlaceDeGestion
+    ...(datos.enlaceDeGestion && datos.sePuedeCambiar === false
+      ? {
+          cierre: html`Tu hora es en menos de ${datos.plazoHoras ?? 0} ${datos.plazoHoras === 1 ? "hora" : "horas"}, así que no se puede cancelar ni cambiar por el enlace. Si lo necesitas, contacta directamente al local.`,
+        }
+      : datos.enlaceDeGestion
       ? {
           boton: { texto: "Cancelar o cambiar mi cita", enlace: datos.enlaceDeGestion },
           cierre:
@@ -327,6 +382,8 @@ export interface DatosAvisoProfesional {
   comentarios?: string | null
   /** A quién quedó asignada; sin dar, no se muestra. */
   profesional?: string | null
+  /** Entró por confirmar (#84): el aviso pide confirmarla o cancelarla en el panel. */
+  porConfirmar?: boolean
 }
 
 export function enviarAvisoProfesional(datos: DatosAvisoProfesional) {
@@ -342,12 +399,43 @@ export function enviarAvisoProfesional(datos: DatosAvisoProfesional) {
   return enviar({
     tipo: "aviso-profesional",
     para: datos.emailProfesional,
-    asunto: asunto`Nueva reserva — ${datos.nombreCliente}`,
-    titulo: "Nueva reserva recibida",
+    asunto: datos.porConfirmar
+      ? asunto`Reserva por confirmar — ${datos.nombreCliente}`
+      : asunto`Nueva reserva — ${datos.nombreCliente}`,
+    titulo: datos.porConfirmar ? "Nueva reserva por confirmar" : "Nueva reserva recibida",
     intro: html`Tienes una nueva cita en <strong>${datos.nombreNegocio}</strong>.`,
     detalle,
     destacado: true,
-    cierre: html`Revisa tu calendario en tu panel para ver todos los detalles.`,
+    cierre: datos.porConfirmar
+      ? html`Este contacto faltó a citas anteriores. Entra a la agenda de tu panel para confirmar la reserva o cancelarla.`
+      : html`Revisa tu calendario en tu panel para ver todos los detalles.`,
+  })
+}
+
+export interface DatosReservaConfirmadaPorElLocal {
+  emailCliente: string
+  nombreCliente: string
+  nombreNegocio: string
+  servicio: string
+  /** `AAAA-MM-DD` y `HH:MM`, en el reloj del negocio. */
+  fecha: string
+  hora: string
+  profesional?: string | null
+}
+
+/** Al cliente: el local confirmó la reserva que había entrado por confirmar (#84). */
+export function enviarReservaConfirmadaPorElLocal(datos: DatosReservaConfirmadaPorElLocal) {
+  const detalle: Array<[string, string]> = [["Servicio", datos.servicio]]
+  if (datos.profesional) detalle.push(["Con", datos.profesional])
+  detalle.push(["Fecha", fechaLegible(datos.fecha)], ["Hora", datos.hora])
+  return enviar({
+    tipo: "reserva-confirmada-por-el-local",
+    para: datos.emailCliente,
+    asunto: asunto`Reserva confirmada — ${datos.nombreNegocio}`,
+    titulo: "¡Tu reserva está confirmada!",
+    intro: html`Hola <strong>${datos.nombreCliente}</strong>, <strong>${datos.nombreNegocio}</strong> confirmó tu reserva. Te esperamos.`,
+    detalle,
+    cierre: html`Si necesitas cancelar o cambiar tu cita, usa el enlace del correo de tu reserva o contacta al local.`,
   })
 }
 
@@ -399,6 +487,14 @@ export interface DatosRecordatorio {
   servicio: string
   fecha: string
   hora: string
+  /**
+   * El enlace para cancelar o reagendar sin cuenta, sólo para las reservas
+   * públicas de antes de la etapa 1, que no lo tenían (#106): se genera al
+   * mandar el recordatorio. Lleva el token en claro.
+   */
+  enlaceDeGestion?: string | null
+  /** Hasta cuántas horas antes se puede cambiar con el enlace. */
+  plazoHoras?: number
 }
 
 export function enviarRecordatorio(datos: DatosRecordatorio) {
@@ -413,7 +509,15 @@ export function enviarRecordatorio(datos: DatosRecordatorio) {
       ["Fecha", fechaLegible(datos.fecha)],
       ["Hora", datos.hora],
     ],
-    cierre: html`¡Te esperamos! Si no puedes asistir, por favor avísanos con anticipación.`,
+    ...(datos.enlaceDeGestion
+      ? {
+          boton: { texto: "Cancelar o cambiar mi cita", enlace: datos.enlaceDeGestion },
+          cierre:
+            datos.plazoHoras && datos.plazoHoras > 0
+              ? html`¡Te esperamos! Si no puedes asistir, cancela o cambia tu cita con el botón hasta ${datos.plazoHoras} ${datos.plazoHoras === 1 ? "hora" : "horas"} antes. Después, contacta directamente al local.`
+              : html`¡Te esperamos! Si no puedes asistir, cancela o cambia tu cita con el botón hasta la hora de la cita.`,
+        }
+      : { cierre: html`¡Te esperamos! Si no puedes asistir, por favor avísanos con anticipación.` }),
   })
 }
 
@@ -606,5 +710,144 @@ export function enviarAcuseDeSoporte(datos: DatosAcuseDeSoporte) {
     intro: html`Hola, tu solicitud quedó registrada con el número <strong>${datos.numero}</strong>. Guárdalo por si necesitas mencionarla.`,
     detalle: datos.detalle,
     cierre: html`Te vamos a responder por correo a esta misma dirección. Si no enviaste esta solicitud, puedes ignorar este correo.`,
+  })
+}
+
+// ─── Mensajes a clientes (etapa 3) ───────────────────────────────────────────
+//
+// Cuándo se manda cada uno, el candado contra duplicados y el registro son de
+// `lib/envios-a-clientes.ts` y de cada trabajo (`lib/lista-de-espera.ts`,
+// `lib/te-toca.ts`, `lib/resenas.ts`); acá sólo se arma el correo. Los
+// promocionales ("te toca" y reseña) exigen los dos enlaces de baja
+// (`enlacesDeBajaDeCliente`): sin ellos no compila.
+
+export interface DatosAvisoListaDeEspera {
+  emailCliente: string
+  nombreCliente: string
+  nombreNegocio: string
+  servicio: string
+  /** Con quién, si se inscribió para un profesional; null es "cualquiera". */
+  profesional?: string | null
+  /** El día de la inscripción, "AAAA-MM-DD" en la zona del negocio. */
+  fecha: string
+  /** La página de reservas ya llenada con servicio, profesional y fecha. */
+  enlaceReservar: string
+  /** La página "Salir de la lista" con el token de la inscripción. */
+  enlaceSalir: string
+  /** El POST de un clic que la saca de la lista (RFC 8058). */
+  enlaceSalirEnUnClic: string
+}
+
+/**
+ * "Se liberó una hora" (#74). Es de servicio: lo pidió la persona al
+ * inscribirse. Se avisa a todos los que esperaban ese día y la hora es de
+ * quien reserve primero, así que el correo lo dice.
+ */
+export function enviarAvisoListaDeEspera(datos: DatosAvisoListaDeEspera) {
+  const detalle: Array<[string, string]> = [["Servicio", datos.servicio]]
+  if (datos.profesional) detalle.push(["Con", datos.profesional])
+  detalle.push(["Día", fechaLegible(datos.fecha)])
+  return enviar({
+    tipo: "aviso-lista-de-espera",
+    para: datos.emailCliente,
+    asunto: asunto`Se liberó una hora — ${datos.nombreNegocio}`,
+    titulo: "Se liberó una hora",
+    intro: html`Hola <strong>${datos.nombreCliente}</strong>, se liberó una hora en <strong>${datos.nombreNegocio}</strong> el día que estabas esperando.`,
+    detalle,
+    destacado: true,
+    boton: { texto: "Reservar la hora", enlace: datos.enlaceReservar },
+    cierre: html`Les avisamos a todas las personas que esperaban este día: la hora es de quien reserve primero. Si ya no la necesitas, puedes salir de la lista.`,
+    enlaceDeBaja: datos.enlaceSalir,
+    textoDeBaja: "Salir de la lista de espera",
+    bajaEnUnClic: datos.enlaceSalirEnUnClic,
+  })
+}
+
+export interface DatosTeToca {
+  emailCliente: string
+  nombreCliente: string
+  nombreNegocio: string
+  /** El último servicio que se hizo, si se sabe. */
+  servicio?: string | null
+  /** La página de reservas del negocio (con el servicio elegido, si se sabe). */
+  enlaceReservar: string
+  /** `enlacesDeBajaDeCliente(customerId)` (`lib/baja-de-clientes.ts`). */
+  enlaceDeBaja: string
+  enlaceDeBajaEnUnClic: string
+}
+
+/** "Te toca" (#75). Promocional: sólo con consentimiento vigente. */
+export function enviarTeToca(datos: DatosTeToca) {
+  return enviar({
+    tipo: "te-toca",
+    para: datos.emailCliente,
+    asunto: asunto`¿Agendamos tu próxima hora? — ${datos.nombreNegocio}`,
+    titulo: "Ya te toca volver",
+    intro: datos.servicio
+      ? html`Hola <strong>${datos.nombreCliente}</strong>, ya pasó un tiempo desde tu último <strong>${datos.servicio}</strong> en <strong>${datos.nombreNegocio}</strong>. Cuando quieras, reserva tu próxima hora.`
+      : html`Hola <strong>${datos.nombreCliente}</strong>, ya pasó un tiempo desde tu última visita a <strong>${datos.nombreNegocio}</strong>. Cuando quieras, reserva tu próxima hora.`,
+    boton: { texto: "Reservar mi hora", enlace: datos.enlaceReservar },
+    cierre: html`Te escribimos porque aceptaste recibir avisos y novedades de ${datos.nombreNegocio}. Puedes dejar de recibirlos cuando quieras.`,
+    enlaceDeBaja: datos.enlaceDeBaja,
+    bajaEnUnClic: datos.enlaceDeBajaEnUnClic,
+  })
+}
+
+export interface DatosPedirResena {
+  emailCliente: string
+  nombreCliente: string
+  nombreNegocio: string
+  /** `Business.enlaceResenas`, ya validado (https y un dominio de Google). */
+  enlaceResenas: string
+  /** `enlacesDeBajaDeCliente(customerId)` (`lib/baja-de-clientes.ts`). */
+  enlaceDeBaja: string
+  enlaceDeBajaEnUnClic: string
+}
+
+/**
+ * Pedir una reseña en Google (#77), el día siguiente a la visita. A todos por
+ * igual, sin filtrar por satisfacción. Promocional: sólo con consentimiento
+ * vigente (decisión del dueño).
+ */
+export function enviarPedirResena(datos: DatosPedirResena) {
+  return enviar({
+    tipo: "pedir-resena",
+    para: datos.emailCliente,
+    asunto: asunto`¿Cómo te fue en ${datos.nombreNegocio}?`,
+    titulo: "Gracias por tu visita",
+    intro: html`Hola <strong>${datos.nombreCliente}</strong>, gracias por venir a <strong>${datos.nombreNegocio}</strong>. Si tienes un minuto, contar cómo te fue en Google ayuda a que más personas lo conozcan.`,
+    boton: { texto: "Dejar mi reseña", enlace: datos.enlaceResenas },
+    cierre: html`Te escribimos porque aceptaste recibir avisos y novedades de ${datos.nombreNegocio}. Puedes dejar de recibirlos cuando quieras.`,
+    enlaceDeBaja: datos.enlaceDeBaja,
+    bajaEnUnClic: datos.enlaceDeBajaEnUnClic,
+  })
+}
+
+export interface DatosAvisoFilaVirtual {
+  emailCliente: string
+  /** El nombre con que se anotó en la fila. */
+  nombreCliente: string
+  nombreNegocio: string
+  /** Su número de turno del día. */
+  numero: number
+}
+
+/**
+ * "Ya casi es tu turno" (#85): a quien se anotó en la fila virtual con su
+ * correo, cuando queda 1 persona adelante (o ninguna). De servicio: lo pidió
+ * al anotarse, y se manda una sola vez por turno. Sin enlace al turno: la
+ * base guarda sólo el hash del token del celular, así que el correo no puede
+ * reconstruirlo; la persona ya tiene la página abierta en su teléfono.
+ */
+export function enviarAvisoFilaVirtual(datos: DatosAvisoFilaVirtual) {
+  return enviar({
+    tipo: "aviso-fila-virtual",
+    para: datos.emailCliente,
+    asunto: asunto`Ya casi es tu turno — ${datos.nombreNegocio}`,
+    titulo: "Ya casi es tu turno",
+    intro: html`Hola <strong>${datos.nombreCliente}</strong>, en <strong>${datos.nombreNegocio}</strong> ya casi es tu turno: queda a lo más una persona antes que tú.`,
+    detalle: [["Tu número", String(datos.numero)]],
+    destacado: true,
+    cierre: html`Acércate al local para no perderlo. Si ya no puedes ir, sal de la fila desde la página de tu turno.`,
   })
 }

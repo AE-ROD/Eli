@@ -4,13 +4,13 @@ import { useState } from "react"
 import { Boton } from "@/components/comunes/boton"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
-import { formatearHora } from "@/lib/fechas"
 import { aQuienBloquea, quitarBloqueo, type Bloqueo } from "../_datos"
+import { diaLargoEn, horaEn } from "../_hora-del-negocio"
+import { useZonaDelNegocio } from "./zona-del-negocio"
 
-/** `martes 20 de octubre, 13:00`: un extremo del bloqueo, para leerlo. */
-function cuando(iso: string): string {
-  const dia = new Date(iso).toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
-  return `${dia}, ${formatearHora(iso)}`
+/** `martes 20 de octubre, 13:00`: un extremo del bloqueo, para leerlo, en la hora del negocio (#99). */
+function cuando(iso: string, zona: string): string {
+  return `${diaLargoEn(iso, zona)}, ${horaEn(iso, zona)}`
 }
 
 interface PropsDeModalBloqueo {
@@ -27,10 +27,11 @@ interface PropsDeModalBloqueo {
  * bloqueo de todo el negocio) sólo se le muestra.
  */
 export function ModalBloqueo({ bloqueo, puedeQuitar, onQuitado, onCerrar }: PropsDeModalBloqueo) {
+  const zona = useZonaDelNegocio()
   const [trabajando, setTrabajando] = useState(false)
   const [aviso, setAviso] = useState("")
 
-  const descripcion = `${aQuienBloquea(bloqueo)}: del ${cuando(bloqueo.startTime)} al ${cuando(bloqueo.endTime)}${
+  const descripcion = `${aQuienBloquea(bloqueo)}: del ${cuando(bloqueo.startTime, zona)} al ${cuando(bloqueo.endTime, zona)}${
     bloqueo.motivo ? ` (${bloqueo.motivo})` : ""
   }.`
 

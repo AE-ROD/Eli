@@ -315,6 +315,163 @@ export function profesionalParaLinea(actor: Actor, pedido: ProfesionalDeLinea): 
   return { memberId: pedido.memberId, byOwner: false }
 }
 
+// ─── La plata del equipo (etapa 2) ───────────────────────────────────────────
+//
+// El reparto es de la dueña: porcentajes, período, cerrar, pagar y
+// anular liquidaciones, ajustes. El encargado opera la caja: cobra, registra
+// propinas, adelantos y vales, cierra la caja y gestiona el catálogo de
+// productos (sin su %). El profesional ve lo suyo y nada más.
+
+/** El historial de cambios de porcentaje (`CommissionChange`). Como fijarlos: sólo la dueña. */
+export const puedeVerHistorialDeComisiones = esDueño
+
+/** Catálogo de productos: nombre, precio y activo. El % de comisión de cada uno, no. */
+export const puedeGestionarProductos = gestionaElNegocio
+
+/**
+ * El % de comisión de un producto. Es comisión: sólo la dueña, como
+ * `puedeEditarComisiones`. Un % que mande el encargado se rechaza, no se ignora
+ * en silencio.
+ */
+export const puedeFijarComisionDeProducto = puedeEditarComisiones
+
+/** Las propinas se anotan al cobrar, así que las registra quien cobra. */
+export const puedeRegistrarPropina = puedeCobrar
+
+/** Tipo de período de liquidación del negocio (y su día de inicio de semana). */
+export const puedeConfigurarLiquidacion = esDueño
+
+/**
+ * Las liquidaciones de todo el equipo (la sección Liquidaciones). El
+ * profesional ve las suyas desde Mi plata; una puntual, con
+ * `puedeVerLiquidacionDe`.
+ */
+export const puedeVerLiquidacionesDelEquipo = gestionaElNegocio
+
+/** Cerrar una liquidación: congela lo que se le paga a alguien. Sólo la dueña. */
+export const puedeCerrarLiquidacion = esDueño
+
+/** Marcar pagada una liquidación cerrada. Sólo la dueña. */
+export const puedePagarLiquidacion = esDueño
+
+/** Anular una liquidación cerrada y no pagada (libera lo que incluía). Sólo la dueña. */
+export const puedeAnularLiquidacion = esDueño
+
+/** Ajustes con signo a lo que se le paga a alguien. Sólo la dueña. */
+export const puedeRegistrarAjuste = esDueño
+
+/** Adelantos y vales: plata que sale de la caja hacia alguien del equipo. Dueña y encargado. */
+export const puedeRegistrarAdelanto = gestionaElNegocio
+
+/**
+ * Mi plata: lo que ganó quien atiende. Es para quien tiene `memberId`
+ * (encargado y profesional); la dueña no es miembro y no la ve. Sin actor,
+ * no (falla cerrado).
+ */
+export const veMiPlata = (actor: Actor | null): boolean => !!actor?.memberId
+
+/** Cerrar la caja: es la caja del día, como cobrar. Dueña y encargado. */
+export const puedeCerrarCaja = puedeCobrar
+
+/** Ver los cierres de caja (montos de todo el negocio). Dueña y encargado. */
+export const puedeVerCierresDeCaja = gestionaElNegocio
+
+/**
+ * Reactivar una cita cancelada o devolver a confirmada una completada o
+ * marcada como no asistió. Dueña y encargado; el profesional no saca una cita
+ * de esos estados.
+ */
+export const puedeReactivarCita = gestionaElNegocio
+
+// ─── Avisos por correo a clientes (etapa 3) ──────────────────────────────────
+//
+// Encender los mensajes a clientes es de la dueña (con WhatsApp van a costar);
+// el encargado ve los interruptores y el contador en solo lectura. La lista de
+// espera y los clientes que se están yendo son operación: dueña y encargado.
+// El profesional no ve ninguno de los dos, por el mismo criterio que exportar:
+// son contactos de toda la base.
+
+/** "Clientes que se están yendo" (#76): dueña y encargado. */
+export const puedeVerClientesQueSeVan = gestionaElNegocio
+
+/** "Escribirle" a un cliente que se está yendo (wa.me o mailto, registrado). Quien lo ve. */
+export const puedeEscribirAClienteQueSeVa = puedeVerClientesQueSeVan
+
+/**
+ * Encender o apagar la lista de espera, "te toca" y las reseñas. Sólo la
+ * dueña; el encargado los ve sin poder cambiarlos (`puedeVerMensajesAClientes`).
+ */
+export const puedeActivarMensajesAClientes = esDueño
+
+/** Ver los interruptores y el contador "Mensajes de este mes". Dueña y encargado. */
+export const puedeVerMensajesAClientes = gestionaElNegocio
+
+/** El enlace de reseñas de Google es parte de la página del negocio. */
+export const puedeEditarEnlaceDeResenas = puedeEditarPaginaDelNegocio
+
+/** Ver quién está en la lista de espera de un día. Dueña y encargado. */
+export const puedeVerListaDeEspera = gestionaElNegocio
+
+/** Quitar a alguien de la lista de espera. Dueña y encargado. */
+export const puedeQuitarDeListaDeEspera = gestionaElNegocio
+
+/**
+ * Marcar o desmarcar en la ficha el consentimiento promocional por correo
+ * (desmarcarlo es la baja pedida en el local). Es un dato del cliente: quien
+ * edita sus datos.
+ */
+export const puedeEditarConsentimientoPromocional = puedeEditarDatosDeCliente
+
+// ─── Reservas seguras y fila virtual (etapa 4) ───────────────────────────────
+//
+// Las dos configuraciones son de la dueña: deciden a quién se le pide
+// confirmación y cuánta gente se anota sola. Lo diario (confirmar o cancelar
+// una reserva por confirmar, mirar la pantalla de la fila) es operación: dueña
+// y encargado.
+
+/** Con cuántas faltas una reserva pública entra por confirmar (#84). Sólo la dueña. */
+export const puedeConfigurarPorConfirmar = esDueño
+
+/** Encender o apagar la fila virtual y fijar su tope (#85). Sólo la dueña. */
+export const puedeActivarFilaVirtual = esDueño
+
+// ─── Reservas a medida (etapa 5) ────────────────────────────────────────────
+
+/**
+ * Encender o apagar los precios de hora valle, sus franjas y qué servicios
+ * quedan fuera (#89c). Es precio, o sea dinero: sólo la dueña.
+ */
+export const puedeConfigurarHoraValle = esDueño
+
+/**
+ * Confirmar o cancelar una reserva que entró por confirmar por faltas
+ * (`Appointment.confirmacionPorFaltas` con status "pendiente"). Dueña y
+ * encargado: aceptar a un cliente que viene faltando es una decisión del
+ * negocio, como reactivar una cita (`puedeReactivarCita`). El profesional no:
+ * es el más interesado en llenar su agenda, y la marca existe justamente para
+ * que lo decida alguien con la vista de todo el negocio. Una reserva pendiente
+ * SIN la marca sigue como hasta ahora (la confirma quien la ve). Que la cita
+ * sea del negocio lo verifica el endpoint antes, con `whereDeAgenda`.
+ */
+export const puedeResolverPorConfirmar = gestionaElNegocio
+
+/**
+ * La pantalla de la fila en el local (ruta del panel, a pantalla completa):
+ * número de turno, nombre con inicial y QR, sin correo ni teléfono. Dueña y
+ * encargado. El profesional no: la fila es de todo el negocio y él no ve el
+ * Tablero entero (`puedeVerTodoElTablero`); la pantalla la deja abierta en el
+ * equipo del local quien gestiona el negocio. Falla cerrado.
+ */
+export const puedeVerPantallaDeFila = gestionaElNegocio
+
+/**
+ * "Vaciar la fila de hoy": anula de una vez a todos los que esperan en la
+ * fila virtual del día (si alguien la llenó con nombres inventados, o al
+ * cerrar). Dueña y encargado, los mismos que ven la fila entera. El
+ * profesional no: la fila es de todo el negocio. Falla cerrado.
+ */
+export const puedeVaciarFilaVirtual = gestionaElNegocio
+
 // ─── Filtros para consultas ──────────────────────────────────────────────────
 
 /**
@@ -459,4 +616,93 @@ export function whereDePagos(
   extra: Prisma.VisitPaymentWhereInput = {}
 ): Prisma.VisitPaymentWhereInput {
   return { AND: [filtroDePagos(actor), extra] }
+}
+
+/**
+ * Lo del dinero de cada profesional (liquidaciones, movimientos, propinas):
+ * dueña y encargado ven todo el negocio; el profesional, sólo lo suyo; sin
+ * `memberId`, nada. Una sola regla para las tres tablas, que tienen
+ * `businessId` y `memberId` propios. No se exporta, igual que `filtroDeAgenda`.
+ */
+function filtroDePlataDelEquipo(actor: Actor | null): { businessId: string; memberId?: string } | typeof NADA {
+  if (!actor) return NADA
+  if (gestionaElNegocio(actor)) return { businessId: actor.businessId }
+  if (!actor.memberId) return NADA
+  return { businessId: actor.businessId, memberId: actor.memberId }
+}
+
+/** Igual que `whereDeAgenda`, para liquidaciones. */
+export function whereDeLiquidaciones(
+  actor: Actor | null,
+  extra: Prisma.LiquidacionWhereInput = {}
+): Prisma.LiquidacionWhereInput {
+  return { AND: [filtroDePlataDelEquipo(actor), extra] }
+}
+
+/** Igual que `whereDeAgenda`, para adelantos, vales y ajustes. */
+export function whereDeMovimientos(
+  actor: Actor | null,
+  extra: Prisma.MovimientoDeLiquidacionWhereInput = {}
+): Prisma.MovimientoDeLiquidacionWhereInput {
+  return { AND: [filtroDePlataDelEquipo(actor), extra] }
+}
+
+/**
+ * Igual que `whereDeAgenda`, para propinas. Las de la dueña (`byOwner`,
+ * `memberId` null) sólo las ve la gestión.
+ */
+export function whereDePropinas(
+  actor: Actor | null,
+  extra: Prisma.PropinaDeAtencionWhereInput = {}
+): Prisma.PropinaDeAtencionWhereInput {
+  return { AND: [filtroDePlataDelEquipo(actor), extra] }
+}
+
+/**
+ * La lista de espera tiene contactos de personas que quizá no son clientes:
+ * sólo quien la puede ver. No se exporta, igual que `filtroDeAgenda`.
+ */
+function filtroDeListaDeEspera(actor: Actor | null): Prisma.InscripcionEnEsperaWhereInput {
+  if (!actor || !puedeVerListaDeEspera(actor)) return NADA
+  return { businessId: actor.businessId }
+}
+
+/** Igual que `whereDeAgenda`, para la lista de espera. */
+export function whereDeListaDeEspera(
+  actor: Actor | null,
+  extra: Prisma.InscripcionEnEsperaWhereInput = {}
+): Prisma.InscripcionEnEsperaWhereInput {
+  return { AND: [filtroDeListaDeEspera(actor), extra] }
+}
+
+/** Los cierres de caja son montos de todo el negocio: sólo quien los puede ver. */
+function filtroDeCierresDeCaja(actor: Actor | null): Prisma.CierreDeCajaWhereInput {
+  if (!actor || !puedeVerCierresDeCaja(actor)) return NADA
+  return { businessId: actor.businessId }
+}
+
+/** Igual que `whereDeAgenda`, para cierres de caja. */
+export function whereDeCierresDeCaja(
+  actor: Actor | null,
+  extra: Prisma.CierreDeCajaWhereInput = {}
+): Prisma.CierreDeCajaWhereInput {
+  return { AND: [filtroDeCierresDeCaja(actor), extra] }
+}
+
+/**
+ * El catálogo de productos es del negocio: todo rol lo ve, porque el
+ * profesional anota en el tablero lo que vendió. Quién ve el % de comisión de
+ * cada producto lo decide el `select` del endpoint, no este filtro.
+ */
+function filtroDeProductos(actor: Actor | null): Prisma.ProductoWhereInput {
+  if (!actor) return NADA
+  return { businessId: actor.businessId }
+}
+
+/** Igual que `whereDeAgenda`, para productos. */
+export function whereDeProductos(
+  actor: Actor | null,
+  extra: Prisma.ProductoWhereInput = {}
+): Prisma.ProductoWhereInput {
+  return { AND: [filtroDeProductos(actor), extra] }
 }

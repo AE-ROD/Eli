@@ -9,10 +9,21 @@
  * HTTP se traducen acá: la pantalla decide por el motivo, no por el número.
  */
 
+import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import type { EstadoActivo, PagoPedido } from "@/lib/atenciones"
-import type { LineaGuardada, LineaPedida, ReservaDeOrigen } from "@/lib/acciones-del-tablero"
+import type { LineaGuardada, LineaPedida, PropinaPedida, ReservaDeOrigen } from "@/lib/acciones-del-tablero"
 import { rangoDelDia, zonaDelDispositivo } from "@/lib/fechas"
-import { conJson, pedir, pedirConCodigo, type Resultado, type ResultadoConCodigo } from "@/lib/peticiones"
+import { CODIGO_CORREGIR_CON_AJUSTE } from "@/lib/bloqueos-de-dinero"
+import {
+  codigoDelServidor,
+  conJson,
+  pedir,
+  pedirConCodigo,
+  pedirConCuerpo,
+  type Resultado,
+  type ResultadoConCodigo,
+} from "@/lib/peticiones"
+import { mostrarTelefono } from "@/lib/telefono"
 
 // ─── Lo que devuelve el servidor ─────────────────────────────────────────────
 
@@ -26,6 +37,16 @@ export type LineaDeServicio = LineaGuardada
 
 export interface PagoRegistrado {
   id: string
+  medio: string
+  nombreMedio: string
+  monto: number
+}
+
+/** Una propina registrada al cobrar (#66): aparte del total, para quien la recibe. */
+export interface PropinaRegistrada {
+  id: string
+  /** Id de miembro o `duenio`; `null` si quien la recibió dejó el equipo. */
+  profesional: { id: string | null; nombre: string }
   medio: string
   nombreMedio: string
   monto: number
@@ -53,6 +74,8 @@ export interface Atencion {
   cobradaEn: string | null
   anuladaEn: string | null
   motivoDeAnulacion: string | null
+  /** El número de turno de quien se anotó en la fila virtual (#85); `null` si llegó por otro lado. */
+  turno: number | null
   /** Al profesional le llegan sólo las suyas. */
   lineas: LineaDeServicio[]
   /**
@@ -62,6 +85,8 @@ export interface Atencion {
    */
   total?: number
   pagos?: PagoRegistrado[]
+  /** Sólo para dueño y encargado, como los pagos. No suman al total. */
+  propinas?: PropinaRegistrada[]
 }
 
 /** Una cita de hoy que todavía no llegó. Que esté atrasada lo calcula la pantalla con su reloj. */
@@ -85,10 +110,19 @@ export interface ServicioDelCatalogo {
   precio: number | null
 }
 
+/** Un producto que se vende en el local (#67). Sin su % de comisión: eso es de la dueña. */
+export interface ProductoDelCatalogo {
+  id: string
+  nombre: string
+  precio: number | null
+}
+
 /** Lo que se puede elegir en el tablero: ya viene recortado según quién mira. */
 export interface Catalogo {
   /** Sólo los activos. */
   servicios: ServicioDelCatalogo[]
+  /** Sólo los activos. */
+  productos: ProductoDelCatalogo[]
   /** Los miembros y el dueño (`id: "duenio"`); al profesional, sólo él. */
   profesionales: { id: string; nombre: string }[]
   mediosDePago: { id: string; nombre: string }[]
@@ -100,6 +134,8 @@ export interface Tablero {
   catalogo: Catalogo
   /** Había más atenciones de las que el servidor manda de una vez: algunas no se ven. */
   truncado: boolean
+  /** La fila virtual está encendida y quien mira puede abrir su pantalla (#85). */
+  filaVirtual?: boolean
 }
 
 /** Un cliente que coincide con lo que se escribe en el buscador. */
@@ -117,9 +153,12 @@ export interface ClienteEncontrado {
  *   no se ve (404). Lo que muestra la pantalla está viejo: hay que recargar.
  * - `falta-requisito`: el servidor dice que falta algo para avanzar (400),
  *   con el mensaje de qué.
+ * - `corregir-con-ajuste`: la atención ya entró en una liquidación o en un
+ *   cierre de caja (409 con `codigo: "corregir-con-ajuste"`): no cambió, no
+ *   se toca, y el mensaje dice cómo se corrige.
  * - `otro`: cualquier otro motivo; se muestra el mensaje y nada más.
  */
-export type MotivoDeFallo = "desactualizada" | "falta-requisito" | "otro"
+export type MotivoDeFallo = "desactualizada" | "falta-requisito" | "corregir-con-ajuste" | "otro"
 
 export type ResultadoDeAccion<T> = { ok: true; datos: T } | { ok: false; error: string; motivo: MotivoDeFallo }
 
@@ -160,8 +199,9 @@ export async function buscarClientes(texto: string): Promise<Resultado<ClienteEn
     datos: resultado.datos.clientes.map((cliente) => ({
       id: cliente.id,
       // Nombre y apellido, como queda escrito en la atención: "María González".
-      nombre: [cliente.name, cliente.lastName].filter(Boolean).join(" "),
-      detalle: cliente.phone ?? cliente.email ?? "",
+      nombre: nombreCompletoDeCliente(cliente),
+      // El teléfono como se lee en todo el panel ("+56 9 1234 5678"), no como se guarda.
+      detalle: mostrarTelefono(cliente.phone) || cliente.email || "",
     })),
   }
 }
@@ -267,20 +307,58 @@ export async function moverAtencion(id: string, estado: EstadoActivo): Promise<R
   )
 }
 
-/** Cobra la atención: los pagos tienen que sumar el total. Con total cero, sin pagos. */
-export async function cobrarAtencion(id: string, pagos: PagoPedido[]): Promise<ResultadoDeAccion<Atencion>> {
+/**
+ * Cobra la atención: los pagos tienen que sumar el total (con total cero, sin
+ * pagos). Las propinas van aparte y no cuentan para el total.
+ */
+export async function cobrarAtencion(
+  id: string,
+  pagos: PagoPedido[],
+  propinas: PropinaPedida[] = []
+): Promise<ResultadoDeAccion<Atencion>> {
   return conMotivo(
-    await pedirConCodigo<Atencion>(`${urlDeAtencion(id)}/cobro`, "No se pudo registrar el cobro", conJson("POST", { pagos }))
+    await pedirConCodigo<Atencion>(
+      `${urlDeAtencion(id)}/cobro`,
+      "No se pudo registrar el cobro",
+      conJson("POST", { pagos, ...(propinas.length > 0 && { propinas }) })
+    )
   )
 }
 
-/** Anula la atención. Queda en el historial como anulada y deja de sumar. */
-export async function anularAtencion(id: string, motivo: string): Promise<ResultadoDeAccion<Atencion>> {
+/** "Vaciar la fila de hoy" (#85): anula a todos los que esperan en la fila virtual del día. */
+export async function vaciarFilaDeHoy(): Promise<ResultadoDeAccion<{ anuladas: number }>> {
   return conMotivo(
-    await pedirConCodigo<Atencion>(
-      `${urlDeAtencion(id)}/anulacion`,
-      "No se pudo anular la atención",
-      conJson("POST", motivo.trim() ? { motivo: motivo.trim() } : {})
-    )
+    await pedirConCodigo<{ anuladas: number }>("/api/fila-virtual/vaciar", "No se pudo vaciar la fila", {
+      method: "POST",
+    })
   )
+}
+
+/**
+ * Antes de cobrar (#118): los ids de las líneas que quedarían sin % de
+ * comisión si se cobrara ahora. Sólo para avisar; el cobro no se frena.
+ */
+export async function leerLineasSinPorcentaje(id: string): Promise<Resultado<string[]>> {
+  const resultado = await pedir<{ lineasSinPorcentaje: string[] }>(
+    `${urlDeAtencion(id)}/cobro`,
+    "No se pudo saber qué servicios quedarán sin porcentaje de comisión"
+  )
+  return resultado.ok ? { ok: true, datos: resultado.datos.lineasSinPorcentaje } : resultado
+}
+
+/**
+ * Anula la atención. Queda en el historial como anulada y deja de sumar. Si
+ * ya se rindió (liquidación o cierre de caja), el servidor lo dice con un
+ * código, no con el texto (#117).
+ */
+export async function anularAtencion(id: string, motivo: string): Promise<ResultadoDeAccion<Atencion>> {
+  const resultado = await pedirConCuerpo<Atencion>(
+    `${urlDeAtencion(id)}/anulacion`,
+    "No se pudo anular la atención",
+    conJson("POST", motivo.trim() ? { motivo: motivo.trim() } : {})
+  )
+  if (!resultado.ok && codigoDelServidor(resultado.cuerpo) === CODIGO_CORREGIR_CON_AJUSTE) {
+    return { ok: false, error: resultado.error, motivo: "corregir-con-ajuste" }
+  }
+  return conMotivo(resultado)
 }

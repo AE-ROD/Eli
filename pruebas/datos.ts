@@ -65,12 +65,44 @@ export function lineaDeLaDueña(id: string, visitId: string, datos: Registro = {
   return linea(id, visitId, { memberId: null, byOwner: true, professionalName: "Ana Dueña", ...datos })
 }
 
+/** Una línea de producto: un Shampoo vendido por Carla a 12.000, salvo lo que se pise. Sin servicio, como exige la base. */
+export function lineaDeProducto(id: string, visitId: string, datos: Registro = {}): Registro {
+  return linea(id, visitId, {
+    tipo: "producto",
+    serviceId: null,
+    productId: "p-shampoo",
+    serviceName: "Shampoo",
+    priceCents: centavos(12000),
+    ...datos,
+  })
+}
+
+/** Una propina de 2.000 en efectivo para Carla, salvo lo que se pise. */
+export function propina(id: string, visitId: string, datos: Registro = {}): Registro {
+  return {
+    id,
+    businessId: NEGOCIO,
+    visitId,
+    memberId: "m-carla",
+    byOwner: false,
+    professionalName: "Carla Profesional",
+    method: "efectivo",
+    amountCents: centavos(2000),
+    createdAt: new Date("2026-10-06T15:00:00.000Z"),
+    ...datos,
+  }
+}
+
 /** Un pago de `monto` en unidades; la base lo guarda en centavos. */
 export function pago(id: string, visitId: string, method: string, monto: number): Registro {
   return { id, visitId, method, amountCents: centavos(monto), createdAt: new Date("2026-10-06T15:00:00.000Z") }
 }
 
-/** Lo que tiene todo escenario: personas, negocios, servicios y clientes. */
+/**
+ * Lo que tiene todo escenario: personas, negocios, servicios, productos y
+ * clientes. Nadie tiene % de comisión configurado (pendiente es lo que hay
+ * cuando nadie lo fijó): cada test fija los que necesita.
+ */
 export function datosBase() {
   return {
     user: [
@@ -97,6 +129,12 @@ export function datosBase() {
       { id: "s-peinado", businessId: NEGOCIO, name: "Peinado", price: null },
       { id: "s-viejo", businessId: NEGOCIO, name: "Alisado", price: 30000, active: false },
       { id: "s-ajeno", businessId: OTRO_NEGOCIO, name: "Corte", price: 9000 },
+    ],
+    producto: [
+      { id: "p-shampoo", businessId: NEGOCIO, name: "Shampoo", priceCents: centavos(12000), commissionPercent: 10 },
+      { id: "p-cera", businessId: NEGOCIO, name: "Cera", priceCents: centavos(8000), commissionPercent: null },
+      { id: "p-viejo", businessId: NEGOCIO, name: "Tónico", priceCents: centavos(5000), active: false },
+      { id: "p-ajeno", businessId: OTRO_NEGOCIO, name: "Shampoo", priceCents: centavos(9000), commissionPercent: 50 },
     ],
     customer: [
       { id: "c-maria", businessId: NEGOCIO, name: "María", lastName: "González" },

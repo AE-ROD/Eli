@@ -5,7 +5,8 @@
  */
 
 import { rangoDelDia, zonaDelDispositivo } from "@/lib/fechas"
-import { conJson, pedir, pedirConCodigo, type Resultado, type ResultadoConCodigo } from "@/lib/peticiones"
+import { CODIGO_CORREGIR_CON_AJUSTE } from "@/lib/bloqueos-de-dinero"
+import { codigoDelServidor, conJson, pedir, pedirConCuerpo, type Resultado } from "@/lib/peticiones"
 import type { TurnoId } from "@/lib/reportes"
 
 // ─── Lo que devuelve el servidor ─────────────────────────────────────────────
@@ -182,14 +183,99 @@ export async function leerOpcionesDeFiltro(): Promise<Resultado<OpcionesDeFiltro
 
 /**
  * Anula un cobro del historial, de cualquier día: deja de sumar y pasa a lo
- * anulado. Sólo el dueño (`puedeAnular`); el servidor lo vuelve a mirar. Con
- * el código del fallo: un 404 o un 409 es que la atención cambió entretanto
- * (otro ya la anuló), y la pantalla recarga en vez de sólo avisar.
+ * anulado. Sólo el dueño (`puedeAnular`); el servidor lo vuelve a mirar.
+ *
+ * - `corregirConAjuste`: el cobro ya entró en una liquidación o en un cierre
+ *   de caja (409 con ese código, #117). No cambió nada: la pantalla muestra
+ *   el mensaje del servidor, que dice cómo se corrige.
+ * - Cualquier otro 404 o 409 es que la atención cambió entretanto (otro ya la
+ *   anuló), y la pantalla recarga en vez de sólo avisar.
  */
-export async function anularCobro(id: string, motivo: string): Promise<ResultadoConCodigo<unknown>> {
-  return pedirConCodigo<unknown>(
+export type ResultadoDeAnulacion =
+  | { ok: true; datos: unknown }
+  | { ok: false; error: string; codigo: number | null; corregirConAjuste: boolean }
+
+export async function anularCobro(id: string, motivo: string): Promise<ResultadoDeAnulacion> {
+  const resultado = await pedirConCuerpo<unknown>(
     `/api/atenciones/${encodeURIComponent(id)}/anulacion`,
     "No se pudo anular el cobro",
     conJson("POST", motivo.trim() ? { motivo: motivo.trim() } : {})
   )
+  if (resultado.ok) return resultado
+  const { error, codigo, cuerpo } = resultado
+  return { ok: false, error, codigo, corregirConAjuste: codigoDelServidor(cuerpo) === CODIGO_CORREGIR_CON_AJUSTE }
+}
+
+// ─── Llenar horas (#72) ──────────────────────────────────────────────────────
+
+export interface ComparacionDeMetrica {
+  actual: number | null
+  anterior: number | null
+  /** Cantidades: cambio relativo (0,25 = 25 % más). Tasas: diferencia en puntos (0,05 = 5 puntos). `null`: sin base. */
+  cambio: number | null
+}
+
+export interface ReporteLlenarHoras {
+  zona: string
+  periodo: { desde: string; hasta: string; dias: number }
+  periodoAnterior: { desde: string; hasta: string }
+  ocupacion: {
+    porProfesional: {
+      id: string
+      nombre: string
+      minutosDisponibles: number
+      minutosOcupados: number
+      /** De 0 a 1; `null` sin horario disponible. */
+      ocupacion: number | null
+    }[]
+    total: { minutosDisponibles: number; minutosOcupados: number; ocupacion: number | null }
+  }
+  clientes: { nuevos: number; recurrentes: number; sinFicha: number }
+  inasistencia: {
+    total: { citas: number; noVino: number; tasa: number | null }
+    porProfesional: { id: string | null; nombre: string; citas: number; noVino: number; tasa: number | null }[]
+  }
+  comparacion: {
+    ocupacion: ComparacionDeMetrica
+    clientesNuevos: ComparacionDeMetrica
+    clientesRecurrentes: ComparacionDeMetrica
+    inasistencia: ComparacionDeMetrica
+  }
+  truncado: boolean
+}
+
+/**
+ * "Llenar horas": ocupación, clientes nuevos y recurrentes, inasistencia y la
+ * comparación con el período anterior. `desde` y `hasta` son días
+ * (`2026-10-19`), los dos incluidos; el servidor los lee en la zona del
+ * negocio. Sólo dueña y encargado.
+ */
+export async function leerLlenarHoras(desde: string, hasta: string): Promise<Resultado<ReporteLlenarHoras>> {
+  const parametros = new URLSearchParams({ desde, hasta })
+  return pedir<ReporteLlenarHoras>(`/api/reportes/ocupacion?${parametros}`, "No se pudo cargar el reporte para llenar horas")
+}
+
+/** `42 %` (sin decimales), o `—` si no hay con qué calcularlo. */
+export function formatearTasa(tasa: number | null): string {
+  return tasa === null ? "—" : `${Math.round(tasa * 100)} %`
+}
+
+/** `12 h 30 min`, `45 min`, `0 min`. */
+export function formatearMinutos(minutos: number): string {
+  const horas = Math.floor(minutos / 60)
+  const resto = minutos % 60
+  if (horas === 0) return `${resto} min`
+  return resto === 0 ? `${horas} h` : `${horas} h ${resto} min`
+}
+
+/**
+ * La comparación con el período anterior, para leer: `+25 %` en una
+ * cantidad, `+5 pts` en una tasa. `null` si no hay base (el anterior fue 0 o
+ * no se pudo calcular).
+ */
+export function formatearCambio(comparacion: ComparacionDeMetrica, tipo: "cantidad" | "tasa"): string | null {
+  if (comparacion.cambio === null) return null
+  const valor = Math.round(comparacion.cambio * 100)
+  const signo = valor > 0 ? "+" : valor < 0 ? "−" : ""
+  return `${signo}${Math.abs(valor)} ${tipo === "cantidad" ? "%" : "pts"}`
 }

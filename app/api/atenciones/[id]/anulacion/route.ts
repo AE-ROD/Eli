@@ -4,7 +4,17 @@ import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { transicionPermitida } from "@/lib/atenciones"
+import {
+  CODIGO_CORREGIR_CON_AJUSTE,
+  atencionBloqueada,
+  horaDeLaBase,
+  tomarCandadoDeCajaCompartido,
+  type MotivoDeBloqueo,
+} from "@/lib/bloqueos-de-dinero"
+import { tomarCandadosDeLaAtencion } from "@/lib/liquidacion"
 import { ESTADOS_DE_RESERVA } from "@/lib/llegadas"
+import { ORIGEN_FILA } from "@/lib/fila-virtual"
+import { programarAvisoDeFila } from "@/lib/fila-virtual-servidor"
 import { actorDeSesion, puedeAnular } from "@/lib/permisos"
 import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
 import {
@@ -15,6 +25,12 @@ import {
   respuestaDeError,
   tomarAtencion,
 } from "@/lib/tablero"
+
+/** Por qué no se anula una atención ya rendida, como lo lee quien anula. */
+const MENSAJE_DE_BLOQUEO: Record<MotivoDeBloqueo, string> = {
+  liquidacion: "Esta atención ya está en una liquidación cerrada: no se anula, corrígelo con un ajuste.",
+  caja: "Esta atención ya entró en un cierre de caja: no se anula, corrígelo con un ajuste.",
+}
 
 const anulacionSchema = z.object({
   motivo: z.string().trim().max(500).optional(),
@@ -61,25 +77,47 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const nombre = await nombreEnElNegocio(prisma, actor, usuarioId)
 
     const atencion = await prisma.$transaction(async (tx) => {
+      // Primero los candados de liquidación de quienes atendieron: un cierre
+      // que la esté incluyendo termina antes, y entonces el bloqueo de abajo
+      // lo ve; o esta anulación termina antes y el cierre ya no la toma.
+      await tomarCandadosDeLaAtencion(tx, actor.businessId, existente.id)
+      // Y el de la caja, compartido: un cierre de caja en curso termina antes
+      // de que se mire si la atención entró en él.
+      await tomarCandadoDeCajaCompartido(tx, actor.businessId)
+      // La hora de la anulación sale de la base, después de los candados, como
+      // el `paidAt` del cobro y el `hasta` de la caja: una sola fuente de hora
+      // aunque las instancias tengan relojes desfasados.
+      const ahora = await horaDeLaBase(tx)
+
       // Sobre el mismo estado con que se decidió el permiso: si entretanto la
       // cobraron, el encargado ya no puede anularla y esto no matchea.
       await tomarAtencion(tx, actor, existente.id, existente.status, {
         status: "anulada",
-        voidedAt: new Date(),
+        voidedAt: ahora,
         voidedById: usuarioId,
         voidedByName: nombre,
         voidReason: motivo || null,
       })
 
+      // Con la fila ya tomada: lo que entró en una liquidación cerrada o en
+      // un cierre de caja ya se rindió, y no se anula (#65, #68, #71). Se
+      // corrige con un ajuste en la liquidación.
+      const bloqueo = await atencionBloqueada(tx, actor.businessId, existente.id)
+      if (bloqueo) throw new ErrorDeAtencion(409, MENSAJE_DE_BLOQUEO[bloqueo.motivo], CODIGO_CORREGIR_CON_AJUSTE)
+
       if (existente.appointmentId && existente.status !== "finalizada") {
         await tx.appointment.updateMany({
           where: { id: existente.appointmentId, businessId: actor.businessId, status: { in: ESTADOS_DE_RESERVA } },
-          data: { status: "cancelada" },
+          // La cancela el negocio al anular (#121): queda quién y cuándo.
+          data: { status: "cancelada", canceladaPor: "negocio", canceladaEn: ahora },
         })
       }
 
       return leerAtencion(tx, actor, existente.id)
     })
+
+    // Se anuló a alguien que esperaba en la fila virtual: avisar al que sigue (#85).
+    if (existente.origen === ORIGEN_FILA && existente.status === "en-espera") programarAvisoDeFila(actor.businessId)
 
     return NextResponse.json(atencion)
   } catch (error) {

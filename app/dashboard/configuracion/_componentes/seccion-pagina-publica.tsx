@@ -28,7 +28,8 @@ interface PropsDeSeccionPaginaPublica {
 
 /**
  * El editor de la mini página pública (`/reservar/[slug]`): dirección,
- * contacto, color, medios de pago y la especialidad de cada profesional.
+ * contacto, enlace de reseñas en Google, color, medios de pago y la
+ * especialidad de cada profesional.
  * La categoría de los servicios se edita en Servicios, con cada servicio.
  * Las fotos esperan a que exista la subida: no se pegan URLs.
  */
@@ -71,6 +72,7 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
       comuna: guardada.comuna ?? "",
       whatsapp: mostrarTelefono(guardada.whatsapp),
       instagram: guardada.instagram ? `@${guardada.instagram}` : "",
+      enlaceResenas: guardada.enlaceResenas ?? "",
       color: guardada.color ?? previos.color,
       mediosDePago: guardada.mediosDePago,
     }))
@@ -133,6 +135,17 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
           <Campo etiqueta="Comuna" valor={datos.comuna} alCambiar={(valor) => cambiar("comuna", valor)} maximo={80} placeholder="Providencia" />
           <Campo etiqueta="WhatsApp del negocio" valor={datos.whatsapp} alCambiar={(valor) => cambiar("whatsapp", valor)} maximo={30} placeholder="+56 9 1234 5678" tipo="tel" />
           <Campo etiqueta="Instagram" valor={datos.instagram} alCambiar={(valor) => cambiar("instagram", valor)} maximo={200} placeholder="@tu.salon" />
+          <div className="sm:col-span-2">
+            <Campo
+              etiqueta="Enlace para dejar una reseña en Google"
+              valor={datos.enlaceResenas}
+              alCambiar={(valor) => cambiar("enlaceResenas", valor)}
+              maximo={500}
+              placeholder="https://g.page/r/…/review"
+              tipo="url"
+              ayuda="Lo copias desde tu Perfil de Empresa en Google, en «Pedir reseñas». Se usa en el correo que pide una reseña el día después de la visita, si lo activas en Mensajes a clientes."
+            />
+          </div>
         </div>
 
         <fieldset className="min-w-0">
@@ -239,12 +252,15 @@ interface PropsDeCampo {
   alCambiar: (valor: string) => void
   maximo: number
   placeholder?: string
-  tipo?: "text" | "tel"
+  tipo?: "text" | "tel" | "url"
   autoComplete?: string
+  /** Una línea debajo del campo que explica de dónde sale o para qué se usa. */
+  ayuda?: string
 }
 
-function Campo({ etiqueta, valor, alCambiar, maximo, placeholder, tipo = "text", autoComplete = "off" }: PropsDeCampo) {
+function Campo({ etiqueta, valor, alCambiar, maximo, placeholder, tipo = "text", autoComplete = "off", ayuda }: PropsDeCampo) {
   const id = useId()
+  const idDeLaAyuda = `${id}-ayuda`
   return (
     <div className="min-w-0">
       <label htmlFor={id} className={ETIQUETA}>
@@ -258,8 +274,14 @@ function Campo({ etiqueta, valor, alCambiar, maximo, placeholder, tipo = "text",
         maxLength={maximo}
         placeholder={placeholder}
         autoComplete={autoComplete}
+        aria-describedby={ayuda ? idDeLaAyuda : undefined}
         className={cn(CAMPO, "disabled:cursor-default disabled:bg-superficie disabled:text-texto-2 disabled:opacity-100")}
       />
+      {ayuda && (
+        <p id={idDeLaAyuda} className="mt-1.5 text-[13px] text-texto-2">
+          {ayuda}
+        </p>
+      )}
     </div>
   )
 }

@@ -2,11 +2,13 @@
  * Cómo se reparten las citas en la grilla de la agenda: qué horas se dibujan,
  * qué citas van en cada hora (vista Día) y en qué columna va cada cita cuando
  * se pisan con otras (vista Semana). Es cálculo puro sobre minutos desde la
- * medianoche: las vistas convierten antes los instantes a la hora local del
- * navegador, igual que el resto de la agenda.
+ * medianoche, en la hora del negocio (`zona`), igual que el resto de la
+ * agenda (#99): nunca en la del navegador.
  */
 
+import { comoTexto } from "@/lib/fechas"
 import { horaAMinutos, type FranjaHorario } from "@/lib/horario-dia"
+import { fechaYMinutosEn, rangoDelDiaEn } from "@/lib/zona-horaria"
 
 /** El rango que se dibujaba siempre. Nunca se muestra menos. */
 export const HORA_INICIO_MINIMA = 8
@@ -49,33 +51,37 @@ export function tramosDeFranjas(franjas: FranjaHorario[]): TramoEnMinutos[] {
 }
 
 /**
- * Una cita como tramo del día en que empieza, en la hora local del navegador.
- * Si termina otro día, el tramo llega hasta la medianoche.
+ * Una cita como tramo del día en que empieza, en la hora del negocio. Si
+ * termina otro día, el tramo llega hasta la medianoche.
  */
-export function tramoDeCita(cita: { startTime: string; endTime: string }): TramoEnMinutos {
+export function tramoDeCita(cita: { startTime: string; endTime: string }, zona: string): TramoEnMinutos {
   const inicio = new Date(cita.startTime)
   const fin = new Date(cita.endTime)
-  const inicioMin = inicio.getHours() * 60 + inicio.getMinutes()
-  const mismoDia = inicio.toDateString() === fin.toDateString()
-  const finMin = mismoDia ? fin.getHours() * 60 + fin.getMinutes() : fin > inicio ? MINUTOS_DEL_DIA : inicioMin
+  const deInicio = fechaYMinutosEn(inicio, zona)
+  const deFin = fechaYMinutosEn(fin, zona)
+  const inicioMin = deInicio.minutos
+  const finMin = deInicio.fecha === deFin.fecha ? deFin.minutos : fin > inicio ? MINUTOS_DEL_DIA : inicioMin
   return { inicioMin, finMin }
 }
 
 /**
- * La parte de un tramo [inicio, fin) que cae en el día `dia`, en minutos desde
- * su medianoche y en la hora local del navegador; `null` si no lo toca. Para
- * los bloqueos, que pueden durar varios días: cada día dibuja su pedazo.
- * Tocar la medianoche no es caer en el día (un bloqueo que termina a las
- * 00:00 no se dibuja en el día siguiente).
+ * La parte de un tramo [inicio, fin) que cae en el día `dia` del negocio, en
+ * minutos desde su medianoche; `null` si no lo toca. Para los bloqueos, que
+ * pueden durar varios días: cada día dibuja su pedazo. Tocar la medianoche no
+ * es caer en el día (un bloqueo que termina a las 00:00 no se dibuja en el
+ * día siguiente).
  */
-export function tramoEnElDia(tramo: { startTime: string; endTime: string }, dia: Date): TramoEnMinutos | null {
+export function tramoEnElDia(
+  tramo: { startTime: string; endTime: string },
+  dia: Date,
+  zona: string
+): TramoEnMinutos | null {
   const inicio = new Date(tramo.startTime)
   const fin = new Date(tramo.endTime)
-  const comienzo = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate())
-  const siguiente = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate() + 1)
+  const { desde: comienzo, hasta: siguiente } = rangoDelDiaEn(comoTexto(dia), zona)
   if (!(fin > comienzo) || !(inicio < siguiente) || !(fin > inicio)) return null
-  const inicioMin = inicio <= comienzo ? 0 : inicio.getHours() * 60 + inicio.getMinutes()
-  const finMin = fin >= siguiente ? MINUTOS_DEL_DIA : fin.getHours() * 60 + fin.getMinutes()
+  const inicioMin = inicio <= comienzo ? 0 : fechaYMinutosEn(inicio, zona).minutos
+  const finMin = fin >= siguiente ? MINUTOS_DEL_DIA : fechaYMinutosEn(fin, zona).minutos
   return { inicioMin, finMin }
 }
 

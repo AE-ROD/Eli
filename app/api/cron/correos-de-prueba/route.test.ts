@@ -10,6 +10,14 @@ vi.mock("@/lib/enviar-correo-de-prueba", () => ({
 
 const prismaMock = { business: { findMany: vi.fn() } }
 
+const mockMensajes = vi.fn()
+vi.mock("@/lib/mensajes-a-clientes", () => ({
+  ejecutarMensajesAClientes: (...args: unknown[]) => mockMensajes(...args),
+}))
+
+/** Lo que devuelve la corrida de mensajes a clientes; su contenido se prueba en su módulo. */
+const RESUMEN_DE_MENSAJES = { listaDeEspera: {}, teToca: {}, resenas: {}, incompleto: false }
+
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
 
 function pedido(cabeceras: Record<string, string> = {}): NextRequest {
@@ -38,6 +46,7 @@ describe("GET /api/cron/correos-de-prueba", () => {
     vi.stubEnv("CRON_SECRET", "secreto-del-cron")
     prismaMock.business.findMany.mockResolvedValue([])
     mockMandar.mockResolvedValue("enviado")
+    mockMensajes.mockResolvedValue(RESUMEN_DE_MENSAJES)
   })
   afterEach(() => {
     vi.useRealTimers()
@@ -54,6 +63,7 @@ describe("GET /api/cron/correos-de-prueba", () => {
 
     expect(respuesta.status).toBe(401)
     expect(prismaMock.business.findMany).not.toHaveBeenCalled()
+    expect(mockMensajes).not.toHaveBeenCalled()
   })
 
   it("sin CRON_SECRET falla cerrado", async () => {
@@ -97,7 +107,13 @@ describe("GET /api/cron/correos-de-prueba", () => {
 
     const respuesta = await GET(autorizado())
 
-    expect(await respuesta.json()).toEqual({ revisados: 4, enviados: 2, fallidos: 1, incompleto: false })
+    expect(await respuesta.json()).toEqual({
+      revisados: 4,
+      enviados: 2,
+      fallidos: 1,
+      incompleto: false,
+      mensajesAClientes: RESUMEN_DE_MENSAJES,
+    })
     expect(mockMandar.mock.calls.map(([negocio, correo]) => [negocio.id, correo.tipo])).toEqual([
       ["a", "consejo"],
       ["c", "quedan-3-dias"],
@@ -126,7 +142,7 @@ describe("GET /api/cron/correos-de-prueba", () => {
     expect(prismaMock.business.findMany).toHaveBeenCalledTimes(2)
     expect(prismaMock.business.findMany.mock.calls[0][0].cursor).toBeUndefined()
     expect(prismaMock.business.findMany.mock.calls[1][0]).toMatchObject({ cursor: { id: "n099" }, skip: 1, orderBy: { id: "asc" } })
-    expect(await respuesta.json()).toEqual({ revisados: 101, enviados: 1, fallidos: 0, incompleto: false })
+    expect(await respuesta.json()).toMatchObject({ revisados: 101, enviados: 1, fallidos: 0, incompleto: false })
   })
 
   it("si la base falla, 500 con lo contado hasta ahí y sin detalles", async () => {
@@ -137,6 +153,41 @@ describe("GET /api/cron/correos-de-prueba", () => {
     const respuesta = await GET(autorizado())
 
     expect(respuesta.status).toBe(500)
-    expect(await respuesta.json()).toEqual({ error: "Error interno", revisados: 0, enviados: 0, fallidos: 0 })
+    expect(await respuesta.json()).toEqual({
+      error: "Error interno",
+      revisados: 0,
+      enviados: 0,
+      fallidos: 0,
+      mensajesAClientes: RESUMEN_DE_MENSAJES,
+    })
+  })
+
+  it("al terminar corre los mensajes a clientes, con plazo hasta los 50 s del inicio (no tienen cron propio)", async () => {
+    const { GET } = await import("./route")
+    prismaMock.business.findMany.mockResolvedValueOnce([negocioDeHace("a", 3)])
+
+    await GET(autorizado())
+
+    expect(mockMensajes).toHaveBeenCalledTimes(1)
+    const [{ ahora, hasta }] = mockMensajes.mock.calls[0]
+    expect(ahora).toEqual(new Date("2026-10-23T13:00:00Z"))
+    expect(hasta).toBe(new Date("2026-10-23T13:00:00Z").getTime() + 50_000)
+    // Después de los correos de prueba, no antes.
+    expect(mockMandar.mock.invocationCallOrder[0]).toBeLessThan(mockMensajes.mock.invocationCallOrder[0])
+  })
+
+  it("los correos de prueba cortan a los 25 s para dejarles tiempo a los mensajes a clientes", async () => {
+    const { GET } = await import("./route")
+    prismaMock.business.findMany.mockResolvedValueOnce([negocioDeHace("a", 3), negocioDeHace("c", 4)])
+    mockMandar.mockImplementationOnce(async () => {
+      vi.setSystemTime(new Date("2026-10-23T13:00:26Z"))
+      return "enviado"
+    })
+
+    const respuesta = await GET(autorizado())
+
+    expect(mockMandar).toHaveBeenCalledTimes(1)
+    expect(await respuesta.json()).toMatchObject({ revisados: 1, enviados: 1, incompleto: true })
+    expect(mockMensajes).toHaveBeenCalledTimes(1)
   })
 })

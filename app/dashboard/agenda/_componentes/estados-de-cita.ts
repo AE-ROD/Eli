@@ -56,9 +56,21 @@ const ESTILOS = {
 } satisfies Record<string, EstiloDeEstado>
 
 /**
- * El estilo del estado de una cita. El endpoint no restringe el texto: uno
- * desconocido se pinta como pendiente, como hizo siempre la agenda.
+ * Una pendiente que el local tiene que confirmar o cancelar (#84): blanca con
+ * borde navy, para que salte entre las pendientes grises, y dicha en palabras.
  */
-export function estiloDeEstado(estado: string): EstiloDeEstado {
+const POR_CONFIRMAR: EstiloDeEstado = {
+  texto: "Por confirmar",
+  insignia: "bg-tarjeta text-navy ring-1 ring-inset ring-navy",
+  bloque: "bg-tarjeta border-l-navy text-navy ring-1 ring-inset ring-navy",
+}
+
+/**
+ * El estilo del estado de una cita. El endpoint no restringe el texto: uno
+ * desconocido se pinta como pendiente, como hizo siempre la agenda. Con
+ * `porConfirmar` (`estaPorConfirmar` de la cita), "Por confirmar".
+ */
+export function estiloDeEstado(estado: string, porConfirmar = false): EstiloDeEstado {
+  if (porConfirmar) return POR_CONFIRMAR
   return ESTILOS[estado as keyof typeof ESTILOS] ?? ESTILOS.pendiente
 }

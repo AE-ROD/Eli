@@ -15,12 +15,18 @@ export interface ServicioPublico {
 
 interface PropsDeSelectorServicio {
   servicios: ServicioPublico[]
-  seleccionado: ServicioPublico | null
-  onSeleccionar: (servicio: ServicioPublico) => void
+  /** Los elegidos, en el orden en que se eligieron: es el orden en que se hacen. */
+  seleccionados: ServicioPublico[]
+  /** Elige uno que no estaba o quita uno que estaba. */
+  onAlternar: (servicio: ServicioPublico) => void
+  /** Cuántos se pueden elegir (#89a). Con el tope lleno, los demás quedan deshabilitados. */
+  tope: number
 }
 
 /**
- * Los servicios del negocio, uno por tarjeta. El elegido se marca con el
+ * Los servicios del negocio, uno por tarjeta, y se pueden elegir varios
+ * (hasta `tope`, #89a). Con más de uno, el círculo lleva el número de orden:
+ * así se lee en qué orden se harán. El elegido se marca con el
  * azul de la Agenda, un borde navy de 2px y un tilde: el pastel solo no llega
  * al contraste de 3:1 contra el blanco, el borde sí.
  *
@@ -29,11 +35,14 @@ interface PropsDeSelectorServicio {
  * enfocar. El de reposo es del gris de texto secundario, como el de los
  * campos: el gris de los bordes decorativos no se distingue sobre blanco.
  */
-export function SelectorServicio({ servicios, seleccionado, onSeleccionar }: PropsDeSelectorServicio) {
+export function SelectorServicio({ servicios, seleccionados, onAlternar, tope }: PropsDeSelectorServicio) {
+  const lleno = seleccionados.length >= tope
   return (
     <ul className="grid gap-3 md:grid-cols-2">
       {servicios.map((servicio) => {
-        const elegido = seleccionado?.id === servicio.id
+        const posicion = seleccionados.findIndex((elegido) => elegido.id === servicio.id)
+        const elegido = posicion >= 0
+        const bloqueado = !elegido && lleno
         // El gris secundario da 4,3:1 sobre el azul suave del elegido: ahí el texto chico pasa a navy al 75%.
         const textoSecundario = elegido ? "text-navy/75" : "text-texto-2"
         return (
@@ -41,13 +50,16 @@ export function SelectorServicio({ servicios, seleccionado, onSeleccionar }: Pro
             <button
               type="button"
               aria-pressed={elegido}
-              onClick={() => onSeleccionar(servicio)}
+              disabled={bloqueado}
+              onClick={() => onAlternar(servicio)}
               className={cn(
                 "flex w-full flex-col rounded-boton-lg p-4 text-left text-navy squircle anillo-foco sm:p-5",
                 "transition-[background-color,box-shadow] duration-150 ease-suave",
                 elegido
                   ? "bg-azul-suave inset-ring-2 inset-ring-navy"
-                  : "bg-tarjeta inset-ring-1 inset-ring-texto-2 hover:bg-crema hover:inset-ring-navy"
+                  : bloqueado
+                    ? "cursor-not-allowed bg-tarjeta opacity-60 inset-ring-1 inset-ring-texto-2"
+                    : "bg-tarjeta inset-ring-1 inset-ring-texto-2 hover:bg-crema hover:inset-ring-navy"
               )}
             >
               <span className="flex w-full items-start justify-between gap-3">
@@ -66,7 +78,12 @@ export function SelectorServicio({ servicios, seleccionado, onSeleccionar }: Pro
                     elegido ? "bg-azul text-navy" : "inset-ring-[1.5px] inset-ring-texto-2"
                   )}
                 >
-                  {elegido && <Check className="size-3.5" strokeWidth={2.5} />}
+                  {elegido &&
+                    (seleccionados.length > 1 ? (
+                      <span className="text-xs font-semibold tabular-nums">{posicion + 1}</span>
+                    ) : (
+                      <Check className="size-3.5" strokeWidth={2.5} />
+                    ))}
                 </span>
               </span>
               <span className="mt-auto flex w-full items-center gap-4 pt-4 text-sm">

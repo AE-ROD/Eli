@@ -7,7 +7,7 @@
 
 import { horaAMinutos } from "@/lib/horario-dia"
 import { aE164Chile } from "@/lib/telefono"
-import { diaDeLaSemana, diasEntre, esFechaCalendario, fechaYMinutosEn } from "@/lib/zona-horaria"
+import { diaDeLaSemana, diasEntre, esFechaCalendario, fechaYMinutosEn, instanteEn } from "@/lib/zona-horaria"
 
 /**
  * Hasta cuántos días después de hoy (en el reloj del negocio) se puede
@@ -49,6 +49,54 @@ export function esDiaReservable(fecha: string, diasConAtencion: readonly number[
   return fechaNoReservable(fecha, ahora, zona) === null && diasConAtencion.includes(diaDeLaSemana(fecha))
 }
 
+/** Quien atiende, como lo conoce el calendario de la reserva: qué servicios hace (null = todos) y qué días trabaja. */
+export interface ProfesionalDelCalendario {
+  id: string
+  servicioIds: string[] | null
+  diasConAtencion: number[]
+}
+
+/**
+ * Los días de la semana (0 domingo a 6 sábado) que el calendario de la
+ * reserva deja elegir, con los mismos candidatos que usa la disponibilidad
+ * (N3): el profesional elegido, o "cualquiera" de los que hacen todos los
+ * servicios elegidos, cada uno con sus días (`diasConHorarioDelProfesional`).
+ * Así no se ofrece un día que después responde "No hay atención ese día".
+ *
+ * Sin equipo (`null`: todavía no se leyó o no se pudo; o lista vacía: el
+ * negocio no tiene profesionales) valen los días del horario publicado, que
+ * en un negocio sin profesionales es el del negocio y en uno con ellos es
+ * la unión de los suyos.
+ */
+export function diasDelCalendarioDeReserva(consulta: {
+  diasPublicados: readonly number[]
+  equipo: readonly ProfesionalDelCalendario[] | null
+  servicioIds: readonly string[]
+  profesionalId: string | null
+}): number[] {
+  const { diasPublicados, equipo, servicioIds, profesionalId } = consulta
+  if (!equipo || equipo.length === 0) return [...new Set(diasPublicados)].sort((a, b) => a - b)
+  const quienes = equipo.filter(
+    (profesional) =>
+      (!profesionalId || profesional.id === profesionalId) &&
+      servicioIds.every((servicioId) => profesional.servicioIds === null || profesional.servicioIds.includes(servicioId))
+  )
+  return [...new Set(quienes.flatMap((profesional) => profesional.diasConAtencion))].sort((a, b) => a - b)
+}
+
+/**
+ * Si el día ya elegido (`fecha`, "AAAA-MM-DD") quedó fuera de los días con
+ * atención (`diasDelCalendarioDeReserva`) después de cambiar de profesional
+ * o de servicios: entonces la reserva lo limpia, con su hora, y avisa. Sin
+ * día elegido, o con uno que no es una fecha, no hay nada que limpiar.
+ */
+export function elDiaElegidoQuedoSinAtencion(fecha: string, diasConAtencion: readonly number[]): boolean {
+  return esFechaCalendario(fecha) && !diasConAtencion.includes(diaDeLaSemana(fecha))
+}
+
+/** El aviso al limpiar el día elegido (`elDiaElegidoQuedoSinAtencion`). */
+export const AVISO_DIA_SIN_ATENCION = "El día que habías elegido no tiene atención para esta reserva. Elige otro."
+
 /**
  * Si la hora `hora` ("HH:MM") de `fecha` ya pasó en el reloj de la zona. La
  * hora en curso cuenta como pasada: a las 10:30 ya no se reserva a las 10:30.
@@ -59,6 +107,35 @@ export function yaPasoLaHora(fecha: string, hora: string, ahora: Date, zona: str
   const dias = diasEntre(hoy.fecha, fecha)
   if (dias !== 0) return dias < 0
   return horaAMinutos(hora) <= hoy.minutos
+}
+
+/**
+ * Si una hora elegida ya cae dentro del plazo para cancelar o cambiar
+ * (`plazoHoras`, ya validado con `plazoValido`): quien reserva con menos
+ * anticipación que el plazo no podrá cancelarla ni cambiarla por el enlace
+ * (QA#8). Es la regla de `dentroDelPlazo` (`lib/gestion-de-cita.ts`) al revés:
+ * falta MENOS que el plazo. Vive acá porque `gestion-de-cita` no entra al
+ * navegador. No lanza: una fecha u hora inválidas dan `false`.
+ */
+export function quedaSinCambiosPorElEnlace(fecha: string, hora: string, zona: string, plazoHoras: number, ahora: Date): boolean {
+  if (!esFechaCalendario(fecha) || !/^\d{2}:\d{2}$/.test(hora)) return false
+  try {
+    return instanteEn(fecha, hora, zona).getTime() - ahora.getTime() < plazoHoras * 60 * 60 * 1000
+  } catch {
+    return false
+  }
+}
+
+/** Lo que se dice antes de confirmar cuando la hora ya está dentro del plazo (QA#8). */
+export function avisoSinCambiosPorElEnlace(plazoHoras: number): string {
+  const plazo = `${plazoHoras} ${plazoHoras === 1 ? "hora" : "horas"}`
+  return `Tu hora es en menos de ${plazo}: una vez confirmada, no podrás cancelarla ni cambiarla por el enlace. Si lo necesitas, tendrás que contactar al local.`
+}
+
+/** Lo mismo, en la pantalla de reserva confirmada: en vez de "Gestiona tu cita acá". */
+export function avisoSinCambiosDespuesDeReservar(plazoHoras: number): string {
+  const plazo = `${plazoHoras} ${plazoHoras === 1 ? "hora" : "horas"}`
+  return `Tu hora es en menos de ${plazo}, así que no se puede cancelar ni cambiar por el enlace. Si lo necesitas, contacta directamente al local.`
 }
 
 // ─── Topes anti-abuso ────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react"
+import { useSession } from "next-auth/react"
 import { motion } from "framer-motion"
 import { X } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
@@ -8,20 +9,30 @@ import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { formatearMonto } from "@/lib/dinero"
-import { formatearHora, duracionParaMostrar } from "@/lib/fechas"
-import { sePuedeMover } from "@/lib/mover-cita"
+import { duracionParaMostrar } from "@/lib/fechas"
+import { formatearTiempoLibre as formatearDuracion } from "@/lib/horario-dia"
+import { sePuedeMover, type Advertencia } from "@/lib/mover-cita"
 import { puedeMarcarseNoVino } from "@/lib/campos-del-panel"
+import { actorDeSesion, puedeAsignarCitasAOtros, puedeReactivarCita, puedeResolverPorConfirmar } from "@/lib/permisos"
+import { Aviso } from "@/components/panel/aviso"
 import { cn } from "@/lib/utils"
-import { nombreDeCliente, type Cita } from "../_datos"
+import {
+  ESTADO_AL_REACTIVAR,
+  citaPorConfirmar,
+  destacaSinProfesional,
+  nombreDeCliente,
+  nombreDelProfesional,
+  quienCancelo,
+  reactivarCita,
+  type Cita,
+} from "../_datos"
 import { estiloDeEstado } from "./estados-de-cita"
+import { useAhora } from "./usar-ahora"
+import { useZonaDelNegocio } from "./zona-del-negocio"
+import { diaLargoEn, horaEn } from "../_hora-del-negocio"
 
 /** Un fundido corto al abrir y al cerrar: el panel no se desliza. */
 const FUNDIDO = { duration: DURACION.sombra, ease: CURVA.suave }
-
-/** `lunes, 8 de marzo`: el día de la cita, sin la hora. */
-function formatearFecha(iso: string) {
-  return new Date(iso).toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
-}
 
 interface PropsDePanelDeCita {
   cita: Cita
@@ -29,6 +40,12 @@ interface PropsDePanelDeCita {
   onCambiarEstado: (id: string, estado: string) => void
   /** Abre el modal para cambiar la fecha, la hora y (si se puede) el profesional. */
   onMover: (cita: Cita) => void
+  /** La cita ya se reactivó en el servidor: la agenda la muestra con su estado nuevo. */
+  onReactivada: (id: string, estado: string) => void
+  /** Abre el modal para elegirle profesional a una cita sin asignar (#103). */
+  onAsignar: (cita: Cita) => void
+  /** Si hay profesionales a quien asignar: entonces se dice que la cita no tiene y se ofrece asignarla. */
+  destacarSinProfesional?: boolean
 }
 
 /**
@@ -39,15 +56,37 @@ interface PropsDePanelDeCita {
  * Al cerrarlo, el foco vuelve a la cita que lo abrió; si no, el botón de
  * cerrar desaparecía con el foco adentro y el teclado volvía al principio.
  */
-export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover }: PropsDePanelDeCita) {
+export function PanelDeCita({
+  cita,
+  onCerrar,
+  onCambiarEstado,
+  onMover,
+  onReactivada,
+  onAsignar,
+  destacarSinProfesional = false,
+}: PropsDePanelDeCita) {
+  const { data: sesion } = useSession()
+  // El día y las horas de la cita, en la zona del negocio (#99).
+  const zona = useZonaDelNegocio()
+  const reactiva = puedeReactivarCita(actorDeSesion(sesion))
+  // Por confirmar tras faltas (#84): la confirman o la cancelan dueña y
+  // encargado. Al profesional el servidor le responde 401 a cualquier cambio
+  // de estado, así que no se le ofrece ninguno.
+  const porConfirmar = citaPorConfirmar(cita)
+  const resuelve = puedeResolverPorConfirmar(actorDeSesion(sesion))
+  const [reactivando, setReactivando] = useState(false)
+  const [advertencias, setAdvertencias] = useState<Advertencia[]>([])
+  const [errorAlReactivar, setErrorAlReactivar] = useState("")
+  // La plata de su atención ya se rindió: no se reactiva, se corrige con un ajuste.
+  const [seCorrigeConAjuste, setSeCorrigeConAjuste] = useState(false)
   const idDelTitulo = useId()
   const panel = useRef<HTMLElement>(null)
   const titulo = useRef<HTMLHeadingElement>(null)
   const abridor = useRef<HTMLElement | null>(null)
   const ultimaVista = useRef({ id: cita.id, estado: cita.status })
-  // La hora a la que se abrió el panel: con ella se decide si ya pasó la de la cita.
-  const [abiertoEn] = useState(() => Date.now())
-  const estado = estiloDeEstado(cita.status)
+  // Con esta hora se decide si ya pasó la de la cita: se renueva al pasar a otra y cada medio minuto (#100).
+  const ahora = useAhora(cita.id)
+  const estado = estiloDeEstado(cita.status, porConfirmar)
   const duracion = duracionParaMostrar(cita.startTime, cita.endTime)
 
   // Lo que tiene el foco al abrir el panel, o al pasar a otra cita, es lo que lo abrió.
@@ -72,13 +111,67 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover }: PropsD
     if (destino?.isConnected) destino.focus({ preventScroll: true })
   }
 
+  // Lo que se avisó al reactivar era de esta cita en este estado.
+  const vista = `${cita.id}:${cita.status}`
+  const [vistaDelAviso, setVistaDelAviso] = useState(vista)
+  if (vistaDelAviso !== vista) {
+    setVistaDelAviso(vista)
+    setAdvertencias([])
+    setErrorAlReactivar("")
+    setSeCorrigeConAjuste(false)
+  }
+
   const cerrada = cita.status === "cancelada" || cita.status === "no-asistio"
-  const puedeCompletarse = cita.status !== "completada" && !cerrada
-  const puedeCancelarse = !cerrada
+  // Por confirmar, primero se confirma: no se completa ni se marca "no vino" de una.
+  const puedeCompletarse = cita.status !== "completada" && !cerrada && !porConfirmar
+  // Una completada ya no se cancela: si fue un error, se devuelve a confirmada.
+  // Si el cliente ya llegó (atención viva en el Tablero), tampoco: el servidor
+  // responde 409 y la atención se anula primero en el Tablero (#136).
+  const puedeCancelarse =
+    !cerrada && cita.status !== "completada" && cita.conAtencion !== true && (!porConfirmar || resuelve)
+  const puedeConfirmarse = porConfirmar && resuelve
+  // Reactivar es de dueña y encargado. Una cancelada, sólo si no empezó; el
+  // servidor vuelve a mirar todo (y que no tenga una atención cobrada).
+  const puedeReactivarse =
+    reactiva &&
+    !seCorrigeConAjuste &&
+    ((cita.status === "cancelada" && new Date(cita.startTime).getTime() > ahora) ||
+      cita.status === "completada" ||
+      cita.status === "no-asistio")
+  // "No vino" marcado por error se deshace acá (#96): vuelve a confirmada, con las reglas de reactivar.
+  const textoDeReactivar =
+    cita.status === "cancelada" ? "Reactivar cita" : cita.status === "no-asistio" ? "Deshacer «No vino»" : "Devolver a confirmada"
+  // Si al volver choca (una cancelada o de "No vino" había soltado su hora, #140), el segundo envío guarda igual.
+  const textoDeReactivarIgual = cita.status === "no-asistio" ? "Deshacer igual" : "Reactivar igual"
+
+  const pedirReactivar = async (confirmar: boolean) => {
+    if (reactivando) return
+    setReactivando(true)
+    setErrorAlReactivar("")
+    const resultado = await reactivarCita(cita.id, { confirmar })
+    setReactivando(false)
+    if (resultado.tipo === "advertencias") return setAdvertencias(resultado.advertencias)
+    setAdvertencias([])
+    if (resultado.tipo === "corregir-con-ajuste") {
+      setSeCorrigeConAjuste(true)
+      return setErrorAlReactivar(resultado.error)
+    }
+    if (resultado.tipo === "error") return setErrorAlReactivar(resultado.error)
+    onReactivada(cita.id, ESTADO_AL_REACTIVAR)
+  }
   const puedeMoverse = sePuedeMover(cita.status)
+  // Sin profesional habiendo equipo (#103): se dice, y quien puede editarla
+  // (dueña y encargado, los que asignan) la asigna. El servidor vuelve a mirar
+  // el permiso y avisa si choca, como al mover.
+  const sinProfesional = destacaSinProfesional(cita, destacarSinProfesional)
+  const asigna = sinProfesional && puedeAsignarCitasAOtros(actorDeSesion(sesion))
+  const profesional = nombreDelProfesional(cita)
+  // Quién la canceló y cuándo (#134); nada en las canceladas de antes de guardarlo.
+  const canceladaPor = quienCancelo(cita)
   // "No vino" cuando ya pasó la hora de empezar: antes, si avisó, se cancela.
   // El servidor lo vuelve a verificar (y que no haya llegado al Tablero).
-  const puedeNoVenir = puedeMarcarseNoVino(cita.status) && new Date(cita.startTime).getTime() <= abiertoEn
+  const puedeNoVenir =
+    puedeMarcarseNoVino(cita.status) && new Date(cita.startTime).getTime() <= ahora && !porConfirmar
 
   return (
     <motion.aside
@@ -116,14 +209,15 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover }: PropsD
         <dl className="mt-4 divide-y divide-borde border-t border-borde text-sm">
           <Dato termino="Fecha">
             {/* `first-letter` y no `capitalize`, que ponía mayúscula en cada palabra. */}
-            <span className="block first-letter:uppercase">{formatearFecha(cita.startTime)}</span>
+            <span className="block first-letter:uppercase">{diaLargoEn(cita.startTime, zona)}</span>
           </Dato>
           <Dato termino="Horario">
             <span className="tabular-nums">
-              {formatearHora(cita.startTime)} – {formatearHora(cita.endTime)}
+              {horaEn(cita.startTime, zona)} – {horaEn(cita.endTime, zona)}
             </span>
           </Dato>
-          <Dato termino="Duración">{duracion} minutos</Dato>
+          <Dato termino="Duración">{formatearDuracion(duracion)}</Dato>
+          {(profesional || sinProfesional) && <Dato termino="Profesional">{profesional ?? "Sin asignar"}</Dato>}
           {cita.price != null && (
             <Dato termino="Precio">
               <span className="tabular-nums">{formatearMonto(cita.price)}</span>
@@ -134,6 +228,14 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover }: PropsD
               {estado.texto}
             </span>
           </Dato>
+          {canceladaPor && <Dato termino="Cancelada por">{canceladaPor}</Dato>}
+          {canceladaPor && cita.canceladaEn && (
+            <Dato termino="Cancelada el">
+              <span className="block first-letter:uppercase">
+                {diaLargoEn(cita.canceladaEn, zona)}, <span className="tabular-nums">{horaEn(cita.canceladaEn, zona)}</span>
+              </span>
+            </Dato>
+          )}
         </dl>
 
         {cita.notes && (
@@ -141,8 +243,63 @@ export function PanelDeCita({ cita, onCerrar, onCambiarEstado, onMover }: PropsD
         )}
       </div>
 
-      {(puedeCompletarse || puedeCancelarse || puedeMoverse || puedeNoVenir) && (
+      {porConfirmar && (
+        <Aviso tono="atencion" rol="status" titulo="Por confirmar">
+          {resuelve
+            ? "Este contacto faltó a citas anteriores. Confírmala si la aceptas, o cancélala: al confirmarla le avisamos por correo."
+            : "Este contacto faltó a citas anteriores: la confirma o la cancela la dueña o el encargado."}
+        </Aviso>
+      )}
+
+      {sinProfesional && (
+        <Aviso tono="atencion" rol="status" titulo="Sin profesional">
+          {asigna
+            ? "Mientras no tenga profesional, en la reserva pública ocupa la hora de todo el equipo. Asígnala para liberar a los demás."
+            : "Mientras no tenga profesional, en la reserva pública ocupa la hora de todo el equipo. La asigna la dueña o el encargado."}
+        </Aviso>
+      )}
+
+      {errorAlReactivar &&
+        (seCorrigeConAjuste ? (
+          <Aviso tono="atencion" rol="status" titulo="Se corrige con un ajuste">
+            {errorAlReactivar}
+          </Aviso>
+        ) : (
+          <Aviso>{errorAlReactivar}</Aviso>
+        ))}
+      {advertencias.length > 0 && (
+        <Aviso tono="atencion" rol="status" titulo={cita.status === "no-asistio" ? "Al volver a confirmarla:" : "Al reactivarla:"}>
+          <ul className="list-disc space-y-1 pl-4">
+            {advertencias.map((advertencia) => (
+              <li key={advertencia.tipo}>{advertencia.mensaje}</li>
+            ))}
+          </ul>
+        </Aviso>
+      )}
+
+      {(puedeConfirmarse || asigna || puedeCompletarse || puedeCancelarse || puedeMoverse || puedeNoVenir || puedeReactivarse) && (
         <div className="grid gap-2 px-1 pb-1">
+          {puedeConfirmarse && (
+            <Boton tamano="sm" className="w-full" onClick={() => onCambiarEstado(cita.id, "confirmada")}>
+              Confirmar reserva
+            </Boton>
+          )}
+          {puedeReactivarse && (
+            <Boton
+              tamano="sm"
+              className="w-full"
+              disabled={reactivando}
+              aria-busy={reactivando}
+              onClick={() => pedirReactivar(advertencias.length > 0)}
+            >
+              {advertencias.length > 0 ? textoDeReactivarIgual : textoDeReactivar}
+            </Boton>
+          )}
+          {asigna && (
+            <Boton tamano="sm" className="w-full" onClick={() => onAsignar(cita)}>
+              Asignar profesional
+            </Boton>
+          )}
           {puedeMoverse && (
             <Boton tamano="sm" variante="secundario" className="w-full" onClick={() => onMover(cita)}>
               Cambiar fecha y hora

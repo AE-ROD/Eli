@@ -6,6 +6,7 @@ import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { formatearHora } from "@/lib/fechas"
+import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import type { CitaDelDia } from "@/lib/horario-dia"
 import { cn } from "@/lib/utils"
 
@@ -31,7 +32,7 @@ export function CitasPorHora({ citas }: PropsDeCitasPorHora) {
                 {/* `min-w-0`: sin él, un nombre largo ensanchaba la fila más allá de la pantalla en vez de cortarse. */}
                 <span className="flex h-8 min-w-0 flex-1 items-center rounded-[12px] bg-azul-suave px-3 squircle">
                   <span className="truncate text-xs font-medium text-navy">
-                    {cita.customer?.name ?? "Sin cliente"} — {cita.title}
+                    {cita.customer ? nombreCompletoDeCliente(cita.customer) : "Sin cliente"} — {cita.title}
                   </span>
                 </span>
               </li>

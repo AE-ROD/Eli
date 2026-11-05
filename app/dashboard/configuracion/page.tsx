@@ -6,18 +6,30 @@ import { BarraSuperior } from "@/components/panel/barra-superior"
 import { SeccionHorario } from "./_componentes/seccion-horario"
 import { SeccionPaginaPublica } from "./_componentes/seccion-pagina-publica"
 import { SeccionServicios } from "./_componentes/seccion-servicios"
+import { SeccionProductos } from "./_componentes/seccion-productos"
 import { SelectorHorarioMiembro } from "./_componentes/selector-horario-miembro"
 import { SeccionPlazoDeCambios } from "./_componentes/seccion-plazo-de-cambios"
-import { apareceEnLaPagina, colorDelNegocio, normalizarInstagram } from "@/lib/pagina-del-negocio"
+import { SeccionPorConfirmar } from "./_componentes/seccion-por-confirmar"
+import { SeccionHoraValle } from "./_componentes/seccion-hora-valle"
+import { SeccionMensajesAClientes } from "./_componentes/seccion-mensajes-a-clientes"
+import { SeccionFilaVirtual } from "./_componentes/seccion-fila-virtual"
+import { contarEnviosDelMes } from "@/lib/envios-a-clientes"
+import { apareceEnLaPagina, colorDelNegocio, esEnlaceDeResenasValido, normalizarInstagram } from "@/lib/pagina-del-negocio"
 import {
   actorDeSesion,
   esDueño,
   gestionaElNegocio,
+  puedeActivarMensajesAClientes,
   puedeEditarHorarioDe,
   puedeEditarPaginaDelNegocio,
   puedeEditarPlazoDeCambios,
+  puedeFijarComisionDeProducto,
+  puedeGestionarProductos,
   puedeGestionarServicios,
+  puedeVerMensajesAClientes,
+  whereDeProductos,
 } from "@/lib/permisos"
+import { formatearProducto } from "@/lib/productos"
 import { mostrarTelefono } from "@/lib/telefono"
 
 export default async function PaginaConfiguracion() {
@@ -29,7 +41,10 @@ export default async function PaginaConfiguracion() {
   // general del negocio); encargado y profesional tienen su propio memberId.
   const memberIdPropio = actor.memberId
 
-  const [horariosActuales, servicios, pagina] = await Promise.all([
+  // El % de cada producto sólo se le pide a la base para la dueña.
+  const conPorcentaje = puedeFijarComisionDeProducto(actor)
+
+  const [horariosActuales, servicios, productos, pagina] = await Promise.all([
     prisma.workSchedule.findMany({
       where: { businessId: actor.businessId, memberId: memberIdPropio },
       orderBy: { dayOfWeek: "asc" },
@@ -38,6 +53,14 @@ export default async function PaginaConfiguracion() {
       where: { businessId: actor.businessId },
       orderBy: { createdAt: "asc" },
     }),
+    puedeGestionarProductos(actor)
+      ? prisma.producto.findMany({
+          where: whereDeProductos(actor),
+          select: { id: true, name: true, priceCents: true, active: true, commissionPercent: conPorcentaje },
+          orderBy: { createdAt: "asc" },
+          take: 200,
+        })
+      : Promise.resolve([]),
     // La página pública: todo rol la ve; sólo dueño y encargado la editan.
     prisma.business.findUnique({
       where: { id: actor.businessId },
@@ -48,9 +71,14 @@ export default async function PaginaConfiguracion() {
         comuna: true,
         whatsapp: true,
         instagram: true,
+        enlaceResenas: true,
         color: true,
         mediosDePago: true,
         cancelacionHorasAntes: true,
+        timezone: true,
+        listaDeEsperaActiva: true,
+        avisoDeVueltaActivo: true,
+        pideResenas: true,
         members: {
           select: { id: true, role: true, especialidad: true, user: { select: { name: true } } },
           orderBy: { createdAt: "asc" },
@@ -77,6 +105,10 @@ export default async function PaginaConfiguracion() {
     email: m.user.email,
     role: m.role,
   }))
+
+  // Mensajes a clientes (#74-#78): dueña y encargado los ven; el profesional no.
+  const mensajesDelMes =
+    pagina && puedeVerMensajesAClientes(actor) ? await contarEnviosDelMes(actor.businessId, pagina.timezone) : null
 
   const tieneEquipo = miembrosParaElSelector.length > 0
   const usuarioDeInstagram = normalizarInstagram(pagina?.instagram)
@@ -121,6 +153,7 @@ export default async function PaginaConfiguracion() {
                 comuna: pagina.comuna ?? "",
                 whatsapp: mostrarTelefono(pagina.whatsapp),
                 instagram: usuarioDeInstagram ? `@${usuarioDeInstagram}` : "",
+                enlaceResenas: pagina.enlaceResenas ?? "",
                 color: colorDelNegocio(pagina.color).clave,
                 mediosDePago: pagina.mediosDePago,
                 // Sólo quienes aparecen en "Equipo" de la página pública.
@@ -143,10 +176,41 @@ export default async function PaginaConfiguracion() {
           </div>
         )}
 
+        {/* Productos (#67): dueña y encargado; el % de comisión, sólo la dueña */}
+        {puedeGestionarProductos(actor) && (
+          <div id="productos" className="scroll-mt-24">
+            <SeccionProductos
+              productosIniciales={productos.map((producto) => formatearProducto(producto, conPorcentaje))}
+              conPorcentaje={conPorcentaje}
+            />
+          </div>
+        )}
+
         {/* Plazo del enlace para cancelar o reagendar: dueño y encargado */}
         {puedeEditarPlazoDeCambios(actor) && (
           <SeccionPlazoDeCambios horasIniciales={pagina?.cancelacionHorasAntes ?? 24} />
         )}
+        <SeccionPorConfirmar actor={actor} />
+        <SeccionHoraValle actor={actor} />
+
+        {pagina && mensajesDelMes && (
+          <div id="mensajes" className="scroll-mt-24">
+            <SeccionMensajesAClientes
+              inicial={{
+                interruptores: {
+                  listaDeEsperaActiva: pagina.listaDeEsperaActiva,
+                  avisoDeVueltaActivo: pagina.avisoDeVueltaActivo,
+                  pideResenas: pagina.pideResenas,
+                },
+                tieneEnlaceDeResenas: esEnlaceDeResenasValido(pagina.enlaceResenas),
+                puedeCambiar: puedeActivarMensajesAClientes(actor),
+                mes: mensajesDelMes,
+              }}
+            />
+          </div>
+        )}
+
+        <SeccionFilaVirtual actor={actor} />
       </div>
     </div>
   )

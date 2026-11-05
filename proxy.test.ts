@@ -95,6 +95,7 @@ describe("proxy — rate limit de los endpoints del panel", () => {
     "/api/equipo/invitacion/token-123/aceptar",
     "/api/cron/correos-de-prueba",
     "/api/correos/baja",
+    "/api/correos/baja-de-cliente",
   ])("no aplica el límite del panel a %s (tiene el suyo propio, o no corresponde)", async (ruta) => {
     const { default: proxy } = await import("./proxy")
 
@@ -119,6 +120,17 @@ describe("proxy — rate limit de los endpoints del panel", () => {
     expect(mockVerificarLimite).toHaveBeenCalledWith("panelEscritura", "usuario:usuario-1")
     expect(res.status).toBe(429)
   })
+
+  it.each(["/api/correos/bajas", "/api/correos/baja-otra-cosa", "/api/cronometro", "/api/reservaciones"])(
+    "%s lleva el límite del panel: una excepción cubre su ruta y lo que cuelga de ella, no cualquier nombre que empiece igual",
+    async (ruta) => {
+      const { default: proxy } = await import("./proxy")
+
+      await proxy(pedidoFalso(ruta, "POST"))
+
+      expect(mockVerificarLimite).toHaveBeenCalledWith("panelEscritura", "usuario:usuario-1")
+    }
+  )
 
   it("sin sesión, cuenta por IP en vez de romper la petición", async () => {
     const { default: proxy } = await import("./proxy")

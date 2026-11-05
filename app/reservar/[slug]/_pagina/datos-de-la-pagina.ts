@@ -1,5 +1,6 @@
 import { cache } from "react"
-import { horarioSemanalDeAtencion, type FranjaDelDia } from "@/lib/horario-de-atencion"
+import { horarioSemanalPublicado, leerProfesionalesQueAtienden, profesionalesConHorarioPublicado } from "@/lib/agenda-publica"
+import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import {
   apareceEnLaPagina,
   colorDelNegocio,
@@ -57,6 +58,10 @@ export interface PaginaDelNegocio {
   equipo: ProfesionalPublico[]
   servicios: ServicioDeLaPagina[]
   horario: FranjaDelDia[]
+  /** Hasta cuántas horas antes se puede cancelar o cambiar (`Business.cancelacionHorasAntes`), dicho antes de reservar (#83). */
+  plazoDeCambiosHoras: number
+  /** Si hay precios de hora valle (#89c): encendida y con alguna franja. */
+  horaValle: boolean
 }
 
 const textoONull = (texto: string | null) => (texto ?? "").trim() || null
@@ -65,6 +70,7 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
   const negocio = await prisma.business.findUnique({
     where: { slug },
     select: {
+      id: true,
       name: true,
       slug: true,
       timezone: true,
@@ -76,6 +82,10 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
       logoUrl: true,
       coverUrl: true,
       mediosDePago: true,
+      cancelacionHorasAntes: true,
+      horaValleActiva: true,
+      // Basta saber si hay alguna: la página no lista las franjas.
+      franjasDeHoraValle: { select: { id: true }, take: 1 },
       members: {
         select: { id: true, role: true, especialidad: true, fotoUrl: true, user: { select: { name: true } } },
         orderBy: { createdAt: "asc" },
@@ -93,6 +103,10 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
     },
   })
   if (!negocio) return null
+
+  // Los mismos profesionales que lee la reserva (rol y tope): si hay alguno,
+  // la reserva ofrece sólo sus horas, y el horario publicado es el de ellos.
+  const profesionales = await leerProfesionalesQueAtienden(prisma, negocio.id)
 
   const usuarioDeInstagram = normalizarInstagram(negocio.instagram)
   const enlaceDelPerfil = enlaceDeInstagram(negocio.instagram)
@@ -119,6 +133,19 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
         foto: imagenPublica(miembro.fotoUrl),
       })),
     servicios: negocio.services,
-    horario: horarioSemanalDeAtencion(negocio.workSchedules),
+    // Exactamente el que la reserva ofrece (QA#4): con profesionales, la
+    // unión de sus horarios efectivos (no el del negocio aparte, que prometía
+    // horas y días que la reserva no tiene); sin ellos, el del negocio.
+    horario: horarioSemanalPublicado(
+      negocio.workSchedules,
+      profesionales.length > 0
+        ? profesionalesConHorarioPublicado(
+            profesionales,
+            negocio.services.map((servicio) => servicio.id)
+          )
+        : null
+    ),
+    plazoDeCambiosHoras: negocio.cancelacionHorasAntes,
+    horaValle: negocio.horaValleActiva && negocio.franjasDeHoraValle.length > 0,
   }
 })

@@ -1,10 +1,18 @@
 import { describe, it, expect } from "vitest"
+import { instanteEn } from "@/lib/zona-horaria"
 import { citasPorHora, columnasDeSolape, rangoDeHoras, recortarAHoras, tramoDeCita, tramoEnElDia, tramosDeFranjas } from "./_disposicion"
 
 const h = (hora: number, minutos = 0) => hora * 60 + minutos
 
-/** Un instante ISO a esa hora local del 20 de octubre de 2026, como llegan las citas. */
-const local = (hora: number, minutos = 0, dia = 20) => new Date(2026, 9, dia, hora, minutos).toISOString()
+const ZONA = "America/Santiago"
+const dosCifras = (n: number) => String(n).padStart(2, "0")
+
+/**
+ * Un instante ISO a esa hora del negocio (Santiago) el `dia` de octubre de
+ * 2026, como llegan las citas. No depende de la zona de la máquina de los tests.
+ */
+const local = (hora: number, minutos = 0, dia = 20) =>
+  instanteEn(`2026-10-${dosCifras(dia)}`, `${dosCifras(hora)}:${dosCifras(minutos)}`, ZONA).toISOString()
 
 describe("rangoDeHoras", () => {
   it("sin nada, de 8 a 20 como siempre", () => {
@@ -62,11 +70,18 @@ describe("tramosDeFranjas", () => {
 
 describe("tramoDeCita", () => {
   it("lee la hora local del inicio y del fin", () => {
-    expect(tramoDeCita({ startTime: local(10, 15), endTime: local(11) })).toEqual({ inicioMin: h(10, 15), finMin: h(11) })
+    expect(tramoDeCita({ startTime: local(10, 15), endTime: local(11) }, ZONA)).toEqual({ inicioMin: h(10, 15), finMin: h(11) })
+  })
+
+  it("se lee en la zona del negocio, no en la del navegador (#99)", () => {
+    // 13:00 UTC: las 10:00 en Santiago, las 22:00 en Tokio.
+    const cita = { startTime: "2026-10-20T13:00:00.000Z", endTime: "2026-10-20T14:30:00.000Z" }
+    expect(tramoDeCita(cita, ZONA)).toEqual({ inicioMin: h(10), finMin: h(11, 30) })
+    expect(tramoDeCita(cita, "Asia/Tokyo")).toEqual({ inicioMin: h(22), finMin: h(23, 30) })
   })
 
   it("si termina al día siguiente, llega hasta la medianoche", () => {
-    expect(tramoDeCita({ startTime: local(23), endTime: local(1, 0, 21) })).toEqual({ inicioMin: h(23), finMin: h(24) })
+    expect(tramoDeCita({ startTime: local(23), endTime: local(1, 0, 21) }, ZONA)).toEqual({ inicioMin: h(23), finMin: h(24) })
   })
 })
 
@@ -165,18 +180,24 @@ describe("tramoEnElDia", () => {
   const dia20 = new Date(2026, 9, 20)
 
   it("un bloqueo dentro del día: sus minutos", () => {
-    expect(tramoEnElDia({ startTime: local(13), endTime: local(14) }, dia20)).toEqual({ inicioMin: h(13), finMin: h(14) })
+    expect(tramoEnElDia({ startTime: local(13), endTime: local(14) }, dia20, ZONA)).toEqual({ inicioMin: h(13), finMin: h(14) })
   })
 
   it("uno que viene del día anterior empieza a la medianoche; uno que sigue al otro día llega al final", () => {
-    expect(tramoEnElDia({ startTime: local(22, 0, 19), endTime: local(2) }, dia20)).toEqual({ inicioMin: 0, finMin: h(2) })
-    expect(tramoEnElDia({ startTime: local(22), endTime: local(2, 0, 21) }, dia20)).toEqual({ inicioMin: h(22), finMin: 24 * 60 })
-    expect(tramoEnElDia({ startTime: local(9, 0, 19), endTime: local(9, 0, 22) }, dia20)).toEqual({ inicioMin: 0, finMin: 24 * 60 })
+    expect(tramoEnElDia({ startTime: local(22, 0, 19), endTime: local(2) }, dia20, ZONA)).toEqual({ inicioMin: 0, finMin: h(2) })
+    expect(tramoEnElDia({ startTime: local(22), endTime: local(2, 0, 21) }, dia20, ZONA)).toEqual({ inicioMin: h(22), finMin: 24 * 60 })
+    expect(tramoEnElDia({ startTime: local(9, 0, 19), endTime: local(9, 0, 22) }, dia20, ZONA)).toEqual({ inicioMin: 0, finMin: 24 * 60 })
+  })
+
+  it("el día es el del negocio: un bloqueo de 22:00 a 23:00 en Santiago es del día siguiente en Tokio", () => {
+    const bloqueo = { startTime: local(22), endTime: local(23) }
+    expect(tramoEnElDia(bloqueo, dia20, "Asia/Tokyo")).toBeNull()
+    expect(tramoEnElDia(bloqueo, new Date(2026, 9, 21), "Asia/Tokyo")).toEqual({ inicioMin: h(10), finMin: h(11) })
   })
 
   it("no toca el día: null; terminar justo a la medianoche no es caer en el día siguiente", () => {
-    expect(tramoEnElDia({ startTime: local(10, 0, 21), endTime: local(11, 0, 21) }, dia20)).toBeNull()
-    expect(tramoEnElDia({ startTime: local(22, 0, 19), endTime: local(0) }, dia20)).toBeNull()
+    expect(tramoEnElDia({ startTime: local(10, 0, 21), endTime: local(11, 0, 21) }, dia20, ZONA)).toBeNull()
+    expect(tramoEnElDia({ startTime: local(22, 0, 19), endTime: local(0) }, dia20, ZONA)).toBeNull()
   })
 })
 

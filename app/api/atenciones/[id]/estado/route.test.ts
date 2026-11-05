@@ -179,6 +179,23 @@ describe("POST /api/atenciones/[id]/estado: transiciones", () => {
     expect(atencionGuardada("v-atencion")).toMatchObject({ status: "por-cobrar", readyAt: AHORA })
   })
 
+  it.each([
+    ["empezar", "v-espera", "en-atencion", "startedAt"],
+    ["terminar", "v-atencion", "por-cobrar", "readyAt"],
+  ])("%s guarda la hora de la base, no la de esta instancia (#152)", async (_caso, id, estado, campo) => {
+    const deLaBase = new Date("2026-10-06T15:00:07.000Z")
+    base.prisma.$queryRaw.mockImplementationOnce(async () => [{ ahora: deLaBase }])
+
+    expect((await mover(sesiones.dueña, id, estado)).status).toBe(200)
+
+    expect(atencionGuardada(id)[campo]).toEqual(deLaBase)
+    const [partes] = base.prisma.$queryRaw.mock.calls[0]
+    expect(partes.join("?")).toBe("SELECT clock_timestamp() AS ahora")
+    expect(base.prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      base.prisma.visit.updateMany.mock.invocationCallOrder[0]
+    )
+  })
+
   it("volver de por cobrar a en atención borra cuándo quedó lista para cobrar", async () => {
     await mover(sesiones.dueña, "v-por-cobrar", "en-atencion")
 

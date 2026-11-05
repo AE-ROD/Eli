@@ -11,7 +11,7 @@ vi.mock("@/lib/rate-limit", () => ({ verificarLimite: (...args: unknown[]) => mo
 
 vi.mock("@/lib/registro-de-errores", () => ({ registrarError: vi.fn() }))
 
-type Cliente = { businessId: string; phone: string | null; email: string | null; tags: string[] }
+type Cliente = { businessId: string; phone: string | null; email: string | null; tags: string[] | null }
 
 /** Clientes que ya están en la base: dos de este negocio, uno eliminado y uno ajeno. */
 let enLaBase: Cliente[] = []
@@ -24,21 +24,63 @@ let enLaBase: Cliente[] = []
 function cumple(cliente: Cliente, where: Record<string, unknown>): boolean {
   return Object.entries(where).every(([clave, valor]) => {
     if (clave === "AND") return (valor as Record<string, unknown>[]).every((sub) => cumple(cliente, sub))
+    if (clave === "OR") return (valor as Record<string, unknown>[]).some((sub) => cumple(cliente, sub))
     if (clave === "NOT") return !cumple(cliente, valor as Record<string, unknown>)
-    if (clave === "tags") return cliente.tags.includes((valor as { has: string }).has)
+    if (clave === "tags") {
+      const filtro = valor as { has?: string; equals?: null }
+      if ("equals" in filtro) return cliente.tags === null
+      // En SQL, `has` sobre una lista NULL es desconocido: ni ella ni su `NOT` la traen.
+      if (cliente.tags === null) throw new Error("has sobre tags NULL: el filtro debe preguntar antes por equals: null")
+      return cliente.tags.includes(filtro.has as string)
+    }
     if (clave === "businessId") return cliente.businessId === valor
     if (clave === "id") return false
     throw new Error(`where no esperado: ${clave}`)
   })
 }
 
+/**
+ * Candados de `pg_advisory_xact_lock` en memoria (#94): la transacción que lo
+ * pide espera a que se libere el de la misma clave, y lo suelta al terminar,
+ * como Postgres. Así dos importaciones en paralelo se ordenan de verdad.
+ */
+const candados = new Map<string, Promise<void>>()
+const clavesDeCandado: string[] = []
+
+const customer = {
+  findMany: vi.fn(async (args: { where: Record<string, unknown> }) =>
+    enLaBase.filter((c) => cumple(c, args.where)).map(({ phone, email }) => ({ phone, email }))
+  ),
+  createMany: vi.fn(async (args: { data: unknown[] }) => {
+    // Lo creado queda en la base: el lote o la importación siguiente lo ve.
+    enLaBase.push(...(args.data as Cliente[]))
+    return { count: args.data.length }
+  }),
+}
+
 const prismaMock = {
-  customer: {
-    findMany: vi.fn(async (args: { where: Record<string, unknown> }) =>
-      enLaBase.filter((c) => cumple(c, args.where)).map(({ phone, email }) => ({ phone, email }))
-    ),
-    createMany: vi.fn(async (args: { data: unknown[] }) => ({ count: args.data.length })),
-  },
+  customer,
+  $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
+    const soltar: (() => void)[] = []
+    const tx = {
+      customer,
+      $executeRaw: async (partes: TemplateStringsArray, ...valores: unknown[]) => {
+        if (!partes.join("?").includes("pg_advisory_xact_lock")) throw new Error("sólo candados")
+        const clave = String(valores[0])
+        clavesDeCandado.push(clave)
+        const anterior = candados.get(clave) ?? Promise.resolve()
+        const propio = new Promise<void>((resolver) => soltar.push(resolver))
+        candados.set(clave, anterior.then(() => propio))
+        await anterior
+        return 0
+      },
+    }
+    try {
+      return await fn(tx)
+    } finally {
+      soltar.forEach((liberar) => liberar())
+    }
+  }),
 }
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
 
@@ -58,8 +100,11 @@ const creados = () => prismaMock.customer.createMany.mock.calls.flatMap(([args])
 
 beforeEach(() => {
   vi.clearAllMocks()
+  candados.clear()
+  clavesDeCandado.length = 0
   enLaBase = [
-    { businessId: "negocio-1", phone: "9 1111 1111", email: null, tags: [] },
+    // Creado por la reserva pública o "Anotar sin reserva": `tags` en NULL. Igual cuenta como repetido.
+    { businessId: "negocio-1", phone: "9 1111 1111", email: null, tags: null },
     { businessId: "negocio-1", phone: null, email: "Existe@Correo.cl", tags: [] },
     // Eliminado: sin contacto, como lo deja la anonimización.
     { businessId: "negocio-1", phone: null, email: null, tags: [MARCA_DE_CLIENTE_ELIMINADO] },
@@ -236,5 +281,30 @@ describe("POST /api/clientes/importar", () => {
     expect(res.status).toBe(400)
     expect((await res.json()).error).toMatch(mensaje)
     expect(prismaMock.customer.createMany).not.toHaveBeenCalled()
+  })
+
+  it("cada lote toma el candado del negocio antes de leer los existentes (#94)", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesion("owner"))
+
+    await POST(pedido({ csv: "Nombre\nAna", mapeo: { nombre: 0 } }))
+
+    expect(clavesDeCandado).toEqual(["importar:negocio-1"])
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1)
+  })
+
+  it("dos importaciones simultáneas del mismo archivo no duplican clientes (#94)", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValue(sesion("owner"))
+    const csv = "Nombre;Apellido;Teléfono;Email\nAna;Rojas;+56933333333;ana@correo.cl\nBeto;Soto;;beto@correo.cl"
+
+    const [primera, segunda] = await Promise.all([
+      POST(pedido({ csv, mapeo: MAPEO })).then((res) => res.json()),
+      POST(pedido({ csv, mapeo: MAPEO })).then((res) => res.json()),
+    ])
+
+    expect(primera.creados + segunda.creados).toBe(2)
+    expect(primera.duplicados.length + segunda.duplicados.length).toBe(2)
+    expect(creados()).toHaveLength(2)
   })
 })

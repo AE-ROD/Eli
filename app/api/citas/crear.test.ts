@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase, pedido, sesiones } from "@/pruebas/datos"
+import { MENSAJE_MIEMBRO_NO_ATIENDE } from "@/lib/agenda-publica"
 
 /**
  * Crear una cita desde el panel con algo en el camino: otra cita del
@@ -207,5 +208,73 @@ describe("POST /api/citas: con qué estado puede nacer una cita", () => {
 
     expect(res.status).toBe(400)
     expect(citasDeMaria()).toHaveLength(0)
+  })
+})
+
+// El selector sólo ofrece a quienes atienden (#140), pero la API aceptaba a
+// cualquier miembro del negocio: con un pedido armado a mano, una cita del
+// encargado quedaba en una agenda que nadie atiende (#144).
+describe("POST /api/citas: a quién se le puede asignar", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    escenario()
+  })
+
+  it("a un profesional del negocio: se crea a su nombre", async () => {
+    const res = await crear(sesiones.dueña, nueva("2026-10-20", "11:00", "12:00", { memberId: "m-pedro" }))
+
+    expect(res.status).toBe(201)
+    expect(citasDeMaria()).toEqual([expect.objectContaining({ memberId: "m-pedro" })])
+  })
+
+  it("sin asignar: se crea sin profesional", async () => {
+    const res = await crear(sesiones.dueña, nueva("2026-10-20", "11:00", "12:00", { memberId: null }))
+
+    expect(res.status).toBe(201)
+    expect(citasDeMaria()).toEqual([expect.objectContaining({ memberId: null })])
+  })
+
+  it("al encargado, que no atiende: 400 con un mensaje claro y no se crea", async () => {
+    const res = await crear(
+      sesiones.dueña,
+      nueva("2026-10-20", "11:00", "12:00", { memberId: "m-encargado", confirmarAdvertencias: true })
+    )
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: MENSAJE_MIEMBRO_NO_ATIENDE })
+    expect(citasDeMaria()).toHaveLength(0)
+  })
+
+  it("el encargado tampoco se la asigna a sí mismo: 400 y no se crea", async () => {
+    const res = await crear(
+      sesiones.encargado,
+      nueva("2026-10-20", "11:00", "12:00", { memberId: "m-encargado", confirmarAdvertencias: true })
+    )
+
+    expect(res.status).toBe(400)
+    expect(citasDeMaria()).toHaveLength(0)
+  })
+
+  it("a un profesional de otro negocio: sigue siendo 404 y no se crea", async () => {
+    const res = await crear(
+      sesiones.dueña,
+      nueva("2026-10-20", "11:00", "12:00", { memberId: "m-ajeno", confirmarAdvertencias: true })
+    )
+
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: "Miembro no encontrado" })
+    expect(citasDeMaria()).toHaveLength(0)
+  })
+
+  it("el dueño de otro negocio no asigna al encargado de éste: 404, no el 400 que delataría que existe", async () => {
+    const antes = base.volcado()
+    const res = await crear(sesiones.dueñoAjeno, {
+      ...nueva("2026-10-20", "11:00", "12:00", { memberId: "m-encargado", confirmarAdvertencias: true }),
+      customerId: "c-ajeno",
+    })
+
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: "Miembro no encontrado" })
+    expect(base.volcado()).toEqual(antes)
   })
 })

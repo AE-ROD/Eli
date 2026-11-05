@@ -38,8 +38,21 @@ function descargarIcs(cita: CitaParaCalendario) {
 /**
  * "No te olvides": la reserva al calendario de quien reservó. Google con un
  * enlace (abre su pantalla de guardar, en otra pestaña) y el resto con el .ics.
+ *
+ * `conRecordatorio`: si el recordatorio va a llegar, según `confirmar`: se
+ * dejó correo y el cron alcanza a mandarlo (`recibiraRecordatorio`). Si no
+ * (sin correo, o reservando para hoy o tarde para el día siguiente), no se
+ * promete (N4).
  */
-export function AgregarAlCalendario({ cita, className }: { cita: CitaParaCalendario; className?: string }) {
+export function AgregarAlCalendario({
+  cita,
+  conRecordatorio,
+  className,
+}: {
+  cita: CitaParaCalendario
+  conRecordatorio: boolean
+  className?: string
+}) {
   return (
     <div className={cn(className)}>
       <Antetitulo>No te olvides</Antetitulo>
@@ -63,9 +76,11 @@ export function AgregarAlCalendario({ cita, className }: { cita: CitaParaCalenda
           iPhone, Outlook y otros (.ics)
         </Boton>
       </div>
-      <p className="mt-3.5 text-sm text-pretty text-texto-2">
-        Si dejaste tu correo, también te llega un recordatorio el día antes.
-      </p>
+      {conRecordatorio && (
+        <p className="mt-3.5 text-sm text-pretty text-texto-2">
+          También te llega un recordatorio por correo el día antes.
+        </p>
+      )}
     </div>
   )
 }

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import type { NextRequest } from "next/server"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
+import { enviarAvisoProfesional } from "@/lib/email"
 
 /**
  * La reserva pública por profesional (P5): la lista pública de quiénes
@@ -108,12 +109,35 @@ describe("GET /api/reservar/[slug]/profesionales", () => {
     expect(status).toBe(200)
     expect(cuerpo).toEqual({
       profesionales: [
-        { id: "m-carla", nombre: "Carla Profesional", especialidad: null, fotoUrl: null, servicioIds: null },
-        { id: "m-pedro", nombre: "Pedro Profesional", especialidad: null, fotoUrl: null, servicioIds: ["s-color"] },
+        { id: "m-carla", nombre: "Carla Profesional", especialidad: null, fotoUrl: null, servicioIds: null, diasConAtencion: [LUNES] },
+        { id: "m-pedro", nombre: "Pedro Profesional", especialidad: null, fotoUrl: null, servicioIds: ["s-color"], diasConAtencion: [LUNES] },
       ],
     })
     // Ni correos ni roles en la respuesta.
     expect(JSON.stringify(cuerpo)).not.toMatch(/@|worker|admin/)
+  })
+
+  it("N3: los días en que atiende cada uno, con su horario efectivo (el propio, o el del negocio) y sólo del negocio del slug", async () => {
+    escenario({
+      workSchedule: [
+        { id: "h-general", businessId: NEGOCIO, memberId: null, dayOfWeek: LUNES, startTime: "09:00", endTime: "12:00" },
+        { id: "h-general-v", businessId: NEGOCIO, memberId: null, dayOfWeek: 5, startTime: "09:00", endTime: "18:00" },
+        ...[1, 2, 3].map((dia) => ({ id: `h-carla-${dia}`, businessId: NEGOCIO, memberId: "m-carla", dayOfWeek: dia, startTime: "14:00", endTime: "20:00" })),
+        { id: "h-carla-inactivo", businessId: NEGOCIO, memberId: "m-carla", dayOfWeek: 6, startTime: "10:00", endTime: "14:00", active: false },
+        { id: "h-ajeno", businessId: OTRO_NEGOCIO, memberId: null, dayOfWeek: 0, startTime: "09:00", endTime: "12:00" },
+      ],
+    })
+
+    const { cuerpo } = await profesionales()
+
+    expect(cuerpo.profesionales.map((profesional: { id: string; diasConAtencion: number[] }) => [profesional.id, profesional.diasConAtencion])).toEqual([
+      // Carla, en su horario propio: ni el viernes del negocio ni su sábado inactivo.
+      ["m-carla", [1, 2, 3]],
+      // Pedro, sin horario propio, en el del negocio; los días sin horario
+      // general vale el de los miembros (`franjasDeAtencion`), igual que en
+      // la disponibilidad.
+      ["m-pedro", [LUNES, 2, 3, 5]],
+    ])
   })
 
   it("la foto sale saneada: sólo rutas del mismo sitio", async () => {
@@ -148,13 +172,13 @@ describe("disponibilidad por profesional", () => {
     escenario({ appointment: [cita("c-1", "m-carla", "10:00")] })
 
     expect((await horas("&profesionalId=m-carla")).cuerpo).toEqual({ slots: ["09:00", "11:00"] })
-    expect((await horas("&profesionalId=m-pedro")).cuerpo).toEqual({ slots: ["09:00", "10:00", "11:00"] })
+    expect((await horas("&profesionalId=m-pedro")).cuerpo).toEqual({ slots: ["09:00", "09:30", "10:00", "10:30", "11:00"] })
   })
 
   it("con cualquiera: la hora sigue libre mientras uno esté libre", async () => {
     escenario({ appointment: [cita("c-1", "m-carla", "10:00"), cita("c-2", "m-pedro", "11:00")] })
 
-    expect((await horas("")).cuerpo).toEqual({ slots: ["09:00", "10:00", "11:00"] })
+    expect((await horas("")).cuerpo).toEqual({ slots: ["09:00", "09:30", "10:00", "11:00"] })
   })
 
   it("con cualquiera: la hora se va cuando todos están ocupados", async () => {
@@ -173,7 +197,7 @@ describe("disponibilidad por profesional", () => {
   it("las citas canceladas no ocupan", async () => {
     escenario({ appointment: [cita("c-1", "m-carla", "10:00", { status: "cancelada" })] })
 
-    expect((await horas("&profesionalId=m-carla")).cuerpo).toEqual({ slots: ["09:00", "10:00", "11:00"] })
+    expect((await horas("&profesionalId=m-carla")).cuerpo).toEqual({ slots: ["09:00", "09:30", "10:00", "10:30", "11:00"] })
   })
 
   it("respeta el bloqueo del profesional y el de todo el negocio", async () => {
@@ -185,7 +209,7 @@ describe("disponibilidad por profesional", () => {
     })
 
     expect((await horas("&profesionalId=m-carla")).cuerpo).toEqual({ slots: ["10:00"] })
-    expect((await horas("&profesionalId=m-pedro")).cuerpo).toEqual({ slots: ["09:00", "10:00"] })
+    expect((await horas("&profesionalId=m-pedro")).cuerpo).toEqual({ slots: ["09:00", "09:30", "10:00"] })
   })
 
   it("sólo los que hacen el servicio: Pedro, que sólo hace color, no ofrece corte", async () => {
@@ -207,7 +231,7 @@ describe("disponibilidad por profesional", () => {
       ],
     })
 
-    expect((await horas("&profesionalId=m-carla")).cuerpo).toEqual({ slots: ["15:00", "16:00"] })
+    expect((await horas("&profesionalId=m-carla")).cuerpo).toEqual({ slots: ["15:00", "15:30", "16:00"] })
   })
 
   it("aislamiento: un profesional de otro negocio, el encargado o uno inventado son 404 indistinguibles", async () => {
@@ -223,7 +247,7 @@ describe("disponibilidad por profesional", () => {
   it("las citas de otro negocio no ocupan", async () => {
     escenario({ appointment: [{ ...cita("c-ajena", "m-ajeno", "10:00"), businessId: OTRO_NEGOCIO }] })
 
-    expect((await horas("&profesionalId=m-carla")).cuerpo).toEqual({ slots: ["09:00", "10:00", "11:00"] })
+    expect((await horas("&profesionalId=m-carla")).cuerpo).toEqual({ slots: ["09:00", "09:30", "10:00", "10:30", "11:00"] })
   })
 })
 
@@ -324,5 +348,61 @@ describe("confirmar por profesional", () => {
     // Y una ofrecida se acepta.
     const [primera] = (await horas("")).cuerpo.slots
     expect((await confirmar(primera)).status).toBe(201)
+  })
+})
+
+describe("aviso de nueva reserva al profesional (#114)", () => {
+  const avisados = () =>
+    vi.mocked(enviarAvisoProfesional).mock.calls.map(([datos]) => datos.emailProfesional).sort()
+
+  it("con profesional elegido: al dueño y a él", async () => {
+    escenario()
+    expect((await confirmar("10:00", { profesionalId: "m-pedro" })).status).toBe(201)
+    expect(avisados()).toEqual(["duena@uno.test", "pedro@uno.test"])
+  })
+
+  it("con cualquiera: al dueño y al que quedó asignado", async () => {
+    escenario({ appointment: [cita("c-1", "m-carla", "09:00")] })
+    expect((await confirmar("10:00")).cuerpo.profesional.id).toBe("m-pedro")
+    expect(avisados()).toEqual(["duena@uno.test", "pedro@uno.test"])
+  })
+
+  it("si el profesional es el mismo usuario del dueño, va una sola vez", async () => {
+    const datos = datosBase()
+    escenario({
+      businessMember: datos.businessMember.map((miembro) => (miembro.id === "m-pedro" ? { ...miembro, userId: "u-duena" } : miembro)),
+    })
+    expect((await confirmar("10:00", { profesionalId: "m-pedro" })).status).toBe(201)
+    expect(avisados()).toEqual(["duena@uno.test"])
+  })
+
+  it("negocio sin profesionales: sólo al dueño", async () => {
+    const datos = datosBase()
+    escenario({ businessMember: datos.businessMember.filter((miembro) => miembro.role !== "worker") })
+    expect((await confirmar("10:00")).status).toBe(201)
+    expect(avisados()).toEqual(["duena@uno.test"])
+  })
+
+  it("aislamiento: si la cita queda con un memberId de otro negocio, ese miembro no recibe aviso; sólo el dueño", async () => {
+    escenario()
+    // La cita vuelve de la base a nombre de m-ajeno (de OTRO_NEGOCIO): el
+    // correo se busca por id Y negocio, así que no aparece carla@dos.test.
+    const crearOriginal = vi.mocked(base.prisma.appointment.create).getMockImplementation()!
+    vi.mocked(base.prisma.appointment.create).mockImplementationOnce(async (args) => ({
+      ...(await crearOriginal(args)),
+      memberId: "m-ajeno",
+    }))
+
+    expect((await confirmar("10:00", { profesionalId: "m-pedro" })).status).toBe(201)
+    expect(avisados()).toEqual(["duena@uno.test"])
+  })
+
+  it("la respuesta 201 no expone correos de nadie", async () => {
+    escenario()
+    const { status, cuerpo } = await confirmar("10:00", { profesionalId: "m-pedro", email: "lucia@cliente.test" })
+
+    expect(status).toBe(201)
+    expect(avisados()).toEqual(["duena@uno.test", "pedro@uno.test"])
+    expect(JSON.stringify(cuerpo)).not.toContain("@")
   })
 })

@@ -3,11 +3,12 @@
 import { useRef, type KeyboardEvent } from "react"
 import { cn } from "@/lib/utils"
 
-export type VistaDeReporte = "cobradas" | "anuladas"
+export type VistaDeReporte = "cobradas" | "anuladas" | "llenar-horas"
 
 const VISTAS: { id: VistaDeReporte; texto: string }[] = [
   { id: "cobradas", texto: "Cobradas" },
   { id: "anuladas", texto: "Anuladas" },
+  { id: "llenar-horas", texto: "Llenar horas" },
 ]
 
 /** El id de la pestaña de cada vista: el panel lo nombra en `aria-labelledby`. */
@@ -22,11 +23,12 @@ interface PropsDeSelectorDeVista {
 }
 
 /**
- * Lo cobrado o lo anulado, como pestañas (patrón de pestañas de ARIA): con
- * las flechas se pasa de una a otra, y Tab entra sólo a la elegida. Lo ve
- * sólo quien puede ver lo anulado (`puedeVerAnuladas`).
+ * Lo cobrado, lo anulado o "Llenar horas", como pestañas (patrón de pestañas
+ * de ARIA): con las flechas se pasa de una a otra, y Tab entra sólo a la
+ * elegida. Lo ve sólo quien puede ver lo anulado (`puedeVerAnuladas`), que es
+ * también quien ve "Llenar horas" (`puedeVerIngresosDelNegocio`).
  *
- * Una píldora blanca con las dos pestañas adentro; la elegida, en navy, como
+ * Una píldora blanca con las pestañas adentro; la elegida, en navy, como
  * los segmentos de los formularios. Cada pestaña mide 40 px y el `::after` la
  * lleva a 44 para el dedo.
  */
@@ -61,7 +63,7 @@ export function SelectorDeVista({ idBase, idDelPanel, vista, onCambiar }: PropsD
       role="tablist"
       aria-label="Qué mirar"
       onKeyDown={alTeclear}
-      className="inline-flex gap-1 rounded-full bg-tarjeta p-1 shadow-sm"
+      className="inline-flex max-w-full gap-1 overflow-x-auto rounded-full bg-tarjeta p-1 shadow-sm"
     >
       {VISTAS.map(({ id, texto }) => {
         const elegida = vista === id
@@ -76,7 +78,7 @@ export function SelectorDeVista({ idBase, idDelPanel, vista, onCambiar }: PropsD
             tabIndex={elegida ? 0 : -1}
             onClick={() => elegir(id)}
             className={cn(
-              "relative h-10 rounded-full px-5 text-sm font-medium anillo-foco after:absolute after:inset-x-0 after:-inset-y-0.5",
+              "relative h-10 shrink-0 whitespace-nowrap rounded-full px-4 text-sm font-medium sm:px-5 anillo-foco after:absolute after:inset-x-0 after:-inset-y-0.5",
               "transition-colors duration-150 ease-suave",
               elegida ? "bg-navy text-white" : "text-texto-2 hover:bg-superficie hover:text-navy"
             )}

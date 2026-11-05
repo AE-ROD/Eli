@@ -70,6 +70,18 @@ describe("GET /api/configuracion/servicios", () => {
     expect(argumentos.where.businessId).toBe("negocio-2")
   })
 
+  it("devuelve la frecuencia de cada servicio, para que el modal la muestre al editar (#75)", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.service.findMany.mockResolvedValueOnce([{ id: "s1", name: "Corte", frecuenciaDias: 30 }])
+
+    const res = await GET()
+
+    expect(prismaMock.service.findMany.mock.calls[0][0].select).toBeUndefined()
+    expect((await res.json())[0].frecuenciaDias).toBe(30)
+  })
+
   it("un profesional (worker) recibe 401", async () => {
     const { GET } = await import("./route")
 
@@ -217,3 +229,32 @@ describe("POST /api/configuracion/servicios — categoría", () => {
     expect(prismaMock.service.create.mock.calls[1][0].data.category).toBeNull()
   })
 })
+
+describe("POST /api/configuracion/servicios — frecuencia de visitas", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it("se guarda si viene, y sin ella queda en null", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.service.create.mockResolvedValueOnce({ id: "srv-1" })
+    await POST(pedidoFalso({ name: "Corte", duration: 30, frecuenciaDias: 28 }))
+    expect(prismaMock.service.create.mock.calls[0][0].data.frecuenciaDias).toBe(28)
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.service.create.mockResolvedValueOnce({ id: "srv-2" })
+    await POST(pedidoFalso({ name: "Corte", duration: 30 }))
+    expect(prismaMock.service.create.mock.calls[1][0].data.frecuenciaDias).toBeNull()
+  })
+
+  it("fuera de 7 a 365 es 400 y no crea nada", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    const res = await POST(pedidoFalso({ name: "Corte", duration: 30, frecuenciaDias: 400 }))
+
+    expect(res.status).toBe(400)
+    expect(prismaMock.service.create).not.toHaveBeenCalled()
+  })
+})
+

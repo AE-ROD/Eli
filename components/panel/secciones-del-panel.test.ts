@@ -1,6 +1,21 @@
 import { describe, expect, it } from "vitest"
 import { MODULOS } from "@/lib/modulos"
-import { SECCIONES_DEL_PANEL, seccionDeLaRuta } from "./secciones-del-panel"
+import {
+  actorDeSesion,
+  puedeEditarComisiones,
+  puedeVerCierresDeCaja,
+  puedeVerLiquidacionesDelEquipo,
+  veMiPlata,
+  type Actor,
+} from "@/lib/permisos"
+import {
+  SECCIONES_DE_LA_PLATA,
+  SECCIONES_DEL_PANEL,
+  SIN_ACCESO_A_LA_PLATA,
+  seccionDeLaRuta,
+  seccionesDeLaPlata,
+  type AccesoALaPlata,
+} from "./secciones-del-panel"
 
 describe("seccionDeLaRuta", () => {
   it("el inicio es sólo /dashboard, con o sin barra final", () => {
@@ -51,6 +66,10 @@ describe("SECCIONES_DEL_PANEL", () => {
     expect(SECCIONES_DEL_PANEL.map((seccion) => seccion.id)).toEqual([
       "inicio",
       ...MODULOS.map((modulo) => modulo.id),
+      "mi-plata",
+      "caja",
+      "liquidaciones",
+      "comisiones",
       "configuracion",
       "ayuda",
     ])
@@ -66,5 +85,55 @@ describe("SECCIONES_DEL_PANEL", () => {
   it("no repiten ruta", () => {
     const rutas = SECCIONES_DEL_PANEL.map((seccion) => seccion.ruta)
     expect(new Set(rutas).size).toBe(rutas.length)
+  })
+})
+
+describe("las secciones de la plata del equipo", () => {
+  /** Lo mismo que calcula el layout del panel en el servidor. */
+  const accesoDe = (actor: Actor | null): AccesoALaPlata => ({
+    miPlata: veMiPlata(actor),
+    caja: puedeVerCierresDeCaja(actor),
+    liquidaciones: puedeVerLiquidacionesDelEquipo(actor),
+    comisiones: puedeEditarComisiones(actor),
+  })
+  const sesion = (user: Record<string, unknown>) => actorDeSesion({ user } as never)
+  const idsPara = (actor: Actor | null) => seccionesDeLaPlata(accesoDe(actor)).map((seccion) => seccion.id)
+
+  it("cada una se reconoce por su ruta, en neutro (no son módulos de la landing)", () => {
+    for (const [ruta, id] of [
+      ["/dashboard/comisiones", "comisiones"],
+      ["/dashboard/liquidaciones/abc", "liquidaciones"],
+      ["/dashboard/mi-plata", "mi-plata"],
+      ["/dashboard/caja", "caja"],
+    ]) {
+      expect(seccionDeLaRuta(ruta)?.id).toBe(id)
+      expect(seccionDeLaRuta(ruta)?.modulo).toBeUndefined()
+    }
+    expect(MODULOS.map((modulo) => modulo.ruta)).not.toContain("/dashboard/caja")
+  })
+
+  it("la dueña ve caja, liquidaciones y comisiones; Mi plata no, porque no es miembro", () => {
+    expect(idsPara(sesion({ role: "owner", businessId: "n1" }))).toEqual(["caja", "liquidaciones", "comisiones"])
+  })
+
+  it("el encargado ve Mi plata, caja y liquidaciones, no comisiones", () => {
+    expect(idsPara(sesion({ role: "admin", businessId: "n1", memberId: "m1" }))).toEqual(["mi-plata", "caja", "liquidaciones"])
+  })
+
+  it("el profesional sólo ve Mi plata", () => {
+    expect(idsPara(sesion({ role: "worker", businessId: "n1", memberId: "m2" }))).toEqual(["mi-plata"])
+  })
+
+  it("falla cerrado: sin sesión, sin acceso o profesional sin memberId, ninguna", () => {
+    expect(idsPara(null)).toEqual([])
+    expect(idsPara(sesion({ role: "worker", businessId: "n1" }))).toEqual([])
+    expect(seccionesDeLaPlata(undefined)).toEqual([])
+    expect(seccionesDeLaPlata(null)).toEqual([])
+    expect(seccionesDeLaPlata(SIN_ACCESO_A_LA_PLATA)).toEqual([])
+  })
+
+  it("con todo el acceso, las cuatro en su orden", () => {
+    const todas = { miPlata: true, caja: true, liquidaciones: true, comisiones: true }
+    expect(seccionesDeLaPlata(todas)).toEqual([...SECCIONES_DE_LA_PLATA])
   })
 })

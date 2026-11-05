@@ -9,6 +9,7 @@ import {
   datosBase,
   linea,
   lineaDeLaDueña,
+  lineaDeProducto,
   pedido,
   sesiones,
 } from "@/pruebas/datos"
@@ -331,6 +332,151 @@ describe("PUT /api/atenciones/[id]: servicios que ya no se ofrecen", () => {
     const res = await PUT(pedido(URL, { lineas: [{ servicioId: "s-viejo" }] }), conId("v-mixta"))
 
     expect(res.status).toBe(400)
+  })
+})
+
+describe("PUT /api/atenciones/[id]: productos (#67)", () => {
+  it("la encargada agrega un producto: línea tipo producto, a nombre de quien lo vendió, con el precio del catálogo, y suma al total", async () => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.encargado)
+
+    const res = await PUT(
+      pedido(URL, {
+        lineas: [
+          { servicioId: "s-corte", profesional: "m-carla" },
+          { productoId: "p-shampoo", profesional: "m-pedro" },
+        ],
+      }),
+      conId("v-pedro")
+    )
+    const data = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(lineasDe("v-pedro")).toEqual([
+      expect.objectContaining({ tipo: "servicio", serviceId: "s-corte", productId: null }),
+      expect.objectContaining({
+        tipo: "producto",
+        serviceId: null,
+        productId: "p-shampoo",
+        serviceName: "Shampoo",
+        memberId: "m-pedro",
+        professionalName: "Pedro Profesional",
+        priceCents: centavos(12000),
+      }),
+    ])
+    expect(data.total).toBe(20000)
+    expect(data.lineas[1]).toMatchObject({ tipo: "producto", productoId: "p-shampoo", servicioId: null, servicio: "Shampoo" })
+  })
+
+  it("dos unidades son dos líneas: no hay cantidad", async () => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const res = await PUT(
+      pedido(URL, { lineas: [{ productoId: "p-cera", profesional: "m-pedro" }, { productoId: "p-cera", profesional: "m-pedro", precio: 7000 }] }),
+      conId("v-pedro")
+    )
+
+    expect(res.status).toBe(200)
+    expect(lineasDe("v-pedro").map((l) => [l.productId, l.priceCents])).toEqual([
+      ["p-cera", centavos(8000)],
+      ["p-cera", centavos(7000)],
+    ])
+  })
+
+  it("la profesional anota lo que vendió y queda a su nombre aunque pida otro", async () => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.pedro)
+
+    const res = await PUT(pedido(URL, { lineas: [{ productoId: "p-shampoo", profesional: "m-carla" }] }), conId("v-pedro"))
+
+    expect(res.status).toBe(200)
+    expect(lineasDe("v-pedro")).toEqual([expect.objectContaining({ productId: "p-shampoo", memberId: "m-pedro" })])
+  })
+
+  it("un producto de otro negocio da 404 y no cambia nada", async () => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const antes = base.volcado()
+
+    const res = await PUT(pedido(URL, { lineas: [{ productoId: "p-ajeno", profesional: "m-pedro" }] }), conId("v-pedro"))
+
+    expect(res.status).toBe(404)
+    expect((await res.json()).error).toBe("Producto no encontrado")
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("un producto inactivo no se agrega como línea nueva: 400 y no cambia nada", async () => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const antes = base.volcado()
+
+    const res = await PUT(pedido(URL, { lineas: [{ productoId: "p-viejo", profesional: "m-pedro" }] }), conId("v-pedro"))
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe("«Tónico» ya no se vende: elige otro producto.")
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("pero la línea que ya lo tenía se conserva al volver a guardar", async () => {
+    const datos = escenario()
+    base.reiniciar({
+      ...datos,
+      visitService: [
+        ...datos.visitService,
+        lineaDeProducto("l-tonico", "v-pedro", { productId: "p-viejo", serviceName: "Tónico", memberId: "m-pedro", priceCents: centavos(5000) }),
+      ],
+    })
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const res = await PUT(
+      pedido(URL, {
+        lineas: [
+          { servicioId: "s-corte", profesional: "m-pedro" },
+          { productoId: "p-viejo", profesional: "m-carla", precio: 4500 },
+        ],
+      }),
+      conId("v-pedro")
+    )
+
+    expect(res.status).toBe(200)
+    expect(lineasDe("v-pedro").find((l) => l.productId === "p-viejo")).toMatchObject({ memberId: "m-carla", priceCents: centavos(4500) })
+  })
+
+  it("una línea con servicio y producto a la vez, o sin ninguno, es un 400", async () => {
+    const { PUT } = await import("./route")
+    for (const lineaPedida of [{ servicioId: "s-corte", productoId: "p-shampoo" }, { profesional: "m-pedro", precio: 1000 }]) {
+      mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+      const res = await PUT(pedido(URL, { lineas: [{ profesional: "m-pedro", ...lineaPedida }] }), conId("v-pedro"))
+      expect(res.status).toBe(400)
+    }
+    expect(lineasDe("v-pedro")).toEqual([expect.objectContaining({ id: "l-solo-pedro" })])
+  })
+
+  it("los productos cuentan para el tope de 20 líneas: 19 servicios y 2 productos no caben", async () => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const antes = base.volcado()
+    const servicios = Array.from({ length: 19 }, () => ({ servicioId: "s-corte", profesional: "m-pedro" }))
+    const productos = Array.from({ length: 2 }, () => ({ productoId: "p-cera", profesional: "m-pedro" }))
+
+    const res = await PUT(pedido(URL, { lineas: [...servicios, ...productos] }), conId("v-pedro"))
+
+    expect(res.status).toBe(400)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("y 18 servicios con 2 productos sí: 20 líneas", async () => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const servicios = Array.from({ length: 18 }, () => ({ servicioId: "s-corte", profesional: "m-pedro" }))
+    const productos = Array.from({ length: 2 }, () => ({ productoId: "p-cera", profesional: "m-pedro" }))
+
+    const res = await PUT(pedido(URL, { lineas: [...servicios, ...productos] }), conId("v-pedro"))
+
+    expect(res.status).toBe(200)
+    expect((await res.json()).total).toBe(18 * 8000 + 2 * 8000)
   })
 })
 
