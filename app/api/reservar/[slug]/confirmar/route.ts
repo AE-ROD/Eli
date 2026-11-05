@@ -28,6 +28,7 @@ import {
   type ServicioDeLaReserva,
 } from "@/lib/servicios-de-la-reserva"
 import { existeLaHora, instanteEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
+import { recibiraRecordatorio } from "@/lib/recordatorios"
 import {
   MAX_RESERVAS_FUTURAS_POR_CONTACTO,
   MAX_RESERVAS_PUBLICAS_POR_DIA,
@@ -451,6 +452,9 @@ export async function POST(
     // Si al reservar ya quedó dentro del plazo, el enlace no la dejará
     // cancelar ni cambiar: ni la pantalla ni el correo lo ofrecen (QA#8).
     const sePuedeCambiar = dentroDelPlazo(startTime, negocio.cancelacionHorasAntes, ahora)
+    // Si el cron de recordatorios alcanza a mandarlo (N4), con la hora del
+    // servidor y no la del navegador: reservando tarde para mañana, no.
+    const conRecordatorio = recibiraRecordatorio(startTime, ahora, zona)
 
     // Referidos (`docs/PRODUCTO.md`, sección 4): la primera reserva pública de
     // un negocio invitado le suma días a la prueba de quien lo invitó. Va
@@ -530,6 +534,7 @@ export async function POST(
         citaId: cita.id,
         enlaceDeGestion: rutaDeGestion,
         sePuedeCambiar,
+        recibiraRecordatorio: conRecordatorio,
         profesional: profesional ? { id: profesional.id, nombre: profesional.nombre } : null,
         mensaje: "Reserva confirmada",
       },

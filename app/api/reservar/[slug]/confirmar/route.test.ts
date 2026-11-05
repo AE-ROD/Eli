@@ -393,6 +393,15 @@ describe("POST /api/reservar/[slug]/confirmar: ni en el pasado ni a más de 90 d
       expect((await confirmar("11:00", "2026-10-21")).cuerpo.sePuedeCambiar).toBe(true)
     })
 
+    it("N4: dice si el recordatorio alcanza a salir, con la hora del servidor (corrida de las 10:00)", async () => {
+      // Para hoy: nunca. Para mañana: la corrida de hoy ya pasó (son las 10:30). Pasado mañana: sí.
+      expect((await confirmar("11:00", "2026-10-19")).cuerpo.recibiraRecordatorio).toBe(false)
+      todaLaSemana()
+      expect((await confirmar("11:00", "2026-10-20")).cuerpo.recibiraRecordatorio).toBe(false)
+      todaLaSemana()
+      expect((await confirmar("11:00", "2026-10-21")).cuerpo.recibiraRecordatorio).toBe(true)
+    })
+
     it("una hora de hoy que todavía no llega (11:00): crea la cita", async () => {
       expect((await confirmar("11:00", "2026-10-19")).status).toBe(201)
       expect((citasCreadas()[0].startTime as Date).toISOString()).toBe("2026-10-19T14:00:00.000Z")

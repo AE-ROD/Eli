@@ -20,9 +20,7 @@ import {
   diasDelCalendarioDeReserva,
   quedaSinCambiosPorElEnlace,
 } from "@/lib/reserva-publica"
-import { recibiraRecordatorio } from "@/lib/recordatorios"
 import { MAX_SERVICIOS_POR_RESERVA, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
-import { instanteEn } from "@/lib/zona-horaria"
 import { cn } from "@/lib/utils"
 import { EncabezadoDeReserva } from "./encabezado-de-reserva"
 import { IndicadorDePasos, PASOS_DE_RESERVA } from "./indicador-de-pasos"
@@ -135,7 +133,7 @@ export function FormularioReserva({
   const [enlaceDeGestion, setEnlaceDeGestion] = useState<string | null>(null)
   // Si la cita quedó dentro del plazo, el enlace ya no la deja cambiar (QA#8).
   const [sePuedeCambiar, setSePuedeCambiar] = useState(true)
-  // Si el cron alcanza a mandar el recordatorio (N4): reservando tarde para mañana, no.
+  // Si el cron alcanza a mandar el recordatorio (N4): lo dice `confirmar`, con la hora del servidor.
   const [conRecordatorio, setConRecordatorio] = useState(false)
   const [fecha, setFecha] = useState(conFechaDeLaUrl ? fechaDeLaUrl : "")
   const [hora, setHora] = useState("")
@@ -243,7 +241,7 @@ export function FormularioReserva({
       setProfesionalAsignado(resultado.datos.profesional?.nombre ?? null)
       setEnlaceDeGestion(resultado.datos.enlaceDeGestion ?? null)
       setSePuedeCambiar(resultado.datos.sePuedeCambiar !== false)
-      setConRecordatorio(recibiraRecordatorio(instanteEn(fecha, hora, zona), new Date(), zona))
+      setConRecordatorio(resultado.datos.recibiraRecordatorio === true)
       setCitaId(resultado.datos.citaId)
     }
     else setError(resultado.error)
