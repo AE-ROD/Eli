@@ -45,9 +45,10 @@ async function horarioDelLunes() {
 }
 
 /**
- * El horario publicado calza con lo que la reserva ofrece: sólo se suma el
- * horario propio de quien `leerProfesionalesQueAtienden` devuelve (rol que
- * atiende, con su tope) y hace algún servicio activo.
+ * El horario publicado calza con lo que la reserva ofrece: con profesionales,
+ * la unión del horario efectivo (el propio, o si no el del negocio) de quien
+ * `leerProfesionalesQueAtienden` devuelve (rol que atiende, con su tope) y
+ * hace algún servicio activo; sin ellos, el del negocio.
  */
 describe("leerPaginaDelNegocio: de quiénes se publica el horario", () => {
   beforeEach(() => {
@@ -65,10 +66,11 @@ describe("leerPaginaDelNegocio: de quiénes se publica el horario", () => {
       ],
     })
 
-    expect(await horarioDelLunes()).toEqual([{ dayOfWeek: LUNES, startTime: "09:00", endTime: "20:00" }])
+    // Pedro atiende en su horario propio; el del negocio no se suma aparte.
+    expect(await horarioDelLunes()).toEqual([{ dayOfWeek: LUNES, startTime: "17:00", endTime: "20:00" }])
   })
 
-  it("publica el de quien hace al menos un servicio activo", async () => {
+  it("publica el de quien hace al menos un servicio activo; sin horario propio, el del negocio en que atiende", async () => {
     escenario({
       memberService: [
         { businessId: NEGOCIO, memberId: "m-carla", serviceId: "s-viejo" },
@@ -77,10 +79,42 @@ describe("leerPaginaDelNegocio: de quiénes se publica el horario", () => {
       workSchedule: [franja(null, "09:00", "18:00"), franja("m-carla", "06:00", "08:00")],
     })
 
+    // Carla en el suyo; Pedro, sin horario propio, en el del negocio.
     expect(await horarioDelLunes()).toEqual([
       { dayOfWeek: LUNES, startTime: "06:00", endTime: "08:00" },
       { dayOfWeek: LUNES, startTime: "09:00", endTime: "18:00" },
     ])
+  })
+
+  it("QA#4: la única profesional con horario propio L–M–X 14–20 publica eso, no el horario del negocio", async () => {
+    const datos = datosBase()
+    const fila = (memberId: string | null, dayOfWeek: number, startTime: string, endTime: string) => ({
+      ...franja(memberId, startTime, endTime),
+      dayOfWeek,
+    })
+    escenario({
+      // Sin Pedro: Carla es la única profesional.
+      businessMember: datos.businessMember.filter((miembro) => miembro.id !== "m-pedro"),
+      workSchedule: [
+        ...[1, 2, 3, 4, 5].map((dia) => fila(null, dia, "09:00", "18:00")),
+        fila(null, 6, "10:00", "14:00"),
+        ...[1, 2, 3].map((dia) => fila("m-carla", dia, "14:00", "20:00")),
+      ],
+    })
+
+    const { leerPaginaDelNegocio } = await import("./datos-de-la-pagina")
+    const pagina = await leerPaginaDelNegocio("salon-uno")
+    expect(pagina?.horario).toEqual([1, 2, 3].map((dayOfWeek) => ({ dayOfWeek, startTime: "14:00", endTime: "20:00" })))
+  })
+
+  it("sin profesionales, publica el horario del negocio", async () => {
+    const datos = datosBase()
+    escenario({
+      businessMember: datos.businessMember.filter((miembro) => miembro.role !== "worker"),
+      workSchedule: [franja(null, "09:00", "18:00"), franja("m-encargado", "06:00", "08:00")],
+    })
+
+    expect(await horarioDelLunes()).toEqual([{ dayOfWeek: LUNES, startTime: "09:00", endTime: "18:00" }])
   })
 
   it("no publica el del encargado ni el de profesionales más allá del tope que lee la reserva", async () => {

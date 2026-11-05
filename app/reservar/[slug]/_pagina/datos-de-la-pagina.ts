@@ -104,8 +104,8 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
   })
   if (!negocio) return null
 
-  // Los mismos profesionales que la reserva puede ofrecer (rol, tope y
-  // servicios), para que el horario publicado calce con las horas ofrecidas.
+  // Los mismos profesionales que lee la reserva (rol y tope): si hay alguno,
+  // la reserva ofrece sólo sus horas, y el horario publicado es el de ellos.
   const profesionales = await leerProfesionalesQueAtienden(prisma, negocio.id)
 
   const usuarioDeInstagram = normalizarInstagram(negocio.instagram)
@@ -133,15 +133,17 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
         foto: imagenPublica(miembro.fotoUrl),
       })),
     servicios: negocio.services,
-    // El del negocio más el de quienes la reserva ofrece (QA#4): la página no
-    // dice "cerrado" a una hora que la reserva ofrece, ni "abierto" por el
-    // horario de alguien que no puede recibir reservas.
+    // Exactamente el que la reserva ofrece (QA#4): con profesionales, la
+    // unión de sus horarios efectivos (no el del negocio aparte, que prometía
+    // horas y días que la reserva no tiene); sin ellos, el del negocio.
     horario: horarioSemanalPublicado(
       negocio.workSchedules,
-      profesionalesConHorarioPublicado(
-        profesionales,
-        negocio.services.map((servicio) => servicio.id)
-      )
+      profesionales.length > 0
+        ? profesionalesConHorarioPublicado(
+            profesionales,
+            negocio.services.map((servicio) => servicio.id)
+          )
+        : null
     ),
     plazoDeCambiosHoras: negocio.cancelacionHorasAntes,
     horaValle: negocio.horaValleActiva && negocio.franjasDeHoraValle.length > 0,

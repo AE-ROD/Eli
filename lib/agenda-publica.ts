@@ -146,31 +146,32 @@ function candidatosDelDiaDeLaSemana(
 
 /**
  * El horario que publica la página del negocio (la mini página, su "Abierto
- * ahora" y los días que ofrece el calendario de la reserva), por día: el del
- * negocio (`horarioSemanalDeAtencion`) más el de cada profesional que atiende
- * (`franjasParaElDia`, el mismo con que se le ofrecen horas), fusionados.
+ * ahora" y los días que ofrece el calendario de la reserva), por día:
+ * exactamente el que la reserva ofrece (QA#4).
  *
- * Antes la página mostraba sólo el del negocio, y un profesional con horario
- * propio más largo (el negocio de 09:00 a 18:00 y Carla de 14:00 a 20:00)
- * recibía reservas a horas que la página decía cerradas (QA#4). PRODUCTO.md
- * fija que cada profesional atiende en su horario propio si lo cargó, así que
- * no se recortan sus horas: se publica lo que de verdad se ofrece, sin
- * esconder el horario que cargó el dueño. Así ninguna hora ofrecida queda
- * fuera del horario publicado. Sin profesionales, es el del negocio.
+ * - **Con profesionales** (`profesionalIds`, los de
+ *   `profesionalesConHorarioPublicado`): la unión del horario efectivo de cada
+ *   uno, `franjasParaElDia`, el mismo con que `candidatosDelDia` les ofrece
+ *   horas (el propio si cargó alguno; si no, el del negocio). El del negocio
+ *   no se suma aparte: si todos tienen horario propio, la reserva no ofrece
+ *   ninguna hora fuera de él (el negocio de 09:00 a 18:00 y Carla, la única,
+ *   de 14:00 a 20:00 publica de 14:00 a 20:00, y los días en que Carla no
+ *   atiende quedan cerrados aunque el negocio tenga horario).
+ * - **Lista vacía:** el negocio tiene profesionales pero ninguno puede tomar
+ *   una reserva (ninguno hace un servicio activo): la reserva no ofrece nada,
+ *   y no se publica ninguna hora.
+ * - **`null`, negocio sin profesionales:** el carril único, con el horario del
+ *   negocio (`horarioSemanalDeAtencion`).
  *
- * `profesionalIds` son los que la reserva puede ofrecer
- * (`profesionalesConHorarioPublicado`): el horario propio de un encargado, o
- * de quien no hace ningún servicio activo, no se publica, porque no recibe
- * reservas.
+ * El horario propio de un encargado, o de quien no hace ningún servicio
+ * activo, no se publica: no recibe reservas.
  */
-export function horarioSemanalPublicado(filas: FilaDeHorarioSemanal[], profesionalIds: string[]): FranjaDelDia[] {
-  const delNegocio = horarioSemanalDeAtencion(filas)
-  if (profesionalIds.length === 0) return delNegocio
+export function horarioSemanalPublicado(filas: FilaDeHorarioSemanal[], profesionalIds: string[] | null): FranjaDelDia[] {
+  if (profesionalIds === null) return horarioSemanalDeAtencion(filas)
   return [0, 1, 2, 3, 4, 5, 6].flatMap((dayOfWeek) =>
-    fusionarFranjas([
-      ...delNegocio.filter((franja) => franja.dayOfWeek === dayOfWeek),
-      ...profesionalIds.flatMap((memberId) => franjasParaElDia(filas, memberId, dayOfWeek)?.franjas ?? []),
-    ]).map((franja) => ({ dayOfWeek, ...franja }))
+    fusionarFranjas(
+      profesionalIds.flatMap((memberId) => franjasParaElDia(filas, memberId, dayOfWeek)?.franjas ?? [])
+    ).map((franja) => ({ dayOfWeek, ...franja }))
   )
 }
 

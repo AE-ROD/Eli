@@ -82,41 +82,70 @@ describe("candidatosQueCubren", () => {
 })
 
 describe("horarioSemanalPublicado (QA#4)", () => {
-  // El negocio atiende de lunes a sábado de 09:00 a 18:00; Carla, de 14:00 a 20:00.
-  const LUNES_A_SABADO = [1, 2, 3, 4, 5, 6]
+  // El escenario del re-QA: el negocio atiende de lunes a viernes de 09:00 a
+  // 18:00 y el sábado de 10:00 a 14:00; Carla, la única profesional, lunes,
+  // martes y miércoles de 14:00 a 20:00 con horario propio.
+  const VIERNES = 5
+  const SABADO = 6
   const filas = [
-    ...LUNES_A_SABADO.map((dia) => fila(null, "09:00", "18:00", dia)),
-    ...LUNES_A_SABADO.map((dia) => fila("m-carla", "14:00", "20:00", dia)),
+    ...[1, 2, 3, 4, 5].map((dia) => fila(null, "09:00", "18:00", dia)),
+    fila(null, "10:00", "14:00", SABADO),
+    ...[1, 2, 3].map((dia) => fila("m-carla", "14:00", "20:00", dia)),
   ]
 
-  it("publica hasta donde atiende el profesional: ninguna hora ofrecida queda fuera del horario de la página", () => {
-    const semana = horarioSemanalPublicado(filas, ["m-carla"])
-    expect(semana.filter((franja) => franja.dayOfWeek === LUNES)).toEqual([{ dayOfWeek: LUNES, startTime: "09:00", endTime: "20:00" }])
-    // El domingo sigue cerrado: nadie atiende.
-    expect(semana.map((franja) => franja.dayOfWeek)).toEqual(LUNES_A_SABADO)
+  it("con profesionales publica sólo su horario: ni las horas ni los días del negocio que la reserva no ofrece", () => {
+    expect(horarioSemanalPublicado(filas, ["m-carla"])).toEqual(
+      [1, 2, 3].map((dayOfWeek) => ({ dayOfWeek, startTime: "14:00", endTime: "20:00" }))
+    )
   })
 
-  it("sin profesionales, el del negocio", () => {
-    expect(horarioSemanalPublicado(filas, []).filter((franja) => franja.dayOfWeek === LUNES)).toEqual([
-      { dayOfWeek: LUNES, startTime: "09:00", endTime: "18:00" },
-    ])
+  it("lo publicado es lo que la reserva ofrece: los mismos días y franjas que `candidatosDelDia`", () => {
+    const semana = horarioSemanalPublicado(filas, ["m-carla"])
+    for (const dayOfWeek of [0, 1, 2, 3, 4, VIERNES, SABADO]) {
+      // 2026-11-01 es domingo.
+      const fecha = `2026-11-0${dayOfWeek + 1}`
+      const ofrecidas = candidatosDelDia(filas, true, ["m-carla"], fecha).flatMap((candidato) => candidato.franjas)
+      expect(semana.filter((franja) => franja.dayOfWeek === dayOfWeek).map(({ startTime, endTime }) => ({ startTime, endTime }))).toEqual(ofrecidas)
+    }
+  })
+
+  it("un profesional sin horario propio atiende en el del negocio, y ése es el que se publica", () => {
+    const semana = horarioSemanalPublicado(filas, ["m-pedro"])
+    expect(semana.filter((franja) => franja.dayOfWeek === LUNES)).toEqual([{ dayOfWeek: LUNES, startTime: "09:00", endTime: "18:00" }])
+    expect(semana.filter((franja) => franja.dayOfWeek === SABADO)).toEqual([{ dayOfWeek: SABADO, startTime: "10:00", endTime: "14:00" }])
+  })
+
+  it("con varios, la unión de sus horarios efectivos", () => {
+    const semana = horarioSemanalPublicado(filas, ["m-carla", "m-pedro"])
+    expect(semana.filter((franja) => franja.dayOfWeek === LUNES)).toEqual([{ dayOfWeek: LUNES, startTime: "09:00", endTime: "20:00" }])
+    expect(semana.filter((franja) => franja.dayOfWeek === VIERNES)).toEqual([{ dayOfWeek: VIERNES, startTime: "09:00", endTime: "18:00" }])
+  })
+
+  it("sin profesionales (null), el del negocio", () => {
+    const semana = horarioSemanalPublicado(filas, null)
+    expect(semana.filter((franja) => franja.dayOfWeek === LUNES)).toEqual([{ dayOfWeek: LUNES, startTime: "09:00", endTime: "18:00" }])
+    expect(semana.map((franja) => franja.dayOfWeek)).toEqual([1, 2, 3, 4, 5, 6])
+  })
+
+  it("con profesionales pero ninguno que pueda tomar reservas, no publica horas: la reserva no ofrece ninguna", () => {
+    expect(horarioSemanalPublicado(filas, [])).toEqual([])
   })
 
   it("el horario propio de quien no atiende (el encargado) no se publica", () => {
     const conEncargado = [...filas, fila("m-encargado", "06:00", "23:00")]
     expect(horarioSemanalPublicado(conEncargado, ["m-carla"]).filter((franja) => franja.dayOfWeek === LUNES)).toEqual([
-      { dayOfWeek: LUNES, startTime: "09:00", endTime: "20:00" },
+      { dayOfWeek: LUNES, startTime: "14:00", endTime: "20:00" },
     ])
   })
 
-  it("un profesional que atiende un día que el negocio no tiene suma ese día; uno con franjas separadas no se fusiona", () => {
+  it("un profesional con franjas separadas no se fusiona, y suma un día que el negocio no tiene", () => {
     const semana = horarioSemanalPublicado(
-      [fila(null, "09:00", "12:00"), fila("m-pedro", "15:00", "17:00"), fila("m-pedro", "10:00", "13:00", 0)],
+      [fila(null, "09:00", "12:00"), fila("m-pedro", "15:00", "17:00"), fila("m-pedro", "10:00", "13:00", 0), fila("m-pedro", "09:00", "11:00")],
       ["m-pedro"]
     )
     expect(semana).toEqual([
       { dayOfWeek: 0, startTime: "10:00", endTime: "13:00" },
-      { dayOfWeek: LUNES, startTime: "09:00", endTime: "12:00" },
+      { dayOfWeek: LUNES, startTime: "09:00", endTime: "11:00" },
       { dayOfWeek: LUNES, startTime: "15:00", endTime: "17:00" },
     ])
   })
