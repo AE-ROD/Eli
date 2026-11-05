@@ -203,6 +203,24 @@ la etapa 5): fuera del horario de atención. Con los conteos en 0 confirmados,
 cada CHECK se puede validar cuando se quiera con
 `ALTER TABLE "<tabla>" VALIDATE CONSTRAINT "<nombre>";` (opcional).
 
+### Teléfonos antiguos a `+56` (#92)
+
+Los teléfonos de clientes guardados antes de la etapa 1 siguen como se
+escribieron. `scripts/normalizar-telefonos.ts` los pasa al formato que usa la
+app (`+56912345678`) con la misma regla que el panel (`aE164Chile`). Por
+defecto sólo simula: cuenta cuántos cambiaría y cuántos no se pueden leer, sin
+mostrar teléfonos ni nombres. Lo corre el dueño:
+
+```bash
+node scripts/normalizar-telefonos.ts                         # simula, todos los negocios
+node scripts/normalizar-telefonos.ts --negocio <businessId>  # simula, un negocio
+node scripts/normalizar-telefonos.ts --aplicar               # escribe
+```
+
+Escribe de a lotes y sólo si el teléfono sigue igual que cuando lo leyó (si
+alguien lo editó mientras tanto, lo deja). Los que no se pueden leer como
+chilenos no se tocan: se corrigen a mano desde la ficha.
+
 ## Cómo está organizado
 
 ```
@@ -291,6 +309,8 @@ pruebas/                      Ayudas compartidas de los tests: la base falsa en 
                               con sus datos de ejemplo, pedidos y respuestas simulados.
                               Fuera de app/: no es una ruta ni entra al build
 prisma/                       Esquema, migraciones y datos de ejemplo (seed.ts)
+scripts/                      Tareas de mantenimiento que corre el dueño a mano
+                              (normalizar-telefonos.ts), con la lógica testeada
 proxy.ts                      Puerta de entrada: sesión y límite de peticiones (con su test)
 types/                        Tipos que extienden librerías (la sesión de NextAuth)
 public/images/                El logo
