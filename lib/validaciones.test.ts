@@ -213,6 +213,14 @@ describe("QA#22: la página pública dice \"correo\", no \"email\"", () => {
     const invalidaEnLista = listaDeEsperaSchema.safeParse({ servicioId: "s-corte", fecha: "2030-01-07", nombre: "Lucía", apellido: "Pérez", email: "x" })
     expect(invalidaEnLista.error?.issues[0].message).toBe("El correo no es válido")
 
+    // Los servicios como en la reserva (#162): servicioIds, o un servicioId suelto; nunca los dos.
+    const contacto = { fecha: "2030-01-07", nombre: "Lucía", apellido: "Pérez", email: "lucia@correo.test" }
+    expect(listaDeEsperaSchema.parse({ ...contacto, servicioIds: ["s2", "s1"] }).servicioIds).toEqual(["s2", "s1"])
+    expect(listaDeEsperaSchema.parse({ ...contacto, servicioId: "s1" }).servicioIds).toEqual(["s1"])
+    expect(listaDeEsperaSchema.safeParse({ ...contacto, servicioId: "s1", servicioIds: ["s1"] }).success).toBe(false)
+    expect(listaDeEsperaSchema.safeParse(contacto).success).toBe(false)
+    expect(listaDeEsperaSchema.safeParse({ ...contacto, servicioIds: ["s1", "s1"] }).success).toBe(false)
+
     const enFila = filaVirtualSchema.safeParse({ nombre: "Juan Pérez", email: "juan" })
     expect(enFila.error?.issues[0].message).toBe("El correo no es válido")
   })

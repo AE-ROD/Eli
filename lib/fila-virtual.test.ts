@@ -1,6 +1,13 @@
-import { describe, it, expect } from "vitest"
+import { afterEach, describe, it, expect, vi } from "vitest"
 import {
   MINUTOS_POR_PERSONA_POR_DEFECTO,
+  enlaceDelTurno,
+  guardarTurno,
+  leerTurnoGuardado,
+  llaveDelTurnoGuardado,
+  olvidarTurno,
+  tokenDelEnlace,
+  turnoSigueVivo,
   leTocaElAviso,
   minutosEstimados,
   minutosPorPersona,
@@ -81,5 +88,67 @@ describe("leTocaElAviso", () => {
     expect(leTocaElAviso(1, null, nunca)).toBe(false)
     expect(leTocaElAviso(1, "", nunca)).toBe(false)
     expect(leTocaElAviso(1, "a@b.cl", new Date())).toBe(false)
+  })
+})
+
+describe("el turno guardado en el navegador (#155)", () => {
+  const TOKEN = "a".repeat(43)
+
+  /** Un `localStorage` de mentira, en memoria. */
+  function conAlmacenamiento() {
+    const datos = new Map<string, string>()
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (llave: string) => datos.get(llave) ?? null,
+        setItem: (llave: string, valor: string) => void datos.set(llave, valor),
+        removeItem: (llave: string) => void datos.delete(llave),
+      },
+    })
+    return datos
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("guarda, lee y olvida el token, uno por negocio", () => {
+    const datos = conAlmacenamiento()
+    guardarTurno("salon-uno", TOKEN)
+    expect(datos.get(llaveDelTurnoGuardado("salon-uno"))).toBe(TOKEN)
+    expect(leerTurnoGuardado("salon-uno")).toBe(TOKEN)
+    expect(leerTurnoGuardado("salon-dos")).toBeNull()
+    olvidarTurno("salon-uno")
+    expect(leerTurnoGuardado("salon-uno")).toBeNull()
+  })
+
+  it("lo que no tiene forma de token no se usa", () => {
+    const datos = conAlmacenamiento()
+    datos.set(llaveDelTurnoGuardado("salon-uno"), "../../api/otra-cosa")
+    expect(leerTurnoGuardado("salon-uno")).toBeNull()
+  })
+
+  it("sin almacenamiento (ventana privada, bloqueado) no lanza: no hay turno guardado", () => {
+    const roto = () => {
+      throw new Error("SecurityError")
+    }
+    vi.stubGlobal("window", { localStorage: { getItem: roto, setItem: roto, removeItem: roto } })
+    expect(() => guardarTurno("salon-uno", TOKEN)).not.toThrow()
+    expect(leerTurnoGuardado("salon-uno")).toBeNull()
+    expect(() => olvidarTurno("salon-uno")).not.toThrow()
+    vi.stubGlobal("window", undefined)
+    expect(leerTurnoGuardado("salon-uno")).toBeNull()
+  })
+
+  it("el enlace del turno y su token van y vuelven", () => {
+    const enlace = enlaceDelTurno("salon-uno", TOKEN)
+    expect(enlace).toBe(`/fila/salon-uno/${TOKEN}`)
+    expect(tokenDelEnlace(enlace)).toBe(TOKEN)
+    expect(tokenDelEnlace("/fila/salon-uno/corto")).toBeNull()
+  })
+
+  it("sólo esperando o en atención sigue vivo", () => {
+    expect(turnoSigueVivo("esperando")).toBe(true)
+    expect(turnoSigueVivo("atendiendo")).toBe(true)
+    for (const estado of ["terminado", "fuera", "vencido", ""]) expect(turnoSigueVivo(estado)).toBe(false)
   })
 })

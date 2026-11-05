@@ -93,7 +93,7 @@ afterEach(() => {
 
 const NEGOCIO = { id: "n1", timezone: "America/Santiago" }
 const datos = (extra: Record<string, unknown> = {}) => ({
-  servicioId: "s1",
+  servicioIds: ["s1"],
   fecha: LUNES,
   nombre: "Lucía",
   apellido: "Pérez",
@@ -123,7 +123,7 @@ describe("inscribirse", () => {
   })
 
   it("servicio de otro negocio, inactivo o profesional ajeno: no-encontrada (404 genérico)", async () => {
-    expect(await m.inscribirEnListaDeEspera(NEGOCIO, datos({ servicioId: "s2" }), AHORA)).toEqual({ tipo: "no-encontrada" })
+    expect(await m.inscribirEnListaDeEspera(NEGOCIO, datos({ servicioIds: ["s2"] }), AHORA)).toEqual({ tipo: "no-encontrada" })
     escenario({
       businessMember: [{ id: "m-ajeno", businessId: "n2", userId: "u-carla", role: "worker" }],
     })
@@ -143,13 +143,33 @@ describe("inscribirse", () => {
     ]
     const TODO_EL_LUNES = { startTime: new Date("2026-11-02T03:00:00.000Z"), endTime: new Date("2026-11-03T03:00:00.000Z") }
 
-    it("bloqueada entera ella y Pedro disponible: se inscribe, igual que en un día lleno", async () => {
+    it("bloqueada entera ella y Pedro disponible: se inscribe, igual que en un día lleno, con cualquiera (#166)", async () => {
       escenario({
         businessMember: EQUIPO,
         timeBlock: [{ id: "b-carla", businessId: "n1", memberId: "m-carla", ...TODO_EL_LUNES }],
       })
       expect(await m.inscribirEnListaDeEspera(NEGOCIO, datos({ profesionalId: "m-carla" }), AHORA)).toEqual({ tipo: "inscrita" })
-      expect(inscripciones()).toHaveLength(1)
+      // Con Carla nunca se iba a liberar una hora: el aviso se calcula para cualquiera.
+      expect(inscripciones()).toEqual([expect.objectContaining({ memberId: null })])
+    })
+
+    it("un día lleno para ella, que sí trabaja: queda con ella (#166)", async () => {
+      escenario({ businessMember: EQUIPO })
+      expect(await m.inscribirEnListaDeEspera(NEGOCIO, datos({ profesionalId: "m-carla" }), AHORA)).toEqual({ tipo: "inscrita" })
+      expect(inscripciones()).toEqual([expect.objectContaining({ memberId: "m-carla" })])
+    })
+
+    it("un día que ella no trabaja (horario propio) y Pedro sí: con cualquiera, y la respuesta es la misma (#166)", async () => {
+      escenario({
+        businessMember: EQUIPO,
+        workSchedule: [
+          { id: "h1", businessId: "n1", dayOfWeek: 1, startTime: "09:00", endTime: "11:00" },
+          // Carla atiende sólo los martes.
+          { id: "h-carla", businessId: "n1", memberId: "m-carla", dayOfWeek: 2, startTime: "09:00", endTime: "11:00" },
+        ],
+      })
+      expect(await m.inscribirEnListaDeEspera(NEGOCIO, datos({ profesionalId: "m-carla" }), AHORA)).toEqual({ tipo: "inscrita" })
+      expect(inscripciones()).toEqual([expect.objectContaining({ memberId: null })])
     })
 
     it("con un bloqueo de todo el negocio: se rechaza como día sin atención", async () => {
@@ -177,6 +197,26 @@ describe("inscribirse", () => {
         error: m.MENSAJE_SIN_ATENCION,
       })
     })
+  })
+
+  it("con varios servicios, el día se revisa con la duración del bloque entero y se guarda el primero (#162)", async () => {
+    escenario({
+      service: [
+        { id: "s1", businessId: "n1", name: "Corte", duration: 60 },
+        { id: "s3", businessId: "n1", name: "Barba", duration: 30 },
+        { id: "s2", businessId: "n2", name: "Corte", duration: 60 },
+      ],
+    })
+    // Queda libre de 10 a 11: cabe un corte (60), no corte + barba (90).
+    await liberar("a10")
+    expect(await m.inscribirEnListaDeEspera(NEGOCIO, datos(), AHORA)).toEqual({ tipo: "rechazada", error: m.MENSAJE_HAY_HORAS })
+    expect(await m.inscribirEnListaDeEspera(NEGOCIO, datos({ servicioIds: ["s1", "s3"] }), AHORA)).toEqual({ tipo: "inscrita" })
+    expect(inscripciones()).toEqual([expect.objectContaining({ serviceId: "s1", memberId: null })])
+    // Uno ajeno entre varios: el mismo 404, sin crear nada.
+    expect(await m.inscribirEnListaDeEspera(NEGOCIO, datos({ servicioIds: ["s3", "s2"], email: "otra@correo.test" }), AHORA)).toEqual({
+      tipo: "no-encontrada",
+    })
+    expect(inscripciones()).toHaveLength(1)
   })
 
   it("la cuarta inscripción activa del mismo email en el negocio: tope", async () => {

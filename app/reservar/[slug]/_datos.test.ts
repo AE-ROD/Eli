@@ -78,9 +78,9 @@ describe("leerDisponibilidad (#89c)", () => {
 })
 
 describe("lista de espera", () => {
-  it("inscribirse manda el día, el servicio y el contacto; WhatsApp sólo con teléfono", async () => {
+  it("inscribirse manda el día, los servicios en orden (#162) y el contacto; WhatsApp sólo con teléfono", async () => {
     await inscribirEnListaDeEspera("salón uno", {
-      servicioId: "s1",
+      servicioIds: ["s2", "s1"],
       profesionalId: null,
       fecha: "2030-01-07",
       nombre: "Lucía",
@@ -91,7 +91,7 @@ describe("lista de espera", () => {
     })
     expect(mockFetch.mock.calls[0][0]).toBe("/api/reservar/sal%C3%B3n%20uno/lista-de-espera")
     expect(cuerpo()).toEqual({
-      servicioId: "s1",
+      servicioIds: ["s2", "s1"],
       fecha: "2030-01-07",
       nombre: "Lucía",
       apellido: "Pérez",
@@ -100,7 +100,7 @@ describe("lista de espera", () => {
   })
 
   it("un 429 (por IP o por correo) llega al formulario con el texto del servidor (#133)", async () => {
-    const datos = { servicioId: "s1", profesionalId: null, fecha: "2030-01-07", nombre: "Lucía", apellido: "Pérez", email: "lucia@correo.test", telefono: "", whatsapp: false }
+    const datos = { servicioIds: ["s1"], profesionalId: null, fecha: "2030-01-07", nombre: "Lucía", apellido: "Pérez", email: "lucia@correo.test", telefono: "", whatsapp: false }
     mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: "Demasiadas solicitudes, intenta más tarde" }), { status: 429 }))
     expect(await inscribirEnListaDeEspera("uno", datos)).toEqual({ ok: false, error: "Demasiadas solicitudes, intenta más tarde" })
     // Sin cuerpo (un proxy): el texto propio de la acción, no uno del tope.

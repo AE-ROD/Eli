@@ -109,10 +109,11 @@ const limitadorBajaPorToken = crearLimitador("baja-por-token", 30, "10 m")
 //   wifi del local comparten IP y suman; el tope del negocio corta antes.
 // - por negocio: 60 por hora. Una fila de 15 a la vez no recibe 60 personas
 //   nuevas en una hora; lo que pase de ahí es alguien llenándola con nombres
-//   inventados rotando IPs. Se descuenta SÓLO cuando la persona quedó
-//   anotada (`quedaLimite` antes, `verificarLimite` después): si cada intento
-//   rechazado (local cerrado, fila llena) lo gastara, unas pocas IPs lo
-//   agotarían y dejarían a la gente real sin poder anotarse una hora.
+//   inventados rotando IPs. Se descuenta antes de anotar, en un solo paso
+//   atómico (`verificarLimite`), y se devuelve si al final no quedó anotada
+//   (`devolverLimite`): si cada intento rechazado (local cerrado, fila llena)
+//   lo gastara, unas pocas IPs lo agotarían y dejarían a la gente real sin
+//   poder anotarse una hora.
 const limitadorFilaVirtual = crearLimitador("fila-virtual", 10, "1 h")
 const limitadorFilaVirtualPorNegocio = crearLimitador("fila-virtual-negocio", 60, "1 h")
 // Mirar la posición en la fila desde el celular (polling), por hash del token:
@@ -265,30 +266,21 @@ export async function verificarLimite(tipo: TipoLimite, identificador: string): 
 }
 
 /**
- * Si al balde le queda cupo, SIN descontar nada: para los que se cobran sólo
- * cuando la acción tuvo éxito (se pregunta antes y se descuenta con
- * `verificarLimite` después). Sin Upstash y ante una falla, lo mismo que
- * `verificarLimite`. Entre la pregunta y el descuento pueden pasar varios a
- * la vez: el balde se puede pasar por unos pocos, no más.
+ * Devuelve al balde lo que descontó un `verificarLimite` permitido, para los
+ * que se cobran sólo cuando la acción tuvo éxito: se descuenta antes (la
+ * pregunta y el descuento son un solo paso en Upstash, así que dos pedidos a
+ * la vez no pasan los dos con el último cupo) y se devuelve si al final no
+ * se hizo. Sin Upstash no hay nada que devolver. Nunca lanza: si Upstash
+ * falla, el cupo queda gastado, que es el lado estricto.
  */
-export async function quedaLimite(tipo: TipoLimite, identificador: string): Promise<ResultadoLimite> {
+export async function devolverLimite(tipo: TipoLimite, identificador: string): Promise<void> {
   const limitador = limitadores[tipo]
-  if (!limitador) return sinLimitador()
-
-  // `getRemaining` no tiene el `timeout` de `limit`: se le pone el mismo acá.
-  let reloj: ReturnType<typeof setTimeout> | undefined
+  if (!limitador) return
   try {
-    const { remaining } = await Promise.race([
-      limitador.getRemaining(identificador),
-      new Promise<never>((_, rechazar) => {
-        reloj = setTimeout(() => rechazar(new Error(`Upstash no respondió en ${TIMEOUT_UPSTASH_MS} ms`)), TIMEOUT_UPSTASH_MS)
-      }),
-    ])
-    return { permitido: remaining > 0, restantes: remaining }
+    // Una tasa negativa suma al balde en vez de descontar (`@upstash/ratelimit` ≥ 2).
+    await limitador.limit(identificador, { rate: -1 })
   } catch (error) {
-    return siUpstashFalla(tipo, error)
-  } finally {
-    clearTimeout(reloj)
+    console.error(`[rate-limit] No se pudo devolver el cupo de "${tipo}"; queda gastado.`, error)
   }
 }
 

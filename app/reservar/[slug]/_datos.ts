@@ -128,7 +128,7 @@ export async function confirmarReserva(
 }
 
 export interface DatosDeListaDeEspera {
-  servicioId: string
+  servicioIds: string[]
   /** `null`: con cualquiera. */
   profesionalId: string | null
   /** `YYYY-MM-DD`. */
@@ -146,7 +146,7 @@ export async function inscribirEnListaDeEspera(slug: string, datos: DatosDeLista
     `/api/reservar/${encodeURIComponent(slug)}/lista-de-espera`,
     "No se pudo anotar en la lista de espera",
     conJson("POST", {
-      servicioId: datos.servicioId,
+      servicioIds: datos.servicioIds,
       profesionalId: datos.profesionalId ?? undefined,
       fecha: datos.fecha,
       nombre: datos.nombre,

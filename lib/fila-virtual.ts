@@ -97,3 +97,62 @@ export function primerNombre(nombre: string): string {
 export function leTocaElAviso(adelante: number, filaEmail: string | null, filaAvisadaAt: Date | null): boolean {
   return filaEmail !== null && filaEmail !== "" && filaAvisadaAt === null && adelante <= 1
 }
+
+// ─── El turno guardado en el navegador (#155) ────────────────────────────────
+
+/** El token del celular: 32 bytes en base64url (`generarToken`). Lo demás no se busca ni se guarda. */
+export const FORMA_DEL_TOKEN_DE_FILA = /^[A-Za-z0-9_-]{43}$/
+
+/** Dónde se guarda el turno de un negocio en este navegador: uno por negocio. */
+export function llaveDelTurnoGuardado(slug: string): string {
+  return `eli:fila:${slug}`
+}
+
+/** El enlace al turno de ese token: `/fila/[slug]/[token]`. */
+export function enlaceDelTurno(slug: string, token: string): string {
+  return `/fila/${encodeURIComponent(slug)}/${token}`
+}
+
+/** El token de un enlace `/fila/[slug]/[token]`, o `null` si no lo es. */
+export function tokenDelEnlace(enlace: string): string | null {
+  const token = enlace.split("/").pop() ?? ""
+  return FORMA_DEL_TOKEN_DE_FILA.test(token) ? token : null
+}
+
+/**
+ * El token del turno que se sacó desde este navegador en ese negocio, o
+ * `null`. Lo que no tenga forma de token se ignora. Nunca lanza: en una
+ * ventana privada o con el almacenamiento bloqueado, `localStorage` no está
+ * o lanza, y ahí simplemente no hay turno guardado.
+ */
+export function leerTurnoGuardado(slug: string): string | null {
+  try {
+    const valor = window.localStorage.getItem(llaveDelTurnoGuardado(slug))
+    return valor && FORMA_DEL_TOKEN_DE_FILA.test(valor) ? valor : null
+  } catch {
+    return null
+  }
+}
+
+/** Recuerda el turno recién sacado. Nunca lanza: si no se puede guardar, la fila funciona igual. */
+export function guardarTurno(slug: string, token: string): void {
+  try {
+    window.localStorage.setItem(llaveDelTurnoGuardado(slug), token)
+  } catch {
+    // Sin almacenamiento: no se recuerda, nada más.
+  }
+}
+
+/** Olvida el turno guardado (ya terminó, salió o no existe). Nunca lanza. */
+export function olvidarTurno(slug: string): void {
+  try {
+    window.localStorage.removeItem(llaveDelTurnoGuardado(slug))
+  } catch {
+    // Sin almacenamiento: no hay nada que olvidar.
+  }
+}
+
+/** Si un turno con este estado sigue vivo: todavía espera o lo están atendiendo. */
+export function turnoSigueVivo(estado: string): boolean {
+  return estado === "esperando" || estado === "atendiendo"
+}

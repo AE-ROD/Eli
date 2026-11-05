@@ -97,69 +97,75 @@ export async function POST(request: NextRequest) {
 
   const { candidatos, duplicados, errores } = prepararFilas(filas, mapeo)
 
-  try {
-    const ahora = new Date()
-    let creados = 0
-    const yaEstaban: FilaOmitida[] = []
-    const noGuardados: FilaOmitida[] = []
-    for (let desde = 0; desde < candidatos.length; desde += CLIENTES_POR_LOTE) {
-      const lote = candidatos.slice(desde, desde + CLIENTES_POR_LOTE)
-      try {
-        const resultado = await guardarLote(actor, lote, ahora)
-        creados += resultado.creados
-        yaEstaban.push(...resultado.duplicados)
-      } catch (error) {
-        // El lote no se escribió (es una transacción): sus filas se informan
-        // y los lotes que siguen se intentan igual. Volver a importar el
-        // mismo archivo no duplica lo que sí se guardó.
-        registrarError("importando un lote de clientes", error)
-        noGuardados.push(...lote.map(({ fila }) => ({ fila, motivo: "No se pudo guardar. Vuelve a importar el archivo." })))
-      }
-    }
-
-    return NextResponse.json({
-      creados,
-      duplicados: [...duplicados, ...yaEstaban].sort(porFila),
-      errores: [...errores, ...noGuardados].sort(porFila),
-    })
-  } catch (error) {
-    registrarError("importando clientes", error)
-    return NextResponse.json({ error: "No se pudo importar el archivo" }, { status: 500 })
-  }
+  // Nunca lanza: si no se pudo guardar, lo dice fila por fila.
+  const resultado = await guardarClientes(actor, candidatos, new Date())
+  return NextResponse.json({
+    creados: resultado.creados,
+    duplicados: [...duplicados, ...resultado.duplicados].sort(porFila),
+    errores: [...errores, ...resultado.errores].sort(porFila),
+  })
 }
 
 /**
- * Un lote, en una transacción serializada por negocio (#94): no hay una
- * restricción única de teléfono ni de correo en la base, así que dos
- * importaciones simultáneas del mismo negocio leían los mismos existentes y
- * creaban los dos el mismo cliente. Con el candado (`hashtext('importar:' ||
- * businessId)`, como el de la caja en `lib/bloqueos-de-dinero.ts`), la otra
- * espera, y al entrar lee lo que la primera ya guardó. Los existentes se leen
- * dentro, después de tomarlo. Los clientes eliminados no se comparan: ya no
- * tienen teléfono ni correo.
+ * Guarda los clientes en una sola transacción serializada por negocio (#94):
+ * no hay una restricción única de teléfono ni de correo en la base, así que
+ * dos importaciones simultáneas del mismo negocio leían los mismos
+ * existentes y creaban los dos el mismo cliente. Con el candado
+ * (`hashtext('importar:' || businessId)`, como el de la caja en
+ * `lib/bloqueos-de-dinero.ts`), la otra espera, y al entrar lee lo que la
+ * primera ya guardó.
+ *
+ * Los existentes se leen una sola vez, después de tomar el candado (antes se
+ * releían en cada lote, #140): el candado se tiene hasta el final, así que
+ * nadie más del negocio importa entremedio. Lo que crea cada lote se suma a
+ * lo leído, por si un lote siguiente lo repite. Los clientes eliminados no
+ * se comparan: ya no tienen teléfono ni correo.
+ *
+ * Se escribe por lotes (un `createMany` cada `CLIENTES_POR_LOTE`), pero es
+ * todo o nada: si un lote falla no se guarda ninguno, y todas las filas se
+ * informan para volver a importar el archivo, que no duplica nada.
  */
-async function guardarLote(
+async function guardarClientes(
   actor: Actor,
-  lote: ClienteAImportar[],
+  candidatos: ClienteAImportar[],
   ahora: Date
-): Promise<{ creados: number; duplicados: FilaOmitida[] }> {
-  return prisma.$transaction(
-    async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`importar:${actor.businessId}`}))`
-      const existentes = await tx.customer.findMany({
-        where: whereDeClientes(actor, clienteNoEliminado),
-        select: { phone: true, email: true },
-      })
-      const { nuevos, duplicados } = descartarExistentes(lote, existentes)
-      if (nuevos.length === 0) return { creados: 0, duplicados }
-      const { count } = await tx.customer.createMany({
-        data: nuevos.map((cliente) => datosDelCliente(cliente, actor.businessId, ahora)),
-      })
-      return { creados: count, duplicados }
-    },
-    // Puede esperar a que termine el lote de otra importación del negocio.
-    { timeout: 20_000 }
-  )
+): Promise<{ creados: number; duplicados: FilaOmitida[]; errores: FilaOmitida[] }> {
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`importar:${actor.businessId}`}))`
+        const existentes: { phone: string | null; email: string | null }[] = await tx.customer.findMany({
+          where: whereDeClientes(actor, clienteNoEliminado),
+          select: { phone: true, email: true },
+        })
+        let creados = 0
+        const duplicados: FilaOmitida[] = []
+        for (let desde = 0; desde < candidatos.length; desde += CLIENTES_POR_LOTE) {
+          const lote = descartarExistentes(candidatos.slice(desde, desde + CLIENTES_POR_LOTE), existentes)
+          duplicados.push(...lote.duplicados)
+          if (lote.nuevos.length === 0) continue
+          const { count } = await tx.customer.createMany({
+            data: lote.nuevos.map((cliente) => datosDelCliente(cliente, actor.businessId, ahora)),
+          })
+          creados += count
+          existentes.push(...lote.nuevos.map(({ phone, email }) => ({ phone, email })))
+        }
+        return { creados, duplicados, errores: [] }
+      },
+      // Puede esperar a que termine otra importación del negocio, y escribe
+      // hasta `FILAS_MAXIMAS` en lotes.
+      { timeout: 30_000 }
+    )
+  } catch (error) {
+    // No se escribió nada (es una transacción): las filas se informan y
+    // volver a importar el mismo archivo no duplica nada.
+    registrarError("importando los clientes", error)
+    return {
+      creados: 0,
+      duplicados: [],
+      errores: candidatos.map(({ fila }) => ({ fila, motivo: "No se pudo guardar. Vuelve a importar el archivo." })),
+    }
+  }
 }
 
 /**

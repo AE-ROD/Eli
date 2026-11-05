@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { estadoDeAtencion } from "@/lib/abierto-ahora"
 import { enviarAvisoFilaVirtual } from "@/lib/email"
 import {
+  FORMA_DEL_TOKEN_DE_FILA,
   MOTIVO_FILA_VACIADA,
   MOTIVO_SALIO_DE_LA_FILA,
   ORIGEN_FILA,
@@ -42,12 +43,9 @@ const EN_ATENCION = "en-atencion"
 /** Cuántas veces se reintenta tomar un número cuando dos personas se anotan a la vez. */
 const INTENTOS_DE_NUMERAR = 3
 
-/** El token del celular: 32 bytes en base64url (`generarToken`). Lo demás no se busca en la base. */
-const FORMA_DEL_TOKEN = /^[A-Za-z0-9_-]{43}$/
-
 /** El hash que se busca en la base, o `null` si el texto no tiene la forma de un token. Nunca lanza. */
 export function hashDelTokenDeFila(token: unknown): string | null {
-  return typeof token === "string" && FORMA_DEL_TOKEN.test(token) ? hashDeToken(token) : null
+  return typeof token === "string" && FORMA_DEL_TOKEN_DE_FILA.test(token) ? hashDeToken(token) : null
 }
 
 /** El día de hoy del negocio, "AAAA-MM-DD" en su zona. */
@@ -60,24 +58,35 @@ function deLaFila(businessId: string, filaFecha: string, status: string | { in: 
   return { businessId, origen: ORIGEN_FILA, filaFecha, status }
 }
 
+/** Tope de bloqueos que se leen: los que cubren un instante son uno o dos. */
+const TOPE_DE_BLOQUEOS = 50
+
 /**
  * Lo que el negocio necesita para la fila pública, con su horario de
  * atención (las franjas activas, generales y de miembros:
- * `horarioSemanalDeAtencion` decide cuál manda cada día). `null` si el slug
- * no existe.
+ * `horarioSemanalDeAtencion` decide cuál manda cada día) y los bloqueos de
+ * todo el negocio (`memberId` null: un feriado, un cierre) que cubren
+ * `ahora`. `null` si el slug no existe.
  */
-export async function negocioDeLaFila(slug: string) {
+export async function negocioDeLaFila(slug: string, ahora = new Date()) {
   const negocio = await prisma.business.findUnique({
     where: { slug },
     select: { id: true, name: true, slug: true, timezone: true, filaVirtualActiva: true, filaVirtualTope: true },
   })
   if (!negocio) return null
-  const workSchedules = await prisma.workSchedule.findMany({
-    where: { businessId: negocio.id, active: true },
-    select: { dayOfWeek: true, memberId: true, startTime: true, endTime: true },
-    take: 500,
-  })
-  return { ...negocio, workSchedules }
+  const [workSchedules, bloqueos] = await Promise.all([
+    prisma.workSchedule.findMany({
+      where: { businessId: negocio.id, active: true },
+      select: { dayOfWeek: true, memberId: true, startTime: true, endTime: true },
+      take: 500,
+    }),
+    prisma.timeBlock.findMany({
+      where: { businessId: negocio.id, memberId: null, startTime: { lte: ahora }, endTime: { gt: ahora } },
+      select: { startTime: true, endTime: true },
+      take: TOPE_DE_BLOQUEOS,
+    }),
+  ])
+  return { ...negocio, workSchedules, bloqueos }
 }
 
 type NegocioDeLaFila = NonNullable<Awaited<ReturnType<typeof negocioDeLaFila>>>
@@ -85,9 +94,17 @@ type NegocioDeLaFila = NonNullable<Awaited<ReturnType<typeof negocioDeLaFila>>>
 /**
  * Si el local está abierto en este instante, según su horario de atención
  * (el mismo que la página pública: `horarioSemanalDeAtencion`) y en su zona.
- * Sin horario cargado, cerrado: no se puede saber cuándo atiende.
+ * Sin horario cargado, cerrado: no se puede saber cuándo atiende. Dentro de
+ * un bloqueo de todo el negocio (feriado, cierre), cerrado aunque el horario
+ * diga que atiende: es el mismo bloqueo que saca esas horas de la reserva
+ * pública. Los bloqueos de un solo profesional no cierran el local.
  */
-export function estaAbiertoAhora(negocio: Pick<NegocioDeLaFila, "timezone" | "workSchedules">, ahora: Date): boolean {
+export function estaAbiertoAhora(
+  negocio: Pick<NegocioDeLaFila, "timezone" | "workSchedules" | "bloqueos">,
+  ahora: Date
+): boolean {
+  const bloqueado = negocio.bloqueos.some((bloqueo) => bloqueo.startTime <= ahora && ahora < bloqueo.endTime)
+  if (bloqueado) return false
   const estado = estadoDeAtencion(horarioSemanalDeAtencion(negocio.workSchedules), ahora, zonaDelNegocio(negocio.timezone))
   return estado?.abierto === true
 }

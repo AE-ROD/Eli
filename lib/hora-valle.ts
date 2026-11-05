@@ -324,3 +324,14 @@ export const configuracionDeHoraValleSchema = z
     ({ franjas }) => !franjas.some((franja, i) => franjas.slice(i + 1).some((otra) => franjasSeSolapan(franja, otra))),
     { message: "Dos franjas del mismo día se pisan", path: ["franjas"] }
   )
+
+/**
+ * El primer problema de unas franjas, con el mismo texto que respondería el
+ * servidor (`configuracionDeHoraValleSchema`), o `null` si se pueden
+ * guardar. La pantalla lo pregunta antes de mandarlas (#138): así una franja
+ * que se pisa con otra se ve sin ir al servidor.
+ */
+export function problemaDeLasFranjas(franjas: FranjaDeHoraValle[]): string | null {
+  const validado = configuracionDeHoraValleSchema.safeParse({ activa: true, franjas })
+  return validado.success ? null : (validado.error.issues[0]?.message ?? MENSAJE_CONFIGURACION)
+}
