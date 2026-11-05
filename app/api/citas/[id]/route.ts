@@ -27,7 +27,12 @@ import { advertenciasDeAgenda } from "@/lib/advertencias-de-agenda"
 import { MENSAJE_CITA_CAMBIO, decidirReactivacion, problemaConLaAtencion } from "@/lib/reactivar-cita"
 import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { ocupaElHorario } from "@/lib/ocupacion"
-import { MENSAJE_MIEMBRO_NO_ATIENDE, atiendeCitas } from "@/lib/agenda-publica"
+import {
+  MENSAJE_MIEMBRO_NO_ATIENDE,
+  MENSAJE_PROFESIONAL_NO_HACE,
+  atiendeCitas,
+  elMiembroHaceLosServicios,
+} from "@/lib/agenda-publica"
 import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
 import { estaPorConfirmar, mensajeDeReservaQueCambio } from "@/lib/por-confirmar"
 import { avisarReservaConfirmadaPorElLocal } from "@/lib/aviso-de-reserva-confirmada"
@@ -57,7 +62,9 @@ const NO_VINO_PERO_LLEGO = "El cliente ya llegó: la cita tiene una atención en
 /**
  * Una cita cuyo cliente ya llegó (atención viva en el Tablero) no se cancela
  * desde la agenda: la atención quedaría colgando de una cita cancelada. Vale
- * para las por confirmar (#84) y para cualquier otra (#136).
+ * para las por confirmar (#84) y para cualquier otra (#136). Lo mismo al
+ * volver una "en progreso" a pendiente o confirmada: la atención quedaría
+ * viva detrás de una cita que dice que el cliente todavía no llega.
  */
 const MENSAJE_CANCELAR_CON_ATENCION = "Esta cita ya tiene una atención en el Tablero: anúlala ahí primero"
 
@@ -212,6 +219,17 @@ export async function PUT(
       if (!atiendeCitas(miembro.role)) {
         return NextResponse.json({ error: MENSAJE_MIEMBRO_NO_ATIENDE }, { status: 400 })
       }
+      // Una cita con servicios del catálogo va a quien los hace todos, como al
+      // crearla. Las filas de un servicio que se borró del catálogo
+      // (`serviceId` null) no cuentan: ya no hay contra qué comparar.
+      const servicios = await prisma.appointmentService.findMany({
+        where: { appointmentId: existente.id, businessId: actor.businessId },
+        select: { serviceId: true },
+      })
+      const serviceIds = servicios.flatMap((fila) => (fila.serviceId ? [fila.serviceId] : []))
+      if (serviceIds.length > 0 && !(await elMiembroHaceLosServicios(prisma, actor.businessId, memberId, serviceIds))) {
+        return NextResponse.json({ error: MENSAJE_PROFESIONAL_NO_HACE }, { status: 400 })
+      }
     }
 
     // Sacar la cita de cancelada, completada o "no vino" es reactivarla:
@@ -225,6 +243,14 @@ export async function PUT(
     })
     if (reactivacion.tipo === "rechazada") {
       return NextResponse.json({ error: reactivacion.mensaje }, { status: reactivacion.status })
+    }
+
+    if (
+      existente.status === "en-progreso" &&
+      (datos.status === "pendiente" || datos.status === "confirmada") &&
+      (await tieneAtencionViva(actor.businessId, existente.id))
+    ) {
+      return NextResponse.json({ error: MENSAJE_CANCELAR_CON_ATENCION }, { status: 409 })
     }
 
     // "No vino" sólo para una reserva que seguía esperando, cuya hora ya
@@ -380,15 +406,20 @@ export async function PUT(
     // con su atención colgando.
     if (resuelvePorConfirmar && reactivacion.tipo !== "reactivar") {
       const cancela = datos.status === "cancelada"
-      const { count } = await prisma.appointment.updateMany({
-        where: {
-          id: existente.id,
-          businessId: actor.businessId,
-          status: "pendiente",
-          confirmacionPorFaltas: true,
-          ...(cancela && SIN_ATENCION_VIVA),
-        },
-        data: actualizacion.data,
+      // La cita y sus filas en la misma transacción: o cambian las dos o ninguna.
+      const { count } = await prisma.$transaction(async (tx) => {
+        const escrita = await tx.appointment.updateMany({
+          where: {
+            id: existente.id,
+            businessId: actor.businessId,
+            status: "pendiente",
+            confirmacionPorFaltas: true,
+            ...(cancela && SIN_ATENCION_VIVA),
+          },
+          data: actualizacion.data,
+        })
+        if (escrita.count === 1) await ajustarFilas(tx, actor.businessId, existente.id, filasAjustadas)
+        return escrita
       })
       const cita = await prisma.appointment.findFirst({
         where: { id: existente.id, businessId: actor.businessId },
@@ -403,7 +434,6 @@ export async function PUT(
         if (cita.status === datos.status && soloCambiaElEstado(datos)) return NextResponse.json(cita)
         return NextResponse.json({ error: mensajeDeReservaQueCambio(datos.status) }, { status: 409 })
       }
-      await ajustarFilas(prisma, actor.businessId, existente.id, filasAjustadas)
       // Confirmada por el local: se le avisa al cliente, después de responder,
       // salvo que ya esté en el local.
       if (datos.status === "confirmada" && !(await tieneAtencionViva(actor.businessId, existente.id))) {
@@ -420,9 +450,13 @@ export async function PUT(
     // condición va en la misma escritura, como en las por confirmar: una
     // llegada que entre entretanto no deja una cancelada con su atención viva.
     if (reactivacion.tipo !== "reactivar" && datos.status === "cancelada" && existente.status !== "cancelada") {
-      const { count } = await prisma.appointment.updateMany({
-        where: { id: existente.id, businessId: actor.businessId, ...SIN_ATENCION_VIVA },
-        data: actualizacion.data,
+      const { count } = await prisma.$transaction(async (tx) => {
+        const escrita = await tx.appointment.updateMany({
+          where: { id: existente.id, businessId: actor.businessId, ...SIN_ATENCION_VIVA },
+          data: actualizacion.data,
+        })
+        if (escrita.count === 1) await ajustarFilas(tx, actor.businessId, existente.id, filasAjustadas)
+        return escrita
       })
       const cita = await prisma.appointment.findFirst({
         where: { id: existente.id, businessId: actor.businessId },
@@ -430,7 +464,6 @@ export async function PUT(
       })
       if (!cita) return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 })
       if (count !== 1) return NextResponse.json({ error: MENSAJE_CANCELAR_CON_ATENCION }, { status: 409 })
-      await ajustarFilas(prisma, actor.businessId, existente.id, filasAjustadas)
       if (ocupaElHorario(existente.status)) {
         programarAvisoDeHoraLiberada({ businessId: actor.businessId, inicio: existente.startTime })
       }

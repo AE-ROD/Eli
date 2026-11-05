@@ -134,3 +134,57 @@ describe("PUT /api/citas/[id]: las filas de servicios siguen a la cita (#138)", 
     expect(base.volcado()).toEqual(antes)
   })
 })
+
+describe("PUT /api/citas/[id]: reasignar una cita con servicios (#159)", () => {
+  beforeEach(() => {
+    base.reiniciar({
+      ...datosBase(),
+      appointment: [cita("con-filas"), cita("borrado", { title: "Alisado" })],
+      appointmentService: [
+        { ...fila("con-filas", 1, "Corte", 30, 8000), serviceId: "s-corte" },
+        { ...fila("con-filas", 2, "Color", 60, 25000), serviceId: "s-color" },
+        // Un servicio que se borró del catálogo: ya no hay contra qué comparar.
+        fila("borrado", 1, "Alisado", 90, 30000),
+      ],
+      // Pedro sólo hace cortes; Carla no tiene filas: hace todo.
+      memberService: [{ id: "ms-1", businessId: NEGOCIO, memberId: "m-pedro", serviceId: "s-corte" }],
+    })
+  })
+
+  it("a un profesional que no hace todos sus servicios: 400, como al crearla, y nada cambia", async () => {
+    const antes = base.volcado()
+    const { status, cuerpo } = await editar("con-filas", { memberId: "m-pedro" })
+
+    expect(status).toBe(400)
+    expect(cuerpo.error).toMatch(/no hace todos los servicios/)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("a quien los hace todos, sí", async () => {
+    base.reiniciar({
+      ...base.volcado(),
+      memberService: [
+        { id: "ms-1", businessId: NEGOCIO, memberId: "m-pedro", serviceId: "s-corte" },
+        { id: "ms-2", businessId: NEGOCIO, memberId: "m-pedro", serviceId: "s-color" },
+      ],
+    })
+    expect((await editar("con-filas", { memberId: "m-pedro" })).status).toBe(200)
+    expect(base.buscar("appointment", { id: "con-filas" })[0].memberId).toBe("m-pedro")
+  })
+
+  it("las filas de un servicio borrado del catálogo no frenan la reasignación", async () => {
+    expect((await editar("borrado", { memberId: "m-pedro" })).status).toBe(200)
+  })
+})
+
+describe("PUT /api/citas/[id]: la cita y sus filas cambian juntas al cancelar", () => {
+  it("si ajustar las filas falla, la cita tampoco queda cancelada", async () => {
+    const antes = base.volcado()
+    base.prisma.appointmentService.updateMany.mockRejectedValueOnce(new Error("se cayó la conexión"))
+
+    const { status } = await editar("con-filas", { status: "cancelada", endTime: aLas("12:00").toISOString() })
+
+    expect(status).toBe(500)
+    expect(base.volcado()).toEqual(antes)
+  })
+})

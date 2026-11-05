@@ -152,6 +152,29 @@ export function haceLosServicios(profesional: Pick<ProfesionalQueAtiende, "servi
   return serviceIds.length > 0 && serviceIds.every((serviceId) => haceElServicio(profesional, serviceId))
 }
 
+/** El 400 al dejar en el panel una cita con servicios a quien no los hace todos. */
+export const MENSAJE_PROFESIONAL_NO_HACE = "Ese profesional no hace todos los servicios elegidos: elige otro o quítalos"
+
+/**
+ * Si el miembro hace todos esos servicios según lo que tiene acotado
+ * (`MemberService`; sin filas, hace todos). Lo usan crear una cita con
+ * servicios en el panel y reasignarla (#159), con la regla de la reserva
+ * pública.
+ */
+export async function elMiembroHaceLosServicios(
+  db: Pick<Prisma.TransactionClient, "memberService">,
+  businessId: string,
+  memberId: string,
+  serviceIds: string[]
+): Promise<boolean> {
+  const queHace = await db.memberService.findMany({
+    where: { businessId, memberId },
+    select: { serviceId: true },
+    take: 500,
+  })
+  return haceLosServicios({ serviceIds: queHace.map((fila) => fila.serviceId) }, serviceIds)
+}
+
 /** Quien puede tomar la reserva ese día y en qué franjas. `memberId` null = el carril único del negocio sin profesionales. */
 export interface Candidato {
   memberId: string | null

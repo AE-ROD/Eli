@@ -11,7 +11,12 @@ import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { esFechaCalendario, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 import { advertenciasDeAgenda } from "@/lib/advertencias-de-agenda"
 import { ocupaElHorario } from "@/lib/ocupacion"
-import { MENSAJE_MIEMBRO_NO_ATIENDE, atiendeCitas, haceLosServicios } from "@/lib/agenda-publica"
+import {
+  MENSAJE_MIEMBRO_NO_ATIENDE,
+  MENSAJE_PROFESIONAL_NO_HACE,
+  atiendeCitas,
+  elMiembroHaceLosServicios,
+} from "@/lib/agenda-publica"
 import { servicioIdsSchema } from "@/lib/validaciones"
 import {
   duracionesQueSuman,
@@ -22,7 +27,6 @@ import {
 
 /** Servicios elegidos que no son del negocio, no existen o ya no se ofrecen. Sin decir cuál. */
 const MENSAJE_SERVICIO_NO_ENCONTRADO = "Servicio no encontrado"
-const MENSAJE_PROFESIONAL_NO_HACE = "Ese profesional no hace todos los servicios elegidos: elige otro o quítalos"
 const mensajeDeDuracionConServicios = (cuantos: number) =>
   `Con ${cuantos} servicios, la cita tiene que durar al menos ${cuantos} minutos y no más de 24 horas por servicio`
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
@@ -187,12 +191,13 @@ export async function POST(request: NextRequest) {
       // Si el profesional tiene acotado lo que hace (`MemberService`), tiene
       // que hacerlos todos, como en la reserva pública. Sin filas, hace todos.
       if (memberId) {
-        const queHace = await prisma.memberService.findMany({
-          where: { businessId: actor.businessId, memberId },
-          select: { serviceId: true },
-          take: 500,
-        })
-        if (!haceLosServicios({ serviceIds: queHace.map((fila) => fila.serviceId) }, servicios.map((servicio) => servicio.id))) {
+        const losHace = await elMiembroHaceLosServicios(
+          prisma,
+          actor.businessId,
+          memberId,
+          servicios.map((servicio) => servicio.id)
+        )
+        if (!losHace) {
           return NextResponse.json({ error: MENSAJE_PROFESIONAL_NO_HACE }, { status: 400 })
         }
       }
