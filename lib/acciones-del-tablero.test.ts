@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import { aCentavos } from "./atenciones"
 import type { Actor } from "./permisos"
 import {
+  avisoDeLargo,
   filaDePropinaSugerida,
   propinasDesdeFilas,
   totalDePropinasEnCentavos,
@@ -826,5 +827,20 @@ describe("avisoAntesDeCobrar (#118)", () => {
     expect(avisoAntesDeCobrar(3)).toBe(
       "3 servicios quedarán sin porcentaje de comisión. Se cobra igual: quedan pendientes hasta que se configuren en Comisiones."
     )
+  })
+})
+
+describe("avisoDeLargo", () => {
+  it("lejos del tope no dice nada", () => {
+    expect(avisoDeLargo(0, 100)).toBeNull()
+    expect(avisoDeLargo(79, 100)).toBeNull()
+  })
+  it("cerca del tope cuenta", () => {
+    expect(avisoDeLargo(80, 100)).toBe("80/100 caracteres.")
+    expect(avisoDeLargo(99, 100)).toBe("99/100 caracteres.")
+  })
+  it("en el tope avisa que lo que sigue no entra", () => {
+    expect(avisoDeLargo(100, 100)).toBe("100/100 caracteres: es el máximo, lo que sigue no se agrega.")
+    expect(avisoDeLargo(130, 100)).toBe("100/100 caracteres: es el máximo, lo que sigue no se agrega.")
   })
 })

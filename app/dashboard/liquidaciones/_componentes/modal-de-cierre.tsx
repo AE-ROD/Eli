@@ -8,8 +8,9 @@ import { Esqueleto } from "@/components/comunes/esqueleto"
 import { Aviso } from "@/components/panel/aviso"
 import { CAMPO } from "@/components/panel/estilos"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
+import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { NOMBRES_DE_MOVIMIENTO } from "@/lib/movimientos"
-import { fechaParaLeer } from "@/lib/periodos-de-liquidacion"
+import { avisoDeCierreAnticipado, fechaParaLeer } from "@/lib/periodos-de-liquidacion"
 import type { Resultado } from "@/lib/peticiones"
 import { cerrarLiquidacion, leerVistaPrevia, type VistaPrevia } from "../_datos"
 import { FilaDeTotal, pesos, porcentaje } from "./piezas"
@@ -25,6 +26,11 @@ interface Props {
  * congelará; lo que no tiene % frena el cierre. Los adelantos, vales y
  * ajustes se pueden dejar para la siguiente (por ejemplo, si el total queda
  * negativo). Sólo la dueña llega acá.
+ *
+ * Cerrar pide confirmación (QA#5): congela comisiones y saca lo incluido de
+ * las próximas, y si el período todavía no termina, lo dice. Mientras se
+ * confirma, este componente sigue montado y guarda lo elegido (excluidos y
+ * nota): cancelar vuelve a la vista previa tal como estaba.
  */
 export function ModalDeCierre({ miembro, alCerrar }: Props) {
   const router = useRouter()
@@ -35,6 +41,7 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
   const [cerrando, setCerrando] = useState(false)
   const [errorAlCerrar, setErrorAlCerrar] = useState("")
   const [reintentos, setReintentos] = useState(0)
+  const [confirmando, setConfirmando] = useState(false)
   const enviado = useRef(false)
 
   const clave = JSON.stringify({ excluidos, reintentos })
@@ -70,11 +77,35 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
     enviado.current = false
     setCerrando(false)
     if (!resultado.ok) {
+      // Vuelve a la vista previa, que se recalcula: lo que hizo fallar el
+      // cierre (algo cambió mientras tanto) se ve ahí.
+      setConfirmando(false)
       setErrorAlCerrar(resultado.error)
       setReintentos((n) => n + 1)
       return
     }
     router.push(`/dashboard/liquidaciones/${resultado.datos.id}`)
+  }
+
+  if (confirmando && vista) {
+    const anticipado = avisoDeCierreAnticipado(vista.periodo, vista.hoy)
+    return (
+      <ModalConfirmar
+        titulo={`¿Cerrar la liquidación de ${miembro.nombre}?`}
+        descripcion={`${vista.periodo.texto}, con ${pesos(vista.totales.totalCents)} a pagar. Las comisiones pendientes se congelan y lo incluido ya no entra en otra liquidación. Se puede anular mientras no esté pagada.`}
+        textoConfirmar="Cerrar liquidación"
+        textoCancelar="Volver a la vista previa"
+        trabajando={cerrando}
+        onConfirmar={cerrar}
+        onCerrar={() => setConfirmando(false)}
+      >
+        {anticipado && (
+          <Aviso tono="atencion" rol="status">
+            {anticipado}
+          </Aviso>
+        )}
+      </ModalConfirmar>
+    )
   }
 
   return (
@@ -217,7 +248,10 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
               anchoCompleto
               cargando={cerrando}
               disabled={cargando || !!vista.noSePuedeCerrar}
-              onClick={cerrar}
+              onClick={() => {
+                setErrorAlCerrar("")
+                setConfirmando(true)
+              }}
             >
               Cerrar liquidación
             </BotonPrimario>

@@ -6,7 +6,7 @@ import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, ETIQUETA } from "@/components/panel/estilos"
-import { lineasDesdeFilas, type FilaDeServicio } from "@/lib/acciones-del-tablero"
+import { avisoDeLargo, lineasDesdeFilas, type FilaDeServicio } from "@/lib/acciones-del-tablero"
 import type { Resultado } from "@/lib/peticiones"
 import { cn } from "@/lib/utils"
 import {
@@ -139,7 +139,7 @@ export function ModalAnotarSinReserva({
     setModo(nuevo)
     // Si la búsqueda no encontró a nadie, lo escrito es casi seguro el nombre;
     // salvo que se haya buscado por teléfono, que no es un nombre.
-    if (nuevo === "nuevo" && !nombre && !elegido && /\p{L}/u.test(textoBuscado)) setNombre(textoBuscado)
+    if (nuevo === "nuevo" && !nombre && !elegido && /\p{L}/u.test(textoBuscado)) setNombre(textoBuscado.slice(0, LARGO_MAXIMO_DEL_NOMBRE))
   }
 
   // Elegir un cliente o pasar a uno nuevo saca de la pantalla el botón que se
@@ -311,18 +311,34 @@ export function ModalAnotarSinReserva({
             )
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <CampoFormulario
-                ref={campoNombre}
-                etiqueta="Nombre"
-                value={nombre}
-                maxLength={LARGO_MAXIMO_DEL_NOMBRE}
-                autoComplete="off"
-                required
-                disabled={guardando}
-                error={mostrarErrores && errorDeCliente ? errorDeCliente : undefined}
-                onChange={(evento) => setNombre(evento.target.value)}
-                icono={<User className="h-4 w-4" aria-hidden="true" />}
-              />
+              {/* El tope se dice al acercarse (QA#16): `maxLength` solo cortaba sin avisar. */}
+              <div>
+                <CampoFormulario
+                  ref={campoNombre}
+                  id={`${idBase}-nombre`}
+                  etiqueta="Nombre"
+                  value={nombre}
+                  maxLength={LARGO_MAXIMO_DEL_NOMBRE}
+                  autoComplete="off"
+                  required
+                  disabled={guardando}
+                  error={mostrarErrores && errorDeCliente ? errorDeCliente : undefined}
+                  aria-describedby={
+                    mostrarErrores && errorDeCliente
+                      ? `${idBase}-nombre-error ${idBase}-nombre-largo`
+                      : `${idBase}-nombre-largo`
+                  }
+                  onChange={(evento) => setNombre(evento.target.value)}
+                  icono={<User className="h-4 w-4" aria-hidden="true" />}
+                />
+                <p id={`${idBase}-nombre-largo`} className="mt-1.5 text-xs text-texto-2 empty:hidden">
+                  {avisoDeLargo(nombre.length, LARGO_MAXIMO_DEL_NOMBRE)}
+                </p>
+                {/* Se anuncia sólo al llegar al tope: contar letra por letra interrumpiría. */}
+                <span aria-live="polite" className="sr-only">
+                  {nombre.length >= LARGO_MAXIMO_DEL_NOMBRE ? avisoDeLargo(nombre.length, LARGO_MAXIMO_DEL_NOMBRE) : ""}
+                </span>
+              </div>
               <CampoFormulario
                 etiqueta="Teléfono (opcional)"
                 type="tel"

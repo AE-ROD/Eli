@@ -25,12 +25,35 @@ export function InsigniaDeEstado({ estado }: { estado: EstadoDeLiquidacion }) {
   return <Insignia tono={TONO_DE_ESTADO[estado] ?? "gris"}>{TEXTO_DE_ESTADO[estado] ?? estado}</Insignia>
 }
 
-/** Una fila de totales: el concepto a la izquierda y el monto a la derecha. */
-export function FilaDeTotal({ concepto, centavos, fuerte = false }: { concepto: string; centavos: number; fuerte?: boolean }) {
+/**
+ * Una fila de totales: el concepto a la izquierda y el monto a la derecha.
+ * `tachado`: un monto que ya no vale (el de una liquidación anulada), tachado
+ * y con texto para el lector de pantalla, que no lee el tachado.
+ */
+export function FilaDeTotal({
+  concepto,
+  centavos,
+  fuerte = false,
+  tachado = false,
+}: {
+  concepto: string
+  centavos: number
+  fuerte?: boolean
+  tachado?: boolean
+}) {
   return (
     <div className={fuerte ? "flex justify-between gap-4 border-t border-borde pt-3 text-base font-semibold" : "flex justify-between gap-4 text-sm"}>
       <dt className={fuerte ? "" : "text-texto-2"}>{concepto}</dt>
-      <dd className="tabular-nums">{pesos(centavos)}</dd>
+      <dd className="tabular-nums">
+        {tachado ? (
+          <s className="text-texto-2">
+            <span className="sr-only">Anulado: </span>
+            {pesos(centavos)}
+          </s>
+        ) : (
+          pesos(centavos)
+        )}
+      </dd>
     </div>
   )
 }

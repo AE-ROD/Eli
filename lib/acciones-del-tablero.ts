@@ -718,3 +718,15 @@ export function filaDePropinaSugerida(
   const unico = quienes.length === 1 && profesionales.some((profesional) => profesional.id === quienes[0]) ? quienes[0] : ""
   return { clave, profesional: unico, monto: "", medio: medios[0]?.id ?? "" }
 }
+
+/**
+ * Lo que se dice debajo de un campo con tope de largo (QA#16): nada mientras
+ * queda lejos; desde el 80 % del tope, cuánto va; y al llegar, que lo que
+ * siga no se agrega (el `maxLength` del navegador lo corta sin avisar, al
+ * escribir y al pegar). Puro.
+ */
+export function avisoDeLargo(largo: number, maximo: number): string | null {
+  if (largo >= maximo) return `${maximo}/${maximo} caracteres: es el máximo, lo que sigue no se agrega.`
+  if (largo >= Math.ceil(maximo * 0.8)) return `${largo}/${maximo} caracteres.`
+  return null
+}

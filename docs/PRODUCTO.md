@@ -134,7 +134,7 @@ Cada negocio liquida al equipo con un período que elige sólo la dueña: **sema
 
 **Total = comisiones + propinas − adelantos y vales + ajustes.**
 
-La dueña ve una **vista previa** sin guardar. Lo que no tenía % al cobrar dice "se congelará al X %" y se congela al cerrar. No se cierra mientras haya líneas sin % configurado ni con el total negativo (los adelantos se pueden dejar para la siguiente). Cerrar, **marcar pagada** (con medio, quién y cuándo) y **anular** son de la dueña. Se anula sólo una cerrada no pagada: libera lo que incluía, y lo ya congelado queda congelado. Una atención incluida en una liquidación no se anula ni se reactiva su cita: se corrige con un ajuste.
+La dueña ve una **vista previa** sin guardar. Lo que no tenía % al cobrar dice "se congelará al X %" y se congela al cerrar. No se cierra mientras haya líneas sin % configurado ni con el total negativo (los adelantos se pueden dejar para la siguiente). Cerrar pide confirmación, con el total a pagar; si el período todavía no termina (hoy es su último día o antes), la confirmación lo dice ("El período termina el 30 nov 2026: lo que se cobre de aquí a esa fecha queda para la próxima liquidación. ¿Cerrar igual?"). Cerrar, **marcar pagada** (con medio, quién y cuándo) y **anular** son de la dueña. Se anula sólo una cerrada no pagada: libera lo que incluía, y lo ya congelado queda congelado. Una atención incluida en una liquidación no se anula ni se reactiva su cita: se corrige con un ajuste.
 
 ### 3.8 Adelantos, vales y ajustes
 
@@ -142,7 +142,7 @@ Adelantos y vales los registran dueña y encargado; los ajustes, sólo la dueña
 
 ### 3.9 Comprobante
 
-Cada liquidación tiene un comprobante en el panel que se imprime o se guarda como PDF desde el navegador y se descarga en CSV. Compartir manda un resumen y el enlace interno: no hay enlace público. El profesional ve sólo los suyos.
+Cada liquidación tiene un comprobante en el panel que se imprime o se guarda como PDF desde el navegador y se descarga en CSV. Compartir manda un resumen y el enlace interno: no hay enlace público. El profesional ve sólo los suyos. El de una liquidación anulada lo dice: lo que incluía volvió a quedar pendiente, los montos de cuando se cerró se ven tachados y el total a pagar es $0. El CSV lo dice igual: estado "Anulada", quién la anuló y por qué, "Total al cerrarse (anulada)" y "Total a pagar" en 0.
 
 ### 3.10 Mi plata
 
@@ -367,7 +367,7 @@ Todo sale por correo; WhatsApp todavía no (sección 10). Cada envío queda regi
 
 ## 7. Tablero de atenciones
 
-Una **atención** es la visita de un cliente al local, con o sin reserva. El tablero muestra el día en columnas y es donde se anota qué se hizo, quién lo hizo y cuánto se cobró. **Los ingresos del negocio son lo cobrado acá.**
+Una **atención** es la visita de un cliente al local, con o sin reserva. El tablero muestra el día en columnas (si no entran en la pantalla, se desplazan de costado: un degradado en el borde y, con mouse, una flecha muestran que hay más) y es donde se anota qué se hizo, quién lo hizo y cuánto se cobró. **Los ingresos del negocio son lo cobrado acá.**
 
 | Columna | Qué hay | Para pasar a la siguiente |
 |---|---|---|
@@ -391,7 +391,7 @@ Una **atención** es la visita de un cliente al local, con o sin reserva. El tab
 
 **Pago dividido.** Medios fijos: efectivo, tarjeta de débito, tarjeta de crédito, transferencia y billetera digital. Un cobro se puede repartir entre varios medios. La suma tiene que coincidir con el total al centavo: se calcula en centavos enteros, nunca con decimales sueltos.
 
-**Lo cobrado no se reescribe.** Una vez finalizada, la atención no se edita. Si hubo un error, el dueño la anula, también días después desde Reportes: queda en el historial de anuladas (quién, cuándo y por qué) y deja de sumar. **Lo rendido no se anula:** una atención que ya entró en una liquidación no anulada o en un cierre de caja se corrige con un ajuste en la liquidación. Si un cierre (de caja o de liquidación) está en curso, cobrar, anular y reactivar una cita esperan a que termine: así no se cuela nada a mitad de un cierre. El nombre de quien cobró y de quien anuló se guarda con la atención, y se conserva aunque esa persona deje el negocio. Si alguien se va sin ser atendido, también se anula.
+**Lo cobrado no se reescribe.** Una vez finalizada, la atención no se edita. Si hubo un error, el dueño la anula, también días después desde Reportes: queda en el historial de anuladas (quién, cuándo y por qué) y deja de sumar. **Lo rendido no se anula:** una atención que ya entró en una liquidación no anulada o en un cierre de caja se corrige con un ajuste en la liquidación; si se intenta anular desde el Tablero o desde Reportes, el modal lo dice sin cerrarse ni borrar el motivo escrito, y ya no ofrece anular. Si un cierre (de caja o de liquidación) está en curso, cobrar, anular y reactivar una cita esperan a que termine: así no se cuela nada a mitad de un cierre. El nombre de quien cobró y de quien anuló se guarda con la atención, y se conserva aunque esa persona deje el negocio. Si alguien se va sin ser atendido, también se anula.
 
 **La agenda se entera sola.** Al empezar la atención de alguien con reserva, su cita pasa a "en progreso"; al cobrarla, a "completada". El precio de la cita no cambia: lo cobrado vive en la atención, y el total puede incluir servicios de otros profesionales que quien atendió la cita no debe ver. Una cita marcada como completada en la agenda sin pasar por el cobro **no suma ingresos**: no hay registro de cuánto se cobró ni cómo. Si se anula la atención de una reserva antes de cobrarla, la cita queda cancelada (salvo que alguien ya la haya completado o cancelado a mano en la agenda: esa decisión no se pisa) y atada a esa atención; si la persona vuelve ese día, se la anota sin reserva.
 
