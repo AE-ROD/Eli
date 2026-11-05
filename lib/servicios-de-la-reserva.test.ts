@@ -134,16 +134,21 @@ describe("duracionAlReagendar", () => {
   const hasta = (minutos: number) => new Date(inicio.getTime() + minutos * 60_000)
 
   it("con filas: la mayor entre su suma y lo que dura hoy la cita", () => {
-    const filas = [{}, {}]
-    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(90), servicios: filas }, { duracion: 90 })).toBe(90)
+    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(90) }, { duracion: 90 })).toBe(90)
     // Alargada en el panel: no se acorta al moverla.
-    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(120), servicios: filas }, { duracion: 90 })).toBe(120)
+    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(120) }, { duracion: 90 })).toBe(120)
     // Acortada en el panel: manda la suma.
-    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(60), servicios: filas }, { duracion: 90 })).toBe(90)
+    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(60) }, { duracion: 90 })).toBe(90)
   })
 
-  it("sin filas, la de su servicio, como siempre; sin duración, null", () => {
-    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(120), servicios: [] }, { duracion: 60 })).toBe(60)
+  it("sin filas (cita de antes), la misma regla: alargada en el panel no se acorta (#138)", () => {
+    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(120) }, { duracion: 60 })).toBe(120)
+    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(60) }, { duracion: 60 })).toBe(60)
+    // Acortada en el panel: manda la de su servicio.
+    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(30) }, { duracion: 60 })).toBe(60)
+  })
+
+  it("sin duración conocida (cita sin servicio del catálogo), null", () => {
     expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(120) }, { duracion: null })).toBeNull()
   })
 })

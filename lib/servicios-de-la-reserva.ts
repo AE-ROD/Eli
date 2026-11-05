@@ -158,18 +158,19 @@ export function serviciosDeLaCita(cita: CitaConSusServicios): ServiciosDeLaCita 
 }
 
 /**
- * Minutos que ocupa el bloque al reagendar por el enlace. Con filas, la mayor
- * entre su suma y lo que la cita dura hoy (`endTime - startTime`): si en el
- * panel se alargó la cita, moverla no la acorta en silencio ni la deja pisar
- * la cita siguiente. Sin filas (las de antes), la duración de su servicio,
- * como siempre.
+ * Minutos que ocupa el bloque al reagendar por el enlace: la mayor entre la
+ * duración de sus servicios (`serviciosDeLaCita`: la suma de las filas o,
+ * sin filas, la de su servicio) y lo que la cita dura hoy
+ * (`endTime - startTime`). Si en el panel se alargó la cita, moverla no la
+ * acorta en silencio ni la deja pisar la cita siguiente. Vale igual para las
+ * citas de antes, sin filas (#138): antes ésas volvían a la duración de su
+ * servicio.
  */
 export function duracionAlReagendar(
-  cita: { startTime: Date; endTime: Date; servicios?: unknown[] },
+  cita: { startTime: Date; endTime: Date },
   servicios: Pick<ServiciosDeLaCita, "duracion">
 ): number | null {
   if (servicios.duracion === null) return null
-  if (!cita.servicios || cita.servicios.length === 0) return servicios.duracion
   const guardada = Math.ceil((cita.endTime.getTime() - cita.startTime.getTime()) / 60_000)
   return Math.max(servicios.duracion, guardada)
 }

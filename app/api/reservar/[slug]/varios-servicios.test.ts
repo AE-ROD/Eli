@@ -355,14 +355,14 @@ describe("el enlace de gestión con varios servicios", () => {
     expect((await (await GET(pedido("http://localhost/x"), params)).json()).sePuedeReagendar).toBe(false)
   })
 
-  it("una cita de antes, sin filas, se reagenda como siempre: con la duración de su servicio", async () => {
+  it("una cita de antes, sin filas, conserva lo que dura si se alargó en el panel (#138)", async () => {
     conCitaDeDos([])
     const { POST } = await import("./cita/[token]/reagendar/route")
     const respuesta = await POST(pedido("http://localhost/x", { fecha: "2030-01-08", hora: "11:00" }), params)
     expect(respuesta.status).toBe(200)
     const [cita] = base.buscar("appointment", { id: "c-lucia" })
-    // Corte: 60 minutos.
-    expect(cita.endTime).toEqual(aLas("12:00", "2030-01-08"))
+    // Corte dura 60 minutos, pero la cita dura 90: no se acorta.
+    expect(cita.endTime).toEqual(aLas("12:30", "2030-01-08"))
   })
 })
 
