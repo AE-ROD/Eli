@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { actorDeSesion, puedeConfigurarLiquidacion } from "@/lib/permisos"
 import {
   ErrorDeLiquidacion,
@@ -36,7 +36,9 @@ export async function PUT(request: NextRequest) {
   }
 
   try {
-    const { fecha } = liquidarDesdeSchema.parse(await cuerpoDelPedido(request))
+    const recibido = await cuerpoConTope(request)
+    if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+    const { fecha } = liquidarDesdeSchema.parse(recibido.cuerpo)
     await prisma.$transaction(async (tx) => {
       // Antes de leer nada: lo que se mira abajo ya incluye cualquier cierre
       // que estuviera en curso.

@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { actorDeSesion, puedeConfigurarHoraValle } from "@/lib/permisos"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 
@@ -31,7 +31,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   const existente = await prisma.service.findFirst({ where: { id, businessId: actor.businessId }, select: { id: true } })
   if (!existente) return NextResponse.json({ error: "Servicio no encontrado" }, { status: 404 })
 
-  const datos = exclusionSchema.safeParse(await cuerpoDelPedido(request))
+  const recibido = await cuerpoConTope(request)
+  if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+  const datos = exclusionSchema.safeParse(recibido.cuerpo)
   if (!datos.success) return respuestaDeDatosInvalidos(datos.error)
 
   // El businessId va también en la escritura: no hay forma de tocar uno ajeno.

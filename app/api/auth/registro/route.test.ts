@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server"
 import { Prisma } from "@prisma/client"
 import { RUBROS } from "@/lib/rubros"
 import { serviciosDeEjemplo } from "@/lib/servicios-de-ejemplo"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 
 const mockVerificarLimite = vi.fn()
 
@@ -33,7 +34,7 @@ vi.mock("@/lib/enviar-correo-de-prueba", () => ({
 }))
 
 const pedidoFalso = (cuerpo: unknown): NextRequest =>
-  ({ headers: new Headers(), json: async () => cuerpo }) as unknown as NextRequest
+  ({ headers: new Headers(), body: cuerpoDePrueba(cuerpo) }) as unknown as NextRequest
 
 const registroValido = {
   nombre: "Ana",

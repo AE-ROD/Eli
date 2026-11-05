@@ -32,6 +32,7 @@ import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
 import { estaPorConfirmar, mensajeDeReservaQueCambio } from "@/lib/por-confirmar"
 import { avisarReservaConfirmadaPorElLocal } from "@/lib/aviso-de-reserva-confirmada"
 import { duracionesQueSuman } from "@/lib/servicios-de-la-reserva"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 const edicionDeCitaSchema = z.object({
   title: titulo().optional(),
@@ -172,7 +173,7 @@ export async function PUT(
   }
 
   try {
-    const cuerpo = await request.json()
+    const cuerpo = await leerJsonConTope(request)
     const datos = edicionDeCitaSchema.parse(cuerpo)
 
     // Una reserva por confirmar (#84) la confirma o la cancela sólo quien
@@ -492,6 +493,7 @@ export async function PUT(
     }
     return NextResponse.json(resultado.cita)
   } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       return respuestaDeDatosInvalidos(error)
     }

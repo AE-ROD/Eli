@@ -265,6 +265,19 @@ describe("POST /api/clientes/importar", () => {
     expect(prismaMock.customer.createMany).not.toHaveBeenCalled()
   })
 
+  it("un CSV de más de 100 KB (el tope por defecto de la API) se importa: esta ruta tiene su propio tope", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesion("owner"))
+    const filas = Array.from({ length: 4000 }, (_, i) => `Cliente con un nombre bastante largo número ${i}`)
+    const cuerpo = { csv: ["Nombre", ...filas].join("\n"), mapeo: { nombre: 0 } }
+    expect(JSON.stringify(cuerpo).length).toBeGreaterThan(100 * 1024)
+
+    const res = await POST(pedido(cuerpo))
+
+    expect(res.status).toBe(200)
+    expect((await res.json()).creados).toBe(4000)
+  })
+
   it("un cuerpo enorme se corta sin leerlo entero: 413", async () => {
     const { POST } = await import("./route")
     mockGetServerSession.mockResolvedValueOnce(sesion("owner"))

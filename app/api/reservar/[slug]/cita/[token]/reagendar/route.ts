@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { asignarCandidatoLibre, candidatosDeLaReserva, candidatosQueOfrecen, tramoDeLaReserva } from "@/lib/agenda-publica"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { correosDelAviso } from "@/lib/avisos-al-negocio"
 import { enviarAvisoDeCambioDelCliente } from "@/lib/email"
 import { ESTADOS_GESTIONABLES, dentroDelPlazo, mensajeFueraDePlazo } from "@/lib/gestion-de-cita"
@@ -43,7 +43,9 @@ export async function POST(request: NextRequest, contexto: Params) {
   if (enlace instanceof NextResponse) return enlace
   const { cita, zona, ahora } = enlace
 
-  const datos = reagendarSchema.safeParse(await cuerpoDelPedido(request))
+  const recibido = await cuerpoConTope(request)
+  if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+  const datos = reagendarSchema.safeParse(recibido.cuerpo)
   if (!datos.success) {
     return NextResponse.json({ error: datos.error.issues[0]?.message ?? "Datos inválidos" }, { status: 400 })
   }

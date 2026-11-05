@@ -7,6 +7,7 @@ import { z } from "zod"
 import { diaDeLaSemana } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, mismoNegocio, puedeEditarHorarioDe, type Actor, type Miembro } from "@/lib/permisos"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 type Objetivo = { ok: true; miembro: Miembro | null } | { ok: false; status: 404 | 401 }
 
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest) {
   const memberId = objetivo.miembro?.id ?? null
 
   try {
-    const cuerpo = await request.json()
+    const cuerpo = await leerJsonConTope(request)
     const horarios = horarioSchema.parse(cuerpo)
     const businessId = actor.businessId
 
@@ -130,6 +131,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(resultado)
   } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       return respuestaDeDatosInvalidos(error)
     }

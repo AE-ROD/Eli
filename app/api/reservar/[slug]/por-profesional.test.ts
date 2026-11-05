@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
 import { enviarAvisoProfesional } from "@/lib/email"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 
 /**
  * La reserva pública por profesional (P5): la lista pública de quiénes
@@ -77,7 +78,7 @@ async function horas(consulta: string, slug = "salon-uno") {
 async function confirmar(hora: string, extra: Registro = {}) {
   const { POST } = await import("./confirmar/route")
   const cuerpo = { servicioId: "s-corte", fecha: FECHA, hora, nombre: "Lucía", apellido: "Pérez", ...extra }
-  const respuesta = await POST({ headers: new Headers(), json: async () => cuerpo } as unknown as NextRequest, conSlug())
+  const respuesta = await POST({ headers: new Headers(), body: cuerpoDePrueba(cuerpo) } as unknown as NextRequest, conSlug())
   return { status: respuesta.status, cuerpo: await respuesta.json() }
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { pedidoFalso } from "@/pruebas/pedidos"
+import { pedidoFalso, cuerpoDePrueba } from "@/pruebas/pedidos"
 
 const mockGetServerSession = vi.fn()
 
@@ -146,7 +146,7 @@ describe("PUT /api/configuracion/pagina", () => {
   it("un cuerpo que no es JSON da 400, no 500", async () => {
     const { PUT } = await import("./route")
     mockGetServerSession.mockResolvedValueOnce(sesion("owner", "negocio-1", null))
-    const roto = { headers: new Headers(), json: async () => { throw new SyntaxError("x") } }
+    const roto = { headers: new Headers(), body: cuerpoDePrueba("{no es json") }
 
     const respuesta = await PUT(roto as never)
 

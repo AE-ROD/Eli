@@ -12,7 +12,7 @@ import {
   transicionPermitida,
 } from "@/lib/atenciones"
 import { actorDeSesion, puedeCobrar, puedeRegistrarPropina } from "@/lib/permisos"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { horaDeLaBase, tomarCandadoDeCajaCompartido } from "@/lib/bloqueos-de-dinero"
 import { congelarComisiones, lineasQueQuedaranSinPorcentaje } from "@/lib/lineas-de-atencion"
 import { errorDePropinas, propinasPedidasSchema, resolverPropinas } from "@/lib/propinas"
@@ -103,7 +103,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   try {
-    const { pagos, propinas } = cobroSchema.parse(await cuerpoDelPedido(request))
+    const recibido = await cuerpoConTope(request)
+    if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+    const { pagos, propinas } = cobroSchema.parse(recibido.cuerpo)
 
     // Hoy registra propinas quien cobra; si alguna vez no, falla cerrado.
     if (propinas.length > 0 && !puedeRegistrarPropina(actor)) {

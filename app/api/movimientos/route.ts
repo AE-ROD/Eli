@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { aCentavos } from "@/lib/atenciones"
 import { actorDeSesion, whereDeMovimientos } from "@/lib/permisos"
 import {
@@ -85,7 +85,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const cuerpo = movimientoSchema.parse(await cuerpoDelPedido(request))
+    const recibido = await cuerpoConTope(request)
+    if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+    const cuerpo = movimientoSchema.parse(recibido.cuerpo)
     if (!puedeManejarMovimiento(actor, cuerpo.tipo)) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }
