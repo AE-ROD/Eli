@@ -35,6 +35,7 @@ import { ModalBloquearHorario } from "./_componentes/modal-bloquear-horario"
 import { ModalBloqueo } from "./_componentes/modal-bloqueo"
 import { ListaDeEsperaDelDia } from "./_componentes/lista-de-espera-del-dia"
 import { useZonaDelNegocio } from "./_componentes/zona-del-negocio"
+import { useEsEscritorio } from "./_componentes/usar-escritorio"
 import { hoyEn } from "./_hora-del-negocio"
 
 function resumen(cargando: boolean, cantidad: number): string {
@@ -62,6 +63,10 @@ export default function PaginaAgenda() {
   const [aviso, setAviso] = useState("")
 
   const [citaAbierta, setCitaAbierta] = useState<Cita | null>(null)
+  // El error de la última acción sobre la cita abierta: en el celular el
+  // detalle tapa la página y se repite adentro (#136).
+  const [avisoDelDetalle, setAvisoDelDetalle] = useState("")
+  const escritorio = useEsEscritorio()
   const [modalAbierto, setModalAbierto] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [avisoDelModal, setAvisoDelModal] = useState("")
@@ -129,9 +134,18 @@ export default function PaginaAgenda() {
 
   const cambiarEstado = async (id: string, estado: string) => {
     setAviso("")
+    setAvisoDelDetalle("")
     const resultado = await cambiarEstadoDeCita(id, estado)
-    if (!resultado.ok) return setAviso(resultado.error)
+    if (!resultado.ok) {
+      setAvisoDelDetalle(resultado.error)
+      return setAviso(resultado.error)
+    }
     mostrarEstado(id, estado)
+  }
+
+  const abrirCita = (cita: Cita) => {
+    setAvisoDelDetalle("")
+    setCitaAbierta(cita)
   }
 
   // Cada vez que se abre, un borrador nuevo del día que se está mirando. Si
@@ -188,7 +202,7 @@ export default function PaginaAgenda() {
           </div>
         )}
 
-        {/* El calendario en una tarjeta blanca y, desde lg, el detalle de la cita elegida al lado. */}
+        {/* El calendario en una tarjeta blanca y, desde lg, el detalle de la cita elegida al lado (más angosto, encima). */}
         <div className="flex items-start gap-6">
           <section
             aria-labelledby={idDelPeriodo}
@@ -211,7 +225,7 @@ export default function PaginaAgenda() {
                 citas={citas}
                 horario={horario}
                 bloqueos={bloqueos}
-                onSeleccionar={setCitaAbierta}
+                onSeleccionar={abrirCita}
                 onSeleccionarBloqueo={setBloqueoAbierto}
                 destacarSinProfesional={conProfesionales}
               />
@@ -222,7 +236,7 @@ export default function PaginaAgenda() {
                 citas={citas}
                 horario={horario}
                 bloqueos={bloqueos}
-                onSeleccionar={setCitaAbierta}
+                onSeleccionar={abrirCita}
                 onSeleccionarBloqueo={setBloqueoAbierto}
                 destacarSinProfesional={conProfesionales}
               />
@@ -239,8 +253,11 @@ export default function PaginaAgenda() {
             )}
           </section>
 
+          {/* En el celular el detalle es un diálogo: mientras se mueve o se asigna la
+              cita se aparta, para no tener dos diálogos peleándose el foco, y
+              vuelve al cerrar ese modal. */}
           <AnimatePresence>
-            {citaAbierta && (
+            {citaAbierta && (escritorio || !citaAMover) && (
               <PanelDeCita
                 cita={citaAbierta}
                 onCerrar={() => setCitaAbierta(null)}
@@ -249,6 +266,7 @@ export default function PaginaAgenda() {
                 onAsignar={(cita) => abrirMover(cita, true)}
                 destacarSinProfesional={conProfesionales}
                 onReactivada={mostrarEstado}
+                aviso={avisoDelDetalle}
               />
             )}
           </AnimatePresence>

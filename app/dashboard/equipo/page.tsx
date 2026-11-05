@@ -1,11 +1,13 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useSession } from "next-auth/react"
 import { AnimatePresence } from "framer-motion"
 import { UserPlus } from "lucide-react"
 import { Aviso } from "@/components/panel/aviso"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
+import { actorDeSesion, puedeGestionarEquipo } from "@/lib/permisos"
 import {
   anularInvitacion,
   leerEquipo,
@@ -18,6 +20,11 @@ import { ModalInvitar } from "./_componentes/modal-invitar"
 import { ModalServiciosDelMiembro } from "./_componentes/modal-servicios-del-miembro"
 
 export default function PaginaEquipo() {
+  const { data: sesion } = useSession()
+  // Invitar es de quien gestiona el equipo (la API ya rechaza al resto). A la
+  // profesional que llega por la URL no se le ofrece: sólo ve el aviso (#49).
+  // Mientras la sesión carga, tampoco: falla cerrado.
+  const invita = puedeGestionarEquipo(actorDeSesion(sesion))
   const [miembros, setMiembros] = useState<MiembroDelEquipo[]>([])
   const [invitaciones, setInvitaciones] = useState<InvitacionPendiente[]>([])
   const [cargando, setCargando] = useState(true)
@@ -82,11 +89,15 @@ export default function PaginaEquipo() {
       <BarraSuperior
         titulo="Equipo"
         subtitulo="Gestiona el equipo de tu negocio"
-        accionPrincipal={{
-          texto: "Invitar al equipo",
-          onClick: () => setModalAbierto(true),
-          icono: UserPlus,
-        }}
+        accionPrincipal={
+          invita
+            ? {
+                texto: "Invitar al equipo",
+                onClick: () => setModalAbierto(true),
+                icono: UserPlus,
+              }
+            : undefined
+        }
       />
 
       <div className="space-y-4 px-4 pt-6 pb-10 sm:px-6">

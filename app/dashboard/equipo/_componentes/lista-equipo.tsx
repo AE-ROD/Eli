@@ -30,7 +30,7 @@ function InsigniaDelRol({ rol }: { rol: string }) {
 
 /** `2 de noviembre`: el día en que vence el enlace. */
 function diaDeVencimiento(iso: string): string {
-  return new Date(iso).toLocaleDateString("es-ES", { day: "numeric", month: "long" })
+  return new Date(iso).toLocaleDateString("es-CL", { day: "numeric", month: "long" })
 }
 
 interface PropsDeListaEquipo {

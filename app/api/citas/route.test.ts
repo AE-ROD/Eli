@@ -139,6 +139,19 @@ describe("GET /api/citas", () => {
     expect(data[0]).toMatchObject({ canceladaPor: "cliente", canceladaEn: canceladaEn.toISOString() })
   })
 
+  it("trae el comentario que el cliente dejó al reservar, para el detalle (#122)", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.appointment.findMany.mockResolvedValueOnce([
+      { id: "reservada", businessId: "negocio-1", clientComments: "Traigo una foto de referencia", visit: null },
+    ] as never)
+
+    const data = await (await GET(pedidoFalso("http://localhost/api/citas"))).json()
+
+    expect((prismaMock.appointment.findMany.mock.calls[0][0] as { select?: unknown }).select).toMatchObject({ clientComments: true })
+    expect(data[0]).toMatchObject({ clientComments: "Traigo una foto de referencia" })
+  })
+
   it("sin sesión recibe 401", async () => {
     const { GET } = await import("./route")
 

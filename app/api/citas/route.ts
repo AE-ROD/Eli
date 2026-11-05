@@ -77,6 +77,8 @@ export async function GET(request: NextRequest) {
       endTime: true,
       status: true,
       notes: true,
+      // Lo que el cliente escribió al reservar, para el detalle (#122).
+      clientComments: true,
       price: true,
       customerId: true,
       customer: { select: { id: true, name: true, lastName: true, email: true, phone: true } },

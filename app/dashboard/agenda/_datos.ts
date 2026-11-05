@@ -25,6 +25,8 @@ export interface Cita {
   endTime: string
   status: string
   notes: string | null
+  /** Lo que el cliente escribió al reservar por la página pública (#122). Sólo se lee. */
+  clientComments?: string | null
   price: number | null
   customerId: string | null
   /**
