@@ -27,6 +27,8 @@ export interface CitaDeCliente {
 export interface Cliente {
   id: string
   name: string
+  /** Sólo en clientes viejos de la reserva pública; los demás lo tienen dentro de `name`. */
+  lastName: string | null
   email: string | null
   phone: string | null
   tags: string[]

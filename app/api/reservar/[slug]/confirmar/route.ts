@@ -197,8 +197,13 @@ async function reservar(
   if (!cliente) {
     cliente = await tx.customer.create({
       data: {
-        name: datos.nombre,
-        lastName: datos.apellido,
+        // Nombre completo en `name`, como el resto de la app (panel, anotar
+        // sin reserva): Clientes muestra y busca por `name`, y con el
+        // apellido aparte "Peñaloza" no encontraba a nadie (N2).
+        // `esElMismoCliente` compara `name` + `lastName`, así que da igual
+        // para reutilizarlo después.
+        name: `${datos.nombre} ${datos.apellido}`.trim(),
+        lastName: null,
         cedula: datos.cedula || null,
         email,
         // Ya en E.164 (`telefonoChileno` en `reservaSchema`).

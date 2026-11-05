@@ -15,6 +15,7 @@ import { CODIGO_CORREGIR_CON_AJUSTE } from "@/lib/bloqueos-de-dinero"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import { sePuedeMover, type Advertencia } from "@/lib/mover-cita"
 import { sigueSinConfirmar } from "@/lib/por-confirmar"
+import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import { isoEn } from "./_hora-del-negocio"
 
 export interface Cita {
@@ -32,7 +33,7 @@ export interface Cita {
    * obligatorio es lo que hace que la pantalla explote la primera vez que
    * aparece una.
    */
-  customer: { id: string; name: string; email: string | null; phone: string | null } | null
+  customer: { id: string; name: string; lastName?: string | null; email: string | null; phone: string | null } | null
   /** A qué profesional está asignada. Nulo: sin asignar (o el dueño, que no es miembro). */
   memberId?: string | null
   /** El profesional asignado, con su nombre para el detalle. */
@@ -72,7 +73,7 @@ export function citaPorConfirmar(cita: Pick<Cita, "status" | "confirmacionPorFal
  * — y para que ninguna vuelva a asumir que `customer` siempre viene.
  */
 export function nombreDeCliente(cita: Cita): string {
-  return cita.customer?.name ?? "Sin cliente"
+  return cita.customer ? nombreCompletoDeCliente(cita.customer) : "Sin cliente"
 }
 
 /**
@@ -438,7 +439,7 @@ export async function leerProfesionales(): Promise<Resultado<Profesional[]>> {
 
 /** Hasta ocho clientes cuyo nombre, correo o teléfono contiene `texto`. */
 export async function buscarClientes(texto: string): Promise<Resultado<ClienteSugerido[]>> {
-  const resultado = await pedir<{ clientes: { id: string; name: string; email: string | null }[] }>(
+  const resultado = await pedir<{ clientes: { id: string; name: string; lastName: string | null; email: string | null }[] }>(
     `/api/clientes?q=${encodeURIComponent(texto)}&limite=8`,
     "No se pudieron buscar los clientes"
   )
@@ -448,7 +449,7 @@ export async function buscarClientes(texto: string): Promise<Resultado<ClienteSu
     ok: true,
     datos: resultado.datos.clientes.map((cliente) => ({
       id: cliente.id,
-      nombre: cliente.name,
+      nombre: nombreCompletoDeCliente(cliente),
       email: cliente.email ?? "",
     })),
   }

@@ -131,8 +131,9 @@ export function FormularioPorConfirmar({ faltasIniciales }: { faltasIniciales: n
             {pendiente || !valido ? "Guardar" : "Guardado"}
           </BotonPrimario>
           <p id={`${idDelCampo}-ayuda`} className="w-full text-sm text-texto-2">
-            Cuentan las citas marcadas &ldquo;No vino&rdquo; con el mismo correo o teléfono, de{" "}
-            {FALTAS_PARA_CONFIRMAR_MINIMO} a {FALTAS_PARA_CONFIRMAR_MAXIMO}.
+            De {FALTAS_PARA_CONFIRMAR_MINIMO} a {FALTAS_PARA_CONFIRMAR_MAXIMO}. Cuentan las citas marcadas &ldquo;No vino&rdquo; con
+            el mismo correo de quien reserva; el teléfono no cuenta, y una reserva sin correo nunca entra por
+            confirmar.
           </p>
         </form>
       )}

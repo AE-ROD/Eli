@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
           startTime: true,
           endTime: true,
           status: true,
-          customer: { select: { id: true, name: true } },
+          customer: { select: { id: true, name: true, lastName: true } },
           // "Por confirmar" en la lista del día (#84). Con la atención, sólo
           // para saber si el cliente ya llegó (`conAtencion`), como la agenda.
           confirmacionPorFaltas: true,

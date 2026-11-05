@@ -6,6 +6,7 @@ import { registrarError } from "@/lib/registro-de-errores"
 import { ESTADOS_GESTIONABLES } from "@/lib/gestion-de-cita"
 import { ORIGEN_RESERVA_PUBLICA } from "@/lib/reserva-publica"
 import { generarToken } from "@/lib/tokens"
+import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import {
   ESTADOS_SIN_RECORDATORIO,
   esDeMañana,
@@ -45,10 +46,6 @@ const PRESUPUESTO_MS = 50_000
 
 /** Tope de candidatas por corrida: con él, una corrida nunca trae la tabla entera. */
 const TOPE = 2000
-
-function nombreCompleto(cliente: { name: string; lastName: string | null }): string {
-  return cliente.lastName ? `${cliente.name} ${cliente.lastName}` : cliente.name
-}
 
 interface CitaParaEnlace {
   id: string
@@ -140,7 +137,7 @@ export async function GET(request: NextRequest) {
         const { fecha, hora } = fechaYHoraEnElNegocio(cita.startTime, cita.business.timezone)
         const resultado = await enviarRecordatorio({
           emailCliente: cita.customer.email,
-          nombreCliente: nombreCompleto(cita.customer),
+          nombreCliente: nombreCompletoDeCliente(cita.customer),
           nombreNegocio: cita.business.name,
           servicio: cita.title,
           fecha,

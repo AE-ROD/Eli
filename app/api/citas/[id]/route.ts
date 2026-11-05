@@ -107,7 +107,7 @@ export async function GET(
   const cita = await prisma.appointment.findFirst({
     where: whereDeAgenda(actor, { id }),
     include: {
-      customer: { select: { id: true, name: true, email: true, phone: true } },
+      customer: { select: { id: true, name: true, lastName: true, email: true, phone: true } },
     },
   })
 
@@ -294,7 +294,7 @@ export async function PUT(
         ...(canceladaEn && { canceladaPor: "negocio", canceladaEn }),
       },
       include: {
-        customer: { select: { id: true, name: true, email: true, phone: true } },
+        customer: { select: { id: true, name: true, lastName: true, email: true, phone: true } },
       },
     } satisfies Prisma.AppointmentUpdateArgs
 

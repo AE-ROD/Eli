@@ -1,3 +1,4 @@
+import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import { after } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
@@ -50,7 +51,7 @@ export async function enviarAvisoDeReservaConfirmada({ businessId, citaId }: Res
     const { fecha, hora } = fechaYHoraEnElNegocio(cita.startTime, cita.business.timezone)
     const resultado = await enviarReservaConfirmadaPorElLocal({
       emailCliente: cita.customer.email,
-      nombreCliente: cita.customer.lastName ? `${cita.customer.name} ${cita.customer.lastName}` : cita.customer.name,
+      nombreCliente: nombreCompletoDeCliente(cita.customer),
       nombreNegocio: cita.business.name,
       servicio: cita.title,
       fecha,

@@ -280,7 +280,7 @@ describe("confirmar: consentimiento de correos promocionales", () => {
 
   it("marcado, en un cliente nuevo con email: se guarda con fecha y origen", async () => {
     expect((await confirmar({ fecha: MARTES, correoPromoConsentimiento: true })).status).toBe(201)
-    const [lucia] = base.buscar("customer", { name: "Lucía" })
+    const [lucia] = base.buscar("customer", { name: "Lucía Pérez" })
     expect(lucia).toMatchObject({ correoPromoConsentAt: AHORA, correoPromoConsentSource: "reserva-publica" })
   })
 

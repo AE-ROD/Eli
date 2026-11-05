@@ -311,6 +311,71 @@ describe("GET /api/clientes", () => {
     expect(data.clientes).toEqual([expect.objectContaining({ id: "cliente-1", name: "Ana", lastName: "Pérez" })])
   })
 
+  it("el buscador encuentra por el apellido guardado aparte (reservas públicas viejas) y por el que va en el nombre, sin cruzar de negocio (N2)", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const porApellidoAparte = await (await GET(fakeGet("?q=pérez&limite=8"))).json()
+    // `cliente-ajeno` también es "Ana Pérez", pero de otro negocio.
+    expect(ids(porApellidoAparte.clientes)).toEqual(["cliente-1"])
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const porApellidoEnElNombre = await (await GET(fakeGet("?q=soto&limite=8"))).json()
+    expect(ids(porApellidoEnElNombre.clientes)).toEqual(["cliente-2"])
+  })
+
+  it("el nombre completo de un cliente con el apellido aparte se encuentra palabra por palabra, en cualquier orden y sin importar mayúsculas", async () => {
+    const { GET } = await import("./route")
+
+    for (const q of ["ana pérez", "  ANA   Pérez ", "pérez ana", "an pér"]) {
+      mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+      const data = await (await GET(fakeGet(`?q=${encodeURIComponent(q)}&limite=8`))).json()
+      expect(ids(data.clientes), q).toEqual(["cliente-1"])
+    }
+  })
+
+  it("buscar por nombre completo no trae al cliente de otro negocio con el mismo nombre y apellido", async () => {
+    const { GET } = await import("./route")
+
+    // `cliente-ajeno` (negocio-2) también es Ana Pérez.
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const delDueño = await (await GET(fakeGet("?q=ana%20p%C3%A9rez&limite=8"))).json()
+    expect(ids(delDueño.clientes)).toEqual(["cliente-1"])
+    expect(delDueño.total).toBe(1)
+
+    mockGetServerSession.mockResolvedValueOnce(sesionOtroNegocio)
+    const delOtro = await (await GET(fakeGet("?q=ana%20p%C3%A9rez&limite=8"))).json()
+    expect(ids(delOtro.clientes)).toEqual(["cliente-ajeno"])
+  })
+
+  it("cada palabra tiene que estar en el mismo cliente: palabras de clientes distintos no traen a ninguno", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const data = await (await GET(fakeGet("?q=ana%20soto&limite=8"))).json()
+    expect(data.clientes).toEqual([])
+  })
+
+  it("el nombre completo guardado entero en `name` también se encuentra por palabras", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const data = await (await GET(fakeGet("?q=soto%20beto&limite=8"))).json()
+    expect(ids(data.clientes)).toEqual(["cliente-2"])
+  })
+
+  it("correo y teléfono se siguen buscando con el texto entero", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const porCorreo = await (await GET(fakeGet("?q=ana%40example&limite=8"))).json()
+    expect(ids(porCorreo.clientes)).toEqual(["cliente-1"])
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const porTelefono = await (await GET(fakeGet("?q=1111%201111&limite=8"))).json()
+    expect(ids(porTelefono.clientes)).toEqual(["cliente-2"])
+  })
+
   it("sin apellido cargado, viaja en null", async () => {
     const { GET } = await import("./route")
 
