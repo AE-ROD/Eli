@@ -1,13 +1,14 @@
 "use client"
 
 import { useState, useRef, useEffect, useId } from "react"
-import { Search, User, Scissors, Calendar, Clock, Check } from "lucide-react"
+import { Search, User, Scissors, Calendar, Check } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
 import { Selector } from "@/components/comunes/selector"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { CAMPO, ETIQUETA } from "@/components/panel/estilos"
+import { CampoHora } from "@/components/panel/campo-hora"
 import { cn } from "@/lib/utils"
 import {
   buscarClientes,
@@ -98,6 +99,8 @@ export function ModalNuevaCita({
   const idDelAvisoDeBusqueda = `${idBase}-aviso-busqueda`
   const idDeNotas = `${idBase}-notas`
   const idDelCatalogo = `${idBase}-catalogo`
+  const idDeHoraInicio = `${idBase}-hora-inicio`
+  const idDeHoraFin = `${idBase}-hora-fin`
 
   useEffect(() => {
     if (!puedeAsignarProfesional) return
@@ -342,27 +345,33 @@ export function ModalNuevaCita({
         />
 
         <div className="grid grid-cols-2 gap-3">
-          <CampoFormulario
-            etiqueta="Hora inicio"
-            type="time"
-            value={form.horaInicio}
-            onChange={(e) => {
-              onCambiarCampo("horaInicio", e.target.value)
-              // Con servicios elegidos, la hora de fin los sigue; el precio no se toca.
-              const fin = resumen ? horaDeFin(e.target.value, resumen.duracion) : null
-              if (fin) onCambiarCampo("horaFin", fin)
-            }}
-            icono={<Clock className="size-4" aria-hidden="true" strokeWidth={1.75} />}
-            required
-          />
-          <CampoFormulario
-            etiqueta="Hora fin"
-            type="time"
-            value={form.horaFin}
-            onChange={(e) => onCambiarCampo("horaFin", e.target.value)}
-            icono={<Clock className="size-4" aria-hidden="true" strokeWidth={1.75} />}
-            required
-          />
+          <div className="min-w-0">
+            <label htmlFor={idDeHoraInicio} className={ETIQUETA}>
+              Hora inicio
+            </label>
+            <CampoHora
+              id={idDeHoraInicio}
+              etiqueta="Hora inicio"
+              value={form.horaInicio}
+              onChange={(valor) => {
+                onCambiarCampo("horaInicio", valor)
+                // Con servicios elegidos, la hora de fin los sigue; el precio no se toca.
+                const fin = resumen ? horaDeFin(valor, resumen.duracion) : null
+                if (fin) onCambiarCampo("horaFin", fin)
+              }}
+            />
+          </div>
+          <div className="min-w-0">
+            <label htmlFor={idDeHoraFin} className={ETIQUETA}>
+              Hora fin
+            </label>
+            <CampoHora
+              id={idDeHoraFin}
+              etiqueta="Hora fin"
+              value={form.horaFin}
+              onChange={(valor) => onCambiarCampo("horaFin", valor)}
+            />
+          </div>
         </div>
 
         <CampoFormulario

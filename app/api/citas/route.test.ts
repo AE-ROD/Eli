@@ -27,7 +27,8 @@ const prismaMock = {
     create: vi.fn((args: { data: Record<string, unknown> }) => Promise.resolve({ id: "cita-nueva", ...args.data })),
   },
   customer: { findFirst: vi.fn() },
-  businessMember: { findFirst: vi.fn() },
+  // `findMany`: quiénes atienden, para el horario de las advertencias (#168).
+  businessMember: { findFirst: vi.fn(), findMany: vi.fn(() => Promise.resolve([])) },
   business: {
     findUnique: vi.fn((_args: { where: { id: string } }) => Promise.resolve({ timezone: zonaDelNegocio })),
   },

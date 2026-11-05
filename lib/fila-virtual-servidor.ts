@@ -15,6 +15,7 @@ import {
   nombreParaPantalla,
   primerNombre,
 } from "@/lib/fila-virtual"
+import { leerHorarioDeQuienesAtienden } from "@/lib/agenda-publica"
 import { horarioSemanalDeAtencion } from "@/lib/horario-de-atencion"
 import { whereDeAtenciones, type Actor } from "@/lib/permisos"
 import { registrarError } from "@/lib/registro-de-errores"
@@ -63,8 +64,9 @@ const TOPE_DE_BLOQUEOS = 50
 
 /**
  * Lo que el negocio necesita para la fila pública, con su horario de
- * atención (las franjas activas, generales y de miembros:
- * `horarioSemanalDeAtencion` decide cuál manda cada día) y los bloqueos de
+ * atención (las franjas activas, generales y de quienes atienden: el horario
+ * personal de un encargado no abre la fila, #168; `horarioSemanalDeAtencion`
+ * decide cuál manda cada día) y los bloqueos de
  * todo el negocio (`memberId` null: un feriado, un cierre) que cubren
  * `ahora`. `null` si el slug no existe.
  */
@@ -75,11 +77,7 @@ export async function negocioDeLaFila(slug: string, ahora = new Date()) {
   })
   if (!negocio) return null
   const [workSchedules, bloqueos] = await Promise.all([
-    prisma.workSchedule.findMany({
-      where: { businessId: negocio.id, active: true },
-      select: { dayOfWeek: true, memberId: true, startTime: true, endTime: true },
-      take: 500,
-    }),
+    leerHorarioDeQuienesAtienden(prisma, negocio.id),
     prisma.timeBlock.findMany({
       where: { businessId: negocio.id, memberId: null, startTime: { lte: ahora }, endTime: { gt: ahora } },
       select: { startTime: true, endTime: true },

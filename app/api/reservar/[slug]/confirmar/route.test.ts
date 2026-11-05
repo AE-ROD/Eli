@@ -102,6 +102,13 @@ describe("POST /api/reservar/[slug]/confirmar: la hora tiene que caer en el hora
     })
   })
 
+  it("la hora con que decide sale de la base, no del reloj de esta instancia (#152)", async () => {
+    escenario([franja({ startTime: "09:00", endTime: "13:00" })])
+
+    expect((await confirmar("12:00")).status).toBe(201)
+    expect(base.prisma.$queryRaw).toHaveBeenCalledWith(expect.arrayContaining(["SELECT clock_timestamp() AS ahora"]))
+  })
+
   it.each([
     ["antes de abrir", "08:00"],
     ["empezando dentro pero terminando después del cierre", "12:30"],

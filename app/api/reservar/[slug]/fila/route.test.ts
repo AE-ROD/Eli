@@ -225,6 +225,29 @@ describe("POST /api/reservar/[slug]/fila: anotarse", () => {
     expect((await anotarse()).status).toBe(409)
   })
 
+  it("un día sin horario general, el horario personal de un encargado no abre la fila; el de un profesional sí (#168)", async () => {
+    const delMiembro = (memberId: string) => ({
+      id: `h-${memberId}`,
+      businessId: NEGOCIO,
+      memberId,
+      dayOfWeek: 1,
+      startTime: "09:00",
+      endTime: "20:00",
+    })
+    const conHorario = (memberId: string) =>
+      base.reiniciar({
+        ...datosBase(),
+        business: datosBase().business.map((b) => ({ ...b, filaVirtualActiva: true })),
+        workSchedule: [delMiembro(memberId)],
+      })
+
+    conHorario("m-encargado")
+    expect((await anotarse()).status).toBe(409)
+
+    conHorario("m-carla")
+    expect((await anotarse()).status).toBe(201)
+  })
+
   it("con tantas personas esperando como el tope: 409; las que ya se atienden o salieron no cuentan", async () => {
     escenario({
       negocio: { filaVirtualTope: 2 },

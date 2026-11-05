@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { z } from "zod"
 import { enviarConfirmacionCliente, enviarAvisoProfesional } from "@/lib/email"
 import { dentroDelPlazo, plazoValido } from "@/lib/gestion-de-cita"
@@ -359,8 +360,13 @@ export async function POST(
 
     // Ni horas que ya pasaron ni fechas a más de `DIAS_MAXIMOS_DE_ANTICIPACION`
     // días, en el reloj del negocio: la misma regla con la que `disponibilidad`
-    // ofrece las horas (`lib/reserva-publica.ts`).
-    const ahora = new Date()
+    // ofrece las horas (`lib/reserva-publica.ts`). La hora es la de la base,
+    // no la de esta instancia, como en el enlace para gestionar la cita
+    // (#152, #154): con ella se decide también el plazo, el recordatorio, las
+    // faltas y los consentimientos. Una sola lectura por pedido. Esta
+    // reserva no toma candados (la ordena la transacción `Serializable`), así
+    // que no hay un "después del candado" que esperar.
+    const ahora = await horaDeLaBase(prisma)
     if (yaPasoLaHora(datos.fecha, datos.hora, ahora, zona)) {
       return NextResponse.json({ error: MENSAJE_HORA_PASADA }, { status: 409 })
     }

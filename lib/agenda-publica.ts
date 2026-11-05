@@ -103,8 +103,8 @@ export async function leerProfesionalesQueAtienden(
  * (`profesionales`, los de `leerProfesionalesQueAtienden`). Un día sin filas
  * generales usa la unión de las de los miembros (`franjasDeAtencion`), y ahí
  * entraba el horario de un encargado, que no recibe reservas: ese día salía
- * con atención en la página y en la reserva (#168). El panel, que no pasa
- * por acá, sigue leyendo todas.
+ * con atención en la página y en la reserva (#168). El panel lee lo mismo
+ * con `leerHorarioDeQuienesAtienden`.
  */
 export function filasDeQuienesAtienden<F extends { memberId: string | null }>(
   filas: F[],
@@ -114,6 +114,35 @@ export function filasDeQuienesAtienden<F extends { memberId: string | null }>(
   return filas.filter((fila) => fila.memberId === null || atienden.has(fila.memberId))
 }
 
+/** Tope de filas de horario que se leen: siete días por persona, con margen. */
+const TOPE_DE_FILAS_DE_HORARIO = 500
+
+/**
+ * El horario activo del negocio que cuenta para saber cuándo atiende: las
+ * filas generales y las de quienes atienden (`filasDeQuienesAtienden`). Lo
+ * usan la fila virtual, las horas que dibuja la agenda y las advertencias de
+ * horario del panel: el horario personal de un encargado no abre el negocio
+ * un día sin horario general (#168).
+ */
+export async function leerHorarioDeQuienesAtienden(
+  db: Pick<Prisma.TransactionClient, "businessMember" | "workSchedule">,
+  businessId: string
+): Promise<FilaDeHorarioSemanal[]> {
+  const [atienden, filas] = await Promise.all([
+    db.businessMember.findMany({
+      where: { businessId, role: { in: [...ROLES_QUE_ATIENDEN] } },
+      select: { id: true },
+    }),
+    db.workSchedule.findMany({
+      where: { businessId, active: true },
+      select: { memberId: true, dayOfWeek: true, startTime: true, endTime: true },
+      orderBy: { startTime: "asc" },
+      take: TOPE_DE_FILAS_DE_HORARIO,
+    }),
+  ])
+  return filasDeQuienesAtienden(filas, atienden)
+}
+
 export function haceElServicio(profesional: Pick<ProfesionalQueAtiende, "serviceIds">, serviceId: string): boolean {
   return profesional.serviceIds.length === 0 || profesional.serviceIds.includes(serviceId)
 }
@@ -121,6 +150,29 @@ export function haceElServicio(profesional: Pick<ProfesionalQueAtiende, "service
 /** Si hace TODOS los servicios de una reserva con varios (#89a): uno solo que no haga lo deja fuera. */
 export function haceLosServicios(profesional: Pick<ProfesionalQueAtiende, "serviceIds">, serviceIds: string[]): boolean {
   return serviceIds.length > 0 && serviceIds.every((serviceId) => haceElServicio(profesional, serviceId))
+}
+
+/** El 400 al dejar en el panel una cita con servicios a quien no los hace todos. */
+export const MENSAJE_PROFESIONAL_NO_HACE = "Ese profesional no hace todos los servicios elegidos: elige otro o quítalos"
+
+/**
+ * Si el miembro hace todos esos servicios según lo que tiene acotado
+ * (`MemberService`; sin filas, hace todos). Lo usan crear una cita con
+ * servicios en el panel y reasignarla (#159), con la regla de la reserva
+ * pública.
+ */
+export async function elMiembroHaceLosServicios(
+  db: Pick<Prisma.TransactionClient, "memberService">,
+  businessId: string,
+  memberId: string,
+  serviceIds: string[]
+): Promise<boolean> {
+  const queHace = await db.memberService.findMany({
+    where: { businessId, memberId },
+    select: { serviceId: true },
+    take: 500,
+  })
+  return haceLosServicios({ serviceIds: queHace.map((fila) => fila.serviceId) }, serviceIds)
 }
 
 /** Quien puede tomar la reserva ese día y en qué franjas. `memberId` null = el carril único del negocio sin profesionales. */

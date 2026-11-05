@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { leerHorarioDeQuienesAtienden } from "@/lib/agenda-publica"
 import { horarioSemanalDeAtencion } from "@/lib/horario-de-atencion"
 import { actorDeSesion } from "@/lib/permisos"
 
@@ -10,7 +11,8 @@ import { actorDeSesion } from "@/lib/permisos"
  * agenda dibuje las horas en que se atiende aunque caigan fuera de 8–20. Es la
  * misma regla que ve el cliente en la reserva pública
  * (`horarioSemanalDeAtencion`): no expone de quién es cada franja, así que
- * cualquier rol lo puede leer. El rate limit lo pone `proxy.ts`.
+ * cualquier rol lo puede leer. Sólo cuentan el horario general y el de
+ * quienes atienden (#168). El rate limit lo pone `proxy.ts`.
  */
 export async function GET() {
   const session = await getServerSession(authOptions)
@@ -19,10 +21,7 @@ export async function GET() {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
-  const filas = await prisma.workSchedule.findMany({
-    where: { businessId: actor.businessId, active: true },
-    select: { memberId: true, dayOfWeek: true, startTime: true, endTime: true },
-  })
+  const filas = await leerHorarioDeQuienesAtienden(prisma, actor.businessId)
 
   return NextResponse.json(horarioSemanalDeAtencion(filas))
 }
