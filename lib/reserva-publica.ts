@@ -85,6 +85,19 @@ export function diasDelCalendarioDeReserva(consulta: {
 }
 
 /**
+ * Si el día ya elegido (`fecha`, "AAAA-MM-DD") quedó fuera de los días con
+ * atención (`diasDelCalendarioDeReserva`) después de cambiar de profesional
+ * o de servicios: entonces la reserva lo limpia, con su hora, y avisa. Sin
+ * día elegido, o con uno que no es una fecha, no hay nada que limpiar.
+ */
+export function elDiaElegidoQuedoSinAtencion(fecha: string, diasConAtencion: readonly number[]): boolean {
+  return esFechaCalendario(fecha) && !diasConAtencion.includes(diaDeLaSemana(fecha))
+}
+
+/** El aviso al limpiar el día elegido (`elDiaElegidoQuedoSinAtencion`). */
+export const AVISO_DIA_SIN_ATENCION = "El día que habías elegido no tiene atención para esta reserva. Elige otro."
+
+/**
  * Si la hora `hora` ("HH:MM") de `fecha` ya pasó en el reloj de la zona. La
  * hora en curso cuenta como pasada: a las 10:30 ya no se reserva a las 10:30.
  * Es la regla con la que `disponibilidad` siempre filtró las horas de hoy.

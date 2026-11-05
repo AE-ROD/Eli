@@ -4,6 +4,7 @@ import {
   compartenContacto,
   consentimientoSobreClienteExistente,
   diasDelCalendarioDeReserva,
+  elDiaElegidoQuedoSinAtencion,
   esDiaReservable,
   esElMismoCliente,
   fechaNoReservable,
@@ -266,5 +267,21 @@ describe("diasDelCalendarioDeReserva (N3): el calendario sólo deja elegir días
   it("sin equipo leído o sin profesionales, los días del horario publicado", () => {
     expect(diasDelCalendarioDeReserva({ diasPublicados: [1, 1, 6], equipo: null, servicioIds: ["s-corte"], profesionalId: null })).toEqual([1, 6])
     expect(diasDelCalendarioDeReserva({ diasPublicados: [1, 6], equipo: [], servicioIds: ["s-corte"], profesionalId: null })).toEqual([1, 6])
+  })
+})
+
+describe("elDiaElegidoQuedoSinAtencion: al cambiar de profesional o servicios, el día elegido se limpia si ya no tiene atención", () => {
+  // El 6 de noviembre de 2026 es viernes; el 2, lunes.
+  it("un viernes elegido con 'cualquiera' se limpia al elegir a Carla, que atiende L–M–X", () => {
+    expect(elDiaElegidoQuedoSinAtencion("2026-11-06", [1, 2, 3])).toBe(true)
+  })
+
+  it("un día que sigue con atención no se toca", () => {
+    expect(elDiaElegidoQuedoSinAtencion("2026-11-02", [1, 2, 3])).toBe(false)
+  })
+
+  it("sin día elegido, o con uno inválido, no hay nada que limpiar", () => {
+    expect(elDiaElegidoQuedoSinAtencion("", [1])).toBe(false)
+    expect(elDiaElegidoQuedoSinAtencion("2026-13-40", [1])).toBe(false)
   })
 })

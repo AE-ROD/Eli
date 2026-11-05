@@ -17,7 +17,9 @@ import { deTexto, formatearDuracionDeServicio } from "@/lib/fechas"
 import {
   avisoSinCambiosDespuesDeReservar,
   avisoSinCambiosPorElEnlace,
+  AVISO_DIA_SIN_ATENCION,
   diasDelCalendarioDeReserva,
+  elDiaElegidoQuedoSinAtencion,
   quedaSinCambiosPorElEnlace,
 } from "@/lib/reserva-publica"
 import { MAX_SERVICIOS_POR_RESERVA, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
@@ -208,6 +210,26 @@ export function FormularioReserva({
     servicioIds,
     profesionalId,
   })
+
+  // Si al cambiar de profesional o de servicios el día elegido deja de tener
+  // atención, se limpian el día y la hora, con un aviso: si no, quedaba
+  // elegido un día que el calendario ya no ofrece y que respondía "No hay
+  // atención ese día". Se ajusta al renderizar, cuando cambian los días.
+  const claveDeDias = diasDisponibles.join(",")
+  const [diasAnteriores, setDiasAnteriores] = useState(claveDeDias)
+  const [avisoDelDia, setAvisoDelDia] = useState("")
+  if (claveDeDias !== diasAnteriores) {
+    setDiasAnteriores(claveDeDias)
+    if (elDiaElegidoQuedoSinAtencion(fecha, diasDisponibles)) {
+      setFecha("")
+      elegirHora("", null)
+      setAvisoDelDia(AVISO_DIA_SIN_ATENCION)
+    }
+  }
+  const elegirFecha = (nueva: string) => {
+    setAvisoDelDia("")
+    setFecha(nueva)
+  }
   const claveDeServicios = servicioIds.join(",")
   const cargarHoras = useCallback(
     (dia: string) => leerDisponibilidad(slug, dia, claveDeServicios ? claveDeServicios.split(",") : [], profesionalId),
@@ -415,6 +437,9 @@ export function FormularioReserva({
                   />
                 </div>
               )}
+              <p role="status" className={cn("text-sm text-texto-2", avisoDelDia && "mt-6")}>
+                {avisoDelDia}
+              </p>
               <div className="mt-6">
                 <SelectorFechaHora
                   cargarHoras={cargarHoras}
@@ -423,7 +448,7 @@ export function FormularioReserva({
                   zona={zona}
                   fechaSeleccionada={fecha}
                   horaSeleccionada={hora}
-                  onFecha={setFecha}
+                  onFecha={elegirFecha}
                   onHora={elegirHora}
                   sinHoras={
                     listaDeEsperaActiva && servicioSeleccionado
