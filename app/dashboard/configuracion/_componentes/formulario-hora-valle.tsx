@@ -7,6 +7,7 @@ import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Interruptor } from "@/components/comunes/interruptor"
 import { Aviso } from "@/components/panel/aviso"
+import { CampoHora } from "@/components/panel/campo-hora"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import {
@@ -176,24 +177,24 @@ export function FormularioHoraValle({
                       <label htmlFor={`${id}-desde`} className="block text-xs text-texto-2">
                         Desde
                       </label>
-                      <input
+                      <CampoHora
                         id={`${id}-desde`}
-                        type="time"
+                        etiqueta="Desde"
                         value={franja.desde}
-                        onChange={(evento) => cambiarFranja(indice, { desde: evento.target.value })}
-                        className={cn(CAMPO, "w-32")}
+                        onChange={(valor) => cambiarFranja(indice, { desde: valor })}
+                        className="w-40"
                       />
                     </div>
                     <div className="min-w-0 space-y-1">
                       <label htmlFor={`${id}-hasta`} className="block text-xs text-texto-2">
                         Hasta
                       </label>
-                      <input
+                      <CampoHora
                         id={`${id}-hasta`}
-                        type="time"
+                        etiqueta="Hasta"
                         value={franja.hasta}
-                        onChange={(evento) => cambiarFranja(indice, { hasta: evento.target.value })}
-                        className={cn(CAMPO, "w-32")}
+                        onChange={(valor) => cambiarFranja(indice, { hasta: valor })}
+                        className="w-40"
                       />
                     </div>
                     <div className="min-w-0 space-y-1">
