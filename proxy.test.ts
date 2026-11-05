@@ -132,6 +132,36 @@ describe("proxy — rate limit de los endpoints del panel", () => {
     }
   )
 
+  it("POST /api/auth/session (update de la sesión) lleva el límite de escritura, por sesión (#49)", async () => {
+    const { default: proxy } = await import("./proxy")
+
+    mockVerificarLimite.mockResolvedValueOnce({ permitido: false, restantes: 0 })
+
+    const res = await proxy(pedidoFalso("/api/auth/session", "POST"))
+
+    expect(mockVerificarLimite).toHaveBeenCalledWith("panelEscritura", "usuario:usuario-1")
+    expect(res.status).toBe(429)
+  })
+
+  it("POST /api/auth/session sin sesión cuenta por IP", async () => {
+    const { default: proxy } = await import("./proxy")
+
+    mockGetToken.mockResolvedValueOnce(null)
+
+    const res = await proxy(pedidoFalso("/api/auth/session", "POST"))
+
+    expect(mockVerificarLimite).toHaveBeenCalledWith("panelEscritura", "ip:127.0.0.1")
+    expect(res.status).not.toBe(429)
+  })
+
+  it("GET /api/auth/session (el que NextAuth pide solo) sigue sin tope: cortarlo dejaría al panel sin sesión", async () => {
+    const { default: proxy } = await import("./proxy")
+
+    await proxy(pedidoFalso("/api/auth/session", "GET"))
+
+    expect(mockVerificarLimite).not.toHaveBeenCalled()
+  })
+
   it("sin sesión, cuenta por IP en vez de romper la petición", async () => {
     const { default: proxy } = await import("./proxy")
 
