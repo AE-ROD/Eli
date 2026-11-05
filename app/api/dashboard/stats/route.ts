@@ -15,6 +15,14 @@ import {
 } from "@/lib/permisos"
 import { esZonaHorariaValida, iniciosDeMesEn } from "@/lib/reportes"
 import { LLEGADA_DE_LA_CITA, conLlegada } from "@/lib/por-confirmar"
+import { ESTADOS_QUE_LIBERAN } from "@/lib/ocupacion"
+
+/**
+ * Las citas que cuentan en el día: las que ocupan su horario. Una cancelada
+ * o una de "No vino" no es una cita de hoy ni tapa un hueco (#97). Es la
+ * misma definición que la agenda y la reserva pública (`lib/ocupacion.ts`).
+ */
+const OCUPAN_EL_HORARIO = { status: { notIn: [...ESTADOS_QUE_LIBERAN] } }
 
 /**
  * Variación porcentual entre dos períodos comparables.
@@ -94,7 +102,7 @@ export async function GET(request: NextRequest) {
         // profesional además de por negocio.
         where: whereDeAgenda(actor, {
           startTime: { gte: hoy, lt: manana },
-          status: { not: "cancelada" },
+          ...OCUPAN_EL_HORARIO,
         }),
         select: {
           id: true,
@@ -162,7 +170,7 @@ export async function GET(request: NextRequest) {
       ? await prisma.appointment.findFirst({
           where: whereDeAgenda(actor, {
             startTime: { gte: manana },
-            status: { not: "cancelada" },
+            ...OCUPAN_EL_HORARIO,
           }),
           select: { id: true, title: true, startTime: true },
           orderBy: { startTime: "asc" },
