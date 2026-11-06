@@ -7,11 +7,14 @@ import { CLASES_DEL_LOCAL } from "@/components/comunes/colores-del-local"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPO, ETIQUETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { MEDIOS_DE_PAGO } from "@/lib/medios-de-pago"
 import { PALETA_DEL_LOCAL, colorDelNegocio, iniciales } from "@/lib/pagina-del-negocio"
 import { mostrarTelefono } from "@/lib/telefono"
 import { cn } from "@/lib/utils"
+import { esRubroDental } from "@/lib/rubros"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { guardarPaginaPublica, type DatosDePaginaPublica } from "../_datos"
 
 /** Como en el modal de servicio: el radio no se ve y el anillo lo dibuja la opción entera. */
@@ -36,6 +39,9 @@ interface PropsDeSeccionPaginaPublica {
 export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLectura }: PropsDeSeccionPaginaPublica) {
   const idDelTitulo = useId()
   const nombreDelColor = useId()
+  // "Pacientes" y "odontólogo" en una clínica dental.
+  const rubro = useRubroDelPanel()
+  const { clientes, profesional } = vocabularioDe(rubro)
   const [datos, setDatos] = useState<DatosDePaginaPublica>(inicial)
   // Las especialidades como están guardadas: al guardar se mandan sólo las que cambiaron (#113).
   const [especialidadesGuardadas, setEspecialidadesGuardadas] = useState(inicial.especialidades)
@@ -92,7 +98,7 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
         titulo="Tu página pública"
         subtitulo={
           <>
-            Lo que ven tus clientes al reservar.{" "}
+            Lo que ven tus {clientes} al reservar.{" "}
             <a
               href={`/reservar/${slug}`}
               target="_blank"
@@ -221,7 +227,7 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
 
         {datos.especialidades.length > 0 && (
           <fieldset className="min-w-0">
-            <legend className={cn(CLASES_DE_ETIQUETA, "mb-1")}>Especialidad de cada profesional</legend>
+            <legend className={cn(CLASES_DE_ETIQUETA, "mb-1")}>Especialidad de cada {profesional}</legend>
             <p className="mb-3 text-[13px] text-texto-2">Se muestra bajo su nombre, en &ldquo;Equipo&rdquo;.</p>
             <div className="grid gap-4 sm:grid-cols-2">
               {datos.especialidades.map((fila) => (
@@ -231,7 +237,7 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
                   valor={fila.especialidad}
                   alCambiar={(valor) => cambiarEspecialidad(fila.memberId, valor)}
                   maximo={60}
-                  placeholder="Ej.: Colorista"
+                  placeholder={esRubroDental(rubro) ? "Ej.: Ortodoncista" : "Ej.: Colorista"}
                 />
               ))}
             </div>
@@ -242,7 +248,7 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
           <Camera className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <p>
             <strong className="font-medium text-navy">Fotos: próximamente.</strong> Pronto vas a poder subir tu logo, una
-            portada y la foto de cada profesional. Mientras, la página usa tu color y tus iniciales.
+            portada y la foto de cada {profesional}. Mientras, la página usa tu color y tus iniciales.
           </p>
         </div>
       </fieldset>

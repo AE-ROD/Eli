@@ -6,6 +6,7 @@ import { LoaderCircle } from "lucide-react"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { Aviso } from "@/components/panel/aviso"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { nombreDelRol } from "@/lib/nombres-de-roles"
 import { cn } from "@/lib/utils"
@@ -28,6 +29,8 @@ interface PropsDeSelectorHorarioMiembro {
 export function SelectorHorarioMiembro({ horariosDelDueño, miembros, nombreDelDueño }: PropsDeSelectorHorarioMiembro) {
   // null = owner; string = memberId del trabajador
   const [seleccionado, setSeleccionado] = useState<string | null>(null)
+  // "Odontólogo" en vez de "Profesional" en una clínica dental.
+  const rubro = useRubroDelPanel()
   // El del dueño viene del servidor una sola vez: lo que se guarda después se
   // anota acá, o volver a su pestaña mostraría el de antes (y, si no tenía
   // nada, el aviso de "todavía no está guardado").
@@ -48,7 +51,7 @@ export function SelectorHorarioMiembro({ horariosDelDueño, miembros, nombreDelD
     ...miembros.map((miembro) => ({
       id: miembro.id,
       nombre: miembro.nombre,
-      sufijo: nombreDelRol(miembro.role),
+      sufijo: nombreDelRol(miembro.role, rubro),
     })),
   ]
 

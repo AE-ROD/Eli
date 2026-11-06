@@ -129,7 +129,7 @@ export function ModalMoverCita({
   return (
     <MarcoDeModal
       titulo={soloAsignar ? `Asignar ${vocabulario.profesional}` : "Cambiar fecha y hora"}
-      antetitulo={nombreDeCliente(cita)}
+      antetitulo={nombreDeCliente(cita, vocabulario.cliente)}
       bloqueado={guardando}
       alCerrar={onCerrar}
     >

@@ -7,11 +7,13 @@ import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Interruptor } from "@/components/comunes/interruptor"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { TOPE_DE_FILA_MAXIMO, TOPE_DE_FILA_MINIMO } from "@/lib/fila-virtual"
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 
 interface FilaVirtual {
   activa: boolean
@@ -39,6 +41,7 @@ interface PropsDeFormularioFilaVirtual {
  */
 export function FormularioFilaVirtual({ slug, activaInicial, topeInicial }: PropsDeFormularioFilaVirtual) {
   const idDelTitulo = useId()
+  const { clientes } = vocabularioDe(useRubroDelPanel())
   const idDelTope = useId()
   const [activa, setActiva] = useState(activaInicial)
   const [texto, setTexto] = useState(String(topeInicial))
@@ -98,7 +101,7 @@ export function FormularioFilaVirtual({ slug, activaInicial, topeInicial }: Prop
       <div className="mt-5">
         <Interruptor
           etiqueta="Fila virtual"
-          descripcion="Tus clientes se anotan desde su celular mientras el local está abierto, ven cuántas personas tienen adelante y les avisamos por correo cuando ya casi es su turno."
+          descripcion={`Tus ${clientes} se anotan desde su celular mientras el local está abierto, ven cuántas personas tienen adelante y les avisamos por correo cuando ya casi es su turno.`}
           activo={activa}
           alCambiar={cambiar}
         />
@@ -150,7 +153,7 @@ export function FormularioFilaVirtual({ slug, activaInicial, topeInicial }: Prop
           </Link>
           <p className="mt-2 text-sm text-texto-2">
             La pantalla usa la sesión de quien la abre: en el televisor o la tablet del local queda abierto el panel de esa
-            cuenta. Déjala en pantalla completa y no dejes el panel a mano de los clientes en ese equipo.
+            cuenta. Déjala en pantalla completa y no dejes el panel a mano de los {clientes} en ese equipo.
           </p>
         </div>
       )}

@@ -1,9 +1,11 @@
 "use client"
 
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { TarjetaCita, type CitaEnTarjeta } from "@/components/panel/tarjeta-cita"
 import { formatearHora, duracionEnMinutos } from "@/lib/fechas"
 import { sigueSinConfirmar } from "@/lib/por-confirmar"
 import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
+import { vocabularioDe } from "@/lib/vocabulario"
 import {
   citasFueraDeFranjas,
   formatearTiempoLibre,
@@ -22,10 +24,11 @@ interface PropsDeLineaDeTiempoDia {
  * Única forma de mapear una cita de las cifras del panel a `TarjetaCita`: la
  * usan esta línea de tiempo, `vista-dia-profesional.tsx` y `citas-de-hoy.tsx`.
  */
-export function citaParaTarjeta(cita: CitaDelDia): CitaEnTarjeta {
+export function citaParaTarjeta(cita: CitaDelDia, palabraCliente = "cliente"): CitaEnTarjeta {
   return {
     id: cita.id,
-    nombreCliente: cita.customer ? nombreCompletoDeCliente(cita.customer) : "Sin cliente",
+    // "Sin paciente" en una clínica dental: quien llama pasa la palabra del rubro.
+    nombreCliente: cita.customer ? nombreCompletoDeCliente(cita.customer) : `Sin ${palabraCliente}`,
     servicio: cita.title,
     horaInicio: formatearHora(cita.startTime),
     horaFin: formatearHora(cita.endTime),
@@ -46,6 +49,7 @@ const CLASE_HUECO =
   "rounded-[20px] border-[1.5px] border-dashed border-borde bg-[repeating-linear-gradient(45deg,var(--color-superficie)_0px,var(--color-superficie)_6px,transparent_6px,transparent_14px)] px-3 py-3 squircle"
 
 export function LineaDeTiempoDia({ franjas, citas }: PropsDeLineaDeTiempoDia) {
+  const { cliente } = vocabularioDe(useRubroDelPanel())
   const fueraDeHorario = citasFueraDeFranjas(franjas, citas)
 
   return (
@@ -76,7 +80,7 @@ export function LineaDeTiempoDia({ franjas, citas }: PropsDeLineaDeTiempoDia) {
                   </span>
                   <div className="min-w-0 flex-1">
                     {segmento.tipo === "cita" ? (
-                      <TarjetaCita cita={citaParaTarjeta(segmento.cita)} compacta />
+                      <TarjetaCita cita={citaParaTarjeta(segmento.cita, cliente)} compacta />
                     ) : (
                       <div className={CLASE_HUECO}>
                         <p className="text-xs text-texto-2">
@@ -98,7 +102,7 @@ export function LineaDeTiempoDia({ franjas, citas }: PropsDeLineaDeTiempoDia) {
           <ul className="space-y-2">
             {fueraDeHorario.map((cita) => (
               <li key={cita.id}>
-                <TarjetaCita cita={citaParaTarjeta(cita)} compacta />
+                <TarjetaCita cita={citaParaTarjeta(cita, cliente)} compacta />
               </li>
             ))}
           </ul>

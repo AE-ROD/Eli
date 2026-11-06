@@ -98,7 +98,12 @@ interface PropsDeMarcoDeModal {
  * Mientras sale (la animación de cierre de `AnimatePresence`) sigue a la
  * vista pero ya no es el diálogo activo: no atrapa el foco ni atiende teclas,
  * para no pelearle el foco a lo que viene después (el modal siguiente, o la
- * tarjeta que se acaba de mover).
+ * tarjeta que se acaba de mover). Y su contenido queda `inert`: el segundo
+ * clic de un doble clic en "Guardar", que llega mientras se desvanece, no
+ * vuelve a apretar el botón (que ya no está deshabilitado) y repite lo que se
+ * acaba de crear. Ese clic cae en el velo, que tampoco hace nada mientras
+ * sale. El foco vuelve a lo que abrió el diálogo apenas empieza a salir: lo
+ * que queda `inert` lo perdería y caería al <body>.
  */
 export function MarcoDeModal({
   titulo,
@@ -127,7 +132,8 @@ export function MarcoDeModal({
   )
 
   const cerrar = () => {
-    if (!bloqueado) alCerrar()
+    // Mientras sale ya se cerró: un clic en el velo no lo cierra otra vez.
+    if (!bloqueado && presente) alCerrar()
   }
   // Con lo último de `bloqueado` y `alCerrar`, sin reinstalar los oyentes del documento.
   const cerrarConEscape = useEffectEvent(() => cerrar())
@@ -199,6 +205,21 @@ export function MarcoDeModal({
     }
   }, [quienLoAbrio])
 
+  // Apenas empieza a salir, el foco que quedó adentro (o en el <body>) vuelve
+  // a lo que abrió el diálogo, si sigue en la página: el contenido se vuelve
+  // `inert` y el navegador lo tiraría al <body> durante el fundido. Si otra
+  // cosa ya lo tomó (el modal siguiente, la tarjeta que se movió), se respeta.
+  // Si lo que lo abrió ya no está, decide quien abrió el modal
+  // (`onExitComplete`), como antes. Sin desplazar: cuando un modal se cierra
+  // para abrir otro (el editor de servicios y el cobro), el foco pasa un
+  // instante por lo que abrió el primero y la página de atrás no debe moverse.
+  useEffect(() => {
+    if (presente) return
+    const actual = document.activeElement
+    const adentroOSinFoco = !actual || actual === document.body || panel.current?.contains(actual)
+    if (adentroOSinFoco && quienLoAbrio?.isConnected) quienLoAbrio.focus({ preventScroll: true })
+  }, [presente, quienLoAbrio])
+
   // Mientras guarda, y cuando termina sin cerrarse (porque falló).
   useEffect(() => {
     const nodo = panel.current
@@ -239,13 +260,17 @@ export function MarcoDeModal({
         aria-describedby={descripcion ? idDeLaDescripcion : undefined}
         tabIndex={-1}
         onFocus={recordarFoco}
+        // Mientras sale no se puede tocar ni enfocar nada de adentro (ver arriba).
+        inert={!presente}
         className={cn(
           // Lo que no entra en el alto se desplaza adentro, y lo que se sale
           // de la tarjeta se corta: el relleno deja lugar al anillo del foco
           // de lo que va pegado al borde, como un campo de ancho completo.
           "relative max-h-[calc(100dvh-1.5rem)] w-full overflow-y-auto rounded-panel bg-tarjeta text-navy shadow-md squircle focus:outline-none sm:max-h-[calc(100dvh-3rem)]",
           "px-5 pt-5 pb-6 sm:px-8 sm:pt-7 sm:pb-8",
-          ANCHOS[ancho]
+          ANCHOS[ancho],
+          // Por si el navegador no conoce `inert`: los clics pasan al velo.
+          !presente && "pointer-events-none"
         )}
       >
         <div className="mb-6 flex items-start justify-between gap-3">

@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } fr
 import { CircleAlert, CircleCheck, CircleDashed, HandCoins, Plus, Trash2, type LucideIcon } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { Esqueleto } from "@/components/comunes/esqueleto"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { MAXIMO_DE_PAGOS, MAXIMO_DE_PROPINAS, aCentavos, deCentavos, type PagoPedido } from "@/lib/atenciones"
@@ -21,6 +22,7 @@ import {
 } from "@/lib/acciones-del-tablero"
 import { formatearMonto } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import { Insignia } from "@/components/comunes/insignia"
 import { leerLineasSinPorcentaje, type Atencion } from "../_datos"
 import { Aviso } from "@/components/panel/aviso"
@@ -80,6 +82,8 @@ export function ModalCobro({
   onCerrar,
 }: PropsDeModalCobro) {
   const idBase = useId()
+  // "Sala de espera" en una clínica dental.
+  const deDonde = conMayuscula(vocabularioDe(useRubroDelPanel()).tablero)
   const botonAgregar = useRef<HTMLButtonElement>(null)
   const botonAgregarPropina = useRef<HTMLButtonElement>(null)
   const totalCentavos = totalEnCentavosDe(atencion)
@@ -178,7 +182,7 @@ export function ModalCobro({
 
   return (
     <MarcoDeModal
-      antetitulo="Tablero"
+      antetitulo={deDonde}
       titulo={`Cobrar a ${atencion.cliente.nombre}`}
       descripcion={`Total: ${formatearMonto(deCentavos(totalCentavos))}`}
       ancho="lg"

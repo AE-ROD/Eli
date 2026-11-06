@@ -3,7 +3,9 @@
 import { useEffect, useId, useRef } from "react"
 import Link from "next/link"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import { fechaYMinutosEn } from "@/lib/zona-horaria"
 import { estiloDeEstado } from "./estados-de-cita"
@@ -386,13 +388,15 @@ interface PropsDeBloqueDeCita {
  * sillón o el odontólogo de la otra vista.
  */
 function BloqueDeCita({ cita, zona, desde, hasta, lugar, verPor, elegida, sinProfesional, onSeleccionar }: PropsDeBloqueDeCita) {
+  // "Sin paciente": la grilla es de la clínica dental.
+  const { cliente } = vocabularioDe(useRubroDelPanel())
   const posicion = posicionDelBloque(tramoDeCita(cita, zona), desde, hasta)
   if (!posicion) return null
 
   const estado = estiloDeEstado(cita.status, citaPorConfirmar(cita))
   const inicio = horaEn(cita.startTime, zona)
   const fin = horaEn(cita.endTime, zona)
-  const paciente = nombreDeCliente(cita)
+  const paciente = nombreDeCliente(cita, cliente)
   const odontologo = nombreDelProfesional(cita)
   // Lo de la otra vista: por sillón, con quién; por odontólogo, en qué sillón.
   const otraColumna =

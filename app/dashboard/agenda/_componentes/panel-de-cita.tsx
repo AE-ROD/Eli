@@ -262,9 +262,9 @@ export function PanelDeCita({
         )}
       >
         <div className="flex items-center gap-3">
-          <AvatarUsuario nombre={nombreDeCliente(cita)} tamaño="lg" />
+          <AvatarUsuario nombre={nombreDeCliente(cita, vocabulario.cliente)} tamaño="lg" />
           <div className="min-w-0">
-            <p className="font-semibold break-words">{nombreDeCliente(cita)}</p>
+            <p className="font-semibold break-words">{nombreDeCliente(cita, vocabulario.cliente)}</p>
             <p className="text-sm break-words text-texto-2">{cita.title}</p>
           </div>
         </div>
@@ -310,7 +310,7 @@ export function PanelDeCita({
         {/* Lo que el cliente escribió al reservar (#122): sólo se lee, y con su rótulo para no confundirlo con la nota del local. */}
         {cita.clientComments && (
           <div className="mt-3 rounded-[16px] bg-superficie p-3 text-sm squircle">
-            <p className="text-xs font-medium text-texto-2">El cliente escribió al reservar</p>
+            <p className="text-xs font-medium text-texto-2">El {vocabulario.cliente} escribió al reservar</p>
             <p className="mt-1 break-words whitespace-pre-line">{cita.clientComments}</p>
           </div>
         )}

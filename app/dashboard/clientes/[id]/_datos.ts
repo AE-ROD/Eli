@@ -124,6 +124,15 @@ export async function cambiarEstadoDePrestacion(
   )
 }
 
+/** El valor de una prestación, en centavos. Sólo en una etapa por aprobar: en una aprobada, el servidor responde 409. */
+export async function cambiarValorDePrestacion(id: string, prestacionId: string, valorCents: number): Promise<Resultado<PlanRespuesta>> {
+  return pedir<PlanRespuesta>(
+    `${deLaFicha(id)}/plan/prestaciones/${encodeURIComponent(prestacionId)}`,
+    "No se pudo guardar el valor de la prestación",
+    conJsonPatch({ valorCents })
+  )
+}
+
 export async function borrarPrestacion(id: string, prestacionId: string): Promise<Resultado<PlanRespuesta>> {
   return pedir<PlanRespuesta>(
     `${deLaFicha(id)}/plan/prestaciones/${encodeURIComponent(prestacionId)}`,

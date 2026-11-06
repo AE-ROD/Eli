@@ -6,9 +6,11 @@ import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { Interruptor } from "@/components/comunes/interruptor"
 import { Aviso } from "@/components/panel/aviso"
 import { CampoHora } from "@/components/panel/campo-hora"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { guardarHorario, type HorarioDelDia } from "../_datos"
 
 const DIAS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
@@ -53,6 +55,7 @@ export function SeccionHorario({
   alGuardar,
 }: PropsDeSeccionHorario) {
   const idDelTitulo = useId()
+  const { clientes } = vocabularioDe(useRubroDelPanel())
   const [horarios, setHorarios] = useState<HorarioDelDia[]>(() => semanaCompleta(horariosIniciales))
   // Lo último que está en la base, para saber si hay cambios sin guardar.
   const [enLaBase, setEnLaBase] = useState<HorarioDelDia[]>(() => semanaCompleta(horariosIniciales))
@@ -126,7 +129,7 @@ export function SeccionHorario({
 
       {nuncaGuardado && (
         <Aviso tono="atencion" titulo="Este horario todavía no está guardado" className="mt-5">
-          Tus clientes no ven horas hasta que lo guardes. Revisa los días y las horas, y toca &ldquo;Guardar horario&rdquo;.
+          Tus {clientes} no ven horas hasta que lo guardes. Revisa los días y las horas, y toca &ldquo;Guardar horario&rdquo;.
         </Aviso>
       )}
       {!nuncaGuardado && pendiente && !guardando && (

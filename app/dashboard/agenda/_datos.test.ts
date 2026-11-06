@@ -333,6 +333,8 @@ describe("nombreDeCliente y buscarClientes: nombre y apellido (clientes viejos d
     expect(nombreDeCliente(conApellido)).toBe("Lucía Pérez")
     expect(nombreDeCliente(sinApellido)).toBe("Lucía Pérez")
     expect(nombreDeCliente({ customer: null } as unknown as Cita)).toBe("Sin cliente")
+    // Con la palabra del rubro: en una clínica dental.
+    expect(nombreDeCliente({ customer: null } as unknown as Cita, "paciente")).toBe("Sin paciente")
   })
 
   it("el buscador de \"Nueva cita\" muestra el nombre completo", async () => {

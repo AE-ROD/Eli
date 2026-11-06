@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react"
 import { TriangleAlert } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import {
   filaDesdeLinea,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/acciones-del-tablero"
 import type { Atencion, Catalogo } from "../_datos"
 import { Aviso } from "@/components/panel/aviso"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import { EditorDeServicios, filaVacia } from "./editor-de-servicios"
 
 /**
@@ -58,6 +60,8 @@ export function ModalServicios({
   onGuardar,
   onCerrar,
 }: PropsDeModalServicios) {
+  // "Sala de espera" en una clínica dental.
+  const deDonde = conMayuscula(vocabularioDe(useRubroDelPanel()).tablero)
   // Las filas se toman una sola vez, al abrir: la recarga del tablero cada
   // 30 segundos no pisa lo que se está escribiendo. Si la atención cambió
   // entretanto, el servidor responde 409 y el tablero se recarga.
@@ -75,7 +79,7 @@ export function ModalServicios({
 
   return (
     <MarcoDeModal
-      antetitulo="Tablero"
+      antetitulo={deDonde}
       titulo={`Servicios de ${atencion.cliente.nombre}`}
       descripcion={
         requisito ? (

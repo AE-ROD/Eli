@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { AnimatePresence } from "framer-motion"
 import { RefreshCw } from "lucide-react"
 import { BarraSuperior } from "@/components/panel/barra-superior"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { Boton } from "@/components/comunes/boton"
 import { Esqueleto } from "@/components/comunes/esqueleto"
 import { ModalAnular } from "@/components/panel/modal-anular"
@@ -15,6 +16,7 @@ import { actorDeSesion, puedeAnular, puedeVerAnuladas } from "@/lib/permisos"
 import type { Resultado } from "@/lib/peticiones"
 import { rotuloDeIngresos } from "@/lib/reportes"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import {
   anularCobro,
   leerAnuladas,
@@ -94,6 +96,8 @@ function AvisoDeTruncado() {
 
 export default function PaginaReportes() {
   const { data: sesion } = useSession()
+  // "Pacientes" y "odontólogo" en una clínica dental.
+  const vocabulario = vocabularioDe(useRubroDelPanel())
   const actor = actorDeSesion(sesion)
   const verAnuladas = puedeVerAnuladas(actor)
   // Lo cobrado lo anula sólo el dueño (`puedeAnular`). Todas las filas son del
@@ -276,7 +280,7 @@ export default function PaginaReportes() {
   // ─── Pantalla ─────────────────────────────────────────────────────────────
 
   const subtitulo = llenarHoras
-    ? "Ocupación del equipo, clientes nuevos y quién no vino"
+    ? `Ocupación del equipo, ${vocabulario.clientes} nuevos y quién no vino`
     : !reporte
       ? errorDelReporte
         ? undefined
@@ -297,7 +301,7 @@ export default function PaginaReportes() {
     id ? (lista?.find((opcion) => opcion.id === id)?.nombre ?? siNoEsta) : ""
   const rotulo = reporte
     ? rotuloDeIngresos(reporte.alcance === "propio", {
-        profesional: nombreDe(opciones?.profesionales, filtros.profesional, "el profesional elegido"),
+        profesional: nombreDe(opciones?.profesionales, filtros.profesional, `el ${vocabulario.profesional} elegido`),
         servicio: nombreDe(opciones?.servicios, filtros.servicio, "el servicio elegido"),
         medio: filtros.medio,
       })

@@ -7,12 +7,14 @@ import { Esqueleto } from "@/components/comunes/esqueleto"
 import { Selector } from "@/components/comunes/selector"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { CAMPO, TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
 import { comoTexto, desplazarFecha, diasDeLaSemanaDe, limitesDelMesDe } from "@/lib/fechas"
 import { DIAS_MAXIMOS } from "@/lib/periodos"
 import type { Resultado } from "@/lib/peticiones"
 import { cn } from "@/lib/utils"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import {
   formatearCambio,
   formatearMinutos,
@@ -69,6 +71,8 @@ function textoDeComparacion(comparacion: ComparacionDeMetrica, tipo: "cantidad" 
  */
 export function LlenarHoras() {
   const idDeOcupacion = useId()
+  // "Pacientes" y "odontólogo" en una clínica dental.
+  const vocabulario = vocabularioDe(useRubroDelPanel())
   const idDeInasistencia = useId()
   const idDelDesde = useId()
   const idDelHasta = useId()
@@ -198,13 +202,13 @@ export function LlenarHoras() {
               principal
             />
             <CifraConComparacion
-              titulo="Clientes nuevos"
+              titulo={`${conMayuscula(vocabulario.clientes)} nuevos`}
               valor={String(reporte.clientes.nuevos)}
               icono={UserPlus}
               comparacion={textoDeComparacion(reporte.comparacion.clientesNuevos, "cantidad")}
             />
             <CifraConComparacion
-              titulo="Clientes que volvieron"
+              titulo={`${conMayuscula(vocabulario.clientes)} que volvieron`}
               valor={String(reporte.clientes.recurrentes)}
               icono={UserCheck}
               comparacion={textoDeComparacion(reporte.comparacion.clientesRecurrentes, "cantidad")}
@@ -219,7 +223,7 @@ export function LlenarHoras() {
 
           <section aria-labelledby={idDeOcupacion} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
             <h2 id={idDeOcupacion} className={TITULO_DE_TARJETA}>
-              Ocupación por profesional
+              Ocupación por {vocabulario.profesional}
             </h2>
             <p className="mt-1 text-sm text-texto-2">
               Minutos con citas dentro de su horario, sin bloqueos. Si no cargó horario propio, cuenta el del negocio.
@@ -258,7 +262,7 @@ export function LlenarHoras() {
             <p className="mt-1 text-sm text-texto-2">
               Citas marcadas como &ldquo;no vino&rdquo;, sobre las que ya empezaron y no se cancelaron.
               {reporte.clientes.sinFicha > 0 &&
-                ` ${reporte.clientes.sinFicha} atención${reporte.clientes.sinFicha === 1 ? "" : "es"} sin ficha de cliente no entra${reporte.clientes.sinFicha === 1 ? "" : "n"} en nuevos ni recurrentes.`}
+                ` ${reporte.clientes.sinFicha} atención${reporte.clientes.sinFicha === 1 ? "" : "es"} sin ficha de ${vocabulario.cliente} no entra${reporte.clientes.sinFicha === 1 ? "" : "n"} en nuevos ni recurrentes.`}
             </p>
             {reporte.inasistencia.porProfesional.length === 0 ? (
               <EstadoVacio className="mt-4">No hubo citas pasadas en el período.</EstadoVacio>

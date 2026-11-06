@@ -5,22 +5,27 @@ import { MailCheck } from "lucide-react"
 import { Insignia } from "@/components/comunes/insignia"
 import { Interruptor } from "@/components/comunes/interruptor"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
+import { vocabularioDe, type Vocabulario } from "@/lib/vocabulario"
 import { cambiarMensajesAClientes, type EstadoDeMensajes, type InterruptoresDeMensajes } from "../_datos"
 
-/** Cada interruptor con lo que hace, en una línea, como se lo explicaríamos a la dueña. */
-const MENSAJES: { campo: keyof InterruptoresDeMensajes; etiqueta: string; descripcion: string }[] = [
+/**
+ * Cada interruptor con lo que hace, en una línea, como se lo explicaríamos a
+ * la dueña. Con la palabra del rubro: "pacientes" en una clínica dental.
+ */
+const mensajesPara = ({ cliente, clientes }: Vocabulario): { campo: keyof InterruptoresDeMensajes; etiqueta: string; descripcion: string }[] => [
   {
     campo: "listaDeEsperaActiva",
     etiqueta: "Lista de espera",
-    descripcion: "Si un día no tiene horas, tus clientes se anotan y les avisamos por correo cuando se libere una.",
+    descripcion: `Si un día no tiene horas, tus ${clientes} se anotan y les avisamos por correo cuando se libere una.`,
   },
   {
     campo: "avisoDeVueltaActivo",
     etiqueta: "Te toca volver",
-    descripcion: "Un correo cuando a un cliente ya le toca volver, según cada cuánto viene o la frecuencia de su servicio.",
+    descripcion: `Un correo cuando a un ${cliente} ya le toca volver, según cada cuánto viene o la frecuencia de su servicio.`,
   },
   {
     campo: "pideResenas",
@@ -56,6 +61,7 @@ const numero = (valor: number | undefined) => new Intl.NumberFormat("es-CL").for
  */
 export function SeccionMensajesAClientes({ inicial }: { inicial: EstadoDeMensajes }) {
   const idDelTitulo = useId()
+  const mensajes = mensajesPara(vocabularioDe(useRubroDelPanel()))
   const idDelMes = useId()
   const [interruptores, setInterruptores] = useState(inicial.interruptores)
   const [guardando, setGuardando] = useState<keyof InterruptoresDeMensajes | null>(null)
@@ -76,7 +82,7 @@ export function SeccionMensajesAClientes({ inicial }: { inicial: EstadoDeMensaje
       return setError(resultado.error)
     }
     setInterruptores(resultado.datos.interruptores)
-    const etiqueta = MENSAJES.find((mensaje) => mensaje.campo === campo)?.etiqueta ?? ""
+    const etiqueta = mensajes.find((mensaje) => mensaje.campo === campo)?.etiqueta ?? ""
     setAnuncio(`${etiqueta}: ${activo ? "encendido" : "apagado"}`)
   }
 
@@ -107,7 +113,7 @@ export function SeccionMensajesAClientes({ inicial }: { inicial: EstadoDeMensaje
       </p>
 
       <ul className="mt-5 divide-y divide-borde">
-        {MENSAJES.map((mensaje) => {
+        {mensajes.map((mensaje) => {
           const descripcion =
             mensaje.campo === "pideResenas" && !inicial.tieneEnlaceDeResenas
               ? `${mensaje.descripcion} Antes, agrega tu enlace de reseñas en "Tu página pública".`

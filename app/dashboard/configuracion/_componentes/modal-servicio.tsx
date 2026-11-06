@@ -7,8 +7,10 @@ import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Aviso } from "@/components/panel/aviso"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { FRECUENCIA_MAXIMA_DIAS, FRECUENCIA_MINIMA_DIAS } from "@/lib/frecuencia-de-visitas"
 import type { DatosDeServicio } from "../_datos"
 
@@ -62,6 +64,7 @@ export function ModalServicio({
   onCambiarFrecuencia,
 }: PropsDeModalServicio) {
   const idDeLaDescripcion = useId()
+  const { cliente } = vocabularioDe(useRubroDelPanel())
   const idDeAyudaDeFrecuencia = useId()
   const idDeLasCategorias = useId()
   const nombreDeLaDuracion = useId()
@@ -164,7 +167,7 @@ export function ModalServicio({
         {onCambiarFrecuencia && (
           <div className="space-y-1.5">
             <CampoFormulario
-              etiqueta="Cada cuántos días vuelve un cliente (opcional)"
+              etiqueta={`Cada cuántos días vuelve un ${cliente} (opcional)`}
               type="text"
               inputMode="numeric"
               autoComplete="off"

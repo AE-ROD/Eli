@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react"
 import { AnimatePresence } from "framer-motion"
-import { ClipboardList, Plus, Trash2 } from "lucide-react"
+import { ClipboardList, Pencil, Plus, Trash2 } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { Insignia } from "@/components/comunes/insignia"
 import { Aviso } from "@/components/panel/aviso"
@@ -13,10 +13,11 @@ import type { AccionDeEtapa, EtapaRespuesta, PlanRespuesta, PrestacionRespuesta 
 import { textoDeCaras } from "@/lib/odontograma"
 import { ESTADOS_DE_PRESTACION, nombreDeEstadoDeEtapa, nombreDeEstadoDePrestacion, type EstadoDePrestacion } from "@/lib/plan-de-tratamiento"
 import { cn } from "@/lib/utils"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import { accionDeEtapa, borrarEtapa, borrarPrestacion, cambiarEstadoDePrestacion } from "../_datos"
 import { cuandoEsLaCita, fechaCorta, pesos, porcentajeRealizado } from "../_formato"
 import type { UsuarioDeLaFicha } from "./ficha-del-paciente"
-import { ModalAgendar, ModalNuevaEtapa, ModalNuevaVersion, ModalPrestacion } from "./modales-del-plan"
+import { ModalAgendar, ModalNuevaEtapa, ModalNuevaVersion, ModalPrestacion, ModalValor } from "./modales-del-plan"
 
 interface PropsDePestanaPlan {
   pacienteId: string
@@ -35,6 +36,7 @@ type Pendiente =
   | { tipo: "etapa" }
   | { tipo: "prestacion"; etapa: EtapaRespuesta }
   | { tipo: "agendar"; prestacion: PrestacionRespuesta }
+  | { tipo: "valor"; prestacion: PrestacionRespuesta }
   | { tipo: "borrar-etapa"; etapa: EtapaRespuesta }
   | { tipo: "borrar-prestacion"; prestacion: PrestacionRespuesta }
 
@@ -65,6 +67,8 @@ const nombreDePrestacion = (prestacion: PrestacionRespuesta) =>
  */
 export function PestanaPlan({ pacienteId, plan: respuesta, alCambiar, conOdontograma, zona, hoy, usuario }: PropsDePestanaPlan) {
   const { plan, versionesAnteriores, puedeEditar } = respuesta
+  // La columna de quién hace cada prestación: "Odontólogo".
+  const quienAtiende = conMayuscula(vocabularioDe(usuario.rubro).profesional)
   const [pendiente, setPendiente] = useState<Pendiente | null>(null)
   const [trabajando, setTrabajando] = useState<string | null>(null)
   const [aviso, setAviso] = useState("")
@@ -248,7 +252,9 @@ export function PestanaPlan({ pacienteId, plan: respuesta, alCambiar, conOdontog
                 alAccion={(accion) => accionEnEtapa(etapa, accion)}
                 alAgregar={() => abrir({ tipo: "prestacion", etapa })}
                 alBorrar={() => abrir({ tipo: "borrar-etapa", etapa })}
+                quienAtiende={quienAtiende}
                 alCambiarEstado={cambiarEstado}
+                alCambiarValor={(prestacion) => abrir({ tipo: "valor", prestacion })}
                 alBorrarPrestacion={(prestacion) => abrir({ tipo: "borrar-prestacion", prestacion })}
               />
             ))}
@@ -334,6 +340,15 @@ export function PestanaPlan({ pacienteId, plan: respuesta, alCambiar, conOdontog
             alCerrar={() => setPendiente(null)}
           />
         )}
+        {pendiente?.tipo === "valor" && (
+          <ModalValor
+            pacienteId={pacienteId}
+            prestacion={pendiente.prestacion}
+            nombre={nombreDePrestacion(pendiente.prestacion)}
+            alTerminar={(nuevo) => alTerminar(nuevo, `${nombreDePrestacion(pendiente.prestacion)}: valor guardado.`)}
+            alCerrar={() => setPendiente(null)}
+          />
+        )}
         {(pendiente?.tipo === "borrar-etapa" || pendiente?.tipo === "borrar-prestacion") && (
           <ModalConfirmar
             titulo={pendiente.tipo === "borrar-etapa" ? `¿Borrar «${pendiente.etapa.nombre}»?` : `¿Borrar ${nombreDePrestacion(pendiente.prestacion)}?`}
@@ -373,18 +388,38 @@ interface PropsDeEtapa {
   zona: string
   hoy: string
   idDeLaNota: string
+  /** El título de la columna de quién la hace: "Odontólogo". */
+  quienAtiende: string
   alAccion: (accion: AccionDeEtapa) => void
   alAgregar: () => void
   alBorrar: () => void
   alCambiarEstado: (prestacion: PrestacionRespuesta, estado: EstadoDePrestacion) => void
+  alCambiarValor: (prestacion: PrestacionRespuesta) => void
   alBorrarPrestacion: (prestacion: PrestacionRespuesta) => void
 }
 
 /** Una etapa: su nombre, su estado, su subtotal, la tabla de prestaciones y lo que se puede hacer con ella. */
-function Etapa({ etapa, puedeEditar, trabajando, zona, hoy, idDeLaNota, alAccion, alAgregar, alBorrar, alCambiarEstado, alBorrarPrestacion }: PropsDeEtapa) {
+function Etapa({
+  etapa,
+  puedeEditar,
+  trabajando,
+  zona,
+  hoy,
+  idDeLaNota,
+  quienAtiende,
+  alAccion,
+  alAgregar,
+  alBorrar,
+  alCambiarEstado,
+  alCambiarValor,
+  alBorrarPrestacion,
+}: PropsDeEtapa) {
   const idDelTitulo = useId()
+  const idDeFaltaElValor = useId()
   const porAprobar = etapa.estado === "por-aprobar"
   const conPrestaciones = etapa.prestaciones.length > 0
+  /** Cuántas quedaron en $0: "Desde el odontograma" sin un servicio de la clínica que les corresponda. */
+  const sinValor = etapa.prestaciones.filter((prestacion) => prestacion.valorCents === 0).length
   const sePuedeBorrar = porAprobar && etapa.prestaciones.every((prestacion) => prestacion.estado === "por-agendar")
 
   return (
@@ -433,7 +468,7 @@ function Etapa({ etapa, puedeEditar, trabajando, zona, hoy, idDeLaNota, alAccion
                   Prestación
                 </th>
                 <th scope="col" className="px-3 font-medium">
-                  Profesional
+                  {quienAtiende}
                 </th>
                 <th scope="col" className="px-3 font-medium">
                   Estado
@@ -458,7 +493,9 @@ function Etapa({ etapa, puedeEditar, trabajando, zona, hoy, idDeLaNota, alAccion
                   trabajando={trabajando === prestacion.id}
                   zona={zona}
                   hoy={hoy}
+                  idDeFaltaElValor={puedeEditar && sinValor > 0 ? idDeFaltaElValor : undefined}
                   alCambiarEstado={(estado) => alCambiarEstado(prestacion, estado)}
+                  alCambiarValor={puedeEditar && porAprobar ? () => alCambiarValor(prestacion) : undefined}
                   alBorrar={() => alBorrarPrestacion(prestacion)}
                 />
               ))}
@@ -468,6 +505,17 @@ function Etapa({ etapa, puedeEditar, trabajando, zona, hoy, idDeLaNota, alAccion
       ) : (
         <p className="mt-3 rounded-[16px] border-2 border-dashed border-borde px-4 py-4 text-center text-sm text-texto-2 squircle">
           La etapa no tiene prestaciones.
+        </p>
+      )}
+
+      {/* Quien puede editar ve cómo completar lo que falta; mientras, suma $0. */}
+      {puedeEditar && sinValor > 0 && (
+        <p id={idDeFaltaElValor} className="mt-2 px-1 text-[13px] text-pretty text-texto-2">
+          {sinValor === 1 ? "A una prestación le falta el valor" : `A ${sinValor} prestaciones les falta el valor`}: mientras, suma $0 a
+          la etapa.{" "}
+          {porAprobar
+            ? "Toca «Falta el valor» en la tabla para completarlo."
+            : "Para completarlo, vuelve la etapa a por aprobar: en una aprobada el valor ya no se cambia."}
         </p>
       )}
 
@@ -531,13 +579,33 @@ interface PropsDeFilaDePrestacion {
   trabajando: boolean
   zona: string
   hoy: string
+  /** La nota de la etapa que explica cómo completar un valor que falta, si se muestra. */
+  idDeFaltaElValor?: string
   alCambiarEstado: (estado: EstadoDePrestacion) => void
+  /** Sólo si el valor se puede cambiar: quien edita, en una etapa por aprobar. */
+  alCambiarValor?: () => void
   alBorrar: () => void
 }
 
 const CELDA = "bg-tarjeta px-3 py-3 align-top"
 
-function FilaDePrestacion({ prestacion, puedeEditar, conColumnaDeBorrar, trabajando, zona, hoy, alCambiarEstado, alBorrar }: PropsDeFilaDePrestacion) {
+/** "Falta el valor": en palabras y en el naranja de lo incompleto (el tono `atencion` de `Aviso`), no sólo $0. */
+const FALTA_EL_VALOR = "inline-flex h-6 items-center gap-1.5 rounded-full bg-naranja-suave px-2.5 text-[13px] font-medium whitespace-nowrap text-navy"
+
+function FilaDePrestacion({
+  prestacion,
+  puedeEditar,
+  conColumnaDeBorrar,
+  trabajando,
+  zona,
+  hoy,
+  idDeFaltaElValor,
+  alCambiarEstado,
+  alCambiarValor,
+  alBorrar,
+}: PropsDeFilaDePrestacion) {
+  const falta = prestacion.valorCents === 0
+  const dondeEs = prestacion.pieza === null ? "boca completa" : `pieza ${prestacion.pieza}`
   const detalle = [
     prestacion.caras.length > 0 ? `${prestacion.caras.length === 1 ? "Cara" : "Caras"} ${textoDeCaras(prestacion.caras)}` : null,
     prestacion.estado === "agendada" && prestacion.cita ? `Cita: ${cuandoEsLaCita(prestacion.cita.startTime, zona, hoy)}` : null,
@@ -561,7 +629,7 @@ function FilaDePrestacion({ prestacion, puedeEditar, conColumnaDeBorrar, trabaja
             value={prestacion.estado}
             onChange={(e) => alCambiarEstado(e.target.value as EstadoDePrestacion)}
             disabled={trabajando}
-            aria-label={`Estado de ${prestacion.nombre}, ${prestacion.pieza === null ? "boca completa" : `pieza ${prestacion.pieza}`}`}
+            aria-label={`Estado de ${prestacion.nombre}, ${dondeEs}`}
             aria-busy={trabajando || undefined}
             className={cn(CAMPO, "min-h-10 w-auto cursor-pointer py-1.5 pr-8", FONDO_DE_PRESTACION[prestacion.estado])}
           >
@@ -578,7 +646,35 @@ function FilaDePrestacion({ prestacion, puedeEditar, conColumnaDeBorrar, trabaja
         )}
       </td>
       <td className={cn(CELDA, "text-right font-medium whitespace-nowrap tabular-nums", !conColumnaDeBorrar && "rounded-r-[14px]")}>
-        {pesos(prestacion.valorCents)}
+        {alCambiarValor ? (
+          // El valor se toca para cambiarlo; el que falta, para completarlo.
+          <button
+            type="button"
+            onClick={alCambiarValor}
+            aria-label={`${falta ? "Completar" : "Cambiar"} el valor de ${prestacion.nombre}, ${dondeEs}${falta ? ": falta el valor" : `: ${pesos(prestacion.valorCents)}`}`}
+            aria-describedby={falta ? idDeFaltaElValor : undefined}
+            className={cn(
+              "group/valor -my-2 -mr-2 inline-flex min-h-10 items-center gap-1.5 rounded-[12px] px-2 squircle anillo-foco",
+              !falta && "hover:bg-superficie"
+            )}
+          >
+            {falta ? (
+              <span className={cn(FALTA_EL_VALOR, "transition-colors duration-150 ease-suave group-hover/valor:bg-naranja")}>
+                Falta el valor
+                <Pencil className="size-3.5" aria-hidden="true" strokeWidth={2} />
+              </span>
+            ) : (
+              <>
+                {pesos(prestacion.valorCents)}
+                <Pencil className="size-3.5 text-texto-2" aria-hidden="true" strokeWidth={1.75} />
+              </>
+            )}
+          </button>
+        ) : falta ? (
+          <span className={FALTA_EL_VALOR}>Falta el valor</span>
+        ) : (
+          pesos(prestacion.valorCents)
+        )}
       </td>
       {conColumnaDeBorrar && (
         <td className={cn(CELDA, "rounded-r-[14px] px-1 py-1.5 text-right")}>
@@ -586,7 +682,7 @@ function FilaDePrestacion({ prestacion, puedeEditar, conColumnaDeBorrar, trabaja
             <button
               type="button"
               onClick={alBorrar}
-              aria-label={`Borrar ${prestacion.nombre}, ${prestacion.pieza === null ? "boca completa" : `pieza ${prestacion.pieza}`}`}
+              aria-label={`Borrar ${prestacion.nombre}, ${dondeEs}`}
               className="grid size-11 place-items-center rounded-[12px] text-error squircle anillo-foco hover:bg-error/6"
             >
               <Trash2 className="size-4" aria-hidden="true" strokeWidth={1.75} />

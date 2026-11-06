@@ -62,7 +62,7 @@ export function VistaSemana({
 }: PropsDeVistaSemana) {
   const caja = useRef<HTMLDivElement>(null)
   // "Sin profesional", con la palabra del rubro: "Sin odontólogo" en una clínica dental.
-  const { profesional } = vocabularioDe(useRubroDelPanel())
+  const { cliente, profesional } = vocabularioDe(useRubroDelPanel())
   // Días, horas y "hoy", en la zona del negocio (#99).
   const zona = useZonaDelNegocio()
   const esHoy = (dia: Date) => esHoyEn(dia, zona)
@@ -202,7 +202,7 @@ export function VistaSemana({
                       onClick={() => onSeleccionar(cita)}
                       // Lo que la grilla dice con el lugar y el color, dicho para el lector de
                       // pantalla. Empieza por lo que se ve, para que también lo encuentre la voz.
-                      aria-label={`${nombreDeCliente(cita)}, ${cita.title}, ${diaParaLeer(dia)}, de ${horaEn(cita.startTime, zona)} a ${horaEn(cita.endTime, zona)}, ${estado.texto}${sinProfesional ? `, sin ${profesional}` : ""}`}
+                      aria-label={`${nombreDeCliente(cita, cliente)}, ${cita.title}, ${diaParaLeer(dia)}, de ${horaEn(cita.startTime, zona)} a ${horaEn(cita.endTime, zona)}, ${estado.texto}${sinProfesional ? `, sin ${profesional}` : ""}`}
                       className={cn(
                         "absolute overflow-hidden rounded-[10px] border-l-[3px] px-1.5 py-1 text-left",
                         "anillo-foco transition-shadow duration-200 ease-suave hover:z-10 hover:shadow-md focus-visible:z-10",
@@ -218,7 +218,7 @@ export function VistaSemana({
                           cita.status === "cancelada" && "line-through"
                         )}
                       >
-                        {nombreDeCliente(cita)}
+                        {nombreDeCliente(cita, cliente)}
                       </span>
                       {altura > 32 && <span className="block truncate text-xs">{cita.title}</span>}
                       {sinProfesional && altura > 48 && <span className="block truncate text-xs font-medium">Sin {profesional}</span>}

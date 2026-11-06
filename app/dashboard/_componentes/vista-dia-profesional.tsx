@@ -4,11 +4,13 @@ import { useId, type ReactNode } from "react"
 import Link from "next/link"
 import { CalendarClock } from "lucide-react"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { TarjetaCita } from "@/components/panel/tarjeta-cita"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { LineaDeTiempoDia, citaParaTarjeta } from "./linea-de-tiempo-dia"
 import { formatearTiempoLibre, minutosLibresEnFranjas, type CitaDelDia } from "@/lib/horario-dia"
 import type { EstadisticasDelPanel } from "../_datos"
@@ -44,6 +46,8 @@ function EnlaceAConfiguracion() {
 /** Lista simple de citas, reutilizada por los dos estados que no pueden dibujar la línea de tiempo (sin horario / horario inválido). */
 function ListaCitasDelDia({ citas }: { citas: CitaDelDia[] }) {
   const idDelTitulo = useId()
+  // "Sin paciente" en una clínica dental.
+  const { cliente } = vocabularioDe(useRubroDelPanel())
   return (
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
@@ -56,7 +60,7 @@ function ListaCitasDelDia({ citas }: { citas: CitaDelDia[] }) {
           <ul className="space-y-2">
             {citas.map((cita) => (
               <li key={cita.id}>
-                <TarjetaCita cita={citaParaTarjeta(cita)} compacta />
+                <TarjetaCita cita={citaParaTarjeta(cita, cliente)} compacta />
               </li>
             ))}
           </ul>

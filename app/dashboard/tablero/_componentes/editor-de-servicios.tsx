@@ -4,11 +4,13 @@ import { useId, useRef, type ReactNode } from "react"
 import Link from "next/link"
 import { Package, Plus, Trash2, TriangleAlert } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { MAXIMO_DE_LINEAS_POR_ATENCION, deCentavos } from "@/lib/atenciones"
 import { esDeProducto, totalDeFilasEnCentavos, type ErroresDeFila, type FilaDeServicio } from "@/lib/acciones-del-tablero"
 import { formatearMonto, montoParaEscribir } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import type { Catalogo } from "../_datos"
 import { Aviso } from "@/components/panel/aviso"
 
@@ -73,6 +75,8 @@ export function EditorDeServicios({
   onCambiar,
 }: PropsDeEditorDeServicios) {
   const idBase = useId()
+  // "Odontólogo" en una clínica dental.
+  const { profesional: quienAtiende } = vocabularioDe(useRubroDelPanel())
   const botonAgregar = useRef<HTMLButtonElement>(null)
   const totalCentavos = totalDeFilasEnCentavos(filas)
   // Un tablero viejo, cargado antes de que el servidor mandara productos, no los trae.
@@ -204,7 +208,7 @@ export function EditorDeServicios({
             {eligeProfesional && (
               <div>
                 <label htmlFor={id("profesional")} className={ETIQUETA}>
-                  Profesional
+                  {conMayuscula(quienAtiende)}
                 </label>
                 <select
                   id={id("profesional")}
@@ -218,7 +222,7 @@ export function EditorDeServicios({
                   onChange={(evento) => cambiarFila(fila.clave, { profesional: evento.target.value })}
                   className={cn(CAMPO, deLaFila.profesional && CAMPO_CON_ERROR)}
                 >
-                  <option value="">Elegir profesional</option>
+                  <option value="">{`Elegir ${quienAtiende}`}</option>
                   {catalogo.profesionales.map((profesional) => (
                     <option key={profesional.id} value={profesional.id}>
                       {profesional.nombre}

@@ -1,10 +1,11 @@
 "use client"
 
-import { useEffect, useId, useState, type FormEvent } from "react"
+import { useEffect, useId, useRef, useState, type FormEvent } from "react"
 import { Boton } from "@/components/comunes/boton"
 import { Aviso } from "@/components/panel/aviso"
 import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
+import { deCentavos } from "@/lib/atenciones"
 import { formatearMonto, montoParaEscribir } from "@/lib/dinero"
 import {
   NOMBRE_DE_LA_ETAPA_DEL_ODONTOGRAMA,
@@ -20,6 +21,7 @@ import {
   agregarEtapa,
   agregarPrestacion,
   cambiarEstadoDePrestacion,
+  cambiarValorDePrestacion,
   crearVersionDelPlan,
   leerCitasDelPaciente,
   leerOdontologos,
@@ -34,6 +36,13 @@ import type { UsuarioDeLaFicha } from "./ficha-del-paciente"
 /**
  * Los dos botones del pie de cada modal: en el teléfono, el que confirma arriba.
  * `esperando`: todavía falta algo para poder confirmar (lo que se elige está cargando).
+ *
+ * Los modales que crean algo (versión, etapa, prestación) y el del valor
+ * mandan una sola vez: un candado (`enviado`) frena el segundo envío de un
+ * doble clic aunque el botón todavía no se vea cargando, y si sale bien
+ * `guardando` no se suelta: el botón sigue cargando mientras el modal se
+ * desvanece, en vez de volver a habilitarse y crear otro igual. Sólo un error
+ * suelta el candado.
  */
 function PieDelModal({ texto, guardando, esperando = false, alCerrar }: { texto: string; guardando: boolean; esperando?: boolean; alCerrar: () => void }) {
   return (
@@ -44,6 +53,49 @@ function PieDelModal({ texto, guardando, esperando = false, alCerrar }: { texto:
       <Boton type="submit" className="w-full" cargando={guardando || esperando}>
         {texto}
       </Boton>
+    </div>
+  )
+}
+
+interface PropsDeCampoDeValor {
+  /** El `useId` del modal: el campo es `${id}-valor`. */
+  id: string
+  valor: string
+  error?: string
+  placeholder: string
+  autoFocus?: boolean
+  alCambiar: (texto: string) => void
+}
+
+/** El valor de una prestación, en pesos: el de "Agregar prestación" y el de "Completar el valor" o "Cambiar el valor". */
+function CampoDeValor({ id, valor, error, placeholder, autoFocus = false, alCambiar }: PropsDeCampoDeValor) {
+  return (
+    <div>
+      <label htmlFor={`${id}-valor`} className={ETIQUETA}>
+        Valor
+      </label>
+      <div className="relative">
+        <span aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-texto-2">
+          $
+        </span>
+        <input
+          id={`${id}-valor`}
+          autoFocus={autoFocus}
+          inputMode="decimal"
+          autoComplete="off"
+          placeholder={placeholder}
+          value={valor}
+          onChange={(e) => alCambiar(e.target.value)}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${id}-error-valor` : undefined}
+          className={cn(CAMPO, "pl-7 text-base tabular-nums", error && CAMPO_CON_ERROR)}
+        />
+      </div>
+      {error && (
+        <p id={`${id}-error-valor`} className={ERROR_DE_CAMPO}>
+          {error}
+        </p>
+      )}
     </div>
   )
 }
@@ -83,15 +135,21 @@ export function ModalNuevaVersion({ pacienteId, versionVigente, conOdontograma, 
   const [desde, setDesde] = useState<OrigenDeVersion>(opciones[0].id)
   const [guardando, setGuardando] = useState(false)
   const [aviso, setAviso] = useState("")
+  const enviado = useRef(false)
   const id = useId()
 
   const armar = async (evento: FormEvent<HTMLFormElement>) => {
     evento.preventDefault()
+    if (enviado.current) return
+    enviado.current = true
     setAviso("")
     setGuardando(true)
     const resultado = await crearVersionDelPlan(pacienteId, desde)
-    setGuardando(false)
-    if (!resultado.ok) return setAviso(resultado.error)
+    if (!resultado.ok) {
+      enviado.current = false
+      setGuardando(false)
+      return setAviso(resultado.error)
+    }
     alTerminar(resultado.datos)
   }
 
@@ -149,16 +207,22 @@ export function ModalNuevaEtapa({ pacienteId, alTerminar, alCerrar }: { paciente
   const [nombre, setNombre] = useState("")
   const [guardando, setGuardando] = useState(false)
   const [aviso, setAviso] = useState("")
+  const enviado = useRef(false)
   const id = useId()
 
   const agregar = async (evento: FormEvent<HTMLFormElement>) => {
     evento.preventDefault()
+    if (enviado.current) return
     if (nombre.trim() === "") return setAviso("Escribe el nombre de la etapa")
+    enviado.current = true
     setAviso("")
     setGuardando(true)
     const resultado = await agregarEtapa(pacienteId, nombre.trim())
-    setGuardando(false)
-    if (!resultado.ok) return setAviso(resultado.error)
+    if (!resultado.ok) {
+      enviado.current = false
+      setGuardando(false)
+      return setAviso(resultado.error)
+    }
     alTerminar(resultado.datos)
   }
 
@@ -218,6 +282,7 @@ export function ModalPrestacion({ pacienteId, etapa, usuario, alTerminar, alCerr
   const [errores, setErrores] = useState<{ caras?: string; nombre?: string; valor?: string }>({})
   const [guardando, setGuardando] = useState(false)
   const [aviso, setAviso] = useState("")
+  const enviado = useRef(false)
   const id = useId()
 
   // Los servicios, para todos; el equipo, sólo para la dueña (el servidor no se lo da a nadie más).
@@ -263,6 +328,7 @@ export function ModalPrestacion({ pacienteId, etapa, usuario, alTerminar, alCerr
 
   const agregar = async (evento: FormEvent<HTMLFormElement>) => {
     evento.preventDefault()
+    if (enviado.current) return
     const errorDeCaras = errorDePiezaYCaras(numeroDePieza, caras) ?? undefined
     const errorDeNombre = !servicio && nombre.trim() === "" ? "Escribe qué prestación es o elige un servicio" : undefined
     const leido = leerValor(valor)
@@ -278,11 +344,15 @@ export function ModalPrestacion({ pacienteId, etapa, usuario, alTerminar, alCerr
       ...(leido.centavos !== null && { valorCents: leido.centavos }),
       ...(profesional === DEL_DUEÑO ? { delDueño: true } : profesional !== SIN_ASIGNAR ? { memberId: profesional } : {}),
     }
+    enviado.current = true
     setAviso("")
     setGuardando(true)
     const resultado = await agregarPrestacion(pacienteId, etapa.id, datos)
-    setGuardando(false)
-    if (!resultado.ok) return setAviso(resultado.error)
+    if (!resultado.ok) {
+      enviado.current = false
+      setGuardando(false)
+      return setAviso(resultado.error)
+    }
     alTerminar(resultado.datos)
   }
 
@@ -423,39 +493,85 @@ export function ModalPrestacion({ pacienteId, etapa, usuario, alTerminar, alCerr
               <option value={SIN_ASIGNAR}>Sin asignar</option>
             </select>
           </div>
-          <div>
-            <label htmlFor={`${id}-valor`} className={ETIQUETA}>
-              Valor
-            </label>
-            <div className="relative">
-              <span aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-texto-2">
-                $
-              </span>
-              <input
-                id={`${id}-valor`}
-                inputMode="decimal"
-                autoComplete="off"
-                placeholder={servicio ? "El del servicio" : "0"}
-                value={valor}
-                onChange={(e) => {
-                  setValor(e.target.value)
-                  setErrores((previos) => ({ ...previos, valor: undefined }))
-                }}
-                aria-invalid={errores.valor ? true : undefined}
-                aria-describedby={errores.valor ? `${id}-error-valor` : undefined}
-                className={cn(CAMPO, "pl-7 text-base tabular-nums", errores.valor && CAMPO_CON_ERROR)}
-              />
-            </div>
-            {errores.valor && (
-              <p id={`${id}-error-valor`} className={ERROR_DE_CAMPO}>
-                {errores.valor}
-              </p>
-            )}
-          </div>
+          <CampoDeValor
+            id={id}
+            valor={valor}
+            error={errores.valor}
+            placeholder={servicio ? "El del servicio" : "0"}
+            alCambiar={(texto) => {
+              setValor(texto)
+              setErrores((previos) => ({ ...previos, valor: undefined }))
+            }}
+          />
         </div>
 
         {aviso && <Aviso>{aviso}</Aviso>}
         <PieDelModal texto="Agregar prestación" guardando={guardando} alCerrar={alCerrar} />
+      </form>
+    </MarcoDeModal>
+  )
+}
+
+// ─── Valor ───────────────────────────────────────────────────────────────────
+
+interface PropsDeModalValor {
+  pacienteId: string
+  prestacion: PrestacionRespuesta
+  /** "Exodoncia (pieza 38)". */
+  nombre: string
+  alTerminar: (plan: PlanRespuesta) => void
+  alCerrar: () => void
+}
+
+/**
+ * El valor de una prestación de una etapa por aprobar (en una aprobada el
+ * servidor no lo deja cambiar: ese presupuesto ya se aceptó). Sobre todo para
+ * completar el que falta: "Desde el odontograma" deja en $0 la prestación que
+ * no tiene un servicio de la clínica que le corresponda.
+ */
+export function ModalValor({ pacienteId, prestacion, nombre, alTerminar, alCerrar }: PropsDeModalValor) {
+  const falta = prestacion.valorCents === 0
+  const [valor, setValor] = useState(falta ? "" : montoParaEscribir(deCentavos(prestacion.valorCents)))
+  const [error, setError] = useState("")
+  const [guardando, setGuardando] = useState(false)
+  const [aviso, setAviso] = useState("")
+  const enviado = useRef(false)
+  const id = useId()
+
+  const guardar = async (evento: FormEvent<HTMLFormElement>) => {
+    evento.preventDefault()
+    if (enviado.current) return
+    const leido = leerValor(valor)
+    if (!leido.ok) return setError(leido.error)
+    if (leido.centavos === null) return setError("Escribe el valor en pesos, por ejemplo 45.000")
+    enviado.current = true
+    setAviso("")
+    setGuardando(true)
+    const resultado = await cambiarValorDePrestacion(pacienteId, prestacion.id, leido.centavos)
+    if (!resultado.ok) {
+      enviado.current = false
+      setGuardando(false)
+      return setAviso(resultado.error)
+    }
+    alTerminar(resultado.datos)
+  }
+
+  return (
+    <MarcoDeModal titulo={falta ? "Completar el valor" : "Cambiar el valor"} descripcion={nombre} bloqueado={guardando} alCerrar={alCerrar}>
+      <form onSubmit={guardar} className="space-y-5" noValidate>
+        <CampoDeValor
+          id={id}
+          valor={valor}
+          error={error || undefined}
+          placeholder="Por ejemplo, 45.000"
+          autoFocus
+          alCambiar={(texto) => {
+            setValor(texto)
+            setError("")
+          }}
+        />
+        {aviso && <Aviso>{aviso}</Aviso>}
+        <PieDelModal texto="Guardar valor" guardando={guardando} alCerrar={alCerrar} />
       </form>
     </MarcoDeModal>
   )

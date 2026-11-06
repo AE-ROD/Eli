@@ -6,17 +6,20 @@ import { Check, Clock, Copy, Link2, Scissors } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { marcarEnlaceCompartido } from "@/lib/lista-de-inicio"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 
 const STORAGE_KEY = "eli_onboarding_completado"
 
-const PASOS = [
+/** Los pasos, con la palabra del rubro para quienes reservan: "tus clientes" o, en una clínica dental, "tus pacientes". */
+const pasosPara = (clientes: string) => [
   {
     icono: Clock,
     titulo: "Configura tu horario",
-    descripcion: "Define los días y horas en que atiendes. Así tus clientes solo podrán reservar en tu disponibilidad real.",
+    descripcion: `Define los días y horas en que atiendes. Así tus ${clientes} solo podrán reservar en tu disponibilidad real.`,
     accion: "Ir a configuración",
     ruta: "/dashboard/configuracion",
   },
@@ -30,7 +33,7 @@ const PASOS = [
   {
     icono: Link2,
     titulo: "Comparte tu enlace",
-    descripcion: "Este es tu link único de reservas. Compártelo con tus clientes por WhatsApp, redes sociales o donde quieras.",
+    descripcion: `Este es tu link único de reservas. Compártelo con tus ${clientes} por WhatsApp, redes sociales o donde quieras.`,
     accion: null,
     ruta: null,
   },
@@ -59,6 +62,7 @@ export function ModalBienvenida({ nombreNegocio, slug, marcarAlCopiar = false }:
   const [copiado, setCopiado] = useState(false)
   const refBotonPrincipal = useRef<HTMLButtonElement>(null)
   const enfocarElBotonPrincipal = useRef(false)
+  const pasos = pasosPara(vocabularioDe(useRubroDelPanel()).clientes)
 
   const enlace = typeof window !== "undefined" ? `${window.location.origin}/reservar/${slug}` : `/reservar/${slug}`
 
@@ -95,20 +99,20 @@ export function ModalBienvenida({ nombreNegocio, slug, marcarAlCopiar = false }:
     setPaso(nuevo)
   }
 
-  const pasoActual = PASOS[paso]
-  const esElUltimo = paso === PASOS.length - 1
+  const pasoActual = pasos[paso]
+  const esElUltimo = paso === pasos.length - 1
 
   return (
     <AnimatePresence>
       {visible && (
         <MarcoDeModal
           titulo={`¡Bienvenido a Eli, ${nombreNegocio}!`}
-          antetitulo={`Paso ${paso + 1} de ${PASOS.length}`}
+          antetitulo={`Paso ${paso + 1} de ${pasos.length}`}
           alCerrar={cerrar}
         >
           {/* El avance ya lo dice el antetítulo: las barras son para el ojo. */}
           <div aria-hidden="true" className="-mt-2 mb-7 flex gap-1.5">
-            {PASOS.map((_, indice) => (
+            {pasos.map((_, indice) => (
               <span
                 key={indice}
                 className={cn(
@@ -120,7 +124,7 @@ export function ModalBienvenida({ nombreNegocio, slug, marcarAlCopiar = false }:
           </div>
 
           <p aria-live="polite" className="sr-only">
-            {cambioDePaso ? `Paso ${paso + 1} de ${PASOS.length}: ${pasoActual.titulo}` : ""}
+            {cambioDePaso ? `Paso ${paso + 1} de ${pasos.length}: ${pasoActual.titulo}` : ""}
           </p>
 
           {/* La clave rearma el paso: entra con un fundido corto, sin desplazarse. */}

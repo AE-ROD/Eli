@@ -3,8 +3,10 @@
 import { useId, type DragEvent } from "react"
 import { Boton } from "@/components/comunes/boton"
 import { Insignia } from "@/components/comunes/insignia"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { formatearHora } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import type { Reserva } from "../_datos"
 import { CLASES_DE_TARJETA, MomentoDeTarjeta, NombreDeTarjeta } from "./partes-de-tarjeta"
 
@@ -44,6 +46,8 @@ interface PropsDeTarjetaDeReserva {
  */
 export function TarjetaDeReserva({ reserva, quien, atrasada, enCurso, arrastre, onLlego, onNoVino }: PropsDeTarjetaDeReserva) {
   const idDelNombre = useId()
+  // "Sin paciente" y "Sin odontólogo asignado" en una clínica dental.
+  const { cliente, profesional } = vocabularioDe(useRubroDelPanel())
 
   return (
     <article
@@ -59,11 +63,11 @@ export function TarjetaDeReserva({ reserva, quien, atrasada, enCurso, arrastre, 
       </div>
 
       <NombreDeTarjeta id={idDelNombre} apagado={!reserva.cliente}>
-        {reserva.cliente?.nombre ?? "Sin cliente"}
+        {reserva.cliente?.nombre ?? `Sin ${cliente}`}
       </NombreDeTarjeta>
 
       <p className="text-[13px] leading-snug break-words">
-        {reserva.titulo} <span className="text-texto-2">· {reserva.profesional?.nombre ?? "Sin profesional asignado"}</span>
+        {reserva.titulo} <span className="text-texto-2">· {reserva.profesional?.nombre ?? `Sin ${profesional} asignado`}</span>
       </p>
 
       <div className="flex gap-2">

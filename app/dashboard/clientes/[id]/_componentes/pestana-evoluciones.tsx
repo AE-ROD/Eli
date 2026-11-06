@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useId, useState, type FormEvent } from "react"
+import { useEffect, useId, useRef, useState, type FormEvent } from "react"
 import { AnimatePresence } from "framer-motion"
 import { NotebookPen } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
@@ -185,6 +185,13 @@ function ModalAnotarEvolucion({ pacienteId, zona, hoy, alAnotar, alCerrar }: Pro
   const [citas, setCitas] = useState<CitaDelPaciente[] | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [aviso, setAviso] = useState("")
+  /**
+   * Una evolución no se borra: se manda una sola vez. El candado frena el
+   * segundo envío de un doble clic, y si sale bien `guardando` no se suelta:
+   * el botón sigue cargando mientras el modal se desvanece, en vez de volver a
+   * habilitarse y anotar otra igual. Sólo un error lo suelta.
+   */
+  const enviado = useRef(false)
   const id = useId()
 
   useEffect(() => {
@@ -199,12 +206,17 @@ function ModalAnotarEvolucion({ pacienteId, zona, hoy, alAnotar, alCerrar }: Pro
 
   const anotar = async (evento: FormEvent<HTMLFormElement>) => {
     evento.preventDefault()
+    if (enviado.current) return
     if (texto.trim() === "") return setAviso("Escribe la evolución")
+    enviado.current = true
     setAviso("")
     setGuardando(true)
     const resultado = await anotarEvolucion(pacienteId, { texto: texto.trim(), appointmentId: citaId || null })
-    setGuardando(false)
-    if (!resultado.ok) return setAviso(resultado.error)
+    if (!resultado.ok) {
+      enviado.current = false
+      setGuardando(false)
+      return setAviso(resultado.error)
+    }
     alAnotar(resultado.datos)
   }
 

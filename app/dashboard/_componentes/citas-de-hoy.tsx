@@ -4,12 +4,14 @@ import { useId } from "react"
 import { CalendarDays } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { Esqueleto } from "@/components/comunes/esqueleto"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { TarjetaCita } from "@/components/panel/tarjeta-cita"
 import type { CitaDelDia } from "@/lib/horario-dia"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { citaParaTarjeta } from "./linea-de-tiempo-dia"
 
 interface PropsDeCitasDeHoy {
@@ -26,6 +28,8 @@ function resumen(citas: CitaDelDia[] | null): string {
 /** La lista de citas de hoy, con el atajo a la agenda. */
 export function CitasDeHoy({ citas, className }: PropsDeCitasDeHoy) {
   const idDelTitulo = useId()
+  // "Sin paciente" en una clínica dental.
+  const { cliente } = vocabularioDe(useRubroDelPanel())
 
   return (
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6", className)}>
@@ -48,7 +52,7 @@ export function CitasDeHoy({ citas, className }: PropsDeCitasDeHoy) {
           <ul className="space-y-2">
             {citas.map((cita) => (
               <li key={cita.id}>
-                <TarjetaCita cita={citaParaTarjeta(cita)} compacta />
+                <TarjetaCita cita={citaParaTarjeta(cita, cliente)} compacta />
               </li>
             ))}
           </ul>

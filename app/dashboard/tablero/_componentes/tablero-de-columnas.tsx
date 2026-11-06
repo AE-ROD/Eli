@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Esqueleto } from "@/components/comunes/esqueleto"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import type { EstadoActivo } from "@/lib/atenciones"
 import {
   COLUMNAS_DEL_TABLERO,
@@ -17,6 +18,7 @@ import {
 } from "@/lib/acciones-del-tablero"
 import type { Actor } from "@/lib/permisos"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import type { Atencion, Reserva, Tablero } from "../_datos"
 import { TarjetaDeAtencion } from "./tarjeta-de-atencion"
 import { TarjetaDeReserva, type PropsDeArrastre } from "./tarjeta-de-reserva"
@@ -285,6 +287,8 @@ export function TableroDeColumnas({
   onAnular,
 }: PropsDeTableroDeColumnas) {
   const punteroFino = usePunteroFino()
+  // "Sin paciente" en una clínica dental.
+  const sinCliente = `Sin ${vocabularioDe(useRubroDelPanel()).cliente}`
   const [arrastrada, setArrastrada] = useState<Arrastrada | null>(null)
   const [encima, setEncima] = useState<ColumnaId | null>(null)
 
@@ -331,7 +335,7 @@ export function TableroDeColumnas({
     tablero.reservas.map((reserva) => ({
       id: reserva.id,
       estado: "reserva",
-      cliente: { nombre: `${reserva.cliente?.nombre ?? "Sin cliente"}, reserva` },
+      cliente: { nombre: `${reserva.cliente?.nombre ?? sinCliente}, reserva` },
       llegoEn: reserva.inicio,
       cobradaEn: null,
     }))
@@ -445,7 +449,7 @@ export function TableroDeColumnas({
                     <TarjetaDeReserva
                       key={reserva.id}
                       reserva={reserva}
-                      quien={nombresDeReservas.get(reserva.id) ?? reserva.cliente?.nombre ?? "Sin cliente"}
+                      quien={nombresDeReservas.get(reserva.id) ?? reserva.cliente?.nombre ?? sinCliente}
                       atrasada={estaAtrasada(reserva.inicio, ahora)}
                       enCurso={enCurso.has(reserva.id)}
                       arrastre={arrastreDe({ tipo: "reserva", reserva }, reserva.id)}

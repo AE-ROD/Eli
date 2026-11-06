@@ -6,11 +6,13 @@ import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
 import { Selector } from "@/components/comunes/selector"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPO_CON_ERROR, ETIQUETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { MEDIOS_DE_PAGO } from "@/lib/medios-de-pago"
 import { PERIODOS, type PeriodoId } from "@/lib/periodos"
 import { TURNOS } from "@/lib/reportes"
 import { cn } from "@/lib/utils"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import type { OpcionesDeFiltro } from "../_datos"
 import { Aviso } from "@/components/panel/aviso"
 
@@ -73,6 +75,8 @@ export function FiltrosDeReporte({
   onReintentarOpciones,
 }: PropsDeFiltrosDeReporte) {
   const idBase = useId()
+  // "Odontólogo" en una clínica dental.
+  const { profesional: quienAtiende } = vocabularioDe(useRubroDelPanel())
   const id = (campo: string) => `${idBase}-${campo}`
   const delNegocio = alcance === "negocio"
 
@@ -175,7 +179,7 @@ export function FiltrosDeReporte({
           {/* Al profesional el reporte ya le muestra sólo lo suyo: elegirse a sí mismo no filtra nada. */}
           {delNegocio && (
             <Selector
-              etiqueta="Profesional"
+              etiqueta={conMayuscula(quienAtiende)}
               id={id("profesional")}
               value={filtros.profesional}
               onChange={(evento) => onCambiar({ profesional: evento.target.value })}

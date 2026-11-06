@@ -7,11 +7,13 @@ import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { Insignia } from "@/components/comunes/insignia"
 import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { formatearMonto, montoParaEscribir } from "@/lib/dinero"
 import { formatearDuracionDeServicio } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { ModalServicio } from "./modal-servicio"
 import {
   crearServicio,
@@ -34,6 +36,7 @@ interface PropsDeSeccionServicios {
 
 export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios) {
   const idDelTitulo = useId()
+  const { clientes } = vocabularioDe(useRubroDelPanel())
   const [servicios, setServicios] = useState<Servicio[]>(serviciosIniciales)
   const [modalAbierto, setModalAbierto] = useState(false)
   const [servicioEditando, setServicioEditando] = useState<Servicio | null>(null)
@@ -114,7 +117,7 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo="Servicios"
-        subtitulo="Los servicios que ofreces a tus clientes"
+        subtitulo={`Los servicios que ofreces a tus ${clientes}`}
         icono={{ figura: Scissors }}
         accion={
           <BotonPrimario tamaño="sm" icono={<Plus className="h-4 w-4" />} onClick={abrirNuevo}>

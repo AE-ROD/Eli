@@ -6,9 +6,11 @@ import { Boton } from "@/components/comunes/boton"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Insignia } from "@/components/comunes/insignia"
 import { Tarjeta } from "@/components/comunes/tarjeta"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { PASOS_DE_INICIO, cuantosHechos, type PasosHechos } from "@/lib/lista-de-inicio"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 
 /**
  * "Deja tu negocio listo": los cuatro pasos de la puesta en marcha, cada uno
@@ -20,6 +22,7 @@ import { cn } from "@/lib/utils"
  */
 export function ListaDeInicio({ pasos }: { pasos: PasosHechos }) {
   const idDelTitulo = useId()
+  const { clientes } = vocabularioDe(useRubroDelPanel())
   const hechos = cuantosHechos(pasos)
   const total = PASOS_DE_INICIO.length
 
@@ -28,7 +31,7 @@ export function ListaDeInicio({ pasos }: { pasos: PasosHechos }) {
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo="Deja tu negocio listo"
-        subtitulo="Cuatro pasos para que tus clientes empiecen a reservar solos."
+        subtitulo={`Cuatro pasos para que tus ${clientes} empiecen a reservar solos.`}
         icono={{ figura: ListChecks }}
       />
 

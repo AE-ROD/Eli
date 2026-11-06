@@ -86,9 +86,11 @@ export function citaPorConfirmar(cita: Pick<Cita, "status" | "confirmacionPorFal
  * Cómo se llama la cita en pantalla cuando no tiene cliente. Está acá, en un
  * solo lugar, para que las tres vistas no inventen cada una su propia palabra
  * — y para que ninguna vuelva a asumir que `customer` siempre viene.
+ * `palabraCliente` es la del rubro (`lib/vocabulario.ts`): "Sin paciente" en
+ * una clínica dental.
  */
-export function nombreDeCliente(cita: Cita): string {
-  return cita.customer ? nombreCompletoDeCliente(cita.customer) : "Sin cliente"
+export function nombreDeCliente(cita: Cita, palabraCliente = "cliente"): string {
+  return cita.customer ? nombreCompletoDeCliente(cita.customer) : `Sin ${palabraCliente}`
 }
 
 /**
