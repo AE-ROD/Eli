@@ -72,6 +72,12 @@ Utilidades de la landing, en `app/globals.css`:
 - `antetitulo-pildora`: el antetítulo en píldora blanca con un punto pistacho.
 - `fondo-brillos` (portada) y `fondo-brillos-navy` (pie y cierre): las
   manchas de la paleta sobre crema o sobre navy.
+- `fondo-tenue-frambuesa`, `fondo-tenue-pistacho` y `fondo-tenue-ciruela`:
+  los brillos suaves detrás de las secciones del medio (dos manchas al 9-18%,
+  cada una con su par de colores). Traen una máscara que los apaga arriba y
+  abajo, así dos secciones seguidas no dejan costura: van en una capa propia
+  detrás del contenido, nunca en el `<section>`. `SeccionDeLanding` la pone
+  con `tono`.
 - `degradado-frutos`: frambuesa → orquídea → violeta; en texto, con
   `bg-clip-text text-transparent`.
 - `animaciones-en-pausa`: congela las animaciones de CSS del bloque y de lo
@@ -83,6 +89,14 @@ usaba pasó a los nombres propios con el mismo valor (`crema`, `navy`, `borde`).
 Se usan sólo los nombres de esta paleta. De shadcn quedan los radios
 `rounded-sm`/`md`/`lg`/`xl` (8, 10, 12 y 16 px), que el panel todavía usa.
 
+**Los cuatro tintes de la landing** (ciruela, frambuesa, pistacho y añil, en
+ese orden) reparten pasos, tarjetas y piezas: el paso 1 es ciruela, el 2
+frambuesa, y así. Sus clases, escritas enteras, están en
+`components/landing/tonos-de-la-landing.ts` (`CLASES_DE_TONO[tono]`: `suave`,
+`texto`, `relleno`, `anillo` y `barra`; `tonoEn(indice)` da el tinte de un
+lugar de una lista). **Texto secundario sobre un tinte:** `texto-2` no llega a
+4,5:1 sobre el suave de ciruela, frambuesa ni añil; ahí va `text-navy/75`.
+
 No hay modo oscuro. Las clases `dark:` no se activan nunca.
 
 ### Tipografía
@@ -93,7 +107,7 @@ No hay modo oscuro. Las clases `dark:` no se activan nunca.
 | `titulo-2` | 28 → 48px, 1.1, −0.5 → −2px | Geist 500 |
 | `titulo-seccion` | 28 → 48px, 1.1, −0.5 → −1.5px | Fraunces 500 |
 | `titulo-portada` | 40 → 56 (md) → 68px (lg), 1.06, −0.045em | Geist 500. El `<h1>` de la landing |
-| `titulo-landing` | 32 → 44 (md) → 54px (lg), 1.04, −0.045em | Geist 500. El `<h2>` de cada sección de la landing (`EncabezadoDeSeccion`) |
+| `titulo-landing` | 32 → 44 (md) → 54px (lg), 1.04, −0.045em | Geist 500. El `<h2>` de cada sección de la landing (`EncabezadoDeLanding`) |
 | `titulo-3` | 24px, 1.25, −0.5px | peso 500, la fuente que herede |
 | `cuerpo-xl` | 18px, 1.4 | |
 | `antetitulo` | 12 → 13px, mayúsculas, +0.08em, 500, color texto-2 | |
@@ -150,13 +164,34 @@ mismo gris, es la de una maqueta de producto que flota en la landing.
 | Landing: lo que entra o cambia de lugar solo | `duration-900 ease-llegada` | `DURACION.llegada`, `CURVA.llegada` |
 | Landing: las líneas del enredo | — | `CURVA.onda` (`TrazosOndulantes`) |
 | Landing: flotar, latido, señalar | `animate-flotar` (7 s), `animate-latido` (3,2 s), `animate-senalar` (1,6 s), sin fin | — |
+| Landing: filas que llegan, barras de gráfico | `animate-aparecer` (10 s), `animate-crecer-columna` y `animate-crecer-barra` (9 s), sin fin | — |
+| Landing: un punto que recorre una línea | `animate-recorrer` (una capa que va de −100% a 0, 9 s) y `animate-recorrer-camino` (un `<path>` de SVG, 16 s), sin fin | — |
+| Landing: el reloj de un paso que avanza solo | `animate-progreso` (una barra que se llena una vez, 6,5 s) | — |
 
-Las tres animaciones sin fin de la landing toman la duración y el retraso de
-cada elemento de `--duracion` y `--retraso` (`[--retraso:-2s]`), que no se
-heredan; por eso van en un `@theme inline` aparte. Se mueven solas más de cinco
+Las animaciones de la landing toman la duración y el retraso de cada elemento
+de `--duracion` y `--retraso` (`[--retraso:-2s]`), que no se heredan; por eso
+van en un `@theme inline` aparte. Las sin fin se mueven solas más de cinco
 segundos: el bloque que las usa lleva un `BotonDePausa`. `flotar` anima
-`transform` y se suma a la inclinación de reposo de `rotate-*`; `latido` anima
-`box-shadow`, así que no va en algo que se enfoca.
+`transform` y se suma a la inclinación de reposo de `rotate-*`; se inclina 2°
+en la mitad y `[--giro:0deg]` la deja derecha (una maqueta que sube y baja).
+`latido` anima `box-shadow`, así que no va en algo que se enfoca.
+
+- `aparecer`, `crecer-columna` y `crecer-barra` arrancan en su primer cuadro
+  mientras esperan su retraso (`backwards`): no se ven llenas y de golpe
+  vacías. Las barras crecen desde abajo o la izquierda: `origin-bottom` u
+  `origin-left`.
+- `recorrer` va en una capa del ancho de la línea, con el punto en su borde
+  derecho, y se apaga en los extremos. Con movimiento reducido el punto se
+  esconde (`motion-reduce:hidden`).
+- `recorrer-camino` va en un `<path>` con `pathLength="1000"`,
+  `stroke-dasharray="0.001 999.999"` y punta redonda: el trazo es un solo
+  punto, del ancho del trazo, que avanza por cualquier camino. Así se mueve
+  por un camino de SVG sin `<animateMotion>`, que no respeta "reducir
+  movimiento".
+- `progreso` sirve de reloj: quien la usa avanza al terminar
+  (`onAnimationEnd`), y la pausa congela la barra y el avance juntos. Con
+  movimiento reducido la animación dura 0,01 ms: ahí no se usa (no hay
+  avance solo) y `onAnimationEnd` lo vuelve a revisar.
 
 Se anima sólo `transform` y `opacity`. Las excepciones son las que pide el
 diseño: el ancho de las tarjetas que se expanden y el tamaño del panel del
@@ -216,7 +251,7 @@ menú.
 | `boton-icono.tsx` | `BotonIcono`: cuadrado de sólo ícono, blanco, navy en hover. `etiqueta` es su nombre |
 | `boton-primario.tsx` | `BotonPrimario`: la API de siempre de formularios y panel, por dentro un `Boton`. Suma la variante `peligro` |
 | `tarjeta.tsx` | `Tarjeta`: blanca, radio de tarjeta, sombra sm. `interactiva` se eleva en hover y con el foco adentro |
-| `seccion.tsx` | `Seccion` (isla crema, superficie, navy o degradado, con contenedor de 1440px) y `EncabezadoDeSeccion` (antetítulo, titular con `titulo-landing`, subtítulo). Sólo los usa la landing |
+| `seccion.tsx` | `Seccion` (isla crema, superficie, navy o degradado, con contenedor de 1440px) y `EncabezadoDeSeccion` (antetítulo, titular con `titulo-landing`, subtítulo). Eran de la landing anterior: la nueva usa `SeccionDeLanding` y hoy nada los usa |
 | `antetitulo.tsx` | `Antetitulo` |
 | `insignia.tsx` | `Insignia`: píldora gris ("Beta", "Nuevo") o del pastel de un módulo |
 | `chip-de-palabra.tsx` | `ChipDePalabra`: una palabra en serif sobre píldora blanca |
@@ -235,6 +270,15 @@ Fuera de `comunes/`:
   menú, el recorrido y los íconos leen de acá.
 - `components/movimiento/`: los tiempos (`tiempos.ts`) y los patrones de
   movimiento de la landing, que se cuentan abajo.
+- `components/landing/`: las secciones de la landing y lo que comparten:
+
+  | Archivo | Qué es |
+  |---|---|
+  | `seccion-de-landing.tsx` | `SeccionDeLanding`: una sección del medio, de borde a borde sobre la crema, con los brillos tenues detrás (`tono`) y el contenedor de 1440px (72px de margen a 1440, como el diseño); recorta lo que se sale, así nada deja scroll horizontal. `EncabezadoDeLanding`: el antetítulo en píldora, el `<h2>` con `titulo-landing` (la palabra que importa en `resaltado`) y una bajada; a la izquierda o al centro |
+  | `tonos-de-la-landing.ts` | Los cuatro tintes y sus clases (arriba, en "Frutos rojos") |
+  | `trazos-de-la-landing.ts` | Las líneas que se ondulan de cada sección, sacadas tal cual del diseño (`formas` de los `values` de cada `<animate>`, `duracion` del `dur`, `desfase` del `begin` sin signo). Cada arreglo dice en su comentario la caja de su `<svg>` |
+  | `maquetas/maqueta-piezas.tsx` | Las piezas de las maquetas: `TARJETA_DE_MAQUETA` (blanca, borde, `rounded-maqueta` y `shadow-maqueta`), `MarcoDeMaqueta` (esa tarjeta como imagen con su `etiqueta`), `Avatar`, `Chip`, `Segmentos` y `CuadroDeTono` |
+  | `maquetas/*.tsx` | Las maquetas del producto, en HTML: reserva, ficha de clienta, tablero y cobro (el recorrido, con `activa`), los cuatro momentos de un día, las reservas de hoy y quién cobra (tablero), la semana, los turnos, cada profesional y las anuladas (reportes) y la visita con o sin equipo (oficios). Los montos de un mismo gráfico cuadran entre sí y los largos de las barras salen de los montos |
 - `components/panel/`: las piezas del panel, que se cuentan más abajo, en
   "El panel".
 
@@ -294,32 +338,60 @@ fundidos. Donde piden un ícono, va ya en su cuadro (`CuadroDeIcono` o
 | `lista-fija.tsx` | `ListaFija`: titular y visual fijos al lado de una lista; el ítem que cruza el centro de la pantalla decide qué muestra el visual | `encabezado`, `items` (`id`, `icono`, `titulo`, `texto`, `visual`), `invertida?`, `fondoDelVisual?` |
 | `tarjetas-expandibles.tsx` | `TarjetasExpandibles`: cuatro tarjetas en fila; la activa crece y muestra su línea de pasos. Por debajo de xl se apilan, abiertas | `tarjetas` (justo cuatro: `id`, `icono`, `titulo`, `corto`, `largo`, `pasos`) |
 | `carrusel-de-historias.tsx` | `CarruselDeHistorias`: una tarjeta grande y las demás historias como píldoras a los lados. Avanza solo cada 5 s, con botón de pausa | `historias` (`id`, `oficio`, `titulo`, `texto`, `color`, `escena`), `etiqueta` |
-| `marquesina.tsx` | `Marquesina`: una fila de palabras que se desplaza sin fin. Se detiene con el cursor encima, fuera de pantalla y con su botón de pausa | `palabras`, `etiqueta` |
+| `marquesina.tsx` | `Marquesina`: una fila de palabras que se desplaza sin fin. Se detiene con el cursor encima, fuera de pantalla y con su botón de pausa. Con movimiento reducido, quieta y en varias filas | `palabras`, `etiqueta`, `sentido?` (`izquierda` o `derecha`), `pausada?` (la pausa la lleva quien la usa: sin botón propio), `ficha?` (cómo se dibuja cada palabra; por defecto, `ChipDePalabra`), `sinEscala?` |
 | `pila-de-tarjetas.tsx` | `PilaDeTarjetas`: tarjetas que quedan fijas una debajo de otra, cada una un paso más abajo (debajo del encabezado si está flotante); mientras la siguiente pasa encima, la de abajo se achica levemente, sube 8px y se vela con navy. Una tarjeta más alta que la ventana queda fija recién cuando se ve su final. Con movimiento reducido y en ventanas de menos de 640px de alto, tarjetas apiladas comunes | `tarjetas` (`id`, `contenido`: la tarjeta entera, con `rounded-tarjeta`) |
 | `grilla-de-iconos.tsx` | `GrillaDeIconos`: tiles grises unidos por puentes cóncavos | `tiles` (`id`, `titulo`, `icono`) |
 | `boton-de-pausa.tsx` | `BotonDePausa`: el botón de dos estados (`aria-pressed`) que detiene lo que se mueve solo en un bloque. Quien lo usa guarda el estado, pone `animaciones-en-pausa` en el bloque y frena lo que mueva con JavaScript | `pausado`, `alCambiar`, `etiqueta?` |
+| `usar-bloque-en-movimiento.ts` | `useBloqueEnMovimiento()`: el estado de un bloque que se mueve solo sin fin. `ref` va en el bloque; `quieto` (en pausa o fuera de la pantalla) dice cuándo poner `animaciones-en-pausa` y `enPausa` de `TrazosOndulantes`; `pausado` y `setPausado` son los del `BotonDePausa` | — |
 | `trazos-ondulantes.tsx` | `TrazosOndulantes`: líneas de SVG que pasan de una forma a otra sin fin (un `<g>` dentro del `<svg>` de quien lo usa). Con framer-motion y no con `<animate>`, que no respeta "reducir movimiento"; con movimiento reducido quedan en la primera forma | `trazos` (constante del módulo: `formas`, `duracion`, `desfase?`, `color`, `opacidad?`, `grosor?`), `enPausa` |
 | `usar-direccion-de-scroll.ts` | `useDireccionDeScroll()`: el estado del encabezado (`arriba`, `oculto` o `flotante`); la regla está en `lib/direccion-de-scroll.ts` | — |
 | `usar-coincide-media.ts` | `useCoincideMedia(consulta, enServidor?)`: si la ventana cumple una media query. Mientras hidrata vale lo mismo que el HTML del servidor; es para cuando la consulta decide el marcado (para elegir sólo una curva alcanza `useReducedMotion`) | — |
 
-Un ejemplo, el recorrido de la landing (`components/landing/seccion-recorrido.tsx`):
+**Sin uso en la landing nueva** (no se borraron): `EscenarioConScroll`,
+`ListaFija`, `TarjetasExpandibles`, `CarruselDeHistorias`, `PilaDeTarjetas` y
+`GrillaDeIconos`. Las secciones que los usaban se rehicieron con el diseño
+nuevo, que no tiene scroll fijo ni pilas.
+
+Un ejemplo, un bloque que se mueve solo (`components/landing/seccion-tablero.tsx`):
 
 ```tsx
-const PASOS: readonly PasoDelEscenario[] = [
-  {
-    id: "agenda",
-    modulo: "agenda", // el color y el ícono de la pestaña
-    titulo: "Reservan solas",
-    texto: "Cada negocio tiene su página de reservas…",
-    puntos: ["Servicio, día y hora, y sus datos"],
-    // Todas las maquetas quedan montadas: `activa` vuelve a animar la del paso elegido.
-    maqueta: (activa) => <MaquetaReserva activa={activa} />,
-  },
-  // …un paso más por módulo
-]
+const { ref, pausado, setPausado, quieto } = useBloqueEnMovimiento<HTMLDivElement>()
 
-<EscenarioConScroll pasos={PASOS} etiqueta="Pasos del recorrido" saltarA="un-dia" />
+<SeccionDeLanding id="tablero" etiquetadaPor="tablero-titulo" tono="frambuesa">
+  <div ref={ref} className={cn(quieto && "animaciones-en-pausa")}>
+    <svg aria-hidden="true" viewBox="0 0 700 170" width="700" height="170">
+      <TrazosOndulantes trazos={TRAZOS_DEL_TABLERO} enPausa={quieto} />
+    </svg>
+    {/* …lo que flota, con animate-flotar */}
+    <div className="flex justify-end motion-reduce:hidden">
+      <BotonDePausa pausado={pausado} alCambiar={setPausado} etiqueta="Pausar la animación del tablero" />
+    </div>
+  </div>
+</SeccionDeLanding>
 ```
+
+### Las secciones de la landing nueva
+
+Cada una en su archivo de `components/landing/`, en el orden del diseño:
+
+| Sección | Qué tiene | Lo que se mueve solo |
+|---|---|---|
+| `seccion-recorrido.tsx` | Acordeón de cuatro pasos (botones con `aria-expanded` y `aria-controls`; el panel cerrado es `inert`) y, al lado, el escenario del tinte del paso con su número gigante, la maqueta, dos etiquetas y las líneas. "Crear mi cuenta" y "Ver planes" (`#planes`) | Avanza un paso cada 6,5 s (lo mide `animate-progreso`). Se detiene con el cursor encima, con el foco del teclado adentro, fuera de pantalla y con la pausa. Con movimiento reducido no avanza |
+| `seccion-un-dia.tsx` | Cuatro tarjetas sobre una línea de tiempo; desde lg en fila, con la línea de centro a centro y las líneas que llegan a su comienzo; por debajo, de arriba abajo | Los números laten, el punto recorre la línea, las maquetas flotan |
+| `seccion-tablero.tsx` | La caja pistacho con "Reservas de hoy" y "Quién puede cobrar", y la lista de cuatro puntos | Las filas entran (`aparecer`), la maqueta y la etiqueta flotan |
+| `seccion-reportes.tsx` | Cuatro tarjetas de tinte en dos filas (746 y 526, la segunda al revés: una grilla de tres columnas) | Las barras crecen, las maquetas flotan |
+| `seccion-oficios.tsx` | "Si trabajas solo / Si tienes equipo" (`aria-pressed`) cambia la historia y la maqueta; los otros oficios en etiquetas con su foto; la caja ciruela con una foto por oficio | Cambia sola cada 5,5 s (se detiene como el recorrido); las fotos y la maqueta flotan |
+| `seccion-funciones.tsx` | Las diez piezas: desde lg, dos filas unidas por un camino en S medido sobre las piezas (entra y sale por los bordes de la pantalla); por debajo, una columna con una línea | El punto recorre el camino (`recorrer-camino`), las piezas flotan |
+| `seccion-precios.tsx` | El titular con tres píldoras, lo incluido en los dos planes, Independiente y Equipo lado a lado (la que da la calculadora, con un borde de su color) y la calculadora (1 a 30 personas) | Las líneas del titular y las de lo incluido, cada una con su pausa |
+| `seccion-cierre.tsx` | El bloque navy, "Deja de complicarte. Pásate a Eli." y dos marquesinas en sentidos opuestos (la segunda es decorativa y con movimiento reducido no está) | Las marquesinas y las líneas, con una sola pausa |
+
+**Fotos de los oficios.** No vienen con el diseño: mientras falten, un
+reemplazo de color con el ícono del oficio (nunca un `<img>` roto). Se
+esperan en `public/landing/oficios/` (JPG verticales de 3:4, unos 600×800 px):
+`peluqueria.jpg`, `barberia.jpg`, `unas.jpg` y `odontologia.jpg`. Al subir
+una, se escribe su nombre en `archivo` (`FOTOS` en `seccion-oficios.tsx`); la
+misma foto va grande en la caja y chica en la etiqueta del oficio. Las de
+Áreas están en `seccion-areas.tsx`.
 
 ## Cómo extender los tokens
 
@@ -379,13 +451,18 @@ No es opcional:
 
 - foco visible con `anillo-foco`;
 - contraste AA: `texto-2` da 5,1:1 sobre crema y 4,8:1 sobre superficie (pasa
-  justo: no le bajes la opacidad). Sobre navy, blanco al 70% o más;
+  justo: no le bajes la opacidad). Sobre los tintes de la landing, navy al
+  75%. Sobre navy, blanco al 70% o más;
 - objetivos táctiles de 44px como mínimo (el botón sm y el `BotonIcono` sm los
   estiran con `::after`);
-- teclado completo, con `aria-expanded` y `aria-selected` donde corresponda;
-- lo que se mueve solo más de 5 segundos se puede detener (WCAG 2.2.2): la
-  marquesina, el carrusel, el enredo de la portada y las áreas tienen su
-  botón de pausa;
+- teclado completo, con `aria-expanded`, `aria-selected` y `aria-pressed`
+  donde corresponda;
+- lo que se mueve solo más de 5 segundos se puede detener (WCAG 2.2.2): el
+  enredo de la portada, las áreas y cada sección del medio de la landing que
+  se mueve sola tienen su botón de pausa (abajo a la derecha del bloque);
+  fuera de la pantalla se detienen solas. Lo que avanza solo (el recorrido,
+  solo / con equipo) también se detiene con el cursor encima y con el foco del
+  teclado adentro;
 - movimiento reducido, como dice arriba.
 
 ## Lo que una pantalla no puede mostrar

@@ -61,6 +61,14 @@ describe("cn", () => {
       expect(cn("bg-frambuesa", "bg-cereza")).toBe("bg-cereza")
     })
 
+    it("las animaciones de las secciones de la landing chocan con cualquier otra", () => {
+      expect(cn("animate-aparecer", "animate-none")).toBe("animate-none")
+      expect(cn("animate-crecer-columna", "animate-crecer-barra")).toBe("animate-crecer-barra")
+      expect(cn("animate-recorrer", "animate-recorrer-camino")).toBe("animate-recorrer-camino")
+      expect(cn("animate-progreso", "animate-flotar")).toBe("animate-flotar")
+      expect(cn("animate-latido", "animate-progreso")).toBe("animate-progreso")
+    })
+
     it("el color de una sombra no pisa la sombra propia", () => {
       expect(cn("shadow-maqueta", "shadow-ciruela/20")).toBe("shadow-maqueta shadow-ciruela/20")
     })

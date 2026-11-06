@@ -171,10 +171,45 @@
    *   (`--latido` cambia el color). Anima `box-shadow`: no va en algo que se
    *   enfoca, porque le taparía el halo del foco. 3,2 s.
    * - `senalar`: se corre a la derecha y vuelve, como una flecha que indica. 1,6 s.
+   * - `aparecer`: sube 14px y aparece, queda y se apaga, una y otra vez (las
+   *   reservas que entran solas al tablero). 10 s.
+   * - `crecer-columna` y `crecer-barra`: una barra de gráfico que crece desde
+   *   abajo (`scaleY`) o desde la izquierda (`scaleX`), queda y se recoge. Con
+   *   `origin-bottom` u `origin-left`. 9 s.
+   * - `recorrer`: un punto que cruza una línea de punta a punta y se apaga en
+   *   los extremos. Va en una capa del ancho de la línea, con el punto en su
+   *   borde derecho: la capa se corre de −100% a 0. 9 s.
+   * - `recorrer-camino`: lo mismo sobre un camino de SVG cualquiera. Va en un
+   *   `<path>` con `pathLength="1000"`, `stroke-dasharray="0.001 999.999"` y
+   *   `stroke-linecap="round"`: el trazo es un solo punto, del ancho del
+   *   trazo, que avanza por el camino. 16 s.
+   *
+   * Y una que no se repite:
+   *
+   * - `progreso`: una barra que se llena una vez (`scaleX`, con
+   *   `origin-left`) y queda llena. Sirve de reloj: quien la usa avanza al
+   *   terminar (`onAnimationEnd`), y en pausa se congela junto con la barra.
+   *   6,5 s.
+   *
+   * `flotar` se inclina 2° más en la mitad; `--giro` lo cambia
+   * (`[--giro:0deg]` para que una maqueta suba y baje derecha).
+   *
+   * Las que se repiten con un retraso positivo (`aparecer` y las dos
+   * `crecer-`) arrancan en su primer cuadro (`backwards`): no se las ve
+   * enteras y de golpe vacías mientras esperan. Con movimiento reducido, la
+   * regla de `@layer base` las deja en su estado de reposo: enteras.
    */
   --animate-flotar: flotar var(--duracion, 7s) ease-in-out var(--retraso, 0s) infinite;
   --animate-latido: latido var(--duracion, 3.2s) ease-in-out var(--retraso, 0s) infinite;
   --animate-senalar: senalar var(--duracion, 1.6s) ease-in-out var(--retraso, 0s) infinite;
+  --animate-aparecer: aparecer var(--duracion, 10s) ease var(--retraso, 0s) infinite backwards;
+  --animate-crecer-columna: crecer-columna var(--duracion, 9s) cubic-bezier(0.3, 0.7, 0.3, 1) var(--retraso, 0s)
+    infinite backwards;
+  --animate-crecer-barra: crecer-barra var(--duracion, 9s) cubic-bezier(0.3, 0.7, 0.3, 1) var(--retraso, 0s) infinite
+    backwards;
+  --animate-recorrer: recorrer var(--duracion, 9s) ease-in-out var(--retraso, 0s) infinite;
+  --animate-recorrer-camino: recorrer-camino var(--duracion, 16s) linear var(--retraso, 0s) infinite;
+  --animate-progreso: progreso var(--duracion, 6.5s) linear var(--retraso, 0s) forwards;
 
   @keyframes flotar {
     0%,
@@ -182,7 +217,85 @@
       transform: translateY(0) rotate(0deg);
     }
     50% {
-      transform: translateY(-9px) rotate(2deg);
+      transform: translateY(-9px) rotate(var(--giro, 2deg));
+    }
+  }
+
+  @keyframes aparecer {
+    0% {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+    8% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    88% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes crecer-columna {
+    0% {
+      transform: scaleY(0);
+    }
+    14%,
+    88% {
+      transform: scaleY(1);
+    }
+    96%,
+    100% {
+      transform: scaleY(0);
+    }
+  }
+
+  @keyframes crecer-barra {
+    0% {
+      transform: scaleX(0);
+    }
+    14%,
+    88% {
+      transform: scaleX(1);
+    }
+    96%,
+    100% {
+      transform: scaleX(0);
+    }
+  }
+
+  @keyframes recorrer {
+    0% {
+      opacity: 0;
+      transform: translateX(-100%);
+    }
+    8%,
+    92% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes recorrer-camino {
+    from {
+      stroke-dashoffset: 0;
+    }
+    to {
+      stroke-dashoffset: -1000;
+    }
+  }
+
+  @keyframes progreso {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
     }
   }
 
@@ -217,6 +330,10 @@
   inherits: false;
 }
 @property --retraso {
+  syntax: '*';
+  inherits: false;
+}
+@property --giro {
   syntax: '*';
   inherits: false;
 }
@@ -411,6 +528,36 @@
   background-image:
     radial-gradient(520px 320px at 92% 0%, color-mix(in srgb, var(--color-frambuesa) 24%, transparent), transparent 70%),
     radial-gradient(560px 340px at 0% 100%, color-mix(in srgb, var(--color-ciruela) 50%, transparent), transparent 70%);
+}
+
+/*
+ * Los brillos tenues de las secciones del medio de la landing: dos manchas
+ * de la paleta sobre crema, como en el diseño. Van en una capa propia, detrás
+ * del contenido y del alto de la sección (`SeccionDeLanding` ya la pone): la
+ * máscara los apaga arriba y abajo, así dos secciones seguidas no dejan una
+ * costura donde se juntan.
+ *
+ * - `frambuesa`: frambuesa abajo a la izquierda y ciruela arriba a la derecha.
+ * - `pistacho`: pistacho arriba a la izquierda y frambuesa abajo a la derecha.
+ * - `ciruela`: ciruela arriba al centro y pistacho abajo a la izquierda.
+ */
+@utility fondo-tenue-frambuesa {
+  background-image:
+    radial-gradient(620px 460px at 8% 90%, color-mix(in srgb, var(--color-frambuesa) 10%, transparent), transparent 70%),
+    radial-gradient(640px 460px at 96% 7%, color-mix(in srgb, var(--color-ciruela) 9%, transparent), transparent 70%);
+  mask-image: linear-gradient(transparent, #000 6rem, #000 calc(100% - 6rem), transparent);
+}
+@utility fondo-tenue-pistacho {
+  background-image:
+    radial-gradient(620px 440px at 4% 6%, color-mix(in srgb, var(--color-pistacho) 18%, transparent), transparent 70%),
+    radial-gradient(640px 460px at 94% 90%, color-mix(in srgb, var(--color-frambuesa) 9%, transparent), transparent 70%);
+  mask-image: linear-gradient(transparent, #000 6rem, #000 calc(100% - 6rem), transparent);
+}
+@utility fondo-tenue-ciruela {
+  background-image:
+    radial-gradient(700px 480px at 50% 0%, color-mix(in srgb, var(--color-ciruela) 10%, transparent), transparent 70%),
+    radial-gradient(560px 420px at 4% 96%, color-mix(in srgb, var(--color-pistacho) 16%, transparent), transparent 70%);
+  mask-image: linear-gradient(transparent, #000 6rem, #000 calc(100% - 6rem), transparent);
 }
 
 /* El degradado de la marca: frambuesa, orquídea y violeta. En texto, con `bg-clip-text text-transparent`. */
