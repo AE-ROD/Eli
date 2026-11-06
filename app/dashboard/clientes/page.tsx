@@ -10,7 +10,7 @@ import { Boton } from "@/components/comunes/boton"
 import {
   actorDeSesion,
   esClinicaDental,
-  veFichaClinica,
+  veAlertaDeAlergias,
   puedeBorrarCliente,
   puedeEditarDatosDeCliente,
   puedeEditarConsentimientoPromocional,
@@ -78,7 +78,7 @@ export default function PaginaClientes() {
   const puedeMarcarCorreoPromo = puedeEditarConsentimientoPromocional(actor)
   // Clínica dental: "pacientes", la ficha clínica y la alerta de alergias. Los demás rubros, como siempre.
   const esDental = esClinicaDental(actor)
-  const leeAlergias = veFichaClinica(actor)
+  const leeAlergias = veAlertaDeAlergias(actor)
   const vocabulario = vocabularioDe(sesion?.user?.rubro)
   const nombreNegocio = sesion?.user?.businessName ?? ""
   const [vistaDeClientes, setVistaDeClientes] = useState<VistaDeClientes>("todos")
@@ -157,7 +157,7 @@ export default function PaginaClientes() {
   )
 
   // Clínica dental: al abrir la ficha de un paciente se piden sus alergias, para la alerta.
-  // Sólo quien ve la ficha clínica (dueño y odontólogos): al encargado el servidor no se la da.
+  // Todo rol de la clínica, también el encargado (`veAlertaDeAlergias`): no ve la ficha clínica, pero sí la alerta.
   const clienteAbiertoId = clienteSeleccionado?.id
   useEffect(() => {
     if (!esDental || !leeAlergias || !clienteAbiertoId) return

@@ -47,3 +47,20 @@ export async function soltarLoClinicoDeLaCita(
     data: { appointmentId: null },
   })
 }
+
+/** Las columnas que la clínica dental le sumó a la cita (migración `etapa_6_odontologia`). */
+const COLUMNAS_DE_LA_CLINICA = ["primeraVez", "sillonId"] as const
+type ColumnaDeLaClinica = (typeof COLUMNAS_DE_LA_CLINICA)[number]
+
+/**
+ * La cita sin las columnas de la clínica dental, para responderla fuera de una
+ * clínica con la misma forma que antes de que existieran: en un salón
+ * `primeraVez` siempre es `false` y `sillonId` siempre `null`, no dicen nada
+ * y no son de su rubro. Lo mismo hace la lista (`GET /api/citas`), que ni las
+ * pide fuera de una clínica.
+ */
+export function sinColumnasDeLaClinica<T extends Record<ColumnaDeLaClinica, unknown>>(cita: T): Omit<T, ColumnaDeLaClinica> {
+  const copia: Record<string, unknown> = { ...cita }
+  for (const columna of COLUMNAS_DE_LA_CLINICA) delete copia[columna]
+  return copia as Omit<T, ColumnaDeLaClinica>
+}

@@ -8,6 +8,7 @@ import {
   MENSAJE_SILLON_INACTIVO,
   MENSAJE_SILLON_NO_ENCONTRADO,
 } from "@/lib/sillones"
+import { MARCA_DE_CLIENTE_ELIMINADO, NOMBRE_DE_CLIENTE_ELIMINADO } from "@/lib/clientes-eliminados"
 
 /**
  * Una cita de la clínica dental: el sillón al editarla y moverla, la alerta
@@ -161,6 +162,25 @@ describe("PUT /api/citas/[id]: el sillón", () => {
     expect(cita("cita-beto").sillonId).toBeNull()
   })
 
+  it("al odontólogo el 409 no le dice las horas de lo que choca: puede ser la cita de un colega que no ve", async () => {
+    // cita-beto es de Pedro; el sillón 1 lo ocupa de 10 a 11 la cita de Carla, que Pedro no ve.
+    const res = await put(sesionesDentales.pedro, "cita-beto", { sillonId: "sl-1", confirmarAdvertencias: true })
+
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({
+      error: "Sillón 1 está ocupado a esa hora. Elige otro sillón u otra hora.",
+      codigo: CODIGO_SILLON_OCUPADO,
+    })
+    expect(cita("cita-beto").sillonId).toBeNull()
+  })
+
+  it("el encargado, que ve toda la agenda, sí recibe las horas", async () => {
+    const res = await put(sesionesDentales.encargado, "cita-beto", { sillonId: "sl-1", confirmarAdvertencias: true })
+
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe("Sillón 1 ya tiene una cita de 10:00 a 11:00. Elige otro sillón u otra hora.")
+  })
+
   it("se cambia con el paciente ya en la sala de espera (no es mover)", async () => {
     const res = await put(sesionesDentales.encargado, "cita-en-espera", { sillonId: "sl-1" })
 
@@ -200,6 +220,18 @@ describe("PUT /api/citas/[id]: mover conserva el sillón y revisa el choque", ()
 
     expect(res.status).toBe(200)
     expect(cita("cita-carla")).toMatchObject({ sillonId: "sl-1", startTime: santiago("2026-10-20", "14:00") })
+  })
+
+  it("al odontólogo que mueve su cita a una hora tomada del sillón, sin las horas de la otra cita", async () => {
+    // cita-pedro está en el sillón 2 de 11 a 12; Carla mueve la suya (sillón 1) al sillón 2 a las 11:30.
+    const res = await put(sesionesDentales.carla, "cita-carla", mover("2026-10-20", "11:30", "12:30", { sillonId: "sl-2", confirmarAdvertencias: true }))
+
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({
+      error: "Sillón 2 está ocupado a esa hora. Elige otro sillón u otra hora.",
+      codigo: CODIGO_SILLON_OCUPADO,
+    })
+    expect(cita("cita-carla")).toMatchObject({ sillonId: "sl-1", startTime: santiago("2026-10-20", "10:00") })
   })
 
   it("a una hora en que el sillón está tomado, 409 y no se mueve", async () => {
@@ -260,6 +292,30 @@ describe("GET /api/citas/[id]: la alerta de alergias", () => {
     expect((await res.json()).alergias).toBeNull()
   })
 
+  it.each([
+    ["la dueña", sesionesDentales.dueña],
+    ["el encargado", sesionesDentales.encargado],
+    ["la odontóloga", sesionesDentales.carla],
+  ])("de un paciente eliminado no se lee nada clínico: %s recibe null, aunque la ficha siga en la base", async (_quien, sesion) => {
+    base.reiniciar({
+      ...datosDeLaClinica(),
+      customer: [
+        ...datosDeLaClinica().customer,
+        { id: "c-eliminado", businessId: NEGOCIO, name: NOMBRE_DE_CLIENTE_ELIMINADO, tags: [MARCA_DE_CLIENTE_ELIMINADO] },
+      ],
+      appointment: [citaDental("cita-del-eliminado", "2026-10-20", "10:00", "11:00", { customerId: "c-eliminado", sillonId: "sl-1" })],
+      fichaClinica: [
+        { id: "f-eliminado", businessId: NEGOCIO, customerId: "c-eliminado", alergias: "Látex", antecedentes: "Asmático", actualizadaPor: "Ana" },
+      ],
+    })
+    const res = await get(sesion, "cita-del-eliminado")
+    const detalle = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(detalle).toMatchObject({ id: "cita-del-eliminado", alergias: null })
+    expect(JSON.stringify(detalle)).not.toMatch(/Látex|Asmático/)
+  })
+
   it("en un salón la clave no viaja", async () => {
     const res = await get(sesiones.dueña, "cita-carla")
     const detalle = await res.json()
@@ -267,6 +323,26 @@ describe("GET /api/citas/[id]: la alerta de alergias", () => {
     expect(res.status).toBe(200)
     expect(detalle).not.toHaveProperty("alergias")
     expect(detalle).not.toHaveProperty("sillon")
+  })
+
+  it("en un salón la cita sale con la forma de siempre: sin primera vez ni sillón", async () => {
+    // Aunque la fila tuviera algo escrito: en un salón esas columnas no son del rubro.
+    base.reiniciar({
+      ...datosBase(),
+      appointment: [citaDental("cita-carla", "2026-10-20", "10:00", "11:00", { primeraVez: true })],
+    })
+    const res = await get(sesiones.dueña, "cita-carla")
+    const detalle = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(detalle).toMatchObject({ id: "cita-carla", title: "Control" })
+    for (const clave of ["primeraVez", "sillonId", "sillon", "alergias"]) expect(detalle).not.toHaveProperty(clave)
+  })
+
+  it("en la clínica, primera vez y sillón sí vienen", async () => {
+    const detalle = await (await get(sesionesDentales.encargado, "cita-carla")).json()
+
+    expect(detalle).toMatchObject({ primeraVez: false, sillonId: "sl-1", sillon: { id: "sl-1", nombre: "Sillón 1" } })
   })
 
   it("la cita de otra clínica es 404", async () => {

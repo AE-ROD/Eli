@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
-import { actorDeSesion, puedeAsignarSillon, whereDeAgenda, whereDeSillones } from "@/lib/permisos"
+import { actorDeSesion, puedeAsignarSillon, puedeVerTodaLaAgenda, whereDeAgenda, whereDeSillones } from "@/lib/permisos"
 import { sePuedeMover } from "@/lib/mover-cita"
 import { ocupaElHorario } from "@/lib/ocupacion"
 import {
@@ -37,7 +37,8 @@ const citaNoEncontrada = () => NextResponse.json({ error: "Cita no encontrada" }
  *   sillón (409).
  * - Si la cita ocupa su horario y el sillón ya tiene otra cita que se pisa,
  *   409 con `codigo: "sillon-ocupado"`; se revisa con el sillón trabado, en
- *   la misma transacción que escribe.
+ *   la misma transacción que escribe. Las horas de lo que choca, sólo a
+ *   quien ve toda la agenda: al odontólogo, "está ocupado a esa hora".
  */
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const actor = actorDeSesion(await getServerSession(authOptions))
@@ -93,6 +94,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           tramo: { startTime: cita.startTime, endTime: cita.endTime },
           ignorarCitaId: cita.id,
           zona: zonaDelNegocio(negocio?.timezone),
+          // Las horas de las citas que chocan, sólo a quien ve toda la agenda.
+          mostrarHorarios: puedeVerTodaLaAgenda(actor),
         })
       }
       // Sólo si sigue como se leyó (hora y estado): si otro la movió o la

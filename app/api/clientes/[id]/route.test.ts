@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { crearBaseDeClientes, escenarioDeClientes } from "../_pruebas/base-de-clientes"
 import { NEGOCIO, OTRO_NEGOCIO, atencion, conId, linea, pago, pedido, sesiones } from "@/pruebas/datos"
 import { MARCA_DE_CLIENTE_ELIMINADO, NOMBRE_DE_CLIENTE_ELIMINADO, datosDeClienteEliminado } from "@/lib/clientes-eliminados"
+import { escenarioDental, sesionesDentales } from "../_pruebas/clinica-dental"
 
 const mockGetServerSession = vi.fn()
 
@@ -253,6 +254,80 @@ describe("GET /api/clientes/[id]", () => {
       "whatsappConsentSource",
     ])
     expect(cliente).toMatchObject({ id: "c-maria", name: "María", lastName: "González", businessId: NEGOCIO })
+  })
+})
+
+describe("GET /api/clientes/[id] — la alerta de alergias en una clínica dental", () => {
+  beforeEach(() => base.reiniciar(escenarioDental()))
+
+  async function leer(sesion: unknown, id: string) {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesion)
+    return GET(pedido(`http://localhost/api/clientes/${id}`), conId(id))
+  }
+
+  it.each([
+    ["la dueña", sesionesDentales.dueña],
+    ["el encargado", sesionesDentales.encargado],
+    ["el odontólogo", sesionesDentales.perez],
+  ])("%s ve las alergias del paciente, y nada más de la ficha", async (_quien, sesion) => {
+    const res = await leer(sesion, "p-camila")
+    const paciente = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(paciente).toMatchObject({ id: "p-camila", name: "Camila", alergias: "Penicilina" })
+    // Ni antecedentes, ni previsión, ni fecha de nacimiento, ni quién la actualizó.
+    expect(JSON.stringify(paciente)).not.toMatch(/Sin enfermedades|isapre|1992-03-15|fechaNacimiento|antecedentes/)
+  })
+
+  it("sin ficha, o sin nada anotado, null", async () => {
+    base.reiniciar({
+      ...escenarioDental(),
+      fichaClinica: [
+        ...escenarioDental().fichaClinica,
+        { id: "f-beto", businessId: "clinica-aurora", customerId: "p-beto", alergias: "   ", actualizadaPor: "Valentina Soto" },
+      ],
+    })
+
+    expect((await (await leer(sesionesDentales.encargado, "p-nadia")).json()).alergias).toBeNull()
+    expect((await (await leer(sesionesDentales.encargado, "p-beto")).json()).alergias).toBeNull()
+  })
+
+  it("el paciente de otra clínica sigue siendo 404, igual que uno que no existe, y no se lee su ficha", async () => {
+    const ajeno = await leer(sesionesDentales.dueña, "p-ajena")
+    const inexistente = await leer(sesionesDentales.dueña, "p-que-no-existe")
+
+    expect(ajeno.status).toBe(404)
+    expect(await ajeno.json()).toEqual({ error: "Cliente no encontrado" })
+    expect(inexistente.status).toBe(404)
+    expect(base.prisma.fichaClinica.findFirst).not.toHaveBeenCalled()
+  })
+
+  it("la otra clínica no llega a los pacientes de esta: 404", async () => {
+    const res = await leer(sesionesDentales.dueñaAjena, "p-camila")
+
+    expect(res.status).toBe(404)
+    expect(JSON.stringify(await res.json())).not.toContain("Penicilina")
+  })
+
+  it("un paciente eliminado sigue siendo 404", async () => {
+    expect((await leer(sesionesDentales.dueña, "p-eliminado")).status).toBe(404)
+  })
+
+  it("en un salón la clave no viaja: la respuesta queda con la forma de siempre", async () => {
+    const res = await leer(sesionesDentales.salon, "p-salon")
+    const cliente = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(cliente).not.toHaveProperty("alergias")
+    expect(base.prisma.fichaClinica.findFirst).not.toHaveBeenCalled()
+  })
+
+  it("una sesión de antes del rubro, en la clínica, tampoco la recibe: falla cerrado", async () => {
+    const res = await leer(sesionesDentales.sinRubro, "p-camila")
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).not.toHaveProperty("alergias")
   })
 })
 

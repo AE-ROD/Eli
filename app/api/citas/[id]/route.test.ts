@@ -36,8 +36,8 @@ const prismaMock = {
       const cita = citasFake.find((c) => c.id === args.where.id)
       return Promise.resolve({ ...cita, ...args.data })
     }),
-    delete: vi.fn((args: { where: { id: string } }) =>
-      Promise.resolve(citasFake.find((c) => c.id === args.where.id))
+    deleteMany: vi.fn((args: { where: Record<string, unknown> }) =>
+      Promise.resolve({ count: citasFake.filter((c) => coincideConWhere(c, args.where)).length })
     ),
     // Las advertencias al mover: acá no hay otras citas con qué chocar.
     findMany: vi.fn(() => Promise.resolve([])),
@@ -276,7 +276,7 @@ describe("DELETE /api/citas/[id]", () => {
     const res = await DELETE(pedidoFalso(), params("cita-colega"))
 
     expect(res.status).toBe(404)
-    expect(prismaMock.appointment.delete).not.toHaveBeenCalled()
+    expect(prismaMock.appointment.deleteMany).not.toHaveBeenCalled()
   })
 
   it("un worker sí puede borrar su propia cita", async () => {
@@ -287,7 +287,8 @@ describe("DELETE /api/citas/[id]", () => {
     const res = await DELETE(pedidoFalso(), params("cita-mia"))
 
     expect(res.status).toBe(200)
-    expect(prismaMock.appointment.delete).toHaveBeenCalledWith({ where: { id: "cita-mia" } })
+    // Acotado al negocio de la sesión, como la rama dental.
+    expect(prismaMock.appointment.deleteMany).toHaveBeenCalledWith({ where: { id: "cita-mia", businessId: "negocio-1" } })
   })
 
   it("el dueño puede borrar cualquier cita del negocio", async () => {
@@ -318,7 +319,7 @@ describe("DELETE /api/citas/[id]", () => {
     const res = await DELETE(pedidoFalso(), params("cita-mia"))
 
     expect(res.status).toBe(404)
-    expect(prismaMock.appointment.delete).not.toHaveBeenCalled()
+    expect(prismaMock.appointment.deleteMany).not.toHaveBeenCalled()
   })
 
   it("un worker no puede borrar una cita sin profesional asignado: 404, no 403", async () => {
@@ -329,7 +330,7 @@ describe("DELETE /api/citas/[id]", () => {
     const res = await DELETE(pedidoFalso(), params("cita-sin-profesional"))
 
     expect(res.status).toBe(404)
-    expect(prismaMock.appointment.delete).not.toHaveBeenCalled()
+    expect(prismaMock.appointment.deleteMany).not.toHaveBeenCalled()
   })
 
   it("el dueño y el encargado pueden borrar una cita sin profesional asignado", async () => {

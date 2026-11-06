@@ -20,7 +20,9 @@ import {
 import type { MarcaDelOdontograma } from "@/lib/odontograma"
 import { fechaDeColumna, fechaParaColumna } from "@/lib/periodos-de-liquidacion"
 import {
+  veAlertaDeAlergias,
   whereDeAgenda,
+  whereDeAlertaDeAlergias,
   whereDeClientes,
   whereDeEvoluciones,
   whereDeFichasClinicas,
@@ -43,7 +45,8 @@ import { fechaYMinutosEn, zonaDelNegocio } from "@/lib/zona-horaria"
  * Aislamiento (CLAUDE.md, regla 1): el paciente se busca con
  * `whereDeClientes` y toda lectura o escritura clínica pasa por los filtros
  * de `lib/permisos.ts` (`whereDeFichasClinicas`, `whereDeMarcasDentales`,
- * `whereDeEvoluciones`), que acotan al negocio de la sesión y no dejan nada a
+ * `whereDeEvoluciones` y, sólo en `leerAlertaDeAlergias`,
+ * `whereDeAlertaDeAlergias`), que acotan al negocio de la sesión y no dejan nada a
  * quien no puede verlo. Toda fila nueva se escribe con el `businessId` de la
  * sesión y con ids, nunca con `connect`: las FK compuestas de la base
  * rechazan una fila que mezcle negocios.
@@ -238,6 +241,40 @@ export async function leerFicha(
     actualizadaPor: ficha?.actualizadaPor ?? null,
     updatedAt: ficha?.updatedAt.toISOString() ?? null,
   }
+}
+
+/**
+ * La alerta de alergias del paciente: lo anotado en `alergias`, recortado.
+ * Es lo único de la ficha que ve también el encargado (`veAlertaDeAlergias`),
+ * y este es su único lector: el panel de la cita (`GET /api/citas/[id]`), el
+ * panel de Pacientes (`GET /api/clientes/[id]`) y la ficha del paciente
+ * (`/dashboard/clientes/[id]`) la leen de acá. Por eso fija las dos cosas que
+ * no se pueden olvidar:
+ *
+ * - el `select` es sólo `alergias`: con `whereDeAlertaDeAlergias` el
+ *   encargado alcanza la fila entera de la ficha, y los antecedentes no son
+ *   para él (`veFichaClinica`);
+ * - el paciente no se eliminó (`clienteNoEliminado`, como
+ *   `pacienteConAcceso`): de uno anonimizado no se lee nada clínico, aunque
+ *   la ficha siga en la base.
+ *
+ * `null` sin ficha, sin nada anotado, con el paciente eliminado o para quien
+ * no ve la alerta (fuera de una clínica dental). Si la respuesta lleva la
+ * clave lo decide el endpoint, con `veAlertaDeAlergias`.
+ */
+export async function leerAlertaDeAlergias(
+  db: Pick<Prisma.TransactionClient, "fichaClinica">,
+  actor: Actor,
+  pacienteId: string
+): Promise<string | null> {
+  if (!veAlertaDeAlergias(actor)) return null
+  const ficha = await db.fichaClinica.findFirst({
+    where: whereDeAlertaDeAlergias(actor, {
+      AND: [{ customerId: pacienteId }, { customer: { is: clienteNoEliminado } }],
+    }),
+    select: { alergias: true },
+  })
+  return ficha?.alergias?.trim() || null
 }
 
 /**

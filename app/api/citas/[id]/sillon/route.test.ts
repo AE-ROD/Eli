@@ -99,6 +99,25 @@ describe("PATCH /api/citas/[id]/sillon", () => {
     expect(sillonDe("cita-pedro")).toBeNull()
   })
 
+  it("al odontólogo el 409 no le dice las horas de lo que choca: es la cita de una colega que no ve", async () => {
+    // cita-pedro es de Pedro; el sillón 1 lo ocupa de 10 a 11 la cita de Carla.
+    const res = await asignar(sesionesDentales.pedro, "cita-pedro", { sillonId: "sl-1" })
+
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({
+      error: "Sillón 1 está ocupado a esa hora. Elige otro sillón u otra hora.",
+      codigo: CODIGO_SILLON_OCUPADO,
+    })
+    expect(sillonDe("cita-pedro")).toBeNull()
+  })
+
+  it("el encargado, que ve toda la agenda, sí recibe las horas", async () => {
+    const res = await asignar(sesionesDentales.encargado, "cita-pedro", { sillonId: "sl-1" })
+
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe("Sillón 1 ya tiene una cita de 10:00 a 11:00. Elige otro sillón u otra hora.")
+  })
+
   it("el sillón de otra clínica: 404", async () => {
     const res = await asignar(sesionesDentales.dueña, "cita-pedro", { sillonId: "sl-ajeno" })
 

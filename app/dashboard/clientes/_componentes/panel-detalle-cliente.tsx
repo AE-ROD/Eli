@@ -64,10 +64,10 @@ interface PropsDePanelDetalleCliente {
   vocabulario?: Pick<Vocabulario, "cliente">
   /**
    * Sólo en una clínica dental: el acceso a la ficha clínica del paciente y,
-   * si las hay anotadas, sus alergias (que se leen sólo para quien ve la
-   * ficha clínica; para el encargado llegan en `null` y la alerta queda en la
-   * ficha clínica, que sí la muestra). En los demás rubros no viene y el
-   * panel queda como siempre.
+   * si las hay anotadas, sus alergias, que salen como alerta para todo rol de
+   * la clínica (también el encargado: es lo único de la ficha que ve). Las
+   * trae el detalle del paciente (`leerAlergiasDelPaciente`). En los demás
+   * rubros no viene y el panel queda como siempre.
    */
   fichaClinica?: { ruta: string; alergias: string | null }
   /** Sus últimas citas, de la más reciente a la más vieja. */

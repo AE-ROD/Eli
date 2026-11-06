@@ -89,6 +89,32 @@ describe("GET /api/citas en una clínica dental", () => {
     expect(ajeno).toEqual([])
   })
 
+  it("en un salón cada cita trae exactamente las claves de antes de la clínica dental", async () => {
+    const citas = await (await listar(sesiones.dueña)).json()
+
+    expect(citas.length).toBeGreaterThan(0)
+    for (const cita of citas) {
+      expect(Object.keys(cita).sort()).toEqual([
+        "canceladaEn",
+        "canceladaPor",
+        "clientComments",
+        "conAtencion",
+        "confirmacionPorFaltas",
+        "customer",
+        "customerId",
+        "endTime",
+        "id",
+        "member",
+        "memberId",
+        "notes",
+        "price",
+        "startTime",
+        "status",
+        "title",
+      ])
+    }
+  })
+
   it("en un salón la respuesta no cambia: sin sillón ni primera vez, y el filtro se ignora", async () => {
     const res = await listar(sesiones.dueña, "fecha=2026-10-20&sillonId=sl-1")
     const citas = await res.json()
@@ -134,6 +160,35 @@ describe("POST /api/citas con sillón", () => {
       codigo: CODIGO_SILLON_OCUPADO,
     })
     expect(citasDeBeto()).toHaveLength(0)
+  })
+
+  it("al odontólogo el 409 no le dice las horas de lo que choca: es la cita de una colega que no ve", async () => {
+    // cita-en-1 es de Carla, de 10 a 11 en el sillón 1: Pedro no la ve en su agenda.
+    const res = await crear(sesionesDentales.pedro, nueva("10:30", "11:30", { sillonId: "sl-1", confirmarAdvertencias: true }))
+
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({
+      error: "Sillón 1 está ocupado a esa hora. Elige otro sillón u otra hora.",
+      codigo: CODIGO_SILLON_OCUPADO,
+    })
+    expect(citasDeBeto()).toHaveLength(0)
+  })
+
+  it("tampoco en la revisión de la transacción, con el sillón trabado", async () => {
+    base.prisma.appointment.findMany.mockResolvedValueOnce([])
+    const res = await crear(sesionesDentales.pedro, nueva("10:30", "11:30", { sillonId: "sl-1", confirmarAdvertencias: true }))
+
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe("Sillón 1 está ocupado a esa hora. Elige otro sillón u otra hora.")
+    expect(base.prisma.$executeRaw).toHaveBeenCalled()
+    expect(citasDeBeto()).toHaveLength(0)
+  })
+
+  it("el encargado, que ve toda la agenda, sí recibe las horas", async () => {
+    const res = await crear(sesionesDentales.encargado, nueva("10:30", "11:30", { sillonId: "sl-1", confirmarAdvertencias: true }))
+
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe("Sillón 1 ya tiene una cita de 10:00 a 11:00. Elige otro sillón u otra hora.")
   })
 
   it("tocarse no es chocar, y una cancelada no ocupa el sillón", async () => {

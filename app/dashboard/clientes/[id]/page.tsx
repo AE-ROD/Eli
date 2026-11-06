@@ -3,19 +3,17 @@ import { notFound, redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
-import { leerFicha, leerOdontograma } from "@/lib/ficha-clinica-servidor"
+import { leerAlertaDeAlergias, leerFicha, leerOdontograma } from "@/lib/ficha-clinica-servidor"
 import { leerPlan } from "@/lib/plan-de-tratamiento-servidor"
 import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import {
   actorDeSesion,
   esClinicaDental,
   puedeEditarFichaClinica,
-  veAlertaDeAlergias,
   veFichaClinica,
   vePlanDeTratamiento,
   veSillones,
   whereDeAgenda,
-  whereDeAlertaDeAlergias,
   whereDeClientes,
 } from "@/lib/permisos"
 import { fechaYMinutosEn, zonaDelNegocio } from "@/lib/zona-horaria"
@@ -61,14 +59,9 @@ export default async function PaginaFichaClinica({ params }: { params: Promise<{
   // El día de hoy en la zona del negocio, como `hoyDelNegocio`: la edad y el tope de la fecha de nacimiento.
   const hoy = fechaYMinutosEn(ahora, zona).fecha
 
-  const [alerta, ficha, odontograma, plan, proximaCita] = await Promise.all([
-    // Sólo la columna de alergias: es lo único de la ficha que ve el encargado.
-    veAlertaDeAlergias(actor)
-      ? prisma.fichaClinica.findFirst({
-          where: whereDeAlertaDeAlergias(actor, { customerId: paciente.id }),
-          select: { alergias: true },
-        })
-      : null,
+  const [alergias, ficha, odontograma, plan, proximaCita] = await Promise.all([
+    // Sólo la columna de alergias (el lector la fija): es lo único de la ficha que ve el encargado.
+    leerAlertaDeAlergias(prisma, actor, paciente.id),
     veFicha ? leerFicha(prisma, actor, paciente.id, hoy) : null,
     veFicha ? leerOdontograma(prisma, actor, paciente.id) : null,
     vePlan ? leerPlan(prisma, actor, paciente.id) : null,
@@ -101,7 +94,7 @@ export default async function PaginaFichaClinica({ params }: { params: Promise<{
         telefono: paciente.phone,
         desde: paciente.createdAt.toISOString(),
       }}
-      alergias={alerta?.alergias?.trim() || null}
+      alergias={alergias}
       fichaInicial={ficha}
       odontogramaInicial={odontograma}
       planInicial={plan}

@@ -10,6 +10,7 @@ import {
   actorDeSesion,
   memberIdParaCita,
   puedeAsignarSillon,
+  puedeVerTodaLaAgenda,
   veSillones,
   whereDeAgenda,
   whereDeClientes,
@@ -271,9 +272,17 @@ export async function POST(request: NextRequest) {
     // vez (`lib/sillones.ts`). Se mira antes que las advertencias, para no
     // pedir que se confirmen y después rechazar igual; la revisión que vale
     // es la de la transacción, con el sillón trabado.
+    // Las horas de las citas que chocan, sólo a quien ve toda la agenda.
     const consultaDeSillon =
       sillonId && ocupaElHorario(status)
-        ? { businessId: actor.businessId, sillonId, tramo, ignorarCitaId: null, zona: await zonaDeLaClinica(actor.businessId) }
+        ? {
+            businessId: actor.businessId,
+            sillonId,
+            tramo,
+            ignorarCitaId: null,
+            zona: await zonaDeLaClinica(actor.businessId),
+            mostrarHorarios: puedeVerTodaLaAgenda(actor),
+          }
         : null
     if (consultaDeSillon) {
       const ocupado = await errorDeSillonOcupado(prisma, consultaDeSillon)

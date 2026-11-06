@@ -7,6 +7,7 @@ import {
   edicionDeSillonSchema,
   errorDeSillonOcupado,
   mensajeDeSillonOcupado,
+  mensajeDeSillonOcupadoSinHorarios,
   ordenAlFinal,
   sillonDeLaCita,
   sillonNuevoSchema,
@@ -65,6 +66,10 @@ describe("mensajeDeSillonOcupado", () => {
       "Sillón 2 ya tiene citas de 09:30 a 10:15 y de 11:00 a 11:30. Elige otro sillón u otra hora."
     )
   })
+
+  it("sin horarios: sólo que está ocupado, sin ninguna hora", () => {
+    expect(mensajeDeSillonOcupadoSinHorarios("Sillón 1")).toBe("Sillón 1 está ocupado a esa hora. Elige otro sillón u otra hora.")
+  })
 })
 
 describe("el choque en un sillón", () => {
@@ -115,12 +120,24 @@ describe("el choque en un sillón", () => {
 
   it("pisarse con una cita que ocupa el sillón es 409 con su código", async () => {
     sembrar()
-    const error = await errorDeSillonOcupado(db, consulta("10:30", "11:30"))
+    const error = await errorDeSillonOcupado(db, consulta("10:30", "11:30", { mostrarHorarios: true }))
 
     expect(error).toBeInstanceOf(SillonOcupado)
     expect(error?.status).toBe(409)
     expect(error?.codigo).toBe(CODIGO_SILLON_OCUPADO)
     expect(error?.message).toBe("Sillón 1 ya tiene una cita de 10:00 a 11:00. Elige otro sillón u otra hora.")
+  })
+
+  it("las horas de lo que choca sólo con `mostrarHorarios`: sin decirlo, o en false, no las dice", async () => {
+    sembrar()
+    for (const extra of [{}, { mostrarHorarios: false }]) {
+      const error = await errorDeSillonOcupado(db, consulta("10:30", "11:30", extra))
+
+      expect(error).toBeInstanceOf(SillonOcupado)
+      expect(error?.codigo).toBe(CODIGO_SILLON_OCUPADO)
+      expect(error?.message).toBe("Sillón 1 está ocupado a esa hora. Elige otro sillón u otra hora.")
+      expect(error?.message).not.toMatch(/\d{1,2}:\d{2}/)
+    }
   })
 
   it("tocarse no es pisarse; cancelada y no vino no ocupan; otro sillón y otro negocio no cuentan", async () => {

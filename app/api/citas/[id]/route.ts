@@ -21,10 +21,10 @@ import {
   puedeAsignarSillon,
   puedeReactivarCita,
   puedeResolverPorConfirmar,
+  puedeVerTodaLaAgenda,
   veAlertaDeAlergias,
   veSillones,
   whereDeAgenda,
-  whereDeAlertaDeAlergias,
   whereDeSillones,
   type Actor,
 } from "@/lib/permisos"
@@ -54,7 +54,8 @@ import {
   sillonDeLaCita,
   type ConsultaDeSillon,
 } from "@/lib/sillones"
-import { soltarLoClinicoDeLaCita } from "@/lib/citas-de-la-clinica"
+import { sinColumnasDeLaClinica, soltarLoClinicoDeLaCita } from "@/lib/citas-de-la-clinica"
+import { leerAlertaDeAlergias } from "@/lib/ficha-clinica-servidor"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
 
 const edicionDeCitaSchema = z.object({
@@ -197,18 +198,18 @@ export async function GET(
     return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 })
   }
 
+  // Fuera de una clínica dental la cita sale con la forma de siempre: sin
+  // sillón y sin las columnas de la clínica (`primeraVez`, `sillonId`), como
+  // en la lista (`GET /api/citas`).
+  const detalle = veSillones(actor) ? cita : sinColumnasDeLaClinica(cita)
+
   // Clínica dental: la alerta de alergias del paciente, para todo rol de la
-  // clínica (también el encargado, que lo recibe). Sólo esa columna: el resto
-  // de la ficha no es para todos (`whereDeAlertaDeAlergias`). Sin ficha o sin
-  // nada anotado, `null`. En otro rubro la clave no viaja.
-  if (!veAlertaDeAlergias(actor)) return NextResponse.json(cita)
-  const ficha = cita.customerId
-    ? await prisma.fichaClinica.findFirst({
-        where: whereDeAlertaDeAlergias(actor, { customerId: cita.customerId }),
-        select: { alergias: true },
-      })
-    : null
-  return NextResponse.json({ ...cita, alergias: ficha?.alergias?.trim() || null })
+  // clínica (también el encargado, que lo recibe). Sólo esa columna, y nada
+  // de un paciente eliminado: lo asegura el lector (`leerAlertaDeAlergias`).
+  // Sin ficha o sin nada anotado, `null`. En otro rubro la clave no viaja.
+  if (!veAlertaDeAlergias(actor)) return NextResponse.json(detalle)
+  const alergias = cita.customerId ? await leerAlertaDeAlergias(prisma, actor, cita.customerId) : null
+  return NextResponse.json({ ...detalle, alergias })
 }
 
 export async function PUT(
@@ -391,6 +392,8 @@ export async function PUT(
             tramo: { startTime: inicio, endTime: fin },
             ignorarCitaId: existente.id,
             zona: await zonaDeLaClinica(actor.businessId),
+            // Las horas de las citas que chocan, sólo a quien ve toda la agenda.
+            mostrarHorarios: puedeVerTodaLaAgenda(actor),
           }
         : null
     if (consultaDeSillon) {
@@ -682,7 +685,9 @@ export async function DELETE(
         await tx.appointment.deleteMany({ where: { id: existente.id, businessId: actor.businessId } })
       })
     } else {
-      await prisma.appointment.delete({ where: { id: existente.id } })
+      // Acotado al negocio, como en la rama dental: la escritura no depende
+      // sólo de la verificación de arriba.
+      await prisma.appointment.deleteMany({ where: { id: existente.id, businessId: actor.businessId } })
     }
   } catch (error) {
     // Algo de la ficha clínica todavía apunta a la cita (una sesión que aún

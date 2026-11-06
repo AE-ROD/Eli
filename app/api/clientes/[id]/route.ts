@@ -21,10 +21,12 @@ import {
   puedeBorrarCliente,
   puedeEditarConsentimientoPromocional,
   puedeEditarDatosDeCliente,
+  veAlertaDeAlergias,
   whereDeAgenda,
   whereDeClientes,
   type Actor,
 } from "@/lib/permisos"
+import { leerAlertaDeAlergias } from "@/lib/ficha-clinica-servidor"
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 const edicionDeClienteSchema = z.object({
@@ -172,7 +174,15 @@ export async function GET(
     return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 })
   }
 
-  return NextResponse.json({ ...cliente, appointments: cliente.appointments.map(conLlegada) })
+  const respuesta = { ...cliente, appointments: cliente.appointments.map(conLlegada) }
+
+  // Clínica dental: la alerta de alergias del paciente, para el panel de al
+  // lado en Pacientes. Todo rol de la clínica la ve (`veAlertaDeAlergias`),
+  // también el encargado, y se lee con el mismo lector que la cita
+  // (`leerAlertaDeAlergias`: sólo esa columna). Sin nada anotado, `null`. En
+  // otro rubro la clave no viaja y la respuesta queda como siempre.
+  if (!veAlertaDeAlergias(actor)) return NextResponse.json(respuesta)
+  return NextResponse.json({ ...respuesta, alergias: await leerAlertaDeAlergias(prisma, actor, cliente.id) })
 }
 
 export async function PUT(

@@ -22,7 +22,8 @@ import { fechaYMinutosEn } from "@/lib/zona-horaria"
  *   (`lib/ocupacion.ts`: cancelada y "no vino" no ocupan) y se pisan en el
  *   mismo sillón no pueden convivir. A diferencia del choque de profesional,
  *   que es una advertencia que se puede confirmar, esto es un 409 que no se
- *   salta: el sillón es uno solo.
+ *   salta: el sillón es uno solo. El mensaje dice las horas de las citas que
+ *   chocan sólo a quien ve toda la agenda (`mostrarHorarios`).
  * - El choque se revisa con un candado por sillón (`tomarCandadoDelSillon`)
  *   dentro de la transacción que escribe, así dos pedidos a la vez no dejan
  *   dos citas en el mismo sillón y la misma hora.
@@ -134,6 +135,15 @@ export function mensajeDeSillonOcupado(nombre: string, choques: readonly Tramo[]
   return `${nombre} ya tiene ${cuales}. Elige otro sillón u otra hora.`
 }
 
+/**
+ * "Sillón 1 está ocupado a esa hora. Elige otro sillón u otra hora." Sin las
+ * horas de las citas que chocan: para quien no ve toda la agenda (el
+ * odontólogo), que con ellas sabría cuándo atienden sus colegas.
+ */
+export function mensajeDeSillonOcupadoSinHorarios(nombre: string): string {
+  return `${nombre} está ocupado a esa hora. Elige otro sillón u otra hora.`
+}
+
 // ─── Choque en el sillón ─────────────────────────────────────────────────────
 
 export interface ConsultaDeSillon {
@@ -142,6 +152,13 @@ export interface ConsultaDeSillon {
   tramo: Tramo
   /** La cita que se está escribiendo: no choca consigo misma. Al crear, `null`. */
   ignorarCitaId: string | null
+  /**
+   * Si el 409 dice de qué hora a qué hora son las citas que chocan. Sólo para
+   * quien ve toda la agenda (`puedeVerTodaLaAgenda`, dueño y encargado): al
+   * odontólogo le contaría los horarios de citas de colegas que no ve. Sin
+   * decirlo, no las dice (falla cerrado).
+   */
+  mostrarHorarios?: boolean
 }
 
 /** Las citas del sillón que ocupan su horario y se pisan con el tramo. Tocarse no es pisarse. */
@@ -171,8 +188,9 @@ export async function tomarCandadoDelSillon(
 
 /**
  * El 409 de un sillón ocupado en ese tramo, o `null` si está libre. Lee el
- * nombre del sillón para el mensaje. Recibe la base (el cliente o el `tx` de
- * una transacción) en vez de importarla, como `lib/ocupacion.ts`.
+ * nombre del sillón para el mensaje, que dice las horas de lo que choca sólo
+ * con `mostrarHorarios`. Recibe la base (el cliente o el `tx` de una
+ * transacción) en vez de importarla, como `lib/ocupacion.ts`.
  */
 export async function errorDeSillonOcupado(
   db: Pick<Prisma.TransactionClient, "appointment" | "sillon">,
@@ -189,7 +207,12 @@ export async function errorDeSillonOcupado(
     where: { id: consulta.sillonId, businessId: consulta.businessId },
     select: { nombre: true },
   })
-  return new SillonOcupado(mensajeDeSillonOcupado(sillon?.nombre ?? "El sillón", choques, consulta.zona))
+  const nombre = sillon?.nombre ?? "El sillón"
+  return new SillonOcupado(
+    consulta.mostrarHorarios
+      ? mensajeDeSillonOcupado(nombre, choques, consulta.zona)
+      : mensajeDeSillonOcupadoSinHorarios(nombre)
+  )
 }
 
 /**

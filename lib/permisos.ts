@@ -518,9 +518,10 @@ export const veFichaClinica = atiendeEnLaClinica
 export const puedeEditarFichaClinica = atiendeEnLaClinica
 
 /**
- * La alerta de alergias en el panel de la cita: todo rol de la clínica,
- * también el encargado, que recibe al paciente. Es lo único de la ficha que ve
- * el encargado, y se lee con `whereDeAlertaDeAlergias`.
+ * La alerta de alergias en el panel de la cita y en el de Pacientes: todo rol
+ * de la clínica, también el encargado, que recibe al paciente. Es lo único de
+ * la ficha que ve el encargado, y se lee sólo con `leerAlertaDeAlergias`
+ * (`lib/ficha-clinica-servidor.ts`).
  */
 export const veAlertaDeAlergias = esClinicaDental
 
@@ -805,9 +806,12 @@ export function whereDeFichasClinicas(
 
 /**
  * La ficha, leída sólo para la alerta de alergias: también para el encargado.
- * El endpoint que lo use tiene que pedir con `select` únicamente `alergias`
- * (y `customerId`): con este filtro el encargado alcanza la fila entera, y los
- * antecedentes no son para él (`veFichaClinica`).
+ * Con este filtro el encargado alcanza la fila entera, y los antecedentes no
+ * son para él (`veFichaClinica`): por eso **se usa sólo a través de
+ * `leerAlertaDeAlergias`** (`lib/ficha-clinica-servidor.ts`), que fija el
+ * `select` en `alergias` y exige que el paciente no se haya eliminado. Se
+ * exporta para ese lector y para los tests de permisos; un endpoint o una
+ * página no lo usa directo.
  */
 export function whereDeAlertaDeAlergias(
   actor: Actor | null,
