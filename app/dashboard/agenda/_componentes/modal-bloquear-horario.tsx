@@ -1,12 +1,14 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Calendar, Clock, NotebookPen } from "lucide-react"
+import { useEffect, useId, useState } from "react"
+import { Calendar, NotebookPen } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { Selector } from "@/components/comunes/selector"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { Aviso } from "@/components/panel/aviso"
+import { CampoHora } from "@/components/panel/campo-hora"
+import { ETIQUETA } from "@/components/panel/estilos"
 import {
   bloqueoEnBlanco,
   crearBloqueo,
@@ -43,6 +45,9 @@ export function ModalBloquearHorario({ dia, eligeAQuien, memberIdPropio, onCread
   )
   // Las horas que se escriben son las del negocio (#99).
   const zona = useZonaDelNegocio()
+  const idBase = useId()
+  const idDeHoraDesde = `${idBase}-hora-desde`
+  const idDeHoraHasta = `${idBase}-hora-hasta`
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState("")
   const [profesionales, setProfesionales] = useState<Profesional[]>([])
@@ -110,14 +115,17 @@ export function ModalBloquearHorario({ dia, eligeAQuien, memberIdPropio, onCread
             icono={<Calendar className="size-4" aria-hidden="true" strokeWidth={1.75} />}
             required
           />
-          <CampoFormulario
-            etiqueta="Hora"
-            type="time"
-            value={form.horaDesde}
-            onChange={(e) => cambiar("horaDesde", e.target.value)}
-            icono={<Clock className="size-4" aria-hidden="true" strokeWidth={1.75} />}
-            required
-          />
+          <div className="min-w-0">
+            <label htmlFor={idDeHoraDesde} className={ETIQUETA}>
+              Hora
+            </label>
+            <CampoHora
+              id={idDeHoraDesde}
+              etiqueta="Hora desde"
+              value={form.horaDesde}
+              onChange={(valor) => cambiar("horaDesde", valor)}
+            />
+          </div>
           <CampoFormulario
             etiqueta="Hasta el día"
             type="date"
@@ -127,14 +135,17 @@ export function ModalBloquearHorario({ dia, eligeAQuien, memberIdPropio, onCread
             icono={<Calendar className="size-4" aria-hidden="true" strokeWidth={1.75} />}
             required
           />
-          <CampoFormulario
-            etiqueta="Hora"
-            type="time"
-            value={form.horaHasta}
-            onChange={(e) => cambiar("horaHasta", e.target.value)}
-            icono={<Clock className="size-4" aria-hidden="true" strokeWidth={1.75} />}
-            required
-          />
+          <div className="min-w-0">
+            <label htmlFor={idDeHoraHasta} className={ETIQUETA}>
+              Hora
+            </label>
+            <CampoHora
+              id={idDeHoraHasta}
+              etiqueta="Hora hasta"
+              value={form.horaHasta}
+              onChange={(valor) => cambiar("horaHasta", valor)}
+            />
+          </div>
         </div>
 
         <CampoFormulario

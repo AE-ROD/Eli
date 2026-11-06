@@ -144,8 +144,8 @@ describe("base falsa: NOT, has y _count", () => {
   })
 
   it("como Postgres, una lista en NULL no sale ni con has ni con su NOT: sólo con equals: null", async () => {
-    // Sin `tags`: la columna no tiene default y queda en NULL, como en la base de verdad.
-    await prisma.customer.create({ data: { id: "c-null", businessId: "n1", name: "Sin etiquetas" } })
+    // Un cliente de antes de que `tags` tuviera default (#160), o uno escrito a mano con NULL.
+    await prisma.customer.create({ data: { id: "c-null", businessId: "n1", name: "Sin etiquetas", tags: null } })
 
     const conVip = await prisma.customer.findMany({ where: { tags: { has: "VIP" } } })
     const sinVip = await prisma.customer.findMany({ where: { NOT: { tags: { has: "VIP" } } } })
@@ -158,6 +158,16 @@ describe("base falsa: NOT, has y _count", () => {
     expect(sinVip).toEqual([])
     expect(enNull.map((c) => c.id)).toEqual(["c-null"])
     expect(vigentes.map((c) => c.id)).toEqual(["c-null"])
+  })
+
+  it("un cliente creado sin decir sus etiquetas queda con la lista vacía, el default de la base (#160)", async () => {
+    await prisma.customer.create({ data: { id: "c-nuevo", businessId: "n1", name: "Sin etiquetas" } })
+
+    const [cliente] = await prisma.customer.findMany({ where: { id: "c-nuevo" } })
+    const sinVip = await prisma.customer.findMany({ where: { NOT: { tags: { has: "VIP" } } } })
+
+    expect(cliente.tags).toEqual([])
+    expect(sinVip.map((c) => c.id)).toContain("c-nuevo")
   })
 
   it("_count cuenta los relacionados, con su where", async () => {
@@ -407,12 +417,11 @@ describe("base falsa: el trigger atencion_servicios_comision_inmutable (#116)", 
     // cascada), así que se carga la base en ese estado.
     base.reiniciar({ ...base.volcado(), visit: [] })
 
-    // La base falsa revisa todas las FK en cada UPDATE (Postgres sólo las que
-    // cambian), así que la línea huérfana la frena la FK a su atención (P2003).
-    // Lo que importa acá es que el trigger la dejó pasar: no es un 23514.
-    const suelta = prisma.visitService.update({ where: { id: "liquidada" }, data: { memberId: null } })
-    await expect(suelta).rejects.toMatchObject({ code: "P2003" })
-    await expect(suelta).rejects.not.toThrow(rechazo)
+    // El trigger la deja pasar, y la FK a su atención no se revisa porque
+    // `visitId` no cambia (#134): Postgres sólo revisa las FK que cambian.
+    await expect(prisma.visitService.update({ where: { id: "liquidada" }, data: { memberId: null } })).resolves.toMatchObject({
+      memberId: null,
+    })
     // Lo congelado sigue sin cambiar, con o sin atención: esa regla no tiene excepción.
     await expect(prisma.visitService.update({ where: { id: "liquidada" }, data: { commissionPercent: 1 } })).rejects.toThrow(
       /ya está congelada/
@@ -516,9 +525,15 @@ describe("base falsa: los triggers atencion_servicios_mismo_negocio y _liquidada
 
     it("en un UPDATE sin atención (cascada del negocio) deja pasar", async () => {
       base.reiniciar({ ...base.volcado(), visit: [] })
-      // La FK a la atención la frena igual (P2003 de la FK, no del trigger).
-      const cambio = prisma.visitService.update({ where: { id: "suelta" }, data: { productId: "p2" } })
-      await expect(cambio).rejects.toThrow(/FK rota/)
+      // Sin atención no hay negocio con qué comparar, y la FK a la atención no
+      // se revisa porque `visitId` no cambia (#134). La del producto sí, y existe.
+      await expect(prisma.visitService.update({ where: { id: "suelta" }, data: { productId: "p2" } })).resolves.toMatchObject({
+        productId: "p2",
+      })
+      // Un producto que no existe sí lo frena la FK, que cambió.
+      await expect(prisma.visitService.update({ where: { id: "suelta" }, data: { productId: "no-existe" } })).rejects.toThrow(
+        /FK rota/
+      )
     })
   })
 
@@ -998,5 +1013,58 @@ describe("base falsa: ON DELETE SET NULL y las cascadas que faltaban (#151)", ()
       await prisma.service.delete({ where: { id: "s1" } })
       expect(fila("visitService", "l1")).toMatchObject({ serviceId: null, productId: "p3" })
     })
+  })
+})
+
+describe("base falsa: un UPDATE sólo revisa las FK que cambian (#134)", () => {
+  beforeEach(() => {
+    base.reiniciar({
+      business: [
+        { id: "n1", name: "Uno", slug: "uno", userId: "u1" },
+        { id: "n2", name: "Dos", slug: "dos", userId: "u2" },
+      ],
+      user: [
+        { id: "u1", name: "Ana", email: "a@test" },
+        { id: "u2", name: "Otro", email: "o@test" },
+      ],
+      businessMember: [
+        { id: "m1", businessId: "n1", userId: "u1" },
+        { id: "m2", businessId: "n2", userId: "u2" },
+      ],
+      // Una cita que apunta a un profesional que ya no está: el estado a medio
+      // camino de una cascada, o un dato de antes de una FK.
+      appointment: [
+        { id: "cita-1", businessId: "n1", title: "Corte", startTime: new Date(1), endTime: new Date(2), memberId: "fantasma" },
+        { id: "cita-2", businessId: "n1", title: "Color", startTime: new Date(3), endTime: new Date(4), memberId: "m1" },
+      ],
+      timeBlock: [{ id: "b1", businessId: "n1", memberId: "m1", startTime: new Date(1), endTime: new Date(2) }],
+    })
+  })
+
+  it("cambiar otro campo no revisa la FK que queda igual", async () => {
+    await expect(prisma.appointment.update({ where: { id: "cita-1" }, data: { title: "Corte y barba" } })).resolves.toMatchObject({
+      title: "Corte y barba",
+    })
+  })
+
+  it("la FK que cambia sí se revisa, y si falla la fila queda como estaba", async () => {
+    await expect(prisma.appointment.update({ where: { id: "cita-2" }, data: { memberId: "no-existe", title: "X" } })).rejects.toMatchObject({
+      code: "P2003",
+    })
+    expect(base.buscar("appointment", { id: "cita-2" })[0]).toMatchObject({ memberId: "m1", title: "Color" })
+  })
+
+  it("en una FK compuesta, cambiar sólo businessId también la revisa", async () => {
+    await expect(prisma.timeBlock.update({ where: { id: "b1" }, data: { businessId: "n2" } })).rejects.toThrow(/FK compuesta rota/)
+    await expect(prisma.timeBlock.update({ where: { id: "b1" }, data: { motivo: "Vacaciones" } })).resolves.toMatchObject({
+      motivo: "Vacaciones",
+    })
+  })
+
+  it("updateMany es todo o nada: si una fila falla su FK, no cambia ninguna", async () => {
+    await expect(
+      prisma.appointment.updateMany({ where: { businessId: "n1" }, data: { serviceId: "no-existe" } })
+    ).rejects.toMatchObject({ code: "P2003" })
+    expect(base.buscar("appointment").map((cita) => cita.serviceId)).toEqual([null, null])
   })
 })

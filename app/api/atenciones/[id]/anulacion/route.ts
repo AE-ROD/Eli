@@ -16,7 +16,7 @@ import { ESTADOS_DE_RESERVA } from "@/lib/llegadas"
 import { ORIGEN_FILA } from "@/lib/fila-virtual"
 import { programarAvisoDeFila } from "@/lib/fila-virtual-servidor"
 import { actorDeSesion, puedeAnular } from "@/lib/permisos"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import {
   ErrorDeAtencion,
   buscarAtencion,
@@ -67,7 +67,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   try {
-    const { motivo } = anulacionSchema.parse((await cuerpoDelPedido(request)) ?? {})
+    const recibido = await cuerpoConTope(request)
+    if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+    const { motivo } = anulacionSchema.parse(recibido.cuerpo ?? {})
 
     if (!transicionPermitida(existente.status, "anulada")) {
       throw new ErrorDeAtencion(409, "Esta atención ya está anulada.")

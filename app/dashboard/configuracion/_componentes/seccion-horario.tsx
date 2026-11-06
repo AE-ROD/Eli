@@ -5,8 +5,9 @@ import { Clock, Save } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { Interruptor } from "@/components/comunes/interruptor"
 import { Aviso } from "@/components/panel/aviso"
+import { CampoHora } from "@/components/panel/campo-hora"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
-import { CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
 import { guardarHorario, type HorarioDelDia } from "../_datos"
 
@@ -149,20 +150,18 @@ export function SeccionHorario({
 
               {horario.active ? (
                 <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:flex-1">
-                  <input
-                    type="time"
-                    aria-label={`${dia}: desde`}
+                  <CampoHora
+                    etiqueta={`${dia}: desde`}
                     value={horario.startTime}
-                    onChange={(e) => cambiarHora(horario.dayOfWeek, "startTime", e.target.value)}
-                    className={cn(CAMPO, "w-auto min-w-0 flex-1 tabular-nums sm:w-32 sm:flex-none")}
+                    onChange={(valor) => cambiarHora(horario.dayOfWeek, "startTime", valor)}
+                    className="min-w-0 flex-1 sm:w-40 sm:flex-none"
                   />
                   <span className="shrink-0 text-sm text-texto-2">hasta</span>
-                  <input
-                    type="time"
-                    aria-label={`${dia}: hasta`}
+                  <CampoHora
+                    etiqueta={`${dia}: hasta`}
                     value={horario.endTime}
-                    onChange={(e) => cambiarHora(horario.dayOfWeek, "endTime", e.target.value)}
-                    className={cn(CAMPO, "w-auto min-w-0 flex-1 tabular-nums sm:w-32 sm:flex-none")}
+                    onChange={(valor) => cambiarHora(horario.dayOfWeek, "endTime", valor)}
+                    className="min-w-0 flex-1 sm:w-40 sm:flex-none"
                   />
                 </div>
               ) : (

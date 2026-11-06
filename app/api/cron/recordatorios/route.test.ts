@@ -341,6 +341,58 @@ describe("GET /api/cron/recordatorios", () => {
       })
     })
 
+    it("#140: si Resend responde un error ambiguo (el correo pudo llegar), el hash se queda y sólo se libera la marca", async () => {
+      prismaMock.appointment.findMany.mockResolvedValue([sinEnlace])
+      mockEnviarRecordatorio.mockResolvedValue({ data: null, error: { name: "application_error", message: "x" } })
+      vi.spyOn(console, "error").mockImplementation(() => {})
+      const { GET } = await import("./route")
+
+      expect(await (await GET(autorizada())).json()).toMatchObject({ enviados: 0, fallidos: 1 })
+
+      expect(llamadasQuePonenToken()).toHaveLength(1)
+      expect(prismaMock.appointment.updateMany).toHaveBeenLastCalledWith({
+        where: { id: "cita-1", reminderSentAt: AHORA },
+        data: { reminderSentAt: null },
+      })
+      expect(prismaMock.appointment.updateMany.mock.calls.some(([args]) => (args as { data: object }).data && "manageTokenHash" in (args as { data: object }).data && (args as { data: { manageTokenHash: unknown } }).data.manageTokenHash === null)).toBe(false)
+    })
+
+    it("#140: si el envío lanza con el enlace ya puesto, tampoco se borra el hash", async () => {
+      prismaMock.appointment.findMany.mockResolvedValue([sinEnlace])
+      mockEnviarRecordatorio.mockRejectedValue(new Error("se cortó la respuesta"))
+      vi.spyOn(console, "error").mockImplementation(() => {})
+      const { GET } = await import("./route")
+
+      await GET(autorizada())
+
+      expect(prismaMock.appointment.updateMany).toHaveBeenLastCalledWith({
+        where: { id: "cita-1", reminderSentAt: AHORA },
+        data: { reminderSentAt: null },
+      })
+    })
+
+    it("#164: dentro del plazo no genera enlace y el correo no ofrece cancelar ni cambiar", async () => {
+      // La cita es en 24 horas; con 48 de plazo ya no se puede cambiar.
+      prismaMock.appointment.findMany.mockResolvedValue([{ ...sinEnlace, business: { ...sinEnlace.business, cancelacionHorasAntes: 48 } }])
+      const { GET } = await import("./route")
+
+      await GET(autorizada())
+
+      expect(llamadasQuePonenToken()).toHaveLength(0)
+      const datos = mockEnviarRecordatorio.mock.calls[0][0] as { sePuedeCambiar: boolean }
+      expect(datos).not.toHaveProperty("enlaceDeGestion")
+      expect(datos.sePuedeCambiar).toBe(false)
+    })
+
+    it("#164: fuera del plazo dice que se puede cambiar", async () => {
+      prismaMock.appointment.findMany.mockResolvedValue([sinEnlace])
+      const { GET } = await import("./route")
+
+      await GET(autorizada())
+
+      expect((mockEnviarRecordatorio.mock.calls[0][0] as { sePuedeCambiar: boolean }).sePuedeCambiar).toBe(true)
+    })
+
     it("si la limpieza falla, no deja un hash suelto: no hay escritura parcial que reintentar", async () => {
       prismaMock.appointment.findMany.mockResolvedValue([sinEnlace])
       mockEnviarRecordatorio.mockResolvedValue({ data: null, error: { name: "rate_limit_exceeded", message: "x" } })

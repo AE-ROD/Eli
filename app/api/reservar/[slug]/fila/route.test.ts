@@ -12,11 +12,11 @@ import { MOTIVO_SALIO_DE_LA_FILA } from "@/lib/fila-virtual"
  */
 
 const mockVerificarLimite = vi.fn()
-const mockQuedaLimite = vi.fn()
+const mockDevolverLimite = vi.fn()
 vi.mock("@/lib/rate-limit", () => ({
   obtenerIp: () => "203.0.113.7",
   verificarLimite: (...args: unknown[]) => mockVerificarLimite(...args),
-  quedaLimite: (...args: unknown[]) => mockQuedaLimite(...args),
+  devolverLimite: (...args: unknown[]) => mockDevolverLimite(...args),
 }))
 
 const correos = vi.hoisted(() => ({
@@ -45,7 +45,7 @@ const DE_NOCHE = new Date("2030-01-07T23:30:00.000Z")
 type Registro = Record<string, unknown>
 
 /** Los dos negocios con la fila encendida y abiertos de 9 a 20 todos los días. */
-function escenario({ negocio = {} as Registro, visitas = [] as Registro[] } = {}) {
+function escenario({ negocio = {} as Registro, visitas = [] as Registro[], bloqueos = [] as Registro[] } = {}) {
   const datos = datosBase()
   const horario = (businessId: string) =>
     [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
@@ -61,6 +61,7 @@ function escenario({ negocio = {} as Registro, visitas = [] as Registro[] } = {}
     business: datos.business.map((b) => ({ ...b, filaVirtualActiva: true, ...(b.id === NEGOCIO ? negocio : {}) })),
     workSchedule: [...horario(NEGOCIO), ...horario(OTRO_NEGOCIO)],
     visit: visitas,
+    timeBlock: bloqueos,
   })
 }
 
@@ -122,7 +123,7 @@ beforeEach(() => {
   vi.setSystemTime(AHORA)
   tareas.length = 0
   mockVerificarLimite.mockResolvedValue({ permitido: true })
-  mockQuedaLimite.mockResolvedValue({ permitido: true })
+  mockDevolverLimite.mockResolvedValue(undefined)
   correos.aviso.mockResolvedValue({ data: { id: "correo" }, error: null })
   escenario()
 })
@@ -224,6 +225,29 @@ describe("POST /api/reservar/[slug]/fila: anotarse", () => {
     expect((await anotarse()).status).toBe(409)
   })
 
+  it("un día sin horario general, el horario personal de un encargado no abre la fila; el de un profesional sí (#168)", async () => {
+    const delMiembro = (memberId: string) => ({
+      id: `h-${memberId}`,
+      businessId: NEGOCIO,
+      memberId,
+      dayOfWeek: 1,
+      startTime: "09:00",
+      endTime: "20:00",
+    })
+    const conHorario = (memberId: string) =>
+      base.reiniciar({
+        ...datosBase(),
+        business: datosBase().business.map((b) => ({ ...b, filaVirtualActiva: true })),
+        workSchedule: [delMiembro(memberId)],
+      })
+
+    conHorario("m-encargado")
+    expect((await anotarse()).status).toBe(409)
+
+    conHorario("m-carla")
+    expect((await anotarse()).status).toBe(201)
+  })
+
   it("con tantas personas esperando como el tope: 409; las que ya se atienden o salieron no cuentan", async () => {
     escenario({
       negocio: { filaVirtualTope: 2 },
@@ -244,40 +268,78 @@ describe("POST /api/reservar/[slug]/fila: anotarse", () => {
   it("cuenta por IP y por negocio; si cualquiera se pasa, 429 sin crear nada", async () => {
     await anotarse()
     expect(mockVerificarLimite).toHaveBeenCalledWith("filaVirtual", "203.0.113.7")
-    expect(mockQuedaLimite).toHaveBeenCalledWith("filaVirtualPorNegocio", NEGOCIO)
     expect(mockVerificarLimite).toHaveBeenCalledWith("filaVirtualPorNegocio", NEGOCIO)
 
     mockVerificarLimite.mockResolvedValueOnce({ permitido: false })
     expect((await anotarse({ nombre: "Por IP" })).status).toBe(429)
-    mockQuedaLimite.mockResolvedValueOnce({ permitido: false })
+    mockVerificarLimite.mockResolvedValueOnce({ permitido: true }).mockResolvedValueOnce({ permitido: false })
     expect((await anotarse({ nombre: "Por Negocio" })).status).toBe(429)
     expect(deLaFila()).toHaveLength(1)
+    // Un 429 del balde no descontó nada: no hay nada que devolver.
+    expect(mockDevolverLimite).not.toHaveBeenCalled()
   })
 
-  it("el balde del negocio sólo se descuenta cuando la persona quedó anotada, no en los rechazos", async () => {
-    const descuentosDelNegocio = () =>
-      mockVerificarLimite.mock.calls.filter(([tipo]) => tipo === "filaVirtualPorNegocio").length
+  it("el balde del negocio se descuenta en un solo paso antes de anotar y se devuelve en los rechazos (#136)", async () => {
+    const neto = () =>
+      mockVerificarLimite.mock.calls.filter(([tipo]) => tipo === "filaVirtualPorNegocio").length -
+      mockDevolverLimite.mock.calls.filter(([tipo]) => tipo === "filaVirtualPorNegocio").length
 
-    // Local cerrado: no se descuenta.
+    // Local cerrado: se devuelve.
     vi.setSystemTime(DE_NOCHE)
     for (let i = 0; i < 5; i++) expect((await anotarse({ nombre: `Cerrado ${i}` })).status).toBe(409)
-    expect(descuentosDelNegocio()).toBe(0)
+    expect(neto()).toBe(0)
 
-    // Fila llena: tampoco.
+    // Fila llena: también.
     vi.setSystemTime(AHORA)
     escenario({ negocio: { filaVirtualTope: 1 }, visitas: [enFila("a", 1)] })
     for (let i = 0; i < 5; i++) expect((await anotarse({ nombre: `Llena ${i}` })).status).toBe(409)
-    expect(descuentosDelNegocio()).toBe(0)
+    expect(neto()).toBe(0)
 
-    // Datos inválidos y negocio sin fila: ni se pregunta.
+    // Un error de la base: también.
+    escenario()
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    base.prisma.$transaction.mockRejectedValueOnce(new Error("se cayó la base"))
+    expect((await anotarse({ nombre: "Con Error" })).status).toBe(500)
+    expect(neto()).toBe(0)
+
+    // Datos inválidos y negocio sin fila: ni se toca.
     expect((await anotarse({ nombre: "J" })).status).toBe(400)
     expect((await anotarse({ nombre: "Juan" }, "no-existe")).status).toBe(404)
-    expect(descuentosDelNegocio()).toBe(0)
+    expect(mockVerificarLimite.mock.calls.filter(([tipo]) => tipo === "filaVirtualPorNegocio")).toHaveLength(11)
 
-    // Anotada: una vez.
-    escenario()
+    // Anotada: cuenta una vez y no se devuelve.
     expect((await anotarse()).status).toBe(201)
-    expect(descuentosDelNegocio()).toBe(1)
+    expect(neto()).toBe(1)
+  })
+
+  it("dentro de un bloqueo de todo el negocio (feriado) está cerrado; el de un profesional no lo cierra (#136)", async () => {
+    const bloqueo = (id: string, extra: Registro): Registro => ({
+      id,
+      businessId: NEGOCIO,
+      memberId: null,
+      startTime: new Date("2030-01-07T12:00:00.000Z"),
+      endTime: new Date("2030-01-07T23:00:00.000Z"),
+      ...extra,
+    })
+
+    // De un profesional, uno que terminó justo ahora y uno de otro negocio: abierto.
+    escenario({
+      bloqueos: [
+        bloqueo("b-carla", { memberId: "m-carla" }),
+        bloqueo("b-antes", { endTime: AHORA }),
+        bloqueo("b-otro", { businessId: OTRO_NEGOCIO }),
+      ],
+    })
+    expect((await anotarse({ nombre: "Sin Feriado" })).status).toBe(201)
+
+    // De todo el negocio, desde ahora: cerrado, como en la reserva pública.
+    escenario({ bloqueos: [bloqueo("b-feriado", { startTime: AHORA }), bloqueo("b-otro", { businessId: OTRO_NEGOCIO })] })
+    const { status, cuerpo } = await anotarse({ nombre: "En Feriado" })
+    expect(status).toBe(409)
+    expect(cuerpo.error).toMatch(/no está atendiendo/)
+    expect(deLaFila()).toHaveLength(0)
+    // El bloqueo de otro negocio cierra sólo ése.
+    expect((await anotarse({ nombre: "Otro Local" }, "salon-dos")).status).toBe(409)
   })
 
   it("al anotarse se programa el aviso: quien queda con 0 o 1 adelante y dejó correo lo recibe", async () => {

@@ -230,14 +230,27 @@ export interface PaginaPublicaGuardada {
   mediosDePago: string[]
 }
 
-export async function guardarPaginaPublica(datos: DatosDePaginaPublica): Promise<Resultado<PaginaPublicaGuardada>> {
+/**
+ * Guarda la página. De las especialidades van sólo las que cambiaron respecto
+ * de `guardadas` (lo que la pantalla leyó o guardó por última vez): mandarlas
+ * todas reescribía también las que no se tocaron, con lo que la pantalla
+ * tenía cargado, y pisaba lo que otra persona hubiera cambiado mientras
+ * tanto (#113).
+ */
+export async function guardarPaginaPublica(
+  datos: DatosDePaginaPublica,
+  guardadas: readonly EspecialidadDeMiembro[]
+): Promise<Resultado<PaginaPublicaGuardada>> {
   const { especialidades, ...resto } = datos
+  const antes = new Map(guardadas.map((fila) => [fila.memberId, fila.especialidad]))
   return pedir<PaginaPublicaGuardada>(
     "/api/configuracion/pagina",
     "No se pudo guardar la página",
     conJson("PUT", {
       ...resto,
-      especialidades: especialidades.map(({ memberId, especialidad }) => ({ memberId, especialidad })),
+      especialidades: especialidades
+        .filter((fila) => antes.get(fila.memberId) !== fila.especialidad)
+        .map(({ memberId, especialidad }) => ({ memberId, especialidad })),
     })
   )
 }

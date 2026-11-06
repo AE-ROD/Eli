@@ -133,3 +133,19 @@ export function seccionDeLaRuta(ruta: string): SeccionDelPanel | null {
     ) ?? null
   )
 }
+
+/**
+ * La sección que la barra lateral marca en `ruta`, entre las que muestra
+ * (`enLaBarra`). Casi siempre es la de la ruta. La excepción es el
+ * comprobante de una liquidación (`/dashboard/liquidaciones/<id>`): cuelga de
+ * Liquidaciones, pero el profesional no tiene esa sección en la barra y llega
+ * desde Mi plata, así que se marca Mi plata (#127). Si no, no se marcaba nada.
+ */
+export function seccionMarcadaEnLaBarra(ruta: string, enLaBarra: readonly SeccionDelPanel[]): SeccionDelPanel | null {
+  const seccion = seccionDeLaRuta(ruta)
+  const visible = (id: IdDeSeccion) => enLaBarra.some((candidata) => candidata.id === id)
+  if (seccion?.id === SECCION_DE_LIQUIDACIONES.id && !visible(seccion.id) && visible(SECCION_MI_PLATA.id)) {
+    return SECCION_MI_PLATA
+  }
+  return seccion
+}

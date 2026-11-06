@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import type { NextRequest } from "next/server"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
 import { generarToken } from "@/lib/tokens"
@@ -72,7 +73,7 @@ function escenario(extra: { appointment?: Registro[]; appointmentService?: Regis
 
 const conSlug = (slug = "salon-uno") => ({ params: Promise.resolve({ slug }) })
 const pedido = (url: string, cuerpo?: unknown) =>
-  ({ url, headers: new Headers(), json: async () => cuerpo }) as unknown as NextRequest
+  ({ url, headers: new Headers(), body: cuerpoDePrueba(cuerpo) }) as unknown as NextRequest
 
 async function horas(consulta: string, slug = "salon-uno") {
   const { GET } = await import("./disponibilidad/route")
@@ -355,14 +356,14 @@ describe("el enlace de gestión con varios servicios", () => {
     expect((await (await GET(pedido("http://localhost/x"), params)).json()).sePuedeReagendar).toBe(false)
   })
 
-  it("una cita de antes, sin filas, se reagenda como siempre: con la duración de su servicio", async () => {
+  it("una cita de antes, sin filas, conserva lo que dura si se alargó en el panel (#138)", async () => {
     conCitaDeDos([])
     const { POST } = await import("./cita/[token]/reagendar/route")
     const respuesta = await POST(pedido("http://localhost/x", { fecha: "2030-01-08", hora: "11:00" }), params)
     expect(respuesta.status).toBe(200)
     const [cita] = base.buscar("appointment", { id: "c-lucia" })
-    // Corte: 60 minutos.
-    expect(cita.endTime).toEqual(aLas("12:00", "2030-01-08"))
+    // Corte dura 60 minutos, pero la cita dura 90: no se acorta.
+    expect(cita.endTime).toEqual(aLas("12:30", "2030-01-08"))
   })
 })
 

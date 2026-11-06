@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
 import { enviarAvisoProfesional } from "@/lib/email"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 
 /**
  * La reserva pública por profesional (P5): la lista pública de quiénes
@@ -77,7 +78,7 @@ async function horas(consulta: string, slug = "salon-uno") {
 async function confirmar(hora: string, extra: Registro = {}) {
   const { POST } = await import("./confirmar/route")
   const cuerpo = { servicioId: "s-corte", fecha: FECHA, hora, nombre: "Lucía", apellido: "Pérez", ...extra }
-  const respuesta = await POST({ headers: new Headers(), json: async () => cuerpo } as unknown as NextRequest, conSlug())
+  const respuesta = await POST({ headers: new Headers(), body: cuerpoDePrueba(cuerpo) } as unknown as NextRequest, conSlug())
   return { status: respuesta.status, cuerpo: await respuesta.json() }
 }
 
@@ -125,6 +126,8 @@ describe("GET /api/reservar/[slug]/profesionales", () => {
         ...[1, 2, 3].map((dia) => ({ id: `h-carla-${dia}`, businessId: NEGOCIO, memberId: "m-carla", dayOfWeek: dia, startTime: "14:00", endTime: "20:00" })),
         { id: "h-carla-inactivo", businessId: NEGOCIO, memberId: "m-carla", dayOfWeek: 6, startTime: "10:00", endTime: "14:00", active: false },
         { id: "h-ajeno", businessId: OTRO_NEGOCIO, memberId: null, dayOfWeek: 0, startTime: "09:00", endTime: "12:00" },
+        // El encargado no atiende: su jueves no abre el día para nadie (#168).
+        { id: "h-encargado", businessId: NEGOCIO, memberId: "m-encargado", dayOfWeek: 4, startTime: "09:00", endTime: "18:00" },
       ],
     })
 
@@ -134,8 +137,8 @@ describe("GET /api/reservar/[slug]/profesionales", () => {
       // Carla, en su horario propio: ni el viernes del negocio ni su sábado inactivo.
       ["m-carla", [1, 2, 3]],
       // Pedro, sin horario propio, en el del negocio; los días sin horario
-      // general vale el de los miembros (`franjasDeAtencion`), igual que en
-      // la disponibilidad.
+      // general vale el de los miembros que atienden (`franjasDeAtencion`),
+      // igual que en la disponibilidad; el jueves del encargado no.
       ["m-pedro", [LUNES, 2, 3, 5]],
     ])
   })

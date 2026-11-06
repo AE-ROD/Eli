@@ -12,7 +12,9 @@ import {
   SECCIONES_DE_LA_PLATA,
   SECCIONES_DEL_PANEL,
   SIN_ACCESO_A_LA_PLATA,
+  SECCION_DE_INICIO,
   seccionDeLaRuta,
+  seccionMarcadaEnLaBarra,
   seccionesDeLaPlata,
   type AccesoALaPlata,
 } from "./secciones-del-panel"
@@ -135,5 +137,29 @@ describe("las secciones de la plata del equipo", () => {
   it("con todo el acceso, las cuatro en su orden", () => {
     const todas = { miPlata: true, caja: true, liquidaciones: true, comisiones: true }
     expect(seccionesDeLaPlata(todas)).toEqual([...SECCIONES_DE_LA_PLATA])
+  })
+})
+
+describe("seccionMarcadaEnLaBarra", () => {
+  const barraCon = (acceso: AccesoALaPlata) => [SECCION_DE_INICIO, ...seccionesDeLaPlata(acceso)]
+  const delProfesional = barraCon({ miPlata: true, caja: false, liquidaciones: false, comisiones: false })
+  const delEncargado = barraCon({ miPlata: true, caja: true, liquidaciones: true, comisiones: false })
+
+  it("el profesional, en el comprobante de su liquidación, ve marcada Mi plata (#127)", () => {
+    expect(seccionMarcadaEnLaBarra("/dashboard/liquidaciones/abc", delProfesional)?.id).toBe("mi-plata")
+  })
+
+  it("quien tiene Liquidaciones en la barra la ve marcada en el comprobante", () => {
+    expect(seccionMarcadaEnLaBarra("/dashboard/liquidaciones/abc", delEncargado)?.id).toBe("liquidaciones")
+  })
+
+  it("en las demás rutas es la sección de la ruta", () => {
+    expect(seccionMarcadaEnLaBarra("/dashboard/mi-plata", delProfesional)?.id).toBe("mi-plata")
+    expect(seccionMarcadaEnLaBarra("/dashboard", delProfesional)?.id).toBe("inicio")
+    expect(seccionMarcadaEnLaBarra("/dashboard/agendas", delProfesional)).toBeNull()
+  })
+
+  it("sin Mi plata ni Liquidaciones en la barra, no se inventa otra", () => {
+    expect(seccionMarcadaEnLaBarra("/dashboard/liquidaciones/abc", [SECCION_DE_INICIO])?.id).toBe("liquidaciones")
   })
 })

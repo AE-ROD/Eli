@@ -13,7 +13,9 @@ import { diaDeLaSemana, instanteEn, sumarDias } from "@/lib/zona-horaria"
  *   progreso, completada) dentro de lo disponible, sobre lo disponible.
  *   Disponible = su horario (el propio si cargó alguno, si no el del negocio,
  *   como al agendar: `franjasParaElDia`) menos sus bloqueos y los de todo el
- *   negocio. Una cita fuera de su horario no suma (no infla más del 100 %), y
+ *   negocio. `miembros` y `filas` son sólo los de quienes atienden y el
+ *   horario general (los arma el endpoint): el encargado no suma capacidad
+ *   ni presta su horario (#168). Una cita fuera de su horario no suma (no infla más del 100 %), y
  *   dos citas que se pisan cuentan una vez. Sin horario disponible la
  *   ocupación es `null` ("sin horario"), nunca `NaN`; con horario y sin citas,
  *   0.

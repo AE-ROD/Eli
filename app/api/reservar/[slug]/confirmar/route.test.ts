@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
 import { enviarConfirmacionCliente } from "@/lib/email"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 
 const mockVerificarLimite = vi.fn()
 
@@ -29,7 +30,7 @@ const DIA = 1
 const OTRO_DIA = 2
 
 const pedidoFalso = (cuerpo: unknown): NextRequest =>
-  ({ headers: new Headers(), json: async () => cuerpo }) as unknown as NextRequest
+  ({ headers: new Headers(), body: cuerpoDePrueba(cuerpo) }) as unknown as NextRequest
 
 const conSlug = { params: Promise.resolve({ slug: "salon-uno" }) }
 
@@ -101,6 +102,13 @@ describe("POST /api/reservar/[slug]/confirmar: la hora tiene que caer en el hora
     })
   })
 
+  it("la hora con que decide sale de la base, no del reloj de esta instancia (#152)", async () => {
+    escenario([franja({ startTime: "09:00", endTime: "13:00" })])
+
+    expect((await confirmar("12:00")).status).toBe(201)
+    expect(base.prisma.$queryRaw).toHaveBeenCalledWith(expect.arrayContaining(["SELECT clock_timestamp() AS ahora"]))
+  })
+
   it.each([
     ["antes de abrir", "08:00"],
     ["empezando dentro pero terminando después del cierre", "12:30"],
@@ -115,6 +123,19 @@ describe("POST /api/reservar/[slug]/confirmar: la hora tiene que caer en el hora
     expect(cuerpo.error).toMatch(/fuera de la atención/)
     expect(citasCreadas()).toHaveLength(0)
     expect(base.buscar("customer", { name: "Lucía Pérez" })).toHaveLength(0)
+  })
+
+  it("#46: una hora que cabe pero que la disponibilidad no ofrece (09:17): 409 sin crear nada", async () => {
+    escenario([franja({ startTime: "09:00", endTime: "13:00" })])
+
+    for (const hora of ["09:17", "10:45", "11:59"]) {
+      const { status, cuerpo } = await confirmar(hora)
+      expect(status).toBe(409)
+      expect(cuerpo.error).toMatch(/fuera de la atención/)
+    }
+    expect(citasCreadas()).toHaveLength(0)
+    // Las de la grilla (cada 30 minutos desde que abre) sí.
+    expect((await confirmar("10:30")).status).toBe(201)
   })
 
   it("un profesional con horario propio atiende en el suyo: la hora fuera del general va a él", async () => {
@@ -137,6 +158,26 @@ describe("POST /api/reservar/[slug]/confirmar: la hora tiene que caer en el hora
 
     expect((await confirmar("16:00")).status).toBe(201)
     expect((await confirmar("10:00")).status).toBe(409)
+  })
+
+  it("#168: sin horario general ese día, el horario de un encargado (no atiende) no lo abre", async () => {
+    escenario([
+      franja({ memberId: "m-encargado", startTime: "09:00", endTime: "13:00" }),
+      franja({ dayOfWeek: OTRO_DIA, startTime: "09:00", endTime: "13:00" }),
+    ])
+
+    expect((await confirmar("10:00")).status).toBe(409)
+    expect(citasCreadas()).toHaveLength(0)
+  })
+
+  it("#168: el del encargado tampoco se suma al de los profesionales", async () => {
+    escenario([
+      franja({ memberId: "m-carla", startTime: "15:00", endTime: "19:00" }),
+      franja({ memberId: "m-encargado", startTime: "09:00", endTime: "13:00" }),
+    ])
+
+    expect((await confirmar("10:00")).status).toBe(409)
+    expect((await confirmar("16:00")).status).toBe(201)
   })
 
   it("con dos franjas el mismo día, acepta en la segunda y rechaza en el hueco entre ambas", async () => {
@@ -961,5 +1002,28 @@ describe("POST /api/reservar/[slug]/confirmar: el premio a quien invitó", () =>
     expect((await confirmar("10:00")).status).toBe(201)
     expect(base.prisma.business.updateMany).not.toHaveBeenCalled()
     expect(negocio(OTRO_NEGOCIO).pruebaTerminaEl).toEqual(FIN_DEL_2)
+  })
+})
+
+describe("POST /api/reservar/[slug]/confirmar: tope del cuerpo (GHSA-mrhx-c7xc-m3w5)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    relojEn("2030-01-01T12:00:00.000Z")
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 9 })
+    escenario([franja({ startTime: "09:00", endTime: "13:00" })])
+  })
+
+  it("una reserva con un cuerpo de más de 100 KB da 413 y no crea nada", async () => {
+    const { POST } = await import("./route")
+
+    const res = await POST(pedidoFalso({ ...reserva("12:00"), relleno: "x".repeat(200 * 1024) }), conSlug)
+
+    expect(res.status).toBe(413)
+    expect(await res.json()).toEqual({ error: "El pedido es demasiado grande." })
+    expect(citasCreadas()).toHaveLength(0)
+  })
+
+  it("la misma reserva, de tamaño normal, se sigue creando", async () => {
+    expect((await confirmar("12:00")).status).toBe(201)
   })
 })

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import type { NextRequest } from "next/server"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase, sesiones } from "@/pruebas/datos"
 
@@ -35,7 +36,7 @@ function escenario(cita: Record<string, unknown> = {}) {
   })
 }
 
-const pedido = (cuerpo?: unknown) => ({ headers: new Headers(), json: async () => cuerpo }) as unknown as NextRequest
+const pedido = (cuerpo?: unknown) => ({ headers: new Headers(), body: cuerpoDePrueba(cuerpo) }) as unknown as NextRequest
 const conId = (id: string) => ({ params: Promise.resolve({ id }) })
 
 async function put(id: string, cuerpo: unknown) {

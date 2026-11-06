@@ -1,12 +1,14 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Calendar, Clock } from "lucide-react"
+import { useEffect, useId, useState } from "react"
+import { Calendar } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { Selector } from "@/components/comunes/selector"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { Aviso } from "@/components/panel/aviso"
+import { CampoHora } from "@/components/panel/campo-hora"
+import { ETIQUETA } from "@/components/panel/estilos"
 import type { Advertencia } from "@/lib/mover-cita"
 import {
   asignarProfesional,
@@ -57,6 +59,9 @@ export function ModalMoverCita({
     horaFin: horaEn(cita.endTime, zona),
     memberId: cita.memberId ?? "",
   }))
+  const idBase = useId()
+  const idDeHoraInicio = `${idBase}-hora-inicio`
+  const idDeHoraFin = `${idBase}-hora-fin`
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState("")
   const [advertencias, setAdvertencias] = useState<Advertencia[]>([])
@@ -125,22 +130,28 @@ export function ModalMoverCita({
             />
 
             <div className="grid grid-cols-2 gap-3">
-              <CampoFormulario
-                etiqueta="Hora inicio"
-                type="time"
-                value={form.horaInicio}
-                onChange={(e) => cambiar("horaInicio", e.target.value)}
-                icono={<Clock className="size-4" aria-hidden="true" strokeWidth={1.75} />}
-                required
-              />
-              <CampoFormulario
-                etiqueta="Hora fin"
-                type="time"
-                value={form.horaFin}
-                onChange={(e) => cambiar("horaFin", e.target.value)}
-                icono={<Clock className="size-4" aria-hidden="true" strokeWidth={1.75} />}
-                required
-              />
+              <div className="min-w-0">
+                <label htmlFor={idDeHoraInicio} className={ETIQUETA}>
+                  Hora inicio
+                </label>
+                <CampoHora
+                  id={idDeHoraInicio}
+                  etiqueta="Hora inicio"
+                  value={form.horaInicio}
+                  onChange={(valor) => cambiar("horaInicio", valor)}
+                />
+              </div>
+              <div className="min-w-0">
+                <label htmlFor={idDeHoraFin} className={ETIQUETA}>
+                  Hora fin
+                </label>
+                <CampoHora
+                  id={idDeHoraFin}
+                  etiqueta="Hora fin"
+                  value={form.horaFin}
+                  onChange={(valor) => cambiar("horaFin", valor)}
+                />
+              </div>
             </div>
           </>
         )}

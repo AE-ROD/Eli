@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { enviarRecordatorio } from "@/lib/email"
 import { llamadaDeCronAutorizada } from "@/lib/cron"
 import { registrarError } from "@/lib/registro-de-errores"
-import { ESTADOS_GESTIONABLES } from "@/lib/gestion-de-cita"
+import { ESTADOS_GESTIONABLES, dentroDelPlazo, plazoValido } from "@/lib/gestion-de-cita"
 import { ORIGEN_RESERVA_PUBLICA } from "@/lib/reserva-publica"
 import { generarToken } from "@/lib/tokens"
 import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
@@ -11,6 +11,7 @@ import {
   ESTADOS_SIN_RECORDATORIO,
   esDeMañana,
   fechaYHoraEnElNegocio,
+  seguroQueNoSalio,
   ventanaDeBusqueda,
 } from "@/lib/recordatorios"
 
@@ -35,8 +36,19 @@ import {
  * Reservas públicas de antes de la etapa 1 (#106): no tienen enlace para
  * cancelar o reagendar (`manageTokenHash` null). Al recordarlas se les genera
  * uno (a la base va sólo el hash, y sólo si seguía vacío: nunca se pisa uno
- * existente) y el correo lo trae. Si el envío falla, el hash se borra junto
- * con la marca: el token en claro no llegó a nadie, y el reintento genera otro.
+ * existente) y el correo lo trae. Si Resend rechazó el envío
+ * (`seguroQueNoSalio`), el hash se borra junto con la marca: el token en
+ * claro no llegó a nadie, y el reintento genera otro. Si el error es ambiguo
+ * (el correo pudo llegar), el hash se queda: borrarlo dejaba en ese correo un
+ * enlace que da 404 (#140); el reintento sale sin enlace.
+ *
+ * El botón para cancelar o cambiar sólo va si la cita sigue fuera del plazo
+ * del negocio (`dentroDelPlazo`), como en la confirmación (#164): con el
+ * plazo por defecto de 24 horas, el recordatorio casi siempre llega cuando
+ * ya no se puede. Entonces tampoco se genera un enlace.
+ *
+ * Las reservas que ya tienen enlace lo traen en su correo de confirmación;
+ * el recordatorio no lo repite: la base guarda sólo el hash.
  */
 
 export const maxDuration = 60
@@ -61,8 +73,11 @@ interface CitaParaEnlace {
  * y un enlace existente nunca se reemplaza). Devuelve el token en claro para
  * el correo, o null si no corresponde o si otro proceso ya le puso uno.
  */
-async function enlaceParaCitaSinToken(cita: CitaParaEnlace): Promise<{ token: string; tokenHash: string } | null> {
-  if (cita.manageTokenHash || cita.source !== ORIGEN_RESERVA_PUBLICA) return null
+async function enlaceParaCitaSinToken(
+  cita: CitaParaEnlace,
+  sePuedeCambiar: boolean
+): Promise<{ token: string; tokenHash: string } | null> {
+  if (!sePuedeCambiar || cita.manageTokenHash || cita.source !== ORIGEN_RESERVA_PUBLICA) return null
   if (!(ESTADOS_GESTIONABLES as readonly string[]).includes(cita.status)) return null
   const enlace = generarToken()
   const { count } = await prisma.appointment.updateMany({
@@ -131,9 +146,12 @@ export async function GET(request: NextRequest) {
       if (marcada.count === 0) continue
 
       let enviado = false
+      // Si el correo seguro no salió: sólo entonces se borra el enlace nuevo.
+      let noSalio = false
       let enlaceNuevo: { token: string; tokenHash: string } | null = null
       try {
-        enlaceNuevo = await enlaceParaCitaSinToken(cita)
+        const sePuedeCambiar = dentroDelPlazo(cita.startTime, cita.business.cancelacionHorasAntes, ahora)
+        enlaceNuevo = await enlaceParaCitaSinToken(cita, sePuedeCambiar)
         const { fecha, hora } = fechaYHoraEnElNegocio(cita.startTime, cita.business.timezone)
         const resultado = await enviarRecordatorio({
           emailCliente: cita.customer.email,
@@ -145,15 +163,17 @@ export async function GET(request: NextRequest) {
           ...(enlaceNuevo
             ? {
                 enlaceDeGestion: `${baseUrl}/reservar/${encodeURIComponent(cita.business.slug)}/cita/${enlaceNuevo.token}`,
-                plazoHoras: cita.business.cancelacionHorasAntes,
+                plazoHoras: plazoValido(cita.business.cancelacionHorasAntes),
               }
             : {}),
+          sePuedeCambiar,
         })
         if (resultado?.error) {
           // Sólo el código de Resend: su mensaje puede repetir el destinatario.
           console.error("Error enviando un recordatorio:", { name: resultado.error.name })
         }
         enviado = resultado !== null && !resultado.error
+        noSalio = !enviado && seguroQueNoSalio(resultado)
       } catch (error) {
         registrarError("enviando un recordatorio", error)
       }
@@ -164,11 +184,12 @@ export async function GET(request: NextRequest) {
       }
       fallidos++
       try {
-        if (enlaceNuevo) {
+        if (enlaceNuevo && noSalio) {
           // Una sola escritura: liberar la marca y quitar el hash que puso esta
           // corrida van juntos. Con dos, si fallara la segunda quedaría un hash
           // cuyo token se perdió y el cliente nunca recibiría su enlace. Si el
-          // hash cambió entretanto, no se toca nada.
+          // hash cambió entretanto, no se toca nada. Si el correo pudo llegar
+          // (error ambiguo o el envío lanzó), el hash se queda (#140).
           await prisma.appointment.updateMany({
             where: {
               id: cita.id,

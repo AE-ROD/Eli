@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { actorDeSesion, puedeAnularLiquidacion, whereDeLiquidaciones } from "@/lib/permisos"
 import { anularLiquidacion, leerLiquidacion, quienFirma, respuestaDeErrorDePlata } from "@/lib/liquidacion"
 
@@ -30,7 +30,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!existe) return NextResponse.json({ error: "Liquidación no encontrada" }, { status: 404 })
     if (!puedeAnularLiquidacion(actor)) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
-    const { motivo } = anulacionSchema.parse(await cuerpoDelPedido(request))
+    const recibido = await cuerpoConTope(request)
+    if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+    const { motivo } = anulacionSchema.parse(recibido.cuerpo)
     const firma = await quienFirma(prisma, actor, session?.user?.id)
     if (!firma) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 

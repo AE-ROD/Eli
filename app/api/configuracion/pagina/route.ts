@@ -4,7 +4,7 @@ import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { textoOpcional, telefonoChileno } from "@/lib/campos-del-panel"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { IDS_DE_MEDIOS_DE_PAGO } from "@/lib/medios-de-pago"
 import {
   CLAVES_DE_COLOR,
@@ -26,6 +26,8 @@ import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
  * el profesional recibe 401, como en el resto de la configuración.
  *
  * Se manda la página entera, no campo por campo: lo que llega vacío se borra.
+ * Las especialidades son la excepción: la pantalla manda sólo las que
+ * cambiaron, y un miembro que no viene en la lista no se toca (#113).
  * Siempre sobre el negocio de la sesión (nunca un id del cuerpo), y las
  * especialidades sólo de miembros de ese negocio: un id ajeno o inexistente
  * es 404 y no se guarda nada.
@@ -116,7 +118,9 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
-  const leido = paginaSchema.safeParse(await cuerpoDelPedido(request))
+  const recibido = await cuerpoConTope(request)
+  if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+  const leido = paginaSchema.safeParse(recibido.cuerpo)
   if (!leido.success) return respuestaDeDatosInvalidos(leido.error)
   const { especialidades, enlaceResenas, ...pagina } = leido.data
 

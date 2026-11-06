@@ -2,6 +2,7 @@ import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import { NextResponse, type NextRequest } from "next/server"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { claveDeLimite, leerCitaDelEnlace, MENSAJE_ENLACE_INVALIDO, type CitaDelEnlace } from "@/lib/gestion-de-cita"
 import { obtenerIp, verificarLimite, type TipoLimite } from "@/lib/rate-limit"
 import { fechaYMinutosEn, zonaDelNegocio } from "@/lib/zona-horaria"
@@ -44,7 +45,10 @@ export async function abrirEnlace(
   ])
   if (!porIp.permitido || !porToken.permitido) return demasiadas()
 
-  const ahora = new Date()
+  // La hora de la base, no la de esta instancia (#152, #154): con ella se
+  // decide si la cita sigue gestionable y, en cada endpoint, el plazo y lo
+  // que se guarda (`canceladaEn`). Una sola lectura por pedido.
+  const ahora = await horaDeLaBase(prisma)
   const cita = await leerCitaDelEnlace(prisma, slug, token, ahora)
   if (!cita) return noEncontrada()
   return { cita, zona: zonaDelNegocio(cita.business.timezone), ahora, token, slug }

@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server"
 import { whereDeAgenda, type Actor } from "@/lib/permisos"
 import { coincide, type Tablas } from "@/pruebas/consultas-falsas"
 import { MARCA_DE_CLIENTE_ELIMINADO, NOMBRE_DE_CLIENTE_ELIMINADO } from "@/lib/clientes-eliminados"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 
 const mockGetServerSession = vi.fn()
 
@@ -26,7 +27,8 @@ const prismaMock = {
     create: vi.fn((args: { data: Record<string, unknown> }) => Promise.resolve({ id: "cita-nueva", ...args.data })),
   },
   customer: { findFirst: vi.fn() },
-  businessMember: { findFirst: vi.fn() },
+  // `findMany`: quiénes atienden, para el horario de las advertencias (#168).
+  businessMember: { findFirst: vi.fn(), findMany: vi.fn(() => Promise.resolve([])) },
   business: {
     findUnique: vi.fn((_args: { where: { id: string } }) => Promise.resolve({ timezone: zonaDelNegocio })),
   },
@@ -137,6 +139,19 @@ describe("GET /api/citas", () => {
 
     expect((prismaMock.appointment.findMany.mock.calls[0][0] as { select?: unknown }).select).toMatchObject({ canceladaPor: true, canceladaEn: true })
     expect(data[0]).toMatchObject({ canceladaPor: "cliente", canceladaEn: canceladaEn.toISOString() })
+  })
+
+  it("trae el comentario que el cliente dejó al reservar, para el detalle (#122)", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.appointment.findMany.mockResolvedValueOnce([
+      { id: "reservada", businessId: "negocio-1", clientComments: "Traigo una foto de referencia", visit: null },
+    ] as never)
+
+    const data = await (await GET(pedidoFalso("http://localhost/api/citas"))).json()
+
+    expect((prismaMock.appointment.findMany.mock.calls[0][0] as { select?: unknown }).select).toMatchObject({ clientComments: true })
+    expect(data[0]).toMatchObject({ clientComments: "Traigo una foto de referencia" })
   })
 
   it("sin sesión recibe 401", async () => {
@@ -302,7 +317,7 @@ describe("POST /api/citas — largos, tipos y horario", () => {
   const crear = async (cuerpo: Record<string, unknown>) => {
     const { POST } = await import("./route")
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
-    return POST({ url: "http://localhost/api/citas", json: () => Promise.resolve(cuerpo) } as unknown as NextRequest)
+    return POST({ url: "http://localhost/api/citas", headers: new Headers(), body: cuerpoDePrueba(cuerpo) } as unknown as NextRequest)
   }
 
   it.each([
@@ -358,13 +373,13 @@ describe("POST /api/citas — un cliente eliminado", () => {
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
     return POST({
       url: "http://localhost/api/citas",
-      json: () =>
-        Promise.resolve({
-          title: "Corte",
-          startTime: "2026-10-20T13:00:00.000Z",
-          endTime: "2026-10-20T13:30:00.000Z",
-          customerId,
-        }),
+      headers: new Headers(),
+      body: cuerpoDePrueba({
+        title: "Corte",
+        startTime: "2026-10-20T13:00:00.000Z",
+        endTime: "2026-10-20T13:30:00.000Z",
+        customerId,
+      }),
     } as unknown as NextRequest)
   }
 

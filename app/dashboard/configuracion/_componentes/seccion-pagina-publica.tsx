@@ -37,6 +37,8 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
   const idDelTitulo = useId()
   const nombreDelColor = useId()
   const [datos, setDatos] = useState<DatosDePaginaPublica>(inicial)
+  // Las especialidades como están guardadas: al guardar se mandan sólo las que cambiaron (#113).
+  const [especialidadesGuardadas, setEspecialidadesGuardadas] = useState(inicial.especialidades)
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
   const [aviso, setAviso] = useState("")
@@ -61,9 +63,11 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
   const guardar = async () => {
     setAviso("")
     setGuardando(true)
-    const resultado = await guardarPaginaPublica(datos)
+    const enviadas = datos.especialidades
+    const resultado = await guardarPaginaPublica(datos, especialidadesGuardadas)
     setGuardando(false)
     if (!resultado.ok) return setAviso(resultado.error)
+    setEspecialidadesGuardadas(enviadas)
     // Lo que quedó guardado, ya normalizado: el WhatsApp con espacios y el Instagram sin @.
     const guardada = resultado.datos
     setDatos((previos) => ({

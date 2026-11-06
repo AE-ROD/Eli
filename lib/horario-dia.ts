@@ -8,7 +8,13 @@
  * horaria: se comparan como minutos desde la medianoche, nunca como `Date`.
  * Las citas sí son instantes reales (ISO), así que su hora se lee con `Date`
  * en la zona local del navegador — igual que ya hace `page.tsx`.
+ *
+ * Sólo cuentan las citas que ocupan su horario (`ocupaElHorario`): una
+ * cancelada o una de "No vino" no se dibuja ni tapa un hueco (#97), aunque
+ * el llamador la pase.
  */
+
+import { ocupaElHorario } from "@/lib/ocupacion"
 
 export interface FranjaHorario {
   startTime: string
@@ -53,6 +59,11 @@ export function franjaValida(franja: FranjaHorario): boolean {
   return horaAMinutos(franja.startTime) < horaAMinutos(franja.endTime)
 }
 
+/** Las citas que ocupan su horario: sin las canceladas ni las de "No vino". */
+function citasQueOcupan(citas: CitaDelDia[]): CitaDelDia[] {
+  return citas.filter((cita) => ocupaElHorario(cita.status))
+}
+
 /** Intervalos [inicio, fin) fusionados: dos citas que se pisan no deben abrir un hueco fantasma entre ellas. */
 function fusionarIntervalos(
   intervalos: { inicio: number; fin: number }[]
@@ -89,7 +100,7 @@ export function segmentosDeFranja(franja: FranjaHorario, citas: CitaDelDia[]): S
   const inicioFranja = horaAMinutos(franja.startTime)
   const finFranja = horaAMinutos(franja.endTime)
 
-  const citasEnFranja = citas
+  const citasEnFranja = citasQueOcupan(citas)
     .map((cita) => {
       const inicioReal = minutosDeInstante(cita.startTime)
       const finReal = minutosDeInstante(cita.endTime)
@@ -137,7 +148,7 @@ export function segmentosDeFranja(franja: FranjaHorario, citas: CitaDelDia[]): S
 export function citasFueraDeFranjas(franjas: FranjaHorario[], citas: CitaDelDia[]): CitaDelDia[] {
   const franjasValidas = franjas.filter(franjaValida)
 
-  return citas.filter((cita) => {
+  return citasQueOcupan(citas).filter((cita) => {
     const inicio = minutosDeInstante(cita.startTime)
     const fin = minutosDeInstante(cita.endTime)
     return !franjasValidas.some((franja) => {

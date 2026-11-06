@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import type { NextRequest } from "next/server"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
 import { MARCA_DE_CLIENTE_ELIMINADO } from "@/lib/clientes-eliminados"
@@ -35,7 +36,7 @@ const DIA_MS = 24 * 60 * 60 * 1000
 const haceDias = (dias: number) => new Date(AHORA.getTime() - dias * DIA_MS)
 
 const pedidoFalso = (cuerpo: unknown): NextRequest =>
-  ({ headers: new Headers(), json: async () => cuerpo }) as unknown as NextRequest
+  ({ headers: new Headers(), body: cuerpoDePrueba(cuerpo) }) as unknown as NextRequest
 
 const conSlug = { params: Promise.resolve({ slug: "salon-uno" }) }
 

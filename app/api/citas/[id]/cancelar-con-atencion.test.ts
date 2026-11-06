@@ -137,3 +137,35 @@ describe("PUT /api/citas/[id]: cancelar una cita con atención viva (#136)", () 
     )
   })
 })
+
+describe("PUT /api/citas/[id]: volver una cita en progreso a pendiente o confirmada con atención viva", () => {
+  beforeEach(() => {
+    base.reiniciar({
+      ...datosBase(),
+      appointment: [cita("en-curso", { status: "en-progreso" }), cita("en-curso-anulada", { status: "en-progreso" })],
+      visit: [
+        atencion("v-en-curso", { appointmentId: "en-curso", status: "en-atencion" }),
+        atencion("v-anulada", { appointmentId: "en-curso-anulada", status: "anulada" }),
+      ],
+    })
+  })
+
+  async function volver(id: string, estado: string) {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const respuesta = await PUT(pedido(`http://localhost/api/citas/${id}`, { status: estado }), conId(id))
+    return { status: respuesta.status, cuerpo: await respuesta.json() }
+  }
+
+  it.each(["pendiente", "confirmada"])("a %s: el mismo 409 que al cancelar, y sigue en progreso", async (estado) => {
+    const { status, cuerpo } = await volver("en-curso", estado)
+    expect(status).toBe(409)
+    expect(cuerpo.error).toBe(MENSAJE)
+    expect(guardada("en-curso").status).toBe("en-progreso")
+  })
+
+  it("con la atención anulada, sí vuelve", async () => {
+    expect((await volver("en-curso-anulada", "confirmada")).status).toBe(200)
+    expect(guardada("en-curso-anulada").status).toBe("confirmada")
+  })
+})

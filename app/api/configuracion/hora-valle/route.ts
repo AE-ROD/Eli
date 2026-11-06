@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { configuracionDeHoraValleSchema } from "@/lib/hora-valle"
 import { actorDeSesion, puedeConfigurarHoraValle } from "@/lib/permisos"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
@@ -23,7 +23,9 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
-  const datos = configuracionDeHoraValleSchema.safeParse(await cuerpoDelPedido(request))
+  const recibido = await cuerpoConTope(request)
+  if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+  const datos = configuracionDeHoraValleSchema.safeParse(recibido.cuerpo)
   if (!datos.success) return respuestaDeDatosInvalidos(datos.error)
   const { activa, franjas } = datos.data
   const businessId = actor.businessId

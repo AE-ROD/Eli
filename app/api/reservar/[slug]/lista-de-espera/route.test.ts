@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest"
 import type { NextRequest } from "next/server"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
 import { generarToken, hashDeToken } from "@/lib/tokens"
@@ -128,14 +129,14 @@ async function salir(token: string, slug = "salon-uno", cuerpo = "List-Unsubscri
 async function confirmar(extra: Registro = {}) {
   const { POST } = await import("../confirmar/route")
   const cuerpo = { servicioId: "s-corte", fecha: LUNES, hora: "09:00", nombre: "Lucía", apellido: "Pérez", email: "LUCIA@correo.test", ...extra }
-  const respuesta = await POST({ headers: new Headers(), json: async () => cuerpo } as unknown as NextRequest, {
+  const respuesta = await POST({ headers: new Headers(), body: cuerpoDePrueba(cuerpo) } as unknown as NextRequest, {
     params: Promise.resolve({ slug: "salon-uno" }),
   })
   return { status: respuesta.status, cuerpo: await respuesta.json() }
 }
 
 const pedidoVacio = (cuerpo?: unknown) =>
-  ({ url: "http://localhost/x", headers: new Headers(), json: async () => cuerpo }) as unknown as NextRequest
+  ({ url: "http://localhost/x", headers: new Headers(), body: cuerpoDePrueba(cuerpo) }) as unknown as NextRequest
 const gestion = { params: Promise.resolve({ slug: "salon-uno", token: TOKEN_DE_GESTION }) }
 
 /** Corre lo que quedó programado con `after`. */

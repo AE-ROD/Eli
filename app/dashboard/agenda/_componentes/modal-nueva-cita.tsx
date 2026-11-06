@@ -1,23 +1,39 @@
 "use client"
 
 import { useState, useRef, useEffect, useId } from "react"
-import { Search, User, Scissors, Calendar, Clock, Check } from "lucide-react"
+import { Search, User, Scissors, Calendar, Check } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
 import { Selector } from "@/components/comunes/selector"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { CAMPO, ETIQUETA } from "@/components/panel/estilos"
+import { CampoHora } from "@/components/panel/campo-hora"
 import { cn } from "@/lib/utils"
 import {
   buscarClientes,
+  idsDeServiciosElegidos,
+  leerCatalogoDeLaCita,
   leerProfesionales,
+  serviciosParaElProfesional,
+  type CatalogoDeLaCita,
   type ClienteSugerido,
   type DatosDeNuevaCita,
   type Profesional,
+  type ServicioDelCatalogo,
 } from "../_datos"
 import { Aviso } from "@/components/panel/aviso"
 import type { Advertencia } from "@/lib/mover-cita"
+import { MAX_SERVICIOS_POR_RESERVA, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
+import { formatearTiempoLibre, horaAMinutos, minutosAHora } from "@/lib/horario-dia"
+import { formatearMonto } from "@/lib/dinero"
+import { SelectorServicio } from "@/app/reservar/[slug]/_componentes/selector-servicio"
+
+/** La hora de fin de `inicio` ("HH:MM") más `minutos`, o `null` si pasa de medianoche. */
+function horaDeFin(inicio: string, minutos: number): string | null {
+  const fin = horaAMinutos(inicio) + minutos
+  return Number.isFinite(fin) && fin < 24 * 60 ? minutosAHora(fin) : null
+}
 
 /** Con menos letras no se busca. */
 const LETRAS_PARA_BUSCAR = 2
@@ -73,6 +89,8 @@ export function ModalNuevaCita({
   const [profesionales, setProfesionales] = useState<Profesional[]>([])
   const [avisoDeBusqueda, setAvisoDeBusqueda] = useState("")
   const [avisoDeEquipo, setAvisoDeEquipo] = useState("")
+  const [catalogo, setCatalogo] = useState<CatalogoDeLaCita | null>(null)
+  const [avisoDeCatalogo, setAvisoDeCatalogo] = useState("")
   const esperaDeBusqueda = useRef<ReturnType<typeof setTimeout> | null>(null)
   const campoBusqueda = useRef<HTMLInputElement>(null)
   const idBase = useId()
@@ -80,6 +98,9 @@ export function ModalNuevaCita({
   const idDelEstado = `${idBase}-estado`
   const idDelAvisoDeBusqueda = `${idBase}-aviso-busqueda`
   const idDeNotas = `${idBase}-notas`
+  const idDelCatalogo = `${idBase}-catalogo`
+  const idDeHoraInicio = `${idBase}-hora-inicio`
+  const idDeHoraFin = `${idBase}-hora-fin`
 
   useEffect(() => {
     if (!puedeAsignarProfesional) return
@@ -91,6 +112,14 @@ export function ModalNuevaCita({
       else setAvisoDeEquipo(resultado.error)
     })
   }, [puedeAsignarProfesional])
+
+  // El catálogo (#159). Si no carga, queda el texto libre, con el aviso.
+  useEffect(() => {
+    leerCatalogoDeLaCita().then((resultado) => {
+      if (resultado.ok) setCatalogo(resultado.datos)
+      else setAvisoDeCatalogo(resultado.error)
+    })
+  }, [])
 
   useEffect(() => {
     if (!busquedaCliente || busquedaCliente.length < LETRAS_PARA_BUSCAR) {
@@ -126,6 +155,46 @@ export function ModalNuevaCita({
     // elegido. Con el dedo no: en el teléfono, enfocar el campo volvería a
     // abrir el teclado.
     if (conTeclado) requestAnimationFrame(() => campoBusqueda.current?.focus())
+  }
+
+  // De quién es la cita, para ofrecer sólo lo que hace: el elegido, o el
+  // profesional mismo (el servidor le manda sólo lo suyo).
+  const profesionalDeLaCita = puedeAsignarProfesional
+    ? form.memberId
+    : (Object.keys(catalogo?.serviciosPorProfesional ?? {})[0] ?? "")
+  const serviciosOfrecidos = catalogo ? serviciosParaElProfesional(catalogo, profesionalDeLaCita) : []
+  const elegidos = idsDeServiciosElegidos(form.servicioIds)
+    .map((id) => catalogo?.servicios.find((servicio) => servicio.id === id))
+    .filter((servicio): servicio is ServicioDelCatalogo => servicio !== undefined)
+  const resumen = elegidos.length > 0 ? resumenDeLaReserva(elegidos) : null
+
+  /**
+   * Elegir servicios llena la hora de fin y el precio con la duración y el
+   * precio sumados, como la reserva pública; se pueden cambiar después. Sin
+   * ninguno, vuelve el texto libre.
+   */
+  function elegirServicios(servicios: ServicioDelCatalogo[]) {
+    onCambiarCampo("servicioIds", servicios.map((servicio) => servicio.id).join(","))
+    if (servicios.length === 0) return
+    const { duracion, precio } = resumenDeLaReserva(servicios)
+    const fin = horaDeFin(form.horaInicio, duracion)
+    if (fin) onCambiarCampo("horaFin", fin)
+    onCambiarCampo("precio", precio === null ? "" : String(precio))
+  }
+
+  function alternarServicio(servicio: ServicioDelCatalogo) {
+    const estaba = elegidos.some((elegido) => elegido.id === servicio.id)
+    elegirServicios(estaba ? elegidos.filter((elegido) => elegido.id !== servicio.id) : [...elegidos, servicio])
+  }
+
+  function cambiarProfesional(memberId: string) {
+    onCambiarCampo("memberId", memberId)
+    // Lo que el nuevo profesional no hace se quita: el servidor no lo aceptaría.
+    if (catalogo && elegidos.length > 0) {
+      const hace = serviciosParaElProfesional(catalogo, memberId)
+      const quedan = elegidos.filter((elegido) => hace.some((servicio) => servicio.id === elegido.id))
+      if (quedan.length !== elegidos.length) elegirServicios(quedan)
+    }
   }
 
   // Ya se eligió de la lista y lo escrito sigue siendo ese nombre: la lista no
@@ -228,14 +297,43 @@ export function ModalNuevaCita({
           )}
         </div>
 
-        <CampoFormulario
-          etiqueta="Servicio"
-          placeholder="Ej.: Corte, Color, Manicura..."
-          value={form.servicio}
-          onChange={(e) => onCambiarCampo("servicio", e.target.value)}
-          icono={<Scissors className="size-4" aria-hidden="true" strokeWidth={1.75} />}
-          required
-        />
+        {/* Servicios del catálogo (#159): llenan nombre, duración y precio, como la reserva pública. */}
+        {serviciosOfrecidos.length > 0 && (
+          <div role="group" aria-labelledby={idDelCatalogo}>
+            <p id={idDelCatalogo} className={cn(ETIQUETA, "mb-2")}>
+              Servicios del catálogo
+            </p>
+            <div className="max-h-72 overflow-y-auto p-0.5">
+              <SelectorServicio
+                servicios={serviciosOfrecidos}
+                seleccionados={elegidos}
+                onAlternar={alternarServicio}
+                tope={MAX_SERVICIOS_POR_RESERVA}
+              />
+            </div>
+            <p aria-live="polite" className="mt-1.5 text-xs text-texto-2">
+              {resumen
+                ? `${resumen.titulo} · ${formatearTiempoLibre(resumen.duracion)}${
+                    resumen.precio !== null ? ` · ${formatearMonto(resumen.precio)}${resumen.precioIncompleto ? " + a consultar" : ""}` : ""
+                  }`
+                : `Elige hasta ${MAX_SERVICIOS_POR_RESERVA}, o escribe el servicio abajo si no está en el catálogo.`}
+            </p>
+          </div>
+        )}
+
+        {avisoDeCatalogo && <Aviso>{avisoDeCatalogo}</Aviso>}
+
+        {/* Texto libre, para una cita sin servicio del catálogo. */}
+        {!resumen && (
+          <CampoFormulario
+            etiqueta={serviciosOfrecidos.length > 0 ? "Otro servicio" : "Servicio"}
+            placeholder="Ej.: Corte, Color, Manicura..."
+            value={form.servicio}
+            onChange={(e) => onCambiarCampo("servicio", e.target.value)}
+            icono={<Scissors className="size-4" aria-hidden="true" strokeWidth={1.75} />}
+            required
+          />
+        )}
 
         <CampoFormulario
           etiqueta="Fecha"
@@ -247,22 +345,33 @@ export function ModalNuevaCita({
         />
 
         <div className="grid grid-cols-2 gap-3">
-          <CampoFormulario
-            etiqueta="Hora inicio"
-            type="time"
-            value={form.horaInicio}
-            onChange={(e) => onCambiarCampo("horaInicio", e.target.value)}
-            icono={<Clock className="size-4" aria-hidden="true" strokeWidth={1.75} />}
-            required
-          />
-          <CampoFormulario
-            etiqueta="Hora fin"
-            type="time"
-            value={form.horaFin}
-            onChange={(e) => onCambiarCampo("horaFin", e.target.value)}
-            icono={<Clock className="size-4" aria-hidden="true" strokeWidth={1.75} />}
-            required
-          />
+          <div className="min-w-0">
+            <label htmlFor={idDeHoraInicio} className={ETIQUETA}>
+              Hora inicio
+            </label>
+            <CampoHora
+              id={idDeHoraInicio}
+              etiqueta="Hora inicio"
+              value={form.horaInicio}
+              onChange={(valor) => {
+                onCambiarCampo("horaInicio", valor)
+                // Con servicios elegidos, la hora de fin los sigue; el precio no se toca.
+                const fin = resumen ? horaDeFin(valor, resumen.duracion) : null
+                if (fin) onCambiarCampo("horaFin", fin)
+              }}
+            />
+          </div>
+          <div className="min-w-0">
+            <label htmlFor={idDeHoraFin} className={ETIQUETA}>
+              Hora fin
+            </label>
+            <CampoHora
+              id={idDeHoraFin}
+              etiqueta="Hora fin"
+              value={form.horaFin}
+              onChange={(valor) => onCambiarCampo("horaFin", valor)}
+            />
+          </div>
         </div>
 
         <CampoFormulario
@@ -285,7 +394,7 @@ export function ModalNuevaCita({
           <Selector
             etiqueta="Profesional"
             value={form.memberId}
-            onChange={(e) => onCambiarCampo("memberId", e.target.value)}
+            onChange={(e) => cambiarProfesional(e.target.value)}
             opciones={profesionales.map((profesional) => ({ valor: profesional.id, texto: profesional.nombre }))}
           >
             <option value="">Sin asignar</option>

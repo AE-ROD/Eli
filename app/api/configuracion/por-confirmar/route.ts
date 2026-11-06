@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { FALTAS_PARA_CONFIRMAR_MAXIMO, FALTAS_PARA_CONFIRMAR_MINIMO } from "@/lib/por-confirmar"
 import { actorDeSesion, puedeConfigurarPorConfirmar } from "@/lib/permisos"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
@@ -35,7 +35,9 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
-  const datos = porConfirmarSchema.safeParse(await cuerpoDelPedido(request))
+  const recibido = await cuerpoConTope(request)
+  if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+  const datos = porConfirmarSchema.safeParse(recibido.cuerpo)
   if (!datos.success) return respuestaDeDatosInvalidos(datos.error)
 
   const negocio = await prisma.business.update({

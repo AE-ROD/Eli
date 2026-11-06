@@ -3,6 +3,7 @@ import { getToken } from "next-auth/jwt"
 import type { NextRequest } from "next/server"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { construirCsp, generarNonce } from "@/lib/csp"
+import { respuestaDeCuerpoDemasiadoGrande, TOPE_DE_CUALQUIER_PEDIDO } from "@/lib/cuerpo-del-pedido"
 
 /**
  * Prefijos de `/api` que NO llevan el límite genérico del panel: cada uno ya
@@ -105,11 +106,40 @@ export default async function proxy(req: NextRequest) {
 async function decidir(req: NextRequest, continuar: () => NextResponse): Promise<NextResponse> {
   const pathname = req.nextUrl.pathname
 
+  // Primera barrera contra cuerpos absurdos (GHSA-mrhx-c7xc-m3w5): si el
+  // `Content-Length` declarado ya pasa el techo de toda la API, ni se llega al
+  // endpoint. Es sólo la cabecera; el tope real, también para cuerpos sin
+  // cabecera o que mienten, lo pone cada endpoint al leer
+  // (`lib/cuerpo-del-pedido.ts`).
+  if (pathname.startsWith("/api/") && Number(req.headers.get("content-length") ?? "0") > TOPE_DE_CUALQUIER_PEDIDO) {
+    return respuestaDeCuerpoDemasiadoGrande()
+  }
+
   // Rate limiting sobre el intento de login por credenciales, antes de que NextAuth lo procese
   if (pathname === "/api/auth/callback/credentials") {
     const { permitido } = await verificarLimite("login", obtenerIp(req))
     if (!permitido) {
       return NextResponse.json({ error: "Demasiados intentos, intenta más tarde" }, { status: 429 })
+    }
+    return continuar()
+  }
+
+  // `update()` de la sesión (POST /api/auth/session): el callback `jwt` de
+  // `lib/auth.ts` revalida contra la base en cada uno, así que sin tope una
+  // sesión podía pedirlo en bucle (#49). Lleva el límite de escritura del
+  // panel, por sesión. El GET (el que el cliente de NextAuth pide solo, al
+  // volver a la pestaña) sigue sin tope, como el resto de /api/auth: cortarlo
+  // dejaría al panel sin sesión. Si se pasa, el `update()` del navegador
+  // devuelve null y la sesión que ya tenía queda igual.
+  if (pathname === "/api/auth/session" && req.method === "POST") {
+    const token = await getToken({ req })
+    const clave = token?.id ? `usuario:${token.id}` : `ip:${obtenerIp(req)}`
+    const { permitido } = await verificarLimite("panelEscritura", clave)
+    if (!permitido) {
+      return NextResponse.json(
+        { error: "Demasiadas solicitudes, esperá un momento e intentá de nuevo" },
+        { status: 429 }
+      )
     }
     return continuar()
   }

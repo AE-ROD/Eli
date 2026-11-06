@@ -5,6 +5,7 @@ import { enviarRecuperacionContrasena } from "@/lib/email"
 import { recuperarContrasenaSchema as schema } from "@/lib/validaciones"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { generarToken } from "@/lib/tokens"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 const MENSAJE_GENERICO = {
   mensaje: "Si existe una cuenta con ese correo, te enviamos un enlace para restablecer tu contraseña.",
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const cuerpo = await request.json()
+    const cuerpo = await leerJsonConTope(request)
     const { email } = schema.parse(cuerpo)
 
     const usuario = await prisma.user.findUnique({ where: { email } })
@@ -48,6 +49,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(MENSAJE_GENERICO)
   } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
     }

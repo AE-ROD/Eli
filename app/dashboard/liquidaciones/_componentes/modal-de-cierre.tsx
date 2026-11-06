@@ -43,6 +43,23 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
   const [reintentos, setReintentos] = useState(0)
   const [confirmando, setConfirmando] = useState(false)
   const enviado = useRef(false)
+  // Lo que abrió la vista previa ("Próxima liquidación", en Equipo). Al pasar
+  // a la confirmación y volver, los dos modales se reemplazan y cada uno anota
+  // como abridor un botón del otro, que ya no existe: al cerrar, el foco caía
+  // al <body> (#158). Se anota acá una sola vez, en el primer render.
+  const [quienLoAbrio] = useState(() =>
+    typeof document !== "undefined" && document.activeElement instanceof HTMLElement ? document.activeElement : null
+  )
+  useEffect(
+    () => () => {
+      // Después de que el marco devuelva el foco a lo suyo: si no pudo y quedó en el <body>, vuelve acá.
+      setTimeout(() => {
+        const actual = document.activeElement
+        if ((!actual || actual === document.body) && quienLoAbrio?.isConnected) quienLoAbrio.focus({ preventScroll: true })
+      }, 0)
+    },
+    [quienLoAbrio]
+  )
 
   const clave = JSON.stringify({ excluidos, reintentos })
   useEffect(() => {

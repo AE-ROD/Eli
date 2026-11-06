@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { PLAZO_MAXIMO_HORAS, PLAZO_MINIMO_HORAS } from "@/lib/gestion-de-cita"
 import { actorDeSesion, puedeEditarPlazoDeCambios } from "@/lib/permisos"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
@@ -30,7 +30,9 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
-  const datos = plazoSchema.safeParse(await cuerpoDelPedido(request))
+  const recibido = await cuerpoConTope(request)
+  if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+  const datos = plazoSchema.safeParse(recibido.cuerpo)
   if (!datos.success) return respuestaDeDatosInvalidos(datos.error)
 
   const negocio = await prisma.business.update({

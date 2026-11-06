@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { cuerpoDelPedido } from "@/lib/cuerpo-del-pedido"
+import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { actorDeSesion, gestionaElNegocio, puedeDefinirServiciosDe } from "@/lib/permisos"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 
@@ -78,7 +78,9 @@ export async function PUT(request: NextRequest, { params }: Contexto) {
   const miembro = await miembroDelNegocio(id, actor.businessId)
   if (!miembro || !puedeDefinirServiciosDe(actor, miembro)) return noEncontrado()
 
-  const datos = definirSchema.safeParse(await cuerpoDelPedido(request))
+  const recibido = await cuerpoConTope(request)
+  if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
+  const datos = definirSchema.safeParse(recibido.cuerpo)
   if (!datos.success) return respuestaDeDatosInvalidos(datos.error)
 
   const serviceIds = datos.data.todos ? [] : [...new Set(datos.data.serviceIds)]

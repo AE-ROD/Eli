@@ -25,6 +25,8 @@ export interface Cita {
   endTime: string
   status: string
   notes: string | null
+  /** Lo que el cliente escribió al reservar por la página pública (#122). Sólo se lee. */
+  clientComments?: string | null
   price: number | null
   customerId: string | null
   /**
@@ -85,7 +87,14 @@ export interface DatosDeNuevaCita {
   clienteId: string
   /** El nombre del cliente elegido de la lista; vacío si no hay ninguno elegido. */
   clienteNombre: string
+  /** El servicio escrito a mano, para una cita sin servicio del catálogo. */
   servicio: string
+  /**
+   * Los servicios del catálogo elegidos (#159), en el orden en que se hacen,
+   * separados por coma (los ids no llevan comas): el borrador es de textos,
+   * como lo cambia la página. Vacío: texto libre (`servicio`).
+   */
+  servicioIds: string
   fecha: string
   horaInicio: string
   horaFin: string
@@ -104,6 +113,7 @@ export function citaEnBlanco(dia: Date): DatosDeNuevaCita {
     clienteId: "",
     clienteNombre: "",
     servicio: "",
+    servicioIds: "",
     fecha: comoTexto(dia),
     horaInicio: "09:00",
     horaFin: "10:00",
@@ -111,6 +121,43 @@ export function citaEnBlanco(dia: Date): DatosDeNuevaCita {
     notas: "",
     memberId: "",
   }
+}
+
+/** Los ids de `DatosDeNuevaCita.servicioIds`, en orden. */
+export function idsDeServiciosElegidos(texto: string): string[] {
+  return texto ? texto.split(",") : []
+}
+
+/** Un servicio del catálogo, como lo ofrece la reserva pública. */
+export interface ServicioDelCatalogo {
+  id: string
+  name: string
+  description: string | null
+  duration: number
+  price: number | null
+}
+
+/**
+ * El catálogo para la cita nueva (#159): los servicios activos y, de quien
+ * tiene acotado lo que hace, qué hace (memberId → ids). Quien no aparece hace
+ * todos.
+ */
+export interface CatalogoDeLaCita {
+  servicios: ServicioDelCatalogo[]
+  serviciosPorProfesional: Record<string, string[]>
+}
+
+export async function leerCatalogoDeLaCita(): Promise<Resultado<CatalogoDeLaCita>> {
+  return pedir<CatalogoDeLaCita>("/api/citas/servicios", "No se pudo cargar el catálogo de servicios")
+}
+
+/**
+ * Los servicios que se le ofrecen a la cita nueva: los que hace el
+ * profesional, si los tiene acotados. `memberId` vacío (sin asignar): todos.
+ */
+export function serviciosParaElProfesional(catalogo: CatalogoDeLaCita, memberId: string): ServicioDelCatalogo[] {
+  const queHace = memberId ? catalogo.serviciosPorProfesional[memberId] : undefined
+  return queHace ? catalogo.servicios.filter((servicio) => queHace.includes(servicio.id)) : catalogo.servicios
 }
 
 /** Un miembro del equipo al que se le puede asignar una cita nueva. */
@@ -344,11 +391,14 @@ export async function crearCita(
   const fin = isoEn(datos.fecha, datos.horaFin, zona)
   if (!inicio || !fin) return { tipo: "error", error: "La fecha o la hora no son válidas" }
 
+  // Con servicios del catálogo el servidor arma el título con sus nombres
+  // (#159); sin ellos, el texto escrito.
+  const servicioIds = idsDeServiciosElegidos(datos.servicioIds)
   const resultado = await pedirConCuerpo(
     "/api/citas",
     "No se pudo crear la cita",
     conJson("POST", {
-      title: datos.servicio,
+      ...(servicioIds.length > 0 ? { servicioIds } : { title: datos.servicio }),
       startTime: inicio,
       endTime: fin,
       customerId: datos.clienteId,

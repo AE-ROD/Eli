@@ -27,10 +27,17 @@ import { advertenciasDeAgenda } from "@/lib/advertencias-de-agenda"
 import { MENSAJE_CITA_CAMBIO, decidirReactivacion, problemaConLaAtencion } from "@/lib/reactivar-cita"
 import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { ocupaElHorario } from "@/lib/ocupacion"
-import { MENSAJE_MIEMBRO_NO_ATIENDE, atiendeCitas } from "@/lib/agenda-publica"
+import {
+  MENSAJE_MIEMBRO_NO_ATIENDE,
+  MENSAJE_PROFESIONAL_NO_HACE,
+  atiendeCitas,
+  elMiembroHaceLosServicios,
+} from "@/lib/agenda-publica"
 import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
 import { estaPorConfirmar, mensajeDeReservaQueCambio } from "@/lib/por-confirmar"
 import { avisarReservaConfirmadaPorElLocal } from "@/lib/aviso-de-reserva-confirmada"
+import { duracionesQueSuman } from "@/lib/servicios-de-la-reserva"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 const edicionDeCitaSchema = z.object({
   title: titulo().optional(),
@@ -55,9 +62,47 @@ const NO_VINO_PERO_LLEGO = "El cliente ya llegó: la cita tiene una atención en
 /**
  * Una cita cuyo cliente ya llegó (atención viva en el Tablero) no se cancela
  * desde la agenda: la atención quedaría colgando de una cita cancelada. Vale
- * para las por confirmar (#84) y para cualquier otra (#136).
+ * para las por confirmar (#84) y para cualquier otra (#136). Lo mismo al
+ * volver una "en progreso" a pendiente o confirmada: la atención quedaría
+ * viva detrás de una cita que dice que el cliente todavía no llega.
  */
 const MENSAJE_CANCELAR_CON_ATENCION = "Esta cita ya tiene una atención en el Tablero: anúlala ahí primero"
+
+/**
+ * Una cita con servicios del catálogo (filas de `cita_servicios`, #89a) se
+ * llama como ellos: el título a mano dejaría a la cita diciendo una cosa y a
+ * sus filas otra (#138). Sólo se rechaza si de verdad cambia.
+ */
+const MENSAJE_TITULO_CON_SERVICIOS =
+  "Esta cita es de servicios del catálogo: su nombre sale de ellos y no se cambia a mano"
+const mensajeDeDuracionConServicios = (cuantos: number) =>
+  `Esta cita tiene ${cuantos} servicios: tiene que durar al menos ${cuantos} minutos y no más de 24 horas por servicio`
+
+/** Lo que dura una cita, en minutos enteros (como `duracionAlReagendar`). */
+function minutosEntre(inicio: Date, fin: Date): number {
+  return Math.ceil((fin.getTime() - inicio.getTime()) / 60_000)
+}
+
+type FilaAjustada = { orden: number; duration: number }
+
+/**
+ * Escribe las duraciones nuevas de las filas, por `orden` y acotado al
+ * negocio. Los precios no se tocan: lo que se cobró o se cobrará por cada
+ * servicio no depende de cuánto dure.
+ */
+async function ajustarFilas(
+  db: Pick<Prisma.TransactionClient, "appointmentService">,
+  businessId: string,
+  citaId: string,
+  filas: FilaAjustada[]
+) {
+  for (const fila of filas) {
+    await db.appointmentService.updateMany({
+      where: { appointmentId: citaId, businessId, orden: fila.orden },
+      data: { duration: fila.duration },
+    })
+  }
+}
 
 /** La cita no tiene atención, o la que tuvo se anuló. Para condicionar la escritura que cancela. */
 const SIN_ATENCION_VIVA = {
@@ -135,7 +180,7 @@ export async function PUT(
   }
 
   try {
-    const cuerpo = await request.json()
+    const cuerpo = await leerJsonConTope(request)
     const datos = edicionDeCitaSchema.parse(cuerpo)
 
     // Una reserva por confirmar (#84) la confirma o la cancela sólo quien
@@ -174,6 +219,17 @@ export async function PUT(
       if (!atiendeCitas(miembro.role)) {
         return NextResponse.json({ error: MENSAJE_MIEMBRO_NO_ATIENDE }, { status: 400 })
       }
+      // Una cita con servicios del catálogo va a quien los hace todos, como al
+      // crearla. Las filas de un servicio que se borró del catálogo
+      // (`serviceId` null) no cuentan: ya no hay contra qué comparar.
+      const servicios = await prisma.appointmentService.findMany({
+        where: { appointmentId: existente.id, businessId: actor.businessId },
+        select: { serviceId: true },
+      })
+      const serviceIds = servicios.flatMap((fila) => (fila.serviceId ? [fila.serviceId] : []))
+      if (serviceIds.length > 0 && !(await elMiembroHaceLosServicios(prisma, actor.businessId, memberId, serviceIds))) {
+        return NextResponse.json({ error: MENSAJE_PROFESIONAL_NO_HACE }, { status: 400 })
+      }
     }
 
     // Sacar la cita de cancelada, completada o "no vino" es reactivarla:
@@ -187,6 +243,14 @@ export async function PUT(
     })
     if (reactivacion.tipo === "rechazada") {
       return NextResponse.json({ error: reactivacion.mensaje }, { status: reactivacion.status })
+    }
+
+    if (
+      existente.status === "en-progreso" &&
+      (datos.status === "pendiente" || datos.status === "confirmada") &&
+      (await tieneAtencionViva(actor.businessId, existente.id))
+    ) {
+      return NextResponse.json({ error: MENSAJE_CANCELAR_CON_ATENCION }, { status: 409 })
     }
 
     // "No vino" sólo para una reserva que seguía esperando, cuya hora ya
@@ -246,6 +310,36 @@ export async function PUT(
             { status: 409 }
           )
         }
+      }
+    }
+
+    // Las filas de `cita_servicios` (#138) siguen a la cita: con un título a
+    // mano dejarían de describirla (409), y si cambia lo que dura se reparten
+    // las duraciones para que sumen lo nuevo (`duracionesQueSuman`). Sin
+    // filas (citas de antes o del panel con texto libre) no hay nada que
+    // mantener.
+    const cambiaElTitulo = datos.title !== undefined && datos.title !== existente.title
+    const cambiaLaDuracion =
+      seMueve && minutosEntre(inicio, fin) !== minutosEntre(existente.startTime, existente.endTime)
+    let filasAjustadas: FilaAjustada[] = []
+    if (cambiaElTitulo || cambiaLaDuracion) {
+      const filas = await prisma.appointmentService.findMany({
+        where: { appointmentId: existente.id, businessId: actor.businessId },
+        orderBy: { orden: "asc" },
+        select: { orden: true, duration: true },
+      })
+      if (filas.length > 0 && cambiaElTitulo) {
+        return NextResponse.json({ error: MENSAJE_TITULO_CON_SERVICIOS }, { status: 409 })
+      }
+      if (filas.length > 0 && cambiaLaDuracion) {
+        const duraciones = duracionesQueSuman(
+          filas.map((fila) => fila.duration),
+          minutosEntre(inicio, fin)
+        )
+        if (!duraciones) {
+          return NextResponse.json({ error: mensajeDeDuracionConServicios(filas.length) }, { status: 400 })
+        }
+        filasAjustadas = filas.map((fila, indice) => ({ orden: fila.orden, duration: duraciones[indice] }))
       }
     }
 
@@ -312,15 +406,20 @@ export async function PUT(
     // con su atención colgando.
     if (resuelvePorConfirmar && reactivacion.tipo !== "reactivar") {
       const cancela = datos.status === "cancelada"
-      const { count } = await prisma.appointment.updateMany({
-        where: {
-          id: existente.id,
-          businessId: actor.businessId,
-          status: "pendiente",
-          confirmacionPorFaltas: true,
-          ...(cancela && SIN_ATENCION_VIVA),
-        },
-        data: actualizacion.data,
+      // La cita y sus filas en la misma transacción: o cambian las dos o ninguna.
+      const { count } = await prisma.$transaction(async (tx) => {
+        const escrita = await tx.appointment.updateMany({
+          where: {
+            id: existente.id,
+            businessId: actor.businessId,
+            status: "pendiente",
+            confirmacionPorFaltas: true,
+            ...(cancela && SIN_ATENCION_VIVA),
+          },
+          data: actualizacion.data,
+        })
+        if (escrita.count === 1) await ajustarFilas(tx, actor.businessId, existente.id, filasAjustadas)
+        return escrita
       })
       const cita = await prisma.appointment.findFirst({
         where: { id: existente.id, businessId: actor.businessId },
@@ -351,9 +450,13 @@ export async function PUT(
     // condición va en la misma escritura, como en las por confirmar: una
     // llegada que entre entretanto no deja una cancelada con su atención viva.
     if (reactivacion.tipo !== "reactivar" && datos.status === "cancelada" && existente.status !== "cancelada") {
-      const { count } = await prisma.appointment.updateMany({
-        where: { id: existente.id, businessId: actor.businessId, ...SIN_ATENCION_VIVA },
-        data: actualizacion.data,
+      const { count } = await prisma.$transaction(async (tx) => {
+        const escrita = await tx.appointment.updateMany({
+          where: { id: existente.id, businessId: actor.businessId, ...SIN_ATENCION_VIVA },
+          data: actualizacion.data,
+        })
+        if (escrita.count === 1) await ajustarFilas(tx, actor.businessId, existente.id, filasAjustadas)
+        return escrita
       })
       const cita = await prisma.appointment.findFirst({
         where: { id: existente.id, businessId: actor.businessId },
@@ -368,7 +471,16 @@ export async function PUT(
     }
 
     if (reactivacion.tipo !== "reactivar") {
-      const cita = await prisma.appointment.update(actualizacion)
+      // Con filas que ajustar, en la misma transacción: la cita y sus filas
+      // quedan diciendo lo mismo o no cambia ninguna.
+      const cita =
+        filasAjustadas.length > 0
+          ? await prisma.$transaction(async (tx) => {
+              const actualizada = await tx.appointment.update(actualizacion)
+              await ajustarFilas(tx, actor.businessId, existente.id, filasAjustadas)
+              return actualizada
+            })
+          : await prisma.appointment.update(actualizacion)
       // Si dejó libre su horario (se canceló, o se movió de hora o de
       // profesional), a la lista de espera de ese día, después de responder.
       const libera = datos.status !== undefined && !ocupaElHorario(datos.status)
@@ -414,6 +526,7 @@ export async function PUT(
     }
     return NextResponse.json(resultado.cita)
   } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       return respuestaDeDatosInvalidos(error)
     }

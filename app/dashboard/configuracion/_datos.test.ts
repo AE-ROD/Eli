@@ -1,6 +1,16 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
-import { cambiarMensajesAClientes, crearServicio, cuerpoDeProducto, cuerpoDeServicio, editarServicio, leerPorcentaje, type DatosDeServicio } from "./_datos"
+import {
+  cambiarMensajesAClientes,
+  crearServicio,
+  cuerpoDeProducto,
+  cuerpoDeServicio,
+  editarServicio,
+  guardarPaginaPublica,
+  leerPorcentaje,
+  type DatosDePaginaPublica,
+  type DatosDeServicio,
+} from "./_datos"
 
 /** El cuerpo JSON con que se llamó a `fetch`. */
 const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
@@ -162,5 +172,38 @@ describe("cambiarMensajesAClientes", () => {
       ok: false,
       error: "Para pedir reseñas, primero agrega el enlace",
     })
+  })
+})
+
+describe("guardarPaginaPublica (#113)", () => {
+  const ana = { memberId: "m-ana", nombre: "Ana", especialidad: "Colorista" }
+  const beto = { memberId: "m-beto", nombre: "Beto", especialidad: "" }
+  const pagina = (especialidades: DatosDePaginaPublica["especialidades"]): DatosDePaginaPublica => ({
+    address: "",
+    comuna: "",
+    whatsapp: "",
+    instagram: "",
+    enlaceResenas: "",
+    color: "lima",
+    mediosDePago: [],
+    especialidades,
+  })
+
+  it("manda sólo las especialidades que cambiaron: las demás no se reescriben con lo que tenía la pantalla", async () => {
+    const fetchFalso = simularRespuesta(json({}))
+    await guardarPaginaPublica(pagina([ana, { ...beto, especialidad: "Barbero" }]), [ana, beto])
+    expect(cuerpoEnviado(fetchFalso).especialidades).toEqual([{ memberId: "m-beto", especialidad: "Barbero" }])
+  })
+
+  it("sin cambios en las especialidades, no manda ninguna", async () => {
+    const fetchFalso = simularRespuesta(json({}))
+    await guardarPaginaPublica(pagina([ana, beto]), [ana, beto])
+    expect(cuerpoEnviado(fetchFalso).especialidades).toEqual([])
+  })
+
+  it("borrar una especialidad también es un cambio: va vacía", async () => {
+    const fetchFalso = simularRespuesta(json({}))
+    await guardarPaginaPublica(pagina([{ ...ana, especialidad: "" }, beto]), [ana, beto])
+    expect(cuerpoEnviado(fetchFalso).especialidades).toEqual([{ memberId: "m-ana", especialidad: "" }])
   })
 })

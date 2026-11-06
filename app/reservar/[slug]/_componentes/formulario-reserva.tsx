@@ -454,11 +454,11 @@ export function FormularioReserva({
                     listaDeEsperaActiva && servicioSeleccionado
                       ? (dia) => (
                           <FormularioListaDeEspera
-                            // Otro día, servicio o profesional es otra inscripción: empieza de cero.
-                            // La lista de espera sigue con un solo servicio: el primero (#89a).
-                            key={`${dia}|${seleccionados[0].id}|${profesionalId ?? ""}`}
+                            // Otro día, servicios o profesional es otra inscripción: empieza de cero.
+                            // Se revisa con todos los servicios; se guarda el primero (#162).
+                            key={`${dia}|${claveDeServicios}|${profesionalId ?? ""}`}
                             slug={slug}
-                            servicioId={seleccionados[0].id}
+                            servicioIds={servicioIds}
                             profesionalId={profesionalId}
                             fecha={dia}
                             fechaParaLeer={fechaParaLeer(deTexto(dia) ?? new Date())}

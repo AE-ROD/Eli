@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import { haceLosServicios } from "./agenda-publica"
 import {
   duracionAlReagendar,
+  duracionesQueSuman,
   mismoPrecio,
   precioEditadoAMano,
   resumenDeLaReserva,
@@ -134,16 +135,49 @@ describe("duracionAlReagendar", () => {
   const hasta = (minutos: number) => new Date(inicio.getTime() + minutos * 60_000)
 
   it("con filas: la mayor entre su suma y lo que dura hoy la cita", () => {
-    const filas = [{}, {}]
-    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(90), servicios: filas }, { duracion: 90 })).toBe(90)
+    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(90) }, { duracion: 90 })).toBe(90)
     // Alargada en el panel: no se acorta al moverla.
-    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(120), servicios: filas }, { duracion: 90 })).toBe(120)
+    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(120) }, { duracion: 90 })).toBe(120)
     // Acortada en el panel: manda la suma.
-    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(60), servicios: filas }, { duracion: 90 })).toBe(90)
+    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(60) }, { duracion: 90 })).toBe(90)
   })
 
-  it("sin filas, la de su servicio, como siempre; sin duración, null", () => {
-    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(120), servicios: [] }, { duracion: 60 })).toBe(60)
+  it("sin filas (cita de antes), la misma regla: alargada en el panel no se acorta (#138)", () => {
+    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(120) }, { duracion: 60 })).toBe(120)
+    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(60) }, { duracion: 60 })).toBe(60)
+    // Acortada en el panel: manda la de su servicio.
+    expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(30) }, { duracion: 60 })).toBe(60)
+  })
+
+  it("sin duración conocida (cita sin servicio del catálogo), null", () => {
     expect(duracionAlReagendar({ startTime: inicio, endTime: hasta(120) }, { duracion: null })).toBeNull()
+  })
+})
+
+describe("duracionesQueSuman (#138)", () => {
+  it("si ya suman el total, quedan igual", () => {
+    expect(duracionesQueSuman([30, 60], 90)).toEqual([30, 60])
+  })
+
+  it("se alarga en proporción a lo que duraba cada servicio", () => {
+    expect(duracionesQueSuman([30, 60], 120)).toEqual([40, 80])
+  })
+
+  it("se acorta igual, en minutos enteros, y lo del redondeo va a la de mayor resto", () => {
+    const repartidas = duracionesQueSuman([30, 30, 30], 100)
+    expect(repartidas).toEqual([34, 33, 33])
+    expect(repartidas?.reduce((a, b) => a + b, 0)).toBe(100)
+  })
+
+  it("ninguna fila queda en cero: al menos un minuto cada una", () => {
+    const repartidas = duracionesQueSuman([5, 300], 20)
+    expect(repartidas?.every((duracion) => duracion >= 1)).toBe(true)
+    expect(repartidas?.reduce((a, b) => a + b, 0)).toBe(20)
+  })
+
+  it("null si no se puede: sin filas, menos de un minuto por fila o más de lo que acepta la base", () => {
+    expect(duracionesQueSuman([], 60)).toBeNull()
+    expect(duracionesQueSuman([30, 30, 30], 2)).toBeNull()
+    expect(duracionesQueSuman([60], 1441)).toBeNull()
   })
 })

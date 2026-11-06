@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { diasConHorarioDelProfesional, leerProfesionalesQueAtienden } from "@/lib/agenda-publica"
+import { diasConHorarioDelProfesional, filasDeQuienesAtienden, leerProfesionalesQueAtienden } from "@/lib/agenda-publica"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 
 /**
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const negocio = await prisma.business.findUnique({ where: { slug }, select: { id: true } })
   if (!negocio) return NextResponse.json({ error: "Negocio no encontrado" }, { status: 404 })
 
-  const [profesionales, filas] = await Promise.all([
+  const [profesionales, todas] = await Promise.all([
     leerProfesionalesQueAtienden(prisma, negocio.id),
     prisma.workSchedule.findMany({
       where: { businessId: negocio.id, active: true },
@@ -34,6 +34,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       orderBy: { startTime: "asc" },
     }),
   ])
+  // Sólo el horario general y el de quienes atienden: el de un encargado no abre días (#168).
+  const filas = filasDeQuienesAtienden(todas, profesionales)
   return NextResponse.json({
     profesionales: profesionales.map((profesional) => ({
       id: profesional.id,

@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import type { NextRequest } from "next/server"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
 import { generarToken } from "@/lib/tokens"
+import { enviarConfirmacionCliente } from "@/lib/email"
 
 /**
  * Precios de hora valle en la reserva pública (#89c). Es opcional: apagada,
@@ -71,7 +73,7 @@ function escenario({ activa = true, appointment = [], appointmentService = [] }:
 
 const conSlug = (slug = "salon-uno") => ({ params: Promise.resolve({ slug }) })
 const pedido = (url: string, cuerpo?: unknown) =>
-  ({ url, headers: new Headers(), json: async () => cuerpo }) as unknown as NextRequest
+  ({ url, headers: new Headers(), body: cuerpoDePrueba(cuerpo) }) as unknown as NextRequest
 
 async function horas(consulta: string) {
   const { GET } = await import("./disponibilidad/route")
@@ -155,6 +157,22 @@ describe("confirmar con hora valle", () => {
     expect(status).toBe(201)
     expect(reservaPublica().price).toBe(6400 + 25000)
     expect(preciosDeLasFilas(cuerpo.citaId)).toEqual([6400, 25000, null])
+  })
+
+  it("#138: el correo de confirmación dice el precio rebajado y el normal", async () => {
+    escenario()
+    await confirmar({ servicioIds: ["s-corte", "s-color", "s-peinado"], hora: "10:00" })
+    expect(vi.mocked(enviarConfirmacionCliente)).toHaveBeenCalledWith(
+      expect.objectContaining({ precio: 6400 + 25000, precioNormal: 8000 + 25000, precioIncompleto: true })
+    )
+  })
+
+  it("#138: fuera de franja el correo dice el precio, sin precio normal aparte", async () => {
+    escenario()
+    await confirmar({ servicioIds: ["s-corte"], hora: "09:00" })
+    expect(vi.mocked(enviarConfirmacionCliente)).toHaveBeenCalledWith(
+      expect.objectContaining({ precio: 8000, precioNormal: null, precioIncompleto: false })
+    )
   })
 
   it("fuera de franja: precio normal, aunque el otro negocio tenga franja a esa hora", async () => {

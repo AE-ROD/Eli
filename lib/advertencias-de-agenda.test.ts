@@ -49,6 +49,22 @@ describe("advertenciasDeAgenda", () => {
     expect(advertencias).toEqual([])
   })
 
+  it("un día sin horario general, el horario personal del encargado no cuenta como atención del negocio (#168)", async () => {
+    // El 21 de octubre de 2026 es miércoles: sólo el encargado cargó horario.
+    base.reiniciar({
+      ...datosBase(),
+      workSchedule: [
+        { id: "h", businessId: NEGOCIO, memberId: null, dayOfWeek: 2, startTime: "09:00", endTime: "19:00" },
+        { id: "h-enc", businessId: NEGOCIO, memberId: "m-encargado", dayOfWeek: 3, startTime: "09:00", endTime: "19:00" },
+      ],
+    })
+    const miercoles = { startTime: santiago("10:00", "2026-10-21"), endTime: santiago("11:00", "2026-10-21") }
+
+    const advertencias = await advertenciasDeAgenda(db, { businessId: NEGOCIO, citaId: null, tramo: miercoles, memberId: null })
+
+    expect(advertencias).toEqual([{ tipo: "fuera-de-horario", mensaje: "El negocio no atiende ese día." }])
+  })
+
   it("nada de otro negocio cuenta: su bloqueo de todo el día no se advierte", async () => {
     const advertencias = await advertenciasDeAgenda(db, {
       businessId: NEGOCIO,

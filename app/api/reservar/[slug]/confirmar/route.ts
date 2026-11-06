@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { z } from "zod"
 import { enviarConfirmacionCliente, enviarAvisoProfesional } from "@/lib/email"
 import { dentroDelPlazo, plazoValido } from "@/lib/gestion-de-cita"
@@ -8,12 +9,13 @@ import { reservaSchema } from "@/lib/validaciones"
 import {
   asignarCandidatoLibre,
   candidatosDeLaReserva,
-  candidatosQueCubren,
+  candidatosQueOfrecen,
   type Candidato,
 } from "@/lib/agenda-publica"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { contabilizarReferido } from "@/lib/referidos"
 import { registrarError } from "@/lib/registro-de-errores"
+import { correosDelAviso } from "@/lib/avisos-al-negocio"
 import { generarToken } from "@/lib/tokens"
 import { leerHoraValle, preciosConHoraValle } from "@/lib/hora-valle"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
@@ -28,6 +30,7 @@ import {
   type ServicioDeLaReserva,
 } from "@/lib/servicios-de-la-reserva"
 import { existeLaHora, instanteEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
+import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { recibiraRecordatorio } from "@/lib/recordatorios"
 import {
   MAX_RESERVAS_FUTURAS_POR_CONTACTO,
@@ -39,11 +42,11 @@ import {
   ORIGEN_RESERVA_PUBLICA,
   WHERE_RESERVA_PUBLICA,
   compartenContacto,
-  consentimientoSobreClienteExistente,
   esElMismoCliente,
   fechaNoReservable,
   normalizarEmail,
   normalizarTelefono,
+  notaDeContactoPorConfirmar,
   yaPasoLaHora,
 } from "@/lib/reserva-publica"
 
@@ -169,7 +172,7 @@ async function reservar(
     ? await tx.customer.findMany({
         // Un cliente eliminado (anonimizado) nunca se reutiliza.
         where: { AND: [{ businessId: negocioId, email: { equals: email, mode: "insensitive" } }, clienteNoEliminado] },
-        select: { id: true, name: true, lastName: true, email: true, phone: true, whatsappConsentAt: true },
+        select: { id: true, name: true, lastName: true, email: true, phone: true },
         orderBy: { createdAt: "asc" },
       })
     : []
@@ -177,10 +180,8 @@ async function reservar(
   let cliente: { id: string } | undefined = reutilizado
 
   // Consentimiento para recordatorios por WhatsApp (PRODUCTO.md §10): se
-  // registra cuándo y por dónde. Marcado, se guarda si no había uno; uno
-  // previo (dado en el local, por ejemplo) no se pisa. Sin marcar no borra
-  // nada. Sin teléfono se ignora: el consentimiento es para un número, y la
-  // página sólo muestra la casilla cuando se escribió uno.
+  // registra cuándo y por dónde. Sin teléfono se ignora: el consentimiento es
+  // para un número, y la página sólo muestra la casilla cuando se escribió uno.
   const conConsentimiento = datos.whatsappConsentimiento === true && Boolean(datos.telefono)
   const consentimiento = conConsentimiento
     ? { whatsappConsentAt: ahora, whatsappConsentSource: ORIGEN_RESERVA_PUBLICA }
@@ -194,6 +195,13 @@ async function reservar(
   const consentimientoPromocional =
     datos.correoPromoConsentimiento === true && email ? datosDeConsentimientoPromocional("reserva-publica", ahora) : {}
 
+  // Un cliente nuevo guarda el teléfono y el consentimiento dados. Uno que ya
+  // existía (reutilizado por email + nombre) no recibe ninguno de los dos:
+  // quien conoce el email y el nombre de otra persona dejaba su propio número
+  // en la ficha y recibía los recordatorios de sus citas, también las que
+  // agenda el local. Lo dado queda como nota interna de la cita, para que el
+  // local lo confirme a mano en la ficha (`notaDeContactoPorConfirmar`).
+  let notaDeContacto: string | null = null
   if (!cliente) {
     cliente = await tx.customer.create({
       data: {
@@ -216,25 +224,8 @@ async function reservar(
       },
       select: { id: true },
     })
-  } else if (conConsentimiento && reutilizado) {
-    // El cliente se reutilizó por email + nombre, no por teléfono: el
-    // consentimiento sólo vale si el número es el suyo. Sin teléfono
-    // guardado, se guarda el dado junto con el consentimiento; con otro
-    // número, no se registra ni se pisa (`consentimientoSobreClienteExistente`).
-    // El teléfono va en el where para que no cambie entre la lectura y la
-    // escritura.
-    const accion = consentimientoSobreClienteExistente(reutilizado.phone, datos.telefono)
-    if (accion === "guardar-telefono") {
-      await tx.customer.updateMany({
-        where: { id: cliente.id, businessId: negocioId, phone: null, whatsappConsentAt: null },
-        data: { phone: datos.telefono, ...consentimiento },
-      })
-    } else if (accion === "registrar") {
-      await tx.customer.updateMany({
-        where: { id: cliente.id, businessId: negocioId, phone: reutilizado.phone, whatsappConsentAt: null },
-        data: consentimiento,
-      })
-    }
+  } else if (reutilizado) {
+    notaDeContacto = notaDeContactoPorConfirmar(reutilizado.phone, datos.telefono, conConsentimiento)
   }
 
   // Reservas por confirmar (#84): con la regla encendida, si el correo de
@@ -263,6 +254,7 @@ async function reservar(
       endTime,
       status: "pendiente",
       clientComments: datos.comentarios || null,
+      notes: notaDeContacto,
       price: resumen.precio,
       customerId: cliente.id,
       memberId: asignacion.memberId,
@@ -313,27 +305,6 @@ async function faltasDelCorreo(
   return faltas.length
 }
 
-const mismaCasilla = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
-
-/**
- * El correo del usuario del profesional al que quedó la cita, leído por id Y
- * negocio: un `memberId` de otro negocio no da correo. Sin profesional, o si
- * la lectura falla, null: la reserva ya está hecha y el dueño igual se entera.
- */
-async function correoDelProfesional(negocioId: string, memberId: string | null): Promise<string | null> {
-  if (!memberId) return null
-  try {
-    const miembro = await prisma.businessMember.findFirst({
-      where: { id: memberId, businessId: negocioId },
-      select: { user: { select: { email: true } } },
-    })
-    return miembro?.user?.email || null
-  } catch (error) {
-    registrarError("leyendo el correo del profesional para el aviso de reserva", error)
-    return null
-  }
-}
-
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
@@ -362,7 +333,7 @@ export async function POST(
   if (!negocio) return NextResponse.json({ error: "Negocio no encontrado" }, { status: 404 })
 
   try {
-    const cuerpo = await request.json()
+    const cuerpo = await leerJsonConTope(request)
     const datos = reservaSchema.parse(cuerpo)
 
     // Todos del negocio y activos, o el mismo 404 sin decir cuál falló. La
@@ -389,8 +360,13 @@ export async function POST(
 
     // Ni horas que ya pasaron ni fechas a más de `DIAS_MAXIMOS_DE_ANTICIPACION`
     // días, en el reloj del negocio: la misma regla con la que `disponibilidad`
-    // ofrece las horas (`lib/reserva-publica.ts`).
-    const ahora = new Date()
+    // ofrece las horas (`lib/reserva-publica.ts`). La hora es la de la base,
+    // no la de esta instancia, como en el enlace para gestionar la cita
+    // (#152, #154): con ella se decide también el plazo, el recordatorio, las
+    // faltas y los consentimientos. Una sola lectura por pedido. Esta
+    // reserva no toma candados (la ordena la transacción `Serializable`), así
+    // que no hay un "después del candado" que esperar.
+    const ahora = await horaDeLaBase(prisma)
     if (yaPasoLaHora(datos.fecha, datos.hora, ahora, zona)) {
       return NextResponse.json({ error: MENSAJE_HORA_PASADA }, { status: 409 })
     }
@@ -412,8 +388,9 @@ export async function POST(
     // Quién puede tomarla (`lib/agenda-publica.ts`), con la misma regla que
     // `disponibilidad`: profesionales que atienden y hacen todos los servicios (sólo
     // el elegido, si eligió), y de ellos los que tienen la hora entera dentro
-    // de su horario. Un negocio sin profesionales es un solo carril con el
-    // horario del negocio, como siempre.
+    // de su horario, en una hora de la grilla que ofrece (`candidatosQueOfrecen`,
+    // #46: no las 09:17). Un negocio sin profesionales es un solo carril con
+    // el horario del negocio, como siempre.
     const reserva = await candidatosDeLaReserva(prisma, {
       businessId: negocio.id,
       serviceIds: servicios.map((servicio) => servicio.id),
@@ -423,7 +400,7 @@ export async function POST(
     if (reserva.tipo === "profesional-no-disponible") {
       return NextResponse.json({ error: "Ese profesional no está disponible para este servicio" }, { status: 404 })
     }
-    const candidatos = candidatosQueCubren(reserva.candidatos, datos.hora, resumen.duracion)
+    const candidatos = candidatosQueOfrecen(reserva.candidatos, datos.hora, resumen.duracion)
     if (candidatos.length === 0) {
       return NextResponse.json(
         { error: "Ese horario está fuera de la atención del negocio. Elige otra hora." },
@@ -503,6 +480,10 @@ export async function POST(
           sePuedeCambiar,
           // El correo sí lo dice: el local la confirmará (#84).
           porConfirmar: cita.confirmacionPorFaltas,
+          // El precio guardado, con la rebaja de hora valle y el normal al lado si la tuvo (#138).
+          precio: precios.total,
+          precioNormal: precios.hayRebaja ? precios.totalNormal : null,
+          precioIncompleto: resumen.precioIncompleto,
         }).catch(() => null)
       )
     }
@@ -510,11 +491,7 @@ export async function POST(
     // El aviso de nueva reserva va al dueño y, si la cita quedó a nombre de un
     // profesional (elegido o asignado por "cualquiera"), también a él, con el
     // correo de su usuario (#114). Una sola vez si es la misma casilla.
-    const avisados = [negocio.user.email]
-    const correoProfesional = await correoDelProfesional(negocio.id, cita.memberId)
-    if (correoProfesional && !avisados.some((correo) => mismaCasilla(correo, correoProfesional))) {
-      avisados.push(correoProfesional)
-    }
+    const avisados = await correosDelAviso(negocio.id, negocio.user.email, [cita.memberId])
     for (const emailProfesional of avisados) {
       emailsPromises.push(
         enviarAvisoProfesional({
@@ -547,6 +524,7 @@ export async function POST(
       { status: 201 }
     )
   } catch (error) {
+    if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       // Público: el primer mensaje, legible, y no los issues crudos de zod.
       return NextResponse.json({ error: error.errors[0]?.message ?? "Datos inválidos" }, { status: 400 })

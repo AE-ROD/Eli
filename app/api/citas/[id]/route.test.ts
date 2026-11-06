@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { coincideConWhere } from "@/pruebas/where-simple"
 import type { NextRequest } from "next/server"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 
 const mockGetServerSession = vi.fn()
 
@@ -47,7 +48,9 @@ const prismaMock = {
   business: { findUnique: vi.fn(() => Promise.resolve({ timezone: "America/Santiago" })) },
   workSchedule: { findMany: vi.fn(() => Promise.resolve([])) },
   timeBlock: { findMany: vi.fn(() => Promise.resolve([])) },
-  businessMember: { findFirst: vi.fn(() => Promise.resolve(null)) },
+  businessMember: { findFirst: vi.fn(() => Promise.resolve(null)), findMany: vi.fn(() => Promise.resolve([])) },
+  // Las filas de `cita_servicios` (#138): estas citas son de texto libre, sin filas.
+  appointmentService: { findMany: vi.fn(() => Promise.resolve([])) },
 }
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
@@ -94,7 +97,8 @@ const sesionEncargado = {
 const pedidoFalso = (body?: Record<string, unknown>): NextRequest =>
   ({
     url: "http://localhost/api/citas/cita-colega",
-    json: () => Promise.resolve(body ?? {}),
+    headers: new Headers(),
+    body: cuerpoDePrueba(body ?? {}),
   }) as unknown as NextRequest
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) })

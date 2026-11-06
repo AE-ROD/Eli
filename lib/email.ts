@@ -1,4 +1,5 @@
 import { Resend } from "resend"
+import { formatearMonto } from "@/lib/dinero"
 import { nombreDelRol } from "@/lib/nombres-de-roles"
 import {
   DIAS_DE_PRUEBA,
@@ -335,12 +336,34 @@ export interface DatosConfirmacionCliente {
    * confirmará, sin decir por qué. La pantalla de la reserva no lo dice.
    */
   porConfirmar?: boolean
+  /** El precio de la cita, ya con la rebaja de hora valle si la tuvo. Sin precio, no se muestra. */
+  precio?: number | null
+  /** Con hora valle (#89c, #138): el total sin la rebaja, para mostrar las dos. Sin rebaja, null. */
+  precioNormal?: number | null
+  /** Algún servicio no tiene precio: el total suma los que sí y dice "+ a consultar". */
+  precioIncompleto?: boolean
+}
+
+/**
+ * La fila "Precio" del correo: el de la cita, y con hora valle también el
+ * normal (#138), como lo muestra la reserva. `null` si no hay precio.
+ */
+function filaDePrecio(datos: Pick<DatosConfirmacionCliente, "precio" | "precioNormal" | "precioIncompleto">): [string, string] | null {
+  if (datos.precio === null || datos.precio === undefined) return null
+  let texto = formatearMonto(datos.precio)
+  if (datos.precioIncompleto) texto += " + a consultar"
+  if (datos.precioNormal !== null && datos.precioNormal !== undefined && datos.precioNormal > datos.precio) {
+    texto += ` (hora valle; precio normal ${formatearMonto(datos.precioNormal)})`
+  }
+  return ["Precio", texto]
 }
 
 export function enviarConfirmacionCliente(datos: DatosConfirmacionCliente) {
   const detalle: Array<[string, string]> = [["Servicio", datos.servicio]]
   if (datos.profesional) detalle.push(["Con", datos.profesional])
   detalle.push(["Fecha", fechaLegible(datos.fecha)], ["Hora", datos.hora], ["Duración", `${datos.duracion} minutos`])
+  const precio = filaDePrecio(datos)
+  if (precio) detalle.push(precio)
   return enviar({
     tipo: "confirmacion-cliente",
     para: datos.emailCliente,
@@ -421,6 +444,8 @@ export interface DatosReservaConfirmadaPorElLocal {
   fecha: string
   hora: string
   profesional?: string | null
+  /** El precio guardado en la cita: el rebajado, si se reservó en hora valle (#138). */
+  precio?: number | null
 }
 
 /** Al cliente: el local confirmó la reserva que había entrado por confirmar (#84). */
@@ -428,6 +453,8 @@ export function enviarReservaConfirmadaPorElLocal(datos: DatosReservaConfirmadaP
   const detalle: Array<[string, string]> = [["Servicio", datos.servicio]]
   if (datos.profesional) detalle.push(["Con", datos.profesional])
   detalle.push(["Fecha", fechaLegible(datos.fecha)], ["Hora", datos.hora])
+  const precio = filaDePrecio({ precio: datos.precio })
+  if (precio) detalle.push(precio)
   return enviar({
     tipo: "reserva-confirmada-por-el-local",
     para: datos.emailCliente,
@@ -495,6 +522,12 @@ export interface DatosRecordatorio {
   enlaceDeGestion?: string | null
   /** Hasta cuántas horas antes se puede cambiar con el enlace. */
   plazoHoras?: number
+  /**
+   * `false` si la cita ya está dentro del plazo (`dentroDelPlazo`): el
+   * enlace no la dejaría cancelar ni cambiar, así que no se ofrece el botón,
+   * como en la confirmación (#164).
+   */
+  sePuedeCambiar?: boolean
 }
 
 export function enviarRecordatorio(datos: DatosRecordatorio) {
@@ -509,7 +542,9 @@ export function enviarRecordatorio(datos: DatosRecordatorio) {
       ["Fecha", fechaLegible(datos.fecha)],
       ["Hora", datos.hora],
     ],
-    ...(datos.enlaceDeGestion
+    ...(datos.sePuedeCambiar === false
+      ? { cierre: html`¡Te esperamos! Si no puedes asistir, contacta directamente al local.` }
+      : datos.enlaceDeGestion
       ? {
           boton: { texto: "Cancelar o cambiar mi cita", enlace: datos.enlaceDeGestion },
           cierre:

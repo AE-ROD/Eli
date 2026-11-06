@@ -132,6 +132,36 @@ describe("proxy — rate limit de los endpoints del panel", () => {
     }
   )
 
+  it("POST /api/auth/session (update de la sesión) lleva el límite de escritura, por sesión (#49)", async () => {
+    const { default: proxy } = await import("./proxy")
+
+    mockVerificarLimite.mockResolvedValueOnce({ permitido: false, restantes: 0 })
+
+    const res = await proxy(pedidoFalso("/api/auth/session", "POST"))
+
+    expect(mockVerificarLimite).toHaveBeenCalledWith("panelEscritura", "usuario:usuario-1")
+    expect(res.status).toBe(429)
+  })
+
+  it("POST /api/auth/session sin sesión cuenta por IP", async () => {
+    const { default: proxy } = await import("./proxy")
+
+    mockGetToken.mockResolvedValueOnce(null)
+
+    const res = await proxy(pedidoFalso("/api/auth/session", "POST"))
+
+    expect(mockVerificarLimite).toHaveBeenCalledWith("panelEscritura", "ip:127.0.0.1")
+    expect(res.status).not.toBe(429)
+  })
+
+  it("GET /api/auth/session (el que NextAuth pide solo) sigue sin tope: cortarlo dejaría al panel sin sesión", async () => {
+    const { default: proxy } = await import("./proxy")
+
+    await proxy(pedidoFalso("/api/auth/session", "GET"))
+
+    expect(mockVerificarLimite).not.toHaveBeenCalled()
+  })
+
   it("sin sesión, cuenta por IP en vez de romper la petición", async () => {
     const { default: proxy } = await import("./proxy")
 
@@ -301,5 +331,38 @@ describe("proxy — sesión revocada", () => {
 
     expect(mockVerificarLimite).toHaveBeenCalledWith("panelLectura", "ip:127.0.0.1")
     expect(res.headers.get("location")).toBeNull()
+  })
+})
+
+describe("proxy — tope del cuerpo de la API (GHSA-mrhx-c7xc-m3w5)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetToken.mockResolvedValue({ id: "usuario-1", businessId: "negocio-1" })
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 100 })
+  })
+
+  const conLargo = (pathname: string, largo: number): NextRequest => {
+    const pedido = pedidoFalso(pathname, "POST")
+    pedido.headers.set("content-length", String(largo))
+    return pedido
+  }
+
+  it("un Content-Length sobre el techo da 413 antes del rate limit, en el panel y en lo público", async () => {
+    const { default: proxy } = await import("./proxy")
+
+    for (const ruta of ["/api/clientes", "/api/reservar/salon-uno/confirmar"]) {
+      const res = await proxy(conLargo(ruta, 6 * 1024 * 1024))
+      expect(res.status).toBe(413)
+      expect(await res.json()).toEqual({ error: "El pedido es demasiado grande." })
+    }
+    expect(mockVerificarLimite).not.toHaveBeenCalled()
+  })
+
+  it("bajo el techo deja pasar (el tope fino lo pone cada endpoint)", async () => {
+    const { default: proxy } = await import("./proxy")
+
+    const res = await proxy(conLargo("/api/clientes/importar", 3 * 1024 * 1024))
+
+    expect(res.status).toBe(200)
   })
 })

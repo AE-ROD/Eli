@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
 import { generarToken, hashDeToken } from "@/lib/tokens"
+import { cuerpoDePrueba } from "@/pruebas/pedidos"
 
 /**
  * El enlace para cancelar o reagendar sin cuenta (P6): lo crea confirmar,
@@ -77,7 +78,7 @@ function escenario({ cita = {}, otras = [] as Registro[], negocio = {} as Regist
 
 const params = (token = TOKEN, slug = "salon-uno") => ({ params: Promise.resolve({ slug, token }) })
 const pedido = (url = "http://localhost/x", cuerpo?: unknown) =>
-  ({ url, headers: new Headers(), json: async () => cuerpo }) as unknown as NextRequest
+  ({ url, headers: new Headers(), body: cuerpoDePrueba(cuerpo) }) as unknown as NextRequest
 
 async function ver(token = TOKEN, slug = "salon-uno") {
   const { GET } = await import("./route")
@@ -126,7 +127,7 @@ describe("confirmar crea el enlace", () => {
     escenario()
     const { POST } = await import("../../confirmar/route")
     const cuerpo = { servicioId: "s-corte", fecha: "2030-01-08", hora: "09:00", nombre: "Ana", apellido: "Ríos", email: "ana@correo.test" }
-    const respuesta = await POST({ headers: new Headers(), json: async () => cuerpo } as unknown as NextRequest, {
+    const respuesta = await POST({ headers: new Headers(), body: cuerpoDePrueba(cuerpo) } as unknown as NextRequest, {
       params: Promise.resolve({ slug: "salon-uno" }),
     })
     expect(respuesta.status).toBe(201)
@@ -261,6 +262,41 @@ describe("cancelar", () => {
   })
 })
 
+describe("el aviso del cambio llega también al profesional (#104)", () => {
+  const destinatarios = () => correos.cambio.mock.calls.map((llamada) => (llamada[0] as { emailNegocio: string }).emailNegocio).sort()
+
+  it("al cancelar: a la dueña y a la profesional de la cita, un correo a cada una", async () => {
+    escenario()
+    expect((await cancelar()).status).toBe(200)
+    expect(destinatarios()).toEqual(["carla@uno.test", "duena@uno.test"])
+  })
+
+  it("al reagendar con la misma profesional: a la dueña y a ella, una vez", async () => {
+    escenario()
+    expect((await reagendar("2030-01-08", "11:00")).status).toBe(200)
+    expect(destinatarios()).toEqual(["carla@uno.test", "duena@uno.test"])
+  })
+
+  it("una cita sin profesional que al reagendar queda con uno: a la dueña y al nuevo", async () => {
+    escenario({ cita: { memberId: null } })
+    expect((await reagendar("2030-01-08", "11:00")).status).toBe(200)
+    const nuevo = laCita().memberId === "m-carla" ? "carla@uno.test" : "pedro@uno.test"
+    expect(destinatarios()).toEqual([nuevo, "duena@uno.test"].sort())
+  })
+
+  it("sin profesional: sólo a la dueña", async () => {
+    escenario({ cita: { memberId: null } })
+    expect((await cancelar()).status).toBe(200)
+    expect(destinatarios()).toEqual(["duena@uno.test"])
+  })
+
+  it("un memberId de otro negocio no da correo", async () => {
+    escenario({ cita: { memberId: "m-ajeno" } })
+    expect((await cancelar()).status).toBe(200)
+    expect(destinatarios()).toEqual(["duena@uno.test"])
+  })
+})
+
 describe("cancelar: la hora es la de la base (#152)", () => {
   // La cita es el 7 a las 10:00 en Santiago (13:00Z); con 48 horas de plazo,
   // el límite es el 5 a las 13:00Z. El reloj de esta instancia y el de la base
@@ -306,6 +342,36 @@ describe("cancelar: la hora es la de la base (#152)", () => {
 
     expect(laCita()).toMatchObject({ status: "cancelada", canceladaPor: "cliente", canceladaEn: deLaBase })
   })
+
+  it("#154: reagendar decide el plazo con la hora de la base, no con la de esta instancia", async () => {
+    escenario({ negocio: { cancelacionHorasAntes: 48 } })
+    relojEn("2030-01-05T12:59:58.000Z")
+    laBaseDice("2030-01-05T13:00:01.000Z")
+
+    const { status, cuerpo } = await reagendar("2030-01-08", "09:00")
+
+    expect(status).toBe(409)
+    expect(cuerpo.error).toMatch(/48 horas antes/)
+    expect(laCita().startTime).toEqual(aLas("10:00"))
+  })
+
+  it("#154: y si para la base sigue dentro del plazo, reagenda aunque esta instancia vaya adelantada", async () => {
+    escenario({ negocio: { cancelacionHorasAntes: 48 } })
+    relojEn("2030-01-05T13:00:01.000Z")
+    laBaseDice("2030-01-05T12:59:58.000Z")
+
+    expect((await reagendar("2030-01-08", "09:00")).status).toBe(200)
+    expect(laCita().startTime).toEqual(aLas("09:00", "2030-01-08"))
+  })
+
+  it("#154: ver la cita y sus horas también usan la hora de la base", async () => {
+    escenario({ negocio: { cancelacionHorasAntes: 48 } })
+    relojEn("2030-01-05T12:59:58.000Z")
+    laBaseDice("2030-01-05T13:00:01.000Z")
+    expect((await ver()).cuerpo.sePuedeCambiar).toBe(false)
+    laBaseDice("2030-01-05T13:00:01.000Z")
+    expect((await horas("2030-01-08")).cuerpo.slots).toEqual([])
+  })
 })
 
 describe("reagendar", () => {
@@ -348,6 +414,13 @@ describe("reagendar", () => {
   it("fuera del horario: 409", async () => {
     escenario()
     expect((await reagendar("2030-01-08", "15:00")).status).toBe(409)
+  })
+
+  it("#46: una hora que cabe pero que la disponibilidad no ofrece (09:17): 409 sin mover la cita", async () => {
+    escenario()
+    expect((await horas("2030-01-08")).cuerpo.slots).not.toContain("09:17")
+    expect((await reagendar("2030-01-08", "09:17")).status).toBe(409)
+    expect(laCita().startTime).toEqual(aLas("10:00"))
   })
 
   it("fuera del plazo: ni horas ni cambio", async () => {
