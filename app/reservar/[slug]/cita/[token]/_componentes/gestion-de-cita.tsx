@@ -213,6 +213,8 @@ export function GestionDeCita({ slug, token }: { slug: string; token: string }) 
                 horaSeleccionada={hora}
                 onFecha={setFecha}
                 onHora={elegirHora}
+                // Clínica dental: una urgencia sólo se mueve a otra hora de hoy.
+                soloHoy={cita.soloHoy === true}
               />
             </div>
             {hora && precioNuevo && precioNuevo.precio !== null && (

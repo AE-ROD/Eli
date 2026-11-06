@@ -1,11 +1,23 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { candidatosDeLaReserva, horasLibresDelDia } from "@/lib/agenda-publica"
+import { candidatosDeLaReserva, horasConElSillonLibre, horasLibresDelDia } from "@/lib/agenda-publica"
 import { dentroDelPlazo, mensajeFueraDePlazo } from "@/lib/gestion-de-cita"
-import { MENSAJE_FECHA_MUY_LEJANA, MENSAJE_FECHA_PASADA, fechaNoReservable } from "@/lib/reserva-publica"
+import {
+  MENSAJE_FECHA_MUY_LEJANA,
+  MENSAJE_FECHA_PASADA,
+  MENSAJE_URGENCIA_SOLO_HOY,
+  esHoyEn,
+  fechaNoReservable,
+} from "@/lib/reserva-publica"
+import { esRubroDental } from "@/lib/rubros"
 import { horasConOtroPrecio, leerHoraValle } from "@/lib/hora-valle"
-import { duracionAlReagendar, leerServiciosDeLaReserva, serviciosDeLaCita } from "@/lib/servicios-de-la-reserva"
+import {
+  duracionAlReagendar,
+  hayServicioDeUrgencia,
+  leerServiciosDeLaReserva,
+  serviciosDeLaCita,
+} from "@/lib/servicios-de-la-reserva"
 import { esFechaCalendario } from "@/lib/zona-horaria"
 import { abrirEnlace, type Params } from "../_comun"
 
@@ -20,6 +32,9 @@ const fechaSchema = z
  * (`lib/agenda-publica.ts`). Con varios servicios (#89a), el bloque entero:
  * la duración total copiada al reservar, o la que tiene hoy si es mayor. La
  * propia cita no se ocupa a sí misma.
+ *
+ * Clínica dental: si la cita tiene sillón, sólo las horas en que el sillón
+ * también está libre (reagendar lo conserva); una urgencia, sólo horas de hoy.
  */
 export async function GET(request: NextRequest, contexto: Params) {
   const enlace = await abrirEnlace(request, contexto, "lecturaPublica")
@@ -46,6 +61,10 @@ export async function GET(request: NextRequest, contexto: Params) {
       mensaje: noReservable === "pasada" ? MENSAJE_FECHA_PASADA : MENSAJE_FECHA_MUY_LEJANA,
     })
   }
+  const clinicaDental = esRubroDental(cita.business.type)
+  if (clinicaDental && !esHoyEn(fecha.data, ahora, zona) && (await hayServicioDeUrgencia(prisma, cita.businessId, servicios.ids))) {
+    return NextResponse.json({ slots: [], mensaje: MENSAJE_URGENCIA_SOLO_HOY })
+  }
 
   const reserva = await candidatosDeLaReserva(prisma, {
     businessId: cita.businessId,
@@ -59,7 +78,7 @@ export async function GET(request: NextRequest, contexto: Params) {
   const candidatos = reserva.candidatos.filter((candidato) => candidato.franjas.length > 0)
   if (candidatos.length === 0) return NextResponse.json({ slots: [], mensaje: "No hay atención ese día" })
 
-  const slots = await horasLibresDelDia(prisma, {
+  const libres = await horasLibresDelDia(prisma, {
     businessId: cita.businessId,
     zona,
     fecha: fecha.data,
@@ -68,6 +87,20 @@ export async function GET(request: NextRequest, contexto: Params) {
     ahora,
     ignorarCitaId: cita.id,
   })
+  // Con sillón (clínica dental), las que también lo dejan libre: reagendar
+  // lo conserva y rechaza la hora en que choca.
+  const slots =
+    clinicaDental && cita.sillonId
+      ? await horasConElSillonLibre(prisma, {
+          businessId: cita.businessId,
+          sillonId: cita.sillonId,
+          fecha: fecha.data,
+          zona,
+          duracion,
+          horas: libres,
+          ignorarCitaId: cita.id,
+        })
+      : libres
 
   // Hora valle (#89c): `slots` no cambia de forma. Si en alguna hora la cita
   // quedaría con otro precio que el guardado (`precioAlReagendar`), va además

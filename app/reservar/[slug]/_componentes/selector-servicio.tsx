@@ -11,6 +11,8 @@ export interface ServicioPublico {
   description: string | null
   duration: number
   price: number | null
+  /** Clínica dental: urgencia, sólo con horas de hoy. Sólo viene en una clínica. */
+  esUrgencia?: boolean
 }
 
 interface PropsDeSelectorServicio {
@@ -91,6 +93,10 @@ export function SelectorServicio({ servicios, seleccionados, onAlternar, tope }:
                   <Clock aria-hidden="true" className="size-4" strokeWidth={1.75} />
                   {formatearDuracionDeServicio(servicio.duration)}
                 </span>
+                {/* Clínica dental: la urgencia sólo tiene horas de hoy, y se dice antes de elegirla. */}
+                {servicio.esUrgencia && (
+                  <span className="rounded-sm bg-naranja-suave px-1.5 py-0.5 text-xs font-medium text-navy">Horas de hoy</span>
+                )}
                 {servicio.price != null && (
                   <span className="ml-auto font-medium tabular-nums">{formatearMonto(servicio.price)}</span>
                 )}

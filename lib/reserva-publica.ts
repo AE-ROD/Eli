@@ -138,6 +138,59 @@ export function avisoSinCambiosDespuesDeReservar(plazoHoras: number): string {
   return `Tu hora es en menos de ${plazo}, así que no se puede cancelar ni cambiar por el enlace. Si lo necesitas, contacta directamente al local.`
 }
 
+// ─── Clínica dental: primera vez y urgencia ──────────────────────────────────
+//
+// Sólo en una clínica dental (`esRubroDental(Business.type)`). En cualquier
+// otro rubro la reserva es la de siempre: `primeraVez` se ignora y ningún
+// servicio es urgencia, aunque la columna diga otra cosa. La duración y si es
+// urgencia los decide el servidor (disponibilidad, confirmar y el enlace para
+// reagendar), con estas mismas funciones; la página sólo las muestra.
+
+/** Los minutos que suma la primera vez en la clínica: para abrir la ficha. */
+export const MINUTOS_DE_PRIMERA_VEZ = 15
+
+/** Lo que dice la reserva junto a "¿Es tu primera vez en la clínica?". */
+export const TEXTO_DE_PRIMERA_VEZ = `La primera vez sumamos ${MINUTOS_DE_PRIMERA_VEZ} minutos para abrir tu ficha.`
+
+/**
+ * Cuánto dura la reserva entera: la suma de los servicios
+ * (`resumenDeLaReserva`) y, en una clínica dental y si es la primera vez del
+ * paciente, `MINUTOS_DE_PRIMERA_VEZ` más. Con la misma cuenta se ofrecen las
+ * horas y se aceptan: una hora en que caben 45 minutos puede no tener 60.
+ */
+export function duracionDeLaReserva(
+  duracionDeLosServicios: number,
+  { clinicaDental, primeraVez }: { clinicaDental: boolean; primeraVez: boolean }
+): number {
+  return duracionDeLosServicios + (clinicaDental && primeraVez ? MINUTOS_DE_PRIMERA_VEZ : 0)
+}
+
+/** Si la reserva es una urgencia: en una clínica dental, alguno de los servicios elegidos está marcado como urgencia. */
+export function esReservaDeUrgencia(clinicaDental: boolean, servicios: readonly { esUrgencia?: boolean | null }[]): boolean {
+  return clinicaDental && servicios.some((servicio) => servicio.esUrgencia === true)
+}
+
+/** Si `fecha` ("AAAA-MM-DD") es hoy en el reloj de la zona. Una urgencia sólo se reserva para hoy. */
+export function esHoyEn(fecha: string, ahora: Date, zona: string): boolean {
+  return fechaYMinutosEn(ahora, zona).fecha === fecha
+}
+
+/** El 400 de `confirmar` (y del enlace para reagendar) con una urgencia para otro día. */
+export const MENSAJE_URGENCIA_SOLO_HOY =
+  "Las urgencias se atienden el mismo día: elige una hora de hoy. Para otro día, elige otro motivo."
+
+/** Cuando hoy no queda ninguna hora para una urgencia. */
+export const MENSAJE_URGENCIA_SIN_HORAS =
+  "Hoy ya no quedan horas de urgencia para reservar por acá. Llama a la clínica para que te orienten."
+
+/** El aviso de la reserva de una clínica con un servicio de urgencia activo, con su nombre. */
+export function avisoDeUrgencia(nombreDelServicio: string): { destacado: string; resto: string } {
+  return {
+    destacado: "¿Tienes dolor fuerte?",
+    resto: `Elige «${nombreDelServicio}» como motivo y te mostramos horas de hoy.`,
+  }
+}
+
 // ─── Topes anti-abuso ────────────────────────────────────────────────────────
 //
 // La página pública no pide cuenta: cualquiera puede reservar, y el límite

@@ -4,6 +4,11 @@ import { cn } from "@/lib/utils"
 /** Los pasos de la reserva, en orden: el número de cada uno es su lugar más uno. */
 export const PASOS_DE_RESERVA = ["Servicio", "Día y hora", "Tus datos"] as const
 
+/** Los mismos pasos en una clínica dental, donde el primero es el "Motivo" (`vocabularioDe`). */
+export function pasosDeLaReserva(servicioDeLaReserva: string): readonly [string, string, string] {
+  return [servicioDeLaReserva, PASOS_DE_RESERVA[1], PASOS_DE_RESERVA[2]]
+}
+
 type EstadoDelPaso = "hecho" | "actual" | "pendiente"
 
 /*
@@ -37,6 +42,8 @@ function estadoDelPaso(numero: number, pasoActual: number): EstadoDelPaso {
 interface PropsDeIndicadorDePasos {
   /** El paso en el que está la clienta: 1, 2 o 3. */
   paso: number
+  /** Los nombres de los pasos; sin él, los de siempre. En una clínica dental el primero es "Motivo". */
+  pasos?: readonly string[]
 }
 
 /**
@@ -46,10 +53,10 @@ interface PropsDeIndicadorDePasos {
  * El lector de pantalla lo lee como una lista de tres pasos con el actual
  * marcado (`aria-current="step"`) y los hechos con "listo".
  */
-export function IndicadorDePasos({ paso }: PropsDeIndicadorDePasos) {
+export function IndicadorDePasos({ paso, pasos = PASOS_DE_RESERVA }: PropsDeIndicadorDePasos) {
   return (
     <ol aria-label="Pasos de la reserva" className="grid grid-cols-3 gap-2 sm:gap-3">
-      {PASOS_DE_RESERVA.map((nombre, indice) => {
+      {pasos.map((nombre, indice) => {
         const numero = indice + 1
         const estado = estadoDelPaso(numero, paso)
         return (

@@ -139,6 +139,10 @@ const camposDeReservaSchema = z.object({
     .boolean({ invalid_type_error: "El consentimiento de correos no es válido" })
     .optional(),
   comentarios: opcionalHasta("Los comentarios", 1000),
+  // "¿Es tu primera vez en la clínica?": sólo cuenta en una clínica dental,
+  // donde suma 15 minutos (`duracionDeLaReserva`). En otro rubro se ignora.
+  // La duración no se recibe nunca: la calcula `confirmar`.
+  primeraVez: z.boolean({ invalid_type_error: "La respuesta a si es tu primera vez no es válida" }).optional(),
   // Sin él, vacío o null: "cualquiera disponible" (lo asigna el servidor).
   profesionalId: z
     .string({ invalid_type_error: "El profesional no es válido" })

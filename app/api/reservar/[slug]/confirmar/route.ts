@@ -39,16 +39,21 @@ import {
   MENSAJE_HORA_PASADA,
   MENSAJE_TOPE_POR_CONTACTO,
   MENSAJE_TOPE_POR_NEGOCIO,
+  MENSAJE_URGENCIA_SOLO_HOY,
   ORIGEN_RESERVA_PUBLICA,
   WHERE_RESERVA_PUBLICA,
   compartenContacto,
+  duracionDeLaReserva,
   esElMismoCliente,
+  esHoyEn,
+  esReservaDeUrgencia,
   fechaNoReservable,
   normalizarEmail,
   normalizarTelefono,
   notaDeContactoPorConfirmar,
   yaPasoLaHora,
 } from "@/lib/reserva-publica"
+import { esRubroDental } from "@/lib/rubros"
 
 const MS_POR_DIA = 24 * 60 * 60 * 1000
 
@@ -79,6 +84,11 @@ interface Reserva {
   manageTokenHash: string
   /** `Business.porConfirmarTrasFaltas`: con cuántas faltas entra por confirmar (#84). Null: apagado. */
   porConfirmarTrasFaltas: number | null
+  /**
+   * Clínica dental: si es la primera vez del paciente (`Appointment.primeraVez`).
+   * `null` en cualquier otro rubro: la cita no lo escribe y queda el default.
+   */
+  primeraVez: boolean | null
 }
 
 /** P2034: Postgres no pudo ordenar la transacción con otra concurrente; hay que reintentarla. */
@@ -114,6 +124,7 @@ async function reservar(
     dia,
     manageTokenHash,
     porConfirmarTrasFaltas,
+    primeraVez,
   }: Reserva
 ): Promise<Resultado> {
   // A quién va, re-verificado dentro de la transacción con la misma regla con
@@ -260,6 +271,9 @@ async function reservar(
       memberId: asignacion.memberId,
       manageTokenHash,
       confirmacionPorFaltas,
+      // Sólo en una clínica dental. El sillón no se asigna acá: lo asigna la
+      // clínica (`PATCH /api/citas/[id]/sillon`).
+      ...(primeraVez !== null && { primeraVez }),
       businessId: negocioId,
     },
     select: { id: true, memberId: true, confirmacionPorFaltas: true },
@@ -323,6 +337,7 @@ export async function POST(
       name: true,
       slug: true,
       timezone: true,
+      type: true,
       cancelacionHorasAntes: true,
       porConfirmarTrasFaltas: true,
       invitadoPorId: true,
@@ -340,7 +355,16 @@ export async function POST(
     // duración y el precio salen de acá, nunca de lo que mande el cliente.
     const servicios = await leerServiciosDeLaReserva(prisma, negocio.id, datos.servicioIds)
     if (!servicios) return NextResponse.json({ error: "Servicio no disponible" }, { status: 404 })
-    const resumen = resumenDeLaReserva(servicios)
+    // Clínica dental (`lib/reserva-publica.ts`): la primera vez suma 15
+    // minutos a la duración, con la misma cuenta con que `disponibilidad`
+    // ofreció la hora. En otro rubro `primeraVez` se ignora y no se guarda.
+    const clinicaDental = esRubroDental(negocio.type)
+    const primeraVez = clinicaDental ? datos.primeraVez === true : null
+    const resumenDeLosServicios = resumenDeLaReserva(servicios)
+    const resumen = {
+      ...resumenDeLosServicios,
+      duracion: duracionDeLaReserva(resumenDeLosServicios.duracion, { clinicaDental, primeraVez: primeraVez === true }),
+    }
 
     // La fecha y la hora son las del reloj del negocio (`Business.timezone`):
     // la cita se guarda en el instante UTC que les corresponde ahí, no en el
@@ -372,6 +396,12 @@ export async function POST(
     }
     if (fechaNoReservable(datos.fecha, ahora, zona) === "muy-lejana") {
       return NextResponse.json({ error: MENSAJE_FECHA_MUY_LEJANA }, { status: 409 })
+    }
+    // Urgencia dental: sólo para hoy, en el reloj de la clínica. Es la regla
+    // con que `disponibilidad` ofrece las horas; acá se rechaza también un
+    // pedido armado a mano para otro día.
+    if (esReservaDeUrgencia(clinicaDental, servicios) && !esHoyEn(datos.fecha, ahora, zona)) {
+      return NextResponse.json({ error: MENSAJE_URGENCIA_SOLO_HOY }, { status: 400 })
     }
 
     const startTime = instanteEn(datos.fecha, datos.hora, zona)
@@ -426,6 +456,7 @@ export async function POST(
       dia: rangoDelDiaEn(datos.fecha, zona),
       manageTokenHash: enlace.tokenHash,
       porConfirmarTrasFaltas: negocio.porConfirmarTrasFaltas,
+      primeraVez,
     })
     if (resultado.tipo === "rechazada") {
       return NextResponse.json({ error: resultado.error }, { status: resultado.status })

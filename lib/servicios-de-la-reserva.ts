@@ -31,6 +31,11 @@ export interface ServicioDeLaReserva {
   price: number | null
   /** Fuera de la rebaja de hora valle (#89c). */
   excluidoDeHoraValle?: boolean
+  /**
+   * Urgencia dental: sólo se reserva para hoy. Cuenta sólo en una clínica
+   * dental (`esReservaDeUrgencia` en `lib/reserva-publica.ts`).
+   */
+  esUrgencia?: boolean
 }
 
 /**
@@ -46,11 +51,28 @@ export async function leerServiciosDeLaReserva(
   if (ids.length === 0 || ids.length > MAX_SERVICIOS_POR_RESERVA || new Set(ids).size !== ids.length) return null
   const encontrados = await db.service.findMany({
     where: { id: { in: ids }, businessId, active: true },
-    select: { id: true, name: true, duration: true, price: true, excluidoDeHoraValle: true },
+    select: { id: true, name: true, duration: true, price: true, excluidoDeHoraValle: true, esUrgencia: true },
   })
   const enOrden = ids.map((id) => encontrados.find((servicio) => servicio.id === id))
   if (enOrden.some((servicio) => !servicio)) return null
   return enOrden as ServicioDeLaReserva[]
+}
+
+/**
+ * Si alguno de esos servicios del negocio está marcado como urgencia, según
+ * el catálogo de hoy. Para el enlace de una cita ya guardada (reagendar), que
+ * en una clínica dental sólo mueve una urgencia a otra hora de hoy. Sin ids
+ * (algún servicio se borró), `false`: esa cita ya no se reagenda por el
+ * enlace (`serviciosDeLaCita`).
+ */
+export async function hayServicioDeUrgencia(
+  db: Pick<Prisma.TransactionClient, "service">,
+  businessId: string,
+  ids: string[]
+): Promise<boolean> {
+  if (ids.length === 0) return false
+  const deUrgencia = await db.service.count({ where: { id: { in: ids }, businessId, esUrgencia: true } })
+  return deUrgencia > 0
 }
 
 /** Lo que es la reserva entera: nombre, duración total y precio total. */

@@ -10,11 +10,20 @@ import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
 import {
   MENSAJE_FECHA_MUY_LEJANA,
   MENSAJE_HORA_PASADA,
+  MENSAJE_URGENCIA_SOLO_HOY,
+  esHoyEn,
   fechaNoReservable,
   yaPasoLaHora,
 } from "@/lib/reserva-publica"
+import { esRubroDental } from "@/lib/rubros"
+import { SillonOcupado, asegurarSillonLibre } from "@/lib/sillones"
 import { leerHoraValle, precioAlReagendar } from "@/lib/hora-valle"
-import { duracionAlReagendar, leerServiciosDeLaReserva, serviciosDeLaCita } from "@/lib/servicios-de-la-reserva"
+import {
+  duracionAlReagendar,
+  hayServicioDeUrgencia,
+  leerServiciosDeLaReserva,
+  serviciosDeLaCita,
+} from "@/lib/servicios-de-la-reserva"
 import { existeLaHora, rangoDelDiaEn } from "@/lib/zona-horaria"
 import { abrirEnlace, enTransaccionSerializable, fechaYHora, noEncontrada, nombreDelCliente, type Params } from "../_comun"
 
@@ -25,6 +34,11 @@ const reagendarSchema = z.object({
 
 const FUERA_DE_ATENCION = "Ese horario está fuera de la atención. Elige otra hora."
 const HORARIO_TOMADO = "El horario ya no está disponible"
+/**
+ * Clínica dental: el sillón de la cita está ocupado a esa hora. Sin nombrar
+ * el sillón ni la otra cita: el paciente no ve los sillones.
+ */
+const SILLON_TOMADO = "Esa hora ya no está disponible. Elige otra."
 
 type Resultado =
   | { tipo: "movida"; memberId: string | null; precio: number | null }
@@ -37,6 +51,11 @@ type Resultado =
  * duración total copiada al reservar (o la que tiene hoy, si es mayor).
  * Las mismas reglas que confirmar una reserva nueva: horario, choques y
  * bloqueos, re-verificados dentro de una transacción `Serializable`.
+ *
+ * Clínica dental: la cita conserva su sillón (lo asignó la clínica; la
+ * reserva pública nunca lo elige) y la hora nueva tiene que dejarlo libre
+ * (`asegurarSillonLibre`, dentro de la transacción): si no, 409. Una
+ * urgencia sólo se mueve a otra hora de hoy.
  */
 export async function POST(request: NextRequest, contexto: Params) {
   const enlace = await abrirEnlace(request, contexto, "reserva")
@@ -66,6 +85,11 @@ export async function POST(request: NextRequest, contexto: Params) {
   if (yaPasoLaHora(fecha, hora, ahora, zona)) return NextResponse.json({ error: MENSAJE_HORA_PASADA }, { status: 409 })
   if (fechaNoReservable(fecha, ahora, zona) === "muy-lejana") {
     return NextResponse.json({ error: MENSAJE_FECHA_MUY_LEJANA }, { status: 409 })
+  }
+  // Urgencia dental: sólo hoy, como al reservarla (`confirmar`).
+  const clinicaDental = esRubroDental(cita.business.type)
+  if (clinicaDental && !esHoyEn(fecha, ahora, zona) && (await hayServicioDeUrgencia(prisma, cita.businessId, servicios.ids))) {
+    return NextResponse.json({ error: MENSAJE_URGENCIA_SOLO_HOY }, { status: 400 })
   }
 
   const reserva = await candidatosDeLaReserva(prisma, {
@@ -102,6 +126,30 @@ export async function POST(request: NextRequest, contexto: Params) {
         ignorarCitaId: cita.id,
       })
       if (!asignacion.libre) return { tipo: "rechazada", error: HORARIO_TOMADO, status: 409 }
+
+      // Clínica dental: el sillón se lee acá, dentro de la transacción (la
+      // clínica pudo asignarlo o cambiarlo recién), y se traba y revisa antes
+      // de escribir. La cita lo conserva: no se le quita ni se cambia.
+      if (clinicaDental) {
+        const actual = await tx.appointment.findFirst({
+          where: { id: cita.id, businessId: cita.businessId },
+          select: { sillonId: true },
+        })
+        if (actual?.sillonId) {
+          try {
+            await asegurarSillonLibre(tx, {
+              businessId: cita.businessId,
+              sillonId: actual.sillonId,
+              tramo,
+              ignorarCitaId: cita.id,
+              zona,
+            })
+          } catch (error) {
+            if (error instanceof SillonOcupado) return { tipo: "rechazada", error: SILLON_TOMADO, status: 409 }
+            throw error
+          }
+        }
+      }
 
       // Sólo si sigue como se leyó: si el local la movió o la cerró, no se pisa.
       const { count } = await tx.appointment.updateMany({

@@ -15,6 +15,12 @@ import {
   avisoSinCambiosPorElEnlace,
   avisoSinCambiosDespuesDeReservar,
   quedaSinCambiosPorElEnlace,
+  MINUTOS_DE_PRIMERA_VEZ,
+  TEXTO_DE_PRIMERA_VEZ,
+  avisoDeUrgencia,
+  duracionDeLaReserva,
+  esHoyEn,
+  esReservaDeUrgencia,
 } from "./reserva-publica"
 import { dentroDelPlazo } from "./gestion-de-cita"
 import { instanteEn } from "./zona-horaria"
@@ -289,5 +295,53 @@ describe("elDiaElegidoQuedoSinAtencion: al cambiar de profesional o servicios, e
   it("sin día elegido, o con uno inválido, no hay nada que limpiar", () => {
     expect(elDiaElegidoQuedoSinAtencion("", [1])).toBe(false)
     expect(elDiaElegidoQuedoSinAtencion("2026-13-40", [1])).toBe(false)
+  })
+})
+
+describe("clínica dental: la primera vez suma 15 minutos (duracionDeLaReserva)", () => {
+  it("son 15 minutos, y el texto lo dice", () => {
+    expect(MINUTOS_DE_PRIMERA_VEZ).toBe(15)
+    expect(TEXTO_DE_PRIMERA_VEZ).toBe("La primera vez sumamos 15 minutos para abrir tu ficha.")
+  })
+
+  it("en una clínica dental, primera vez: la suma de los servicios más 15", () => {
+    expect(duracionDeLaReserva(45, { clinicaDental: true, primeraVez: true })).toBe(60)
+  })
+
+  it("en una clínica dental, ya se atendió: la suma de los servicios", () => {
+    expect(duracionDeLaReserva(45, { clinicaDental: true, primeraVez: false })).toBe(45)
+  })
+
+  it("en otro rubro la primera vez no cuenta", () => {
+    expect(duracionDeLaReserva(45, { clinicaDental: false, primeraVez: true })).toBe(45)
+    expect(duracionDeLaReserva(45, { clinicaDental: false, primeraVez: false })).toBe(45)
+  })
+})
+
+describe("clínica dental: urgencia (esReservaDeUrgencia, esHoyEn)", () => {
+  it("es urgencia si algún servicio elegido lo es, sólo en una clínica dental", () => {
+    expect(esReservaDeUrgencia(true, [{ esUrgencia: false }, { esUrgencia: true }])).toBe(true)
+    expect(esReservaDeUrgencia(true, [{ esUrgencia: false }, {}])).toBe(false)
+    expect(esReservaDeUrgencia(true, [])).toBe(false)
+    // En un salón la columna no cuenta, aunque diga que sí.
+    expect(esReservaDeUrgencia(false, [{ esUrgencia: true }])).toBe(false)
+  })
+
+  it("hoy es el del reloj del negocio, no el del servidor", () => {
+    // Lunes 19 a las 10:30 en Santiago; en Tokio ya son las 22:30 del lunes.
+    expect(esHoyEn("2026-10-19", LUNES_10_30_SANTIAGO, SANTIAGO)).toBe(true)
+    expect(esHoyEn("2026-10-20", LUNES_10_30_SANTIAGO, SANTIAGO)).toBe(false)
+    expect(esHoyEn("2026-10-18", LUNES_10_30_SANTIAGO, SANTIAGO)).toBe(false)
+    // A las 02:00 UTC del 19, en Santiago todavía es el 18.
+    expect(esHoyEn("2026-10-18", new Date("2026-10-19T02:00:00.000Z"), SANTIAGO)).toBe(true)
+    // Y a las 16:00 UTC del 19, en Tokio ya es el 20.
+    expect(esHoyEn("2026-10-20", new Date("2026-10-19T16:00:00.000Z"), TOKIO)).toBe(true)
+  })
+
+  it("el aviso nombra el servicio de urgencia de la clínica", () => {
+    expect(avisoDeUrgencia("Urgencia dental")).toEqual({
+      destacado: "¿Tienes dolor fuerte?",
+      resto: "Elige «Urgencia dental» como motivo y te mostramos horas de hoy.",
+    })
   })
 })

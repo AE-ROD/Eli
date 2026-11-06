@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server"
 import { diasConAtencionDeLaReserva } from "@/lib/agenda-publica"
 import { dentroDelPlazo } from "@/lib/gestion-de-cita"
 import { prisma } from "@/lib/prisma"
-import { serviciosDeLaCita } from "@/lib/servicios-de-la-reserva"
+import { esRubroDental } from "@/lib/rubros"
+import { hayServicioDeUrgencia, serviciosDeLaCita } from "@/lib/servicios-de-la-reserva"
 import { abrirEnlace, fechaYHora, type Params } from "./_comun"
 
 /**
@@ -28,6 +29,12 @@ export async function GET(request: NextRequest, contexto: Params) {
         profesionalId: cita.memberId,
       })
     : null
+  // Clínica dental: una urgencia sólo se mueve a otra hora de hoy (lo valida
+  // `reagendar`); el calendario sólo deja elegir hoy. En otro rubro no viene.
+  const soloHoy =
+    sePuedeReagendar &&
+    esRubroDental(cita.business.type) &&
+    (await hayServicioDeUrgencia(prisma, cita.businessId, servicios.ids))
   return NextResponse.json({
     negocio: { nombre: cita.business.name },
     // Con varios servicios (#89a), los nombres unidos y la duración total.
@@ -44,5 +51,6 @@ export async function GET(request: NextRequest, contexto: Params) {
     // o se borró, sólo se cancela.
     sePuedeReagendar,
     diasConAtencion,
+    ...(soloHoy && { soloHoy: true }),
   })
 }

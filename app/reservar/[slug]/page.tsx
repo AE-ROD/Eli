@@ -5,6 +5,7 @@ import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Tarjeta } from "@/components/comunes/tarjeta"
 import { plazoParaQuienReserva, plazoValido } from "@/lib/gestion-de-cita"
 import { prisma } from "@/lib/prisma"
+import { esRubroDental } from "@/lib/rubros"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
 import { descripcionParaCompartir } from "@/lib/pagina-del-negocio"
 import { leerPaginaDelNegocio } from "./_pagina/datos-de-la-pagina"
@@ -65,7 +66,7 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
       listaDeEsperaActiva: true,
       services: {
         where: { active: true },
-        select: { id: true, name: true, description: true, duration: true, price: true },
+        select: { id: true, name: true, description: true, duration: true, price: true, esUrgencia: true },
         orderBy: { createdAt: "asc" },
       },
     },
@@ -93,6 +94,15 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
     )
   }
 
+  // Clínica dental: la reserva habla de "motivo" y "odontólogo", pregunta si
+  // es la primera vez y avisa de la urgencia. Lo único que sale de más es si
+  // cada servicio es urgencia, y sólo en una clínica: nada clínico ni de
+  // sillones. En otro rubro, los servicios de siempre.
+  const clinicaDental = esRubroDental(negocio.type)
+  const servicios = negocio.services.map(({ esUrgencia, ...servicio }) =>
+    clinicaDental ? { ...servicio, esUrgencia } : servicio
+  )
+
   return (
     <MarcoDeReserva>
       {miniPagina}
@@ -100,8 +110,9 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
       <FormularioReserva
         slug={negocio.slug}
         nombreNegocio={negocio.name}
+        clinicaDental={clinicaDental}
         zona={zonaDelNegocio(negocio.timezone)}
-        servicios={negocio.services}
+        servicios={servicios}
         // El mismo horario que publica la mini página (QA#4): el que la
         // reserva ofrece. El calendario lo usa hasta leer quién atiende.
         horarios={pagina.horario}

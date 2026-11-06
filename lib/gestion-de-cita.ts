@@ -89,13 +89,26 @@ const SELECCION = {
   endTime: true,
   // El precio de hoy: al reagendar se compara con el de la hora nueva (#89c).
   price: true,
+  // Clínica dental: el sillón que le asignó la clínica. Reagendar lo conserva
+  // y sólo ofrece y acepta horas en que está libre. Nunca se le muestra al
+  // paciente.
+  sillonId: true,
   customer: { select: { name: true, lastName: true } },
   member: { select: { user: { select: { name: true } } } },
   service: { select: { id: true, name: true, duration: true, active: true } },
   // Varios servicios (#89a): con filas, mandan ellas (`serviciosDeLaCita`).
   servicios: SELECCION_DE_SERVICIOS_DE_LA_CITA,
   business: {
-    select: { id: true, name: true, slug: true, timezone: true, cancelacionHorasAntes: true, user: { select: { email: true } } },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      timezone: true,
+      cancelacionHorasAntes: true,
+      // El rubro: en una clínica dental, una urgencia sólo se mueve a hoy.
+      type: true,
+      user: { select: { email: true } },
+    },
   },
 } satisfies Prisma.AppointmentSelect
 

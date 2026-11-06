@@ -8,7 +8,7 @@ import { Esqueleto } from "@/components/comunes/esqueleto"
 import { formatearMonto } from "@/lib/dinero"
 import { comoTexto, deTexto } from "@/lib/fechas"
 import { rebajaDeLaHora, type PrecioDeLaHora } from "@/lib/hora-valle"
-import { esDiaReservable } from "@/lib/reserva-publica"
+import { esDiaReservable, esHoyEn } from "@/lib/reserva-publica"
 import { fechaYMinutosEn } from "@/lib/zona-horaria"
 import type { Resultado } from "@/lib/peticiones"
 import { cn } from "@/lib/utils"
@@ -82,6 +82,13 @@ interface PropsDeSelectorFechaHora {
    * que no hay horas (reagendar).
    */
   sinHoras?: (fecha: string) => ReactNode
+  /**
+   * Sólo se puede elegir hoy (en el reloj del negocio): la urgencia de una
+   * clínica dental. El servidor tampoco ofrece ni acepta otro día.
+   */
+  soloHoy?: boolean
+  /** Lo que se dice cuando el día no tiene horas libres, en vez del texto de siempre (la urgencia). */
+  textoSinHoras?: string
 }
 
 export function SelectorFechaHora({
@@ -94,6 +101,8 @@ export function SelectorFechaHora({
   onFecha,
   onHora,
   sinHoras,
+  soloHoy = false,
+  textoSinHoras,
 }: PropsDeSelectorFechaHora) {
   // "Hoy" es el del negocio, no el del navegador: quien reserva desde otra
   // zona ve los mismos días que `confirmar` acepta. Como medianoche local,
@@ -199,7 +208,9 @@ export function SelectorFechaHora({
             // (Madrid, Tokio) daba el día anterior al que se tocó.
             const iso = comoTexto(fecha)
             // Ni días pasados ni más allá de la ventana de reserva: la regla de `confirmar`.
-            const disponible = esDelMes && esDiaReservable(iso, diasDisponibles, ahora, zona)
+            // Con `soloHoy` (urgencia), además sólo hoy.
+            const disponible =
+              esDelMes && esDiaReservable(iso, diasDisponibles, ahora, zona) && (!soloHoy || esHoyEn(iso, ahora, zona))
             const seleccionado = iso === fechaSeleccionada
             const esHoy = fecha.toDateString() === hoy.toDateString()
 
@@ -256,7 +267,8 @@ export function SelectorFechaHora({
             {estadoDeHoras === "sin-dia" && "Elige un día para ver los horarios libres."}
             {estadoDeHoras === "cargando" && "Cargando horarios…"}
             {estadoDeHoras === "sin-horas" &&
-              (ofrecerSinHoras ? "No hay horarios disponibles para este día." : "No hay horarios disponibles para este día. Prueba con otro.")}
+              (textoSinHoras ??
+                (ofrecerSinHoras ? "No hay horarios disponibles para este día." : "No hay horarios disponibles para este día. Prueba con otro."))}
             {estadoDeHoras === "con-horas" &&
               `${horasLibres.length} ${horasLibres.length === 1 ? "horario libre" : "horarios libres"}.`}
           </p>
