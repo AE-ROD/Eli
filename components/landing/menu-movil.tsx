@@ -199,7 +199,7 @@ function PanelDelMenu({ id, alCerrar }: Omit<PropsDeMenuMovil, "abierto">) {
         <Boton href="/iniciar-sesion" variante="secundario" tamano="lg" onClick={irA}>
           Iniciar sesión
         </Boton>
-        <Boton href="/crear-cuenta" tamano="lg" onClick={irA}>
+        <Boton href="/crear-cuenta" variante="destacado" tamano="lg" onClick={irA}>
           Crear cuenta
         </Boton>
       </div>

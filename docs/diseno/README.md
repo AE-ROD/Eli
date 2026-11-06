@@ -2,7 +2,8 @@
 
 Cómo se ve Eli y de dónde sale cada decisión visual. Los tokens viven en
 `app/globals.css`; los componentes base, en `components/comunes/`. La landing
-y el panel usan los mismos.
+y el panel usan los mismos, y la landing suma su paleta propia ("Frutos
+rojos", más abajo) y titulares en Geist.
 
 > **El mockup de la dirección anterior** (terracota, DM Serif Display, grano
 > de papel) quedó **reemplazado** por este sistema y ya no está en el repo.
@@ -47,6 +48,35 @@ no se repiten:
 El fuerte es el fondo del ícono del módulo activo; el suave, fondos,
 insignias y el halo del foco. El texto sobre cualquiera de los dos es navy.
 
+#### La paleta de la landing: Frutos rojos
+
+**Sólo la landing** (`components/landing/`). El panel, la reserva y el acceso
+siguen con navy y los pasteles de módulo. Tres colores con un papel cada uno,
+sobre la misma crema; los contrastes están en el comentario de cada token:
+
+| Clase | Valor | Para qué |
+|---|---|---|
+| `frambuesa`, `-suave`, `-texto` | `#E4336F`, `#FDE6EE`, `#B3194F` | Lo enredado ("enredado."). La fuerte llega a 3,9:1 sobre crema: sólo texto de 24px o más, o decoración. Texto chico, `frambuesa-texto` |
+| `ciruela`, `-suave`, `-claro` | `#5B2A86`, `#EFE6F6`, `#D9C7EC` | Lo que Eli ordena. Texto de cualquier tamaño; `-claro`, barras secundarias de gráficos |
+| `pistacho`, `-suave`, `-oscuro`, `-texto` | `#A6D65A`, `#EAF6D6`, `#3E6B12`, `#2F5E12` | El toque: puntos, subrayado, tildes. Navy encima del fuerte; `-oscuro` para íconos y tildes, `-texto` para texto chico |
+| `anil`, `-suave` | `#1B2A6B`, `#E4E9F2` | El cuarto tinte de los pasos (el de navy) y su texto |
+| `lavanda`, `pervinca`, `rosa` (y `-suave`) | `#C79BE0`/`#F1E4F8`, `#8FA8F0`/`#E1E8FA`, `#F59BB9`/`#FDE3EC` | Un par por oficio: peluquería, barbería, spa de uñas (odontología usa pistacho). Tarjeta detrás de la foto y fondo de la sección |
+| `orquidea`, `violeta` | `#B8579E`, `#8D5CC4` | Los tramos de `degradado-frutos` |
+| `cereza`, `-oscuro` | `#D92B3F`, `#B81F33` | La acción principal ("Crear cuenta", `Boton variante="destacado"`) y su hover |
+| `borde-suave` | `#EFEADE` | Bordes de maquetas y separadores. Decorativo |
+
+Utilidades de la landing, en `app/globals.css`:
+
+- `resaltado`: la palabra que Eli ordena, en ciruela con un subrayado grueso
+  de pistacho. Otros colores con `--resaltado-texto` y `--resaltado-fondo`.
+- `antetitulo-pildora`: el antetítulo en píldora blanca con un punto pistacho.
+- `fondo-brillos` (portada) y `fondo-brillos-navy` (pie y cierre): las
+  manchas de la paleta sobre crema o sobre navy.
+- `degradado-frutos`: frambuesa → orquídea → violeta; en texto, con
+  `bg-clip-text text-transparent`.
+- `animaciones-en-pausa`: congela las animaciones de CSS del bloque y de lo
+  de adentro. Va con `BotonDePausa`.
+
 Los nombres semánticos de shadcn (`background`, `foreground`, `primary`,
 `muted`, `border`, `ring`…) se retiraron de `app/globals.css`: lo poco que los
 usaba pasó a los nombres propios con el mismo valor (`crema`, `navy`, `borde`).
@@ -62,6 +92,8 @@ No hay modo oscuro. Las clases `dark:` no se activan nunca.
 | `titulo-1` | 40 → 72px, interlineado 1.1, tracking −1 → −2px | Geist 500 |
 | `titulo-2` | 28 → 48px, 1.1, −0.5 → −2px | Geist 500 |
 | `titulo-seccion` | 28 → 48px, 1.1, −0.5 → −1.5px | Fraunces 500 |
+| `titulo-portada` | 40 → 56 (md) → 68px (lg), 1.06, −0.045em | Geist 500. El `<h1>` de la landing |
+| `titulo-landing` | 32 → 44 (md) → 54px (lg), 1.04, −0.045em | Geist 500. El `<h2>` de cada sección de la landing (`EncabezadoDeSeccion`) |
 | `titulo-3` | 24px, 1.25, −0.5px | peso 500, la fuente que herede |
 | `cuerpo-xl` | 18px, 1.4 | |
 | `antetitulo` | 12 → 13px, mayúsculas, +0.08em, 500, color texto-2 | |
@@ -71,7 +103,8 @@ titulares llevan siempre tracking negativo.
 
 `font-sans` es Geist, la de todo. `font-serif` y `font-display` son Fraunces,
 para titulares de sección, citas y chips de palabra, siempre con
-`font-medium`. Las carga `next/font` en `app/layout.tsx`, con el eje de tamaño
+`font-medium`. La landing ya no usa Fraunces en sus titulares: van en Geist
+con `titulo-portada` y `titulo-landing`. Las carga `next/font` en `app/layout.tsx`, con el eje de tamaño
 óptico de Fraunces para que un titular grande tenga trazo de titular.
 
 ### Radios
@@ -84,6 +117,10 @@ para titulares de sección, citas y chips de palabra, siempre con
 | `rounded-panel` | 32px | Paneles flotantes, como el del menú |
 | `rounded-tarjeta` | 48px | Tarjetas |
 | `rounded-seccion` | 64px | Islas |
+| `rounded-etiqueta` | 14px | Landing: etiquetas flotantes ("WhatsApp", "Cuaderno") |
+| `rounded-ficha` | 18px | Landing: filas con ícono y tilde |
+| `rounded-maqueta` | 22px | Landing: la tarjeta blanca de una maqueta de producto |
+| `rounded-bloque` | 36px | Landing: escenarios y bloques de color grandes |
 | `rounded-full` | — | Píldoras |
 
 `squircle` agrega `corner-shape: squircle` donde el navegador lo sabe
@@ -97,7 +134,8 @@ se arma con `Boton` ni `BotonIcono`, que traen `squircle`. `rounded-sm`, `-md`, 
 
 `shadow-sm` (en reposo) y `shadow-md` (elevada: tarjeta interactiva en hover,
 encabezado flotante) reemplazan a las de Tailwind. Están teñidas con el gris
-del texto secundario, nunca negras.
+del texto secundario, nunca negras. `shadow-maqueta`, más honda y con el
+mismo gris, es la de una maqueta de producto que flota en la landing.
 
 ### Movimiento
 
@@ -109,6 +147,16 @@ del texto secundario, nunca negras.
 | Expandir tarjetas | `duration-500 ease-in-out` | `DURACION.expandir` con `"easeInOut"` |
 | Fundidos de contenido | `duration-600 ease-fundido` | `DURACION.fundido`, `CURVA.fundido` |
 | Brillo de carga | `animate-brillo` (2,4 s, lineal, sin fin) | — |
+| Landing: lo que entra o cambia de lugar solo | `duration-900 ease-llegada` | `DURACION.llegada`, `CURVA.llegada` |
+| Landing: las líneas del enredo | — | `CURVA.onda` (`TrazosOndulantes`) |
+| Landing: flotar, latido, señalar | `animate-flotar` (7 s), `animate-latido` (3,2 s), `animate-senalar` (1,6 s), sin fin | — |
+
+Las tres animaciones sin fin de la landing toman la duración y el retraso de
+cada elemento de `--duracion` y `--retraso` (`[--retraso:-2s]`), que no se
+heredan; por eso van en un `@theme inline` aparte. Se mueven solas más de cinco
+segundos: el bloque que las usa lleva un `BotonDePausa`. `flotar` anima
+`transform` y se suma a la inclinación de reposo de `rotate-*`; `latido` anima
+`box-shadow`, así que no va en algo que se enfoca.
 
 Se anima sólo `transform` y `opacity`. Las excepciones son las que pide el
 diseño: el ancho de las tarjetas que se expanden y el tamaño del panel del
@@ -164,11 +212,11 @@ menú.
 
 | Archivo | Qué es |
 |---|---|
-| `boton.tsx` | `Boton` y `clasesDeBoton`. Variantes primario, secundario, fantasma, enlace e invertido; altos de 36, 48 y 56px; ícono en un cuadro a la izquierda. Con `href` es un `Link`, o un `<a>` común si empieza con `#` (el `Link` de Next no desplaza a un ancla que ya está en la dirección; lo que haga falta al ir va en `onClick`, no en `onNavigate`); sin `href`, un `<button>` con estado `cargando`. De ancho natural no se achica; con `w-full` sí, hasta el ancho de su texto, para que dos compartan una fila |
+| `boton.tsx` | `Boton` y `clasesDeBoton`. Variantes primario, secundario, fantasma, enlace, invertido y destacado (sólo la landing: cereza, con el cuadro del ícono en pistacho); altos de 36, 48 y 56px; ícono en un cuadro a la izquierda. Con `href` es un `Link`, o un `<a>` común si empieza con `#` (el `Link` de Next no desplaza a un ancla que ya está en la dirección; lo que haga falta al ir va en `onClick`, no en `onNavigate`); sin `href`, un `<button>` con estado `cargando`. De ancho natural no se achica; con `w-full` sí, hasta el ancho de su texto, para que dos compartan una fila |
 | `boton-icono.tsx` | `BotonIcono`: cuadrado de sólo ícono, blanco, navy en hover. `etiqueta` es su nombre |
 | `boton-primario.tsx` | `BotonPrimario`: la API de siempre de formularios y panel, por dentro un `Boton`. Suma la variante `peligro` |
 | `tarjeta.tsx` | `Tarjeta`: blanca, radio de tarjeta, sombra sm. `interactiva` se eleva en hover y con el foco adentro |
-| `seccion.tsx` | `Seccion` (isla crema, superficie, navy o degradado, con contenedor de 1440px) y `EncabezadoDeSeccion` (antetítulo, titular en serif, subtítulo) |
+| `seccion.tsx` | `Seccion` (isla crema, superficie, navy o degradado, con contenedor de 1440px) y `EncabezadoDeSeccion` (antetítulo, titular con `titulo-landing`, subtítulo). Sólo los usa la landing |
 | `antetitulo.tsx` | `Antetitulo` |
 | `insignia.tsx` | `Insignia`: píldora gris ("Beta", "Nuevo") o del pastel de un módulo |
 | `chip-de-palabra.tsx` | `ChipDePalabra`: una palabra en serif sobre píldora blanca |
@@ -249,6 +297,8 @@ fundidos. Donde piden un ícono, va ya en su cuadro (`CuadroDeIcono` o
 | `marquesina.tsx` | `Marquesina`: una fila de palabras que se desplaza sin fin. Se detiene con el cursor encima, fuera de pantalla y con su botón de pausa | `palabras`, `etiqueta` |
 | `pila-de-tarjetas.tsx` | `PilaDeTarjetas`: tarjetas que quedan fijas una debajo de otra, cada una un paso más abajo (debajo del encabezado si está flotante); mientras la siguiente pasa encima, la de abajo se achica levemente, sube 8px y se vela con navy. Una tarjeta más alta que la ventana queda fija recién cuando se ve su final. Con movimiento reducido y en ventanas de menos de 640px de alto, tarjetas apiladas comunes | `tarjetas` (`id`, `contenido`: la tarjeta entera, con `rounded-tarjeta`) |
 | `grilla-de-iconos.tsx` | `GrillaDeIconos`: tiles grises unidos por puentes cóncavos | `tiles` (`id`, `titulo`, `icono`) |
+| `boton-de-pausa.tsx` | `BotonDePausa`: el botón de dos estados (`aria-pressed`) que detiene lo que se mueve solo en un bloque. Quien lo usa guarda el estado, pone `animaciones-en-pausa` en el bloque y frena lo que mueva con JavaScript | `pausado`, `alCambiar`, `etiqueta?` |
+| `trazos-ondulantes.tsx` | `TrazosOndulantes`: líneas de SVG que pasan de una forma a otra sin fin (un `<g>` dentro del `<svg>` de quien lo usa). Con framer-motion y no con `<animate>`, que no respeta "reducir movimiento"; con movimiento reducido quedan en la primera forma | `trazos` (constante del módulo: `formas`, `duracion`, `desfase?`, `color`, `opacidad?`, `grosor?`), `enPausa` |
 | `usar-direccion-de-scroll.ts` | `useDireccionDeScroll()`: el estado del encabezado (`arriba`, `oculto` o `flotante`); la regla está en `lib/direccion-de-scroll.ts` | — |
 | `usar-coincide-media.ts` | `useCoincideMedia(consulta, enServidor?)`: si la ventana cumple una media query. Mientras hidrata vale lo mismo que el HTML del servidor; es para cuando la consulta decide el marcado (para elegir sólo una curva alcanza `useReducedMotion`) | — |
 
@@ -334,7 +384,8 @@ No es opcional:
   estiran con `::after`);
 - teclado completo, con `aria-expanded` y `aria-selected` donde corresponda;
 - lo que se mueve solo más de 5 segundos se puede detener (WCAG 2.2.2): la
-  marquesina y el carrusel tienen su botón de pausa;
+  marquesina, el carrusel, el enredo de la portada y las áreas tienen su
+  botón de pausa;
 - movimiento reducido, como dice arriba.
 
 ## Lo que una pantalla no puede mostrar

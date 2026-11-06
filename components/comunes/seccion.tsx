@@ -66,7 +66,13 @@ interface PropsDeEncabezadoDeSeccion {
   tono?: "claro" | "oscuro"
 }
 
-/** Antetítulo, titular de sección en serif (hasta 640px) y subtítulo (hasta 560px). */
+/**
+ * Antetítulo, titular de sección (hasta 640px) y subtítulo (hasta 560px).
+ *
+ * Sólo lo usa la landing, así que el titular va con `titulo-landing` (Geist
+ * 500, el de la landing nueva) y no con la serif de `titulo-seccion`, que
+ * sigue siendo la de los títulos del panel y del acceso.
+ */
 export function EncabezadoDeSeccion({
   antetitulo,
   titulo,
@@ -84,7 +90,7 @@ export function EncabezadoDeSeccion({
       <h2
         id={id}
         className={cn(
-          "titulo-seccion max-w-[640px] text-balance",
+          "titulo-landing max-w-[640px] text-balance",
           antetitulo && "mt-3",
           oscuro ? "text-white" : "text-navy"
         )}

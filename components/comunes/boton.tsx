@@ -15,13 +15,13 @@ import { cn } from "@/lib/utils"
  * tiene manejadores.
  */
 
-export type VarianteDeBoton = "primario" | "secundario" | "fantasma" | "enlace" | "invertido"
+export type VarianteDeBoton = "primario" | "secundario" | "fantasma" | "enlace" | "invertido" | "destacado"
 
 /** Alto de 36, 48 o 56 px. */
 export type TamanoDeBoton = "sm" | "md" | "lg"
 
 /** Las que llevan el ícono en un cuadro; `enlace` lo pone suelto junto al texto. */
-const CON_CAJA_DE_ICONO: VarianteDeBoton[] = ["primario", "secundario", "fantasma", "invertido"]
+const CON_CAJA_DE_ICONO: VarianteDeBoton[] = ["primario", "secundario", "fantasma", "invertido", "destacado"]
 
 /**
  * Las clases de cada combinación. cva sólo las junta; los choques (el alto
@@ -65,6 +65,10 @@ const variantesDeBoton = cva(
         enlace: "h-auto min-h-11 rounded-md px-0 underline decoration-[1.5px] underline-offset-4",
         // Blanco con texto navy, para ir sobre un fondo navy.
         invertido: "bg-white text-navy hover:bg-superficie",
+        // Sólo la landing: la acción principal ("Crear cuenta") en el rojo
+        // cereza de la paleta Frutos rojos, con el cuadro del ícono en
+        // pistacho. El panel sigue con `primario`.
+        destacado: "bg-cereza text-white hover:bg-cereza-oscuro",
       } satisfies Record<VarianteDeBoton, string>,
       // Interno: lo usa `Boton` cuando lleva ícono; `clasesDeBoton` no lo expone.
       conIcono: { true: "", false: "" },
@@ -85,11 +89,21 @@ const cajaDeIcono = cva("grid shrink-0 place-items-center squircle", {
       md: "size-8 rounded-[10px] [&_svg:not([class*='size-'])]:size-4",
       lg: "size-10 rounded-[12px] [&_svg:not([class*='size-'])]:size-5",
     } satisfies Record<TamanoDeBoton, string>,
-    // Sobre el botón blanco de `invertido`, el cuadro pasa a navy.
-    invertido: { true: "bg-navy text-white", false: "bg-white text-navy" },
+    // Blanco por defecto; navy sobre el botón blanco de `invertido`, y
+    // pistacho con el ícono navy sobre el cereza de `destacado`.
+    tono: { claro: "bg-white text-navy", oscuro: "bg-navy text-white", pistacho: "bg-pistacho text-navy" },
   },
-  defaultVariants: { tamano: "md", invertido: false },
+  defaultVariants: { tamano: "md", tono: "claro" },
 })
+
+const TONO_DE_CAJA = {
+  primario: "claro",
+  secundario: "claro",
+  fantasma: "claro",
+  enlace: "claro",
+  invertido: "oscuro",
+  destacado: "pistacho",
+} as const satisfies Record<VarianteDeBoton, "claro" | "oscuro" | "pistacho">
 
 /**
  * Las clases de un botón, para darle esa forma a algo que no es `Boton` (un
@@ -109,7 +123,7 @@ interface PropsComunesDeBoton {
   variante?: VarianteDeBoton
   /** Por defecto, `md`. */
   tamano?: TamanoDeBoton
-  /** Va en un cuadro blanco a la izquierda del texto (navy en `invertido`). */
+  /** Va en un cuadro blanco a la izquierda del texto (navy en `invertido`, pistacho en `destacado`). */
   icono?: ReactNode
   className?: string
   children: ReactNode
@@ -172,7 +186,7 @@ function contenido(variante: VarianteDeBoton, tamano: TamanoDeBoton, icono: Reac
   return (
     <>
       {Boolean(icono) && variante !== "enlace" && (
-        <span aria-hidden="true" className={cajaDeIcono({ tamano, invertido: variante === "invertido" })}>
+        <span aria-hidden="true" className={cajaDeIcono({ tamano, tono: TONO_DE_CAJA[variante] })}>
           {icono}
         </span>
       )}

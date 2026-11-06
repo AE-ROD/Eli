@@ -149,10 +149,11 @@ export function Encabezado() {
             <MenuDesplegable oculto={estado === "oculto"} className="hidden md:flex" />
 
             <div className="ml-auto flex items-center gap-2">
-              <Boton href="/iniciar-sesion" variante="fantasma" className="hidden lg:inline-flex">
+              <Boton href="/iniciar-sesion" variante="fantasma" className="hidden text-sm lg:inline-flex">
                 Iniciar sesión
               </Boton>
-              <Boton href="/crear-cuenta" className="hidden md:inline-flex">
+              {/* La acción principal de la landing, en el rojo cereza de la paleta. */}
+              <Boton href="/crear-cuenta" variante="destacado" className="hidden text-sm md:inline-flex">
                 Crear cuenta
               </Boton>
               <BotonIcono

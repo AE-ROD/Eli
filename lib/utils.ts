@@ -13,9 +13,10 @@ import { extendTailwindMerge } from 'tailwind-merge'
 const twMerge = extendTailwindMerge({
   extend: {
     theme: {
-      radius: ['boton', 'boton-lg', 'campo', 'panel', 'tarjeta', 'seccion'],
-      ease: ['suave', 'fundido'],
-      animate: ['brillo'],
+      radius: ['boton', 'boton-lg', 'campo', 'panel', 'tarjeta', 'seccion', 'etiqueta', 'ficha', 'maqueta', 'bloque'],
+      ease: ['suave', 'fundido', 'llegada', 'onda'],
+      animate: ['brillo', 'flotar', 'latido', 'senalar'],
+      shadow: ['maqueta'],
     },
   },
 })

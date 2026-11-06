@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type FocusEvent, type KeyboardEvent, type ReactNode, type Ref } from "react"
 import { motion, useReducedMotion } from "framer-motion"
-import { ChevronDown, Hand, Scissors, Sparkles, type LucideIcon } from "lucide-react"
+import { ChevronDown, Hand, Scissors, Smile, Sparkles, type LucideIcon } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { HALO_DE_MODULO } from "@/components/comunes/colores-de-modulo"
 import { CuadroDeIcono, IconoDeModulo } from "@/components/comunes/icono-de-modulo"
@@ -31,11 +31,15 @@ export interface Oficio {
   color: ColorDeModulo
 }
 
-/** Los tres oficios que atiende Eli. En la landing todos llevan a la sección de oficios. */
+/**
+ * Los cuatro oficios que atiende Eli. En la landing todos llevan a la sección
+ * de oficios. Los usan el menú "Para quién", el menú del teléfono y el pie.
+ */
 export const OFICIOS: readonly Oficio[] = [
   { nombre: "Salones de belleza", descripcion: "Varios profesionales en una misma visita.", icono: Sparkles, color: "lila" },
   { nombre: "Barberías", descripcion: "Con reserva o sin ella, en la misma fila.", icono: Scissors, color: "azul" },
   { nombre: "Spas de uñas", descripcion: "Servicios, horarios y pago dividido.", icono: Hand, color: "naranja" },
+  { nombre: "Odontología", descripcion: "Ficha clínica, odontograma y sillones.", icono: Smile, color: "lima" },
 ]
 
 export const SECCION_DE_OFICIOS = "#oficios"
@@ -68,7 +72,7 @@ const SIN_MEDIDA: Medida = { ancho: 0, alto: 0 }
 const RETARDO_DE_CIERRE = 150
 
 const PILDORA =
-  "inline-flex h-11 items-center gap-1.5 rounded-full px-3.5 text-[15px] font-medium text-navy transition-colors duration-150 ease-suave hover:bg-superficie anillo-foco"
+  "inline-flex h-11 items-center gap-1 rounded-full px-3.5 text-sm font-medium text-navy transition-colors duration-150 ease-suave hover:bg-superficie anillo-foco"
 
 /**
  * Un grupo del menú. Va dentro de su `<li>`, justo después de su botón: Tab
@@ -377,7 +381,7 @@ function BotonDeMenu({ ref, id, controla, abierto, alPulsar, children }: PropsDe
       <ChevronDown
         aria-hidden="true"
         strokeWidth={1.75}
-        className={cn("size-4 transition-transform duration-300 ease-suave", abierto && "rotate-180")}
+        className={cn("size-3.5 transition-transform duration-300 ease-suave", abierto && "rotate-180")}
       />
     </button>
   )
