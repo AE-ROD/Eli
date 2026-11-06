@@ -16,6 +16,7 @@ import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import { sePuedeMover, type Advertencia } from "@/lib/mover-cita"
 import { sigueSinConfirmar } from "@/lib/por-confirmar"
 import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
+import { CODIGO_SILLON_OCUPADO } from "@/lib/sillones"
 import { isoEn } from "./_hora-del-negocio"
 
 export interface Cita {
@@ -48,6 +49,18 @@ export interface Cita {
   canceladaPor?: string | null
   /** Cuándo se canceló, ISO. */
   canceladaEn?: string | null
+  /** Clínica dental: el sillón de la cita (`null`, sin sillón). En otro rubro la clave no viene. */
+  sillonId?: string | null
+  /** Clínica dental: el sillón, con su nombre. */
+  sillon?: SillonDeLaCita | null
+  /** Clínica dental: el paciente viene por primera vez. */
+  primeraVez?: boolean
+}
+
+/** El sillón de una cita, como viene en la lista y en el detalle. */
+export interface SillonDeLaCita {
+  id: string
+  nombre: string
 }
 
 /**
@@ -101,6 +114,11 @@ export interface DatosDeNuevaCita {
   precio: string
   notas: string
   memberId: string
+  /**
+   * Clínica dental: el sillón elegido ("" es sin sillón). Fuera de una
+   * clínica no está, y la cita se crea como siempre, sin la clave.
+   */
+  sillonId?: string
 }
 
 /**
@@ -253,6 +271,11 @@ export interface DatosDeMoverCita {
   horaInicio: string
   horaFin: string
   memberId: string
+  /**
+   * Clínica dental: el sillón nuevo ("" es sin sillón). Sin la clave la cita
+   * conserva el que tiene, también al moverla: se manda sólo si cambió.
+   */
+  sillonId?: string
 }
 
 /**
@@ -264,7 +287,12 @@ export interface DatosDeMoverCita {
 export type ResultadoConAdvertencias =
   | { tipo: "guardada" }
   | { tipo: "advertencias"; advertencias: Advertencia[] }
-  | { tipo: "error"; error: string }
+  /**
+   * `sillonOcupado`: el 409 de la clínica dental cuando el sillón ya tiene
+   * otra cita a esa hora (`codigo: "sillon-ocupado"`). No es una advertencia:
+   * no se ofrece "guardar igual", se elige otro sillón u otra hora.
+   */
+  | { tipo: "error"; error: string; sillonOcupado?: boolean }
 
 export type ResultadoDeMover = ResultadoConAdvertencias
 
@@ -299,6 +327,8 @@ export async function moverCita(
       // Sólo quien puede asignar manda el profesional; al otro el servidor lo
       // dejaría igual en sí mismo.
       ...(opciones.asignaProfesional && { memberId: datos.memberId || null }),
+      // Clínica dental: sólo si cambió de sillón (sin la clave, conserva el suyo).
+      ...(datos.sillonId !== undefined && { sillonId: datos.sillonId || null }),
       ...(opciones.confirmar && { confirmarAdvertencias: true }),
     })
   )
@@ -333,6 +363,9 @@ function conAdvertencias(resultado: Awaited<ReturnType<typeof pedirConCuerpo>>):
   const advertencias = (resultado.cuerpo as { advertencias?: unknown } | null)?.advertencias
   if (resultado.codigo === 409 && sonAdvertencias(advertencias)) {
     return { tipo: "advertencias", advertencias }
+  }
+  if (codigoDelServidor(resultado.cuerpo) === CODIGO_SILLON_OCUPADO) {
+    return { tipo: "error", error: resultado.error, sillonOcupado: true }
   }
   return { tipo: "error", error: resultado.error }
 }
@@ -405,6 +438,8 @@ export async function crearCita(
       price: precio.datos,
       notes: datos.notas || undefined,
       memberId: datos.memberId || null,
+      // Clínica dental: el sillón, si se eligió uno. Fuera de una clínica la clave no va.
+      ...(datos.sillonId !== undefined && { sillonId: datos.sillonId || null }),
       ...(opciones.confirmar && { confirmarAdvertencias: true }),
     })
   )
@@ -503,4 +538,113 @@ export async function buscarClientes(texto: string): Promise<Resultado<ClienteSu
       email: cliente.email ?? "",
     })),
   }
+}
+
+// ─── Clínica dental: sillones, alergias y "Asignar sillón" ───────────────────
+
+/** Un sillón de la clínica, como lo devuelve Configuración. */
+export interface SillonDeLaAgenda {
+  id: string
+  nombre: string
+  orden: number
+  activo: boolean
+}
+
+/**
+ * Los sillones de la clínica, activos e inactivos, por orden. Todo rol de la
+ * clínica los lee; fuera de una clínica el servidor responde 404 y la agenda
+ * no los pide.
+ */
+export async function leerSillones(): Promise<Resultado<SillonDeLaAgenda[]>> {
+  return pedir<SillonDeLaAgenda[]>("/api/configuracion/sillones", "No se pudieron cargar los sillones")
+}
+
+/**
+ * Las opciones del selector de sillón: los activos, en su orden. Si la cita
+ * ya está en uno desactivado, también ese, dicho así, para que el selector
+ * diga dónde está y no "Sin sillón". Un sillón desactivado no se ofrece para
+ * una cita nueva ni para cambiar: el servidor lo rechazaría.
+ */
+export function opcionesDeSillon(
+  sillones: readonly SillonDeLaAgenda[],
+  cita?: Pick<Cita, "sillonId" | "sillon"> | null
+): { valor: string; texto: string }[] {
+  const opciones = sillones.filter((sillon) => sillon.activo).map((sillon) => ({ valor: sillon.id, texto: sillon.nombre }))
+  const actual = cita?.sillonId
+  if (actual && !opciones.some((opcion) => opcion.valor === actual)) {
+    const nombre = sillones.find((sillon) => sillon.id === actual)?.nombre ?? cita?.sillon?.nombre ?? "Sillón"
+    opciones.push({ valor: actual, texto: `${nombre} (desactivado)` })
+  }
+  return opciones
+}
+
+/** Lo que el detalle de una cita suma en una clínica: la alerta de alergias y el sillón. */
+export interface DetalleDeLaClinica {
+  /** Lo anotado en "Alergias" de la ficha del paciente; `null` si no hay nada anotado. */
+  alergias: string | null
+  sillonId: string | null
+  sillon: SillonDeLaCita | null
+}
+
+/**
+ * El detalle de una cita en la clínica. La lista de la agenda no trae las
+ * alergias: el panel de la cita lo pide al abrirse. Si el servidor no manda
+ * la clave `alergias` (otro rubro), es un error: en una clínica no se dice
+ * "sin alergias" sin haberlo leído.
+ */
+export async function leerDetalleDeLaClinica(citaId: string): Promise<Resultado<DetalleDeLaClinica>> {
+  const resultado = await pedir<{ alergias?: unknown; sillonId?: unknown; sillon?: unknown }>(
+    `/api/citas/${encodeURIComponent(citaId)}`,
+    "No se pudo revisar la ficha del paciente"
+  )
+  if (!resultado.ok) return resultado
+  const { alergias, sillonId, sillon } = resultado.datos
+  if (alergias !== null && typeof alergias !== "string") {
+    return { ok: false, error: "No se pudo revisar la ficha del paciente" }
+  }
+  return {
+    ok: true,
+    datos: {
+      alergias: alergias?.trim() || null,
+      sillonId: typeof sillonId === "string" ? sillonId : null,
+      sillon: esSillonDeLaCita(sillon) ? sillon : null,
+    },
+  }
+}
+
+function esSillonDeLaCita(valor: unknown): valor is SillonDeLaCita {
+  return (
+    typeof valor === "object" &&
+    valor !== null &&
+    typeof (valor as SillonDeLaCita).id === "string" &&
+    typeof (valor as SillonDeLaCita).nombre === "string"
+  )
+}
+
+/**
+ * "Asignar sillón": guardado (con el sillón como quedó), el sillón ocupado a
+ * esa hora (409 `sillon-ocupado`: se elige otro, no hay "guardar igual") u
+ * otro error.
+ */
+export type ResultadoDeAsignarSillon =
+  | { tipo: "asignado"; sillonId: string | null; sillon: SillonDeLaCita | null }
+  | { tipo: "ocupado"; error: string }
+  | { tipo: "error"; error: string }
+
+/** Asigna, cambia o quita (`null`) el sillón de una cita, sin tocar su hora ni su odontólogo. */
+export async function asignarSillon(citaId: string, sillonId: string | null): Promise<ResultadoDeAsignarSillon> {
+  const resultado = await pedirConCuerpo<{ sillonId: string | null; sillon: SillonDeLaCita | null }>(
+    `/api/citas/${encodeURIComponent(citaId)}/sillon`,
+    "No se pudo asignar el sillón",
+    { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sillonId }) }
+  )
+  if (resultado.ok) {
+    return {
+      tipo: "asignado",
+      sillonId: resultado.datos.sillonId ?? null,
+      sillon: esSillonDeLaCita(resultado.datos.sillon) ? resultado.datos.sillon : null,
+    }
+  }
+  if (codigoDelServidor(resultado.cuerpo) === CODIGO_SILLON_OCUPADO) return { tipo: "ocupado", error: resultado.error }
+  return { tipo: "error", error: resultado.error }
 }

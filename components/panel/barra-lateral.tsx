@@ -19,6 +19,7 @@ import {
   SECCION_DE_INICIO,
   SECCIONES_DE_MODULOS,
   seccionMarcadaEnLaBarra,
+  seccionesConNombreDelRubro,
   seccionesDeLaPlata,
   type AccesoALaPlata,
   type SeccionDelPanel,
@@ -60,6 +61,12 @@ interface PropsDeBarraLateral {
    * Comisiones). Resuelto en el servidor con `lib/permisos.ts`; sin dato, ninguna.
    */
   accesoALaPlata?: AccesoALaPlata
+  /**
+   * El rubro del negocio, del actor en el servidor: elige el nombre de cada
+   * sección (`seccionesConNombreDelRubro`). En una clínica dental, "Pacientes"
+   * y "Sala de espera"; en otro rubro o sin dato, los de siempre.
+   */
+  rubro?: string | null
 }
 
 export function BarraLateral({
@@ -68,6 +75,7 @@ export function BarraLateral({
   diasTrialRestantes,
   puedeVerEquipo,
   accesoALaPlata,
+  rubro,
 }: PropsDeBarraLateral) {
   const { abrirPrecios } = usePrecios()
   const pathname = usePathname()
@@ -81,13 +89,17 @@ export function BarraLateral({
    * configuración y ayuda. Chats está escondido hasta que exista WhatsApp
    * (`secciones-del-panel.ts`). Tablero y reportes son para todos los roles: cada
    * endpoint ya recorta lo que ve cada uno. Equipo, sólo para quien lo gestiona.
-   * Después, las de la plata del equipo que le tocan a cada rol.
+   * Después, las de la plata del equipo que le tocan a cada rol. Cada una,
+   * con el nombre que le da el rubro (en una clínica dental, "Pacientes").
    */
-  const principales: SeccionDelPanel[] = [
-    SECCION_DE_INICIO,
-    ...SECCIONES_DE_MODULOS.filter((seccion) => seccion.id !== "equipo" || puedeVerEquipo),
-    ...seccionesDeLaPlata(accesoALaPlata),
-  ]
+  const principales: SeccionDelPanel[] = seccionesConNombreDelRubro(
+    [
+      SECCION_DE_INICIO,
+      ...SECCIONES_DE_MODULOS.filter((seccion) => seccion.id !== "equipo" || puedeVerEquipo),
+      ...seccionesDeLaPlata(accesoALaPlata),
+    ],
+    rubro
+  )
   const secundarias: SeccionDelPanel[] = [SECCION_DE_CONFIGURACION, SECCION_DE_AYUDA]
   const seccionActiva = seccionMarcadaEnLaBarra(pathname, [...principales, ...secundarias])
 

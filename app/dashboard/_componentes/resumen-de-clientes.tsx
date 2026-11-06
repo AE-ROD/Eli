@@ -3,10 +3,12 @@
 import { useId } from "react"
 import { Users } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import type { EstadisticasDelPanel } from "../_datos"
 
 interface PropsDeResumenDeClientes {
@@ -14,15 +16,16 @@ interface PropsDeResumenDeClientes {
   estadisticas: EstadisticasDelPanel | null
 }
 
-/** Cuántos clientes tiene el negocio y cuántos se sumaron este mes. */
+/** Cuántos clientes tiene el negocio y cuántos se sumaron este mes. En una clínica dental, "pacientes". */
 export function ResumenDeClientes({ estadisticas }: PropsDeResumenDeClientes) {
   const idDelTitulo = useId()
+  const { cliente, clientes } = vocabularioDe(useRubroDelPanel())
 
   return (
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "flex flex-col p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
-        titulo="Clientes"
+        titulo={conMayuscula(clientes)}
         subtitulo={estadisticas ? `${estadisticas.totalClientes} en total` : "Cargando..."}
         icono={{ figura: Users, color: "lila" }}
         accion={
@@ -34,12 +37,12 @@ export function ResumenDeClientes({ estadisticas }: PropsDeResumenDeClientes) {
 
       <div className="mt-5">
         {estadisticas && estadisticas.totalClientes === 0 ? (
-          <EstadoVacio>Aún no tienes clientes registrados</EstadoVacio>
+          <EstadoVacio>Aún no tienes {clientes} registrados</EstadoVacio>
         ) : (
           <div className="rounded-[20px] bg-lila-suave px-4 py-3.5 squircle">
             <p className="font-medium tabular-nums">
               {estadisticas
-                ? `${estadisticas.totalClientes} ${estadisticas.totalClientes === 1 ? "cliente" : "clientes"}`
+                ? `${estadisticas.totalClientes} ${estadisticas.totalClientes === 1 ? cliente : clientes}`
                 : "—"}
             </p>
             {/* Sobre el lila, el gris secundario no llega a 4,5:1: el texto chico va en navy al 75%. */}

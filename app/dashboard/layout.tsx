@@ -6,6 +6,7 @@ import { ContenidoDelPanel } from "@/components/panel/contenido-del-panel"
 import { ModalBienvenida } from "@/components/panel/modal-bienvenida"
 import { ProveedorDePrecios } from "@/components/panel/contexto-precios"
 import { ProveedorDeBarraLateral } from "@/components/panel/contexto-barra-lateral"
+import { ProveedorDeRubro } from "@/components/panel/contexto-rubro"
 import {
   actorDeSesion,
   puedeEditarComisiones,
@@ -36,6 +37,10 @@ export default async function LayoutDelPanel({
   const businessSlug = session?.user?.businessSlug ?? ""
   const businessId = session?.user?.businessId ?? ""
   const actor = actorDeSesion(session)
+  // El rubro elige las palabras del panel (`lib/vocabulario.ts`): en una
+  // clínica dental, "Pacientes" y "Sala de espera". Llega a la barra lateral
+  // y, por contexto, a cada página, desde la primera pintura.
+  const rubro = actor?.rubro ?? null
   const puedeVerEquipo = puedeGestionarEquipo(actor)
   const verSuscripcion = puedeGestionarSuscripcion(actor)
   const accesoALaPlata = {
@@ -62,25 +67,28 @@ export default async function LayoutDelPanel({
 
   return (
     <ProveedorDePrecios diasTrialRestantes={diasTrialRestantes}>
-      <ProveedorDeBarraLateral>
-        <div className="min-h-dvh bg-crema text-navy">
-          <BarraLateral
-            usuario={usuario}
-            puedeGestionarSuscripcion={verSuscripcion}
-            diasTrialRestantes={diasTrialRestantes}
-            puedeVerEquipo={puedeVerEquipo}
-            accesoALaPlata={accesoALaPlata}
-          />
-          <ContenidoDelPanel>{children}</ContenidoDelPanel>
-          {businessName && businessSlug && (
-            <ModalBienvenida
-              nombreNegocio={businessName}
-              slug={businessSlug}
-              marcarAlCopiar={veLaListaDeInicio(actor)}
+      <ProveedorDeRubro rubro={rubro}>
+        <ProveedorDeBarraLateral>
+          <div className="min-h-dvh bg-crema text-navy">
+            <BarraLateral
+              usuario={usuario}
+              puedeGestionarSuscripcion={verSuscripcion}
+              diasTrialRestantes={diasTrialRestantes}
+              puedeVerEquipo={puedeVerEquipo}
+              accesoALaPlata={accesoALaPlata}
+              rubro={rubro}
             />
-          )}
-        </div>
-      </ProveedorDeBarraLateral>
+            <ContenidoDelPanel>{children}</ContenidoDelPanel>
+            {businessName && businessSlug && (
+              <ModalBienvenida
+                nombreNegocio={businessName}
+                slug={businessSlug}
+                marcarAlCopiar={veLaListaDeInicio(actor)}
+              />
+            )}
+          </div>
+        </ProveedorDeBarraLateral>
+      </ProveedorDeRubro>
     </ProveedorDePrecios>
   )
 }

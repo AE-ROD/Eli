@@ -303,3 +303,67 @@ export async function cambiarMensajesAClientes(
     conJson("PUT", cambios)
   )
 }
+
+// ─── Sillones (clínica dental) ───────────────────────────────────────────────
+
+/** Un sillón de la clínica, como lo devuelve el servidor. */
+export interface Sillon {
+  id: string
+  nombre: string
+  /** En qué lugar sale en la agenda y en el inicio (0 a 999). */
+  orden: number
+  activo: boolean
+}
+
+/** Todos los sillones, activos e inactivos, por orden y nombre. */
+export async function leerSillonesDeLaClinica(): Promise<Resultado<Sillon[]>> {
+  return pedir<Sillon[]>("/api/configuracion/sillones", "No se pudieron cargar los sillones")
+}
+
+/** Un sillón nuevo va al final (el servidor le pone el orden). Devuelve el sillón como quedó. */
+export async function crearSillon(nombre: string): Promise<Resultado<Sillon>> {
+  return pedir<Sillon>("/api/configuracion/sillones", "No se pudo agregar el sillón", conJson("POST", { nombre: nombre.trim() }))
+}
+
+/**
+ * Cambia el nombre, el orden o si está activo. Un sillón no se borra: se
+ * desactiva, y las citas que ya lo tienen lo conservan. Devuelve el sillón
+ * como quedó.
+ */
+export async function editarSillon(
+  id: string,
+  cambios: { nombre?: string; orden?: number; activo?: boolean }
+): Promise<Resultado<Sillon>> {
+  const errorPorDefecto =
+    cambios.activo === true
+      ? "No se pudo activar el sillón"
+      : cambios.activo === false
+        ? "No se pudo desactivar el sillón"
+        : "No se pudo guardar el sillón"
+  return pedir<Sillon>(`/api/configuracion/sillones/${encodeURIComponent(id)}`, errorPorDefecto, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(cambios.nombre === undefined ? cambios : { ...cambios, nombre: cambios.nombre.trim() }),
+  })
+}
+
+/**
+ * Los sillones con `sillon` movido un lugar (`-1` sube, `1` baja), y el orden
+ * que le toca a cada uno: su posición en la lista, de 0 en adelante. Devuelve
+ * también qué sillones cambian de orden, para guardar sólo esos. Si no se
+ * puede mover (ya está primero o último, o no está), `null`.
+ */
+export function moverSillon(
+  sillones: readonly Sillon[],
+  id: string,
+  direccion: -1 | 1
+): { lista: Sillon[]; cambios: { id: string; orden: number }[] } | null {
+  const desde = sillones.findIndex((sillon) => sillon.id === id)
+  const hasta = desde + direccion
+  if (desde === -1 || hasta < 0 || hasta >= sillones.length) return null
+
+  const reordenados = [...sillones]
+  ;[reordenados[desde], reordenados[hasta]] = [reordenados[hasta], reordenados[desde]]
+  const cambios = reordenados.flatMap((sillon, orden) => (sillon.orden === orden ? [] : [{ id: sillon.id, orden }]))
+  return { lista: reordenados.map((sillon, orden) => ({ ...sillon, orden })), cambios }
+}

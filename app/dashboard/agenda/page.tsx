@@ -2,7 +2,16 @@
 
 import { useState, useEffect, useCallback, useId } from "react"
 import { useSession } from "next-auth/react"
-import { actorDeSesion, gestionaElNegocio, puedeAsignarCitasAOtros, puedeGestionarBloqueoDe, puedeVerListaDeEspera } from "@/lib/permisos"
+import {
+  actorDeSesion,
+  esClinicaDental,
+  gestionaElNegocio,
+  puedeAsignarCitasAOtros,
+  puedeGestionarBloqueoDe,
+  puedeGestionarSillones,
+  puedeVerListaDeEspera,
+  veSillones,
+} from "@/lib/permisos"
 import type { Advertencia } from "@/lib/mover-cita"
 import { Ban } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
@@ -19,14 +28,20 @@ import {
   hayProfesionales,
   leerHorarioDeAtencion,
   leerProfesionales,
+  leerSillones,
   type Bloqueo,
   type Cita,
   type DatosDeNuevaCita,
+  type Profesional,
+  type SillonDeLaAgenda,
+  type SillonDeLaCita,
 } from "./_datos"
+import type { VerPor } from "./_grilla-del-dia"
 import { Aviso } from "@/components/panel/aviso"
 import { ControlesDeAgenda } from "./_componentes/controles-de-agenda"
 import { VistaSemana } from "./_componentes/vista-semana"
 import { VistaDia } from "./_componentes/vista-dia"
+import { GrillaDelDia } from "./_componentes/grilla-del-dia"
 import { VistaMes } from "./_componentes/vista-mes"
 import { PanelDeCita } from "./_componentes/panel-de-cita"
 import { ModalNuevaCita } from "./_componentes/modal-nueva-cita"
@@ -53,6 +68,10 @@ export default function PaginaAgenda() {
   const bloqueaATodos = gestionaElNegocio(actor)
   const miembroPropio = actor?.memberId ? { id: actor.memberId, businessId: actor.businessId } : null
   const puedeBloquear = bloqueaATodos || puedeGestionarBloqueoDe(actor, miembroPropio)
+  // Clínica dental: la vista Día en grilla por sillón u odontólogo, el sillón
+  // de cada cita y la alerta de alergias. En otro rubro, la agenda de siempre.
+  const clinica = esClinicaDental(actor)
+  const conSillones = clinica && veSillones(actor)
 
   // "Hoy" es el del negocio, no el del navegador (#99).
   const zona = useZonaDelNegocio()
@@ -70,6 +89,8 @@ export default function PaginaAgenda() {
   const [modalAbierto, setModalAbierto] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [avisoDelModal, setAvisoDelModal] = useState("")
+  // Clínica dental: el aviso del modal es el 409 del sillón ocupado.
+  const [sillonOcupadoEnElModal, setSillonOcupadoEnElModal] = useState(false)
   const [nuevaCita, setNuevaCita] = useState<DatosDeNuevaCita>(() => citaEnBlanco(hoyEn(zona)))
   const [citaAMover, setCitaAMover] = useState<Cita | null>(null)
   // El modal de mover, sólo para elegir el profesional de una cita sin asignar (#103).
@@ -81,6 +102,11 @@ export default function PaginaAgenda() {
   const [advertenciasDeNuevaCita, setAdvertenciasDeNuevaCita] = useState<Advertencia[]>([])
   const [bloquearAbierto, setBloquearAbierto] = useState(false)
   const [bloqueoAbierto, setBloqueoAbierto] = useState<Bloqueo | null>(null)
+  // Quienes atienden (lo pide sólo quien asigna): las columnas por odontólogo.
+  const [equipo, setEquipo] = useState<Profesional[]>([])
+  const [sillones, setSillones] = useState<SillonDeLaAgenda[]>([])
+  const [avisoDeSillones, setAvisoDeSillones] = useState("")
+  const [verPor, setVerPor] = useState<VerPor>("sillon")
   const idDelPeriodo = useId()
 
   const recargar = useCallback(async (fecha: Date, modo: UnidadDeTiempo) => {
@@ -117,9 +143,23 @@ export default function PaginaAgenda() {
   useEffect(() => {
     if (!puedeAsignarProfesional) return
     leerProfesionales().then((resultado) => {
-      if (resultado.ok) setConProfesionales(hayProfesionales(resultado.datos))
+      if (!resultado.ok) return
+      setConProfesionales(hayProfesionales(resultado.datos))
+      setEquipo(resultado.datos)
     })
   }, [puedeAsignarProfesional])
+
+  // Clínica dental: los sillones (todo rol de la clínica los lee). Si no
+  // cargan, la grilla lo dice y muestra los que traen las citas.
+  useEffect(() => {
+    if (!conSillones) return
+    leerSillones().then((resultado) => {
+      if (resultado.ok) {
+        setSillones(resultado.datos)
+        setAvisoDeSillones("")
+      } else setAvisoDeSillones(resultado.error)
+    })
+  }, [conSillones])
 
   const abrirMover = (cita: Cita, asignar: boolean) => {
     setSoloAsignar(asignar)
@@ -143,6 +183,13 @@ export default function PaginaAgenda() {
     mostrarEstado(id, estado)
   }
 
+  /** Clínica dental: el sillón ya se asignó en el servidor; la agenda y el detalle lo muestran. */
+  const mostrarSillon = (id: string, sillonId: string | null, sillon: SillonDeLaCita | null) => {
+    const conSillon = (cita: Cita) => (cita.id === id ? { ...cita, sillonId, sillon } : cita)
+    setCitas((previas) => previas.map(conSillon))
+    setCitaAbierta((abierta) => abierta && conSillon(abierta))
+  }
+
   const abrirCita = (cita: Cita) => {
     setAvisoDelDetalle("")
     setCitaAbierta(cita)
@@ -153,8 +200,10 @@ export default function PaginaAgenda() {
   // antes todavía elegido por debajo (A1).
   const abrirModal = () => {
     setAvisoDelModal("")
+    setSillonOcupadoEnElModal(false)
     setAdvertenciasDeNuevaCita([])
-    setNuevaCita(citaEnBlanco(fecha))
+    // En la clínica, el borrador lleva el sillón (vacío: sin sillón); en otro rubro, ni la clave.
+    setNuevaCita(conSillones ? { ...citaEnBlanco(fecha), sillonId: "" } : citaEnBlanco(fecha))
     setModalAbierto(true)
   }
 
@@ -164,6 +213,7 @@ export default function PaginaAgenda() {
     if (!nuevaCita.clienteId) return
 
     setAvisoDelModal("")
+    setSillonOcupadoEnElModal(false)
     setGuardando(true)
     const resultado = await crearCita(nuevaCita, zona, { confirmar })
     setGuardando(false)
@@ -172,7 +222,10 @@ export default function PaginaAgenda() {
     // la página quedaría tapado por el velo del modal.
     if (resultado.tipo === "advertencias") return setAdvertenciasDeNuevaCita(resultado.advertencias)
     setAdvertenciasDeNuevaCita([])
-    if (resultado.tipo === "error") return setAvisoDelModal(resultado.error)
+    if (resultado.tipo === "error") {
+      setSillonOcupadoEnElModal(resultado.sillonOcupado === true)
+      return setAvisoDelModal(resultado.error)
+    }
 
     setModalAbierto(false)
     recargar(fecha, modo)
@@ -230,7 +283,25 @@ export default function PaginaAgenda() {
                 destacarSinProfesional={conProfesionales}
               />
             )}
-            {modo === "dia" && (
+            {modo === "dia" && clinica && (
+              <GrillaDelDia
+                fecha={fecha}
+                citas={citas}
+                horario={horario}
+                bloqueos={bloqueos}
+                sillones={sillones}
+                equipo={equipo}
+                verPor={verPor}
+                onVerPor={setVerPor}
+                onSeleccionar={abrirCita}
+                onSeleccionarBloqueo={setBloqueoAbierto}
+                citaElegidaId={citaAbierta?.id ?? null}
+                destacarSinProfesional={conProfesionales}
+                gestionaSillones={puedeGestionarSillones(actor)}
+                avisoDeSillones={avisoDeSillones}
+              />
+            )}
+            {modo === "dia" && !clinica && (
               <VistaDia
                 fecha={fecha}
                 citas={citas}
@@ -267,6 +338,8 @@ export default function PaginaAgenda() {
                 destacarSinProfesional={conProfesionales}
                 onReactivada={mostrarEstado}
                 aviso={avisoDelDetalle}
+                sillones={conSillones ? sillones : null}
+                onSillonAsignado={mostrarSillon}
               />
             )}
           </AnimatePresence>
@@ -281,6 +354,8 @@ export default function PaginaAgenda() {
             form={nuevaCita}
             guardando={guardando}
             aviso={avisoDelModal}
+            avisoDeSillonOcupado={sillonOcupadoEnElModal}
+            sillones={conSillones ? sillones : null}
             advertencias={advertenciasDeNuevaCita}
             onGuardarIgual={() => guardarNuevaCita(true)}
             puedeAsignarProfesional={puedeAsignarProfesional}
@@ -288,6 +363,11 @@ export default function PaginaAgenda() {
               setNuevaCita((previa) => ({ ...previa, [campo]: valor }))
               // Las advertencias eran de lo de antes.
               setAdvertenciasDeNuevaCita([])
+              // El sillón ocupado también: con otro sillón u otra hora, ya no es ese el aviso.
+              if (sillonOcupadoEnElModal) {
+                setSillonOcupadoEnElModal(false)
+                setAvisoDelModal("")
+              }
             }}
             onSubmit={(evento) => {
               evento.preventDefault()
@@ -336,6 +416,7 @@ export default function PaginaAgenda() {
             cita={citaAMover}
             puedeAsignarProfesional={puedeAsignarProfesional}
             soloAsignar={soloAsignar}
+            sillones={conSillones ? sillones : null}
             onMovida={() => {
               setCitaAMover(null)
               recargar(fecha, modo)

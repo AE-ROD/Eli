@@ -11,9 +11,10 @@ import { BotonIcono } from "@/components/comunes/boton-icono"
 import { LogoEli } from "@/components/comunes/logo-eli"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { ID_DEL_CAJON, useBarraLateral } from "@/components/panel/contexto-barra-lateral"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPO } from "@/components/panel/estilos"
 import { CuadroDeSeccion } from "@/components/panel/icono-de-seccion"
-import { seccionDeLaRuta } from "@/components/panel/secciones-del-panel"
+import { seccionConNombreDelRubro, seccionDeLaRuta } from "@/components/panel/secciones-del-panel"
 import { cn } from "@/lib/utils"
 
 interface PropsDeBarraSuperior {
@@ -44,7 +45,10 @@ const BOTON_DE_LA_FILA =
  * fuera de la vista, la página saltaba al principio.
  */
 export function BarraSuperior({ titulo, subtitulo, accionPrincipal, mostrarBusqueda = true }: PropsDeBarraSuperior) {
-  const seccion = seccionDeLaRuta(usePathname())
+  const seccionDeLaPagina = seccionDeLaRuta(usePathname())
+  // El antetítulo, con el nombre del rubro: "Pacientes" en una clínica dental.
+  const rubro = useRubroDelPanel()
+  const seccion = seccionDeLaPagina && seccionConNombreDelRubro(seccionDeLaPagina, rubro)
   const IconoDeLaAccion = accionPrincipal?.icono ?? Plus
 
   // La fila de la derecha no deja un hueco donde no tiene nada que mostrar:

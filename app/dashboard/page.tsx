@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
-import { actorDeSesion, puedeInvitarNegocios, veElPanelDeSuDia, veLaListaDeInicio } from "@/lib/permisos"
+import {
+  actorDeSesion,
+  esClinicaDental,
+  puedeGestionarSillones,
+  puedeInvitarNegocios,
+  veElPanelDeSuDia,
+  veLaListaDeInicio,
+} from "@/lib/permisos"
 import {
   leerListaDeInicio,
   marcarEnlaceCompartido,
@@ -25,6 +32,7 @@ import { ResumenDelNegocio } from "./_componentes/resumen-del-negocio"
 import { ListaDeInicio } from "./_componentes/lista-de-inicio"
 import { QrDelLocal } from "./_componentes/qr-del-local"
 import { InvitarNegocios } from "./_componentes/invitar-negocios"
+import { InicioDeLaClinica } from "./_componentes/inicio-de-la-clinica"
 
 /** `Lunes, 8 de marzo de 2026`, con mayúscula inicial. */
 function fechaDeHoy(): string {
@@ -52,6 +60,9 @@ export default function PaginaPanel() {
   const verListaDeInicio = veLaListaDeInicio(actorDeSesion(sesion))
   const [listaDeInicio, setListaDeInicio] = useState<DatosDeListaDeInicio | null>(null)
   const verInvitacion = puedeInvitarNegocios(actorDeSesion(sesion))
+  // Clínica dental: "Sillones ahora", la sala de espera y los presupuestos,
+  // arriba de lo de siempre (dueña, encargado y odontólogo). En otro rubro, nada.
+  const clinica = esClinicaDental(actorDeSesion(sesion))
   const [invitacion, setInvitacion] = useState<DatosDeInvitacion | null>(null)
 
   useEffect(() => {
@@ -110,9 +121,14 @@ export default function PaginaPanel() {
             Cargando...
           </div>
         ) : verPanelDeSuDia ? (
-          !sinEstadisticas && <VistaDiaProfesional estadisticas={estadisticas} />
+          <>
+            {clinica && <InicioDeLaClinica gestionaSillones={false} />}
+            {!sinEstadisticas && <VistaDiaProfesional estadisticas={estadisticas} />}
+          </>
         ) : (
           <>
+            {clinica && <InicioDeLaClinica gestionaSillones={puedeGestionarSillones(actorDeSesion(sesion))} />}
+
             {listaDeInicio && mostrarListaDeInicio(listaDeInicio) && <ListaDeInicio pasos={listaDeInicio.pasos} />}
 
             {invitacion && <InvitarNegocios datos={invitacion} />}

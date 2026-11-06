@@ -6,6 +6,7 @@ import { AnimatePresence } from "framer-motion"
 import Link from "next/link"
 import { CircleAlert, ListX, MonitorPlay, RefreshCw, UserPlus } from "lucide-react"
 import { BarraSuperior } from "@/components/panel/barra-superior"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { Boton, clasesDeBoton } from "@/components/comunes/boton"
 import { ModalAnular } from "@/components/panel/modal-anular"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
@@ -29,6 +30,7 @@ import {
   puedeVerTodoElTablero,
 } from "@/lib/permisos"
 import { cn } from "@/lib/utils"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import {
   anotarSinReserva,
   anularAtencion,
@@ -106,6 +108,7 @@ const conRecarga = (mensaje: string) => `${mensaje.replace(/\.$/, "")}. Se recar
 export default function PaginaTablero() {
   const { data: sesion, status: estadoDeSesion } = useSession()
   const actor = actorDeSesion(sesion)
+  const rubro = useRubroDelPanel()
 
   const [tablero, setTablero] = useState<Tablero | null>(null)
   const [errorDeCarga, setErrorDeCarga] = useState("")
@@ -527,12 +530,14 @@ export default function PaginaTablero() {
     ? tablero.atenciones.filter((atencion) => atencion.turno !== null && atencion.estado === "en-espera").length
     : 0
   const puedeVaciarFila = esperandoEnFila > 0 && puedeVaciarFilaVirtual(actor)
+  // En una clínica dental se llama "Sala de espera"; en otro rubro, "Tablero".
+  const tituloDeLaPagina = conMayuscula(vocabularioDe(rubro).tablero)
 
   return (
     <div className="min-h-screen">
       {/* En el teléfono la cabecera muestra la acción como botón de ícono: no hace falta otro abajo. */}
       <BarraSuperior
-        titulo="Tablero"
+        titulo={tituloDeLaPagina}
         subtitulo={ahora ? fechaLarga(ahora) : "Cargando..."}
         accionPrincipal={
           puedeAnotar ? { texto: "Anotar sin reserva", onClick: () => abrirModal({ tipo: "anotar" }), icono: UserPlus } : undefined

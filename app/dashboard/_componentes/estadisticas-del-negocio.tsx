@@ -4,6 +4,8 @@ import { CalendarDays, Users, DollarSign, type LucideIcon } from "lucide-react"
 import { formatearHora } from "@/lib/fechas"
 import { formatearMonto } from "@/lib/dinero"
 import type { ColorDeModulo } from "@/lib/modulos"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { TarjetaEstadistica } from "./tarjeta-estadistica"
 import { puedeVerIngresos, type EstadisticasDelPanel } from "../_datos"
 
@@ -56,14 +58,19 @@ function procedenciaDeIngresos(estadisticas: EstadisticasDelPanel): string | und
   return `${base} este mes · ${signo}${Math.abs(tendencia)}% vs el mes pasado.`
 }
 
-/** Mientras cargan, las tres tarjetas con un guion: nunca un cero que no es cierto. */
-const TARJETAS_CARGANDO: Tarjeta[] = [
-  { titulo: "Citas hoy", valor: "—", icono: CalendarDays, color: "azul" },
-  { titulo: "Clientes activos", valor: "—", icono: Users, color: "lila" },
-  { titulo: "Ingresos del mes", valor: "—", icono: DollarSign, color: "lima" },
-]
+/** "Clientes activos", o "Pacientes activos" en una clínica dental. */
+const tituloDeClientes = (clientes: string) => `${conMayuscula(clientes)} activos`
 
-function tarjetasDe(estadisticas: EstadisticasDelPanel): Tarjeta[] {
+/** Mientras cargan, las tres tarjetas con un guion: nunca un cero que no es cierto. */
+function tarjetasCargando(clientes: string): Tarjeta[] {
+  return [
+    { titulo: "Citas hoy", valor: "—", icono: CalendarDays, color: "azul" },
+    { titulo: tituloDeClientes(clientes), valor: "—", icono: Users, color: "lila" },
+    { titulo: "Ingresos del mes", valor: "—", icono: DollarSign, color: "lima" },
+  ]
+}
+
+function tarjetasDe(estadisticas: EstadisticasDelPanel, clientes: string): Tarjeta[] {
   return [
     {
       titulo: "Citas hoy",
@@ -73,7 +80,7 @@ function tarjetasDe(estadisticas: EstadisticasDelPanel): Tarjeta[] {
       procedencia: procedenciaDeCitas(estadisticas),
     },
     {
-      titulo: "Clientes activos",
+      titulo: tituloDeClientes(clientes),
       valor: estadisticas.totalClientes,
       icono: Users,
       color: "lila",
@@ -100,7 +107,8 @@ interface PropsDeEstadisticasDelNegocio {
 
 /** Las tarjetas de arriba del panel: citas de hoy, clientes e ingresos del mes. */
 export function EstadisticasDelNegocio({ estadisticas }: PropsDeEstadisticasDelNegocio) {
-  const tarjetas = estadisticas ? tarjetasDe(estadisticas) : TARJETAS_CARGANDO
+  const { clientes } = vocabularioDe(useRubroDelPanel())
+  const tarjetas = estadisticas ? tarjetasDe(estadisticas, clientes) : tarjetasCargando(clientes)
 
   return (
     <div aria-busy={!estadisticas || undefined} className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

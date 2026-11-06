@@ -13,6 +13,7 @@ import { SeccionPorConfirmar } from "./_componentes/seccion-por-confirmar"
 import { SeccionHoraValle } from "./_componentes/seccion-hora-valle"
 import { SeccionMensajesAClientes } from "./_componentes/seccion-mensajes-a-clientes"
 import { SeccionFilaVirtual } from "./_componentes/seccion-fila-virtual"
+import { SeccionSillones } from "./_componentes/seccion-sillones"
 import { contarEnviosDelMes } from "@/lib/envios-a-clientes"
 import { apareceEnLaPagina, colorDelNegocio, esEnlaceDeResenasValido, normalizarInstagram } from "@/lib/pagina-del-negocio"
 import {
@@ -26,10 +27,13 @@ import {
   puedeFijarComisionDeProducto,
   puedeGestionarProductos,
   puedeGestionarServicios,
+  puedeGestionarSillones,
   puedeVerMensajesAClientes,
   whereDeProductos,
+  whereDeSillones,
 } from "@/lib/permisos"
 import { formatearProducto } from "@/lib/productos"
+import { ORDEN_DE_SILLONES, SELECCION_DE_SILLON } from "@/lib/sillones"
 import { mostrarTelefono } from "@/lib/telefono"
 
 export default async function PaginaConfiguracion() {
@@ -44,7 +48,11 @@ export default async function PaginaConfiguracion() {
   // El % de cada producto sólo se le pide a la base para la dueña.
   const conPorcentaje = puedeFijarComisionDeProducto(actor)
 
-  const [horariosActuales, servicios, productos, pagina] = await Promise.all([
+  // Clínica dental: los sillones los gestionan dueña y encargado, como los
+  // servicios; el odontólogo no ve la sección. En otro rubro, ni se piden.
+  const gestionaSillones = puedeGestionarSillones(actor)
+
+  const [horariosActuales, servicios, productos, pagina, sillones] = await Promise.all([
     prisma.workSchedule.findMany({
       where: { businessId: actor.businessId, memberId: memberIdPropio },
       orderBy: { dayOfWeek: "asc" },
@@ -85,6 +93,14 @@ export default async function PaginaConfiguracion() {
         },
       },
     }),
+    gestionaSillones
+      ? prisma.sillon.findMany({
+          where: whereDeSillones(actor),
+          select: SELECCION_DE_SILLON,
+          orderBy: ORDEN_DE_SILLONES,
+          take: 100,
+        })
+      : Promise.resolve([]),
   ])
 
   // Dueño y encargado editan el horario de cualquier miembro: cargan el
@@ -173,6 +189,13 @@ export default async function PaginaConfiguracion() {
         {puedeGestionarServicios(actor) && (
           <div id="servicios" className="scroll-mt-24">
             <SeccionServicios serviciosIniciales={servicios} />
+          </div>
+        )}
+
+        {/* Sillones: sólo en una clínica dental, para dueña y encargado */}
+        {gestionaSillones && (
+          <div id="sillones" className="scroll-mt-24">
+            <SeccionSillones sillonesIniciales={sillones} />
           </div>
         )}
 

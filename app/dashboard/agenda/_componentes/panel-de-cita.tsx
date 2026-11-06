@@ -13,20 +13,35 @@ import { duracionParaMostrar } from "@/lib/fechas"
 import { formatearTiempoLibre as formatearDuracion } from "@/lib/horario-dia"
 import { sePuedeMover, type Advertencia } from "@/lib/mover-cita"
 import { puedeMarcarseNoVino } from "@/lib/campos-del-panel"
-import { actorDeSesion, puedeAsignarCitasAOtros, puedeReactivarCita, puedeResolverPorConfirmar } from "@/lib/permisos"
+import {
+  actorDeSesion,
+  esClinicaDental,
+  puedeAsignarCitasAOtros,
+  puedeAsignarSillon,
+  puedeReactivarCita,
+  puedeResolverPorConfirmar,
+} from "@/lib/permisos"
+import type { Resultado } from "@/lib/peticiones"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { cn } from "@/lib/utils"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import {
   ESTADO_AL_REACTIVAR,
   citaPorConfirmar,
   destacaSinProfesional,
+  leerDetalleDeLaClinica,
   nombreDeCliente,
   nombreDelProfesional,
   quienCancelo,
   reactivarCita,
   type Cita,
+  type DetalleDeLaClinica,
+  type SillonDeLaAgenda,
+  type SillonDeLaCita,
 } from "../_datos"
+import { AsignarSillon } from "./asignar-sillon"
 import { estiloDeEstado } from "./estados-de-cita"
 import { useAhora } from "./usar-ahora"
 import { useZonaDelNegocio } from "./zona-del-negocio"
@@ -53,6 +68,13 @@ interface PropsDePanelDeCita {
    * la página y el aviso de arriba no se ve: se repite adentro.
    */
   aviso?: string
+  /**
+   * Clínica dental: los sillones, para "Asignar sillón". `null` (o sin dato)
+   * fuera de una clínica: el panel se ve como siempre.
+   */
+  sillones?: SillonDeLaAgenda[] | null
+  /** Clínica dental: el sillón ya se asignó en el servidor; la agenda muestra la cita con el nuevo. */
+  onSillonAsignado?: (id: string, sillonId: string | null, sillon: SillonDeLaCita | null) => void
 }
 
 /**
@@ -77,8 +99,15 @@ export function PanelDeCita({
   onAsignar,
   destacarSinProfesional = false,
   aviso = "",
+  sillones = null,
+  onSillonAsignado,
 }: PropsDePanelDeCita) {
   const { data: sesion } = useSession()
+  const vocabulario = vocabularioDe(useRubroDelPanel())
+  // Clínica dental: la alerta de alergias, el sillón y el enlace a la ficha.
+  // Lo decide `lib/permisos.ts`; sin los sillones (otro rubro), nada de eso.
+  const clinica = esClinicaDental(actorDeSesion(sesion)) && sillones !== null
+  const [detalle, setDetalle] = useState<{ citaId: string; resultado: Resultado<DetalleDeLaClinica> } | null>(null)
   const escritorio = useEsEscritorio()
   // El día y las horas de la cita, en la zona del negocio (#99).
   const zona = useZonaDelNegocio()
@@ -103,6 +132,20 @@ export function PanelDeCita({
   const ahora = useAhora(cita.id)
   const estado = estiloDeEstado(cita.status, porConfirmar)
   const duracion = duracionParaMostrar(cita.startTime, cita.endTime)
+
+  // Clínica dental: la lista de la agenda no trae las alergias; se piden al
+  // abrir cada cita. Lo que llega tarde de otra cita no se muestra en esta.
+  useEffect(() => {
+    if (!clinica) return
+    let vigente = true
+    leerDetalleDeLaClinica(cita.id).then((resultado) => {
+      if (vigente) setDetalle({ citaId: cita.id, resultado })
+    })
+    return () => {
+      vigente = false
+    }
+  }, [cita.id, clinica])
+  const detalleDeEsta = clinica && detalle?.citaId === cita.id ? detalle.resultado : null
 
   // Lo que tiene el foco al abrir el panel, o al pasar a otra cita, es lo que lo abrió.
   useEffect(() => {
@@ -193,8 +236,24 @@ export function PanelDeCita({
     !porConfirmar &&
     cita.conAtencion !== true
 
+  // Clínica dental: asignar el sillón (todo rol de la clínica; el odontólogo
+  // ve sólo sus citas) mientras la cita se puede mover.
+  const asignaSillon = clinica && puedeAsignarSillon(actorDeSesion(sesion)) && sePuedeMover(cita.status)
+
   const contenido = (
     <>
+      {/* La alerta de alergias va primero: es lo que hay que ver antes de atender. */}
+      {detalleDeEsta?.ok && detalleDeEsta.datos.alergias && (
+        <Aviso tono="atencion" rol="status" titulo="Alergias anotadas en su ficha">
+          <span className="break-words whitespace-pre-line">{detalleDeEsta.datos.alergias}</span>
+        </Aviso>
+      )}
+      {detalleDeEsta && !detalleDeEsta.ok && (
+        <Aviso tono="atencion" rol="status" titulo="No se pudo revisar si tiene alergias">
+          {detalleDeEsta.error}. Cierra y vuelve a abrir la cita, o mira su ficha antes de atender.
+        </Aviso>
+      )}
+
       <div
         className={cn(
           "rounded-[24px] bg-tarjeta p-4 squircle",
@@ -221,7 +280,10 @@ export function PanelDeCita({
             </span>
           </Dato>
           <Dato termino="Duración">{formatearDuracion(duracion)}</Dato>
-          {(profesional || sinProfesional) && <Dato termino="Profesional">{profesional ?? "Sin asignar"}</Dato>}
+          {(profesional || sinProfesional) && (
+            <Dato termino={conMayuscula(vocabulario.profesional)}>{profesional ?? "Sin asignar"}</Dato>
+          )}
+          {clinica && <Dato termino="Sillón">{cita.sillon?.nombre ?? "Sin sillón"}</Dato>}
           {cita.price != null && (
             <Dato termino="Precio">
               <span className="tabular-nums">{formatearMonto(cita.price)}</span>
@@ -263,11 +325,38 @@ export function PanelDeCita({
       )}
 
       {sinProfesional && (
-        <Aviso tono="atencion" rol="status" titulo="Sin profesional">
+        <Aviso tono="atencion" rol="status" titulo={`Sin ${vocabulario.profesional}`}>
           {asigna
-            ? "Mientras no tenga profesional, en la reserva pública ocupa la hora de todo el equipo. Asígnala para liberar a los demás."
-            : "Mientras no tenga profesional, en la reserva pública ocupa la hora de todo el equipo. La asigna la dueña o el encargado."}
+            ? `Mientras no tenga ${vocabulario.profesional}, en la reserva pública ocupa la hora de todo el equipo. Asígnala para liberar a los demás.`
+            : `Mientras no tenga ${vocabulario.profesional}, en la reserva pública ocupa la hora de todo el equipo. La asigna la dueña o el encargado.`}
         </Aviso>
+      )}
+
+      {asignaSillon && sillones && (
+        <div className="px-1">
+          <AsignarSillon
+            key={cita.id}
+            citaId={cita.id}
+            sillonId={cita.sillonId ?? null}
+            sillon={cita.sillon ?? null}
+            sillones={sillones}
+            onAsignado={(sillonId, sillon) => onSillonAsignado?.(cita.id, sillonId, sillon)}
+          />
+        </div>
+      )}
+
+      {/* La ficha del paciente (la página la hace la ficha clínica: ahí se decide qué ve cada rol). */}
+      {clinica && cita.customerId && (
+        <div className="px-1">
+          <Boton
+            href={`/dashboard/clientes/${encodeURIComponent(cita.customerId)}`}
+            variante="secundario"
+            tamano="sm"
+            className="w-full"
+          >
+            Abrir ficha
+          </Boton>
+        </div>
       )}
 
       {errorAlReactivar &&
@@ -308,7 +397,7 @@ export function PanelDeCita({
           )}
           {asigna && (
             <Boton tamano="sm" className="w-full" onClick={() => onAsignar(cita)}>
-              Asignar profesional
+              Asignar {vocabulario.profesional}
             </Boton>
           )}
           {puedeMoverse && (

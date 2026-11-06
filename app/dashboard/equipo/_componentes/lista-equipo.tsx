@@ -7,10 +7,12 @@ import { Esqueleto } from "@/components/comunes/esqueleto"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Insignia } from "@/components/comunes/insignia"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
 import { nombreDelRol } from "@/lib/nombres-de-roles"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import type { InvitacionPendiente, MiembroDelEquipo } from "../_datos"
 
 /**
@@ -23,9 +25,14 @@ const FILA_DE_PERSONA =
 const LUGAR_DEL_AVATAR = "row-span-2 self-start sm:row-span-1 sm:self-center"
 const LUGAR_DEL_ROL = "col-start-2 justify-self-start sm:col-start-3 sm:justify-self-end"
 
-/** El encargado lleva el turquesa del equipo; el profesional, gris. El nombre del rol va siempre escrito. */
+/**
+ * El encargado lleva el turquesa del equipo; el profesional, gris. El nombre
+ * del rol va siempre escrito, con la palabra del rubro ("Odontólogo" en una
+ * clínica dental).
+ */
 function InsigniaDelRol({ rol }: { rol: string }) {
-  return <Insignia tono={rol === "admin" ? "turquesa" : "gris"}>{nombreDelRol(rol)}</Insignia>
+  const rubro = useRubroDelPanel()
+  return <Insignia tono={rol === "admin" ? "turquesa" : "gris"}>{nombreDelRol(rol, rubro)}</Insignia>
 }
 
 /** `2 de noviembre`: el día en que vence el enlace. */
@@ -57,6 +64,7 @@ export function ListaEquipo({
   alAnular,
   alEditarServicios,
 }: PropsDeListaEquipo) {
+  const { profesionales } = vocabularioDe(useRubroDelPanel())
   if (cargando) return <ListaCargando />
 
   if (miembros.length === 0 && invitaciones.length === 0) {
@@ -66,7 +74,7 @@ export function ListaEquipo({
           icono={<CuadroDeIcono icono={UsersRound} color="turquesa" tamano="lg" />}
           titulo="Todavía no hay nadie en tu equipo"
         >
-          Usa el botón &ldquo;Invitar al equipo&rdquo; para sumar a tu encargado o a tus profesionales.
+          Usa el botón &ldquo;Invitar al equipo&rdquo; para sumar a tu encargado o a tus {profesionales}.
         </EstadoVacio>
       </div>
     )
