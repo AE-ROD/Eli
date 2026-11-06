@@ -104,6 +104,20 @@ export async function crearCliente(datos: DatosDeNuevoCliente): Promise<Resultad
   )
 }
 
+/**
+ * Las alergias anotadas en la ficha clínica del paciente (clínica dental),
+ * para la alerta de la ficha de al lado: `null` si no hay nada anotado. Sólo
+ * dueño y odontólogos: al encargado y fuera de una clínica, el servidor
+ * responde 404.
+ */
+export async function leerAlergiasDelPaciente(id: string): Promise<Resultado<string | null>> {
+  const resultado = await pedir<{ alergias: string | null }>(
+    `/api/clientes/${encodeURIComponent(id)}/ficha`,
+    "No se pudieron leer las alergias"
+  )
+  return resultado.ok ? { ok: true, datos: resultado.datos.alergias?.trim() || null } : resultado
+}
+
 export async function guardarNotasDeCliente(id: string, notas: string): Promise<Resultado> {
   return pedir(`/api/clientes/${id}`, "No se pudieron guardar las notas", conJson("PUT", { notes: notas }))
 }

@@ -2,7 +2,20 @@
 
 import { useEffect, useId, useRef } from "react"
 import { motion } from "framer-motion"
-import { CalendarClock, CalendarDays, CalendarX, Clock, Mail, MailCheck, MailX, Pencil, Phone, Trash2, X } from "lucide-react"
+import {
+  CalendarClock,
+  CalendarDays,
+  CalendarX,
+  ClipboardList,
+  Clock,
+  Mail,
+  MailCheck,
+  MailX,
+  Pencil,
+  Phone,
+  Trash2,
+  X,
+} from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
@@ -13,6 +26,7 @@ import { formatearMonto } from "@/lib/dinero"
 import { formatearHora, duracionParaMostrar } from "@/lib/fechas"
 import { sigueSinConfirmar } from "@/lib/por-confirmar"
 import { cn } from "@/lib/utils"
+import type { Vocabulario } from "@/lib/vocabulario"
 import { Aviso } from "@/components/panel/aviso"
 import { EtiquetaDeCliente, type ClienteEnTarjeta } from "./tarjeta-cliente"
 import type { CitaDeCliente } from "../_datos"
@@ -46,6 +60,16 @@ function fechaDeLaCita(iso: string): string {
 
 interface PropsDePanelDetalleCliente {
   cliente: ClienteEnTarjeta
+  /** "cliente" o, en una clínica dental, "paciente". */
+  vocabulario?: Pick<Vocabulario, "cliente">
+  /**
+   * Sólo en una clínica dental: el acceso a la ficha clínica del paciente y,
+   * si las hay anotadas, sus alergias (que se leen sólo para quien ve la
+   * ficha clínica; para el encargado llegan en `null` y la alerta queda en la
+   * ficha clínica, que sí la muestra). En los demás rubros no viene y el
+   * panel queda como siempre.
+   */
+  fichaClinica?: { ruta: string; alergias: string | null }
   /** Sus últimas citas, de la más reciente a la más vieja. */
   citas: CitaDeCliente[]
   /** Si tiene el consentimiento vigente para avisos y novedades por correo ("te toca", reseñas). */
@@ -83,6 +107,8 @@ interface PropsDePanelDetalleCliente {
  */
 export function PanelDetalleCliente({
   cliente,
+  vocabulario = { cliente: "cliente" },
+  fichaClinica,
   citas,
   avisosPorCorreo = false,
   notas,
@@ -137,7 +163,7 @@ export function PanelDetalleCliente({
       <div className="flex items-start gap-3 pt-1 pl-2">
         <AvatarUsuario nombre={cliente.nombre} tamaño="xl" />
         <div className="min-w-0 flex-1 pt-1">
-          <p className="antetitulo">Ficha del cliente</p>
+          <p className="antetitulo">Ficha del {vocabulario.cliente}</p>
           <h2 id={idDelNombre} className="titulo-3 mt-1 font-serif text-balance break-words">
             {cliente.nombre}
           </h2>
@@ -153,8 +179,22 @@ export function PanelDetalleCliente({
         </button>
       </div>
 
+      {/* Clínica dental: la alerta de alergias y el acceso a la ficha clínica, lo primero. */}
+      {fichaClinica && (
+        <section aria-label="Ficha clínica" className={cn(BLOQUE, "space-y-3")}>
+          {fichaClinica.alergias && (
+            <Aviso tono="atencion" titulo="Alergias">
+              <span className="whitespace-pre-line">{fichaClinica.alergias}</span>
+            </Aviso>
+          )}
+          <Boton href={fichaClinica.ruta} tamano="sm" className="w-full" icono={<ClipboardList aria-hidden="true" />}>
+            Abrir ficha clínica
+          </Boton>
+        </section>
+      )}
+
       {/* Datos de contacto */}
-      <section aria-label="Datos del cliente" className={BLOQUE}>
+      <section aria-label={`Datos del ${vocabulario.cliente}`} className={BLOQUE}>
         <ul className="space-y-3 text-sm">
           <li className="flex items-start gap-3">
             <Mail className="mt-0.5 size-4 shrink-0 text-texto-2" aria-hidden="true" strokeWidth={1.75} />
@@ -224,7 +264,7 @@ export function PanelDetalleCliente({
                 icono={<Trash2 className="size-4" aria-hidden="true" />}
                 onClick={onEliminar}
               >
-                Eliminar cliente
+                Eliminar {vocabulario.cliente}
               </Boton>
             )}
           </div>

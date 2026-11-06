@@ -9,6 +9,8 @@ import { Download, Upload } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import {
   actorDeSesion,
+  esClinicaDental,
+  veFichaClinica,
   puedeBorrarCliente,
   puedeEditarDatosDeCliente,
   puedeEditarConsentimientoPromocional,
@@ -17,6 +19,7 @@ import {
 } from "@/lib/permisos"
 import {
   leerClientes,
+  leerAlergiasDelPaciente,
   crearCliente,
   editarCliente,
   eliminarCliente,
@@ -34,6 +37,7 @@ import { VistaSeVan } from "./_componentes/vista-se-van"
 import { clienteParaTarjeta, type ClienteEnTarjeta } from "./_componentes/tarjeta-cliente"
 import { mostrarTelefono } from "@/lib/telefono"
 import { cn } from "@/lib/utils"
+import { conMayuscula, vocabularioDe, type Vocabulario } from "@/lib/vocabulario"
 
 const CLIENTE_EN_BLANCO: DatosDeNuevoCliente = {
   nombre: "",
@@ -50,10 +54,13 @@ const VISTAS_DE_CLIENTES = [
 ] as const
 type VistaDeClientes = (typeof VISTAS_DE_CLIENTES)[number]["id"]
 
-/** `1 cliente registrado`, `12 clientes registrados`. */
-function cuantosClientes(total: number): string {
-  return total === 1 ? "1 cliente registrado" : `${total} clientes registrados`
+/** `1 cliente registrado`, `12 clientes registrados` (en una clínica dental, pacientes). */
+function cuantosClientes(total: number, vocabulario: Vocabulario): string {
+  return total === 1 ? `1 ${vocabulario.cliente} registrado` : `${total} ${vocabulario.clientes} registrados`
 }
+
+/** La ficha clínica de un paciente: sólo existe en una clínica dental. */
+const rutaDeLaFicha = (id: string) => `/dashboard/clientes/${encodeURIComponent(id)}`
 
 /** Los mismos clientes, con las notas de uno cambiadas. Si no está en la lista, quedan como estaban. */
 function conNotas(clientesPorId: Record<string, Cliente>, clienteId: string, notas: string | null) {
@@ -69,6 +76,10 @@ export default function PaginaClientes() {
   const puedeImportarExportar = puedeImportarExportarClientes(actor)
   const puedeVerSeVan = puedeVerClientesQueSeVan(actor)
   const puedeMarcarCorreoPromo = puedeEditarConsentimientoPromocional(actor)
+  // Clínica dental: "pacientes", la ficha clínica y la alerta de alergias. Los demás rubros, como siempre.
+  const esDental = esClinicaDental(actor)
+  const leeAlergias = veFichaClinica(actor)
+  const vocabulario = vocabularioDe(sesion?.user?.rubro)
   const nombreNegocio = sesion?.user?.businessName ?? ""
   const [vistaDeClientes, setVistaDeClientes] = useState<VistaDeClientes>("todos")
 
@@ -108,6 +119,8 @@ export default function PaginaClientes() {
   const [avisoDeEliminar, setAvisoDeEliminar] = useState("")
   const [avisoListo, setAvisoListo] = useState("")
   const [exportando, setExportando] = useState(false)
+  // Las alergias del paciente abierto en la ficha de al lado (clínica dental), con de quién son.
+  const [alergiasDelPanel, setAlergiasDelPanel] = useState<{ clienteId: string; alergias: string | null } | null>(null)
 
   const esperaDeBusqueda = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -142,6 +155,20 @@ export default function PaginaClientes() {
     },
     []
   )
+
+  // Clínica dental: al abrir la ficha de un paciente se piden sus alergias, para la alerta.
+  // Sólo quien ve la ficha clínica (dueño y odontólogos): al encargado el servidor no se la da.
+  const clienteAbiertoId = clienteSeleccionado?.id
+  useEffect(() => {
+    if (!esDental || !leeAlergias || !clienteAbiertoId) return
+    let vigente = true
+    leerAlergiasDelPaciente(clienteAbiertoId).then((resultado) => {
+      if (vigente && resultado.ok) setAlergiasDelPanel({ clienteId: clienteAbiertoId, alergias: resultado.datos })
+    })
+    return () => {
+      vigente = false
+    }
+  }, [esDental, leeAlergias, clienteAbiertoId])
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- carga la lista de clientes al montar
   useEffect(() => { cargarClientes("", "Todos", 1) }, [cargarClientes])
@@ -275,9 +302,9 @@ export default function PaginaClientes() {
     <div className="min-h-dvh">
       {/* Sin la búsqueda de la cabecera: la página tiene la suya, justo debajo. */}
       <BarraSuperior
-        titulo="Clientes"
-        subtitulo={cargando ? "Cargando..." : cuantosClientes(total)}
-        accionPrincipal={{ texto: "Nuevo cliente", onClick: abrirModal }}
+        titulo={conMayuscula(vocabulario.clientes)}
+        subtitulo={cargando ? "Cargando..." : cuantosClientes(total, vocabulario)}
+        accionPrincipal={{ texto: `Nuevo ${vocabulario.cliente}`, onClick: abrirModal }}
         mostrarBusqueda={false}
       />
 
@@ -357,6 +384,8 @@ export default function PaginaClientes() {
                   pagina={pagina}
                   paginas={paginas}
                   seleccionadoId={clienteSeleccionado?.id}
+                  vocabulario={vocabulario}
+                  rutaDeLaFicha={esDental ? rutaDeLaFicha : undefined}
                   onSeleccionar={seleccionarCliente}
                   onCargarMas={() => cargarClientes(busqueda, etiquetaActiva, pagina + 1, true)}
                 />
@@ -366,6 +395,16 @@ export default function PaginaClientes() {
                 {clienteSeleccionado && (
                   <PanelDetalleCliente
                     cliente={clienteSeleccionado}
+                    vocabulario={vocabulario}
+                    fichaClinica={
+                      esDental
+                        ? {
+                            ruta: rutaDeLaFicha(clienteSeleccionado.id),
+                            alergias:
+                              alergiasDelPanel?.clienteId === clienteSeleccionado.id ? alergiasDelPanel.alergias : null,
+                          }
+                        : undefined
+                    }
                     citas={clientesPorId[clienteSeleccionado.id]?.appointments ?? []}
                   avisosPorCorreo={!!clientesPorId[clienteSeleccionado.id]?.correoPromoConsentAt}
                     notas={notas}
@@ -390,6 +429,7 @@ export default function PaginaClientes() {
         {modalAbierto && (
           <ModalNuevoCliente
             editando={editandoId !== null}
+            palabraCliente={vocabulario.cliente}
             form={nuevoCliente}
             guardando={guardando}
             aviso={avisoDelModal}
@@ -414,7 +454,7 @@ export default function PaginaClientes() {
           <ModalConfirmar
             titulo={`¿Eliminar a ${aEliminar.nombre}?`}
             descripcion="Se borran sus datos personales y no se pueden recuperar."
-            textoConfirmar="Eliminar cliente"
+            textoConfirmar={`Eliminar ${vocabulario.cliente}`}
             textoCancelar="No eliminar"
             peligro
             trabajando={eliminando}

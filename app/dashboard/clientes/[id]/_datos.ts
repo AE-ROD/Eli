@@ -1,0 +1,168 @@
+/**
+ * Lo que la ficha clínica le pide al servidor: antecedentes, odontograma,
+ * evoluciones y plan de tratamiento (`app/api/clientes/[id]/…`), y lo que
+ * necesita de otras partes del panel (las citas del paciente, los servicios y
+ * el equipo). La pantalla llama a estas funciones y no conoce ninguna URL.
+ *
+ * Cada función devuelve un `Resultado` (`lib/peticiones.ts`): el error viene
+ * del servidor ya listo para mostrar (`{ error }`).
+ */
+
+import { conJson, pedir, type Resultado } from "@/lib/peticiones"
+import type { EvolucionRespuesta, EvolucionesRespuesta, FichaClinicaRespuesta, OdontogramaRespuesta } from "@/lib/ficha-clinica"
+import type { AccionDeEtapa, OrigenDeVersion, PlanRespuesta } from "@/lib/edicion-del-plan"
+import type { EstadoDePrestacion } from "@/lib/plan-de-tratamiento"
+import type { MarcaDelOdontograma } from "@/lib/odontograma"
+
+const deLaFicha = (id: string) => `/api/clientes/${encodeURIComponent(id)}`
+
+/** PATCH con JSON: `conJson` sólo arma POST y PUT. */
+function conJsonPatch(cuerpo: unknown): RequestInit {
+  return { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cuerpo) }
+}
+
+// ─── Antecedentes ────────────────────────────────────────────────────────────
+
+/** Lo que manda el formulario: todo como texto, vacío es "sin anotar" (el servidor lo guarda como null). */
+export interface AntecedentesEscritos {
+  fechaNacimiento: string
+  prevision: string
+  alergias: string
+  antecedentes: string
+}
+
+export async function guardarAntecedentes(id: string, datos: AntecedentesEscritos): Promise<Resultado<FichaClinicaRespuesta>> {
+  return pedir<FichaClinicaRespuesta>(`${deLaFicha(id)}/ficha`, "No se pudieron guardar los antecedentes", conJson("PUT", datos))
+}
+
+// ─── Odontograma ─────────────────────────────────────────────────────────────
+
+/** Manda el odontograma entero: reemplaza al guardado. */
+export async function guardarOdontograma(id: string, marcas: readonly MarcaDelOdontograma[]): Promise<Resultado<OdontogramaRespuesta>> {
+  return pedir<OdontogramaRespuesta>(
+    `${deLaFicha(id)}/odontograma`,
+    "No se pudo guardar el odontograma",
+    conJson("PUT", { marcas: marcas.map(({ pieza, cara, tipo }) => ({ pieza, cara, tipo })) })
+  )
+}
+
+// ─── Evoluciones ─────────────────────────────────────────────────────────────
+
+/** Una página, de la más nueva a la más vieja. `antes`: el `siguiente` de la página anterior. */
+export async function leerEvoluciones(id: string, antes: string | null): Promise<Resultado<EvolucionesRespuesta>> {
+  const parametros = antes ? `?${new URLSearchParams({ antes })}` : ""
+  return pedir<EvolucionesRespuesta>(`${deLaFicha(id)}/evoluciones${parametros}`, "No se pudieron cargar las evoluciones")
+}
+
+export async function anotarEvolucion(
+  id: string,
+  datos: { texto: string; appointmentId: string | null }
+): Promise<Resultado<EvolucionRespuesta>> {
+  return pedir<EvolucionRespuesta>(`${deLaFicha(id)}/evoluciones`, "No se pudo anotar la evolución", conJson("POST", datos))
+}
+
+// ─── Plan de tratamiento ─────────────────────────────────────────────────────
+
+export async function crearVersionDelPlan(id: string, desde: OrigenDeVersion): Promise<Resultado<PlanRespuesta>> {
+  return pedir<PlanRespuesta>(`${deLaFicha(id)}/plan`, "No se pudo armar el plan", conJson("POST", { desde }))
+}
+
+export async function agregarEtapa(id: string, nombre: string): Promise<Resultado<PlanRespuesta>> {
+  return pedir<PlanRespuesta>(`${deLaFicha(id)}/plan/etapas`, "No se pudo agregar la etapa", conJson("POST", { nombre }))
+}
+
+const MENSAJE_DE_ACCION: Record<AccionDeEtapa, string> = {
+  presentar: "No se pudo registrar que se presentó",
+  aprobar: "No se pudo aprobar la etapa",
+  "volver-a-por-aprobar": "No se pudo volver la etapa a por aprobar",
+}
+
+export async function accionDeEtapa(id: string, etapaId: string, accion: AccionDeEtapa): Promise<Resultado<PlanRespuesta>> {
+  return pedir<PlanRespuesta>(
+    `${deLaFicha(id)}/plan/etapas/${encodeURIComponent(etapaId)}`,
+    MENSAJE_DE_ACCION[accion],
+    conJsonPatch({ accion })
+  )
+}
+
+export async function borrarEtapa(id: string, etapaId: string): Promise<Resultado<PlanRespuesta>> {
+  return pedir<PlanRespuesta>(`${deLaFicha(id)}/plan/etapas/${encodeURIComponent(etapaId)}`, "No se pudo borrar la etapa", {
+    method: "DELETE",
+  })
+}
+
+/** Una prestación nueva: `serviceId` o `nombre` (o los dos), y quién la hace. */
+export interface PrestacionNueva {
+  pieza: number | null
+  caras: string[]
+  serviceId?: string
+  nombre?: string
+  valorCents?: number
+  memberId?: string
+  delDueño?: boolean
+}
+
+export async function agregarPrestacion(id: string, etapaId: string, datos: PrestacionNueva): Promise<Resultado<PlanRespuesta>> {
+  return pedir<PlanRespuesta>(
+    `${deLaFicha(id)}/plan/etapas/${encodeURIComponent(etapaId)}/prestaciones`,
+    "No se pudo agregar la prestación",
+    conJson("POST", datos)
+  )
+}
+
+/** El estado de una prestación; "agendada" lleva la cita. */
+export async function cambiarEstadoDePrestacion(
+  id: string,
+  prestacionId: string,
+  estado: EstadoDePrestacion,
+  appointmentId?: string
+): Promise<Resultado<PlanRespuesta>> {
+  return pedir<PlanRespuesta>(
+    `${deLaFicha(id)}/plan/prestaciones/${encodeURIComponent(prestacionId)}`,
+    "No se pudo cambiar el estado de la prestación",
+    conJsonPatch(estado === "agendada" ? { estado, appointmentId } : { estado })
+  )
+}
+
+export async function borrarPrestacion(id: string, prestacionId: string): Promise<Resultado<PlanRespuesta>> {
+  return pedir<PlanRespuesta>(
+    `${deLaFicha(id)}/plan/prestaciones/${encodeURIComponent(prestacionId)}`,
+    "No se pudo borrar la prestación",
+    { method: "DELETE" }
+  )
+}
+
+// ─── De otras partes del panel ───────────────────────────────────────────────
+
+/** Una cita del paciente, como la trae `GET /api/clientes/[id]` (las 20 más recientes que quien mira ve). */
+export interface CitaDelPaciente {
+  id: string
+  title: string
+  startTime: string
+  status: string
+}
+
+export async function leerCitasDelPaciente(id: string): Promise<Resultado<CitaDelPaciente[]>> {
+  const resultado = await pedir<{ appointments: CitaDelPaciente[] }>(deLaFicha(id), "No se pudieron cargar las citas del paciente")
+  return resultado.ok ? { ok: true, datos: resultado.datos.appointments } : resultado
+}
+
+/** Un servicio activo del negocio, del catálogo de la agenda. */
+export interface ServicioDeLaClinica {
+  id: string
+  name: string
+  /** En pesos. */
+  price: number | null
+}
+
+export async function leerServicios(): Promise<Resultado<ServicioDeLaClinica[]>> {
+  const resultado = await pedir<{ servicios: ServicioDeLaClinica[] }>("/api/citas/servicios", "No se pudieron cargar los servicios")
+  return resultado.ok ? { ok: true, datos: resultado.datos.servicios } : resultado
+}
+
+/** Quienes atienden. El servidor se los da a quien gestiona el equipo (la dueña); a los demás, 401. */
+export async function leerOdontologos(): Promise<Resultado<{ id: string; nombre: string }[]>> {
+  return pedir<{ miembros: { id: string; nombre: string }[] }>("/api/equipo/miembros", "No se pudo cargar el equipo").then(
+    (resultado) => (resultado.ok ? { ok: true, datos: resultado.datos.miembros } : resultado)
+  )
+}

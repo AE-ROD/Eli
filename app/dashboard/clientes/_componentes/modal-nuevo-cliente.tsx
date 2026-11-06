@@ -10,6 +10,8 @@ import { Aviso } from "@/components/panel/aviso"
 interface PropsDeModalNuevoCliente {
   /** Con `editando`, el mismo formulario cambia los datos de un cliente que ya existe. */
   editando?: boolean
+  /** "cliente" o, en una clínica dental, "paciente" (`lib/vocabulario.ts`). */
+  palabraCliente?: string
   form: DatosDeNuevoCliente
   guardando: boolean
   /**
@@ -40,6 +42,7 @@ interface PropsDeModalNuevoCliente {
  */
 export function ModalNuevoCliente({
   editando = false,
+  palabraCliente = "cliente",
   form,
   guardando,
   aviso,
@@ -51,13 +54,13 @@ export function ModalNuevoCliente({
   onCerrar,
 }: PropsDeModalNuevoCliente) {
   return (
-    <MarcoDeModal titulo={editando ? "Editar cliente" : "Nuevo cliente"} bloqueado={guardando} alCerrar={onCerrar}>
+    <MarcoDeModal titulo={editando ? `Editar ${palabraCliente}` : `Nuevo ${palabraCliente}`} bloqueado={guardando} alCerrar={onCerrar}>
       <form onSubmit={onSubmit} className="space-y-5">
         {/* Al abrir, el foco va al nombre. `MarcoDeModal` anota antes quién lo abrió. */}
         <CampoFormulario
           autoFocus
           etiqueta="Nombre completo"
-          placeholder="Nombre del cliente"
+          placeholder={`Nombre del ${palabraCliente}`}
           value={form.nombre}
           onChange={(e) => onCambiarCampo("nombre", e.target.value)}
           icono={<User className="size-4" aria-hidden="true" strokeWidth={1.75} />}
@@ -117,7 +120,7 @@ export function ModalNuevoCliente({
             Cancelar
           </Boton>
           <Boton type="submit" className="w-full" cargando={guardando}>
-            {editando ? "Guardar cambios" : "Guardar cliente"}
+            {editando ? "Guardar cambios" : `Guardar ${palabraCliente}`}
           </Boton>
         </div>
       </form>
