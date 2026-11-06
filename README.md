@@ -1,8 +1,10 @@
 # Eli
 
-Sistema de reservas para **salones de belleza, barberías y spas de uñas**. Cada
-negocio tiene su agenda, su equipo y su página pública de reserva; los
-profesionales cobran un porcentaje del servicio que atienden.
+Sistema de reservas para **salones de belleza, barberías, spas de uñas y
+clínicas dentales**. Cada negocio tiene su agenda, su equipo y su página
+pública de reserva; los profesionales cobran un porcentaje del servicio que
+atienden. La clínica dental suma lo clínico: ficha del paciente, odontograma,
+plan de tratamiento y sillones.
 
 Qué es, para quién y qué falta decidir: `docs/PRODUCTO.md`.
 
@@ -300,7 +302,7 @@ lib/                          Lógica compartida, cada archivo con su test al la
                               y la conversión entre "HH:MM" y minutos
   nombres-de-roles.ts         Cómo se escribe cada rol (Encargado, Profesional). Sólo
                               la etiqueta: lo que puede hacer cada uno está en permisos.ts
-  rubros.ts                   Los tres rubros que atiende Eli
+  rubros.ts                   Los cuatro rubros que atiende Eli
   servicios-de-ejemplo.ts     Los servicios con que nace un negocio, según su rubro
   modulos.ts                  Los cinco módulos del panel: nombre, frase, ruta y color
   correos-de-prueba.ts        Qué correo del ciclo de prueba le toca hoy a un negocio

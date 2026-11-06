@@ -305,7 +305,8 @@ pantallas vive en `components/panel/`:
 
 | Archivo | Qué es |
 |---|---|
-| `secciones-del-panel.ts` | Las secciones del panel (inicio, los cinco módulos de `lib/modulos.ts`, configuración y ayuda), con nombre, ruta y módulo, y `seccionDeLaRuta(ruta)`, que dice de qué sección es una página. De acá salen los enlaces de la barra lateral, el antetítulo de cada página y el halo del foco: una sección nueva se agrega acá |
+| `secciones-del-panel.ts` | Las secciones del panel (inicio, los cinco módulos de `lib/modulos.ts`, configuración y ayuda), con nombre, ruta y módulo, y `seccionDeLaRuta(ruta)`, que dice de qué sección es una página. De acá salen los enlaces de la barra lateral, el antetítulo de cada página y el halo del foco: una sección nueva se agrega acá. `seccionConNombreDelRubro` y `seccionesConNombreDelRubro` le dan a cada sección el nombre de su rubro (en una clínica dental, Clientes es "Pacientes" y Tablero, "Sala de espera") sin tocar su id, su ruta, su color ni su ícono; en cualquier otro rubro la devuelven igual |
+| `contexto-rubro.tsx` | `ProveedorDeRubro` y `useRubroDelPanel()`: el rubro del negocio para las piezas de cliente del panel. Lo pone el layout del panel con el rubro del actor del servidor, así la primera pintura ya dice "Pacientes" (con la sesión del navegador, que llega después, el antetítulo decía "Clientes" un instante); sin proveedor, el de la sesión. Las palabras salen de `vocabularioDe(useRubroDelPanel())` (`lib/vocabulario.ts`); qué se muestra lo sigue decidiendo `lib/permisos.ts` |
 | `icono-de-seccion.tsx` | `CuadroDeSeccion`: el ícono de una sección en su cuadro. El de un módulo es `IconoDeModulo`, en su pastel fuerte; el de las demás, gris. De 32px en la barra lateral y de 20px en el antetítulo |
 | `barra-lateral.tsx`, `contexto-barra-lateral.tsx` | La isla de la izquierda desde lg (240px, 76 colapsada, con la sección actual en la píldora de su pastel y `aria-current`) y, por debajo, el cajón del teléfono con su manejo del foco |
 | `barra-superior.tsx` | `BarraSuperior`: el encabezado de cada página (antetítulo con la sección de la ruta, título en serif, subtítulo, búsqueda y acción principal) y, por debajo de lg, la fila fija con el botón del menú |
@@ -315,6 +316,7 @@ pantallas vive en `components/panel/`:
 | `estado-vacio.tsx` | `EstadoVacio`: el lugar de una lista que todavía no tiene nada, con borde punteado para que no se lea como una tarjeta más |
 | `encabezado-de-tarjeta.tsx` | `EncabezadoDeTarjeta`: la cabecera de una tarjeta, con el ícono en su cuadro, el título en serif, una bajada y una acción a la derecha que baja de renglón si no entra |
 | `tarjeta-cita.tsx`, `avatar-usuario.tsx` | `TarjetaCita` (compacta en las listas, o completa; con `onClick` es un botón) y `AvatarUsuario` (la foto o las iniciales navy sobre un pastel fuerte; es decorativo, va siempre junto al nombre) |
+| `odontograma/` | El odontograma de la ficha clínica, en arcada (abajo, en "Lo que suma la clínica dental") |
 | `estilos.ts` | Las clases que no son un componente: `CAMPO` (el aspecto de `CampoFormulario` en 44px de alto en vez de 48: lo mínimo para un dedo), `CAMPO_CON_ERROR`, `ETIQUETA`, `ERROR_DE_CAMPO`, `ANILLO_DE_FOCO`, `TARJETA_DEL_PANEL` (blanca, radio 32 y sombra sm, para lo que no es `Tarjeta`) y `TITULO_DE_TARJETA` (la serif a 24px del `<h2>` de una tarjeta) |
 
 **El estado de una cita** se ve igual en todo el panel, siempre en palabras
@@ -323,6 +325,137 @@ del tablero la que se está atendiendo, el lima de lo cobrado la completada y
 el rojo de error la cancelada. Lo usan `TarjetaCita` y la agenda
 (`app/dashboard/agenda/_componentes/estados-de-cita.ts`, para la insignia del
 detalle y el bloque de la semana).
+
+#### Lo que suma la clínica dental
+
+Sólo en el rubro `odontologia` (qué se ve lo decide `lib/permisos.ts`); en
+los otros rubros el panel queda igual que antes. Tres reglas valen para todo
+lo que sigue:
+
+- **Las palabras son del rubro.** "Cliente", "profesional" y "tablero" no se
+  escriben fijos en una pantalla del panel: salen de
+  `vocabularioDe(useRubroDelPanel())`, en minúscula, con `conMayuscula` para
+  empezar una frase. Los nombres de
+  `lib/modulos.ts` no cambian, porque la landing los lee y habla de todos los
+  rubros; la barra y el antetítulo los cambian al mostrarlos
+  (`seccionConNombreDelRubro`). El color y el ícono de cada módulo siguen
+  iguales: Pacientes en lila, Sala de espera en naranja.
+- **Los colores son los de siempre.** Lo que se está atendiendo, en el
+  naranja del tablero; lo libre, en gris (`superficie`); las alergias, en el
+  naranja de atención y siempre con su título o su ícono, no sólo por el
+  color (en la cita y en Pacientes, un `Aviso` de tono `atencion`; en la
+  ficha, la primera tarjeta del resumen). La excepción es el odontograma
+  (abajo).
+- **La tarjeta del paciente es un enlace por debajo de lg.**
+  En una clínica, la tarjeta de Pacientes
+  (`app/dashboard/clientes/_componentes/tarjeta-cliente.tsx`) lleva a la
+  ficha clínica por debajo de lg, donde no está la ficha de al lado
+  (`lg:hidden`); desde lg sigue siendo el botón que abre la de al lado, que
+  tiene "Abrir ficha clínica" (`hidden lg:block`). Se dibujan las dos y el
+  CSS muestra una: el HTML del servidor ya es el correcto, sin esperar a
+  medir la ventana.
+
+**La grilla del día** (`app/dashboard/agenda/_grilla-del-dia.ts` hace las
+cuentas, puras y con test; `_componentes/grilla-del-dia.tsx` dibuja). Es la
+vista Día de la clínica:
+
+- filas de 15 minutos de **32 px** (`ALTO_DE_FILA`), con la hora cada media
+  hora; la línea de la media hora, más marcada que la del cuarto;
+- una columna por sillón o por odontólogo, de 148 px como mínimo, y la de las
+  horas, de 56. La grilla se desplaza dentro de su caja, a lo alto y a lo
+  ancho, nunca la página; la fila de los nombres y la columna de las horas
+  quedan fijas (`sticky`);
+- **"Ver por"** son dos botones con `aria-pressed` en una píldora
+  `superficie`, el elegido en navy (36 px a la vista, 44 con el `::after`);
+- cada cita es un botón que empieza en su hora y mide lo que dura, menos 4 px
+  de separación, y nunca menos de 28 (una de 5 minutos se lee y se toca). Las
+  que se pisan van lado a lado (`_disposicion.ts`, como en la Semana). Fondo
+  y barra izquierda, los del estado (`estados-de-cita.ts`); la cancelada,
+  además, tachada. Adentro: el rango, el paciente y **el estado en palabras
+  antes del motivo**, para que en una columna angosta lo que se corte sea el
+  motivo; si no hay alto para tres renglones, uno con la hora y el paciente.
+  El nombre accesible (y el `title`) lo dice todo, con el sillón o el
+  odontólogo de la otra vista y "primera vez". La elegida lleva un borde navy
+  por dentro; la que no tiene odontólogo, un contorno punteado naranja;
+- **la línea de ahora**: navy, de 2 px, sobre todas las columnas, con la hora
+  en una píldora navy fija a la izquierda. Hoy la grilla se abre un poco más
+  de una hora antes de esa línea, y después queda donde la deje quien mira;
+- **los bloqueos van dos veces**: una lista de botones encima de la grilla (a
+  quién bloquean, el motivo y las horas; abren su detalle) y, en la grilla,
+  una franja rayada de `superficie` y `borde` detrás de las citas, que no se
+  toca ni se anuncia: ya lo dice la lista.
+
+**Asignar sillón** (`app/dashboard/agenda/_componentes/asignar-sillon.tsx`):
+el selector (los sillones activos, el actual aunque esté desactivado y "Sin
+sillón") y un botón "Asignar" aparte. Guarda el botón, no el cambio del
+selector: con el teclado, recorrer las opciones no guarda nada. Un sillón
+ocupado se dice en un `Aviso` con el título "Sillón ocupado" y el mensaje del
+servidor, sin "guardar igual"; lo guardado, en un `Aviso` `listo` ("Quedó en
+Sillón 2."). Lo usan el panel de la cita y la sala de espera del inicio.
+
+**Sillones ahora** (`app/dashboard/_componentes/inicio-de-la-clinica.tsx`):
+una tarjeta por sillón, de radio 24, en el **naranja suave** del tablero si
+está atendiendo y en **gris** (`superficie`) si está libre; una por fila en
+el teléfono y dos desde sm. El estado va siempre en palabras, en una
+insignia blanca ("Atendiendo", "Libre" o, para el odontólogo, "Sin citas
+tuyas ahora"), y el titular dice a quién se atiende o hasta cuándo está
+libre. Mientras carga, cuatro tarjetas grises con esqueletos, del mismo alto:
+nada salta cuando llegan.
+
+**El odontograma** (`components/panel/odontograma/`):
+
+| Archivo | Qué es |
+|---|---|
+| `odontograma.tsx` | `Odontograma`: la barra de herramientas, la dentición (permanente o temporal), la arcada, el panel de la pieza elegida con sus caras, el resumen con los hallazgos por pieza y la leyenda. Controlado: las marcas entran y cada toque devuelve la lista nueva con `alCambiar`; sin `alCambiar` sólo se mira. Cada cambio se anuncia ("Pieza 16: …") en un `role="status"` |
+| `arcada.tsx` | `Arcada`: el SVG de las dos arcadas. Cada pieza es **un** botón, con nombre accesible completo ("Pieza 16, primer molar superior derecho: caries oclusal"). Tab entra a la pieza elegida (una sola parada para toda la arcada); las flechas recorren las piezas (de lado por la fila, arriba y abajo a la otra arcada) e Inicio y Fin van a las puntas; Enter o Espacio tocan el número, y la letra de una cara (V, M, D, O, I, P, L) toca esa cara. Se achica con su caja hasta una escala mínima, con los números siempre a 12 px; más angosta, se desplaza de lado dentro de su caja, empezando por el centro |
+| `geometria.ts` | Dónde va cada pieza, en unidades de un dibujo de 620 × 700: las dos arcadas en U vistas de frente, con la derecha del paciente a la izquierda de quien mira (cuadrantes 1 y 4, o 5 y 8). Cada pieza es un cuadrado girado: su lado de afuera es la cara vestibular, el de adentro la palatina o lingual, el centro la oclusal o incisal y los costados mesial y distal; los molares, más grandes que los incisivos. Qué cara es cada lado lo dice `lib/odontograma.ts`; acá sólo se ubica. Puro, con test |
+| `marcas.ts` | Lo que hace cada toque, puro y con test: una cara lleva una sola marca (tocarla con la misma herramienta la saca, con otra la cambia), las marcas de pieza se ponen y se sacan, y "Borrar" en el número limpia la pieza entera |
+| `colores.ts` | Los colores clínicos, con el contraste de cada uno anotado (abajo) |
+| `muestra.tsx` | `MuestraDeMarca`: cada marca en chico, igual que en el dibujo, para la barra, la leyenda y los botones de cara. Decorativa: va siempre junto al nombre de la marca |
+
+**Los colores del odontograma no son tokens.** Son los del dibujo clínico de
+siempre: rojo lo que hay que tratar (caries y la X de la extracción
+indicada), azul lo ya tratado (obturación), verde azulado el sellante, ámbar
+el contorno de la corona, morado el triángulo de la endodoncia y gris la X de
+la pieza ausente. Viven en `colores.ts` y se aplican con `style` en el SVG,
+no en `app/globals.css`: sólo los usa esta pantalla y no son pasteles de
+módulo. **Todos pasan 3:1** contra el blanco de la pieza y contra crema
+(WCAG 1.4.11, objetos gráficos), cada uno con su contraste en un comentario;
+el sellante y la corona del diseño no llegaban sobre `superficie` y se
+oscurecieron. **Nunca son la única pista:** cada marca se nombra en el nombre
+accesible de la pieza, en "Pieza seleccionada" y en los hallazgos, y la
+leyenda las dice en palabras. El sellante, además, va **rayado** (en el SVG y
+en `RAYAS_DE_SELLANTE` para las muestras): contra la caries no se distingue
+sólo por el tono para quien no ve el rojo. Un color clínico nuevo va en
+`colores.ts`, con su contraste anotado, no como token.
+
+**Las pestañas de la ficha**
+(`app/dashboard/clientes/[id]/_componentes/pestanas.tsx`): el patrón de
+pestañas de ARIA, como el selector de vista de Reportes. Tab entra sólo a la
+elegida; las flechas pasan de una a otra, e Inicio y Fin van a las puntas. La
+elegida va en el lila de Clientes **y en negrita**, no sólo por el color. Cada
+una mide 40 px y el `::after` la lleva a 44; en el teléfono la fila se
+desplaza de lado dentro de su píldora. Los paneles no se desmontan al cambiar
+de pestaña (un odontograma marcado y sin guardar sigue ahí al volver), y las
+pestañas que no son para quien mira no aparecen.
+
+**Cambios sin guardar** (`pestana-odontograma.tsx`). Mientras el odontograma
+tiene cambios, una barra **navy** dice "Tienes cambios sin guardar en el
+odontograma." con "Descartar cambios" (fantasma, en blanco) y "Guardar
+odontograma" (invertido), y lleva `anillo-foco-claro`. Va **pegada abajo**
+(`sticky bottom-3`) mientras se ve el odontograma, para que los cambios no se
+pierdan de vista; la pega el bloque que la envuelve y no la barra, porque un
+`sticky` se mueve sólo dentro de su padre. El navegador pregunta antes de
+cerrar o recargar.
+
+**El foco cuando el botón que se usó desaparece.** Al guardar o descartar, la
+barra se va con el botón que tenía el foco, y el foco caería al `<body>`. Si
+cae ahí, va al bloque que envolvía la barra (`tabIndex={-1}`), que ahora
+muestra el resultado y se lee al llegar; si la persona ya lo movió a otra
+parte, se respeta. Lo mismo en la sala de espera del inicio: después de
+"Asignar sillón", el formulario se va y el foco pasa a "Pasar al sillón", que
+aparece en su lugar. Todo lo que hace desaparecer el botón que se apretó
+dice adónde va el foco.
 
 ## Patrones de movimiento
 
@@ -471,12 +604,22 @@ Las maquetas del producto se arman con HTML real animado, nunca con imágenes,
 y muestran sólo lo que Eli hace (`docs/PRODUCTO.md`). Datos de ejemplo sí, con
 nombres comunes y montos de ejemplo en pesos.
 
-**No se dibuja, porque el producto no lo hace:** elegir profesional al
-reservar, porcentaje de ocupación, bloquear horarios, comisiones calculadas
-solas, pagos en línea, WhatsApp u otras integraciones, app nativa.
+**No se dibuja, porque el producto no lo hace:** pagos en línea del cliente
+final, mensajes automáticos por WhatsApp u otras integraciones (sí se agrega
+la reserva al calendario, con .ics o a Google Calendar), inventario de
+productos, app nativa y, en la clínica dental, el envío del presupuesto al
+paciente ("Presentar" sólo registra que se le mostró), el PDF del plan, los
+abonos o pagos del plan y las radiografías o documentos.
 
 **Tampoco:** testimonios, nombres de negocios reales, logos de clientes, cifras
 de marketing ("+500 salones").
+
+**Sí se dibuja, porque ya existe** (`docs/PRODUCTO.md`): elegir profesional
+al reservar, o "cualquiera disponible"; los bloqueos de horario de la agenda;
+la ocupación por profesional (Reportes › Llenar horas), y la comisión de
+cada línea, que se calcula y se congela **al cobrar**. Una línea sin % queda
+pendiente: nunca se dibuja una comisión en $0 ni una que se calcula antes de
+cobrar.
 
 Los precios de los planes sí se muestran, siempre leídos de `lib/precios.ts`,
 nunca escritos a mano en la pantalla.
