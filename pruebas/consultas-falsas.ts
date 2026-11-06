@@ -36,6 +36,14 @@ export type NombreDeModelo =
   | "envioAClientes"
   | "appointmentService"
   | "franjaDeHoraValle"
+  // Clínica dental (migración `20261106120000_etapa_6_odontologia`).
+  | "sillon"
+  | "fichaClinica"
+  | "marcaDental"
+  | "evolucion"
+  | "planDeTratamiento"
+  | "etapaDelPlan"
+  | "prestacionDelPlan"
 
 export type Tablas = Record<NombreDeModelo, Registro[]>
 
@@ -52,7 +60,13 @@ export interface Relacion {
 const uno = (modelo: NombreDeModelo, local: string, remoto = "id"): Relacion => ({ modelo, tipo: "uno", local, remoto })
 const muchos = (modelo: NombreDeModelo, remoto: string): Relacion => ({ modelo, tipo: "muchos", local: "id", remoto })
 
-/** Sólo las relaciones que usan los endpoints. Una que falte acá, lanza. */
+/**
+ * Sólo las relaciones que usan los endpoints. Una que falte acá, lanza. Las
+ * de la clínica dental están todas las del esquema (también las inversas en
+ * negocio, miembro, cliente, servicio y cita), para los tests de sus
+ * endpoints. Cada relación a uno que apunta a un `id` es además una FK que la
+ * base revisa al escribir (`verificarClaves` en `base-falsa.ts`).
+ */
 export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
   user: {},
   business: {
@@ -62,6 +76,13 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     services: muchos("service", "businessId"),
     workSchedules: muchos("workSchedule", "businessId"),
     franjasDeHoraValle: muchos("franjaDeHoraValle", "businessId"),
+    sillones: muchos("sillon", "businessId"),
+    fichasClinicas: muchos("fichaClinica", "businessId"),
+    marcasDentales: muchos("marcaDental", "businessId"),
+    evoluciones: muchos("evolucion", "businessId"),
+    planesDeTratamiento: muchos("planDeTratamiento", "businessId"),
+    etapasDelPlan: muchos("etapaDelPlan", "businessId"),
+    prestacionesDelPlan: muchos("prestacionDelPlan", "businessId"),
   },
   businessMember: {
     user: uno("user", "userId"),
@@ -69,9 +90,20 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     memberServices: muchos("memberService", "memberId"),
     commissionRates: muchos("commissionRate", "memberId"),
     liquidaciones: muchos("liquidacion", "memberId"),
+    evoluciones: muchos("evolucion", "memberId"),
+    prestacionesDelPlan: muchos("prestacionDelPlan", "memberId"),
   },
-  customer: {},
-  service: { commissionRates: muchos("commissionRate", "serviceId") },
+  customer: {
+    // La ficha guarda la FK: del lado del paciente es la relación inversa (1:1).
+    fichaClinica: uno("fichaClinica", "id", "customerId"),
+    marcasDentales: muchos("marcaDental", "customerId"),
+    evoluciones: muchos("evolucion", "customerId"),
+    planesDeTratamiento: muchos("planDeTratamiento", "customerId"),
+  },
+  service: {
+    commissionRates: muchos("commissionRate", "serviceId"),
+    prestacionesDelPlan: muchos("prestacionDelPlan", "serviceId"),
+  },
   appointment: {
     customer: uno("customer", "customerId"),
     member: uno("businessMember", "memberId"),
@@ -80,6 +112,9 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     // La atención guarda la FK: del lado de la cita es la relación inversa.
     visit: uno("visit", "id", "appointmentId"),
     servicios: muchos("appointmentService", "appointmentId"),
+    sillon: uno("sillon", "sillonId"),
+    evoluciones: muchos("evolucion", "appointmentId"),
+    prestacionesDelPlan: muchos("prestacionDelPlan", "appointmentId"),
   },
   visit: {
     business: uno("business", "businessId"),
@@ -153,6 +188,32 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     service: uno("service", "serviceId"),
   },
   franjaDeHoraValle: { business: uno("business", "businessId") },
+  sillon: { business: uno("business", "businessId"), citas: muchos("appointment", "sillonId") },
+  fichaClinica: { business: uno("business", "businessId"), customer: uno("customer", "customerId") },
+  marcaDental: { business: uno("business", "businessId"), customer: uno("customer", "customerId") },
+  evolucion: {
+    business: uno("business", "businessId"),
+    customer: uno("customer", "customerId"),
+    member: uno("businessMember", "memberId"),
+    appointment: uno("appointment", "appointmentId"),
+  },
+  planDeTratamiento: {
+    business: uno("business", "businessId"),
+    customer: uno("customer", "customerId"),
+    etapas: muchos("etapaDelPlan", "planId"),
+  },
+  etapaDelPlan: {
+    business: uno("business", "businessId"),
+    plan: uno("planDeTratamiento", "planId"),
+    prestaciones: muchos("prestacionDelPlan", "etapaId"),
+  },
+  prestacionDelPlan: {
+    business: uno("business", "businessId"),
+    etapa: uno("etapaDelPlan", "etapaId"),
+    service: uno("service", "serviceId"),
+    member: uno("businessMember", "memberId"),
+    appointment: uno("appointment", "appointmentId"),
+  },
 }
 
 /**
@@ -174,6 +235,16 @@ export const COMPUESTAS: Partial<Record<NombreDeModelo, string[]>> = {
   // `cita_servicios_mismo_negocio` exige que sea del mismo negocio: acá se
   // emula igual que una compuesta.
   appointmentService: ["appointment", "service"],
+  // Clínica dental: toda FK a otra fila del negocio es compuesta, también el
+  // sillón de la cita (`citas_sillonId_businessId_fkey`). Sólo `business` es
+  // simple en cada tabla nueva.
+  appointment: ["sillon"],
+  fichaClinica: ["customer"],
+  marcaDental: ["customer"],
+  evolucion: ["customer", "member", "appointment"],
+  planDeTratamiento: ["customer"],
+  etapaDelPlan: ["plan"],
+  prestacionDelPlan: ["etapa", "service", "member", "appointment"],
 }
 
 const OPERADORES_DE_CAMPO = new Set(["equals", "in", "notIn", "not", "gt", "gte", "lt", "lte", "has"])

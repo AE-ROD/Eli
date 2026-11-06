@@ -89,6 +89,7 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     price: null,
     frecuenciaDias: null,
     excluidoDeHoraValle: false,
+    esUrgencia: false,
     active: true,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -98,6 +99,8 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     status: "pendiente",
     source: "panel",
     confirmacionPorFaltas: false,
+    primeraVez: false,
+    sillonId: null,
     notes: null,
     clientComments: null,
     price: null,
@@ -199,6 +202,44 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
   envioAClientes: () => ({ customerId: null, esperaId: null, enviadoAt: new Date() }),
   appointmentService: () => ({ serviceId: null, price: null, createdAt: new Date() }),
   franjaDeHoraValle: () => ({ createdAt: new Date() }),
+  // Clínica dental. Sin default en el esquema (los pone quien escribe):
+  // `nombre`, `actualizadaPor`, `pieza` y `tipo` de la marca, `texto` y
+  // `autorNombre`, `version` y `creadoPorNombre`, `orden` de etapa y
+  // prestación, `valorCents`.
+  sillon: () => ({ orden: 0, activo: true, createdAt: new Date(), updatedAt: new Date() }),
+  fichaClinica: () => ({
+    fechaNacimiento: null,
+    prevision: null,
+    alergias: null,
+    antecedentes: null,
+    odontogramaActualizadoEn: null,
+    odontogramaActualizadoPor: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
+  marcaDental: () => ({ cara: null, createdAt: new Date() }),
+  evolucion: () => ({ autorUserId: null, memberId: null, appointmentId: null, createdAt: new Date() }),
+  planDeTratamiento: () => ({ vigente: true, createdAt: new Date() }),
+  etapaDelPlan: () => ({
+    estado: "por-aprobar",
+    presentadaEn: null,
+    aprobadaEn: null,
+    aprobadaPorNombre: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
+  prestacionDelPlan: () => ({
+    pieza: null,
+    caras: [],
+    serviceId: null,
+    memberId: null,
+    profesionalNombre: null,
+    estado: "por-agendar",
+    appointmentId: null,
+    realizadaEn: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
 }
 
 /** Campos `Json` del esquema: aceptan un objeto como valor (cualquier otro objeto es una escritura anidada). */
@@ -226,6 +267,23 @@ const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
   // El candado de los mensajes a clientes.
   envioAClientes: [{ campos: ["businessId", "tipo", "referencia"] }],
   appointmentService: [{ campos: ["appointmentId", "orden"] }],
+  // Clínica dental. Los `[id, businessId]` que habilitan las FK compuestas no
+  // hacen falta: `id` ya es único.
+  sillon: [{ campos: ["businessId", "nombre"] }],
+  fichaClinica: [{ campos: ["customerId", "businessId"] }],
+  marcaDental: [
+    // `odontograma_marcas_customerId_pieza_cara_key`: con `cara` null no
+    // choca, así que es "una marca por cara".
+    { campos: ["customerId", "pieza", "cara"] },
+    // `odontograma_marcas_marca_de_pieza_key`, parcial: la misma marca de
+    // pieza (cara null) no se repite en la pieza.
+    { campos: ["customerId", "pieza", "tipo"], si: (registro) => registro.cara === null || registro.cara === undefined },
+  ],
+  planDeTratamiento: [
+    { campos: ["customerId", "version"] },
+    // `planes_de_tratamiento_vigente_key`, parcial: un solo plan vigente por paciente.
+    { campos: ["customerId"], si: (registro) => registro.vigente === true },
+  ],
 }
 
 /**
@@ -278,6 +336,13 @@ const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]
     ["envioAClientes", "businessId", "cascade"], // envios_a_clientes_businessId_fkey
     ["appointmentService", "businessId", "cascade"], // cita_servicios_businessId_fkey
     ["franjaDeHoraValle", "businessId", "cascade"], // franjas_de_hora_valle_businessId_fkey
+    ["sillon", "businessId", "cascade"], // sillones_businessId_fkey
+    ["fichaClinica", "businessId", "cascade"], // fichas_clinicas_businessId_fkey
+    ["marcaDental", "businessId", "cascade"], // odontograma_marcas_businessId_fkey
+    ["evolucion", "businessId", "cascade"], // evoluciones_businessId_fkey
+    ["planDeTratamiento", "businessId", "cascade"], // planes_de_tratamiento_businessId_fkey
+    ["etapaDelPlan", "businessId", "cascade"], // etapas_del_plan_businessId_fkey
+    ["prestacionDelPlan", "businessId", "cascade"], // prestaciones_del_plan_businessId_fkey
   ],
   businessMember: [
     ["workSchedule", "memberId", "cascade"], // horarios_laborales_memberId_fkey
@@ -291,11 +356,17 @@ const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]
     ["liquidacion", "memberId", "no action"], // liquidaciones_memberId_businessId_fkey
     ["movimientoDeLiquidacion", "memberId", "no action"], // movimientos_de_liquidacion_memberId_businessId_fkey
     ["inscripcionEnEspera", "memberId", "set null"], // lista_de_espera_memberId_fkey
+    ["evolucion", "memberId", "no action"], // evoluciones_memberId_businessId_fkey
+    ["prestacionDelPlan", "memberId", "no action"], // prestaciones_del_plan_memberId_businessId_fkey
   ],
   customer: [
     ["appointment", "customerId", "set null"], // citas_patientId_fkey
     ["visit", "customerId", "set null"], // atenciones_customerId_fkey
     ["envioAClientes", "customerId", "set null"], // envios_a_clientes_customerId_fkey
+    ["fichaClinica", "customerId", "cascade"], // fichas_clinicas_customerId_businessId_fkey
+    ["marcaDental", "customerId", "cascade"], // odontograma_marcas_customerId_businessId_fkey
+    ["evolucion", "customerId", "cascade"], // evoluciones_customerId_businessId_fkey
+    ["planDeTratamiento", "customerId", "cascade"], // planes_de_tratamiento_customerId_businessId_fkey
   ],
   service: [
     ["appointment", "serviceId", "set null"], // citas_serviceId_fkey
@@ -305,10 +376,13 @@ const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]
     ["memberService", "serviceId", "cascade"], // member_services_serviceId_businessId_fkey
     ["inscripcionEnEspera", "serviceId", "cascade"], // lista_de_espera_serviceId_businessId_fkey
     ["appointmentService", "serviceId", "set null"], // cita_servicios_serviceId_fkey
+    ["prestacionDelPlan", "serviceId", "no action"], // prestaciones_del_plan_serviceId_businessId_fkey
   ],
   appointment: [
     ["visit", "appointmentId", "set null"], // atenciones_appointmentId_fkey
     ["appointmentService", "appointmentId", "cascade"], // cita_servicios_appointmentId_businessId_fkey
+    ["evolucion", "appointmentId", "no action"], // evoluciones_appointmentId_businessId_fkey
+    ["prestacionDelPlan", "appointmentId", "no action"], // prestaciones_del_plan_appointmentId_businessId_fkey
   ],
   // Borrar una atención que esperaba (`app/api/atenciones/[id]`) se lleva sus
   // líneas, pagos y propinas. Es también la excepción de los triggers de
@@ -330,6 +404,20 @@ const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]
   ],
   inscripcionEnEspera: [
     ["envioAClientes", "esperaId", "set null"], // envios_a_clientes_esperaId_fkey
+  ],
+  // Clínica dental (`20261106120000_etapa_6_odontologia`). Lo que cuelga del
+  // paciente, del negocio, del plan y de la etapa es CASCADE; lo que apunta a
+  // citas, sillones, servicios y miembros es NO ACTION (P2003): el endpoint
+  // desvincula antes de borrar, o responde 409. Los sillones no se borran
+  // (se desactivan), pero la FK está igual.
+  sillon: [
+    ["appointment", "sillonId", "no action"], // citas_sillonId_businessId_fkey
+  ],
+  planDeTratamiento: [
+    ["etapaDelPlan", "planId", "cascade"], // etapas_del_plan_planId_businessId_fkey
+  ],
+  etapaDelPlan: [
+    ["prestacionDelPlan", "etapaId", "cascade"], // prestaciones_del_plan_etapaId_businessId_fkey
   ],
 }
 
@@ -376,6 +464,13 @@ function tablasVacias(): Tablas {
     workSchedule: [],
     timeBlock: [],
     memberService: [],
+    sillon: [],
+    fichaClinica: [],
+    marcaDental: [],
+    evolucion: [],
+    planDeTratamiento: [],
+    etapaDelPlan: [],
+    prestacionDelPlan: [],
   }
 }
 
@@ -585,6 +680,39 @@ export function crearBaseFalsa() {
     throw errorDeTrigger(`atencion_servicios ${String(viejo.id)}: la línea está en una liquidación; no se borra`)
   }
 
+  /**
+   * El trigger `evoluciones_inmutables` (migración
+   * `20261106120000_etapa_6_odontologia`): una evolución no se edita. Se
+   * compara la fila entera menos `memberId` y `appointmentId`, y esas dos sólo
+   * pueden pasar a null (desvincular la cita o el miembro, para poder
+   * borrarlos después). Escribir lo mismo que ya tiene no es un cambio.
+   */
+  function evolucionInmutable(viejo: Registro, nuevo: Registro) {
+    const desvinculables = ["memberId", "appointmentId"]
+    const campos = new Set([...Object.keys(viejo), ...Object.keys(nuevo)])
+    const cambia = [...campos].some((campo) => !desvinculables.includes(campo) && distintos(nuevo[campo], viejo[campo]))
+    const apuntaAOtro = desvinculables.some(
+      (campo) => nuevo[campo] !== null && nuevo[campo] !== undefined && distintos(nuevo[campo], viejo[campo])
+    )
+    if (cambia || apuntaAOtro) {
+      throw errorDeTrigger(`evoluciones ${String(viejo.id)}: una evolución no se edita; se anota una nueva`)
+    }
+  }
+
+  /**
+   * El trigger `evoluciones_no_se_borran` (misma migración): una evolución no
+   * se borra mientras existan su paciente y su negocio. Sin alguno de los dos
+   * es la cascada de borrar el paciente o el negocio entero, y pasa (como
+   * `lineaLiquidadaNoSeBorra`). Igual que el de verdad, mira las dos filas:
+   * un test que siembra evoluciones sin su negocio no ve el rechazo.
+   */
+  function evolucionNoSeBorra(viejo: Registro) {
+    const existe = (modelo: NombreDeModelo, id: unknown) => tablas[modelo].some((fila) => fila.id === id)
+    if (existe("customer", viejo.customerId) && existe("business", viejo.businessId)) {
+      throw errorDeTrigger(`evoluciones ${String(viejo.id)}: una evolución no se borra`)
+    }
+  }
+
   /** Los triggers `BEFORE INSERT` de la base de verdad que la falsa reproduce. */
   const ANTES_DE_INSERTAR: Partial<Record<NombreDeModelo, (nuevo: Registro) => void>> = {
     visitService: (nuevo) => lineaDelMismoNegocio(null, nuevo),
@@ -596,11 +724,13 @@ export function crearBaseFalsa() {
       comisionInmutable(viejo, nuevo)
       lineaDelMismoNegocio(viejo, nuevo)
     },
+    evolucion: evolucionInmutable,
   }
 
   /** Los triggers `BEFORE DELETE` de la base de verdad que la falsa reproduce. */
   const ANTES_DE_BORRAR: Partial<Record<NombreDeModelo, (viejo: Registro) => void>> = {
     visitService: lineaLiquidadaNoSeBorra,
+    evolucion: evolucionNoSeBorra,
   }
 
   /**
@@ -658,11 +788,23 @@ export function crearBaseFalsa() {
     tablas[modelo].push(registro)
 
     for (const [rel, hijos] of anidados) {
+      // Por una FK compuesta (las `etapas` de un plan, las `prestaciones` de
+      // una etapa), Prisma completa también el `businessId` del hijo con el del
+      // padre: el `create` anidado no lo lleva.
+      const negocio = esInversaDeCompuesta(modelo, rel) ? { businessId: registro.businessId } : {}
       for (const hijo of Array.isArray(hijos) ? hijos : [hijos]) {
-        crear(rel.modelo, { ...(hijo as Registro), [rel.remoto]: registro[rel.local] })
+        crear(rel.modelo, { ...(hijo as Registro), [rel.remoto]: registro[rel.local], ...negocio })
       }
     }
     return registro
+  }
+
+  /** Si la relación a muchos `rel` de `modelo` es, del lado del hijo, una FK compuesta `(id, businessId)`. */
+  function esInversaDeCompuesta(modelo: NombreDeModelo, rel: Relacion): boolean {
+    const inversa = Object.entries(RELACIONES[rel.modelo]).find(
+      ([, otra]) => otra.tipo === "uno" && otra.modelo === modelo && otra.local === rel.remoto && otra.remoto === rel.local
+    )
+    return !!inversa && (COMPUESTAS[rel.modelo] ?? []).includes(inversa[0])
   }
 
   /**
@@ -803,6 +945,13 @@ export function crearBaseFalsa() {
     envioAClientes: delegado("envioAClientes"),
     appointmentService: delegado("appointmentService"),
     franjaDeHoraValle: delegado("franjaDeHoraValle"),
+    sillon: delegado("sillon"),
+    fichaClinica: delegado("fichaClinica"),
+    marcaDental: delegado("marcaDental"),
+    evolucion: delegado("evolucion"),
+    planDeTratamiento: delegado("planDeTratamiento"),
+    etapaDelPlan: delegado("etapaDelPlan"),
+    prestacionDelPlan: delegado("prestacionDelPlan"),
     /**
      * Sólo para candados (`SELECT … FOR UPDATE` o `pg_advisory_xact_lock`): en
      * memoria no hay concurrencia que ordenar, así que no devuelve nada. Queda

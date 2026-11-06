@@ -1068,3 +1068,425 @@ describe("base falsa: un UPDATE sólo revisa las FK que cambian (#134)", () => {
     expect(base.buscar("appointment").map((cita) => cita.serviceId)).toEqual([null, null])
   })
 })
+
+describe("base falsa: la clínica dental (etapa 6, 37f9b39)", () => {
+  // n1 y n2 son dos clínicas con nombres que coinciden a propósito. c1 tiene
+  // de todo: ficha, marcas, una evolución y un plan con una prestación
+  // agendada en cita-1, que está en el sillón sl1. c2 es un paciente sin nada.
+  const datos = () => ({
+    business: [
+      { id: "n1", name: "Uno", slug: "uno", userId: "u1", type: "odontologia" },
+      { id: "n2", name: "Dos", slug: "dos", userId: "u2", type: "odontologia" },
+    ],
+    user: [
+      { id: "u1", name: "Ana", email: "a@test" },
+      { id: "u2", name: "Otro", email: "o@test" },
+    ],
+    businessMember: [
+      { id: "m1", businessId: "n1", userId: "u1" },
+      { id: "m2", businessId: "n2", userId: "u2" },
+    ],
+    customer: [
+      { id: "c1", businessId: "n1", name: "María" },
+      { id: "c2", businessId: "n1", name: "Beto" },
+      { id: "c3", businessId: "n2", name: "Otra" },
+    ],
+    service: [
+      { id: "s1", businessId: "n1", name: "Obturación" },
+      { id: "s2", businessId: "n2", name: "Obturación" },
+    ],
+    sillon: [
+      { id: "sl1", businessId: "n1", nombre: "Sillón 1" },
+      { id: "sl2", businessId: "n2", nombre: "Sillón 1" },
+    ],
+    appointment: [
+      { id: "cita-1", businessId: "n1", title: "Control", startTime: new Date(1), endTime: new Date(2), customerId: "c1", memberId: "m1", sillonId: "sl1" },
+      { id: "cita-2", businessId: "n2", title: "Control", startTime: new Date(1), endTime: new Date(2), customerId: "c3", memberId: "m2" },
+    ],
+    fichaClinica: [{ id: "f1", businessId: "n1", customerId: "c1", alergias: "Penicilina", actualizadaPor: "Ana" }],
+    marcaDental: [
+      { id: "mk1", businessId: "n1", customerId: "c1", pieza: 16, cara: "O", tipo: "caries" },
+      { id: "mk2", businessId: "n1", customerId: "c1", pieza: 21, tipo: "corona" },
+    ],
+    evolucion: [
+      { id: "ev1", businessId: "n1", customerId: "c1", texto: "Control sin novedad", autorNombre: "Ana", memberId: "m1", appointmentId: "cita-1" },
+    ],
+    planDeTratamiento: [{ id: "plan-1", businessId: "n1", customerId: "c1", version: 1, creadoPorNombre: "Ana" }],
+    etapaDelPlan: [{ id: "et1", businessId: "n1", planId: "plan-1", orden: 1, nombre: "Urgencia" }],
+    prestacionDelPlan: [
+      {
+        id: "pr1",
+        businessId: "n1",
+        etapaId: "et1",
+        orden: 1,
+        pieza: 16,
+        caras: ["O"],
+        serviceId: "s1",
+        nombre: "Obturación",
+        memberId: "m1",
+        profesionalNombre: "Ana",
+        estado: "agendada",
+        valorCents: 3500000,
+        appointmentId: "cita-1",
+      },
+    ],
+  })
+
+  beforeEach(() => base.reiniciar(datos()))
+
+  const fila = (modelo: NombreDeModelo, id: string) => base.buscar(modelo, { id })[0]
+  const rechazo = /23514/
+
+  describe("defaults y relaciones", () => {
+    it("las columnas nuevas de servicios y citas traen su default, sembradas o creadas", async () => {
+      const cita = await prisma.appointment.create({
+        data: { businessId: "n1", title: "Limpieza", startTime: new Date(3), endTime: new Date(4) },
+      })
+
+      expect(fila("service", "s1")).toMatchObject({ esUrgencia: false })
+      expect(fila("appointment", "cita-2")).toMatchObject({ primeraVez: false, sillonId: null })
+      expect(cita).toMatchObject({ primeraVez: false, sillonId: null })
+    })
+
+    it("los modelos nuevos traen los defaults del esquema", async () => {
+      const sillon = await prisma.sillon.create({ data: { businessId: "n1", nombre: "Sillón 2" } })
+      const ficha = await prisma.fichaClinica.create({ data: { businessId: "n1", customerId: "c2", actualizadaPor: "Ana" } })
+      const marca = await prisma.marcaDental.create({ data: { businessId: "n1", customerId: "c2", pieza: 36, tipo: "ausente" } })
+      const evolucion = await prisma.evolucion.create({ data: { businessId: "n1", customerId: "c2", texto: "Primera visita", autorNombre: "Ana" } })
+      const plan = await prisma.planDeTratamiento.create({ data: { businessId: "n1", customerId: "c2", version: 1, creadoPorNombre: "Ana" } })
+      const etapa = await prisma.etapaDelPlan.create({ data: { businessId: "n1", planId: plan.id, orden: 1, nombre: "Higiene" } })
+      const prestacion = await prisma.prestacionDelPlan.create({
+        data: { businessId: "n1", etapaId: etapa.id, orden: 1, nombre: "Destartraje", valorCents: 2500000 },
+      })
+
+      expect(sillon).toMatchObject({ orden: 0, activo: true })
+      expect(ficha).toMatchObject({
+        fechaNacimiento: null,
+        prevision: null,
+        alergias: null,
+        antecedentes: null,
+        odontogramaActualizadoEn: null,
+        odontogramaActualizadoPor: null,
+      })
+      expect(marca).toMatchObject({ cara: null })
+      expect(evolucion).toMatchObject({ autorUserId: null, memberId: null, appointmentId: null })
+      expect(plan).toMatchObject({ vigente: true })
+      expect(etapa).toMatchObject({ estado: "por-aprobar", presentadaEn: null, aprobadaEn: null, aprobadaPorNombre: null })
+      expect(prestacion).toMatchObject({
+        pieza: null,
+        caras: [],
+        serviceId: null,
+        memberId: null,
+        profesionalNombre: null,
+        estado: "por-agendar",
+        appointmentId: null,
+        realizadaEn: null,
+      })
+      for (const creado of [sillon, ficha, marca, evolucion, plan, etapa, prestacion]) {
+        expect(creado.createdAt).toBeInstanceOf(Date)
+      }
+    })
+
+    it("lee las relaciones nuevas con include, select, _count y filtros", async () => {
+      const conFicha = await prisma.customer.findMany({ orderBy: { id: "asc" }, include: { fichaClinica: { select: { alergias: true } } } })
+      const cita = await prisma.appointment.findFirst({ where: { id: "cita-1" }, select: { id: true, sillon: { select: { nombre: true } } } })
+      const plan = (await prisma.planDeTratamiento.findFirst({
+        where: { customerId: "c1", vigente: true },
+        include: { etapas: { orderBy: { orden: "asc" }, include: { prestaciones: { where: { estado: "agendada" } } } } },
+      })) as { etapas: { id: string; prestaciones: { id: string; caras: string[] }[] }[] }
+      const conteo = await prisma.customer.findFirst({
+        where: { id: "c1" },
+        select: { _count: { select: { marcasDentales: true, evoluciones: true, planesDeTratamiento: { where: { vigente: false } } } } },
+      })
+      const conPlanVigente = await prisma.customer.findMany({ where: { planesDeTratamiento: { some: { vigente: true } } } })
+      const deCitasConSillon = await prisma.evolucion.findMany({ where: { appointment: { is: { sillon: { is: { nombre: "Sillón 1" } } } } } })
+
+      expect(conFicha.map((c) => [c.id, c.fichaClinica])).toEqual([
+        ["c1", { alergias: "Penicilina" }],
+        ["c2", null],
+        ["c3", null],
+      ])
+      expect(cita).toEqual({ id: "cita-1", sillon: { nombre: "Sillón 1" } })
+      expect(plan.etapas.map((e) => e.id)).toEqual(["et1"])
+      expect(plan.etapas[0].prestaciones).toMatchObject([{ id: "pr1", caras: ["O"] }])
+      expect(conteo).toEqual({ _count: { marcasDentales: 2, evoluciones: 1, planesDeTratamiento: 0 } })
+      expect(conPlanVigente.map((c) => c.id)).toEqual(["c1"])
+      expect(deCitasConSillon.map((e) => e.id)).toEqual(["ev1"])
+    })
+
+    it("has sobre las caras de una prestación", async () => {
+      expect((await prisma.prestacionDelPlan.findMany({ where: { caras: { has: "O" } } })).map((p) => p.id)).toEqual(["pr1"])
+      expect(await prisma.prestacionDelPlan.findMany({ where: { caras: { has: "V" } } })).toEqual([])
+    })
+
+    it("un create anidado del plan completa planId, etapaId y el businessId de las FK compuestas", async () => {
+      await prisma.planDeTratamiento.create({
+        data: {
+          businessId: "n1",
+          customerId: "c2",
+          version: 1,
+          creadoPorNombre: "Ana",
+          etapas: {
+            create: [
+              {
+                orden: 1,
+                nombre: "Higiene",
+                prestaciones: { create: [{ orden: 1, nombre: "Destartraje", valorCents: 2500000, memberId: "m1" }] },
+              },
+            ],
+          },
+        },
+      })
+
+      const [etapa] = base.buscar("etapaDelPlan", { nombre: "Higiene" })
+      const [prestacion] = base.buscar("prestacionDelPlan", { nombre: "Destartraje" })
+      expect(etapa).toMatchObject({ businessId: "n1", planId: base.buscar("planDeTratamiento", { customerId: "c2" })[0].id })
+      expect(prestacion).toMatchObject({ businessId: "n1", etapaId: etapa.id, memberId: "m1" })
+    })
+  })
+
+  describe("FK compuestas: nada cruza de negocio (P2003)", () => {
+    const enN1 = { businessId: "n1" }
+    const casos: [string, () => Promise<unknown>][] = [
+      ["cita en el sillón de otra clínica", () => prisma.appointment.create({ data: { ...enN1, title: "X", startTime: new Date(5), endTime: new Date(6), sillonId: "sl2" } })],
+      ["cita movida al sillón de otra clínica", () => prisma.appointment.update({ where: { id: "cita-1" }, data: { sillonId: "sl2" } })],
+      ["ficha de un paciente ajeno", () => prisma.fichaClinica.create({ data: { ...enN1, customerId: "c3", actualizadaPor: "Ana" } })],
+      ["marca de un paciente ajeno", () => prisma.marcaDental.create({ data: { ...enN1, customerId: "c3", pieza: 11, tipo: "corona" } })],
+      ["evolución de un paciente ajeno", () => prisma.evolucion.create({ data: { ...enN1, customerId: "c3", texto: "X", autorNombre: "Ana" } })],
+      ["evolución con un odontólogo ajeno", () => prisma.evolucion.create({ data: { ...enN1, customerId: "c1", texto: "X", autorNombre: "Ana", memberId: "m2" } })],
+      ["evolución en una cita ajena", () => prisma.evolucion.create({ data: { ...enN1, customerId: "c1", texto: "X", autorNombre: "Ana", appointmentId: "cita-2" } })],
+      ["plan de un paciente ajeno", () => prisma.planDeTratamiento.create({ data: { ...enN1, customerId: "c3", version: 1, creadoPorNombre: "Ana" } })],
+      ["etapa en el plan de otra clínica", () => prisma.etapaDelPlan.create({ data: { businessId: "n2", planId: "plan-1", orden: 2, nombre: "X" } })],
+      ["prestación en la etapa de otra clínica", () => prisma.prestacionDelPlan.create({ data: { businessId: "n2", etapaId: "et1", orden: 2, nombre: "X", valorCents: 0 } })],
+      ["prestación con un servicio ajeno", () => prisma.prestacionDelPlan.update({ where: { id: "pr1" }, data: { serviceId: "s2" } })],
+      ["prestación con un odontólogo ajeno", () => prisma.prestacionDelPlan.update({ where: { id: "pr1" }, data: { memberId: "m2" } })],
+      ["prestación agendada en una cita ajena", () => prisma.prestacionDelPlan.update({ where: { id: "pr1" }, data: { appointmentId: "cita-2" } })],
+    ]
+
+    it.each(casos)("%s", async (_caso, escribir) => {
+      const antes = base.volcado()
+      await expect(escribir()).rejects.toMatchObject({ code: "P2003", message: expect.stringMatching(/FK compuesta rota/) })
+      expect(base.volcado()).toEqual(antes)
+    })
+
+    it("las FK simples al negocio y a filas que no existen también se revisan", async () => {
+      await expect(prisma.sillon.create({ data: { businessId: "no-existe", nombre: "X" } })).rejects.toMatchObject({ code: "P2003" })
+      await expect(prisma.appointment.update({ where: { id: "cita-1" }, data: { sillonId: "no-existe" } })).rejects.toThrow(/FK rota/)
+      await expect(prisma.appointment.update({ where: { id: "cita-1" }, data: { sillonId: null } })).resolves.toMatchObject({ sillonId: null })
+    })
+  })
+
+  describe("únicos", () => {
+    it("sillón: nombre único por clínica; otra clínica no choca", async () => {
+      await expect(prisma.sillon.create({ data: { businessId: "n1", nombre: "Sillón 1" } })).rejects.toMatchObject({ code: "P2002" })
+      await expect(prisma.sillon.update({ where: { id: "sl2" }, data: { nombre: "Sillón 1", orden: 3 } })).resolves.toMatchObject({ orden: 3 })
+      await expect(prisma.sillon.create({ data: { businessId: "n1", nombre: "Sillón 2" } })).resolves.toBeTruthy()
+    })
+
+    it("ficha: una por paciente, y se escribe con upsert por (customerId, businessId)", async () => {
+      await expect(prisma.fichaClinica.create({ data: { businessId: "n1", customerId: "c1", actualizadaPor: "Ana" } })).rejects.toMatchObject({
+        code: "P2002",
+      })
+      for (const customerId of ["c1", "c2"]) {
+        await prisma.fichaClinica.upsert({
+          where: { customerId_businessId: { customerId, businessId: "n1" } },
+          create: { businessId: "n1", customerId, alergias: "Látex", actualizadaPor: "Ana" },
+          update: { alergias: "Látex", actualizadaPor: "Ana" },
+        })
+      }
+      expect(base.buscar("fichaClinica").map((f) => [f.customerId, f.alergias])).toEqual([
+        ["c1", "Látex"],
+        ["c2", "Látex"],
+      ])
+    })
+
+    it("marca de cara: una por (paciente, pieza, cara), con upsert por customerId_pieza_cara", async () => {
+      await prisma.marcaDental.upsert({
+        where: { customerId_pieza_cara: { customerId: "c1", pieza: 16, cara: "O" } },
+        create: { businessId: "n1", customerId: "c1", pieza: 16, cara: "O", tipo: "obturacion" },
+        update: { tipo: "obturacion" },
+      })
+      expect(base.buscar("marcaDental", { pieza: 16 }).map((m) => [m.cara, m.tipo])).toEqual([["O", "obturacion"]])
+
+      const enLaCara = { businessId: "n1", customerId: "c1", pieza: 16, cara: "O", tipo: "sellante" }
+      await expect(prisma.marcaDental.create({ data: enLaCara })).rejects.toMatchObject({ code: "P2002" })
+      // Otra cara de la misma pieza, aun con el mismo tipo, u otro paciente: no chocan.
+      await expect(prisma.marcaDental.create({ data: { ...enLaCara, cara: "M", tipo: "obturacion" } })).resolves.toBeTruthy()
+      await expect(prisma.marcaDental.create({ data: { ...enLaCara, customerId: "c2" } })).resolves.toBeTruthy()
+    })
+
+    it("marca de pieza (cara null): el mismo tipo no se repite en la pieza (único parcial)", async () => {
+      const corona = { businessId: "n1", customerId: "c1", pieza: 21, tipo: "corona" }
+      await expect(prisma.marcaDental.create({ data: corona })).rejects.toMatchObject({ code: "P2002" })
+      await expect(prisma.marcaDental.createMany({ data: [{ ...corona, tipo: "endodoncia" }, { ...corona, pieza: 22 }] })).resolves.toEqual({
+        count: 2,
+      })
+      await expect(prisma.marcaDental.create({ data: { ...corona, customerId: "c2" } })).resolves.toBeTruthy()
+      // Y se borra por (paciente, pieza, tipo).
+      await prisma.marcaDental.deleteMany({ where: { customerId: "c1", pieza: 21, tipo: "corona", cara: null } })
+      expect(base.buscar("marcaDental", { customerId: "c1", pieza: 21 }).map((m) => m.tipo)).toEqual(["endodoncia"])
+    })
+
+    it("plan: un solo vigente por paciente (único parcial) y versiones sin repetir", async () => {
+      const plan = { businessId: "n1", customerId: "c1", creadoPorNombre: "Ana" }
+      await expect(prisma.planDeTratamiento.create({ data: { ...plan, version: 2 } })).rejects.toMatchObject({
+        code: "P2002",
+        message: expect.stringMatching(/customerId$/),
+      })
+      await expect(prisma.planDeTratamiento.create({ data: { ...plan, version: 1, vigente: false } })).rejects.toMatchObject({
+        code: "P2002",
+        message: expect.stringMatching(/customerId_version/),
+      })
+      // Un plan no vigente de otra versión, u otro paciente, no chocan.
+      await expect(prisma.planDeTratamiento.create({ data: { ...plan, version: 2, vigente: false } })).resolves.toBeTruthy()
+      await expect(prisma.planDeTratamiento.create({ data: { ...plan, customerId: "c2", version: 1 } })).resolves.toBeTruthy()
+    })
+
+    it("versión nueva: en una transacción, la anterior deja de estar vigente; al revés choca y no queda nada", async () => {
+      const nueva = { businessId: "n1", customerId: "c1", version: 2, creadoPorNombre: "Ana" }
+      await expect(
+        prisma.$transaction(async (tx: typeof prisma) => {
+          await tx.planDeTratamiento.create({ data: nueva })
+          await tx.planDeTratamiento.update({ where: { id: "plan-1" }, data: { vigente: false } })
+        })
+      ).rejects.toMatchObject({ code: "P2002" })
+      expect(base.buscar("planDeTratamiento").map((p) => [p.version, p.vigente])).toEqual([[1, true]])
+
+      await prisma.$transaction(async (tx: typeof prisma) => {
+        await tx.planDeTratamiento.update({ where: { id: "plan-1" }, data: { vigente: false } })
+        await tx.planDeTratamiento.create({ data: nueva })
+      })
+      expect(base.buscar("planDeTratamiento").map((p) => [p.version, p.vigente])).toEqual([
+        [1, false],
+        [2, true],
+      ])
+    })
+  })
+
+  describe("al borrar", () => {
+    it("borrar al paciente se lleva su ficha, marcas, evoluciones y planes con etapas y prestaciones; la cita queda sin paciente", async () => {
+      await prisma.customer.delete({ where: { id: "c1" } })
+
+      for (const modelo of ["fichaClinica", "marcaDental", "evolucion", "planDeTratamiento", "etapaDelPlan", "prestacionDelPlan"] as const) {
+        expect(base.buscar(modelo), modelo).toEqual([])
+      }
+      expect(fila("appointment", "cita-1")).toMatchObject({ customerId: null, sillonId: "sl1" })
+      expect(base.buscar("customer").map((c) => c.id)).toEqual(["c2", "c3"])
+    })
+
+    it("también con deleteMany, y sólo lo del paciente borrado", async () => {
+      await prisma.fichaClinica.create({ data: { businessId: "n1", customerId: "c2", actualizadaPor: "Ana" } })
+      await prisma.customer.deleteMany({ where: { id: "c1" } })
+      expect(base.buscar("fichaClinica").map((f) => f.customerId)).toEqual(["c2"])
+    })
+
+    it("borrar el plan se lleva sus etapas y prestaciones; borrar una etapa, sus prestaciones", async () => {
+      await prisma.planDeTratamiento.create({
+        data: { businessId: "n1", customerId: "c2", version: 1, creadoPorNombre: "Ana", etapas: { create: [{ orden: 1, nombre: "Otra" }] } },
+      })
+      await prisma.etapaDelPlan.delete({ where: { id: "et1" } })
+      expect(base.buscar("prestacionDelPlan")).toEqual([])
+      expect(base.buscar("etapaDelPlan").map((e) => e.nombre)).toEqual(["Otra"])
+
+      await prisma.planDeTratamiento.deleteMany({ where: { customerId: "c2" } })
+      expect(base.buscar("etapaDelPlan")).toEqual([])
+      expect(base.buscar("planDeTratamiento").map((p) => p.id)).toEqual(["plan-1"])
+    })
+
+    it("una cita con evolución o prestación no se borra (NO ACTION, P2003), y la base queda como estaba", async () => {
+      const antes = base.volcado()
+      await expect(prisma.appointment.delete({ where: { id: "cita-1" } })).rejects.toMatchObject({
+        code: "P2003",
+        message: expect.stringMatching(/evolucion\.appointmentId/),
+      })
+      await prisma.evolucion.update({ where: { id: "ev1" }, data: { appointmentId: null } })
+      await expect(prisma.appointment.deleteMany({ where: { id: "cita-1" } })).rejects.toMatchObject({
+        code: "P2003",
+        message: expect.stringMatching(/prestacionDelPlan\.appointmentId/),
+      })
+      expect(base.buscar("appointment").map((c) => c.id)).toEqual(antes.appointment.map((c) => c.id))
+    })
+
+    it("desvinculando en la misma transacción, la cita se borra y la evolución queda", async () => {
+      await prisma.$transaction(async (tx: typeof prisma) => {
+        await tx.prestacionDelPlan.updateMany({ where: { appointmentId: "cita-1" }, data: { estado: "por-agendar", appointmentId: null } })
+        await tx.evolucion.updateMany({ where: { appointmentId: "cita-1" }, data: { appointmentId: null } })
+        await tx.appointment.delete({ where: { id: "cita-1" } })
+      })
+
+      expect(base.buscar("appointment").map((c) => c.id)).toEqual(["cita-2"])
+      expect(fila("prestacionDelPlan", "pr1")).toMatchObject({ estado: "por-agendar", appointmentId: null })
+      expect(fila("evolucion", "ev1")).toMatchObject({ appointmentId: null, texto: "Control sin novedad" })
+    })
+
+    it.each([
+      ["businessMember", "m1", /evolucion\.memberId/],
+      ["service", "s1", /prestacionDelPlan\.serviceId/],
+      ["sillon", "sl1", /appointment\.sillonId/],
+    ] as const)("%s referido por algo dental no se borra (NO ACTION, P2003), y lo que corrió antes se revierte", async (modelo, id, mensaje) => {
+      const antes = base.volcado()
+      const delegado = prisma[modelo] as unknown as { delete: (args: unknown) => Promise<unknown> }
+      await expect(delegado.delete({ where: { id } })).rejects.toMatchObject({ code: "P2003", message: expect.stringMatching(mensaje) })
+      // El SET NULL de citas_memberId_fkey, que corre antes, también vuelve.
+      expect(base.volcado()).toEqual(antes)
+    })
+
+    it("un sillón sin citas sí se borra", async () => {
+      await expect(prisma.sillon.delete({ where: { id: "sl2" } })).resolves.toMatchObject({ id: "sl2" })
+    })
+
+    it("borrar la clínica entera se lleva todo lo dental, evoluciones incluidas, y no toca a la otra", async () => {
+      await prisma.evolucion.create({ data: { businessId: "n2", customerId: "c3", texto: "Ajena", autorNombre: "Otro", appointmentId: "cita-2" } })
+
+      await prisma.business.delete({ where: { id: "n1" } })
+
+      const quedan = base.volcado()
+      for (const [modelo, filas] of Object.entries(quedan)) {
+        expect(filas.filter((f) => f.businessId === "n1"), modelo).toEqual([])
+      }
+      expect(quedan.sillon.map((s) => s.id)).toEqual(["sl2"])
+      expect(quedan.evolucion.map((e) => e.texto)).toEqual(["Ajena"])
+      expect(quedan.appointment.map((c) => c.id)).toEqual(["cita-2"])
+    })
+  })
+
+  describe("los triggers evoluciones_inmutables y evoluciones_no_se_borran", () => {
+    it("una evolución no se edita: ni el texto, ni el autor, ni la fecha (23514)", async () => {
+      for (const data of [{ texto: "Corregido" }, { autorNombre: "Otra" }, { createdAt: new Date(0) }, { customerId: "c2" }]) {
+        await expect(prisma.evolucion.update({ where: { id: "ev1" }, data })).rejects.toThrow(/23514.*no se edita/)
+      }
+      expect(fila("evolucion", "ev1")).toMatchObject({ texto: "Control sin novedad", autorNombre: "Ana", customerId: "c1" })
+    })
+
+    it("sólo se desvinculan la cita y el miembro (a null); apuntarlos a otro no", async () => {
+      const otra = await prisma.appointment.create({ data: { businessId: "n1", title: "Otra", startTime: new Date(5), endTime: new Date(6) } })
+      await expect(prisma.evolucion.update({ where: { id: "ev1" }, data: { appointmentId: otra.id } })).rejects.toThrow(rechazo)
+
+      await expect(prisma.evolucion.update({ where: { id: "ev1" }, data: { appointmentId: null, memberId: null } })).resolves.toMatchObject({
+        appointmentId: null,
+        memberId: null,
+      })
+      // Volver a vincular también es editarla.
+      await expect(prisma.evolucion.update({ where: { id: "ev1" }, data: { memberId: "m1" } })).rejects.toThrow(rechazo)
+    })
+
+    it("escribir lo mismo que ya tiene no es un cambio", async () => {
+      await expect(
+        prisma.evolucion.update({ where: { id: "ev1" }, data: { texto: "Control sin novedad", appointmentId: "cita-1" } })
+      ).resolves.toBeTruthy()
+    })
+
+    it("rige en updateMany y upsert, y updateMany no cambia ninguna si una falla", async () => {
+      await prisma.evolucion.create({ data: { businessId: "n1", customerId: "c1", texto: "Otra", autorNombre: "Ana" } })
+      await expect(prisma.evolucion.updateMany({ where: { customerId: "c1" }, data: { autorNombre: "X" } })).rejects.toThrow(rechazo)
+      expect(base.buscar("evolucion").map((e) => e.autorNombre)).toEqual(["Ana", "Ana"])
+      await expect(prisma.evolucion.upsert({ where: { id: "ev1" }, create: {}, update: { texto: "X" } })).rejects.toThrow(rechazo)
+    })
+
+    it("una evolución no se borra, ni con delete ni con deleteMany", async () => {
+      await expect(prisma.evolucion.delete({ where: { id: "ev1" } })).rejects.toThrow(/23514.*no se borra/)
+      await expect(prisma.evolucion.deleteMany({ where: { customerId: "c1" } })).rejects.toThrow(rechazo)
+      expect(base.buscar("evolucion").map((e) => e.id)).toEqual(["ev1"])
+    })
+  })
+})

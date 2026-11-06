@@ -174,6 +174,13 @@ const tablas: Tablas = {
   envioAClientes: [],
   appointmentService: [],
   franjaDeHoraValle: [],
+  sillon: [],
+  fichaClinica: [],
+  marcaDental: [],
+  evolucion: [],
+  planDeTratamiento: [],
+  etapaDelPlan: [],
+  prestacionDelPlan: [],
   customer: clientesFake,
   appointment: citasFake,
 }
