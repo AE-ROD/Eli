@@ -185,9 +185,13 @@ export function PanelDeCita({
   // Quién la canceló y cuándo (#134); nada en las canceladas de antes de guardarlo.
   const canceladaPor = quienCancelo(cita)
   // "No vino" cuando ya pasó la hora de empezar: antes, si avisó, se cancela.
-  // El servidor lo vuelve a verificar (y que no haya llegado al Tablero).
+  // Si ya llegó al Tablero no se ofrece, como "Cancelar cita"; el servidor
+  // igual lo vuelve a verificar.
   const puedeNoVenir =
-    puedeMarcarseNoVino(cita.status) && new Date(cita.startTime).getTime() <= ahora && !porConfirmar
+    puedeMarcarseNoVino(cita.status) &&
+    new Date(cita.startTime).getTime() <= ahora &&
+    !porConfirmar &&
+    cita.conAtencion !== true
 
   const contenido = (
     <>
