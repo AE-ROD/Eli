@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import type { Prisma } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -16,10 +16,16 @@ import {
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import {
   actorDeSesion,
+  esClinicaDental,
   memberIdParaCita,
+  puedeAsignarSillon,
   puedeReactivarCita,
   puedeResolverPorConfirmar,
+  veAlertaDeAlergias,
+  veSillones,
   whereDeAgenda,
+  whereDeAlertaDeAlergias,
+  whereDeSillones,
   type Actor,
 } from "@/lib/permisos"
 import { MENSAJE_CITA_CERRADA, MENSAJE_CITA_CON_ATENCION, sePuedeMover } from "@/lib/mover-cita"
@@ -38,6 +44,18 @@ import { estaPorConfirmar, mensajeDeReservaQueCambio } from "@/lib/por-confirmar
 import { avisarReservaConfirmadaPorElLocal } from "@/lib/aviso-de-reserva-confirmada"
 import { duracionesQueSuman } from "@/lib/servicios-de-la-reserva"
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
+import {
+  MENSAJE_SILLON_DE_CITA_CERRADA,
+  MENSAJE_SILLON_INACTIVO,
+  MENSAJE_SILLON_NO_ENCONTRADO,
+  SillonOcupado,
+  asegurarSillonLibre,
+  errorDeSillonOcupado,
+  sillonDeLaCita,
+  type ConsultaDeSillon,
+} from "@/lib/sillones"
+import { soltarLoClinicoDeLaCita } from "@/lib/citas-de-la-clinica"
+import { zonaDelNegocio } from "@/lib/zona-horaria"
 
 const edicionDeCitaSchema = z.object({
   title: titulo().optional(),
@@ -51,6 +69,13 @@ const edicionDeCitaSchema = z.object({
    * encargado eligen: al profesional `memberIdParaCita` lo deja en sí mismo.
    */
   memberId: z.string().nullable().optional(),
+  /**
+   * Clínica dental: el sillón (`null` o vacío, sin sillón). Sólo cuenta si el
+   * actor puede asignar sillón (`puedeAsignarSillon`); en otro rubro se
+   * ignora, como el `memberId` del profesional, y nunca se guarda. Sin la
+   * clave, la cita conserva el que tiene (también al moverla).
+   */
+  sillonId: sillonDeLaCita().optional(),
   /** Segundo envío: quien mueve ya vio las advertencias y guarda igual. */
   confirmarAdvertencias: z.boolean().optional(),
 })
@@ -67,6 +92,10 @@ const NO_VINO_PERO_LLEGO = "El cliente ya llegó: la cita tiene una atención en
  * viva detrás de una cita que dice que el cliente todavía no llega.
  */
 const MENSAJE_CANCELAR_CON_ATENCION = "Esta cita ya tiene una atención en el Tablero: anúlala ahí primero"
+
+/** Borrar una cita que algo de la ficha clínica todavía referencia. */
+const MENSAJE_CITA_CON_REGISTROS_CLINICOS =
+  "Esta cita tiene registros de la ficha clínica o del plan de tratamiento. Vuelve a cargar la agenda e inténtalo de nuevo, o cancélala en vez de borrarla."
 
 /**
  * Una cita con servicios del catálogo (filas de `cita_servicios`, #89a) se
@@ -102,6 +131,12 @@ async function ajustarFilas(
       data: { duration: fila.duration },
     })
   }
+}
+
+/** La zona del negocio, para escribir las horas de un mensaje en su reloj. */
+async function zonaDeLaClinica(businessId: string): Promise<string> {
+  const negocio = await prisma.business.findUnique({ where: { id: businessId }, select: { timezone: true } })
+  return zonaDelNegocio(negocio?.timezone)
 }
 
 /** La cita no tiene atención, o la que tuvo se anuló. Para condicionar la escritura que cancela. */
@@ -153,6 +188,8 @@ export async function GET(
     where: whereDeAgenda(actor, { id }),
     include: {
       customer: { select: { id: true, name: true, lastName: true, email: true, phone: true } },
+      // Clínica dental: el nombre del sillón, para el panel de la cita.
+      ...(veSillones(actor) && { sillon: { select: { id: true, nombre: true } } }),
     },
   })
 
@@ -160,7 +197,18 @@ export async function GET(
     return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 })
   }
 
-  return NextResponse.json(cita)
+  // Clínica dental: la alerta de alergias del paciente, para todo rol de la
+  // clínica (también el encargado, que lo recibe). Sólo esa columna: el resto
+  // de la ficha no es para todos (`whereDeAlertaDeAlergias`). Sin ficha o sin
+  // nada anotado, `null`. En otro rubro la clave no viaja.
+  if (!veAlertaDeAlergias(actor)) return NextResponse.json(cita)
+  const ficha = cita.customerId
+    ? await prisma.fichaClinica.findFirst({
+        where: whereDeAlertaDeAlergias(actor, { customerId: cita.customerId }),
+        select: { alergias: true },
+      })
+    : null
+  return NextResponse.json({ ...cita, alergias: ficha?.alergias?.trim() || null })
 }
 
 export async function PUT(
@@ -232,6 +280,32 @@ export async function PUT(
       }
     }
 
+    // Clínica dental: el sillón. Sin la clave, o en otro rubro (donde
+    // `puedeAsignarSillon` dice que no y lo pedido se ignora), la cita
+    // conserva el que tiene, también al moverla.
+    const sillonId =
+      puedeAsignarSillon(actor) && datos.sillonId !== undefined ? datos.sillonId : existente.sillonId
+    const cambiaElSillon = sillonId !== existente.sillonId
+    if (cambiaElSillon) {
+      // Cambiar de sillón no es mover: se puede con el paciente ya en la sala
+      // de espera ("Asignar sillón"), pero no en una cita cerrada.
+      if (!sePuedeMover(existente.status)) {
+        return NextResponse.json({ error: MENSAJE_SILLON_DE_CITA_CERRADA }, { status: 409 })
+      }
+      if (sillonId) {
+        const sillon = await prisma.sillon.findFirst({
+          where: whereDeSillones(actor, { id: sillonId }),
+          select: { activo: true },
+        })
+        if (!sillon) {
+          return NextResponse.json({ error: MENSAJE_SILLON_NO_ENCONTRADO }, { status: 404 })
+        }
+        if (!sillon.activo) {
+          return NextResponse.json({ error: MENSAJE_SILLON_INACTIVO }, { status: 400 })
+        }
+      }
+    }
+
     // Sacar la cita de cancelada, completada o "no vino" es reactivarla:
     // sólo dueña y encargado, y con sus reglas (`lib/reactivar-cita.ts`).
     const reactivacion = decidirReactivacion({
@@ -296,20 +370,46 @@ export async function PUT(
       if (atencion) {
         return NextResponse.json({ error: MENSAJE_CITA_CON_ATENCION }, { status: 409 })
       }
+    }
 
-      if (!datos.confirmarAdvertencias) {
-        const advertencias = await advertenciasDeAgenda(prisma, {
-          businessId: actor.businessId,
-          citaId: existente.id,
-          tramo: { startTime: inicio, endTime: fin },
-          memberId,
-        })
-        if (advertencias.length > 0) {
-          return NextResponse.json(
-            { error: advertencias.map((advertencia) => advertencia.mensaje).join(" "), advertencias },
-            { status: 409 }
-          )
-        }
+    // El sillón tiene que estar libre si la cita queda en uno ocupando su
+    // horario y algo de eso cambia: otro sillón, otra hora, o vuelve a ocupar
+    // (se reactiva). No es una advertencia: un sillón atiende a uno a la vez
+    // (`lib/sillones.ts`). Se mira antes que las advertencias, para no pedir
+    // que se confirmen y después rechazar igual; la revisión que vale es la
+    // de la transacción que escribe, con el sillón trabado.
+    const estadoFinal = datos.status ?? existente.status
+    const cambiaElHorario =
+      (datos.startTime !== undefined || datos.endTime !== undefined) &&
+      (inicio.getTime() !== existente.startTime.getTime() || fin.getTime() !== existente.endTime.getTime())
+    const vuelveAOcupar = !ocupaElHorario(existente.status) && ocupaElHorario(estadoFinal)
+    const consultaDeSillon: (ConsultaDeSillon & { zona: string }) | null =
+      sillonId && ocupaElHorario(estadoFinal) && (cambiaElSillon || cambiaElHorario || vuelveAOcupar)
+        ? {
+            businessId: actor.businessId,
+            sillonId,
+            tramo: { startTime: inicio, endTime: fin },
+            ignorarCitaId: existente.id,
+            zona: await zonaDeLaClinica(actor.businessId),
+          }
+        : null
+    if (consultaDeSillon) {
+      const ocupado = await errorDeSillonOcupado(prisma, consultaDeSillon)
+      if (ocupado) throw ocupado
+    }
+
+    if (seMueve && !datos.confirmarAdvertencias) {
+      const advertencias = await advertenciasDeAgenda(prisma, {
+        businessId: actor.businessId,
+        citaId: existente.id,
+        tramo: { startTime: inicio, endTime: fin },
+        memberId,
+      })
+      if (advertencias.length > 0) {
+        return NextResponse.json(
+          { error: advertencias.map((advertencia) => advertencia.mensaje).join(" "), advertencias },
+          { status: 409 }
+        )
       }
     }
 
@@ -378,6 +478,7 @@ export async function PUT(
         ...(datos.startTime && { startTime: new Date(datos.startTime) }),
         ...(datos.endTime && { endTime: new Date(datos.endTime) }),
         ...(memberId !== existente.memberId && { memberId }),
+        ...(cambiaElSillon && { sillonId }),
         ...(datos.status && { status: datos.status }),
         ...(datos.notes !== undefined && { notes: datos.notes || null }),
         ...(datos.price !== undefined && { price: datos.price }),
@@ -408,6 +509,7 @@ export async function PUT(
       const cancela = datos.status === "cancelada"
       // La cita y sus filas en la misma transacción: o cambian las dos o ninguna.
       const { count } = await prisma.$transaction(async (tx) => {
+        if (consultaDeSillon) await asegurarSillonLibre(tx, consultaDeSillon)
         const escrita = await tx.appointment.updateMany({
           where: {
             id: existente.id,
@@ -419,6 +521,10 @@ export async function PUT(
           data: actualizacion.data,
         })
         if (escrita.count === 1) await ajustarFilas(tx, actor.businessId, existente.id, filasAjustadas)
+        // Clínica dental: lo agendado en esta cita vuelve a "por agendar".
+        if (escrita.count === 1 && cancela && esClinicaDental(actor)) {
+          await soltarLoClinicoDeLaCita(tx, actor.businessId, existente.id, "cancela")
+        }
         return escrita
       })
       const cita = await prisma.appointment.findFirst({
@@ -456,6 +562,10 @@ export async function PUT(
           data: actualizacion.data,
         })
         if (escrita.count === 1) await ajustarFilas(tx, actor.businessId, existente.id, filasAjustadas)
+        // Clínica dental: lo agendado en esta cita vuelve a "por agendar".
+        if (escrita.count === 1 && esClinicaDental(actor)) {
+          await soltarLoClinicoDeLaCita(tx, actor.businessId, existente.id, "cancela")
+        }
         return escrita
       })
       const cita = await prisma.appointment.findFirst({
@@ -472,10 +582,12 @@ export async function PUT(
 
     if (reactivacion.tipo !== "reactivar") {
       // Con filas que ajustar, en la misma transacción: la cita y sus filas
-      // quedan diciendo lo mismo o no cambia ninguna.
+      // quedan diciendo lo mismo o no cambia ninguna. Con un sillón que
+      // revisar, también: se traba el sillón y se mira de nuevo que esté libre.
       const cita =
-        filasAjustadas.length > 0
+        filasAjustadas.length > 0 || consultaDeSillon
           ? await prisma.$transaction(async (tx) => {
+              if (consultaDeSillon) await asegurarSillonLibre(tx, consultaDeSillon)
               const actualizada = await tx.appointment.update(actualizacion)
               await ajustarFilas(tx, actor.businessId, existente.id, filasAjustadas)
               return actualizada
@@ -508,6 +620,8 @@ export async function PUT(
         puede: puedeReactivarCita(actor),
       })
       if (decision.tipo === "rechazada") return { problema: { mensaje: decision.mensaje } }
+      // Vuelve a ocupar su horario: si tiene sillón, que siga libre.
+      if (consultaDeSillon) await asegurarSillonLibre(tx, consultaDeSillon)
       const { count } = await tx.appointment.updateMany({
         where: { id: existente.id, businessId: actor.businessId, status: existente.status },
         data: actualizacion.data,
@@ -529,6 +643,10 @@ export async function PUT(
     if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       return respuestaDeDatosInvalidos(error)
+    }
+    // El sillón ocupado (409 con `codigo: "sillon-ocupado"`).
+    if (error instanceof SillonOcupado) {
+      return NextResponse.json({ error: error.message, codigo: error.codigo }, { status: error.status })
     }
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
@@ -554,7 +672,27 @@ export async function DELETE(
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   }
 
-  await prisma.appointment.delete({ where: { id: existente.id } })
+  try {
+    if (esClinicaDental(actor)) {
+      // Clínica dental: las prestaciones del plan y las evoluciones que
+      // apuntan a la cita se sueltan antes, en la misma transacción (con FK NO
+      // ACTION, si no, la base rechaza el borrado). `lib/citas-de-la-clinica.ts`.
+      await prisma.$transaction(async (tx) => {
+        await soltarLoClinicoDeLaCita(tx, actor.businessId, existente.id, "borra")
+        await tx.appointment.deleteMany({ where: { id: existente.id, businessId: actor.businessId } })
+      })
+    } else {
+      await prisma.appointment.delete({ where: { id: existente.id } })
+    }
+  } catch (error) {
+    // Algo de la ficha clínica todavía apunta a la cita (una sesión que aún
+    // no sabe que el negocio es dental, o algo que se ligó entretanto): la
+    // base no la deja borrar. Se dice qué hacer en vez de un 500.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+      return NextResponse.json({ error: MENSAJE_CITA_CON_REGISTROS_CLINICOS }, { status: 409 })
+    }
+    throw error
+  }
   if (ocupaElHorario(existente.status)) {
     programarAvisoDeHoraLiberada({ businessId: actor.businessId, inicio: existente.startTime })
   }
