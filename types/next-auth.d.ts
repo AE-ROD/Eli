@@ -12,6 +12,11 @@ declare module "next-auth" {
       businessId: string
       businessName: string
       businessSlug: string
+      /**
+       * El rubro del negocio (`Business.type`, `lib/rubros.ts`). Null en una
+       * sesión de antes de este campo: no es dental (`esRubroDental`).
+       */
+      rubro: string | null
       memberId: string | null
     }
   }
@@ -24,6 +29,7 @@ declare module "next-auth" {
     businessId?: string | null
     businessName?: string | null
     businessSlug?: string | null
+    rubro?: string | null
     memberId?: string | null
   }
 }
@@ -36,6 +42,8 @@ declare module "next-auth/jwt" {
     businessId?: string | null
     businessName?: string | null
     businessSlug?: string | null
+    /** El rubro del negocio. Lo trae `perfilDe`; un token viejo no lo tiene hasta revalidarse. */
+    rubro?: string | null
     memberId?: string | null
     /** Cuándo se inició esta sesión (ms). Se compara con `User.sesionesValidasDesde`. */
     emitidoEn?: number

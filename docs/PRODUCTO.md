@@ -9,27 +9,30 @@
 
 **Eli es el sistema de reservas que además reparte el dinero.**
 
-Gestiona la agenda, los clientes y el equipo de negocios de belleza y cuidado personal — y resuelve algo que ninguna herramienta de agendamiento resuelve bien: **cuánto le corresponde a cada profesional por lo que atendió.**
+Gestiona la agenda, los clientes y el equipo de negocios de belleza y cuidado personal, y de clínicas dentales — y resuelve algo que ninguna herramienta de agendamiento resuelve bien: **cuánto le corresponde a cada profesional por lo que atendió.**
 
 ### A quién le habla
 
-Eli arranca con **tres rubros**:
+Eli atiende **cuatro rubros**:
 
 | Rubro | Id interno (`Business.type`) |
 |---|---|
 | **Salones de belleza** | `salon` |
 | **Barberías** | `barberia` |
 | **Spas de uñas** | `spa-de-unas` |
+| **Clínicas dentales** | `odontologia` |
 
-El catálogo vive en un solo lugar, `lib/rubros.ts`; el registro sólo acepta esos tres.
+El catálogo vive en un solo lugar, `lib/rubros.ts`; el registro sólo acepta esos cuatro. El rubro se elige al crear la cuenta (o al completar el perfil después de entrar con Google) y no se cambia después.
 
 **Por qué estos tres.** Comparten exactamente el modelo que Eli resuelve: atienden con reserva, trabajan con un equipo de profesionales y a cada profesional se le paga un porcentaje de lo que atiende. Elegir un nicho permite que el producto hable un solo idioma y sea el mejor en algo, en vez de servir a medias a siete rubros distintos.
 
+**La clínica dental, el cuarto.** También atiende con reserva y con un equipo (odontólogos que trabajan en sillones), y además lleva lo clínico de cada paciente: ficha, odontograma, evoluciones y plan de tratamiento. Por eso es el único rubro que **cambia la interfaz** (sección 6, "Clínica dental"). La comisión sigue como en los otros rubros.
+
 > **Esto reemplaza una decisión anterior.** Antes Eli se ofrecía a "cualquier negocio que trabaje con reservas" y no nombraba rubros. Ahora sí se nombran: el mensaje, los ejemplos y las imágenes hablan de cortes, color, barba y manicura.
 
-**Vocabulario:** se dice **"Clientes"** en toda la aplicación — nunca "pacientes" ni "usuarios". Quien atiende es **"profesional"**.
+**Vocabulario por rubro:** en salones, barberías y spas de uñas se dice **"Clientes"** — nunca "pacientes" ni "usuarios" — y quien atiende es **"profesional"**. La clínica dental habla como una clínica: **"Pacientes"** (en vez de Clientes), **"Sala de espera"** (en vez de Tablero), **"Odontólogo"** (en vez de Profesional) y **"Motivo"** (en vez de Servicio, en la reserva). Las palabras salen de un solo lugar, `lib/vocabulario.ts` (`vocabularioDe`), con el rubro de la sesión; cualquier rubro que no sea el dental habla como hoy.
 
-Los negocios que ya existen con otros rubros (`salud`, `fitness`, `otro`) siguen funcionando: el rubro es un dato de segmentación y no cambia la interfaz.
+Los negocios que ya existen con otros rubros (`salud`, `fitness`, `otro`) siguen funcionando y se ven como los tres primeros: para ellos el rubro es un dato de segmentación. Sólo la clínica dental cambia la interfaz.
 
 ### Misión
 
@@ -188,6 +191,8 @@ En pesos chilenos, **con IVA incluido** y **cobro sólo mensual** (no hay plan a
 
 El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisiones de por medio, cuánto factura el local es información del dueño.
 
+**En una clínica dental** (decisión del dueño): el dueño y los odontólogos (el rol profesional) **ven y escriben la ficha clínica de todos los pacientes** — antecedentes, odontograma, evoluciones y plan de tratamiento —, no sólo la de los suyos. El encargado (la recepción) **sólo ve la alerta de alergias** en la cita y **el plan de tratamiento, sin editarlo**; no ve el odontograma, los antecedentes ni las evoluciones. Crear y desactivar sillones es de dueño y encargado. Lo decide `lib/permisos.ts` (`veFichaClinica`, `veAlertaDeAlergias`, `vePlanDeTratamiento`, `puedeGestionarSillones`…), que falla cerrado: en un negocio que no es dental, nadie ve nada de esto, ni el dueño.
+
 ### Cuentas (decidido)
 
 - **Una cuenta entra de una sola forma.** La que se creó con Google entra con Google; la que se creó con correo y contraseña (registro o invitación al equipo) entra con correo y contraseña. Si alguien intenta entrar con Google usando el correo de una cuenta con contraseña, Eli **no las vincula**: lo manda a iniciar sesión con el mensaje "Esta cuenta usa correo y contraseña. Entra con ellos.". Vincularlas sola le daría la cuenta a quien controle ese Gmail sin conocer la contraseña. Google además tiene que dar el correo como verificado.
@@ -212,6 +217,7 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 - Recordatorios automáticos por correo: uno por cita, el día anterior en la zona del negocio (abajo)
 - **Avisos a clientes por correo:** lista de espera, "Te toca volver" y pedir reseña en Google, más la lista de clientes que se están yendo para escribirles a mano (abajo, "Mensajes a clientes")
 - **Fila virtual** para atender por orden de llegada: el cliente se anota desde el celular y el local la muestra en una pantalla (sección 7, "Fila virtual")
+- **Clínica dental:** ficha clínica con odontograma y evoluciones, alerta de alergias, plan de tratamiento con presupuesto, sillones y la reserva pública con motivo, primera vez y urgencia (abajo, "Clínica dental")
 
 **No entra:**
 - Cobro online al cliente final
@@ -221,6 +227,7 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 - Retención de honorarios en la liquidación (decisión del dueño, sección 10)
 - Aplicación móvil nativa
 - Multi-sucursal
+- En la clínica dental: página propia (`/odontologia`), documentos, radiografías y consentimientos (falta el almacenamiento, sección 10), PDF del plan, abonos y pagos del plan, cambios en la caja o en las comisiones, periodontograma, implantes y puentes como marca del odontograma, bloqueos por sillón e historial de versiones del odontograma
 
 **Zona horaria del negocio.** Cada negocio tiene su zona horaria (IANA, por defecto `America/Santiago`). En ella se leen sus horarios de atención y sus días: qué día de la semana es una fecha, qué horas ofrece la página pública (y cuáles ya pasaron hoy), en qué instante se guarda la cita reservada y qué citas trae la vista Día, Semana y Mes de la agenda. La agenda también muestra y escribe sus horas en esa zona, no en la del dispositivo de quien mira: en qué día y a qué hora se dibuja cada cita y cada bloqueo, cuál es "hoy", y en qué instante se guarda una cita creada o movida y un bloqueo nuevo. Si la zona guardada no es válida, se usa la de por defecto. Con el cambio de horario, una hora que no existe se corre hacia adelante lo que dura el salto y una que ocurre dos veces se toma la primera vez. **Todavía no hay pantalla para cambiarla** (sección 10).
 
@@ -242,7 +249,7 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 
 **Recordatorios.** Un correo al cliente con email, una vez por cita, el día anterior en la zona del negocio, con la fecha y la hora de allá. No sale para las canceladas, las completadas ni las de "No vino". Lo manda un cron diario a las 13:00 UTC (~10:00 en Chile): el plan Hobby de Vercel no permite más de uno al día. Una cita creada después de esa hora para el día siguiente no recibe recordatorio. Por eso la pantalla de reserva confirmada dice "También te llega un recordatorio por correo el día antes" sólo si se dejó correo y el cron alcanza a mandarlo (lo calcula el servidor al confirmar, con su hora y la misma regla del cron); si se reservó para hoy, o para mañana después de la corrida, no lo promete. El correo de confirmación no menciona el recordatorio. Las reservas públicas hechas antes de que existiera el enlace para cancelar o reagendar reciben ese enlace en el recordatorio si todavía se pueden cambiar (se crea al enviarlo; las que ya lo tienen lo traen en su correo de confirmación, y las citas del panel no tienen enlace). Si el envío falla y el correo pudo haber llegado, el enlace creado sigue sirviendo; sólo se descarta si el proveedor rechazó el envío.
 
-**Servicios de ejemplo.** Un negocio nuevo (registro con correo o con Google) nace con 5 servicios comunes de su rubro, con duración, precio de referencia en pesos y categoría (`lib/servicios-de-ejemplo.ts`): corte, brushing y color en un salón; corte, barba y corte infantil en una barbería; manicure, esmaltado permanente, acrílicas y pedicure en un spa de uñas. Se crean junto con el negocio (si uno falla, no se crea ninguno de los dos) y se editan o borran como cualquier otro. Un rubro que el catálogo no conoce nace sin servicios.
+**Servicios de ejemplo.** Un negocio nuevo (registro con correo o con Google) nace con 5 o 6 servicios comunes de su rubro, con duración, precio de referencia en pesos y categoría (`lib/servicios-de-ejemplo.ts`): corte, brushing y color en un salón; corte, barba y corte infantil en una barbería; manicure, esmaltado permanente, acrílicas y pedicure en un spa de uñas; evaluación, limpieza y destartraje, restauración con resina, exodoncia simple, urgencia dental (marcada como urgencia) y endodoncia en una clínica dental. Se crean junto con el negocio (si uno falla, no se crea ninguno de los dos) y se editan o borran como cualquier otro. Un rubro que el catálogo no conoce nace sin servicios.
 
 **Horas de la agenda.** Las vistas Día y Semana muestran como mínimo de 8 a 20, y se amplían para incluir el horario de atención del negocio y cualquier cita fuera de ese rango. La vista Día lista todas las citas de cada hora; en la Semana, las que se pisan se dibujan lado a lado.
 
@@ -270,7 +277,7 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
   - **Consentimientos y lista de espera:** se borran sus consentimientos de WhatsApp y de novedades por correo, y sus inscripciones en la lista de espera de ese negocio (las de su correo).
   - Deja de aparecer en Clientes, en los buscadores de "Nueva cita" y "Anotar sin reserva", y en las cifras de clientes del inicio (total y nuevos del mes).
   - Todo se hace junto: si algo falla, no se borra nada. Una edición, una cita nueva o una atención que se anota mientras se elimina no pueden devolverle sus datos: lo editado o lo nuevo de un cliente eliminado responde "no encontrado", y una llegada de su reserva queda a nombre de "Cliente eliminado".
-  - **Pendiente:** los chats (`Conversation` y sus mensajes, hoy apagados) guardan nombre y teléfono sin enlace a la ficha del cliente, así que eliminarlo no los toca; hay que atarlos al cliente antes de volver a encenderlos. Y los correos que ya se le enviaron (recordatorios, confirmaciones) quedan en el historial del proveedor de correo (Resend), fuera de la base de Eli.
+  - **Pendiente:** los chats (`Conversation` y sus mensajes, hoy apagados) guardan nombre y teléfono sin enlace a la ficha del cliente, así que eliminarlo no los toca; hay que atarlos al cliente antes de volver a encenderlos. Y los correos que ya se le enviaron (recordatorios, confirmaciones) quedan en el historial del proveedor de correo (Resend), fuera de la base de Eli. En una clínica dental, la ficha clínica del paciente (antecedentes, odontograma, evoluciones y plan) todavía no se toca al eliminarlo (sección 10, "Clínica dental: conservar la ficha").
 
 - **Nombre:** un cliente nuevo de la reserva pública queda con nombre y apellido juntos, como los que se crean en el panel, y el buscador de Clientes lo encuentra por cualquiera de los dos. Los creados antes por la reserva pública guardaban el apellido aparte: en todo el panel (Clientes y su ficha, buscadores, agenda, inicio y Tablero) se muestran nombre y apellido juntos, y al editar el nombre en la ficha queda guardado entero. El buscador busca el nombre palabra por palabra ("Lucía Pérez", "pérez lucía") en el nombre y en el apellido; correo y teléfono, con el texto entero. Un cliente que ya existía y se reutiliza (mismo correo y nombre) no cambia su nombre.
 - **Teléfono:** se guarda en formato internacional (`+56912345678`) y se muestra con espacios (`+56 9 1234 5678`). Se acepta escrito de cualquier forma común ("9 1234 5678", "56912345678", un fijo "2 2345 6789"); uno que no se puede leer como número chileno es un error que dice cómo escribirlo. Los teléfonos guardados antes de este cambio no se reescribieron: se muestran igual de ordenados si se pueden leer, y `scripts/normalizar-telefonos.ts` (lo corre el dueño; README.md) los pasa a `+56` con la misma regla; los que no se pueden leer como chilenos quedan como estaban. Así se muestran también en la agenda (lista de espera) y en el buscador de clientes del Tablero.
@@ -368,6 +375,20 @@ Todo sale por correo; WhatsApp todavía no (sección 10). Cada envío queda regi
 **Pedir reseña en Google.** El día siguiente a una visita finalizada (en la zona del negocio), a todos por igual, sin filtrar por cómo le fue, con un máximo de una vez cada 90 días por cliente. Una visita anulada no la pide. Necesita el enlace de reseñas en Configuración › Tu página pública (https de g.page, maps.app.goo.gl, google.com/maps o search.google.com/local/writereview): sin enlace no se enciende, y borrarlo lo apaga.
 
 **Mensajes de este mes.** Una tarjeta en Configuración › Mensajes a clientes cuenta los envíos del mes por tipo, por servicio o promocional y por correo o manual.
+
+### Clínica dental
+
+Un negocio de rubro `odontologia` ve, además de todo lo anterior, lo clínico. En los otros rubros nada de esto aparece y sus endpoints responden 404, como lo de otro negocio. Quién ve qué, en la sección 5 ("En una clínica dental").
+
+- **Vocabulario:** Pacientes, Sala de espera, Odontólogo y Motivo (sección 1).
+- **Ficha clínica** del paciente:
+  - **Antecedentes:** fecha de nacimiento (la ficha muestra la edad), previsión (Fonasa, Isapre, particular u otra), alergias y enfermedades o medicamentos.
+  - **Odontograma** en notación FDI, dibujado en arcada: dentición permanente (11 a 48) y temporal (51 a 85), cinco caras por pieza (vestibular, palatina o lingual, mesial, distal, oclusal o incisal). Por cara: caries, obturación o sellante. Por pieza: corona, endodoncia, ausente o extracción indicada. Muestra quién lo actualizó por última vez y cuándo, un resumen (caras con caries, caras obturadas, piezas ausentes, por extraer) y los hallazgos por pieza. Las reglas viven en `lib/odontograma.ts` y la base las repite.
+  - **Evoluciones:** lo que se hizo en cada atención, con fecha y autor. **Sólo se agregan:** no se editan ni se borran (la base lo impide).
+- **Alerta de alergias** en el panel de la cita, para todo el equipo de la clínica.
+- **Plan de tratamiento y presupuesto**, por etapas y con versiones (rehacerlo crea una versión nueva; vale una sola a la vez). Se arma desde el odontograma: una pieza con caries propone una restauración con esas caras, una extracción indicada propone una exodoncia, con el servicio del catálogo que coincida por nombre (o en $0, para que el odontólogo lo elija). Cada prestación lleva pieza (o "Boca"), caras, prestación, profesional, estado (por agendar, agendada, realizada) y valor; cada etapa está por aprobar o aprobada. "Presentar al paciente" **sólo registra** que se presentó: Eli no lo manda por ningún canal. Totales: total del plan, aprobado y realizado. **Sin abonos, sin pagos del plan y sin PDF.**
+- **Sillones:** nombre, orden y activo; se desactivan, no se borran. Una cita lleva un sillón opcional, que asigna la clínica. La agenda se ve en columnas por sillón o por odontólogo, y el inicio muestra "Sillones ahora" y los presupuestos por responder.
+- **Reserva pública dental:** el paso "Motivo" (los servicios). "¿Es tu primera vez?" suma 15 minutos a la cita (los suma el servidor). Un motivo marcado como urgencia sólo ofrece horas de hoy, y el servidor lo vuelve a revisar al confirmar. Las reservas públicas no asignan sillón.
 
 ---
 
@@ -467,7 +488,7 @@ Con el diferenciador definido, la identidad ya no debería comunicar "agenda bon
 | **Nombre** | A decidir: mantener *Eli* o cambiar |
 | **Tono** | Claro y directo. Nada de jerga técnica ni de promesas infladas |
 | **Atributos** | Exactitud, transparencia, calma |
-| **Evitar** | Rubros fuera de los tres elegidos (consultorios, gimnasios, yoga); cifras no verificables |
+| **Evitar** | Rubros fuera de los cuatro elegidos (consultorios que no son dentales, gimnasios, yoga); cifras no verificables |
 
 **Frase de cierre vigente:** *Deja de complicarte. Pásate a Eli.*
 
@@ -499,6 +520,7 @@ Nada de esto bloquea el trabajo actual, pero cada punto se decide antes de const
 | **Clientes: datos pendientes** | Los teléfonos guardados antes de normalizar se pasan a `+56` con `scripts/normalizar-telefonos.ts` cuando el dueño lo corra; los ilegibles siguen obligando a corregirlos al editar la ficha (#92). El cliente no tiene fecha de nacimiento, así que la importación no la lee. |
 | **Mensajes a clientes** | Ya construido por correo (sección 6, "Mensajes a clientes"). Esperan la SpA y la decisión de precios: los mensajes por WhatsApp (y con ellos el ofrecimiento de a uno, "el primero y a los 10 minutos el siguiente", de la lista de espera), los topes de mensajes por plan, el aviso al 80 % y los packs. Falta confirmar con el plan de Resend el tope de 100 correos por corrida: el gratuito comparte unos 100 al día con los recordatorios y los correos de prueba. Decidido por los agentes, a confirmar: una hora entre avisos a la misma inscripción, 14 días oculto tras "Escribirle", 2 años de historial para el ritmo, y que una reseña que no salió en su corrida no se reintenta al día siguiente. |
 | **Notificaciones push** | Fuera de esta etapa (#112). |
+| **Clínica dental: conservar la ficha** | Eliminar un paciente lo anonimiza (sección 6, Clientes), pero su ficha clínica, su odontograma, sus evoluciones y su plan quedan: las evoluciones no se pueden editar ni borrar, salvo en cascada al borrar la fila del paciente o el negocio entero. Falta decidir, con asesoría legal, cuánto tiempo se conserva la ficha clínica y cómo convive con el derecho a supresión, y qué pasa con lo clínico al borrar un negocio. |
 | **Chats** | Chats: escondido del panel hasta que exista un canal real (WhatsApp). Hoy los mensajes no le llegan al cliente, todos se guardan como 'del negocio' sin autor y la conversación no está ligada a la ficha del cliente. El código y las tablas se conservan. |
 | **Branding** | Nombre definitivo (mantener *Eli* o cambiar), dominio, y tono: cercano o sobrio. |
 | **Deuda: referido propio (B1)** | Un dueño puede ganar los 7 días extra creando una segunda cuenta con su enlace y reservando en ella. Acotado: se da una sola vez por negocio y todavía no hay cobro. Mitigación futura: contar el referido sólo cuando la cita se marca atendida, o exigir correo verificado. |

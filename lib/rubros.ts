@@ -11,6 +11,7 @@ export const RUBROS = [
   { id: "salon", nombre: "Salón de belleza", icono: "💇" },
   { id: "barberia", nombre: "Barbería", icono: "💈" },
   { id: "spa-de-unas", nombre: "Spa de uñas", icono: "💅" },
+  { id: "odontologia", nombre: "Clínica dental", icono: "🦷" },
 ] as const
 
 export type RubroId = (typeof RUBROS)[number]["id"]
@@ -36,4 +37,20 @@ const RUBRO_DESCONOCIDO = "Otro rubro"
  */
 export function nombreDeRubro(id: string): string {
   return RUBROS.find((rubro) => rubro.id === id)?.nombre ?? RUBRO_DESCONOCIDO
+}
+
+/**
+ * El único rubro que cambia la interfaz: ficha clínica, odontograma, plan de
+ * tratamiento, sillones y su vocabulario (`lib/vocabulario.ts`). Quién ve qué
+ * lo decide `lib/permisos.ts` (`esClinicaDental`), no quien pregunta esto.
+ */
+export const RUBRO_DENTAL = "odontologia" satisfies RubroId
+
+/**
+ * Si el rubro es el dental. Compara con el id exacto y nada más: un rubro
+ * desconocido, vacío, ausente o que no es texto (una sesión vieja sin rubro)
+ * no es dental, y así nadie recibe por error las funciones clínicas.
+ */
+export function esRubroDental(rubro: unknown): boolean {
+  return rubro === RUBRO_DENTAL
 }

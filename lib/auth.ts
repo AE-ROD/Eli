@@ -31,6 +31,11 @@ function buscarUsuario(where: { id: string } | { email: string }) {
  * otro: si se le dejara la membresía ajena, el par `(businessId, memberId)` de la
  * sesión apuntaría a dos negocios distintos y cualquier consulta por `memberId`
  * leería del equivocado.
+ *
+ * `rubro` es el `type` del mismo negocio (`lib/rubros.ts`): con él la interfaz
+ * cambia de palabras (`lib/vocabulario.ts`) y `lib/permisos.ts` abre o cierra
+ * lo clínico (`esClinicaDental`). Sale siempre del negocio de la sesión, nunca
+ * del de otra membresía, por la misma razón que `memberId`.
  */
 function perfilDe(usuario: UsuarioConNegocio) {
   const esDueño = !!usuario.business
@@ -42,6 +47,7 @@ function perfilDe(usuario: UsuarioConNegocio) {
     businessId: negocio?.id ?? null,
     businessName: negocio?.name ?? null,
     businessSlug: negocio?.slug ?? null,
+    rubro: negocio?.type ?? null,
     memberId: esDueño ? null : (membresia?.id ?? null),
   }
 }
@@ -67,6 +73,7 @@ function quitarNegocio(token: JWT): JWT {
   token.businessId = null
   token.businessName = null
   token.businessSlug = null
+  token.rubro = null
   token.memberId = null
   return token
 }
@@ -186,6 +193,7 @@ export const authOptions: NextAuthOptions = {
           businessId: user.businessId,
           businessName: user.businessName,
           businessSlug: user.businessSlug,
+          rubro: user.rubro,
           memberId: user.memberId,
           emitidoEn: ahora,
           revalidadoEn: ahora,
@@ -212,6 +220,9 @@ export const authOptions: NextAuthOptions = {
         session.user.businessId = token.businessId ?? ""
         session.user.businessName = token.businessName ?? ""
         session.user.businessSlug = token.businessSlug ?? ""
+        // Una sesión de antes de este campo no lo trae: null, que no es dental
+        // (falla cerrado) hasta la próxima revalidación, que lo completa.
+        session.user.rubro = token.rubro ?? null
         session.user.memberId = token.memberId ?? null
       }
       return session

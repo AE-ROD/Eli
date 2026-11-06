@@ -8,12 +8,18 @@ import type { RubroId } from "./rubros"
  *
  * Duración en minutos, múltiplo de 15 y dentro de lo que acepta `duracion()`
  * (`lib/campos-del-panel.ts`); precio en pesos, como `Service.price`.
+ *
+ * En una clínica dental, los servicios son los "motivos" de la reserva
+ * (`lib/vocabulario.ts`), y uno nace marcado como urgencia
+ * (`Service.esUrgencia`): la reserva pública sólo ofrece horas de hoy para él.
  */
 export interface ServicioDeEjemplo {
   name: string
   duration: number
   price: number
   category: string
+  /** Sólo en el que es urgencia; los demás lo dejan fuera y quedan con el default (false). */
+  esUrgencia?: boolean
 }
 
 const SERVICIOS_POR_RUBRO: Record<RubroId, readonly ServicioDeEjemplo[]> = {
@@ -37,6 +43,14 @@ const SERVICIOS_POR_RUBRO: Record<RubroId, readonly ServicioDeEjemplo[]> = {
     { name: "Uñas acrílicas", duration: 120, price: 30000, category: "Manos" },
     { name: "Pedicure spa", duration: 60, price: 18000, category: "Pies" },
     { name: "Retiro de esmaltado permanente", duration: 15, price: 5000, category: "Extras" },
+  ],
+  odontologia: [
+    { name: "Evaluación / primera consulta", duration: 30, price: 20000, category: "Diagnóstico" },
+    { name: "Limpieza y destartraje", duration: 45, price: 35000, category: "Prevención" },
+    { name: "Restauración con resina", duration: 45, price: 45000, category: "Restauraciones" },
+    { name: "Exodoncia simple", duration: 45, price: 40000, category: "Cirugía" },
+    { name: "Urgencia dental", duration: 30, price: 30000, category: "Urgencias", esUrgencia: true },
+    { name: "Endodoncia", duration: 90, price: 150000, category: "Endodoncia" },
   ],
 }
 

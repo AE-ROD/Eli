@@ -162,6 +162,15 @@ model Business {
   enviosAClientes          EnvioAClientes[]
   serviciosDeCitas         AppointmentService[]
   franjasDeHoraValle       FranjaDeHoraValle[]
+  // Clínica dental (`type` "odontologia"). Las tablas existen para todo
+  // negocio, pero sólo uno dental las usa: lo decide `lib/permisos.ts`.
+  sillones                 Sillon[]
+  fichasClinicas           FichaClinica[]
+  marcasDentales           MarcaDental[]
+  evoluciones              Evolucion[]
+  planesDeTratamiento      PlanDeTratamiento[]
+  etapasDelPlan            EtapaDelPlan[]
+  prestacionesDelPlan      PrestacionDelPlan[]
 
   @@index([invitadoPorId])
   @@map("negocios")
@@ -216,6 +225,10 @@ model BusinessMember {
   liquidaciones            Liquidacion[]
   movimientosDeLiquidacion MovimientoDeLiquidacion[]
   inscripcionesEnEspera    InscripcionEnEspera[]
+  // Clínica dental: lo que escribió o atiende este odontólogo. FK compuestas
+  // y NO ACTION, como las de la liquidación.
+  evoluciones              Evolucion[]
+  prestacionesDelPlan      PrestacionDelPlan[]
 
   @@unique([businessId, userId])
   // Habilita la FK compuesta de CommissionRate (memberId, businessId): sin
@@ -295,6 +308,13 @@ model Customer {
   visits          Visit[]
   enviosAClientes EnvioAClientes[]
 
+  // Clínica dental: la ficha clínica del paciente. Todo con FK compuesta
+  // (customerId, businessId) y Cascade.
+  fichaClinica        FichaClinica?
+  marcasDentales      MarcaDental[]
+  evoluciones         Evolucion[]
+  planesDeTratamiento PlanDeTratamiento[]
+
   @@unique([id, businessId])
   @@index([businessId])
   @@index([businessId, createdAt])
@@ -318,6 +338,10 @@ model Service {
   /// Hora valle (#89c): este servicio no se rebaja nunca, aunque la reserva
   /// caiga en una franja.
   excluidoDeHoraValle Boolean  @default(false)
+  /// Clínica dental: el motivo es una urgencia. La reserva pública sólo
+  /// ofrece horas de hoy para él, y el servidor lo vuelve a validar al
+  /// confirmar. En los otros rubros queda en false y no se usa.
+  esUrgencia          Boolean  @default(false)
   active              Boolean  @default(true)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -331,6 +355,10 @@ model Service {
   memberServices        MemberService[]
   inscripcionesEnEspera InscripcionEnEspera[]
   serviciosDeCitas      AppointmentService[]
+  // Prestaciones de planes de tratamiento que sugieren este servicio. FK
+  // compuesta y NO ACTION: borrar un servicio que está en un plan falla
+  // (P2003, el endpoint responde 409); se desactiva con `active`.
+  prestacionesDelPlan   PrestacionDelPlan[]
 
   // Habilita la FK compuesta de CommissionRate (serviceId, businessId), igual
   // que en BusinessMember.
@@ -375,6 +403,19 @@ model Appointment {
   // "pendiente" (`estaPorConfirmar` en `lib/por-confirmar.ts`). La confirman o
   // cancelan dueña y encargado (`puedeResolverPorConfirmar`).
   confirmacionPorFaltas Boolean         @default(false)
+  // Clínica dental: el paciente dijo en la reserva pública que es su primera
+  // vez. La cita ya trae sumados los 15 minutos extra (los suma el servidor,
+  // no el navegador); la marca queda para mostrarlo en la agenda.
+  primeraVez            Boolean         @default(false)
+  // Clínica dental: el sillón donde se atiende. Opcional: la reserva pública
+  // no lo asigna, lo asigna la clínica. FK compuesta (sillonId, businessId)
+  // contra `sillones`, así una cita nunca queda en el sillón de otro negocio.
+  // NO ACTION y no Restrict: Restrict rompería el borrado en cascada del
+  // negocio entero (la cascada puede llegar a `sillones` antes que a `citas`);
+  // NO ACTION se revisa al final de la sentencia, cuando ya no queda ninguna
+  // de las dos. Los sillones no se borran: se desactivan.
+  sillonId              String?
+  sillon                Sillon?         @relation(fields: [sillonId, businessId], references: [id, businessId], onDelete: NoAction)
   notes                 String? // notas internas del profesional
   clientComments        String? // comentarios del cliente al reservar
   price                 Float?
@@ -458,6 +499,14 @@ model Appointment {
   // Etapa 5 (#89a): los servicios de la cita, en orden. Las citas de antes
   // no tienen filas y se leen por `serviceId`, como siempre.
   servicios AppointmentService[]
+
+  // Clínica dental: evoluciones anotadas en esta cita y prestaciones del plan
+  // agendadas en ella. FK compuestas y NO ACTION: borrar una cita con
+  // cualquiera de las dos falla (P2003). Quien la borre primero desvincula
+  // (la prestación vuelve a "por-agendar"; la evolución sólo admite poner
+  // `appointmentId` en null) o responde 409.
+  evoluciones         Evolucion[]
+  prestacionesDelPlan PrestacionDelPlan[]
 
   // Habilita la FK compuesta (appointmentId, businessId) de AppointmentService.
   @@unique([id, businessId])
@@ -1167,4 +1216,250 @@ model EnvioAClientes {
   @@index([customerId, tipo, enviadoAt])
   @@index([esperaId])
   @@map("envios_a_clientes")
+}
+
+// ─── Clínica dental (rubro "odontologia") ───────────────────────────────────
+//
+// Sillones, ficha clínica, odontograma, evoluciones y plan de tratamiento.
+// Las tablas existen para todo negocio, pero sólo uno dental las ve y las
+// escribe: lo decide `lib/permisos.ts` (`esClinicaDental` y sus `whereDe*`),
+// que falla cerrado. Todas las FK a otra fila del negocio son compuestas
+// contra `(id, businessId)`: Postgres rechaza una fila que mezcle el paciente,
+// la cita, el servicio o el odontólogo de otro negocio. Las que apuntan a
+// citas, servicios y miembros son NO ACTION (no SetNull: en una compuesta
+// anularía también `businessId`; no Restrict: rompería el borrado en cascada
+// del negocio entero), así que borrar una de esas filas mientras algo dental
+// la referencia falla con P2003. Los CHECKs, los únicos parciales y el
+// trigger de las evoluciones están escritos a mano en la migración
+// `20261106120000_etapa_6_odontologia`.
+//
+// Con FK compuestas que comparten `businessId`, se escribe con los ids
+// (`sillonId`, `memberId`, `serviceId`...) y no con `connect`/`disconnect`:
+// desconectar una relación compuesta intentaría anular también `businessId`.
+
+/**
+ * Un sillón de la clínica. La cita lleva uno opcional (`Appointment.sillonId`)
+ * y la agenda se puede ver en columnas por sillón, en `orden`. No se borra: se
+ * desactiva con `activo` (las citas viejas lo siguen nombrando). Nombre único
+ * por negocio. CHECKs: nombre no vacío, orden 0..999.
+ */
+model Sillon {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  nombre     String
+  orden      Int      @default(0)
+  activo     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  citas Appointment[]
+
+  // Habilita la FK compuesta (sillonId, businessId) de las citas.
+  @@unique([id, businessId])
+  @@unique([businessId, nombre])
+  @@map("sillones")
+}
+
+/**
+ * Los antecedentes del paciente: una fila por cliente (1:1, FK compuesta).
+ * Se crea con la primera escritura (antecedentes u odontograma), así que un
+ * paciente sin ficha es un paciente sin nada anotado.
+ * `updatedAt`/`actualizadaPor`: el último cambio de cualquier parte de la
+ * ficha. `odontogramaActualizadoEn`/`Por`: el último cambio del odontograma
+ * ("Actualizado el 28 oct por Dra. Soto"); los dos juntos o ninguno (CHECK).
+ * Los nombres van copiados, como `Liquidacion.cerradaPorNombre`.
+ * `alergias` la ve también el encargado, como alerta en el panel de la cita
+ * (`whereDeAlertaDeAlergias`, con un `select` sólo de esa columna); el resto,
+ * sólo dueño y odontólogos (`whereDeFichasClinicas`).
+ */
+model FichaClinica {
+  id                        String    @id @default(cuid())
+  businessId                String
+  business                  Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerId                String
+  customer                  Customer  @relation(fields: [customerId, businessId], references: [id, businessId], onDelete: Cascade)
+  /// Para la edad. CHECK: desde 1900-01-01.
+  fechaNacimiento           DateTime? @db.Date
+  /// "fonasa" | "isapre" | "particular" | "otra" (CHECK). Null = sin anotar.
+  prevision                 String?
+  /// Null = sin anotar. Lo que se escriba acá sale como alerta en la cita.
+  alergias                  String?
+  /// Enfermedades, medicamentos y otros antecedentes, en texto.
+  antecedentes              String?
+  odontogramaActualizadoEn  DateTime?
+  odontogramaActualizadoPor String?
+  actualizadaPor            String
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+
+  @@unique([customerId, businessId])
+  @@map("fichas_clinicas")
+}
+
+/**
+ * Una marca del odontograma (notación FDI, `lib/odontograma.ts`). De cara
+ * (`cara` no null): caries, obturación o sellante en V, P, L, M, D, O o I. De
+ * pieza (`cara` null): corona, endodoncia, ausente o extracción indicada.
+ * Los CHECKs repiten las reglas de `errorDeMarca`: pieza FDI válida, el tipo
+ * con o sin cara según corresponda, P sólo en el maxilar, L sólo en la
+ * mandíbula, I sólo en incisivos y caninos, O sólo en premolares y molares.
+ * Una sola marca por cara (este único) y un solo tipo de pieza repetido por
+ * pieza (único parcial escrito a mano). Sin historial: quién y cuándo, en la
+ * ficha (`odontogramaActualizadoEn`/`Por`).
+ */
+model MarcaDental {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   Customer @relation(fields: [customerId, businessId], references: [id, businessId], onDelete: Cascade)
+  /// 11-18, 21-28, 31-38, 41-48 (permanente); 51-55, 61-65, 71-75, 81-85 (temporal).
+  pieza      Int
+  /// "V" | "P" | "L" | "M" | "D" | "O" | "I"; null = marca de la pieza entera.
+  cara       String?
+  /// caries | obturacion | sellante (de cara); corona | endodoncia | ausente | extraccion (de pieza).
+  tipo       String
+  createdAt  DateTime @default(now())
+
+  // En Postgres las filas con `cara` null no chocan entre sí: equivale al
+  // único parcial "una marca por cara" y deja hacer `upsert` por cara.
+  @@unique([customerId, pieza, cara])
+  @@index([businessId, customerId])
+  @@map("odontograma_marcas")
+}
+
+/**
+ * Una evolución: lo que se hizo y se observó en una atención, con fecha y
+ * autor. Sólo se agregan: el trigger `evoluciones_inmutables` rechaza todo
+ * UPDATE salvo desvincular la cita o el miembro (ponerlos en null, para poder
+ * borrar la cita o al miembro). El borrado en cascada desde el cliente o el
+ * negocio sigue como en el resto de las tablas.
+ * `autorNombre` es copia (el historial se lee igual si la persona se va);
+ * `autorUserId` es el id de `User` sin FK, como `Visit.createdById`, y vale
+ * también para el dueño, que no es miembro. `memberId` y `appointmentId` son
+ * FK compuestas NO ACTION.
+ */
+model Evolucion {
+  id            String          @id @default(cuid())
+  businessId    String
+  business      Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerId    String
+  customer      Customer        @relation(fields: [customerId, businessId], references: [id, businessId], onDelete: Cascade)
+  texto         String
+  autorNombre   String
+  autorUserId   String?
+  memberId      String?
+  member        BusinessMember? @relation(fields: [memberId, businessId], references: [id, businessId], onDelete: NoAction)
+  appointmentId String?
+  appointment   Appointment?    @relation(fields: [appointmentId, businessId], references: [id, businessId], onDelete: NoAction)
+  createdAt     DateTime        @default(now())
+
+  @@index([businessId, customerId, createdAt])
+  @@index([appointmentId])
+  @@map("evoluciones")
+}
+
+/**
+ * Un plan de tratamiento del paciente, con versiones: rehacerlo crea una
+ * versión nueva (`version` + 1) y la anterior deja de estar `vigente`. Un solo
+ * plan vigente por paciente (único parcial escrito a mano) y versiones sin
+ * repetir (este único). Totales y propuesta desde el odontograma:
+ * `lib/plan-de-tratamiento.ts`. Sin pagos ni abonos: el plan no es dinero
+ * cobrado, es un presupuesto.
+ */
+model PlanDeTratamiento {
+  id              String   @id @default(cuid())
+  businessId      String
+  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerId      String
+  customer        Customer @relation(fields: [customerId, businessId], references: [id, businessId], onDelete: Cascade)
+  /// 1, 2, 3… por paciente (CHECK ≥ 1).
+  version         Int
+  vigente         Boolean  @default(true)
+  creadoPorNombre String
+  createdAt       DateTime @default(now())
+
+  etapas EtapaDelPlan[]
+
+  // Habilita la FK compuesta (planId, businessId) de las etapas.
+  @@unique([id, businessId])
+  @@unique([customerId, version])
+  @@index([businessId, customerId])
+  @@map("planes_de_tratamiento")
+}
+
+/**
+ * Una etapa del plan ("Higiene y urgencia"), en `orden`. "por-aprobar" o
+ * "aprobada" (CHECK); aprobada lleva cuándo y quién, y sólo ella (CHECK).
+ * `presentadaEn`: cuándo se le presentó al paciente. Sólo lo registra: Eli no
+ * manda el presupuesto por ningún canal. Las presentadas y por aprobar son
+ * los "presupuestos por responder" del inicio.
+ */
+model EtapaDelPlan {
+  id                String            @id @default(cuid())
+  businessId        String
+  business          Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  planId            String
+  plan              PlanDeTratamiento @relation(fields: [planId, businessId], references: [id, businessId], onDelete: Cascade)
+  /// 1, 2, 3… dentro del plan (CHECK ≥ 1). Sin único: reordenar no choca.
+  orden             Int
+  nombre            String
+  estado            String            @default("por-aprobar")
+  presentadaEn      DateTime?
+  aprobadaEn        DateTime?
+  aprobadaPorNombre String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  prestaciones PrestacionDelPlan[]
+
+  // Habilita la FK compuesta (etapaId, businessId) de las prestaciones.
+  @@unique([id, businessId])
+  @@index([planId, orden])
+  @@index([businessId, estado])
+  @@map("etapas_del_plan")
+}
+
+/**
+ * Una prestación de una etapa: pieza (null = "Boca"), caras, qué se hace,
+ * quién y cuánto. `nombre` es copia (del servicio sugerido o escrita), como
+ * `AppointmentService.serviceName`; `serviceId` sólo dice de dónde salió.
+ * `profesionalNombre` es copia; `memberId` null con nombre es el dueño.
+ * `valorCents`: centavos enteros con tope 2.000.000.000, como el dinero del
+ * tablero y de la liquidación (`lib/atenciones.ts`, `aCentavos`): los totales
+ * del plan se suman, y en `Float` la suma arrastra error.
+ * Estado (CHECKs): "por-agendar" sin cita, "agendada" con cita, "realizada"
+ * con `realizadaEn` (con o sin cita). Las caras, como en el odontograma, sólo
+ * con pieza y válidas para ella. Cita, servicio y miembro son FK compuestas
+ * NO ACTION.
+ */
+model PrestacionDelPlan {
+  id                String          @id @default(cuid())
+  businessId        String
+  business          Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  etapaId           String
+  etapa             EtapaDelPlan    @relation(fields: [etapaId, businessId], references: [id, businessId], onDelete: Cascade)
+  /// 1, 2, 3… dentro de la etapa (CHECK ≥ 1).
+  orden             Int
+  /// Pieza FDI, como en `MarcaDental`; null = toda la boca.
+  pieza             Int?
+  caras             String[]        @default([])
+  serviceId         String?
+  service           Service?        @relation(fields: [serviceId, businessId], references: [id, businessId], onDelete: NoAction)
+  nombre            String
+  memberId          String?
+  member            BusinessMember? @relation(fields: [memberId, businessId], references: [id, businessId], onDelete: NoAction)
+  profesionalNombre String?
+  estado            String          @default("por-agendar")
+  valorCents        Int
+  appointmentId     String?
+  appointment       Appointment?    @relation(fields: [appointmentId, businessId], references: [id, businessId], onDelete: NoAction)
+  realizadaEn       DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([etapaId, orden])
+  @@index([appointmentId])
+  @@map("prestaciones_del_plan")
 }

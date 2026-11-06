@@ -216,6 +216,58 @@ describe("sesiones revocables (lib/auth.ts, callback jwt)", () => {
     expect(actor).toBeNull()
   })
 
+  it("el rubro del negocio llega a la sesión y al actor al revalidar", async () => {
+    const clinica = { id: "negocio-1", name: "Clínica Aurora", slug: "clinica-aurora", type: "odontologia" }
+    prismaMock.user.findUnique.mockResolvedValueOnce(
+      usuarioMiembro("worker", { memberships: [{ id: "miembro-1", role: "worker", business: clinica }] })
+    )
+
+    const { token, actor } = await leerSesion(tokenDeProfesional(6))
+
+    expect(token.rubro).toBe("odontologia")
+    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-1", rubro: "odontologia" })
+  })
+
+  it("el rubro es el del negocio propio del dueño, no el de una membresía en otro", async () => {
+    const propio = { id: "negocio-3", name: "Salón Tres", slug: "salon-tres", type: "salon" }
+    const clinicaAjena = { id: "negocio-1", name: "Clínica", slug: "clinica", type: "odontologia" }
+    prismaMock.user.findUnique.mockResolvedValueOnce(
+      usuarioMiembro("worker", { business: propio, memberships: [{ id: "miembro-1", role: "worker", business: clinicaAjena }] })
+    )
+
+    const { actor } = await leerSesion(tokenDeProfesional(6))
+
+    expect(actor).toEqual({ rol: "owner", businessId: "negocio-3", memberId: null, rubro: "salon" })
+  })
+
+  it("un token de antes del rubro sigue valiendo, sin rubro (no dental), hasta la próxima revalidación", async () => {
+    const { token, actor } = await leerSesion(tokenDeProfesional(4))
+
+    expect(prismaMock.user.findUnique).not.toHaveBeenCalled()
+    expect(token.rubro).toBeUndefined()
+    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-1" })
+  })
+
+  it("al quedarse sin negocio, el token pierde también el rubro", async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce(usuarioMiembro("worker", { memberships: [] }))
+
+    const { token } = await leerSesion(tokenDeProfesional(6, { rubro: "odontologia" }))
+
+    expect(token.rubro).toBeNull()
+  })
+
+  it("el login con credenciales lleva el rubro que devolvió `authorize`", async () => {
+    const { jwt } = await callbacks()
+    const token = (await jwt!({
+      token: { email: "carla@x.com" },
+      user: { id: "usuario-1", name: "Carla", email: "carla@x.com", role: "owner", businessId: "negocio-1", rubro: "odontologia", memberId: null },
+      account: { provider: "credentials", type: "credentials", providerAccountId: "usuario-1" },
+      trigger: "signIn",
+    } as unknown as Parameters<NonNullable<typeof jwt>>[0])) as JWT
+
+    expect(token.rubro).toBe("odontologia")
+  })
+
   it("el login con credenciales marca la emisión y la revalidación", async () => {
     const { jwt } = await callbacks()
     const token = (await jwt!({

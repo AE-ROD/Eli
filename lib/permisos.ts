@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client"
 import type { Session } from "next-auth"
 import { esEstadoActivo } from "@/lib/atenciones"
+import { esRubroDental } from "@/lib/rubros"
 
 /**
  * Quién puede hacer qué. Única fuente de verdad: ningún endpoint compara roles
@@ -17,6 +18,12 @@ export interface Actor {
   businessId: string
   /** El dueño no es miembro del equipo, así que no tiene memberId. */
   memberId: string | null
+  /**
+   * El rubro del negocio (`Business.type`), de la sesión. Opcional: sin él el
+   * negocio no es dental (`esClinicaDental` falla cerrado), así que un actor
+   * armado sin rubro, o una sesión de antes de este campo, no ve nada clínico.
+   */
+  rubro?: string
 }
 
 /** Miembro sobre el que se decide algo. Trae su negocio para poder validarlo. */
@@ -32,7 +39,7 @@ const ROLES: readonly string[] = ["owner", "admin", "worker"]
  * viejo o mal formado no debe producir un actor.
  */
 export function actorDeSesion(session: Pick<Session, "user"> | null | undefined): Actor | null {
-  const { role, businessId, memberId } = (session?.user ?? {}) as Record<string, unknown>
+  const { role, businessId, memberId, rubro } = (session?.user ?? {}) as Record<string, unknown>
 
   if (typeof role !== "string" || !ROLES.includes(role)) return null
   if (typeof businessId !== "string" || !businessId) return null
@@ -41,6 +48,8 @@ export function actorDeSesion(session: Pick<Session, "user"> | null | undefined)
     rol: role as Rol,
     businessId,
     memberId: typeof memberId === "string" && memberId ? memberId : null,
+    // Sólo si es texto: lo demás queda fuera y el negocio no es dental.
+    ...(typeof rubro === "string" && rubro ? { rubro } : {}),
   }
 }
 
@@ -472,6 +481,72 @@ export const puedeVerPantallaDeFila = gestionaElNegocio
  */
 export const puedeVaciarFilaVirtual = gestionaElNegocio
 
+// ─── Clínica dental (rubro "odontologia") ────────────────────────────────────
+//
+// Todo lo clínico existe sólo en un negocio dental: en un salón, una barbería
+// o un spa de uñas cada una de estas funciones dice que no, y sus endpoints
+// responden 404 (como lo ajeno: no se confirma que exista). El rubro viene de
+// la sesión (`Actor.rubro`); sin él, nada es dental.
+//
+// Roles (decisión del dueño): dueño y odontólogos (`worker`) ven y escriben la
+// ficha clínica de todos los pacientes: antecedentes, odontograma,
+// evoluciones y plan. El encargado (`admin`, la recepción) sólo ve la alerta
+// de alergias y el plan, sin editarlo; no ve el odontograma, los
+// antecedentes ni las evoluciones.
+
+/**
+ * Un rol de la lista. El tipo ya lo dice, pero un token viejo o un objeto
+ * armado a mano pueden traer otro: lo clínico no se le abre a un rol que no
+ * se conoce.
+ */
+const tieneRolConocido = (actor: Actor | null): actor is Actor => !!actor && ROLES.includes(actor.rol)
+
+/** El negocio del actor es una clínica dental. Falla cerrado sin actor, con un rol desconocido o sin rubro. */
+export const esClinicaDental = (actor: Actor | null): boolean => tieneRolConocido(actor) && esRubroDental(actor.rubro)
+
+/** Dueño y odontólogos: los que atienden en la clínica. El encargado no. */
+const atiendeEnLaClinica = (actor: Actor | null): boolean =>
+  esClinicaDental(actor) && (actor?.rol === "owner" || actor?.rol === "worker")
+
+/**
+ * Ver la ficha clínica completa: antecedentes, odontograma y evoluciones, de
+ * cualquier paciente del negocio. Dueño y odontólogos; el encargado, no.
+ */
+export const veFichaClinica = atiendeEnLaClinica
+
+/** Escribir antecedentes, marcar el odontograma y anotar evoluciones. Los mismos que la ven. */
+export const puedeEditarFichaClinica = atiendeEnLaClinica
+
+/**
+ * La alerta de alergias en el panel de la cita: todo rol de la clínica,
+ * también el encargado, que recibe al paciente. Es lo único de la ficha que ve
+ * el encargado, y se lee con `whereDeAlertaDeAlergias`.
+ */
+export const veAlertaDeAlergias = esClinicaDental
+
+/** El plan de tratamiento y su presupuesto: todo rol de la clínica. El encargado, sólo lectura. */
+export const vePlanDeTratamiento = esClinicaDental
+
+/**
+ * Armar, versionar y cambiar el plan: etapas, prestaciones, aprobar una etapa
+ * y registrar que se le presentó al paciente. Dueño y odontólogos.
+ */
+export const puedeEditarPlanDeTratamiento = atiendeEnLaClinica
+
+/** Los sillones (para la agenda por sillón y "Sillones ahora"): todo rol de la clínica. */
+export const veSillones = esClinicaDental
+
+/** Crear, renombrar, ordenar y desactivar sillones: dueño y encargado, como los servicios. */
+export const puedeGestionarSillones = (actor: Actor | null): boolean =>
+  esClinicaDental(actor) && gestionaElNegocio(actor)
+
+/**
+ * Asignar o cambiar el sillón de una cita: todo rol de la clínica. Qué citas
+ * puede tocar cada uno lo sigue diciendo `whereDeAgenda` (el odontólogo, las
+ * suyas), y que el sillón sea del negocio, `whereDeSillones`.
+ */
+export const puedeAsignarSillon = esClinicaDental
+
 // ─── Filtros para consultas ──────────────────────────────────────────────────
 
 /**
@@ -705,4 +780,86 @@ export function whereDeProductos(
   extra: Prisma.ProductoWhereInput = {}
 ): Prisma.ProductoWhereInput {
   return { AND: [filtroDeProductos(actor), extra] }
+}
+
+// ─── Clínica dental ──────────────────────────────────────────────────────────
+
+/**
+ * Lo clínico es del negocio, no del odontólogo: quien puede verlo ve lo de
+ * todos los pacientes del negocio, y quien no, nada. Una sola regla para las
+ * siete tablas, que tienen `businessId` propio. No se exporta, igual que
+ * `filtroDeAgenda`.
+ */
+function filtroClinico(actor: Actor | null, puede: (actor: Actor | null) => boolean): { businessId: string } | typeof NADA {
+  if (!actor || !puede(actor)) return NADA
+  return { businessId: actor.businessId }
+}
+
+/** Igual que `whereDeAgenda`, para la ficha clínica completa (antecedentes). */
+export function whereDeFichasClinicas(
+  actor: Actor | null,
+  extra: Prisma.FichaClinicaWhereInput = {}
+): Prisma.FichaClinicaWhereInput {
+  return { AND: [filtroClinico(actor, veFichaClinica), extra] }
+}
+
+/**
+ * La ficha, leída sólo para la alerta de alergias: también para el encargado.
+ * El endpoint que lo use tiene que pedir con `select` únicamente `alergias`
+ * (y `customerId`): con este filtro el encargado alcanza la fila entera, y los
+ * antecedentes no son para él (`veFichaClinica`).
+ */
+export function whereDeAlertaDeAlergias(
+  actor: Actor | null,
+  extra: Prisma.FichaClinicaWhereInput = {}
+): Prisma.FichaClinicaWhereInput {
+  return { AND: [filtroClinico(actor, veAlertaDeAlergias), extra] }
+}
+
+/** Igual que `whereDeAgenda`, para las marcas del odontograma. */
+export function whereDeMarcasDentales(
+  actor: Actor | null,
+  extra: Prisma.MarcaDentalWhereInput = {}
+): Prisma.MarcaDentalWhereInput {
+  return { AND: [filtroClinico(actor, veFichaClinica), extra] }
+}
+
+/** Igual que `whereDeAgenda`, para las evoluciones. */
+export function whereDeEvoluciones(
+  actor: Actor | null,
+  extra: Prisma.EvolucionWhereInput = {}
+): Prisma.EvolucionWhereInput {
+  return { AND: [filtroClinico(actor, veFichaClinica), extra] }
+}
+
+/** Igual que `whereDeAgenda`, para los planes de tratamiento. */
+export function whereDePlanes(
+  actor: Actor | null,
+  extra: Prisma.PlanDeTratamientoWhereInput = {}
+): Prisma.PlanDeTratamientoWhereInput {
+  return { AND: [filtroClinico(actor, vePlanDeTratamiento), extra] }
+}
+
+/** Igual que `whereDePlanes`, para las etapas de un plan. */
+export function whereDeEtapasDelPlan(
+  actor: Actor | null,
+  extra: Prisma.EtapaDelPlanWhereInput = {}
+): Prisma.EtapaDelPlanWhereInput {
+  return { AND: [filtroClinico(actor, vePlanDeTratamiento), extra] }
+}
+
+/** Igual que `whereDePlanes`, para las prestaciones de una etapa. */
+export function whereDePrestacionesDelPlan(
+  actor: Actor | null,
+  extra: Prisma.PrestacionDelPlanWhereInput = {}
+): Prisma.PrestacionDelPlanWhereInput {
+  return { AND: [filtroClinico(actor, vePlanDeTratamiento), extra] }
+}
+
+/** Igual que `whereDeAgenda`, para los sillones. */
+export function whereDeSillones(
+  actor: Actor | null,
+  extra: Prisma.SillonWhereInput = {}
+): Prisma.SillonWhereInput {
+  return { AND: [filtroClinico(actor, veSillones), extra] }
 }

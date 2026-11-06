@@ -203,6 +203,45 @@ la etapa 5): fuera del horario de atención. Con los conteos en 0 confirmados,
 cada CHECK se puede validar cuando se quiera con
 `ALTER TABLE "<tabla>" VALIDATE CONSTRAINT "<nombre>";` (opcional).
 
+### `20261106120000_etapa_6_odontologia`
+
+El rubro dental. Aditiva: columnas nuevas con default en `servicios`
+(`esUrgencia`) y `citas` (`primeraVez`), una nullable en `citas` (`sillonId`,
+con FK compuesta a `sillones`); las tablas nuevas `sillones`,
+`fichas_clinicas`, `odontograma_marcas`, `evoluciones`,
+`planes_de_tratamiento`, `etapas_del_plan` y `prestaciones_del_plan`, con
+CHECKs, dos únicos parciales y los triggers `evoluciones_inmutables` y
+`evoluciones_no_se_borran`, escritos a mano. Reemplaza `negocios_type_check`
+por uno que suma `'odontologia'` (sigue `NOT VALID`). No reescribe filas. La
+aplica el dueño, nunca un agente (la única base configurada es producción).
+
+**Requiere `20261105120000_cierre_de_la_v1` aplicada antes**: borra y vuelve
+a crear el CHECK del rubro que crea esa. Si no está, la migración falla entera
+(va en una transacción) y no queda nada a medias.
+
+**Se aplica antes de desplegar, sin excepción.** El cliente de Prisma nuevo
+lee `servicios.esUrgencia`, `citas.primeraVez` y `citas.sillonId` en
+cualquier consulta de servicios o citas: desplegado sin la migración, la
+agenda, la reserva pública y el tablero fallan. Y el registro ya ofrece
+"Clínica dental", que el CHECK viejo rechaza. Con la migración aplicada, el
+código viejo sigue funcionando (no conoce las columnas ni las tablas nuevas).
+
+Consulta previa (sólo lectura), si las de `cierre_de_la_v1` no se corrieron o
+pasó tiempo desde entonces: tiene que volver 0. El CHECK nuevo acepta todo lo
+que aceptaba el viejo, más `'odontologia'`.
+
+```sql
+SELECT count(*) FROM "negocios" WHERE "type" NOT IN ('salon', 'barberia', 'spa-de-unas', 'odontologia', 'salud', 'fitness', 'otro');
+```
+
+Orden: (la consulta, si hace falta), aplicar la migración, desplegar, y
+`npx prisma migrate resolve --applied 20261106120000_etapa_6_odontologia`.
+Bloqueos: los `ALTER TABLE` de `servicios`, `citas` y `negocios` toman un
+bloqueo exclusivo un instante (los default son constantes: no reescriben la
+tabla), y la FK nueva de `citas` revisa las citas existentes (todas con
+`sillonId` en null) bloqueando sus escrituras mientras tanto. Con el tamaño de
+hoy es poco; igual, fuera del horario de atención.
+
 ### Teléfonos antiguos a `+56` (#92)
 
 Los teléfonos de clientes guardados antes de la etapa 1 siguen como se
