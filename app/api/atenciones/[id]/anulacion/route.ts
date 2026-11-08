@@ -31,6 +31,8 @@ import {
 const MENSAJE_DE_BLOQUEO: Record<MotivoDeBloqueo, string> = {
   liquidacion: "Esta atención ya está en una liquidación cerrada: no se anula, corrígelo con un ajuste.",
   caja: "Esta atención ya entró en un cierre de caja: no se anula, corrígelo con un ajuste.",
+  laboratorio:
+    "Un abono de prótesis de esta atención ya se le pagó al laboratorio: anula primero ese pago (Comisiones → Por pagar al laboratorio).",
 }
 
 const anulacionSchema = z.object({
@@ -106,7 +108,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // un cierre de caja ya se rindió, y no se anula (#65, #68, #71). Se
       // corrige con un ajuste en la liquidación.
       const bloqueo = await atencionBloqueada(tx, actor.businessId, existente.id)
-      if (bloqueo) throw new ErrorDeAtencion(409, MENSAJE_DE_BLOQUEO[bloqueo.motivo], CODIGO_CORREGIR_CON_AJUSTE)
+      if (bloqueo) {
+        // Lo del laboratorio no se corrige con un ajuste: se anula el pago.
+        const codigo = bloqueo.motivo === "laboratorio" ? undefined : CODIGO_CORREGIR_CON_AJUSTE
+        throw new ErrorDeAtencion(409, MENSAJE_DE_BLOQUEO[bloqueo.motivo], codigo)
+      }
 
       if (existente.appointmentId && existente.status !== "finalizada") {
         const { count } = await tx.appointment.updateMany({

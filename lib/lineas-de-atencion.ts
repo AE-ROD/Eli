@@ -243,7 +243,10 @@ export async function resolverLineas(
  */
 async function lineasSinCongelarConSusPorcentajes(db: Prisma.TransactionClient, businessId: string, visitId: string) {
   const lineas = await db.visitService.findMany({
-    where: { visitId, visit: { is: { businessId } }, commissionAt: null },
+    // Los abonos de prótesis no van por la cascada: llevan su propio reparto
+    // (`congelarRepartoDeAbonos`, lib/abonos-de-protesis.ts) y la base les
+    // prohíbe la comisión (`atencion_servicios_protesis_check`).
+    where: { visitId, visit: { is: { businessId } }, commissionAt: null, protesisId: null },
     select: {
       id: true,
       tipo: true,

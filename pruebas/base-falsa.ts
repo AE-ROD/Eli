@@ -174,6 +174,8 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
   propinaDeAtencion: () => ({ memberId: null, byOwner: false, liquidacionId: null, createdAt: new Date() }),
   liquidacion: () => ({
     estado: "cerrada",
+    // Default 0 desde `20261108130000_etapa_7b_abonos_de_protesis`.
+    comisionProtesisCents: 0,
     cerradaAt: new Date(),
     pagadaAt: null,
     pagadaPorId: null,
@@ -874,7 +876,8 @@ export function crearBaseFalsa() {
    * al laboratorio de una línea tienen que ser del negocio de su atención (la
    * línea no tiene `businessId`); un reparto congelado no cambia; una línea
    * pagada no pasa a otro pago. Sin atención (cascada del negocio), pasa.
-   * `viejo` es `null` en un INSERT.
+   * Desde la etapa 7b, además, sólo se le paga al laboratorio de la prótesis
+   * y si la prótesis está entregada. `viejo` es `null` en un INSERT.
    */
   function abonoDeProtesis(viejo: Registro | null, nuevo: Registro) {
     const id = String(nuevo.id)
@@ -906,6 +909,14 @@ export function crearBaseFalsa() {
     }
     if (pagoId !== null && !delNegocio("pagoAlLaboratorio", pagoId)) {
       throw errorDePrisma("P2003", `atencion_servicios ${id}: el pago al laboratorio es de otro negocio`)
+    }
+    if (pagoId !== null) {
+      const pago = tablas.pagoAlLaboratorio.find((otro) => otro.id === pagoId)
+      const protesis = tablas.protesis.find((otra) => otra.id === protesisId)
+      const entregada = protesis?.entregadaEn !== null && protesis?.entregadaEn !== undefined
+      if (!pago || !protesis || protesis.laboratorioId !== pago.laboratorioId || !entregada) {
+        throw errorDeTrigger(`atencion_servicios ${id}: el pago es a otro laboratorio o la prótesis no está entregada`)
+      }
     }
   }
 

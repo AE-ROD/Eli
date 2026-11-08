@@ -552,7 +552,8 @@ export const puedeAsignarSillon = esClinicaDental
 //
 // La pestaña Prótesis de la ficha es clínica: la ven, crean y avanzan los
 // mismos que la ficha (dueño y odontólogos). El encargado no la ve (sí cobra
-// los abonos en la Sala de espera, como cualquier cobro: `puedeCobrar`). El
+// los abonos en la Sala de espera, como cualquier cobro:
+// `puedeCobrarAbonosDeProtesis`). El
 // reparto es dinero: lo configura sólo el dueño (como las comisiones,
 // §3.4), y en la ficha cada uno ve del reparto sólo lo que le toca
 // (`veMontosDelReparto`).
@@ -578,6 +579,22 @@ export const puedeConfigurarRepartoDeProtesis = (actor: Actor | null): boolean =
  * sólo los activos) sin gestionarlo.
  */
 export const puedeGestionarLaboratorios = puedeConfigurarRepartoDeProtesis
+
+/**
+ * Agregar o quitar un abono de prótesis en una atención de la Sala de espera
+ * (y ver, para eso, las prótesis del paciente con su saldo): quien cobra,
+ * dueño y encargado (`puedeCobrar`), sólo en la clínica. El odontólogo no:
+ * no cobra, y la línea del abono queda a nombre de la tratante, no de quien
+ * la anota.
+ */
+export const puedeCobrarAbonosDeProtesis = (actor: Actor | null): boolean => esClinicaDental(actor) && puedeCobrar(actor)
+
+/**
+ * "Por pagar al laboratorio": ver lo que se le debe a cada laboratorio,
+ * marcarlo pagado y anular un pago. Es la parte del técnico del reparto:
+ * sólo el dueño, como el reparto.
+ */
+export const puedePagarAlLaboratorio = puedeConfigurarRepartoDeProtesis
 
 /** Lo que alguien ve del reparto de una prótesis: las tres partes, sólo la suya, o nada. */
 export type MontosDelReparto = "todo" | "suyo" | "nada"
@@ -1015,12 +1032,38 @@ export function whereDeAbonosDeProtesis(
   return { AND: [{ protesisId: { not: null }, visit: { is: { businessId: actor.businessId } } }, extra] }
 }
 
-/** Los pagos a laboratorios (la tanda del cobro): sólo el dueño, como el resto del dinero de las prótesis. */
+/** Los pagos a laboratorios ("Por pagar al laboratorio"): sólo el dueño, como el resto del dinero de las prótesis. */
 export function whereDePagosAlLaboratorio(
   actor: Actor | null,
   extra: Prisma.PagoAlLaboratorioWhereInput = {}
 ): Prisma.PagoAlLaboratorioWhereInput {
-  return { AND: [filtroClinico(actor, puedeConfigurarRepartoDeProtesis), extra] }
+  return { AND: [filtroClinico(actor, puedePagarAlLaboratorio), extra] }
+}
+
+/**
+ * Las prótesis a las que se les puede cobrar un abono en la Sala de espera:
+ * las del negocio, para quien cobra (dueño y encargado, en la clínica). Es
+ * otro filtro que `whereDeProtesis` a propósito: el encargado no ve la
+ * pestaña Prótesis, pero cobra. El endpoint además las acota al paciente de
+ * la atención y lee sólo lo que el cobro necesita (nombre, valor, saldo), no
+ * el reparto.
+ */
+export function whereDeProtesisParaCobrar(actor: Actor | null, extra: Prisma.ProtesisWhereInput = {}): Prisma.ProtesisWhereInput {
+  return { AND: [filtroClinico(actor, puedeCobrarAbonosDeProtesis), extra] }
+}
+
+/**
+ * Las líneas de abono de prótesis del negocio, para lo que paga la dueña al
+ * laboratorio (la parte del técnico). Va por la atención para acotar al
+ * negocio, porque la línea no tiene `businessId` propio, igual que
+ * `whereDeAbonosDeProtesis`.
+ */
+export function whereDeAbonosPorPagarAlLaboratorio(
+  actor: Actor | null,
+  extra: Prisma.VisitServiceWhereInput = {}
+): Prisma.VisitServiceWhereInput {
+  if (!actor || !puedePagarAlLaboratorio(actor)) return { AND: [NADA, extra] }
+  return { AND: [{ protesisId: { not: null }, visit: { is: { businessId: actor.businessId } } }, extra] }
 }
 
 /** Igual que `whereDeAgenda`, para los sillones. */

@@ -1683,9 +1683,25 @@ describe("base falsa: las prótesis (etapa 7)", () => {
         })
       await pago("pg1")
       await pago("pg2")
+      // Desde la etapa 7b sólo se paga lo liberado: la prótesis, entregada.
+      await prisma.protesis.update({ where: { id: "pt1" }, data: { estado: "entregada", entregadaEn: new Date() } })
       await prisma.visitService.update({ where: { id: "ab1" }, data: { pagoAlLaboratorioId: "pg1" } })
       await expect(prisma.visitService.update({ where: { id: "ab1" }, data: { pagoAlLaboratorioId: "pg2" } })).rejects.toThrow(/otro pago/)
       await expect(prisma.visitService.update({ where: { id: "ab1" }, data: { pagoAlLaboratorioId: null } })).resolves.toBeTruthy()
+    })
+
+    it("etapa 7b: sólo se le paga al laboratorio de la prótesis, y sólo si está entregada", async () => {
+      await prisma.laboratorio.create({ data: { id: "lab3", businessId: "n1", nombre: "Otro lab" } })
+      const pago = (id: string, laboratorioId: string) =>
+        prisma.pagoAlLaboratorio.create({
+          data: { id, businessId: "n1", laboratorioId, laboratorioNombre: "Lab", montoCents: 15, medio: "transferencia", pagadoPorId: "u1", pagadoPorNombre: "Ana" },
+        })
+      await pago("pg-sur", "lab1")
+      await pago("pg-otro", "lab3")
+      await expect(prisma.visitService.update({ where: { id: "ab1" }, data: { pagoAlLaboratorioId: "pg-sur" } })).rejects.toThrow(/no está entregada/)
+      await prisma.protesis.update({ where: { id: "pt1" }, data: { estado: "entregada", entregadaEn: new Date() } })
+      await expect(prisma.visitService.update({ where: { id: "ab1" }, data: { pagoAlLaboratorioId: "pg-otro" } })).rejects.toThrow(/otro laboratorio/)
+      await expect(prisma.visitService.update({ where: { id: "ab1" }, data: { pagoAlLaboratorioId: "pg-sur" } })).resolves.toBeTruthy()
     })
   })
 

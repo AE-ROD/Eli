@@ -11,7 +11,7 @@ import type { Prisma } from "@prisma/client"
  * (frente C), dentro de la misma transacción que escribe.
  */
 
-export type MotivoDeBloqueo = "liquidacion" | "caja"
+export type MotivoDeBloqueo = "liquidacion" | "caja" | "laboratorio"
 
 /**
  * El `codigo` de la respuesta 409 "corrígelo con un ajuste". Sale en dos
@@ -65,6 +65,9 @@ export interface AtencionBloqueada {
  *   bloquea aunque alguno siguiera apuntándole.
  * - Caja: la atención tiene `paidAt` dentro de un cierre del negocio, en
  *   `(desde, hasta]` (un pago justo en el límite es del cierre que termina ahí).
+ * - Laboratorio (clínica dental): algún abono de prótesis de la atención ya
+ *   se le pagó al laboratorio en un pago no anulado. Lo rendido no se anula:
+ *   primero se anula ese pago (que suelta sus líneas).
  *
  * Siempre acota por `businessId`: una atención de otro negocio no existe para
  * este y devuelve `null` (el endpoint ya respondió 404 antes de preguntar).
@@ -87,6 +90,12 @@ export async function atencionBloqueada(
     }),
   ])
   if (lineaLiquidada || propinaLiquidada) return { motivo: "liquidacion" }
+
+  const pagadaAlLaboratorio = await db.visitService.findFirst({
+    where: { visitId, visit: { is: { businessId } }, pagoAlLaboratorio: { is: { businessId, anuladoEn: null } } },
+    select: { id: true },
+  })
+  if (pagadaAlLaboratorio) return { motivo: "laboratorio" }
 
   const atencion = await db.visit.findFirst({ where: { id: visitId, businessId }, select: { paidAt: true } })
   if (!atencion?.paidAt) return null

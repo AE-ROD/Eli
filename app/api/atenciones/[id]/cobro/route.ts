@@ -15,6 +15,7 @@ import { actorDeSesion, puedeCobrar, puedeRegistrarPropina } from "@/lib/permiso
 import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { horaDeLaBase, tomarCandadoDeCajaCompartido } from "@/lib/bloqueos-de-dinero"
 import { congelarComisiones, lineasQueQuedaranSinPorcentaje } from "@/lib/lineas-de-atencion"
+import { congelarRepartoDeAbonos } from "@/lib/abonos-de-protesis"
 import { errorDePropinas, propinasPedidasSchema, resolverPropinas } from "@/lib/propinas"
 import {
   ErrorDeAtencion,
@@ -189,6 +190,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Sin % queda pendiente (null, nunca 0) y el cobro no se frena: la
       // atención vuelve con cada línea en `pendiente` y el tablero avisa.
       await congelarComisiones(tx, actor.businessId, existente.id, ahora)
+      // Los abonos de prótesis no llevan la comisión de arriba: se reparten en
+      // tres partes con la regla congelada de su prótesis.
+      await congelarRepartoDeAbonos(tx, actor.businessId, existente.id)
 
       if (existente.appointmentId) {
         await tx.appointment.updateMany({

@@ -40,7 +40,17 @@ export type { TipoDeMovimiento }
  *   anular, con fecha hasta el fin del período. Se pueden dejar afuera de a
  *   uno (pasan a la siguiente).
  *
- * total = comisiones + propinas − adelantos y vales + ajustes. No se cierra
+ * - en una clínica dental, su parte (`odontologoCents`) de los abonos de
+ *   prótesis cobrados de las que es tratante, recién cuando la prótesis está
+ *   entregada: cada abono se libera el día más tardío entre su cobro y la
+ *   entrega, y entra en la liquidación cuyo período contiene ese día (o en
+ *   la siguiente que se cierre, si se atrasó). Así lo cobrado antes de
+ *   entregar entra en la liquidación del período de la entrega, y lo cobrado
+ *   después, en la del período de su cobro. Lo cobrado antes de "Liquidar
+ *   desde" nunca entra, como el resto. No lleva la comisión de la cascada.
+ *
+ * total = comisiones (servicios, productos y prótesis) + propinas − adelantos
+ * y vales + ajustes. No se cierra
  * con líneas sin % configurado ni con el total negativo. Una línea pendiente
  * que ya tiene % vigente se congela al cerrar, en la misma sentencia que le
  * pone la liquidación (el trigger de la base rechaza congelarla después).
@@ -212,6 +222,29 @@ export interface LineaEnLiquidacion {
   comisionCents: number | null
 }
 
+/**
+ * La parte de la odontóloga de un abono de prótesis (`odontologoCents`,
+ * congelada al cobrar con la regla de la prótesis). `fecha` es el día en que
+ * se liberó: el más tardío entre el cobro y la entrega de la prótesis.
+ */
+export interface AbonoDeProtesisEnLiquidacion {
+  id: string
+  visitId: string
+  protesisId: string
+  /** El día del negocio en que se liberó para liquidar. */
+  fecha: string
+  /** El día del negocio en que se cobró el abono. */
+  cobradoEl: string
+  /** El día del negocio en que se entregó la prótesis. */
+  entregadaEl: string
+  cliente: string
+  detalle: string
+  /** Lo que pagó el paciente en ese abono. */
+  abonoCents: number
+  /** La parte de la odontóloga: lo que se le liquida. */
+  comisionCents: number
+}
+
 export interface PropinaEnLiquidacion {
   id: string
   visitId: string
@@ -234,6 +267,8 @@ export interface MovimientoEnLiquidacion {
 export interface TotalesDeLiquidacion {
   comisionServiciosCents: number
   comisionProductosCents: number
+  /** La parte de la odontóloga de los abonos de prótesis entregadas. 0 fuera de una clínica dental. */
+  comisionProtesisCents: number
   propinasCents: number
   /** Adelantos y vales: descuentan. */
   adelantosCents: number
@@ -248,6 +283,8 @@ export interface VistaPrevia {
   periodo: { tipo: TipoDePeriodo; desde: string; hasta: string; zona: string; texto: string }
   hoy: string
   lineas: LineaEnLiquidacion[]
+  /** Clínica dental: su parte de los abonos de prótesis ya liberados. Vacío en los demás rubros. */
+  protesis: AbonoDeProtesisEnLiquidacion[]
   propinas: PropinaEnLiquidacion[]
   movimientos: MovimientoEnLiquidacion[]
   totales: TotalesDeLiquidacion
@@ -263,19 +300,22 @@ const esTipoDeLinea = (tipo: string): TipoDeLinea => (tipo === "producto" ? "pro
 export function calcularTotales(
   lineas: readonly Pick<LineaEnLiquidacion, "tipo" | "comisionCents">[],
   propinas: readonly Pick<PropinaEnLiquidacion, "montoCents">[],
-  movimientos: readonly Pick<MovimientoEnLiquidacion, "tipo" | "montoCents" | "incluido">[]
+  movimientos: readonly Pick<MovimientoEnLiquidacion, "tipo" | "montoCents" | "incluido">[],
+  abonosDeProtesis: readonly Pick<AbonoDeProtesisEnLiquidacion, "comisionCents">[] = []
 ): TotalesDeLiquidacion {
   const suma = (valores: number[]) => valores.reduce((total, valor) => total + valor, 0)
   const comisionServiciosCents = suma(lineas.filter((l) => l.tipo === "servicio").map((l) => l.comisionCents ?? 0))
   const comisionProductosCents = suma(lineas.filter((l) => l.tipo === "producto").map((l) => l.comisionCents ?? 0))
+  const comisionProtesisCents = suma(abonosDeProtesis.map((a) => a.comisionCents))
   const propinasCents = suma(propinas.map((p) => p.montoCents))
   const incluidos = movimientos.filter((m) => m.incluido)
   const adelantosCents = suma(incluidos.filter((m) => m.tipo !== "ajuste").map((m) => m.montoCents))
   const ajustesCents = suma(incluidos.filter((m) => m.tipo === "ajuste").map((m) => m.montoCents))
-  const brutoCents = comisionServiciosCents + comisionProductosCents + propinasCents
+  const brutoCents = comisionServiciosCents + comisionProductosCents + comisionProtesisCents + propinasCents
   return {
     comisionServiciosCents,
     comisionProductosCents,
+    comisionProtesisCents,
     propinasCents,
     adelantosCents,
     ajustesCents,
@@ -309,6 +349,28 @@ export function motivoParaNoCerrar(opciones: {
 }
 
 /**
+ * Los abonos de prótesis de `memberId` que se pueden liquidar: de prótesis
+ * suyas (tratante) y del negocio ya entregadas, con su parte congelada, de una
+ * línea suya que no es de la dueña y todavía sin liquidar. El estado de la
+ * atención lo agrega quien llama.
+ */
+function abonosLiberadosDe(businessId: string, memberId: string) {
+  return {
+    memberId,
+    byOwner: false,
+    liquidacionId: null,
+    protesisId: { not: null },
+    odontologoCents: { not: null },
+    protesis: { is: { businessId, memberId, entregadaEn: { not: null } } },
+  } satisfies Prisma.VisitServiceWhereInput
+}
+
+/** El día en que se libera un abono para liquidar: el más tardío entre su cobro y la entrega de la prótesis. Puro. */
+export function liberadoEl(cobrado: Date, entregada: Date): Date {
+  return cobrado > entregada ? cobrado : entregada
+}
+
+/**
  * Lo que tendría la próxima liquidación de `memberId`, sin guardar nada.
  * `null` si la persona no es del negocio. `ahora` decide "hoy" y la fecha
  * con que se congelaría lo pendiente.
@@ -332,7 +394,7 @@ export async function vistaPrevia(
   // Lo cobrado antes de "Liquidar desde" (en la zona del negocio) nunca entra.
   const inicio = inicioDelPeriodoEn(liquidarDesde, zona)
 
-  const [ultima, lineas, propinas, movimientos] = await Promise.all([
+  const [ultima, lineas, abonos, propinas, movimientos] = await Promise.all([
     db.liquidacion.findFirst({
       where: { businessId, memberId, estado: { not: "anulada" } },
       orderBy: { hasta: "desc" },
@@ -343,6 +405,8 @@ export async function vistaPrevia(
         memberId,
         byOwner: false,
         liquidacionId: null,
+        // Los abonos de prótesis van aparte (abajo): no llevan la cascada.
+        protesisId: null,
         visit: { is: { businessId, status: "finalizada", paidAt: { gte: inicio } } },
       },
       select: {
@@ -357,6 +421,22 @@ export async function vistaPrevia(
         commissionCents: true,
         commissionAt: true,
         visit: { select: { paidAt: true, customerName: true } },
+      },
+      orderBy: { id: "asc" },
+    }),
+    // Su parte de los abonos de prótesis de las que es tratante, ya
+    // congelada al cobrar y liberada: la prótesis está entregada.
+    db.visitService.findMany({
+      where: { ...abonosLiberadosDe(businessId, memberId), visit: { is: { businessId, status: "finalizada", paidAt: { gte: inicio } } } },
+      select: {
+        id: true,
+        visitId: true,
+        protesisId: true,
+        serviceName: true,
+        priceCents: true,
+        odontologoCents: true,
+        visit: { select: { paidAt: true, customerName: true } },
+        protesis: { select: { entregadaEn: true } },
       },
       orderBy: { id: "asc" },
     }),
@@ -385,8 +465,14 @@ export async function vistaPrevia(
   ])
 
   const cobradaEn = (visita: { paidAt: Date | null } | null, respaldo: Date) => visita?.paidAt ?? respaldo
+  const abonosLeidos = abonos.map((a) => {
+    const cobrado = cobradaEn(a.visit, ahora)
+    const entregada = a.protesis?.entregadaEn ?? ahora
+    return { ...a, cobrado, entregada, liberado: liberadoEl(cobrado, entregada) }
+  })
   const fechas = [
     ...lineas.map((l) => fechaDelNegocio(cobradaEn(l.visit, ahora), zona)),
+    ...abonosLeidos.map((a) => fechaDelNegocio(a.liberado, zona)),
     ...propinas.map((p) => fechaDelNegocio(cobradaEn(p.visit, p.createdAt), zona)),
     ...movimientos.map((m) => fechaDeColumna(m.fecha)),
   ].sort()
@@ -437,6 +523,22 @@ export async function vistaPrevia(
       : { ...comun, estado: "sin-porcentaje", porcentaje: null, comisionCents: null }
   })
 
+  const protesisEnLiquidacion: AbonoDeProtesisEnLiquidacion[] = abonosLeidos
+    .filter((a) => a.liberado < fin)
+    .map((a) => ({
+      id: a.id,
+      visitId: a.visitId,
+      protesisId: a.protesisId ?? "",
+      fecha: fechaDelNegocio(a.liberado, zona),
+      cobradoEl: fechaDelNegocio(a.cobrado, zona),
+      entregadaEl: fechaDelNegocio(a.entregada, zona),
+      cliente: a.visit?.customerName ?? "",
+      detalle: a.serviceName,
+      abonoCents: a.priceCents,
+      comisionCents: a.odontologoCents ?? 0,
+    }))
+    .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.id.localeCompare(b.id))
+
   const propinasEnLiquidacion: PropinaEnLiquidacion[] = propinas
     .filter((p) => cobradaEn(p.visit, p.createdAt) < fin)
     .map((p) => ({
@@ -459,7 +561,7 @@ export async function vistaPrevia(
       incluido: !excluir.has(m.id),
     }))
 
-  const totales = calcularTotales(lineasEnLiquidacion, propinasEnLiquidacion, movimientosEnLiquidacion)
+  const totales = calcularTotales(lineasEnLiquidacion, propinasEnLiquidacion, movimientosEnLiquidacion, protesisEnLiquidacion)
   const sinPorcentaje = lineasEnLiquidacion.filter((l) => l.estado === "sin-porcentaje").length
 
   return {
@@ -467,6 +569,7 @@ export async function vistaPrevia(
     periodo: { tipo: config.periodo, ...periodo, zona, texto: periodoParaLeer(periodo.desde, periodo.hasta) },
     hoy,
     lineas: lineasEnLiquidacion,
+    protesis: protesisEnLiquidacion,
     propinas: propinasEnLiquidacion,
     movimientos: movimientosEnLiquidacion,
     totales,
@@ -525,6 +628,7 @@ export async function cerrarLiquidacion(
       estado: "cerrada",
       comisionServiciosCents: totales.comisionServiciosCents,
       comisionProductosCents: totales.comisionProductosCents,
+      comisionProtesisCents: totales.comisionProtesisCents,
       propinasCents: totales.propinasCents,
       adelantosCents: totales.adelantosCents,
       ajustesCents: totales.ajustesCents,
@@ -564,6 +668,17 @@ export async function cerrarLiquidacion(
       },
     })
     if (count !== 1) throw new ErrorDeLiquidacion(409, CAMBIO_A_MITAD)
+  }
+
+  // Los abonos de prótesis, sólo si siguen liberados, sin liquidar y de una
+  // atención cobrada: su parte ya está congelada, sólo se marca.
+  const abonos = vista.protesis.map((a) => a.id)
+  if (abonos.length > 0) {
+    const { count } = await tx.visitService.updateMany({
+      where: { ...abonosLiberadosDe(businessId, memberId), id: { in: abonos }, visit: { is: { businessId, status: "finalizada" } } },
+      data: { liquidacionId: creada.id },
+    })
+    if (count !== abonos.length) throw new ErrorDeLiquidacion(409, CAMBIO_A_MITAD)
   }
 
   const propinas = vista.propinas.map((p) => p.id)
@@ -708,6 +823,8 @@ export interface DetalleDeLiquidacion extends ResumenDeLiquidacion {
   motivoAnulacion: string | null
   nota: string | null
   lineas: Omit<LineaEnLiquidacion, "estado">[]
+  /** Clínica dental: los abonos de prótesis que pagó (la parte de la odontóloga). Vacío en los demás rubros. */
+  protesis: AbonoDeProtesisEnLiquidacion[]
   propinas: PropinaEnLiquidacion[]
   movimientos: Omit<MovimientoEnLiquidacion, "incluido">[]
 }
@@ -758,6 +875,7 @@ export async function leerLiquidacion(db: Db, actor: Actor, id: string): Promise
       zona: true,
       comisionServiciosCents: true,
       comisionProductosCents: true,
+      comisionProtesisCents: true,
       propinasCents: true,
       adelantosCents: true,
       ajustesCents: true,
@@ -778,7 +896,10 @@ export async function leerLiquidacion(db: Db, actor: Actor, id: string): Promise
           priceCents: true,
           commissionPercent: true,
           commissionCents: true,
+          protesisId: true,
+          odontologoCents: true,
           visit: { select: { paidAt: true, customerName: true } },
+          protesis: { select: { entregadaEn: true } },
         },
         orderBy: { id: "asc" },
       },
@@ -804,6 +925,7 @@ export async function leerLiquidacion(db: Db, actor: Actor, id: string): Promise
   const zona = zonaDelNegocio(fila.zona)
   const dia = (instante: Date | null | undefined, respaldo: Date) => fechaDelNegocio(instante ?? respaldo, zona)
   const lineas = fila.lineas
+    .filter((l) => !l.protesisId)
     .map((l) => ({
       id: l.id,
       visitId: l.visitId,
@@ -815,6 +937,25 @@ export async function leerLiquidacion(db: Db, actor: Actor, id: string): Promise
       porcentaje: l.commissionPercent,
       comisionCents: l.commissionCents,
     }))
+    .sort((a, b) => a.fecha.localeCompare(b.fecha))
+  const protesis = fila.lineas
+    .filter((l) => !!l.protesisId)
+    .map((l): AbonoDeProtesisEnLiquidacion => {
+      const cobrado = l.visit?.paidAt ?? fila.cerradaAt
+      const entregada = l.protesis?.entregadaEn ?? fila.cerradaAt
+      return {
+        id: l.id,
+        visitId: l.visitId,
+        protesisId: l.protesisId ?? "",
+        fecha: dia(liberadoEl(cobrado, entregada), fila.cerradaAt),
+        cobradoEl: dia(cobrado, fila.cerradaAt),
+        entregadaEl: dia(entregada, fila.cerradaAt),
+        cliente: l.visit?.customerName ?? "",
+        detalle: l.serviceName,
+        abonoCents: l.priceCents,
+        comisionCents: l.odontologoCents ?? 0,
+      }
+    })
     .sort((a, b) => a.fecha.localeCompare(b.fecha))
   const propinas = fila.propinas
     .map((p) => ({
@@ -833,6 +974,7 @@ export async function leerLiquidacion(db: Db, actor: Actor, id: string): Promise
     totales: {
       comisionServiciosCents: fila.comisionServiciosCents,
       comisionProductosCents: fila.comisionProductosCents,
+      comisionProtesisCents: fila.comisionProtesisCents,
       propinasCents: fila.propinasCents,
       adelantosCents: fila.adelantosCents,
       ajustesCents: fila.ajustesCents,
@@ -848,6 +990,7 @@ export async function leerLiquidacion(db: Db, actor: Actor, id: string): Promise
     motivoAnulacion: fila.motivoAnulacion,
     nota: fila.nota,
     lineas,
+    protesis,
     propinas,
     movimientos: fila.movimientos.map((m) => ({
       id: m.id,
@@ -887,6 +1030,9 @@ export function filasDelComprobante(detalle: DetalleDeLiquidacion): (string | nu
   const t = detalle.totales
   const vacia: (string | null)[] = []
   const anulada = detalle.estado === "anulada"
+  // La sección de prótesis sólo si hubo (clínica dental): el comprobante de
+  // los demás rubros sale igual que siempre.
+  const conProtesis = detalle.protesis.length > 0 || t.comisionProtesisCents !== 0
   return [
     ["Liquidación", detalle.texto],
     ["Profesional", detalle.miembro],
@@ -911,6 +1057,21 @@ export function filasDelComprobante(detalle: DetalleDeLiquidacion): (string | nu
       l.porcentaje === null ? null : String(l.porcentaje).replace(".", ","),
       l.comisionCents === null ? null : enPesos(l.comisionCents),
     ]),
+    ...(conProtesis
+      ? [
+          vacia,
+          ["Liberado el", "Cliente", "Prótesis", "Cobrado el", "Entregada el", "Abono", "Parte de la odontóloga"],
+          ...detalle.protesis.map((a) => [
+            a.fecha,
+            a.cliente,
+            a.detalle,
+            a.cobradoEl,
+            a.entregadaEl,
+            enPesos(a.abonoCents),
+            enPesos(a.comisionCents),
+          ]),
+        ]
+      : []),
     vacia,
     ["Fecha", "Cliente", "Propina", "Medio", "Monto"],
     ...detalle.propinas.map((p) => [p.fecha, p.cliente, "Propina", nombreDeMedio(p.medio), enPesos(p.montoCents)]),
@@ -926,6 +1087,7 @@ export function filasDelComprobante(detalle: DetalleDeLiquidacion): (string | nu
     vacia,
     ["Comisión por servicios", enPesos(t.comisionServiciosCents)],
     ["Comisión por productos", enPesos(t.comisionProductosCents)],
+    ...(conProtesis ? [["Comisión por prótesis", enPesos(t.comisionProtesisCents)]] : []),
     ["Propinas", enPesos(t.propinasCents)],
     ["Adelantos y vales", enPesos(-t.adelantosCents)],
     ["Ajustes", enPesos(t.ajustesCents)],

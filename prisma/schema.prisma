@@ -849,10 +849,12 @@ model Liquidacion {
   estado                 String         @default("cerrada")
   comisionServiciosCents Int
   comisionProductosCents Int
+  /// La parte de la odontóloga de los abonos de prótesis entregadas (etapa 7b). 0 si no hubo.
+  comisionProtesisCents  Int            @default(0)
   propinasCents          Int
   adelantosCents         Int // adelantos y vales: descuentan
   ajustesCents           Int // con signo
-  brutoCents             Int // comisiones + propinas
+  brutoCents             Int // comisiones (servicios, productos y prótesis) + propinas
   totalCents             Int // bruto − adelantos ± ajustes; ≥ 0 (CHECK): no se cierra en negativo
   cerradaAt              DateTime       @default(now())
   cerradaPorId           String

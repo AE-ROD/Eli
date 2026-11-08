@@ -42,6 +42,8 @@ export const MENSAJE_EN_CAJA = "La atención de esta cita ya entró en un cierre
 export const MENSAJE_EN_LIQUIDACION =
   "La atención de esta cita ya entró en una liquidación: no se puede reactivar. Corrígelo con un ajuste"
 /** Otro cambió la cita entre que se leyó y se reactivó: no se pisa su cambio. */
+export const MENSAJE_PAGADA_AL_LABORATORIO =
+  "Un abono de prótesis de la atención de esta cita ya se le pagó al laboratorio: no se puede reactivar. Anula primero ese pago"
 export const MENSAJE_CITA_CAMBIO = "La cita cambió mientras la reactivabas. Recarga y vuelve a intentarlo"
 
 export type DecisionDeReactivacion =
@@ -118,5 +120,6 @@ export async function problemaConLaAtencion(
   const bloqueo = await atencionBloqueada(tx, businessId, atencion.id)
   if (bloqueo?.motivo === "liquidacion") return { mensaje: MENSAJE_EN_LIQUIDACION, codigo: CODIGO_CORREGIR_CON_AJUSTE }
   if (bloqueo?.motivo === "caja") return { mensaje: MENSAJE_EN_CAJA, codigo: CODIGO_CORREGIR_CON_AJUSTE }
+  if (bloqueo?.motivo === "laboratorio") return { mensaje: MENSAJE_PAGADA_AL_LABORATORIO }
   return { mensaje: MENSAJE_CON_ATENCION }
 }

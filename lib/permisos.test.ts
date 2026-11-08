@@ -106,6 +106,10 @@ import {
   whereDeCambiosDeReparto,
   whereDeAbonosDeProtesis,
   whereDePagosAlLaboratorio,
+  puedeCobrarAbonosDeProtesis,
+  puedePagarAlLaboratorio,
+  whereDeProtesisParaCobrar,
+  whereDeAbonosPorPagarAlLaboratorio,
   type Actor,
   type Rol,
 } from "./permisos"
@@ -1096,6 +1100,9 @@ describe("prótesis (clínica dental)", () => {
     ["puedeEditarProtesis", puedeEditarProtesis, [true, false, true]],
     ["puedeConfigurarRepartoDeProtesis", puedeConfigurarRepartoDeProtesis, [true, false, false]],
     ["puedeGestionarLaboratorios", puedeGestionarLaboratorios, [true, false, false]],
+    // Los abonos se cobran en la Sala de espera: quien cobra, también el encargado.
+    ["puedeCobrarAbonosDeProtesis", puedeCobrarAbonosDeProtesis, [true, true, false]],
+    ["puedePagarAlLaboratorio", puedePagarAlLaboratorio, [true, false, false]],
   ]
 
   it.each(TABLA)("%s sigue la tabla por rol", (_nombre, permiso, [deDueña, deEncargado, deOdontologo]) => {
@@ -1177,6 +1184,7 @@ describe("prótesis (clínica dental)", () => {
       ["whereDeLaboratorios", whereDeLaboratorios as Filtro, [true, false, true]],
       ["whereDeCambiosDeReparto", whereDeCambiosDeReparto as Filtro, [true, false, false]],
       ["whereDePagosAlLaboratorio", whereDePagosAlLaboratorio as Filtro, [true, false, false]],
+      ["whereDeProtesisParaCobrar", whereDeProtesisParaCobrar as Filtro, [true, true, false]],
     ]
 
     const filas = [
@@ -1249,6 +1257,33 @@ describe("prótesis (clínica dental)", () => {
 
       it("falla cerrado: encargado, sin actor, rol desconocido u otro rubro", () => {
         for (const quien of [recepcion, null, desconocido, dueño, { ...duenaDental, rubro: "salon" }]) expect(abonos(quien)).toEqual([])
+      })
+    })
+
+    describe("whereDeAbonosPorPagarAlLaboratorio", () => {
+      const tablas = {
+        visit: [
+          { id: "at-1", businessId: NEGOCIO },
+          { id: "at-2", businessId: OTRO_NEGOCIO },
+        ],
+        visitService: [
+          { id: "abono-propio", visitId: "at-1", protesisId: "pr-1", memberId: "colega" },
+          { id: "linea-normal", visitId: "at-1", protesisId: null, memberId: "yo" },
+          { id: "abono-ajeno", visitId: "at-2", protesisId: "pr-9", memberId: "yo" },
+        ],
+      } as unknown as Tablas
+      const abonos = (quien: Actor | null, extra: object = {}) =>
+        tablas.visitService
+          .filter((linea) => coincide(tablas, "visitService", linea, whereDeAbonosPorPagarAlLaboratorio(quien, extra)))
+          .map((linea) => linea.id)
+
+      it("sólo la dueña, los abonos de su clínica; el extra no pisa el negocio", () => {
+        expect(abonos(duenaDental)).toEqual(["abono-propio"])
+        expect(abonos(duenaDental, { visit: { is: { businessId: OTRO_NEGOCIO } } })).toEqual([])
+      })
+
+      it("falla cerrado: encargado, odontólogo, sin actor, rol desconocido u otro rubro", () => {
+        for (const quien of [recepcion, odontologo, null, desconocido, dueño, { ...duenaDental, rubro: "salon" }]) expect(abonos(quien)).toEqual([])
       })
     })
   })

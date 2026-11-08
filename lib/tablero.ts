@@ -19,6 +19,7 @@ import { nombreDeMedio } from "@/lib/medios-de-pago"
 import {
   puedeVerCita,
   puedeVerTodoElTablero,
+  veMontosDelReparto,
   whereDeAtenciones,
   whereDeLineas,
   whereDePagos,
@@ -129,6 +130,11 @@ const SELECCION_DE_LINEA = {
   commissionPercent: true,
   commissionCents: true,
   commissionAt: true,
+  // Abono de prótesis (null en las demás líneas) y su reparto, congelado al cobrar.
+  protesisId: true,
+  odontologoCents: true,
+  clinicaCents: true,
+  tecnicoCents: true,
 } satisfies Prisma.VisitServiceSelect
 
 /** De una propina (#66), lo que viaja al tablero. */
@@ -405,7 +411,9 @@ export async function leerAtencion(db: Prisma.TransactionClient, actor: Actor, i
  * o el del producto (#67). Sin comisión: eso lo agrega `formatearAtencion`,
  * que sabe quién mira.
  */
-export function formatearLinea(linea: Omit<LineaLeida, "commissionPercent" | "commissionCents" | "commissionAt">) {
+export function formatearLinea(
+  linea: Omit<LineaLeida, "commissionPercent" | "commissionCents" | "commissionAt" | "odontologoCents" | "clinicaCents" | "tecnicoCents">
+) {
   return {
     id: linea.id,
     tipo: linea.tipo === "producto" ? ("producto" as const) : ("servicio" as const),
@@ -415,7 +423,36 @@ export function formatearLinea(linea: Omit<LineaLeida, "commissionPercent" | "co
     // `id` en null: quien la hizo ya no está en el equipo (el nombre quedó copiado).
     profesional: { id: idDeProfesional(linea), nombre: linea.professionalName },
     precio: deCentavos(linea.priceCents),
+    // Sólo en un abono de prótesis: las demás líneas viajan como siempre.
+    ...(linea.protesisId ? { abono: { protesisId: linea.protesisId } } : {}),
   }
+}
+
+/**
+ * Un abono de prótesis como lo ve `actor` en el tablero: a qué prótesis
+ * abona y, ya cobrado (con el reparto congelado), lo que le toca ver del
+ * reparto (`veMontosDelReparto`): la dueña, las tres partes; la odontóloga
+ * tratante, sólo la suya; el encargado, nada. En unidades, como el tablero.
+ * `null` si la línea no es un abono.
+ */
+export function abonoDeLinea(
+  actor: Actor,
+  linea: Pick<LineaLeida, "protesisId" | "memberId" | "odontologoCents" | "clinicaCents" | "tecnicoCents">
+) {
+  if (!linea.protesisId) return null
+  const congelado = linea.odontologoCents !== null && linea.clinicaCents !== null && linea.tecnicoCents !== null
+  const visible = congelado ? veMontosDelReparto(actor, { businessId: actor.businessId, memberId: linea.memberId }) : "nada"
+  const reparto =
+    visible === "todo"
+      ? {
+          odontologo: deCentavos(linea.odontologoCents ?? 0),
+          clinica: deCentavos(linea.clinicaCents ?? 0),
+          tecnico: deCentavos(linea.tecnicoCents ?? 0),
+        }
+      : visible === "suyo"
+        ? { odontologo: deCentavos(linea.odontologoCents ?? 0) }
+        : null
+  return { protesisId: linea.protesisId, reparto }
 }
 
 /**
@@ -427,8 +464,12 @@ export function formatearLinea(linea: Omit<LineaLeida, "commissionPercent" | "co
  */
 export function comisionDeLinea(
   actor: Actor,
-  linea: Pick<LineaLeida, "memberId" | "byOwner" | "commissionPercent" | "commissionCents" | "commissionAt">
+  linea: Pick<LineaLeida, "memberId" | "byOwner" | "commissionPercent" | "commissionCents" | "commissionAt"> &
+    Partial<Pick<LineaLeida, "protesisId">>
 ) {
+  // Un abono de prótesis no lleva la comisión de la cascada: su parte sale
+  // del reparto de la prótesis (`abonoDeLinea`). Nunca es "Sin %".
+  if (linea.protesisId) return { estado: "no-aplica" as const }
   const estado = estadoDeComision(linea)
   const propia = !!actor.memberId && linea.memberId === actor.memberId
   if (estado !== "congelada" || !(puedeVerTodoElTablero(actor) || propia)) return { estado }
@@ -508,7 +549,10 @@ export function formatearAtencion(actor: Actor, atencion: AtencionLeida) {
     anuladaEn: atencion.voidedAt,
     motivoDeAnulacion: atencion.voidReason,
     turno: atencion.filaNumero,
-    lineas: atencion.services.map((linea) => ({ ...formatearLinea(linea), comision: comisionDeLinea(actor, linea) })),
+    lineas: atencion.services.map((linea) => {
+      const abono = abonoDeLinea(actor, linea)
+      return { ...formatearLinea(linea), comision: comisionDeLinea(actor, linea), ...(abono ? { abono } : {}) }
+    }),
   }
 
   if (!puedeVerTodoElTablero(actor)) return visible

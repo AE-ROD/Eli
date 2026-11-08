@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
+import { trabarProtesis } from "@/lib/abonos-de-protesis"
 import { ErrorClinico, nombreParaCopiar, trabarPaciente } from "@/lib/ficha-clinica-servidor"
 import {
   MAXIMO_DE_ETAPAS,
@@ -771,8 +772,8 @@ export async function crearProtesis(
 
 /**
  * Las líneas de atención que abonan a la prótesis, cobradas o por cobrar (no
- * las de atenciones anuladas). Hasta que exista el cobro por abonos no hay
- * ninguna; desde entonces, una prótesis con abonos no se anula.
+ * las de atenciones anuladas): una prótesis con abonos no se anula. Se mira
+ * con la prótesis trabada (`trabarProtesis`), igual que al agregar un abono.
  */
 async function tieneAbonos(tx: Tx, actor: Actor, protesisId: string): Promise<boolean> {
   const abonos = await tx.visitService.count({
@@ -796,6 +797,10 @@ export async function editarProtesis(
 ): Promise<ProtesisRespuesta> {
   return prisma.$transaction(async (tx) => {
     await trabarPaciente(tx, actor, pacienteId)
+    // Y la prótesis: un abono que se esté agregando en la Sala de espera
+    // (que la traba igual, `agregarAbono`) termina antes, y anularla ya lo
+    // ve; o la anulación termina antes, y el abono la ve anulada.
+    await trabarProtesis(tx, actor.businessId, protesisId)
     const actual = await tx.protesis.findFirst({
       where: whereDeProtesis(actor, { id: protesisId, customerId: pacienteId }),
       select: { id: true, estado: true, laboratorioId: true },

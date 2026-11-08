@@ -142,6 +142,7 @@ describe("GET /api/liquidaciones/vista-previa", () => {
     expect(cuerpo.totales).toEqual({
       comisionServiciosCents: centavos(3200 + 3200 + 4000),
       comisionProductosCents: centavos(1200),
+      comisionProtesisCents: 0,
       propinasCents: centavos(2000),
       adelantosCents: centavos(5000),
       ajustesCents: centavos(1000),
