@@ -44,7 +44,7 @@ import { etiquetaDePieza, marcaDeCara, nombreAccesibleDePieza, tieneMarcaDePieza
  * de este ancho, la arcada se desplaza de lado dentro de su caja (nunca la
  * página).
  */
-const ESCALA_MINIMA = 0.72
+export const ESCALA_MINIMA = 0.72
 
 /** Cada cara es un trapecio del cuadrado de la pieza (en un lienzo de 100 × 100), y el centro, un cuadrado. */
 const POLIGONOS: Record<LugarDeCara, string> = {

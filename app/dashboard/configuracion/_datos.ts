@@ -12,6 +12,7 @@
 import { leerMonto } from "@/lib/dinero"
 import { frecuenciaDelFormulario } from "@/lib/frecuencia-de-visitas"
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
+import type { LaboratorioRespuesta } from "@/lib/edicion-de-protesis"
 
 /** Un día del horario semanal: si se atiende y de qué hora a qué hora. */
 export interface HorarioDelDia {
@@ -366,4 +367,35 @@ export function moverSillon(
   ;[reordenados[desde], reordenados[hasta]] = [reordenados[hasta], reordenados[desde]]
   const cambios = reordenados.flatMap((sillon, orden) => (sillon.orden === orden ? [] : [{ id: sillon.id, orden }]))
   return { lista: reordenados.map((sillon, orden) => ({ ...sillon, orden })), cambios }
+}
+
+// ─── Laboratorios (clínica dental, sólo la dueña) ────────────────────────────
+
+/** Un laboratorio de la clínica, como lo devuelve el servidor (`LaboratorioRespuesta`). */
+export type Laboratorio = LaboratorioRespuesta
+
+export async function crearLaboratorio(datos: { nombre: string; contacto: string | null }): Promise<Resultado<Laboratorio>> {
+  return pedir<Laboratorio>(
+    "/api/configuracion/laboratorios",
+    "No se pudo agregar el laboratorio",
+    conJson("POST", { nombre: datos.nombre.trim(), contacto: datos.contacto?.trim() || null })
+  )
+}
+
+/** Renombra, cambia el contacto o lo activa o desactiva. No se borra: las prótesis que lo tienen lo siguen nombrando. */
+export async function editarLaboratorio(
+  id: string,
+  cambios: { nombre?: string; contacto?: string | null; activo?: boolean }
+): Promise<Resultado<Laboratorio>> {
+  const errorPorDefecto =
+    cambios.activo === true
+      ? "No se pudo activar el laboratorio"
+      : cambios.activo === false
+        ? "No se pudo desactivar el laboratorio"
+        : "No se pudo guardar el laboratorio"
+  return pedir<Laboratorio>(`/api/configuracion/laboratorios/${encodeURIComponent(id)}`, errorPorDefecto, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(cambios),
+  })
 }

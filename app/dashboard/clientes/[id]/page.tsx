@@ -12,6 +12,7 @@ import {
   puedeEditarFichaClinica,
   veFichaClinica,
   vePlanDeTratamiento,
+  veProtesis,
   veSillones,
   whereDeAgenda,
   whereDeClientes,
@@ -32,6 +33,8 @@ import { FichaDelPaciente } from "./_componentes/ficha-del-paciente"
  *   evoluciones y los antecedentes, y escriben todo;
  * - el encargado: la alerta de alergias y el plan, sólo para leer. La ficha
  *   (antecedentes, odontograma, evoluciones) no se lee para él: ni se pide.
+ *   Tampoco ve la pestaña Prótesis (`veProtesis`), que pide sus datos al
+ *   abrirse.
  *
  * Se lee acá lo que la pantalla muestra al entrar (con los mismos lectores que
  * los endpoints, `lib/ficha-clinica-servidor.ts` y
@@ -110,6 +113,7 @@ export default async function PaginaFichaClinica({ params }: { params: Promise<{
       zona={zona}
       hoy={hoy}
       puedeEditarFicha={puedeEditarFichaClinica(actor)}
+      veProtesis={veProtesis(actor)}
       usuario={{
         rol: actor.rol,
         memberId: actor.memberId,

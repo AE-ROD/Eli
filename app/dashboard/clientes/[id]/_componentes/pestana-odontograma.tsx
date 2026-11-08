@@ -24,6 +24,8 @@ interface PropsDePestanaOdontograma {
   zona: string
   /** Con el plan nuevo, ya armado: la ficha lo muestra en su pestaña. */
   alArmarPresupuesto: (plan: PlanRespuesta) => void
+  /** Con el odontograma recién guardado: la pestaña Prótesis dibuja lo ausente según lo guardado. */
+  alGuardar?: (odontograma: OdontogramaRespuesta) => void
 }
 
 /**
@@ -36,7 +38,7 @@ interface PropsDePestanaOdontograma {
  * guardado (guarda antes lo que falte). Si ya hay un plan vigente, lo
  * reemplaza: se pregunta antes.
  */
-export function PestanaOdontograma({ pacienteId, inicial, editable, plan, zona, alArmarPresupuesto }: PropsDePestanaOdontograma) {
+export function PestanaOdontograma({ pacienteId, inicial, editable, plan, zona, alArmarPresupuesto, alGuardar }: PropsDePestanaOdontograma) {
   const [guardado, setGuardado] = useState(inicial)
   const [marcas, setMarcas] = useState<MarcaDelOdontograma[]>(inicial.marcas)
   const [guardando, setGuardando] = useState(false)
@@ -92,6 +94,7 @@ export function PestanaOdontograma({ pacienteId, inicial, editable, plan, zona, 
     }
     // Lo local no se pisa: si se siguió marcando mientras guardaba, eso sigue como cambio.
     setGuardado(resultado.datos)
+    alGuardar?.(resultado.datos)
     setListo("Odontograma guardado.")
     return true
   }

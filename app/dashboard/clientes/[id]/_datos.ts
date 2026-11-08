@@ -13,6 +13,13 @@ import type { EvolucionRespuesta, EvolucionesRespuesta, FichaClinicaRespuesta, O
 import type { AccionDeEtapa, OrigenDeVersion, PlanRespuesta } from "@/lib/edicion-del-plan"
 import type { EstadoDePrestacion } from "@/lib/plan-de-tratamiento"
 import type { MarcaDelOdontograma } from "@/lib/odontograma"
+import type {
+  AlPlanRespuesta,
+  OpcionesDeProtesisRespuesta,
+  ProtesisDelPacienteRespuesta,
+  ProtesisRespuesta,
+} from "@/lib/edicion-de-protesis"
+import type { EstadoDeProtesis } from "@/lib/protesis"
 
 const deLaFicha = (id: string) => `/api/clientes/${encodeURIComponent(id)}`
 
@@ -138,6 +145,59 @@ export async function borrarPrestacion(id: string, prestacionId: string): Promis
     `${deLaFicha(id)}/plan/prestaciones/${encodeURIComponent(prestacionId)}`,
     "No se pudo borrar la prestación",
     { method: "DELETE" }
+  )
+}
+
+/** El plan como está guardado: después de agregarle una prótesis, para mostrarlo al día. */
+export async function leerPlanDelPaciente(id: string): Promise<Resultado<PlanRespuesta>> {
+  return pedir<PlanRespuesta>(`${deLaFicha(id)}/plan`, "No se pudo cargar el plan")
+}
+
+// ─── Prótesis ────────────────────────────────────────────────────────────────
+
+export async function leerProtesis(id: string): Promise<Resultado<ProtesisDelPacienteRespuesta>> {
+  return pedir<ProtesisDelPacienteRespuesta>(`${deLaFicha(id)}/protesis`, "No se pudieron cargar las prótesis")
+}
+
+export async function leerOpcionesDeProtesis(id: string): Promise<Resultado<OpcionesDeProtesisRespuesta>> {
+  return pedir<OpcionesDeProtesisRespuesta>(`${deLaFicha(id)}/protesis/opciones`, "No se pudieron cargar los materiales")
+}
+
+/** Una prótesis nueva: el diseño, el material, el laboratorio, la entrega y (sólo la dueña) la tratante. Sin precios: los pone el servidor. */
+export interface ProtesisPedida {
+  tipo: string
+  arcada: string
+  piezas: number[]
+  pilares: number[]
+  zonas: string[]
+  materialId: string
+  laboratorioId: string | null
+  entregaEstimada: string | null
+  tratante?: string
+}
+
+export async function crearProtesis(id: string, datos: ProtesisPedida): Promise<Resultado<ProtesisRespuesta>> {
+  return pedir<ProtesisRespuesta>(`${deLaFicha(id)}/protesis`, "No se pudo crear la prótesis", conJson("POST", datos))
+}
+
+/** Avanzar el seguimiento (con el laboratorio, si se elige al enviarla) o anularla. */
+export async function cambiarProtesis(
+  id: string,
+  protesisId: string,
+  datos: { estado?: EstadoDeProtesis; laboratorioId?: string | null }
+): Promise<Resultado<ProtesisRespuesta>> {
+  return pedir<ProtesisRespuesta>(
+    `${deLaFicha(id)}/protesis/${encodeURIComponent(protesisId)}`,
+    datos.estado === "anulada" ? "No se pudo anular la prótesis" : "No se pudo avanzar el seguimiento",
+    conJsonPatch(datos)
+  )
+}
+
+export async function agregarProtesisAlPlan(id: string, protesisId: string): Promise<Resultado<AlPlanRespuesta>> {
+  return pedir<AlPlanRespuesta>(
+    `${deLaFicha(id)}/protesis/${encodeURIComponent(protesisId)}/al-plan`,
+    "No se pudo agregar al plan",
+    conJson("POST", {})
   )
 }
 

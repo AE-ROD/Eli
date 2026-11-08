@@ -14,6 +14,7 @@ import { PestanaAntecedentes } from "./pestana-antecedentes"
 import { PestanaEvoluciones } from "./pestana-evoluciones"
 import { PestanaOdontograma } from "./pestana-odontograma"
 import { PestanaPlan } from "./pestana-plan"
+import { PestanaProtesis } from "./pestana-protesis"
 import { TarjetasDeResumen, type ProximaCita } from "./tarjetas-de-resumen"
 
 export interface PacienteDeLaFicha {
@@ -36,7 +37,7 @@ export interface UsuarioDeLaFicha {
   rubro: string | null
 }
 
-type IdDePestana = "odontograma" | "plan" | "evoluciones" | "antecedentes"
+type IdDePestana = "odontograma" | "plan" | "protesis" | "evoluciones" | "antecedentes"
 
 interface PropsDeFichaDelPaciente {
   paciente: PacienteDeLaFicha
@@ -51,13 +52,15 @@ interface PropsDeFichaDelPaciente {
   zona: string
   hoy: string
   puedeEditarFicha: boolean
+  /** La pestaña Prótesis: dueño y odontólogos (`veProtesis`). El encargado no la ve. */
+  veProtesis: boolean
   usuario: UsuarioDeLaFicha
 }
 
 /**
  * La ficha clínica de un paciente (`Ficha.dc.html` y `Plan.dc.html`): el
  * encabezado con sus datos, el resumen y las pestañas Odontograma, Plan y
- * presupuesto, Evoluciones y Antecedentes. Las que no son para quien mira no
+ * presupuesto, Prótesis, Evoluciones y Antecedentes. Las que no son para quien mira no
  * aparecen: el encargado ve sólo la alerta y el plan, sin editar.
  *
  * Los paneles de las pestañas no se desmontan al cambiar de pestaña: un
@@ -73,11 +76,14 @@ export function FichaDelPaciente({
   zona,
   hoy,
   puedeEditarFicha,
+  veProtesis,
   usuario,
 }: PropsDeFichaDelPaciente) {
   const vocabulario = vocabularioDe(usuario.rubro)
   const [ficha, setFicha] = useState(fichaInicial)
   const [plan, setPlan] = useState(planInicial)
+  /** Las marcas del odontograma como están guardadas: la prótesis dibuja punteado lo ausente. */
+  const [marcasGuardadas, setMarcasGuardadas] = useState(odontogramaInicial?.marcas ?? [])
   const idBase = `ficha${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`
   /** Al armar el presupuesto desde el odontograma, el foco va a la pestaña del plan. */
   const enfocarPestana = useRef<IdDePestana | null>(null)
@@ -85,6 +91,7 @@ export function FichaDelPaciente({
   const pestanas: Pestana<IdDePestana>[] = [
     ...(odontogramaInicial ? [{ id: "odontograma" as const, texto: "Odontograma" }] : []),
     ...(plan ? [{ id: "plan" as const, texto: "Plan y presupuesto" }] : []),
+    ...(veProtesis ? [{ id: "protesis" as const, texto: "Prótesis" }] : []),
     ...(ficha ? [{ id: "evoluciones" as const, texto: "Evoluciones" }] : []),
     ...(ficha ? [{ id: "antecedentes" as const, texto: "Antecedentes" }] : []),
   ]
@@ -160,6 +167,7 @@ export function FichaDelPaciente({
                   plan={plan}
                   zona={zona}
                   alArmarPresupuesto={alArmarPresupuesto}
+                  alGuardar={(guardado) => setMarcasGuardadas(guardado.marcas)}
                 />
               </div>
             )}
@@ -173,6 +181,20 @@ export function FichaDelPaciente({
                   zona={zona}
                   hoy={hoy}
                   usuario={usuario}
+                />
+              </div>
+            )}
+            {veProtesis && (
+              <div {...panel("protesis")}>
+                <PestanaProtesis
+                  pacienteId={paciente.id}
+                  activa={activa === "protesis"}
+                  odontograma={marcasGuardadas}
+                  plan={plan}
+                  alCambiarPlan={setPlan}
+                  esLaDuena={usuario.rol === "owner"}
+                  nombreDeQuienMira={usuario.nombre}
+                  zona={zona}
                 />
               </div>
             )}

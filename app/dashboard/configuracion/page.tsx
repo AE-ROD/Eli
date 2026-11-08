@@ -14,6 +14,8 @@ import { SeccionHoraValle } from "./_componentes/seccion-hora-valle"
 import { SeccionMensajesAClientes } from "./_componentes/seccion-mensajes-a-clientes"
 import { SeccionFilaVirtual } from "./_componentes/seccion-fila-virtual"
 import { SeccionSillones } from "./_componentes/seccion-sillones"
+import { SeccionLaboratorios } from "./_componentes/seccion-laboratorios"
+import { leerLaboratorios } from "@/lib/protesis-servidor"
 import { contarEnviosDelMes } from "@/lib/envios-a-clientes"
 import { apareceEnLaPagina, colorDelNegocio, esEnlaceDeResenasValido, normalizarInstagram } from "@/lib/pagina-del-negocio"
 import {
@@ -25,6 +27,7 @@ import {
   puedeEditarPaginaDelNegocio,
   puedeEditarPlazoDeCambios,
   puedeFijarComisionDeProducto,
+  puedeGestionarLaboratorios,
   puedeGestionarProductos,
   puedeGestionarServicios,
   puedeGestionarSillones,
@@ -51,8 +54,10 @@ export default async function PaginaConfiguracion() {
   // Clínica dental: los sillones los gestionan dueña y encargado, como los
   // servicios; el odontólogo no ve la sección. En otro rubro, ni se piden.
   const gestionaSillones = puedeGestionarSillones(actor)
+  // Los laboratorios de las prótesis: sólo la dueña de una clínica dental.
+  const gestionaLaboratorios = puedeGestionarLaboratorios(actor)
 
-  const [horariosActuales, servicios, productos, pagina, sillones] = await Promise.all([
+  const [horariosActuales, servicios, productos, pagina, sillones, laboratorios] = await Promise.all([
     prisma.workSchedule.findMany({
       where: { businessId: actor.businessId, memberId: memberIdPropio },
       orderBy: { dayOfWeek: "asc" },
@@ -101,6 +106,7 @@ export default async function PaginaConfiguracion() {
           take: 100,
         })
       : Promise.resolve([]),
+    gestionaLaboratorios ? leerLaboratorios(actor) : Promise.resolve([]),
   ])
 
   // Dueño y encargado editan el horario de cualquier miembro: cargan el
@@ -196,6 +202,13 @@ export default async function PaginaConfiguracion() {
         {gestionaSillones && (
           <div id="sillones" className="scroll-mt-24">
             <SeccionSillones sillonesIniciales={sillones} />
+          </div>
+        )}
+
+        {/* Laboratorios: sólo en una clínica dental, para la dueña */}
+        {gestionaLaboratorios && (
+          <div id="laboratorios" className="scroll-mt-24">
+            <SeccionLaboratorios laboratoriosIniciales={laboratorios} />
           </div>
         )}
 
