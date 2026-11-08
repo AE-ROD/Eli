@@ -254,7 +254,7 @@ y los triggers `protesis_congelada`, `protesis_no_se_borra`,
 `eventos_de_protesis_inmutables` y `atencion_servicios_reparto_de_protesis`,
 escritos a mano; columnas nuevas nullable (sin default) en
 `atencion_servicios` (`protesisId`, `odontologoCents`, `clinicaCents`,
-`tecnicoCents`, `pagoAlLaboratorioId`, para el cobro por abonos que viene) y
+`tecnicoCents`, `pagoAlLaboratorioId`, para el cobro por abonos de la etapa 7b) y
 en `prestaciones_del_plan` (`protesisId`). No reescribe filas existentes ni
 toca los triggers de la etapa 2. Lo único que escribe es un INSERT en la tabla
 nueva: los cinco materiales iniciales a cada clínica dental que todavía no
@@ -299,6 +299,61 @@ Ojo: los dos índices únicos de nombre usan `lower()`, que distingue
 mayúsculas de las letras con tilde (Ó/ó) sólo si la base tiene un `LC_CTYPE`
 con UTF-8. En una base con `LC_CTYPE` `C` (como la local de desarrollo),
 "Ó" y "ó" no chocan, igual que en la búsqueda sin mayúsculas de los sillones.
+
+### `20261108130000_etapa_7b_abonos_de_protesis`
+
+El cobro de las prótesis por abonos. Aditiva: la columna
+`liquidaciones."comisionProtesisCents"` (`INTEGER NOT NULL DEFAULT 0`, la parte
+de la odontóloga de los abonos que incluye cada liquidación) con su CHECK de
+rango; reemplaza `liquidaciones_bruto_check` por uno que la suma al bruto; el
+CHECK nuevo `atencion_servicios_abono_liquidado_check` (un abono sólo entra a
+una liquidación con su reparto congelado y si la tratante no es la dueña), y
+reemplaza (`CREATE OR REPLACE`) la función del trigger
+`atencion_servicios_reparto_de_protesis` con una regla más: una línea sólo se
+marca pagada al laboratorio si la prótesis está entregada y el pago es al
+laboratorio de esa prótesis. No reescribe filas: las liquidaciones que ya
+existen quedan con 0 y siguen cumpliendo el CHECK del bruto, y ninguna línea
+existente tiene `protesisId`. La aplica el dueño, nunca un agente (la única
+base configurada es producción).
+
+**Requiere `20261108120000_etapa_7_protesis` aplicada antes** (reemplaza la
+función de su trigger). Si no está, falla entera (va en una transacción) y no
+queda nada a medias.
+
+**Se aplica antes de desplegar.** El cliente de Prisma nuevo lee
+`liquidaciones.comisionProtesisCents`: desplegado sin la migración, las
+liquidaciones (vista previa, cierre y comprobante) fallan. Con la migración
+aplicada, el código viejo sigue funcionando: no conoce la columna (el default
+0 cumple el CHECK del bruto al cerrar una liquidación), no crea abonos y no
+paga al laboratorio.
+
+Orden: aplicar la migración, desplegar, y
+`npx prisma migrate resolve --applied 20261108130000_etapa_7b_abonos_de_protesis`.
+
+Bloqueos: el `ADD COLUMN` de `liquidaciones` toma un bloqueo exclusivo un
+instante (default constante: no reescribe la tabla); los CHECK nuevos revisan
+las filas que hay de `liquidaciones` y de `atencion_servicios` bloqueando sus
+escrituras mientras tanto (cobros y cierres de liquidación). Con el tamaño de
+hoy es poco; igual, fuera del horario de atención.
+
+### Las tres migraciones de la clínica dental, en orden
+
+El código de las prótesis necesita las tres, y cada una requiere la anterior.
+Las que falten se aplican **todas antes de desplegar**, en este orden, y
+después del despliegue se marcan en el mismo orden:
+
+1. `20261106120000_etapa_6_odontologia` (requiere `20261105120000_cierre_de_la_v1`;
+   su consulta previa, arriba).
+2. `20261108120000_etapa_7_protesis`.
+3. `20261108130000_etapa_7b_abonos_de_protesis`.
+4. Desplegar.
+5. `npx prisma migrate resolve --applied` de cada una, en el mismo orden.
+6. Si alguna clínica se registró entre aplicar la etapa 7 y desplegar, correr
+   la consulta de materiales de la etapa 7 (arriba) y, si no vuelve 0, su
+   último bloque.
+
+No desplegar con alguna de las tres sin aplicar: el código nuevo falla en la
+agenda, el tablero, el plan o las liquidaciones según cuál falte.
 
 ### Teléfonos antiguos a `+56` (#92)
 
