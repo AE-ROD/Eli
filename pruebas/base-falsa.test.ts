@@ -1490,3 +1490,231 @@ describe("base falsa: la clínica dental (etapa 6, 37f9b39)", () => {
     })
   })
 })
+
+describe("base falsa: las prótesis (etapa 7)", () => {
+  // n1 y n2 son dos clínicas con nombres que coinciden a propósito. En n1, la
+  // prótesis pt1 de c1 (tratante m1, material mt1, laboratorio lab1) con un
+  // evento y un abono cobrado en la atención v1.
+  const datos = () => ({
+    business: [
+      { id: "n1", name: "Uno", slug: "uno", userId: "u1", type: "odontologia" },
+      { id: "n2", name: "Dos", slug: "dos", userId: "u2", type: "odontologia" },
+    ],
+    user: [
+      { id: "u1", name: "Ana", email: "a@test" },
+      { id: "u2", name: "Otro", email: "o@test" },
+    ],
+    businessMember: [
+      { id: "m1", businessId: "n1", userId: "u1" },
+      { id: "m2", businessId: "n2", userId: "u2" },
+    ],
+    customer: [
+      { id: "c1", businessId: "n1", name: "María" },
+      { id: "c2", businessId: "n2", name: "María" },
+    ],
+    laboratorio: [
+      { id: "lab1", businessId: "n1", nombre: "Lab Sur" },
+      { id: "lab2", businessId: "n2", nombre: "Lab Sur" },
+    ],
+    materialDeProtesis: [
+      { id: "mt1", businessId: "n1", nombre: "Acrílico", unidad: "arcada", tipos: ["removible"], precioCents: 100, pbOdontologo: 4000, pbClinica: 3000, pbTecnico: 3000, laboratorioPorDefectoId: "lab1" },
+      { id: "mt2", businessId: "n2", nombre: "Acrílico", unidad: "arcada", tipos: ["removible"], precioCents: 100, pbOdontologo: 4000, pbClinica: 3000, pbTecnico: 3000 },
+    ],
+    excepcionDeRepartoDeProtesis: [{ id: "ex1", businessId: "n1", memberId: "m1", materialId: "mt1", pbOdontologo: 5000, pbClinica: 2000, pbTecnico: 3000 }],
+    protesis: [
+      {
+        id: "pt1",
+        businessId: "n1",
+        customerId: "c1",
+        memberId: "m1",
+        tratanteNombre: "Ana",
+        tipo: "removible",
+        arcada: "inferior",
+        piezas: [46],
+        pilares: [45, 47],
+        zonas: ["lingual"],
+        materialId: "mt1",
+        materialNombre: "Acrílico",
+        unidad: "arcada",
+        precioUnitarioCents: 100,
+        unidades: 1,
+        valorCents: 100,
+        laboratorioId: "lab1",
+        laboratorioNombre: "Lab Sur",
+        pbOdontologo: 5000,
+        pbClinica: 2000,
+        pbTecnico: 3000,
+        origenDelReparto: "excepcion",
+        creadoPorNombre: "Ana",
+      },
+    ],
+    eventoDeProtesis: [{ id: "evp1", businessId: "n1", protesisId: "pt1", estado: "impresion", autorNombre: "Ana" }],
+    visit: [
+      { id: "v1", businessId: "n1", customerName: "María", status: "finalizada" },
+      { id: "v2", businessId: "n2", customerName: "María" },
+    ],
+    visitService: [
+      { id: "ab1", visitId: "v1", serviceId: null, serviceName: "Abono", memberId: "m1", professionalName: "Ana", priceCents: 50, protesisId: "pt1", odontologoCents: 25, clinicaCents: 10, tecnicoCents: 15 },
+    ],
+  })
+
+  beforeEach(() => base.reiniciar(datos()))
+
+  const fila = (modelo: NombreDeModelo, id: string) => base.buscar(modelo, { id })[0]
+  const rechazo = /23514/
+
+  it("defaults: laboratorio activo sin contacto, material activo sin laboratorio, prótesis en impresión y sin abonos en una línea normal", async () => {
+    const lab = await prisma.laboratorio.create({ data: { businessId: "n1", nombre: "Otro" } })
+    expect(lab).toMatchObject({ contacto: null, activo: true })
+    const material = await prisma.materialDeProtesis.create({
+      data: { businessId: "n1", nombre: "Zirconio", unidad: "pieza", tipos: ["corona"], precioCents: 1, pbOdontologo: 1, pbClinica: 1, pbTecnico: 9998 },
+    })
+    expect(material).toMatchObject({ laboratorioPorDefectoId: null, orden: 0, activo: true })
+    expect(fila("protesis", "pt1")).toMatchObject({ estado: "impresion", byOwner: false, entregadaEn: null, anuladaEn: null, entregaEstimada: null })
+    expect(fila("visitService", "ab1")).toMatchObject({ pagoAlLaboratorioId: null })
+    expect(fila("prestacionDelPlan", "x") ?? null).toBeNull()
+  })
+
+  it("las relaciones se leen: abonos, eventos y material de una prótesis", async () => {
+    const leida = await prisma.protesis.findFirst({
+      where: { id: "pt1" },
+      select: { material: { select: { nombre: true } }, eventos: { select: { estado: true } }, abonos: { select: { priceCents: true } } },
+    })
+    expect(leida).toEqual({ material: { nombre: "Acrílico" }, eventos: [{ estado: "impresion" }], abonos: [{ priceCents: 50 }] })
+  })
+
+  describe("FK compuestas: nada cruza de negocio (P2003)", () => {
+    const protesisCon = (cambios: Record<string, unknown>) => ({ ...datos().protesis[0], id: undefined, ...cambios })
+
+    it.each([
+      ["el paciente", { customerId: "c2" }],
+      ["la tratante", { memberId: "m2" }],
+      ["el material", { materialId: "mt2" }],
+      ["el laboratorio", { laboratorioId: "lab2" }],
+    ])("una prótesis con %s de otra clínica", async (_que, cambios) => {
+      await expect(prisma.protesis.create({ data: protesisCon(cambios) })).rejects.toMatchObject({ code: "P2003" })
+    })
+
+    it("el laboratorio por defecto, la excepción, el evento y el pago", async () => {
+      await expect(prisma.materialDeProtesis.update({ where: { id: "mt1" }, data: { laboratorioPorDefectoId: "lab2" } })).rejects.toMatchObject({ code: "P2003" })
+      await expect(
+        prisma.excepcionDeRepartoDeProtesis.create({ data: { businessId: "n1", memberId: "m2", materialId: "mt1", pbOdontologo: 1, pbClinica: 1, pbTecnico: 9998 } })
+      ).rejects.toMatchObject({ code: "P2003" })
+      await expect(prisma.eventoDeProtesis.create({ data: { businessId: "n2", protesisId: "pt1", estado: "prueba", autorNombre: "X" } })).rejects.toMatchObject({ code: "P2003" })
+      await expect(
+        prisma.pagoAlLaboratorio.create({ data: { businessId: "n1", laboratorioId: "lab2", laboratorioNombre: "X", montoCents: 1, medio: "efectivo", pagadoPorId: "u1", pagadoPorNombre: "Ana" } })
+      ).rejects.toMatchObject({ code: "P2003" })
+    })
+
+    it("un abono con la prótesis o el pago de otro negocio que su atención (el trigger)", async () => {
+      await expect(
+        prisma.visitService.create({ data: { visitId: "v2", serviceName: "Abono", professionalName: "X", priceCents: 1, protesisId: "pt1" } })
+      ).rejects.toMatchObject({ code: "P2003", message: expect.stringMatching(/prótesis es de otro negocio/) })
+      const pago = await prisma.pagoAlLaboratorio.create({
+        data: { businessId: "n2", laboratorioId: "lab2", laboratorioNombre: "Lab Sur", montoCents: 1, medio: "efectivo", pagadoPorId: "u2", pagadoPorNombre: "Otro" },
+      })
+      await expect(prisma.visitService.update({ where: { id: "ab1" }, data: { pagoAlLaboratorioId: pago.id } })).rejects.toMatchObject({
+        code: "P2003",
+        message: expect.stringMatching(/pago al laboratorio es de otro negocio/),
+      })
+    })
+
+    it("la prestación del plan ligada a una prótesis de otra clínica", async () => {
+      await prisma.planDeTratamiento.create({ data: { id: "pl2", businessId: "n2", customerId: "c2", version: 1, creadoPorNombre: "Otro" } })
+      await prisma.etapaDelPlan.create({ data: { id: "et2", businessId: "n2", planId: "pl2", orden: 1, nombre: "E" } })
+      await expect(
+        prisma.prestacionDelPlan.create({ data: { businessId: "n2", etapaId: "et2", orden: 1, nombre: "P", valorCents: 1, protesisId: "pt1" } })
+      ).rejects.toMatchObject({ code: "P2003" })
+    })
+  })
+
+  describe("únicos", () => {
+    it("el nombre del laboratorio y del material no se repite en la clínica, sin distinguir mayúsculas; en otra sí", async () => {
+      await expect(prisma.laboratorio.create({ data: { businessId: "n1", nombre: "LAB SUR" } })).rejects.toMatchObject({ code: "P2002" })
+      await expect(prisma.laboratorio.update({ where: { id: "lab2" }, data: { nombre: "lab sur" } })).resolves.toBeTruthy()
+      await expect(
+        prisma.materialDeProtesis.create({
+          data: { businessId: "n1", nombre: "acrílico", unidad: "arcada", tipos: ["total"], precioCents: 1, pbOdontologo: 1, pbClinica: 1, pbTecnico: 9998 },
+        })
+      ).rejects.toMatchObject({ code: "P2002" })
+    })
+
+    it("una excepción por odontólogo y material", async () => {
+      await expect(
+        prisma.excepcionDeRepartoDeProtesis.create({ data: { businessId: "n1", memberId: "m1", materialId: "mt1", pbOdontologo: 1, pbClinica: 1, pbTecnico: 9998 } })
+      ).rejects.toMatchObject({ code: "P2002" })
+    })
+  })
+
+  describe("los triggers de la prótesis", () => {
+    it("lo copiado no cambia: valor, reparto, piezas, material ni paciente", async () => {
+      for (const data of [{ valorCents: 1 }, { pbOdontologo: 4000, pbClinica: 3000 }, { piezas: [36] }, { materialNombre: "X" }, { customerId: "c1", tratanteNombre: "Otra" }]) {
+        await expect(prisma.protesis.update({ where: { id: "pt1" }, data })).rejects.toThrow(/23514.*no cambian/)
+      }
+      expect(fila("protesis", "pt1")).toMatchObject({ valorCents: 100, piezas: [46], pbOdontologo: 5000 })
+    })
+
+    it("el estado sólo avanza (se puede saltar un paso), y anulada o entregada ya no cambia", async () => {
+      await expect(prisma.protesis.update({ where: { id: "pt1" }, data: { estado: "prueba" } })).resolves.toBeTruthy()
+      await expect(prisma.protesis.update({ where: { id: "pt1" }, data: { estado: "en-laboratorio" } })).rejects.toThrow(/sólo avanza/)
+      await expect(prisma.protesis.update({ where: { id: "pt1" }, data: { estado: "entregada", entregadaEn: new Date(5) } })).resolves.toBeTruthy()
+      await expect(prisma.protesis.update({ where: { id: "pt1" }, data: { laboratorioId: null, laboratorioNombre: null } })).rejects.toThrow(/ya no cambia/)
+      await expect(prisma.protesis.update({ where: { id: "pt1" }, data: { estado: "anulada", anuladaEn: new Date(6) } })).rejects.toThrow(rechazo)
+    })
+
+    it("la tratante sólo se desvincula (a null)", async () => {
+      await expect(prisma.protesis.update({ where: { id: "pt1" }, data: { memberId: "m1" } })).resolves.toBeTruthy()
+      await expect(prisma.protesis.update({ where: { id: "pt1" }, data: { memberId: null } })).resolves.toMatchObject({ memberId: null })
+      await expect(prisma.protesis.update({ where: { id: "pt1" }, data: { memberId: "m1" } })).rejects.toThrow(/tratante no cambia/)
+    })
+
+    it("una prótesis no se borra; un evento no se edita ni se borra", async () => {
+      await expect(prisma.protesis.delete({ where: { id: "pt1" } })).rejects.toThrow(/no se borra; se anula/)
+      await expect(prisma.eventoDeProtesis.update({ where: { id: "evp1" }, data: { autorNombre: "Otra" } })).rejects.toThrow(/no se edita/)
+      await expect(prisma.eventoDeProtesis.deleteMany({ where: { protesisId: "pt1" } })).rejects.toThrow(/no se borra/)
+    })
+
+    it("el reparto de un abono no cambia; una línea pagada no pasa a otro pago", async () => {
+      await expect(prisma.visitService.update({ where: { id: "ab1" }, data: { priceCents: 60, clinicaCents: 20 } })).rejects.toThrow(/ya está congelado/)
+      await expect(prisma.visitService.update({ where: { id: "ab1" }, data: { professionalName: "Ana Pérez" } })).resolves.toBeTruthy()
+      const pago = (id: string) =>
+        prisma.pagoAlLaboratorio.create({
+          data: { id, businessId: "n1", laboratorioId: "lab1", laboratorioNombre: "Lab Sur", montoCents: 15, medio: "transferencia", pagadoPorId: "u1", pagadoPorNombre: "Ana" },
+        })
+      await pago("pg1")
+      await pago("pg2")
+      await prisma.visitService.update({ where: { id: "ab1" }, data: { pagoAlLaboratorioId: "pg1" } })
+      await expect(prisma.visitService.update({ where: { id: "ab1" }, data: { pagoAlLaboratorioId: "pg2" } })).rejects.toThrow(/otro pago/)
+      await expect(prisma.visitService.update({ where: { id: "ab1" }, data: { pagoAlLaboratorioId: null } })).resolves.toBeTruthy()
+    })
+  })
+
+  describe("al borrar", () => {
+    it("un material, un laboratorio o una tratante referidos por una prótesis no se borran (NO ACTION)", async () => {
+      const antes = base.volcado()
+      await expect(prisma.materialDeProtesis.delete({ where: { id: "mt1" } })).rejects.toMatchObject({ code: "P2003" })
+      await expect(prisma.laboratorio.delete({ where: { id: "lab1" } })).rejects.toMatchObject({ code: "P2003" })
+      await expect(prisma.businessMember.delete({ where: { id: "m1" } })).rejects.toMatchObject({ code: "P2003" })
+      expect(base.volcado()).toEqual(antes)
+    })
+
+    it("un paciente con una prótesis abonada no se borra (el abono es historial); sin abonos, se lleva la prótesis y sus eventos", async () => {
+      await expect(prisma.customer.delete({ where: { id: "c1" } })).rejects.toMatchObject({ code: "P2003", message: expect.stringMatching(/visitService\.protesisId/) })
+      base.reiniciar({ ...datos(), visitService: [] })
+      await prisma.customer.delete({ where: { id: "c1" } })
+      expect(base.buscar("protesis")).toEqual([])
+      expect(base.buscar("eventoDeProtesis")).toEqual([])
+    })
+
+    it("borrar la clínica entera se lleva todo, abonos incluidos, y no toca a la otra", async () => {
+      await prisma.business.delete({ where: { id: "n1" } })
+      const quedan = base.volcado()
+      for (const [modelo, filas] of Object.entries(quedan)) {
+        expect(filas.filter((f) => f.businessId === "n1"), modelo).toEqual([])
+      }
+      expect(quedan.visitService).toEqual([])
+      expect(quedan.laboratorio.map((l) => l.id)).toEqual(["lab2"])
+      expect(quedan.materialDeProtesis.map((m) => m.id)).toEqual(["mt2"])
+    })
+  })
+})

@@ -181,6 +181,13 @@ const tablas: Tablas = {
   planDeTratamiento: [],
   etapaDelPlan: [],
   prestacionDelPlan: [],
+  laboratorio: [],
+  materialDeProtesis: [],
+  excepcionDeRepartoDeProtesis: [],
+  cambioDeRepartoDeProtesis: [],
+  protesis: [],
+  eventoDeProtesis: [],
+  pagoAlLaboratorio: [],
   customer: clientesFake,
   appointment: citasFake,
 }

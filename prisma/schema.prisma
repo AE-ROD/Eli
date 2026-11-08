@@ -138,7 +138,7 @@ model Business {
   /// dueña (`puedeConfigurarHoraValle`).
   horaValleActiva Boolean @default(false)
 
-  invitados                Business[]                @relation("Referidos")
+  invitados                Business[]                     @relation("Referidos")
   correosDeCuenta          CorreoDeCuenta[]
   customers                Customer[]
   appointments             Appointment[]
@@ -171,6 +171,14 @@ model Business {
   planesDeTratamiento      PlanDeTratamiento[]
   etapasDelPlan            EtapaDelPlan[]
   prestacionesDelPlan      PrestacionDelPlan[]
+  // Prótesis (clínica dental, etapa 7).
+  laboratorios             Laboratorio[]
+  materialesDeProtesis     MaterialDeProtesis[]
+  excepcionesDeReparto     ExcepcionDeRepartoDeProtesis[]
+  cambiosDeReparto         CambioDeRepartoDeProtesis[]
+  protesis                 Protesis[]
+  eventosDeProtesis        EventoDeProtesis[]
+  pagosAlLaboratorio       PagoAlLaboratorio[]
 
   @@index([invitadoPorId])
   @@map("negocios")
@@ -229,6 +237,11 @@ model BusinessMember {
   // y NO ACTION, como las de la liquidación.
   evoluciones              Evolucion[]
   prestacionesDelPlan      PrestacionDelPlan[]
+  // Prótesis: las que trata y sus excepciones de reparto. FK compuestas; la
+  // de la prótesis es NO ACTION, la de la excepción CASCADE (como
+  // CommissionRate).
+  protesis                 Protesis[]
+  excepcionesDeReparto     ExcepcionDeRepartoDeProtesis[]
 
   @@unique([businessId, userId])
   // Habilita la FK compuesta de CommissionRate (memberId, businessId): sin
@@ -314,6 +327,7 @@ model Customer {
   marcasDentales      MarcaDental[]
   evoluciones         Evolucion[]
   planesDeTratamiento PlanDeTratamiento[]
+  protesis            Protesis[]
 
   @@unique([id, businessId])
   @@index([businessId])
@@ -707,10 +721,34 @@ model VisitService {
   liquidacionId String?
   liquidacion   Liquidacion? @relation(fields: [liquidacionId], references: [id], onDelete: NoAction)
 
+  // ─── Abono de una prótesis (etapa 7; lo usa la tanda del cobro) ─────────
+  // Una línea con `protesisId` es un abono a esa prótesis: `serviceName` lo
+  // describe, `priceCents` es lo abonado y no lleva servicio, producto ni la
+  // comisión de la cascada (CHECK `atencion_servicios_protesis_check`: la
+  // parte de la odontóloga no se paga dos veces). Al cobrar se congela el
+  // reparto del abono en tres partes con la regla congelada de la prótesis
+  // (`lib/protesis.ts`, `repartirMonto`): los tres juntos o ninguno, suman
+  // `priceCents`, y la dueña no lleva parte de odontóloga (CHECKs). Una vez
+  // congelado no cambia (trigger `atencion_servicios_reparto_de_protesis`).
+  // La parte de la odontóloga se libera para la liquidación cuando la prótesis
+  // está entregada (`Protesis.entregadaEn`); la del técnico pasa a "por pagar
+  // al laboratorio" con la misma regla, y `pagoAlLaboratorioId` dice en qué
+  // pago se le pagó. FK simples (la línea no tiene `businessId`): el mismo
+  // trigger exige que la prótesis y el pago sean del negocio de la atención.
+  protesisId          String?
+  protesis            Protesis?          @relation(fields: [protesisId], references: [id], onDelete: NoAction)
+  odontologoCents     Int?
+  clinicaCents        Int?
+  tecnicoCents        Int?
+  pagoAlLaboratorioId String?
+  pagoAlLaboratorio   PagoAlLaboratorio? @relation(fields: [pagoAlLaboratorioId], references: [id], onDelete: NoAction)
+
   @@index([visitId])
   @@index([memberId])
   @@index([productId])
   @@index([memberId, liquidacionId])
+  @@index([protesisId])
+  @@index([pagoAlLaboratorioId])
   @@map("atencion_servicios")
 }
 
@@ -1456,10 +1494,268 @@ model PrestacionDelPlan {
   appointmentId     String?
   appointment       Appointment?    @relation(fields: [appointmentId, businessId], references: [id, businessId], onDelete: NoAction)
   realizadaEn       DateTime?
+  /// La prótesis que se agregó al plan con esta prestación ("Agregar al plan
+  /// y presupuesto"; nace de "Boca" y se edita como cualquier otra). FK
+  /// compuesta NO ACTION. Copiar la versión vigente la conserva; borrar la
+  /// prestación suelta el vínculo.
+  protesisId        String?
+  protesis          Protesis?       @relation(fields: [protesisId, businessId], references: [id, businessId], onDelete: NoAction)
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
   @@index([etapaId, orden])
   @@index([appointmentId])
+  @@index([protesisId])
   @@map("prestaciones_del_plan")
+}
+
+// ─── Prótesis (clínica dental, etapa 7) ─────────────────────────────────────
+// Migración `20261108120000_etapa_7_protesis`. Reglas puras en
+// `lib/protesis.ts`; quién ve y escribe, en `lib/permisos.ts`. Dinero en
+// centavos enteros (tope 2.000.000.000) y porcentajes en puntos base
+// (10.000 = 100 %), como `lib/comisiones.ts`.
+
+/**
+ * Un laboratorio (o técnico) dental externo: no tiene cuenta en Eli. Nombre
+ * único en la clínica sin distinguir mayúsculas (índice único sobre
+ * `lower("nombre")`, escrito a mano) y contacto opcional. No se borra: se
+ * desactiva, y las prótesis que lo tienen lo siguen nombrando (copia).
+ */
+model Laboratorio {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  nombre     String
+  contacto   String?
+  activo     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  materialesPorDefecto MaterialDeProtesis[]
+  protesis             Protesis[]
+  pagos                PagoAlLaboratorio[]
+
+  // Habilita las FK compuestas (laboratorioId, businessId).
+  @@unique([id, businessId])
+  @@index([businessId])
+  @@map("laboratorios")
+}
+
+/**
+ * Un material del catálogo de prótesis, con su precio por `unidad` ("arcada":
+ * removible y total; "pieza": fija, implante y corona; CHECK) y la regla de
+ * reparto del valor cobrado en tres partes, en puntos base que suman 10.000
+ * (CHECK). La regla se copia a la prótesis al crearla: cambiarla acá sólo
+ * afecta las nuevas. Nombre único en la clínica sin mayúsculas (índice a
+ * mano). No se borra: se desactiva. Lo configura sólo la dueña.
+ */
+model MaterialDeProtesis {
+  id                      String       @id @default(cuid())
+  businessId              String
+  business                Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  nombre                  String
+  /// "arcada" | "pieza" (CHECK).
+  unidad                  String
+  /// Subconjunto no vacío de los tipos de su unidad (CHECK).
+  tipos                   String[]
+  precioCents             Int
+  pbOdontologo            Int
+  pbClinica               Int
+  pbTecnico               Int
+  laboratorioPorDefectoId String?
+  laboratorioPorDefecto   Laboratorio? @relation(fields: [laboratorioPorDefectoId, businessId], references: [id, businessId], onDelete: NoAction)
+  /// 0..999 (CHECK): el orden en que se ofrece.
+  orden                   Int          @default(0)
+  activo                  Boolean      @default(true)
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+
+  excepciones ExcepcionDeRepartoDeProtesis[]
+  protesis    Protesis[]
+
+  @@unique([id, businessId])
+  @@index([businessId])
+  @@map("materiales_de_protesis")
+}
+
+/**
+ * La regla de reparto de un odontólogo en un material, que manda sobre la del
+ * material (como `CommissionRate` sobre el % por defecto). Una por
+ * (miembro, material). FK compuestas CASCADE: sin el miembro o el material no
+ * tiene sentido. Las prótesis ya creadas no la miran: copiaron la suya.
+ */
+model ExcepcionDeRepartoDeProtesis {
+  id           String             @id @default(cuid())
+  businessId   String
+  business     Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  memberId     String
+  member       BusinessMember     @relation(fields: [memberId, businessId], references: [id, businessId], onDelete: Cascade)
+  materialId   String
+  material     MaterialDeProtesis @relation(fields: [materialId, businessId], references: [id, businessId], onDelete: Cascade)
+  pbOdontologo Int
+  pbClinica    Int
+  pbTecnico    Int
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@unique([memberId, materialId])
+  @@index([businessId])
+  @@map("excepciones_de_reparto_de_protesis")
+}
+
+/**
+ * Auditoría de los cambios de reparto (docs/PRODUCTO.md §3.5): quién, cuándo,
+ * de qué a qué, de la regla de un material ("material") o de una excepción
+ * ("excepcion"). `anterior*` en null = no existía (se creó); `nuevo*` en null
+ * = se quitó (sólo una excepción). Los ids van sin FK, como
+ * `Visit.paidById`, con los nombres copiados: el registro no depende de que
+ * el material, el miembro o el usuario sigan existiendo.
+ */
+model CambioDeRepartoDeProtesis {
+  id                   String   @id @default(cuid())
+  businessId           String
+  business             Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  /// "material" | "excepcion" (CHECK).
+  scope                String
+  materialId           String
+  materialNombre       String
+  memberId             String?
+  memberName           String?
+  anteriorPbOdontologo Int?
+  anteriorPbClinica    Int?
+  anteriorPbTecnico    Int?
+  nuevoPbOdontologo    Int?
+  nuevoPbClinica       Int?
+  nuevoPbTecnico       Int?
+  changedById          String
+  changedByName        String
+  changedByEmail       String
+  createdAt            DateTime @default(now())
+
+  @@index([businessId, createdAt])
+  @@map("cambios_de_reparto_de_protesis")
+}
+
+/**
+ * Una prótesis de un paciente: el diseño sobre la arcada (tipo, arcada,
+ * piezas protésicas y pilares en FDI permanente, zonas de la base), el
+ * material con su unidad y su precio copiados, el valor al paciente
+ * (precio × unidades, lo calcula el servidor), el laboratorio y la entrega
+ * estimada, y el seguimiento (Impresión → En laboratorio → Prueba en boca →
+ * Ajustes → Entregada, sólo hacia adelante; o anulada antes de entregar).
+ * El reparto (tres partes en puntos base y de dónde salió) se CONGELA al
+ * crearla: cambiar después la regla del material o la excepción no la toca.
+ * La tratante es un miembro (`memberId`) o la dueña (`byOwner`, sin
+ * `memberId`, como `VisitService`); su nombre va copiado. Si es la dueña, su
+ * parte va a la clínica (`repartoEfectivo`).
+ * El trigger `protesis_congelada` sólo deja cambiar estado (hacia adelante),
+ * laboratorio, entrega estimada, las fechas de entrega y anulación, y
+ * desvincular a la tratante; una entregada o anulada ya no cambia. No se
+ * borra (`protesis_no_se_borra`) salvo con su paciente o su negocio.
+ */
+model Protesis {
+  id                  String             @id @default(cuid())
+  businessId          String
+  business            Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerId          String
+  customer            Customer           @relation(fields: [customerId, businessId], references: [id, businessId], onDelete: Cascade)
+  memberId            String?
+  member              BusinessMember?    @relation(fields: [memberId, businessId], references: [id, businessId], onDelete: NoAction)
+  byOwner             Boolean            @default(false)
+  tratanteNombre      String
+  /// removible | total | fija | implante | corona (CHECK).
+  tipo                String
+  /// superior | inferior | ambas (CHECK).
+  arcada              String
+  /// Piezas protésicas y pilares (o ganchos), FDI permanente de la arcada, sin repetir entre sí (CHECK).
+  piezas              Int[]
+  pilares             Int[]              @default([])
+  /// paladar | lingual | flanco | rebasado | reparacion; sólo removible y total (CHECK).
+  zonas               String[]           @default([])
+  materialId          String
+  material            MaterialDeProtesis @relation(fields: [materialId, businessId], references: [id, businessId], onDelete: NoAction)
+  materialNombre      String
+  unidad              String
+  precioUnitarioCents Int
+  /// Arcadas (1 o 2) o piezas + pilares, según la unidad (CHECK).
+  unidades            Int
+  /// precioUnitarioCents × unidades (CHECK), ≤ 2.000.000.000.
+  valorCents          Int
+  laboratorioId       String?
+  laboratorio         Laboratorio?       @relation(fields: [laboratorioId, businessId], references: [id, businessId], onDelete: NoAction)
+  laboratorioNombre   String?
+  entregaEstimada     DateTime?          @db.Date
+  /// impresion | en-laboratorio | prueba | ajustes | entregada | anulada (CHECK).
+  estado              String             @default("impresion")
+  pbOdontologo        Int
+  pbClinica           Int
+  pbTecnico           Int
+  /// "material" | "excepcion" (CHECK): qué regla se congeló.
+  origenDelReparto    String
+  entregadaEn         DateTime?
+  anuladaEn           DateTime?
+  anuladaPorNombre    String?
+  creadoPorNombre     String
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  eventos             EventoDeProtesis[]
+  prestacionesDelPlan PrestacionDelPlan[]
+  abonos              VisitService[]
+
+  @@unique([id, businessId])
+  @@index([businessId, customerId, createdAt])
+  @@index([businessId, estado])
+  @@map("protesis")
+}
+
+/**
+ * Un paso del seguimiento de una prótesis: a qué estado pasó, cuándo y quién
+ * (nombre copiado). Sólo se agregan: el trigger `eventos_de_protesis_inmutables`
+ * rechaza todo UPDATE y el DELETE fuera de la cascada de su prótesis.
+ */
+model EventoDeProtesis {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  protesisId  String
+  protesis    Protesis @relation(fields: [protesisId, businessId], references: [id, businessId], onDelete: Cascade)
+  estado      String
+  autorNombre String
+  autorUserId String?
+  createdAt   DateTime @default(now())
+
+  @@index([protesisId, createdAt])
+  @@map("eventos_de_protesis")
+}
+
+/**
+ * Un pago a un laboratorio (lo usa la tanda del cobro: "Por pagar al
+ * laboratorio" → "Marcar pagado"): cuánto, por qué medio, quién y cuándo. Las
+ * líneas que paga quedan marcadas con su `pagoAlLaboratorioId`, como las de
+ * una liquidación. No se borra: se anula (los dos datos juntos, CHECK), y
+ * anularlo suelta sus líneas. FK compuesta NO ACTION al laboratorio.
+ */
+model PagoAlLaboratorio {
+  id                String      @id @default(cuid())
+  businessId        String
+  business          Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  laboratorioId     String
+  laboratorio       Laboratorio @relation(fields: [laboratorioId, businessId], references: [id, businessId], onDelete: NoAction)
+  laboratorioNombre String
+  montoCents        Int
+  /// id de `lib/medios-de-pago.ts` (CHECK).
+  medio             String
+  pagadoEn          DateTime    @default(now())
+  pagadoPorId       String
+  pagadoPorNombre   String
+  anuladoEn         DateTime?
+  anuladoPorNombre  String?
+  createdAt         DateTime    @default(now())
+
+  lineas VisitService[]
+
+  @@unique([id, businessId])
+  @@index([businessId, laboratorioId, pagadoEn])
+  @@map("pagos_al_laboratorio")
 }

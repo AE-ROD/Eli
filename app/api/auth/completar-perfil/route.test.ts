@@ -3,6 +3,7 @@ import { pedidoFalso } from "@/pruebas/pedidos"
 import { Prisma } from "@prisma/client"
 import { RUBROS } from "@/lib/rubros"
 import { serviciosDeEjemplo } from "@/lib/servicios-de-ejemplo"
+import { materialesDeProtesisDeEjemplo } from "@/lib/protesis"
 
 const mockGetServerSession = vi.fn()
 
@@ -101,6 +102,9 @@ describe("POST /api/auth/completar-perfil", () => {
       expect(res.status).toBe(200)
       expect(prismaMock.business.create).toHaveBeenCalledTimes(1)
       expect(prismaMock.business.create.mock.calls[0][0].data.services).toEqual({ create: serviciosDeEjemplo(tipoNegocio) })
+      expect(prismaMock.business.create.mock.calls[0][0].data.materialesDeProtesis).toEqual({
+        create: materialesDeProtesisDeEjemplo(tipoNegocio),
+      })
     }
   )
 

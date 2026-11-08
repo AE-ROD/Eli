@@ -44,6 +44,14 @@ export type NombreDeModelo =
   | "planDeTratamiento"
   | "etapaDelPlan"
   | "prestacionDelPlan"
+  // Prótesis (migración `20261108120000_etapa_7_protesis`).
+  | "laboratorio"
+  | "materialDeProtesis"
+  | "excepcionDeRepartoDeProtesis"
+  | "cambioDeRepartoDeProtesis"
+  | "protesis"
+  | "eventoDeProtesis"
+  | "pagoAlLaboratorio"
 
 export type Tablas = Record<NombreDeModelo, Registro[]>
 
@@ -83,6 +91,13 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     planesDeTratamiento: muchos("planDeTratamiento", "businessId"),
     etapasDelPlan: muchos("etapaDelPlan", "businessId"),
     prestacionesDelPlan: muchos("prestacionDelPlan", "businessId"),
+    laboratorios: muchos("laboratorio", "businessId"),
+    materialesDeProtesis: muchos("materialDeProtesis", "businessId"),
+    excepcionesDeReparto: muchos("excepcionDeRepartoDeProtesis", "businessId"),
+    cambiosDeReparto: muchos("cambioDeRepartoDeProtesis", "businessId"),
+    protesis: muchos("protesis", "businessId"),
+    eventosDeProtesis: muchos("eventoDeProtesis", "businessId"),
+    pagosAlLaboratorio: muchos("pagoAlLaboratorio", "businessId"),
   },
   businessMember: {
     user: uno("user", "userId"),
@@ -92,6 +107,8 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     liquidaciones: muchos("liquidacion", "memberId"),
     evoluciones: muchos("evolucion", "memberId"),
     prestacionesDelPlan: muchos("prestacionDelPlan", "memberId"),
+    protesis: muchos("protesis", "memberId"),
+    excepcionesDeReparto: muchos("excepcionDeRepartoDeProtesis", "memberId"),
   },
   customer: {
     // La ficha guarda la FK: del lado del paciente es la relación inversa (1:1).
@@ -99,6 +116,7 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     marcasDentales: muchos("marcaDental", "customerId"),
     evoluciones: muchos("evolucion", "customerId"),
     planesDeTratamiento: muchos("planDeTratamiento", "customerId"),
+    protesis: muchos("protesis", "customerId"),
   },
   service: {
     commissionRates: muchos("commissionRate", "serviceId"),
@@ -130,6 +148,8 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     service: uno("service", "serviceId"),
     product: uno("producto", "productId"),
     liquidacion: uno("liquidacion", "liquidacionId"),
+    protesis: uno("protesis", "protesisId"),
+    pagoAlLaboratorio: uno("pagoAlLaboratorio", "pagoAlLaboratorioId"),
   },
   visitPayment: { visit: uno("visit", "visitId") },
   workSchedule: { business: uno("business", "businessId"), member: uno("businessMember", "memberId") },
@@ -213,6 +233,41 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     service: uno("service", "serviceId"),
     member: uno("businessMember", "memberId"),
     appointment: uno("appointment", "appointmentId"),
+    protesis: uno("protesis", "protesisId"),
+  },
+  laboratorio: {
+    business: uno("business", "businessId"),
+    materialesPorDefecto: muchos("materialDeProtesis", "laboratorioPorDefectoId"),
+    protesis: muchos("protesis", "laboratorioId"),
+    pagos: muchos("pagoAlLaboratorio", "laboratorioId"),
+  },
+  materialDeProtesis: {
+    business: uno("business", "businessId"),
+    laboratorioPorDefecto: uno("laboratorio", "laboratorioPorDefectoId"),
+    excepciones: muchos("excepcionDeRepartoDeProtesis", "materialId"),
+    protesis: muchos("protesis", "materialId"),
+  },
+  excepcionDeRepartoDeProtesis: {
+    business: uno("business", "businessId"),
+    member: uno("businessMember", "memberId"),
+    material: uno("materialDeProtesis", "materialId"),
+  },
+  cambioDeRepartoDeProtesis: { business: uno("business", "businessId") },
+  protesis: {
+    business: uno("business", "businessId"),
+    customer: uno("customer", "customerId"),
+    member: uno("businessMember", "memberId"),
+    material: uno("materialDeProtesis", "materialId"),
+    laboratorio: uno("laboratorio", "laboratorioId"),
+    eventos: muchos("eventoDeProtesis", "protesisId"),
+    prestacionesDelPlan: muchos("prestacionDelPlan", "protesisId"),
+    abonos: muchos("visitService", "protesisId"),
+  },
+  eventoDeProtesis: { business: uno("business", "businessId"), protesis: uno("protesis", "protesisId") },
+  pagoAlLaboratorio: {
+    business: uno("business", "businessId"),
+    laboratorio: uno("laboratorio", "laboratorioId"),
+    lineas: muchos("visitService", "pagoAlLaboratorioId"),
   },
 }
 
@@ -244,7 +299,16 @@ export const COMPUESTAS: Partial<Record<NombreDeModelo, string[]>> = {
   evolucion: ["customer", "member", "appointment"],
   planDeTratamiento: ["customer"],
   etapaDelPlan: ["plan"],
-  prestacionDelPlan: ["etapa", "service", "member", "appointment"],
+  prestacionDelPlan: ["etapa", "service", "member", "appointment", "protesis"],
+  // Prótesis: como las de la clínica dental, toda FK a otra fila del negocio
+  // es compuesta. Las dos nuevas de `atencion_servicios` (prótesis y pago al
+  // laboratorio) son simples, y el trigger `atencion_servicios_reparto_de_protesis`
+  // exige el negocio de la atención: lo emula `base-falsa.ts`.
+  materialDeProtesis: ["laboratorioPorDefecto"],
+  excepcionDeRepartoDeProtesis: ["member", "material"],
+  protesis: ["customer", "member", "material", "laboratorio"],
+  eventoDeProtesis: ["protesis"],
+  pagoAlLaboratorio: ["laboratorio"],
 }
 
 const OPERADORES_DE_CAMPO = new Set(["equals", "in", "notIn", "not", "gt", "gte", "lt", "lte", "has"])

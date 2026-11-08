@@ -11,6 +11,7 @@ import { enviarBienvenida } from "@/lib/enviar-correo-de-prueba"
 import { negocioQueInvita } from "@/lib/referidos"
 import { registrarError } from "@/lib/registro-de-errores"
 import { serviciosDeEjemplo } from "@/lib/servicios-de-ejemplo"
+import { materialesDeProtesisDeEjemplo } from "@/lib/protesis"
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 async function slugUnico(base: string): Promise<string> {
@@ -74,6 +75,10 @@ export async function POST(request: NextRequest) {
               // página de reservas vacía. En la misma escritura anidada: sin
               // negocio no quedan servicios sueltos, y al revés.
               services: { create: serviciosDeEjemplo(datos.tipoNegocio) },
+              // Una clínica dental nace con los materiales de prótesis del
+              // diseño (ninguno en otro rubro). Las que ya existían los
+              // recibieron en la migración `etapa_7_protesis`.
+              materialesDeProtesis: { create: materialesDeProtesisDeEjemplo(datos.tipoNegocio) },
             },
           },
         },

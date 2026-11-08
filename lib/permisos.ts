@@ -548,6 +548,81 @@ export const puedeGestionarSillones = (actor: Actor | null): boolean =>
  */
 export const puedeAsignarSillon = esClinicaDental
 
+// ─── Prótesis (clínica dental) ───────────────────────────────────────────────
+//
+// La pestaña Prótesis de la ficha es clínica: la ven, crean y avanzan los
+// mismos que la ficha (dueño y odontólogos). El encargado no la ve (sí cobra
+// los abonos en la Sala de espera, como cualquier cobro: `puedeCobrar`). El
+// reparto es dinero: lo configura sólo el dueño (como las comisiones,
+// §3.4), y en la ficha cada uno ve del reparto sólo lo que le toca
+// (`veMontosDelReparto`).
+
+/** Ver la pestaña Prótesis: las prótesis de cualquier paciente, con su valor y su seguimiento. Dueño y odontólogos. */
+export const veProtesis = atiendeEnLaClinica
+
+/** Crear una prótesis, avanzar su seguimiento, anularla y agregarla al plan. Los mismos que la ven. */
+export const puedeEditarProtesis = atiendeEnLaClinica
+
+/**
+ * Configurar el reparto de prótesis: materiales (precio, unidad, tipos y
+ * regla), excepciones por odontólogo y su historial. Es dinero: sólo el
+ * dueño, como `puedeEditarComisiones`.
+ */
+export const puedeConfigurarRepartoDeProtesis = (actor: Actor | null): boolean => esClinicaDental(actor) && esDueño(actor)
+
+/**
+ * El catálogo de laboratorios (nombre, contacto, activo). Sólo el dueño, y no
+ * dueño y encargado como los sillones o los servicios: el laboratorio es a
+ * quién se le paga la parte del técnico, y el encargado no ve las prótesis ni
+ * el reparto. Los odontólogos lo eligen en la ficha (`whereDeLaboratorios`,
+ * sólo los activos) sin gestionarlo.
+ */
+export const puedeGestionarLaboratorios = puedeConfigurarRepartoDeProtesis
+
+/** Lo que alguien ve del reparto de una prótesis: las tres partes, sólo la suya, o nada. */
+export type MontosDelReparto = "todo" | "suyo" | "nada"
+
+/**
+ * Cuánto del reparto de una prótesis ve el actor. El dueño, todo (las tres
+ * partes y de dónde salió la regla). La odontóloga tratante, sólo su parte:
+ * ni la de la clínica ni la del laboratorio (§5). Cualquier otro (otro
+ * odontólogo, el encargado, alguien fuera de la clínica o de otro negocio),
+ * nada. El valor al paciente no es parte del reparto: lo ve quien ve la
+ * prótesis. Falla cerrado.
+ */
+export function veMontosDelReparto(
+  actor: Actor | null,
+  protesis: { businessId: string; memberId: string | null }
+): MontosDelReparto {
+  if (!veProtesis(actor) || !mismoNegocio(actor, protesis.businessId)) return "nada"
+  if (esDueño(actor)) return "todo"
+  if (actor?.rol === "worker" && !!actor.memberId && actor.memberId === protesis.memberId) return "suyo"
+  return "nada"
+}
+
+/** La tratante de una prótesis: un miembro, o la dueña (`byOwner`, sin miembro). */
+export interface TratanteDeProtesis {
+  memberId: string | null
+  byOwner: boolean
+}
+
+/**
+ * Quién queda como tratante de una prótesis nueva. Sólo el dueño elige: a sí
+ * mismo (`"duenio"` o nada) o a un miembro (que el endpoint verifica del
+ * negocio). El odontólogo queda siempre él, pida lo que pida, como
+ * `profesionalParaLinea`: así nunca congela la regla de un colega ni la ve.
+ * Cualquier otro, o un odontólogo sin `memberId`, no tiene tratante (`null`:
+ * el endpoint no crea nada). Falla cerrado.
+ */
+export function tratanteParaProtesis(actor: Actor | null, pedido: string | undefined): TratanteDeProtesis | null {
+  if (!puedeEditarProtesis(actor) || !actor) return null
+  if (esDueño(actor)) {
+    return !pedido || pedido === "duenio" ? { memberId: null, byOwner: true } : { memberId: pedido, byOwner: false }
+  }
+  if (actor.rol === "worker" && actor.memberId) return { memberId: actor.memberId, byOwner: false }
+  return null
+}
+
 // ─── Filtros para consultas ──────────────────────────────────────────────────
 
 /**
@@ -788,7 +863,7 @@ export function whereDeProductos(
 /**
  * Lo clínico es del negocio, no del odontólogo: quien puede verlo ve lo de
  * todos los pacientes del negocio, y quien no, nada. Una sola regla para las
- * siete tablas, que tienen `businessId` propio. No se exporta, igual que
+ * tablas, que tienen `businessId` propio. No se exporta, igual que
  * `filtroDeAgenda`.
  */
 function filtroClinico(actor: Actor | null, puede: (actor: Actor | null) => boolean): { businessId: string } | typeof NADA {
@@ -858,6 +933,94 @@ export function whereDePrestacionesDelPlan(
   extra: Prisma.PrestacionDelPlanWhereInput = {}
 ): Prisma.PrestacionDelPlanWhereInput {
   return { AND: [filtroClinico(actor, vePlanDeTratamiento), extra] }
+}
+
+// ─── Prótesis ────────────────────────────────────────────────────────────────
+
+/** Igual que `whereDeAgenda`, para las prótesis: dueño y odontólogos, las de todos los pacientes del negocio. */
+export function whereDeProtesis(actor: Actor | null, extra: Prisma.ProtesisWhereInput = {}): Prisma.ProtesisWhereInput {
+  return { AND: [filtroClinico(actor, veProtesis), extra] }
+}
+
+/** Igual que `whereDeProtesis`, para el seguimiento de cada una. */
+export function whereDeEventosDeProtesis(
+  actor: Actor | null,
+  extra: Prisma.EventoDeProtesisWhereInput = {}
+): Prisma.EventoDeProtesisWhereInput {
+  return { AND: [filtroClinico(actor, veProtesis), extra] }
+}
+
+/**
+ * Los materiales: los gestiona el dueño y los eligen los odontólogos en la
+ * ficha. Quién ve la regla de reparto de cada uno lo decide el `select` del
+ * endpoint (`veMontosDelReparto`, `puedeConfigurarRepartoDeProtesis`), no
+ * este filtro, como el % de los productos.
+ */
+export function whereDeMaterialesDeProtesis(
+  actor: Actor | null,
+  extra: Prisma.MaterialDeProtesisWhereInput = {}
+): Prisma.MaterialDeProtesisWhereInput {
+  return { AND: [filtroClinico(actor, veProtesis), extra] }
+}
+
+/** Los laboratorios: los gestiona el dueño y los eligen los odontólogos en la ficha. El encargado, ninguno. */
+export function whereDeLaboratorios(
+  actor: Actor | null,
+  extra: Prisma.LaboratorioWhereInput = {}
+): Prisma.LaboratorioWhereInput {
+  return { AND: [filtroClinico(actor, veProtesis), extra] }
+}
+
+/**
+ * Las excepciones de reparto: el dueño, todas las del negocio; el odontólogo,
+ * sólo las suyas (el servidor las lee al crear una prótesis suya, para
+ * congelar su regla, y la ficha le muestra su parte); nadie más, ninguna. No
+ * se exporta la primitiva, igual que `filtroDeAgenda`.
+ */
+function filtroDeExcepcionesDeReparto(actor: Actor | null): { businessId: string; memberId?: string } | typeof NADA {
+  if (!actor || !veProtesis(actor)) return NADA
+  if (esDueño(actor)) return { businessId: actor.businessId }
+  if (actor.rol === "worker" && actor.memberId) return { businessId: actor.businessId, memberId: actor.memberId }
+  return NADA
+}
+
+/** Igual que `whereDeAgenda`, para las excepciones de reparto de prótesis. */
+export function whereDeExcepcionesDeReparto(
+  actor: Actor | null,
+  extra: Prisma.ExcepcionDeRepartoDeProtesisWhereInput = {}
+): Prisma.ExcepcionDeRepartoDeProtesisWhereInput {
+  return { AND: [filtroDeExcepcionesDeReparto(actor), extra] }
+}
+
+/** El historial de cambios de reparto: sólo el dueño, como `puedeVerHistorialDeComisiones`. */
+export function whereDeCambiosDeReparto(
+  actor: Actor | null,
+  extra: Prisma.CambioDeRepartoDeProtesisWhereInput = {}
+): Prisma.CambioDeRepartoDeProtesisWhereInput {
+  return { AND: [filtroClinico(actor, puedeConfigurarRepartoDeProtesis), extra] }
+}
+
+/**
+ * Los abonos de las prótesis (las líneas de atención con `protesisId`), para
+ * el pagado y el saldo de la ficha: quien ve la prótesis ve cuánto se le
+ * abonó, sea de quien sea la línea (no `whereDeLineas`, que al odontólogo le
+ * deja sólo las suyas). Va por la atención para acotar al negocio, porque la
+ * línea no tiene `businessId` propio.
+ */
+export function whereDeAbonosDeProtesis(
+  actor: Actor | null,
+  extra: Prisma.VisitServiceWhereInput = {}
+): Prisma.VisitServiceWhereInput {
+  if (!actor || !veProtesis(actor)) return { AND: [NADA, extra] }
+  return { AND: [{ protesisId: { not: null }, visit: { is: { businessId: actor.businessId } } }, extra] }
+}
+
+/** Los pagos a laboratorios (la tanda del cobro): sólo el dueño, como el resto del dinero de las prótesis. */
+export function whereDePagosAlLaboratorio(
+  actor: Actor | null,
+  extra: Prisma.PagoAlLaboratorioWhereInput = {}
+): Prisma.PagoAlLaboratorioWhereInput {
+  return { AND: [filtroClinico(actor, puedeConfigurarRepartoDeProtesis), extra] }
 }
 
 /** Igual que `whereDeAgenda`, para los sillones. */

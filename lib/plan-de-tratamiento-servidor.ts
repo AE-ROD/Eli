@@ -360,7 +360,7 @@ async function etapasDesdeElOdontograma(tx: Tx, actor: Actor, pacienteId: string
 
 /**
  * Las etapas de la versión vigente, copiadas tal cual (estado, aprobación,
- * presentación, y en cada prestación su estado, cita y valor): la versión
+ * presentación, y en cada prestación su estado, cita, valor y prótesis): la versión
  * nueva parte de donde estaba. Sin plan vigente, ninguna.
  */
 async function etapasCopiadasDeLaVigente(tx: Tx, actor: Actor, pacienteId: string): Promise<EtapaNueva[]> {
@@ -392,6 +392,9 @@ async function etapasCopiadasDeLaVigente(tx: Tx, actor: Actor, pacienteId: strin
               valorCents: true,
               appointmentId: true,
               realizadaEn: true,
+              // La prestación que vino de una prótesis sigue ligada a ella en la
+              // versión nueva: así "Agregar al plan" no la duplica.
+              protesisId: true,
             },
           },
         },

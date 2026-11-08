@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server"
 import { Prisma } from "@prisma/client"
 import { RUBROS } from "@/lib/rubros"
 import { serviciosDeEjemplo } from "@/lib/servicios-de-ejemplo"
+import { materialesDeProtesisDeEjemplo } from "@/lib/protesis"
 import { cuerpoDePrueba } from "@/pruebas/pedidos"
 
 const mockVerificarLimite = vi.fn()
@@ -115,6 +116,9 @@ describe("POST /api/auth/registro: bienvenida", () => {
       const negocio = mockPrisma.user.create.mock.calls[0][0].data.business.create
       expect(negocio.services).toEqual({ create: serviciosDeEjemplo(tipoNegocio) })
       expect(negocio.services.create.length).toBeGreaterThanOrEqual(4)
+      // Los materiales de prótesis: los cinco en una clínica dental, ninguno en otro rubro.
+      expect(negocio.materialesDeProtesis).toEqual({ create: materialesDeProtesisDeEjemplo(tipoNegocio) })
+      expect(negocio.materialesDeProtesis.create).toHaveLength(tipoNegocio === "odontologia" ? 5 : 0)
     }
   )
 

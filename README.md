@@ -244,6 +244,62 @@ tabla), y la FK nueva de `citas` revisa las citas existentes (todas con
 `sillonId` en null) bloqueando sus escrituras mientras tanto. Con el tamaño de
 hoy es poco; igual, fuera del horario de atención.
 
+### `20261108120000_etapa_7_protesis`
+
+Las prótesis de la clínica dental. Aditiva: las tablas nuevas
+`laboratorios`, `materiales_de_protesis`, `excepciones_de_reparto_de_protesis`,
+`cambios_de_reparto_de_protesis`, `protesis`, `eventos_de_protesis` y
+`pagos_al_laboratorio`, con CHECKs, dos índices únicos sobre `lower("nombre")`
+y los triggers `protesis_congelada`, `protesis_no_se_borra`,
+`eventos_de_protesis_inmutables` y `atencion_servicios_reparto_de_protesis`,
+escritos a mano; columnas nuevas nullable (sin default) en
+`atencion_servicios` (`protesisId`, `odontologoCents`, `clinicaCents`,
+`tecnicoCents`, `pagoAlLaboratorioId`, para el cobro por abonos que viene) y
+en `prestaciones_del_plan` (`protesisId`). No reescribe filas existentes ni
+toca los triggers de la etapa 2. Lo único que escribe es un INSERT en la tabla
+nueva: los cinco materiales iniciales a cada clínica dental que todavía no
+tiene ninguno. La aplica el dueño, nunca un agente (la única base configurada
+es producción).
+
+**Requiere `20261106120000_etapa_6_odontologia` aplicada antes** (usa
+`prestaciones_del_plan`). Si no está, falla entera (va en una transacción) y
+no queda nada a medias. Usa `gen_random_uuid()`, que viene con Postgres 13 o
+más nuevo.
+
+**Se aplica antes de desplegar, sin excepción.** El cliente de Prisma nuevo
+lee `atencion_servicios.protesisId` (y las otras columnas nuevas) en cualquier
+consulta de líneas de atención, y `prestaciones_del_plan.protesisId` en el
+plan: desplegado sin la migración, el tablero, la caja, la liquidación y el
+plan fallan. Con la migración aplicada, el código viejo sigue funcionando (no
+conoce las columnas ni las tablas nuevas).
+
+Orden: aplicar la migración, desplegar, y
+`npx prisma migrate resolve --applied 20261108120000_etapa_7_protesis`.
+
+**Materiales de las clínicas que se registren entre aplicar y desplegar.** El
+código viejo no los crea al registrar. Después de desplegar, correr de nuevo el
+último bloque de la migración (desde `INSERT INTO "materiales_de_protesis"`
+hasta su `;`): sólo agrega a las clínicas dentales sin ningún material (los
+materiales no se borran, se desactivan), así que no duplica nada ni repone lo
+que una clínica cambió. Para saber antes si hace falta (sólo lectura; tiene que
+volver 0):
+
+```sql
+SELECT count(*) FROM "negocios" n WHERE n."type" = 'odontologia'
+  AND NOT EXISTS (SELECT 1 FROM "materiales_de_protesis" m WHERE m."businessId" = n."id");
+```
+
+Bloqueos: los `ALTER TABLE` de `atencion_servicios` y `prestaciones_del_plan`
+toman un bloqueo exclusivo un instante (columnas nullable sin default: no
+reescriben la tabla); sus tres índices nuevos y sus dos FK revisan las filas
+que hay (todas en null) bloqueando sus escrituras mientras tanto. Con el
+tamaño de hoy es poco; igual, fuera del horario de atención.
+
+Ojo: los dos índices únicos de nombre usan `lower()`, que distingue
+mayúsculas de las letras con tilde (Ó/ó) sólo si la base tiene un `LC_CTYPE`
+con UTF-8. En una base con `LC_CTYPE` `C` (como la local de desarrollo),
+"Ó" y "ó" no chocan, igual que en la búsqueda sin mayúsculas de los sillones.
+
 ### Teléfonos antiguos a `+56` (#92)
 
 Los teléfonos de clientes guardados antes de la etapa 1 siguen como se

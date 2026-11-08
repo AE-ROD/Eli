@@ -147,6 +147,12 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     commissionCents: null,
     commissionAt: null,
     liquidacionId: null,
+    // El abono de una prótesis (etapa 7): sin prótesis, sin reparto ni pago al laboratorio.
+    protesisId: null,
+    odontologoCents: null,
+    clinicaCents: null,
+    tecnicoCents: null,
+    pagoAlLaboratorioId: null,
   }),
   visitPayment: () => ({ createdAt: new Date() }),
   workSchedule: () => ({ memberId: null, active: true }),
@@ -237,9 +243,45 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     estado: "por-agendar",
     appointmentId: null,
     realizadaEn: null,
+    protesisId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
+  // Prótesis. Sin default en el esquema (los pone quien escribe): `nombre`,
+  // `unidad`, `tipos`, `precioCents` y las tres partes del material; en la
+  // prótesis, el diseño, el material copiado, el valor, el reparto y
+  // `creadoPorNombre`; en el evento, `estado` y `autorNombre`.
+  laboratorio: () => ({ contacto: null, activo: true, createdAt: new Date(), updatedAt: new Date() }),
+  materialDeProtesis: () => ({ laboratorioPorDefectoId: null, orden: 0, activo: true, createdAt: new Date(), updatedAt: new Date() }),
+  excepcionDeRepartoDeProtesis: () => ({ createdAt: new Date(), updatedAt: new Date() }),
+  cambioDeRepartoDeProtesis: () => ({
+    memberId: null,
+    memberName: null,
+    anteriorPbOdontologo: null,
+    anteriorPbClinica: null,
+    anteriorPbTecnico: null,
+    nuevoPbOdontologo: null,
+    nuevoPbClinica: null,
+    nuevoPbTecnico: null,
+    createdAt: new Date(),
+  }),
+  protesis: () => ({
+    memberId: null,
+    byOwner: false,
+    pilares: [],
+    zonas: [],
+    laboratorioId: null,
+    laboratorioNombre: null,
+    entregaEstimada: null,
+    estado: "impresion",
+    entregadaEn: null,
+    anuladaEn: null,
+    anuladaPorNombre: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
+  eventoDeProtesis: () => ({ autorUserId: null, createdAt: new Date() }),
+  pagoAlLaboratorio: () => ({ pagadoEn: new Date(), anuladoEn: null, anuladoPorNombre: null, createdAt: new Date() }),
 }
 
 /** Campos `Json` del esquema: aceptan un objeto como valor (cualquier otro objeto es una escritura anidada). */
@@ -254,6 +296,8 @@ const esJson = (modelo: NombreDeModelo, campo: string) => (CAMPOS_JSON[modelo] ?
 interface Unico {
   campos: string[]
   si?: (registro: Registro) => boolean
+  /** Los campos que el índice compara con `lower(...)`: sin distinguir mayúsculas. */
+  sinMayusculas?: string[]
 }
 const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
   visit: [{ campos: ["appointmentId"] }, { campos: ["filaTokenHash"] }, { campos: ["businessId", "filaFecha", "filaNumero"] }],
@@ -284,6 +328,11 @@ const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
     // `planes_de_tratamiento_vigente_key`, parcial: un solo plan vigente por paciente.
     { campos: ["customerId"], si: (registro) => registro.vigente === true },
   ],
+  // Prótesis. `laboratorios_businessId_nombre_key` y
+  // `materiales_de_protesis_businessId_nombre_key` son sobre `lower("nombre")`.
+  laboratorio: [{ campos: ["businessId", "nombre"], sinMayusculas: ["nombre"] }],
+  materialDeProtesis: [{ campos: ["businessId", "nombre"], sinMayusculas: ["nombre"] }],
+  excepcionDeRepartoDeProtesis: [{ campos: ["memberId", "materialId"] }],
 }
 
 /**
@@ -343,6 +392,13 @@ const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]
     ["planDeTratamiento", "businessId", "cascade"], // planes_de_tratamiento_businessId_fkey
     ["etapaDelPlan", "businessId", "cascade"], // etapas_del_plan_businessId_fkey
     ["prestacionDelPlan", "businessId", "cascade"], // prestaciones_del_plan_businessId_fkey
+    ["laboratorio", "businessId", "cascade"], // laboratorios_businessId_fkey
+    ["materialDeProtesis", "businessId", "cascade"], // materiales_de_protesis_businessId_fkey
+    ["excepcionDeRepartoDeProtesis", "businessId", "cascade"], // excepciones_de_reparto_de_protesis_businessId_fkey
+    ["cambioDeRepartoDeProtesis", "businessId", "cascade"], // cambios_de_reparto_de_protesis_businessId_fkey
+    ["protesis", "businessId", "cascade"], // protesis_businessId_fkey
+    ["eventoDeProtesis", "businessId", "cascade"], // eventos_de_protesis_businessId_fkey
+    ["pagoAlLaboratorio", "businessId", "cascade"], // pagos_al_laboratorio_businessId_fkey
   ],
   businessMember: [
     ["workSchedule", "memberId", "cascade"], // horarios_laborales_memberId_fkey
@@ -358,6 +414,8 @@ const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]
     ["inscripcionEnEspera", "memberId", "set null"], // lista_de_espera_memberId_fkey
     ["evolucion", "memberId", "no action"], // evoluciones_memberId_businessId_fkey
     ["prestacionDelPlan", "memberId", "no action"], // prestaciones_del_plan_memberId_businessId_fkey
+    ["excepcionDeRepartoDeProtesis", "memberId", "cascade"], // excepciones_de_reparto_de_protesis_memberId_businessId_fkey
+    ["protesis", "memberId", "no action"], // protesis_memberId_businessId_fkey
   ],
   customer: [
     ["appointment", "customerId", "set null"], // citas_patientId_fkey
@@ -367,6 +425,7 @@ const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]
     ["marcaDental", "customerId", "cascade"], // odontograma_marcas_customerId_businessId_fkey
     ["evolucion", "customerId", "cascade"], // evoluciones_customerId_businessId_fkey
     ["planDeTratamiento", "customerId", "cascade"], // planes_de_tratamiento_customerId_businessId_fkey
+    ["protesis", "customerId", "cascade"], // protesis_customerId_businessId_fkey
   ],
   service: [
     ["appointment", "serviceId", "set null"], // citas_serviceId_fkey
@@ -418,6 +477,28 @@ const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]
   ],
   etapaDelPlan: [
     ["prestacionDelPlan", "etapaId", "cascade"], // prestaciones_del_plan_etapaId_businessId_fkey
+  ],
+  // Prótesis (`20261108120000_etapa_7_protesis`). Lo que cuelga del negocio,
+  // del paciente, de la prótesis y (la excepción) del miembro y del material
+  // es CASCADE; lo que apunta a una prótesis, un material, un laboratorio o un
+  // pago desde otra tabla es NO ACTION. Nada de esto se borra desde un
+  // endpoint (se desactiva o se anula), pero las FK están igual.
+  protesis: [
+    ["visitService", "protesisId", "no action"], // atencion_servicios_protesisId_fkey
+    ["prestacionDelPlan", "protesisId", "no action"], // prestaciones_del_plan_protesisId_businessId_fkey
+    ["eventoDeProtesis", "protesisId", "cascade"], // eventos_de_protesis_protesisId_businessId_fkey
+  ],
+  pagoAlLaboratorio: [
+    ["visitService", "pagoAlLaboratorioId", "no action"], // atencion_servicios_pagoAlLaboratorioId_fkey
+  ],
+  laboratorio: [
+    ["materialDeProtesis", "laboratorioPorDefectoId", "no action"], // materiales_de_protesis_laboratorioPorDefectoId_businessId_fkey
+    ["protesis", "laboratorioId", "no action"], // protesis_laboratorioId_businessId_fkey
+    ["pagoAlLaboratorio", "laboratorioId", "no action"], // pagos_al_laboratorio_laboratorioId_businessId_fkey
+  ],
+  materialDeProtesis: [
+    ["excepcionDeRepartoDeProtesis", "materialId", "cascade"], // excepciones_de_reparto_de_protesis_materialId_businessId_fkey
+    ["protesis", "materialId", "no action"], // protesis_materialId_businessId_fkey
   ],
 }
 
@@ -471,6 +552,13 @@ function tablasVacias(): Tablas {
     planDeTratamiento: [],
     etapaDelPlan: [],
     prestacionDelPlan: [],
+    laboratorio: [],
+    materialDeProtesis: [],
+    excepcionDeRepartoDeProtesis: [],
+    cambioDeRepartoDeProtesis: [],
+    protesis: [],
+    eventoDeProtesis: [],
+    pagoAlLaboratorio: [],
   }
 }
 
@@ -581,15 +669,17 @@ export function crearBaseFalsa() {
         throw errorDePrisma("P2003", `FK compuesta rota: ${modelo}.${clave} → ${String(valor)} es de otro negocio`)
       }
     }
-    for (const { campos, si } of UNICOS[modelo] ?? []) {
+    for (const { campos, si, sinMayusculas = [] } of UNICOS[modelo] ?? []) {
       if (campos.some((campo) => registro[campo] === null || registro[campo] === undefined)) continue
       if (si && !si(registro)) continue
+      const comparable = (fila: Registro, campo: string) =>
+        sinMayusculas.includes(campo) && typeof fila[campo] === "string" ? (fila[campo] as string).toLowerCase() : fila[campo]
       const choca = tablas[modelo].some(
         (otro) =>
           otro !== registro &&
           otro !== anterior &&
           (!si || si(otro)) &&
-          campos.every((campo) => iguales(otro[campo], registro[campo]))
+          campos.every((campo) => iguales(comparable(otro, campo), comparable(registro, campo)))
       )
       if (choca) throw errorDePrisma("P2002", `Unique constraint failed: ${modelo}.${campos.join("_")}`)
     }
@@ -713,9 +803,118 @@ export function crearBaseFalsa() {
     }
   }
 
-  /** Los triggers `BEFORE INSERT` de la base de verdad que la falsa reproduce. */
+  // ─── Triggers de las prótesis (`20261108120000_etapa_7_protesis`) ─────────
+
+  /** Las columnas de una prótesis que se pueden mover (`protesis_congelada`). */
+  const MOVIBLES_DE_PROTESIS = [
+    "estado",
+    "laboratorioId",
+    "laboratorioNombre",
+    "entregaEstimada",
+    "entregadaEn",
+    "anuladaEn",
+    "anuladaPorNombre",
+    "memberId",
+    "updatedAt",
+  ]
+  const PASOS_DE_PROTESIS = ["impresion", "en-laboratorio", "prueba", "ajustes", "entregada"]
+
+  /** `distintos`, también para listas (piezas, pilares, zonas): Postgres compara el arreglo entero. */
+  const distintosOListas = (a: unknown, b: unknown) =>
+    Array.isArray(a) || Array.isArray(b) ? JSON.stringify(a ?? null) !== JSON.stringify(b ?? null) : distintos(a, b)
+
+  /**
+   * El trigger `protesis_congelada`: lo copiado al crear la prótesis no
+   * cambia (se compara la fila entera menos lo movible); `memberId` sólo pasa
+   * a null; una entregada o anulada no cambia más; el estado sólo avanza (o
+   * pasa a anulada).
+   */
+  function protesisCongelada(viejo: Registro, nuevo: Registro) {
+    const id = String(viejo.id)
+    const campos = new Set([...Object.keys(viejo), ...Object.keys(nuevo)])
+    if ([...campos].some((campo) => !MOVIBLES_DE_PROTESIS.includes(campo) && distintosOListas(nuevo[campo], viejo[campo]))) {
+      throw errorDeTrigger(`protesis ${id}: el diseño, el material, el valor y el reparto no cambian; se anula y se crea otra`)
+    }
+    if (nuevo.memberId !== null && nuevo.memberId !== undefined && distintos(nuevo.memberId, viejo.memberId)) {
+      throw errorDeTrigger(`protesis ${id}: la tratante no cambia`)
+    }
+    const cierre = MOVIBLES_DE_PROTESIS.filter((campo) => campo !== "memberId" && campo !== "updatedAt")
+    if ((viejo.estado === "entregada" || viejo.estado === "anulada") && cierre.some((campo) => distintos(nuevo[campo], viejo[campo]))) {
+      throw errorDeTrigger(`protesis ${id}: una prótesis entregada o anulada ya no cambia`)
+    }
+    if (distintos(nuevo.estado, viejo.estado) && nuevo.estado !== "anulada") {
+      const antes = PASOS_DE_PROTESIS.indexOf(String(viejo.estado))
+      const despues = PASOS_DE_PROTESIS.indexOf(String(nuevo.estado))
+      if (antes < 0 || despues < 0 || despues <= antes) throw errorDeTrigger(`protesis ${id}: el seguimiento sólo avanza`)
+    }
+  }
+
+  /** El trigger `protesis_no_se_borra`: sólo en la cascada de su paciente o su negocio, como `evolucionNoSeBorra`. */
+  function protesisNoSeBorra(viejo: Registro) {
+    const existe = (modelo: NombreDeModelo, id: unknown) => tablas[modelo].some((fila) => fila.id === id)
+    if (existe("customer", viejo.customerId) && existe("business", viejo.businessId)) {
+      throw errorDeTrigger(`protesis ${String(viejo.id)}: una prótesis no se borra; se anula`)
+    }
+  }
+
+  /** El trigger `eventos_de_protesis_inmutables`, en el UPDATE: un paso del seguimiento no se edita. */
+  function eventoNoSeEdita(viejo: Registro) {
+    throw errorDeTrigger(`eventos_de_protesis ${String(viejo.id)}: un paso del seguimiento no se edita`)
+  }
+
+  /** El mismo trigger, en el DELETE: sólo en la cascada de su prótesis. */
+  function eventoNoSeBorra(viejo: Registro) {
+    if (tablas.protesis.some((fila) => fila.id === viejo.protesisId)) {
+      throw errorDeTrigger(`eventos_de_protesis ${String(viejo.id)}: un paso del seguimiento no se borra`)
+    }
+  }
+
+  /**
+   * El trigger `atencion_servicios_reparto_de_protesis`: la prótesis y el pago
+   * al laboratorio de una línea tienen que ser del negocio de su atención (la
+   * línea no tiene `businessId`); un reparto congelado no cambia; una línea
+   * pagada no pasa a otro pago. Sin atención (cascada del negocio), pasa.
+   * `viejo` es `null` en un INSERT.
+   */
+  function abonoDeProtesis(viejo: Registro | null, nuevo: Registro) {
+    const id = String(nuevo.id)
+    const atencionExiste = (visitId: unknown) => tablas.visit.some((atencion) => atencion.id === visitId)
+    if (viejo) {
+      const congelado = viejo.odontologoCents !== null && viejo.odontologoCents !== undefined
+      const cambia = ["protesisId", "priceCents", "odontologoCents", "clinicaCents", "tecnicoCents"].some((campo) =>
+        distintos(nuevo[campo], viejo[campo])
+      )
+      if (congelado && cambia && atencionExiste(viejo.visitId)) {
+        throw errorDeTrigger(`atencion_servicios ${id}: el reparto del abono ya está congelado`)
+      }
+      const pagoViejo = viejo.pagoAlLaboratorioId ?? null
+      const pagoNuevo = nuevo.pagoAlLaboratorioId ?? null
+      if (pagoViejo !== null && pagoNuevo !== null && pagoNuevo !== pagoViejo && atencionExiste(viejo.visitId)) {
+        throw errorDeTrigger(`atencion_servicios ${id}: la línea ya está en otro pago al laboratorio`)
+      }
+      if (nuevo.visitId === viejo.visitId && !distintos(nuevo.protesisId, viejo.protesisId) && pagoNuevo === pagoViejo) return
+    }
+    const protesisId = nuevo.protesisId ?? null
+    const pagoId = nuevo.pagoAlLaboratorioId ?? null
+    if (protesisId === null && pagoId === null) return
+    const negocio = tablas.visit.find((atencion) => atencion.id === nuevo.visitId)?.businessId ?? null
+    if (negocio === null && viejo) return
+    const delNegocio = (modelo: NombreDeModelo, otroId: unknown) =>
+      negocio !== null && tablas[modelo].some((otro) => otro.id === otroId && otro.businessId === negocio)
+    if (protesisId !== null && !delNegocio("protesis", protesisId)) {
+      throw errorDePrisma("P2003", `atencion_servicios ${id}: la prótesis es de otro negocio`)
+    }
+    if (pagoId !== null && !delNegocio("pagoAlLaboratorio", pagoId)) {
+      throw errorDePrisma("P2003", `atencion_servicios ${id}: el pago al laboratorio es de otro negocio`)
+    }
+  }
+
+  /** Los triggers `BEFORE INSERT` de la base de verdad que la falsa reproduce, en el orden de Postgres (alfabético). */
   const ANTES_DE_INSERTAR: Partial<Record<NombreDeModelo, (nuevo: Registro) => void>> = {
-    visitService: (nuevo) => lineaDelMismoNegocio(null, nuevo),
+    visitService: (nuevo) => {
+      lineaDelMismoNegocio(null, nuevo)
+      abonoDeProtesis(null, nuevo)
+    },
   }
 
   /** Los triggers `BEFORE UPDATE` de la base de verdad que la falsa reproduce, en el orden de Postgres (alfabético). */
@@ -723,14 +922,19 @@ export function crearBaseFalsa() {
     visitService: (viejo, nuevo) => {
       comisionInmutable(viejo, nuevo)
       lineaDelMismoNegocio(viejo, nuevo)
+      abonoDeProtesis(viejo, nuevo)
     },
     evolucion: evolucionInmutable,
+    protesis: protesisCongelada,
+    eventoDeProtesis: eventoNoSeEdita,
   }
 
   /** Los triggers `BEFORE DELETE` de la base de verdad que la falsa reproduce. */
   const ANTES_DE_BORRAR: Partial<Record<NombreDeModelo, (viejo: Registro) => void>> = {
     visitService: lineaLiquidadaNoSeBorra,
     evolucion: evolucionNoSeBorra,
+    protesis: protesisNoSeBorra,
+    eventoDeProtesis: eventoNoSeBorra,
   }
 
   /**
@@ -952,6 +1156,13 @@ export function crearBaseFalsa() {
     planDeTratamiento: delegado("planDeTratamiento"),
     etapaDelPlan: delegado("etapaDelPlan"),
     prestacionDelPlan: delegado("prestacionDelPlan"),
+    laboratorio: delegado("laboratorio"),
+    materialDeProtesis: delegado("materialDeProtesis"),
+    excepcionDeRepartoDeProtesis: delegado("excepcionDeRepartoDeProtesis"),
+    cambioDeRepartoDeProtesis: delegado("cambioDeRepartoDeProtesis"),
+    protesis: delegado("protesis"),
+    eventoDeProtesis: delegado("eventoDeProtesis"),
+    pagoAlLaboratorio: delegado("pagoAlLaboratorio"),
     /**
      * Sólo para candados (`SELECT … FOR UPDATE` o `pg_advisory_xact_lock`): en
      * memoria no hay concurrencia que ordenar, así que no devuelve nada. Queda
