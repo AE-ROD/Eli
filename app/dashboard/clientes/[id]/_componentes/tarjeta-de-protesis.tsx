@@ -10,7 +10,7 @@ import { CAMPO, ETIQUETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import type { EtapaRespuesta, ProtesisRespuesta } from "@/lib/edicion-de-protesis"
 import type { ColorDeModulo } from "@/lib/modulos"
-import { estaCerrada, nombreDeEstado } from "@/lib/protesis"
+import { MENSAJE_ENTREGA_SIN_LABORATORIO, estaCerrada, nombreDeEstado } from "@/lib/protesis"
 import { cn } from "@/lib/utils"
 import { agregarProtesisAlPlan, cambiarProtesis } from "../_datos"
 import { fechaCorta, fechaYHora } from "../_formato"
@@ -58,6 +58,10 @@ interface PropsDeTarjetaDeProtesis {
  * (`siguienteEstado`). "Entregada" no se deshace: se pregunta antes.
  * Mientras no esté entregada ni anulada se cambian el laboratorio, la entrega
  * estimada y el tono. "Anular", antes de entregar.
+ *
+ * Si el técnico lleva parte (`requiereLaboratorioParaEntregar`, sin decir
+ * cuánto) y falta el laboratorio, "Marcar como entregada" lleva primero a
+ * elegirlo: sin laboratorio su parte no tendría a quién pagarse.
  */
 export function TarjetaDeProtesis({
   pacienteId,
@@ -80,6 +84,9 @@ export function TarjetaDeProtesis({
   const [avisoDeLaEdicion, setAvisoDeLaEdicion] = useState("")
   /** Al abrir la edición: a qué campo va el foco. */
   const focoAlEditar = useRef<"laboratorio" | "titulo" | null>(null)
+  /** Si la edición se abrió desde "Marcar como entregada" porque faltaba el laboratorio. */
+  const editaParaEntregar = useRef(false)
+  const botonAvanzar = useRef<HTMLButtonElement>(null)
   /** El resultado de lo último que se hizo: adonde va el foco si el botón que se usó desaparece. */
   const resultado = useRef<HTMLDivElement>(null)
   const botonEditar = useRef<HTMLButtonElement>(null)
@@ -88,6 +95,8 @@ export function TarjetaDeProtesis({
   const cerrada = estaCerrada(protesis.estado)
   const siguiente = protesis.siguienteEstado
   const editable = puedeEditar && !cerrada
+  /** Entregar ahora perdería la parte del técnico: falta elegir el laboratorio. */
+  const faltaLaboratorioParaEntregar = siguiente === "entregada" && protesis.requiereLaboratorioParaEntregar && !protesis.laboratorio
 
   useEffect(() => {
     if (!edicion || !focoAlEditar.current) return
@@ -121,6 +130,12 @@ export function TarjetaDeProtesis({
 
   const avanzar = () => {
     if (!siguiente) return
+    if (siguiente === "entregada" && faltaLaboratorioParaEntregar) {
+      // Con la edición ya abierta no se pisa lo que se está escribiendo: sólo se va al laboratorio.
+      if (!edicion) return abrirEdicion("laboratorio", true)
+      editaParaEntregar.current = true
+      return document.getElementById(`${id}-laboratorio`)?.focus()
+    }
     if (siguiente === "entregada") {
       setAvisoDelModal("")
       return setModal("entregar")
@@ -128,8 +143,9 @@ export function TarjetaDeProtesis({
     void cambiar({ estado: siguiente }, `Seguimiento: quedó en «${nombreDeEstado(siguiente)}».`, false)
   }
 
-  const abrirEdicion = (foco: "laboratorio" | "titulo") => {
+  const abrirEdicion = (foco: "laboratorio" | "titulo", paraEntregar = false) => {
     focoAlEditar.current = foco
+    editaParaEntregar.current = paraEntregar
     setAvisoDeLaEdicion("")
     setListo("")
     setAviso("")
@@ -137,8 +153,10 @@ export function TarjetaDeProtesis({
   }
 
   const cerrarEdicion = () => {
+    const volverAEntregar = editaParaEntregar.current
+    editaParaEntregar.current = false
     setEdicion(null)
-    requestAnimationFrame(() => botonEditar.current?.focus())
+    requestAnimationFrame(() => (volverAEntregar ? botonAvanzar.current : botonEditar.current)?.focus())
   }
 
   const guardarEdicion = async (evento: FormEvent<HTMLFormElement>) => {
@@ -153,8 +171,11 @@ export function TarjetaDeProtesis({
     if (!respuesta.ok) return setAvisoDeLaEdicion(respuesta.error)
     alCambiar(respuesta.datos)
     setEdicion(null)
-    setListo("Se guardaron los cambios de la prótesis.")
-    requestAnimationFrame(() => (botonEditar.current ?? resultado.current)?.focus())
+    // Si se abrió para poder entregar y ya tiene laboratorio, el foco vuelve a "Marcar como entregada".
+    const listaParaEntregar = editaParaEntregar.current && respuesta.datos.laboratorio !== null
+    editaParaEntregar.current = false
+    setListo(listaParaEntregar ? "Se guardó el laboratorio: ya puedes marcarla como entregada." : "Se guardaron los cambios de la prótesis.")
+    requestAnimationFrame(() => ((listaParaEntregar ? botonAvanzar.current : botonEditar.current) ?? resultado.current)?.focus())
   }
 
   const agregarAlPlan = async () => {
@@ -234,6 +255,11 @@ export function TarjetaDeProtesis({
             Laboratorio, entrega y tono
           </h4>
           <p className="mt-0.5 text-[13px] text-texto-2">Se pueden cambiar hasta que la prótesis se entregue.</p>
+          {faltaLaboratorioParaEntregar && (
+            <Aviso tono="info" className="mt-3">
+              Para marcarla como entregada, primero elige el laboratorio: se le debe su parte.
+            </Aviso>
+          )}
           <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-3">
             <div>
               <label htmlFor={`${id}-laboratorio`} className={ETIQUETA}>
@@ -342,7 +368,15 @@ export function TarjetaDeProtesis({
       {puedeEditar && (
         <div className="mt-4 flex flex-wrap items-start gap-2">
           {!cerrada && siguiente && (
-            <Boton type="button" tamano="sm" cargando={trabajando && !modal && !edicion} disabled={trabajando} onClick={avanzar}>
+            <Boton
+              ref={botonAvanzar}
+              type="button"
+              tamano="sm"
+              cargando={trabajando && !modal && !edicion}
+              disabled={trabajando}
+              aria-describedby={faltaLaboratorioParaEntregar ? `${id}-falta-laboratorio` : undefined}
+              onClick={avanzar}
+            >
               {siguiente === "entregada" ? "Marcar como entregada" : `Pasar a ${nombreDeEstado(siguiente)}`}
             </Boton>
           )}
@@ -379,6 +413,11 @@ export function TarjetaDeProtesis({
             </Boton>
           )}
         </div>
+      )}
+      {puedeEditar && faltaLaboratorioParaEntregar && (
+        <p id={`${id}-falta-laboratorio`} className="mt-2 text-[13px] text-texto-2">
+          {MENSAJE_ENTREGA_SIN_LABORATORIO} «Marcar como entregada» te lleva a elegirlo.
+        </p>
       )}
       {puedeEditar && protesis.estado !== "anulada" && !protesis.enElPlan && !hayPlanVigente && (
         <p id={`${id}-sin-plan`} className="mt-2 text-[13px] text-texto-2">

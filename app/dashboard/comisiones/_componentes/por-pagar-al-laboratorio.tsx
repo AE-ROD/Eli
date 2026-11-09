@@ -14,8 +14,9 @@ import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { deCentavos } from "@/lib/atenciones"
 import { formatearMonto } from "@/lib/dinero"
-import { HORA_24 } from "@/lib/fechas"
+import { formatearHora } from "@/lib/fechas"
 import { MEDIOS_DE_PAGO } from "@/lib/medios-de-pago"
+import { fechaDelNegocio, fechaParaLeer } from "@/lib/periodos-de-liquidacion"
 import { cn } from "@/lib/utils"
 import {
   anularPagoAlLaboratorio,
@@ -29,13 +30,11 @@ import {
 
 const pesos = (centavos: number) => formatearMonto(deCentavos(centavos))
 
-/** "8 nov 2026": el día de un instante, en la hora de quien mira. */
-const dia = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString("es-CL", { day: "numeric", month: "short", year: "numeric" }) : "—"
+/** "9 nov 2026": el día de un instante en la zona del negocio, como en la liquidación y la ficha. */
+const dia = (iso: string | null, zona: string) => (iso ? fechaParaLeer(fechaDelNegocio(new Date(iso), zona)) : "—")
 
-/** "8 nov 2026, 14:05". */
-const momento = (iso: string) =>
-  new Date(iso).toLocaleString("es-CL", { dateStyle: "medium", timeStyle: "short", ...HORA_24 })
+/** "9 nov 2026, 14:05", con la hora en 24 h, en la zona del negocio. */
+const momento = (iso: string, zona: string) => `${dia(iso, zona)}, ${formatearHora(iso, zona)}`
 
 /** "Abono prótesis · Removible parcial · Acrílico (45, 46)" → la prótesis, sin el "Abono prótesis". */
 const nombreDeLaProtesis = (detalle: string) => detalle.replace(/^Abono prótesis · /, "")
@@ -71,7 +70,7 @@ interface Pagando {
  * Los envíos que crean o anulan un pago van una sola vez: un candado
  * (`enviado`) frena el doble clic antes de que el botón se vea cargando.
  */
-export function PorPagarAlLaboratorioConfig() {
+export function PorPagarAlLaboratorioConfig({ zona }: { zona: string }) {
   const [datos, setDatos] = useState<Datos | null>(null)
   const [error, setError] = useState("")
   const [anuncio, setAnuncio] = useState("")
@@ -251,6 +250,7 @@ export function PorPagarAlLaboratorioConfig() {
           <TarjetaDeLaboratorio
             key={deUno.laboratorio.id}
             deUno={deUno}
+            zona={zona}
             elegidas={elegidas[deUno.laboratorio.id] ?? []}
             onAlternar={(lineaId) => alternar(deUno.laboratorio.id, lineaId)}
             onPagar={(soloElegidas) => abrirPago(deUno, soloElegidas)}
@@ -279,12 +279,12 @@ export function PorPagarAlLaboratorioConfig() {
                       {anulado && <Insignia>Anulado</Insignia>}
                     </p>
                     <p className="text-texto-2">
-                      {momento(pago.pagadoEn)} · {pago.nombreMedio} · por {pago.pagadoPorNombre}
+                      {momento(pago.pagadoEn, zona)} · {pago.nombreMedio} · por {pago.pagadoPorNombre}
                       {!anulado && ` · ${pago.lineas === 1 ? "1 abono" : `${pago.lineas} abonos`}`}
                     </p>
                     {anulado && pago.anuladoEn && (
                       <p className="text-texto-2">
-                        Anulado el {momento(pago.anuladoEn)}
+                        Anulado el {momento(pago.anuladoEn, zona)}
                         {pago.anuladoPorNombre ? ` por ${pago.anuladoPorNombre}` : ""}
                       </p>
                     )}
@@ -305,7 +305,7 @@ export function PorPagarAlLaboratorioConfig() {
                         variante="fantasma"
                         tamano="sm"
                         className="text-error hover:bg-error/8"
-                        aria-label={`Anular el pago de ${pesos(pago.montoCents)} a ${pago.laboratorio.nombre} del ${momento(pago.pagadoEn)}`}
+                        aria-label={`Anular el pago de ${pesos(pago.montoCents)} a ${pago.laboratorio.nombre} del ${momento(pago.pagadoEn, zona)}`}
                         onClick={() => {
                           setAnuncio("")
                           setAvisoDelModal("")
@@ -332,7 +332,7 @@ export function PorPagarAlLaboratorioConfig() {
           <ModalConfirmar
             key="anular"
             titulo={`¿Anular el pago de ${pesos(anulando.montoCents)} a ${anulando.laboratorio.nombre}?`}
-            descripcion={`Lo registró ${anulando.pagadoPorNombre} el ${momento(anulando.pagadoEn)}, con ${anulando.nombreMedio.toLowerCase()}. ${
+            descripcion={`Lo registró ${anulando.pagadoPorNombre} el ${momento(anulando.pagadoEn, zona)}, con ${anulando.nombreMedio.toLowerCase()}. ${
               anulando.lineas === 1 ? "Su abono vuelve" : `Sus ${anulando.lineas} abonos vuelven`
             } a estar por pagar, y el pago queda en el historial como anulado.`}
             textoConfirmar="Anular pago"
@@ -351,13 +351,15 @@ export function PorPagarAlLaboratorioConfig() {
 
 interface PropsDeTarjetaDeLaboratorio {
   deUno: LaboratorioPorPagar
+  /** La zona del negocio, para las fechas. */
+  zona: string
   elegidas: readonly string[]
   onAlternar: (lineaId: string) => void
   onPagar: (soloElegidas: boolean) => void
 }
 
 /** Un laboratorio: lo que se le debe, línea por línea, con "Marcar pagado" para todo o para lo elegido. */
-function TarjetaDeLaboratorio({ deUno, elegidas, onAlternar, onPagar }: PropsDeTarjetaDeLaboratorio) {
+function TarjetaDeLaboratorio({ deUno, zona, elegidas, onAlternar, onPagar }: PropsDeTarjetaDeLaboratorio) {
   const idTitulo = useId()
   const { laboratorio, lineas, totalCents } = deUno
   const elegidasAca = lineas.filter((linea) => elegidas.includes(linea.id))
@@ -396,7 +398,7 @@ function TarjetaDeLaboratorio({ deUno, elegidas, onAlternar, onPagar }: PropsDeT
                     <span className="font-medium">{linea.paciente}</span> · {nombreDeLaProtesis(linea.detalle)}
                   </span>
                   <span className="block text-[13px] text-texto-2">
-                    Cobrado el {dia(linea.cobradoEn)} · Entregada el {dia(linea.entregadaEn)} · Abono de {pesos(linea.abonoCents)}
+                    Cobrado el {dia(linea.cobradoEn, zona)} · Entregada el {dia(linea.entregadaEn, zona)} · Abono de {pesos(linea.abonoCents)}
                   </span>
                 </span>
                 <span className="shrink-0 text-right tabular-nums">

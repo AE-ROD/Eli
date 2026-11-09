@@ -349,6 +349,12 @@ export interface ProtesisRespuesta {
    * (`null` si no tiene).
    */
   laboratorio: { id: string; nombre: string; contacto: string | null } | null
+  /**
+   * Si para entregarla hace falta elegir antes el laboratorio: la regla le da
+   * una parte al técnico (`requiereLaboratorioParaEntregar`). Dice sólo eso,
+   * no cuánto: la odontóloga no ve la parte del técnico.
+   */
+  requiereLaboratorioParaEntregar: boolean
   /** "AAAA-MM-DD". */
   entregaEstimada: string | null
   /** Tono VITA classical, o `null` si no se eligió. */

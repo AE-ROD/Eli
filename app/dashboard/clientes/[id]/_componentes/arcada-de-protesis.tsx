@@ -35,7 +35,7 @@ interface PropsDeArcadaDeProtesis {
   /** Las zonas de la base que se dibujan: el paladar arriba y la barra lingual abajo. */
   conPaladar: boolean
   conBarraLingual: boolean
-  /** Sin esto, las piezas sólo se recorren (la total: van todas). */
+  /** Sin esto, las piezas sólo se recorren (la total: van todas). Un cordal avisa igual: se toca y dice por qué no se marca. */
   editable: boolean
   /** El id del texto que explica cómo se usa con el teclado. */
   idDeLaAyuda?: string
@@ -51,7 +51,8 @@ interface PropsDeArcadaDeProtesis {
  * el color: el número de la protésica va en navy, el del pilar en naranja
  * suave, y el nombre accesible lo dice todo. Los cordales (18, 28, 38, 48) se
  * ven pero no se marcan: van rayados y deshabilitados ("cordal, no entra en
- * una prótesis"); siguen en el recorrido con las flechas para que se lean.
+ * una prótesis"); siguen en el recorrido con las flechas para que se lean, y
+ * al tocarlos `alTocar` recibe el cordal para que se avise.
  *
  * Con una sola arcada se muestra sólo su franja del dibujo. Como el
  * odontograma: cada pieza es un botón, Tab entra por una sola (la elegida),
@@ -105,7 +106,11 @@ export function ArcadaDeProtesis({
     evento.preventDefault()
     const destino = vecinaEnLaArcada(arcada, pieza, evento.key as TeclaDeLaArcada)
     setElegida(destino)
-    botones.current.get(destino)?.focus()
+    const boton = botones.current.get(destino)
+    boton?.focus()
+    // Angosta (a 390 px se desplaza de lado): la pieza enfocada siempre a la vista. "auto" sigue al
+    // CSS (sin animación con movimiento reducido).
+    boton?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "auto" })
   }
 
   return (
@@ -177,7 +182,8 @@ export function ArcadaDeProtesis({
             }}
             alTocar={() => {
               setElegida(pieza)
-              if (editable && !esCordal(pieza)) alTocar(pieza)
+              // El cordal no se marca, pero quien lo toca se entera de por qué (`alTocar` lo anuncia).
+              if (editable || esCordal(pieza)) alTocar(pieza)
             }}
             alTeclear={(evento) => alTeclear(evento, pieza)}
             alEnfocar={() => setElegida(pieza)}

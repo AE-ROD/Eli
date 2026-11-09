@@ -4,6 +4,8 @@ import { redirect } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 import { authOptions } from "@/lib/auth"
 import { actorDeSesion, puedeEditarComisiones, puedePagarAlLaboratorio } from "@/lib/permisos"
+import { prisma } from "@/lib/prisma"
+import { zonaDelNegocio } from "@/lib/zona-horaria"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { PorPagarAlLaboratorioConfig } from "../_componentes/por-pagar-al-laboratorio"
 
@@ -16,6 +18,9 @@ export default async function PaginaPorPagarAlLaboratorio() {
   const actor = actorDeSesion(await getServerSession(authOptions))
   if (!actor) redirect("/iniciar-sesion")
   if (!puedePagarAlLaboratorio(actor)) redirect(puedeEditarComisiones(actor) ? "/dashboard/comisiones" : "/dashboard")
+  // Las fechas, en la zona del negocio (como la ficha y la liquidación), no en la del dispositivo.
+  const negocio = await prisma.business.findUnique({ where: { id: actor.businessId }, select: { timezone: true } })
+  const zona = zonaDelNegocio(negocio?.timezone)
 
   return (
     <div className="min-h-dvh">
@@ -33,7 +38,7 @@ export default async function PaginaPorPagarAlLaboratorio() {
           <ArrowLeft className="size-4" aria-hidden="true" strokeWidth={1.75} />
           Comisiones
         </Link>
-        <PorPagarAlLaboratorioConfig />
+        <PorPagarAlLaboratorioConfig zona={zona} />
       </div>
     </div>
   )

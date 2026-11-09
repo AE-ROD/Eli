@@ -387,9 +387,72 @@ Bloqueos: el `ALTER TABLE` de `protesis` y los de `eventos_de_protesis`
 tablas hasta el COMMIT; los CHECK nuevos revisan todas sus filas. Son tablas
 chicas: dura poco.
 
+### `20261109130000_etapa_7d_protesis_entrega_con_laboratorio`
+
+Arreglos de la revisión de las prótesis (2026-11-09). Aditiva, sin reescribir
+filas: el CHECK nuevo `protesis_entrega_con_laboratorio_check` (una prótesis
+entregada tiene laboratorio, salvo que su regla congelada no le dé nada al
+técnico: `pbTecnico` = 0; sin laboratorio, la parte del técnico no aparecía en
+"Por pagar al laboratorio" y ya no se podía asignar uno) y reemplaza
+(`CREATE OR REPLACE`) la función del trigger
+`atencion_servicios_reparto_de_protesis` con todo lo de las etapas 7 y 7b más
+una segunda barrera para los abonos: al agregarlo, la prótesis es del mismo
+paciente que la atención y la línea va a nombre de la tratante (`memberId` y
+`byOwner` de la prótesis; pasar `memberId` a null sigue permitido, es
+desvincular al miembro); al entrar a una liquidación, la prótesis está
+entregada y la línea es de la tratante. La aplica el dueño, nunca un agente (la
+única base configurada es producción).
+
+**Requiere `20261108120000_etapa_7_protesis`,
+`20261108130000_etapa_7b_abonos_de_protesis` y
+`20261109120000_etapa_7c_protesis_por_tipo` aplicadas antes.** Va en una
+transacción: si algo falla, no queda nada a medias.
+
+**Si hay prótesis entregadas sin laboratorio y con parte del técnico, la
+migración no se aplica** y dice cuáles. Para saberlo antes (sólo lectura; tiene
+que volver 0):
+
+```sql
+SELECT "id", "businessId" FROM "protesis"
+WHERE "estado" = 'entregada' AND "laboratorioId" IS NULL AND "pbTecnico" <> 0;
+```
+
+Si vuelve filas: una entregada no cambia desde la ficha, así que se arregla a
+mano. Averiguar con la clínica qué laboratorio hizo cada una (sus ids en
+`laboratorios`, del mismo `businessId`) y correr, por cada una:
+
+```sql
+BEGIN;
+ALTER TABLE "protesis" DISABLE TRIGGER "protesis_congelada";
+UPDATE "protesis" p
+SET "laboratorioId" = l."id", "laboratorioNombre" = l."nombre", "updatedAt" = CURRENT_TIMESTAMP
+FROM "laboratorios" l
+WHERE p."id" = '<id de la prótesis>' AND p."estado" = 'entregada' AND p."laboratorioId" IS NULL
+  AND l."id" = '<id del laboratorio>' AND l."businessId" = p."businessId";
+-- Tiene que decir UPDATE 1; si no, ROLLBACK.
+ALTER TABLE "protesis" ENABLE TRIGGER "protesis_congelada";
+COMMIT;
+```
+
+Con el laboratorio puesto, su parte aparece en "Por pagar al laboratorio".
+Después, aplicar la migración. Se descartó dejar el CHECK `NOT VALID`: Postgres
+revisa la fila entera en cada UPDATE, y una entregada todavía se actualiza al
+desvincular a su tratante (para borrar a ese miembro), que fallaría.
+
+**Compatible en los dos sentidos.** El código nuevo no la necesita para andar
+(la exigencia del laboratorio la hace también la aplicación); el código viejo,
+con la migración aplicada, sigue andando salvo al entregar sin laboratorio una
+prótesis cuyo técnico lleva parte: falla (500) en vez de perder esa parte. Se
+aplica en la misma ventana que el despliegue, antes o después. Luego,
+`npx prisma migrate resolve --applied 20261109130000_etapa_7d_protesis_entrega_con_laboratorio`.
+
+Bloqueos: el CHECK nuevo revisa todas las filas de `protesis` (tabla chica)
+bloqueando sus escrituras mientras tanto; reemplazar la función no bloquea las
+tablas.
+
 ### Las migraciones de la clínica dental, en orden
 
-El código de las prótesis necesita las cuatro, y cada una requiere la
+El código de las prótesis necesita las cinco, y cada una requiere la
 anterior. Las que falten se aplican en este orden:
 
 1. `20261106120000_etapa_6_odontologia` (requiere `20261105120000_cierre_de_la_v1`;
@@ -399,14 +462,16 @@ anterior. Las que falten se aplican en este orden:
 4. `20261109120000_etapa_7c_protesis_por_tipo` (su consulta previa, arriba),
    **en la misma ventana que el despliegue**: aplicarla y desplegar enseguida.
    Si las tres anteriores ya están aplicadas y el código desplegado es el de la
-   etapa 7b, ésta es la única que falta.
-5. Desplegar.
-6. `npx prisma migrate resolve --applied` de cada una, en el mismo orden.
-7. Si alguna clínica se registró entre aplicar la etapa 7 y desplegar, correr
+   etapa 7b, ésta y la 7d son las únicas que faltan.
+5. `20261109130000_etapa_7d_protesis_entrega_con_laboratorio` (su consulta
+   previa, arriba), en la misma ventana.
+6. Desplegar.
+7. `npx prisma migrate resolve --applied` de cada una, en el mismo orden.
+8. Si alguna clínica se registró entre aplicar la etapa 7 y desplegar, correr
    la consulta de materiales de la etapa 7 (arriba) y, si no vuelve 0, su
    último bloque.
 
-No desplegar con alguna de las cuatro sin aplicar: el código nuevo falla en la
+No desplegar con alguna de las cuatro primeras sin aplicar: el código nuevo falla en la
 agenda, el tablero, el plan, las liquidaciones o la pestaña Prótesis según
 cuál falte.
 

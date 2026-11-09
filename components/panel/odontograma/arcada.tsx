@@ -138,7 +138,13 @@ export function Arcada({
       evento.preventDefault()
       const destino = piezaVecina(denticion, pieza, evento.key as TeclaDeLaArcada)
       alElegir(destino)
-      botones.current.get(destino)?.focus()
+      const boton = botones.current.get(destino)
+      boton?.focus()
+      // Angosta (a 390 px se desplaza de lado): la pieza enfocada siempre a la vista. El botón no
+      // tiene área: se lleva a la vista su cuadrado. "auto" sigue al CSS (sin animación con
+      // movimiento reducido).
+      const cuadrado = boton?.firstElementChild ?? boton
+      cuadrado?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "auto" })
       return
     }
     if (!editable || evento.altKey || evento.ctrlKey || evento.metaKey) return

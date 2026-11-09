@@ -882,11 +882,17 @@ export function crearBaseFalsa() {
    * línea no tiene `businessId`); un reparto congelado no cambia; una línea
    * pagada no pasa a otro pago. Sin atención (cascada del negocio), pasa.
    * Desde la etapa 7b, además, sólo se le paga al laboratorio de la prótesis
-   * y si la prótesis está entregada. `viejo` es `null` en un INSERT.
+   * y si la prótesis está entregada. Desde la 7d
+   * (`20261109130000_etapa_7d_protesis_entrega_con_laboratorio`), un abono es
+   * del mismo paciente que su atención, va a nombre de la tratante de la
+   * prótesis (`memberId` a null sigue permitido: desvincular) y sólo entra a
+   * una liquidación con la prótesis entregada y a nombre de la tratante.
+   * `viejo` es `null` en un INSERT.
    */
   function abonoDeProtesis(viejo: Registro | null, nuevo: Registro) {
     const id = String(nuevo.id)
     const atencionExiste = (visitId: unknown) => tablas.visit.some((atencion) => atencion.id === visitId)
+    const valor = (registro: Registro | null, campo: string) => (registro ? (registro[campo] ?? null) : null)
     if (viejo) {
       const congelado = viejo.odontologoCents !== null && viejo.odontologoCents !== undefined
       const cambia = ["protesisId", "priceCents", "odontologoCents", "clinicaCents", "tecnicoCents"].some((campo) =>
@@ -900,28 +906,54 @@ export function crearBaseFalsa() {
       if (pagoViejo !== null && pagoNuevo !== null && pagoNuevo !== pagoViejo && atencionExiste(viejo.visitId)) {
         throw errorDeTrigger(`atencion_servicios ${id}: la línea ya está en otro pago al laboratorio`)
       }
-      if (nuevo.visitId === viejo.visitId && !distintos(nuevo.protesisId, viejo.protesisId) && pagoNuevo === pagoViejo) return
     }
+    const cambiaLinea = !viejo || nuevo.visitId !== viejo.visitId || distintos(nuevo.protesisId, viejo.protesisId)
+    const cambiaPago = distintos(valor(nuevo, "pagoAlLaboratorioId"), valor(viejo, "pagoAlLaboratorioId"))
+    const memberId = nuevo.memberId ?? null
+    const byOwner = nuevo.byOwner ?? false
+    const cambiaTratante = !viejo || distintos(byOwner, viejo.byOwner ?? false) || (memberId !== null && distintos(memberId, viejo.memberId))
+    const liquidacionId = nuevo.liquidacionId ?? null
+    const entraALiquidacion = liquidacionId !== null && distintos(liquidacionId, valor(viejo, "liquidacionId"))
+    if (viejo && !cambiaLinea && !cambiaPago && !cambiaTratante && !entraALiquidacion) return
+
     const protesisId = nuevo.protesisId ?? null
     const pagoId = nuevo.pagoAlLaboratorioId ?? null
     if (protesisId === null && pagoId === null) return
-    const negocio = tablas.visit.find((atencion) => atencion.id === nuevo.visitId)?.businessId ?? null
+    const atencion = tablas.visit.find((otra) => otra.id === nuevo.visitId)
+    const negocio = atencion?.businessId ?? null
     if (negocio === null && viejo) return
     const delNegocio = (modelo: NombreDeModelo, otroId: unknown) =>
       negocio !== null && tablas[modelo].some((otro) => otro.id === otroId && otro.businessId === negocio)
-    if (protesisId !== null && !delNegocio("protesis", protesisId)) {
-      throw errorDePrisma("P2003", `atencion_servicios ${id}: la prótesis es de otro negocio`)
-    }
-    if (pagoId !== null && !delNegocio("pagoAlLaboratorio", pagoId)) {
-      throw errorDePrisma("P2003", `atencion_servicios ${id}: el pago al laboratorio es de otro negocio`)
-    }
-    if (pagoId !== null) {
-      const pago = tablas.pagoAlLaboratorio.find((otro) => otro.id === pagoId)
-      const protesis = tablas.protesis.find((otra) => otra.id === protesisId)
-      const entregada = protesis?.entregadaEn !== null && protesis?.entregadaEn !== undefined
-      if (!pago || !protesis || protesis.laboratorioId !== pago.laboratorioId || !entregada) {
-        throw errorDeTrigger(`atencion_servicios ${id}: el pago es a otro laboratorio o la prótesis no está entregada`)
+    const protesis = protesisId === null ? undefined : tablas.protesis.find((otra) => otra.id === protesisId)
+
+    if (cambiaLinea || cambiaPago) {
+      if (protesisId !== null && !delNegocio("protesis", protesisId)) {
+        throw errorDePrisma("P2003", `atencion_servicios ${id}: la prótesis es de otro negocio`)
       }
+      if (pagoId !== null && !delNegocio("pagoAlLaboratorio", pagoId)) {
+        throw errorDePrisma("P2003", `atencion_servicios ${id}: el pago al laboratorio es de otro negocio`)
+      }
+      if (pagoId !== null) {
+        const pago = tablas.pagoAlLaboratorio.find((otro) => otro.id === pagoId)
+        const entregada = protesis?.entregadaEn !== null && protesis?.entregadaEn !== undefined
+        if (!pago || !protesis || protesis.laboratorioId !== pago.laboratorioId || !entregada) {
+          throw errorDeTrigger(`atencion_servicios ${id}: el pago es a otro laboratorio o la prótesis no está entregada`)
+        }
+      }
+    }
+
+    // Etapa 7d. `protesis` existe: la FK y la regla de negocio de arriba ya lo exigen.
+    if (!protesis) return
+    if (cambiaLinea && distintos(protesis.customerId, atencion?.customerId)) {
+      throw errorDeTrigger(`atencion_servicios ${id}: la prótesis es de otro paciente`)
+    }
+    const deLaDuena = protesis.byOwner === true
+    if ((cambiaLinea || cambiaTratante) && (distintos(byOwner, deLaDuena) || distintos(memberId, deLaDuena ? null : protesis.memberId))) {
+      throw errorDeTrigger(`atencion_servicios ${id}: el abono va a nombre de la tratante de la prótesis`)
+    }
+    const entregada = protesis.entregadaEn !== null && protesis.entregadaEn !== undefined
+    if (entraALiquidacion && (!entregada || memberId === null || distintos(memberId, protesis.memberId) || distintos(byOwner, deLaDuena))) {
+      throw errorDeTrigger(`atencion_servicios ${id}: el abono sólo se liquida a la tratante y con la prótesis entregada`)
     }
   }
 

@@ -16,6 +16,11 @@ import { leerOpcionesDeProtesis, leerPlanDelPaciente, leerProtesis } from "../_d
 import { NuevaProtesis } from "./nueva-protesis"
 import { TarjetaDeProtesis } from "./tarjeta-de-protesis"
 
+/** Lo que sí se lleva el foco con un clic mientras se retiene en el mensaje de lo creado. */
+const INTERACTIVOS = "a[href], button, input, select, textarea, summary, [contenteditable], [tabindex]:not([tabindex='-1'])"
+/** Cuánto se retiene el foco en el mensaje después de crear: lo que tarda un doble clic lento. */
+const RETENCION_DEL_FOCO_MS = 700
+
 interface PropsDePestanaProtesis {
   pacienteId: string
   /** Se piden la primera vez que se abre la pestaña. */
@@ -99,9 +104,25 @@ export function PestanaProtesis({
 
   useEffect(() => {
     if (creando || !focoAlCerrar.current) return
-    if (focoAlCerrar.current === "boton") botonNueva.current?.focus()
-    else resultado.current?.focus()
+    const alMensaje = focoAlCerrar.current === "resultado"
     focoAlCerrar.current = null
+    if (!alMensaje) return botonNueva.current?.focus()
+    resultado.current?.focus()
+    // El segundo clic de un doble clic en "Crear prótesis" puede llegar con el
+    // formulario ya cerrado y caer sobre algo que no recibe el foco: el
+    // navegador lo mandaría a <body> y se perdería el mensaje. Durante un
+    // momento, un clic así no se lleva el foco (el clic igual ocurre); uno
+    // sobre algo interactivo, sí.
+    const retener = (evento: MouseEvent) => {
+      if (evento.target instanceof Element && evento.target.closest(INTERACTIVOS)) return
+      evento.preventDefault()
+    }
+    document.addEventListener("mousedown", retener, true)
+    const tope = window.setTimeout(() => document.removeEventListener("mousedown", retener, true), RETENCION_DEL_FOCO_MS)
+    return () => {
+      window.clearTimeout(tope)
+      document.removeEventListener("mousedown", retener, true)
+    }
   }, [creando])
 
   const reintentar = async () => {

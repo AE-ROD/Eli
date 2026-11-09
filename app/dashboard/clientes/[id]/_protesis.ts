@@ -301,6 +301,9 @@ export function faltasDelOdontograma(marcas: readonly MarcaDelOdontograma[]): Ma
 /** Lo que se lee de un cordal en la arcada de la prótesis: se ve, pero no se marca. */
 export const TEXTO_DEL_CORDAL = "cordal, no entra en una prótesis"
 
+/** Lo que se anuncia (y se ve) al tocar un cordal: "La pieza 18 es un cordal: no entra en una prótesis." */
+export const avisoDelCordal = (pieza: number): string => `La pieza ${pieza} es un cordal: no entra en una prótesis.`
+
 /** "Pieza protésica", "Pilar o gancho" o "sin marca", más lo que dice el odontograma. */
 export function estadoDePiezaParaLeer(marca: MarcaDeProtesis | undefined, falta: FaltaEnElOdontograma | undefined): string {
   const texto = marca === "protesica" ? "pieza protésica" : marca === "pilar" ? "pilar o gancho" : "sin marcar"

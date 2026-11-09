@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { comisionEnCentavos } from "@/lib/comisiones"
 import {
+  requiereLaboratorioParaEntregar,
   MATERIALES_INICIALES,
   ESTADOS_DE_PROTESIS,
   GRUPOS_DE_TONOS,
@@ -468,5 +469,13 @@ describe("materiales iniciales", () => {
     const copia = materialesDeProtesisDeEjemplo("odontologia")
     copia[0].tipos.push("fija")
     expect(MATERIALES_INICIALES[0].tipos).toEqual(["removible", "total"])
+  })
+})
+
+describe("requiereLaboratorioParaEntregar (protesis_entrega_con_laboratorio_check)", () => {
+  it("con parte del técnico hace falta laboratorio; sin parte, no", () => {
+    expect(requiereLaboratorioParaEntregar({ pbTecnico: 3000 })).toBe(true)
+    expect(requiereLaboratorioParaEntregar({ pbTecnico: 1 })).toBe(true)
+    expect(requiereLaboratorioParaEntregar({ pbTecnico: 0 })).toBe(false)
   })
 })

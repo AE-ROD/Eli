@@ -1707,6 +1707,83 @@ describe("base falsa: las prótesis (etapa 7)", () => {
     })
   })
 
+  describe("etapa 7d: el abono, del paciente y de la tratante de su prótesis", () => {
+    // v1 pasa a ser de c1 (la paciente de pt1); v3, de otra paciente de n1.
+    const conPacientes = () => {
+      const d = datos()
+      return {
+        ...d,
+        businessMember: [...d.businessMember, { id: "m3", businessId: "n1", userId: "u2" }],
+        customer: [...d.customer, { id: "c3", businessId: "n1", name: "Otra" }],
+        visit: [
+          { id: "v1", businessId: "n1", customerId: "c1", customerName: "María", status: "finalizada" },
+          { id: "v2", businessId: "n2", customerName: "María" },
+          { id: "v3", businessId: "n1", customerId: "c3", customerName: "Otra", status: "en-espera" },
+        ],
+        liquidacion: [liquidacionDe("liq1", "m1")],
+      }
+    }
+    const liquidacionDe = (id: string, memberId: string) => ({
+      id,
+      businessId: "n1",
+      memberId,
+      desde: new Date("2026-11-01T00:00:00.000Z"),
+      hasta: new Date("2026-11-30T00:00:00.000Z"),
+      comisionServiciosCents: 0,
+      comisionProductosCents: 0,
+      propinasCents: 0,
+      ajustesCents: 0,
+      brutoCents: 0,
+      netoCents: 0,
+      cerradaPorNombre: "Ana",
+    })
+    const abono = (id: string, cambios: Record<string, unknown>) =>
+      prisma.visitService.create({
+        data: { id, visitId: "v1", serviceName: "Abono", memberId: "m1", professionalName: "Ana", priceCents: 1, protesisId: "pt1", ...cambios },
+      })
+
+    beforeEach(() => base.reiniciar(conPacientes()))
+
+    it("al agregarlo: de la misma paciente que la atención y a nombre de la tratante", async () => {
+      await expect(abono("ok", {})).resolves.toBeTruthy()
+      await expect(abono("otra-paciente", { visitId: "v3" })).rejects.toThrow(/23514.*otro paciente/)
+      await expect(abono("otro-miembro", { memberId: "m3" })).rejects.toThrow(/23514.*nombre de la tratante/)
+      await expect(abono("la-duena", { memberId: null, byOwner: true })).rejects.toThrow(/nombre de la tratante/)
+      await expect(abono("sin-nadie", { memberId: null })).rejects.toThrow(/nombre de la tratante/)
+    })
+
+    it("si la tratante es la dueña, el abono va a nombre de la dueña y sin miembro", async () => {
+      base.reiniciar({ ...conPacientes(), protesis: [{ ...datos().protesis[0], memberId: null, byOwner: true }], visitService: [] })
+      await expect(abono("duena", { memberId: null, byOwner: true })).resolves.toBeTruthy()
+      await expect(abono("con-miembro", {})).rejects.toThrow(/nombre de la tratante/)
+    })
+
+    it("no cambia de nombre después; desvincular al miembro (a null) sí se puede", async () => {
+      await expect(prisma.visitService.update({ where: { id: "ab1" }, data: { memberId: "m3" } })).rejects.toThrow(/nombre de la tratante/)
+      await expect(prisma.visitService.update({ where: { id: "ab1" }, data: { byOwner: true, memberId: null } })).rejects.toThrow(/nombre de la tratante/)
+      await expect(prisma.visitService.update({ where: { id: "ab1" }, data: { memberId: null } })).resolves.toMatchObject({ memberId: null })
+    })
+
+    it("entra a una liquidación sólo con la prótesis entregada y a nombre de la tratante", async () => {
+      await expect(prisma.visitService.update({ where: { id: "ab1" }, data: { liquidacionId: "liq1" } })).rejects.toThrow(/sólo se liquida/)
+      await prisma.protesis.update({ where: { id: "pt1" }, data: { estado: "entregada", entregadaEn: new Date() } })
+      await expect(prisma.visitService.update({ where: { id: "ab1" }, data: { liquidacionId: "liq1" } })).resolves.toMatchObject({ liquidacionId: "liq1" })
+    })
+
+    it("un abono desvinculado (sin miembro) no se liquida", async () => {
+      await prisma.protesis.update({ where: { id: "pt1" }, data: { estado: "entregada", entregadaEn: new Date() } })
+      await prisma.visitService.update({ where: { id: "ab1" }, data: { memberId: null } })
+      await expect(prisma.visitService.update({ where: { id: "ab1" }, data: { liquidacionId: "liq1" } })).rejects.toThrow(/sólo se liquida/)
+    })
+
+    it("una línea sin prótesis no se mira", async () => {
+      await expect(
+        prisma.visitService.create({ data: { id: "normal", visitId: "v3", serviceName: "Limpieza", memberId: "m3", professionalName: "X", priceCents: 1 } })
+      ).resolves.toBeTruthy()
+      await expect(prisma.visitService.update({ where: { id: "normal" }, data: { liquidacionId: "liq1", memberId: "m1" } })).resolves.toBeTruthy()
+    })
+  })
+
   describe("al borrar", () => {
     it("un material, un laboratorio o una tratante referidos por una prótesis no se borran (NO ACTION)", async () => {
       const antes = base.volcado()

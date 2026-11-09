@@ -55,6 +55,7 @@ import {
   type Actor,
 } from "@/lib/permisos"
 import {
+  MENSAJE_ENTREGA_SIN_LABORATORIO,
   MENSAJE_PASO_DE_OTRO_TIPO,
   MENSAJE_PROTESIS_CERRADA,
   errorDeCambioDeEstado,
@@ -76,6 +77,7 @@ import {
   repartirMonto,
   repartoEfectivo,
   repartoQueAplica,
+  requiereLaboratorioParaEntregar,
   tonoDeLaGuia,
   unidadDelTipo,
   valorDeLaProtesis,
@@ -603,6 +605,7 @@ function formatearProtesis(actor: Actor, protesis: ProtesisLeida, agregados: Agr
       protesis.laboratorioId && protesis.laboratorioNombre
         ? { id: protesis.laboratorioId, nombre: protesis.laboratorioNombre, contacto: protesis.laboratorio?.contacto ?? null }
         : null,
+    requiereLaboratorioParaEntregar: requiereLaboratorioParaEntregar(protesis),
     entregaEstimada: protesis.entregaEstimada ? fechaDeColumna(protesis.entregaEstimada) : null,
     // Un valor fuera de la guía no debería existir (hay CHECK): se muestra como sin tono.
     tono: tono ? { id: tono.id, etiqueta: tono.etiqueta, grupo: tono.grupo, color: tono.color } : null,
@@ -831,7 +834,7 @@ export async function editarProtesis(
     await trabarProtesis(tx, actor.businessId, protesisId)
     const actual = await tx.protesis.findFirst({
       where: whereDeProtesis(actor, { id: protesisId, customerId: pacienteId }),
-      select: { id: true, tipo: true, estado: true },
+      select: { id: true, tipo: true, estado: true, laboratorioId: true, pbTecnico: true },
     })
     if (!actual) throw new ErrorClinico(404, MENSAJE_PROTESIS_NO_ENCONTRADA)
     const cambiaEstado = pedido.estado !== undefined && pedido.estado !== actual.estado
@@ -859,6 +862,13 @@ export async function editarProtesis(
     if (cambiaEstado && pedido.estado) {
       const error = errorDeCambioDeEstado(tipo, actual.estado, pedido.estado)
       if (error) throw new ErrorClinico(409, error)
+      // Sin laboratorio, la parte del técnico se perdería: se elige antes
+      // (o en el mismo pedido). La base lo exige también
+      // (`protesis_entrega_con_laboratorio_check`).
+      const laboratorioAlEntregar = data.laboratorioId !== undefined ? data.laboratorioId : actual.laboratorioId
+      if (pedido.estado === "entregada" && !laboratorioAlEntregar && requiereLaboratorioParaEntregar(actual)) {
+        throw new ErrorClinico(400, MENSAJE_ENTREGA_SIN_LABORATORIO)
+      }
       if (pedido.estado === "anulada" && (await tieneAbonos(tx, actor, actual.id))) throw new ErrorClinico(409, MENSAJE_CON_ABONOS)
       const ahora = await horaDeLaBase(tx)
       data.estado = pedido.estado

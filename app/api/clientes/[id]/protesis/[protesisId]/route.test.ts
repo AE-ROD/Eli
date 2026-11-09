@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { pedido } from "@/pruebas/datos"
 import { MENSAJE_CON_ABONOS, type ProtesisRespuesta } from "@/lib/edicion-de-protesis"
-import { MENSAJE_PASO_DE_OTRO_TIPO, MENSAJE_PROTESIS_CERRADA, MENSAJE_SOLO_AVANZA } from "@/lib/protesis"
+import { MENSAJE_ENTREGA_SIN_LABORATORIO, MENSAJE_PASO_DE_OTRO_TIPO, MENSAJE_PROTESIS_CERRADA, MENSAJE_SOLO_AVANZA } from "@/lib/protesis"
 import { conParams, sesionesDentales as sesiones } from "../../../_pruebas/clinica-dental"
-import { conAbono, escenarioDeProtesis } from "../../../_pruebas/protesis"
+import { conAbono, escenarioDeProtesis, protesis as unaProtesis } from "../../../_pruebas/protesis"
 
 const mockGetServerSession = vi.fn()
 
@@ -91,6 +91,56 @@ describe("PATCH /api/clientes/[id]/protesis/[protesisId]", () => {
       expect(otra.status).toBe(409)
       expect(await otra.json()).toEqual({ error: MENSAJE_PROTESIS_CERRADA })
     }
+  })
+
+  describe("entregar sin laboratorio (la parte del técnico se le debe a alguien)", () => {
+    it("si el técnico lleva parte, 400 explicando y no escribe nada; la respuesta lo avisa sin decir cuánto", async () => {
+      const leida = await cambiar(sesiones.nunez, "pt-corona", { tono: "A2" })
+      const cuerpo = await leida.json()
+      expect(cuerpo).toMatchObject({ laboratorio: null, requiereLaboratorioParaEntregar: true, reparto: { visible: "suyo" } })
+      // La tratante no ve la parte del técnico: sólo que hace falta un laboratorio.
+      expect(JSON.stringify(cuerpo)).not.toMatch(/tecnico|pbTecnico|4500/)
+
+      const antes = base.volcado()
+      const res = await cambiar(sesiones.nunez, "pt-corona", { estado: "entregada" })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({ error: MENSAJE_ENTREGA_SIN_LABORATORIO })
+      expect(base.volcado()).toEqual(antes)
+    })
+
+    it("con el laboratorio elegido antes, o en el mismo pedido, se entrega", async () => {
+      const res = await cambiar(sesiones.nunez, "pt-corona", { estado: "entregada", laboratorioId: "lab-sur" })
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({ estado: "entregada", laboratorio: { id: "lab-sur" } })
+      expect(guardada("pt-corona")).toMatchObject({ estado: "entregada", laboratorioId: "lab-sur", entregadaEn: AHORA })
+    })
+
+    it("sacarle el laboratorio en el mismo pedido que la entrega es 400", async () => {
+      const res = await cambiar(sesiones.dueña, "pt-removible", { estado: "entregada", laboratorioId: null })
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({ error: MENSAJE_ENTREGA_SIN_LABORATORIO })
+      expect(guardada("pt-removible")).toMatchObject({ estado: "rodete", laboratorioId: "lab-sur" })
+    })
+
+    it("si la regla no le da nada al técnico, se entrega sin laboratorio", async () => {
+      const escenario = escenarioDeProtesis()
+      base.reiniciar({
+        ...escenario,
+        protesis: [
+          ...escenario.protesis.filter((p) => p.id !== "pt-removible"),
+          unaProtesis("pt-removible", { laboratorioId: null, laboratorioNombre: null, pbOdontologo: 4000, pbClinica: 6000, pbTecnico: 0 }),
+        ],
+      })
+      const leida = await cambiar(sesiones.dueña, "pt-removible", { tono: "A2" })
+      expect(await leida.json()).toMatchObject({ requiereLaboratorioParaEntregar: false })
+
+      const res = await cambiar(sesiones.dueña, "pt-removible", { estado: "entregada" })
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({ estado: "entregada", laboratorio: null })
+    })
   })
 
   it("sólo hacia adelante: volver a un paso anterior es 409 y no escribe nada", async () => {

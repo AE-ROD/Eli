@@ -3,6 +3,7 @@ import type { OpcionesDeProtesisRespuesta } from "@/lib/edicion-de-protesis"
 import { CORDALES, IDS_DE_TONOS, piezasProtesicasDeLaArcada, repartirMonto } from "@/lib/protesis"
 import {
   TEXTO_DEL_CORDAL,
+  avisoDelCordal,
   alternarZona,
   borradorInicial,
   cambiarArcada,
@@ -105,6 +106,7 @@ describe("tocarPieza", () => {
       expect(tocarPieza(borrador, cordal, "pilar")).toBe(borrador)
     }
     expect(TEXTO_DEL_CORDAL).toBe("cordal, no entra en una prótesis")
+    expect(avisoDelCordal(38)).toBe("La pieza 38 es un cordal: no entra en una prótesis.")
   })
 
   it("en la total no se tocan: van todas menos los cordales (14 por arcada)", () => {

@@ -455,6 +455,17 @@ export function pasoSiguiente(tipo: TipoDeProtesis, estado: string): PasoDelSegu
 }
 
 export const MENSAJE_PROTESIS_CERRADA = "La prótesis ya está entregada o anulada: no cambia más."
+export const MENSAJE_ENTREGA_SIN_LABORATORIO = "Asigna el laboratorio antes de entregar: se le debe su parte."
+
+/**
+ * Si para entregar la prótesis hace falta un laboratorio: su regla congelada
+ * le da una parte al técnico, y esa parte se le debe al laboratorio ("Por
+ * pagar al laboratorio" agrupa por laboratorio, y una entregada ya no
+ * cambia). Repite el CHECK `protesis_entrega_con_laboratorio_check`
+ * (`20261109130000_etapa_7d_protesis_entrega_con_laboratorio`): si cambia
+ * uno, cambia el otro.
+ */
+export const requiereLaboratorioParaEntregar = (reparto: Pick<RepartoEnPuntosBase, "pbTecnico">): boolean => reparto.pbTecnico !== 0
 export const MENSAJE_SOLO_AVANZA = "El seguimiento sólo avanza: no se vuelve a un paso anterior."
 export const MENSAJE_PASO_DE_OTRO_TIPO = "Ese paso no es del seguimiento de este tipo de prótesis."
 

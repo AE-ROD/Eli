@@ -24,10 +24,10 @@ import { crearProtesis } from "../_datos"
 import { pesos } from "../_formato"
 import {
   HERRAMIENTAS_DE_PROTESIS,
-  TEXTO_DEL_CORDAL,
   admiteAmbas,
   admitePilares,
   alternarZona,
+  avisoDelCordal,
   borradorInicial,
   cambiarArcada,
   cambiarTipo,
@@ -84,6 +84,8 @@ export function NuevaProtesis({ pacienteId, opciones, odontograma, esLaDuena, no
   const [borrador, setBorrador] = useState<BorradorDeProtesis>(() => borradorInicial(opciones))
   const [herramienta, setHerramienta] = useState<HerramientaDeProtesis>("protesica")
   const [anuncio, setAnuncio] = useState("")
+  /** Si lo último anunciado es que se tocó un cordal: ese aviso además se ve. */
+  const [anuncioDelCordal, setAnuncioDelCordal] = useState(false)
   const [intentado, setIntentado] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [aviso, setAviso] = useState("")
@@ -108,9 +110,13 @@ export function NuevaProtesis({ pacienteId, opciones, odontograma, esLaDuena, no
   const errorParaMostrar = errorDeDiseno ?? (!material ? `Elige un material para ${tipoEnMinuscula}.` : valor && !valor.ok ? valor.error : null)
 
   const tocar = (pieza: number) => {
-    if (esCordal(pieza)) return setAnuncio(`Pieza ${pieza}: ${TEXTO_DEL_CORDAL}.`)
+    if (esCordal(pieza)) {
+      setAnuncioDelCordal(true)
+      return setAnuncio(avisoDelCordal(pieza))
+    }
     const siguiente = tocarPieza(borrador, pieza, herramienta)
     if (siguiente === borrador) return
+    setAnuncioDelCordal(false)
     setBorrador(siguiente)
     const marca = siguiente.marcas[pieza]
     setAnuncio(`Pieza ${pieza}: ${marca === "protesica" ? "pieza protésica" : marca === "pilar" ? "pilar o gancho" : "sin marcar"}.`)
@@ -258,7 +264,7 @@ export function NuevaProtesis({ pacienteId, opciones, odontograma, esLaDuena, no
               alTocar={tocar}
             />
           </div>
-          <p role="status" className="sr-only">
+          <p role="status" className={anuncioDelCordal ? "mt-2 text-[13px] text-texto-2" : "sr-only"}>
             {anuncio}
           </p>
 

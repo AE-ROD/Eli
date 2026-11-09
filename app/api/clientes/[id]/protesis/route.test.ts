@@ -73,6 +73,7 @@ describe("GET /api/clientes/[id]/protesis", () => {
       pagadoCents: 0,
       saldoCents: 18_000_000,
       laboratorio: { id: "lab-sur", nombre: "Laboratorio Sur", contacto: "+56 9 1111 2222" },
+      requiereLaboratorioParaEntregar: true,
       entregaEstimada: "2026-11-20",
       tono: { id: "A3.5", etiqueta: "A3,5", grupo: "A", color: expect.stringMatching(/^#[0-9A-F]{6}$/) },
       estado: "rodete",
