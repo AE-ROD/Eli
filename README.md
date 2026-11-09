@@ -336,24 +336,79 @@ las filas que hay de `liquidaciones` y de `atencion_servicios` bloqueando sus
 escrituras mientras tanto (cobros y cierres de liquidación). Con el tamaño de
 hoy es poco; igual, fuera del horario de atención.
 
-### Las tres migraciones de la clínica dental, en orden
+### `20261109120000_etapa_7c_protesis_por_tipo`
 
-El código de las prótesis necesita las tres, y cada una requiere la anterior.
-Las que falten se aplican **todas antes de desplegar**, en este orden, y
-después del despliegue se marcan en el mismo orden:
+Correcciones del dueño a las prótesis (2026-11-09): sin cordales (18, 28, 38 y
+48 no son piezas protésicas ni pilares; la total marca la arcada sin ellos),
+etapas por tipo (removible y total: `impresion` → `rodete` → `enfilado` →
+`entregada`; fija, corona e implante: `impresion` → `prueba` → `entregada`; sin
+el paso "en laboratorio") y el tono VITA (`protesis.tono`, nullable, sin
+default). Reemplaza `protesis_estado_check` (que ahora ata el paso al tipo),
+`protesis_total_check` y `eventos_de_protesis_estado_check`, agrega
+`protesis_sin_cordales_check` y `protesis_tono_check`, y reemplaza la función y
+el trigger `protesis_congelada` (pasos por tipo; el tono se cambia hasta
+entregar). La aplica el dueño, nunca un agente (la única base configurada es
+producción).
+
+**Requiere `20261108120000_etapa_7_protesis` y
+`20261108130000_etapa_7b_abonos_de_protesis` aplicadas antes.** Si falta la
+etapa 7, falla entera (va en una transacción) y no queda nada a medias.
+
+**Reescribe filas** (lo dice su cabecera): convierte el estado de las prótesis
+y de sus eventos (`en-laboratorio` → `impresion`; `prueba` y `ajustes` →
+`enfilado` en removible y total, `prueba` en las demás; para los eventos
+desactiva su trigger de inmutabilidad sólo durante ese UPDATE, dentro de la
+transacción) y les saca los cordales a las totales (su valor es por arcada: no
+cambia). Una prótesis entregada o anulada con un cordal queda como está.
+**Si hay una prótesis en curso que no es total y tiene un cordal, la migración
+no se aplica** y dice cuáles: anularla (o entregarla) desde la ficha con el
+código de hoy, y aplicar de nuevo. Para saberlo antes (sólo lectura; tiene que
+volver 0):
+
+```sql
+SELECT count(*) FROM "protesis" WHERE "tipo" <> 'total' AND "estado" NOT IN ('entregada', 'anulada')
+  AND ("piezas" || "pilares") && ARRAY[18, 28, 38, 48]::INTEGER[];
+```
+
+**Rompe la compatibilidad en los dos sentidos, sólo en el seguimiento de las
+prótesis:** con la migración aplicada, el código viejo falla al pasar a "En
+laboratorio", "Prueba en boca" (en removible y total) o "Ajustes" (el CHECK
+nuevo lo rechaza); el código nuevo lee `protesis.tono` y escribe los pasos
+nuevos, así que sin la migración falla la pestaña Prótesis de la ficha (ver,
+crear, avanzar y "Agregar al plan"); el cobro de abonos, la liquidación y el
+pago al laboratorio no leen el tono y siguen andando. Por eso, como
+`ganchos_de_activacion`: dejar el despliegue construido y listo, aplicar la
+migración en una ventana tranquila (fuera del horario de atención) e
+inmediatamente promover el despliegue. Después,
+`npx prisma migrate resolve --applied 20261109120000_etapa_7c_protesis_por_tipo`.
+
+Bloqueos: el `ALTER TABLE` de `protesis` y los de `eventos_de_protesis`
+(desactivar y activar su trigger) toman un bloqueo exclusivo de esas dos
+tablas hasta el COMMIT; los CHECK nuevos revisan todas sus filas. Son tablas
+chicas: dura poco.
+
+### Las migraciones de la clínica dental, en orden
+
+El código de las prótesis necesita las cuatro, y cada una requiere la
+anterior. Las que falten se aplican en este orden:
 
 1. `20261106120000_etapa_6_odontologia` (requiere `20261105120000_cierre_de_la_v1`;
-   su consulta previa, arriba).
-2. `20261108120000_etapa_7_protesis`.
-3. `20261108130000_etapa_7b_abonos_de_protesis`.
-4. Desplegar.
-5. `npx prisma migrate resolve --applied` de cada una, en el mismo orden.
-6. Si alguna clínica se registró entre aplicar la etapa 7 y desplegar, correr
+   su consulta previa, arriba). Antes de desplegar.
+2. `20261108120000_etapa_7_protesis`. Antes de desplegar.
+3. `20261108130000_etapa_7b_abonos_de_protesis`. Antes de desplegar.
+4. `20261109120000_etapa_7c_protesis_por_tipo` (su consulta previa, arriba),
+   **en la misma ventana que el despliegue**: aplicarla y desplegar enseguida.
+   Si las tres anteriores ya están aplicadas y el código desplegado es el de la
+   etapa 7b, ésta es la única que falta.
+5. Desplegar.
+6. `npx prisma migrate resolve --applied` de cada una, en el mismo orden.
+7. Si alguna clínica se registró entre aplicar la etapa 7 y desplegar, correr
    la consulta de materiales de la etapa 7 (arriba) y, si no vuelve 0, su
    último bloque.
 
-No desplegar con alguna de las tres sin aplicar: el código nuevo falla en la
-agenda, el tablero, el plan o las liquidaciones según cuál falte.
+No desplegar con alguna de las cuatro sin aplicar: el código nuevo falla en la
+agenda, el tablero, el plan, las liquidaciones o la pestaña Prótesis según
+cuál falte.
 
 ### Teléfonos antiguos a `+56` (#92)
 

@@ -1,38 +1,22 @@
 "use client"
 
-import { useId, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState, type FormEvent } from "react"
 import { AnimatePresence } from "framer-motion"
 import { Check } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { Insignia } from "@/components/comunes/insignia"
 import { Aviso } from "@/components/panel/aviso"
-import { CAMPO, ETIQUETA, TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
+import { CAMPO, ETIQUETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
-import type { ProtesisRespuesta } from "@/lib/edicion-de-protesis"
+import type { EtapaRespuesta, ProtesisRespuesta } from "@/lib/edicion-de-protesis"
 import type { ColorDeModulo } from "@/lib/modulos"
-import {
-  PASOS_DEL_SEGUIMIENTO,
-  estaCerrada,
-  llevaBase,
-  nombreDeArcada,
-  nombreDeEstado,
-  nombreDeZona,
-  textoDeUnidades,
-  type PasoDelSeguimiento,
-} from "@/lib/protesis"
+import { estaCerrada, nombreDeEstado } from "@/lib/protesis"
 import { cn } from "@/lib/utils"
 import { agregarProtesisAlPlan, cambiarProtesis } from "../_datos"
-import { fechaCorta, fechaYHora, pesos } from "../_formato"
-import { RepartoDeProtesis } from "./reparto-de-protesis"
-
-/** Qué dice el botón que avanza a cada paso. "Enviar al laboratorio" sólo registra el paso. */
-const TEXTO_PARA_AVANZAR: Record<PasoDelSeguimiento, string> = {
-  impresion: "Volver a Impresión",
-  "en-laboratorio": "Enviar al laboratorio",
-  prueba: "Pasar a Prueba en boca",
-  ajustes: "Pasar a Ajustes",
-  entregada: "Marcar como entregada",
-}
+import { fechaCorta, fechaYHora } from "../_formato"
+import { cambiosDeLaEdicion, edicionDe, tituloDeProtesis, type EdicionDeProtesis } from "../_protesis"
+import { ResumenDeProtesis } from "./resumen-de-protesis"
+import { SelectorDeTono } from "./tono-de-protesis"
 
 /** El tono del estado: en curso, el naranja de lo que se está atendiendo; entregada, el lima de lo cobrado; anulada, gris. */
 function tonoDelEstado(estado: string): ColorDeModulo | "gris" {
@@ -41,11 +25,19 @@ function tonoDelEstado(estado: string): ColorDeModulo | "gris" {
   return "naranja"
 }
 
+/** Lo que dice cada etapa arriba de su nombre. */
+function rotuloDeEtapa(etapa: EtapaRespuesta, indice: number): string {
+  if (etapa.situacion === "hecha") return "Hecho"
+  if (etapa.situacion === "actual") return "Ahora"
+  if (etapa.situacion === "saltada") return "Se saltó"
+  return `Paso ${indice + 1}`
+}
+
 interface PropsDeTarjetaDeProtesis {
   pacienteId: string
   protesis: ProtesisRespuesta
   puedeEditar: boolean
-  /** Los laboratorios activos, para elegir al enviarla. `null` mientras cargan. */
+  /** Los laboratorios activos, para cambiarlo. `null` mientras cargan. */
   laboratorios: { id: string; nombre: string }[] | null
   /** Si el paciente tiene un plan vigente que quien mira puede editar: si no, "Agregar al plan" no se puede. */
   planEditable: boolean
@@ -57,13 +49,15 @@ interface PropsDeTarjetaDeProtesis {
 }
 
 /**
- * Una prótesis del historial: el diseño, el material, el laboratorio, la
- * entrega estimada, el valor con lo pagado y el saldo, el reparto que le toca
- * ver a quien mira y el seguimiento con la fecha y el autor de cada paso.
+ * Una prótesis del historial: su resumen (`ResumenDeProtesis`: quién la
+ * hace, el diseño, el material, el tono, la entrega, el valor y el reparto
+ * que le toca ver a quien mira) y el seguimiento con los pasos de su tipo
+ * (`etapas`, como las arma el servidor), con la fecha y el autor de cada uno.
  *
- * El seguimiento sólo avanza, de a un paso. "Enviar al laboratorio" registra
- * el paso (y el laboratorio, si se elige ahí): no se envía nada. "Entregada"
- * no se deshace: se pregunta antes. "Anular", antes de entregar.
+ * El seguimiento sólo avanza, al paso que sigue según el tipo
+ * (`siguienteEstado`). "Entregada" no se deshace: se pregunta antes.
+ * Mientras no esté entregada ni anulada se cambian el laboratorio, la entrega
+ * estimada y el tono. "Anular", antes de entregar.
  */
 export function TarjetaDeProtesis({
   pacienteId,
@@ -76,22 +70,30 @@ export function TarjetaDeProtesis({
   alCambiar,
   alAgregarAlPlan,
 }: PropsDeTarjetaDeProtesis) {
-  const [modal, setModal] = useState<"enviar" | "entregar" | "anular" | null>(null)
+  const [modal, setModal] = useState<"entregar" | "anular" | null>(null)
   const [trabajando, setTrabajando] = useState(false)
   const [avisoDelModal, setAvisoDelModal] = useState("")
   const [aviso, setAviso] = useState("")
   const [listo, setListo] = useState("")
-  const [laboratorioElegido, setLaboratorioElegido] = useState(protesis.laboratorio?.id ?? "")
+  /** Lo que se está cambiando (laboratorio, entrega y tono), o `null` si no se está editando. */
+  const [edicion, setEdicion] = useState<EdicionDeProtesis | null>(null)
+  const [avisoDeLaEdicion, setAvisoDeLaEdicion] = useState("")
+  /** Al abrir la edición: a qué campo va el foco. */
+  const focoAlEditar = useRef<"laboratorio" | "titulo" | null>(null)
   /** El resultado de lo último que se hizo: adonde va el foco si el botón que se usó desaparece. */
   const resultado = useRef<HTMLDivElement>(null)
+  const botonEditar = useRef<HTMLButtonElement>(null)
   const id = useId()
 
   const cerrada = estaCerrada(protesis.estado)
   const siguiente = protesis.siguienteEstado
-  const posicionActual = PASOS_DEL_SEGUIMIENTO.findIndex((paso) => paso.id === protesis.estado)
-  // Anulada: el último paso al que llegó es el del último evento que no es la anulación.
-  const ultimoPaso = protesis.eventos.filter((evento) => evento.estado !== "anulada").at(-1)?.estado
-  const alcanzado = posicionActual >= 0 ? posicionActual : PASOS_DEL_SEGUIMIENTO.findIndex((paso) => paso.id === ultimoPaso)
+  const editable = puedeEditar && !cerrada
+
+  useEffect(() => {
+    if (!edicion || !focoAlEditar.current) return
+    document.getElementById(focoAlEditar.current === "laboratorio" ? `${id}-laboratorio` : `${id}-editar`)?.focus()
+    focoAlEditar.current = null
+  }, [edicion, id])
 
   const enfocarResultadoSiSePerdio = () => {
     if (document.activeElement === document.body) resultado.current?.focus()
@@ -111,31 +113,48 @@ export function TarjetaDeProtesis({
     }
     alCambiar(respuesta.datos)
     setModal(null)
+    setEdicion(null)
     setListo(mensaje)
+    // El botón se deshabilitó mientras se guardaba: si el foco se perdió, va al mensaje.
+    if (!conModal) requestAnimationFrame(enfocarResultadoSiSePerdio)
   }
 
   const avanzar = () => {
     if (!siguiente) return
-    if (siguiente === "en-laboratorio") {
-      setLaboratorioElegido(protesis.laboratorio?.id ?? "")
-      setAvisoDelModal("")
-      return setModal("enviar")
-    }
     if (siguiente === "entregada") {
       setAvisoDelModal("")
       return setModal("entregar")
     }
-    void cambiar({ estado: siguiente }, `Seguimiento: quedó en ${nombreDeEstado(siguiente)}.`, false)
+    void cambiar({ estado: siguiente }, `Seguimiento: quedó en «${nombreDeEstado(siguiente)}».`, false)
   }
 
-  const enviar = () => {
-    if (!laboratorioElegido) return setAvisoDelModal("Elige el laboratorio antes de enviarla.")
-    const cambiaElLaboratorio = laboratorioElegido !== protesis.laboratorio?.id
-    void cambiar(
-      { estado: "en-laboratorio", ...(cambiaElLaboratorio && { laboratorioId: laboratorioElegido }) },
-      "Seguimiento: quedó en En laboratorio.",
-      true
-    )
+  const abrirEdicion = (foco: "laboratorio" | "titulo") => {
+    focoAlEditar.current = foco
+    setAvisoDeLaEdicion("")
+    setListo("")
+    setAviso("")
+    setEdicion(edicionDe(protesis))
+  }
+
+  const cerrarEdicion = () => {
+    setEdicion(null)
+    requestAnimationFrame(() => botonEditar.current?.focus())
+  }
+
+  const guardarEdicion = async (evento: FormEvent<HTMLFormElement>) => {
+    evento.preventDefault()
+    if (!edicion || trabajando) return
+    const cambios = cambiosDeLaEdicion(edicionDe(protesis), edicion)
+    if (!cambios) return cerrarEdicion()
+    setTrabajando(true)
+    setAvisoDeLaEdicion("")
+    const respuesta = await cambiarProtesis(pacienteId, protesis.id, cambios)
+    setTrabajando(false)
+    if (!respuesta.ok) return setAvisoDeLaEdicion(respuesta.error)
+    alCambiar(respuesta.datos)
+    setEdicion(null)
+    setListo("Se guardaron los cambios de la prótesis.")
+    requestAnimationFrame(() => (botonEditar.current ?? resultado.current)?.focus())
   }
 
   const agregarAlPlan = async () => {
@@ -155,130 +174,155 @@ export function TarjetaDeProtesis({
     requestAnimationFrame(enfocarResultadoSiSePerdio)
   }
 
-  // Las opciones del laboratorio al enviarla: los activos y, si el de la prótesis ya no lo está, también ése.
+  // Las opciones del laboratorio: los activos y, si el de la prótesis ya no lo está, también ése.
   const opcionesDeLaboratorio = [
     ...(protesis.laboratorio && !laboratorios?.some((lab) => lab.id === protesis.laboratorio?.id) ? [protesis.laboratorio] : []),
     ...(laboratorios ?? []),
   ]
 
-  const detalles: { clave: string; valor: string }[] = [
-    { clave: "Arcada", valor: nombreDeArcada(protesis.arcada) },
-    {
-      clave: "Piezas protésicas",
-      valor: protesis.tipo === "total" ? `Todas (${protesis.piezas.length})` : protesis.piezas.join(", ") || "—",
-    },
-    ...(protesis.pilares.length > 0 ? [{ clave: "Pilares o ganchos", valor: protesis.pilares.join(", ") }] : []),
-    ...(llevaBase(protesis.tipo)
-      ? [{ clave: "Zonas de la base", valor: protesis.zonas.map(nombreDeZona).join(", ") || "—" }]
-      : []),
-    {
-      clave: "Material",
-      valor: `${protesis.material.nombre} · ${textoDeUnidades(protesis.material.unidad, protesis.unidades)} × ${pesos(protesis.material.precioUnitarioCents)}`,
-    },
-    { clave: "Tratante", valor: protesis.tratante.nombre },
-    { clave: "Laboratorio", valor: protesis.laboratorio?.nombre ?? "Sin laboratorio todavía" },
-    { clave: "Entrega estimada", valor: protesis.entregaEstimada ? fechaDelDia(protesis.entregaEstimada) : "Sin fecha" },
-  ]
-
   return (
     <article aria-labelledby={`${id}-titulo`} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-        <div className="min-w-0 flex-[1_1_260px]">
-          <h3 id={`${id}-titulo`} className={cn(TITULO_DE_TARJETA, "break-words")}>
-            {protesis.nombreParaElPlan}
-          </h3>
-          <p className="mt-1 text-[13px] text-texto-2">
-            Creada el {fechaCorta(protesis.createdAt, zona)} por {protesis.creadoPorNombre}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          <Insignia tono={tonoDelEstado(protesis.estado)}>{nombreDeEstado(protesis.estado)}</Insignia>
-          {protesis.enElPlan && <Insignia tono="lila">En el plan</Insignia>}
-        </div>
-      </div>
+      <ResumenDeProtesis
+        titulo={tituloDeProtesis(protesis.tipo, protesis.arcada)}
+        idDelTitulo={`${id}-titulo`}
+        subtitulo={`Creada el ${fechaCorta(protesis.createdAt, zona)} por ${protesis.creadoPorNombre}`}
+        accion={
+          <span className="flex flex-wrap gap-1.5">
+            <Insignia tono={tonoDelEstado(protesis.estado)}>{nombreDeEstado(protesis.estado)}</Insignia>
+            {protesis.enElPlan && <Insignia tono="lila">En el plan</Insignia>}
+          </span>
+        }
+        aviso={
+          protesis.estado === "anulada" && (
+            <Aviso tono="info" className="mt-4">
+              Anulada{protesis.anuladaEn ? ` el ${fechaYHora(protesis.anuladaEn, zona)}` : ""}
+              {protesis.anuladaPorNombre ? ` por ${protesis.anuladaPorNombre}` : ""}. No cambia más.
+            </Aviso>
+          )
+        }
+        tipo={protesis.tipo}
+        tratante={protesis.tratante.nombre}
+        laboratorio={protesis.laboratorio}
+        accionSinLaboratorio={
+          editable &&
+          !edicion && (
+            <Boton type="button" variante="secundario" tamano="sm" onClick={() => abrirEdicion("laboratorio")}>
+              Elegir laboratorio
+            </Boton>
+          )
+        }
+        piezas={protesis.piezas}
+        pilares={protesis.pilares}
+        zonas={protesis.zonas}
+        material={protesis.material}
+        unidades={protesis.unidades}
+        tono={protesis.tono}
+        entregaEstimada={protesis.entregaEstimada}
+        dinero={protesis}
+        reparto={protesis.reparto}
+        tratanteEsLaDuena={protesis.tratante.esLaDuena}
+      />
 
-      {protesis.estado === "anulada" && (
-        <Aviso tono="info" className="mt-4">
-          Anulada{protesis.anuladaEn ? ` el ${fechaYHora(protesis.anuladaEn, zona)}` : ""}
-          {protesis.anuladaPorNombre ? ` por ${protesis.anuladaPorNombre}` : ""}. No cambia más.
-        </Aviso>
-      )}
-
-      <div className="mt-4 flex flex-wrap gap-x-8 gap-y-4">
-        <dl className="min-w-0 flex-[1_1_280px]">
-          {detalles.map((fila) => (
-            <div key={fila.clave} className="flex justify-between gap-3 border-t border-borde py-2 text-sm first:border-t-0 first:pt-0">
-              <dt className="shrink-0 text-texto-2">{fila.clave}</dt>
-              <dd className="min-w-0 text-right font-medium break-words">{fila.valor}</dd>
+      {edicion && (
+        <form
+          onSubmit={guardarEdicion}
+          noValidate
+          aria-labelledby={`${id}-editar`}
+          className="mt-5 rounded-[24px] border-[1.5px] border-borde p-4 squircle sm:p-5"
+        >
+          <h4 id={`${id}-editar`} tabIndex={-1} className="font-semibold focus:outline-none">
+            Laboratorio, entrega y tono
+          </h4>
+          <p className="mt-0.5 text-[13px] text-texto-2">Se pueden cambiar hasta que la prótesis se entregue.</p>
+          <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-3">
+            <div>
+              <label htmlFor={`${id}-laboratorio`} className={ETIQUETA}>
+                Técnico / laboratorio
+              </label>
+              <select
+                id={`${id}-laboratorio`}
+                value={edicion.laboratorioId ?? ""}
+                onChange={(evento) => setEdicion({ ...edicion, laboratorioId: evento.target.value || null })}
+                disabled={laboratorios === null}
+                className={cn(CAMPO, "cursor-pointer text-base")}
+              >
+                <option value="">{laboratorios === null ? "Cargando laboratorios..." : "Sin laboratorio asignado"}</option>
+                {opcionesDeLaboratorio.map((lab) => (
+                  <option key={lab.id} value={lab.id}>
+                    {lab.nombre}
+                  </option>
+                ))}
+              </select>
             </div>
-          ))}
-        </dl>
-
-        <div className="min-w-0 flex-[1_1_280px]">
-          <dl className="grid grid-cols-3 gap-2">
-            {[
-              { clave: "Valor", cents: protesis.valorCents },
-              { clave: "Pagado", cents: protesis.pagadoCents },
-              { clave: "Saldo", cents: protesis.saldoCents },
-            ].map((fila) => (
-              <div key={fila.clave} className="min-w-0 rounded-[16px] bg-superficie px-3 py-2.5 squircle">
-                <dt className="text-[13px] text-texto-2">{fila.clave}</dt>
-                <dd className="mt-0.5 font-semibold break-words tabular-nums">{pesos(fila.cents)}</dd>
-              </div>
-            ))}
-          </dl>
-          {protesis.reparto && (
-            <div className="mt-4">
-              <h4 className="text-sm font-semibold">{protesis.reparto.visible === "suyo" ? "Tu parte" : "Reparto"}</h4>
-              <RepartoDeProtesis
-                reparto={protesis.reparto}
-                tratante={protesis.tratante.nombre}
-                laboratorio={protesis.laboratorio?.nombre ?? null}
-                tratanteEsLaDuena={protesis.tratante.esLaDuena}
-                className="mt-2"
+            <div>
+              <label htmlFor={`${id}-entrega`} className={ETIQUETA}>
+                Entrega estimada
+              </label>
+              <input
+                id={`${id}-entrega`}
+                type="date"
+                min="2000-01-01"
+                value={edicion.entregaEstimada}
+                onChange={(evento) => setEdicion({ ...edicion, entregaEstimada: evento.target.value })}
+                className={cn(CAMPO, "text-base")}
               />
             </div>
+          </div>
+          {laboratorios !== null && laboratorios.length === 0 && (
+            <p className="mt-2 text-[13px] text-texto-2">No hay laboratorios activos: la dueña los agrega en Configuración.</p>
           )}
-        </div>
-      </div>
+          <p id={`${id}-tono`} className={cn(ETIQUETA, "mt-4")}>
+            Tono VITA classical
+          </p>
+          <SelectorDeTono valor={edicion.tono} alCambiar={(tono) => setEdicion({ ...edicion, tono })} idDelNombre={`${id}-tono`} />
+          {avisoDeLaEdicion && <Aviso className="mt-4">{avisoDeLaEdicion}</Aviso>}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Boton type="submit" tamano="sm" cargando={trabajando}>
+              Guardar cambios
+            </Boton>
+            <Boton type="button" variante="secundario" tamano="sm" disabled={trabajando} onClick={cerrarEdicion}>
+              Cancelar
+            </Boton>
+          </div>
+        </form>
+      )}
 
-      <div className="mt-5">
-        <h4 id={`${id}-seguimiento`} className="text-sm font-semibold">
-          Seguimiento con el laboratorio
-        </h4>
-        <ol aria-labelledby={`${id}-seguimiento`} className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(128px,1fr))] gap-2">
-          {PASOS_DEL_SEGUIMIENTO.map((paso, indice) => {
-            const evento = protesis.eventos.find((otro) => otro.estado === paso.id)
-            // Entregada: el último paso también está hecho, no "en curso".
-            const entregada = protesis.estado === "entregada"
-            const esElActual = paso.id === protesis.estado && !entregada
-            const hecho = indice <= alcanzado
+      <div className="mt-5 border-t border-borde pt-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h4 id={`${id}-seguimiento`} className="font-semibold">
+            Seguimiento
+          </h4>
+          {!cerrada && <span className="text-[13px] text-texto-2">La liquidación se libera al entregar</span>}
+        </div>
+        <ol aria-labelledby={`${id}-seguimiento`} className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2">
+          {protesis.etapas.map((etapa, indice) => {
+            const esLaActual = etapa.situacion === "actual"
+            const hecha = etapa.situacion === "hecha"
             return (
               <li
-                key={paso.id}
-                aria-current={esElActual ? "step" : undefined}
+                key={etapa.id}
+                aria-current={esLaActual ? "step" : undefined}
                 className={cn(
                   "rounded-[20px] border-[1.5px] p-3 squircle",
-                  esElActual
+                  esLaActual
                     ? "border-navy bg-lila-suave"
-                    : entregada && paso.id === "entregada"
+                    : hecha && etapa.id === "entregada"
                       ? "border-transparent bg-lima-suave"
-                      : hecho
+                      : hecha || etapa.situacion === "saltada"
                         ? "border-transparent bg-superficie"
-                        : "border-borde bg-tarjeta"
+                        : "border-dashed border-borde bg-tarjeta"
                 )}
               >
                 <span className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.08em] text-texto-2 uppercase">
-                  {hecho && !esElActual && <Check aria-hidden="true" className="size-3.5" strokeWidth={2.5} />}
-                  {esElActual ? <span className="text-navy">Ahora</span> : hecho ? "Hecho" : `Paso ${indice + 1}`}
+                  {hecha && <Check aria-hidden="true" className="size-3.5" strokeWidth={2.5} />}
+                  {esLaActual ? <span className="text-navy">Ahora</span> : rotuloDeEtapa(etapa, indice)}
                 </span>
-                <span className={cn("mt-1 block", esElActual ? "font-semibold" : "font-medium")}>{paso.nombre}</span>
-                {evento ? (
+                <span className={cn("mt-1 block", esLaActual ? "font-semibold" : "font-medium")}>{etapa.nombre}</span>
+                {etapa.fecha && (
                   <span className="mt-1 block text-[12px] leading-snug text-texto-2">
-                    {fechaYHora(evento.createdAt, zona)} · {evento.autorNombre}
+                    {fechaYHora(etapa.fecha, zona)}
+                    {etapa.autorNombre && ` · ${etapa.autorNombre}`}
                   </span>
-                ) : (
-                  hecho && <span className="mt-1 block text-[12px] text-texto-2">Se saltó</span>
                 )}
               </li>
             )
@@ -298,11 +342,14 @@ export function TarjetaDeProtesis({
       {puedeEditar && (
         <div className="mt-4 flex flex-wrap items-start gap-2">
           {!cerrada && siguiente && (
-            <div>
-              <Boton type="button" tamano="sm" cargando={trabajando && !modal} onClick={avanzar}>
-                {TEXTO_PARA_AVANZAR[siguiente]}
-              </Boton>
-            </div>
+            <Boton type="button" tamano="sm" cargando={trabajando && !modal && !edicion} disabled={trabajando} onClick={avanzar}>
+              {siguiente === "entregada" ? "Marcar como entregada" : `Pasar a ${nombreDeEstado(siguiente)}`}
+            </Boton>
+          )}
+          {editable && !edicion && (
+            <Boton ref={botonEditar} type="button" variante="secundario" tamano="sm" disabled={trabajando} onClick={() => abrirEdicion("titulo")}>
+              Cambiar laboratorio, entrega o tono
+            </Boton>
           )}
           {protesis.estado !== "anulada" && !protesis.enElPlan && (
             <Boton
@@ -333,9 +380,6 @@ export function TarjetaDeProtesis({
           )}
         </div>
       )}
-      {puedeEditar && !cerrada && siguiente === "en-laboratorio" && (
-        <p className="mt-2 text-[13px] text-texto-2">«Enviar al laboratorio» sólo registra el paso y la fecha: no se envía nada.</p>
-      )}
       {puedeEditar && protesis.estado !== "anulada" && !protesis.enElPlan && !hayPlanVigente && (
         <p id={`${id}-sin-plan`} className="mt-2 text-[13px] text-texto-2">
           Para agregarla al plan, primero arma un plan en «Plan y presupuesto».
@@ -343,42 +387,10 @@ export function TarjetaDeProtesis({
       )}
 
       <AnimatePresence onExitComplete={enfocarResultadoSiSePerdio}>
-        {modal === "enviar" && (
-          <ModalConfirmar
-            titulo="Enviar al laboratorio"
-            descripcion="Registra que la prótesis pasó al laboratorio, con la fecha de hoy y tu nombre. No se envía nada: Eli no le avisa al laboratorio."
-            textoConfirmar="Registrar el envío"
-            textoCancelar="Cancelar"
-            trabajando={trabajando}
-            aviso={avisoDelModal}
-            onConfirmar={enviar}
-            onCerrar={() => setModal(null)}
-          >
-            <div>
-              <label htmlFor={`${id}-laboratorio`} className={ETIQUETA}>
-                Laboratorio
-              </label>
-              <select
-                id={`${id}-laboratorio`}
-                value={laboratorioElegido}
-                onChange={(evento) => setLaboratorioElegido(evento.target.value)}
-                disabled={laboratorios === null}
-                className={cn(CAMPO, "cursor-pointer text-base")}
-              >
-                <option value="">{laboratorios === null ? "Cargando laboratorios..." : "Elige el laboratorio"}</option>
-                {opcionesDeLaboratorio.map((lab) => (
-                  <option key={lab.id} value={lab.id}>
-                    {lab.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </ModalConfirmar>
-        )}
         {modal === "entregar" && (
           <ModalConfirmar
             titulo="Marcar como entregada"
-            descripcion="La entrega queda con la fecha de hoy y tu nombre, y no se deshace: una prótesis entregada no cambia más ni se anula."
+            descripcion="La entrega queda con la fecha de hoy y tu nombre, y no se deshace: una prótesis entregada no cambia más ni se anula. Al entregarla se libera la parte de la odontóloga y la del laboratorio."
             textoConfirmar="Marcar como entregada"
             textoCancelar="Todavía no"
             trabajando={trabajando}
@@ -403,9 +415,4 @@ export function TarjetaDeProtesis({
       </AnimatePresence>
     </article>
   )
-}
-
-/** "12 dic 2026", desde un día "AAAA-MM-DD" (sin hora: no depende de la zona). */
-function fechaDelDia(dia: string): string {
-  return fechaCorta(`${dia}T12:00:00Z`, "UTC")
 }

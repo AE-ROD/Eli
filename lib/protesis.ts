@@ -17,6 +17,11 @@ import { cuadranteDe, esPiezaValida, piezasDelCuadrante } from "@/lib/odontogram
  *   suman exactamente 10.000.
  * - Piezas en FDI permanente (11 a 48): la prótesis no se hace sobre
  *   temporales. La arcada superior son los cuadrantes 1 y 2; la inferior, 3 y 4.
+ * - Sin cordales: las piezas que terminan en 8 (18, 28, 38, 48) no son
+ *   piezas protésicas ni pilares, y la total no las cuenta.
+ *
+ * La migración `20261109120000_etapa_7c_protesis_por_tipo` cambió las
+ * etapas (por tipo), sacó los cordales y agregó el tono.
  */
 
 /** El tope del dinero en centavos, el de `lib/atenciones.ts` y los CHECK de la base. */
@@ -64,18 +69,47 @@ export const UNIDADES = [
 export type Unidad = (typeof UNIDADES)[number]["id"]
 export const IDS_DE_UNIDADES = UNIDADES.map((unidad) => unidad.id) as [Unidad, ...Unidad[]]
 
-/** El seguimiento, en orden. "Anulada" va aparte: se llega desde cualquiera antes de entregar. */
-export const PASOS_DEL_SEGUIMIENTO = [
-  { id: "impresion", nombre: "Impresión" },
-  { id: "en-laboratorio", nombre: "En laboratorio" },
-  { id: "prueba", nombre: "Prueba en boca" },
-  { id: "ajustes", nombre: "Ajustes" },
+/**
+ * Los estados de una prótesis: los pasos del seguimiento (cada tipo usa los
+ * suyos, `pasosDelTipo`) y "Anulada", que va aparte: se llega desde
+ * cualquier paso antes de entregar.
+ */
+export const ESTADOS_DE_PROTESIS = [
+  { id: "impresion", nombre: "Toma de impresión" },
+  { id: "rodete", nombre: "Prueba de rodete" },
+  { id: "enfilado", nombre: "Prueba de enfilado" },
+  { id: "prueba", nombre: "Prueba" },
   { id: "entregada", nombre: "Entregada" },
+  { id: "anulada", nombre: "Anulada" },
 ] as const
-export type PasoDelSeguimiento = (typeof PASOS_DEL_SEGUIMIENTO)[number]["id"]
-export type EstadoDeProtesis = PasoDelSeguimiento | "anulada"
-export const ESTADOS_DE_PROTESIS = [...PASOS_DEL_SEGUIMIENTO, { id: "anulada", nombre: "Anulada" }] as const
+export type EstadoDeProtesis = (typeof ESTADOS_DE_PROTESIS)[number]["id"]
+export type PasoDelSeguimiento = Exclude<EstadoDeProtesis, "anulada">
 export const IDS_DE_ESTADOS = ESTADOS_DE_PROTESIS.map((estado) => estado.id) as [EstadoDeProtesis, ...EstadoDeProtesis[]]
+
+/**
+ * Las etapas de cada tipo, en orden (decisión del dueño, 2026-11-09). La
+ * removible y la total pasan por rodete y enfilado; la fija, la corona y la
+ * de implantes, por una sola prueba. Todas empiezan en la toma de impresión y
+ * terminan en "Entregada", que libera la liquidación. El laboratorio es un
+ * dato de la prótesis, no un paso.
+ */
+export const PASOS_POR_TIPO: Readonly<Record<TipoDeProtesis, readonly PasoDelSeguimiento[]>> = {
+  removible: ["impresion", "rodete", "enfilado", "entregada"],
+  total: ["impresion", "rodete", "enfilado", "entregada"],
+  fija: ["impresion", "prueba", "entregada"],
+  implante: ["impresion", "prueba", "entregada"],
+  corona: ["impresion", "prueba", "entregada"],
+}
+
+/** Los pasos de un tipo, en orden (copia). */
+export function pasosDelTipo(tipo: TipoDeProtesis): PasoDelSeguimiento[] {
+  return [...PASOS_POR_TIPO[tipo]]
+}
+
+/** Si el estado es un paso del seguimiento de ese tipo ("anulada" no es un paso). */
+export function esPasoDelTipo(tipo: TipoDeProtesis, estado: string): estado is PasoDelSeguimiento {
+  return PASOS_POR_TIPO[tipo].includes(estado as PasoDelSeguimiento)
+}
 
 /** De dónde salió el reparto congelado: la regla del material o la excepción de la tratante. */
 export type OrigenDelReparto = "material" | "excepcion"
@@ -157,9 +191,27 @@ export function cuadrantesDeLaArcada(arcada: Arcada): number[] {
   return [...SUPERIOR, ...INFERIOR]
 }
 
-/** Las piezas permanentes de la arcada, cuadrante por cuadrante: 16, o 32 con "Ambas". */
+/**
+ * Las piezas permanentes de la arcada, cuadrante por cuadrante: 16, o 32 con
+ * "Ambas" (cordales incluidos: es lo que se dibuja). Las que se pueden marcar
+ * en una prótesis, `piezasProtesicasDeLaArcada`.
+ */
 export function piezasDeLaArcada(arcada: Arcada): number[] {
   return cuadrantesDeLaArcada(arcada).flatMap(piezasDelCuadrante)
+}
+
+/** Las piezas que terminan en 8 (18, 28, 38, 48): los cordales, que no entran en una prótesis. */
+export const CORDALES = [18, 28, 38, 48] as const
+
+/** Si la pieza es un cordal (permanente terminada en 8). */
+export const esCordal = (pieza: number): boolean => (CORDALES as readonly number[]).includes(pieza)
+
+/**
+ * Las piezas de la arcada que pueden ser protésicas o pilares: todas menos
+ * los cordales (14, o 28 con "Ambas"). La total marca exactamente estas.
+ */
+export function piezasProtesicasDeLaArcada(arcada: Arcada): number[] {
+  return piezasDeLaArcada(arcada).filter((pieza) => !esCordal(pieza))
 }
 
 /** Si una pieza es permanente y está en la arcada. */
@@ -198,11 +250,11 @@ const enOrden = (piezas: readonly number[]) => [...piezas].sort((a, b) => a - b)
 /**
  * El primer problema del diseño, o `null`. Las mismas reglas que los CHECKs
  * de `protesis`:
- * - piezas y pilares FDI permanente de la arcada, sin repetir, y una pieza no
- *   es a la vez protésica y pilar; al menos una pieza protésica;
+ * - piezas y pilares FDI permanente de la arcada, sin cordales, sin repetir,
+ *   y una pieza no es a la vez protésica y pilar; al menos una pieza protésica;
  * - con "Ambas", piezas protésicas arriba y abajo;
- * - la total, todas las piezas de la arcada y sin pilares (la arma
- *   `normalizarDiseno`: quien llama no tiene que mandarlas);
+ * - la total, todas las piezas de la arcada menos los cordales, y sin
+ *   pilares (la arma `normalizarDiseno`: quien llama no tiene que mandarlas);
  * - la corona, una sola pieza, sin pilares y en una arcada;
  * - zonas sólo en removible y total, y las que admite la arcada.
  */
@@ -215,6 +267,8 @@ export function errorDelDiseno(diseno: DisenoDeProtesis): string | null {
       ? `La pieza ${fuera} no es de la arcada ${nombreDeArcada(arcada).toLowerCase()}.`
       : `La pieza ${String(fuera)} no existe en la dentición permanente.`
   }
+  const cordal = todas.find(esCordal)
+  if (cordal !== undefined) return `La pieza ${cordal} es un cordal: no entra en una prótesis.`
   if (new Set(piezas).size !== piezas.length || new Set(pilares).size !== pilares.length) {
     return "Una pieza está marcada dos veces."
   }
@@ -230,8 +284,8 @@ export function errorDelDiseno(diseno: DisenoDeProtesis): string | null {
 
   if (tipo === "total") {
     if (pilares.length > 0) return "Una prótesis total no lleva pilares ni ganchos."
-    const deLaArcada = piezasDeLaArcada(arcada)
-    if (deLaArcada.some((pieza) => !piezas.includes(pieza))) return "Una prótesis total reemplaza todas las piezas de la arcada."
+    const deLaArcada = piezasProtesicasDeLaArcada(arcada)
+    if (deLaArcada.some((pieza) => !piezas.includes(pieza))) return "Una prótesis total reemplaza todas las piezas de la arcada (menos los cordales)."
   }
   if (tipo === "corona") {
     if (arcada === "ambas") return "Una corona unitaria va en una sola arcada."
@@ -252,8 +306,8 @@ export function errorDelDiseno(diseno: DisenoDeProtesis): string | null {
 
 /**
  * El diseño listo para validar y guardar. La total marca todas las piezas de
- * la arcada (lo que haya mandado quien llama se reemplaza) y no lleva
- * pilares; el resto queda como vino, en orden. Las zonas, en el orden del
+ * la arcada menos los cordales (lo que haya mandado quien llama se
+ * reemplaza) y no lleva pilares; el resto queda como vino, en orden. Las zonas, en el orden del
  * catálogo. No valida: para eso, `errorDelDiseno` sobre lo que devuelve.
  */
 export function normalizarDiseno(diseno: DisenoDeProtesis): DisenoNormalizado {
@@ -261,7 +315,7 @@ export function normalizarDiseno(diseno: DisenoDeProtesis): DisenoNormalizado {
   return {
     tipo: diseno.tipo,
     arcada: diseno.arcada,
-    piezas: total ? piezasDeLaArcada(diseno.arcada) : enOrden(diseno.piezas),
+    piezas: total ? piezasProtesicasDeLaArcada(diseno.arcada) : enOrden(diseno.piezas),
     pilares: total ? [] : enOrden(diseno.pilares),
     zonas: IDS_DE_ZONAS.filter((zona) => diseno.zonas.includes(zona)).concat(
       // Una zona desconocida se conserva al final, para que `errorDelDiseno` la rechace.
@@ -389,37 +443,149 @@ export function repartirMonto(montoCents: number, reparto: RepartoEnPuntosBase, 
 
 // ─── El seguimiento ──────────────────────────────────────────────────────────
 
-const posicionDelPaso = (estado: string) => PASOS_DEL_SEGUIMIENTO.findIndex((paso) => paso.id === estado)
-
 /** Entregada y anulada no cambian más. */
 export const estaCerrada = (estado: string): boolean => estado === "entregada" || estado === "anulada"
 
-/** El paso que sigue (el que ofrece la pantalla), o `null` si ya está entregada o anulada. */
-export function pasoSiguiente(estado: string): PasoDelSeguimiento | null {
-  const posicion = posicionDelPaso(estado)
-  if (posicion < 0 || posicion >= PASOS_DEL_SEGUIMIENTO.length - 1) return null
-  return PASOS_DEL_SEGUIMIENTO[posicion + 1].id
+/** El paso que sigue en el seguimiento de ese tipo (el que ofrece la pantalla), o `null` si ya está entregada o anulada. */
+export function pasoSiguiente(tipo: TipoDeProtesis, estado: string): PasoDelSeguimiento | null {
+  const pasos = PASOS_POR_TIPO[tipo]
+  const posicion = pasos.indexOf(estado as PasoDelSeguimiento)
+  if (posicion < 0 || posicion >= pasos.length - 1) return null
+  return pasos[posicion + 1]
 }
 
 export const MENSAJE_PROTESIS_CERRADA = "La prótesis ya está entregada o anulada: no cambia más."
 export const MENSAJE_SOLO_AVANZA = "El seguimiento sólo avanza: no se vuelve a un paso anterior."
-export const MENSAJE_SIN_LABORATORIO = "Elige el laboratorio antes de enviarla."
+export const MENSAJE_PASO_DE_OTRO_TIPO = "Ese paso no es del seguimiento de este tipo de prótesis."
 
 /**
- * Si se puede pasar de `actual` a `nuevo`. El seguimiento sólo avanza
- * (Impresión → En laboratorio → Prueba en boca → Ajustes → Entregada), y se
- * puede saltar un paso (no toda prótesis necesita ajustes). Anular se puede
- * en cualquier paso antes de entregar; entregada y anulada no cambian más.
- * Pasar a "En laboratorio" o más allá ("Enviar al laboratorio") pide un
- * laboratorio. Devuelve el error o `null`.
+ * Si se puede pasar de `actual` a `nuevo` en una prótesis de ese tipo. El
+ * seguimiento sólo avanza por los pasos del tipo (`PASOS_POR_TIPO`), y se
+ * puede saltar un paso. Anular se puede en cualquier paso antes de entregar;
+ * entregada y anulada no cambian más. Devuelve el error o `null`.
  */
-export function errorDeCambioDeEstado(actual: string, nuevo: EstadoDeProtesis, conLaboratorio: boolean): string | null {
+export function errorDeCambioDeEstado(tipo: TipoDeProtesis, actual: string, nuevo: EstadoDeProtesis): string | null {
   if (estaCerrada(actual)) return MENSAJE_PROTESIS_CERRADA
   if (nuevo === "anulada") return null
-  if (posicionDelPaso(nuevo) <= posicionDelPaso(actual)) return MENSAJE_SOLO_AVANZA
-  if (posicionDelPaso(nuevo) >= posicionDelPaso("en-laboratorio") && !conLaboratorio) return MENSAJE_SIN_LABORATORIO
+  if (!esPasoDelTipo(tipo, nuevo)) return MENSAJE_PASO_DE_OTRO_TIPO
+  const pasos = PASOS_POR_TIPO[tipo]
+  if (pasos.indexOf(nuevo) <= pasos.indexOf(actual as PasoDelSeguimiento)) return MENSAJE_SOLO_AVANZA
   return null
 }
+
+/**
+ * Cómo está cada etapa: `hecha` (se pasó por ella), `actual` (la prótesis
+ * está ahí), `saltada` (quedó atrás sin pasar por ella) o `pendiente`.
+ */
+export type SituacionDeEtapa = "hecha" | "actual" | "saltada" | "pendiente"
+
+export interface EtapaDelSeguimiento<F> {
+  id: PasoDelSeguimiento
+  nombre: string
+  situacion: SituacionDeEtapa
+  /** Cuándo y quién la registró (el primer evento de ese paso), o `null` si no se pasó por ella. */
+  fecha: F | null
+  autorNombre: string | null
+}
+
+/**
+ * Las etapas que le tocan a la prótesis según su tipo, con su situación y
+ * el evento que las registró, para que la pantalla no las recalcule.
+ *
+ * - En curso: las de antes, `hecha` (o `saltada` si no tienen evento); la del
+ *   estado, `actual`; las de después, `pendiente`.
+ * - Entregada: todas `hecha` o `saltada`, también "Entregada".
+ * - Anulada: lo mismo hasta el último paso con evento (donde estaba cuando se
+ *   anuló), y el resto `pendiente`; ninguna es `actual`.
+ *
+ * `eventos` del más viejo al más nuevo; si un paso se registró dos veces
+ * (prótesis de antes de la etapa 7c, cuando "En laboratorio" pasó a ser
+ * "Toma de impresión"), cuenta el primero.
+ */
+export function etapasDeLaProtesis<F>(
+  tipo: TipoDeProtesis,
+  estado: string,
+  eventos: readonly { estado: string; autorNombre: string; createdAt: F }[]
+): EtapaDelSeguimiento<F>[] {
+  const pasos = PASOS_POR_TIPO[tipo]
+  const primero = new Map<string, { autorNombre: string; createdAt: F }>()
+  for (const evento of eventos) if (!primero.has(evento.estado)) primero.set(evento.estado, evento)
+
+  let posicion = pasos.indexOf(estado as PasoDelSeguimiento)
+  if (posicion < 0) posicion = pasos.reduce((ultimo, paso, indice) => (primero.has(paso) ? indice : ultimo), -1)
+  const cerrada = estaCerrada(estado)
+
+  return pasos.map((paso, indice) => {
+    const evento = primero.get(paso)
+    let situacion: SituacionDeEtapa
+    if (indice > posicion) situacion = "pendiente"
+    else if (indice === posicion && !cerrada) situacion = "actual"
+    else situacion = evento || indice === posicion ? "hecha" : "saltada"
+    return {
+      id: paso,
+      nombre: nombreDeEstado(paso),
+      situacion,
+      fecha: evento?.createdAt ?? null,
+      autorNombre: evento?.autorNombre ?? null,
+    }
+  })
+}
+
+// ─── El tono (guía VITA classical) ───────────────────────────────────────────
+
+/** Los grupos de la guía VITA classical, en su orden. */
+export const GRUPOS_DE_TONOS = [
+  { id: "0M", nombre: "Blanqueamiento" },
+  { id: "A", nombre: "Rojizo-marrón" },
+  { id: "B", nombre: "Rojizo-amarillo" },
+  { id: "C", nombre: "Gris" },
+  { id: "D", nombre: "Rojizo-gris" },
+] as const
+export type GrupoDeTono = (typeof GRUPOS_DE_TONOS)[number]["id"]
+
+/**
+ * Los tonos de la guía VITA classical (con los de blanqueamiento 0M), en el
+ * orden de la guía. `id` es lo que se guarda (sin coma: "A3.5"); `etiqueta`,
+ * lo que se muestra ("A3,5"). `color` es un hex APROXIMADO, sólo para
+ * mostrar una muestra de referencia en pantalla: el color de verdad lo da la
+ * guía física, y la pantalla tiene que decirlo. La migración
+ * `20261109120000_etapa_7c_protesis_por_tipo` repite los ids en
+ * `protesis_tono_check`: si cambia uno, cambia el otro.
+ */
+export const TONOS_VITA = [
+  { id: "0M1", etiqueta: "0M1", grupo: "0M", color: "#F6F3EA" },
+  { id: "0M2", etiqueta: "0M2", grupo: "0M", color: "#F2EDE0" },
+  { id: "0M3", etiqueta: "0M3", grupo: "0M", color: "#EEE7D6" },
+  { id: "A1", etiqueta: "A1", grupo: "A", color: "#EDE1C6" },
+  { id: "A2", etiqueta: "A2", grupo: "A", color: "#E6D3AF" },
+  { id: "A3", etiqueta: "A3", grupo: "A", color: "#DEC69B" },
+  { id: "A3.5", etiqueta: "A3,5", grupo: "A", color: "#D4B886" },
+  { id: "A4", etiqueta: "A4", grupo: "A", color: "#C7A574" },
+  { id: "B1", etiqueta: "B1", grupo: "B", color: "#F0E6CC" },
+  { id: "B2", etiqueta: "B2", grupo: "B", color: "#E8D8B0" },
+  { id: "B3", etiqueta: "B3", grupo: "B", color: "#DDC593" },
+  { id: "B4", etiqueta: "B4", grupo: "B", color: "#D4B982" },
+  { id: "C1", etiqueta: "C1", grupo: "C", color: "#E2D7BE" },
+  { id: "C2", etiqueta: "C2", grupo: "C", color: "#D7C8A7" },
+  { id: "C3", etiqueta: "C3", grupo: "C", color: "#CBBA96" },
+  { id: "C4", etiqueta: "C4", grupo: "C", color: "#BAA582" },
+  { id: "D2", etiqueta: "D2", grupo: "D", color: "#E2D2B9" },
+  { id: "D3", etiqueta: "D3", grupo: "D", color: "#D8C5A5" },
+  { id: "D4", etiqueta: "D4", grupo: "D", color: "#D1BC9A" },
+] as const satisfies readonly { id: string; etiqueta: string; grupo: GrupoDeTono; color: string }[]
+export type TonoVita = (typeof TONOS_VITA)[number]["id"]
+export type TonoDeLaGuia = (typeof TONOS_VITA)[number]
+export const IDS_DE_TONOS = TONOS_VITA.map((tono) => tono.id) as [TonoVita, ...TonoVita[]]
+
+export const esTonoVita = (valor: unknown): valor is TonoVita => IDS_DE_TONOS.includes(valor as TonoVita)
+
+/** El tono de la guía con ese id, o `null` (sin tono, o un valor que no es de la guía). */
+export function tonoDeLaGuia(id: string | null | undefined): TonoDeLaGuia | null {
+  return TONOS_VITA.find((tono) => tono.id === id) ?? null
+}
+
+/** "A3,5" para "A3.5"; un id que no es de la guía, tal cual. */
+export const etiquetaDeTono = (id: string): string => tonoDeLaGuia(id)?.etiqueta ?? id
 
 // ─── El nombre para el plan ──────────────────────────────────────────────────
 

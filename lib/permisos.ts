@@ -626,7 +626,7 @@ export interface TratanteDeProtesis {
 /**
  * Quién queda como tratante de una prótesis nueva. Sólo el dueño elige: a sí
  * mismo (`"duenio"` o nada) o a un miembro (que el endpoint verifica del
- * negocio). El odontólogo queda siempre él, pida lo que pida, como
+ * negocio y odontólogo, `role: "worker"`: el encargado no es tratante). El odontólogo queda siempre él, pida lo que pida, como
  * `profesionalParaLinea`: así nunca congela la regla de un colega ni la ve.
  * Cualquier otro, o un odontólogo sin `memberId`, no tiene tratante (`null`:
  * el endpoint no crea nada). Falla cerrado.

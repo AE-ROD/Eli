@@ -11,15 +11,15 @@ import { CLINICA, OTRA_CLINICA, escenarioDental } from "./clinica-dental"
  *   Laboratorio Sur por defecto), Zirconio (por pieza, $290.000, 35/20/45),
  *   Flexible viejo (desactivado) y uno de la otra clínica.
  * - Pérez tiene una excepción en Zirconio (40/15/45).
- * - Camila tiene dos prótesis: una removible de Pérez en laboratorio (con dos
- *   pasos de seguimiento) y una corona de Núñez recién creada, sin
- *   laboratorio. Beto tiene una, y la otra clínica, otra.
+ * - Camila tiene dos prótesis: una removible de Pérez en prueba de rodete
+ *   (con dos pasos de seguimiento, tono A3,5) y una corona de Núñez recién
+ *   creada, sin laboratorio ni tono. Beto tiene una, y la otra clínica, otra.
  */
 
 type Registro = Record<string, unknown>
 
 const CREADA = new Date("2026-11-02T14:00:00.000Z")
-const ENVIADA = new Date("2026-11-03T15:00:00.000Z")
+const RODETE = new Date("2026-11-03T15:00:00.000Z")
 
 /** Una prótesis de la clínica: la removible de Camila, salvo lo que se pise. */
 export function protesis(id: string, datos: Registro = {}): Registro {
@@ -43,7 +43,8 @@ export function protesis(id: string, datos: Registro = {}): Registro {
     laboratorioId: "lab-sur",
     laboratorioNombre: "Laboratorio Sur",
     entregaEstimada: new Date("2026-11-20T00:00:00.000Z"),
-    estado: "en-laboratorio",
+    tono: "A3.5",
+    estado: "rodete",
     pbOdontologo: 4000,
     pbClinica: 3000,
     pbTecnico: 3000,
@@ -136,6 +137,7 @@ export function escenarioDeProtesis() {
         laboratorioId: null,
         laboratorioNombre: null,
         entregaEstimada: null,
+        tono: null,
         estado: "impresion",
         pbOdontologo: 3500,
         pbClinica: 2000,
@@ -154,7 +156,7 @@ export function escenarioDeProtesis() {
     ],
     eventoDeProtesis: [
       { id: "evp-1", businessId: CLINICA, protesisId: "pt-removible", estado: "impresion", autorNombre: "Diego Pérez", createdAt: CREADA },
-      { id: "evp-2", businessId: CLINICA, protesisId: "pt-removible", estado: "en-laboratorio", autorNombre: "Valentina Soto", createdAt: ENVIADA },
+      { id: "evp-2", businessId: CLINICA, protesisId: "pt-removible", estado: "rodete", autorNombre: "Valentina Soto", createdAt: RODETE },
       {
         id: "evp-3",
         businessId: CLINICA,

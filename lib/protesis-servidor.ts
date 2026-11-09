@@ -19,6 +19,7 @@ import {
   MENSAJE_MATERIAL_REPETIDO,
   MENSAJE_PROTESIS_ANULADA,
   MENSAJE_SIN_MIEMBRO,
+  MENSAJE_TRATANTE_NO_ODONTOLOGO,
   MENSAJE_YA_EN_EL_PLAN,
   NOMBRE_DE_LA_ETAPA_DE_PROTESIS,
   type AlPlanRespuesta,
@@ -54,6 +55,7 @@ import {
   type Actor,
 } from "@/lib/permisos"
 import {
+  MENSAJE_PASO_DE_OTRO_TIPO,
   MENSAJE_PROTESIS_CERRADA,
   errorDeCambioDeEstado,
   errorDeTiposDelMaterial,
@@ -61,10 +63,12 @@ import {
   esArcada,
   esEstadoDeProtesis,
   esMaterialCompatible,
+  esPasoDelTipo,
   esTipoDeProtesis,
   esUnidad,
   esZona,
   estaCerrada,
+  etapasDeLaProtesis,
   nombreParaElPlan,
   normalizarDiseno,
   ordenarTipos,
@@ -72,6 +76,7 @@ import {
   repartirMonto,
   repartoEfectivo,
   repartoQueAplica,
+  tonoDeLaGuia,
   unidadDelTipo,
   valorDeLaProtesis,
   type RepartoEnPuntosBase,
@@ -449,12 +454,14 @@ export async function crearExcepcion(
     const [miembro, material] = await Promise.all([
       tx.businessMember.findFirst({
         where: { id: datos.memberId, businessId: actor.businessId },
-        select: { id: true, user: { select: { name: true } } },
+        select: { id: true, role: true, user: { select: { name: true } } },
       }),
       tx.materialDeProtesis.findFirst({ where: whereDeMaterialesDeProtesis(actor, { id: datos.materialId }), select: { id: true, nombre: true } }),
     ])
     if (!miembro) throw new ErrorClinico(404, MENSAJE_PROFESIONAL_NO_ENCONTRADO)
     if (!material) throw new ErrorClinico(404, MENSAJE_MATERIAL_NO_ENCONTRADO)
+    // Como la tratante (`tratanteConNombre`): sólo un odontólogo puede tener una excepción; el encargado nunca es tratante.
+    if (miembro.role !== "worker") throw new ErrorClinico(400, MENSAJE_TRATANTE_NO_ODONTOLOGO)
     await trabarMaterial(tx, actor, material.id)
     const repetida = await tx.excepcionDeRepartoDeProtesis.findFirst({
       where: whereDeExcepcionesDeReparto(actor, { memberId: miembro.id, materialId: material.id }),
@@ -520,7 +527,10 @@ const SELECCION_DE_PROTESIS = {
   valorCents: true,
   laboratorioId: true,
   laboratorioNombre: true,
+  // El contacto no se copia: es el del catálogo, el de hoy.
+  laboratorio: { select: { contacto: true } },
   entregaEstimada: true,
+  tono: true,
   estado: true,
   memberId: true,
   byOwner: true,
@@ -566,6 +576,12 @@ function formatearProtesis(actor: Actor, protesis: ProtesisLeida, agregados: Agr
   const tipo = esTipoDeProtesis(protesis.tipo) ? protesis.tipo : "removible"
   const estado = esEstadoDeProtesis(protesis.estado) ? protesis.estado : "impresion"
   const pagadoCents = agregados.pagado.get(protesis.id) ?? 0
+  const eventos = (agregados.eventos.get(protesis.id) ?? []).map((evento) => ({
+    estado: esEstadoDeProtesis(evento.estado) ? evento.estado : "impresion",
+    autorNombre: evento.autorNombre,
+    createdAt: evento.createdAt.toISOString(),
+  }))
+  const tono = tonoDeLaGuia(protesis.tono)
   return {
     id: protesis.id,
     tipo,
@@ -583,21 +599,23 @@ function formatearProtesis(actor: Actor, protesis: ProtesisLeida, agregados: Agr
     valorCents: protesis.valorCents,
     pagadoCents,
     saldoCents: Math.max(protesis.valorCents - pagadoCents, 0),
-    laboratorio: protesis.laboratorioId && protesis.laboratorioNombre ? { id: protesis.laboratorioId, nombre: protesis.laboratorioNombre } : null,
+    laboratorio:
+      protesis.laboratorioId && protesis.laboratorioNombre
+        ? { id: protesis.laboratorioId, nombre: protesis.laboratorioNombre, contacto: protesis.laboratorio?.contacto ?? null }
+        : null,
     entregaEstimada: protesis.entregaEstimada ? fechaDeColumna(protesis.entregaEstimada) : null,
+    // Un valor fuera de la guía no debería existir (hay CHECK): se muestra como sin tono.
+    tono: tono ? { id: tono.id, etiqueta: tono.etiqueta, grupo: tono.grupo, color: tono.color } : null,
     estado,
-    siguienteEstado: pasoSiguiente(estado),
+    siguienteEstado: pasoSiguiente(tipo, estado),
+    etapas: etapasDeLaProtesis(tipo, estado, eventos),
     entregadaEn: protesis.entregadaEn?.toISOString() ?? null,
     anuladaEn: protesis.anuladaEn?.toISOString() ?? null,
     anuladaPorNombre: protesis.anuladaPorNombre,
     tratante: { memberId: protesis.memberId, nombre: protesis.tratanteNombre, esLaDuena: protesis.byOwner },
     creadoPorNombre: protesis.creadoPorNombre,
     createdAt: protesis.createdAt.toISOString(),
-    eventos: (agregados.eventos.get(protesis.id) ?? []).map((evento) => ({
-      estado: esEstadoDeProtesis(evento.estado) ? evento.estado : "impresion",
-      autorNombre: evento.autorNombre,
-      createdAt: evento.createdAt.toISOString(),
-    })),
+    eventos,
     enElPlan: agregados.enElPlan.has(protesis.id),
     nombreParaElPlan: nombreParaElPlan(protesis),
     reparto: repartoVisible(actor, protesis),
@@ -663,7 +681,12 @@ async function leerUna(db: Tx, actor: Actor, pacienteId: string, protesisId: str
 
 // ─── Prótesis del paciente: escritura ────────────────────────────────────────
 
-/** La tratante con su nombre copiado: la dueña, o un miembro del negocio (ajeno, 404). */
+/**
+ * La tratante con su nombre copiado: la dueña, o un odontólogo (miembro
+ * `worker`) del negocio. Un miembro ajeno o que no existe, 404; un miembro
+ * de la clínica que no es odontólogo (el encargado), 400: la tratante es
+ * quien hace la prótesis y cobra su parte.
+ */
 async function tratanteConNombre(tx: Tx, actor: Actor, pedido: string | undefined) {
   const tratante = tratanteParaProtesis(actor, pedido)
   if (!tratante) throw new ErrorClinico(401, MENSAJE_SIN_MIEMBRO)
@@ -673,9 +696,10 @@ async function tratanteConNombre(tx: Tx, actor: Actor, pedido: string | undefine
   }
   const miembro = await tx.businessMember.findFirst({
     where: { id: tratante.memberId ?? "", businessId: actor.businessId },
-    select: { id: true, user: { select: { name: true } } },
+    select: { id: true, role: true, user: { select: { name: true } } },
   })
   if (!miembro) throw new ErrorClinico(404, MENSAJE_PROFESIONAL_NO_ENCONTRADO)
+  if (miembro.role !== "worker") throw new ErrorClinico(400, MENSAJE_TRATANTE_NO_ODONTOLOGO)
   return { memberId: miembro.id, byOwner: false, nombre: nombreParaCopiar(miembro.user.name) }
 }
 
@@ -684,7 +708,8 @@ async function tratanteConNombre(tx: Tx, actor: Actor, pedido: string | undefine
  * y el valor con el precio del catálogo, y congela la regla de reparto (la
  * excepción de la tratante en ese material, o la del material). Lo que mande
  * el navegador de eso no existe en el esquema. Sin laboratorio, el del
- * material por defecto si sigue activo. Empieza en Impresión, con su evento.
+ * material por defecto si sigue activo. El tono, si viene, de la guía VITA.
+ * Empieza en la toma de impresión, con su evento.
  */
 export async function crearProtesis(
   actor: Actor,
@@ -756,6 +781,7 @@ export async function crearProtesis(
         laboratorioId: laboratorio?.id ?? null,
         laboratorioNombre: laboratorio?.nombre ?? null,
         entregaEstimada: pedido.entregaEstimada ? fechaParaColumna(pedido.entregaEstimada) : null,
+        tono: pedido.tono ?? null,
         ...reparto,
         origenDelReparto: origen,
         creadoPorNombre: autor.nombre,
@@ -783,10 +809,12 @@ async function tieneAbonos(tx: Tx, actor: Actor, protesisId: string): Promise<bo
 }
 
 /**
- * Avanza el seguimiento (con su evento, la fecha de entrega o la de anulación
- * y quién) o cambia el laboratorio o la entrega estimada. Una entregada o
- * anulada no cambia (409). Pedir el estado en que ya está no es un cambio: el
- * doble clic no falla ni duplica el evento. Anular con abonos, 409.
+ * Avanza el seguimiento por los pasos de su tipo (con su evento, la fecha de
+ * entrega o la de anulación y quién) o cambia el laboratorio, la entrega
+ * estimada o el tono. Una entregada o anulada no cambia (409). Pedir el
+ * estado en que ya está no es un cambio: el doble clic no falla ni duplica el
+ * evento. Un paso que no es del tipo, 400; volver atrás, 409; anular con
+ * abonos, 409.
  */
 export async function editarProtesis(
   actor: Actor,
@@ -803,28 +831,33 @@ export async function editarProtesis(
     await trabarProtesis(tx, actor.businessId, protesisId)
     const actual = await tx.protesis.findFirst({
       where: whereDeProtesis(actor, { id: protesisId, customerId: pacienteId }),
-      select: { id: true, estado: true, laboratorioId: true },
+      select: { id: true, tipo: true, estado: true },
     })
     if (!actual) throw new ErrorClinico(404, MENSAJE_PROTESIS_NO_ENCONTRADA)
     const cambiaEstado = pedido.estado !== undefined && pedido.estado !== actual.estado
+    const cambiaOtraCosa = pedido.laboratorioId !== undefined || pedido.entregaEstimada !== undefined || pedido.tono !== undefined
     if (estaCerrada(actual.estado)) {
-      if (!cambiaEstado && pedido.laboratorioId === undefined && pedido.entregaEstimada === undefined) return leerUna(tx, actor, pacienteId, actual.id)
+      if (!cambiaEstado && !cambiaOtraCosa) return leerUna(tx, actor, pacienteId, actual.id)
       throw new ErrorClinico(409, MENSAJE_PROTESIS_CERRADA)
+    }
+    // Los CHECKs garantizan el tipo (lo mismo que `formatearProtesis` si algo raro llegara).
+    const tipo = esTipoDeProtesis(actual.tipo) ? actual.tipo : "removible"
+    if (cambiaEstado && pedido.estado && pedido.estado !== "anulada" && !esPasoDelTipo(tipo, pedido.estado)) {
+      throw new ErrorClinico(400, MENSAJE_PASO_DE_OTRO_TIPO)
     }
 
     const data: Prisma.ProtesisUncheckedUpdateManyInput = {}
-    let laboratorioId = actual.laboratorioId
     if (pedido.laboratorioId !== undefined) {
       const laboratorio = pedido.laboratorioId ? await laboratorioActivo(tx, actor, pedido.laboratorioId) : null
-      laboratorioId = laboratorio?.id ?? null
-      data.laboratorioId = laboratorioId
+      data.laboratorioId = laboratorio?.id ?? null
       data.laboratorioNombre = laboratorio?.nombre ?? null
     }
     if (pedido.entregaEstimada !== undefined) {
       data.entregaEstimada = pedido.entregaEstimada ? fechaParaColumna(pedido.entregaEstimada) : null
     }
+    if (pedido.tono !== undefined) data.tono = pedido.tono
     if (cambiaEstado && pedido.estado) {
-      const error = errorDeCambioDeEstado(actual.estado, pedido.estado, laboratorioId !== null)
+      const error = errorDeCambioDeEstado(tipo, actual.estado, pedido.estado)
       if (error) throw new ErrorClinico(409, error)
       if (pedido.estado === "anulada" && (await tieneAbonos(tx, actor, actual.id))) throw new ErrorClinico(409, MENSAJE_CON_ABONOS)
       const ahora = await horaDeLaBase(tx)

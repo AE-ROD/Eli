@@ -13,11 +13,10 @@ import {
   TIPOS_DE_PROTESIS,
   ZONAS_DE_LA_BASE,
   errorDelDiseno,
+  esCordal,
   llevaBase,
-  nombreDeArcada,
   nombreDeTipo,
-  nombreDeZona,
-  textoDeUnidades,
+  tonoDeLaGuia,
   zonasPermitidas,
 } from "@/lib/protesis"
 import { cn } from "@/lib/utils"
@@ -25,6 +24,7 @@ import { crearProtesis } from "../_datos"
 import { pesos } from "../_formato"
 import {
   HERRAMIENTAS_DE_PROTESIS,
+  TEXTO_DEL_CORDAL,
   admiteAmbas,
   admitePilares,
   alternarZona,
@@ -38,13 +38,15 @@ import {
   pedidoDelBorrador,
   repartoDelBorrador,
   sePuedenTocarLasPiezas,
+  tituloDeProtesis,
   tocarPieza,
   valorDelBorrador,
   type BorradorDeProtesis,
   type HerramientaDeProtesis,
 } from "../_protesis"
 import { ArcadaDeProtesis } from "./arcada-de-protesis"
-import { RepartoDeProtesis } from "./reparto-de-protesis"
+import { ResumenDeProtesis } from "./resumen-de-protesis"
+import { SelectorDeTono } from "./tono-de-protesis"
 
 /** Los botones de opción (arcada, herramienta, zona): 40px de alto, el ::after los lleva a 44 para el dedo. */
 const BOTON_DE_OPCION =
@@ -67,9 +69,11 @@ interface PropsDeNuevaProtesis {
 
 /**
  * "Nueva prótesis" (`Main.dc.html`): el diseño sobre la arcada (arcada, tipo,
- * piezas protésicas y pilares tocando la arcada, zonas de la base), el
- * material del catálogo con el valor al paciente, el reparto para leer, el
- * laboratorio, la entrega estimada y la tratante (sólo la dueña elige).
+ * piezas protésicas y pilares tocando la arcada, sin cordales; zonas de la
+ * base), el tono de la guía VITA, el material del catálogo, la tratante (sólo
+ * la dueña elige), el laboratorio y la entrega estimada, y el resumen antes
+ * de crear (`ResumenDeProtesis`, el mismo de la tarjeta) con el valor al
+ * paciente y el reparto para leer.
  *
  * El valor y el reparto son una vista previa hecha con las reglas de
  * `lib/protesis.ts`, las mismas del servidor; al crear, el servidor los
@@ -104,6 +108,7 @@ export function NuevaProtesis({ pacienteId, opciones, odontograma, esLaDuena, no
   const errorParaMostrar = errorDeDiseno ?? (!material ? `Elige un material para ${tipoEnMinuscula}.` : valor && !valor.ok ? valor.error : null)
 
   const tocar = (pieza: number) => {
+    if (esCordal(pieza)) return setAnuncio(`Pieza ${pieza}: ${TEXTO_DEL_CORDAL}.`)
     const siguiente = tocarPieza(borrador, pieza, herramienta)
     if (siguiente === borrador) return
     setBorrador(siguiente)
@@ -130,20 +135,11 @@ export function NuevaProtesis({ pacienteId, opciones, odontograma, esLaDuena, no
 
   const piezas = diseno.piezas
   const pilares = diseno.pilares
-  const resumen: { clave: string; valor: string }[] = [
-    { clave: "Tipo", valor: nombreDeTipo(borrador.tipo) },
-    { clave: "Arcada", valor: nombreDeArcada(borrador.arcada) },
-    {
-      clave: "Piezas protésicas",
-      valor: borrador.tipo === "total" ? `Todas (${piezas.length})` : piezas.join(", ") || "—",
-    },
-    { clave: "Pilares o ganchos", valor: admitePilares(borrador.tipo) ? pilares.join(", ") || "—" : "No lleva" },
-    {
-      clave: "Zonas de la base",
-      valor: llevaBase(borrador.tipo) ? diseno.zonas.map(nombreDeZona).join(", ") || "—" : "No aplica",
-    },
-    { clave: "Material", valor: material?.nombre ?? "—" },
-  ]
+  const nombreDeLaTratante = esLaDuena
+    ? borrador.tratante === "duenio"
+      ? `${tratante?.nombre ?? nombreDeQuienMira} (tú)`
+      : (tratante?.nombre ?? "—")
+    : `${tratante?.nombre ?? nombreDeQuienMira} (tú)`
 
   return (
     <form onSubmit={crear} noValidate aria-label="Nueva prótesis" className="flex flex-wrap items-start gap-6">
@@ -240,7 +236,8 @@ export function NuevaProtesis({ pacienteId, opciones, odontograma, esLaDuena, no
             </div>
           ) : (
             <p className="mt-5 text-sm text-texto-2">
-              Una prótesis total reemplaza todas las piezas de la arcada ({piezas.length}): no hace falta tocarlas.
+              Una prótesis total reemplaza todas las piezas de la arcada menos los cordales ({piezas.length}): no hace falta
+              tocarlas.
             </p>
           )}
 
@@ -308,7 +305,31 @@ export function NuevaProtesis({ pacienteId, opciones, odontograma, esLaDuena, no
               <span aria-hidden="true" className="size-3.5 rounded-[5px] border-[1.5px] border-dashed border-texto-2 bg-superficie" />
               Ausente o con extracción indicada en el odontograma
             </span>
+            <span className="inline-flex items-center gap-2">
+              <span
+                aria-hidden="true"
+                className="size-3.5 rounded-[5px] border-[1.5px] bg-superficie"
+                style={{
+                  borderColor: COLOR_DEL_CONTORNO,
+                  backgroundImage: "repeating-linear-gradient(45deg, transparent 0 3px, rgb(95 109 119 / 0.35) 3px 4.5px)",
+                }}
+              />
+              Cordal: no entra en una prótesis
+            </span>
           </div>
+        </section>
+
+        <section aria-labelledby={`${id}-tono`} className={cn(TARJETA_DEL_PANEL, "p-4 sm:p-6")}>
+          <h3 id={`${id}-tono`} className={TITULO_DE_TARJETA}>
+            Tono
+          </h3>
+          <p className="mt-1 text-sm text-texto-2">Guía VITA classical, en su orden. Se puede cambiar hasta entregarla.</p>
+          <SelectorDeTono
+            valor={borrador.tono}
+            alCambiar={(tono) => setBorrador({ ...borrador, tono })}
+            idDelNombre={`${id}-tono`}
+            className="mt-4"
+          />
         </section>
       </div>
 
@@ -350,66 +371,46 @@ export function NuevaProtesis({ pacienteId, opciones, odontograma, esLaDuena, no
           )}
         </section>
 
-        <section aria-labelledby={`${id}-reparto`} className={cn(TARJETA_DEL_PANEL, "p-5")}>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 id={`${id}-reparto`} className={TITULO_DE_TARJETA}>
-              {reparto?.visible === "suyo" ? "Valor y tu parte" : "Valor y reparto"}
-            </h3>
-            <span className="rounded-full bg-superficie px-3 py-1 text-[13px] font-medium">
-              {esLaDuena ? "Se cambia en Comisiones" : "Lo define la dueña"}
-            </span>
-          </div>
-          <div className="mt-3 rounded-[20px] bg-superficie px-4 py-3.5 squircle">
-            <span className="block text-[13px] text-texto-2">Valor al paciente</span>
-            <span className="mt-0.5 block text-[32px] leading-tight font-medium tracking-[-0.5px] tabular-nums">
-              {valor?.ok ? pesos(valor.valorCents) : "—"}
-            </span>
-            {material && valor?.ok && (
-              <span className="mt-0.5 block text-[13px] text-texto-2 tabular-nums">
-                {textoDeUnidades(material.unidad, valor.unidades)} × {pesos(material.precioCents)}
-              </span>
-            )}
-          </div>
-          {reparto && valor?.ok && (
-            <RepartoDeProtesis
-              reparto={reparto}
-              tratante={tratante?.nombre ?? nombreDeQuienMira}
-              laboratorio={laboratorio?.nombre ?? null}
-              tratanteEsLaDuena={esLaDuena && borrador.tratante === "duenio"}
-              vistaPrevia
-              className="mt-3"
-            />
-          )}
-          <p className="mt-3 text-[12px] leading-snug text-texto-2">
-            Vista previa: el servidor calcula el valor con el precio del catálogo al crear la prótesis.
-          </p>
-        </section>
-
-        <section aria-labelledby={`${id}-resumen`} className={cn(TARJETA_DEL_PANEL, "p-5")}>
-          <h3 id={`${id}-resumen`} className={TITULO_DE_TARJETA}>
-            Resumen
+        <section aria-labelledby={`${id}-quien`} className={cn(TARJETA_DEL_PANEL, "p-5")}>
+          <h3 id={`${id}-quien`} className={TITULO_DE_TARJETA}>
+            Quién y cuándo
           </h3>
-          <dl className="mt-3 flex flex-col">
-            {resumen.map((fila) => (
-              <div key={fila.clave} className="flex justify-between gap-3 border-t border-borde py-2 text-sm">
-                <dt className="text-texto-2">{fila.clave}</dt>
-                <dd className="text-right font-medium break-words tabular-nums">{fila.valor}</dd>
-              </div>
-            ))}
-          </dl>
-
-          <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2.5">
+          {esLaDuena ? (
+            <div className="mt-3">
+              <label htmlFor={`${id}-tratante`} className={ETIQUETA}>
+                Odontólogo/a a cargo
+              </label>
+              <select
+                id={`${id}-tratante`}
+                value={borrador.tratante}
+                onChange={(evento) => setBorrador({ ...borrador, tratante: evento.target.value })}
+                className={cn(CAMPO, "cursor-pointer text-base")}
+              >
+                {opciones.tratantes.map((otro) => (
+                  <option key={otro.id} value={otro.id}>
+                    {otro.id === "duenio" ? `${otro.nombre} (tú)` : otro.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <p className="mt-3 text-sm">
+              <span className="text-texto-2">Odontólogo/a a cargo: </span>
+              <span className="font-medium">{nombreDeLaTratante}</span>
+            </p>
+          )}
+          <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,150px),1fr))] gap-2.5">
             <div>
               <label htmlFor={`${id}-laboratorio`} className={ETIQUETA}>
-                Laboratorio
+                Técnico / laboratorio
               </label>
               <select
                 id={`${id}-laboratorio`}
                 value={borrador.laboratorioId ?? ""}
                 onChange={(evento) => setBorrador({ ...borrador, laboratorioId: evento.target.value || null })}
-                className={cn(CAMPO, "cursor-pointer")}
+                className={cn(CAMPO, "cursor-pointer text-base")}
               >
-                <option value="">Sin laboratorio todavía</option>
+                <option value="">Sin laboratorio asignado</option>
                 {opciones.laboratorios.map((lab) => (
                   <option key={lab.id} value={lab.id}>
                     {lab.nombre}
@@ -427,7 +428,7 @@ export function NuevaProtesis({ pacienteId, opciones, odontograma, esLaDuena, no
                 min="2000-01-01"
                 value={borrador.entregaEstimada}
                 onChange={(evento) => setBorrador({ ...borrador, entregaEstimada: evento.target.value })}
-                className={CAMPO}
+                className={cn(CAMPO, "text-base")}
               />
             </div>
           </div>
@@ -436,31 +437,41 @@ export function NuevaProtesis({ pacienteId, opciones, odontograma, esLaDuena, no
               {esLaDuena ? "Agrega los laboratorios en Configuración." : "La dueña agrega los laboratorios en Configuración."}
             </p>
           )}
+        </section>
 
-          {esLaDuena ? (
-            <div className="mt-3">
-              <label htmlFor={`${id}-tratante`} className={ETIQUETA}>
-                Tratante
-              </label>
-              <select
-                id={`${id}-tratante`}
-                value={borrador.tratante}
-                onChange={(evento) => setBorrador({ ...borrador, tratante: evento.target.value })}
-                className={cn(CAMPO, "cursor-pointer")}
-              >
-                {opciones.tratantes.map((otro) => (
-                  <option key={otro.id} value={otro.id}>
-                    {otro.id === "duenio" ? `${otro.nombre} (tú)` : otro.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <p className="mt-3 text-sm">
-              <span className="text-texto-2">Tratante: </span>
-              <span className="font-medium">{tratante?.nombre ?? nombreDeQuienMira} (tú)</span>
-            </p>
-          )}
+        <section aria-labelledby={`${id}-resumen`} className={cn(TARJETA_DEL_PANEL, "p-5")}>
+          <Antetitulo>Resumen</Antetitulo>
+          <ResumenDeProtesis
+            titulo={tituloDeProtesis(borrador.tipo, borrador.arcada)}
+            idDelTitulo={`${id}-resumen`}
+            subtitulo="Así queda al crearla."
+            tipo={borrador.tipo}
+            tratante={nombreDeLaTratante}
+            laboratorio={laboratorio ? { nombre: laboratorio.nombre, contacto: null } : null}
+            accionSinLaboratorio={
+              opciones.laboratorios.length > 0 && (
+                <Boton
+                  type="button"
+                  variante="secundario"
+                  tamano="sm"
+                  onClick={() => document.getElementById(`${id}-laboratorio`)?.focus()}
+                >
+                  Elegir laboratorio
+                </Boton>
+              )
+            }
+            piezas={piezas}
+            pilares={pilares}
+            zonas={diseno.zonas}
+            material={material ? { nombre: material.nombre, unidad: material.unidad, precioUnitarioCents: material.precioCents } : null}
+            unidades={valor?.ok ? valor.unidades : null}
+            tono={tonoDeLaGuia(borrador.tono)}
+            entregaEstimada={borrador.entregaEstimada.trim() || null}
+            dinero={valor?.ok ? { valorCents: valor.valorCents, pagadoCents: 0, saldoCents: valor.valorCents } : null}
+            reparto={reparto}
+            tratanteEsLaDuena={esLaDuena && borrador.tratante === "duenio"}
+            vistaPrevia
+          />
 
           {intentado && errorParaMostrar && (
             <Aviso tono="atencion" rol="status" className="mt-4">
@@ -478,8 +489,8 @@ export function NuevaProtesis({ pacienteId, opciones, odontograma, esLaDuena, no
             </Boton>
           </div>
           <p className="mt-3 text-[13px] leading-snug text-texto-2">
-            Queda en «Impresión», con tu nombre y la fecha. Después, «Enviar al laboratorio» sólo registra el paso: no se
-            envía nada.
+            Queda en «Toma de impresión», con tu nombre y la fecha. El laboratorio, la entrega y el tono se pueden cambiar hasta
+            entregarla.
           </p>
         </section>
       </div>

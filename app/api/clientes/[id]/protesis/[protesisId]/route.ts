@@ -14,12 +14,12 @@ import { actorDeSesion, puedeEditarProtesis, veProtesis } from "@/lib/permisos"
 import { editarProtesis } from "@/lib/protesis-servidor"
 
 /**
- * Avanza el seguimiento de una prótesis (`{ estado }`: "Enviar al
- * laboratorio" es `en-laboratorio`, que pide un laboratorio; `entregada` fija
- * la fecha de entrega; `anulada` sólo antes de entregar y sin abonos), o
- * cambia el laboratorio o la entrega estimada. Sólo hacia adelante: un paso
- * anterior, o una prótesis entregada o anulada, 409. Cada paso queda como un
- * evento con fecha y autor. Una prótesis de otro paciente es 404.
+ * Avanza el seguimiento de una prótesis por los pasos de su tipo
+ * (`{ estado }`, `PASOS_POR_TIPO` en lib/protesis.ts: `entregada` fija la
+ * fecha de entrega; `anulada` sólo antes de entregar y sin abonos), o cambia
+ * el laboratorio, la entrega estimada o el tono. Un paso que no es del tipo,
+ * 400; un paso anterior, o una prótesis entregada o anulada, 409. Cada paso
+ * queda como un evento con fecha y autor. Una prótesis de otro paciente es 404.
  */
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string; protesisId: string }> }) {
   const session = await getServerSession(authOptions)

@@ -13,9 +13,10 @@ import {
   type TeclaDeLaArcada,
 } from "@/components/panel/odontograma/geometria"
 import { nombreDePieza } from "@/lib/odontograma"
-import { piezasDeLaArcada, type Arcada } from "@/lib/protesis"
+import { esCordal, piezasDeLaArcada, type Arcada } from "@/lib/protesis"
 import { cn } from "@/lib/utils"
 import {
+  TEXTO_DEL_CORDAL,
   estadoDePiezaParaLeer,
   franjaDeLaArcada,
   vecinaEnLaArcada,
@@ -48,7 +49,9 @@ interface PropsDeArcadaDeProtesis {
  * un pilar o gancho, blanco con el borde ámbar de la corona; lo ausente o con
  * extracción indicada en el odontograma, punteado sobre gris. Nunca sólo por
  * el color: el número de la protésica va en navy, el del pilar en naranja
- * suave, y el nombre accesible lo dice todo.
+ * suave, y el nombre accesible lo dice todo. Los cordales (18, 28, 38, 48) se
+ * ven pero no se marcan: van rayados y deshabilitados ("cordal, no entra en
+ * una prótesis"); siguen en el recorrido con las flechas para que se lean.
  *
  * Con una sola arcada se muestra sólo su franja del dibujo. Como el
  * odontograma: cada pieza es un botón, Tab entra por una sola (la elegida),
@@ -109,7 +112,11 @@ export function ArcadaDeProtesis({
     <div ref={caja} className="overflow-x-auto overflow-y-hidden rounded-[24px] bg-crema px-2 py-4 squircle sm:px-3">
       <div
         role="group"
-        aria-label={arcada === "ambas" ? "Las dos arcadas, 32 piezas" : `Arcada ${arcada}, 16 piezas`}
+        aria-label={
+          arcada === "ambas"
+            ? "Las dos arcadas, 32 piezas (28 sin los cordales)"
+            : `Arcada ${arcada}, 16 piezas (14 sin los cordales)`
+        }
         aria-describedby={idDeLaAyuda}
         className="relative mx-auto"
         style={{ width: e(ANCHO_DE_LA_ARCADA), height: e(franja.alto) }}
@@ -159,8 +166,9 @@ export function ArcadaDeProtesis({
             geometria={geometriaDePieza(pieza)}
             escala={escala}
             arriba={franja.arriba}
-            marca={marcas[pieza]}
+            marca={esCordal(pieza) ? undefined : marcas[pieza]}
             falta={faltas.get(pieza)}
+            cordal={esCordal(pieza)}
             enElTab={pieza === paradaDelTab}
             editable={editable}
             refDelBoton={(nodo) => {
@@ -169,7 +177,7 @@ export function ArcadaDeProtesis({
             }}
             alTocar={() => {
               setElegida(pieza)
-              if (editable) alTocar(pieza)
+              if (editable && !esCordal(pieza)) alTocar(pieza)
             }}
             alTeclear={(evento) => alTeclear(evento, pieza)}
             alEnfocar={() => setElegida(pieza)}
@@ -233,6 +241,8 @@ interface PropsDePiezaDeProtesis {
   arriba: number
   marca: MarcaDeProtesis | undefined
   falta: FaltaEnElOdontograma | undefined
+  /** Un cordal: se ve, pero no se marca. */
+  cordal: boolean
   enElTab: boolean
   editable: boolean
   refDelBoton: (nodo: HTMLButtonElement | null) => void
@@ -248,6 +258,7 @@ function PiezaDeProtesis({
   arriba,
   marca,
   falta,
+  cordal,
   enElTab,
   editable,
   refDelBoton,
@@ -260,7 +271,7 @@ function PiezaDeProtesis({
   const x = centro.x * escala
   const y = (centro.y - arriba) * escala
   const numero = { x: x + normal.x * (lado / 2 + 13), y: y + normal.y * (lado / 2 + 13) }
-  const sinMarcaYFalta = !marca && !!falta
+  const sinMarcaYFalta = !marca && !!falta && !cordal
 
   return (
     <>
@@ -268,17 +279,17 @@ function PiezaDeProtesis({
         ref={refDelBoton}
         type="button"
         tabIndex={enElTab ? 0 : -1}
-        aria-label={`Pieza ${pieza}, ${nombreDePieza(pieza)}: ${estadoDePiezaParaLeer(marca, falta)}`}
-        aria-pressed={!!marca}
-        aria-disabled={!editable || undefined}
+        aria-label={`Pieza ${pieza}, ${nombreDePieza(pieza)}: ${cordal ? TEXTO_DEL_CORDAL : estadoDePiezaParaLeer(marca, falta)}`}
+        aria-pressed={cordal ? undefined : !!marca}
+        aria-disabled={!editable || cordal || undefined}
         onClick={alTocar}
         onKeyDown={alTeclear}
         onFocus={alEnfocar}
         className={cn(
           "absolute p-0 anillo-foco shadow-[0_1px_2px_#5f6d7724]",
-          editable ? "cursor-pointer" : "cursor-default",
+          editable && !cordal ? "cursor-pointer" : cordal ? "cursor-not-allowed" : "cursor-default",
           marca === "protesica" ? "border-[1.5px] border-navy bg-lila" : marca === "pilar" ? "border-[2.5px] bg-tarjeta" : "border-[1.5px]",
-          sinMarcaYFalta ? "border-dashed bg-superficie" : !marca && "bg-tarjeta"
+          cordal ? "bg-superficie" : sinMarcaYFalta ? "border-dashed bg-superficie" : !marca && "bg-tarjeta"
         )}
         style={{
           left: x - lado / 2,
@@ -288,9 +299,13 @@ function PiezaDeProtesis({
           borderRadius: "34%",
           transform: `rotate(${rotacion.toFixed(1)}deg)`,
           ...(marca === "pilar" ? { borderColor: COLOR_DE_CORONA } : !marca ? { borderColor: COLOR_DEL_CONTORNO } : {}),
+          // El cordal, rayado: se distingue sin depender del color.
+          ...(cordal && {
+            backgroundImage: "repeating-linear-gradient(45deg, transparent 0 5px, rgb(95 109 119 / 0.28) 5px 6.5px)",
+          }),
         }}
       >
-        {!sinMarcaYFalta && (
+        {!sinMarcaYFalta && !cordal && (
           <span
             aria-hidden="true"
             className={cn("absolute inset-[27%] rounded-[32%] border-[1.5px]", marca === "protesica" ? "border-navy/40" : "border-borde")}
@@ -301,7 +316,13 @@ function PiezaDeProtesis({
         aria-hidden="true"
         className={cn(
           "pointer-events-none absolute flex h-[22px] min-w-[26px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full px-1.5 text-xs font-semibold whitespace-nowrap tabular-nums",
-          marca === "protesica" ? "bg-navy text-white" : marca === "pilar" ? "bg-naranja-suave text-navy" : sinMarcaYFalta ? "text-texto-2" : "text-navy"
+          marca === "protesica"
+            ? "bg-navy text-white"
+            : marca === "pilar"
+              ? "bg-naranja-suave text-navy"
+              : sinMarcaYFalta || cordal
+                ? "text-texto-2"
+                : "text-navy"
         )}
         style={{ left: numero.x, top: numero.y }}
       >

@@ -1654,11 +1654,13 @@ describe("base falsa: las prótesis (etapa 7)", () => {
       expect(fila("protesis", "pt1")).toMatchObject({ valorCents: 100, piezas: [46], pbOdontologo: 5000 })
     })
 
-    it("el estado sólo avanza (se puede saltar un paso), y anulada o entregada ya no cambia", async () => {
-      await expect(prisma.protesis.update({ where: { id: "pt1" }, data: { estado: "prueba" } })).resolves.toBeTruthy()
-      await expect(prisma.protesis.update({ where: { id: "pt1" }, data: { estado: "en-laboratorio" } })).rejects.toThrow(/sólo avanza/)
+    it("el estado sólo avanza por los pasos de su tipo (se puede saltar uno), y anulada o entregada ya no cambia, ni su tono", async () => {
+      await expect(prisma.protesis.update({ where: { id: "pt1" }, data: { estado: "prueba" } })).rejects.toThrow(/sólo avanza/)
+      await expect(prisma.protesis.update({ where: { id: "pt1" }, data: { estado: "enfilado", tono: "A3.5" } })).resolves.toBeTruthy()
+      await expect(prisma.protesis.update({ where: { id: "pt1" }, data: { estado: "rodete" } })).rejects.toThrow(/sólo avanza/)
       await expect(prisma.protesis.update({ where: { id: "pt1" }, data: { estado: "entregada", entregadaEn: new Date(5) } })).resolves.toBeTruthy()
       await expect(prisma.protesis.update({ where: { id: "pt1" }, data: { laboratorioId: null, laboratorioNombre: null } })).rejects.toThrow(/ya no cambia/)
+      await expect(prisma.protesis.update({ where: { id: "pt1" }, data: { tono: "A1" } })).rejects.toThrow(/ya no cambia/)
       await expect(prisma.protesis.update({ where: { id: "pt1" }, data: { estado: "anulada", anuladaEn: new Date(6) } })).rejects.toThrow(rechazo)
     })
 

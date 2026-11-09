@@ -155,8 +155,8 @@ describe("GET /api/atenciones/[id]/abonos", () => {
     expect(removible).toEqual({
       id: "pt-removible",
       nombre: "Removible parcial · Acrílico termocurado (45, 46, 47)",
-      estado: "en-laboratorio",
-      nombreDeEstado: "En laboratorio",
+      estado: "rodete",
+      nombreDeEstado: "Prueba de rodete",
       tratante: "Diego Pérez",
       valor: 180_000,
       pagado: 30_000,

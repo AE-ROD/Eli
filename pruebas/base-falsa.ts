@@ -275,6 +275,7 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     laboratorioId: null,
     laboratorioNombre: null,
     entregaEstimada: null,
+    tono: null,
     estado: "impresion",
     entregadaEn: null,
     anuladaEn: null,
@@ -805,7 +806,7 @@ export function crearBaseFalsa() {
     }
   }
 
-  // ─── Triggers de las prótesis (`20261108120000_etapa_7_protesis`) ─────────
+  // ─── Triggers de las prótesis (`20261108120000_etapa_7_protesis`; `protesis_congelada` como la reemplazó `20261109120000_etapa_7c_protesis_por_tipo`) ─
 
   /** Las columnas de una prótesis que se pueden mover (`protesis_congelada`). */
   const MOVIBLES_DE_PROTESIS = [
@@ -813,13 +814,16 @@ export function crearBaseFalsa() {
     "laboratorioId",
     "laboratorioNombre",
     "entregaEstimada",
+    "tono",
     "entregadaEn",
     "anuladaEn",
     "anuladaPorNombre",
     "memberId",
     "updatedAt",
   ]
-  const PASOS_DE_PROTESIS = ["impresion", "en-laboratorio", "prueba", "ajustes", "entregada"]
+  /** Los pasos según el tipo (la removible y la total, con rodete y enfilado; el resto, con una prueba). */
+  const pasosDeProtesis = (tipo: unknown) =>
+    tipo === "removible" || tipo === "total" ? ["impresion", "rodete", "enfilado", "entregada"] : ["impresion", "prueba", "entregada"]
 
   /** `distintos`, también para listas (piezas, pilares, zonas): Postgres compara el arreglo entero. */
   const distintosOListas = (a: unknown, b: unknown) =>
@@ -828,8 +832,8 @@ export function crearBaseFalsa() {
   /**
    * El trigger `protesis_congelada`: lo copiado al crear la prótesis no
    * cambia (se compara la fila entera menos lo movible); `memberId` sólo pasa
-   * a null; una entregada o anulada no cambia más; el estado sólo avanza (o
-   * pasa a anulada).
+   * a null; una entregada o anulada no cambia más (tampoco el tono); el
+   * estado sólo avanza por los pasos de su tipo (o pasa a anulada).
    */
   function protesisCongelada(viejo: Registro, nuevo: Registro) {
     const id = String(viejo.id)
@@ -845,9 +849,10 @@ export function crearBaseFalsa() {
       throw errorDeTrigger(`protesis ${id}: una prótesis entregada o anulada ya no cambia`)
     }
     if (distintos(nuevo.estado, viejo.estado) && nuevo.estado !== "anulada") {
-      const antes = PASOS_DE_PROTESIS.indexOf(String(viejo.estado))
-      const despues = PASOS_DE_PROTESIS.indexOf(String(nuevo.estado))
-      if (antes < 0 || despues < 0 || despues <= antes) throw errorDeTrigger(`protesis ${id}: el seguimiento sólo avanza`)
+      const pasos = pasosDeProtesis(viejo.tipo)
+      const antes = pasos.indexOf(String(viejo.estado))
+      const despues = pasos.indexOf(String(nuevo.estado))
+      if (antes < 0 || despues < 0 || despues <= antes) throw errorDeTrigger(`protesis ${id}: el seguimiento sólo avanza por los pasos de su tipo`)
     }
   }
 

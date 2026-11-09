@@ -8,8 +8,14 @@ import { comisionEnCentavos } from "@/lib/comisiones"
 import type { OpcionesDeProtesisRespuesta, ParteDelReparto, RepartoRespuesta } from "@/lib/edicion-de-protesis"
 import { cuadranteDe, type MarcaDelOdontograma } from "@/lib/odontograma"
 import {
+  GRUPOS_DE_TONOS,
+  IDS_DE_TONOS,
+  TONOS_VITA,
+  esCordal,
   esMaterialCompatible,
   esPiezaDeLaArcada,
+  nombreDeArcada,
+  nombreDeTipo,
   normalizarDiseno,
   piezasDeLaArcada,
   repartirMonto,
@@ -19,8 +25,11 @@ import {
   zonasPermitidas,
   type Arcada,
   type DisenoNormalizado,
+  type GrupoDeTono,
   type ResultadoDelValor,
   type TipoDeProtesis,
+  type TonoDeLaGuia,
+  type TonoVita,
   type ZonaDeLaBase,
 } from "@/lib/protesis"
 
@@ -28,7 +37,8 @@ import {
  * Lo que hace la pestaña Prótesis mientras se arma una prótesis nueva, como
  * funciones puras sobre un borrador: tocar piezas con una herramienta, cambiar
  * el tipo o la arcada, las zonas, el material y su laboratorio, y la vista
- * previa del valor y del reparto.
+ * previa del valor y del reparto. También el tono de la guía VITA y lo que
+ * se cambia de una prótesis ya creada (laboratorio, entrega y tono).
  *
  * Las reglas son las de `lib/protesis.ts` (las mismas que aplica el servidor):
  * acá no se repiten, se usan. El valor y el reparto que se muestran son una
@@ -59,6 +69,8 @@ export interface BorradorDeProtesis {
   laboratorioId: string | null
   /** "AAAA-MM-DD", o vacío. */
   entregaEstimada: string
+  /** El tono de la guía VITA classical, o `null` si todavía no se eligió. */
+  tono: TonoVita | null
   /** "duenio" o un memberId. Sólo lo elige la dueña. */
   tratante: string
 }
@@ -91,10 +103,10 @@ export const sePuedenTocarLasPiezas = (tipo: TipoDeProtesis) => tipo !== "total"
  * tiene, la deja sin marca; otra herramienta la cambia. En la corona, marcar
  * una pieza protésica reemplaza a la anterior (es una sola). Lo que el tipo
  * no admite (piezas en la total, pilares en la corona) no cambia nada, y una
- * pieza fuera de la arcada tampoco.
+ * pieza fuera de la arcada o un cordal (18, 28, 38, 48) tampoco.
  */
 export function tocarPieza(borrador: BorradorDeProtesis, pieza: number, herramienta: HerramientaDeProtesis): BorradorDeProtesis {
-  if (!sePuedenTocarLasPiezas(borrador.tipo) || !esPiezaDeLaArcada(pieza, borrador.arcada)) return borrador
+  if (!sePuedenTocarLasPiezas(borrador.tipo) || !esPiezaDeLaArcada(pieza, borrador.arcada) || esCordal(pieza)) return borrador
   if (herramienta === "pilar" && !admitePilares(borrador.tipo)) return borrador
   const marcas = { ...borrador.marcas }
   if (herramienta === "borrar" || marcas[pieza] === herramienta) delete marcas[pieza]
@@ -103,10 +115,10 @@ export function tocarPieza(borrador: BorradorDeProtesis, pieza: number, herramie
   return { ...borrador, marcas }
 }
 
-/** Las marcas que siguen valiendo en la arcada y el tipo: fuera de la arcada se van; la corona se queda con una pieza y sin pilares. */
+/** Las marcas que siguen valiendo en la arcada y el tipo: fuera de la arcada (o en un cordal) se van; la corona se queda con una pieza y sin pilares. */
 function marcasQueQuedan(marcas: Readonly<Record<number, MarcaDeProtesis>>, tipo: TipoDeProtesis, arcada: Arcada) {
   const enLaArcada = Object.fromEntries(
-    Object.entries(marcas).filter(([pieza]) => esPiezaDeLaArcada(Number(pieza), arcada))
+    Object.entries(marcas).filter(([pieza]) => esPiezaDeLaArcada(Number(pieza), arcada) && !esCordal(Number(pieza)))
   ) as Record<number, MarcaDeProtesis>
   if (tipo === "total") return {}
   if (tipo === "corona") {
@@ -179,7 +191,7 @@ export function zonasQueValen(borrador: Pick<BorradorDeProtesis, "tipo" | "arcad
   return zonasPermitidas(borrador.tipo, borrador.arcada).filter((zona) => borrador.zonas.includes(zona))
 }
 
-/** El diseño como lo guardará el servidor (`normalizarDiseno`): la total, con todas las piezas de la arcada. */
+/** El diseño como lo guardará el servidor (`normalizarDiseno`): la total, con todas las piezas de la arcada menos los cordales. */
 export function disenoDelBorrador(borrador: BorradorDeProtesis): DisenoNormalizado {
   return normalizarDiseno({
     tipo: borrador.tipo,
@@ -200,6 +212,7 @@ export function borradorInicial(opciones: OpcionesDeProtesisRespuesta): Borrador
     materialId: null,
     laboratorioId: null,
     entregaEstimada: "",
+    tono: null,
     tratante: opciones.tratantes[0]?.id ?? "duenio",
   }
   return elegirMaterial(vacio, primerMaterialPara("removible", opciones.materiales), opciones.laboratorios)
@@ -217,6 +230,7 @@ export function pedidoDelBorrador(borrador: BorradorDeProtesis, conTratante: boo
     materialId: borrador.materialId ?? "",
     laboratorioId: borrador.laboratorioId,
     entregaEstimada: borrador.entregaEstimada.trim() || null,
+    tono: borrador.tono,
     ...(conTratante && { tratante: borrador.tratante }),
   }
 }
@@ -284,6 +298,9 @@ export function faltasDelOdontograma(marcas: readonly MarcaDelOdontograma[]): Ma
   return faltas
 }
 
+/** Lo que se lee de un cordal en la arcada de la prótesis: se ve, pero no se marca. */
+export const TEXTO_DEL_CORDAL = "cordal, no entra en una prótesis"
+
 /** "Pieza protésica", "Pilar o gancho" o "sin marca", más lo que dice el odontograma. */
 export function estadoDePiezaParaLeer(marca: MarcaDeProtesis | undefined, falta: FaltaEnElOdontograma | undefined): string {
   const texto = marca === "protesica" ? "pieza protésica" : marca === "pilar" ? "pilar o gancho" : "sin marcar"
@@ -314,4 +331,87 @@ export function franjaDeLaArcada(arcada: Arcada): { arriba: number; alto: number
   const arriba = Math.max(0, Math.min(...piezas.map((g) => g.centro.y - g.lado / 2 - MARGEN_DEL_NUMERO)))
   const abajo = Math.min(ALTO_DE_LA_ARCADA, Math.max(...piezas.map((g) => g.centro.y + g.lado / 2 + MARGEN_DEL_NUMERO)))
   return { arriba: Math.floor(arriba), alto: Math.ceil(abajo - arriba) }
+}
+
+// ─── El título ───────────────────────────────────────────────────────────────
+
+/** "Removible parcial, arcada superior", "Total, ambas arcadas": el título del resumen. */
+export function tituloDeProtesis(tipo: TipoDeProtesis, arcada: Arcada): string {
+  const deLaArcada = arcada === "ambas" ? "ambas arcadas" : `arcada ${nombreDeArcada(arcada).toLocaleLowerCase("es-CL")}`
+  return `${nombreDeTipo(tipo)}, ${deLaArcada}`
+}
+
+// ─── El tono (guía VITA classical) ───────────────────────────────────────────
+
+/** El nombre que se muestra de un grupo de la guía: "Blanqueamiento", "A rojizo-marrón". */
+export function nombreDelGrupoDeTonos(grupo: GrupoDeTono): string {
+  const datos = GRUPOS_DE_TONOS.find((otro) => otro.id === grupo)
+  if (!datos) return grupo
+  return grupo === "0M" ? datos.nombre : `${grupo} ${datos.nombre.toLocaleLowerCase("es-CL")}`
+}
+
+/** Los tonos de la guía por grupo, en el orden de la guía (0M, A, B, C, D), para dibujar el selector. */
+export function tonosPorGrupo(): { grupo: GrupoDeTono; nombre: string; tonos: TonoDeLaGuia[] }[] {
+  return GRUPOS_DE_TONOS.map((grupo) => ({
+    grupo: grupo.id,
+    nombre: nombreDelGrupoDeTonos(grupo.id),
+    tonos: TONOS_VITA.filter((tono) => tono.grupo === grupo.id),
+  }))
+}
+
+/** Las teclas con que se recorre el selector de tonos, como un grupo de radios. */
+export const TECLAS_DEL_TONO = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"] as const
+export type TeclaDelTono = (typeof TECLAS_DEL_TONO)[number]
+
+/**
+ * A qué tono se pasa con una tecla, en el orden de la guía: derecha y abajo,
+ * al siguiente; izquierda y arriba, al anterior (las dos dan la vuelta);
+ * Inicio y Fin, a las puntas.
+ */
+export function tonoVecino(actual: TonoVita, tecla: TeclaDelTono): TonoVita {
+  const total = IDS_DE_TONOS.length
+  const posicion = Math.max(0, IDS_DE_TONOS.indexOf(actual))
+  if (tecla === "Home") return IDS_DE_TONOS[0]
+  if (tecla === "End") return IDS_DE_TONOS[total - 1]
+  const paso = tecla === "ArrowRight" || tecla === "ArrowDown" ? 1 : -1
+  return IDS_DE_TONOS[(posicion + paso + total) % total]
+}
+
+// ─── Cambiar una prótesis ya creada ──────────────────────────────────────────
+
+/** Lo que se cambia de una prótesis mientras no esté entregada: laboratorio, entrega estimada y tono. */
+export interface EdicionDeProtesis {
+  laboratorioId: string | null
+  /** "AAAA-MM-DD", o vacío. */
+  entregaEstimada: string
+  tono: TonoVita | null
+}
+
+/** La edición tal como está la prótesis (el punto de partida del formulario). */
+export function edicionDe(protesis: {
+  laboratorio: { id: string } | null
+  entregaEstimada: string | null
+  tono: { id: TonoVita } | null
+}): EdicionDeProtesis {
+  return {
+    laboratorioId: protesis.laboratorio?.id ?? null,
+    entregaEstimada: protesis.entregaEstimada ?? "",
+    tono: protesis.tono?.id ?? null,
+  }
+}
+
+/**
+ * Lo que se manda a `PATCH …/protesis/[protesisId]`: sólo lo que cambió.
+ * Sin cambios, `null` (no hace falta pedir nada).
+ */
+export function cambiosDeLaEdicion(
+  antes: EdicionDeProtesis,
+  despues: EdicionDeProtesis
+): { laboratorioId?: string | null; entregaEstimada?: string | null; tono?: TonoVita | null } | null {
+  const cambios: { laboratorioId?: string | null; entregaEstimada?: string | null; tono?: TonoVita | null } = {}
+  if (despues.laboratorioId !== antes.laboratorioId) cambios.laboratorioId = despues.laboratorioId
+  const entrega = despues.entregaEstimada.trim()
+  if (entrega !== antes.entregaEstimada.trim()) cambios.entregaEstimada = entrega || null
+  if (despues.tono !== antes.tono) cambios.tono = despues.tono
+  return Object.keys(cambios).length > 0 ? cambios : null
 }

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { pedido } from "@/pruebas/datos"
-import type { ProtesisDelPacienteRespuesta, ProtesisRespuesta } from "@/lib/edicion-de-protesis"
+import { MENSAJE_TRATANTE_NO_ODONTOLOGO, type ProtesisDelPacienteRespuesta, type ProtesisRespuesta } from "@/lib/edicion-de-protesis"
 import { CLINICA, conParams, sesionesDentales as sesiones } from "../../_pruebas/clinica-dental"
 import { conAbono, escenarioDeProtesis } from "../../_pruebas/protesis"
 
@@ -72,10 +72,17 @@ describe("GET /api/clientes/[id]/protesis", () => {
       valorCents: 18_000_000,
       pagadoCents: 0,
       saldoCents: 18_000_000,
-      laboratorio: { id: "lab-sur", nombre: "Laboratorio Sur" },
+      laboratorio: { id: "lab-sur", nombre: "Laboratorio Sur", contacto: "+56 9 1111 2222" },
       entregaEstimada: "2026-11-20",
-      estado: "en-laboratorio",
-      siguienteEstado: "prueba",
+      tono: { id: "A3.5", etiqueta: "A3,5", grupo: "A", color: expect.stringMatching(/^#[0-9A-F]{6}$/) },
+      estado: "rodete",
+      siguienteEstado: "enfilado",
+      etapas: [
+        { id: "impresion", nombre: "Toma de impresión", situacion: "hecha", fecha: "2026-11-02T14:00:00.000Z", autorNombre: "Diego Pérez" },
+        { id: "rodete", nombre: "Prueba de rodete", situacion: "actual", fecha: "2026-11-03T15:00:00.000Z", autorNombre: "Valentina Soto" },
+        { id: "enfilado", nombre: "Prueba de enfilado", situacion: "pendiente", fecha: null, autorNombre: null },
+        { id: "entregada", nombre: "Entregada", situacion: "pendiente", fecha: null, autorNombre: null },
+      ],
       entregadaEn: null,
       anuladaEn: null,
       anuladaPorNombre: null,
@@ -84,7 +91,7 @@ describe("GET /api/clientes/[id]/protesis", () => {
       createdAt: "2026-11-02T14:00:00.000Z",
       eventos: [
         { estado: "impresion", autorNombre: "Diego Pérez", createdAt: "2026-11-02T14:00:00.000Z" },
-        { estado: "en-laboratorio", autorNombre: "Valentina Soto", createdAt: "2026-11-03T15:00:00.000Z" },
+        { estado: "rodete", autorNombre: "Valentina Soto", createdAt: "2026-11-03T15:00:00.000Z" },
       ],
       enElPlan: false,
       nombreParaElPlan: "Removible parcial · Acrílico termocurado (45, 46, 47)",
@@ -105,7 +112,18 @@ describe("GET /api/clientes/[id]/protesis", () => {
     const protesis = await lista(res)
     expect(una(protesis, "pt-removible")).toMatchObject({ valorCents: 18_000_000, reparto: { visible: "suyo", odontologo: { pb: 4000, cents: 7_200_000 } } })
     expect(una(protesis, "pt-removible")?.reparto).toEqual({ visible: "suyo", odontologo: { pb: 4000, cents: 7_200_000 } })
-    expect(una(protesis, "pt-corona")).toMatchObject({ valorCents: 29_000_000, reparto: null })
+    expect(una(protesis, "pt-corona")).toMatchObject({
+      valorCents: 29_000_000,
+      reparto: null,
+      laboratorio: null,
+      tono: null,
+      siguienteEstado: "prueba",
+      etapas: [
+        { id: "impresion", situacion: "actual", autorNombre: "Laura Núñez" },
+        { id: "prueba", situacion: "pendiente" },
+        { id: "entregada", situacion: "pendiente" },
+      ],
+    })
     // Ni la parte de la clínica ni la del técnico salen en la respuesta.
     const texto = JSON.stringify(protesis)
     expect(texto).not.toMatch(/clinica|tecnico|origen|5400000|pbClinica|pbTecnico/)
@@ -155,6 +173,7 @@ describe("POST /api/clientes/[id]/protesis", () => {
       tratante: "m-perez",
       laboratorioId: "lab-sur",
       entregaEstimada: "2026-12-01",
+      tono: "B2",
       // Nada de esto cuenta.
       valorCents: 1,
       precioUnitarioCents: 1,
@@ -176,8 +195,10 @@ describe("POST /api/clientes/[id]/protesis", () => {
       valorCents: 87_000_000,
       material: { id: "mt-zirconio", nombre: "Zirconio", unidad: "pieza", precioUnitarioCents: 29_000_000 },
       estado: "impresion",
-      laboratorio: { id: "lab-sur", nombre: "Laboratorio Sur" },
+      siguienteEstado: "prueba",
+      laboratorio: { id: "lab-sur", nombre: "Laboratorio Sur", contacto: "+56 9 1111 2222" },
       entregaEstimada: "2026-12-01",
+      tono: { id: "B2", etiqueta: "B2", grupo: "B" },
       tratante: { memberId: "m-perez", nombre: "Diego Pérez", esLaDuena: false },
       creadoPorNombre: "Valentina Soto",
       eventos: [{ estado: "impresion", autorNombre: "Valentina Soto", createdAt: AHORA.toISOString() }],
@@ -190,7 +211,19 @@ describe("POST /api/clientes/[id]/protesis", () => {
       },
     })
     const [guardada] = nuevas()
-    expect(guardada).toMatchObject({ businessId: CLINICA, pbOdontologo: 4000, pbClinica: 1500, pbTecnico: 4500, origenDelReparto: "excepcion" })
+    expect(guardada).toMatchObject({ businessId: CLINICA, pbOdontologo: 4000, pbClinica: 1500, pbTecnico: 4500, origenDelReparto: "excepcion", tono: "B2" })
+  })
+
+  it("la tratante sólo puede ser la dueña o un odontólogo: el encargado es 400 y no crea nada", async () => {
+    const res = await crear(sesiones.dueña, { ...removible, tratante: "m-recepcion" })
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: MENSAJE_TRATANTE_NO_ODONTOLOGO })
+    expect(nuevas()).toEqual([])
+    // Un odontólogo sí.
+    const otra = await crear(sesiones.dueña, { ...removible, tratante: "m-nunez" })
+    expect(otra.status).toBe(201)
+    expect(((await otra.json()) as ProtesisRespuesta).tratante).toEqual({ memberId: "m-nunez", nombre: "Laura Núñez", esLaDuena: false })
   })
 
   it("la odontóloga queda siempre como tratante, pida lo que pida, y ve sólo su parte", async () => {
@@ -221,14 +254,19 @@ describe("POST /api/clientes/[id]/protesis", () => {
   })
 
   it("sin laboratorio usa el del material; con null, ninguno; la total marca toda la arcada y se cobra por arcada", async () => {
-    expect(((await (await crear(sesiones.dueña, removible)).json()) as ProtesisRespuesta).laboratorio).toEqual({ id: "lab-sur", nombre: "Laboratorio Sur" })
+    const sinTono = (await (await crear(sesiones.dueña, removible)).json()) as ProtesisRespuesta
+    expect(sinTono.laboratorio).toEqual({ id: "lab-sur", nombre: "Laboratorio Sur", contacto: "+56 9 1111 2222" })
+    expect(sinTono.tono).toBeNull()
     expect(((await (await crear(sesiones.dueña, { ...removible, laboratorioId: null })).json()) as ProtesisRespuesta).laboratorio).toBeNull()
 
     const total = (await (
       await crear(sesiones.dueña, { tipo: "total", arcada: "ambas", piezas: [], zonas: ["paladar", "lingual"], materialId: "mt-acrilico" })
     ).json()) as ProtesisRespuesta
     expect(total).toMatchObject({ unidades: 2, valorCents: 36_000_000, pilares: [], zonas: ["paladar", "lingual"] })
-    expect(total.piezas).toHaveLength(32)
+    // Toda la arcada menos los cordales (18, 28, 38 y 48).
+    expect(total.piezas).toHaveLength(28)
+    expect(total.piezas).not.toContain(48)
+    expect(total.etapas.map((etapa) => etapa.id)).toEqual(["impresion", "rodete", "enfilado", "entregada"])
     expect(total.nombreParaElPlan).toBe("Total · Acrílico termocurado (ambas arcadas)")
   })
 
@@ -236,6 +274,9 @@ describe("POST /api/clientes/[id]/protesis", () => {
     ["una pieza de la otra arcada", { ...removible, piezas: [16] }, /no es de la arcada inferior/],
     ["una pieza temporal", { ...removible, piezas: [75] }, /dentición permanente/],
     ["sin piezas", { ...removible, piezas: [] }, /al menos una pieza/],
+    ["un cordal de pilar", { ...removible, pilares: [35, 37, 38] }, /38 es un cordal/],
+    ["una corona en un cordal", { tipo: "corona", arcada: "superior", piezas: [18], materialId: "mt-zirconio" }, /18 es un cordal/],
+    ["un tono fuera de la guía", { ...removible, tono: "A3,5" }, /guía VITA/],
     ["un pilar que también es protésica", { ...removible, pilares: [36] }, /a la vez protésica y pilar/],
     ["el paladar en la inferior", { ...removible, zonas: ["paladar"] }, /paladar es de la arcada superior/],
     ["zonas en una corona", { tipo: "corona", arcada: "superior", piezas: [21], zonas: ["rebasado"], materialId: "mt-zirconio" }, /no llevan base/],

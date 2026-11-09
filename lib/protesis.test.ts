@@ -2,17 +2,25 @@ import { describe, expect, it } from "vitest"
 import { comisionEnCentavos } from "@/lib/comisiones"
 import {
   MATERIALES_INICIALES,
+  ESTADOS_DE_PROTESIS,
+  GRUPOS_DE_TONOS,
+  IDS_DE_TIPOS,
+  MENSAJE_PASO_DE_OTRO_TIPO,
   MENSAJE_PROTESIS_CERRADA,
-  MENSAJE_SIN_LABORATORIO,
   MENSAJE_SOLO_AVANZA,
-  PASOS_DEL_SEGUIMIENTO,
+  TONOS_VITA,
   errorDeCambioDeEstado,
   errorDeTiposDelMaterial,
   errorDelDiseno,
+  esCordal,
   esMaterialCompatible,
+  esPasoDelTipo,
   esPiezaDeLaArcada,
   esRepartoValido,
+  esTonoVita,
   estaCerrada,
+  etapasDeLaProtesis,
+  etiquetaDeTono,
   llevaBase,
   materialesDeProtesisDeEjemplo,
   nombreDeEstado,
@@ -21,13 +29,16 @@ import {
   normalizarDiseno,
   ordenarTipos,
   pasoSiguiente,
+  pasosDelTipo,
   piezasDeLaArcada,
+  piezasProtesicasDeLaArcada,
   repartirMonto,
   repartoEfectivo,
   repartoQueAplica,
   textoDePorcentaje,
   textoDeUnidades,
   tiposDeLaUnidad,
+  tonoDeLaGuia,
   unidadDelTipo,
   unidadesDe,
   valorDeLaProtesis,
@@ -88,8 +99,15 @@ describe("tipos y materiales", () => {
   it("nombres", () => {
     expect(nombreDeTipo("removible")).toBe("Removible parcial")
     expect(nombreDeTipo("nada")).toBe("Prótesis")
-    expect(nombreDeEstado("prueba")).toBe("Prueba en boca")
-    expect(nombreDeEstado("anulada")).toBe("Anulada")
+    expect(ESTADOS_DE_PROTESIS.map((estado) => nombreDeEstado(estado.id))).toEqual([
+      "Toma de impresión",
+      "Prueba de rodete",
+      "Prueba de enfilado",
+      "Prueba",
+      "Entregada",
+      "Anulada",
+    ])
+    expect(nombreDeEstado("en-laboratorio")).toBe("Estado desconocido")
   })
 })
 
@@ -104,6 +122,14 @@ describe("el diseño sobre la arcada", () => {
     expect(esPiezaDeLaArcada(84, "ambas")).toBe(false)
   })
 
+  it("los cordales (x8) no son piezas protésicas: la arcada que se marca tiene 14, o 28 con Ambas", () => {
+    expect([18, 28, 38, 48].every(esCordal)).toBe(true)
+    expect([17, 47, 58, 8].some(esCordal)).toBe(false)
+    expect(piezasProtesicasDeLaArcada("superior")).toEqual([11, 12, 13, 14, 15, 16, 17, 21, 22, 23, 24, 25, 26, 27])
+    expect(piezasProtesicasDeLaArcada("inferior")).toEqual([31, 32, 33, 34, 35, 36, 37, 41, 42, 43, 44, 45, 46, 47])
+    expect(piezasProtesicasDeLaArcada("ambas")).toHaveLength(28)
+  })
+
   it("acepta una removible inferior con pieza, pilares y barra lingual", () => {
     expect(errorDelDiseno(removible())).toBeNull()
   })
@@ -112,6 +138,11 @@ describe("el diseño sobre la arcada", () => {
     ["una pieza de la otra arcada", removible({ piezas: [16] }), /no es de la arcada inferior/],
     ["una pieza temporal", removible({ piezas: [84] }), /dentición permanente/],
     ["una pieza que no existe", removible({ piezas: [49] }), /dentición permanente/],
+    ["un cordal como pieza protésica", removible({ piezas: [46, 48] }), /48 es un cordal/],
+    ["un cordal como pilar (gancho)", removible({ pilares: [45, 47, 38] }), /38 es un cordal/],
+    ["un cordal en una fija", { tipo: "fija", arcada: "superior", piezas: [17], pilares: [16, 18], zonas: [] }, /18 es un cordal/],
+    ["una corona en un cordal", { tipo: "corona", arcada: "superior", piezas: [28], pilares: [], zonas: [] }, /28 es un cordal/],
+    ["una total con cordales", { tipo: "total", arcada: "superior", piezas: piezasDeLaArcada("superior"), pilares: [], zonas: [] }, /18 es un cordal/],
     ["un pilar fuera de la arcada", removible({ pilares: [15] }), /no es de la arcada inferior/],
     ["una pieza repetida", removible({ piezas: [46, 46] }), /dos veces/],
     ["una pieza protésica que también es pilar", removible({ pilares: [46] }), /a la vez protésica y pilar/],
@@ -127,7 +158,7 @@ describe("el diseño sobre la arcada", () => {
     ["una corona con pilar", { tipo: "corona", arcada: "superior", piezas: [21], pilares: [22], zonas: [] }, /una sola pieza/],
     ["una corona en ambas", { tipo: "corona", arcada: "ambas", piezas: [21, 31], pilares: [], zonas: [] }, /una sola arcada/],
     ["una total sin todas las piezas", { tipo: "total", arcada: "superior", piezas: [11], pilares: [], zonas: [] }, /todas las piezas/],
-    ["una total con pilares", { tipo: "total", arcada: "superior", piezas: piezasDeLaArcada("superior").slice(1), pilares: [11], zonas: [] }, /no lleva pilares/],
+    ["una total con pilares", { tipo: "total", arcada: "superior", piezas: piezasProtesicasDeLaArcada("superior").slice(1), pilares: [11], zonas: [] }, /no lleva pilares/],
   ] as [string, DisenoDeProtesis, RegExp][])("rechaza %s", (_caso, diseno, error) => {
     expect(errorDelDiseno(diseno)).toMatch(error)
   })
@@ -144,18 +175,20 @@ describe("el diseño sobre la arcada", () => {
     expect(zonasPermitidas("fija", "ambas")).toEqual([])
   })
 
-  it("normalizar: la total marca todas las piezas de la arcada y sin pilares, aunque manden otras", () => {
-    const total = normalizarDiseno({ tipo: "total", arcada: "superior", piezas: [11], pilares: [12], zonas: ["paladar"] })
-    expect(total.piezas).toEqual(piezasDeLaArcada("superior"))
+  it("normalizar: la total marca todas las piezas de la arcada menos los cordales, sin pilares, aunque manden otras", () => {
+    const total = normalizarDiseno({ tipo: "total", arcada: "superior", piezas: [11, 18], pilares: [12], zonas: ["paladar"] })
+    expect(total.piezas).toEqual([11, 12, 13, 14, 15, 16, 17, 21, 22, 23, 24, 25, 26, 27])
     expect(total.pilares).toEqual([])
     expect(errorDelDiseno(total)).toBeNull()
-    expect(normalizarDiseno({ tipo: "total", arcada: "ambas", piezas: [], pilares: [], zonas: [] }).piezas).toHaveLength(32)
+    const ambas = normalizarDiseno({ tipo: "total", arcada: "ambas", piezas: [], pilares: [], zonas: [] })
+    expect(ambas.piezas).toHaveLength(28)
+    expect(ambas.piezas.some(esCordal)).toBe(false)
   })
 
   it("normalizar: ordena piezas y pilares y deja las zonas en el orden del catálogo, sin perder las desconocidas", () => {
-    const normal = normalizarDiseno(removible({ piezas: [47, 46], pilares: [48, 45], zonas: ["rebasado", "lingual", "encia"] }))
+    const normal = normalizarDiseno(removible({ piezas: [47, 46], pilares: [45, 44], zonas: ["rebasado", "lingual", "encia"] }))
     expect(normal.piezas).toEqual([46, 47])
-    expect(normal.pilares).toEqual([45, 48])
+    expect(normal.pilares).toEqual([44, 45])
     expect(normal.zonas).toEqual(["lingual", "rebasado", "encia"])
     expect(errorDelDiseno(normal)).toMatch(/no existe/)
   })
@@ -255,32 +288,130 @@ describe("el reparto", () => {
 })
 
 describe("el seguimiento", () => {
-  it("el paso siguiente, en orden, hasta entregada", () => {
-    expect(PASOS_DEL_SEGUIMIENTO.map((paso) => pasoSiguiente(paso.id))).toEqual(["en-laboratorio", "prueba", "ajustes", "entregada", null])
-    expect(pasoSiguiente("anulada")).toBeNull()
+  it("cada tipo tiene sus etapas: removible y total con rodete y enfilado; fija, corona e implante con una prueba", () => {
+    expect(pasosDelTipo("removible")).toEqual(["impresion", "rodete", "enfilado", "entregada"])
+    expect(pasosDelTipo("total")).toEqual(["impresion", "rodete", "enfilado", "entregada"])
+    for (const tipo of ["fija", "corona", "implante"] as const) expect(pasosDelTipo(tipo)).toEqual(["impresion", "prueba", "entregada"])
+    // Ningún tipo pasa por un laboratorio como paso, y todos empiezan y terminan igual.
+    for (const tipo of IDS_DE_TIPOS) {
+      expect(pasosDelTipo(tipo)[0]).toBe("impresion")
+      expect(pasosDelTipo(tipo).at(-1)).toBe("entregada")
+    }
+    expect(esPasoDelTipo("fija", "rodete")).toBe(false)
+    expect(esPasoDelTipo("total", "prueba")).toBe(false)
+    expect(esPasoDelTipo("removible", "anulada")).toBe(false)
+    // Una copia: no se toca el catálogo.
+    pasosDelTipo("corona").push("rodete")
+    expect(pasosDelTipo("corona")).toEqual(["impresion", "prueba", "entregada"])
   })
 
-  it("sólo hacia adelante, se puede saltar un paso, y anular antes de entregar", () => {
-    expect(errorDeCambioDeEstado("impresion", "en-laboratorio", true)).toBeNull()
-    expect(errorDeCambioDeEstado("prueba", "entregada", true)).toBeNull()
-    expect(errorDeCambioDeEstado("ajustes", "prueba", true)).toBe(MENSAJE_SOLO_AVANZA)
-    expect(errorDeCambioDeEstado("prueba", "prueba", true)).toBe(MENSAJE_SOLO_AVANZA)
-    expect(errorDeCambioDeEstado("en-laboratorio", "impresion", true)).toBe(MENSAJE_SOLO_AVANZA)
-    expect(errorDeCambioDeEstado("impresion", "anulada", false)).toBeNull()
-    expect(errorDeCambioDeEstado("ajustes", "anulada", true)).toBeNull()
+  it("el paso siguiente según el tipo, hasta entregada", () => {
+    expect(pasosDelTipo("removible").map((paso) => pasoSiguiente("removible", paso))).toEqual(["rodete", "enfilado", "entregada", null])
+    expect(pasosDelTipo("corona").map((paso) => pasoSiguiente("corona", paso))).toEqual(["prueba", "entregada", null])
+    expect(pasoSiguiente("fija", "anulada")).toBeNull()
+    expect(pasoSiguiente("fija", "rodete")).toBeNull()
+  })
+
+  it("sólo hacia adelante por los pasos del tipo, se puede saltar un paso, y anular antes de entregar; sin pedir laboratorio", () => {
+    expect(errorDeCambioDeEstado("removible", "impresion", "rodete")).toBeNull()
+    expect(errorDeCambioDeEstado("total", "impresion", "entregada")).toBeNull()
+    expect(errorDeCambioDeEstado("fija", "impresion", "prueba")).toBeNull()
+    expect(errorDeCambioDeEstado("removible", "enfilado", "rodete")).toBe(MENSAJE_SOLO_AVANZA)
+    expect(errorDeCambioDeEstado("corona", "prueba", "prueba")).toBe(MENSAJE_SOLO_AVANZA)
+    expect(errorDeCambioDeEstado("implante", "prueba", "impresion")).toBe(MENSAJE_SOLO_AVANZA)
+    expect(errorDeCambioDeEstado("fija", "impresion", "rodete")).toBe(MENSAJE_PASO_DE_OTRO_TIPO)
+    expect(errorDeCambioDeEstado("removible", "impresion", "prueba")).toBe(MENSAJE_PASO_DE_OTRO_TIPO)
+    expect(errorDeCambioDeEstado("removible", "impresion", "anulada")).toBeNull()
+    expect(errorDeCambioDeEstado("corona", "prueba", "anulada")).toBeNull()
   })
 
   it("entregada y anulada no cambian más", () => {
     expect(estaCerrada("entregada")).toBe(true)
     expect(estaCerrada("anulada")).toBe(true)
     expect(estaCerrada("prueba")).toBe(false)
-    expect(errorDeCambioDeEstado("entregada", "anulada", true)).toBe(MENSAJE_PROTESIS_CERRADA)
-    expect(errorDeCambioDeEstado("anulada", "entregada", true)).toBe(MENSAJE_PROTESIS_CERRADA)
+    expect(errorDeCambioDeEstado("fija", "entregada", "anulada")).toBe(MENSAJE_PROTESIS_CERRADA)
+    expect(errorDeCambioDeEstado("removible", "anulada", "entregada")).toBe(MENSAJE_PROTESIS_CERRADA)
   })
 
-  it("enviar al laboratorio (o más allá) pide un laboratorio", () => {
-    expect(errorDeCambioDeEstado("impresion", "en-laboratorio", false)).toBe(MENSAJE_SIN_LABORATORIO)
-    expect(errorDeCambioDeEstado("impresion", "entregada", false)).toBe(MENSAJE_SIN_LABORATORIO)
+  describe("las etapas para la pantalla", () => {
+    const evento = (estado: string, createdAt: string, autorNombre = "Ana") => ({ estado, autorNombre, createdAt })
+
+    it("en curso: hechas con su fecha y autor, la actual, y las pendientes", () => {
+      const etapas = etapasDeLaProtesis("removible", "rodete", [evento("impresion", "d1"), evento("rodete", "d2", "Beto")])
+      expect(etapas).toEqual([
+        { id: "impresion", nombre: "Toma de impresión", situacion: "hecha", fecha: "d1", autorNombre: "Ana" },
+        { id: "rodete", nombre: "Prueba de rodete", situacion: "actual", fecha: "d2", autorNombre: "Beto" },
+        { id: "enfilado", nombre: "Prueba de enfilado", situacion: "pendiente", fecha: null, autorNombre: null },
+        { id: "entregada", nombre: "Entregada", situacion: "pendiente", fecha: null, autorNombre: null },
+      ])
+    })
+
+    it("un paso saltado queda como saltada; entregada, todo hecho", () => {
+      const etapas = etapasDeLaProtesis("total", "entregada", [evento("impresion", "d1"), evento("entregada", "d3")])
+      expect(etapas.map((etapa) => [etapa.id, etapa.situacion, etapa.fecha])).toEqual([
+        ["impresion", "hecha", "d1"],
+        ["rodete", "saltada", null],
+        ["enfilado", "saltada", null],
+        ["entregada", "hecha", "d3"],
+      ])
+    })
+
+    it("anulada: hasta donde llegó, sin actual; el resto pendiente", () => {
+      const etapas = etapasDeLaProtesis("corona", "anulada", [evento("impresion", "d1"), evento("prueba", "d2"), evento("anulada", "d3")])
+      expect(etapas.map((etapa) => [etapa.id, etapa.situacion])).toEqual([
+        ["impresion", "hecha"],
+        ["prueba", "hecha"],
+        ["entregada", "pendiente"],
+      ])
+      expect(etapasDeLaProtesis("fija", "anulada", [evento("anulada", "d1")]).map((etapa) => etapa.situacion)).toEqual([
+        "pendiente",
+        "pendiente",
+        "pendiente",
+      ])
+    })
+
+    it("si un paso se registró dos veces (prótesis de antes de la etapa 7c), cuenta el primero", () => {
+      const etapas = etapasDeLaProtesis("corona", "prueba", [
+        evento("impresion", "d1", "Ana"),
+        evento("impresion", "d2", "Beto"),
+        evento("prueba", "d3"),
+        evento("prueba", "d4"),
+      ])
+      expect(etapas[0]).toMatchObject({ situacion: "hecha", fecha: "d1", autorNombre: "Ana" })
+      expect(etapas[1]).toMatchObject({ situacion: "actual", fecha: "d3" })
+    })
+  })
+})
+
+describe("el tono (guía VITA classical)", () => {
+  it("los 19 tonos en el orden de la guía, con su etiqueta, su grupo y un color de referencia", () => {
+    expect(TONOS_VITA.map((tono) => tono.etiqueta)).toEqual([
+      "0M1", "0M2", "0M3", "A1", "A2", "A3", "A3,5", "A4", "B1", "B2", "B3", "B4", "C1", "C2", "C3", "C4", "D2", "D3", "D4",
+    ])
+    expect(new Set(TONOS_VITA.map((tono) => tono.id)).size).toBe(19)
+    for (const tono of TONOS_VITA) {
+      expect(tono.id).toMatch(/^[0-9A-Z.]+$/)
+      expect(tono.color).toMatch(/^#[0-9A-F]{6}$/)
+      expect(tono.etiqueta.startsWith(tono.grupo)).toBe(true)
+    }
+    expect(GRUPOS_DE_TONOS.map((grupo) => [grupo.id, grupo.nombre])).toEqual([
+      ["0M", "Blanqueamiento"],
+      ["A", "Rojizo-marrón"],
+      ["B", "Rojizo-amarillo"],
+      ["C", "Gris"],
+      ["D", "Rojizo-gris"],
+    ])
+  })
+
+  it("se guarda el id seguro y se muestra con coma", () => {
+    expect(esTonoVita("A3.5")).toBe(true)
+    expect(esTonoVita("A3,5")).toBe(false)
+    expect(esTonoVita("D1")).toBe(false)
+    expect(etiquetaDeTono("A3.5")).toBe("A3,5")
+    expect(etiquetaDeTono("B2")).toBe("B2")
+    expect(tonoDeLaGuia("0M2")).toMatchObject({ grupo: "0M" })
+    expect(tonoDeLaGuia(null)).toBeNull()
+    expect(tonoDeLaGuia("constructor")).toBeNull()
   })
 })
 

@@ -19,7 +19,7 @@ import type {
   ProtesisDelPacienteRespuesta,
   ProtesisRespuesta,
 } from "@/lib/edicion-de-protesis"
-import type { EstadoDeProtesis } from "@/lib/protesis"
+import type { EstadoDeProtesis, TonoVita } from "@/lib/protesis"
 
 const deLaFicha = (id: string) => `/api/clientes/${encodeURIComponent(id)}`
 
@@ -163,7 +163,7 @@ export async function leerOpcionesDeProtesis(id: string): Promise<Resultado<Opci
   return pedir<OpcionesDeProtesisRespuesta>(`${deLaFicha(id)}/protesis/opciones`, "No se pudieron cargar los materiales")
 }
 
-/** Una prótesis nueva: el diseño, el material, el laboratorio, la entrega y (sólo la dueña) la tratante. Sin precios: los pone el servidor. */
+/** Una prótesis nueva: el diseño, el material, el laboratorio, la entrega, el tono y (sólo la dueña) la tratante. Sin precios: los pone el servidor. */
 export interface ProtesisPedida {
   tipo: string
   arcada: string
@@ -173,6 +173,7 @@ export interface ProtesisPedida {
   materialId: string
   laboratorioId: string | null
   entregaEstimada: string | null
+  tono: TonoVita | null
   tratante?: string
 }
 
@@ -180,15 +181,19 @@ export async function crearProtesis(id: string, datos: ProtesisPedida): Promise<
   return pedir<ProtesisRespuesta>(`${deLaFicha(id)}/protesis`, "No se pudo crear la prótesis", conJson("POST", datos))
 }
 
-/** Avanzar el seguimiento (con el laboratorio, si se elige al enviarla) o anularla. */
+/** Avanzar el seguimiento, anularla, o cambiar el laboratorio, la entrega estimada o el tono (hasta entregarla). */
 export async function cambiarProtesis(
   id: string,
   protesisId: string,
-  datos: { estado?: EstadoDeProtesis; laboratorioId?: string | null }
+  datos: { estado?: EstadoDeProtesis; laboratorioId?: string | null; entregaEstimada?: string | null; tono?: TonoVita | null }
 ): Promise<Resultado<ProtesisRespuesta>> {
   return pedir<ProtesisRespuesta>(
     `${deLaFicha(id)}/protesis/${encodeURIComponent(protesisId)}`,
-    datos.estado === "anulada" ? "No se pudo anular la prótesis" : "No se pudo avanzar el seguimiento",
+    datos.estado === "anulada"
+      ? "No se pudo anular la prótesis"
+      : datos.estado
+        ? "No se pudo avanzar el seguimiento"
+        : "No se pudieron guardar los cambios",
     conJsonPatch(datos)
   )
 }

@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest"
 import type { OpcionesDeProtesisRespuesta } from "@/lib/edicion-de-protesis"
-import { repartirMonto } from "@/lib/protesis"
+import { CORDALES, IDS_DE_TONOS, piezasProtesicasDeLaArcada, repartirMonto } from "@/lib/protesis"
 import {
+  TEXTO_DEL_CORDAL,
   alternarZona,
   borradorInicial,
   cambiarArcada,
   cambiarTipo,
+  cambiosDeLaEdicion,
   disenoDelBorrador,
+  edicionDe,
   elegirMaterial,
   estadoDePiezaParaLeer,
   faltasDelOdontograma,
@@ -14,7 +17,10 @@ import {
   materialesPara,
   pedidoDelBorrador,
   repartoDelBorrador,
+  tituloDeProtesis,
   tocarPieza,
+  tonoVecino,
+  tonosPorGrupo,
   valorDelBorrador,
   vecinaEnLaArcada,
   type BorradorDeProtesis,
@@ -58,7 +64,14 @@ const base = (extra: Partial<BorradorDeProtesis> = {}): BorradorDeProtesis => ({
 describe("borradorInicial", () => {
   it("abre una removible superior con el primer material que sirve y su laboratorio", () => {
     const borrador = borradorInicial(OPCIONES)
-    expect(borrador).toMatchObject({ tipo: "removible", arcada: "superior", materialId: "acrilico", laboratorioId: "lab-1", tratante: "duenio" })
+    expect(borrador).toMatchObject({
+      tipo: "removible",
+      arcada: "superior",
+      materialId: "acrilico",
+      laboratorioId: "lab-1",
+      tono: null,
+      tratante: "duenio",
+    })
   })
 })
 
@@ -85,10 +98,22 @@ describe("tocarPieza", () => {
     expect(tocarPieza(borrador, 22, "pilar")).toBe(borrador)
   })
 
-  it("en la total no se tocan: van todas", () => {
+  it("los cordales se ven pero no se marcan", () => {
+    const borrador = base({ arcada: "ambas" })
+    for (const cordal of CORDALES) {
+      expect(tocarPieza(borrador, cordal, "protesica")).toBe(borrador)
+      expect(tocarPieza(borrador, cordal, "pilar")).toBe(borrador)
+    }
+    expect(TEXTO_DEL_CORDAL).toBe("cordal, no entra en una prótesis")
+  })
+
+  it("en la total no se tocan: van todas menos los cordales (14 por arcada)", () => {
     const borrador = base({ tipo: "total" })
     expect(tocarPieza(borrador, 11, "protesica")).toBe(borrador)
-    expect(disenoDelBorrador(borrador).piezas).toHaveLength(16)
+    expect(disenoDelBorrador(borrador).piezas).toEqual(piezasProtesicasDeLaArcada("superior"))
+    expect(disenoDelBorrador(borrador).piezas).toHaveLength(14)
+    expect(disenoDelBorrador(borrador).piezas).not.toContain(18)
+    expect(disenoDelBorrador({ ...borrador, arcada: "ambas" }).piezas).toHaveLength(28)
   })
 })
 
@@ -134,8 +159,10 @@ describe("zonas y pedido", () => {
       materialId: "acrilico",
       laboratorioId: "lab-1",
       entregaEstimada: null,
+      tono: null,
     })
     expect(pedidoDelBorrador({ ...borrador, tipo: "fija" }, true)).toMatchObject({ zonas: [], tratante: "duenio" })
+    expect(pedidoDelBorrador({ ...borrador, tono: "A3.5" }, false)).toMatchObject({ tono: "A3.5" })
   })
 })
 
@@ -205,5 +232,58 @@ describe("la arcada", () => {
     expect(arriba.arriba + arriba.alto).toBeLessThan(400)
     expect(abajo.arriba).toBeGreaterThan(300)
     expect(abajo.arriba + abajo.alto).toBeLessThanOrEqual(700)
+  })
+})
+
+describe("el título", () => {
+  it("tipo y arcada", () => {
+    expect(tituloDeProtesis("removible", "superior")).toBe("Removible parcial, arcada superior")
+    expect(tituloDeProtesis("total", "ambas")).toBe("Total, ambas arcadas")
+  })
+})
+
+describe("el tono", () => {
+  it("agrupa los 19 tonos en el orden de la guía", () => {
+    const grupos = tonosPorGrupo()
+    expect(grupos.map((grupo) => grupo.nombre)).toEqual([
+      "Blanqueamiento",
+      "A rojizo-marrón",
+      "B rojizo-amarillo",
+      "C gris",
+      "D rojizo-gris",
+    ])
+    expect(grupos.flatMap((grupo) => grupo.tonos.map((tono) => tono.etiqueta))).toEqual([
+      "0M1", "0M2", "0M3", "A1", "A2", "A3", "A3,5", "A4", "B1", "B2", "B3", "B4", "C1", "C2", "C3", "C4", "D2", "D3", "D4",
+    ])
+  })
+
+  it("las flechas recorren la guía y dan la vuelta; Inicio y Fin van a las puntas", () => {
+    expect(tonoVecino("A3", "ArrowRight")).toBe("A3.5")
+    expect(tonoVecino("A3.5", "ArrowDown")).toBe("A4")
+    expect(tonoVecino("B1", "ArrowLeft")).toBe("A4")
+    expect(tonoVecino("D4", "ArrowRight")).toBe("0M1")
+    expect(tonoVecino("0M1", "ArrowUp")).toBe("D4")
+    expect(tonoVecino("C2", "Home")).toBe(IDS_DE_TONOS[0])
+    expect(tonoVecino("C2", "End")).toBe("D4")
+  })
+})
+
+describe("cambiar una prótesis creada", () => {
+  const creada = { laboratorio: { id: "lab-1" }, entregaEstimada: "2026-12-01", tono: { id: "A2" as const } }
+
+  it("parte de lo que tiene", () => {
+    expect(edicionDe(creada)).toEqual({ laboratorioId: "lab-1", entregaEstimada: "2026-12-01", tono: "A2" })
+    expect(edicionDe({ laboratorio: null, entregaEstimada: null, tono: null })).toEqual({ laboratorioId: null, entregaEstimada: "", tono: null })
+  })
+
+  it("manda sólo lo que cambió; sin cambios, nada", () => {
+    const antes = edicionDe(creada)
+    expect(cambiosDeLaEdicion(antes, antes)).toBeNull()
+    expect(cambiosDeLaEdicion(antes, { ...antes, tono: "A3.5" })).toEqual({ tono: "A3.5" })
+    expect(cambiosDeLaEdicion(antes, { laboratorioId: null, entregaEstimada: "", tono: null })).toEqual({
+      laboratorioId: null,
+      entregaEstimada: null,
+      tono: null,
+    })
   })
 })

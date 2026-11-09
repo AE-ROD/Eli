@@ -6,6 +6,7 @@ import {
   MENSAJE_MATERIAL_REPETIDO,
   MENSAJE_REPARTO_INCOMPLETO,
   MENSAJE_REPARTO_NO_SUMA,
+  MENSAJE_TRATANTE_NO_ODONTOLOGO,
   type ExcepcionRespuesta,
   type MaterialRespuesta,
 } from "@/lib/edicion-de-protesis"
@@ -230,6 +231,15 @@ describe("excepciones", () => {
   ])("POST con %s: 404", async (_caso, ids) => {
     expect((await excepciones.crear(sesiones.dueña, { ...ids, pbOdontologo: 4000, pbClinica: 3000, pbTecnico: 3000 })).status).toBe(404)
     expect(base.buscar("excepcionDeRepartoDeProtesis", { businessId: CLINICA })).toHaveLength(1)
+  })
+
+  it("POST para un miembro que no es odontólogo (el encargado), 400: la excepción es de una tratante", async () => {
+    const res = await excepciones.crear(sesiones.dueña, { memberId: "m-recepcion", materialId: "mt-acrilico", pbOdontologo: 4000, pbClinica: 3000, pbTecnico: 3000 })
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: MENSAJE_TRATANTE_NO_ODONTOLOGO })
+    expect(base.buscar("excepcionDeRepartoDeProtesis", { businessId: CLINICA })).toHaveLength(1)
+    expect(auditoria()).toEqual([])
   })
 
   it("POST con un reparto que no suma, 400", async () => {

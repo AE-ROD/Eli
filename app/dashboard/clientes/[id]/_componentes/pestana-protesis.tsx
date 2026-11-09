@@ -187,7 +187,7 @@ export function PestanaProtesis({
           nombreDeQuienMira={nombreDeQuienMira}
           alCrear={(nueva) => {
             setProtesis((previas) => [nueva, ...previas])
-            setListo(`Prótesis creada: ${nueva.nombreParaElPlan}. Quedó en «Impresión».`)
+            setListo(`Prótesis creada: ${nueva.nombreParaElPlan}. Quedó en «Toma de impresión».`)
             focoAlCerrar.current = "resultado"
             setCreando(false)
           }}

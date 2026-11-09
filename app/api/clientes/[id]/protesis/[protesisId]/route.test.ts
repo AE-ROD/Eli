@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { pedido } from "@/pruebas/datos"
 import { MENSAJE_CON_ABONOS, type ProtesisRespuesta } from "@/lib/edicion-de-protesis"
-import { MENSAJE_PROTESIS_CERRADA, MENSAJE_SIN_LABORATORIO, MENSAJE_SOLO_AVANZA } from "@/lib/protesis"
+import { MENSAJE_PASO_DE_OTRO_TIPO, MENSAJE_PROTESIS_CERRADA, MENSAJE_SOLO_AVANZA } from "@/lib/protesis"
 import { conParams, sesionesDentales as sesiones } from "../../../_pruebas/clinica-dental"
 import { conAbono, escenarioDeProtesis } from "../../../_pruebas/protesis"
 
@@ -41,14 +41,42 @@ const guardada = (id: string) => base.buscar("protesis", { id })[0]
 const eventosDe = (id: string) => base.buscar("eventoDeProtesis", { protesisId: id }).map((evento) => evento.estado)
 
 describe("PATCH /api/clientes/[id]/protesis/[protesisId]", () => {
-  it("avanza al paso siguiente y deja el evento con fecha y autor", async () => {
-    const res = await cambiar(sesiones.perez, "pt-removible", { estado: "prueba" })
+  it("avanza al paso siguiente de su tipo y deja el evento con fecha y autor", async () => {
+    const res = await cambiar(sesiones.perez, "pt-removible", { estado: "enfilado" })
 
     expect(res.status).toBe(200)
     const protesis = (await res.json()) as ProtesisRespuesta
-    expect(protesis).toMatchObject({ estado: "prueba", siguienteEstado: "ajustes" })
-    expect(protesis.eventos.at(-1)).toEqual({ estado: "prueba", autorNombre: "Diego Pérez", createdAt: AHORA.toISOString() })
-    expect(eventosDe("pt-removible")).toEqual(["impresion", "en-laboratorio", "prueba"])
+    expect(protesis).toMatchObject({ estado: "enfilado", siguienteEstado: "entregada" })
+    expect(protesis.eventos.at(-1)).toEqual({ estado: "enfilado", autorNombre: "Diego Pérez", createdAt: AHORA.toISOString() })
+    expect(protesis.etapas.map((etapa) => [etapa.id, etapa.situacion])).toEqual([
+      ["impresion", "hecha"],
+      ["rodete", "hecha"],
+      ["enfilado", "actual"],
+      ["entregada", "pendiente"],
+    ])
+    expect(protesis.etapas[2]).toMatchObject({ fecha: AHORA.toISOString(), autorNombre: "Diego Pérez" })
+    expect(eventosDe("pt-removible")).toEqual(["impresion", "rodete", "enfilado"])
+  })
+
+  it("una corona va de la toma de impresión a la prueba, sin laboratorio: el laboratorio ya no es un paso", async () => {
+    const res = await cambiar(sesiones.nunez, "pt-corona", { estado: "prueba" })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ estado: "prueba", siguienteEstado: "entregada", laboratorio: null })
+    expect(eventosDe("pt-corona")).toEqual(["impresion", "prueba"])
+  })
+
+  it.each([
+    ["una corona a la prueba de rodete", "pt-corona", "rodete"],
+    ["una corona a la prueba de enfilado", "pt-corona", "enfilado"],
+    ["una removible a la prueba (de fija)", "pt-removible", "prueba"],
+  ])("un paso que no es de su tipo (%s): 400 y no escribe nada", async (_caso, protesisId, estado) => {
+    const antes = base.volcado()
+    const res = await cambiar(sesiones.dueña, protesisId, { estado })
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: MENSAJE_PASO_DE_OTRO_TIPO })
+    expect(base.volcado()).toEqual(antes)
   })
 
   it("se puede saltar un paso; entregar fija la fecha de entrega y ya no cambia más", async () => {
@@ -58,7 +86,7 @@ describe("PATCH /api/clientes/[id]/protesis/[protesisId]", () => {
     expect(await res.json()).toMatchObject({ estado: "entregada", entregadaEn: AHORA.toISOString(), siguienteEstado: null })
     expect(guardada("pt-removible")).toMatchObject({ estado: "entregada", entregadaEn: AHORA })
 
-    for (const cuerpo of [{ estado: "anulada" }, { laboratorioId: null }, { entregaEstimada: "2026-12-24" }]) {
+    for (const cuerpo of [{ estado: "anulada" }, { laboratorioId: null }, { entregaEstimada: "2026-12-24" }, { tono: "A1" }, { tono: null }]) {
       const otra = await cambiar(sesiones.dueña, "pt-removible", cuerpo)
       expect(otra.status).toBe(409)
       expect(await otra.json()).toEqual({ error: MENSAJE_PROTESIS_CERRADA })
@@ -75,29 +103,34 @@ describe("PATCH /api/clientes/[id]/protesis/[protesisId]", () => {
   })
 
   it("pedir el paso en que ya está no es un cambio: no falla ni duplica el evento (doble clic)", async () => {
-    expect((await cambiar(sesiones.dueña, "pt-removible", { estado: "en-laboratorio" })).status).toBe(200)
-    expect(eventosDe("pt-removible")).toEqual(["impresion", "en-laboratorio"])
+    expect((await cambiar(sesiones.dueña, "pt-removible", { estado: "rodete" })).status).toBe(200)
+    expect(eventosDe("pt-removible")).toEqual(["impresion", "rodete"])
   })
 
-  it("enviar al laboratorio pide un laboratorio; con el laboratorio en el mismo pedido, pasa", async () => {
-    const sin = await cambiar(sesiones.nunez, "pt-corona", { estado: "en-laboratorio" })
-    expect(sin.status).toBe(409)
-    expect(await sin.json()).toEqual({ error: MENSAJE_SIN_LABORATORIO })
-
-    const res = await cambiar(sesiones.nunez, "pt-corona", { estado: "en-laboratorio", laboratorioId: "lab-sur", entregaEstimada: "2026-11-30" })
+  it("el laboratorio, la entrega estimada y el tono se cambian en el mismo pedido que un paso, o solos", async () => {
+    const res = await cambiar(sesiones.nunez, "pt-corona", { estado: "prueba", laboratorioId: "lab-sur", entregaEstimada: "2026-11-30", tono: "C2" })
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({
-      estado: "en-laboratorio",
-      laboratorio: { id: "lab-sur", nombre: "Laboratorio Sur" },
+      estado: "prueba",
+      laboratorio: { id: "lab-sur", nombre: "Laboratorio Sur", contacto: "+56 9 1111 2222" },
       entregaEstimada: "2026-11-30",
+      tono: { id: "C2", etiqueta: "C2", grupo: "C" },
     })
   })
 
-  it("cambia el laboratorio o la entrega estimada sin tocar el estado ni dejar evento", async () => {
+  it("cambia el laboratorio, la entrega estimada o el tono sin tocar el estado ni dejar evento", async () => {
     const res = await cambiar(sesiones.dueña, "pt-removible", { entregaEstimada: null })
     expect(res.status).toBe(200)
-    expect(await res.json()).toMatchObject({ estado: "en-laboratorio", entregaEstimada: null })
-    expect(eventosDe("pt-removible")).toEqual(["impresion", "en-laboratorio"])
+    expect(await res.json()).toMatchObject({ estado: "rodete", entregaEstimada: null })
+
+    const otroTono = await cambiar(sesiones.perez, "pt-removible", { tono: "D4" })
+    expect(otroTono.status).toBe(200)
+    expect(await otroTono.json()).toMatchObject({ estado: "rodete", tono: { id: "D4", etiqueta: "D4" } })
+    expect(guardada("pt-removible")).toMatchObject({ tono: "D4" })
+
+    const sinTono = await cambiar(sesiones.perez, "pt-removible", { tono: null })
+    expect(await sinTono.json()).toMatchObject({ tono: null })
+    expect(eventosDe("pt-removible")).toEqual(["impresion", "rodete"])
   })
 
   it("un laboratorio desactivado es 400; uno de otra clínica, 404", async () => {
@@ -112,7 +145,7 @@ describe("PATCH /api/clientes/[id]/protesis/[protesisId]", () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ estado: "anulada", anuladaEn: AHORA.toISOString(), anuladaPorNombre: "Laura Núñez", siguienteEstado: null })
     expect(eventosDe("pt-corona")).toEqual(["impresion", "anulada"])
-    expect((await cambiar(sesiones.nunez, "pt-corona", { estado: "en-laboratorio" })).status).toBe(409)
+    expect((await cambiar(sesiones.nunez, "pt-corona", { estado: "prueba" })).status).toBe(409)
   })
 
   it.each(["finalizada", "en-espera"])("con un abono (atención %s) no se anula: 409", async (status) => {
@@ -121,7 +154,7 @@ describe("PATCH /api/clientes/[id]/protesis/[protesisId]", () => {
 
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: MENSAJE_CON_ABONOS })
-    expect(guardada("pt-removible")).toMatchObject({ estado: "en-laboratorio", anuladaEn: null })
+    expect(guardada("pt-removible")).toMatchObject({ estado: "rodete", anuladaEn: null })
   })
 
   it("el abono de una atención anulada no cuenta", async () => {
@@ -131,6 +164,8 @@ describe("PATCH /api/clientes/[id]/protesis/[protesisId]", () => {
 
   it.each([
     ["un estado que no existe", { estado: "perdida" }],
+    ["un paso que ya no existe", { estado: "en-laboratorio" }],
+    ["un tono fuera de la guía", { tono: "A3,5" }],
     ["nada que cambiar", {}],
     ["una fecha mal escrita", { entregaEstimada: "30/11/2026" }],
   ])("%s: 400", async (_caso, cuerpo) => {
@@ -146,7 +181,7 @@ describe("PATCH /api/clientes/[id]/protesis/[protesisId]", () => {
     ["la dueña de otra clínica", sesiones.dueñaAjena, "pt-removible", "p-camila"],
   ])("%s: 404 y no escribe nada", async (_caso, sesion, protesisId, id) => {
     const antes = base.volcado()
-    expect((await cambiar(sesion, protesisId, { estado: "prueba" }, id)).status).toBe(404)
+    expect((await cambiar(sesion, protesisId, { estado: "enfilado" }, id)).status).toBe(404)
     expect(base.volcado()).toEqual(antes)
   })
 

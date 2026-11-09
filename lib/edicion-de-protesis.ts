@@ -4,6 +4,7 @@ import {
   IDS_DE_ARCADAS,
   IDS_DE_ESTADOS,
   IDS_DE_TIPOS,
+  IDS_DE_TONOS,
   IDS_DE_UNIDADES,
   IDS_DE_ZONAS,
   PUNTOS_BASE_DEL_TOTAL,
@@ -13,8 +14,11 @@ import {
   type Arcada,
   type EstadoDeProtesis,
   type OrigenDelReparto,
+  type GrupoDeTono,
   type PasoDelSeguimiento,
+  type SituacionDeEtapa,
   type TipoDeProtesis,
+  type TonoVita,
   type Unidad,
   type ZonaDeLaBase,
 } from "@/lib/protesis"
@@ -93,6 +97,10 @@ const fecha = () =>
     .trim()
     .refine((valor) => /^\d{4}-\d{2}-\d{2}$/.test(valor) && esFechaCalendario(valor) && valor >= "2000-01-01", "La fecha de entrega no es válida")
     .nullable()
+
+/** Un tono de la guía VITA classical por su id ("A3.5", no "A3,5"), o `null` para quitarlo. */
+const tono = () =>
+  z.enum(IDS_DE_TONOS, { errorMap: () => ({ message: "Ese tono no está en la guía VITA classical" }) }).nullable()
 
 // ─── Configuración: laboratorios ─────────────────────────────────────────────
 
@@ -199,22 +207,24 @@ export const protesisNuevaSchema = z.object({
   materialId: id("Elige el material"),
   laboratorioId: id("El laboratorio no es válido").nullable().optional(),
   entregaEstimada: fecha().optional(),
+  tono: tono().optional(),
   tratante: id("La tratante no es válida").optional(),
 })
 
 export type ProtesisNueva = z.infer<typeof protesisNuevaSchema>
 
 /**
- * Cambiar una prótesis: avanzar el seguimiento ("Enviar al laboratorio" es
- * pasar a `en-laboratorio`; "Entregada" fija la fecha de entrega; "anulada"
- * sólo antes de entregar y sin abonos), y el laboratorio o la entrega
- * estimada mientras no esté entregada ni anulada.
+ * Cambiar una prótesis: avanzar el seguimiento por los pasos de su tipo
+ * (`PASOS_POR_TIPO`; "Entregada" fija la fecha de entrega; "anulada" sólo
+ * antes de entregar y sin abonos), y el laboratorio, la entrega estimada o el
+ * tono mientras no esté entregada ni anulada.
  */
 export const edicionDeProtesisSchema = z
   .object({
     estado: z.enum(IDS_DE_ESTADOS, { errorMap: () => ({ message: "Ese paso del seguimiento no existe" }) }).optional(),
     laboratorioId: id("El laboratorio no es válido").nullable().optional(),
     entregaEstimada: fecha().optional(),
+    tono: tono().optional(),
   })
   .refine((datos) => Object.values(datos).some((valor) => valor !== undefined), "No hay nada que cambiar")
 
@@ -239,6 +249,7 @@ export const MENSAJE_CON_ABONOS =
 export const MENSAJE_YA_EN_EL_PLAN = "La prótesis ya está en el plan vigente."
 export const MENSAJE_PROTESIS_ANULADA = "Una prótesis anulada no se agrega al plan."
 export const MENSAJE_SIN_MIEMBRO = "Para crear una prótesis tienes que ser parte del equipo de la clínica."
+export const MENSAJE_TRATANTE_NO_ODONTOLOGO = "La tratante tiene que ser la dueña o un odontólogo de la clínica."
 
 /** El nombre de la etapa que se crea si el plan no tiene ninguna por aprobar. */
 export const NOMBRE_DE_LA_ETAPA_DE_PROTESIS = "Prótesis"
@@ -299,6 +310,27 @@ export interface EventoRespuesta {
   createdAt: string
 }
 
+/** Una etapa del seguimiento que le toca a la prótesis por su tipo (`etapasDeLaProtesis`). */
+export interface EtapaRespuesta {
+  id: PasoDelSeguimiento
+  /** "Toma de impresión", "Prueba de rodete", "Prueba de enfilado", "Prueba", "Entregada". */
+  nombre: string
+  situacion: SituacionDeEtapa
+  /** Cuándo se registró (ISO) y quién, o `null` si no se pasó por ella. */
+  fecha: string | null
+  autorNombre: string | null
+}
+
+/** El tono elegido, con lo que hace falta para mostrarlo (`TONOS_VITA`; el color es aproximado). */
+export interface TonoRespuesta {
+  id: TonoVita
+  /** "A3,5". */
+  etiqueta: string
+  grupo: GrupoDeTono
+  /** Hex aproximado, sólo de referencia: manda la guía física. */
+  color: string
+}
+
 export interface ProtesisRespuesta {
   id: string
   tipo: TipoDeProtesis
@@ -312,12 +344,20 @@ export interface ProtesisRespuesta {
   /** Lo cobrado en abonos (atenciones finalizadas) y lo que falta. Hasta que exista el cobro por abonos, 0 y el valor. */
   pagadoCents: number
   saldoCents: number
-  laboratorio: { id: string; nombre: string } | null
+  /**
+   * El nombre es el copiado al elegirlo; el contacto, el actual del catálogo
+   * (`null` si no tiene).
+   */
+  laboratorio: { id: string; nombre: string; contacto: string | null } | null
   /** "AAAA-MM-DD". */
   entregaEstimada: string | null
+  /** Tono VITA classical, o `null` si no se eligió. */
+  tono: TonoRespuesta | null
   estado: EstadoDeProtesis
-  /** El paso que ofrece la pantalla; `null` si está entregada o anulada. */
+  /** El paso que sigue según el tipo (el que ofrece la pantalla); `null` si está entregada o anulada. */
   siguienteEstado: PasoDelSeguimiento | null
+  /** Los pasos que le tocan según el tipo, en orden, con su situación y su evento. */
+  etapas: EtapaRespuesta[]
   entregadaEn: string | null
   anuladaEn: string | null
   anuladaPorNombre: string | null
