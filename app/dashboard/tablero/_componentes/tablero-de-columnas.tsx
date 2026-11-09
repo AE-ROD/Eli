@@ -19,7 +19,7 @@ import {
 import type { Actor } from "@/lib/permisos"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
-import type { Atencion, Reserva, Tablero } from "../_datos"
+import type { Atencion, LineaDeServicio, Reserva, Tablero } from "../_datos"
 import { TarjetaDeAtencion } from "./tarjeta-de-atencion"
 import { TarjetaDeReserva, type PropsDeArrastre } from "./tarjeta-de-reserva"
 
@@ -263,6 +263,9 @@ interface PropsDeTableroDeColumnas {
   onCobrar: (atencion: Atencion) => void
   onEditar: (atencion: Atencion) => void
   onAnular: (atencion: Atencion) => void
+  /** Clínica dental: abonar a una prótesis del paciente, o quitar un abono antes de cobrar. */
+  onAbonar: (atencion: Atencion) => void
+  onQuitarAbono: (atencion: Atencion, linea: LineaDeServicio) => void
 }
 
 /**
@@ -285,6 +288,8 @@ export function TableroDeColumnas({
   onCobrar,
   onEditar,
   onAnular,
+  onAbonar,
+  onQuitarAbono,
 }: PropsDeTableroDeColumnas) {
   const punteroFino = usePunteroFino()
   // "Sin paciente" en una clínica dental.
@@ -478,6 +483,8 @@ export function TableroDeColumnas({
                     onCobrar={() => onCobrar(atencion)}
                     onEditar={() => onEditar(atencion)}
                     onAnular={() => onAnular(atencion)}
+                    onAbonar={() => onAbonar(atencion)}
+                    onQuitarAbono={(linea) => onQuitarAbono(atencion, linea)}
                   />
                 ))}
               </Columna>

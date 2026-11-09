@@ -24,7 +24,7 @@ import { formatearMonto } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
 import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import { Insignia } from "@/components/comunes/insignia"
-import { leerLineasSinPorcentaje, type Atencion } from "../_datos"
+import { esAbono, leerLineasSinPorcentaje, nombreDelAbono, type Atencion } from "../_datos"
 import { Aviso } from "@/components/panel/aviso"
 
 /**
@@ -206,7 +206,9 @@ export function ModalCobro({
               {atencion.lineas.map((linea) => (
                 <li key={linea.id} className="flex items-baseline justify-between gap-3 text-sm">
                   <span className="min-w-0 break-words">
-                    {linea.servicio} <span className="text-texto-2">· {linea.profesional.nombre}</span>
+                    {/* Un abono de prótesis suma como cualquier línea y no lleva %: su reparto sale de la prótesis. */}
+                    {esAbono(linea) ? nombreDelAbono(linea.servicio) : linea.servicio}{" "}
+                    <span className="text-texto-2">· {linea.profesional.nombre}</span>
                     {idsSinPorcentaje.has(linea.id) && (
                       <>
                         <span className="sr-only"> (quedará sin porcentaje de comisión)</span>{" "}

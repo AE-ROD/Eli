@@ -6,6 +6,7 @@
 
 import { conJson, pedir, type Resultado } from "@/lib/peticiones"
 import type { ExcepcionRespuesta, MaterialRespuesta } from "@/lib/edicion-de-protesis"
+import type { LineaPorPagar, PagoAlLaboratorioRespuesta, PorPagarDeUnLaboratorio, PorPagarRespuesta } from "@/lib/pagos-al-laboratorio"
 import { esRepartoValido, textoDePorcentaje, type RepartoEnPuntosBase, type TipoDeProtesis, type Unidad } from "@/lib/protesis"
 
 export interface ExcepcionDeComision {
@@ -233,4 +234,44 @@ export function leerReparto(escrito: RepartoEscrito): RepartoLeido {
     return { ok: false, error: `Hoy suma ${textoDePorcentaje(sumaPb)}. Ajusta las partes hasta llegar a 100 % para guardar.`, sumaPb }
   }
   return { ok: true, reparto, sumaPb }
+}
+
+// ─── Por pagar al laboratorio (clínica dental, sólo la dueña) ────────────────
+
+export type PorPagarAlLaboratorio = PorPagarRespuesta
+export type LaboratorioPorPagar = PorPagarDeUnLaboratorio
+export type LineaPorPagarAlLaboratorio = LineaPorPagar
+export type PagoAlLaboratorio = PagoAlLaboratorioRespuesta
+
+/** Lo que se le debe a cada laboratorio: la parte del técnico de los abonos de prótesis ya entregadas. */
+export async function leerPorPagarAlLaboratorio(): Promise<Resultado<PorPagarAlLaboratorio>> {
+  return pedir<PorPagarAlLaboratorio>("/api/comisiones/protesis/por-pagar", "No se pudo cargar lo por pagar al laboratorio")
+}
+
+/** El historial de pagos a laboratorios, anulados incluidos, del más nuevo al más viejo. */
+export async function leerPagosAlLaboratorio(): Promise<Resultado<PagoAlLaboratorio[]>> {
+  return pedir<PagoAlLaboratorio[]>("/api/comisiones/protesis/pagos-al-laboratorio", "No se pudieron cargar los pagos al laboratorio")
+}
+
+/** "Marcar pagado": todo lo pendiente del laboratorio, o sólo las líneas elegidas. El monto lo suma el servidor. */
+export async function pagarAlLaboratorio(pedido: {
+  laboratorioId: string
+  medio: string
+  lineas: readonly string[] | "todo"
+}): Promise<Resultado<PagoAlLaboratorio>> {
+  const { laboratorioId, medio, lineas } = pedido
+  return pedir<PagoAlLaboratorio>(
+    "/api/comisiones/protesis/pagos-al-laboratorio",
+    "No se pudo marcar como pagado",
+    conJson("POST", lineas === "todo" ? { laboratorioId, medio, todo: true } : { laboratorioId, medio, lineas })
+  )
+}
+
+/** Anula un pago: sus líneas vuelven a quedar por pagar. */
+export async function anularPagoAlLaboratorio(id: string): Promise<Resultado<PagoAlLaboratorio>> {
+  return pedir<PagoAlLaboratorio>(
+    `/api/comisiones/protesis/pagos-al-laboratorio/${encodeURIComponent(id)}/anulacion`,
+    "No se pudo anular el pago",
+    { method: "POST" }
+  )
 }

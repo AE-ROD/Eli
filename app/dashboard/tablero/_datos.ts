@@ -33,7 +33,46 @@ import { mostrarTelefono } from "@/lib/telefono"
  * copiado). `profesional.id` en null: quien lo hizo dejó el equipo, y hay que
  * reasignarla antes de cobrar.
  */
-export type LineaDeServicio = LineaGuardada
+export type LineaDeServicio = LineaGuardada & {
+  /**
+   * Sólo en un abono de prótesis (clínica dental): a qué prótesis abona y,
+   * ya cobrado, lo que quien mira ve del reparto (en unidades). La dueña, las
+   * tres partes; la odontóloga tratante, sólo la suya; el encargado, nada
+   * (`null`). Antes de cobrar, `null` para todos.
+   */
+  abono?: AbonoDeLinea
+}
+
+export interface AbonoDeLinea {
+  protesisId: string
+  reparto: { odontologo: number; clinica?: number; tecnico?: number } | null
+}
+
+/** Si la línea es un abono de prótesis: no se edita como servicio ni viaja en el PUT de líneas. */
+export const esAbono = (linea: { abono?: unknown }): boolean => !!linea.abono
+
+/**
+ * Cómo se lee un abono en la tarjeta y en el cobro: "Abono · Removible
+ * parcial · Acrílico (45, 46)". El servidor lo guarda como "Abono prótesis ·
+ * …" (así queda en reportes); acá se acorta, porque la tarjeta es angosta.
+ */
+export const nombreDelAbono = (servicio: string): string => servicio.replace(/^Abono prótesis · /, "Abono · ")
+
+/** Una prótesis del paciente a la que se puede abonar (no anulada), en unidades como el tablero. */
+export interface ProtesisParaAbonar {
+  id: string
+  nombre: string
+  estado: string
+  nombreDeEstado: string
+  tratante: string
+  valor: number
+  /** Abonos de atenciones ya cobradas. */
+  pagado: number
+  /** Abonos en atenciones abiertas de la Sala de espera (esta incluida). */
+  porCobrar: number
+  /** Valor − pagado − por cobrar: el máximo del abono. */
+  saldo: number
+}
 
 export interface PagoRegistrado {
   id: string
@@ -322,6 +361,35 @@ export async function cobrarAtencion(
       "No se pudo registrar el cobro",
       conJson("POST", { pagos, ...(propinas.length > 0 && { propinas }) })
     )
+  )
+}
+
+// ─── Abonos de prótesis (clínica dental) ─────────────────────────────────────
+
+const urlDeAbonos = (id: string) => `${urlDeAtencion(id)}/abonos`
+
+/** Las prótesis no anuladas del paciente de la atención, con su valor, lo pagado, lo por cobrar y el saldo. */
+export async function leerProtesisParaAbonar(id: string): Promise<Resultado<ProtesisParaAbonar[]>> {
+  const resultado = await pedir<{ protesis: ProtesisParaAbonar[] }>(urlDeAbonos(id), "No se pudieron cargar las prótesis")
+  return resultado.ok ? { ok: true, datos: resultado.datos.protesis } : resultado
+}
+
+/**
+ * Agrega un abono a la atención: una línea ligada a la prótesis, de monto
+ * libre hasta el saldo. Responde la atención con la línea nueva. Los fallos
+ * se muestran tal cual (el monto pasa el saldo, la atención ya se cobró…):
+ * el código no cambia lo que hace la pantalla, que vuelve a leer las prótesis.
+ */
+export async function agregarAbono(id: string, protesisId: string, monto: number): Promise<ResultadoConCodigo<Atencion>> {
+  return pedirConCodigo<Atencion>(urlDeAbonos(id), "No se pudo agregar el abono", conJson("POST", { protesisId, monto }))
+}
+
+/** Quita un abono antes de cobrar. Responde la atención sin esa línea. */
+export async function quitarAbono(id: string, lineaId: string): Promise<ResultadoDeAccion<Atencion>> {
+  return conMotivo(
+    await pedirConCodigo<Atencion>(`${urlDeAbonos(id)}/${encodeURIComponent(lineaId)}`, "No se pudo quitar el abono", {
+      method: "DELETE",
+    })
   )
 }
 

@@ -1,8 +1,8 @@
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
-import { Smile } from "lucide-react"
-import { actorDeSesion, puedeConfigurarRepartoDeProtesis, puedeEditarComisiones } from "@/lib/permisos"
+import { FlaskConical, Smile } from "lucide-react"
+import { actorDeSesion, puedeConfigurarRepartoDeProtesis, puedeEditarComisiones, puedePagarAlLaboratorio } from "@/lib/permisos"
 import { Boton } from "@/components/comunes/boton"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
@@ -34,6 +34,22 @@ export default async function PaginaComisiones() {
               accion={
                 <Boton href="/dashboard/comisiones/protesis" variante="secundario" tamano="sm">
                   Configurar el reparto
+                </Boton>
+              }
+            />
+          </section>
+        )}
+        {/* Junto al reparto: lo que se le debe a cada laboratorio por las prótesis entregadas. */}
+        {puedePagarAlLaboratorio(actor) && (
+          <section aria-labelledby="por-pagar-al-laboratorio" className={`${TARJETA_DEL_PANEL} p-5 sm:p-6`}>
+            <EncabezadoDeTarjeta
+              id="por-pagar-al-laboratorio"
+              titulo="Por pagar al laboratorio"
+              subtitulo="La parte del laboratorio de los abonos de prótesis ya entregadas: cuánto se le debe a cada uno, marcar pagado y el historial de pagos."
+              icono={{ figura: FlaskConical }}
+              accion={
+                <Boton href="/dashboard/comisiones/laboratorio" variante="secundario" tamano="sm">
+                  Ver lo por pagar
                 </Boton>
               }
             />

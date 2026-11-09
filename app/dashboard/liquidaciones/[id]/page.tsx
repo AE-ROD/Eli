@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils"
 import { HORA_24 } from "@/lib/fechas"
 import { AccionesDelComprobante } from "../_componentes/acciones-del-comprobante"
 import { FilaDeTotal, InsigniaDeEstado, pesos, porcentaje } from "../_componentes/piezas"
+import { TablaDeProtesis } from "../_componentes/protesis-en-liquidacion"
 
 /**
  * Al imprimir (o guardar como PDF desde el diálogo del navegador) la hoja es
@@ -179,6 +180,8 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
             )}
           </section>
 
+          <TablaDeProtesis protesis={detalle.protesis} />
+
           {detalle.propinas.length > 0 && (
             <section aria-labelledby="titulo-propinas" className="space-y-2">
               <h3 id="titulo-propinas" className="font-medium">
@@ -231,6 +234,9 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
               <FilaDeTotal concepto="Comisión por servicios" centavos={t.comisionServiciosCents} tachado={anulada} />
               {t.comisionProductosCents !== 0 && (
                 <FilaDeTotal concepto="Comisión por productos" centavos={t.comisionProductosCents} tachado={anulada} />
+              )}
+              {(detalle.protesis.length > 0 || t.comisionProtesisCents !== 0) && (
+                <FilaDeTotal concepto="Comisión por prótesis" centavos={t.comisionProtesisCents} tachado={anulada} />
               )}
               {t.propinasCents !== 0 && <FilaDeTotal concepto="Propinas" centavos={t.propinasCents} tachado={anulada} />}
               {t.adelantosCents !== 0 && (

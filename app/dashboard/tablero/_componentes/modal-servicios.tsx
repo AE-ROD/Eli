@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
+import { useId, useState, type FormEvent } from "react"
 import { TriangleAlert } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
@@ -12,8 +12,9 @@ import {
   type FilaDeServicio,
   type LineaPedida,
 } from "@/lib/acciones-del-tablero"
-import type { Atencion, Catalogo } from "../_datos"
+import { esAbono, nombreDelAbono, type Atencion, type Catalogo } from "../_datos"
 import { Aviso } from "@/components/panel/aviso"
+import { formatearMonto } from "@/lib/dinero"
 import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import { EditorDeServicios, filaVacia } from "./editor-de-servicios"
 
@@ -23,7 +24,10 @@ import { EditorDeServicios, filaVacia } from "./editor-de-servicios"
  * si no, una fila vacía.
  */
 function filasIniciales(atencion: Atencion, catalogo: Catalogo): FilaDeServicio[] {
-  if (atencion.lineas.length > 0) return atencion.lineas.map(filaDesdeLinea)
+  // Los abonos de prótesis no son servicios: no se editan acá ni viajan en el
+  // PUT (el servidor los conserva; mandados como servicio darían 400).
+  const servicios = atencion.lineas.filter((linea) => !esAbono(linea))
+  if (servicios.length > 0) return servicios.map(filaDesdeLinea)
   if (atencion.reserva) return [filaDesdeReserva(atencion.reserva, catalogo, "fila-inicial")]
   return [filaVacia(catalogo, "fila-inicial")]
 }
@@ -67,6 +71,8 @@ export function ModalServicios({
   // entretanto, el servidor responde 409 y el tablero se recarga.
   const [filas, setFilas] = useState<FilaDeServicio[]>(() => filasIniciales(atencion, catalogo))
   const [intentoGuardar, setIntentoGuardar] = useState(false)
+  const idDeLosAbonos = useId()
+  const abonos = atencion.lineas.filter(esAbono)
 
   const validacion = lineasDesdeFilas(filas, eligeProfesional)
   const errores = intentoGuardar && !validacion.ok ? validacion.errores : {}
@@ -106,6 +112,26 @@ export function ModalServicios({
           deshabilitado={guardando}
           onCambiar={setFilas}
         />
+
+        {/* Los abonos se quitan desde la tarjeta: guardar los servicios no los toca. */}
+        {abonos.length > 0 && (
+          <section aria-labelledby={idDeLosAbonos} className="rounded-[20px] bg-superficie p-4 text-sm squircle">
+            <h3 id={idDeLosAbonos} className="font-semibold">
+              {abonos.length === 1 ? "Abono de prótesis" : "Abonos de prótesis"}
+            </h3>
+            <ul className="mt-2 space-y-1">
+              {abonos.map((linea) => (
+                <li key={linea.id} className="flex items-baseline justify-between gap-3">
+                  <span className="min-w-0 break-words">{nombreDelAbono(linea.servicio)}</span>
+                  <span className="shrink-0 tabular-nums">{formatearMonto(linea.precio)}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-[13px] text-texto-2">
+              No se editan aquí y guardar los servicios no los cambia. Se quitan desde la tarjeta, antes de cobrar.
+            </p>
+          </section>
+        )}
 
         {intentoGuardar && !validacion.ok && (
           <Aviso tono="error" rol="alert">

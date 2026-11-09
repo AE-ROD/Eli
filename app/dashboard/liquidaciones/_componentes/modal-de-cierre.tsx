@@ -14,6 +14,7 @@ import { avisoDeCierreAnticipado, fechaParaLeer } from "@/lib/periodos-de-liquid
 import type { Resultado } from "@/lib/peticiones"
 import { cerrarLiquidacion, leerVistaPrevia, type VistaPrevia } from "../_datos"
 import { FilaDeTotal, pesos, porcentaje } from "./piezas"
+import { ListaDeProtesis } from "./protesis-en-liquidacion"
 
 interface Props {
   miembro: { id: string; nombre: string }
@@ -179,6 +180,8 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
             )}
           </section>
 
+          <ListaDeProtesis protesis={vista.protesis} />
+
           {vista.propinas.length > 0 && (
             <section className="space-y-2">
               <h3 className="font-medium">Propinas ({vista.propinas.length})</h3>
@@ -229,6 +232,9 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
           <dl className="space-y-2 rounded-campo bg-superficie p-4 squircle">
             <FilaDeTotal concepto="Comisión por servicios" centavos={vista.totales.comisionServiciosCents} />
             <FilaDeTotal concepto="Comisión por productos" centavos={vista.totales.comisionProductosCents} />
+            {(vista.protesis.length > 0 || vista.totales.comisionProtesisCents !== 0) && (
+              <FilaDeTotal concepto="Comisión por prótesis" centavos={vista.totales.comisionProtesisCents} />
+            )}
             <FilaDeTotal concepto="Propinas" centavos={vista.totales.propinasCents} />
             <FilaDeTotal concepto="Adelantos y vales" centavos={-vista.totales.adelantosCents} />
             <FilaDeTotal concepto="Ajustes" centavos={vista.totales.ajustesCents} />
