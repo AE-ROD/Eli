@@ -1,5 +1,7 @@
+import { AsyncLocalStorage } from "node:async_hooks"
 import { vi } from "vitest"
 import { Prisma } from "@prisma/client"
+import { TABLAS_SQL, chequeoQueFalla } from "./chequeos"
 import {
   COMPUESTAS,
   RELACIONES,
@@ -7,6 +9,7 @@ import {
   esObjetoPlano,
   falla,
   iguales,
+  comparador,
   ordenar,
   proyectar,
   type Condicion,
@@ -22,22 +25,46 @@ export type { NombreDeModelo, Tablas } from "./consultas-falsas"
  * Una base en memoria con la forma del cliente de Prisma, para los tests del
  * tablero y de los reportes. Filtra de verdad con el `where` que arma el
  * endpoint (incluidos los filtros por relación de `lib/permisos.ts`), proyecta
- * `select`/`include` con sus `where` anidados, respeta claves foráneas y
- * únicos, y deshace una transacción que lanza. Así un test de aislamiento
- * comprueba lo que la consulta trae, no sólo qué argumento recibió.
+ * `select`/`include` con sus `where` anidados, respeta claves foráneas,
+ * únicos, los triggers y los CHECK de las migraciones (`chequeos.ts`), y
+ * deshace una transacción que lanza. Así un test de aislamiento comprueba lo
+ * que la consulta trae, no sólo qué argumento recibió.
+ *
+ * Transacciones: corren de a una, en orden de llegada (dos en un
+ * `Promise.all` no se pisan; ver "Transacciones" más abajo), y el `tx` que
+ * recibe la función tiene sus propias `$queryRaw`/`$executeRaw`. Un candado
+ * (`FOR UPDATE`, `pg_advisory_xact_lock`) pedido fuera de una transacción, o
+ * con `prisma` en vez del `tx`, lanza: en Postgres no protegería nada.
  *
  * Cómo se leen `where`, `orderBy` y `select` está en `consultas-falsas.ts`,
- * con la misma regla para todo: ante lo que no entiende, lanza (F-018).
+ * con la misma regla para todo: ante lo que no entiende, lanza (F-018). Lo
+ * mismo con las opciones: una que no soporta (o un `where` de único sin
+ * valor, que Prisma rechaza) lanza en vez de ignorarse.
  */
 
 /** Los defaults del esquema: todo campo existe en el registro, aunque sea en null. */
 const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
-  user: () => ({ password: "", correosDesactivados: false, createdAt: new Date(), updatedAt: new Date() }),
+  user: () => ({
+    password: "",
+    correosDesactivados: false,
+    sesionesValidasDesde: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
   // `pruebaTerminaEl` y `codigoInvitacion` no tienen default en el esquema: los
   // pone quien crea el negocio, igual que en la base de verdad.
   business: () => ({
     type: "salon",
+    address: null,
+    comuna: null,
+    whatsapp: null,
+    instagram: null,
+    color: null,
+    logoUrl: null,
+    coverUrl: null,
     teamSize: 1,
+    // Default `{}` del esquema: sin medios declarados.
+    mediosDePago: [],
     timezone: "America/Santiago",
     recibeCorreosDePrueba: true,
     enlaceCompartidoAt: null,
@@ -85,6 +112,7 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
   }),
   service: () => ({
     description: null,
+    category: null,
     duration: 30,
     price: null,
     frecuenciaDias: null,
@@ -110,6 +138,10 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     canceladaPor: null,
     canceladaEn: null,
     reminderSentAt: null,
+    // La comisión congelada de la cita (de antes del tablero): pendiente, los tres en null.
+    commissionPercent: null,
+    commissionAmount: null,
+    commissionAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
@@ -303,6 +335,15 @@ interface Unico {
   sinMayusculas?: string[]
 }
 const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
+  // `usuarios_email_key`: el email se guarda ya normalizado (`normalizarEmail`,
+  // migración `20261020120200_emails_normalizados`), así que el índice es
+  // sobre la columna tal cual, sin `lower(...)`.
+  user: [{ campos: ["email"] }],
+  // `negocios_slug_key`, `negocios_userId_key` (un negocio por cuenta) y
+  // `negocios_codigoInvitacion_key`.
+  business: [{ campos: ["slug"] }, { campos: ["userId"] }, { campos: ["codigoInvitacion"] }],
+  // `miembros_negocio_businessId_userId_key`: una membresía por negocio y cuenta.
+  businessMember: [{ campos: ["businessId", "userId"] }],
   visit: [{ campos: ["appointmentId"] }, { campos: ["filaTokenHash"] }, { campos: ["businessId", "filaFecha", "filaNumero"] }],
   appointment: [{ campos: ["manageTokenHash"] }],
   commissionRate: [{ campos: ["memberId", "serviceId"] }],
@@ -521,6 +562,69 @@ function errorDeTrigger(mensaje: string) {
   return new Prisma.PrismaClientUnknownRequestError(`23514: ${mensaje}`, { clientVersion: "base-falsa" })
 }
 
+/**
+ * Una fila que no cumple un CHECK (`chequeos.ts`): Postgres responde
+ * `check_violation` (23514) con el nombre de la restricción, y Prisma lo trae
+ * como error desconocido, igual que el de un trigger (en una consulta cruda
+ * sería P2010, pero la base falsa no escribe con SQL crudo).
+ */
+function revisarChequeos(modelo: NombreDeModelo, fila: Registro) {
+  const fallido = chequeoQueFalla(modelo, fila)
+  if (!fallido) return
+  throw new Prisma.PrismaClientUnknownRequestError(
+    `23514: new row for relation "${TABLAS_SQL[modelo]}" violates check constraint "${fallido.nombre}"`,
+    { clientVersion: "base-falsa" }
+  )
+}
+
+/**
+ * Lo que Prisma valida antes de mandar la consulta: un `where` de
+ * `findUnique`, `update`, `upsert` o `delete` tiene que nombrar un único con
+ * valor. Con `{ id: undefined }` Prisma lanza; filtrar por el resto traería
+ * la primera fila que calce, y un test pasaría por la razón equivocada.
+ */
+function exigirDondeUnico(modelo: NombreDeModelo, operacion: string, where: unknown) {
+  if (!esObjetoPlano(where)) return falla(`${modelo}.${operacion} sin where`)
+  const definido = (valor: unknown) => valor !== undefined
+  const simples = new Set(["id", ...(UNICOS[modelo] ?? []).filter((u) => u.campos.length === 1 && !u.si).map((u) => u.campos[0])])
+  const nombraUnico = Object.entries(where).some(([clave, valor]) => {
+    if (simples.has(clave)) return definido(valor) && valor !== null
+    // Un único compuesto, como lo arma Prisma: `memberId_serviceId: { memberId, serviceId }`.
+    return clave.includes("_") && esObjetoPlano(valor) && Object.values(valor).every((parte) => definido(parte) && parte !== null)
+  })
+  if (!nombraUnico) {
+    throw new Prisma.PrismaClientValidationError(
+      `Invalid \`prisma.${modelo}.${operacion}()\` invocation: Argument \`where\` needs at least one unique argument with a value (${JSON.stringify(where)})`,
+      { clientVersion: "base-falsa" }
+    )
+  }
+}
+
+/** Las opciones que entiende cada operación; cualquier otra lanza en vez de ignorarse en silencio. */
+const OPCIONES_DE_LECTURA = ["where", "select", "include", "omit"]
+const OPCIONES: Record<string, string[]> = {
+  findFirst: [...OPCIONES_DE_LECTURA, "orderBy", "take", "skip", "distinct", "cursor"],
+  findMany: [...OPCIONES_DE_LECTURA, "orderBy", "take", "skip", "distinct", "cursor"],
+  findUnique: OPCIONES_DE_LECTURA,
+  count: ["where"],
+  create: ["data", "select", "include", "omit"],
+  createMany: ["data"],
+  update: ["where", "data", "select", "include", "omit"],
+  upsert: ["where", "create", "update", "select", "include", "omit"],
+  delete: OPCIONES_DE_LECTURA,
+  updateMany: ["where", "data"],
+  deleteMany: ["where"],
+}
+function exigirOpciones(modelo: NombreDeModelo, operacion: string, args: unknown) {
+  if (args === undefined) return
+  if (!esObjetoPlano(args)) return falla(`${modelo}.${operacion}: argumentos inválidos`)
+  for (const [clave, valor] of Object.entries(args)) {
+    if (valor !== undefined && !OPCIONES[operacion].includes(clave)) {
+      return falla(`${modelo}.${operacion}: la opción ${clave} no está soportada`)
+    }
+  }
+}
+
 const distintos = (a: unknown, b: unknown) => !iguales(a ?? null, b ?? null)
 
 function tablasVacias(): Tablas {
@@ -629,7 +733,7 @@ export function crearBaseFalsa() {
   /**
    * El UPDATE que hace un `ON DELETE SET NULL`: cada fila pasa por sus
    * triggers `BEFORE UPDATE` (los de `atencion_servicios` sí se disparan con
-   * la cascada) y queda con el campo en null. No revisa las demás FK de la
+   * la cascada) y por sus CHECK, y queda con el campo en null. No revisa las demás FK de la
    * fila (Postgres sólo revisa las columnas que cambian, y un null no se
    * revisa) ni toca `updatedAt`, que lo pone Prisma y no la base.
    */
@@ -637,6 +741,7 @@ export function crearBaseFalsa() {
     for (const registro of registros) {
       const nuevo = { ...registro, [campo]: null }
       ANTES_DE_ACTUALIZAR[modelo]?.(registro, nuevo)
+      revisarChequeos(modelo, nuevo)
       Object.assign(registro, nuevo)
     }
   }
@@ -986,8 +1091,8 @@ export function crearBaseFalsa() {
   }
 
   /**
-   * Un UPDATE de una fila: arma la fila nueva, la pasa por el trigger y recién
-   * entonces la escribe, como `BEFORE UPDATE`. Devuelve la escritura para que
+   * Un UPDATE de una fila: arma la fila nueva, la pasa por el trigger y por
+   * los CHECK (`chequeos.ts`) y recién entonces la escribe, como Postgres. Devuelve la escritura para que
    * `updateMany` pueda revisar todas las filas antes de tocar ninguna (en
    * Postgres la sentencia entera falla o pasa). La escritura revisa FK y
    * únicos antes de copiar: si fallan, la fila queda como estaba.
@@ -996,6 +1101,7 @@ export function crearBaseFalsa() {
     const nuevo = { ...registro }
     aplicar(modelo, nuevo, datos)
     ANTES_DE_ACTUALIZAR[modelo]?.(registro, nuevo)
+    revisarChequeos(modelo, nuevo)
     return () => {
       verificarClaves(modelo, nuevo, registro)
       Object.assign(registro, nuevo)
@@ -1015,7 +1121,25 @@ export function crearBaseFalsa() {
     if ("updatedAt" in registro) registro.updatedAt = new Date()
   }
 
+  /**
+   * Un INSERT, con sus `create` anidados. Es una sola sentencia para Prisma:
+   * si un hijo falla (un CHECK, una FK, un único), no queda ni el padre ni
+   * los hijos que ya entraron, como en Postgres.
+   */
   function crear(modelo: NombreDeModelo, datos: unknown): Registro {
+    // Sin escrituras anidadas, `insertar` revisa todo antes de tocar la tabla: no hace falta la copia.
+    const anidada = esObjetoPlano(datos) && Object.entries(datos).some(([clave, valor]) => valor !== undefined && RELACIONES[modelo][clave])
+    if (!anidada) return insertar(modelo, datos)
+    const antes = instantanea()
+    try {
+      return insertar(modelo, datos)
+    } catch (error) {
+      tablas = antes
+      throw error
+    }
+  }
+
+  function insertar(modelo: NombreDeModelo, datos: unknown): Registro {
     if (!esObjetoPlano(datos)) return falla(`data inválido en ${modelo}`)
 
     const escalares: Registro = {}
@@ -1036,6 +1160,8 @@ export function crearBaseFalsa() {
 
     const registro: Registro = { id: `${modelo}-${siguienteId++}`, ...POR_DEFECTO[modelo](), ...escalares }
     ANTES_DE_INSERTAR[modelo]?.(registro)
+    // Después de los triggers `BEFORE`, como Postgres.
+    revisarChequeos(modelo, registro)
     verificarClaves(modelo, registro)
     tablas[modelo].push(registro)
 
@@ -1045,7 +1171,7 @@ export function crearBaseFalsa() {
       // padre: el `create` anidado no lo lleva.
       const negocio = esInversaDeCompuesta(modelo, rel) ? { businessId: registro.businessId } : {}
       for (const hijo of Array.isArray(hijos) ? hijos : [hijos]) {
-        crear(rel.modelo, { ...(hijo as Registro), [rel.remoto]: registro[rel.local], ...negocio })
+        insertar(rel.modelo, { ...(hijo as Registro), [rel.remoto]: registro[rel.local], ...negocio })
       }
     }
     return registro
@@ -1082,6 +1208,70 @@ export function crearBaseFalsa() {
     })
   }
 
+  // ─── Transacciones ───────────────────────────────────────────────────────
+
+  /**
+   * Las transacciones corren de a una, en orden de llegada: dos
+   * `$transaction` en un `Promise.all` se encolan en vez de mezclarse. En
+   * memoria no hay MVCC, y sin la fila una que se deshace restauraría una
+   * copia que borra lo que la otra ya escribió. Encoladas se comportan como
+   * transacciones aisladas (serializables: nunca hay un 40001). Un test que
+   * quiere ver la carrera la arma él (`enFila` en los de liquidaciones y
+   * abonos, que siguen valiendo encima de ésta).
+   *
+   * Una operación fuera de toda transacción que llega mientras una está
+   * abierta también espera su turno, como una sentencia que se confirma sola:
+   * si la abierta se deshace, no se lleva lo que esa operación escribió.
+   *
+   * Qué corre dentro de cuál se sabe con `AsyncLocalStorage`: la función de
+   * la transacción corre con su número, y todo lo que llama (con `await` de
+   * por medio) lo hereda. Una transacción anidada lanza: con Prisma de
+   * verdad abriría otra conexión, y acá esperaría su turno para siempre.
+   */
+  interface Contexto {
+    /** El número de la transacción en cuya función se está. */
+    transaccion: number
+    /** Si la consulta cruda llegó por el `tx` de esa transacción, y no por `prisma`. */
+    porTx: boolean
+  }
+  const contexto = new AsyncLocalStorage<Contexto>()
+  let ocupada = false
+  let esperando: (() => void)[] = []
+  let transaccionActiva: number | null = null
+  let siguienteTransaccion = 1
+
+  const esperarTurno = () => new Promise<void>((resolver) => esperando.push(resolver))
+  /** Le pasa el turno al siguiente de la fila, o deja la base libre. */
+  function soltarTurno() {
+    const siguiente = esperando.shift()
+    if (siguiente) siguiente()
+    else ocupada = false
+  }
+
+  /**
+   * Una operación de un delegado. Dentro de una transacción, o con la base
+   * libre, corre en el acto (sin un `await` de por medio, como antes). Fuera
+   * de toda transacción y con una abierta, espera su turno.
+   */
+  function enTurno<A extends unknown[], R>(operacion: (...args: A) => R): (...args: A) => Promise<R> {
+    return (...args) => {
+      if (!ocupada || contexto.getStore()) {
+        try {
+          return Promise.resolve(operacion(...args))
+        } catch (error) {
+          return Promise.reject(error)
+        }
+      }
+      return esperarTurno().then(() => {
+        try {
+          return operacion(...args)
+        } finally {
+          soltarTurno()
+        }
+      })
+    }
+  }
+
   // ─── El cliente ──────────────────────────────────────────────────────────
 
   /** Lo que devuelve la base es una copia: el endpoint no puede tocar el estado por referencia. */
@@ -1095,85 +1285,144 @@ export function crearBaseFalsa() {
       skip?: number
       data?: unknown
       distinct?: unknown
+      cursor?: unknown
     }
 
-    const buscar = (args: Args = {}) => {
+    const buscar = (operacion: string, args: Args = {}) => {
+      exigirOpciones(modelo, operacion, args)
       let lista = ordenar(filtrar(modelo, args.where), args.orderBy)
       if (args.distinct !== undefined) lista = sinRepetidos(modelo, lista, args.distinct)
+      if (args.cursor !== undefined) lista = desdeElCursor(modelo, lista, args.cursor, args.orderBy)
       if (args.skip !== undefined) lista = lista.slice(args.skip)
-      if (args.take !== undefined) lista = lista.slice(0, args.take)
+      if (args.take !== undefined) {
+        if (args.take < 0) return falla(`take negativo en ${modelo}: no está soportado`)
+        lista = lista.slice(0, args.take)
+      }
       return lista
+    }
+    /** El registro de un `where` de único (`findUnique`, `update`, `upsert`, `delete`). */
+    const unico = (operacion: string, args: Args) => {
+      exigirOpciones(modelo, operacion, args)
+      exigirDondeUnico(modelo, operacion, args?.where)
+      return filtrar(modelo, args.where)[0]
     }
     const salida = (registro: Registro, args: Args) => copia(proyectar(tablas, modelo, registro, args))
 
     return {
-      findFirst: vi.fn(async (args: Args = {}) => {
-        const [primero] = buscar(args)
-        return primero ? salida(primero, args) : null
-      }),
-      findUnique: vi.fn(async (args: Args) => {
-        const [unico] = filtrar(modelo, args.where)
-        return unico ? salida(unico, args) : null
-      }),
-      findMany: vi.fn(async (args: Args = {}) => buscar(args).map((registro) => salida(registro, args))),
-      count: vi.fn(async (args: Args = {}) => filtrar(modelo, args.where).length),
-      create: vi.fn(async (args: Args) => salida(crear(modelo, args.data), args)),
+      findFirst: vi.fn(
+        enTurno((args: Args = {}) => {
+          const [primero] = buscar("findFirst", args)
+          return primero ? salida(primero, args) : null
+        })
+      ),
+      findUnique: vi.fn(
+        enTurno((args: Args) => {
+          const registro = unico("findUnique", args)
+          return registro ? salida(registro, args) : null
+        })
+      ),
+      findMany: vi.fn(enTurno((args: Args = {}) => buscar("findMany", args).map((registro) => salida(registro, args)))),
+      count: vi.fn(
+        enTurno((args: Args = {}) => {
+          exigirOpciones(modelo, "count", args)
+          return filtrar(modelo, args.where).length
+        })
+      ),
+      create: vi.fn(
+        enTurno((args: Args) => {
+          exigirOpciones(modelo, "create", args)
+          return salida(crear(modelo, args.data), args)
+        })
+      ),
       // Un solo INSERT: si una fila falla un trigger, una FK o un único, no
       // queda ninguna, como en Postgres.
-      createMany: vi.fn(async (args: Args) => {
-        const lista = Array.isArray(args.data) ? args.data : [args.data]
-        const antes = instantanea()
-        try {
-          lista.forEach((datos) => crear(modelo, datos))
-        } catch (error) {
-          tablas = antes
-          throw error
-        }
-        return { count: lista.length }
-      }),
-      update: vi.fn(async (args: Args) => {
-        const [registro] = filtrar(modelo, args.where)
-        if (!registro) throw errorDePrisma("P2025", `No existe el registro a actualizar en ${modelo}`)
-        prepararActualizacion(modelo, registro, args.data)()
-        return salida(registro, args)
-      }),
-      upsert: vi.fn(async (args: Args & { create?: unknown; update?: unknown }) => {
-        const [registro] = filtrar(modelo, args.where)
-        if (!registro) return salida(crear(modelo, args.create), args)
-        prepararActualizacion(modelo, registro, args.update)()
-        return salida(registro, args)
-      }),
-      delete: vi.fn(async (args: Args) => {
-        const [registro] = filtrar(modelo, args.where)
-        if (!registro) throw errorDePrisma("P2025", `No existe el registro a borrar en ${modelo}`)
-        const copiaDeSalida = salida(registro, args)
-        borrarSentencia(modelo, new Set([registro]))
-        return copiaDeSalida
-      }),
-      // Una sola sentencia: si una fila falla una FK o un único, no queda
-      // ninguna cambiada, como en Postgres.
-      updateMany: vi.fn(async (args: Args) => {
-        const registros = filtrar(modelo, args.where)
-        const escrituras = registros.map((registro) => prepararActualizacion(modelo, registro, args.data))
-        const antes = instantanea()
-        try {
-          escrituras.forEach((escribir) => escribir())
-        } catch (error) {
-          tablas = antes
-          throw error
-        }
-        return { count: registros.length }
-      }),
-      deleteMany: vi.fn(async (args: Args = {}) => {
-        const registros = new Set(filtrar(modelo, args.where))
-        borrarSentencia(modelo, registros)
-        return { count: registros.size }
-      }),
+      createMany: vi.fn(
+        enTurno((args: Args) => {
+          exigirOpciones(modelo, "createMany", args)
+          const lista = Array.isArray(args.data) ? args.data : [args.data]
+          const antes = instantanea()
+          try {
+            lista.forEach((datos) => insertar(modelo, datos))
+          } catch (error) {
+            tablas = antes
+            throw error
+          }
+          return { count: lista.length }
+        })
+      ),
+      update: vi.fn(
+        enTurno((args: Args) => {
+          const registro = unico("update", args)
+          if (!registro) throw errorDePrisma("P2025", `No existe el registro a actualizar en ${modelo}`)
+          prepararActualizacion(modelo, registro, args.data)()
+          return salida(registro, args)
+        })
+      ),
+      upsert: vi.fn(
+        enTurno((args: Args & { create?: unknown; update?: unknown }) => {
+          const registro = unico("upsert", args)
+          if (!registro) return salida(crear(modelo, args.create), args)
+          prepararActualizacion(modelo, registro, args.update)()
+          return salida(registro, args)
+        })
+      ),
+      delete: vi.fn(
+        enTurno((args: Args) => {
+          const registro = unico("delete", args)
+          if (!registro) throw errorDePrisma("P2025", `No existe el registro a borrar en ${modelo}`)
+          const copiaDeSalida = salida(registro, args)
+          borrarSentencia(modelo, new Set([registro]))
+          return copiaDeSalida
+        })
+      ),
+      // Una sola sentencia: si una fila falla una FK, un único o un CHECK, no
+      // queda ninguna cambiada, como en Postgres.
+      updateMany: vi.fn(
+        enTurno((args: Args) => {
+          exigirOpciones(modelo, "updateMany", args)
+          const registros = filtrar(modelo, args.where)
+          const escrituras = registros.map((registro) => prepararActualizacion(modelo, registro, args.data))
+          const antes = instantanea()
+          try {
+            escrituras.forEach((escribir) => escribir())
+          } catch (error) {
+            tablas = antes
+            throw error
+          }
+          return { count: registros.length }
+        })
+      ),
+      deleteMany: vi.fn(
+        enTurno((args: Args = {}) => {
+          exigirOpciones(modelo, "deleteMany", args)
+          const registros = new Set(filtrar(modelo, args.where))
+          borrarSentencia(modelo, registros)
+          return { count: registros.size }
+        })
+      ),
     }
   }
 
-  /** Lo que recibe la función de una transacción: como el cliente real, sin `$transaction`. */
-  const cliente = {
+  /**
+   * `cursor` de Prisma: la lista (ya filtrada y ordenada) desde la fila del
+   * cursor, incluida; con `skip: 1`, desde la siguiente. Como Prisma, compara
+   * con los valores de esa fila según el `orderBy` (más el campo del cursor
+   * como desempate), así que el cursor no tiene que cumplir el `where`. Si
+   * la fila del cursor no existe, no trae nada. Sólo un cursor de un campo
+   * único (`{ id }`).
+   */
+  function desdeElCursor(modelo: NombreDeModelo, lista: Registro[], cursor: unknown, orderBy: unknown): Registro[] {
+    exigirDondeUnico(modelo, "cursor", cursor)
+    const campos = Object.keys(cursor as Condicion)
+    if (campos.length !== 1 || campos[0].includes("_")) return falla(`cursor de más de un campo en ${modelo}: no está soportado`)
+    const [delCursor] = filtrar(modelo, cursor)
+    if (!delCursor) return []
+    const criterios = orderBy === undefined ? [] : Array.isArray(orderBy) ? orderBy : [orderBy]
+    const comparar = comparador([...criterios, { [campos[0]]: "asc" }])
+    return lista.filter((registro) => comparar(registro, delCursor) >= 0)
+  }
+
+  const delegados = {
     user: delegado("user"),
     business: delegado("business"),
     businessMember: delegado("businessMember"),
@@ -1211,58 +1460,127 @@ export function crearBaseFalsa() {
     protesis: delegado("protesis"),
     eventoDeProtesis: delegado("eventoDeProtesis"),
     pagoAlLaboratorio: delegado("pagoAlLaboratorio"),
-    /**
-     * Sólo para candados (`SELECT … FOR UPDATE` o `pg_advisory_xact_lock`): en
-     * memoria no hay concurrencia que ordenar, así que no devuelve nada. Queda
-     * registrado para que un test compruebe que se pidió, con qué valores y
-     * dentro de la transacción. También responde la hora de la base
-     * (`SELECT clock_timestamp() AS ahora`) con `new Date()`, que los tests
-     * controlan con el reloj falso de vitest. Cualquier otra consulta cruda
-     * lanza: no se sabe leerla.
-     */
-    $queryRaw: vi.fn(async (partes: TemplateStringsArray, ..._valores: unknown[]) => {
-      const sql = partes.join("?")
-      if (sql.trim() === "SELECT clock_timestamp() AS ahora") return [{ ahora: new Date() }]
-      if (!CANDADOS.some((candado) => sql.includes(candado))) return falla(`$queryRaw sólo para candados: ${sql}`)
-      return []
-    }),
-    /**
-     * Como `$queryRaw`, sólo para `pg_advisory_xact_lock` y para la versión
-     * nueva de la fila del sillón (`tomarCandadoDelSillon`), que no cambia
-     * ninguna columna. Devuelve filas afectadas: 0.
-     */
-    $executeRaw: vi.fn(async (partes: TemplateStringsArray, ..._valores: unknown[]) => {
-      const sql = partes.join("?")
-      const marcaDelSillon = sql.startsWith('UPDATE "sillones" SET "orden" = "orden" WHERE')
-      if (!sql.includes("pg_advisory_xact_lock") && !marcaDelSillon) return falla(`$executeRaw sólo para candados: ${sql}`)
-      return 0
-    }),
+  }
+
+  // ─── Consultas crudas ────────────────────────────────────────────────────
+
+  /**
+   * Si la consulta cruda que se está atendiendo llegó por el `tx` de la
+   * transacción abierta. Se lee al empezar, antes de cualquier `await`.
+   */
+  const porElTx = () => {
+    const actual = contexto.getStore()
+    return actual?.porTx === true && actual.transaccion === transaccionActiva
+  }
+
+  /**
+   * Un candado sólo sirve dentro de una transacción: fuera, Postgres lo suelta
+   * al terminar la sentencia y no ordena nada. Por eso se rechaza un candado
+   * pedido por `prisma` (aunque sea desde la función de una transacción: va
+   * por otra conexión) o por un `tx` cuya transacción ya terminó.
+   */
+  function exigirTransaccion(sql: string) {
+    if (!porElTx()) return falla(`candado fuera de una transacción (pídelo con el tx de $transaction): ${sql}`)
+  }
+
+  /**
+   * Sólo para candados (`SELECT … FOR UPDATE` o `pg_advisory_xact_lock`): en
+   * memoria no hay concurrencia que ordenar (las transacciones ya van de a
+   * una), así que no devuelve nada. Queda registrado para que un test
+   * compruebe que se pidió y con qué valores; que fue dentro de la
+   * transacción lo garantiza la base, que lo rechaza fuera de ella. También
+   * responde la hora de la base (`SELECT clock_timestamp() AS ahora`) con
+   * `new Date()`, que los tests controlan con el reloj falso de vitest.
+   * Cualquier otra consulta cruda lanza: no se sabe leerla.
+   *
+   * `prisma.$queryRaw` registra todas las consultas (también las que llegan
+   * por el `tx`, que pasan por acá); `transaccion.$queryRaw`, sólo las del `tx`.
+   */
+  const $queryRaw = vi.fn(async (partes: TemplateStringsArray, ..._valores: unknown[]) => {
+    const sql = partes.join("?")
+    if (sql.trim() === "SELECT clock_timestamp() AS ahora") return [{ ahora: new Date() }]
+    if (!CANDADOS.some((candado) => sql.includes(candado))) return falla(`$queryRaw sólo para candados: ${sql}`)
+    exigirTransaccion(sql)
+    return []
+  })
+  /**
+   * Como `$queryRaw`, sólo para `pg_advisory_xact_lock` y para la versión
+   * nueva de la fila del sillón (`tomarCandadoDelSillon`), que no cambia
+   * ninguna columna y es también un candado: las dos, sólo dentro de una
+   * transacción. Devuelve filas afectadas: 0.
+   */
+  const $executeRaw = vi.fn(async (partes: TemplateStringsArray, ..._valores: unknown[]) => {
+    const sql = partes.join("?")
+    const marcaDelSillon = sql.startsWith('UPDATE "sillones" SET "orden" = "orden" WHERE')
+    if (!sql.includes("pg_advisory_xact_lock") && !marcaDelSillon) return falla(`$executeRaw sólo para candados: ${sql}`)
+    exigirTransaccion(sql)
+    return 0
+  })
+
+  /**
+   * Las consultas crudas del `tx`: funciones propias (no las de `prisma`),
+   * que marcan que la consulta llegó por la transacción y la pasan a las de
+   * `prisma`, así un test que reemplaza `prisma.$queryRaw` (la hora de la
+   * base, por ejemplo) sigue viendo también las de adentro.
+   */
+  const porLaTransaccion = <T>(cruda: (partes: TemplateStringsArray, ...valores: unknown[]) => Promise<T>) =>
+    vi.fn((partes: TemplateStringsArray, ...valores: unknown[]) => {
+      const actual = contexto.getStore()
+      // Sin transacción (un `tx` que se usa después de terminada), `transaccion` no calza con ninguna.
+      return contexto.run({ transaccion: actual?.transaccion ?? -1, porTx: true }, () => cruda(partes, ...valores))
+    })
+
+  /** Lo que recibe la función de una transacción: como el cliente real, sin `$transaction`. */
+  const tx = {
+    ...delegados,
+    $queryRaw: porLaTransaccion($queryRaw),
+    $executeRaw: porLaTransaccion($executeRaw),
   }
 
   const prisma = {
-    ...cliente,
+    ...delegados,
+    $queryRaw,
+    $executeRaw,
     /**
      * Sólo la forma interactiva, que es la que usan estos endpoints. Si la
-     * función lanza, la base vuelve a como estaba: igual que Postgres.
+     * función lanza, la base vuelve a como estaba: igual que Postgres. Las
+     * opciones (`isolationLevel`) no cambian nada: ya van de a una.
      */
-    $transaction: vi.fn(async (fn: unknown) => {
+    $transaction: vi.fn(async (fn: unknown, _opciones?: unknown) => {
       if (typeof fn !== "function") return falla("sólo se soportan transacciones interactivas")
-      const antes = structuredClone(tablas)
+      if (contexto.getStore()) return falla("transacción anidada: con Prisma de verdad sería otra conexión, fuera de ésta")
+      if (ocupada) await esperarTurno()
+      else ocupada = true
+      const numero = siguienteTransaccion++
+      transaccionActiva = numero
+      const antes = instantanea()
       try {
-        return await fn(cliente)
+        return await contexto.run({ transaccion: numero, porTx: false }, () => fn(tx))
       } catch (error) {
         tablas = antes
         throw error
+      } finally {
+        transaccionActiva = null
+        soltarTurno()
       }
     }),
   }
 
   return {
     prisma,
+    /**
+     * El `tx` que recibe la función de cada transacción. Sus `$queryRaw` y
+     * `$executeRaw` son propios: `transaccion.$queryRaw.mock.calls` son sólo
+     * las consultas crudas que se hicieron dentro de una transacción.
+     */
+    transaccion: tx,
     /** Vacía la base y carga `datos`, con los defaults del esquema en cada registro. */
     reiniciar(datos: Partial<Record<NombreDeModelo, Registro[]>>) {
       tablas = tablasVacias()
       siguienteId = 1
+      ocupada = false
+      esperando = []
+      transaccionActiva = null
       for (const [modelo, registros] of Object.entries(datos) as [NombreDeModelo, Registro[]][]) {
         tablas[modelo] = registros.map((registro) => ({ ...POR_DEFECTO[modelo](), ...structuredClone(registro) }))
       }

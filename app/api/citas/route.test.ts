@@ -22,7 +22,7 @@ const citasFake = [
 const prismaMock = {
   appointment: {
     findMany: vi.fn((args: { where: Record<string, unknown> }) =>
-      Promise.resolve(citasFake.filter((c) => coincideConWhere(c, args.where)))
+      Promise.resolve(citasFake.filter((c) => coincideConWhere("appointment", c, args.where)))
     ),
     create: vi.fn((args: { data: Record<string, unknown> }) => Promise.resolve({ id: "cita-nueva", ...args.data })),
   },
@@ -98,13 +98,13 @@ describe("GET /api/citas", () => {
   it("worker con memberId: un extra con memberId de un colega no le abre su cita (antes sí, pisaba el filtro)", () => {
     const where = whereDeAgenda(workerConMember, { memberId: "member-colega" })
 
-    expect(citasFake.filter((c) => coincideConWhere(c, where))).toHaveLength(0)
+    expect(citasFake.filter((c) => coincideConWhere("appointment", c, where))).toHaveLength(0)
   })
 
   it("worker sin memberId: un extra con su propio AND no destapa todas las del negocio (bug de F-002)", () => {
     const where = whereDeAgenda(workerSinMember, { AND: [{ businessId: "negocio-1" }] })
 
-    expect(citasFake.filter((c) => coincideConWhere(c, where))).toHaveLength(0)
+    expect(citasFake.filter((c) => coincideConWhere("appointment", c, where))).toHaveLength(0)
   })
 
   it("dice si el cliente ya llegó (atención no anulada) sin exponer la atención, y filtra por el negocio", async () => {
@@ -124,7 +124,7 @@ describe("GET /api/citas", () => {
       { id: "sin-atencion", businessId: "negocio-1", conAtencion: false },
     ])
     const where = prismaMock.appointment.findMany.mock.calls[0][0].where
-    expect(coincideConWhere({ businessId: "otro-negocio", memberId: null }, where)).toBe(false)
+    expect(coincideConWhere("appointment", { businessId: "otro-negocio", memberId: null }, where)).toBe(false)
   })
 
   it("trae quién canceló y cuándo, para el detalle de la agenda (#134)", async () => {

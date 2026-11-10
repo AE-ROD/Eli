@@ -30,7 +30,7 @@ const citasFake = [
 const prismaMock = {
   appointment: {
     findFirst: vi.fn((args: { where: Record<string, unknown> }) =>
-      Promise.resolve(citasFake.find((c) => coincideConWhere(c, args.where)) ?? null)
+      Promise.resolve(citasFake.find((c) => coincideConWhere("appointment", c, args.where)) ?? null)
     ),
     update: vi.fn((args: { where: { id: string }; data: Record<string, unknown> }) => {
       const cita = citasFake.find((c) => c.id === args.where.id)

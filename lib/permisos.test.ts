@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { coincideConWhere } from "@/pruebas/where-simple"
-import { coincide, type Tablas } from "@/pruebas/consultas-falsas"
+import { coincide, type NombreDeModelo, type Tablas } from "@/pruebas/consultas-falsas"
 import {
   actorDeSesion,
   mismoNegocio,
@@ -435,7 +435,7 @@ describe("falla cerrado", () => {
     // como elementos separados del AND exterior y ninguno pisa al otro.
     const where = whereDeAgenda(roto, { AND: [{ businessId: NEGOCIO }] })
 
-    expect(citasFake.filter((c) => coincideConWhere(c, where))).toHaveLength(0)
+    expect(citasFake.filter((c) => coincideConWhere("appointment", c, where))).toHaveLength(0)
   })
 })
 
@@ -1051,8 +1051,19 @@ describe("clínica dental (rubro odontología)", () => {
       { id: "propia", businessId: NEGOCIO, customerId: "paciente-1" },
       { id: "ajena", businessId: OTRO_NEGOCIO, customerId: "paciente-9" },
     ]
+    /** El modelo que filtra cada uno, para leer su `where` con la base falsa (lanza ante un campo que no tiene). */
+    const MODELO = new Map<Filtro, NombreDeModelo>([
+      [whereDeFichasClinicas as Filtro, "fichaClinica"],
+      [whereDeAlertaDeAlergias as Filtro, "fichaClinica"],
+      [whereDeMarcasDentales as Filtro, "marcaDental"],
+      [whereDeEvoluciones as Filtro, "evolucion"],
+      [whereDePlanes as Filtro, "planDeTratamiento"],
+      [whereDeEtapasDelPlan as Filtro, "etapaDelPlan"],
+      [whereDePrestacionesDelPlan as Filtro, "prestacionDelPlan"],
+      [whereDeSillones as Filtro, "sillon"],
+    ])
     const visibles = (filtro: Filtro, quien: Actor | null, extra: object = {}) =>
-      filas.filter((fila) => coincideConWhere(fila, filtro(quien, extra) as Record<string, unknown>)).map((fila) => fila.id)
+      filas.filter((fila) => coincideConWhere(MODELO.get(filtro)!, fila, filtro(quien, extra))).map((fila) => fila.id)
 
     it.each(FILTROS)("%s acota al negocio de quien puede, y a nada a quien no", (_nombre, filtro, [deDueña, deEncargado, deOdontologo]) => {
       expect(filtro(duenaDental)).toEqual(deDueña ? DEL_NEGOCIO : NADA_SIN_EXTRA)
@@ -1192,8 +1203,19 @@ describe("prótesis (clínica dental)", () => {
       { id: "de-colega", businessId: NEGOCIO, memberId: "colega" },
       { id: "ajena", businessId: OTRO_NEGOCIO, memberId: "yo" },
     ]
+    /** El modelo que filtra cada uno, para leer su `where` con la base falsa (lanza ante un campo que no tiene). */
+    const MODELO = new Map<Filtro, NombreDeModelo>([
+      [whereDeProtesis as Filtro, "protesis"],
+      [whereDeEventosDeProtesis as Filtro, "eventoDeProtesis"],
+      [whereDeMaterialesDeProtesis as Filtro, "materialDeProtesis"],
+      [whereDeLaboratorios as Filtro, "laboratorio"],
+      [whereDeCambiosDeReparto as Filtro, "cambioDeRepartoDeProtesis"],
+      [whereDePagosAlLaboratorio as Filtro, "pagoAlLaboratorio"],
+      [whereDeProtesisParaCobrar as Filtro, "protesis"],
+      [whereDeExcepcionesDeReparto as Filtro, "excepcionDeRepartoDeProtesis"],
+    ])
     const visibles = (filtro: Filtro, quien: Actor | null, extra: object = {}) =>
-      filas.filter((fila) => coincideConWhere(fila, filtro(quien, extra) as Record<string, unknown>)).map((fila) => fila.id)
+      filas.filter((fila) => coincideConWhere(MODELO.get(filtro)!, fila, filtro(quien, extra))).map((fila) => fila.id)
 
     it.each(FILTROS)("%s acota al negocio de quien puede, y a nada a quien no", (_nombre, filtro, [deDueña, deEncargado, deOdontologo]) => {
       expect(filtro(duenaDental)).toEqual(deDueña ? DEL_NEGOCIO : NADA_SIN_EXTRA)

@@ -293,11 +293,13 @@ describe("base falsa: lo de la etapa 2", () => {
     await expect(prisma.commissionRate.delete({ where: donde })).rejects.toMatchObject({ code: "P2025" })
   })
 
-  it("acepta el candado pg_advisory_xact_lock y sigue lanzando ante otra consulta cruda", async () => {
+  it("acepta el candado pg_advisory_xact_lock dentro de una transacción y sigue lanzando ante otra consulta cruda", async () => {
     const sql = (partes: TemplateStringsArray, ...valores: unknown[]) => [partes, ...valores] as const
-    await expect(prisma.$executeRaw(...sql`SELECT pg_advisory_xact_lock(${1}, ${2})`)).resolves.toBe(0)
-    await expect(prisma.$queryRaw(...sql`SELECT pg_advisory_xact_lock(${1}, ${2})`)).resolves.toEqual([])
-    await expect(prisma.$executeRaw(...sql`DELETE FROM liquidaciones`)).rejects.toThrow(/base falsa/)
+    await prisma.$transaction(async (tx: typeof base.transaccion) => {
+      await expect(tx.$executeRaw(...sql`SELECT pg_advisory_xact_lock(${1}, ${2})`)).resolves.toBe(0)
+      await expect(tx.$queryRaw(...sql`SELECT pg_advisory_xact_lock(${1}, ${2})`)).resolves.toEqual([])
+      await expect(tx.$executeRaw(...sql`DELETE FROM liquidaciones`)).rejects.toThrow(/base falsa/)
+    })
   })
 
   it("responde la hora de la base con el reloj del test, y sólo con esa consulta exacta", async () => {
@@ -432,6 +434,8 @@ describe("base falsa: el trigger atencion_servicios_comision_inmutable (#116)", 
 describe("base falsa: los triggers atencion_servicios_mismo_negocio y _liquidada_no_se_borra (#134)", () => {
   const periodo = { memberName: "Ana", desde: new Date("2026-10-01"), hasta: new Date("2026-10-31") }
   const linea = { serviceName: "Corte", professionalName: "Ana", priceCents: 1000 }
+  // Una línea con producto es de tipo producto (`atencion_servicios_tipo_coherente_check`).
+  const deProducto = { ...linea, tipo: "producto" }
 
   beforeEach(() => {
     base.reiniciar({
@@ -460,7 +464,7 @@ describe("base falsa: los triggers atencion_servicios_mismo_negocio y _liquidada
         { id: "liq-2", businessId: "n2", memberId: "m2", ...periodo },
       ],
       visitService: [
-        { id: "suelta", visitId: "v1", memberId: "m1", ...linea },
+        { id: "suelta", visitId: "v1", memberId: "m1", ...deProducto },
         { id: "liquidada", visitId: "v1", memberId: "m1", ...linea, liquidacionId: "liq-1" },
       ],
     })
@@ -468,7 +472,7 @@ describe("base falsa: los triggers atencion_servicios_mismo_negocio y _liquidada
 
   describe("mismo negocio", () => {
     it("al crear: el producto y la liquidación tienen que ser del negocio de la atención", async () => {
-      await expect(prisma.visitService.create({ data: { visitId: "v1", ...linea, productId: "p2" } })).rejects.toMatchObject({
+      await expect(prisma.visitService.create({ data: { visitId: "v1", ...deProducto, productId: "p2" } })).rejects.toMatchObject({
         code: "P2003",
         message: expect.stringMatching(/producto es de otro negocio/),
       })
@@ -476,7 +480,7 @@ describe("base falsa: los triggers atencion_servicios_mismo_negocio y _liquidada
         prisma.visitService.createMany({ data: [{ visitId: "v1", ...linea, liquidacionId: "liq-2" }] })
       ).rejects.toThrow(/liquidación es de otro negocio/)
       await expect(
-        prisma.visitService.create({ data: { visitId: "v1", ...linea, productId: "p1", liquidacionId: "liq-1" } })
+        prisma.visitService.create({ data: { visitId: "v1", ...deProducto, productId: "p1", liquidacionId: "liq-1" } })
       ).resolves.toMatchObject({ productId: "p1" })
       expect(base.buscar("visitService")).toHaveLength(3)
     })
@@ -499,7 +503,7 @@ describe("base falsa: los triggers atencion_servicios_mismo_negocio y _liquidada
     it("sólo mira si cambia la atención, el producto o la liquidación", async () => {
       // Una línea que ya apunta a algo ajeno (no debería existir) no frena
       // cambiar otro campo: el trigger no la vuelve a revisar.
-      base.reiniciar({ ...base.volcado(), visitService: [{ id: "rara", visitId: "v1", ...linea, productId: "p2" }] })
+      base.reiniciar({ ...base.volcado(), visitService: [{ id: "rara", visitId: "v1", ...deProducto, productId: "p2" }] })
       await expect(prisma.visitService.update({ where: { id: "rara" }, data: { serviceName: "Otro" } })).resolves.toBeTruthy()
     })
 
@@ -802,9 +806,13 @@ describe("base falsa: ON DELETE SET NULL y las cascadas que faltaban (#151)", ()
     appointment: [
       { id: "cita-1", businessId: "n1", title: "Corte", startTime: new Date(1), endTime: new Date(2), memberId: "m2", customerId: "c1", serviceId: "s1" },
     ],
-    appointmentService: [{ id: "as1", businessId: "n1", appointmentId: "cita-1", serviceId: "s1", serviceName: "Corte", duration: 30, orden: 0 }],
+    appointmentService: [{ id: "as1", businessId: "n1", appointmentId: "cita-1", serviceId: "s1", serviceName: "Corte", duration: 30, orden: 1 }],
     visit: [{ id: "v1", businessId: "n1", customerName: "María", customerId: "c1", appointmentId: "cita-1", status: "finalizada" }],
-    visitService: [{ id: "l1", visitId: "v1", ...linea, memberId: "m2", serviceId: "s1", productId: "p1" }],
+    // Una línea lleva servicio o producto, nunca los dos (`atencion_servicios_tipo_coherente_check`).
+    visitService: [
+      { id: "l1", visitId: "v1", ...linea, memberId: "m2", serviceId: "s1" },
+      { id: "lp1", visitId: "v1", ...linea, tipo: "producto", productId: "p1" },
+    ],
     commissionChange: [
       { id: "cc1", businessId: "n1", scope: "service", memberId: "m2", memberName: "Beto", serviceId: "s1", productId: "p1", changedById: "u4", changedByName: "Dani", changedByEmail: "d@test" },
     ],
@@ -865,7 +873,7 @@ describe("base falsa: ON DELETE SET NULL y las cascadas que faltaban (#151)", ()
         "producto",
         "p1",
         [
-          ["visitService", "l1", "productId"],
+          ["visitService", "lp1", "productId"],
           ["commissionChange", "cc1", "productId"],
         ],
       ],
@@ -941,7 +949,8 @@ describe("base falsa: ON DELETE SET NULL y las cascadas que faltaban (#151)", ()
       base.reiniciar({
         ...datos(),
         visitService: [
-          { id: "l1", visitId: "v1", ...linea, memberId: "m2", serviceId: "s1", productId: "p1", ...congelada, liquidacionId: "liq-1" },
+          { id: "l1", visitId: "v1", ...linea, memberId: "m2", serviceId: "s1", ...congelada, liquidacionId: "liq-1" },
+          { id: "lp1", visitId: "v1", ...linea, tipo: "producto", memberId: "m2", productId: "p1", ...congelada, liquidacionId: "liq-1" },
         ],
         visitPayment: [{ id: "pago-1", visitId: "v1", method: "efectivo", amountCents: 1000 }],
         liquidacion: [{ id: "liq-1", businessId: "n1", memberId: "m2", ...periodo }],
@@ -995,23 +1004,25 @@ describe("base falsa: ON DELETE SET NULL y las cascadas que faltaban (#151)", ()
     it("el producto de una línea liquidada sí se borra: el trigger no mira el producto", async () => {
       base.reiniciar({
         ...datos(),
-        visitService: [{ id: "l1", visitId: "v1", ...linea, memberId: "m2", productId: "p1", ...congelada, liquidacionId: "liq-1" }],
+        visitService: [{ id: "l1", visitId: "v1", ...linea, tipo: "producto", memberId: "m2", productId: "p1", ...congelada, liquidacionId: "liq-1" }],
         liquidacion: [{ id: "liq-1", businessId: "n1", memberId: "m2", ...periodo }],
       })
       await prisma.producto.delete({ where: { id: "p1" } })
       expect(fila("visitService", "l1")).toMatchObject({ productId: null, memberId: "m2", liquidacionId: "liq-1" })
     })
 
-    it("el SET NULL no revisa las otras FK de la fila: una línea que apunta a un producto ajeno no frena borrar el servicio", async () => {
+    it("el SET NULL no revisa las otras FK de la fila: una línea que apunta a una liquidación ajena no frena borrar el servicio", async () => {
       // El trigger mismo_negocio sólo mira si cambia el profesional, el producto,
       // la liquidación o la atención, y la base sólo revisa la FK que cambia.
+      // (Antes era un producto ajeno en una línea con servicio, una fila que
+      // `atencion_servicios_tipo_coherente_check` no deja existir.)
       base.reiniciar({
         ...datos(),
-        producto: [{ id: "p3", businessId: "n2", name: "Ajena" }],
-        visitService: [{ id: "l1", visitId: "v1", ...linea, serviceId: "s1", productId: "p3" }],
+        liquidacion: [{ id: "liq-ajena", businessId: "n2", memberId: "m3", ...periodo }],
+        visitService: [{ id: "l1", visitId: "v1", ...linea, serviceId: "s1", liquidacionId: "liq-ajena" }],
       })
       await prisma.service.delete({ where: { id: "s1" } })
-      expect(fila("visitService", "l1")).toMatchObject({ serviceId: null, productId: "p3" })
+      expect(fila("visitService", "l1")).toMatchObject({ serviceId: null, liquidacionId: "liq-ajena" })
     })
   })
 })
@@ -1811,5 +1822,397 @@ describe("base falsa: las prótesis (etapa 7)", () => {
       expect(quedan.laboratorio.map((l) => l.id)).toEqual(["lab2"])
       expect(quedan.materialDeProtesis.map((m) => m.id)).toEqual(["mt2"])
     })
+  })
+})
+
+describe("base falsa: transacciones concurrentes (revisión del lote 11)", () => {
+  /** Una promesa que el test resuelve a mano, para dejar una transacción abierta a mitad de camino. */
+  function pausa() {
+    let soltar!: () => void
+    const promesa = new Promise<void>((resolver) => (soltar = resolver))
+    return { promesa, soltar }
+  }
+
+  it("dos transacciones en un Promise.all van de a una: la que se deshace no se lleva lo que escribió la otra", async () => {
+    const orden: string[] = []
+    const primera = prisma.$transaction(async (tx: typeof prisma) => {
+      orden.push("empieza la primera")
+      await tx.visit.updateMany({ where: { id: "v1" }, data: { status: "anulada" } })
+      await Promise.resolve()
+      orden.push("termina la primera")
+      throw new Error("se deshace")
+    })
+    const segunda = prisma.$transaction(async (tx: typeof prisma) => {
+      orden.push("empieza la segunda")
+      await tx.visit.updateMany({ where: { id: "v2" }, data: { notes: "escrita" } })
+      orden.push("termina la segunda")
+    })
+
+    const [a, b] = await Promise.allSettled([primera, segunda])
+    expect(a.status).toBe("rejected")
+    expect(b.status).toBe("fulfilled")
+    expect(orden).toEqual(["empieza la primera", "termina la primera", "empieza la segunda", "termina la segunda"])
+    expect(base.buscar("visit", { id: "v1" })[0].status).toBe("en-espera")
+    expect(base.buscar("visit", { id: "v2" })[0].notes).toBe("escrita")
+  })
+
+  it("una escritura fuera de transacción que llega con una abierta espera su turno y no se pierde si la abierta se deshace", async () => {
+    const { promesa, soltar } = pausa()
+    const abierta = prisma.$transaction(async (tx: typeof prisma) => {
+      await tx.visit.updateMany({ where: { id: "v1" }, data: { status: "anulada" } })
+      await promesa
+      throw new Error("se deshace")
+    })
+    const suelta = prisma.visit.update({ where: { id: "v2" }, data: { notes: "suelta" } })
+    // Todavía no corrió: espera a que la transacción termine.
+    await Promise.resolve()
+    expect(base.buscar("visit", { id: "v2" })[0].notes).toBeNull()
+    soltar()
+    await expect(abierta).rejects.toThrow("se deshace")
+    await suelta
+    expect(base.buscar("visit", { id: "v1" })[0].status).toBe("en-espera")
+    expect(base.buscar("visit", { id: "v2" })[0].notes).toBe("suelta")
+  })
+
+  it("una transacción anidada lanza en vez de esperar su turno para siempre", async () => {
+    await expect(
+      prisma.$transaction(async () => {
+        await prisma.$transaction(async () => undefined)
+      })
+    ).rejects.toThrow(/transacción anidada/)
+  })
+
+  it("el `enFila` a mano de los tests de carreras sigue funcionando encima de la fila de la base", async () => {
+    const original = prisma.$transaction.getMockImplementation()!
+    let fila: Promise<unknown> = Promise.resolve()
+    const enFila = async (fn: unknown) => {
+      const turno = fila.then(() => original(fn))
+      fila = turno.catch(() => undefined)
+      return turno
+    }
+    prisma.$transaction.mockImplementationOnce(enFila).mockImplementationOnce(enFila)
+    const escribir = (notes: string) =>
+      prisma.$transaction(async (tx: typeof prisma) => tx.visit.update({ where: { id: "v2" }, data: { notes } }))
+    await Promise.all([escribir("uno"), escribir("dos")])
+    expect(base.buscar("visit", { id: "v2" })[0].notes).toBe("dos")
+  })
+})
+
+describe("base falsa: los candados sólo dentro de una transacción (revisión del lote 11)", () => {
+  const sql = (partes: TemplateStringsArray, ...valores: unknown[]) => [partes, ...valores] as const
+
+  it("el tx tiene sus propias consultas crudas, que también quedan en las de prisma", async () => {
+    expect(base.transaccion.$queryRaw).not.toBe(prisma.$queryRaw)
+    expect(base.transaccion.$executeRaw).not.toBe(prisma.$executeRaw)
+    await prisma.$transaction(async (tx: typeof base.transaccion) => {
+      expect(tx.$queryRaw).toBe(base.transaccion.$queryRaw)
+      await tx.$queryRaw(...sql`SELECT id FROM atenciones WHERE id = ${"v1"} FOR UPDATE`)
+      await tx.$executeRaw(...sql`SELECT pg_advisory_xact_lock(hashtext(${"caja:n1"}))`)
+    })
+    expect(base.transaccion.$queryRaw).toHaveBeenCalledWith(expect.arrayContaining([expect.stringContaining("FOR UPDATE")]), "v1")
+    expect(prisma.$queryRaw).toHaveBeenCalledWith(expect.arrayContaining([expect.stringContaining("FOR UPDATE")]), "v1")
+    expect(base.transaccion.$executeRaw).toHaveBeenCalledWith(expect.anything(), "caja:n1")
+  })
+
+  it("FOR UPDATE, pg_advisory_xact_lock y la marca del sillón fuera de una transacción lanzan", async () => {
+    await expect(prisma.$queryRaw(...sql`SELECT id FROM atenciones WHERE id = ${"v1"} FOR UPDATE`)).rejects.toThrow(
+      /candado fuera de una transacción/
+    )
+    await expect(prisma.$executeRaw(...sql`SELECT pg_advisory_xact_lock(hashtext(${"caja:n1"}))`)).rejects.toThrow(
+      /candado fuera de una transacción/
+    )
+    await expect(prisma.$executeRaw(...sql`SELECT pg_advisory_xact_lock_shared(hashtext(${"caja:n1"}))`)).rejects.toThrow(
+      /candado fuera de una transacción/
+    )
+    await expect(
+      prisma.$executeRaw(...sql`UPDATE "sillones" SET "orden" = "orden" WHERE "id" = ${"sl1"} AND "businessId" = ${"n1"}`)
+    ).rejects.toThrow(/candado fuera de una transacción/)
+    // La hora de la base no es un candado: se pide donde sea.
+    await expect(prisma.$queryRaw(...sql`SELECT clock_timestamp() AS ahora`)).resolves.toHaveLength(1)
+  })
+
+  it("un candado pedido con prisma desde adentro de una transacción también lanza: iría por otra conexión", async () => {
+    await expect(
+      prisma.$transaction(async () => {
+        await prisma.$queryRaw(...sql`SELECT id FROM atenciones WHERE id = ${"v1"} FOR UPDATE`)
+      })
+    ).rejects.toThrow(/candado fuera de una transacción/)
+  })
+
+  it("el tx de una transacción que ya terminó no sirve para un candado", async () => {
+    let guardado: typeof base.transaccion | undefined
+    await prisma.$transaction(async (tx: typeof base.transaccion) => {
+      guardado = tx
+    })
+    await expect(guardado!.$executeRaw(...sql`SELECT pg_advisory_xact_lock(hashtext(${"caja:n1"}))`)).rejects.toThrow(
+      /candado fuera de una transacción/
+    )
+  })
+
+  it("un reemplazo de prisma.$queryRaw que espera antes de delegar sigue sabiendo que vino del tx", async () => {
+    const original = prisma.$queryRaw.getMockImplementation()!
+    prisma.$queryRaw.mockImplementationOnce(async (partes: TemplateStringsArray, ...valores: unknown[]) => {
+      await Promise.resolve()
+      return original(partes, ...valores)
+    })
+    await expect(
+      prisma.$transaction((tx: typeof base.transaccion) => tx.$queryRaw(...sql`SELECT id FROM clientes WHERE id = ${"c1"} FOR UPDATE`))
+    ).resolves.toEqual([])
+  })
+})
+
+describe("base falsa: los únicos de cuentas, negocios y membresías (revisión del lote 11)", () => {
+  it("usuarios_email_key", async () => {
+    await expect(prisma.user.create({ data: { name: "Otra Ana", email: "a@test" } })).rejects.toMatchObject({ code: "P2002" })
+    await expect(prisma.user.create({ data: { name: "Bea", email: "b@test" } })).resolves.toMatchObject({ email: "b@test" })
+  })
+
+  it("negocios_slug_key, negocios_userId_key y negocios_codigoInvitacion_key", async () => {
+    // `codigoInvitacion` no tiene default en el esquema: lo pone quien crea el negocio.
+    base.reiniciar({ ...base.volcado(), business: [{ id: "n1", name: "Uno", slug: "uno", userId: "u1", codigoInvitacion: "COD-1" }] })
+    await prisma.user.create({ data: { name: "Bea", email: "b@test" } })
+    const [bea] = base.buscar("user", { email: "b@test" })
+    const nuevo = { name: "Dos", slug: "dos", userId: bea.id, codigoInvitacion: "COD-2" }
+    await expect(prisma.business.create({ data: { ...nuevo, slug: "uno" } })).rejects.toMatchObject({ code: "P2002" })
+    await expect(prisma.business.create({ data: { ...nuevo, userId: "u1" } })).rejects.toMatchObject({ code: "P2002" })
+    await expect(prisma.business.create({ data: { ...nuevo, codigoInvitacion: "COD-1" } })).rejects.toMatchObject({ code: "P2002" })
+    await expect(prisma.business.create({ data: nuevo })).resolves.toMatchObject({ slug: "dos" })
+  })
+
+  it("miembros_negocio_businessId_userId_key: una membresía por negocio y cuenta", async () => {
+    await expect(prisma.businessMember.create({ data: { businessId: "n1", userId: "u1" } })).rejects.toMatchObject({ code: "P2002" })
+  })
+})
+
+describe("base falsa: los CHECK de las migraciones (revisión del lote 11)", () => {
+  const datos = () => ({
+    business: [{ id: "n1", name: "Uno", slug: "uno", userId: "u1", type: "odontologia" }],
+    user: [{ id: "u1", name: "Ana", email: "a@test" }],
+    businessMember: [{ id: "m1", businessId: "n1", userId: "u1" }],
+    customer: [{ id: "c1", businessId: "n1", name: "María" }],
+    appointment: [{ id: "cita-1", businessId: "n1", title: "Control", startTime: new Date(1), endTime: new Date(2), customerId: "c1" }],
+    visit: [{ id: "v1", businessId: "n1", customerName: "María", customerId: "c1" }],
+    visitService: [{ id: "l1", visitId: "v1", serviceName: "Corte", professionalName: "Ana", priceCents: 1000, memberId: "m1" }],
+    liquidacion: [
+      {
+        id: "liq-1",
+        businessId: "n1",
+        memberId: "m1",
+        memberName: "Ana",
+        periodo: "mensual",
+        desde: new Date("2026-10-01"),
+        hasta: new Date("2026-10-31"),
+        comisionServiciosCents: 1000,
+        comisionProductosCents: 0,
+        propinasCents: 0,
+        adelantosCents: 0,
+        ajustesCents: 0,
+        brutoCents: 1000,
+        totalCents: 1000,
+      },
+    ],
+    planDeTratamiento: [{ id: "plan-1", businessId: "n1", customerId: "c1", version: 1, creadoPorNombre: "Ana" }],
+    etapaDelPlan: [{ id: "et1", businessId: "n1", planId: "plan-1", orden: 1, nombre: "Urgencia" }],
+    prestacionDelPlan: [{ id: "pr1", businessId: "n1", etapaId: "et1", orden: 1, nombre: "Limpieza", valorCents: 1000 }],
+    fichaClinica: [{ id: "f1", businessId: "n1", customerId: "c1", actualizadaPor: "Ana" }],
+  })
+  beforeEach(() => base.reiniciar(datos()))
+
+  it("lanza 23514 con el nombre de la restricción, como Postgres, y la fila queda como estaba", async () => {
+    const intento = prisma.etapaDelPlan.update({ where: { id: "et1" }, data: { estado: "aprobada" } })
+    await expect(intento).rejects.toBeInstanceOf(Prisma.PrismaClientUnknownRequestError)
+    await expect(intento).rejects.toThrow(/^23514: new row for relation "etapas_del_plan" violates check constraint "etapas_del_plan_aprobada_check"$/)
+    expect(base.buscar("etapaDelPlan", { id: "et1" })[0]).toMatchObject({ estado: "por-aprobar", aprobadaEn: null })
+  })
+
+  it("estado ↔ fecha: etapa aprobada con cuándo y quién; prestación realizada con realizadaEn; agendada con cita", async () => {
+    await expect(
+      prisma.etapaDelPlan.update({ where: { id: "et1" }, data: { estado: "aprobada", aprobadaEn: new Date() } })
+    ).rejects.toThrow(/etapas_del_plan_aprobada_check/)
+    await prisma.etapaDelPlan.update({ where: { id: "et1" }, data: { estado: "aprobada", aprobadaEn: new Date(), aprobadaPorNombre: "Ana" } })
+
+    await expect(prisma.prestacionDelPlan.update({ where: { id: "pr1" }, data: { estado: "realizada" } })).rejects.toThrow(
+      /prestaciones_del_plan_realizada_check/
+    )
+    await expect(prisma.prestacionDelPlan.update({ where: { id: "pr1" }, data: { estado: "agendada" } })).rejects.toThrow(
+      /prestaciones_del_plan_cita_check/
+    )
+    await expect(prisma.prestacionDelPlan.update({ where: { id: "pr1" }, data: { appointmentId: "cita-1" } })).rejects.toThrow(
+      /prestaciones_del_plan_cita_check/
+    )
+    await prisma.prestacionDelPlan.update({ where: { id: "pr1" }, data: { estado: "agendada", appointmentId: "cita-1" } })
+    await prisma.prestacionDelPlan.update({ where: { id: "pr1" }, data: { estado: "realizada", realizadaEn: new Date() } })
+  })
+
+  it("la ficha: el odontograma y quién lo actualizó van juntos", async () => {
+    await expect(prisma.fichaClinica.update({ where: { id: "f1" }, data: { odontogramaActualizadoEn: new Date() } })).rejects.toThrow(
+      /fichas_clinicas_odontograma_check/
+    )
+  })
+
+  it("la plata: comisión hasta el precio, propina de la dueña o de un miembro, bruto que suma", async () => {
+    const congelada = { commissionPercent: 50, commissionAt: new Date() }
+    await expect(prisma.visitService.update({ where: { id: "l1" }, data: { ...congelada, commissionCents: 1001 } })).rejects.toThrow(
+      /atencion_servicios_commissionCents_check/
+    )
+    await expect(prisma.visitService.update({ where: { id: "l1" }, data: { commissionPercent: 50 } })).rejects.toThrow(
+      /atencion_servicios_comision_congelada_check/
+    )
+    await prisma.visitService.update({ where: { id: "l1" }, data: { ...congelada, commissionCents: 500 } })
+
+    const propina = { businessId: "n1", visitId: "v1", professionalName: "Ana", method: "efectivo", amountCents: 100 }
+    await expect(prisma.propinaDeAtencion.create({ data: { ...propina, byOwner: true, memberId: "m1" } })).rejects.toThrow(
+      /atencion_propinas_profesional_check/
+    )
+    await expect(prisma.propinaDeAtencion.create({ data: { ...propina, byOwner: false } })).rejects.toThrow(
+      /atencion_propinas_profesional_check/
+    )
+
+    await expect(prisma.liquidacion.update({ where: { id: "liq-1" }, data: { propinasCents: 100 } })).rejects.toThrow(
+      /liquidaciones_bruto_check/
+    )
+    await expect(prisma.liquidacion.update({ where: { id: "liq-1" }, data: { estado: "pagada" } })).rejects.toThrow(
+      /liquidaciones_pagada_check/
+    )
+  })
+
+  it("el abono de una prótesis: el reparto suma lo abonado", async () => {
+    await expect(
+      prisma.visitService.create({
+        data: { visitId: "v1", serviceName: "Abono", professionalName: "Ana", priceCents: 1000, odontologoCents: 500, clinicaCents: 400, tecnicoCents: 0 },
+      })
+    ).rejects.toThrow(/atencion_servicios_reparto_check/)
+  })
+
+  it("la fila virtual: fuera de la fila, sin columnas de la fila", async () => {
+    await expect(prisma.visit.update({ where: { id: "v1" }, data: { filaNumero: 3 } })).rejects.toThrow(/atenciones_fila_coherente_check/)
+    await expect(prisma.visit.create({ data: { businessId: "n1", customerName: "X", origen: "fila" } })).rejects.toThrow(
+      /atenciones_fila_coherente_check/
+    )
+  })
+
+  it("updateMany no escribe ninguna fila si una no cumple un CHECK", async () => {
+    base.reiniciar({ ...datos(), visit: [...datos().visit, { id: "v2", businessId: "n1", customerName: "Beto", origen: "fila", filaTokenHash: "t", filaFecha: "2026-11-10", filaNumero: 1 }] })
+    await expect(prisma.visit.updateMany({ where: { businessId: "n1" }, data: { filaNumero: 2 } })).rejects.toThrow(
+      /atenciones_fila_coherente_check/
+    )
+    expect(base.buscar("visit").map((visita) => visita.filaNumero)).toEqual([null, 1])
+  })
+
+  it("como en SQL, una columna que el test no sembró es desconocida y no viola el CHECK", async () => {
+    // Sembrada sin montos (en la base no podría: son NOT NULL), bruto y total
+    // comparan contra NULL: desconocido, que no viola el CHECK.
+    base.reiniciar({ ...datos(), liquidacion: [{ id: "liq-1", businessId: "n1", memberId: "m1", estado: "cerrada" }] })
+    await expect(prisma.liquidacion.update({ where: { id: "liq-1" }, data: { nota: "ok" } })).resolves.toMatchObject({ nota: "ok" })
+  })
+})
+
+describe("base falsa: lo que Prisma valida antes de consultar (revisión del lote 11)", () => {
+  it("findUnique, update, upsert y delete con el único en undefined lanzan, en vez de traer la primera fila", async () => {
+    const sinId = { id: undefined, businessId: "n1" }
+    await expect(prisma.visit.findUnique({ where: sinId })).rejects.toBeInstanceOf(Prisma.PrismaClientValidationError)
+    await expect(prisma.visit.update({ where: sinId, data: { notes: "x" } })).rejects.toBeInstanceOf(Prisma.PrismaClientValidationError)
+    await expect(prisma.visit.upsert({ where: sinId, create: {}, update: { notes: "x" } })).rejects.toBeInstanceOf(
+      Prisma.PrismaClientValidationError
+    )
+    await expect(prisma.visit.delete({ where: sinId })).rejects.toBeInstanceOf(Prisma.PrismaClientValidationError)
+    expect(base.buscar("visit").map((visita) => visita.notes)).toEqual([null, null])
+  })
+
+  it("con un único de un campo o compuesto, sí", async () => {
+    await expect(prisma.visit.findUnique({ where: { appointmentId: "cita-1" } })).resolves.toMatchObject({ id: "v1" })
+    await expect(prisma.businessMember.findUnique({ where: { businessId_userId: { businessId: "n1", userId: "u1" } } })).resolves.toMatchObject({
+      id: "m1",
+    })
+    await expect(
+      prisma.businessMember.findUnique({ where: { businessId_userId: { businessId: "n1", userId: undefined } } })
+    ).rejects.toBeInstanceOf(Prisma.PrismaClientValidationError)
+  })
+
+  it("un create anidado que falla a mitad no deja ni al padre ni a los hijos que ya entraron", async () => {
+    base.reiniciar({
+      ...base.volcado(),
+      customer: [{ id: "c1", businessId: "n1", name: "María" }],
+    })
+    const antes = base.volcado()
+    await expect(
+      prisma.planDeTratamiento.create({
+        data: {
+          businessId: "n1",
+          customerId: "c1",
+          version: 1,
+          creadoPorNombre: "Ana",
+          etapas: { create: [{ orden: 1, nombre: "Bien" }, { orden: 0, nombre: "Mal" }] },
+        },
+      })
+    ).rejects.toThrow(/etapas_del_plan_orden_check/)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("las opciones que no entiende lanzan en vez de ignorarse", async () => {
+    await expect(prisma.visit.count({ where: { businessId: "n1" }, take: 1 } as never)).rejects.toThrow(/la opción take no está soportada/)
+    await expect(prisma.visit.findUnique({ where: { id: "v1" }, orderBy: { id: "asc" } } as never)).rejects.toThrow(/orderBy/)
+    await expect(prisma.visit.findMany({ include: { services: { distinct: ["serviceName"] } } })).rejects.toThrow(/distinct no está soportado/)
+    await expect(prisma.visit.findMany({ include: { services: { cursor: { id: "l1" } } } })).rejects.toThrow(/cursor no está soportado/)
+    await expect(prisma.visit.findMany({ take: -1 })).rejects.toThrow(/take negativo/)
+  })
+
+  it("omit y skip anidado", async () => {
+    const [atencion] = await prisma.visit.findMany({
+      where: { id: "v1" },
+      omit: { customerName: true, notes: false },
+      include: { services: { orderBy: { id: "asc" }, skip: 1, select: { id: true } } },
+    })
+    expect(atencion).not.toHaveProperty("customerName")
+    expect(atencion).toHaveProperty("notes")
+    expect(atencion.services).toEqual([{ id: "l2" }])
+    await expect(prisma.visit.findMany({ select: { id: true }, omit: { notes: true } } as never)).rejects.toThrow(/select y omit/)
+  })
+
+  it("cursor: desde la fila del cursor (incluida; con skip 1, la siguiente), aunque no cumpla el where; sin fila, nada", async () => {
+    base.reiniciar({
+      ...base.volcado(),
+      business: ["a", "b", "c", "d", "e"].map((id) => ({ id, name: id, slug: id, userId: `u-${id}`, recibeCorreosDePrueba: id !== "c" })),
+    })
+    const pagina = (cursor?: string) =>
+      prisma.business.findMany({
+        where: { recibeCorreosDePrueba: true },
+        select: { id: true },
+        orderBy: { id: "asc" },
+        take: 2,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      })
+    expect(await pagina()).toEqual([{ id: "a" }, { id: "b" }])
+    expect(await pagina("b")).toEqual([{ id: "d" }, { id: "e" }])
+    // Como Prisma: el cursor que no cumple el where no está en la lista, y `skip: 1` se salta la primera que sí.
+    expect(await pagina("c")).toEqual([{ id: "e" }])
+    expect(await pagina("e")).toEqual([])
+    expect(await pagina("no-existe")).toEqual([])
+    await expect(prisma.business.findMany({ cursor: { id: "b" }, orderBy: { id: "desc" }, select: { id: true } })).resolves.toEqual([
+      { id: "b" },
+      { id: "a" },
+    ])
+  })
+
+  it("los defaults del esquema que faltaban: medios de pago, datos del negocio, categoría, comisión de la cita", async () => {
+    await prisma.user.create({ data: { id: "u9", name: "Bea", email: "b@test" } })
+    const negocio = await prisma.business.create({ data: { name: "Dos", slug: "dos", userId: "u9", codigoInvitacion: "X" } })
+    expect(negocio).toMatchObject({ mediosDePago: [], address: null, comuna: null, whatsapp: null, instagram: null, color: null, logoUrl: null, coverUrl: null })
+    expect(await prisma.service.create({ data: { businessId: "n1", name: "Corte" } })).toMatchObject({ category: null })
+    expect(base.buscar("appointment", { id: "cita-1" })[0]).toMatchObject({ commissionPercent: null, commissionAmount: null, commissionAt: null })
+    expect(base.buscar("user", { id: "u1" })[0]).toMatchObject({ sesionesValidasDesde: null })
+  })
+})
+
+describe("base falsa: los textos se ordenan con collation (revisión del lote 11)", () => {
+  it("mayúsculas y tildes junto a su letra, en orderBy y en gt/lt", async () => {
+    base.reiniciar({
+      ...base.volcado(),
+      customer: ["Zoe", "ana", "Ángela", "beto"].map((name, i) => ({ id: `c${i}`, businessId: "n1", name })),
+    })
+    const nombres = await prisma.customer.findMany({ orderBy: { name: "asc" }, select: { name: true } })
+    expect(nombres.map((cliente) => cliente.name)).toEqual(["ana", "Ángela", "beto", "Zoe"])
+    const despues = await prisma.customer.findMany({ where: { name: { gt: "Ángela" } }, orderBy: { name: "asc" }, select: { name: true } })
+    expect(despues.map((cliente) => cliente.name)).toEqual(["beto", "Zoe"])
   })
 })

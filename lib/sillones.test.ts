@@ -157,11 +157,16 @@ describe("el choque en un sillón", () => {
 
   it("asegurarSillonLibre traba el sillón antes de mirar, y lanza si choca", async () => {
     sembrar()
-    await expect(asegurarSillonLibre(db, consulta("10:30", "11:30"))).rejects.toBeInstanceOf(SillonOcupado)
+    // El candado sólo vale dentro de una transacción: la base falsa lo rechaza fuera.
+    const enTransaccion = (fn: (tx: Prisma.TransactionClient) => Promise<void>) =>
+      base.prisma.$transaction((tx: unknown) => fn(tx as Prisma.TransactionClient))
+    await expect(asegurarSillonLibre(db, consulta("10:30", "11:30"))).rejects.toThrow(/candado fuera de una transacción/)
+    base.prisma.$executeRaw.mockClear()
+    await expect(enTransaccion((tx) => asegurarSillonLibre(tx, consulta("10:30", "11:30")))).rejects.toBeInstanceOf(SillonOcupado)
     const [sql, clave] = base.prisma.$executeRaw.mock.calls[0] as [TemplateStringsArray, string]
     expect(sql.join("?")).toContain("pg_advisory_xact_lock")
     expect(clave).toBe("sillon:n1:sl1")
 
-    await expect(asegurarSillonLibre(db, consulta("15:00", "16:00"))).resolves.toBeUndefined()
+    await expect(enTransaccion((tx) => asegurarSillonLibre(tx, consulta("15:00", "16:00")))).resolves.toBeUndefined()
   })
 })

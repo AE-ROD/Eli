@@ -45,7 +45,10 @@ function escenario() {
       cita("c1", {
         manageTokenHash: "hash-del-enlace",
         reminderSentAt: new Date("2026-10-19T13:00:00.000Z"),
+        // La comisión congelada va entera (`citas_comision_congelada_check`).
         commissionPercent: 40,
+        commissionAmount: 8000,
+        commissionAt: new Date("2026-10-20T14:00:00.000Z"),
       }),
       cita("cancelada", { status: "cancelada" }),
       cita("llego"),

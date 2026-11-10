@@ -479,22 +479,42 @@ function coincideCampo(guardado: unknown, condicion: unknown, ruta: string): Log
         return operador === "in" ? esta : valor !== null && !esta
       }
       if (valor === null) return false
-      const a = comparable(valor)
-      const b = comparable(argumento)
-      if (operador === "gt") return a > b
-      if (operador === "gte") return a >= b
-      if (operador === "lt") return a < b
-      return a <= b
+      const orden = comparar(valor, argumento)
+      if (operador === "gt") return orden > 0
+      if (operador === "gte") return orden >= 0
+      if (operador === "lt") return orden < 0
+      return orden <= 0
     })
   )
 }
 
 // ─── orderBy ─────────────────────────────────────────────────────────────────
 
-export function ordenar(registros: Registro[], orderBy: unknown): Registro[] {
-  if (orderBy === undefined) return registros
+/**
+ * Los textos se ordenan con una collation, como Postgres (`es`: mayúsculas y
+ * minúsculas juntas, la tilde junto a su letra), no por punto de código como
+ * `<` de JavaScript, que pone "Zoe" antes que "ana" y "Ángela" al final. Los
+ * `gt`/`lt` sobre textos usan la misma, para que un keyset (`orderBy` más
+ * `where: { campo: { gt } }`) recorra todo sin saltarse ni repetir filas.
+ */
+const COLLATION = new Intl.Collator("es")
+
+/** -1, 0 o 1: fechas por instante, números por valor, textos con la collation. */
+function comparar(a: unknown, b: unknown): number {
+  if (typeof a === "string" && typeof b === "string") return Math.sign(COLLATION.compare(a, b))
+  // Prisma acepta una fecha ISO en texto donde va un `DateTime`.
+  const comoFecha = (valor: unknown, otro: unknown) =>
+    otro instanceof Date && typeof valor === "string" && !Number.isNaN(Date.parse(valor)) ? new Date(valor) : valor
+  const x = comparable(comoFecha(a, b))
+  const y = comparable(comoFecha(b, a))
+  if (typeof x !== typeof y) return falla(`no sé comparar ${JSON.stringify(a)} con ${JSON.stringify(b)}`)
+  return x < y ? -1 : x > y ? 1 : 0
+}
+
+/** El criterio de un `orderBy` como función de comparación para `sort`. */
+export function comparador(orderBy: unknown): (x: Registro, y: Registro) => number {
   const criterios = (Array.isArray(orderBy) ? orderBy : [orderBy]) as Condicion[]
-  return [...registros].sort((x, y) => {
+  return (x, y) => {
     for (const criterio of criterios) {
       const entradas = Object.entries(criterio)
       if (entradas.length !== 1) return falla(`orderBy con más de un campo por objeto: ${JSON.stringify(criterio)}`)
@@ -507,11 +527,17 @@ export function ordenar(registros: Registro[], orderBy: unknown): Registro[] {
       // Como Postgres: los null van al final en asc y al principio en desc.
       if (a === null) return sentido === "asc" ? 1 : -1
       if (b === null) return sentido === "asc" ? -1 : 1
-      const resultado = comparable(a) < comparable(b) ? -1 : 1
+      const resultado = comparar(a, b)
+      if (resultado === 0) continue
       return sentido === "asc" ? resultado : -resultado
     }
     return 0
-  })
+  }
+}
+
+export function ordenar(registros: Registro[], orderBy: unknown): Registro[] {
+  if (orderBy === undefined) return registros
+  return [...registros].sort(comparador(orderBy))
 }
 
 // ─── select / include ────────────────────────────────────────────────────────
@@ -520,6 +546,7 @@ export function ordenar(registros: Registro[], orderBy: unknown): Registro[] {
 export function proyectar(tablas: Tablas, modelo: NombreDeModelo, registro: Registro, args: unknown): Registro {
   const opciones = esObjetoPlano(args) ? args : {}
   const salida: Registro = {}
+  if (opciones.select !== undefined && opciones.omit !== undefined) return falla(`select y omit juntos en ${modelo}`)
 
   if (opciones.select !== undefined) {
     if (!esObjetoPlano(opciones.select)) return falla(`select inválido en ${modelo}`)
@@ -538,6 +565,14 @@ export function proyectar(tablas: Tablas, modelo: NombreDeModelo, registro: Regi
   }
 
   for (const [clave, valor] of Object.entries(registro)) salida[clave] = valor
+  // `omit`: todos los campos menos los marcados en `true`.
+  if (opciones.omit !== undefined) {
+    if (!esObjetoPlano(opciones.omit)) return falla(`omit inválido en ${modelo}`)
+    for (const [clave, fuera] of Object.entries(opciones.omit)) {
+      if (!(clave in registro) || RELACIONES[modelo][clave]) return falla(`omit de un campo que no existe: ${modelo}.${clave}`)
+      if (fuera) delete salida[clave]
+    }
+  }
   if (opciones.include !== undefined) {
     if (!esObjetoPlano(opciones.include)) return falla(`include inválido en ${modelo}`)
     for (const [clave, pedido] of Object.entries(opciones.include)) {
@@ -569,19 +604,25 @@ function contar(tablas: Tablas, modelo: NombreDeModelo, registro: Registro, pedi
   return cuentas
 }
 
+/** Lo que entiende un `select`/`include` anidado; `distinct` y `cursor` anidados lanzan en vez de ignorarse. */
+const OPCIONES_A_UNO = ["select", "include", "omit"]
+const OPCIONES_A_MUCHOS = [...OPCIONES_A_UNO, "where", "orderBy", "take", "skip"]
+
 function resolver(tablas: Tablas, rel: Relacion, registro: Registro, pedido: unknown): unknown {
   const args = esObjetoPlano(pedido) ? pedido : undefined
   const otros = relacionados(tablas, rel, registro)
-
-  if (rel.tipo === "uno") {
-    if (args && ("where" in args || "orderBy" in args || "take" in args)) {
-      return falla(`where/orderBy/take en una relación a uno (${rel.modelo})`)
+  const permitidas = rel.tipo === "uno" ? OPCIONES_A_UNO : OPCIONES_A_MUCHOS
+  for (const [clave, valor] of Object.entries(args ?? {})) {
+    if (valor !== undefined && !permitidas.includes(clave)) {
+      return falla(`${clave} no está soportado en una relación a ${rel.tipo} (${rel.modelo})`)
     }
-    return otros[0] ? proyectar(tablas, rel.modelo, otros[0], args) : null
   }
+
+  if (rel.tipo === "uno") return otros[0] ? proyectar(tablas, rel.modelo, otros[0], args) : null
 
   let lista = args?.where === undefined ? otros : otros.filter((otro) => coincide(tablas, rel.modelo, otro, args.where))
   lista = ordenar(lista, args?.orderBy)
+  if (args?.skip !== undefined) lista = lista.slice(args.skip as number)
   if (args?.take !== undefined) lista = lista.slice(0, args.take as number)
   return lista.map((otro) => proyectar(tablas, rel.modelo, otro, args))
 }
