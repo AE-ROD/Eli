@@ -5,7 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { signOut } from "next-auth/react"
 import { motion, AnimatePresence } from "framer-motion"
-import { ArrowRight, LogOut, PanelLeftClose, PanelLeftOpen, Sparkles, UserRound, X } from "lucide-react"
+import { ArrowLeftRight, ArrowRight, LogOut, PanelLeftClose, PanelLeftOpen, Sparkles, UserRound, X } from "lucide-react"
 import { FONDO_SUAVE, HALO_DE_MODULO } from "@/components/comunes/colores-de-modulo"
 import { LogoEli } from "@/components/comunes/logo-eli"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
@@ -67,6 +67,11 @@ interface PropsDeBarraLateral {
    * y "Sala de espera"; en otro rubro o sin dato, los de siempre.
    */
   rubro?: string | null
+  /**
+   * Si la cuenta tiene más de un negocio o rol (PRODUCTO.md, sección 5): junto
+   * a cerrar sesión aparece "Cambiar de negocio". Resuelto en el servidor.
+   */
+  puedeCambiarDeNegocio?: boolean
 }
 
 export function BarraLateral({
@@ -76,6 +81,7 @@ export function BarraLateral({
   puedeVerEquipo,
   accesoALaPlata,
   rubro,
+  puedeCambiarDeNegocio,
 }: PropsDeBarraLateral) {
   const { abrirPrecios } = usePrecios()
   const pathname = usePathname()
@@ -343,6 +349,18 @@ export function BarraLateral({
                   <p className="text-[13px] leading-tight text-texto-2">Sesión no disponible</p>
                 )}
               </div>
+              {/* Va a otra página (elegir con qué negocio trabajar): es un enlace. */}
+              {puedeCambiarDeNegocio && (
+                <Link
+                  href="/elegir-negocio"
+                  onNavigate={cerrarCajon}
+                  aria-label="Cambiar de negocio"
+                  title="Cambiar de negocio"
+                  className={cn(BOTON_DE_ICONO, "relative size-10 rounded-[12px] after:absolute after:-inset-0.5 hover:bg-tarjeta")}
+                >
+                  <ArrowLeftRight className="size-[18px]" aria-hidden="true" strokeWidth={1.75} />
+                </Link>
+              )}
               <button
                 type="button"
                 onClick={() => signOut({ callbackUrl: "/iniciar-sesion" })}

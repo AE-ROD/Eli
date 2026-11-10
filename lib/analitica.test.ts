@@ -13,6 +13,12 @@ describe("redactarUrlDeAnalitica", () => {
     ["https://eli.app/unirse/tok/", "https://eli.app/unirse/[token]/"],
     ["https://eli.app/baja-de-correos/dXNy.firma", "https://eli.app/baja-de-correos/[token]"],
     ["https://eli.app/reservar/salon-uno/cita/Ab_9-xyz", "https://eli.app/reservar/salon-uno/cita/[token]"],
+    // Lote 01 M1: estas tres dejaban el token a la vista.
+    ["https://eli.app/baja-de-correos/cliente/Y2xp.firma", "https://eli.app/baja-de-correos/cliente/[token]"],
+    ["https://eli.app/fila/barberia-uno/Tk_fila-9", "https://eli.app/fila/barberia-uno/[token]"],
+    ["https://eli.app/reservar/salon-uno/espera/Esp-3_x", "https://eli.app/reservar/salon-uno/espera/[token]"],
+    // Con una letra codificada es la misma página: tampoco se escapa el token.
+    ["https://eli.app/fil%61/barberia-uno/Tk_fila-9", "https://eli.app/fila/barberia-uno/[token]"],
     [
       "https://eli.app/restablecer-contrasena/abc?desde=mail#arriba",
       "https://eli.app/restablecer-contrasena/[token]?desde=mail#arriba",
@@ -30,6 +36,8 @@ describe("redactarUrlDeAnalitica", () => {
     "https://eli.app/reservar/mi-negocio?profesional=m-1",
     "https://eli.app/unirse-ahora/algo",
     "https://eli.app/dashboard/unirse/algo",
+    "https://eli.app/fila/barberia-uno",
+    "https://eli.app/reservar/salon-uno/espera",
   ])("no toca otras rutas: %s", (url) => {
     expect(redactarUrlDeAnalitica(url)).toBe(url)
   })

@@ -16,9 +16,10 @@ import { DIAS_MAXIMOS_DE_ANTICIPACION } from "@/lib/reserva-publica"
  * (`lib/soporte.ts`).
  *
  * Cada respuesta cuenta solo lo que el producto hace hoy (`docs/PRODUCTO.md`):
- * nada de WhatsApp, pagos en línea, app nativa, elegir profesional al reservar
- * ni comisiones. Los precios y los días se leen de `lib/precios.ts` y de
- * `lib/reserva-publica.ts`: escritos a mano quedarían viejos cuando cambien.
+ * nada de WhatsApp, pagos en línea ni app nativa, que no existen. Cuando el
+ * producto cambie, se revisan acá también. Los precios y los días se leen de
+ * `lib/precios.ts` y de `lib/reserva-publica.ts`: escritos a mano quedarían
+ * viejos cuando cambien.
  */
 
 export interface PreguntaFrecuente {
@@ -74,7 +75,8 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
     area: "agenda",
     pregunta: "¿Puedo cambiar la hora de una cita?",
     respuesta: [
-      "Hoy no hay un botón para mover una cita a otra hora. Cancela la cita y crea una nueva con \"Nueva cita\" en el horario correcto.",
+      "Sí. Abre la cita en la agenda y toca \"Cambiar fecha y hora\": eliges la fecha, la hora de inicio y la de término y, si eres dueño o encargado, el profesional.",
+      "Si a esa hora ya hay algo, está bloqueada o queda fuera del horario, Eli te avisa antes de guardar y puedes confirmar igual. Tus clientes también pueden cambiar su hora desde el enlace de su correo de confirmación, dentro del plazo que fijes.",
     ],
     palabrasClave: ["reprogramar", "mover", "cambiar fecha", "reagendar"],
   },
@@ -93,7 +95,7 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
     pregunta: "No veo una cita en la agenda",
     respuesta: [
       "Revisa la vista (Día, Semana o Mes) y la fecha en que estás parado: con las flechas pasas al día, la semana o el mes anterior o siguiente.",
-      "Si eres profesional, ves solo las citas asignadas a ti. Las reservas que llegan desde tu página pública quedan sin asignar, así que no aparecen en tu agenda; el dueño y el encargado ven todas.",
+      "Si eres profesional, ves solo las citas asignadas a ti. Las reservas de la página pública llegan a nombre del profesional que eligió el cliente o, con \"Cualquiera disponible\", del que estaba libre. Las citas sin profesional (por ejemplo, las de antes de que se pudiera elegir) solo las ven el dueño y el encargado, que pueden asignarlas desde el detalle de la cita.",
     ],
     palabrasClave: ["no aparece", "no veo", "falta", "cita perdida", "reserva", "profesional"],
     paraFallas: true,
@@ -156,7 +158,7 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
     area: "reservas",
     pregunta: "No me llega el correo cuando alguien reserva",
     respuesta: [
-      "El aviso va al correo de la cuenta del dueño del negocio. Revisa la carpeta de spam o correo no deseado.",
+      "El aviso va al correo con que entra a Eli el dueño del negocio y, si la cita quedó a nombre de un profesional, también al de ese profesional. Revisa la carpeta de spam o correo no deseado.",
       "Aunque el correo no llegue, la reserva queda guardada: la ves en la Agenda y, el día que corresponde, en \"Reservas de hoy\" del Tablero.",
     ],
     palabrasClave: ["no llega", "no me llega", "spam", "aviso", "correo", "notificación"],
@@ -167,7 +169,8 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
     area: "reservas",
     pregunta: "¿Un cliente puede cancelar o cambiar su reserva por su cuenta?",
     respuesta: [
-      "Desde la página todavía no. Si un cliente necesita cancelar o cambiar su hora, tiene que avisarte, y tú la cancelas en la Agenda y, si hace falta, creas la nueva.",
+      "Sí, sin cuenta. El correo de confirmación (y la pantalla de reserva confirmada) trae \"Cancelar o cambiar mi cita\": desde ahí la cancela o elige otra hora libre. Cuando lo hace, te llega un correo.",
+      "Puede hacerlo hasta 24 horas antes, o el plazo que elijas en Configuración, en \"Plazo para cancelar o reagendar (horas)\" (de 0 a 72). Pasado el plazo, tiene que contactarte.",
     ],
     palabrasClave: ["cancelar reserva", "reprogramar", "cambiar hora", "cliente"],
   },
@@ -310,7 +313,10 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
     id: "reportes-exportar",
     area: "reportes",
     pregunta: "¿Puedo exportar los reportes a Excel?",
-    respuesta: ["Todavía no: los reportes se ven en el panel, pero no se descargan."],
+    respuesta: [
+      "Los reportes se ven en el panel, pero no se descargan.",
+      "Lo que sí se descarga, en un archivo CSV que abre Excel: los clientes y las atenciones de un rango de fechas, desde Clientes con \"Exportar\" (dueño y encargado), y el comprobante de cada liquidación.",
+    ],
     palabrasClave: ["excel", "descargar", "exportar", "pdf", "planilla"],
   },
   {
@@ -329,8 +335,8 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
     area: "equipo",
     pregunta: "¿Cómo invito a alguien a mi equipo?",
     respuesta: [
-      "En Equipo, toca \"Invitar al equipo\" y escribe su nombre, su correo y su rol (encargado o profesional). Le llega un correo con un enlace para crear su cuenta.",
-      "El enlace vale 7 días y sirve una sola vez.",
+      "En Equipo, toca \"Invitar al equipo\" y escribe su nombre, su correo y su rol (encargado o profesional). Le llega un correo con un enlace para crear su cuenta o, si ya tiene una en Eli (por ejemplo, porque trabaja en otro negocio), para sumarse con ella.",
+      "El enlace vale 7 días y sirve una sola vez. También puedes invitarte a ti mismo como profesional de tu negocio, si además de administrarlo atiendes.",
     ],
     palabrasClave: ["invitar", "agregar profesional", "sumar", "trabajador", "invitación"],
   },
@@ -339,8 +345,8 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
     area: "equipo",
     pregunta: "La invitación no le llegó a la persona que invité",
     respuesta: [
-      "Pídele que revise su carpeta de spam o correo no deseado, y que el correo esté bien escrito.",
-      "Si el enlace venció o no aparece, escríbenos desde aquí y lo revisamos.",
+      "Pídele que revise su carpeta de spam o correo no deseado, y revisa que el correo esté bien escrito.",
+      "Si no la encuentra o el enlace venció, reenvíala desde Equipo, en las invitaciones pendientes: le llega un enlace nuevo y el anterior deja de servir.",
     ],
     palabrasClave: ["no llega", "spam", "correo", "invitación", "vencida"],
     paraFallas: true,
@@ -350,8 +356,8 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
     area: "equipo",
     pregunta: "Me dice que ya existe una invitación pendiente",
     respuesta: [
-      "Ya invitaste a ese correo y la persona todavía no creó su cuenta. Pídele que busque el correo de la invitación, también en spam.",
-      "Si el enlace venció, hoy no se puede invitar de nuevo al mismo correo desde el panel: escríbenos desde aquí y lo revisamos.",
+      "Ya invitaste a ese correo y la invitación sigue vigente. En Equipo, en las invitaciones pendientes, puedes reenviarla (le llega un enlace nuevo y el anterior deja de servir) o anularla. Se puede reenviar hasta 3 veces por hora.",
+      "Si la invitación venció, invitar de nuevo a ese correo la reemplaza por una nueva.",
     ],
     palabrasClave: ["invitación pendiente", "volver a invitar", "reenviar", "no me deja", "vencida"],
     paraFallas: true,
@@ -373,6 +379,17 @@ export const PREGUNTAS_FRECUENTES: readonly PreguntaFrecuente[] = [
       "Sí. En Configuración, el dueño y el encargado eligen a quién le editan el horario. Cada profesional puede editar el suyo.",
     ],
     palabrasClave: ["horario", "turnos", "disponibilidad", "configuración"],
+  },
+
+  {
+    id: "equipo-varios-negocios",
+    area: "equipo",
+    pregunta: "¿Puedo trabajar en más de un negocio con la misma cuenta?",
+    respuesta: [
+      "Sí. Una cuenta puede ser dueña de un negocio y trabajar en otros, y el dueño también puede ser profesional de su propio negocio. Al iniciar sesión eliges con qué negocio y con qué rol entras, y lo cambias cuando quieras con el botón de las flechas, junto a tu nombre en la barra lateral.",
+      "Cada vez ves solo lo de ese negocio y ese rol: como profesional ves tus citas y tu plata, y tus atenciones llevan comisión como las de cualquiera del equipo.",
+    ],
+    palabrasClave: ["dos negocios", "otro negocio", "cambiar de negocio", "varios locales", "cuenta", "rol"],
   },
 
   // ─── Cuenta y plan ─────────────────────────────────────────────────────────

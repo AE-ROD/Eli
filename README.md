@@ -22,7 +22,7 @@ Necesita un `.env` con:
 |---|---|
 | `DATABASE_URL` | Postgres (Neon), conexión con pool. |
 | `DIRECT_URL` | Postgres directo. Sólo lo usan las migraciones. |
-| `NEXTAUTH_URL` / `NEXTAUTH_SECRET` | Sesiones. `NEXTAUTH_URL` arma los enlaces de los correos; de `NEXTAUTH_SECRET` se deriva la firma del enlace de baja de los correos de prueba. |
+| `NEXTAUTH_URL` / `NEXTAUTH_SECRET` | Sesiones. `NEXTAUTH_URL` arma los enlaces de los correos (en producción es obligatoria: sin ella esos correos no salen, en vez de salir con enlaces a localhost; `lib/url-base.ts`); de `NEXTAUTH_SECRET` se deriva la firma del enlace de baja de los correos de prueba. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Entrar con Google. |
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Correos. Sin esto no se envían, pero nada se rompe. |
 | `SOPORTE_EMAIL` | Casilla que recibe las solicitudes de soporte (`/soporte` y `/dashboard/ayuda`). Sin esto la solicitud se guarda igual y el usuario recibe su acuse, pero no llega aviso a soporte. |

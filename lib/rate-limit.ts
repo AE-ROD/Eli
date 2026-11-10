@@ -40,6 +40,11 @@ function crearLimitador(prefix: string, tokens: number, ventana: `${number} ${"s
 const limitadorLogin = crearLimitador("login", 10, "1 m")
 // Registro y recuperación de contraseña: 5 por 10 minutos por IP
 const limitadorAuth = crearLimitador("auth", 5, "10 m")
+// Recuperar la contraseña, por correo de destino (en hash): 3 por hora. El de
+// `auth` cuenta por IP; sin éste, alguien que rota IPs podía llenarle la
+// bandeja a una persona de enlaces de recuperación. Al pasarse, el endpoint
+// responde lo mismo que siempre y no manda nada (no revela que el tope existe).
+const limitadorRecuperacionPorCorreo = crearLimitador("recuperacion-correo", 3, "1 h")
 // Reserva pública: 20 por hora por IP
 const limitadorReserva = crearLimitador("reserva", 20, "1 h")
 // Lectura pública, sin sesión (las horas libres de la página de reservas): 60
@@ -125,6 +130,7 @@ const limitadorPosicionEnFila = crearLimitador("fila-posicion", 240, "1 h")
 export type TipoLimite =
   | "login"
   | "auth"
+  | "recuperacionPorCorreo"
   | "reserva"
   | "lecturaPublica"
   | "panelLectura"
@@ -145,6 +151,7 @@ export type TipoLimite =
 const limitadores: Record<TipoLimite, Ratelimit | null> = {
   login: limitadorLogin,
   auth: limitadorAuth,
+  recuperacionPorCorreo: limitadorRecuperacionPorCorreo,
   reserva: limitadorReserva,
   lecturaPublica: limitadorLecturaPublica,
   panelLectura: limitadorPanelLectura,
@@ -178,6 +185,8 @@ const limitadores: Record<TipoLimite, Ratelimit | null> = {
 const fallaAbiertoSiUpstashFalla: Record<TipoLimite, boolean> = {
   login: false,
   auth: false,
+  // Cerrado: sin sesión, y manda un correo a una casilla que escribe un anónimo.
+  recuperacionPorCorreo: false,
   reserva: false,
   soporte: false,
   // Cerrado sólo omite el acuse: la solicitud se guarda igual.

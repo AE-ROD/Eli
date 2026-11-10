@@ -241,10 +241,130 @@ describe("proxy — Content-Security-Policy con nonce", () => {
       "http://localhost/completar-perfil"
     )
 
-    mockGetToken.mockResolvedValueOnce({ id: "u", businessId: "n" })
+    mockGetToken.mockResolvedValueOnce({ id: "u", businessId: "n", role: "owner", tieneNegocioPropio: true })
     expect((await proxy(pedidoFalso("/completar-perfil"))).headers.get("location")).toBe(
       "http://localhost/dashboard"
     )
+  })
+})
+
+/**
+ * Una cuenta en varios negocios (PRODUCTO.md, sección 5): sin contexto
+ * elegido no entra al panel; con algún negocio elige, sin ninguno completa el
+ * perfil. Quien sólo es miembro puede crear su propio negocio.
+ */
+describe("proxy — contextos de la cuenta", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 100 })
+  })
+
+  it("con varios contextos y ninguno elegido, el panel manda a elegir negocio (no a completar el perfil)", async () => {
+    const { default: proxy } = await import("./proxy")
+    mockGetToken.mockResolvedValueOnce({ id: "u", businessId: null, contextos: 2, tieneNegocioPropio: true })
+
+    const res = await proxy(pedidoFalso("/dashboard/agenda"))
+
+    expect(res.headers.get("location")).toBe("http://localhost/elegir-negocio")
+  })
+
+  it("con un contexto de miembro elegido entra al panel", async () => {
+    const { default: proxy } = await import("./proxy")
+    mockGetToken.mockResolvedValueOnce({ id: "u", businessId: "n", role: "worker", contextos: 1, tieneNegocioPropio: false })
+
+    const res = await proxy(pedidoFalso("/dashboard"))
+
+    expect(res.headers.get("location")).toBeNull()
+  })
+
+  it("quien sólo es miembro puede abrir completar-perfil para crear su propio negocio", async () => {
+    const { default: proxy } = await import("./proxy")
+    mockGetToken.mockResolvedValueOnce({ id: "u", businessId: "n", role: "worker", contextos: 1, tieneNegocioPropio: false })
+
+    const res = await proxy(pedidoFalso("/completar-perfil"))
+
+    expect(res.headers.get("location")).toBeNull()
+  })
+
+  it("quien ya es dueña de un negocio no vuelve a completar-perfil, aunque esté trabajando como profesional", async () => {
+    const { default: proxy } = await import("./proxy")
+    mockGetToken.mockResolvedValueOnce({ id: "u", businessId: "n", role: "worker", contextos: 2, tieneNegocioPropio: true })
+
+    const res = await proxy(pedidoFalso("/completar-perfil"))
+
+    expect(res.headers.get("location")).toBe("http://localhost/dashboard")
+  })
+
+  it("elegir negocio exige sesión, y sin ningún negocio manda a completar el perfil", async () => {
+    const { default: proxy } = await import("./proxy")
+
+    mockGetToken.mockResolvedValueOnce(null)
+    expect((await proxy(pedidoFalso("/elegir-negocio"))).headers.get("location")).toBe("http://localhost/iniciar-sesion")
+
+    mockGetToken.mockResolvedValueOnce({ id: "u", businessId: null, contextos: 0 })
+    expect((await proxy(pedidoFalso("/elegir-negocio"))).headers.get("location")).toBe(
+      "http://localhost/completar-perfil"
+    )
+
+    mockGetToken.mockResolvedValueOnce({ id: "u", businessId: null, contextos: 3 })
+    expect((await proxy(pedidoFalso("/elegir-negocio"))).headers.get("location")).toBeNull()
+  })
+})
+
+/**
+ * La ruta se compara decodificada (A1 de la revisión): Next enruta
+ * `/api/auth/callback/credential%73` a NextAuth igual que la ruta sin
+ * codificar, y comparar la cruda dejaba saltarse el límite.
+ */
+describe("proxy — rutas codificadas", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetToken.mockResolvedValue({ id: "usuario-1", businessId: "negocio-1" })
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 100 })
+  })
+
+  it.each(["/api/auth/callback/credentials", "/api/auth/callback/credential%73", "/api/auth/callback/%63redentials", "/api/auth/c%61llback/credentials"])(
+    "el login por %s lleva el límite de login y, al pasarse, responde 429 con la url que lee signIn",
+    async (ruta) => {
+      const { default: proxy } = await import("./proxy")
+      mockVerificarLimite.mockResolvedValueOnce({ permitido: false, restantes: 0 })
+
+      const res = await proxy(pedidoFalso(ruta, "POST"))
+      const cuerpo = await res.json()
+
+      expect(mockVerificarLimite).toHaveBeenCalledWith("login", "127.0.0.1")
+      expect(res.status).toBe(429)
+      expect(cuerpo.error).toMatch(/demasiados intentos/i)
+      // `signIn` de next-auth hace `new URL(data.url)`: sin url lanzaba y el botón quedaba girando.
+      expect(new URL(cuerpo.url).searchParams.get("error")).toBe("DemasiadosIntentos")
+    }
+  )
+
+  it("POST /api/auth/sessio%6E (update codificado) lleva el límite de escritura por sesión", async () => {
+    const { default: proxy } = await import("./proxy")
+    mockVerificarLimite.mockResolvedValueOnce({ permitido: false, restantes: 0 })
+
+    const res = await proxy(pedidoFalso("/api/auth/sessio%6E", "POST"))
+
+    expect(mockVerificarLimite).toHaveBeenCalledWith("panelEscritura", "usuario:usuario-1")
+    expect(res.status).toBe(429)
+  })
+
+  it("una página del panel con una letra codificada sigue exigiendo sesión", async () => {
+    const { default: proxy } = await import("./proxy")
+    mockGetToken.mockResolvedValueOnce(null)
+
+    const res = await proxy(pedidoFalso("/dashboar%64/agenda"))
+
+    expect(res.headers.get("location")).toBe("http://localhost/iniciar-sesion")
+  })
+
+  it("rutaDecodificada decodifica por segmento y deja como vino un segmento mal codificado", async () => {
+    const { rutaDecodificada } = await import("./proxy")
+
+    expect(rutaDecodificada("/api/auth/callback/credential%73")).toBe("/api/auth/callback/credentials")
+    expect(rutaDecodificada("/api/a%2Fb/c")).toBe("/api/a/b/c")
+    expect(rutaDecodificada("/api/%E0%A4%A/x")).toBe("/api/%E0%A4%A/x")
   })
 })
 

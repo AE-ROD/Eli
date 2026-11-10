@@ -66,6 +66,7 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     vi.clearAllMocks()
     prismaMock.$transaction.mockImplementation(async (fn: (tx: typeof prismaMock) => unknown) => fn(prismaMock))
     prismaMock.workerInvitation.updateMany.mockResolvedValue({ count: 1 })
+    prismaMock.businessMember.create.mockResolvedValue({ id: "miembro-nuevo" })
   })
 
   it("responde 410 si la invitación no existe, venció o ya fue aceptada", async () => {
@@ -200,6 +201,7 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     expect(await bcrypt.compare("unaClaveSegura1", hashGuardado)).toBe(true)
     expect(prismaMock.businessMember.create).toHaveBeenCalledWith({
       data: { businessId: invitacionBase.businessId, userId: "user-nuevo", role: invitacionBase.role },
+      select: { id: true },
     })
     expect(prismaMock.workerInvitation.updateMany).toHaveBeenCalledWith({
       where: { id: invitacionBase.id, acceptedAt: null, expiresAt: { gt: expect.any(Date) } },
@@ -339,13 +341,15 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     const data = await res.json()
 
     expect(res.status).toBe(200)
-    expect(data).toMatchObject({ ok: true, cuentaNueva: false, email: cuentaExistente.email })
+    // Con el contexto nuevo, para que la pantalla entre a él con `update({ contexto })`.
+    expect(data).toMatchObject({ ok: true, cuentaNueva: false, email: cuentaExistente.email, contexto: "miembro:miembro-nuevo" })
     expect(prismaMock.user.create).not.toHaveBeenCalled()
     // Lo que sostiene toda la ficha: ni siquiera en el camino feliz se escribe
     // sobre la cuenta que ya existía.
     expect(prismaMock.user.update).not.toHaveBeenCalled()
     expect(prismaMock.businessMember.create).toHaveBeenCalledWith({
       data: { businessId: invitacionBase.businessId, userId: cuentaExistente.id, role: invitacionBase.role },
+      select: { id: true },
     })
     expect(prismaMock.workerInvitation.updateMany).toHaveBeenCalledWith({
       where: { id: invitacionBase.id, acceptedAt: null, expiresAt: { gt: expect.any(Date) } },
@@ -372,5 +376,71 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     expect(log).toHaveBeenCalledWith(expect.any(String), { name: "PrismaClientKnownRequestError", code: "P2010" })
     expect(JSON.stringify(log.mock.calls)).not.toContain(invitacionBase.email)
     log.mockRestore()
+  })
+
+  it("la dueña invitada como profesional en SU PROPIO negocio: suma la membresía (un contexto más)", async () => {
+    const { POST } = await import("./route")
+    const dueña = { id: "user-dueña", name: "Carla", email: "carla@salon.com", password: "hash" }
+
+    prismaMock.workerInvitation.findUnique.mockResolvedValueOnce({ ...invitacionBase, businessId: "negocio-de-carla", email: dueña.email })
+    prismaMock.user.findFirst.mockResolvedValueOnce(dueña)
+    prismaMock.businessMember.findUnique.mockResolvedValueOnce(null)
+    mockGetServerSession.mockResolvedValueOnce({ user: { id: dueña.id, email: dueña.email, businessId: "negocio-de-carla", role: "owner" } })
+
+    const res = await POST(pedidoFalso({}), { params: params() })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true, cuentaNueva: false, contexto: "miembro:miembro-nuevo" })
+    expect(prismaMock.businessMember.create).toHaveBeenCalledWith({
+      data: { businessId: "negocio-de-carla", userId: dueña.id, role: "worker" },
+      select: { id: true },
+    })
+  })
+
+  it("una cuenta que ya es miembro de ese negocio: 409, sin duplicar ni gastar la invitación", async () => {
+    const { POST } = await import("./route")
+
+    prismaMock.workerInvitation.findUnique.mockResolvedValueOnce(invitacionBase)
+    prismaMock.user.findFirst.mockResolvedValueOnce(cuentaExistente)
+    prismaMock.businessMember.findUnique.mockResolvedValueOnce({ id: "miembro-de-antes" })
+    mockGetServerSession.mockResolvedValueOnce({ user: { id: cuentaExistente.id, email: cuentaExistente.email } })
+    // La transacción se deshace entera si lanza: lo que marcó adentro no queda.
+    let deshecha = false
+    prismaMock.$transaction.mockImplementationOnce(async (fn: (tx: typeof prismaMock) => unknown) => {
+      try {
+        return await fn(prismaMock)
+      } catch (error) {
+        deshecha = true
+        throw error
+      }
+    })
+
+    const res = await POST(pedidoFalso({}), { params: params() })
+
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toMatch(/ya eres parte/i)
+    expect(prismaMock.businessMember.create).not.toHaveBeenCalled()
+    expect(deshecha).toBe(true)
+  })
+
+  it("la cuenta nueva también recibe su contexto", async () => {
+    const { POST } = await import("./route")
+
+    prismaMock.workerInvitation.findUnique.mockResolvedValueOnce(invitacionBase)
+    prismaMock.user.findFirst.mockResolvedValueOnce(null)
+    prismaMock.user.create.mockResolvedValueOnce({ id: "user-nuevo", email: invitacionBase.email })
+
+    const res = await POST(pedidoFalso({ contrasena: "unaClaveSegura1" }), { params: params() })
+
+    expect(await res.json()).toMatchObject({ ok: true, cuentaNueva: true, contexto: "miembro:miembro-nuevo" })
+  })
+
+  it("un cuerpo que no es JSON da 400, no 500", async () => {
+    const { POST } = await import("./route")
+    prismaMock.workerInvitation.findUnique.mockResolvedValueOnce(invitacionBase)
+
+    const res = await POST(pedidoFalso("{roto"), { params: params() })
+
+    expect(res.status).toBe(400)
   })
 })

@@ -1,9 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { Boton } from "@/components/comunes/boton"
+import { idDeContextoDeDueña } from "@/lib/contextos"
 import type { RubroId } from "@/lib/rubros"
 import { completarPerfil } from "../_datos"
 import { AvisoDeError } from "../_componentes/aviso-de-error"
@@ -20,7 +20,6 @@ const opcionesEquipo: readonly OpcionDeGrupo<number>[] = [
 ]
 
 export default function PaginaCompletarPerfil() {
-  const router = useRouter()
   const { update } = useSession()
   const [cargando, setCargando] = useState(false)
   const [nombreNegocio, setNombreNegocio] = useState("")
@@ -47,9 +46,16 @@ export default function PaginaCompletarPerfil() {
       return
     }
 
-    await update()
-    router.push("/dashboard")
-    router.refresh()
+    // Entra al negocio recién creado como dueña. Quien ya trabajaba en otros
+    // negocios queda con un contexto más y puede cambiar desde el panel. El
+    // servidor verifica que el negocio sea de esta cuenta (`lib/auth.ts`).
+    await update({ contexto: idDeContextoDeDueña(resultado.datos.id) })
+    // Navegación completa y no `router.push`: el enrutador del navegador
+    // guarda que "/dashboard" redirigía acá (cuando la sesión no tenía
+    // negocio elegido) y con `push` volvía a esta misma pantalla. Además el
+    // panel se arma de cero, sin nada del contexto anterior en memoria.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- ver arriba
+    window.location.assign("/dashboard")
   }
 
   // Si falta el tipo de negocio, el aviso va debajo de las opciones; lo del servidor, arriba del botón.

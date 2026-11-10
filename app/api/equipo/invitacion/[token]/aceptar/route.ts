@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import type { Prisma } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 import { z } from "zod"
 import bcrypt from "bcryptjs"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { hashDeToken } from "@/lib/tokens"
 import { contrasenaNuevaSchema, normalizarEmail } from "@/lib/validaciones"
 import { registrarError } from "@/lib/registro-de-errores"
+import { idDeContextoDeMiembro } from "@/lib/contextos"
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 // `contrasena`, igual que el registro y el restablecimiento de contraseña.
@@ -21,6 +22,12 @@ const INVITACION_INVALIDA = () =>
 
 /** La invitación ya no estaba pendiente al momento de marcarla: otro pedido la usó primero. */
 class InvitacionYaUsada extends Error {}
+
+/** La cuenta ya es miembro de ese negocio: no se duplica la membresía. */
+class YaEsMiembro extends Error {}
+
+const YA_ES_MIEMBRO = () =>
+  NextResponse.json({ error: "Ya eres parte del equipo de este negocio." }, { status: 409 })
 
 /**
  * Marca la invitación como aceptada, y es lo primero que hace la transacción.
@@ -39,7 +46,17 @@ async function marcarAceptada(tx: Prisma.TransactionClient, id: string) {
   if (marcada.count !== 1) throw new InvitacionYaUsada()
 }
 
-// POST /api/equipo/invitacion/[token]/aceptar — crear cuenta y unirse al negocio
+/**
+ * POST /api/equipo/invitacion/[token]/aceptar — crear cuenta y unirse al negocio,
+ * o sumar el negocio a una cuenta que ya existe.
+ *
+ * Una cuenta puede estar en varios negocios (PRODUCTO.md, sección 5): la
+ * dueña de otro negocio, alguien que ya trabaja en otro, e incluso la dueña
+ * de ESTE negocio (invitada como profesional o encargada de su propio
+ * negocio). Aceptar suma un contexto a la cuenta y responde su id: la
+ * pantalla pide entrar a él con `update({ contexto })`, que el servidor
+ * verifica contra la base. Lo único que se rechaza es duplicar una membresía.
+ */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
@@ -98,25 +115,33 @@ export async function POST(
         )
       }
 
-      await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const miembro = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         await marcarAceptada(tx, invitacion.id)
 
+        // Ya es miembro: se deshace todo (la invitación queda pendiente y el
+        // negocio la puede anular). Antes se marcaba aceptada sin hacer nada.
         const yaEsMiembro = await tx.businessMember.findUnique({
           where: { businessId_userId: { businessId: invitacion.businessId, userId: usuarioExistente.id } },
+          select: { id: true },
         })
+        if (yaEsMiembro) throw new YaEsMiembro()
 
-        if (!yaEsMiembro) {
-          await tx.businessMember.create({
-            data: {
-              businessId: invitacion.businessId,
-              userId: usuarioExistente.id,
-              role: invitacion.role,
-            },
-          })
-        }
+        return tx.businessMember.create({
+          data: {
+            businessId: invitacion.businessId,
+            userId: usuarioExistente.id,
+            role: invitacion.role,
+          },
+          select: { id: true },
+        })
       })
 
-      return NextResponse.json({ ok: true, email: usuarioExistente.email, cuentaNueva: false })
+      return NextResponse.json({
+        ok: true,
+        email: usuarioExistente.email,
+        cuentaNueva: false,
+        contexto: idDeContextoDeMiembro(miembro.id),
+      })
     }
 
     if (!contrasena) {
@@ -138,24 +163,39 @@ export async function POST(
         },
       })
 
-      await tx.businessMember.create({
+      const miembro = await tx.businessMember.create({
         data: {
           businessId: invitacion.businessId,
           userId: usuario.id,
           role: invitacion.role,
         },
+        select: { id: true },
       })
 
-      return usuario
+      return { email: usuario.email, memberId: miembro.id }
     })
 
-    return NextResponse.json({ ok: true, email: resultado.email, cuentaNueva: true })
+    return NextResponse.json({
+      ok: true,
+      email: resultado.email,
+      cuentaNueva: true,
+      contexto: idDeContextoDeMiembro(resultado.memberId),
+    })
   } catch (error) {
     if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof InvitacionYaUsada) {
       return INVITACION_INVALIDA()
     }
-    if (error instanceof z.ZodError) {
+    // Dos aceptaciones a la vez de dos invitaciones al mismo negocio: el
+    // `@@unique([businessId, userId])` frena la segunda.
+    if (
+      error instanceof YaEsMiembro ||
+      (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
+    ) {
+      return YA_ES_MIEMBRO()
+    }
+    // Un cuerpo que no es JSON es un pedido mal hecho: 400, no 500.
+    if (error instanceof SyntaxError || error instanceof z.ZodError) {
       return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
     }
     registrarError("aceptando la invitación", error)

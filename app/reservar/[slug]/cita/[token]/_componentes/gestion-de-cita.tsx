@@ -83,17 +83,40 @@ export function GestionDeCita({ slug, token }: { slug: string; token: string }) 
     )
   }
 
-  if (vista.tipo === "no-sirve" || vista.tipo === "error") {
+  if (vista.tipo === "no-sirve") {
     return (
       <>
         <EncabezadoDeReserva antetitulo="Tu cita" titulo="Este enlace no sirve" />
         <Tarjeta className="mx-auto mt-8 flex max-w-xl flex-col items-center gap-5 px-6 py-10 text-center sm:px-10 md:mt-12">
           <CuadroDeIcono icono={CalendarX2} color="azul" tamano="lg" />
           <p className="cuerpo-xl text-pretty text-texto-2">
-            {vista.tipo === "error"
-              ? vista.mensaje
-              : "El enlace no es válido, o la cita ya pasó o se canceló. Si necesitas algo, contacta directamente al local."}
+            El enlace no es válido, o la cita ya pasó o se canceló. Si necesitas algo, contacta directamente al local.
           </p>
+        </Tarjeta>
+      </>
+    )
+  }
+
+  // Sin red o con el servidor fallando no se sabe nada del enlace: no se dice
+  // que no sirve (antes sí, y la persona lo daba por perdido), se ofrece reintentar.
+  if (vista.tipo === "error") {
+    return (
+      <>
+        <EncabezadoDeReserva antetitulo="Tu cita" titulo="No se pudo cargar tu cita" />
+        <Tarjeta className="mx-auto mt-8 flex max-w-xl flex-col items-center gap-5 px-6 py-10 text-center sm:px-10 md:mt-12">
+          <CuadroDeIcono icono={CalendarX2} color="azul" tamano="lg" />
+          <p className="cuerpo-xl text-pretty text-texto-2">
+            {vista.mensaje}
+            <span className="mt-2 block">Tu enlace sigue sirviendo: vuelve a intentarlo.</span>
+          </p>
+          <Boton
+            onClick={() => {
+              setVista({ tipo: "cargando" })
+              void cargar()
+            }}
+          >
+            Reintentar
+          </Boton>
         </Tarjeta>
       </>
     )

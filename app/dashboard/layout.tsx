@@ -7,6 +7,7 @@ import { ModalBienvenida } from "@/components/panel/modal-bienvenida"
 import { ProveedorDePrecios } from "@/components/panel/contexto-precios"
 import { ProveedorDeBarraLateral } from "@/components/panel/contexto-barra-lateral"
 import { ProveedorDeRubro } from "@/components/panel/contexto-rubro"
+import { nombreDelRolDelContexto } from "@/lib/contextos"
 import {
   actorDeSesion,
   puedeEditarComisiones,
@@ -24,19 +25,30 @@ export default async function LayoutDelPanel({
   children: React.ReactNode
 }) {
   const session = await getServerSession(authOptions)
+  const actor = actorDeSesion(session)
+
+  // Una cuenta en varios negocios (o dueña y profesional en el suyo) trabaja
+  // con uno a la vez: la barra dice con qué rol y en cuál, y ofrece cambiar.
+  // El rol va primero: con el botón de cambiar al lado el texto se corta, y
+  // lo que no se puede perder de vista es el rol (el negocio entero va en el
+  // globo del cursor).
+  const puedeCambiarDeNegocio = (session?.user?.contextos ?? 0) > 1
+  const negocioEnLaBarra =
+    puedeCambiarDeNegocio && actor && session?.user?.businessName
+      ? `${nombreDelRolDelContexto({ rol: actor.rol, rubro: actor.rubro ?? null })} · ${session.user.businessName}`
+      : (session?.user?.businessName ?? "")
 
   const usuario = session?.user
     ? {
         nombre: session.user.name ?? "",
         email: session.user.email ?? "",
-        negocio: session.user.businessName ?? "",
+        negocio: negocioEnLaBarra,
       }
     : undefined
 
   const businessName = session?.user?.businessName ?? ""
   const businessSlug = session?.user?.businessSlug ?? ""
   const businessId = session?.user?.businessId ?? ""
-  const actor = actorDeSesion(session)
   // El rubro elige las palabras del panel (`lib/vocabulario.ts`): en una
   // clínica dental, "Pacientes" y "Sala de espera". Llega a la barra lateral
   // y, por contexto, a cada página, desde la primera pintura.
@@ -77,6 +89,7 @@ export default async function LayoutDelPanel({
               puedeVerEquipo={puedeVerEquipo}
               accesoALaPlata={accesoALaPlata}
               rubro={rubro}
+              puedeCambiarDeNegocio={puedeCambiarDeNegocio}
             />
             <ContenidoDelPanel>{children}</ContenidoDelPanel>
             {businessName && businessSlug && (

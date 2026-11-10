@@ -124,6 +124,18 @@ describe("mandarCorreoDePrueba: el candado de CorreoDeCuenta", () => {
     expect(mockEnviarCorreoDePrueba).not.toHaveBeenCalled()
     expect(prismaMock.correoDeCuenta.deleteMany).toHaveBeenCalled()
   })
+
+  it("en producción sin NEXTAUTH_URL no manda enlaces a localhost: no envía y libera la fila (el cron reintenta)", async () => {
+    const { mandarCorreoDePrueba } = await import("./enviar-correo-de-prueba")
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    vi.stubEnv("NEXTAUTH_URL", "")
+    vi.stubEnv("NODE_ENV", "production")
+
+    expect(await mandarCorreoDePrueba(negocio, consejo)).toBe("fallido")
+    expect(mockEnviarCorreoDePrueba).not.toHaveBeenCalled()
+    expect(prismaMock.correoDeCuenta.deleteMany).toHaveBeenCalled()
+    vi.unstubAllEnvs()
+  })
 })
 
 describe("enviarBienvenida", () => {

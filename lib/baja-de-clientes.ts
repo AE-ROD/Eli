@@ -1,4 +1,5 @@
 import { createHmac, hkdfSync, timingSafeEqual } from "node:crypto"
+import { urlBase } from "@/lib/url-base"
 
 /**
  * El token del enlace "Dejar de recibir estos correos" de los correos
@@ -65,10 +66,6 @@ export function clienteDelTokenDeBaja(token: unknown): string | null {
   return timingSafeEqual(recibida, firmar(customerId, llave)) ? customerId : null
 }
 
-function urlBase(): string {
-  return process.env.NEXTAUTH_URL ?? "http://localhost:3000"
-}
-
 /** Los dos enlaces de baja que lleva cada correo promocional a un cliente. */
 export interface EnlacesDeBajaDeCliente {
   /** La página con el botón de confirmar: el enlace del pie del correo. */
@@ -81,7 +78,7 @@ export interface EnlacesDeBajaDeCliente {
   enlaceDeBajaEnUnClic: string
 }
 
-/** Lanza si falta `NEXTAUTH_SECRET`, como `tokenDeBajaDeCliente`. */
+/** Lanza si falta `NEXTAUTH_SECRET`, como `tokenDeBajaDeCliente`, o en producción si falta `NEXTAUTH_URL` (`lib/url-base.ts`). */
 export function enlacesDeBajaDeCliente(customerId: string): EnlacesDeBajaDeCliente {
   const token = tokenDeBajaDeCliente(customerId)
   const base = urlBase()

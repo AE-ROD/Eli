@@ -467,3 +467,52 @@ describe("POST /api/equipo — una invitación anterior sin aceptar", () => {
     expect(mockVerificarLimite).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * Una cuenta puede estar en varios negocios (PRODUCTO.md, sección 5): se
+ * invita a una cuenta que ya existe, también a la dueña en su propio negocio.
+ * Lo único que se rechaza es invitar a quien ya es miembro de ESTE negocio.
+ */
+describe("POST /api/equipo — cuentas que ya existen", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const invitacionCreada = (email: string) => ({
+    id: "inv-9",
+    name: "Carla",
+    email,
+    role: "worker",
+    expiresAt: new Date(),
+    createdAt: new Date(),
+  })
+
+  it.each([
+    ["la dueña de otro negocio (sin membresía acá)", "duena@otro.com"],
+    ["la propia dueña, como profesional de su negocio", "owner@minegocio.com"],
+  ])("invita a %s: 201", async (_caso, email) => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    // La cuenta existe y no tiene membresía en negocio-1 (la consulta ya viene filtrada por negocio).
+    prismaMock.user.findFirst.mockResolvedValueOnce({ id: "cuenta-existente", email, memberships: [] })
+    prismaMock.workerInvitation.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.create.mockResolvedValueOnce(invitacionCreada(email))
+    prismaMock.business.findUnique.mockResolvedValueOnce({ name: "Mi negocio" })
+
+    const res = await POST(pedidoFalso({ nombre: "Carla", email, rol: "worker" }))
+
+    expect(res.status).toBe(201)
+    expect(prismaMock.user.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ include: { memberships: { where: { businessId: "negocio-1" } } } })
+    )
+  })
+
+  it("quien ya es miembro de este negocio: 409, sin invitación nueva", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.user.findFirst.mockResolvedValueOnce({ id: "cuenta-existente", memberships: [{ id: "m-1", businessId: "negocio-1" }] })
+
+    const res = await POST(pedidoFalso({ nombre: "Carla", email: "carla@x.com", rol: "worker" }))
+
+    expect(res.status).toBe(409)
+    expect(prismaMock.workerInvitation.create).not.toHaveBeenCalled()
+  })
+})
