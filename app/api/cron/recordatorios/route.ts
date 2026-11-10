@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { enviarRecordatorio } from "@/lib/email"
 import { llamadaDeCronAutorizada } from "@/lib/cron"
@@ -22,11 +23,17 @@ import {
  * `lib/recordatorios.ts`.
  *
  * Una vez por cita: antes de enviar se marca `reminderSentAt` sólo si seguía
- * vacío (si otro proceso la marcó, no se repite); si el envío falla se
- * libera, y una corrida manual del mismo día la reintenta.
+ * vacío (si otro proceso la marcó, no se repite). Si el envío seguro no salió
+ * (`seguroQueNoSalio`, o falló antes de intentarlo) se libera, y una corrida
+ * manual del mismo día la reintenta. Si el error es ambiguo (el correo pudo
+ * llegar: un error de Resend que no es un rechazo, o el envío lanzó), la
+ * marca se queda: más vale un recordatorio perdido que dos. Se cuentan en
+ * `dudosos` (también dentro de `fallidos`).
  *
- * Envía de a uno (Resend limita los envíos por segundo) y corta antes de que
- * la plataforma lo mate: lo que quedó lo dice `incompleto`.
+ * Lee las candidatas por páginas (sin un tope que deje citas afuera en
+ * silencio), envía de a uno (Resend limita los envíos por segundo) y corta
+ * antes de que la plataforma lo mate o al llegar al tope de páginas: lo que
+ * quedó lo dice `incompleto`.
  *
  * Defensa en profundidad: `Appointment.customer` es una FK simple, la base no
  * garantiza que el cliente sea del mismo negocio que la cita. Si no coinciden,
@@ -56,8 +63,15 @@ export const maxDuration = 60
 /** Margen antes de `maxDuration` para no cortar un envío a la mitad. */
 const PRESUPUESTO_MS = 50_000
 
-/** Tope de candidatas por corrida: con él, una corrida nunca trae la tabla entera. */
-const TOPE = 2000
+/** Candidatas por página: una lectura nunca trae la tabla entera. */
+const POR_PAGINA = 500
+
+/**
+ * Tope de páginas por corrida (10.000 candidatas). La ventana trae más que
+ * "mañana" (`esDeMañana` filtra después), así que el tope es sobre lo leído.
+ * Si se alcanza, la respuesta dice `incompleto`: nunca se corta en silencio.
+ */
+const TOPE_DE_PAGINAS = 20
 
 interface CitaParaEnlace {
   id: string
@@ -100,16 +114,37 @@ export async function GET(request: NextRequest) {
   let fallidos = 0
   let omitidas = 0
   let total = 0
+  let dudosos = 0
   let incompleto = false
 
-  try {
-    const candidatas = await prisma.appointment.findMany({
-      where: {
-        startTime: { gte: ventana.desde, lt: ventana.hasta },
-        status: { notIn: [...ESTADOS_SIN_RECORDATORIO] },
-        reminderSentAt: null,
-        customer: { email: { not: null } },
-      },
+  const candidatasDe = {
+    startTime: { gte: ventana.desde, lt: ventana.hasta },
+    status: { notIn: [...ESTADOS_SIN_RECORDATORIO] },
+    reminderSentAt: null,
+    customer: { email: { not: null } },
+  } satisfies Prisma.AppointmentWhereInput
+
+  /**
+   * Una página, en orden de inicio y luego de id. Desde la segunda, las que
+   * van después de la última leída (por posición, no por `reminderSentAt`:
+   * una que se liberó por un envío fallido no se vuelve a leer en la misma
+   * corrida).
+   */
+  const leerPagina = (despuesDe: { startTime: Date; id: string } | null) =>
+    prisma.appointment.findMany({
+      where: despuesDe
+        ? {
+            AND: [
+              candidatasDe,
+              {
+                OR: [
+                  { startTime: { gt: despuesDe.startTime } },
+                  { startTime: despuesDe.startTime, id: { gt: despuesDe.id } },
+                ],
+              },
+            ],
+          }
+        : candidatasDe,
       select: {
         id: true,
         businessId: true,
@@ -121,97 +156,122 @@ export async function GET(request: NextRequest) {
         customer: { select: { name: true, lastName: true, email: true, businessId: true } },
         business: { select: { name: true, slug: true, timezone: true, cancelacionHorasAntes: true } },
       },
-      orderBy: { startTime: "asc" },
-      take: TOPE,
+      orderBy: [{ startTime: "asc" }, { id: "asc" }],
+      take: POR_PAGINA,
     })
 
-    for (const cita of candidatas) {
-      if (!cita.customer?.email || !esDeMañana(cita.startTime, ahora, cita.business.timezone)) continue
-      if (Date.now() - inicio > PRESUPUESTO_MS) {
+  try {
+    let despuesDe: { startTime: Date; id: string } | null = null
+    let paginas = 0
+    paginando: for (;;) {
+      if (paginas >= TOPE_DE_PAGINAS) {
         incompleto = true
         break
       }
-      if (cita.customer.businessId !== cita.businessId) {
-        omitidas++
-        console.error("Recordatorio omitido: la cita y su cliente son de negocios distintos", { citaId: cita.id })
-        continue
-      }
-      total++
+      const pagina = await leerPagina(despuesDe)
+      paginas++
 
-      // El candado: sólo quien la marca la envía.
-      const marcada = await prisma.appointment.updateMany({
-        where: { id: cita.id, reminderSentAt: null },
-        data: { reminderSentAt: ahora },
-      })
-      if (marcada.count === 0) continue
+      for (const cita of pagina) {
+        if (!cita.customer?.email || !esDeMañana(cita.startTime, ahora, cita.business.timezone)) continue
+        if (Date.now() - inicio > PRESUPUESTO_MS) {
+          incompleto = true
+          break paginando
+        }
+        if (cita.customer.businessId !== cita.businessId) {
+          omitidas++
+          console.error("Recordatorio omitido: la cita y su cliente son de negocios distintos", { citaId: cita.id })
+          continue
+        }
+        total++
 
-      let enviado = false
-      // Si el correo seguro no salió: sólo entonces se borra el enlace nuevo.
-      let noSalio = false
-      let enlaceNuevo: { token: string; tokenHash: string } | null = null
-      try {
-        const sePuedeCambiar = dentroDelPlazo(cita.startTime, cita.business.cancelacionHorasAntes, ahora)
-        enlaceNuevo = await enlaceParaCitaSinToken(cita, sePuedeCambiar)
-        const { fecha, hora } = fechaYHoraEnElNegocio(cita.startTime, cita.business.timezone)
-        const resultado = await enviarRecordatorio({
-          emailCliente: cita.customer.email,
-          nombreCliente: nombreCompletoDeCliente(cita.customer),
-          nombreNegocio: cita.business.name,
-          servicio: cita.title,
-          fecha,
-          hora,
-          ...(enlaceNuevo
-            ? {
-                enlaceDeGestion: `${baseUrl}/reservar/${encodeURIComponent(cita.business.slug)}/cita/${enlaceNuevo.token}`,
-                plazoHoras: plazoValido(cita.business.cancelacionHorasAntes),
-              }
-            : {}),
-          sePuedeCambiar,
+        // El candado: sólo quien la marca la envía.
+        const marcada = await prisma.appointment.updateMany({
+          where: { id: cita.id, reminderSentAt: null },
+          data: { reminderSentAt: ahora },
         })
-        if (resultado?.error) {
-          // Sólo el código de Resend: su mensaje puede repetir el destinatario.
-          console.error("Error enviando un recordatorio:", { name: resultado.error.name })
+        if (marcada.count === 0) continue
+
+        let enviado = false
+        // Si el correo seguro no salió: sólo entonces se libera la marca y se
+        // borra el enlace nuevo. Si falló antes de intentar enviarlo, tampoco salió.
+        let noSalio = true
+        let enlaceNuevo: { token: string; tokenHash: string } | null = null
+        try {
+          const sePuedeCambiar = dentroDelPlazo(cita.startTime, cita.business.cancelacionHorasAntes, ahora)
+          enlaceNuevo = await enlaceParaCitaSinToken(cita, sePuedeCambiar)
+          const { fecha, hora } = fechaYHoraEnElNegocio(cita.startTime, cita.business.timezone)
+          // Desde acá el correo pudo salir aunque después algo falle.
+          noSalio = false
+          const resultado = await enviarRecordatorio({
+            emailCliente: cita.customer.email,
+            nombreCliente: nombreCompletoDeCliente(cita.customer),
+            nombreNegocio: cita.business.name,
+            servicio: cita.title,
+            fecha,
+            hora,
+            ...(enlaceNuevo
+              ? {
+                  enlaceDeGestion: `${baseUrl}/reservar/${encodeURIComponent(cita.business.slug)}/cita/${enlaceNuevo.token}`,
+                  plazoHoras: plazoValido(cita.business.cancelacionHorasAntes),
+                }
+              : {}),
+            sePuedeCambiar,
+          })
+          if (resultado?.error) {
+            // Sólo el código de Resend: su mensaje puede repetir el destinatario.
+            console.error("Error enviando un recordatorio:", { name: resultado.error.name })
+          }
+          enviado = resultado !== null && !resultado.error
+          noSalio = !enviado && seguroQueNoSalio(resultado)
+        } catch (error) {
+          registrarError("enviando un recordatorio", error)
         }
-        enviado = resultado !== null && !resultado.error
-        noSalio = !enviado && seguroQueNoSalio(resultado)
-      } catch (error) {
-        registrarError("enviando un recordatorio", error)
+
+        if (enviado) {
+          enviados++
+          continue
+        }
+        fallidos++
+        // Error ambiguo: el correo pudo llegar. La marca se queda (no se
+        // reintenta: sería un segundo recordatorio) y el enlace nuevo también
+        // (borrarlo dejaba en ese correo un enlace que da 404, #140).
+        if (!noSalio) {
+          dudosos++
+          continue
+        }
+        try {
+          if (enlaceNuevo) {
+            // Una sola escritura: liberar la marca y quitar el hash que puso esta
+            // corrida van juntos. Con dos, si fallara la segunda quedaría un hash
+            // cuyo token se perdió y el cliente nunca recibiría su enlace. Si el
+            // hash cambió entretanto, no se toca nada.
+            await prisma.appointment.updateMany({
+              where: {
+                id: cita.id,
+                businessId: cita.businessId,
+                reminderSentAt: ahora,
+                manageTokenHash: enlaceNuevo.tokenHash,
+              },
+              data: { reminderSentAt: null, manageTokenHash: null },
+            })
+          } else {
+            await prisma.appointment.updateMany({
+              where: { id: cita.id, reminderSentAt: ahora },
+              data: { reminderSentAt: null },
+            })
+          }
+        } catch (error) {
+          registrarError("liberando un recordatorio", error)
+        }
       }
 
-      if (enviado) {
-        enviados++
-        continue
-      }
-      fallidos++
-      try {
-        if (enlaceNuevo && noSalio) {
-          // Una sola escritura: liberar la marca y quitar el hash que puso esta
-          // corrida van juntos. Con dos, si fallara la segunda quedaría un hash
-          // cuyo token se perdió y el cliente nunca recibiría su enlace. Si el
-          // hash cambió entretanto, no se toca nada. Si el correo pudo llegar
-          // (error ambiguo o el envío lanzó), el hash se queda (#140).
-          await prisma.appointment.updateMany({
-            where: {
-              id: cita.id,
-              businessId: cita.businessId,
-              reminderSentAt: ahora,
-              manageTokenHash: enlaceNuevo.tokenHash,
-            },
-            data: { reminderSentAt: null, manageTokenHash: null },
-          })
-        } else {
-          await prisma.appointment.updateMany({
-            where: { id: cita.id, reminderSentAt: ahora },
-            data: { reminderSentAt: null },
-          })
-        }
-      } catch (error) {
-        registrarError("liberando un recordatorio", error)
-      }
+      if (pagina.length < POR_PAGINA) break
+      const ultima = pagina[pagina.length - 1]
+      despuesDe = { startTime: ultima.startTime, id: ultima.id }
     }
   } catch (error) {
     registrarError("en el cron de recordatorios", error)
-    return NextResponse.json({ error: "Error interno", total, enviados, fallidos, omitidas }, { status: 500 })
+    return NextResponse.json({ error: "Error interno", total, enviados, fallidos, dudosos, omitidas }, { status: 500 })
   }
 
   return NextResponse.json({
@@ -219,6 +279,7 @@ export async function GET(request: NextRequest) {
     total,
     enviados,
     fallidos,
+    dudosos,
     omitidas,
     incompleto,
   })

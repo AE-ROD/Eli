@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import type { NextRequest } from "next/server"
+import { Prisma } from "@prisma/client"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, datosBase } from "@/pruebas/datos"
 import { cuerpoDePrueba } from "@/pruebas/pedidos"
@@ -231,6 +232,51 @@ describe("POST reagendar por el enlace, clínica dental: el sillón", () => {
     expect(base.prisma.$executeRaw).toHaveBeenCalledWith(
       expect.arrayContaining([expect.stringContaining("pg_advisory_xact_lock")]),
       `sillon:${NEGOCIO}:sl-1`
+    )
+  })
+
+  it("la carrera con el panel: si la clínica guardó otra cita en el sillón mientras reagendar esperaba, se reintenta y la ve (409)", async () => {
+    escenario("odontologia")
+    const transaccionReal = base.prisma.$transaction.getMockImplementation()!
+    // Primer intento: mientras la transacción `Serializable` de reagendar
+    // esperaba el candado, el panel (Read Committed) guardó una cita de 12:00
+    // a 13:00 en el Sillón 1 y confirmó. La foto de reagendar es de antes, así
+    // que no la ve; lo que Postgres hace es rechazar el `UPDATE` de la fila del
+    // sillón (tocada por el panel después de la foto) con un 40001, que Prisma
+    // entrega como P2010.
+    base.prisma.$transaction.mockImplementationOnce(async () => {
+      await base.prisma.appointment.create({
+        data: {
+          id: "c-del-panel",
+          businessId: NEGOCIO,
+          title: "Control",
+          memberId: "m-pedro",
+          customerId: "c-beto",
+          startTime: santiago(LUNES, "12:00"),
+          endTime: santiago(LUNES, "13:00"),
+          sillonId: "sl-1",
+        },
+      })
+      throw new Prisma.PrismaClientKnownRequestError("Raw query failed. Code: `40001`.", {
+        code: "P2010",
+        clientVersion: "prueba",
+        meta: { code: "40001", message: "could not serialize access due to concurrent update" },
+      })
+    })
+    base.prisma.$transaction.mockImplementation(transaccionReal)
+
+    const { status, cuerpo } = await reagendar(LUNES, "12:00")
+
+    // El reintento, con una foto nueva, ve la cita del panel: no quedan dos en el sillón.
+    expect(status).toBe(409)
+    expect(cuerpo.error).toMatch(/^Esa hora ya no está disponible/)
+    expect(base.prisma.$transaction).toHaveBeenCalledTimes(2)
+    expect(laCita().startTime).toEqual(santiago(LUNES, "10:00"))
+    // Y el candado deja una versión nueva de la fila del sillón, que es lo que hace saltar el conflicto.
+    expect(base.prisma.$executeRaw).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.stringContaining('UPDATE "sillones" SET "orden" = "orden"')]),
+      "sl-1",
+      NEGOCIO
     )
   })
 

@@ -26,7 +26,8 @@ import { fechaYMinutosEn } from "@/lib/zona-horaria"
  *   chocan sólo a quien ve toda la agenda (`mostrarHorarios`).
  * - El choque se revisa con un candado por sillón (`tomarCandadoDelSillon`)
  *   dentro de la transacción que escribe, así dos pedidos a la vez no dejan
- *   dos citas en el mismo sillón y la misma hora.
+ *   dos citas en el mismo sillón y la misma hora, tampoco cuando uno es la
+ *   transacción `Serializable` de reagendar por el enlace (ver el candado).
  */
 
 // ─── Campos ──────────────────────────────────────────────────────────────────
@@ -177,6 +178,17 @@ export function whereDeChoqueEnSillon(consulta: ConsultaDeSillon): Prisma.Appoin
 /**
  * Traba el sillón hasta que termine la transacción. Va antes de mirar si
  * choca: quien llega segundo espera, y cuando mira ya ve la cita del primero.
+ *
+ * Además deja una versión nueva de la fila del sillón (un `UPDATE` que no
+ * cambia nada). Es por la transacción `Serializable` de reagendar por el
+ * enlace: su foto de la base se toma en su primera consulta, antes del
+ * candado, así que una cita que el panel (Read Committed) guardó en el sillón
+ * mientras ella esperaba no aparecería en su foto, y el candado solo no la
+ * salvaba. Con la fila tocada por el panel después de su foto, su propio
+ * `UPDATE` falla con un conflicto de serialización (40001) y se reintenta con
+ * una foto que ya la ve (`enTransaccionSerializable`). En Read Committed el
+ * `UPDATE` sólo espera a quien tenga la fila, como el candado. No cambia
+ * ninguna columna, ni `updatedAt` (no pasa por Prisma).
  */
 export async function tomarCandadoDelSillon(
   tx: Pick<Prisma.TransactionClient, "$executeRaw">,
@@ -184,6 +196,7 @@ export async function tomarCandadoDelSillon(
   sillonId: string
 ): Promise<void> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`sillon:${businessId}:${sillonId}`}))`
+  await tx.$executeRaw`UPDATE "sillones" SET "orden" = "orden" WHERE "id" = ${sillonId} AND "businessId" = ${businessId}`
 }
 
 /**

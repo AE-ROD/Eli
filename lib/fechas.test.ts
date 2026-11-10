@@ -137,7 +137,9 @@ describe("HORA_24", () => {
     })
 
     expect(comprobante).toMatch(/00:00$/)
-    expect(caja).toBe("4 de noviembre, 00:00")
+    // El separador entre fecha y hora (", " o " a las ") depende de la versión de ICU del
+    // entorno; lo que importa acá es que la hora salga en 24 h, no cómo se une a la fecha.
+    expect(caja).toMatch(/^4 de noviembre(,| a las) 00:00$/)
     expect(`${comprobante} ${caja}`).not.toMatch(/a\.\s?m\.|p\.\s?m\./)
   })
 })

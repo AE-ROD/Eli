@@ -192,9 +192,26 @@ describe("POST /api/clientes/[id]/evoluciones", () => {
   })
 
   it("la dueña, que ve toda la agenda, sí anota en la cita de cualquier odontólogo", async () => {
-    const res = await anotar(sesiones.dueña, "p-camila", { texto: "Control.", appointmentId: "cita-nunez" })
+    const res = await anotar(sesiones.dueña, "p-camila", { texto: "Control.", appointmentId: "cita-perez" })
 
     expect(res.status).toBe(201)
+  })
+
+  it("la evolución registra lo que pasó: con una cita que todavía no llega (otro día), 409 y nada se anota", async () => {
+    const antes = base.volcado()
+
+    const res = await anotar(sesiones.dueña, "p-camila", { texto: "Control.", appointmentId: "cita-nunez" })
+
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toMatch(/todavía no llega/)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("una cita de hoy que todavía no empieza sí sirve: es del día", async () => {
+    // A las 08:00 en Santiago; la cita es a las 10:30.
+    vi.setSystemTime(new Date("2026-11-06T11:00:00.000Z"))
+
+    expect((await anotar(sesiones.perez, "p-camila", { texto: "Control.", appointmentId: "cita-perez" })).status).toBe(201)
   })
 
   it("sin texto: 400 legible", async () => {

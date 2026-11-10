@@ -178,21 +178,39 @@ export async function hoyDelNegocio(actor: Actor): Promise<string> {
 export const CITA_NO_SIRVE_PARA_EVOLUCION = ["cancelada"] as const
 export const CITA_NO_SIRVE_PARA_PRESTACION = ["cancelada", "no-asistio"] as const
 
+/** Una cita para una prestación agendada: la que no terminó ni se cerró. */
+const CITA_CERRADA_PARA_AGENDAR = ["cancelada", "no-asistio", "completada"] as const
+
+/**
+ * Cuándo tiene que ser la cita, además de servir por su estado:
+ * - "de-hoy-o-antes": una evolución registra lo que pasó; su cita es de hoy o
+ *   de antes, en el día del negocio (`Business.timezone`). Una de mañana, 409.
+ * - "por-delante": una prestación agendada va a hacerse en esa cita, así que
+ *   la cita no terminó y no está cerrada (cancelada, no vino ni completada).
+ *   Una que ya pasó, 409.
+ */
+export type CuandoDeLaCita = { regla: "de-hoy-o-antes" | "por-delante"; ahora: Date }
+
+const MENSAJE_CITA_FUTURA_PARA_EVOLUCION = "Esa cita todavía no llega: la evolución es de una cita de hoy o de antes."
+const MENSAJE_CITA_PASADA_PARA_AGENDAR = "Esa cita ya pasó o está cerrada: para agendarla elige una cita que viene."
+
 /**
  * La cita `appointmentId`, si es de este paciente y el actor la ve en la
  * agenda (`whereDeAgenda`: el odontólogo, las suyas; dueño y encargado,
- * todas). Si no, 404, como cualquier id ajeno; en un estado de `noSirve`, 409.
+ * todas). Si no, 404, como cualquier id ajeno; en un estado de `noSirve`, o
+ * fuera de lo que pide `cuando`, 409.
  */
 export async function citaDelPaciente(
   db: Prisma.TransactionClient,
   actor: Actor,
   pacienteId: string,
   appointmentId: string,
-  noSirve: readonly string[]
+  noSirve: readonly string[],
+  cuando?: CuandoDeLaCita
 ): Promise<{ id: string }> {
   const cita = await db.appointment.findFirst({
     where: whereDeAgenda(actor, { id: appointmentId, customerId: pacienteId }),
-    select: { id: true, status: true },
+    select: { id: true, status: true, startTime: true, endTime: true },
   })
   if (!cita) throw new ErrorClinico(404, "Cita no encontrada")
   if (noSirve.includes(cita.status)) {
@@ -200,6 +218,20 @@ export async function citaDelPaciente(
       409,
       cita.status === "cancelada" ? "Esa cita está cancelada: elige otra." : "A esa cita el paciente no vino: elige otra."
     )
+  }
+  if (cuando?.regla === "por-delante") {
+    const cerrada = (CITA_CERRADA_PARA_AGENDAR as readonly string[]).includes(cita.status)
+    if (cerrada || cita.endTime.getTime() <= cuando.ahora.getTime()) {
+      throw new ErrorClinico(409, MENSAJE_CITA_PASADA_PARA_AGENDAR)
+    }
+  }
+  if (cuando?.regla === "de-hoy-o-antes") {
+    const negocio = await db.business.findUnique({ where: { id: actor.businessId }, select: { timezone: true } })
+    const zona = zonaDelNegocio(negocio?.timezone)
+    // Fechas "AAAA-MM-DD": se comparan como texto.
+    if (fechaYMinutosEn(cita.startTime, zona).fecha > fechaYMinutosEn(cuando.ahora, zona).fecha) {
+      throw new ErrorClinico(409, MENSAJE_CITA_FUTURA_PARA_EVOLUCION)
+    }
   }
   return { id: cita.id }
 }
@@ -437,8 +469,12 @@ export async function anotarEvolucion(
 ): Promise<EvolucionRespuesta> {
   return prisma.$transaction(async (tx) => {
     await trabarPaciente(tx, actor, pacienteId)
+    // La cita de una evolución es de hoy o de antes: registra lo que pasó.
     const cita = datos.appointmentId
-      ? await citaDelPaciente(tx, actor, pacienteId, datos.appointmentId, CITA_NO_SIRVE_PARA_EVOLUCION)
+      ? await citaDelPaciente(tx, actor, pacienteId, datos.appointmentId, CITA_NO_SIRVE_PARA_EVOLUCION, {
+          regla: "de-hoy-o-antes",
+          ahora: await horaDeLaBase(tx),
+        })
       : null
     const evolucion = await tx.evolucion.create({
       data: {

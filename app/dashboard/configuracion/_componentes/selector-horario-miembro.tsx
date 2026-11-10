@@ -21,13 +21,22 @@ export interface MiembroHorario {
 }
 
 interface PropsDeSelectorHorarioMiembro {
+  /** El horario general del negocio (el del dueño). */
   horariosDelDueño: HorarioDelDia[]
   miembros: MiembroHorario[]
+  /** Cómo se llama la pestaña del horario general: el nombre del dueño o el del negocio. */
   nombreDelDueño: string
+  /** Lo que va al lado: "(tú)" para el dueño; para el encargado, "Horario general". */
+  sufijoDelGeneral?: string
 }
 
-export function SelectorHorarioMiembro({ horariosDelDueño, miembros, nombreDelDueño }: PropsDeSelectorHorarioMiembro) {
-  // null = owner; string = memberId del trabajador
+export function SelectorHorarioMiembro({
+  horariosDelDueño,
+  miembros,
+  nombreDelDueño,
+  sufijoDelGeneral = "(tú)",
+}: PropsDeSelectorHorarioMiembro) {
+  // null = el horario general del negocio (el del dueño); string = memberId
   const [seleccionado, setSeleccionado] = useState<string | null>(null)
   // "Odontólogo" en vez de "Profesional" en una clínica dental.
   const rubro = useRubroDelPanel()
@@ -47,7 +56,7 @@ export function SelectorHorarioMiembro({ horariosDelDueño, miembros, nombreDelD
   const [cambioDePersona, setCambioDePersona] = useState(false)
 
   const pestañas = [
-    { id: null, nombre: nombreDelDueño, sufijo: "(tú)" },
+    { id: null, nombre: nombreDelDueño, sufijo: sufijoDelGeneral },
     ...miembros.map((miembro) => ({
       id: miembro.id,
       nombre: miembro.nombre,
@@ -147,7 +156,13 @@ export function SelectorHorarioMiembro({ horariosDelDueño, miembros, nombreDelD
           <SeccionHorario
             horariosIniciales={horariosActivos}
             memberId={seleccionado}
-            titulo={seleccionado === null ? "Mi horario" : `Horario de ${pestañaActiva?.nombre}`}
+            titulo={
+              seleccionado === null
+                ? sufijoDelGeneral === "(tú)"
+                  ? "Mi horario"
+                  : "Horario general del negocio"
+                : `Horario de ${pestañaActiva?.nombre}`
+            }
             alCambiarPendiente={setPendiente}
             alGuardar={alGuardar}
           />

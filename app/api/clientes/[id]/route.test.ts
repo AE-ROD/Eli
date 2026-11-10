@@ -680,6 +680,26 @@ describe("DELETE /api/clientes/[id]", () => {
     expect(base.buscar("appointment", { id: "cita-pedro" })[0].title).toBe("Color (sin servicio del catálogo)")
   })
 
+  it("una cita de varios servicios vuelve a llamarse como sus filas, en orden, no como el primero", async () => {
+    const { DELETE } = await import("./route")
+
+    base.reiniciar({
+      ...escenarioDeClientes(),
+      appointment: escenarioDeClientes().appointment.map((cita) =>
+        cita.id === "cita-carla" ? { ...cita, serviceId: "s-corte", title: "Corte + Color para María González" } : cita
+      ),
+      appointmentService: [
+        { id: "cs-1", appointmentId: "cita-carla", businessId: NEGOCIO, serviceId: "s-corte", serviceName: "Corte", duration: 30, orden: 1 },
+        { id: "cs-2", appointmentId: "cita-carla", businessId: NEGOCIO, serviceId: "s-color", serviceName: "Color", duration: 60, orden: 2 },
+      ],
+    })
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    await DELETE(pedido(URL_DE_MARIA), conId("c-maria"))
+
+    expect(base.buscar("appointment", { id: "cita-carla" })[0].title).toBe("Corte + Color")
+  })
+
   it("nadie pone la marca de eliminado a mano: 400, y el cliente sigue igual", async () => {
     const { PUT } = await import("./route")
 

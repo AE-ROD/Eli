@@ -9,6 +9,7 @@ import { frecuenciaDeServicio } from "@/lib/frecuencia-de-visitas"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, esClinicaDental, puedeGestionarServicios, whereDePrestacionesDelPlan } from "@/lib/permisos"
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
+import { registrarError } from "@/lib/registro-de-errores"
 
 const edicionDeServicioSchema = z.object({
   name: nombre().optional(),
@@ -61,6 +62,14 @@ export async function PUT(
     if (error instanceof z.ZodError) {
       return respuestaDeDatosInvalidos(error)
     }
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ error: "El pedido no es un JSON válido" }, { status: 400 })
+    }
+    // Se borró entre la lectura y la escritura: como uno que no existe.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      return NextResponse.json({ error: "Servicio no encontrado" }, { status: 404 })
+    }
+    registrarError("editando un servicio", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
 }
@@ -98,6 +107,10 @@ export async function DELETE(
         esClinicaDental(actor) &&
         (await prisma.prestacionDelPlan.count({ where: whereDePrestacionesDelPlan(actor, { serviceId: existente.id }) })) > 0
       return NextResponse.json({ error: enUnPlan ? MENSAJE_EN_UN_PLAN : MENSAJE_CON_COMISIONES }, { status: 409 })
+    }
+    // Otro lo borró entretanto: ya no está, como uno que no existe.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      return NextResponse.json({ error: "Servicio no encontrado" }, { status: 404 })
     }
     throw error
   }

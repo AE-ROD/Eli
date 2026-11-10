@@ -14,6 +14,7 @@ import {
   minutosPorPersona,
   nombreParaPantalla,
   primerNombre,
+  jornadaDeLaFila,
 } from "@/lib/fila-virtual"
 import { leerHorarioDeQuienesAtienden } from "@/lib/agenda-publica"
 import { horarioSemanalDeAtencion } from "@/lib/horario-de-atencion"
@@ -49,9 +50,15 @@ export function hashDelTokenDeFila(token: unknown): string | null {
   return typeof token === "string" && FORMA_DEL_TOKEN_DE_FILA.test(token) ? hashDeToken(token) : null
 }
 
-/** El día de hoy del negocio, "AAAA-MM-DD" en su zona. */
+/**
+ * La jornada de la fila en este momento, "AAAA-MM-DD" en la zona del negocio
+ * (`jornadaDeLaFila`): hasta las 05:00 sigue la del día anterior, así una
+ * fila que pasa la medianoche no reinicia los números ni vence a quienes
+ * esperan. Es lo que se guarda en `filaFecha`.
+ */
 function hoyEn(zona: string | null | undefined, ahora: Date): string {
-  return fechaYMinutosEn(ahora, zonaDelNegocio(zona)).fecha
+  const { fecha, minutos } = fechaYMinutosEn(ahora, zonaDelNegocio(zona))
+  return jornadaDeLaFila(fecha, minutos)
 }
 
 /** Las de la fila de un día de un negocio, en el estado que se pida. */

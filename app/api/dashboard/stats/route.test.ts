@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import type { NextRequest } from "next/server"
 
 const mockGetServerSession = vi.fn()
 
@@ -10,6 +9,9 @@ vi.mock("next-auth", () => ({
 vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
 const prismaMock = {
+  business: {
+    findUnique: vi.fn(),
+  },
   appointment: {
     findMany: vi.fn(),
     findFirst: vi.fn(),
@@ -44,8 +46,6 @@ const sesionProfesional = {
   },
 }
 
-const pedidoFalso = (): NextRequest => ({ url: "http://localhost/api/dashboard/stats" }) as unknown as NextRequest
-
 /**
  * Lo que no es ingresos: citas de hoy, clientes y horario. Los ingresos se
  * prueban contra datos, con la base falsa, en `ingresos.test.ts`.
@@ -53,6 +53,7 @@ const pedidoFalso = (): NextRequest => ({ url: "http://localhost/api/dashboard/s
 describe("GET /api/dashboard/stats", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    prismaMock.business.findUnique.mockResolvedValue({ timezone: "America/Santiago" })
     prismaMock.appointment.findMany.mockResolvedValue([])
     prismaMock.appointment.findFirst.mockResolvedValue(null)
     prismaMock.visitPayment.aggregate.mockResolvedValue({ _sum: { amountCents: 100000 } })
@@ -66,7 +67,7 @@ describe("GET /api/dashboard/stats", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
 
-    await GET(pedidoFalso())
+    await GET()
 
     const llamada = prismaMock.appointment.findMany.mock.calls[0][0] as {
       where: { AND: [Record<string, unknown>, Record<string, unknown>] }
@@ -91,7 +92,7 @@ describe("GET /api/dashboard/stats", () => {
       .mockResolvedValueOnce({ _sum: { amountCents: 100000 } })
       .mockResolvedValueOnce({ _sum: { amountCents: null } })
 
-    const res = await GET(pedidoFalso())
+    const res = await GET()
     const data = await res.json()
 
     // Ni `0` ni `null`: la clave no existe. Un `0` se muestra como
@@ -113,7 +114,7 @@ describe("GET /api/dashboard/stats", () => {
       .mockResolvedValueOnce(10)
       .mockResolvedValueOnce(2)
 
-    const res = await GET(pedidoFalso())
+    const res = await GET()
     const data = await res.json()
 
     expect(data.totalClientes).toBe(12)
@@ -127,7 +128,7 @@ describe("GET /api/dashboard/stats", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
 
-    await GET(pedidoFalso())
+    await GET()
 
     const consultas = prismaMock.customer.count.mock.calls.map((llamada) => llamada[0].where)
     expect(consultas).toHaveLength(3)
@@ -147,7 +148,7 @@ describe("GET /api/dashboard/stats", () => {
       startTime: new Date("2026-09-07T13:00:00.000Z"),
     })
 
-    const res = await GET(pedidoFalso())
+    const res = await GET()
     const data = await res.json()
 
     expect(data.citasHoy).toBe(0)
@@ -167,7 +168,7 @@ describe("GET /api/dashboard/stats", () => {
       { id: "cita-hoy", title: "Color", startTime: new Date(), endTime: new Date(), status: "confirmada", customer: null },
     ])
 
-    const res = await GET(pedidoFalso())
+    const res = await GET()
     const data = await res.json()
 
     expect(data.citasHoy).toBe(1)
@@ -184,7 +185,7 @@ describe("GET /api/dashboard/stats", () => {
       { startTime: "14:00", endTime: "18:00" },
     ])
 
-    const res = await GET(pedidoFalso())
+    const res = await GET()
     const data = await res.json()
 
     expect(data.horarioHoy).toEqual([
@@ -208,7 +209,7 @@ describe("GET /api/dashboard/stats", () => {
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
     prismaMock.workSchedule.findMany.mockResolvedValueOnce([])
 
-    const res = await GET(pedidoFalso())
+    const res = await GET()
     const data = await res.json()
 
     // Ni un rango inventado ni un array vacío como placeholder: la clave no viaja.
@@ -220,7 +221,7 @@ describe("GET /api/dashboard/stats", () => {
 
     mockGetServerSession.mockResolvedValueOnce(sesionDueño)
 
-    const res = await GET(pedidoFalso())
+    const res = await GET()
     const data = await res.json()
 
     expect(data).not.toHaveProperty("horarioHoy")
@@ -232,7 +233,7 @@ describe("GET /api/dashboard/stats", () => {
 
     mockGetServerSession.mockResolvedValueOnce(null)
 
-    const res = await GET(pedidoFalso())
+    const res = await GET()
 
     expect(res.status).toBe(401)
   })

@@ -933,6 +933,15 @@ describe("POST /api/reservar/[slug]/confirmar: datos inválidos", () => {
     expect(cuerpo.error).toMatch(mensaje)
     expect(citasCreadas()).toHaveLength(0)
   })
+
+  it("un cuerpo que no es JSON: 400, no 500, y no crea nada", async () => {
+    const { POST } = await import("./route")
+
+    const respuesta = await POST(pedidoFalso("{esto no es json"), conSlug)
+
+    expect(respuesta.status).toBe(400)
+    expect(citasCreadas()).toHaveLength(0)
+  })
 })
 
 /**

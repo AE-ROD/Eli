@@ -5,7 +5,7 @@ import { asignarCandidatoLibre, candidatosDeLaReserva, candidatosQueOfrecen, tra
 import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { correosDelAviso } from "@/lib/avisos-al-negocio"
 import { enviarAvisoDeCambioDelCliente } from "@/lib/email"
-import { ESTADOS_GESTIONABLES, dentroDelPlazo, mensajeFueraDePlazo } from "@/lib/gestion-de-cita"
+import { dentroDelPlazo, mensajeFueraDePlazo, whereDeEscrituraDelEnlace } from "@/lib/gestion-de-cita"
 import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
 import {
   MENSAJE_FECHA_MUY_LEJANA,
@@ -151,17 +151,16 @@ export async function POST(request: NextRequest, contexto: Params) {
         }
       }
 
-      // Sólo si sigue como se leyó: si el local la movió o la cerró, no se pisa.
+      // Sólo si sigue como se leyó: si el local la movió o la cerró, o el
+      // cliente llegó (atención viva en el Tablero), no se pisa.
       const { count } = await tx.appointment.updateMany({
-        where: {
-          id: cita.id,
-          businessId: cita.businessId,
-          status: { in: [...ESTADOS_GESTIONABLES] },
-          startTime: cita.startTime,
-        },
+        where: whereDeEscrituraDelEnlace(cita),
         data: {
           startTime: tramo.startTime,
           endTime: tramo.endTime,
+          // A la hora nueva le corresponde su propio recordatorio: el de la
+          // hora anterior (si ya salió) no la cubre.
+          reminderSentAt: null,
           memberId: asignacion.memberId,
           ...(precioNuevo && { price: precioNuevo.total }),
         },

@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
-import type { Prisma } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { ESTADOS_AL_CREAR, MENSAJE_DE_ESTADO_AL_CREAR, MENSAJE_DE_HORARIO_INVERTIDO, notas, precioDeCita, terminaDespuesDeEmpezar, titulo } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
+import { seleccionDeCitaDelPanel } from "@/lib/citas-de-la-clinica"
+import { registrarError } from "@/lib/registro-de-errores"
 import {
   actorDeSesion,
   memberIdParaCita,
@@ -326,10 +328,9 @@ export async function POST(request: NextRequest) {
         ...(sillonId && { sillonId }),
         businessId: actor.businessId,
       },
-      include: {
-        customer: { select: { id: true, name: true, lastName: true, email: true, phone: true } },
-        member: { select: { id: true, role: true, user: { select: { id: true, name: true } } } },
-      },
+      // Columnas explícitas (`lib/citas-de-la-clinica.ts`): ni el hash del
+      // enlace, ni las comisiones; fuera de una clínica, sin sillón ni `primeraVez`.
+      select: seleccionDeCitaDelPanel(veSillones(actor)),
     } satisfies Prisma.AppointmentCreateArgs
 
     // Con servicios, la cita y sus filas en la misma transacción, como en la
@@ -363,7 +364,16 @@ export async function POST(request: NextRequest) {
     if (error instanceof SillonOcupado) {
       return NextResponse.json({ error: error.message, codigo: error.codigo }, { status: error.status })
     }
-    console.error("Error creando cita:", error)
+    // Un cuerpo que no es JSON: es un pedido mal hecho, no un error del servidor.
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ error: "El pedido no es un JSON válido" }, { status: 400 })
+    }
+    // Lo que se iba a ligar (cliente, profesional, sillón) se borró entretanto.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2025" || error.code === "P2003")) {
+      return NextResponse.json({ error: "Algo de la cita cambió recién: vuelve a cargar la agenda" }, { status: 409 })
+    }
+    // Sin volcar el error: uno de Prisma trae en `meta` los datos del cliente.
+    registrarError("creando una cita", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
 }

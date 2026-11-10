@@ -788,7 +788,8 @@ describe("POST /api/atenciones sin reserva", () => {
 
     expect(res.status).toBe(201)
     const [cliente] = base.buscar("customer", { name: "Daniela Ruiz" })
-    expect(cliente).toMatchObject({ businessId: NEGOCIO, phone: "+56 9 5555 5555" })
+    // En E.164, como cualquier teléfono de cliente.
+    expect(cliente).toMatchObject({ businessId: NEGOCIO, phone: "+56955555555" })
     expect(data).toMatchObject({ estado: "en-espera", cliente: { id: cliente.id, nombre: "Daniela Ruiz" }, notas: "Primera vez" })
     // En la base, en centavos.
     expect(base.buscar("visitService", { visitId: data.id })).toEqual([
@@ -798,6 +799,25 @@ describe("POST /api/atenciones sin reserva", () => {
     ])
     // Por la API, en unidades.
     expect(data.lineas.map((l: { precio: number }) => l.precio)).toEqual([7500, 25000])
+  })
+
+  it("con un teléfono que no se puede leer como chileno: 400 y no crea nada", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const antes = base.volcado()
+
+    const res = await POST(pedido(URL, { clienteNuevo: { nombre: "Daniela Ruiz", telefono: "12" } }))
+
+    expect(res.status).toBe(400)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("con el teléfono vacío: el cliente queda sin teléfono", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    expect((await POST(pedido(URL, { clienteNuevo: { nombre: "Daniela Ruiz", telefono: "" } }))).status).toBe(201)
+    expect(base.buscar("customer", { name: "Daniela Ruiz" })[0].phone).toBeNull()
   })
 
   it("con un cliente existente del negocio", async () => {

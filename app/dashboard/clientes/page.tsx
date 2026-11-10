@@ -434,7 +434,9 @@ export default function PaginaClientes() {
             guardando={guardando}
             aviso={avisoDelModal}
             onCambiarCampo={(campo, valor) => setNuevoCliente((previo) => ({ ...previo, [campo]: valor }))}
-            onCambiarWhatsapp={(acepta) => setNuevoCliente((previo) => ({ ...previo, aceptaWhatsapp: acepta }))}
+            onCambiarWhatsapp={
+              puedeEditar ? (acepta) => setNuevoCliente((previo) => ({ ...previo, aceptaWhatsapp: acepta })) : undefined
+            }
             nombreNegocio={nombreNegocio}
             onCambiarCorreoPromo={
               puedeMarcarCorreoPromo

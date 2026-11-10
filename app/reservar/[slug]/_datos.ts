@@ -149,6 +149,8 @@ export interface DatosDeListaDeEspera {
   email: string
   telefono: string
   whatsapp: boolean
+  /** Clínica dental: la primera vez suma minutos; el servidor revisa el día con esa duración. Fuera de una clínica, `null`. */
+  primeraVez?: boolean | null
 }
 
 /** "Avísame si se libera una hora" (#74): anota en la lista de espera de ese día. */
@@ -165,6 +167,8 @@ export async function inscribirEnListaDeEspera(slug: string, datos: DatosDeLista
       email: datos.email,
       telefono: datos.telefono || undefined,
       whatsappConsentimiento: datos.telefono ? datos.whatsapp : undefined,
+      // Sólo en una clínica dental.
+      primeraVez: datos.primeraVez ?? undefined,
     })
   )
 }

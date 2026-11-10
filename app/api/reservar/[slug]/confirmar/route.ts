@@ -560,6 +560,16 @@ export async function POST(
       // Público: el primer mensaje, legible, y no los issues crudos de zod.
       return NextResponse.json({ error: error.errors[0]?.message ?? "Datos inválidos" }, { status: 400 })
     }
+    // Un cuerpo que no es JSON: es un pedido mal hecho, no un error del servidor.
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ error: "El pedido no es un JSON válido" }, { status: 400 })
+    }
+    // Algo que la reserva ligaba (servicio, profesional) se borró entretanto.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2025" || error.code === "P2003")) {
+      return NextResponse.json({ error: "Algo cambió mientras reservabas. Vuelve a elegir la hora." }, { status: 409 })
+    }
+    // Sin volcar el error: uno de Prisma trae en `meta` los datos de quien reserva.
+    registrarError("confirmando una reserva", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
 }

@@ -36,8 +36,14 @@ const prismaMock = {
       const cita = citasFake.find((c) => c.id === args.where.id)
       return Promise.resolve({ ...cita, ...args.data })
     }),
-    deleteMany: vi.fn((args: { where: Record<string, unknown> }) =>
-      Promise.resolve({ count: citasFake.filter((c) => coincideConWhere(c, args.where)).length })
+    // Borrar y mover se escriben con condiciones (estado, sin atención viva)
+    // que este doble no evalúa: cuenta por id y negocio. Los escenarios con
+    // atención están en `cancelar-con-atencion.test.ts` y `mover.test.ts`.
+    deleteMany: vi.fn((args: { where: { id: string; businessId: string } }) =>
+      Promise.resolve({ count: citasFake.filter((c) => c.id === args.where.id && c.businessId === args.where.businessId).length })
+    ),
+    updateMany: vi.fn((args: { where: { id: string; businessId: string } }) =>
+      Promise.resolve({ count: citasFake.filter((c) => c.id === args.where.id && c.businessId === args.where.businessId).length })
     ),
     // Las advertencias al mover: acá no hay otras citas con qué chocar.
     findMany: vi.fn(() => Promise.resolve([])),
@@ -53,7 +59,12 @@ const prismaMock = {
   appointmentService: { findMany: vi.fn(() => Promise.resolve([])) },
 }
 
-vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
+const prismaConTransacciones = {
+  ...prismaMock,
+  $transaction: vi.fn((fn: (tx: typeof prismaMock) => unknown) => fn(prismaMock)),
+}
+
+vi.mock("@/lib/prisma", () => ({ prisma: prismaConTransacciones }))
 
 const sesionDueño = {
   user: { id: "owner-1", role: "owner", businessId: "negocio-1", businessName: "Mi negocio" },
@@ -279,16 +290,45 @@ describe("DELETE /api/citas/[id]", () => {
     expect(prismaMock.appointment.deleteMany).not.toHaveBeenCalled()
   })
 
-  it("un worker sí puede borrar su propia cita", async () => {
+  it("un worker no borra ni su propia cita: cancela, no borra (401)", async () => {
     const { DELETE } = await import("./route")
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
 
     const res = await DELETE(pedidoFalso(), params("cita-mia"))
 
+    expect(res.status).toBe(401)
+    expect(prismaMock.appointment.deleteMany).not.toHaveBeenCalled()
+  })
+
+  it("el borrado va acotado al negocio, sin cita cerrada y sin atención viva, en la misma escritura", async () => {
+    const { DELETE } = await import("./route")
+    const { SIN_ATENCION_VIVA } = await import("@/lib/mover-cita")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    const res = await DELETE(pedidoFalso(), params("cita-mia"))
+
     expect(res.status).toBe(200)
-    // Acotado al negocio de la sesión, como la rama dental.
-    expect(prismaMock.appointment.deleteMany).toHaveBeenCalledWith({ where: { id: "cita-mia", businessId: "negocio-1" } })
+    expect(prismaMock.appointment.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: "cita-mia",
+        businessId: "negocio-1",
+        status: { notIn: ["cancelada", "completada", "no-asistio"] },
+        AND: [SIN_ATENCION_VIVA],
+      },
+    })
+  })
+
+  it("si la escritura no borra nada (llegó el cliente entretanto), 409", async () => {
+    const { DELETE } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.appointment.deleteMany.mockResolvedValueOnce({ count: 0 })
+
+    const res = await DELETE(pedidoFalso(), params("cita-mia"))
+
+    expect(res.status).toBe(409)
   })
 
   it("el dueño puede borrar cualquier cita del negocio", async () => {

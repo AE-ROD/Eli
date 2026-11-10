@@ -50,11 +50,14 @@ export interface DatosDeServicio {
 }
 
 /**
- * Sin `memberId`, el endpoint opera sobre el horario propio de quien está en
- * sesión (el del dueño es el horario general del negocio).
+ * Con `memberId`, el horario de ese miembro; con `null`, el horario general
+ * del negocio, dicho explícitamente (`?general=1`): el del dueño, y el que
+ * también edita el encargado. Un profesional sólo edita el suyo (con su id).
  */
 function rutaDelHorario(memberId: string | null): string {
-  return memberId ? `/api/configuracion/horarios?memberId=${memberId}` : "/api/configuracion/horarios"
+  return memberId
+    ? `/api/configuracion/horarios?memberId=${encodeURIComponent(memberId)}`
+    : "/api/configuracion/horarios?general=1"
 }
 
 export async function leerHorario(memberId: string | null): Promise<Resultado<HorarioDelDia[]>> {

@@ -48,19 +48,53 @@ export async function soltarLoClinicoDeLaCita(
   })
 }
 
-/** Las columnas que la clínica dental le sumó a la cita (migración `etapa_6_odontologia`). */
-const COLUMNAS_DE_LA_CLINICA = ["primeraVez", "sillonId"] as const
-type ColumnaDeLaClinica = (typeof COLUMNAS_DE_LA_CLINICA)[number]
+/**
+ * Lo que el panel recibe de una cita al leerla, crearla o editarla
+ * (`/api/citas` y `/api/citas/[id]`), con `select` explícito: nunca el hash
+ * del enlace del cliente (`manageTokenHash`), ni las comisiones congeladas
+ * (`commission*`), ni la marca del recordatorio. Una columna nueva de la cita
+ * no sale sola: hay que sumarla acá.
+ */
+const SELECCION_DE_CITA_DEL_PANEL = {
+  id: true,
+  businessId: true,
+  title: true,
+  startTime: true,
+  endTime: true,
+  status: true,
+  notes: true,
+  // Lo que el cliente escribió al reservar (#122).
+  clientComments: true,
+  price: true,
+  serviceId: true,
+  source: true,
+  customerId: true,
+  customer: { select: { id: true, name: true, lastName: true, email: true, phone: true } },
+  memberId: true,
+  member: { select: { id: true, role: true, user: { select: { id: true, name: true } } } },
+  // "Por confirmar" (#84) y quién canceló y cuándo (#121).
+  confirmacionPorFaltas: true,
+  canceladaPor: true,
+  canceladaEn: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.AppointmentSelect
+
+/** Lo mismo, con lo de la clínica dental: el sillón (con su nombre) y la primera vez. */
+const SELECCION_DE_CITA_DE_LA_CLINICA = {
+  ...SELECCION_DE_CITA_DEL_PANEL,
+  sillonId: true,
+  sillon: { select: { id: true, nombre: true } },
+  primeraVez: true,
+} satisfies Prisma.AppointmentSelect
 
 /**
- * La cita sin las columnas de la clínica dental, para responderla fuera de una
- * clínica con la misma forma que antes de que existieran: en un salón
- * `primeraVez` siempre es `false` y `sillonId` siempre `null`, no dicen nada
- * y no son de su rubro. Lo mismo hace la lista (`GET /api/citas`), que ni las
- * pide fuera de una clínica.
+ * El `select` de la respuesta de una cita al panel. Fuera de una clínica
+ * dental (`veSillones` en `lib/permisos.ts`) sin `primeraVez` ni el sillón:
+ * en un salón no dicen nada y no son de su rubro.
  */
-export function sinColumnasDeLaClinica<T extends Record<ColumnaDeLaClinica, unknown>>(cita: T): Omit<T, ColumnaDeLaClinica> {
-  const copia: Record<string, unknown> = { ...cita }
-  for (const columna of COLUMNAS_DE_LA_CLINICA) delete copia[columna]
-  return copia as Omit<T, ColumnaDeLaClinica>
+export function seleccionDeCitaDelPanel(
+  conLaClinica: boolean
+): typeof SELECCION_DE_CITA_DEL_PANEL | typeof SELECCION_DE_CITA_DE_LA_CLINICA {
+  return conLaClinica ? SELECCION_DE_CITA_DE_LA_CLINICA : SELECCION_DE_CITA_DEL_PANEL
 }

@@ -47,6 +47,11 @@ export default async function PaginaConfiguracion() {
   // Horario propio: el dueño no es miembro del equipo (clave null → horario
   // general del negocio); encargado y profesional tienen su propio memberId.
   const memberIdPropio = actor.memberId
+  // Quien edita el horario de otros (dueño y encargado) abre en el horario
+  // general del negocio (§5: el encargado lleva los horarios); el propio del
+  // encargado está en su pestaña. El profesional, en el suyo.
+  const editaElGeneral = puedeEditarHorarioDe(actor, null)
+  const horarioInicial = editaElGeneral ? null : memberIdPropio
 
   // El % de cada producto sólo se le pide a la base para la dueña.
   const conPorcentaje = puedeFijarComisionDeProducto(actor)
@@ -59,7 +64,7 @@ export default async function PaginaConfiguracion() {
 
   const [horariosActuales, servicios, productos, pagina, sillones, laboratorios] = await Promise.all([
     prisma.workSchedule.findMany({
-      where: { businessId: actor.businessId, memberId: memberIdPropio },
+      where: { businessId: actor.businessId, memberId: horarioInicial },
       orderBy: { dayOfWeek: "asc" },
     }),
     prisma.service.findMany({
@@ -111,7 +116,7 @@ export default async function PaginaConfiguracion() {
 
   // Dueño y encargado editan el horario de cualquier miembro: cargan el
   // equipo para el selector de tabs. El profesional sólo ve el propio.
-  const puedeEditarHorarioDeOtros = puedeEditarHorarioDe(actor, null)
+  const puedeEditarHorarioDeOtros = editaElGeneral
 
   const miembros = puedeEditarHorarioDeOtros
     ? await prisma.businessMember.findMany({
@@ -153,12 +158,14 @@ export default async function PaginaConfiguracion() {
             <SelectorHorarioMiembro
               horariosDelDueño={horariosActuales}
               miembros={miembrosParaElSelector}
-              nombreDelDueño={nombreActor}
+              // El encargado ve el general con el nombre del negocio; la dueña, con el suyo.
+              nombreDelDueño={esDueño(actor) ? nombreActor : (pagina?.name ?? "El negocio")}
+              sufijoDelGeneral={esDueño(actor) ? "(tú)" : "Horario general"}
             />
           ) : (
             <SeccionHorario
               horariosIniciales={horariosActuales}
-              memberId={memberIdPropio}
+              memberId={horarioInicial}
               titulo={esDueño(actor) ? "Mi horario" : "Mi horario de atención"}
             />
           )}

@@ -138,7 +138,7 @@ export default function PaginaPanel() {
                 <EstadisticasDelNegocio estadisticas={estadisticas} />
 
                 <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
-                  <CitasDeHoy citas={citasDeHoy} className="lg:col-span-2" />
+                  <CitasDeHoy citas={citasDeHoy} zona={estadisticas?.zona} className="lg:col-span-2" />
                   <ResumenDeClientes estadisticas={estadisticas} />
                 </div>
               </>
@@ -153,7 +153,7 @@ export default function PaginaPanel() {
 
             {!sinEstadisticas && (
               <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
-                <CitasPorHora citas={citasDeHoy} />
+                <CitasPorHora citas={citasDeHoy} zona={estadisticas?.zona} />
                 <ResumenDelNegocio estadisticas={estadisticas} />
               </div>
             )}

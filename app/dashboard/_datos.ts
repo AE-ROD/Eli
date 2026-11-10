@@ -7,11 +7,15 @@
  * quedarse en "Cargando..." para siempre.
  */
 
-import { zonaDelDispositivo } from "@/lib/fechas"
 import { conJson, pedir, type Resultado } from "@/lib/peticiones"
 import type { CitaDelDia, FranjaHorario } from "@/lib/horario-dia"
 
 export interface EstadisticasDelPanel {
+  /**
+   * La zona del negocio (`Business.timezone`). "Hoy" y el mes se calcularon en
+   * ella, y las horas de las citas se muestran en ella.
+   */
+  zona: string
   citasHoy: number
   /** `customer` puede venir nulo: en el esquema una cita puede no tener cliente. */
   citasHoyLista: CitaDelDia[]
@@ -43,15 +47,11 @@ export interface EstadisticasDelPanel {
 }
 
 /**
- * Con la zona del dispositivo, el mes de los ingresos es el del calendario de
- * quien mira, el mismo que cuentan los reportes: con la del servidor (UTC), un
- * cobro del 30 a la noche ya caía en el mes siguiente. Si el navegador no la
- * informa, no se manda y el servidor usa la suya, como antes.
+ * "Hoy", el mes y las horas son los del negocio: el servidor los calcula con
+ * `Business.timezone` y devuelve la zona. La del dispositivo no se manda.
  */
 export async function leerEstadisticas(): Promise<Resultado<EstadisticasDelPanel>> {
-  const zona = zonaDelDispositivo()
-  const url = zona ? `/api/dashboard/stats?${new URLSearchParams({ zona })}` : "/api/dashboard/stats"
-  return pedir<EstadisticasDelPanel>(url, "No se pudieron cargar las estadísticas")
+  return pedir<EstadisticasDelPanel>("/api/dashboard/stats", "No se pudieron cargar las estadísticas")
 }
 
 /**

@@ -20,7 +20,8 @@ interface PropsDeModalNuevoCliente {
    */
   aviso: string
   onCambiarCampo: (campo: "nombre" | "email" | "telefono", valor: string) => void
-  onCambiarWhatsapp: (acepta: boolean) => void
+  /** Sólo a quien registra consentimientos (dueño y encargado); sin ella, la casilla no aparece. */
+  onCambiarWhatsapp?: (acepta: boolean) => void
   /** Para la casilla de avisos por correo: "… de <negocio> por correo". */
   nombreNegocio?: string
   /**
@@ -84,15 +85,17 @@ export function ModalNuevoCliente({
         />
 
         {/* Casilla nativa: el lector de pantalla la anuncia como tal y la etiqueta la marca. */}
-        <label className="flex cursor-pointer items-start gap-3 text-sm text-navy">
-          <input
-            type="checkbox"
-            checked={form.aceptaWhatsapp}
-            onChange={(e) => onCambiarWhatsapp(e.target.checked)}
-            className="anillo-foco mt-0.5 size-4 shrink-0 cursor-pointer accent-navy"
-          />
-          <span>Acepta recibir mensajes por WhatsApp</span>
-        </label>
+        {onCambiarWhatsapp && (
+          <label className="flex cursor-pointer items-start gap-3 text-sm text-navy">
+            <input
+              type="checkbox"
+              checked={form.aceptaWhatsapp}
+              onChange={(e) => onCambiarWhatsapp(e.target.checked)}
+              className="anillo-foco mt-0.5 size-4 shrink-0 cursor-pointer accent-navy"
+            />
+            <span>Acepta recibir mensajes por WhatsApp</span>
+          </label>
+        )}
 
         {/*
           Sin marcar por defecto (como en la reserva pública). Desmarcarla en

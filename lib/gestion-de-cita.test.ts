@@ -8,6 +8,7 @@ import {
   whereDeCitaPorToken,
 } from "./gestion-de-cita"
 import { generarToken, hashDeToken } from "./tokens"
+import { SIN_ATENCION_VIVA } from "./mover-cita"
 
 const AHORA = new Date("2030-01-01T12:00:00.000Z")
 const enHoras = (horas: number) => new Date(AHORA.getTime() + horas * 3600_000)
@@ -77,6 +78,8 @@ describe("whereDeCitaPorToken", () => {
       manageTokenHash: hashDeToken(token),
       business: { slug: "salon-uno" },
       status: { in: ["pendiente", "confirmada"] },
+      // Sin atención viva: con el cliente en el Tablero, gana la llegada.
+      AND: [SIN_ATENCION_VIVA],
     })
     expect(JSON.stringify(where)).not.toContain(token)
   })

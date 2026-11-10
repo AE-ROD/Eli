@@ -101,12 +101,23 @@ export const AVISO_DIA_SIN_ATENCION = "El día que habías elegido no tiene aten
  * Si la hora `hora` ("HH:MM") de `fecha` ya pasó en el reloj de la zona. La
  * hora en curso cuenta como pasada: a las 10:30 ya no se reserva a las 10:30.
  * Es la regla con la que `disponibilidad` siempre filtró las horas de hoy.
+ *
+ * Hoy se compara el instante en que se guardaría la cita (`instanteEn`), no
+ * la hora de pared: la noche en que el reloj retrocede (Santiago, de las
+ * 24:00 a las 23:00), las 23:30 ocurren dos veces y la cita se guarda en la
+ * primera. Pasada esa primera, ya no se ofrece aunque el reloj vuelva a
+ * marcar las 23:10.
  */
 export function yaPasoLaHora(fecha: string, hora: string, ahora: Date, zona: string): boolean {
   const hoy = fechaYMinutosEn(ahora, zona)
   const dias = diasEntre(hoy.fecha, fecha)
   if (dias !== 0) return dias < 0
-  return horaAMinutos(hora) <= hoy.minutos
+  try {
+    return instanteEn(fecha, hora, zona).getTime() <= ahora.getTime()
+  } catch {
+    // Una hora que no se puede leer: la regla de siempre, con la hora de pared.
+    return horaAMinutos(hora) <= hoy.minutos
+  }
 }
 
 /**

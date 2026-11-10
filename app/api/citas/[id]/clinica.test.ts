@@ -383,12 +383,15 @@ describe("cancelar o borrar una cita con lo clínico ligado", () => {
     expect(fila("prestacionDelPlan", "pr-agendada")).toMatchObject({ estado: "agendada", appointmentId: "cita-carla" })
   })
 
-  it("marcar que no vino no toca el plan", async () => {
+  it("marcar que no vino suelta lo agendado, como cancelar: vuelve a por agendar; lo realizado y las evoluciones no cambian", async () => {
     vi.setSystemTime(santiago("2026-10-20", "11:30"))
     const res = await put(sesionesDentales.dueña, "cita-carla", { status: "no-asistio" })
 
     expect(res.status).toBe(200)
-    expect(fila("prestacionDelPlan", "pr-agendada")).toMatchObject({ estado: "agendada", appointmentId: "cita-carla" })
+    expect(cita("cita-carla")?.status).toBe("no-asistio")
+    expect(fila("prestacionDelPlan", "pr-agendada")).toMatchObject({ estado: "por-agendar", appointmentId: null })
+    expect(fila("prestacionDelPlan", "pr-realizada")).toMatchObject({ estado: "realizada", appointmentId: "cita-carla" })
+    expect(fila("evolucion", "ev-1").appointmentId).toBe("cita-carla")
   })
 
   it("borrar: no revienta, suelta prestaciones y evoluciones, y conserva lo realizado", async () => {

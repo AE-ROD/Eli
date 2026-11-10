@@ -99,6 +99,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           data: { status: "en-progreso" },
         })
       }
+      // Y al revés: si la atención vuelve a la sala de espera, la cita deja de
+      // estar "en progreso" y vuelve a confirmada (el cliente está, pero no lo
+      // están atendiendo). Sólo si sigue en progreso: una cita que se cerró
+      // a mano en la agenda no se pisa.
+      if (desde === "en-atencion" && destino === "en-espera" && existente.appointmentId) {
+        await tx.appointment.updateMany({
+          where: { id: existente.appointmentId, businessId: actor.businessId, status: "en-progreso" },
+          data: { status: "confirmada" },
+        })
+      }
 
       return leerAtencion(tx, actor, existente.id)
     })

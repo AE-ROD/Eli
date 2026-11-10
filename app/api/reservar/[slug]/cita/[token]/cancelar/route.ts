@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { correosDelAviso } from "@/lib/avisos-al-negocio"
 import { soltarLoClinicoDeLaCita } from "@/lib/citas-de-la-clinica"
 import { enviarAvisoDeCambioDelCliente } from "@/lib/email"
-import { ESTADOS_GESTIONABLES, dentroDelPlazo, mensajeFueraDePlazo } from "@/lib/gestion-de-cita"
+import { dentroDelPlazo, mensajeFueraDePlazo, whereDeEscrituraDelEnlace } from "@/lib/gestion-de-cita"
 import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
 import { serviciosDeLaCita } from "@/lib/servicios-de-la-reserva"
 import { abrirEnlace, fechaYHora, noEncontrada, nombreDelCliente, type Params } from "../_comun"
@@ -35,12 +35,8 @@ export async function POST(request: NextRequest, contexto: Params) {
   // soltar y no cambia nada.
   const count = await prisma.$transaction(async (tx) => {
     const { count: canceladas } = await tx.appointment.updateMany({
-      where: {
-        id: cita.id,
-        businessId: cita.businessId,
-        status: { in: [...ESTADOS_GESTIONABLES] },
-        startTime: cita.startTime,
-      },
+      // Y sin atención viva: si el cliente llegó entretanto, gana la llegada.
+      where: whereDeEscrituraDelEnlace(cita),
       data: { status: "cancelada", canceladaPor: "cliente", canceladaEn: ahora },
     })
     if (canceladas > 0) await soltarLoClinicoDeLaCita(tx, cita.businessId, cita.id, "cancela")

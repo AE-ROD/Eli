@@ -119,6 +119,9 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
         listaDeEsperaActiva={negocio.listaDeEsperaActiva}
         plazoDeCambios={plazoParaQuienReserva(pagina.plazoDeCambiosHoras)}
         plazoDeCambiosHoras={plazoValido(pagina.plazoDeCambiosHoras)}
+        // El lugar del evento de "Agregar al calendario": la dirección y la comuna.
+        // Sin calle no hay lugar (como los enlaces de mapa): la comuna sola no lleva a ninguna parte.
+        direccion={pagina.direccion ? [pagina.direccion, pagina.comuna].filter(Boolean).join(", ") : null}
       />
       </div>
     </MarcoDeReserva>

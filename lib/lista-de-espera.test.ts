@@ -219,6 +219,36 @@ describe("inscribirse", () => {
     expect(inscripciones()).toHaveLength(1)
   })
 
+  describe("en una clínica dental", () => {
+    const CLINICA = { ...NEGOCIO, type: "odontologia" }
+
+    it("la primera vez suma 15 minutos: un día con una hora libre de 60 que no alcanza para 75 se acepta", async () => {
+      // Queda libre de 10 a 11: cabe la limpieza (60), no con la primera vez (75).
+      await liberar("a10")
+      expect(await m.inscribirEnListaDeEspera(CLINICA, datos(), AHORA)).toEqual({ tipo: "rechazada", error: m.MENSAJE_HAY_HORAS })
+      expect(await m.inscribirEnListaDeEspera(CLINICA, datos({ primeraVez: true }), AHORA)).toEqual({ tipo: "inscrita" })
+      // En otro rubro la primera vez no suma nada.
+      expect(await m.inscribirEnListaDeEspera(NEGOCIO, datos({ primeraVez: true, email: "otra@correo.test" }), AHORA)).toEqual({
+        tipo: "rechazada",
+        error: m.MENSAJE_HAY_HORAS,
+      })
+    })
+
+    it("una urgencia sólo espera por hoy: para otro día, rechazada con el mismo motivo que la reserva", async () => {
+      const { MENSAJE_URGENCIA_SOLO_HOY } = await import("./reserva-publica")
+      escenario({
+        service: [
+          { id: "s1", businessId: "n1", name: "Urgencia", duration: 60, esUrgencia: true },
+          { id: "s2", businessId: "n2", name: "Corte", duration: 60 },
+        ],
+      })
+      expect(await m.inscribirEnListaDeEspera(CLINICA, datos(), AHORA)).toEqual({ tipo: "rechazada", error: MENSAJE_URGENCIA_SOLO_HOY })
+      expect(inscripciones()).toHaveLength(0)
+      // En un salón la marca no cuenta.
+      expect(await m.inscribirEnListaDeEspera(NEGOCIO, datos(), AHORA)).toEqual({ tipo: "inscrita" })
+    })
+  })
+
   it("la cuarta inscripción activa del mismo email en el negocio: tope", async () => {
     escenario({
       inscripcionEnEspera: [
@@ -469,6 +499,9 @@ describe("reservó", () => {
     })
     expect(await m.marcarReservo(base.prisma as never, { businessId: "n1", email: " ANA@correo.test", fecha: LUNES, ahora: AHORA })).toBe(1)
     expect(inscripciones({ estado: "reservo" }).map((fila) => fila.id)).toEqual(["i1"])
+    // Ya reservó: sus datos personales se borran, como al salir o expirar.
+    expect(inscripciones({ id: "i1" })[0]).toMatchObject({ nombre: "", apellido: "", email: "", telefono: null, whatsappConsentAt: null })
+    expect(inscripciones({ id: "i-otro-dia" })[0]).toMatchObject({ email: "ana@correo.test" })
     expect(await m.marcarReservo(base.prisma as never, { businessId: "n1", email: null, fecha: LUNES, ahora: AHORA })).toBe(0)
   })
 })

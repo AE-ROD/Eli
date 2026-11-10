@@ -536,3 +536,37 @@ describe("aviso por correo cuando queda 1 persona adelante", () => {
     expect(correos.aviso).not.toHaveBeenCalled()
   })
 })
+
+describe("la fila que pasa la medianoche: cuenta la jornada, no el día del calendario", () => {
+  /** El local atiende toda la noche (00:00 a 23:59), con María esperando con el número 7 desde el lunes. */
+  function deNocheConMaria(token: string) {
+    escenario({ visitas: [enFila("maria", 7, { filaTokenHash: hashDeToken(token) })] })
+    const datos = base.volcado()
+    base.reiniciar({
+      ...datos,
+      workSchedule: datos.workSchedule.map((franja) => ({ ...franja, startTime: "00:00", endTime: "23:59" })),
+    })
+  }
+
+  it("a las 00:30 del martes sigue la jornada del lunes: el número sigue y quien espera no vence", async () => {
+    const { token } = generarToken()
+    deNocheConMaria(token)
+    vi.setSystemTime(new Date("2030-01-08T03:30:00.000Z"))
+
+    const anotado = await anotarse({ nombre: "Juan Pérez" })
+
+    expect(anotado.status).toBe(201)
+    expect(deLaFila().find((v) => v.customerName === "Juan Pérez")).toMatchObject({ filaFecha: HOY, filaNumero: 8 })
+    expect((await miTurno(token)).cuerpo).toMatchObject({ estado: "esperando", adelante: 0 })
+  })
+
+  it("a las 05:00 empieza la jornada del martes: se numera desde 1 y quien quedó esperando vence", async () => {
+    const { token } = generarToken()
+    deNocheConMaria(token)
+    vi.setSystemTime(new Date("2030-01-08T08:00:00.000Z"))
+
+    expect((await anotarse({ nombre: "Juan Pérez" })).status).toBe(201)
+    expect(deLaFila().find((v) => v.customerName === "Juan Pérez")).toMatchObject({ filaFecha: "2030-01-08", filaNumero: 1 })
+    expect((await miTurno(token)).cuerpo.estado).toBe("vencido")
+  })
+})

@@ -13,7 +13,10 @@ vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 const prismaMock = {
   businessMember: { findUnique: vi.fn() },
   workSchedule: { findMany: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
-  $transaction: vi.fn(),
+  // El candado del horario, dentro de la transacción.
+  $executeRaw: vi.fn(),
+  // Transacción interactiva: corre la función con el mismo cliente.
+  $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(prismaMock)),
 }
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
@@ -159,7 +162,6 @@ describe("POST /api/configuracion/horarios", () => {
       id: "member-worker-1",
       businessId: "negocio-1",
     })
-    prismaMock.$transaction.mockResolvedValueOnce(undefined)
     prismaMock.workSchedule.findMany.mockResolvedValueOnce(horarios)
 
     const res = await POST(pedidoFalso("/api/configuracion/horarios?memberId=member-worker-1", horarios))
@@ -173,7 +175,6 @@ describe("POST /api/configuracion/horarios", () => {
     const { POST } = await import("./route")
 
     mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
-    prismaMock.$transaction.mockResolvedValueOnce(undefined)
     prismaMock.workSchedule.findMany.mockResolvedValueOnce(horarios)
 
     const res = await POST(pedidoFalso("/api/configuracion/horarios", horarios))
@@ -223,7 +224,6 @@ describe("POST /api/configuracion/horarios", () => {
     const { POST } = await import("./route")
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
-    prismaMock.$transaction.mockResolvedValueOnce(undefined)
     prismaMock.workSchedule.findMany.mockResolvedValueOnce(horarios)
 
     const res = await POST(pedidoFalso("/api/configuracion/horarios", horarios))
@@ -273,6 +273,64 @@ describe("POST /api/configuracion/horarios", () => {
   })
 })
 
+describe("el horario general con destino explícito (?general=1)", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const horarios = [{ dayOfWeek: 1, startTime: "09:00", endTime: "18:00", active: true }]
+
+  it("el encargado lo lee y lo edita (§5: lleva los horarios): clave null", async () => {
+    const { GET, POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    prismaMock.workSchedule.findMany.mockResolvedValueOnce([])
+    expect((await GET(pedidoFalso("/api/configuracion/horarios?general=1"))).status).toBe(200)
+    expect(prismaMock.workSchedule.findMany.mock.calls[0][0].where).toEqual({ businessId: "negocio-1", memberId: null })
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    prismaMock.workSchedule.findMany.mockResolvedValueOnce(horarios)
+    const res = await POST(pedidoFalso("/api/configuracion/horarios?general=1", horarios))
+
+    expect(res.status).toBe(200)
+    expect(prismaMock.workSchedule.deleteMany).toHaveBeenCalledWith({ where: { businessId: "negocio-1", memberId: null } })
+    expect(prismaMock.workSchedule.createMany.mock.calls[0][0].data[0]).toMatchObject({ businessId: "negocio-1", memberId: null })
+  })
+
+  it("el profesional no: 401 y no escribe", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+    const res = await POST(pedidoFalso("/api/configuracion/horarios?general=1", horarios))
+
+    expect(res.status).toBe(401)
+    expect(prismaMock.$transaction).not.toHaveBeenCalled()
+  })
+
+  it("con general y memberId a la vez: 400, el destino tiene que ser uno", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const res = await POST(pedidoFalso("/api/configuracion/horarios?general=1&memberId=member-worker-1", horarios))
+
+    expect(res.status).toBe(400)
+    expect(prismaMock.$transaction).not.toHaveBeenCalled()
+  })
+
+  it("reemplazar va bajo el candado de ese horario, antes de borrar y crear: dos guardados a la vez no lo duplican", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.workSchedule.findMany.mockResolvedValueOnce(horarios)
+    await POST(pedidoFalso("/api/configuracion/horarios?general=1", horarios))
+
+    const [sql, clave] = prismaMock.$executeRaw.mock.calls[0] as [TemplateStringsArray, string]
+    expect(sql.join("?")).toContain("pg_advisory_xact_lock")
+    expect(clave).toBe("horario:negocio-1:general")
+    expect(prismaMock.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      prismaMock.workSchedule.deleteMany.mock.invocationCallOrder[0]
+    )
+  })
+})
+
 describe("POST /api/configuracion/horarios — largos y tipos", () => {
   beforeEach(() => vi.clearAllMocks())
 
@@ -314,7 +372,6 @@ describe("POST /api/configuracion/horarios — largos y tipos", () => {
     const { POST } = await import("./route")
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
-    prismaMock.$transaction.mockResolvedValueOnce(undefined)
     prismaMock.workSchedule.findMany.mockResolvedValueOnce(semanaCompleta)
 
     const res = await POST(pedidoFalso("/api/configuracion/horarios", semanaCompleta))

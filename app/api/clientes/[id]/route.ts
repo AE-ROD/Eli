@@ -27,6 +27,7 @@ import {
   type Actor,
 } from "@/lib/permisos"
 import { leerAlertaDeAlergias } from "@/lib/ficha-clinica-servidor"
+import { SEPARADOR_DE_SERVICIOS } from "@/lib/servicios-de-la-reserva"
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 const edicionDeClienteSchema = z.object({
@@ -301,16 +302,35 @@ export async function DELETE(
         where: { customerId: existente.id, businessId: actor.businessId },
         data: textosDeCitaDeClienteEliminado(),
       })
-      // El título de la cita es texto libre. Si la cita tiene servicio, vuelve
-      // a ser su nombre, por si alguien escribió ahí algo del cliente. Sin
-      // servicio no hay con qué reemplazarlo y queda (PRODUCTO.md, sección 6).
+      // El título de la cita es texto libre. Si la cita tiene servicios, vuelve
+      // a ser lo que dicen ellos, por si alguien escribió ahí algo del
+      // cliente: con varios (#89a), sus nombres en orden, como al reservar
+      // (`resumenDeLaReserva`), con los nombres copiados en sus filas; si no,
+      // el nombre de su servicio. Sin servicio no hay con qué reemplazarlo y
+      // queda (PRODUCTO.md, sección 6).
       const conServicio = await tx.appointment.findMany({
-        where: { customerId: existente.id, businessId: actor.businessId, serviceId: { not: null } },
-        select: { id: true, title: true, service: { select: { name: true } } },
+        where: {
+          customerId: existente.id,
+          businessId: actor.businessId,
+          OR: [{ serviceId: { not: null } }, { servicios: { some: {} } }],
+        },
+        select: {
+          id: true,
+          title: true,
+          service: { select: { name: true } },
+          servicios: { orderBy: { orden: "asc" }, select: { serviceName: true } },
+        },
       })
       for (const cita of conServicio) {
-        if (cita.service && cita.title !== cita.service.name) {
-          await tx.appointment.update({ where: { id: cita.id }, data: { title: cita.service.name }, select: { id: true } })
+        const titulo =
+          cita.servicios.length > 0
+            ? cita.servicios.map((fila) => fila.serviceName).join(SEPARADOR_DE_SERVICIOS)
+            : cita.service?.name
+        if (titulo && cita.title !== titulo) {
+          await tx.appointment.updateMany({
+            where: { id: cita.id, businessId: actor.businessId },
+            data: { title: titulo },
+          })
         }
       }
       await tx.visit.updateMany({

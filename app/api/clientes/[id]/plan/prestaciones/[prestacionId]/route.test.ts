@@ -60,6 +60,8 @@ const AJENOS = [
 
 describe("PATCH /api/clientes/[id]/plan/prestaciones/[prestacionId]: estados", () => {
   it("agendar exige una cita de este paciente que quien escribe vea en su agenda", async () => {
+    // A las 08:00 en Santiago: la cita (10:30) todavía está por delante.
+    vi.setSystemTime(new Date("2026-11-06T11:00:00.000Z"))
     const res = await editar(sesiones.perez, "p-camila", "pr-46", { estado: "agendada", appointmentId: "cita-perez" })
 
     expect(res.status).toBe(200)
@@ -69,6 +71,38 @@ describe("PATCH /api/clientes/[id]/plan/prestaciones/[prestacionId]: estados", (
       appointmentId: "cita-perez",
       cita: { id: "cita-perez", startTime: "2026-11-06T13:30:00.000Z", status: "confirmada" },
     })
+  })
+
+  it("agendar en una cita que ya pasó: 409 y nada cambia", async () => {
+    // AHORA es 12:00 en Santiago: la cita de las 10:30 ya terminó.
+    const antes = base.volcado()
+
+    const res = await editar(sesiones.perez, "p-camila", "pr-46", { estado: "agendada", appointmentId: "cita-perez" })
+
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toMatch(/ya pasó/)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("volver a agendada revisa de nuevo la cita que tenía: si ya pasó, 409", async () => {
+    vi.setSystemTime(new Date("2026-11-06T11:00:00.000Z"))
+    expect((await editar(sesiones.perez, "p-camila", "pr-46", { estado: "agendada", appointmentId: "cita-perez" })).status).toBe(200)
+    expect((await editar(sesiones.perez, "p-camila", "pr-46", { estado: "realizada" })).status).toBe(200)
+    // Al día siguiente quiere volverla a agendada en la misma cita, que ya pasó.
+    vi.setSystemTime(new Date("2026-11-07T15:00:00.000Z"))
+
+    const res = await editar(sesiones.perez, "p-camila", "pr-46", { estado: "agendada" })
+
+    expect(res.status).toBe(409)
+    expect(base.buscar("prestacionDelPlan", { id: "pr-46" })[0].estado).toBe("realizada")
+  })
+
+  it("el profesional de la prestación es la dueña o un odontólogo: el encargado (recepción) no, 400", async () => {
+    const res = await editar(sesiones.dueña, "p-camila", "pr-46", { memberId: "m-recepcion" })
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/no atiende/)
+    expect((await editar(sesiones.dueña, "p-camila", "pr-46", { memberId: "m-nunez" })).status).toBe(200)
   })
 
   it("agendada sin cita: 400 y nada cambia", async () => {
@@ -264,6 +298,7 @@ describe("DELETE /api/clientes/[id]/plan/prestaciones/[prestacionId]", () => {
   })
 
   it("no borra una agendada aunque su etapa esté por aprobar: 409", async () => {
+    vi.setSystemTime(new Date("2026-11-06T11:00:00.000Z"))
     await editar(sesiones.perez, "p-camila", "pr-46", { estado: "agendada", appointmentId: "cita-perez" })
     const antes = base.volcado()
 

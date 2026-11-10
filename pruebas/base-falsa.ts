@@ -1226,10 +1226,15 @@ export function crearBaseFalsa() {
       if (!CANDADOS.some((candado) => sql.includes(candado))) return falla(`$queryRaw sólo para candados: ${sql}`)
       return []
     }),
-    /** Como `$queryRaw`, sólo para `pg_advisory_xact_lock`. Devuelve filas afectadas: 0. */
+    /**
+     * Como `$queryRaw`, sólo para `pg_advisory_xact_lock` y para la versión
+     * nueva de la fila del sillón (`tomarCandadoDelSillon`), que no cambia
+     * ninguna columna. Devuelve filas afectadas: 0.
+     */
     $executeRaw: vi.fn(async (partes: TemplateStringsArray, ..._valores: unknown[]) => {
       const sql = partes.join("?")
-      if (!sql.includes("pg_advisory_xact_lock")) return falla(`$executeRaw sólo para candados: ${sql}`)
+      const marcaDelSillon = sql.startsWith('UPDATE "sillones" SET "orden" = "orden" WHERE')
+      if (!sql.includes("pg_advisory_xact_lock") && !marcaDelSillon) return falla(`$executeRaw sólo para candados: ${sql}`)
       return 0
     }),
   }

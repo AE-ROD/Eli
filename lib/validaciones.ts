@@ -202,6 +202,12 @@ export const listaDeEsperaSchema = z
     email: correoPublicoSchema,
     telefono: camposDeReservaSchema.shape.telefono,
     whatsappConsentimiento: camposDeReservaSchema.shape.whatsappConsentimiento,
+    /**
+     * Clínica dental: la primera vez suma minutos (`duracionDeLaReserva`), y
+     * el día se revisa con esa duración, como lo ofreció la página. En otro
+     * rubro se ignora.
+     */
+    primeraVez: camposDeReservaSchema.shape.primeraVez,
   })
   .superRefine(revisarServicios)
   .transform(juntarServicios)

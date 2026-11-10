@@ -102,6 +102,16 @@ describe("yaPasoLaHora", () => {
     expect(yaPasoLaHora(fecha, hora, LUNES_10_30_SANTIAGO, SANTIAGO)).toBe(esperado)
   })
 
+  it("la noche en que el reloj retrocede, una hora repetida ya pasó si pasó la primera vez (es la que se guarda)", () => {
+    // Santiago, sábado 4 de abril de 2026: a las 24:00 el reloj vuelve a las 23:00.
+    // Las 23:10 de la segunda vez son las 03:10 UTC del 5; las 23:30 de la primera, las 02:30 UTC.
+    const segundaVez = new Date("2026-04-05T03:10:00.000Z")
+    expect(instanteEn("2026-04-04", "23:30", SANTIAGO)).toEqual(new Date("2026-04-05T02:30:00.000Z"))
+    expect(yaPasoLaHora("2026-04-04", "23:30", segundaVez, SANTIAGO)).toBe(true)
+    // La primera vez, a las 23:10, las 23:30 todavía no llegan.
+    expect(yaPasoLaHora("2026-04-04", "23:30", new Date("2026-04-05T02:10:00.000Z"), SANTIAGO)).toBe(false)
+  })
+
   it("con el reloj de Tokio, a las 13:30 UTC del 19 ya son las 22:30", () => {
     expect(yaPasoLaHora("2026-10-19", "22:00", LUNES_10_30_SANTIAGO, TOKIO)).toBe(true)
     expect(yaPasoLaHora("2026-10-19", "23:00", LUNES_10_30_SANTIAGO, TOKIO)).toBe(false)

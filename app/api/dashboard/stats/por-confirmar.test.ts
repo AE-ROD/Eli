@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import type { NextRequest } from "next/server"
 import { NEGOCIO, atencion, datosBase, sesiones } from "@/pruebas/datos"
 import { sigueSinConfirmar } from "@/lib/por-confirmar"
 import { crearBaseDeEstadisticas } from "./_pruebas/base-de-estadisticas"
@@ -58,7 +57,7 @@ describe("GET /api/dashboard/stats: citas por confirmar de hoy", () => {
     const { GET } = await import("./route")
     mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
 
-    const data = await (await GET({ url: "http://localhost/api/dashboard/stats" } as unknown as NextRequest)).json()
+    const data = await (await GET()).json()
 
     const lista = data.citasHoyLista as { id: string; status: string; confirmacionPorFaltas: boolean; conAtencion: boolean }[]
     expect(Object.fromEntries(lista.map((c) => [c.id, c.conAtencion]))).toEqual({

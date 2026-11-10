@@ -13,7 +13,17 @@ import {
   type ResumenDeTrabajo,
 } from "@/lib/envios-a-clientes"
 import { registrarError } from "@/lib/registro-de-errores"
-import { MENSAJE_FECHA_MUY_LEJANA, MENSAJE_FECHA_PASADA, fechaNoReservable, normalizarEmail } from "@/lib/reserva-publica"
+import {
+  MENSAJE_FECHA_MUY_LEJANA,
+  MENSAJE_FECHA_PASADA,
+  MENSAJE_URGENCIA_SOLO_HOY,
+  duracionDeLaReserva,
+  esHoyEn,
+  esReservaDeUrgencia,
+  fechaNoReservable,
+  normalizarEmail,
+} from "@/lib/reserva-publica"
+import { esRubroDental } from "@/lib/rubros"
 import { leerServiciosDeLaReserva, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
 import { hashDeToken } from "@/lib/tokens"
 import { fechaYMinutosEn, zonaDelNegocio } from "@/lib/zona-horaria"
@@ -34,7 +44,8 @@ import { fechaYMinutosEn, zonaDelNegocio } from "@/lib/zona-horaria"
  *   tope por evento; la hora es de quien confirme primero, y la transacción
  *   `Serializable` de `confirmar` ya resuelve la carrera.
  * - **Reservó** (`marcarReservo`): al confirmar una reserva con el mismo email
- *   y para el mismo día, sus inscripciones activas pasan a "reservo".
+ *   y para el mismo día, sus inscripciones activas pasan a "reservo" y se
+ *   borran sus datos personales (ya no se le va a escribir).
  * - **Salir** (`salirDeLaLista`): por el token del correo (página o POST de un
  *   clic, RFC 8058). Borra los datos personales.
  * - **Expirar** (`expirarListaDeEspera`, cron diario): las de días pasados en
@@ -140,6 +151,8 @@ export interface DatosDeInscripcion {
   /** Ya en E.164, o null. */
   telefono: string | null
   whatsappConsentimiento?: boolean
+  /** Clínica dental: la primera vez del paciente suma minutos a la duración. En otro rubro se ignora. */
+  primeraVez?: boolean
 }
 
 export type ResultadoDeInscripcion =
@@ -163,9 +176,14 @@ export type ResultadoDeInscripcion =
  * trabaja, o está bloqueado entero) pero otro sí, se anota con "cualquiera"
  * (#166): si no, el aviso se calculaba sólo para esa persona y nunca llegaba.
  * La respuesta es la misma en los dos casos: no dice nada de su agenda.
+ *
+ * Clínica dental (`negocio.type`), con las reglas de la reserva
+ * (`lib/reserva-publica.ts`): la primera vez suma minutos a la duración
+ * (`duracionDeLaReserva`), así que un día que la página mostró sin horas no
+ * se rechaza con "todavía hay horas"; y una urgencia sólo espera por hoy.
  */
 export async function inscribirEnListaDeEspera(
-  negocio: { id: string; timezone: string | null },
+  negocio: { id: string; timezone: string | null; type?: string | null },
   datos: DatosDeInscripcion,
   ahora = new Date()
 ): Promise<ResultadoDeInscripcion> {
@@ -177,12 +195,20 @@ export async function inscribirEnListaDeEspera(
   if (!servicios) return { tipo: "no-encontrada" }
   const serviceIds = servicios.map((servicio) => servicio.id)
   const servicioId = serviceIds[0]
-  const { duracion } = resumenDeLaReserva(servicios)
+  const clinicaDental = esRubroDental(negocio.type)
+  const duracion = duracionDeLaReserva(resumenDeLaReserva(servicios).duracion, {
+    clinicaDental,
+    primeraVez: datos.primeraVez === true,
+  })
 
   const zona = zonaDelNegocio(negocio.timezone)
   const noReservable = fechaNoReservable(datos.fecha, ahora, zona)
   if (noReservable) {
     return { tipo: "rechazada", error: noReservable === "pasada" ? MENSAJE_FECHA_PASADA : MENSAJE_FECHA_MUY_LEJANA }
+  }
+  // Una urgencia se atiende el mismo día: no se espera por otro, como no se reserva para otro.
+  if (esReservaDeUrgencia(clinicaDental, servicios) && !esHoyEn(datos.fecha, ahora, zona)) {
+    return { tipo: "rechazada", error: MENSAJE_URGENCIA_SOLO_HOY }
   }
 
   const elegido = datos.profesionalId || null
@@ -277,8 +303,9 @@ export async function inscribirEnListaDeEspera(
 
 /**
  * Al confirmar una reserva: las inscripciones activas de ese email para ese
- * día en el negocio pasan a "reservo" y no se les avisa más. Va con el `tx`
- * de `confirmar`, así que queda junto con la cita o no queda.
+ * día en el negocio pasan a "reservo", no se les avisa más y se borran sus
+ * datos personales (como al salir o expirar: ya no hacen falta). Va con el
+ * `tx` de `confirmar`, así que queda junto con la cita o no queda.
  */
 export async function marcarReservo(
   db: Pick<Prisma.TransactionClient, "inscripcionEnEspera">,
@@ -288,7 +315,7 @@ export async function marcarReservo(
   if (!email) return 0
   const { count } = await db.inscripcionEnEspera.updateMany({
     where: { businessId: datos.businessId, email, fecha: datos.fecha, estado: "activa" },
-    data: { estado: "reservo", resueltaAt: datos.ahora },
+    data: { estado: "reservo", resueltaAt: datos.ahora, ...SIN_DATOS_PERSONALES },
   })
   return count
 }

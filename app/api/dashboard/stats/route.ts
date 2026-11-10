@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -13,7 +13,8 @@ import {
   whereDePagos,
   type Actor,
 } from "@/lib/permisos"
-import { esZonaHorariaValida, iniciosDeMesEn } from "@/lib/reportes"
+import { iniciosDeMesEn } from "@/lib/reportes"
+import { diaDeLaSemana, fechaYMinutosEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 import { LLEGADA_DE_LA_CITA, conLlegada } from "@/lib/por-confirmar"
 import { ESTADOS_QUE_LIBERAN } from "@/lib/ocupacion"
 
@@ -57,22 +58,11 @@ async function sumaDePagos(actor: Actor, paidAt: { gte: Date; lt?: Date }): Prom
   return deCentavos(_sum.amountCents ?? 0)
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   const session = await getServerSession(authOptions)
   const actor = actorDeSesion(session)
   if (!actor) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
-  }
-
-  // La zona de quien mira, opcional. Con ella, el mes de los ingresos es el
-  // de su calendario, igual que en Reportes; sin ella, el del servidor, como
-  // siempre. Vacía es lo mismo que no mandarla.
-  const zona = new URL(request.url).searchParams.get("zona") || null
-  if (zona !== null && !esZonaHorariaValida(zona)) {
-    return NextResponse.json(
-      { error: "La zona horaria no es una zona IANA válida, como America/Santiago." },
-      { status: 400 }
-    )
   }
 
   const verIngresos = puedeVerIngresosDelNegocio(actor)
@@ -82,17 +72,20 @@ export async function GET(request: NextRequest) {
   const conHorarioDeHoy = veElPanelDeSuDia(actor)
   const businessId = actor.businessId
 
-  const hoy = new Date()
-  hoy.setHours(0, 0, 0, 0)
-  const manana = new Date(hoy)
-  manana.setDate(manana.getDate() + 1)
-
-  const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
-  const inicioMesAnterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1)
-  // Los meses de los ingresos. Con la hora del servidor (UTC), un cobro del
-  // 30 de septiembre a las 22:30 en Santiago ya cae en octubre, y el inicio
-  // no coincidía con Reportes en el borde del mes.
-  const mesesDeIngresos = zona ? iniciosDeMesEn(new Date(), zona) : { inicioMes, inicioMesAnterior }
+  // "Hoy", el mes y el día de la semana son los del NEGOCIO (`Business.timezone`),
+  // como en /api/dashboard/clinica: ni los del servidor (en Vercel, UTC: a las
+  // 21:30 en Santiago ya era mañana y "Citas de hoy" salía vacía) ni los del
+  // navegador de quien mira (una dueña de viaje vería otro día). El parámetro
+  // `zona` que mandaba el panel ya no se lee. La zona viaja en la respuesta para
+  // que el panel muestre las horas en ella.
+  const negocio = await prisma.business.findUnique({ where: { id: businessId }, select: { timezone: true } })
+  const zona = zonaDelNegocio(negocio?.timezone)
+  const ahora = new Date()
+  const fechaDeHoy = fechaYMinutosEn(ahora, zona).fecha
+  const { desde: hoy, hasta: manana } = rangoDelDiaEn(fechaDeHoy, zona)
+  // Los meses de los ingresos y de los clientes nuevos. Un cobro del 30 de
+  // septiembre a las 22:30 en Santiago es de septiembre, como en Reportes.
+  const { inicioMes, inicioMesAnterior } = iniciosDeMesEn(ahora, zona)
 
   const [citasHoy, totalClientes, clientesMesAnterior, clientesNuevosMes, ingresosMes, atencionesCobradasMes, ingresosMesAnterior, franjasHoy] =
     await Promise.all([
@@ -131,15 +124,15 @@ export async function GET(request: NextRequest) {
       // La facturación es del negocio: no se calcula siquiera si el actor no
       // puede verla. `atencionesCobradasMes` dice sobre cuántas atenciones
       // está hecha la suma.
-      verIngresos ? sumaDePagos(actor, { gte: mesesDeIngresos.inicioMes }) : Promise.resolve(0),
+      verIngresos ? sumaDePagos(actor, { gte: inicioMes }) : Promise.resolve(0),
       verIngresos
-        ? prisma.visit.count({ where: whereDeAtenciones(actor, cobradasEn({ gte: mesesDeIngresos.inicioMes })) })
+        ? prisma.visit.count({ where: whereDeAtenciones(actor, cobradasEn({ gte: inicioMes })) })
         : Promise.resolve(0),
       // El mes anterior termina donde empieza este (`lt`). Con `lte` contra
       // las 00:00 de su último día, como se comparaba antes, ese día quedaba
       // afuera de la comparación.
       verIngresos
-        ? sumaDePagos(actor, { gte: mesesDeIngresos.inicioMesAnterior, lt: mesesDeIngresos.inicioMes })
+        ? sumaDePagos(actor, { gte: inicioMesAnterior, lt: inicioMes })
         : Promise.resolve(0),
       // Horario propio de hoy, sólo para el profesional. Nunca acepta un
       // `memberId` de querystring (a diferencia de /api/configuracion/horarios):
@@ -151,7 +144,7 @@ export async function GET(request: NextRequest) {
             where: {
               businessId,
               memberId: actor.memberId,
-              dayOfWeek: hoy.getDay(),
+              dayOfWeek: diaDeLaSemana(fechaDeHoy),
               // `active: false` es un día marcado como libre a propósito
               // (configuracion/horarios): para esta vista es lo mismo que no
               // tener horario cargado, así que no cuenta como franja de hoy.
@@ -191,6 +184,7 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
+    zona,
     citasHoy: citasHoy.length,
     citasHoyLista: citasHoy.map(conLlegada),
     ...(proximaCita && { proximaCita }),

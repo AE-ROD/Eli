@@ -67,6 +67,17 @@ describe("PUT /api/configuracion/hora-valle (#89c)", () => {
     expect(franjasDe(OTRO_NEGOCIO)).toEqual([expect.objectContaining(FRANJA_AJENA)])
   })
 
+  it("reemplazar va bajo el candado de las franjas del negocio, antes de borrarlas", async () => {
+    await guardar(sesiones.dueña, { activa: true, franjas: [FRANJA] })
+
+    const [sql, clave] = base.prisma.$executeRaw.mock.calls[0] as [TemplateStringsArray, string]
+    expect(sql.join("?")).toContain("pg_advisory_xact_lock")
+    expect(clave).toBe(`hora-valle:${NEGOCIO}`)
+    expect(base.prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      base.prisma.franjaDeHoraValle.deleteMany.mock.invocationCallOrder[0]
+    )
+  })
+
   it("el dueño de otro negocio sólo toca el suyo", async () => {
     expect((await guardar(sesiones.dueñoAjeno, { activa: true, franjas: [FRANJA] })).status).toBe(200)
     expect(activaEn(OTRO_NEGOCIO)).toBe(true)

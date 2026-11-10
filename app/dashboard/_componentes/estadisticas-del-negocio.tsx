@@ -27,9 +27,16 @@ function procedenciaDeCitas(estadisticas: EstadisticasDelPanel): string | undefi
   if (estadisticas.citasHoy > 0) return undefined
   if (!estadisticas.proximaCita) return "Ninguna agendada todavía."
 
+  // El día y la hora en la zona del negocio, la misma con la que el servidor decidió qué es "hoy".
+  const { zona } = estadisticas
   const cuando = new Date(estadisticas.proximaCita.startTime)
-  const dia = cuando.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
-  return `La próxima es el ${dia} a las ${formatearHora(estadisticas.proximaCita.startTime)}.`
+  const dia = cuando.toLocaleDateString("es-CL", {
+    ...(zona && { timeZone: zona }),
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  })
+  return `La próxima es el ${dia} a las ${formatearHora(estadisticas.proximaCita.startTime, zona)}.`
 }
 
 function procedenciaDeClientes(estadisticas: EstadisticasDelPanel): string | undefined {

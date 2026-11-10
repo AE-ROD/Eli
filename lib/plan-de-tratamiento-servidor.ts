@@ -33,6 +33,7 @@ import {
   type PrestacionRespuesta,
 } from "@/lib/edicion-del-plan"
 import { ordenarCaras } from "@/lib/odontograma"
+import { atiendeCitas } from "@/lib/agenda-publica"
 import {
   esDueño,
   puedeEditarPlanDeTratamiento,
@@ -256,10 +257,15 @@ async function servicioDelNegocio(tx: Tx, actor: Actor, serviceId: string) {
   return servicio
 }
 
+/** El 400 al elegir como profesional de una prestación a alguien que no atiende (el encargado). */
+const MENSAJE_PROFESIONAL_QUE_NO_ATIENDE =
+  "Esa persona no atiende pacientes: elige un odontólogo del equipo, a la dueña o déjala sin asignar"
+
 /**
  * Quién hace la prestación, con el nombre copiado: el dueño (`memberId` null
- * con su nombre), un miembro del negocio, o nadie. Un miembro que no es del
- * negocio es 404.
+ * con su nombre), un odontólogo del negocio (un miembro que atiende,
+ * `atiendeCitas`: el encargado es recepción y no atiende), o nadie. Un
+ * miembro que no es del negocio es 404; uno que no atiende, 400.
  */
 async function profesionalPedido(
   tx: Tx,
@@ -276,9 +282,10 @@ async function profesionalPedido(
   if (!pedido.memberId) return { memberId: null, profesionalNombre: null }
   const miembro = await tx.businessMember.findFirst({
     where: { id: pedido.memberId, businessId: actor.businessId },
-    select: { id: true, user: { select: { name: true } } },
+    select: { id: true, role: true, user: { select: { name: true } } },
   })
   if (!miembro) throw new ErrorClinico(404, "Profesional no encontrado")
+  if (!atiendeCitas(miembro.role)) throw new ErrorClinico(400, MENSAJE_PROFESIONAL_QUE_NO_ATIENDE)
   return { memberId: miembro.id, profesionalNombre: nombreParaCopiar(miembro.user.name) }
 }
 
@@ -615,10 +622,23 @@ export async function editarPrestacion(
       Object.assign(data, await profesionalPedido(tx, actor, pedido))
     }
     if (pedido.estado !== undefined || pedido.appointmentId !== undefined) {
-      const resultado = estadoSiguienteDePrestacion(actual, pedido, await horaDeLaBase(tx))
+      const ahora = await horaDeLaBase(tx)
+      const resultado = estadoSiguienteDePrestacion(actual, pedido, ahora)
       if (!resultado.ok) throw new ErrorClinico(400, resultado.error)
       const { cambio } = resultado
-      if (cambio.appointmentId && cambio.appointmentId !== actual.appointmentId) {
+      // Agendada (en otra cita, o al volver a agendada desde otro estado): la
+      // cita se revisa de nuevo y tiene que estar por delante; la que tenía
+      // pudo pasar o cerrarse mientras la prestación estaba en otro estado.
+      const quedaAgendada =
+        cambio.estado === "agendada" &&
+        cambio.appointmentId &&
+        (cambio.appointmentId !== actual.appointmentId || actual.estado !== "agendada")
+      if (quedaAgendada && cambio.appointmentId) {
+        await citaDelPaciente(tx, actor, pacienteId, cambio.appointmentId, CITA_NO_SIRVE_PARA_PRESTACION, {
+          regla: "por-delante",
+          ahora,
+        })
+      } else if (cambio.appointmentId && cambio.appointmentId !== actual.appointmentId) {
         await citaDelPaciente(tx, actor, pacienteId, cambio.appointmentId, CITA_NO_SIRVE_PARA_PRESTACION)
       }
       Object.assign(data, cambio)
