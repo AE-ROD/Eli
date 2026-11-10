@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { registrarError } from "@/lib/registro-de-errores"
 import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { z } from "zod"
 import { emailOVacio, etiquetas, nombre, notas, telefonoChileno } from "@/lib/campos-del-panel"
@@ -245,7 +246,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return respuestaDeDatosInvalidos(error)
     }
-    console.error("Error creando cliente:", error)
+    registrarError("creando cliente", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
 }

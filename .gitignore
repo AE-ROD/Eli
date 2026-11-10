@@ -12,6 +12,8 @@ env.txt
 *.dump
 *.sql.gz
 *.bak
+# Volcados o consultas sueltas en la raíz (las migraciones viven en prisma/migrations/).
+/*.sql
 
 # Evidencias y capturas de pruebas o auditorías: pueden traer datos reales.
 evidencias/

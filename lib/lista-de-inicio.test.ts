@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { PASOS_DE_INICIO, cuantosHechos, mostrarListaDeInicio, pruebaTerminada, type PasosHechos } from "./lista-de-inicio"
+import { PASOS_DE_INICIO, cuantosHechos, mostrarListaDeInicio, pasosDeInicioPara, pruebaTerminada, type PasosHechos } from "./lista-de-inicio"
 
 const ninguno: PasosHechos = { horario: false, servicios: false, enlace: false, primeraReserva: false }
 const todos: PasosHechos = { horario: true, servicios: true, enlace: true, primeraReserva: true }
@@ -7,6 +7,14 @@ const todos: PasosHechos = { horario: true, servicios: true, enlace: true, prime
 describe("lista de inicio", () => {
   it("son cuatro pasos, sin repetir", () => {
     expect(PASOS_DE_INICIO.map((paso) => paso.id)).toEqual(["horario", "servicios", "enlace", "primeraReserva"])
+  })
+
+  it("con las palabras del rubro: paciente en una clínica dental, cliente en los demás", () => {
+    const texto = (rubro: string | null) => pasosDeInicioPara(rubro).find((paso) => paso.id === "primeraReserva")?.texto
+    expect(texto("odontologia")).toBe("Cuando un paciente reserve desde tu página, se marca sola.")
+    expect(texto("salon")).toBe("Cuando un cliente reserve desde tu página, se marca sola.")
+    expect(texto(null)).toBe("Cuando un cliente reserve desde tu página, se marca sola.")
+    expect(pasosDeInicioPara("odontologia").map((paso) => paso.id)).toEqual(PASOS_DE_INICIO.map((paso) => paso.id))
   })
 
   it("cuenta los pasos hechos", () => {

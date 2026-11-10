@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import type { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
+import { registrarError } from "@/lib/registro-de-errores"
 import {
   MAXIMO_DE_LINEAS_POR_ATENCION,
   MAXIMO_DE_PAGOS,
@@ -67,7 +68,7 @@ export function respuestaDeError(error: unknown, contexto: string): NextResponse
       { status: error.status }
     )
   }
-  console.error(`Error ${contexto}:`, error)
+  registrarError(contexto, error)
   return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
 }
 

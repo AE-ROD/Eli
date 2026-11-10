@@ -1656,7 +1656,12 @@ model CambioDeRepartoDeProtesis {
  * cambiar estado (hacia adelante, por los pasos del tipo), laboratorio,
  * entrega estimada, tono, las fechas de entrega y anulación, y desvincular a
  * la tratante; una entregada o anulada ya no cambia. No se
- * borra (`protesis_no_se_borra`) salvo con su paciente o su negocio.
+ * borra (`protesis_no_se_borra`) salvo con su paciente o su negocio; y con
+ * su paciente sólo si nada la nombra: un abono (`VisitService.protesisId`)
+ * o una prestación del plan (`PrestacionDelPlan.protesisId`) son FK NO
+ * ACTION y frenan el borrado de la fila del paciente (comprobado contra
+ * Postgres; la app no la borra: la anonimiza; docs/PRODUCTO.md, "Clínica
+ * dental: conservar la ficha").
  */
 model Protesis {
   id                  String             @id @default(cuid())

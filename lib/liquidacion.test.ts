@@ -155,6 +155,17 @@ describe("filasDelComprobante", () => {
     expect(fila(filas, "Total a pagar")).toEqual(["Total a pagar", 32_800])
   })
 
+  it("clínica dental: los encabezados dicen odontólogo y paciente; los demás rubros, como siempre", () => {
+    const dental = filasDelComprobante(detalle, "odontologia")
+    expect(fila(dental, "Odontólogo")).toEqual(["Odontólogo", "Carla"])
+    expect(fila(dental, "Profesional")).toBeUndefined()
+    expect(dental.filter((f) => f[0] === "Fecha").map((f) => f[1])).toEqual(["Paciente", "Paciente", "Movimiento"])
+    const salon = filasDelComprobante(detalle, "salon")
+    expect(fila(salon, "Profesional")).toEqual(["Profesional", "Carla"])
+    expect(salon.filter((f) => f[0] === "Fecha").map((f) => f[1])).toEqual(["Cliente", "Cliente", "Movimiento"])
+    expect(filasDelComprobante(detalle)).toEqual(salon)
+  })
+
   it("anulada: dice que está anulada y el total a pagar queda en 0", () => {
     const filas = filasDelComprobante({
       ...detalle,

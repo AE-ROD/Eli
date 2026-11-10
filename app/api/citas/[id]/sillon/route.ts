@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { registrarError } from "@/lib/registro-de-errores"
 import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, puedeAsignarSillon, puedeVerTodaLaAgenda, whereDeAgenda, whereDeSillones } from "@/lib/permisos"
@@ -119,7 +120,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (error instanceof SillonOcupado) {
       return NextResponse.json({ error: error.message, codigo: error.codigo }, { status: error.status })
     }
-    console.error("Error asignando sillón:", error)
+    registrarError("asignando sillón", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
 

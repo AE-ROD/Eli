@@ -10,6 +10,7 @@ import { nombreEnElNegocio } from "@/lib/tablero"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { sumarDias, zonaDelNegocio } from "@/lib/zona-horaria"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import {
   configuracionDelNegocio,
   fechaDeColumna,
@@ -1062,8 +1063,13 @@ export const enPesos = (centavos: number): number | string =>
  * Anulada (QA#13, igual que el comprobante en pantalla): lo que incluía
  * volvió a quedar pendiente, así que no se paga. Lo de cuando se cerró queda
  * como "Total al cerrarse (anulada)" y el total a pagar es 0.
+ *
+ * `rubro`: en una clínica dental los encabezados dicen "Odontólogo" y
+ * "Paciente" (`vocabularioDe`); en los demás rubros, como siempre.
  */
-export function filasDelComprobante(detalle: DetalleDeLiquidacion): (string | number | null)[][] {
+export function filasDelComprobante(detalle: DetalleDeLiquidacion, rubro?: string | null): (string | number | null)[][] {
+  const palabras = vocabularioDe(rubro)
+  const cliente = conMayuscula(palabras.cliente)
   const t = detalle.totales
   const vacia: (string | null)[] = []
   const anulada = detalle.estado === "anulada"
@@ -1072,7 +1078,7 @@ export function filasDelComprobante(detalle: DetalleDeLiquidacion): (string | nu
   const conProtesis = detalle.protesis.length > 0 || t.comisionProtesisCents !== 0
   return [
     ["Liquidación", detalle.texto],
-    ["Profesional", detalle.miembro],
+    [conMayuscula(palabras.profesional), detalle.miembro],
     ["Período", `${detalle.desde} al ${detalle.hasta}`],
     ["Estado", NOMBRES_DE_ESTADO[detalle.estado]],
     ["Pagada con", detalle.medioDePagoTexto],
@@ -1084,7 +1090,7 @@ export function filasDelComprobante(detalle: DetalleDeLiquidacion): (string | nu
         ]
       : []),
     vacia,
-    ["Fecha", "Cliente", "Detalle", "Tipo", "Precio", "% comisión", "Comisión"],
+    ["Fecha", cliente, "Detalle", "Tipo", "Precio", "% comisión", "Comisión"],
     ...detalle.lineas.map((l) => [
       l.fecha,
       l.cliente,
@@ -1097,7 +1103,7 @@ export function filasDelComprobante(detalle: DetalleDeLiquidacion): (string | nu
     ...(conProtesis
       ? [
           vacia,
-          ["Liberado el", "Cliente", "Prótesis", "Cobrado el", "Entregada el", "Abono", "Parte de la odontóloga"],
+          ["Liberado el", cliente, "Prótesis", "Cobrado el", "Entregada el", "Abono", "Parte de la odontóloga"],
           ...detalle.protesis.map((a) => [
             a.fecha,
             a.cliente,
@@ -1110,7 +1116,7 @@ export function filasDelComprobante(detalle: DetalleDeLiquidacion): (string | nu
         ]
       : []),
     vacia,
-    ["Fecha", "Cliente", "Propina", "Medio", "Monto"],
+    ["Fecha", cliente, "Propina", "Medio", "Monto"],
     ...detalle.propinas.map((p) => [p.fecha, p.cliente, "Propina", nombreDeMedio(p.medio), enPesos(p.montoCents)]),
     vacia,
     ["Fecha", "Movimiento", "Motivo", "Monto"],

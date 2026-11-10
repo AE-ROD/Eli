@@ -10,7 +10,7 @@ import {
 } from "./invitaciones-de-equipo"
 
 const mockEnviarInvitacion = vi.fn(async (..._args: unknown[]) => null)
-const mockBuscarNegocio = vi.fn(async (..._args: unknown[]) => ({ name: "Salón Uno" }))
+const mockBuscarNegocio = vi.fn(async (..._args: unknown[]): Promise<{ name: string; type: string } | null> => ({ name: "Salón Uno", type: "salon" }))
 
 // Hoisted por vitest: el módulo no llega a conectarse a la base ni a Resend.
 vi.mock("@/lib/prisma", () => ({ prisma: { business: { findUnique: (...a: unknown[]) => mockBuscarNegocio(...a) } } }))
@@ -67,6 +67,13 @@ describe("mandarCorreoDeInvitacion", () => {
     vi.stubEnv("NEXTAUTH_URL", "https://eli.app")
     await mandarCorreoDeInvitacion(datos)
     expect(mockEnviarInvitacion).toHaveBeenCalledWith(expect.objectContaining({ enlaceAceptar: "https://eli.app/unirse/tok" }))
+  })
+
+  it("lleva el rubro del negocio, para que el rol diga \"Odontólogo\" en una clínica dental", async () => {
+    vi.stubEnv("NEXTAUTH_URL", "https://eli.app")
+    mockBuscarNegocio.mockResolvedValueOnce({ name: "Clínica Uno", type: "odontologia" })
+    await mandarCorreoDeInvitacion(datos)
+    expect(mockEnviarInvitacion).toHaveBeenCalledWith(expect.objectContaining({ nombreNegocio: "Clínica Uno", rubro: "odontologia" }))
   })
 
   it("en producción sin NEXTAUTH_URL no manda un enlace a localhost, y no lanza (la invitación queda para reenviar)", async () => {

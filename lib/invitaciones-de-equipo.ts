@@ -72,13 +72,14 @@ export async function mandarCorreoDeInvitacion(datos: DatosDelCorreo): Promise<v
     registrarError("armando el enlace de la invitación", error)
     return
   }
-  const negocio = await prisma.business.findUnique({ where: { id: datos.businessId }, select: { name: true } })
+  const negocio = await prisma.business.findUnique({ where: { id: datos.businessId }, select: { name: true, type: true } })
 
   await enviarInvitacionTrabajador({
     emailTrabajador: datos.email,
     nombreTrabajador: datos.nombre,
     nombreNegocio: negocio?.name ?? datos.nombreDeRespaldo,
     rol: datos.rol,
+    rubro: negocio?.type ?? null,
     enlaceAceptar: `${baseUrl}/unirse/${datos.token}`,
   }).catch(() => null)
 }

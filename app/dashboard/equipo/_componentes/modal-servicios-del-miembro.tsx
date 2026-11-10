@@ -5,8 +5,10 @@ import { Check, LoaderCircle } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import {
   guardarServiciosDelMiembro,
   leerCatalogoDeServicios,
@@ -33,6 +35,8 @@ const CASILLA = "size-4 shrink-0 accent-navy"
  * la persona sólo aparece para los servicios que hace.
  */
 export function ModalServiciosDelMiembro({ miembro, alCerrar, alGuardar }: PropsDeModalServiciosDelMiembro) {
+  // "tus pacientes" en una clínica dental.
+  const { clientes } = vocabularioDe(useRubroDelPanel())
   const [catalogo, setCatalogo] = useState<ServicioDelCatalogo[]>([])
   const [todos, setTodos] = useState(true)
   const [elegidos, setElegidos] = useState<Set<string>>(new Set())
@@ -88,7 +92,7 @@ export function ModalServiciosDelMiembro({ miembro, alCerrar, alGuardar }: Props
     <MarcoDeModal
       titulo={`Servicios de ${miembro.user.name}`}
       antetitulo="Equipo"
-      descripcion="En la página de reservas, tus clientes sólo pueden elegir a esta persona para los servicios que hace."
+      descripcion={`En la página de reservas, tus ${clientes} sólo pueden elegir a esta persona para los servicios que hace.`}
       bloqueado={guardando}
       alCerrar={alCerrar}
     >

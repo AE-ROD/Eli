@@ -974,9 +974,17 @@ export function crearBaseFalsa() {
     throw errorDeTrigger(`eventos_de_protesis ${String(viejo.id)}: un paso del seguimiento no se edita`)
   }
 
-  /** El mismo trigger, en el DELETE: sólo en la cascada de su prótesis. */
+  /**
+   * El mismo trigger, en el DELETE: sólo en la cascada de su prótesis, del
+   * paciente de esa prótesis o de su negocio. Desde
+   * `20261110120000_etapa_8_endurecer_protesis` mira los tres, como
+   * `protesisNoSeBorra`: al borrar un negocio, Postgres puede correr la
+   * cascada de los eventos antes que la de las prótesis.
+   */
   function eventoNoSeBorra(viejo: Registro) {
-    if (tablas.protesis.some((fila) => fila.id === viejo.protesisId)) {
+    const protesis = tablas.protesis.find((fila) => fila.id === viejo.protesisId)
+    const existe = (modelo: NombreDeModelo, id: unknown) => tablas[modelo].some((fila) => fila.id === id)
+    if (protesis && existe("customer", protesis.customerId) && existe("business", viejo.businessId)) {
       throw errorDeTrigger(`eventos_de_protesis ${String(viejo.id)}: un paso del seguimiento no se borra`)
     }
   }
@@ -992,6 +1000,8 @@ export function crearBaseFalsa() {
    * del mismo paciente que su atención, va a nombre de la tratante de la
    * prótesis (`memberId` a null sigue permitido: desvincular) y sólo entra a
    * una liquidación con la prótesis entregada y a nombre de la tratante.
+   * Desde la etapa 8 (`20261110120000_etapa_8_endurecer_protesis`), una
+   * prótesis anulada no recibe abonos nuevos (ni una línea pasa a ella).
    * `viejo` es `null` en un INSERT.
    */
   function abonoDeProtesis(viejo: Registro | null, nuevo: Registro) {
@@ -1049,6 +1059,9 @@ export function crearBaseFalsa() {
 
     // Etapa 7d. `protesis` existe: la FK y la regla de negocio de arriba ya lo exigen.
     if (!protesis) return
+    if (cambiaLinea && protesis.estado === "anulada") {
+      throw errorDeTrigger(`atencion_servicios ${id}: la prótesis está anulada y no recibe abonos`)
+    }
     if (cambiaLinea && distintos(protesis.customerId, atencion?.customerId)) {
       throw errorDeTrigger(`atencion_servicios ${id}: la prótesis es de otro paciente`)
     }

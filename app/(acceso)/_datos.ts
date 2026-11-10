@@ -98,6 +98,8 @@ export interface Invitacion {
   email: string
   rol: string
   negocio: string
+  /** El rubro del negocio que invita, para nombrar el rol ("Odontólogo" en una clínica dental). */
+  rubro?: string | null
 }
 
 /**

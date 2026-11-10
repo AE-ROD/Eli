@@ -258,7 +258,7 @@ export default function PaginaUnirse() {
       <div>
         <dt className="text-texto-2">Tu rol</dt>
         {/* Los nombres del producto, los mismos del correo de la invitación. */}
-        <dd className="mt-1 font-medium">{nombreDelRol(invitacion?.rol)}</dd>
+        <dd className="mt-1 font-medium">{nombreDelRol(invitacion?.rol, invitacion?.rubro)}</dd>
       </div>
     </dl>
   )

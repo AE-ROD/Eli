@@ -1787,6 +1787,24 @@ describe("base falsa: las prótesis (etapa 7)", () => {
       await expect(prisma.visitService.update({ where: { id: "ab1" }, data: { liquidacionId: "liq1" } })).rejects.toThrow(/sólo se liquida/)
     })
 
+    it("etapa 8: una prótesis anulada no recibe abonos nuevos ni una línea pasa a ella; lo que ya tenía queda", async () => {
+      base.reiniciar({
+        ...conPacientes(),
+        protesis: [
+          ...conPacientes().protesis,
+          { ...datos().protesis[0], id: "anulada", estado: "anulada", anuladaEn: new Date(1), anuladaPorNombre: "Ana" },
+        ],
+        visitService: [
+          ...conPacientes().visitService,
+          { id: "ab-viejo", visitId: "v1", serviceId: null, serviceName: "Abono", memberId: "m1", professionalName: "Ana", priceCents: 5, protesisId: "anulada" },
+        ],
+      })
+      await expect(abono("a-la-anulada", { protesisId: "anulada" })).rejects.toThrow(/23514.*anulada y no recibe abonos/)
+      await expect(prisma.visitService.update({ where: { id: "ab1" }, data: { protesisId: "anulada" } })).rejects.toThrow(rechazo)
+      await expect(prisma.visitService.update({ where: { id: "ab-viejo" }, data: { priceCents: 4 } })).resolves.toMatchObject({ priceCents: 4 })
+      await expect(abono("a-la-viva", {})).resolves.toBeTruthy()
+    })
+
     it("una línea sin prótesis no se mira", async () => {
       await expect(
         prisma.visitService.create({ data: { id: "normal", visitId: "v3", serviceName: "Limpieza", memberId: "m3", professionalName: "X", priceCents: 1 } })
@@ -1809,6 +1827,13 @@ describe("base falsa: las prótesis (etapa 7)", () => {
       base.reiniciar({ ...datos(), visitService: [] })
       await prisma.customer.delete({ where: { id: "c1" } })
       expect(base.buscar("protesis")).toEqual([])
+      expect(base.buscar("eventoDeProtesis")).toEqual([])
+    })
+
+    it("etapa 8: un evento se borra en la cascada de su paciente; suelto, con todo vivo, no", async () => {
+      base.reiniciar({ ...datos(), visitService: [] })
+      await expect(prisma.eventoDeProtesis.delete({ where: { id: "evp1" } })).rejects.toThrow(/no se borra/)
+      await prisma.customer.delete({ where: { id: "c1" } })
       expect(base.buscar("eventoDeProtesis")).toEqual([])
     })
 

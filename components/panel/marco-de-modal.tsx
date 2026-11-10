@@ -6,6 +6,7 @@ import { X } from "lucide-react"
 import { Antetitulo } from "@/components/comunes/antetitulo"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { ANILLO_DE_FOCO } from "@/components/panel/estilos"
+import { crearBloqueoDeScroll } from "@/components/panel/bloqueo-de-scroll"
 import { crearPilaDeDialogos, destinoAlCerrar, type DialogoEnLaPila } from "@/components/panel/pila-de-dialogos"
 import { cn } from "@/lib/utils"
 
@@ -37,6 +38,12 @@ const ENFOCABLES = [
 
 /** Los diálogos abiertos: sólo el de arriba atiende teclas y foco (`pila-de-dialogos.ts`). */
 const DIALOGOS_ABIERTOS = crearPilaDeDialogos<HTMLElement>()
+
+/** La página de atrás no se desplaza mientras haya un diálogo abierto (`components/panel/bloqueo-de-scroll.ts`). */
+const SCROLL_DE_LA_PAGINA = crearBloqueoDeScroll(
+  () => document.documentElement.style,
+  () => window.innerWidth - document.documentElement.clientWidth
+)
 
 /** Los campos del formulario: adonde vuelve el foco si lo que lo tenía ya no se puede usar. */
 const CAMPOS = 'input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled])'
@@ -114,6 +121,7 @@ interface PropsDeMarcoDeModal {
  *   Tab y el foco; al cerrarse, el de abajo vuelve a atenderlos;
  * - si lo que lo abrió estaba en otro diálogo que ya se fue (uno reemplazó a
  *   otro), al cerrarse el foco va adonde iría aquél, no al `<body>`.
+ * - mientras está abierto, la página de atrás no se desplaza.
  *
  * Mientras sale (la animación de cierre de `AnimatePresence`) sigue a la
  * vista pero ya no es el diálogo activo: no atrapa el foco ni atiende teclas,
@@ -224,6 +232,12 @@ export function MarcoDeModal({
       document.removeEventListener("focusin", alEnfocarAfuera)
     }
   }, [presente, enLaPila])
+
+  // Mientras está a la vista y no salió, la página de atrás no se desplaza.
+  useEffect(() => {
+    if (!presente) return
+    return SCROLL_DE_LA_PAGINA.bloquear()
+  }, [presente])
 
   // Al abrirse el foco entra; al cerrarse vuelve a lo que abrió el diálogo.
   useEffect(() => {

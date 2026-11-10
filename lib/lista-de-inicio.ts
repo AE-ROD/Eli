@@ -9,6 +9,7 @@
  */
 
 import { pedir, type Resultado } from "@/lib/peticiones"
+import { vocabularioDe } from "@/lib/vocabulario"
 
 export type IdDePasoDeInicio = "horario" | "servicios" | "enlace" | "primeraReserva"
 
@@ -52,6 +53,17 @@ export const PASOS_DE_INICIO: readonly PasoDeInicio[] = [
 ]
 
 /** Lo que devuelve `GET /api/dashboard/lista-de-inicio`. */
+/**
+ * Los pasos con las palabras del rubro: en una clínica dental, "Cuando un
+ * paciente reserve…"; en los demás rubros, como en `PASOS_DE_INICIO`.
+ */
+export function pasosDeInicioPara(rubro: string | null | undefined): PasoDeInicio[] {
+  const { cliente } = vocabularioDe(rubro)
+  return PASOS_DE_INICIO.map((paso) =>
+    paso.id === "primeraReserva" ? { ...paso, texto: `Cuando un ${cliente} reserve desde tu página, se marca sola.` } : paso
+  )
+}
+
 export interface DatosDeListaDeInicio {
   pasos: PasosHechos
   /** Si ya terminó la prueba gratis: entonces la lista no se muestra. */

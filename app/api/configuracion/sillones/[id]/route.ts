@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth"
 import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { registrarError } from "@/lib/registro-de-errores"
 import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, puedeGestionarSillones, veSillones, whereDeSillones } from "@/lib/permisos"
@@ -72,7 +73,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return NextResponse.json({ error: MENSAJE_NOMBRE_REPETIDO }, { status: 409 })
     }
-    console.error("Error editando sillón:", error)
+    registrarError("editando sillón", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
 

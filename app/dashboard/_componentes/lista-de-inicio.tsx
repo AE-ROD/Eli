@@ -8,7 +8,7 @@ import { Insignia } from "@/components/comunes/insignia"
 import { Tarjeta } from "@/components/comunes/tarjeta"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
-import { PASOS_DE_INICIO, cuantosHechos, type PasosHechos } from "@/lib/lista-de-inicio"
+import { cuantosHechos, pasosDeInicioPara, type PasosHechos } from "@/lib/lista-de-inicio"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 
@@ -22,9 +22,11 @@ import { vocabularioDe } from "@/lib/vocabulario"
  */
 export function ListaDeInicio({ pasos }: { pasos: PasosHechos }) {
   const idDelTitulo = useId()
-  const { clientes } = vocabularioDe(useRubroDelPanel())
+  const rubro = useRubroDelPanel()
+  const { clientes } = vocabularioDe(rubro)
+  const pasosDelRubro = pasosDeInicioPara(rubro)
   const hechos = cuantosHechos(pasos)
-  const total = PASOS_DE_INICIO.length
+  const total = pasosDelRubro.length
 
   return (
     <Tarjeta como="section" aria-labelledby={idDelTitulo} className="rounded-panel p-5 sm:p-6">
@@ -60,7 +62,7 @@ export function ListaDeInicio({ pasos }: { pasos: PasosHechos }) {
       </div>
 
       <ol className="mt-5 divide-y divide-borde">
-        {PASOS_DE_INICIO.map((paso, indice) => {
+        {pasosDelRubro.map((paso, indice) => {
           const hecho = pasos[paso.id]
           return (
             <li key={paso.id} className="flex flex-wrap items-center gap-x-4 gap-y-3 py-4 first:pt-1 last:pb-0">
