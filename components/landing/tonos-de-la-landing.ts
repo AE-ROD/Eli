@@ -1,7 +1,8 @@
 /**
  * Los cuatro tintes con que la landing distingue pasos, tarjetas y piezas, en
- * el orden en que se reparten: ciruela, frambuesa, pistacho y añil. Las
- * clases van escritas enteras para que Tailwind las vea.
+ * el orden en que se reparten: ciruela, frambuesa, pistacho y añil. Los
+ * nombres son históricos (`app/globals.css`): hoy son burdeos, rojo, arena y
+ * tierra. Las clases van escritas enteras para que Tailwind las vea.
  *
  * - `suave`: el fondo de la tarjeta, del cuadro de un ícono o de un paso.
  * - `texto`: texto e íconos sobre crema, blanco o su suave (todos pasan 4,5:1).
@@ -10,8 +11,9 @@
  * - `anillo`: el halo del número del paso activo (`ring-*`).
  * - `barra`: el color fuerte de una barra de gráfico sobre blanco. Decorativo.
  *
- * Sobre un `suave` de ciruela, frambuesa o añil, el gris `texto-2` no llega a
- * 4,5:1: el texto secundario va en `text-navy/75`.
+ * Sobre cualquier `suave` el gris `texto-2` de la landing (#6E5E58) pasa 4,5:1
+ * por poco (4,6 a 5,2): si el texto es chico y delgado, `text-navy/75` es más
+ * seguro.
  */
 export type TonoDeLanding = "ciruela" | "frambuesa" | "pistacho" | "anil"
 

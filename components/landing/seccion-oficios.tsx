@@ -17,12 +17,15 @@ const INTERVALO_MS = 5500
 
 interface FotoDeOficio {
   /**
-   * El archivo en `public/landing/oficios/`, cuando el dueño lo suba. Mientras
-   * falte se pinta un reemplazo de color con el ícono del oficio: nunca un
-   * `<img>` con un archivo que no existe. Al subirlo, se escribe acá su
-   * nombre (p. ej. `"odontologia.jpg"`).
+   * Ruta pública de la foto (`/landing/<oficio>/<archivo>.jpg`, vertical 3:4).
+   * Son material de referencia de terceros: hay que cambiarlas por
+   * licenciadas antes del lanzamiento (`docs/PRODUCTO.md`, §10). Si el
+   * archivo falta, se pinta un reemplazo de color con el ícono del oficio:
+   * nunca un `<img>` roto.
    */
-  archivo?: string
+  src: string
+  /** Lo que muestra, en español. */
+  descripcion: string
   /** Las clases de cada color, escritas enteras para que Tailwind las vea. */
   tarjeta: string
   relleno: string
@@ -36,18 +39,13 @@ interface FotoDeOficio {
 
 /**
  * Una foto por oficio, con la tarjeta de color del oficio detrás. Va en la
- * caja de la derecha y, chica y redonda, en la etiqueta del oficio.
- *
- * Fotos esperadas en `public/landing/oficios/` (JPG verticales de 3:4, unos
- * 600×800 px), una por oficio:
- *
- * - peluqueria.jpg (salones de belleza)
- * - barberia.jpg
- * - unas.jpg (spas de uñas)
- * - odontologia.jpg
+ * caja de la derecha y, chica y redonda, en la etiqueta del oficio. Son las
+ * mismas fotos de la sección de áreas.
  */
 const FOTOS: Record<string, FotoDeOficio> = {
   "Salones de belleza": {
+    src: "/landing/peluqueria/pel-pelo.jpg",
+    descripcion: "Tres cabelleras vistas de espalda",
     tarjeta: "bg-lavanda",
     relleno: "bg-lavanda/35",
     texto: "text-ciruela",
@@ -56,14 +54,18 @@ const FOTOS: Record<string, FotoDeOficio> = {
     retraso: "0s",
   },
   Barberías: {
+    src: "/landing/barberia/bar-barbero.jpg",
+    descripcion: "Barbero perfilando la barba de un cliente",
     tarjeta: "bg-pervinca",
     relleno: "bg-pervinca/35",
-    texto: "text-anil",
+    texto: "text-ciruela",
     lugar: "left-[74%] top-[8.7%] w-[22.5%] aspect-[150/190] rotate-[4deg]",
     duracion: "7s",
     retraso: "-2s",
   },
   "Spas de uñas": {
+    src: "/landing/spa-de-unas/spa-manicura.jpg",
+    descripcion: "Manicurista sonriendo mientras trabaja",
     tarjeta: "bg-rosa",
     relleno: "bg-rosa/35",
     texto: "text-frambuesa-texto",
@@ -72,17 +74,19 @@ const FOTOS: Record<string, FotoDeOficio> = {
     retraso: "-4s",
   },
   Odontología: {
+    src: "/landing/odontologia/odo-dentista.jpg",
+    descripcion: "Dentista atendiendo a una paciente",
     tarjeta: "bg-pistacho",
     relleno: "bg-pistacho/35",
-    texto: "text-pistacho-texto",
+    texto: "text-ciruela",
     lugar: "left-[3.9%] top-[61.5%] w-[25.4%] aspect-[170/200] rotate-[3deg]",
     duracion: "9s",
     retraso: "-6s",
   },
 }
 
-/** El oficio de la historia (el primero del menú) y los otros, que van en etiquetas. */
-const [DESTACADO, ...OTROS] = OFICIOS
+/** Los otros oficios (el primero del menú es el de la historia) van en etiquetas. */
+const [, ...OTROS] = OFICIOS
 
 const HISTORIA = {
   equipo: {
@@ -104,7 +108,7 @@ const OPCIONES = [
 /**
  * "Hecho para cuatro oficios": el titular, un selector "Si trabajas solo /
  * Si tienes equipo" que cambia la historia y la maqueta de la visita, y las
- * etiquetas de los otros oficios. A la derecha, una caja ciruela con la
+ * etiquetas de los otros oficios. A la derecha, una caja arena con la
  * maqueta y una foto por oficio alrededor.
  *
  * El selector pasa solo de una opción a la otra cada 5,5 s. Se detiene con
@@ -151,7 +155,13 @@ export function SeccionOficios() {
   }
 
   return (
-    <SeccionDeLanding id="oficios" etiquetadaPor="oficios-titulo" tono="pistacho">
+    <SeccionDeLanding
+      id="oficios"
+      etiquetadaPor="oficios-titulo"
+      // El fondo arena de este bloque (#E0CDB0 → #D8C3A5) es más oscuro que el crema: el gris
+      // secundario pasa a #3F2A26 (7,8:1) para que el texto chico siga llegando a 4,5:1.
+      className="bg-[linear-gradient(180deg,#e0cdb0,#d8c3a5)] [--color-texto-2:#3f2a26]"
+    >
       <div
         ref={ref}
         onPointerEnter={() => setConCursor(true)}
@@ -186,7 +196,7 @@ export function SeccionOficios() {
           <div
             role="group"
             aria-label="Tamaño del negocio"
-            className="mt-[26px] inline-flex max-w-full gap-0.5 rounded-[16px] bg-superficie p-1"
+            className="mt-[26px] inline-flex max-w-full gap-0.5 rounded-[16px] bg-[#f2e9da] p-1"
           >
             {OPCIONES.map((opcion) => {
               const elegida = (opcion.id === "equipo") === conEquipo
@@ -208,7 +218,7 @@ export function SeccionOficios() {
           </div>
 
           <div className="mt-7 max-w-[500px]">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-frambuesa-texto">{DESTACADO.nombre}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-frambuesa-texto">Salón de belleza</p>
             <h3 className="mt-1.5 text-[1.625rem] font-semibold leading-[1.15] tracking-[-0.035em]">{historia.titulo}</h3>
             <p className="mt-2.5 min-h-[70px] text-[15px] leading-[1.55] text-texto-2">{historia.texto}</p>
           </div>
@@ -251,9 +261,13 @@ export function SeccionOficios() {
   )
 }
 
-/** Una foto del oficio (o su reemplazo) con la tarjeta de color inclinada detrás. Decorativa. */
+/**
+ * Una foto del oficio (o, si falta el archivo, su reemplazo) con la tarjeta
+ * de color inclinada detrás. Decorativa: el oficio ya está en el texto.
+ */
 function FotoGrande({ oficio }: { oficio: Oficio }) {
   const foto = FOTOS[oficio.nombre]
+  const [faltaElArchivo, setFaltaElArchivo] = useState(false)
   if (!foto) return null
   const Icono = oficio.icono
   return (
@@ -263,19 +277,22 @@ function FotoGrande({ oficio }: { oficio: Oficio }) {
         style={{ "--duracion": foto.duracion, "--retraso": foto.retraso } as CSSProperties}
       >
         <div className={cn("absolute inset-0 translate-x-3 translate-y-3.5 -rotate-3 rounded-[26px]", foto.tarjeta)} />
-        <div className="absolute inset-0 overflow-hidden rounded-[26px] border-[3px] border-white bg-tarjeta shadow-maqueta">
-          {foto.archivo ? (
-            <Image
-              src={`/landing/oficios/${foto.archivo}`}
-              alt=""
-              fill
-              sizes="(min-width: 1024px) 160px, 22vw"
-              className="object-cover"
-            />
-          ) : (
+        <div className="absolute inset-0 overflow-hidden rounded-[26px] border-[3px] border-white bg-tarjeta shadow-[0_14px_34px_rgba(31,14,14,0.16)]">
+          {faltaElArchivo ? (
             <div className={cn("grid size-full place-items-center", foto.relleno)}>
               <Icono strokeWidth={1.25} className={cn("size-[42%]", foto.texto)} />
             </div>
+          ) : (
+            <Image
+              src={foto.src}
+              alt={foto.descripcion}
+              width={720}
+              height={960}
+              sizes="(min-width: 1024px) 160px, 22vw"
+              loading="lazy"
+              onError={() => setFaltaElArchivo(true)}
+              className="absolute inset-0 size-full object-cover"
+            />
           )}
         </div>
       </div>
@@ -283,15 +300,25 @@ function FotoGrande({ oficio }: { oficio: Oficio }) {
   )
 }
 
-/** Un oficio en una píldora blanca, con su foto chica y redonda (o su ícono). */
+/** Un oficio en una píldora blanca, con su foto chica y redonda (o su ícono si falta el archivo). */
 function EtiquetaDeOficio({ oficio }: { oficio: Oficio }) {
   const foto = FOTOS[oficio.nombre]
+  const [faltaElArchivo, setFaltaElArchivo] = useState(false)
   const Icono = oficio.icono
   return (
     <span className="inline-flex items-center gap-2.5 rounded-full border border-borde bg-tarjeta py-[5px] pl-[5px] pr-[18px] text-sm font-semibold shadow-sm">
+      {/* El nombre del oficio va al lado: la foto no aporta nada más, `alt` vacío a propósito. */}
       <span aria-hidden="true" className={cn("relative grid size-8 shrink-0 place-items-center overflow-hidden rounded-full", foto?.relleno)}>
-        {foto?.archivo ? (
-          <Image src={`/landing/oficios/${foto.archivo}`} alt="" fill sizes="32px" className="object-cover" />
+        {foto && !faltaElArchivo ? (
+          <Image
+            src={foto.src}
+            alt=""
+            width={96}
+            height={128}
+            loading="lazy"
+            onError={() => setFaltaElArchivo(true)}
+            className="absolute inset-0 size-full object-cover"
+          />
         ) : (
           <Icono strokeWidth={1.75} className={cn("size-4", foto?.texto)} />
         )}

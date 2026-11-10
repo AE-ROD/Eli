@@ -18,16 +18,22 @@ const GIROS_POR_AREA = 3
 /** Un lugar para una foto: izquierda, arriba y ancho, en % del escenario. El alto sale del ancho (3:4). */
 type Lugar = readonly [izquierda: number, arriba: number, ancho: number]
 
+/** Un video corto de una foto: se ve su póster hasta que arranca (y siempre con movimiento reducido o en pausa). */
+interface VideoDeFoto {
+  /** Ruta pública del `.mp4`, sin audio. */
+  src: string
+}
+
 interface FotoDeArea {
   /**
-   * El archivo en `public/landing/areas/`, cuando el dueño lo suba. Mientras
-   * falte se pinta un reemplazo de color con el ícono del área: nunca un
-   * `<img>` con un archivo que no existe. Al subirlo, se escribe acá su
-   * nombre (p. ej. `"odontologia-1.jpg"`).
+   * Ruta pública de la foto (`/landing/<oficio>/<archivo>.jpg`, vertical 3:4).
+   * Si es un video, es su póster. Si el archivo falta, se pinta un reemplazo
+   * de color con el ícono del área: nunca un `<img>` roto.
    */
-  archivo?: string
-  /** Lo que muestra la foto del diseño: la guía para elegir la que se suba. */
-  muestra: string
+  src: string
+  /** Lo que muestra, en español: es el `alt` de la foto o el `aria-label` del video. */
+  descripcion: string
+  video?: VideoDeFoto
 }
 
 interface Area {
@@ -46,17 +52,11 @@ interface Area {
 }
 
 /**
- * Las cuatro áreas, en el orden del diseño.
- *
- * Fotos esperadas en `public/landing/areas/` (JPG de 3:4, unos 600×800 px).
- * En el diseño, la primera de peluquería y la primera de odontología eran
- * videos; acá van como fotos: un video que se reproduce solo necesitaría su
- * propio botón de pausa.
- *
- * - peluqueria-1.jpg, peluqueria-2.jpg, peluqueria-3.jpg
- * - barberia-1.jpg, barberia-2.jpg, barberia-3.jpg
- * - unas-1.jpg, unas-2.jpg, unas-3.jpg
- * - odontologia-1.jpg, odontologia-2.jpg, odontologia-3.jpg
+ * Las cuatro áreas, en el orden del diseño, con las fotos y videos reales de
+ * `public/landing/<oficio>/`. Son material de referencia de terceros: hay que
+ * cambiarlos por licenciados antes del lanzamiento (`docs/PRODUCTO.md`, §10).
+ * Peluquería y odontología abren con un video; de barbería y spa de uñas
+ * todavía no hay videos, sólo fotos.
  */
 const AREAS: readonly Area[] = [
   {
@@ -68,9 +68,13 @@ const AREAS: readonly Area[] = [
     tarjeta: "bg-lavanda",
     relleno: "bg-lavanda/35",
     fotos: [
-      { muestra: "Clienta con balayage largo, antes y después (en el diseño, un video)" },
-      { muestra: "Tres cabelleras vistas de espalda" },
-      { muestra: "Salón de peluquería con espejos y sillones" },
+      {
+        src: "/landing/peluqueria/pel-video.jpg",
+        descripcion: "Clienta con balayage largo, antes y después",
+        video: { src: "/landing/peluqueria/pel-video.mp4" },
+      },
+      { src: "/landing/peluqueria/pel-pelo.jpg", descripcion: "Tres cabelleras vistas de espalda" },
+      { src: "/landing/peluqueria/pel-salon.jpg", descripcion: "Salón de peluquería con espejos y sillones" },
     ],
     lugares: [
       [5, 27.8, 20.83],
@@ -83,13 +87,13 @@ const AREAS: readonly Area[] = [
     nombre: "Barbería",
     icono: Scissors,
     fondo: "bg-pervinca-suave",
-    texto: "text-anil",
+    texto: "text-ciruela",
     tarjeta: "bg-pervinca",
     relleno: "bg-pervinca/35",
     fotos: [
-      { muestra: "Barbero perfilando la barba de un cliente" },
-      { muestra: "Detalle del perfilado de barba" },
-      { muestra: "Interior de una barbería clásica" },
+      { src: "/landing/barberia/bar-barbero.jpg", descripcion: "Barbero perfilando la barba de un cliente" },
+      { src: "/landing/barberia/bar-detalle.jpg", descripcion: "Detalle del perfilado de barba" },
+      { src: "/landing/barberia/bar-local.jpg", descripcion: "Interior de una barbería clásica" },
     ],
     lugares: [
       [73.61, 25.56, 20.83],
@@ -106,9 +110,9 @@ const AREAS: readonly Area[] = [
     tarjeta: "bg-rosa",
     relleno: "bg-rosa/35",
     fotos: [
-      { muestra: "Manicurista sonriendo mientras trabaja" },
-      { muestra: "Manos con guantes y uñas nude" },
-      { muestra: "Salón de pedicure luminoso" },
+      { src: "/landing/spa-de-unas/spa-manicura.jpg", descripcion: "Manicurista sonriendo mientras trabaja" },
+      { src: "/landing/spa-de-unas/spa-manos.jpg", descripcion: "Manos con guantes y uñas nude" },
+      { src: "/landing/spa-de-unas/spa-lounge.jpg", descripcion: "Salón de pedicure luminoso" },
     ],
     lugares: [
       [6.25, 52.22, 19.44],
@@ -121,13 +125,17 @@ const AREAS: readonly Area[] = [
     nombre: "Odontología",
     icono: Smile,
     fondo: "bg-pistacho-suave",
-    texto: "text-pistacho-texto",
+    texto: "text-ciruela",
     tarjeta: "bg-pistacho",
     relleno: "bg-pistacho/35",
     fotos: [
-      { muestra: "Limpieza del sillón dental (en el diseño, un video)" },
-      { muestra: "Tablet mostrando una dentadura" },
-      { muestra: "Dentista atendiendo a una paciente" },
+      {
+        src: "/landing/odontologia/odo-video.jpg",
+        descripcion: "Limpieza del sillón dental",
+        video: { src: "/landing/odontologia/odo-video.mp4" },
+      },
+      { src: "/landing/odontologia/odo-tablet.jpg", descripcion: "Tablet mostrando una dentadura" },
+      { src: "/landing/odontologia/odo-dentista.jpg", descripcion: "Dentista atendiendo a una paciente" },
     ],
     lugares: [
       [75.69, 10, 20.83],
@@ -166,7 +174,11 @@ const FLOTAR_DE_FOTO = [
  *
  * Los oficios son un grupo de botones con `aria-pressed`: el apretado es el
  * que se ve. El que no está elegido queda en navy al 55%, que sobre los
- * cuatro fondos llega a 3,7:1 (texto grande).
+ * cuatro fondos llega a 3,8:1 o más (texto grande).
+ *
+ * Los videos (peluquería y odontología) arrancan sólo mientras su foto está
+ * a la vista y la sección en pantalla y sin pausa: con el botón de pausa o
+ * con movimiento reducido se ve el póster. No tienen audio.
  */
 export function SeccionAreas() {
   const idDelTitulo = useId()
@@ -250,7 +262,7 @@ export function SeccionAreas() {
           <BotonDePausa
             pausado={pausado}
             alCambiar={alternarPausa}
-            etiqueta="Pausar el avance de los tipos de negocio"
+            etiqueta="Pausar el avance de los oficios y los videos"
           />
         </div>
 
@@ -264,6 +276,7 @@ export function SeccionAreas() {
                   key={`${area.id}-${giro}-${orden}`}
                   area={area}
                   foto={foto}
+                  reproducir={!congelada}
                   orden={orden}
                   enTelefono={LUGARES_EN_TELEFONO[lugar]}
                   desdeMd={area.lugares[lugar]}
@@ -323,15 +336,19 @@ interface PropsDeFotoFlotante {
   enTelefono: Lugar
   desdeMd: Lugar
   capa: number
+  /** Los videos corren sólo con esto en `true` (sin pausa y con la sección en pantalla). */
+  reproducir: boolean
 }
 
 /**
- * Una foto del área elegida (o su reemplazo), con una tarjeta de color
- * inclinada detrás. Entra desde abajo y sale hacia arriba, escalonada con las
+ * Una foto o un video del área elegida (o, si falta el archivo, su reemplazo),
+ * con una tarjeta de color inclinada detrás. Entra desde abajo y sale hacia arriba, escalonada con las
  * otras dos; mientras está, flota.
  */
-function FotoFlotante({ area, foto, orden, enTelefono, desdeMd, capa }: PropsDeFotoFlotante) {
+function FotoFlotante({ area, foto, orden, enTelefono, desdeMd, capa, reproducir }: PropsDeFotoFlotante) {
   const Icono = area.icono
+  // Si el archivo no está, queda el reemplazo de color con el ícono del área.
+  const [faltaElArchivo, setFaltaElArchivo] = useState(false)
   const flotar = FLOTAR_DE_FOTO[orden]
   const retraso = orden * 0.07
   const lugar = {
@@ -365,22 +382,70 @@ function FotoFlotante({ area, foto, orden, enTelefono, desdeMd, capa }: PropsDeF
         >
           <div className={cn("absolute inset-0 translate-x-[4.7%] translate-y-[4%] -rotate-[3.5deg] rounded-[18px]", area.tarjeta)} />
           <div className="absolute inset-0 overflow-hidden rounded-2xl bg-tarjeta">
-            {foto.archivo ? (
-              <Image
-                src={`/landing/areas/${foto.archivo}`}
-                alt=""
-                fill
-                sizes="(min-width: 768px) 21vw, 36vw"
-                className="object-cover"
-              />
-            ) : (
+            {faltaElArchivo ? (
               <div className={cn("grid h-full place-items-center", area.relleno)}>
                 <Icono strokeWidth={1.25} className={cn("size-[38%]", area.texto)} />
               </div>
+            ) : foto.video ? (
+              <VideoDeFoto foto={foto} video={foto.video} reproducir={reproducir} alFallar={() => setFaltaElArchivo(true)} />
+            ) : (
+              <Image
+                src={foto.src}
+                alt={foto.descripcion}
+                width={720}
+                height={960}
+                sizes="(min-width: 768px) 21vw, 36vw"
+                loading="lazy"
+                onError={() => setFaltaElArchivo(true)}
+                className="absolute inset-0 size-full object-cover"
+              />
             )}
           </div>
         </div>
       </motion.div>
     </div>
+  )
+}
+
+interface PropsDeVideoDeFoto {
+  foto: FotoDeArea
+  video: VideoDeFoto
+  reproducir: boolean
+  alFallar: () => void
+}
+
+/**
+ * El video de una foto: sin audio, en bucle, con la foto de póster. Corre
+ * sólo mientras `reproducir` sea cierto; si no (pausa, sección fuera de la
+ * pantalla, movimiento reducido) se queda quieto en el póster. `preload`
+ * "metadata": el video no se descarga entero hasta que hace falta.
+ */
+function VideoDeFoto({ foto, video, reproducir, alFallar }: PropsDeVideoDeFoto) {
+  const elemento = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    const v = elemento.current
+    if (!v) return
+    if (reproducir) {
+      // Un navegador que no deja arrancar solo no es un error: queda el póster.
+      v.play().catch(() => {})
+    } else {
+      v.pause()
+    }
+  }, [reproducir])
+
+  return (
+    <video
+      ref={elemento}
+      src={video.src}
+      poster={foto.src}
+      aria-label={foto.descripcion}
+      muted
+      loop
+      playsInline
+      preload="metadata"
+      onError={alFallar}
+      className="absolute inset-0 size-full object-cover"
+    />
   )
 }

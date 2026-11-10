@@ -66,8 +66,8 @@ const variantesDeBoton = cva(
         // Blanco con texto navy, para ir sobre un fondo navy.
         invertido: "bg-white text-navy hover:bg-superficie",
         // Sólo la landing: la acción principal ("Crear cuenta") en el rojo
-        // cereza de la paleta Frutos rojos, con el cuadro del ícono en
-        // pistacho. El panel sigue con `primario`.
+        // #B81D23 (`cereza`), con el cuadro del ícono en arena (`pistacho`;
+        // los nombres son históricos). El panel sigue con `primario`.
         destacado: "bg-cereza text-white hover:bg-cereza-oscuro",
       } satisfies Record<VarianteDeBoton, string>,
       // Interno: lo usa `Boton` cuando lleva ícono; `clasesDeBoton` no lo expone.
@@ -90,7 +90,7 @@ const cajaDeIcono = cva("grid shrink-0 place-items-center squircle", {
       lg: "size-10 rounded-[12px] [&_svg:not([class*='size-'])]:size-5",
     } satisfies Record<TamanoDeBoton, string>,
     // Blanco por defecto; navy sobre el botón blanco de `invertido`, y
-    // pistacho con el ícono navy sobre el cereza de `destacado`.
+    // arena (`pistacho`) con el ícono oscuro sobre el rojo de `destacado`.
     tono: { claro: "bg-white text-navy", oscuro: "bg-navy text-white", pistacho: "bg-pistacho text-navy" },
   },
   defaultVariants: { tamano: "md", tono: "claro" },
@@ -123,7 +123,7 @@ interface PropsComunesDeBoton {
   variante?: VarianteDeBoton
   /** Por defecto, `md`. */
   tamano?: TamanoDeBoton
-  /** Va en un cuadro blanco a la izquierda del texto (navy en `invertido`, pistacho en `destacado`). */
+  /** Va en un cuadro blanco a la izquierda del texto (navy en `invertido`, arena en `destacado`). */
   icono?: ReactNode
   className?: string
   children: ReactNode

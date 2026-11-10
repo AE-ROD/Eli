@@ -50,7 +50,7 @@ interface Destino {
 const DESTINOS: readonly Destino[] = [
   { modulo: "agenda", cuadro: "bg-ciruela-suave text-ciruela" },
   { modulo: "clientes", cuadro: "bg-frambuesa-suave text-frambuesa" },
-  { modulo: "tablero", cuadro: "bg-pistacho-suave text-pistacho-oscuro" },
+  { modulo: "tablero", cuadro: "bg-pistacho-suave text-ciruela" },
   { modulo: "reportes", cuadro: "bg-ciruela-suave text-ciruela" },
 ]
 
@@ -353,7 +353,7 @@ function FichaDeDestino({ destino, compacta = false, className, style }: PropsDe
         <Icono strokeWidth={1.75} className="size-4" />
       </span>
       <span className="min-w-0 flex-1 truncate">{modulo.nombre}</span>
-      <span className="grid size-5 shrink-0 place-items-center rounded-full bg-pistacho-suave text-pistacho-oscuro">
+      <span className="grid size-5 shrink-0 place-items-center rounded-full bg-pistacho-suave text-ciruela">
         <Check strokeWidth={2} className="size-3" />
       </span>
     </span>

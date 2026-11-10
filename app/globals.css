@@ -71,62 +71,80 @@
   }
 
   /*
-   * ── Landing: paleta "Frutos rojos" ──────────────────────────────────────
+   * ── Landing: paleta "Rojo, burdeos y arena" ─────────────────────────────
    * SÓLO para la landing (`components/landing/`). El panel, la reserva y el
-   * acceso siguen con navy y los pasteles de módulo de arriba. Tres colores
-   * con un papel cada uno: frambuesa es lo enredado, ciruela lo que Eli
-   * ordena y pistacho el toque (puntos, subrayados, tildes). Cada uno trae su
-   * suave (fondos e íconos) y, donde hace falta, uno oscuro para texto chico.
-   * Contrastes medidos sobre crema y sobre su propio suave.
+   * acceso siguen con navy y los pasteles de módulo de arriba.
+   *
+   * LOS NOMBRES SON HISTÓRICOS. La landing tuvo antes una paleta de "frutos
+   * rojos" y las clases se llaman como sus colores de entonces; los nombres
+   * se conservaron para no tocar cada componente, pero los valores son otros,
+   * asignados por ROL:
+   *
+   * - `frambuesa` (y `cereza`) = ROJO #B81D23: lo enredado, la acción
+   *   principal ("Crear cuenta").
+   * - `ciruela` = BURDEOS #4A1F1F: lo que Eli ordena ("acomoda.").
+   * - `pistacho` = ARENA #D1C0A6: el toque (puntos, subrayado, tildes, el
+   *   cuadro del ícono del botón destacado).
+   * - `anil` = TIERRA #6E3F34: el cuarto tinte de pasos y tarjetas.
+   * - `lavanda` / `pervinca` / `rosa` = el color de cada oficio (peluquería:
+   *   arena; barbería: cacao; spa de uñas: rosa viejo).
+   * - `orquidea` / `violeta` = los tramos claros del degradado de la marca
+   *   (salmón y rosa pálido), que sólo se usa sobre fondo oscuro.
+   *
+   * Cada uno trae su suave (fondos e íconos) y, donde hace falta, uno oscuro
+   * para texto chico (`-texto`, `-oscuro`). Contrastes medidos (WCAG, texto
+   * chico ≥ 4,5:1) sobre el crema de la landing y sobre su propio suave.
+   * Dentro de la landing también cambian crema, navy, texto-2 y borde: ver
+   * "Tema de la landing" más abajo.
    */
 
-  /* Frambuesa: lo enredado. 3,9:1 sobre crema: sólo texto grande (24px o más) o decoración. */
-  --color-frambuesa: #e4336f;
-  /* Fondo del cuadro de un ícono frambuesa y tinte del paso frambuesa. */
-  --color-frambuesa-suave: #fde6ee;
-  /* Texto chico frambuesa: 5,6:1 sobre su suave. */
-  --color-frambuesa-texto: #b3194f;
+  /* Rojo: lo enredado. 6,1:1 sobre crema y 5,1:1 sobre su suave: sirve para texto de cualquier tamaño. */
+  --color-frambuesa: #b81d23;
+  /* Fondo del cuadro de un ícono rojo y tinte del paso rojo. */
+  --color-frambuesa-suave: #f6e0dc;
+  /* Texto chico rojo: 6,3:1 sobre su suave. */
+  --color-frambuesa-texto: #9e1a1f;
 
-  /* Ciruela: lo ordenado. Sirve para texto de cualquier tamaño (9,3:1 sobre crema, 8,2:1 sobre su suave). */
-  --color-ciruela: #5b2a86;
-  --color-ciruela-suave: #efe6f6;
+  /* Burdeos: lo ordenado. Texto de cualquier tamaño (13:1 sobre crema, 11,3:1 sobre su suave). */
+  --color-ciruela: #4a1f1f;
+  --color-ciruela-suave: #efe6d6;
   /* Barras secundarias de los gráficos de las maquetas. */
-  --color-ciruela-claro: #d9c7ec;
+  --color-ciruela-claro: #e0d2bc;
 
-  /* Pistacho: el toque. Puntos, el subrayado de `resaltado`, el cuadro del ícono del botón destacado. Texto navy encima (10,3:1). */
-  --color-pistacho: #a6d65a;
-  --color-pistacho-suave: #eaf6d6;
-  /* Íconos, tildes y barras verdes sobre fondo claro (5,6:1 sobre su suave). */
-  --color-pistacho-oscuro: #3e6b12;
-  /* Texto chico verde (6,8:1 sobre su suave). */
-  --color-pistacho-texto: #2f5e12;
+  /* Arena: el toque. Puntos, el subrayado de `resaltado`, el cuadro del ícono del botón destacado. Texto burdeos o navy encima (9,7:1 sobre navy en el pie). */
+  --color-pistacho: #d1c0a6;
+  --color-pistacho-suave: #f3eadb;
+  /* Íconos, tildes y barras sobre fondo claro (5,3:1 sobre su suave). */
+  --color-pistacho-oscuro: #7a5a36;
+  /* Texto chico sobre arena claro (6,4:1 sobre su suave). */
+  --color-pistacho-texto: #6b4e2e;
 
-  /* Añil: el cuarto tinte de los pasos (el de navy) y su texto (10,8:1 sobre su suave). */
-  --color-anil: #1b2a6b;
-  --color-anil-suave: #e4e9f2;
+  /* Tierra: el cuarto tinte de los pasos y su texto (6:1 sobre su suave). */
+  --color-anil: #6e3f34;
+  --color-anil-suave: #e9decb;
 
   /*
    * Un par por oficio (Áreas, Oficios, Cierre): el fuerte es la tarjeta de
    * color detrás de cada foto, el suave el fondo de la sección cuando ese
-   * oficio está elegido. Odontología usa el pistacho.
+   * oficio está elegido. Odontología usa la arena (`pistacho`).
    */
-  --color-lavanda: #c79be0; /* Peluquería */
-  --color-lavanda-suave: #f1e4f8;
-  --color-pervinca: #8fa8f0; /* Barbería */
-  --color-pervinca-suave: #e1e8fa;
-  --color-rosa: #f59bb9; /* Spa de uñas */
-  --color-rosa-suave: #fde3ec;
+  --color-lavanda: #d1c0a6; /* Peluquería */
+  --color-lavanda-suave: #f0e6d5;
+  --color-pervinca: #9b6b5f; /* Barbería */
+  --color-pervinca-suave: #ebdfcb;
+  --color-rosa: #d7857f; /* Spa de uñas */
+  --color-rosa-suave: #f5ddd8;
 
-  /* Los dos tramos del degradado de la marca (`degradado-frutos`), de frambuesa a violeta. */
-  --color-orquidea: #b8579e;
-  --color-violeta: #8d5cc4;
+  /* Los dos tramos claros del degradado de la marca (`degradado-frutos`), tras el rojo vivo del pie. */
+  --color-orquidea: #ee7b72;
+  --color-violeta: #f6c6ba;
 
-  /* La acción principal de la landing ("Crear cuenta"): blanco encima da 4,8:1. Su hover, un paso más oscuro (6,4:1). */
-  --color-cereza: #d92b3f;
-  --color-cereza-oscuro: #b81f33;
+  /* La acción principal de la landing ("Crear cuenta"): blanco encima da 6,5:1. Su hover, un paso más oscuro (8:1). */
+  --color-cereza: #b81d23;
+  --color-cereza-oscuro: #9e1a1f;
 
   /* Bordes de las maquetas y separadores de la landing: un poco más cálido que `borde`. Decorativo. */
-  --color-borde-suave: #efeade;
+  --color-borde-suave: #efe4d2;
 
   /*
    * Radios de la landing. `etiqueta` es la de las etiquetas flotantes
@@ -139,8 +157,8 @@
   --radius-maqueta: 22px;
   --radius-bloque: 36px;
 
-  /* La sombra de una maqueta de producto que flota: más honda que `md`, con el mismo gris. */
-  --shadow-maqueta: 0 18px 50px #5f6d771f, 0 2px 6px #5f6d7712;
+  /* La sombra de una maqueta de producto que flota: más honda que `md`, teñida con el texto de la landing. */
+  --shadow-maqueta: 0 18px 50px #1f0e0e1a, 0 2px 6px #1f0e0e0f;
 
   /*
    * Curvas de la landing. `llegada` frena largo al final: lo que entra o
@@ -468,8 +486,9 @@
 }
 
 /*
- * El antetítulo de la landing: una píldora blanca con un punto pistacho
- * ("Cómo funciona"). En navy no va: ahí el antetítulo es texto pistacho.
+ * El antetítulo de la landing: una píldora blanca con un punto rojo
+ * (#B81D23, como en el diseño) y borde cálido ("Cómo funciona"). En lo
+ * oscuro no va: ahí el antetítulo es texto arena.
  */
 @utility antetitulo-pildora {
   display: inline-flex;
@@ -489,22 +508,23 @@
     width: 0.5rem;
     height: 0.5rem;
     border-radius: 9999px;
-    background-color: var(--color-pistacho);
+    background-color: var(--color-frambuesa);
   }
 }
 
 /*
- * La palabra que Eli ordena en un titular ("acomoda."): en ciruela, con un
- * subrayado grueso de pistacho por detrás de la parte baja de las letras.
- * Otros colores con `--resaltado-texto` y `--resaltado-fondo` (en el cierre
- * navy: texto blanco sobre frambuesa). Si la palabra se parte en dos
+ * La palabra que Eli ordena en un titular ("acomoda."): en burdeos
+ * (`ciruela`), con un subrayado grueso arena (#E6D4B6, un poco más claro que
+ * `pistacho` para que el burdeos se lea) por detrás de la parte baja de las
+ * letras. Otros colores con `--resaltado-texto` y `--resaltado-fondo` (en el
+ * cierre oscuro: texto blanco sobre rojo). Si la palabra se parte en dos
  * renglones, cada uno lleva su subrayado.
  */
 @utility resaltado {
   color: var(--resaltado-texto, var(--color-ciruela));
   background-image: linear-gradient(
     transparent 64%,
-    var(--resaltado-fondo, var(--color-pistacho)) 64% 90%,
+    var(--resaltado-fondo, #e6d4b6) 64% 90%,
     transparent 90%
   );
   padding-inline: 0.09em;
@@ -513,7 +533,7 @@
   box-decoration-break: clone;
 }
 
-/* El fondo de la portada (el "A, brillos" del diseño): tres manchas de la paleta sobre crema. */
+/* El fondo de la portada (el "A, brillos" del diseño): tres manchas, rojo, burdeos y arena, sobre crema (en la landing, #FBF7EF). */
 @utility fondo-brillos {
   background-color: var(--color-crema);
   background-image:
@@ -522,12 +542,16 @@
     radial-gradient(540px 260px at 50% 4%, color-mix(in srgb, var(--color-pistacho) 28%, transparent), transparent 72%);
 }
 
-/* Lo mismo sobre navy, para el pie y el cierre: frambuesa arriba a la derecha y ciruela abajo a la izquierda. */
+/*
+ * Lo mismo sobre el burdeos muy oscuro del cierre y el pie (#2E1212, el tono
+ * del diseño): rojo arriba a la derecha y burdeos abajo a la izquierda. El
+ * nombre "navy" es histórico.
+ */
 @utility fondo-brillos-navy {
-  background-color: var(--color-navy);
+  background-color: #2e1212;
   background-image:
-    radial-gradient(520px 320px at 92% 0%, color-mix(in srgb, var(--color-frambuesa) 24%, transparent), transparent 70%),
-    radial-gradient(560px 340px at 0% 100%, color-mix(in srgb, var(--color-ciruela) 50%, transparent), transparent 70%);
+    radial-gradient(520px 340px at 88% 6%, rgb(184 29 35 / 0.27), transparent 70%),
+    radial-gradient(560px 350px at 4% 100%, rgb(74 31 31 / 0.52), transparent 70%);
 }
 
 /*
@@ -537,9 +561,9 @@
  * máscara los apaga arriba y abajo, así dos secciones seguidas no dejan una
  * costura donde se juntan.
  *
- * - `frambuesa`: frambuesa abajo a la izquierda y ciruela arriba a la derecha.
- * - `pistacho`: pistacho arriba a la izquierda y frambuesa abajo a la derecha.
- * - `ciruela`: ciruela arriba al centro y pistacho abajo a la izquierda.
+ * - `frambuesa`: rojo abajo a la izquierda y burdeos arriba a la derecha.
+ * - `pistacho`: arena arriba a la izquierda y rojo abajo a la derecha.
+ * - `ciruela`: burdeos arriba al centro y arena abajo a la izquierda.
  */
 @utility fondo-tenue-frambuesa {
   background-image:
@@ -560,11 +584,15 @@
   mask-image: linear-gradient(transparent, #000 6rem, #000 calc(100% - 6rem), transparent);
 }
 
-/* El degradado de la marca: frambuesa, orquídea y violeta. En texto, con `bg-clip-text text-transparent`. */
+/*
+ * El degradado de la marca: rojo vivo, salmón y rosa pálido (el "Eli" grande
+ * del pie). Sólo sobre fondo oscuro: el rojo vivo (#E3383E) no llega a 4,5:1
+ * sobre crema. En texto, con `bg-clip-text text-transparent`.
+ */
 @utility degradado-frutos {
   background-image: linear-gradient(
     100deg,
-    var(--color-frambuesa) 0%,
+    #e3383e 0%,
     var(--color-orquidea) 50%,
     var(--color-violeta) 100%
   );
@@ -659,6 +687,27 @@
 }
 
 @layer base {
+  /*
+   * Tema de la landing. La landing se ve sobre un crema más cálido y con
+   * texto burdeos casi negro, no navy; el panel, la reserva y el acceso no
+   * cambian. En vez de escribir otros colores en cada componente, la página
+   * pública marca su <main> con `data-landing` y acá se reasignan los tokens
+   * base: `bg-crema`, `text-navy`, `text-texto-2`, `border-borde` siguen
+   * escritos igual y valen lo del diseño
+   * (crema #FBF7EF, texto #1F0E0E, secundario #6E5E58, borde #E6D9C4); las
+   * sombras `shadow-sm` y `shadow-md`, que Tailwind escribe con su valor
+   * adentro, se reasignan en las dos reglas de después de esta capa. Vale
+   * para toda la página, menús y portales incluidos, porque se ata al <html>.
+   * `bg-navy` pasa a #1F0E0E: los bloques oscuros que lo usan quedan en el
+   * tono del diseño.
+   */
+  html:has([data-landing]) {
+    --color-crema: #fbf7ef;
+    --color-superficie: #f5ebdc;
+    --color-navy: #1f0e0e;
+    --color-texto-2: #6e5e58;
+    --color-borde: #e6d9c4;
+  }
   * {
     @apply border-borde outline-navy/50;
   }
@@ -730,6 +779,19 @@
       scroll-behavior: auto !important;
     }
   }
+}
+
+/*
+ * Las sombras `sm` y `md` dentro de la landing, teñidas con el marrón del
+ * texto secundario (#6E5E58) en vez del gris del panel. Tailwind escribe su
+ * valor dentro de la clase, así que no alcanza con redefinir el token: van
+ * sin capa para ganarle a las utilidades. Siguen respetando `shadow-<color>`.
+ */
+html:has([data-landing]) .shadow-sm {
+  --tw-shadow: 0 4px 5px var(--tw-shadow-color, #6e5e580a), 0 6px 10px var(--tw-shadow-color, #6e5e580d);
+}
+html:has([data-landing]) .shadow-md {
+  --tw-shadow: 0 4px 5px var(--tw-shadow-color, #6e5e580a), 0 8px 15px var(--tw-shadow-color, #6e5e5808);
 }
 
 /*

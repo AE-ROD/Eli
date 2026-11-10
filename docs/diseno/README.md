@@ -2,8 +2,8 @@
 
 Cómo se ve Eli y de dónde sale cada decisión visual. Los tokens viven en
 `app/globals.css`; los componentes base, en `components/comunes/`. La landing
-y el panel usan los mismos, y la landing suma su paleta propia ("Frutos
-rojos", más abajo) y titulares en Geist.
+y el panel usan los mismos, y la landing suma su paleta propia ("Rojo,
+burdeos y arena", más abajo) y titulares en Geist.
 
 > **El mockup de la dirección anterior** (terracota, DM Serif Display, grano
 > de papel) quedó **reemplazado** por este sistema y ya no está en el repo.
@@ -48,38 +48,64 @@ no se repiten:
 El fuerte es el fondo del ícono del módulo activo; el suave, fondos,
 insignias y el halo del foco. El texto sobre cualquiera de los dos es navy.
 
-#### La paleta de la landing: Frutos rojos
+#### La paleta de la landing: rojo, burdeos y arena
 
 **Sólo la landing** (`components/landing/`). El panel, la reserva y el acceso
 siguen con navy y los pasteles de módulo. Tres colores con un papel cada uno,
-sobre la misma crema; los contrastes están en el comentario de cada token:
+sobre un crema más cálido; los contrastes están en el comentario de cada
+token.
+
+**Los nombres son históricos.** La landing tuvo antes una paleta de "frutos
+rojos" (frambuesa, ciruela, pistacho). Los nombres de las clases se
+conservaron para no tocar cada componente, pero los valores son otros y se
+asignan por rol: `frambuesa` es el rojo, `ciruela` el burdeos y `pistacho` la
+arena. Se escribe la clase de siempre; el color que sale es el de esta tabla.
 
 | Clase | Valor | Para qué |
 |---|---|---|
-| `frambuesa`, `-suave`, `-texto` | `#E4336F`, `#FDE6EE`, `#B3194F` | Lo enredado ("enredado."). La fuerte llega a 3,9:1 sobre crema: sólo texto de 24px o más, o decoración. Texto chico, `frambuesa-texto` |
-| `ciruela`, `-suave`, `-claro` | `#5B2A86`, `#EFE6F6`, `#D9C7EC` | Lo que Eli ordena. Texto de cualquier tamaño; `-claro`, barras secundarias de gráficos |
-| `pistacho`, `-suave`, `-oscuro`, `-texto` | `#A6D65A`, `#EAF6D6`, `#3E6B12`, `#2F5E12` | El toque: puntos, subrayado, tildes. Navy encima del fuerte; `-oscuro` para íconos y tildes, `-texto` para texto chico |
-| `anil`, `-suave` | `#1B2A6B`, `#E4E9F2` | El cuarto tinte de los pasos (el de navy) y su texto |
-| `lavanda`, `pervinca`, `rosa` (y `-suave`) | `#C79BE0`/`#F1E4F8`, `#8FA8F0`/`#E1E8FA`, `#F59BB9`/`#FDE3EC` | Un par por oficio: peluquería, barbería, spa de uñas (odontología usa pistacho). Tarjeta detrás de la foto y fondo de la sección |
-| `orquidea`, `violeta` | `#B8579E`, `#8D5CC4` | Los tramos de `degradado-frutos` |
-| `cereza`, `-oscuro` | `#D92B3F`, `#B81F33` | La acción principal ("Crear cuenta", `Boton variante="destacado"`) y su hover |
-| `borde-suave` | `#EFEADE` | Bordes de maquetas y separadores. Decorativo |
+| `frambuesa`, `-suave`, `-texto` | `#B81D23`, `#F6E0DC`, `#9E1A1F` | **Rojo.** Lo enredado ("enredado."). 6,1:1 sobre crema: sirve para texto de cualquier tamaño. `-texto`, para texto chico sobre su suave (6,3:1) |
+| `ciruela`, `-suave`, `-claro` | `#4A1F1F`, `#EFE6D6`, `#E0D2BC` | **Burdeos.** Lo que Eli ordena ("acomoda."). Texto de cualquier tamaño; `-claro`, barras secundarias de gráficos |
+| `pistacho`, `-suave`, `-oscuro`, `-texto` | `#D1C0A6`, `#F3EADB`, `#7A5A36`, `#6B4E2E` | **Arena.** El toque: puntos, subrayado, tildes, cuadro del ícono del botón. `-oscuro` para íconos y tildes (5,3:1 sobre su suave), `-texto` para texto chico (6,4:1) |
+| `anil`, `-suave` | `#6E3F34`, `#E9DECB` | **Tierra.** El cuarto tinte de los pasos y su texto (6,5:1 sobre su suave) |
+| `lavanda`, `pervinca`, `rosa` (y `-suave`) | `#D1C0A6`/`#F0E6D5`, `#9B6B5F`/`#EBDFCB`, `#D7857F`/`#F5DDD8` | Un par por oficio: peluquería (arena), barbería (cacao), spa de uñas (rosa viejo); odontología usa `pistacho`. Tarjeta detrás de la foto y fondo de la sección |
+| `orquidea`, `violeta` | `#EE7B72`, `#F6C6BA` | Los dos tramos claros de `degradado-frutos` (salmón y rosa pálido), tras el rojo vivo `#E3383E` |
+| `cereza`, `-oscuro` | `#B81D23`, `#9E1A1F` | La acción principal ("Crear cuenta", `Boton variante="destacado"`, con el cuadro del ícono en arena) y su hover. Blanco encima: 6,5:1 |
+| `borde-suave` | `#EFE4D2` | Bordes de maquetas y separadores. Decorativo |
+
+**Tema de la landing.** Dentro de la landing (el `<main data-landing>` de
+`app/page.tsx`; la regla de `app/globals.css` se ata al `<html>` con `:has()`,
+así vale también para menús y portales) cuatro tokens base cambian de valor,
+sin tocar el código de los componentes: `crema` `#FBF7EF`, `navy` `#1F0E0E`
+(texto y bloques oscuros), `texto-2` `#6E5E58` (5,8:1 sobre crema) y `borde`
+`#E6D9C4`; también `superficie` y las sombras `sm` y `md`, teñidas con el
+mismo marrón. Se sigue escribiendo `text-navy`, `bg-crema`, `border-borde`.
+El panel no lo ve. Sobre fondos arena más oscuros (el bloque de Oficios,
+`#E0CDB0 → #D8C3A5`) `texto-2` baja a 3,6:1: ahí se redefine localmente
+(`[--color-texto-2:#3f2a26]`).
+
+**Fondos oscuros.** El cierre y el pie son un bloque `#2E1212` (el nombre
+`fondo-brillos-navy` es histórico) sobre una franja burdeos `#4A1F1F → #451D1D`
+(cierre) y `#451D1D → #3F1A1A` (pie), continua: no hay costura entre uno y
+otro. De arriba abajo la página oscurece: Oficios termina en `#D8C3A5`,
+Funciones sigue desde ahí hacia `#4A1F1F` en Planes.
 
 Utilidades de la landing, en `app/globals.css`:
 
-- `resaltado`: la palabra que Eli ordena, en ciruela con un subrayado grueso
-  de pistacho. Otros colores con `--resaltado-texto` y `--resaltado-fondo`.
-- `antetitulo-pildora`: el antetítulo en píldora blanca con un punto pistacho.
+- `resaltado`: la palabra que Eli ordena, en burdeos (`ciruela`) con un
+  subrayado grueso arena (`#E6D4B6`). Otros colores con `--resaltado-texto` y
+  `--resaltado-fondo`.
+- `antetitulo-pildora`: el antetítulo en píldora blanca con un punto rojo.
 - `fondo-brillos` (portada) y `fondo-brillos-navy` (pie y cierre): las
-  manchas de la paleta sobre crema o sobre navy.
+  manchas rojo, burdeos y arena sobre crema, o rojo y burdeos sobre el
+  burdeos muy oscuro `#2E1212`.
 - `fondo-tenue-frambuesa`, `fondo-tenue-pistacho` y `fondo-tenue-ciruela`:
   los brillos suaves detrás de las secciones del medio (dos manchas al 9-18%,
   cada una con su par de colores). Traen una máscara que los apaga arriba y
   abajo, así dos secciones seguidas no dejan costura: van en una capa propia
   detrás del contenido, nunca en el `<section>`. `SeccionDeLanding` la pone
   con `tono`.
-- `degradado-frutos`: frambuesa → orquídea → violeta; en texto, con
-  `bg-clip-text text-transparent`.
+- `degradado-frutos`: rojo vivo → salmón → rosa pálido; en texto, con
+  `bg-clip-text text-transparent`, sólo sobre fondo oscuro.
 - `animaciones-en-pausa`: congela las animaciones de CSS del bloque y de lo
   de adentro. Va con `BotonDePausa`.
 
@@ -89,13 +115,14 @@ usaba pasó a los nombres propios con el mismo valor (`crema`, `navy`, `borde`).
 Se usan sólo los nombres de esta paleta. De shadcn quedan los radios
 `rounded-sm`/`md`/`lg`/`xl` (8, 10, 12 y 16 px), que el panel todavía usa.
 
-**Los cuatro tintes de la landing** (ciruela, frambuesa, pistacho y añil, en
-ese orden) reparten pasos, tarjetas y piezas: el paso 1 es ciruela, el 2
+**Los cuatro tintes de la landing** (ciruela, frambuesa, pistacho y añil, hoy
+burdeos, rojo, arena y tierra, en ese orden) reparten pasos, tarjetas y piezas: el paso 1 es ciruela, el 2
 frambuesa, y así. Sus clases, escritas enteras, están en
 `components/landing/tonos-de-la-landing.ts` (`CLASES_DE_TONO[tono]`: `suave`,
 `texto`, `relleno`, `anillo` y `barra`; `tonoEn(indice)` da el tinte de un
-lugar de una lista). **Texto secundario sobre un tinte:** `texto-2` no llega a
-4,5:1 sobre el suave de ciruela, frambuesa ni añil; ahí va `text-navy/75`.
+lugar de una lista). **Texto secundario sobre un tinte:** el `texto-2` de la
+landing (`#6E5E58`) pasa 4,5:1 sobre cada suave, pero por poco (4,6 a 5,2:1);
+para texto chico y delgado, `text-navy/75` es más seguro.
 
 No hay modo oscuro. Las clases `dark:` no se activan nunca.
 
@@ -247,7 +274,7 @@ menú.
 
 | Archivo | Qué es |
 |---|---|
-| `boton.tsx` | `Boton` y `clasesDeBoton`. Variantes primario, secundario, fantasma, enlace, invertido y destacado (sólo la landing: cereza, con el cuadro del ícono en pistacho); altos de 36, 48 y 56px; ícono en un cuadro a la izquierda. Con `href` es un `Link`, o un `<a>` común si empieza con `#` (el `Link` de Next no desplaza a un ancla que ya está en la dirección; lo que haga falta al ir va en `onClick`, no en `onNavigate`); sin `href`, un `<button>` con estado `cargando`. De ancho natural no se achica; con `w-full` sí, hasta el ancho de su texto, para que dos compartan una fila |
+| `boton.tsx` | `Boton` y `clasesDeBoton`. Variantes primario, secundario, fantasma, enlace, invertido y destacado (sólo la landing: rojo `#B81D23`, con el cuadro del ícono en arena); altos de 36, 48 y 56px; ícono en un cuadro a la izquierda. Con `href` es un `Link`, o un `<a>` común si empieza con `#` (el `Link` de Next no desplaza a un ancla que ya está en la dirección; lo que haga falta al ir va en `onClick`, no en `onNavigate`); sin `href`, un `<button>` con estado `cargando`. De ancho natural no se achica; con `w-full` sí, hasta el ancho de su texto, para que dos compartan una fila |
 | `boton-icono.tsx` | `BotonIcono`: cuadrado de sólo ícono, blanco, navy en hover. `etiqueta` es su nombre |
 | `boton-primario.tsx` | `BotonPrimario`: la API de siempre de formularios y panel, por dentro un `Boton`. Suma la variante `peligro` |
 | `tarjeta.tsx` | `Tarjeta`: blanca, radio de tarjeta, sombra sm. `interactiva` se eleva en hover y con el foco adentro |
@@ -275,7 +302,7 @@ Fuera de `comunes/`:
   | Archivo | Qué es |
   |---|---|
   | `seccion-de-landing.tsx` | `SeccionDeLanding`: una sección del medio, de borde a borde sobre la crema, con los brillos tenues detrás (`tono`) y el contenedor de 1440px (72px de margen a 1440, como el diseño); recorta lo que se sale, así nada deja scroll horizontal. `EncabezadoDeLanding`: el antetítulo en píldora, el `<h2>` con `titulo-landing` (la palabra que importa en `resaltado`) y una bajada; a la izquierda o al centro |
-  | `tonos-de-la-landing.ts` | Los cuatro tintes y sus clases (arriba, en "Frutos rojos") |
+  | `tonos-de-la-landing.ts` | Los cuatro tintes y sus clases (arriba, en "Rojo, burdeos y arena") |
   | `trazos-de-la-landing.ts` | Las líneas que se ondulan de cada sección, sacadas tal cual del diseño (`formas` de los `values` de cada `<animate>`, `duracion` del `dur`, `desfase` del `begin` sin signo). Cada arreglo dice en su comentario la caja de su `<svg>` |
   | `maquetas/maqueta-piezas.tsx` | Las piezas de las maquetas: `TARJETA_DE_MAQUETA` (blanca, borde, `rounded-maqueta` y `shadow-maqueta`), `MarcoDeMaqueta` (esa tarjeta como imagen con su `etiqueta`), `Avatar`, `Chip`, `Segmentos` (hoy sin uso) y `CuadroDeTono` |
   | `maquetas/*.tsx` | Las maquetas del producto, en HTML: reserva, ficha de clienta, tablero y cobro (el recorrido, con `activa`), los cuatro momentos de un día, las reservas de hoy y quién cobra (tablero), el período, el filtro de turno, los desgloses por profesional y por medio de pago, y las anuladas (reportes: sólo lo que Reportes hace; el turno es un filtro, no un gráfico) y la visita con o sin equipo (oficios). Los montos de un mismo gráfico cuadran entre sí y los largos de las barras salen de los montos |
@@ -511,20 +538,28 @@ Cada una en su archivo de `components/landing/`, en el orden del diseño:
 |---|---|---|
 | `seccion-recorrido.tsx` | Acordeón de cuatro pasos (botones con `aria-expanded` y `aria-controls`; el panel cerrado es `inert`) y, al lado, el escenario del tinte del paso con su número gigante, la maqueta, dos etiquetas y las líneas. "Crear mi cuenta" y "Ver planes" (`#planes`) | Avanza un paso cada 6,5 s (lo mide `animate-progreso`). Se detiene con el cursor encima, con el foco del teclado adentro, fuera de pantalla y con la pausa. Con movimiento reducido no avanza |
 | `seccion-un-dia.tsx` | Cuatro tarjetas sobre una línea de tiempo; desde lg en fila, con la línea de centro a centro y las líneas que llegan a su comienzo; por debajo, de arriba abajo | Los números laten, el punto recorre la línea, las maquetas flotan |
-| `seccion-tablero.tsx` | La caja pistacho con "Reservas de hoy" y "Quién puede cobrar", y la lista de cuatro puntos | Las filas entran (`aparecer`), la maqueta y la etiqueta flotan |
+| `seccion-tablero.tsx` | La caja arena con "Reservas de hoy" y "Quién puede cobrar", y la lista de cuatro puntos | Las filas entran (`aparecer`), la maqueta y la etiqueta flotan |
 | `seccion-reportes.tsx` | Cuatro tarjetas de tinte en dos filas (746 y 526, la segunda al revés: una grilla de tres columnas): el período (con lo cobrado, las atenciones y el ticket promedio), el turno como filtro ("Turno: Tarde" y lo cobrado en él), los desgloses por profesional y por medio de pago, y las anuladas | Las barras crecen, las maquetas flotan |
-| `seccion-oficios.tsx` | "Si trabajas solo / Si tienes equipo" (`aria-pressed`) cambia la historia y la maqueta; los otros oficios en etiquetas con su foto; la caja ciruela con una foto por oficio | Cambia sola cada 5,5 s (se detiene como el recorrido); las fotos y la maqueta flotan |
+| `seccion-oficios.tsx` | "Si trabajas solo / Si tienes equipo" (`aria-pressed`) cambia la historia y la maqueta; los otros oficios en etiquetas con su foto; la caja arena con una foto por oficio | Cambia sola cada 5,5 s (se detiene como el recorrido); las fotos y la maqueta flotan |
 | `seccion-funciones.tsx` | Las diez piezas: desde lg, dos filas unidas por un camino en S medido sobre las piezas (entra y sale por los bordes de la pantalla); por debajo, una columna con una línea | El punto recorre el camino (`recorrer-camino`), las piezas flotan |
 | `seccion-precios.tsx` | El titular con tres píldoras, lo incluido en los dos planes, Independiente y Equipo lado a lado (la que da la calculadora, con un borde de su color) y la calculadora (1 a 30 personas) | Las líneas del titular y las de lo incluido, cada una con su pausa |
-| `seccion-cierre.tsx` | El bloque navy, "Deja de complicarte. Pásate a Eli." y dos marquesinas en sentidos opuestos (la segunda es decorativa y con movimiento reducido no está) | Las marquesinas y las líneas, con una sola pausa |
+| `seccion-cierre.tsx` | El bloque burdeos oscuro, "Deja de complicarte. Pásate a Eli." y dos marquesinas en sentidos opuestos (la segunda es decorativa y con movimiento reducido no está) | Las marquesinas y las líneas, con una sola pausa |
 
-**Fotos de los oficios.** No vienen con el diseño: mientras falten, un
-reemplazo de color con el ícono del oficio (nunca un `<img>` roto). Se
-esperan en `public/landing/oficios/` (JPG verticales de 3:4, unos 600×800 px):
-`peluqueria.jpg`, `barberia.jpg`, `unas.jpg` y `odontologia.jpg`. Al subir
-una, se escribe su nombre en `archivo` (`FOTOS` en `seccion-oficios.tsx`); la
-misma foto va grande en la caja y chica en la etiqueta del oficio. Las de
-Áreas están en `seccion-areas.tsx`.
+**Fotos y videos de Áreas y Oficios.** Están en
+`public/landing/{peluqueria,barberia,spa-de-unas,odontologia}/` (JPG
+verticales 3:4, ya optimizados: no se vuelven a comprimir; un `.mp4` sin audio
+para peluquería y otro para odontología, con su foto como póster). Son
+**material de referencia de terceros**: hay que cambiarlos por licenciados
+antes del lanzamiento, y faltan los videos de barbería y spa de uñas (hoy sólo
+foto). Qué foto va dónde, con su `alt` en español, está en `AREAS`
+(`seccion-areas.tsx`) y en `FOTOS` (`seccion-oficios.tsx`); la misma foto va
+grande en la caja de Oficios y chica en la etiqueta del oficio. Si un archivo
+falta, queda el reemplazo de color con el ícono del oficio (nunca un `<img>`
+roto). Los videos son `muted`, `playsInline` y `loop`, con
+`preload="metadata"`: arrancan sólo mientras su foto está a la vista, la
+sección en pantalla y sin pausa (el botón de pausa de Áreas los detiene); con
+movimiento reducido se ve el póster. La CSP no necesita `media-src`: los
+archivos son del mismo origen y `default-src 'self'` los cubre.
 
 ## Cómo extender los tokens
 

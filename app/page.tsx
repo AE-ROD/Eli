@@ -38,7 +38,7 @@ export default function PaginaLanding() {
       {/* En el orden del diseño de la landing nueva. La separación entre islas
           la pone el <main>, no cada sección; la portada y las áreas van de
           borde a borde y juntas, como en el diseño. */}
-      <main id="contenido" className="flex flex-col gap-2 md:gap-6">
+      <main id="contenido" data-landing className="flex flex-col gap-2 md:gap-6">
         <div>
           <SeccionPortada />
           <SeccionAreas />
