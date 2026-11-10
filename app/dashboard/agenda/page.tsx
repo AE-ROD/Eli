@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback, useId } from "react"
+import { useState, useEffect, useCallback, useId, useRef } from "react"
+import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import {
   actorDeSesion,
@@ -25,6 +26,7 @@ import {
   crearCita,
   cambiarEstadoDeCita,
   citaEnBlanco,
+  conEstadoNuevo,
   hayProfesionales,
   leerHorarioDeAtencion,
   leerProfesionales,
@@ -38,6 +40,8 @@ import {
 } from "./_datos"
 import type { VerPor } from "./_grilla-del-dia"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import { ControlesDeAgenda } from "./_componentes/controles-de-agenda"
 import { VistaSemana } from "./_componentes/vista-semana"
 import { VistaDia } from "./_componentes/vista-dia"
@@ -61,7 +65,9 @@ function resumen(cargando: boolean, cantidad: number): string {
 
 export default function PaginaAgenda() {
   const { data: sesion } = useSession()
+  const router = useRouter()
   const actor = actorDeSesion(sesion)
+  const vocabulario = vocabularioDe(useRubroDelPanel())
   const puedeAsignarProfesional = puedeAsignarCitasAOtros(actor)
   // Dueño y encargado bloquean a cualquiera o a todo el negocio; el
   // profesional, su agenda. Sin `memberId`, nada (no ve el botón).
@@ -109,21 +115,25 @@ export default function PaginaAgenda() {
   const [verPor, setVerPor] = useState<VerPor>("sillon")
   const idDelPeriodo = useId()
 
+  // El número de la última carga pedida: la respuesta de una anterior (pasar
+  // rápido de semana, o una recarga lenta) llega tarde y no pisa a la nueva.
+  const ultimaCarga = useRef(0)
+
   const recargar = useCallback(async (fecha: Date, modo: UnidadDeTiempo) => {
+    const numero = ++ultimaCarga.current
     setCargando(true)
     const [resultado, deBloqueos] = await Promise.all([leerCitas(fecha, modo), leerBloqueos(fecha, modo)])
+    if (numero !== ultimaCarga.current) return
     // Si los bloqueos no cargan, la agenda se muestra igual, sin las franjas, y se avisa.
-    if (deBloqueos.ok) setBloqueos(deBloqueos.datos)
-    else {
-      setBloqueos([])
-      setAviso(deBloqueos.error)
-    }
+    setBloqueos(deBloqueos.ok ? deBloqueos.datos : [])
     if (resultado.ok) {
       setCitas(resultado.datos)
       // El detalle abierto muestra la cita como quedó (por ejemplo, después de
       // moverla); si ya no está en el período que se mira, se cierra.
       setCitaAbierta((abierta) => (abierta ? (resultado.datos.find((cita) => cita.id === abierta.id) ?? null) : null))
-    } else setAviso(resultado.error)
+    }
+    // Lo que se avisó de una carga anterior se va cuando ésta llega bien.
+    setAviso(!resultado.ok ? resultado.error : !deBloqueos.ok ? deBloqueos.error : "")
     setCargando(false)
   }, [])
 
@@ -172,15 +182,25 @@ export default function PaginaAgenda() {
     setCitaAbierta((abierta) => (abierta?.id === id ? { ...abierta, status: estado } : abierta))
   }
 
-  const cambiarEstado = async (id: string, estado: string) => {
+  /**
+   * Cambia el estado y muestra la cita como la devolvió el servidor: al
+   * cancelarla, el detalle ya dice quién y cuándo. Devuelve el error (vacío
+   * si salió bien), para el modal que pidió confirmar.
+   */
+  const cambiarEstado = async (id: string, estado: string): Promise<string> => {
     setAviso("")
     setAvisoDelDetalle("")
     const resultado = await cambiarEstadoDeCita(id, estado)
     if (!resultado.ok) {
       setAvisoDelDetalle(resultado.error)
-      return setAviso(resultado.error)
+      setAviso(resultado.error)
+      return resultado.error
     }
-    mostrarEstado(id, estado)
+    // El 200 es con la cita ya en `estado`; de la respuesta se toma quién y cuándo la canceló.
+    const guardada = { ...resultado.datos, status: estado }
+    setCitas((previas) => previas.map((cita) => (cita.id === id ? conEstadoNuevo(cita, guardada) : cita)))
+    setCitaAbierta((abierta) => (abierta?.id === id ? conEstadoNuevo(abierta, guardada) : abierta))
+    return ""
   }
 
   /** Clínica dental: el sillón ya se asignó en el servidor; la agenda y el detalle lo muestran. */
@@ -207,10 +227,33 @@ export default function PaginaAgenda() {
     setModalAbierto(true)
   }
 
+  // Desde el inicio ("Nueva cita") se llega con `?nueva=1`: se abre el modal
+  // y se saca de la dirección, para que recargar o volver no lo abra otra vez.
+  const abrirModalAlLlegar = useRef(true)
+  useEffect(() => {
+    if (!abrirModalAlLlegar.current) return
+    abrirModalAlLlegar.current = false
+    const parametros = new URLSearchParams(window.location.search)
+    if (parametros.get("nueva") !== "1") return
+    parametros.delete("nueva")
+    const resto = parametros.toString()
+    router.replace(`${window.location.pathname}${resto ? `?${resto}` : ""}`, { scroll: false })
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- la dirección sólo se lee en el navegador, al llegar
+    abrirModal()
+    // Sólo al llegar: `abrirModal` cambia en cada render y no debe volver a correr esto.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // `confirmar`: el segundo envío, después de ver las advertencias (choque,
   // bloqueo, fuera de horario). Guarda igual, como al mover.
   const guardarNuevaCita = async (confirmar: boolean) => {
-    if (!nuevaCita.clienteId) return
+    // Escribir el nombre no basta: el buscador es para elegir de la lista. Se
+    // dice qué falta en vez de no hacer nada.
+    if (!nuevaCita.clienteId) {
+      setAdvertenciasDeNuevaCita([])
+      setSillonOcupadoEnElModal(false)
+      return setAvisoDelModal(`Elige un ${vocabulario.cliente} de la lista: escribir su nombre no basta. Si no aparece, créalo primero en ${conMayuscula(vocabulario.clientes)}.`)
+    }
 
     setAvisoDelModal("")
     setSillonOcupadoEnElModal(false)

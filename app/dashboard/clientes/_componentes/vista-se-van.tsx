@@ -9,6 +9,7 @@ import { Insignia } from "@/components/comunes/insignia"
 import { Tarjeta } from "@/components/comunes/tarjeta"
 import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import { Aviso } from "@/components/panel/aviso"
+import { conMayuscula, type Vocabulario } from "@/lib/vocabulario"
 import { leerClientesQueSeVan, registrarContacto, type ClienteQueSeVa } from "../_datos"
 import {
   asuntoSugerido,
@@ -22,6 +23,8 @@ import {
 interface PropsDeVistaSeVan {
   /** Para firmar el mensaje sugerido: "Te escribimos de …". */
   nombreNegocio: string
+  /** "cliente(s)" o, en una clínica dental, "paciente(s)". */
+  vocabulario?: Pick<Vocabulario, "cliente" | "clientes">
 }
 
 const ICONO = "size-4"
@@ -36,7 +39,8 @@ const ICONO = "size-4"
  * Primero el teléfono: una columna de tarjetas, con los botones de un toque.
  * Sólo la ven dueña y encargado; el servidor lo vuelve a verificar.
  */
-export function VistaSeVan({ nombreNegocio }: PropsDeVistaSeVan) {
+export function VistaSeVan({ nombreNegocio, vocabulario = { cliente: "cliente", clientes: "clientes" } }: PropsDeVistaSeVan) {
+  const { cliente: palabraCliente, clientes: palabraClientes } = vocabulario
   const [clientes, setClientes] = useState<ClienteQueSeVa[]>([])
   const [total, setTotal] = useState(0)
   const [diasOculto, setDiasOculto] = useState(14)
@@ -82,9 +86,9 @@ export function VistaSeVan({ nombreNegocio }: PropsDeVistaSeVan) {
           Se están yendo
         </h2>
         <p className="max-w-prose text-sm text-pretty text-texto-2">
-          Clientes que no vienen hace al menos una vez y media lo que suelen tardar, y no tienen hora. Al tocar
-          &ldquo;Escribirle&rdquo; se abre tu WhatsApp o tu correo con un mensaje listo para cambiar, y el cliente sale
-          de esta lista por {dias(diasOculto)}.
+          {conMayuscula(palabraClientes)} que no vienen hace al menos una vez y media lo que suelen tardar, y no tienen
+          hora. Al tocar &ldquo;Escribirle&rdquo; se abre tu WhatsApp o tu correo con un mensaje listo para cambiar, y el{" "}
+          {palabraCliente} sale de esta lista por {dias(diasOculto)}.
         </p>
       </div>
 
@@ -107,7 +111,7 @@ export function VistaSeVan({ nombreNegocio }: PropsDeVistaSeVan) {
 
       {cargando ? (
         <div aria-busy="true">
-          <span className="sr-only">Cargando clientes que se están yendo...</span>
+          <span className="sr-only">Cargando {palabraClientes} que se están yendo...</span>
           <ul aria-hidden="true" className="space-y-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <li key={i} className="space-y-3 rounded-[24px] bg-tarjeta p-4 shadow-sm squircle">
@@ -124,8 +128,8 @@ export function VistaSeVan({ nombreNegocio }: PropsDeVistaSeVan) {
             <CuadroDeIcono icono={HeartHandshake} color="lila" tamano="lg" />
             <p className="mt-2 font-semibold text-navy">Nadie se está yendo por ahora</p>
             <p className="max-w-sm text-sm text-pretty text-texto-2">
-              Aparecen acá los clientes con al menos 3 visitas, o cuyo último servicio tiene una frecuencia, cuando se
-              atrasan.
+              Aparecen acá los {palabraClientes} con al menos 3 visitas, o cuyo último servicio tiene una frecuencia, cuando
+              se atrasan.
             </p>
           </div>
         )

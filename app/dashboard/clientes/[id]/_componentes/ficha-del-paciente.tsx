@@ -9,6 +9,7 @@ import type { FichaClinicaRespuesta, OdontogramaRespuesta } from "@/lib/ficha-cl
 import type { Rol } from "@/lib/permisos"
 import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import { subtituloDelPaciente } from "../_formato"
+import { ProveedorDeCambiosSinGuardar } from "./cambios-sin-guardar"
 import { Pestanas, idDePanel, idDePestana, type Pestana } from "./pestanas"
 import { PestanaAntecedentes } from "./pestana-antecedentes"
 import { PestanaEvoluciones } from "./pestana-evoluciones"
@@ -64,7 +65,9 @@ interface PropsDeFichaDelPaciente {
  * aparecen: el encargado ve sólo la alerta y el plan, sin editar.
  *
  * Los paneles de las pestañas no se desmontan al cambiar de pestaña: un
- * odontograma marcado y sin guardar sigue ahí al volver.
+ * odontograma marcado y sin guardar sigue ahí al volver. Y antes de salir de
+ * la ficha por un enlace con algo sin guardar, se pregunta
+ * (`ProveedorDeCambiosSinGuardar`).
  */
 export function FichaDelPaciente({
   paciente,
@@ -120,6 +123,9 @@ export function FichaDelPaciente({
   })
 
   return (
+    // Lo que quede sin guardar (odontograma, antecedentes, una prótesis a
+    // medio diseñar) se pregunta antes de irse por un enlace del panel.
+    <ProveedorDeCambiosSinGuardar>
     <div className="min-h-dvh">
       <BarraSuperior
         titulo={paciente.nombre}
@@ -212,5 +218,6 @@ export function FichaDelPaciente({
         )}
       </div>
     </div>
+    </ProveedorDeCambiosSinGuardar>
   )
 }

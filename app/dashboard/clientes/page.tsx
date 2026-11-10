@@ -30,7 +30,7 @@ import {
 import { Aviso } from "@/components/panel/aviso"
 import { FiltrosClientes } from "./_componentes/filtros-clientes"
 import { ListaClientes } from "./_componentes/lista-clientes"
-import { PanelDetalleCliente } from "./_componentes/panel-detalle-cliente"
+import { PanelDetalleCliente, type AlergiasDelPanel } from "./_componentes/panel-detalle-cliente"
 import { ModalNuevoCliente } from "./_componentes/modal-nuevo-cliente"
 import { ModalExportar } from "./_componentes/modal-exportar"
 import { VistaSeVan } from "./_componentes/vista-se-van"
@@ -38,6 +38,8 @@ import { clienteParaTarjeta, type ClienteEnTarjeta } from "./_componentes/tarjet
 import { mostrarTelefono } from "@/lib/telefono"
 import { cn } from "@/lib/utils"
 import { conMayuscula, vocabularioDe, type Vocabulario } from "@/lib/vocabulario"
+import { useCoincideMedia } from "@/components/movimiento/usar-coincide-media"
+import { useZonaDelNegocio } from "../agenda/_componentes/zona-del-negocio"
 
 const CLIENTE_EN_BLANCO: DatosDeNuevoCliente = {
   nombre: "",
@@ -62,6 +64,12 @@ function cuantosClientes(total: number, vocabulario: Vocabulario): string {
 /** La ficha clínica de un paciente: sólo existe en una clínica dental. */
 const rutaDeLaFicha = (id: string) => `/dashboard/clientes/${encodeURIComponent(id)}`
 
+/** La agenda con el formulario de cita nueva abierto y este cliente elegido. */
+const rutaParaAgendar = (id: string) => `/dashboard/agenda?nueva=1&cliente=${encodeURIComponent(id)}`
+
+/** Desde 1024 px la ficha va al lado de la lista; por debajo, en una hoja encima. */
+const PANTALLA_ANCHA = "(min-width: 1024px)"
+
 /** Los mismos clientes, con las notas de uno cambiadas. Si no está en la lista, quedan como estaban. */
 function conNotas(clientesPorId: Record<string, Cliente>, clienteId: string, notas: string | null) {
   const cliente = clientesPorId[clienteId]
@@ -81,6 +89,8 @@ export default function PaginaClientes() {
   const leeAlergias = veAlertaDeAlergias(actor)
   const vocabulario = vocabularioDe(sesion?.user?.rubro)
   const nombreNegocio = sesion?.user?.businessName ?? ""
+  const zona = useZonaDelNegocio()
+  const pantallaAncha = useCoincideMedia(PANTALLA_ANCHA)
   const [vistaDeClientes, setVistaDeClientes] = useState<VistaDeClientes>("todos")
 
   const [clientes, setClientes] = useState<ClienteEnTarjeta[]>([])
@@ -119,10 +129,21 @@ export default function PaginaClientes() {
   const [avisoDeEliminar, setAvisoDeEliminar] = useState("")
   const [avisoListo, setAvisoListo] = useState("")
   const [exportando, setExportando] = useState(false)
-  // Las alergias del paciente abierto en la ficha de al lado (clínica dental), con de quién son.
-  const [alergiasDelPanel, setAlergiasDelPanel] = useState<{ clienteId: string; alergias: string | null } | null>(null)
+  // Las alergias del paciente abierto en la ficha (clínica dental), con de
+  // quién son: si son de otro, todavía se están leyendo. Si la lectura falla
+  // se dice, y no se muestra como "sin alergias".
+  const [alergiasDelPanel, setAlergiasDelPanel] = useState<
+    { clienteId: string; estado: "error" } | { clienteId: string; estado: "listo"; alergias: string | null } | null
+  >(null)
+  // Sube al tocar "Reintentar": vuelve a pedir las del mismo paciente.
+  const [reintentoDeAlergias, setReintentoDeAlergias] = useState(0)
 
-  const esperaDeBusqueda = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // El último pedido del listado. Una respuesta que llega después de otra
+  // más nueva (se siguió escribiendo en la búsqueda, se cambió el filtro) se
+  // descarta: si no, la lista mostraba lo de una búsqueda vieja.
+  const ultimoPedido = useRef(0)
+  // La primera carga sale sin esperar; las búsquedas, 300 ms después de la última tecla.
+  const yaCargo = useRef(false)
 
   /**
    * Trae una página del listado. Con `acumular` la suma a la que ya se ve (el
@@ -131,11 +152,14 @@ export default function PaginaClientes() {
    */
   const cargarClientes = useCallback(
     async (textoBuscado: string, etiqueta: string, paginaPedida: number, acumular = false) => {
+      const numero = ++ultimoPedido.current
       if (acumular) setCargandoMas(true)
       else setCargando(true)
       setAviso("")
 
       const resultado = await leerClientes({ busqueda: textoBuscado, etiqueta, pagina: paginaPedida })
+      // Hubo un pedido después de éste: el que manda es ése, y él apaga la carga.
+      if (numero !== ultimoPedido.current) return
 
       if (resultado.ok) {
         const recibidos = resultado.datos.clientes
@@ -163,20 +187,38 @@ export default function PaginaClientes() {
     if (!esDental || !leeAlergias || !clienteAbiertoId) return
     let vigente = true
     leerAlergiasDelPaciente(clienteAbiertoId).then((resultado) => {
-      if (vigente && resultado.ok) setAlergiasDelPanel({ clienteId: clienteAbiertoId, alergias: resultado.datos })
+      if (!vigente) return
+      setAlergiasDelPanel(
+        resultado.ok
+          ? { clienteId: clienteAbiertoId, estado: "listo", alergias: resultado.datos }
+          : { clienteId: clienteAbiertoId, estado: "error" }
+      )
     })
     return () => {
       vigente = false
     }
-  }, [esDental, leeAlergias, clienteAbiertoId])
+  }, [esDental, leeAlergias, clienteAbiertoId, reintentoDeAlergias])
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- carga la lista de clientes al montar
-  useEffect(() => { cargarClientes("", "Todos", 1) }, [cargarClientes])
+  /** Lo que la ficha muestra de las alergias del paciente abierto: mientras no lleguen las suyas, "cargando". */
+  const alergiasParaLaFicha = (clienteId: string): AlergiasDelPanel =>
+    alergiasDelPanel?.clienteId !== clienteId
+      ? { estado: "cargando" }
+      : alergiasDelPanel.estado === "error"
+        ? { estado: "error" }
+        : { estado: "listo", alergias: alergiasDelPanel.alergias }
 
+  const reintentarAlergias = () => {
+    setAlergiasDelPanel(null)
+    setReintentoDeAlergias((previo) => previo + 1)
+  }
+
+  // Un solo pedido al entrar (antes salían dos: uno al montar y otro de la
+  // búsqueda vacía, 300 ms después) y, después, uno por búsqueda o filtro.
   useEffect(() => {
-    if (esperaDeBusqueda.current) clearTimeout(esperaDeBusqueda.current)
-    esperaDeBusqueda.current = setTimeout(() => cargarClientes(busqueda, etiquetaActiva, 1), 300)
-    return () => { if (esperaDeBusqueda.current) clearTimeout(esperaDeBusqueda.current) }
+    const espera = yaCargo.current ? 300 : 0
+    yaCargo.current = true
+    const temporizador = setTimeout(() => cargarClientes(busqueda, etiquetaActiva, 1), espera)
+    return () => clearTimeout(temporizador)
   }, [busqueda, etiquetaActiva, cargarClientes])
 
   /**
@@ -318,7 +360,7 @@ export default function PaginaClientes() {
 
         {/* "Se están yendo" (#76): dueña y encargado. El servidor lo vuelve a verificar. */}
         {puedeVerSeVan && (
-          <div role="group" aria-label="Qué clientes ver" className="flex w-full gap-1 rounded-full bg-superficie p-1 sm:w-fit">
+          <div role="group" aria-label={`Qué ${vocabulario.clientes} ver`} className="flex w-full gap-1 rounded-full bg-superficie p-1 sm:w-fit">
             {VISTAS_DE_CLIENTES.map(({ id, texto }) => (
               <button
                 key={id}
@@ -337,7 +379,7 @@ export default function PaginaClientes() {
         )}
 
         {vistaDeClientes === "se-van" && puedeVerSeVan ? (
-          <VistaSeVan nombreNegocio={nombreNegocio} />
+          <VistaSeVan nombreNegocio={nombreNegocio} vocabulario={vocabulario} />
         ) : (
           <>
             {/* Cargar y llevarse la base: dueño y encargado. El servidor lo vuelve a verificar. */}
@@ -394,19 +436,27 @@ export default function PaginaClientes() {
               <AnimatePresence>
                 {clienteSeleccionado && (
                   <PanelDetalleCliente
+                    key={pantallaAncha ? "al-lado" : "hoja"}
                     cliente={clienteSeleccionado}
                     vocabulario={vocabulario}
                     fichaClinica={
                       esDental
                         ? {
                             ruta: rutaDeLaFicha(clienteSeleccionado.id),
-                            alergias:
-                              alergiasDelPanel?.clienteId === clienteSeleccionado.id ? alergiasDelPanel.alergias : null,
+                            alergias: leeAlergias ? alergiasParaLaFicha(clienteSeleccionado.id) : undefined,
+                            alReintentarAlergias: reintentarAlergias,
                           }
                         : undefined
                     }
                     citas={clientesPorId[clienteSeleccionado.id]?.appointments ?? []}
-                  avisosPorCorreo={!!clientesPorId[clienteSeleccionado.id]?.correoPromoConsentAt}
+                    zona={zona}
+                    contacto={{
+                      telefono: clientesPorId[clienteSeleccionado.id]?.phone ?? null,
+                      email: clientesPorId[clienteSeleccionado.id]?.email ?? null,
+                    }}
+                    nombreNegocio={nombreNegocio}
+                    rutaParaAgendar={rutaParaAgendar(clienteSeleccionado.id)}
+                    avisosPorCorreo={!!clientesPorId[clienteSeleccionado.id]?.correoPromoConsentAt}
                     notas={notas}
                     guardandoNotas={guardandoNotas}
                     avisoDeNotas={avisoDeNotas?.clienteId === clienteSeleccionado.id ? avisoDeNotas.mensaje : ""}
@@ -417,6 +467,9 @@ export default function PaginaClientes() {
                     onCerrar={() => setClienteSeleccionado(null)}
                     onCambiarNotas={setNotas}
                     onNotasBlur={guardarNotas}
+                    // Por debajo de lg, una hoja encima de la lista; editar y eliminar se abren sobre ella.
+                    comoHoja={!pantallaAncha}
+                    enSegundoPlano={modalAbierto || aEliminar !== null}
                   />
                 )}
               </AnimatePresence>
@@ -449,7 +502,9 @@ export default function PaginaClientes() {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>{exportando && <ModalExportar alCerrar={() => setExportando(false)} />}</AnimatePresence>
+      <AnimatePresence>
+        {exportando && <ModalExportar vocabulario={vocabulario} alCerrar={() => setExportando(false)} />}
+      </AnimatePresence>
 
       <AnimatePresence>
         {aEliminar && (
@@ -468,13 +523,15 @@ export default function PaginaClientes() {
               <div>
                 <p className="font-medium text-navy">Se borra</p>
                 <p className="mt-1">
-                  Su nombre, correo, teléfono, cédula, notas y etiquetas; su nombre en cada cobro, que pasa a decir &ldquo;Cliente eliminado&rdquo;; y las notas y comentarios de sus citas y atenciones. Deja de aparecer en Clientes y en los buscadores.
+                  Su nombre, correo, teléfono, cédula, notas y etiquetas; su nombre en cada cobro, que pasa a decir &ldquo;Cliente eliminado&rdquo;; y las notas y comentarios de sus citas y atenciones. Deja de aparecer en {conMayuscula(vocabulario.clientes)} y en los buscadores.
                 </p>
               </div>
               <div>
                 <p className="font-medium text-navy">Queda</p>
                 <p className="mt-1">
                   Sus citas y sus cobros, con sus fechas, servicios, profesionales y montos, para que la agenda y los reportes sumen lo mismo.
+                  {esDental &&
+                    " Y su ficha clínica (antecedentes, odontograma, evoluciones, plan y prótesis): queda guardada, aunque ya no se ve en ninguna pantalla."}
                 </p>
               </div>
             </div>

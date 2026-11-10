@@ -50,47 +50,69 @@ interface PropsDeInicioDeLaClinica {
 export function InicioDeLaClinica({ gestionaSillones }: PropsDeInicioDeLaClinica) {
   const [inicio, setInicio] = useState<Resultado<DatosDelInicio> | null>(null)
   const [sillones, setSillones] = useState<SillonDeLaAgenda[] | null>(null)
+  // La última recarga falló pero queda lo de antes a la vista: se dice que
+  // puede estar desactualizado, en vez de mostrarlo como si fuera de ahora.
+  const [errorAlRecargar, setErrorAlRecargar] = useState("")
+  const [reintentando, setReintentando] = useState(false)
+  const vigente = useRef(true)
 
   const recargar = useCallback(async () => {
     const resultado = await leerInicioDeLaClinica()
+    if (!vigente.current) return
     // Si una recarga falla, se queda lo último que llegó bien; sólo sin nada se muestra el error.
     setInicio((previo) => (resultado.ok || !previo?.ok ? resultado : previo))
+    setErrorAlRecargar(resultado.ok ? "" : resultado.error)
   }, [])
 
+  const reintentar = async () => {
+    if (reintentando) return
+    setReintentando(true)
+    await recargar()
+    if (vigente.current) setReintentando(false)
+  }
+
   useEffect(() => {
-    let vigente = true
-    leerInicioDeLaClinica().then((resultado) => {
-      if (vigente) setInicio(resultado)
-    })
+    vigente.current = true
+    void recargar()
     // Los sillones, para "Asignar sillón". Si no cargan, ese botón no se ofrece.
     leerSillones().then((resultado) => {
-      if (vigente && resultado.ok) setSillones(resultado.datos)
+      if (vigente.current && resultado.ok) setSillones(resultado.datos)
     })
-    const reloj = setInterval(() => void recargar(), CADA_MS)
+    // Cada minuto, sólo con la pestaña a la vista: oculta no se pide nada, y al
+    // volver se recarga en el acto (lo de antes ya puede ser viejo).
+    const reloj = setInterval(() => {
+      if (document.visibilityState === "visible") void recargar()
+    }, CADA_MS)
+    const alCambiarLaVisibilidad = () => {
+      if (document.visibilityState === "visible") void recargar()
+    }
+    document.addEventListener("visibilitychange", alCambiarLaVisibilidad)
     return () => {
-      vigente = false
+      vigente.current = false
       clearInterval(reloj)
+      document.removeEventListener("visibilitychange", alCambiarLaVisibilidad)
     }
   }, [recargar])
 
+  const botonReintentar = (
+    <Boton variante="secundario" tamano="sm" cargando={reintentando} onClick={() => void reintentar()}>
+      Reintentar
+    </Boton>
+  )
+
   if (inicio && !inicio.ok) {
-    return (
-      <Aviso
-        accion={
-          <Boton variante="secundario" tamano="sm" onClick={() => void recargar()}>
-            Reintentar
-          </Boton>
-        }
-      >
-        {inicio.error}
-      </Aviso>
-    )
+    return <Aviso accion={botonReintentar}>{inicio.error}</Aviso>
   }
 
   const datos = inicio?.ok ? inicio.datos : null
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-3 xl:items-start">
+      {datos && errorAlRecargar && (
+        <Aviso tono="atencion" rol="status" titulo="Puede estar desactualizado" accion={botonReintentar} className="xl:col-span-3">
+          No se pudo actualizar ({errorAlRecargar}). Lo que ves es de las {horaEn(datos.ahora, datos.zona)}.
+        </Aviso>
+      )}
       <SillonesAhora datos={datos} gestionaSillones={gestionaSillones} className="xl:col-span-2" />
       <div className="flex flex-col gap-4 sm:gap-6">
         <SalaDeEspera datos={datos} sillones={sillones} alCambiar={recargar} />
@@ -341,7 +363,10 @@ function PersonaEsperando({
       setPasando(false)
       return setError(resultado.error)
     }
+    // Si la recarga falla, la persona sigue en la lista (con lo de antes): el
+    // botón no se queda girando. El aviso de arriba dice que está desactualizado.
     await alCambiar()
+    setPasando(false)
   }
 
   const detalle = [persona.titulo, persona.sillon ? persona.sillon.nombre : persona.citaId ? "sin sillón asignado" : "sin reserva"]

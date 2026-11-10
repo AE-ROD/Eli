@@ -76,7 +76,8 @@ type ModalAbierto =
   | { tipo: "cobro"; atencion: Atencion }
   /**
    * `rechazo`: el servidor dijo que ya entró en una caja cerrada o en una
-   * liquidación (`corregir-con-ajuste`). El modal sigue abierto con lo escrito
+   * liquidación, o que tiene un abono pagado al laboratorio
+   * (`corregir-con-ajuste`). El modal sigue abierto con lo escrito
    * y dice cómo se corrige, en vez de cerrarse y perder el motivo (QA#12).
    */
   | { tipo: "anular"; atencion: Atencion; rechazo?: string }
@@ -480,18 +481,18 @@ export default function PaginaTablero() {
   const anular = (atencion: Atencion, motivo: string) =>
     desdeUnModal(async () => {
       const resultado = await anularAtencion(atencion.id, motivo)
-      // Ya entró en una liquidación o en un cierre de caja: la atención no
-      // cambió, no hay nada que recargar ni reintentar. El modal se queda con
-      // el motivo escrito y el mensaje del servidor, que dice cómo se corrige
-      // (con un ajuste), y ya no ofrece anular.
+      // Ya entró en una liquidación o en un cierre de caja, o lleva un abono
+      // ya pagado al laboratorio: la atención no cambió, no hay nada que
+      // recargar ni reintentar. El modal se queda con el motivo escrito y el
+      // mensaje del servidor, que dice cómo se corrige (con un ajuste, o
+      // anulando primero el pago al laboratorio), y ya no ofrece anular.
       if (!resultado.ok && resultado.motivo === "corregir-con-ajuste") {
         setGuardando(false)
         setModal({ tipo: "anular", atencion, rechazo: resultado.error })
         return
       }
-      // Otro 409 o un 404: el mensaje del servidor se muestra tal cual, porque
-      // puede decir qué hacer (un abono de prótesis ya pagado al laboratorio:
-      // "anula primero ese pago…"), y se recarga por si la atención cambió.
+      // Otro 409 o un 404: el mensaje del servidor se muestra tal cual, y se
+      // recarga por si la atención cambió.
       if (!resultado.ok && resultado.motivo === "desactualizada") {
         setGuardando(false)
         return tableroDesactualizado(tarjetaDe(atencion), conRecarga(resultado.error))

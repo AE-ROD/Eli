@@ -62,11 +62,19 @@ export default async function PaginaConfiguracion() {
   // Los laboratorios de las prótesis: sólo la dueña de una clínica dental.
   const gestionaLaboratorios = puedeGestionarLaboratorios(actor)
 
-  const [horariosActuales, servicios, productos, pagina, sillones, laboratorios] = await Promise.all([
+  const [horariosActuales, horarioDelNegocio, servicios, productos, pagina, sillones, laboratorios] = await Promise.all([
     prisma.workSchedule.findMany({
       where: { businessId: actor.businessId, memberId: horarioInicial },
       orderBy: { dayOfWeek: "asc" },
     }),
+    // Para quien ve sólo el suyo: si no tiene horario propio, atiende en el
+    // del negocio, y eso es lo que se le muestra (no un ejemplo inventado).
+    horarioInicial
+      ? prisma.workSchedule.findMany({
+          where: { businessId: actor.businessId, memberId: null },
+          orderBy: { dayOfWeek: "asc" },
+        })
+      : Promise.resolve(undefined),
     prisma.service.findMany({
       where: { businessId: actor.businessId },
       orderBy: { createdAt: "asc" },
@@ -161,11 +169,14 @@ export default async function PaginaConfiguracion() {
               // El encargado ve el general con el nombre del negocio; la dueña, con el suyo.
               nombreDelDueño={esDueño(actor) ? nombreActor : (pagina?.name ?? "El negocio")}
               sufijoDelGeneral={esDueño(actor) ? "(tú)" : "Horario general"}
+              // El encargado se ve también en su propia pestaña: con "(tú)", para que no parezca repetido.
+              memberIdPropio={esDueño(actor) ? null : memberIdPropio}
             />
           ) : (
             <SeccionHorario
               horariosIniciales={horariosActuales}
               memberId={horarioInicial}
+              horarioDelNegocio={horarioDelNegocio}
               titulo={esDueño(actor) ? "Mi horario" : "Mi horario de atención"}
             />
           )}

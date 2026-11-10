@@ -55,6 +55,9 @@ export function QrDelLocal({ slug, nombreNegocio }: PropsDeQrDelLocal) {
   const [enlace, setEnlace] = useState("")
   const [imagen, setImagen] = useState<string | null>(null)
   const [error, setError] = useState("")
+  // Si falla la descarga, el QR sigue a la vista (se puede imprimir o
+  // reintentar): el aviso va junto a los botones, no en su lugar.
+  const [errorAlDescargar, setErrorAlDescargar] = useState("")
 
   useEffect(() => {
     const url = `${window.location.origin}/reservar/${slug}`
@@ -74,6 +77,7 @@ export function QrDelLocal({ slug, nombreNegocio }: PropsDeQrDelLocal) {
   }, [slug])
 
   const descargar = async () => {
+    setErrorAlDescargar("")
     try {
       const datos = await QRCode.toDataURL(enlace, { ...opcionesDelQr(), width: 1200, margin: 4 })
       const vinculo = document.createElement("a")
@@ -83,7 +87,7 @@ export function QrDelLocal({ slug, nombreNegocio }: PropsDeQrDelLocal) {
       vinculo.click()
       vinculo.remove()
     } catch {
-      setError("No se pudo generar la imagen. Intenta de nuevo.")
+      setErrorAlDescargar("No se pudo generar la imagen. Intenta de nuevo.")
     }
   }
 
@@ -134,6 +138,7 @@ export function QrDelLocal({ slug, nombreNegocio }: PropsDeQrDelLocal) {
             >
               Descargar imagen
             </Boton>
+            {errorAlDescargar && <Aviso>{errorAlDescargar}</Aviso>}
           </div>
         </div>
       )}

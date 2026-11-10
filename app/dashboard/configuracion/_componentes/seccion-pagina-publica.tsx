@@ -1,6 +1,7 @@
 "use client"
 
 import { useId, useState } from "react"
+import { useRouter } from "next/navigation"
 import { ArrowUpRight, Camera, Globe, Save } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CLASES_DEL_LOCAL } from "@/components/comunes/colores-del-local"
@@ -48,6 +49,9 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
   const [aviso, setAviso] = useState("")
+  const router = useRouter()
+  // El enlace de reseñas como está guardado: "Mensajes a clientes" depende de él.
+  const [enlaceGuardado, setEnlaceGuardado] = useState(inicial.enlaceResenas)
 
   const cambiar = <Campo extends keyof DatosDePaginaPublica>(campo: Campo, valor: DatosDePaginaPublica[Campo]) => {
     setGuardado(false)
@@ -87,6 +91,14 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
       mediosDePago: guardada.mediosDePago,
     }))
     setGuardado(true)
+    // "Pedir reseña en Google" dice si falta el enlace con lo que leyó la
+    // página al entrar: si el enlace cambió, se vuelve a leer del servidor.
+    // Lo que se está editando en las otras secciones no se pierde.
+    const enlaceNuevo = guardada.enlaceResenas ?? ""
+    if (enlaceNuevo !== enlaceGuardado) {
+      setEnlaceGuardado(enlaceNuevo)
+      router.refresh()
+    }
   }
 
   const color = colorDelNegocio(datos.color)
@@ -144,7 +156,7 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
           <Campo etiqueta="Dirección" valor={datos.address} alCambiar={(valor) => cambiar("address", valor)} maximo={200} placeholder="Av. Providencia 1234, local 5" autoComplete="street-address" />
           <Campo etiqueta="Comuna" valor={datos.comuna} alCambiar={(valor) => cambiar("comuna", valor)} maximo={80} placeholder="Providencia" />
           <Campo etiqueta="WhatsApp del negocio" valor={datos.whatsapp} alCambiar={(valor) => cambiar("whatsapp", valor)} maximo={30} placeholder="+56 9 1234 5678" tipo="tel" />
-          <Campo etiqueta="Instagram" valor={datos.instagram} alCambiar={(valor) => cambiar("instagram", valor)} maximo={200} placeholder="@tu.salon" />
+          <Campo etiqueta="Instagram" valor={datos.instagram} alCambiar={(valor) => cambiar("instagram", valor)} maximo={200} placeholder={esRubroDental(rubro) ? "@tu.clinica" : "@tu.salon"} />
           <div className="sm:col-span-2">
             <Campo
               etiqueta="Enlace para dejar una reseña en Google"

@@ -21,11 +21,14 @@ import {
   agregarEtapa,
   agregarPrestacion,
   cambiarEstadoDePrestacion,
+  cambiarPrestacion,
   cambiarValorDePrestacion,
   crearVersionDelPlan,
+  correrDias,
   leerCitasDelPaciente,
   leerOdontologos,
   leerServicios,
+  type CambiosDePrestacion,
   type CitaDelPaciente,
   type PrestacionNueva,
   type ServicioDeLaClinica,
@@ -252,6 +255,85 @@ export function ModalNuevaEtapa({ pacienteId, alTerminar, alCerrar }: { paciente
 
 // ─── Prestación ──────────────────────────────────────────────────────────────
 
+interface PropsDeCamposDePiezaYCaras {
+  /** El `useId` del modal: los campos son `${id}-pieza` y `${id}-error-caras`. */
+  id: string
+  /** El número de la pieza como texto; "" es boca completa. */
+  pieza: string
+  caras: Cara[]
+  error?: string
+  alElegirPieza: (texto: string) => void
+  alAlternarCara: (cara: Cara) => void
+}
+
+/** La pieza (o boca completa) y sus caras: los de "Agregar prestación" y los de "Editar prestación". */
+function CamposDePiezaYCaras({ id, pieza, caras, error, alElegirPieza, alAlternarCara }: PropsDeCamposDePiezaYCaras) {
+  const numeroDePieza = pieza === "" ? null : Number(pieza)
+  const carasPosibles = numeroDePieza === null ? [] : carasDe(numeroDePieza)
+  return (
+    <>
+      <div>
+        <label htmlFor={`${id}-pieza`} className={ETIQUETA}>
+          Pieza
+        </label>
+        <select
+          id={`${id}-pieza`}
+          autoFocus
+          value={pieza}
+          onChange={(e) => alElegirPieza(e.target.value)}
+          className={cn(CAMPO, "cursor-pointer text-base")}
+        >
+          <option value="">Boca completa</option>
+          <optgroup label="Dentición permanente">
+            {piezasDe("permanente").map((numero) => (
+              <option key={numero} value={numero}>
+                {numero} · {nombreDePieza(numero)}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="Dentición temporal">
+            {piezasDe("temporal").map((numero) => (
+              <option key={numero} value={numero}>
+                {numero} · {nombreDePieza(numero)}
+              </option>
+            ))}
+          </optgroup>
+        </select>
+      </div>
+
+      {numeroDePieza !== null && (
+        <fieldset aria-describedby={error ? `${id}-error-caras` : undefined}>
+          <legend className={ETIQUETA}>Caras (si la prestación es de algunas)</legend>
+          <div className="flex flex-wrap gap-2">
+            {carasPosibles.map((cara) => (
+              <label
+                key={cara}
+                className={cn(
+                  "flex min-h-11 cursor-pointer items-center gap-2 rounded-[14px] border-[1.5px] px-3 text-sm squircle",
+                  caras.includes(cara) ? "border-navy bg-lila-suave/60" : "border-borde hover:bg-superficie"
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={caras.includes(cara)}
+                  onChange={() => alAlternarCara(cara)}
+                  className="anillo-foco size-4 shrink-0 cursor-pointer accent-navy"
+                />
+                <span className="capitalize">{nombreDeCara(cara)}</span>
+              </label>
+            ))}
+          </div>
+          {error && (
+            <p id={`${id}-error-caras`} className={ERROR_DE_CAMPO}>
+              {error}
+            </p>
+          )}
+        </fieldset>
+      )}
+    </>
+  )
+}
+
 /** El valor del selector de profesional: nadie, el dueño o un miembro (su id). */
 const SIN_ASIGNAR = ""
 const DEL_DUEÑO = "duenio"
@@ -285,15 +367,22 @@ export function ModalPrestacion({ pacienteId, etapa, usuario, alTerminar, alCerr
   const enviado = useRef(false)
   const id = useId()
 
+  // Si no llegan, se dice: sin los servicios queda escribir el nombre; sin el equipo, elegirse a sí misma o nadie.
+  const [avisoDeCarga, setAvisoDeCarga] = useState<string[]>([])
+
   // Los servicios, para todos; el equipo, sólo para la dueña (el servidor no se lo da a nadie más).
   useEffect(() => {
     let vigente = true
     leerServicios().then((resultado) => {
-      if (vigente) setServicios(resultado.ok ? resultado.datos : [])
+      if (!vigente) return
+      setServicios(resultado.ok ? resultado.datos : [])
+      if (!resultado.ok) setAvisoDeCarga((previos) => [...previos, `${resultado.error.replace(/\.?$/, ".")} Puedes escribir el nombre de la prestación.`])
     })
     if (usuario.rol === "owner") {
       leerOdontologos().then((resultado) => {
-        if (vigente && resultado.ok) setOdontologos(resultado.datos)
+        if (!vigente) return
+        if (resultado.ok) setOdontologos(resultado.datos)
+        else setAvisoDeCarga((previos) => [...previos, `${resultado.error.replace(/\.?$/, ".")} Por ahora sólo puedes elegirte a ti o dejarla sin asignar.`])
       })
     }
     return () => {
@@ -302,7 +391,6 @@ export function ModalPrestacion({ pacienteId, etapa, usuario, alTerminar, alCerr
   }, [usuario.rol])
 
   const numeroDePieza = pieza === "" ? null : Number(pieza)
-  const carasPosibles = numeroDePieza === null ? [] : carasDe(numeroDePieza)
   const servicio = servicios?.find((candidato) => candidato.id === servicioId) ?? null
 
   const elegirPieza = (texto: string) => {
@@ -367,64 +455,14 @@ export function ModalPrestacion({ pacienteId, etapa, usuario, alTerminar, alCerr
       alCerrar={alCerrar}
     >
       <form onSubmit={agregar} className="space-y-5" noValidate>
-        <div>
-          <label htmlFor={`${id}-pieza`} className={ETIQUETA}>
-            Pieza
-          </label>
-          <select
-            id={`${id}-pieza`}
-            autoFocus
-            value={pieza}
-            onChange={(e) => elegirPieza(e.target.value)}
-            className={cn(CAMPO, "cursor-pointer text-base")}
-          >
-            <option value="">Boca completa</option>
-            <optgroup label="Dentición permanente">
-              {piezasDe("permanente").map((numero) => (
-                <option key={numero} value={numero}>
-                  {numero} · {nombreDePieza(numero)}
-                </option>
-              ))}
-            </optgroup>
-            <optgroup label="Dentición temporal">
-              {piezasDe("temporal").map((numero) => (
-                <option key={numero} value={numero}>
-                  {numero} · {nombreDePieza(numero)}
-                </option>
-              ))}
-            </optgroup>
-          </select>
-        </div>
-
-        {numeroDePieza !== null && (
-          <fieldset aria-describedby={errores.caras ? `${id}-error-caras` : undefined}>
-            <legend className={ETIQUETA}>Caras (si la prestación es de algunas)</legend>
-            <div className="flex flex-wrap gap-2">
-              {carasPosibles.map((cara) => (
-                <label
-                  key={cara}
-                  className={cn(
-                    "flex min-h-11 cursor-pointer items-center gap-2 rounded-[14px] border-[1.5px] px-3 text-sm squircle",
-                    caras.includes(cara) ? "border-navy bg-lila-suave/60" : "border-borde hover:bg-superficie"
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    checked={caras.includes(cara)}
-                    onChange={() => alternarCara(cara)}
-                    className="anillo-foco size-4 shrink-0 cursor-pointer accent-navy"
-                  />
-                  <span className="capitalize">{nombreDeCara(cara)}</span>
-                </label>
-              ))}
-            </div>
-            {errores.caras && (
-              <p id={`${id}-error-caras`} className={ERROR_DE_CAMPO}>
-                {errores.caras}
-              </p>
-            )}
-          </fieldset>
-        )}
+        <CamposDePiezaYCaras
+          id={id}
+          pieza={pieza}
+          caras={caras}
+          error={errores.caras}
+          alElegirPieza={elegirPieza}
+          alAlternarCara={alternarCara}
+        />
 
         <div className="grid gap-5 sm:grid-cols-2">
           <div>
@@ -505,8 +543,123 @@ export function ModalPrestacion({ pacienteId, etapa, usuario, alTerminar, alCerr
           />
         </div>
 
+        {avisoDeCarga.map((texto) => (
+          <Aviso key={texto} tono="atencion">
+            {texto}
+          </Aviso>
+        ))}
         {aviso && <Aviso>{aviso}</Aviso>}
         <PieDelModal texto="Agregar prestación" guardando={guardando} alCerrar={alCerrar} />
+      </form>
+    </MarcoDeModal>
+  )
+}
+
+// ─── Editar pieza, caras y nombre ────────────────────────────────────────────
+
+interface PropsDeModalEditarPrestacion {
+  pacienteId: string
+  prestacion: PrestacionRespuesta
+  /** "Restauración (pieza 16)". */
+  nombre: string
+  alTerminar: (plan: PlanRespuesta) => void
+  alCerrar: () => void
+}
+
+/**
+ * Corregir la pieza, las caras o el nombre de una prestación de una etapa
+ * por aprobar (en una aprobada el servidor no lo deja: ese presupuesto ya se
+ * aceptó). Se manda sólo lo que cambió; la pieza y las caras se revisan con
+ * la regla del servidor (`errorDePiezaYCaras`). El valor y quién la hace se
+ * cambian en la tabla.
+ */
+export function ModalEditarPrestacion({ pacienteId, prestacion, nombre: titulo, alTerminar, alCerrar }: PropsDeModalEditarPrestacion) {
+  const [pieza, setPieza] = useState(prestacion.pieza === null ? "" : String(prestacion.pieza))
+  const [caras, setCaras] = useState<Cara[]>(prestacion.caras as Cara[])
+  const [nombre, setNombre] = useState(prestacion.nombre)
+  const [errores, setErrores] = useState<{ caras?: string; nombre?: string }>({})
+  const [guardando, setGuardando] = useState(false)
+  const [aviso, setAviso] = useState("")
+  const enviado = useRef(false)
+  const id = useId()
+
+  const elegirPieza = (texto: string) => {
+    setPieza(texto)
+    const posibles: Cara[] = texto === "" ? [] : carasDe(Number(texto))
+    setCaras((previas) => previas.filter((cara) => posibles.includes(cara)))
+    setErrores((previos) => ({ ...previos, caras: undefined }))
+  }
+
+  const alternarCara = (cara: Cara) => {
+    setCaras((previas) => (previas.includes(cara) ? previas.filter((c) => c !== cara) : ordenarCaras([...previas, cara])))
+    setErrores((previos) => ({ ...previos, caras: undefined }))
+  }
+
+  const guardar = async (evento: FormEvent<HTMLFormElement>) => {
+    evento.preventDefault()
+    if (enviado.current) return
+    const numeroDePieza = pieza === "" ? null : Number(pieza)
+    const errorDeCaras = errorDePiezaYCaras(numeroDePieza, caras) ?? undefined
+    const errorDeNombre = nombre.trim() === "" ? "Escribe qué prestación es" : undefined
+    setErrores({ caras: errorDeCaras, nombre: errorDeNombre })
+    if (errorDeCaras || errorDeNombre) return
+
+    const cambios: CambiosDePrestacion = {}
+    const cambioLaPieza = numeroDePieza !== prestacion.pieza
+    const cambiaronLasCaras = caras.join(",") !== ordenarCaras(prestacion.caras as Cara[]).join(",")
+    if (cambioLaPieza) cambios.pieza = numeroDePieza
+    // Con la pieza van siempre las caras: las de antes pueden no ser de la nueva.
+    if (cambioLaPieza || cambiaronLasCaras) cambios.caras = caras
+    if (nombre.trim() !== prestacion.nombre) cambios.nombre = nombre.trim()
+    if (Object.keys(cambios).length === 0) return alCerrar()
+
+    enviado.current = true
+    setAviso("")
+    setGuardando(true)
+    const resultado = await cambiarPrestacion(pacienteId, prestacion.id, cambios)
+    if (!resultado.ok) {
+      enviado.current = false
+      setGuardando(false)
+      return setAviso(resultado.error)
+    }
+    alTerminar(resultado.datos)
+  }
+
+  return (
+    <MarcoDeModal titulo="Editar prestación" antetitulo={titulo} bloqueado={guardando} ancho="lg" alCerrar={alCerrar}>
+      <form onSubmit={guardar} className="space-y-5" noValidate>
+        <CamposDePiezaYCaras
+          id={id}
+          pieza={pieza}
+          caras={caras}
+          error={errores.caras}
+          alElegirPieza={elegirPieza}
+          alAlternarCara={alternarCara}
+        />
+        <div>
+          <label htmlFor={`${id}-nombre`} className={ETIQUETA}>
+            Nombre de la prestación
+          </label>
+          <input
+            id={`${id}-nombre`}
+            maxLength={120}
+            value={nombre}
+            onChange={(e) => {
+              setNombre(e.target.value)
+              setErrores((previos) => ({ ...previos, nombre: undefined }))
+            }}
+            aria-invalid={errores.nombre ? true : undefined}
+            aria-describedby={errores.nombre ? `${id}-error-nombre` : undefined}
+            className={cn(CAMPO, "text-base", errores.nombre && CAMPO_CON_ERROR)}
+          />
+          {errores.nombre && (
+            <p id={`${id}-error-nombre`} className={ERROR_DE_CAMPO}>
+              {errores.nombre}
+            </p>
+          )}
+        </div>
+        {aviso && <Aviso>{aviso}</Aviso>}
+        <PieDelModal texto="Guardar cambios" guardando={guardando} alCerrar={alCerrar} />
       </form>
     </MarcoDeModal>
   )
@@ -590,6 +743,9 @@ interface PropsDeModalAgendar {
   alCerrar: () => void
 }
 
+/** Hasta cuántos días por delante se ofrecen citas para agendar una prestación. */
+const DIAS_HACIA_ADELANTE = 365
+
 /**
  * Marcar una prestación como agendada pide la cita: una de las que el
  * paciente tiene por delante (pendiente o confirmada). La cita se crea en la
@@ -597,20 +753,20 @@ interface PropsDeModalAgendar {
  */
 export function ModalAgendar({ pacienteId, prestacion, nombre, zona, hoy, alTerminar, alCerrar }: PropsDeModalAgendar) {
   const [citas, setCitas] = useState<CitaDelPaciente[] | null>(null)
+  // Que no se pudieran leer no es "no tiene citas por delante": se dice y se puede reintentar.
+  const [errorDeCitas, setErrorDeCitas] = useState("")
+  const [intento, setIntento] = useState(0)
   const [citaId, setCitaId] = useState("")
   const [guardando, setGuardando] = useState(false)
   const [aviso, setAviso] = useState("")
   const id = useId()
 
+  // Las de hoy en adelante, hasta un año: las que pueden recibir la prestación.
   useEffect(() => {
     let vigente = true
-    leerCitasDelPaciente(pacienteId).then((resultado) => {
+    leerCitasDelPaciente(pacienteId, hoy, correrDias(hoy, DIAS_HACIA_ADELANTE)).then((resultado) => {
       if (!vigente) return
-      if (!resultado.ok) {
-        setAviso(resultado.error)
-        setCitas([])
-        return
-      }
+      if (!resultado.ok) return setErrorDeCitas(resultado.error)
       const proximas = citasParaAgendar(resultado.datos, new Date())
       setCitas(proximas)
       setCitaId(proximas[0]?.id ?? "")
@@ -618,7 +774,12 @@ export function ModalAgendar({ pacienteId, prestacion, nombre, zona, hoy, alTerm
     return () => {
       vigente = false
     }
-  }, [pacienteId])
+  }, [pacienteId, hoy, intento])
+
+  const reintentar = () => {
+    setErrorDeCitas("")
+    setIntento((previo) => previo + 1)
+  }
 
   const agendar = async (evento: FormEvent<HTMLFormElement>) => {
     evento.preventDefault()
@@ -634,7 +795,17 @@ export function ModalAgendar({ pacienteId, prestacion, nombre, zona, hoy, alTerm
   return (
     <MarcoDeModal titulo="¿En qué cita se hace?" descripcion={nombre} bloqueado={guardando} alCerrar={alCerrar}>
       <form onSubmit={agendar} className="space-y-5">
-        {citas === null ? (
+        {errorDeCitas ? (
+          <Aviso
+            accion={
+              <Boton type="button" variante="secundario" tamano="sm" onClick={reintentar}>
+                Reintentar
+              </Boton>
+            }
+          >
+            {errorDeCitas}
+          </Aviso>
+        ) : citas === null ? (
           <p className="text-sm text-texto-2" aria-busy="true">
             Cargando las citas del paciente...
           </p>
@@ -678,12 +849,12 @@ export function ModalAgendar({ pacienteId, prestacion, nombre, zona, hoy, alTerm
             <Boton type="button" variante="secundario" className="w-full" onClick={alCerrar}>
               Cerrar
             </Boton>
-            <Boton href="/dashboard/agenda" className="w-full">
+            <Boton href={`/dashboard/agenda?nueva=1&cliente=${encodeURIComponent(pacienteId)}`} className="w-full">
               Ir a la agenda
             </Boton>
           </div>
         ) : (
-          <PieDelModal texto="Marcar agendada" guardando={guardando} esperando={citas === null} alCerrar={alCerrar} />
+          <PieDelModal texto="Marcar agendada" guardando={guardando} esperando={citas === null && !errorDeCitas} alCerrar={alCerrar} />
         )}
       </form>
     </MarcoDeModal>

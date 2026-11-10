@@ -14,10 +14,17 @@ import { textoDeCaras } from "@/lib/odontograma"
 import { ESTADOS_DE_PRESTACION, nombreDeEstadoDeEtapa, nombreDeEstadoDePrestacion, type EstadoDePrestacion } from "@/lib/plan-de-tratamiento"
 import { cn } from "@/lib/utils"
 import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
-import { accionDeEtapa, borrarEtapa, borrarPrestacion, cambiarEstadoDePrestacion } from "../_datos"
-import { cuandoEsLaCita, fechaCorta, pesos, porcentajeRealizado } from "../_formato"
+import { accionDeEtapa, borrarEtapa, borrarPrestacion, cambiarEstadoDePrestacion, cambiarPrestacion, leerOdontologos } from "../_datos"
+import { cambioDeProfesional, cuandoEsLaCita, fechaCorta, pesos, porcentajeRealizado, profesionalDeLaFila } from "../_formato"
 import type { UsuarioDeLaFicha } from "./ficha-del-paciente"
-import { ModalAgendar, ModalNuevaEtapa, ModalNuevaVersion, ModalPrestacion, ModalValor } from "./modales-del-plan"
+import {
+  ModalAgendar,
+  ModalEditarPrestacion,
+  ModalNuevaEtapa,
+  ModalNuevaVersion,
+  ModalPrestacion,
+  ModalValor,
+} from "./modales-del-plan"
 
 interface PropsDePestanaPlan {
   pacienteId: string
@@ -37,6 +44,7 @@ type Pendiente =
   | { tipo: "prestacion"; etapa: EtapaRespuesta }
   | { tipo: "agendar"; prestacion: PrestacionRespuesta }
   | { tipo: "valor"; prestacion: PrestacionRespuesta }
+  | { tipo: "editar"; prestacion: PrestacionRespuesta }
   | { tipo: "borrar-etapa"; etapa: EtapaRespuesta }
   | { tipo: "borrar-prestacion"; prestacion: PrestacionRespuesta }
 
@@ -74,6 +82,17 @@ export function PestanaPlan({ pacienteId, plan: respuesta, alCambiar, conOdontog
   const [aviso, setAviso] = useState("")
   const [avisoDelModal, setAvisoDelModal] = useState("")
   const [listo, setListo] = useState("")
+  // Quienes atienden, para el selector de cada fila: sólo a la dueña se los da el servidor.
+  const [equipo, setEquipo] = useState<{ id: string; nombre: string }[]>([])
+  const [avisoDelEquipo, setAvisoDelEquipo] = useState("")
+  /**
+   * Una acción sin modal a la vez. Cada una devuelve el plan entero: con dos
+   * en vuelo, la respuesta que llegaba última (no siempre la del último
+   * cambio) dejaba a la vista un plan viejo. Mientras una trabaja, las demás
+   * quedan deshabilitadas, y este candado frena un segundo clic que llegue
+   * antes de que se dibujen así.
+   */
+  const accionEnCurso = useRef(false)
   const idDelTitulo = useId()
   const idDelPresupuesto = useId()
   const idDeLaNota = useId()
@@ -105,6 +124,19 @@ export function PestanaPlan({ pacienteId, plan: respuesta, alCambiar, conOdontog
     rescatarFoco()
   }, [respuesta])
 
+  useEffect(() => {
+    if (!puedeEditar || usuario.rol !== "owner") return
+    let vigente = true
+    leerOdontologos().then((resultado) => {
+      if (!vigente) return
+      if (resultado.ok) setEquipo(resultado.datos)
+      else setAvisoDelEquipo(`${resultado.error.replace(/\.?$/, ".")} Para darle una prestación a otro odontólogo, recarga la página.`)
+    })
+    return () => {
+      vigente = false
+    }
+  }, [puedeEditar, usuario.rol])
+
   const abrir = (nuevo: Pendiente) => {
     setAvisoDelModal("")
     setPendiente(nuevo)
@@ -120,10 +152,13 @@ export function PestanaPlan({ pacienteId, plan: respuesta, alCambiar, conOdontog
 
   /** Una acción sin modal (aprobar, presentar, cambiar un estado): `clave` marca qué botón trabaja. */
   const hacer = async (clave: string, accion: () => Promise<{ ok: true; datos: PlanRespuesta } | { ok: false; error: string }>, mensaje: string) => {
+    if (accionEnCurso.current) return
+    accionEnCurso.current = true
     setAviso("")
     setListo("")
     setTrabajando(clave)
     const resultado = await accion()
+    accionEnCurso.current = false
     setTrabajando(null)
     if (!resultado.ok) return setAviso(resultado.error)
     alCambiar(resultado.datos)
@@ -147,6 +182,19 @@ export function PestanaPlan({ pacienteId, plan: respuesta, alCambiar, conOdontog
       prestacion.id,
       () => cambiarEstadoDePrestacion(pacienteId, prestacion.id, estado),
       `${nombreDePrestacion(prestacion)}: ${nombreDeEstadoDePrestacion(estado).toLocaleLowerCase("es-CL")}.`
+    )
+  }
+
+  const cambiarProfesional = (prestacion: PrestacionRespuesta, valor: string) => {
+    const cambio = cambioDeProfesional(valor)
+    if (!cambio) return
+    const nuevo = profesionalDeLaFila(prestacion, usuario, equipo).opciones.find((opcion) => opcion.valor === valor)?.texto
+    void hacer(
+      `${prestacion.id}:profesional`,
+      () => cambiarPrestacion(pacienteId, prestacion.id, cambio),
+      "memberId" in cambio && cambio.memberId === null
+        ? `${nombreDePrestacion(prestacion)}: quedó sin asignar.`
+        : `${nombreDePrestacion(prestacion)}: la hace ${nuevo?.replace(/^Yo \((.*)\)$/, "$1") ?? "quien elegiste"}.`
     )
   }
 
@@ -210,6 +258,7 @@ export function PestanaPlan({ pacienteId, plan: respuesta, alCambiar, conOdontog
 
         <div ref={resultado} tabIndex={-1} className="mt-4 space-y-3 rounded-campo anillo-foco">
           {aviso && <Aviso>{aviso}</Aviso>}
+          {avisoDelEquipo && <Aviso tono="atencion">{avisoDelEquipo}</Aviso>}
           {listo && (
             <Aviso tono="listo" rol="status">
               {listo}
@@ -253,6 +302,9 @@ export function PestanaPlan({ pacienteId, plan: respuesta, alCambiar, conOdontog
                 alAgregar={() => abrir({ tipo: "prestacion", etapa })}
                 alBorrar={() => abrir({ tipo: "borrar-etapa", etapa })}
                 quienAtiende={quienAtiende}
+                profesionalDe={(prestacion) => profesionalDeLaFila(prestacion, usuario, equipo)}
+                alCambiarProfesional={cambiarProfesional}
+                alEditarPrestacion={(prestacion) => abrir({ tipo: "editar", prestacion })}
                 alCambiarEstado={cambiarEstado}
                 alCambiarValor={(prestacion) => abrir({ tipo: "valor", prestacion })}
                 alBorrarPrestacion={(prestacion) => abrir({ tipo: "borrar-prestacion", prestacion })}
@@ -340,6 +392,15 @@ export function PestanaPlan({ pacienteId, plan: respuesta, alCambiar, conOdontog
             alCerrar={() => setPendiente(null)}
           />
         )}
+        {pendiente?.tipo === "editar" && (
+          <ModalEditarPrestacion
+            pacienteId={pacienteId}
+            prestacion={pendiente.prestacion}
+            nombre={nombreDePrestacion(pendiente.prestacion)}
+            alTerminar={(nuevo) => alTerminar(nuevo, "Prestación guardada.")}
+            alCerrar={() => setPendiente(null)}
+          />
+        )}
         {pendiente?.tipo === "valor" && (
           <ModalValor
             pacienteId={pacienteId}
@@ -390,6 +451,10 @@ interface PropsDeEtapa {
   idDeLaNota: string
   /** El título de la columna de quién la hace: "Odontólogo". */
   quienAtiende: string
+  /** Qué está elegido y entre qué se elige en el selector de quién la hace. */
+  profesionalDe: (prestacion: PrestacionRespuesta) => ReturnType<typeof profesionalDeLaFila>
+  alCambiarProfesional: (prestacion: PrestacionRespuesta, valor: string) => void
+  alEditarPrestacion: (prestacion: PrestacionRespuesta) => void
   alAccion: (accion: AccionDeEtapa) => void
   alAgregar: () => void
   alBorrar: () => void
@@ -407,6 +472,9 @@ function Etapa({
   hoy,
   idDeLaNota,
   quienAtiende,
+  profesionalDe,
+  alCambiarProfesional,
+  alEditarPrestacion,
   alAccion,
   alAgregar,
   alBorrar,
@@ -421,6 +489,8 @@ function Etapa({
   /** Cuántas quedaron en $0: "Desde el odontograma" sin un servicio de la clínica que les corresponda. */
   const sinValor = etapa.prestaciones.filter((prestacion) => prestacion.valorCents === 0).length
   const sePuedeBorrar = porAprobar && etapa.prestaciones.every((prestacion) => prestacion.estado === "por-agendar")
+  /** Hay una acción en curso: las demás esperan (ver `accionEnCurso`). */
+  const ocupado = trabajando !== null
 
   return (
     <section aria-labelledby={idDelTitulo} className="rounded-[24px] bg-superficie p-3 squircle sm:p-4">
@@ -491,6 +561,11 @@ function Etapa({
                   puedeEditar={puedeEditar}
                   conColumnaDeBorrar={puedeEditar && porAprobar}
                   trabajando={trabajando === prestacion.id}
+                  trabajandoElProfesional={trabajando === `${prestacion.id}:profesional`}
+                  ocupado={ocupado}
+                  profesional={puedeEditar ? profesionalDe(prestacion) : null}
+                  alCambiarProfesional={(valor) => alCambiarProfesional(prestacion, valor)}
+                  alEditar={puedeEditar && porAprobar ? () => alEditarPrestacion(prestacion) : undefined}
                   zona={zona}
                   hoy={hoy}
                   idDeFaltaElValor={puedeEditar && sinValor > 0 ? idDeFaltaElValor : undefined}
@@ -533,13 +608,14 @@ function Etapa({
               tamano="sm"
               aria-describedby={idDeLaNota}
               cargando={trabajando === `${etapa.id}:presentar`}
+              disabled={ocupado}
               onClick={() => alAccion("presentar")}
             >
               {etapa.presentadaEn ? "Presentar de nuevo" : "Presentar al paciente"}
             </Boton>
           )}
           {porAprobar && conPrestaciones && (
-            <Boton type="button" tamano="sm" cargando={trabajando === `${etapa.id}:aprobar`} onClick={() => alAccion("aprobar")}>
+            <Boton type="button" tamano="sm" cargando={trabajando === `${etapa.id}:aprobar`} disabled={ocupado} onClick={() => alAccion("aprobar")}>
               Marcar aprobada
             </Boton>
           )}
@@ -549,6 +625,7 @@ function Etapa({
               variante="secundario"
               tamano="sm"
               cargando={trabajando === `${etapa.id}:volver-a-por-aprobar`}
+              disabled={ocupado}
               onClick={() => alAccion("volver-a-por-aprobar")}
             >
               Volver a por aprobar
@@ -576,7 +653,17 @@ interface PropsDeFilaDePrestacion {
   prestacion: PrestacionRespuesta
   puedeEditar: boolean
   conColumnaDeBorrar: boolean
+  /** Su estado se está guardando. */
   trabajando: boolean
+  /** Quién la hace se está guardando. */
+  trabajandoElProfesional: boolean
+  /** Hay otra acción del plan en curso: los selectores esperan. */
+  ocupado: boolean
+  /** El selector de quién la hace, para quien edita; `null`, sólo el nombre. */
+  profesional: ReturnType<typeof profesionalDeLaFila> | null
+  alCambiarProfesional: (valor: string) => void
+  /** Sólo en una etapa por aprobar: corregir la pieza, las caras y el nombre. */
+  alEditar?: () => void
   zona: string
   hoy: string
   /** La nota de la etapa que explica cómo completar un valor que falta, si se muestra. */
@@ -597,6 +684,11 @@ function FilaDePrestacion({
   puedeEditar,
   conColumnaDeBorrar,
   trabajando,
+  trabajandoElProfesional,
+  ocupado,
+  profesional,
+  alCambiarProfesional,
+  alEditar,
   zona,
   hoy,
   idDeFaltaElValor,
@@ -617,18 +709,51 @@ function FilaDePrestacion({
     <tr>
       <td className={cn(CELDA, "rounded-l-[14px] font-semibold whitespace-nowrap tabular-nums")}>{piezaDe(prestacion)}</td>
       <td className={CELDA}>
-        <span className="block font-medium">
-          {prestacion.nombre}
+        <span className="flex items-start gap-1">
+          <span className="min-w-0 flex-1">
+            <span className="block font-medium">{prestacion.nombre}</span>
+            {detalle.length > 0 && <span className="block text-[13px] text-texto-2">{detalle.join(" · ")}</span>}
+          </span>
+          {alEditar && (
+            <button
+              type="button"
+              onClick={alEditar}
+              disabled={ocupado}
+              aria-label={`Editar pieza, caras y nombre de ${prestacion.nombre}, ${dondeEs}`}
+              title="Editar pieza, caras y nombre"
+              className="-my-2 grid size-10 shrink-0 place-items-center rounded-[12px] text-texto-2 squircle anillo-foco hover:bg-superficie hover:text-navy disabled:opacity-50"
+            >
+              <Pencil className="size-4" aria-hidden="true" strokeWidth={1.75} />
+            </button>
+          )}
         </span>
-        {detalle.length > 0 && <span className="block text-[13px] text-texto-2">{detalle.join(" · ")}</span>}
       </td>
-      <td className={cn(CELDA, "whitespace-nowrap")}>{prestacion.profesionalNombre ?? <span className="text-texto-2">Sin asignar</span>}</td>
+      <td className={cn(CELDA, "whitespace-nowrap")}>
+        {profesional ? (
+          <select
+            value={profesional.valor}
+            onChange={(e) => alCambiarProfesional(e.target.value)}
+            disabled={ocupado}
+            aria-label={`Quién hace ${prestacion.nombre}, ${dondeEs}`}
+            aria-busy={trabajandoElProfesional || undefined}
+            className={cn(CAMPO, "min-h-10 w-auto max-w-48 cursor-pointer py-1.5 pr-8")}
+          >
+            {profesional.opciones.map((opcion) => (
+              <option key={opcion.valor} value={opcion.valor}>
+                {opcion.texto}
+              </option>
+            ))}
+          </select>
+        ) : (
+          prestacion.profesionalNombre ?? <span className="text-texto-2">Sin asignar</span>
+        )}
+      </td>
       <td className={cn(CELDA, "whitespace-nowrap")}>
         {puedeEditar ? (
           <select
             value={prestacion.estado}
             onChange={(e) => alCambiarEstado(e.target.value as EstadoDePrestacion)}
-            disabled={trabajando}
+            disabled={trabajando || ocupado}
             aria-label={`Estado de ${prestacion.nombre}, ${dondeEs}`}
             aria-busy={trabajando || undefined}
             className={cn(CAMPO, "min-h-10 w-auto cursor-pointer py-1.5 pr-8", FONDO_DE_PRESTACION[prestacion.estado])}

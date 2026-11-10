@@ -22,7 +22,8 @@ interface PropsDeListaClientes {
   vocabulario?: Pick<Vocabulario, "clientes" | "cliente">
   /**
    * Clínica dental: la ruta de la ficha clínica de cada paciente. Por debajo
-   * de `lg` no está la ficha de al lado, y la tarjeta lleva a la ficha clínica.
+   * de `lg` la tarjeta lleva a la ficha clínica, y su botón de la esquina abre
+   * la ficha del paciente en una hoja (`onSeleccionar`).
    */
   rutaDeLaFicha?: (id: string) => string
   onSeleccionar: (cliente: ClienteEnTarjeta) => void

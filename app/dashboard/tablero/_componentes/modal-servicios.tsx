@@ -110,6 +110,7 @@ export function ModalServicios({
           puedeConfigurarServicios={puedeConfigurarServicios}
           errores={errores}
           deshabilitado={guardando}
+          lineasAparte={abonos.length}
           onCambiar={setFilas}
         />
 

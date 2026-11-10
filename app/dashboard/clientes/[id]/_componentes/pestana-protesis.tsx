@@ -57,6 +57,7 @@ export function PestanaProtesis({
   const [aviso, setAviso] = useState("")
   const [avisoDeOpciones, setAvisoDeOpciones] = useState("")
   const [creando, setCreando] = useState(false)
+  const [reintentandoOpciones, setReintentandoOpciones] = useState(false)
   const [listo, setListo] = useState("")
   const idDelTitulo = useId()
   const botonNueva = useRef<HTMLButtonElement>(null)
@@ -130,6 +131,20 @@ export function PestanaProtesis({
     setEstado((await cargar()) ? "lista" : "error")
   }
 
+  /**
+   * Sin el catálogo (materiales, laboratorios, tratantes) no se puede crear
+   * ni cambiar el laboratorio: si falló sólo eso, se vuelve a pedir sólo eso,
+   * sin recargar las prótesis.
+   */
+  const reintentarOpciones = async () => {
+    setReintentandoOpciones(true)
+    const delCatalogo = await leerOpcionesDeProtesis(pacienteId)
+    setReintentandoOpciones(false)
+    if (!delCatalogo.ok) return setAvisoDeOpciones(delCatalogo.error)
+    setOpciones(delCatalogo.datos)
+    setAvisoDeOpciones("")
+  }
+
   const reemplazar = (actualizada: ProtesisRespuesta) =>
     setProtesis((previas) => previas.map((otra) => (otra.id === actualizada.id ? actualizada : otra)))
 
@@ -189,7 +204,27 @@ export function PestanaProtesis({
               {aviso}
             </Aviso>
           )}
-          {avisoDeOpciones && <Aviso tono="atencion">{avisoDeOpciones}</Aviso>}
+          {avisoDeOpciones && (
+            <Aviso
+              tono="atencion"
+              accion={
+                // Si también fallaron las prótesis, "Reintentar" de arriba pide las dos cosas.
+                estado !== "error" && (
+                  <Boton
+                    type="button"
+                    variante="secundario"
+                    tamano="sm"
+                    cargando={reintentandoOpciones}
+                    onClick={() => void reintentarOpciones()}
+                  >
+                    Reintentar
+                  </Boton>
+                )
+              }
+            >
+              {avisoDeOpciones.replace(/\.?$/, ".")} Sin eso no se puede crear una prótesis nueva.
+            </Aviso>
+          )}
         </div>
 
         {estado === "lista" && protesis.length === 0 && !creando && (

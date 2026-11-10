@@ -11,6 +11,7 @@ import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { CampoHora } from "@/components/panel/campo-hora"
 import { cn } from "@/lib/utils"
+import { esRubroDental } from "@/lib/rubros"
 import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import {
   buscarClientes,
@@ -18,6 +19,7 @@ import {
   leerCatalogoDeLaCita,
   leerProfesionales,
   opcionesDeSillon,
+  precioDeLosServicios,
   serviciosParaElProfesional,
   type CatalogoDeLaCita,
   type ClienteSugerido,
@@ -98,7 +100,8 @@ export function ModalNuevaCita({
 }: PropsDeModalNuevaCita) {
   const hayAdvertencias = advertencias.length > 0
   // "Cliente" y "Profesional", con las palabras del rubro: "Paciente" y "Odontólogo" en una clínica dental.
-  const vocabulario = vocabularioDe(useRubroDelPanel())
+  const rubro = useRubroDelPanel()
+  const vocabulario = vocabularioDe(rubro)
   // El buscador arranca diciendo el cliente del borrador, si hay uno elegido:
   // lo que se ve y lo que se guarda son lo mismo desde que se abre (A1).
   const [busquedaCliente, setBusquedaCliente] = useState(form.clienteNombre)
@@ -194,10 +197,10 @@ export function ModalNuevaCita({
   function elegirServicios(servicios: ServicioDelCatalogo[]) {
     onCambiarCampo("servicioIds", servicios.map((servicio) => servicio.id).join(","))
     if (servicios.length === 0) return
-    const { duracion, precio } = resumenDeLaReserva(servicios)
+    const { duracion } = resumenDeLaReserva(servicios)
     const fin = horaDeFin(form.horaInicio, duracion)
     if (fin) onCambiarCampo("horaFin", fin)
-    onCambiarCampo("precio", precio === null ? "" : String(precio))
+    onCambiarCampo("precio", precioDeLosServicios(servicios))
   }
 
   function alternarServicio(servicio: ServicioDelCatalogo) {
@@ -345,7 +348,7 @@ export function ModalNuevaCita({
         {!resumen && (
           <CampoFormulario
             etiqueta={serviciosOfrecidos.length > 0 ? "Otro servicio" : "Servicio"}
-            placeholder="Ej.: Corte, Color, Manicura..."
+            placeholder={esRubroDental(rubro) ? "Ej.: Limpieza, Control, Urgencia..." : "Ej.: Corte, Color, Manicura..."}
             value={form.servicio}
             onChange={(e) => onCambiarCampo("servicio", e.target.value)}
             icono={<Scissors className="size-4" aria-hidden="true" strokeWidth={1.75} />}

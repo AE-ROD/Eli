@@ -14,8 +14,14 @@ import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import type { Catalogo } from "../_datos"
 import { Aviso } from "@/components/panel/aviso"
 
-/** Ninguna atención real tiene más; es el tope del servidor. */
-const MAXIMO_DE_FILAS = MAXIMO_DE_LINEAS_POR_ATENCION
+/**
+ * Si cabe otra fila: ninguna atención real tiene más de
+ * `MAXIMO_DE_LINEAS_POR_ATENCION` líneas, y el servidor las cuenta todas, los
+ * abonos de prótesis (`lineasAparte`, que no se editan acá) también.
+ */
+export function quedaLugarParaOtraFila(filas: number, lineasAparte = 0): boolean {
+  return filas + lineasAparte < MAXIMO_DE_LINEAS_POR_ATENCION
+}
 
 /**
  * Las filas que se agregan en esta pestaña. Un contador y no un azar: las
@@ -57,6 +63,11 @@ interface PropsDeEditorDeServicios {
   /** Los errores de cada fila, por su clave. Vacío hasta el primer intento de guardar. */
   errores: Record<string, ErroresDeFila>
   deshabilitado?: boolean
+  /**
+   * Las líneas de la atención que no se editan acá (los abonos de prótesis)
+   * y cuentan igual para el tope de líneas del servidor.
+   */
+  lineasAparte?: number
   onCambiar: (filas: FilaDeServicio[]) => void
 }
 
@@ -72,8 +83,11 @@ export function EditorDeServicios({
   puedeConfigurarServicios,
   errores,
   deshabilitado = false,
+  lineasAparte = 0,
   onCambiar,
 }: PropsDeEditorDeServicios) {
+  // Lo que se puede agregar: el tope del servidor cuenta también los abonos.
+  const sinLugar = !quedaLugarParaOtraFila(filas.length, lineasAparte)
   const idBase = useId()
   // "Odontólogo" en una clínica dental.
   const { profesional: quienAtiende } = vocabularioDe(useRubroDelPanel())
@@ -308,14 +322,14 @@ export function EditorDeServicios({
       })}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* El tope cuenta servicios y productos juntos: es el de líneas de la atención. */}
+        {/* El tope cuenta servicios, productos y abonos juntos: es el de líneas de la atención. */}
         <div className="flex flex-wrap gap-2">
           <Boton
             ref={botonAgregar}
             variante="secundario"
             tamano="sm"
             onClick={() => agregar()}
-            disabled={deshabilitado || filas.length >= MAXIMO_DE_FILAS || catalogo.servicios.length === 0}
+            disabled={deshabilitado || sinLugar || catalogo.servicios.length === 0}
           >
             <Plus aria-hidden="true" className="size-4" strokeWidth={2} />
             Agregar servicio
@@ -325,7 +339,7 @@ export function EditorDeServicios({
               variante="secundario"
               tamano="sm"
               onClick={() => agregar(true)}
-              disabled={deshabilitado || filas.length >= MAXIMO_DE_FILAS}
+              disabled={deshabilitado || sinLugar}
             >
               <Package aria-hidden="true" className="size-4" strokeWidth={2} />
               Agregar producto

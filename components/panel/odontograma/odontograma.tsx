@@ -24,6 +24,7 @@ import { COLOR_DE_LAS_DIVISIONES, COLOR_DEL_CONTORNO } from "./colores"
 import { carasEnLaCruz, type LugarDeCara } from "./geometria"
 import {
   HERRAMIENTAS,
+  denticionAMostrar,
   hallazgosParaLeer,
   marcaDeCara,
   mismasMarcas,
@@ -41,11 +42,6 @@ const BOTON_DE_OPCION =
 
 /** La pieza que se elige al abrir cada dentición: el primer molar superior derecho. */
 const PRIMERA_ELEGIDA: Record<Denticion, number> = { permanente: 16, temporal: 55 }
-
-/** Con qué dentición abre: la temporal sólo si todo lo marcado es temporal. */
-function denticionInicial(marcas: readonly MarcaDelOdontograma[]): Denticion {
-  return marcas.length > 0 && marcas.every((marca) => denticionDe(marca.pieza) === "temporal") ? "temporal" : "permanente"
-}
 
 interface PropsDeOdontograma {
   /** Las marcas que se muestran (las que se están editando, todavía sin guardar). */
@@ -72,9 +68,18 @@ interface PropsDeOdontograma {
  */
 export function Odontograma({ marcas, alCambiar, actualizado, accionesDelResumen, pie }: PropsDeOdontograma) {
   const editable = !!alCambiar
-  const [denticion, setDenticion] = useState<Denticion>(() => denticionInicial(marcas))
+  // `null` mientras quien mira no eligió: la dentición y la pieza siguen a las marcas (`denticionAMostrar`).
+  const [denticionElegida, setDenticionElegida] = useState<Denticion | null>(null)
+  const denticion = denticionAMostrar(marcas, denticionElegida)
   const [herramienta, setHerramienta] = useState<Herramienta>("caries")
-  const [seleccionada, setSeleccionada] = useState(() => PRIMERA_ELEGIDA[denticionInicial(marcas)])
+  const [piezaElegida, setPiezaElegida] = useState<number | null>(null)
+  const seleccionada = piezaElegida ?? PRIMERA_ELEGIDA[denticion]
+  /** Elegir una pieza deja fija la dentición en la que está. */
+  const setSeleccionada = (pieza: number) => {
+    setDenticionElegida(denticionDe(pieza))
+    setPiezaElegida(pieza)
+  }
+  const setDenticion = (otra: Denticion) => setDenticionElegida(otra)
   const [anuncio, setAnuncio] = useState("")
   const idDelTitulo = useId()
   const idDeLaAyuda = useId()

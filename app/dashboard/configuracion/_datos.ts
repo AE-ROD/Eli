@@ -69,24 +69,27 @@ export async function guardarHorario(memberId: string | null, horarios: HorarioD
 }
 
 /**
- * Del formulario a lo que espera el servidor: descripción o precio vacíos no
- * se mandan. El precio lo lee `leerMonto`, así "8.000", "8000" y "8.000,50"
+ * Del formulario a lo que espera el servidor. Al crear, descripción o precio
+ * vacíos no se mandan; al editar se mandan como `null`, que los borra: sin
+ * mandarlos, vaciar el campo no hacía nada y el servicio seguía con el precio
+ * de antes. El precio lo lee `leerMonto`, así "8.000", "8000" y "8.000,50"
  * son el monto que se quiso escribir (con `parseFloat`, "8.000" era 8). Un
  * precio que no se puede leer sin adivinar es un error, no un servicio
  * guardado sin precio o con otro. La frecuencia, igual: vacía es `null` (se
  * borra) y una que no es un entero de 7 a 365 es un error, no se manda.
  */
-export function cuerpoDeServicio(datos: DatosDeServicio) {
+export function cuerpoDeServicio(datos: DatosDeServicio, para: "crear" | "editar" = "crear") {
   const f = frecuenciaDelFormulario(datos.frecuenciaDias)
   if (!f.ok) return f
+  const vacio = para === "editar" ? null : undefined
   const base = {
     name: datos.name,
-    description: datos.description || undefined,
+    description: datos.description.trim() ? datos.description : vacio,
     duration: datos.duration,
     category: datos.category.trim() || null,
     frecuenciaDias: f.valor,
   }
-  if (!datos.price.trim()) return { ok: true as const, datos: { ...base, price: undefined } }
+  if (!datos.price.trim()) return { ok: true as const, datos: { ...base, price: vacio } }
   const precio = leerMonto(datos.price)
   return precio === null
     ? { ok: false as const, error: "No se entiende el precio. Escríbelo así: 8000 o 8000,50." }
@@ -102,7 +105,7 @@ export async function crearServicio(datos: DatosDeServicio): Promise<Resultado<S
 
 /** Devuelve el servicio tal como quedó guardado. */
 export async function editarServicio(id: string, datos: DatosDeServicio): Promise<Resultado<Servicio>> {
-  const cuerpo = cuerpoDeServicio(datos)
+  const cuerpo = cuerpoDeServicio(datos, "editar")
   if (!cuerpo.ok) return cuerpo
   return pedir<Servicio>(`/api/configuracion/servicios/${id}`, "No se pudo guardar el servicio", conJson("PUT", cuerpo.datos))
 }

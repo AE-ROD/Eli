@@ -105,6 +105,18 @@ describe("crearServicio y editarServicio", () => {
     expect(cuerpoEnviado(alEditar)).toHaveProperty("frecuenciaDias", null)
   })
 
+  it("editar con precio y descripción vacíos manda null, para borrarlos; crear no los manda", async () => {
+    const alEditar = simularRespuesta(json({ id: "s1" }))
+    await editarServicio("s1", { ...SERVICIO, price: " ", description: "" })
+    expect(cuerpoEnviado(alEditar)).toMatchObject({ price: null, description: null })
+    vi.unstubAllGlobals()
+
+    const alCrear = simularRespuesta(json({ id: "s1" }, 201))
+    await crearServicio({ ...SERVICIO, price: "", description: "" })
+    expect(cuerpoEnviado(alCrear)).not.toHaveProperty("price")
+    expect(cuerpoEnviado(alCrear)).not.toHaveProperty("description")
+  })
+
   it("con una frecuencia fuera de rango no llama al servidor", async () => {
     const fetchFalso = simularRespuesta(json({ id: "s1" }))
 

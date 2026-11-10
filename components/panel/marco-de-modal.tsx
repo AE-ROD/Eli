@@ -6,6 +6,7 @@ import { X } from "lucide-react"
 import { Antetitulo } from "@/components/comunes/antetitulo"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { ANILLO_DE_FOCO } from "@/components/panel/estilos"
+import { crearPilaDeDialogos, destinoAlCerrar, type DialogoEnLaPila } from "@/components/panel/pila-de-dialogos"
 import { cn } from "@/lib/utils"
 
 /** El ancho máximo de la tarjeta: 448, 672 o 896 px. */
@@ -18,9 +19,24 @@ const ANCHOS = {
 /** Un fundido corto, también al cerrar: nada se agranda ni se desliza. */
 const FUNDIDO = { duration: DURACION.sombra, ease: CURVA.suave }
 
-/** Lo que se puede enfocar con Tab dentro del diálogo. */
-const ENFOCABLES =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+/**
+ * Lo que se puede enfocar con Tab dentro del diálogo: también el `<summary>`
+ * de un desplegable y lo editable a mano (`contenteditable`), que el
+ * navegador recorre con Tab aunque no lleven `tabindex`.
+ */
+const ENFOCABLES = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "summary",
+  '[contenteditable]:not([contenteditable="false"])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(", ")
+
+/** Los diálogos abiertos: sólo el de arriba atiende teclas y foco (`pila-de-dialogos.ts`). */
+const DIALOGOS_ABIERTOS = crearPilaDeDialogos<HTMLElement>()
 
 /** Los campos del formulario: adonde vuelve el foco si lo que lo tenía ya no se puede usar. */
 const CAMPOS = 'input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled])'
@@ -93,7 +109,11 @@ interface PropsDeMarcoDeModal {
  * - Escape y Tab se atienden en el documento y no sólo en el diálogo: así
  *   funcionan aunque el foco haya quedado afuera;
  * - Escape, el botón de cerrar y un clic en el velo lo cierran, salvo
- *   mientras guarda.
+ *   mientras guarda;
+ * - con dos abiertos (uno encima de otro), sólo el de arriba atiende Escape,
+ *   Tab y el foco; al cerrarse, el de abajo vuelve a atenderlos;
+ * - si lo que lo abrió estaba en otro diálogo que ya se fue (uno reemplazó a
+ *   otro), al cerrarse el foco va adonde iría aquél, no al `<body>`.
  *
  * Mientras sale (la animación de cierre de `AnimatePresence`) sigue a la
  * vista pero ya no es el diálogo activo: no atrapa el foco ni atiende teclas,
@@ -127,9 +147,19 @@ export function MarcoDeModal({
    * antes de que corran los efectos, y entonces se anotaba el campo mismo, que
    * al cerrar ya no existe, y el foco caía al <body>.
    */
-  const [quienLoAbrio] = useState(() =>
-    typeof document !== "undefined" && document.activeElement instanceof HTMLElement ? document.activeElement : null
-  )
+  const [apertura] = useState(() => {
+    const activo =
+      typeof document !== "undefined" && document.activeElement instanceof HTMLElement ? document.activeElement : null
+    // Si lo abrió algo de adentro de otro diálogo (el que éste reemplaza, o el
+    // de abajo), se guarda aquél: si al cerrar ese botón ya no está, el foco va
+    // adonde iría aquél.
+    return { quienLoAbrio: activo, dialogoQueLoTenia: activo ? DIALOGOS_ABIERTOS.contenedorDe(activo) : null }
+  })
+  // Este diálogo en la pila: lo que contiene y adonde va el foco al cerrarlo.
+  const [enLaPila] = useState<DialogoEnLaPila<HTMLElement>>(() => ({
+    contiene: (elemento) => panel.current?.contains(elemento) ?? false,
+    destinoAlCerrar: () => destinoAlCerrar(apertura.quienLoAbrio, apertura.dialogoQueLoTenia),
+  }))
 
   const cerrar = () => {
     // Mientras sale ya se cerró: un clic en el velo no lo cierra otra vez.
@@ -146,8 +176,11 @@ export function MarcoDeModal({
   useEffect(() => {
     const nodo = panel.current
     if (!presente || !nodo) return
+    const sacarDeLaPila = DIALOGOS_ABIERTOS.abrir(enLaPila)
 
     const alTeclear = (evento: KeyboardEvent) => {
+      // Con otro diálogo encima, ése atiende: éste espera a que se cierre.
+      if (!DIALOGOS_ABIERTOS.esElDeArriba(enLaPila)) return
       if (evento.key === "Escape") {
         if (!evento.defaultPrevented) cerrarConEscape()
         return
@@ -179,16 +212,18 @@ export function MarcoDeModal({
     }
 
     const alEnfocarAfuera = (evento: globalThis.FocusEvent) => {
+      if (!DIALOGOS_ABIERTOS.esElDeArriba(enLaPila)) return
       if (evento.target instanceof Node && !nodo.contains(evento.target)) volverAdentro(nodo, ultimoEnfocado.current)
     }
 
     document.addEventListener("keydown", alTeclear)
     document.addEventListener("focusin", alEnfocarAfuera)
     return () => {
+      sacarDeLaPila()
       document.removeEventListener("keydown", alTeclear)
       document.removeEventListener("focusin", alEnfocarAfuera)
     }
-  }, [presente])
+  }, [presente, enLaPila])
 
   // Al abrirse el foco entra; al cerrarse vuelve a lo que abrió el diálogo.
   useEffect(() => {
@@ -201,24 +236,25 @@ export function MarcoDeModal({
       // tarjeta que se acaba de mover. Devolvérselo a lo que abrió éste se lo
       // sacaría.
       const actual = document.activeElement
-      if (!actual || actual === document.body || nodo?.contains(actual)) quienLoAbrio?.focus()
+      if (!actual || actual === document.body || nodo?.contains(actual)) enLaPila.destinoAlCerrar()?.focus()
     }
-  }, [quienLoAbrio])
+  }, [enLaPila])
 
   // Apenas empieza a salir, el foco que quedó adentro (o en el <body>) vuelve
   // a lo que abrió el diálogo, si sigue en la página: el contenido se vuelve
   // `inert` y el navegador lo tiraría al <body> durante el fundido. Si otra
   // cosa ya lo tomó (el modal siguiente, la tarjeta que se movió), se respeta.
-  // Si lo que lo abrió ya no está, decide quien abrió el modal
-  // (`onExitComplete`), como antes. Sin desplazar: cuando un modal se cierra
+  // Si lo que lo abrió ya no está (ni el diálogo donde estaba), decide quien
+  // abrió el modal (`onExitComplete`), como antes. Sin desplazar: cuando un modal se cierra
   // para abrir otro (el editor de servicios y el cobro), el foco pasa un
   // instante por lo que abrió el primero y la página de atrás no debe moverse.
   useEffect(() => {
     if (presente) return
     const actual = document.activeElement
     const adentroOSinFoco = !actual || actual === document.body || panel.current?.contains(actual)
-    if (adentroOSinFoco && quienLoAbrio?.isConnected) quienLoAbrio.focus({ preventScroll: true })
-  }, [presente, quienLoAbrio])
+    const destino = enLaPila.destinoAlCerrar()
+    if (adentroOSinFoco && destino) destino.focus({ preventScroll: true })
+  }, [presente, enLaPila])
 
   // Mientras guarda, y cuando termina sin cerrarse (porque falló).
   useEffect(() => {

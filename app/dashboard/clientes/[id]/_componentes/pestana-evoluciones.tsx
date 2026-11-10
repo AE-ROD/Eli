@@ -12,7 +12,7 @@ import { CAMPO, ETIQUETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { MAXIMO_DE_EVOLUCION, type EvolucionRespuesta } from "@/lib/ficha-clinica"
 import { cn } from "@/lib/utils"
-import { anotarEvolucion, leerCitasDelPaciente, leerEvoluciones, type CitaDelPaciente } from "../_datos"
+import { anotarEvolucion, correrDias, leerCitasDelPaciente, leerEvoluciones, type CitaDelPaciente } from "../_datos"
 import { citasParaEvolucion, cuandoEsLaCita, fechaYHora } from "../_formato"
 
 interface PropsDePestanaEvoluciones {
@@ -178,11 +178,17 @@ interface PropsDeModalAnotarEvolucion {
   alCerrar: () => void
 }
 
+/** Cuántos días hacia atrás se ofrecen citas para colgar una evolución. */
+const DIAS_HACIA_ATRAS = 365
+
 /** El texto de la evolución y, si se quiere, la cita en que se atendió (de hoy o antes, sin las canceladas). */
 function ModalAnotarEvolucion({ pacienteId, zona, hoy, alAnotar, alCerrar }: PropsDeModalAnotarEvolucion) {
   const [texto, setTexto] = useState("")
   const [citaId, setCitaId] = useState("")
   const [citas, setCitas] = useState<CitaDelPaciente[] | null>(null)
+  // Si no se pudieron leer las citas se dice: la lista vacía parecía "no tiene citas".
+  const [errorDeCitas, setErrorDeCitas] = useState("")
+  const [intentoDeCitas, setIntentoDeCitas] = useState(0)
   const [guardando, setGuardando] = useState(false)
   const [aviso, setAviso] = useState("")
   /**
@@ -194,15 +200,24 @@ function ModalAnotarEvolucion({ pacienteId, zona, hoy, alAnotar, alCerrar }: Pro
   const enviado = useRef(false)
   const id = useId()
 
+  // Las del último año hasta hoy: una evolución cuenta lo que ya se hizo.
   useEffect(() => {
     let vigente = true
-    leerCitasDelPaciente(pacienteId).then((resultado) => {
-      if (vigente) setCitas(resultado.ok ? citasParaEvolucion(resultado.datos, zona, hoy) : [])
+    leerCitasDelPaciente(pacienteId, correrDias(hoy, -DIAS_HACIA_ATRAS), hoy).then((resultado) => {
+      if (!vigente) return
+      setCitas(resultado.ok ? citasParaEvolucion(resultado.datos, zona, hoy) : [])
+      setErrorDeCitas(resultado.ok ? "" : resultado.error)
     })
     return () => {
       vigente = false
     }
-  }, [pacienteId, zona, hoy])
+  }, [pacienteId, zona, hoy, intentoDeCitas])
+
+  const reintentarCitas = () => {
+    setCitas(null)
+    setErrorDeCitas("")
+    setIntentoDeCitas((previo) => previo + 1)
+  }
 
   const anotar = async (evento: FormEvent<HTMLFormElement>) => {
     evento.preventDefault()
@@ -257,6 +272,7 @@ function ModalAnotarEvolucion({ pacienteId, zona, hoy, alAnotar, alCerrar }: Pro
             value={citaId}
             onChange={(e) => setCitaId(e.target.value)}
             disabled={citas === null}
+            aria-describedby={errorDeCitas ? `${id}-error-citas` : undefined}
             className={cn(CAMPO, "cursor-pointer text-base")}
           >
             <option value="">{citas === null ? "Cargando citas..." : "Sin cita"}</option>
@@ -266,6 +282,14 @@ function ModalAnotarEvolucion({ pacienteId, zona, hoy, alAnotar, alCerrar }: Pro
               </option>
             ))}
           </select>
+          {errorDeCitas && (
+            <div id={`${id}-error-citas`} className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-texto-2">
+              <p>{errorDeCitas.replace(/\.?$/, ".")} Puedes anotarla sin cita.</p>
+              <Boton type="button" variante="secundario" tamano="sm" onClick={reintentarCitas}>
+                Reintentar
+              </Boton>
+            </div>
+          )}
         </div>
 
         {aviso && <Aviso>{aviso}</Aviso>}

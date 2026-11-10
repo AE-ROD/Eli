@@ -4,7 +4,8 @@ import { CalendarDays, Users, DollarSign, type LucideIcon } from "lucide-react"
 import { formatearHora } from "@/lib/fechas"
 import { formatearMonto } from "@/lib/dinero"
 import type { ColorDeModulo } from "@/lib/modulos"
-import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
+import { esRubroDental } from "@/lib/rubros"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { TarjetaEstadistica } from "./tarjeta-estadistica"
 import { puedeVerIngresos, type EstadisticasDelPanel } from "../_datos"
@@ -53,9 +54,11 @@ function procedenciaDeClientes(estadisticas: EstadisticasDelPanel): string | und
  * completada en la agenda sin pasar por el cobro no suma, así que la línea
  * habla de atenciones cobradas y no de citas.
  */
-function procedenciaDeIngresos(estadisticas: EstadisticasDelPanel): string | undefined {
+function procedenciaDeIngresos(estadisticas: EstadisticasDelPanel, rubro: string | null): string | undefined {
   const cobradas = estadisticas.atencionesCobradasMes ?? 0
-  if (cobradas === 0) return "Se suma al cobrar en el tablero. Todavía nada este mes."
+  // "en el tablero", o "en la sala de espera" en una clínica dental.
+  const dondeSeCobra = `${esRubroDental(rubro) ? "la" : "el"} ${vocabularioDe(rubro).tablero}`
+  if (cobradas === 0) return `Se suma al cobrar en ${dondeSeCobra}. Todavía nada este mes.`
 
   const base = cobradas === 1 ? "1 atención cobrada" : `${cobradas} atenciones cobradas`
   const tendencia = estadisticas.tendencias.ingresos
@@ -65,8 +68,12 @@ function procedenciaDeIngresos(estadisticas: EstadisticasDelPanel): string | und
   return `${base} este mes · ${signo}${Math.abs(tendencia)}% vs el mes pasado.`
 }
 
-/** "Clientes activos", o "Pacientes activos" en una clínica dental. */
-const tituloDeClientes = (clientes: string) => `${conMayuscula(clientes)} activos`
+/**
+ * "Total de clientes", o "Total de pacientes" en una clínica dental. La cifra
+ * es el total del negocio, no los que vinieron hace poco: decía "activos" y no
+ * lo eran.
+ */
+const tituloDeClientes = (clientes: string) => `Total de ${clientes}`
 
 /** Mientras cargan, las tres tarjetas con un guion: nunca un cero que no es cierto. */
 function tarjetasCargando(clientes: string): Tarjeta[] {
@@ -77,7 +84,7 @@ function tarjetasCargando(clientes: string): Tarjeta[] {
   ]
 }
 
-function tarjetasDe(estadisticas: EstadisticasDelPanel, clientes: string): Tarjeta[] {
+function tarjetasDe(estadisticas: EstadisticasDelPanel, clientes: string, rubro: string | null): Tarjeta[] {
   return [
     {
       titulo: "Citas hoy",
@@ -100,7 +107,7 @@ function tarjetasDe(estadisticas: EstadisticasDelPanel, clientes: string): Tarje
             valor: formatearMonto(estadisticas.ingresosMes ?? 0),
             icono: DollarSign,
             color: "lima" as const,
-            procedencia: procedenciaDeIngresos(estadisticas),
+            procedencia: procedenciaDeIngresos(estadisticas, rubro),
           },
         ]
       : []),
@@ -114,8 +121,9 @@ interface PropsDeEstadisticasDelNegocio {
 
 /** Las tarjetas de arriba del panel: citas de hoy, clientes e ingresos del mes. */
 export function EstadisticasDelNegocio({ estadisticas }: PropsDeEstadisticasDelNegocio) {
-  const { clientes } = vocabularioDe(useRubroDelPanel())
-  const tarjetas = estadisticas ? tarjetasDe(estadisticas, clientes) : tarjetasCargando(clientes)
+  const rubro = useRubroDelPanel()
+  const { clientes } = vocabularioDe(rubro)
+  const tarjetas = estadisticas ? tarjetasDe(estadisticas, clientes, rubro) : tarjetasCargando(clientes)
 
   return (
     <div aria-busy={!estadisticas || undefined} className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

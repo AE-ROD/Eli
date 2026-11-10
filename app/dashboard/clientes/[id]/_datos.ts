@@ -140,6 +140,30 @@ export async function cambiarValorDePrestacion(id: string, prestacionId: string,
   )
 }
 
+/** Lo que se cambia de una prestación desde la tabla: quién la hace o, en una etapa por aprobar, la pieza, las caras y el nombre. */
+export interface CambiosDePrestacion {
+  pieza?: number | null
+  caras?: string[]
+  nombre?: string
+  /** Un odontólogo del equipo, o `null` para dejarla sin asignar. */
+  memberId?: string | null
+  /** El dueño, que no es miembro del equipo. */
+  delDueño?: true
+}
+
+/**
+ * Cambia quién hace la prestación (en cualquier etapa) o su pieza, caras y
+ * nombre (sólo en una por aprobar: en una aprobada el servidor responde 409).
+ */
+export async function cambiarPrestacion(id: string, prestacionId: string, cambios: CambiosDePrestacion): Promise<Resultado<PlanRespuesta>> {
+  const esDelProfesional = cambios.memberId !== undefined || cambios.delDueño !== undefined
+  return pedir<PlanRespuesta>(
+    `${deLaFicha(id)}/plan/prestaciones/${encodeURIComponent(prestacionId)}`,
+    esDelProfesional ? "No se pudo cambiar quién hace la prestación" : "No se pudo guardar la prestación",
+    conJsonPatch(cambios)
+  )
+}
+
 export async function borrarPrestacion(id: string, prestacionId: string): Promise<Resultado<PlanRespuesta>> {
   return pedir<PlanRespuesta>(
     `${deLaFicha(id)}/plan/prestaciones/${encodeURIComponent(prestacionId)}`,
@@ -208,7 +232,7 @@ export async function agregarProtesisAlPlan(id: string, protesisId: string): Pro
 
 // ─── De otras partes del panel ───────────────────────────────────────────────
 
-/** Una cita del paciente, como la trae `GET /api/clientes/[id]` (las 20 más recientes que quien mira ve). */
+/** Una cita del paciente, como la trae la agenda (`GET /api/citas`): las que quien mira ve. */
 export interface CitaDelPaciente {
   id: string
   title: string
@@ -216,9 +240,22 @@ export interface CitaDelPaciente {
   status: string
 }
 
-export async function leerCitasDelPaciente(id: string): Promise<Resultado<CitaDelPaciente[]>> {
-  const resultado = await pedir<{ appointments: CitaDelPaciente[] }>(deLaFicha(id), "No se pudieron cargar las citas del paciente")
-  return resultado.ok ? { ok: true, datos: resultado.datos.appointments } : resultado
+/** "AAAA-MM-DD" corrido `dias` días (negativo, hacia atrás). Sin zona: es una fecha calendario. */
+export function correrDias(fecha: string, dias: number): string {
+  const [anio, mes, dia] = fecha.split("-").map(Number)
+  return new Date(Date.UTC(anio, mes - 1, dia + dias)).toISOString().slice(0, 10)
+}
+
+/**
+ * Las citas del paciente entre dos días del negocio (incluidos), de la agenda
+ * (`GET /api/citas?customerId=…&desde=…&hasta=…`). Antes salían del detalle
+ * del cliente, que trae sólo las 20 más nuevas: con varias citas por delante,
+ * las ya pasadas (las de una evolución) no llegaban. El servidor filtra por
+ * el negocio de la sesión y, al odontólogo, por las suyas, como en la agenda.
+ */
+export async function leerCitasDelPaciente(id: string, desde: string, hasta: string): Promise<Resultado<CitaDelPaciente[]>> {
+  const parametros = new URLSearchParams({ customerId: id, desde, hasta })
+  return pedir<CitaDelPaciente[]>(`/api/citas?${parametros}`, "No se pudieron cargar las citas del paciente")
 }
 
 /** Un servicio activo del negocio, del catálogo de la agenda. */

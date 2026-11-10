@@ -13,7 +13,7 @@ import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import type { EstadoActivo, PagoPedido } from "@/lib/atenciones"
 import type { LineaGuardada, LineaPedida, PropinaPedida, ReservaDeOrigen } from "@/lib/acciones-del-tablero"
 import { rangoDelDia, zonaDelDispositivo } from "@/lib/fechas"
-import { CODIGO_CORREGIR_CON_AJUSTE } from "@/lib/bloqueos-de-dinero"
+import { CODIGO_CORREGIR_CON_AJUSTE, CODIGO_PAGADO_AL_LABORATORIO } from "@/lib/bloqueos-de-dinero"
 import {
   codigoDelServidor,
   conJson,
@@ -193,8 +193,9 @@ export interface ClienteEncontrado {
  * - `falta-requisito`: el servidor dice que falta algo para avanzar (400),
  *   con el mensaje de qué.
  * - `corregir-con-ajuste`: la atención ya entró en una liquidación o en un
- *   cierre de caja (409 con `codigo: "corregir-con-ajuste"`): no cambió, no
- *   se toca, y el mensaje dice cómo se corrige.
+ *   cierre de caja (409 con `codigo: "corregir-con-ajuste"`), o lleva un
+ *   abono ya pagado al laboratorio (`codigo: "pagado-al-laboratorio"`): no
+ *   cambió, no se toca, y el mensaje dice cómo se corrige.
  * - `otro`: cualquier otro motivo; se muestra el mensaje y nada más.
  */
 export type MotivoDeFallo = "desactualizada" | "falta-requisito" | "corregir-con-ajuste" | "otro"
@@ -417,7 +418,12 @@ export async function leerLineasSinPorcentaje(id: string): Promise<Resultado<str
 /**
  * Anula la atención. Queda en el historial como anulada y deja de sumar. Si
  * ya se rindió (liquidación o cierre de caja), el servidor lo dice con un
- * código, no con el texto (#117).
+ * código, no con el texto (#117). Lo mismo si lleva un abono de prótesis ya
+ * pagado al laboratorio (`pagado-al-laboratorio`): no cambió nada, así que no
+ * es "la atención cambió". Las dos se tratan igual (`corregir-con-ajuste`):
+ * el modal se queda con el motivo escrito y el mensaje del servidor, que dice
+ * cómo seguir; antes ese 409 se leía como desactualizada, el tablero recargaba
+ * y el motivo se perdía.
  */
 export async function anularAtencion(id: string, motivo: string): Promise<ResultadoDeAccion<Atencion>> {
   const resultado = await pedirConCuerpo<Atencion>(
@@ -425,7 +431,8 @@ export async function anularAtencion(id: string, motivo: string): Promise<Result
     "No se pudo anular la atención",
     conJson("POST", motivo.trim() ? { motivo: motivo.trim() } : {})
   )
-  if (!resultado.ok && codigoDelServidor(resultado.cuerpo) === CODIGO_CORREGIR_CON_AJUSTE) {
+  const codigo = codigoDelServidor(resultado.ok ? null : resultado.cuerpo)
+  if (!resultado.ok && (codigo === CODIGO_CORREGIR_CON_AJUSTE || codigo === CODIGO_PAGADO_AL_LABORATORIO)) {
     return { ok: false, error: resultado.error, motivo: "corregir-con-ajuste" }
   }
   return conMotivo(resultado)

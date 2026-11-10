@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { LoaderCircle } from "lucide-react"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
@@ -28,6 +28,8 @@ interface PropsDeSelectorHorarioMiembro {
   nombreDelDueño: string
   /** Lo que va al lado: "(tú)" para el dueño; para el encargado, "Horario general". */
   sufijoDelGeneral?: string
+  /** El `memberId` de quien mira, si es del equipo (el encargado): su pestaña dice "(tú)". */
+  memberIdPropio?: string | null
 }
 
 export function SelectorHorarioMiembro({
@@ -35,6 +37,7 @@ export function SelectorHorarioMiembro({
   miembros,
   nombreDelDueño,
   sufijoDelGeneral = "(tú)",
+  memberIdPropio = null,
 }: PropsDeSelectorHorarioMiembro) {
   // null = el horario general del negocio (el del dueño); string = memberId
   const [seleccionado, setSeleccionado] = useState<string | null>(null)
@@ -54,13 +57,22 @@ export function SelectorHorarioMiembro({
   // El fundido es para el cambio de persona: lo primero que se pinta (que
   // viene del servidor) no espera a JavaScript para verse.
   const [cambioDePersona, setCambioDePersona] = useState(false)
+  // Cada apertura de una pestaña es una carga nueva: la clave de la sección
+  // la incluye, así la sección se rearma con lo que llegó (también al volver
+  // a la misma persona) y no se queda con el estado de la carga anterior.
+  const [carga, setCarga] = useState(0)
+  // La última pestaña pedida. Una respuesta que llega cuando ya se eligió otra
+  // es de otra persona: se descarta, o su horario quedaba a la vista con el
+  // nombre de ésta y "Guardar" lo escribía encima del suyo.
+  const ultimoPedido = useRef(0)
+  const pestañaVigente = useRef<string | null>(null)
 
   const pestañas = [
     { id: null, nombre: nombreDelDueño, sufijo: sufijoDelGeneral },
     ...miembros.map((miembro) => ({
       id: miembro.id,
       nombre: miembro.nombre,
-      sufijo: nombreDelRol(miembro.role, rubro),
+      sufijo: miembro.id === memberIdPropio ? `${nombreDelRol(miembro.role, rubro)} (tú)` : nombreDelRol(miembro.role, rubro),
     })),
   ]
 
@@ -77,33 +89,46 @@ export function SelectorHorarioMiembro({
   }
 
   const abrirPestaña = async (memberId: string | null) => {
+    const numero = ++ultimoPedido.current
+    pestañaVigente.current = memberId
     setSeleccionado(memberId)
     setAviso("")
     setPendiente(false)
     setCambioDePersona(true)
 
     if (memberId === null) {
+      // El general ya está acá. Si había una carga de otra persona en vuelo,
+      // queda descartada (el número cambió) y el cargando se apaga ahora.
+      setCargando(false)
       setHorariosActivos(horariosDelDueñoActuales)
+      setCarga(numero)
       return
     }
 
     setCargando(true)
     const resultado = await leerHorario(memberId)
+    if (numero !== ultimoPedido.current) return
     setCargando(false)
 
     // Si no cargó, no se deja a la vista el horario de la pestaña anterior con
     // el nombre de esta: guardarlo pisaría el horario de este miembro con el
     // de otro.
-    if (resultado.ok) setHorariosActivos(resultado.datos)
-    else setAviso(resultado.error)
+    if (resultado.ok) {
+      setHorariosActivos(resultado.datos)
+      setCarga(numero)
+    } else setAviso(resultado.error)
   }
 
   const pestañaActiva = pestañas.find((pestaña) => pestaña.id === seleccionado)
 
-  /** Lo que se acaba de guardar es lo que se muestra si se vuelve a esta pestaña. */
-  const alGuardar = (horarios: HorarioDelDia[]) => {
-    setHorariosActivos(horarios)
-    if (seleccionado === null) setHorariosDelDueñoActuales(horarios)
+  /**
+   * Lo que se acaba de guardar es lo que se muestra si se vuelve a esta
+   * pestaña. Dice de quién es: un guardado que termina cuando ya se cambió de
+   * persona no toca lo que se ve de la otra.
+   */
+  const alGuardar = (memberId: string | null, horarios: HorarioDelDia[]) => {
+    if (memberId === null) setHorariosDelDueñoActuales(horarios)
+    if (memberId === pestañaVigente.current) setHorariosActivos(horarios)
   }
 
   const descartarYCambiar = () => {
@@ -148,7 +173,7 @@ export function SelectorHorarioMiembro({
       ) : (
         // La clave rearma la sección con el horario de la persona elegida.
         <motion.div
-          key={seleccionado ?? "owner"}
+          key={`${seleccionado ?? "owner"}-${carga}`}
           initial={cambioDePersona ? { opacity: 0 } : false}
           animate={{ opacity: 1 }}
           transition={{ duration: DURACION.hover, ease: CURVA.fundido }}
@@ -156,6 +181,8 @@ export function SelectorHorarioMiembro({
           <SeccionHorario
             horariosIniciales={horariosActivos}
             memberId={seleccionado}
+            // Quien no tiene horario propio atiende en el del negocio: eso es lo que se le muestra.
+            horarioDelNegocio={seleccionado === null ? undefined : horariosDelDueñoActuales}
             titulo={
               seleccionado === null
                 ? sufijoDelGeneral === "(tú)"
@@ -164,7 +191,7 @@ export function SelectorHorarioMiembro({
                 : `Horario de ${pestañaActiva?.nombre}`
             }
             alCambiarPendiente={setPendiente}
-            alGuardar={alGuardar}
+            alGuardar={(horarios) => alGuardar(seleccionado, horarios)}
           />
         </motion.div>
       )}

@@ -1,11 +1,13 @@
 import {
   carasDe,
+  denticionDe,
   esTipoDeCara,
   esTipoDePieza,
   nombreDePieza,
   posicionDe,
   textoDeHallazgos,
   type Cara,
+  type Denticion,
   type MarcaDelOdontograma,
   type TipoDeCara,
   type TipoDeMarca,
@@ -125,4 +127,20 @@ export function nombreAccesibleDePieza(pieza: number, marcas: readonly MarcaDelO
 /** Los terceros molares (18, 28, 38, 48) llevan el número entre paréntesis, como en la ficha de papel. */
 export function etiquetaDePieza(pieza: number): string {
   return pieza < 50 && posicionDe(pieza) === 8 ? `(${pieza})` : String(pieza)
+}
+
+/** Con qué dentición abre: la temporal sólo si todo lo marcado es temporal. */
+export function denticionInicial(marcas: readonly MarcaDelOdontograma[]): Denticion {
+  return marcas.length > 0 && marcas.every((marca) => denticionDe(marca.pieza) === "temporal") ? "temporal" : "permanente"
+}
+
+/**
+ * La dentición que se muestra: la que eligió quien mira o, mientras no tocó
+ * nada (`elegida` en `null`), la que piden las marcas. Así, si las marcas
+ * llegan después de montar (la ficha las carga), un odontograma todo temporal
+ * se abre en la temporal y no en la permanente vacía. Apenas quien mira hace
+ * algo, queda fija: borrar la última marca temporal no le cambia la vista.
+ */
+export function denticionAMostrar(marcas: readonly MarcaDelOdontograma[], elegida: Denticion | null): Denticion {
+  return elegida ?? denticionInicial(marcas)
 }

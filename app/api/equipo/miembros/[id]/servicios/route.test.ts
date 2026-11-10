@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
+import { Prisma } from "@prisma/client"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, conId, datosBase, pedido, sesiones } from "@/pruebas/datos"
 
@@ -114,6 +115,28 @@ describe("PUT /api/equipo/miembros/[id]/servicios", () => {
     const antes = base.volcado()
     expect((await definir(sesiones.dueña, "m-ajeno", { todos: true })).status).toBe(404)
     expect((await definir(sesiones.dueñoAjeno, "m-pedro", { todos: true })).status).toBe(404)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("reemplazar va bajo el candado de ese miembro, antes de borrar", async () => {
+    await definir(sesiones.dueña, "m-pedro", { todos: false, serviceIds: ["s-color"] })
+
+    const [sql, clave] = base.prisma.$executeRaw.mock.calls[0] as [TemplateStringsArray, string]
+    expect(sql.join("?")).toContain("pg_advisory_xact_lock")
+    expect(clave).toBe(`servicios-del-miembro:${NEGOCIO}:m-pedro`)
+    expect(base.prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      base.prisma.memberService.deleteMany.mock.invocationCallOrder[0]
+    )
+  })
+
+  it("si igual choca con el único (miembro, servicio), es 409 y no deja nada a medias", async () => {
+    const antes = base.volcado()
+    base.prisma.memberService.createMany.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError("Unique constraint failed", { code: "P2002", clientVersion: "prueba" })
+    )
+    const { status, cuerpo } = await definir(sesiones.dueña, "m-pedro", { todos: false, serviceIds: ["s-color"] })
+    expect(status).toBe(409)
+    expect(typeof cuerpo.error).toBe("string")
     expect(base.volcado()).toEqual(antes)
   })
 

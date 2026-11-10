@@ -9,7 +9,7 @@
  */
 
 import { comoTexto, diasDeLaSemanaDe, limitesDelMesDe, type UnidadDeTiempo } from "@/lib/fechas"
-import { leerMonto } from "@/lib/dinero"
+import { leerMonto, montoParaEscribir } from "@/lib/dinero"
 import { codigoDelServidor, pedir, pedirConCuerpo, conJson, type Resultado } from "@/lib/peticiones"
 import { CODIGO_CORREGIR_CON_AJUSTE } from "@/lib/bloqueos-de-dinero"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
@@ -249,8 +249,40 @@ export async function leerCitas(fecha: Date, modo: UnidadDeTiempo): Promise<Resu
   return pedir<Cita[]>(`/api/citas?${rangoVisible(fecha, modo)}`, "No se pudieron cargar las citas")
 }
 
-export async function cambiarEstadoDeCita(id: string, estado: string): Promise<Resultado> {
-  return pedir(`/api/citas/${id}`, "No se pudo cambiar el estado", conJson("PUT", { status: estado }))
+/**
+ * Cambia el estado y devuelve la cita como quedó en el servidor: al
+ * cancelarla trae quién y cuándo (`canceladaPor`, `canceladaEn`), y el
+ * detalle lo muestra sin recargar la agenda.
+ */
+export async function cambiarEstadoDeCita(id: string, estado: string): Promise<Resultado<Cita>> {
+  return pedir<Cita>(`/api/citas/${id}`, "No se pudo cambiar el estado", conJson("PUT", { status: estado }))
+}
+
+/**
+ * La cita de la agenda con lo que cambió al cambiarle el estado: el estado y
+ * quién y cuándo la canceló. Lo demás (el cliente, si ya llegó, el sillón) se
+ * queda como estaba: la respuesta del servidor no trae todo lo de la lista.
+ */
+export function conEstadoNuevo(cita: Cita, guardada: Pick<Cita, "status" | "canceladaPor" | "canceladaEn">): Cita {
+  return {
+    ...cita,
+    status: guardada.status,
+    canceladaPor: guardada.canceladaPor ?? null,
+    canceladaEn: guardada.canceladaEn ?? null,
+  }
+}
+
+/**
+ * El precio que se precarga al elegir servicios del catálogo: la suma de los
+ * que tienen precio, hecha en centavos (con `+`, 0,1 + 0,2 daba
+ * 0,30000000000000004 y el campo mostraba eso), y escrita como la lee
+ * `leerMonto` (`montoParaEscribir`): "8000", "8000,5". Vacío si ninguno tiene.
+ */
+export function precioDeLosServicios(servicios: Pick<ServicioDelCatalogo, "price">[]): string {
+  const conPrecio = servicios.filter((servicio): servicio is { price: number } => servicio.price !== null)
+  if (conPrecio.length === 0) return ""
+  const centavos = conPrecio.reduce((total, servicio) => total + Math.round(servicio.price * 100), 0)
+  return montoParaEscribir(centavos / 100)
 }
 
 /**

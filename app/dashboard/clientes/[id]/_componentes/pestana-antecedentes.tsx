@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils"
 import { guardarAntecedentes, type AntecedentesEscritos } from "../_datos"
 import { fechaYHora } from "../_formato"
+import { useCambiosSinGuardar } from "./cambios-sin-guardar"
 
 interface PropsDePestanaAntecedentes {
   pacienteId: string
@@ -52,6 +53,7 @@ export function PestanaAntecedentes({ pacienteId, ficha, editable, zona, hoy, al
 
   const guardados = deLaFicha(ficha)
   const hayCambios = (Object.keys(datos) as (keyof AntecedentesEscritos)[]).some((campo) => datos[campo] !== guardados[campo])
+  useCambiosSinGuardar("antecedentes", "los antecedentes", editable && hayCambios)
 
   const cambiar = (campo: keyof AntecedentesEscritos, valor: string) => {
     setDatos((previos) => ({ ...previos, [campo]: valor }))

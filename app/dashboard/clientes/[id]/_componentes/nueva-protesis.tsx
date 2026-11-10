@@ -1,9 +1,11 @@
 "use client"
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react"
+import { AnimatePresence } from "framer-motion"
 import { Antetitulo } from "@/components/comunes/antetitulo"
 import { Boton } from "@/components/comunes/boton"
 import { Aviso } from "@/components/panel/aviso"
+import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { CAMPO, ETIQUETA, TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
 import { COLOR_DE_CORONA, COLOR_DEL_CONTORNO } from "@/components/panel/odontograma/colores"
 import type { OpcionesDeProtesisRespuesta, ProtesisRespuesta } from "@/lib/edicion-de-protesis"
@@ -47,6 +49,7 @@ import {
 import { ArcadaDeProtesis } from "./arcada-de-protesis"
 import { ResumenDeProtesis } from "./resumen-de-protesis"
 import { SelectorDeTono } from "./tono-de-protesis"
+import { useCambiosSinGuardar } from "./cambios-sin-guardar"
 
 /** Los botones de opción (arcada, herramienta, zona): 40px de alto, el ::after los lleva a 44 para el dedo. */
 const BOTON_DE_OPCION =
@@ -81,7 +84,10 @@ interface PropsDeNuevaProtesis {
  * diseño incompleto) lo dice `errorDelDiseno` antes de mandar.
  */
 export function NuevaProtesis({ pacienteId, opciones, odontograma, esLaDuena, nombreDeQuienMira, alCrear, alCancelar }: PropsDeNuevaProtesis) {
-  const [borrador, setBorrador] = useState<BorradorDeProtesis>(() => borradorInicial(opciones))
+  // Cómo empezó el borrador: si se tocó algo, cancelar o salir de la ficha pregunta antes.
+  const [inicial] = useState<BorradorDeProtesis>(() => borradorInicial(opciones))
+  const [borrador, setBorrador] = useState<BorradorDeProtesis>(inicial)
+  const [preguntandoSiCancelar, setPreguntandoSiCancelar] = useState(false)
   const [herramienta, setHerramienta] = useState<HerramientaDeProtesis>("protesica")
   const [anuncio, setAnuncio] = useState("")
   /** Si lo último anunciado es que se tocó un cordal: ese aviso además se ve. */
@@ -95,6 +101,14 @@ export function NuevaProtesis({ pacienteId, opciones, odontograma, esLaDuena, no
 
   // Al abrirse, el foco va al título: se lee qué es y se sigue con Tab.
   useEffect(() => titulo.current?.focus(), [])
+
+  const hayCambios = JSON.stringify(borrador) !== JSON.stringify(inicial)
+  useCambiosSinGuardar("nueva-protesis", "la prótesis nueva", hayCambios && !guardando)
+
+  const cancelar = () => {
+    if (hayCambios) setPreguntandoSiCancelar(true)
+    else alCancelar()
+  }
 
   const faltas = faltasDelOdontograma(odontograma)
   const diseno = disenoDelBorrador(borrador)
@@ -490,7 +504,7 @@ export function NuevaProtesis({ pacienteId, opciones, odontograma, esLaDuena, no
             <Boton type="submit" className="w-full" cargando={guardando}>
               Crear prótesis
             </Boton>
-            <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={alCancelar}>
+            <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={cancelar}>
               Cancelar
             </Boton>
           </div>
@@ -500,6 +514,22 @@ export function NuevaProtesis({ pacienteId, opciones, odontograma, esLaDuena, no
           </p>
         </section>
       </div>
+      <AnimatePresence>
+        {preguntandoSiCancelar && (
+          <ModalConfirmar
+            titulo="¿Descartar esta prótesis?"
+            descripcion="Todavía no se creó: si cancelas, se pierde lo que diseñaste."
+            textoConfirmar="Descartar prótesis"
+            textoCancelar="Seguir diseñando"
+            peligro
+            onConfirmar={() => {
+              setPreguntandoSiCancelar(false)
+              alCancelar()
+            }}
+            onCerrar={() => setPreguntandoSiCancelar(false)}
+          />
+        )}
+      </AnimatePresence>
     </form>
   )
 }

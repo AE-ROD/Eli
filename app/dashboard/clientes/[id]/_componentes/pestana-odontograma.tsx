@@ -14,6 +14,7 @@ import { propuestaDesdeOdontograma } from "@/lib/plan-de-tratamiento"
 import { cn } from "@/lib/utils"
 import { crearVersionDelPlan, guardarOdontograma } from "../_datos"
 import { fechaYHora } from "../_formato"
+import { useCambiosSinGuardar } from "./cambios-sin-guardar"
 
 interface PropsDePestanaOdontograma {
   pacienteId: string
@@ -32,7 +33,7 @@ interface PropsDePestanaOdontograma {
  * El odontograma del paciente con lo de guardar: los toques cambian una copia
  * local, y "Guardar odontograma" manda el conjunto entero (la API lo
  * reemplaza). Mientras haya cambios sin guardar se dice, con una barra que
- * acompaña al bajar, y el navegador avisa antes de salir de la página.
+ * acompaña al bajar, y se pregunta antes de salir de la ficha.
  *
  * "Generar presupuesto" arma una versión del plan desde el odontograma
  * guardado (guarda antes lo que falte). Si ya hay un plan vigente, lo
@@ -54,13 +55,8 @@ export function PestanaOdontograma({ pacienteId, inicial, editable, plan, zona, 
   const vigente = plan?.plan ?? null
   const puedeArmarPlan = editable && !!plan?.puedeEditar
 
-  // Con cambios sin guardar, el navegador pregunta antes de cerrar o recargar.
-  useEffect(() => {
-    if (!hayCambios) return
-    const avisar = (evento: BeforeUnloadEvent) => evento.preventDefault()
-    window.addEventListener("beforeunload", avisar)
-    return () => window.removeEventListener("beforeunload", avisar)
-  }, [hayCambios])
+  // Con cambios sin guardar, se pregunta antes de cerrar, recargar o irse por un enlace del panel.
+  useCambiosSinGuardar("odontograma", "el odontograma", hayCambios)
 
   // Al guardar o descartar, la barra (con el botón que tenía el foco) se va y
   // el foco caería al <body>: va al mensaje de lo que pasó, que se lee al llegar.

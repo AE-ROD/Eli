@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useId, useState } from "react"
+import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { AnimatePresence } from "framer-motion"
 import { Hourglass, Mail, Phone, X } from "lucide-react"
 import { BotonIcono } from "@/components/comunes/boton-icono"
@@ -51,8 +51,14 @@ export function ListaDeEsperaDelDia({ fecha }: { fecha: Date }) {
   const [avisoAlQuitar, setAvisoAlQuitar] = useState("")
   const idDelTitulo = useId()
 
+  // La respuesta de un día que ya no se mira (pasar rápido de día) llega
+  // tarde y no pisa la del día nuevo: sólo cuenta la última pedida.
+  const ultimaCarga = useRef(0)
+
   const cargar = useCallback(async (dia: string) => {
+    const numero = ++ultimaCarga.current
     const resultado = await leerListaDeEspera(dia)
+    if (numero !== ultimaCarga.current) return
     if (resultado.ok) {
       setInscripciones(resultado.datos)
       setAviso("")

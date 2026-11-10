@@ -26,6 +26,21 @@ export function mensajeSugerido({ nombre, nombreNegocio, ultimoServicio }: ParaE
   return `${saludo}${desde} Hace un tiempo que no te vemos y queríamos saber cómo estás. ${propuesta}`
 }
 
+/**
+ * El saludo con que se abre un mensaje desde la ficha del cliente ("Enviar
+ * mensaje"): sólo el saludo y de dónde se escribe; lo demás lo escribe quien
+ * lo manda.
+ */
+export function saludoSugerido({ nombre, nombreNegocio }: Omit<ParaElMensaje, "ultimoServicio">): string {
+  const saludo = primerNombre(nombre) ? `¡Hola, ${primerNombre(nombre)}!` : "¡Hola!"
+  return nombreNegocio.trim() ? `${saludo} Te escribimos de ${nombreNegocio.trim()}.` : saludo
+}
+
+/** Asunto del correo que se abre desde la ficha: el nombre del negocio. */
+export function asuntoDelSaludo(nombreNegocio: string): string {
+  return nombreNegocio.trim() || "Hola"
+}
+
 /** Asunto del correo. */
 export function asuntoSugerido(nombreNegocio: string): string {
   return nombreNegocio.trim() ? `Te extrañamos en ${nombreNegocio.trim()}` : "Te extrañamos"

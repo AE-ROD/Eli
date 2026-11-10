@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 import type { MarcaDelOdontograma } from "@/lib/odontograma"
 import {
+  denticionAMostrar,
+  denticionInicial,
   etiquetaDePieza,
   hallazgosParaLeer,
   marcaDeCara,
@@ -92,5 +94,27 @@ describe("textos para leer", () => {
     expect(etiquetaDePieza(18)).toBe("(18)")
     expect(etiquetaDePieza(17)).toBe("17")
     expect(etiquetaDePieza(55)).toBe("55")
+  })
+})
+
+describe("denticionAMostrar: la dentición sigue a las marcas hasta que quien mira elige", () => {
+  const temporal: MarcaDelOdontograma = { pieza: 55, cara: "O", tipo: "caries" }
+
+  it("sin marcas, la permanente; con todo temporal, la temporal", () => {
+    expect(denticionInicial([])).toBe("permanente")
+    expect(denticionInicial([temporal])).toBe("temporal")
+    expect(denticionInicial([temporal, caries16O])).toBe("permanente")
+  })
+
+  it("si las marcas llegan después de montar, se recalcula", () => {
+    // Al montar todavía no hay marcas (la ficha las está cargando): permanente.
+    expect(denticionAMostrar([], null)).toBe("permanente")
+    // Llegan, todas temporales: temporal, sin que nadie haya tocado nada.
+    expect(denticionAMostrar([temporal], null)).toBe("temporal")
+  })
+
+  it("lo que eligió quien mira manda, aunque las marcas pidan otra", () => {
+    expect(denticionAMostrar([temporal], "permanente")).toBe("permanente")
+    expect(denticionAMostrar([], "temporal")).toBe("temporal")
   })
 })

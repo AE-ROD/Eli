@@ -7,9 +7,12 @@ import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { Aviso } from "@/components/panel/aviso"
 import { comoTexto } from "@/lib/fechas"
+import { conMayuscula, type Vocabulario } from "@/lib/vocabulario"
 import { exportarAtenciones, exportarClientes } from "../_datos"
 
 interface PropsDeModalExportar {
+  /** "clientes" o, en una clínica dental, "pacientes". */
+  vocabulario?: Pick<Vocabulario, "clientes">
   alCerrar: () => void
 }
 
@@ -25,7 +28,8 @@ function mesEnCurso(): { desde: string; hasta: string } {
  * Sólo lo abre quien puede (`puedeImportarExportarClientes`); el servidor lo
  * vuelve a verificar.
  */
-export function ModalExportar({ alCerrar }: PropsDeModalExportar) {
+export function ModalExportar({ vocabulario = { clientes: "clientes" }, alCerrar }: PropsDeModalExportar) {
+  const { clientes } = vocabulario
   const [rango, setRango] = useState(mesEnCurso)
   const [descargando, setDescargando] = useState<"clientes" | "atenciones" | null>(null)
   const [aviso, setAviso] = useState("")
@@ -49,9 +53,9 @@ export function ModalExportar({ alCerrar }: PropsDeModalExportar) {
         <section className="space-y-3">
           <h3 className="flex items-center gap-2 font-medium text-navy">
             <Users className="size-4" aria-hidden="true" strokeWidth={1.75} />
-            Clientes
+            {conMayuscula(clientes)}
           </h3>
-          <p className="text-sm text-texto-2">Todos los clientes del negocio, con sus datos de contacto y notas.</p>
+          <p className="text-sm text-texto-2">Todos los {clientes} del negocio, con sus datos de contacto y notas.</p>
           <Boton
             type="button"
             variante="secundario"
@@ -60,7 +64,7 @@ export function ModalExportar({ alCerrar }: PropsDeModalExportar) {
             cargando={descargando === "clientes"}
             onClick={() => descargar("clientes")}
           >
-            Descargar clientes
+            Descargar {clientes}
           </Boton>
         </section>
 

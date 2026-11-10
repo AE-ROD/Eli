@@ -184,6 +184,29 @@ describe("GET /api/atenciones", () => {
     ])
   })
 
+  it("la dueña que también es profesional de su negocio aparece dos veces, y se distinguen", async () => {
+    const { GET } = await import("./route")
+    base.reiniciar({
+      ...escenario(),
+      businessMember: [
+        ...escenario().businessMember,
+        { id: "m-duena", businessId: NEGOCIO, userId: "u-duena", role: "worker", createdAt: new Date("2026-01-04") },
+      ],
+    })
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const { catalogo } = await (await GET(pedido(URL_DEL_DIA))).json()
+
+    // Como profesional sus líneas llevan comisión; como dueña, no: el selector lo dice.
+    expect(catalogo.profesionales).toEqual([
+      { id: "m-encargado", nombre: "Bruno Encargado" },
+      { id: "m-carla", nombre: "Carla Profesional" },
+      { id: "m-pedro", nombre: "Pedro Profesional" },
+      { id: "m-duena", nombre: "Ana Dueña (como profesional)" },
+      { id: "duenio", nombre: "Ana Dueña" },
+    ])
+  })
+
   it("el catálogo trae los productos activos del negocio, sin su % de comisión, también a la profesional (#67)", async () => {
     const { GET } = await import("./route")
     for (const sesion of [sesiones.dueña, sesiones.carla]) {

@@ -34,9 +34,15 @@ export const COLOR_DE_AUSENTE = "#6b7780"
 /** Rojo de la X de una extracción indicada: el de la caries, también algo por tratar. */
 export const COLOR_DE_EXTRACCION = COLOR_DE_CARA.caries
 
-/** El contorno de cada pieza (el texto secundario, 5,3:1) y las líneas que separan sus caras. */
+/** El contorno de cada pieza (el texto secundario, 5,3:1). */
 export const COLOR_DEL_CONTORNO = "#5f6d77"
-export const COLOR_DE_LAS_DIVISIONES = "#8d99a2"
+/**
+ * Las líneas que separan las caras: más claras que el contorno, pero sobre 3:1
+ * contra todos los fondos de cara: 3,4:1 sobre blanco, 3,3 sobre crema, 3,1
+ * sobre el del tercer molar y sobre el de la pieza ausente. La de antes
+ * (#8d99a2) daba 2,9:1 sobre blanco y no se distinguía la cara a tocar.
+ */
+export const COLOR_DE_LAS_DIVISIONES = "#808c95"
 
 /** El fondo de una cara sana; el de una pieza ausente, y el de un tercer molar, que a menudo no está. */
 export const FONDO_DE_CARA = "#ffffff"

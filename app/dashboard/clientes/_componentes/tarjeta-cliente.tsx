@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { CalendarDays, Mail, Phone } from "lucide-react"
+import { CalendarDays, Contact, Mail, Phone } from "lucide-react"
 import { Insignia } from "@/components/comunes/insignia"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { fechaRelativa } from "@/lib/fechas"
@@ -35,10 +35,12 @@ interface PropsDeTarjetaCliente {
   /** Si es el que está abierto en la ficha de al lado. La ficha se ve desde `lg`, y la marca también. */
   seleccionado?: boolean
   /**
-   * Clínica dental: la ficha clínica del paciente. Por debajo de `lg` no hay
-   * ficha al lado de la lista, así que ahí la tarjeta es un enlace a la ficha
-   * clínica; desde `lg` sigue siendo el botón que abre la de al lado (que
-   * tiene "Abrir ficha clínica").
+   * Clínica dental: la ficha clínica del paciente. Por debajo de `lg` la
+   * tarjeta es un enlace a la ficha clínica, y un botón aparte, en la
+   * esquina, abre la ficha del paciente en una hoja (contacto, editar,
+   * eliminar y notas, que la ficha clínica no tiene). Desde `lg` la tarjeta
+   * sigue siendo el botón que abre la de al lado (que tiene "Abrir ficha
+   * clínica").
    */
   rutaDeLaFicha?: string
   onClick?: () => void
@@ -117,14 +119,24 @@ export function TarjetaCliente({ cliente, seleccionado = false, rutaDeLaFicha, o
 
   if (rutaDeLaFicha) {
     return (
-      <>
-        <Link href={rutaDeLaFicha} className={cn(clases, "lg:hidden")}>
+      // El botón de los datos va al lado del enlace y no adentro: un botón dentro de un enlace no se puede usar.
+      <div className="relative h-full">
+        <Link href={rutaDeLaFicha} className={cn(clases, "pr-14 lg:hidden")}>
           <ContenidoDeLaTarjeta cliente={cliente} />
         </Link>
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={`Datos y notas de ${cliente.nombre}`}
+          title="Datos y notas"
+          className="absolute top-2 right-2 grid size-11 place-items-center rounded-[14px] text-navy squircle anillo-foco transition-colors duration-150 ease-suave hover:bg-superficie lg:hidden"
+        >
+          <Contact className="size-5" aria-hidden="true" strokeWidth={1.75} />
+        </button>
         <button type="button" onClick={onClick} className={cn(clases, "hidden lg:block")}>
           <ContenidoDeLaTarjeta cliente={cliente} />
         </button>
-      </>
+      </div>
     )
   }
 

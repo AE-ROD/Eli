@@ -122,7 +122,10 @@ export function TarjetaDeProtesis({
     }
     alCambiar(respuesta.datos)
     setModal(null)
-    setEdicion(null)
+    // "Pasar a…" con la edición abierta la deja abierta, con lo escrito: sólo
+    // cambió el seguimiento. Se cierra si la prótesis quedó cerrada
+    // (entregada o anulada), que ya no se edita.
+    if (estaCerrada(respuesta.datos.estado)) setEdicion(null)
     setListo(mensaje)
     // El botón se deshabilitó mientras se guardaba: si el foco se perdió, va al mensaje.
     if (!conModal) requestAnimationFrame(enfocarResultadoSiSePerdio)
@@ -137,6 +140,11 @@ export function TarjetaDeProtesis({
       return document.getElementById(`${id}-laboratorio`)?.focus()
     }
     if (siguiente === "entregada") {
+      // Entregarla la cierra y se perdería lo que se está cambiando: primero se guarda o se cancela.
+      if (edicion && cambiosDeLaEdicion(edicionDe(protesis), edicion)) {
+        setAvisoDeLaEdicion("Guarda o cancela estos cambios antes de marcarla como entregada.")
+        return document.getElementById(`${id}-editar`)?.focus()
+      }
       setAvisoDelModal("")
       return setModal("entregar")
     }

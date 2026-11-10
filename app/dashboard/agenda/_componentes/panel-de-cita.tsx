@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react"
 import { useSession } from "next-auth/react"
-import { motion } from "framer-motion"
+import { AnimatePresence, motion } from "framer-motion"
 import { X } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
@@ -25,6 +25,7 @@ import type { Resultado } from "@/lib/peticiones"
 import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
+import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { cn } from "@/lib/utils"
 import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import {
@@ -54,7 +55,8 @@ const FUNDIDO = { duration: DURACION.sombra, ease: CURVA.suave }
 interface PropsDePanelDeCita {
   cita: Cita
   onCerrar: () => void
-  onCambiarEstado: (id: string, estado: string) => void
+  /** Cambia el estado en el servidor. Devuelve el error, o vacío si salió bien. */
+  onCambiarEstado: (id: string, estado: string) => Promise<string>
   /** Abre el modal para cambiar la fecha, la hora y (si se puede) el profesional. */
   onMover: (cita: Cita) => void
   /** La cita ya se reactivó en el servidor: la agenda la muestra con su estado nuevo. */
@@ -113,8 +115,9 @@ export function PanelDeCita({
   const zona = useZonaDelNegocio()
   const reactiva = puedeReactivarCita(actorDeSesion(sesion))
   // Por confirmar tras faltas (#84): la confirman o la cancelan dueña y
-  // encargado. Al profesional el servidor le responde 401 a cualquier cambio
-  // de estado, así que no se le ofrece ninguno.
+  // encargado. En una por confirmar, al profesional el servidor le responde
+  // 401 a cualquier cambio de estado, así que en ésas no se le ofrece ninguno;
+  // en sus demás citas, sí.
   const porConfirmar = citaPorConfirmar(cita)
   const resuelve = puedeResolverPorConfirmar(actorDeSesion(sesion))
   const [reactivando, setReactivando] = useState(false)
@@ -122,6 +125,14 @@ export function PanelDeCita({
   const [errorAlReactivar, setErrorAlReactivar] = useState("")
   // La plata de su atención ya se rindió: no se reactiva, se corrige con un ajuste.
   const [seCorrigeConAjuste, setSeCorrigeConAjuste] = useState(false)
+  // "Cancelar cita" pide confirmación: no se deshace sola (reactivarla es de
+  // dueña y encargado, y sólo si no empezó).
+  const [confirmandoCancelar, setConfirmandoCancelar] = useState(false)
+  const [cancelando, setCancelando] = useState(false)
+  const [errorAlCancelar, setErrorAlCancelar] = useState("")
+  // Cancelada, el botón que abrió la confirmación ya no está: al terminar de
+  // salir el modal, el foco va al título del detalle.
+  const enfocarElTituloAlSalir = useRef(false)
   const idDelTitulo = useId()
   // El panel al lado del calendario o, en el celular, el contenido del diálogo.
   const panel = useRef<HTMLDivElement>(null)
@@ -164,6 +175,29 @@ export function PanelDeCita({
     if (cambioDeEstado && sinFoco) (titulo.current ?? panel.current)?.focus({ preventScroll: true })
   }, [cita.id, cita.status])
 
+  const pedirCancelar = () => {
+    setErrorAlCancelar("")
+    setConfirmandoCancelar(true)
+  }
+
+  const cancelar = async () => {
+    if (cancelando) return
+    setCancelando(true)
+    setErrorAlCancelar("")
+    const error = await onCambiarEstado(cita.id, "cancelada")
+    setCancelando(false)
+    if (error) return setErrorAlCancelar(error)
+    enfocarElTituloAlSalir.current = true
+    setConfirmandoCancelar(false)
+  }
+
+  const alSalirLaConfirmacion = () => {
+    if (!enfocarElTituloAlSalir.current) return
+    enfocarElTituloAlSalir.current = false
+    const sinFoco = !document.activeElement || document.activeElement === document.body
+    if (sinFoco) (titulo.current ?? panel.current)?.focus({ preventScroll: true })
+  }
+
   const cerrar = () => {
     const destino = abridor.current
     onCerrar()
@@ -178,6 +212,8 @@ export function PanelDeCita({
     setAdvertencias([])
     setErrorAlReactivar("")
     setSeCorrigeConAjuste(false)
+    // Otra cita, o ésta cambió de estado: la confirmación de cancelar era de lo de antes.
+    if (!cancelando) setConfirmandoCancelar(false)
   }
 
   const cerrada = cita.status === "cancelada" || cita.status === "no-asistio"
@@ -242,7 +278,12 @@ export function PanelDeCita({
 
   const contenido = (
     <>
-      {/* La alerta de alergias va primero: es lo que hay que ver antes de atender. */}
+      {/* La alerta de alergias va primero: es lo que hay que ver antes de atender. Mientras se revisa, se dice. */}
+      {clinica && !detalleDeEsta && (
+        <Aviso tono="info" rol="status">
+          Revisando si tiene alergias anotadas…
+        </Aviso>
+      )}
       {detalleDeEsta?.ok && detalleDeEsta.datos.alergias && (
         <Aviso tono="atencion" rol="status" titulo="Alergias anotadas en su ficha">
           <span className="break-words whitespace-pre-line">{detalleDeEsta.datos.alergias}</span>
@@ -380,7 +421,7 @@ export function PanelDeCita({
       {(puedeConfirmarse || asigna || puedeCompletarse || puedeCancelarse || puedeMoverse || puedeNoVenir || puedeReactivarse) && (
         <div className="grid gap-2 px-1 pb-1">
           {puedeConfirmarse && (
-            <Boton tamano="sm" className="w-full" onClick={() => onCambiarEstado(cita.id, "confirmada")}>
+            <Boton tamano="sm" className="w-full" onClick={() => void onCambiarEstado(cita.id, "confirmada")}>
               Confirmar reserva
             </Boton>
           )}
@@ -406,12 +447,12 @@ export function PanelDeCita({
             </Boton>
           )}
           {puedeCompletarse && (
-            <Boton tamano="sm" className="w-full" onClick={() => onCambiarEstado(cita.id, "completada")}>
+            <Boton tamano="sm" className="w-full" onClick={() => void onCambiarEstado(cita.id, "completada")}>
               Marcar completada
             </Boton>
           )}
           {puedeNoVenir && (
-            <Boton tamano="sm" variante="secundario" className="w-full" onClick={() => onCambiarEstado(cita.id, "no-asistio")}>
+            <Boton tamano="sm" variante="secundario" className="w-full" onClick={() => void onCambiarEstado(cita.id, "no-asistio")}>
               No vino
             </Boton>
           )}
@@ -420,7 +461,7 @@ export function PanelDeCita({
               variante="peligro"
               anchoCompleto
               tamaño="sm"
-              onClick={() => onCambiarEstado(cita.id, "cancelada")}
+              onClick={pedirCancelar}
             >
               Cancelar cita
             </BotonPrimario>
@@ -430,43 +471,70 @@ export function PanelDeCita({
     </>
   )
 
+  // Fuera del panel y no adentro: en el teléfono el panel ya es un diálogo, y
+  // la confirmación va encima, como un diálogo aparte (MarcoDeModal atiende
+  // Escape y el foco sólo en el de arriba).
+  const confirmacionDeCancelar = (
+    <AnimatePresence onExitComplete={alSalirLaConfirmacion}>
+      {confirmandoCancelar && (
+        <ModalConfirmar
+          titulo="¿Cancelar la cita?"
+          descripcion={`${nombreDeCliente(cita, vocabulario.cliente)}, ${diaLargoEn(cita.startTime, zona)} a las ${horaEn(cita.startTime, zona)}. Su hora queda libre para otra reserva.`}
+          textoConfirmar="Cancelar cita"
+          textoCancelar="No cancelar"
+          peligro
+          trabajando={cancelando}
+          aviso={errorAlCancelar}
+          onConfirmar={() => void cancelar()}
+          onCerrar={() => setConfirmandoCancelar(false)}
+        />
+      )}
+    </AnimatePresence>
+  )
+
   if (!escritorio) {
     return (
-      <MarcoDeModal titulo="Detalle de cita" antetitulo="Agenda" alCerrar={onCerrar}>
-        <div ref={panel} tabIndex={-1} className="flex flex-col gap-3 focus:outline-none">
-          {aviso && <Aviso>{aviso}</Aviso>}
-          {contenido}
-        </div>
-      </MarcoDeModal>
+      <>
+        <MarcoDeModal titulo="Detalle de cita" antetitulo="Agenda" alCerrar={onCerrar}>
+          <div ref={panel} tabIndex={-1} className="flex flex-col gap-3 focus:outline-none">
+            {aviso && <Aviso>{aviso}</Aviso>}
+            {contenido}
+          </div>
+        </MarcoDeModal>
+        {confirmacionDeCancelar}
+      </>
     )
   }
 
   return (
-    <motion.aside
-      ref={panel}
-      aria-labelledby={idDelTitulo}
-      className="flex w-80 shrink-0 flex-col gap-3 rounded-panel bg-superficie p-3 text-navy squircle lg:sticky lg:top-6"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={FUNDIDO}
-    >
-      <div className="flex items-center justify-between gap-2 pl-3">
-        <h2 ref={titulo} id={idDelTitulo} tabIndex={-1} className="antetitulo rounded-md anillo-foco">
-          Detalle de cita
-        </h2>
-        <button
-          type="button"
-          onClick={cerrar}
-          aria-label="Cerrar el detalle"
-          className="grid size-11 shrink-0 place-items-center rounded-[14px] text-navy squircle anillo-foco transition-colors duration-150 ease-suave hover:bg-borde"
-        >
-          <X className="size-5" aria-hidden="true" strokeWidth={1.75} />
-        </button>
-      </div>
+    <>
+      <motion.aside
+        ref={panel}
+        aria-labelledby={idDelTitulo}
+        className="flex w-80 shrink-0 flex-col gap-3 rounded-panel bg-superficie p-3 text-navy squircle lg:sticky lg:top-6"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={FUNDIDO}
+      >
+        <div className="flex items-center justify-between gap-2 pl-3">
+          <h2 ref={titulo} id={idDelTitulo} tabIndex={-1} className="antetitulo rounded-md anillo-foco">
+            Detalle de cita
+          </h2>
+          <button
+            type="button"
+            onClick={cerrar}
+            aria-label="Cerrar el detalle"
+            className="grid size-11 shrink-0 place-items-center rounded-[14px] text-navy squircle anillo-foco transition-colors duration-150 ease-suave hover:bg-borde"
+          >
+            <X className="size-5" aria-hidden="true" strokeWidth={1.75} />
+          </button>
+        </div>
 
-      {contenido}
-    </motion.aside>
+        {contenido}
+      </motion.aside>
+      {confirmacionDeCancelar}
+    </>
   )
 }
 
