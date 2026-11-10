@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useId, useState } from "react"
-import { CircleCheck, Hourglass, LogOut, Scissors, SearchX } from "lucide-react"
+import { CircleCheck, Hourglass, LogOut, SearchX, UserRoundCheck } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
@@ -35,6 +35,12 @@ function textoDeMinutos(minutos: number): string {
   const resto = minutos % 60
   return `Unas ${horas} h${resto ? ` ${resto} min` : ""}`
 }
+
+/**
+ * Los estados de los que no se vuelve: el turno ya no cambia, así que se deja
+ * de preguntar. "atendiendo" no es final: todavía pasa a "terminado".
+ */
+const ESTADOS_FINALES: ReadonlySet<EstadoDelTurno> = new Set(["terminado", "fuera", "vencido"])
 
 const TEXTOS: Record<Exclude<EstadoDelTurno, "esperando">, { titulo: string; bajada: string }> = {
   atendiendo: { titulo: "Es tu turno", bajada: "Ya te están atendiendo. ¡Que te vaya bien!" },
@@ -70,7 +76,11 @@ export function MiTurno({ slug, token }: { slug: string; token: string }) {
     }
   }, [url])
 
+  // Un turno que terminó (o que no existe) ya no cambia: no se consulta más.
+  const turnoCerrado = noExiste || (turno !== null && ESTADOS_FINALES.has(turno.estado))
+
   useEffect(() => {
+    if (turnoCerrado) return
     let vigente = true
     const tick = () => {
       if (vigente && document.visibilityState === "visible") void cargar()
@@ -83,7 +93,7 @@ export function MiTurno({ slug, token }: { slug: string; token: string }) {
       window.clearInterval(intervalo)
       document.removeEventListener("visibilitychange", tick)
     }
-  }, [cargar])
+  }, [cargar, turnoCerrado])
 
   const salir = async () => {
     setSaliendo(true)
@@ -143,7 +153,8 @@ export function MiTurno({ slug, token }: { slug: string; token: string }) {
             <p className="text-[13px] text-texto-2">Es una estimación: depende de lo que se haga cada persona.</p>
           </div>
         ) : (
-          <CuadroDeIcono icono={turno.estado === "atendiendo" ? Scissors : CircleCheck} color="azul" tamano="lg" />
+          // Un ícono neutro: la fila es de cualquier rubro (unas tijeras no van en una clínica).
+          <CuadroDeIcono icono={turno.estado === "atendiendo" ? UserRoundCheck : CircleCheck} color="azul" tamano="lg" />
         )}
 
         {error && (

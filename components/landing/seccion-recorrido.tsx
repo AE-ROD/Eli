@@ -59,7 +59,7 @@ const PASOS: readonly Paso[] = [
     titulo: "Reservan solas",
     texto:
       "Cada negocio tiene su página de reservas. La clienta elige el servicio, el día y la hora, y deja sus datos.",
-    puntos: ["Servicio, día y hora, y sus datos", "Recordatorio por correo antes de la cita", "La cita entra a la agenda con su precio"],
+    puntos: ["Servicio, día y hora, y sus datos", "Recordatorio el día antes, a quien dejó su correo", "La cita entra a la agenda con su precio"],
     maqueta: (activa) => <MaquetaReserva activa={activa} />,
     etiquetas: [
       { texto: "Recordatorio por correo", icono: Mail, lugar: "left-[2%] top-[3%] -rotate-[4deg]" },
@@ -195,6 +195,29 @@ export function SeccionRecorrido() {
           }
         />
 
+        {/*
+          El escenario va antes de los pasos en el documento, con la pausa
+          primero: así el teclado y el lector de pantalla la encuentran antes
+          de lo que avanza solo. Dónde se ve lo decide la grilla (al lado
+          desde lg, arriba de los pasos en el teléfono, como antes).
+        */}
+        <Escenario
+          paso={paso}
+          numero={`0${paso + 1}`}
+          tono={actual.tono}
+          quieto={quieto}
+          pausa={
+            avanzaSolo && (
+              <BotonDePausa
+                pausado={pausado}
+                alCambiar={alternarPausa}
+                etiqueta="Pausar el avance de los pasos"
+                className="absolute bottom-4 right-4 z-10"
+              />
+            )
+          }
+        />
+
         <div className="[grid-area:pasos]">
           <ol className="flex flex-col gap-3.5">
             {PASOS.map((opcion, indice) => {
@@ -322,22 +345,6 @@ export function SeccionRecorrido() {
           </div>
         </div>
 
-        <Escenario
-          paso={paso}
-          numero={`0${paso + 1}`}
-          tono={actual.tono}
-          quieto={quieto}
-          pausa={
-            avanzaSolo && (
-              <BotonDePausa
-                pausado={pausado}
-                alCambiar={alternarPausa}
-                etiqueta="Pausar el avance de los pasos"
-                className="absolute bottom-4 right-4 z-10"
-              />
-            )
-          }
-        />
       </div>
     </SeccionDeLanding>
   )
@@ -367,6 +374,9 @@ function Escenario({ paso, numero, tono, quieto, pausa }: PropsDeEscenario) {
         clases.suave
       )}
     >
+      {/* Primero en el documento; se ve abajo a la derecha (absoluta). */}
+      {pausa}
+
       <span
         aria-hidden="true"
         className={cn(
@@ -419,8 +429,6 @@ function Escenario({ paso, numero, tono, quieto, pausa }: PropsDeEscenario) {
           ))
         )}
       </div>
-
-      {pausa}
     </div>
   )
 }

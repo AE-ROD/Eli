@@ -22,8 +22,11 @@ interface PropsDeBotonDePausa {
  *
  * Quien lo usa guarda el estado y, en pausa, pone `animaciones-en-pausa` en
  * el bloque (congela las animaciones de CSS) y detiene lo que mueva con
- * JavaScript. Se ve siempre, también con movimiento reducido: ahí el bloque
- * arranca en pausa y la persona puede elegir verlo moverse.
+ * JavaScript. Con movimiento reducido, quien lo usa decide: si el bloque ya
+ * no se mueve, lo oculta (`motion-reduce:hidden`, o no lo monta); si se puede
+ * ver avanzar igual (Áreas), arranca en pausa y el botón queda para seguir.
+ * En lo que avanza solo va antes del contenido en el orden del documento,
+ * aunque se vea abajo (`docs/diseno/README.md`, "Accesibilidad").
  */
 export function BotonDePausa({ pausado, alCambiar, etiqueta = "Pausar la animación", className }: PropsDeBotonDePausa) {
   return (

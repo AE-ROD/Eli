@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import type { ReactNode, Ref } from "react"
+import type { FormEvent, ReactNode, Ref } from "react"
 import { motion } from "framer-motion"
-import { ArrowLeft, ArrowRight, CalendarCheck, Check, TriangleAlert } from "lucide-react"
+import { ArrowLeft, ArrowRight, CalendarCheck, CalendarX2, Check, TriangleAlert } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
@@ -44,6 +44,16 @@ import { SelectorServicio, type ServicioPublico } from "./selector-servicio"
 import { SelectorFechaHora, fechaParaLeer } from "./selector-fecha-hora"
 import { FormularioListaDeEspera } from "./formulario-lista-de-espera"
 import { SelectorProfesional } from "./selector-profesional"
+import {
+  erroresDeTusDatos,
+  haceElServicio,
+  haceTodos,
+  ORDEN_DE_TUS_DATOS,
+  profesionalSigueValiendo,
+  serviciosQueNoSePuedenSumar,
+  type ErroresDeTusDatos,
+  type TusDatos,
+} from "./reglas-de-la-reserva"
 import { confirmarReserva, leerDisponibilidad, leerProfesionales, type ProfesionalPublico } from "../_datos"
 
 interface HorarioPublico {
@@ -80,6 +90,11 @@ interface PropsDeFormularioReserva {
    * cambiar por el enlace (QA#8).
    */
   plazoDeCambiosHoras: number
+  /**
+   * Dónde queda el negocio ("Av. Italia 1234, Providencia"), para el evento
+   * de "Agregar al calendario". Sin dirección, el evento va sin lugar.
+   */
+  direccion?: string | null
 }
 
 type Paso = 1 | 2 | 3
@@ -91,13 +106,12 @@ type Paso = 1 | 2 | 3
  */
 const FUNDIDO = { duration: DURACION.pildora, ease: CURVA.fundido }
 
-/** Lo hace el profesional: sin servicios definidos, hace todos. */
-const haceElServicio = (profesional: ProfesionalPublico, servicioId: string) =>
-  profesional.servicioIds === null || profesional.servicioIds.includes(servicioId)
-
 /** Hace todos los elegidos (#89a): la reserva es con una sola persona. */
 const haceLosServicios = (profesional: ProfesionalPublico, elegidos: ServicioPublico[]) =>
-  elegidos.every((servicio) => haceElServicio(profesional, servicio.id))
+  haceTodos(
+    profesional,
+    elegidos.map((servicio) => servicio.id)
+  )
 
 /**
  * Los elegidos como si fueran un solo servicio, para el resumen, el
@@ -128,6 +142,7 @@ export function FormularioReserva({
   listaDeEsperaActiva,
   plazoDeCambios,
   plazoDeCambiosHoras,
+  direccion = null,
 }: PropsDeFormularioReserva) {
   const parametros = useSearchParams()
   // `?servicio=<id>&fecha=AAAA-MM-DD` (el enlace del aviso de la lista de
@@ -176,6 +191,11 @@ export function FormularioReserva({
   const [whatsapp, setWhatsapp] = useState(false)
   const [correoPromo, setCorreoPromo] = useState(false)
   const [comentarios, setComentarios] = useState("")
+  // Los errores de "Tus datos", por campo: aparecen al intentar confirmar y
+  // se corrigen mientras se escribe. Antes del primer intento, ninguno.
+  const [erroresDeDatos, setErroresDeDatos] = useState<ErroresDeTusDatos>({})
+  const [intentoConfirmar, setIntentoConfirmar] = useState(false)
+  const camposDeDatos = useRef<Partial<Record<keyof TusDatos, HTMLInputElement | null>>>({})
   const [enviando, setEnviando] = useState(false)
   /** El id de la cita creada: con él, la reserva está confirmada. */
   const [citaId, setCitaId] = useState<string | null>(null)
@@ -202,13 +222,18 @@ export function FormularioReserva({
       if (!vigente || !resultado.ok) return
       setProfesionales(resultado.datos)
       setEquipoLeido(true)
-      // Un profesional de la URL que no existe no queda elegido.
-      setProfesionalId((actual) => (actual && resultado.datos.some((p) => p.id === actual) ? actual : null))
     })
     return () => {
       vigente = false
     }
   }, [slug])
+
+  // Un profesional elegido que no es del equipo, o que no hace todo lo
+  // elegido (el de `?profesional=` con un `?servicio=` que no hace, o el
+  // equipo que llegó después de elegir), no queda elegido: vuelve a
+  // "cualquiera". Se ajusta al renderizar, con el equipo ya leído.
+  const servicioIds = seleccionados.map((servicio) => servicio.id)
+  if (equipoLeido && !profesionalSigueValiendo(profesionalId, profesionales, servicioIds)) setProfesionalId(null)
 
   const profesionalElegido = profesionales.find((profesional) => profesional.id === profesionalId) ?? null
   // Con un profesional elegido, sólo los servicios que hace.
@@ -218,6 +243,20 @@ export function FormularioReserva({
   // Con varios, sólo quienes hacen todos: los hace una sola persona, seguidos.
   const profesionalesDelServicio =
     seleccionados.length > 0 ? profesionales.filter((profesional) => haceLosServicios(profesional, seleccionados)) : []
+
+  // Lo que no se puede sumar a lo ya elegido: nadie (o no quien se eligió)
+  // hace la combinación. Se deshabilita en el paso 1 con el motivo a la vista,
+  // en vez de llegar a un calendario sin días.
+  const sinCombinacion = serviciosQueNoSePuedenSumar(
+    serviciosVisibles.map((servicio) => servicio.id),
+    servicioIds,
+    equipoLeido ? (profesionalElegido ? [profesionalElegido] : profesionales) : null
+  )
+  const motivoSinCombinacion = profesionalElegido
+    ? `${profesionalElegido.nombre} no lo hace junto con lo que elegiste.`
+    : clinicaDental
+      ? `Ningún ${vocabulario.profesional} lo atiende junto con lo que elegiste.`
+      : "Nadie del equipo lo hace junto con lo que elegiste."
 
   const alternarServicio = (servicio: ServicioPublico) => {
     const yaEstaba = seleccionados.some((elegido) => elegido.id === servicio.id)
@@ -231,7 +270,6 @@ export function FormularioReserva({
     elegirHora("", null)
   }
 
-  const servicioIds = seleccionados.map((servicio) => servicio.id)
   // Los días con atención para estos servicios y este profesional (o
   // cualquiera), los mismos que la disponibilidad (N3): no se puede elegir un
   // día que después diga "No hay atención ese día".
@@ -293,11 +331,31 @@ export function FormularioReserva({
     ? { nombre: "La primera hora disponible", detalle: `Con cualquier ${vocabulario.profesional}` }
     : undefined
 
+  // Ningún día de la semana con atención para lo elegido (y con quien se
+  // eligió): el calendario quedaría vacío. Se dice qué pasa y cómo salir. La
+  // urgencia sin horas ya tiene su aviso.
+  const sinDias = !urgencia && diasDisponibles.length === 0
+
   const puedeAvanzarPaso1 = !!servicioSeleccionado
   const puedeAvanzarPaso2 = !!fecha && !!hora && !faltaLaPrimeraVez
-  const puedeEnviar = !!nombre && !!apellido
 
-  const confirmar = async () => {
+  const tusDatos = { nombre, apellido, email }
+  // Después del primer intento, los errores se corrigen mientras se escribe.
+  const cambiarDato = (campo: keyof TusDatos, valor: string, guardar: (valor: string) => void) => {
+    guardar(valor)
+    if (intentoConfirmar) setErroresDeDatos(erroresDeTusDatos({ ...tusDatos, [campo]: valor }))
+  }
+
+  const confirmar = async (evento: FormEvent) => {
+    evento.preventDefault()
+    setIntentoConfirmar(true)
+    const errores = erroresDeTusDatos(tusDatos)
+    setErroresDeDatos(errores)
+    const primeroConError = ORDEN_DE_TUS_DATOS.find((campo) => errores[campo])
+    if (primeroConError) {
+      camposDeDatos.current[primeroConError]?.focus()
+      return
+    }
     setEnviando(true)
     setError("")
     const resultado = await confirmarReserva(slug, {
@@ -305,10 +363,10 @@ export function FormularioReserva({
       profesionalId,
       fecha,
       hora,
-      nombre,
-      apellido,
+      nombre: nombre.trim(),
+      apellido: apellido.trim(),
       cedula,
-      email,
+      email: email.trim(),
       telefono,
       whatsapp,
       correoPromo,
@@ -379,6 +437,7 @@ export function FormularioReserva({
               hora,
               duracionMinutos: servicioConDuracion?.duration ?? servicioSeleccionado.duration,
               zona,
+              direccion,
             }}
           />
           {enlaceDeGestion && !sePuedeCambiar && (
@@ -460,6 +519,8 @@ export function FormularioReserva({
                   seleccionados={seleccionados}
                   onAlternar={alternarServicio}
                   tope={MAX_SERVICIOS_POR_RESERVA}
+                  sinCombinacion={sinCombinacion}
+                  motivoSinCombinacion={motivoSinCombinacion}
                 />
               </div>
               {servicioSeleccionado && seleccionados.length > 1 && (
@@ -497,7 +558,7 @@ export function FormularioReserva({
                   plural={`${servicioDeLaReserva}s`}
                 />
               )}
-              {clinicaDental && <PreguntaPrimeraVez valor={primeraVez} onResponder={setPrimeraVez} />}
+              {clinicaDental && !sinDias && <PreguntaPrimeraVez valor={primeraVez} onResponder={setPrimeraVez} />}
               {/* Sin equipo (el dueño solo) no hay a quién elegir: no se muestra. */}
               {profesionalesDelServicio.length > 0 && (
                 <div className="mt-6">
@@ -523,7 +584,16 @@ export function FormularioReserva({
               <p role="status" className={cn("text-sm text-texto-2", avisoDelDia && "mt-6")}>
                 {avisoDelDia}
               </p>
-              {faltaLaPrimeraVez ? (
+              {sinDias ? (
+                <SinDiasConAtencion
+                  className="mt-6"
+                  lo={seleccionados.length > 1 ? `estos ${servicioDeLaReserva}s juntos` : `este ${servicioDeLaReserva}`}
+                  conQuien={profesionalElegido?.nombre ?? null}
+                  hayOtros={profesionalesDelServicio.length > 1}
+                  textoDelBoton={`Cambiar ${seleccionados.length > 1 ? `los ${servicioDeLaReserva}s` : `el ${servicioDeLaReserva}`}`}
+                  onCambiar={() => setPaso(1)}
+                />
+              ) : faltaLaPrimeraVez ? (
                 <p className="mt-6 text-sm text-texto-2">Responde si es tu primera vez para ver las horas libres.</p>
               ) : urgencia && !hoyConAtencion ? null : (
                 <div className="mt-6">
@@ -538,18 +608,20 @@ export function FormularioReserva({
                     horaSeleccionada={hora}
                     onFecha={elegirFecha}
                     onHora={elegirHora}
+                    // Una urgencia sin horas no se espera: se llama a la clínica (el texto de arriba).
                     sinHoras={
-                      listaDeEsperaActiva && servicioSeleccionado
+                      listaDeEsperaActiva && servicioSeleccionado && !urgencia
                         ? (dia) => (
                             <FormularioListaDeEspera
                               // Otro día, servicios o profesional es otra inscripción: empieza de cero.
                               // Se revisa con todos los servicios; se guarda el primero (#162).
-                              key={`${dia}|${claveDeServicios}|${profesionalId ?? ""}`}
+                              key={`${dia}|${claveDeServicios}|${profesionalId ?? ""}|${primeraVezQueSeManda ?? ""}`}
                               slug={slug}
                               servicioIds={servicioIds}
                               profesionalId={profesionalId}
                               fecha={dia}
                               fechaParaLeer={fechaParaLeer(deTexto(dia) ?? new Date())}
+                              primeraVez={primeraVezQueSeManda}
                             />
                           )
                         : undefined
@@ -585,21 +657,35 @@ export function FormularioReserva({
               <TituloDelPaso ref={titulo} paso={3}>
                 Tus datos
               </TituloDelPaso>
+              {/*
+                Un formulario de verdad: Enter en un campo confirma. `noValidate`
+                porque los errores los dice la página, por campo y en su idioma;
+                el botón no se deshabilita: al apretarlo se dice qué falta.
+              */}
+              <form noValidate onSubmit={confirmar} aria-describedby={error ? idDelError : undefined}>
               <div className="mt-5 grid gap-5 sm:grid-cols-2">
                 <CampoFormulario
+                  ref={(campo) => {
+                    camposDeDatos.current.nombre = campo
+                  }}
                   etiqueta="Nombre"
                   placeholder="Tu nombre"
                   autoComplete="given-name"
                   value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
+                  onChange={(e) => cambiarDato("nombre", e.target.value, setNombre)}
+                  error={erroresDeDatos.nombre}
                   required
                 />
                 <CampoFormulario
+                  ref={(campo) => {
+                    camposDeDatos.current.apellido = campo
+                  }}
                   etiqueta="Apellido"
                   placeholder="Tu apellido"
                   autoComplete="family-name"
                   value={apellido}
-                  onChange={(e) => setApellido(e.target.value)}
+                  onChange={(e) => cambiarDato("apellido", e.target.value, setApellido)}
+                  error={erroresDeDatos.apellido}
                   required
                 />
                 <CampoFormulario
@@ -630,12 +716,16 @@ export function FormularioReserva({
                 )}
                 <div className="sm:col-span-2">
                   <CampoFormulario
+                    ref={(campo) => {
+                      camposDeDatos.current.email = campo
+                    }}
                     etiqueta="Correo electrónico (opcional)"
                     type="email"
                     placeholder="tu@correo.com"
                     autoComplete="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => cambiarDato("email", e.target.value, setEmail)}
+                    error={erroresDeDatos.email}
                   />
                 </div>
                 {/* Sólo con correo: el consentimiento es para esa casilla. Nada viene marcado. */}
@@ -716,15 +806,16 @@ export function FormularioReserva({
                   Atrás
                 </Boton>
                 <Boton
+                  type="submit"
                   icono={<Check />}
-                  disabled={!puedeEnviar}
                   cargando={enviando}
-                  onClick={confirmar}
+                  aria-describedby={error ? idDelError : undefined}
                   className="w-full sm:w-auto"
                 >
                   Confirmar reserva
                 </Boton>
               </BarraDeAcciones>
+              </form>
             </>
           )}
         </motion.div>
@@ -861,6 +952,50 @@ function AvisoDeUrgencia({ nombre, className }: { nombre: string; className?: st
       <p className="text-sm text-pretty">
         <strong className="font-semibold">{destacado}</strong> {resto}
       </p>
+    </div>
+  )
+}
+
+/**
+ * El paso 2 sin ningún día con atención para lo elegido: nadie que haga
+ * todo eso atiende (o no quien se eligió). En vez de un calendario vacío, qué
+ * pasa y cómo salir: elegir con quién (si hay otros) o cambiar lo elegido.
+ */
+function SinDiasConAtencion({
+  lo,
+  conQuien,
+  hayOtros,
+  textoDelBoton,
+  onCambiar,
+  className,
+}: {
+  /** "este servicio", "estos motivos juntos". */
+  lo: string
+  /** El profesional elegido, si hay uno. */
+  conQuien: string | null
+  /** Si arriba hay a quién más elegir. */
+  hayOtros: boolean
+  textoDelBoton: string
+  onCambiar: () => void
+  className?: string
+}) {
+  const titulo = conQuien ? `${conQuien} no tiene días con atención para ${lo}.` : `No hay días con atención para ${lo}.`
+  const detalle =
+    conQuien && hayOtros
+      ? "Elige con quién más arriba, o cambia lo que elegiste."
+      : "Nadie que lo haga tiene horario para reservar por acá. Cambia lo que elegiste, o escríbele al negocio."
+  return (
+    <div role="status" className={cn("rounded-panel bg-superficie p-5 squircle sm:p-6", className)}>
+      <div className="flex items-start gap-3">
+        <CalendarX2 aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-navy" strokeWidth={1.75} />
+        <div>
+          <p className="font-medium text-navy">{titulo}</p>
+          <p className="mt-1 text-sm text-pretty text-texto-2">{detalle}</p>
+        </div>
+      </div>
+      <Boton variante="secundario" icono={<ArrowLeft />} onClick={onCambiar} className="mt-4 w-full sm:w-auto">
+        {textoDelBoton}
+      </Boton>
     </div>
   )
 }

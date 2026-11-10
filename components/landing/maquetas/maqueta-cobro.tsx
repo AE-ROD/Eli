@@ -53,14 +53,18 @@ const FILA = "flex justify-between gap-2 border-t border-borde-suave py-[9px] te
  */
 export function MaquetaCobro({ activa }: PropsDeMaqueta) {
   return (
+    // Cada tarjeta se describe sola: la de lo cobrado por profesional sólo se
+    // ve con lugar (`@xl`), y oculta no se anuncia.
     <motion.div
-      role="img"
-      aria-label={`Maqueta: un cobro de $37.000 dividido entre efectivo y débito, que cuadra, y lo cobrado hoy por profesional: ${formatearPesos(COBRADO_HOY)}`}
       className="flex w-full max-w-[600px] items-stretch justify-center gap-3.5"
       initial="reposo"
       animate={activa ? "activa" : "reposo"}
     >
-      <div aria-hidden="true" className={cn(TARJETA_DE_MAQUETA, "w-full max-w-[300px] p-5 @xl:w-[250px] @xl:flex-none")}>
+      <div
+        role="img"
+        aria-label="Maqueta: el cobro de María G., color + corte por $37.000, dividido entre efectivo ($20.000) y débito ($17.000), que cuadra al centavo"
+        className={cn(TARJETA_DE_MAQUETA, "w-full max-w-[300px] p-5 @xl:w-[250px] @xl:flex-none")}
+      >
         <p className="text-[13px] text-texto-2">Cobrar · María G.</p>
         <p className="mt-0.5 text-[17px] font-semibold tracking-[-0.02em]">Color + corte</p>
         <div className="mt-2.5">
@@ -100,7 +104,11 @@ export function MaquetaCobro({ activa }: PropsDeMaqueta) {
         </div>
       </div>
 
-      <div aria-hidden="true" className={cn(TARJETA_DE_MAQUETA, "hidden min-w-0 flex-1 p-5 @xl:block")}>
+      <div
+        role="img"
+        aria-label={`Maqueta: lo cobrado hoy por profesional, ${formatearPesos(COBRADO_HOY)} en total: ${POR_PROFESIONAL.map((profesional) => `${profesional.nombre}, ${formatearPesos(profesional.monto)}`).join("; ")}`}
+        className={cn(TARJETA_DE_MAQUETA, "hidden min-w-0 flex-1 p-5 @xl:block")}
+      >
         <p className="text-[13px] text-texto-2">Hoy, por profesional</p>
         <p className="mt-0.5 text-[22px] font-semibold tracking-[-0.03em]">Cobrado: {formatearPesos(COBRADO_HOY)}</p>
         {POR_PROFESIONAL.map((profesional, orden) => (

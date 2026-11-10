@@ -71,8 +71,9 @@ const SIN_MEDIDA: Medida = { ancho: 0, alto: 0 }
 /** Lo que espera el menú antes de cerrarse cuando sale el cursor: alcanza para cruzar al panel. */
 const RETARDO_DE_CIERRE = 150
 
+// En una línea siempre; entre 768 y 1023 px, con "Iniciar sesión" al lado, un poco más juntas.
 const PILDORA =
-  "inline-flex h-11 items-center gap-1 rounded-full px-3.5 text-sm font-medium text-navy transition-colors duration-150 ease-suave hover:bg-superficie anillo-foco"
+  "inline-flex h-11 items-center gap-1 whitespace-nowrap rounded-full px-2.5 text-sm font-medium text-navy transition-colors duration-150 ease-suave hover:bg-superficie anillo-foco lg:px-3.5"
 
 /**
  * Un grupo del menú. Va dentro de su `<li>`, justo después de su botón: Tab

@@ -277,8 +277,8 @@ Fuera de `comunes/`:
   | `seccion-de-landing.tsx` | `SeccionDeLanding`: una sección del medio, de borde a borde sobre la crema, con los brillos tenues detrás (`tono`) y el contenedor de 1440px (72px de margen a 1440, como el diseño); recorta lo que se sale, así nada deja scroll horizontal. `EncabezadoDeLanding`: el antetítulo en píldora, el `<h2>` con `titulo-landing` (la palabra que importa en `resaltado`) y una bajada; a la izquierda o al centro |
   | `tonos-de-la-landing.ts` | Los cuatro tintes y sus clases (arriba, en "Frutos rojos") |
   | `trazos-de-la-landing.ts` | Las líneas que se ondulan de cada sección, sacadas tal cual del diseño (`formas` de los `values` de cada `<animate>`, `duracion` del `dur`, `desfase` del `begin` sin signo). Cada arreglo dice en su comentario la caja de su `<svg>` |
-  | `maquetas/maqueta-piezas.tsx` | Las piezas de las maquetas: `TARJETA_DE_MAQUETA` (blanca, borde, `rounded-maqueta` y `shadow-maqueta`), `MarcoDeMaqueta` (esa tarjeta como imagen con su `etiqueta`), `Avatar`, `Chip`, `Segmentos` y `CuadroDeTono` |
-  | `maquetas/*.tsx` | Las maquetas del producto, en HTML: reserva, ficha de clienta, tablero y cobro (el recorrido, con `activa`), los cuatro momentos de un día, las reservas de hoy y quién cobra (tablero), la semana, los turnos, cada profesional y las anuladas (reportes) y la visita con o sin equipo (oficios). Los montos de un mismo gráfico cuadran entre sí y los largos de las barras salen de los montos |
+  | `maquetas/maqueta-piezas.tsx` | Las piezas de las maquetas: `TARJETA_DE_MAQUETA` (blanca, borde, `rounded-maqueta` y `shadow-maqueta`), `MarcoDeMaqueta` (esa tarjeta como imagen con su `etiqueta`), `Avatar`, `Chip`, `Segmentos` (hoy sin uso) y `CuadroDeTono` |
+  | `maquetas/*.tsx` | Las maquetas del producto, en HTML: reserva, ficha de clienta, tablero y cobro (el recorrido, con `activa`), los cuatro momentos de un día, las reservas de hoy y quién cobra (tablero), el período, el filtro de turno, los desgloses por profesional y por medio de pago, y las anuladas (reportes: sólo lo que Reportes hace; el turno es un filtro, no un gráfico) y la visita con o sin equipo (oficios). Los montos de un mismo gráfico cuadran entre sí y los largos de las barras salen de los montos |
 - `components/panel/`: las piezas del panel, que se cuentan más abajo, en
   "El panel".
 
@@ -512,7 +512,7 @@ Cada una en su archivo de `components/landing/`, en el orden del diseño:
 | `seccion-recorrido.tsx` | Acordeón de cuatro pasos (botones con `aria-expanded` y `aria-controls`; el panel cerrado es `inert`) y, al lado, el escenario del tinte del paso con su número gigante, la maqueta, dos etiquetas y las líneas. "Crear mi cuenta" y "Ver planes" (`#planes`) | Avanza un paso cada 6,5 s (lo mide `animate-progreso`). Se detiene con el cursor encima, con el foco del teclado adentro, fuera de pantalla y con la pausa. Con movimiento reducido no avanza |
 | `seccion-un-dia.tsx` | Cuatro tarjetas sobre una línea de tiempo; desde lg en fila, con la línea de centro a centro y las líneas que llegan a su comienzo; por debajo, de arriba abajo | Los números laten, el punto recorre la línea, las maquetas flotan |
 | `seccion-tablero.tsx` | La caja pistacho con "Reservas de hoy" y "Quién puede cobrar", y la lista de cuatro puntos | Las filas entran (`aparecer`), la maqueta y la etiqueta flotan |
-| `seccion-reportes.tsx` | Cuatro tarjetas de tinte en dos filas (746 y 526, la segunda al revés: una grilla de tres columnas) | Las barras crecen, las maquetas flotan |
+| `seccion-reportes.tsx` | Cuatro tarjetas de tinte en dos filas (746 y 526, la segunda al revés: una grilla de tres columnas): el período (con lo cobrado, las atenciones y el ticket promedio), el turno como filtro ("Turno: Tarde" y lo cobrado en él), los desgloses por profesional y por medio de pago, y las anuladas | Las barras crecen, las maquetas flotan |
 | `seccion-oficios.tsx` | "Si trabajas solo / Si tienes equipo" (`aria-pressed`) cambia la historia y la maqueta; los otros oficios en etiquetas con su foto; la caja ciruela con una foto por oficio | Cambia sola cada 5,5 s (se detiene como el recorrido); las fotos y la maqueta flotan |
 | `seccion-funciones.tsx` | Las diez piezas: desde lg, dos filas unidas por un camino en S medido sobre las piezas (entra y sale por los bordes de la pantalla); por debajo, una columna con una línea | El punto recorre el camino (`recorrer-camino`), las piezas flotan |
 | `seccion-precios.tsx` | El titular con tres píldoras, lo incluido en los dos planes, Independiente y Equipo lado a lado (la que da la calculadora, con un borde de su color) y la calculadora (1 a 30 personas) | Las líneas del titular y las de lo incluido, cada una con su pausa |
@@ -584,18 +584,28 @@ No es opcional:
 
 - foco visible con `anillo-foco`;
 - contraste AA: `texto-2` da 5,1:1 sobre crema y 4,8:1 sobre superficie (pasa
-  justo: no le bajes la opacidad). Sobre los tintes de la landing, navy al
-  75%. Sobre navy, blanco al 70% o más;
+  justo: no le bajes la opacidad). Sobre los brillos tenues de las secciones
+  de la landing (`fondo-tenue-*`) se midió píxel a píxel donde cae el texto,
+  de 360 a 1440 px: 4,58:1 o más. En el centro de un brillo bajaría a 4,3:1:
+  no pongas texto gris ahí sin volver a medir. Sobre los tintes de la landing,
+  navy al 75%. Sobre navy, blanco al 70% o más;
 - objetivos táctiles de 44px como mínimo (el botón sm y el `BotonIcono` sm los
   estiran con `::after`);
 - teclado completo, con `aria-expanded`, `aria-selected` y `aria-pressed`
   donde corresponda;
 - lo que se mueve solo más de 5 segundos se puede detener (WCAG 2.2.2): el
   enredo de la portada, las áreas y cada sección del medio de la landing que
-  se mueve sola tienen su botón de pausa (abajo a la derecha del bloque);
-  fuera de la pantalla se detienen solas. Lo que avanza solo (el recorrido,
-  solo / con equipo) también se detiene con el cursor encima y con el foco del
-  teclado adentro;
+  se mueve sola tienen su `BotonDePausa`, que se ve abajo a la derecha del
+  bloque (en Áreas, abajo al centro); fuera de la pantalla se detienen solas.
+  Lo que avanza solo (el recorrido, las áreas y el solo / con equipo de
+  Oficios) también se detiene con el cursor encima y con el foco del teclado
+  adentro, y lleva la pausa **antes** de lo que avanza en el orden del
+  documento, para que el teclado y el lector de pantalla la encuentren
+  primero: se ve donde siempre porque la ubica la grilla (`grid-template-areas`)
+  o `order-last`, no el orden del HTML. Con movimiento reducido: donde nada se
+  mueve, el botón no está (`motion-reduce:hidden`, o no se monta en el
+  recorrido y en Oficios); en Áreas, que con movimiento reducido igual se puede
+  ver avanzar, el bloque arranca en pausa y el botón se ve para seguir;
 - movimiento reducido, como dice arriba.
 
 ## Lo que una pantalla no puede mostrar

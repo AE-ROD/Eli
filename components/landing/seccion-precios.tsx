@@ -18,6 +18,7 @@ import {
   SquareKanban,
   User,
   Users,
+  UsersRound,
   type LucideIcon,
 } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
@@ -38,7 +39,11 @@ import {
 } from "@/lib/precios"
 import { cn } from "@/lib/utils"
 
-/** Lo que trae Eli en los dos planes: las piezas de "Lo que trae Eli", sin la del equipo, que es del plan Equipo. */
+/**
+ * Lo que trae Eli en los dos planes: las piezas de "Lo que trae Eli". Los dos
+ * traen todas las funciones (`docs/PRODUCTO.md`, sección 4), también el equipo
+ * con roles: el Independiente puede sumar un encargado, que no atiende.
+ */
 const FUNCIONES: readonly { id: string; titulo: string; icono: LucideIcon }[] = [
   { id: "agenda", titulo: "Agenda por profesional", icono: CalendarDays },
   { id: "pagina-de-reservas", titulo: "Página de reservas", icono: Link2 },
@@ -49,11 +54,12 @@ const FUNCIONES: readonly { id: string; titulo: string; icono: LucideIcon }[] = 
   { id: "reportes", titulo: "Reportes de lo cobrado", icono: ChartColumn },
   { id: "anulaciones", titulo: "Anulaciones con registro", icono: RotateCcw },
   { id: "servicios-y-horarios", titulo: "Servicios y horarios", icono: Clock },
+  { id: "equipo", titulo: "Equipo con roles", icono: UsersRound },
 ]
 
 const DIA_CON_ELI = [
   "Tus clientes reservan solos en tu página, a cualquier hora.",
-  "Antes de cada cita les llega un recordatorio por correo.",
+  "El día antes, a quien dejó su correo le llega un recordatorio.",
   "Cobras desde el tablero y al cerrar el día ves cuánto entró.",
   "Cada cliente con sus notas y el historial de sus visitas.",
 ] as const

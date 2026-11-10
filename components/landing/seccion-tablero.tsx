@@ -78,7 +78,8 @@ export function SeccionTablero() {
 
             <span
               aria-hidden="true"
-              className="relative z-[4] -mb-3 ml-auto mr-2 rotate-[3deg] md:mr-[6%] lg:absolute lg:left-[47%] lg:right-auto lg:top-[38px] lg:m-0"
+              // Desde lg, anclada a la derecha (y no a la izquierda): entre 1024 y 1279 px el bloque es angosto y se cortaba.
+              className="relative z-[4] -mb-3 ml-auto mr-2 rotate-[3deg] md:mr-[6%] lg:absolute lg:right-[10%] lg:top-[38px] lg:m-0"
             >
               <span
                 className="flex animate-flotar items-center gap-2 whitespace-nowrap rounded-etiqueta border border-borde bg-tarjeta py-[7px] pl-2 pr-4 text-[13px] font-semibold shadow-sm squircle md:text-sm"
@@ -93,7 +94,7 @@ export function SeccionTablero() {
 
             <MaquetaReservasDeHoy className="relative z-[2] w-full max-w-[450px] lg:mt-[38px]" />
             <div
-              className="relative z-[3] ml-auto mt-3 w-[88%] max-w-[362px] animate-flotar [--giro:0deg] md:-mt-10 lg:absolute lg:bottom-[50px] lg:left-[41%] lg:mt-0 lg:w-[362px]"
+              className="relative z-[3] ml-auto mt-3 w-[88%] max-w-[362px] animate-flotar [--giro:0deg] md:-mt-10 lg:absolute lg:bottom-[50px] lg:right-[7%] lg:mt-0 lg:w-[362px]"
               style={{ "--retraso": "-2s" } as CSSProperties}
             >
               <MaquetaQuienCobra />

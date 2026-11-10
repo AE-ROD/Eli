@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useState } from "react"
 import { motion } from "framer-motion"
+import { UserPlus } from "lucide-react"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { useCoincideMedia } from "@/components/movimiento/usar-coincide-media"
 import { TARJETA_DE_MAQUETA } from "@/components/landing/maquetas/maqueta-piezas"
@@ -83,8 +84,15 @@ const COLUMNAS: readonly Columna[] = [
   },
 ]
 
-/** Llegó sin reserva, se anotó en el momento y es la que pasa a atenderse. */
-const PAULA: TarjetaDelTablero = { nombre: "Paula", servicios: ["Corte"], pie: { texto: "Sin reserva", tono: "sin-reserva" } }
+/**
+ * Llegó sin reserva, se anotó en el momento y es la que pasa a atenderse. Va
+ * con quién la atiende, como todo lo que está en atención.
+ */
+const PAULA: TarjetaDelTablero = {
+  nombre: "Paula",
+  servicios: ["Corte · Carla"],
+  pie: { texto: "Sin reserva", tono: "sin-reserva" },
+}
 
 /** Cuándo pasa Paula a En atención, con la maqueta a la vista. */
 const RETRASO_DEL_PASE = 1300
@@ -121,8 +129,10 @@ export function MaquetaTablero({ activa }: PropsDeMaqueta) {
       <div aria-hidden="true">
         <div className="flex items-center justify-between gap-2">
           <span className="text-base font-semibold tracking-[-0.02em] @sm:text-lg">Hoy · lunes 12</span>
-          <span className="rounded-[12px] bg-ciruela px-3 py-2 text-xs font-semibold text-white @sm:px-3.5">
-            + Anotar visita
+          {/* El botón del tablero, con su nombre de verdad. */}
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-[12px] bg-ciruela px-3 py-2 text-xs font-semibold text-white @sm:px-3.5">
+            <UserPlus className="size-3.5" strokeWidth={2} />
+            Anotar sin reserva
           </span>
         </div>
 
@@ -174,12 +184,13 @@ function TarjetaDeMaqueta({ tarjeta }: { tarjeta: TarjetaDelTablero }) {
     <div className="mt-[7px] rounded-[11px] border border-borde bg-tarjeta px-2 py-2 @sm:px-[9px]">
       <p className="break-words text-xs font-semibold leading-tight">{tarjeta.nombre}</p>
       {tarjeta.servicios.map((servicio) => (
-        <p key={servicio} className="truncate text-[11px] leading-[1.35] text-texto-2">
+        // Sin cortar con "…": en el teléfono la columna mide ~53px y "Pedicura · Ana" se perdía. Baja de renglón.
+        <p key={servicio} className="break-words text-[11px] leading-[1.35] text-texto-2">
           {servicio}
         </p>
       ))}
       {tarjeta.pie && (
-        <p className={cn("mt-[3px] truncate text-[11px]", COLOR_DEL_PIE[tarjeta.pie.tono])}>{tarjeta.pie.texto}</p>
+        <p className={cn("mt-[3px] break-words text-[11px]", COLOR_DEL_PIE[tarjeta.pie.tono])}>{tarjeta.pie.texto}</p>
       )}
     </div>
   )

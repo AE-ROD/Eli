@@ -108,9 +108,10 @@ export function SeccionUnDia() {
                   aria-labelledby={`un-dia-${momento.id}`}
                   className="min-w-0 flex-1 overflow-hidden rounded-[30px] border border-borde bg-tarjeta p-2.5 shadow-maqueta squircle md:grid md:grid-cols-2 md:items-center md:gap-2 lg:block lg:h-full"
                 >
-                  <div aria-hidden="true" className={cn("grid h-[236px] place-items-center rounded-[22px] px-2 squircle", tono.suave)}>
+                  <div aria-hidden="true" className={cn("grid h-[236px] grid-cols-1 place-items-center rounded-[22px] px-2 squircle", tono.suave)}>
+                    {/* A lo más los 232px de la maqueta (`grid-cols-1` deja que la columna sea más angosta que ella): entre 1024 y 1279 px la tarjeta es más angosta y la maqueta se achica en vez de cortarse. */}
                     <div
-                      className="animate-flotar [--giro:0deg]"
+                      className="flex w-full max-w-[232px] justify-center animate-flotar [--giro:0deg]"
                       style={{ "--duracion": "6.4s", "--retraso": `${-indice * 1.6}s` } as CSSProperties}
                     >
                       {momento.maqueta}

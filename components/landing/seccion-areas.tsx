@@ -155,7 +155,7 @@ const FLOTAR_DE_FOTO = [
 ] as const
 
 /**
- * "Reservas para todo tipo de negocio": los cuatro oficios en letras
+ * "Reservas para cuatro oficios": los cuatro oficios en letras
  * grandes, y alrededor tres fotos del elegido que flotan.
  *
  * Avanza sola cada 2,8 s: dos veces reacomoda las fotos y a la tercera pasa
@@ -235,14 +235,27 @@ export function SeccionAreas() {
         ref={escenario}
         onFocus={alRecibirElFoco}
         onBlur={alSalirElFoco}
-        className="contenedor relative px-4 pb-8 pt-12 md:aspect-[16/10] md:p-0"
+        className="contenedor relative flex flex-col px-4 pb-8 pt-12 md:block md:aspect-[16/10] md:p-0"
       >
         <h2 id={idDelTitulo} className="relative z-10 text-center text-base md:absolute md:inset-x-0 md:top-[6%]">
-          Reservas para todo tipo de negocio
+          Reservas para cuatro oficios
         </h2>
 
+        {/*
+          La pausa va antes de lo que se mueve en el orden del documento (el
+          teclado y el lector de pantalla la encuentran primero), aunque se vea
+          abajo: en el teléfono la baja `order-last`, desde md su lugar absoluto.
+        */}
+        <div className="relative z-10 order-last mt-6 flex justify-center md:absolute md:inset-x-0 md:bottom-[4%] md:mt-0">
+          <BotonDePausa
+            pausado={pausado}
+            alCambiar={alternarPausa}
+            etiqueta="Pausar el avance de los tipos de negocio"
+          />
+        </div>
+
         {/* Las fotos: decoración, el nombre del oficio ya está en las palabras. */}
-        <div aria-hidden="true" className="relative mx-auto mt-6 aspect-[328/200] max-w-md md:absolute md:inset-0 md:mt-0 md:aspect-auto md:max-w-none">
+        <div aria-hidden="true" className="relative mx-auto mt-6 aspect-[328/200] w-full max-w-md md:absolute md:inset-0 md:mt-0 md:aspect-auto md:max-w-none">
           <AnimatePresence initial={false}>
             {area.fotos.map((foto, orden) => {
               const lugar = (orden + giro) % 3
@@ -296,14 +309,6 @@ export function SeccionAreas() {
               )
             })}
           </div>
-        </div>
-
-        <div className="relative z-10 mt-6 flex justify-center md:absolute md:inset-x-0 md:bottom-[4%] md:mt-0">
-          <BotonDePausa
-            pausado={pausado}
-            alCambiar={alternarPausa}
-            etiqueta="Pausar el avance de los tipos de negocio"
-          />
         </div>
       </div>
     </section>

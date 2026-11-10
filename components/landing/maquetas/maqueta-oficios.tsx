@@ -8,10 +8,19 @@ const CORTE = 15000
 const TOTAL = COLOR + CORTE
 
 /**
- * La visita de hoy de una clienta de un salón, con o sin equipo. Con equipo,
- * cada servicio lleva su profesional y su precio; quien trabaja solo la
- * atiende entera. Las dos suman lo mismo. El cambio de una a otra se funde
- * (la fila del corte se pliega), y los datos son de ejemplo.
+ * Una línea por servicio, como en el tablero, con o sin equipo: lo que cambia
+ * es quién la atiende (cada línea lleva su profesional y su comisión).
+ */
+const LINEAS = [
+  { servicio: "Color", monto: COLOR, profesional: "Lucía Pérez", iniciales: "LP", tono: "ciruela" },
+  { servicio: "Corte", monto: CORTE, profesional: "Carla", iniciales: "C", tono: "frambuesa" },
+] as const
+
+/**
+ * La visita de hoy de una clienta de un salón, con o sin equipo: siempre dos
+ * líneas, color y corte, cada una con su precio. Con equipo, cada una con su
+ * profesional; quien trabaja solo las atiende las dos. Las dos suman lo
+ * mismo. Al cambiar, sólo cambia quién atiende, y los datos son de ejemplo.
  */
 export function MaquetaVisita({ conEquipo, className }: { conEquipo: boolean; className?: string }) {
   return (
@@ -19,7 +28,7 @@ export function MaquetaVisita({ conEquipo, className }: { conEquipo: boolean; cl
       etiqueta={
         conEquipo
           ? `Maqueta: la visita de María González, en atención, con color por Lucía Pérez (${formatearPesos(COLOR)}) y corte por Carla (${formatearPesos(CORTE)}); total ${formatearPesos(TOTAL)}`
-          : `Maqueta: la visita de María González, en atención, con color + corte atendido por ti; total ${formatearPesos(TOTAL)}`
+          : `Maqueta: la visita de María González, en atención, con color (${formatearPesos(COLOR)}) y corte (${formatearPesos(CORTE)}), los dos atendidos por ti; total ${formatearPesos(TOTAL)}`
       }
       className={cn("px-5 pb-5 pt-[22px] md:px-6", className)}
     >
@@ -36,38 +45,23 @@ export function MaquetaVisita({ conEquipo, className }: { conEquipo: boolean; cl
         <Chip tono="pistacho">En atención</Chip>
       </div>
 
-      <div className="mt-4 border-t border-borde-suave pt-3.5">
-        <div className="flex items-center gap-3">
-          <Avatar
-            tono={conEquipo ? "ciruela" : "pistacho"}
-            className="transition-colors duration-400 ease-suave"
-          >
-            {conEquipo ? "LP" : "Tú"}
-          </Avatar>
-          <div className="min-w-0 flex-1">
-            <p className="text-[14.5px] font-semibold">{conEquipo ? "Color" : "Color + corte"}</p>
-            <p className="mt-px text-[12.5px] text-texto-2">{conEquipo ? "Lucía Pérez" : "Atiendes tú"}</p>
-          </div>
-          <span className="text-[14.5px] font-semibold">{formatearPesos(conEquipo ? COLOR : TOTAL)}</span>
-        </div>
-        <div
-          className={cn(
-            "grid transition-[grid-template-rows,opacity] duration-500 ease-suave",
-            conEquipo ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
-          )}
-        >
-          <div className="overflow-hidden">
-            <div className="flex items-center gap-3 pt-2">
-              <Avatar tono="frambuesa">C</Avatar>
-              <div className="min-w-0 flex-1">
-                <p className="text-[14.5px] font-semibold">Corte</p>
-                <p className="mt-px text-[12.5px] text-texto-2">Carla</p>
-              </div>
-              <span className="text-[14.5px] font-semibold">{formatearPesos(CORTE)}</span>
+      <ul className="mt-4 flex flex-col gap-2 border-t border-borde-suave pt-3.5">
+        {LINEAS.map((linea) => (
+          <li key={linea.servicio} className="flex items-center gap-3">
+            <Avatar
+              tono={conEquipo ? linea.tono : "pistacho"}
+              className="transition-colors duration-400 ease-suave"
+            >
+              {conEquipo ? linea.iniciales : "Tú"}
+            </Avatar>
+            <div className="min-w-0 flex-1">
+              <p className="text-[14.5px] font-semibold">{linea.servicio}</p>
+              <p className="mt-px text-[12.5px] text-texto-2">{conEquipo ? linea.profesional : "Atiendes tú"}</p>
             </div>
-          </div>
-        </div>
-      </div>
+            <span className="text-[14.5px] font-semibold">{formatearPesos(linea.monto)}</span>
+          </li>
+        ))}
+      </ul>
 
       <div className="mt-4 flex items-center justify-between border-t border-borde-suave pt-3.5">
         <span className="text-[13.5px] font-semibold text-texto-2">Total de la visita</span>

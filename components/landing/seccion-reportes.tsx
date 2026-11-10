@@ -3,9 +3,9 @@
 import type { CSSProperties, ReactNode } from "react"
 import {
   MaquetaAnuladas,
+  MaquetaPeriodo,
   MaquetaPorProfesional,
-  MaquetaSemana,
-  MaquetaTurnos,
+  MaquetaTurno,
 } from "@/components/landing/maquetas/maqueta-lo-cobrado"
 import { EncabezadoDeLanding, SeccionDeLanding } from "@/components/landing/seccion-de-landing"
 import { CLASES_DE_TONO, tonoEn } from "@/components/landing/tonos-de-la-landing"
@@ -27,27 +27,29 @@ interface Reporte {
 /**
  * En dos filas, como el diseño: ancha y angosta arriba, angosta y ancha
  * abajo. Cada tarjeta, de su tinte (ciruela, frambuesa, pistacho y añil).
+ * Dicen sólo lo que Reportes hace: el período, el turno como filtro, los
+ * desgloses por profesional, servicio y medio de pago, y las anuladas.
  */
 const REPORTES: readonly Reporte[] = [
   {
     id: "periodo",
-    titulo: "Por día, semana o el rango que quieras",
-    texto: "El historial de lo cobrado, para un día, una semana o las fechas que elijas.",
-    maqueta: <MaquetaSemana />,
+    titulo: "Hoy, esta semana, este mes o las fechas que elijas",
+    texto: "Cuánto entró en el período, en cuántas atenciones y el ticket promedio, con el historial de cada cobro.",
+    maqueta: <MaquetaPeriodo />,
     ancha: true,
   },
   {
     id: "turno",
-    titulo: "Por turno: mañana, tarde o noche",
-    texto: "Mañana es antes de las 12, tarde de 12 a 18 y noche desde las 18. Ves qué parte del día mueve más.",
-    maqueta: <MaquetaTurnos />,
+    titulo: "Filtra por turno: mañana, tarde o noche",
+    texto: "Mañana es antes de las 12, tarde de 12 a 18 y noche desde las 18. Eliges uno y ves lo cobrado en esa parte del día.",
+    maqueta: <MaquetaTurno />,
     ancha: false,
   },
   {
     id: "profesional",
     titulo: "Por profesional, servicio o medio de pago",
     texto:
-      "Cuánto generó cada profesional y cada servicio, y cuánto entró en efectivo, tarjetas, transferencia o billetera digital.",
+      "Cuánto generó cada profesional y cada servicio, y cuánto entró por cada medio: efectivo, tarjetas, transferencia o billetera digital.",
     maqueta: <MaquetaPorProfesional />,
     ancha: false,
   },

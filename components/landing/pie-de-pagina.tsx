@@ -45,7 +45,14 @@ export function PieDePagina() {
         </div>
 
         <div className="mt-12 flex flex-col gap-3 border-t border-white/18 pt-5 text-white/80 md:flex-row md:items-center md:justify-between md:gap-6">
-          <p className="text-[12.5px] font-medium uppercase tracking-[0.14em]">© {año} Eli · Sistema One</p>
+          {/*
+            El año se calcula en el servidor y otra vez al hidratar: en Nochevieja
+            pueden no coincidir (otra zona, o la medianoche entre medio). Es sólo
+            el año del pie: se acepta el del servidor sin avisar.
+          */}
+          <p suppressHydrationWarning className="text-[12.5px] font-medium uppercase tracking-[0.14em]">
+            © {año} Eli · Sistema One
+          </p>
           <p className="text-[12.5px] font-medium uppercase tracking-[0.14em]">
             Reservas{" "}
             <span className="text-[15px] font-semibold normal-case tracking-normal text-pistacho">

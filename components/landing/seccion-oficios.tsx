@@ -159,11 +159,19 @@ export function SeccionOficios() {
         onFocus={alRecibirElFoco}
         onBlur={alSalirElFoco}
         className={cn(
-          "grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] xl:gap-[68px]",
+          // La pausa va primera en el documento y se ve debajo de la maqueta: la
+          // pone ahí la grilla ('pausa'), con 16px de separación como antes.
+          "grid items-start gap-10 [grid-template-areas:'texto'_'maqueta'_'pausa'] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] lg:grid-rows-[auto_1fr] lg:gap-y-4 lg:[grid-template-areas:'texto_maqueta'_'texto_pausa'] xl:gap-x-[68px]",
           quieto && "animaciones-en-pausa"
         )}
       >
-        <div>
+        <div className="-mt-6 flex justify-end [grid-area:pausa] lg:mt-0">
+          {!reducido && (
+            <BotonDePausa pausado={pausado} alCambiar={alternarPausa} etiqueta="Pausar el cambio entre solo y con equipo" />
+          )}
+        </div>
+
+        <div className="[grid-area:texto]">
           <EncabezadoDeLanding
             id="oficios-titulo"
             antetitulo="Oficios"
@@ -214,7 +222,7 @@ export function SeccionOficios() {
           </ul>
         </div>
 
-        <div>
+        <div className="[grid-area:maqueta]">
           <div
             className="relative isolate min-h-[500px] overflow-hidden rounded-bloque border border-borde-suave bg-ciruela-suave squircle md:min-h-0 md:aspect-[668/572]"
           >
@@ -236,11 +244,6 @@ export function SeccionOficios() {
             >
               <MaquetaVisita conEquipo={conEquipo} />
             </div>
-          </div>
-          <div className="mt-4 flex justify-end">
-            {!reducido && (
-              <BotonDePausa pausado={pausado} alCambiar={alternarPausa} etiqueta="Pausar el cambio entre solo y con equipo" />
-            )}
           </div>
         </div>
       </div>
