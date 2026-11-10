@@ -89,7 +89,7 @@ export const TRAZOS_DE_UN_DIA: readonly TrazoOndulante[] = [
   },
 ]
 
-/** La caja pistacho del tablero: abajo, detrás de las maquetas. Caja de 700×170. */
+/** La caja arena del tablero: abajo, detrás de las maquetas. Caja de 700×170. */
 export const TRAZOS_DEL_TABLERO: readonly TrazoOndulante[] = [
   {
     color: "stroke-frambuesa",
@@ -116,7 +116,7 @@ export const TRAZOS_DEL_TABLERO: readonly TrazoOndulante[] = [
     ],
   },
   {
-    color: "stroke-pistacho-oscuro",
+    color: "stroke-ciruela",
     grosor: 3.2,
     duracion: 11.4,
     desfase: 2.6,
@@ -156,7 +156,7 @@ export const TRAZOS_DE_REPORTES: readonly TrazoOndulante[] = [
     ],
   },
   {
-    color: "stroke-pistacho-oscuro",
+    color: "stroke-ciruela",
     grosor: 3.2,
     duracion: 11.4,
     desfase: 2.6,
@@ -275,7 +275,7 @@ export const TRAZOS_DE_INCLUIDO: readonly TrazoOndulante[] = [
     ],
   },
   {
-    color: "stroke-pistacho-oscuro",
+    color: "stroke-ciruela",
     opacidad: 0.6,
     duracion: 11.4,
     desfase: 2.6,
@@ -288,10 +288,10 @@ export const TRAZOS_DE_INCLUIDO: readonly TrazoOndulante[] = [
   },
 ]
 
-/** El cierre navy: arriba, detrás del titular (el bloque va al 50%). Caja de 1296×230. */
+/** El cierre, en su caja oscura: arriba, detrás del titular (el bloque va al 50%). Rojo claro, durazno y arena. Caja de 1296×230. */
 export const TRAZOS_DEL_CIERRE: readonly TrazoOndulante[] = [
   {
-    color: "stroke-frambuesa",
+    color: "stroke-[#E3383F]",
     opacidad: 0.9,
     grosor: 3.2,
     duracion: 8,
@@ -303,7 +303,7 @@ export const TRAZOS_DEL_CIERRE: readonly TrazoOndulante[] = [
     ],
   },
   {
-    color: "stroke-violeta",
+    color: "stroke-[#F6C6BA]",
     grosor: 3.2,
     duracion: 9.7,
     desfase: 1.3,

@@ -53,7 +53,11 @@ const FUNCIONES: readonly { id: string; titulo: string; icono: LucideIcon }[] = 
   { id: "pago-dividido", titulo: "Pago dividido", icono: CreditCard },
   { id: "reportes", titulo: "Reportes de lo cobrado", icono: ChartColumn },
   { id: "anulaciones", titulo: "Anulaciones con registro", icono: RotateCcw },
-  { id: "servicios-y-horarios", titulo: "Servicios y horarios", icono: Clock },
+  {
+    id: "servicios-y-horarios",
+    titulo: "Servicios y horarios",
+    icono: Clock,
+  },
   { id: "equipo", titulo: "Equipo con roles", icono: UsersRound },
 ]
 
@@ -67,19 +71,42 @@ const DIA_CON_ELI = [
 /** Las iniciales del equipo de ejemplo: tú y quienes atienden contigo. Se muestran tantas como incluye el plan. */
 const INICIALES_DE_EJEMPLO = ["Tú", "C", "A", "M", "F", "J", "R", "V", "L", "S"] as const
 
-const ROLES: readonly { rol: string; texto: string; icono: LucideIcon; tono: TonoDeLanding }[] = [
-  { rol: "Dueño", texto: "Ve todo el negocio. El plan y el pago son solo tuyos.", icono: Shield, tono: "ciruela" },
+const ROLES: readonly {
+  rol: string
+  texto: string
+  icono: LucideIcon
+  tono: TonoDeLanding
+}[] = [
+  {
+    rol: "Dueño",
+    texto: "Ve todo el negocio. El plan y el pago son solo tuyos.",
+    icono: Shield,
+    tono: "ciruela",
+  },
   {
     rol: "Encargado",
     texto: "Organiza la agenda, los servicios y el equipo. No cuenta como persona que atiende.",
     icono: Users,
     tono: "frambuesa",
   },
-  { rol: "Profesional", texto: "Ve su agenda, sus citas y lo que lleva cobrado. Siempre cuenta.", icono: User, tono: "pistacho" },
+  {
+    rol: "Profesional",
+    texto: "Ve su agenda, sus citas y lo que lleva cobrado. Siempre cuenta.",
+    icono: User,
+    tono: "pistacho",
+  },
 ]
 
-const PILDORAS: readonly { texto: string; icono: LucideIcon; tono: TonoDeLanding }[] = [
-  { texto: `${DIAS_DE_PRUEBA} días de prueba`, icono: CalendarDays, tono: "ciruela" },
+const PILDORAS: readonly {
+  texto: string
+  icono: LucideIcon
+  tono: TonoDeLanding
+}[] = [
+  {
+    texto: `${DIAS_DE_PRUEBA} días de prueba`,
+    icono: CalendarDays,
+    tono: "ciruela",
+  },
   { texto: "Sin tarjeta para empezar", icono: Shield, tono: "pistacho" },
   { texto: "Cobro mensual", icono: Clock, tono: "frambuesa" },
 ]
@@ -118,7 +145,13 @@ export function SeccionPrecios() {
   return (
     <>
       <EncabezadoDePrecios />
-      <SeccionDeLanding id="planes" etiquetadaPor="planes-titulo" tono="ciruela" interior="pt-2 md:pt-4">
+      {/* Del marrón claro de Precios (#A78673) al burdeos del cierre (#4A1F1F), pasando por #6A3F37: los tramos del diseño en 1830px. */}
+      <SeccionDeLanding
+        id="planes"
+        etiquetadaPor="planes-titulo"
+        className="bg-[linear-gradient(180deg,#A78673_0%,#6A3F37_31%,#4A1F1F_69%)]"
+        interior="pt-2 md:pt-4 md:pb-20"
+      >
         <h2 id="planes-titulo" className="sr-only">
           Los planes
         </h2>
@@ -137,15 +170,23 @@ export function SeccionPrecios() {
 function EncabezadoDePrecios() {
   const { ref, pausado, setPausado, quieto } = useBloqueEnMovimiento<HTMLDivElement>()
   return (
-    <SeccionDeLanding id="precios" etiquetadaPor="precios-titulo" tono="frambuesa" interior="pb-6 md:pb-8">
+    <SeccionDeLanding
+      id="precios"
+      etiquetadaPor="precios-titulo"
+      className="bg-[linear-gradient(180deg,#C9B297,#A78673)]"
+      interior="pb-6 md:pb-8"
+    >
       <div ref={ref}>
         <EncabezadoDeLanding
           id="precios-titulo"
           antetitulo="Precios"
           alineacion="centro"
+          // Sobre el marrón claro, la bajada va en el marrón más oscuro del diseño (#2A1A17).
+          className="[&>p:last-child]:text-[#2A1A17]"
           titulo={
             <>
-              Dos planes. Las <span className="resaltado">mismas funciones.</span>
+              Dos planes.
+              <br className="max-md:hidden" /> Las <span className="resaltado">mismas funciones.</span>
             </>
           }
           subtitulo="Lo único que cambia es cuántas personas atienden. En pesos chilenos, con IVA incluido."
@@ -158,7 +199,11 @@ function EncabezadoDePrecios() {
             >
               <span
                 aria-hidden="true"
-                className={cn("grid size-7 place-items-center rounded-full", CLASES_DE_TONO[tono].suave, CLASES_DE_TONO[tono].texto)}
+                className={cn(
+                  "grid size-7 place-items-center rounded-full",
+                  CLASES_DE_TONO[tono].suave,
+                  CLASES_DE_TONO[tono].texto,
+                )}
               >
                 <Icono className="size-[15px]" strokeWidth={1.75} />
               </span>
@@ -184,7 +229,7 @@ function EncabezadoDePrecios() {
   )
 }
 
-/** Lo que tienen los dos planes, en una caja pistacho con las líneas suaves abajo. */
+/** Lo que tienen los dos planes, en una caja de arena con las líneas suaves abajo. */
 function Incluido() {
   const { ref, pausado, setPausado, quieto } = useBloqueEnMovimiento<HTMLElement>()
   return (
@@ -231,7 +276,10 @@ function Incluido() {
               key={funcion.id}
               className="flex items-center gap-3 rounded-[20px] border border-borde-suave bg-tarjeta py-3 pl-3 pr-4 text-[14.5px] font-semibold leading-[1.25] tracking-[-0.01em] shadow-sm squircle"
             >
-              <span aria-hidden="true" className={cn("grid size-9 shrink-0 place-items-center rounded-[13px]", tono.suave, tono.texto)}>
+              <span
+                aria-hidden="true"
+                className={cn("grid size-9 shrink-0 place-items-center rounded-[13px]", tono.suave, tono.texto)}
+              >
                 <Icono className="size-[18px]" strokeWidth={1.75} />
               </span>
               {funcion.titulo}
@@ -336,7 +384,10 @@ function TarjetaIndependiente({ resaltada }: { resaltada: boolean }) {
           <ul className="mt-1">
             {DIA_CON_ELI.map((texto) => (
               <li key={texto} className="flex items-start gap-3 py-[9px] text-[15px] leading-[1.45]">
-                <span aria-hidden="true" className="mt-px grid size-[22px] shrink-0 place-items-center rounded-full bg-pistacho text-navy">
+                <span
+                  aria-hidden="true"
+                  className="mt-px grid size-[22px] shrink-0 place-items-center rounded-full bg-pistacho text-navy"
+                >
                   <Check className="size-[13px]" strokeWidth={1.75} />
                 </span>
                 {texto}
@@ -346,23 +397,23 @@ function TarjetaIndependiente({ resaltada }: { resaltada: boolean }) {
         </Recuadro>
       </div>
       <p className="mt-auto pt-[22px] text-[14.5px] leading-normal">
-        <span className="font-semibold text-frambuesa-texto">¿Sumas a alguien?</span> Te pasas a Equipo y tu agenda, tus
-        clientes y tu historial siguen ahí.
+        <span className="font-semibold text-frambuesa-texto">¿Sumas a alguien?</span> Te pasas a Equipo y tu agenda, tus clientes
+        y tu historial siguen ahí.
       </p>
     </article>
   )
 }
 
-/** Un círculo con iniciales, decorativo: el texto de al lado dice lo mismo. El primero ("Tú") va en ciruela lleno. */
+/** Un círculo con iniciales, decorativo: el texto de al lado dice lo mismo. El primero ("Tú") va en burdeos lleno; los demás reparten los tintes. */
 function Avatar({ indice, children }: { indice: number; children: ReactNode }) {
-  const tono = CLASES_DE_TONO[tonoEn(indice + 3)]
+  const tono = CLASES_DE_TONO[tonoEn(indice)]
   return (
     <span
       aria-hidden="true"
       className={cn(
         "grid size-[42px] shrink-0 place-items-center rounded-full border-[2.5px] border-white text-[12.5px] font-semibold",
         indice === 0 ? "bg-ciruela text-white" : cn(tono.suave, tono.texto),
-        indice > 0 && "-ml-[9px]"
+        indice > 0 && "-ml-[9px]",
       )}
     >
       {children}
@@ -414,8 +465,8 @@ function TarjetaEquipo({ resaltada }: { resaltada: boolean }) {
             </span>
           </div>
           <p className="mt-3 text-[14.5px] leading-[1.45]">
-            {PERSONAS_INCLUIDAS_EQUIPO} incluidas. Desde la {ordinal(PERSONAS_INCLUIDAS_EQUIPO + 1)}, {adicional} al mes
-            por persona.
+            {PERSONAS_INCLUIDAS_EQUIPO} incluidas. Desde la {ordinal(PERSONAS_INCLUIDAS_EQUIPO + 1)}, {adicional} al mes por
+            persona.
           </p>
         </Recuadro>
         <Recuadro titulo="Cada uno con su rol">
@@ -424,7 +475,11 @@ function TarjetaEquipo({ resaltada }: { resaltada: boolean }) {
               <div key={rol} className={cn("flex items-start gap-3.5 py-3", orden > 0 && "border-t border-borde-suave")}>
                 <span
                   aria-hidden="true"
-                  className={cn("grid size-9 shrink-0 place-items-center rounded-[13px]", CLASES_DE_TONO[tono].suave, CLASES_DE_TONO[tono].texto)}
+                  className={cn(
+                    "grid size-9 shrink-0 place-items-center rounded-[13px]",
+                    CLASES_DE_TONO[tono].suave,
+                    CLASES_DE_TONO[tono].texto,
+                  )}
                 >
                   <Icono className="size-[18px]" strokeWidth={1.75} />
                 </span>
@@ -491,8 +546,7 @@ function Calculadora({ personas, alCambiar }: { personas: number; alCambiar: (pe
           ¿Cuánto pagarías?
         </h3>
         <p className={cn("mt-3.5 text-base leading-normal", TEXTO_SOBRE_TINTE)}>
-          Cuentan los profesionales, y tú si atiendes. Los cambios se cobran desde el mes siguiente, sin cobros a medio
-          mes.
+          Cuentan los profesionales, y tú si atiendes. Los cambios se cobran desde el mes siguiente, sin cobros a medio mes.
         </p>
       </div>
 
@@ -531,9 +585,7 @@ function Calculadora({ personas, alCambiar }: { personas: number; alCambiar: (pe
         </p>
         <ul>
           <li className="flex justify-between gap-4 pb-3 pt-3.5 text-[15px]">
-            <span>
-              {independiente ? "Independiente, 1 persona" : `Equipo, ${PERSONAS_INCLUIDAS_EQUIPO} personas incluidas`}
-            </span>
+            <span>{independiente ? "Independiente, 1 persona" : `Equipo, ${PERSONAS_INCLUIDAS_EQUIPO} personas incluidas`}</span>
             <span className="font-semibold tabular-nums">{formatearPesos(calculo.montoBase)}</span>
           </li>
           {calculo.adicionales > 0 && (

@@ -31,7 +31,11 @@ const FUNCIONES: readonly { id: string; titulo: string; icono: LucideIcon }[] = 
   { id: "pago-dividido", titulo: "Pago dividido", icono: CreditCard },
   { id: "reportes", titulo: "Reportes", icono: ChartColumn },
   { id: "anulaciones", titulo: "Anulaciones con registro", icono: RotateCcw },
-  { id: "servicios-y-horarios", titulo: "Servicios y horarios", icono: Clock },
+  {
+    id: "servicios-y-horarios",
+    titulo: "Servicios y horarios",
+    icono: Clock,
+  },
 ]
 
 /** Desde aquí van en dos filas de cinco, unidas por el camino en S. */
@@ -39,7 +43,10 @@ const DOS_FILAS = "(min-width: 64rem)"
 
 /** Cada pieza flota a su ritmo: 6, 7 y 8 s, con adelantos de 0,7 s. */
 function flotarDe(indice: number): CSSProperties {
-  return { "--duracion": `${6 + (indice % 3)}s`, "--retraso": `${-indice * 0.7}s` } as CSSProperties
+  return {
+    "--duracion": `${6 + (indice % 3)}s`,
+    "--retraso": `${-indice * 0.7}s`,
+  } as CSSProperties
 }
 
 interface Camino {
@@ -89,7 +96,7 @@ function medirCamino(bloque: HTMLElement, piezas: HTMLElement[]): Camino | null 
 /**
  * "Lo que trae Eli": las diez piezas del producto. Desde lg, en dos filas de
  * cinco unidas por un camino en S que entra y sale por los bordes de la
- * pantalla, con un punto pistacho que lo recorre; en el teléfono y la
+ * pantalla, con un punto de arena que lo recorre; en el teléfono y la
  * tableta, una columna unida por una línea, sin el punto.
  *
  * Las piezas flotan y el punto avanza sin fin: el botón de pausa lo congela,
@@ -123,11 +130,14 @@ export function SeccionFunciones() {
   }, [ref])
 
   return (
-    <SeccionDeLanding id="funciones" etiquetadaPor="funciones-titulo" tono="ciruela">
+    // La página empieza a oscurecerse: de la arena de Oficios (#D8C3A5) al tono con que sigue Precios (#C9B297).
+    <SeccionDeLanding id="funciones" etiquetadaPor="funciones-titulo" className="bg-[linear-gradient(180deg,#D8C3A5,#C9B297)]">
       <EncabezadoDeLanding
         id="funciones-titulo"
         antetitulo="Funciones"
         alineacion="centro"
+        // Sobre la arena, el gris de la bajada no llega a 4,5:1: va en el marrón oscuro del diseño.
+        className="[&>p:last-child]:text-[#3F2A26]"
         titulo={
           <>
             Lo que trae <span className="resaltado">Eli.</span>
@@ -183,7 +193,7 @@ export function SeccionFunciones() {
                   <div
                     className={cn(
                       "relative flex h-full animate-flotar items-center gap-4 rounded-[22px] border border-white px-4 py-3 shadow-sm squircle [--giro:0deg] lg:block lg:rounded-[28px] lg:p-0",
-                      tono.suave
+                      tono.suave,
                     )}
                     style={flotarDe(indice)}
                   >
@@ -191,7 +201,7 @@ export function SeccionFunciones() {
                       aria-hidden="true"
                       className={cn(
                         "grid size-10 shrink-0 place-items-center rounded-[14px] bg-tarjeta shadow-sm lg:absolute lg:left-5 lg:top-5 lg:size-[46px] lg:rounded-[16px]",
-                        tono.texto
+                        tono.texto,
                       )}
                     >
                       <Icono className="size-5 lg:size-[22px]" strokeWidth={1.75} />
