@@ -108,6 +108,21 @@ export function contextoSinElegir(contextos: readonly Contexto[]): Contexto | nu
   return contextos.length === 1 ? contextos[0] : null
 }
 
+/**
+ * El contexto con el que sigue la sesión, dado el que ya tenía (`elegido`).
+ *
+ * - Sin contexto (el login, o un token de antes de los contextos o que nunca
+ *   eligió): el atajo de `contextoSinElegir`, el único si hay uno solo.
+ * - Con un contexto: ése, si sigue entre los de la cuenta. Si ya no está (le
+ *   borraron la membresía, dejó de ser dueña) la sesión queda SIN contexto y
+ *   vuelve a elegir: nunca se pasa sola a otro negocio, aunque quede uno solo.
+ *   Quien trabajaba en A y pierde A no tiene que aparecer escribiendo en B.
+ */
+export function contextoDeLaSesion(contextos: readonly Contexto[], elegido: unknown): Contexto | null {
+  const sinElegir = elegido === undefined || elegido === null || elegido === ""
+  return sinElegir ? contextoSinElegir(contextos) : buscarContexto(contextos, elegido)
+}
+
 /** El rol en palabras, con el vocabulario del rubro: "Dueño", "Encargado", "Profesional" u "Odontólogo". */
 export function nombreDelRolDelContexto(contexto: Pick<Contexto, "rol" | "rubro">): string {
   return contexto.rol === "owner" ? "Dueño" : nombreDelRol(contexto.rol, contexto.rubro)
@@ -128,4 +143,40 @@ export function opcionDeContexto(contexto: Contexto): OpcionDeContexto {
     rubro: nombreDeRubro(contexto.rubro ?? ""),
     rol: nombreDelRolDelContexto(contexto),
   }
+}
+
+// ─── Una pestaña del panel abierta con otro contexto ─────────────────────────
+
+/**
+ * La sesión (la cookie) es una sola para todas las pestañas: si en una se
+ * cambia de negocio, otra que quedó abierta con el anterior seguiría
+ * mostrando el negocio viejo pero escribiendo en el nuevo. El panel recuerda
+ * con qué contexto se cargó (lo dibuja el servidor) y se recarga en cuanto
+ * sabe que la sesión ya trabaja con otro (`BarraLateral`):
+ *
+ * - otra pestaña cargó el panel con otro contexto: lo anota en
+ *   `localStorage` bajo esta clave y las demás lo oyen (`storage`), aunque
+ *   estén en segundo plano;
+ * - al volver a la pestaña, se mira esa clave en el acto, antes de que se
+ *   alcance a tocar nada;
+ * - la sesión cambió sin que se cargara el panel (la revalidación la dejó sin
+ *   negocio): `useSession` la vuelve a leer al volver el foco y avisa.
+ *
+ * Se eligió esto y no una cabecera por pedido revisada en el servidor porque
+ * no toca ningún endpoint (tampoco los públicos) y cubre lo que se ve en
+ * pantalla, no sólo lo que se envía. El servidor sigue sin confiar en el
+ * navegador: siempre escribe en el contexto de la sesión.
+ */
+export const CLAVE_DEL_CONTEXTO_DEL_PANEL = "eli:contexto-del-panel"
+
+/**
+ * Si la pestaña tiene que recargarse: `actual` es el contexto que dice la
+ * sesión ahora (o la clave compartida). `undefined` es "no se sabe" (la
+ * sesión todavía no llegó, no hay nada anotado): nunca recarga por eso. Sin
+ * contexto (`null` o "") cuenta como un valor: si se cargó con uno y ahora no
+ * hay ninguno, recarga y el proxy manda a elegir.
+ */
+export function cambioElContextoDelPanel(cargado: string | null, actual: string | null | undefined): boolean {
+  if (actual === undefined) return false
+  return (actual || null) !== (cargado || null)
 }

@@ -3,7 +3,7 @@ import type { JWT } from "next-auth/jwt"
 import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 import { prisma } from "@/lib/prisma"
-import { buscarContexto, contextoSinElegir, contextosDe, MAXIMO_DE_CONTEXTOS, type Contexto } from "@/lib/contextos"
+import { buscarContexto, contextoDeLaSesion, contextosDe, MAXIMO_DE_CONTEXTOS, type Contexto } from "@/lib/contextos"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { hashDeToken } from "@/lib/tokens"
 import { normalizarEmail } from "@/lib/validaciones"
@@ -51,9 +51,11 @@ export async function contextosDeLaCuenta(userId: string): Promise<Contexto[]> {
  * `elegido` es el id del contexto que la sesión ya tenía (o el que pidió al
  * cambiar). Se busca entre los contextos que la base dice que la cuenta
  * tiene: si ya no está (la sacaron del equipo, dejó de ser dueña), no se
- * conserva nada de él. En ese caso, o sin elegido, se entra al único contexto
- * si hay uno solo; con varios, la sesión queda sin negocio y el proxy la manda
- * a elegir (`/elegir-negocio`), y sin ninguno, a completar el perfil.
+ * conserva nada de él y la sesión queda SIN negocio, aunque a la cuenta le
+ * quede un solo contexto: nunca se cambia sola a otro (`contextoDeLaSesion`).
+ * Sólo sin elegido (el login, un token que nunca eligió) se entra directo al
+ * único contexto si hay uno solo. Sin negocio, el proxy manda a elegir
+ * (`/elegir-negocio`), o a completar el perfil si no queda ninguno.
  *
  * `rol`, `businessId`, `memberId` y `rubro` salen siempre del MISMO contexto:
  * el par `(businessId, memberId)` nunca apunta a dos negocios distintos, y el
@@ -61,7 +63,7 @@ export async function contextosDeLaCuenta(userId: string): Promise<Contexto[]> {
  */
 function perfilDe(usuario: UsuarioConNegocio, elegido?: unknown) {
   const contextos = contextosDe(usuario)
-  const contexto = buscarContexto(contextos, elegido) ?? contextoSinElegir(contextos)
+  const contexto = contextoDeLaSesion(contextos, elegido)
 
   return {
     contexto: contexto?.id ?? null,
@@ -126,17 +128,19 @@ function cabecerasDelPedido(pedido: unknown): Headers {
  * (`proxy.ts`) compara la ruta y una ruta se puede escribir de varias formas
  * (`/api/auth/callback/credential%73`); éste no depende de eso.
  *
- * Dos baldes del límite `login` (10 por minuto, falla cerrado si Upstash
- * falla): por IP, y por cuenta (el correo normalizado, en hash: el correo no
- * va en claro a Upstash). El de cuenta frena a quien prueba contraseñas de una
- * misma persona rotando IPs. Las claves llevan su propio prefijo y no chocan
- * con las del proxy, que cuenta la IP aparte.
+ * Dos baldes, los dos fallan cerrado si Upstash falla: por IP (`login`, 10
+ * por minuto) y por cuenta (`loginPorCuenta`, 30 por 15 minutos; el correo
+ * normalizado, en hash: no va en claro a Upstash). El de cuenta frena a quien
+ * prueba contraseñas de una misma persona rotando IPs, y es más amplio que el
+ * de IP para que un tercero con unos pocos intentos no deje fuera a la dueña
+ * de la cuenta (los números, en `lib/rate-limit.ts`). Las claves llevan su
+ * propio prefijo y no chocan con las del proxy, que cuenta la IP aparte.
  */
 async function quedanIntentosDeLogin(pedido: unknown, email: string): Promise<boolean> {
   const ip = obtenerIp({ headers: cabecerasDelPedido(pedido) })
   const [porIp, porCuenta] = await Promise.all([
     verificarLimite("login", `authorize:ip:${ip}`),
-    verificarLimite("login", `authorize:cuenta:${hashDeToken(email)}`),
+    verificarLimite("loginPorCuenta", `authorize:cuenta:${hashDeToken(email)}`),
   ])
   return porIp.permitido && porCuenta.permitido
 }

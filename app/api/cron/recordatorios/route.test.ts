@@ -352,6 +352,33 @@ describe("GET /api/cron/recordatorios", () => {
       expect(datos.plazoHoras).toBe(24)
     })
 
+    it("el enlace sale de urlBase(): NEXTAUTH_URL sin la barra final", async () => {
+      vi.stubEnv("NEXTAUTH_URL", "https://eli.test/")
+      prismaMock.appointment.findMany.mockResolvedValue([sinEnlace])
+      const { GET } = await import("./route")
+
+      await GET(autorizada())
+
+      const datos = mockEnviarRecordatorio.mock.calls[0][0] as { enlaceDeGestion: string }
+      expect(datos.enlaceDeGestion).toMatch(/^https:\/\/eli\.test\/reservar\/salon-uno\/cita\//)
+    })
+
+    it("en producción sin NEXTAUTH_URL, el recordatorio sale igual, sin enlace y sin crear un token que nadie recibiría", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {})
+      vi.stubEnv("NEXTAUTH_URL", "")
+      vi.stubEnv("NODE_ENV", "production")
+      prismaMock.appointment.findMany.mockResolvedValue([sinEnlace])
+      const { GET } = await import("./route")
+
+      const res = await GET(autorizada())
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({ enviados: 1 })
+      expect(llamadasQuePonenToken()).toHaveLength(0)
+      expect(mockEnviarRecordatorio).toHaveBeenCalledTimes(1)
+      expect(mockEnviarRecordatorio.mock.calls[0][0]).not.toHaveProperty("enlaceDeGestion")
+    })
+
     it("con un enlace existente no lo pisa ni manda uno", async () => {
       prismaMock.appointment.findMany.mockResolvedValue([{ ...sinEnlace, manageTokenHash: "hash-existente" }])
       const { GET } = await import("./route")

@@ -15,6 +15,10 @@ import {
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { contabilizarReferido } from "@/lib/referidos"
 import { registrarError } from "@/lib/registro-de-errores"
+import { urlBase } from "@/lib/url-base"
+// El mismo detector que el enlace de gestión: P2034, y P2010 con 40001 cuando
+// lo que choca es una consulta cruda (el candado del sillón, por ejemplo).
+import { esConflictoDeSerializacion } from "../cita/[token]/_comun"
 import { correosDelAviso } from "@/lib/avisos-al-negocio"
 import { generarToken } from "@/lib/tokens"
 import { leerHoraValle, preciosConHoraValle } from "@/lib/hora-valle"
@@ -89,11 +93,6 @@ interface Reserva {
    * `null` en cualquier otro rubro: la cita no lo escribe y queda el default.
    */
   primeraVez: boolean | null
-}
-
-/** P2034: Postgres no pudo ordenar la transacción con otra concurrente; hay que reintentarla. */
-function esConflictoDeSerializacion(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034"
 }
 
 async function reservarEnTransaccion(reserva: Reserva): Promise<Resultado> {
@@ -490,7 +489,15 @@ export async function POST(
     // Lleva el token en claro: va en el correo del cliente y en la respuesta a
     // quien acaba de reservar (que sin correo no tendría otra forma de verlo).
     const rutaDeGestion = `/reservar/${encodeURIComponent(negocio.slug)}/cita/${enlace.token}`
-    const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000"
+    // En producción sin NEXTAUTH_URL, `urlBase` lanza. La cita ya está creada:
+    // eso no puede volverse un 500. Se registra y la confirmación sale sin el
+    // botón de gestión (la pantalla igual muestra el enlace, que es relativo).
+    let baseUrl: string | null = null
+    try {
+      baseUrl = urlBase()
+    } catch (error) {
+      registrarError("armando el enlace de gestión de la reserva", error)
+    }
 
     // Enviar emails en paralelo (sin bloquear la respuesta si fallan)
     const emailsPromises: Promise<unknown>[] = []
@@ -506,7 +513,7 @@ export async function POST(
           hora: datos.hora,
           duracion: resumen.duracion,
           profesional: profesional?.nombre ?? null,
-          enlaceDeGestion: `${baseUrl}${rutaDeGestion}`,
+          enlaceDeGestion: baseUrl ? `${baseUrl}${rutaDeGestion}` : null,
           plazoHoras: plazoValido(negocio.cancelacionHorasAntes),
           sePuedeCambiar,
           // El correo sí lo dice: el local la confirmará (#84).

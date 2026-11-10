@@ -26,6 +26,7 @@ import {
 import { esRubroDental } from "@/lib/rubros"
 import { leerServiciosDeLaReserva, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
 import { hashDeToken } from "@/lib/tokens"
+import { urlBase } from "@/lib/url-base"
 import { fechaYMinutosEn, zonaDelNegocio } from "@/lib/zona-horaria"
 
 /**
@@ -111,11 +112,12 @@ export function hashDelTokenDeEspera(token: unknown): string | null {
   return typeof token === "string" && FORMA_DEL_TOKEN.test(token) ? hashDeToken(token) : null
 }
 
-function urlBase(): string {
-  return process.env.NEXTAUTH_URL ?? "http://localhost:3000"
-}
-
-/** Los enlaces de un aviso: reservar con todo elegido, y salir de la lista (página y un clic). */
+/**
+ * Los enlaces de un aviso: reservar con todo elegido, y salir de la lista
+ * (página y un clic). Lanza en producción sin `NEXTAUTH_URL` (`urlBase`) y sin
+ * `NEXTAUTH_SECRET` (el token): quien la llame dentro de un envío lo cuenta
+ * como fallido y sigue, nunca manda un enlace a localhost.
+ */
 export function enlacesDelAviso(datos: {
   slug: string
   esperaId: string
@@ -488,13 +490,6 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
         continue
       }
 
-      const enlaces = enlacesDelAviso({
-        slug: negocio.slug,
-        esperaId: fila.id,
-        serviceId: fila.serviceId,
-        memberId: fila.memberId,
-        fecha,
-      })
       const resultado = await enviarAClientes({
         businessId: negocio.id,
         zona,
@@ -511,7 +506,17 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
             servicio: fila.service?.name ?? "",
             profesional: fila.memberId ? (nombreDelProfesional.get(fila.memberId) ?? null) : null,
             fecha,
-            ...enlaces,
+            // Adentro de `enviar`: si los enlaces no se pueden armar (sin
+            // NEXTAUTH_URL o NEXTAUTH_SECRET en producción), `enviarAClientes`
+            // lo registra, lo cuenta como fallido y suelta el candado; el resto
+            // de la lista sigue.
+            ...enlacesDelAviso({
+              slug: negocio.slug,
+              esperaId: fila.id,
+              serviceId: fila.serviceId,
+              memberId: fila.memberId,
+              fecha,
+            }),
           }),
       })
 

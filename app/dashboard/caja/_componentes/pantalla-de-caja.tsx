@@ -222,11 +222,13 @@ function CajaAbierta({ estado, actualizando, onActualizar, onCerrada, onCambio }
     enviado.current = true
     setGuardando(true)
     setAviso("")
-    // Lo que se vio: el período hasta la hora en que se leyó y el esperado mostrado.
+    // Lo que se vio: el período hasta la hora en que se leyó, el esperado
+    // mostrado y el total de todos los medios con que se leyó la caja.
     const resultado = await cerrarCaja({
       desde: abierta.desde,
       hasta: abierta.hasta,
       esperado: confirmando.esperado,
+      totalCobrado: abierta.totalCobrado,
       fondoInicial: confirmando.fondo,
       contado: confirmando.contado,
       nota,

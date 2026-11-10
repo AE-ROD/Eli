@@ -537,6 +537,46 @@ describe("contextos de la cuenta (lib/auth.ts)", () => {
     expect(token.contextos).toBe(2)
   })
 
+  it("Ana en A y B trabajando en A: si borran su membresía en A, queda sin negocio y a elegir, nunca pasa sola a B", async () => {
+    // A = Barbería Uno (miembro-a), B = Spa Dos (miembro-b). Tras borrar A le queda sólo B.
+    prismaMock.user.findUnique.mockResolvedValueOnce(
+      usuarioMiembro("worker", { memberships: [{ id: "miembro-b", role: "admin", business: otroNegocio }] })
+    )
+
+    const { token, actor } = await leerSesion(
+      tokenDeProfesional(6, { contexto: "miembro:miembro-a", memberId: "miembro-a", contextos: 2 })
+    )
+
+    expect(actor).toBeNull()
+    expect(token.businessId).toBeFalsy()
+    expect(token.memberId).toBeFalsy()
+    expect(token.role).toBeFalsy()
+    expect(token.contexto).toBeNull()
+    // Sigue identificando a la cuenta: el proxy la manda a elegir (le queda B).
+    expect(token.id).toBe("usuario-1")
+    expect(token.contextos).toBe(1)
+  })
+
+  it("lo mismo al cambiar de contexto con update(): un pedido inválido no rescata un contexto que dejó de existir", async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce(
+      usuarioMiembro("worker", { memberships: [{ id: "miembro-b", role: "admin", business: otroNegocio }] })
+    )
+
+    const { actor } = await actualizarSesion(tokenDeProfesional(0, { contexto: "miembro:miembro-a" }), { contexto: "miembro:ajeno" })
+
+    expect(actor).toBeNull()
+  })
+
+  it("tras quedar sin negocio, elegir el que le queda funciona como siempre", async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce(
+      usuarioMiembro("worker", { memberships: [{ id: "miembro-b", role: "admin", business: otroNegocio }] })
+    )
+
+    const { actor } = await actualizarSesion(tokenDeProfesional(0, { contexto: null }), { contexto: "miembro:miembro-b" })
+
+    expect(actor).toEqual({ rol: "admin", businessId: "negocio-2", memberId: "miembro-b" })
+  })
+
   it("si deja de ser dueña, el contexto de dueña deja de valer aunque el token lo traiga", async () => {
     prismaMock.user.findUnique.mockResolvedValueOnce(
       usuarioMiembro("worker", {
@@ -605,10 +645,11 @@ describe("límite de intentos de login dentro de authorize (A1)", () => {
     await authorizeCon({ email: " Carla@X.com ", password: "loquesea1" }, { "x-real-ip": "203.0.113.7" })
 
     const claves = mockVerificarLimite.mock.calls.map((llamada) => llamada[1] as string)
-    expect(mockVerificarLimite.mock.calls.every((llamada) => llamada[0] === "login")).toBe(true)
-    expect(claves).toContain("authorize:ip:203.0.113.7")
     const { hashDeToken } = await import("@/lib/tokens")
-    expect(claves).toContain(`authorize:cuenta:${hashDeToken("carla@x.com")}`)
+    // La IP en el balde `login`; la cuenta en el suyo, más amplio (`loginPorCuenta`).
+    expect(mockVerificarLimite).toHaveBeenCalledWith("login", "authorize:ip:203.0.113.7")
+    expect(mockVerificarLimite).toHaveBeenCalledWith("loginPorCuenta", `authorize:cuenta:${hashDeToken("carla@x.com")}`)
+    expect(mockVerificarLimite).toHaveBeenCalledTimes(2)
     expect(claves.join(" ")).not.toContain("carla")
   })
 

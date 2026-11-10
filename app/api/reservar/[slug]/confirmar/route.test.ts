@@ -788,6 +788,33 @@ describe("POST /api/reservar/[slug]/confirmar: dos confirmaciones al mismo tiemp
     expect(citasCreadas()).toHaveLength(1)
   })
 
+  it("un conflicto de serialización en una consulta cruda (P2010 con 40001) también se reintenta, como en el enlace de gestión", async () => {
+    transaccion.mockImplementationOnce(async () => {
+      throw new Prisma.PrismaClientKnownRequestError("Raw query failed. Code: `40001`", {
+        code: "P2010",
+        clientVersion: "test",
+        meta: { code: "40001" },
+      })
+    })
+
+    expect((await confirmar("10:00", "2026-10-15")).status).toBe(201)
+    expect(transaccion).toHaveBeenCalledTimes(2)
+    expect(citasCreadas()).toHaveLength(1)
+  })
+
+  it("un P2010 que no es de serialización no se reintenta: 500", async () => {
+    transaccion.mockImplementation(async () => {
+      throw new Prisma.PrismaClientKnownRequestError("Raw query failed. Code: `42P01`", {
+        code: "P2010",
+        clientVersion: "test",
+        meta: { code: "42P01" },
+      })
+    })
+
+    expect((await confirmar("10:00", "2026-10-15")).status).toBe(500)
+    expect(transaccion).toHaveBeenCalledTimes(1)
+  })
+
   it("si el conflicto persiste, se rinde a los 3 intentos con 409 'El horario ya no está disponible'", async () => {
     transaccion.mockImplementation(async () => {
       throw errorDeSerializacion()
@@ -808,6 +835,50 @@ describe("POST /api/reservar/[slug]/confirmar: dos confirmaciones al mismo tiemp
 
     expect((await confirmar("10:00", "2026-10-15")).status).toBe(500)
     expect(transaccion).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("POST /api/reservar/[slug]/confirmar: el enlace del correo sale de urlBase()", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    relojEn("2026-10-01T12:00:00.000Z")
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 9 })
+    escenario([0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => franja({ dayOfWeek, startTime: "09:00", endTime: "13:00" })))
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  const confirmarConCorreo = async () => {
+    const { POST } = await import("./route")
+    const res = await POST(pedidoFalso({ ...reserva("10:00", "2026-10-15"), email: "lucia@correo.test" }), conSlug)
+    return { status: res.status, cuerpo: await res.json() }
+  }
+
+  it("con NEXTAUTH_URL, el enlace de gestión del correo es absoluto y sin barra doble", async () => {
+    vi.stubEnv("NEXTAUTH_URL", "https://eli.test/")
+
+    const { status, cuerpo } = await confirmarConCorreo()
+
+    expect(status).toBe(201)
+    expect(vi.mocked(enviarConfirmacionCliente)).toHaveBeenCalledWith(
+      expect.objectContaining({ enlaceDeGestion: `https://eli.test${cuerpo.enlaceDeGestion}` })
+    )
+  })
+
+  it("en producción sin NEXTAUTH_URL no manda un enlace a localhost: la reserva queda y el correo sale sin botón", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    vi.stubEnv("NEXTAUTH_URL", "")
+    vi.stubEnv("NODE_ENV", "production")
+
+    const { status, cuerpo } = await confirmarConCorreo()
+
+    expect(status).toBe(201)
+    expect(cuerpo.enlaceDeGestion).toMatch(/^\/reservar\//)
+    expect(citasCreadas()).toHaveLength(1)
+    expect(vi.mocked(enviarConfirmacionCliente)).toHaveBeenCalledWith(expect.objectContaining({ enlaceDeGestion: null }))
+    expect(JSON.stringify(vi.mocked(enviarConfirmacionCliente).mock.calls)).not.toContain("localhost")
   })
 })
 

@@ -31,6 +31,8 @@ import {
   leerHorarioDeAtencion,
   leerProfesionales,
   leerSillones,
+  leerClienteParaLaCita,
+  llegadaALaAgenda,
   type Bloqueo,
   type Cita,
   type DatosDeNuevaCita,
@@ -218,28 +220,47 @@ export default function PaginaAgenda() {
   // Cada vez que se abre, un borrador nuevo del día que se está mirando. Si
   // se conservaba el anterior, el buscador volvía vacío con el cliente de
   // antes todavía elegido por debajo (A1).
-  const abrirModal = () => {
+  // `cliente`: el que ya viene elegido (al llegar con `?cliente=<id>`).
+  const abrirModal = (cliente?: { id: string; nombre: string }) => {
     setAvisoDelModal("")
     setSillonOcupadoEnElModal(false)
     setAdvertenciasDeNuevaCita([])
+    const borrador = cliente
+      ? { ...citaEnBlanco(fecha), clienteId: cliente.id, clienteNombre: cliente.nombre }
+      : citaEnBlanco(fecha)
     // En la clínica, el borrador lleva el sillón (vacío: sin sillón); en otro rubro, ni la clave.
-    setNuevaCita(conSillones ? { ...citaEnBlanco(fecha), sillonId: "" } : citaEnBlanco(fecha))
+    setNuevaCita(conSillones ? { ...borrador, sillonId: "" } : borrador)
     setModalAbierto(true)
   }
 
-  // Desde el inicio ("Nueva cita") se llega con `?nueva=1`: se abre el modal
-  // y se saca de la dirección, para que recargar o volver no lo abra otra vez.
+  // Desde el inicio ("Nueva cita") se llega con `?nueva=1`, y desde un
+  // cliente ("Agendar cita") además con `&cliente=<id>`: se abre el modal,
+  // con ese cliente elegido si el servidor lo devuelve (es del negocio; si no,
+  // 404 y se abre sin cliente), y se sacan los dos de la dirección para que
+  // recargar o volver no lo abra otra vez. El cliente se lee ANTES de abrir:
+  // el buscador del modal arranca con el nombre del borrador.
+  //
+  // La respuesta del cliente llega después: abre con el `abrirModal` del
+  // último render (el día y el rubro ya cargados), no con el del primero. Sin
+  // cancelar al desmontar a propósito: en desarrollo React monta dos veces y
+  // la segunda no vuelve a leer la dirección (`abrirModalAlLlegar`).
   const abrirModalAlLlegar = useRef(true)
+  const abrirModalVigente = useRef(abrirModal)
+  useEffect(() => {
+    abrirModalVigente.current = abrirModal
+  })
   useEffect(() => {
     if (!abrirModalAlLlegar.current) return
     abrirModalAlLlegar.current = false
-    const parametros = new URLSearchParams(window.location.search)
-    if (parametros.get("nueva") !== "1") return
-    parametros.delete("nueva")
-    const resto = parametros.toString()
-    router.replace(`${window.location.pathname}${resto ? `?${resto}` : ""}`, { scroll: false })
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- la dirección sólo se lee en el navegador, al llegar
-    abrirModal()
+    const llegada = llegadaALaAgenda(window.location.search)
+    if (!llegada.nueva) return
+    router.replace(`${window.location.pathname}${llegada.resto ? `?${llegada.resto}` : ""}`, { scroll: false })
+    if (!llegada.clienteId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- la dirección sólo se lee en el navegador, al llegar
+      abrirModal()
+      return
+    }
+    leerClienteParaLaCita(llegada.clienteId).then((cliente) => abrirModalVigente.current(cliente ?? undefined))
     // Sólo al llegar: `abrirModal` cambia en cada render y no debe volver a correr esto.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -279,7 +300,7 @@ export default function PaginaAgenda() {
       <BarraSuperior
         titulo="Agenda"
         subtitulo={resumen(cargando, citas.length)}
-        accionPrincipal={{ texto: "Nueva cita", onClick: abrirModal }}
+        accionPrincipal={{ texto: "Nueva cita", onClick: () => abrirModal() }}
       />
 
       <div className="space-y-4 px-4 pt-6 pb-10 sm:space-y-6 sm:px-6">

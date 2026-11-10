@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
-import { aQuienBloquea, asignarProfesional, cambiarEstadoDeCita, citaPorConfirmar, conEstadoNuevo, precioDeLosServicios, crearBloqueo, crearCita, destacaSinProfesional, hayProfesionales, moverCita, nombreDelProfesional, opcionesDeProfesional, precioDeLaCita, quienCancelo, serviciosParaElProfesional, idsDeServiciosElegidos, quitarBloqueo, reactivarCita, type Bloqueo, type Cita, type DatosDeNuevaCita } from "./_datos"
+import { aQuienBloquea, asignarProfesional, cambiarEstadoDeCita, citaPorConfirmar, conEstadoNuevo, precioDeLosServicios, crearBloqueo, crearCita, destacaSinProfesional, hayProfesionales, moverCita, nombreDelProfesional, opcionesDeProfesional, precioDeLaCita, quienCancelo, serviciosParaElProfesional, idsDeServiciosElegidos, quitarBloqueo, reactivarCita, leerClienteParaLaCita, llegadaALaAgenda, type Bloqueo, type Cita, type DatosDeNuevaCita } from "./_datos"
 
 /** El cuerpo JSON con que se llamó a `fetch`. */
 const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
@@ -415,5 +415,33 @@ describe("cancelar desde el detalle: quién y cuándo, sin recargar", () => {
   it("sin datos de cancelación en la respuesta, no queda la de antes", () => {
     const vieja = { ...cita, status: "cancelada", canceladaPor: "cliente", canceladaEn: "2026-11-01T12:00:00.000Z" }
     expect(conEstadoNuevo(vieja, { status: "confirmada" })).toMatchObject({ canceladaPor: null, canceladaEn: null })
+  })
+})
+
+describe("llegar a la agenda con ?nueva=1&cliente=<id>", () => {
+  it("lee los dos y deja la consulta sin ellos", () => {
+    expect(llegadaALaAgenda("?nueva=1&cliente=c-1&vista=dia")).toEqual({ nueva: true, clienteId: "c-1", resto: "vista=dia" })
+    expect(llegadaALaAgenda("?nueva=1")).toEqual({ nueva: true, clienteId: null, resto: "" })
+  })
+
+  it("sin nueva=1 no abre nada, aunque venga un cliente", () => {
+    expect(llegadaALaAgenda("?cliente=c-1")).toMatchObject({ nueva: false, clienteId: null })
+    expect(llegadaALaAgenda("")).toMatchObject({ nueva: false, clienteId: null })
+  })
+
+  it("con 200, el cliente queda elegido con su nombre completo, pedido a /api/clientes/<id>", async () => {
+    const fetchFalso = simularRespuesta(json({ id: "c 1", name: "Ana", lastName: "Pérez", email: null, appointments: [] }))
+    expect(await leerClienteParaLaCita("c 1")).toEqual({ id: "c 1", nombre: "Ana Pérez", email: "" })
+    expect(fetchFalso.mock.calls[0][0]).toBe("/api/clientes/c%201")
+  })
+
+  it("con 404 (otro negocio, eliminado o inexistente) se ignora: sin cliente", async () => {
+    simularRespuesta(json({ error: "Cliente no encontrado" }, 404))
+    expect(await leerClienteParaLaCita("ajeno")).toBeNull()
+  })
+
+  it("sin conexión, también sin cliente", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")))
+    expect(await leerClienteParaLaCita("c-1")).toBeNull()
   })
 })

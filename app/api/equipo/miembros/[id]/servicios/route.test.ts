@@ -140,6 +140,17 @@ describe("PUT /api/equipo/miembros/[id]/servicios", () => {
     expect(base.volcado()).toEqual(antes)
   })
 
+  it("si un servicio o la persona se borró entre la revisión y el guardado (P2003), es 409 y no deja nada a medias", async () => {
+    const antes = base.volcado()
+    base.prisma.memberService.createMany.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError("Foreign key constraint failed", { code: "P2003", clientVersion: "prueba" })
+    )
+    const { status, cuerpo } = await definir(sesiones.dueña, "m-pedro", { todos: false, serviceIds: ["s-color"] })
+    expect(status).toBe(409)
+    expect(cuerpo.error).toMatch(/se borró/)
+    expect(base.volcado()).toEqual(antes)
+  })
+
   it("el profesional no define los suyos: 401", async () => {
     expect((await definir(sesiones.carla, "m-carla", { todos: true })).status).toBe(401)
   })

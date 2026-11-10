@@ -101,6 +101,9 @@ export async function PUT(request: NextRequest, { params }: Contexto) {
   // encargado) borraban los dos lo mismo y el segundo chocaba con el único
   // (miembro, servicio) al crear. Con el candado, el segundo espera y
   // reemplaza lo del primero. Si igual choca (la última red), es 409.
+  // También es 409 si entre la revisión de arriba y el guardado se borró un
+  // servicio o la persona (P2003, clave foránea): no es un error del
+  // servidor, es que lo que vio quien guarda ya no existe.
   try {
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`servicios-del-miembro:${actor.businessId}:${miembro.id}`}))`
@@ -115,6 +118,12 @@ export async function PUT(request: NextRequest, { params }: Contexto) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return NextResponse.json(
         { error: "Alguien más cambió los servicios de esta persona al mismo tiempo. Vuelve a abrirlos y revisa." },
+        { status: 409 }
+      )
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+      return NextResponse.json(
+        { error: "Uno de los servicios, o esta persona, se borró mientras guardabas. Vuelve a abrirlos y revisa." },
         { status: 409 }
       )
     }

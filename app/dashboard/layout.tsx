@@ -90,6 +90,7 @@ export default async function LayoutDelPanel({
               accesoALaPlata={accesoALaPlata}
               rubro={rubro}
               puedeCambiarDeNegocio={puedeCambiarDeNegocio}
+              contexto={session?.user?.contexto ?? null}
             />
             <ContenidoDelPanel>{children}</ContenidoDelPanel>
             {businessName && businessSlug && (

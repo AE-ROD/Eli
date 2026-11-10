@@ -45,6 +45,8 @@ export interface EstadoDeCaja {
     efectivoCobrado: number
     propinasEfectivo: number
     desglose: Desglose
+    /** Todo lo cobrado, en todos los medios y con propinas. Se devuelve al cerrar: si cambió, 409. */
+    totalCobrado: number
     /** El cobro más antiguo de un día anterior a hoy: la caja arrastra días sin cerrar. Null si todo es de hoy. */
     cobrosDesde: string | null
   }
@@ -61,14 +63,17 @@ export async function leerCaja(pagina: number): Promise<Resultado<EstadoDeCaja>>
 /**
  * Cierra la caja con lo que se vio: `desde` y `hasta` son el período que
  * estaba en pantalla al contar (lo cobrado después de `hasta` queda para el
- * próximo cierre) y `esperado`, el esperado que se mostró. Si otro la cerró
- * entretanto, o lo cobrado en ese período ya no da ese esperado, el servidor
- * responde 409 y la pantalla recarga.
+ * próximo cierre), `esperado`, el esperado que se mostró, y `totalCobrado`,
+ * el total de todos los medios que venía con la caja leída. Si otro la cerró
+ * entretanto, o lo cobrado en ese período ya no da ese esperado o ese total
+ * (un cobro con tarjeta también cuenta), el servidor responde 409 y la
+ * pantalla recarga.
  */
 export async function cerrarCaja(datos: {
   desde: string
   hasta: string
   esperado: number
+  totalCobrado: number
   fondoInicial: number
   contado: number
   nota: string

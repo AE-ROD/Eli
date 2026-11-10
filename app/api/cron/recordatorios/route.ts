@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { enviarRecordatorio } from "@/lib/email"
 import { llamadaDeCronAutorizada } from "@/lib/cron"
 import { registrarError } from "@/lib/registro-de-errores"
+import { urlBase } from "@/lib/url-base"
 import { ESTADOS_GESTIONABLES, dentroDelPlazo, plazoValido } from "@/lib/gestion-de-cita"
 import { ORIGEN_RESERVA_PUBLICA } from "@/lib/reserva-publica"
 import { generarToken } from "@/lib/tokens"
@@ -109,7 +110,15 @@ export async function GET(request: NextRequest) {
   const inicio = Date.now()
   const ahora = new Date(inicio)
   const ventana = ventanaDeBusqueda(ahora)
-  const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000"
+  // En producción sin NEXTAUTH_URL, `urlBase` lanza. El recordatorio es lo
+  // principal y sale igual, sin el enlace de gestión (y sin crear un token
+  // que nadie recibiría): mejor sin botón que con uno a localhost.
+  let baseUrl: string | null = null
+  try {
+    baseUrl = urlBase()
+  } catch (error) {
+    registrarError("armando los enlaces de los recordatorios", error)
+  }
   let enviados = 0
   let fallidos = 0
   let omitidas = 0
@@ -198,7 +207,7 @@ export async function GET(request: NextRequest) {
         let enlaceNuevo: { token: string; tokenHash: string } | null = null
         try {
           const sePuedeCambiar = dentroDelPlazo(cita.startTime, cita.business.cancelacionHorasAntes, ahora)
-          enlaceNuevo = await enlaceParaCitaSinToken(cita, sePuedeCambiar)
+          enlaceNuevo = baseUrl ? await enlaceParaCitaSinToken(cita, sePuedeCambiar) : null
           const { fecha, hora } = fechaYHoraEnElNegocio(cita.startTime, cita.business.timezone)
           // Desde acá el correo pudo salir aunque después algo falle.
           noSalio = false
@@ -209,7 +218,7 @@ export async function GET(request: NextRequest) {
             servicio: cita.title,
             fecha,
             hora,
-            ...(enlaceNuevo
+            ...(enlaceNuevo && baseUrl
               ? {
                   enlaceDeGestion: `${baseUrl}/reservar/${encodeURIComponent(cita.business.slug)}/cita/${enlaceNuevo.token}`,
                   plazoHoras: plazoValido(cita.business.cancelacionHorasAntes),

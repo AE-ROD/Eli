@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { signOut } from "next-auth/react"
+import { signOut, useSession } from "next-auth/react"
 import { motion, AnimatePresence } from "framer-motion"
 import { ArrowLeftRight, ArrowRight, LogOut, PanelLeftClose, PanelLeftOpen, Sparkles, UserRound, X } from "lucide-react"
 import { FONDO_SUAVE, HALO_DE_MODULO } from "@/components/comunes/colores-de-modulo"
@@ -24,6 +24,7 @@ import {
   type AccesoALaPlata,
   type SeccionDelPanel,
 } from "@/components/panel/secciones-del-panel"
+import { CLAVE_DEL_CONTEXTO_DEL_PANEL, cambioElContextoDelPanel } from "@/lib/contextos"
 import { moduloPorId } from "@/lib/modulos"
 import { DIA_DEL_AVISO_DE_PRUEBA, DIAS_DE_PRUEBA } from "@/lib/precios"
 import { cn } from "@/lib/utils"
@@ -72,6 +73,68 @@ interface PropsDeBarraLateral {
    * a cerrar sesión aparece "Cambiar de negocio". Resuelto en el servidor.
    */
   puedeCambiarDeNegocio?: boolean
+  /**
+   * El contexto (negocio y rol) con que el servidor dibujó el panel. Si la
+   * sesión pasa a otro (se cambió en otra pestaña, o la revalidación la dejó
+   * sin negocio), la pestaña se recarga (`useRecargarSiCambiaElContexto`).
+   */
+  contexto?: string | null
+}
+
+/** Lee la clave compartida entre pestañas; `undefined` si no hay o no se puede leer (modo privado). */
+function contextoAnotado(): string | null | undefined {
+  try {
+    const valor = window.localStorage.getItem(CLAVE_DEL_CONTEXTO_DEL_PANEL)
+    return valor === null ? undefined : valor
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Una pestaña del panel abierta con otro contexto no sigue trabajando: en
+ * cuanto sabe que la sesión ya es de otro negocio o rol, se recarga y el
+ * servidor la dibuja con el de ahora (o el proxy la manda a elegir). Ver
+ * `CLAVE_DEL_CONTEXTO_DEL_PANEL` en `lib/contextos.ts`.
+ */
+function useRecargarSiCambiaElContexto(cargado: string | null | undefined) {
+  const { data: sesion, status } = useSession()
+
+  // Al cargar, anota con qué contexto quedó esta pestaña; las demás lo oyen.
+  // Al volver a la pestaña mira lo anotado en el acto, antes de cualquier clic.
+  useEffect(() => {
+    if (cargado === undefined) return
+    try {
+      window.localStorage.setItem(CLAVE_DEL_CONTEXTO_DEL_PANEL, cargado ?? "")
+    } catch {
+      // Sin localStorage queda la revisión de la sesión, de abajo.
+    }
+    const recargarSiCambio = (actual: string | null | undefined) => {
+      if (cambioElContextoDelPanel(cargado, actual)) window.location.reload()
+    }
+    const alOirOtraPestaña = (evento: StorageEvent) => {
+      if (evento.key === CLAVE_DEL_CONTEXTO_DEL_PANEL) recargarSiCambio(evento.newValue ?? undefined)
+    }
+    const alVolver = () => {
+      if (document.visibilityState === "visible") recargarSiCambio(contextoAnotado())
+    }
+    window.addEventListener("storage", alOirOtraPestaña)
+    document.addEventListener("visibilitychange", alVolver)
+    window.addEventListener("focus", alVolver)
+    return () => {
+      window.removeEventListener("storage", alOirOtraPestaña)
+      document.removeEventListener("visibilitychange", alVolver)
+      window.removeEventListener("focus", alVolver)
+    }
+  }, [cargado])
+
+  // La sesión que `SessionProvider` vuelve a leer al volver el foco (y cuando
+  // otra pestaña la actualiza): si ya trabaja con otro contexto, recarga. Sólo
+  // con una sesión leída: un error de red no es "sin contexto".
+  const actual = status === "authenticated" ? (sesion?.user?.contexto ?? null) : undefined
+  useEffect(() => {
+    if (cargado !== undefined && cambioElContextoDelPanel(cargado, actual)) window.location.reload()
+  }, [cargado, actual])
 }
 
 export function BarraLateral({
@@ -82,7 +145,9 @@ export function BarraLateral({
   accesoALaPlata,
   rubro,
   puedeCambiarDeNegocio,
+  contexto,
 }: PropsDeBarraLateral) {
+  useRecargarSiCambiaElContexto(contexto)
   const { abrirPrecios } = usePrecios()
   const pathname = usePathname()
   const { cajonAbierto, cerrarCajon, cerrarCajonParaIrA, colapsada, alternarColapso, enfocarBotonMenu } =

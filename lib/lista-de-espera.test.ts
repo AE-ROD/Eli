@@ -305,6 +305,26 @@ describe("avisar cuando se libera una hora", () => {
     expect(inscripciones({ id: "i-ajena" })[0]).toMatchObject({ avisos: 0 })
   })
 
+  it("en producción sin NEXTAUTH_URL no manda un enlace a localhost: se cuenta como fallido, se libera y sigue", async () => {
+    const silencio = vi.spyOn(console, "error").mockImplementation(() => {})
+    vi.stubEnv("NEXTAUTH_URL", "")
+    vi.stubEnv("NODE_ENV", "production")
+    try {
+      escenario({ inscripcionEnEspera: [inscripcion("i1")] })
+      await liberar("a9")
+      const resumen = await m.avisarHoraLiberada({ businessId: "n1", inicio: A_LAS_9 }, AHORA)
+
+      expect(resumen).toMatchObject({ enviados: 0, fallidos: 1 })
+      expect(enviarAviso).not.toHaveBeenCalled()
+      // El candado se suelta: el próximo evento lo vuelve a intentar.
+      expect(envios()).toHaveLength(0)
+      expect(inscripciones({ id: "i1" })[0]).toMatchObject({ avisos: 0 })
+    } finally {
+      vi.unstubAllEnvs()
+      silencio.mockRestore()
+    }
+  })
+
   it("el evento de otro negocio nunca avisa a este", async () => {
     escenario({ inscripcionEnEspera: [inscripcion("i1")] })
     await liberar("a9")

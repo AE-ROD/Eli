@@ -100,6 +100,7 @@ async function cerrar(sesion: unknown, cuerpo: unknown) {
     cuerpo = {
       hasta: visto?.hasta ?? new Date().toISOString(),
       esperado: visto ? Math.round((fondo + visto.efectivoCobrado + visto.propinasEfectivo) * 100) / 100 : 0,
+      totalCobrado: visto?.totalCobrado ?? 0,
       ...cuerpo,
     }
   }
@@ -154,6 +155,8 @@ describe("/api/caja", () => {
           otrosMedios: [{ medio: "tarjeta-debito", nombre: "Tarjeta de débito", monto: 5000 }],
           propinasOtrosMedios: [{ medio: "transferencia", nombre: "Transferencia", monto: 1000 }],
         },
+        // Todos los medios, con propinas: 8000 + 5000 + 2000 + 1000.
+        totalCobrado: 16000,
         cobrosDesde: null,
       })
       // El cierre del otro negocio no aparece.
@@ -266,7 +269,7 @@ describe("/api/caja", () => {
         const visto = (await (await leer(sesiones.dueña)).json()).abierta
         expect(visto.hasta).toBe(deLaBase.toISOString())
         base.prisma.$queryRaw.mockClear()
-        const res = await cerrar(sesiones.dueña, { desde: INICIO_DEL_DIA, hasta: visto.hasta, esperado: 20000, fondoInicial: 10000, contado: 20000 })
+        const res = await cerrar(sesiones.dueña, { desde: INICIO_DEL_DIA, hasta: visto.hasta, esperado: 20000, totalCobrado: visto.totalCobrado, fondoInicial: 10000, contado: 20000 })
         expect(res.status).toBe(201)
         expect((await res.json()).hasta).toBe(deLaBase.toISOString())
         expect(cierresDelNegocio()[0].hasta).toEqual(deLaBase)
@@ -291,7 +294,7 @@ describe("/api/caja", () => {
       })
       await base.prisma.visitPayment.create({ data: { visitId: "v-abierta", method: "efectivo", amountCents: centavos(700) } })
 
-      const res = await cerrar(sesiones.dueña, { desde: visto.desde, hasta: visto.hasta, esperado: 10000, fondoInicial: 0, contado: 10000 })
+      const res = await cerrar(sesiones.dueña, { desde: visto.desde, hasta: visto.hasta, esperado: 10000, totalCobrado: visto.totalCobrado, fondoInicial: 0, contado: 10000 })
       expect(res.status).toBe(201)
       expect(await res.json()).toMatchObject({ hasta: AHORA.toISOString(), efectivoCobrado: 8000, esperado: 10000 })
 
@@ -310,26 +313,69 @@ describe("/api/caja", () => {
       })
       await base.prisma.visitPayment.create({ data: { visitId: "v-abierta", method: "efectivo", amountCents: centavos(500) } })
 
-      const res = await cerrar(sesiones.dueña, { desde: visto.desde, hasta: visto.hasta, esperado: 10000, fondoInicial: 0, contado: 10000 })
+      const res = await cerrar(sesiones.dueña, { desde: visto.desde, hasta: visto.hasta, esperado: 10000, totalCobrado: visto.totalCobrado, fondoInicial: 0, contado: 10000 })
       expect(res.status).toBe(409)
       expect((await res.json()).error).toBe(MENSAJE_CAJA_CAMBIO_LO_COBRADO)
       expect(cierresDelNegocio()).toEqual([])
     })
 
+    it("si cambió lo cobrado con otro medio (el efectivo da igual): 409 y nada se guarda", async () => {
+      const visto = (await (await leer(sesiones.dueña)).json()).abierta
+      // Un cobro con tarjeta anterior a lo visto, que terminó de guardarse después de leer.
+      await base.prisma.visit.update({
+        where: { id: "v-abierta" },
+        data: { status: "finalizada", paidAt: new Date(AHORA.getTime() - 60_000) },
+      })
+      await base.prisma.visitPayment.create({ data: { visitId: "v-abierta", method: "tarjeta-debito", amountCents: centavos(500) } })
+
+      const res = await cerrar(sesiones.dueña, {
+        desde: visto.desde,
+        hasta: visto.hasta,
+        esperado: 20000,
+        totalCobrado: visto.totalCobrado,
+        fondoInicial: 10000,
+        contado: 20000,
+      })
+      expect(res.status).toBe(409)
+      expect((await res.json()).error).toBe(MENSAJE_CAJA_CAMBIO_LO_COBRADO)
+      expect(cierresDelNegocio()).toEqual([])
+    })
+
+    it("con el total que se ve ahora, el mismo cierre pasa y guarda el cobro con tarjeta en el desglose", async () => {
+      await base.prisma.visit.update({
+        where: { id: "v-abierta" },
+        data: { status: "finalizada", paidAt: new Date(AHORA.getTime() - 60_000) },
+      })
+      await base.prisma.visitPayment.create({ data: { visitId: "v-abierta", method: "tarjeta-debito", amountCents: centavos(500) } })
+      const visto = (await (await leer(sesiones.dueña)).json()).abierta
+      expect(visto.totalCobrado).toBe(16500)
+
+      const res = await cerrar(sesiones.dueña, {
+        desde: visto.desde,
+        hasta: visto.hasta,
+        esperado: 20000,
+        totalCobrado: visto.totalCobrado,
+        fondoInicial: 10000,
+        contado: 20000,
+      })
+      expect(res.status).toBe(201)
+      expect(cierresDelNegocio()[0].desglose).toMatchObject({ otrosMedios: { "tarjeta-debito": centavos(5500) } })
+    })
+
     it("un hasta en el futuro de la base, o no posterior al inicio: 409", async () => {
       const futuro = new Date(AHORA.getTime() + 60_000).toISOString()
       expect(
-        (await cerrar(sesiones.dueña, { desde: INICIO_DEL_DIA, hasta: futuro, esperado: 10000, fondoInicial: 0, contado: 10000 })).status
+        (await cerrar(sesiones.dueña, { desde: INICIO_DEL_DIA, hasta: futuro, esperado: 10000, totalCobrado: 16000, fondoInicial: 0, contado: 10000 })).status
       ).toBe(409)
       expect(
-        (await cerrar(sesiones.dueña, { desde: INICIO_DEL_DIA, hasta: INICIO_DEL_DIA, esperado: 0, fondoInicial: 0, contado: 0 })).status
+        (await cerrar(sesiones.dueña, { desde: INICIO_DEL_DIA, hasta: INICIO_DEL_DIA, esperado: 0, totalCobrado: 16000, fondoInicial: 0, contado: 0 })).status
       ).toBe(409)
       expect(cierresDelNegocio()).toEqual([])
     })
 
     it("una sesión sin id de usuario no cierra: 401, nunca un cierre firmado por nadie", async () => {
       const sinId = { user: { role: "owner", businessId: NEGOCIO, businessName: "Salón Uno", memberId: null } }
-      const res = await cerrar(sinId, { desde: INICIO_DEL_DIA, hasta: AHORA.toISOString(), esperado: 10000, fondoInicial: 0, contado: 10000 })
+      const res = await cerrar(sinId, { desde: INICIO_DEL_DIA, hasta: AHORA.toISOString(), esperado: 10000, totalCobrado: 16000, fondoInicial: 0, contado: 10000 })
       expect(res.status).toBe(401)
       expect(cierresDelNegocio()).toEqual([])
     })
@@ -424,7 +470,9 @@ describe("/api/caja", () => {
       ["un texto", { desde: INICIO_DEL_DIA, fondoInicial: "10", contado: 0 }],
       ["sin desde", { fondoInicial: 0, contado: 0 }],
       ["sin hasta", { desde: INICIO_DEL_DIA, hasta: undefined, esperado: 0, fondoInicial: 0, contado: 0 }],
-      ["sin el esperado visto", { desde: INICIO_DEL_DIA, hasta: AHORA.toISOString(), fondoInicial: 0, contado: 0 }],
+      ["sin el esperado visto", { desde: INICIO_DEL_DIA, hasta: AHORA.toISOString(), totalCobrado: 0, fondoInicial: 0, contado: 0 }],
+      ["sin el total cobrado visto", { desde: INICIO_DEL_DIA, hasta: AHORA.toISOString(), esperado: 0, fondoInicial: 0, contado: 0 }],
+      ["un total cobrado que no es número", { desde: INICIO_DEL_DIA, hasta: AHORA.toISOString(), esperado: 0, totalCobrado: "16000", fondoInicial: 0, contado: 0 }],
       ["sin contado", { desde: INICIO_DEL_DIA, fondoInicial: 0 }],
       ["nota de más de 500", { desde: INICIO_DEL_DIA, fondoInicial: 0, contado: 0, nota: "x".repeat(501) }],
       ["sin cuerpo", undefined],

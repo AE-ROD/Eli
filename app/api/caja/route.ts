@@ -16,6 +16,7 @@ import {
   MENSAJE_NOTA_OBLIGATORIA,
   primerCobroDeOtroDia,
   type DesgloseDeCaja,
+  type ResumenDeCaja,
 } from "@/lib/caja"
 import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { formatearMonto } from "@/lib/dinero"
@@ -52,12 +53,38 @@ const cierreSchema = z.object(
      * estaba en curso al leer, una anulación), 409 y la pantalla recarga.
      */
     esperado: monto("el esperado"),
+    /**
+     * El total cobrado que se vio (`abierta.totalCobrado` del GET): todos los
+     * medios, con propinas. El esperado sólo mira el efectivo; sin éste, un
+     * cobro con tarjeta o una anulación entre leer y cerrar entraba al
+     * desglose del cierre sin que nadie lo viera. Si cambió, 409.
+     */
+    totalCobrado: z
+      .number({ required_error: MENSAJE_CAJA_CAMBIO_LO_COBRADO, invalid_type_error: MENSAJE_CAJA_CAMBIO_LO_COBRADO })
+      .finite(MENSAJE_CAJA_CAMBIO_LO_COBRADO)
+      .nonnegative(MENSAJE_CAJA_CAMBIO_LO_COBRADO),
     fondoInicial: monto("el fondo inicial"),
     contado: monto("lo contado"),
     nota: z.string().trim().max(LARGO_MAXIMO_DE_NOTA, `La nota puede tener hasta ${LARGO_MAXIMO_DE_NOTA} caracteres`).optional(),
   },
   { required_error: "Datos inválidos", invalid_type_error: "Datos inválidos" }
 )
+
+/**
+ * Todo lo cobrado en el período, en centavos: pagos y propinas de todos los
+ * medios. Es lo que el cierre guarda (efectivo y desglose); la pantalla lo
+ * recibe en el GET y lo devuelve al cerrar para confirmar que no cambió.
+ */
+function totalCobradoCents(resumen: ResumenDeCaja): number {
+  const suma = (porMedio: Record<string, number> | undefined) =>
+    Object.values(porMedio ?? {}).reduce((total, centavos) => total + centavos, 0)
+  return (
+    resumen.efectivoCobradoCents +
+    resumen.propinasEfectivoCents +
+    suma(resumen.desglose.otrosMedios) +
+    suma(resumen.desglose.propinasOtrosMedios)
+  )
+}
 
 /** El desglose en unidades y con nombres, para mostrar. */
 function desgloseParaMostrar(desglose: DesgloseDeCaja) {
@@ -164,6 +191,8 @@ export async function GET(request: NextRequest) {
       efectivoCobrado: deCentavos(resumen.efectivoCobradoCents),
       propinasEfectivo: deCentavos(resumen.propinasEfectivoCents),
       desglose: desgloseParaMostrar(resumen.desglose),
+      /** Todo lo cobrado, en todos los medios y con propinas: el cierre lo pide de vuelta (409 si cambió). */
+      totalCobrado: deCentavos(totalCobradoCents(resumen)),
       /** El cobro más antiguo de un día anterior a hoy, si la caja arrastra días sin cerrar (#120); si no, null. */
       cobrosDesde: cobroDeOtroDia,
     },
@@ -182,7 +211,8 @@ export async function GET(request: NextRequest) {
  *
  * `desde` es el inicio del período que se vio al contar: si otro cerró
  * entretanto, ya no coincide y es 409 (lo contado era de otro período).
- * `esperado` es el que se vio: si lo que hay en `(desde, hasta]` da otro, 409.
+ * `esperado` y `totalCobrado` son los que se vieron: si lo que hay en
+ * `(desde, hasta]` da otro efectivo u otro total (cualquier medio), 409.
  * Con un candado por negocio, dos cierres simultáneos no se solapan: el
  * segundo espera, ve el cierre nuevo y responde 409. Un cierre no se edita ni
  * se borra: esta ruta no tiene PUT ni DELETE.
@@ -240,8 +270,13 @@ export async function POST(request: NextRequest) {
         return { status: 400 as const, error: "Los montos son demasiado grandes para un solo cierre" }
       }
       // Lo que hay de verdad en `(desde, hasta]` no es lo que se vio: un
-      // cobro que estaba en curso al leer, o una anulación entretanto.
-      if (cuenta.efectivoEsperadoCents !== aCentavos(datos.data.esperado)) {
+      // cobro que estaba en curso al leer, o una anulación entretanto. Se
+      // mira el efectivo (el esperado) y también el total de todos los
+      // medios: un cobro con tarjeta cambia el desglose que guarda el cierre.
+      if (
+        cuenta.efectivoEsperadoCents !== aCentavos(datos.data.esperado) ||
+        totalCobradoCents(cuenta) !== aCentavos(datos.data.totalCobrado)
+      ) {
         return { status: 409 as const, error: MENSAJE_CAJA_CAMBIO_LO_COBRADO }
       }
       if (cuenta.diferenciaCents !== 0 && !nota) return { status: 400 as const, error: MENSAJE_NOTA_OBLIGATORIA }

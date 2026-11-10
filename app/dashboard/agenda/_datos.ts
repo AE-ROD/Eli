@@ -574,6 +574,36 @@ export async function buscarClientes(texto: string): Promise<Resultado<ClienteSu
   }
 }
 
+/**
+ * Lo que trae la dirección al llegar a la agenda: `?nueva=1` abre el modal de
+ * cita nueva y `&cliente=<id>` (desde la ficha o la lista de clientes, o el
+ * plan dental) lo abre con ese cliente elegido. `resto` es la consulta sin
+ * esos dos, para dejar la dirección limpia: recargar o volver no lo repite.
+ */
+export function llegadaALaAgenda(consulta: string): { nueva: boolean; clienteId: string | null; resto: string } {
+  const parametros = new URLSearchParams(consulta)
+  const nueva = parametros.get("nueva") === "1"
+  const clienteId = parametros.get("cliente")?.trim() || null
+  parametros.delete("nueva")
+  parametros.delete("cliente")
+  return { nueva, clienteId: nueva ? clienteId : null, resto: parametros.toString() }
+}
+
+/**
+ * El cliente con que se abre la cita nueva al llegar con `?cliente=<id>`. El
+ * servidor sólo lo devuelve si es del negocio de la sesión (y no está
+ * eliminado); si no (404) o si falla, `null`: el modal se abre sin cliente,
+ * como si el parámetro no estuviera.
+ */
+export async function leerClienteParaLaCita(id: string): Promise<ClienteSugerido | null> {
+  const resultado = await pedir<{ id: string; name: string; lastName: string | null; email: string | null }>(
+    `/api/clientes/${encodeURIComponent(id)}`,
+    "No se pudo leer el cliente"
+  )
+  if (!resultado.ok || resultado.datos?.id !== id) return null
+  return { id: resultado.datos.id, nombre: nombreCompletoDeCliente(resultado.datos), email: resultado.datos.email ?? "" }
+}
+
 // ─── Clínica dental: sillones, alergias y "Asignar sillón" ───────────────────
 
 /** Un sillón de la clínica, como lo devuelve Configuración. */
