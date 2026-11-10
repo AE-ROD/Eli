@@ -253,17 +253,33 @@ export async function leerPagosAlLaboratorio(): Promise<Resultado<PagoAlLaborato
   return pedir<PagoAlLaboratorio[]>("/api/comisiones/protesis/pagos-al-laboratorio", "No se pudieron cargar los pagos al laboratorio")
 }
 
-/** "Marcar pagado": todo lo pendiente del laboratorio, o sólo las líneas elegidas. El monto lo suma el servidor. */
+/**
+ * Cuántos abonos entran en un pago al laboratorio: el mismo tope que
+ * `MAXIMO_DE_LINEAS_POR_PAGO` en `lib/pagos-al-laboratorio.ts` (su prueba
+ * los compara). Con más por pagar, se paga de a este tope.
+ */
+export const MAXIMO_DE_ABONOS_POR_PAGO = 1000
+
+/** Lo que se paga de una vez: las líneas pedidas, hasta el tope (las primeras, en el orden en que se ven). */
+export function lineasDeUnPago<T>(lineas: readonly T[]): { lineas: T[]; quedan: number } {
+  return { lineas: lineas.slice(0, MAXIMO_DE_ABONOS_POR_PAGO), quedan: Math.max(0, lineas.length - MAXIMO_DE_ABONOS_POR_PAGO) }
+}
+
+/**
+ * "Marcar pagado": las líneas que se vieron, siempre por id (también "todo",
+ * que son todas las que se ven), con el monto que se vio. Si lo por pagar
+ * cambió entretanto, el servidor responde 409 y la pantalla recarga.
+ */
 export async function pagarAlLaboratorio(pedido: {
   laboratorioId: string
   medio: string
-  lineas: readonly string[] | "todo"
+  lineas: readonly string[]
+  montoEsperadoCents: number
 }): Promise<Resultado<PagoAlLaboratorio>> {
-  const { laboratorioId, medio, lineas } = pedido
   return pedir<PagoAlLaboratorio>(
     "/api/comisiones/protesis/pagos-al-laboratorio",
     "No se pudo marcar como pagado",
-    conJson("POST", lineas === "todo" ? { laboratorioId, medio, todo: true } : { laboratorioId, medio, lineas })
+    conJson("POST", pedido)
   )
 }
 

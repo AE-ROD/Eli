@@ -62,15 +62,23 @@ export interface PropinaResuelta {
   amountCents: number
 }
 
+/** El 400 de una propina para alguien que no atendió esa atención. */
+export const MENSAJE_PROPINA_A_QUIEN_NO_ATENDIO =
+  "Una propina sólo puede ir a quien atendió esta atención: elige a alguien con un servicio o producto en ella."
+
 /**
  * Valida a quién va cada propina y arma lo que se guarda. El nombre se copia
  * de la base, nunca del cuerpo. Un miembro de otro negocio, o uno que no
- * existe, da 404 como en el resto de los endpoints. La forma, el medio y el
- * monto ya los validó `errorDePropinas`.
+ * existe, da 404 como en el resto de los endpoints. Sólo puede recibirla
+ * quien atendió esa atención (§7: "para quien atendió"): un miembro con
+ * alguna línea suya en `visitId`, o la dueña si tiene una línea a su nombre;
+ * cualquier otro, 400. La forma, el medio y el monto ya los validó
+ * `errorDePropinas`.
  */
 export async function resolverPropinas(
   db: Prisma.TransactionClient,
   actor: Actor,
+  visitId: string,
   pedidas: readonly PropinaPedida[]
 ): Promise<PropinaResuelta[]> {
   if (pedidas.length === 0) return []
@@ -80,7 +88,7 @@ export async function resolverPropinas(
   ]
   const llevaALaDueña = pedidas.some((pedida) => pedida.profesional === PROFESIONAL_DUEÑO)
 
-  const [miembros, negocio] = await Promise.all([
+  const [miembros, negocio, lineas] = await Promise.all([
     idsDeMiembros.length === 0
       ? Promise.resolve([])
       : db.businessMember.findMany({
@@ -91,7 +99,14 @@ export async function resolverPropinas(
     llevaALaDueña
       ? db.business.findUnique({ where: { id: actor.businessId }, select: { user: { select: { name: true } } } })
       : Promise.resolve(null),
+    db.visitService.findMany({
+      where: { visitId, visit: { is: { businessId: actor.businessId } } },
+      select: { memberId: true, byOwner: true },
+    }),
   ])
+  const atendieron = new Set(
+    lineas.flatMap((linea) => (linea.byOwner ? [PROFESIONAL_DUEÑO] : linea.memberId ? [linea.memberId] : []))
+  )
 
   return pedidas.map((pedida) => {
     const deLaDueña = pedida.profesional === PROFESIONAL_DUEÑO
@@ -99,6 +114,7 @@ export async function resolverPropinas(
       ? negocio?.user.name
       : miembros.find((miembro) => miembro.id === pedida.profesional)?.user.name
     if (nombre === undefined) throw new ErrorDeAtencion(404, "Profesional no encontrado")
+    if (!atendieron.has(pedida.profesional)) throw new ErrorDeAtencion(400, MENSAJE_PROPINA_A_QUIEN_NO_ATENDIO)
     return {
       memberId: deLaDueña ? null : pedida.profesional,
       byOwner: deLaDueña,

@@ -1,6 +1,8 @@
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
+import { prisma } from "@/lib/prisma"
+import { zonaDelNegocio } from "@/lib/zona-horaria"
 import { FlaskConical, Smile } from "lucide-react"
 import { actorDeSesion, puedeConfigurarRepartoDeProtesis, puedeEditarComisiones, puedePagarAlLaboratorio } from "@/lib/permisos"
 import { Boton } from "@/components/comunes/boton"
@@ -17,6 +19,9 @@ export default async function PaginaComisiones() {
   const actor = actorDeSesion(await getServerSession(authOptions))
   if (!actor) redirect("/iniciar-sesion")
   if (!puedeEditarComisiones(actor)) redirect("/dashboard")
+  // El historial muestra cuándo se cambió cada % en la zona del negocio, no en la del dispositivo.
+  const negocio = await prisma.business.findUnique({ where: { id: actor.businessId }, select: { timezone: true } })
+  const zona = zonaDelNegocio(negocio?.timezone)
 
   return (
     <div className="min-h-dvh">
@@ -55,7 +60,7 @@ export default async function PaginaComisiones() {
             />
           </section>
         )}
-        <PantallaDeComisiones />
+        <PantallaDeComisiones zona={zona} />
       </div>
     </div>
   )

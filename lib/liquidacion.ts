@@ -85,6 +85,15 @@ export function respuestaDeErrorDePlata(error: unknown, contexto: string): NextR
       { status: 409 }
     )
   }
+  // Lo que se iba a escribir ya no existe (P2025: se borró entretanto) o
+  // apunta a algo que ya no está (P2003): es una carrera, no un error del
+  // servidor. Se dice como 404 y 409, sin registrar.
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+    return NextResponse.json({ error: "Ya no existe: vuelve a cargar." }, { status: 404 })
+  }
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+    return NextResponse.json({ error: "Algo de lo que se usaba cambió mientras tanto: vuelve a cargar." }, { status: 409 })
+  }
   registrarError(contexto, error)
   return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
 }
@@ -142,11 +151,18 @@ export async function tomarCandadoDeLiquidacionesDelNegocio(
 /**
  * Toma el candado de liquidación de cada profesional con líneas o propinas en
  * la atención, en orden estable (por id) para que dos transacciones que toman
- * varios no se crucen en un deadlock. Lo usa la anulación de una atención
- * antes de mirar si ya está liquidada: así no puede pasar en medio de un
- * cierre que la está incluyendo.
+ * varios no se crucen en un deadlock. Lo usan la anulación de una atención,
+ * antes de mirar si ya está liquidada (así no pasa en medio de un cierre que
+ * la está incluyendo), y el cobro, antes de fijar la hora (§7: si un cierre
+ * de liquidación está en curso, cobrar espera a que termine). `otros` suma
+ * miembros que todavía no están en la atención (las propinas del cobro).
  */
-export async function tomarCandadosDeLaAtencion(tx: Db, businessId: string, visitId: string): Promise<void> {
+export async function tomarCandadosDeLaAtencion(
+  tx: Db,
+  businessId: string,
+  visitId: string,
+  otros: readonly string[] = []
+): Promise<void> {
   const [lineas, propinas] = await Promise.all([
     tx.visitService.findMany({
       where: { visitId, visit: { is: { businessId } }, memberId: { not: null } },
@@ -157,7 +173,7 @@ export async function tomarCandadosDeLaAtencion(tx: Db, businessId: string, visi
       select: { memberId: true },
     }),
   ])
-  const miembros = [...new Set([...lineas, ...propinas].map((f) => f.memberId as string))].sort()
+  const miembros = [...new Set([...[...lineas, ...propinas].map((f) => f.memberId as string), ...otros])].sort()
   for (const memberId of miembros) await tomarCandadoDeLiquidacion(tx, businessId, memberId)
 }
 
@@ -558,7 +574,9 @@ export async function vistaPrevia(
       montoCents: m.montoCents,
       fecha: fechaDeColumna(m.fecha),
       motivo: m.motivo,
-      incluido: !excluir.has(m.id),
+      // Sólo adelantos y vales se dejan para la siguiente (§3.7): un ajuste
+      // corrige algo ya cobrado y entra siempre.
+      incluido: m.tipo === "ajuste" || !excluir.has(m.id),
     }))
 
   const totales = calcularTotales(lineasEnLiquidacion, propinasEnLiquidacion, movimientosEnLiquidacion, protesisEnLiquidacion)
@@ -582,10 +600,19 @@ export async function vistaPrevia(
 
 const CAMBIO_A_MITAD = "La liquidación cambió mientras tanto (alguien la cerró, la anuló o cobró algo): vuelve a cargarla."
 
+/** El 409 de un cierre cuyo total ya no es el que se confirmó. */
+export const CAMBIO_MIENTRAS_CONFIRMABAS =
+  "La liquidación cambió mientras confirmabas (se cobró, se anuló o se registró algo): revisa el total nuevo y vuelve a cerrar."
+
+/** El 400 de un cierre que pide dejar afuera un ajuste: sólo adelantos y vales pasan a la siguiente (§3.7). */
+export const AJUSTE_NO_SE_EXCLUYE = "Los ajustes no se dejan para la siguiente liquidación: sólo los adelantos y los vales."
+
 /**
  * Cierra la próxima liquidación de `memberId`. Va dentro de una transacción:
- * toma el candado, recalcula, y verifica que el período sea el que se vio
- * (`desdeEsperado`); si no, 409. Congela el snapshot y marca líneas,
+ * toma el candado, recalcula, y verifica que el período y el total sean los
+ * que se vieron y confirmaron (`desdeEsperado`, `totalEsperadoCents`); si
+ * no, 409: lo que se cobró, se anuló o se registró mientras la dueña
+ * confirmaba no se cuela en un cierre que no lo mostró. Congela el snapshot y marca líneas,
  * propinas y movimientos con la liquidación. Devuelve el id.
  */
 export async function cerrarLiquidacion(
@@ -594,6 +621,8 @@ export async function cerrarLiquidacion(
     businessId: string
     memberId: string
     desdeEsperado: string
+    /** El total a pagar que se vio al confirmar. */
+    totalEsperadoCents: number
     excluirMovimientos: readonly string[]
     nota: string | null
     cerradaPorId: string
@@ -613,7 +642,14 @@ export async function cerrarLiquidacion(
   const vista = await vistaPrevia(tx, { businessId, memberId, excluirMovimientos: opciones.excluirMovimientos, ahora })
   if (!vista) throw new ErrorDeLiquidacion(404, "Profesional no encontrado")
   if (vista.periodo.desde !== opciones.desdeEsperado) throw new ErrorDeLiquidacion(409, CAMBIO_A_MITAD)
+  const excluidos = new Set(opciones.excluirMovimientos)
+  if (vista.movimientos.some((m) => m.tipo === "ajuste" && excluidos.has(m.id))) {
+    throw new ErrorDeLiquidacion(400, AJUSTE_NO_SE_EXCLUYE)
+  }
   if (vista.noSePuedeCerrar) throw new ErrorDeLiquidacion(409, vista.noSePuedeCerrar)
+  if (vista.totales.totalCents !== opciones.totalEsperadoCents) {
+    throw new ErrorDeLiquidacion(409, CAMBIO_MIENTRAS_CONFIRMABAS)
+  }
 
   const { totales } = vista
   const creada = await tx.liquidacion.create({
@@ -1013,10 +1049,11 @@ export const NOMBRES_DE_ESTADO: Record<EstadoDeLiquidacion, string> = {
 /**
  * En pesos para la planilla. Entero, como número: así un negativo (un
  * descuento) no se toma por fórmula y Excel lo suma. Con centavos, texto con
- * coma decimal, como `montoParaPlanilla`.
+ * coma decimal y siempre dos decimales ("19,90", no "19,9"). Exportada para
+ * su prueba.
  */
-const enPesos = (centavos: number): number | string =>
-  centavos % 100 === 0 ? centavos / 100 : String(centavos / 100).replace(".", ",")
+export const enPesos = (centavos: number): number | string =>
+  centavos % 100 === 0 ? centavos / 100 : (centavos / 100).toFixed(2).replace(".", ",")
 
 /**
  * Las filas del comprobante para `escribirCsv`, que protege cada celda

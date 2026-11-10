@@ -181,22 +181,51 @@ describe("POST /api/atenciones/[id]/cobro: el cobro", () => {
     ])
   })
 
-  it("espera el candado de la caja (compartido) y recién entonces fija la hora del cobro", async () => {
-    // Un cierre de caja en curso tiene el candado exclusivo: el cobro espera,
-    // y su hora queda después del cierre, no adentro de lo que ya se contó.
+  it("espera los candados de liquidación de quienes atendieron y el de la caja (compartido), y recién entonces fija la hora", async () => {
+    // Un cierre de caja o de liquidación en curso tiene su candado: el cobro
+    // espera (§7), y su hora queda después del cierre, no adentro de lo que
+    // ya se contó.
     const despues = new Date("2026-10-06T15:00:05.000Z")
-    base.prisma.$executeRaw.mockImplementationOnce(async () => {
-      vi.setSystemTime(despues)
-      return 0
+    const candados = base.prisma.$executeRaw.getMockImplementation()!
+    base.prisma.$executeRaw.mockImplementation(async (partes: TemplateStringsArray, ...valores: unknown[]) => {
+      if (valores[0] === `caja:${NEGOCIO}`) vi.setSystemTime(despues)
+      return candados(partes, ...valores)
     })
 
-    const res = await cobrar(sesiones.dueña, "v-mixta", { pagos: [{ medio: "efectivo", monto: 33000 }] })
+    try {
+      const res = await cobrar(sesiones.dueña, "v-mixta", { pagos: [{ medio: "efectivo", monto: 33000 }] })
+      expect(res.status).toBe(200)
+    } finally {
+      base.prisma.$executeRaw.mockImplementation(candados)
+    }
 
-    expect(res.status).toBe(200)
-    const [partes, ...valores] = base.prisma.$executeRaw.mock.calls[0]
-    expect(partes.join("?")).toBe("SELECT pg_advisory_xact_lock_shared(hashtext(?))")
-    expect(valores).toEqual([`caja:${NEGOCIO}`])
+    // Primero la liquidación de Carla (la dueña no se liquida), en el mismo
+    // orden que la anulación; después la caja, compartida.
+    const pedidos = base.prisma.$executeRaw.mock.calls.map(([partes, ...valores]) => [partes.join("?"), ...valores])
+    expect(pedidos).toEqual([
+      ["SELECT pg_advisory_xact_lock(hashtext(?), hashtext(?))", NEGOCIO, "m-carla"],
+      ["SELECT pg_advisory_xact_lock_shared(hashtext(?))", `caja:${NEGOCIO}`],
+    ])
     expect(atencionGuardada("v-mixta").paidAt).toEqual(despues)
+  })
+
+  it("si se está cerrando la liquidación de quien atendió, el cobro espera: queda después y entra en la siguiente", async () => {
+    // El cierre de octubre tiene el candado de Carla: el cobro espera a que
+    // termine, y su línea la ve sin liquidar (no se cuela en el cierre).
+    const candados = base.prisma.$executeRaw.getMockImplementation()!
+    const orden: string[] = []
+    base.prisma.$executeRaw.mockImplementation(async (partes: TemplateStringsArray, ...valores: unknown[]) => {
+      if (valores[1] === "m-carla") orden.push("liquidación de Carla")
+      if (valores[0] === `caja:${NEGOCIO}`) orden.push("caja")
+      return candados(partes, ...valores)
+    })
+    try {
+      await cobrar(sesiones.dueña, "v-mixta", { pagos: [{ medio: "efectivo", monto: 33000 }] })
+    } finally {
+      base.prisma.$executeRaw.mockImplementation(candados)
+    }
+    expect(orden).toEqual(["liquidación de Carla", "caja"])
+    expect(base.prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(base.prisma.visit.updateMany.mock.invocationCallOrder[0])
   })
 
   it("la hora del cobro es la de la base, leída después del candado, no la de esta instancia", async () => {

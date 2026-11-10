@@ -17,6 +17,7 @@ import type { Resultado } from "@/lib/peticiones"
 import { rotuloDeIngresos } from "@/lib/reportes"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
+import { esRubroDental } from "@/lib/rubros"
 import {
   anularCobro,
   leerAnuladas,
@@ -97,7 +98,8 @@ function AvisoDeTruncado() {
 export default function PaginaReportes() {
   const { data: sesion } = useSession()
   // "Pacientes" y "odontólogo" en una clínica dental.
-  const vocabulario = vocabularioDe(useRubroDelPanel())
+  const rubro = useRubroDelPanel()
+  const vocabulario = vocabularioDe(rubro)
   const actor = actorDeSesion(sesion)
   const verAnuladas = puedeVerAnuladas(actor)
   // Lo cobrado lo anula sólo el dueño (`puedeAnular`). Todas las filas son del
@@ -287,7 +289,7 @@ export default function PaginaReportes() {
         : "Cargando..."
       : reporte.alcance === "propio"
         ? "Lo que atendiste"
-        : "Lo atendido y cobrado en el tablero"
+        : `Lo atendido y cobrado en ${esRubroDental(rubro) ? "la" : "el"} ${vocabulario.tablero}`
 
   // Con un rango que no sirve o un pedido que falló, lo último que llegó ya
   // no es lo de lo elegido: no se muestra como si lo fuera.

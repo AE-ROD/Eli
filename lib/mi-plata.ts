@@ -28,6 +28,12 @@ import {
  * el más tardío entre el cobro y la entrega de la prótesis (`liberadoEl`,
  * igual que la liquidación). Lo ya cobrado de prótesis que todavía no se
  * entregan se muestra aparte, como "por liberar". Nunca lo de otra tratante.
+ *
+ * "Liquidar desde" (§3.7, decisión del 2026-11-10): lo cobrado antes de esa
+ * fecha nunca se va a liquidar (se pagó por fuera de Eli). No espera %, y su
+ * parte de los abonos de prótesis no cuenta ni como liberada ni por liberar:
+ * el mismo corte que la liquidación. Las comisiones y propinas ganadas se
+ * siguen mostrando por día de cobro (es lo que cobró).
  */
 
 type Db = Prisma.TransactionClient
@@ -95,8 +101,10 @@ export async function calcularMiPlata(
   // Un solo rango que cubre la semana y el período (pueden no contenerse).
   const desde = semana.desde < periodo.desde ? semana.desde : periodo.desde
   const hasta = semana.hasta > periodo.hasta ? semana.hasta : periodo.hasta
-  const inicioDelRango = inicioDelPeriodoEn(desde, zona)
   const finDelRango = finDelPeriodoEn(hasta, zona)
+  // Lo cobrado antes de "Liquidar desde" no se liquida: ni espera %, ni sus abonos se liberan.
+  const corte = liquidarDesde ? inicioDelPeriodoEn(liquidarDesde, zona) : null
+  const inicioDelRango = inicioDelPeriodoEn(desde, zona)
   const cobradoEnRango = {
     status: "finalizada",
     businessId,
@@ -109,7 +117,7 @@ export async function calcularMiPlata(
     protesisId: { not: null },
     odontologoCents: { not: null },
   } satisfies Prisma.VisitServiceWhereInput
-  const desdeLiquidarDesde = liquidarDesde ? { paidAt: { gte: inicioDelPeriodoEn(liquidarDesde, zona) } } : {}
+  const desdeLiquidarDesde = corte ? { paidAt: { gte: corte } } : {}
 
   const [lineas, abonos, porLiberar, propinas, esperanPorcentaje, adelantos, liquidaciones] = await Promise.all([
     db.visitService.findMany({
@@ -117,11 +125,12 @@ export async function calcularMiPlata(
       select: { commissionCents: true, visit: { select: { paidAt: true } } },
     }),
     // Liberados dentro del rango: cobrados y entregados antes de su fin, y
-    // alguna de las dos cosas desde su inicio.
+    // alguna de las dos cosas desde su inicio. Cobrados antes de "Liquidar
+    // desde", nunca: aunque la entrega caiga en el rango, no se liquidan.
     db.visitService.findMany({
       where: {
         ...susAbonos,
-        visit: { is: { status: "finalizada", businessId, paidAt: { lt: finDelRango } } },
+        visit: { is: { status: "finalizada", businessId, paidAt: { lt: finDelRango, ...(corte ? { gte: corte } : {}) } } },
         protesis: { is: { businessId, memberId, entregadaEn: { not: null, lt: finDelRango } } },
         OR: [{ visit: { is: { paidAt: { gte: inicioDelRango } } } }, { protesis: { is: { entregadaEn: { gte: inicioDelRango } } } }],
       },
@@ -153,7 +162,7 @@ export async function calcularMiPlata(
           is: {
             businessId,
             status: "finalizada",
-            ...(liquidarDesde ? { paidAt: { gte: inicioDelPeriodoEn(liquidarDesde, zona) } } : {}),
+            ...desdeLiquidarDesde,
           },
         },
       },

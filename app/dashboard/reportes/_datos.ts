@@ -5,7 +5,7 @@
  */
 
 import { rangoDelDia, zonaDelDispositivo } from "@/lib/fechas"
-import { CODIGO_CORREGIR_CON_AJUSTE } from "@/lib/bloqueos-de-dinero"
+import { CODIGO_CORREGIR_CON_AJUSTE, CODIGO_PAGADO_AL_LABORATORIO } from "@/lib/bloqueos-de-dinero"
 import { codigoDelServidor, conJson, pedir, pedirConCuerpo, type Resultado } from "@/lib/peticiones"
 import type { TurnoId } from "@/lib/reportes"
 
@@ -186,8 +186,9 @@ export async function leerOpcionesDeFiltro(): Promise<Resultado<OpcionesDeFiltro
  * anulado. Sólo el dueño (`puedeAnular`); el servidor lo vuelve a mirar.
  *
  * - `corregirConAjuste`: el cobro ya entró en una liquidación o en un cierre
- *   de caja (409 con ese código, #117). No cambió nada: la pantalla muestra
- *   el mensaje del servidor, que dice cómo se corrige.
+ *   de caja (409 con ese código, #117), o tiene un abono de prótesis ya
+ *   pagado al laboratorio (409 `pagado-al-laboratorio`). No cambió nada: la
+ *   pantalla muestra el mensaje del servidor, que dice cómo se corrige.
  * - Cualquier otro 404 o 409 es que la atención cambió entretanto (otro ya la
  *   anuló), y la pantalla recarga en vez de sólo avisar.
  */
@@ -203,7 +204,10 @@ export async function anularCobro(id: string, motivo: string): Promise<Resultado
   )
   if (resultado.ok) return resultado
   const { error, codigo, cuerpo } = resultado
-  return { ok: false, error, codigo, corregirConAjuste: codigoDelServidor(cuerpo) === CODIGO_CORREGIR_CON_AJUSTE }
+  // Pagado al laboratorio tampoco se anula ni es "cambió entretanto": se
+  // trata igual que lo rendido, con el mensaje del servidor (anular el pago).
+  const rendido = [CODIGO_CORREGIR_CON_AJUSTE, CODIGO_PAGADO_AL_LABORATORIO].includes(codigoDelServidor(cuerpo) ?? "")
+  return { ok: false, error, codigo, corregirConAjuste: rendido }
 }
 
 // ─── Llenar horas (#72) ──────────────────────────────────────────────────────

@@ -23,6 +23,15 @@ export type MotivoDeBloqueo = "liquidacion" | "caja" | "laboratorio"
 export const CODIGO_CORREGIR_CON_AJUSTE = "corregir-con-ajuste"
 
 /**
+ * El `codigo` del 409 al anular una atención con un abono de prótesis ya
+ * pagado al laboratorio (clínica dental). Tampoco se anula, pero no se
+ * corrige con un ajuste: primero se anula ese pago. La interfaz lo trata como
+ * el de arriba (no recarga, no pierde el motivo escrito, deja de ofrecer
+ * anular) con el mensaje del servidor, que dice qué hacer.
+ */
+export const CODIGO_PAGADO_AL_LABORATORIO = "pagado-al-laboratorio"
+
+/**
  * Candado de la caja del negocio. El cierre lo toma exclusivo; cobrar y anular
  * lo toman compartido (entre ellos no se esperan) ANTES de fijar `paidAt` o de
  * mirar si la atención ya entró en un cierre. Así un cobro no queda con una

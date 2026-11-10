@@ -112,6 +112,21 @@ describe("POST /api/atenciones/[id]/cobro: propinas (#66)", () => {
     ])
   })
 
+  it.each([
+    ["a un miembro que no atendió esta atención (Pedro)", "m-pedro"],
+    ["a la dueña, si no tiene una línea en esta atención", "duenio"],
+  ])("una propina %s: 400 y no se cobra nada", async (_caso, profesional) => {
+    const antes = base.volcado()
+    // En v-sola sólo atendió Carla.
+    const res = await cobrar(sesiones.dueña, "v-sola", {
+      pagos: [{ medio: "efectivo", monto: 8000 }],
+      propinas: [{ profesional, monto: 1000, medio: "efectivo" }],
+    })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/quien atendió/)
+    expect(base.volcado()).toEqual(antes)
+  })
+
   it("sin propinas se cobra como siempre, y no se crea ninguna", async () => {
     expect((await cobrar(sesiones.dueña, "v-mixta", { pagos: PAGO_EXACTO })).status).toBe(200)
     expect(propinasDe("v-mixta")).toEqual([])

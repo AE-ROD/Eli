@@ -12,6 +12,7 @@ import {
   inicioDelProximoCierre,
   leerCaja,
   MENSAJE_CAJA_CAMBIO,
+  MENSAJE_CAJA_CAMBIO_LO_COBRADO,
   MENSAJE_NOTA_OBLIGATORIA,
   primerCobroDeOtroDia,
   type DesgloseDeCaja,
@@ -20,6 +21,7 @@ import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-de
 import { formatearMonto } from "@/lib/dinero"
 import { nombreDeMedio } from "@/lib/medios-de-pago"
 import { actorDeSesion, puedeCerrarCaja, puedeVerCierresDeCaja, whereDeCierresDeCaja } from "@/lib/permisos"
+import { registrarError } from "@/lib/registro-de-errores"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { horaDeLaBase, tomarCandadoDeCaja } from "@/lib/bloqueos-de-dinero"
 import { nombreEnElNegocio } from "@/lib/tablero"
@@ -38,6 +40,18 @@ const cierreSchema = z.object(
   {
     /** El inicio del período que se vio al contar (`abierto.desde` del GET): si cambió, otro cerró antes. */
     desde: z.string({ required_error: MENSAJE_CAJA_CAMBIO }).datetime({ offset: true, message: MENSAJE_CAJA_CAMBIO }),
+    /**
+     * El fin del período que se vio al contar (`abierta.hasta` del GET): el
+     * cierre cubre `(desde, hasta]` y lo cobrado después queda para el
+     * próximo. Así no entra en el cierre nada que no estaba en pantalla.
+     */
+    hasta: z.string({ required_error: MENSAJE_CAJA_CAMBIO }).datetime({ offset: true, message: MENSAJE_CAJA_CAMBIO }),
+    /**
+     * El esperado que se vio (fondo + efectivo + propinas en efectivo): si
+     * con lo que hay de verdad en `(desde, hasta]` da otro (un cobro que
+     * estaba en curso al leer, una anulación), 409 y la pantalla recarga.
+     */
+    esperado: monto("el esperado"),
     fondoInicial: monto("el fondo inicial"),
     contado: monto("lo contado"),
     nota: z.string().trim().max(LARGO_MAXIMO_DE_NOTA, `La nota puede tener hasta ${LARGO_MAXIMO_DE_NOTA} caracteres`).optional(),
@@ -114,7 +128,10 @@ export async function GET(request: NextRequest) {
     .catch(1)
     .parse(new URL(request.url).searchParams.get("pagina") ?? 1)
 
-  const ahora = new Date()
+  // La hora de la base, como el cierre y el cobro: con relojes desfasados
+  // entre instancias, cerca de medianoche el GET y el POST podían ver días
+  // distintos y el cierre respondía un 409 falso.
+  const ahora = await horaDeLaBase(prisma)
   const zona = await zonaDe(actor.businessId)
   const [ultimo, total, cierres] = await Promise.all([
     prisma.cierreDeCaja.findFirst({
@@ -158,15 +175,17 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * POST /api/caja — cierra la caja: cubre desde el último cierre hasta
- * ahora. Lo cierran quienes pueden cobrar (`puedeCerrarCaja`); el
+ * POST /api/caja — cierra la caja: cubre desde el último cierre hasta el
+ * `hasta` que se vio en pantalla (lo cobrado después queda para el próximo
+ * cierre). Lo cierran quienes pueden cobrar (`puedeCerrarCaja`); el
  * profesional, 401.
  *
  * `desde` es el inicio del período que se vio al contar: si otro cerró
- * entretanto, ya no coincide y es 409 (lo contado era de otro período). Con
- * un candado por negocio, dos cierres simultáneos no se solapan: el segundo
- * espera, ve el cierre nuevo y responde 409. Un cierre no se edita ni se
- * borra: esta ruta no tiene PUT ni DELETE.
+ * entretanto, ya no coincide y es 409 (lo contado era de otro período).
+ * `esperado` es el que se vio: si lo que hay en `(desde, hasta]` da otro, 409.
+ * Con un candado por negocio, dos cierres simultáneos no se solapan: el
+ * segundo espera, ve el cierre nuevo y responde 409. Un cierre no se edita ni
+ * se borra: esta ruta no tiene PUT ni DELETE.
  */
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -180,10 +199,14 @@ export async function POST(request: NextRequest) {
   const datos = cierreSchema.safeParse(recibido.cuerpo)
   if (!datos.success) return respuestaDeDatosInvalidos(datos.error)
   const visto = new Date(datos.data.desde)
+  const hasta = new Date(datos.data.hasta)
   const nota = datos.data.nota || null
 
+  // Sin id de usuario en la sesión no hay quién firme el cierre: 401, como la
+  // liquidación (`quienFirma`), en vez de guardar un `cerradoPorId` vacío.
+  const usuarioId = session?.user?.id || null
+  if (!usuarioId) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   const zona = await zonaDe(actor.businessId)
-  const usuarioId = session?.user?.id ?? null
 
   try {
     const resultado = await prisma.$transaction(async (tx) => {
@@ -198,17 +221,28 @@ export async function POST(request: NextRequest) {
         orderBy: { hasta: "desc" },
       })
       const desde = inicioDelProximoCierre(ultimo?.hasta ?? null, ahora, zona)
-      if (desde.getTime() !== visto.getTime() || ahora.getTime() <= desde.getTime()) {
+      // El `hasta` visto tiene que caer después del inicio y no en el futuro
+      // de la base: si no, lo que se contó no es de este período.
+      if (
+        desde.getTime() !== visto.getTime() ||
+        hasta.getTime() <= desde.getTime() ||
+        hasta.getTime() > ahora.getTime()
+      ) {
         return { status: 409 as const, error: MENSAJE_CAJA_CAMBIO }
       }
 
       const cuenta = cuentaDeCaja(
-        await leerCaja(tx, actor.businessId, desde, ahora),
+        await leerCaja(tx, actor.businessId, desde, hasta),
         aCentavos(datos.data.fondoInicial),
         aCentavos(datos.data.contado)
       )
       if (!cabeEnLaCaja(cuenta)) {
         return { status: 400 as const, error: "Los montos son demasiado grandes para un solo cierre" }
+      }
+      // Lo que hay de verdad en `(desde, hasta]` no es lo que se vio: un
+      // cobro que estaba en curso al leer, o una anulación entretanto.
+      if (cuenta.efectivoEsperadoCents !== aCentavos(datos.data.esperado)) {
+        return { status: 409 as const, error: MENSAJE_CAJA_CAMBIO_LO_COBRADO }
       }
       if (cuenta.diferenciaCents !== 0 && !nota) return { status: 400 as const, error: MENSAJE_NOTA_OBLIGATORIA }
 
@@ -216,8 +250,8 @@ export async function POST(request: NextRequest) {
         data: {
           businessId: actor.businessId,
           desde,
-          hasta: ahora,
-          fecha: diaDelNegocio(ahora, zona),
+          hasta,
+          fecha: diaDelNegocio(hasta, zona),
           zona,
           fondoInicialCents: cuenta.fondoInicialCents,
           efectivoCobradoCents: cuenta.efectivoCobradoCents,
@@ -227,7 +261,7 @@ export async function POST(request: NextRequest) {
           diferenciaCents: cuenta.diferenciaCents,
           desglose: cuenta.desglose as unknown as Prisma.InputJsonValue,
           nota,
-          cerradoPorId: usuarioId ?? "",
+          cerradoPorId: usuarioId,
           cerradoPorNombre: (await nombreEnElNegocio(tx, actor, usuarioId)) ?? "Alguien del equipo",
         },
         select: SELECCION_DE_CIERRE,
@@ -242,7 +276,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return NextResponse.json({ error: MENSAJE_CAJA_CAMBIO }, { status: 409 })
     }
-    console.error("Error al cerrar la caja:", error)
+    registrarError("cerrando la caja", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
 }

@@ -40,9 +40,12 @@ async function vista(miembro = "m-perez") {
   return GET(pedido(`${URL}/vista-previa?miembro=${miembro}`))
 }
 
+/** Cierra como la pantalla: con el total que mostró la vista previa (0 si no respondió). */
 async function cerrar(miembroId: string, desde: string) {
   const { POST } = await import("./route")
-  return POST(pedido(URL, { miembroId, desde }))
+  const previa = await vista(miembroId)
+  const totalEsperadoCents = previa.status === 200 ? (await previa.json()).totales.totalCents : 0
+  return POST(pedido(URL, { miembroId, desde, totalEsperadoCents }))
 }
 
 async function detalle(id: string) {
@@ -242,6 +245,22 @@ describe("Mi plata de la odontóloga", () => {
     const plata = await miPlata(sesiones.perez)
     expect(plata.hoy).toMatchObject({ fecha: "2026-11-05", protesisCents: 1_200_000 })
     expect(plata.semana).toMatchObject({ desde: "2026-11-02", protesisCents: 3_200_000 })
+  })
+
+  it("lo cobrado antes de 'Liquidar desde' no cuenta como liberado aunque se entregue después (decisión 2)", async () => {
+    // Liquida desde el 1 de noviembre: el abono del 20 de octubre (2.000.000 de su parte) ya se pagó por fuera.
+    base.reiniciar({
+      ...escenarioDeAbonos(),
+      business: escenarioDeAbonos().business.map((negocio) =>
+        negocio.id === CLINICA ? { ...negocio, liquidacionDesde: new Date("2026-11-01T00:00:00.000Z") } : negocio
+      ),
+    })
+    const plata = await miPlata(sesiones.perez)
+    expect(plata.periodo).toMatchObject({ protesisCents: 1_200_000, totalCents: 1_200_000 })
+    // Lo mismo que liquidaría: la vista previa de noviembre tampoco lo trae.
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    const previa = await (await vista("m-perez")).json()
+    expect(previa.totales.comisionProtesisCents).toBe(1_200_000)
   })
 
   it("Núñez ve sólo lo suyo; nada de Pérez ni de la dueña", async () => {

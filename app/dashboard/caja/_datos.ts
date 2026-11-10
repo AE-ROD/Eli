@@ -38,7 +38,7 @@ export interface CierreDeCaja {
 export interface EstadoDeCaja {
   zona: string
   puedeCerrar: boolean
-  /** Lo que lleva la caja desde el último cierre (o el inicio del día) hasta ahora. */
+  /** Lo que lleva la caja desde el último cierre (o el inicio del día) hasta `hasta`, la hora en que se leyó. */
   abierta: {
     desde: string
     hasta: string
@@ -59,11 +59,16 @@ export async function leerCaja(pagina: number): Promise<Resultado<EstadoDeCaja>>
 }
 
 /**
- * Cierra la caja. `desde` es el inicio del período que se vio al contar: si
- * otro la cerró entretanto, el servidor responde 409 y la pantalla recarga.
+ * Cierra la caja con lo que se vio: `desde` y `hasta` son el período que
+ * estaba en pantalla al contar (lo cobrado después de `hasta` queda para el
+ * próximo cierre) y `esperado`, el esperado que se mostró. Si otro la cerró
+ * entretanto, o lo cobrado en ese período ya no da ese esperado, el servidor
+ * responde 409 y la pantalla recarga.
  */
 export async function cerrarCaja(datos: {
   desde: string
+  hasta: string
+  esperado: number
   fondoInicial: number
   contado: number
   nota: string

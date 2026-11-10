@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest"
-import { formatearPorcentaje, leerPorcentaje, leerReparto, porcentajeParaEscribir, repartoParaEscribir } from "./_datos"
+import { MAXIMO_DE_LINEAS_POR_PAGO } from "@/lib/pagos-al-laboratorio"
+import {
+  MAXIMO_DE_ABONOS_POR_PAGO,
+  formatearPorcentaje,
+  leerPorcentaje,
+  leerReparto,
+  lineasDeUnPago,
+  porcentajeParaEscribir,
+  repartoParaEscribir,
+} from "./_datos"
 
 describe("leerPorcentaje", () => {
   it.each([
@@ -61,5 +70,20 @@ describe("leerReparto", () => {
       clinica: "20,5",
       tecnico: "44,5",
     })
+  })
+})
+
+describe("lineasDeUnPago (Marcar pagado al laboratorio)", () => {
+  it("el tope de la pantalla es el del servidor", () => {
+    expect(MAXIMO_DE_ABONOS_POR_PAGO).toBe(MAXIMO_DE_LINEAS_POR_PAGO)
+  })
+
+  it("hasta el tope, todas; con más, las primeras y cuántas quedan para otro pago", () => {
+    expect(lineasDeUnPago(["a", "b"])).toEqual({ lineas: ["a", "b"], quedan: 0 })
+    const muchas = Array.from({ length: MAXIMO_DE_ABONOS_POR_PAGO + 3 }, (_, i) => i)
+    const pago = lineasDeUnPago(muchas)
+    expect(pago.lineas).toHaveLength(MAXIMO_DE_ABONOS_POR_PAGO)
+    expect(pago.lineas[0]).toBe(0)
+    expect(pago.quedan).toBe(3)
   })
 })

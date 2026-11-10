@@ -1,6 +1,6 @@
 "use client"
 
-import { useId, useState } from "react"
+import { useId, useRef, useState } from "react"
 import { AnimatePresence } from "framer-motion"
 import { Mail, MailCheck, User, UserRound, UsersRound, type LucideIcon } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
@@ -49,6 +49,7 @@ export function ModalInvitar({ abierto, onCerrar, onInvitado }: PropsDeModalInvi
   const [vigenteId, setVigenteId] = useState<string | null>(null)
   const [exito, setExito] = useState(false)
   const [enviando, setEnviando] = useState(false)
+  const enviado = useRef(false)
 
   const resetear = () => {
     setNombre("")
@@ -67,11 +68,15 @@ export function ModalInvitar({ abierto, onCerrar, onInvitado }: PropsDeModalInvi
 
   const enviar = async (e: React.FormEvent) => {
     e.preventDefault()
+    // Un doble clic llega antes de que se dibuje el botón ocupado: sin esto, dos invitaciones.
+    if (enviado.current) return
+    enviado.current = true
     setError("")
     setVigenteId(null)
     setEnviando(true)
 
     const resultado = await invitarAlEquipo({ nombre, email, rol })
+    enviado.current = false
 
     if (!resultado.ok) {
       setError(resultado.error)
@@ -87,10 +92,12 @@ export function ModalInvitar({ abierto, onCerrar, onInvitado }: PropsDeModalInvi
 
   /** La invitación vigente de ese correo, con un enlace nuevo: lo que ofrece el error. */
   const reenviarLaVigente = async () => {
-    if (!vigenteId) return
+    if (!vigenteId || enviado.current) return
+    enviado.current = true
     setError("")
     setEnviando(true)
     const resultado = await reenviarInvitacion(vigenteId)
+    enviado.current = false
     setEnviando(false)
     if (!resultado.ok) return setError(resultado.error)
     setVigenteId(null)

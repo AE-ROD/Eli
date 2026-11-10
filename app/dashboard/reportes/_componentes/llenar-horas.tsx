@@ -12,6 +12,7 @@ import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { CAMPO, TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
 import { comoTexto, desplazarFecha, diasDeLaSemanaDe, limitesDelMesDe } from "@/lib/fechas"
 import { DIAS_MAXIMOS } from "@/lib/periodos"
+import { periodoParaLeer } from "@/lib/periodos-de-liquidacion"
 import type { Resultado } from "@/lib/peticiones"
 import { cn } from "@/lib/utils"
 import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
@@ -189,8 +190,8 @@ export function LlenarHoras() {
           )}
 
           <p className="text-sm text-texto-2">
-            Comparado con el período anterior de igual largo ({reporte.periodoAnterior.desde} al{" "}
-            {reporte.periodoAnterior.hasta}), en la zona horaria del negocio.
+            Comparado con el período anterior de igual largo (
+            {periodoParaLeer(reporte.periodoAnterior.desde, reporte.periodoAnterior.hasta)}), en la zona horaria del negocio.
           </p>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">

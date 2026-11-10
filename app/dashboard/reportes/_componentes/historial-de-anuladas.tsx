@@ -2,10 +2,12 @@
 
 import { useId } from "react"
 import { Ban, CircleSlash, DollarSign } from "lucide-react"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
 import { formatearMonto } from "@/lib/dinero"
 import { formatearHora } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import type { FilaAnulada, ReporteDeAnuladas } from "../_datos"
 import { CLASES_DE_CELDA, ENCABEZADO_DE_COLUMNA, MediosDeLaFila, SinFilas, diaCorto } from "./historial-de-cobros"
 import { Paginador } from "./paginador"
@@ -83,6 +85,8 @@ interface PropsDeHistorialDeAnuladas {
  */
 export function HistorialDeAnuladas({ reporte, actualizando, onPagina }: PropsDeHistorialDeAnuladas) {
   const idDelTitulo = useId()
+  // "Paciente" en una clínica dental; en los demás rubros, igual que siempre.
+  const vocabulario = vocabularioDe(useRubroDelPanel())
   const { pagina, paginas, total: cantidad } = reporte
   const { seccion, irA } = useIrALaSeccion(onPagina, actualizando, reporte)
 
@@ -122,7 +126,7 @@ export function HistorialDeAnuladas({ reporte, actualizando, onPagina }: PropsDe
                   Por
                 </th>
                 <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
-                  Cliente
+                  {conMayuscula(vocabulario.cliente)}
                 </th>
                 <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
                   Servicios

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useId, useState, type FormEvent } from "react"
+import { useEffect, useId, useRef, useState, type FormEvent } from "react"
 import { AnimatePresence } from "framer-motion"
 import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
@@ -106,6 +106,8 @@ export function RepartoDeProtesisConfig() {
   const [modalExcepcion, setModalExcepcion] = useState<{ excepcion: ExcepcionDeProtesis | null } | null>(null)
   const [quitando, setQuitando] = useState<ExcepcionDeProtesis | null>(null)
   const [trabajando, setTrabajando] = useState(false)
+  /** Un ref y no sólo el estado: un doble clic llega antes de que se dibuje el botón ocupado. */
+  const quitarEnviado = useRef(false)
   const [avisoDeQuitar, setAvisoDeQuitar] = useState("")
   const idMateriales = useId()
   const idExcepciones = useId()
@@ -181,10 +183,12 @@ export function RepartoDeProtesisConfig() {
   }
 
   const quitar = async () => {
-    if (!quitando) return
+    if (!quitando || quitarEnviado.current) return
+    quitarEnviado.current = true
     setTrabajando(true)
     setAvisoDeQuitar("")
     const resultado = await borrarExcepcionDeProtesis(quitando.id)
+    quitarEnviado.current = false
     setTrabajando(false)
     if (!resultado.ok) return setAvisoDeQuitar(resultado.error)
     setDatos((previos) => previos && { ...previos, excepciones: previos.excepciones.filter((otra) => otra.id !== quitando.id) })
@@ -490,6 +494,8 @@ function ModalMaterial({ material, laboratorios, alGuardar, alCerrar }: PropsDeM
   const [activo, setActivo] = useState(material?.activo ?? true)
   const [intentado, setIntentado] = useState(false)
   const [guardando, setGuardando] = useState(false)
+  /** Un ref y no sólo el estado: un doble clic llega antes de que se dibuje el botón ocupado. */
+  const enviado = useRef(false)
   const [error, setError] = useState("")
   const id = useId()
 
@@ -519,9 +525,12 @@ function ModalMaterial({ material, laboratorios, alGuardar, alCerrar }: PropsDeM
       laboratorioPorDefectoId: laboratorioId || null,
       activo,
     }
+    if (enviado.current) return
+    enviado.current = true
     setError("")
     setGuardando(true)
     const resultado = material ? await editarMaterialDeProtesis(material.id, cambiosDe(material, datos)) : await crearMaterialDeProtesis(datos)
+    enviado.current = false
     setGuardando(false)
     if (!resultado.ok) return setError(resultado.error)
     alGuardar(resultado.datos, !material)
@@ -679,6 +688,8 @@ function ModalExcepcion({ excepcion, materiales, odontologos, alGuardar, alCerra
   )
   const [intentado, setIntentado] = useState(false)
   const [guardando, setGuardando] = useState(false)
+  /** Un ref y no sólo el estado: un doble clic llega antes de que se dibuje el botón ocupado. */
+  const enviado = useRef(false)
   const [error, setError] = useState("")
   const id = useId()
 
@@ -687,11 +698,14 @@ function ModalExcepcion({ excepcion, materiales, odontologos, alGuardar, alCerra
     setIntentado(true)
     const leido = leerReparto(reparto)
     if (!leido.ok || (!excepcion && (!memberId || !materialId))) return
+    if (enviado.current) return
+    enviado.current = true
     setError("")
     setGuardando(true)
     const resultado = excepcion
       ? await editarExcepcionDeProtesis(excepcion.id, leido.reparto)
       : await crearExcepcionDeProtesis({ memberId, materialId, ...leido.reparto })
+    enviado.current = false
     setGuardando(false)
     if (!resultado.ok) return setError(resultado.error)
     alGuardar(resultado.datos, !excepcion)

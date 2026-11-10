@@ -44,7 +44,7 @@ interface PropsDeModalCobro {
    */
   atencion: Atencion
   mediosDePago: { id: string; nombre: string }[]
-  /** A quién puede ir una propina: los miembros y la dueña (`duenio`). */
+  /** El equipo y la dueña (`duenio`): la propina se ofrece a quienes de ellos atendieron. */
   profesionales: { id: string; nombre: string }[]
   /** Por qué no se pudo cobrar, si falló. */
   aviso: string
@@ -87,6 +87,10 @@ export function ModalCobro({
   const botonAgregar = useRef<HTMLButtonElement>(null)
   const botonAgregarPropina = useRef<HTMLButtonElement>(null)
   const totalCentavos = totalEnCentavosDe(atencion)
+  // La propina va a quien atendió esta atención (el servidor rechaza a otro):
+  // sólo se ofrece a quien tiene una línea en ella.
+  const quienesAtendieron = new Set(atencion.lineas.map((linea) => linea.profesional.id))
+  const paraPropina = profesionales.filter((profesional) => quienesAtendieron.has(profesional.id))
 
   // Arranca con todo en el primer medio, que es el caso de todos los días.
   // Con total cero no hay nada que pagar: se cobra sin pagos.
@@ -357,7 +361,7 @@ export function ModalCobro({
                       className={CAMPO}
                     >
                       <option value="">Elegir</option>
-                      {profesionales.map((profesional) => (
+                      {paraPropina.map((profesional) => (
                         <option key={profesional.id} value={profesional.id}>
                           {profesional.nombre}
                         </option>

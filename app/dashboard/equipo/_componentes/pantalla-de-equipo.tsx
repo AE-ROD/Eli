@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { AnimatePresence } from "framer-motion"
 import { UserPlus } from "lucide-react"
@@ -34,6 +34,11 @@ export function PantallaDeEquipo() {
   const [ahora, setAhora] = useState(0)
   const [avisoListo, setAvisoListo] = useState("")
   const [reenviandoId, setReenviandoId] = useState<string | null>(null)
+  /** La invitación que se va a reenviar: se confirma antes, porque el enlace anterior deja de servir. */
+  const [aReenviar, setAReenviar] = useState<InvitacionPendiente | null>(null)
+  const [avisoDeReenviar, setAvisoDeReenviar] = useState("")
+  /** Un ref y no sólo el estado: un doble clic llega antes de que se dibuje el botón ocupado. */
+  const enviado = useRef(false)
   const [aAnular, setAAnular] = useState<InvitacionPendiente | null>(null)
   const [anulando, setAnulando] = useState(false)
   const [avisoDeAnular, setAvisoDeAnular] = useState("")
@@ -53,13 +58,24 @@ export function PantallaDeEquipo() {
     setCargando(false)
   }
 
-  const reenviar = async (invitacion: InvitacionPendiente) => {
+  const pedirReenviar = (invitacion: InvitacionPendiente) => {
     setAviso("")
     setAvisoListo("")
+    setAvisoDeReenviar("")
+    setAReenviar(invitacion)
+  }
+
+  const confirmarReenviar = async () => {
+    if (!aReenviar || enviado.current) return
+    enviado.current = true
+    const invitacion = aReenviar
+    setAvisoDeReenviar("")
     setReenviandoId(invitacion.id)
     const resultado = await reenviarInvitacion(invitacion.id)
+    enviado.current = false
     setReenviandoId(null)
-    if (!resultado.ok) return setAviso(resultado.error)
+    if (!resultado.ok) return setAvisoDeReenviar(resultado.error)
+    setAReenviar(null)
     setAvisoListo(`Se reenvió la invitación a ${invitacion.email}, con un enlace nuevo que vale 7 días.`)
     cargar()
   }
@@ -70,10 +86,12 @@ export function PantallaDeEquipo() {
   }
 
   const confirmarAnular = async () => {
-    if (!aAnular) return
+    if (!aAnular || enviado.current) return
+    enviado.current = true
     setAvisoDeAnular("")
     setAnulando(true)
     const resultado = await anularInvitacion(aAnular.id)
+    enviado.current = false
     setAnulando(false)
     if (!resultado.ok) return setAvisoDeAnular(resultado.error)
     setAvisoListo(`Se anuló la invitación de ${aAnular.name}.`)
@@ -114,7 +132,7 @@ export function PantallaDeEquipo() {
           cargando={cargando}
           ahora={ahora}
           reenviandoId={reenviandoId}
-          alReenviar={reenviar}
+          alReenviar={pedirReenviar}
           alAnular={pedirAnular}
           alEditarServicios={(miembro) => {
             setAvisoListo("")
@@ -122,6 +140,21 @@ export function PantallaDeEquipo() {
           }}
         />
       </div>
+
+      <AnimatePresence>
+        {aReenviar && (
+          <ModalConfirmar
+            titulo={`¿Reenviar la invitación de ${aReenviar.name}?`}
+            descripcion={`Le llega a ${aReenviar.email} un correo con un enlace nuevo que vale 7 días. El enlace que tenía deja de servir.`}
+            textoConfirmar="Reenviar invitación"
+            textoCancelar="No reenviar"
+            trabajando={reenviandoId === aReenviar.id}
+            aviso={avisoDeReenviar}
+            onConfirmar={confirmarReenviar}
+            onCerrar={() => setAReenviar(null)}
+          />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {aAnular && (

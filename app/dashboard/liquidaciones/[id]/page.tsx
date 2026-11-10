@@ -7,7 +7,14 @@ import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { leerLiquidacion } from "@/lib/liquidacion"
 import { NOMBRES_DE_MOVIMIENTO } from "@/lib/movimientos"
 import { nombreDeMedio } from "@/lib/medios-de-pago"
-import { actorDeSesion, puedeAnularLiquidacion, puedePagarLiquidacion, puedeVerLiquidacionesDelEquipo } from "@/lib/permisos"
+import {
+  actorDeSesion,
+  esClinicaDental,
+  puedeAnularLiquidacion,
+  puedePagarLiquidacion,
+  puedeVerLiquidacionesDelEquipo,
+} from "@/lib/permisos"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import { fechaParaLeer } from "@/lib/periodos-de-liquidacion"
 import { cn } from "@/lib/utils"
 import { HORA_24 } from "@/lib/fechas"
@@ -62,6 +69,9 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
   // tachados y el total a pagar queda en $0 (QA#13).
   const anulada = detalle.estado === "anulada"
   const volverA = puedeVerLiquidacionesDelEquipo(actor) ? "/dashboard/liquidaciones" : "/dashboard/mi-plata"
+  // "Odontólogo" y "Paciente" en una clínica dental; en los demás rubros, igual que siempre.
+  const vocabulario = vocabularioDe(actor.rubro)
+  const clinica = esClinicaDental(actor)
 
   return (
     <div className="min-h-dvh">
@@ -80,6 +90,10 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
                 ? `Liquidación de ${detalle.miembro}, ${detalle.texto}: anulada`
                 : `Liquidación de ${detalle.miembro}, ${detalle.texto}: ${pesos(t.totalCents)}`
             }
+            miembro={detalle.miembro}
+            periodo={detalle.texto}
+            totalCents={t.totalCents}
+            conProtesis={clinica}
             volverA={volverA}
             puedePagar={puedePagarLiquidacion(actor)}
             puedeAnular={puedeAnularLiquidacion(actor)}
@@ -97,7 +111,7 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
             </div>
             <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-texto-2">Profesional</dt>
+                <dt className="text-texto-2">{conMayuscula(vocabulario.profesional)}</dt>
                 <dd className="font-medium">{detalle.miembro}</dd>
               </div>
               <div>
@@ -138,8 +152,8 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
             </h3>
             {anulada && detalle.lineas.length === 0 ? (
               <p className="text-sm text-texto-2">
-                Anulada: los servicios, productos, propinas y movimientos que incluía volvieron a quedar pendientes para
-                la próxima liquidación.
+                Anulada: los servicios, productos{clinica ? ", abonos de prótesis" : ""}, propinas y movimientos que incluía
+                volvieron a quedar pendientes para la próxima liquidación.
               </p>
             ) : detalle.lineas.length === 0 ? (
               <p className="text-sm text-texto-2">No incluye servicios ni productos.</p>
@@ -149,7 +163,7 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
                   <thead>
                     <tr className="border-b border-borde">
                       <th className={CABECERA}>Fecha</th>
-                      <th className={CABECERA}>Cliente</th>
+                      <th className={CABECERA}>{conMayuscula(vocabulario.cliente)}</th>
                       <th className={CABECERA}>Detalle</th>
                       <th className={cn(CABECERA, "text-right")}>Precio</th>
                       <th className={cn(CABECERA, "text-right")}>%</th>

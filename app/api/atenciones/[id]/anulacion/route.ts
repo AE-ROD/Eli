@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma"
 import { transicionPermitida } from "@/lib/atenciones"
 import {
   CODIGO_CORREGIR_CON_AJUSTE,
+  CODIGO_PAGADO_AL_LABORATORIO,
   atencionBloqueada,
   horaDeLaBase,
   tomarCandadoDeCajaCompartido,
@@ -110,7 +111,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const bloqueo = await atencionBloqueada(tx, actor.businessId, existente.id)
       if (bloqueo) {
         // Lo del laboratorio no se corrige con un ajuste: se anula el pago.
-        const codigo = bloqueo.motivo === "laboratorio" ? undefined : CODIGO_CORREGIR_CON_AJUSTE
+        // Lleva su propio código para que la pantalla no lo lea como "la
+        // atención cambió" (y recargue perdiendo el motivo escrito).
+        const codigo = bloqueo.motivo === "laboratorio" ? CODIGO_PAGADO_AL_LABORATORIO : CODIGO_CORREGIR_CON_AJUSTE
         throw new ErrorDeAtencion(409, MENSAJE_DE_BLOQUEO[bloqueo.motivo], codigo)
       }
 

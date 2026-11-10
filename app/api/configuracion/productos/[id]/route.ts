@@ -61,6 +61,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
   try {
     const producto = await prisma.$transaction(async (tx) => {
+      // La fila trabada antes de leer el "antes": dos cambios de % a la vez
+      // van uno detrás del otro, y la auditoría del segundo dice el valor que
+      // dejó el primero (como `bloquearMiembro` en Comisiones).
+      await tx.$queryRaw`SELECT id FROM productos WHERE id = ${id} AND "businessId" = ${actor.businessId} FOR UPDATE`
       const antes = await tx.producto.findFirst({ where: whereDeProductos(actor, { id }), select: SELECCION })
       if (!antes) throw new ErrorDeAtencion(404, "Producto no encontrado")
 

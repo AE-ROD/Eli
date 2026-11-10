@@ -127,12 +127,12 @@ describe("POST /api/comisiones/protesis/pagos-al-laboratorio", () => {
   })
 
   it("todo lo pendiente de un laboratorio, de una vez", async () => {
-    const pago = await (await pagar(sesiones.dueña, { laboratorioId: "lab-sur", medio: "efectivo", todo: true })).json()
+    const pago = await (await pagar(sesiones.dueña, { laboratorioId: "lab-sur", medio: "efectivo", todo: true, montoEsperadoCents: 2_700_000 })).json()
     expect(pago).toMatchObject({ montoCents: 2_700_000, lineas: 3 })
     for (const id of ["ab-oct", "ab-nov", "ab-duena"]) expect(pagoDe(id)).toBe(pago.id)
     for (const id of ["ab-nunez", "ab-sin-entregar", "ab-anulada", "ab-ajeno"]) expect(pagoDe(id)).toBeNull()
     // Ya no queda nada para ese laboratorio.
-    expect((await pagar(sesiones.dueña, { laboratorioId: "lab-sur", medio: "efectivo", todo: true })).status).toBe(409)
+    expect((await pagar(sesiones.dueña, { laboratorioId: "lab-sur", medio: "efectivo", todo: true, montoEsperadoCents: 2_700_000 })).status).toBe(409)
   })
 
   it.each([
@@ -156,14 +156,14 @@ describe("POST /api/comisiones/protesis/pagos-al-laboratorio", () => {
   })
 
   it("un laboratorio de otra clínica: 404; uno sin nada por pagar: 409", async () => {
-    expect((await pagar(sesiones.dueña, { laboratorioId: "lab-ajeno", medio: "efectivo", todo: true })).status).toBe(404)
-    expect((await pagar(sesiones.dueña, { laboratorioId: "lab-viejo", medio: "efectivo", todo: true })).status).toBe(409)
+    expect((await pagar(sesiones.dueña, { laboratorioId: "lab-ajeno", medio: "efectivo", todo: true, montoEsperadoCents: 2_700_000 })).status).toBe(404)
+    expect((await pagar(sesiones.dueña, { laboratorioId: "lab-viejo", medio: "efectivo", todo: true, montoEsperadoCents: 2_700_000 })).status).toBe(409)
     expect(base.buscar("pagoAlLaboratorio")).toEqual([])
   })
 
   it.each([
-    ["un medio que no existe", { laboratorioId: "lab-sur", medio: "cheque", todo: true }],
-    ["líneas y todo a la vez", { laboratorioId: "lab-sur", medio: "efectivo", todo: true, lineas: ["ab-oct"] }],
+    ["un medio que no existe", { laboratorioId: "lab-sur", medio: "cheque", todo: true, montoEsperadoCents: 2_700_000 }],
+    ["líneas y todo a la vez", { laboratorioId: "lab-sur", medio: "efectivo", todo: true, montoEsperadoCents: 2_700_000, lineas: ["ab-oct"] }],
     ["ni líneas ni todo", { laboratorioId: "lab-sur", medio: "efectivo" }],
     ["una lista vacía", { laboratorioId: "lab-sur", medio: "efectivo", lineas: [] }],
   ])("%s: 400", async (_caso, cuerpo) => {
@@ -177,7 +177,7 @@ describe("POST /api/comisiones/protesis/pagos-al-laboratorio", () => {
     ["la dueña de otra clínica", sesiones.dueñaAjena, 404],
     ["un salón", sesiones.salon, 404],
   ])("%s: %s y nada se paga", async (_caso, sesion, status) => {
-    const res = await pagar(sesion, { laboratorioId: "lab-sur", medio: "efectivo", todo: true })
+    const res = await pagar(sesion, { laboratorioId: "lab-sur", medio: "efectivo", todo: true, montoEsperadoCents: 2_700_000 })
     expect(res.status).toBe(status)
     expect(base.buscar("pagoAlLaboratorio")).toEqual([])
   })
@@ -188,7 +188,7 @@ describe("POST /api/comisiones/protesis/pagos-al-laboratorio", () => {
       await base.prisma.visit.updateMany({ where: { id: "at-nov" }, data: { status: "anulada" } })
       return crear(args)
     })
-    expect((await pagar(sesiones.dueña, { laboratorioId: "lab-sur", medio: "efectivo", todo: true })).status).toBe(409)
+    expect((await pagar(sesiones.dueña, { laboratorioId: "lab-sur", medio: "efectivo", todo: true, montoEsperadoCents: 2_700_000 })).status).toBe(409)
     expect(base.buscar("pagoAlLaboratorio")).toEqual([])
     expect(base.buscar("visitService").filter((l) => l.pagoAlLaboratorioId)).toEqual([])
   })
@@ -196,7 +196,7 @@ describe("POST /api/comisiones/protesis/pagos-al-laboratorio", () => {
 
 describe("pagos al laboratorio: historial y anulación", () => {
   it("anular un pago suelta sus líneas, que vuelven a estar por pagar; queda en el historial; dos veces, 409", async () => {
-    const pago = await (await pagar(sesiones.dueña, { laboratorioId: "lab-sur", medio: "efectivo", todo: true })).json()
+    const pago = await (await pagar(sesiones.dueña, { laboratorioId: "lab-sur", medio: "efectivo", todo: true, montoEsperadoCents: 2_700_000 })).json()
 
     const res = await anularPago(sesiones.dueña, pago.id)
     expect(res.status).toBe(200)
@@ -234,7 +234,8 @@ describe("pagos al laboratorio: historial y anulación", () => {
     expect(bloqueada.status).toBe(409)
     const cuerpo = await bloqueada.json()
     expect(cuerpo.error).toMatch(/laboratorio/)
-    expect(cuerpo.codigo).toBeUndefined()
+    // Su propio código (no "corregir con ajuste" ni "cambió"): la pantalla no recarga ni pierde el motivo.
+    expect(cuerpo.codigo).toBe("pagado-al-laboratorio")
     expect(base.buscar("visit", { id: "at-nov" })[0].status).toBe("finalizada")
 
     await anularPago(sesiones.dueña, pago.id)
@@ -242,5 +243,57 @@ describe("pagos al laboratorio: historial y anulación", () => {
     // Anulada, ya no se le debe nada al laboratorio por ese abono.
     const sur = (await (await porPagar(sesiones.dueña)).json()).laboratorios.find((g: { laboratorio: { id: string } }) => g.laboratorio.id === "lab-sur")
     expect(sur.lineas.map((l: { id: string }) => l.id)).toEqual(["ab-duena", "ab-oct"])
+  })
+})
+
+describe("Marcar pagado con lo que se vio (revisión 2026-11-10)", () => {
+  it("todo lo pendiente exige el monto visto: sin él, 400; si cambió entretanto, 409 y nada se paga", async () => {
+    expect((await pagar(sesiones.dueña, { laboratorioId: "lab-sur", medio: "efectivo", todo: true })).status).toBe(400)
+    const antes = base.volcado()
+    const res = await pagar(sesiones.dueña, { laboratorioId: "lab-sur", medio: "efectivo", todo: true, montoEsperadoCents: 1_500_000 })
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toMatch(/cambió mientras confirmabas/)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("con la lista de ids que se mostró y su monto, paga sólo esas; un monto que no es el de esas líneas, 409", async () => {
+    expect(
+      (await pagar(sesiones.dueña, { laboratorioId: "lab-sur", medio: "efectivo", lineas: ["ab-oct", "ab-nov"], montoEsperadoCents: 1 })).status
+    ).toBe(409)
+    const res = await pagar(sesiones.dueña, {
+      laboratorioId: "lab-sur",
+      medio: "efectivo",
+      lineas: ["ab-oct", "ab-nov"],
+      montoEsperadoCents: 2_400_000,
+    })
+    expect(res.status).toBe(201)
+    expect(await res.json()).toMatchObject({ montoCents: 2_400_000, lineas: 2 })
+    expect(pagoDe("ab-duena")).toBeNull()
+  })
+
+  it("más de 1000 líneas en un pedido: 400 con un mensaje que dice cómo seguir", async () => {
+    const lineas = Array.from({ length: 1001 }, (_, i) => `ab-${i}`)
+    const res = await pagar(sesiones.dueña, { laboratorioId: "lab-sur", medio: "efectivo", lineas })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/Hasta 1000 abonos por pago/)
+  })
+
+  it("lo cobrado antes de 'Liquidar desde' no queda por pagar al laboratorio ni se paga (decisión 2)", async () => {
+    // La dueña liquida desde el 1 de noviembre (en Santiago): el abono del 20 de octubre ya se pagó por fuera.
+    base.reiniciar({
+      ...escenarioDeAbonos(),
+      business: escenarioDeAbonos().business.map((negocio) =>
+        negocio.id === "clinica-aurora" ? { ...negocio, liquidacionDesde: new Date("2026-11-01T00:00:00.000Z") } : negocio
+      ),
+    })
+    const cuerpo = await (await porPagar(sesiones.dueña)).json()
+    const sur = cuerpo.laboratorios.find((g: { laboratorio: { id: string } }) => g.laboratorio.id === "lab-sur")
+    expect(sur.lineas.map((l: { id: string }) => l.id)).toEqual(["ab-duena", "ab-nov"])
+    expect(sur.totalCents).toBe(1_200_000)
+
+    expect((await pagar(sesiones.dueña, { laboratorioId: "lab-sur", medio: "efectivo", lineas: ["ab-oct"] })).status).toBe(409)
+    const todo = await pagar(sesiones.dueña, { laboratorioId: "lab-sur", medio: "efectivo", todo: true, montoEsperadoCents: 1_200_000 })
+    expect(todo.status).toBe(201)
+    expect(pagoDe("ab-oct")).toBeNull()
   })
 })

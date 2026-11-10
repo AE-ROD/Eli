@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest"
-import { calcularTotales, filasDelComprobante, liberadoEl, motivoParaNoCerrar, type DetalleDeLiquidacion } from "./liquidacion"
+import { Prisma } from "@prisma/client"
+import {
+  calcularTotales,
+  enPesos,
+  filasDelComprobante,
+  liberadoEl,
+  motivoParaNoCerrar,
+  respuestaDeErrorDePlata,
+  type DetalleDeLiquidacion,
+} from "./liquidacion"
 
 describe("calcularTotales", () => {
   it("bruto = comisiones + propinas; total = bruto − adelantos y vales + ajustes; lo excluido no cuenta", () => {
@@ -159,5 +168,27 @@ describe("filasDelComprobante", () => {
     expect(fila(filas, "Motivo de la anulación")).toEqual(["Motivo de la anulación", "Se cerró antes de tiempo"])
     expect(fila(filas, "Total al cerrarse (anulada)")).toEqual(["Total al cerrarse (anulada)", 25_600])
     expect(fila(filas, "Total a pagar")).toEqual(["Total a pagar", 0])
+  })
+})
+
+describe("enPesos (CSV del comprobante)", () => {
+  it("entero como número; con centavos, siempre dos decimales con coma", () => {
+    expect(enPesos(1_000_000)).toBe(10000)
+    expect(enPesos(1990)).toBe("19,90")
+    expect(enPesos(1905)).toBe("19,05")
+    expect(enPesos(-1990)).toBe("-19,90")
+    expect(enPesos(1)).toBe("0,01")
+  })
+})
+
+describe("respuestaDeErrorDePlata", () => {
+  const conocido = (code: string) => new Prisma.PrismaClientKnownRequestError("x", { code, clientVersion: "prueba" })
+
+  it("lo que ya no existe (P2025) es 404 y una referencia perdida (P2003) es 409, no 500", async () => {
+    const noExiste = respuestaDeErrorDePlata(conocido("P2025"), "prueba")
+    expect(noExiste.status).toBe(404)
+    expect((await noExiste.json()).error).toMatch(/vuelve a cargar/)
+    expect(respuestaDeErrorDePlata(conocido("P2003"), "prueba").status).toBe(409)
+    expect(respuestaDeErrorDePlata(conocido("P2002"), "prueba").status).toBe(409)
   })
 })

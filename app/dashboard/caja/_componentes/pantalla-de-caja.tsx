@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from "react"
+import { AnimatePresence } from "framer-motion"
 import { History, Lock, RefreshCw, Wallet } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { Esqueleto } from "@/components/comunes/esqueleto"
@@ -12,6 +13,7 @@ import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, TARJETA_DEL_PANEL } from "@/com
 import { formatearMonto } from "@/lib/dinero"
 import { HORA_24, formatearHora } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
+import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { Paginador } from "../../reportes/_componentes/paginador"
 import { cerrarCaja, cuentaEnPantalla, leerCaja, type CierreDeCaja, type Desglose, type EstadoDeCaja } from "../_datos"
 
@@ -35,6 +37,12 @@ function dia(iso: string, zona: string): string {
 /** `14:30` en la zona del negocio. */
 function hora(iso: string, zona: string): string {
   return formatearHora(iso, zona)
+}
+
+/** El fin de un período de caja: sólo la hora si es el mismo día del inicio; si no, también el día. */
+function finDelPeriodo(desde: string, hasta: string, zona: string): string {
+  const mismoDia = new Date(desde).toLocaleDateString("es-CL", { timeZone: zona }) === new Date(hasta).toLocaleDateString("es-CL", { timeZone: zona })
+  return mismoDia ? hora(hasta, zona) : momento(hasta, zona)
 }
 
 /** `+$500` / `-$500` / `$0`: la diferencia con su signo, que es lo que se lee primero. */
@@ -136,6 +144,8 @@ export function PantallaDeCaja() {
         // Un período nuevo (otro cerró, o se acaba de cerrar) es un formulario nuevo.
         key={estado.abierta.desde}
         estado={estado}
+        actualizando={cargando}
+        onActualizar={recargar}
         onCerrada={(cierre) => {
           setMensaje({
             texto:
@@ -163,12 +173,16 @@ export function PantallaDeCaja() {
 
 interface PropsDeCajaAbierta {
   estado: EstadoDeCaja
+  /** Se está volviendo a leer la caja. */
+  actualizando: boolean
+  /** Vuelve a leer la caja: el período pasa a llegar hasta ahora (lo escrito se conserva). */
+  onActualizar: () => void
   onCerrada: (cierre: CierreDeCaja) => void
   /** Otro cerró la caja entretanto: lo que se contó era de otro período. */
   onCambio: (mensaje: string) => void
 }
 
-function CajaAbierta({ estado, onCerrada, onCambio }: PropsDeCajaAbierta) {
+function CajaAbierta({ estado, actualizando, onActualizar, onCerrada, onCambio }: PropsDeCajaAbierta) {
   const { abierta, zona } = estado
   const idDelTitulo = useId()
   const idDelFondo = useId()
@@ -180,13 +194,16 @@ function CajaAbierta({ estado, onCerrada, onCambio }: PropsDeCajaAbierta) {
   const [errores, setErrores] = useState<{ fondo?: string; contado?: string; nota?: string }>({})
   const [aviso, setAviso] = useState("")
   const [guardando, setGuardando] = useState(false)
+  /** Lo que se va a cerrar, con los montos que se ven: se confirma antes de enviar. */
+  const [confirmando, setConfirmando] = useState<{ fondo: number; contado: number; esperado: number; diferencia: number } | null>(null)
   /** Un ref y no sólo el estado: un doble toque llega antes de que se dibuje el botón ocupado. */
   const enviado = useRef(false)
 
   const cuenta = cuentaEnPantalla(abierta, fondo, contado)
   const hayDiferencia = cuenta.diferencia !== null && cuenta.diferencia !== 0
 
-  const enviar = async (evento: FormEvent) => {
+  /** Revisa lo escrito y, si está completo, pide confirmar con esperado, contado y diferencia. */
+  const revisar = (evento: FormEvent) => {
     evento.preventDefault()
     if (enviado.current) return
     const nuevos: typeof errores = {}
@@ -195,13 +212,28 @@ function CajaAbierta({ estado, onCerrada, onCambio }: PropsDeCajaAbierta) {
     if (hayDiferencia && !nota.trim()) nuevos.nota = "Hay diferencia: explica en una nota qué pasó."
     setErrores(nuevos)
     setAviso("")
-    if (Object.keys(nuevos).length > 0 || cuenta.fondo === null || cuenta.contado === null) return
+    if (Object.keys(nuevos).length > 0) return
+    if (cuenta.fondo === null || cuenta.contado === null || cuenta.esperado === null || cuenta.diferencia === null) return
+    setConfirmando({ fondo: cuenta.fondo, contado: cuenta.contado, esperado: cuenta.esperado, diferencia: cuenta.diferencia })
+  }
 
+  const cerrar = async () => {
+    if (!confirmando || enviado.current) return
     enviado.current = true
     setGuardando(true)
-    const resultado = await cerrarCaja({ desde: abierta.desde, fondoInicial: cuenta.fondo, contado: cuenta.contado, nota })
+    setAviso("")
+    // Lo que se vio: el período hasta la hora en que se leyó y el esperado mostrado.
+    const resultado = await cerrarCaja({
+      desde: abierta.desde,
+      hasta: abierta.hasta,
+      esperado: confirmando.esperado,
+      fondoInicial: confirmando.fondo,
+      contado: confirmando.contado,
+      nota,
+    })
     enviado.current = false
     setGuardando(false)
+    setConfirmando(null)
     if (resultado.ok) return onCerrada(resultado.datos)
     if (resultado.codigo === 409) return onCambio(`${resultado.error.replace(/\.$/, "")}. Se recargó la caja.`)
     setAviso(resultado.error)
@@ -212,9 +244,18 @@ function CajaAbierta({ estado, onCerrada, onCambio }: PropsDeCajaAbierta) {
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo="Caja abierta"
-        subtitulo={`Desde el ${momento(abierta.desde, zona)} hasta ahora.`}
+        subtitulo={`Desde el ${momento(abierta.desde, zona)} hasta las ${hora(abierta.hasta, zona)}.`}
         icono={{ figura: Wallet }}
       />
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm text-texto-2">
+        <p className="min-w-0 flex-1 text-pretty">
+          El cierre cubre hasta las {hora(abierta.hasta, zona)}: lo que se cobre después queda para el próximo.
+        </p>
+        <Boton variante="secundario" tamano="sm" cargando={actualizando} disabled={guardando} onClick={onActualizar}>
+          <RefreshCw aria-hidden="true" className="size-4" strokeWidth={2} />
+          Actualizar
+        </Boton>
+      </div>
 
       {abierta.cobrosDesde && (
         <Aviso tono="atencion" className="mt-4" titulo="Este cierre junta varios días">
@@ -230,7 +271,7 @@ function CajaAbierta({ estado, onCerrada, onCambio }: PropsDeCajaAbierta) {
       <OtrosMedios desglose={abierta.desglose} />
 
       {estado.puedeCerrar && (
-        <form onSubmit={enviar} noValidate className="mt-5 space-y-4">
+        <form onSubmit={revisar} noValidate className="mt-5 space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <CampoDeMonto
               id={idDelFondo}
@@ -297,6 +338,33 @@ function CajaAbierta({ estado, onCerrada, onCambio }: PropsDeCajaAbierta) {
           <p className="text-sm text-texto-2">Un cierre no se edita: revisa los montos antes de cerrar.</p>
         </form>
       )}
+
+      <AnimatePresence>
+        {confirmando && (
+          <ModalConfirmar
+            key="confirmar-cierre"
+            titulo="¿Cerrar la caja?"
+            descripcion={`Cubre desde el ${momento(abierta.desde, zona)} hasta las ${hora(abierta.hasta, zona)}. Un cierre no se edita, y lo cobrado dentro de él ya no se anula.`}
+            textoConfirmar="Cerrar caja"
+            textoCancelar="Volver a revisar"
+            trabajando={guardando}
+            onConfirmar={() => void cerrar()}
+            onCerrar={() => {
+              if (!guardando) setConfirmando(null)
+            }}
+          >
+            <dl className="divide-y divide-borde border-y border-borde text-sm">
+              <Renglon termino="Esperado" valor={formatearMonto(confirmando.esperado)} />
+              <Renglon termino="Contado" valor={formatearMonto(confirmando.contado)} />
+              <Renglon
+                termino="Diferencia"
+                valor={confirmando.diferencia === 0 ? "Cuadra" : conSigno(confirmando.diferencia)}
+                fuerte
+              />
+            </dl>
+          </ModalConfirmar>
+        )}
+      </AnimatePresence>
     </section>
   )
 }
@@ -361,7 +429,7 @@ function CierresAnteriores({
               <li key={cierre.id} className="rounded-[20px] border border-borde p-4 text-sm squircle">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                   <p className="font-medium">
-                    {momento(cierre.desde, zona)} – {hora(cierre.hasta, zona)}
+                    {momento(cierre.desde, zona)} – {finDelPeriodo(cierre.desde, cierre.hasta, zona)}
                   </p>
                   <p
                     className={cn(
@@ -372,9 +440,10 @@ function CierresAnteriores({
                     {cierre.diferencia === 0 ? "Cuadró" : `Diferencia ${conSigno(cierre.diferencia)}`}
                   </p>
                 </div>
-                <dl className="mt-2 grid grid-cols-2 gap-x-4 sm:grid-cols-4">
+                <dl className="mt-2 grid grid-cols-2 gap-x-4 sm:grid-cols-5">
                   <Renglon termino="Fondo" valor={formatearMonto(cierre.fondoInicial)} />
                   <Renglon termino="Efectivo" valor={formatearMonto(cierre.efectivoCobrado)} />
+                  <Renglon termino="Propinas en efectivo" valor={formatearMonto(cierre.propinasEfectivo)} />
                   <Renglon termino="Esperado" valor={formatearMonto(cierre.esperado)} />
                   <Renglon termino="Contado" valor={formatearMonto(cierre.contado)} />
                 </dl>

@@ -29,7 +29,9 @@ interface Props {
  * negativo). Sólo la dueña llega acá.
  *
  * Cerrar pide confirmación (QA#5): congela comisiones y saca lo incluido de
- * las próximas, y si el período todavía no termina, lo dice. Mientras se
+ * las próximas, y si el período todavía no termina, lo dice. Se cierra con el
+ * total que se confirmó: si entretanto se cobró o se anuló algo, el servidor
+ * responde 409 ("cambió mientras confirmabas") y la vista previa se recalcula. Mientras se
  * confirma, este componente sigue montado y guarda lo elegido (excluidos y
  * nota): cancelar vuelve a la vista previa tal como estaba.
  */
@@ -89,6 +91,8 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
     const resultado = await cerrarLiquidacion({
       miembroId: miembro.id,
       desde: vista.periodo.desde,
+      // El total que se vio al confirmar: si cambió entretanto, 409 y se recalcula.
+      totalEsperadoCents: vista.totales.totalCents,
       excluirMovimientos: excluidos,
       nota: nota.trim(),
     })
@@ -202,29 +206,48 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
           {vista.movimientos.length > 0 && (
             <fieldset className="space-y-2">
               <legend className="font-medium">Adelantos, vales y ajustes</legend>
-              <p className="text-sm text-texto-2">Lo que desmarques queda para la próxima liquidación.</p>
+              <p className="text-sm text-texto-2">
+                Los adelantos y vales que desmarques quedan para la próxima liquidación. Los ajustes entran siempre.
+              </p>
               <ul className="divide-y divide-borde/60 text-sm">
-                {vista.movimientos.map((movimiento) => (
-                  <li key={movimiento.id}>
-                    <label className="flex min-h-11 cursor-pointer items-center gap-3 py-2">
-                      <input
-                        type="checkbox"
-                        checked={movimiento.incluido}
-                        onChange={() => alternar(movimiento.id)}
-                        disabled={cerrando}
-                        className="size-5 accent-navy"
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="text-texto-2">{fechaParaLeer(movimiento.fecha)} · </span>
-                        {NOMBRES_DE_MOVIMIENTO[movimiento.tipo]}
-                        {movimiento.motivo && <span className="text-texto-2">: {movimiento.motivo}</span>}
-                      </span>
-                      <span className="tabular-nums">
-                        {pesos(movimiento.tipo === "ajuste" ? movimiento.montoCents : -movimiento.montoCents)}
-                      </span>
-                    </label>
-                  </li>
-                ))}
+                {vista.movimientos.map((movimiento) => {
+                  const detalle = (
+                    <span className="min-w-0 flex-1">
+                      <span className="text-texto-2">{fechaParaLeer(movimiento.fecha)} · </span>
+                      {NOMBRES_DE_MOVIMIENTO[movimiento.tipo]}
+                      {movimiento.motivo && <span className="text-texto-2">: {movimiento.motivo}</span>}
+                    </span>
+                  )
+                  const monto = (
+                    <span className="tabular-nums">
+                      {pesos(movimiento.tipo === "ajuste" ? movimiento.montoCents : -movimiento.montoCents)}
+                    </span>
+                  )
+                  // Un ajuste corrige algo ya cobrado (§3.7): no se deja para la siguiente.
+                  if (movimiento.tipo === "ajuste") {
+                    return (
+                      <li key={movimiento.id} className="flex min-h-11 items-center gap-3 py-2 pl-8">
+                        {detalle}
+                        {monto}
+                      </li>
+                    )
+                  }
+                  return (
+                    <li key={movimiento.id}>
+                      <label className="flex min-h-11 cursor-pointer items-center gap-3 py-2">
+                        <input
+                          type="checkbox"
+                          checked={movimiento.incluido}
+                          onChange={() => alternar(movimiento.id)}
+                          disabled={cerrando}
+                          className="size-5 accent-navy"
+                        />
+                        {detalle}
+                        {monto}
+                      </label>
+                    </li>
+                  )
+                })}
               </ul>
             </fieldset>
           )}

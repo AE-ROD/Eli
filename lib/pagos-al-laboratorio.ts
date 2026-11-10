@@ -3,6 +3,8 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { ErrorClinico } from "@/lib/ficha-clinica-servidor"
+import { leerNegocioParaLiquidar } from "@/lib/liquidacion"
+import { inicioDelPeriodoEn } from "@/lib/periodos-de-liquidacion"
 import { esMedioDePago, nombreDeMedio } from "@/lib/medios-de-pago"
 import {
   puedePagarAlLaboratorio,
@@ -25,6 +27,11 @@ import {
  * caja del día: no cuenta en el cierre de caja, igual que los adelantos
  * (docs/PRODUCTO.md §7). Es plata que la dueña paga por fuera.
  *
+ * "Liquidar desde" (§3.7, decisión del 2026-11-10): lo cobrado antes de esa
+ * fecha nunca entra a una liquidación, y su parte del técnico tampoco queda
+ * por pagar al laboratorio (se pagó por fuera de Eli, como el resto). Sin la
+ * fecha fijada todavía, no hay corte.
+ *
  * Candados: pagar y anular traban la fila del laboratorio (`FOR UPDATE`), así
  * dos pagos al mismo laboratorio, o un pago y su anulación, van uno detrás
  * del otro. Pagar además traba las atenciones de las líneas: una anulación de
@@ -44,24 +51,42 @@ export const MENSAJE_LINEA_NO_ESTA_POR_PAGAR =
 export const MENSAJE_PAGO_ANULADO = "Este pago ya está anulado."
 export const MENSAJE_PASA_DEL_TOPE = "El pago pasa del máximo que se puede registrar de una vez: divídelo en dos."
 export const MENSAJE_CAMBIO_A_MITAD = "Lo por pagar cambió mientras tanto: vuelve a cargar."
+export const MENSAJE_MONTO_CAMBIO =
+  "Lo por pagar a este laboratorio cambió mientras confirmabas (se entregó, se cobró o se anuló algo): revisa el monto nuevo y vuelve a marcarlo."
 
 const TOPE_DE_CENTAVOS = 2_000_000_000
-const MAXIMO_DE_LINEAS_POR_PAGO = 1000
+/** Cuántas líneas entran en un pago. La pantalla paga de a este tope (`app/dashboard/comisiones/_datos.ts`). */
+export const MAXIMO_DE_LINEAS_POR_PAGO = 1000
 const PAGOS_A_MOSTRAR = 200
 
 // ─── Esquemas ────────────────────────────────────────────────────────────────
 
-/** "Marcar pagado": el laboratorio, el medio, y las líneas que se pagan o "todo lo pendiente" de ese laboratorio. */
+/**
+ * "Marcar pagado": el laboratorio, el medio, y las líneas que se vieron (la
+ * pantalla manda siempre la lista explícita) o "todo lo pendiente" de ese
+ * laboratorio. `todo` exige `montoEsperadoCents`, el total que se vio: si al
+ * pagar ya es otro, 409. Con `lineas`, el monto es opcional (las líneas ya
+ * dicen cuánto: su parte del técnico está congelada), y si viene se compara.
+ */
 export const pagoAlLaboratorioSchema = z
   .object({
     laboratorioId: z.string().min(1).max(100),
     medio: z.string().refine(esMedioDePago, "Ese medio de pago no existe."),
-    lineas: z.array(z.string().min(1).max(100)).min(1).max(MAXIMO_DE_LINEAS_POR_PAGO).optional(),
+    lineas: z
+      .array(z.string().min(1).max(100))
+      .min(1)
+      .max(MAXIMO_DE_LINEAS_POR_PAGO, `Hasta ${MAXIMO_DE_LINEAS_POR_PAGO} abonos por pago: divídelo en dos.`)
+      .optional(),
     todo: z.literal(true).optional(),
+    montoEsperadoCents: z.number().int().min(1).max(TOPE_DE_CENTAVOS).optional(),
   })
   .refine((pedido) => (pedido.lineas === undefined) !== (pedido.todo === undefined), {
     message: "Indica las líneas que se pagan o todo lo pendiente, una de las dos.",
     path: ["lineas"],
+  })
+  .refine((pedido) => pedido.todo === undefined || pedido.montoEsperadoCents !== undefined, {
+    message: "Para pagar todo lo pendiente, indica el monto que viste.",
+    path: ["montoEsperadoCents"],
   })
 
 export type PagoAlLaboratorioPedido = z.infer<typeof pagoAlLaboratorioSchema>
@@ -110,17 +135,28 @@ export interface PagoAlLaboratorioRespuesta {
 // ─── Lo por pagar ────────────────────────────────────────────────────────────
 
 /**
- * Lo que se le debe a un laboratorio: abonos de atenciones cobradas (no
- * anuladas), con la parte del técnico congelada y mayor que cero, de
- * prótesis entregadas del negocio con laboratorio, y sin pago todavía.
+ * Desde cuándo cuenta lo cobrado para el laboratorio: el inicio de "Liquidar
+ * desde" en la zona del negocio, como en la liquidación; `null` si la dueña
+ * todavía no lo fijó (no hay corte).
  */
-function porPagar(actor: Actor, extra: Prisma.VisitServiceWhereInput = {}) {
+async function corteDeLiquidarDesde(db: Tx, businessId: string): Promise<Date | null> {
+  const { zona, liquidarDesde } = await leerNegocioParaLiquidar(db, businessId)
+  return liquidarDesde ? inicioDelPeriodoEn(liquidarDesde, zona) : null
+}
+
+/**
+ * Lo que se le debe a un laboratorio: abonos de atenciones cobradas (no
+ * anuladas) desde "Liquidar desde" (`corte`), con la parte del técnico
+ * congelada y mayor que cero, de prótesis entregadas del negocio con
+ * laboratorio, y sin pago todavía.
+ */
+function porPagar(actor: Actor, corte: Date | null, extra: Prisma.VisitServiceWhereInput = {}) {
   return whereDeAbonosPorPagarAlLaboratorio(actor, {
     AND: [
       {
         pagoAlLaboratorioId: null,
         tecnicoCents: { gt: 0 },
-        visit: { is: { businessId: actor.businessId, status: "finalizada" } },
+        visit: { is: { businessId: actor.businessId, status: "finalizada", ...(corte ? { paidAt: { gte: corte } } : {}) } },
         protesis: { is: { businessId: actor.businessId, entregadaEn: { not: null }, laboratorioId: { not: null } } },
       },
       extra,
@@ -160,7 +196,8 @@ const sumarTecnico = (lineas: readonly { tecnicoCents: number | null }[]) => lin
 /** Lo que se le debe a cada laboratorio, por nombre, con sus líneas de la entrega más vieja a la más nueva. */
 export async function leerPorPagar(actor: Actor): Promise<PorPagarRespuesta> {
   if (!puedePagarAlLaboratorio(actor)) throw new ErrorClinico(401, "No autorizado")
-  const lineas = await prisma.visitService.findMany({ where: porPagar(actor), select: SELECCION_POR_PAGAR, orderBy: { id: "asc" } })
+  const corte = await corteDeLiquidarDesde(prisma, actor.businessId)
+  const lineas = await prisma.visitService.findMany({ where: porPagar(actor, corte), select: SELECCION_POR_PAGAR, orderBy: { id: "asc" } })
   const ids = [...new Set(lineas.flatMap((l) => (l.protesis?.laboratorioId ? [l.protesis.laboratorioId] : [])))]
   const laboratorios =
     ids.length === 0
@@ -240,9 +277,10 @@ async function trabarAtenciones(tx: Tx, businessId: string, ids: string[]): Prom
  * "Marcar pagado": paga al laboratorio las líneas pedidas, o todo lo que se le
  * debe. Cada línea pedida tiene que estar por pagar a ESE laboratorio: una de
  * otra clínica o que no existe, 404; una de otro laboratorio, ya pagada, de
- * una prótesis sin entregar o de una atención anulada, 409. Sin nada por
- * pagar, 409. El monto es la suma de la parte del técnico de las líneas (lo
- * calcula el servidor). Responde el pago creado.
+ * una prótesis sin entregar, de una atención anulada o cobrada antes de
+ * "Liquidar desde", 409. Sin nada por pagar, 409. El monto es la suma de la
+ * parte del técnico de las líneas (lo calcula el servidor); si no es el que
+ * se vio (`montoEsperadoCents`), 409. Responde el pago creado.
  */
 export async function pagarAlLaboratorio(
   actor: Actor,
@@ -259,9 +297,10 @@ export async function pagarAlLaboratorio(
     if (!laboratorio) throw new ErrorClinico(404, MENSAJE_LABORATORIO_NO_ENCONTRADO)
 
     const delLaboratorio = { protesis: { is: { businessId: actor.businessId, laboratorioId: laboratorio.id } } }
+    const corte = await corteDeLiquidarDesde(tx, actor.businessId)
     const pedidas = pedido.lineas ? [...new Set(pedido.lineas)] : null
     const candidatas = await tx.visitService.findMany({
-      where: porPagar(actor, { AND: [delLaboratorio, pedidas ? { id: { in: pedidas } } : {}] }),
+      where: porPagar(actor, corte, { AND: [delLaboratorio, pedidas ? { id: { in: pedidas } } : {}] }),
       select: { id: true, visitId: true, tecnicoCents: true },
       orderBy: { id: "asc" },
     })
@@ -277,10 +316,14 @@ export async function pagarAlLaboratorio(
     } else if (candidatas.length === 0) {
       throw new ErrorClinico(409, MENSAJE_NADA_POR_PAGAR)
     }
-    if (candidatas.length > MAXIMO_DE_LINEAS_POR_PAGO) throw new ErrorClinico(400, MENSAJE_PASA_DEL_TOPE)
-
     const montoCents = sumarTecnico(candidatas)
     if (montoCents <= 0) throw new ErrorClinico(409, MENSAJE_NADA_POR_PAGAR)
+    // Lo que se vio al confirmar: con `todo`, lo pendiente pudo crecer o
+    // achicarse entretanto; no se paga a ciegas.
+    if (pedido.montoEsperadoCents !== undefined && montoCents !== pedido.montoEsperadoCents) {
+      throw new ErrorClinico(409, MENSAJE_MONTO_CAMBIO)
+    }
+    if (candidatas.length > MAXIMO_DE_LINEAS_POR_PAGO) throw new ErrorClinico(400, MENSAJE_PASA_DEL_TOPE)
     if (montoCents > TOPE_DE_CENTAVOS) throw new ErrorClinico(400, MENSAJE_PASA_DEL_TOPE)
 
     // Las atenciones, trabadas: si entretanto alguna se anuló, el
@@ -302,7 +345,7 @@ export async function pagarAlLaboratorio(
     })
     const ids = candidatas.map((l) => l.id)
     const { count } = await tx.visitService.updateMany({
-      where: porPagar(actor, { AND: [delLaboratorio, { id: { in: ids } }] }),
+      where: porPagar(actor, corte, { AND: [delLaboratorio, { id: { in: ids } }] }),
       data: { pagoAlLaboratorioId: pago.id },
     })
     if (count !== ids.length) throw new ErrorClinico(409, MENSAJE_CAMBIO_A_MITAD)

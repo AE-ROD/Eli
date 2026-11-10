@@ -19,7 +19,9 @@ import { MEDIOS_DE_PAGO } from "@/lib/medios-de-pago"
 import { fechaDelNegocio, fechaParaLeer } from "@/lib/periodos-de-liquidacion"
 import { cn } from "@/lib/utils"
 import {
+  MAXIMO_DE_ABONOS_POR_PAGO,
   anularPagoAlLaboratorio,
+  lineasDeUnPago,
   leerPagosAlLaboratorio,
   leerPorPagarAlLaboratorio,
   pagarAlLaboratorio,
@@ -51,12 +53,17 @@ async function leerTodo(): Promise<{ ok: true; datos: Datos } | { ok: false; err
   return { ok: true, datos: { porPagar: porPagar.datos, pagos: pagos.datos } }
 }
 
-/** Lo que se va a marcar pagado: todo lo del laboratorio o las líneas elegidas, con su monto (el que se ve). */
+/**
+ * Lo que se va a marcar pagado: las líneas que se ven (todas las del
+ * laboratorio, o las elegidas), por id y con su monto. Con más del tope, las
+ * primeras; `quedan` dice cuántas quedan para otro pago.
+ */
 interface Pagando {
   laboratorio: LaboratorioPorPagar["laboratorio"]
-  lineas: string[] | "todo"
-  cantidad: number
+  todo: boolean
+  lineas: string[]
   montoCents: number
+  quedan: number
 }
 
 /**
@@ -123,12 +130,16 @@ export function PorPagarAlLaboratorioConfig({ zona }: { zona: string }) {
     setAnuncio("")
     setAvisoDelModal("")
     const ids = elegidas[deUno.laboratorio.id] ?? []
-    const lineas = soloElegidas ? deUno.lineas.filter((linea) => ids.includes(linea.id)) : deUno.lineas
+    const vistas = soloElegidas ? deUno.lineas.filter((linea) => ids.includes(linea.id)) : deUno.lineas
+    // Siempre la lista explícita de lo que se ve: el servidor no paga "todo"
+    // a ciegas. Más que el tope por pago, se paga de a partes.
+    const { lineas, quedan } = lineasDeUnPago(vistas)
     setPagando({
       laboratorio: deUno.laboratorio,
-      lineas: soloElegidas ? lineas.map((linea) => linea.id) : "todo",
-      cantidad: lineas.length,
+      todo: !soloElegidas,
+      lineas: lineas.map((linea) => linea.id),
       montoCents: lineas.reduce((suma, linea) => suma + linea.tecnicoCents, 0),
+      quedan,
     })
   }
 
@@ -137,7 +148,12 @@ export function PorPagarAlLaboratorioConfig({ zona }: { zona: string }) {
     enviado.current = true
     setTrabajando(true)
     setAvisoDelModal("")
-    const resultado = await pagarAlLaboratorio({ laboratorioId: pagando.laboratorio.id, medio, lineas: pagando.lineas })
+    const resultado = await pagarAlLaboratorio({
+      laboratorioId: pagando.laboratorio.id,
+      medio,
+      lineas: pagando.lineas,
+      montoEsperadoCents: pagando.montoCents,
+    })
     if (!resultado.ok) {
       enviado.current = false
       setTrabajando(false)
@@ -146,7 +162,12 @@ export function PorPagarAlLaboratorioConfig({ zona }: { zona: string }) {
       void recargar()
       return
     }
-    setElegidas((previas) => ({ ...previas, [pagando.laboratorio.id]: [] }))
+    // Lo pagado se suelta de lo elegido; lo que quedó (pasado el tope) sigue elegido.
+    const pagadas = new Set(pagando.lineas)
+    setElegidas((previas) => ({
+      ...previas,
+      [pagando.laboratorio.id]: (previas[pagando.laboratorio.id] ?? []).filter((id) => !pagadas.has(id)),
+    }))
     setAnuncio(
       `Se marcó pagado ${pesos(resultado.datos.montoCents)} a ${resultado.datos.laboratorio.nombre} (${resultado.datos.nombreMedio.toLowerCase()}).`
     )
@@ -221,7 +242,19 @@ export function PorPagarAlLaboratorioConfig({ zona }: { zona: string }) {
 
   return (
     <div className="space-y-6">
-      {error && <Aviso>{error}</Aviso>}
+      {/* No se pudo volver a leer: lo de abajo es lo de antes y puede no estar al día. */}
+      {error && (
+        <Aviso
+          accion={
+            <Boton variante="secundario" tamano="sm" onClick={() => void recargar()}>
+              <RefreshCw aria-hidden="true" className="size-4" strokeWidth={2} />
+              Reintentar
+            </Boton>
+          }
+        >
+          {error.replace(/\.$/, "")}. Lo que ves abajo puede no estar al día: no marques nada pagado hasta volver a cargar.
+        </Aviso>
+      )}
       <div ref={regionDelAnuncio} tabIndex={-1} aria-live="polite" className="rounded-campo anillo-foco">
         {anuncio && (
           <Aviso tono="listo" rol="status">
@@ -443,15 +476,19 @@ function ModalDePago({ pagando, trabajando, aviso, onPagar, onCerrar }: PropsDeM
     onPagar(medio)
   }
 
-  const cuantos = pagando.cantidad === 1 ? "1 abono" : `${pagando.cantidad} abonos`
+  const cuantos = pagando.lineas.length === 1 ? "1 abono" : `${pagando.lineas.length} abonos`
+  const queQueda =
+    pagando.quedan > 0
+      ? ` Se pagan de a ${MAXIMO_DE_ABONOS_POR_PAGO} abonos por vez: ${pagando.quedan === 1 ? "queda 1" : `quedan ${pagando.quedan}`} para un segundo pago.`
+      : ""
   return (
     <MarcoDeModal
       antetitulo="Por pagar al laboratorio"
       titulo={`Marcar pagado a ${pagando.laboratorio.nombre}`}
       descripcion={
-        pagando.lineas === "todo"
+        pagando.todo && pagando.quedan === 0
           ? `Todo lo pendiente: ${pesos(pagando.montoCents)} de ${cuantos}.`
-          : `Lo elegido: ${pesos(pagando.montoCents)} de ${cuantos}.`
+          : `${pagando.todo ? "Lo pendiente más antiguo" : "Lo elegido"}: ${pesos(pagando.montoCents)} de ${cuantos}.${queQueda}`
       }
       bloqueado={trabajando}
       alCerrar={onCerrar}
