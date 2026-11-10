@@ -20,8 +20,8 @@ function Campo({ titulo, ancho, icono }: { titulo: string; ancho: string; icono:
   return (
     <div className="mb-[11px]">
       <p className="mb-[5px] text-[11px] font-semibold text-texto-2">{titulo}</p>
-      <div className="flex h-[34px] items-center justify-between rounded-[11px] border border-borde bg-crema px-2.5 text-texto-2">
-        <span className={cn("h-[7px] rounded-full bg-borde", ancho)} />
+      <div className="flex h-[34px] items-center justify-between rounded-[11px] border border-borde bg-[#FEFBF6] px-2.5 text-texto-2">
+        <span className={cn("h-[7px] rounded-full bg-[#E2D5BF]", ancho)} />
         {icono}
       </div>
     </div>
@@ -39,7 +39,7 @@ export function MaquetaMomentoReserva() {
   )
 }
 
-/** "Llegó" pasa la reserva a En espera. El botón late en pistacho. */
+/** "Llegó" pasa la reserva a En espera. El botón late en arena. */
 export function MaquetaMomentoLlegada() {
   return (
     <Tarjeta>
@@ -60,7 +60,7 @@ export function MaquetaMomentoLlegada() {
         </span>
       </div>
       <div className="my-[9px] mb-[7px] flex justify-center">
-        <CuadroDeTono tono="pistacho" className="size-6 rounded-full">
+        <CuadroDeTono tono="pistacho" className="size-6 rounded-full text-ciruela">
           <ArrowDown className="size-3.5" strokeWidth={1.75} />
         </CuadroDeTono>
       </div>
@@ -95,7 +95,7 @@ export function MaquetaMomentoAtencion() {
         <p className="text-[13px] font-semibold">Corte · Carla</p>
       </div>
       <div className="mt-3 flex justify-center">
-        <Chip tono="pistacho" className="px-3 py-1.5">
+        <Chip tono="pistacho" className="px-3 py-1.5 text-ciruela">
           <CreditCard className="size-[13px]" strokeWidth={1.75} />
           Por cobrar
         </Chip>
@@ -109,7 +109,7 @@ export function MaquetaMomentoCobro() {
   return (
     <Tarjeta>
       <div className="flex items-center gap-2.5 py-[7px]">
-        <CuadroDeTono tono="pistacho">
+        <CuadroDeTono tono="pistacho" className="text-ciruela">
           <Banknote className="size-[15px]" strokeWidth={1.75} />
         </CuadroDeTono>
         <span className="flex-1 text-[13px] font-semibold">Efectivo</span>

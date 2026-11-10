@@ -3,9 +3,8 @@
 import type { CSSProperties } from "react"
 import { Link2 } from "lucide-react"
 import { MaquetaQuienCobra, MaquetaReservasDeHoy } from "@/components/landing/maquetas/maqueta-dia-a-la-vista"
-import { CuadroDeTono } from "@/components/landing/maquetas/maqueta-piezas"
+import { CuadroDeTono, TINTES_DE_PASO } from "@/components/landing/maquetas/maqueta-piezas"
 import { EncabezadoDeLanding, SeccionDeLanding } from "@/components/landing/seccion-de-landing"
-import { CLASES_DE_TONO, tonoEn } from "@/components/landing/tonos-de-la-landing"
 import { TRAZOS_DEL_TABLERO } from "@/components/landing/trazos-de-la-landing"
 import { BotonDePausa } from "@/components/movimiento/boton-de-pausa"
 import { TrazosOndulantes } from "@/components/movimiento/trazos-ondulantes"
@@ -32,7 +31,7 @@ const PUNTOS = [
 ] as const
 
 /**
- * El tablero del día: una caja pistacho con dos maquetas ("Reservas de hoy",
+ * El tablero del día: una caja arena con dos maquetas ("Reservas de hoy",
  * con las reservas que entran solas, y "Quién puede cobrar", que flota) y, al
  * lado, la lista de cuatro puntos. En el teléfono, el titular, la caja y la
  * lista, en ese orden.
@@ -45,7 +44,11 @@ export function SeccionTablero() {
   const { ref, pausado, setPausado, quieto } = useBloqueEnMovimiento<HTMLDivElement>()
 
   return (
-    <SeccionDeLanding id="tablero" etiquetadaPor="tablero-titulo" tono="frambuesa">
+    <SeccionDeLanding
+      id="tablero"
+      etiquetadaPor="tablero-titulo"
+      className="bg-linear-to-b from-[#EBDEC8] to-[#E7D8C0]"
+    >
       <div
         ref={ref}
         className={cn(
@@ -105,7 +108,7 @@ export function SeccionTablero() {
         <div className="flex flex-col [grid-area:lista]">
           <ol className="flex flex-col gap-[22px]">
             {PUNTOS.map((punto, indice) => {
-              const tono = CLASES_DE_TONO[tonoEn(indice)]
+              const tinte = TINTES_DE_PASO[indice]
               return (
                 <li key={punto.titulo} className="relative pl-16">
                   {indice < PUNTOS.length - 1 && (
@@ -114,9 +117,10 @@ export function SeccionTablero() {
                   <span
                     aria-hidden="true"
                     className={cn(
-                      "absolute left-0 top-0.5 grid size-10 place-items-center rounded-full text-[15px] font-semibold",
-                      tono.suave,
-                      tono.texto
+                      "absolute left-0 top-0.5 grid size-10 place-items-center rounded-full text-[15px] font-semibold ring-5",
+                      tinte.suave,
+                      tinte.texto,
+                      tinte.anillo
                     )}
                   >
                     {indice + 1}

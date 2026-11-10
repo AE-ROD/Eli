@@ -21,7 +21,7 @@ const COLOR_DEL_PIE: Record<PieDeTarjeta["tono"], string> = {
   reserva: "font-semibold text-ciruela",
   "sin-reserva": "font-semibold text-frambuesa-texto",
   monto: "font-bold text-navy",
-  cobrado: "font-semibold text-pistacho-texto",
+  cobrado: "font-semibold text-ciruela",
 }
 
 interface TarjetaDelTablero {
@@ -75,7 +75,7 @@ const COLUMNAS: readonly Columna[] = [
   {
     id: "finalizado",
     titulo: "Finalizado",
-    contador: "bg-pistacho-texto",
+    contador: "bg-ciruela",
     soloAncha: true,
     tarjetas: [
       { nombre: "Josefa C.", servicios: ["Corte · Carla"], pie: { texto: "Cobrado", tono: "cobrado" } },

@@ -7,8 +7,8 @@ import {
   MaquetaPorProfesional,
   MaquetaTurno,
 } from "@/components/landing/maquetas/maqueta-lo-cobrado"
+import { TINTES_DE_PASO } from "@/components/landing/maquetas/maqueta-piezas"
 import { EncabezadoDeLanding, SeccionDeLanding } from "@/components/landing/seccion-de-landing"
-import { CLASES_DE_TONO, tonoEn } from "@/components/landing/tonos-de-la-landing"
 import { TRAZOS_DE_REPORTES } from "@/components/landing/trazos-de-la-landing"
 import { BotonDePausa } from "@/components/movimiento/boton-de-pausa"
 import { TrazosOndulantes } from "@/components/movimiento/trazos-ondulantes"
@@ -26,7 +26,7 @@ interface Reporte {
 
 /**
  * En dos filas, como el diseño: ancha y angosta arriba, angosta y ancha
- * abajo. Cada tarjeta, de su tinte (ciruela, frambuesa, pistacho y añil).
+ * abajo. Cada tarjeta, de su tinte (burdeos, rojo, arena y tierra).
  * Dicen sólo lo que Reportes hace: el período, el turno como filtro, los
  * desgloses por profesional, servicio y medio de pago, y las anuladas.
  */
@@ -83,7 +83,11 @@ export function SeccionReportes() {
   const { ref, pausado, setPausado, quieto } = useBloqueEnMovimiento<HTMLDivElement>()
 
   return (
-    <SeccionDeLanding id="reportes" etiquetadaPor="reportes-titulo" tono="ciruela">
+    <SeccionDeLanding
+      id="reportes"
+      etiquetadaPor="reportes-titulo"
+      className="bg-linear-to-b from-[#E7D8C0] via-[#E7D8BF] via-4% to-[#E0CDB0]"
+    >
       <div ref={ref} className={cn("relative", quieto && "animaciones-en-pausa")}>
         <svg
           aria-hidden="true"
@@ -131,13 +135,13 @@ export function SeccionReportes() {
 }
 
 function TarjetaDeReporte({ reporte, indice, className }: { reporte: Reporte; indice: number; className?: string }) {
-  const tono = CLASES_DE_TONO[tonoEn(indice)]
+  const tinte = TINTES_DE_PASO[indice]
   const flotar = FLOTAR[indice]
   return (
     <li
       className={cn(
         "flex flex-col gap-6 overflow-hidden rounded-[34px] p-6 squircle md:p-10 lg:min-h-[410px] lg:p-7 xl:p-10",
-        tono.suave,
+        tinte.suave,
         // Texto al lado de la maqueta sólo donde la tarjeta ancha tiene lugar:
         // sola en su fila (md) o en la grilla desde xl.
         reporte.ancha && "md:flex-row md:items-center md:gap-9 lg:flex-col lg:items-stretch lg:gap-6 xl:flex-row xl:items-center xl:gap-9",

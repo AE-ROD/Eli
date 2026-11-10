@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils"
 const PROFESIONALES: readonly { nombre: string; iniciales: string; monto: number; tono: TonoDeLanding; barra: string }[] = [
   { nombre: "Lucía Pérez", iniciales: "LP", monto: 168000, tono: "ciruela", barra: "bg-ciruela" },
   { nombre: "Carla", iniciales: "C", monto: 142000, tono: "frambuesa", barra: "bg-frambuesa" },
-  { nombre: "Ana", iniciales: "A", monto: 102000, tono: "pistacho", barra: "bg-pistacho-oscuro" },
+  { nombre: "Ana", iniciales: "A", monto: 102000, tono: "pistacho", barra: "bg-ciruela" },
 ]
 
 /** Lo que entró por cada medio, con los nombres del catálogo (`lib/medios-de-pago.ts`). */
@@ -145,7 +145,7 @@ export function MaquetaPorProfesional({ className }: { className?: string }) {
       <div className="mt-2 flex flex-col gap-[9px]">
         {PROFESIONALES.map(({ nombre, iniciales, monto, tono, barra }, orden) => (
           <div key={nombre} className="flex items-center gap-2.5">
-            <Avatar tono={tono} tamano="sm">
+            <Avatar tono={tono} tamano="sm" className={tono === "pistacho" ? "text-ciruela" : undefined}>
               {iniciales}
             </Avatar>
             <div className="min-w-0 flex-1">
@@ -217,7 +217,7 @@ export function MaquetaAnuladas({ className }: { className?: string }) {
           </div>
         ))}
       </div>
-      <p className="mt-1.5 flex items-center gap-[7px] text-xs font-semibold text-pistacho-texto">
+      <p className="mt-1.5 flex items-center gap-[7px] text-xs font-semibold text-ciruela">
         <Check className="size-3.5 shrink-0" strokeWidth={1.75} />
         Lo cobrado no se reescribe: el registro queda.
       </p>

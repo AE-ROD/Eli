@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react"
 import { Shield, SquareKanban, User, Users, type LucideIcon } from "lucide-react"
-import { Chip, CuadroDeTono, MarcoDeMaqueta } from "@/components/landing/maquetas/maqueta-piezas"
+import { Chip, CuadroDeTono, MarcoDeMaqueta, SUAVE_DEL_COBRO } from "@/components/landing/maquetas/maqueta-piezas"
 import type { TonoDeLanding } from "@/components/landing/tonos-de-la-landing"
 import { cn } from "@/lib/utils"
 
@@ -74,7 +74,7 @@ export function MaquetaQuienCobra({ className }: { className?: string }) {
       <p className="mb-1 text-[13px] font-semibold text-texto-2">Quién puede cobrar</p>
       {QUIEN_COBRA.map(({ rol, icono: Icono, tono, cobra }, orden) => (
         <div key={rol} className={cn("flex items-center gap-3 py-[11px]", orden > 0 && "border-t border-borde-suave")}>
-          <CuadroDeTono tono={tono} className="size-8 rounded-[11px]">
+          <CuadroDeTono tono={tono} className={cn("size-8 rounded-[11px]", tono === "anil" && SUAVE_DEL_COBRO)}>
             <Icono className="size-4" strokeWidth={1.75} />
           </CuadroDeTono>
           <span className="flex-1 text-[15px] font-semibold">{rol}</span>

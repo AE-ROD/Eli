@@ -15,10 +15,10 @@ import {
 import { Boton } from "@/components/comunes/boton"
 import { MaquetaCliente } from "@/components/landing/maquetas/maqueta-cliente"
 import { MaquetaCobro } from "@/components/landing/maquetas/maqueta-cobro"
+import { TINTES_DE_PASO } from "@/components/landing/maquetas/maqueta-piezas"
 import { MaquetaReserva } from "@/components/landing/maquetas/maqueta-reserva"
 import { MaquetaTablero } from "@/components/landing/maquetas/maqueta-tablero"
 import { EncabezadoDeLanding, SeccionDeLanding } from "@/components/landing/seccion-de-landing"
-import { CLASES_DE_TONO, type TonoDeLanding } from "@/components/landing/tonos-de-la-landing"
 import { TRAZOS_DEL_RECORRIDO } from "@/components/landing/trazos-de-la-landing"
 import { BotonDePausa } from "@/components/movimiento/boton-de-pausa"
 import { TrazosOndulantes } from "@/components/movimiento/trazos-ondulantes"
@@ -37,10 +37,18 @@ interface EtiquetaFlotante {
   lugar: string
 }
 
+/** Los colores de un paso: ver `TINTES_DE_PASO`. */
+interface Tinte {
+  suave: string
+  texto: string
+  relleno: string
+  anillo: string
+}
+
 interface Paso {
   id: string
   modulo: ModuloId
-  tono: TonoDeLanding
+  tinte: Tinte
   titulo: string
   texto: string
   puntos: readonly string[]
@@ -55,7 +63,7 @@ const PASOS: readonly Paso[] = [
   {
     id: "agenda",
     modulo: "agenda",
-    tono: "ciruela",
+    tinte: TINTES_DE_PASO[0],
     titulo: "Reservan solas",
     texto:
       "Cada negocio tiene su página de reservas. La clienta elige el servicio, el día y la hora, y deja sus datos.",
@@ -69,7 +77,7 @@ const PASOS: readonly Paso[] = [
   {
     id: "clientes",
     modulo: "clientes",
-    tono: "frambuesa",
+    tinte: TINTES_DE_PASO[1],
     titulo: "Cada clienta, con su historia",
     texto: "Cada clienta tiene su ficha con sus datos, tus notas y el historial de sus visitas.",
     puntos: ["Datos de contacto", "Notas que quedan guardadas", "Visitas con servicio, profesional y precio"],
@@ -82,7 +90,7 @@ const PASOS: readonly Paso[] = [
   {
     id: "tablero",
     modulo: "tablero",
-    tono: "pistacho",
+    tinte: TINTES_DE_PASO[2],
     titulo: "El día, en columnas",
     texto:
       "Las reservas de hoy entran solas y quien llega sin reserva se anota en el momento. Cada visita avanza hasta que se cobra.",
@@ -96,7 +104,8 @@ const PASOS: readonly Paso[] = [
   {
     id: "reportes",
     modulo: "reportes",
-    tono: "anil",
+    // En el cuarto paso, el acento (barra, número, tildes) es el texto de la landing, no el burdeos.
+    tinte: { ...TINTES_DE_PASO[3], texto: "text-navy", relleno: "bg-navy" },
     titulo: "Lo cobrado, cuadrado",
     texto:
       "El pago se divide entre los medios que haga falta y cuadra al centavo. Al cerrar sabes cuánto entró, cómo y quién lo generó.",
@@ -172,7 +181,11 @@ export function SeccionRecorrido() {
   }
 
   return (
-    <SeccionDeLanding id="recorrido" etiquetadaPor="recorrido-titulo" tono="frambuesa">
+    <SeccionDeLanding
+      id="recorrido"
+      etiquetadaPor="recorrido-titulo"
+      className="bg-linear-to-b from-[#F5EBDC] to-[#F0E5D2]"
+    >
       <div
         ref={ref}
         onPointerEnter={() => setConCursor(true)}
@@ -204,7 +217,7 @@ export function SeccionRecorrido() {
         <Escenario
           paso={paso}
           numero={`0${paso + 1}`}
-          tono={actual.tono}
+          tinte={actual.tinte}
           quieto={quieto}
           pausa={
             avanzaSolo && (
@@ -223,7 +236,7 @@ export function SeccionRecorrido() {
             {PASOS.map((opcion, indice) => {
               const abierto = indice === paso
               const hecho = indice < paso
-              const tono = CLASES_DE_TONO[opcion.tono]
+              const tinte = opcion.tinte
               const idDelBoton = `${base}-boton-${opcion.id}`
               const idDelPanel = `${base}-panel-${opcion.id}`
               const modulo = moduloPorId(opcion.modulo).nombre
@@ -234,20 +247,21 @@ export function SeccionRecorrido() {
                       aria-hidden="true"
                       className={cn(
                         "absolute -bottom-3 left-[19px] top-12 w-0.5 rounded-full transition-colors duration-600 ease-suave",
-                        hecho ? tono.relleno : "bg-borde"
+                        hecho ? tinte.relleno : "bg-borde"
                       )}
                     />
                   )}
                   <span
                     aria-hidden="true"
                     className={cn(
-                      "absolute left-0 top-0.5 grid size-10 place-items-center rounded-full text-[15px] font-semibold transition-[background-color,color,box-shadow] duration-500 ease-suave",
-                      abierto
-                        ? cn(tono.relleno, tono.anillo, "text-white ring-6")
-                        : hecho
-                          ? cn(tono.suave, tono.texto)
-                          : "border-[1.5px] border-[#d8d3c8] bg-tarjeta text-texto-2"
+                      "absolute grid place-items-center rounded-full border-[1.5px] border-ciruela font-semibold transition-[width,height,left,top,font-size,background-color,color,box-shadow] duration-[550ms] ease-suave",
+                      // El número abierto crece un poco con cada paso (40, 44, 48 y 52 px), como en el diseño.
+                      abierto || hecho
+                        ? "bg-ciruela text-white"
+                        : "bg-tarjeta text-ciruela",
+                      abierto && "ring-6 ring-ciruela/14"
                     )}
+                    style={medidaDelNumero(indice, abierto)}
                   >
                     {indice + 1}
                   </span>
@@ -267,7 +281,7 @@ export function SeccionRecorrido() {
                         aria-hidden="true"
                         className={cn(
                           "block text-xs font-bold uppercase leading-tight tracking-[0.08em] transition-colors duration-300",
-                          abierto ? tono.texto : "text-texto-2"
+                          abierto ? tinte.texto : "text-texto-2"
                         )}
                       >
                         0{indice + 1} · {modulo}
@@ -300,7 +314,7 @@ export function SeccionRecorrido() {
                           <li key={punto} className="flex items-start gap-2.5 text-sm leading-[1.4]">
                             <span
                               aria-hidden="true"
-                              className={cn("mt-0.5 grid size-5 shrink-0 place-items-center rounded-full", tono.suave, tono.texto)}
+                              className={cn("mt-0.5 grid size-5 shrink-0 place-items-center rounded-full", tinte.suave, tinte.texto)}
                             >
                               <Check className="size-3.5" strokeWidth={1.75} />
                             </span>
@@ -315,13 +329,13 @@ export function SeccionRecorrido() {
                             onAnimationEnd={alTerminarLaBarra}
                             className={cn(
                               "block h-full origin-left animate-progreso",
-                              tono.relleno,
+                              tinte.relleno,
                               frenado && "[animation-play-state:paused]"
                             )}
                             style={{ "--duracion": DURACION_DEL_PASO } as CSSProperties}
                           />
                         )}
-                        {abierto && !avanzaSolo && <span className={cn("block h-full", tono.relleno)} />}
+                        {abierto && !avanzaSolo && <span className={cn("block h-full", tinte.relleno)} />}
                       </div>
                     </div>
                   </div>
@@ -350,10 +364,23 @@ export function SeccionRecorrido() {
   )
 }
 
+/** El número del paso: 40px, y el abierto crece de a 4px con cada paso, sin mover el centro. */
+function medidaDelNumero(indice: number, abierto: boolean): CSSProperties {
+  const lado = abierto ? 40 + indice * 4 : 40
+  const corrimiento = (lado - 40) / 2
+  return {
+    width: lado,
+    height: lado,
+    left: -corrimiento,
+    top: 2 - corrimiento,
+    fontSize: abierto ? 15 + indice : 15,
+  }
+}
+
 interface PropsDeEscenario {
   paso: number
   numero: string
-  tono: TonoDeLanding
+  tinte: Tinte
   quieto: boolean
   pausa: ReactNode
 }
@@ -365,13 +392,12 @@ interface PropsDeEscenario {
  * que la más alta y no salta al cambiar de paso); la que no es del paso se
  * va hacia arriba o hacia abajo y se apaga.
  */
-function Escenario({ paso, numero, tono, quieto, pausa }: PropsDeEscenario) {
-  const clases = CLASES_DE_TONO[tono]
+function Escenario({ paso, numero, tinte, quieto, pausa }: PropsDeEscenario) {
   return (
     <div
       className={cn(
         "relative grid min-h-[520px] overflow-hidden rounded-bloque border border-borde-suave transition-colors duration-900 ease-suave squircle [grid-area:escenario] lg:min-h-[640px] xl:min-h-[716px]",
-        clases.suave
+        tinte.suave
       )}
     >
       {/* Primero en el documento; se ve abajo a la derecha (absoluta). */}
@@ -381,7 +407,7 @@ function Escenario({ paso, numero, tono, quieto, pausa }: PropsDeEscenario) {
         aria-hidden="true"
         className={cn(
           "pointer-events-none absolute right-5 top-2 select-none text-[120px] font-medium leading-none tracking-[-0.06em] opacity-[0.07] md:right-9 md:top-3.5 md:text-[190px]",
-          clases.texto
+          tinte.texto
         )}
       >
         {numero}
@@ -422,7 +448,7 @@ function Escenario({ paso, numero, tono, quieto, pausa }: PropsDeEscenario) {
             <Etiqueta
               key={etiqueta.texto}
               etiqueta={etiqueta}
-              tono={opcion.tono}
+              tinte={opcion.tinte}
               orden={orden}
               visible={indice === paso}
             />
@@ -435,13 +461,13 @@ function Escenario({ paso, numero, tono, quieto, pausa }: PropsDeEscenario) {
 
 interface PropsDeEtiqueta {
   etiqueta: EtiquetaFlotante
-  tono: TonoDeLanding
+  tinte: Tinte
   /** La primera o la segunda del paso: entra un poco después y flota a otro ritmo. */
   orden: number
   visible: boolean
 }
 
-function Etiqueta({ etiqueta, tono, orden, visible }: PropsDeEtiqueta) {
+function Etiqueta({ etiqueta, tinte, orden, visible }: PropsDeEtiqueta) {
   const Icono = etiqueta.icono
   return (
     <span
@@ -459,8 +485,8 @@ function Etiqueta({ etiqueta, tono, orden, visible }: PropsDeEtiqueta) {
         <span
           className={cn(
             "grid size-7 shrink-0 place-items-center rounded-[10px]",
-            CLASES_DE_TONO[tono].suave,
-            CLASES_DE_TONO[tono].texto
+            tinte.suave,
+            tinte.texto
           )}
         >
           <Icono className="size-[15px]" strokeWidth={1.75} />

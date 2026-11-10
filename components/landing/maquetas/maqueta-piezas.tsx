@@ -3,10 +3,33 @@ import { CLASES_DE_TONO, type TonoDeLanding } from "@/components/landing/tonos-d
 import { cn } from "@/lib/utils"
 
 /*
- * Las piezas con que se arman las maquetas de la landing, en la paleta
- * Frutos rojos. Son pantallas del producto dibujadas con HTML, no capturas:
+ * Las piezas con que se arman las maquetas de la landing, en la paleta rojo,
+ * burdeos y arena. Son pantallas del producto dibujadas con HTML, no capturas:
  * los datos son de ejemplo y cada maqueta se lee entera por su `etiqueta`.
  */
+
+/**
+ * Los cuatro tintes de los pasos del diseño, en el orden en que se reparten
+ * (reserva, clienta, tablero, cobro), con lo que se pone encima:
+ *
+ * - `suave`: el fondo del escenario, de la tarjeta o del número de un paso.
+ * - `texto`: texto e íconos sobre su suave (burdeos en el tercero y el cuarto:
+ *   el arena y la tierra del diseño no tienen un texto propio).
+ * - `relleno`: ese mismo color como fondo, con texto blanco encima.
+ * - `anillo`: el halo de un número, el suave a un tercio.
+ *
+ * El cuarto (#E9DECB, un arena más oscuro) no tiene token: el `anil` de
+ * `app/globals.css` es otro color. Va escrito acá, una sola vez.
+ */
+export const TINTES_DE_PASO = [
+  { suave: "bg-ciruela-suave", texto: "text-ciruela", relleno: "bg-ciruela", anillo: "ring-ciruela-suave/33" },
+  { suave: "bg-frambuesa-suave", texto: "text-frambuesa-texto", relleno: "bg-frambuesa-texto", anillo: "ring-frambuesa-suave/33" },
+  { suave: "bg-pistacho-suave", texto: "text-ciruela", relleno: "bg-ciruela", anillo: "ring-pistacho-suave/33" },
+  { suave: "bg-[#E9DECB]", texto: "text-ciruela", relleno: "bg-ciruela", anillo: "ring-[#E9DECB]/33" },
+] as const
+
+/** El fondo y el texto del cuarto tinte, para un ícono o una insignia suelta. */
+export const SUAVE_DEL_COBRO = "bg-[#E9DECB] text-ciruela"
 
 /** La tarjeta blanca de una maqueta: borde, radio de maqueta y la sombra honda. */
 export const TARJETA_DE_MAQUETA =

@@ -90,7 +90,7 @@ export function MaquetaCobro({ activa }: PropsDeMaqueta) {
             </motion.div>
             <motion.div
               variants={CUADRA}
-              className="col-start-1 row-start-1 flex items-center gap-2 py-[9px] text-sm font-semibold text-pistacho-texto"
+              className="col-start-1 row-start-1 flex items-center gap-2 py-[9px] text-sm font-semibold text-ciruela"
             >
               <span className="grid size-5 place-items-center rounded-full bg-pistacho text-navy">
                 <Check className="size-3" strokeWidth={2.5} />
