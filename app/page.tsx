@@ -35,10 +35,10 @@ export default function PaginaLanding() {
       {/* La barra de anuncio (`components/landing/barra-de-anuncio.tsx`) ya no
           se muestra: la landing nueva arranca con el encabezado. */}
       <Encabezado />
-      {/* En el orden del diseño de la landing nueva. La separación entre islas
-          la pone el <main>, no cada sección; la portada y las áreas van de
-          borde a borde y juntas, como en el diseño. */}
-      <main id="contenido" data-landing className="flex flex-col gap-2 md:gap-6">
+      {/* En el orden del diseño de la landing nueva. Las secciones van de borde
+          a borde y juntas: el fondo oscurece de forma continua de una a la
+          siguiente (el final de una es el comienzo de la otra), sin franjas. */}
+      <main id="contenido" data-landing className="flex flex-col">
         <div>
           <SeccionPortada />
           <SeccionAreas />
