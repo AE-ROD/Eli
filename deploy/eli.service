@@ -14,9 +14,12 @@ Description=Eli (Next.js)
 Documentation=file:///opt/eli/current/deploy/README.md
 After=network-online.target
 Wants=network-online.target
-# Si falla 10 veces en 5 minutos, systemd deja de insistir y queda "failed":
-# mejor eso que un bucle infinito que llena el disco de logs. (Se ve con
-# "systemctl status eli"; "systemctl reset-failed eli" lo rearma.)
+# Si falla 10 veces en 5 minutos, systemd deja de insistir y queda "failed
+# (start-limit-hit)": mejor eso que un bucle infinito que llena el disco de
+# logs. (Se ve con "systemctl status eli"; "systemctl reset-failed eli" lo
+# rearma.) OJO: en ese estado systemd RECHAZA "restart" hasta un reset-failed;
+# por eso actualizar.sh y volver-atras.sh lo hacen antes de cada reinicio y
+# deploy/sudoers-eli lo permite.
 StartLimitIntervalSec=300
 StartLimitBurst=10
 
@@ -77,6 +80,16 @@ RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 CapabilityBoundingSet=
 AmbientCapabilities=
 UMask=0077
+# El proceso de Eli no tiene por qué ver los respaldos de la base (son datos de
+# clientes): para él, esa carpeta no existe. Los hace cron, como usuario eli
+# pero FUERA de este servicio. El "-" delante hace que no falle si la carpeta
+# todavía no existe (se crea en el paso 10, después de arrancar por primera vez).
+InaccessiblePaths=-/var/backups/eli
+# Sin grupos extra declarados en la unidad. A COMPROBAR EN EL VPS (paso 8.5):
+# systemd igual suma los grupos que "eli" tiene en /etc/group, así que lo que
+# manda es qué grupos tenga el usuario; mira con
+#   grep Groups /proc/$(systemctl show eli -p MainPID --value)/status
+SupplementaryGroups=
 # Con ProtectSystem=strict todo el disco es de sólo lectura salvo lo que se
 # liste aquí. Next escribe su caché dentro del release (.next/cache).
 ReadWritePaths=/opt/eli/releases

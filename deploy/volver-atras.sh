@@ -14,20 +14,37 @@
 # por caso. Si la versión de la que sales trae migraciones que la anterior no
 # tiene, este script te lo avisa y pide confirmación.
 #
-# Variables SOLO PARA PRUEBAS: ELI_RAIZ, ELI_CMD_REINICIAR, ELI_URL_SALUD.
+# No lo corras entre las 12:50 y las 13:20 UTC (hora de los crons diarios): si
+# lo corres, los crons esperan a que termines (comparten el candado).
+#
+# Como actualizar.sh, comprueba la portada y las direcciones de
+# ELI_URL_SALUD_EXTRA (README.md, paso 14).
+#
+# Variables SOLO PARA PRUEBAS: ELI_RAIZ, ELI_CMD_REINICIAR, ELI_URL_SALUD,
+# ELI_ESPERA_SALUD, ELI_ENV_FILE, ELI_PERMITIR_ROOT.
 
 set -euo pipefail
+
+DIRECTORIO_DEL_SCRIPT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+# shellcheck source=lib-entorno.sh
+source "$DIRECTORIO_DEL_SCRIPT/lib-entorno.sh"
 
 RAIZ="${ELI_RAIZ:-/opt/eli}"
 ACTUAL="$RAIZ/current"
 ANTERIOR="$RAIZ/previous"
 URL_SALUD="${ELI_URL_SALUD:-http://127.0.0.1:3000/}"
-CMD_REINICIAR="${ELI_CMD_REINICIAR:-sudo -n systemctl restart eli}"
-ESPERA_SALUD_SEGUNDOS=60
+# reset-failed antes de reiniciar: si la versión de la que sales murió al
+# arrancar, la unidad está en "failed (start-limit-hit)" y systemd rechaza el
+# "restart" hasta limpiarla (deploy/sudoers-eli permite los dos comandos).
+CMD_REINICIAR="${ELI_CMD_REINICIAR:-sudo -n systemctl reset-failed eli; sudo -n systemctl restart eli}"
+ESPERA_SALUD_SEGUNDOS="${ELI_ESPERA_SALUD:-60}"
 
 mensaje() { printf '\n==> %s\n' "$*"; }
 fallo() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
 
+if [[ "$(id -u)" -eq 0 && -z "${ELI_PERMITIR_ROOT:-}" ]]; then
+  fallo "No corras esto como root: dejaría archivos con dueño root y el servicio no podría escribir su caché. Entra como el usuario 'eli' (su - eli)."
+fi
 [[ -L "$ACTUAL" ]] || fallo "No existe $ACTUAL: todavía no hay una versión instalada."
 [[ -L "$ANTERIOR" ]] || fallo "No hay una versión anterior registrada ($ANTERIOR). Es el primer despliegue, o se limpió."
 DESDE="$(readlink -f "$ACTUAL")"
@@ -59,18 +76,7 @@ if [[ -f "$DESDE/.commit" && -f "$HACIA/.commit" && -d "$RAIZ/repo/.git" ]]; the
   fi
 fi
 
-esperar_salud() {
-  local limite=$((SECONDS + ESPERA_SALUD_SEGUNDOS)) codigo
-  while (( SECONDS < limite )); do
-    codigo="$(curl --silent --output /dev/null --max-time 5 --write-out '%{http_code}' "$URL_SALUD" || true)"
-    if [[ "$codigo" =~ ^[23][0-9][0-9]$ ]]; then
-      echo "    Responde ($codigo) en $URL_SALUD"
-      return 0
-    fi
-    sleep 2
-  done
-  return 1
-}
+# esperar_salud: lib-entorno.sh (la portada y las ELI_URL_SALUD_EXTRA).
 
 apuntar() {
   ln -sfn "$2" "$RAIZ/$1.nuevo"

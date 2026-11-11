@@ -17,19 +17,31 @@
 #      Este script NUNCA toca la base de datos con cambios (el contrato del
 #      proyecto lo prohíbe): sólo lee, para informarte.
 #   3. Arma una carpeta nueva /opt/eli/releases/<commit>, instala dependencias
-#      (npm ci) y compila (npm run build) con las variables de /etc/eli/eli.env.
-#      Si algo falla, la versión que está andando NO se toca.
+#      (npm ci --ignore-scripts: NO se ejecutan los scripts de instalación de
+#      las dependencias) y compila (prisma generate + npm run build) con las
+#      variables de /etc/eli/eli.env. Si algo falla, la versión que está
+#      andando NO se toca.
 #   4. Cambia el enlace /opt/eli/current a la carpeta nueva y reinicia el
-#      servicio. Comprueba que responde. Si no responde, vuelve solo a la
-#      versión anterior.
+#      servicio (antes hace "reset-failed", ver más abajo). Comprueba que
+#      responde (la portada y, si se configuró, ELI_URL_SALUD_EXTRA). Si no
+#      responde, vuelve solo a la versión anterior.
 #   5. Conserva las últimas 3 versiones y borra las más viejas.
 #
 # Se puede correr varias veces sin problema: si esa versión ya está activa, no
 # hace nada.
 #
+# NO la corras entre las 12:50 y las 13:20 UTC (hora de los crons diarios). Si
+# la corres, los crons esperan a que termines (comparten el candado) y salen
+# un poco tarde; no se pierden.
+#
+# Variable de uso real (opcional): ELI_URL_SALUD_EXTRA, una o más direcciones
+# (separadas por espacios) que también tienen que responder bien, además de la
+# portada. Pon ahí una página pública que toque la base de datos. Se puede
+# dejar en /etc/eli/eli.env o escribir antes del comando.
+#
 # Variables SOLO PARA PRUEBAS (no hace falta tocarlas): ELI_RAIZ, ELI_ENV_FILE,
 # ELI_CMD_INSTALAR, ELI_CMD_COMPILAR, ELI_CMD_REINICIAR, ELI_URL_SALUD,
-# ELI_PERMITIR_ROOT.
+# ELI_ESPERA_SALUD, ELI_PERMITIR_ROOT.
 
 set -euo pipefail
 
@@ -44,17 +56,27 @@ ACTUAL="$RAIZ/current"
 ANTERIOR="$RAIZ/previous"
 CONSERVAR=3
 URL_SALUD="${ELI_URL_SALUD:-http://127.0.0.1:3000/}"
-ESPERA_SALUD_SEGUNDOS=60
-CMD_INSTALAR="${ELI_CMD_INSTALAR:-npm ci --no-audit --no-fund}"
-CMD_COMPILAR="${ELI_CMD_COMPILAR:-npm run build}"
-CMD_REINICIAR="${ELI_CMD_REINICIAR:-sudo -n systemctl restart eli}"
+ESPERA_SALUD_SEGUNDOS="${ELI_ESPERA_SALUD:-60}"
+# --ignore-scripts: npm NO ejecuta los scripts de instalación de las ~500
+# dependencias (código de terceros que correría como el usuario "eli", con
+# acceso a /etc/eli/eli.env, ~/.ssh y los respaldos). Probado: la compilación y
+# el arranque no los necesitan; "prisma generate" baja sus propios motores.
+CMD_INSTALAR="${ELI_CMD_INSTALAR:-npm ci --no-audit --no-fund --ignore-scripts}"
+# prisma generate explícito (los scripts de @prisma/client no corrieron).
+# "npm run build" lo vuelve a hacer; es rápido y deja la intención a la vista.
+CMD_COMPILAR="${ELI_CMD_COMPILAR:-npx prisma generate && npm run build}"
+# reset-failed ANTES de reiniciar: si la versión nueva murió al arrancar, la
+# unidad quedó en "failed (start-limit-hit)" y systemd rechaza "restart" hasta
+# limpiarla. Los dos comandos están permitidos en deploy/sudoers-eli. El
+# reset-failed puede fallar sin consecuencias (por eso ";" y no "&&").
+CMD_REINICIAR="${ELI_CMD_REINICIAR:-sudo -n systemctl reset-failed eli; sudo -n systemctl restart eli}"
 
 MIGRACIONES_CONFIRMADAS=no
 OBJETIVO="origin/main"
 for argumento in "$@"; do
   case "$argumento" in
     --migraciones-aplicadas) MIGRACIONES_CONFIRMADAS=si ;;
-    -h|--help) sed -n '2,32p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help) sed -n '2,44p' "${BASH_SOURCE[0]}"; exit 0 ;;
     -*) echo "Opción desconocida: $argumento" >&2; exit 2 ;;
     *) OBJETIVO="$argumento" ;;
   esac
@@ -193,12 +215,17 @@ else
   echo "$COMMIT" > "$CONSTRUYENDO/.commit"
 
   mensaje "Instalando dependencias (npm ci)... suele tardar 1-3 minutos."
-  # Sin las variables secretas (los scripts de las dependencias no las
-  # necesitan) y sin NODE_ENV=production: con él npm omite las dependencias de
-  # desarrollo (typescript, tailwind, prisma) que SÍ hacen falta para compilar.
+  # Sin NODE_ENV=production: con él npm omite las dependencias de desarrollo
+  # (typescript, tailwind, prisma) que SÍ hacen falta para compilar.
+  # OJO, para no engañarse: aquí NO se cargan las variables de eli.env, pero eso
+  # NO protege nada por sí solo: todo lo que corre aquí corre como el usuario
+  # "eli", que puede leer /etc/eli/eli.env (permiso 640, grupo eli), ~/.ssh y
+  # /var/backups/eli directamente. La defensa real es --ignore-scripts (no corre
+  # el código de instalación de las dependencias) y, a futuro, separar el usuario
+  # que construye del que sirve (README.md, "Mejoras futuras").
   ( cd "$CONSTRUYENDO" && env -u NODE_ENV bash -c "$CMD_INSTALAR" ) || fallo "npm ci falló. La versión instalada no se tocó."
 
-  mensaje "Compilando (npm run build)... suele tardar 1-3 minutos."
+  mensaje "Compilando (prisma generate + npm run build)... suele tardar 1-3 minutos."
   # Con las variables de eli.env (prisma.config.ts exige DATABASE_URL).
   ( cd "$CONSTRUYENDO" && cargar_entorno "$ARCHIVO_ENTORNO" && bash -c "$CMD_COMPILAR" ) || fallo "La compilación falló. La versión instalada no se tocó."
 
@@ -209,19 +236,7 @@ else
 fi
 
 # --- 4. Activar, reiniciar, comprobar, y volver si falla ----------------------
-esperar_salud() {
-  local limite=$((SECONDS + ESPERA_SALUD_SEGUNDOS)) codigo
-  while (( SECONDS < limite )); do
-    codigo="$(curl --silent --output /dev/null --max-time 5 --write-out '%{http_code}' "$URL_SALUD" || true)"
-    if [[ "$codigo" =~ ^[23][0-9][0-9]$ ]]; then
-      echo "    Responde ($codigo) en $URL_SALUD"
-      return 0
-    fi
-    sleep 2
-  done
-  return 1
-}
-
+# esperar_salud (lib-entorno.sh): la portada y las ELI_URL_SALUD_EXTRA.
 apuntar_a() {
   # Cambio atómico del enlace: nunca hay un instante sin "current".
   ln -sfn "$1" "$RAIZ/current.nuevo"
@@ -245,6 +260,9 @@ else
   if [[ -n "$DIR_ANTERIOR" && -d "$DIR_ANTERIOR" ]]; then
     mensaje "Volviendo a la versión anterior ($(basename "$DIR_ANTERIOR"))..."
     apuntar_a "$DIR_ANTERIOR"
+    # CMD_REINICIAR empieza con "reset-failed": si la versión nueva agotó el
+    # límite de arranques de systemd ("start-limit-hit"), sin eso este reinicio
+    # sería rechazado y el regreso automático fallaría.
     if bash -c "$CMD_REINICIAR" && esperar_salud; then
       fallo "La versión nueva falló y se VOLVIÓ a la anterior (que responde bien). Revisa: journalctl -u eli -n 100 --no-pager"
     fi

@@ -11,6 +11,14 @@
 #
 # Caddy pide y renueva solo el certificado HTTPS (Let's Encrypt). Necesita que
 # los puertos 80 y 443 lleguen al servidor y que el DNS ya apunte aquí.
+#
+# SOLO IPv4 ("bind 0.0.0.0" en cada sitio). Por qué: el límite de intentos
+# cuenta por IP y {remote_host} es la dirección COMPLETA. En IPv6 cada persona
+# recibe un bloque entero (/64: 18 trillones de direcciones) y podría usar una
+# distinta en cada pedido, saltándose el límite. Sin IPv6 no existe ese hueco.
+# Consecuencia: NO crees registros DNS AAAA para este dominio (Let's Encrypt los
+# usaría para validar y fallaría). Si "caddy validate" rechaza "bind", mira
+# deploy/README.md, paso 9.4.
 
 {
 	# Opcional: un correo real para que Let's Encrypt avise si algún día falla
@@ -19,10 +27,13 @@
 }
 
 www.eli.example.cl {
+	bind 0.0.0.0
 	redir https://eli.example.cl{uri} permanent
 }
 
 eli.example.cl {
+	bind 0.0.0.0
+
 	# Compresión de las respuestas (HTML, JS, JSON).
 	encode zstd gzip
 
@@ -39,6 +50,12 @@ eli.example.cl {
 		# No anunciar "Server: Caddy".
 		-Server
 	}
+
+	# Los crons los llama el propio servidor directo a 127.0.0.1:3000 (sin pasar
+	# por acá), así que desde internet /api/cron/* no tiene por qué existir.
+	# Cierra esa superficie aunque el secreto es la defensa de fondo.
+	@cron path /api/cron /api/cron/*
+	respond @cron 404
 
 	reverse_proxy 127.0.0.1:3000 {
 		# ---------------------------------------------------------------------
