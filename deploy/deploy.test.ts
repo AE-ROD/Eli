@@ -1,6 +1,8 @@
-import { describe, it, expect } from "vitest"
-import { readFileSync, readdirSync, statSync } from "node:fs"
-import { spawnSync } from "node:child_process"
+import { describe, it, expect, beforeAll, afterAll } from "vitest"
+import { readFileSync, readdirSync, statSync, mkdtempSync, writeFileSync, chmodSync, existsSync, rmSync } from "node:fs"
+import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process"
+import { createServer, type Server } from "node:http"
+import { tmpdir } from "node:os"
 import path from "node:path"
 
 /**
@@ -19,6 +21,15 @@ const sinComentarios = (texto: string) =>
     .split("\n")
     .filter((linea) => !linea.trim().startsWith("#"))
     .join("\n")
+
+/** El texto entre dos marcas (la segunda excluida); falla si falta alguna. */
+function tramo(texto: string, desde: string, hasta: string): string {
+  const i = texto.indexOf(desde)
+  expect(i, `no encuentro "${desde}"`).toBeGreaterThan(-1)
+  const j = texto.indexOf(hasta, i + desde.length)
+  expect(j, `no encuentro "${hasta}" después de "${desde}"`).toBeGreaterThan(i)
+  return texto.slice(i, j)
+}
 
 /** Una línea con los espacios normalizados (tabs y dobles espacios → uno). */
 const normalizar = (linea: string) => linea.trim().replace(/\s+/g, " ")
@@ -397,10 +408,22 @@ describe("deploy/README.md — lo que la seguridad y la recuperación suponen", 
     expect(guia.slice(desde, hasta)).not.toMatch(/llamar-cron\.sh/)
   })
 
-  it("explica el chequeo de IPv6, la protección de main, la contraseña fuerte de eli y el --ignore-scripts", () => {
-    for (const texto of ["ip -6 addr show scope global", "Settings", "openssl rand -base64 24", "--ignore-scripts", "equivale a root", "bind 0.0.0.0"]) {
+  it("explica el chequeo de IPv6, la contraseña fuerte de eli y el --ignore-scripts", () => {
+    for (const texto of ["ip -6 addr show scope global", "openssl rand -base64 24", "--ignore-scripts", "equivale a root", "bind 0.0.0.0"]) {
       expect(guia, `falta en la guía: ${texto}`).toContain(texto)
     }
+  })
+
+  it("5.7 (protección de main): 0 aprobaciones con un solo usuario, dice qué NO ataja y comprueba la regla SIN empujar a main", () => {
+    const seccion = tramo(guia, "### 5.7", "## Paso 6")
+    expect(seccion).toContain("Require a pull request before merging")
+    expect(seccion).toMatch(/\*\*0\*\* aprobaciones/)
+    expect(seccion, "con un solo usuario, '1 aprobación' lo deja sin poder entrar a main").not.toMatch(/al menos \*\*1\*\* aprobación/)
+    expect(seccion).toMatch(/No\*\* protege contra un token/)
+    expect(seccion).toContain("NUNCA pruebes empujando a `main`")
+    expect(seccion).toMatch(/Settings\* → \*Rules\*/)
+    expect(seccion).toContain("git push origin HEAD:prueba-regla-1")
+    expect(seccion, "la prueba ya no empuja un cambio cualquiera a main").not.toMatch(/intenta `git push origin main`/)
   })
 
   it("usa el dominio real eliagenda.com (sin marcadores): IP, NEXTAUTH_URL, URI de Google, DNS y Resend", () => {
@@ -613,5 +636,362 @@ describe("deploy/*.sh", () => {
     expect(codigo).toMatch(/CADDYFILE="\$\{1:-/)
     expect(codigo).toContain("bind")
     expect(codigo).toContain("/api/cron/recordatorios")
+  })
+})
+
+describe("deploy/README.md — crons del VPS: nunca encendidos antes del lanzamiento por descuido", () => {
+  const guia = leer("deploy/README.md")
+  const s103 = tramo(guia, "### 10.3", "### 10.4")
+  const s143 = tramo(guia, "### 14.3", "## Paso 15")
+  const s135 = tramo(guia, "### 13.5", "### 13.6")
+  const reCopia = /deploy\/cron-eli \/etc\/cron\.d\/eli/
+  const comandoSed = /sed -i -E '(s\|\^\(0 13 \.\*llamar-cron\)\|#DESACTIVADO# \\1\|)'/
+
+  it.each([
+    ["10.3", s103],
+    ["14.3", s143],
+  ])("%s: instalar cron-eli y apagar las dos líneas de correo es UN SOLO comando encadenado (&&)", (_nombre, seccion) => {
+    const encadenados = seccion.split("\n").filter((l) => reCopia.test(l) && comandoSed.test(l))
+    expect(encadenados.length, "falta el comando 'install ... && sudo sed ...'").toBeGreaterThanOrEqual(1)
+    for (const l of encadenados) expect(l).toMatch(/\/etc\/cron\.d\/eli && sudo sed -i -E /)
+  })
+
+  it.each([
+    ["10.3", s103],
+    ["14.3", s143],
+  ])("%s: el install SIN sed sólo aparece después de la marca 'DESPUÉS del lanzamiento'", (_nombre, seccion) => {
+    const marca = seccion.indexOf("DESPUÉS del lanzamiento")
+    expect(marca, "falta la marca 'DESPUÉS del lanzamiento'").toBeGreaterThan(-1)
+    let posicion = 0
+    for (const l of seccion.split("\n")) {
+      if (/^sudo install .*cron-eli \/etc\/cron\.d\/eli$/.test(l.trim())) {
+        expect(posicion, `install sin sed antes del lanzamiento: ${l}`).toBeGreaterThan(marca)
+      }
+      posicion += l.length + 1
+    }
+  })
+
+  it("el sed de la guía apaga EXACTAMENTE las dos líneas de correo de cron-eli, deja un archivo de cron válido, y el de 13.5 lo deja idéntico al original", () => {
+    const expresion = s103.match(comandoSed)![1]
+    expect(s143.match(comandoSed)![1], "10.3 y 14.3 deben usar el mismo sed").toBe(expresion)
+    const original = leer("deploy/cron-eli")
+    const apagado = spawnSync("sed", ["-E", expresion], { input: original, encoding: "utf8" }).stdout
+    const lineas = apagado.split("\n")
+    const apagadas = lineas.filter((l) => l.startsWith("#DESACTIVADO# 0 13 "))
+    expect(apagadas).toHaveLength(2)
+    expect(apagadas.every((l) => l.includes("llamar-cron.sh"))).toBe(true)
+    // Lo único que cron ve activo ya no llama a ningún cron de correo; el respaldo sigue.
+    const activas = sinComentarios(apagado).split("\n").filter((l) => /^\d/.test(l.trim()))
+    expect(activas).toHaveLength(1)
+    expect(activas[0]).toMatch(/^30 6 \* \* \*\s+eli\s+\S+\/respaldo\.sh$/)
+    expect(sinComentarios(apagado)).not.toContain("llamar-cron")
+    const encender = s135.match(/sed -i '(s\|\^#DESACTIVADO# \|\|)'/)
+    expect(encender, "13.5 debe traer el comando para encenderlas").not.toBeNull()
+    expect(spawnSync("sed", [encender![1]], { input: apagado, encoding: "utf8" }).stdout).toBe(original)
+  })
+
+  it("TODO 'llamar-cron.sh' de la guía va con el prefijo ELI_URL_LOCAL=http://127.0.0.1:1, salvo el único de 13.5 (el real)", () => {
+    const inicio13 = guia.indexOf(s135)
+    const fin13 = inicio13 + s135.length
+    let dentroDeBloque = false
+    let posicion = 0
+    let conPrefijo = 0
+    let reales = 0
+    for (const linea of guia.split("\n")) {
+      if (linea.trim().startsWith("```")) dentroDeBloque = !dentroDeBloque
+      else if (dentroDeBloque && /llamar-cron\.sh/.test(linea)) {
+        if (posicion >= inicio13 && posicion < fin13) reales++
+        else {
+          conPrefijo++
+          expect(linea.trim(), "un llamar-cron.sh sin prefijo ejecutaría el cron REAL").toMatch(/^ELI_URL_LOCAL=http:\/\/127\.0\.0\.1:1 \S*llamar-cron\.sh /)
+        }
+      }
+      posicion += linea.length + 1
+    }
+    expect(conPrefijo, "la prueba de 10.5 desapareció: esta guarda ya no mira nada").toBeGreaterThanOrEqual(1)
+    expect(reales).toBe(1)
+  })
+
+  it("10.5 avisa en voz alta (antes del comando) que hay que copiarlo con el prefijo", () => {
+    const s105 = tramo(guia, "### 10.5", "## Paso 11")
+    const aviso = s105.indexOf("copia el comando COMPLETO")
+    expect(aviso).toBeGreaterThan(-1)
+    expect(aviso).toBeLessThan(s105.indexOf("llamar-cron.sh /api/cron/recordatorios"))
+    expect(s105).toContain("manda los\n> recordatorios reales a los clientes")
+  })
+
+  it("13.2 avisa que el interruptor de Vercel puede pedir un nuevo despliegue, y 13.5 no promete algo confuso", () => {
+    expect(tramo(guia, "### 13.2", "### 13.3")).toContain("**nuevo despliegue**")
+    expect(s135).not.toContain("sólo adelanta los de mañana")
+    expect(s135).toContain("SÍ ejecuta el cron de verdad")
+  })
+})
+
+describe("deploy/README.md — correcciones de la iteración 3", () => {
+  const guia = leer("deploy/README.md")
+
+  it("B2: antes de crear el DMARC se mira si ya hay uno (un segundo TXT _dmarc invalida DMARC)", () => {
+    const s = tramo(guia, "### 7.4", "## Paso 8")
+    expect(s).toContain("dig +short TXT _dmarc.eliagenda.com")
+    expect(s.indexOf("dig +short TXT _dmarc")).toBeLessThan(s.indexOf("`v=DMARC1; p=none"))
+    expect(s).toMatch(/edita ese registro/)
+  })
+
+  it("B3: 11.5 avisa que Vercel de respaldo apunta a la base vieja y que --exit-on-error puede abortar por errores inocuos", () => {
+    const s = tramo(guia, "### 11.5", "### 11.6")
+    expect(s).toMatch(/Si Vercel quedó de respaldo/)
+    expect(s).toMatch(/`DATABASE_URL` también apunta a la base vieja/)
+    expect(s).toMatch(/COMMENT ON EXTENSION/)
+    expect(s).toMatch(/A COMPROBAR en la prueba mensual/)
+    expect(s).toMatch(/pg_restore --no-owner --no-privileges --dbname=/)
+  })
+
+  it("el paso 3.1 instala openssl (6.2 lo usa para generar secretos)", () => {
+    expect(tramo(guia, "### 3.1", "### 3.2")).toMatch(/apt install -y [^\n]*\bopenssl\b/)
+  })
+
+  it("12.4b prueba las siete variantes de /api/cron (mayúsculas, //, %2f, %63, sin barra y con barra final)", () => {
+    const s = tramo(guia, "**12.4b", "**12.5")
+    for (const ruta of ["/api/cron/recordatorios", "/API/CRON/recordatorios", "//api/cron/recordatorios", "/api/cron%2frecordatorios", "/api/%63ron/recordatorios", "/api/cron /api/cron/;"]) {
+      expect(s, ruta).toContain(ruta)
+    }
+    expect(s).toContain("404 404 404 404 404 404 404")
+  })
+
+  it("14.3: antes de reinstalar eli.service se corre systemd-analyze verify sobre el archivo", () => {
+    const s = tramo(guia, "**`eli.service`**", "**`sudoers-eli`:**")
+    expect(s.indexOf("systemd-analyze verify /opt/eli/repo/deploy/eli.service")).toBeGreaterThan(-1)
+    expect(s.indexOf("systemd-analyze verify")).toBeLessThan(s.indexOf("sudo install -m 644 /opt/eli/repo/deploy/eli.service"))
+  })
+
+  it("M4: el estado de los avisos vive en ~/.eli-avisos, no en /var/backups/eli, y la guía ya no lo dice", () => {
+    expect(guia).not.toMatch(/\/var\/backups\/eli\/\.avisos/)
+    expect(guia).toContain("~/.eli-avisos")
+    const lib = sinComentarios(leer("deploy/lib-entorno.sh"))
+    expect(lib).toContain('ELI_DIR_AVISOS:-${HOME:-/var/tmp}/.eli-avisos')
+    expect(lib).not.toMatch(/\/var\/backups\/eli/)
+  })
+})
+
+describe("deploy/*.sh — el reinicio siempre pasa por CMD_REINICIAR (mutación)", () => {
+  // Si alguien cambia UN sitio de llamada (p. ej. a 'sudo -n systemctl restart eli'
+  // a secas) sin tocar la definición, se pierde el reset-failed y el regreso
+  // automático puede fallar con start-limit-hit. La prueba de arriba sólo mira la
+  // definición; ésta mira los sitios de llamada.
+  const esperados: Record<string, number> = { "actualizar.sh": 2, "volver-atras.sh": 2 }
+  it.each(Object.entries(esperados))("%s: %i sitios de llamada, todos exactamente 'bash -c \"$CMD_REINICIAR\"', y ningún 'systemctl restart' fuera de la definición", (nombre, cuantos) => {
+    const lineas = sinComentarios(leer(`deploy/${nombre}`)).split("\n")
+    const fueraDeLaDefinicion = lineas.filter((l) => !/^CMD_REINICIAR=/.test(l.trim()))
+    expect(fueraDeLaDefinicion.join("\n"), `${nombre}: un reinicio escrito a mano esquiva el reset-failed`).not.toMatch(/systemctl\s+(restart|start|reload)/)
+    const usos = fueraDeLaDefinicion.flatMap((l) => [...l.matchAll(/CMD_REINICIAR/g)].map(() => l))
+    expect(usos).toHaveLength(cuantos)
+    for (const l of usos) expect(l).toMatch(/bash -c "\$CMD_REINICIAR"/)
+  })
+
+  it("la mutación se detecta: un sitio de llamada cambiado a mano ya no cumple la regla", () => {
+    const original = sinComentarios(leer("deploy/actualizar.sh"))
+    const mutado = original.replace('if bash -c "$CMD_REINICIAR" && esperar_salud; then\n  if [[ -n "$DIR_ANTERIOR"', 'if sudo -n systemctl restart eli && esperar_salud; then\n  if [[ -n "$DIR_ANTERIOR"')
+    expect(mutado).not.toBe(original)
+    expect(mutado).toMatch(/systemctl\s+restart/)
+    expect([...mutado.matchAll(/bash -c "\$CMD_REINICIAR"/g)]).toHaveLength(1)
+  })
+})
+
+describe("deploy/actualizar.sh — 'esa versión ya está activa' no se dice con el servicio caído", () => {
+  const codigo = sinComentarios(leer("deploy/actualizar.sh"))
+  it("antes de salir con 'nada que hacer' comprueba la salud con esperar_salud (espera corta); si no responde, sigue y sólo reinicia", () => {
+    const bloque = tramo(codigo, 'if [[ "$COMMIT" == "$COMMIT_ACTUAL" ]]; then', "migraciones_nuevas() {")
+    expect(bloque).toMatch(/ESPERA_SALUD_SEGUNDOS > 10 \)\) && ESPERA_SALUD_SEGUNDOS=10/)
+    expect(bloque.indexOf("esperar_salud")).toBeGreaterThan(-1)
+    expect(bloque.indexOf("esperar_salud")).toBeLessThan(bloque.indexOf("exit 0"))
+    expect(bloque.match(/exit 0/g)).toHaveLength(1)
+    expect(codigo).not.toContain("Esa versión ya está activa. No hay nada que hacer.")
+  })
+
+  it("si reinicia la misma versión y sigue sin responder no 'vuelve' a la misma carpeta en bucle", () => {
+    expect(codigo).toMatch(/if \[\[ "\$DIR_ANTERIOR" == "\$DESTINO" \]\]; then\n\s+fallo /)
+  })
+})
+
+describe("respaldo.sh — otro respaldo corriendo no es un fallo", () => {
+  const codigo = sinComentarios(leer("deploy/respaldo.sh"))
+  it("sale con 75 sin correo (no usa falla(), que dispara el aviso)", () => {
+    expect(codigo).not.toMatch(/falla "Ya hay otro respaldo/)
+    expect(codigo).toMatch(/OTRO_CORRIENDO=si\n\s+exit 75/)
+    expect(codigo).toMatch(/\[\[ "\$codigo" -ne 0 && "\$OTRO_CORRIENDO" != si \]\]/)
+  })
+})
+
+describe("avisar_por_correo y llamar-cron.sh/respaldo.sh — comportamiento con un Resend de juguete (sin red real)", () => {
+  const rutaLib = path.join(RAIZ, "deploy/lib-entorno.sh")
+  const curlReal = spawnSync("bash", ["-c", "command -v curl"], { encoding: "utf8" }).stdout.trim()
+  const hayHerramientas = Boolean(curlReal) && spawnSync("node", ["--version"]).status === 0 && spawnSync("flock", ["--version"]).status === 0
+  const hoy = () => new Date().toISOString().slice(0, 10)
+  const CLAVE_RESEND = "re_CLAVE_SECRETA_DE_PRUEBA"
+  const SECRETO_CRON = "secreto-de-cron-de-prueba"
+
+  let dir = ""
+  let servidor: Server
+  let puerto = 0
+  let estadoResend = 200
+  const correos: { auth: string | undefined; cuerpo: { from: string; to: string[]; subject: string; text: string } }[] = []
+
+  function correr(orden: string, args: string[], env: Record<string, string>): Promise<{ code: number | null; salida: string }> {
+    return new Promise((resolve) => {
+      const hijo: ChildProcessWithoutNullStreams = spawn(orden, args, { env: { PATH: `${path.join(dir, "bin")}:${process.env.PATH}`, ...env } as unknown as NodeJS.ProcessEnv })
+      let salida = ""
+      hijo.stdout.on("data", (d) => (salida += d))
+      hijo.stderr.on("data", (d) => (salida += d))
+      hijo.on("close", (code) => resolve({ code, salida }))
+    })
+  }
+
+  const entorno = (extra: Record<string, string> = {}) => ({
+    HOME: path.join(dir, "home"),
+    ELI_ENV_FILE: path.join(dir, "eli.env"),
+    ELI_DIR_AVISOS: path.join(dir, "avisos"),
+    ELI_URL_RESEND: `http://127.0.0.1:${puerto}/emails`,
+    ELI_URL_LOCAL: `http://127.0.0.1:${puerto}`,
+    ELI_RAIZ: path.join(dir, "no-existe"),
+    ...extra,
+  })
+  const avisar = (clave: string, extra: Record<string, string> = {}) =>
+    correr("bash", ["-c", 'source "$1"; avisar_por_correo "$2" "Asunto de prueba" "Texto de prueba"', "_", rutaLib, clave], entorno(extra))
+
+  beforeAll(async () => {
+    if (!hayHerramientas) return
+    dir = mkdtempSync(path.join(tmpdir(), "eli-deploy-test-"))
+    spawnSync("mkdir", ["-p", path.join(dir, "bin"), path.join(dir, "home")])
+    // curl de mentira que anota sus argumentos (lo que "ps" mostraría) y luego llama al real.
+    writeFileSync(path.join(dir, "bin/curl"), `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> "${dir}/argv-curl.log"\nexec "${curlReal}" "$@"\n`)
+    chmodSync(path.join(dir, "bin/curl"), 0o755)
+    writeFileSync(
+      path.join(dir, "eli.env"),
+      `RESEND_API_KEY=${CLAVE_RESEND}\nRESEND_FROM_EMAIL=Eli <no-reply@demo.eli>\nSOPORTE_EMAIL=dueno@demo.eli\nCRON_SECRET=${SECRETO_CRON}\n`
+    )
+    servidor = createServer((req, res) => {
+      let datos = ""
+      req.on("data", (d) => (datos += d))
+      req.on("end", () => {
+        if (req.method === "POST" && req.url === "/emails") {
+          correos.push({ auth: req.headers.authorization, cuerpo: JSON.parse(datos) })
+          res.statusCode = estadoResend
+          res.end("{}")
+        } else if (req.url?.startsWith("/api/cron/")) {
+          res.statusCode = req.headers.authorization === `Bearer ${SECRETO_CRON}` ? 200 : 401
+          res.end('{"total":0}')
+        } else {
+          res.statusCode = 404
+          res.end()
+        }
+      })
+    })
+    await new Promise<void>((ok) => servidor.listen(0, "127.0.0.1", ok))
+    puerto = (servidor.address() as { port: number }).port
+  })
+  afterAll(async () => {
+    if (!hayHerramientas) return
+    await new Promise((ok) => servidor.close(ok))
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  const leerAviso = (clave: string) => (existsSync(path.join(dir, "avisos", clave)) ? readFileSync(path.join(dir, "avisos", clave), "utf8").trim() : null)
+
+  it.skipIf(!hayHerramientas)("manda UN correo con la clave de Resend en el encabezado, nunca en los argumentos de curl; y guarda la fecha de hoy", async () => {
+    const r = await avisar("prueba-a")
+    expect(r.code).toBe(0)
+    expect(correos).toHaveLength(1)
+    expect(correos[0].auth).toBe(`Bearer ${CLAVE_RESEND}`)
+    expect(correos[0].cuerpo).toMatchObject({ from: "Eli <no-reply@demo.eli>", to: ["dueno@demo.eli"], subject: "Asunto de prueba", text: "Texto de prueba" })
+    expect(JSON.stringify(correos[0].cuerpo)).not.toContain(CLAVE_RESEND)
+    expect(leerAviso("prueba-a")).toBe(hoy())
+    const argv = readFileSync(path.join(dir, "argv-curl.log"), "utf8")
+    expect(argv).toContain("--config -")
+    expect(argv, "la clave de Resend no puede verse en los argumentos de curl (ps)").not.toContain(CLAVE_RESEND)
+    expect(r.salida).not.toContain(CLAVE_RESEND)
+  })
+
+  it.skipIf(!hayHerramientas)("tope diario: la misma clave el mismo día no repite el correo; otra clave sí; una fecha de ayer sí", async () => {
+    const antes = correos.length
+    const repetido = await avisar("prueba-a")
+    expect(repetido.code).toBe(0)
+    expect(repetido.salida).toContain("Ya se avisó hoy")
+    expect(correos).toHaveLength(antes)
+    await avisar("prueba-b")
+    expect(correos).toHaveLength(antes + 1)
+    writeFileSync(path.join(dir, "avisos/prueba-a"), "2000-01-01\n")
+    await avisar("prueba-a")
+    expect(correos).toHaveLength(antes + 2)
+    expect(leerAviso("prueba-a")).toBe(hoy())
+  })
+
+  it.skipIf(!hayHerramientas)("si Resend rechaza el envío NO se gasta el cupo (el siguiente intento lo reintenta) y el script que llama no falla", async () => {
+    estadoResend = 500
+    try {
+      const r = await avisar("prueba-c")
+      expect(r.code).toBe(0)
+      expect(r.salida).toContain("No pude mandar el aviso por correo")
+      expect(leerAviso("prueba-c")).toBeNull()
+    } finally {
+      estadoResend = 200
+    }
+    const antes = correos.length
+    await avisar("prueba-c")
+    expect(correos).toHaveLength(antes + 1)
+  })
+
+  it.skipIf(!hayHerramientas)("el estado por defecto vive en ~/.eli-avisos (modo 700), no en /var/backups/eli", async () => {
+    const env = entorno()
+    delete (env as Record<string, string | undefined>).ELI_DIR_AVISOS
+    const antes = correos.length
+    const r = await correr("bash", ["-c", 'source "$1"; avisar_por_correo prueba-d "A" "T"', "_", rutaLib], env)
+    expect(r.code).toBe(0)
+    expect(correos).toHaveLength(antes + 1)
+    const carpeta = path.join(dir, "home/.eli-avisos")
+    expect(readFileSync(path.join(carpeta, "prueba-d"), "utf8").trim()).toBe(hoy())
+    expect(statSync(carpeta).mode & 0o777).toBe(0o700)
+  })
+
+  it.skipIf(!hayHerramientas)("sin las variables de Resend no manda nada y no falla", async () => {
+    writeFileSync(path.join(dir, "sin-resend.env"), `CRON_SECRET=${SECRETO_CRON}\n`)
+    const antes = correos.length
+    const r = await avisar("prueba-e", { ELI_ENV_FILE: path.join(dir, "sin-resend.env") })
+    expect(r.code).toBe(0)
+    expect(correos).toHaveLength(antes)
+  })
+
+  it.skipIf(!hayHerramientas)("llamar-cron.sh: en ÉXITO (200) no manda ningún correo; con un secreto malo (401) manda uno y sale con 1", async () => {
+    const antes = correos.length
+    const bien = await correr(path.join(RAIZ, "deploy/llamar-cron.sh"), ["/api/cron/recordatorios"], entorno())
+    expect(bien.code).toBe(0)
+    expect(bien.salida).toContain("-> 200")
+    expect(correos).toHaveLength(antes)
+    expect(leerAviso("cron-recordatorios")).toBeNull()
+
+    writeFileSync(path.join(dir, "malo.env"), `CRON_SECRET=otro\nRESEND_API_KEY=${CLAVE_RESEND}\nRESEND_FROM_EMAIL=Eli <no-reply@demo.eli>\nSOPORTE_EMAIL=dueno@demo.eli\n`)
+    const mal = await correr(path.join(RAIZ, "deploy/llamar-cron.sh"), ["/api/cron/recordatorios"], entorno({ ELI_ENV_FILE: path.join(dir, "malo.env") }))
+    expect(mal.code).toBe(1)
+    expect(correos).toHaveLength(antes + 1)
+    expect(correos[antes].cuerpo.subject).toBe("Eli: falló el cron /api/cron/recordatorios")
+    expect(correos[antes].cuerpo.text).toContain("401")
+    expect(JSON.stringify(correos[antes].cuerpo)).not.toContain("otro\n")
+  })
+
+  const hayPg = spawnSync("bash", ["-c", "command -v pg_dump && command -v pg_restore && command -v psql"]).status === 0
+  it.skipIf(!hayHerramientas || !hayPg)("respaldo.sh con otro respaldo corriendo: sale con 75, sin correo y sin gastar el cupo", async () => {
+    const destino = path.join(dir, "respaldos")
+    spawnSync("mkdir", ["-p", destino])
+    const otro = spawn("flock", [path.join(destino, ".candado"), "sleep", "8"])
+    try {
+      await new Promise((ok) => setTimeout(ok, 500))
+      const antes = correos.length
+      const r = await correr(path.join(RAIZ, "deploy/respaldo.sh"), [], entorno({ ELI_RESPALDOS: destino }))
+      expect(r.code).toBe(75)
+      expect(r.salida).toContain("Ya hay otro respaldo corriendo")
+      expect(correos).toHaveLength(antes)
+      expect(leerAviso("respaldo")).toBeNull()
+    } finally {
+      otro.kill()
+    }
   })
 })

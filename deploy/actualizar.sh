@@ -27,8 +27,9 @@
 #      responde, vuelve solo a la versión anterior.
 #   5. Conserva las últimas 3 versiones y borra las más viejas.
 #
-# Se puede correr varias veces sin problema: si esa versión ya está activa, no
-# hace nada.
+# Se puede correr varias veces sin problema: si esa versión ya está activa y
+# Eli responde, no hace nada. Si está activa pero Eli NO responde, reutiliza la
+# carpeta ya construida y sólo reinicia el servicio.
 #
 # NO la corras entre las 12:50 y las 13:20 UTC (hora de los crons diarios). Si
 # la corres, los crons esperan a que termines (comparten el candado) y salen
@@ -119,8 +120,17 @@ if [[ -f "$ACTUAL/.commit" ]]; then
 fi
 
 if [[ "$COMMIT" == "$COMMIT_ACTUAL" ]]; then
-  mensaje "Esa versión ya está activa. No hay nada que hacer."
-  exit 0
+  # "Activa" según el enlace, no según el servicio: un primer despliegue que no
+  # arrancó, o una unidad en "failed", también tienen esta versión como actual.
+  # Espera corta (máx. 10 s) con la misma comprobación de siempre.
+  (( ESPERA_SALUD_SEGUNDOS > 10 )) && ESPERA_SALUD_SEGUNDOS=10
+  if esperar_salud; then
+    mensaje "Esa versión ya está activa y responde. No hay nada que hacer."
+    exit 0
+  fi
+  aviso "Esa versión figura como activa pero Eli NO responde."
+  aviso "Se reutiliza la carpeta ya construida y sólo se reinicia el servicio."
+  ESPERA_SALUD_SEGUNDOS="${ELI_ESPERA_SALUD:-60}"
 fi
 
 # --- 2. Migraciones: avisar y detenerse --------------------------------------
@@ -257,6 +267,9 @@ if bash -c "$CMD_REINICIAR" && esperar_salud; then
 else
   printf '\nERROR: la versión nueva NO respondió bien.\n' >&2
   journalctl -u eli -n 25 --no-pager 2>/dev/null | sed 's/^/    | /' >&2 || true
+  if [[ "$DIR_ANTERIOR" == "$DESTINO" ]]; then
+    fallo "Se reinició la versión que ya estaba activa ($CORTO) y sigue sin responder; no hay otra a la que volver sola. Revisa: journalctl -u eli -n 100 --no-pager, y deploy/README.md, paso 15."
+  fi
   if [[ -n "$DIR_ANTERIOR" && -d "$DIR_ANTERIOR" ]]; then
     mensaje "Volviendo a la versión anterior ($(basename "$DIR_ANTERIOR"))..."
     apuntar_a "$DIR_ANTERIOR"

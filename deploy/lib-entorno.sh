@@ -163,9 +163,12 @@ esperar_salud() {
 # registro del sistema y nadie lo ve.
 #
 #  - TOPE: como mucho UN correo por CLAVE y por día (UTC). Un archivo en
-#    ELI_DIR_AVISOS (por defecto /var/backups/eli/.avisos) guarda la fecha del
-#    último correo ENVIADO CON ÉXITO; si el envío falla, el siguiente intento
-#    lo vuelve a probar.
+#    ELI_DIR_AVISOS (por defecto ~/.eli-avisos, o sea /home/eli/.eli-avisos)
+#    guarda la fecha del último correo ENVIADO CON ÉXITO; si el envío falla, el
+#    siguiente intento lo vuelve a probar. Está en el HOME del usuario que corre
+#    cron y NO en /var/backups/eli a propósito: lo que más importa avisar es que
+#    esa carpeta no exista o no se pueda escribir, y el aviso no puede depender
+#    de ella.
 #  - Si faltan las tres variables o no se puede escribir el archivo de estado,
 #    NO se manda nada: sólo se deja constancia en el registro.
 #  - Nunca hace fallar al script que lo llama, y nunca dura más de ~25 s.
@@ -175,11 +178,11 @@ esperar_salud() {
 #  - ELI_URL_RESEND sólo existe para las pruebas.
 avisar_por_correo() {
   local clave="$1" asunto="$2" texto="$3"
-  local carpeta="${ELI_DIR_AVISOS:-/var/backups/eli/.avisos}"
+  local carpeta="${ELI_DIR_AVISOS:-${HOME:-/var/tmp}/.eli-avisos}"
   local hoy previo
   [[ "$clave" =~ ^[a-z0-9-]+$ ]] || return 0
   hoy="$(date -u +%Y-%m-%d)"
-  if ! { mkdir -p "$carpeta" && [[ -w "$carpeta" ]]; } 2>/dev/null; then
+  if ! { mkdir -p "$carpeta" && chmod 700 "$carpeta" && [[ -w "$carpeta" ]]; } 2>/dev/null; then
     registrar eli-aviso warning "No puedo escribir en $carpeta: no mando el aviso por correo '$asunto' (queda sólo en el registro)."
     return 0
   fi

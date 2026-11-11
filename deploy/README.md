@@ -50,7 +50,8 @@ Carpetas y archivos del servidor:
 | `/etc/sudoers.d/eli` | Los dos únicos comandos de administrador que `eli` puede usar sin contraseña (`deploy/sudoers-eli`). |
 | `/etc/caddy/Caddyfile` | La configuración de Caddy. |
 | `/etc/cron.d/eli` | Los relojes (crons y respaldo). |
-| `/var/backups/eli` | Los respaldos de la base (y `.avisos/`, para no repetir correos de aviso). |
+| `/var/backups/eli` | Los respaldos de la base. |
+| `/home/eli/.eli-avisos` | Un archivo por tarea con la fecha del último correo de aviso (para no repetirlos). Está fuera de `/var/backups/eli` a propósito: si esa carpeta falta o no se puede escribir, el aviso tiene que salir igual. |
 
 ## Qué se probó y qué NO (honestidad)
 
@@ -531,7 +532,7 @@ contraseña).
 ### 3.1 Herramientas base
 
 ```bash
-sudo apt install -y ca-certificates curl gnupg git
+sudo apt install -y ca-certificates curl gnupg git openssl
 ```
 
 ### 3.2 Node 22 LTS (repositorio oficial de NodeSource)
@@ -784,7 +785,11 @@ En el navegador, con tu cuenta de administrador de `AE-ROD/Eli`:
 4. *Target branches* → **Add target** → *Include default branch* (o escribe el
    patrón `main`).
 5. Marca estas reglas:
-   - **Require a pull request before merging** (con al menos **1** aprobación).
+   - **Require a pull request before merging** con **0** aprobaciones requeridas
+     si eres la única persona con cuenta en el repositorio (GitHub no deja que
+     apruebes tu propio PR: con "1 aprobación" y sin bypass te quedas sin poder
+     entrar a `main` tú mismo). Si hay una segunda cuenta que revisa, ahí sí puede
+     ser 1.
    - **Require status checks to pass** y agrega la verificación del CI
      (`build-and-test`).
    - **Block force pushes** (no permitir `git push --force`).
@@ -794,9 +799,24 @@ En el navegador, con tu cuenta de administrador de `AE-ROD/Eli`:
      por descuido.
 6. **Create** / **Save changes**.
 
-Comprueba: intenta `git push origin main` desde una copia de trabajo (con un
-cambio cualquiera): GitHub debe **rechazarlo** (`protected branch hook declined`
-o similar). Si lo acepta, la regla no quedó activa.
+**Qué ataja esta regla y qué no:** ataja los accidentes (un `git push` a `main`
+por descuido, o un cambio sin pasar por PR). **No** protege contra un token o una
+cuenta de GitHub comprometidos con permiso de administrador: quien la controla
+puede desactivar la regla. Por eso la cuenta de GitHub lleva contraseña fuerte y
+verificación en dos pasos.
+
+**Comprueba la regla sin ensuciar `main`. NUNCA pruebes empujando a `main`:** si
+la regla no estuviera activa, ese cambio entraría de verdad y `actualizar.sh` lo
+instalaría. Dos formas seguras:
+
+- En la interfaz: `github.com/AE-ROD/Eli` → *Settings* → *Rules* → *Rulesets* →
+  `proteger-main` debe decir **Active** y listar `main` como destino (con
+  clásicas: *Settings* → *Branches* → la regla de `main`).
+- O con una rama desechable que **sí** quede cubierta por la regla: crea un
+  ruleset de prueba sobre el patrón `prueba-regla-*` con las mismas reglas,
+  intenta `git push origin HEAD:prueba-regla-1` desde una copia de trabajo (debe
+  ser **rechazado**, `protected branch hook declined` o similar) y borra el ruleset
+  de prueba después. Si lo acepta, la regla no quedó activa.
 
 > GitHub puede decirte que esta protección en repositorios **privados** requiere
 > un plan de pago (Pro/Team). Si es tu caso, no sigas como si nada: avisa a
@@ -1032,7 +1052,15 @@ tú agregas aquí mismo en hPanel:
    registros que ya existan**. Si ya tienes un `TXT` de SPF en `@`
    (`v=spf1 ...`), no crees un segundo: un nombre sólo puede tener uno.
 3. Agrega también un **DMARC** (recomendado; avisa si alguien suplanta tu
-   dominio): un `TXT` con nombre `_dmarc` y valor
+   dominio). **Primero mira si ya existe uno** (Hostinger a veces trae uno por
+   defecto), porque un segundo `TXT` en `_dmarc` invalida el DMARC entero:
+
+   ```bash
+   dig +short TXT _dmarc.eliagenda.com
+   ```
+
+   Si imprime algo que empieza con `"v=DMARC1;`, **edita ese registro** en hPanel
+   en vez de crear otro. Si no imprime nada, crea un `TXT` con nombre `_dmarc` y valor
    `v=DMARC1; p=none; rua=mailto:TU_CORREO` (empieza en `p=none`, que sólo
    observa; cuando veas que todo lo tuyo pasa, se puede endurecer). Si Resend te
    muestra su propio valor de DMARC, usa el de Resend.
@@ -1445,15 +1473,18 @@ hay servicios nuevos.
 sudo install -d -m 700 -o eli -g eli /var/backups/eli
 ```
 
+**ANTES del lanzamiento** (el caso de este paso): instala el archivo **y deja
+apagadas las dos líneas de correo en un solo comando**. No lo partas en dos:
+`install` solo deja las dos líneas `0 13` ENCENDIDAS, y si te olvidas del segundo
+paso correrán a la vez que los crons de Vercel (justo lo prohibido arriba).
+
 ```bash
-sudo install -m 644 -o root -g root /opt/eli/repo/deploy/cron-eli /etc/cron.d/eli
+sudo install -m 644 -o root -g root /opt/eli/repo/deploy/cron-eli /etc/cron.d/eli && sudo sed -i -E 's|^(0 13 .*llamar-cron)|#DESACTIVADO# \1|' /etc/cron.d/eli
 ```
 
-Apaga las dos líneas de correo (las deja comentadas):
-
-```bash
-sudo sed -i -E 's|^(0 13 .*llamar-cron)|#DESACTIVADO# \1|' /etc/cron.d/eli
-```
+(El `sed` sólo toca las líneas que empiezan con `0 13` y llaman a `llamar-cron`;
+las deja como comentario, que cron ignora, así que el formato del archivo sigue
+siendo válido. El respaldo, `30 6 ...`, no se toca.)
 
 ```bash
 grep -n -E "llamar-cron|respaldo" /etc/cron.d/eli
@@ -1461,6 +1492,15 @@ grep -n -E "llamar-cron|respaldo" /etc/cron.d/eli
 
 Las dos de `llamar-cron` deben empezar con `#DESACTIVADO#`; la de `respaldo.sh`,
 no. (cron relee el archivo solo, no hay que reiniciar nada.)
+
+**DESPUÉS del lanzamiento** (13.5 ya hecho, los crons del VPS encendidos y los de
+Vercel apagados) el archivo se instala sin `sed`, para dejar las dos líneas
+encendidas. Es la variante para reinstalarlo más adelante (paso 14.3); no la uses
+antes del lanzamiento:
+
+```bash
+sudo install -m 644 -o root -g root /opt/eli/repo/deploy/cron-eli /etc/cron.d/eli
+```
 
 Ya existe la carpeta de respaldos, así que repite aquí la comprobación de 8.5
 (el servicio de Eli no puede abrirla; **A COMPROBAR EN EL VPS**):
@@ -1501,7 +1541,17 @@ ya tiene `eli.env` (`RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `SOPORTE_EMAIL`); la
 clave no aparece en `ps` ni en ningún registro, y el correo trae sólo un mensaje
 corto de error (nunca datos de clientes). Si falta alguna de las tres variables,
 no se manda nada y el fallo queda sólo en el registro. El tope diario se guarda en
-`/var/backups/eli/.avisos/` (un archivo con la fecha del último aviso).
+`/home/eli/.eli-avisos/` (un archivo con la fecha del último aviso; fuera de
+`/var/backups/eli` a propósito, porque justo ese fallo —que la carpeta de respaldos
+falte o no se pueda escribir— es de los que hay que avisar).
+
+> **CUIDADO: copia el comando COMPLETO, con el prefijo
+> `ELI_URL_LOCAL=http://127.0.0.1:1`.** Ese prefijo apunta la llamada a un
+> puerto donde no hay nadie, y por eso la prueba no ejecuta nada real. Sin el
+> prefijo, `llamar-cron.sh` llama de verdad al Eli del servidor y **manda los
+> recordatorios reales a los clientes** (y, antes del lanzamiento, repite lo que
+> hacen los crons de Vercel). Esto vale para todas las pruebas de este paso: sólo
+> el 13.5 llama a `llamar-cron.sh` sin prefijo, a propósito.
 
 **Pruébalo una vez** (**A COMPROBAR EN EL VPS**: el remitente de `RESEND_FROM_EMAIL`
 tiene que estar verificado en Resend, o Resend lo rechaza). Esta prueba provoca un
@@ -1516,7 +1566,7 @@ Debe terminar con `FALLÓ con código 000` y `Aviso por correo enviado`, y debe
 llegar un correo a `SOPORTE_EMAIL` ("Eli: falló el cron /api/cron/recordatorios").
 Si dice `No pude mandar el aviso por correo`, revisa las tres variables y que
 el remitente esté verificado en Resend. Esa prueba gasta el aviso de hoy para ese
-cron; para volver a armarlo: `rm /var/backups/eli/.avisos/cron-recordatorios`.
+cron; para volver a armarlo: `rm ~/.eli-avisos/cron-recordatorios`.
 
 Lo mismo con el respaldo (falla de inmediato por un valor inválido, sin tocar la
 base):
@@ -1526,7 +1576,7 @@ ELI_RETENCION_DIAS=0 /opt/eli/current/deploy/respaldo.sh
 ```
 
 Debe decir `ELI_RETENCION_DIAS debe ser un número...` y llegar el correo "FALLÓ el
-respaldo". Rearmar: `rm /var/backups/eli/.avisos/respaldo`.
+respaldo". Rearmar: `rm ~/.eli-avisos/respaldo`.
 
 **Lo que este aviso NO cubre:** avisa cuando algo *falla*, no cuando algo *no
 corre* (si `cron` se detuviera, o el servidor estuviera apagado, no habría
@@ -1719,6 +1769,17 @@ no sirve, sigue:
    (con el servidor, usuario y clave de la URL en las variables `PG*`; por eso se
    usa el script, que las arma sin dejar la clave en la pantalla).
 
+   **A COMPROBAR en la prueba mensual (11.3):** `--exit-on-error` hace que
+   `pg_restore` aborte con el primer error, y hacia Neon puede abortar por errores
+   inocuos (por ejemplo `COMMENT ON EXTENSION` sin permiso para comentar una
+   extensión que Neon ya instaló). Si pasa: la base nueva quedó a medias, así que
+   bórrala y crea otra vacía (paso 3), y vuelve a restaurar **sin** esa opción:
+   `pg_restore --no-owner --no-privileges --dbname=NOMBRE_DE_LA_BASE ...`. Esa
+   corrida no se detiene sola, así que **lee los errores uno por uno** al final:
+   los de extensiones o comentarios son ignorables; uno que mencione una tabla, un
+   dato (`COPY`) o una restricción, no (usa otro respaldo). Anota en tu cuaderno
+   qué errores inocuos salen en tu Neon, para reconocerlos el día de verdad.
+
 5. **Comprueba** lo que muestra al final: debe decir `Restauración terminada`,
    un número de tablas parecido al de antes (~40) y cuentas de filas razonables
    en `negocios`, `usuarios`, `clientes` y `citas`. Si algo no cuadra, **no sigas**:
@@ -1753,6 +1814,12 @@ no sirve, sigue:
    Debe decir `200`. Luego, en el navegador: entra con una cuenta real, mira la
    agenda y una ficha. Las sesiones abiertas siguen valiendo (no dependen de la
    base).
+
+   **Si Vercel quedó de respaldo** (plan de vuelta atrás, paso 13), su
+   `DATABASE_URL` también apunta a la base vieja, y el paso 6 sólo cambió la del
+   VPS. Cámbiala también en Vercel (*Settings* → *Environment Variables*, y
+   redespliega) o deja Vercel apagado: una web de respaldo conectada a la base
+   mala escribiría datos en ella.
 
 9. **Confirma que los respaldos siguen funcionando contra la base nueva:**
 
@@ -1841,16 +1908,18 @@ curl -m 5 http://IP_DEL_VPS:3000
 Debe fallar (`Connection timed out` o `refused`). Si responde HTML, Eli quedó
 expuesto sin Caddy: para y avisa.
 
-**12.4b (Mac) `/api/cron/*` no existe desde internet.** Debe dar `404` las tres
-veces (también con mayúsculas y con doble barra, por si Caddy y Next
+**12.4b (Mac) `/api/cron/*` no existe desde internet.** Debe dar `404` las siete
+veces (también con mayúsculas, doble barra, la barra codificada `%2f`, una letra
+codificada `%63`, y la carpeta sola con y sin barra final, por si Caddy y Next
 interpretan la ruta distinto; **A COMPROBAR**):
 
 ```bash
-for r in /api/cron/recordatorios /API/CRON/recordatorios //api/cron/recordatorios; do curl -s -o /dev/null -w "%{http_code} " "https://eliagenda.com$r"; done; echo
+for r in /api/cron/recordatorios /API/CRON/recordatorios //api/cron/recordatorios /api/cron%2frecordatorios /api/%63ron/recordatorios /api/cron /api/cron/; do curl -s -o /dev/null -w "%{http_code} " "https://eliagenda.com$r"; done; echo
 ```
 
-Debe imprimir `404 404 404`. (Si alguna da `401`, esa variante llegó hasta la
-app: el secreto igual la protege, pero avisa para ajustar el Caddyfile.)
+Debe imprimir `404 404 404 404 404 404 404`. (Si alguna da `401`, esa variante
+llegó hasta la app: el secreto igual la protege, pero avisa para ajustar el
+Caddyfile.)
 
 **12.5 (VPS) La IP del límite de intentos NO se puede falsificar — prueba con
 Caddy de verdad.** Levanta un Caddy de juguete usando el bloque real del
@@ -2066,6 +2135,10 @@ los menús de Vercel cambian; si no los encuentras, usa la forma 2.
 
 1. Vercel → tu proyecto → *Settings* → *Cron Jobs* → **Disable Cron Jobs**
    (el interruptor/botón para desactivarlos). Para reactivarlos: *Enable*.
+   **A COMPROBAR:** según la versión de Vercel, el interruptor puede surtir efecto
+   sólo con un **nuevo despliegue** del proyecto; si al apagarlo te ofrece
+   *Redeploy*, hazlo, y no des los crons por apagados hasta ver el estado
+   *Disabled* y, mañana, ninguna ejecución en *Logs*.
 2. En el repositorio, quitar la sección `"crons"` de `vercel.json` y desplegar
    (mediante un PR; **no** lo hagas desde el VPS). Para volver, se revierte ese
    cambio. *(Ojo: la prueba automática de `deploy/` compara `deploy/cron-eli`
@@ -2130,9 +2203,11 @@ el cron lo hará solo):
 /opt/eli/current/deploy/llamar-cron.sh /api/cron/recordatorios
 ```
 
-Debe imprimir `[eli-cron] /api/cron/recordatorios -> 200 {...}`. (Es seguro
-repetirla: cada recordatorio se reclama en la base antes de enviarse y no sale
-dos veces; sólo adelanta los de mañana.)
+Debe imprimir `[eli-cron] /api/cron/recordatorios -> 200 {...}`. Esta llamada
+SÍ ejecuta el cron de verdad: manda ahora los recordatorios de las citas de
+mañana que todavía no habían salido (los que ya salieron no se repiten, porque
+cada recordatorio se reclama en la base antes de enviarse). Es seguro repetirla;
+lo único que cambia es que esos correos salen ahora y no a las 13:00 UTC.
 
 **Al día siguiente**, pasadas las 13:00 UTC, la confirmación definitiva:
 
@@ -2270,7 +2345,15 @@ diff -q /opt/eli/repo/deploy/eli.service /etc/systemd/system/eli.service; sudo d
 (`cron-eli` aparecerá distinto mientras tengas líneas `#DESACTIVADO#`, antes de
 el lanzamiento: es normal.) Para cada uno que difiera:
 
-**`eli.service`** (reinicia Eli; fuera de horario):
+**`eli.service`** (reinicia Eli; fuera de horario). Antes de instalarlo,
+verifica el archivo nuevo; si imprime algún error, no sigas:
+
+```bash
+systemd-analyze verify /opt/eli/repo/deploy/eli.service
+```
+
+(Puede avisar de que `/opt/eli/current/...` o `/etc/eli/eli.env` no existen si lo
+corres en otra máquina; en el VPS no debe decir nada.) Si no imprime errores:
 
 ```bash
 sudo install -m 644 /opt/eli/repo/deploy/eli.service /etc/systemd/system/eli.service && sudo systemctl daemon-reload && sudo systemctl restart eli
@@ -2295,14 +2378,23 @@ caddy validate --config /opt/eli/repo/deploy/Caddyfile --adapter caddyfile && su
 y vuelve a probar: `/opt/eli/current/deploy/probar-cabeceras.sh /etc/caddy/Caddyfile`
 y `sudo ss -tlnp | grep -E ':(80|443) '`.
 
-**`cron-eli`:** ojo, copiarlo **vuelve a encender** las líneas de correo. Si
-todavía no hiciste el lanzamiento, apágalas de nuevo justo después (10.3):
+**`cron-eli`:** ojo, copiarlo **vuelve a encender** las líneas de correo. Antes
+del lanzamiento (13.5) usa SIEMPRE este comando, que instala y las vuelve a
+apagar en un solo paso:
+
+```bash
+sudo install -m 644 -o root -g root /opt/eli/repo/deploy/cron-eli /etc/cron.d/eli && sudo sed -i -E 's|^(0 13 .*llamar-cron)|#DESACTIVADO# \1|' /etc/cron.d/eli
+```
+
+Y comprueba que quedaron apagadas: `grep -n llamar-cron /etc/cron.d/eli` (las dos
+deben empezar con `#DESACTIVADO#`).
+
+DESPUÉS del lanzamiento (13.5 ya hecho) las líneas deben quedar encendidas, así
+que se instala sin `sed`:
 
 ```bash
 sudo install -m 644 -o root -g root /opt/eli/repo/deploy/cron-eli /etc/cron.d/eli
 ```
-
-Después del lanzamiento (13.5) no hay nada más que hacer.
 
 ---
 
@@ -2326,7 +2418,7 @@ Empieza siempre por aquí, en el VPS (entra con `ssh eli@IP_DEL_VPS`):
 | Cortafuegos | `sudo ufw status` |
 | Crons | `journalctl -t eli-cron --since "2 days ago" --no-pager` |
 | Respaldos | `journalctl -t eli-respaldo --since "2 days ago" --no-pager` y `ls -lh /var/backups/eli` |
-| ¿Se mandaron avisos por correo? | `journalctl -t eli-aviso --since "2 days ago" --no-pager` (y `ls /var/backups/eli/.avisos`) |
+| ¿Se mandaron avisos por correo? | `journalctl -t eli-aviso --since "2 days ago" --no-pager` (y `ls ~/.eli-avisos`) |
 | DNS (desde tu Mac) | `dig +short eliagenda.com` |
 
 Qué buscar según lo que ves:

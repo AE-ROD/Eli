@@ -18,8 +18,11 @@
 #   la práctica quedan 14 o 15 archivos.
 # - Cualquier problema sale con código distinto de 0, queda en el registro
 #   (journalctl -t eli-respaldo) y manda UN correo al día a SOPORTE_EMAIL con la
-#   API de Resend (lib-entorno.sh, avisar_por_correo). Si faltan las variables
-#   de Resend en eli.env, sólo queda en el registro.
+#   API de Resend (lib-entorno.sh, avisar_por_correo; el tope diario vive en
+#   ~/.eli-avisos, fuera de /var/backups/eli). Si faltan las variables de
+#   Resend en eli.env, sólo queda en el registro. Excepción: si ya hay otro
+#   respaldo corriendo, este intento sale con código 75 SIN correo (no es un
+#   fallo y no debe gastar el cupo del día).
 #   OJO: avisa cuando FALLA; si cron deja de correr del todo, no hay quien avise
 #   (por eso la guía pide mirar a mano cada mes que el último .dump sea reciente).
 #
@@ -45,10 +48,11 @@ falla() { ULTIMO_ERROR="$*"; registrar "$ETIQUETA" err "ERROR: $*"; exit 1; }
 # avisa por correo. Va en un solo EXIT para cubrir también las salidas que no
 # pasan por falla() (p. ej. un comando que aborta por "set -e").
 TEMPORAL=""
+OTRO_CORRIENDO=no
 al_salir() {
   local codigo=$?
   [[ -n "$TEMPORAL" ]] && rm -f "$TEMPORAL"
-  if [[ "$codigo" -ne 0 ]]; then
+  if [[ "$codigo" -ne 0 && "$OTRO_CORRIENDO" != si ]]; then
     avisar_por_correo respaldo "Eli: FALLÓ el respaldo de la base de datos" \
 "El respaldo nocturno de la base de datos no se completó ($(date -u '+%Y-%m-%d %H:%M UTC')).
 
@@ -71,9 +75,14 @@ command -v psql >/dev/null || falla "No está psql (viene con postgresql-client-
 command -v node >/dev/null || falla "No está node."
 [[ -d "$DESTINO" && -w "$DESTINO" ]] || falla "La carpeta $DESTINO no existe o no se puede escribir (deploy/README.md, paso 11)."
 
-# Un solo respaldo a la vez.
+# Un solo respaldo a la vez. Si ya hay otro, éste se descarta: no es un fallo,
+# así que sale con 75 (EX_TEMPFAIL) sin correo y sin gastar el aviso del día.
 exec 9>"$DESTINO/.candado"
-flock -n 9 || falla "Ya hay otro respaldo corriendo."
+if ! flock -n 9; then
+  registrar "$ETIQUETA" warning "Ya hay otro respaldo corriendo; este intento se descarta (sin aviso por correo)."
+  OTRO_CORRIENDO=si
+  exit 75
+fi
 
 cargar_entorno "$ARCHIVO_ENTORNO" DIRECT_URL || falla "No pude leer las variables."
 [[ -n "${DIRECT_URL:-}" ]] || falla "Falta DIRECT_URL en $ARCHIVO_ENTORNO."
