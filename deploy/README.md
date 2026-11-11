@@ -1520,7 +1520,7 @@ sudo cp /etc/nginx/sites-available/eliagenda /etc/nginx/sites-available/eliagend
 instala nada; si falla, falla sin consecuencias):
 
 ```bash
-sudo certbot --nginx --dry-run -d eliagenda.com -d www.eliagenda.com
+sudo certbot certonly --nginx --dry-run -d eliagenda.com -d www.eliagenda.com
 ```
 
 Debe terminar con `The dry run was successful`. Si falla con `NXDOMAIN`,

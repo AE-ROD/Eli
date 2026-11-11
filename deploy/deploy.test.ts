@@ -934,7 +934,7 @@ describe("deploy/README.md — nginx convive con sistemaone.com: nunca se apaga,
 
   it("9.6: el orden es ensayo (--dry-run) ANTES del certbot real, sin --hsts, y comprueba la config final con nginx -T y la renovación", () => {
     const s96 = tramo(guia, "### 9.6", "### 9.7")
-    expect(s96.indexOf("sudo certbot --nginx --dry-run -d eliagenda.com -d www.eliagenda.com")).toBeGreaterThan(-1)
+    expect(s96.indexOf("sudo certbot certonly --nginx --dry-run -d eliagenda.com -d www.eliagenda.com")).toBeGreaterThan(-1)
     expect(s96.indexOf("--dry-run")).toBeLessThan(s96.indexOf("sudo certbot --nginx -d eliagenda.com -d www.eliagenda.com --redirect"))
     expect(s96).not.toMatch(/certbot[^\n]*--hsts/)
     expect(s96).toContain("sudo nginx -T")
