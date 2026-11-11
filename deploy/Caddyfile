@@ -1,9 +1,7 @@
-# Caddyfile de Eli (Caddy 2). Se instala en /etc/caddy/Caddyfile.
+# Caddyfile de Eli (Caddy 2). Se instala tal cual en /etc/caddy/Caddyfile
+# (deploy/README.md, paso 9). El dominio de Eli es eliagenda.com.
 #
-# "eli.example.cl" es un MARCADOR: se reemplaza por el dominio real en todo el
-# archivo (ver deploy/README.md, paso 9).
-#
-# Dominio canónico: el dominio SIN www (eli.example.cl). El www redirige ahí.
+# Dominio canónico: el dominio SIN www (eliagenda.com). El www redirige ahí.
 # Por qué sin www: es la dirección que va en NEXTAUTH_URL, en los enlaces de
 # los correos y en las URIs autorizadas de Google. Si la página viviera en dos
 # direcciones, las sesiones (cookies) y el login con Google quedarían partidos
@@ -26,12 +24,12 @@
 	# email tu-correo@tu-dominio.cl
 }
 
-www.eli.example.cl {
+www.eliagenda.com {
 	bind 0.0.0.0
-	redir https://eli.example.cl{uri} permanent
+	redir https://eliagenda.com{uri} permanent
 }
 
-eli.example.cl {
+eliagenda.com {
 	bind 0.0.0.0
 
 	# Compresión de las respuestas (HTML, JS, JSON).

@@ -47,9 +47,10 @@ Carpetas y archivos del servidor:
 | `/opt/eli/previous` | Enlace a la versión anterior (para volver atrás). |
 | `/etc/eli/eli.env` | **Las claves y variables.** Sólo lo lee root y el grupo eli. |
 | `/etc/systemd/system/eli.service` | Cómo se arranca Eli. |
+| `/etc/sudoers.d/eli` | Los dos únicos comandos de administrador que `eli` puede usar sin contraseña (`deploy/sudoers-eli`). |
 | `/etc/caddy/Caddyfile` | La configuración de Caddy. |
 | `/etc/cron.d/eli` | Los relojes (crons y respaldo). |
-| `/var/backups/eli` | Los respaldos de la base. |
+| `/var/backups/eli` | Los respaldos de la base (y `.avisos/`, para no repetir correos de aviso). |
 
 ## Qué se probó y qué NO (honestidad)
 
@@ -59,18 +60,58 @@ y trae el comando exacto.
 
 | Pieza | Estado |
 |---|---|
-| `respaldo.sh` (contra un Postgres 16 local: dump, verificación, retención, errores) | Probado |
+| `respaldo.sh` (contra un Postgres 16 local: dump, verificación, comparación de filas, retención, errores, aviso por correo) | Probado |
 | `probar-restauracion.sh` (restaurar en base vacía; se niega a tocar "producción") | Probado |
-| `actualizar.sh` / `volver-atras.sh` (releases, migraciones, salud, reversión automática, poda a 3) | Probado con un repositorio y un servidor de juguete |
-| `llamar-cron.sh` (401 sin secreto, 200 con secreto, el secreto no aparece en `ps`) | Probado |
+| `actualizar.sh` / `volver-atras.sh` (releases, migraciones, salud, poda a 3) con un repositorio, un `systemctl`/`sudo` falsos y un servidor de juguete, **incluido** un release que muere al arrancar (queda `start-limit-hit`): `reset-failed` + regreso automático | Probado (con juguetes; **no** con systemd real) |
+| `llamar-cron.sh` (401 sin secreto, 200 con secreto, el secreto no aparece en `ps`, espera del candado, aviso por correo con tope diario) | Probado |
+| `npm ci --ignore-scripts` + `npx prisma generate` + `npm run build` + `next start` (`/`, una página de reservas con base, crons 401) | Probado en una carpeta limpia: **funciona sin los scripts de las dependencias** |
 | `next start` con las variables de producción: arranca, `/` responde 200, cabeceras de seguridad y CSP, crons 401 sin secreto | Probado (compilación incluida) |
-| `bash -n` y `shellcheck` de todos los `.sh`; `eli.service` con `systemd-analyze verify` | Probado |
+| `bash -n` y `shellcheck` de todos los `.sh`; `eli.service` con `systemd-analyze verify`; `deploy/sudoers-eli` con `visudo -cf` | Probado |
 | Pruebas automáticas de `deploy/` (`npx vitest run deploy/`) | Probado |
-| **Caddyfile**: que `caddy` lo acepte, que pida el certificado, que pise las cabeceras de IP | **A COMPROBAR EN EL VPS** (paso 9 y 12: `deploy/probar-cabeceras.sh`) |
-| `eli.service` arrancando de verdad con el endurecimiento (`ProtectSystem`, etc.) | **A COMPROBAR EN EL VPS** (paso 8) |
+| **Caddyfile**: que `caddy` lo acepte (incluido `bind 0.0.0.0`), que pida el certificado, que pise las cabeceras de IP, que `/api/cron/*` dé 404 | **A COMPROBAR EN EL VPS** (paso 9 y 12: `deploy/probar-cabeceras.sh /etc/caddy/Caddyfile`). Aquí no había Caddy: el script se probó con un Caddy de juguete |
+| **IPv6**: que con `bind 0.0.0.0` nada escuche en IPv6 | **A COMPROBAR EN EL VPS** (pasos 9.4 y 12.5: `sudo ss -tlnp \| grep -E ':(80\|443) '` y `curl -6`) |
+| `eli.service` arrancando de verdad con el endurecimiento (`ProtectSystem`, `InaccessiblePaths`, `SupplementaryGroups`, etc.) | **A COMPROBAR EN EL VPS** (paso 8.5) |
+| Que `sudo` acepte las dos reglas de `deploy/sudoers-eli` tal como los scripts las llaman (`sudo -n systemctl reset-failed eli` / `restart eli`) | **A COMPROBAR EN EL VPS** (paso 8.2: `sudo -l` y la prueba como `eli`) |
 | Instalación de Node, Caddy y PGDG desde sus repositorios | **A COMPROBAR EN EL VPS** (paso 3; son los métodos oficiales, pero no se pudieron abrir sus páginas desde aquí para recontrastar los comandos) |
 | `cron.d` con `CRON_TZ=UTC` | **A COMPROBAR EN EL VPS** (paso 10) |
-| Tiempo de compilación en el KVM 2 | **A COMPROBAR** (aquí, con 4 CPU: ~1 minuto) |
+| Tiempo de compilación en el KVM 2 | **A COMPROBAR** (aquí, con 4 CPU: ~40 segundos de `npm run build` y ~16 de `npm ci`) |
+| Envío real del correo de aviso con Resend (el remitente `RESEND_FROM_EMAIL` tiene que estar verificado en Resend) | **A COMPROBAR EN EL VPS** (paso 10.5). Aquí se probó contra un Resend de juguete |
+
+## Antes de empezar: lo que tienes que saber de los datos de salud
+
+Eli guarda **datos de salud de personas reales** (fichas clínicas, odontogramas,
+evoluciones, citas). Esta guía deja el servidor razonablemente protegido de
+ataques desde internet, pero hay riesgos que **no resuelve**, y es mejor que los
+conozcas tú que descubrirlos después:
+
+- **El disco del VPS no está cifrado por esta guía.** Quien tenga acceso al
+  disco (el proveedor, un técnico, alguien que se lleve una copia) podría leer
+  `/etc/eli/eli.env` (las claves) y `/var/backups/eli` (los respaldos son **toda
+  la base de datos**, sin cifrar). Los permisos 600/640 protegen de otros
+  usuarios *dentro* del servidor, no de quien tiene el disco. Pregúntale a
+  Hostinger qué ofrece (cifrado de disco, y qué personal puede acceder).
+- **Los snapshots y copias del proveedor** (los que Hostinger hace del disco
+  completo, si tienes esa opción) contienen todo lo anterior. Tómalos en cuenta
+  igual que a los respaldos.
+- **El swap (paso 4)** es un archivo (`/swapfile`) donde el sistema vuelca
+  memoria cuando le falta; esa memoria puede contener datos de pacientes y
+  claves, y ahí quedan **sin cifrar**. Se vacía al apagar, pero no se borra de
+  forma segura.
+- **Las copias a tu Mac se acumulan** (paso 11.4: `rsync` no borra nada). En
+  pocos meses tendrás decenas de copias completas de la base. Ver la política
+  sugerida en 11.4: **FileVault encendido**, una carpeta que *no* esté sincronizada
+  con iCloud/Dropbox, y borrar lo viejo.
+- **Recomendado, NO implementado** (agrega una herramienta, así que requiere tu
+  aprobación antes de hacerlo): **cifrar cada `.dump` con `age` o `gpg`** apenas
+  se genera, de modo que ni el VPS ni la Mac guarden la base en claro. También:
+  un servicio externo de aviso de caídas (healthchecks.io) y de errores (Sentry).
+- **Consulta asesoría legal.** Los datos de salud tienen reglas propias: en Chile,
+  la **Ley 20.584** (derechos y deberes de los pacientes; la ficha clínica es
+  reservada) y la nueva **Ley 21.719** de protección de datos personales (los
+  datos de salud son "sensibles"; exige medidas de seguridad y avisar de las
+  brechas; confirma con tu asesor desde cuándo rige y qué te toca a ti como
+  responsable y qué a cada clínica). Lo de esta guía son medidas técnicas, **no
+  asesoría legal**.
 
 ---
 
@@ -81,14 +122,15 @@ sea un chat**):
 
 | Dato | Dónde se saca |
 |---|---|
-| **IP del VPS** | hPanel de Hostinger → *VPS* → tu servidor → *Resumen* (aparece como "Dirección IP"). |
+| **IP del VPS** | `187.41.114.36` (la confirmas en hPanel → *VPS* → tu servidor → *Resumen*, "Dirección IP"). En la guía, `IP_DEL_VPS` es ésa. |
 | **Contraseña de root** | La que pusiste al crear el VPS (hPanel → VPS → *Configuración* si la quieres cambiar). |
-| **Versión de Ubuntu** | hPanel → VPS → Resumen. Esta guía vale para **22.04 y 24.04**. |
-| **Dominio** | El que compres (en esta guía: `eli.example.cl`; reemplázalo por el tuyo). |
+| **Versión de Ubuntu** | `24.04.5` (hPanel → VPS → Resumen). Esta guía vale para **22.04 y 24.04**. |
+| **Dominio** | `eliagenda.com`, comprado en Hostinger, con el DNS en hPanel. Todavía no sirve a Eli: hoy Eli vive sólo en su dirección de Vercel (`*.vercel.app`), así que pasar al VPS es un **lanzamiento** (paso 13), no un cambio de dirección. |
 | **Variables de Eli** | Vercel → tu proyecto → *Settings* → *Environment Variables*. Son las mismas del paso 6. **`NEXTAUTH_SECRET` tiene que ser EXACTAMENTE el mismo que usa Vercel** (si no, todos pierden la sesión y los enlaces de baja de los correos dejan de servir). |
 | **Acceso a GitHub** | Que seas administrador del repositorio `AE-ROD/Eli` (para crear la deploy key). |
 | **Acceso a Neon** | Para saber la versión de Postgres (paso 3) y crear una base de pruebas (paso 11). |
 | **Acceso a Google Cloud, Resend y Vercel** | Para la mudanza (paso 13). |
+| **Dónde está el DNS de tu dominio** | Ver el aviso al principio del paso 7. Si el dominio no está en Hostinger, los registros DNS se cambian en otro panel. |
 
 **Este kit tiene que estar en la rama `main` de GitHub** (haber pasado por el
 PR y el merge) antes del paso 5. Si todavía está en una rama de trabajo, avísale
@@ -96,7 +138,7 @@ a quien te ayuda: se puede probar desde esa rama, pero la guía asume `main`.
 
 Dos decisiones que ya vienen tomadas:
 
-- **Dominio sin `www`** (`eli.example.cl`). El `www` redirige a ese. Así hay una
+- **Dominio sin `www`** (`eliagenda.com`). El `www` redirige a ese. Así hay una
   sola dirección, una sola cookie de sesión y un solo login con Google.
 - **Hora del servidor en UTC**, igual que Vercel: así los crons a las 13:00 UTC
   son los de siempre.
@@ -134,13 +176,31 @@ Debe decir `Ubuntu 22.04.x LTS` o `Ubuntu 24.04.x LTS`. Si es otra, para.
 
 ### 1.3 Crear el usuario `eli`
 
+**Antes**, genera una contraseña FUERTE y guárdala en tu gestor de contraseñas
+(no en un chat, no en una nota suelta):
+
+```bash
+openssl rand -base64 24
+```
+
+Imprime algo como `q3Vn0b...=` (32 caracteres al azar). **Cópiala al gestor de
+contraseñas ahora.** No inventes una "fácil": ver el recuadro de abajo.
+
 ```bash
 adduser eli
 ```
 
-Pide una contraseña (anótala; es la que te pedirá `sudo`) y luego datos como
-nombre y teléfono: déjalos vacíos con Enter. Al final pregunta `Is the
-information correct? [Y/n]`: Enter.
+Pide la contraseña (pega la que generaste; al pegar no se ve nada, es normal) y
+luego datos como nombre y teléfono: déjalos vacíos con Enter. Al final pregunta
+`Is the information correct? [Y/n]`: Enter.
+
+> **Esta contraseña equivale a root.** Es como la contraseña de root: el usuario `eli` puede usar `sudo`
+> (siguiente paso) y es el que construye y corre Eli; quien la tenga, tiene el
+> servidor entero: las claves de `/etc/eli/eli.env` y todos los respaldos. Por
+> eso tiene que ser larga y al azar, vivir sólo en tu gestor de contraseñas, y
+> **nunca** repetirse en otro servicio. (Cuando apagues el ingreso por
+> contraseña en SSH, paso 2.6, ya no sirve para entrar por internet; sigue
+> sirviendo en la terminal del navegador de Hostinger y para `sudo`.)
 
 ```bash
 usermod -aG sudo eli
@@ -238,6 +298,23 @@ yes`.
 **Primero se permite SSH y recién después se enciende. Si lo haces al revés te
 quedas afuera.**
 
+> **Antes de nada, dos cosas que evitan quedarte afuera:**
+>
+> 1. **¿En qué puerto escucha SSH de verdad?** Casi siempre es el 22, pero no lo
+>    supongas: si estuviera en otro y bloqueas el 22, te cortas solo.
+>
+>    ```bash
+>    sudo ss -tlnp | grep sshd
+>    ```
+>
+>    Debe mostrar `0.0.0.0:22` (y/o `[::]:22`). Si ves **otro número** (por
+>    ejemplo `:2222`), usa ESE en `sudo ufw allow NUMERO/tcp` en lugar de 22.
+> 2. **El firewall de Hostinger.** En hPanel → VPS → tu servidor puede haber un
+>    *Firewall* propio (aparte de `ufw`). Si existe y está activo, debe dejar
+>    abiertos **22, 80 y 443** (y 443/UDP si quieres HTTP/3); si no, el sitio no
+>    será visible aunque `ufw` esté bien. Y recuerda: si te quedas sin SSH, la
+>    **terminal del navegador de hPanel** entra sin pasar por el 22.
+
 ```bash
 sudo apt install -y ufw fail2ban unattended-upgrades
 ```
@@ -262,6 +339,12 @@ sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 ```
 
+Opcional (HTTP/3, un poco más rápido en celulares; si no estás seguro, sáltalo):
+
+```bash
+sudo ufw allow 443/udp
+```
+
 ```bash
 sudo ufw enable
 ```
@@ -273,7 +356,8 @@ Pregunta `Command may disrupt existing ssh connections. Proceed with operation
 sudo ufw status verbose
 ```
 
-Debe decir `Status: active` y listar sólo 22, 80 y 443 (`ALLOW IN`).
+Debe decir `Status: active` y listar sólo 22, 80 y 443 (`ALLOW IN`; el 443/udp
+sólo si lo abriste).
 
 ### 2.4 fail2ban (expulsa a quien intenta adivinar claves)
 
@@ -289,6 +373,20 @@ Debe mostrar `Status for the jail: sshd` con `Currently banned: 0` (o algunos).
 Si dijera `Sorry but the jail 'sshd' does not exist`, avísale a quien te
 ayuda.
 
+**Opcional, recomendado si tu IP de casa/oficina es fija:** que fail2ban nunca te
+bloquee a ti por equivocarte de clave. Cambia `TU_IP` por tu IP pública (búscala
+con `curl -s https://api.ipify.org` en tu Mac):
+
+```bash
+printf '[DEFAULT]\nignoreip = 127.0.0.1/8 ::1 TU_IP\n' | sudo tee /etc/fail2ban/jail.d/eli.local
+```
+
+```bash
+sudo systemctl restart fail2ban
+```
+
+(Si tu IP cambia seguido, no lo hagas: una IP vieja aquí sólo deja pasar a otro.)
+
 ### 2.5 Actualizaciones de seguridad automáticas
 
 ```bash
@@ -296,21 +394,60 @@ printf 'APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgr
 ```
 
 Repite las dos líneas. Esto instala solos los parches de seguridad de Ubuntu.
-**No reinicia solo.** Cada mes, mira si el servidor lo pide:
+Algunos parches (el kernel, por ejemplo) sólo se aplican al reiniciar, así que
+se deja que el servidor se reinicie **solo, cuando haga falta, a las 07:00 UTC**
+(04:00 en Chile en verano; después del respaldo de las 06:30 y lejos de los
+crons de las 13:00):
 
 ```bash
-ls /var/run/reboot-required
+printf 'Unattended-Upgrade::Automatic-Reboot "true";\nUnattended-Upgrade::Automatic-Reboot-Time "07:00";\n' | sudo tee /etc/apt/apt.conf.d/52eli-reinicio
 ```
 
-Si existe (si no, dice `No such file`), reinicia en un momento tranquilo con
-`sudo reboot`. Ojo: Node, Caddy y el cliente de Postgres vienen de
-repositorios aparte que **no** se actualizan solos; una vez al mes corre
-`sudo apt update && sudo apt upgrade`.
+```bash
+apt-config dump | grep -i Automatic-Reboot
+```
+
+Debe mostrar `Automatic-Reboot "true";` y `Automatic-Reboot-Time "07:00";`. Sólo
+reinicia si hay un parche que lo pide (existe `/var/run/reboot-required`) y si
+no hay nadie conectado por SSH. Un reinicio deja Eli caído 1-2 minutos y vuelve
+solo (es lo que se prueba en 12.9).
+
+**Lo que NO se actualiza solo:** Node (NodeSource), Caddy y el cliente de
+Postgres (PGDG) vienen de repositorios aparte que `unattended-upgrades` no toca.
+Una vez al mes, mira los avisos y actualiza a mano:
+
+```bash
+sudo apt update && apt list --upgradable
+```
+
+```bash
+sudo apt upgrade
+```
+
+Si actualizó `nodejs` o `caddy`, aplica con `sudo systemctl restart eli caddy` y
+revisa que Eli responda (`curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000/`
+debe decir `200`). *(Alternativa para avanzados, no recomendada para empezar:
+agregar esos repositorios a `Unattended-Upgrade::Origins-Pattern` copiando
+`origin=` y `archive=` de lo que muestre `apt-cache policy caddy`. Una
+actualización automática de Node o de Caddy puede cambiar el comportamiento sin
+que lo veas.)*
 
 ### 2.6 Apagar el ingreso por contraseña (SÓLO después de comprobar la llave)
 
 > **CUIDADO: aquí es donde la gente se queda sin poder entrar.** Haz exactamente
 > en este orden. Mantén abierta la sesión actual hasta el final.
+
+**(0) Antes de tocar nada, ten UNA SALIDA de emergencia:**
+
+- Guarda una **copia de tu llave privada** (`~/.ssh/id_ed25519`, el archivo SIN
+  `.pub`) en tu gestor de contraseñas o en un USB cifrado; ya está protegida por
+  la frase que le pusiste. Si pierdes tu Mac y no tienes copia, sólo te queda la
+  terminal del navegador de Hostinger.
+- Mejor aún: **agrega una segunda llave pública** (la de otro computador, o una
+  de respaldo) a `/home/eli/.ssh/authorized_keys`, una línea por llave.
+- Y recuerda dónde está el salvavidas: **hPanel → VPS → tu servidor →
+  Terminal** (en el navegador). No usa SSH, así que funciona aunque el SSH quede
+  mal configurado; entras como `root` con la contraseña de root.
 
 **(a) Comprueba la llave desde una TERMINAL NUEVA en tu Mac**, forzando a no usar
 contraseña:
@@ -354,6 +491,17 @@ reinicies**: `sudo rm /etc/ssh/sshd_config.d/00-eli.conf`.
 ```bash
 sudo systemctl restart ssh
 ```
+
+Comprueba la configuración que SSH realmente está usando (no la que tú creías
+haber escrito):
+
+```bash
+sudo sshd -T | grep -E 'passwordauthentication|permitrootlogin|kbdinteractiveauthentication'
+```
+
+Debe decir `passwordauthentication no`, `permitrootlogin no` y
+`kbdinteractiveauthentication no`. Si alguna dice `yes`, otro archivo la está
+pisando (mira `ls /etc/ssh/sshd_config.d/`): no cierres la sesión y avisa.
 
 **(f) Comprueba, SIN cerrar la sesión actual**, desde una terminal nueva en tu
 Mac:
@@ -541,6 +689,11 @@ free -m
 La fila `Swap:` debe decir `total` ≈ 2047. (`swappiness=10` hace que sólo lo use
 en apuros; se aplica completo tras el próximo reinicio.)
 
+> **Ojo, datos de salud:** el swap guarda en el disco, **sin cifrar**, trozos de
+> la memoria (que pueden incluir datos de pacientes y claves). Es el precio de
+> tener colchón al compilar. Ver "Antes de empezar: lo que tienes que saber de
+> los datos de salud", al principio.
+
 ---
 
 ## Paso 5. Traer el código (repositorio privado, con una deploy key de sólo lectura)
@@ -612,6 +765,44 @@ ls /opt/eli/repo/deploy
 Debe listar `Caddyfile`, `README.md`, `actualizar.sh`, etc. (Si no existe
 `deploy`, el kit todavía no está en `main`: ver paso 0.)
 
+### 5.7 Proteger la rama `main` en GitHub (hazlo ahora, una sola vez)
+
+**Por qué:** `actualizar.sh` instala lo que haya en `origin/main` y lo **ejecuta
+en tu servidor** (`npm ci`, `npm run build`, y luego la app, con acceso a las
+claves). Quien pueda escribir en `main` sin que nadie lo revise puede, en la
+práctica, ejecutar código en tu servidor con datos de pacientes. Por eso `main`
+sólo debe recibir cambios por *pull request* revisado.
+
+En el navegador, con tu cuenta de administrador de `AE-ROD/Eli`:
+
+1. `github.com/AE-ROD/Eli` → pestaña **Settings** (arriba a la derecha).
+2. En el menú de la izquierda: **Branches** (bajo *Code and automation*) →
+   **Add branch ruleset** (o *Add classic branch protection rule*, según lo que
+   te ofrezca tu cuenta; las dos sirven). Si prefieres, **Rules → Rulesets →
+   New ruleset → New branch ruleset**.
+3. Nombre: `proteger-main`. *Enforcement status*: **Active**.
+4. *Target branches* → **Add target** → *Include default branch* (o escribe el
+   patrón `main`).
+5. Marca estas reglas:
+   - **Require a pull request before merging** (con al menos **1** aprobación).
+   - **Require status checks to pass** y agrega la verificación del CI
+     (`build-and-test`).
+   - **Block force pushes** (no permitir `git push --force`).
+   - **Restrict deletions** (no permitir borrar la rama).
+   - En las versiones con "Do not allow bypassing the above settings" /
+     "Include administrators": **actívalo**, para que tampoco tú puedas saltártelas
+     por descuido.
+6. **Create** / **Save changes**.
+
+Comprueba: intenta `git push origin main` desde una copia de trabajo (con un
+cambio cualquiera): GitHub debe **rechazarlo** (`protected branch hook declined`
+o similar). Si lo acepta, la regla no quedó activa.
+
+> GitHub puede decirte que esta protección en repositorios **privados** requiere
+> un plan de pago (Pro/Team). Si es tu caso, no sigas como si nada: avisa a
+> quien te ayuda (alternativas: pagar el plan, o dejar de usar `main` como rama
+> de despliegue y desplegar sólo commits que tú revisaste: `./deploy/actualizar.sh <commit>`).
+
 ---
 
 ## Paso 6. Las variables de Eli: `/etc/eli/eli.env`
@@ -626,14 +817,15 @@ Salen de buscar `process.env` en `app/`, `lib/`, `proxy.ts` y
 | `NODE_ENV` | **Sí** → `production` | Modo producción: activa el límite de intentos "cerrado" y desactiva herramientas de desarrollo. |
 | `DATABASE_URL` | **Sí** | Neon, conexión **con pooler** (el host trae `-pooler`). Es la que usa la app. También la necesita la compilación. |
 | `DIRECT_URL` | **Sí** | Neon, conexión **directa** (sin `-pooler`). La usan los respaldos y Prisma (el esquema la exige para compilar). |
-| `NEXTAUTH_URL` | **Sí** (en producción, sin ella los correos no salen) | La dirección pública: `https://eli.example.cl` (sin barra final). |
+| `NEXTAUTH_URL` | **Sí** (en producción, sin ella los correos no salen) | La dirección pública: `https://eliagenda.com` (sin barra final). |
 | `NEXTAUTH_SECRET` | **Sí** | Firma las sesiones y los enlaces de baja. **Copiar el mismo de Vercel.** |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | **Sí** (para entrar con Google) | Google Cloud → Credenciales. Los mismos de Vercel. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | **Sí en producción** | Límite de intentos. **Sin ellas, todo endpoint responde 429** (falla cerrado a propósito). |
-| `CRON_SECRET` | **Sí** (si falta, los crons responden siempre 401) | Contraseña que protege `/api/cron/*`. Puedes reusar la de Vercel o crear una nueva: `openssl rand -hex 32`. |
+| `CRON_SECRET` | **Sí** (si falta, los crons responden siempre 401) | Contraseña que protege `/api/cron/*`. **Crea una NUEVA para el servidor** (`openssl rand -hex 32`, y guárdala en tu gestor de contraseñas); no reutilices la de Vercel: así, si una se filtra, la otra sigue sirviendo. Mientras dure la mudanza, Vercel conserva la suya y el VPS la nueva; nadie más las usa. |
 | `RESEND_API_KEY` | Recomendada | Correos. Sin ella no sale ningún correo (ni recordatorios), pero nada se rompe. |
 | `RESEND_FROM_EMAIL` | Recomendada | Remitente, p. ej. `Eli <no-reply@tu-dominio-verificado.cl>`. Si falta usa un valor por defecto que no es tuyo. |
-| `SOPORTE_EMAIL` | Opcional | Casilla que recibe las solicitudes de soporte. |
+| `SOPORTE_EMAIL` | **Recomendada** | Casilla que recibe las solicitudes de soporte **y los avisos automáticos de fallo** de los respaldos y los crons (paso 10.5). Sin ella (o sin `RESEND_API_KEY`/`RESEND_FROM_EMAIL`) esos avisos no salen y los fallos quedan sólo en el registro del servidor, donde nadie los ve. |
+| `ELI_URL_SALUD_EXTRA` | Opcional (no la lee la app, la leen `actualizar.sh` y `volver-atras.sh`) | Dirección local de una página pública que **toque la base de datos**, p. ej. `http://127.0.0.1:3000/reservar/<slug-de-un-negocio-real>`. Además de la portada, tiene que responder bien para dar por buena una versión nueva (paso 14.1). |
 
 `TZ` **no** va en este archivo: el servicio ya la fija en UTC (`eli.service`).
 
@@ -649,8 +841,12 @@ mínimo que hace que todo funcione, y sólo `root` puede modificarlas.)*
 sudo install -d -m 750 -o root -g eli /etc/eli
 ```
 
+> **SÓLO UNA VEZ.** El comando de abajo crea el archivo **vacío**; si ya existía
+> uno con tus claves, lo borraría. Por eso está protegido: si el archivo ya
+> existe, no hace nada y te avisa.
+
 ```bash
-sudo install -m 640 -o root -g eli /dev/null /etc/eli/eli.env
+[ -e /etc/eli/eli.env ] && echo "YA EXISTE /etc/eli/eli.env: NO lo toques, sigue al siguiente comando (nano)" || sudo install -m 640 -o root -g eli /dev/null /etc/eli/eli.env
 ```
 
 Ábrelo con el editor `nano`:
@@ -660,7 +856,9 @@ sudo nano /etc/eli/eli.env
 ```
 
 Pega esto y **reemplaza cada `CAMBIAR`** con el valor real (cópialos desde
-Vercel → *Settings* → *Environment Variables* → ojo para mostrar el valor).
+Vercel → *Settings* → *Environment Variables* → ojo para mostrar el valor; el
+`CRON_SECRET` es la excepción: ese es NUEVO, ver la tabla; y
+`RESEND_FROM_EMAIL` lleva el remitente de tu dominio, ver abajo).
 Reglas: sin comillas, sin espacios alrededor del `=`, una variable por línea,
 sin la palabra `export`:
 
@@ -668,7 +866,7 @@ sin la palabra `export`:
 NODE_ENV=production
 DATABASE_URL=CAMBIAR
 DIRECT_URL=CAMBIAR
-NEXTAUTH_URL=https://eli.example.cl
+NEXTAUTH_URL=https://eliagenda.com
 NEXTAUTH_SECRET=CAMBIAR
 GOOGLE_CLIENT_ID=CAMBIAR
 GOOGLE_CLIENT_SECRET=CAMBIAR
@@ -682,8 +880,19 @@ SOPORTE_EMAIL=CAMBIAR
 
 Para guardar en nano: `Ctrl+O`, Enter; para salir: `Ctrl+X`.
 
-**Durante las pruebas** (antes de la mudanza) `NEXTAUTH_URL` lleva la dirección
-de prueba (`https://prueba.eli.example.cl`, ver pasos 7 y 13), no la final.
+(`ELI_URL_SALUD_EXTRA` **no** va en esta plantilla todavía: se agrega en el paso
+14.1, cuando ya sepas qué página de reservas usar.)
+
+**Guarda una copia de este archivo en tu gestor de contraseñas** (cada valor,
+como nota segura; nunca en un chat). Si el VPS se pierde, sin esas claves no
+puedes levantar otro (paso 11.5).
+
+`NEXTAUTH_URL` es `https://eliagenda.com` desde el principio (sin barra final):
+Eli no vive todavía en ese dominio, así que no hay una dirección "de prueba"
+aparte. `RESEND_FROM_EMAIL` debe ser un remitente del dominio, p. ej.
+`Eli <no-reply@eliagenda.com>`; **hasta que Resend verifique el dominio (paso 7.4)
+los correos no salen**: ponlo ahora y verifícalo en el paso 7.4. La URI de Google
+(`https://eliagenda.com/api/auth/callback/google`) se agrega en el paso 13.0.
 
 ### 6.3 Comprobar (sin mostrar los secretos)
 
@@ -694,11 +903,27 @@ ls -l /etc/eli/eli.env
 Debe empezar con `-rw-r-----` y decir `root eli`.
 
 ```bash
-for v in NODE_ENV DATABASE_URL DIRECT_URL NEXTAUTH_URL NEXTAUTH_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET UPSTASH_REDIS_REST_URL UPSTASH_REDIS_REST_TOKEN CRON_SECRET RESEND_API_KEY RESEND_FROM_EMAIL; do if grep -q "^$v=." /etc/eli/eli.env && ! grep -q "^$v=CAMBIAR$" /etc/eli/eli.env; then echo "ok      $v"; else echo "FALTA   $v"; fi; done
+for v in NODE_ENV DATABASE_URL DIRECT_URL NEXTAUTH_URL NEXTAUTH_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET UPSTASH_REDIS_REST_URL UPSTASH_REDIS_REST_TOKEN CRON_SECRET RESEND_API_KEY RESEND_FROM_EMAIL SOPORTE_EMAIL; do if grep -q "^$v=." /etc/eli/eli.env && ! grep -q "^$v=CAMBIAR$" /etc/eli/eli.env; then echo "ok      $v"; else echo "FALTA   $v"; fi; done
 ```
 
 Debe decir `ok` en todas (`FALTA` si está vacía o todavía dice `CAMBIAR`).
 No imprime ningún valor.
+
+Y que no quedó ningún valor de ejemplo ni de relleno (`CAMBIAR`, `example`):
+
+```bash
+grep -ciE "CAMBIAR|example" /etc/eli/eli.env
+```
+
+Debe imprimir `0`. Si imprime otro número, hay una línea sin completar o con un
+dominio de ejemplo (por ejemplo un `SOPORTE_EMAIL=...@example.com`): ábrela
+(`sudo nano /etc/eli/eli.env`) y corrígela. Y que `NEXTAUTH_URL` es la correcta:
+
+```bash
+grep "^NEXTAUTH_URL=" /etc/eli/eli.env
+```
+
+Debe imprimir exactamente `NEXTAUTH_URL=https://eliagenda.com`.
 
 Y que `eli` (no root) puede leerlo:
 
@@ -708,53 +933,115 @@ test -r /etc/eli/eli.env && echo "eli puede leerlo"
 
 ---
 
-## Paso 7. DNS en Hostinger
+## Paso 7. DNS en Hostinger (el dominio `eliagenda.com`)
 
-El DNS es la libreta que dice "el dominio `eli.example.cl` está en tal IP".
+El DNS es la libreta que dice "el dominio `eliagenda.com` está en tal IP". El
+dominio es nuevo y todavía no lo usa nadie (**caso A**): el DNS se apunta al VPS
+desde ya y todas las pruebas se hacen directamente con `eliagenda.com`. Eli
+sigue funcionando en su dirección de Vercel mientras tanto; el lanzamiento
+(avisar a los clientes, encender los crons del VPS) es el paso 13.
 
-**Primero decide cuál es tu caso:**
+El DNS de `eliagenda.com` está en Hostinger, así que se edita en **hPanel →
+*Dominios* → `eliagenda.com` → *DNS / Servidores de nombres* → *Registros DNS***.
+Confírmalo (en tu Mac):
 
-- **Caso A, dominio nuevo, que hoy no usa nadie:** apunta el DNS al VPS desde ya
-  y prueba directamente con el dominio final. Salta lo de `prueba.` de abajo y
-  usa `eli.example.cl` en todos lados.
-- **Caso B, el dominio ya sirve a Eli desde Vercel** (o lo quieres mantener
-  funcionando mientras pruebas): se prueba primero con un subdominio provisional
-  `prueba.eli.example.cl` y recién al final se cambia el dominio real (paso 13).
-  La guía usa este caso en los ejemplos.
+```bash
+dig +short NS eliagenda.com
+```
 
-En el paso 13, Vercel y VPS **nunca** deben atender al mismo tiempo con sus
-crons encendidos.
+Debe responder nombres de Hostinger (algo como `ns1.dns-parking.com`). Si
+respondiera otros, el DNS está en otro servicio y los registros se cambian
+**en el panel de ese servicio** (las instrucciones valen igual).
 
-### 7.1 Bajar el TTL (sólo caso B)
+> **No crees registros `AAAA` (IPv6)** para este dominio: el Caddyfile escucha
+> sólo en IPv4 a propósito (paso 9.1) y Let's Encrypt usaría el `AAAA` para
+> validar y fallaría. Si hPanel ya trajo alguno, **bórralo**.
+>
+> **Si algún día pones Cloudflare delante**, déjalo en "solo DNS" (nube gris):
+> con la nube naranja queda delante de Caddy y todo el cálculo de la IP del
+> cliente (paso 9.1) dejaría de valer.
 
-El TTL es cuánto tiempo recuerdan los demás una respuesta del DNS. Para poder
-volver atrás rápido, bájalo **por lo menos un día antes de la mudanza**:
+### 7.1 Ver y anotar cómo está hoy
 
-hPanel → *Dominios* → tu dominio → *DNS / Servidores de nombres* → *Registros
-DNS*. En los registros actuales (`A` de `@`, y el de `www`) cambia **TTL a 300**
-(5 minutos), sin cambiar nada más. Anota o toma captura de **cómo estaban**
-(valor, tipo, TTL): lo necesitas para volver a Vercel.
+Antes de tocar nada, toma una captura de los registros actuales (por si algo
+hay que deshacer). Un dominio recién comprado en Hostinger suele traer
+registros de "estacionamiento" (*parking*) o de *Website*/*Website Builder*
+apuntando a servidores de Hostinger, y a veces un `AAAA`. Esos **chocan** con los
+nuevos: un mismo nombre no puede tener un `CNAME` y un `A` a la vez, y si quedan
+dos `A` distintos, la mitad de las visitas irían al sitio equivocado.
 
 ### 7.2 Crear los registros del VPS
 
-Todavía en *Registros DNS*, *Agregar registro*:
+En *Registros DNS*:
+
+1. **Borra** los registros de `@` y `www` de tipo `A`, `AAAA` y `CNAME` que
+   pertenezcan al estacionamiento/Website de Hostinger (los que apuntan a sus
+   servidores, no a tu VPS), y **todo** `AAAA`. **No borres** los `MX` (correo del
+   dominio, si lo usas), los `TXT` (SPF/verificaciones) ni los `NS`.
+2. **Agrega** (TTL bajo, 300 = 5 minutos, para poder corregir rápido):
 
 | Tipo | Nombre | Apunta a | TTL |
 |---|---|---|---|
-| A | `prueba` | IP del VPS | 300 |
-| A | `www.prueba` | IP del VPS | 300 |
+| A | `@` | `187.41.114.36` | 300 |
+| CNAME | `www` | `eliagenda.com` | 300 |
 
-(En el caso A, los nombres son `@` y `www`.) Si Hostinger trae registros
-automáticos del dominio ("parking") que chocan con estos, bórralos.
+(Si hPanel no te deja crear el `CNAME` de `www`, usa un registro `A` de `www`
+a `187.41.114.36`; funciona igual.) El `www` sólo sirve para que Caddy lo
+redirija al dominio sin `www`.
 
 ### 7.3 Comprobar que el DNS ya apunta (en tu Mac)
 
 ```bash
-dig +short prueba.eli.example.cl
+dig +short eliagenda.com @8.8.8.8
 ```
 
-Debe imprimir la IP del VPS. Si no imprime nada, espera unos minutos y repite.
-(Sin `dig`: `nslookup prueba.eli.example.cl`.)
+```bash
+dig +short eliagenda.com @1.1.1.1
+```
+
+Los dos deben imprimir `187.41.114.36` y nada más. Si no imprime nada, espera unos
+minutos y repite (sin `dig`: `nslookup eliagenda.com`). Comprueba también que no
+quedó ningún `AAAA` y que el `www` apunta bien:
+
+```bash
+dig +short AAAA eliagenda.com
+```
+
+(no debe imprimir nada) y
+
+```bash
+dig +short www.eliagenda.com
+```
+
+(debe mostrar `eliagenda.com.` y/o `187.41.114.36`). **No sigas al paso 9 hasta que
+esto esté así**: Caddy pide el certificado en cuanto lo recargas y necesita que
+el dominio ya apunte al VPS.
+
+### 7.4 Verificar `eliagenda.com` en Resend (para que los correos salgan de tu dominio)
+
+Los correos de Eli (y los avisos de fallo del paso 10.5) salen de
+`RESEND_FROM_EMAIL`, que será `Eli <no-reply@eliagenda.com>`. Resend sólo envía
+desde un dominio **verificado**, y eso se hace con registros en el DNS que
+tú agregas aquí mismo en hPanel:
+
+1. En Resend → *Domains* → *Add Domain* → `eliagenda.com` (región cercana a tus
+   clientes).
+2. Resend te muestra una lista de registros (SPF y DKIM, tipos `TXT`/`MX`/`CNAME`,
+   normalmente con nombres como `send` y `resend._domainkey`). Agrégalos en hPanel
+   **tal cual** los muestra Resend (nombre, tipo y valor), **sin tocar los
+   registros que ya existan**. Si ya tienes un `TXT` de SPF en `@`
+   (`v=spf1 ...`), no crees un segundo: un nombre sólo puede tener uno.
+3. Agrega también un **DMARC** (recomendado; avisa si alguien suplanta tu
+   dominio): un `TXT` con nombre `_dmarc` y valor
+   `v=DMARC1; p=none; rua=mailto:TU_CORREO` (empieza en `p=none`, que sólo
+   observa; cuando veas que todo lo tuyo pasa, se puede endurecer). Si Resend te
+   muestra su propio valor de DMARC, usa el de Resend.
+4. En Resend pulsa *Verify* y espera a que diga **Verified** (minutos a unas
+   horas). `RESEND_FROM_EMAIL` ya está en `eli.env` (paso 6): no hay nada más que
+   cambiar.
+
+Hasta que diga *Verified*, Resend rechaza los envíos (y el aviso del paso 10.5
+fallará).
 
 ---
 
@@ -779,23 +1066,61 @@ compilado.)
 
 ### 8.2 Permiso para reiniciar sólo ese servicio
 
-El script de actualización necesita reiniciar Eli sin pedir contraseña. Se le
-da a `eli` permiso para **un solo comando exacto**:
+Los scripts de actualización necesitan reiniciar Eli sin pedir contraseña. Se le
+da a `eli` permiso para **dos comandos exactos** (no para "administrar todo"),
+escritos en `deploy/sudoers-eli`:
+
+- `systemctl restart eli`: reiniciar Eli.
+- `systemctl reset-failed eli`: si una versión nueva se muere al arrancar, systemd
+  se rinde tras 10 intentos en 5 minutos y deja Eli en `failed (start-limit-hit)`;
+  en ese estado **rechaza** cualquier reinicio hasta un `reset-failed`. Sin esta
+  línea, el regreso automático a la versión anterior fallaría justo cuando hace
+  falta.
+
+Un archivo `sudoers` con un error puede dejarte **sin `sudo`**. Por eso se
+valida ANTES de instalarlo: se copia a un archivo temporal, `visudo -cf` lo
+revisa, y sólo si dice `parsed OK` se instala (la cadena de `&&` se corta ante
+cualquier error y no instala nada):
 
 ```bash
-echo 'eli ALL=(root) NOPASSWD: /usr/bin/systemctl restart eli' | sudo tee /etc/sudoers.d/eli-reiniciar
+TMP_SUDOERS="$(mktemp)" && cp /opt/eli/repo/deploy/sudoers-eli "$TMP_SUDOERS" && sudo visudo -cf "$TMP_SUDOERS" && sudo install -m 440 -o root -g root "$TMP_SUDOERS" /etc/sudoers.d/eli; rm -f "$TMP_SUDOERS"
 ```
+
+Debe imprimir `/tmp/tmp.XXXX: parsed OK` y nada de `error`. Si dice `syntax
+error`, **no se instaló nada**: avisa (no lo arregles a mano).
+
+Comprueba que quedó bien instalado y que `sudo` lo acepta tal como lo llaman los
+scripts (**A COMPROBAR EN EL VPS**; no se pudo probar con un `sudo` real):
 
 ```bash
-sudo chmod 440 /etc/sudoers.d/eli-reiniciar
+sudo ls -l /etc/sudoers.d/eli
 ```
+
+Debe empezar con `-r--r-----` y decir `root root`.
 
 ```bash
-sudo visudo -cf /etc/sudoers.d/eli-reiniciar
+sudo -l | grep -A3 "NOPASSWD"
 ```
 
-Debe decir `/etc/sudoers.d/eli-reiniciar: parsed OK`. Si dice error, borra el
-archivo (`sudo rm /etc/sudoers.d/eli-reiniciar`) y avisa.
+Debe listar exactamente `/usr/bin/systemctl restart eli` y `/usr/bin/systemctl
+reset-failed eli`. Y que `systemctl` es el de esa ruta:
+
+```bash
+command -v systemctl
+```
+
+Debe decir `/usr/bin/systemctl`. Por último, la prueba de verdad (no cambia
+nada: limpiar un estado "fallido" que no existe no hace daño):
+
+```bash
+sudo -n systemctl reset-failed eli && echo "sudo sin contraseña: OK"
+```
+
+Debe imprimir `sudo sin contraseña: OK`. Si pide contraseña o dice `a password
+is required`, la regla no coincide con lo que los scripts ejecutan: no sigas.
+
+*(Si en una versión anterior de esta guía creaste `/etc/sudoers.d/eli-reiniciar`,
+bórralo: `sudo rm /etc/sudoers.d/eli-reiniciar`.)*
 
 Para poder leer los registros del servicio sin `sudo`:
 
@@ -837,9 +1162,14 @@ Verás, en este orden:
    constan como aplicadas", escribe exactamente `YA APLIQUE LAS MIGRACIONES` y
    Enter. Cualquier otra cosa cancela sin cambiar nada.
 3. `Instalando dependencias (npm ci)...` (1-3 minutos; muchas líneas de
-   progreso).
-4. `Compilando (npm run build)...` (1-3 minutos aquí; en el KVM 2 puede ser más:
-   **A COMPROBAR**). Termina con una lista de rutas (`ƒ (Dynamic)`).
+   progreso). Se instala con `--ignore-scripts`: npm **no ejecuta** los scripts
+   de instalación de las ~500 dependencias (código de terceros que, de otro
+   modo, correría como tu usuario `eli`, con acceso a las claves y a los
+   respaldos). Se probó que la compilación y el arranque no los necesitan; el
+   cliente de Prisma se genera aparte con `npx prisma generate`.
+4. `Compilando (prisma generate + npm run build)...` (1-3 minutos aquí; en el
+   KVM 2 puede ser más: **A COMPROBAR**). Termina con una lista de rutas
+   (`ƒ (Dynamic)`).
 5. `==> Activando la versión nueva y reiniciando el servicio...`, luego
    `Responde (200) en http://127.0.0.1:3000/` y `==> Listo: Eli corre la versión
    ...`.
@@ -874,15 +1204,48 @@ escribir su caché. Si el servicio no arranca y el registro menciona `EROFS`,
 `EACCES` o "read-only file system", avisa y pega esas líneas (se ajusta
 `ReadWritePaths` en `eli.service`).
 
+**A COMPROBAR EN EL VPS: el proceso de Eli no ve los respaldos ni tiene grupos
+extra.** `eli.service` trae `InaccessiblePaths=-/var/backups/eli` y
+`SupplementaryGroups=` (vacío). Comprueba:
+
+```bash
+systemctl show eli -p SupplementaryGroups
+```
+
+Debe imprimir `SupplementaryGroups=` (vacío).
+
+```bash
+sudo grep -E '^(Uid|Gid|Groups):' /proc/$(systemctl show eli -p MainPID --value)/status
+```
+
+Muestra los números de usuario y grupos con los que corre el proceso. Compáralos
+con `id eli` (mismos números = el servicio hereda los grupos que `eli` tenga en
+`/etc/group`; es esperable, y por eso `eli` **no** debe estar en más grupos de
+los necesarios: `sudo`, `systemd-journal` y el suyo). Lo que sí debe cumplirse
+es que el servicio no puede abrir los respaldos (cuando exista la carpeta, paso
+10.3; esta comprobación se repite ahí):
+
+```bash
+sudo nsenter -t $(systemctl show eli -p MainPID --value) -m ls /var/backups/eli
+```
+
+Debe fallar o mostrar la carpeta **vacía** (`Permission denied`/sin archivos).
+Si lista los `.dump`, avisa. *(Nota: `SupplementaryGroups=` vacío no le quita
+al proceso los grupos que `eli` ya tiene en el sistema; lo que protege es
+`InaccessiblePaths` y los permisos de los archivos. Quitar esos grupos de verdad
+exige separar el usuario del servicio: ver "Mejoras futuras" al final.)*
+
 ---
 
 ## Paso 9. Caddy (HTTPS y la IP del cliente)
 
 ### 9.1 Qué hace y por qué es crítico
 
-`deploy/Caddyfile` hace cuatro cosas: pone el candado HTTPS solo (Let's
-Encrypt), comprime las respuestas, manda `www` al dominio sin `www`, y —lo
-importante— **decide qué IP "ve" Eli**.
+`deploy/Caddyfile` hace seis cosas: pone el candado HTTPS solo (Let's
+Encrypt), comprime las respuestas, manda `www` al dominio sin `www`, **escucha
+sólo en IPv4**, responde 404 a `/api/cron/*` desde internet (los crons llaman
+directo a `127.0.0.1:3000`, sin pasar por Caddy) y —lo importante— **decide qué
+IP "ve" Eli**.
 
 El límite de intentos de login (10 por minuto por IP, etc.) cuenta por IP. El
 código (`lib/rate-limit.ts`, `obtenerIp`) confía primero en la cabecera
@@ -897,18 +1260,44 @@ comprobación en vivo en el paso 12 (`deploy/probar-cabeceras.sh`).
 > Si algún día pones otro servicio delante de Caddy (Cloudflare, otro proxy),
 > esto hay que rehacerlo. Avísale a quien mantiene el código.
 
-### 9.2 Definir tu dominio de prueba (una vez por terminal)
+**Por qué sólo IPv4 (`bind 0.0.0.0`).** El límite cuenta por la dirección
+*completa* de la conexión. En IPv4 cada conexión tiene una dirección; en IPv6, a
+cada cliente se le entrega un bloque entero (un `/64`, 18 trillones de
+direcciones) y un atacante puede usar una distinta en cada pedido, saltándose el
+límite como si no existiera. Sin IPv6 en Caddy, ese hueco no existe. Es una
+decisión deliberada: **no crees registros DNS `AAAA`** (paso 7) ni quites los
+`bind 0.0.0.0` del Caddyfile (hay una prueba automática que falla si
+desaparecen).
 
-Escribe esto **cambiando el dominio** (si cierras la terminal hay que volver a
-escribirlo). Para el caso A pon el dominio final:
+**¿Tiene tu VPS IPv6?** Mira (en el VPS):
 
 ```bash
-DOMINIO=prueba.eli.example.cl
+ip -6 addr show scope global
 ```
+
+Si no imprime nada, el servidor no tiene IPv6 público y esto es sólo una
+precaución. Si imprime líneas con `inet6 ...` (suele ser el caso en Hostinger),
+el servidor **sí** podría atender por IPv6, y es justo para lo que sirve el
+`bind`: en 9.4 y 12.5 se comprueba que Caddy NO escucha ahí.
+
+### 9.2 Antes de cargar Caddy: el DNS tiene que apuntar ya al VPS
+
+Caddy pide el certificado HTTPS en cuanto lo recargas (9.4). Si el dominio
+todavía no apunta aquí, Let's Encrypt falla, Caddy reintenta con pausas cada vez
+más largas y Let's Encrypt limita los intentos fallidos. Por eso el paso 7.3 tiene
+que estar en verde **antes**. Compruébalo otra vez (en tu Mac):
+
+```bash
+dig +short eliagenda.com @8.8.8.8
+```
+
+Debe imprimir `187.41.114.36`. Si no, vuelve al paso 7.
 
 ### 9.3 Instalar la configuración
 
-Guarda la original, instala la nuestra y cámbiale el dominio de marcador:
+El Caddyfile del repositorio ya trae el dominio real (`eliagenda.com`), así que se
+instala tal cual (no hay nada que reemplazar). Guarda la original e instala la
+nuestra:
 
 ```bash
 sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.original
@@ -919,14 +1308,11 @@ sudo install -m 644 /opt/eli/repo/deploy/Caddyfile /etc/caddy/Caddyfile
 ```
 
 ```bash
-sudo sed -i "s/eli\.example\.cl/$DOMINIO/g" /etc/caddy/Caddyfile
+grep -n "eliagenda.com" /etc/caddy/Caddyfile
 ```
 
-```bash
-grep -n "$DOMINIO" /etc/caddy/Caddyfile
-```
-
-Debe mostrar dos líneas: `www.$DOMINIO {` y `$DOMINIO {`.
+Debe mostrar las líneas de los dos sitios: `www.eliagenda.com {` y
+`eliagenda.com {` (más la redirección del `www`).
 
 ### 9.4 Validar y aplicar
 
@@ -934,12 +1320,40 @@ Debe mostrar dos líneas: `www.$DOMINIO {` y `$DOMINIO {`.
 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 ```
 
-Debe terminar en `Valid configuration`. (Un `adapted ... with warnings` sobre
-formato es inofensivo; un error, no: para y avisa.)
+**Esta validación es obligatoria** antes de recargar: es la única comprobación
+real que tienes de que Caddy entiende el archivo (incluido `bind 0.0.0.0`, que
+no se pudo probar con un Caddy de verdad al armar el kit). Debe terminar en
+`Valid configuration`. (Un `adapted ... with warnings` sobre formato es
+inofensivo; un error, no.)
+
+**Si dice error** (por ejemplo `unrecognized directive` o `wrong argument count`
+en una línea con `bind`): **NO recargues.** Caddy sigue sirviendo con la
+configuración anterior mientras no lo hagas. Deshaz y avisa:
+
+```bash
+sudo cp /etc/caddy/Caddyfile.original /etc/caddy/Caddyfile
+```
+
+y pega a quien te ayuda **sólo** la salida del `validate`. *(Alternativa de
+emergencia, sólo si te lo indican: dejar el archivo sin `bind` y apagar IPv6 en
+el sistema con `printf 'net.ipv6.conf.all.disable_ipv6=1\nnet.ipv6.conf.default.disable_ipv6=1\n' | sudo tee /etc/sysctl.d/99-eli-sin-ipv6.conf && sudo sysctl --system`.
+**A COMPROBAR**; la prueba de IPv6 del paso 12.5 sigue valiendo.)*
+
+Si dice `Valid configuration`:
 
 ```bash
 sudo systemctl reload caddy
 ```
+
+Comprueba que Caddy escucha sólo en IPv4 (**A COMPROBAR EN EL VPS**):
+
+```bash
+sudo ss -tlnp | grep -E ':(80|443) '
+```
+
+Debe mostrar `0.0.0.0:80` y `0.0.0.0:443` (con `caddy`). Si ves `*:443` o
+`[::]:443`, Caddy está escuchando también en IPv6: **no sigas**, el `bind` no se
+aplicó.
 
 ```bash
 sudo journalctl -u caddy -n 30 --no-pager
@@ -952,11 +1366,21 @@ Busca `certificate obtained successfully` (o similar) para tu dominio. Si ves
 ### 9.5 Probar desde tu Mac
 
 ```bash
-curl -I https://prueba.eli.example.cl
+curl -I https://eliagenda.com
 ```
 
 Debe empezar con `HTTP/2 200` y llevar, entre otras, `strict-transport-security`
 y `content-security-policy`.
+
+Y lo de los crons: desde internet no deben existir (los llama el propio
+servidor, sin pasar por Caddy):
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" https://eliagenda.com/api/cron/recordatorios
+```
+
+Debe imprimir `404` (si imprimiera `401`, el cierre del Caddyfile no está
+aplicado: el secreto sigue protegiendo, pero re-aplica el Caddyfile, ver 14.3).
 
 ---
 
@@ -988,13 +1412,34 @@ Una prueba automática falla si estas dos rutas/horas se separan de las de
 
 Cada llamada usa `deploy/llamar-cron.sh`: lee `CRON_SECRET` del archivo de
 variables, se lo manda a Eli por la entrada estándar de `curl` (no aparece en
-`ps` ni en ningún registro) y anota el resultado.
+`ps` ni en ningún registro) y anota el resultado. Llama **directo** a
+`127.0.0.1:3000` (no al dominio): por eso Caddy puede responder 404 a
+`/api/cron/*` desde internet.
+
+Si hay una actualización en curso (comparten el candado de `actualizar.sh`),
+espera hasta 15 minutos a que termine y llama a Eli ya reiniciado. Aun así,
+**no actualices ni vuelvas atrás entre las 12:50 y las 13:20 UTC** (la hora de
+los crons diarios).
+
+Si un cron o el respaldo **falla**, además de anotarlo manda **un correo al día**
+a `SOPORTE_EMAIL` (paso 10.5). Eso funciona con lo que Eli ya usa (Resend); no
+hay servicios nuevos.
 
 ### 10.3 Instalar (con los de correo APAGADOS hasta la mudanza)
 
 > **NO enciendas los crons de correo mientras Vercel siga con los suyos
-> encendidos:** cada recordatorio saldría dos veces. Se encienden en el paso 13.
-> El respaldo sí puede quedar encendido desde ya.
+> encendidos, ni mientras el servidor use un dominio de prueba.** Lo que se
+> verificó en el código (`app/api/cron/recordatorios/route.ts`): cada recordatorio
+> se "reclama" en la base **antes** de enviarse (se marca `reminderSentAt` sólo si
+> estaba vacío), por eso repetir una corrida, o correr dos a la vez, **no duplica**
+> un correo. Aun así la regla sigue siendo no encender los dos: (1) un envío que
+> falla de forma ambigua queda marcado y no se reintenta (a propósito: "más vale
+> un recordatorio perdido que dos"), así que una corrida de más puede gastar el
+> único intento con el dominio equivocado; y (2) los enlaces del correo llevan el
+> `NEXTAUTH_URL` del servidor que los manda: desde el servidor de pruebas
+> saldrían con la dirección de **prueba**, que desaparecerá, y la marca ya
+> quedaría puesta (no se puede deshacer). Se encienden en el paso 13. El respaldo
+> sí puede quedar encendido desde ya.
 
 ```bash
 sudo install -d -m 700 -o eli -g eli /var/backups/eli
@@ -1016,6 +1461,15 @@ grep -n -E "llamar-cron|respaldo" /etc/cron.d/eli
 
 Las dos de `llamar-cron` deben empezar con `#DESACTIVADO#`; la de `respaldo.sh`,
 no. (cron relee el archivo solo, no hay que reiniciar nada.)
+
+Ya existe la carpeta de respaldos, así que repite aquí la comprobación de 8.5
+(el servicio de Eli no puede abrirla; **A COMPROBAR EN EL VPS**):
+
+```bash
+sudo systemctl restart eli && sleep 5 && sudo nsenter -t $(systemctl show eli -p MainPID --value) -m ls /var/backups/eli
+```
+
+No debe listar archivos `.dump` (error de permiso o carpeta vacía).
 
 **Encenderlos (paso 13)**, cuando toque:
 
@@ -1039,6 +1493,46 @@ Una corrida buena dice, p. ej., `/api/cron/recordatorios -> 200 {"total":...}`.
 Una mala dice `FALLÓ con código 401` (el `CRON_SECRET` no coincide) o `000`
 (Eli no está respondiendo).
 
+### 10.5 Avisos por correo cuando algo falla
+
+`respaldo.sh` y `llamar-cron.sh` mandan **un correo al día** (como máximo, por
+tarea) a `SOPORTE_EMAIL` si fallan. Usan la API de Resend con las variables que
+ya tiene `eli.env` (`RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `SOPORTE_EMAIL`); la
+clave no aparece en `ps` ni en ningún registro, y el correo trae sólo un mensaje
+corto de error (nunca datos de clientes). Si falta alguna de las tres variables,
+no se manda nada y el fallo queda sólo en el registro. El tope diario se guarda en
+`/var/backups/eli/.avisos/` (un archivo con la fecha del último aviso).
+
+**Pruébalo una vez** (**A COMPROBAR EN EL VPS**: el remitente de `RESEND_FROM_EMAIL`
+tiene que estar verificado en Resend, o Resend lo rechaza). Esta prueba provoca un
+fallo *a propósito* sin tocar nada real: apunta el cron a un puerto donde no hay
+nadie, así que **no ejecuta ningún cron de verdad**:
+
+```bash
+ELI_URL_LOCAL=http://127.0.0.1:1 /opt/eli/current/deploy/llamar-cron.sh /api/cron/recordatorios
+```
+
+Debe terminar con `FALLÓ con código 000` y `Aviso por correo enviado`, y debe
+llegar un correo a `SOPORTE_EMAIL` ("Eli: falló el cron /api/cron/recordatorios").
+Si dice `No pude mandar el aviso por correo`, revisa las tres variables y que
+el remitente esté verificado en Resend. Esa prueba gasta el aviso de hoy para ese
+cron; para volver a armarlo: `rm /var/backups/eli/.avisos/cron-recordatorios`.
+
+Lo mismo con el respaldo (falla de inmediato por un valor inválido, sin tocar la
+base):
+
+```bash
+ELI_RETENCION_DIAS=0 /opt/eli/current/deploy/respaldo.sh
+```
+
+Debe decir `ELI_RETENCION_DIAS debe ser un número...` y llegar el correo "FALLÓ el
+respaldo". Rearmar: `rm /var/backups/eli/.avisos/respaldo`.
+
+**Lo que este aviso NO cubre:** avisa cuando algo *falla*, no cuando algo *no
+corre* (si `cron` se detuviera, o el servidor estuviera apagado, no habría
+quién avisar). Por eso existen el monitor externo (apéndice) y el chequeo mensual
+del paso 11.6.
+
 ---
 
 ## Paso 11. Respaldos: cómo se hacen, cuánto duran, y CÓMO PROBAR QUE SIRVEN
@@ -1052,9 +1546,14 @@ Un respaldo que nunca se probó restaurar **no es un respaldo**.
 - Hace un `pg_dump` en formato *custom* comprimido, a
   `/var/backups/eli/eli-AAAA-MM-DD_HHMMSS.dump` con permiso 600 (sólo `eli`), y un
   enlace `ultimo.dump`.
-- Lo **verifica**: no vacío, `pg_restore --list` lo lee sin errores, y trae tablas
-  con datos. Si algo falla, sale con error y lo anota en el registro.
-- Borra los respaldos de más de **14 días** (recién cuando el nuevo quedó bien).
+- Lo **verifica**: no vacío, `pg_restore --list` lo lee sin errores, trae tablas
+  con datos, y **compara las filas** de `usuarios`, `negocios` y `citas` del
+  respaldo contra las de la base en ese momento (como la base sigue en uso, no
+  exige que sean idénticas; falla si el respaldo trae menos del 95 % o 0 filas
+  cuando la base tiene). Si algo falla, sale con error, lo anota en el registro
+  y **te manda un correo** (paso 10.5).
+- Borra los respaldos de más de **14 días** (336 horas; recién cuando el nuevo
+  quedó bien). En la práctica quedan 14 o 15 archivos.
 
 ### 11.2 Primer respaldo, a mano
 
@@ -1062,8 +1561,9 @@ Un respaldo que nunca se probó restaurar **no es un respaldo**.
 /opt/eli/current/deploy/respaldo.sh
 ```
 
-Debe terminar con `Respaldo listo y verificado: /var/backups/eli/eli-...dump
-(... MB, NN tablas con datos)`.
+Debe mostrar tres líneas `Filas de 'usuarios'/'negocios'/'citas': N en el
+respaldo, N en la base` y terminar con `Respaldo listo y verificado:
+/var/backups/eli/eli-...dump (... MB, NN tablas con datos)`.
 
 ```bash
 ls -lh /var/backups/eli
@@ -1111,12 +1611,20 @@ Si dice `ERROR: Esa base ... es la de PRODUCCIÓN`, pegaste la URL equivocada:
 **(d) Borra el proyecto de pruebas** en Neon (*Settings* → *Delete project*).
 
 Repite esta prueba una vez al mes, y después de cualquier cambio en el respaldo.
+(`probar-restauracion.sh` sólo **prueba** que el respaldo sirve. Para
+**recuperar** de verdad después de un desastre, usa el procedimiento de 11.5.)
 
 ### 11.4 Copiar los respaldos a otro lugar (opcional pero recomendado)
 
 Si el VPS se pierde, los respaldos que están sólo en el VPS se pierden con él
 (Neon guarda su propio historial, pero es bueno tener el tuyo). La forma más
 simple es **bajarlos a tu Mac**, y no deja ninguna clave guardada en el servidor.
+
+**Antes: FileVault.** En la Mac: Ajustes del Sistema → Privacidad y seguridad →
+**FileVault** → *Activar*. Sin eso, quien robe tu Mac se lleva toda la base de
+pacientes. Y guarda la carpeta **fuera** de iCloud Drive, Dropbox o cualquier
+carpeta que se sincronice.
+
 En una terminal de tu Mac:
 
 ```bash
@@ -1130,22 +1638,164 @@ rsync -av --exclude ultimo.dump --exclude .candado eli@IP_DEL_VPS:/var/backups/e
 Copia sólo lo que falta. Repítelo cuando quieras (por ejemplo cada semana).
 Los respaldos tienen **datos de clientes**: guárdalos sólo en discos cifrados
 (en Mac: FileVault encendido) y no los subas a servicios públicos sin cifrar.
+
+**Esas copias se acumulan** (el servidor borra las suyas a los 14 días, pero
+`rsync` así usado **nunca borra nada en tu Mac**): cada una es la base completa
+de ese día. Política sugerida: quédate con las de los últimos 30 días y una por
+mes de ahí hacia atrás, y borra el resto. Ver cuáles pasan de 30 días (no borra
+nada):
+
+```bash
+find ~/respaldos-eli -name 'eli-*.dump' -mtime +30
+```
+
+Revisa la lista y, si está bien, bórralas (`-delete` al final del mismo
+comando). Cuantas menos copias de datos de salud existan, menos que proteger.
+Pendiente recomendado (no implementado, necesita tu aprobación): **cifrar cada
+`.dump` con `age` o `gpg`** antes de guardarlo; ver el recuadro de datos de salud
+al principio.
+
 Otras opciones (si algún día lo quieres automático): `rclone` hacia un
 almacenamiento (Backblaze B2, Google Drive...) corriendo desde cron; es
 agregar una herramienta nueva, así que hay que aprobarlo antes.
+
+### 11.5 Recuperarse de un desastre: restaurar la base de verdad
+
+Esto es **distinto** de `probar-restauracion.sh` (que sólo prueba que un
+respaldo sirve): aquí se **reemplaza** la base que usa Eli. Léelo completo antes
+de empezar; tómate el tiempo, no es una carrera.
+
+**Cuándo:** la base de Neon se borró, se corrompió o quedó con datos malos, y
+no se arregla con las herramientas de Neon.
+
+**Antes de nada, mira si Neon puede deshacerlo solo.** En la consola de Neon →
+tu proyecto → *Backup & Restore* (o *Branches* → *Restore*) puedes volver a un
+instante anterior (cuánto atrás depende de tu plan). Si el problema es de hace
+unas horas, eso es más rápido y pierde menos datos que un respaldo de anoche. Si
+no sirve, sigue:
+
+1. **Detén Eli** para que nadie escriba datos nuevos en una base mala (verán una
+   página de error; es mejor que seguir mezclando datos):
+
+   ```bash
+   sudo systemctl stop eli
+   ```
+
+   (Mientras esté detenido, los crons de las 13:00 fallarán y te llegará un correo de
+   aviso: es esperable.)
+
+2. **Elige el respaldo.** El más nuevo es `ultimo.dump`; mira sus fechas:
+
+   ```bash
+   ls -lht /var/backups/eli | head
+   ```
+
+   Si el último pesa 0 o mucho menos que los otros, usa uno anterior. Si el VPS
+   también se perdió, usa una copia de tu Mac (paso 11.4) y súbela con `scp`.
+   **Pierdes todo lo escrito después de ese respaldo** (hasta ~24 horas): díselo
+   a las clínicas afectadas.
+
+3. **Crea una base NUEVA y vacía en Neon**, sin tocar la vieja: consola de Neon →
+   *New Project* → nombre `eli-restaurada`, **misma versión de Postgres** que
+   producción. Copia **dos** cadenas desde *Connect*: la **directa** (desactiva
+   "Connection pooling") y la **con pooler** (activado, el host trae `-pooler`).
+   No las pegues en ningún chat.
+
+4. **Restaura el respaldo en la base nueva**, con el script (que se niega a
+   tocar la base que hoy usa `eli.env` y a escribir sobre una base con tablas;
+   cuando pida la URL, pega la **directa** de la base nueva):
+
+   ```bash
+   /opt/eli/current/deploy/probar-restauracion.sh /var/backups/eli/ultimo.dump
+   ```
+
+   (Ignora su última línea que dice "puedes BORRAR la base de prueba": esta vez es
+   la buena.) Equivale a este comando de `pg_restore`, que es lo que hace por dentro:
+
+   ```bash
+   pg_restore --no-owner --no-privileges --exit-on-error --dbname=NOMBRE_DE_LA_BASE /var/backups/eli/ultimo.dump
+   ```
+
+   (con el servidor, usuario y clave de la URL en las variables `PG*`; por eso se
+   usa el script, que las arma sin dejar la clave en la pantalla).
+
+5. **Comprueba** lo que muestra al final: debe decir `Restauración terminada`,
+   un número de tablas parecido al de antes (~40) y cuentas de filas razonables
+   en `negocios`, `usuarios`, `clientes` y `citas`. Si algo no cuadra, **no sigas**:
+   prueba con el respaldo anterior.
+
+6. **Apunta Eli a la base nueva.** Edita las dos líneas con las cadenas del
+   paso 3 (`DATABASE_URL` la **con pooler**, `DIRECT_URL` la **directa**):
+
+   ```bash
+   sudo nano /etc/eli/eli.env
+   ```
+
+7. **Si desde ese respaldo se aplicaron migraciones nuevas**, la base restaurada
+   no las tiene: el script de actualización te lo dice ("La base NO tiene
+   registradas como aplicadas"). Aplícalas con el procedimiento de siempre
+   (README de la raíz, "Migraciones en producción"), con un respaldo antes.
+
+8. **Arranca y comprueba:**
+
+   ```bash
+   sudo systemctl restart eli
+   ```
+
+   ```bash
+   journalctl -u eli -n 30 --no-pager
+   ```
+
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000/reservar/EL-SLUG-DE-UN-NEGOCIO-REAL
+   ```
+
+   Debe decir `200`. Luego, en el navegador: entra con una cuenta real, mira la
+   agenda y una ficha. Las sesiones abiertas siguen valiendo (no dependen de la
+   base).
+
+9. **Confirma que los respaldos siguen funcionando contra la base nueva:**
+
+   ```bash
+   /opt/eli/current/deploy/respaldo.sh
+   ```
+
+10. **Guarda la base vieja** (no la borres) hasta estar seguro, por si hace falta
+    sacar algo de ahí. Después de unas semanas, bórrala.
+
+**Si lo que se perdió es el VPS (y Neon está bien):** crea un VPS nuevo, sigue esta
+guía desde el paso 1, y en el paso 6 pega las claves que guardaste en tu gestor
+de contraseñas. No hay nada que restaurar en la base.
+
+Si hubo pérdida o filtración de datos de pacientes, consulta de inmediato con tu
+asesor legal (ver el recuadro del principio): puede haber obligaciones de
+avisar.
+
+### 11.6 Chequeo mensual: ¿hay respaldos recientes?
+
+Cada mes (ponlo en tu calendario), en el VPS:
+
+```bash
+find /var/backups/eli -maxdepth 1 -name 'eli-*.dump' -mtime -2 | grep -q . && echo "OK: hay un respaldo de menos de 2 días" || echo "ALERTA: el respaldo más nuevo tiene 2 días o más"
+```
+
+Debe decir `OK`. Si dice `ALERTA`: `journalctl -t eli-respaldo --since "3 days ago"
+--no-pager` y el paso 15. Un correo de fallo sólo llega si el respaldo *falla*;
+si `cron` no corrió, este chequeo es lo único que lo nota. (El mismo mes, repite
+la prueba de restauración, 11.3.)
 
 ---
 
 ## Paso 12. Lista de verificación final
 
 Haz esto **antes** de la mudanza, con el dominio de prueba. Reemplaza
-`prueba.eli.example.cl` por tu dominio. En las que dicen "(Mac)" usa la terminal
+`eliagenda.com` por tu dominio. En las que dicen "(Mac)" usa la terminal
 de tu Mac; en las que dicen "(VPS)", la del servidor.
 
 **12.1 (Mac) HTTPS responde, con candado válido.**
 
 ```bash
-curl -I https://prueba.eli.example.cl
+curl -I https://eliagenda.com
 ```
 
 `HTTP/2 200`. Sin errores de certificado.
@@ -1153,7 +1803,7 @@ curl -I https://prueba.eli.example.cl
 **12.2 (Mac) Cabeceras de seguridad y CSP presentes.**
 
 ```bash
-curl -sI https://prueba.eli.example.cl | grep -iE "strict-transport-security|content-security-policy|x-frame-options|x-content-type-options|referrer-policy|permissions-policy"
+curl -sI https://eliagenda.com | grep -iE "strict-transport-security|content-security-policy|x-frame-options|x-content-type-options|referrer-policy|permissions-policy"
 ```
 
 Deben salir las seis: `strict-transport-security: max-age=31536000`,
@@ -1162,7 +1812,7 @@ Deben salir las seis: `strict-transport-security: max-age=31536000`,
 `referrer-policy: strict-origin-when-cross-origin`, `permissions-policy: ...`.
 
 ```bash
-curl -sI https://prueba.eli.example.cl | grep -iE "^server:|x-powered-by"
+curl -sI https://eliagenda.com | grep -iE "^server:|x-powered-by"
 ```
 
 No debe imprimir nada (no se anuncia ni Caddy ni Next).
@@ -1170,17 +1820,17 @@ No debe imprimir nada (no se anuncia ni Caddy ni Next).
 **12.3 (Mac) HTTP salta a HTTPS y el www salta al dominio sin www.**
 
 ```bash
-curl -I http://prueba.eli.example.cl
+curl -I http://eliagenda.com
 ```
 
-`308 Permanent Redirect` con `Location: https://prueba.eli.example.cl/` (es la
+`308 Permanent Redirect` con `Location: https://eliagenda.com/` (es la
 redirección automática de Caddy).
 
 ```bash
-curl -I "https://www.prueba.eli.example.cl/ruta?x=1"
+curl -I "https://www.eliagenda.com/ruta?x=1"
 ```
 
-`301` con `Location: https://prueba.eli.example.cl/ruta?x=1`.
+`301` con `Location: https://eliagenda.com/ruta?x=1`.
 
 **12.4 (Mac) El puerto 3000 no se ve desde afuera.**
 
@@ -1191,26 +1841,57 @@ curl -m 5 http://IP_DEL_VPS:3000
 Debe fallar (`Connection timed out` o `refused`). Si responde HTML, Eli quedó
 expuesto sin Caddy: para y avisa.
 
-**12.5 (VPS) La IP del límite de intentos NO se puede falsificar — prueba con
-Caddy de verdad.** Levanta un Caddy de juguete usando el bloque real de tu
-`Caddyfile` y verifica lo que le llega a la app:
+**12.4b (Mac) `/api/cron/*` no existe desde internet.** Debe dar `404` las tres
+veces (también con mayúsculas y con doble barra, por si Caddy y Next
+interpretan la ruta distinto; **A COMPROBAR**):
 
 ```bash
-/opt/eli/current/deploy/probar-cabeceras.sh
+for r in /api/cron/recordatorios /API/CRON/recordatorios //api/cron/recordatorios; do curl -s -o /dev/null -w "%{http_code} " "https://eliagenda.com$r"; done; echo
 ```
 
-Debe terminar con `TODO BIEN: el cliente no puede elegir su IP.` y las cuatro
-líneas en `OK`. Si dice `FALLA`, **no pongas Eli en producción**: pega la salida
-completa (no tiene secretos) a quien mantiene el código. *(A COMPROBAR: este
-script no pudo correrse con un Caddy real al armarlo; es justo la prueba que
+Debe imprimir `404 404 404`. (Si alguna da `401`, esa variante llegó hasta la
+app: el secreto igual la protege, pero avisa para ajustar el Caddyfile.)
+
+**12.5 (VPS) La IP del límite de intentos NO se puede falsificar — prueba con
+Caddy de verdad.** Levanta un Caddy de juguete usando el bloque real del
+`Caddyfile` **instalado** (el que de verdad atiende, no el del repositorio) y
+verifica lo que le llega a la app:
+
+```bash
+/opt/eli/current/deploy/probar-cabeceras.sh /etc/caddy/Caddyfile
+```
+
+Debe empezar con `Probando: /etc/caddy/Caddyfile` y terminar con `TODO BIEN: el
+cliente no puede elegir su IP.`, con las siete líneas en `OK` (las cuatro de IP,
+más "cada sitio escucha sólo en IPv4", "/api/cron/... da 404" y "el resto del
+sitio sí llega a la app"). Si dice `FALLA`, **no pongas Eli en producción**: pega
+la salida completa (no tiene secretos) a quien mantiene el código. *(A COMPROBAR:
+este script no pudo correrse con un Caddy real al armarlo; es justo la prueba que
 confirma que `header_up X-Forwarded-For {remote_host}` reemplaza y no suma.)*
+
+**12.5b (VPS, sólo si tiene IPv6) Caddy no atiende por IPv6.** Si en 9.1 viste que
+el servidor tiene IPv6 (`ip -6 addr show scope global` imprime algo), toma su
+dirección (la que sigue a `inet6`, sin el `/64`) y prueba, mintiendo la IP:
+
+```bash
+IPV6=$(ip -6 addr show scope global | awk '/inet6/ {sub("/.*","",$2); print $2; exit}'); echo "IPv6: $IPV6"
+```
+
+```bash
+curl -6 -m 8 -s -o /dev/null -w "%{http_code}\n" --resolve "eliagenda.com:443:[$IPV6]" -H "X-Real-IP: 9.9.9.9" -H "X-Forwarded-For: 9.9.9.9" https://eliagenda.com/
+```
+
+Debe imprimir `000` (la conexión se rechaza: nada escucha en IPv6). Si imprime
+`200`/`3xx`/`4xx`, Caddy sí atiende por IPv6 y el límite de intentos se puede
+saltar rotando direcciones: **no sigas**, mira 9.4. (Se prueba desde el propio
+VPS porque desde tu Mac quizá no tengas IPv6; es la misma conexión.)
 
 **12.6 (Mac) Lo mismo, de punta a punta, contra el sitio real.** Manda 14
 intentos de login seguidos mintiendo una IP distinta en cada uno. El límite es
 10 por minuto por IP, así que los últimos tienen que dar `429`:
 
 ```bash
-for i in $(seq 1 14); do curl -s -o /dev/null -w "%{http_code} " -X POST https://prueba.eli.example.cl/api/auth/callback/credentials -H "X-Vercel-Forwarded-For: 10.0.0.$i" -H "X-Real-IP: 10.0.1.$i" -H "X-Forwarded-For: 10.0.2.$i"; done; echo
+for i in $(seq 1 14); do curl -s -o /dev/null -w "%{http_code} " -X POST https://eliagenda.com/api/auth/callback/credentials -H "X-Vercel-Forwarded-For: 10.0.0.$i" -H "X-Real-IP: 10.0.1.$i" -H "X-Forwarded-For: 10.0.2.$i"; done; echo
 ```
 
 Debe imprimir algo como `200 200 200 200 200 200 200 200 200 200 429 429 429
@@ -1224,9 +1905,10 @@ Debe imprimir algo como `200 200 200 200 200 200 200 200 200 200 429 429 429
 - Tu IP real queda bloqueada para el login ~1 minuto. Es normal. No repitas esta
   prueba seguido.
 
-**12.7 (VPS) Un cron sin el secreto da 401, y con el secreto 200.**
+**12.7 (VPS) Un cron sin el secreto da 401 (nada más).**
 
-Sin secreto (no dispara nada):
+Sin secreto no dispara nada. Se prueba contra la app **directo** (no contra el
+dominio, que responde 404 a `/api/cron/*`):
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000/api/cron/recordatorios
@@ -1234,19 +1916,14 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000/api/cron/recordat
 
 Debe imprimir `401`.
 
-Con el secreto (usa el script, que lo lee del archivo sin mostrarlo):
-
-```bash
-/opt/eli/current/deploy/llamar-cron.sh /api/cron/recordatorios
-```
-
-Debe imprimir `[eli-cron] /api/cron/recordatorios -> 200 {...}`.
-
-> **Cuidado: ese 200 ejecuta de verdad la corrida diaria contra la base real**
-> (manda los recordatorios pendientes de mañana). Es seguro repetirla (cada envío
-> tiene su candado y no duplica), pero adelanta correos. Hazlo **después de las
-> 13:05 UTC**, cuando la corrida del día ya pasó, y nunca mientras Vercel y el VPS
-> tengan sus crons encendidos a la vez.
+> **NO pruebes aquí el 200 con secreto.** Ese 200 ejecuta de verdad la corrida
+> diaria contra la base **real**: manda los recordatorios pendientes de mañana
+> con enlaces a `NEXTAUTH_URL`, que ahora es el dominio de **prueba** (el que
+> desaparecerá), y deja marcado `reminderSentAt` en esas citas (no se puede
+> deshacer: no se reenvían). La prueba con secreto va **después de la mudanza**,
+> en 13.5, con el dominio final. Que el secreto del servidor coincide con el de la
+> app ya lo prueba el arranque: si estuviera mal, el primer cron real daría `401`
+> y te llegaría el correo de aviso (10.5).
 
 **12.8 (VPS) El servicio se reinicia solo si muere.** Anota el número de
 proceso:
@@ -1291,9 +1968,36 @@ ls -lh /var/backups/eli && timedatectl | grep "Time zone"
 ```
 
 **12.11 Login y flujo real.** En el navegador: abre
-`https://prueba.eli.example.cl`, inicia sesión con correo y contraseña, mira la
+`https://eliagenda.com`, inicia sesión con correo y contraseña, mira la
 agenda, y una página pública de reservas. (El login con Google requiere el
-paso 13: la URI de prueba hay que agregarla a Google.)
+paso 13: la URI de prueba hay que agregarla a Google.) Cierra sesión y vuelve a
+entrar; crea y borra una cita de prueba **en un negocio de pruebas** (no en el de
+una clínica real).
+
+**12.12 (Mac) Las rutas privadas redirigen al login de TU dominio.**
+
+```bash
+curl -I https://eliagenda.com/dashboard
+```
+
+Debe responder `307` con `location: /iniciar-sesion` (así lo hace la app al
+probarla en local) o con `https://eliagenda.com/iniciar-sesion`; puede
+llevar `?callbackUrl=...` al final. **No** debe apuntar a `http://127.0.0.1:3000/...`
+ni a `localhost`: eso significaría que la app arma las direcciones con el host
+interno y que `NEXTAUTH_URL` o las cabeceras están mal (revisa 6.3 y reinicia
+Eli).
+
+**12.13 (VPS) La comprobación de salud usa una página que toque la base.** Elige
+el *slug* de un negocio real (lo que sigue a `/reservar/` en su página pública)
+y comprueba:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000/reservar/EL-SLUG-DE-UN-NEGOCIO-REAL
+```
+
+Debe decir `200`. Esa dirección es la que se pone en `ELI_URL_SALUD_EXTRA` (paso
+14.1) para que una versión nueva que arranca pero **no puede hablar con la base**
+se detecte y se revierta sola.
 
 ---
 
@@ -1313,10 +2017,10 @@ Hazla **fuera del horario de atención** y **lejos de las 13:00 UTC** (entre las
       (paso 7.1), y anotado cómo estaba todo (para volver).
 - [ ] **Google:** Google Cloud → *APIs y servicios* → *Credenciales* → tu cliente
       OAuth. En *Orígenes autorizados de JavaScript* agrega
-      `https://eli.example.cl` y en *URIs de redireccionamiento autorizados*
-      `https://eli.example.cl/api/auth/callback/google`. **Deja también las de
+      `https://eliagenda.com` y en *URIs de redireccionamiento autorizados*
+      `https://eliagenda.com/api/auth/callback/google`. **Deja también las de
       Vercel** (las necesitas si vuelves atrás). Agrega igual las de
-      `prueba.eli.example.cl` si quieres probar el login con Google antes. Los
+      `eliagenda.com` si quieres probar el login con Google antes. Los
       cambios de Google pueden tardar unos minutos en aplicarse.
 - [ ] **Resend:** el remitente (`RESEND_FROM_EMAIL`) no depende del dominio de la
       web. Sólo si quieres enviar desde tu dominio nuevo: Resend → *Domains* →
@@ -1341,14 +2045,14 @@ En el VPS:
 sudo nano /etc/eli/eli.env
 ```
 
-Cambia la línea `NEXTAUTH_URL=` a `https://eli.example.cl` (el dominio final, con
+Cambia la línea `NEXTAUTH_URL=` a `https://eliagenda.com` (el dominio final, con
 tu dominio real). Guarda (`Ctrl+O`, Enter, `Ctrl+X`).
 
 Cambia Caddy al dominio final. Escribe tus dos dominios (el de prueba y el
 final; **con los tuyos**):
 
 ```bash
-DOMINIO=prueba.eli.example.cl; DOMINIO_FINAL=eli.example.cl
+DOMINIO=eliagenda.com; DOMINIO_FINAL=eliagenda.com
 ```
 
 ```bash
@@ -1359,13 +2063,14 @@ sudo sed -i "s/$DOMINIO/$DOMINIO_FINAL/g" /etc/caddy/Caddyfile
 grep -n "example\|eli" /etc/caddy/Caddyfile | head
 ```
 
-Deben aparecer `www.eli.example.cl {` y `eli.example.cl {` (con tu dominio real).
+Deben aparecer `www.eliagenda.com {` y `eliagenda.com {` (con tu dominio real).
 
 ```bash
 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 ```
 
-No reinicies Eli ni Caddy todavía: se hace justo antes del cambio de DNS.
+No reinicies Eli ni recargues Caddy todavía: Eli se reinicia justo antes de
+cambiar el DNS, y Caddy se recarga DESPUÉS de que el DNS ya apunte aquí (13.3).
 
 ### 13.2 Apagar los crons de VERCEL (antes de encender los del VPS)
 
@@ -1383,50 +2088,95 @@ los menús de Vercel cambian; si no los encuentras, usa la forma 2.
    pausar). Esto también deja de servir la web: úsalo sólo si ya no lo
    necesitas de respaldo inmediato.
 
-**Comprueba que quedaron apagados:** Vercel → proyecto → pestaña *Logs* o
-*Cron Jobs*; mañana a las 13:00 UTC no debe aparecer ninguna ejecución.
+**Comprueba que quedaron apagados, AHORA:** en la pantalla de Vercel debe verse
+que los cron jobs están **desactivados** (*Disabled*; si eliminaste la sección de
+`vercel.json`, que el último despliegue ya no los lista). No hace falta esperar
+a mañana para seguir: la confirmación definitiva llega después (13.5, "Al día
+siguiente"). Por qué no es peligroso seguir con esa confirmación pendiente: aun si
+un cron de Vercel se disparara una vez más, cada recordatorio se reclama en la
+base antes de enviarse, así que no sale duplicado (ver 10.3); el riesgo
+real es sólo que un envío ambiguo quede marcado con el dominio equivocado.
 
-### 13.3 Cambiar el DNS y reiniciar
+### 13.3 Cambiar el DNS, esperar, y RECIÉN ENTONCES recargar Caddy
 
-Reinicia Eli (para que lea el `NEXTAUTH_URL` nuevo) y recarga Caddy:
+El orden importa. Si Caddy se recarga **antes** de que el DNS apunte aquí, pide
+el certificado del dominio final, Let's Encrypt no encuentra el servidor (el
+dominio todavía apunta a Vercel), falla, y Caddy reintenta con pausas cada vez
+más largas (y Let's Encrypt limita los intentos fallidos). Por eso: primero DNS,
+después Caddy.
+
+**(a) Reinicia Eli** para que lea el `NEXTAUTH_URL` nuevo (todavía no entra
+tráfico del dominio final; el de prueba sigue funcionando):
 
 ```bash
-sudo systemctl restart eli && sudo systemctl reload caddy
+sudo systemctl restart eli
 ```
 
-hPanel → *Dominios* → *Registros DNS*: cambia el registro **A de `@`** y el de
+**(b) Cambia el DNS.** hPanel → *Dominios* → *Registros DNS* (o el panel que
+corresponda, ver el aviso del paso 7): cambia el registro **A de `@`** y el de
 **`www`** para que apunten a la **IP del VPS** (borra el `CNAME`/`A` que apuntaba
-a Vercel; un nombre no puede tener un `CNAME` y un `A` a la vez). TTL 300. Si
-tenías `AAAA`, bórralos (el VPS no está configurado para IPv6).
+a Vercel; un nombre no puede tener un `CNAME` y un `A` a la vez). TTL 300. **Borra
+cualquier registro `AAAA`** del dominio: el Caddyfile escucha sólo en IPv4 a
+propósito (paso 9.1) y un `AAAA` haría fallar el certificado.
 
-Comprueba desde tu Mac (puede tardar de 1 a 10 minutos):
+**(c) Espera a que los DNS públicos ya lo vean** (puede tardar de 1 a 10 minutos;
+Let's Encrypt consulta a los DNS públicos, no a tu Mac). Desde tu Mac, con DOS
+resolvedores distintos:
 
 ```bash
-dig +short eli.example.cl
+dig +short eliagenda.com @8.8.8.8
 ```
 
-Debe mostrar la IP del VPS. Ahora Caddy pedirá el certificado del dominio final
-(en cuanto el DNS le apunta). Míralo en el VPS:
+```bash
+dig +short eliagenda.com @1.1.1.1
+```
+
+Los dos deben mostrar la IP del VPS (y no la de Vercel). Si alguno muestra otra,
+espera 2-3 minutos y repite. **No sigas hasta que los dos coincidan.**
+
+**(d) Ahora sí, recarga Caddy** (en el VPS):
+
+```bash
+sudo systemctl reload caddy
+```
+
+> **Qué verán los usuarios:** durante 1 a 3 minutos (lo que tarda Caddy en
+> obtener el certificado), quien entre al dominio puede ver un **error de
+> certificado** o "conexión no segura". Es normal; pasa solo. Haz esto fuera del
+> horario de atención. **Ojo con HSTS:** desde que Caddy responda, los navegadores
+> que visiten el dominio recordarán durante un año ("Strict-Transport-Security")
+> que sólo se entra por HTTPS válido, y **no dejarán "continuar de todos modos"**
+> si el certificado falla. Si algo va mal con el certificado, la salida no es
+> pedirle a la gente que ignore la advertencia, sino arreglarlo (abajo) o volver
+> atrás al plan de Vercel (más abajo; Vercel también sirve HTTPS con HSTS).
+
+Mira cómo va, en el VPS:
 
 ```bash
 sudo journalctl -u caddy -n 40 --no-pager
 ```
 
-Busca `certificate obtained successfully`. Si no avanza, `sudo systemctl
-reload caddy` otra vez.
+Busca `certificate obtained successfully`. Si no avanza tras 5 minutos, revisa
+que los dos `dig` sigan mostrando la IP del VPS y repite
+`sudo systemctl reload caddy`.
 
 ### 13.4 Comprobar con el dominio final
 
-Repite en la Mac los puntos **12.1, 12.2, 12.3 y 12.6** reemplazando el dominio
-de prueba por el final. Y entra al sitio en el navegador: inicia sesión con
-correo y **con Google**, mira la agenda, y una página pública de reservas.
+Repite en la Mac los puntos **12.1, 12.2, 12.3, 12.4b, 12.6 y 12.12**
+reemplazando el dominio de prueba por el final, y en el VPS
+`/opt/eli/current/deploy/probar-cabeceras.sh /etc/caddy/Caddyfile` (12.5) y
+`sudo ss -tlnp | grep -E ':(80|443) '` (9.4: sólo `0.0.0.0`). Y entra al sitio en
+el navegador: inicia sesión con correo y **con Google**, mira la agenda, y una
+página pública de reservas.
 
 Como `NEXTAUTH_SECRET` es el mismo y el dominio es el mismo, las sesiones que ya
 estaban abiertas **siguen valiendo** (nadie tiene que volver a entrar).
 
 ### 13.5 Encender los crons del VPS (y sólo ahora)
 
-Confirma una vez más que los de Vercel están apagados (13.2). Entonces:
+Confirma una vez más, **en la pantalla de Vercel**, que los cron jobs siguen
+desactivados (13.2). Y que hoy **no** estás entre las 12:50 y las 13:20 UTC.
+Entonces:
 
 ```bash
 sudo sed -i 's|^#DESACTIVADO# ||' /etc/cron.d/eli
@@ -1436,13 +2186,31 @@ sudo sed -i 's|^#DESACTIVADO# ||' /etc/cron.d/eli
 grep -n llamar-cron /etc/cron.d/eli
 ```
 
-Ninguna debe empezar con `#`. Al día siguiente, pasadas las 13:00 UTC:
+Ninguna debe empezar con `#`.
+
+**Prueba única del cron con secreto (ahora sí es seguro):** el dominio ya es el
+final, así que los enlaces de los correos serán los definitivos. Hazla **después
+de las 13:05 UTC**, cuando la corrida del día ya pasó (o mañana, sin hacer nada:
+el cron lo hará solo):
+
+```bash
+/opt/eli/current/deploy/llamar-cron.sh /api/cron/recordatorios
+```
+
+Debe imprimir `[eli-cron] /api/cron/recordatorios -> 200 {...}`. (Es seguro
+repetirla: cada recordatorio se reclama en la base antes de enviarse y no sale
+dos veces; sólo adelanta los de mañana.)
+
+**Al día siguiente**, pasadas las 13:00 UTC, la confirmación definitiva:
 
 ```bash
 journalctl -t eli-cron --since today --no-pager
 ```
 
-Deben aparecer las dos corridas con `-> 200`.
+Deben aparecer las dos corridas con `-> 200`. Y en Vercel (*Logs* / *Cron Jobs*)
+**no** debe aparecer ninguna ejecución de esa hora. Si apareció una, apágalos de
+verdad (13.2) y avisa: los envíos no se duplicaron, pero revisa que ningún
+recordatorio quedara marcado sin enviarse (`journalctl -u eli | grep -i recordatorio`).
 
 ### 13.6 Después
 
@@ -1465,7 +2233,9 @@ el orden. (Con TTL 300, en ~5-10 minutos el tráfico vuelve.)
 
 2. **Enciende los crons de Vercel** (la forma que usaste en 13.2, al revés).
 3. **Devuelve el DNS** a como estaba (lo que anotaste en 7.1): los registros
-   `A`/`CNAME` de `@` y `www` que apuntaban a Vercel, TTL 300.
+   `A`/`CNAME` de `@` y `www` que apuntaban a Vercel, TTL 300. (Los navegadores
+   que ya recibieron HSTS del VPS seguirán exigiendo HTTPS válido: Vercel lo da,
+   así que no hay problema.)
 4. Asegúrate de que en Vercel `NEXTAUTH_URL` y las URIs de Google corresponden
    al dominio por el que se entra (si el dominio se mantuvo, ya lo están: por eso
    en 13.0 se **agregaron** las del VPS sin quitar las de Vercel).
@@ -1480,6 +2250,29 @@ Un problema *sólo de código* (no de servidor) se arregla sin tocar el DNS con
 ## Paso 14. Actualizar Eli y volver a la versión anterior
 
 ### 14.1 Actualizar
+
+> **No actualices ni vuelvas atrás entre las 12:50 y las 13:20 UTC.** A las 13:00
+> corren los crons diarios (recordatorios y correos). Si coinciden, los crons
+> esperan a que termines (comparten el candado, hasta 15 minutos) y salen tarde,
+> con Eli ya reiniciado; no se pierden, pero es innecesario correr ese riesgo.
+> Tampoco a las 06:30 UTC (respaldo), ni cerca de las 07:00 UTC (el servidor puede
+> reiniciarse solo si hay parches, paso 2.5), ni con Eli en horario de más uso.
+
+**Una vez, antes de la primera actualización: la página de salud.** Por defecto
+el script da por sana una versión si la portada (`/`) responde. Pero `/` no
+consulta la base de datos: una versión que arranca y **no puede hablar con Neon**
+también la serviría. Para que eso se detecte (y se vuelva sola a la versión
+anterior), elige el *slug* de un negocio real y escribe esta línea en
+`eli.env` (cambia el slug; 12.13 la prueba):
+
+```bash
+echo 'ELI_URL_SALUD_EXTRA=http://127.0.0.1:3000/reservar/EL-SLUG-DE-UN-NEGOCIO-REAL' | sudo tee -a /etc/eli/eli.env
+```
+
+(La app ignora esa variable; sólo la leen `actualizar.sh` y `volver-atras.sh`.
+Si algún día ese negocio se borra o cambia de slug, esa página dará 404 y las
+actualizaciones se revertirán solas: actualiza la línea. Si hace falta, también
+se puede dar una sola vez: `ELI_URL_SALUD_EXTRA=http://... ./deploy/actualizar.sh`.)
 
 ```bash
 cd /opt/eli/repo && git pull --ff-only && ./deploy/actualizar.sh
@@ -1500,9 +2293,14 @@ Qué hace (el detalle está al principio del propio script):
    él.** Se aplican como siempre, a mano y con respaldo antes (README.md de la
    raíz, sección "Migraciones en producción"), y cada una dice si va antes o
    después de desplegar.
-3. `npm ci` + `npm run build`. Si falla algo, la versión que corre no se toca.
-4. Cambia el enlace `current`, reinicia el servicio y comprueba que responde
-   (hasta 60 segundos). Si no responde, **vuelve solo a la versión anterior**.
+3. `npm ci --ignore-scripts` + `prisma generate` + `npm run build`. Si falla
+   algo, la versión que corre no se toca.
+4. Cambia el enlace `current`, limpia el estado "fallido" de systemd si lo
+   hubiera (`reset-failed`), reinicia el servicio y comprueba que responde
+   (hasta 60 segundos; la portada y, si la configuraste, la página de
+   `ELI_URL_SALUD_EXTRA`). Si no responde, **vuelve solo a la versión anterior**
+   (con otro `reset-failed` + reinicio, para que funcione aunque la versión nueva
+   haya agotado el límite de arranques).
 5. Conserva las últimas 3 versiones.
 
 Se puede correr dos veces seguidas sin problema: si esa versión ya está activa,
@@ -1515,11 +2313,67 @@ dice que no hay nada que hacer.
 ```
 
 Cambia a la versión que estaba antes de la última actualización (sigue guardada)
-y reinicia. Si la versión de la que sales trae migraciones que la anterior no
+y reinicia (con la misma comprobación de salud de 14.1). Si la versión de la que sales trae migraciones que la anterior no
 conoce, te avisa y pide confirmación: **volver atrás no deshace migraciones**
 (las del proyecto son casi siempre aditivas y el código viejo sigue andando; el
 README de la raíz lo dice caso por caso). Si lo corres otra vez, vuelves a la
 versión que dejaste.
+
+### 14.3 Cuando cambian `eli.service`, `Caddyfile`, `cron-eli` o `sudoers-eli`
+
+**Estos cuatro archivos se instalaron por COPIA** (pasos 8, 9, 10): `git pull` y
+`actualizar.sh` actualizan el código de Eli, pero **no** tocan las copias de
+`/etc`. Si alguien cambia uno en el repositorio (por ejemplo, una mejora de
+seguridad en el Caddyfile), el servidor sigue con el viejo hasta que lo
+**re-apliques**. Primero mira cuáles difieren (no cambia nada; un archivo igual
+no imprime nada):
+
+```bash
+cd /opt/eli/repo && git pull --ff-only
+```
+
+```bash
+diff -q /opt/eli/repo/deploy/eli.service /etc/systemd/system/eli.service; sudo diff -q /opt/eli/repo/deploy/sudoers-eli /etc/sudoers.d/eli; diff -q /opt/eli/repo/deploy/cron-eli /etc/cron.d/eli
+```
+
+(`cron-eli` aparecerá distinto mientras tengas líneas `#DESACTIVADO#`, antes de
+la mudanza: es normal. El `Caddyfile` se compara aparte, abajo, porque lleva tu
+dominio.) Para cada uno que difiera:
+
+**`eli.service`** (reinicia Eli; fuera de horario):
+
+```bash
+sudo install -m 644 /opt/eli/repo/deploy/eli.service /etc/systemd/system/eli.service && sudo systemctl daemon-reload && sudo systemctl restart eli
+```
+
+y repite las comprobaciones de 8.5.
+
+**`sudoers-eli`:** repite el comando de validar-e-instalar del paso 8.2.
+
+**`Caddyfile`** (lleva tu dominio, así que se reemplaza igual que en 9.3; cambia
+`DOMINIO` por el tuyo, el definitivo):
+
+```bash
+DOMINIO=eliagenda.com; NUEVO="$(mktemp)"; sed "s/eli\.example\.cl/$DOMINIO/g" /opt/eli/repo/deploy/Caddyfile > "$NUEVO"; diff /etc/caddy/Caddyfile "$NUEVO"
+```
+
+Lo que muestre `diff` es exactamente lo que va a cambiar. Si te parece bien:
+
+```bash
+caddy validate --config "$NUEVO" --adapter caddyfile && sudo install -m 644 "$NUEVO" /etc/caddy/Caddyfile && sudo systemctl reload caddy; rm -f "$NUEVO"
+```
+
+y vuelve a probar: `/opt/eli/current/deploy/probar-cabeceras.sh /etc/caddy/Caddyfile`
+y `sudo ss -tlnp | grep -E ':(80|443) '`.
+
+**`cron-eli`:** ojo, copiarlo **vuelve a encender** las líneas de correo. Si
+todavía no hiciste la mudanza, apágalas de nuevo justo después (10.3):
+
+```bash
+sudo install -m 644 -o root -g root /opt/eli/repo/deploy/cron-eli /etc/cron.d/eli
+```
+
+Después de la mudanza (13.5) no hay nada más que hacer.
 
 ---
 
@@ -1543,14 +2397,16 @@ Empieza siempre por aquí, en el VPS (entra con `ssh eli@IP_DEL_VPS`):
 | Cortafuegos | `sudo ufw status` |
 | Crons | `journalctl -t eli-cron --since "2 days ago" --no-pager` |
 | Respaldos | `journalctl -t eli-respaldo --since "2 days ago" --no-pager` y `ls -lh /var/backups/eli` |
-| DNS (desde tu Mac) | `dig +short eli.example.cl` |
+| ¿Se mandaron avisos por correo? | `journalctl -t eli-aviso --since "2 days ago" --no-pager` (y `ls /var/backups/eli/.avisos`) |
+| DNS (desde tu Mac) | `dig +short eliagenda.com` |
 
 Qué buscar según lo que ves:
 
 - **El navegador dice 502 / "Bad Gateway":** Caddy vive pero Eli no. Mira `systemctl
   status eli`. Si está `failed`: `journalctl -u eli -n 100 --no-pager`; casi
   siempre es una variable faltante (revisa 6.3), la base inaccesible, o un
-  release roto (`./deploy/volver-atras.sh`). Para volver a intentar:
+  release roto (`./deploy/volver-atras.sh`, que también limpia el estado
+  fallido). Para volver a intentar a mano:
   `sudo systemctl reset-failed eli && sudo systemctl restart eli`.
 - **No abre nada y `ping` no responde:** el VPS está apagado o bloqueado: hPanel →
   VPS → reiniciar. Si `ssh` no entra pero la web sí: `fail2ban` pudo bloquearte;
@@ -1575,6 +2431,46 @@ Qué buscar según lo que ves:
 
 ---
 
+## Limitaciones conocidas y mejoras futuras
+
+Cosas que esta guía **no** resuelve, dichas con franqueza. Ninguna es urgente para
+arrancar, pero conviene tenerlas en el radar; cada una merece su propio issue.
+
+1. **Un solo usuario (`eli`) hace de administrador, de compilador y de servidor
+   de cron.** Es cómodo, pero significa que todo el código que corre al
+   construir (`npm run build`, y las ~500 dependencias) corre con el mismo
+   usuario que puede leer `/etc/eli/eli.env`, `~/.ssh` y los respaldos, y que
+   tiene `sudo`. Lo que sí se hizo: `npm ci --ignore-scripts` (los scripts de
+   instalación de las dependencias, la vía más común de ataque a la cadena de
+   suministro, **no** corren), `main` protegida en GitHub (5.7), contraseña fuerte
+   (1.3) y un `sudoers` mínimo. Lo que **queda**: el código de las dependencias
+   sigue ejecutándose al compilar y al correr, como `eli`. **Mejora futura:**
+   dos usuarios, `eli` (administrador: ssh, sudo, actualizar) y `eli-app`
+   (sólo corre el servicio, sin shell, sin `sudo`, sin grupos extra, sin acceso a
+   `~/.ssh` ni a los respaldos), y que las compilaciones se hagan en un usuario
+   sin acceso a las claves. Se deja sin hacer porque cambia permisos de todo el
+   kit y no se puede probar sin el servidor.
+2. **`ReadWritePaths=/opt/eli/releases` es amplio.** El servicio puede escribir en
+   TODAS las versiones guardadas (hace falta para el caché de Next), lo que
+   permitiría a código comprometido modificar su propio código y el de la versión
+   anterior. **Mejora futura (a probar en el VPS, no aquí):** `ReadOnlyPaths=` sobre
+   el código y un caché de Next en una carpeta aparte, con escritura sólo ahí.
+   No se cambió ahora porque un error rompería el arranque y no se pudo probar
+   con systemd real.
+3. **Datos de salud sin cifrar en reposo** (disco, swap, snapshots, copias en la
+   Mac): ver el recuadro del principio. **Mejora futura:** cifrar los `.dump`
+   con `age`/`gpg` y, si el proveedor lo permite, cifrado de disco.
+4. **Sin monitoreo externo propio:** sólo UptimeRobot (apéndice). Opciones a
+   evaluar (servicios nuevos, requieren aprobación): healthchecks.io para saber
+   si los crons *dejaron de correr* y Sentry para errores de la app.
+5. **El aviso por correo** (10.5) cubre fallos, no ausencias; y depende de que
+   Resend funcione (si Resend estuviera caído justo esa noche, el aviso no sale
+   y queda en el registro).
+6. **Copias de respaldo sólo en el mismo VPS y en tu Mac.** No hay copia
+   automática fuera del servidor.
+
+---
+
 ## Apéndice: Monitoreo con UptimeRobot (avisa si se cae)
 
 Gratis y sin instalar nada en el servidor (los nombres de los menús pueden
@@ -1582,14 +2478,14 @@ cambiar; la idea es la misma):
 
 1. Crea una cuenta en `uptimerobot.com`.
 2. *Add New Monitor* → tipo **HTTP(s)**.
-3. *Friendly Name*: `Eli`. *URL*: `https://eli.example.cl/` (la tuya).
+3. *Friendly Name*: `Eli`. *URL*: `https://eliagenda.com/` (la tuya).
 4. *Monitoring Interval*: **5 minutos** (lo mínimo del plan gratis, a lo que
    recuerdo).
 5. *Alert Contacts*: tu correo (y el WhatsApp/Telegram si lo ofrece).
 6. Guardar. Debe aparecer en verde ("Up").
 
 Recomendado agregar un segundo monitor a una **página pública de reservas
-real** (`https://eli.example.cl/reservar/<el-slug-de-un-negocio>`, tipo *Keyword*
+real** (`https://eliagenda.com/reservar/<el-slug-de-un-negocio>`, tipo *Keyword*
 con una palabra de esa página): esa sí toca la base de datos y avisa si Neon está
 caído aunque la portada siga viva.
 

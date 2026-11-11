@@ -31,7 +31,7 @@ umask 077
 
 ETIQUETA="eli-respaldo"
 DIRECTORIO_DEL_SCRIPT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-# shellcheck source=lib-entorno.sh
+# shellcheck source-path=SCRIPTDIR source=lib-entorno.sh
 source "$DIRECTORIO_DEL_SCRIPT/lib-entorno.sh"
 
 DESTINO="${ELI_RESPALDOS:-/var/backups/eli}"
