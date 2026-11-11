@@ -25,6 +25,10 @@ interface PropsDeResumenDeReserva {
   precioDeLaHora?: PrecioDeLaHora | null
   /** Sin la fila del servicio, cuando ya está escrito arriba (la reserva confirmada). */
   sinServicio?: boolean
+  /** Cómo se llama la fila del servicio: "Servicio", o "Motivo" en una clínica dental. */
+  terminoDelServicio?: string
+  /** Una línea bajo la duración: en una clínica dental, que incluye los minutos de la primera vez. */
+  detalleDeDuracion?: string | null
   className?: string
 }
 
@@ -40,6 +44,8 @@ export function ResumenDeReserva({
   profesional,
   precioDeLaHora,
   sinServicio = false,
+  terminoDelServicio = "Servicio",
+  detalleDeDuracion,
   className,
 }: PropsDeResumenDeReserva) {
   const dia = deTexto(fecha)
@@ -50,8 +56,13 @@ export function ResumenDeReserva({
       : null
   return (
     <dl className={cn("divide-y divide-borde text-sm", className)}>
-      {servicio && !sinServicio && <Fila termino="Servicio">{servicio.name}</Fila>}
-      {servicio && <Fila termino="Duración">{formatearDuracionDeServicio(servicio.duration)}</Fila>}
+      {servicio && !sinServicio && <Fila termino={terminoDelServicio}>{servicio.name}</Fila>}
+      {servicio && (
+        <Fila termino="Duración">
+          {formatearDuracionDeServicio(servicio.duration)}
+          {detalleDeDuracion && <span className="mt-0.5 block text-xs font-normal text-texto-2">{detalleDeDuracion}</span>}
+        </Fila>
+      )}
       {profesional && <Fila termino="Con">{profesional}</Fila>}
       <Fila termino="Día">{dia ? fechaParaLeer(dia) : fecha}</Fila>
       <Fila termino="Hora">{hora}</Fila>

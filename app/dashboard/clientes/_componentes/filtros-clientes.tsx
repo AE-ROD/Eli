@@ -2,8 +2,10 @@
 
 import { useId } from "react"
 import { LayoutGrid, List, Search } from "lucide-react"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPO } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 
 const ETIQUETAS = ["Todos", "VIP", "Frecuente", "Nuevo", "Inactivo"]
 
@@ -36,13 +38,15 @@ export function FiltrosClientes({
   onVista,
 }: PropsDeFiltrosClientes) {
   const idDelBuscador = useId()
+  // "Buscar pacientes" en una clínica dental.
+  const { clientes } = vocabularioDe(useRubroDelPanel())
 
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3">
         <div className="relative min-w-0 flex-1">
           <label htmlFor={idDelBuscador} className="sr-only">
-            Buscar clientes
+            Buscar {clientes}
           </label>
           <Search
             className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-texto-2"
@@ -64,7 +68,7 @@ export function FiltrosClientes({
         {/* En el teléfono la lista y la cuadrícula se ven iguales, en una columna: el selector aparece desde md, donde se distinguen. */}
         <div
           role="group"
-          aria-label="Cómo ver los clientes"
+          aria-label={`Cómo ver los ${clientes}`}
           className="hidden shrink-0 gap-1 rounded-full bg-superficie p-1 md:flex"
         >
           {VISTAS.map(({ id, texto, icono: Icono }) => (

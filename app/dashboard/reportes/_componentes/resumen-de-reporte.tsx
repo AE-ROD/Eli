@@ -3,9 +3,11 @@
 import { useId, type ReactNode } from "react"
 import { DollarSign, Receipt, TrendingUp, type LucideIcon } from "lucide-react"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
 import { formatearMonto } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import type { Reporte } from "../_datos"
 
 interface PropsDeCifra {
@@ -106,10 +108,16 @@ function conMarca(nombre: string, sigue: boolean, marca: string): ReactNode {
   )
 }
 
-/** Por qué no hay desglose por medio: un pago es de la atención entera, no de una línea. */
-const SIN_DESGLOSE_POR_MEDIO = "No se puede repartir por medio de pago cuando filtras por profesional o servicio."
+/**
+ * Por qué no hay desglose por medio: un pago es de la atención entera, no de
+ * una línea. Con la palabra del rubro para quien atiende ("odontólogo" en una
+ * clínica dental).
+ */
+const sinDesglosePorMedio = (profesional: string) =>
+  `No se puede repartir por medio de pago cuando filtras por ${profesional} o servicio.`
 /** Y al revés: lo pagado con un medio no se puede repartir entre las líneas. */
-const SIN_DESGLOSE_POR_PROFESIONAL = "No se puede repartir por profesional cuando filtras por medio de pago."
+const sinDesglosePorProfesional = (profesional: string) =>
+  `No se puede repartir por ${profesional} cuando filtras por medio de pago.`
 const SIN_DESGLOSE_POR_SERVICIO = "No se puede repartir por servicio cuando filtras por medio de pago."
 
 interface PropsDeResumenDeReporte {
@@ -132,6 +140,7 @@ interface PropsDeResumenDeReporte {
 export function ResumenDeReporte({ reporte, rotuloDeIngresos }: PropsDeResumenDeReporte) {
   const { resumen, alcance } = reporte
   const propio = alcance === "propio"
+  const { profesional } = vocabularioDe(useRubroDelPanel())
 
   return (
     <div className="space-y-4">
@@ -155,8 +164,8 @@ export function ResumenDeReporte({ reporte, rotuloDeIngresos }: PropsDeResumenDe
         {/* Al profesional, el desglose por profesional sería una sola fila: la suya, que ya está arriba. */}
         {!propio && (
           <Desglose
-            titulo="Por profesional"
-            sinDesglose={SIN_DESGLOSE_POR_PROFESIONAL}
+            titulo={`Por ${profesional}`}
+            sinDesglose={sinDesglosePorProfesional(profesional)}
             renglones={
               resumen.porProfesional?.map((grupo) => ({
                 clave: grupo.clave,
@@ -183,7 +192,7 @@ export function ResumenDeReporte({ reporte, rotuloDeIngresos }: PropsDeResumenDe
         {resumen.porMedio !== undefined && (
           <Desglose
             titulo="Por medio de pago"
-            sinDesglose={SIN_DESGLOSE_POR_MEDIO}
+            sinDesglose={sinDesglosePorMedio(profesional)}
             renglones={
               resumen.porMedio?.map((grupo) => ({ clave: grupo.medio, nombre: grupo.nombre, monto: grupo.monto })) ?? null
             }

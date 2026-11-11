@@ -10,6 +10,7 @@ import { Tarjeta } from "@/components/comunes/tarjeta"
 import { actorDeSesion, puedeImportarExportarClientes } from "@/lib/permisos"
 import { decodificarCsv, leerCsv } from "@/lib/csv"
 import { FILAS_MAXIMAS, TAMAÑO_MAXIMO_EN_BYTES, sugerirMapeo, type CampoDeImportacion } from "@/lib/importar-clientes"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import { importarClientes, type ResumenDeImportacion as Resumen } from "../_datos"
 import { VistaPrevia, type MapeoEnPantalla } from "./_componentes/vista-previa"
 import { ResumenDeImportacion } from "./_componentes/resumen-de-importacion"
@@ -34,6 +35,8 @@ function pareceCsv(archivo: File): boolean {
 export default function PaginaImportarClientes() {
   const { data: sesion, status } = useSession()
   const puede = puedeImportarExportarClientes(actorDeSesion(sesion))
+  // "Pacientes" en una clínica dental.
+  const { cliente, clientes } = vocabularioDe(sesion?.user?.rubro)
   const idDelArchivo = useId()
 
   const [archivo, setArchivo] = useState<ArchivoLeido | null>(null)
@@ -51,9 +54,17 @@ export default function PaginaImportarClientes() {
     if (!pareceCsv(elegido)) return setAviso("El archivo tiene que ser un CSV (.csv). Desde Excel: Guardar como → CSV.")
     if (elegido.size > TAMAÑO_MAXIMO_EN_BYTES) return setAviso("El archivo pesa más de 2 MB. Divídelo en partes.")
 
-    const texto = decodificarCsv(new Uint8Array(await elegido.arrayBuffer()))
-    const filas = leerCsv(texto)
-    if (filas.length < 2) return setAviso("El archivo no tiene clientes: le falta la cabecera o las filas.")
+    // Leer el archivo puede fallar (se movió o se borró después de elegirlo,
+    // o el navegador no lo deja leer): se dice, en vez de quedar sin respuesta.
+    let texto: string
+    let filas: string[][]
+    try {
+      texto = decodificarCsv(new Uint8Array(await elegido.arrayBuffer()))
+      filas = leerCsv(texto)
+    } catch {
+      return setAviso("No se pudo leer el archivo. Vuelve a elegirlo; si sigue sin leerse, guárdalo otra vez como CSV.")
+    }
+    if (filas.length < 2) return setAviso(`El archivo no tiene ${clientes}: le falta la cabecera o las filas.`)
     if (filas.length - 1 > FILAS_MAXIMAS) {
       return setAviso(`El archivo tiene más de ${FILAS_MAXIMAS.toLocaleString("es-CL")} filas. Divídelo en partes.`)
     }
@@ -75,7 +86,7 @@ export default function PaginaImportarClientes() {
 
   const importar = async () => {
     if (!archivo) return
-    if (mapeo.nombre === undefined) return setAviso("Elige qué columna tiene el nombre de los clientes.")
+    if (mapeo.nombre === undefined) return setAviso(`Elige qué columna tiene el nombre de los ${clientes}.`)
     setAviso("")
     setImportando(true)
     const resultado = await importarClientes(archivo.texto, mapeo)
@@ -88,21 +99,21 @@ export default function PaginaImportarClientes() {
   return (
     <div className="min-h-dvh">
       <BarraSuperior
-        titulo="Importar clientes"
+        titulo={`Importar ${clientes}`}
         subtitulo="Desde un CSV: el que exporta tu sistema anterior (AgendaPro u otro) o una planilla de Excel."
         mostrarBusqueda={false}
       />
 
       <div className="space-y-4 px-4 pt-6 pb-10 sm:space-y-6 sm:px-6">
         <Boton href="/dashboard/clientes" variante="fantasma" tamano="sm" icono={<ArrowLeft aria-hidden="true" strokeWidth={1.75} />}>
-          Volver a Clientes
+          Volver a {conMayuscula(clientes)}
         </Boton>
 
         {status !== "loading" && !puede ? (
-          <Aviso tono="info">Sólo el dueño y el encargado pueden importar clientes.</Aviso>
+          <Aviso tono="info">Sólo el dueño y el encargado pueden importar {clientes}.</Aviso>
         ) : (
           <>
-            {resumen && <ResumenDeImportacion resumen={resumen} />}
+            {resumen && <ResumenDeImportacion resumen={resumen} vocabulario={{ cliente, clientes }} />}
 
             <Tarjeta como="section" className="space-y-4 p-5 sm:p-6" aria-labelledby="titulo-archivo">
               <div>
@@ -111,7 +122,7 @@ export default function PaginaImportarClientes() {
                 </h2>
                 <p className="mt-1 text-sm text-texto-2">
                   Un CSV de hasta 2 MB y {FILAS_MAXIMAS.toLocaleString("es-CL")} filas, con una primera fila de
-                  títulos. No se crean clientes repetidos: si el teléfono o el correo ya están en Eli (o más arriba en el
+                  títulos. No se crean {clientes} repetidos: si el teléfono o el correo ya están en Eli (o más arriba en el
                   archivo), la fila se omite.
                 </p>
               </div>
@@ -127,7 +138,7 @@ export default function PaginaImportarClientes() {
                   accept=".csv,text/csv"
                   className="sr-only"
                   onChange={(e) => {
-                    elegirArchivo(e.target.files?.[0])
+                    void elegirArchivo(e.target.files?.[0])
                     // Así elegir el mismo archivo otra vez también lo vuelve a leer.
                     e.target.value = ""
                   }}
@@ -142,7 +153,7 @@ export default function PaginaImportarClientes() {
               <>
                 <VistaPrevia filas={archivo.filas} mapeo={mapeo} alCambiarMapeo={cambiarMapeo} />
                 <Boton type="button" className="w-full sm:w-auto" cargando={importando} onClick={importar}>
-                  Importar clientes
+                  Importar {clientes}
                 </Boton>
               </>
             )}

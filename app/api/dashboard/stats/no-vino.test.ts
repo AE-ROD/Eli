@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import type { NextRequest } from "next/server"
 import { NEGOCIO, datosBase, sesiones } from "@/pruebas/datos"
 import { crearBaseDeEstadisticas } from "./_pruebas/base-de-estadisticas"
 
@@ -38,7 +37,7 @@ const cita = (id: string, inicio: string, status: string) => ({
 async function estadisticas() {
   const { GET } = await import("./route")
   mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
-  return (await GET({ url: "http://localhost/api/dashboard/stats" } as unknown as NextRequest)).json()
+  return (await GET()).json()
 }
 
 beforeEach(() => {

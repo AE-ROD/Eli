@@ -1,5 +1,26 @@
 import { describe, it, expect } from "vitest"
-import { asuntoSugerido, dias, enlaceDeCorreo, enlaceDeWhatsapp, fechaParaLeer, mensajeSugerido } from "./_escribirle"
+import {
+  asuntoDelSaludo,
+  asuntoSugerido,
+  dias,
+  enlaceDeCorreo,
+  enlaceDeWhatsapp,
+  fechaParaLeer,
+  mensajeSugerido,
+  saludoSugerido,
+} from "./_escribirle"
+
+describe("saludoSugerido (Enviar mensaje, desde la ficha)", () => {
+  it("saluda por el primer nombre y dice de dónde le escriben, sin inventar el motivo", () => {
+    expect(saludoSugerido({ nombre: "María José", nombreNegocio: " Salón Uno " })).toBe("¡Hola, María! Te escribimos de Salón Uno.")
+  })
+
+  it("sin nombre ni negocio, sólo el saludo; el asunto, el negocio o 'Hola'", () => {
+    expect(saludoSugerido({ nombre: "", nombreNegocio: "" })).toBe("¡Hola!")
+    expect(asuntoDelSaludo("Clínica Sonrisa")).toBe("Clínica Sonrisa")
+    expect(asuntoDelSaludo("  ")).toBe("Hola")
+  })
+})
 
 describe("mensajeSugerido", () => {
   it("saluda por el primer nombre, dice de dónde le escriben y propone su último servicio", () => {

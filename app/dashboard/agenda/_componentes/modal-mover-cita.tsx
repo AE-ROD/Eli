@@ -8,17 +8,21 @@ import { Selector } from "@/components/comunes/selector"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { Aviso } from "@/components/panel/aviso"
 import { CampoHora } from "@/components/panel/campo-hora"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { ETIQUETA } from "@/components/panel/estilos"
 import type { Advertencia } from "@/lib/mover-cita"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import {
   asignarProfesional,
   leerProfesionales,
   moverCita,
   nombreDeCliente,
   opcionesDeProfesional,
+  opcionesDeSillon,
   type Cita,
   type DatosDeMoverCita,
   type Profesional,
+  type SillonDeLaAgenda,
 } from "../_datos"
 import { fechaEn, horaEn } from "../_hora-del-negocio"
 import { useZonaDelNegocio } from "./zona-del-negocio"
@@ -33,6 +37,12 @@ interface PropsDeModalMoverCita {
    * (`asignarProfesional`). Un choque se avisa igual que al mover.
    */
   soloAsignar?: boolean
+  /**
+   * Clínica dental: los sillones, para cambiar el de la cita al moverla (se
+   * ofrecen los activos y el que tiene). `null` (o sin dato) fuera de una
+   * clínica: no hay selector y la cita conserva su sillón.
+   */
+  sillones?: SillonDeLaAgenda[] | null
   onMovida: () => void
   onCerrar: () => void
 }
@@ -48,9 +58,13 @@ export function ModalMoverCita({
   cita,
   puedeAsignarProfesional,
   soloAsignar = false,
+  sillones = null,
   onMovida,
   onCerrar,
 }: PropsDeModalMoverCita) {
+  // "Profesional", con la palabra del rubro: "Odontólogo" en una clínica dental.
+  const vocabulario = vocabularioDe(useRubroDelPanel())
+  const conSillon = sillones !== null && !soloAsignar
   // Fecha y horas en la zona del negocio, como se muestran y se guardan (#99).
   const zona = useZonaDelNegocio()
   const [form, setForm] = useState<DatosDeMoverCita>(() => ({
@@ -58,12 +72,14 @@ export function ModalMoverCita({
     horaInicio: horaEn(cita.startTime, zona),
     horaFin: horaEn(cita.endTime, zona),
     memberId: cita.memberId ?? "",
+    sillonId: cita.sillonId ?? "",
   }))
   const idBase = useId()
   const idDeHoraInicio = `${idBase}-hora-inicio`
   const idDeHoraFin = `${idBase}-hora-fin`
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState("")
+  const [sillonOcupado, setSillonOcupado] = useState(false)
   const [advertencias, setAdvertencias] = useState<Advertencia[]>([])
   const [profesionales, setProfesionales] = useState<Profesional[]>([])
   const [avisoDeEquipo, setAvisoDeEquipo] = useState("")
@@ -80,14 +96,19 @@ export function ModalMoverCita({
     setForm((previo) => ({ ...previo, [campo]: valor }))
     setAdvertencias([])
     setError("")
+    setSillonOcupado(false)
   }
 
   const guardar = async (confirmar: boolean) => {
     setError("")
+    setSillonOcupado(false)
     setGuardando(true)
+    // El sillón se manda sólo si cambió: sin la clave la cita conserva el suyo,
+    // también si está desactivado (mandarlo de nuevo lo rechazaría).
+    const sillonCambio = conSillon && (form.sillonId ?? "") !== (cita.sillonId ?? "")
     const resultado = soloAsignar
       ? await asignarProfesional(cita.id, form.memberId, { confirmar })
-      : await moverCita(cita.id, form, zona, {
+      : await moverCita(cita.id, { ...form, sillonId: sillonCambio ? form.sillonId : undefined }, zona, {
           confirmar,
           // Si el equipo no cargó, no se manda el profesional: se deja el que tenía.
           asignaProfesional: puedeAsignarProfesional && profesionales.length > 0,
@@ -98,6 +119,7 @@ export function ModalMoverCita({
     if (resultado.tipo === "advertencias") return setAdvertencias(resultado.advertencias)
     setAdvertencias([])
     setError(resultado.error)
+    setSillonOcupado(resultado.sillonOcupado === true)
   }
 
   const hayAdvertencias = advertencias.length > 0
@@ -106,8 +128,8 @@ export function ModalMoverCita({
 
   return (
     <MarcoDeModal
-      titulo={soloAsignar ? "Asignar profesional" : "Cambiar fecha y hora"}
-      antetitulo={nombreDeCliente(cita)}
+      titulo={soloAsignar ? `Asignar ${vocabulario.profesional}` : "Cambiar fecha y hora"}
+      antetitulo={nombreDeCliente(cita, vocabulario.cliente)}
       bloqueado={guardando}
       alCerrar={onCerrar}
     >
@@ -160,7 +182,7 @@ export function ModalMoverCita({
 
         {puedeAsignarProfesional && profesionales.length > 0 && (
           <Selector
-            etiqueta="Profesional"
+            etiqueta={conMayuscula(vocabulario.profesional)}
             value={form.memberId}
             onChange={(e) => cambiar("memberId", e.target.value)}
             opciones={opcionesDeProfesional(profesionales, cita)}
@@ -169,7 +191,19 @@ export function ModalMoverCita({
           </Selector>
         )}
 
-        {error && <Aviso>{error}</Aviso>}
+        {/* Clínica dental: el sillón. Si el nuevo horario choca en el sillón, es un 409: no hay "guardar igual". */}
+        {conSillon && sillones && (
+          <Selector
+            etiqueta="Sillón (opcional)"
+            value={form.sillonId ?? ""}
+            onChange={(e) => cambiar("sillonId", e.target.value)}
+            opciones={opcionesDeSillon(sillones, cita)}
+          >
+            <option value="">Sin sillón</option>
+          </Selector>
+        )}
+
+        {error && (sillonOcupado ? <Aviso titulo="Sillón ocupado">{error}</Aviso> : <Aviso>{error}</Aviso>)}
 
         {hayAdvertencias && (
           <Aviso tono="atencion" rol="alert" titulo="¿Guardar igual?">

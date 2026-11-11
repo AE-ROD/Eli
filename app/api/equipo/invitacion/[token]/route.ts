@@ -25,7 +25,7 @@ export async function GET(
   // La base guarda el hash del token (lib/tokens.ts), no el token del enlace.
   const invitacion = await prisma.workerInvitation.findUnique({
     where: { tokenHash: hashDeToken(token) },
-    include: { business: { select: { name: true } } },
+    include: { business: { select: { name: true, type: true } } },
   })
 
   if (!invitacion) {
@@ -45,5 +45,7 @@ export async function GET(
     email: invitacion.email,
     rol: invitacion.role,
     negocio: invitacion.business.name,
+    // Para nombrar el rol con la palabra del rubro ("Odontólogo" en una clínica dental).
+    rubro: invitacion.business.type,
   })
 }

@@ -36,6 +36,13 @@ describe("anularCobro", () => {
     expect(await anularCobro("v1", "")).toEqual({ ok: false, error: mensaje, codigo: 409, corregirConAjuste: true })
   })
 
+  it("con un abono ya pagado al laboratorio tampoco se anula: se trata igual (no recarga ni pierde el motivo)", async () => {
+    const mensaje = "Un abono de prótesis de esta atención ya se le pagó al laboratorio: anula primero ese pago."
+    simularRespuesta(json({ error: mensaje, codigo: "pagado-al-laboratorio" }, 409))
+
+    expect(await anularCobro("v1", "Error")).toEqual({ ok: false, error: mensaje, codigo: 409, corregirConAjuste: true })
+  })
+
   it("otro 409 no lo es: la pantalla lo trata como un cobro que cambió", async () => {
     simularRespuesta(json({ error: "Esta atención ya está anulada." }, 409))
 

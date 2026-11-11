@@ -2,9 +2,11 @@
 
 import { useId } from "react"
 import { FONDO_FUERTE } from "@/components/comunes/colores-de-modulo"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
 import { formatearMonto } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import { puedeVerIngresos, type EstadisticasDelPanel } from "../_datos"
 
 interface PropsDeResumenDelNegocio {
@@ -16,6 +18,8 @@ interface PropsDeResumenDelNegocio {
 export function ResumenDelNegocio({ estadisticas }: PropsDeResumenDelNegocio) {
   const idDelTitulo = useId()
   const conIngresos = puedeVerIngresos(estadisticas)
+  // "Pacientes" en una clínica dental.
+  const { clientes } = vocabularioDe(useRubroDelPanel())
 
   const renglones = [
     {
@@ -24,7 +28,7 @@ export function ResumenDelNegocio({ estadisticas }: PropsDeResumenDelNegocio) {
       color: FONDO_FUERTE.azul,
     },
     {
-      etiqueta: "Total clientes",
+      etiqueta: `Total ${clientes}`,
       valor: estadisticas?.totalClientes ?? "—",
       color: FONDO_FUERTE.lila,
     },
@@ -40,7 +44,7 @@ export function ResumenDelNegocio({ estadisticas }: PropsDeResumenDelNegocio) {
         ]
       : []),
     {
-      etiqueta: "Clientes nuevos este mes",
+      etiqueta: `${conMayuscula(clientes)} nuevos este mes`,
       valor: estadisticas?.clientesNuevosMes ?? "—",
       color: FONDO_FUERTE.lila,
     },

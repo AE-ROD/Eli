@@ -6,6 +6,7 @@ import { AnimatePresence } from "framer-motion"
 import Link from "next/link"
 import { CircleAlert, ListX, MonitorPlay, RefreshCw, UserPlus } from "lucide-react"
 import { BarraSuperior } from "@/components/panel/barra-superior"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { Boton, clasesDeBoton } from "@/components/comunes/boton"
 import { ModalAnular } from "@/components/panel/modal-anular"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
@@ -29,7 +30,9 @@ import {
   puedeVerTodoElTablero,
 } from "@/lib/permisos"
 import { cn } from "@/lib/utils"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import {
+  agregarAbono,
   anotarSinReserva,
   anularAtencion,
   cobrarAtencion,
@@ -39,8 +42,10 @@ import {
   marcarLlegada,
   marcarNoVino,
   moverAtencion,
+  quitarAbono,
   vaciarFilaDeHoy,
   type Atencion,
+  type LineaDeServicio,
   type DatosSinReserva,
   type MotivoDeFallo,
   type Reserva,
@@ -51,6 +56,7 @@ import { TableroCargando, TableroDeColumnas, type DestinoDelFoco } from "./_comp
 import { ModalAnotarSinReserva } from "./_componentes/modal-anotar-sin-reserva"
 import { ModalServicios } from "./_componentes/modal-servicios"
 import { ModalCobro } from "./_componentes/modal-cobro"
+import { ModalAbono } from "./_componentes/modal-abono"
 
 /** Cada cuánto se recarga solo: lo que hacen los demás en el local aparece sin tocar nada. */
 const RECARGA_CADA_MS = 30_000
@@ -70,11 +76,14 @@ type ModalAbierto =
   | { tipo: "cobro"; atencion: Atencion }
   /**
    * `rechazo`: el servidor dijo que ya entró en una caja cerrada o en una
-   * liquidación (`corregir-con-ajuste`). El modal sigue abierto con lo escrito
+   * liquidación, o que tiene un abono pagado al laboratorio
+   * (`corregir-con-ajuste`). El modal sigue abierto con lo escrito
    * y dice cómo se corrige, en vez de cerrarse y perder el motivo (QA#12).
    */
   | { tipo: "anular"; atencion: Atencion; rechazo?: string }
   | { tipo: "vaciar-fila"; personas: number }
+  /** Clínica dental: abonar a una prótesis del paciente. */
+  | { tipo: "abono"; atencion: Atencion }
 
 type ModalDeServicios = Extract<ModalAbierto, { tipo: "servicios" }>
 
@@ -106,6 +115,7 @@ const conRecarga = (mensaje: string) => `${mensaje.replace(/\.$/, "")}. Se recar
 export default function PaginaTablero() {
   const { data: sesion, status: estadoDeSesion } = useSession()
   const actor = actorDeSesion(sesion)
+  const rubro = useRubroDelPanel()
 
   const [tablero, setTablero] = useState<Tablero | null>(null)
   const [errorDeCarga, setErrorDeCarga] = useState("")
@@ -121,6 +131,8 @@ export default function PaginaTablero() {
   const [modal, setModal] = useState<ModalAbierto | null>(null)
   const [avisoDelModal, setAvisoDelModal] = useState("")
   const [guardando, setGuardando] = useState(false)
+  /** Sube cada vez que un abono falla: el modal vuelve a leer las prótesis y su saldo. */
+  const [versionDelAbono, setVersionDelAbono] = useState(0)
 
   // El número del último pedido de recarga: si llega la respuesta de uno
   // anterior (más lento), se descarta en vez de pisar datos más nuevos.
@@ -469,14 +481,21 @@ export default function PaginaTablero() {
   const anular = (atencion: Atencion, motivo: string) =>
     desdeUnModal(async () => {
       const resultado = await anularAtencion(atencion.id, motivo)
-      // Ya entró en una liquidación o en un cierre de caja: la atención no
-      // cambió, no hay nada que recargar ni reintentar. El modal se queda con
-      // el motivo escrito y el mensaje del servidor, que dice cómo se corrige
-      // (con un ajuste), y ya no ofrece anular.
+      // Ya entró en una liquidación o en un cierre de caja, o lleva un abono
+      // ya pagado al laboratorio: la atención no cambió, no hay nada que
+      // recargar ni reintentar. El modal se queda con el motivo escrito y el
+      // mensaje del servidor, que dice cómo se corrige (con un ajuste, o
+      // anulando primero el pago al laboratorio), y ya no ofrece anular.
       if (!resultado.ok && resultado.motivo === "corregir-con-ajuste") {
         setGuardando(false)
         setModal({ tipo: "anular", atencion, rechazo: resultado.error })
         return
+      }
+      // Otro 409 o un 404: el mensaje del servidor se muestra tal cual, y se
+      // recarga por si la atención cambió.
+      if (!resultado.ok && resultado.motivo === "desactualizada") {
+        setGuardando(false)
+        return tableroDesactualizado(tarjetaDe(atencion), conRecarga(resultado.error))
       }
       if (!resultado.ok) return falloEnModal(resultado, atencion)
 
@@ -485,6 +504,41 @@ export default function PaginaTablero() {
       quitarAtencion(atencion.id)
       cerrarModal()
       setFoco({ columna: columnaDe(atencion) })
+      recargar()
+    })
+
+  /**
+   * Clínica dental: agrega un abono a una prótesis. Cualquier rechazo (el
+   * monto pasa el saldo, la atención ya se cobró, la prótesis se anuló) se
+   * dice adentro con el mensaje del servidor, y el modal vuelve a leer las
+   * prótesis; el tablero se recarga por detrás.
+   */
+  const abonar = (atencion: Atencion, protesisId: string, monto: number) =>
+    desdeUnModal(async () => {
+      const resultado = await agregarAbono(atencion.id, protesisId, monto)
+      if (!resultado.ok) {
+        setGuardando(false)
+        setAvisoDelModal(resultado.error)
+        setVersionDelAbono((n) => n + 1)
+        recargar()
+        return
+      }
+      ponerAtencion(resultado.datos)
+      cerrarModal()
+      recargar()
+    })
+
+  /** Quita un abono antes de cobrar. El botón se va con la línea: el foco, a la tarjeta. */
+  const quitarElAbono = (atencion: Atencion, linea: LineaDeServicio) =>
+    enTarjeta(atencion.id, async () => {
+      setAviso("")
+      const resultado = await quitarAbono(atencion.id, linea.id)
+      if (!resultado.ok) {
+        if (resultado.motivo === "desactualizada") return tableroDesactualizado(tarjetaDe(atencion), conRecarga(resultado.error))
+        return setAviso(resultado.error)
+      }
+      ponerAtencion(resultado.datos)
+      setFoco(tarjetaDe(resultado.datos))
       recargar()
     })
 
@@ -527,12 +581,14 @@ export default function PaginaTablero() {
     ? tablero.atenciones.filter((atencion) => atencion.turno !== null && atencion.estado === "en-espera").length
     : 0
   const puedeVaciarFila = esperandoEnFila > 0 && puedeVaciarFilaVirtual(actor)
+  // En una clínica dental se llama "Sala de espera"; en otro rubro, "Tablero".
+  const tituloDeLaPagina = conMayuscula(vocabularioDe(rubro).tablero)
 
   return (
     <div className="min-h-screen">
       {/* En el teléfono la cabecera muestra la acción como botón de ícono: no hace falta otro abajo. */}
       <BarraSuperior
-        titulo="Tablero"
+        titulo={tituloDeLaPagina}
         subtitulo={ahora ? fechaLarga(ahora) : "Cargando..."}
         accionPrincipal={
           puedeAnotar ? { texto: "Anotar sin reserva", onClick: () => abrirModal({ tipo: "anotar" }), icono: UserPlus } : undefined
@@ -626,6 +682,8 @@ export default function PaginaTablero() {
             onCobrar={cobrar}
             onEditar={(atencion) => editarServicios(atencion)}
             onAnular={(atencion) => abrirModal({ tipo: "anular", atencion })}
+            onAbonar={(atencion) => abrirModal({ tipo: "abono", atencion })}
+            onQuitarAbono={quitarElAbono}
           />
         )}
       </div>
@@ -683,6 +741,18 @@ export default function PaginaTablero() {
             rechazo={modal.rechazo}
             guardando={guardando}
             onAnular={(motivo) => anular(modal.atencion, motivo)}
+            onCerrar={cerrarModal}
+          />
+        )}
+
+        {modal?.tipo === "abono" && (
+          <ModalAbono
+            key={`abono-${modal.atencion.id}`}
+            atencion={modal.atencion}
+            aviso={avisoDelModal}
+            guardando={guardando}
+            version={versionDelAbono}
+            onAbonar={(protesisId, monto) => abonar(modal.atencion, protesisId, monto)}
             onCerrar={cerrarModal}
           />
         )}

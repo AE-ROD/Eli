@@ -6,12 +6,15 @@ import { Clock, Pencil, Plus, Scissors, Trash2 } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { Insignia } from "@/components/comunes/insignia"
 import { Aviso } from "@/components/panel/aviso"
+import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { formatearMonto, montoParaEscribir } from "@/lib/dinero"
 import { formatearDuracionDeServicio } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { ModalServicio } from "./modal-servicio"
 import {
   crearServicio,
@@ -34,6 +37,7 @@ interface PropsDeSeccionServicios {
 
 export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios) {
   const idDelTitulo = useId()
+  const { clientes } = vocabularioDe(useRubroDelPanel())
   const [servicios, setServicios] = useState<Servicio[]>(serviciosIniciales)
   const [modalAbierto, setModalAbierto] = useState(false)
   const [servicioEditando, setServicioEditando] = useState<Servicio | null>(null)
@@ -41,6 +45,10 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
   const [guardando, setGuardando] = useState(false)
   const [aviso, setAviso] = useState("")
   const [avisoDelModal, setAvisoDelModal] = useState("")
+  // El servicio que se está por eliminar, con su modal de confirmación.
+  const [aEliminar, setAEliminar] = useState<Servicio | null>(null)
+  const [eliminando, setEliminando] = useState(false)
+  const [avisoDeEliminar, setAvisoDeEliminar] = useState("")
 
   const abrirNuevo = () => {
     setServicioEditando(null)
@@ -101,12 +109,23 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
     else setAviso(resultado.error)
   }
 
-  const eliminar = async (id: string) => {
-    if (!confirm("¿Eliminar este servicio?")) return
-    setAviso("")
+  const pedirEliminar = (servicio: Servicio) => {
+    setAvisoDeEliminar("")
+    setAEliminar(servicio)
+  }
+
+  /** Si el servidor no lo deja (por ejemplo, porque tiene citas), el motivo queda en el modal. */
+  const confirmarEliminar = async () => {
+    if (!aEliminar) return
+    const id = aEliminar.id
+    setAvisoDeEliminar("")
+    setEliminando(true)
     const resultado = await borrarServicio(id)
-    if (resultado.ok) setServicios((previos) => previos.filter((servicio) => servicio.id !== id))
-    else setAviso(resultado.error)
+    setEliminando(false)
+    if (!resultado.ok) return setAvisoDeEliminar(resultado.error)
+    setAviso("")
+    setServicios((previos) => previos.filter((servicio) => servicio.id !== id))
+    setAEliminar(null)
   }
 
   return (
@@ -114,7 +133,7 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo="Servicios"
-        subtitulo="Los servicios que ofreces a tus clientes"
+        subtitulo={`Los servicios que ofreces a tus ${clientes}`}
         icono={{ figura: Scissors }}
         accion={
           <BotonPrimario tamaño="sm" icono={<Plus className="h-4 w-4" />} onClick={abrirNuevo}>
@@ -167,7 +186,7 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
                 </button>
                 <button
                   type="button"
-                  onClick={() => eliminar(servicio.id)}
+                  onClick={() => pedirEliminar(servicio)}
                   aria-label={`Eliminar ${servicio.name}`}
                   title="Eliminar"
                   className={cn(BOTON_DE_ICONO, "hover:bg-error/6 hover:text-error")}
@@ -193,6 +212,22 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
             onCerrar={cerrarModal}
             frecuenciaDias={form.frecuenciaDias}
             onCambiarFrecuencia={(valor) => setForm((previo) => ({ ...previo, frecuenciaDias: valor }))}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {aEliminar && (
+          <ModalConfirmar
+            titulo={`¿Eliminar ${aEliminar.name}?`}
+            descripcion="No se puede deshacer. Si sólo quieres dejar de ofrecerlo por un tiempo, desactívalo con su interruptor: sale de la página pública y lo vuelves a encender cuando quieras."
+            textoConfirmar="Eliminar servicio"
+            textoCancelar="No eliminar"
+            peligro
+            trabajando={eliminando}
+            aviso={avisoDeEliminar}
+            onConfirmar={confirmarEliminar}
+            onCerrar={() => setAEliminar(null)}
           />
         )}
       </AnimatePresence>

@@ -49,6 +49,30 @@ describe("cn", () => {
       expect(cn("shadow-sm", "shadow-md")).toBe("shadow-md")
     })
 
+    it("los tokens de la landing chocan como los demás", () => {
+      expect(cn("rounded-ficha", "rounded-bloque")).toBe("rounded-bloque")
+      expect(cn("rounded-etiqueta", "rounded-full")).toBe("rounded-full")
+      expect(cn("rounded-maqueta", "rounded-[24px]")).toBe("rounded-[24px]")
+      expect(cn("ease-llegada", "ease-onda")).toBe("ease-onda")
+      expect(cn("animate-flotar", "animate-senalar")).toBe("animate-senalar")
+      expect(cn("animate-latido", "animate-none")).toBe("animate-none")
+      expect(cn("shadow-sm", "shadow-maqueta")).toBe("shadow-maqueta")
+      expect(cn("shadow-maqueta", "shadow-md")).toBe("shadow-md")
+      expect(cn("bg-frambuesa", "bg-cereza")).toBe("bg-cereza")
+    })
+
+    it("las animaciones de las secciones de la landing chocan con cualquier otra", () => {
+      expect(cn("animate-aparecer", "animate-none")).toBe("animate-none")
+      expect(cn("animate-crecer-columna", "animate-crecer-barra")).toBe("animate-crecer-barra")
+      expect(cn("animate-recorrer", "animate-recorrer-camino")).toBe("animate-recorrer-camino")
+      expect(cn("animate-progreso", "animate-flotar")).toBe("animate-flotar")
+      expect(cn("animate-latido", "animate-progreso")).toBe("animate-progreso")
+    })
+
+    it("el color de una sombra no pisa la sombra propia", () => {
+      expect(cn("shadow-maqueta", "shadow-ciruela/20")).toBe("shadow-maqueta shadow-ciruela/20")
+    })
+
     it("el tamaño de letra y el color no se confunden aunque los dos empiecen con text-", () => {
       expect(cn("text-base", "text-texto-2")).toBe("text-base text-texto-2")
     })

@@ -1,142 +1,84 @@
-"use client"
-
-import { Check, Eye, Link2, Lock } from "lucide-react"
-import { Insignia } from "@/components/comunes/insignia"
-import {
-  Avatar,
-  BotonDeMaqueta,
-  CabeceraDeMaqueta,
-  Circulo,
-  AparecerAlEntrar,
-  FilaDeMaqueta,
-  MarcoDeMaqueta,
-  PieDeMaqueta,
-  Separador,
-  TextoDeFila,
-} from "./maqueta-piezas"
+import type { CSSProperties } from "react"
+import { Shield, SquareKanban, User, Users, type LucideIcon } from "lucide-react"
+import { Chip, CuadroDeTono, MarcoDeMaqueta, SUAVE_DEL_COBRO } from "@/components/landing/maquetas/maqueta-piezas"
+import type { TonoDeLanding } from "@/components/landing/tonos-de-la-landing"
+import { cn } from "@/lib/utils"
 
 /*
- * Las cuatro maquetas de la sección del tablero, una por ítem de la lista:
- * las reservas que entran solas, quien llega sin reserva, lo que ve un
- * profesional y quién cobra.
+ * Las dos maquetas de la sección del tablero: las reservas de hoy, que
+ * entran solas, y quién puede cobrar. Los datos son de ejemplo.
  */
 
-const RESERVAS_DE_HOY = [
-  { hora: "10:30", cliente: "María González", servicio: "Color + corte", nueva: false, retraso: 0.1 },
-  { hora: "12:00", cliente: "Sofía Rojas", servicio: "Manicura", nueva: false, retraso: 0.25 },
-  { hora: "16:00", cliente: "Camila Torres", servicio: "Corte", nueva: true, retraso: 0.7 },
+const RESERVAS = [
+  { hora: "10:30", nombre: "María González", servicio: "Color + corte" },
+  { hora: "12:00", nombre: "Sofía Rojas", servicio: "Manicura" },
+  { hora: "16:00", nombre: "Camila Torres", servicio: "Corte" },
 ] as const
 
-export function MaquetaReservasDeHoy() {
+/**
+ * La columna "Reservas de hoy" del tablero. Las filas entran de a una, se
+ * quedan y vuelven a entrar, como reservas que llegan solas: es `aparecer`,
+ * de CSS, que congela el `animaciones-en-pausa` de la sección.
+ */
+export function MaquetaReservasDeHoy({ className }: { className?: string }) {
   return (
-    <MarcoDeMaqueta etiqueta="Maqueta: columna Reservas de hoy con tres reservas que entraron solas">
-      <CabeceraDeMaqueta titulo="Reservas de hoy">
-        <Insignia>3</Insignia>
-      </CabeceraDeMaqueta>
-      {RESERVAS_DE_HOY.map((reserva) => (
-        <AparecerAlEntrar key={reserva.hora} retraso={reserva.retraso}>
-          <FilaDeMaqueta className="mt-2">
-            <span className="w-10 shrink-0 font-semibold tabular-nums">{reserva.hora}</span>
-            <TextoDeFila titulo={reserva.cliente} detalle={reserva.servicio} />
-            <Insignia tono={reserva.nueva ? "naranja" : "gris"}>{reserva.nueva ? "Nueva" : "Reserva"}</Insignia>
-          </FilaDeMaqueta>
-        </AparecerAlEntrar>
-      ))}
-      <PieDeMaqueta icono={<Link2 />}>Entran desde tu página de reservas</PieDeMaqueta>
-    </MarcoDeMaqueta>
-  )
-}
-
-function CampoDeMaqueta({ etiqueta, valor }: { etiqueta: string; valor: string }) {
-  return (
-    <div className="rounded-[12px] px-2.5 py-2 ring-1 ring-borde ring-inset">
-      <span className="block text-xs text-texto-2">{etiqueta}</span>
-      <span className="font-medium">{valor}</span>
-    </div>
-  )
-}
-
-export function MaquetaAnotarVisita() {
-  return (
-    <MarcoDeMaqueta etiqueta="Maqueta: se anota a Paula, que llegó sin reserva, y entra a En espera">
-      <p className="text-sm font-semibold">Anotar visita</p>
-      <div className="mt-2.5 grid grid-cols-2 gap-2">
-        <CampoDeMaqueta etiqueta="Nombre" valor="Paula" />
-        <CampoDeMaqueta etiqueta="Servicio" valor="Corte · $15.000" />
-      </div>
-      <BotonDeMaqueta>Anotar en espera</BotonDeMaqueta>
-      <Separador />
-      <div className="flex items-center justify-between gap-2.5">
-        <span className="font-semibold">En espera</span>
-        <Insignia>2</Insignia>
-      </div>
-      <FilaDeMaqueta className="mt-2">
-        <TextoDeFila titulo="Valentina Medina" detalle="Peinado · llegó 10:58" />
-        <Insignia>Reserva</Insignia>
-      </FilaDeMaqueta>
-      <AparecerAlEntrar retraso={0.9}>
-        <FilaDeMaqueta className="mt-2">
-          <TextoDeFila titulo="Paula" detalle="Corte · llegó 11:05" />
-          <Insignia tono="naranja">Sin reserva</Insignia>
-        </FilaDeMaqueta>
-      </AparecerAlEntrar>
-    </MarcoDeMaqueta>
-  )
-}
-
-const MIS_SERVICIOS = [
-  { cliente: "María González", servicio: "Corte · 11:15", precio: "$15.000", retraso: 0.15 },
-  { cliente: "Paula", servicio: "Corte · 11:40", precio: "$15.000", retraso: 0.3 },
-] as const
-
-export function MaquetaVistaDeProfesional() {
-  return (
-    <MarcoDeMaqueta etiqueta="Maqueta: la vista de Carla, profesional, con solo sus servicios del día">
-      <div className="flex items-center gap-2.5">
-        <Avatar color="turquesa">C</Avatar>
-        <span>
-          <span className="block text-sm font-semibold">Carla</span>
-          <span className="text-xs text-texto-2">Profesional</span>
+    <MarcoDeMaqueta
+      etiqueta="Maqueta: la columna Reservas de hoy del tablero, con tres reservas que entraron desde la página de reservas"
+      className={cn("px-5 pb-2 pt-5 md:px-6", className)}
+    >
+      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-2 text-[13px] font-semibold uppercase text-texto-2">
+          <CuadroDeTono tono="ciruela" className="size-[26px] rounded-[9px]">
+            <SquareKanban className="size-3.5" strokeWidth={1.75} />
+          </CuadroDeTono>
+          Tablero
         </span>
-        <Insignia className="ml-auto">Mis servicios</Insignia>
+        <span className="text-[13px] font-semibold text-texto-2">
+          Reservas de hoy
+          <span className="ml-1.5 inline-block min-w-[22px] rounded-full bg-ciruela px-[7px] py-0.5 text-center text-xs text-white">
+            {RESERVAS.length}
+          </span>
+        </span>
       </div>
-      <Separador />
-      {MIS_SERVICIOS.map((servicio) => (
-        <AparecerAlEntrar key={servicio.servicio} retraso={servicio.retraso}>
-          <FilaDeMaqueta className="mt-2">
-            <TextoDeFila titulo={servicio.cliente} detalle={servicio.servicio} />
-            <span className="font-semibold">{servicio.precio}</span>
-          </FilaDeMaqueta>
-        </AparecerAlEntrar>
+      {RESERVAS.map((reserva, orden) => (
+        <div
+          key={reserva.nombre}
+          className={cn("flex animate-aparecer items-center gap-3.5 py-[13px]", orden > 0 && "border-t border-borde-suave")}
+          style={{ "--retraso": `${orden * 0.5}s` } as CSSProperties}
+        >
+          <span className="w-[46px] shrink-0 text-[13px] font-semibold text-texto-2">{reserva.hora}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[15px] font-semibold tracking-[-0.01em]">{reserva.nombre}</span>
+            <span className="mt-0.5 block truncate text-[12.5px] text-texto-2">{reserva.servicio}</span>
+          </span>
+          <Chip tono="ciruela">Reserva</Chip>
+        </div>
       ))}
-      <PieDeMaqueta icono={<Eye />}>Lo de otros profesionales no aparece en su vista</PieDeMaqueta>
     </MarcoDeMaqueta>
   )
 }
 
-const QUIEN_COBRA = [
-  { rol: "Dueño", cobra: true },
-  { rol: "Encargado", cobra: true },
-  { rol: "Profesional", cobra: false },
-] as const
+const QUIEN_COBRA: readonly { rol: string; icono: LucideIcon; tono: TonoDeLanding; cobra: boolean }[] = [
+  { rol: "Dueño", icono: Shield, tono: "ciruela", cobra: true },
+  { rol: "Encargado", icono: Users, tono: "frambuesa", cobra: true },
+  { rol: "Profesional", icono: User, tono: "anil", cobra: false },
+]
 
-export function MaquetaQuienCobra() {
+/** Los tres roles y si cobran: el dueño y el encargado sí, el profesional no (`docs/PRODUCTO.md`). */
+export function MaquetaQuienCobra({ className }: { className?: string }) {
   return (
-    <MarcoDeMaqueta etiqueta="Maqueta: visita por cobrar; cobran el dueño y el encargado, el profesional no">
-      <CabeceraDeMaqueta titulo="Por cobrar · María G.">
-        <span className="font-semibold">$37.000</span>
-      </CabeceraDeMaqueta>
-      <p className="mt-0.5 text-xs text-texto-2">Color · Lucía Pérez — Corte · Carla</p>
-      <BotonDeMaqueta>Cobrar</BotonDeMaqueta>
-      <Separador />
-      <p className="text-xs font-semibold">Quién puede cobrar</p>
-      {QUIEN_COBRA.map(({ rol, cobra }) => (
-        <div key={rol} className="flex items-center justify-between gap-2.5 border-b border-borde py-2">
-          <span className="font-medium">{rol}</span>
-          <span className="flex items-center gap-1.5 text-xs text-texto-2">
-            {cobra ? "Cobra" : "No cobra"}
-            <Circulo tono={cobra ? "lima" : "gris"}>{cobra ? <Check /> : <Lock />}</Circulo>
-          </span>
+    <MarcoDeMaqueta
+      etiqueta="Maqueta: quién puede cobrar. El dueño y el encargado cobran; el profesional no."
+      className={cn("px-5 pb-1.5 pt-[18px] md:px-[22px]", className)}
+    >
+      <p className="mb-1 text-[13px] font-semibold text-texto-2">Quién puede cobrar</p>
+      {QUIEN_COBRA.map(({ rol, icono: Icono, tono, cobra }, orden) => (
+        <div key={rol} className={cn("flex items-center gap-3 py-[11px]", orden > 0 && "border-t border-borde-suave")}>
+          <CuadroDeTono tono={tono} className={cn("size-8 rounded-[11px]", tono === "anil" && SUAVE_DEL_COBRO)}>
+            <Icono className="size-4" strokeWidth={1.75} />
+          </CuadroDeTono>
+          <span className="flex-1 text-[15px] font-semibold">{rol}</span>
+          <Chip tono={cobra ? "listo" : "gris"}>{cobra ? "Cobra" : "No cobra"}</Chip>
         </div>
       ))}
     </MarcoDeMaqueta>

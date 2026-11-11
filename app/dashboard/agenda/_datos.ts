@@ -9,13 +9,14 @@
  */
 
 import { comoTexto, diasDeLaSemanaDe, limitesDelMesDe, type UnidadDeTiempo } from "@/lib/fechas"
-import { leerMonto } from "@/lib/dinero"
+import { leerMonto, montoParaEscribir } from "@/lib/dinero"
 import { codigoDelServidor, pedir, pedirConCuerpo, conJson, type Resultado } from "@/lib/peticiones"
 import { CODIGO_CORREGIR_CON_AJUSTE } from "@/lib/bloqueos-de-dinero"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import { sePuedeMover, type Advertencia } from "@/lib/mover-cita"
 import { sigueSinConfirmar } from "@/lib/por-confirmar"
 import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
+import { CODIGO_SILLON_OCUPADO } from "@/lib/sillones"
 import { isoEn } from "./_hora-del-negocio"
 
 export interface Cita {
@@ -48,6 +49,18 @@ export interface Cita {
   canceladaPor?: string | null
   /** Cuándo se canceló, ISO. */
   canceladaEn?: string | null
+  /** Clínica dental: el sillón de la cita (`null`, sin sillón). En otro rubro la clave no viene. */
+  sillonId?: string | null
+  /** Clínica dental: el sillón, con su nombre. */
+  sillon?: SillonDeLaCita | null
+  /** Clínica dental: el paciente viene por primera vez. */
+  primeraVez?: boolean
+}
+
+/** El sillón de una cita, como viene en la lista y en el detalle. */
+export interface SillonDeLaCita {
+  id: string
+  nombre: string
 }
 
 /**
@@ -73,9 +86,11 @@ export function citaPorConfirmar(cita: Pick<Cita, "status" | "confirmacionPorFal
  * Cómo se llama la cita en pantalla cuando no tiene cliente. Está acá, en un
  * solo lugar, para que las tres vistas no inventen cada una su propia palabra
  * — y para que ninguna vuelva a asumir que `customer` siempre viene.
+ * `palabraCliente` es la del rubro (`lib/vocabulario.ts`): "Sin paciente" en
+ * una clínica dental.
  */
-export function nombreDeCliente(cita: Cita): string {
-  return cita.customer ? nombreCompletoDeCliente(cita.customer) : "Sin cliente"
+export function nombreDeCliente(cita: Cita, palabraCliente = "cliente"): string {
+  return cita.customer ? nombreCompletoDeCliente(cita.customer) : `Sin ${palabraCliente}`
 }
 
 /**
@@ -101,6 +116,11 @@ export interface DatosDeNuevaCita {
   precio: string
   notas: string
   memberId: string
+  /**
+   * Clínica dental: el sillón elegido ("" es sin sillón). Fuera de una
+   * clínica no está, y la cita se crea como siempre, sin la clave.
+   */
+  sillonId?: string
 }
 
 /**
@@ -229,8 +249,40 @@ export async function leerCitas(fecha: Date, modo: UnidadDeTiempo): Promise<Resu
   return pedir<Cita[]>(`/api/citas?${rangoVisible(fecha, modo)}`, "No se pudieron cargar las citas")
 }
 
-export async function cambiarEstadoDeCita(id: string, estado: string): Promise<Resultado> {
-  return pedir(`/api/citas/${id}`, "No se pudo cambiar el estado", conJson("PUT", { status: estado }))
+/**
+ * Cambia el estado y devuelve la cita como quedó en el servidor: al
+ * cancelarla trae quién y cuándo (`canceladaPor`, `canceladaEn`), y el
+ * detalle lo muestra sin recargar la agenda.
+ */
+export async function cambiarEstadoDeCita(id: string, estado: string): Promise<Resultado<Cita>> {
+  return pedir<Cita>(`/api/citas/${id}`, "No se pudo cambiar el estado", conJson("PUT", { status: estado }))
+}
+
+/**
+ * La cita de la agenda con lo que cambió al cambiarle el estado: el estado y
+ * quién y cuándo la canceló. Lo demás (el cliente, si ya llegó, el sillón) se
+ * queda como estaba: la respuesta del servidor no trae todo lo de la lista.
+ */
+export function conEstadoNuevo(cita: Cita, guardada: Pick<Cita, "status" | "canceladaPor" | "canceladaEn">): Cita {
+  return {
+    ...cita,
+    status: guardada.status,
+    canceladaPor: guardada.canceladaPor ?? null,
+    canceladaEn: guardada.canceladaEn ?? null,
+  }
+}
+
+/**
+ * El precio que se precarga al elegir servicios del catálogo: la suma de los
+ * que tienen precio, hecha en centavos (con `+`, 0,1 + 0,2 daba
+ * 0,30000000000000004 y el campo mostraba eso), y escrita como la lee
+ * `leerMonto` (`montoParaEscribir`): "8000", "8000,5". Vacío si ninguno tiene.
+ */
+export function precioDeLosServicios(servicios: Pick<ServicioDelCatalogo, "price">[]): string {
+  const conPrecio = servicios.filter((servicio): servicio is { price: number } => servicio.price !== null)
+  if (conPrecio.length === 0) return ""
+  const centavos = conPrecio.reduce((total, servicio) => total + Math.round(servicio.price * 100), 0)
+  return montoParaEscribir(centavos / 100)
 }
 
 /**
@@ -253,6 +305,11 @@ export interface DatosDeMoverCita {
   horaInicio: string
   horaFin: string
   memberId: string
+  /**
+   * Clínica dental: el sillón nuevo ("" es sin sillón). Sin la clave la cita
+   * conserva el que tiene, también al moverla: se manda sólo si cambió.
+   */
+  sillonId?: string
 }
 
 /**
@@ -264,7 +321,12 @@ export interface DatosDeMoverCita {
 export type ResultadoConAdvertencias =
   | { tipo: "guardada" }
   | { tipo: "advertencias"; advertencias: Advertencia[] }
-  | { tipo: "error"; error: string }
+  /**
+   * `sillonOcupado`: el 409 de la clínica dental cuando el sillón ya tiene
+   * otra cita a esa hora (`codigo: "sillon-ocupado"`). No es una advertencia:
+   * no se ofrece "guardar igual", se elige otro sillón u otra hora.
+   */
+  | { tipo: "error"; error: string; sillonOcupado?: boolean }
 
 export type ResultadoDeMover = ResultadoConAdvertencias
 
@@ -299,6 +361,8 @@ export async function moverCita(
       // Sólo quien puede asignar manda el profesional; al otro el servidor lo
       // dejaría igual en sí mismo.
       ...(opciones.asignaProfesional && { memberId: datos.memberId || null }),
+      // Clínica dental: sólo si cambió de sillón (sin la clave, conserva el suyo).
+      ...(datos.sillonId !== undefined && { sillonId: datos.sillonId || null }),
       ...(opciones.confirmar && { confirmarAdvertencias: true }),
     })
   )
@@ -333,6 +397,9 @@ function conAdvertencias(resultado: Awaited<ReturnType<typeof pedirConCuerpo>>):
   const advertencias = (resultado.cuerpo as { advertencias?: unknown } | null)?.advertencias
   if (resultado.codigo === 409 && sonAdvertencias(advertencias)) {
     return { tipo: "advertencias", advertencias }
+  }
+  if (codigoDelServidor(resultado.cuerpo) === CODIGO_SILLON_OCUPADO) {
+    return { tipo: "error", error: resultado.error, sillonOcupado: true }
   }
   return { tipo: "error", error: resultado.error }
 }
@@ -405,6 +472,8 @@ export async function crearCita(
       price: precio.datos,
       notes: datos.notas || undefined,
       memberId: datos.memberId || null,
+      // Clínica dental: el sillón, si se eligió uno. Fuera de una clínica la clave no va.
+      ...(datos.sillonId !== undefined && { sillonId: datos.sillonId || null }),
       ...(opciones.confirmar && { confirmarAdvertencias: true }),
     })
   )
@@ -503,4 +572,143 @@ export async function buscarClientes(texto: string): Promise<Resultado<ClienteSu
       email: cliente.email ?? "",
     })),
   }
+}
+
+/**
+ * Lo que trae la dirección al llegar a la agenda: `?nueva=1` abre el modal de
+ * cita nueva y `&cliente=<id>` (desde la ficha o la lista de clientes, o el
+ * plan dental) lo abre con ese cliente elegido. `resto` es la consulta sin
+ * esos dos, para dejar la dirección limpia: recargar o volver no lo repite.
+ */
+export function llegadaALaAgenda(consulta: string): { nueva: boolean; clienteId: string | null; resto: string } {
+  const parametros = new URLSearchParams(consulta)
+  const nueva = parametros.get("nueva") === "1"
+  const clienteId = parametros.get("cliente")?.trim() || null
+  parametros.delete("nueva")
+  parametros.delete("cliente")
+  return { nueva, clienteId: nueva ? clienteId : null, resto: parametros.toString() }
+}
+
+/**
+ * El cliente con que se abre la cita nueva al llegar con `?cliente=<id>`. El
+ * servidor sólo lo devuelve si es del negocio de la sesión (y no está
+ * eliminado); si no (404) o si falla, `null`: el modal se abre sin cliente,
+ * como si el parámetro no estuviera.
+ */
+export async function leerClienteParaLaCita(id: string): Promise<ClienteSugerido | null> {
+  const resultado = await pedir<{ id: string; name: string; lastName: string | null; email: string | null }>(
+    `/api/clientes/${encodeURIComponent(id)}`,
+    "No se pudo leer el cliente"
+  )
+  if (!resultado.ok || resultado.datos?.id !== id) return null
+  return { id: resultado.datos.id, nombre: nombreCompletoDeCliente(resultado.datos), email: resultado.datos.email ?? "" }
+}
+
+// ─── Clínica dental: sillones, alergias y "Asignar sillón" ───────────────────
+
+/** Un sillón de la clínica, como lo devuelve Configuración. */
+export interface SillonDeLaAgenda {
+  id: string
+  nombre: string
+  orden: number
+  activo: boolean
+}
+
+/**
+ * Los sillones de la clínica, activos e inactivos, por orden. Todo rol de la
+ * clínica los lee; fuera de una clínica el servidor responde 404 y la agenda
+ * no los pide.
+ */
+export async function leerSillones(): Promise<Resultado<SillonDeLaAgenda[]>> {
+  return pedir<SillonDeLaAgenda[]>("/api/configuracion/sillones", "No se pudieron cargar los sillones")
+}
+
+/**
+ * Las opciones del selector de sillón: los activos, en su orden. Si la cita
+ * ya está en uno desactivado, también ese, dicho así, para que el selector
+ * diga dónde está y no "Sin sillón". Un sillón desactivado no se ofrece para
+ * una cita nueva ni para cambiar: el servidor lo rechazaría.
+ */
+export function opcionesDeSillon(
+  sillones: readonly SillonDeLaAgenda[],
+  cita?: Pick<Cita, "sillonId" | "sillon"> | null
+): { valor: string; texto: string }[] {
+  const opciones = sillones.filter((sillon) => sillon.activo).map((sillon) => ({ valor: sillon.id, texto: sillon.nombre }))
+  const actual = cita?.sillonId
+  if (actual && !opciones.some((opcion) => opcion.valor === actual)) {
+    const nombre = sillones.find((sillon) => sillon.id === actual)?.nombre ?? cita?.sillon?.nombre ?? "Sillón"
+    opciones.push({ valor: actual, texto: `${nombre} (desactivado)` })
+  }
+  return opciones
+}
+
+/** Lo que el detalle de una cita suma en una clínica: la alerta de alergias y el sillón. */
+export interface DetalleDeLaClinica {
+  /** Lo anotado en "Alergias" de la ficha del paciente; `null` si no hay nada anotado. */
+  alergias: string | null
+  sillonId: string | null
+  sillon: SillonDeLaCita | null
+}
+
+/**
+ * El detalle de una cita en la clínica. La lista de la agenda no trae las
+ * alergias: el panel de la cita lo pide al abrirse. Si el servidor no manda
+ * la clave `alergias` (otro rubro), es un error: en una clínica no se dice
+ * "sin alergias" sin haberlo leído.
+ */
+export async function leerDetalleDeLaClinica(citaId: string): Promise<Resultado<DetalleDeLaClinica>> {
+  const resultado = await pedir<{ alergias?: unknown; sillonId?: unknown; sillon?: unknown }>(
+    `/api/citas/${encodeURIComponent(citaId)}`,
+    "No se pudo revisar la ficha del paciente"
+  )
+  if (!resultado.ok) return resultado
+  const { alergias, sillonId, sillon } = resultado.datos
+  if (alergias !== null && typeof alergias !== "string") {
+    return { ok: false, error: "No se pudo revisar la ficha del paciente" }
+  }
+  return {
+    ok: true,
+    datos: {
+      alergias: alergias?.trim() || null,
+      sillonId: typeof sillonId === "string" ? sillonId : null,
+      sillon: esSillonDeLaCita(sillon) ? sillon : null,
+    },
+  }
+}
+
+function esSillonDeLaCita(valor: unknown): valor is SillonDeLaCita {
+  return (
+    typeof valor === "object" &&
+    valor !== null &&
+    typeof (valor as SillonDeLaCita).id === "string" &&
+    typeof (valor as SillonDeLaCita).nombre === "string"
+  )
+}
+
+/**
+ * "Asignar sillón": guardado (con el sillón como quedó), el sillón ocupado a
+ * esa hora (409 `sillon-ocupado`: se elige otro, no hay "guardar igual") u
+ * otro error.
+ */
+export type ResultadoDeAsignarSillon =
+  | { tipo: "asignado"; sillonId: string | null; sillon: SillonDeLaCita | null }
+  | { tipo: "ocupado"; error: string }
+  | { tipo: "error"; error: string }
+
+/** Asigna, cambia o quita (`null`) el sillón de una cita, sin tocar su hora ni su odontólogo. */
+export async function asignarSillon(citaId: string, sillonId: string | null): Promise<ResultadoDeAsignarSillon> {
+  const resultado = await pedirConCuerpo<{ sillonId: string | null; sillon: SillonDeLaCita | null }>(
+    `/api/citas/${encodeURIComponent(citaId)}/sillon`,
+    "No se pudo asignar el sillón",
+    { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sillonId }) }
+  )
+  if (resultado.ok) {
+    return {
+      tipo: "asignado",
+      sillonId: resultado.datos.sillonId ?? null,
+      sillon: esSillonDeLaCita(resultado.datos.sillon) ? resultado.datos.sillon : null,
+    }
+  }
+  if (codigoDelServidor(resultado.cuerpo) === CODIGO_SILLON_OCUPADO) return { tipo: "ocupado", error: resultado.error }
+  return { tipo: "error", error: resultado.error }
 }

@@ -6,6 +6,7 @@ import { Boton } from "@/components/comunes/boton"
 import { Insignia } from "@/components/comunes/insignia"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { nombreDelRol } from "@/lib/nombres-de-roles"
@@ -33,6 +34,8 @@ interface PropsDeTarjetaDeMiembro {
  */
 export function TarjetaDeMiembro({ miembro, servicios, onCambio }: PropsDeTarjetaDeMiembro) {
   const idDelTitulo = useId()
+  // "Odontólogo" en una clínica dental; en los demás rubros, "Profesional".
+  const rubro = useRubroDelPanel()
   const idDelCampo = useId()
   const idDelServicio = useId()
   const idDeLaExcepcion = useId()
@@ -106,7 +109,7 @@ export function TarjetaDeMiembro({ miembro, servicios, onCambio }: PropsDeTarjet
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo={miembro.nombre}
-        subtitulo={nombreDelRol(miembro.rol)}
+        subtitulo={nombreDelRol(miembro.rol, rubro)}
         icono={{ figura: Percent }}
         accion={sinConfigurar ? <Insignia tono="naranja">Sin configurar</Insignia> : undefined}
       />

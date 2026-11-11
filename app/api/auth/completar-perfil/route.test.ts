@@ -3,6 +3,7 @@ import { pedidoFalso } from "@/pruebas/pedidos"
 import { Prisma } from "@prisma/client"
 import { RUBROS } from "@/lib/rubros"
 import { serviciosDeEjemplo } from "@/lib/servicios-de-ejemplo"
+import { materialesDeProtesisDeEjemplo } from "@/lib/protesis"
 
 const mockGetServerSession = vi.fn()
 
@@ -101,6 +102,9 @@ describe("POST /api/auth/completar-perfil", () => {
       expect(res.status).toBe(200)
       expect(prismaMock.business.create).toHaveBeenCalledTimes(1)
       expect(prismaMock.business.create.mock.calls[0][0].data.services).toEqual({ create: serviciosDeEjemplo(tipoNegocio) })
+      expect(prismaMock.business.create.mock.calls[0][0].data.materialesDeProtesis).toEqual({
+        create: materialesDeProtesisDeEjemplo(tipoNegocio),
+      })
     }
   )
 
@@ -273,6 +277,38 @@ describe("POST /api/auth/completar-perfil", () => {
       expect(slug).toMatch(/^negocio-[a-z0-9]{6}$/)
     }
   )
+
+  it("el nombre se guarda sin espacios en las puntas, y sólo espacios no es un nombre", async () => {
+    const { POST } = await import("./route")
+
+    await POST(pedidoFalso({ nombreNegocio: "   Salón María   ", tipoNegocio: "salon" }))
+    expect(prismaMock.business.create.mock.calls[0][0].data.name).toBe("Salón María")
+
+    const soloEspacios = await POST(pedidoFalso({ nombreNegocio: "      ", tipoNegocio: "salon" }))
+    expect(soloEspacios.status).toBe(400)
+    expect(prismaMock.business.create).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(["{roto", ""])("un cuerpo que no es JSON (%j) da 400, no 500", async (cuerpo) => {
+    const { POST } = await import("./route")
+
+    const res = await POST(pedidoFalso(cuerpo))
+
+    expect(res.status).toBe(400)
+    expect(prismaMock.business.create).not.toHaveBeenCalled()
+  })
+
+  it("quien sólo es miembro de otros negocios puede crear el suyo (suma un contexto de dueña)", async () => {
+    const { POST } = await import("./route")
+    // La sesión trabaja como profesional en otro negocio; la cuenta no es dueña de ninguno.
+    mockGetServerSession.mockResolvedValueOnce({ user: { id: "usuario-1", businessId: "negocio-ajeno", role: "worker", memberId: "m-1" } })
+
+    const res = await POST(pedidoFalso({ nombreNegocio: "Mi Salón", tipoNegocio: "salon" }))
+
+    expect(res.status).toBe(200)
+    expect(prismaMock.business.findFirst).toHaveBeenCalledWith({ where: { userId: "usuario-1" } })
+    expect(prismaMock.business.create.mock.calls[0][0].data.userId).toBe("usuario-1")
+  })
 })
 
 /**

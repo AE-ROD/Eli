@@ -38,8 +38,22 @@ function crearLimitador(prefix: string, tokens: number, ventana: `${number} ${"s
 
 // Login: 10 intentos por minuto por IP
 const limitadorLogin = crearLimitador("login", 10, "1 m")
+// Login por cuenta (el correo normalizado, en hash; ver `lib/auth.ts`): 30
+// intentos por 15 minutos. Más amplio que el de IP a propósito: este balde lo
+// puede gastar cualquiera que escriba el correo de otra persona, así que si
+// fuera igual de estrecho (10), un tercero con 10 intentos dejaba a la dueña
+// de la cuenta fuera del panel. Con 30 por 15 minutos, quien rota IPs sigue
+// probando a lo más 2 contraseñas por minuto contra una misma cuenta, y quien
+// se equivoca de verdad no llega nunca al tope. Una sola IP se corta antes
+// por su propio balde (10 por minuto).
+const limitadorLoginPorCuenta = crearLimitador("login-cuenta", 30, "15 m")
 // Registro y recuperación de contraseña: 5 por 10 minutos por IP
 const limitadorAuth = crearLimitador("auth", 5, "10 m")
+// Recuperar la contraseña, por correo de destino (en hash): 3 por hora. El de
+// `auth` cuenta por IP; sin éste, alguien que rota IPs podía llenarle la
+// bandeja a una persona de enlaces de recuperación. Al pasarse, el endpoint
+// responde lo mismo que siempre y no manda nada (no revela que el tope existe).
+const limitadorRecuperacionPorCorreo = crearLimitador("recuperacion-correo", 3, "1 h")
 // Reserva pública: 20 por hora por IP
 const limitadorReserva = crearLimitador("reserva", 20, "1 h")
 // Lectura pública, sin sesión (las horas libres de la página de reservas): 60
@@ -124,7 +138,9 @@ const limitadorPosicionEnFila = crearLimitador("fila-posicion", 240, "1 h")
 
 export type TipoLimite =
   | "login"
+  | "loginPorCuenta"
   | "auth"
+  | "recuperacionPorCorreo"
   | "reserva"
   | "lecturaPublica"
   | "panelLectura"
@@ -144,7 +160,9 @@ export type TipoLimite =
 
 const limitadores: Record<TipoLimite, Ratelimit | null> = {
   login: limitadorLogin,
+  loginPorCuenta: limitadorLoginPorCuenta,
   auth: limitadorAuth,
+  recuperacionPorCorreo: limitadorRecuperacionPorCorreo,
   reserva: limitadorReserva,
   lecturaPublica: limitadorLecturaPublica,
   panelLectura: limitadorPanelLectura,
@@ -177,7 +195,10 @@ const limitadores: Record<TipoLimite, Ratelimit | null> = {
  */
 const fallaAbiertoSiUpstashFalla: Record<TipoLimite, boolean> = {
   login: false,
+  loginPorCuenta: false,
   auth: false,
+  // Cerrado: sin sesión, y manda un correo a una casilla que escribe un anónimo.
+  recuperacionPorCorreo: false,
   reserva: false,
   soporte: false,
   // Cerrado sólo omite el acuse: la solicitud se guarda igual.

@@ -24,9 +24,15 @@ export function leerVistaPrevia(miembroId: string, excluir: readonly string[]): 
   )
 }
 
+/**
+ * Cierra con lo que se vio: el período (`desde`) y el total a pagar
+ * (`totalEsperadoCents`). Si al cerrar ya es otro, el servidor responde 409
+ * y el modal recalcula la vista previa.
+ */
 export function cerrarLiquidacion(datos: {
   miembroId: string
   desde: string
+  totalEsperadoCents: number
   excluirMovimientos: readonly string[]
   nota: string
 }): Promise<Resultado<ResumenDeLiquidacion>> {
@@ -77,4 +83,14 @@ export function guardarLiquidarDesde(fecha: string): Promise<Resultado<{ liquida
     "No se pudo guardar la fecha",
     conJson("PUT", { fecha })
   )
+}
+
+/** Cuántas trae cada página del historial (`GET /api/liquidaciones?pagina=`): una página con menos es la última. */
+export const LIQUIDACIONES_POR_PAGINA = 50
+
+/** Una página del historial, de la más nueva a la más vieja; `miembro` la acota a una persona. */
+export function leerHistorialDeLiquidaciones(pagina: number, miembro: string): Promise<Resultado<ResumenDeLiquidacion[]>> {
+  const consulta = new URLSearchParams({ pagina: String(pagina) })
+  if (miembro) consulta.set("miembro", miembro)
+  return pedir<ResumenDeLiquidacion[]>(`/api/liquidaciones?${consulta}`, "No se pudo cargar el historial")
 }

@@ -31,6 +31,15 @@ describe("serviciosDeEjemplo", () => {
     expect(serviciosDeEjemplo(rubro)).toEqual([])
   })
 
+  it("la clínica dental nace con un solo motivo de urgencia, y es la urgencia dental", () => {
+    const urgencias = serviciosDeEjemplo("odontologia").filter((servicio) => servicio.esUrgencia)
+    expect(urgencias.map((servicio) => servicio.name)).toEqual(["Urgencia dental"])
+  })
+
+  it.each(["salon", "barberia", "spa-de-unas"])("el rubro %s no trae urgencias (queda el default de la base)", (rubro) => {
+    for (const servicio of serviciosDeEjemplo(rubro)) expect(servicio).not.toHaveProperty("esUrgencia")
+  })
+
   it("devuelve copias: cambiar lo devuelto no cambia la próxima llamada", () => {
     const primera = serviciosDeEjemplo("barberia")
     primera[0].price = 1

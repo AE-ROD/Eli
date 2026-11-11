@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma"
 import { enviarInvitacionTrabajador } from "@/lib/email"
 import { generarToken } from "@/lib/tokens"
+import { urlBase } from "@/lib/url-base"
+import { registrarError } from "@/lib/registro-de-errores"
 
 /**
  * (servidor) Las invitaciones al equipo: cuánto duran, cuándo están vencidas
@@ -61,14 +63,23 @@ interface DatosDelCorreo {
  * invitación ya quedó guardada y se puede reenviar.
  */
 export async function mandarCorreoDeInvitacion(datos: DatosDelCorreo): Promise<void> {
-  const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000"
-  const negocio = await prisma.business.findUnique({ where: { id: datos.businessId }, select: { name: true } })
+  // En producción sin NEXTAUTH_URL, `urlBase` lanza: mejor ningún correo (la
+  // invitación queda y se puede reenviar) que uno con un enlace a localhost.
+  let baseUrl: string
+  try {
+    baseUrl = urlBase()
+  } catch (error) {
+    registrarError("armando el enlace de la invitación", error)
+    return
+  }
+  const negocio = await prisma.business.findUnique({ where: { id: datos.businessId }, select: { name: true, type: true } })
 
   await enviarInvitacionTrabajador({
     emailTrabajador: datos.email,
     nombreTrabajador: datos.nombre,
     nombreNegocio: negocio?.name ?? datos.nombreDeRespaldo,
     rol: datos.rol,
+    rubro: negocio?.type ?? null,
     enlaceAceptar: `${baseUrl}/unirse/${datos.token}`,
   }).catch(() => null)
 }

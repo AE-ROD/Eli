@@ -7,8 +7,11 @@ import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Aviso } from "@/components/panel/aviso"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPO, ETIQUETA } from "@/components/panel/estilos"
+import { esRubroDental } from "@/lib/rubros"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { FRECUENCIA_MAXIMA_DIAS, FRECUENCIA_MINIMA_DIAS } from "@/lib/frecuencia-de-visitas"
 import type { DatosDeServicio } from "../_datos"
 
@@ -62,6 +65,10 @@ export function ModalServicio({
   onCambiarFrecuencia,
 }: PropsDeModalServicio) {
   const idDeLaDescripcion = useId()
+  const rubro = useRubroDelPanel()
+  const { cliente } = vocabularioDe(rubro)
+  // Los ejemplos, en el oficio del negocio: en una clínica dental no se corta el pelo.
+  const dental = esRubroDental(rubro)
   const idDeAyudaDeFrecuencia = useId()
   const idDeLasCategorias = useId()
   const nombreDeLaDuracion = useId()
@@ -76,7 +83,7 @@ export function ModalServicio({
       <form onSubmit={onSubmit} className="space-y-5">
         <CampoFormulario
           etiqueta="Nombre del servicio"
-          placeholder="Ej.: Corte de cabello, Arreglo de barba, Manicura..."
+          placeholder={dental ? "Ej.: Limpieza, Control, Extracción..." : "Ej.: Corte de cabello, Arreglo de barba, Manicura..."}
           value={form.name}
           onChange={(e) => onCambiarCampo("name", e.target.value)}
           icono={<Scissors className="h-4 w-4" />}
@@ -86,7 +93,7 @@ export function ModalServicio({
         {/* Agrupa los servicios en la página pública; los sin categoría van a "Otros". */}
         <CampoFormulario
           etiqueta="Categoría (opcional)"
-          placeholder="Ej.: Corte, Color, Uñas..."
+          placeholder={dental ? "Ej.: Prevención, Endodoncia, Urgencias..." : "Ej.: Corte, Color, Uñas..."}
           value={form.category}
           onChange={(e) => onCambiarCampo("category", e.target.value)}
           icono={<Tag className="h-4 w-4" />}
@@ -164,7 +171,7 @@ export function ModalServicio({
         {onCambiarFrecuencia && (
           <div className="space-y-1.5">
             <CampoFormulario
-              etiqueta="Cada cuántos días vuelve un cliente (opcional)"
+              etiqueta={`Cada cuántos días vuelve un ${cliente} (opcional)`}
               type="text"
               inputMode="numeric"
               autoComplete="off"

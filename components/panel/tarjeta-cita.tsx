@@ -3,6 +3,8 @@
 import type { ReactNode } from "react"
 import { Clock, Timer } from "lucide-react"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { cn } from "@/lib/utils"
 import { formatearTiempoLibre as formatearDuracion } from "@/lib/horario-dia"
 import type { EstadoDeCita } from "@/lib/campos-del-panel"
@@ -46,11 +48,15 @@ const ESTADOS: Record<CitaEnTarjeta["estado"], { texto: string; clases: string }
 /** Una pendiente que el local tiene que confirmar (#84): el gris de la pendiente, con borde, y dicho en palabras. */
 const POR_CONFIRMAR = { texto: "Por confirmar", clases: "bg-tarjeta text-navy ring-1 ring-inset ring-navy" }
 
-/** "Sin profesional", en el naranja del tablero y con borde punteado: se distingue sin depender del color. */
+/**
+ * "Sin profesional" ("Sin odontólogo" en una clínica dental), en el naranja
+ * del tablero y con borde punteado: se distingue sin depender del color.
+ */
 function MarcaSinProfesional() {
+  const { profesional } = vocabularioDe(useRubroDelPanel())
   return (
     <span className="inline-flex h-5 shrink-0 items-center rounded-full border border-dashed border-navy/40 bg-naranja-suave px-2 text-[11px] leading-none font-medium whitespace-nowrap text-navy">
-      Sin profesional
+      Sin {profesional}
     </span>
   )
 }

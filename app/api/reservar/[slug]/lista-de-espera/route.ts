@@ -47,7 +47,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const negocio = await prisma.business.findUnique({
     where: { slug },
-    select: { id: true, timezone: true, listaDeEsperaActiva: true },
+    // El rubro: en una clínica dental cuentan la primera vez y la urgencia.
+    select: { id: true, timezone: true, type: true, listaDeEsperaActiva: true },
   })
   if (!negocio?.listaDeEsperaActiva) return NO_ENCONTRADO()
 

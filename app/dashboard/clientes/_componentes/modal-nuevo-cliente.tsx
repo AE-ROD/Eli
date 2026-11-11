@@ -10,6 +10,8 @@ import { Aviso } from "@/components/panel/aviso"
 interface PropsDeModalNuevoCliente {
   /** Con `editando`, el mismo formulario cambia los datos de un cliente que ya existe. */
   editando?: boolean
+  /** "cliente" o, en una clínica dental, "paciente" (`lib/vocabulario.ts`). */
+  palabraCliente?: string
   form: DatosDeNuevoCliente
   guardando: boolean
   /**
@@ -18,7 +20,8 @@ interface PropsDeModalNuevoCliente {
    */
   aviso: string
   onCambiarCampo: (campo: "nombre" | "email" | "telefono", valor: string) => void
-  onCambiarWhatsapp: (acepta: boolean) => void
+  /** Sólo a quien registra consentimientos (dueño y encargado); sin ella, la casilla no aparece. */
+  onCambiarWhatsapp?: (acepta: boolean) => void
   /** Para la casilla de avisos por correo: "… de <negocio> por correo". */
   nombreNegocio?: string
   /**
@@ -40,6 +43,7 @@ interface PropsDeModalNuevoCliente {
  */
 export function ModalNuevoCliente({
   editando = false,
+  palabraCliente = "cliente",
   form,
   guardando,
   aviso,
@@ -51,13 +55,13 @@ export function ModalNuevoCliente({
   onCerrar,
 }: PropsDeModalNuevoCliente) {
   return (
-    <MarcoDeModal titulo={editando ? "Editar cliente" : "Nuevo cliente"} bloqueado={guardando} alCerrar={onCerrar}>
+    <MarcoDeModal titulo={editando ? `Editar ${palabraCliente}` : `Nuevo ${palabraCliente}`} bloqueado={guardando} alCerrar={onCerrar}>
       <form onSubmit={onSubmit} className="space-y-5">
         {/* Al abrir, el foco va al nombre. `MarcoDeModal` anota antes quién lo abrió. */}
         <CampoFormulario
           autoFocus
           etiqueta="Nombre completo"
-          placeholder="Nombre del cliente"
+          placeholder={`Nombre del ${palabraCliente}`}
           value={form.nombre}
           onChange={(e) => onCambiarCampo("nombre", e.target.value)}
           icono={<User className="size-4" aria-hidden="true" strokeWidth={1.75} />}
@@ -81,15 +85,17 @@ export function ModalNuevoCliente({
         />
 
         {/* Casilla nativa: el lector de pantalla la anuncia como tal y la etiqueta la marca. */}
-        <label className="flex cursor-pointer items-start gap-3 text-sm text-navy">
-          <input
-            type="checkbox"
-            checked={form.aceptaWhatsapp}
-            onChange={(e) => onCambiarWhatsapp(e.target.checked)}
-            className="anillo-foco mt-0.5 size-4 shrink-0 cursor-pointer accent-navy"
-          />
-          <span>Acepta recibir mensajes por WhatsApp</span>
-        </label>
+        {onCambiarWhatsapp && (
+          <label className="flex cursor-pointer items-start gap-3 text-sm text-navy">
+            <input
+              type="checkbox"
+              checked={form.aceptaWhatsapp}
+              onChange={(e) => onCambiarWhatsapp(e.target.checked)}
+              className="anillo-foco mt-0.5 size-4 shrink-0 cursor-pointer accent-navy"
+            />
+            <span>Acepta recibir mensajes por WhatsApp</span>
+          </label>
+        )}
 
         {/*
           Sin marcar por defecto (como en la reserva pública). Desmarcarla en
@@ -117,7 +123,7 @@ export function ModalNuevoCliente({
             Cancelar
           </Boton>
           <Boton type="submit" className="w-full" cargando={guardando}>
-            {editando ? "Guardar cambios" : "Guardar cliente"}
+            {editando ? "Guardar cambios" : `Guardar ${palabraCliente}`}
           </Boton>
         </div>
       </form>

@@ -11,6 +11,8 @@ export interface ServicioPublico {
   description: string | null
   duration: number
   price: number | null
+  /** Clínica dental: urgencia, sólo con horas de hoy. Sólo viene en una clínica. */
+  esUrgencia?: boolean
 }
 
 interface PropsDeSelectorServicio {
@@ -21,6 +23,14 @@ interface PropsDeSelectorServicio {
   onAlternar: (servicio: ServicioPublico) => void
   /** Cuántos se pueden elegir (#89a). Con el tope lleno, los demás quedan deshabilitados. */
   tope: number
+  /**
+   * Los que no se pueden sumar a los ya elegidos: nadie del equipo hace la
+   * combinación (`serviciosQueNoSePuedenSumar`). Quedan deshabilitados, con
+   * `motivoSinCombinacion` a la vista en la tarjeta.
+   */
+  sinCombinacion?: ReadonlySet<string>
+  /** Por qué no se pueden sumar: "Nadie del equipo lo hace junto con lo que elegiste." */
+  motivoSinCombinacion?: string
 }
 
 /**
@@ -35,14 +45,23 @@ interface PropsDeSelectorServicio {
  * enfocar. El de reposo es del gris de texto secundario, como el de los
  * campos: el gris de los bordes decorativos no se distingue sobre blanco.
  */
-export function SelectorServicio({ servicios, seleccionados, onAlternar, tope }: PropsDeSelectorServicio) {
+export function SelectorServicio({
+  servicios,
+  seleccionados,
+  onAlternar,
+  tope,
+  sinCombinacion,
+  motivoSinCombinacion = "Nadie del equipo lo hace junto con lo que elegiste.",
+}: PropsDeSelectorServicio) {
   const lleno = seleccionados.length >= tope
   return (
     <ul className="grid gap-3 md:grid-cols-2">
       {servicios.map((servicio) => {
         const posicion = seleccionados.findIndex((elegido) => elegido.id === servicio.id)
         const elegido = posicion >= 0
-        const bloqueado = !elegido && lleno
+        // Sin combinación se dice por qué en la tarjeta; con el tope lleno, ya lo dice el texto de arriba.
+        const noSeSuma = !elegido && (sinCombinacion?.has(servicio.id) ?? false)
+        const bloqueado = !elegido && (lleno || noSeSuma)
         // El gris secundario da 4,3:1 sobre el azul suave del elegido: ahí el texto chico pasa a navy al 75%.
         const textoSecundario = elegido ? "text-navy/75" : "text-texto-2"
         return (
@@ -57,7 +76,10 @@ export function SelectorServicio({ servicios, seleccionados, onAlternar, tope }:
                 "transition-[background-color,box-shadow] duration-150 ease-suave",
                 elegido
                   ? "bg-azul-suave inset-ring-2 inset-ring-navy"
-                  : bloqueado
+                  : noSeSuma
+                    ? // Sin opacidad: el motivo de abajo se tiene que poder leer.
+                      "cursor-not-allowed bg-superficie inset-ring-1 inset-ring-borde"
+                    : bloqueado
                     ? "cursor-not-allowed bg-tarjeta opacity-60 inset-ring-1 inset-ring-texto-2"
                     : "bg-tarjeta inset-ring-1 inset-ring-texto-2 hover:bg-crema hover:inset-ring-navy"
               )}
@@ -91,10 +113,18 @@ export function SelectorServicio({ servicios, seleccionados, onAlternar, tope }:
                   <Clock aria-hidden="true" className="size-4" strokeWidth={1.75} />
                   {formatearDuracionDeServicio(servicio.duration)}
                 </span>
+                {/* Clínica dental: la urgencia sólo tiene horas de hoy, y se dice antes de elegirla. */}
+                {servicio.esUrgencia && (
+                  <span className="rounded-sm bg-naranja-suave px-1.5 py-0.5 text-xs font-medium text-navy">Horas de hoy</span>
+                )}
                 {servicio.price != null && (
                   <span className="ml-auto font-medium tabular-nums">{formatearMonto(servicio.price)}</span>
                 )}
               </span>
+              {noSeSuma && (
+                // Dentro del botón: el lector de pantalla lo lee junto con el nombre, aunque esté deshabilitado.
+                <span className="mt-2 block text-sm font-medium text-navy">{motivoSinCombinacion}</span>
+              )}
             </button>
           </li>
         )

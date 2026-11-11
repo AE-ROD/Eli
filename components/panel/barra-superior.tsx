@@ -1,19 +1,17 @@
 "use client"
 
-import { useId, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { Bell, Menu, Plus, Search, UserRound, type LucideIcon } from "lucide-react"
+import { Menu, Plus, UserRound, type LucideIcon } from "lucide-react"
 import { Antetitulo } from "@/components/comunes/antetitulo"
 import { Boton } from "@/components/comunes/boton"
-import { BotonIcono } from "@/components/comunes/boton-icono"
 import { LogoEli } from "@/components/comunes/logo-eli"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { ID_DEL_CAJON, useBarraLateral } from "@/components/panel/contexto-barra-lateral"
-import { CAMPO } from "@/components/panel/estilos"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CuadroDeSeccion } from "@/components/panel/icono-de-seccion"
-import { seccionDeLaRuta } from "@/components/panel/secciones-del-panel"
+import { seccionConNombreDelRubro, seccionDeLaRuta } from "@/components/panel/secciones-del-panel"
 import { cn } from "@/lib/utils"
 
 interface PropsDeBarraSuperior {
@@ -25,6 +23,11 @@ interface PropsDeBarraSuperior {
     /** Sin ícono propio va `Plus`. */
     icono?: LucideIcon
   }
+  /**
+   * @deprecated No hace nada: la búsqueda no existe todavía y no se muestra
+   * (un campo que no busca es peor que ninguno). Queda para no tocar las
+   * páginas que la apagan; se borra con ellas cuando llegue la búsqueda.
+   */
   mostrarBusqueda?: boolean
 }
 
@@ -35,21 +38,24 @@ const BOTON_DE_LA_FILA =
 /**
  * El encabezado de cada página del panel: el antetítulo con la sección (sale
  * de la ruta, con el color de su módulo o en neutro), el título en la serif de
- * los titulares y el subtítulo; a la derecha, la búsqueda y la acción
- * principal.
+ * los titulares y el subtítulo; a la derecha, la acción principal.
+ *
+ * La búsqueda y la campana de notificaciones no están: no existen todavía, y
+ * un campo que no busca o una campana que no avisa prometen algo que no hay.
+ * Vuelven cuando existan.
  *
  * Por debajo de `lg` la barra lateral es un cajón, y arriba va una fila fija
  * con el botón que lo abre. Fija y no con el resto del encabezado: el foco
  * vuelve a ese botón cuando el cajón se cierra, y si hubiera quedado arriba,
  * fuera de la vista, la página saltaba al principio.
  */
-export function BarraSuperior({ titulo, subtitulo, accionPrincipal, mostrarBusqueda = true }: PropsDeBarraSuperior) {
-  const seccion = seccionDeLaRuta(usePathname())
+export function BarraSuperior({ titulo, subtitulo, accionPrincipal }: PropsDeBarraSuperior) {
+  const seccionDeLaPagina = seccionDeLaRuta(usePathname())
+  // El antetítulo, con el nombre del rubro: "Pacientes" en una clínica dental.
+  const rubro = useRubroDelPanel()
+  const seccion = seccionDeLaPagina && seccionConNombreDelRubro(seccionDeLaPagina, rubro)
   const IconoDeLaAccion = accionPrincipal?.icono ?? Plus
 
-  // La fila de la derecha no deja un hueco donde no tiene nada que mostrar:
-  // la búsqueda aparece desde sm y la campana, desde lg (antes va en la fila del menú).
-  const clasesDeLasAcciones = accionPrincipal ? "flex" : mostrarBusqueda ? "hidden sm:flex" : "hidden lg:flex"
 
   return (
     <>
@@ -72,11 +78,10 @@ export function BarraSuperior({ titulo, subtitulo, accionPrincipal, mostrarBusqu
             {subtitulo && <p className="mt-2 text-pretty text-texto-2">{subtitulo}</p>}
           </div>
 
-          <div className={cn(clasesDeLasAcciones, "items-center gap-3")}>
-            {mostrarBusqueda && <Busqueda />}
-            <BotonIcono etiqueta="Notificaciones" icono={<Bell aria-hidden="true" strokeWidth={1.75} />} className="hidden lg:inline-flex" />
-            {accionPrincipal && (
-              // En el teléfono ocupa el ancho: se lee entera y es fácil de tocar.
+          {/* Sin acción no queda un hueco a la derecha. */}
+          {accionPrincipal && (
+            <div className="flex items-center gap-3">
+              {/* En el teléfono ocupa el ancho: se lee entera y es fácil de tocar. */}
               <Boton
                 onClick={accionPrincipal.onClick}
                 icono={<IconoDeLaAccion aria-hidden="true" />}
@@ -84,15 +89,15 @@ export function BarraSuperior({ titulo, subtitulo, accionPrincipal, mostrarBusqu
               >
                 {accionPrincipal.texto}
               </Boton>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </header>
     </>
   )
 }
 
-/** La fila fija de arriba en el teléfono y la tableta: el menú, el logo, las notificaciones y quién está en sesión. */
+/** La fila fija de arriba en el teléfono y la tableta: el menú, el logo y quién está en sesión. */
 function FilaDelTelefono() {
   const { cajonAbierto, abrirCajon, refBotonMenu } = useBarraLateral()
   const { data: sesion } = useSession()
@@ -125,9 +130,6 @@ function FilaDelTelefono() {
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          <button type="button" aria-label="Notificaciones" className={cn(BOTON_DE_LA_FILA, "hover:bg-superficie")}>
-            <Bell className="size-5" aria-hidden="true" strokeWidth={1.75} />
-          </button>
           {/* Sin sesión no se inventa un nombre: va la silueta. */}
           {nombreUsuario ? (
             <AvatarUsuario nombre={nombreUsuario} tamaño="md" />
@@ -138,49 +140,6 @@ function FilaDelTelefono() {
           )}
         </div>
       </div>
-    </div>
-  )
-}
-
-/**
- * La búsqueda: un botón con forma de campo que, al tocarlo, se vuelve el
- * campo. Desde sm; en el teléfono no entra junto a la acción principal.
- */
-function Busqueda() {
-  const [activa, setActiva] = useState(false)
-  const idDelCampo = useId()
-
-  if (!activa) {
-    return (
-      <button
-        type="button"
-        onClick={() => setActiva(true)}
-        className={cn(CAMPO, "hidden h-12 w-auto items-center gap-2 px-4 text-texto-2 sm:inline-flex")}
-      >
-        <Search className="size-4 shrink-0" aria-hidden="true" strokeWidth={1.75} />
-        <span>Buscar</span>
-      </button>
-    )
-  }
-
-  return (
-    <div className="relative hidden w-56 sm:block lg:w-72">
-      <label htmlFor={idDelCampo} className="sr-only">
-        Buscar
-      </label>
-      <Search
-        className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-texto-2"
-        aria-hidden="true"
-        strokeWidth={1.75}
-      />
-      <input
-        id={idDelCampo}
-        type="search"
-        placeholder="Buscar"
-        autoFocus
-        onBlur={() => setActiva(false)}
-        className={cn(CAMPO, "h-12 pl-10")}
-      />
     </div>
   )
 }

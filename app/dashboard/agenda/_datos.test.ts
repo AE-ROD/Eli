@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
-import { aQuienBloquea, asignarProfesional, citaPorConfirmar, crearBloqueo, crearCita, destacaSinProfesional, hayProfesionales, moverCita, nombreDelProfesional, opcionesDeProfesional, precioDeLaCita, quienCancelo, serviciosParaElProfesional, idsDeServiciosElegidos, quitarBloqueo, reactivarCita, type Bloqueo, type DatosDeNuevaCita } from "./_datos"
+import { aQuienBloquea, asignarProfesional, cambiarEstadoDeCita, citaPorConfirmar, conEstadoNuevo, precioDeLosServicios, crearBloqueo, crearCita, destacaSinProfesional, hayProfesionales, moverCita, nombreDelProfesional, opcionesDeProfesional, precioDeLaCita, quienCancelo, serviciosParaElProfesional, idsDeServiciosElegidos, quitarBloqueo, reactivarCita, leerClienteParaLaCita, llegadaALaAgenda, type Bloqueo, type Cita, type DatosDeNuevaCita } from "./_datos"
 
 /** El cuerpo JSON con que se llamó a `fetch`. */
 const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
@@ -333,6 +333,8 @@ describe("nombreDeCliente y buscarClientes: nombre y apellido (clientes viejos d
     expect(nombreDeCliente(conApellido)).toBe("Lucía Pérez")
     expect(nombreDeCliente(sinApellido)).toBe("Lucía Pérez")
     expect(nombreDeCliente({ customer: null } as unknown as Cita)).toBe("Sin cliente")
+    // Con la palabra del rubro: en una clínica dental.
+    expect(nombreDeCliente({ customer: null } as unknown as Cita, "paciente")).toBe("Sin paciente")
   })
 
   it("el buscador de \"Nueva cita\" muestra el nombre completo", async () => {
@@ -359,5 +361,87 @@ describe("catálogo de la cita nueva (#159)", () => {
   it("los ids elegidos, en orden; vacío es ninguno", () => {
     expect(idsDeServiciosElegidos("s-color,s-corte")).toEqual(["s-color", "s-corte"])
     expect(idsDeServiciosElegidos("")).toEqual([])
+  })
+})
+
+describe("precioDeLosServicios: el precio que se precarga al elegir del catálogo", () => {
+  it("suma en centavos: sin el ruido del punto flotante", () => {
+    // Con `+`, 0,1 + 0,2 era 0,30000000000000004.
+    expect(precioDeLosServicios([{ price: 0.1 }, { price: 0.2 }])).toBe("0,30")
+    expect(precioDeLosServicios([{ price: 1.15 }, { price: 2.3 }])).toBe("3,45")
+  })
+
+  it("los enteros van sin decimales, y lo escrito lo lee leerMonto igual", () => {
+    expect(precioDeLosServicios([{ price: 8000 }, { price: 12500 }])).toBe("20500")
+    expect(precioDeLaCita(precioDeLosServicios([{ price: 8000.5 }, { price: 0.25 }]))).toEqual({ ok: true, datos: 8000.75 })
+  })
+
+  it("los que no tienen precio no suman; si ninguno tiene, queda vacío", () => {
+    expect(precioDeLosServicios([{ price: 8000 }, { price: null }])).toBe("8000")
+    expect(precioDeLosServicios([{ price: null }])).toBe("")
+    expect(precioDeLosServicios([])).toBe("")
+  })
+})
+
+describe("cancelar desde el detalle: quién y cuándo, sin recargar", () => {
+  const cita: Cita = {
+    id: "c1",
+    title: "Corte",
+    startTime: "2026-11-10T13:00:00.000Z",
+    endTime: "2026-11-10T14:00:00.000Z",
+    status: "confirmada",
+    notes: null,
+    price: null,
+    customerId: "cl1",
+    customer: { id: "cl1", name: "Ana", email: null, phone: null },
+    conAtencion: false,
+  }
+
+  it("cambiarEstadoDeCita devuelve la cita como quedó en el servidor", async () => {
+    simularRespuesta(json({ ...cita, status: "cancelada", canceladaPor: "negocio", canceladaEn: "2026-11-10T12:00:00.000Z" }))
+
+    const resultado = await cambiarEstadoDeCita("c1", "cancelada")
+
+    expect(resultado.ok && resultado.datos).toMatchObject({ status: "cancelada", canceladaPor: "negocio" })
+  })
+
+  it("conEstadoNuevo trae el estado y la cancelación, y deja lo demás de la lista", () => {
+    const nueva = conEstadoNuevo(cita, { status: "cancelada", canceladaPor: "negocio", canceladaEn: "2026-11-10T12:00:00.000Z" })
+
+    expect(nueva).toMatchObject({ status: "cancelada", canceladaPor: "negocio", canceladaEn: "2026-11-10T12:00:00.000Z", conAtencion: false })
+    expect(quienCancelo(nueva)).toBe("El negocio")
+  })
+
+  it("sin datos de cancelación en la respuesta, no queda la de antes", () => {
+    const vieja = { ...cita, status: "cancelada", canceladaPor: "cliente", canceladaEn: "2026-11-01T12:00:00.000Z" }
+    expect(conEstadoNuevo(vieja, { status: "confirmada" })).toMatchObject({ canceladaPor: null, canceladaEn: null })
+  })
+})
+
+describe("llegar a la agenda con ?nueva=1&cliente=<id>", () => {
+  it("lee los dos y deja la consulta sin ellos", () => {
+    expect(llegadaALaAgenda("?nueva=1&cliente=c-1&vista=dia")).toEqual({ nueva: true, clienteId: "c-1", resto: "vista=dia" })
+    expect(llegadaALaAgenda("?nueva=1")).toEqual({ nueva: true, clienteId: null, resto: "" })
+  })
+
+  it("sin nueva=1 no abre nada, aunque venga un cliente", () => {
+    expect(llegadaALaAgenda("?cliente=c-1")).toMatchObject({ nueva: false, clienteId: null })
+    expect(llegadaALaAgenda("")).toMatchObject({ nueva: false, clienteId: null })
+  })
+
+  it("con 200, el cliente queda elegido con su nombre completo, pedido a /api/clientes/<id>", async () => {
+    const fetchFalso = simularRespuesta(json({ id: "c 1", name: "Ana", lastName: "Pérez", email: null, appointments: [] }))
+    expect(await leerClienteParaLaCita("c 1")).toEqual({ id: "c 1", nombre: "Ana Pérez", email: "" })
+    expect(fetchFalso.mock.calls[0][0]).toBe("/api/clientes/c%201")
+  })
+
+  it("con 404 (otro negocio, eliminado o inexistente) se ignora: sin cliente", async () => {
+    simularRespuesta(json({ error: "Cliente no encontrado" }, 404))
+    expect(await leerClienteParaLaCita("ajeno")).toBeNull()
+  })
+
+  it("sin conexión, también sin cliente", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")))
+    expect(await leerClienteParaLaCita("c-1")).toBeNull()
   })
 })

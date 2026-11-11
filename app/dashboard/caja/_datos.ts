@@ -38,13 +38,15 @@ export interface CierreDeCaja {
 export interface EstadoDeCaja {
   zona: string
   puedeCerrar: boolean
-  /** Lo que lleva la caja desde el último cierre (o el inicio del día) hasta ahora. */
+  /** Lo que lleva la caja desde el último cierre (o el inicio del día) hasta `hasta`, la hora en que se leyó. */
   abierta: {
     desde: string
     hasta: string
     efectivoCobrado: number
     propinasEfectivo: number
     desglose: Desglose
+    /** Todo lo cobrado, en todos los medios y con propinas. Se devuelve al cerrar: si cambió, 409. */
+    totalCobrado: number
     /** El cobro más antiguo de un día anterior a hoy: la caja arrastra días sin cerrar. Null si todo es de hoy. */
     cobrosDesde: string | null
   }
@@ -59,11 +61,19 @@ export async function leerCaja(pagina: number): Promise<Resultado<EstadoDeCaja>>
 }
 
 /**
- * Cierra la caja. `desde` es el inicio del período que se vio al contar: si
- * otro la cerró entretanto, el servidor responde 409 y la pantalla recarga.
+ * Cierra la caja con lo que se vio: `desde` y `hasta` son el período que
+ * estaba en pantalla al contar (lo cobrado después de `hasta` queda para el
+ * próximo cierre), `esperado`, el esperado que se mostró, y `totalCobrado`,
+ * el total de todos los medios que venía con la caja leída. Si otro la cerró
+ * entretanto, o lo cobrado en ese período ya no da ese esperado o ese total
+ * (un cobro con tarjeta también cuenta), el servidor responde 409 y la
+ * pantalla recarga.
  */
 export async function cerrarCaja(datos: {
   desde: string
+  hasta: string
+  esperado: number
+  totalCobrado: number
   fondoInicial: number
   contado: number
   nota: string

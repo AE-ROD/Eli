@@ -5,6 +5,27 @@
  * en las columnas `fila*` (ver el esquema).
  */
 
+import { sumarDias } from "@/lib/zona-horaria"
+
+/**
+ * La hora (en el reloj del negocio) en que termina la jornada de la fila. La
+ * fila numera y vence por jornada, no por día del calendario: un local que
+ * atiende pasada la medianoche no reinicia los números a las 00:00 ni deja
+ * "vencidos" a quienes todavía esperan. Antes de las 05:00, la jornada es la
+ * del día anterior. Límite conocido: un local que abriera antes de las 05:00
+ * contaría esas primeras horas en la jornada anterior (ningún rubro de Eli
+ * abre a esa hora).
+ */
+export const HORA_DE_CORTE_DE_LA_JORNADA = 5
+
+/**
+ * La jornada de la fila ("AAAA-MM-DD", la fecha en que empezó) para una fecha
+ * y un minuto del día del negocio (`fechaYMinutosEn`).
+ */
+export function jornadaDeLaFila(fecha: string, minutos: number): string {
+  return minutos < HORA_DE_CORTE_DE_LA_JORNADA * 60 ? sumarDias(fecha, -1) : fecha
+}
+
 /** Valores de `Visit.origen`. Los mismos que la CHECK de la migración. */
 export const ORIGEN_TABLERO = "tablero"
 export const ORIGEN_FILA = "fila"

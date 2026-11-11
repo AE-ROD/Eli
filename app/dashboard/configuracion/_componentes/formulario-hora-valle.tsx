@@ -92,7 +92,10 @@ export function FormularioHoraValle({
     if (!resultado.ok) return setError(resultado.error)
     setActiva(resultado.datos.activa)
     setGuardadas(resultado.datos.franjas)
-    setFranjas(resultado.datos.franjas)
+    // Lo guardado reemplaza a lo que se ve sólo si es lo mismo que se mandó.
+    // Al encender o apagar se mandan las guardadas: si había franjas a medio
+    // editar (o se editó mientras se guardaba), se quedan como estaban.
+    setFranjas((previas) => (igual(previas, nuevasFranjas) ? resultado.datos.franjas : previas))
     setAnuncio(resultado.datos.activa ? "Hora valle: guardado" : "Hora valle: apagada")
   }
 
@@ -101,7 +104,7 @@ export function FormularioHoraValle({
   const cambiarInterruptor = (nueva: boolean) => guardar(nueva, guardadas)
 
   const cambiarFranja = (indice: number, cambio: Partial<FranjaDeHoraValle>) => {
-    setFranjas(franjas.map((franja, i) => (i === indice ? { ...franja, ...cambio } : franja)))
+    setFranjas((previas) => previas.map((franja, i) => (i === indice ? { ...franja, ...cambio } : franja)))
     setAnuncio("")
   }
 
@@ -110,7 +113,8 @@ export function FormularioHoraValle({
     setAnuncio("")
     const resultado = await guardarExclusion(servicio.id, excluido)
     if (!resultado.ok) return setError(resultado.error)
-    setServicios(servicios.map((s) => (s.id === servicio.id ? { ...s, excluido: resultado.datos.excluido } : s)))
+    // Con la lista de ahora, no la de cuando se tocó: marcar dos seguidos no deshace el primero.
+    setServicios((previos) => previos.map((s) => (s.id === servicio.id ? { ...s, excluido: resultado.datos.excluido } : s)))
     setAnuncio(`${servicio.nombre}: ${resultado.datos.excluido ? "sin rebaja" : "con rebaja"}`)
   }
 
@@ -217,7 +221,7 @@ export function FormularioHoraValle({
                       etiqueta={`Quitar la franja del ${DIAS[franja.dayOfWeek]?.toLowerCase() ?? ""}`}
                       icono={<Trash2 />}
                       tamano="sm"
-                      onClick={() => setFranjas(franjas.filter((_, i) => i !== indice))}
+                      onClick={() => setFranjas((previas) => previas.filter((_, i) => i !== indice))}
                     />
                   </li>
                 )
@@ -230,7 +234,7 @@ export function FormularioHoraValle({
                 variante="secundario"
                 icono={<Plus className="h-4 w-4" />}
                 disabled={franjas.length >= MAX_FRANJAS_DE_HORA_VALLE}
-                onClick={() => setFranjas([...franjas, FRANJA_SUGERIDA])}
+                onClick={() => setFranjas((previas) => [...previas, FRANJA_SUGERIDA])}
               >
                 Agregar franja
               </BotonPrimario>

@@ -4,11 +4,13 @@ import { useId, type ReactNode } from "react"
 import Link from "next/link"
 import { CalendarClock } from "lucide-react"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { TarjetaCita } from "@/components/panel/tarjeta-cita"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { LineaDeTiempoDia, citaParaTarjeta } from "./linea-de-tiempo-dia"
 import { formatearTiempoLibre, minutosLibresEnFranjas, type CitaDelDia } from "@/lib/horario-dia"
 import type { EstadisticasDelPanel } from "../_datos"
@@ -17,7 +19,7 @@ import type { EstadisticasDelPanel } from "../_datos"
  * Lo mínimo de las cifras del panel que necesita la vista del profesional.
  * `horarioHoy` viene ausente si no tiene horario activo cargado para hoy.
  */
-type EstadisticasDelProfesional = Pick<EstadisticasDelPanel, "citasHoy" | "citasHoyLista" | "horarioHoy">
+type EstadisticasDelProfesional = Pick<EstadisticasDelPanel, "citasHoy" | "citasHoyLista" | "horarioHoy" | "zona">
 
 interface PropsDeVistaDiaProfesional {
   /** Nulo mientras cargan. */
@@ -42,8 +44,10 @@ function EnlaceAConfiguracion() {
 }
 
 /** Lista simple de citas, reutilizada por los dos estados que no pueden dibujar la línea de tiempo (sin horario / horario inválido). */
-function ListaCitasDelDia({ citas }: { citas: CitaDelDia[] }) {
+function ListaCitasDelDia({ citas, zona }: { citas: CitaDelDia[]; zona?: string }) {
   const idDelTitulo = useId()
+  // "Sin paciente" en una clínica dental.
+  const { cliente } = vocabularioDe(useRubroDelPanel())
   return (
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
@@ -56,7 +60,7 @@ function ListaCitasDelDia({ citas }: { citas: CitaDelDia[] }) {
           <ul className="space-y-2">
             {citas.map((cita) => (
               <li key={cita.id}>
-                <TarjetaCita cita={citaParaTarjeta(cita)} compacta />
+                <TarjetaCita cita={citaParaTarjeta(cita, cliente, zona)} compacta />
               </li>
             ))}
           </ul>
@@ -88,7 +92,8 @@ export function VistaDiaProfesional({ estadisticas }: PropsDeVistaDiaProfesional
     )
   }
 
-  const { citasHoy, citasHoyLista, horarioHoy } = estadisticas
+  // Las horas, en la zona del negocio.
+  const { citasHoy, citasHoyLista, horarioHoy, zona } = estadisticas
 
   // Sin horario activo para hoy: no hay contra qué medir el tiempo libre, así
   // que no se inventa ninguna cifra. Igual se muestran las citas que haya.
@@ -98,12 +103,12 @@ export function VistaDiaProfesional({ estadisticas }: PropsDeVistaDiaProfesional
         <AvisoHorario titulo="No tienes un horario cargado para hoy">
           Sin horario no se puede calcular tu tiempo libre. Se configura en <EnlaceAConfiguracion />.
         </AvisoHorario>
-        <ListaCitasDelDia citas={citasHoyLista} />
+        <ListaCitasDelDia citas={citasHoyLista} zona={zona} />
       </div>
     )
   }
 
-  const minutosLibres = minutosLibresEnFranjas(horarioHoy, citasHoyLista)
+  const minutosLibres = minutosLibresEnFranjas(horarioHoy, citasHoyLista, zona)
 
   // Una franja con la hora de fin antes (o igual) que la de inicio no se puede
   // medir: "0 minutos libres" sería una cifra inventada, así que el día se
@@ -116,7 +121,7 @@ export function VistaDiaProfesional({ estadisticas }: PropsDeVistaDiaProfesional
           Una franja tiene la hora de fin antes o igual que la de inicio, así que no se puede calcular tu tiempo
           libre. Se corrige en <EnlaceAConfiguracion />.
         </AvisoHorario>
-        <ListaCitasDelDia citas={citasHoyLista} />
+        <ListaCitasDelDia citas={citasHoyLista} zona={zona} />
       </div>
     )
   }
@@ -135,7 +140,7 @@ export function VistaDiaProfesional({ estadisticas }: PropsDeVistaDiaProfesional
       />
 
       <div className="mt-5">
-        <LineaDeTiempoDia franjas={horarioHoy} citas={citasHoyLista} />
+        <LineaDeTiempoDia franjas={horarioHoy} citas={citasHoyLista} zona={zona} />
       </div>
     </section>
   )

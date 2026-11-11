@@ -44,6 +44,11 @@ export interface DatosDeReserva {
   /** "Quiero recibir avisos y novedades por correo". */
   correoPromo: boolean
   comentarios: string
+  /**
+   * Clínica dental: "¿Es tu primera vez en la clínica?". `null` en otro
+   * rubro (o sin él): no se manda. La duración que suma la calcula el servidor.
+   */
+  primeraVez?: boolean | null
 }
 
 /** Los profesionales que atienden. Si no se pudo leer, la reserva sigue con "cualquiera". */
@@ -60,15 +65,19 @@ export async function leerProfesionales(slug: string): Promise<Resultado<Profesi
  * con ese profesional o con cualquiera (`null`). El servidor calcula la
  * duración: acá sólo van los ids. Con hora valle (#89c), las horas rebajadas
  * traen su precio (`valle`); el que vale es el que calcula `confirmar`.
+ * Clínica dental: `primeraVez` (los 15 minutos los suma el servidor); `null`
+ * en otro rubro, y no se manda.
  */
 export async function leerDisponibilidad(
   slug: string,
   fecha: string,
   servicioIds: string[],
-  profesionalId: string | null
+  profesionalId: string | null,
+  primeraVez: boolean | null = null
 ): Promise<Resultado<HorasDelDia>> {
   const consulta = new URLSearchParams({ fecha, servicioIds: servicioIds.join(",") })
   if (profesionalId) consulta.set("profesionalId", profesionalId)
+  if (primeraVez !== null) consulta.set("primeraVez", primeraVez ? "1" : "0")
   const resultado = await pedir<{ slots: string[]; valle?: PrecioDeLaHora[]; sinListaDeEspera?: boolean }>(
     `/api/reservar/${encodeURIComponent(slug)}/disponibilidad?${consulta}`,
     "No se pudieron cargar los horarios disponibles"
@@ -123,6 +132,8 @@ export async function confirmarReserva(
       // Sólo con email: es para esa casilla.
       correoPromoConsentimiento: datos.email ? datos.correoPromo : undefined,
       comentarios: datos.comentarios || undefined,
+      // Sólo en una clínica dental.
+      primeraVez: datos.primeraVez ?? undefined,
     })
   )
 }
@@ -138,6 +149,8 @@ export interface DatosDeListaDeEspera {
   email: string
   telefono: string
   whatsapp: boolean
+  /** Clínica dental: la primera vez suma minutos; el servidor revisa el día con esa duración. Fuera de una clínica, `null`. */
+  primeraVez?: boolean | null
 }
 
 /** "Avísame si se libera una hora" (#74): anota en la lista de espera de ese día. */
@@ -154,6 +167,8 @@ export async function inscribirEnListaDeEspera(slug: string, datos: DatosDeLista
       email: datos.email,
       telefono: datos.telefono || undefined,
       whatsappConsentimiento: datos.telefono ? datos.whatsapp : undefined,
+      // Sólo en una clínica dental.
+      primeraVez: datos.primeraVez ?? undefined,
     })
   )
 }

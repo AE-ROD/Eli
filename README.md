@@ -1,8 +1,10 @@
 # Eli
 
-Sistema de reservas para **salones de belleza, barberías y spas de uñas**. Cada
-negocio tiene su agenda, su equipo y su página pública de reserva; los
-profesionales cobran un porcentaje del servicio que atienden.
+Sistema de reservas para **salones de belleza, barberías, spas de uñas y
+clínicas dentales**. Cada negocio tiene su agenda, su equipo y su página
+pública de reserva; los profesionales cobran un porcentaje del servicio que
+atienden. La clínica dental suma lo clínico: ficha del paciente, odontograma,
+plan de tratamiento y sillones.
 
 Qué es, para quién y qué falta decidir: `docs/PRODUCTO.md`.
 
@@ -20,7 +22,7 @@ Necesita un `.env` con:
 |---|---|
 | `DATABASE_URL` | Postgres (Neon), conexión con pool. |
 | `DIRECT_URL` | Postgres directo. Sólo lo usan las migraciones. |
-| `NEXTAUTH_URL` / `NEXTAUTH_SECRET` | Sesiones. `NEXTAUTH_URL` arma los enlaces de los correos; de `NEXTAUTH_SECRET` se deriva la firma del enlace de baja de los correos de prueba. |
+| `NEXTAUTH_URL` / `NEXTAUTH_SECRET` | Sesiones. `NEXTAUTH_URL` arma los enlaces de los correos (en producción es obligatoria: sin ella esos correos no salen, en vez de salir con enlaces a localhost; `lib/url-base.ts`); de `NEXTAUTH_SECRET` se deriva la firma del enlace de baja de los correos de prueba. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Entrar con Google. |
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Correos. Sin esto no se envían, pero nada se rompe. |
 | `SOPORTE_EMAIL` | Casilla que recibe las solicitudes de soporte (`/soporte` y `/dashboard/ayuda`). Sin esto la solicitud se guarda igual y el usuario recibe su acuse, pero no llega aviso a soporte. |
@@ -85,13 +87,40 @@ terminar (está en `prisma/seed.ts`).
 
 ## Migraciones en producción
 
-Las migraciones nuevas se aplican a mano con `psql` contra `DIRECT_URL`
-(`-v ON_ERROR_STOP=1 -f prisma/migrations/<carpeta>/migration.sql`) y después
-se marcan como aplicadas para que Prisma no las vuelva a correr:
+Las migraciones nuevas se aplican a mano con `psql` contra `DIRECT_URL` y
+después se marcan como aplicadas para que Prisma no las vuelva a correr:
 
 ```bash
+PGOPTIONS='-c lock_timeout=5s' psql "$DIRECT_URL" -v ON_ERROR_STOP=1 \
+  -f prisma/migrations/<carpeta>/migration.sql
 npx prisma migrate resolve --applied <carpeta>
 ```
+
+Antes de aplicar, siempre:
+
+1. **Un respaldo.** En Neon, crear un branch de la base de producción desde
+   la consola (Branches → New branch, desde `main`, "Current point in time").
+   Es una copia instantánea: si la migración deja algo mal después del
+   COMMIT, se vuelve a ese punto restaurando el branch. Obligatorio en las que
+   reescriben filas (hoy `20261109120000_etapa_7c_protesis_por_tipo`); igual
+   de barato en todas. Se borra cuando el despliegue quedó andando.
+2. **El orden.** Cada sección dice qué migración requiere antes; la consulta
+   de "Qué migraciones están aplicadas" (más abajo) lo responde sin adivinar.
+
+Los candados. Toda migración va en `BEGIN; … COMMIT;` y los candados que
+toma (un `ALTER TABLE` toma uno exclusivo sobre su tabla) **duran hasta el
+COMMIT**, no un instante: mientras tanto, las reservas, cobros o "Llegó" que
+escriban en esas tablas esperan detrás. Si la migración misma tiene que
+esperar un candado (un cobro largo en curso), todo lo que llegue después
+queda en fila detrás de ella. `PGOPTIONS='-c lock_timeout=5s'` corta eso: si
+un candado no llega en 5 segundos, la migración falla entera (no queda nada
+a medias, va en una transacción) y se reintenta en otro momento. Las
+migraciones desde `20261110120000_etapa_8_endurecer_protesis` lo traen
+adentro (`SET LOCAL lock_timeout = '5s'`); las anteriores no, por eso va en
+la línea de `psql`. Igual: fuera del horario de atención.
+
+Las migraciones ya escritas no se editan (pueden estar aplicadas): lo que
+haya que corregir va en una migración nueva.
 
 ### `20261022120000_ganchos_de_activacion`
 
@@ -150,6 +179,25 @@ el dueño, nunca un agente (la única base configurada es producción). Orden:
 aplicar la migración, desplegar, y
 `npx prisma migrate resolve --applied 20261029120000_etapa_3_avisos_por_correo`.
 
+### `20261030120000_etapa_4_reservas_seguras`
+
+Aditiva: columnas nuevas con default o nullable en `negocios` (con cuántas
+faltas una reserva pública entra por confirmar, y la fila virtual: encendida y
+su tope), `citas` (`confirmacionPorFaltas`) y `atenciones` (origen `tablero` o
+`fila` y los datos del turno de la fila virtual); dos índices únicos en
+`atenciones` (`filaTokenHash`, y negocio + día + número de turno) y CHECKs
+escritos a mano. No reescribe filas: las atenciones que existen quedan con
+origen `tablero` y las columnas de la fila en null, que cumplen los CHECKs. El
+código viejo no usa nada de esto, así que se aplica **antes** de desplegar; el
+código nuevo la necesita para la fila virtual, el tablero y la reserva
+pública. La aplica el dueño, nunca un agente. Orden: aplicar la migración,
+desplegar, y
+`npx prisma migrate resolve --applied 20261030120000_etapa_4_reservas_seguras`.
+
+Bloqueos: los dos índices únicos se construyen dentro de la transacción (no
+son `CONCURRENTLY`) y bloquean las escrituras en `atenciones` (el tablero)
+hasta el COMMIT: fuera del horario de atención.
+
 ### `20261031120000_etapa_5_reservas_a_medida`
 
 Aditiva: columnas nuevas con default en `negocios` (`horaValleActiva`) y
@@ -202,6 +250,348 @@ Orden: correr las consultas, aplicar la migración, y
 la etapa 5): fuera del horario de atención. Con los conteos en 0 confirmados,
 cada CHECK se puede validar cuando se quiera con
 `ALTER TABLE "<tabla>" VALIDATE CONSTRAINT "<nombre>";` (opcional).
+
+### `20261106120000_etapa_6_odontologia`
+
+El rubro dental. Aditiva: columnas nuevas con default en `servicios`
+(`esUrgencia`) y `citas` (`primeraVez`), una nullable en `citas` (`sillonId`,
+con FK compuesta a `sillones`); las tablas nuevas `sillones`,
+`fichas_clinicas`, `odontograma_marcas`, `evoluciones`,
+`planes_de_tratamiento`, `etapas_del_plan` y `prestaciones_del_plan`, con
+CHECKs, dos únicos parciales y los triggers `evoluciones_inmutables` y
+`evoluciones_no_se_borran`, escritos a mano. Reemplaza `negocios_type_check`
+por uno que suma `'odontologia'` (sigue `NOT VALID`). No reescribe filas. La
+aplica el dueño, nunca un agente (la única base configurada es producción).
+
+**Requiere `20261105120000_cierre_de_la_v1` aplicada antes**: borra y vuelve
+a crear el CHECK del rubro que crea esa. Si no está, la migración falla entera
+(va en una transacción) y no queda nada a medias.
+
+**Se aplica antes de desplegar, sin excepción.** El cliente de Prisma nuevo
+lee `servicios.esUrgencia`, `citas.primeraVez` y `citas.sillonId` en
+cualquier consulta de servicios o citas: desplegado sin la migración, la
+agenda, la reserva pública y el tablero fallan. Y el registro ya ofrece
+"Clínica dental", que el CHECK viejo rechaza. Con la migración aplicada, el
+código viejo sigue funcionando (no conoce las columnas ni las tablas nuevas).
+
+Consulta previa (sólo lectura), si las de `cierre_de_la_v1` no se corrieron o
+pasó tiempo desde entonces: tiene que volver 0. El CHECK nuevo acepta todo lo
+que aceptaba el viejo, más `'odontologia'`.
+
+```sql
+SELECT count(*) FROM "negocios" WHERE "type" NOT IN ('salon', 'barberia', 'spa-de-unas', 'odontologia', 'salud', 'fitness', 'otro');
+```
+
+Orden: (la consulta, si hace falta), aplicar la migración, desplegar, y
+`npx prisma migrate resolve --applied 20261106120000_etapa_6_odontologia`.
+Bloqueos: los `ALTER TABLE` de `servicios`, `citas` y `negocios` toman un
+bloqueo exclusivo hasta el COMMIT (los default son constantes: no reescriben
+la tabla, así que la migración dura poco), y la FK nueva de `citas` revisa las citas existentes (todas con
+`sillonId` en null) bloqueando sus escrituras mientras tanto. Con el tamaño de
+hoy es poco; igual, fuera del horario de atención.
+
+### `20261108120000_etapa_7_protesis`
+
+Las prótesis de la clínica dental. Aditiva: las tablas nuevas
+`laboratorios`, `materiales_de_protesis`, `excepciones_de_reparto_de_protesis`,
+`cambios_de_reparto_de_protesis`, `protesis`, `eventos_de_protesis` y
+`pagos_al_laboratorio`, con CHECKs, dos índices únicos sobre `lower("nombre")`
+y los triggers `protesis_congelada`, `protesis_no_se_borra`,
+`eventos_de_protesis_inmutables` y `atencion_servicios_reparto_de_protesis`,
+escritos a mano; columnas nuevas nullable (sin default) en
+`atencion_servicios` (`protesisId`, `odontologoCents`, `clinicaCents`,
+`tecnicoCents`, `pagoAlLaboratorioId`, para el cobro por abonos de la etapa 7b) y
+en `prestaciones_del_plan` (`protesisId`). No reescribe filas existentes ni
+toca los triggers de la etapa 2. Lo único que escribe es un INSERT en la tabla
+nueva: los cinco materiales iniciales a cada clínica dental que todavía no
+tiene ninguno. La aplica el dueño, nunca un agente (la única base configurada
+es producción).
+
+**Requiere `20261106120000_etapa_6_odontologia` aplicada antes** (usa
+`prestaciones_del_plan`). Si no está, falla entera (va en una transacción) y
+no queda nada a medias. Usa `gen_random_uuid()`, que viene con Postgres 13 o
+más nuevo.
+
+**Se aplica antes de desplegar, sin excepción.** El cliente de Prisma nuevo
+lee `atencion_servicios.protesisId` (y las otras columnas nuevas) en cualquier
+consulta de líneas de atención, y `prestaciones_del_plan.protesisId` en el
+plan: desplegado sin la migración, el tablero, la caja, la liquidación y el
+plan fallan. Con la migración aplicada, el código viejo sigue funcionando (no
+conoce las columnas ni las tablas nuevas).
+
+Orden: aplicar la migración, desplegar, y
+`npx prisma migrate resolve --applied 20261108120000_etapa_7_protesis`.
+
+**Materiales de las clínicas que se registren entre aplicar y desplegar.** El
+código viejo no los crea al registrar. Después de desplegar, correr de nuevo el
+último bloque de la migración (desde `INSERT INTO "materiales_de_protesis"`
+hasta su `;`): sólo agrega a las clínicas dentales sin ningún material (los
+materiales no se borran, se desactivan), así que no duplica nada ni repone lo
+que una clínica cambió. Para saber antes si hace falta (sólo lectura; tiene que
+volver 0):
+
+```sql
+SELECT count(*) FROM "negocios" n WHERE n."type" = 'odontologia'
+  AND NOT EXISTS (SELECT 1 FROM "materiales_de_protesis" m WHERE m."businessId" = n."id");
+```
+
+Bloqueos: los `ALTER TABLE` de `atencion_servicios` y `prestaciones_del_plan`
+toman un bloqueo exclusivo hasta el COMMIT (columnas nullable sin default: no
+reescriben la tabla, así que la migración dura poco); sus tres índices nuevos y sus dos FK revisan las filas
+que hay (todas en null) bloqueando sus escrituras mientras tanto. Con el
+tamaño de hoy es poco; igual, fuera del horario de atención.
+
+Ojo: los dos índices únicos de nombre usan `lower()`, que distingue
+mayúsculas de las letras con tilde (Ó/ó) sólo si la base tiene un `LC_CTYPE`
+con UTF-8. En una base con `LC_CTYPE` `C` (como la local de desarrollo),
+"Ó" y "ó" no chocan, igual que en la búsqueda sin mayúsculas de los sillones.
+
+### `20261108130000_etapa_7b_abonos_de_protesis`
+
+El cobro de las prótesis por abonos. Aditiva: la columna
+`liquidaciones."comisionProtesisCents"` (`INTEGER NOT NULL DEFAULT 0`, la parte
+de la odontóloga de los abonos que incluye cada liquidación) con su CHECK de
+rango; reemplaza `liquidaciones_bruto_check` por uno que la suma al bruto; el
+CHECK nuevo `atencion_servicios_abono_liquidado_check` (un abono sólo entra a
+una liquidación con su reparto congelado y si la tratante no es la dueña), y
+reemplaza (`CREATE OR REPLACE`) la función del trigger
+`atencion_servicios_reparto_de_protesis` con una regla más: una línea sólo se
+marca pagada al laboratorio si la prótesis está entregada y el pago es al
+laboratorio de esa prótesis. No reescribe filas: las liquidaciones que ya
+existen quedan con 0 y siguen cumpliendo el CHECK del bruto, y ninguna línea
+existente tiene `protesisId`. La aplica el dueño, nunca un agente (la única
+base configurada es producción).
+
+**Requiere `20261108120000_etapa_7_protesis` aplicada antes** (reemplaza la
+función de su trigger). Si no está, falla entera (va en una transacción) y no
+queda nada a medias.
+
+**Nunca después de la 7d.** La 7b reemplaza la función del trigger
+`atencion_servicios_reparto_de_protesis` con su versión, sin las reglas que
+le suma la 7d: aplicada después, las borra en silencio (no falla). Antes de
+aplicarla, la consulta de "Qué migraciones están aplicadas" (abajo) tiene que
+decir `7d = f`. Si ya pasó, `20261110120000_etapa_8_endurecer_protesis`
+vuelve a poner la función completa.
+
+**Se aplica antes de desplegar.** El cliente de Prisma nuevo lee
+`liquidaciones.comisionProtesisCents`: desplegado sin la migración, las
+liquidaciones (vista previa, cierre y comprobante) fallan. Con la migración
+aplicada, el código viejo sigue funcionando: no conoce la columna (el default
+0 cumple el CHECK del bruto al cerrar una liquidación), no crea abonos y no
+paga al laboratorio.
+
+Orden: aplicar la migración, desplegar, y
+`npx prisma migrate resolve --applied 20261108130000_etapa_7b_abonos_de_protesis`.
+
+Bloqueos: el `ADD COLUMN` de `liquidaciones` toma un bloqueo exclusivo hasta
+el COMMIT (default constante: no reescribe la tabla, así que la migración dura
+poco); los CHECK nuevos revisan
+las filas que hay de `liquidaciones` y de `atencion_servicios` bloqueando sus
+escrituras mientras tanto (cobros y cierres de liquidación). Con el tamaño de
+hoy es poco; igual, fuera del horario de atención.
+
+### `20261109120000_etapa_7c_protesis_por_tipo`
+
+Correcciones del dueño a las prótesis (2026-11-09): sin cordales (18, 28, 38 y
+48 no son piezas protésicas ni pilares; la total marca la arcada sin ellos),
+etapas por tipo (removible y total: `impresion` → `rodete` → `enfilado` →
+`entregada`; fija, corona e implante: `impresion` → `prueba` → `entregada`; sin
+el paso "en laboratorio") y el tono VITA (`protesis.tono`, nullable, sin
+default). Reemplaza `protesis_estado_check` (que ahora ata el paso al tipo),
+`protesis_total_check` y `eventos_de_protesis_estado_check`, agrega
+`protesis_sin_cordales_check` y `protesis_tono_check`, y reemplaza la función y
+el trigger `protesis_congelada` (pasos por tipo; el tono se cambia hasta
+entregar). La aplica el dueño, nunca un agente (la única base configurada es
+producción).
+
+**Requiere `20261108120000_etapa_7_protesis` y
+`20261108130000_etapa_7b_abonos_de_protesis` aplicadas antes.** Si falta la
+etapa 7, falla entera (va en una transacción) y no queda nada a medias; si
+falta la 7b, **no falla**: se aplica igual, y la 7b aplicada después borraría
+las reglas de la 7d (ver la 7b). Por eso, antes de aplicarla, la consulta de
+"Qué migraciones están aplicadas" (abajo) tiene que decir `7b = t`.
+
+**Reescribe filas** (lo dice su cabecera): convierte el estado de las prótesis
+y de sus eventos (`en-laboratorio` → `impresion`; `prueba` y `ajustes` →
+`enfilado` en removible y total, `prueba` en las demás; para los eventos
+desactiva su trigger de inmutabilidad sólo durante ese UPDATE, dentro de la
+transacción) y les saca los cordales a las totales (su valor es por arcada: no
+cambia). Una prótesis entregada o anulada con un cordal queda como está.
+**Si hay una prótesis en curso que no es total y tiene un cordal, la migración
+no se aplica** y dice cuáles: anularla (o entregarla) desde la ficha con el
+código de hoy, y aplicar de nuevo. Para saberlo antes (sólo lectura; tiene que
+volver 0):
+
+```sql
+SELECT count(*) FROM "protesis" WHERE "tipo" <> 'total' AND "estado" NOT IN ('entregada', 'anulada')
+  AND ("piezas" || "pilares") && ARRAY[18, 28, 38, 48]::INTEGER[];
+```
+
+**Rompe la compatibilidad en los dos sentidos, sólo en el seguimiento de las
+prótesis:** con la migración aplicada, el código viejo falla al pasar a "En
+laboratorio", "Prueba en boca" (en removible y total) o "Ajustes" (el CHECK
+nuevo lo rechaza); el código nuevo lee `protesis.tono` y escribe los pasos
+nuevos, así que sin la migración falla la pestaña Prótesis de la ficha (ver,
+crear, avanzar y "Agregar al plan"); el cobro de abonos, la liquidación y el
+pago al laboratorio no leen el tono y siguen andando. Por eso, como
+`ganchos_de_activacion`: dejar el despliegue construido y listo, aplicar la
+migración en una ventana tranquila (fuera del horario de atención) e
+inmediatamente promover el despliegue. Después,
+`npx prisma migrate resolve --applied 20261109120000_etapa_7c_protesis_por_tipo`.
+
+Bloqueos: el `ALTER TABLE` de `protesis` y los de `eventos_de_protesis`
+(desactivar y activar su trigger) toman un bloqueo exclusivo de esas dos
+tablas hasta el COMMIT; los CHECK nuevos revisan todas sus filas. Son tablas
+chicas: dura poco.
+
+### `20261109130000_etapa_7d_protesis_entrega_con_laboratorio`
+
+Arreglos de la revisión de las prótesis (2026-11-09). Aditiva, sin reescribir
+filas: el CHECK nuevo `protesis_entrega_con_laboratorio_check` (una prótesis
+entregada tiene laboratorio, salvo que su regla congelada no le dé nada al
+técnico: `pbTecnico` = 0; sin laboratorio, la parte del técnico no aparecía en
+"Por pagar al laboratorio" y ya no se podía asignar uno) y reemplaza
+(`CREATE OR REPLACE`) la función del trigger
+`atencion_servicios_reparto_de_protesis` con todo lo de las etapas 7 y 7b más
+una segunda barrera para los abonos: al agregarlo, la prótesis es del mismo
+paciente que la atención y la línea va a nombre de la tratante (`memberId` y
+`byOwner` de la prótesis; pasar `memberId` a null sigue permitido, es
+desvincular al miembro); al entrar a una liquidación, la prótesis está
+entregada y la línea es de la tratante. La aplica el dueño, nunca un agente (la
+única base configurada es producción).
+
+**Requiere `20261108120000_etapa_7_protesis`,
+`20261108130000_etapa_7b_abonos_de_protesis` y
+`20261109120000_etapa_7c_protesis_por_tipo` aplicadas antes.** Va en una
+transacción: si algo falla, no queda nada a medias. Si falta la 7b **no
+falla**, y la 7b aplicada después le borraría las reglas: antes de aplicarla,
+la consulta de "Qué migraciones están aplicadas" (abajo) tiene que decir
+`7b = t` y `7c = t`.
+
+**Si hay prótesis entregadas sin laboratorio y con parte del técnico, la
+migración no se aplica** y dice cuáles. Para saberlo antes (sólo lectura; tiene
+que volver 0):
+
+```sql
+SELECT "id", "businessId" FROM "protesis"
+WHERE "estado" = 'entregada' AND "laboratorioId" IS NULL AND "pbTecnico" <> 0;
+```
+
+Si vuelve filas: una entregada no cambia desde la ficha, así que se arregla a
+mano. Averiguar con la clínica qué laboratorio hizo cada una (sus ids en
+`laboratorios`, del mismo `businessId`) y correr, por cada una:
+
+```sql
+BEGIN;
+ALTER TABLE "protesis" DISABLE TRIGGER "protesis_congelada";
+UPDATE "protesis" p
+SET "laboratorioId" = l."id", "laboratorioNombre" = l."nombre", "updatedAt" = CURRENT_TIMESTAMP
+FROM "laboratorios" l
+WHERE p."id" = '<id de la prótesis>' AND p."estado" = 'entregada' AND p."laboratorioId" IS NULL
+  AND l."id" = '<id del laboratorio>' AND l."businessId" = p."businessId";
+-- Tiene que decir UPDATE 1; si no, ROLLBACK.
+ALTER TABLE "protesis" ENABLE TRIGGER "protesis_congelada";
+COMMIT;
+```
+
+Con el laboratorio puesto, su parte aparece en "Por pagar al laboratorio".
+Después, aplicar la migración. Se descartó dejar el CHECK `NOT VALID`: Postgres
+revisa la fila entera en cada UPDATE, y una entregada todavía se actualiza al
+desvincular a su tratante (para borrar a ese miembro), que fallaría.
+
+**Compatible en los dos sentidos.** El código nuevo anda sin ella (no lee nada
+que ella cree: la exigencia del laboratorio y las reglas de los abonos las
+hace también la aplicación), pero se aplica igual: es la segunda barrera. El
+código viejo,
+con la migración aplicada, sigue andando salvo al entregar sin laboratorio una
+prótesis cuyo técnico lleva parte: falla (500) en vez de perder esa parte. Se
+aplica en la misma ventana que el despliegue, antes o después. Luego,
+`npx prisma migrate resolve --applied 20261109130000_etapa_7d_protesis_entrega_con_laboratorio`.
+
+Bloqueos: el CHECK nuevo revisa todas las filas de `protesis` (tabla chica)
+bloqueando sus escrituras mientras tanto; reemplazar la función no bloquea las
+tablas.
+
+### `20261110120000_etapa_8_endurecer_protesis`
+
+Arreglos de la revisión pre-despliegue (2026-11-10). No crea tablas,
+columnas ni CHECKs y no reescribe filas: reemplaza (`CREATE OR REPLACE`) dos
+funciones de trigger.
+
+- `eventos_de_protesis_inmutables`: un paso del seguimiento se borra sólo en
+  la cascada de su prótesis, de su paciente o de su negocio, como
+  `protesis_no_se_borra`. Antes, borrar un negocio entero podía fallar según
+  el orden en que Postgres corre las cascadas (el de los oid de sus
+  triggers internos, que cambia al restaurar un respaldo); reproducido
+  contra Postgres.
+- `atencion_servicios_reparto_de_protesis`: todo lo de las etapas 7, 7b y 7d,
+  más una regla: un abono nuevo (o una línea que pasa a otra prótesis) no
+  puede ir a una prótesis anulada. La aplicación ya lo impide (409); ésta es
+  la segunda barrera. Los abonos que una prótesis ya tenía no se tocan.
+
+**Requiere la 7, 7b, 7c y 7d aplicadas antes**: la migración lo revisa al
+empezar y, si falta alguna, no aplica nada y dice cuál. Trae
+`SET LOCAL lock_timeout = '5s'`. **Compatible en los dos sentidos** (el código
+de hoy y el anterior ya cumplen las dos reglas): se aplica antes o después de
+desplegar. Orden: aplicarla y
+`npx prisma migrate resolve --applied 20261110120000_etapa_8_endurecer_protesis`.
+Bloqueos: reemplazar una función no bloquea tablas.
+
+### Qué migraciones están aplicadas
+
+Sólo lectura. Responde, por lo que cada migración deja en la base, cuáles de
+las de la clínica dental ya están (`t`) y cuáles no (`f`), sin depender de
+`_prisma_migrations` (que se marca a mano y puede no coincidir):
+
+```sql
+SELECT
+  EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'negocios_type_check')                AS "cierre_v1",
+  EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sillones')            AS "6",
+  EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'protesis')            AS "7",
+  EXISTS (SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'liquidaciones' AND column_name = 'comisionProtesisCents')      AS "7b",
+  EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'protesis_tono_check')                AS "7c",
+  EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'protesis_entrega_con_laboratorio_check') AS "7d",
+  EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'atencion_servicios_reparto_de_protesis'
+          AND prosrc LIKE '%anulada y no recibe abonos%')                                    AS "8",
+  EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'atencion_servicios_reparto_de_protesis'
+          AND prosrc LIKE '%otro paciente%')                                                 AS "reglas_7d_vigentes";
+```
+
+Cómo leerla: tienen que ser `t` desde la izquierda sin huecos (un `f` seguido
+de un `t` es una migración salteada: avisar antes de seguir). Si `7d = t` y
+`reglas_7d_vigentes = f`, la 7b se aplicó después de la 7d y le borró las
+reglas: aplicar la etapa 8, que las vuelve a poner.
+
+### Las migraciones de la clínica dental, en orden
+
+Cada una requiere las anteriores. Las que falten se aplican en este orden,
+con la consulta de arriba antes de cada una:
+
+1. `20261106120000_etapa_6_odontologia` (requiere `20261105120000_cierre_de_la_v1`;
+   su consulta previa, arriba). Antes de desplegar.
+2. `20261108120000_etapa_7_protesis`. Antes de desplegar.
+3. `20261108130000_etapa_7b_abonos_de_protesis`. Antes de desplegar, y
+   nunca después de la 7d.
+4. `20261109120000_etapa_7c_protesis_por_tipo` (respaldo y su consulta
+   previa, arriba), **en la misma ventana que el despliegue**: aplicarla y
+   desplegar enseguida.
+5. `20261109130000_etapa_7d_protesis_entrega_con_laboratorio` (su consulta
+   previa, arriba), en la misma ventana.
+6. `20261110120000_etapa_8_endurecer_protesis`, en la misma ventana.
+7. Desplegar.
+8. `npx prisma migrate resolve --applied` de cada una, en el mismo orden.
+9. Si alguna clínica se registró entre aplicar la etapa 7 y desplegar, correr
+   la consulta de materiales de la etapa 7 (arriba) y, si no vuelve 0, su
+   último bloque.
+
+Qué necesita el código de hoy para andar: las cuatro primeras (6, 7, 7b y
+7c). Sin alguna de ellas falla en la agenda, el tablero, el plan, las
+liquidaciones o la pestaña Prótesis, según cuál falte: no desplegar así. La
+7d y la 8 no las necesita para andar (son la segunda barrera de reglas que
+la aplicación ya cumple), pero van en la misma ventana: no se dejan para
+después. Si las tres primeras ya están aplicadas y el código desplegado es
+el de la etapa 7b, faltan la 7c, la 7d y la 8.
 
 ### Teléfonos antiguos a `+56` (#92)
 
@@ -261,7 +651,7 @@ lib/                          Lógica compartida, cada archivo con su test al la
                               y la conversión entre "HH:MM" y minutos
   nombres-de-roles.ts         Cómo se escribe cada rol (Encargado, Profesional). Sólo
                               la etiqueta: lo que puede hacer cada uno está en permisos.ts
-  rubros.ts                   Los tres rubros que atiende Eli
+  rubros.ts                   Los cuatro rubros que atiende Eli
   servicios-de-ejemplo.ts     Los servicios con que nace un negocio, según su rubro
   modulos.ts                  Los cinco módulos del panel: nombre, frase, ruta y color
   correos-de-prueba.ts        Qué correo del ciclo de prueba le toca hoy a un negocio
@@ -364,6 +754,14 @@ Cada vista del panel se arma igual:
   tiene que dar 0,3 cuando se cuadra una caja.
 - **NextAuth sigue en v4.** Auth.js v5 existe, pero migrar rompe lo que funciona
   sin aportar valor.
+- **`npm audit fix --force` no se corre.** `npm audit` muestra avisos (next-auth
+  vía `@auth/core`, zod, prisma, vitest, eslint) y su "arreglo" cambia de versión
+  mayor (zod 3 → 4, prisma 6 → 7, vitest, eslint-config-next) o baja next-auth:
+  rompe el código y los tests. La revisión pre-despliegue (2026-11-10) no
+  encontró uno explotable en cómo Eli los usa (por ejemplo, todo cuerpo de
+  pedido llega con tope de tamaño, `lib/cuerpo-del-pedido.ts`, antes de zod).
+  Actualizar una dependencia es una tarea propia, con aprobación (CLAUDE.md,
+  regla 4).
 - **Vercel Hobby prohíbe el uso comercial.** Antes de cobrar hay que pasar a Pro
   o mover el despliegue.
 - **Resend:** falta verificar el dominio (SPF/DKIM) o los correos caen en spam.

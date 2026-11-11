@@ -8,6 +8,7 @@ import {
   editarServicio,
   guardarPaginaPublica,
   leerPorcentaje,
+  moverSillon,
   type DatosDePaginaPublica,
   type DatosDeServicio,
 } from "./_datos"
@@ -102,6 +103,18 @@ describe("crearServicio y editarServicio", () => {
     const alEditar = simularRespuesta(json({ id: "s1" }))
     await editarServicio("s1", { ...SERVICIO, frecuenciaDias: "" })
     expect(cuerpoEnviado(alEditar)).toHaveProperty("frecuenciaDias", null)
+  })
+
+  it("editar con precio y descripción vacíos manda null, para borrarlos; crear no los manda", async () => {
+    const alEditar = simularRespuesta(json({ id: "s1" }))
+    await editarServicio("s1", { ...SERVICIO, price: " ", description: "" })
+    expect(cuerpoEnviado(alEditar)).toMatchObject({ price: null, description: null })
+    vi.unstubAllGlobals()
+
+    const alCrear = simularRespuesta(json({ id: "s1" }, 201))
+    await crearServicio({ ...SERVICIO, price: "", description: "" })
+    expect(cuerpoEnviado(alCrear)).not.toHaveProperty("price")
+    expect(cuerpoEnviado(alCrear)).not.toHaveProperty("description")
   })
 
   it("con una frecuencia fuera de rango no llama al servidor", async () => {
@@ -205,5 +218,41 @@ describe("guardarPaginaPublica (#113)", () => {
     const fetchFalso = simularRespuesta(json({}))
     await guardarPaginaPublica(pagina([{ ...ana, especialidad: "" }, beto]), [ana, beto])
     expect(cuerpoEnviado(fetchFalso).especialidades).toEqual([{ memberId: "m-ana", especialidad: "" }])
+  })
+})
+
+describe("moverSillon", () => {
+  const SILLONES = [
+    { id: "a", nombre: "Sillón 1", orden: 0, activo: true },
+    { id: "b", nombre: "Sillón 2", orden: 1, activo: false },
+    { id: "c", nombre: "Sillón 3", orden: 2, activo: true },
+  ]
+
+  it("subir cambia de lugar con el de arriba, y sólo esos dos cambian de orden", () => {
+    const movido = moverSillon(SILLONES, "b", -1)
+    expect(movido?.lista.map((sillon) => [sillon.id, sillon.orden])).toEqual([["b", 0], ["a", 1], ["c", 2]])
+    expect(movido?.cambios).toEqual([{ id: "b", orden: 0 }, { id: "a", orden: 1 }])
+  })
+
+  it("bajar cambia de lugar con el de abajo", () => {
+    expect(moverSillon(SILLONES, "a", 1)?.lista.map((sillon) => sillon.id)).toEqual(["b", "a", "c"])
+  })
+
+  it("con órdenes repetidos o con huecos, los vuelve a numerar de 0 en adelante", () => {
+    const repetidos = SILLONES.map((sillon) => ({ ...sillon, orden: 5 }))
+    const movido = moverSillon(repetidos, "c", -1)
+    expect(movido?.lista.map((sillon) => [sillon.id, sillon.orden])).toEqual([["a", 0], ["c", 1], ["b", 2]])
+    expect(movido?.cambios).toEqual([{ id: "a", orden: 0 }, { id: "c", orden: 1 }, { id: "b", orden: 2 }])
+  })
+
+  it("el primero no sube, el último no baja, y uno que no está no se mueve", () => {
+    expect(moverSillon(SILLONES, "a", -1)).toBeNull()
+    expect(moverSillon(SILLONES, "c", 1)).toBeNull()
+    expect(moverSillon(SILLONES, "x", 1)).toBeNull()
+  })
+
+  it("no toca la lista que recibe", () => {
+    moverSillon(SILLONES, "b", -1)
+    expect(SILLONES.map((sillon) => sillon.id)).toEqual(["a", "b", "c"])
   })
 })

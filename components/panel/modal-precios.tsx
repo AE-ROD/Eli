@@ -93,13 +93,16 @@ export function ModalPrecios({ abierto, onCerrar, diasTrialRestantes }: PropsDeM
           ancho="xl"
           alCerrar={onCerrar}
         >
-          {/* Lo que queda de la prueba */}
+          {/*
+            Lo que queda de la prueba. Terminada, no se pide elegir un plan: no
+            hay cómo pagarlo todavía y nada se corta (PRODUCTO.md, secciones 4 y 10).
+          */}
           {diasTrialRestantes !== undefined && (
             <p className="mb-6 flex items-start gap-2.5 rounded-campo bg-superficie px-4 py-3 text-sm font-medium squircle">
               <Sparkles className="mt-0.5 size-4 shrink-0" aria-hidden="true" strokeWidth={1.75} />
               {diasTrialRestantes > 0
                 ? `Tu prueba gratuita vence en ${diasTrialRestantes} día${diasTrialRestantes !== 1 ? "s" : ""}`
-                : "Tu prueba gratuita ha terminado — elige un plan para continuar"}
+                : "Tu prueba gratuita terminó. Todavía no cobramos: puedes seguir usando Eli como hasta ahora."}
             </p>
           )}
 

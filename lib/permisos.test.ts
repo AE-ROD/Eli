@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { coincideConWhere } from "@/pruebas/where-simple"
-import { coincide, type Tablas } from "@/pruebas/consultas-falsas"
+import { coincide, type NombreDeModelo, type Tablas } from "@/pruebas/consultas-falsas"
 import {
   actorDeSesion,
   mismoNegocio,
@@ -75,6 +75,41 @@ import {
   puedeResolverPorConfirmar,
   puedeVerPantallaDeFila,
   puedeVaciarFilaVirtual,
+  esClinicaDental,
+  veFichaClinica,
+  puedeEditarFichaClinica,
+  veAlertaDeAlergias,
+  vePlanDeTratamiento,
+  puedeEditarPlanDeTratamiento,
+  veSillones,
+  puedeGestionarSillones,
+  puedeAsignarSillon,
+  whereDeFichasClinicas,
+  whereDeAlertaDeAlergias,
+  whereDeMarcasDentales,
+  whereDeEvoluciones,
+  whereDePlanes,
+  whereDeEtapasDelPlan,
+  whereDePrestacionesDelPlan,
+  whereDeSillones,
+  veProtesis,
+  puedeEditarProtesis,
+  puedeConfigurarRepartoDeProtesis,
+  puedeGestionarLaboratorios,
+  veMontosDelReparto,
+  tratanteParaProtesis,
+  whereDeProtesis,
+  whereDeEventosDeProtesis,
+  whereDeMaterialesDeProtesis,
+  whereDeLaboratorios,
+  whereDeExcepcionesDeReparto,
+  whereDeCambiosDeReparto,
+  whereDeAbonosDeProtesis,
+  whereDePagosAlLaboratorio,
+  puedeCobrarAbonosDeProtesis,
+  puedePagarAlLaboratorio,
+  whereDeProtesisParaCobrar,
+  whereDeAbonosPorPagarAlLaboratorio,
   type Actor,
   type Rol,
 } from "./permisos"
@@ -400,7 +435,7 @@ describe("falla cerrado", () => {
     // como elementos separados del AND exterior y ninguno pisa al otro.
     const where = whereDeAgenda(roto, { AND: [{ businessId: NEGOCIO }] })
 
-    expect(citasFake.filter((c) => coincideConWhere(c, where))).toHaveLength(0)
+    expect(citasFake.filter((c) => coincideConWhere("appointment", c, where))).toHaveLength(0)
   })
 })
 
@@ -914,5 +949,364 @@ describe("reservas a medida (etapa 5)", () => {
     const desconocido = { rol: "gerente", businessId: NEGOCIO, memberId: "yo" } as unknown as Actor
     expect(puedeConfigurarHoraValle(null)).toBe(false)
     expect(puedeConfigurarHoraValle(desconocido)).toBe(false)
+  })
+})
+
+describe("clínica dental (rubro odontología)", () => {
+  type Permiso = (quien: Actor | null) => boolean
+  const dental = (rol: Rol): Actor => ({ ...actor(rol), rubro: "odontologia" })
+  const duenaDental = dental("owner")
+  const recepcion = dental("admin")
+  const odontologo = dental("worker")
+  const desconocido = { rol: "gerente", businessId: NEGOCIO, memberId: "yo", rubro: "odontologia" } as unknown as Actor
+
+  /** Decisión del dueño: [dueña, encargado, odontólogo]. */
+  const TABLA: [string, Permiso, [boolean, boolean, boolean]][] = [
+    ["esClinicaDental", esClinicaDental, [true, true, true]],
+    ["veFichaClinica", veFichaClinica, [true, false, true]],
+    ["puedeEditarFichaClinica", puedeEditarFichaClinica, [true, false, true]],
+    ["veAlertaDeAlergias", veAlertaDeAlergias, [true, true, true]],
+    ["vePlanDeTratamiento", vePlanDeTratamiento, [true, true, true]],
+    ["puedeEditarPlanDeTratamiento", puedeEditarPlanDeTratamiento, [true, false, true]],
+    ["veSillones", veSillones, [true, true, true]],
+    ["puedeGestionarSillones", puedeGestionarSillones, [true, true, false]],
+    ["puedeAsignarSillon", puedeAsignarSillon, [true, true, true]],
+  ]
+
+  it.each(TABLA)("%s sigue la tabla por rol en una clínica dental", (_nombre, permiso, [deDueña, deEncargado, deOdontologo]) => {
+    expect(permiso(duenaDental)).toBe(deDueña)
+    expect(permiso(recepcion)).toBe(deEncargado)
+    expect(permiso(odontologo)).toBe(deOdontologo)
+  })
+
+  it.each(TABLA)("%s falla cerrado sin actor y con un rol desconocido", (_nombre, permiso) => {
+    expect(permiso(null)).toBe(false)
+    expect(permiso(desconocido)).toBe(false)
+  })
+
+  it.each(TABLA)("%s: en un negocio que no es dental, nadie (ni la dueña)", (_nombre, permiso) => {
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "salud", "Odontologia", "odontología", ""]) {
+      for (const rol of ["owner", "admin", "worker"] as const) {
+        expect(permiso({ ...actor(rol), rubro })).toBe(false)
+      }
+    }
+  })
+
+  it.each(TABLA)("%s: sin rubro (un actor de antes, o una sesión vieja), nadie", (_nombre, permiso) => {
+    expect(permiso(dueño)).toBe(false)
+    expect(permiso(encargado)).toBe(false)
+    expect(permiso(profesional)).toBe(false)
+  })
+
+  it("el rubro de otro tipo que no es texto no cuenta", () => {
+    const conRubroRaro = { ...dueño, rubro: ["odontologia"] } as unknown as Actor
+    expect(esClinicaDental(conRubroRaro)).toBe(false)
+  })
+
+  describe("actorDeSesion lleva el rubro", () => {
+    const sesion = (user: Record<string, unknown>) => ({ user }) as never
+
+    it("copia el rubro de la sesión", () => {
+      const desdeLaSesion = actorDeSesion(sesion({ role: "worker", businessId: NEGOCIO, memberId: "yo", rubro: "odontologia" }))
+      expect(desdeLaSesion).toEqual({ rol: "worker", businessId: NEGOCIO, memberId: "yo", rubro: "odontologia" })
+      expect(esClinicaDental(desdeLaSesion)).toBe(true)
+    })
+
+    it.each([
+      ["sin rubro (sesión de antes del campo)", {}],
+      ["rubro null", { rubro: null }],
+      ["rubro vacío", { rubro: "" }],
+      ["rubro que no es texto", { rubro: 1 }],
+      ["rubro en una lista", { rubro: ["odontologia"] }],
+    ])("%s: el actor sale igual, sin rubro, y no es dental", (_caso, extra) => {
+      const desdeLaSesion = actorDeSesion(sesion({ role: "owner", businessId: NEGOCIO, ...extra }))
+      expect(desdeLaSesion).toEqual({ rol: "owner", businessId: NEGOCIO, memberId: null })
+      expect(desdeLaSesion).not.toHaveProperty("rubro")
+      expect(esClinicaDental(desdeLaSesion)).toBe(false)
+    })
+
+    it("con el rubro de un salón no es dental", () => {
+      expect(esClinicaDental(actorDeSesion(sesion({ role: "owner", businessId: NEGOCIO, rubro: "salon" })))).toBe(false)
+    })
+  })
+
+  describe("filtros", () => {
+    type Filtro = (quien: Actor | null, extra?: object) => object
+    const DEL_NEGOCIO = { AND: [{ businessId: NEGOCIO }, {}] }
+    const NADA_SIN_EXTRA = { AND: [NADA, {}] }
+
+    /** [nombre, filtro, lo que ve cada uno: dueña, encargado, odontólogo]. */
+    const FILTROS: [string, Filtro, [boolean, boolean, boolean]][] = [
+      ["whereDeFichasClinicas", whereDeFichasClinicas as Filtro, [true, false, true]],
+      ["whereDeAlertaDeAlergias", whereDeAlertaDeAlergias as Filtro, [true, true, true]],
+      ["whereDeMarcasDentales", whereDeMarcasDentales as Filtro, [true, false, true]],
+      ["whereDeEvoluciones", whereDeEvoluciones as Filtro, [true, false, true]],
+      ["whereDePlanes", whereDePlanes as Filtro, [true, true, true]],
+      ["whereDeEtapasDelPlan", whereDeEtapasDelPlan as Filtro, [true, true, true]],
+      ["whereDePrestacionesDelPlan", whereDePrestacionesDelPlan as Filtro, [true, true, true]],
+      ["whereDeSillones", whereDeSillones as Filtro, [true, true, true]],
+    ]
+
+    const filas = [
+      { id: "propia", businessId: NEGOCIO, customerId: "paciente-1" },
+      { id: "ajena", businessId: OTRO_NEGOCIO, customerId: "paciente-9" },
+    ]
+    /** El modelo que filtra cada uno, para leer su `where` con la base falsa (lanza ante un campo que no tiene). */
+    const MODELO = new Map<Filtro, NombreDeModelo>([
+      [whereDeFichasClinicas as Filtro, "fichaClinica"],
+      [whereDeAlertaDeAlergias as Filtro, "fichaClinica"],
+      [whereDeMarcasDentales as Filtro, "marcaDental"],
+      [whereDeEvoluciones as Filtro, "evolucion"],
+      [whereDePlanes as Filtro, "planDeTratamiento"],
+      [whereDeEtapasDelPlan as Filtro, "etapaDelPlan"],
+      [whereDePrestacionesDelPlan as Filtro, "prestacionDelPlan"],
+      [whereDeSillones as Filtro, "sillon"],
+    ])
+    const visibles = (filtro: Filtro, quien: Actor | null, extra: object = {}) =>
+      filas.filter((fila) => coincideConWhere(MODELO.get(filtro)!, fila, filtro(quien, extra))).map((fila) => fila.id)
+
+    it.each(FILTROS)("%s acota al negocio de quien puede, y a nada a quien no", (_nombre, filtro, [deDueña, deEncargado, deOdontologo]) => {
+      expect(filtro(duenaDental)).toEqual(deDueña ? DEL_NEGOCIO : NADA_SIN_EXTRA)
+      expect(filtro(recepcion)).toEqual(deEncargado ? DEL_NEGOCIO : NADA_SIN_EXTRA)
+      expect(filtro(odontologo)).toEqual(deOdontologo ? DEL_NEGOCIO : NADA_SIN_EXTRA)
+      expect(visibles(filtro, duenaDental)).toEqual(deDueña ? ["propia"] : [])
+      expect(visibles(filtro, recepcion)).toEqual(deEncargado ? ["propia"] : [])
+    })
+
+    it.each(FILTROS)("%s falla cerrado: sin actor, rol desconocido, sin rubro o en otro rubro, nada", (_nombre, filtro) => {
+      for (const quien of [null, desconocido, dueño, encargado, profesional, { ...dueño, rubro: "salon" }]) {
+        expect(filtro(quien)).toEqual(NADA_SIN_EXTRA)
+        expect(visibles(filtro, quien)).toEqual([])
+        expect(visibles(filtro, quien, { id: "propia" })).toEqual([])
+      }
+    })
+
+    it.each(FILTROS)("%s: lo que agrega el endpoint va en el AND y no pisa el filtro", (_nombre, filtro) => {
+      const extraQuePisa = { businessId: OTRO_NEGOCIO, AND: [{ id: "ajena" }] }
+      expect(filtro(duenaDental, extraQuePisa)).toEqual({ AND: [{ businessId: NEGOCIO }, extraQuePisa] })
+      expect(visibles(filtro, duenaDental, { businessId: OTRO_NEGOCIO })).toEqual([])
+      expect(visibles(filtro, duenaDental, { id: "ajena" })).toEqual([])
+      expect(visibles(filtro, duenaDental, { customerId: "paciente-1" })).toEqual(["propia"])
+    })
+
+    it("la dueña de otra clínica no ve nada de ésta", () => {
+      const otraClinica: Actor = { rol: "owner", businessId: OTRO_NEGOCIO, memberId: null, rubro: "odontologia" }
+      for (const [, filtro] of FILTROS) expect(visibles(filtro, otraClinica)).toEqual(["ajena"])
+    })
+  })
+})
+
+
+describe("prótesis (clínica dental)", () => {
+  type Permiso = (quien: Actor | null) => boolean
+  const dental = (rol: Rol, memberId?: string | null): Actor => ({ ...actor(rol, memberId), rubro: "odontologia" })
+  const duenaDental = dental("owner")
+  const recepcion = dental("admin")
+  const odontologo = dental("worker")
+  const desconocido = { rol: "gerente", businessId: NEGOCIO, memberId: "yo", rubro: "odontologia" } as unknown as Actor
+
+  /** Decisión del dueño: [dueña, encargado, odontólogo]. */
+  const TABLA: [string, Permiso, [boolean, boolean, boolean]][] = [
+    ["veProtesis", veProtesis, [true, false, true]],
+    ["puedeEditarProtesis", puedeEditarProtesis, [true, false, true]],
+    ["puedeConfigurarRepartoDeProtesis", puedeConfigurarRepartoDeProtesis, [true, false, false]],
+    ["puedeGestionarLaboratorios", puedeGestionarLaboratorios, [true, false, false]],
+    // Los abonos se cobran en la Sala de espera: quien cobra, también el encargado.
+    ["puedeCobrarAbonosDeProtesis", puedeCobrarAbonosDeProtesis, [true, true, false]],
+    ["puedePagarAlLaboratorio", puedePagarAlLaboratorio, [true, false, false]],
+  ]
+
+  it.each(TABLA)("%s sigue la tabla por rol", (_nombre, permiso, [deDueña, deEncargado, deOdontologo]) => {
+    expect(permiso(duenaDental)).toBe(deDueña)
+    expect(permiso(recepcion)).toBe(deEncargado)
+    expect(permiso(odontologo)).toBe(deOdontologo)
+  })
+
+  it.each(TABLA)("%s falla cerrado: sin actor, rol desconocido, sin rubro o en otro rubro", (_nombre, permiso) => {
+    for (const quien of [null, desconocido, dueño, encargado, profesional]) expect(permiso(quien)).toBe(false)
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "odontología", ""]) {
+      for (const rol of ["owner", "admin", "worker"] as const) expect(permiso({ ...actor(rol), rubro })).toBe(false)
+    }
+  })
+
+  describe("veMontosDelReparto", () => {
+    const suya = { businessId: NEGOCIO, memberId: "yo" }
+    const deUnColega = { businessId: NEGOCIO, memberId: "colega" }
+    const deLaDuena = { businessId: NEGOCIO, memberId: null }
+
+    it("la dueña ve todo el reparto de cualquier prótesis de su clínica", () => {
+      for (const protesis of [suya, deUnColega, deLaDuena]) expect(veMontosDelReparto(duenaDental, protesis)).toBe("todo")
+    })
+
+    it("la odontóloga ve sólo su parte, y sólo en las suyas", () => {
+      expect(veMontosDelReparto(odontologo, suya)).toBe("suyo")
+      expect(veMontosDelReparto(odontologo, deUnColega)).toBe("nada")
+      expect(veMontosDelReparto(odontologo, deLaDuena)).toBe("nada")
+    })
+
+    it("un odontólogo sin memberId no ve nada, ni en una prótesis sin tratante", () => {
+      expect(veMontosDelReparto(dental("worker", null), deLaDuena)).toBe("nada")
+    })
+
+    it("el encargado no ve nada", () => {
+      expect(veMontosDelReparto(recepcion, suya)).toBe("nada")
+    })
+
+    it("falla cerrado: sin actor, rol desconocido, otro rubro u otro negocio", () => {
+      expect(veMontosDelReparto(null, suya)).toBe("nada")
+      expect(veMontosDelReparto(desconocido, suya)).toBe("nada")
+      expect(veMontosDelReparto(dueño, suya)).toBe("nada")
+      expect(veMontosDelReparto({ ...duenaDental, rubro: "salon" }, suya)).toBe("nada")
+      expect(veMontosDelReparto(duenaDental, { businessId: OTRO_NEGOCIO, memberId: null })).toBe("nada")
+      expect(veMontosDelReparto(odontologo, { businessId: OTRO_NEGOCIO, memberId: "yo" })).toBe("nada")
+    })
+  })
+
+  describe("tratanteParaProtesis", () => {
+    it("la dueña elige: ella misma por defecto o con duenio, o un miembro", () => {
+      expect(tratanteParaProtesis(duenaDental, undefined)).toEqual({ memberId: null, byOwner: true })
+      expect(tratanteParaProtesis(duenaDental, "duenio")).toEqual({ memberId: null, byOwner: true })
+      expect(tratanteParaProtesis(duenaDental, "colega")).toEqual({ memberId: "colega", byOwner: false })
+    })
+
+    it("el odontólogo queda siempre él, pida lo que pida", () => {
+      for (const pedido of [undefined, "duenio", "colega", "yo"]) {
+        expect(tratanteParaProtesis(odontologo, pedido)).toEqual({ memberId: "yo", byOwner: false })
+      }
+    })
+
+    it("falla cerrado: encargado, odontólogo sin memberId, sin actor, rol desconocido u otro rubro", () => {
+      for (const quien of [recepcion, dental("worker", null), null, desconocido, dueño, profesional]) {
+        expect(tratanteParaProtesis(quien, "colega")).toBeNull()
+      }
+    })
+  })
+
+  describe("filtros", () => {
+    type Filtro = (quien: Actor | null, extra?: object) => object
+    const DEL_NEGOCIO = { AND: [{ businessId: NEGOCIO }, {}] }
+    const NADA_SIN_EXTRA = { AND: [NADA, {}] }
+
+    /** [nombre, filtro, lo que ve cada uno: dueña, encargado, odontólogo]. */
+    const FILTROS: [string, Filtro, [boolean, boolean, boolean]][] = [
+      ["whereDeProtesis", whereDeProtesis as Filtro, [true, false, true]],
+      ["whereDeEventosDeProtesis", whereDeEventosDeProtesis as Filtro, [true, false, true]],
+      ["whereDeMaterialesDeProtesis", whereDeMaterialesDeProtesis as Filtro, [true, false, true]],
+      ["whereDeLaboratorios", whereDeLaboratorios as Filtro, [true, false, true]],
+      ["whereDeCambiosDeReparto", whereDeCambiosDeReparto as Filtro, [true, false, false]],
+      ["whereDePagosAlLaboratorio", whereDePagosAlLaboratorio as Filtro, [true, false, false]],
+      ["whereDeProtesisParaCobrar", whereDeProtesisParaCobrar as Filtro, [true, true, false]],
+    ]
+
+    const filas = [
+      { id: "propia", businessId: NEGOCIO, memberId: "yo" },
+      { id: "de-colega", businessId: NEGOCIO, memberId: "colega" },
+      { id: "ajena", businessId: OTRO_NEGOCIO, memberId: "yo" },
+    ]
+    /** El modelo que filtra cada uno, para leer su `where` con la base falsa (lanza ante un campo que no tiene). */
+    const MODELO = new Map<Filtro, NombreDeModelo>([
+      [whereDeProtesis as Filtro, "protesis"],
+      [whereDeEventosDeProtesis as Filtro, "eventoDeProtesis"],
+      [whereDeMaterialesDeProtesis as Filtro, "materialDeProtesis"],
+      [whereDeLaboratorios as Filtro, "laboratorio"],
+      [whereDeCambiosDeReparto as Filtro, "cambioDeRepartoDeProtesis"],
+      [whereDePagosAlLaboratorio as Filtro, "pagoAlLaboratorio"],
+      [whereDeProtesisParaCobrar as Filtro, "protesis"],
+      [whereDeExcepcionesDeReparto as Filtro, "excepcionDeRepartoDeProtesis"],
+    ])
+    const visibles = (filtro: Filtro, quien: Actor | null, extra: object = {}) =>
+      filas.filter((fila) => coincideConWhere(MODELO.get(filtro)!, fila, filtro(quien, extra))).map((fila) => fila.id)
+
+    it.each(FILTROS)("%s acota al negocio de quien puede, y a nada a quien no", (_nombre, filtro, [deDueña, deEncargado, deOdontologo]) => {
+      expect(filtro(duenaDental)).toEqual(deDueña ? DEL_NEGOCIO : NADA_SIN_EXTRA)
+      expect(filtro(recepcion)).toEqual(deEncargado ? DEL_NEGOCIO : NADA_SIN_EXTRA)
+      expect(filtro(odontologo)).toEqual(deOdontologo ? DEL_NEGOCIO : NADA_SIN_EXTRA)
+      expect(visibles(filtro, duenaDental)).toEqual(deDueña ? ["propia", "de-colega"] : [])
+    })
+
+    it.each(FILTROS)("%s falla cerrado: sin actor, rol desconocido, sin rubro o en otro rubro, nada", (_nombre, filtro) => {
+      for (const quien of [null, desconocido, dueño, encargado, profesional, { ...duenaDental, rubro: "salon" }]) {
+        expect(filtro(quien)).toEqual(NADA_SIN_EXTRA)
+        expect(visibles(filtro, quien, { id: "propia" })).toEqual([])
+      }
+    })
+
+    it.each(FILTROS)("%s: lo que agrega el endpoint va en el AND y no pisa el filtro", (_nombre, filtro) => {
+      const extraQuePisa = { businessId: OTRO_NEGOCIO, AND: [{ id: "ajena" }] }
+      expect(filtro(duenaDental, extraQuePisa)).toEqual({ AND: [{ businessId: NEGOCIO }, extraQuePisa] })
+      expect(visibles(filtro, duenaDental, { id: "ajena" })).toEqual([])
+    })
+
+    it("whereDeExcepcionesDeReparto: la dueña, todas; el odontólogo, sólo las suyas; nadie más, ninguna", () => {
+      expect(visibles(whereDeExcepcionesDeReparto as Filtro, duenaDental)).toEqual(["propia", "de-colega"])
+      expect(visibles(whereDeExcepcionesDeReparto as Filtro, odontologo)).toEqual(["propia"])
+      expect(visibles(whereDeExcepcionesDeReparto as Filtro, odontologo, { memberId: "colega" })).toEqual([])
+      for (const quien of [recepcion, dental("worker", null), null, desconocido, dueño, profesional, { ...duenaDental, rubro: "salon" }]) {
+        expect(whereDeExcepcionesDeReparto(quien)).toEqual(NADA_SIN_EXTRA)
+        expect(visibles(whereDeExcepcionesDeReparto as Filtro, quien)).toEqual([])
+      }
+      const otraClinica: Actor = { rol: "owner", businessId: OTRO_NEGOCIO, memberId: null, rubro: "odontologia" }
+      expect(visibles(whereDeExcepcionesDeReparto as Filtro, otraClinica)).toEqual(["ajena"])
+    })
+
+    it("la dueña de otra clínica no ve nada de ésta", () => {
+      const otraClinica: Actor = { rol: "owner", businessId: OTRO_NEGOCIO, memberId: null, rubro: "odontologia" }
+      for (const [, filtro] of FILTROS) expect(visibles(filtro, otraClinica)).toEqual(["ajena"])
+    })
+
+    describe("whereDeAbonosDeProtesis", () => {
+      const tablas = {
+        visit: [
+          { id: "at-1", businessId: NEGOCIO },
+          { id: "at-2", businessId: OTRO_NEGOCIO },
+        ],
+        visitService: [
+          { id: "abono-propio", visitId: "at-1", protesisId: "pr-1", memberId: "colega" },
+          { id: "linea-normal", visitId: "at-1", protesisId: null, memberId: "yo" },
+          { id: "abono-ajeno", visitId: "at-2", protesisId: "pr-9", memberId: "yo" },
+        ],
+      } as unknown as Tablas
+      const abonos = (quien: Actor | null, extra: object = {}) =>
+        tablas.visitService
+          .filter((linea) => coincide(tablas, "visitService", linea, whereDeAbonosDeProtesis(quien, extra)))
+          .map((linea) => linea.id)
+
+      it("quien ve prótesis ve los abonos de su negocio, de cualquier profesional; no las líneas normales", () => {
+        expect(abonos(duenaDental)).toEqual(["abono-propio"])
+        expect(abonos(odontologo)).toEqual(["abono-propio"])
+        expect(abonos(duenaDental, { protesisId: "pr-9" })).toEqual([])
+      })
+
+      it("falla cerrado: encargado, sin actor, rol desconocido u otro rubro", () => {
+        for (const quien of [recepcion, null, desconocido, dueño, { ...duenaDental, rubro: "salon" }]) expect(abonos(quien)).toEqual([])
+      })
+    })
+
+    describe("whereDeAbonosPorPagarAlLaboratorio", () => {
+      const tablas = {
+        visit: [
+          { id: "at-1", businessId: NEGOCIO },
+          { id: "at-2", businessId: OTRO_NEGOCIO },
+        ],
+        visitService: [
+          { id: "abono-propio", visitId: "at-1", protesisId: "pr-1", memberId: "colega" },
+          { id: "linea-normal", visitId: "at-1", protesisId: null, memberId: "yo" },
+          { id: "abono-ajeno", visitId: "at-2", protesisId: "pr-9", memberId: "yo" },
+        ],
+      } as unknown as Tablas
+      const abonos = (quien: Actor | null, extra: object = {}) =>
+        tablas.visitService
+          .filter((linea) => coincide(tablas, "visitService", linea, whereDeAbonosPorPagarAlLaboratorio(quien, extra)))
+          .map((linea) => linea.id)
+
+      it("sólo la dueña, los abonos de su clínica; el extra no pisa el negocio", () => {
+        expect(abonos(duenaDental)).toEqual(["abono-propio"])
+        expect(abonos(duenaDental, { visit: { is: { businessId: OTRO_NEGOCIO } } })).toEqual([])
+      })
+
+      it("falla cerrado: encargado, odontólogo, sin actor, rol desconocido u otro rubro", () => {
+        for (const quien of [recepcion, odontologo, null, desconocido, dueño, { ...duenaDental, rubro: "salon" }]) expect(abonos(quien)).toEqual([])
+      })
+    })
   })
 })

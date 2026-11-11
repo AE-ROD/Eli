@@ -28,9 +28,13 @@ function codigoDeInvitacion(): string | undefined {
   return new URLSearchParams(window.location.search).get("invita") ?? undefined
 }
 
+/** Los campos del paso 1 (tus datos): un error del servidor en uno de ellos vuelve a ese paso. */
+const CAMPOS_DEL_PASO_1: readonly string[] = ["nombre", "email", "contrasena"]
+
 export default function PaginaCrearCuenta() {
   const router = useRouter()
   const [cargando, setCargando] = useState(false)
+  const [cargandoGoogle, setCargandoGoogle] = useState(false)
   const [paso, setPaso] = useState(1)
   const [tipoNegocio, setTipoNegocio] = useState<RubroId | "">("")
   const [error, setError] = useState("")
@@ -80,40 +84,47 @@ export default function PaginaCrearCuenta() {
     })
 
     if (!registro.ok) {
+      // Un error de tus datos (el correo ya tiene cuenta, el nombre no vale)
+      // se muestra en el paso 1, junto a esos campos, y no debajo del negocio.
+      if (registro.campo && CAMPOS_DEL_PASO_1.includes(registro.campo)) setPaso(1)
       setError(registro.error)
       setCargando(false)
       return
     }
 
-    // `signIn` es de next-auth y sí puede lanzar si se cae la red, a
-    // diferencia de `crearCuenta`, que devuelve el error.
+    // La cuenta ya existe: si entrar falla (el límite de intentos, la red), no
+    // se ofrece "Crear cuenta" otra vez (diría que el correo ya tiene cuenta),
+    // se lleva a iniciar sesión diciendo que la cuenta quedó creada. `signIn`
+    // es de next-auth y sí puede lanzar, a diferencia de `crearCuenta`.
+    let entro = false
     try {
       const inicioDeSesion = await signIn("credentials", {
         email: formulario.email,
         password: formulario.contrasena,
         redirect: false,
       })
-
-      if (inicioDeSesion?.error) {
-        setError("Cuenta creada pero no se pudo iniciar sesión automáticamente")
-        setCargando(false)
-      } else {
-        router.push("/dashboard")
-        router.refresh()
-      }
+      entro = Boolean(inicioDeSesion?.ok && !inicioDeSesion.error)
     } catch {
-      setError("Error de conexión. Inténtalo de nuevo.")
-      setCargando(false)
+      entro = false
     }
+
+    router.push(entro ? "/dashboard" : "/iniciar-sesion?aviso=CuentaCreada")
+    router.refresh()
   }
 
   // Con Google el negocio se crea a la vuelta, en completar-perfil: el código
   // de invitación se deja antes en una cookie del servidor. Si eso falla, se
   // sigue igual: la cuenta se crea, sólo que sin invitación.
   const registrarseConGoogle = async () => {
-    const invita = codigoDeInvitacion()
-    if (invita) await recordarInvitacion(invita)
-    await signIn("google", { callbackUrl: "/dashboard" })
+    setCargandoGoogle(true)
+    try {
+      const invita = codigoDeInvitacion()
+      if (invita) await recordarInvitacion(invita)
+      await signIn("google", { callbackUrl: "/dashboard" })
+    } catch {
+      setError("No se pudo conectar con Google. Revisa tu conexión e inténtalo de nuevo.")
+      setCargandoGoogle(false)
+    }
   }
 
   // Lo que se valida acá va debajo de su campo; lo que responde el servidor, arriba del botón.
@@ -224,7 +235,7 @@ export default function PaginaCrearCuenta() {
       </form>
 
       {pasoUno && (
-        <AccesoConGoogle alElegir={registrarseConGoogle}>
+        <AccesoConGoogle alElegir={registrarseConGoogle} cargando={cargandoGoogle}>
           Registrarse con Google
         </AccesoConGoogle>
       )}

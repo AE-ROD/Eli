@@ -1,6 +1,6 @@
 "use client"
 
-import { useId, useState, type FormEvent } from "react"
+import { useEffect, useId, useRef, useState, type FormEvent } from "react"
 import { BellRing, Check } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
@@ -17,6 +17,8 @@ interface PropsDeFormularioListaDeEspera {
   fecha: string
   /** Cómo se lee ese día ("lunes 2 de noviembre"). */
   fechaParaLeer: string
+  /** Clínica dental: lo que respondió a "¿Es tu primera vez?" (suma minutos). Fuera de una clínica, `null`. */
+  primeraVez?: boolean | null
 }
 
 /**
@@ -32,6 +34,7 @@ export function FormularioListaDeEspera({
   profesionalId,
   fecha,
   fechaParaLeer,
+  primeraVez = null,
 }: PropsDeFormularioListaDeEspera) {
   const [abierto, setAbierto] = useState(false)
   const [nombre, setNombre] = useState("")
@@ -45,9 +48,25 @@ export function FormularioListaDeEspera({
   const idDelError = useId()
   const idDelTitulo = useId()
 
+  /*
+   * Al abrir, el botón que se apretó desaparece y el foco caía al <body>: va
+   * al título del formulario, que el lector anuncia con su explicación. Al
+   * inscribirse, el formulario desaparece: va al "Listo".
+   */
+  const titulo = useRef<HTMLHeadingElement>(null)
+  const confirmacion = useRef<HTMLParagraphElement>(null)
+  useEffect(() => {
+    if (listo) confirmacion.current?.focus()
+    else if (abierto) titulo.current?.focus()
+  }, [abierto, listo])
+
   if (listo) {
     return (
-      <p role="status" className="flex items-start gap-2 rounded-boton-lg bg-superficie px-4 py-3 text-sm text-navy squircle">
+      <p
+        ref={confirmacion}
+        tabIndex={-1}
+        role="status"
+        className="outline-none flex items-start gap-2 rounded-boton-lg bg-superficie px-4 py-3 text-sm text-navy squircle">
         <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" strokeWidth={2} />
         <span>
           Listo. Si se libera una hora el {fechaParaLeer}, te escribimos a <strong className="font-medium break-all">{email}</strong>.
@@ -77,6 +96,7 @@ export function FormularioListaDeEspera({
       email,
       telefono,
       whatsapp,
+      primeraVez,
     })
     setEnviando(false)
     if (resultado.ok) setListo(true)
@@ -90,7 +110,7 @@ export function FormularioListaDeEspera({
       className="space-y-4 rounded-panel bg-superficie p-4 squircle sm:p-5"
     >
       <div>
-        <h4 id={idDelTitulo} className="font-medium text-navy">
+        <h4 ref={titulo} id={idDelTitulo} tabIndex={-1} className="font-medium text-navy outline-none">
           Avísame si se libera una hora
         </h4>
         <p className="mt-1 text-sm text-texto-2">
@@ -131,7 +151,12 @@ export function FormularioListaDeEspera({
         value={telefono}
         onChange={(e) => setTelefono(e.target.value)}
       />
-      {/* Sólo con teléfono: sin número no hay a dónde escribir. Nada viene marcado. */}
+      {/*
+        Sólo con teléfono: sin número no hay a dónde escribir. Nada viene
+        marcado. Es el mismo consentimiento que pide la reserva, con las mismas
+        palabras: el aviso de esta lista llega por correo (WhatsApp todavía no
+        manda nada), así que no se promete por ahí.
+      */}
       {telefono.trim() && (
         <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-navy">
           <input
@@ -140,7 +165,7 @@ export function FormularioListaDeEspera({
             onChange={(e) => setWhatsapp(e.target.checked)}
             className="size-4 shrink-0 accent-navy anillo-foco"
           />
-          También quiero que me avisen por WhatsApp
+          Quiero recibir recordatorios por WhatsApp
         </label>
       )}
       {error && (

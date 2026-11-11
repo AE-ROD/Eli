@@ -47,6 +47,22 @@ describe("PUT /api/configuracion/servicios/[id]", () => {
     expect(res.status).toBe(200)
   })
 
+  it("si otro lo borró entre la lectura y la escritura (P2025): 404, no 500", async () => {
+    const { PUT, DELETE } = await import("./route")
+    const borrado = () =>
+      new Prisma.PrismaClientKnownRequestError("No record was found for an update.", { code: "P2025", clientVersion: "prueba" })
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    prismaMock.service.findFirst.mockResolvedValueOnce({ id: "srv-1", businessId: "negocio-1" })
+    prismaMock.service.update.mockRejectedValueOnce(borrado())
+    expect((await PUT(pedidoFalso({ name: "Nuevo nombre" }), paramsCon("srv-1"))).status).toBe(404)
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    prismaMock.service.findFirst.mockResolvedValueOnce({ id: "srv-1", businessId: "negocio-1" })
+    prismaMock.service.delete.mockRejectedValueOnce(borrado())
+    expect((await DELETE(pedidoFalso(undefined), paramsCon("srv-1"))).status).toBe(404)
+  })
+
   it("la búsqueda de pertenencia queda acotada por el businessId del actor", async () => {
     const { PUT } = await import("./route")
 
@@ -172,8 +188,9 @@ describe("DELETE /api/configuracion/servicios/[id] — servicio con comisiones",
 
     mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
     prismaMock.service.findFirst.mockResolvedValueOnce({ id: "srv-1", businessId: "negocio-1" })
-    const otroError = new Prisma.PrismaClientKnownRequestError("Record not found", {
-      code: "P2025",
+    // P2025 (se borró entretanto) es 404; cualquier otro, como una base caída, no se disfraza.
+    const otroError = new Prisma.PrismaClientKnownRequestError("Can't reach database server", {
+      code: "P1001",
       clientVersion: "test",
     })
     prismaMock.service.delete.mockRejectedValueOnce(otroError)

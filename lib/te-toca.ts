@@ -11,6 +11,7 @@ import {
 } from "@/lib/envios-a-clientes"
 import { DIAS_DE_HISTORIAL, estaVencido, fechaDeVisita, frecuenciasPorCliente } from "@/lib/frecuencia-de-visitas"
 import { registrarError } from "@/lib/registro-de-errores"
+import { urlBase } from "@/lib/url-base"
 import { rangoDelDiaEn, sumarDias, zonaDelNegocio } from "@/lib/zona-horaria"
 
 /**
@@ -41,10 +42,6 @@ import { rangoDelDiaEn, sumarDias, zonaDelNegocio } from "@/lib/zona-horaria"
 
 /** Cuántas atenciones se leen por negocio y corrida, como mucho. */
 const TOPE_DE_ATENCIONES_POR_NEGOCIO = 20_000
-
-function urlBase(): string {
-  return process.env.NEXTAUTH_URL ?? "http://localhost:3000"
-}
 
 /** Por qué se cortó el negocio: ya no queda cupo ni tiempo, o llegó a su tope del día. */
 type Corte = "corrida" | "negocio" | null
@@ -178,6 +175,9 @@ async function teTocaEnElNegocio(negocio: Negocio, contexto: ContextoDeCorrida, 
           nombreCliente: cliente.name,
           nombreNegocio: negocio.name,
           servicio: frecuencia.ultimoServicio,
+          // `urlBase` lanza en producción sin NEXTAUTH_URL: adentro de `enviar`,
+          // `enviarAClientes` lo registra, lo cuenta como fallido y suelta el
+          // candado (la próxima corrida lo reintenta). Nunca un enlace a localhost.
           enlaceReservar: `${urlBase()}/reservar/${negocio.slug}`,
           ...enlacesDeBajaDeCliente(frecuencia.customerId),
         }),

@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } fr
 import { CircleAlert, CircleCheck, CircleDashed, HandCoins, Plus, Trash2, type LucideIcon } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { Esqueleto } from "@/components/comunes/esqueleto"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { MAXIMO_DE_PAGOS, MAXIMO_DE_PROPINAS, aCentavos, deCentavos, type PagoPedido } from "@/lib/atenciones"
@@ -21,8 +22,9 @@ import {
 } from "@/lib/acciones-del-tablero"
 import { formatearMonto } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import { Insignia } from "@/components/comunes/insignia"
-import { leerLineasSinPorcentaje, type Atencion } from "../_datos"
+import { esAbono, leerLineasSinPorcentaje, nombreDelAbono, type Atencion } from "../_datos"
 import { Aviso } from "@/components/panel/aviso"
 
 /**
@@ -42,7 +44,7 @@ interface PropsDeModalCobro {
    */
   atencion: Atencion
   mediosDePago: { id: string; nombre: string }[]
-  /** A quién puede ir una propina: los miembros y la dueña (`duenio`). */
+  /** El equipo y la dueña (`duenio`): la propina se ofrece a quienes de ellos atendieron. */
   profesionales: { id: string; nombre: string }[]
   /** Por qué no se pudo cobrar, si falló. */
   aviso: string
@@ -80,9 +82,15 @@ export function ModalCobro({
   onCerrar,
 }: PropsDeModalCobro) {
   const idBase = useId()
+  // "Sala de espera" en una clínica dental.
+  const deDonde = conMayuscula(vocabularioDe(useRubroDelPanel()).tablero)
   const botonAgregar = useRef<HTMLButtonElement>(null)
   const botonAgregarPropina = useRef<HTMLButtonElement>(null)
   const totalCentavos = totalEnCentavosDe(atencion)
+  // La propina va a quien atendió esta atención (el servidor rechaza a otro):
+  // sólo se ofrece a quien tiene una línea en ella.
+  const quienesAtendieron = new Set(atencion.lineas.map((linea) => linea.profesional.id))
+  const paraPropina = profesionales.filter((profesional) => quienesAtendieron.has(profesional.id))
 
   // Arranca con todo en el primer medio, que es el caso de todos los días.
   // Con total cero no hay nada que pagar: se cobra sin pagos.
@@ -178,7 +186,7 @@ export function ModalCobro({
 
   return (
     <MarcoDeModal
-      antetitulo="Tablero"
+      antetitulo={deDonde}
       titulo={`Cobrar a ${atencion.cliente.nombre}`}
       descripcion={`Total: ${formatearMonto(deCentavos(totalCentavos))}`}
       ancho="lg"
@@ -202,7 +210,9 @@ export function ModalCobro({
               {atencion.lineas.map((linea) => (
                 <li key={linea.id} className="flex items-baseline justify-between gap-3 text-sm">
                   <span className="min-w-0 break-words">
-                    {linea.servicio} <span className="text-texto-2">· {linea.profesional.nombre}</span>
+                    {/* Un abono de prótesis suma como cualquier línea y no lleva %: su reparto sale de la prótesis. */}
+                    {esAbono(linea) ? nombreDelAbono(linea.servicio) : linea.servicio}{" "}
+                    <span className="text-texto-2">· {linea.profesional.nombre}</span>
                     {idsSinPorcentaje.has(linea.id) && (
                       <>
                         <span className="sr-only"> (quedará sin porcentaje de comisión)</span>{" "}
@@ -351,7 +361,7 @@ export function ModalCobro({
                       className={CAMPO}
                     >
                       <option value="">Elegir</option>
-                      {profesionales.map((profesional) => (
+                      {paraPropina.map((profesional) => (
                         <option key={profesional.id} value={profesional.id}>
                           {profesional.nombre}
                         </option>

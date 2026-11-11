@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client"
+import { SIN_ATENCION_VIVA } from "@/lib/mover-cita"
 import { SELECCION_DE_SERVICIOS_DE_LA_CITA } from "@/lib/servicios-de-la-reserva"
 import { hashDeToken } from "@/lib/tokens"
 
@@ -11,9 +12,13 @@ import { hashDeToken } from "@/lib/tokens"
  * ──────
  * - La cita se busca por el hash del token Y por el slug del negocio: un
  *   token válido con el slug de otro negocio no encuentra nada.
- * - Sólo se gestiona una cita pendiente o confirmada que todavía no empezó.
- *   Token inválido, de otro negocio, cita cancelada, pasada o en otro estado:
- *   todo es el mismo 404, sin decir cuál de esas cosas pasó.
+ * - Sólo se gestiona una cita pendiente o confirmada que todavía no empezó y
+ *   cuyo cliente no llegó: con una atención viva en el Tablero, gana la
+ *   llegada (PRODUCTO.md §6) y el enlace ya no la cancela ni la mueve.
+ *   Token inválido, de otro negocio, cita cancelada, pasada, en otro estado o
+ *   con su atención: todo es el mismo 404, sin decir cuál de esas cosas pasó.
+ *   Las escrituras (`cancelar`, `reagendar`) repiten la condición
+ *   (`whereDeEscrituraDelEnlace`): una llegada que entre entretanto gana.
  * - Cambiar (cancelar o reagendar) sólo hasta `Business.cancelacionHorasAntes`
  *   horas antes. Después, la cita se ve pero hay que contactar al local.
  */
@@ -69,12 +74,33 @@ export function mensajeFueraDePlazo(horasAntes: number): string {
     : `Ya no se puede cambiar por acá: se puede hasta ${horasAntes} horas antes. Contacta al local.`
 }
 
-/** El `where` de la cita del enlace: hash del token, negocio del slug y estado gestionable. */
+/** El `where` de la cita del enlace: hash del token, negocio del slug, estado gestionable y sin atención viva. */
 export function whereDeCitaPorToken(slug: string, token: string): Prisma.AppointmentWhereInput {
   return {
     manageTokenHash: hashDeToken(token),
     business: { slug },
     status: { in: [...ESTADOS_GESTIONABLES] },
+    AND: [SIN_ATENCION_VIVA],
+  }
+}
+
+/**
+ * El `where` con que el enlace escribe (cancela o reagenda): la cita tal como
+ * se leyó (negocio, estado gestionable, misma hora) y todavía sin atención
+ * viva. Si entretanto el local la movió, la cerró o el cliente llegó, no se
+ * escribe nada y el endpoint responde el 404 del enlace.
+ */
+export function whereDeEscrituraDelEnlace(cita: {
+  id: string
+  businessId: string
+  startTime: Date
+}): Prisma.AppointmentWhereInput {
+  return {
+    id: cita.id,
+    businessId: cita.businessId,
+    status: { in: [...ESTADOS_GESTIONABLES] },
+    startTime: cita.startTime,
+    AND: [SIN_ATENCION_VIVA],
   }
 }
 
@@ -89,13 +115,26 @@ const SELECCION = {
   endTime: true,
   // El precio de hoy: al reagendar se compara con el de la hora nueva (#89c).
   price: true,
+  // Clínica dental: el sillón que le asignó la clínica. Reagendar lo conserva
+  // y sólo ofrece y acepta horas en que está libre. Nunca se le muestra al
+  // paciente.
+  sillonId: true,
   customer: { select: { name: true, lastName: true } },
   member: { select: { user: { select: { name: true } } } },
   service: { select: { id: true, name: true, duration: true, active: true } },
   // Varios servicios (#89a): con filas, mandan ellas (`serviciosDeLaCita`).
   servicios: SELECCION_DE_SERVICIOS_DE_LA_CITA,
   business: {
-    select: { id: true, name: true, slug: true, timezone: true, cancelacionHorasAntes: true, user: { select: { email: true } } },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      timezone: true,
+      cancelacionHorasAntes: true,
+      // El rubro: en una clínica dental, una urgencia sólo se mueve a hoy.
+      type: true,
+      user: { select: { email: true } },
+    },
   },
 } satisfies Prisma.AppointmentSelect
 

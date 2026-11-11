@@ -6,10 +6,16 @@ interface PropsDeAccesoConGoogle {
   children: ReactNode
   /** Lo decide la pantalla: acá sólo se dibuja. */
   alElegir: () => void
+  /**
+   * Mientras se va a Google: el botón gira y no se puede volver a tocar. Ir a
+   * Google tarda (y antes, al registrarse, se guarda la invitación); sin esto
+   * no pasaba nada a la vista y se tocaba de nuevo.
+   */
+  cargando?: boolean
 }
 
 /** La otra forma de entrar, debajo del formulario: una raya con una "o" y el botón de Google. */
-export function AccesoConGoogle({ children, alElegir }: PropsDeAccesoConGoogle) {
+export function AccesoConGoogle({ children, alElegir, cargando = false }: PropsDeAccesoConGoogle) {
   return (
     <div className="mt-6">
       <div className="flex items-center gap-4 text-sm text-texto-2">
@@ -17,7 +23,7 @@ export function AccesoConGoogle({ children, alElegir }: PropsDeAccesoConGoogle) 
         <span>o</span>
         <span aria-hidden="true" className="h-px flex-1 bg-borde" />
       </div>
-      <Boton variante="secundario" icono={<LogoDeGoogle />} onClick={alElegir} className="mt-6 w-full">
+      <Boton variante="secundario" icono={<LogoDeGoogle />} onClick={alElegir} cargando={cargando} className="mt-6 w-full">
         {children}
       </Boton>
     </div>

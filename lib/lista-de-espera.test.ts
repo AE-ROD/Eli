@@ -219,6 +219,36 @@ describe("inscribirse", () => {
     expect(inscripciones()).toHaveLength(1)
   })
 
+  describe("en una clínica dental", () => {
+    const CLINICA = { ...NEGOCIO, type: "odontologia" }
+
+    it("la primera vez suma 15 minutos: un día con una hora libre de 60 que no alcanza para 75 se acepta", async () => {
+      // Queda libre de 10 a 11: cabe la limpieza (60), no con la primera vez (75).
+      await liberar("a10")
+      expect(await m.inscribirEnListaDeEspera(CLINICA, datos(), AHORA)).toEqual({ tipo: "rechazada", error: m.MENSAJE_HAY_HORAS })
+      expect(await m.inscribirEnListaDeEspera(CLINICA, datos({ primeraVez: true }), AHORA)).toEqual({ tipo: "inscrita" })
+      // En otro rubro la primera vez no suma nada.
+      expect(await m.inscribirEnListaDeEspera(NEGOCIO, datos({ primeraVez: true, email: "otra@correo.test" }), AHORA)).toEqual({
+        tipo: "rechazada",
+        error: m.MENSAJE_HAY_HORAS,
+      })
+    })
+
+    it("una urgencia sólo espera por hoy: para otro día, rechazada con el mismo motivo que la reserva", async () => {
+      const { MENSAJE_URGENCIA_SOLO_HOY } = await import("./reserva-publica")
+      escenario({
+        service: [
+          { id: "s1", businessId: "n1", name: "Urgencia", duration: 60, esUrgencia: true },
+          { id: "s2", businessId: "n2", name: "Corte", duration: 60 },
+        ],
+      })
+      expect(await m.inscribirEnListaDeEspera(CLINICA, datos(), AHORA)).toEqual({ tipo: "rechazada", error: MENSAJE_URGENCIA_SOLO_HOY })
+      expect(inscripciones()).toHaveLength(0)
+      // En un salón la marca no cuenta.
+      expect(await m.inscribirEnListaDeEspera(NEGOCIO, datos(), AHORA)).toEqual({ tipo: "inscrita" })
+    })
+  })
+
   it("la cuarta inscripción activa del mismo email en el negocio: tope", async () => {
     escenario({
       inscripcionEnEspera: [
@@ -273,6 +303,26 @@ describe("avisar cuando se libera una hora", () => {
     expect(envios()).toEqual([expect.objectContaining({ businessId: "n1", tipo: "lista-de-espera", esperaId: "i1", referencia: "i1:1" })])
     expect(inscripciones({ id: "i1" })[0]).toMatchObject({ avisos: 1, ultimoAvisoAt: AHORA })
     expect(inscripciones({ id: "i-ajena" })[0]).toMatchObject({ avisos: 0 })
+  })
+
+  it("en producción sin NEXTAUTH_URL no manda un enlace a localhost: se cuenta como fallido, se libera y sigue", async () => {
+    const silencio = vi.spyOn(console, "error").mockImplementation(() => {})
+    vi.stubEnv("NEXTAUTH_URL", "")
+    vi.stubEnv("NODE_ENV", "production")
+    try {
+      escenario({ inscripcionEnEspera: [inscripcion("i1")] })
+      await liberar("a9")
+      const resumen = await m.avisarHoraLiberada({ businessId: "n1", inicio: A_LAS_9 }, AHORA)
+
+      expect(resumen).toMatchObject({ enviados: 0, fallidos: 1 })
+      expect(enviarAviso).not.toHaveBeenCalled()
+      // El candado se suelta: el próximo evento lo vuelve a intentar.
+      expect(envios()).toHaveLength(0)
+      expect(inscripciones({ id: "i1" })[0]).toMatchObject({ avisos: 0 })
+    } finally {
+      vi.unstubAllEnvs()
+      silencio.mockRestore()
+    }
   })
 
   it("el evento de otro negocio nunca avisa a este", async () => {
@@ -469,6 +519,9 @@ describe("reservó", () => {
     })
     expect(await m.marcarReservo(base.prisma as never, { businessId: "n1", email: " ANA@correo.test", fecha: LUNES, ahora: AHORA })).toBe(1)
     expect(inscripciones({ estado: "reservo" }).map((fila) => fila.id)).toEqual(["i1"])
+    // Ya reservó: sus datos personales se borran, como al salir o expirar.
+    expect(inscripciones({ id: "i1" })[0]).toMatchObject({ nombre: "", apellido: "", email: "", telefono: null, whatsappConsentAt: null })
+    expect(inscripciones({ id: "i-otro-dia" })[0]).toMatchObject({ email: "ana@correo.test" })
     expect(await m.marcarReservo(base.prisma as never, { businessId: "n1", email: null, fecha: LUNES, ahora: AHORA })).toBe(0)
   })
 })

@@ -18,6 +18,7 @@ import {
   rangoDelDia,
   tiempoDesde,
   fechaRelativa,
+  fechaLargaEn,
 } from "./fechas"
 
 describe("comoTexto", () => {
@@ -77,7 +78,25 @@ describe("desplazarFecha", () => {
     const base = new Date(2026, 2, 11)
     expect(comoTexto(desplazarFecha(base, "dia", 1))).toBe("2026-03-12")
     expect(comoTexto(desplazarFecha(base, "semana", -1))).toBe("2026-03-04")
-    expect(comoTexto(desplazarFecha(base, "mes", 1))).toBe("2026-04-11")
+    // Por mes, al día 1 del mes de destino.
+    expect(comoTexto(desplazarFecha(base, "mes", 1))).toBe("2026-04-01")
+  })
+
+  it("por mes no se salta ninguno desde un día 31", () => {
+    // Con `setMonth`, el 31 de octubre más un mes caía en diciembre.
+    const treintaYUnoDeOctubre = new Date(2026, 9, 31)
+    expect(comoTexto(desplazarFecha(treintaYUnoDeOctubre, "mes", 1))).toBe("2026-11-01")
+    expect(comoTexto(desplazarFecha(treintaYUnoDeOctubre, "mes", -1))).toBe("2026-09-01")
+
+    // Y el 31 de marzo menos un mes caía en marzo otra vez (31 de febrero → 3 de marzo).
+    const treintaYUnoDeMarzo = new Date(2026, 2, 31)
+    expect(comoTexto(desplazarFecha(treintaYUnoDeMarzo, "mes", -1))).toBe("2026-02-01")
+    expect(comoTexto(desplazarFecha(treintaYUnoDeMarzo, "mes", 1))).toBe("2026-04-01")
+  })
+
+  it("por mes cruza el año", () => {
+    expect(comoTexto(desplazarFecha(new Date(2026, 11, 31), "mes", 1))).toBe("2027-01-01")
+    expect(comoTexto(desplazarFecha(new Date(2026, 0, 31), "mes", -1))).toBe("2025-12-01")
   })
 
   it("no modifica la fecha que recibe", () => {
@@ -137,7 +156,9 @@ describe("HORA_24", () => {
     })
 
     expect(comprobante).toMatch(/00:00$/)
-    expect(caja).toBe("4 de noviembre, 00:00")
+    // El separador entre fecha y hora (", " o " a las ") depende de la versión de ICU del
+    // entorno; lo que importa acá es que la hora salga en 24 h, no cómo se une a la fecha.
+    expect(caja).toMatch(/^4 de noviembre(,| a las) 00:00$/)
     expect(`${comprobante} ${caja}`).not.toMatch(/a\.\s?m\.|p\.\s?m\./)
   })
 })
@@ -385,5 +406,18 @@ describe("fechaRelativa", () => {
       const iso = new Date(2026, 9, 26 + dias, 12, 0).toISOString()
       expect(fechaRelativa(iso, ahora)).not.toMatch(/-/)
     }
+  })
+})
+
+describe("fechaLargaEn", () => {
+  it("dice el día en la zona del negocio, no en la del dispositivo", () => {
+    // 02:00 del 9 de marzo en UTC: en Santiago todavía es el domingo 8.
+    const instante = new Date("2026-03-09T02:00:00.000Z")
+    expect(fechaLargaEn("America/Santiago", instante)).toBe("Domingo, 8 de marzo de 2026")
+    expect(fechaLargaEn("Europe/Madrid", instante)).toBe("Lunes, 9 de marzo de 2026")
+  })
+
+  it("con una zona que no existe no lanza: usa la del dispositivo", () => {
+    expect(fechaLargaEn("Marte/Olympus", new Date(2026, 6, 15, 12))).toBe("Miércoles, 15 de julio de 2026")
   })
 })

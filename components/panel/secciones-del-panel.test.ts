@@ -13,8 +13,10 @@ import {
   SECCIONES_DEL_PANEL,
   SIN_ACCESO_A_LA_PLATA,
   SECCION_DE_INICIO,
+  seccionConNombreDelRubro,
   seccionDeLaRuta,
   seccionMarcadaEnLaBarra,
+  seccionesConNombreDelRubro,
   seccionesDeLaPlata,
   type AccesoALaPlata,
 } from "./secciones-del-panel"
@@ -161,5 +163,47 @@ describe("seccionMarcadaEnLaBarra", () => {
 
   it("sin Mi plata ni Liquidaciones en la barra, no se inventa otra", () => {
     expect(seccionMarcadaEnLaBarra("/dashboard/liquidaciones/abc", [SECCION_DE_INICIO])?.id).toBe("liquidaciones")
+  })
+})
+
+describe("las secciones con el nombre del rubro", () => {
+  const nombres = (rubro: string | null | undefined) =>
+    seccionesConNombreDelRubro(SECCIONES_DEL_PANEL, rubro).map((seccion) => seccion.nombre)
+
+  it("en una clínica dental, Clientes es Pacientes y Tablero es Sala de espera", () => {
+    const enLaClinica = seccionesConNombreDelRubro(SECCIONES_DEL_PANEL, "odontologia")
+    expect(enLaClinica.find((seccion) => seccion.id === "clientes")?.nombre).toBe("Pacientes")
+    expect(enLaClinica.find((seccion) => seccion.id === "tablero")?.nombre).toBe("Sala de espera")
+  })
+
+  it("en la clínica sólo cambia el nombre: id, ruta, módulo y orden son los mismos", () => {
+    const enLaClinica = seccionesConNombreDelRubro(SECCIONES_DEL_PANEL, "odontologia")
+    expect(enLaClinica.map(({ id, ruta, modulo }) => ({ id, ruta, modulo }))).toEqual(
+      SECCIONES_DEL_PANEL.map(({ id, ruta, modulo }) => ({ id, ruta, modulo }))
+    )
+    const cambiadas = enLaClinica.filter((seccion, i) => seccion.nombre !== SECCIONES_DEL_PANEL[i].nombre)
+    expect(cambiadas.map((seccion) => seccion.id)).toEqual(["tablero", "clientes"])
+  })
+
+  it("salón, barbería, spa de uñas, un rubro desconocido o ninguno: las mismas secciones, sin tocar", () => {
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "constructor", "", null, undefined]) {
+      const secciones = seccionesConNombreDelRubro(SECCIONES_DEL_PANEL, rubro)
+      secciones.forEach((seccion, i) => expect(seccion).toBe(SECCIONES_DEL_PANEL[i]))
+      expect(nombres(rubro)).toContain("Clientes")
+      expect(nombres(rubro)).toContain("Tablero")
+    }
+  })
+
+  it("no cambia los nombres fijos que lee la landing", () => {
+    seccionesConNombreDelRubro(SECCIONES_DEL_PANEL, "odontologia")
+    expect(SECCIONES_DEL_PANEL.find((seccion) => seccion.id === "clientes")?.nombre).toBe("Clientes")
+    expect(MODULOS.find((modulo) => modulo.id === "clientes")?.nombre).toBe("Clientes")
+    expect(MODULOS.find((modulo) => modulo.id === "tablero")?.nombre).toBe("Tablero")
+  })
+
+  it("el antetítulo de una ficha de paciente dice Pacientes", () => {
+    const seccion = seccionDeLaRuta("/dashboard/clientes/abc")
+    expect(seccion && seccionConNombreDelRubro(seccion, "odontologia").nombre).toBe("Pacientes")
+    expect(seccion && seccionConNombreDelRubro(seccion, "salon").nombre).toBe("Clientes")
   })
 })

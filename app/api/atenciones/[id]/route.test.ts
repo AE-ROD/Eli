@@ -943,7 +943,8 @@ describe("DELETE /api/atenciones/[id]: deshacer una llegada", () => {
     expect(data.error).toBe("Solo se deshace la llegada de una reserva que todavía no empezó a atenderse; lo demás se anula.")
     expect(base.buscar("visit", { id: "v-recien-llegada" })[0]).toMatchObject({ status: "en-espera", startedAt: expect.any(Date) })
     expect(lineasDe("v-recien-llegada")).toHaveLength(1)
-    expect(citaGuardada("cita-recien-llegada").status).toBe("en-progreso")
+    // De vuelta en la sala de espera, la cita ya no está "en progreso": vuelve a confirmada.
+    expect(citaGuardada("cita-recien-llegada").status).toBe("confirmada")
   })
 
   it("si alguien la empieza mientras tanto, 409 y no se borra nada", async () => {

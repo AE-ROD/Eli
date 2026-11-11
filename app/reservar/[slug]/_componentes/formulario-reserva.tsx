@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import type { ReactNode, Ref } from "react"
+import type { FormEvent, ReactNode, Ref } from "react"
 import { motion } from "framer-motion"
-import { ArrowLeft, ArrowRight, CalendarCheck, Check } from "lucide-react"
+import { ArrowLeft, ArrowRight, CalendarCheck, CalendarX2, Check, TriangleAlert } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
@@ -15,17 +15,27 @@ import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { formatearMonto } from "@/lib/dinero"
 import { deTexto, formatearDuracionDeServicio } from "@/lib/fechas"
 import {
+  avisoDeUrgencia,
   avisoSinCambiosDespuesDeReservar,
   avisoSinCambiosPorElEnlace,
   AVISO_DIA_SIN_ATENCION,
   diasDelCalendarioDeReserva,
+  duracionDeLaReserva,
   elDiaElegidoQuedoSinAtencion,
+  esDiaReservable,
+  esReservaDeUrgencia,
+  MENSAJE_URGENCIA_SIN_HORAS,
+  MINUTOS_DE_PRIMERA_VEZ,
   quedaSinCambiosPorElEnlace,
+  TEXTO_DE_PRIMERA_VEZ,
 } from "@/lib/reserva-publica"
+import { RUBRO_DENTAL } from "@/lib/rubros"
 import { MAX_SERVICIOS_POR_RESERVA, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
 import { cn } from "@/lib/utils"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
+import { fechaYMinutosEn } from "@/lib/zona-horaria"
 import { EncabezadoDeReserva } from "./encabezado-de-reserva"
-import { IndicadorDePasos, PASOS_DE_RESERVA } from "./indicador-de-pasos"
+import { IndicadorDePasos, PASOS_DE_RESERVA, pasosDeLaReserva } from "./indicador-de-pasos"
 import { AgregarAlCalendario } from "./agregar-al-calendario"
 import { InvitacionAEli } from "./pie-de-eli"
 import type { PrecioDeLaHora } from "@/lib/hora-valle"
@@ -34,6 +44,16 @@ import { SelectorServicio, type ServicioPublico } from "./selector-servicio"
 import { SelectorFechaHora, fechaParaLeer } from "./selector-fecha-hora"
 import { FormularioListaDeEspera } from "./formulario-lista-de-espera"
 import { SelectorProfesional } from "./selector-profesional"
+import {
+  erroresDeTusDatos,
+  haceElServicio,
+  haceTodos,
+  ORDEN_DE_TUS_DATOS,
+  profesionalSigueValiendo,
+  serviciosQueNoSePuedenSumar,
+  type ErroresDeTusDatos,
+  type TusDatos,
+} from "./reglas-de-la-reserva"
 import { confirmarReserva, leerDisponibilidad, leerProfesionales, type ProfesionalPublico } from "../_datos"
 
 interface HorarioPublico {
@@ -45,6 +65,13 @@ interface HorarioPublico {
 interface PropsDeFormularioReserva {
   slug: string
   nombreNegocio: string
+  /**
+   * Clínica dental (`esRubroDental(Business.type)`): el paso 1 es el
+   * "Motivo", se elige "odontólogo", se pregunta si es la primera vez (suma
+   * 15 minutos, que calcula el servidor) y una urgencia sólo ofrece horas de
+   * hoy. En otro rubro, la reserva de siempre.
+   */
+  clinicaDental?: boolean
   /** La zona del negocio (IANA): el calendario cuenta "hoy" en su reloj. */
   zona: string
   servicios: ServicioPublico[]
@@ -63,6 +90,11 @@ interface PropsDeFormularioReserva {
    * cambiar por el enlace (QA#8).
    */
   plazoDeCambiosHoras: number
+  /**
+   * Dónde queda el negocio ("Av. Italia 1234, Providencia"), para el evento
+   * de "Agregar al calendario". Sin dirección, el evento va sin lugar.
+   */
+  direccion?: string | null
 }
 
 type Paso = 1 | 2 | 3
@@ -74,13 +106,12 @@ type Paso = 1 | 2 | 3
  */
 const FUNDIDO = { duration: DURACION.pildora, ease: CURVA.fundido }
 
-/** Lo hace el profesional: sin servicios definidos, hace todos. */
-const haceElServicio = (profesional: ProfesionalPublico, servicioId: string) =>
-  profesional.servicioIds === null || profesional.servicioIds.includes(servicioId)
-
 /** Hace todos los elegidos (#89a): la reserva es con una sola persona. */
 const haceLosServicios = (profesional: ProfesionalPublico, elegidos: ServicioPublico[]) =>
-  elegidos.every((servicio) => haceElServicio(profesional, servicio.id))
+  haceTodos(
+    profesional,
+    elegidos.map((servicio) => servicio.id)
+  )
 
 /**
  * Los elegidos como si fueran un solo servicio, para el resumen, el
@@ -104,12 +135,14 @@ function comoUnServicio(elegidos: ServicioPublico[]): (ServicioPublico & { preci
 export function FormularioReserva({
   slug,
   nombreNegocio,
+  clinicaDental = false,
   zona,
   servicios,
   horarios,
   listaDeEsperaActiva,
   plazoDeCambios,
   plazoDeCambiosHoras,
+  direccion = null,
 }: PropsDeFormularioReserva) {
   const parametros = useSearchParams()
   // `?servicio=<id>&fecha=AAAA-MM-DD` (el enlace del aviso de la lista de
@@ -137,7 +170,12 @@ export function FormularioReserva({
   const [sePuedeCambiar, setSePuedeCambiar] = useState(true)
   // Si el cron alcanza a mandar el recordatorio (N4): lo dice `confirmar`, con la hora del servidor.
   const [conRecordatorio, setConRecordatorio] = useState(false)
-  const [fecha, setFecha] = useState(conFechaDeLaUrl ? fechaDeLaUrl : "")
+  // El día elegido en el calendario. El que vale es `fecha` (abajo): con una
+  // urgencia dental, siempre hoy.
+  const [fechaElegida, setFecha] = useState(conFechaDeLaUrl ? fechaDeLaUrl : "")
+  // Clínica dental: "¿Es tu primera vez en la clínica?". Sin responder
+  // (`null`) no se piden horas: la respuesta cambia cuánto dura la cita.
+  const [primeraVez, setPrimeraVez] = useState<boolean | null>(null)
   const [hora, setHora] = useState("")
   // Con hora valle (#89c), el precio de la hora elegida; `null` si es el de siempre.
   const [precioDeLaHora, setPrecioDeLaHora] = useState<PrecioDeLaHora | null>(null)
@@ -153,11 +191,24 @@ export function FormularioReserva({
   const [whatsapp, setWhatsapp] = useState(false)
   const [correoPromo, setCorreoPromo] = useState(false)
   const [comentarios, setComentarios] = useState("")
+  // Los errores de "Tus datos", por campo: aparecen al intentar confirmar y
+  // se corrigen mientras se escribe. Antes del primer intento, ninguno.
+  const [erroresDeDatos, setErroresDeDatos] = useState<ErroresDeTusDatos>({})
+  const [intentoConfirmar, setIntentoConfirmar] = useState(false)
+  const camposDeDatos = useRef<Partial<Record<keyof TusDatos, HTMLInputElement | null>>>({})
   const [enviando, setEnviando] = useState(false)
   /** El id de la cita creada: con él, la reserva está confirmada. */
   const [citaId, setCitaId] = useState<string | null>(null)
   const confirmado = citaId !== null
   const [error, setError] = useState("")
+
+  // Las palabras del rubro (`lib/vocabulario.ts`): "motivo" y "odontólogo" en
+  // una clínica dental; las de siempre en cualquier otro.
+  const vocabulario = vocabularioDe(clinicaDental ? RUBRO_DENTAL : null)
+  const servicioDeLaReserva = vocabulario.servicioDeLaReserva
+  // El servicio de urgencia activo de la clínica, para el aviso "¿Tienes dolor fuerte?".
+  const servicioDeUrgencia = clinicaDental ? (servicios.find((servicio) => servicio.esUrgencia) ?? null) : null
+  const urgencia = esReservaDeUrgencia(clinicaDental, seleccionados)
 
   const idDeComentarios = useId()
   const idDelResumen = useId()
@@ -171,13 +222,18 @@ export function FormularioReserva({
       if (!vigente || !resultado.ok) return
       setProfesionales(resultado.datos)
       setEquipoLeido(true)
-      // Un profesional de la URL que no existe no queda elegido.
-      setProfesionalId((actual) => (actual && resultado.datos.some((p) => p.id === actual) ? actual : null))
     })
     return () => {
       vigente = false
     }
   }, [slug])
+
+  // Un profesional elegido que no es del equipo, o que no hace todo lo
+  // elegido (el de `?profesional=` con un `?servicio=` que no hace, o el
+  // equipo que llegó después de elegir), no queda elegido: vuelve a
+  // "cualquiera". Se ajusta al renderizar, con el equipo ya leído.
+  const servicioIds = seleccionados.map((servicio) => servicio.id)
+  if (equipoLeido && !profesionalSigueValiendo(profesionalId, profesionales, servicioIds)) setProfesionalId(null)
 
   const profesionalElegido = profesionales.find((profesional) => profesional.id === profesionalId) ?? null
   // Con un profesional elegido, sólo los servicios que hace.
@@ -187,6 +243,20 @@ export function FormularioReserva({
   // Con varios, sólo quienes hacen todos: los hace una sola persona, seguidos.
   const profesionalesDelServicio =
     seleccionados.length > 0 ? profesionales.filter((profesional) => haceLosServicios(profesional, seleccionados)) : []
+
+  // Lo que no se puede sumar a lo ya elegido: nadie (o no quien se eligió)
+  // hace la combinación. Se deshabilita en el paso 1 con el motivo a la vista,
+  // en vez de llegar a un calendario sin días.
+  const sinCombinacion = serviciosQueNoSePuedenSumar(
+    serviciosVisibles.map((servicio) => servicio.id),
+    servicioIds,
+    equipoLeido ? (profesionalElegido ? [profesionalElegido] : profesionales) : null
+  )
+  const motivoSinCombinacion = profesionalElegido
+    ? `${profesionalElegido.nombre} no lo hace junto con lo que elegiste.`
+    : clinicaDental
+      ? `Ningún ${vocabulario.profesional} lo atiende junto con lo que elegiste.`
+      : "Nadie del equipo lo hace junto con lo que elegiste."
 
   const alternarServicio = (servicio: ServicioPublico) => {
     const yaEstaba = seleccionados.some((elegido) => elegido.id === servicio.id)
@@ -200,7 +270,6 @@ export function FormularioReserva({
     elegirHora("", null)
   }
 
-  const servicioIds = seleccionados.map((servicio) => servicio.id)
   // Los días con atención para estos servicios y este profesional (o
   // cualquiera), los mismos que la disponibilidad (N3): no se puede elegir un
   // día que después diga "No hay atención ese día".
@@ -210,6 +279,13 @@ export function FormularioReserva({
     servicioIds,
     profesionalId,
   })
+
+  // Urgencia dental: sólo hoy, en el reloj de la clínica (el servidor no
+  // ofrece ni acepta otro día). Si hoy nadie que la haga atiende, ningún día.
+  const ahora = new Date()
+  const hoy = fechaYMinutosEn(ahora, zona).fecha
+  const hoyConAtencion = esDiaReservable(hoy, diasDisponibles, ahora, zona)
+  const fecha = urgencia ? (hoyConAtencion ? hoy : "") : fechaElegida
 
   // Si al cambiar de profesional o de servicios el día elegido deja de tener
   // atención, se limpian el día y la hora, con un aviso: si no, quedaba
@@ -231,16 +307,55 @@ export function FormularioReserva({
     setFecha(nueva)
   }
   const claveDeServicios = servicioIds.join(",")
+  // Sólo en una clínica dental: con "primera vez" la cita dura 15 minutos
+  // más y las horas son otras. El servidor suma; acá sólo va la respuesta.
+  const primeraVezQueSeManda = clinicaDental ? primeraVez : null
   const cargarHoras = useCallback(
-    (dia: string) => leerDisponibilidad(slug, dia, claveDeServicios ? claveDeServicios.split(",") : [], profesionalId),
-    [slug, claveDeServicios, profesionalId]
+    (dia: string) =>
+      leerDisponibilidad(slug, dia, claveDeServicios ? claveDeServicios.split(",") : [], profesionalId, primeraVezQueSeManda),
+    [slug, claveDeServicios, profesionalId, primeraVezQueSeManda]
   )
+  const claveDeHoras = `${claveDeServicios}|${profesionalId ?? ""}${clinicaDental ? `|${primeraVez ?? ""}` : ""}`
+  // En una clínica, el calendario aparece cuando se respondió la pregunta.
+  const faltaLaPrimeraVez = clinicaDental && primeraVez === null
+
+  // La duración que se muestra (resumen, calendario): la misma cuenta que hace
+  // el servidor (`duracionDeLaReserva`), que es el que manda.
+  const servicioConDuracion = servicioSeleccionado && {
+    ...servicioSeleccionado,
+    duration: duracionDeLaReserva(servicioSeleccionado.duration, { clinicaDental, primeraVez: primeraVez === true }),
+  }
+  const detalleDeDuracion =
+    clinicaDental && primeraVez === true ? `Incluye ${MINUTOS_DE_PRIMERA_VEZ} min para abrir tu ficha` : null
+  const cualquiera = clinicaDental
+    ? { nombre: "La primera hora disponible", detalle: `Con cualquier ${vocabulario.profesional}` }
+    : undefined
+
+  // Ningún día de la semana con atención para lo elegido (y con quien se
+  // eligió): el calendario quedaría vacío. Se dice qué pasa y cómo salir. La
+  // urgencia sin horas ya tiene su aviso.
+  const sinDias = !urgencia && diasDisponibles.length === 0
 
   const puedeAvanzarPaso1 = !!servicioSeleccionado
-  const puedeAvanzarPaso2 = !!fecha && !!hora
-  const puedeEnviar = !!nombre && !!apellido
+  const puedeAvanzarPaso2 = !!fecha && !!hora && !faltaLaPrimeraVez
 
-  const confirmar = async () => {
+  const tusDatos = { nombre, apellido, email }
+  // Después del primer intento, los errores se corrigen mientras se escribe.
+  const cambiarDato = (campo: keyof TusDatos, valor: string, guardar: (valor: string) => void) => {
+    guardar(valor)
+    if (intentoConfirmar) setErroresDeDatos(erroresDeTusDatos({ ...tusDatos, [campo]: valor }))
+  }
+
+  const confirmar = async (evento: FormEvent) => {
+    evento.preventDefault()
+    setIntentoConfirmar(true)
+    const errores = erroresDeTusDatos(tusDatos)
+    setErroresDeDatos(errores)
+    const primeroConError = ORDEN_DE_TUS_DATOS.find((campo) => errores[campo])
+    if (primeroConError) {
+      camposDeDatos.current[primeroConError]?.focus()
+      return
+    }
     setEnviando(true)
     setError("")
     const resultado = await confirmarReserva(slug, {
@@ -248,14 +363,15 @@ export function FormularioReserva({
       profesionalId,
       fecha,
       hora,
-      nombre,
-      apellido,
+      nombre: nombre.trim(),
+      apellido: apellido.trim(),
       cedula,
-      email,
+      email: email.trim(),
       telefono,
       whatsapp,
       correoPromo,
       comentarios,
+      primeraVez: primeraVezQueSeManda,
     })
     setEnviando(false)
 
@@ -302,11 +418,12 @@ export function FormularioReserva({
           </div>
           <ResumenDeReserva
             className="mt-6 border-t border-borde pt-3"
-            servicio={servicioSeleccionado}
+            servicio={servicioConDuracion}
             fecha={fecha}
             hora={hora}
             profesional={profesionalAsignado}
             precioDeLaHora={precioDeLaHora}
+            detalleDeDuracion={detalleDeDuracion}
             sinServicio
           />
           <AgregarAlCalendario
@@ -318,8 +435,9 @@ export function FormularioReserva({
               negocio: nombreNegocio,
               fecha,
               hora,
-              duracionMinutos: servicioSeleccionado.duration,
+              duracionMinutos: servicioConDuracion?.duration ?? servicioSeleccionado.duration,
               zona,
+              direccion,
             }}
           />
           {enlaceDeGestion && !sePuedeCambiar && (
@@ -351,7 +469,7 @@ export function FormularioReserva({
         nivel={2}
         antetitulo={nombreNegocio}
         titulo="Reserva tu hora"
-        bajada="Elige el servicio, el día y la hora, y deja tus datos."
+        bajada={`Elige el ${servicioDeLaReserva}, el día y la hora, y deja tus datos.`}
       />
 
       {/*
@@ -360,7 +478,7 @@ export function FormularioReserva({
         a 768px entre al lado de los horarios.
       */}
       <Tarjeta className="mt-8 px-4 py-6 sm:p-8 md:mt-12 lg:p-10">
-        <IndicadorDePasos paso={paso} />
+        <IndicadorDePasos paso={paso} pasos={clinicaDental ? pasosDeLaReserva(conMayuscula(servicioDeLaReserva)) : undefined} />
 
         <motion.div
           key={paso}
@@ -369,15 +487,18 @@ export function FormularioReserva({
           transition={FUNDIDO}
           className="mt-8"
         >
-          {/* Paso 1: Servicio */}
+          {/* Paso 1: Servicio (en una clínica dental, el motivo) */}
           {paso === 1 && (
             <>
               <TituloDelPaso ref={titulo} paso={1}>
-                ¿Qué servicio necesitas?
+                {clinicaDental ? "¿Cuál es el motivo de tu consulta?" : "¿Qué servicio necesitas?"}
               </TituloDelPaso>
               <p className="mt-2 text-sm text-texto-2">
-                Puedes elegir hasta {MAX_SERVICIOS_POR_RESERVA}: te los hace la misma persona, uno después del otro.
+                {clinicaDental
+                  ? `Puedes elegir hasta ${MAX_SERVICIOS_POR_RESERVA} motivos: te atiende el mismo ${vocabulario.profesional}, en una sola hora.`
+                  : `Puedes elegir hasta ${MAX_SERVICIOS_POR_RESERVA}: te los hace la misma persona, uno después del otro.`}
               </p>
+              {servicioDeUrgencia && !urgencia && <AvisoDeUrgencia className="mt-4" nombre={servicioDeUrgencia.name} />}
               {profesionalElegido && (
                 <p className="mt-3 flex flex-wrap items-center gap-x-2 text-sm text-texto-2">
                   <span>
@@ -388,7 +509,7 @@ export function FormularioReserva({
                     onClick={() => setProfesionalId(null)}
                     className="font-medium text-navy underline underline-offset-4 anillo-foco"
                   >
-                    Ver todos los servicios
+                    Ver todos los {servicioDeLaReserva}s
                   </button>
                 </p>
               )}
@@ -398,11 +519,17 @@ export function FormularioReserva({
                   seleccionados={seleccionados}
                   onAlternar={alternarServicio}
                   tope={MAX_SERVICIOS_POR_RESERVA}
+                  sinCombinacion={sinCombinacion}
+                  motivoSinCombinacion={motivoSinCombinacion}
                 />
               </div>
               {servicioSeleccionado && seleccionados.length > 1 && (
                 <div className="mt-5" aria-live="polite">
-                  <ServicioElegido servicio={servicioSeleccionado} cantidad={seleccionados.length} />
+                  <ServicioElegido
+                    servicio={servicioSeleccionado}
+                    cantidad={seleccionados.length}
+                    plural={`${servicioDeLaReserva}s`}
+                  />
                 </div>
               )}
               <BarraDeAcciones>
@@ -425,8 +552,13 @@ export function FormularioReserva({
                 ¿Cuándo quieres venir?
               </TituloDelPaso>
               {servicioSeleccionado && (
-                <ServicioElegido servicio={servicioSeleccionado} cantidad={seleccionados.length} />
+                <ServicioElegido
+                  servicio={servicioSeleccionado}
+                  cantidad={seleccionados.length}
+                  plural={`${servicioDeLaReserva}s`}
+                />
               )}
+              {clinicaDental && !sinDias && <PreguntaPrimeraVez valor={primeraVez} onResponder={setPrimeraVez} />}
               {/* Sin equipo (el dueño solo) no hay a quién elegir: no se muestra. */}
               {profesionalesDelServicio.length > 0 && (
                 <div className="mt-6">
@@ -434,40 +566,70 @@ export function FormularioReserva({
                     profesionales={profesionalesDelServicio}
                     elegido={profesionalId}
                     onElegir={setProfesionalId}
+                    cualquiera={cualquiera}
                   />
                 </div>
+              )}
+              {urgencia && (
+                <p role="status" className="mt-6 rounded-boton-lg bg-naranja-suave px-4 py-3 text-sm text-navy squircle">
+                  {hoyConAtencion ? (
+                    <>
+                      <strong className="font-semibold">Urgencia:</strong> te mostramos sólo las horas de hoy.
+                    </>
+                  ) : (
+                    MENSAJE_URGENCIA_SIN_HORAS
+                  )}
+                </p>
               )}
               <p role="status" className={cn("text-sm text-texto-2", avisoDelDia && "mt-6")}>
                 {avisoDelDia}
               </p>
-              <div className="mt-6">
-                <SelectorFechaHora
-                  cargarHoras={cargarHoras}
-                  claveDeHoras={`${claveDeServicios}|${profesionalId ?? ""}`}
-                  diasDisponibles={diasDisponibles}
-                  zona={zona}
-                  fechaSeleccionada={fecha}
-                  horaSeleccionada={hora}
-                  onFecha={elegirFecha}
-                  onHora={elegirHora}
-                  sinHoras={
-                    listaDeEsperaActiva && servicioSeleccionado
-                      ? (dia) => (
-                          <FormularioListaDeEspera
-                            // Otro día, servicios o profesional es otra inscripción: empieza de cero.
-                            // Se revisa con todos los servicios; se guarda el primero (#162).
-                            key={`${dia}|${claveDeServicios}|${profesionalId ?? ""}`}
-                            slug={slug}
-                            servicioIds={servicioIds}
-                            profesionalId={profesionalId}
-                            fecha={dia}
-                            fechaParaLeer={fechaParaLeer(deTexto(dia) ?? new Date())}
-                          />
-                        )
-                      : undefined
-                  }
+              {sinDias ? (
+                <SinDiasConAtencion
+                  className="mt-6"
+                  lo={seleccionados.length > 1 ? `estos ${servicioDeLaReserva}s juntos` : `este ${servicioDeLaReserva}`}
+                  conQuien={profesionalElegido?.nombre ?? null}
+                  hayOtros={profesionalesDelServicio.length > 1}
+                  textoDelBoton={`Cambiar ${seleccionados.length > 1 ? `los ${servicioDeLaReserva}s` : `el ${servicioDeLaReserva}`}`}
+                  onCambiar={() => setPaso(1)}
                 />
-              </div>
+              ) : faltaLaPrimeraVez ? (
+                <p className="mt-6 text-sm text-texto-2">Responde si es tu primera vez para ver las horas libres.</p>
+              ) : urgencia && !hoyConAtencion ? null : (
+                <div className="mt-6">
+                  <SelectorFechaHora
+                    cargarHoras={cargarHoras}
+                    claveDeHoras={claveDeHoras}
+                    soloHoy={urgencia}
+                    textoSinHoras={urgencia ? MENSAJE_URGENCIA_SIN_HORAS : undefined}
+                    diasDisponibles={diasDisponibles}
+                    zona={zona}
+                    fechaSeleccionada={fecha}
+                    horaSeleccionada={hora}
+                    onFecha={elegirFecha}
+                    onHora={elegirHora}
+                    // Una urgencia sin horas no se espera: se llama a la clínica (el texto de arriba).
+                    sinHoras={
+                      listaDeEsperaActiva && servicioSeleccionado && !urgencia
+                        ? (dia) => (
+                            <FormularioListaDeEspera
+                              // Otro día, servicios o profesional es otra inscripción: empieza de cero.
+                              // Se revisa con todos los servicios; se guarda el primero (#162).
+                              key={`${dia}|${claveDeServicios}|${profesionalId ?? ""}|${primeraVezQueSeManda ?? ""}`}
+                              slug={slug}
+                              servicioIds={servicioIds}
+                              profesionalId={profesionalId}
+                              fecha={dia}
+                              fechaParaLeer={fechaParaLeer(deTexto(dia) ?? new Date())}
+                              primeraVez={primeraVezQueSeManda}
+                            />
+                          )
+                        : undefined
+                    }
+                  />
+                </div>
+              )}
+              {servicioDeUrgencia && !urgencia && <AvisoDeUrgencia className="mt-8" nombre={servicioDeUrgencia.name} />}
               <BarraDeAcciones>
                 <Boton
                   variante="secundario"
@@ -495,21 +657,35 @@ export function FormularioReserva({
               <TituloDelPaso ref={titulo} paso={3}>
                 Tus datos
               </TituloDelPaso>
+              {/*
+                Un formulario de verdad: Enter en un campo confirma. `noValidate`
+                porque los errores los dice la página, por campo y en su idioma;
+                el botón no se deshabilita: al apretarlo se dice qué falta.
+              */}
+              <form noValidate onSubmit={confirmar} aria-describedby={error ? idDelError : undefined}>
               <div className="mt-5 grid gap-5 sm:grid-cols-2">
                 <CampoFormulario
+                  ref={(campo) => {
+                    camposDeDatos.current.nombre = campo
+                  }}
                   etiqueta="Nombre"
                   placeholder="Tu nombre"
                   autoComplete="given-name"
                   value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
+                  onChange={(e) => cambiarDato("nombre", e.target.value, setNombre)}
+                  error={erroresDeDatos.nombre}
                   required
                 />
                 <CampoFormulario
+                  ref={(campo) => {
+                    camposDeDatos.current.apellido = campo
+                  }}
                   etiqueta="Apellido"
                   placeholder="Tu apellido"
                   autoComplete="family-name"
                   value={apellido}
-                  onChange={(e) => setApellido(e.target.value)}
+                  onChange={(e) => cambiarDato("apellido", e.target.value, setApellido)}
+                  error={erroresDeDatos.apellido}
                   required
                 />
                 <CampoFormulario
@@ -540,12 +716,16 @@ export function FormularioReserva({
                 )}
                 <div className="sm:col-span-2">
                   <CampoFormulario
+                    ref={(campo) => {
+                      camposDeDatos.current.email = campo
+                    }}
                     etiqueta="Correo electrónico (opcional)"
                     type="email"
                     placeholder="tu@correo.com"
                     autoComplete="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => cambiarDato("email", e.target.value, setEmail)}
+                    error={erroresDeDatos.email}
                   />
                 </div>
                 {/* Sólo con correo: el consentimiento es para esa casilla. Nada viene marcado. */}
@@ -583,11 +763,20 @@ export function FormularioReserva({
                 </h3>
                 <ResumenDeReserva
                   className="mt-4"
-                  servicio={servicioSeleccionado}
+                  servicio={servicioConDuracion}
                   fecha={fecha}
                   hora={hora}
                   precioDeLaHora={precioDeLaHora}
-                  profesional={profesionalElegido?.nombre ?? (profesionalesDelServicio.length > 0 ? "Cualquiera disponible" : null)}
+                  terminoDelServicio={conMayuscula(servicioDeLaReserva)}
+                  detalleDeDuracion={detalleDeDuracion}
+                  profesional={
+                    profesionalElegido?.nombre ??
+                    (profesionalesDelServicio.length > 0
+                      ? clinicaDental
+                        ? `Cualquier ${vocabulario.profesional}`
+                        : "Cualquiera disponible"
+                      : null)
+                  }
                 />
                 {quedaSinCambiosPorElEnlace(fecha, hora, zona, plazoDeCambiosHoras, new Date()) ? (
                   // La hora ya está dentro del plazo: se dice antes de confirmar, no después en el enlace.
@@ -617,15 +806,16 @@ export function FormularioReserva({
                   Atrás
                 </Boton>
                 <Boton
+                  type="submit"
                   icono={<Check />}
-                  disabled={!puedeEnviar}
                   cargando={enviando}
-                  onClick={confirmar}
+                  aria-describedby={error ? idDelError : undefined}
                   className="w-full sm:w-auto"
                 >
                   Confirmar reserva
                 </Boton>
               </BarraDeAcciones>
+              </form>
             </>
           )}
         </motion.div>
@@ -657,16 +847,19 @@ function TituloDelPaso({ paso, children, ref }: { paso: Paso; children: ReactNod
 function ServicioElegido({
   servicio,
   cantidad = 1,
+  plural = "servicios",
 }: {
   servicio: ServicioPublico & { precioIncompleto?: boolean }
   cantidad?: number
+  /** "servicios", o "motivos" en una clínica dental. */
+  plural?: string
 }) {
   return (
     <div className="mt-4 flex items-center justify-between gap-4 rounded-boton-lg bg-superficie px-4 py-3 squircle sm:px-5">
       <div className="min-w-0">
         <p className="font-medium break-words text-navy">{servicio.name}</p>
         <p className="text-sm text-texto-2">
-          {cantidad > 1 ? `${cantidad} servicios · en total ` : ""}
+          {cantidad > 1 ? `${cantidad} ${plural} · en total ` : ""}
           {formatearDuracionDeServicio(servicio.duration)}
         </p>
       </div>
@@ -689,5 +882,120 @@ function ServicioElegido({
 function BarraDeAcciones({ children }: { children: ReactNode }) {
   return (
     <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between md:mt-10">{children}</div>
+  )
+}
+
+/*
+ * Lo elegido en la pregunta de la primera vez, como "¿Con quién?": el azul
+ * suave con borde navy de 2px. El color nunca va solo: `aria-pressed` dice
+ * cuál está elegido y el elegido va en negrita.
+ */
+const RESPUESTA_ELEGIDA = "bg-azul-suave font-semibold text-navy inset-ring-2 inset-ring-navy"
+const RESPUESTA_EN_REPOSO =
+  "bg-tarjeta font-medium text-navy inset-ring-1 inset-ring-texto-2 hover:bg-azul-suave hover:inset-ring-navy"
+
+/**
+ * Clínica dental: "¿Es tu primera vez en la clínica?". La primera vez suma
+ * 15 minutos para abrir la ficha; la cuenta la hace el servidor. Sin
+ * respuesta no se muestran horas: cambia cuánto dura la cita.
+ */
+function PreguntaPrimeraVez({ valor, onResponder }: { valor: boolean | null; onResponder: (primeraVez: boolean) => void }) {
+  const idDelTexto = useId()
+  const respuestas = [
+    { valor: true, texto: "Sí, es la primera" },
+    { valor: false, texto: "Ya me he atendido" },
+  ]
+  return (
+    <fieldset className="mt-6">
+      <legend className="font-medium text-navy">¿Es tu primera vez en la clínica?</legend>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:max-w-md">
+        {respuestas.map((respuesta) => {
+          const elegida = valor === respuesta.valor
+          return (
+            <button
+              key={respuesta.texto}
+              type="button"
+              aria-pressed={elegida}
+              aria-describedby={idDelTexto}
+              onClick={() => onResponder(respuesta.valor)}
+              className={cn(
+                "min-h-12 rounded-campo px-3 text-sm squircle anillo-foco",
+                "transition-[background-color,box-shadow] duration-150 ease-suave",
+                elegida ? RESPUESTA_ELEGIDA : RESPUESTA_EN_REPOSO
+              )}
+            >
+              {respuesta.texto}
+            </button>
+          )
+        })}
+      </div>
+      <p id={idDelTexto} className="mt-2.5 text-sm text-texto-2">
+        {TEXTO_DE_PRIMERA_VEZ}
+      </p>
+    </fieldset>
+  )
+}
+
+/**
+ * Clínica dental con un servicio de urgencia activo: "¿Tienes dolor fuerte?
+ * Elige «Urgencia dental» como motivo y te mostramos horas de hoy.", con el
+ * nombre que le dio la clínica. Es una nota, no un error: en el naranja suave.
+ */
+function AvisoDeUrgencia({ nombre, className }: { nombre: string; className?: string }) {
+  const { destacado, resto } = avisoDeUrgencia(nombre)
+  return (
+    <div
+      role="note"
+      className={cn("flex items-start gap-3 rounded-boton-lg bg-naranja-suave px-4 py-3.5 text-navy squircle", className)}
+    >
+      <TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0" strokeWidth={1.75} />
+      <p className="text-sm text-pretty">
+        <strong className="font-semibold">{destacado}</strong> {resto}
+      </p>
+    </div>
+  )
+}
+
+/**
+ * El paso 2 sin ningún día con atención para lo elegido: nadie que haga
+ * todo eso atiende (o no quien se eligió). En vez de un calendario vacío, qué
+ * pasa y cómo salir: elegir con quién (si hay otros) o cambiar lo elegido.
+ */
+function SinDiasConAtencion({
+  lo,
+  conQuien,
+  hayOtros,
+  textoDelBoton,
+  onCambiar,
+  className,
+}: {
+  /** "este servicio", "estos motivos juntos". */
+  lo: string
+  /** El profesional elegido, si hay uno. */
+  conQuien: string | null
+  /** Si arriba hay a quién más elegir. */
+  hayOtros: boolean
+  textoDelBoton: string
+  onCambiar: () => void
+  className?: string
+}) {
+  const titulo = conQuien ? `${conQuien} no tiene días con atención para ${lo}.` : `No hay días con atención para ${lo}.`
+  const detalle =
+    conQuien && hayOtros
+      ? "Elige con quién más arriba, o cambia lo que elegiste."
+      : "Nadie que lo haga tiene horario para reservar por acá. Cambia lo que elegiste, o escríbele al negocio."
+  return (
+    <div role="status" className={cn("rounded-panel bg-superficie p-5 squircle sm:p-6", className)}>
+      <div className="flex items-start gap-3">
+        <CalendarX2 aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-navy" strokeWidth={1.75} />
+        <div>
+          <p className="font-medium text-navy">{titulo}</p>
+          <p className="mt-1 text-sm text-pretty text-texto-2">{detalle}</p>
+        </div>
+      </div>
+      <Boton variante="secundario" icono={<ArrowLeft />} onClick={onCambiar} className="mt-4 w-full sm:w-auto">
+        {textoDelBoton}
+      </Boton>
+    </div>
   )
 }

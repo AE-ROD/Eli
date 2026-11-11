@@ -1,10 +1,10 @@
 "use client"
 
 import { useId } from "react"
-import { ArrowLeft, Ban, Check, Pencil, Undo2 } from "lucide-react"
+import { ArrowLeft, Ban, Check, Pencil, Trash2, Undo2, Wallet } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { Insignia } from "@/components/comunes/insignia"
-import { aCentavos, deCentavos, nombreDeEstado, type EstadoActivo } from "@/lib/atenciones"
+import { aCentavos, deCentavos, esEstadoActivo, nombreDeEstado, type EstadoActivo } from "@/lib/atenciones"
 import {
   accionPrincipal,
   accionesSecundarias,
@@ -14,9 +14,9 @@ import {
 } from "@/lib/acciones-del-tablero"
 import { formatearMonto } from "@/lib/dinero"
 import { formatearHora, tiempoDesde } from "@/lib/fechas"
-import type { Actor } from "@/lib/permisos"
+import { puedeCobrarAbonosDeProtesis, type Actor } from "@/lib/permisos"
 import { cn } from "@/lib/utils"
-import type { Atencion, PagoRegistrado } from "../_datos"
+import { esAbono, nombreDelAbono, type Atencion, type LineaDeServicio as Linea, type PagoRegistrado } from "../_datos"
 import { CLASES_DE_TARJETA, Herramienta, LineaDeServicio, MomentoDeTarjeta, NombreDeTarjeta } from "./partes-de-tarjeta"
 import type { PropsDeArrastre } from "./tarjeta-de-reserva"
 
@@ -67,6 +67,19 @@ interface PropsDeTarjetaDeAtencion {
   onCobrar: () => void
   onEditar: () => void
   onAnular: () => void
+  /** Clínica dental: "Abonar a prótesis" (dueño y encargado, en una atención abierta con paciente). */
+  onAbonar: () => void
+  /** Quitar un abono antes de cobrar. */
+  onQuitarAbono: (linea: Linea) => void
+}
+
+/**
+ * El reparto de un abono cobrado, como lo ve quien mira: la dueña, las tres
+ * partes; la odontóloga tratante, la suya. Al encargado no le llega.
+ */
+function textoDelReparto(reparto: NonNullable<NonNullable<Linea["abono"]>["reparto"]>): string {
+  if (reparto.clinica === undefined || reparto.tecnico === undefined) return `Tu parte: ${formatearMonto(reparto.odontologo)}`
+  return `Tratante ${formatearMonto(reparto.odontologo)} · Clínica ${formatearMonto(reparto.clinica)} · Laboratorio ${formatearMonto(reparto.tecnico)}`
 }
 
 /**
@@ -91,6 +104,8 @@ export function TarjetaDeAtencion({
   onCobrar,
   onEditar,
   onAnular,
+  onAbonar,
+  onQuitarAbono,
 }: PropsDeTarjetaDeAtencion) {
   const idDelNombre = useId()
   const momento = momentoDe(atencion, ahora)
@@ -100,7 +115,13 @@ export function TarjetaDeAtencion({
   const deshacer = ofreceDeshacerLlegada(actor, atencion)
   const cobrada = atencion.estado === "finalizada"
   const porCobrar = atencion.estado === "por-cobrar"
-  const hayHerramientas = secundarias.editar || volverA !== null || deshacer || secundarias.anular
+  // Abonar a una prótesis: en una atención abierta con paciente, quien cobra
+  // (dueño y encargado) en una clínica dental. Si el paciente no tiene
+  // prótesis, el modal lo dice: el tablero no lo sabe sin preguntar.
+  const abonable = puedeCobrarAbonosDeProtesis(actor) && esEstadoActivo(atencion.estado) && atencion.cliente.id !== null
+  const servicios = atencion.lineas.filter((linea) => !esAbono(linea))
+  const abonos = atencion.lineas.filter(esAbono)
+  const hayHerramientas = secundarias.editar || volverA !== null || deshacer || secundarias.anular || abonable
 
   return (
     <article
@@ -124,9 +145,9 @@ export function TarjetaDeAtencion({
         {atencion.cliente.nombre}
       </NombreDeTarjeta>
 
-      {atencion.lineas.length > 0 ? (
+      {servicios.length > 0 ? (
         <ul className="flex flex-col gap-1" aria-label="Servicios">
-          {atencion.lineas.map((linea) => (
+          {servicios.map((linea) => (
             <LineaDeServicio key={linea.id} servicio={linea.servicio} profesional={linea.profesional.nombre}>
               {faltaAsignar(linea) && (
                 <>
@@ -148,8 +169,39 @@ export function TarjetaDeAtencion({
             </LineaDeServicio>
           ))}
         </ul>
-      ) : (
+      ) : abonos.length === 0 ? (
         <p className="text-[13px] leading-snug text-texto-2">Sin servicios todavía.</p>
+      ) : null}
+
+      {/* Los abonos de prótesis, con su monto: no son un servicio y se quitan aparte, antes de cobrar. */}
+      {abonos.length > 0 && (
+        <ul className="flex flex-col gap-1.5" aria-label="Abonos de prótesis">
+          {abonos.map((linea) => (
+            <li key={linea.id} className="rounded-[12px] bg-lila-suave px-2.5 py-1.5 text-[13px] leading-snug">
+              <div className="flex items-start gap-1">
+                <p className="min-w-0 flex-1 break-words">
+                  {nombreDelAbono(linea.servicio)} <span className="text-navy/75">· {linea.profesional.nombre}</span>
+                  <span className="block font-semibold tabular-nums">{formatearMonto(linea.precio)}</span>
+                </p>
+                {abonable && (
+                  <Herramienta
+                    icono={Trash2}
+                    etiqueta={`Quitar el abono de ${formatearMonto(linea.precio)} (${nombreDelAbono(linea.servicio)}): ${quien}`}
+                    globo="Quitar el abono"
+                    peligro
+                    ocupado={enCurso}
+                    onClick={() => onQuitarAbono(linea)}
+                  />
+                )}
+              </div>
+              {linea.abono?.reparto && (
+                <p className="mt-0.5 text-xs text-navy/75 tabular-nums [overflow-wrap:anywhere]">
+                  {textoDelReparto(linea.abono.reparto)}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
       )}
 
       {atencion.notas && (
@@ -240,6 +292,15 @@ export function TarjetaDeAtencion({
               globo="Deshacer la llegada"
               ocupado={enCurso}
               onClick={onDeshacerLlegada}
+            />
+          )}
+          {abonable && (
+            <Herramienta
+              icono={Wallet}
+              etiqueta={`Abonar a prótesis: ${quien}`}
+              globo="Abonar a prótesis"
+              ocupado={enCurso}
+              onClick={onAbonar}
             />
           )}
           {secundarias.anular && (

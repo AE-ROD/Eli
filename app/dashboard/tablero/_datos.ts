@@ -13,7 +13,7 @@ import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import type { EstadoActivo, PagoPedido } from "@/lib/atenciones"
 import type { LineaGuardada, LineaPedida, PropinaPedida, ReservaDeOrigen } from "@/lib/acciones-del-tablero"
 import { rangoDelDia, zonaDelDispositivo } from "@/lib/fechas"
-import { CODIGO_CORREGIR_CON_AJUSTE } from "@/lib/bloqueos-de-dinero"
+import { CODIGO_CORREGIR_CON_AJUSTE, CODIGO_PAGADO_AL_LABORATORIO } from "@/lib/bloqueos-de-dinero"
 import {
   codigoDelServidor,
   conJson,
@@ -33,7 +33,46 @@ import { mostrarTelefono } from "@/lib/telefono"
  * copiado). `profesional.id` en null: quien lo hizo dejó el equipo, y hay que
  * reasignarla antes de cobrar.
  */
-export type LineaDeServicio = LineaGuardada
+export type LineaDeServicio = LineaGuardada & {
+  /**
+   * Sólo en un abono de prótesis (clínica dental): a qué prótesis abona y,
+   * ya cobrado, lo que quien mira ve del reparto (en unidades). La dueña, las
+   * tres partes; la odontóloga tratante, sólo la suya; el encargado, nada
+   * (`null`). Antes de cobrar, `null` para todos.
+   */
+  abono?: AbonoDeLinea
+}
+
+export interface AbonoDeLinea {
+  protesisId: string
+  reparto: { odontologo: number; clinica?: number; tecnico?: number } | null
+}
+
+/** Si la línea es un abono de prótesis: no se edita como servicio ni viaja en el PUT de líneas. */
+export const esAbono = (linea: { abono?: unknown }): boolean => !!linea.abono
+
+/**
+ * Cómo se lee un abono en la tarjeta y en el cobro: "Abono · Removible
+ * parcial · Acrílico (45, 46)". El servidor lo guarda como "Abono prótesis ·
+ * …" (así queda en reportes); acá se acorta, porque la tarjeta es angosta.
+ */
+export const nombreDelAbono = (servicio: string): string => servicio.replace(/^Abono prótesis · /, "Abono · ")
+
+/** Una prótesis del paciente a la que se puede abonar (no anulada), en unidades como el tablero. */
+export interface ProtesisParaAbonar {
+  id: string
+  nombre: string
+  estado: string
+  nombreDeEstado: string
+  tratante: string
+  valor: number
+  /** Abonos de atenciones ya cobradas. */
+  pagado: number
+  /** Abonos en atenciones abiertas de la Sala de espera (esta incluida). */
+  porCobrar: number
+  /** Valor − pagado − por cobrar: el máximo del abono. */
+  saldo: number
+}
 
 export interface PagoRegistrado {
   id: string
@@ -154,8 +193,9 @@ export interface ClienteEncontrado {
  * - `falta-requisito`: el servidor dice que falta algo para avanzar (400),
  *   con el mensaje de qué.
  * - `corregir-con-ajuste`: la atención ya entró en una liquidación o en un
- *   cierre de caja (409 con `codigo: "corregir-con-ajuste"`): no cambió, no
- *   se toca, y el mensaje dice cómo se corrige.
+ *   cierre de caja (409 con `codigo: "corregir-con-ajuste"`), o lleva un
+ *   abono ya pagado al laboratorio (`codigo: "pagado-al-laboratorio"`): no
+ *   cambió, no se toca, y el mensaje dice cómo se corrige.
  * - `otro`: cualquier otro motivo; se muestra el mensaje y nada más.
  */
 export type MotivoDeFallo = "desactualizada" | "falta-requisito" | "corregir-con-ajuste" | "otro"
@@ -325,6 +365,35 @@ export async function cobrarAtencion(
   )
 }
 
+// ─── Abonos de prótesis (clínica dental) ─────────────────────────────────────
+
+const urlDeAbonos = (id: string) => `${urlDeAtencion(id)}/abonos`
+
+/** Las prótesis no anuladas del paciente de la atención, con su valor, lo pagado, lo por cobrar y el saldo. */
+export async function leerProtesisParaAbonar(id: string): Promise<Resultado<ProtesisParaAbonar[]>> {
+  const resultado = await pedir<{ protesis: ProtesisParaAbonar[] }>(urlDeAbonos(id), "No se pudieron cargar las prótesis")
+  return resultado.ok ? { ok: true, datos: resultado.datos.protesis } : resultado
+}
+
+/**
+ * Agrega un abono a la atención: una línea ligada a la prótesis, de monto
+ * libre hasta el saldo. Responde la atención con la línea nueva. Los fallos
+ * se muestran tal cual (el monto pasa el saldo, la atención ya se cobró…):
+ * el código no cambia lo que hace la pantalla, que vuelve a leer las prótesis.
+ */
+export async function agregarAbono(id: string, protesisId: string, monto: number): Promise<ResultadoConCodigo<Atencion>> {
+  return pedirConCodigo<Atencion>(urlDeAbonos(id), "No se pudo agregar el abono", conJson("POST", { protesisId, monto }))
+}
+
+/** Quita un abono antes de cobrar. Responde la atención sin esa línea. */
+export async function quitarAbono(id: string, lineaId: string): Promise<ResultadoDeAccion<Atencion>> {
+  return conMotivo(
+    await pedirConCodigo<Atencion>(`${urlDeAbonos(id)}/${encodeURIComponent(lineaId)}`, "No se pudo quitar el abono", {
+      method: "DELETE",
+    })
+  )
+}
+
 /** "Vaciar la fila de hoy" (#85): anula a todos los que esperan en la fila virtual del día. */
 export async function vaciarFilaDeHoy(): Promise<ResultadoDeAccion<{ anuladas: number }>> {
   return conMotivo(
@@ -349,7 +418,12 @@ export async function leerLineasSinPorcentaje(id: string): Promise<Resultado<str
 /**
  * Anula la atención. Queda en el historial como anulada y deja de sumar. Si
  * ya se rindió (liquidación o cierre de caja), el servidor lo dice con un
- * código, no con el texto (#117).
+ * código, no con el texto (#117). Lo mismo si lleva un abono de prótesis ya
+ * pagado al laboratorio (`pagado-al-laboratorio`): no cambió nada, así que no
+ * es "la atención cambió". Las dos se tratan igual (`corregir-con-ajuste`):
+ * el modal se queda con el motivo escrito y el mensaje del servidor, que dice
+ * cómo seguir; antes ese 409 se leía como desactualizada, el tablero recargaba
+ * y el motivo se perdía.
  */
 export async function anularAtencion(id: string, motivo: string): Promise<ResultadoDeAccion<Atencion>> {
   const resultado = await pedirConCuerpo<Atencion>(
@@ -357,7 +431,8 @@ export async function anularAtencion(id: string, motivo: string): Promise<Result
     "No se pudo anular la atención",
     conJson("POST", motivo.trim() ? { motivo: motivo.trim() } : {})
   )
-  if (!resultado.ok && codigoDelServidor(resultado.cuerpo) === CODIGO_CORREGIR_CON_AJUSTE) {
+  const codigo = codigoDelServidor(resultado.ok ? null : resultado.cuerpo)
+  if (!resultado.ok && (codigo === CODIGO_CORREGIR_CON_AJUSTE || codigo === CODIGO_PAGADO_AL_LABORATORIO)) {
     return { ok: false, error: resultado.error, motivo: "corregir-con-ajuste" }
   }
   return conMotivo(resultado)

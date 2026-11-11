@@ -21,11 +21,22 @@ interface PropsDeEnlaceDeReservas {
 export function EnlaceDeReservas({ slug, alCopiar }: PropsDeEnlaceDeReservas) {
   const idDelTitulo = useId()
   const [copiado, setCopiado] = useState(false)
+  const [noSeCopio, setNoSeCopio] = useState(false)
   const enlace =
     typeof window !== "undefined" ? `${window.location.origin}/reservar/${slug}` : `/reservar/${slug}`
 
+  // El portapapeles puede negarse (permiso, una página sin HTTPS, un navegador
+  // viejo): entonces se dice y el enlace queda escrito para copiarlo a mano.
+  // Sólo un copiado de verdad cuenta como compartido.
   const copiarEnlace = async () => {
-    await navigator.clipboard.writeText(enlace)
+    try {
+      await navigator.clipboard.writeText(enlace)
+    } catch {
+      setCopiado(false)
+      setNoSeCopio(true)
+      return
+    }
+    setNoSeCopio(false)
     setCopiado(true)
     setTimeout(() => setCopiado(false), 2000)
     alCopiar?.()
@@ -62,8 +73,8 @@ export function EnlaceDeReservas({ slug, alCopiar }: PropsDeEnlaceDeReservas) {
         }
       />
       {/* El texto del botón cambia, pero el lector de pantalla no siempre lo dice: esto sí. */}
-      <p role="status" className="sr-only">
-        {copiado ? "Enlace copiado" : ""}
+      <p role="status" className={noSeCopio ? "mt-3 text-sm text-texto-2" : "sr-only"}>
+        {copiado ? "Enlace copiado" : noSeCopio ? "No se pudo copiar. Selecciona el enlace de arriba y cópialo a mano." : ""}
       </p>
     </section>
   )

@@ -239,6 +239,27 @@ describe("ejecutarTeToca: no duplica", () => {
   })
 })
 
+describe("ejecutarTeToca: los enlaces salen de urlBase()", () => {
+  it("en producción sin NEXTAUTH_URL no manda un enlace a localhost: cuenta fallidos, suelta el candado y la corrida sigue", async () => {
+    vi.stubEnv("NEXTAUTH_URL", "")
+    vi.stubEnv("NODE_ENV", "production")
+
+    const resumen = await ejecutarTeToca(contexto())
+
+    expect(resumen).toMatchObject({ enviados: 0, fallidos: 2 })
+    expect(mockEnviarTeToca).not.toHaveBeenCalled()
+    expect(base.buscar("envioAClientes")).toHaveLength(0)
+  })
+
+  it("con NEXTAUTH_URL con barra final, el enlace no queda con barra doble", async () => {
+    vi.stubEnv("NEXTAUTH_URL", "https://eli.test/")
+
+    await ejecutarTeToca(contexto())
+
+    expect(mockEnviarTeToca.mock.calls.map(([d]) => d.enlaceReservar)).toContain("https://eli.test/reservar/salon-uno")
+  })
+})
+
 describe("ejecutarTeToca: el 'hoy' es el del negocio", () => {
   it("a las 23:00 del 27 en Santiago (ya 28 en UTC) todavía no le toca a María; a las 10:00 del 28 sí", async () => {
     await ejecutarTeToca(contexto({ ahora: new Date("2026-10-28T02:00:00.000Z") }))

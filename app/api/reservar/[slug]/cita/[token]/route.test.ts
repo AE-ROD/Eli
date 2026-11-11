@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import type { NextRequest } from "next/server"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
-import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
+import { NEGOCIO, OTRO_NEGOCIO, atencion, datosBase } from "@/pruebas/datos"
 import { generarToken, hashDeToken } from "@/lib/tokens"
 import { cuerpoDePrueba } from "@/pruebas/pedidos"
 
@@ -433,5 +433,65 @@ describe("reagendar", () => {
   it("datos inválidos: 400", async () => {
     escenario()
     expect((await reagendar("mañana", "09:00")).status).toBe(400)
+  })
+})
+
+describe("el enlace y la llegada: con una atención viva en el Tablero, gana la llegada (PRODUCTO.md §6)", () => {
+  /** María ya llegó: su atención está viva en el Tablero, ligada a la cita. */
+  function conAtencion(status = "en-espera") {
+    escenario()
+    base.reiniciar({ ...base.volcado(), visit: [atencion("v-lucia", { appointmentId: "c-lucia", status })] })
+  }
+
+  it("la cita no se ve por el enlace, ni se cancela, ni se reagenda: el mismo 404, sin tocarla", async () => {
+    conAtencion()
+    const antes = laCita()
+
+    expect((await ver()).status).toBe(404)
+    expect((await cancelar()).status).toBe(404)
+    expect((await reagendar("2030-01-08", "09:00")).status).toBe(404)
+    expect((await horas("2030-01-08")).status).toBe(404)
+    expect(laCita()).toEqual(antes)
+  })
+
+  it("con la atención anulada, el enlace vuelve a servir", async () => {
+    conAtencion("anulada")
+
+    expect((await ver()).status).toBe(200)
+    expect((await cancelar()).status).toBe(200)
+    expect(laCita().status).toBe("cancelada")
+  })
+
+  it("si el cliente llega entre que se leyó la cita y se escribe, cancelar no la pisa", async () => {
+    escenario()
+    const transaccionReal = base.prisma.$transaction.getMockImplementation()!
+    base.prisma.$transaction.mockImplementationOnce(async (fn: unknown) => {
+      await base.prisma.visit.create({ data: atencion("v-lucia", { appointmentId: "c-lucia" }) })
+      return transaccionReal(fn)
+    })
+
+    expect((await cancelar()).status).toBe(404)
+    expect(laCita().status).toBe("pendiente")
+  })
+
+  it("y reagendar tampoco la mueve", async () => {
+    escenario()
+    const transaccionReal = base.prisma.$transaction.getMockImplementation()!
+    base.prisma.$transaction.mockImplementationOnce(async (fn: unknown, ...resto: unknown[]) => {
+      await base.prisma.visit.create({ data: atencion("v-lucia", { appointmentId: "c-lucia" }) })
+      return (transaccionReal as (...args: unknown[]) => unknown)(fn, ...resto)
+    })
+
+    expect((await reagendar("2030-01-08", "09:00")).status).toBe(404)
+    expect(laCita().startTime).toEqual(aLas("10:00"))
+  })
+})
+
+describe("reagendar y el recordatorio", () => {
+  it("una cita movida a otra hora vuelve a recibir su recordatorio: reminderSentAt queda vacío", async () => {
+    escenario({ cita: { reminderSentAt: new Date("2030-01-06T13:00:00.000Z") } })
+
+    expect((await reagendar("2030-01-08", "09:00")).status).toBe(200)
+    expect(laCita().reminderSentAt).toBeNull()
   })
 })

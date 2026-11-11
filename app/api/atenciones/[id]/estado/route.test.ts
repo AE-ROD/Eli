@@ -166,6 +166,23 @@ describe("POST /api/atenciones/[id]/estado: transiciones", () => {
     expect((await res.json()).estado).toBe("en-atencion")
   })
 
+  it("volver a la sala de espera devuelve la cita de en progreso a confirmada", async () => {
+    await mover(sesiones.encargado, "v-espera", "en-atencion")
+    expect(citaGuardada("cita-confirmada").status).toBe("en-progreso")
+
+    const res = await mover(sesiones.encargado, "v-espera", "en-espera")
+
+    expect(res.status).toBe(200)
+    expect(citaGuardada("cita-confirmada").status).toBe("confirmada")
+  })
+
+  it("y no pisa una cita que se cerró a mano en la agenda", async () => {
+    await mover(sesiones.dueña, "v-espera-de-cita-cancelada", "en-atencion")
+    await mover(sesiones.dueña, "v-espera-de-cita-cancelada", "en-espera")
+
+    expect(citaGuardada("cita-cancelada-a-mano").status).toBe("cancelada")
+  })
+
   it("una cita cancelada a mano en la agenda no se pisa al empezar la atención", async () => {
     await mover(sesiones.dueña, "v-espera-de-cita-cancelada", "en-atencion")
 

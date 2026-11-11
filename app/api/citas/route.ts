@@ -1,12 +1,23 @@
 import { NextRequest, NextResponse } from "next/server"
-import type { Prisma } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { ESTADOS_AL_CREAR, MENSAJE_DE_ESTADO_AL_CREAR, MENSAJE_DE_HORARIO_INVERTIDO, notas, precioDeCita, terminaDespuesDeEmpezar, titulo } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
-import { actorDeSesion, memberIdParaCita, whereDeAgenda, whereDeClientes } from "@/lib/permisos"
+import { seleccionDeCitaDelPanel } from "@/lib/citas-de-la-clinica"
+import { registrarError } from "@/lib/registro-de-errores"
+import {
+  actorDeSesion,
+  memberIdParaCita,
+  puedeAsignarSillon,
+  puedeVerTodaLaAgenda,
+  veSillones,
+  whereDeAgenda,
+  whereDeClientes,
+  whereDeSillones,
+} from "@/lib/permisos"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { esFechaCalendario, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 import { advertenciasDeAgenda } from "@/lib/advertencias-de-agenda"
@@ -30,6 +41,20 @@ const MENSAJE_SERVICIO_NO_ENCONTRADO = "Servicio no encontrado"
 const mensajeDeDuracionConServicios = (cuantos: number) =>
   `Con ${cuantos} servicios, la cita tiene que durar al menos ${cuantos} minutos y no más de 24 horas por servicio`
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
+import {
+  MENSAJE_SILLON_INACTIVO,
+  MENSAJE_SILLON_NO_ENCONTRADO,
+  SillonOcupado,
+  asegurarSillonLibre,
+  errorDeSillonOcupado,
+  sillonDeLaCita,
+} from "@/lib/sillones"
+
+/** La zona del negocio, para escribir las horas de un mensaje en su reloj. */
+async function zonaDeLaClinica(businessId: string): Promise<string> {
+  const negocio = await prisma.business.findUnique({ where: { id: businessId }, select: { timezone: true } })
+  return zonaDelNegocio(negocio?.timezone)
+}
 
 const citaSchema = z
   .object({
@@ -50,6 +75,12 @@ const citaSchema = z
     price: precioDeCita().optional(),
     customerId: z.string(),
     memberId: z.string().nullable().optional(),
+    /**
+     * Clínica dental: el sillón (`null` o vacío, sin sillón). Sólo cuenta si
+     * el actor puede asignar sillón (`puedeAsignarSillon`); en otro rubro se
+     * ignora, como el `memberId` del profesional, y nunca se guarda.
+     */
+    sillonId: sillonDeLaCita().optional(),
     /** Segundo envío: quien agenda ya vio las advertencias (choque, bloqueo, horario) y guarda igual. */
     confirmarAdvertencias: z.boolean().optional(),
   })
@@ -74,6 +105,11 @@ export async function GET(request: NextRequest) {
   const desde = searchParams.get("desde")
   const hasta = searchParams.get("hasta")
   const customerId = searchParams.get("customerId")
+  // Clínica dental: el sillón y su nombre, la marca de primera vez y un
+  // filtro opcional por sillón. En otro rubro no se piden ni se filtra: la
+  // respuesta queda como siempre.
+  const conSillones = veSillones(actor)
+  const sillonId = conSillones ? searchParams.get("sillonId") : null
 
   // `fecha`, `desde` y `hasta` son días calendario ("AAAA-MM-DD") del
   // negocio: el rango va de las 00:00 del primero a las 00:00 del día
@@ -99,6 +135,7 @@ export async function GET(request: NextRequest) {
     where: whereDeAgenda(actor, {
       ...(customerId && { customerId }),
       ...(rango && { startTime: rango }),
+      ...(sillonId && { sillonId }),
     }),
     select: {
       id: true,
@@ -122,6 +159,11 @@ export async function GET(request: NextRequest) {
       // Sólo para saber si el cliente ya llegó: una por confirmar con
       // atención viva en el Tablero ya está resuelta. No sale en la respuesta.
       visit: { select: { status: true } },
+      ...(conSillones && {
+        sillonId: true,
+        sillon: { select: { id: true, nombre: true } },
+        primeraVez: true,
+      }),
     },
     orderBy: { startTime: "asc" },
     // Siempre con tope: con un rango amplio, sin él se traía el histórico entero.
@@ -174,6 +216,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Clínica dental: el sillón, si se eligió uno. Tiene que ser de la
+    // clínica (si no, 404, como lo ajeno) y estar activo. En otro rubro,
+    // `puedeAsignarSillon` dice que no y lo pedido se ignora.
+    const sillonId = puedeAsignarSillon(actor) ? (datos.sillonId ?? null) : null
+    if (sillonId) {
+      const sillon = await prisma.sillon.findFirst({
+        where: whereDeSillones(actor, { id: sillonId }),
+        select: { activo: true },
+      })
+      if (!sillon) {
+        return NextResponse.json({ error: MENSAJE_SILLON_NO_ENCONTRADO }, { status: 404 })
+      }
+      if (!sillon.activo) {
+        return NextResponse.json({ error: MENSAJE_SILLON_INACTIVO }, { status: 400 })
+      }
+    }
+
     const tramo = { startTime: new Date(datos.startTime), endTime: new Date(datos.endTime) }
     const status = datos.status ?? "pendiente"
 
@@ -211,6 +270,27 @@ export async function POST(request: NextRequest) {
       duracionesDeLasFilas = duraciones
     }
 
+    // El sillón ocupado no es una advertencia: un sillón atiende a uno a la
+    // vez (`lib/sillones.ts`). Se mira antes que las advertencias, para no
+    // pedir que se confirmen y después rechazar igual; la revisión que vale
+    // es la de la transacción, con el sillón trabado.
+    // Las horas de las citas que chocan, sólo a quien ve toda la agenda.
+    const consultaDeSillon =
+      sillonId && ocupaElHorario(status)
+        ? {
+            businessId: actor.businessId,
+            sillonId,
+            tramo,
+            ignorarCitaId: null,
+            zona: await zonaDeLaClinica(actor.businessId),
+            mostrarHorarios: puedeVerTodaLaAgenda(actor),
+          }
+        : null
+    if (consultaDeSillon) {
+      const ocupado = await errorDeSillonOcupado(prisma, consultaDeSillon)
+      if (ocupado) throw ocupado
+    }
+
     // Como al mover: un choque, un bloqueo o quedar fuera del horario no
     // impiden agendar desde el panel, pero se avisan primero. Hoy toda cita
     // nueva ocupa el horario (`ESTADOS_AL_CREAR`); la guarda queda por si se
@@ -245,29 +325,34 @@ export async function POST(request: NextRequest) {
         price: datos.price ?? resumen?.precio ?? null,
         customerId: datos.customerId,
         memberId,
+        ...(sillonId && { sillonId }),
         businessId: actor.businessId,
       },
-      include: {
-        customer: { select: { id: true, name: true, lastName: true, email: true, phone: true } },
-        member: { select: { id: true, role: true, user: { select: { id: true, name: true } } } },
-      },
+      // Columnas explícitas (`lib/citas-de-la-clinica.ts`): ni el hash del
+      // enlace, ni las comisiones; fuera de una clínica, sin sillón ni `primeraVez`.
+      select: seleccionDeCitaDelPanel(veSillones(actor)),
     } satisfies Prisma.AppointmentCreateArgs
 
     // Con servicios, la cita y sus filas en la misma transacción, como en la
-    // reserva pública (`app/api/reservar/[slug]/confirmar`).
-    const cita = servicios
-      ? await prisma.$transaction(async (tx) => {
-          const creada = await tx.appointment.create(creacion)
-          await tx.appointmentService.createMany({
-            data: filasDeServicios(actor.businessId, servicios).map((fila, indice) => ({
-              ...fila,
-              duration: duracionesDeLasFilas[indice],
-              appointmentId: creada.id,
-            })),
+    // reserva pública (`app/api/reservar/[slug]/confirmar`). Con sillón,
+    // también: se traba el sillón y se vuelve a mirar que esté libre.
+    const cita =
+      servicios || consultaDeSillon
+        ? await prisma.$transaction(async (tx) => {
+            if (consultaDeSillon) await asegurarSillonLibre(tx, consultaDeSillon)
+            const creada = await tx.appointment.create(creacion)
+            if (servicios) {
+              await tx.appointmentService.createMany({
+                data: filasDeServicios(actor.businessId, servicios).map((fila, indice) => ({
+                  ...fila,
+                  duration: duracionesDeLasFilas[indice],
+                  appointmentId: creada.id,
+                })),
+              })
+            }
+            return creada
           })
-          return creada
-        })
-      : await prisma.appointment.create(creacion)
+        : await prisma.appointment.create(creacion)
 
     return NextResponse.json(cita, { status: 201 })
   } catch (error) {
@@ -275,7 +360,20 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return respuestaDeDatosInvalidos(error)
     }
-    console.error("Error creando cita:", error)
+    // El sillón ocupado (409 con `codigo: "sillon-ocupado"`).
+    if (error instanceof SillonOcupado) {
+      return NextResponse.json({ error: error.message, codigo: error.codigo }, { status: error.status })
+    }
+    // Un cuerpo que no es JSON: es un pedido mal hecho, no un error del servidor.
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ error: "El pedido no es un JSON válido" }, { status: 400 })
+    }
+    // Lo que se iba a ligar (cliente, profesional, sillón) se borró entretanto.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2025" || error.code === "P2003")) {
+      return NextResponse.json({ error: "Algo de la cita cambió recién: vuelve a cargar la agenda" }, { status: 409 })
+    }
+    // Sin volcar el error: uno de Prisma trae en `meta` los datos del cliente.
+    registrarError("creando una cita", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
 }

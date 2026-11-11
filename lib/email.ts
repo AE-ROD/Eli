@@ -579,11 +579,13 @@ export interface DatosInvitacionTrabajador {
   nombreTrabajador: string
   nombreNegocio: string
   rol: string
+  /** El rubro del negocio: en una clínica dental el rol dice "Odontólogo". */
+  rubro?: string | null
   enlaceAceptar: string
 }
 
 export function enviarInvitacionTrabajador(datos: DatosInvitacionTrabajador) {
-  const rol = nombreDelRol(datos.rol)
+  const rol = nombreDelRol(datos.rol, datos.rubro)
 
   return enviar({
     tipo: "invitacion-trabajador",

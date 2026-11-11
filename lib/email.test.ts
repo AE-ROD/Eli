@@ -95,6 +95,17 @@ describe("lib/email — escapado de datos de origen humano", () => {
     expect(html).toContain('href="https://eli.app/invitacion/token-real"')
   })
 
+  it("en una clínica dental la invitación nombra el rol \"Odontólogo\"; sin rubro, \"Profesional\"", async () => {
+    const { enviarInvitacionTrabajador } = await import("./email")
+    const base = { emailTrabajador: "t@ejemplo.com", nombreTrabajador: "Ana", nombreNegocio: "Uno", rol: "worker", enlaceAceptar: "https://eli.app/unirse/x" }
+
+    await enviarInvitacionTrabajador({ ...base, rubro: "odontologia" })
+    await enviarInvitacionTrabajador(base)
+
+    expect(enviarMock.mock.calls[0][0].html as string).toContain("<strong>Odontólogo</strong>")
+    expect(enviarMock.mock.calls[1][0].html as string).toContain("<strong>Profesional</strong>")
+  })
+
   it("escapa los comentarios del cliente en el aviso al profesional (enviarAvisoProfesional)", async () => {
     const { enviarAvisoProfesional } = await import("./email")
 

@@ -248,7 +248,7 @@ describe("GET /api/cron/recordatorios", () => {
       })
     })
 
-    it("si el envío lanza, también la libera y sigue con las demás", async () => {
+    it("si el envío lanza, el correo pudo salir: la marca se queda (no se duplica) y sigue con las demás", async () => {
       const otra = { ...citaDeMañana, id: "cita-2" }
       prismaMock.appointment.findMany.mockResolvedValue([citaDeMañana, otra])
       mockEnviarRecordatorio.mockRejectedValueOnce(new Error("caída")).mockResolvedValueOnce(ENVIADO)
@@ -257,11 +257,69 @@ describe("GET /api/cron/recordatorios", () => {
 
       const res = await GET(autorizada())
 
-      expect(await res.json()).toMatchObject({ total: 2, enviados: 1, fallidos: 1 })
-      expect(prismaMock.appointment.updateMany).toHaveBeenCalledWith({
+      expect(await res.json()).toMatchObject({ total: 2, enviados: 1, fallidos: 1, dudosos: 1 })
+      expect(prismaMock.appointment.updateMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: { reminderSentAt: null } })
+      )
+    })
+
+    it("con un error ambiguo de Resend (el correo pudo llegar), la marca tampoco se libera", async () => {
+      mockEnviarRecordatorio.mockResolvedValue({ data: null, error: { name: "application_error", message: "x" } })
+      vi.spyOn(console, "error").mockImplementation(() => {})
+      const { GET } = await import("./route")
+
+      expect(await (await GET(autorizada())).json()).toMatchObject({ enviados: 0, fallidos: 1, dudosos: 1 })
+      // Sólo la marca: ninguna escritura la deshace.
+      expect(prismaMock.appointment.updateMany).toHaveBeenCalledTimes(1)
+    })
+
+    it("sin clave de Resend no se intentó: se libera para reintentar", async () => {
+      mockEnviarRecordatorio.mockResolvedValue(null)
+      const { GET } = await import("./route")
+
+      expect(await (await GET(autorizada())).json()).toMatchObject({ fallidos: 1, dudosos: 0 })
+      expect(prismaMock.appointment.updateMany).toHaveBeenLastCalledWith({
         where: { id: "cita-1", reminderSentAt: AHORA },
         data: { reminderSentAt: null },
       })
+    })
+  })
+
+  describe("lee por páginas, sin cortar en silencio", () => {
+    const autorizada = () => llamada({ authorization: `Bearer ${SECRETO}` })
+
+    const pagina = (desde: number, cuantas: number) =>
+      Array.from({ length: cuantas }, (_, i) => ({
+        ...citaDeMañana,
+        id: `cita-${String(desde + i).padStart(4, "0")}`,
+        customer: { ...citaDeMañana.customer, email: null },
+      }))
+
+    it("con una página llena pide la siguiente, después de la última leída", async () => {
+      prismaMock.appointment.findMany.mockResolvedValueOnce(pagina(0, 500)).mockResolvedValueOnce([citaDeMañana])
+      const { GET } = await import("./route")
+
+      const res = await GET(autorizada())
+
+      expect(await res.json()).toMatchObject({ total: 1, enviados: 1, incompleto: false })
+      expect(prismaMock.appointment.findMany).toHaveBeenCalledTimes(2)
+      const { where } = prismaMock.appointment.findMany.mock.calls[1][0]
+      expect(where.AND[1]).toEqual({
+        OR: [
+          { startTime: { gt: citaDeMañana.startTime } },
+          { startTime: citaDeMañana.startTime, id: { gt: "cita-0499" } },
+        ],
+      })
+    })
+
+    it("si llega al tope de páginas, lo dice: incompleto", async () => {
+      prismaMock.appointment.findMany.mockResolvedValue(pagina(0, 500))
+      const { GET } = await import("./route")
+
+      const res = await GET(autorizada())
+
+      expect(await res.json()).toMatchObject({ incompleto: true })
+      expect(prismaMock.appointment.findMany).toHaveBeenCalledTimes(20)
     })
   })
 
@@ -292,6 +350,33 @@ describe("GET /api/cron/recordatorios", () => {
       expect(hashDeToken(token)).toBe(data.manageTokenHash)
       expect(token).not.toBe(data.manageTokenHash)
       expect(datos.plazoHoras).toBe(24)
+    })
+
+    it("el enlace sale de urlBase(): NEXTAUTH_URL sin la barra final", async () => {
+      vi.stubEnv("NEXTAUTH_URL", "https://eli.test/")
+      prismaMock.appointment.findMany.mockResolvedValue([sinEnlace])
+      const { GET } = await import("./route")
+
+      await GET(autorizada())
+
+      const datos = mockEnviarRecordatorio.mock.calls[0][0] as { enlaceDeGestion: string }
+      expect(datos.enlaceDeGestion).toMatch(/^https:\/\/eli\.test\/reservar\/salon-uno\/cita\//)
+    })
+
+    it("en producción sin NEXTAUTH_URL, el recordatorio sale igual, sin enlace y sin crear un token que nadie recibiría", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {})
+      vi.stubEnv("NEXTAUTH_URL", "")
+      vi.stubEnv("NODE_ENV", "production")
+      prismaMock.appointment.findMany.mockResolvedValue([sinEnlace])
+      const { GET } = await import("./route")
+
+      const res = await GET(autorizada())
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({ enviados: 1 })
+      expect(llamadasQuePonenToken()).toHaveLength(0)
+      expect(mockEnviarRecordatorio).toHaveBeenCalledTimes(1)
+      expect(mockEnviarRecordatorio.mock.calls[0][0]).not.toHaveProperty("enlaceDeGestion")
     })
 
     it("con un enlace existente no lo pisa ni manda uno", async () => {
@@ -341,23 +426,21 @@ describe("GET /api/cron/recordatorios", () => {
       })
     })
 
-    it("#140: si Resend responde un error ambiguo (el correo pudo llegar), el hash se queda y sólo se libera la marca", async () => {
+    it("#140: si Resend responde un error ambiguo (el correo pudo llegar), el hash y la marca se quedan", async () => {
       prismaMock.appointment.findMany.mockResolvedValue([sinEnlace])
       mockEnviarRecordatorio.mockResolvedValue({ data: null, error: { name: "application_error", message: "x" } })
       vi.spyOn(console, "error").mockImplementation(() => {})
       const { GET } = await import("./route")
 
-      expect(await (await GET(autorizada())).json()).toMatchObject({ enviados: 0, fallidos: 1 })
+      expect(await (await GET(autorizada())).json()).toMatchObject({ enviados: 0, fallidos: 1, dudosos: 1 })
 
       expect(llamadasQuePonenToken()).toHaveLength(1)
-      expect(prismaMock.appointment.updateMany).toHaveBeenLastCalledWith({
-        where: { id: "cita-1", reminderSentAt: AHORA },
-        data: { reminderSentAt: null },
-      })
+      // Marcar y poner el token: nada más.
+      expect(prismaMock.appointment.updateMany).toHaveBeenCalledTimes(2)
       expect(prismaMock.appointment.updateMany.mock.calls.some(([args]) => (args as { data: object }).data && "manageTokenHash" in (args as { data: object }).data && (args as { data: { manageTokenHash: unknown } }).data.manageTokenHash === null)).toBe(false)
     })
 
-    it("#140: si el envío lanza con el enlace ya puesto, tampoco se borra el hash", async () => {
+    it("#140: si el envío lanza con el enlace ya puesto, no se borra el hash ni se libera la marca", async () => {
       prismaMock.appointment.findMany.mockResolvedValue([sinEnlace])
       mockEnviarRecordatorio.mockRejectedValue(new Error("se cortó la respuesta"))
       vi.spyOn(console, "error").mockImplementation(() => {})
@@ -365,6 +448,17 @@ describe("GET /api/cron/recordatorios", () => {
 
       await GET(autorizada())
 
+      expect(prismaMock.appointment.updateMany).toHaveBeenCalledTimes(2)
+    })
+
+    it("si falla antes de intentar el envío (al poner el enlace), seguro no salió: se libera la marca", async () => {
+      prismaMock.appointment.findMany.mockResolvedValue([sinEnlace])
+      prismaMock.appointment.updateMany.mockResolvedValueOnce({ count: 1 }).mockRejectedValueOnce(new Error("caída"))
+      vi.spyOn(console, "error").mockImplementation(() => {})
+      const { GET } = await import("./route")
+
+      expect(await (await GET(autorizada())).json()).toMatchObject({ fallidos: 1, dudosos: 0 })
+      expect(mockEnviarRecordatorio).not.toHaveBeenCalled()
       expect(prismaMock.appointment.updateMany).toHaveBeenLastCalledWith({
         where: { id: "cita-1", reminderSentAt: AHORA },
         data: { reminderSentAt: null },

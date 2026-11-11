@@ -1,4 +1,6 @@
 import { MODULOS, type ModuloId } from "@/lib/modulos"
+import { esRubroDental } from "@/lib/rubros"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 
 /**
  * Las secciones del panel: el inicio, los cinco módulos, las de la plata del
@@ -115,6 +117,33 @@ export const SECCIONES_DEL_PANEL: readonly SeccionDelPanel[] = [
   SECCION_DE_CONFIGURACION,
   SECCION_DE_AYUDA,
 ]
+
+/**
+ * La sección con el nombre que le da el rubro (`lib/vocabulario.ts`): en una
+ * clínica dental, Clientes se llama "Pacientes" y Tablero, "Sala de espera".
+ * El id, la ruta y el módulo (el color y el ícono) no cambian. En cualquier
+ * otro rubro, uno desconocido o ninguno, devuelve la misma sección, sin
+ * tocarla: el salón, la barbería y el spa de uñas se ven como siempre.
+ *
+ * Es para el panel (la barra lateral y el antetítulo de cada página). Los
+ * nombres fijos de `SECCIONES_DEL_PANEL` y de `lib/modulos.ts` no cambian:
+ * la landing los lee y habla de todos los rubros.
+ */
+export function seccionConNombreDelRubro(seccion: SeccionDelPanel, rubro: string | null | undefined): SeccionDelPanel {
+  if (!esRubroDental(rubro)) return seccion
+  const vocabulario = vocabularioDe(rubro)
+  if (seccion.id === "clientes") return { ...seccion, nombre: conMayuscula(vocabulario.clientes) }
+  if (seccion.id === "tablero") return { ...seccion, nombre: conMayuscula(vocabulario.tablero) }
+  return seccion
+}
+
+/** Las secciones, en el mismo orden, con el nombre que les da el rubro (`seccionConNombreDelRubro`). */
+export function seccionesConNombreDelRubro(
+  secciones: readonly SeccionDelPanel[],
+  rubro: string | null | undefined
+): SeccionDelPanel[] {
+  return secciones.map((seccion) => seccionConNombreDelRubro(seccion, rubro))
+}
 
 /**
  * La sección de una ruta del panel: la suya o la de una página que cuelga de

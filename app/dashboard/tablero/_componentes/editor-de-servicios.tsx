@@ -4,16 +4,24 @@ import { useId, useRef, type ReactNode } from "react"
 import Link from "next/link"
 import { Package, Plus, Trash2, TriangleAlert } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { MAXIMO_DE_LINEAS_POR_ATENCION, deCentavos } from "@/lib/atenciones"
 import { esDeProducto, totalDeFilasEnCentavos, type ErroresDeFila, type FilaDeServicio } from "@/lib/acciones-del-tablero"
 import { formatearMonto, montoParaEscribir } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import type { Catalogo } from "../_datos"
 import { Aviso } from "@/components/panel/aviso"
 
-/** Ninguna atención real tiene más; es el tope del servidor. */
-const MAXIMO_DE_FILAS = MAXIMO_DE_LINEAS_POR_ATENCION
+/**
+ * Si cabe otra fila: ninguna atención real tiene más de
+ * `MAXIMO_DE_LINEAS_POR_ATENCION` líneas, y el servidor las cuenta todas, los
+ * abonos de prótesis (`lineasAparte`, que no se editan acá) también.
+ */
+export function quedaLugarParaOtraFila(filas: number, lineasAparte = 0): boolean {
+  return filas + lineasAparte < MAXIMO_DE_LINEAS_POR_ATENCION
+}
 
 /**
  * Las filas que se agregan en esta pestaña. Un contador y no un azar: las
@@ -55,6 +63,11 @@ interface PropsDeEditorDeServicios {
   /** Los errores de cada fila, por su clave. Vacío hasta el primer intento de guardar. */
   errores: Record<string, ErroresDeFila>
   deshabilitado?: boolean
+  /**
+   * Las líneas de la atención que no se editan acá (los abonos de prótesis)
+   * y cuentan igual para el tope de líneas del servidor.
+   */
+  lineasAparte?: number
   onCambiar: (filas: FilaDeServicio[]) => void
 }
 
@@ -70,9 +83,14 @@ export function EditorDeServicios({
   puedeConfigurarServicios,
   errores,
   deshabilitado = false,
+  lineasAparte = 0,
   onCambiar,
 }: PropsDeEditorDeServicios) {
+  // Lo que se puede agregar: el tope del servidor cuenta también los abonos.
+  const sinLugar = !quedaLugarParaOtraFila(filas.length, lineasAparte)
   const idBase = useId()
+  // "Odontólogo" en una clínica dental.
+  const { profesional: quienAtiende } = vocabularioDe(useRubroDelPanel())
   const botonAgregar = useRef<HTMLButtonElement>(null)
   const totalCentavos = totalDeFilasEnCentavos(filas)
   // Un tablero viejo, cargado antes de que el servidor mandara productos, no los trae.
@@ -204,7 +222,7 @@ export function EditorDeServicios({
             {eligeProfesional && (
               <div>
                 <label htmlFor={id("profesional")} className={ETIQUETA}>
-                  Profesional
+                  {conMayuscula(quienAtiende)}
                 </label>
                 <select
                   id={id("profesional")}
@@ -218,7 +236,7 @@ export function EditorDeServicios({
                   onChange={(evento) => cambiarFila(fila.clave, { profesional: evento.target.value })}
                   className={cn(CAMPO, deLaFila.profesional && CAMPO_CON_ERROR)}
                 >
-                  <option value="">Elegir profesional</option>
+                  <option value="">{`Elegir ${quienAtiende}`}</option>
                   {catalogo.profesionales.map((profesional) => (
                     <option key={profesional.id} value={profesional.id}>
                       {profesional.nombre}
@@ -304,14 +322,14 @@ export function EditorDeServicios({
       })}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* El tope cuenta servicios y productos juntos: es el de líneas de la atención. */}
+        {/* El tope cuenta servicios, productos y abonos juntos: es el de líneas de la atención. */}
         <div className="flex flex-wrap gap-2">
           <Boton
             ref={botonAgregar}
             variante="secundario"
             tamano="sm"
             onClick={() => agregar()}
-            disabled={deshabilitado || filas.length >= MAXIMO_DE_FILAS || catalogo.servicios.length === 0}
+            disabled={deshabilitado || sinLugar || catalogo.servicios.length === 0}
           >
             <Plus aria-hidden="true" className="size-4" strokeWidth={2} />
             Agregar servicio
@@ -321,7 +339,7 @@ export function EditorDeServicios({
               variante="secundario"
               tamano="sm"
               onClick={() => agregar(true)}
-              disabled={deshabilitado || filas.length >= MAXIMO_DE_FILAS}
+              disabled={deshabilitado || sinLugar}
             >
               <Package aria-hidden="true" className="size-4" strokeWidth={2} />
               Agregar producto

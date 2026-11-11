@@ -13,6 +13,9 @@ import { SeccionPorConfirmar } from "./_componentes/seccion-por-confirmar"
 import { SeccionHoraValle } from "./_componentes/seccion-hora-valle"
 import { SeccionMensajesAClientes } from "./_componentes/seccion-mensajes-a-clientes"
 import { SeccionFilaVirtual } from "./_componentes/seccion-fila-virtual"
+import { SeccionSillones } from "./_componentes/seccion-sillones"
+import { SeccionLaboratorios } from "./_componentes/seccion-laboratorios"
+import { leerLaboratorios } from "@/lib/protesis-servidor"
 import { contarEnviosDelMes } from "@/lib/envios-a-clientes"
 import { apareceEnLaPagina, colorDelNegocio, esEnlaceDeResenasValido, normalizarInstagram } from "@/lib/pagina-del-negocio"
 import {
@@ -24,12 +27,16 @@ import {
   puedeEditarPaginaDelNegocio,
   puedeEditarPlazoDeCambios,
   puedeFijarComisionDeProducto,
+  puedeGestionarLaboratorios,
   puedeGestionarProductos,
   puedeGestionarServicios,
+  puedeGestionarSillones,
   puedeVerMensajesAClientes,
   whereDeProductos,
+  whereDeSillones,
 } from "@/lib/permisos"
 import { formatearProducto } from "@/lib/productos"
+import { ORDEN_DE_SILLONES, SELECCION_DE_SILLON } from "@/lib/sillones"
 import { mostrarTelefono } from "@/lib/telefono"
 
 export default async function PaginaConfiguracion() {
@@ -40,15 +47,34 @@ export default async function PaginaConfiguracion() {
   // Horario propio: el dueño no es miembro del equipo (clave null → horario
   // general del negocio); encargado y profesional tienen su propio memberId.
   const memberIdPropio = actor.memberId
+  // Quien edita el horario de otros (dueño y encargado) abre en el horario
+  // general del negocio (§5: el encargado lleva los horarios); el propio del
+  // encargado está en su pestaña. El profesional, en el suyo.
+  const editaElGeneral = puedeEditarHorarioDe(actor, null)
+  const horarioInicial = editaElGeneral ? null : memberIdPropio
 
   // El % de cada producto sólo se le pide a la base para la dueña.
   const conPorcentaje = puedeFijarComisionDeProducto(actor)
 
-  const [horariosActuales, servicios, productos, pagina] = await Promise.all([
+  // Clínica dental: los sillones los gestionan dueña y encargado, como los
+  // servicios; el odontólogo no ve la sección. En otro rubro, ni se piden.
+  const gestionaSillones = puedeGestionarSillones(actor)
+  // Los laboratorios de las prótesis: sólo la dueña de una clínica dental.
+  const gestionaLaboratorios = puedeGestionarLaboratorios(actor)
+
+  const [horariosActuales, horarioDelNegocio, servicios, productos, pagina, sillones, laboratorios] = await Promise.all([
     prisma.workSchedule.findMany({
-      where: { businessId: actor.businessId, memberId: memberIdPropio },
+      where: { businessId: actor.businessId, memberId: horarioInicial },
       orderBy: { dayOfWeek: "asc" },
     }),
+    // Para quien ve sólo el suyo: si no tiene horario propio, atiende en el
+    // del negocio, y eso es lo que se le muestra (no un ejemplo inventado).
+    horarioInicial
+      ? prisma.workSchedule.findMany({
+          where: { businessId: actor.businessId, memberId: null },
+          orderBy: { dayOfWeek: "asc" },
+        })
+      : Promise.resolve(undefined),
     prisma.service.findMany({
       where: { businessId: actor.businessId },
       orderBy: { createdAt: "asc" },
@@ -85,11 +111,20 @@ export default async function PaginaConfiguracion() {
         },
       },
     }),
+    gestionaSillones
+      ? prisma.sillon.findMany({
+          where: whereDeSillones(actor),
+          select: SELECCION_DE_SILLON,
+          orderBy: ORDEN_DE_SILLONES,
+          take: 100,
+        })
+      : Promise.resolve([]),
+    gestionaLaboratorios ? leerLaboratorios(actor) : Promise.resolve([]),
   ])
 
   // Dueño y encargado editan el horario de cualquier miembro: cargan el
   // equipo para el selector de tabs. El profesional sólo ve el propio.
-  const puedeEditarHorarioDeOtros = puedeEditarHorarioDe(actor, null)
+  const puedeEditarHorarioDeOtros = editaElGeneral
 
   const miembros = puedeEditarHorarioDeOtros
     ? await prisma.businessMember.findMany({
@@ -131,12 +166,17 @@ export default async function PaginaConfiguracion() {
             <SelectorHorarioMiembro
               horariosDelDueño={horariosActuales}
               miembros={miembrosParaElSelector}
-              nombreDelDueño={nombreActor}
+              // El encargado ve el general con el nombre del negocio; la dueña, con el suyo.
+              nombreDelDueño={esDueño(actor) ? nombreActor : (pagina?.name ?? "El negocio")}
+              sufijoDelGeneral={esDueño(actor) ? "(tú)" : "Horario general"}
+              // El encargado se ve también en su propia pestaña: con "(tú)", para que no parezca repetido.
+              memberIdPropio={esDueño(actor) ? null : memberIdPropio}
             />
           ) : (
             <SeccionHorario
               horariosIniciales={horariosActuales}
-              memberId={memberIdPropio}
+              memberId={horarioInicial}
+              horarioDelNegocio={horarioDelNegocio}
               titulo={esDueño(actor) ? "Mi horario" : "Mi horario de atención"}
             />
           )}
@@ -173,6 +213,20 @@ export default async function PaginaConfiguracion() {
         {puedeGestionarServicios(actor) && (
           <div id="servicios" className="scroll-mt-24">
             <SeccionServicios serviciosIniciales={servicios} />
+          </div>
+        )}
+
+        {/* Sillones: sólo en una clínica dental, para dueña y encargado */}
+        {gestionaSillones && (
+          <div id="sillones" className="scroll-mt-24">
+            <SeccionSillones sillonesIniciales={sillones} />
+          </div>
+        )}
+
+        {/* Laboratorios: sólo en una clínica dental, para la dueña */}
+        {gestionaLaboratorios && (
+          <div id="laboratorios" className="scroll-mt-24">
+            <SeccionLaboratorios laboratoriosIniciales={laboratorios} />
           </div>
         )}
 

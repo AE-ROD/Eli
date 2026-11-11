@@ -25,7 +25,7 @@ const invitacionVigente = {
   expiresAt: new Date(Date.now() + 60 * 60 * 1000),
   acceptedAt: null,
   createdAt: new Date(),
-  business: { name: "Salón Uno" },
+  business: { name: "Salón Uno", type: "salon" },
 }
 
 const pedidoFalso = (): NextRequest => ({ headers: new Headers() }) as unknown as NextRequest
@@ -85,6 +85,7 @@ describe("GET /api/equipo/invitacion/[token]", () => {
       email: "carla@uno.test",
       rol: "worker",
       negocio: "Salón Uno",
+      rubro: "salon",
     })
   })
 })

@@ -97,6 +97,13 @@ describe("anularAtencion", () => {
     expect(await anularAtencion("v1", "")).toEqual({ ok: false, error: mensaje, motivo: "corregir-con-ajuste" })
   })
 
+  it("pagada al laboratorio también: el modal se queda con el motivo, sin recargar", async () => {
+    const mensaje = "Esta atención tiene un abono ya pagado al laboratorio: anula primero ese pago."
+    simularRespuesta(json({ error: mensaje, codigo: "pagado-al-laboratorio" }, 409))
+
+    expect(await anularAtencion("v1", "Se cobró dos veces")).toEqual({ ok: false, error: mensaje, motivo: "corregir-con-ajuste" })
+  })
+
   it("un 409 sin ese código es un tablero viejo, aunque el texto diga «ajuste»", async () => {
     simularRespuesta(json({ error: "Esta atención ya está anulada. Haz un ajuste." }, 409))
 

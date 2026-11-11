@@ -1,6 +1,6 @@
 "use client"
 
-import { useId, useState } from "react"
+import { useId, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { CalendarCheck, Save } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
@@ -36,13 +36,18 @@ export function SeccionLiquidarDesde({ liquidarDesde, hoy, editable, bloqueada }
   const [fecha, setFecha] = useState(liquidarDesde ?? hoy)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState("")
+  /** Un ref y no sólo el estado: un doble clic llega antes de que se dibuje el botón ocupado. */
+  const enviado = useRef(false)
 
   const guardar = async (evento: React.FormEvent) => {
     evento.preventDefault()
+    if (enviado.current) return
     setError("")
     if (!fecha) return setError("Elige la fecha.")
+    enviado.current = true
     setGuardando(true)
     const resultado = await guardarLiquidarDesde(fecha)
+    enviado.current = false
     setGuardando(false)
     if (!resultado.ok) return setError(resultado.error)
     router.refresh()

@@ -68,8 +68,21 @@ export function nombreDelCliente(cita: CitaDelEnlace): string {
 const INTENTOS_ANTE_CONFLICTO = 3
 
 /**
+ * Si Postgres no pudo ordenar la transacción con otra concurrente y hay que
+ * reintentarla. Prisma lo dice como P2034, salvo cuando falla una consulta
+ * cruda (el `UPDATE` del candado del sillón, `tomarCandadoDelSillon`): ahí es
+ * P2010 con el código de Postgres, 40001.
+ */
+export function esConflictoDeSerializacion(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false
+  if (error.code === "P2034") return true
+  return error.code === "P2010" && (error.meta as { code?: unknown } | undefined)?.code === "40001"
+}
+
+/**
  * Una transacción `Serializable` con los reintentos de `confirmar` ante un
- * conflicto de serialización (P2034). Si sigue chocando, `alRendirse`.
+ * conflicto de serialización (`esConflictoDeSerializacion`). Si sigue
+ * chocando, `alRendirse`.
  */
 export async function enTransaccionSerializable<T>(
   fn: (tx: Prisma.TransactionClient) => Promise<T>,
@@ -79,7 +92,7 @@ export async function enTransaccionSerializable<T>(
     try {
       return await prisma.$transaction(fn, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
     } catch (error) {
-      const conflicto = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034"
+      const conflicto = esConflictoDeSerializacion(error)
       if (!conflicto) throw error
       if (intento >= INTENTOS_ANTE_CONFLICTO) return alRendirse()
     }

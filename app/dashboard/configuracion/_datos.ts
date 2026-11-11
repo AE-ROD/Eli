@@ -12,6 +12,7 @@
 import { leerMonto } from "@/lib/dinero"
 import { frecuenciaDelFormulario } from "@/lib/frecuencia-de-visitas"
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
+import type { LaboratorioRespuesta } from "@/lib/edicion-de-protesis"
 
 /** Un día del horario semanal: si se atiende y de qué hora a qué hora. */
 export interface HorarioDelDia {
@@ -49,11 +50,14 @@ export interface DatosDeServicio {
 }
 
 /**
- * Sin `memberId`, el endpoint opera sobre el horario propio de quien está en
- * sesión (el del dueño es el horario general del negocio).
+ * Con `memberId`, el horario de ese miembro; con `null`, el horario general
+ * del negocio, dicho explícitamente (`?general=1`): el del dueño, y el que
+ * también edita el encargado. Un profesional sólo edita el suyo (con su id).
  */
 function rutaDelHorario(memberId: string | null): string {
-  return memberId ? `/api/configuracion/horarios?memberId=${memberId}` : "/api/configuracion/horarios"
+  return memberId
+    ? `/api/configuracion/horarios?memberId=${encodeURIComponent(memberId)}`
+    : "/api/configuracion/horarios?general=1"
 }
 
 export async function leerHorario(memberId: string | null): Promise<Resultado<HorarioDelDia[]>> {
@@ -65,24 +69,27 @@ export async function guardarHorario(memberId: string | null, horarios: HorarioD
 }
 
 /**
- * Del formulario a lo que espera el servidor: descripción o precio vacíos no
- * se mandan. El precio lo lee `leerMonto`, así "8.000", "8000" y "8.000,50"
+ * Del formulario a lo que espera el servidor. Al crear, descripción o precio
+ * vacíos no se mandan; al editar se mandan como `null`, que los borra: sin
+ * mandarlos, vaciar el campo no hacía nada y el servicio seguía con el precio
+ * de antes. El precio lo lee `leerMonto`, así "8.000", "8000" y "8.000,50"
  * son el monto que se quiso escribir (con `parseFloat`, "8.000" era 8). Un
  * precio que no se puede leer sin adivinar es un error, no un servicio
  * guardado sin precio o con otro. La frecuencia, igual: vacía es `null` (se
  * borra) y una que no es un entero de 7 a 365 es un error, no se manda.
  */
-export function cuerpoDeServicio(datos: DatosDeServicio) {
+export function cuerpoDeServicio(datos: DatosDeServicio, para: "crear" | "editar" = "crear") {
   const f = frecuenciaDelFormulario(datos.frecuenciaDias)
   if (!f.ok) return f
+  const vacio = para === "editar" ? null : undefined
   const base = {
     name: datos.name,
-    description: datos.description || undefined,
+    description: datos.description.trim() ? datos.description : vacio,
     duration: datos.duration,
     category: datos.category.trim() || null,
     frecuenciaDias: f.valor,
   }
-  if (!datos.price.trim()) return { ok: true as const, datos: { ...base, price: undefined } }
+  if (!datos.price.trim()) return { ok: true as const, datos: { ...base, price: vacio } }
   const precio = leerMonto(datos.price)
   return precio === null
     ? { ok: false as const, error: "No se entiende el precio. Escríbelo así: 8000 o 8000,50." }
@@ -98,7 +105,7 @@ export async function crearServicio(datos: DatosDeServicio): Promise<Resultado<S
 
 /** Devuelve el servicio tal como quedó guardado. */
 export async function editarServicio(id: string, datos: DatosDeServicio): Promise<Resultado<Servicio>> {
-  const cuerpo = cuerpoDeServicio(datos)
+  const cuerpo = cuerpoDeServicio(datos, "editar")
   if (!cuerpo.ok) return cuerpo
   return pedir<Servicio>(`/api/configuracion/servicios/${id}`, "No se pudo guardar el servicio", conJson("PUT", cuerpo.datos))
 }
@@ -302,4 +309,99 @@ export async function cambiarMensajesAClientes(
     "No se pudo guardar el cambio",
     conJson("PUT", cambios)
   )
+}
+
+// ─── Sillones (clínica dental) ───────────────────────────────────────────────
+
+/** Un sillón de la clínica, como lo devuelve el servidor. */
+export interface Sillon {
+  id: string
+  nombre: string
+  /** En qué lugar sale en la agenda y en el inicio (0 a 999). */
+  orden: number
+  activo: boolean
+}
+
+/** Todos los sillones, activos e inactivos, por orden y nombre. */
+export async function leerSillonesDeLaClinica(): Promise<Resultado<Sillon[]>> {
+  return pedir<Sillon[]>("/api/configuracion/sillones", "No se pudieron cargar los sillones")
+}
+
+/** Un sillón nuevo va al final (el servidor le pone el orden). Devuelve el sillón como quedó. */
+export async function crearSillon(nombre: string): Promise<Resultado<Sillon>> {
+  return pedir<Sillon>("/api/configuracion/sillones", "No se pudo agregar el sillón", conJson("POST", { nombre: nombre.trim() }))
+}
+
+/**
+ * Cambia el nombre, el orden o si está activo. Un sillón no se borra: se
+ * desactiva, y las citas que ya lo tienen lo conservan. Devuelve el sillón
+ * como quedó.
+ */
+export async function editarSillon(
+  id: string,
+  cambios: { nombre?: string; orden?: number; activo?: boolean }
+): Promise<Resultado<Sillon>> {
+  const errorPorDefecto =
+    cambios.activo === true
+      ? "No se pudo activar el sillón"
+      : cambios.activo === false
+        ? "No se pudo desactivar el sillón"
+        : "No se pudo guardar el sillón"
+  return pedir<Sillon>(`/api/configuracion/sillones/${encodeURIComponent(id)}`, errorPorDefecto, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(cambios.nombre === undefined ? cambios : { ...cambios, nombre: cambios.nombre.trim() }),
+  })
+}
+
+/**
+ * Los sillones con `sillon` movido un lugar (`-1` sube, `1` baja), y el orden
+ * que le toca a cada uno: su posición en la lista, de 0 en adelante. Devuelve
+ * también qué sillones cambian de orden, para guardar sólo esos. Si no se
+ * puede mover (ya está primero o último, o no está), `null`.
+ */
+export function moverSillon(
+  sillones: readonly Sillon[],
+  id: string,
+  direccion: -1 | 1
+): { lista: Sillon[]; cambios: { id: string; orden: number }[] } | null {
+  const desde = sillones.findIndex((sillon) => sillon.id === id)
+  const hasta = desde + direccion
+  if (desde === -1 || hasta < 0 || hasta >= sillones.length) return null
+
+  const reordenados = [...sillones]
+  ;[reordenados[desde], reordenados[hasta]] = [reordenados[hasta], reordenados[desde]]
+  const cambios = reordenados.flatMap((sillon, orden) => (sillon.orden === orden ? [] : [{ id: sillon.id, orden }]))
+  return { lista: reordenados.map((sillon, orden) => ({ ...sillon, orden })), cambios }
+}
+
+// ─── Laboratorios (clínica dental, sólo la dueña) ────────────────────────────
+
+/** Un laboratorio de la clínica, como lo devuelve el servidor (`LaboratorioRespuesta`). */
+export type Laboratorio = LaboratorioRespuesta
+
+export async function crearLaboratorio(datos: { nombre: string; contacto: string | null }): Promise<Resultado<Laboratorio>> {
+  return pedir<Laboratorio>(
+    "/api/configuracion/laboratorios",
+    "No se pudo agregar el laboratorio",
+    conJson("POST", { nombre: datos.nombre.trim(), contacto: datos.contacto?.trim() || null })
+  )
+}
+
+/** Renombra, cambia el contacto o lo activa o desactiva. No se borra: las prótesis que lo tienen lo siguen nombrando. */
+export async function editarLaboratorio(
+  id: string,
+  cambios: { nombre?: string; contacto?: string | null; activo?: boolean }
+): Promise<Resultado<Laboratorio>> {
+  const errorPorDefecto =
+    cambios.activo === true
+      ? "No se pudo activar el laboratorio"
+      : cambios.activo === false
+        ? "No se pudo desactivar el laboratorio"
+        : "No se pudo guardar el laboratorio"
+  return pedir<Laboratorio>(`/api/configuracion/laboratorios/${encodeURIComponent(id)}`, errorPorDefecto, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(cambios),
+  })
 }

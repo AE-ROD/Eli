@@ -69,6 +69,291 @@
       transform: translateX(100%);
     }
   }
+
+  /*
+   * ── Landing: paleta "Rojo, burdeos y arena" ─────────────────────────────
+   * SÓLO para la landing (`components/landing/`). El panel, la reserva y el
+   * acceso siguen con navy y los pasteles de módulo de arriba.
+   *
+   * LOS NOMBRES SON HISTÓRICOS. La landing tuvo antes una paleta de "frutos
+   * rojos" y las clases se llaman como sus colores de entonces; los nombres
+   * se conservaron para no tocar cada componente, pero los valores son otros,
+   * asignados por ROL:
+   *
+   * - `frambuesa` (y `cereza`) = ROJO #B81D23: lo enredado, la acción
+   *   principal ("Crear cuenta").
+   * - `ciruela` = BURDEOS #4A1F1F: lo que Eli ordena ("acomoda.").
+   * - `pistacho` = ARENA #D1C0A6: el toque (puntos, subrayado, tildes, el
+   *   cuadro del ícono del botón destacado).
+   * - `anil` = TIERRA #6E3F34: el cuarto tinte de pasos y tarjetas.
+   * - `lavanda` / `pervinca` / `rosa` = el color de cada oficio (peluquería:
+   *   arena; barbería: cacao; spa de uñas: rosa viejo).
+   * - `orquidea` / `violeta` = los tramos claros del degradado de la marca
+   *   (salmón y rosa pálido), que sólo se usa sobre fondo oscuro.
+   *
+   * Cada uno trae su suave (fondos e íconos) y, donde hace falta, uno oscuro
+   * para texto chico (`-texto`, `-oscuro`). Contrastes medidos (WCAG, texto
+   * chico ≥ 4,5:1) sobre el crema de la landing y sobre su propio suave.
+   * Dentro de la landing también cambian crema, navy, texto-2 y borde: ver
+   * "Tema de la landing" más abajo.
+   */
+
+  /* Rojo: lo enredado. 6,1:1 sobre crema y 5,1:1 sobre su suave: sirve para texto de cualquier tamaño. */
+  --color-frambuesa: #b81d23;
+  /* Fondo del cuadro de un ícono rojo y tinte del paso rojo. */
+  --color-frambuesa-suave: #f6e0dc;
+  /* Texto chico rojo: 6,3:1 sobre su suave. */
+  --color-frambuesa-texto: #9e1a1f;
+
+  /* Burdeos: lo ordenado. Texto de cualquier tamaño (13:1 sobre crema, 11,3:1 sobre su suave). */
+  --color-ciruela: #4a1f1f;
+  --color-ciruela-suave: #efe6d6;
+  /* Barras secundarias de los gráficos de las maquetas. */
+  --color-ciruela-claro: #e0d2bc;
+
+  /* Arena: el toque. Puntos, el subrayado de `resaltado`, el cuadro del ícono del botón destacado. Texto burdeos o navy encima (9,7:1 sobre navy en el pie). */
+  --color-pistacho: #d1c0a6;
+  --color-pistacho-suave: #f3eadb;
+  /* Íconos, tildes y barras sobre fondo claro (5,3:1 sobre su suave). */
+  --color-pistacho-oscuro: #7a5a36;
+  /* Texto chico sobre arena claro (6,4:1 sobre su suave). */
+  --color-pistacho-texto: #6b4e2e;
+
+  /* Tierra: el cuarto tinte de los pasos y su texto (6:1 sobre su suave). */
+  --color-anil: #6e3f34;
+  --color-anil-suave: #e9decb;
+
+  /*
+   * Un par por oficio (Áreas, Oficios, Cierre): el fuerte es la tarjeta de
+   * color detrás de cada foto, el suave el fondo de la sección cuando ese
+   * oficio está elegido. Odontología usa la arena (`pistacho`).
+   */
+  --color-lavanda: #d1c0a6; /* Peluquería */
+  --color-lavanda-suave: #f0e6d5;
+  --color-pervinca: #9b6b5f; /* Barbería */
+  --color-pervinca-suave: #ebdfcb;
+  --color-rosa: #d7857f; /* Spa de uñas */
+  --color-rosa-suave: #f5ddd8;
+
+  /* Los dos tramos claros del degradado de la marca (`degradado-frutos`), tras el rojo vivo del pie. */
+  --color-orquidea: #ee7b72;
+  --color-violeta: #f6c6ba;
+
+  /* La acción principal de la landing ("Crear cuenta"): blanco encima da 6,5:1. Su hover, un paso más oscuro (8:1). */
+  --color-cereza: #b81d23;
+  --color-cereza-oscuro: #9e1a1f;
+
+  /* Bordes de las maquetas y separadores de la landing: un poco más cálido que `borde`. Decorativo. */
+  --color-borde-suave: #efe4d2;
+
+  /*
+   * Radios de la landing. `etiqueta` es la de las etiquetas flotantes
+   * ("WhatsApp", "Cuaderno"); `ficha`, la de las filas con ícono y tilde;
+   * `maqueta`, la tarjeta blanca de una maqueta de producto; `bloque`, los
+   * escenarios y bloques de color grandes.
+   */
+  --radius-etiqueta: 14px;
+  --radius-ficha: 18px;
+  --radius-maqueta: 22px;
+  --radius-bloque: 36px;
+
+  /* La sombra de una maqueta de producto que flota: más honda que `md`, teñida con el texto de la landing. */
+  --shadow-maqueta: 0 18px 50px #1f0e0e1a, 0 2px 6px #1f0e0e0f;
+
+  /*
+   * Curvas de la landing. `llegada` frena largo al final: lo que entra o
+   * cambia de lugar solo (las fotos de Áreas, los pasos). `onda` es simétrica
+   * y lenta: las líneas del enredo de la portada.
+   */
+  --ease-llegada: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-onda: cubic-bezier(0.45, 0, 0.55, 1);
+}
+
+/*
+ * Animaciones sin fin de la landing. Van en `@theme inline` y no en el
+ * `static` de arriba: así `animate-flotar` escribe la animación entera en la
+ * clase y `var(--duracion)` / `var(--retraso)` se leen en cada elemento. En
+ * `static` se resolvían una sola vez en :root, con el valor de respaldo.
+ */
+@theme inline {
+  /*
+   * Todas se mueven solas más de cinco segundos: el bloque que las usa
+   * lleva un botón de pausa (`BotonDePausa` con `animaciones-en-pausa`), y
+   * con movimiento reducido las apaga la regla de `@layer base`. Duración y
+   * retraso de cada elemento con `--duracion` y `--retraso`
+   * (`[--retraso:-2s]`), que no se heredan.
+   *
+   * - `flotar`: sube 9px y se inclina 2° más. La inclinación de reposo va con
+   *   `rotate-*`, que es otra propiedad y se suma. 7 s.
+   * - `latido`: un anillo ciruela que se abre y se apaga alrededor de un punto
+   *   (`--latido` cambia el color). Anima `box-shadow`: no va en algo que se
+   *   enfoca, porque le taparía el halo del foco. 3,2 s.
+   * - `senalar`: se corre a la derecha y vuelve, como una flecha que indica. 1,6 s.
+   * - `aparecer`: sube 14px y aparece, queda y se apaga, una y otra vez (las
+   *   reservas que entran solas al tablero). 10 s.
+   * - `crecer-columna` y `crecer-barra`: una barra de gráfico que crece desde
+   *   abajo (`scaleY`) o desde la izquierda (`scaleX`), queda y se recoge. Con
+   *   `origin-bottom` u `origin-left`. 9 s.
+   * - `recorrer`: un punto que cruza una línea de punta a punta y se apaga en
+   *   los extremos. Va en una capa del ancho de la línea, con el punto en su
+   *   borde derecho: la capa se corre de −100% a 0. 9 s.
+   * - `recorrer-camino`: lo mismo sobre un camino de SVG cualquiera. Va en un
+   *   `<path>` con `pathLength="1000"`, `stroke-dasharray="0.001 999.999"` y
+   *   `stroke-linecap="round"`: el trazo es un solo punto, del ancho del
+   *   trazo, que avanza por el camino. 16 s.
+   *
+   * Y una que no se repite:
+   *
+   * - `progreso`: una barra que se llena una vez (`scaleX`, con
+   *   `origin-left`) y queda llena. Sirve de reloj: quien la usa avanza al
+   *   terminar (`onAnimationEnd`), y en pausa se congela junto con la barra.
+   *   6,5 s.
+   *
+   * `flotar` se inclina 2° más en la mitad; `--giro` lo cambia
+   * (`[--giro:0deg]` para que una maqueta suba y baje derecha).
+   *
+   * Las que se repiten con un retraso positivo (`aparecer` y las dos
+   * `crecer-`) arrancan en su primer cuadro (`backwards`): no se las ve
+   * enteras y de golpe vacías mientras esperan. Con movimiento reducido, la
+   * regla de `@layer base` las deja en su estado de reposo: enteras.
+   */
+  --animate-flotar: flotar var(--duracion, 7s) ease-in-out var(--retraso, 0s) infinite;
+  --animate-latido: latido var(--duracion, 3.2s) ease-in-out var(--retraso, 0s) infinite;
+  --animate-senalar: senalar var(--duracion, 1.6s) ease-in-out var(--retraso, 0s) infinite;
+  --animate-aparecer: aparecer var(--duracion, 10s) ease var(--retraso, 0s) infinite backwards;
+  --animate-crecer-columna: crecer-columna var(--duracion, 9s) cubic-bezier(0.3, 0.7, 0.3, 1) var(--retraso, 0s)
+    infinite backwards;
+  --animate-crecer-barra: crecer-barra var(--duracion, 9s) cubic-bezier(0.3, 0.7, 0.3, 1) var(--retraso, 0s) infinite
+    backwards;
+  --animate-recorrer: recorrer var(--duracion, 9s) ease-in-out var(--retraso, 0s) infinite;
+  --animate-recorrer-camino: recorrer-camino var(--duracion, 16s) linear var(--retraso, 0s) infinite;
+  --animate-progreso: progreso var(--duracion, 6.5s) linear var(--retraso, 0s) forwards;
+
+  @keyframes flotar {
+    0%,
+    100% {
+      transform: translateY(0) rotate(0deg);
+    }
+    50% {
+      transform: translateY(-9px) rotate(var(--giro, 2deg));
+    }
+  }
+
+  @keyframes aparecer {
+    0% {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+    8% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    88% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes crecer-columna {
+    0% {
+      transform: scaleY(0);
+    }
+    14%,
+    88% {
+      transform: scaleY(1);
+    }
+    96%,
+    100% {
+      transform: scaleY(0);
+    }
+  }
+
+  @keyframes crecer-barra {
+    0% {
+      transform: scaleX(0);
+    }
+    14%,
+    88% {
+      transform: scaleX(1);
+    }
+    96%,
+    100% {
+      transform: scaleX(0);
+    }
+  }
+
+  @keyframes recorrer {
+    0% {
+      opacity: 0;
+      transform: translateX(-100%);
+    }
+    8%,
+    92% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes recorrer-camino {
+    from {
+      stroke-dashoffset: 0;
+    }
+    to {
+      stroke-dashoffset: -1000;
+    }
+  }
+
+  @keyframes progreso {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  @keyframes latido {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 var(--latido, color-mix(in srgb, var(--color-ciruela) 38%, transparent));
+    }
+    60% {
+      box-shadow: 0 0 0 14px transparent;
+    }
+  }
+
+  @keyframes senalar {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    50% {
+      transform: translateX(0.22em);
+    }
+  }
+}
+
+/*
+ * La duración y el retraso de una animación de la landing, por elemento. No
+ * se heredan: una flecha que señala dentro de una etiqueta que flota no toma
+ * los tiempos de la etiqueta.
+ */
+@property --duracion {
+  syntax: '*';
+  inherits: false;
+}
+@property --retraso {
+  syntax: '*';
+  inherits: false;
+}
+@property --giro {
+  syntax: '*';
+  inherits: false;
 }
 
 /*
@@ -163,6 +448,168 @@
   }
 }
 
+/*
+ * Titulares de la landing: Geist 500 (no Fraunces), interlineado apretado y
+ * tracking en `em`, que acompaña al tamaño. Sólo la landing: el panel y el
+ * acceso siguen con `titulo-seccion`. De teléfono a escritorio cambian en md
+ * y en lg.
+ */
+
+/* El <h1> de la portada: 40 → 56 → 68px. */
+@utility titulo-portada {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 2.5rem;
+  line-height: 1.06;
+  letter-spacing: -0.045em;
+  @media (width >= 48rem) {
+    font-size: 3.5rem;
+  }
+  @media (width >= 64rem) {
+    font-size: 4.25rem;
+  }
+}
+
+/* El <h2> de una sección de la landing: 32 → 44 → 54px. */
+@utility titulo-landing {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 2rem;
+  line-height: 1.04;
+  letter-spacing: -0.045em;
+  @media (width >= 48rem) {
+    font-size: 2.75rem;
+  }
+  @media (width >= 64rem) {
+    font-size: 3.375rem;
+  }
+}
+
+/*
+ * El antetítulo de la landing: una píldora blanca con un punto rojo
+ * (#B81D23, como en el diseño) y borde cálido ("Cómo funciona"). En lo
+ * oscuro no va: ahí el antetítulo es texto arena.
+ */
+@utility antetitulo-pildora {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--color-borde);
+  border-radius: 9999px;
+  background-color: var(--color-tarjeta);
+  padding: 0.375rem 0.875rem 0.375rem 0.625rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-navy);
+  &::before {
+    content: '';
+    flex: none;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+    background-color: var(--color-frambuesa);
+  }
+}
+
+/*
+ * La palabra que Eli ordena en un titular ("acomoda."): en burdeos
+ * (`ciruela`), con un subrayado grueso arena (#E6D4B6, un poco más claro que
+ * `pistacho` para que el burdeos se lea) por detrás de la parte baja de las
+ * letras. Otros colores con `--resaltado-texto` y `--resaltado-fondo` (en el
+ * cierre oscuro: texto blanco sobre rojo). Si la palabra se parte en dos
+ * renglones, cada uno lleva su subrayado.
+ */
+@utility resaltado {
+  color: var(--resaltado-texto, var(--color-ciruela));
+  background-image: linear-gradient(
+    transparent 64%,
+    var(--resaltado-fondo, #e6d4b6) 64% 90%,
+    transparent 90%
+  );
+  padding-inline: 0.09em;
+  margin-inline: -0.09em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+/* El fondo de la portada (el "A, brillos" del diseño): tres manchas, rojo, burdeos y arena, sobre crema (en la landing, #FBF7EF). */
+@utility fondo-brillos {
+  background-color: var(--color-crema);
+  background-image:
+    radial-gradient(640px 460px at 16% 74%, color-mix(in srgb, var(--color-frambuesa) 17%, transparent), transparent 70%),
+    radial-gradient(560px 420px at 86% 64%, color-mix(in srgb, var(--color-ciruela) 15%, transparent), transparent 70%),
+    radial-gradient(540px 260px at 50% 4%, color-mix(in srgb, var(--color-pistacho) 28%, transparent), transparent 72%);
+}
+
+/*
+ * Lo mismo sobre el burdeos muy oscuro del cierre y el pie (#2E1212, el tono
+ * del diseño): rojo arriba a la derecha y burdeos abajo a la izquierda. El
+ * nombre "navy" es histórico.
+ */
+@utility fondo-brillos-navy {
+  background-color: #2e1212;
+  background-image:
+    radial-gradient(520px 340px at 88% 6%, rgb(184 29 35 / 0.27), transparent 70%),
+    radial-gradient(560px 350px at 4% 100%, rgb(74 31 31 / 0.52), transparent 70%);
+}
+
+/*
+ * Los brillos tenues de las secciones del medio de la landing: dos manchas
+ * de la paleta sobre crema, como en el diseño. Van en una capa propia, detrás
+ * del contenido y del alto de la sección (`SeccionDeLanding` ya la pone): la
+ * máscara los apaga arriba y abajo, así dos secciones seguidas no dejan una
+ * costura donde se juntan.
+ *
+ * - `frambuesa`: rojo abajo a la izquierda y burdeos arriba a la derecha.
+ * - `pistacho`: arena arriba a la izquierda y rojo abajo a la derecha.
+ * - `ciruela`: burdeos arriba al centro y arena abajo a la izquierda.
+ */
+@utility fondo-tenue-frambuesa {
+  background-image:
+    radial-gradient(620px 460px at 8% 90%, color-mix(in srgb, var(--color-frambuesa) 10%, transparent), transparent 70%),
+    radial-gradient(640px 460px at 96% 7%, color-mix(in srgb, var(--color-ciruela) 9%, transparent), transparent 70%);
+  mask-image: linear-gradient(transparent, #000 6rem, #000 calc(100% - 6rem), transparent);
+}
+@utility fondo-tenue-pistacho {
+  background-image:
+    radial-gradient(620px 440px at 4% 6%, color-mix(in srgb, var(--color-pistacho) 18%, transparent), transparent 70%),
+    radial-gradient(640px 460px at 94% 90%, color-mix(in srgb, var(--color-frambuesa) 9%, transparent), transparent 70%);
+  mask-image: linear-gradient(transparent, #000 6rem, #000 calc(100% - 6rem), transparent);
+}
+@utility fondo-tenue-ciruela {
+  background-image:
+    radial-gradient(700px 480px at 50% 0%, color-mix(in srgb, var(--color-ciruela) 10%, transparent), transparent 70%),
+    radial-gradient(560px 420px at 4% 96%, color-mix(in srgb, var(--color-pistacho) 16%, transparent), transparent 70%);
+  mask-image: linear-gradient(transparent, #000 6rem, #000 calc(100% - 6rem), transparent);
+}
+
+/*
+ * El degradado de la marca: rojo vivo, salmón y rosa pálido (el "Eli" grande
+ * del pie). Sólo sobre fondo oscuro: el rojo vivo (#E3383E) no llega a 4,5:1
+ * sobre crema. En texto, con `bg-clip-text text-transparent`.
+ */
+@utility degradado-frutos {
+  background-image: linear-gradient(
+    100deg,
+    #e3383e 0%,
+    var(--color-orquidea) 50%,
+    var(--color-violeta) 100%
+  );
+}
+
+/*
+ * Congela todas las animaciones de CSS del bloque y de lo que tiene adentro
+ * donde estén, sin volverlas al principio. Lo pone el bloque mientras su
+ * `BotonDePausa` está apretado o mientras no se ve.
+ */
+@utility animaciones-en-pausa {
+  &,
+  & * {
+    animation-play-state: paused !important;
+  }
+}
+
 /* Forma y layout. */
 
 /* Esquinas de superelipse donde el navegador las sabe dibujar; en el resto, el radio común. */
@@ -240,6 +687,27 @@
 }
 
 @layer base {
+  /*
+   * Tema de la landing. La landing se ve sobre un crema más cálido y con
+   * texto burdeos casi negro, no navy; el panel, la reserva y el acceso no
+   * cambian. En vez de escribir otros colores en cada componente, la página
+   * pública marca su <main> con `data-landing` y acá se reasignan los tokens
+   * base: `bg-crema`, `text-navy`, `text-texto-2`, `border-borde` siguen
+   * escritos igual y valen lo del diseño
+   * (crema #FBF7EF, texto #1F0E0E, secundario #6E5E58, borde #E6D9C4); las
+   * sombras `shadow-sm` y `shadow-md`, que Tailwind escribe con su valor
+   * adentro, se reasignan en las dos reglas de después de esta capa. Vale
+   * para toda la página, menús y portales incluidos, porque se ata al <html>.
+   * `bg-navy` pasa a #1F0E0E: los bloques oscuros que lo usan quedan en el
+   * tono del diseño.
+   */
+  html:has([data-landing]) {
+    --color-crema: #fbf7ef;
+    --color-superficie: #f5ebdc;
+    --color-navy: #1f0e0e;
+    --color-texto-2: #6e5e58;
+    --color-borde: #e6d9c4;
+  }
   * {
     @apply border-borde outline-navy/50;
   }
@@ -311,6 +779,19 @@
       scroll-behavior: auto !important;
     }
   }
+}
+
+/*
+ * Las sombras `sm` y `md` dentro de la landing, teñidas con el marrón del
+ * texto secundario (#6E5E58) en vez del gris del panel. Tailwind escribe su
+ * valor dentro de la clase, así que no alcanza con redefinir el token: van
+ * sin capa para ganarle a las utilidades. Siguen respetando `shadow-<color>`.
+ */
+html:has([data-landing]) .shadow-sm {
+  --tw-shadow: 0 4px 5px var(--tw-shadow-color, #6e5e580a), 0 6px 10px var(--tw-shadow-color, #6e5e580d);
+}
+html:has([data-landing]) .shadow-md {
+  --tw-shadow: 0 4px 5px var(--tw-shadow-color, #6e5e580a), 0 8px 15px var(--tw-shadow-color, #6e5e5808);
 }
 
 /*

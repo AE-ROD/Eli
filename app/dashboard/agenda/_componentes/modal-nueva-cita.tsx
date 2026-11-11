@@ -7,20 +7,26 @@ import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
 import { Selector } from "@/components/comunes/selector"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { CampoHora } from "@/components/panel/campo-hora"
 import { cn } from "@/lib/utils"
+import { esRubroDental } from "@/lib/rubros"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import {
   buscarClientes,
   idsDeServiciosElegidos,
   leerCatalogoDeLaCita,
   leerProfesionales,
+  opcionesDeSillon,
+  precioDeLosServicios,
   serviciosParaElProfesional,
   type CatalogoDeLaCita,
   type ClienteSugerido,
   type DatosDeNuevaCita,
   type Profesional,
   type ServicioDelCatalogo,
+  type SillonDeLaAgenda,
 } from "../_datos"
 import { Aviso } from "@/components/panel/aviso"
 import type { Advertencia } from "@/lib/mover-cita"
@@ -56,6 +62,16 @@ interface PropsDeModalNuevaCita {
    */
   aviso: string
   /**
+   * Clínica dental: el aviso es el 409 del sillón ocupado. Se titula así y no
+   * se ofrece "guardar igual": se elige otro sillón u otra hora.
+   */
+  avisoDeSillonOcupado?: boolean
+  /**
+   * Clínica dental: los sillones, para elegir uno (opcional; se ofrecen sólo
+   * los activos). `null` (o sin dato) fuera de una clínica: no hay selector.
+   */
+  sillones?: SillonDeLaAgenda[] | null
+  /**
    * Lo que el servidor advirtió del primer envío (choque, bloqueo, fuera de
    * horario). Con advertencias, el botón pasa a "Guardar igual": como al
    * mover una cita. Cambiar un campo las descarta (lo hace la página).
@@ -73,6 +89,8 @@ export function ModalNuevaCita({
   form,
   guardando,
   aviso,
+  avisoDeSillonOcupado = false,
+  sillones = null,
   advertencias,
   onGuardarIgual,
   puedeAsignarProfesional,
@@ -81,6 +99,9 @@ export function ModalNuevaCita({
   onCerrar,
 }: PropsDeModalNuevaCita) {
   const hayAdvertencias = advertencias.length > 0
+  // "Cliente" y "Profesional", con las palabras del rubro: "Paciente" y "Odontólogo" en una clínica dental.
+  const rubro = useRubroDelPanel()
+  const vocabulario = vocabularioDe(rubro)
   // El buscador arranca diciendo el cliente del borrador, si hay uno elegido:
   // lo que se ve y lo que se guarda son lo mismo desde que se abre (A1).
   const [busquedaCliente, setBusquedaCliente] = useState(form.clienteNombre)
@@ -176,10 +197,10 @@ export function ModalNuevaCita({
   function elegirServicios(servicios: ServicioDelCatalogo[]) {
     onCambiarCampo("servicioIds", servicios.map((servicio) => servicio.id).join(","))
     if (servicios.length === 0) return
-    const { duracion, precio } = resumenDeLaReserva(servicios)
+    const { duracion } = resumenDeLaReserva(servicios)
     const fin = horaDeFin(form.horaInicio, duracion)
     if (fin) onCambiarCampo("horaFin", fin)
-    onCambiarCampo("precio", precio === null ? "" : String(precio))
+    onCambiarCampo("precio", precioDeLosServicios(servicios))
   }
 
   function alternarServicio(servicio: ServicioDelCatalogo) {
@@ -207,10 +228,10 @@ export function ModalNuevaCita({
     busquedaCliente.length < LETRAS_PARA_BUSCAR
       ? `Escribe al menos ${LETRAS_PARA_BUSCAR} letras y elige de la lista.`
       : clienteElegido
-        ? "Cliente elegido."
+        ? `${conMayuscula(vocabulario.cliente)} elegido.`
         : listaVisible
-          ? `${sugerencias.length === 1 ? "1 cliente coincide" : `${sugerencias.length} clientes coinciden`}. Elige uno de la lista.`
-          : "Elige un cliente de la lista."
+          ? `${sugerencias.length === 1 ? `1 ${vocabulario.cliente} coincide` : `${sugerencias.length} ${vocabulario.clientes} coinciden`}. Elige uno de la lista.`
+          : `Elige un ${vocabulario.cliente} de la lista.`
 
   return (
     <MarcoDeModal titulo="Nueva cita" bloqueado={guardando} alCerrar={onCerrar}>
@@ -218,7 +239,7 @@ export function ModalNuevaCita({
         {/* Búsqueda de cliente */}
         <div>
           <label htmlFor={idDelBuscador} className={cn(ETIQUETA, "mb-2")}>
-            Cliente
+            {conMayuscula(vocabulario.cliente)}
           </label>
           <div className="relative">
             <Search
@@ -233,7 +254,7 @@ export function ModalNuevaCita({
               autoFocus
               type="text"
               autoComplete="off"
-              placeholder="Buscar cliente..."
+              placeholder={`Buscar ${vocabulario.cliente}...`}
               value={busquedaCliente}
               aria-describedby={avisoDeBusqueda ? `${idDelEstado} ${idDelAvisoDeBusqueda}` : idDelEstado}
               onChange={(e) => {
@@ -269,7 +290,7 @@ export function ModalNuevaCita({
 
           {listaVisible && (
             <ul
-              aria-label="Clientes que coinciden"
+              aria-label={`${conMayuscula(vocabulario.clientes)} que coinciden`}
               className="mt-2 max-h-56 divide-y divide-borde overflow-y-auto rounded-campo bg-tarjeta inset-ring-1 inset-ring-borde squircle"
             >
               {sugerencias.map((cliente) => (
@@ -327,7 +348,7 @@ export function ModalNuevaCita({
         {!resumen && (
           <CampoFormulario
             etiqueta={serviciosOfrecidos.length > 0 ? "Otro servicio" : "Servicio"}
-            placeholder="Ej.: Corte, Color, Manicura..."
+            placeholder={esRubroDental(rubro) ? "Ej.: Limpieza, Control, Urgencia..." : "Ej.: Corte, Color, Manicura..."}
             value={form.servicio}
             onChange={(e) => onCambiarCampo("servicio", e.target.value)}
             icono={<Scissors className="size-4" aria-hidden="true" strokeWidth={1.75} />}
@@ -392,12 +413,24 @@ export function ModalNuevaCita({
 
         {puedeAsignarProfesional && profesionales.length > 0 && (
           <Selector
-            etiqueta="Profesional"
+            etiqueta={conMayuscula(vocabulario.profesional)}
             value={form.memberId}
             onChange={(e) => cambiarProfesional(e.target.value)}
             opciones={profesionales.map((profesional) => ({ valor: profesional.id, texto: profesional.nombre }))}
           >
             <option value="">Sin asignar</option>
+          </Selector>
+        )}
+
+        {/* Clínica dental: el sillón, opcional. Sólo los activos; un choque en el sillón es un 409, no una advertencia. */}
+        {sillones && (
+          <Selector
+            etiqueta="Sillón (opcional)"
+            value={form.sillonId ?? ""}
+            onChange={(e) => onCambiarCampo("sillonId", e.target.value)}
+            opciones={opcionesDeSillon(sillones)}
+          >
+            <option value="">Sin sillón</option>
           </Selector>
         )}
 
@@ -415,7 +448,7 @@ export function ModalNuevaCita({
           />
         </div>
 
-        {aviso && <Aviso>{aviso}</Aviso>}
+        {aviso && (avisoDeSillonOcupado ? <Aviso titulo="Sillón ocupado">{aviso}</Aviso> : <Aviso>{aviso}</Aviso>)}
 
         {hayAdvertencias && (
           <Aviso tono="atencion" rol="alert" titulo="¿Guardar igual?">

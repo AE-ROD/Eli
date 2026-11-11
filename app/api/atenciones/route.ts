@@ -125,6 +125,12 @@ async function buscarAtenciones(actor: Actor, desde: Date, hasta: Date) {
  * A quién se le puede anotar una línea. Dueño y encargado: cualquier miembro
  * o el dueño, que no es miembro y viaja con el id `duenio`. El profesional:
  * sólo él, porque sus líneas quedan a su nombre igual.
+ *
+ * La dueña que además se invitó como profesional de su propio negocio está
+ * dos veces (como dueña y como miembro), con el mismo nombre: la opción de
+ * miembro dice "Nombre (como profesional)", porque sus líneas llevan comisión
+ * y las de la dueña no. Es sólo la etiqueta del selector: el nombre que queda
+ * en la línea lo pone el servidor al guardarla.
  */
 async function profesionalesAsignables(actor: Actor) {
   if (!puedeAsignarLineasAOtros(actor)) {
@@ -139,18 +145,21 @@ async function profesionalesAsignables(actor: Actor) {
   const [miembros, negocio] = await Promise.all([
     prisma.businessMember.findMany({
       where: { businessId: actor.businessId },
-      select: { id: true, user: { select: { name: true } } },
+      select: { id: true, userId: true, user: { select: { name: true } } },
       orderBy: { createdAt: "asc" },
       take: 100,
     }),
     prisma.business.findUnique({
       where: { id: actor.businessId },
-      select: { user: { select: { name: true } } },
+      select: { userId: true, user: { select: { name: true } } },
     }),
   ])
 
   return [
-    ...miembros.map((miembro) => ({ id: miembro.id, nombre: miembro.user.name })),
+    ...miembros.map((miembro) => ({
+      id: miembro.id,
+      nombre: negocio && miembro.userId === negocio.userId ? `${miembro.user.name} (como profesional)` : miembro.user.name,
+    })),
     ...(negocio ? [{ id: PROFESIONAL_DUEÑO, nombre: negocio.user.name }] : []),
   ]
 }

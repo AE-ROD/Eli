@@ -19,7 +19,7 @@ import { HistorialDeComisionesTarjeta } from "./historial-de-comisiones"
  * pantalla la ve sólo la dueña: la página lo verifica en el servidor y cada
  * endpoint de nuevo.
  */
-export function PantallaDeComisiones() {
+export function PantallaDeComisiones({ zona }: { zona: string }) {
   const [datos, setDatos] = useState<DatosDeComisiones | null>(null)
   const [error, setError] = useState("")
   const [version, setVersion] = useState(0)
@@ -112,6 +112,7 @@ export function PantallaDeComisiones() {
       <HistorialDeComisionesTarjeta
         miembros={datos.miembros.map(({ id, nombre }) => ({ id, nombre }))}
         version={version}
+        zona={zona}
       />
     </div>
   )

@@ -57,6 +57,10 @@ export function GestionDeCita({ slug, token }: { slug: string; token: string }) 
   const [trabajando, setTrabajando] = useState(false)
   const [error, setError] = useState("")
   const [aviso, setAviso] = useState("")
+  // Sube cuando reagendar falla (lo típico: la hora se tomó entretanto). Va
+  // en la clave de las horas, así que el selector las vuelve a pedir y suelta
+  // la hora elegida, en vez de seguir ofreciendo la que ya no está libre.
+  const [recargasDeHoras, setRecargasDeHoras] = useState(0)
   const titulo = useRef<HTMLHeadingElement>(null)
 
   const cargar = useCallback(async () => {
@@ -83,17 +87,40 @@ export function GestionDeCita({ slug, token }: { slug: string; token: string }) 
     )
   }
 
-  if (vista.tipo === "no-sirve" || vista.tipo === "error") {
+  if (vista.tipo === "no-sirve") {
     return (
       <>
         <EncabezadoDeReserva antetitulo="Tu cita" titulo="Este enlace no sirve" />
         <Tarjeta className="mx-auto mt-8 flex max-w-xl flex-col items-center gap-5 px-6 py-10 text-center sm:px-10 md:mt-12">
           <CuadroDeIcono icono={CalendarX2} color="azul" tamano="lg" />
           <p className="cuerpo-xl text-pretty text-texto-2">
-            {vista.tipo === "error"
-              ? vista.mensaje
-              : "El enlace no es válido, o la cita ya pasó o se canceló. Si necesitas algo, contacta directamente al local."}
+            El enlace no es válido, o la cita ya pasó o se canceló. Si necesitas algo, contacta directamente al local.
           </p>
+        </Tarjeta>
+      </>
+    )
+  }
+
+  // Sin red o con el servidor fallando no se sabe nada del enlace: no se dice
+  // que no sirve (antes sí, y la persona lo daba por perdido), se ofrece reintentar.
+  if (vista.tipo === "error") {
+    return (
+      <>
+        <EncabezadoDeReserva antetitulo="Tu cita" titulo="No se pudo cargar tu cita" />
+        <Tarjeta className="mx-auto mt-8 flex max-w-xl flex-col items-center gap-5 px-6 py-10 text-center sm:px-10 md:mt-12">
+          <CuadroDeIcono icono={CalendarX2} color="azul" tamano="lg" />
+          <p className="cuerpo-xl text-pretty text-texto-2">
+            {vista.mensaje}
+            <span className="mt-2 block">Tu enlace sigue sirviendo: vuelve a intentarlo.</span>
+          </p>
+          <Boton
+            onClick={() => {
+              setVista({ tipo: "cargando" })
+              void cargar()
+            }}
+          >
+            Reintentar
+          </Boton>
         </Tarjeta>
       </>
     )
@@ -127,7 +154,11 @@ export function GestionDeCita({ slug, token }: { slug: string; token: string }) 
     setError("")
     const resultado = await reagendarCita(slug, token, fecha, hora)
     setTrabajando(false)
-    if (!resultado.ok) return setError(resultado.error)
+    if (!resultado.ok) {
+      setError(resultado.error)
+      setRecargasDeHoras((previas) => previas + 1)
+      return
+    }
     setVista({
       tipo: "cita",
       cita: {
@@ -206,13 +237,15 @@ export function GestionDeCita({ slug, token }: { slug: string; token: string }) 
             <div className="mt-6">
               <SelectorFechaHora
                 cargarHoras={cargarHoras}
-                claveDeHoras={token}
+                claveDeHoras={`${token}|${recargasDeHoras}`}
                 diasDisponibles={cita.diasConAtencion && cita.diasConAtencion.length > 0 ? cita.diasConAtencion : TODOS_LOS_DIAS}
                 zona={cita.zona}
                 fechaSeleccionada={fecha}
                 horaSeleccionada={hora}
                 onFecha={setFecha}
                 onHora={elegirHora}
+                // Clínica dental: una urgencia sólo se mueve a otra hora de hoy.
+                soloHoy={cita.soloHoy === true}
               />
             </div>
             {hora && precioNuevo && precioNuevo.precio !== null && (

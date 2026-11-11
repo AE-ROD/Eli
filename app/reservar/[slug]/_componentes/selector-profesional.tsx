@@ -11,7 +11,14 @@ interface PropsDeSelectorProfesional {
   /** `null`: cualquiera disponible. */
   elegido: string | null
   onElegir: (profesionalId: string | null) => void
+  /**
+   * Cómo se dice "cualquiera". Sin él, el de siempre; en una clínica dental,
+   * "La primera hora disponible · Con cualquier odontólogo".
+   */
+  cualquiera?: { nombre: string; detalle: string }
 }
+
+const CUALQUIERA_DE_SIEMPRE = { nombre: "Cualquiera disponible", detalle: "Te asignamos a quien esté libre" }
 
 const ELEGIDO = "bg-azul-suave font-semibold text-navy inset-ring-2 inset-ring-navy"
 const EN_REPOSO = "bg-tarjeta font-medium text-navy inset-ring-1 inset-ring-texto-2 hover:bg-azul-suave hover:inset-ring-navy"
@@ -31,10 +38,15 @@ function iniciales(nombre: string): string {
  * o una persona del equipo que hace el servicio. Son botones que dicen cuál
  * está elegido (`aria-pressed`), como los días y las horas del calendario.
  */
-export function SelectorProfesional({ profesionales, elegido, onElegir }: PropsDeSelectorProfesional) {
+export function SelectorProfesional({
+  profesionales,
+  elegido,
+  onElegir,
+  cualquiera = CUALQUIERA_DE_SIEMPRE,
+}: PropsDeSelectorProfesional) {
   const idDelTitulo = useId()
   const opciones: { id: string | null; nombre: string; detalle: string | null; fotoUrl: string | null }[] = [
-    { id: null, nombre: "Cualquiera disponible", detalle: "Te asignamos a quien esté libre", fotoUrl: null },
+    { id: null, nombre: cualquiera.nombre, detalle: cualquiera.detalle, fotoUrl: null },
     ...profesionales.map((profesional) => ({
       id: profesional.id,
       nombre: profesional.nombre,

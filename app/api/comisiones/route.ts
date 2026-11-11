@@ -67,12 +67,14 @@ export async function GET() {
     }),
     // Líneas cobradas de alguien del equipo que todavía no tienen comisión:
     // las de la dueña nunca llevan, y las de quien dejó el equipo no tienen a
-    // quién liquidarse. Lo cobrado antes de "Liquidar desde", tampoco.
+    // quién liquidarse. Lo cobrado antes de "Liquidar desde", tampoco. Los
+    // abonos de prótesis no esperan %: llevan el reparto de su prótesis.
     prisma.visitService.findMany({
       where: {
         memberId: { not: null },
         byOwner: false,
         commissionAt: null,
+        protesisId: null,
         visit: { is: { businessId, status: "finalizada", ...(cobradaDesde && { paidAt: { gte: cobradaDesde } }) } },
       },
       select: { memberId: true },

@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import type { NextRequest } from "next/server"
 import { NEGOCIO, OTRO_NEGOCIO, atencion, datosBase, pago, sesiones } from "@/pruebas/datos"
 import { crearBaseDeEstadisticas } from "./_pruebas/base-de-estadisticas"
 
@@ -60,10 +59,10 @@ function escenario() {
   }
 }
 
-async function pedir(sesion: unknown, consulta = "") {
+async function pedir(sesion: unknown) {
   const { GET } = await import("./route")
   mockGetServerSession.mockResolvedValueOnce(sesion)
-  const res = await GET({ url: `http://localhost/api/dashboard/stats${consulta}` } as unknown as NextRequest)
+  const res = await GET()
   return { status: res.status, data: await res.json() }
 }
 
@@ -76,9 +75,9 @@ beforeEach(() => {
 
 afterEach(() => vi.useRealTimers())
 
-describe("GET /api/dashboard/stats: ingresos con la zona de quien mira", () => {
+describe("GET /api/dashboard/stats: ingresos en la zona del negocio", () => {
   it("son los pagos de las atenciones cobradas en el mes, sumados en centavos exactos", async () => {
-    const { status, data } = await pedir(sesiones.dueña, "?zona=America/Santiago")
+    const { status, data } = await pedir(sesiones.dueña)
 
     expect(status).toBe(200)
     // 20.000 + 13.000 + 0,10 + 0,20. Ni la anulada, ni la abierta, ni la cita
@@ -94,21 +93,21 @@ describe("GET /api/dashboard/stats: ingresos con la zona de quien mira", () => {
       visitPayment: escenario().visitPayment.filter((p) => p.visitId === "v-anulada"),
     })
 
-    const { data } = await pedir(sesiones.dueña, "?zona=America/Santiago")
+    const { data } = await pedir(sesiones.dueña)
 
     expect(data.ingresosMes).toBe(0)
     expect(data.atencionesCobradasMes).toBe(0)
   })
 
   it("lo cobrado por otro negocio no suma, y al revés", async () => {
-    const otro = await pedir(sesiones.dueñoAjeno, "?zona=America/Santiago")
+    const otro = await pedir(sesiones.dueñoAjeno)
 
     expect(otro.data.ingresosMes).toBe(99000)
     expect(otro.data.atencionesCobradasMes).toBe(1)
   })
 
   it("el profesional no recibe ingresos, ni su contexto, ni la tendencia, y no se calculan", async () => {
-    const { status, data } = await pedir(sesiones.carla, "?zona=America/Santiago")
+    const { status, data } = await pedir(sesiones.carla)
 
     expect(status).toBe(200)
     expect(data).not.toHaveProperty("ingresosMes")
@@ -119,13 +118,13 @@ describe("GET /api/dashboard/stats: ingresos con la zona de quien mira", () => {
   })
 
   it("el cobro del 30 de septiembre a las 22:30 en Santiago es de septiembre: cuenta para la tendencia, no para octubre", async () => {
-    const { data } = await pedir(sesiones.dueña, "?zona=America/Santiago")
+    const { data } = await pedir(sesiones.dueña)
 
     // Septiembre: 11.000 + 7.000 del borde. (33.000,30 - 18.000) / 18.000 = 83 %.
     expect(data.tendencias.ingresos).toBe(83)
   })
 
-  it("y a las 22:45 de ese 30 de septiembre, el mes de quien mira todavía es septiembre", async () => {
+  it("y a las 22:45 de ese 30 de septiembre, el mes del negocio todavía es septiembre", async () => {
     vi.setSystemTime(new Date("2026-10-01T01:45:00.000Z"))
     // Lo que ya se había cobrado a esa hora.
     const hastaEntonces = new Set(["v-borde", "v-septiembre"])
@@ -135,15 +134,22 @@ describe("GET /api/dashboard/stats: ingresos con la zona de quien mira", () => {
       visitPayment: escenario().visitPayment.filter((p) => hastaEntonces.has(p.visitId as string)),
     })
 
-    const { data } = await pedir(sesiones.dueña, "?zona=America/Santiago")
+    const { data } = await pedir(sesiones.dueña)
 
     expect(data.ingresosMes).toBe(18000)
     expect(data.atencionesCobradasMes).toBe(2)
   })
 
-  it("en otra zona, el mismo cobro es de otro mes: en UTC ya es octubre", async () => {
-    const { data } = await pedir(sesiones.dueña, "?zona=UTC")
+  it("en un negocio en UTC, el mismo cobro es de otro mes: ya es octubre", async () => {
+    const datos = escenario()
+    base.reiniciar({
+      ...datos,
+      business: datos.business.map((negocio) => (negocio.id === NEGOCIO ? { ...negocio, timezone: "UTC" } : negocio)),
+    })
 
+    const { data } = await pedir(sesiones.dueña)
+
+    expect(data.zona).toBe("UTC")
     expect(data.ingresosMes).toBe(40000.3)
     expect(data.atencionesCobradasMes).toBe(3)
   })
@@ -151,38 +157,30 @@ describe("GET /api/dashboard/stats: ingresos con la zona de quien mira", () => {
   it("sin nada cobrado en el mes: cero y no null, y sin mes anterior la tendencia no viaja", async () => {
     base.reiniciar({ ...datosBase() })
 
-    const { data } = await pedir(sesiones.dueña, "?zona=America/Santiago")
+    const { data } = await pedir(sesiones.dueña)
 
     expect(data.ingresosMes).toBe(0)
     expect(data.atencionesCobradasMes).toBe(0)
     expect(data.tendencias).not.toHaveProperty("ingresos")
   })
-
-  it.each([
-    ["una zona que no existe", "Mars/Olympus"],
-    ["un desplazamiento en vez de una zona", "-03:00"],
-  ])("%s da 400 sin consultar nada", async (_caso, zona) => {
-    const { status, data } = await pedir(sesiones.dueña, `?zona=${encodeURIComponent(zona)}`)
-
-    expect(status).toBe(400)
-    expect(data.error).toMatch(/zona horaria/)
-    expect(base.prisma.visitPayment.aggregate).not.toHaveBeenCalled()
-    expect(base.prisma.appointment.findMany).not.toHaveBeenCalled()
-  })
 })
 
-describe("GET /api/dashboard/stats: ingresos sin zona, como antes", () => {
-  /** Sin zona, el mes es el del reloj del servidor: depende del huso donde corra el test. */
-  const bordeEsDeOctubre = new Date(BORDE) >= new Date(2026, 9, 1)
-
+describe("GET /api/dashboard/stats: la zona del navegador no cuenta", () => {
   it.each([
     ["sin el parámetro", ""],
-    ["con el parámetro vacío", "?zona="],
-  ])("%s, el mes es el del servidor", async (_caso, consulta) => {
-    const { status, data } = await pedir(sesiones.dueña, consulta)
+    ["con otra zona", "?zona=UTC"],
+    ["con una zona inválida", "?zona=Mars/Olympus"],
+  ])("%s, el mes es el del negocio (Santiago)", async (_caso, consulta) => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    // El handler no lee el pedido: aunque el panel viejo mande `zona`, no cambia nada.
+    const res = await (GET as unknown as (pedido: unknown) => Promise<Response>)({
+      url: `http://localhost/api/dashboard/stats${consulta}`,
+    })
+    const data = await res.json()
 
-    expect(status).toBe(200)
-    expect(data.ingresosMes).toBe(bordeEsDeOctubre ? 40000.3 : 33000.3)
-    expect(data.atencionesCobradasMes).toBe(bordeEsDeOctubre ? 3 : 2)
+    expect(res.status).toBe(200)
+    expect(data.zona).toBe("America/Santiago")
+    expect(data.ingresosMes).toBe(33000.3)
   })
 })

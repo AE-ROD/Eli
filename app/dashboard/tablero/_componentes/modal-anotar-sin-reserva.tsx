@@ -4,11 +4,14 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react"
 import { Search, User, UserPlus } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { avisoDeLargo, lineasDesdeFilas, type FilaDeServicio } from "@/lib/acciones-del-tablero"
 import type { Resultado } from "@/lib/peticiones"
+import { esRubroDental } from "@/lib/rubros"
 import { cn } from "@/lib/utils"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import {
   buscarClientes,
   type Catalogo,
@@ -74,6 +77,9 @@ export function ModalAnotarSinReserva({
   onCerrar,
 }: PropsDeModalAnotarSinReserva) {
   const idBase = useId()
+  // "Paciente" y "Sala de espera" en una clínica dental: "paciente" es masculino como "cliente", el resto de la frase no cambia.
+  const rubro = useRubroDelPanel()
+  const { cliente, clientes, tablero } = vocabularioDe(rubro)
   const botonCambiar = useRef<HTMLButtonElement>(null)
   const campoNombre = useRef<HTMLInputElement>(null)
   const campoBusqueda = useRef<HTMLInputElement>(null)
@@ -120,10 +126,10 @@ export function ModalAnotarSinReserva({
     modo === "existente"
       ? elegido
         ? null
-        : "Elige un cliente de la lista, o anótalo como cliente nuevo."
+        : `Elige un ${cliente} de la lista, o anótalo como ${cliente} nuevo.`
       : nombre.trim().length >= LARGO_MINIMO_DEL_NOMBRE
         ? null
-        : `Escribe el nombre del cliente (al menos ${LARGO_MINIMO_DEL_NOMBRE} letras).`
+        : `Escribe el nombre del ${cliente} (al menos ${LARGO_MINIMO_DEL_NOMBRE} letras).`
   const errorDeServicios =
     servicioObligatorio && filas.length === 0 ? "Agrega el servicio que vas a hacer: la atención queda a tu nombre." : null
   const mostrarErrores = intentoAnotar
@@ -169,9 +175,9 @@ export function ModalAnotarSinReserva({
 
   return (
     <MarcoDeModal
-      antetitulo="Tablero"
+      antetitulo={conMayuscula(tablero)}
       titulo="Anotar sin reserva"
-      descripcion="Entra al tablero en espera."
+      descripcion={esRubroDental(rubro) ? "Queda esperando en la sala de espera." : "Entra al tablero en espera."}
       ancho="lg"
       bloqueado={guardando}
       alCerrar={onCerrar}
@@ -179,14 +185,14 @@ export function ModalAnotarSinReserva({
       <form onSubmit={anotar} noValidate className="space-y-6">
         {/* ── Cliente ── */}
         <fieldset className="space-y-3">
-          <legend className="mb-3 text-sm font-semibold">Cliente</legend>
+          <legend className="mb-3 text-sm font-semibold">{conMayuscula(cliente)}</legend>
 
           {/* Las dos opciones lado a lado, la elegida en navy: el borde gris de los campos dice que son controles. */}
-          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="¿Ya es cliente?">
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label={`¿Ya es ${cliente}?`}>
             {(
               [
-                { id: "existente", texto: "Ya es cliente", icono: User },
-                { id: "nuevo", texto: "Cliente nuevo", icono: UserPlus },
+                { id: "existente", texto: `Ya es ${cliente}`, icono: User },
+                { id: "nuevo", texto: `${conMayuscula(cliente)} nuevo`, icono: UserPlus },
               ] as const
             ).map(({ id, texto, icono: Icono }) => (
               <label
@@ -236,7 +242,7 @@ export function ModalAnotarSinReserva({
             ) : (
               <div>
                 <label htmlFor={`${idBase}-buscar`} className={ETIQUETA}>
-                  Buscar cliente
+                  Buscar {cliente}
                 </label>
                 <div className="relative">
                   <Search
@@ -266,8 +272,8 @@ export function ModalAnotarSinReserva({
                   {textoBuscado.length < LETRAS_PARA_BUSCAR && `Escribe al menos ${LETRAS_PARA_BUSCAR} letras para buscar.`}
                   {buscando && "Buscando…"}
                   {sugerencias.length > 0 &&
-                    (sugerencias.length === 1 ? "1 cliente encontrado." : `${sugerencias.length} clientes encontrados.`)}
-                  {sinResultados && "No hay clientes con ese texto."}
+                    (sugerencias.length === 1 ? `1 ${cliente} encontrado.` : `${sugerencias.length} ${clientes} encontrados.`)}
+                  {sinResultados && `No hay ${clientes} con ese texto.`}
                 </div>
 
                 {avisoDeBusqueda && (
@@ -304,7 +310,7 @@ export function ModalAnotarSinReserva({
 
                 {sinResultados && (
                   <Boton variante="enlace" tamano="sm" onClick={anotarComoNuevo} disabled={guardando} className="mt-1">
-                    Anotarlo como cliente nuevo
+                    Anotarlo como {cliente} nuevo
                   </Boton>
                 )}
               </div>

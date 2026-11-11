@@ -1,6 +1,6 @@
 "use client"
 
-import { Hand, Scissors, Sparkles, type LucideIcon } from "lucide-react"
+import { Hand, Scissors, Smile, Sparkles, type LucideIcon } from "lucide-react"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import type { ColorDeModulo } from "@/lib/modulos"
 import { RUBROS, type RubroId } from "@/lib/rubros"
@@ -11,6 +11,8 @@ const ICONO_DE_RUBRO: Record<RubroId, { figura: LucideIcon; color: ColorDeModulo
   salon: { figura: Sparkles, color: "lila" },
   barberia: { figura: Scissors, color: "azul" },
   "spa-de-unas": { figura: Hand, color: "naranja" },
+  // Lucide no tiene un diente: la sonrisa es la figura más cercana.
+  odontologia: { figura: Smile, color: "lima" },
 }
 
 const OPCIONES_DE_RUBRO: readonly OpcionDeGrupo<RubroId>[] = RUBROS.map((rubro) => ({

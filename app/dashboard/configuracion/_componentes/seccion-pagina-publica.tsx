@@ -1,17 +1,21 @@
 "use client"
 
 import { useId, useState } from "react"
+import { useRouter } from "next/navigation"
 import { ArrowUpRight, Camera, Globe, Save } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CLASES_DEL_LOCAL } from "@/components/comunes/colores-del-local"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPO, ETIQUETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { MEDIOS_DE_PAGO } from "@/lib/medios-de-pago"
 import { PALETA_DEL_LOCAL, colorDelNegocio, iniciales } from "@/lib/pagina-del-negocio"
 import { mostrarTelefono } from "@/lib/telefono"
 import { cn } from "@/lib/utils"
+import { esRubroDental } from "@/lib/rubros"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { guardarPaginaPublica, type DatosDePaginaPublica } from "../_datos"
 
 /** Como en el modal de servicio: el radio no se ve y el anillo lo dibuja la opción entera. */
@@ -36,12 +40,18 @@ interface PropsDeSeccionPaginaPublica {
 export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLectura }: PropsDeSeccionPaginaPublica) {
   const idDelTitulo = useId()
   const nombreDelColor = useId()
+  // "Pacientes" y "odontólogo" en una clínica dental.
+  const rubro = useRubroDelPanel()
+  const { clientes, profesional } = vocabularioDe(rubro)
   const [datos, setDatos] = useState<DatosDePaginaPublica>(inicial)
   // Las especialidades como están guardadas: al guardar se mandan sólo las que cambiaron (#113).
   const [especialidadesGuardadas, setEspecialidadesGuardadas] = useState(inicial.especialidades)
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
   const [aviso, setAviso] = useState("")
+  const router = useRouter()
+  // El enlace de reseñas como está guardado: "Mensajes a clientes" depende de él.
+  const [enlaceGuardado, setEnlaceGuardado] = useState(inicial.enlaceResenas)
 
   const cambiar = <Campo extends keyof DatosDePaginaPublica>(campo: Campo, valor: DatosDePaginaPublica[Campo]) => {
     setGuardado(false)
@@ -81,6 +91,14 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
       mediosDePago: guardada.mediosDePago,
     }))
     setGuardado(true)
+    // "Pedir reseña en Google" dice si falta el enlace con lo que leyó la
+    // página al entrar: si el enlace cambió, se vuelve a leer del servidor.
+    // Lo que se está editando en las otras secciones no se pierde.
+    const enlaceNuevo = guardada.enlaceResenas ?? ""
+    if (enlaceNuevo !== enlaceGuardado) {
+      setEnlaceGuardado(enlaceNuevo)
+      router.refresh()
+    }
   }
 
   const color = colorDelNegocio(datos.color)
@@ -92,7 +110,7 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
         titulo="Tu página pública"
         subtitulo={
           <>
-            Lo que ven tus clientes al reservar.{" "}
+            Lo que ven tus {clientes} al reservar.{" "}
             <a
               href={`/reservar/${slug}`}
               target="_blank"
@@ -138,7 +156,7 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
           <Campo etiqueta="Dirección" valor={datos.address} alCambiar={(valor) => cambiar("address", valor)} maximo={200} placeholder="Av. Providencia 1234, local 5" autoComplete="street-address" />
           <Campo etiqueta="Comuna" valor={datos.comuna} alCambiar={(valor) => cambiar("comuna", valor)} maximo={80} placeholder="Providencia" />
           <Campo etiqueta="WhatsApp del negocio" valor={datos.whatsapp} alCambiar={(valor) => cambiar("whatsapp", valor)} maximo={30} placeholder="+56 9 1234 5678" tipo="tel" />
-          <Campo etiqueta="Instagram" valor={datos.instagram} alCambiar={(valor) => cambiar("instagram", valor)} maximo={200} placeholder="@tu.salon" />
+          <Campo etiqueta="Instagram" valor={datos.instagram} alCambiar={(valor) => cambiar("instagram", valor)} maximo={200} placeholder={esRubroDental(rubro) ? "@tu.clinica" : "@tu.salon"} />
           <div className="sm:col-span-2">
             <Campo
               etiqueta="Enlace para dejar una reseña en Google"
@@ -221,7 +239,7 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
 
         {datos.especialidades.length > 0 && (
           <fieldset className="min-w-0">
-            <legend className={cn(CLASES_DE_ETIQUETA, "mb-1")}>Especialidad de cada profesional</legend>
+            <legend className={cn(CLASES_DE_ETIQUETA, "mb-1")}>Especialidad de cada {profesional}</legend>
             <p className="mb-3 text-[13px] text-texto-2">Se muestra bajo su nombre, en &ldquo;Equipo&rdquo;.</p>
             <div className="grid gap-4 sm:grid-cols-2">
               {datos.especialidades.map((fila) => (
@@ -231,7 +249,7 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
                   valor={fila.especialidad}
                   alCambiar={(valor) => cambiarEspecialidad(fila.memberId, valor)}
                   maximo={60}
-                  placeholder="Ej.: Colorista"
+                  placeholder={esRubroDental(rubro) ? "Ej.: Ortodoncista" : "Ej.: Colorista"}
                 />
               ))}
             </div>
@@ -242,7 +260,7 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
           <Camera className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <p>
             <strong className="font-medium text-navy">Fotos: próximamente.</strong> Pronto vas a poder subir tu logo, una
-            portada y la foto de cada profesional. Mientras, la página usa tu color y tus iniciales.
+            portada y la foto de cada {profesional}. Mientras, la página usa tu color y tus iniciales.
           </p>
         </div>
       </fieldset>

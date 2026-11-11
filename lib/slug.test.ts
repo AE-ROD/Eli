@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { generarSlug } from "./slug"
+import { generarSlug, slugDelNombre } from "./slug"
 
 describe("generarSlug", () => {
   it("pasa a minúsculas y reemplaza espacios por guiones", () => {
@@ -21,5 +21,15 @@ describe("generarSlug", () => {
   it("trunca a 50 caracteres", () => {
     const nombreLargo = "a".repeat(80)
     expect(generarSlug(nombreLargo)).toHaveLength(50)
+  })
+})
+
+describe("slugDelNombre", () => {
+  it("usa el slug del nombre cuando tiene algo que sirva en una URL", () => {
+    expect(slugDelNombre("Salón Ñuñoa")).toBe("salon-nunoa")
+  })
+
+  it.each(["💇‍♀️✨", "!!!", "---", "Салон", "   "])("un nombre sin letras ni números latinos (%s) da un slug de respaldo, nunca vacío", (nombre) => {
+    expect(slugDelNombre(nombre)).toMatch(/^negocio-[0-9a-f]{6}$/)
   })
 })

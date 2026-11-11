@@ -1,6 +1,6 @@
 "use client"
 
-import { useId, useState, type FormEvent } from "react"
+import { useEffect, useId, useRef, useState, type FormEvent } from "react"
 import { Hourglass } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
@@ -19,6 +19,12 @@ export function SalirDeLaLista({ slug, token }: { slug: string; token: string })
   const [listo, setListo] = useState(false)
   const [error, setError] = useState("")
   const idDelError = useId()
+  // Al salir, el botón (y su tarjeta) desaparece y el foco caía al <body>: va
+  // al título, que ya dice "Listo" y lo anuncia el lector de pantalla.
+  const titulo = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    if (listo) titulo.current?.focus()
+  }, [listo])
 
   const confirmar = async (evento: FormEvent) => {
     evento.preventDefault()
@@ -33,6 +39,7 @@ export function SalirDeLaLista({ slug, token }: { slug: string; token: string })
   return (
     <>
       <EncabezadoDeReserva
+        ref={titulo}
         antetitulo="Lista de espera"
         titulo={listo ? "Listo" : "¿Salir de la lista de espera?"}
         bajada={

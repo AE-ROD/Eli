@@ -11,6 +11,7 @@ import { franjasParaElDia } from "@/lib/mover-cita"
 import { imagenPublica } from "@/lib/pagina-del-negocio"
 import { ESTADOS_QUE_LIBERAN, estaLibre, leerOcupacion, type Ocupacion, type Tramo } from "@/lib/ocupacion"
 import { yaPasoLaHora } from "@/lib/reserva-publica"
+import { whereDeChoqueEnSillon } from "@/lib/sillones"
 import { diaDeLaSemana, existeLaHora, instanteEn, rangoDelDiaEn } from "@/lib/zona-horaria"
 
 /**
@@ -376,6 +377,43 @@ export async function horasLibresDelDia(
   }
 
   return [...libres].sort((a, b) => horaAMinutos(a) - horaAMinutos(b))
+}
+
+/**
+ * Clínica dental: al reagendar por el enlace una cita que ya tiene sillón
+ * (lo asignó la clínica), de `horas` sólo las que dejan el sillón libre en
+ * todo el tramo, con la misma regla de choque que el panel
+ * (`whereDeChoqueEnSillon`; la propia cita no choca consigo misma).
+ * Reagendar conserva el sillón y lo vuelve a revisar con
+ * `asegurarSillonLibre` dentro de su transacción: así se ofrece lo mismo que
+ * se acepta. El paciente nunca ve el sillón; sólo ve menos horas.
+ */
+export async function horasConElSillonLibre(
+  db: Pick<Prisma.TransactionClient, "appointment">,
+  consulta: {
+    businessId: string
+    sillonId: string
+    fecha: string
+    zona: string
+    duracion: number
+    horas: string[]
+    ignorarCitaId: string
+  }
+): Promise<string[]> {
+  const { businessId, sillonId, fecha, zona, duracion, horas, ignorarCitaId } = consulta
+  if (horas.length === 0) return []
+  const tramos = horas.map((hora) => ({ hora, tramo: tramoDeLaReserva(fecha, hora, duracion, zona) }))
+  const desde = new Date(Math.min(...tramos.map(({ tramo }) => tramo.startTime.getTime())))
+  const hasta = new Date(Math.max(...tramos.map(({ tramo }) => tramo.endTime.getTime())))
+  const ocupado = await db.appointment.findMany({
+    where: whereDeChoqueEnSillon({ businessId, sillonId, tramo: { startTime: desde, endTime: hasta }, ignorarCitaId }),
+    select: { startTime: true, endTime: true },
+    orderBy: { startTime: "asc" },
+    take: 500,
+  })
+  return tramos
+    .filter(({ tramo }) => !ocupado.some((cita) => cita.startTime < tramo.endTime && cita.endTime > tramo.startTime))
+    .map(({ hora }) => hora)
 }
 
 /**

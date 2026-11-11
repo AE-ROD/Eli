@@ -4,6 +4,9 @@ import { CalendarDays, Users, DollarSign, type LucideIcon } from "lucide-react"
 import { formatearHora } from "@/lib/fechas"
 import { formatearMonto } from "@/lib/dinero"
 import type { ColorDeModulo } from "@/lib/modulos"
+import { esRubroDental } from "@/lib/rubros"
+import { vocabularioDe } from "@/lib/vocabulario"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { TarjetaEstadistica } from "./tarjeta-estadistica"
 import { puedeVerIngresos, type EstadisticasDelPanel } from "../_datos"
 
@@ -25,9 +28,16 @@ function procedenciaDeCitas(estadisticas: EstadisticasDelPanel): string | undefi
   if (estadisticas.citasHoy > 0) return undefined
   if (!estadisticas.proximaCita) return "Ninguna agendada todavía."
 
+  // El día y la hora en la zona del negocio, la misma con la que el servidor decidió qué es "hoy".
+  const { zona } = estadisticas
   const cuando = new Date(estadisticas.proximaCita.startTime)
-  const dia = cuando.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
-  return `La próxima es el ${dia} a las ${formatearHora(estadisticas.proximaCita.startTime)}.`
+  const dia = cuando.toLocaleDateString("es-CL", {
+    ...(zona && { timeZone: zona }),
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  })
+  return `La próxima es el ${dia} a las ${formatearHora(estadisticas.proximaCita.startTime, zona)}.`
 }
 
 function procedenciaDeClientes(estadisticas: EstadisticasDelPanel): string | undefined {
@@ -44,9 +54,11 @@ function procedenciaDeClientes(estadisticas: EstadisticasDelPanel): string | und
  * completada en la agenda sin pasar por el cobro no suma, así que la línea
  * habla de atenciones cobradas y no de citas.
  */
-function procedenciaDeIngresos(estadisticas: EstadisticasDelPanel): string | undefined {
+function procedenciaDeIngresos(estadisticas: EstadisticasDelPanel, rubro: string | null): string | undefined {
   const cobradas = estadisticas.atencionesCobradasMes ?? 0
-  if (cobradas === 0) return "Se suma al cobrar en el tablero. Todavía nada este mes."
+  // "en el tablero", o "en la sala de espera" en una clínica dental.
+  const dondeSeCobra = `${esRubroDental(rubro) ? "la" : "el"} ${vocabularioDe(rubro).tablero}`
+  if (cobradas === 0) return `Se suma al cobrar en ${dondeSeCobra}. Todavía nada este mes.`
 
   const base = cobradas === 1 ? "1 atención cobrada" : `${cobradas} atenciones cobradas`
   const tendencia = estadisticas.tendencias.ingresos
@@ -56,14 +68,23 @@ function procedenciaDeIngresos(estadisticas: EstadisticasDelPanel): string | und
   return `${base} este mes · ${signo}${Math.abs(tendencia)}% vs el mes pasado.`
 }
 
-/** Mientras cargan, las tres tarjetas con un guion: nunca un cero que no es cierto. */
-const TARJETAS_CARGANDO: Tarjeta[] = [
-  { titulo: "Citas hoy", valor: "—", icono: CalendarDays, color: "azul" },
-  { titulo: "Clientes activos", valor: "—", icono: Users, color: "lila" },
-  { titulo: "Ingresos del mes", valor: "—", icono: DollarSign, color: "lima" },
-]
+/**
+ * "Total de clientes", o "Total de pacientes" en una clínica dental. La cifra
+ * es el total del negocio, no los que vinieron hace poco: decía "activos" y no
+ * lo eran.
+ */
+const tituloDeClientes = (clientes: string) => `Total de ${clientes}`
 
-function tarjetasDe(estadisticas: EstadisticasDelPanel): Tarjeta[] {
+/** Mientras cargan, las tres tarjetas con un guion: nunca un cero que no es cierto. */
+function tarjetasCargando(clientes: string): Tarjeta[] {
+  return [
+    { titulo: "Citas hoy", valor: "—", icono: CalendarDays, color: "azul" },
+    { titulo: tituloDeClientes(clientes), valor: "—", icono: Users, color: "lila" },
+    { titulo: "Ingresos del mes", valor: "—", icono: DollarSign, color: "lima" },
+  ]
+}
+
+function tarjetasDe(estadisticas: EstadisticasDelPanel, clientes: string, rubro: string | null): Tarjeta[] {
   return [
     {
       titulo: "Citas hoy",
@@ -73,7 +94,7 @@ function tarjetasDe(estadisticas: EstadisticasDelPanel): Tarjeta[] {
       procedencia: procedenciaDeCitas(estadisticas),
     },
     {
-      titulo: "Clientes activos",
+      titulo: tituloDeClientes(clientes),
       valor: estadisticas.totalClientes,
       icono: Users,
       color: "lila",
@@ -86,7 +107,7 @@ function tarjetasDe(estadisticas: EstadisticasDelPanel): Tarjeta[] {
             valor: formatearMonto(estadisticas.ingresosMes ?? 0),
             icono: DollarSign,
             color: "lima" as const,
-            procedencia: procedenciaDeIngresos(estadisticas),
+            procedencia: procedenciaDeIngresos(estadisticas, rubro),
           },
         ]
       : []),
@@ -100,7 +121,9 @@ interface PropsDeEstadisticasDelNegocio {
 
 /** Las tarjetas de arriba del panel: citas de hoy, clientes e ingresos del mes. */
 export function EstadisticasDelNegocio({ estadisticas }: PropsDeEstadisticasDelNegocio) {
-  const tarjetas = estadisticas ? tarjetasDe(estadisticas) : TARJETAS_CARGANDO
+  const rubro = useRubroDelPanel()
+  const { clientes } = vocabularioDe(rubro)
+  const tarjetas = estadisticas ? tarjetasDe(estadisticas, clientes, rubro) : tarjetasCargando(clientes)
 
   return (
     <div aria-busy={!estadisticas || undefined} className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

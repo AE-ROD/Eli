@@ -16,8 +16,9 @@ interface PropsDeModalAnular {
   /** Por qué no se pudo anular, si falló. */
   aviso: string
   /**
-   * El servidor no la deja anular nunca más (ya entró en una caja cerrada o en
-   * una liquidación: código `corregir-con-ajuste`). Se muestra el mensaje, lo
+   * El servidor no la deja anular (ya entró en una caja cerrada o en una
+   * liquidación: código `corregir-con-ajuste`; o lleva un abono ya pagado al
+   * laboratorio: `pagado-al-laboratorio`). Se muestra el mensaje, lo
    * escrito queda a la vista (sólo lectura) y ya no se ofrece anular.
    */
   rechazo?: string
