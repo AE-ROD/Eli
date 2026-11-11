@@ -23,7 +23,8 @@ falla() { registrar "$ETIQUETA" err "ERROR: $*"; exit 1; }
 
 ARCHIVO="${1:-${ELI_RESPALDOS:-/var/backups/eli}/ultimo.dump}"
 [[ -s "$ARCHIVO" ]] || falla "No encuentro el respaldo '$ARCHIVO' (o está vacío)."
-command -v pg_restore >/dev/null && command -v psql >/dev/null || falla "Faltan psql / pg_restore (deploy/README.md, paso 3)."
+command -v pg_restore >/dev/null || falla "Falta pg_restore (deploy/README.md, paso 3)."
+command -v psql >/dev/null || falla "Falta psql (deploy/README.md, paso 3)."
 
 # "servidor/base" de una URL, sin el '-pooler' (el pooler y el directo de Neon
 # son la misma base).
