@@ -137,5 +137,5 @@ echo
 if [[ "$ERRORES" -eq 0 ]]; then
   echo "TODO BIEN: el cliente no puede elegir su IP."
 else
-  fallo "$ERRORES comprobación(es) fallaron: el rate limit se podría saltar. NO pongas Eli en producción así."
+  fallo "$ERRORES comprobación(es) fallaron: el límite de intentos se podría saltar o algo quedaría expuesto. NO pongas Eli en producción así."
 fi

@@ -15,8 +15,17 @@
 # /api/cron/mensajes-a-clientes NO se programa acá: igual que en Vercel, lo corre
 # solo /api/cron/correos-de-prueba al terminar lo suyo.
 #
-# IMPORTANTE: nunca tener estos crons activos acá y en Vercel a la vez (cada
-# correo saldría dos veces). Ver deploy/README.md, paso 13.
+# IMPORTANTE: regla conservadora, no tener estos crons activos acá y en Vercel a
+# la vez. Verificado en el código: cada envío se "reclama" en la base antes de
+# mandarse (Appointment.reminderSentAt se marca ANTES de enviar y sólo si estaba
+# vacío), así que repetir una corrida o correr dos a la vez NO duplica un
+# recordatorio; pero un fallo ambiguo a mitad de envío puede dejar uno perdido o,
+# con dos corridas, mandado por quien no corresponde (y el enlace del correo
+# llevaría el NEXTAUTH_URL de quien lo mandó). Ver deploy/README.md, paso 13.
+#
+# Horarios siempre con los 5 campos numéricos. NO uses alias como @daily o
+# @reboot: no se pueden comparar con vercel.json (la prueba automática los
+# rechaza) y @reboot correría cada vez que se reinicia el servidor.
 #
 # Resultado de cada corrida:  journalctl -t eli-cron      (y -t eli-respaldo)
 
