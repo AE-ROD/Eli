@@ -1,0 +1,94 @@
+# Caddyfile de Eli (Caddy 2). Se instala tal cual en /etc/caddy/Caddyfile
+# (deploy/README.md, paso 9). El dominio de Eli es eliagenda.com.
+#
+# Dominio canónico: el dominio SIN www (eliagenda.com). El www redirige ahí.
+# Por qué sin www: es la dirección que va en NEXTAUTH_URL, en los enlaces de
+# los correos y en las URIs autorizadas de Google. Si la página viviera en dos
+# direcciones, las sesiones (cookies) y el login con Google quedarían partidos
+# entre las dos. Una sola dirección, una sola cookie.
+#
+# Caddy pide y renueva solo el certificado HTTPS (Let's Encrypt). Necesita que
+# los puertos 80 y 443 lleguen al servidor y que el DNS ya apunte aquí.
+#
+# SOLO IPv4 ("bind 0.0.0.0" en cada sitio). Por qué: el límite de intentos
+# cuenta por IP y {remote_host} es la dirección COMPLETA. En IPv6 cada persona
+# recibe un bloque entero (/64: 18 trillones de direcciones) y podría usar una
+# distinta en cada pedido, saltándose el límite. Sin IPv6 no existe ese hueco.
+# Consecuencia: NO crees registros DNS AAAA para este dominio (Let's Encrypt los
+# usaría para validar y fallaría). Si "caddy validate" rechaza "bind", mira
+# deploy/README.md, paso 9.4.
+
+{
+	# Opcional: un correo real para que Let's Encrypt avise si algún día falla
+	# la renovación del certificado. Sin esto igual funciona.
+	# email tu-correo@tu-dominio.cl
+}
+
+www.eliagenda.com {
+	bind 0.0.0.0
+	redir https://eliagenda.com{uri} permanent
+}
+
+eliagenda.com {
+	bind 0.0.0.0
+
+	# Compresión de las respuestas (HTML, JS, JSON).
+	encode zstd gzip
+
+	# El código de la app limita los cuerpos a 5 MB (lib/cuerpo-del-pedido.ts);
+	# esto corta antes, en la puerta, lo que ya sería rechazado.
+	request_body {
+		max_size 6MB
+	}
+
+	header {
+		# El HTTPS lo termina Caddy. Vercel agregaba esta cabecera solo; aquí la
+		# ponemos nosotros (la app no la manda). Un año, sin includeSubDomains.
+		Strict-Transport-Security "max-age=31536000"
+		# No anunciar "Server: Caddy".
+		-Server
+	}
+
+	# Los crons los llama el propio servidor directo a 127.0.0.1:3000 (sin pasar
+	# por acá), así que desde internet /api/cron/* no tiene por qué existir.
+	# Cierra esa superficie aunque el secreto es la defensa de fondo.
+	@cron path /api/cron /api/cron/*
+	respond @cron 404
+
+	reverse_proxy 127.0.0.1:3000 {
+		# ---------------------------------------------------------------------
+		# LO CRÍTICO: LA IP DEL CLIENTE QUE USA EL RATE LIMIT
+		#
+		# lib/rate-limit.ts (obtenerIp) lee la IP en este orden y se queda con
+		# la primera que encuentra:
+		#     1) x-vercel-forwarded-for   2) x-real-ip   3) x-forwarded-for
+		# Eso era seguro en Vercel, que fija esas cabeceras él mismo. Aquí el
+		# único que las fija es ESTE archivo. Si un atacante manda
+		# "X-Vercel-Forwarded-For: 1.2.3.4" y Caddy lo deja pasar, la app lo
+		# cree, y el atacante cambia de IP en cada pedido: el límite de intentos
+		# de login (10 por minuto) deja de existir.
+		#
+		# Por eso, de las tres cabeceras:
+		#   - x-vercel-forwarded-for: se BORRA (acá nadie legítimo la manda).
+		#   - x-real-ip y x-forwarded-for: se FIJAN con la IP de la conexión
+		#     TCP real ({remote_host}), pisando lo que haya mandado el cliente.
+		#
+		# Si este bloque se quita o se cambia, hay que revisar obtenerIp.
+		# Hay una prueba (deploy/deploy.test.ts) que falla si desaparece.
+		# ---------------------------------------------------------------------
+		header_up -X-Vercel-Forwarded-For
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+
+		# Notas (sintaxis de Caddy 2):
+		#  - "header_up -Campo" borra la cabecera; "header_up Campo valor" la
+		#    reemplaza (no la suma; para sumar sería "+Campo").
+		#  - {remote_host} es la IP de quien se conectó a Caddy, sin puerto
+		#    (atajo de {http.request.remote.host}).
+		#  - Sin "trusted_proxies" configurado (como aquí), Caddy NO se fía de
+		#    ninguna cabecera X-Forwarded-* que venga del cliente. No se debe
+		#    agregar "trusted_proxies" salvo que algún día haya otro proxy
+		#    (por ejemplo Cloudflare) DELANTE de Caddy; en ese caso hay que
+		#    rehacer esta sección completa.
+	}
+}
