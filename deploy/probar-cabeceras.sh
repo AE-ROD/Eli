@@ -38,6 +38,10 @@
 # Necesita: nginx (el binario; con "apt install nginx" ya está), node, curl, awk.
 # Corre como el usuario eli (no hace falta sudo). Sale con 0 sólo si pasa todo.
 
+# Las condiciones de "comprobar" van entre comillas simples a propósito: se
+# evalúan DENTRO de la función, cuando las variables ya tienen su valor (por eso
+# el analizador las ve "sin usar" o "sin expandir").
+# shellcheck disable=SC2016,SC2034
 set -euo pipefail
 
 DIRECTORIO_DEL_SCRIPT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
@@ -49,7 +53,7 @@ fallo() { printf '\nFALLÓ: %s\n' "$*" >&2; exit 1; }
 
 NGINX="$(command -v nginx || true)"
 [[ -z "$NGINX" && -x /usr/sbin/nginx ]] && NGINX=/usr/sbin/nginx
-[[ -n "$NGINX" ]] || fallo "Falta 'nginx' (sudo apt install nginx; ya está en el VPS)."
+[[ -n "$NGINX" ]] || fallo "Falta 'nginx' (apt install nginx; ya está instalado en el VPS)."
 for herramienta in node curl awk sed; do
   command -v "$herramienta" >/dev/null || fallo "Falta '$herramienta'."
 done

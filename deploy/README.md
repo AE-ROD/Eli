@@ -6,6 +6,11 @@ debajo dice qué deberías ver en pantalla. Si lo que ves es distinto, **para y
 no sigas**: pega *sólo la salida del comando* (nunca claves ni contraseñas) a
 quien te esté ayudando.
 
+> **ESTE VPS YA ALOJA `sistemaone.com` CON nginx (en producción). NO APAGUES
+> nginx.** Eli se agrega como un sitio más de ese mismo nginx (paso 9). Nunca
+> `systemctl stop`, `restart` ni `disable` de nginx: sólo
+> `sudo nginx -t && sudo systemctl reload nginx`. Caddy ya no se usa.
+
 > **Regla de oro: nunca pegues contraseñas, claves, tokens ni el contenido de
 > `/etc/eli/eli.env` en un chat, un correo o un issue.** Ni siquiera "para que
 > me ayuden". Las claves se escriben sólo dentro del servidor (paso 6).
@@ -21,7 +26,8 @@ quien te esté ayudando.
 | **Llave SSH** | Un par de archivos (uno privado en tu Mac, uno público en el servidor) que reemplazan a la contraseña. Mucho más seguro. |
 | **ufw / fail2ban** | El guardia de la puerta (ufw: sólo deja pasar lo necesario) y el que expulsa a quien insiste en adivinar claves (fail2ban). |
 | **Node** | El programa que ejecuta Eli. |
-| **Caddy** | El "recepcionista" de internet: recibe las visitas en tu dominio, pone el candado HTTPS solo, y se las pasa a Eli. También protege el límite de intentos (ver paso 9). |
+| **nginx** | El "recepcionista" de internet: **ya estaba instalado** en el VPS y sirve `sistemaone.com`. Recibe las visitas de `eliagenda.com`, y se las pasa a Eli. También protege el límite de intentos (ver paso 9). **Nunca se apaga ni se reinicia** (ver el aviso de arriba). |
+| **Certbot** | El programa (también **ya instalado**) que pide y renueva solo el certificado HTTPS (Let's Encrypt) y lo pone en nginx. |
 | **systemd** | Lo que arranca Eli solo al prender el servidor y lo vuelve a levantar si se cae. |
 | **cron** | El reloj del servidor: dispara los recordatorios, los correos y los respaldos a su hora. |
 | **Deploy key** | Una llave de *sólo lectura* que deja al servidor bajar el código de GitHub (el repositorio es privado). |
@@ -31,7 +37,7 @@ quien te esté ayudando.
 ## Cómo está armado
 
 ```
-Internet ──► Caddy (puertos 80 y 443, HTTPS) ──► Eli (Next.js, 127.0.0.1:3000, sólo local)
+Internet ──► nginx (puertos 80 y 443, HTTPS; ya sirve sistemaone.com) ──► Eli (Next.js, 127.0.0.1:3000, sólo local)
                                                     │
                           Neon (base) · Upstash (límite de intentos) · Resend (correo)
 cron ──► Eli (127.0.0.1:3000/api/cron/...)      cron ──► respaldo ──► /var/backups/eli
@@ -48,7 +54,8 @@ Carpetas y archivos del servidor:
 | `/etc/eli/eli.env` | **Las claves y variables.** Sólo lo lee root y el grupo eli. |
 | `/etc/systemd/system/eli.service` | Cómo se arranca Eli. |
 | `/etc/sudoers.d/eli` | Los dos únicos comandos de administrador que `eli` puede usar sin contraseña (`deploy/sudoers-eli`). |
-| `/etc/caddy/Caddyfile` | La configuración de Caddy. |
+| `/etc/nginx/sites-available/eliagenda` | El sitio de Eli en nginx (copia de `deploy/nginx-eliagenda.conf`; Certbot le agrega el HTTPS). |
+| `/etc/nginx/sites-enabled/zz-eliagenda` | Enlace que lo activa. Se llama `zz-` para que nginx lo lea **después** de `sistemaone` (si no, Eli sería el sitio por defecto). |
 | `/etc/cron.d/eli` | Los relojes (crons y respaldo). |
 | `/var/backups/eli` | Los respaldos de la base. |
 | `/home/eli/.eli-avisos` | Un archivo por tarea con la fecha del último correo de aviso (para no repetirlos). Está fuera de `/var/backups/eli` a propósito: si esa carpeta falta o no se puede escribir, el aviso tiene que salir igual. |
@@ -69,11 +76,14 @@ y trae el comando exacto.
 | `next start` con las variables de producción: arranca, `/` responde 200, cabeceras de seguridad y CSP, crons 401 sin secreto | Probado (compilación incluida) |
 | `bash -n` y `shellcheck` de todos los `.sh`; `eli.service` con `systemd-analyze verify`; `deploy/sudoers-eli` con `visudo -cf` | Probado |
 | Pruebas automáticas de `deploy/` (`npx vitest run deploy/`) | Probado |
-| **Caddyfile**: que `caddy` lo acepte (incluido `bind 0.0.0.0`), que pida el certificado, que pise las cabeceras de IP, que `/api/cron/*` dé 404 | **A COMPROBAR EN EL VPS** (paso 9 y 12: `deploy/probar-cabeceras.sh /etc/caddy/Caddyfile`). Aquí no había Caddy: el script se probó con un Caddy de juguete |
-| **IPv6**: que con `bind 0.0.0.0` nada escuche en IPv6 | **A COMPROBAR EN EL VPS** (pasos 9.4 y 12.5: `sudo ss -tlnp \| grep -E ':(80\|443) '` y `curl -6`) |
+| **`nginx-eliagenda.conf` con un nginx de verdad (1.24.0, la versión de Ubuntu 24.04)**: `nginx -t` lo acepta; borra `X-Vercel-Forwarded-For` (también en minúsculas, repetida y nombrada en `Connection`); `X-Real-IP` y `X-Forwarded-For` quedan sólo con la IP real; `Forwarded`, `True-Client-IP` y `CF-Connecting-IP` no llegan; `/api/cron` da 404 en 13 variantes (mayúsculas, `//`, `%2f`, `%63`, `/../`) sin llegar a la app; HSTS sale también en ese 404; 413 sobre 6 MB; el `www` redirige 301 | Probado aquí (`deploy/probar-cabeceras.sh`, con un eco en Node) |
+| **Certbot 2.9.0 (la versión del VPS) reescribiendo ese archivo** en un nginx de pruebas con 80/443 y un sitio parecido a sistemaone: conserva las líneas de IP, HSTS, el 404 de cron y `client_max_body_size`; agrega `listen 443 ssl` y los redirects; HTTP→HTTPS y www→apex; un nombre desconocido (HTTP, HTTPS/SNI y la IP pelada) cae en el otro sitio, no en Eli (con el enlace `zz-eliagenda`; con `eliagenda` Eli pasaba a ser el sitio por defecto). También `nginx-eliagenda-https.conf` | Probado aquí con un certificado autofirmado (**sin** Let's Encrypt real) |
+| **Let's Encrypt de verdad** (validación del dominio por el puerto 80 con el `www` redirigido dentro de `location /`, `renew --dry-run`) | **A COMPROBAR EN EL VPS** (9.6) |
+| **Que el nginx del VPS no tenga `real_ip`/`proxy_protocol`/otro `default_server`**, y su `nginx.conf` real (aquí no hay acceso a él) | **A COMPROBAR EN EL VPS** (9.2) |
+| **IPv6**: que un cliente IPv6 con SNI `eliagenda.com` caiga en sistemaone y no en Eli | Razonado desde cómo elige nginx el sitio (por socket); aquí no hay IPv6. **A COMPROBAR EN EL VPS** (9.7) |
 | `eli.service` arrancando de verdad con el endurecimiento (`ProtectSystem`, `InaccessiblePaths`, `SupplementaryGroups`, etc.) | **A COMPROBAR EN EL VPS** (paso 8.5) |
 | Que `sudo` acepte las dos reglas de `deploy/sudoers-eli` tal como los scripts las llaman (`sudo -n systemctl reset-failed eli` / `restart eli`) | **A COMPROBAR EN EL VPS** (paso 8.2: `sudo -l` y la prueba como `eli`) |
-| Instalación de Node, Caddy y PGDG desde sus repositorios | **A COMPROBAR EN EL VPS** (paso 3; son los métodos oficiales, pero no se pudieron abrir sus páginas desde aquí para recontrastar los comandos) |
+| Instalación de Node y PGDG desde sus repositorios | **A COMPROBAR EN EL VPS** (paso 3; son los métodos oficiales, pero no se pudieron abrir sus páginas desde aquí para recontrastar los comandos). nginx y Certbot ya estaban instalados: no se instalan |
 | `cron.d` con `CRON_TZ=UTC` | **A COMPROBAR EN EL VPS** (paso 10) |
 | Tiempo de compilación en el KVM 2 | **A COMPROBAR** (aquí, con 4 CPU: ~40 segundos de `npm run build` y ~16 de `npm ci`) |
 | Envío real del correo de aviso con Resend (el remitente `RESEND_FROM_EMAIL` tiene que estar verificado en Resend) | **A COMPROBAR EN EL VPS** (paso 10.5). Aquí se probó contra un Resend de juguete |
@@ -296,6 +306,14 @@ yes`.
 
 ### 2.3 Cortafuegos (ufw): sólo 22, 80 y 443
 
+> **En este VPS el cortafuegos YA ESTÁ configurado y encendido** (por
+> `sistemaone.com`): ya permite `22/tcp`, `80/tcp`, `443/tcp` y `443/udp` (más
+> las reglas `OpenSSH` y `Nginx Full` de la plantilla del proveedor). **No
+> repitas los comandos de abajo ni apagues/reinicies `ufw`**: sólo
+> compruébalo con `sudo ufw status verbose` y sigue con 2.4. No hace falta abrir
+> nada más; el 443/udp (HTTP/3) ya está abierto pero Eli **no** lo usa: nginx no
+> lo atiende aquí. Lo que sigue queda como referencia para un servidor nuevo.
+
 **Primero se permite SSH y recién después se enciende. Si lo haces al revés te
 quedas afuera.**
 
@@ -312,7 +330,7 @@ quedas afuera.**
 >    ejemplo `:2222`), usa ESE en `sudo ufw allow NUMERO/tcp` en lugar de 22.
 > 2. **El firewall de Hostinger.** En hPanel → VPS → tu servidor puede haber un
 >    *Firewall* propio (aparte de `ufw`). Si existe y está activo, debe dejar
->    abiertos **22, 80 y 443** (y 443/UDP si quieres HTTP/3); si no, el sitio no
+>    abiertos **22, 80 y 443**; si no, el sitio no
 >    será visible aunque `ufw` esté bien. Y recuerda: si te quedas sin SSH, la
 >    **terminal del navegador de hPanel** entra sin pasar por el 22.
 
@@ -340,12 +358,6 @@ sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 ```
 
-Opcional (HTTP/3, un poco más rápido en celulares; si no estás seguro, sáltalo):
-
-```bash
-sudo ufw allow 443/udp
-```
-
 ```bash
 sudo ufw enable
 ```
@@ -357,8 +369,10 @@ Pregunta `Command may disrupt existing ssh connections. Proceed with operation
 sudo ufw status verbose
 ```
 
-Debe decir `Status: active` y listar sólo 22, 80 y 443 (`ALLOW IN`; el 443/udp
-sólo si lo abriste).
+Debe decir `Status: active` y permitir 22, 80 y 443 (`ALLOW IN`). **En este
+VPS verás además** `443/udp` y las reglas `OpenSSH` y `Nginx Full` de la plantilla
+del proveedor (y sus versiones `(v6)`): es lo esperado, no las borres (sistemaone
+las usa).
 
 ### 2.4 fail2ban (expulsa a quien intenta adivinar claves)
 
@@ -413,8 +427,10 @@ reinicia si hay un parche que lo pide (existe `/var/run/reboot-required`) y si
 no hay nadie conectado por SSH. Un reinicio deja Eli caído 1-2 minutos y vuelve
 solo (es lo que se prueba en 12.9).
 
-**Lo que NO se actualiza solo:** Node (NodeSource), Caddy y el cliente de
-Postgres (PGDG) vienen de repositorios aparte que `unattended-upgrades` no toca.
+**Lo que NO se actualiza solo:** Node (NodeSource) y el cliente de Postgres
+(PGDG) vienen de repositorios aparte que `unattended-upgrades` no toca. (nginx y
+Certbot vienen de Ubuntu: sí se actualizan solos, y el paquete de nginx se
+actualiza **en caliente**, sin cortar sistemaone. Tú nunca lo reinicias.)
 Una vez al mes, mira los avisos y actualiza a mano:
 
 ```bash
@@ -425,13 +441,13 @@ sudo apt update && apt list --upgradable
 sudo apt upgrade
 ```
 
-Si actualizó `nodejs` o `caddy`, aplica con `sudo systemctl restart eli caddy` y
-revisa que Eli responda (`curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000/`
+Si actualizó `nodejs`, aplica con `sudo systemctl restart eli` y revisa que Eli
+responda (`curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000/`
 debe decir `200`). *(Alternativa para avanzados, no recomendada para empezar:
 agregar esos repositorios a `Unattended-Upgrade::Origins-Pattern` copiando
-`origin=` y `archive=` de lo que muestre `apt-cache policy caddy`. Una
-actualización automática de Node o de Caddy puede cambiar el comportamiento sin
-que lo veas.)*
+`origin=` y `archive=` de lo que muestre `apt-cache policy nodejs`. Una
+actualización automática de Node puede cambiar el comportamiento sin que lo
+veas.)*
 
 ### 2.6 Apagar el ingreso por contraseña (SÓLO después de comprobar la llave)
 
@@ -527,7 +543,7 @@ contraseña).
 
 ---
 
-## Paso 3. Instalar Node 22, git, Caddy y el cliente de Postgres
+## Paso 3. Instalar Node 22, git y el cliente de Postgres (nginx y Certbot ya están)
 
 ### 3.1 Herramientas base
 
@@ -569,38 +585,18 @@ npm -v
 Debe decir `10.` algo. Si `node -v` dice otra versión (por ejemplo `v18`), para:
 hay otro Node instalado que gana; avisa.
 
-### 3.3 Caddy (repositorio oficial de Caddy)
+### 3.3 nginx y Certbot: ya están instalados (no instales nada)
 
-Comandos de la documentación oficial de Caddy para Debian/Ubuntu (**A COMPROBAR:**
-no pude abrir su página desde donde armé esto; si algún comando falla, la guía
-vigente está en `https://caddyserver.com/docs/install#debian-ubuntu-raspbian`).
-
-```bash
-sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
-```
+Este VPS ya tiene nginx (sirviendo `sistemaone.com`) y Certbot 2.9.0. **No los
+instales ni los actualices a mano.** Sólo comprueba que están:
 
 ```bash
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+nginx -v && certbot --version
 ```
 
-```bash
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-```
-
-```bash
-sudo chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg /etc/apt/sources.list.d/caddy-stable.list
-```
-
-```bash
-sudo apt update && sudo apt install -y caddy
-```
-
-```bash
-caddy version
-```
-
-Debe decir `v2.` algo. Caddy queda corriendo con una página de bienvenida; la
-reemplazaremos en el paso 9.
+Debe decir `nginx version: nginx/1.24.0 (Ubuntu)` (o parecido) y `certbot 2.9.0`.
+Si falta alguno, **para y avisa**: no instales Caddy ni otro servidor web, y no
+reinicies nginx.
 
 ### 3.4 El cliente de Postgres, de la MISMA versión que tu base en Neon
 
@@ -763,7 +759,7 @@ git clone git@github-eli:AE-ROD/Eli.git /opt/eli/repo
 ls /opt/eli/repo/deploy
 ```
 
-Debe listar `Caddyfile`, `README.md`, `actualizar.sh`, etc. (Si no existe
+Debe listar `nginx-eliagenda.conf`, `README.md`, `actualizar.sh`, etc. (Si no existe
 `deploy`, el kit todavía no está en `main`: ver paso 0.)
 
 ### 5.7 Proteger la rama `main` en GitHub (hazlo ahora, una sola vez)
@@ -973,12 +969,12 @@ Debe responder nombres de Hostinger (algo como `ns1.dns-parking.com`). Si
 respondiera otros, el DNS está en otro servicio y los registros se cambian
 **en el panel de ese servicio** (las instrucciones valen igual).
 
-> **No crees registros `AAAA` (IPv6)** para este dominio: el Caddyfile escucha
-> sólo en IPv4 a propósito (paso 9.1) y Let's Encrypt usaría el `AAAA` para
-> validar y fallaría. Si hPanel ya trajo alguno, **bórralo**.
+> **No crees registros `AAAA` (IPv6)** para este dominio: el sitio de Eli en
+> nginx escucha sólo en IPv4 a propósito (paso 9.1) y Let's Encrypt usaría el
+> `AAAA` para validar y caería en sistemaone (fallaría). Si hPanel ya trajo alguno, **bórralo**.
 >
 > **Si algún día pones Cloudflare delante**, déjalo en "solo DNS" (nube gris):
-> con la nube naranja queda delante de Caddy y todo el cálculo de la IP del
+> con la nube naranja queda delante de nginx y todo el cálculo de la IP del
 > cliente (paso 9.1) dejaría de valer.
 
 ### 7.1 Ver y anotar cómo está hoy
@@ -1006,7 +1002,7 @@ En *Registros DNS*:
 | CNAME | `www` | `eliagenda.com` | 300 |
 
 (Si hPanel no te deja crear el `CNAME` de `www`, usa un registro `A` de `www`
-a `187.41.114.36`; funciona igual.) El `www` sólo sirve para que Caddy lo
+a `187.41.114.36`; funciona igual.) El `www` sólo sirve para que nginx lo
 redirija al dominio sin `www`.
 
 ### 7.3 Comprobar que el DNS ya apunta (en tu Mac)
@@ -1034,8 +1030,8 @@ dig +short www.eliagenda.com
 ```
 
 (debe mostrar `eliagenda.com.` y/o `187.41.114.36`). **No sigas al paso 9 hasta que
-esto esté así**: Caddy pide el certificado en cuanto lo recargas y necesita que
-el dominio ya apunte al VPS.
+esto esté así**: Certbot (9.6) valida el dominio por el puerto 80 y necesita que
+ya apunte al VPS.
 
 ### 7.4 Verificar `eliagenda.com` en Resend (para que los correos salgan de tu dominio)
 
@@ -1265,150 +1261,459 @@ exige separar el usuario del servicio: ver "Mejoras futuras" al final.)*
 
 ---
 
-## Paso 9. Caddy (HTTPS y la IP del cliente)
+## Paso 9. nginx (HTTPS y la IP del cliente), conviviendo con sistemaone.com
+
+> **ALTO. LEE ESTO ANTES DE TOCAR NADA.** Este VPS **ya sirve `sistemaone.com` en
+> producción con este mismo nginx**. Eli se agrega como **un sitio más** de ese
+> nginx; no hay otro servidor web (Caddy ya no se usa: no puede compartir los
+> puertos 80/443 con nginx).
+>
+> **NUNCA `systemctl stop`, `restart` ni `disable` de nginx** (ya hubo un corte de
+> 5 minutos de `sistemaone.com` por apagarlo por error). **Lo único permitido es
+> `sudo nginx -t && sudo systemctl reload nginx`**: `nginx -t` revisa la
+> configuración y `reload` la aplica **sin cortar** ninguna conexión, y si la
+> configuración está mal, `nginx -t` falla y el `reload` ni se ejecuta.
+>
+> **No toques `/etc/nginx/sites-enabled/sistemaone`** (ni su archivo en
+> `sites-available`, ni `/etc/nginx/nginx.conf`). Este paso sólo **agrega** un
+> archivo nuevo.
+>
+> **Antes y después de CADA cambio** comprueba que sistemaone sigue vivo:
+>
+> ```bash
+> curl -sI https://sistemaone.com | head -1
+> ```
+>
+> Debe decir `200` (`HTTP/1.1 200 OK`, o `HTTP/2 200`). Si deja de decirlo, **ve
+> directo a 9.9 (vuelta atrás)**.
 
 ### 9.1 Qué hace y por qué es crítico
 
-`deploy/Caddyfile` hace seis cosas: pone el candado HTTPS solo (Let's
-Encrypt), comprime las respuestas, manda `www` al dominio sin `www`, **escucha
-sólo en IPv4**, responde 404 a `/api/cron/*` desde internet (los crons llaman
-directo a `127.0.0.1:3000`, sin pasar por Caddy) y —lo importante— **decide qué
-IP "ve" Eli**.
+`deploy/nginx-eliagenda.conf` hace seis cosas: manda el `www` al dominio sin
+`www`, **escucha sólo en IPv4**, comprime las respuestas, responde 404 a
+`/api/cron` y `/api/cron/*` desde internet (los crons llaman directo a
+`127.0.0.1:3000`, sin pasar por nginx), pone HSTS y —lo importante— **decide qué
+IP "ve" Eli**. El candado HTTPS lo agrega Certbot en 9.6.
 
 El límite de intentos de login (10 por minuto por IP, etc.) cuenta por IP. El
 código (`lib/rate-limit.ts`, `obtenerIp`) confía primero en la cabecera
 `x-vercel-forwarded-for`, luego en `x-real-ip` y luego en `x-forwarded-for`.
-En Vercel eso era seguro porque Vercel las pisaba. **Aquí las pisa Caddy**: borra
-`X-Vercel-Forwarded-For` y fija `X-Real-IP` y `X-Forwarded-For` con la IP real
-de la conexión. Sin eso, un atacante cambiaría de "IP" en cada pedido y se
-saltaría el límite de intentos. Hay una prueba automática
-(`deploy/deploy.test.ts`) que falla si alguien quita esas líneas, y una
-comprobación en vivo en el paso 12 (`deploy/probar-cabeceras.sh`).
+En Vercel eso era seguro porque Vercel las pisaba. **Aquí las pisa nginx**:
 
-> Si algún día pones otro servicio delante de Caddy (Cloudflare, otro proxy),
+- `proxy_set_header X-Vercel-Forwarded-For "";` — con valor vacío, nginx **no
+  pasa** esa cabecera a Eli (la documentación de nginx lo dice así, y se probó con
+  un nginx real: tampoco pasa la que mande el cliente, en minúsculas,
+  mayúsculas ni repetida).
+- `proxy_set_header X-Real-IP $remote_addr;` y `proxy_set_header X-Forwarded-For
+  $remote_addr;` — **reemplazan** lo que mande el cliente por la IP de la
+  conexión TCP real. **Nunca `$proxy_add_x_forwarded_for`**: ése *suma* a la
+  cabecera del cliente y es justo el ataque.
+
+Sin eso, un atacante cambiaría de "IP" en cada pedido y se saltaría el límite de
+intentos. Hay una prueba automática (`deploy/deploy.test.ts`) que falla si alguien
+quita esas líneas, y una comprobación en vivo con un nginx real
+(`deploy/probar-cabeceras.sh`, 9.5 y 12.5).
+
+**Qué se sabe con certeza y qué no (sobre esas cabeceras).** Con certeza (probado
+aquí con nginx 1.24.0, la misma versión de Ubuntu 24.04): el valor vacío borra la
+cabecera, `$remote_addr` pisa lo del cliente, y un `Connection: X-Real-IP, ...`
+inventado por el cliente no sirve (nginx fija su propio `Connection`). Lo que
+depende de **cómo esté configurado el nginx del VPS** y por eso se comprueba en
+9.2: que no haya `set_real_ip_from`/`real_ip_header` ni PROXY protocol (con
+ellos, `$remote_addr` dejaría de ser la IP de la conexión).
+
+> Si algún día pones otro servicio delante de nginx (Cloudflare, otro proxy),
 > esto hay que rehacerlo. Avísale a quien mantiene el código.
 
-**Por qué sólo IPv4 (`bind 0.0.0.0`).** El límite cuenta por la dirección
-*completa* de la conexión. En IPv4 cada conexión tiene una dirección; en IPv6, a
-cada cliente se le entrega un bloque entero (un `/64`, 18 trillones de
-direcciones) y un atacante puede usar una distinta en cada pedido, saltándose el
-límite como si no existiera. Sin IPv6 en Caddy, ese hueco no existe. Es una
-decisión deliberada: **no crees registros DNS `AAAA`** (paso 7) ni quites los
-`bind 0.0.0.0` del Caddyfile (hay una prueba automática que falla si
-desaparecen).
+**Por qué sólo IPv4 (ningún `listen [::]` en el archivo de Eli).** El límite
+cuenta por la dirección *completa* de la conexión. En IPv4 cada conexión tiene una
+dirección; en IPv6, a cada cliente se le entrega un bloque entero (un `/64`, 18
+trillones de direcciones) y un atacante puede usar una distinta en cada pedido,
+saltándose el límite como si no existiera. Es una decisión deliberada: **no crees
+registros DNS `AAAA`** (paso 7) ni agregues `listen [::]...` al sitio de Eli (hay
+una prueba automática que falla si aparece).
 
-**¿Tiene tu VPS IPv6?** Mira (en el VPS):
+**¿Qué pasa con un cliente IPv6 que pide `eliagenda.com`?** `sistemaone` sí
+escucha en IPv6 (`listen [::]:443 ssl ipv6only=on;`). nginx elige el sitio sólo
+entre los que escuchan en el *socket* que recibió la conexión, y Eli no escucha en
+ningún `[::]`. Entonces un cliente que fuerce IPv6 con el nombre `eliagenda.com`
+(por ejemplo con `curl -6 --resolve`) cae en el sitio **por defecto de
+sistemaone** (su certificado y su contenido; el navegador avisará que el
+certificado no es de `eliagenda.com`) y **nunca llega a Eli**. Se comprueba en 9.7.
 
-```bash
-ip -6 addr show scope global
-```
+**El orden de los archivos importa (el enlace se llama `zz-eliagenda`).** El
+primer sitio que nginx lee para un puerto es el **sitio por defecto** de ese
+puerto: el que contesta a nombres desconocidos, a la IP pelada y a los escáneres.
+nginx lee `sites-enabled/` en orden alfabético y `eliagenda` ordena antes que
+`sistemaone`: si el enlace se llamara `eliagenda`, Eli pasaría a ser el sitio por
+defecto y cambiaría lo que ve cualquiera que no escriba bien el nombre de
+sistemaone. Por eso el enlace se llama **`zz-eliagenda`** (queda después) y no se
+usa `default_server` en ninguno de los dos archivos. 9.4 lo comprueba.
 
-Si no imprime nada, el servidor no tiene IPv6 público y esto es sólo una
-precaución. Si imprime líneas con `inet6 ...` (suele ser el caso en Hostinger),
-el servidor **sí** podría atender por IPv6, y es justo para lo que sirve el
-`bind`: en 9.4 y 12.5 se comprueba que Caddy NO escucha ahí.
+### 9.2 Inventario previo (sólo mirar, no cambia nada)
 
-### 9.2 Antes de cargar Caddy: el DNS tiene que apuntar ya al VPS
-
-Caddy pide el certificado HTTPS en cuanto lo recargas (9.4). Si el dominio
-todavía no apunta aquí, Let's Encrypt falla, Caddy reintenta con pausas cada vez
-más largas y Let's Encrypt limita los intentos fallidos. Por eso el paso 7.3 tiene
-que estar en verde **antes**. Compruébalo otra vez (en tu Mac):
-
-```bash
-dig +short eliagenda.com @8.8.8.8
-```
-
-Debe imprimir `187.41.114.36`. Si no, vuelve al paso 7.
-
-### 9.3 Instalar la configuración
-
-El Caddyfile del repositorio ya trae el dominio real (`eliagenda.com`), así que se
-instala tal cual (no hay nada que reemplazar). Guarda la original e instala la
-nuestra:
+Antes de agregar nada, anota cómo está el nginx **hoy**. Ninguno de estos comandos
+modifica nada. (VPS.)
 
 ```bash
-sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.original
+curl -sI https://sistemaone.com | head -1
 ```
+
+Debe decir `200`. **Anota que lo dijo**: es tu línea base.
 
 ```bash
-sudo install -m 644 /opt/eli/repo/deploy/Caddyfile /etc/caddy/Caddyfile
+systemctl is-active nginx && nginx -v
 ```
+
+Debe decir `active` y una versión (en Ubuntu 24.04, `nginx/1.24.0`).
 
 ```bash
-grep -n "eliagenda.com" /etc/caddy/Caddyfile
+ls -la /etc/nginx/sites-enabled/
 ```
 
-Debe mostrar las líneas de los dos sitios: `www.eliagenda.com {` y
-`eliagenda.com {` (más la redirección del `www`).
-
-### 9.4 Validar y aplicar
-
-```bash
-caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-```
-
-**Esta validación es obligatoria** antes de recargar: es la única comprobación
-real que tienes de que Caddy entiende el archivo (incluido `bind 0.0.0.0`, que
-no se pudo probar con un Caddy de verdad al armar el kit). Debe terminar en
-`Valid configuration`. (Un `adapted ... with warnings` sobre formato es
-inofensivo; un error, no.)
-
-**Si dice error** (por ejemplo `unrecognized directive` o `wrong argument count`
-en una línea con `bind`): **NO recargues.** Caddy sigue sirviendo con la
-configuración anterior mientras no lo hagas. Deshaz y avisa:
-
-```bash
-sudo cp /etc/caddy/Caddyfile.original /etc/caddy/Caddyfile
-```
-
-y pega a quien te ayuda **sólo** la salida del `validate`. *(Alternativa de
-emergencia, sólo si te lo indican: dejar el archivo sin `bind` y apagar IPv6 en
-el sistema con `printf 'net.ipv6.conf.all.disable_ipv6=1\nnet.ipv6.conf.default.disable_ipv6=1\n' | sudo tee /etc/sysctl.d/99-eli-sin-ipv6.conf && sudo sysctl --system`.
-**A COMPROBAR**; la prueba de IPv6 del paso 12.5 sigue valiendo.)*
-
-Si dice `Valid configuration`:
-
-```bash
-sudo systemctl reload caddy
-```
-
-Comprueba que Caddy escucha sólo en IPv4 (**A COMPROBAR EN EL VPS**):
+Debe listar `sistemaone` (un enlace a `../sites-available/sistemaone`). **No debe
+existir todavía** `zz-eliagenda` ni `eliagenda`. Si hay otros sitios que no
+conoces, no los toques y avisa.
 
 ```bash
 sudo ss -tlnp | grep -E ':(80|443) '
 ```
 
-Debe mostrar `0.0.0.0:80` y `0.0.0.0:443` (con `caddy`). Si ves `*:443` o
-`[::]:443`, Caddy está escuchando también en IPv6: **no sigas**, el `bind` no se
-aplicó.
+Debe mostrar sólo `nginx` escuchando en 80 y 443 (`0.0.0.0:80`, `0.0.0.0:443` y
+probablemente `[::]:80`/`[::]:443` por sistemaone). Nada de `caddy` ni de `apache`.
 
 ```bash
-sudo journalctl -u caddy -n 30 --no-pager
+sudo nginx -T 2>/dev/null | grep -nE 'set_real_ip_from|real_ip_header|proxy_protocol|default_server'
 ```
 
-Busca `certificate obtained successfully` (o similar) para tu dominio. Si ves
-`challenge failed`/`NXDOMAIN`/`timeout`, normalmente el DNS aún no apunta al VPS
-(paso 7.3) o el puerto 80/443 está cerrado (paso 2.3).
+**No debe imprimir nada**. Si imprime `set_real_ip_from`/`real_ip_header`/
+`proxy_protocol`, `$remote_addr` podría no ser la IP real: **para y avisa** (Eli no
+puede ir con esa configuración). Si imprime `default_server`, anota en qué sitio
+está y avisa (no cambia lo de abajo, pero hay que saberlo).
 
-### 9.5 Probar desde tu Mac
+```bash
+sudo certbot --version && systemctl list-timers --no-pager | grep -i certbot
+```
+
+Debe decir `certbot 2.9.0` (o parecido) y mostrar el temporizador de Certbot
+(`certbot.timer`): es el que renueva los certificados solo.
+
+### 9.3 El DNS tiene que apuntar ya al VPS
+
+Certbot valida el dominio por HTTP (puerto 80) en el paso 9.6: si `eliagenda.com`
+todavía no apunta aquí, Let's Encrypt falla y limita los intentos fallidos. El
+paso 7.3 tiene que estar en verde **antes**. Compruébalo otra vez (en tu Mac):
+
+```bash
+dig +short eliagenda.com @8.8.8.8
+```
+
+Debe imprimir `187.41.114.36`. Si no, vuelve al paso 7. Y `dig +short AAAA
+eliagenda.com @8.8.8.8` **no** debe imprimir nada.
+
+### 9.4 Instalar el sitio de HTTP (puerto 80) y recargar nginx
+
+Primero la línea base (debe decir `200`):
+
+```bash
+curl -sI https://sistemaone.com | head -1
+```
+
+Copia el archivo (es **nuevo**; no pisa nada) y actívalo con un enlace **llamado
+`zz-eliagenda`**:
+
+```bash
+sudo install -m 644 /opt/eli/repo/deploy/nginx-eliagenda.conf /etc/nginx/sites-available/eliagenda
+```
+
+```bash
+sudo ln -s /etc/nginx/sites-available/eliagenda /etc/nginx/sites-enabled/zz-eliagenda
+```
+
+```bash
+ls -la /etc/nginx/sites-enabled/
+```
+
+Deben verse `sistemaone` y `zz-eliagenda`, y **sólo esos**.
+
+Revisa la configuración **sin aplicarla**:
+
+```bash
+sudo nginx -t
+```
+
+Debe decir `syntax is ok` y `test is successful`. **Si dice error:** NO recargues.
+nginx sigue sirviendo con la configuración anterior mientras no lo hagas. Quita el
+enlace (es lo único que hay que deshacer; **no apagues nginx**) y avisa pegando
+sólo la salida de `nginx -t`:
+
+```bash
+sudo rm /etc/nginx/sites-enabled/zz-eliagenda && sudo nginx -t
+```
+
+Si `nginx -t` dijo `test is successful`, aplica (esto **no** corta nada):
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Ahora **comprueba sistemaone otra vez** (debe seguir diciendo `200`):
+
+```bash
+curl -sI https://sistemaone.com | head -1
+```
+
+Y que Eli responde por el puerto 80 y que sistemaone sigue siendo el sitio por
+defecto (VPS):
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -H "Host: eliagenda.com" http://127.0.0.1/
+```
+
+Debe imprimir `200` (Eli, a través de nginx).
+
+```bash
+curl -sI -H "Host: nombre-que-no-existe.example" http://127.0.0.1/ | head -4
+```
+
+Debe ser la respuesta de **sistemaone** (su redirección a `https://nombre-que-no-existe.example/`),
+**no** la de Eli. Si en `Location:` aparece `https://eliagenda.com/`, Eli quedó
+como sitio por defecto (el enlace no se llama `zz-eliagenda`): quita el enlace y
+rehaz 9.4.
+
+### 9.5 Probar las cabeceras con un nginx de prueba (aún sin HTTPS)
+
+(VPS.) Levanta un nginx **de prueba** (otro proceso, en el puerto 38080, con su
+propia carpeta temporal: no toca el nginx de producción ni usa `sudo`) con el
+bloque real del archivo instalado, un servidor "eco" de juguete y cabeceras
+falsificadas:
+
+```bash
+/opt/eli/current/deploy/probar-cabeceras.sh /etc/nginx/sites-available/eliagenda
+```
+
+Debe empezar con `Probando: /etc/nginx/sites-available/eliagenda` y terminar con
+`TODO BIEN: el cliente no puede elegir su IP y /api/cron no se alcanza desde
+afuera.`, **sin ninguna línea `FALLA`**. Si dice `FALLA`, no sigas: pega la salida
+completa (no tiene secretos) a quien mantiene el código.
+
+### 9.6 El HTTPS con Certbot (el orden exacto)
+
+El orden importa: **primero** el sitio de HTTP con el proxy (9.4: Certbot lo
+necesita para validar el dominio por el puerto 80) y **después** Certbot, que
+modifica ese archivo. Cada vez, `nginx -t` antes de `reload`. Certbot ya está
+instalado (lo usa sistemaone).
+
+**1. Línea base y copia de seguridad** (VPS):
+
+```bash
+curl -sI https://sistemaone.com | head -1
+```
+
+```bash
+sudo cp /etc/nginx/sites-available/eliagenda /etc/nginx/sites-available/eliagenda.antes-de-certbot
+```
+
+(Esa copia vive en `sites-available`, que nginx **no** lee: no estorba.)
+
+**2. Ensayo** (pide el certificado a un servidor de pruebas de Let's Encrypt y no
+instala nada; si falla, falla sin consecuencias):
+
+```bash
+sudo certbot --nginx --dry-run -d eliagenda.com -d www.eliagenda.com
+```
+
+Debe terminar con `The dry run was successful`. Si falla con `NXDOMAIN`,
+`timeout` o `connection refused`, es el DNS (9.3) o el puerto 80 (2.3). Si
+sistemaone dejó de responder `200`, ve a 9.9.
+
+**2b.** Comprueba sistemaone:
+
+```bash
+curl -sI https://sistemaone.com | head -1
+```
+
+**3. El certificado de verdad.** Sin `--hsts` (el archivo ya manda su HSTS; con
+`--hsts` saldría duplicado):
+
+```bash
+sudo certbot --nginx -d eliagenda.com -d www.eliagenda.com --redirect
+```
+
+Si te pregunta un correo (sólo la primera vez en esta máquina), pon uno real: es
+para los avisos de renovación. Debe terminar con `Successfully deployed
+certificate for eliagenda.com` (y para `www.eliagenda.com`). Certbot recarga nginx
+por su cuenta con un `reload` (nunca lo apaga).
+
+**3b.** Comprueba sistemaone:
+
+```bash
+curl -sI https://sistemaone.com | head -1
+```
+
+**4. Cómo reescribió Certbot el archivo, y cómo comprobar que no perdió nada.**
+Certbot convierte cada bloque de `/etc/nginx/sites-available/eliagenda` en su
+versión HTTPS **en su lugar** (cambia `listen 80;` por `listen 443 ssl; # managed
+by Certbot` y agrega las líneas `ssl_certificate...`) y **agrega al final** dos
+bloques de puerto 80 que redirigen a HTTPS (`if ($host = eliagenda.com) { return
+301 https://$host$request_uri; } # managed by Certbot`). Todo lo demás (los
+`proxy_set_header`, el HSTS, el 404 de `/api/cron`, `client_max_body_size`,
+`server_tokens`) queda **tal cual**: se comprobó con Certbot 2.9.0 y nginx 1.24.0
+sobre este mismo archivo. **Pero lo vuelves a comprobar en el servidor**, con la
+configuración que de verdad quedó cargada:
+
+```bash
+sudo nginx -T 2>/dev/null | awk '/^# configuration file /{p = ($0 ~ /eliagenda/)} p' | grep -vE '^[[:space:]]*#' | grep -nE 'listen|server_name|proxy_pass|proxy_set_header|add_header|client_max_body_size|server_tokens|ssl_certificate|location|return|default_server|real_ip'
+```
+
+(Muestra sólo lo que viene del archivo de Eli, sin comentarios.) Debe verse, en
+el bloque de `eliagenda.com`:
+
+| Línea | Por qué |
+|---|---|
+| `listen 443 ssl; # managed by Certbot` | el HTTPS |
+| `proxy_set_header X-Vercel-Forwarded-For "";` | borra la cabecera falsificable |
+| `proxy_set_header X-Real-IP $remote_addr;` | fija la IP real |
+| `proxy_set_header X-Forwarded-For $remote_addr;` | fija la IP real (**sin** `$proxy_add_x_forwarded_for`) |
+| `add_header Strict-Transport-Security "max-age=31536000" always;` | HSTS, a nivel de `server` (una sola vez) |
+| `location ~* ^/api/cron(/\|$) {` con `return 404;` | los crons no existen desde afuera |
+| `client_max_body_size 6m;` | tope del cuerpo |
+| `proxy_pass http://127.0.0.1:3000;` | hacia Eli |
+
+Y **no** debe verse ningún `listen [::]`, ni `default_server`, ni
+`proxy_add_x_forwarded_for`, ni `real_ip`. Con el nginx de prueba (la prueba real):
+
+```bash
+/opt/eli/current/deploy/probar-cabeceras.sh /etc/nginx/sites-available/eliagenda
+```
+
+Debe terminar con `TODO BIEN`. **Si falta cualquiera de esas líneas o el script
+dice `FALLA`: no sigas con Eli en producción**, y pasa a 9.8 (HTTPS a mano).
+
+**5. La renovación automática** (los certificados duran 90 días; Certbot los
+renueva solo con `certbot.timer`). Comprueba que sigue funcionando para el
+certificado de Eli (el ensayo no renueva de verdad ni cambia nada):
+
+```bash
+sudo certbot renew --dry-run --cert-name eliagenda.com
+```
+
+Debe decir `Congratulations, all simulated renewals succeeded`. La renovación usa
+el mismo método (`--nginx`), que se apoya en el bloque de puerto 80: **no quites
+los bloques `listen 80` que Certbot agregó** ni pongas un `return` a nivel de
+`server` en el puerto 80 (taparía el desafío de Let's Encrypt). Al renovar,
+Certbot recarga nginx (`reload`), igual que con sistemaone. Y comprueba que
+sistemaone sigue en `200`.
+
+### 9.7 Probar desde tu Mac (y el caso IPv6)
 
 ```bash
 curl -I https://eliagenda.com
 ```
 
-Debe empezar con `HTTP/2 200` y llevar, entre otras, `strict-transport-security`
-y `content-security-policy`.
+Debe empezar con `HTTP/1.1 200 OK` (no hay HTTP/2 a propósito: activarlo en este
+puerto compartido cambiaría el comportamiento de sistemaone) y llevar, entre
+otras, `strict-transport-security` y `content-security-policy`.
 
-Y lo de los crons: desde internet no deben existir (los llama el propio
-servidor, sin pasar por Caddy):
+Y lo de los crons: desde internet no deben existir (los llama el propio servidor,
+sin pasar por nginx):
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" https://eliagenda.com/api/cron/recordatorios
 ```
 
-Debe imprimir `404` (si imprimiera `401`, el cierre del Caddyfile no está
-aplicado: el secreto sigue protegiendo, pero re-aplica el Caddyfile, ver 14.3).
+Debe imprimir `404` (si imprimiera `401`, el cierre del `location` de `/api/cron`
+no está aplicado: el secreto sigue protegiendo, pero re-aplica el archivo, ver
+14.3).
+
+**El caso IPv6** (VPS, sólo si el servidor tiene IPv6: `ip -6 addr show scope
+global` imprime algo). Un cliente IPv6 que pida `eliagenda.com` debe caer en
+sistemaone, no en Eli. Se compara la respuesta de `eliagenda.com` contra la de un
+nombre inventado: tienen que ser **idénticas** (las dos las da el sitio por
+defecto de sistemaone). `-k` es necesario aquí porque el certificado que presenta
+sistemaone no es de `eliagenda.com`:
+
+```bash
+IPV6=$(ip -6 addr show scope global | awk '/inet6/ {sub("/.*","",$2); print $2; exit}'); echo "IPv6: $IPV6"
+```
+
+```bash
+for n in eliagenda.com nombre-que-no-existe.example; do curl -6 -sk -m 8 -o /dev/null -w "$n -> %{http_code} %{size_download} bytes\n" --resolve "$n:443:[$IPV6]" https://$n/; done
+```
+
+Las dos líneas deben mostrar **el mismo código y el mismo tamaño**. Si la de
+`eliagenda.com` es distinta (y tiene pinta de Eli), Eli está atendiendo por IPv6:
+**no sigas**, el límite de intentos se puede saltar rotando direcciones; revisa
+que el archivo no tenga `listen [::]` (`sudo nginx -T | grep -n 'listen \['` sólo
+debe mostrar líneas de sistemaone).
+
+### 9.8 Plan B: HTTPS escrito a mano (sólo si 9.6 mostró que Certbot perdió algo)
+
+Si tras Certbot falta alguna de las líneas de la tabla de 9.6, no te quedes con
+esa configuración. En vez de depender de cómo la reescriba Certbot, usa
+`deploy/nginx-eliagenda-https.conf`: el archivo **final**, con el 80 y el 443 ya
+escritos (el bloque `location /` del proxy es idéntico al de HTTP; una prueba
+automática lo exige). Se prueba con el mismo script.
+
+```bash
+sudo cp /etc/nginx/sites-available/eliagenda.antes-de-certbot /etc/nginx/sites-available/eliagenda
+```
+
+(Vuelve al archivo de HTTP de antes de Certbot.) Ahora el certificado: si ya se
+emitió en el paso 3 de 9.6, `--keep-until-expiring` lo conserva; si no, lo pide.
+En los dos casos **sin reescribir la configuración**. Con `--deploy-hook` para
+que nginx tome cada certificado renovado (siempre con `reload`):
+
+```bash
+sudo nginx -t && sudo certbot certonly --nginx -d eliagenda.com -d www.eliagenda.com --keep-until-expiring --deploy-hook "systemctl reload nginx"
+```
+
+Ahora instala el archivo final y revísalo antes de aplicar:
+
+```bash
+sudo install -m 644 /opt/eli/repo/deploy/nginx-eliagenda-https.conf /etc/nginx/sites-available/eliagenda
+```
+
+```bash
+sudo nginx -t
+```
+
+Sólo si dice `test is successful`:
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+```bash
+curl -sI https://sistemaone.com | head -1
+```
+
+Repite la prueba de 9.5 (`probar-cabeceras.sh /etc/nginx/sites-available/eliagenda`),
+la de renovación (`sudo certbot renew --dry-run --cert-name eliagenda.com`) y 9.7.
+
+### 9.9 Vuelta atrás (si algo sale mal)
+
+El cambio es **sólo agregar un enlace**: deshacerlo es quitarlo. **No apagues
+nginx** (sistemaone sigue sirviéndose todo el tiempo):
+
+```bash
+sudo rm /etc/nginx/sites-enabled/zz-eliagenda
+```
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+```bash
+curl -sI https://sistemaone.com | head -1
+```
+
+Debe volver a decir `200`. `sites-available/eliagenda` y el certificado de Let's
+Encrypt pueden quedarse donde están (no estorban: nginx sólo lee `sites-enabled`).
+Para volver a ponerlo: `sudo ln -s /etc/nginx/sites-available/eliagenda
+/etc/nginx/sites-enabled/zz-eliagenda` y `sudo nginx -t && sudo systemctl reload
+nginx`. Si además quieres borrar el certificado: `sudo certbot delete --cert-name
+eliagenda.com`.
 
 ---
 
@@ -1441,7 +1746,7 @@ Una prueba automática falla si estas dos rutas/horas se separan de las de
 Cada llamada usa `deploy/llamar-cron.sh`: lee `CRON_SECRET` del archivo de
 variables, se lo manda a Eli por la entrada estándar de `curl` (no aparece en
 `ps` ni en ningún registro) y anota el resultado. Llama **directo** a
-`127.0.0.1:3000` (no al dominio): por eso Caddy puede responder 404 a
+`127.0.0.1:3000` (no al dominio): por eso nginx puede responder 404 a
 `/api/cron/*` desde internet.
 
 Si hay una actualización en curso (comparten el candado de `actualizar.sh`),
@@ -1865,7 +2170,7 @@ de tu Mac; en las que dicen "(VPS)", la del servidor.
 curl -I https://eliagenda.com
 ```
 
-`HTTP/2 200`. Sin errores de certificado.
+`HTTP/1.1 200 OK` (no hay HTTP/2 a propósito: ver 9.7). Sin errores de certificado.
 
 **12.2 (Mac) Cabeceras de seguridad y CSP presentes.**
 
@@ -1882,7 +2187,9 @@ Deben salir las seis: `strict-transport-security: max-age=31536000`,
 curl -sI https://eliagenda.com | grep -iE "^server:|x-powered-by"
 ```
 
-No debe imprimir nada (no se anuncia ni Caddy ni Next).
+No debe imprimir `x-powered-by` (Next no se anuncia) y el `server:` debe decir
+sólo `nginx`, **sin número de versión** (`server_tokens off`; quitar la palabra
+`nginx` del todo necesita un módulo que Ubuntu no trae).
 
 **12.3 (Mac) HTTP salta a HTTPS y el www salta al dominio sin www.**
 
@@ -1890,14 +2197,16 @@ No debe imprimir nada (no se anuncia ni Caddy ni Next).
 curl -I http://eliagenda.com
 ```
 
-`308 Permanent Redirect` con `Location: https://eliagenda.com/` (es la
-redirección automática de Caddy).
+`301 Moved Permanently` con `Location: https://eliagenda.com/` (es el redirect
+que agregó Certbot).
 
 ```bash
 curl -I "https://www.eliagenda.com/ruta?x=1"
 ```
 
-`301` con `Location: https://eliagenda.com/ruta?x=1`.
+`301` con `Location: https://eliagenda.com/ruta?x=1`. (Si pides
+`http://www.eliagenda.com/ruta?x=1` hay dos saltos: primero a `https://www...` y
+de ahí al dominio sin `www`; es normal.)
 
 **12.4 (Mac) El puerto 3000 no se ve desde afuera.**
 
@@ -1906,12 +2215,16 @@ curl -m 5 http://IP_DEL_VPS:3000
 ```
 
 Debe fallar (`Connection timed out` o `refused`). Si responde HTML, Eli quedó
-expuesto sin Caddy: para y avisa.
+expuesto sin nginx: para y avisa.
 
 **12.4b (Mac) `/api/cron/*` no existe desde internet.** Debe dar `404` las siete
 veces (también con mayúsculas, doble barra, la barra codificada `%2f`, una letra
-codificada `%63`, y la carpeta sola con y sin barra final, por si Caddy y Next
-interpretan la ruta distinto; **A COMPROBAR**):
+codificada `%63`, y la carpeta sola con y sin barra final, por si nginx y Next
+interpretan la ruta distinto; **A COMPROBAR**). nginx compara contra la ruta ya
+**normalizada**: decodifica `%2f` y `%63`, junta `//` y resuelve `/../`, así que
+todas esas variantes dan 404 desde nginx (se probó con nginx 1.24.0 aquí); lo que
+no se puede asegurar desde acá son rarezas que Next interprete distinto (por
+ejemplo `;` o `\`), y para eso está el secreto del cron como defensa de fondo:
 
 ```bash
 for r in /api/cron/recordatorios /API/CRON/recordatorios //api/cron/recordatorios /api/cron%2frecordatorios /api/%63ron/recordatorios /api/cron /api/cron/; do curl -s -o /dev/null -w "%{http_code} " "https://eliagenda.com$r"; done; echo
@@ -1919,41 +2232,42 @@ for r in /api/cron/recordatorios /API/CRON/recordatorios //api/cron/recordatorio
 
 Debe imprimir `404 404 404 404 404 404 404`. (Si alguna da `401`, esa variante
 llegó hasta la app: el secreto igual la protege, pero avisa para ajustar el
-Caddyfile.)
+`location` de `/api/cron` en el archivo de nginx.)
 
 **12.5 (VPS) La IP del límite de intentos NO se puede falsificar — prueba con
-Caddy de verdad.** Levanta un Caddy de juguete usando el bloque real del
-`Caddyfile` **instalado** (el que de verdad atiende, no el del repositorio) y
-verifica lo que le llega a la app:
+un nginx de verdad.** Levanta un nginx **de prueba** (otro proceso en el puerto
+38080, con su carpeta temporal; no toca el nginx de producción ni hace falta
+`sudo`) usando el bloque real del archivo **instalado** (el que de verdad
+atiende, ya con el HTTPS que puso Certbot, no el del repositorio) y verifica lo
+que le llega a un servidor "eco":
 
 ```bash
-/opt/eli/current/deploy/probar-cabeceras.sh /etc/caddy/Caddyfile
+/opt/eli/current/deploy/probar-cabeceras.sh /etc/nginx/sites-available/eliagenda
 ```
 
-Debe empezar con `Probando: /etc/caddy/Caddyfile` y terminar con `TODO BIEN: el
-cliente no puede elegir su IP.`, con las siete líneas en `OK` (las cuatro de IP,
-más "cada sitio escucha sólo en IPv4", "/api/cron/... da 404" y "el resto del
-sitio sí llega a la app"). Si dice `FALLA`, **no pongas Eli en producción**: pega
-la salida completa (no tiene secretos) a quien mantiene el código. *(A COMPROBAR:
-este script no pudo correrse con un Caddy real al armarlo; es justo la prueba que
-confirma que `header_up X-Forwarded-For {remote_host}` reemplaza y no suma.)*
+Debe empezar con `Probando: /etc/nginx/sites-available/eliagenda` y terminar con
+`TODO BIEN: el cliente no puede elegir su IP y /api/cron no se alcanza desde
+afuera.`, **sin ninguna línea `FALLA`** (revisa el texto del archivo, las 13
+variantes de `/api/cron`, las cabeceras falsificadas —`X-Vercel-Forwarded-For`,
+`X-Real-IP`, `X-Forwarded-For`, `Forwarded`, `True-Client-IP`, `CF-Connecting-IP`—,
+HSTS, el tope de 6 MB y que `/api/cronista` no se bloquea). Si dice `FALLA`, **no
+pongas Eli en producción**: pega la salida completa (no tiene secretos) a quien
+mantiene el código. *(Se probó aquí con nginx 1.24.0 real y con el archivo
+reescrito por Certbot 2.9.0; **A COMPROBAR** que en el VPS da lo mismo.)*
 
-**12.5b (VPS, sólo si tiene IPv6) Caddy no atiende por IPv6.** Si en 9.1 viste que
-el servidor tiene IPv6 (`ip -6 addr show scope global` imprime algo), toma su
-dirección (la que sigue a `inet6`, sin el `/64`) y prueba, mintiendo la IP:
+**12.5b (VPS, sólo si tiene IPv6) Un cliente IPv6 no llega a Eli.** Si en 9.1
+viste que el servidor tiene IPv6 (`ip -6 addr show scope global` imprime algo),
+repite la comprobación de 9.7: el pedido por IPv6 a `eliagenda.com` tiene que dar
+**lo mismo** (código y tamaño) que el de un nombre inventado, porque las dos las
+atiende el sitio por defecto de sistemaone. Si no, Eli atiende por IPv6 y el
+límite de intentos se puede saltar rotando direcciones: **no sigas**, mira 9.7.
+Y comprueba que el sitio de Eli no declara ningún `listen [::]`:
 
 ```bash
-IPV6=$(ip -6 addr show scope global | awk '/inet6/ {sub("/.*","",$2); print $2; exit}'); echo "IPv6: $IPV6"
+sudo nginx -T 2>/dev/null | awk '/^# configuration file /{p = ($0 ~ /eliagenda/)} p' | grep -vE '^[[:space:]]*#' | grep -c 'listen \['
 ```
 
-```bash
-curl -6 -m 8 -s -o /dev/null -w "%{http_code}\n" --resolve "eliagenda.com:443:[$IPV6]" -H "X-Real-IP: 9.9.9.9" -H "X-Forwarded-For: 9.9.9.9" https://eliagenda.com/
-```
-
-Debe imprimir `000` (la conexión se rechaza: nada escucha en IPv6). Si imprime
-`200`/`3xx`/`4xx`, Caddy sí atiende por IPv6 y el límite de intentos se puede
-saltar rotando direcciones: **no sigas**, mira 9.4. (Se prueba desde el propio
-VPS porque desde tu Mac quizá no tengas IPv6; es la misma conexión.)
+Debe imprimir `0`.
 
 **12.6 (Mac) Lo mismo, de punta a punta, contra el sitio real.** Manda 14
 intentos de login seguidos mintiendo una IP distinta en cada uno. El límite es
@@ -1970,7 +2284,7 @@ Debe imprimir algo como `200 200 200 200 200 200 200 200 200 200 429 429 429
 - Si salen **todos 429 desde el primero**: Upstash no está bien configurado
   (`UPSTASH_REDIS_REST_URL/TOKEN` mal o vacíos); arréglalo en `eli.env`.
 - Si **ninguno** da 429: el rate limit se está saltando con IPs falsas: **grave**,
-  no sigas; es justo lo que Caddy debe evitar.
+  no sigas; es justo lo que nginx debe evitar.
 - Tu IP real queda bloqueada para el login ~1 minuto. Es normal. No repitas esta
   prueba seguido.
 
@@ -2018,6 +2332,11 @@ El número de proceso debe ser **distinto** (y distinto de `0`) y debe decir
 
 **12.9 (VPS) Todo vuelve solo tras reiniciar el servidor.**
 
+> **Ojo: reiniciar el servidor corta `sistemaone.com` también** (1-2 minutos: es
+> el mismo VPS). Hazlo sólo con el visto bueno del dueño, **fuera del horario de
+> sistemaone**, y avisa antes. Esto es un reinicio del *servidor*; sigue sin
+> estar permitido reiniciar *sólo nginx*.
+
 ```bash
 sudo reboot
 ```
@@ -2025,10 +2344,12 @@ sudo reboot
 Espera 1-2 minutos, entra de nuevo con `ssh eli@IP_DEL_VPS` y:
 
 ```bash
-systemctl is-active eli caddy fail2ban
+systemctl is-active eli nginx fail2ban
 ```
 
-Debe imprimir tres veces `active`. Y `free -m` debe mostrar el swap.
+Debe imprimir tres veces `active`. Y `free -m` debe mostrar el swap. Comprueba
+también que **sistemaone volvió**: `curl -sI https://sistemaone.com | head -1`
+debe decir `200`.
 
 **12.10 (VPS) Respaldo y hora.**
 
@@ -2074,7 +2395,7 @@ se detecte y se revierta sola.
 
 `eliagenda.com` es un dominio nuevo: hoy Eli sólo vive en su dirección de
 Vercel. Al terminar el paso 12 el VPS ya atiende `https://eliagenda.com` (DNS en
-el paso 7, Caddy en el 9) **con la misma base de datos real** que Vercel, pero
+el paso 7, nginx en el 9) **con la misma base de datos real** que Vercel, pero
 nadie lo conoce todavía y sus crons están apagados. "Lanzar" es: apagar los crons
 de Vercel, encender los del VPS, y empezar a usar `eliagenda.com` como la
 dirección oficial. Como no hay un dominio viejo que redirigir, **no hay un
@@ -2122,10 +2443,12 @@ grep "^NEXTAUTH_URL=" /etc/eli/eli.env
 ```
 
 Debe imprimir exactamente `NEXTAUTH_URL=https://eliagenda.com`. Y que el
-Caddyfile instalado es el del repositorio (14.3):
+sitio de nginx instalado es el del repositorio (14.3). Como Certbot lo reescribió
+(le agregó el HTTPS), **no** se compara archivo contra archivo: se comprueba con la
+prueba de 12.5 y la tabla de 9.6:
 
 ```bash
-diff -q /opt/eli/repo/deploy/Caddyfile /etc/caddy/Caddyfile && echo "Caddyfile al día"
+/opt/eli/current/deploy/probar-cabeceras.sh /etc/nginx/sites-available/eliagenda
 ```
 
 ### 13.2 Apagar los crons de VERCEL (antes de encender los del VPS)
@@ -2158,7 +2481,7 @@ base antes de enviarse, así que no sale duplicado (ver 10.3).
 
 ### 13.3 Empezar a usar `eliagenda.com`
 
-No hay nada que cambiar en el DNS ni en Caddy (ya están). Lo que cambia es que
+No hay nada que cambiar en el DNS ni en nginx (ya están). Lo que cambia es que
 desde ahora **esta es la dirección oficial**: compártela, ponla en tus materiales
 y en el monitoreo (apéndice).
 
@@ -2166,15 +2489,17 @@ y en el monitoreo (apéndice).
 > durante un año ("Strict-Transport-Security") que sólo se entra por HTTPS
 > válido, y **no dejan "continuar de todos modos"** si el certificado falla. Si
 > algo va mal con el certificado, la salida no es pedirle a la gente que ignore la
-> advertencia, sino arreglarlo: `sudo journalctl -u caddy -n 100 --no-pager`
-> (casi siempre el DNS dejó de apuntar al VPS o el 80/443 se cerró). Caddy
-> renueva el certificado solo, unos 30 días antes de que venza.
+> advertencia, sino arreglarlo: `sudo tail -n 50 /var/log/letsencrypt/letsencrypt.log` y `sudo
+> certbot certificates` (casi siempre el DNS dejó de apuntar al VPS o el 80/443 se
+> cerró). Certbot renueva el certificado solo (`certbot.timer`), unos 30 días antes
+> de que venza, y recarga nginx con `reload`; **nunca con restart**.
 
 ### 13.4 Comprobar de punta a punta
 
 Repite en la Mac los puntos **12.1, 12.2, 12.3, 12.4b, 12.6 y 12.12**, y en el
-VPS `/opt/eli/current/deploy/probar-cabeceras.sh /etc/caddy/Caddyfile` (12.5) y
-`sudo ss -tlnp | grep -E ':(80|443) '` (9.4: sólo `0.0.0.0`). Y entra al sitio en
+VPS `/opt/eli/current/deploy/probar-cabeceras.sh /etc/nginx/sites-available/eliagenda`
+(12.5) y el chequeo IPv6 de 9.7. Y comprueba, antes y después,
+`curl -sI https://sistemaone.com | head -1` (`200`). Y entra al sitio en
 el navegador: inicia sesión con correo y **con Google**, mira la agenda, y una
 página pública de reservas. Pide a una clínica amiga que pruebe también.
 
@@ -2244,9 +2569,12 @@ orden. Como Vercel sigue sirviendo en su propia dirección y el DNS de
    habías compartido enlaces de `eliagenda.com`, que esos quedan sin servicio
    hasta arreglar el VPS). Las URIs de Google de Vercel siguen en su sitio
    (por eso en 13.0 se **agregaron** las nuevas sin quitar las viejas).
-4. Si hace falta que `eliagenda.com` deje de recibir visitas del todo, apaga
-   Caddy (`sudo systemctl stop caddy`). El VPS puede quedarse encendido sin hacer
-   daño (con los crons apagados).
+4. Si hace falta que `eliagenda.com` deje de recibir visitas del todo, **no
+   apagues nginx** (sirve `sistemaone.com`): quita el enlace del sitio de Eli y
+   recarga: `sudo rm /etc/nginx/sites-enabled/zz-eliagenda && sudo nginx -t &&
+   sudo systemctl reload nginx` (9.9), y comprueba
+   `curl -sI https://sistemaone.com | head -1`. El VPS puede quedarse encendido
+   sin hacer daño (con los crons apagados).
 
 Un problema *sólo de código* (no de servidor) se arregla sin tocar nada de esto
 con `volver-atras.sh` (paso 14).
@@ -2325,12 +2653,12 @@ conoce, te avisa y pide confirmación: **volver atrás no deshace migraciones**
 README de la raíz lo dice caso por caso). Si lo corres otra vez, vuelves a la
 versión que dejaste.
 
-### 14.3 Cuando cambian `eli.service`, `Caddyfile`, `cron-eli` o `sudoers-eli`
+### 14.3 Cuando cambian `eli.service`, `nginx-eliagenda.conf`, `cron-eli` o `sudoers-eli`
 
 **Estos cuatro archivos se instalaron por COPIA** (pasos 8, 9, 10): `git pull` y
 `actualizar.sh` actualizan el código de Eli, pero **no** tocan las copias de
 `/etc`. Si alguien cambia uno en el repositorio (por ejemplo, una mejora de
-seguridad en el Caddyfile), el servidor sigue con el viejo hasta que lo
+seguridad en el archivo de nginx), el servidor sigue con el viejo hasta que lo
 **re-apliques**. Primero mira cuáles difieren (no cambia nada; un archivo igual
 no imprime nada):
 
@@ -2339,7 +2667,7 @@ cd /opt/eli/repo && git pull --ff-only
 ```
 
 ```bash
-diff -q /opt/eli/repo/deploy/eli.service /etc/systemd/system/eli.service; sudo diff -q /opt/eli/repo/deploy/sudoers-eli /etc/sudoers.d/eli; diff -q /opt/eli/repo/deploy/cron-eli /etc/cron.d/eli; diff -q /opt/eli/repo/deploy/Caddyfile /etc/caddy/Caddyfile
+diff -q /opt/eli/repo/deploy/eli.service /etc/systemd/system/eli.service; sudo diff -q /opt/eli/repo/deploy/sudoers-eli /etc/sudoers.d/eli; diff -q /opt/eli/repo/deploy/cron-eli /etc/cron.d/eli
 ```
 
 (`cron-eli` aparecerá distinto mientras tengas líneas `#DESACTIVADO#`, antes de
@@ -2363,20 +2691,44 @@ y repite las comprobaciones de 8.5.
 
 **`sudoers-eli`:** repite el comando de validar-e-instalar del paso 8.2.
 
-**`Caddyfile`** (ya trae `eliagenda.com`, se copia tal cual):
+**`nginx-eliagenda.conf`** (el sitio de Eli en nginx). **Ojo: este NO se copia
+encima.** El archivo instalado (`/etc/nginx/sites-available/eliagenda`) ya no es
+igual al del repositorio, porque Certbot le agregó el HTTPS (9.6); copiarlo tal
+cual **borraría el HTTPS**. Mira primero qué cambió en el repositorio:
 
 ```bash
-diff /etc/caddy/Caddyfile /opt/eli/repo/deploy/Caddyfile
+cd /opt/eli/repo && git log -p -n 3 --stat -- deploy/nginx-eliagenda.conf deploy/nginx-eliagenda-https.conf
 ```
 
-Lo que muestre `diff` es exactamente lo que va a cambiar. Si te parece bien:
+Y qué difiere hoy (Certbot siempre aparecerá en el diff: `listen 443 ssl`, las
+líneas `ssl_*` y los bloques `managed by Certbot`; lo que importa es lo demás):
 
 ```bash
-caddy validate --config /opt/eli/repo/deploy/Caddyfile --adapter caddyfile && sudo install -m 644 /opt/eli/repo/deploy/Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy
+diff /opt/eli/repo/deploy/nginx-eliagenda.conf /etc/nginx/sites-available/eliagenda
 ```
 
-y vuelve a probar: `/opt/eli/current/deploy/probar-cabeceras.sh /etc/caddy/Caddyfile`
-y `sudo ss -tlnp | grep -E ':(80|443) '`.
+Si lo que cambió son **líneas de la configuración** (no comentarios), lo más
+seguro es aplicarlas **a mano en el archivo instalado**, o reinstalar con el
+archivo con HTTPS escrito a mano (9.8) y probar. Siempre en este orden y **sin
+tocar sistemaone**:
+
+```bash
+sudo cp /etc/nginx/sites-available/eliagenda /etc/nginx/sites-available/eliagenda.antes-del-cambio
+```
+
+(edita o instala el archivo nuevo, y entonces:)
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+```bash
+curl -sI https://sistemaone.com | head -1
+```
+
+y vuelve a probar: `/opt/eli/current/deploy/probar-cabeceras.sh /etc/nginx/sites-available/eliagenda`
+y la tabla de 9.6. Si `nginx -t` falla, **no recargues**: vuelve a poner
+`eliagenda.antes-del-cambio`. **Nunca** `systemctl restart nginx`.
 
 **`cron-eli`:** ojo, copiarlo **vuelve a encender** las líneas de correo. Antes
 del lanzamiento (13.5) usa SIEMPRE este comando, que instala y las vuelve a
@@ -2405,10 +2757,13 @@ Empieza siempre por aquí, en el VPS (entra con `ssh eli@IP_DEL_VPS`):
 | Qué quieres saber | Comando |
 |---|---|
 | ¿Eli está vivo? | `systemctl status eli --no-pager` |
-| ¿Caddy está vivo? | `systemctl status caddy --no-pager` |
+| ¿nginx está vivo? (**sólo mirar**) | `systemctl status nginx --no-pager` |
+| ¿Responde sistemaone? | `curl -sI https://sistemaone.com \| head -1` (`200`) |
+| ¿La configuración de nginx está bien? | `sudo nginx -t` (si falla, no recargues; **nunca** restart/stop de nginx) |
 | Qué dijo Eli antes de caer | `journalctl -u eli -n 100 --no-pager` |
-| Qué dice Caddy (certificados, errores) | `sudo journalctl -u caddy -n 100 --no-pager` |
-| Visitas y errores web en vivo | `sudo journalctl -u caddy -f` (salir: `Ctrl+C`) |
+| Qué dice nginx (errores) | `sudo tail -n 100 /var/log/nginx/error.log` |
+| Qué dice Certbot (certificados) | `sudo tail -n 100 /var/log/letsencrypt/letsencrypt.log` y `sudo certbot certificates` |
+| Visitas web en vivo | `sudo tail -f /var/log/nginx/access.log` (salir: `Ctrl+C`; aquí también salen las de sistemaone) |
 | ¿Eli responde por dentro? | `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000/` (debe ser `200`) |
 | ¿Quién escucha en los puertos? | `ss -tlnp \| grep -E ':(80\|443\|3000)'` |
 | Disco | `df -h` (alarma si `/` pasa de 85%) |
@@ -2423,7 +2778,7 @@ Empieza siempre por aquí, en el VPS (entra con `ssh eli@IP_DEL_VPS`):
 
 Qué buscar según lo que ves:
 
-- **El navegador dice 502 / "Bad Gateway":** Caddy vive pero Eli no. Mira `systemctl
+- **El navegador dice 502 / "Bad Gateway":** nginx vive pero Eli no. Mira `systemctl
   status eli`. Si está `failed`: `journalctl -u eli -n 100 --no-pager`; casi
   siempre es una variable faltante (revisa 6.3), la base inaccesible, o un
   release roto (`./deploy/volver-atras.sh`, que también limpia el estado
@@ -2433,9 +2788,14 @@ Qué buscar según lo que ves:
   VPS → reiniciar. Si `ssh` no entra pero la web sí: `fail2ban` pudo bloquearte;
   desde la terminal del navegador de Hostinger: `sudo fail2ban-client set sshd
   unbanip TU_IP`.
-- **Error de certificado / "sitio no seguro":** `sudo journalctl -u caddy -n 100`;
-  casi siempre el DNS no apunta al VPS o el 80/443 están cerrados (`sudo ufw
-  status`).
+- **Error de certificado / "sitio no seguro":** `sudo certbot certificates` y
+  `sudo tail -n 100 /var/log/letsencrypt/letsencrypt.log`; casi siempre el DNS no
+  apunta al VPS o el 80/443 están cerrados (`sudo ufw status`). Para renovar a
+  mano: `sudo certbot renew --cert-name eliagenda.com` (recarga nginx con
+  `reload`; nunca lo reinicies).
+- **`sistemaone.com` dejó de responder tras tocar nginx:** quita el enlace de Eli
+  y recarga (9.9): `sudo rm /etc/nginx/sites-enabled/zz-eliagenda && sudo nginx -t
+  && sudo systemctl reload nginx`. **No** reinicies ni apagues nginx.
 - **Todo responde `429`:** Upstash mal configurado o caído (`UPSTASH_*` en
   `eli.env`; falla cerrado a propósito). Tras corregir: `sudo systemctl restart eli`.
 - **No salen correos:** `RESEND_API_KEY`/`RESEND_FROM_EMAIL`, o el remitente no

@@ -3,7 +3,9 @@
 #
 # - Corre como el usuario "eli" (sin privilegios), nunca como root.
 # - Next escucha SOLO en 127.0.0.1:3000: desde afuera no se llega directo, sólo
-#   por Caddy (que es quien fija la IP real del cliente; ver deploy/Caddyfile).
+#   por nginx (que es quien fija la IP real del cliente; ver
+#   deploy/nginx-eliagenda.conf). Ese nginx también sirve sistemaone.com: nunca
+#   se apaga ni se reinicia, sólo "nginx -t && systemctl reload nginx".
 # - Las variables salen de /etc/eli/eli.env. systemd lee ese archivo como root
 #   antes de bajar privilegios, así que el servicio funciona aunque el archivo
 #   no fuera legible por "eli".
@@ -53,7 +55,7 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=eli
 
-# Límites razonables para un servidor de 8 GB compartido con Caddy y el SO.
+# Límites razonables para un servidor de 8 GB compartido con nginx y el SO.
 MemoryHigh=2500M
 MemoryMax=3G
 TasksMax=512

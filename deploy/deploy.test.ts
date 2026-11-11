@@ -7,7 +7,7 @@ import path from "node:path"
 
 /**
  * Guardas del kit de despliegue en VPS (`deploy/`). Leen los archivos como
- * texto: no prueban que Caddy o systemd funcionen (eso se comprueba en el
+ * texto: no prueban que nginx o systemd funcionen (eso se comprueba en el
  * servidor, ver `deploy/README.md`, paso 12), sino que nadie quite o separe
  * por accidente lo que la seguridad y los crons suponen.
  */
@@ -75,121 +75,129 @@ function cuerpoDeFuncion(fuente: string, nombre: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Un lector mínimo de Caddyfile: bloques anidados `algo { ... }` y directivas.
-// Alcanza para saber QUÉ directiva está dentro de QUÉ bloque (no sólo que el
-// texto exista en algún lado del archivo).
+// Un lector mínimo de configuración de nginx: bloques anidados `algo { ... }` y
+// directivas que terminan en `;`. Alcanza para saber QUÉ directiva está dentro
+// de QUÉ bloque (no sólo que el texto exista en algún lado del archivo): en
+// nginx eso importa, porque add_header y proxy_set_header se HEREDAN sólo si el
+// nivel de abajo no define los suyos.
 // ---------------------------------------------------------------------------
 
-interface NodoCaddy {
+interface NodoNginx {
   cabecera: string
-  contenido: (string | NodoCaddy)[]
+  contenido: (string | NodoNginx)[]
 }
 
-function leerCaddyfile(texto: string): NodoCaddy {
-  const raiz: NodoCaddy = { cabecera: "", contenido: [] }
-  const pila: NodoCaddy[] = [raiz]
+function leerNginx(texto: string): NodoNginx {
+  const raiz: NodoNginx = { cabecera: "", contenido: [] }
+  const pila: NodoNginx[] = [raiz]
   for (const cruda of sinComentarios(texto).split("\n")) {
     const linea = normalizar(cruda)
     if (!linea) continue
     const actual = pila[pila.length - 1]
     if (linea === "}") {
-      expect(pila.length, "Caddyfile con una } de más").toBeGreaterThan(1)
+      expect(pila.length, "configuración de nginx con una } de más").toBeGreaterThan(1)
       pila.pop()
-    } else if (linea === "{" || /\s\{$/.test(linea)) {
-      const nodo: NodoCaddy = { cabecera: linea === "{" ? "" : linea.slice(0, -1).trim(), contenido: [] }
+    } else if (linea.endsWith("{")) {
+      const nodo: NodoNginx = { cabecera: linea.slice(0, -1).trim(), contenido: [] }
       actual.contenido.push(nodo)
       pila.push(nodo)
     } else {
-      actual.contenido.push(linea)
+      expect(linea, `directiva sin ';' (¿dos por línea?): ${linea}`).toMatch(/;$/)
+      actual.contenido.push(linea.slice(0, -1).trim())
     }
   }
-  expect(pila.length, "Caddyfile con un { sin cerrar").toBe(1)
+  expect(pila.length, "configuración de nginx con un { sin cerrar").toBe(1)
   return raiz
 }
 
-const directivasDe = (nodo: NodoCaddy) => nodo.contenido.filter((c): c is string => typeof c === "string")
-const bloquesDe = (nodo: NodoCaddy) => nodo.contenido.filter((c): c is NodoCaddy => typeof c !== "string")
-const bloqueLlamado = (nodo: NodoCaddy, cabecera: string | RegExp) =>
-  bloquesDe(nodo).find((b) => (typeof cabecera === "string" ? b.cabecera === cabecera : cabecera.test(b.cabecera)))
+const directivasNginx = (nodo: NodoNginx) => nodo.contenido.filter((c): c is string => typeof c === "string")
+const bloquesNginx = (nodo: NodoNginx) => nodo.contenido.filter((c): c is NodoNginx => typeof c !== "string")
+const servidoresDe = (arbol: NodoNginx) => bloquesNginx(arbol).filter((b) => b.cabecera === "server")
+const servidorLlamado = (arbol: NodoNginx, nombre: string) =>
+  servidoresDe(arbol).find((s) => directivasNginx(s).includes(`server_name ${nombre}`))
+const locationDe = (servidor: NodoNginx, cabecera: string) => bloquesNginx(servidor).find((b) => b.cabecera === `location ${cabecera}`)
+/** Todos los bloques `location` del servidor (y los anidados). */
+const locationsDe = (nodo: NodoNginx): NodoNginx[] =>
+  bloquesNginx(nodo).flatMap((b) => (b.cabecera.startsWith("location ") ? [b, ...locationsDe(b)] : locationsDe(b)))
+/** Todas las directivas de un nodo y sus hijos, en orden de aparición. */
+const todasLasDirectivas = (nodo: NodoNginx): string[] =>
+  nodo.contenido.flatMap((c) => (typeof c === "string" ? [c] : todasLasDirectivas(c)))
 
-/** Todas las líneas `header_up ...` de un nodo y sus hijos, en orden de aparición. */
-function headerUpEnOrden(nodo: NodoCaddy): string[] {
-  return nodo.contenido.flatMap((c) => (typeof c === "string" ? (c.startsWith("header_up ") ? [c] : []) : headerUpEnOrden(c)))
-}
-
-/** Para cada cabecera, la ÚLTIMA instrucción header_up (la que gana en Caddy). */
-function ultimaOperacionPorCabecera(lineas: string[]): Map<string, string> {
+/** Para cada cabecera, el valor de la ÚLTIMA instrucción proxy_set_header (la que gana en nginx). */
+function ultimoValorPorCabecera(directivas: string[]): Map<string, string> {
   const mapa = new Map<string, string>()
-  for (const linea of lineas) {
-    const [, operacion, ...valor] = linea.split(" ")
-    mapa.set(operacion.replace(/^[-+]/, "").toLowerCase(), [operacion.startsWith("-") ? "-" : operacion.startsWith("+") ? "+" : "=", ...valor].join(" ").trim())
+  for (const d of directivas) {
+    const m = d.match(/^proxy_set_header\s+(\S+)\s+(.*)$/)
+    if (m) mapa.set(m[1].toLowerCase(), m[2].trim())
   }
   return mapa
 }
 
-describe("deploy/Caddyfile — la IP del cliente no la elige el cliente", () => {
-  const texto = leer("deploy/Caddyfile")
-  const caddyfile = sinComentarios(texto)
-  const arbol = leerCaddyfile(texto)
-  const www = bloqueLlamado(arbol, "www.eliagenda.com")
-  const sitio = bloqueLlamado(arbol, "eliagenda.com")
-  const proxy = sitio && bloqueLlamado(sitio, "reverse_proxy 127.0.0.1:3000")
-  const delProxy = proxy ? headerUpEnOrden(proxy) : []
-  const ultimas = ultimaOperacionPorCabecera(delProxy)
+const hayNginx = spawnSync("nginx", ["-v"]).status === 0 && spawnSync("node", ["--version"]).status === 0
 
-  it("define los dos sitios (www y el dominio sin www) y el reverse_proxy dentro del segundo", () => {
-    expect(www, "falta el bloque de www.eliagenda.com").toBeDefined()
-    expect(sitio, "falta el bloque de eliagenda.com").toBeDefined()
-    expect(proxy, "falta 'reverse_proxy 127.0.0.1:3000 { ... }' dentro de eliagenda.com").toBeDefined()
-    expect(caddyfile).toMatch(/reverse_proxy 127\.0\.0\.1:3000/)
+describe("deploy/nginx-eliagenda.conf — la IP del cliente no la elige el cliente", () => {
+  const texto = leer("deploy/nginx-eliagenda.conf")
+  const conf = sinComentarios(texto)
+  const arbol = leerNginx(texto)
+  const www = servidorLlamado(arbol, "www.eliagenda.com")
+  const sitio = servidorLlamado(arbol, "eliagenda.com")
+  const proxy = sitio && locationDe(sitio, "/")
+  const delProxy = proxy ? todasLasDirectivas(proxy) : []
+  const ultimas = ultimoValorPorCabecera(delProxy)
+
+  it("define los dos servidores (www y el dominio sin www) y el proxy_pass a 127.0.0.1:3000 en 'location /' del segundo", () => {
+    expect(servidoresDe(arbol)).toHaveLength(2)
+    expect(www, "falta el server de www.eliagenda.com").toBeDefined()
+    expect(sitio, "falta el server de eliagenda.com").toBeDefined()
+    expect(proxy, "falta 'location / { ... }' dentro de eliagenda.com").toBeDefined()
+    expect(directivasNginx(proxy!)).toContain("proxy_pass http://127.0.0.1:3000")
+    expect(directivasNginx(proxy!)).toContain("proxy_http_version 1.1")
+    expect(directivasNginx(proxy!)).toContain("proxy_set_header Host $host")
+    expect(directivasNginx(proxy!)).toContain("proxy_set_header X-Forwarded-Proto $scheme")
+    // El proxy es de UN solo lugar: ningún otro location ni server habla con Eli.
+    expect(conf.match(/proxy_pass/g)).toHaveLength(1)
   })
 
-  it("cada sitio escucha SÓLO en IPv4 (bind 0.0.0.0): en IPv6 un atacante rota dentro de su /64 y se salta el límite", () => {
-    // Todos los bloques de sitio (cabecera con un dominio), no el de opciones globales.
-    const sitios = bloquesDe(arbol).filter((b) => b.cabecera !== "")
-    expect(sitios.length).toBeGreaterThanOrEqual(2)
-    for (const s of sitios) {
-      expect(directivasDe(s), `el sitio ${s.cabecera} no tiene 'bind 0.0.0.0'`).toContain("bind 0.0.0.0")
-    }
-    // Y nada que vuelva a abrir IPv6 en ningún lado.
-    expect(caddyfile).not.toMatch(/\bbind\b[^\n]*(::|\[)/)
-    expect(caddyfile).not.toMatch(/\bdefault_bind\b[^\n]*::/)
-    for (const linea of caddyfile.split("\n").map(normalizar)) {
-      if (linea.startsWith("bind ")) expect(linea).toBe("bind 0.0.0.0")
-    }
+  it("escucha SÓLO en IPv4 (listen 80, sin [::]) y no toca el sitio por defecto de sistemaone (sin default_server)", () => {
+    const listens = todasLasDirectivas(arbol).filter((d) => d.startsWith("listen"))
+    expect(listens).toEqual(["listen 80", "listen 80"])
+    expect(conf).not.toMatch(/listen[^\n;]*\[/)
+    expect(conf).not.toMatch(/ipv6only/)
+    expect(conf).not.toMatch(/default_server/)
+    expect(conf).not.toMatch(/\breuseport\b/)
+    // sin http2: el socket 443 lo comparte sistemaone y no se le cambia nada.
+    expect(conf).not.toMatch(/\bhttp2\b/)
   })
 
-  it("la última instrucción sobre x-vercel-forwarded-for es BORRARLA: obtenerIp la lee primero y el cliente la podría inventar", () => {
-    expect(ultimas.get("x-vercel-forwarded-for")).toBe("-")
+  it("la última instrucción sobre x-vercel-forwarded-for es VACIARLA (valor \"\"): obtenerIp la lee primero y el cliente la podría inventar", () => {
+    expect(ultimas.get("x-vercel-forwarded-for")).toBe('""')
   })
 
-  it("la última instrucción sobre X-Real-IP es FIJARLA con la IP de la conexión (un segundo header_up posterior la pisaría)", () => {
-    expect(ultimas.get("x-real-ip")).toBe("= {remote_host}")
+  it("la última instrucción sobre X-Real-IP es FIJARLA con $remote_addr (una segunda posterior la pisaría)", () => {
+    expect(ultimas.get("x-real-ip")).toBe("$remote_addr")
   })
 
-  it("la última instrucción sobre X-Forwarded-For es FIJARLA con la IP de la conexión", () => {
-    expect(ultimas.get("x-forwarded-for")).toBe("= {remote_host}")
+  it("la última instrucción sobre X-Forwarded-For es FIJARLA con $remote_addr", () => {
+    expect(ultimas.get("x-forwarded-for")).toBe("$remote_addr")
   })
 
-  it("no hay header_up (ni request_header) sobre esas cabeceras fuera del bloque del proxy", () => {
-    const enElProxy = new Set(delProxy)
-    const todas = caddyfile.split("\n").map(normalizar)
-    for (const linea of todas.filter((l) => l.startsWith("header_up "))) {
-      expect(enElProxy.has(linea), `header_up fuera de reverse_proxy: ${linea}`).toBe(true)
-    }
-    expect(todas.filter((l) => /^request_header\b.*\b(x-vercel-forwarded-for|x-real-ip|x-forwarded-for)\b/i.test(l))).toEqual([])
+  it("NUNCA $proxy_add_x_forwarded_for (suma lo que mande el cliente), ni en un comentario-trampa dentro de una directiva", () => {
+    expect(conf).not.toMatch(/proxy_add_x_forwarded_for/)
+    expect(conf).not.toMatch(/\$http_x_forwarded_for|\$http_x_real_ip|\$http_x_vercel/i)
   })
 
-  it("no confía en proxies de afuera (trusted_proxies / client_ip_headers abrirían la puerta a cabeceras falsas)", () => {
-    expect(caddyfile).not.toMatch(/trusted_proxies/)
-    expect(caddyfile).not.toMatch(/client_ip_headers/)
+  it("todos los proxy_set_header están dentro de 'location /' (si un nivel define uno, pierde los heredados) y no hay otras formas de tocar las cabeceras", () => {
+    const fuera = todasLasDirectivas(arbol).filter((d) => d.startsWith("proxy_set_header"))
+    expect(fuera.length).toBeGreaterThan(0)
+    expect(directivasNginx(proxy!).filter((d) => d.startsWith("proxy_set_header"))).toEqual(fuera)
+    expect(conf).not.toMatch(/\b(proxy_pass_request_headers|underscores_in_headers|ignore_invalid_headers)\b/)
   })
 
-  it("no vuelve a sumar (+) ninguna de esas cabeceras", () => {
-    expect(caddyfile).not.toMatch(/header_up\s+\+(X-Vercel-Forwarded-For|X-Real-IP|X-Forwarded-For)/i)
+  it("no confía en proxies de afuera (realip, PROXY protocol, set_real_ip_from abrirían la puerta a cabeceras falsas)", () => {
+    expect(conf).not.toMatch(/set_real_ip_from|real_ip_header|real_ip_recursive|proxy_protocol/)
   })
 
-  it("cada cabecera de IP que lee obtenerIp (comillas dobles, simples, constantes, has/get) está borrada o fijada en el Caddyfile", () => {
+  it("cada cabecera de IP que lee obtenerIp (comillas dobles, simples, constantes, has/get) está vaciada o fijada con $remote_addr", () => {
     const fuente = leer("lib/rate-limit.ts")
     const cuerpo = cuerpoDeFuncion(fuente, "obtenerIp")
     const leidas = new Set<string>()
@@ -213,49 +221,183 @@ describe("deploy/Caddyfile — la IP del cliente no la elige el cliente", () => 
       leidas.add(m[2].toLowerCase())
     }
 
-    // Si esto da vacío o dice NO-SE-PUDO-RESOLVER, cambió la forma de obtenerIp: revisar esta prueba y el Caddyfile.
+    // Si esto da vacío o dice NO-SE-PUDO-RESOLVER, cambió la forma de obtenerIp: revisar esta prueba y el archivo de nginx.
     expect(leidas.size).toBeGreaterThan(0)
     expect([...leidas].filter((c) => c.startsWith("no-se-pudo") || c.startsWith("NO-SE-PUDO"))).toEqual([])
     for (const cabecera of leidas) {
-      const operacion = ultimas.get(cabecera)
-      expect(operacion, `obtenerIp lee "${cabecera}" y el Caddyfile no la borra ni la fija`).toBeDefined()
-      expect(["-", "= {remote_host}"], `"${cabecera}": el Caddyfile la deja en "${operacion}"`).toContain(operacion)
+      const valor = ultimas.get(cabecera)
+      expect(valor, `obtenerIp lee "${cabecera}" y nginx-eliagenda.conf no la vacía ni la fija`).toBeDefined()
+      expect(['""', "$remote_addr"], `"${cabecera}": nginx la deja en "${valor}"`).toContain(valor)
     }
   })
 
-  it("el www redirige al dominio sin www, de forma permanente (y sólo eso)", () => {
-    expect(directivasDe(www!).filter((d) => d !== "bind 0.0.0.0")).toEqual(["redir https://eliagenda.com{uri} permanent"])
+  it("también vacía Forwarded, True-Client-IP y CF-Connecting-IP (hoy obtenerIp no las lee; defensa por si algún día las lee)", () => {
+    for (const c of ["forwarded", "true-client-ip", "cf-connecting-ip"]) expect(ultimas.get(c), c).toBe('""')
   })
 
-  it("comprime con zstd y gzip DENTRO del sitio principal", () => {
-    expect(directivasDe(sitio!)).toContain("encode zstd gzip")
+  it("el www redirige al dominio sin www con 301 DENTRO de 'location /' (un return a nivel server taparía el desafío de Certbot)", () => {
+    expect(directivasNginx(www!).filter((d) => d.startsWith("return"))).toEqual([])
+    expect(directivasNginx(locationDe(www!, "/")!)).toEqual(["return 301 https://eliagenda.com$request_uri"])
+    expect(directivasNginx(sitio!).filter((d) => d.startsWith("return"))).toEqual([])
   })
 
-  it("limita el cuerpo del pedido (request_body max_size) dentro del sitio principal", () => {
-    const bloque = bloqueLlamado(sitio!, "request_body")
-    expect(bloque, "falta request_body { ... } dentro de eliagenda.com").toBeDefined()
-    expect(directivasDe(bloque!)).toEqual(["max_size 6MB"])
+  it("limita el cuerpo del pedido (client_max_body_size 6m) a nivel del server principal", () => {
+    expect(directivasNginx(sitio!)).toContain("client_max_body_size 6m")
+    expect(conf.match(/client_max_body_size/g)).toHaveLength(1)
   })
 
-  it("manda Strict-Transport-Security y quita Server dentro de header { ... } del sitio principal (Vercel ponía HSTS solo; la app no)", () => {
-    const bloque = bloqueLlamado(sitio!, "header")
-    expect(bloque, "falta header { ... } dentro de eliagenda.com").toBeDefined()
-    const dentro = directivasDe(bloque!)
-    expect(dentro).toContain('Strict-Transport-Security "max-age=31536000"')
-    expect(dentro).toContain("-Server")
+  it("no anuncia la versión (server_tokens off) y comprime (gzip on) en el server principal", () => {
+    expect(directivasNginx(sitio!)).toContain("server_tokens off")
+    expect(directivasNginx(www!)).toContain("server_tokens off")
+    expect(conf).not.toMatch(/server_tokens\s+on/)
+    expect(directivasNginx(sitio!)).toContain("gzip on")
   })
 
-  it("cierra /api/cron/* con un 404 ANTES del proxy (los crons llaman directo a 127.0.0.1:3000)", () => {
-    const directivas = directivasDe(sitio!)
-    const matcher = directivas.find((d) => d.startsWith("@cron path "))
-    expect(matcher, "falta '@cron path /api/cron /api/cron/*'").toBeDefined()
-    expect(matcher!.split(" ").slice(2)).toEqual(expect.arrayContaining(["/api/cron/*"]))
-    expect(directivas).toContain("respond @cron 404")
-    // El orden de Caddy ejecuta respond antes que reverse_proxy, pero que el archivo lo diga también evita malentendidos.
-    const orden = sitio!.contenido.map((c) => (typeof c === "string" ? c : c.cabecera))
-    expect(orden.indexOf("respond @cron 404")).toBeGreaterThan(-1)
-    expect(orden.indexOf("respond @cron 404")).toBeLessThan(orden.indexOf("reverse_proxy 127.0.0.1:3000"))
+  it("HSTS está a nivel de server (los dos), con 'always', y ningún location define add_header (si lo hiciera, el location perdería el HSTS por herencia)", () => {
+    const hsts = 'add_header Strict-Transport-Security "max-age=31536000" always'
+    expect(directivasNginx(sitio!)).toContain(hsts)
+    expect(directivasNginx(www!)).toContain(hsts)
+    expect(conf.match(/add_header/g)).toHaveLength(2)
+    for (const s of servidoresDe(arbol)) {
+      for (const l of locationsDe(s)) {
+        expect(todasLasDirectivas(l).filter((d) => d.startsWith("add_header")), `add_header dentro de "${l.cabecera}": anula el HSTS del server`).toEqual([])
+      }
+    }
   })
+
+  it("cierra /api/cron y /api/cron/* con 404 ANTES de 'location /', sin distinguir mayúsculas (los crons llaman directo a 127.0.0.1:3000)", () => {
+    const bloques = bloquesNginx(sitio!).map((b) => b.cabecera)
+    const cron = bloquesNginx(sitio!).find((b) => /^location ~\*\s/.test(b.cabecera) && /api\/cron/.test(b.cabecera))
+    expect(cron, "falta 'location ~* ^/api/cron(/|$) { return 404; }'").toBeDefined()
+    expect(directivasNginx(cron!)).toEqual(["return 404"])
+    expect(bloques.indexOf(cron!.cabecera)).toBeLessThan(bloques.indexOf("location /"))
+    // La expresión regular de verdad, probada en JS contra lo que nginx le va a pasar (la ruta ya normalizada).
+    const regex = new RegExp(cron!.cabecera.replace(/^location ~\*\s+/, ""), "i")
+    for (const ruta of ["/api/cron", "/api/cron/", "/api/cron/recordatorios", "/API/CRON/recordatorios", "/Api/Cron/x"]) {
+      expect(regex.test(ruta), ruta).toBe(true)
+    }
+    // y no se come otras rutas
+    for (const ruta of ["/api/cronista", "/api/cro", "/api/otra/cron", "/", "/api/crono/x"]) {
+      expect(regex.test(ruta), ruta).toBe(false)
+    }
+  })
+
+  it("la mutación se detecta: sin '~*', con $proxy_add_x_forwarded_for o sin vaciar la cabecera, las comprobaciones de arriba fallarían", () => {
+    const sinVaciar = leerNginx(texto.replace('proxy_set_header X-Vercel-Forwarded-For "";', ""))
+    const l1 = locationDe(servidorLlamado(sinVaciar, "eliagenda.com")!, "/")!
+    expect(ultimoValorPorCabecera(todasLasDirectivas(l1)).get("x-vercel-forwarded-for")).toBeUndefined()
+    const sumando = leerNginx(texto.replace("proxy_set_header X-Forwarded-For $remote_addr;", "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;"))
+    const l2 = locationDe(servidorLlamado(sumando, "eliagenda.com")!, "/")!
+    expect(ultimoValorPorCabecera(todasLasDirectivas(l2)).get("x-forwarded-for")).not.toBe("$remote_addr")
+    const reordenado = leerNginx(texto.replace("proxy_set_header X-Real-IP $remote_addr;", 'proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Real-IP $http_x_real_ip;'))
+    const l3 = locationDe(servidorLlamado(reordenado, "eliagenda.com")!, "/")!
+    expect(ultimoValorPorCabecera(todasLasDirectivas(l3)).get("x-real-ip")).not.toBe("$remote_addr")
+    const conLocationHsts = leerNginx(texto.replace("return 404;", 'add_header X-Algo "1"; return 404;'))
+    const cron = bloquesNginx(servidorLlamado(conLocationHsts, "eliagenda.com")!).find((b) => /api\/cron/.test(b.cabecera))!
+    expect(directivasNginx(cron).some((d) => d.startsWith("add_header"))).toBe(true)
+  })
+})
+
+describe("deploy/nginx-eliagenda-https.conf — el HTTPS escrito a mano (plan B de Certbot)", () => {
+  const principal = leerNginx(leer("deploy/nginx-eliagenda.conf"))
+  const texto = leer("deploy/nginx-eliagenda-https.conf")
+  const conf = sinComentarios(texto)
+  const arbol = leerNginx(texto)
+  const http = servidoresDe(arbol).find((s) => directivasNginx(s).includes("listen 80"))
+  const www = servidoresDe(arbol).find((s) => directivasNginx(s).includes("server_name www.eliagenda.com"))
+  const sitio = servidoresDe(arbol).find((s) => directivasNginx(s).includes("server_name eliagenda.com"))
+
+  it("tiene el 80 (todo a https://eliagenda.com, dentro de location /) y los dos 443; sólo IPv4, sin default_server ni http2", () => {
+    expect(servidoresDe(arbol)).toHaveLength(3)
+    expect(directivasNginx(http!).filter((d) => d.startsWith("return"))).toEqual([])
+    expect(directivasNginx(locationDe(http!, "/")!)).toEqual(["return 301 https://eliagenda.com$request_uri"])
+    expect(todasLasDirectivas(arbol).filter((d) => d.startsWith("listen"))).toEqual(["listen 80", "listen 443 ssl", "listen 443 ssl"])
+    expect(conf).not.toMatch(/listen[^\n;]*\[|default_server|ipv6only|\bhttp2\b|reuseport/)
+    for (const s of [www!, sitio!]) {
+      expect(directivasNginx(s)).toContain("ssl_certificate /etc/letsencrypt/live/eliagenda.com/fullchain.pem")
+      expect(directivasNginx(s)).toContain("ssl_certificate_key /etc/letsencrypt/live/eliagenda.com/privkey.pem")
+    }
+  })
+
+  it("el bloque del proxy, el del 404 de /api/cron y las directivas del server principal son IDÉNTICOS a los del archivo de HTTP", () => {
+    const origen = servidorLlamado(principal, "eliagenda.com")!
+    expect(locationDe(sitio!, "/")).toEqual(locationDe(origen, "/"))
+    expect(bloquesNginx(sitio!).find((b) => /api\/cron/.test(b.cabecera))).toEqual(bloquesNginx(origen).find((b) => /api\/cron/.test(b.cabecera)))
+    for (const d of directivasNginx(origen).filter((d) => !/^(listen|server_name)\b/.test(d))) {
+      expect(directivasNginx(sitio!), d).toContain(d)
+    }
+    expect(directivasNginx(www!)).toContain('add_header Strict-Transport-Security "max-age=31536000" always')
+  })
+
+  it("sin $proxy_add_x_forwarded_for, sin realip y ningún add_header dentro de un location", () => {
+    expect(conf).not.toMatch(/proxy_add_x_forwarded_for|set_real_ip_from|real_ip_header|proxy_protocol/)
+    for (const s of servidoresDe(arbol)) {
+      for (const l of locationsDe(s)) expect(todasLasDirectivas(l).filter((d) => d.startsWith("add_header")), l.cabecera).toEqual([])
+    }
+  })
+})
+
+describe("deploy/probar-cabeceras.sh — prueba con un nginx real, sin tocar el de producción", () => {
+  const codigo = sinComentarios(leer("deploy/probar-cabeceras.sh"))
+
+  it("acepta la ruta del archivo de nginx (para probar el instalado), lo extrae y revisa listen [::], default_server y el 404 de /api/cron", () => {
+    expect(codigo).toMatch(/ARCHIVO="\$\{1:-/)
+    expect(codigo).toContain("nginx-eliagenda.conf")
+    expect(codigo).toContain("proxy_pass")
+    expect(codigo).toContain("/api/cron/recordatorios")
+    expect(codigo).toContain("default_server")
+    for (const cabecera of ["X-Vercel-Forwarded-For", "X-Real-IP", "X-Forwarded-For", "Forwarded", "True-Client-IP", "CF-Connecting-IP"]) {
+      expect(codigo, cabecera).toContain(`${cabecera}:`)
+    }
+  })
+
+  it("levanta SU PROPIO nginx (-p/-c, pid y registros en un temporal, puerto alto en 127.0.0.1) y jamás toca el del sistema", () => {
+    expect(codigo).toMatch(/"\$NGINX" -p "\$TEMPORAL\/" -c "\$TEMPORAL\/nginx\.conf"/)
+    expect(codigo).toMatch(/^pid \$TEMPORAL\/nginx\.pid;/m)
+    expect(codigo).toMatch(/^error_log \$TEMPORAL\//m)
+    expect(codigo).toMatch(/access_log \$TEMPORAL\//)
+    expect(codigo).toMatch(/listen 127\.0\.0\.1:\$PUERTO_NGINX;/)
+    expect(codigo).toMatch(/PUERTO_NGINX=38080/)
+    // Nada de sudo, systemctl, service, señales ni de la configuración real.
+    expect(codigo).not.toMatch(/\bsudo\b/)
+    expect(codigo).not.toMatch(/systemctl|\bservice\s+nginx|nginx\s+-s\b|pkill|killall/)
+    expect(codigo).not.toMatch(/\/etc\/nginx\/nginx\.conf|\/run\/nginx\.pid|\/var\/log\/nginx/)
+    expect(codigo).not.toMatch(/listen (80|443)\b/)
+  })
+
+  it.skipIf(!hayNginx)("CON nginx real: pasa con el archivo de HTTP y con el de HTTPS, y FALLA con versiones sabotadas (mutación real)", () => {
+    const script = path.join(RAIZ, "deploy/probar-cabeceras.sh")
+    const correr = (archivo: string) => spawnSync("bash", [script, archivo], { encoding: "utf8", timeout: 90_000 })
+    for (const archivo of ["deploy/nginx-eliagenda.conf", "deploy/nginx-eliagenda-https.conf"]) {
+      const r = correr(path.join(RAIZ, archivo))
+      expect(r.stdout + r.stderr, archivo).toContain("TODO BIEN")
+      expect(r.status, archivo).toBe(0)
+    }
+    const directorio = mkdtempSync(path.join(tmpdir(), "eli-nginx-mutante-"))
+    try {
+      const original = leer("deploy/nginx-eliagenda.conf")
+      const mutantes: Record<string, string> = {
+        "suma la cabecera del cliente": original.replace("proxy_set_header X-Forwarded-For $remote_addr;", "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;"),
+        "deja pasar x-vercel-forwarded-for": original.replace('proxy_set_header X-Vercel-Forwarded-For "";', ""),
+        "cron sin distinguir mayúsculas roto": original.replace("location ~* ^/api/cron", "location ~ ^/api/cron"),
+        "add_header en el location de cron": original.replace("return 404;", 'add_header X-Algo "1";\n        return 404;'),
+        "sin límite de cuerpo": original.replace("client_max_body_size 6m;", "client_max_body_size 60m;"),
+      }
+      for (const [nombre, contenido] of Object.entries(mutantes)) {
+        expect(contenido, nombre).not.toBe(original)
+        const archivo = path.join(directorio, "mutante.conf")
+        writeFileSync(archivo, contenido)
+        const r = correr(archivo)
+        expect(r.status, `el mutante "${nombre}" no fue detectado:\n${r.stdout}`).not.toBe(0)
+        expect(r.stdout + r.stderr, nombre).toContain("FALLA")
+      }
+    } finally {
+      rmSync(directorio, { recursive: true, force: true })
+    }
+  }, 180_000)
+  if (!hayNginx) {
+    console.warn("[deploy] nginx o node NO están en el PATH: se salta la prueba que corre probar-cabeceras.sh con un nginx real (A COMPROBAR en el VPS: deploy/probar-cabeceras.sh).")
+  }
 })
 
 describe("deploy/cron-eli — mismos crons que vercel.json", () => {
@@ -409,7 +551,7 @@ describe("deploy/README.md — lo que la seguridad y la recuperación suponen", 
   })
 
   it("explica el chequeo de IPv6, la contraseña fuerte de eli y el --ignore-scripts", () => {
-    for (const texto of ["ip -6 addr show scope global", "openssl rand -base64 24", "--ignore-scripts", "equivale a root", "bind 0.0.0.0"]) {
+    for (const texto of ["ip -6 addr show scope global", "openssl rand -base64 24", "--ignore-scripts", "equivale a root", "listen [::]"]) {
       expect(guia, `falta en la guía: ${texto}`).toContain(texto)
     }
   })
@@ -435,7 +577,7 @@ describe("deploy/README.md — lo que la seguridad y la recuperación suponen", 
     expect(guia).toMatch(/\| CNAME \| `www` \| `eliagenda\.com` \|/)
     expect(guia).toMatch(/\| A \| `@` \| `187\.41\.114\.36` \|/)
     for (const texto of ["SPF", "DKIM", "DMARC", "no-reply@eliagenda.com"]) expect(guia, texto).toContain(texto)
-    expect(leer("deploy/Caddyfile")).not.toMatch(/example\.cl/)
+    expect(leer("deploy/nginx-eliagenda.conf")).not.toMatch(/example\.cl/)
   })
 
   it("trae el runbook de restauración real y la advertencia de datos de salud sin cifrar", () => {
@@ -517,6 +659,11 @@ describe("deploy/sudoers-eli — lo único que eli puede hacer como root", () =>
     }
     expect(usados.size).toBeGreaterThan(0)
     for (const comando of usados) expect(comandosPermitidos, `un script usa 'sudo -n ${comando.replace("/usr/bin/", "")}' y deploy/sudoers-eli no lo permite`).toContain(comando)
+  })
+
+  it("no permite tocar nginx (ni nada que no sea el servicio eli): sistemaone.com vive en ese nginx", () => {
+    expect(archivo.replace(/^#.*$/gm, "")).not.toMatch(/nginx|certbot|caddy/i)
+    for (const regla of reglas) expect(regla).not.toMatch(/nginx|certbot/i)
   })
 
   it("la guía lo instala desde deploy/sudoers-eli hacia /etc/sudoers.d/eli (sin punto en el nombre)", () => {
@@ -631,12 +778,6 @@ describe("deploy/*.sh", () => {
     }
   })
 
-  it("probar-cabeceras.sh acepta la ruta del Caddyfile (para probar el instalado) y revisa el bind y el 404 de los crons", () => {
-    const codigo = sinComentarios(leer("deploy/probar-cabeceras.sh"))
-    expect(codigo).toMatch(/CADDYFILE="\$\{1:-/)
-    expect(codigo).toContain("bind")
-    expect(codigo).toContain("/api/cron/recordatorios")
-  })
 })
 
 describe("deploy/README.md — crons del VPS: nunca encendidos antes del lanzamiento por descuido", () => {
@@ -724,6 +865,116 @@ describe("deploy/README.md — crons del VPS: nunca encendidos antes del lanzami
     expect(tramo(guia, "### 13.2", "### 13.3")).toContain("**nuevo despliegue**")
     expect(s135).not.toContain("sólo adelanta los de mañana")
     expect(s135).toContain("SÍ ejecuta el cron de verdad")
+  })
+})
+
+describe("deploy/README.md — nginx convive con sistemaone.com: nunca se apaga, sólo se recarga", () => {
+  const guia = leer("deploy/README.md")
+  /** Las líneas de los bloques ``` de la guía (lo que alguien copia y pega). */
+  const lineasDeComandos: string[] = []
+  let dentro = false
+  for (const linea of guia.split("\n")) {
+    if (/^\s*(>\s*)?```/.test(linea)) {
+      dentro = !dentro
+      continue
+    }
+    if (dentro) lineasDeComandos.push(linea.replace(/^\s*>\s?/, ""))
+  }
+  const sinCitas = guia.replace(/\n>\s?/g, " ").replace(/\s+/g, " ")
+
+  it("lee bien los bloques de comandos (si esto falla, las pruebas de abajo no prueban nada)", () => {
+    expect(lineasDeComandos.length).toBeGreaterThan(200)
+    expect(lineasDeComandos.some((l) => l.includes("sudo nginx -t && sudo systemctl reload nginx"))).toBe(true)
+  })
+
+  it("prohíbe stop/restart/disable de nginx, con la advertencia repetida (al inicio y en el paso 9) y el comando permitido", () => {
+    const advertencias = sinCitas.match(/nunca `systemctl stop`, `restart` ni `disable` de nginx/gi) ?? []
+    expect(advertencias.length).toBeGreaterThanOrEqual(2)
+    expect(guia.indexOf("ESTE VPS YA ALOJA `sistemaone.com` CON nginx")).toBeGreaterThan(-1)
+    expect(guia.indexOf("ESTE VPS YA ALOJA `sistemaone.com` CON nginx")).toBeLessThan(guia.indexOf("## Qué es cada cosa"))
+    expect(tramo(guia, "## Paso 9.", "## Paso 10.")).toMatch(/NUNCA `systemctl stop`, `restart` ni `disable` de nginx/)
+    expect(sinCitas).toContain("Lo único permitido es `sudo nginx -t && sudo systemctl reload nginx`")
+    expect(sinCitas.match(/sudo nginx -t && sudo systemctl reload nginx/g)!.length).toBeGreaterThanOrEqual(4)
+  })
+
+  it("NINGÚN bloque de comandos apaga, reinicia, deshabilita ni mata nginx (ni solo ni junto a otra unidad), ni toca sistemaone", () => {
+    for (const l of lineasDeComandos) {
+      expect(l, l).not.toMatch(/systemctl\s+(stop|restart|disable|mask|kill|try-restart|force-reload|reload-or-restart)\b[^\n]*\bnginx\b/)
+      expect(l, l).not.toMatch(/systemctl\s+(stop|restart|disable|mask|kill)\b[^\n]*\bcaddy\b/)
+      expect(l, l).not.toMatch(/\bservice\s+nginx\s+(stop|restart|force-reload)\b|\bnginx\s+-s\s+(stop|quit|reopen)\b|\b(pkill|killall)\b[^\n]*nginx/)
+      expect(l, l).not.toMatch(/\bapt(-get)?\s+(remove|purge|install)\b[^\n]*\b(nginx|caddy|certbot)\b/)
+      expect(l, l).not.toMatch(/\b(rm|mv|cp|install|ln|tee|sed\s+-i|nano|vim?)\b[^\n]*(sites-(enabled|available)\/sistemaone|\/etc\/nginx\/nginx\.conf|\/etc\/nginx\/conf\.d)/)
+      expect(l, l).not.toMatch(/caddy/i)
+    }
+  })
+
+  it("todo cambio a nginx se aplica con reload tras nginx -t, y se comprueba sistemaone.com antes y después", () => {
+    const paso9 = tramo(guia, "## Paso 9.", "## Paso 10.")
+    const reloads = lineasDeComandos.filter((l) => /systemctl\s+reload\s+nginx/.test(l) && !/--deploy-hook/.test(l))
+    expect(reloads.length).toBeGreaterThanOrEqual(3)
+    for (const l of reloads) expect(l, "un reload sin 'nginx -t &&' delante").toMatch(/nginx -t && (sudo )?systemctl reload nginx|&& sudo nginx -t && sudo systemctl reload nginx/)
+    expect(paso9.match(/curl -sI https:\/\/sistemaone\.com \| head -1/g)!.length).toBeGreaterThanOrEqual(8)
+    // 9.4: primero la línea base, luego el cambio, luego otra comprobación.
+    const s94 = tramo(guia, "### 9.4", "### 9.5")
+    const base = s94.indexOf("curl -sI https://sistemaone.com | head -1")
+    const reload = s94.indexOf("sudo nginx -t && sudo systemctl reload nginx\n```")
+    expect(base).toBeGreaterThan(-1)
+    expect(reload).toBeGreaterThan(base)
+    expect(s94.indexOf("curl -sI https://sistemaone.com | head -1", reload)).toBeGreaterThan(reload)
+  })
+
+  it("9.4 usa el enlace 'zz-eliagenda' (para que sistemaone siga siendo el sitio por defecto), y el plan de vuelta atrás quita el enlace y recarga", () => {
+    const s94 = tramo(guia, "### 9.4", "### 9.5")
+    expect(s94).toContain("sudo ln -s /etc/nginx/sites-available/eliagenda /etc/nginx/sites-enabled/zz-eliagenda")
+    expect(lineasDeComandos.filter((l) => /sites-enabled\/eliagenda\b/.test(l))).toEqual([])
+    const s99 = tramo(guia, "### 9.9", "## Paso 10.")
+    expect(s99).toContain("sudo rm /etc/nginx/sites-enabled/zz-eliagenda")
+    expect(s99.indexOf("sudo rm /etc/nginx/sites-enabled/zz-eliagenda")).toBeLessThan(s99.indexOf("sudo nginx -t && sudo systemctl reload nginx"))
+  })
+
+  it("9.6: el orden es ensayo (--dry-run) ANTES del certbot real, sin --hsts, y comprueba la config final con nginx -T y la renovación", () => {
+    const s96 = tramo(guia, "### 9.6", "### 9.7")
+    expect(s96.indexOf("sudo certbot --nginx --dry-run -d eliagenda.com -d www.eliagenda.com")).toBeGreaterThan(-1)
+    expect(s96.indexOf("--dry-run")).toBeLessThan(s96.indexOf("sudo certbot --nginx -d eliagenda.com -d www.eliagenda.com --redirect"))
+    expect(s96).not.toMatch(/certbot[^\n]*--hsts/)
+    expect(s96).toContain("sudo nginx -T")
+    expect(s96).toContain("probar-cabeceras.sh /etc/nginx/sites-available/eliagenda")
+    expect(s96).toContain("sudo certbot renew --dry-run --cert-name eliagenda.com")
+    for (const linea of ["X-Vercel-Forwarded-For", "X-Real-IP", "X-Forwarded-For", "Strict-Transport-Security", "/api/cron", "client_max_body_size"]) {
+      expect(s96, linea).toContain(linea)
+    }
+  })
+
+  it("los comandos de nginx -T de la guía no muestran el contenido de claves y filtran sólo el sitio de Eli", () => {
+    for (const l of lineasDeComandos.filter((x) => /nginx -T/.test(x))) {
+      expect(l).not.toMatch(/privkey|\.key\b/)
+    }
+  })
+
+  it("no queda ningún rastro de Caddy como herramienta (sólo la frase de que ya no se usa) y el Caddyfile ya no existe", () => {
+    expect(existsSync(path.join(RAIZ, "deploy/Caddyfile"))).toBe(false)
+    const menciones = guia.match(/caddy/gi) ?? []
+    // La nota inicial, el aviso del paso 9, "no instales Caddy" de 3.3 y "nada de caddy" del inventario.
+    expect(menciones.length).toBeLessThanOrEqual(4)
+    for (const archivo of ["deploy/eli.service", "deploy/cron-eli", "deploy/llamar-cron.sh", "deploy/actualizar.sh", "deploy/volver-atras.sh", "deploy/lib-entorno.sh", "deploy/sudoers-eli", "deploy/probar-cabeceras.sh", "deploy/nginx-eliagenda.conf", "deploy/nginx-eliagenda-https.conf"]) {
+      expect(leer(archivo), archivo).not.toMatch(/caddy/i)
+    }
+  })
+
+  it("ninguno de los scripts ni el servicio apagan o reinician nginx", () => {
+    for (const nombre of readdirSync(path.join(RAIZ, "deploy")).filter((n) => n.endsWith(".sh") || n.endsWith(".service") || n.startsWith("cron-"))) {
+      expect(sinComentarios(leer(`deploy/${nombre}`)), nombre).not.toMatch(/systemctl\s+(stop|restart|disable|mask|kill)\b[^\n]*\bnginx\b|\bservice\s+nginx\b|\bnginx\s+-s\s+(stop|quit)\b/)
+    }
+  })
+
+  it("la mutación se detecta: un 'systemctl restart nginx' en un bloque, aunque venga junto a otra unidad, lo atraparía la regla", () => {
+    const regla = /systemctl\s+(stop|restart|disable|mask|kill|try-restart|force-reload|reload-or-restart)\b[^\n]*\bnginx\b/
+    for (const malo of ["sudo systemctl restart nginx", "sudo systemctl stop nginx", "sudo systemctl disable --now nginx", "sudo systemctl restart eli nginx", "sudo systemctl kill nginx"]) {
+      expect(malo, malo).toMatch(regla)
+    }
+    for (const bueno of ["sudo nginx -t && sudo systemctl reload nginx", "systemctl status nginx --no-pager", "systemctl is-active eli nginx fail2ban"]) {
+      expect(bueno, bueno).not.toMatch(regla)
+    }
   })
 })
 
