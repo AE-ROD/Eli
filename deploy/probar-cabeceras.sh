@@ -165,7 +165,7 @@ PIDS+=("$!")
 PIDS+=("$!")
 
 URL="http://127.0.0.1:$PUERTO_NGINX"
-PEDIR=(curl --silent --max-time 5 --path-as-is -H "Host: eliagenda.com")
+PEDIR=(curl --silent --noproxy "*" --max-time 5 --path-as-is -H "Host: eliagenda.com")
 
 # Esperar a que nginx y el eco respondan (hasta ~15 s).
 for _ in $(seq 1 30); do
