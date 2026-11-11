@@ -126,10 +126,10 @@ sea un chat**):
 | **Contraseña de root** | La que pusiste al crear el VPS (hPanel → VPS → *Configuración* si la quieres cambiar). |
 | **Versión de Ubuntu** | `24.04.5` (hPanel → VPS → Resumen). Esta guía vale para **22.04 y 24.04**. |
 | **Dominio** | `eliagenda.com`, comprado en Hostinger, con el DNS en hPanel. Todavía no sirve a Eli: hoy Eli vive sólo en su dirección de Vercel (`*.vercel.app`), así que pasar al VPS es un **lanzamiento** (paso 13), no un cambio de dirección. |
-| **Variables de Eli** | Vercel → tu proyecto → *Settings* → *Environment Variables*. Son las mismas del paso 6. **`NEXTAUTH_SECRET` tiene que ser EXACTAMENTE el mismo que usa Vercel** (si no, todos pierden la sesión y los enlaces de baja de los correos dejan de servir). |
+| **Variables de Eli** | Vercel → tu proyecto → *Settings* → *Environment Variables*. Son las mismas del paso 6. **`NEXTAUTH_SECRET` tiene que ser EXACTAMENTE el mismo que usa Vercel** (si no, los enlaces de baja y de cancelar/cambiar cita de los correos ya enviados dejan de servir). |
 | **Acceso a GitHub** | Que seas administrador del repositorio `AE-ROD/Eli` (para crear la deploy key). |
 | **Acceso a Neon** | Para saber la versión de Postgres (paso 3) y crear una base de pruebas (paso 11). |
-| **Acceso a Google Cloud, Resend y Vercel** | Para la mudanza (paso 13). |
+| **Acceso a Google Cloud, Resend y Vercel** | Para el lanzamiento (paso 13) y para verificar el dominio en Resend (paso 7.4). |
 | **Dónde está el DNS de tu dominio** | Ver el aviso al principio del paso 7. Si el dominio no está en Hostinger, los registros DNS se cambian en otro panel. |
 
 **Este kit tiene que estar en la rama `main` de GitHub** (haber pasado por el
@@ -1425,21 +1425,21 @@ Si un cron o el respaldo **falla**, además de anotarlo manda **un correo al dí
 a `SOPORTE_EMAIL` (paso 10.5). Eso funciona con lo que Eli ya usa (Resend); no
 hay servicios nuevos.
 
-### 10.3 Instalar (con los de correo APAGADOS hasta la mudanza)
+### 10.3 Instalar (con los de correo APAGADOS hasta el lanzamiento)
 
 > **NO enciendas los crons de correo mientras Vercel siga con los suyos
-> encendidos, ni mientras el servidor use un dominio de prueba.** Lo que se
+> encendidos, ni antes del lanzamiento.** Lo que se
 > verificó en el código (`app/api/cron/recordatorios/route.ts`): cada recordatorio
 > se "reclama" en la base **antes** de enviarse (se marca `reminderSentAt` sólo si
 > estaba vacío), por eso repetir una corrida, o correr dos a la vez, **no duplica**
 > un correo. Aun así la regla sigue siendo no encender los dos: (1) un envío que
 > falla de forma ambigua queda marcado y no se reintenta (a propósito: "más vale
 > un recordatorio perdido que dos"), así que una corrida de más puede gastar el
-> único intento con el dominio equivocado; y (2) los enlaces del correo llevan el
-> `NEXTAUTH_URL` del servidor que los manda: desde el servidor de pruebas
-> saldrían con la dirección de **prueba**, que desaparecerá, y la marca ya
-> quedaría puesta (no se puede deshacer). Se encienden en el paso 13. El respaldo
-> sí puede quedar encendido desde ya.
+> único intento, antes de que todo esté listo (Resend sin verificar, por
+> ejemplo); y (2) los enlaces del correo llevan el `NEXTAUTH_URL` del servidor que
+> los manda (el VPS usa `eliagenda.com`, Vercel usa su propia dirección), y la marca
+> ya quedaría puesta (no se puede deshacer). Se encienden en el paso 13. El
+> respaldo sí puede quedar encendido desde ya.
 
 ```bash
 sudo install -d -m 700 -o eli -g eli /var/backups/eli
@@ -1788,8 +1788,8 @@ la prueba de restauración, 11.3.)
 
 ## Paso 12. Lista de verificación final
 
-Haz esto **antes** de la mudanza, con el dominio de prueba. Reemplaza
-`eliagenda.com` por tu dominio. En las que dicen "(Mac)" usa la terminal
+Haz esto **antes** del lanzamiento, con `eliagenda.com` (que ya apunta al VPS
+desde el paso 7 pero todavía no lo usa nadie). En las que dicen "(Mac)" usa la terminal
 de tu Mac; en las que dicen "(VPS)", la del servidor.
 
 **12.1 (Mac) HTTPS responde, con candado válido.**
@@ -1918,10 +1918,10 @@ Debe imprimir `401`.
 
 > **NO pruebes aquí el 200 con secreto.** Ese 200 ejecuta de verdad la corrida
 > diaria contra la base **real**: manda los recordatorios pendientes de mañana
-> con enlaces a `NEXTAUTH_URL`, que ahora es el dominio de **prueba** (el que
-> desaparecerá), y deja marcado `reminderSentAt` en esas citas (no se puede
-> deshacer: no se reenvían). La prueba con secreto va **después de la mudanza**,
-> en 13.5, con el dominio final. Que el secreto del servidor coincide con el de la
+> con enlaces a `eliagenda.com`, y deja marcado `reminderSentAt` en esas citas
+> (no se puede deshacer: no se reenvían) cuando todavía no se avisó a los
+> negocios ni Resend está verificado, y mientras Vercel sigue mandando los suyos.
+> La prueba con secreto va **después del lanzamiento**, en 13.5. Que el secreto del servidor coincide con el de la
 > app ya lo prueba el arranque: si estuviera mal, el primer cron real daría `401`
 > y te llegaría el correo de aviso (10.5).
 
@@ -1970,7 +1970,7 @@ ls -lh /var/backups/eli && timedatectl | grep "Time zone"
 **12.11 Login y flujo real.** En el navegador: abre
 `https://eliagenda.com`, inicia sesión con correo y contraseña, mira la
 agenda, y una página pública de reservas. (El login con Google requiere el
-paso 13: la URI de prueba hay que agregarla a Google.) Cierra sesión y vuelve a
+paso 13.0: la URI de `eliagenda.com` hay que agregarla a Google antes.) Cierra sesión y vuelve a
 entrar; crea y borra una cita de prueba **en un negocio de pruebas** (no en el de
 una clínica real).
 
@@ -2001,76 +2001,63 @@ se detecte y se revierta sola.
 
 ---
 
-## Paso 13. LA MUDANZA (y el plan para volver atrás)
+## Paso 13. EL LANZAMIENTO en `eliagenda.com` (y el plan para volver atrás)
 
-Hazla **fuera del horario de atención** y **lejos de las 13:00 UTC** (entre las
-12:30 y las 13:30 UTC no la hagas: ahí corren los crons). Reserva 1-2 horas.
+`eliagenda.com` es un dominio nuevo: hoy Eli sólo vive en su dirección de
+Vercel. Al terminar el paso 12 el VPS ya atiende `https://eliagenda.com` (DNS en
+el paso 7, Caddy en el 9) **con la misma base de datos real** que Vercel, pero
+nadie lo conoce todavía y sus crons están apagados. "Lanzar" es: apagar los crons
+de Vercel, encender los del VPS, y empezar a usar `eliagenda.com` como la
+dirección oficial. Como no hay un dominio viejo que redirigir, **no hay un
+cambio de DNS en el día del lanzamiento** (eso se hizo, sin riesgo, en el paso 7).
+
+Hazlo **fuera del horario de atención** y **lejos de las 13:00 UTC** (entre las
+12:30 y las 13:30 UTC no lo hagas: ahí corren los crons). Reserva 1-2 horas.
 
 > **Regla que nunca se rompe:** Vercel y el VPS **no pueden tener los crons
-> encendidos a la vez** (los correos saldrían duplicados). Por eso: primero se
-> apagan los de Vercel, *después* se encienden los del VPS.
+> encendidos a la vez**. Por eso: primero se apagan los de Vercel, *después*
+> se encienden los del VPS.
 
 ### 13.0 Antes (días antes)
 
-- [ ] El paso 12 completo está en verde con el dominio de prueba.
-- [ ] TTL de los registros DNS del dominio en **300** desde hace al menos un día
-      (paso 7.1), y anotado cómo estaba todo (para volver).
+- [ ] El paso 12 completo está en verde con `eliagenda.com`.
+- [ ] **Resend verificado** (paso 7.4: `eliagenda.com` en *Verified*, con SPF,
+      DKIM y DMARC) y la prueba de aviso del paso 10.5 llegó a tu correo. Sin esto,
+      los correos de Eli (recordatorios, bienvenida, recuperar contraseña) no salen.
 - [ ] **Google:** Google Cloud → *APIs y servicios* → *Credenciales* → tu cliente
       OAuth. En *Orígenes autorizados de JavaScript* agrega
       `https://eliagenda.com` y en *URIs de redireccionamiento autorizados*
       `https://eliagenda.com/api/auth/callback/google`. **Deja también las de
-      Vercel** (las necesitas si vuelves atrás). Agrega igual las de
-      `eliagenda.com` si quieres probar el login con Google antes. Los
-      cambios de Google pueden tardar unos minutos en aplicarse.
-- [ ] **Resend:** el remitente (`RESEND_FROM_EMAIL`) no depende del dominio de la
-      web. Sólo si quieres enviar desde tu dominio nuevo: Resend → *Domains* →
-      *Add Domain* → agrega en el DNS de Hostinger los registros que te indica
-      (SPF y DKIM, tipo TXT/CNAME) **sin tocar los registros de correo que ya
-      existan** → espera `Verified` → cambia `RESEND_FROM_EMAIL`.
-- [ ] En **Vercel**, `NEXTAUTH_URL` debe ser la dirección con la que entran los
-      clientes. Si hoy Eli vive en una dirección `*.vercel.app` y el dominio es
-      nuevo, decide primero qué pasará con los enlaces antiguos (reservas ya
-      compartidas): para que Vercel pueda atender el dominio nuevo si vuelves
-      atrás, hay que agregar el dominio al proyecto de Vercel y poner ahí
-      `NEXTAUTH_URL` con el dominio.
+      Vercel** (las necesitas mientras Vercel siga sirviendo y si vuelves atrás).
+      Los cambios de Google pueden tardar unos minutos en aplicarse.
+- [ ] **Vercel sigue como está** (con su propio `NEXTAUTH_URL`, la de `*.vercel.app`):
+      es tu plan de vuelta atrás. No lo cambies.
+- [ ] Piensa qué pasa con los enlaces que ya se compartieron con la dirección de
+      Vercel (páginas de reservas, correos viejos): **seguirán funcionando mientras
+      Vercel siga encendido** (los enlaces de cancelar/cambiar cita sirven en
+      cualquiera de los dos porque comparten base y `NEXTAUTH_SECRET`). El día que
+      apagues Vercel dejarán de servir: decide antes cómo avisar a los negocios
+      (o configurar una redirección en Vercel hacia `eliagenda.com`).
+- [ ] **Las sesiones abiertas en la dirección de Vercel no pasan a `eliagenda.com`**
+      (una cookie sólo vale para su propio dominio): cada persona tendrá que iniciar
+      sesión de nuevo la primera vez. Avísales.
 - [ ] Haz un respaldo fresco: `/opt/eli/current/deploy/respaldo.sh`.
-- [ ] Avisa a los negocios si quieres (habrá unos minutos en que algunos usuarios
-      puedan ver el sitio viejo).
+- [ ] Avisa a los negocios la dirección nueva y el horario del lanzamiento.
 
-### 13.1 Dejar el VPS listo con el dominio FINAL (aún sin tráfico)
+### 13.1 Dejar el VPS listo
 
-En el VPS:
-
-```bash
-sudo nano /etc/eli/eli.env
-```
-
-Cambia la línea `NEXTAUTH_URL=` a `https://eliagenda.com` (el dominio final, con
-tu dominio real). Guarda (`Ctrl+O`, Enter, `Ctrl+X`).
-
-Cambia Caddy al dominio final. Escribe tus dos dominios (el de prueba y el
-final; **con los tuyos**):
+En el VPS, confirma que `eli.env` tiene la dirección oficial (6.3 lo comprueba):
 
 ```bash
-DOMINIO=eliagenda.com; DOMINIO_FINAL=eliagenda.com
+grep "^NEXTAUTH_URL=" /etc/eli/eli.env
 ```
+
+Debe imprimir exactamente `NEXTAUTH_URL=https://eliagenda.com`. Y que el
+Caddyfile instalado es el del repositorio (14.3):
 
 ```bash
-sudo sed -i "s/$DOMINIO/$DOMINIO_FINAL/g" /etc/caddy/Caddyfile
+diff -q /opt/eli/repo/deploy/Caddyfile /etc/caddy/Caddyfile && echo "Caddyfile al día"
 ```
-
-```bash
-grep -n "example\|eli" /etc/caddy/Caddyfile | head
-```
-
-Deben aparecer `www.eliagenda.com {` y `eliagenda.com {` (con tu dominio real).
-
-```bash
-caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-```
-
-No reinicies Eli ni recargues Caddy todavía: Eli se reinicia justo antes de
-cambiar el DNS, y Caddy se recarga DESPUÉS de que el DNS ya apunte aquí (13.3).
 
 ### 13.2 Apagar los crons de VERCEL (antes de encender los del VPS)
 
@@ -2085,8 +2072,8 @@ los menús de Vercel cambian; si no los encuentras, usa la forma 2.
    con `vercel.json`; si haces esto, quien mantiene el código debe ajustar la
    prueba en el mismo PR.)*
 3. Pausar el proyecto entero en Vercel (*Settings* → *General*, si ofrece
-   pausar). Esto también deja de servir la web: úsalo sólo si ya no lo
-   necesitas de respaldo inmediato.
+   pausar). Esto también deja de servir la web de Vercel: úsalo sólo si ya no
+   la necesitas de respaldo inmediato.
 
 **Comprueba que quedaron apagados, AHORA:** en la pantalla de Vercel debe verse
 que los cron jobs están **desactivados** (*Disabled*; si eliminaste la sección de
@@ -2094,83 +2081,29 @@ que los cron jobs están **desactivados** (*Disabled*; si eliminaste la sección
 a mañana para seguir: la confirmación definitiva llega después (13.5, "Al día
 siguiente"). Por qué no es peligroso seguir con esa confirmación pendiente: aun si
 un cron de Vercel se disparara una vez más, cada recordatorio se reclama en la
-base antes de enviarse, así que no sale duplicado (ver 10.3); el riesgo
-real es sólo que un envío ambiguo quede marcado con el dominio equivocado.
+base antes de enviarse, así que no sale duplicado (ver 10.3).
 
-### 13.3 Cambiar el DNS, esperar, y RECIÉN ENTONCES recargar Caddy
+### 13.3 Empezar a usar `eliagenda.com`
 
-El orden importa. Si Caddy se recarga **antes** de que el DNS apunte aquí, pide
-el certificado del dominio final, Let's Encrypt no encuentra el servidor (el
-dominio todavía apunta a Vercel), falla, y Caddy reintenta con pausas cada vez
-más largas (y Let's Encrypt limita los intentos fallidos). Por eso: primero DNS,
-después Caddy.
+No hay nada que cambiar en el DNS ni en Caddy (ya están). Lo que cambia es que
+desde ahora **esta es la dirección oficial**: compártela, ponla en tus materiales
+y en el monitoreo (apéndice).
 
-**(a) Reinicia Eli** para que lea el `NEXTAUTH_URL` nuevo (todavía no entra
-tráfico del dominio final; el de prueba sigue funcionando):
+> **Ojo con HSTS:** desde que los navegadores visitan `eliagenda.com`, recuerdan
+> durante un año ("Strict-Transport-Security") que sólo se entra por HTTPS
+> válido, y **no dejan "continuar de todos modos"** si el certificado falla. Si
+> algo va mal con el certificado, la salida no es pedirle a la gente que ignore la
+> advertencia, sino arreglarlo: `sudo journalctl -u caddy -n 100 --no-pager`
+> (casi siempre el DNS dejó de apuntar al VPS o el 80/443 se cerró). Caddy
+> renueva el certificado solo, unos 30 días antes de que venza.
 
-```bash
-sudo systemctl restart eli
-```
+### 13.4 Comprobar de punta a punta
 
-**(b) Cambia el DNS.** hPanel → *Dominios* → *Registros DNS* (o el panel que
-corresponda, ver el aviso del paso 7): cambia el registro **A de `@`** y el de
-**`www`** para que apunten a la **IP del VPS** (borra el `CNAME`/`A` que apuntaba
-a Vercel; un nombre no puede tener un `CNAME` y un `A` a la vez). TTL 300. **Borra
-cualquier registro `AAAA`** del dominio: el Caddyfile escucha sólo en IPv4 a
-propósito (paso 9.1) y un `AAAA` haría fallar el certificado.
-
-**(c) Espera a que los DNS públicos ya lo vean** (puede tardar de 1 a 10 minutos;
-Let's Encrypt consulta a los DNS públicos, no a tu Mac). Desde tu Mac, con DOS
-resolvedores distintos:
-
-```bash
-dig +short eliagenda.com @8.8.8.8
-```
-
-```bash
-dig +short eliagenda.com @1.1.1.1
-```
-
-Los dos deben mostrar la IP del VPS (y no la de Vercel). Si alguno muestra otra,
-espera 2-3 minutos y repite. **No sigas hasta que los dos coincidan.**
-
-**(d) Ahora sí, recarga Caddy** (en el VPS):
-
-```bash
-sudo systemctl reload caddy
-```
-
-> **Qué verán los usuarios:** durante 1 a 3 minutos (lo que tarda Caddy en
-> obtener el certificado), quien entre al dominio puede ver un **error de
-> certificado** o "conexión no segura". Es normal; pasa solo. Haz esto fuera del
-> horario de atención. **Ojo con HSTS:** desde que Caddy responda, los navegadores
-> que visiten el dominio recordarán durante un año ("Strict-Transport-Security")
-> que sólo se entra por HTTPS válido, y **no dejarán "continuar de todos modos"**
-> si el certificado falla. Si algo va mal con el certificado, la salida no es
-> pedirle a la gente que ignore la advertencia, sino arreglarlo (abajo) o volver
-> atrás al plan de Vercel (más abajo; Vercel también sirve HTTPS con HSTS).
-
-Mira cómo va, en el VPS:
-
-```bash
-sudo journalctl -u caddy -n 40 --no-pager
-```
-
-Busca `certificate obtained successfully`. Si no avanza tras 5 minutos, revisa
-que los dos `dig` sigan mostrando la IP del VPS y repite
-`sudo systemctl reload caddy`.
-
-### 13.4 Comprobar con el dominio final
-
-Repite en la Mac los puntos **12.1, 12.2, 12.3, 12.4b, 12.6 y 12.12**
-reemplazando el dominio de prueba por el final, y en el VPS
-`/opt/eli/current/deploy/probar-cabeceras.sh /etc/caddy/Caddyfile` (12.5) y
+Repite en la Mac los puntos **12.1, 12.2, 12.3, 12.4b, 12.6 y 12.12**, y en el
+VPS `/opt/eli/current/deploy/probar-cabeceras.sh /etc/caddy/Caddyfile` (12.5) y
 `sudo ss -tlnp | grep -E ':(80|443) '` (9.4: sólo `0.0.0.0`). Y entra al sitio en
 el navegador: inicia sesión con correo y **con Google**, mira la agenda, y una
-página pública de reservas.
-
-Como `NEXTAUTH_SECRET` es el mismo y el dominio es el mismo, las sesiones que ya
-estaban abiertas **siguen valiendo** (nadie tiene que volver a entrar).
+página pública de reservas. Pide a una clínica amiga que pruebe también.
 
 ### 13.5 Encender los crons del VPS (y sólo ahora)
 
@@ -2188,8 +2121,8 @@ grep -n llamar-cron /etc/cron.d/eli
 
 Ninguna debe empezar con `#`.
 
-**Prueba única del cron con secreto (ahora sí es seguro):** el dominio ya es el
-final, así que los enlaces de los correos serán los definitivos. Hazla **después
+**Prueba única del cron con secreto (ahora sí es seguro):** el dominio es el
+oficial, así que los enlaces de los correos serán los definitivos. Hazla **después
 de las 13:05 UTC**, cuando la corrida del día ya pasó (o mañana, sin hacer nada:
 el cron lo hará solo):
 
@@ -2215,14 +2148,14 @@ recordatorio quedara marcado sin enviarse (`journalctl -u eli | grep -i recordat
 ### 13.6 Después
 
 - Deja Vercel **como respaldo** (sin crons) por una o dos semanas.
-- Sube el TTL del DNS otra vez a algo normal (p. ej. 3600) cuando estés tranquilo
-  (esto hace más lento volver atrás, por eso se hace al final).
+- Sube el TTL del DNS a algo normal (p. ej. 3600) cuando estés tranquilo.
 - Pon el monitoreo (apéndice).
 
 ### PLAN DE VUELTA ATRÁS a Vercel
 
-Si algo sale mal **después** del cambio de DNS y no se arregla rápido, este es
-el orden. (Con TTL 300, en ~5-10 minutos el tráfico vuelve.)
+Si algo sale mal **después** del lanzamiento y no se arregla rápido, este es el
+orden. Como Vercel sigue sirviendo en su propia dirección y el DNS de
+`eliagenda.com` no es lo que sostiene a Vercel, **no hay que tocar el DNS**:
 
 1. **Apaga los crons del VPS primero** (así no se duplican al volver a encender
    los de Vercel):
@@ -2232,18 +2165,16 @@ el orden. (Con TTL 300, en ~5-10 minutos el tráfico vuelve.)
    ```
 
 2. **Enciende los crons de Vercel** (la forma que usaste en 13.2, al revés).
-3. **Devuelve el DNS** a como estaba (lo que anotaste en 7.1): los registros
-   `A`/`CNAME` de `@` y `www` que apuntaban a Vercel, TTL 300. (Los navegadores
-   que ya recibieron HSTS del VPS seguirán exigiendo HTTPS válido: Vercel lo da,
-   así que no hay problema.)
-4. Asegúrate de que en Vercel `NEXTAUTH_URL` y las URIs de Google corresponden
-   al dominio por el que se entra (si el dominio se mantuvo, ya lo están: por eso
-   en 13.0 se **agregaron** las del VPS sin quitar las de Vercel).
-5. Comprueba en el navegador y espera a que el DNS propague. El VPS puede
-   quedarse encendido sin hacer daño (con los crons apagados).
+3. **Avisa a los negocios** que vuelvan a usar la dirección de Vercel (y, si ya
+   habías compartido enlaces de `eliagenda.com`, que esos quedan sin servicio
+   hasta arreglar el VPS). Las URIs de Google de Vercel siguen en su sitio
+   (por eso en 13.0 se **agregaron** las nuevas sin quitar las viejas).
+4. Si hace falta que `eliagenda.com` deje de recibir visitas del todo, apaga
+   Caddy (`sudo systemctl stop caddy`). El VPS puede quedarse encendido sin hacer
+   daño (con los crons apagados).
 
-Un problema *sólo de código* (no de servidor) se arregla sin tocar el DNS con
-`volver-atras.sh` (paso 14).
+Un problema *sólo de código* (no de servidor) se arregla sin tocar nada de esto
+con `volver-atras.sh` (paso 14).
 
 ---
 
@@ -2333,12 +2264,11 @@ cd /opt/eli/repo && git pull --ff-only
 ```
 
 ```bash
-diff -q /opt/eli/repo/deploy/eli.service /etc/systemd/system/eli.service; sudo diff -q /opt/eli/repo/deploy/sudoers-eli /etc/sudoers.d/eli; diff -q /opt/eli/repo/deploy/cron-eli /etc/cron.d/eli
+diff -q /opt/eli/repo/deploy/eli.service /etc/systemd/system/eli.service; sudo diff -q /opt/eli/repo/deploy/sudoers-eli /etc/sudoers.d/eli; diff -q /opt/eli/repo/deploy/cron-eli /etc/cron.d/eli; diff -q /opt/eli/repo/deploy/Caddyfile /etc/caddy/Caddyfile
 ```
 
 (`cron-eli` aparecerá distinto mientras tengas líneas `#DESACTIVADO#`, antes de
-la mudanza: es normal. El `Caddyfile` se compara aparte, abajo, porque lleva tu
-dominio.) Para cada uno que difiera:
+el lanzamiento: es normal.) Para cada uno que difiera:
 
 **`eli.service`** (reinicia Eli; fuera de horario):
 
@@ -2350,30 +2280,29 @@ y repite las comprobaciones de 8.5.
 
 **`sudoers-eli`:** repite el comando de validar-e-instalar del paso 8.2.
 
-**`Caddyfile`** (lleva tu dominio, así que se reemplaza igual que en 9.3; cambia
-`DOMINIO` por el tuyo, el definitivo):
+**`Caddyfile`** (ya trae `eliagenda.com`, se copia tal cual):
 
 ```bash
-DOMINIO=eliagenda.com; NUEVO="$(mktemp)"; sed "s/eli\.example\.cl/$DOMINIO/g" /opt/eli/repo/deploy/Caddyfile > "$NUEVO"; diff /etc/caddy/Caddyfile "$NUEVO"
+diff /etc/caddy/Caddyfile /opt/eli/repo/deploy/Caddyfile
 ```
 
 Lo que muestre `diff` es exactamente lo que va a cambiar. Si te parece bien:
 
 ```bash
-caddy validate --config "$NUEVO" --adapter caddyfile && sudo install -m 644 "$NUEVO" /etc/caddy/Caddyfile && sudo systemctl reload caddy; rm -f "$NUEVO"
+caddy validate --config /opt/eli/repo/deploy/Caddyfile --adapter caddyfile && sudo install -m 644 /opt/eli/repo/deploy/Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy
 ```
 
 y vuelve a probar: `/opt/eli/current/deploy/probar-cabeceras.sh /etc/caddy/Caddyfile`
 y `sudo ss -tlnp | grep -E ':(80|443) '`.
 
 **`cron-eli`:** ojo, copiarlo **vuelve a encender** las líneas de correo. Si
-todavía no hiciste la mudanza, apágalas de nuevo justo después (10.3):
+todavía no hiciste el lanzamiento, apágalas de nuevo justo después (10.3):
 
 ```bash
 sudo install -m 644 -o root -g root /opt/eli/repo/deploy/cron-eli /etc/cron.d/eli
 ```
 
-Después de la mudanza (13.5) no hay nada más que hacer.
+Después del lanzamiento (13.5) no hay nada más que hacer.
 
 ---
 

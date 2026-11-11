@@ -403,6 +403,18 @@ describe("deploy/README.md — lo que la seguridad y la recuperación suponen", 
     }
   })
 
+  it("usa el dominio real eliagenda.com (sin marcadores): IP, NEXTAUTH_URL, URI de Google, DNS y Resend", () => {
+    expect(guia).not.toMatch(/example\.cl/)
+    expect(guia).not.toMatch(/prueba\.eliagenda/)
+    expect(guia).toMatch(/^NEXTAUTH_URL=https:\/\/eliagenda\.com$/m)
+    expect(guia).toContain("https://eliagenda.com/api/auth/callback/google")
+    expect(guia).toContain("187.41.114.36")
+    expect(guia).toMatch(/\| CNAME \| `www` \| `eliagenda\.com` \|/)
+    expect(guia).toMatch(/\| A \| `@` \| `187\.41\.114\.36` \|/)
+    for (const texto of ["SPF", "DKIM", "DMARC", "no-reply@eliagenda.com"]) expect(guia, texto).toContain(texto)
+    expect(leer("deploy/Caddyfile")).not.toMatch(/example\.cl/)
+  })
+
   it("trae el runbook de restauración real y la advertencia de datos de salud sin cifrar", () => {
     expect(guia).toMatch(/pg_restore --no-owner --no-privileges --exit-on-error --dbname/)
     expect(guia).toMatch(/Ley 20\.584/)
