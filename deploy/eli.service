@@ -30,6 +30,9 @@ EnvironmentFile=/etc/eli/eli.env
 # Misma zona horaria que Vercel (UTC). Varias partes del código y el horario
 # del cron suponen un servidor en UTC; no lo cambies.
 Environment=TZ=UTC
+# Next no envía telemetría ni intenta escribir su archivo de configuración en un
+# HOME que este servicio no puede tocar (ProtectHome).
+Environment=NEXT_TELEMETRY_DISABLED=1
 
 # node directo (no "npm start"): una capa menos entre systemd y la app, y las
 # señales (reinicio, apagado) le llegan a Next. -H 127.0.0.1 es lo que lo deja

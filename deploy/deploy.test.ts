@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { readFileSync, readdirSync } from "node:fs"
+import { readFileSync, readdirSync, statSync } from "node:fs"
 import { spawnSync } from "node:child_process"
 import path from "node:path"
 
@@ -146,6 +146,40 @@ describe("deploy/cron-eli — mismos crons que vercel.json", () => {
     expect(script).toContain("--config -")
     expect(script).not.toMatch(/curl[^\n]*-H\s/)
     expect(script).not.toMatch(/curl[^\n]*--header/)
+  })
+})
+
+describe("deploy/README.md — las variables de entorno", () => {
+  /** Todos los archivos .ts/.tsx/.mjs bajo `carpeta`, sin las pruebas. */
+  function fuentes(carpeta: string): string[] {
+    return readdirSync(path.join(RAIZ, carpeta)).flatMap((nombre) => {
+      const relativa = `${carpeta}/${nombre}`
+      if (statSync(path.join(RAIZ, relativa)).isDirectory()) return fuentes(relativa)
+      return /\.(ts|tsx|mjs)$/.test(nombre) && !/\.test\.tsx?$/.test(nombre) ? [relativa] : []
+    })
+  }
+
+  it("lista todas las variables que lee el código (app/, lib/, proxy.ts, prisma.config.ts, esquema)", () => {
+    const archivos = [...fuentes("app"), ...fuentes("lib"), "proxy.ts", "prisma.config.ts", "prisma/schema.prisma"]
+    const usadas = new Set<string>()
+    for (const archivo of archivos) {
+      const texto = leer(archivo)
+      for (const m of texto.matchAll(/process\.env\.([A-Z][A-Z0-9_]*)/g)) usadas.add(m[1])
+      for (const m of texto.matchAll(/\benv\("([A-Z][A-Z0-9_]*)"\)/g)) usadas.add(m[1])
+    }
+    expect(usadas.size).toBeGreaterThan(5)
+
+    const guia = leer("deploy/README.md")
+    for (const variable of usadas) {
+      expect(guia, `deploy/README.md no menciona ${variable}`).toContain(`\`${variable}\``)
+    }
+  })
+
+  it("la plantilla de /etc/eli/eli.env trae las obligatorias", () => {
+    const guia = leer("deploy/README.md")
+    for (const variable of ["NODE_ENV", "DATABASE_URL", "DIRECT_URL", "NEXTAUTH_URL", "NEXTAUTH_SECRET", "CRON_SECRET", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"]) {
+      expect(guia).toMatch(new RegExp(`^${variable}=`, "m"))
+    }
   })
 })
 
