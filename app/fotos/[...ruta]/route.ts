@@ -4,15 +4,17 @@ import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { registrarError } from "@/lib/registro-de-errores"
 
 /**
- * GET /fotos/<ruta> — las fotos del negocio (logo, portada, integrantes),
- * públicas como la página que las muestra. Es la única puerta: el bucket de R2
- * no es público, y como la ruta es del mismo origen la CSP (`img-src 'self'`)
- * no se abre.
+ * GET /fotos/<ruta> — las fotos del negocio (logo, portada, integrantes) y la
+ * foto de la cuenta de cada persona (la del avatar del panel). Es la única
+ * puerta: el bucket de R2 no es público, y como la ruta es del mismo origen la
+ * CSP (`img-src 'self'`) no se abre. Las del negocio son públicas como la
+ * página que las muestra; la de una cuenta no está enlazada desde ninguna
+ * página pública, y su nombre lleva un uuid que no se adivina.
  *
  * La ruta tiene que ser EXACTAMENTE una clave que generamos
- * (`negocios/<negocio>/<logo|portada|miembro-<id>>-<uuid>.webp`,
- * `esClaveDeFoto`); cualquier otra cosa, con `..` o sin ellos, es 404 antes de
- * tocar el almacén. Sin almacén (producción sin `R2_*`) también es 404: la
+ * (`negocios/<negocio>/<logo|portada|miembro-<id>>-<uuid>.webp` o
+ * `usuarios/<cuenta>/cuenta-<uuid>.webp`, `esClaveDeFoto`); cualquier otra
+ * cosa, con `..` o sin ellos, es 404 antes de tocar el almacén. Sin almacén (producción sin `R2_*`) también es 404: la
  * página muestra las iniciales en vez de la foto y nada se cae.
  *
  * La clave lleva un uuid y cambiar la foto cambia la URL, así que lo servido

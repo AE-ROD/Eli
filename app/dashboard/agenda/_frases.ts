@@ -20,6 +20,12 @@ import { concordar, el, un } from "@/lib/concordancia"
 import { conMayuscula, type PalabrasDelRubro } from "@/lib/vocabulario"
 import { cantidadDe, nuevaCita, pronombreDe, todoElNegocio, unoDe } from "../_frases"
 
+/** `a, b y c`. */
+function enumerar(partes: string[]): string {
+  if (partes.length <= 1) return partes.join("")
+  return `${partes.slice(0, -1).join(", ")} y ${partes[partes.length - 1]}`
+}
+
 /** Lo que hace falta saber del buscador de la cita nueva para decir su estado. */
 export interface EntradaDelBuscador {
   /** Cuántas letras se escribieron. */
@@ -164,6 +170,26 @@ export function frasesDeLaAgenda(palabras: PalabrasDelRubro) {
       asignarProfesional: `No se pudo asignar ${el(profesional)}`,
       cargarCatalogo: `No se pudo cargar el catálogo de ${servicio.plural}`,
       buscarClientes: `No se pudieron buscar ${el(cliente, "plural")}`,
+    },
+
+    /**
+     * Las sedes (etapa 9, plan Independiente): sólo con varias sedes activas.
+     * Con una o ninguna la agenda no las nombra.
+     */
+    sede: {
+      /** La etiqueta del selector del modal y del dato del detalle. */
+      etiqueta: "Sede",
+      /** La opción vacía del selector: obliga a elegir una. */
+      elegir: "Elige la sede",
+      /** Dicho en un nombre accesible: "sede Centro". */
+      enNombreAccesible: (nombre: string): string => `sede ${nombre}`,
+      /** Debajo de la hora del modal: cuándo atiende la sede elegida el día elegido. */
+      horarioEseDia: (franjas: readonly { startTime: string; endTime: string }[]): string =>
+        franjas.length === 0
+          ? "Esta sede no atiende ese día."
+          : `Atiende ese día de ${enumerar(franjas.map((franja) => `${franja.startTime} a ${franja.endTime}`))}.`,
+      /** Si el horario de la sede no cargó: no se avisa nada de horas, sólo se dice. */
+      horarioNoCargo: "No se pudo cargar el horario de la sede.",
     },
 
     /** Clínica dental: la grilla del día. */

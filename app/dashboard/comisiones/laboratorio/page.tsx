@@ -1,8 +1,7 @@
-import { getServerSession } from "next-auth"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
-import { authOptions } from "@/lib/auth"
+import { sesionDelServidor } from "@/lib/sesion-del-servidor"
 import { actorDeSesion, puedeEditarComisiones, puedePagarAlLaboratorio } from "@/lib/permisos"
 import { prisma } from "@/lib/prisma"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
@@ -15,7 +14,7 @@ import { PorPagarAlLaboratorioConfig } from "../_componentes/por-pagar-al-labora
  * dueña, al inicio. Los endpoints lo vuelven a mirar.
  */
 export default async function PaginaPorPagarAlLaboratorio() {
-  const actor = actorDeSesion(await getServerSession(authOptions))
+  const actor = actorDeSesion(await sesionDelServidor())
   if (!actor) redirect("/iniciar-sesion")
   if (!puedePagarAlLaboratorio(actor)) redirect(puedeEditarComisiones(actor) ? "/dashboard/comisiones" : "/dashboard")
   // Las fechas, en la zona del negocio (como la ficha y la liquidación), no en la del dispositivo.

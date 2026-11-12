@@ -1,6 +1,5 @@
-import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+import { sesionDelServidor } from "@/lib/sesion-del-servidor"
 import { prisma } from "@/lib/prisma"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import {
@@ -35,7 +34,7 @@ import { frasesDeLasLiquidaciones } from "./_frases"
  * adelantos y vales, también del encargado.
  */
 export default async function PaginaLiquidaciones() {
-  const actor = actorDeSesion(await getServerSession(authOptions))
+  const actor = actorDeSesion(await sesionDelServidor())
   if (!actor) redirect("/iniciar-sesion")
   if (!puedeVerLiquidacionesDelEquipo(actor)) redirect("/dashboard")
 

@@ -1,6 +1,5 @@
-import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+import { sesionDelServidor } from "@/lib/sesion-del-servidor"
 import { actorDeSesion } from "@/lib/permisos"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { CentroDeAyuda } from "@/components/soporte/centro-de-ayuda"
@@ -13,7 +12,7 @@ import { CentroDeAyuda } from "@/components/soporte/centro-de-ayuda"
  * dental, "estilista" y "hora" en un salón.
  */
 export default async function PaginaAyuda() {
-  const session = await getServerSession(authOptions)
+  const session = await sesionDelServidor()
   const actor = actorDeSesion(session)
   if (!actor) redirect("/iniciar-sesion")
 

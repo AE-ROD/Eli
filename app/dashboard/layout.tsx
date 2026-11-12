@@ -1,5 +1,4 @@
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { sesionDelServidor } from "@/lib/sesion-del-servidor"
 import { prisma } from "@/lib/prisma"
 import { BarraLateral } from "@/components/panel/barra-lateral"
 import { ContenidoDelPanel } from "@/components/panel/contenido-del-panel"
@@ -25,7 +24,7 @@ export default async function LayoutDelPanel({
 }: {
   children: React.ReactNode
 }) {
-  const session = await getServerSession(authOptions)
+  const session = await sesionDelServidor()
   const actor = actorDeSesion(session)
 
   // Una cuenta en varios negocios (o dueña y profesional en el suyo) trabaja

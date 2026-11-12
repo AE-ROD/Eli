@@ -1,6 +1,5 @@
-import { getServerSession } from "next-auth"
 import { notFound, redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+import { sesionDelServidor } from "@/lib/sesion-del-servidor"
 import { prisma } from "@/lib/prisma"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { leerAlertaDeAlergias, leerFicha, leerOdontograma } from "@/lib/ficha-clinica-servidor"
@@ -17,7 +16,8 @@ import {
   whereDeAgenda,
   whereDeClientes,
 } from "@/lib/permisos"
-import { fechaYMinutosEn, zonaDelNegocio } from "@/lib/zona-horaria"
+import { fechaYMinutosEn } from "@/lib/zona-horaria"
+import { zonaHorariaDelNegocio } from "@/lib/zona-horaria-servidor"
 import { FichaDelPaciente } from "./_componentes/ficha-del-paciente"
 
 /**
@@ -42,7 +42,7 @@ import { FichaDelPaciente } from "./_componentes/ficha-del-paciente"
  * pestaña.
  */
 export default async function PaginaFichaClinica({ params }: { params: Promise<{ id: string }> }) {
-  const session = await getServerSession(authOptions)
+  const session = await sesionDelServidor()
   const actor = actorDeSesion(session)
   if (!actor) redirect("/iniciar-sesion")
   if (!esClinicaDental(actor)) redirect("/dashboard/clientes")
@@ -57,8 +57,8 @@ export default async function PaginaFichaClinica({ params }: { params: Promise<{
   const veFicha = veFichaClinica(actor)
   const vePlan = vePlanDeTratamiento(actor)
   const ahora = new Date()
-  const negocio = await prisma.business.findUnique({ where: { id: actor.businessId }, select: { timezone: true } })
-  const zona = zonaDelNegocio(negocio?.timezone)
+  // La zona ya la leyó (o la está leyendo) el layout de clientes en este render: misma consulta, una vez.
+  const zona = await zonaHorariaDelNegocio(actor.businessId)
   // El día de hoy en la zona del negocio, como `hoyDelNegocio`: la edad y el tope de la fecha de nacimiento.
   const hoy = fechaYMinutosEn(ahora, zona).fecha
 

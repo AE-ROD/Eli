@@ -1,9 +1,8 @@
 import type { ReactNode } from "react"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { sesionDelServidor } from "@/lib/sesion-del-servidor"
 import { actorDeSesion } from "@/lib/permisos"
-import { zonaDelNegocio } from "@/lib/zona-horaria"
+import { ZONA_POR_DEFECTO } from "@/lib/zona-horaria"
+import { zonaHorariaDelNegocio } from "@/lib/zona-horaria-servidor"
 import { ProveedorDeZona } from "../agenda/_componentes/zona-del-negocio"
 
 /**
@@ -14,12 +13,11 @@ import { ProveedorDeZona } from "../agenda/_componentes/zona-del-negocio"
  * inválida o si la lectura falla, la de por defecto.
  */
 export default async function LayoutDeClientes({ children }: { children: ReactNode }) {
-  const actor = actorDeSesion(await getServerSession(authOptions))
-  const negocio = actor
-    ? await prisma.business
-        .findUnique({ where: { id: actor.businessId }, select: { timezone: true } })
-        .catch(() => null)
-    : null
+  const actor = actorDeSesion(await sesionDelServidor())
+  // La misma lectura que hace la ficha del paciente en este render: una sola consulta.
+  const zona = actor
+    ? await zonaHorariaDelNegocio(actor.businessId).catch(() => ZONA_POR_DEFECTO)
+    : ZONA_POR_DEFECTO
 
-  return <ProveedorDeZona zona={zonaDelNegocio(negocio?.timezone)}>{children}</ProveedorDeZona>
+  return <ProveedorDeZona zona={zona}>{children}</ProveedorDeZona>
 }

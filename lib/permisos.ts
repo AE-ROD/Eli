@@ -64,9 +64,24 @@ export function actorDeSesion(session: Pick<Session, "user"> | null | undefined)
   }
 }
 
+/**
+ * La cuenta (la persona) de la sesión, o `null` si no hay una vigente. Es para
+ * lo que es de la persona y no de un negocio (su foto): no pide rol ni negocio,
+ * sólo que la sesión traiga un id de cuenta. Valida en runtime: una sesión
+ * revocada (`lib/auth.ts` la deja con `id` vacío) o mal formada no es nadie, y
+ * falla cerrado.
+ *
+ * El id sale SIEMPRE de la sesión: ningún endpoint lo recibe del navegador, así
+ * que una persona no tiene cómo apuntar a la cuenta de otra.
+ */
+export function cuentaDeSesion(session: Pick<Session, "user"> | null | undefined): { id: string } | null {
+  const { id } = (session?.user ?? {}) as Record<string, unknown>
+  return typeof id === "string" && id ? { id } : null
+}
+
 // ─── Quién es ────────────────────────────────────────────────────────────────
 
-export const esDueño = (actor: Actor | null): boolean => actor?.rol === "owner"
+export const esDueño =(actor: Actor | null): boolean => actor?.rol === "owner"
 
 /** Dueño y encargado: los que gestionan el negocio. */
 export const gestionaElNegocio = (actor: Actor | null): boolean =>

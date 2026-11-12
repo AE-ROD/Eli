@@ -87,7 +87,7 @@ export function frasesDelPlan(palabras: PalabrasDelRubro) {
       aEquipo: {
         invitar: `Podrás invitar a un encargado y a tus ${profesional.plural}.`,
         unaSede: `Equipo tiene una sola sede: la dirección ${del(negocio)}.`,
-        sinSedes: "No tienes sedes, así que tu dirección sigue como está.",
+        sinSedes: `No tienes sedes activas, así que la dirección ${del(negocio)} sigue como está.`,
         /** Con sedes activas: pide elegir y avisa que las demás se desactivan. */
         elegirSede: `Elige cuál de tus sedes queda como la dirección ${del(negocio)}. Las demás se desactivan y dejan de verse en tu página de reservas.`,
         unaSedeQueda: (nombre: string): string =>

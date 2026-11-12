@@ -55,6 +55,37 @@ describe("GET /fotos/<ruta>", () => {
     }
   })
 
+  it("sirve la foto de una cuenta (usuarios/<cuenta>/cuenta-<uuid>.webp) con las mismas cabeceras y el mismo límite", async () => {
+    const clave = `usuarios/u-1/cuenta-${UUID}.webp`
+    almacen.objetos.set(clave, { bytes: BYTES, tipoMime: "text/html" })
+
+    const respuesta = await pedir(clave)
+
+    expect(respuesta.status).toBe(200)
+    expect(respuesta.headers.get("content-type")).toBe("image/webp")
+    expect(respuesta.headers.get("cache-control")).toBe("public, max-age=31536000, immutable")
+    expect(respuesta.headers.get("x-content-type-options")).toBe("nosniff")
+    expect(respuesta.headers.get("content-disposition")).toBe("inline")
+    expect(respuesta.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox")
+    expect(Array.from(new Uint8Array(await respuesta.arrayBuffer()))).toEqual(Array.from(BYTES))
+    expect(mockVerificarLimite).toHaveBeenCalledWith("fotosPublicas", "ip:203.0.113.7")
+  })
+
+  it("una ruta de cuenta que no es exactamente una clave nuestra es 404 sin tocar el almacén", async () => {
+    for (const ruta of [
+      `usuarios/u-1/../u-2/cuenta-${UUID}.webp`,
+      `usuarios/u-1/cuenta-${UUID}.png`,
+      `usuarios/u-1/logo-${UUID}.webp`,
+      `usuarios/cuenta-${UUID}.webp`,
+      `usuarios/u-1/otra/cuenta-${UUID}.webp`,
+      `usuarios//cuenta-${UUID}.webp`,
+      `cuentas/u-1/cuenta-${UUID}.webp`,
+    ]) {
+      expect((await pedir(ruta)).status, ruta).toBe(404)
+    }
+    expect(almacen.operaciones).toEqual([])
+  })
+
   it("siempre dice image/webp, aunque el almacén diga otra cosa (nunca se confía en el tipo guardado)", async () => {
     almacen.objetos.set(CLAVE, { bytes: BYTES, tipoMime: "text/html" })
 

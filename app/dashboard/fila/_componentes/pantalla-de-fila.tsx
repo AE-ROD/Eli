@@ -9,6 +9,7 @@ import { Boton, clasesDeBoton } from "@/components/comunes/boton"
 import { MarcaDeEli } from "@/components/comunes/marca-de-eli"
 import { POLLING_DE_LA_PANTALLA_MS } from "@/lib/fila-virtual"
 import { pedir } from "@/lib/peticiones"
+import { iniciarSondeoVisible } from "@/lib/sondeo-visible"
 import { cn } from "@/lib/utils"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { esRubroDental } from "@/lib/rubros"
@@ -37,7 +38,8 @@ const TURNOS_VISIBLES = 12
  * lateral) para ponerla en un televisor o una tablet. A la izquierda, quiénes
  * están en atención y la fila de espera, con número y nombre con inicial; a
  * la derecha, el QR y el enlace para anotarse, en grande. Se refresca sola
- * cada ~15 s; si un refresco falla, deja lo último que tenía y lo dice.
+ * cada ~15 s mientras la pestaña está a la vista; si un refresco falla, deja
+ * lo último que tenía y lo dice.
  */
 export function PantallaDeFila() {
   // "Volver al Tablero", o "a la Sala de espera" en una clínica dental: el nombre de la sección del rubro.
@@ -63,10 +65,11 @@ export function PantallaDeFila() {
       if (vigente) void cargar()
     }
     tick()
-    const intervalo = window.setInterval(tick, POLLING_DE_LA_PANTALLA_MS)
+    // Con la pestaña oculta no se pide nada (nadie ve la pantalla); al volver se actualiza en el acto.
+    const detener = iniciarSondeoVisible({ alTocar: tick, cadaMs: POLLING_DE_LA_PANTALLA_MS })
     return () => {
       vigente = false
-      window.clearInterval(intervalo)
+      detener()
     }
   }, [cargar])
 

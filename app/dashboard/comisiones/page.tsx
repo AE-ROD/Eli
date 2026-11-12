@@ -1,6 +1,5 @@
-import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+import { sesionDelServidor } from "@/lib/sesion-del-servidor"
 import { prisma } from "@/lib/prisma"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
 import { FlaskConical, Smile } from "lucide-react"
@@ -18,7 +17,7 @@ import { frasesDeLasComisiones } from "./_frases"
  * sin él, de vuelta al inicio. Los endpoints lo vuelven a mirar (401).
  */
 export default async function PaginaComisiones() {
-  const actor = actorDeSesion(await getServerSession(authOptions))
+  const actor = actorDeSesion(await sesionDelServidor())
   if (!actor) redirect("/iniciar-sesion")
   if (!puedeEditarComisiones(actor)) redirect("/dashboard")
   // El historial muestra cuándo se cambió cada % en la zona del negocio, no en la del dispositivo.

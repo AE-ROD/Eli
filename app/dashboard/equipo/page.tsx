@@ -1,6 +1,5 @@
-import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+import { sesionDelServidor } from "@/lib/sesion-del-servidor"
 import { actorDeSesion, puedeGestionarEquipo } from "@/lib/permisos"
 import { PantallaDeEquipo } from "./_componentes/pantalla-de-equipo"
 
@@ -12,7 +11,7 @@ import { PantallaDeEquipo } from "./_componentes/pantalla-de-equipo"
  * permiso (401).
  */
 export default async function PaginaEquipo() {
-  const actor = actorDeSesion(await getServerSession(authOptions))
+  const actor = actorDeSesion(await sesionDelServidor())
   if (!actor) redirect("/iniciar-sesion")
   if (!puedeGestionarEquipo(actor)) redirect("/dashboard")
   return <PantallaDeEquipo />

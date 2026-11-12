@@ -7,8 +7,10 @@ import {
   AlmacenEnR2,
   almacenDeFotos,
   CARPETA_DE_FOTOS_EN_DESARROLLO,
+  claveDeFotoDeLaCuenta,
   claveDeFotoPropia,
   claveNuevaDeFoto,
+  claveNuevaDeFotoDeLaCuenta,
   elegirAlmacenDeFotos,
   ErrorDeAlmacenamiento,
   esClaveDeFoto,
@@ -20,6 +22,7 @@ import { crearAlmacenEnMemoria } from "@/pruebas/almacen-de-fotos"
 const UUID = "0b8a7c1e-2d3f-4a5b-8c9d-0e1f2a3b4c5d"
 const OTRO_UUID = "11111111-2222-4333-8444-555555555555"
 const CLAVE = `negocios/negocio-1/logo-${UUID}.webp`
+const CLAVE_DE_CUENTA = `usuarios/u-1/cuenta-${UUID}.webp`
 const BYTES = Uint8Array.from([1, 2, 3, 4, 5])
 
 describe("esClaveDeFoto: la única forma de clave que existe", () => {
@@ -29,6 +32,9 @@ describe("esClaveDeFoto: la única forma de clave que existe", () => {
     `negocios/negocio-1/miembro-m-carla-${UUID}.webp`,
     `negocios/cm9x0abcd0000xyz/miembro-cm9x0efgh0001uvw-${UUID}.webp`,
     `negocios/neg_1/logo-${OTRO_UUID}.webp`,
+    CLAVE_DE_CUENTA,
+    `usuarios/cm9x0abcd0000xyz/cuenta-${OTRO_UUID}.webp`,
+    `usuarios/u_1-b/cuenta-${UUID}.webp`,
   ])("acepta %s", (clave) => {
     expect(esClaveDeFoto(clave)).toBe(true)
   })
@@ -55,6 +61,27 @@ describe("esClaveDeFoto: la única forma de clave que existe", () => {
     ["con un punto en el negocio", `negocios/negocio.1/logo-${UUID}.webp`],
     ["vacía", ""],
     ["demasiado larga", `negocios/${"a".repeat(300)}/logo-${UUID}.webp`],
+    ["de cuenta con .. para salir de su carpeta", `usuarios/u-1/../u-2/cuenta-${UUID}.webp`],
+    ["de cuenta con .. en lugar de la cuenta", `usuarios/../cuenta-${UUID}.webp`],
+    ["de cuenta con .. codificado", `usuarios/%2e%2e/u-2/cuenta-${UUID}.webp`],
+    ["de cuenta con barra inicial", `/${CLAVE_DE_CUENTA}`],
+    ["de cuenta con barra invertida", `usuarios\\u-1\\cuenta-${UUID}.webp`],
+    ["de cuenta con una barra de más", `usuarios//u-1/cuenta-${UUID}.webp`],
+    ["de cuenta con un segmento de más", `usuarios/u-1/otra/cuenta-${UUID}.webp`],
+    ["de cuenta con un segmento de menos", `usuarios/cuenta-${UUID}.webp`],
+    ["de cuenta sin id", `usuarios//cuenta-${UUID}.webp`],
+    ["de cuenta con otro nombre de archivo", `usuarios/u-1/logo-${UUID}.webp`],
+    ["de cuenta con nombre de integrante", `usuarios/u-1/miembro-m-1-${UUID}.webp`],
+    ["de cuenta con otra extensión", `usuarios/u-1/cuenta-${UUID}.png`],
+    ["de cuenta con doble extensión", `usuarios/u-1/cuenta-${UUID}.webp.php`],
+    ["de cuenta sin uuid", "usuarios/u-1/cuenta.webp"],
+    ["de cuenta con un uuid en mayúsculas", `usuarios/u-1/cuenta-${UUID.toUpperCase()}.webp`],
+    ["de cuenta con un salto de línea al final", `${CLAVE_DE_CUENTA}\n`],
+    ["de cuenta con un byte nulo", `usuarios/u-1/cuenta-${UUID}.webp\0.png`],
+    ["de cuenta con un punto en el id", `usuarios/u.1/cuenta-${UUID}.webp`],
+    ["de cuenta con la forma del negocio", `negocios/u-1/cuenta-${UUID}.webp`],
+    ["con otra carpeta raíz", `cuentas/u-1/cuenta-${UUID}.webp`],
+    ["de cuenta demasiado larga", `usuarios/${"a".repeat(300)}/cuenta-${UUID}.webp`],
   ])("rechaza una clave %s", (_caso, clave) => {
     expect(esClaveDeFoto(clave)).toBe(false)
   })
@@ -123,6 +150,74 @@ describe("claveDeFotoPropia: lo que viene de la base no se borra sin comprobar e
     ]) {
       expect(claveDeFotoPropia(url, "negocio-1")).toBeNull()
     }
+  })
+})
+
+describe("claveNuevaDeFotoDeLaCuenta", () => {
+  it("arma usuarios/<cuenta>/cuenta-<uuid>.webp, válida y nunca repetida", () => {
+    const claves = Array.from({ length: 50 }, () => claveNuevaDeFotoDeLaCuenta("u-1"))
+
+    for (const clave of claves) expect(clave).toMatch(/^usuarios\/u-1\/cuenta-[0-9a-f-]{36}\.webp$/)
+    for (const clave of claves) expect(esClaveDeFoto(clave)).toBe(true)
+    expect(new Set(claves).size).toBe(50)
+  })
+
+  it("un id con caracteres raros no llega a una clave: lanza", () => {
+    for (const id of ["", "../u-2", "a/b", "u 1", "u.1", "u-1\n", "a".repeat(65)]) {
+      expect(() => claveNuevaDeFotoDeLaCuenta(id), JSON.stringify(id)).toThrow()
+    }
+  })
+
+  it("la ruta pública es la misma de las demás fotos", () => {
+    expect(rutaPublicaDeFoto(CLAVE_DE_CUENTA)).toBe(`/fotos/${CLAVE_DE_CUENTA}`)
+  })
+})
+
+describe("claveDeFotoDeLaCuenta: una persona sólo apunta a su carpeta", () => {
+  it("devuelve la clave de una foto de ESTA cuenta", () => {
+    expect(claveDeFotoDeLaCuenta(`/fotos/${CLAVE_DE_CUENTA}`, "u-1")).toBe(CLAVE_DE_CUENTA)
+  })
+
+  it("null si es de otra cuenta, aunque la forma sea válida (un fotoUrl armado a mano)", () => {
+    expect(claveDeFotoDeLaCuenta(`/fotos/${CLAVE_DE_CUENTA}`, "u-2")).toBeNull()
+    // Una cuenta cuyo id empieza igual no es la misma.
+    expect(claveDeFotoDeLaCuenta(`/fotos/usuarios/u-10/cuenta-${UUID}.webp`, "u-1")).toBeNull()
+    expect(claveDeFotoDeLaCuenta(`/fotos/usuarios/u-1/cuenta-${UUID}.webp`, "u-")).toBeNull()
+    expect(claveDeFotoDeLaCuenta(`/fotos/${CLAVE_DE_CUENTA}`, "")).toBeNull()
+    expect(claveDeFotoDeLaCuenta(`/fotos/${CLAVE_DE_CUENTA}`, null)).toBeNull()
+    expect(claveDeFotoDeLaCuenta(`/fotos/${CLAVE_DE_CUENTA}`, undefined)).toBeNull()
+  })
+
+  it("null si apunta a una foto de un negocio, aunque la cuenta se llame igual que el negocio", () => {
+    expect(claveDeFotoDeLaCuenta(`/fotos/${CLAVE}`, "negocio-1")).toBeNull()
+    expect(claveDeFotoDeLaCuenta(`/fotos/${CLAVE}`, "u-1")).toBeNull()
+    expect(claveDeFotoDeLaCuenta(`/fotos/negocios/u-1/miembro-m-1-${UUID}.webp`, "u-1")).toBeNull()
+  })
+
+  it("null si no es una foto nuestra: otra ruta, otro sitio, una escapada o algo vacío", () => {
+    for (const url of [
+      null,
+      undefined,
+      "",
+      "https://cdn.ejemplo.cl/yo.png",
+      `//cdn.ejemplo.cl/fotos/${CLAVE_DE_CUENTA}`,
+      "/otra/ruta.webp",
+      `fotos/${CLAVE_DE_CUENTA}`,
+      `/fotos/usuarios/u-1/../u-2/cuenta-${UUID}.webp`,
+      `/fotos/usuarios/u-2/../../usuarios/u-1/cuenta-${UUID}.webp`,
+      `/fotos/usuarios/u-1/%2e%2e/u-2/cuenta-${UUID}.webp`,
+      `/fotos//${CLAVE_DE_CUENTA}`,
+      `/fotos/${CLAVE_DE_CUENTA}?x=1`,
+      `/fotos/${CLAVE_DE_CUENTA}#hash`,
+      "/fotos/usuarios/u-1/cuenta.webp",
+    ]) {
+      expect(claveDeFotoDeLaCuenta(url, "u-1")).toBeNull()
+    }
+  })
+
+  it("y al revés: claveDeFotoPropia no entrega la foto de una cuenta como si fuera de un negocio", () => {
+    expect(claveDeFotoPropia(`/fotos/${CLAVE_DE_CUENTA}`, "u-1")).toBeNull()
+    expect(claveDeFotoPropia(`/fotos/${CLAVE_DE_CUENTA}`, "usuarios")).toBeNull()
   })
 })
 
@@ -244,8 +339,19 @@ describe("AlmacenEnDisco (sólo desarrollo)", () => {
     expect(Array.from((await almacen.leer(CLAVE))!.bytes)).toEqual([9, 9])
   })
 
+  it("guarda, lee y borra la foto de una cuenta, en su carpeta usuarios/<cuenta>/", async () => {
+    await almacen.guardar(CLAVE_DE_CUENTA, BYTES)
+
+    expect(await readdir(path.join(carpeta, "usuarios", "u-1"))).toEqual([`cuenta-${UUID}.webp`])
+    expect(Array.from((await almacen.leer(CLAVE_DE_CUENTA))!.bytes)).toEqual(Array.from(BYTES))
+    await almacen.borrar(CLAVE_DE_CUENTA)
+    expect(await almacen.leer(CLAVE_DE_CUENTA)).toBeNull()
+  })
+
   it("valida la clave ANTES de tocar el disco: una escapada lanza y no crea nada", async () => {
     const escapadas = [
+      `usuarios/u-1/../../fuera-${UUID}.webp`,
+      `usuarios/u-1/../u-2/cuenta-${UUID}.webp`,
       `negocios/negocio-1/../../fuera-${UUID}.webp`,
       `../../etc/passwd`,
       `/etc/passwd`,

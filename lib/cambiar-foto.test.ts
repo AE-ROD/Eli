@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ponerAlmacenDeFotos } from "./almacenamiento-de-fotos"
-import { quitarFoto, subirFoto, type DestinoDeFoto } from "./cambiar-foto"
+import { quitarFoto, subirFoto, type DestinoDeFotoDeLaCuenta, type DestinoDeFotoDeNegocio } from "./cambiar-foto"
 import { crearAlmacenEnMemoria, jpegDePrueba, pedidoDeFoto, type AlmacenEnMemoria } from "@/pruebas/almacen-de-fotos"
 
 // El recorrido completo, con sus permisos y su base, se prueba en los tests de
@@ -17,7 +17,7 @@ const QUIEN = { usuarioId: "u-1" }
 
 let almacen: AlmacenEnMemoria
 
-function destino(parcial: Partial<DestinoDeFoto> = {}): DestinoDeFoto & { escrituras: (string | null)[] } {
+function destino(parcial: Partial<DestinoDeFotoDeNegocio> = {}): DestinoDeFotoDeNegocio & { escrituras: (string | null)[] } {
   const escrituras: (string | null)[] = []
   return {
     tipo: "logo",
@@ -158,3 +158,77 @@ describe("quitarFoto", () => {
     expect(almacen.operaciones).toEqual([{ operacion: "borrar", clave: VIEJA }])
   })
 })
+
+describe("el destino de una cuenta: la clave cuelga de la persona, no de un negocio", () => {
+  const DE_LA_CUENTA = `usuarios/u-1/cuenta-${UUID_VIEJO}.webp`
+  const DE_OTRA_CUENTA = `usuarios/u-2/cuenta-${UUID_VIEJO}.webp`
+
+  function destinoDeCuenta(parcial: Partial<DestinoDeFotoDeLaCuenta> = {}): DestinoDeFotoDeLaCuenta & { escrituras: (string | null)[] } {
+    const escrituras: (string | null)[] = []
+    return {
+      tipo: "cuenta",
+      usuarioId: "u-1",
+      leerUrl: async () => ({ url: `/fotos/${DE_LA_CUENTA}` }),
+      guardarUrl: async (url) => {
+        escrituras.push(url)
+        return true
+      },
+      ...parcial,
+      escrituras,
+    }
+  }
+
+  beforeEach(() => {
+    for (const clave of [DE_LA_CUENTA, DE_OTRA_CUENTA]) almacen.objetos.set(clave, { bytes: Uint8Array.from([1]), tipoMime: "image/webp" })
+  })
+
+  it("sube a usuarios/<cuenta>/cuenta-<uuid>.webp (512 × 512) y borra sólo la foto anterior de ESA cuenta", async () => {
+    const d = destinoDeCuenta()
+
+    const respuesta = await subirFoto(pedidoDeFoto("http://localhost/x", await jpegDePrueba()), QUIEN, d)
+
+    expect(respuesta.status).toBe(200)
+    const { url } = await respuesta.json()
+    expect(url).toMatch(/^\/fotos\/usuarios\/u-1\/cuenta-[0-9a-f-]{36}\.webp$/)
+    expect(d.escrituras).toEqual([url])
+    expect(almacen.operaciones.map((op) => op.operacion)).toEqual(["guardar", "borrar"])
+    expect(almacen.operaciones[1].clave).toBe(DE_LA_CUENTA)
+    expect(almacen.objetos.has(DE_OTRA_CUENTA)).toBe(true)
+    const { default: sharp } = await import("sharp")
+    const guardada = almacen.objetos.get(url.slice("/fotos/".length))!
+    const medidas = await sharp(guardada.bytes).metadata()
+    expect([medidas.format, medidas.width, medidas.height]).toEqual(["webp", 512, 512])
+  })
+
+  it("lo que haya en la columna de otra cuenta, de un negocio o armado a mano NO se borra al reemplazar ni al quitar", async () => {
+    for (const ajena of [`/fotos/${DE_OTRA_CUENTA}`, `/fotos/${VIEJA}`, `/fotos/usuarios/u-1/../u-2/cuenta-${UUID_VIEJO}.webp`, "https://cdn.ejemplo.cl/yo.png"]) {
+      almacen.operaciones.length = 0
+
+      expect((await subirFoto(pedidoDeFoto("http://localhost/x", await jpegDePrueba()), QUIEN, destinoDeCuenta({ leerUrl: async () => ({ url: ajena }) }))).status).toBe(200)
+      expect((await quitarFoto(QUIEN, destinoDeCuenta({ leerUrl: async () => ({ url: ajena }) }))).status).toBe(200)
+
+      // Ninguna operación borra: lo de la columna no es de esta cuenta, y el objeto nuevo se queda.
+      expect(almacen.operaciones.filter((op) => op.operacion === "borrar"), ajena).toEqual([])
+    }
+    expect(almacen.objetos.has(DE_OTRA_CUENTA)).toBe(true)
+    expect(almacen.objetos.has(VIEJA)).toBe(true)
+  })
+
+  it("quitar: la columna a null y recién entonces el objeto de la cuenta", async () => {
+    const d = destinoDeCuenta()
+
+    const respuesta = await quitarFoto(QUIEN, d)
+
+    expect(await respuesta.json()).toEqual({ url: null })
+    expect(d.escrituras).toEqual([null])
+    expect(almacen.operaciones).toEqual([{ operacion: "borrar", clave: DE_LA_CUENTA }])
+  })
+
+  it("un id de cuenta con caracteres raros no llega a una clave: no se guarda nada", async () => {
+    await expect(
+      subirFoto(pedidoDeFoto("http://localhost/x", await jpegDePrueba()), QUIEN, destinoDeCuenta({ usuarioId: "../u-2" }))
+    ).rejects.toThrow()
+    expect(almacen.operaciones).toEqual([])
+  })
+})
+

@@ -3,11 +3,11 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { AwsClient } from "aws4fetch"
-import type { TipoDeFoto } from "@/lib/procesar-foto"
+import type { TipoDeFotoDeNegocio } from "@/lib/procesar-foto"
 
 /**
- * Dónde viven las fotos (logo, portada y foto de cada integrante). SÓLO
- * SERVIDOR.
+ * Dónde viven las fotos (logo, portada, foto de cada integrante y foto de la
+ * cuenta de cada persona). SÓLO SERVIDOR.
  *
  * El navegador nunca habla con el almacenamiento: sube la foto a NUESTRO
  * endpoint (`lib/procesar-foto.ts` la valida y la reduce), y la página pública
@@ -44,14 +44,25 @@ export interface AlmacenDeFotos {
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
 /**
- * La ÚNICA forma de clave que existe: `negocios/<negocio>/<logo|portada|miembro-<id>>-<uuid>.webp`.
+ * Las ÚNICAS dos formas de clave que existen:
+ *
+ * - del negocio: `negocios/<negocio>/<logo|portada|miembro-<id>>-<uuid>.webp`;
+ * - de la cuenta de una persona: `usuarios/<cuenta>/cuenta-<uuid>.webp`.
+ *
  * Tanto la ruta pública como cada implementación la validan antes de tocar
  * nada: sin `..`, sin barras de más, sin mayúsculas raras ni extensiones.
  */
-const FORMA_DE_CLAVE = new RegExp(`^negocios/([A-Za-z0-9_-]{1,64})/(logo|portada|miembro-[A-Za-z0-9_-]{1,64})-${UUID}\\.webp$`)
+const FORMA_DE_CLAVE_DE_NEGOCIO = new RegExp(
+  `^negocios/([A-Za-z0-9_-]{1,64})/(logo|portada|miembro-[A-Za-z0-9_-]{1,64})-${UUID}\\.webp$`
+)
+const FORMA_DE_CLAVE_DE_CUENTA = new RegExp(`^usuarios/([A-Za-z0-9_-]{1,64})/cuenta-${UUID}\\.webp$`)
 
 export function esClaveDeFoto(clave: unknown): clave is string {
-  return typeof clave === "string" && clave.length <= 256 && FORMA_DE_CLAVE.test(clave)
+  return (
+    typeof clave === "string" &&
+    clave.length <= 256 &&
+    (FORMA_DE_CLAVE_DE_NEGOCIO.test(clave) || FORMA_DE_CLAVE_DE_CUENTA.test(clave))
+  )
 }
 
 /**
@@ -59,9 +70,21 @@ export function esClaveDeFoto(clave: unknown): clave is string {
  * anterior: cambiar la foto cambia la URL, y por eso la ruta pública puede
  * mandarla con `Cache-Control: immutable`.
  */
-export function claveNuevaDeFoto(datos: { businessId: string; tipo: TipoDeFoto; miembroId?: string }): string {
+export function claveNuevaDeFoto(datos: { businessId: string; tipo: TipoDeFotoDeNegocio; miembroId?: string }): string {
   const nombre = datos.tipo === "miembro" ? `miembro-${datos.miembroId ?? ""}` : datos.tipo
   const clave = `negocios/${datos.businessId}/${nombre}-${randomUUID()}.webp`
+  // Un id con caracteres raros no debe llegar a una clave: se corta acá.
+  if (!esClaveDeFoto(clave)) throw new Error("No se pudo armar una clave de foto válida")
+  return clave
+}
+
+/**
+ * Una clave NUEVA para la foto de la cuenta de una persona:
+ * `usuarios/<cuenta>/cuenta-<uuid>.webp`. Con uuid, como las demás: cambiar la
+ * foto cambia la URL y lo ya servido nunca cambia.
+ */
+export function claveNuevaDeFotoDeLaCuenta(usuarioId: string): string {
+  const clave = `usuarios/${usuarioId}/cuenta-${randomUUID()}.webp`
   // Un id con caracteres raros no debe llegar a una clave: se corta acá.
   if (!esClaveDeFoto(clave)) throw new Error("No se pudo armar una clave de foto válida")
   return clave
@@ -81,6 +104,21 @@ export function claveDeFotoPropia(url: string | null | undefined, businessId: st
   const clave = url.slice("/fotos/".length)
   if (!esClaveDeFoto(clave)) return null
   return clave.startsWith(`negocios/${businessId}/`) ? clave : null
+}
+
+/**
+ * La clave de la foto de una CUENTA que está guardada en `User.fotoUrl`, SÓLO
+ * si es de la carpeta de esa persona (`usuarios/<su id>/`). Igual que
+ * `claveDeFotoPropia`, pero por persona: una fila con una ruta rara (armada a
+ * mano, de otra cuenta, del negocio de alguien) devuelve `null`, y entonces ni
+ * se sirve, ni se muestra, ni se borra. Una persona nunca apunta a un objeto de
+ * otra.
+ */
+export function claveDeFotoDeLaCuenta(url: string | null | undefined, usuarioId: string | null | undefined): string | null {
+  if (!url || !usuarioId || !url.startsWith("/fotos/")) return null
+  const clave = url.slice("/fotos/".length)
+  if (!esClaveDeFoto(clave)) return null
+  return clave.startsWith(`usuarios/${usuarioId}/`) ? clave : null
 }
 
 // ─── R2 ──────────────────────────────────────────────────────────────────────

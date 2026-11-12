@@ -50,6 +50,8 @@ Un rubro desconocido o ninguno (una sesión de antes del rubro) y los viejos `sa
 
 Los negocios que ya existen con otros rubros (`salud`, `fitness`, `otro`) siguen funcionando y se ven como los tres primeros: para ellos el rubro es un dato de segmentación. Sólo la clínica dental cambia la interfaz.
 
+**Cómo se escribe una frase del rubro: ningún artículo pegado a mano.** `vocabularioDe(rubro).palabras` es la única forma de pedir una palabra del rubro: las seis cadenas sueltas que tuvo antes (`clientes`, `cliente`, `tablero`, `profesional`, `profesionales` y `servicioDeLaReserva`) se retiraron. Una frase nunca escribe un "el", "un", "ningún", "este", un "todos los" ni un adjetivo pegado a una palabra del vocabulario: le pide a `lib/concordancia.ts` (`el`, `un`, `al`, `del`, `este`, `ningun`, `todos`, `concordar`…) que lo ponga según el género y el número, y por eso la misma frase sale "la estilista" en un salón y "el odontólogo" en una clínica. El texto de cada zona vive en su `_frases.ts`, junto a la pantalla (inicio, agenda, clientes, comisiones y prótesis, Configuración, Equipo, liquidaciones, Mi plata, reportes, Tablero y la reserva pública): recibe las palabras y devuelve las frases. Los correos (`lib/email.ts`) y la ayuda (`lib/catalogo-de-preguntas.ts`) toman las mismas palabras. Los tests de cada `_frases.ts` comprueban la concordancia, y varios corren las frases con un rubro inventado de géneros al revés para que un artículo pegado a mano se rompa. Límite conocido: una palabra femenina que empiece con "a" tónica ("el agua") llevaría mal el artículo; hoy ninguna del vocabulario lo es.
+
 ### Misión
 
 Centralizar la información, eliminar el trabajo engorroso y construir soluciones donde hoy sólo hay problemas.
@@ -204,12 +206,12 @@ No se cobra comisión sobre las reservas. Eli **administra** el dinero del negoc
 
 ### Precios (decidido)
 
-En pesos chilenos, **con IVA incluido** y **cobro sólo mensual** (no hay plan anual). Los dos planes traen todas las funciones; lo único que cambia es cuántas personas atienden.
+En pesos chilenos, **con IVA incluido** y **cobro sólo mensual** (no hay plan anual). Los dos planes traen las mismas funciones de agenda, reservas, clientes, comisiones y reportes; lo que cambia es quién atiende y cuántos locales tiene el negocio (abajo, "Los planes en el producto").
 
 | Plan | Precio | Para quién |
 |---|---|---|
-| **Independiente** | $9.990/mes | Sólo el dueño atiende |
-| **Equipo** | $34.990/mes con 5 personas que atienden incluidas, y **+$4.990/mes por cada persona adicional** | Negocios con equipo |
+| **Independiente** | $9.990/mes | Sólo el dueño atiende. Hasta 5 sedes; no invita a nadie |
+| **Equipo** | $34.990/mes con 5 personas que atienden incluidas, y **+$4.990/mes por cada persona adicional** | Negocios con equipo. Invita; una sola sede, la dirección del negocio |
 
 - **Prueba gratis de 7 días, sin tarjeta**, contados desde que se crea el negocio.
 - **Correos del ciclo de prueba al dueño**, uno de cada tipo por negocio: bienvenida al crear el negocio (con los tres pasos: horario, servicios y compartir el enlace), un consejo el día 3 (compartir el enlace de reservas en Instagram y WhatsApp), un aviso cuando faltan 3 días y otro el último día. Los días se cuentan en la zona del negocio. No prometen cobro: dicen que todavía no se cobra y que pronto se podrá activar el plan desde el panel. Cada uno trae "Dejar de recibir estos correos", que los apaga (no los de la cuenta). Los negocios que existían antes no los reciben.
@@ -220,6 +222,35 @@ En pesos chilenos, **con IVA incluido** y **cobro sólo mensual** (no hay plan a
 - **Pasarela de pago: pendiente** (sección 10). Hoy no se cobra nada: el panel muestra los planes y avisa que activarlos llega pronto.
 
 **Regla firme:** no se vende ninguna función que no exista. La versión anterior listaba "reportes exportables" en planes pagos sin haberlos construido — eso es motivo directo de reembolso.
+
+### Los planes en el producto (etapa 9)
+
+`Business.plan` guarda el plan de cada negocio, `independiente` o `equipo` (`lib/planes.ts`; la base lo exige con un CHECK y, si no se dice otro, vale `equipo`).
+
+| | Independiente | Equipo |
+|---|---|---|
+| Quién atiende | Sólo la dueña | Los profesionales, y la dueña si atiende |
+| Invitar al equipo | No | Sí |
+| Sedes | Hasta 5 activas, cada una con su horario por día | Una sola: la dirección del negocio |
+
+- **Se elige al crear la cuenta, junto al rubro.** Crear cuenta tiene tres pasos: tus datos, tu negocio (con el rubro) y tu plan. Quien entra con Google lo elige al completar el perfil, con el mismo componente: dos tarjetas con su precio y tres líneas de lo que incluye, que salen de `lib/precios.ts` y `lib/sedes.ts`, nunca escritas a mano. `/crear-cuenta?plan=independiente` o `?plan=equipo` lo deja preseleccionado; cualquier otro valor se ignora. Es obligatorio: el servidor lo valida (uno que no es de la lista responde 400 con el campo `plan`) y lo guarda en la misma escritura que crea el negocio.
+- **Cuántas personas atienden al crear.** `Business.teamSize` sale del plan (`personasAlCrearElNegocio`): una en Independiente, aunque el navegador mande otra cosa, y lo que se pidió en Equipo (una si no se pidió nada). La prueba de 7 días, el rubro, los servicios de ejemplo y el código de invitación no cambian con el plan.
+- **Quién invita.** Sólo el plan Equipo: invitar a alguien al equipo y reenviar una invitación (dueña y encargado; `puedeInvitarAlEquipo`). En un negocio Independiente la API responde 403 con el motivo ("Tu plan Independiente es para atender sin equipo…"); al profesional, que no gestiona el equipo, le sigue respondiendo 401. Ver la lista y anular invitaciones no dependen del plan. La base repite la regla: si la sesión decía Equipo pero el negocio ya pasó a Independiente, el trigger rechaza la invitación y la API responde 403, no 500. En la pantalla Equipo, un negocio Independiente ve, en lugar de "Invitar al equipo", la explicación "Tu plan es Independiente: atiendes tú solo" con salida a los precios; si de antes quedara alguien o una invitación pendiente, la lista se sigue viendo y las invitaciones se pueden anular. El modal de precios del panel marca "Tu plan" en la tarjeta que corresponde, y no marca ninguna si la sesión no dice el plan.
+- **El plan viaja en la sesión.** Lo arma el servidor desde la base (`lib/auth.ts`), nunca lo manda el navegador, y se vuelve a leer en cada revalidación de la sesión (cada 5 minutos, sección 5): un cambio de plan le llega a cada persona en ese plazo. Es el plan del negocio del contexto con que se trabaja: una misma cuenta puede estar en una clínica Equipo y tener su propio negocio Independiente. **Una sesión sin plan** (de antes del campo, o con un valor que no es un plan) **no habilita nada que dependa de él**, ni invitar ni gestionar sedes: `lib/permisos.ts` compara siempre con `"equipo"` o `"independiente"`, nunca con "no es el otro".
+- **Los negocios que ya existían.** La migración los reparte (README, `20261112120000_etapa_9_planes_y_sedes`): los que tienen algún integrante o una invitación pendiente quedan en Equipo; todos los demás, los que atienden solos, pasan a Independiente y **dejan de poder invitar** hasta que pasen a Equipo. Se aplica antes de desplegar el código nuevo, con respaldo, y sólo la aplica el dueño.
+- **Qué se paga.** `calcularPrecio(personas, plan)` (`lib/precios.ts`): Independiente siempre $9.990; Equipo $34.990, que incluye 5 personas aunque haya una sola, y +$4.990 por cada una desde la sexta. Sin plan (la calculadora de la landing) sugiere Independiente con una persona y Equipo con dos o más. Todavía no se cobra.
+
+**Sedes: la base.** Lo que ya existe en los datos y en las reglas, sin pantallas todavía (`lib/sedes.ts`):
+
+- **La tabla `sedes`:** nombre (único por negocio, también entre las desactivadas), dirección, comuna, teléfono opcional en formato internacional (E.164, como el WhatsApp del negocio), orden y activo. Los horarios, las citas y las inscripciones de la lista de espera pueden llevar una sede.
+- **Hasta 5 sedes activas, sólo en Independiente.** En Equipo no hay sedes: el local es la dirección del negocio. Una sede con citas no se borra, se desactiva; una desactivada no cuenta para el tope ni para el modo del negocio.
+- **Cero sedes es el negocio de siempre.** El local es `Business.address` y la comuna del negocio, y sus horarios no llevan sede: es todo negocio de hoy y todo plan Equipo. El negocio sólo se comporta como "varias sedes" con el plan Independiente y dos o más activas; con una sola se comporta como hoy. **Con una o más sedes activas, toda cita nueva lleva sede** (`sedeParaReservar` sólo acepta una sede activa del negocio).
+- **Un horario por sede, sin pisarse.** Cada sede tiene su horario semanal por día (franjas "HH:MM", con el inicio antes del fin). Dos franjas activas de sedes activas distintas no se pisan el mismo día: la dueña no está en dos lugares a la vez. Tocarse (una termina cuando la otra empieza) vale; la holgura de traslado hoy es de 0 minutos (`HOLGURA_ENTRE_SEDES_MIN`). El horario general, sin sede, no entra en esta regla.
+- **La base es la segunda barrera:** el tope de 5, el plan, los solapes entre sedes y quién invita los repiten triggers de la migración (README). La aplicación valida antes y responde con un mensaje claro.
+
+### Sedes: pantallas y reserva con sedes — se documenta al cerrar el bloque
+
+En construcción; no se describe hasta que cierre: la pantalla de sedes en Configuración, el cambio de plan desde el panel, la reserva pública con sedes (elegir sede, la página y los correos), la agenda y las citas con sede, y la lista de espera y la fila virtual con sede. Mientras tanto, el alta de cuenta y el modal de precios ya nombran las sedes del plan Independiente: por la regla firme de arriba, esa promesa no se publica antes de que existan.
 
 ---
 
@@ -241,10 +272,10 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 - **Una cuenta entra de una sola forma.** La que se creó con Google entra con Google; la que se creó con correo y contraseña (registro o invitación al equipo) entra con correo y contraseña. Si alguien intenta entrar con Google usando el correo de una cuenta con contraseña, Eli **no las vincula**: lo manda a iniciar sesión con el mensaje "Esta cuenta usa correo y contraseña. Entra con ellos.". Vincularlas sola le daría la cuenta a quien controle ese Gmail sin conocer la contraseña. Google además tiene que dar el correo como verificado.
 - **El correo de una cuenta no distingue mayúsculas ni espacios en las puntas**: se guarda y se busca en minúsculas.
 - **Iniciar sesión tiene tope:** 10 intentos por minuto desde una misma conexión y 10 por minuto para una misma cuenta. Pasado, la pantalla dice "Demasiados intentos. Espera un minuto y vuelve a intentarlo.". Responder "correo o contraseña incorrectos" tarda lo mismo exista o no la cuenta, y pedir el enlace de recuperar la contraseña responde lo mismo y en el mismo tiempo (el correo sale después); a un mismo correo le llegan como mucho 3 enlaces por hora.
-- **Las sesiones duran 7 días** y se revisan contra la base cada 5 minutos: a quien sacan del equipo o le cambian el rol, el cambio le llega en ese plazo. **Restablecer la contraseña cierra todas las sesiones abiertas** de esa cuenta. Dentro del panel, el navegador relee la sesión cada 5 minutos y 5 segundos (`lib/renovacion-de-sesion.ts`): es lo único que renueva la cookie, y sin eso, pasado el plazo, cada petición del servidor repetía la revalidación contra la base.
+- **Las sesiones duran 7 días** y se revisan contra la base cada 5 minutos: a quien sacan del equipo, le cambian el rol o le cambian el plan de su negocio (sección 4), el cambio le llega en ese plazo. **Restablecer la contraseña cierra todas las sesiones abiertas** de esa cuenta. Dentro del panel, el navegador relee la sesión cada 5 minutos y 5 segundos (`lib/renovacion-de-sesion.ts`): es lo único que renueva la cookie, y sin eso, pasado el plazo, cada petición del servidor repetía la revalidación contra la base.
 - **Los enlaces de recuperar contraseña e invitación son de un solo uso** y la base guarda sólo su huella (hash), no el enlace.
 - **Una invitación se acepta con una cuenta nueva o con una que ya existe.** Si el correo invitado ya tiene cuenta en Eli, quien acepta tiene que haber iniciado sesión con esa cuenta (la pantalla de la invitación ofrece "Inicia sesión" y vuelve a la invitación al entrar); entonces aceptar no pide contraseña: sólo suma ese negocio a la cuenta y entra a él. Lo único que se rechaza es invitar o aceptar a quien ya es miembro de ese negocio.
-- **Las invitaciones al equipo vencen a los 7 días.** En Equipo, cada invitación pendiente dice "Vence el …" o "Vencida", y dueño y encargado pueden **reenviarla** (enlace nuevo y 7 días más; el enlace anterior deja de servir) o **anularla**, con confirmación. Invitar de nuevo un correo con una invitación vencida la reemplaza; si está vigente, se ofrece reenviarla. Reenviar a un mismo correo tiene tope: 3 por hora.
+- **Las invitaciones al equipo vencen a los 7 días.** En Equipo, cada invitación pendiente dice "Vence el …" o "Vencida", y dueño y encargado pueden **reenviarla** (enlace nuevo y 7 días más; el enlace anterior deja de servir) o **anularla**, con confirmación. Invitar de nuevo un correo con una invitación vencida la reemplaza; si está vigente, se ofrece reenviarla. Reenviar a un mismo correo tiene tope: 3 por hora. Invitar y reenviar sólo existen en el plan Equipo (sección 4, "Los planes en el producto"); en el plan Independiente no hay a quién invitar.
 
 ### Una cuenta en varios negocios (decidido el 2026-11-10)
 
@@ -279,7 +310,7 @@ El profesional **no ve la facturación del negocio**, sólo lo suyo. Con comisio
 - Inventario de productos
 - Retención de honorarios en la liquidación (decisión del dueño, sección 10)
 - Aplicación móvil nativa
-- Multi-sucursal
+- Multi-sucursal para negocios con equipo: el plan Equipo tiene una sola sede, la dirección del negocio; las sedes son del plan Independiente (sección 4)
 - En la clínica dental: página propia (`/odontologia`), documentos, radiografías y consentimientos (falta el almacenamiento, sección 10), PDF del plan, abonos y pagos del plan (las prótesis sí se abonan), cambios en la caja o en la comisión de las prestaciones (las prótesis tienen su propio reparto, sección 3.11), costo de materiales de las prótesis, correo al laboratorio y liquidación propia del laboratorio, periodontograma, implantes y puentes como marca del odontograma, bloqueos por sillón e historial de versiones del odontograma
 
 **Zona horaria del negocio.** Cada negocio tiene su zona horaria (IANA, por defecto `America/Santiago`). En ella se leen sus horarios de atención y sus días: qué día de la semana es una fecha, qué horas ofrece la página pública (y cuáles ya pasaron hoy), en qué instante se guarda la cita reservada y qué citas trae la vista Día, Semana y Mes de la agenda. La agenda también muestra y escribe sus horas en esa zona, no en la del dispositivo de quien mira: en qué día y a qué hora se dibuja cada cita y cada bloqueo, cuál es "hoy", y en qué instante se guarda una cita creada o movida y un bloqueo nuevo. Si la zona guardada no es válida, se usa la de por defecto. Con el cambio de horario, una hora que no existe se corre hacia adelante lo que dura el salto y una que ocurre dos veces se toma la primera vez. La dueña la cambia en Configuración › Horario y equipo › Zona horaria, entre las tres de Chile (continental, Magallanes e Isla de Pascua, cada una con su hora actual); antes de guardar se le explica que cambia cómo se leen las citas y qué horas ofrece la reserva pública, no las citas ya guardadas. El inicio, los reportes y el Tablero siguen con la zona del dispositivo (decidido el 2026-11-05).

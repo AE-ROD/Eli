@@ -23,6 +23,16 @@ model User {
   /// Baja de los correos del ciclo de prueba (bienvenida, consejo, avisos de
   /// fin). No afecta los correos de la cuenta (recuperar contraseña, etc.).
   correosDesactivados  Boolean   @default(false)
+  /// La foto de la CUENTA (la persona, no un negocio), como ruta del propio
+  /// sitio: `/fotos/usuarios/<id>/cuenta-<uuid>.webp` (`lib/almacenamiento-de-fotos.ts`).
+  /// La sigue en todos sus contextos (clínica y negocio propio) y sólo la ve ella,
+  /// en el avatar del panel: no se publica en la reserva y no es la del integrante
+  /// (`BusinessMember.fotoUrl`, la que ve el cliente), ni hace de respaldo de ella.
+  /// Null es "sin foto" (se ven las iniciales). Sin CHECK en la base, como la del
+  /// integrante: la forma de la ruta y que sea de su carpeta las exige la
+  /// aplicación (`claveDeFotoDeLaCuenta`) al escribir y al leer. Columna en
+  /// camelCase y sin `@map`, como el resto del modelo.
+  fotoUrl              String?
 
   business             Business?
   memberships          BusinessMember[]

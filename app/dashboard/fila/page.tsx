@@ -1,7 +1,6 @@
 import type { Metadata } from "next"
-import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+import { sesionDelServidor } from "@/lib/sesion-del-servidor"
 import { actorDeSesion, puedeVerPantallaDeFila } from "@/lib/permisos"
 import { PantallaDeFila } from "./_componentes/pantalla-de-fila"
 
@@ -15,7 +14,7 @@ export const metadata: Metadata = { title: "Pantalla de la fila" }
  * el permiso, y se refrescan solos.
  */
 export default async function PaginaPantallaDeFila() {
-  const actor = actorDeSesion(await getServerSession(authOptions))
+  const actor = actorDeSesion(await sesionDelServidor())
   if (!actor) redirect("/iniciar-sesion")
   if (!puedeVerPantallaDeFila(actor)) redirect("/dashboard")
   return <PantallaDeFila />

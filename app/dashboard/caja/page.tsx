@@ -1,6 +1,5 @@
-import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+import { sesionDelServidor } from "@/lib/sesion-del-servidor"
 import { actorDeSesion, puedeVerCierresDeCaja } from "@/lib/permisos"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { PantallaDeCaja } from "./_componentes/pantalla-de-caja"
@@ -10,7 +9,7 @@ import { PantallaDeCaja } from "./_componentes/pantalla-de-caja"
  * servidor: sin él, de vuelta al inicio. El endpoint lo vuelve a mirar (401).
  */
 export default async function PaginaCaja() {
-  const actor = actorDeSesion(await getServerSession(authOptions))
+  const actor = actorDeSesion(await sesionDelServidor())
   if (!actor) redirect("/iniciar-sesion")
   if (!puedeVerCierresDeCaja(actor)) redirect("/dashboard")
 

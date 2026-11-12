@@ -3,6 +3,7 @@ import { coincideConWhere } from "@/pruebas/where-simple"
 import { coincide, type NombreDeModelo, type Tablas } from "@/pruebas/consultas-falsas"
 import {
   actorDeSesion,
+  cuentaDeSesion,
   mismoNegocio,
   puedeGestionarEquipo,
   puedeCambiarRolDe,
@@ -176,6 +177,31 @@ describe("actorDeSesion", () => {
   it("rechaza cuando no hay sesión", () => {
     expect(actorDeSesion(null)).toBeNull()
     expect(actorDeSesion(undefined)).toBeNull()
+  })
+})
+
+describe("cuentaDeSesion", () => {
+  const sesion = (user: Record<string, unknown>) => ({ user }) as never
+
+  it("devuelve la cuenta de la sesión, con o sin negocio ni rol (lo que es de la persona, no del negocio)", () => {
+    expect(cuentaDeSesion(sesion({ id: "u-1", role: "worker", businessId: NEGOCIO }))).toEqual({ id: "u-1" })
+    expect(cuentaDeSesion(sesion({ id: "u-1" }))).toEqual({ id: "u-1" })
+  })
+
+  it.each([
+    ["sin id", { role: "owner", businessId: NEGOCIO }],
+    ["id vacío (sesión revocada)", { id: "", role: "owner", businessId: NEGOCIO }],
+    ["id que no es texto", { id: 7 }],
+    ["id nulo", { id: null }],
+    ["id como objeto", { id: { $ne: null } }],
+  ])("rechaza una sesión %s", (_caso, user) => {
+    expect(cuentaDeSesion(sesion(user))).toBeNull()
+  })
+
+  it("rechaza cuando no hay sesión", () => {
+    expect(cuentaDeSesion(null)).toBeNull()
+    expect(cuentaDeSesion(undefined)).toBeNull()
+    expect(cuentaDeSesion({} as never)).toBeNull()
   })
 })
 

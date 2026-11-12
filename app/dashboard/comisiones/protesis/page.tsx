@@ -1,8 +1,7 @@
-import { getServerSession } from "next-auth"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
-import { authOptions } from "@/lib/auth"
+import { sesionDelServidor } from "@/lib/sesion-del-servidor"
 import { CAMBIOS_MAXIMOS, CAMBIOS_POR_PAGINA, leerCambiosDeReparto, limiteDeCambios } from "@/lib/cambios-de-reparto-servidor"
 import { actorDeSesion, puedeConfigurarRepartoDeProtesis, puedeEditarComisiones } from "@/lib/permisos"
 import { prisma } from "@/lib/prisma"
@@ -29,7 +28,7 @@ export default async function PaginaRepartoDeProtesis({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const actor = actorDeSesion(await getServerSession(authOptions))
+  const actor = actorDeSesion(await sesionDelServidor())
   if (!actor) redirect("/iniciar-sesion")
   if (!puedeConfigurarRepartoDeProtesis(actor)) redirect(puedeEditarComisiones(actor) ? "/dashboard/comisiones" : "/dashboard")
 

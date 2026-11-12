@@ -1,28 +1,33 @@
 import { NextResponse } from "next/server"
 import {
   almacenDeFotos,
+  claveDeFotoDeLaCuenta,
   claveDeFotoPropia,
   claveNuevaDeFoto,
+  claveNuevaDeFotoDeLaCuenta,
   rutaPublicaDeFoto,
   type AlmacenDeFotos,
 } from "@/lib/almacenamiento-de-fotos"
 import { leerBytesConTope, respuestaDeCuerpoDemasiadoGrande, TOPE_DE_UNA_FOTO } from "@/lib/cuerpo-del-pedido"
-import { FotoInvalida, procesarFoto, TIPO_MIME_DE_SALIDA, type TipoDeFoto } from "@/lib/procesar-foto"
+import { FotoInvalida, procesarFoto, TIPO_MIME_DE_SALIDA, type TipoDeFotoDeNegocio } from "@/lib/procesar-foto"
 import { verificarLimite } from "@/lib/rate-limit"
 import { registrarError } from "@/lib/registro-de-errores"
 
 /**
- * Subir y quitar una foto (logo, portada, foto de un integrante): el recorrido
- * que comparten `PUT/DELETE /api/configuracion/fotos/[tipo]` y
- * `/api/equipo/miembros/[id]/foto`. SÓLO SERVIDOR.
+ * Subir y quitar una foto (logo, portada, foto de un integrante, foto de la
+ * cuenta de una persona): el recorrido que comparten
+ * `PUT/DELETE /api/configuracion/fotos/[tipo]`, `/api/equipo/miembros/[id]/foto`
+ * y `/api/cuenta/foto`. SÓLO SERVIDOR.
  *
  * Cada endpoint ya resolvió lo suyo ANTES de llamar acá: la sesión, el permiso
- * (`lib/permisos.ts`) y que el negocio o el integrante sean de la sesión (404
- * si no). Acá va lo que es igual para todos: que haya almacén (503), el límite
- * de peticiones (429), el tipo de contenido y el tope de bytes (400, 413), la
+ * (`lib/permisos.ts`) y que el negocio, el integrante o la cuenta sean de la
+ * sesión (404 si no; la cuenta sale de la sesión, nunca de un id del pedido).
+ * Acá va lo que es igual para todos: que haya almacén (503), el límite de
+ * peticiones (429), el tipo de contenido y el tope de bytes (400, 413), la
  * validación y reducción de la imagen (400), y la escritura en este orden:
  *
- *   1. el objeto NUEVO, con una clave nueva (`negocios/<negocio>/...-<uuid>.webp`);
+ *   1. el objeto NUEVO, con una clave nueva (`negocios/<negocio>/...-<uuid>.webp`,
+ *      o `usuarios/<cuenta>/cuenta-<uuid>.webp` para la foto de una cuenta);
  *   2. la columna, que pasa a apuntar al objeto nuevo;
  *   3. recién entonces, el objeto anterior.
  *
@@ -32,18 +37,31 @@ import { registrarError } from "@/lib/registro-de-errores"
  * huérfano que nadie ve (se registra el fallo).
  */
 
-/** Dónde vive la URL de la foto y cómo se cambia. Lo arma cada endpoint con el `where` de la sesión. */
-export interface DestinoDeFoto {
-  tipo: TipoDeFoto
-  /** El negocio de la sesión: la carpeta de la clave y el prefijo que se exige para borrar. */
-  businessId: string
-  /** Sólo para `miembro`: la membresía, que va en el nombre del archivo. */
-  miembroId?: string
+/** Lo que tiene todo destino: dónde vive la URL de la foto y cómo se cambia. Lo arma cada endpoint con el `where` de la sesión. */
+interface DestinoBase {
   /** Lo que hay hoy en la columna, o `null` si la fila ya no existe (el endpoint responde 404). */
   leerUrl(): Promise<{ url: string | null } | null>
   /** Escribe la columna. `false` si la fila ya no existe. */
   guardarUrl(url: string | null): Promise<boolean>
 }
+
+/** Una foto que cuelga de un negocio: el logo, la portada, la de un integrante. */
+export interface DestinoDeFotoDeNegocio extends DestinoBase {
+  tipo: TipoDeFotoDeNegocio
+  /** El negocio de la sesión: la carpeta de la clave y el prefijo que se exige para borrar. */
+  businessId: string
+  /** Sólo para `miembro`: la membresía, que va en el nombre del archivo. */
+  miembroId?: string
+}
+
+/** La foto de la cuenta de una persona: cuelga de ella, no de un negocio. */
+export interface DestinoDeFotoDeLaCuenta extends DestinoBase {
+  tipo: "cuenta"
+  /** La cuenta de la SESIÓN: la carpeta de la clave y el prefijo que se exige para borrar. */
+  usuarioId: string
+}
+
+export type DestinoDeFoto = DestinoDeFotoDeNegocio | DestinoDeFotoDeLaCuenta
 
 /** Quién cambia la foto, para el límite de peticiones: se cuenta por sesión, no por IP. */
 export interface QuienCambia {
@@ -80,9 +98,25 @@ async function puertas(quien: QuienCambia): Promise<{ almacen: AlmacenDeFotos } 
   return { almacen }
 }
 
-/** Borra el objeto de una columna si es de este negocio. Nunca lanza: un huérfano no rompe nada. */
-async function borrarSiEsDelNegocio(almacen: AlmacenDeFotos, url: string | null, businessId: string): Promise<void> {
-  const clave = claveDeFotoPropia(url, businessId)
+/**
+ * La clave de lo que hay en la columna, SÓLO si es de este destino: de este
+ * negocio, o de la carpeta de esta persona. Lo demás (a mano, de una versión
+ * vieja, de otro negocio o de otra cuenta) es `null` y no se toca.
+ */
+function claveAnterior(url: string | null, destino: DestinoDeFoto): string | null {
+  return destino.tipo === "cuenta" ? claveDeFotoDeLaCuenta(url, destino.usuarioId) : claveDeFotoPropia(url, destino.businessId)
+}
+
+/** Una clave nueva en la carpeta del destino: la del negocio o la de la persona. */
+function claveNueva(destino: DestinoDeFoto): string {
+  return destino.tipo === "cuenta"
+    ? claveNuevaDeFotoDeLaCuenta(destino.usuarioId)
+    : claveNuevaDeFoto({ businessId: destino.businessId, tipo: destino.tipo, miembroId: destino.miembroId })
+}
+
+/** Borra el objeto de una columna si es de este destino. Nunca lanza: un huérfano no rompe nada. */
+async function borrarSiEsPropia(almacen: AlmacenDeFotos, url: string | null, destino: DestinoDeFoto): Promise<void> {
+  const clave = claveAnterior(url, destino)
   if (!clave) return
   try {
     await almacen.borrar(clave)
@@ -118,7 +152,7 @@ export async function subirFoto(request: Request, quien: QuienCambia, destino: D
     return error("Error interno", 500)
   }
 
-  const clave = claveNuevaDeFoto({ businessId: destino.businessId, tipo: destino.tipo, miembroId: destino.miembroId })
+  const clave = claveNueva(destino)
   try {
     await almacen.guardar(clave, foto.bytes, TIPO_MIME_DE_SALIDA)
   } catch (fallo) {
@@ -154,8 +188,8 @@ export async function subirFoto(request: Request, quien: QuienCambia, destino: D
     return error("Error interno", 500)
   }
 
-  // Ya apunta a la nueva: el objeto anterior (si era de este negocio) sobra.
-  await borrarSiEsDelNegocio(almacen, anterior, destino.businessId)
+  // Ya apunta a la nueva: el objeto anterior (si era de este destino) sobra.
+  await borrarSiEsPropia(almacen, anterior, destino)
 
   return NextResponse.json({ url })
 }
@@ -176,7 +210,7 @@ export async function quitarFoto(quien: QuienCambia, destino: DestinoDeFoto): Pr
     return error("Error interno", 500)
   }
 
-  await borrarSiEsDelNegocio(almacen, anterior, destino.businessId)
+  await borrarSiEsPropia(almacen, anterior, destino)
 
   return NextResponse.json({ url: null })
 }

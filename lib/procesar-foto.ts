@@ -19,7 +19,10 @@ import sharp from "sharp"
  *   mandó el navegador.
  */
 
-export type TipoDeFoto = "logo" | "portada" | "miembro"
+export type TipoDeFoto = "logo" | "portada" | "miembro" | "cuenta"
+
+/** Las fotos que cuelgan de un negocio (`negocios/<negocio>/...`); la de la cuenta cuelga de la persona. */
+export type TipoDeFotoDeNegocio = Exclude<TipoDeFoto, "cuenta">
 
 /** Hasta cuántos píxeles de entrada se aceptan (un celular de 48 MP son ~48 000 000 sólo con zoom; lo normal es 12 MP). */
 export const LIMITE_DE_PIXELES = 40_000_000
@@ -46,11 +49,14 @@ export const TIPO_MIME_DE_SALIDA = "image/webp"
  *   abajo, en el celular algo a los lados, y en ninguno se pierde el centro.
  * - miembro: cuadrada 640 × 640, recortada del centro; se muestra en círculos
  *   de 56 px y en tarjetas más grandes.
+ * - cuenta: cuadrada 512 × 512, recortada del centro; sólo se ve en el avatar
+ *   del panel (de 40 a 96 px), así que 512 sobra incluso en pantallas retina.
  */
 export const MEDIDAS_DE_FOTO = {
   logo: { ancho: 512, alto: 512, ajuste: "inside" },
   portada: { ancho: 1600, alto: 400, ajuste: "cover" },
   miembro: { ancho: 640, alto: 640, ajuste: "cover" },
+  cuenta: { ancho: 512, alto: 512, ajuste: "cover" },
 } as const satisfies Record<TipoDeFoto, { ancho: number; alto: number; ajuste: "inside" | "cover" }>
 
 export type MotivoDeFotoInvalida = "formato" | "animada" | "enorme" | "ilegible"

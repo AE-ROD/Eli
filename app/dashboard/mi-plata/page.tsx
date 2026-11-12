@@ -1,8 +1,7 @@
 import Link from "next/link"
-import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { ChevronRight, HandCoins, History, Smile } from "lucide-react"
-import { authOptions } from "@/lib/auth"
+import { sesionDelServidor } from "@/lib/sesion-del-servidor"
 import { prisma } from "@/lib/prisma"
 import { actorDeSesion, esClinicaDental, veLaLineaDePropinas, veMiPlata } from "@/lib/permisos"
 import { calcularMiPlata, type Ganado } from "@/lib/mi-plata"
@@ -41,7 +40,7 @@ function DeProtesis({ ganado }: { ganado: Ganado }) {
  * `memberId` (la dueña) no se ve: de vuelta al inicio.
  */
 export default async function PaginaMiPlata() {
-  const actor = actorDeSesion(await getServerSession(authOptions))
+  const actor = actorDeSesion(await sesionDelServidor())
   if (!actor) redirect("/iniciar-sesion")
   if (!veMiPlata(actor) || !actor.memberId) redirect("/dashboard")
 

@@ -1,6 +1,5 @@
-import { getServerSession } from "next-auth"
 import { notFound, redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+import { sesionDelServidor } from "@/lib/sesion-del-servidor"
 import { prisma } from "@/lib/prisma"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
@@ -54,7 +53,7 @@ const CABECERA = "py-2 pr-3 text-left text-xs font-medium uppercase tracking-[0.
  * la dueña.
  */
 export default async function PaginaComprobante({ params }: { params: Promise<{ id: string }> }) {
-  const actor = actorDeSesion(await getServerSession(authOptions))
+  const actor = actorDeSesion(await sesionDelServidor())
   if (!actor) redirect("/iniciar-sesion")
 
   const { id } = await params
