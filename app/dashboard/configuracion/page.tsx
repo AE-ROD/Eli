@@ -105,14 +105,15 @@ export default async function PaginaConfiguracion() {
 
   const [horariosActuales, horarioDelNegocio, servicios, productos, pagina, sillones, laboratorios, miMembresia, sedes, invitacionesPendientes] = await Promise.all([
     prisma.workSchedule.findMany({
-      where: { businessId: actor.businessId, memberId: horarioInicial },
+      // `sedeId: null`: el horario de una sede es de la sede (sección "Sedes y horarios"), no el general ni el de nadie.
+      where: { businessId: actor.businessId, memberId: horarioInicial, sedeId: null },
       orderBy: { dayOfWeek: "asc" },
     }),
     // Para quien ve sólo el suyo: si no tiene horario propio, atiende en el
     // del negocio, y eso es lo que se le muestra (no un ejemplo inventado).
     horarioInicial
       ? prisma.workSchedule.findMany({
-          where: { businessId: actor.businessId, memberId: null },
+          where: { businessId: actor.businessId, memberId: null, sedeId: null },
           orderBy: { dayOfWeek: "asc" },
         })
       : Promise.resolve(undefined),

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { diasConHorarioDelProfesional, filasDeQuienesAtienden, leerProfesionalesQueAtienden } from "@/lib/agenda-publica"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
+import { WHERE_HORARIO_VIGENTE } from "@/lib/sedes"
 
 /**
  * GET /api/reservar/[slug]/profesionales — quiénes atienden en la página
@@ -29,7 +30,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const [profesionales, todas] = await Promise.all([
     leerProfesionalesQueAtienden(prisma, negocio.id),
     prisma.workSchedule.findMany({
-      where: { businessId: negocio.id, active: true },
+      // Con sedes, las franjas de una sede desactivada quedan guardadas pero no cuentan.
+      where: { businessId: negocio.id, active: true, ...WHERE_HORARIO_VIGENTE },
       select: { memberId: true, dayOfWeek: true, startTime: true, endTime: true },
       orderBy: { startTime: "asc" },
     }),
