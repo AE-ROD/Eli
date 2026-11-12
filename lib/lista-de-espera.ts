@@ -24,6 +24,7 @@ import {
   normalizarEmail,
 } from "@/lib/reserva-publica"
 import { esRubroDental } from "@/lib/rubros"
+import { hayVariasSedes, leerSedesDeLaReserva, resolverSedeDeLaReserva } from "@/lib/sede-de-la-reserva"
 import { leerServiciosDeLaReserva, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
 import { hashDeToken } from "@/lib/tokens"
 import { urlBase } from "@/lib/url-base"
@@ -124,11 +125,14 @@ export function enlacesDelAviso(datos: {
   serviceId: string
   memberId: string | null
   fecha: string
+  /** La sede por la que se anotó (plan Independiente): el enlace la deja elegida. */
+  sedeId?: string | null
 }) {
   const base = urlBase()
   const slug = encodeURIComponent(datos.slug)
   const consulta = new URLSearchParams({ servicio: datos.serviceId, fecha: datos.fecha })
   if (datos.memberId) consulta.set("profesional", datos.memberId)
+  if (datos.sedeId) consulta.set("sede", datos.sedeId)
   const token = tokenDeInscripcion(datos.esperaId)
   return {
     enlaceReservar: `${base}/reservar/${slug}?${consulta}#reservar`,
@@ -155,6 +159,12 @@ export interface DatosDeInscripcion {
   whatsappConsentimiento?: boolean
   /** Clínica dental: la primera vez del paciente suma minutos a la duración. En otro rubro se ignora. */
   primeraVez?: boolean
+  /**
+   * La sede que eligió quien se anota (plan Independiente), tal como llegó del
+   * navegador: se revalida acá contra las sedes activas del negocio
+   * (`resolverSedeDeLaReserva`), igual que en `confirmar`.
+   */
+  sedeId?: string | null
 }
 
 export type ResultadoDeInscripcion =
@@ -163,6 +173,8 @@ export type ResultadoDeInscripcion =
   | { tipo: "no-encontrada" }
   | { tipo: "tope" }
   | { tipo: "rechazada"; error: string }
+  /** Con dos o más sedes activas, la sede falta o no es una sede activa del negocio: 400. */
+  | { tipo: "sede-no-valida" }
 
 /**
  * Anota a alguien en la lista de espera de un día. `negocio` es el del slug
@@ -195,6 +207,11 @@ export async function inscribirEnListaDeEspera(
   // Todos del negocio y activos, o el mismo 404 sin decir cuál falló.
   const servicios = await leerServiciosDeLaReserva(prisma, negocio.id, datos.servicioIds)
   if (!servicios) return { tipo: "no-encontrada" }
+  // La sede, revalidada contra las sedes activas de ESTE negocio. Con varias, el
+  // día se revisa con el horario de la elegida; con una sola o sin sedes, el de siempre.
+  const eleccionDeSede = resolverSedeDeLaReserva(await leerSedesDeLaReserva(prisma, negocio.id), datos.sedeId)
+  if (eleccionDeSede.tipo === "no-valida") return { tipo: "sede-no-valida" }
+  const sedeDelHorario = eleccionDeSede.sedeDelHorario
   const serviceIds = servicios.map((servicio) => servicio.id)
   const servicioId = serviceIds[0]
   const clinicaDental = esRubroDental(negocio.type)
@@ -219,6 +236,7 @@ export async function inscribirEnListaDeEspera(
     serviceIds,
     profesionalId: elegido,
     fecha: datos.fecha,
+    sedeId: sedeDelHorario,
   })
   if (reserva.tipo === "profesional-no-disponible") return { tipo: "no-encontrada" }
 
@@ -249,6 +267,7 @@ export async function inscribirEnListaDeEspera(
     zona,
     duracion,
     ahora,
+    sedeId: sedeDelHorario,
   })
   if (delNegocio !== "con-horas-posibles") return { tipo: "rechazada", error: MENSAJE_SIN_ATENCION }
 
@@ -286,6 +305,8 @@ export async function inscribirEnListaDeEspera(
         businessId: negocio.id,
         serviceId: servicioId,
         memberId,
+        // La sede que el servidor revalidó; sin sedes, queda NULL como siempre.
+        ...(eleccionDeSede.sede && { sedeId: eleccionDeSede.sede.id }),
         fecha: datos.fecha,
         nombre: datos.nombre,
         apellido: datos.apellido,
@@ -406,6 +427,7 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
         id: true,
         serviceId: true,
         memberId: true,
+        sedeId: true,
         nombre: true,
         apellido: true,
         email: true,
@@ -446,10 +468,15 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
       historial.set(envio.esperaId, actual)
     }
 
-    // Si hay hora libre se calcula una vez por servicio y profesional.
+    // Con dos o más sedes activas, la hora libre se busca en la sede por la que
+    // se anotó cada una (como la inscripción): una hora de otra sede no le sirve.
+    const conVariasSedes = hayVariasSedes(await leerSedesDeLaReserva(prisma, negocio.id))
+    const sedeDelHorario = (fila: { sedeId: string | null }) => (conVariasSedes ? fila.sedeId : null)
+
+    // Si hay hora libre se calcula una vez por servicio, profesional y sede.
     const hayHora = new Map<string, boolean>()
     const tieneHoraLibre = async (fila: (typeof inscripciones)[number]): Promise<boolean> => {
-      const llave = `${fila.serviceId}|${fila.memberId ?? ""}`
+      const llave = `${fila.serviceId}|${fila.memberId ?? ""}|${sedeDelHorario(fila) ?? ""}`
       const guardada = hayHora.get(llave)
       if (guardada !== undefined) return guardada
       let libre = false
@@ -459,6 +486,7 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
           serviceIds: [fila.serviceId],
           profesionalId: fila.memberId,
           fecha,
+          sedeId: sedeDelHorario(fila),
         })
         if (reserva.tipo === "ok") {
           const candidatos = reserva.candidatos.filter((candidato) => candidato.franjas.length > 0)
@@ -517,6 +545,7 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
               serviceId: fila.serviceId,
               memberId: fila.memberId,
               fecha,
+              sedeId: fila.sedeId,
             }),
           }),
       })
