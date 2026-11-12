@@ -5,6 +5,7 @@ import GoogleProvider from "next-auth/providers/google"
 import { prisma } from "@/lib/prisma"
 import { buscarContexto, contextoDeLaSesion, contextosDe, MAXIMO_DE_CONTEXTOS, type Contexto } from "@/lib/contextos"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
+import { REVALIDAR_CADA_MS } from "@/lib/renovacion-de-sesion"
 import { hashDeToken } from "@/lib/tokens"
 import { normalizarEmail } from "@/lib/validaciones"
 import bcrypt from "bcryptjs"
@@ -89,13 +90,14 @@ function contextoPedido(datos: unknown): unknown {
 }
 
 /**
- * Cada cuánto el token se vuelve a contrastar con la base. Con JWT no hay
- * sesión en el servidor que borrar: sin esta revisión, un miembro eliminado o
- * una contraseña restablecida dejaban la sesión vieja viva hasta que venciera.
- * Cinco minutos es el máximo que alguien conserva un acceso que ya perdió, a
- * cambio de una consulta cada cinco minutos por sesión y no una por petición.
+ * Cada cuánto el token se vuelve a contrastar con la base (definido en
+ * `lib/renovacion-de-sesion.ts`, que también fija cada cuánto el navegador
+ * renueva la cookie dentro del panel para que esto sea una consulta cada cinco
+ * minutos por sesión y no una por petición). Con JWT no hay sesión en el
+ * servidor que borrar: sin esta revisión, un miembro eliminado o una contraseña
+ * restablecida dejaban la sesión vieja viva hasta que venciera.
  */
-export const REVALIDAR_CADA_MS = 5 * 60 * 1000
+export { REVALIDAR_CADA_MS }
 
 /** Los códigos que la pantalla de iniciar sesión traduce (`errores-de-acceso.ts`). */
 const ERROR_CUENTA_CON_CONTRASENA = "CuentaConContrasena"
