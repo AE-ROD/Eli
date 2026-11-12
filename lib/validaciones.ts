@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { IDS_DE_RUBROS } from "@/lib/rubros"
+import { personasAlCrearElNegocio, PLANES, type PlanId } from "@/lib/planes"
 import { telefonoChileno } from "@/lib/campos-del-panel"
 import { LARGO_MAXIMO_NOMBRE_EN_FILA } from "@/lib/fila-virtual"
 import {
@@ -17,6 +18,12 @@ import { MAX_SERVICIOS_POR_RESERVA } from "@/lib/servicios-de-la-reserva"
  * uno nuevo con un rubro que el catálogo no conoce.
  */
 export const tipoNegocioSchema = z.enum(IDS_DE_RUBROS)
+
+/**
+ * El plan que se elige al crear la cuenta (`lib/planes.ts`): sólo los ids de la
+ * lista. Cualquier otra cosa, o nada, es "Elige un plan".
+ */
+export const planSchema = z.enum(PLANES, { errorMap: () => ({ message: "Elige un plan" }) })
 
 /**
  * Largos máximos de lo que llega de afuera (M10/F-06): sin tope, la página
@@ -102,13 +109,51 @@ export const nombreDelNegocioSchema = z
   .min(LARGO_MINIMO_DEL_NOMBRE_DEL_NEGOCIO, MENSAJES_DEL_NOMBRE_DEL_NEGOCIO.muyCorto)
   .max(LARGO_MAXIMO_DEL_NOMBRE_DEL_NEGOCIO, MENSAJES_DEL_NOMBRE_DEL_NEGOCIO.muyLargo)
 
-export const registroSchema = z.object({
-  nombre: nombreSchema("nombre"),
-  email: emailDeCuentaSchema,
-  contrasena: contrasenaNuevaSchema,
-  nombreNegocio: nombreDelNegocioSchema,
-  tipoNegocio: tipoNegocioSchema,
-})
+/**
+ * Cuántas personas trabajan en el negocio al crearlo (`Business.teamSize`),
+ * contando a quien se registra. Opcional: sin ella son una.
+ */
+const personasDelNegocioSchema = z
+  .number({ invalid_type_error: "La cantidad de personas no es válida" })
+  .int("La cantidad de personas no es válida")
+  .min(1, "La cantidad de personas tiene que ser al menos 1")
+  .max(500, "La cantidad de personas puede ser hasta 500")
+  .optional()
+
+/**
+ * Deja siempre `teamSize` según el plan (`personasAlCrearElNegocio`): en
+ * Independiente es una sola persona, la dueña (no se pregunta y lo que llegue
+ * se descarta); en Equipo, lo que se pidió o una.
+ */
+function conPersonasDelPlan<T extends { plan: PlanId; teamSize?: number }>(datos: T): Omit<T, "teamSize"> & { teamSize: number } {
+  return { ...datos, teamSize: personasAlCrearElNegocio(datos.plan, datos.teamSize) }
+}
+
+export const registroSchema = z
+  .object({
+    nombre: nombreSchema("nombre"),
+    email: emailDeCuentaSchema,
+    contrasena: contrasenaNuevaSchema,
+    nombreNegocio: nombreDelNegocioSchema,
+    tipoNegocio: tipoNegocioSchema,
+    plan: planSchema,
+    teamSize: personasDelNegocioSchema,
+  })
+  .transform(conPersonasDelPlan)
+
+/**
+ * Completar el perfil (quien entró con Google, o ya trabaja en otros negocios,
+ * y crea el suyo): el nombre y el rubro del negocio, el plan y, sólo con el plan
+ * Equipo, cuántas personas son. Sale siempre con `teamSize`: 1 en Independiente.
+ */
+export const completarPerfilSchema = z
+  .object({
+    nombreNegocio: nombreDelNegocioSchema,
+    tipoNegocio: tipoNegocioSchema,
+    plan: planSchema,
+    teamSize: personasDelNegocioSchema,
+  })
+  .transform(conPersonasDelPlan)
 
 /** Un id de servicio (`cuid()`, 25 caracteres): el tope corta un texto arbitrario antes de la base. */
 const servicioIdSchema = z

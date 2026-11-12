@@ -36,7 +36,7 @@ interface PropsDeGrupoDeOpciones<Valor extends string | number> {
  * cuando el radio de adentro lo tiene. Es el de `anillo-foco`, con las mismas
  * variables: contorno de 2px separado 2px y el halo del módulo.
  */
-const ANILLO_DE_LA_OPCION =
+export const ANILLO_DE_LA_OPCION =
   "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-(--anillo) has-focus-visible:shadow-[0_0_0_6px_var(--halo)]"
 
 const OPCION = cn(
@@ -131,7 +131,7 @@ export function GrupoDeOpciones<Valor extends string | number>({
 }
 
 /** El círculo de la derecha de cada fila: vacío, o con el punto navy si es la elegida. */
-function MarcaDeElegida({ elegida }: { elegida: boolean }) {
+export function MarcaDeElegida({ elegida }: { elegida: boolean }) {
   return (
     <span
       aria-hidden="true"

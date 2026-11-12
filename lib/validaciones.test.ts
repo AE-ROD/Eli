@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest"
 import {
+  completarPerfilSchema,
   nombreDelNegocioSchema,
+  planSchema,
   registroSchema,
   reservaSchema,
   listaDeEsperaSchema,
@@ -18,6 +20,7 @@ describe("registroSchema", () => {
     contrasena: "password123",
     nombreNegocio: "Spa Ana",
     tipoNegocio: "salon",
+    plan: "equipo",
   }
 
   it("acepta datos válidos", () => {
@@ -54,6 +57,106 @@ describe("registroSchema", () => {
     const { tipoNegocio: _sinRubro, ...sinRubro } = datosValidos
     expect(registroSchema.safeParse(sinRubro).success).toBe(false)
   })
+
+  it.each(["independiente", "equipo"])("acepta el plan %s", (plan) => {
+    const resultado = registroSchema.safeParse({ ...datosValidos, plan })
+    expect(resultado.success).toBe(true)
+    if (resultado.success) expect(resultado.data.plan).toBe(plan)
+  })
+
+  it("rechaza un registro sin plan, con el mensaje en español", () => {
+    const { plan: _sinPlan, ...sinPlan } = datosValidos
+    const resultado = registroSchema.safeParse(sinPlan)
+    expect(resultado.success).toBe(false)
+    if (!resultado.success) {
+      expect(resultado.error.issues).toHaveLength(1)
+      expect(resultado.error.issues[0].path).toEqual(["plan"])
+      expect(resultado.error.issues[0].message).toBe("Elige un plan")
+    }
+  })
+
+  it.each(["", "Equipo", "EQUIPO", " equipo", "pro", "clinica", null, 1, ["equipo"], { id: "equipo" }])(
+    "rechaza el plan %j: no es uno de la lista",
+    (plan) => {
+      const resultado = registroSchema.safeParse({ ...datosValidos, plan })
+      expect(resultado.success).toBe(false)
+      if (!resultado.success) expect(resultado.error.issues[0].message).toBe("Elige un plan")
+    }
+  )
+
+  describe("cuántas personas trabajan en el negocio (teamSize)", () => {
+    it("con el plan Independiente es siempre 1: no se pregunta, y lo que llegue se descarta", () => {
+      expect(registroSchema.parse({ ...datosValidos, plan: "independiente" }).teamSize).toBe(1)
+      expect(registroSchema.parse({ ...datosValidos, plan: "independiente", teamSize: 1 }).teamSize).toBe(1)
+      expect(registroSchema.parse({ ...datosValidos, plan: "independiente", teamSize: 8 }).teamSize).toBe(1)
+    })
+
+    it("con el plan Equipo se mantiene lo que se pidió, y 1 si no se pidió nada", () => {
+      expect(registroSchema.parse({ ...datosValidos, plan: "equipo", teamSize: 4 }).teamSize).toBe(4)
+      expect(registroSchema.parse({ ...datosValidos, plan: "equipo", teamSize: 500 }).teamSize).toBe(500)
+      expect(registroSchema.parse({ ...datosValidos, plan: "equipo" }).teamSize).toBe(1)
+    })
+
+    it.each([0, -1, 1.5, 501, "3", null, Number.NaN])("con el plan Equipo rechaza %j", (teamSize) => {
+      expect(registroSchema.safeParse({ ...datosValidos, plan: "equipo", teamSize }).success).toBe(false)
+    })
+  })
+})
+
+describe("planSchema", () => {
+  it("acepta los planes de la lista y nada más", () => {
+    expect(planSchema.safeParse("independiente").success).toBe(true)
+    expect(planSchema.safeParse("equipo").success).toBe(true)
+    expect(planSchema.safeParse("Independiente").success).toBe(false)
+    expect(planSchema.safeParse(undefined).success).toBe(false)
+  })
+
+  it.each([undefined, null, "", "pro", 0, {}])("dice «Elige un plan» con %j", (valor) => {
+    const resultado = planSchema.safeParse(valor)
+    expect(resultado.success).toBe(false)
+    if (!resultado.success) expect(resultado.error.issues[0].message).toBe("Elige un plan")
+  })
+})
+
+describe("completarPerfilSchema", () => {
+  const datosValidos = { nombreNegocio: "Spa Ana", tipoNegocio: "salon", plan: "equipo" }
+
+  it("acepta datos válidos y recorta el nombre", () => {
+    const resultado = completarPerfilSchema.safeParse({ ...datosValidos, nombreNegocio: "  Spa Ana  ", teamSize: 3 })
+    expect(resultado.success).toBe(true)
+    if (resultado.success) expect(resultado.data).toEqual({ ...datosValidos, teamSize: 3 })
+  })
+
+  it("el plan es obligatorio y dice «Elige un plan»", () => {
+    const { plan: _sinPlan, ...sinPlan } = datosValidos
+    const resultado = completarPerfilSchema.safeParse(sinPlan)
+    expect(resultado.success).toBe(false)
+    if (!resultado.success) expect(resultado.error.issues[0].message).toBe("Elige un plan")
+    expect(completarPerfilSchema.safeParse({ ...datosValidos, plan: "pro" }).success).toBe(false)
+  })
+
+  it("con el plan Independiente la cantidad de personas es 1, mande lo que mande el navegador", () => {
+    expect(completarPerfilSchema.parse({ ...datosValidos, plan: "independiente" }).teamSize).toBe(1)
+    expect(completarPerfilSchema.parse({ ...datosValidos, plan: "independiente", teamSize: 12 }).teamSize).toBe(1)
+  })
+
+  it("con el plan Equipo se mantiene como hoy: lo pedido, 1 sin pedir, de 1 a 500 enteros", () => {
+    expect(completarPerfilSchema.parse({ ...datosValidos, teamSize: 6 }).teamSize).toBe(6)
+    expect(completarPerfilSchema.parse(datosValidos).teamSize).toBe(1)
+    for (const teamSize of [0, -2, 2.5, 501, "4"]) {
+      expect(completarPerfilSchema.safeParse({ ...datosValidos, teamSize }).success).toBe(false)
+    }
+  })
+
+  it.each([
+    ["sin nombre de negocio", { nombreNegocio: undefined }],
+    ["con el nombre de un solo carácter", { nombreNegocio: "A" }],
+    ["con el nombre de 81 caracteres", { nombreNegocio: "a".repeat(81) }],
+    ["sin rubro", { tipoNegocio: undefined }],
+    ["con un rubro que no está en el catálogo", { tipoNegocio: "peluqueria-canina" }],
+  ])("rechaza %s", (_caso, cambio) => {
+    expect(completarPerfilSchema.safeParse({ ...datosValidos, ...cambio }).success).toBe(false)
+  })
 })
 
 describe("nombreDelNegocioSchema", () => {
@@ -76,7 +179,7 @@ describe("nombreDelNegocioSchema", () => {
   })
 
   it("el registro usa el mismo: los mensajes de siempre no cambian", () => {
-    const datos = { nombre: "Ana", email: "ana@example.com", contrasena: "password123", tipoNegocio: "salon" }
+    const datos = { nombre: "Ana", email: "ana@example.com", contrasena: "password123", tipoNegocio: "salon", plan: "equipo" }
     const corto = registroSchema.safeParse({ ...datos, nombreNegocio: "A" })
     expect(corto.success).toBe(false)
     if (!corto.success) expect(corto.error.issues[0].message).toBe("El nombre del negocio tiene que tener al menos 2 caracteres")
@@ -171,6 +274,7 @@ describe("largos máximos", () => {
     contrasena: "password123",
     nombreNegocio: "Spa Ana",
     tipoNegocio: "salon",
+    plan: "equipo",
   }
   const texto = (largo: number) => "a".repeat(largo)
   /** Un email válido de `largo` caracteres. */

@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
-import { tipoNegocioSchema } from "@/lib/validaciones"
+import { completarPerfilSchema } from "@/lib/validaciones"
 import { serviciosDeEjemplo } from "@/lib/servicios-de-ejemplo"
 import { materialesDeProtesisDeEjemplo } from "@/lib/protesis"
 import { verificarLimite } from "@/lib/rate-limit"
@@ -14,13 +14,6 @@ import { enviarBienvenida } from "@/lib/enviar-correo-de-prueba"
 import { registrarError } from "@/lib/registro-de-errores"
 import { COOKIE_DE_INVITACION, borrarCookieDeInvitacion, negocioQueInvita } from "@/lib/referidos"
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
-
-const schema = z.object({
-  // Sin espacios en las puntas, como en el registro: "  Salón  " no es otro nombre.
-  nombreNegocio: z.string().trim().min(2).max(80),
-  tipoNegocio: tipoNegocioSchema,
-  teamSize: z.number().int().min(1).max(500).default(1),
-})
 
 /**
  * Crea el negocio propio de la cuenta: el último paso de quien entró con
@@ -46,7 +39,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const cuerpo = await leerJsonConTope(request)
-    const { nombreNegocio, tipoNegocio, teamSize } = schema.parse(cuerpo)
+    // `teamSize` sale ya según el plan: una sola persona en Independiente,
+    // aunque el navegador mande otra cosa (`personasAlCrearElNegocio`).
+    const { nombreNegocio, tipoNegocio, plan, teamSize } = completarPerfilSchema.parse(cuerpo)
 
     const existente = await prisma.business.findFirst({ where: { userId } })
     if (existente) {
@@ -73,6 +68,7 @@ export async function POST(request: NextRequest) {
         data: {
           name: nombreNegocio,
           type: tipoNegocio,
+          plan,
           slug,
           teamSize,
           userId,

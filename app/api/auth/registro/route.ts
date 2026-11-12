@@ -15,11 +15,13 @@ import { materialesDeProtesisDeEjemplo } from "@/lib/protesis"
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 /**
- * Los campos del paso 1 de crear-cuenta (tus datos). Si el error es de uno de
- * éstos, la respuesta lo dice en `campo` y la pantalla vuelve a ese paso en
- * vez de mostrarlo debajo de los datos del negocio.
+ * Los campos de crear-cuenta, que se pide en tres pasos: tus datos (nombre,
+ * email, contraseña), tu negocio (nombre y tipo) y tu plan. Si el error es de
+ * uno de éstos, la respuesta lo dice en `campo` y la pantalla vuelve al paso
+ * donde está, o lo muestra debajo del plan, en vez de dejarlo como un aviso
+ * suelto sobre el botón.
  */
-type CampoDelRegistro = "nombre" | "email" | "contrasena" | "nombreNegocio" | "tipoNegocio"
+type CampoDelRegistro = "nombre" | "email" | "contrasena" | "nombreNegocio" | "tipoNegocio" | "plan"
 
 function datosInvalidos(mensaje: string, campo?: unknown) {
   return NextResponse.json(
@@ -77,6 +79,12 @@ export async function POST(request: NextRequest) {
             create: {
               name: datos.nombreNegocio,
               type: datos.tipoNegocio,
+              // El plan elegido y las personas que atienden, que el esquema ya
+              // dejó según el plan (`personasAlCrearElNegocio`): una sola en
+              // Independiente, aunque el navegador mande otra cosa. En la
+              // misma escritura anidada que la cuenta.
+              plan: datos.plan,
+              teamSize: datos.teamSize,
               slug,
               createdAt: ahora,
               pruebaTerminaEl: finDeLaPrueba(ahora),

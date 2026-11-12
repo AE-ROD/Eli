@@ -10,6 +10,7 @@
  */
 
 import { pedir, pedirConCodigo, pedirConCuerpo, conJson, type Resultado, type ResultadoConCodigo } from "@/lib/peticiones"
+import type { PlanId } from "@/lib/planes"
 import type { RubroId } from "@/lib/rubros"
 
 export interface DatosDeRegistro {
@@ -18,6 +19,8 @@ export interface DatosDeRegistro {
   contrasena: string
   nombreNegocio: string
   tipoNegocio: RubroId
+  /** El plan elegido (`lib/planes.ts`). El servidor lo valida: sólo acepta uno de los dos. */
+  plan: PlanId
   /**
    * El código del enlace de invitación (`?invita=`), tal como vino. El
    * servidor lo valida y, si no corresponde a un negocio, lo ignora.
@@ -33,7 +36,7 @@ export type ResultadoDeCrearCuenta =
   | { ok: true; datos: void }
   | { ok: false; error: string; campo: keyof DatosDeRegistro | null }
 
-const CAMPOS_DEL_REGISTRO: readonly string[] = ["nombre", "email", "contrasena", "nombreNegocio", "tipoNegocio"]
+const CAMPOS_DEL_REGISTRO: readonly string[] = ["nombre", "email", "contrasena", "nombreNegocio", "tipoNegocio", "plan"]
 
 /** Crea la cuenta y su negocio. No inicia sesión: eso lo hace la pantalla después. */
 export async function crearCuenta(datos: DatosDeRegistro): Promise<ResultadoDeCrearCuenta> {
@@ -50,8 +53,14 @@ export async function crearCuenta(datos: DatosDeRegistro): Promise<ResultadoDeCr
 export interface DatosDelNegocio {
   nombreNegocio: string
   tipoNegocio: RubroId
-  /** Cuántas personas trabajan en el negocio, contando a quien se registra. */
-  teamSize: number
+  /** El plan elegido (`lib/planes.ts`). El servidor lo valida: sólo acepta uno de los dos. */
+  plan: PlanId
+  /**
+   * Cuántas personas trabajan en el negocio, contando a quien se registra. Sólo
+   * en el plan Equipo: en Independiente no se manda (es una, y el servidor
+   * decide con `personasAlCrearElNegocio`).
+   */
+  teamSize?: number
 }
 
 /**

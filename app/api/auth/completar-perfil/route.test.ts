@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { pedidoFalso } from "@/pruebas/pedidos"
 import { Prisma } from "@prisma/client"
+import { PLANES } from "@/lib/planes"
 import { RUBROS } from "@/lib/rubros"
 import { serviciosDeEjemplo } from "@/lib/servicios-de-ejemplo"
 import { materialesDeProtesisDeEjemplo } from "@/lib/protesis"
@@ -84,7 +85,7 @@ describe("POST /api/auth/completar-perfil", () => {
   it.each(RUBROS.map((rubro) => rubro.id))("crea el negocio con el rubro %s del catálogo", async (tipoNegocio) => {
     const { POST } = await import("./route")
 
-    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio }))
+    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio, plan: "equipo" }))
 
     expect(res.status).toBe(200)
     expect(prismaMock.business.create).toHaveBeenCalledWith(
@@ -97,7 +98,7 @@ describe("POST /api/auth/completar-perfil", () => {
     async (tipoNegocio) => {
       const { POST } = await import("./route")
 
-      const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio }))
+      const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio, plan: "equipo" }))
 
       expect(res.status).toBe(200)
       expect(prismaMock.business.create).toHaveBeenCalledTimes(1)
@@ -111,7 +112,7 @@ describe("POST /api/auth/completar-perfil", () => {
   it("programa la bienvenida del negocio nuevo para después de responder", async () => {
     const { POST } = await import("./route")
 
-    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: RUBROS[0].id }))
+    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: RUBROS[0].id, plan: "equipo" }))
 
     expect(res.status).toBe(200)
     expect(mockAfter).toHaveBeenCalledTimes(1)
@@ -123,7 +124,7 @@ describe("POST /api/auth/completar-perfil", () => {
   it("responde sólo id, slug y nombre: ni el código de invitación, ni quién invitó, ni el userId", async () => {
     const { POST } = await import("./route")
 
-    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: RUBROS[0].id }))
+    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: RUBROS[0].id, plan: "equipo" }))
 
     expect(res.status).toBe(200)
     expect(prismaMock.business.create).toHaveBeenCalledWith(
@@ -135,7 +136,7 @@ describe("POST /api/auth/completar-perfil", () => {
     const { POST } = await import("./route")
     prismaMock.business.create.mockRejectedValueOnce(choqueDeUnico("userId"))
 
-    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: RUBROS[0].id }))
+    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: RUBROS[0].id, plan: "equipo" }))
 
     expect(res.status).toBe(409)
     expect(mockAfter).not.toHaveBeenCalled()
@@ -144,7 +145,7 @@ describe("POST /api/auth/completar-perfil", () => {
   it("fija el fin de la prueba DIAS_DE_PRUEBA días después de crearlo, y un código de invitación al azar", async () => {
     const { POST } = await import("./route")
 
-    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: RUBROS[0].id }))
+    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: RUBROS[0].id, plan: "equipo" }))
 
     expect(res.status).toBe(200)
     const { createdAt, pruebaTerminaEl, codigoInvitacion, slug } = prismaMock.business.create.mock.calls[0][0].data
@@ -158,7 +159,7 @@ describe("POST /api/auth/completar-perfil", () => {
     async (tipoNegocio) => {
       const { POST } = await import("./route")
 
-      const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio }))
+      const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio, plan: "equipo" }))
 
       expect(res.status).toBe(400)
       expect(prismaMock.business.create).not.toHaveBeenCalled()
@@ -168,7 +169,7 @@ describe("POST /api/auth/completar-perfil", () => {
   it("sin rubro tampoco crea el negocio", async () => {
     const { POST } = await import("./route")
 
-    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María" }))
+    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", plan: "equipo" }))
 
     expect(res.status).toBe(400)
     expect(prismaMock.business.create).not.toHaveBeenCalled()
@@ -179,7 +180,7 @@ describe("POST /api/auth/completar-perfil", () => {
 
     mockGetServerSession.mockResolvedValueOnce(null)
 
-    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon" }))
+    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon", plan: "equipo" }))
 
     expect(res.status).toBe(401)
     expect(prismaMock.business.findFirst).not.toHaveBeenCalled()
@@ -191,7 +192,7 @@ describe("POST /api/auth/completar-perfil", () => {
 
     mockVerificarLimite.mockResolvedValueOnce({ permitido: false, restantes: 0 })
 
-    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon" }))
+    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon", plan: "equipo" }))
 
     expect(res.status).toBe(429)
     expect(mockVerificarLimite).toHaveBeenCalledWith("auth", "completar-perfil:usuario-1")
@@ -204,7 +205,7 @@ describe("POST /api/auth/completar-perfil", () => {
 
     mockGetServerSession.mockResolvedValueOnce(null)
 
-    await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon" }))
+    await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon", plan: "equipo" }))
 
     expect(mockVerificarLimite).not.toHaveBeenCalled()
   })
@@ -218,7 +219,7 @@ describe("POST /api/auth/completar-perfil", () => {
   ])("rechaza %s: 400 y no se crea el negocio", async (_caso, campos) => {
     const { POST } = await import("./route")
 
-    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon", ...campos }))
+    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon", plan: "equipo", ...campos }))
 
     expect(res.status).toBe(400)
     expect(prismaMock.business.create).not.toHaveBeenCalled()
@@ -227,7 +228,7 @@ describe("POST /api/auth/completar-perfil", () => {
   it("acepta los bordes: nombre de 80 caracteres y equipo de 500", async () => {
     const { POST } = await import("./route")
 
-    const res = await POST(pedidoFalso({ nombreNegocio: "a".repeat(80), tipoNegocio: "salon", teamSize: 500 }))
+    const res = await POST(pedidoFalso({ nombreNegocio: "a".repeat(80), tipoNegocio: "salon", plan: "equipo", teamSize: 500 }))
 
     expect(res.status).toBe(200)
     expect(prismaMock.business.create).toHaveBeenCalledWith(
@@ -240,7 +241,7 @@ describe("POST /api/auth/completar-perfil", () => {
 
     prismaMock.business.create.mockRejectedValueOnce(choqueDeUnico("userId"))
 
-    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon" }))
+    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon", plan: "equipo" }))
 
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: "Ya tienes un negocio configurado" })
@@ -251,7 +252,7 @@ describe("POST /api/auth/completar-perfil", () => {
 
     prismaMock.business.create.mockRejectedValueOnce(choqueDeUnico("slug"))
 
-    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon" }))
+    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon", plan: "equipo" }))
 
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: "No se pudo crear el negocio, intenta de nuevo" })
@@ -260,7 +261,7 @@ describe("POST /api/auth/completar-perfil", () => {
   it("el slug sale del nombre", async () => {
     const { POST } = await import("./route")
 
-    await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon" }))
+    await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon", plan: "equipo" }))
 
     expect(prismaMock.business.create.mock.calls[0][0].data.slug).toBe("salon-maria")
   })
@@ -270,7 +271,7 @@ describe("POST /api/auth/completar-perfil", () => {
     async (nombreNegocio) => {
       const { POST } = await import("./route")
 
-      const res = await POST(pedidoFalso({ nombreNegocio, tipoNegocio: "salon" }))
+      const res = await POST(pedidoFalso({ nombreNegocio, tipoNegocio: "salon", plan: "equipo" }))
 
       expect(res.status).toBe(200)
       const { slug } = prismaMock.business.create.mock.calls[0][0].data
@@ -281,10 +282,10 @@ describe("POST /api/auth/completar-perfil", () => {
   it("el nombre se guarda sin espacios en las puntas, y sólo espacios no es un nombre", async () => {
     const { POST } = await import("./route")
 
-    await POST(pedidoFalso({ nombreNegocio: "   Salón María   ", tipoNegocio: "salon" }))
+    await POST(pedidoFalso({ nombreNegocio: "   Salón María   ", tipoNegocio: "salon", plan: "equipo" }))
     expect(prismaMock.business.create.mock.calls[0][0].data.name).toBe("Salón María")
 
-    const soloEspacios = await POST(pedidoFalso({ nombreNegocio: "      ", tipoNegocio: "salon" }))
+    const soloEspacios = await POST(pedidoFalso({ nombreNegocio: "      ", tipoNegocio: "salon", plan: "equipo" }))
     expect(soloEspacios.status).toBe(400)
     expect(prismaMock.business.create).toHaveBeenCalledTimes(1)
   })
@@ -303,11 +304,88 @@ describe("POST /api/auth/completar-perfil", () => {
     // La sesión trabaja como profesional en otro negocio; la cuenta no es dueña de ninguno.
     mockGetServerSession.mockResolvedValueOnce({ user: { id: "usuario-1", businessId: "negocio-ajeno", role: "worker", memberId: "m-1" } })
 
-    const res = await POST(pedidoFalso({ nombreNegocio: "Mi Salón", tipoNegocio: "salon" }))
+    const res = await POST(pedidoFalso({ nombreNegocio: "Mi Salón", tipoNegocio: "salon", plan: "equipo" }))
 
     expect(res.status).toBe(200)
     expect(prismaMock.business.findFirst).toHaveBeenCalledWith({ where: { userId: "usuario-1" } })
     expect(prismaMock.business.create.mock.calls[0][0].data.userId).toBe("usuario-1")
+  })
+})
+
+/**
+ * El plan se elige al crear el negocio (`lib/planes.ts`): se guarda con el resto
+ * del negocio, en la misma escritura, y decide cuántas personas atienden al
+ * nacer. El navegador no decide eso: en Independiente atiende una sola.
+ */
+describe("POST /api/auth/completar-perfil: plan", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetServerSession.mockResolvedValue(sesion)
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 4 })
+    prismaMock.business.findFirst.mockResolvedValue(null)
+    prismaMock.business.findUnique.mockResolvedValue(null)
+    prismaMock.business.create.mockImplementation(crearConSelect)
+  })
+
+  const negocioCreado = () => prismaMock.business.create.mock.calls[0][0].data
+
+  it.each(PLANES)("con el plan %s, el negocio nace con ese plan, en la misma escritura que sus servicios", async (plan) => {
+    const { POST } = await import("./route")
+
+    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon", plan }))
+
+    expect(res.status).toBe(200)
+    expect(prismaMock.business.create).toHaveBeenCalledTimes(1)
+    expect(negocioCreado().plan).toBe(plan)
+    expect(negocioCreado().services).toEqual({ create: serviciosDeEjemplo("salon") })
+  })
+
+  it.each([
+    ["sin plan", undefined],
+    ["un plan que no existe", "gratis"],
+    ["un plan con otra letra", "Equipo"],
+    ["un plan vacío", ""],
+    ["un plan que no es texto", 2],
+    ["un plan nulo", null],
+    ["un objeto", { $ne: null }],
+  ])("rechaza %s: 400 y no se crea el negocio", async (_caso, plan) => {
+    const { POST } = await import("./route")
+
+    const res = await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon", plan }))
+
+    expect(res.status).toBe(400)
+    expect(prismaMock.business.create).not.toHaveBeenCalled()
+  })
+
+  it("Independiente fija una sola persona aunque el navegador mande 12", async () => {
+    const { POST } = await import("./route")
+
+    const res = await POST(
+      pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon", plan: "independiente", teamSize: 12 })
+    )
+
+    expect(res.status).toBe(200)
+    expect(negocioCreado().plan).toBe("independiente")
+    expect(negocioCreado().teamSize).toBe(1)
+  })
+
+  it("Independiente sin cantidad de personas también queda en una", async () => {
+    const { POST } = await import("./route")
+
+    await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon", plan: "independiente" }))
+
+    expect(negocioCreado().teamSize).toBe(1)
+  })
+
+  it("Equipo respeta las personas que se pidieron, y sin pedir ninguna queda en una", async () => {
+    const { POST } = await import("./route")
+
+    await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon", plan: "equipo", teamSize: 12 }))
+    expect(negocioCreado().plan).toBe("equipo")
+    expect(negocioCreado().teamSize).toBe(12)
+
+    await POST(pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: "salon", plan: "equipo" }))
+    expect(prismaMock.business.create.mock.calls[1][0].data.teamSize).toBe(1)
   })
 })
 
@@ -320,7 +398,7 @@ describe("POST /api/auth/completar-perfil: invitación", () => {
 
   /** Un pedido con la cookie de invitación, si se pasa. */
   const conCookie = (valor?: string) => {
-    const pedido = pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: RUBROS[0].id })
+    const pedido = pedidoFalso({ nombreNegocio: "Salón María", tipoNegocio: RUBROS[0].id, plan: "equipo" })
     const cookies = { get: (nombre: string) => (nombre === "eli-invita" && valor !== undefined ? { value: valor } : undefined) }
     return Object.assign(pedido, { cookies })
   }

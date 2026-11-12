@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { NextRequest } from "next/server"
 import { Prisma } from "@prisma/client"
+import { PLANES } from "@/lib/planes"
 import { RUBROS } from "@/lib/rubros"
 import { serviciosDeEjemplo } from "@/lib/servicios-de-ejemplo"
 import { materialesDeProtesisDeEjemplo } from "@/lib/protesis"
@@ -43,6 +44,7 @@ const registroValido = {
   contrasena: "password123",
   nombreNegocio: "Spa Ana",
   tipoNegocio: "salon",
+  plan: "equipo",
 }
 
 /**
@@ -76,6 +78,100 @@ describe("POST /api/auth/registro: datos inválidos", () => {
     expect(cuerpo.error).toMatch(mensaje)
     expect(mockPrisma.user.findUnique).not.toHaveBeenCalled()
     expect(mockPrisma.user.create).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * El plan se elige al crear la cuenta (`lib/planes.ts`) y es obligatorio: el
+ * navegador sólo manda cuál, y el servidor acepta uno de los dos. Se guarda con
+ * el negocio, en la misma escritura anidada que la cuenta, y decide cuántas
+ * personas atienden al nacer: en Independiente, una sola.
+ */
+describe("POST /api/auth/registro: plan", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 4 })
+    mockPrisma.user.findUnique.mockResolvedValue(null)
+    mockPrisma.business.findUnique.mockResolvedValue(null)
+    mockPrisma.user.create.mockResolvedValue({
+      id: "usuario-1",
+      name: "Ana",
+      email: "ana@example.com",
+      business: { id: "negocio-1" },
+    })
+  })
+
+  const negocioCreado = () => mockPrisma.user.create.mock.calls[0][0].data.business.create
+
+  it.each(PLANES)("con el plan %s, el negocio nace con ese plan, en la misma escritura que la cuenta", async (plan) => {
+    const { POST } = await import("./route")
+
+    const respuesta = await POST(pedidoFalso({ ...registroValido, plan }))
+
+    expect(respuesta.status).toBe(200)
+    // Una sola llamada: usuario, negocio con su plan y servicios, todo o nada.
+    expect(mockPrisma.user.create).toHaveBeenCalledTimes(1)
+    expect(negocioCreado().plan).toBe(plan)
+    expect(negocioCreado().services).toEqual({ create: serviciosDeEjemplo(registroValido.tipoNegocio) })
+  })
+
+  it.each([
+    ["sin plan", undefined],
+    ["un plan que no existe", "gratis"],
+    ["un plan con otra letra", "Equipo"],
+    ["un plan vacío", ""],
+    ["un plan que no es texto", 2],
+    ["un plan nulo", null],
+    ["un objeto", { $ne: null }],
+  ])("rechaza %s: 400 con el campo `plan`, sin tocar la base", async (_caso, plan) => {
+    const { POST } = await import("./route")
+
+    const respuesta = await POST(pedidoFalso({ ...registroValido, plan }))
+
+    expect(respuesta.status).toBe(400)
+    expect(await respuesta.json()).toEqual({ error: "Elige un plan", campo: "plan" })
+    expect(mockPrisma.user.findUnique).not.toHaveBeenCalled()
+    expect(mockPrisma.user.create).not.toHaveBeenCalled()
+  })
+
+  it("Independiente fija una sola persona aunque el navegador mande 12", async () => {
+    const { POST } = await import("./route")
+
+    const respuesta = await POST(pedidoFalso({ ...registroValido, plan: "independiente", teamSize: 12 }))
+
+    expect(respuesta.status).toBe(200)
+    expect(negocioCreado().plan).toBe("independiente")
+    expect(negocioCreado().teamSize).toBe(1)
+  })
+
+  it("Independiente sin cantidad de personas también queda en una", async () => {
+    const { POST } = await import("./route")
+
+    await POST(pedidoFalso({ ...registroValido, plan: "independiente" }))
+
+    expect(negocioCreado().teamSize).toBe(1)
+  })
+
+  it("Equipo respeta las personas que se pidieron, y sin pedir ninguna queda en una", async () => {
+    const { POST } = await import("./route")
+
+    await POST(pedidoFalso({ ...registroValido, plan: "equipo", teamSize: 12 }))
+    expect(negocioCreado().plan).toBe("equipo")
+    expect(negocioCreado().teamSize).toBe(12)
+
+    await POST(pedidoFalso({ ...registroValido, plan: "equipo" }))
+    expect(mockPrisma.user.create.mock.calls[1][0].data.business.create.teamSize).toBe(1)
+  })
+
+  it("el rubro, la prueba de 7 días y el código de invitación siguen igual con cualquier plan", async () => {
+    const { POST } = await import("./route")
+
+    await POST(pedidoFalso({ ...registroValido, plan: "independiente" }))
+
+    const { type, createdAt, pruebaTerminaEl, codigoInvitacion } = negocioCreado()
+    expect(type).toBe(registroValido.tipoNegocio)
+    expect(pruebaTerminaEl.getTime() - createdAt.getTime()).toBe(7 * 24 * 60 * 60 * 1000)
+    expect(codigoInvitacion).toMatch(/^[0-9a-hjkmnp-tv-z]{10}$/)
   })
 })
 

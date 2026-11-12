@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
 import { SIN_CONEXION } from "@/lib/peticiones"
-import { aceptarInvitacion, crearCuenta, invitacionNoValida, leerInvitacion } from "./_datos"
+import { aceptarInvitacion, completarPerfil, crearCuenta, invitacionNoValida, leerInvitacion } from "./_datos"
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -123,11 +123,25 @@ describe("leerInvitacion", () => {
 })
 
 describe("crearCuenta", () => {
-  const datos = { nombre: "Ana", email: "a@x.com", contrasena: "secreta123", nombreNegocio: "Salón", tipoNegocio: "salon" as const }
+  const datos = { nombre: "Ana", email: "a@x.com", contrasena: "secreta123", nombreNegocio: "Salón", tipoNegocio: "salon" as const, plan: "equipo" as const }
 
   it("el error trae el campo que dijo el servidor, para volver a su paso", async () => {
     simularRespuesta(json({ error: "Ya existe una cuenta con ese correo", campo: "email" }, 400))
     expect(await crearCuenta(datos)).toEqual({ ok: false, error: "Ya existe una cuenta con ese correo", campo: "email" })
+  })
+
+  it("un error del plan trae el campo `plan`, para mostrarlo debajo de las tarjetas", async () => {
+    simularRespuesta(json({ error: "Elige un plan", campo: "plan" }, 400))
+    expect(await crearCuenta(datos)).toEqual({ ok: false, error: "Elige un plan", campo: "plan" })
+  })
+
+  it("manda el plan junto con el resto del registro", async () => {
+    const fetchFalso = simularRespuesta(json({ id: "u-1" }))
+
+    await crearCuenta({ ...datos, plan: "independiente" })
+
+    const cuerpo = JSON.parse(fetchFalso.mock.calls[0][1].body as string)
+    expect(cuerpo).toMatchObject({ tipoNegocio: "salon", plan: "independiente" })
   })
 
   it("un campo que no es del registro, o ninguno, da null", async () => {
@@ -141,5 +155,26 @@ describe("crearCuenta", () => {
   it("con la cuenta creada, ok", async () => {
     simularRespuesta(json({ id: "u-1" }))
     expect(await crearCuenta(datos)).toEqual({ ok: true, datos: undefined })
+  })
+})
+
+describe("completarPerfil", () => {
+  it("manda el plan, y las personas sólo si se pidieron", async () => {
+    const fetchFalso = simularRespuesta(json({ id: "n-1" }))
+
+    await completarPerfil({ nombreNegocio: "Salón", tipoNegocio: "salon", plan: "equipo", teamSize: 3 })
+    expect(JSON.parse(fetchFalso.mock.calls[0][1].body as string)).toEqual({
+      nombreNegocio: "Salón",
+      tipoNegocio: "salon",
+      plan: "equipo",
+      teamSize: 3,
+    })
+
+    await completarPerfil({ nombreNegocio: "Salón", tipoNegocio: "salon", plan: "independiente" })
+    expect(JSON.parse(fetchFalso.mock.calls[1][1].body as string)).toEqual({
+      nombreNegocio: "Salón",
+      tipoNegocio: "salon",
+      plan: "independiente",
+    })
   })
 })
