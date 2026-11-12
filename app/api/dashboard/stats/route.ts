@@ -17,6 +17,7 @@ import { iniciosDeMesEn } from "@/lib/reportes"
 import { diaDeLaSemana, fechaYMinutosEn, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
 import { LLEGADA_DE_LA_CITA, conLlegada } from "@/lib/por-confirmar"
 import { ESTADOS_QUE_LIBERAN } from "@/lib/ocupacion"
+import { WHERE_HORARIO_VIGENTE } from "@/lib/sedes"
 
 /**
  * Las citas que cuentan en el día: las que ocupan su horario. Una cancelada
@@ -149,6 +150,8 @@ export async function GET() {
               // (configuracion/horarios): para esta vista es lo mismo que no
               // tener horario cargado, así que no cuenta como franja de hoy.
               active: true,
+              // Las franjas de una sede desactivada quedan guardadas, no cuentan.
+              ...WHERE_HORARIO_VIGENTE,
             },
             select: { startTime: true, endTime: true },
             orderBy: { startTime: "asc" },

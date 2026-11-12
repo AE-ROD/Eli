@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { actorDeSesion, veLaListaDeInicio } from "@/lib/permisos"
 import { pruebaTerminada, type DatosDeListaDeInicio } from "@/lib/lista-de-inicio"
+import { WHERE_HORARIO_VIGENTE } from "@/lib/sedes"
 
 /**
  * Los cuatro pasos de "Deja tu negocio listo", hechos o no, y si la prueba ya
@@ -25,7 +26,8 @@ export async function GET() {
       where: { id: businessId },
       select: { pruebaTerminaEl: true, enlaceCompartidoAt: true },
     }),
-    prisma.workSchedule.findFirst({ where: { businessId, active: true }, select: { id: true } }),
+    // Con sedes cuenta el horario de una sede activa; el de una desactivada queda guardado pero no es "tener horario".
+    prisma.workSchedule.findFirst({ where: { businessId, active: true, ...WHERE_HORARIO_VIGENTE }, select: { id: true } }),
     prisma.service.findFirst({ where: { businessId, active: true }, select: { id: true } }),
     prisma.appointment.findFirst({ where: { businessId, source: "reserva-publica" }, select: { id: true } }),
   ])
