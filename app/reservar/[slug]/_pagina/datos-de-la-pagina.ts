@@ -18,6 +18,7 @@ import {
   type ColorDelLocal,
 } from "@/lib/pagina-del-negocio"
 import { prisma } from "@/lib/prisma"
+import { servicioIdsPublicos } from "@/lib/servicios-del-profesional"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
 
 /**
@@ -25,7 +26,9 @@ import { zonaDelNegocio } from "@/lib/zona-horaria"
  * slug. Es público y sin sesión: el `select` trae sólo lo que se puede
  * mostrar a cualquiera. Ni correos, ni teléfonos de las personas del equipo,
  * ni comisiones, ni ids internos más allá del `memberId` que usa "Reservar
- * con…" (el mismo que la reserva ya acepta).
+ * con…" (el mismo que la reserva ya acepta) y los ids de los servicios activos
+ * de este negocio que hace cada uno (los mismos que ya publica
+ * `/api/reservar/[slug]/profesionales`).
  *
  * Con `cache`: la página, sus metadatos y la imagen para compartir lo piden
  * en la misma petición y se lee una sola vez.
@@ -36,6 +39,12 @@ export interface ProfesionalPublico {
   nombre: string
   especialidad: string | null
   foto: string | null
+  /**
+   * Los servicios que hace: `null` si hace todos (no tiene servicios
+   * acotados). Con la lista, sólo servicios ACTIVOS de este negocio, en el
+   * orden del catálogo; vacía si ninguno de los que tenía sigue activo.
+   */
+  servicioIds: string[] | null
 }
 
 export interface ServicioDeLaPagina {
@@ -112,6 +121,12 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
   // Los mismos profesionales que lee la reserva (rol y tope): si hay alguno,
   // la reserva ofrece sólo sus horas, y el horario publicado es el de ellos.
   const profesionales = await leerProfesionalesQueAtienden(prisma, negocio.id)
+  // Qué hace cada uno, de lo que ya leyó la reserva (`MemberService` del
+  // mismo negocio), acotado a los servicios activos que esta página lista.
+  const idsDeServiciosActivos = negocio.services.map((servicio) => servicio.id)
+  const serviciosDeCadaUno = new Map(
+    profesionales.map((profesional) => [profesional.id, servicioIdsPublicos(profesional.serviceIds, idsDeServiciosActivos)])
+  )
 
   const usuarioDeInstagram = normalizarInstagram(negocio.instagram)
   const enlaceDelPerfil = enlaceDeInstagram(negocio.instagram)
@@ -129,13 +144,16 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
     instagram: usuarioDeInstagram && enlaceDelPerfil ? { usuario: usuarioDeInstagram, enlace: enlaceDelPerfil } : null,
     mapas: enlacesDeMapa(negocio.address, negocio.comuna),
     medios: mediosParaMostrar(negocio.mediosDePago),
+    // Sólo quien la reserva también lee (`profesionales`): de quien queda
+    // fuera del tope no se sabe qué hace, y tampoco se le podría reservar.
     equipo: negocio.members
-      .filter((miembro) => apareceEnLaPagina(miembro.role))
+      .filter((miembro) => apareceEnLaPagina(miembro.role) && serviciosDeCadaUno.has(miembro.id))
       .map((miembro) => ({
         id: miembro.id,
         nombre: miembro.user.name,
         especialidad: textoONull(miembro.especialidad),
         foto: imagenPublica(miembro.fotoUrl),
+        servicioIds: serviciosDeCadaUno.get(miembro.id) ?? null,
       })),
     servicios: negocio.services,
     // Exactamente el que la reserva ofrece (QA#4): con profesionales, la

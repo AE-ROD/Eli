@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest"
 import {
+  avisoDeServiciosQuitados,
   erroresDeTusDatos,
   profesionalSigueValiendo,
+  separarLosQueNoHace,
   serviciosQueNoSePuedenSumar,
+  serviciosQueVe,
 } from "./reglas-de-la-reserva"
 
 /*
@@ -14,6 +17,93 @@ const equipo = [
   { id: "bea", servicioIds: ["corte", "unas"] },
 ]
 const servicios = ["color", "corte", "unas"]
+
+/* El catálogo de un salón de barrio, con nombre, para mirar qué ve cada profesional. */
+const catalogo = [
+  { id: "corte", name: "Corte" },
+  { id: "barba", name: "Barba" },
+  { id: "tinte", name: "Tinte" },
+  { id: "higiene", name: "Higiene" },
+]
+const hace = (...servicioIds: string[]) => ({ id: "carla", servicioIds })
+
+describe("serviciosQueVe", () => {
+  it("sin profesional ('cualquiera') ve todos los servicios", () => {
+    expect(serviciosQueVe(null, catalogo)).toEqual(catalogo)
+  })
+
+  it("un profesional con servicios acotados ve sólo esos, en el orden del catálogo", () => {
+    expect(serviciosQueVe(hace("tinte", "corte"), catalogo)).toEqual([catalogo[0], catalogo[2]])
+  })
+
+  it("servicioIds en null: hace todos, los ve todos", () => {
+    expect(serviciosQueVe({ id: "pedro", servicioIds: null }, catalogo)).toEqual(catalogo)
+  })
+
+  it("ignora un id que no está en el catálogo (un servicio inactivo)", () => {
+    expect(serviciosQueVe(hace("corte", "viejo-inactivo"), catalogo)).toEqual([catalogo[0]])
+  })
+
+  it("quien no hace ninguno de los que hay no ve ninguno", () => {
+    expect(serviciosQueVe(hace(), catalogo)).toEqual([])
+  })
+
+  it("no cambia la lista que recibe", () => {
+    const original = [...catalogo]
+    serviciosQueVe(hace("corte"), original)
+    serviciosQueVe(null, original).pop()
+    expect(original).toEqual(catalogo)
+  })
+})
+
+describe("separarLosQueNoHace", () => {
+  const elegidos = [catalogo[2], catalogo[0], catalogo[1]] // tinte, corte, barba: en ese orden se hacen
+
+  it("deja los que hace, en el orden en que se eligieron, y separa los que no", () => {
+    expect(separarLosQueNoHace(hace("corte", "barba"), elegidos)).toEqual({
+      quedan: [catalogo[0], catalogo[1]],
+      quitados: [catalogo[2]],
+    })
+  })
+
+  it("si hace todos los elegidos no quita nada", () => {
+    expect(separarLosQueNoHace(hace("corte", "barba", "tinte"), elegidos)).toEqual({ quedan: elegidos, quitados: [] })
+    expect(separarLosQueNoHace({ id: "pedro", servicioIds: null }, elegidos)).toEqual({ quedan: elegidos, quitados: [] })
+  })
+
+  it("sin profesional ('cualquiera') no quita nada", () => {
+    expect(separarLosQueNoHace(null, elegidos)).toEqual({ quedan: elegidos, quitados: [] })
+  })
+
+  it("si no hace ninguno, quita todos", () => {
+    expect(separarLosQueNoHace(hace("higiene"), elegidos)).toEqual({ quedan: [], quitados: elegidos })
+  })
+
+  it("sin nada elegido no hay nada que quitar", () => {
+    expect(separarLosQueNoHace(hace("corte"), [])).toEqual({ quedan: [], quitados: [] })
+  })
+})
+
+describe("avisoDeServiciosQuitados", () => {
+  it("uno: 'lo hace'", () => {
+    expect(avisoDeServiciosQuitados("Carla", [catalogo[1]])).toBe("Quitamos Barba porque Carla no lo hace.")
+  })
+
+  it("varios: 'los hace', con 'y' antes del último", () => {
+    expect(avisoDeServiciosQuitados("Carla", [catalogo[1], catalogo[2]])).toBe("Quitamos Barba y Tinte porque Carla no los hace.")
+    expect(avisoDeServiciosQuitados("Carla", [catalogo[0], catalogo[1], catalogo[2]])).toBe(
+      "Quitamos Corte, Barba y Tinte porque Carla no los hace."
+    )
+  })
+
+  it("'e' en vez de 'y' ante un nombre que empieza con i", () => {
+    expect(avisoDeServiciosQuitados("Carla", [catalogo[0], catalogo[3]])).toBe("Quitamos Corte e Higiene porque Carla no los hace.")
+  })
+
+  it("sin nada quitado, ningún aviso", () => {
+    expect(avisoDeServiciosQuitados("Carla", [])).toBe("")
+  })
+})
 
 describe("serviciosQueNoSePuedenSumar", () => {
   it("sin nada elegido, sólo bloquea lo que nadie hace", () => {

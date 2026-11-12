@@ -3,11 +3,11 @@
 import { useId } from "react"
 import { UsersRound } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { ProfesionalPublico } from "../_datos"
+import type { ProfesionalDelEquipo } from "../_datos"
 
 interface PropsDeSelectorProfesional {
-  /** Los que hacen el servicio elegido. */
-  profesionales: ProfesionalPublico[]
+  /** Entre quienes se elige: en el primer paso, el equipo; en el segundo, los que hacen lo elegido. */
+  profesionales: Pick<ProfesionalDelEquipo, "id" | "nombre" | "especialidad" | "fotoUrl">[]
   /** `null`: cualquiera disponible. */
   elegido: string | null
   onElegir: (profesionalId: string | null) => void
@@ -35,8 +35,10 @@ function iniciales(nombre: string): string {
 
 /**
  * "¿Con quién?": cualquiera disponible (lo primero, y lo que viene elegido)
- * o una persona del equipo que hace el servicio. Son botones que dicen cuál
- * está elegido (`aria-pressed`), como los días y las horas del calendario.
+ * o una persona del equipo. Son botones que dicen cuál está elegido
+ * (`aria-pressed`), como los días y las horas del calendario. Se usa en el
+ * primer paso (elegir a quién, y de ahí qué servicios) y en el segundo (para
+ * cambiar de profesional sin cambiar los servicios).
  */
 export function SelectorProfesional({
   profesionales,

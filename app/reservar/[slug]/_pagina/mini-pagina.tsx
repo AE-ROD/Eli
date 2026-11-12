@@ -10,6 +10,7 @@ import { formatearMonto } from "@/lib/dinero"
 import { formatearDuracionDeServicio } from "@/lib/fechas"
 import { plazoParaQuienReserva } from "@/lib/gestion-de-cita"
 import { CATEGORIA_SIN_NOMBRE, horarioParaMostrar, iniciales, serviciosPorCategoria } from "@/lib/pagina-del-negocio"
+import { haceAlgunServicio, textoDeLoQueHace } from "@/lib/servicios-del-profesional"
 import { cn } from "@/lib/utils"
 import type { PaginaDelNegocio, ProfesionalPublico } from "./datos-de-la-pagina"
 
@@ -41,7 +42,7 @@ export function MiniPagina({ pagina, ahora }: PropsDeMiniPagina) {
   return (
     <div className="flex flex-col gap-4 md:gap-6">
       <Cabecera pagina={pagina} ahora={ahora} />
-      {pagina.equipo.length > 0 && <Equipo equipo={pagina.equipo} color={pagina.color.clave} />}
+      {pagina.equipo.length > 0 && <Equipo equipo={pagina.equipo} servicios={pagina.servicios} color={pagina.color.clave} />}
       {pagina.servicios.length > 0 && <Servicios servicios={pagina.servicios} />}
       <Datos pagina={pagina} />
     </div>
@@ -173,45 +174,63 @@ function Bloque({ titulo, children, className, id }: PropsDeBloque) {
   )
 }
 
-function Equipo({ equipo, color }: { equipo: ProfesionalPublico[]; color: PaginaDelNegocio["color"]["clave"] }) {
+function Equipo({
+  equipo,
+  servicios,
+  color,
+}: {
+  equipo: ProfesionalPublico[]
+  servicios: PaginaDelNegocio["servicios"]
+  color: PaginaDelNegocio["color"]["clave"]
+}) {
   return (
     <Bloque titulo="Equipo">
       <ul className="mt-5 grid gap-3 sm:grid-cols-2">
         {equipo.map((profesional) => {
           const primerNombre = profesional.nombre.trim().split(/\s+/)[0] || profesional.nombre
+          // Quien ya no hace ninguno de los servicios que hay no se puede reservar: sin botón que no lleve a nada.
+          const sePuedeReservar = haceAlgunServicio(profesional.servicioIds, servicios)
           return (
             <li key={profesional.id} className="flex flex-col gap-4 rounded-[24px] bg-superficie p-4 squircle">
-              <div className="flex items-center gap-3">
-                <span
-                  className={cn(
-                    "relative grid size-14 shrink-0 place-items-center overflow-hidden rounded-full text-lg font-medium select-none",
-                    CLASES_DEL_LOCAL[color]
-                  )}
-                >
-                  {profesional.foto ? (
-                    <Image src={profesional.foto} alt="" fill sizes="56px" className="object-cover" />
-                  ) : (
-                    <span aria-hidden="true">{iniciales(profesional.nombre)}</span>
-                  )}
-                </span>
-                <span className="min-w-0">
-                  <span className="block font-medium break-words text-navy">{profesional.nombre}</span>
-                  {profesional.especialidad && (
-                    <span className="block text-sm break-words text-texto-2">{profesional.especialidad}</span>
-                  )}
-                </span>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3">
+                  <span
+                    className={cn(
+                      "relative grid size-14 shrink-0 place-items-center overflow-hidden rounded-full text-lg font-medium select-none",
+                      CLASES_DEL_LOCAL[color]
+                    )}
+                  >
+                    {profesional.foto ? (
+                      <Image src={profesional.foto} alt="" fill sizes="56px" className="object-cover" />
+                    ) : (
+                      <span aria-hidden="true">{iniciales(profesional.nombre)}</span>
+                    )}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block font-medium break-words text-navy">{profesional.nombre}</span>
+                    {profesional.especialidad && (
+                      <span className="block text-sm break-words text-texto-2">{profesional.especialidad}</span>
+                    )}
+                  </span>
+                </div>
+                {/* Qué hace: sus servicios por nombre (con tope) o "todos". Debajo de la foto, a todo el ancho de la tarjeta. */}
+                <p className="text-sm text-pretty break-words text-texto-2">{textoDeLoQueHace(profesional.servicioIds, servicios)}</p>
               </div>
               {/*
                 Un `<a>` común y no `Link`: carga la página con el profesional en
-                la dirección, así el flujo de reserva nace con él elegido.
+                la dirección, así el flujo de reserva nace con él elegido. Con
+                `mt-auto` los botones de una fila quedan alineados abajo aunque
+                la línea de "Hace:" ocupe más o menos renglones.
               */}
-              <a
-                href={`?profesional=${encodeURIComponent(profesional.id)}#${ANCLA_DE_RESERVA}`}
-                aria-label={`Reservar con ${profesional.nombre}`}
-                className={clasesDeBoton({ variante: "secundario", tamano: "sm", className: "w-full bg-tarjeta" })}
-              >
-                <span className="truncate">Reservar con {primerNombre}</span>
-              </a>
+              {sePuedeReservar && (
+                <a
+                  href={`?profesional=${encodeURIComponent(profesional.id)}#${ANCLA_DE_RESERVA}`}
+                  aria-label={`Reservar con ${profesional.nombre}`}
+                  className={clasesDeBoton({ variante: "secundario", tamano: "sm", className: "mt-auto w-full bg-tarjeta" })}
+                >
+                  <span className="truncate">Reservar con {primerNombre}</span>
+                </a>
+              )}
             </li>
           )
         })}

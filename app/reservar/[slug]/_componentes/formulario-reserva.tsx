@@ -31,6 +31,7 @@ import {
 } from "@/lib/reserva-publica"
 import { RUBRO_DENTAL } from "@/lib/rubros"
 import { MAX_SERVICIOS_POR_RESERVA, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
+import { haceAlgunServicio } from "@/lib/servicios-del-profesional"
 import { cn } from "@/lib/utils"
 import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import { fechaYMinutosEn } from "@/lib/zona-horaria"
@@ -45,16 +46,25 @@ import { SelectorFechaHora, fechaParaLeer } from "./selector-fecha-hora"
 import { FormularioListaDeEspera } from "./formulario-lista-de-espera"
 import { SelectorProfesional } from "./selector-profesional"
 import {
+  avisoDeServiciosQuitados,
   erroresDeTusDatos,
   haceElServicio,
   haceTodos,
   ORDEN_DE_TUS_DATOS,
   profesionalSigueValiendo,
+  separarLosQueNoHace,
   serviciosQueNoSePuedenSumar,
+  serviciosQueVe,
   type ErroresDeTusDatos,
   type TusDatos,
 } from "./reglas-de-la-reserva"
-import { confirmarReserva, leerDisponibilidad, leerProfesionales, type ProfesionalPublico } from "../_datos"
+import {
+  confirmarReserva,
+  leerDisponibilidad,
+  leerProfesionales,
+  type ProfesionalDelEquipo,
+  type ProfesionalPublico,
+} from "../_datos"
 
 interface HorarioPublico {
   dayOfWeek: number
@@ -75,6 +85,13 @@ interface PropsDeFormularioReserva {
   /** La zona del negocio (IANA): el calendario cuenta "hoy" en su reloj. */
   zona: string
   servicios: ServicioPublico[]
+  /**
+   * El equipo que atiende, tal como lo leyó el servidor con la página
+   * (`leerPaginaDelNegocio`): con qué servicios hace cada uno. Es lo que
+   * permite elegir con quién y filtrar los servicios desde la primera pintura,
+   * sin esperar a `/profesionales` (que además trae los días de cada uno).
+   */
+  equipo: ProfesionalDelEquipo[]
   horarios: HorarioPublico[]
   /** Si el negocio ofrece "Avísame si se libera una hora" (#74). */
   listaDeEsperaActiva: boolean
@@ -107,7 +124,7 @@ type Paso = 1 | 2 | 3
 const FUNDIDO = { duration: DURACION.pildora, ease: CURVA.fundido }
 
 /** Hace todos los elegidos (#89a): la reserva es con una sola persona. */
-const haceLosServicios = (profesional: ProfesionalPublico, elegidos: ServicioPublico[]) =>
+const haceLosServicios = (profesional: ProfesionalDelEquipo, elegidos: ServicioPublico[]) =>
   haceTodos(
     profesional,
     elegidos.map((servicio) => servicio.id)
@@ -138,6 +155,7 @@ export function FormularioReserva({
   clinicaDental = false,
   zona,
   servicios,
+  equipo: equipoDeLaPagina,
   horarios,
   listaDeEsperaActiva,
   plazoDeCambios,
@@ -157,13 +175,31 @@ export function FormularioReserva({
   const [seleccionados, setSeleccionados] = useState<ServicioPublico[]>(servicioDeLaUrl ? [servicioDeLaUrl] : [])
   const servicioSeleccionado = comoUnServicio(seleccionados)
   // `?profesional=<id>` (el "Reservar con …" de la mini página, y el aviso de
-  // la lista de espera) lo deja elegido de entrada. Si no es de este negocio,
-  // no aparece en la lista y se ignora: el servidor igual lo rechazaría.
+  // la lista de espera) lo deja elegido de entrada, ya en la primera pintura:
+  // se revisa contra el equipo que trajo el servidor, no contra `/profesionales`.
+  // Si no es de este negocio, no hace ninguno de los servicios que hay o no hace
+  // el de `?servicio=`, se ignora: el servidor igual lo rechazaría.
   const profesionalDeLaUrl = parametros.get("profesional")
   const [profesionales, setProfesionales] = useState<ProfesionalPublico[]>([])
-  // Si ya se leyó el equipo: hasta entonces el calendario usa el horario publicado.
+  // Si ya se leyó `/profesionales`: hasta entonces el calendario usa el horario
+  // publicado (los días de cada uno vienen de esa lectura).
   const [equipoLeido, setEquipoLeido] = useState(false)
-  const [profesionalId, setProfesionalId] = useState<string | null>(profesionalDeLaUrl)
+  // Quienes atienden: lo que trajo la página, y lo que responde `/profesionales` cuando llega.
+  const equipo: ProfesionalDelEquipo[] = equipoLeido ? profesionales : equipoDeLaPagina
+  const [profesionalId, setProfesionalId] = useState<string | null>(() =>
+    profesionalSigueValiendo(
+      profesionalDeLaUrl,
+      equipoDeLaPagina.filter((profesional) => haceAlgunServicio(profesional.servicioIds, servicios)),
+      servicioDeLaUrl ? [servicioDeLaUrl.id] : []
+    )
+      ? profesionalDeLaUrl
+      : null
+  )
+  // En el segundo paso, con alguien ya elegido en el primero, se muestra "Con X · Cambiar";
+  // el selector completo aparece al querer cambiar (o si todavía es "cualquiera").
+  const [cambiandoProfesional, setCambiandoProfesional] = useState(false)
+  // Lo que se quitó del paso 1 al elegir a alguien que no lo hace (se dice, discreto).
+  const [avisoDeServicios, setAvisoDeServicios] = useState("")
   const [profesionalAsignado, setProfesionalAsignado] = useState<string | null>(null)
   const [enlaceDeGestion, setEnlaceDeGestion] = useState<string | null>(null)
   // Si la cita quedó dentro del plazo, el enlace ya no la deja cambiar (QA#8).
@@ -229,20 +265,20 @@ export function FormularioReserva({
   }, [slug])
 
   // Un profesional elegido que no es del equipo, o que no hace todo lo
-  // elegido (el de `?profesional=` con un `?servicio=` que no hace, o el
-  // equipo que llegó después de elegir), no queda elegido: vuelve a
-  // "cualquiera". Se ajusta al renderizar, con el equipo ya leído.
+  // elegido (el equipo que llegó de `/profesionales` después de elegir), no
+  // queda elegido: vuelve a "cualquiera". Se ajusta al renderizar.
   const servicioIds = seleccionados.map((servicio) => servicio.id)
-  if (equipoLeido && !profesionalSigueValiendo(profesionalId, profesionales, servicioIds)) setProfesionalId(null)
+  if (!profesionalSigueValiendo(profesionalId, equipo, servicioIds)) setProfesionalId(null)
 
-  const profesionalElegido = profesionales.find((profesional) => profesional.id === profesionalId) ?? null
-  // Con un profesional elegido, sólo los servicios que hace.
-  const serviciosVisibles = profesionalElegido
-    ? servicios.filter((servicio) => haceElServicio(profesionalElegido, servicio.id))
-    : servicios
+  const profesionalElegido = equipo.find((profesional) => profesional.id === profesionalId) ?? null
+  // Con un profesional elegido, sólo los servicios que hace (`serviciosQueVe`).
+  const serviciosVisibles = serviciosQueVe(profesionalElegido, servicios)
+  // Entre quienes se elige en el paso 1: el equipo, menos quien no hace ninguno
+  // de los servicios que hay (elegirlo dejaría la lista de servicios vacía).
+  const profesionalesParaElegir = equipo.filter((profesional) => haceAlgunServicio(profesional.servicioIds, servicios))
   // Con varios, sólo quienes hacen todos: los hace una sola persona, seguidos.
   const profesionalesDelServicio =
-    seleccionados.length > 0 ? profesionales.filter((profesional) => haceLosServicios(profesional, seleccionados)) : []
+    seleccionados.length > 0 ? equipo.filter((profesional) => haceLosServicios(profesional, seleccionados)) : []
 
   // Lo que no se puede sumar a lo ya elegido: nadie (o no quien se eligió)
   // hace la combinación. Se deshabilita en el paso 1 con el motivo a la vista,
@@ -250,7 +286,7 @@ export function FormularioReserva({
   const sinCombinacion = serviciosQueNoSePuedenSumar(
     serviciosVisibles.map((servicio) => servicio.id),
     servicioIds,
-    equipoLeido ? (profesionalElegido ? [profesionalElegido] : profesionales) : null
+    profesionalElegido ? [profesionalElegido] : equipo
   )
   const motivoSinCombinacion = profesionalElegido
     ? `${profesionalElegido.nombre} no lo hace junto con lo que elegiste.`
@@ -266,8 +302,29 @@ export function FormularioReserva({
     )
     // Si el profesional elegido no hace el que se suma, vuelve a "cualquiera".
     if (!yaEstaba && profesionalElegido && !haceElServicio(profesionalElegido, servicio.id)) setProfesionalId(null)
+    // El aviso de lo que se quitó ya se leyó: sigue otra elección.
+    setAvisoDeServicios("")
     // Otra combinación es otra duración: la hora elegida puede no caber.
     elegirHora("", null)
+  }
+
+  /*
+   * Elegir con quién, en el paso 1 o en el 2. Elegir a alguien que no hace
+   * algo de lo ya elegido lo quita (en lugar de dejar una reserva que el
+   * servidor rechazaría) y lo dice, discreto, en una región `status`.
+   * "Cualquiera" no quita nada.
+   */
+  const elegirProfesional = (id: string | null) => {
+    const profesional = equipo.find((candidato) => candidato.id === id) ?? null
+    const { quedan, quitados } = separarLosQueNoHace(profesional, seleccionados)
+    setProfesionalId(profesional?.id ?? null)
+    setCambiandoProfesional(false)
+    setAvisoDeServicios(profesional ? avisoDeServiciosQuitados(profesional.nombre, quitados) : "")
+    if (quitados.length > 0) {
+      setSeleccionados(quedan)
+      // Otra combinación es otra duración: la hora elegida puede no caber.
+      elegirHora("", null)
+    }
   }
 
   // Los días con atención para estos servicios y este profesional (o
@@ -493,26 +550,31 @@ export function FormularioReserva({
               <TituloDelPaso ref={titulo} paso={1}>
                 {clinicaDental ? "¿Cuál es el motivo de tu consulta?" : "¿Qué servicio necesitas?"}
               </TituloDelPaso>
-              <p className="mt-2 text-sm text-texto-2">
+              {/*
+                ¿Con quién?, arriba: elegir a alguien deja ver sólo lo que hace;
+                "cualquiera" los muestra todos. Sin equipo (el dueño solo) no hay
+                a quién elegir y no se muestra.
+              */}
+              {profesionalesParaElegir.length > 0 && (
+                <div className="mt-5">
+                  <SelectorProfesional
+                    profesionales={profesionalesParaElegir}
+                    elegido={profesionalId}
+                    onElegir={elegirProfesional}
+                    cualquiera={cualquiera}
+                  />
+                  {/* Siempre en la página: así el lector de pantalla anuncia lo que aparece. */}
+                  <p role="status" className={cn("text-sm text-pretty text-texto-2", avisoDeServicios && "mt-3")}>
+                    {avisoDeServicios}
+                  </p>
+                </div>
+              )}
+              <p className={cn("text-sm text-texto-2", profesionalesParaElegir.length > 0 ? "mt-6" : "mt-2")}>
                 {clinicaDental
                   ? `Puedes elegir hasta ${MAX_SERVICIOS_POR_RESERVA} motivos: te atiende el mismo ${vocabulario.profesional}, en una sola hora.`
                   : `Puedes elegir hasta ${MAX_SERVICIOS_POR_RESERVA}: te los hace la misma persona, uno después del otro.`}
               </p>
               {servicioDeUrgencia && !urgencia && <AvisoDeUrgencia className="mt-4" nombre={servicioDeUrgencia.name} />}
-              {profesionalElegido && (
-                <p className="mt-3 flex flex-wrap items-center gap-x-2 text-sm text-texto-2">
-                  <span>
-                    Reservando con <strong className="font-medium text-navy">{profesionalElegido.nombre}</strong>.
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setProfesionalId(null)}
-                    className="font-medium text-navy underline underline-offset-4 anillo-foco"
-                  >
-                    Ver todos los {servicioDeLaReserva}s
-                  </button>
-                </p>
-              )}
               <div className="mt-5">
                 <SelectorServicio
                   servicios={serviciosVisibles}
@@ -536,7 +598,11 @@ export function FormularioReserva({
                 <Boton
                   icono={<ArrowRight />}
                   disabled={!puedeAvanzarPaso1}
-                  onClick={() => setPaso(2)}
+                  onClick={() => {
+                    // El aviso de lo que se quitó ya se leyó: al volver no se repite.
+                    setAvisoDeServicios("")
+                    setPaso(2)
+                  }}
                   className="w-full sm:ml-auto sm:w-auto"
                 >
                   Continuar
@@ -559,15 +625,29 @@ export function FormularioReserva({
                 />
               )}
               {clinicaDental && !sinDias && <PreguntaPrimeraVez valor={primeraVez} onResponder={setPrimeraVez} />}
-              {/* Sin equipo (el dueño solo) no hay a quién elegir: no se muestra. */}
+              {/*
+                Sin equipo (el dueño solo) no hay a quién elegir: no se muestra.
+                Si en el paso 1 ya se eligió a alguien no se vuelve a preguntar:
+                queda "Con X · Cambiar", y el selector (con X marcado) sólo
+                aparece al querer cambiar, o si no hay días para X (el aviso de
+                abajo manda a elegir con quién).
+              */}
               {profesionalesDelServicio.length > 0 && (
                 <div className="mt-6">
-                  <SelectorProfesional
-                    profesionales={profesionalesDelServicio}
-                    elegido={profesionalId}
-                    onElegir={setProfesionalId}
-                    cualquiera={cualquiera}
-                  />
+                  {profesionalElegido && !cambiandoProfesional && !sinDias ? (
+                    <ProfesionalYaElegido
+                      nombre={profesionalElegido.nombre}
+                      profesional={vocabulario.profesional}
+                      onCambiar={() => setCambiandoProfesional(true)}
+                    />
+                  ) : (
+                    <SelectorProfesional
+                      profesionales={profesionalesDelServicio}
+                      elegido={profesionalId}
+                      onElegir={elegirProfesional}
+                      cualquiera={cualquiera}
+                    />
+                  )}
                 </div>
               )}
               {urgencia && (
@@ -837,6 +917,38 @@ function TituloDelPaso({ paso, children, ref }: { paso: Paso; children: ReactNod
       </span>
       {children}
     </h3>
+  )
+}
+
+/**
+ * El profesional que se eligió en el paso 1, a la vista en el paso 2 en vez de
+ * volver a preguntar "¿Con quién?": "Con Carla · Cambiar". "Cambiar" abre el
+ * selector, con ella marcada. El botón mide 44px de alto para el pulgar.
+ */
+function ProfesionalYaElegido({
+  nombre,
+  profesional,
+  onCambiar,
+}: {
+  nombre: string
+  /** "profesional", u "odontólogo" en una clínica dental. */
+  profesional: string
+  onCambiar: () => void
+}) {
+  return (
+    <p className="flex flex-wrap items-center gap-x-3 text-sm text-texto-2">
+      <span className="break-words">
+        Con <strong className="font-medium text-navy">{nombre}</strong>
+      </span>
+      <button
+        type="button"
+        onClick={onCambiar}
+        aria-label={`Cambiar de ${profesional}: ahora con ${nombre}`}
+        className="inline-flex min-h-11 items-center font-medium text-navy underline underline-offset-4 anillo-foco"
+      >
+        Cambiar
+      </button>
+    </p>
   )
 }
 

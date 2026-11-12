@@ -20,6 +20,42 @@ export const haceTodos = (profesional: QuienAtiende, servicioIds: readonly strin
   servicioIds.every((servicioId) => haceElServicio(profesional, servicioId))
 
 /**
+ * Los servicios que ve quien reserva con ese profesional: los que hace
+ * (`servicioIds` en `null`: todos). Sin profesional ("cualquiera") ve todos.
+ * Conserva el orden del catálogo.
+ */
+export function serviciosQueVe<S extends { id: string }>(profesional: QuienAtiende | null, servicios: readonly S[]): S[] {
+  return profesional ? servicios.filter((servicio) => haceElServicio(profesional, servicio.id)) : [...servicios]
+}
+
+/**
+ * Al elegir a un profesional con servicios ya elegidos: los que sigue
+ * pudiendo hacer (`quedan`, en el orden en que se eligieron: es el orden en
+ * que se hacen) y los que no (`quitados`). Sin profesional no se quita nada.
+ */
+export function separarLosQueNoHace<S extends { id: string }>(
+  profesional: QuienAtiende | null,
+  elegidos: readonly S[]
+): { quedan: S[]; quitados: S[] } {
+  if (!profesional) return { quedan: [...elegidos], quitados: [] }
+  return {
+    quedan: elegidos.filter((servicio) => haceElServicio(profesional, servicio.id)),
+    quitados: elegidos.filter((servicio) => !haceElServicio(profesional, servicio.id)),
+  }
+}
+
+/**
+ * El aviso discreto de lo que se quitó al cambiar de profesional: "Quitamos
+ * Barba y Tinte porque Carla no los hace." Sin nombres, una cadena vacía. La
+ * lista la arma `Intl.ListFormat`, que también cambia "y" por "e" ante una "i".
+ */
+export function avisoDeServiciosQuitados(profesional: string, quitados: readonly { name: string }[]): string {
+  if (quitados.length === 0) return ""
+  const lista = new Intl.ListFormat("es", { style: "long", type: "conjunction" }).format(quitados.map((servicio) => servicio.name))
+  return `Quitamos ${lista} porque ${profesional} no ${quitados.length === 1 ? "lo" : "los"} hace.`
+}
+
+/**
  * Los servicios que no se pueden sumar a los ya elegidos porque nadie del
  * equipo hace la combinación: la reserva es con una sola persona, que hace
  * todos seguidos. Sin equipo (no se leyó, o el negocio no tiene) no se

@@ -113,6 +113,15 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
         clinicaDental={clinicaDental}
         zona={zonaDelNegocio(negocio.timezone)}
         servicios={servicios}
+        // Quién atiende y qué servicios hace cada uno, ya leído: el primer paso
+        // filtra los servicios desde la primera pintura, sin esperar a `/profesionales`.
+        equipo={pagina.equipo.map((profesional) => ({
+          id: profesional.id,
+          nombre: profesional.nombre,
+          especialidad: profesional.especialidad,
+          fotoUrl: profesional.foto,
+          servicioIds: profesional.servicioIds,
+        }))}
         // El mismo horario que publica la mini página (QA#4): el que la
         // reserva ofrece. El calendario lo usa hasta leer quién atiende.
         horarios={pagina.horario}

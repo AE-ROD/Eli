@@ -14,13 +14,22 @@ import type { PrecioDeLaHora } from "@/lib/hora-valle"
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
 import type { HorasDelDia } from "./_componentes/selector-fecha-hora"
 
-/** Quien atiende, tal como lo muestra la página pública. `servicioIds` en null: hace todos. */
-export interface ProfesionalPublico {
+/**
+ * Quien atiende, con lo que alcanza para elegirlo y saber qué servicios hace.
+ * `servicioIds` en null: hace todos. Es lo que la página ya trae del servidor
+ * (`page.tsx`), antes de pedir `/profesionales`: así el primer paso filtra los
+ * servicios desde la primera pintura.
+ */
+export interface ProfesionalDelEquipo {
   id: string
   nombre: string
   especialidad: string | null
   fotoUrl: string | null
   servicioIds: string[] | null
+}
+
+/** Quien atiende, tal como lo responde `/profesionales`: suma los días en que atiende. */
+export interface ProfesionalPublico extends ProfesionalDelEquipo {
   /** Los días de la semana (0 domingo a 6 sábado) en que atiende. */
   diasConAtencion: number[]
 }
