@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { nombreDelRol } from "./nombres-de-roles"
+import { delRol, nombreDelRol } from "./nombres-de-roles"
 
 describe("nombreDelRol", () => {
   it("el admin se llama Encargado", () => {
@@ -26,5 +26,27 @@ describe("nombreDelRol", () => {
       expect(nombreDelRol("worker", rubro)).toBe("Profesional")
       expect(nombreDelRol("admin", rubro)).toBe("Encargado")
     }
+  })
+})
+
+describe("delRol", () => {
+  it("el encargado es «del encargado» en todos los rubros", () => {
+    for (const rubro of ["salon", "barberia", "odontologia", "constructor", null, undefined]) {
+      expect(delRol("admin", rubro)).toBe("del encargado")
+    }
+  })
+
+  it("el profesional concuerda con la palabra del rubro: del barbero, de la estilista, del odontólogo", () => {
+    expect(delRol("worker", "barberia")).toBe("del barbero")
+    expect(delRol("worker", "salon")).toBe("de la estilista")
+    expect(delRol("worker", "spa-de-unas")).toBe("de la manicurista")
+    expect(delRol("worker", "odontologia")).toBe("del odontólogo")
+  })
+
+  it("sin rubro conocido, del profesional; un rol desconocido o ausente se lee como profesional", () => {
+    expect(delRol("worker")).toBe("del profesional")
+    expect(delRol("worker", "constructor")).toBe("del profesional")
+    expect(delRol(undefined, "salon")).toBe("de la estilista")
+    expect(delRol("otro", "barberia")).toBe("del barbero")
   })
 })

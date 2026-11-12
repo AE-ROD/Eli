@@ -6,12 +6,15 @@
  * la pantalla está obligada a decidir qué mostrar cuando algo falla.
  */
 
+import { enviarFoto, pedirQuitarFoto, type ResultadoDeFoto } from "@/lib/enviar-foto"
 import { pedir, pedirConCuerpo, conJson, type Resultado } from "@/lib/peticiones"
 
 export interface MiembroDelEquipo {
   id: string
   role: string
   createdAt: string
+  /** La foto del integrante (una URL del propio sitio), o `null` si no subió ninguna. */
+  fotoUrl: string | null
   user: { id: string; name: string; email: string }
 }
 
@@ -107,4 +110,22 @@ export async function guardarServiciosDelMiembro(
     "No se pudieron guardar los servicios",
     conJson("PUT", serviceIds === null ? { todos: true } : { todos: false, serviceIds })
   )
+}
+
+// ─── Foto del integrante ─────────────────────────────────────────────────────
+
+const rutaDeLaFotoDelMiembro = (miembroId: string) => `/api/equipo/miembros/${encodeURIComponent(miembroId)}/foto`
+
+/**
+ * Sube la foto de un integrante (`miembroId` es el de su membresía, no el de
+ * su cuenta). La imagen ya viene ajustada por el navegador. Devuelve la URL
+ * con que quedó.
+ */
+export function subirFotoDelMiembro(miembroId: string, foto: Blob): Promise<ResultadoDeFoto> {
+  return enviarFoto(rutaDeLaFotoDelMiembro(miembroId), foto)
+}
+
+/** Quita la foto: vuelven a verse las iniciales. */
+export function quitarFotoDelMiembro(miembroId: string): Promise<ResultadoDeFoto> {
+  return pedirQuitarFoto(rutaDeLaFotoDelMiembro(miembroId))
 }

@@ -52,7 +52,7 @@ const CLASE_HUECO =
   "rounded-[20px] border-[1.5px] border-dashed border-borde bg-[repeating-linear-gradient(45deg,var(--color-superficie)_0px,var(--color-superficie)_6px,transparent_6px,transparent_14px)] px-3 py-3 squircle"
 
 export function LineaDeTiempoDia({ franjas, citas, zona }: PropsDeLineaDeTiempoDia) {
-  const { cliente } = vocabularioDe(useRubroDelPanel())
+  const palabraCliente = vocabularioDe(useRubroDelPanel()).palabras.cliente.singular
   const fueraDeHorario = citasFueraDeFranjas(franjas, citas, zona)
 
   return (
@@ -83,7 +83,7 @@ export function LineaDeTiempoDia({ franjas, citas, zona }: PropsDeLineaDeTiempoD
                   </span>
                   <div className="min-w-0 flex-1">
                     {segmento.tipo === "cita" ? (
-                      <TarjetaCita cita={citaParaTarjeta(segmento.cita, cliente, zona)} compacta />
+                      <TarjetaCita cita={citaParaTarjeta(segmento.cita, palabraCliente, zona)} compacta />
                     ) : (
                       <div className={CLASE_HUECO}>
                         <p className="text-xs text-texto-2">
@@ -105,7 +105,7 @@ export function LineaDeTiempoDia({ franjas, citas, zona }: PropsDeLineaDeTiempoD
           <ul className="space-y-2">
             {fueraDeHorario.map((cita) => (
               <li key={cita.id}>
-                <TarjetaCita cita={citaParaTarjeta(cita, cliente, zona)} compacta />
+                <TarjetaCita cita={citaParaTarjeta(cita, palabraCliente, zona)} compacta />
               </li>
             ))}
           </ul>

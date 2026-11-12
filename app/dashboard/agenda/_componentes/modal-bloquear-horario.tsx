@@ -8,7 +8,9 @@ import { Selector } from "@/components/comunes/selector"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { Aviso } from "@/components/panel/aviso"
 import { CampoHora } from "@/components/panel/campo-hora"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { ETIQUETA } from "@/components/panel/estilos"
+import { vocabularioDe } from "@/lib/vocabulario"
 import {
   bloqueoEnBlanco,
   crearBloqueo,
@@ -16,6 +18,7 @@ import {
   type DatosDeNuevoBloqueo,
   type Profesional,
 } from "../_datos"
+import { frasesDeLaAgenda } from "../_frases"
 import { useZonaDelNegocio } from "./zona-del-negocio"
 
 interface PropsDeModalBloquearHorario {
@@ -45,6 +48,8 @@ export function ModalBloquearHorario({ dia, eligeAQuien, memberIdPropio, onCread
   )
   // Las horas que se escriben son las del negocio (#99).
   const zona = useZonaDelNegocio()
+  // "Todo el negocio" / "Todo el salón" y la cita que pide confirmación ("una hora" en un salón).
+  const frases = frasesDeLaAgenda(vocabularioDe(useRubroDelPanel()).palabras)
   const idBase = useId()
   const idDeHoraDesde = `${idBase}-hora-desde`
   const idDeHoraHasta = `${idBase}-hora-hasta`
@@ -86,7 +91,7 @@ export function ModalBloquearHorario({ dia, eligeAQuien, memberIdPropio, onCread
   return (
     <MarcoDeModal
       titulo="Bloquear horario"
-      descripcion="Ese tramo se ve en gris en la agenda, y una cita encima pide confirmación."
+      descripcion={frases.descripcionDelBloqueo}
       bloqueado={guardando}
       alCerrar={onCerrar}
     >
@@ -100,7 +105,7 @@ export function ModalBloquearHorario({ dia, eligeAQuien, memberIdPropio, onCread
             onChange={(e) => cambiar("memberId", e.target.value)}
             opciones={profesionales.map((profesional) => ({ valor: profesional.id, texto: profesional.nombre }))}
           >
-            <option value="">Todo el negocio</option>
+            <option value="">{frases.todoElNegocio}</option>
           </Selector>
         ) : (
           <p className="text-sm text-texto-2">Se bloquea tu agenda.</p>

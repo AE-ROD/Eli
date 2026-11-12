@@ -28,6 +28,7 @@ import {
   type PersonaEnLaSalaDeEspera,
   type SillonAhora,
 } from "../_datos"
+import { frasesDelInicioDeLaClinica } from "../_frases"
 
 /** Cada cuánto se vuelve a mirar quién está en cada sillón y quién espera. */
 const CADA_MS = 60_000
@@ -134,6 +135,7 @@ function SillonesAhora({
   className?: string
 }) {
   const idDelTitulo = useId()
+  const frases = frasesDelInicioDeLaClinica(vocabularioDe(useRubroDelPanel()).palabras)
   const propias = datos?.alcance === "propias"
 
   return (
@@ -143,7 +145,7 @@ function SillonesAhora({
         titulo="Sillones ahora"
         subtitulo={
           propias
-            ? "Tus citas en cada sillón. Un sillón sin citas tuyas puede estar ocupado por otro odontólogo."
+            ? frases.sillonesDeQuienSoloVeLoSuyo
             : "Quién está en cada sillón y quién sigue."
         }
         icono={{ figura: Armchair, color: "naranja" }}
@@ -193,22 +195,23 @@ function SillonesAhora({
  * (en gris), dicho siempre en palabras. Libre, hasta cuándo y quién sigue.
  */
 function TarjetaDeSillon({ sillon, zona, ahora, propias }: { sillon: SillonAhora; zona: string; ahora: string; propias: boolean }) {
+  const frases = frasesDelInicioDeLaClinica(vocabularioDe(useRubroDelPanel()).palabras)
   const atendiendo = sillon.estado === "atendiendo" && sillon.actual
   const siguiente = sillon.siguiente
   // La siguiente ya debía haber empezado: se dice, no se esconde.
   const atrasada = !atendiendo && sillon.libreHasta !== null && new Date(sillon.libreHasta).getTime() < new Date(ahora).getTime()
 
-  const estado = atendiendo ? "Atendiendo" : propias ? "Sin citas tuyas ahora" : "Libre"
+  const estado = atendiendo ? "Atendiendo" : propias ? frases.sinCitasTuyasAhora : "Libre"
   const titular = atendiendo
-    ? (sillon.actual?.paciente?.nombre ?? "Sin paciente")
+    ? (sillon.actual?.paciente?.nombre ?? frases.sinCliente)
     : atrasada && siguiente
-      ? `Atrasada la de las ${horaEn(siguiente.inicio, zona)}`
+      ? frases.atrasada(horaEn(siguiente.inicio, zona))
       : sillon.libreHasta
         ? propias
-          ? `Tu próxima cita, a las ${horaEn(sillon.libreHasta, zona)}`
+          ? frases.tuProxima(horaEn(sillon.libreHasta, zona))
           : `Hasta las ${horaEn(sillon.libreHasta, zona)}`
         : propias
-          ? "Sin más citas tuyas hoy"
+          ? frases.sinMasCitasTuyasHoy
           : "Libre el resto del día"
 
   return (
@@ -238,7 +241,7 @@ function TarjetaDeSillon({ sillon, zona, ahora, propias }: { sillon: SillonAhora
       ) : siguiente ? (
         <>
           <p className="text-sm break-words">
-            Sigue: {siguiente.paciente?.nombre ?? "Sin paciente"}
+            Sigue: {siguiente.paciente?.nombre ?? frases.sinCliente}
             {atrasada ? "" : `, a las ${horaEn(siguiente.inicio, zona)}`}
           </p>
           <p className="text-[13px] break-words text-texto-2">
@@ -278,7 +281,7 @@ function SalaDeEspera({
   alCambiar: () => Promise<void>
 }) {
   const idDelTitulo = useId()
-  const vocabulario = vocabularioDe(useRubroDelPanel())
+  const frases = frasesDelInicioDeLaClinica(vocabularioDe(useRubroDelPanel()).palabras)
   const sala = datos?.salaDeEspera
   const resumen = !sala
     ? "Cargando..."
@@ -292,7 +295,7 @@ function SalaDeEspera({
     <section aria-labelledby={idDelTitulo} aria-busy={!datos || undefined} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
-        titulo={`En ${vocabulario.tablero}`}
+        titulo={frases.enLaSalaDeEspera}
         subtitulo={resumen}
         icono={{ figura: ICONOS_DE_MODULO.tablero, color: "naranja" }}
       />
@@ -312,9 +315,7 @@ function SalaDeEspera({
           {(sala.cantidad > sala.lista.length || sala.lista.some((persona) => !persona.citaId)) && (
             <div className="mt-3">
               <Boton href="/dashboard/tablero" variante="enlace" tamano="sm">
-                {sala.cantidad > sala.lista.length
-                  ? `Ver los ${sala.cantidad} en la ${vocabulario.tablero}`
-                  : `Ir a la ${vocabulario.tablero}`}
+                {sala.cantidad > sala.lista.length ? frases.verLosQueEsperan(sala.cantidad) : frases.irALaSalaDeEspera}
               </Boton>
             </div>
           )}
@@ -437,7 +438,7 @@ function PersonaEsperando({
 
 function PresupuestosPorResponder({ datos }: { datos: DatosDelInicio }) {
   const idDelTitulo = useId()
-  const vocabulario = vocabularioDe(useRubroDelPanel())
+  const frases = frasesDelInicioDeLaClinica(vocabularioDe(useRubroDelPanel()).palabras)
   const presupuestos = datos.presupuestosPorResponder
   // El "hace cuánto" se mide contra la hora que mandó el servidor, la misma para todas.
   const ahora = new Date(datos.ahora).getTime()
@@ -469,7 +470,7 @@ function PresupuestosPorResponder({ datos }: { datos: DatosDelInicio }) {
                   className="rounded-sm font-medium break-words text-navy underline-offset-4 anillo-foco hover:underline"
                 >
                   {presupuesto.paciente.nombre}
-                  <span className="sr-only">, abrir la ficha del {vocabulario.cliente}</span>
+                  <span className="sr-only">{frases.abrirLaFicha}</span>
                 </Link>
                 <p className="text-[13px] break-words text-texto-2">
                   {presupuesto.etapa}
@@ -485,7 +486,7 @@ function PresupuestosPorResponder({ datos }: { datos: DatosDelInicio }) {
       )}
       {cantidad > lista.length && (
         <p className="mt-3 text-sm text-texto-2">
-          Y {cantidad - lista.length} más: están en la ficha de cada {vocabulario.cliente}.
+          {frases.estanEnLaFicha(cantidad - lista.length)}
         </p>
       )}
     </section>

@@ -8,8 +8,9 @@ import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
-import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
+import { vocabularioDe } from "@/lib/vocabulario"
 import type { EstadisticasDelPanel } from "../_datos"
+import { frasesDelInicio } from "../_frases"
 
 interface PropsDeResumenDeClientes {
   /** Nulo mientras cargan. */
@@ -19,31 +20,29 @@ interface PropsDeResumenDeClientes {
 /** Cuántos clientes tiene el negocio y cuántos se sumaron este mes. En una clínica dental, "pacientes". */
 export function ResumenDeClientes({ estadisticas }: PropsDeResumenDeClientes) {
   const idDelTitulo = useId()
-  const { cliente, clientes } = vocabularioDe(useRubroDelPanel())
+  const frases = frasesDelInicio(vocabularioDe(useRubroDelPanel()).palabras).resumenDeClientes
 
   return (
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "flex flex-col p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
-        titulo={conMayuscula(clientes)}
+        titulo={frases.titulo}
         subtitulo={estadisticas ? `${estadisticas.totalClientes} en total` : "Cargando..."}
         icono={{ figura: Users, color: "lila" }}
         accion={
           <Boton href="/dashboard/clientes" variante="enlace" tamano="sm">
-            Ver todos
+            {frases.verTodos}
           </Boton>
         }
       />
 
       <div className="mt-5">
         {estadisticas && estadisticas.totalClientes === 0 ? (
-          <EstadoVacio>Aún no tienes {clientes} registrados</EstadoVacio>
+          <EstadoVacio>{frases.sinClientes}</EstadoVacio>
         ) : (
           <div className="rounded-[20px] bg-lila-suave px-4 py-3.5 squircle">
             <p className="font-medium tabular-nums">
-              {estadisticas
-                ? `${estadisticas.totalClientes} ${estadisticas.totalClientes === 1 ? cliente : clientes}`
-                : "—"}
+              {estadisticas ? frases.total(estadisticas.totalClientes) : "—"}
             </p>
             {/* Sobre el lila, el gris secundario no llega a 4,5:1: el texto chico va en navy al 75%. */}
             <p className="mt-0.5 text-[13px] text-navy/75">

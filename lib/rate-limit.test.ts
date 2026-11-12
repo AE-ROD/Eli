@@ -32,7 +32,7 @@ describe("verificarLimite cuando Upstash está configurado pero falla", () => {
     vi.restoreAllMocks()
   })
 
-  it.each(["login", "loginPorCuenta", "auth", "reserva", "soporte", "acuseDeSoporte", "reenvioDeInvitacion", "importacionDeClientes", "gestionDeCita", "listaDeEspera", "listaDeEsperaPorEmail", "bajaPorToken", "filaVirtual", "filaVirtualPorNegocio", "posicionEnFila"] as const)(
+  it.each(["login", "loginPorCuenta", "auth", "reserva", "soporte", "acuseDeSoporte", "reenvioDeInvitacion", "importacionDeClientes", "gestionDeCita", "listaDeEspera", "listaDeEsperaPorEmail", "bajaPorToken", "filaVirtual", "filaVirtualPorNegocio", "posicionEnFila", "fotos"] as const)(
     "falla CERRADO para %s si Upstash tira un error: lo que un anónimo puede abusar no queda sin tope",
     async (tipo) => {
       vi.spyOn(console, "error").mockImplementation(() => {})
@@ -42,7 +42,7 @@ describe("verificarLimite cuando Upstash está configurado pero falla", () => {
     },
   )
 
-  it.each(["lecturaPublica", "panelLectura", "panelEscritura", "exportacion"] as const)(
+  it.each(["lecturaPublica", "panelLectura", "panelEscritura", "exportacion", "fotosPublicas"] as const)(
     "falla abierto para %s si Upstash tira un error: ni una lectura ni una escritura con sesión se cortan por una caída del proveedor",
     async (tipo) => {
       vi.spyOn(console, "error").mockImplementation(() => {})
@@ -86,6 +86,19 @@ describe("verificarLimite cuando Upstash está configurado pero falla", () => {
     const usados = Ratelimit.creados.filter((limitador) => limitador.limit.mock.calls.length > 0)
     expect(usados).toHaveLength(1)
     expect(usados[0].config).toMatchObject({ prefix: "eli:lectura-publica", limiter: { tokens: 60, ventana: "1 m" } })
+    expect(usados[0].limit).toHaveBeenCalledWith("203.0.113.7")
+  })
+
+  it("la lectura de fotos cuenta en su propio balde, de 600 por minuto por IP: no gasta el de las reservas ni el de la lectura pública", async () => {
+    const { Ratelimit } = (await import("@upstash/ratelimit")) as unknown as { Ratelimit: RatelimitFalso }
+    Ratelimit.creados.length = 0
+    const { verificarLimite } = await import("./rate-limit")
+
+    await verificarLimite("fotosPublicas", "203.0.113.7")
+
+    const usados = Ratelimit.creados.filter((limitador) => limitador.limit.mock.calls.length > 0)
+    expect(usados).toHaveLength(1)
+    expect(usados[0].config).toMatchObject({ prefix: "eli:fotos-publicas", limiter: { tokens: 600, ventana: "1 m" } })
     expect(usados[0].limit).toHaveBeenCalledWith("203.0.113.7")
   })
 
@@ -138,6 +151,7 @@ describe("los baldes del CSV de clientes", () => {
     ["filaVirtual", "eli:fila-virtual", 10],
     ["filaVirtualPorNegocio", "eli:fila-virtual-negocio", 60],
     ["posicionEnFila", "eli:fila-posicion", 240],
+    ["fotos", "eli:fotos", 20],
   ] as const)("%s cuenta en su propio balde (%s), de %i por hora", async (tipo, prefijo, tokens) => {
     vi.spyOn(console, "error").mockImplementation(() => {})
     const { Ratelimit } = (await import("@upstash/ratelimit")) as unknown as { Ratelimit: RatelimitFalso }

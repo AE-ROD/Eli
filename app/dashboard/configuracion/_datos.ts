@@ -1,6 +1,7 @@
 /**
  * Todo lo que la configuración le pide al servidor desde el navegador: el
- * horario de un miembro (leer y guardar) y el catálogo de servicios. Lo que se
+ * horario de un miembro (leer y guardar), el catálogo de servicios y las
+ * fotos de la página pública. Lo que se
  * ve al entrar ya viene resuelto por `page.tsx`, que es de servidor y consulta
  * la base directo.
  *
@@ -11,6 +12,7 @@
 
 import { leerMonto } from "@/lib/dinero"
 import { frecuenciaDelFormulario } from "@/lib/frecuencia-de-visitas"
+import { enviarFoto, pedirQuitarFoto, type ResultadoDeFoto } from "@/lib/enviar-foto"
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
 import type { LaboratorioRespuesta } from "@/lib/edicion-de-protesis"
 
@@ -260,6 +262,27 @@ export async function guardarPaginaPublica(
         .map(({ memberId, especialidad }) => ({ memberId, especialidad })),
     })
   )
+}
+
+// ─── Fotos del negocio ───────────────────────────────────────────────────────
+
+/** Las dos fotos de la página pública que se suben aparte del resto de los datos. */
+export type TipoDeFotoDelNegocio = "logo" | "portada"
+
+const rutaDeFotoDelNegocio = (tipo: TipoDeFotoDelNegocio) => `/api/configuracion/fotos/${tipo}`
+
+/**
+ * Sube el logo o la portada (la imagen ya ajustada por el navegador). Se
+ * guarda al instante, no con "Guardar" de la página. Devuelve la URL con que
+ * quedó.
+ */
+export function subirFotoDelNegocio(tipo: TipoDeFotoDelNegocio, foto: Blob): Promise<ResultadoDeFoto> {
+  return enviarFoto(rutaDeFotoDelNegocio(tipo), foto)
+}
+
+/** Quita el logo o la portada: la página vuelve a usar el color y las iniciales. */
+export function quitarFotoDelNegocio(tipo: TipoDeFotoDelNegocio): Promise<ResultadoDeFoto> {
+  return pedirQuitarFoto(rutaDeFotoDelNegocio(tipo))
 }
 
 /** Hasta cuántas horas antes el cliente puede cancelar o reagendar con su enlace (0 a 72). */

@@ -5,11 +5,13 @@ import { AnimatePresence } from "framer-motion"
 import { Hourglass, Mail, Phone, X } from "lucide-react"
 import { BotonIcono } from "@/components/comunes/boton-icono"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { comoTexto } from "@/lib/fechas"
 import { pedir, type Resultado } from "@/lib/peticiones"
 import { aE164Chile, mostrarTelefono } from "@/lib/telefono"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 
 /** Una persona esperando, como la devuelve `GET /api/lista-de-espera`. */
 interface Inscripcion {
@@ -44,6 +46,8 @@ function quitarDeLaLista(id: string): Promise<Resultado> {
  */
 export function ListaDeEsperaDelDia({ fecha }: { fecha: Date }) {
   const dia = comoTexto(fecha)
+  // El servicio de quien espera, si no eligió uno: "Servicio" / "Prestación".
+  const servicioPorOmision = conMayuscula(vocabularioDe(useRubroDelPanel()).palabras.servicio.singular)
   const [inscripciones, setInscripciones] = useState<Inscripcion[]>([])
   const [aviso, setAviso] = useState("")
   const [aQuitar, setAQuitar] = useState<Inscripcion | null>(null)
@@ -110,7 +114,7 @@ export function ListaDeEsperaDelDia({ fecha }: { fecha: Date }) {
               <div className="min-w-0 text-sm">
                 <p className="font-medium break-words">{inscripcion.nombre}</p>
                 <p className="text-texto-2">
-                  {inscripcion.servicio ?? "Servicio"} · {inscripcion.profesional ? `con ${inscripcion.profesional}` : "con cualquiera"}
+                  {inscripcion.servicio ?? servicioPorOmision} · {inscripcion.profesional ? `con ${inscripcion.profesional}` : "con cualquiera"}
                   {inscripcion.avisos > 0 && ` · avisada ${inscripcion.avisos} ${inscripcion.avisos === 1 ? "vez" : "veces"}`}
                 </p>
                 <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-texto-2">

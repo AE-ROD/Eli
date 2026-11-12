@@ -9,9 +9,12 @@ import { Boton } from "@/components/comunes/boton"
 import { Esqueleto } from "@/components/comunes/esqueleto"
 import { MarcaDeEli } from "@/components/comunes/marca-de-eli"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
+import { frasesDelInicio } from "../_frases"
 
 interface PropsDeQrDelLocal {
   /** El slug del negocio: el QR lleva a `/reservar/<slug>`. */
@@ -52,6 +55,8 @@ function nombreDelArchivo(slug: string): string {
  */
 export function QrDelLocal({ slug, nombreNegocio }: PropsDeQrDelLocal) {
   const idDelTitulo = useId()
+  // "Tu QR para el local" sin rubro; "para el salón" o "para la clínica" con él.
+  const { tituloDelQr } = frasesDelInicio(vocabularioDe(useRubroDelPanel()).palabras)
   const [enlace, setEnlace] = useState("")
   const [imagen, setImagen] = useState<string | null>(null)
   const [error, setError] = useState("")
@@ -106,7 +111,7 @@ export function QrDelLocal({ slug, nombreNegocio }: PropsDeQrDelLocal) {
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
-        titulo="Tu QR para el local"
+        titulo={tituloDelQr}
         subtitulo="Quien lo escanea llega directo a tu página de reservas."
         icono={{ figura: QrCode, color: "azul" }}
       />

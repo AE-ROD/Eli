@@ -9,6 +9,8 @@ import {
   guardarPaginaPublica,
   leerPorcentaje,
   moverSillon,
+  quitarFotoDelNegocio,
+  subirFotoDelNegocio,
   type DatosDePaginaPublica,
   type DatosDeServicio,
 } from "./_datos"
@@ -254,5 +256,37 @@ describe("moverSillon", () => {
   it("no toca la lista que recibe", () => {
     moverSillon(SILLONES, "b", -1)
     expect(SILLONES.map((sillon) => sillon.id)).toEqual(["a", "b", "c"])
+  })
+})
+
+describe("fotos del negocio", () => {
+  const FOTO = new Blob([new Uint8Array([1, 2, 3])], { type: "image/webp" })
+
+  it("el logo y la portada suben a su propia ruta, con los bytes crudos y el tipo de la imagen", async () => {
+    for (const tipo of ["logo", "portada"] as const) {
+      const fetchFalso = simularRespuesta(json({ url: `/fotos/negocios/n1/${tipo}.webp` }))
+      expect(await subirFotoDelNegocio(tipo, FOTO)).toEqual({ ok: true, url: `/fotos/negocios/n1/${tipo}.webp` })
+      const [ruta, opciones] = fetchFalso.mock.calls[0] as [string, RequestInit]
+      expect(ruta).toBe(`/api/configuracion/fotos/${tipo}`)
+      expect(opciones.method).toBe("PUT")
+      expect(opciones.body).toBe(FOTO)
+      expect(opciones.headers).toEqual({ "Content-Type": "image/webp" })
+    }
+  })
+
+  it("quitar hace DELETE a la ruta del tipo y devuelve url null", async () => {
+    const fetchFalso = simularRespuesta(json({ url: null }))
+    expect(await quitarFotoDelNegocio("portada")).toEqual({ ok: true, url: null })
+    const [ruta, opciones] = fetchFalso.mock.calls[0] as [string, RequestInit]
+    expect(ruta).toBe("/api/configuracion/fotos/portada")
+    expect(opciones.method).toBe("DELETE")
+  })
+
+  it("el mensaje del servidor llega tal cual a la pantalla", async () => {
+    simularRespuesta(json({ error: "La foto pesa más de 5 MB. Sube una más liviana." }, 413))
+    expect(await subirFotoDelNegocio("logo", FOTO)).toEqual({
+      ok: false,
+      error: "La foto pesa más de 5 MB. Sube una más liviana.",
+    })
   })
 })

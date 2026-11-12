@@ -33,9 +33,11 @@ import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
  * especialidades sólo de miembros de ese negocio: un id ajeno o inexistente
  * es 404 y no se guarda nada.
  *
- * Fotos (logo, portada, profesionales): no se editan acá. Todavía no hay
- * subida ni almacenamiento aprobado, y pegar una URL cualquiera dejaría a un
- * negocio mostrar lo que quiera desde donde quiera.
+ * Fotos (logo, portada, profesionales): no se editan acá. Se suben por sus
+ * propios endpoints (`/api/configuracion/fotos/[tipo]` y
+ * `/api/equipo/miembros/[id]/foto`), que validan y reducen la imagen: pegar
+ * una URL cualquiera dejaría a un negocio mostrar lo que quiera desde donde
+ * quiera.
  *
  * El enlace de reseñas de Google (#77, `puedeEditarEnlaceDeResenas`) es
  * opcional en el cuerpo: si no viene, no se toca. Sólo se acepta uno de Google

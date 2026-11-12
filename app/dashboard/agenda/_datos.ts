@@ -17,7 +17,14 @@ import { sePuedeMover, type Advertencia } from "@/lib/mover-cita"
 import { sigueSinConfirmar } from "@/lib/por-confirmar"
 import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import { CODIGO_SILLON_OCUPADO } from "@/lib/sillones"
+import { conMayuscula, vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
+import { el } from "@/lib/concordancia"
+import { todoElNegocio } from "../_frases"
+import { frasesDeLaAgenda } from "./_frases"
 import { isoEn } from "./_hora-del-negocio"
+
+/** Las palabras de un rubro sin palabras propias: lo que dicen estos pedidos y estas etiquetas si quien llama no pasa las suyas. */
+const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
 
 export interface Cita {
   id: string
@@ -65,12 +72,17 @@ export interface SillonDeLaCita {
 
 /**
  * Quién canceló la cita, para el detalle (#134), o `null` si no está
- * cancelada o no se sabe (las canceladas antes de guardarse el dato).
+ * cancelada o no se sabe (las canceladas antes de guardarse el dato). Con las
+ * palabras del rubro: "El paciente" / "La clínica"; sin ellas, "El cliente" /
+ * "El negocio".
  */
-export function quienCancelo(cita: Pick<Cita, "status" | "canceladaPor">): string | null {
+export function quienCancelo(
+  cita: Pick<Cita, "status" | "canceladaPor">,
+  palabras: Pick<PalabrasDelRubro, "cliente" | "negocio"> = PALABRAS_NEUTRAS
+): string | null {
   if (cita.status !== "cancelada") return null
-  if (cita.canceladaPor === "cliente") return "El cliente"
-  if (cita.canceladaPor === "negocio") return "El negocio"
+  if (cita.canceladaPor === "cliente") return conMayuscula(el(palabras.cliente))
+  if (cita.canceladaPor === "negocio") return conMayuscula(el(palabras.negocio))
   return null
 }
 
@@ -167,8 +179,8 @@ export interface CatalogoDeLaCita {
   serviciosPorProfesional: Record<string, string[]>
 }
 
-export async function leerCatalogoDeLaCita(): Promise<Resultado<CatalogoDeLaCita>> {
-  return pedir<CatalogoDeLaCita>("/api/citas/servicios", "No se pudo cargar el catálogo de servicios")
+export async function leerCatalogoDeLaCita(palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado<CatalogoDeLaCita>> {
+  return pedir<CatalogoDeLaCita>("/api/citas/servicios", frasesDeLaAgenda(palabras).errores.cargarCatalogo)
 }
 
 /**
@@ -195,11 +207,12 @@ export interface Profesional {
  */
 export function opcionesDeProfesional(
   equipo: Profesional[],
-  cita: Pick<Cita, "memberId" | "member">
+  cita: Pick<Cita, "memberId" | "member">,
+  palabraProfesional = "Profesional"
 ): { valor: string; texto: string }[] {
   const opciones = equipo.map((miembro) => ({ valor: miembro.id, texto: miembro.nombre }))
   if (cita.memberId && !equipo.some((miembro) => miembro.id === cita.memberId)) {
-    opciones.push({ valor: cita.memberId, texto: nombreDelProfesional(cita) ?? "Profesional" })
+    opciones.push({ valor: cita.memberId, texto: nombreDelProfesional(cita, palabraProfesional) ?? palabraProfesional })
   }
   return opciones
 }
@@ -220,10 +233,14 @@ export function destacaSinProfesional(cita: Pick<Cita, "memberId" | "status">, c
   return conProfesionales && !cita.memberId && sePuedeMover(cita.status)
 }
 
-/** El nombre del profesional de la cita, o `null` si no tiene. */
-export function nombreDelProfesional(cita: Pick<Cita, "memberId" | "member">): string | null {
+/**
+ * El nombre del profesional de la cita, o `null` si no tiene. Si la persona no
+ * tiene nombre, la palabra del rubro ya escrita con su mayúscula inicial
+ * ("Estilista", "Odontólogo"); por defecto, "Profesional".
+ */
+export function nombreDelProfesional(cita: Pick<Cita, "memberId" | "member">, palabraProfesional = "Profesional"): string | null {
   if (!cita.memberId) return null
-  return cita.member?.user?.name?.trim() || "Profesional"
+  return cita.member?.user?.name?.trim() || palabraProfesional
 }
 
 /** Un cliente que coincide con lo que se escribe en el buscador de la cita nueva. */
@@ -245,8 +262,12 @@ function rangoVisible(fecha: Date, modo: UnidadDeTiempo): string {
   return `desde=${comoTexto(desde)}&hasta=${comoTexto(hasta)}`
 }
 
-export async function leerCitas(fecha: Date, modo: UnidadDeTiempo): Promise<Resultado<Cita[]>> {
-  return pedir<Cita[]>(`/api/citas?${rangoVisible(fecha, modo)}`, "No se pudieron cargar las citas")
+export async function leerCitas(
+  fecha: Date,
+  modo: UnidadDeTiempo,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<Cita[]>> {
+  return pedir<Cita[]>(`/api/citas?${rangoVisible(fecha, modo)}`, frasesDeLaAgenda(palabras).errores.cargarCitas)
 }
 
 /**
@@ -346,7 +367,8 @@ export async function moverCita(
   id: string,
   datos: DatosDeMoverCita,
   zona: string,
-  opciones: { confirmar: boolean; asignaProfesional: boolean }
+  opciones: { confirmar: boolean; asignaProfesional: boolean },
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
 ): Promise<ResultadoDeMover> {
   const inicio = isoEn(datos.fecha, datos.horaInicio, zona)
   const fin = isoEn(datos.fecha, datos.horaFin, zona)
@@ -354,7 +376,7 @@ export async function moverCita(
 
   const resultado = await pedirConCuerpo(
     `/api/citas/${id}`,
-    "No se pudo mover la cita",
+    frasesDeLaAgenda(palabras).errores.moverCita,
     conJson("PUT", {
       startTime: inicio,
       endTime: fin,
@@ -380,11 +402,12 @@ export async function moverCita(
 export async function asignarProfesional(
   id: string,
   memberId: string,
-  opciones: { confirmar: boolean }
+  opciones: { confirmar: boolean },
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
 ): Promise<ResultadoDeMover> {
   const resultado = await pedirConCuerpo(
     `/api/citas/${encodeURIComponent(id)}`,
-    "No se pudo asignar el profesional",
+    frasesDeLaAgenda(palabras).errores.asignarProfesional,
     conJson("PUT", { memberId, ...(opciones.confirmar && { confirmarAdvertencias: true }) })
   )
   return conAdvertencias(resultado)
@@ -420,10 +443,14 @@ export type ResultadoDeReactivar =
   | { tipo: "corregir-con-ajuste"; error: string }
   | { tipo: "error"; error: string }
 
-export async function reactivarCita(id: string, opciones: { confirmar: boolean }): Promise<ResultadoDeReactivar> {
+export async function reactivarCita(
+  id: string,
+  opciones: { confirmar: boolean },
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<ResultadoDeReactivar> {
   const resultado = await pedirConCuerpo(
     `/api/citas/${encodeURIComponent(id)}`,
-    "No se pudo reactivar la cita",
+    frasesDeLaAgenda(palabras).errores.reactivarCita,
     conJson("PUT", { status: ESTADO_AL_REACTIVAR, ...(opciones.confirmar && { confirmarAdvertencias: true }) })
   )
   if (resultado.ok) return { tipo: "lista" }
@@ -448,7 +475,8 @@ export async function leerHorarioDeAtencion(): Promise<Resultado<FranjaDelDia[]>
 export async function crearCita(
   datos: DatosDeNuevaCita,
   zona: string,
-  opciones: { confirmar: boolean } = { confirmar: false }
+  opciones: { confirmar: boolean } = { confirmar: false },
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
 ): Promise<ResultadoConAdvertencias> {
   const precio = precioDeLaCita(datos.precio)
   if (!precio.ok) return { tipo: "error", error: precio.error }
@@ -463,7 +491,7 @@ export async function crearCita(
   const servicioIds = idsDeServiciosElegidos(datos.servicioIds)
   const resultado = await pedirConCuerpo(
     "/api/citas",
-    "No se pudo crear la cita",
+    frasesDeLaAgenda(palabras).errores.crearCita,
     conJson("POST", {
       ...(servicioIds.length > 0 ? { servicioIds } : { title: datos.servicio }),
       startTime: inicio,
@@ -492,10 +520,16 @@ export interface Bloqueo {
   member: { user: { name: string | null } | null } | null
 }
 
-/** De quién es el bloqueo, para leerlo: el profesional o "Todo el negocio". */
-export function aQuienBloquea(bloqueo: Bloqueo): string {
-  if (!bloqueo.memberId) return "Todo el negocio"
-  return bloqueo.member?.user?.name?.trim() || "Profesional"
+/**
+ * De quién es el bloqueo, para leerlo: el profesional o "Todo el negocio"
+ * ("Todo el salón", "Toda la clínica" con las palabras del rubro).
+ */
+export function aQuienBloquea(
+  bloqueo: Bloqueo,
+  palabras: Pick<PalabrasDelRubro, "negocio" | "profesional"> = PALABRAS_NEUTRAS
+): string {
+  if (!bloqueo.memberId) return todoElNegocio(palabras.negocio)
+  return bloqueo.member?.user?.name?.trim() || conMayuscula(palabras.profesional.singular)
 }
 
 /** Los días que se están mirando, para pedir los bloqueos que los tocan. */
@@ -557,10 +591,13 @@ export async function leerProfesionales(): Promise<Resultado<Profesional[]>> {
 }
 
 /** Hasta ocho clientes cuyo nombre, correo o teléfono contiene `texto`. */
-export async function buscarClientes(texto: string): Promise<Resultado<ClienteSugerido[]>> {
+export async function buscarClientes(
+  texto: string,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<ClienteSugerido[]>> {
   const resultado = await pedir<{ clientes: { id: string; name: string; lastName: string | null; email: string | null }[] }>(
     `/api/clientes?q=${encodeURIComponent(texto)}&limite=8`,
-    "No se pudieron buscar los clientes"
+    frasesDeLaAgenda(palabras).errores.buscarClientes
   )
   if (!resultado.ok) return resultado
 

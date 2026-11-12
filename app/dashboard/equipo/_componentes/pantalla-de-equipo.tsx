@@ -7,7 +7,7 @@ import { UserPlus } from "lucide-react"
 import { Aviso } from "@/components/panel/aviso"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
-import { actorDeSesion, puedeGestionarEquipo } from "@/lib/permisos"
+import { actorDeSesion, puedeEditarFotoDelMiembro, puedeGestionarEquipo } from "@/lib/permisos"
 import {
   anularInvitacion,
   leerEquipo,
@@ -16,6 +16,7 @@ import {
   type MiembroDelEquipo,
 } from "../_datos"
 import { ListaEquipo } from "./lista-equipo"
+import { ModalFotoDelMiembro } from "./modal-foto-del-miembro"
 import { ModalInvitar } from "./modal-invitar"
 import { ModalServiciosDelMiembro } from "./modal-servicios-del-miembro"
 
@@ -24,7 +25,8 @@ export function PantallaDeEquipo() {
   // Invitar es de quien gestiona el equipo (la API ya rechaza al resto). A
   // quien no lo gestiona la página ya lo devolvió al panel (#49); mientras la
   // sesión carga, el botón tampoco se ofrece: falla cerrado.
-  const invita = puedeGestionarEquipo(actorDeSesion(sesion))
+  const actor = actorDeSesion(sesion)
+  const invita = puedeGestionarEquipo(actor)
   const [miembros, setMiembros] = useState<MiembroDelEquipo[]>([])
   const [invitaciones, setInvitaciones] = useState<InvitacionPendiente[]>([])
   const [cargando, setCargando] = useState(true)
@@ -43,6 +45,9 @@ export function PantallaDeEquipo() {
   const [anulando, setAnulando] = useState(false)
   const [avisoDeAnular, setAvisoDeAnular] = useState("")
   const [serviciosDe, setServiciosDe] = useState<MiembroDelEquipo | null>(null)
+  /** La persona cuya foto se está cambiando: su id, no la fila, para que el modal vea la foto que se acaba de guardar. */
+  const [fotoDeId, setFotoDeId] = useState<string | null>(null)
+  const fotoDe = miembros.find((miembro) => miembro.id === fotoDeId) ?? null
 
   const cargar = async () => {
     setCargando(true)
@@ -138,6 +143,11 @@ export function PantallaDeEquipo() {
             setAvisoListo("")
             setServiciosDe(miembro)
           }}
+          puedeCambiarLaFotoDe={(miembro) => puedeEditarFotoDelMiembro(actor, miembro)}
+          alEditarFoto={(miembro) => {
+            setAvisoListo("")
+            setFotoDeId(miembro.id)
+          }}
         />
       </div>
 
@@ -181,6 +191,21 @@ export function PantallaDeEquipo() {
               setServiciosDe(null)
               setAvisoListo(texto)
             }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {fotoDe && (
+          <ModalFotoDelMiembro
+            miembro={fotoDe}
+            alCerrar={() => setFotoDeId(null)}
+            // La lista se actualiza detrás sin volver a pedirla: sólo cambió una foto.
+            alCambiar={(miembroId, url) =>
+              setMiembros((actuales) =>
+                actuales.map((miembro) => (miembro.id === miembroId ? { ...miembro, fotoUrl: url } : miembro))
+              )
+            }
           />
         )}
       </AnimatePresence>

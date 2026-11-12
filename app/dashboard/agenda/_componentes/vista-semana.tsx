@@ -9,6 +9,7 @@ import { vocabularioDe } from "@/lib/vocabulario"
 import { diasSemana } from "./controles-de-agenda"
 import { estiloDeEstado } from "./estados-de-cita"
 import { aQuienBloquea, citaPorConfirmar, destacaSinProfesional, nombreDeCliente, type Bloqueo, type Cita } from "../_datos"
+import { frasesDeLaAgenda } from "../_frases"
 import { columnasDeSolape, rangoDeHoras, recortarAHoras, tramoDeCita, tramoEnElDia, tramosDeFranjas } from "../_disposicion"
 import { caeEnElDia, esHoyEn, horaEn } from "../_hora-del-negocio"
 import { useZonaDelNegocio } from "./zona-del-negocio"
@@ -61,8 +62,10 @@ export function VistaSemana({
   destacarSinProfesional = false,
 }: PropsDeVistaSemana) {
   const caja = useRef<HTMLDivElement>(null)
-  // "Sin profesional", con la palabra del rubro: "Sin odontólogo" en una clínica dental.
-  const { cliente, profesional } = vocabularioDe(useRubroDelPanel())
+  // "Sin profesional", "Sin cliente" y el estado, con las palabras del rubro: "Sin odontólogo", "Sin paciente" y "No asistió" en una clínica dental.
+  const { palabras } = vocabularioDe(useRubroDelPanel())
+  const frases = frasesDeLaAgenda(palabras)
+  const palabraCliente = palabras.cliente.singular
   // Días, horas y "hoy", en la zona del negocio (#99).
   const zona = useZonaDelNegocio()
   const esHoy = (dia: Date) => esHoyEn(dia, zona)
@@ -159,7 +162,7 @@ export function VistaSemana({
                   if (!visible) return null
                   const arriba = ((visible.inicioMin - desde * 60) / 60) * ALTURA_HORA
                   const alto = Math.max(((visible.finMin - visible.inicioMin) / 60) * ALTURA_HORA - SEPARACION, ALTURA_MINIMA)
-                  const quien = aQuienBloquea(bloqueo)
+                  const quien = aQuienBloquea(bloqueo, palabras)
                   return (
                     <button
                       key={bloqueo.id}
@@ -181,7 +184,7 @@ export function VistaSemana({
                   const distanciaArriba = ((inicioMin - desde * 60) / 60) * ALTURA_HORA
                   const duracion = duracionParaMostrar(cita.startTime, cita.endTime)
                   const altura = Math.max((duracion / 60) * ALTURA_HORA - SEPARACION, ALTURA_MINIMA)
-                  const estado = estiloDeEstado(cita.status, citaPorConfirmar(cita))
+                  const estado = estiloDeEstado(cita.status, citaPorConfirmar(cita), palabras)
                   const sinProfesional = destacaSinProfesional(cita, destacarSinProfesional)
                   const { columna, columnas } = lugares.get(cita.id) ?? { columna: 0, columnas: 1 }
                   // Sola, 4 px de cada lado; compartiendo, 2 px, que el ancho es poco.
@@ -202,7 +205,7 @@ export function VistaSemana({
                       onClick={() => onSeleccionar(cita)}
                       // Lo que la grilla dice con el lugar y el color, dicho para el lector de
                       // pantalla. Empieza por lo que se ve, para que también lo encuentre la voz.
-                      aria-label={`${nombreDeCliente(cita, cliente)}, ${cita.title}, ${diaParaLeer(dia)}, de ${horaEn(cita.startTime, zona)} a ${horaEn(cita.endTime, zona)}, ${estado.texto}${sinProfesional ? `, sin ${profesional}` : ""}`}
+                      aria-label={`${nombreDeCliente(cita, palabraCliente)}, ${cita.title}, ${diaParaLeer(dia)}, de ${horaEn(cita.startTime, zona)} a ${horaEn(cita.endTime, zona)}, ${estado.texto}${sinProfesional ? `, ${frases.profesional.sinEnMedioDeFrase}` : ""}`}
                       className={cn(
                         "absolute overflow-hidden rounded-[10px] border-l-[3px] px-1.5 py-1 text-left",
                         "anillo-foco transition-shadow duration-200 ease-suave hover:z-10 hover:shadow-md focus-visible:z-10",
@@ -218,10 +221,10 @@ export function VistaSemana({
                           cita.status === "cancelada" && "line-through"
                         )}
                       >
-                        {nombreDeCliente(cita, cliente)}
+                        {nombreDeCliente(cita, palabraCliente)}
                       </span>
                       {altura > 32 && <span className="block truncate text-xs">{cita.title}</span>}
-                      {sinProfesional && altura > 48 && <span className="block truncate text-xs font-medium">Sin {profesional}</span>}
+                      {sinProfesional && altura > 48 && <span className="block truncate text-xs font-medium">{frases.profesional.sin}</span>}
                     </button>
                   )
                 })}

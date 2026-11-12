@@ -135,6 +135,19 @@ const limitadorFilaVirtualPorNegocio = crearLimitador("fila-virtual-negocio", 60
 // una espera que puede pasar de una hora, y cortarlo dejaría a la persona sin
 // saber cuándo le toca. A un enlace filtrado lo deja en una consulta cada 15 s.
 const limitadorPosicionEnFila = crearLimitador("fila-posicion", 240, "1 h")
+// Subir o quitar una foto (logo, portada, foto de un integrante): 20 por hora
+// por sesión. Cada subida decodifica una imagen de hasta 5 MB, la reencoda y
+// escribe en el almacenamiento externo (R2): es de lo más caro que hace la
+// API, y el límite de escritura del panel (60 por minuto) dejaría llenar el
+// bucket y gastar CPU en bucle. Nadie cambia el logo, la portada y la foto de
+// cada profesional más de un puñado de veces por hora.
+const limitadorFotos = crearLimitador("fotos", 20, "1 h")
+// Leer una foto (`GET /fotos/...`), sin sesión: 600 por minuto por IP. La
+// página pública de un negocio carga su portada, su logo y la foto de cada
+// profesional, y los celulares de un local comparten la misma IP; las fotos
+// son inmutables y el navegador las cachea un año, así que el tope sólo corta
+// a quien las pide en bucle (cada lectura es un pedido al almacenamiento).
+const limitadorFotosPublicas = crearLimitador("fotos-publicas", 600, "1 m")
 
 export type TipoLimite =
   | "login"
@@ -157,6 +170,8 @@ export type TipoLimite =
   | "filaVirtual"
   | "filaVirtualPorNegocio"
   | "posicionEnFila"
+  | "fotos"
+  | "fotosPublicas"
 
 const limitadores: Record<TipoLimite, Ratelimit | null> = {
   login: limitadorLogin,
@@ -179,6 +194,8 @@ const limitadores: Record<TipoLimite, Ratelimit | null> = {
   filaVirtual: limitadorFilaVirtual,
   filaVirtualPorNegocio: limitadorFilaVirtualPorNegocio,
   posicionEnFila: limitadorPosicionEnFila,
+  fotos: limitadorFotos,
+  fotosPublicas: limitadorFotosPublicas,
 }
 
 /**
@@ -223,12 +240,19 @@ const fallaAbiertoSiUpstashFalla: Record<TipoLimite, boolean> = {
   // Cerrado: sin sesión. Una caída del proveedor deja a la persona sin
   // actualizar su posición unos segundos; el siguiente intento la trae.
   posicionEnFila: false,
+  // Cerrado: es una escritura cara (decodifica y reencoda una imagen y escribe
+  // en R2). Exige sesión de dueño, encargado o profesional, así que una caída
+  // del proveedor sólo demora el cambio de una foto.
+  fotos: false,
   // Abierto, como las lecturas del panel: exige sesión de dueño o encargado y
   // cortarla dejaría al negocio sin sus datos por una caída ajena.
   exportacion: true,
   panelEscritura: true,
   lecturaPublica: true,
   panelLectura: true,
+  // Abierto: es una lectura pública; cortarla dejaría a todos los negocios
+  // sin fotos en su página por una caída ajena.
+  fotosPublicas: true,
 }
 
 function primerValor(cabecera: string | null): string | null {

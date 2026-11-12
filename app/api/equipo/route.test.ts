@@ -100,6 +100,24 @@ describe("GET /api/equipo", () => {
     expect(argumentosInvitaciones.where.businessId).toBe("negocio-2")
   })
 
+  it("trae la foto de cada integrante (una ruta del propio sitio) para que la pantalla de Equipo la muestre", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const miembros = [
+      { id: "m-1", role: "worker", createdAt: new Date(), fotoUrl: "/fotos/negocios/negocio-1/miembro-m-1-0b8a7c1e-2d3f-4a5b-8c9d-0e1f2a3b4c5d.webp", user: { id: "u-1", name: "Ana", email: "ana@x.com" } },
+      { id: "m-2", role: "admin", createdAt: new Date(), fotoUrl: null, user: { id: "u-2", name: "Bea", email: "bea@x.com" } },
+    ]
+    prismaMock.businessMember.findMany.mockResolvedValueOnce(miembros)
+    prismaMock.workerInvitation.findMany.mockResolvedValueOnce([])
+
+    const res = await GET()
+    const data = await res.json()
+
+    expect(prismaMock.businessMember.findMany.mock.calls[0][0].select.fotoUrl).toBe(true)
+    expect(data.miembros.map((m: { fotoUrl: string | null }) => m.fotoUrl)).toEqual([miembros[0].fotoUrl, null])
+  })
+
   it("un profesional (worker) recibe 401", async () => {
     const { GET } = await import("./route")
 

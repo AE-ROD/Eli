@@ -20,6 +20,7 @@
  * "Sin odontólogo") vacía, para que la grilla diga que el día está libre.
  */
 
+import { conMayuscula } from "@/lib/vocabulario"
 import { columnasDeSolape, type LugarEnLaColumna, type TramoEnMinutos } from "./_disposicion"
 
 /** Cada fila de la grilla: 15 minutos. */
@@ -172,20 +173,27 @@ export function columnasPorSillon(
   return columnas
 }
 
-/** Las columnas de la vista por odontólogo (ver la cabecera del módulo). */
+/**
+ * Las columnas de la vista por odontólogo (ver la cabecera del módulo).
+ * `palabraProfesional` es la del rubro, en minúscula (`palabras.profesional
+ * .singular`): nombra la columna de quien no tiene nombre y la de las citas sin
+ * asignar. La grilla es de la clínica dental, así que por defecto es
+ * "odontólogo".
+ */
 export function columnasPorOdontologo(
   equipo: readonly { id: string; nombre: string }[],
-  citas: readonly CitaParaLaGrilla[]
+  citas: readonly CitaParaLaGrilla[],
+  palabraProfesional = "odontólogo"
 ): ColumnaDeLaGrilla[] {
   const columnas: ColumnaDeLaGrilla[] = equipo.map((miembro) => ({ id: miembro.id, nombre: miembro.nombre }))
   for (const cita of citas) {
     const id = cita.memberId
     if (id && !columnas.some((columna) => columna.id === id)) {
-      columnas.push({ id, nombre: cita.member?.user?.name?.trim() || "Odontólogo" })
+      columnas.push({ id, nombre: cita.member?.user?.name?.trim() || conMayuscula(palabraProfesional) })
     }
   }
   if (citas.some((cita) => !cita.memberId) || columnas.length === 0) {
-    columnas.push({ id: SIN_ODONTOLOGO, nombre: "Sin odontólogo" })
+    columnas.push({ id: SIN_ODONTOLOGO, nombre: `Sin ${palabraProfesional}` })
   }
   return columnas
 }
@@ -195,9 +203,10 @@ export function columnasDeLaGrilla(
   verPor: VerPor,
   sillones: readonly SillonParaLaGrilla[],
   equipo: readonly { id: string; nombre: string }[],
-  citas: readonly CitaParaLaGrilla[]
+  citas: readonly CitaParaLaGrilla[],
+  palabraProfesional = "odontólogo"
 ): ColumnaDeLaGrilla[] {
-  return verPor === "sillon" ? columnasPorSillon(sillones, citas) : columnasPorOdontologo(equipo, citas)
+  return verPor === "sillon" ? columnasPorSillon(sillones, citas) : columnasPorOdontologo(equipo, citas, palabraProfesional)
 }
 
 /**

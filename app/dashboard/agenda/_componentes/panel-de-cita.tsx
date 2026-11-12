@@ -27,7 +27,7 @@ import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { cn } from "@/lib/utils"
-import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
+import { vocabularioDe } from "@/lib/vocabulario"
 import {
   ESTADO_AL_REACTIVAR,
   citaPorConfirmar,
@@ -42,6 +42,7 @@ import {
   type SillonDeLaAgenda,
   type SillonDeLaCita,
 } from "../_datos"
+import { frasesDeLaAgenda } from "../_frases"
 import { AsignarSillon } from "./asignar-sillon"
 import { estiloDeEstado } from "./estados-de-cita"
 import { useAhora } from "./usar-ahora"
@@ -105,7 +106,9 @@ export function PanelDeCita({
   onSillonAsignado,
 }: PropsDePanelDeCita) {
   const { data: sesion } = useSession()
-  const vocabulario = vocabularioDe(useRubroDelPanel())
+  // Las palabras del rubro: cliente, profesional y cita ("hora" en un salón, "cita" en una clínica).
+  const { palabras } = vocabularioDe(useRubroDelPanel())
+  const frases = frasesDeLaAgenda(palabras)
   // Clínica dental: la alerta de alergias, el sillón y el enlace a la ficha.
   // Lo decide `lib/permisos.ts`; sin los sillones (otro rubro), nada de eso.
   const clinica = esClinicaDental(actorDeSesion(sesion)) && sillones !== null
@@ -141,7 +144,7 @@ export function PanelDeCita({
   const ultimaVista = useRef({ id: cita.id, estado: cita.status })
   // Con esta hora se decide si ya pasó la de la cita: se renueva al pasar a otra y cada medio minuto (#100).
   const ahora = useAhora(cita.id)
-  const estado = estiloDeEstado(cita.status, porConfirmar)
+  const estado = estiloDeEstado(cita.status, porConfirmar, palabras)
   const duracion = duracionParaMostrar(cita.startTime, cita.endTime)
 
   // Clínica dental: la lista de la agenda no trae las alergias; se piden al
@@ -234,16 +237,14 @@ export function PanelDeCita({
       cita.status === "completada" ||
       cita.status === "no-asistio")
   // "No vino" marcado por error se deshace acá (#96): vuelve a confirmada, con las reglas de reactivar.
-  const textoDeReactivar =
-    cita.status === "cancelada" ? "Reactivar cita" : cita.status === "no-asistio" ? "Deshacer «No vino»" : "Devolver a confirmada"
   // Si al volver choca (una cancelada o de "No vino" había soltado su hora, #140), el segundo envío guarda igual.
-  const textoDeReactivarIgual = cita.status === "no-asistio" ? "Deshacer igual" : "Reactivar igual"
+  const reactivacion = frases.reactivar(cita.status)
 
   const pedirReactivar = async (confirmar: boolean) => {
     if (reactivando) return
     setReactivando(true)
     setErrorAlReactivar("")
-    const resultado = await reactivarCita(cita.id, { confirmar })
+    const resultado = await reactivarCita(cita.id, { confirmar }, palabras)
     setReactivando(false)
     if (resultado.tipo === "advertencias") return setAdvertencias(resultado.advertencias)
     setAdvertencias([])
@@ -260,9 +261,9 @@ export function PanelDeCita({
   // el permiso y avisa si choca, como al mover.
   const sinProfesional = destacaSinProfesional(cita, destacarSinProfesional)
   const asigna = sinProfesional && puedeAsignarCitasAOtros(actorDeSesion(sesion))
-  const profesional = nombreDelProfesional(cita)
+  const profesional = nombreDelProfesional(cita, frases.profesional.etiqueta)
   // Quién la canceló y cuándo (#134); nada en las canceladas de antes de guardarlo.
-  const canceladaPor = quienCancelo(cita)
+  const canceladaPor = quienCancelo(cita, palabras)
   // "No vino" cuando ya pasó la hora de empezar: antes, si avisó, se cancela.
   // Si ya llegó al Tablero no se ofrece, como "Cancelar cita"; el servidor
   // igual lo vuelve a verificar.
@@ -303,9 +304,9 @@ export function PanelDeCita({
         )}
       >
         <div className="flex items-center gap-3">
-          <AvatarUsuario nombre={nombreDeCliente(cita, vocabulario.cliente)} tamaño="lg" />
+          <AvatarUsuario nombre={nombreDeCliente(cita, palabras.cliente.singular)} tamaño="lg" />
           <div className="min-w-0">
-            <p className="font-semibold break-words">{nombreDeCliente(cita, vocabulario.cliente)}</p>
+            <p className="font-semibold break-words">{nombreDeCliente(cita, palabras.cliente.singular)}</p>
             <p className="text-sm break-words text-texto-2">{cita.title}</p>
           </div>
         </div>
@@ -322,7 +323,7 @@ export function PanelDeCita({
           </Dato>
           <Dato termino="Duración">{formatearDuracion(duracion)}</Dato>
           {(profesional || sinProfesional) && (
-            <Dato termino={conMayuscula(vocabulario.profesional)}>{profesional ?? "Sin asignar"}</Dato>
+            <Dato termino={frases.profesional.etiqueta}>{profesional ?? "Sin asignar"}</Dato>
           )}
           {clinica && <Dato termino="Sillón">{cita.sillon?.nombre ?? "Sin sillón"}</Dato>}
           {cita.price != null && (
@@ -335,9 +336,9 @@ export function PanelDeCita({
               {estado.texto}
             </span>
           </Dato>
-          {canceladaPor && <Dato termino="Cancelada por">{canceladaPor}</Dato>}
+          {canceladaPor && <Dato termino={frases.cancelada.por}>{canceladaPor}</Dato>}
           {canceladaPor && cita.canceladaEn && (
-            <Dato termino="Cancelada el">
+            <Dato termino={frases.cancelada.el}>
               <span className="block first-letter:uppercase">
                 {diaLargoEn(cita.canceladaEn, zona)}, <span className="tabular-nums">{horaEn(cita.canceladaEn, zona)}</span>
               </span>
@@ -351,7 +352,7 @@ export function PanelDeCita({
         {/* Lo que el cliente escribió al reservar (#122): sólo se lee, y con su rótulo para no confundirlo con la nota del local. */}
         {cita.clientComments && (
           <div className="mt-3 rounded-[16px] bg-superficie p-3 text-sm squircle">
-            <p className="text-xs font-medium text-texto-2">El {vocabulario.cliente} escribió al reservar</p>
+            <p className="text-xs font-medium text-texto-2">{frases.cliente.escribioAlReservar}</p>
             <p className="mt-1 break-words whitespace-pre-line">{cita.clientComments}</p>
           </div>
         )}
@@ -359,17 +360,13 @@ export function PanelDeCita({
 
       {porConfirmar && (
         <Aviso tono="atencion" rol="status" titulo="Por confirmar">
-          {resuelve
-            ? "Este contacto faltó a citas anteriores. Confírmala si la aceptas, o cancélala: al confirmarla le avisamos por correo."
-            : "Este contacto faltó a citas anteriores: la confirma o la cancela la dueña o el encargado."}
+          {frases.avisoPorConfirmar(resuelve)}
         </Aviso>
       )}
 
       {sinProfesional && (
-        <Aviso tono="atencion" rol="status" titulo={`Sin ${vocabulario.profesional}`}>
-          {asigna
-            ? `Mientras no tenga ${vocabulario.profesional}, en la reserva pública ocupa la hora de todo el equipo. Asígnala para liberar a los demás.`
-            : `Mientras no tenga ${vocabulario.profesional}, en la reserva pública ocupa la hora de todo el equipo. La asigna la dueña o el encargado.`}
+        <Aviso tono="atencion" rol="status" titulo={frases.profesional.sin}>
+          {frases.profesional.avisoSinAsignar(asigna)}
         </Aviso>
       )}
 
@@ -409,7 +406,7 @@ export function PanelDeCita({
           <Aviso>{errorAlReactivar}</Aviso>
         ))}
       {advertencias.length > 0 && (
-        <Aviso tono="atencion" rol="status" titulo={cita.status === "no-asistio" ? "Al volver a confirmarla:" : "Al reactivarla:"}>
+        <Aviso tono="atencion" rol="status" titulo={reactivacion.advertencias}>
           <ul className="list-disc space-y-1 pl-4">
             {advertencias.map((advertencia) => (
               <li key={advertencia.tipo}>{advertencia.mensaje}</li>
@@ -433,12 +430,12 @@ export function PanelDeCita({
               aria-busy={reactivando}
               onClick={() => pedirReactivar(advertencias.length > 0)}
             >
-              {advertencias.length > 0 ? textoDeReactivarIgual : textoDeReactivar}
+              {advertencias.length > 0 ? reactivacion.botonIgual : reactivacion.boton}
             </Boton>
           )}
           {asigna && (
             <Boton tamano="sm" className="w-full" onClick={() => onAsignar(cita)}>
-              Asignar {vocabulario.profesional}
+              {frases.profesional.asignar}
             </Boton>
           )}
           {puedeMoverse && (
@@ -448,12 +445,12 @@ export function PanelDeCita({
           )}
           {puedeCompletarse && (
             <Boton tamano="sm" className="w-full" onClick={() => void onCambiarEstado(cita.id, "completada")}>
-              Marcar completada
+              {frases.marcarCompletada}
             </Boton>
           )}
           {puedeNoVenir && (
             <Boton tamano="sm" variante="secundario" className="w-full" onClick={() => void onCambiarEstado(cita.id, "no-asistio")}>
-              No vino
+              {frases.noVino}
             </Boton>
           )}
           {puedeCancelarse && (
@@ -463,7 +460,7 @@ export function PanelDeCita({
               tamaño="sm"
               onClick={pedirCancelar}
             >
-              Cancelar cita
+              {frases.cancelarCita}
             </BotonPrimario>
           )}
         </div>
@@ -478,9 +475,9 @@ export function PanelDeCita({
     <AnimatePresence onExitComplete={alSalirLaConfirmacion}>
       {confirmandoCancelar && (
         <ModalConfirmar
-          titulo="¿Cancelar la cita?"
-          descripcion={`${nombreDeCliente(cita, vocabulario.cliente)}, ${diaLargoEn(cita.startTime, zona)} a las ${horaEn(cita.startTime, zona)}. Su hora queda libre para otra reserva.`}
-          textoConfirmar="Cancelar cita"
+          titulo={frases.preguntaCancelar}
+          descripcion={`${nombreDeCliente(cita, palabras.cliente.singular)}, ${diaLargoEn(cita.startTime, zona)} a las ${horaEn(cita.startTime, zona)}. Su hora queda libre para otra reserva.`}
+          textoConfirmar={frases.cancelarCita}
           textoCancelar="No cancelar"
           peligro
           trabajando={cancelando}
@@ -495,7 +492,7 @@ export function PanelDeCita({
   if (!escritorio) {
     return (
       <>
-        <MarcoDeModal titulo="Detalle de cita" antetitulo="Agenda" alCerrar={onCerrar}>
+        <MarcoDeModal titulo={frases.detalleDeLaCita} antetitulo="Agenda" alCerrar={onCerrar}>
           <div ref={panel} tabIndex={-1} className="flex flex-col gap-3 focus:outline-none">
             {aviso && <Aviso>{aviso}</Aviso>}
             {contenido}
@@ -519,7 +516,7 @@ export function PanelDeCita({
       >
         <div className="flex items-center justify-between gap-2 pl-3">
           <h2 ref={titulo} id={idDelTitulo} tabIndex={-1} className="antetitulo rounded-md anillo-foco">
-            Detalle de cita
+            {frases.detalleDeLaCita}
           </h2>
           <button
             type="button"

@@ -32,6 +32,8 @@ import {
   puedeBorrarCliente,
   puedeImportarExportarClientes,
   puedeEditarPaginaDelNegocio,
+  puedeEditarFotosDelNegocio,
+  puedeEditarFotoDelMiembro,
   memberIdParaCita,
   profesionalParaLinea,
   whereDeAgenda,
@@ -192,6 +194,8 @@ describe("jerarquía de roles", () => {
     ["importar y exportar clientes en CSV", puedeImportarExportarClientes, true, true, false],
     // La página pública es la cara del negocio: el profesional la ve, no la edita.
     ["editar la página pública del negocio", puedeEditarPaginaDelNegocio, true, true, false],
+    // El logo y la portada son parte de esa cara: el profesional no los cambia.
+    ["cambiar el logo y la portada del negocio", puedeEditarFotosDelNegocio, true, true, false],
   ])("%s — dueño/encargado/profesional", (_que, puede, esperaDueño, esperaEncargado, esperaProfesional) => {
     expect(puede(dueño)).toBe(esperaDueño)
     expect(puede(encargado)).toBe(esperaEncargado)
@@ -336,6 +340,55 @@ describe("sobre un miembro concreto", () => {
   })
 })
 
+describe("fotos de la página pública", () => {
+  const rubros = ["salon", "barberia", "odontologia", "salud", "otro", "", undefined, null, 7] as const
+  const conRubro = (rol: Rol, rubro: unknown, memberId?: string | null): Actor =>
+    ({ ...actor(rol, memberId), rubro }) as Actor
+
+  it("la foto de un integrante: dueño y encargado cambian la de cualquiera; el profesional sólo la suya", () => {
+    // [dueño, encargado, profesional] sobre un colega y sobre sí mismo.
+    expect([dueño, encargado, profesional].map((quien) => puedeEditarFotoDelMiembro(quien, miembro))).toEqual([true, true, false])
+    expect([dueño, encargado, profesional].map((quien) => puedeEditarFotoDelMiembro(quien, yoMismo))).toEqual([true, true, true])
+  })
+
+  it("lo mismo en todos los rubros: ninguno cambia quién puede", () => {
+    for (const rubro of rubros) {
+      expect(puedeEditarFotosDelNegocio(conRubro("owner", rubro))).toBe(true)
+      expect(puedeEditarFotosDelNegocio(conRubro("admin", rubro))).toBe(true)
+      expect(puedeEditarFotosDelNegocio(conRubro("worker", rubro))).toBe(false)
+      expect(puedeEditarFotoDelMiembro(conRubro("owner", rubro), miembro)).toBe(true)
+      expect(puedeEditarFotoDelMiembro(conRubro("admin", rubro), miembro)).toBe(true)
+      expect(puedeEditarFotoDelMiembro(conRubro("worker", rubro), miembro)).toBe(false)
+      expect(puedeEditarFotoDelMiembro(conRubro("worker", rubro), yoMismo)).toBe(true)
+    }
+  })
+
+  it("un integrante de otro negocio no se alcanza, ni siendo la dueña", () => {
+    expect(puedeEditarFotoDelMiembro(dueño, ajeno)).toBe(false)
+    expect(puedeEditarFotoDelMiembro(encargado, ajeno)).toBe(false)
+    // Mismo id de membresía, pero de otro negocio: no es "la suya".
+    expect(puedeEditarFotoDelMiembro(profesional, { id: "yo", businessId: OTRO_NEGOCIO })).toBe(false)
+  })
+
+  it("sin `businessId` (la interfaz sólo tiene el id) decide el rol y la membresía", () => {
+    expect(puedeEditarFotoDelMiembro(dueño, { id: "colega" })).toBe(true)
+    expect(puedeEditarFotoDelMiembro(profesional, { id: "colega" })).toBe(false)
+    expect(puedeEditarFotoDelMiembro(profesional, { id: "yo" })).toBe(true)
+  })
+
+  it("un profesional sin memberId no cambia ninguna foto, ni una sin id que coincida", () => {
+    const roto = actor("worker", null)
+    expect(puedeEditarFotoDelMiembro(roto, yoMismo)).toBe(false)
+    expect(puedeEditarFotoDelMiembro(roto, miembro)).toBe(false)
+    expect(puedeEditarFotoDelMiembro(roto, { id: "", businessId: NEGOCIO })).toBe(false)
+  })
+
+  it("el dueño no es miembro: tiene permiso por rol, no por memberId", () => {
+    expect(dueño.memberId).toBeNull()
+    expect(puedeEditarFotoDelMiembro(dueño, miembro)).toBe(true)
+  })
+})
+
 describe("falla cerrado", () => {
   it("sin actor, toda función niega", () => {
     expect(puedeGestionarEquipo(null)).toBe(false)
@@ -365,6 +418,8 @@ describe("falla cerrado", () => {
     expect(puedeBorrarCliente(null)).toBe(false)
     expect(puedeImportarExportarClientes(null)).toBe(false)
     expect(puedeEditarPaginaDelNegocio(null)).toBe(false)
+    expect(puedeEditarFotosDelNegocio(null)).toBe(false)
+    expect(puedeEditarFotoDelMiembro(null, miembro)).toBe(false)
   })
 
   it("un rol desconocido no gestiona la suscripción ni asigna citas a otros", () => {
@@ -375,6 +430,10 @@ describe("falla cerrado", () => {
     expect(veLaListaDeInicio(desconocido)).toBe(false)
     expect(puedeAsignarCitasAOtros(desconocido)).toBe(false)
     expect(puedeEditarPaginaDelNegocio(desconocido)).toBe(false)
+    expect(puedeEditarFotosDelNegocio(desconocido)).toBe(false)
+    expect(puedeEditarFotoDelMiembro(desconocido, miembro)).toBe(false)
+    // Ni siquiera con su propia membresía: un rol que no existe no cuenta como profesional.
+    expect(puedeEditarFotoDelMiembro(desconocido, yoMismo)).toBe(false)
     // El panel del día es la vista restringida: un rol desconocido cae ahí.
     expect(veElPanelDeSuDia(desconocido)).toBe(true)
   })

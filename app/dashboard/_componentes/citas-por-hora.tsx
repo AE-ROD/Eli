@@ -11,6 +11,7 @@ import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import type { CitaDelDia } from "@/lib/horario-dia"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
+import { frasesDelInicio } from "../_frases"
 
 interface PropsDeCitasPorHora {
   /** Nulo mientras cargan las cifras del panel. */
@@ -22,12 +23,13 @@ interface PropsDeCitasPorHora {
 /** Las citas de hoy en fila por hora de inicio: quién viene y a qué. */
 export function CitasPorHora({ citas, zona }: PropsDeCitasPorHora) {
   const idDelTitulo = useId()
-  // "Sin paciente" en una clínica dental.
-  const { cliente } = vocabularioDe(useRubroDelPanel())
+  // "Sin paciente" en una clínica dental; "Hoy, hora por hora" en un salón.
+  const { palabras } = vocabularioDe(useRubroDelPanel())
+  const frases = frasesDelInicio(palabras).citasPorHora
 
   return (
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
-      <EncabezadoDeTarjeta id={idDelTitulo} titulo="Citas de hoy por hora" icono={{ figura: Clock, color: "azul" }} />
+      <EncabezadoDeTarjeta id={idDelTitulo} titulo={frases.titulo} icono={{ figura: Clock, color: "azul" }} />
 
       <div className="mt-5">
         {citas && citas.length > 0 ? (
@@ -38,14 +40,14 @@ export function CitasPorHora({ citas, zona }: PropsDeCitasPorHora) {
                 {/* `min-w-0`: sin él, un nombre largo ensanchaba la fila más allá de la pantalla en vez de cortarse. */}
                 <span className="flex h-8 min-w-0 flex-1 items-center rounded-[12px] bg-azul-suave px-3 squircle">
                   <span className="truncate text-xs font-medium text-navy">
-                    {cita.customer ? nombreCompletoDeCliente(cita.customer) : `Sin ${cliente}`} — {cita.title}
+                    {cita.customer ? nombreCompletoDeCliente(cita.customer) : `Sin ${palabras.cliente.singular}`} — {cita.title}
                   </span>
                 </span>
               </li>
             ))}
           </ul>
         ) : (
-          <EstadoVacio>{citas ? "Sin citas para hoy" : "Cargando..."}</EstadoVacio>
+          <EstadoVacio>{citas ? frases.sinCitas : "Cargando..."}</EstadoVacio>
         )}
       </div>
     </section>

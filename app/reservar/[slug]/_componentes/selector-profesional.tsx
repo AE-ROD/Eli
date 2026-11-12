@@ -3,6 +3,7 @@
 import { useId } from "react"
 import type { Ref } from "react"
 import { UsersRound } from "lucide-react"
+import { ImagenConRespaldo } from "@/components/comunes/imagen-con-respaldo"
 import { cn } from "@/lib/utils"
 import type { ProfesionalDelEquipo } from "../_datos"
 
@@ -96,8 +97,14 @@ export function SelectorProfesional({
                 {opcion.id === null ? (
                   <UsersRound className="size-4" strokeWidth={1.75} />
                 ) : opcion.fotoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- la foto es una URL que carga el negocio; no pasa por el optimizador
-                  <img src={opcion.fotoUrl} alt="" className="size-full object-cover" />
+                  <ImagenConRespaldo
+                    src={opcion.fotoUrl}
+                    alt=""
+                    width={32}
+                    height={32}
+                    className="size-full object-cover"
+                    respaldo={iniciales(opcion.nombre)}
+                  />
                 ) : (
                   iniciales(opcion.nombre)
                 )}

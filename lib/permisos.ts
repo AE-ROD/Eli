@@ -147,6 +147,34 @@ export const puedeImportarExportarClientes = gestionaElNegocio
 export const puedeEditarPaginaDelNegocio = gestionaElNegocio
 
 /**
+ * Las fotos de la página pública (logo y portada del negocio): son la cara
+ * del negocio, como el resto de la página, así que dueño y encargado. El
+ * profesional no las cambia.
+ */
+export const puedeEditarFotosDelNegocio = gestionaElNegocio
+
+/**
+ * La foto de un integrante del equipo (la que se ve en "Quiénes atienden").
+ * Dueño y encargado cambian la de cualquiera del negocio; el profesional,
+ * SÓLO la suya: su membresía (`memberId` de la sesión) tiene que ser la del
+ * integrante. Un profesional sin `memberId` no cambia ninguna (`null` no es
+ * "la suya"): falla cerrado.
+ *
+ * `businessId` es opcional para quien sólo tiene el id (la interfaz decide si
+ * muestra el botón); el endpoint lo pasa siempre, leído de la base: si viene y
+ * no es el del actor, niega aunque el actor gestione el negocio.
+ */
+export const puedeEditarFotoDelMiembro = (
+  actor: Actor | null,
+  miembro: { id: string; businessId?: string }
+): boolean => {
+  if (!actor) return false
+  if (miembro.businessId !== undefined && !mismoNegocio(actor, miembro.businessId)) return false
+  if (gestionaElNegocio(actor)) return true
+  return actor.rol === "worker" && !!actor.memberId && actor.memberId === miembro.id
+}
+
+/**
  * A quién se asigna una cita. Sólo quien puede asignar citas a otros (dueño y
  * encargado) elige: se respeta lo pedido, incluido `null` ("sin asignar").
  * Cualquier otro —el profesional, o un rol desconocido— no elige: termina

@@ -1,9 +1,9 @@
-import Image from "next/image"
 import { useId } from "react"
 import type { ReactNode } from "react"
 import { CalendarCheck, CalendarClock, Clock, Instagram, MapPin, MessageCircle, Navigation, Percent, Wallet } from "lucide-react"
 import { Boton, clasesDeBoton } from "@/components/comunes/boton"
 import { CLASES_DEL_LOCAL } from "@/components/comunes/colores-del-local"
+import { ImagenConRespaldo } from "@/components/comunes/imagen-con-respaldo"
 import { Tarjeta } from "@/components/comunes/tarjeta"
 import { estadoDeAtencion, textoDeEstado } from "@/lib/abierto-ahora"
 import { formatearMonto } from "@/lib/dinero"
@@ -58,7 +58,7 @@ function Cabecera({ pagina, ahora }: PropsDeMiniPagina) {
     <Tarjeta como="section" aria-labelledby={idDelTitulo} className="overflow-hidden">
       <div className={cn("relative h-28 sm:h-40", clasesDelColor)}>
         {pagina.portada && (
-          <Image src={pagina.portada} alt="" fill priority sizes="(min-width: 832px) 832px, 100vw" className="object-cover" />
+          <ImagenConRespaldo src={pagina.portada} alt="" fill priority sizes="(min-width: 832px) 832px, 100vw" className="object-cover" />
         )}
       </div>
 
@@ -70,7 +70,15 @@ function Cabecera({ pagina, ahora }: PropsDeMiniPagina) {
           )}
         >
           {pagina.logo ? (
-            <Image src={pagina.logo} alt={`Logo de ${pagina.nombre}`} fill sizes="80px" className="object-cover" />
+            // Si el logo no carga, las iniciales: el texto alternativo no debe quedar a la vista dentro del círculo.
+            <ImagenConRespaldo
+              src={pagina.logo}
+              alt={`Logo de ${pagina.nombre}`}
+              fill
+              sizes="80px"
+              className="object-cover"
+              respaldo={<span aria-hidden="true">{iniciales(pagina.nombre)}</span>}
+            />
           ) : (
             <span aria-hidden="true">{iniciales(pagina.nombre)}</span>
           )}
@@ -204,7 +212,14 @@ function Equipo({
                     )}
                   >
                     {profesional.foto ? (
-                      <Image src={profesional.foto} alt="" fill sizes="56px" className="object-cover" />
+                      <ImagenConRespaldo
+                        src={profesional.foto}
+                        alt=""
+                        fill
+                        sizes="56px"
+                        className="object-cover"
+                        respaldo={<span aria-hidden="true">{iniciales(profesional.nombre)}</span>}
+                      />
                     ) : (
                       <span aria-hidden="true">{iniciales(profesional.nombre)}</span>
                     )}

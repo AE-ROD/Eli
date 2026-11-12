@@ -59,8 +59,8 @@ export function VistaDia({
   destacarSinProfesional = false,
 }: PropsDeVistaDia) {
   const zona = useZonaDelNegocio()
-  // "Sin paciente" en una clínica dental.
-  const { cliente } = vocabularioDe(useRubroDelPanel())
+  // "Sin paciente" en una clínica dental; "Todo el salón" en un salón.
+  const { palabras } = vocabularioDe(useRubroDelPanel())
   // El día y las horas, en la zona del negocio (#99).
   const citasDelDia = citas.filter((cita) => caeEnElDia(cita.startTime, fecha, zona))
   const franjasDelDia = horario.filter((franja) => franja.dayOfWeek === fecha.getDay())
@@ -97,7 +97,7 @@ export function VistaDia({
                   >
                     <span className="min-w-0 break-words">
                       <span className="font-medium">Bloqueado</span>
-                      {` · ${aQuienBloquea(bloqueo)}`}
+                      {` · ${aQuienBloquea(bloqueo, palabras)}`}
                       {bloqueo.motivo && ` · ${bloqueo.motivo}`}
                     </span>
                     <span className="shrink-0 text-xs tabular-nums">
@@ -106,7 +106,7 @@ export function VistaDia({
                   </button>
                 ))}
                 {citasEnHora.map((cita) => (
-                  <TarjetaCita key={cita.id} cita={paraTarjeta(cita, zona, destacarSinProfesional, cliente)} compacta onClick={() => onSeleccionar(cita)} />
+                  <TarjetaCita key={cita.id} cita={paraTarjeta(cita, zona, destacarSinProfesional, palabras.cliente.singular)} compacta onClick={() => onSeleccionar(cita)} />
                 ))}
               </div>
             ) : cubierta ? (

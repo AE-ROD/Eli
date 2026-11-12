@@ -8,9 +8,8 @@ import { Insignia } from "@/components/comunes/insignia"
 import { Tarjeta } from "@/components/comunes/tarjeta"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
-import { cuantosHechos, pasosDeInicioPara, type PasosHechos } from "@/lib/lista-de-inicio"
+import { cuantosHechos, pasosDeInicioPara, textosDeLaLista, type PasosHechos } from "@/lib/lista-de-inicio"
 import { cn } from "@/lib/utils"
-import { vocabularioDe } from "@/lib/vocabulario"
 
 /**
  * "Deja tu negocio listo": los cuatro pasos de la puesta en marcha, cada uno
@@ -23,7 +22,7 @@ import { vocabularioDe } from "@/lib/vocabulario"
 export function ListaDeInicio({ pasos }: { pasos: PasosHechos }) {
   const idDelTitulo = useId()
   const rubro = useRubroDelPanel()
-  const { clientes } = vocabularioDe(rubro)
+  const textos = textosDeLaLista(rubro)
   const pasosDelRubro = pasosDeInicioPara(rubro)
   const hechos = cuantosHechos(pasos)
   const total = pasosDelRubro.length
@@ -32,8 +31,8 @@ export function ListaDeInicio({ pasos }: { pasos: PasosHechos }) {
     <Tarjeta como="section" aria-labelledby={idDelTitulo} className="rounded-panel p-5 sm:p-6">
       <EncabezadoDeTarjeta
         id={idDelTitulo}
-        titulo="Deja tu negocio listo"
-        subtitulo={`Cuatro pasos para que tus ${clientes} empiecen a reservar solos.`}
+        titulo={textos.titulo}
+        subtitulo={textos.subtitulo}
         icono={{ figura: ListChecks }}
       />
 

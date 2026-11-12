@@ -34,6 +34,8 @@ export async function GET() {
         id: true,
         role: true,
         createdAt: true,
+        // La foto es una ruta del propio sitio (`/fotos/...`), no un dato sensible.
+        fotoUrl: true,
         user: { select: { id: true, name: true, email: true } },
       },
       orderBy: { createdAt: "asc" },

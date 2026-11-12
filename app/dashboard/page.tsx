@@ -20,9 +20,12 @@ import {
 import { leerInvitacion, type DatosDeInvitacion } from "@/lib/invitar-negocios"
 import { Aviso } from "@/components/panel/aviso"
 import { BarraSuperior } from "@/components/panel/barra-superior"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { fechaLargaEn } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
+import { frasesDelInicio } from "./_frases"
 import { leerEstadisticas, type EstadisticasDelPanel } from "./_datos"
 import { VistaDiaProfesional } from "./_componentes/vista-dia-profesional"
 import { EstadisticasDelNegocio } from "./_componentes/estadisticas-del-negocio"
@@ -47,6 +50,8 @@ export default function PaginaPanel() {
   const [aviso, setAviso] = useState("")
   const router = useRouter()
   const { data: sesion, status: estadoSesion } = useSession()
+  // "Nueva hora" en un salón, "Nueva cita" en una clínica o sin rubro.
+  const nuevaCita = frasesDelInicio(vocabularioDe(useRubroDelPanel()).palabras).nuevaCita
   // El panel del profesional es su día (F-014), no el tablero del negocio:
   // dueño y encargado siguen viendo exactamente lo de antes, sin tocar su rama.
   // Mientras no se sabe el rol no se elige ninguna rama: evita el parpadeo de
@@ -110,7 +115,7 @@ export default function PaginaPanel() {
         titulo="Inicio"
         subtitulo={subtitulo}
         accionPrincipal={{
-          texto: "Nueva cita",
+          texto: nuevaCita,
           onClick: () => router.push(AGENDA_CON_CITA_NUEVA),
         }}
       />

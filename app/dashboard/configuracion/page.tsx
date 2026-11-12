@@ -16,9 +16,16 @@ import { SeccionFilaVirtual } from "./_componentes/seccion-fila-virtual"
 import { GruposDeConfiguracion, type SeccionDeConfiguracion } from "./_componentes/grupos-de-configuracion"
 import { SeccionSillones } from "./_componentes/seccion-sillones"
 import { SeccionLaboratorios } from "./_componentes/seccion-laboratorios"
+import { SeccionMiFoto } from "./_componentes/seccion-mi-foto"
 import { leerLaboratorios } from "@/lib/protesis-servidor"
 import { contarEnviosDelMes } from "@/lib/envios-a-clientes"
-import { apareceEnLaPagina, colorDelNegocio, esEnlaceDeResenasValido, normalizarInstagram } from "@/lib/pagina-del-negocio"
+import {
+  apareceEnLaPagina,
+  colorDelNegocio,
+  esEnlaceDeResenasValido,
+  imagenPublica,
+  normalizarInstagram,
+} from "@/lib/pagina-del-negocio"
 import {
   actorDeSesion,
   esDueño,
@@ -27,6 +34,8 @@ import {
   puedeActivarMensajesAClientes,
   puedeConfigurarHoraValle,
   puedeConfigurarPorConfirmar,
+  puedeEditarFotoDelMiembro,
+  puedeEditarFotosDelNegocio,
   puedeEditarHorarioDe,
   puedeEditarPaginaDelNegocio,
   puedeEditarPlazoDeCambios,
@@ -66,7 +75,13 @@ export default async function PaginaConfiguracion() {
   // Los laboratorios de las prótesis: sólo la dueña de una clínica dental.
   const gestionaLaboratorios = puedeGestionarLaboratorios(actor)
 
-  const [horariosActuales, horarioDelNegocio, servicios, productos, pagina, sillones, laboratorios] = await Promise.all([
+  // "Mi foto": quien tiene una membresía en el negocio y puede cambiar la suya.
+  // La dueña no es del equipo (sin `memberId`), así que no la tiene. El `where`
+  // lleva el negocio de la sesión, como toda consulta.
+  const membresiaConFotoPropia =
+    actor.memberId && puedeEditarFotoDelMiembro(actor, { id: actor.memberId }) ? actor.memberId : null
+
+  const [horariosActuales, horarioDelNegocio, servicios, productos, pagina, sillones, laboratorios, miMembresia] = await Promise.all([
     prisma.workSchedule.findMany({
       where: { businessId: actor.businessId, memberId: horarioInicial },
       orderBy: { dayOfWeek: "asc" },
@@ -103,6 +118,8 @@ export default async function PaginaConfiguracion() {
         instagram: true,
         enlaceResenas: true,
         color: true,
+        logoUrl: true,
+        coverUrl: true,
         mediosDePago: true,
         cancelacionHorasAntes: true,
         timezone: true,
@@ -124,6 +141,12 @@ export default async function PaginaConfiguracion() {
         })
       : Promise.resolve([]),
     gestionaLaboratorios ? leerLaboratorios(actor) : Promise.resolve([]),
+    membresiaConFotoPropia
+      ? prisma.businessMember.findFirst({
+          where: { id: membresiaConFotoPropia, businessId: actor.businessId },
+          select: { id: true, role: true, fotoUrl: true },
+        })
+      : Promise.resolve(null),
   ])
 
   // Dueño y encargado editan el horario de cualquier miembro: cargan el
@@ -183,6 +206,21 @@ export default async function PaginaConfiguracion() {
     },
   ]
 
+  // Mi foto: cada integrante sube la suya (el profesional no ve Equipo).
+  if (miMembresia) {
+    secciones.push({
+      id: "mi-foto",
+      contenido: (
+        <SeccionMiFoto
+          miembroId={miMembresia.id}
+          nombre={nombreActor}
+          fotoInicial={imagenPublica(miMembresia.fotoUrl)}
+          apareceEnLaPagina={apareceEnLaPagina(miMembresia.role)}
+        />
+      ),
+    })
+  }
+
   if (pagina) {
     secciones.push({
       id: "pagina",
@@ -191,6 +229,8 @@ export default async function PaginaConfiguracion() {
           slug={pagina.slug}
           nombreDelNegocio={pagina.name}
           soloLectura={!puedeEditarPaginaDelNegocio(actor)}
+          puedeEditarFotos={puedeEditarFotosDelNegocio(actor)}
+          fotosIniciales={{ logo: imagenPublica(pagina.logoUrl), portada: imagenPublica(pagina.coverUrl) }}
           inicial={{
             address: pagina.address ?? "",
             comuna: pagina.comuna ?? "",

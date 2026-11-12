@@ -2,8 +2,10 @@
 
 import { useState } from "react"
 import { Boton } from "@/components/comunes/boton"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { aQuienBloquea, quitarBloqueo, type Bloqueo } from "../_datos"
 import { diaLargoEn, horaEn } from "../_hora-del-negocio"
 import { useZonaDelNegocio } from "./zona-del-negocio"
@@ -28,10 +30,11 @@ interface PropsDeModalBloqueo {
  */
 export function ModalBloqueo({ bloqueo, puedeQuitar, onQuitado, onCerrar }: PropsDeModalBloqueo) {
   const zona = useZonaDelNegocio()
+  const { palabras } = vocabularioDe(useRubroDelPanel())
   const [trabajando, setTrabajando] = useState(false)
   const [aviso, setAviso] = useState("")
 
-  const descripcion = `${aQuienBloquea(bloqueo)}: del ${cuando(bloqueo.startTime, zona)} al ${cuando(bloqueo.endTime, zona)}${
+  const descripcion = `${aQuienBloquea(bloqueo, palabras)}: del ${cuando(bloqueo.startTime, zona)} al ${cuando(bloqueo.endTime, zona)}${
     bloqueo.motivo ? ` (${bloqueo.motivo})` : ""
   }.`
 

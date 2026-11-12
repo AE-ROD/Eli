@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { cn } from "@/lib/utils"
-import { vocabularioDe } from "@/lib/vocabulario"
+import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import { fechaYMinutosEn } from "@/lib/zona-horaria"
 import { estiloDeEstado } from "./estados-de-cita"
@@ -21,6 +21,7 @@ import {
   type Cita,
   type SillonDeLaAgenda,
 } from "../_datos"
+import { frasesDeLaAgenda } from "../_frases"
 import { rangoDeHoras, recortarAHoras, tramoDeCita, tramoEnElDia, tramosDeFranjas } from "../_disposicion"
 import {
   ALTO_DE_FILA,
@@ -48,10 +49,13 @@ const ANCHO_MINIMO_DE_COLUMNA = 148
  */
 const ANTES_DE_AHORA = 4.5 * ALTO_DE_FILA
 
-const OPCIONES_DE_VER_POR: { id: VerPor; texto: string }[] = [
-  { id: "sillon", texto: "Sillón" },
-  { id: "odontologo", texto: "Odontólogo" },
-]
+/** Los botones de "Ver por": el sillón y quien atiende, con la palabra del rubro ("Odontólogo"). */
+function opcionesDeVerPor(palabraProfesional: string): { id: VerPor; texto: string }[] {
+  return [
+    { id: "sillon", texto: "Sillón" },
+    { id: "odontologo", texto: palabraProfesional },
+  ]
+}
 
 interface PropsDeGrillaDelDia {
   fecha: Date
@@ -112,6 +116,9 @@ export function GrillaDelDia({
   avisoDeSillones = "",
 }: PropsDeGrillaDelDia) {
   const zona = useZonaDelNegocio()
+  // La grilla es de la clínica dental, pero sus palabras salen del vocabulario como en el resto del panel.
+  const { palabras } = vocabularioDe(useRubroDelPanel())
+  const frases = frasesDeLaAgenda(palabras)
   const caja = useRef<HTMLDivElement>(null)
   const idDeVerPor = useId()
   const idDeBloqueos = useId()
@@ -127,7 +134,7 @@ export function GrillaDelDia({
   const filas = filasDeLaGrilla(desde, hasta)
   const alto = altoDeLaGrilla(desde, hasta)
 
-  const columnas = columnasDeLaGrilla(verPor, sillones, equipo, citasDelDia)
+  const columnas = columnasDeLaGrilla(verPor, sillones, equipo, citasDelDia, palabras.profesional.singular)
   const porColumna = citasPorColumna(citasDelDia, columnas, verPor, (cita) => tramoDeCita(cita, zona).inicioMin)
 
   // Cada bloqueo, recortado al día y a las horas que se muestran.
@@ -164,7 +171,7 @@ export function GrillaDelDia({
           </span>
           {/* Botones que dicen cuál está elegido (`aria-pressed`), como la vista de la agenda. */}
           <div role="group" aria-labelledby={idDeVerPor} className="flex gap-1 rounded-full bg-superficie p-1">
-            {OPCIONES_DE_VER_POR.map(({ id, texto }) => {
+            {opcionesDeVerPor(frases.grilla.verPorProfesional).map(({ id, texto }) => {
               const elegida = verPor === id
               return (
                 <button
@@ -231,7 +238,7 @@ export function GrillaDelDia({
                 >
                   <span className="min-w-0 break-words">
                     <span className="font-medium">Bloqueado</span>
-                    {` · ${aQuienBloquea(bloqueo)}`}
+                    {` · ${aQuienBloquea(bloqueo, palabras)}`}
                     {bloqueo.motivo && ` · ${bloqueo.motivo}`}
                   </span>
                   <span className="shrink-0 text-xs tabular-nums">
@@ -254,7 +261,12 @@ export function GrillaDelDia({
           <div className="sticky top-0 z-30 flex border-b border-borde bg-tarjeta">
             <div className="sticky left-0 z-10 w-14 shrink-0 bg-tarjeta" />
             {columnas.map((columna) => (
-              <CabeceraDeColumna key={columna.id} columna={columna} cantidad={porColumna.get(columna.id)?.length ?? 0} />
+              <CabeceraDeColumna
+                key={columna.id}
+                columna={columna}
+                cantidad={porColumna.get(columna.id)?.length ?? 0}
+                frases={frases}
+              />
             ))}
           </div>
 
@@ -292,7 +304,7 @@ export function GrillaDelDia({
                   key={columna.id}
                   role="group"
                   aria-label={`${columna.nombre}${columna.inactiva ? ", desactivado" : ""}: ${
-                    cantidad === 0 ? "sin citas" : cantidad === 1 ? "1 cita" : `${cantidad} citas`
+                    cantidad === 0 ? frases.sinCitas : frases.cuantasCitas(cantidad)
                   }`}
                   className="relative min-w-0 flex-1 border-l border-borde"
                   style={{
@@ -355,7 +367,15 @@ export function GrillaDelDia({
 }
 
 /** El nombre de la columna y cuántas citas tiene; un sillón desactivado lo dice. */
-function CabeceraDeColumna({ columna, cantidad }: { columna: ColumnaDeLaGrilla; cantidad: number }) {
+function CabeceraDeColumna({
+  columna,
+  cantidad,
+  frases,
+}: {
+  columna: ColumnaDeLaGrilla
+  cantidad: number
+  frases: ReturnType<typeof frasesDeLaAgenda>
+}) {
   return (
     <div className="min-w-0 flex-1 border-l border-borde px-2.5 py-2.5">
       <p className="truncate font-semibold" title={columna.nombre}>
@@ -363,7 +383,7 @@ function CabeceraDeColumna({ columna, cantidad }: { columna: ColumnaDeLaGrilla; 
       </p>
       <p className="truncate text-[13px] text-texto-2">
         {columna.inactiva ? "Desactivado · " : ""}
-        {cantidad === 0 ? "Sin citas" : cantidad === 1 ? "1 cita" : `${cantidad} citas`}
+        {cantidad === 0 ? conMayuscula(frases.sinCitas) : frases.cuantasCitas(cantidad)}
       </p>
     </div>
   )
@@ -388,16 +408,17 @@ interface PropsDeBloqueDeCita {
  * sillón o el odontólogo de la otra vista.
  */
 function BloqueDeCita({ cita, zona, desde, hasta, lugar, verPor, elegida, sinProfesional, onSeleccionar }: PropsDeBloqueDeCita) {
-  // "Sin paciente": la grilla es de la clínica dental.
-  const { cliente } = vocabularioDe(useRubroDelPanel())
+  // "Sin paciente", el estado y "sin odontólogo": la grilla es de la clínica dental.
+  const { palabras } = vocabularioDe(useRubroDelPanel())
+  const frases = frasesDeLaAgenda(palabras)
   const posicion = posicionDelBloque(tramoDeCita(cita, zona), desde, hasta)
   if (!posicion) return null
 
-  const estado = estiloDeEstado(cita.status, citaPorConfirmar(cita))
+  const estado = estiloDeEstado(cita.status, citaPorConfirmar(cita), palabras)
   const inicio = horaEn(cita.startTime, zona)
   const fin = horaEn(cita.endTime, zona)
-  const paciente = nombreDeCliente(cita, cliente)
-  const odontologo = nombreDelProfesional(cita)
+  const paciente = nombreDeCliente(cita, palabras.cliente.singular)
+  const odontologo = nombreDelProfesional(cita, frases.profesional.etiqueta)
   // Lo de la otra vista: por sillón, con quién; por odontólogo, en qué sillón.
   const otraColumna =
     verPor === "sillon"
@@ -413,8 +434,8 @@ function BloqueDeCita({ cita, zona, desde, hasta, lugar, verPor, elegida, sinPro
     cita.title,
     estado.texto,
     otraColumna,
-    cita.primeraVez ? "primera vez" : null,
-    sinProfesional ? "sin odontólogo" : null,
+    cita.primeraVez ? frases.grilla.primeraVez : null,
+    sinProfesional ? frases.profesional.sinEnMedioDeFrase : null,
   ]
     .filter(Boolean)
     .join(", ")

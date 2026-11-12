@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
-import { aQuienBloquea, asignarProfesional, cambiarEstadoDeCita, citaPorConfirmar, conEstadoNuevo, precioDeLosServicios, crearBloqueo, crearCita, destacaSinProfesional, hayProfesionales, moverCita, nombreDelProfesional, opcionesDeProfesional, precioDeLaCita, quienCancelo, serviciosParaElProfesional, idsDeServiciosElegidos, quitarBloqueo, reactivarCita, leerClienteParaLaCita, llegadaALaAgenda, type Bloqueo, type Cita, type DatosDeNuevaCita } from "./_datos"
+import { vocabularioDe } from "@/lib/vocabulario"
+import { aQuienBloquea, asignarProfesional, cambiarEstadoDeCita, citaPorConfirmar, conEstadoNuevo, precioDeLosServicios, crearBloqueo, crearCita, destacaSinProfesional, hayProfesionales, moverCita, nombreDelProfesional, opcionesDeProfesional, precioDeLaCita, quienCancelo, serviciosParaElProfesional, idsDeServiciosElegidos, quitarBloqueo, reactivarCita, leerCatalogoDeLaCita, leerCitas, buscarClientes, leerClienteParaLaCita, llegadaALaAgenda, type Bloqueo, type Cita, type DatosDeNuevaCita } from "./_datos"
 
 /** El cuerpo JSON con que se llamó a `fetch`. */
 const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
@@ -443,5 +444,77 @@ describe("llegar a la agenda con ?nueva=1&cliente=<id>", () => {
   it("sin conexión, también sin cliente", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")))
     expect(await leerClienteParaLaCita("c-1")).toBeNull()
+  })
+})
+
+describe("con las palabras del rubro", () => {
+  const salon = vocabularioDe("salon").palabras
+  const clinica = vocabularioDe("odontologia").palabras
+  const barberia = vocabularioDe("barberia").palabras
+
+  it("quién canceló: el cliente o el negocio, con su artículo", () => {
+    const cancelada = (canceladaPor: string) => ({ status: "cancelada", canceladaPor })
+    expect(quienCancelo(cancelada("cliente"), salon)).toBe("El cliente")
+    expect(quienCancelo(cancelada("negocio"), salon)).toBe("El salón")
+    expect(quienCancelo(cancelada("negocio"), barberia)).toBe("La barbería")
+    expect(quienCancelo(cancelada("cliente"), clinica)).toBe("El paciente")
+    expect(quienCancelo(cancelada("negocio"), clinica)).toBe("La clínica")
+    expect(quienCancelo({ status: "confirmada", canceladaPor: "cliente" }, clinica)).toBeNull()
+  })
+
+  it("de quién es el bloqueo: todo el lugar, o el profesional con la palabra del rubro", () => {
+    const base: Bloqueo = { id: "b", memberId: null, startTime: "", endTime: "", motivo: null, member: null }
+    expect(aQuienBloquea(base, salon)).toBe("Todo el salón")
+    expect(aQuienBloquea(base, barberia)).toBe("Toda la barbería")
+    expect(aQuienBloquea(base, clinica)).toBe("Toda la clínica")
+    expect(aQuienBloquea({ ...base, memberId: "m", member: { user: { name: " " } } }, salon)).toBe("Estilista")
+    expect(aQuienBloquea({ ...base, memberId: "m", member: { user: { name: null } } }, clinica)).toBe("Odontólogo")
+    expect(aQuienBloquea({ ...base, memberId: "m", member: { user: { name: "Carla" } } }, salon)).toBe("Carla")
+  })
+
+  it("el profesional sin nombre se llama como el rubro lo llama", () => {
+    const sinNombre = { memberId: "m1", member: { id: "m1", user: { name: "" } } }
+    expect(nombreDelProfesional(sinNombre, "Estilista")).toBe("Estilista")
+    expect(nombreDelProfesional(sinNombre)).toBe("Profesional")
+    expect(nombreDelProfesional({ memberId: null, member: null }, "Estilista")).toBeNull()
+    expect(opcionesDeProfesional([], { memberId: "m1", member: null }, "Estilista")).toEqual([{ valor: "m1", texto: "Estilista" }])
+  })
+
+  it("los mensajes de error dicen qué no se pudo hacer con las palabras del rubro", async () => {
+    const falla = () => simularRespuesta(json({}, 500))
+
+    falla()
+    expect(await leerCitas(new Date(2026, 9, 20), "dia", salon)).toEqual({ ok: false, error: "No se pudieron cargar las horas" })
+    falla()
+    expect(await leerCitas(new Date(2026, 9, 20), "dia")).toEqual({ ok: false, error: "No se pudieron cargar las citas" })
+    falla()
+    expect(await crearCita(CITA, ZONA, { confirmar: false }, salon)).toEqual({ tipo: "error", error: "No se pudo crear la hora" })
+    falla()
+    expect(await crearCita(CITA, ZONA)).toEqual({ tipo: "error", error: "No se pudo crear la cita" })
+    falla()
+    expect(
+      await moverCita("c1", { fecha: "2026-10-20", horaInicio: "10:00", horaFin: "11:00", memberId: "" }, ZONA, { confirmar: false, asignaProfesional: false }, salon)
+    ).toEqual({ tipo: "error", error: "No se pudo mover la hora" })
+    falla()
+    expect(await asignarProfesional("c1", "m1", { confirmar: false }, salon)).toEqual({ tipo: "error", error: "No se pudo asignar la estilista" })
+    falla()
+    expect(await asignarProfesional("c1", "m1", { confirmar: false }, clinica)).toEqual({ tipo: "error", error: "No se pudo asignar el odontólogo" })
+    falla()
+    expect(await reactivarCita("c1", { confirmar: false }, clinica)).toEqual({ tipo: "error", error: "No se pudo reactivar la cita" })
+    falla()
+    expect(await reactivarCita("c1", { confirmar: false }, salon)).toEqual({ tipo: "error", error: "No se pudo reactivar la hora" })
+    falla()
+    expect(await leerCatalogoDeLaCita(clinica)).toEqual({ ok: false, error: "No se pudo cargar el catálogo de prestaciones" })
+    falla()
+    expect(await leerCatalogoDeLaCita()).toEqual({ ok: false, error: "No se pudo cargar el catálogo de servicios" })
+    falla()
+    expect(await buscarClientes("ana", clinica)).toEqual({ ok: false, error: "No se pudieron buscar los pacientes" })
+    falla()
+    expect(await buscarClientes("ana")).toEqual({ ok: false, error: "No se pudieron buscar los clientes" })
+  })
+
+  it("el mensaje que manda el servidor sigue ganando sobre el del rubro", async () => {
+    simularRespuesta(json({ error: "Ese horario ya pasó" }, 400))
+    expect(await crearCita(CITA, ZONA, { confirmar: false }, salon)).toEqual({ tipo: "error", error: "Ese horario ya pasó" })
   })
 })

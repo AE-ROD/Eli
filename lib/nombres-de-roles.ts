@@ -1,3 +1,4 @@
+import { del } from "@/lib/concordancia"
 import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 
 /**
@@ -14,4 +15,15 @@ import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
  */
 export function nombreDelRol(rol: string | undefined, rubro?: string | null): string {
   return rol === "admin" ? "Encargado" : conMayuscula(vocabularioDe(rubro).profesional)
+}
+
+/**
+ * El rol con su artículo, para frases como «Foto del barbero» o «Foto de la
+ * estilista»: `nombreDelRol` en minúscula, concordado con el género de la
+ * palabra del rubro (`lib/concordancia.ts`) en vez de pegarle un "del". El
+ * encargado es "del encargado" en todos los rubros. Mismas reglas que
+ * `nombreDelRol`: lo que no sea `"admin"` se lee como profesional.
+ */
+export function delRol(rol: string | undefined, rubro?: string | null): string {
+  return rol === "admin" ? "del encargado" : del(vocabularioDe(rubro).palabras.profesional)
 }

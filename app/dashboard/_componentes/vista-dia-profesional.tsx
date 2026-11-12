@@ -14,6 +14,7 @@ import { vocabularioDe } from "@/lib/vocabulario"
 import { LineaDeTiempoDia, citaParaTarjeta } from "./linea-de-tiempo-dia"
 import { formatearTiempoLibre, minutosLibresEnFranjas, type CitaDelDia } from "@/lib/horario-dia"
 import type { EstadisticasDelPanel } from "../_datos"
+import { frasesDelInicio } from "../_frases"
 
 /**
  * Lo mínimo de las cifras del panel que necesita la vista del profesional.
@@ -24,11 +25,6 @@ type EstadisticasDelProfesional = Pick<EstadisticasDelPanel, "citasHoy" | "citas
 interface PropsDeVistaDiaProfesional {
   /** Nulo mientras cargan. */
   estadisticas: EstadisticasDelProfesional | null
-}
-
-function tituloResumen(citasHoy: number): string {
-  if (citasHoy === 0) return "Tu día está libre"
-  return citasHoy === 1 ? "1 cita hoy" : `${citasHoy} citas hoy`
 }
 
 /** El enlace a configuración dentro de un aviso: subrayado, como un enlace en medio del texto. */
@@ -46,13 +42,14 @@ function EnlaceAConfiguracion() {
 /** Lista simple de citas, reutilizada por los dos estados que no pueden dibujar la línea de tiempo (sin horario / horario inválido). */
 function ListaCitasDelDia({ citas, zona }: { citas: CitaDelDia[]; zona?: string }) {
   const idDelTitulo = useId()
-  // "Sin paciente" en una clínica dental.
-  const { cliente } = vocabularioDe(useRubroDelPanel())
+  // "Sin paciente" en una clínica dental; "Tus horas de hoy" en un salón.
+  const { palabras } = vocabularioDe(useRubroDelPanel())
+  const frases = frasesDelInicio(palabras).vistaDelProfesional
   return (
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
-        titulo={citas.length > 0 ? "Tus citas de hoy" : "Sin citas para hoy"}
+        titulo={citas.length > 0 ? frases.tusCitasDeHoy : frases.sinCitas}
         icono={{ figura: CalendarClock, color: "azul" }}
       />
       <div className="mt-5">
@@ -60,12 +57,12 @@ function ListaCitasDelDia({ citas, zona }: { citas: CitaDelDia[]; zona?: string 
           <ul className="space-y-2">
             {citas.map((cita) => (
               <li key={cita.id}>
-                <TarjetaCita cita={citaParaTarjeta(cita, cliente, zona)} compacta />
+                <TarjetaCita cita={citaParaTarjeta(cita, palabras.cliente.singular, zona)} compacta />
               </li>
             ))}
           </ul>
         ) : (
-          <EstadoVacio>Tampoco tienes citas agendadas para hoy.</EstadoVacio>
+          <EstadoVacio>{frases.tampocoTienes}</EstadoVacio>
         )}
       </div>
     </section>
@@ -83,6 +80,7 @@ function AvisoHorario({ titulo, children }: { titulo: string; children: ReactNod
 
 export function VistaDiaProfesional({ estadisticas }: PropsDeVistaDiaProfesional) {
   const idDelTitulo = useId()
+  const frases = frasesDelInicio(vocabularioDe(useRubroDelPanel()).palabras).vistaDelProfesional
 
   if (!estadisticas) {
     return (
@@ -130,7 +128,7 @@ export function VistaDiaProfesional({ estadisticas }: PropsDeVistaDiaProfesional
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
-        titulo={tituloResumen(citasHoy)}
+        titulo={citasHoy === 0 ? "Tu día está libre" : frases.resumenDelDia(citasHoy)}
         subtitulo={
           <span className="tabular-nums">
             {minutosLibres > 0 ? `${formatearTiempoLibre(minutosLibres)} sin reservar hoy` : "Tu agenda de hoy está completa"}

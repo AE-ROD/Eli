@@ -173,6 +173,15 @@ describe("columnasPorOdontologo", () => {
     expect(columnasPorOdontologo([], [])).toEqual([{ id: SIN_ODONTOLOGO, nombre: "Sin odontólogo" }])
   })
 
+  it("quien atiende se llama como el rubro lo llama: «Sin odontólogo» por defecto, otra palabra si se pasa", () => {
+    const citas = [{ memberId: "m7", member: { id: "m7", user: { name: " " } } }, { memberId: null }]
+    expect(columnasPorOdontologo([], citas).map((columna) => columna.nombre)).toEqual(["Odontólogo", "Sin odontólogo"])
+    expect(columnasPorOdontologo([], citas, "estilista").map((columna) => columna.nombre)).toEqual(["Estilista", "Sin estilista"])
+    expect(columnasDeLaGrilla("odontologo", SILLONES, [], [{ memberId: null }], "barbero").map((columna) => columna.nombre)).toEqual([
+      "Sin barbero",
+    ])
+  })
+
   it("columnasDeLaGrilla elige según «Ver por»", () => {
     expect(columnasDeLaGrilla("sillon", SILLONES, EQUIPO, [])[0].id).toBe("s1")
     expect(columnasDeLaGrilla("odontologo", SILLONES, EQUIPO, [])[0].id).toBe("m1")

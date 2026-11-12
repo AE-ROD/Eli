@@ -43,7 +43,7 @@ import {
 import type { VerPor } from "./_grilla-del-dia"
 import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
-import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { ControlesDeAgenda } from "./_componentes/controles-de-agenda"
 import { VistaSemana } from "./_componentes/vista-semana"
 import { VistaDia } from "./_componentes/vista-dia"
@@ -57,19 +57,16 @@ import { ModalBloqueo } from "./_componentes/modal-bloqueo"
 import { ListaDeEsperaDelDia } from "./_componentes/lista-de-espera-del-dia"
 import { useZonaDelNegocio } from "./_componentes/zona-del-negocio"
 import { useEsEscritorio } from "./_componentes/usar-escritorio"
+import { frasesDeLaAgenda } from "./_frases"
 import { hoyEn } from "./_hora-del-negocio"
-
-function resumen(cargando: boolean, cantidad: number): string {
-  if (cargando) return "Cargando..."
-  if (cantidad === 0) return "Sin citas en este período"
-  return `${cantidad} cita${cantidad === 1 ? "" : "s"} en este período`
-}
 
 export default function PaginaAgenda() {
   const { data: sesion } = useSession()
   const router = useRouter()
   const actor = actorDeSesion(sesion)
-  const vocabulario = vocabularioDe(useRubroDelPanel())
+  // Las palabras del rubro: "hora" en un salón, "cita" en una clínica o sin rubro.
+  const { palabras } = vocabularioDe(useRubroDelPanel())
+  const frases = frasesDeLaAgenda(palabras)
   const puedeAsignarProfesional = puedeAsignarCitasAOtros(actor)
   // Dueño y encargado bloquean a cualquiera o a todo el negocio; el
   // profesional, su agenda. Sin `memberId`, nada (no ve el botón).
@@ -117,6 +114,13 @@ export default function PaginaAgenda() {
   const [verPor, setVerPor] = useState<VerPor>("sillon")
   const idDelPeriodo = useId()
 
+  // Las palabras del último render: el aviso de una carga que falla las usa sin
+  // volver a crear `recargar` (que recargaría la agenda en cada render).
+  const palabrasVigentes = useRef(palabras)
+  useEffect(() => {
+    palabrasVigentes.current = palabras
+  })
+
   // El número de la última carga pedida: la respuesta de una anterior (pasar
   // rápido de semana, o una recarga lenta) llega tarde y no pisa a la nueva.
   const ultimaCarga = useRef(0)
@@ -124,7 +128,7 @@ export default function PaginaAgenda() {
   const recargar = useCallback(async (fecha: Date, modo: UnidadDeTiempo) => {
     const numero = ++ultimaCarga.current
     setCargando(true)
-    const [resultado, deBloqueos] = await Promise.all([leerCitas(fecha, modo), leerBloqueos(fecha, modo)])
+    const [resultado, deBloqueos] = await Promise.all([leerCitas(fecha, modo, palabrasVigentes.current), leerBloqueos(fecha, modo)])
     if (numero !== ultimaCarga.current) return
     // Si los bloqueos no cargan, la agenda se muestra igual, sin las franjas, y se avisa.
     setBloqueos(deBloqueos.ok ? deBloqueos.datos : [])
@@ -273,13 +277,13 @@ export default function PaginaAgenda() {
     if (!nuevaCita.clienteId) {
       setAdvertenciasDeNuevaCita([])
       setSillonOcupadoEnElModal(false)
-      return setAvisoDelModal(`Elige un ${vocabulario.cliente} de la lista: escribir su nombre no basta. Si no aparece, créalo primero en ${conMayuscula(vocabulario.clientes)}.`)
+      return setAvisoDelModal(frases.elegirClienteDeLaLista)
     }
 
     setAvisoDelModal("")
     setSillonOcupadoEnElModal(false)
     setGuardando(true)
-    const resultado = await crearCita(nuevaCita, zona, { confirmar })
+    const resultado = await crearCita(nuevaCita, zona, { confirmar }, palabras)
     setGuardando(false)
 
     // El aviso va dentro del modal, que sigue abierto con lo que se cargó: en
@@ -299,8 +303,8 @@ export default function PaginaAgenda() {
     <div className="min-h-dvh">
       <BarraSuperior
         titulo="Agenda"
-        subtitulo={resumen(cargando, citas.length)}
-        accionPrincipal={{ texto: "Nueva cita", onClick: () => abrirModal() }}
+        subtitulo={frases.resumenDelPeriodo(cargando, citas.length)}
+        accionPrincipal={{ texto: frases.nuevaCita, onClick: () => abrirModal() }}
       />
 
       <div className="space-y-4 px-4 pt-6 pb-10 sm:space-y-6 sm:px-6">

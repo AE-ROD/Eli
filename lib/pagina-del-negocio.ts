@@ -174,9 +174,10 @@ export function esEnlaceDeResenasValido(guardado: string | null | undefined): gu
 
 /**
  * La URL de una foto (logo, portada, profesional) sólo si es del mismo sitio
- * ("/..."). Todavía no hay subida de fotos ni almacenamiento aprobado, y la
- * CSP (`lib/csp.ts`) sólo deja cargar imágenes propias: una URL externa se
- * vería rota. Cuando exista la subida, esto y la CSP se abren juntos.
+ * ("/..."). Las fotos que sube el panel se guardan como `/fotos/negocios/...`
+ * (`lib/almacenamiento-de-fotos.ts`) y las sirve nuestra propia ruta, así que
+ * la CSP (`lib/csp.ts`) sigue dejando cargar sólo imágenes propias: una URL
+ * externa se vería rota, y por eso no pasa.
  */
 export function imagenPublica(url: string | null | undefined): string | null {
   const limpia = (url ?? "").trim()

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useId } from "react"
+import { useState, useRef, useEffect, useId, useMemo } from "react"
 import { Search, User, Scissors, Calendar, Check } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
@@ -12,7 +12,7 @@ import { CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { CampoHora } from "@/components/panel/campo-hora"
 import { cn } from "@/lib/utils"
 import { ejemplosDe, textoDeEjemplo } from "@/lib/ejemplos-por-rubro"
-import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
+import { vocabularioDe } from "@/lib/vocabulario"
 import {
   buscarClientes,
   idsDeServiciosElegidos,
@@ -28,6 +28,7 @@ import {
   type ServicioDelCatalogo,
   type SillonDeLaAgenda,
 } from "../_datos"
+import { frasesDeLaAgenda } from "../_frases"
 import { Aviso } from "@/components/panel/aviso"
 import type { Advertencia } from "@/lib/mover-cita"
 import { MAX_SERVICIOS_POR_RESERVA, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
@@ -99,9 +100,11 @@ export function ModalNuevaCita({
   onCerrar,
 }: PropsDeModalNuevaCita) {
   const hayAdvertencias = advertencias.length > 0
-  // "Cliente" y "Profesional", con las palabras del rubro: "Paciente" y "Odontólogo" en una clínica dental.
+  // Cliente, servicio, profesional y cita, con las palabras del rubro: "Paciente", "Prestación" y "Odontólogo" en una clínica dental.
   const rubro = useRubroDelPanel()
-  const vocabulario = vocabularioDe(rubro)
+  // Una sola vez por rubro: los efectos de abajo dependen de las palabras y no deben volver a correr en cada render.
+  const palabras = useMemo(() => vocabularioDe(rubro).palabras, [rubro])
+  const frases = frasesDeLaAgenda(palabras)
   // El buscador arranca diciendo el cliente del borrador, si hay uno elegido:
   // lo que se ve y lo que se guarda son lo mismo desde que se abre (A1).
   const [busquedaCliente, setBusquedaCliente] = useState(form.clienteNombre)
@@ -136,11 +139,11 @@ export function ModalNuevaCita({
 
   // El catálogo (#159). Si no carga, queda el texto libre, con el aviso.
   useEffect(() => {
-    leerCatalogoDeLaCita().then((resultado) => {
+    leerCatalogoDeLaCita(palabras).then((resultado) => {
       if (resultado.ok) setCatalogo(resultado.datos)
       else setAvisoDeCatalogo(resultado.error)
     })
-  }, [])
+  }, [palabras])
 
   useEffect(() => {
     if (!busquedaCliente || busquedaCliente.length < LETRAS_PARA_BUSCAR) {
@@ -151,7 +154,7 @@ export function ModalNuevaCita({
     }
     if (esperaDeBusqueda.current) clearTimeout(esperaDeBusqueda.current)
     esperaDeBusqueda.current = setTimeout(async () => {
-      const resultado = await buscarClientes(busquedaCliente)
+      const resultado = await buscarClientes(busquedaCliente, palabras)
       if (!resultado.ok) {
         // Las sugerencias que había eran de otra búsqueda: no se dejan como si
         // fueran las de esta.
@@ -164,7 +167,7 @@ export function ModalNuevaCita({
       setMostrarSugerencias(true)
     }, 300)
     return () => { if (esperaDeBusqueda.current) clearTimeout(esperaDeBusqueda.current) }
-  }, [busquedaCliente])
+  }, [busquedaCliente, palabras])
 
   function seleccionarCliente(cliente: ClienteSugerido, conTeclado: boolean) {
     onCambiarCampo("clienteId", cliente.id)
@@ -224,22 +227,20 @@ export function ModalNuevaCita({
   const listaVisible = mostrarSugerencias && sugerencias.length > 0 && !clienteElegido
 
   // Lo que dice la línea de debajo del buscador. Se anuncia al cambiar.
-  const estadoDeBusqueda =
-    busquedaCliente.length < LETRAS_PARA_BUSCAR
-      ? `Escribe al menos ${LETRAS_PARA_BUSCAR} letras y elige de la lista.`
-      : clienteElegido
-        ? `${conMayuscula(vocabulario.cliente)} elegido.`
-        : listaVisible
-          ? `${sugerencias.length === 1 ? `1 ${vocabulario.cliente} coincide` : `${sugerencias.length} ${vocabulario.clientes} coinciden`}. Elige uno de la lista.`
-          : `Elige un ${vocabulario.cliente} de la lista.`
+  const estadoDeBusqueda = frases.cliente.estadoDelBuscador({
+    letras: busquedaCliente.length,
+    minimo: LETRAS_PARA_BUSCAR,
+    elegido: clienteElegido,
+    coincidencias: listaVisible ? sugerencias.length : null,
+  })
 
   return (
-    <MarcoDeModal titulo="Nueva cita" bloqueado={guardando} alCerrar={onCerrar}>
+    <MarcoDeModal titulo={frases.nuevaCita} bloqueado={guardando} alCerrar={onCerrar}>
       <form onSubmit={onSubmit} className="space-y-5">
         {/* Búsqueda de cliente */}
         <div>
           <label htmlFor={idDelBuscador} className={cn(ETIQUETA, "mb-2")}>
-            {conMayuscula(vocabulario.cliente)}
+            {frases.cliente.etiqueta}
           </label>
           <div className="relative">
             <Search
@@ -254,7 +255,7 @@ export function ModalNuevaCita({
               autoFocus
               type="text"
               autoComplete="off"
-              placeholder={`Buscar ${vocabulario.cliente}...`}
+              placeholder={frases.cliente.buscar}
               value={busquedaCliente}
               aria-describedby={avisoDeBusqueda ? `${idDelEstado} ${idDelAvisoDeBusqueda}` : idDelEstado}
               onChange={(e) => {
@@ -290,7 +291,7 @@ export function ModalNuevaCita({
 
           {listaVisible && (
             <ul
-              aria-label={`${conMayuscula(vocabulario.clientes)} que coinciden`}
+              aria-label={frases.cliente.queCoinciden}
               className="mt-2 max-h-56 divide-y divide-borde overflow-y-auto rounded-campo bg-tarjeta inset-ring-1 inset-ring-borde squircle"
             >
               {sugerencias.map((cliente) => (
@@ -322,7 +323,7 @@ export function ModalNuevaCita({
         {serviciosOfrecidos.length > 0 && (
           <div role="group" aria-labelledby={idDelCatalogo}>
             <p id={idDelCatalogo} className={cn(ETIQUETA, "mb-2")}>
-              Servicios del catálogo
+              {frases.servicio.delCatalogo}
             </p>
             <div className="max-h-72 overflow-y-auto p-0.5">
               <SelectorServicio
@@ -337,7 +338,7 @@ export function ModalNuevaCita({
                 ? `${resumen.titulo} · ${formatearTiempoLibre(resumen.duracion)}${
                     resumen.precio !== null ? ` · ${formatearMonto(resumen.precio)}${resumen.precioIncompleto ? " + a consultar" : ""}` : ""
                   }`
-                : `Elige hasta ${MAX_SERVICIOS_POR_RESERVA}, o escribe el servicio abajo si no está en el catálogo.`}
+                : frases.servicio.ayudaDelCatalogo(MAX_SERVICIOS_POR_RESERVA)}
             </p>
           </div>
         )}
@@ -347,7 +348,7 @@ export function ModalNuevaCita({
         {/* Texto libre, para una cita sin servicio del catálogo. */}
         {!resumen && (
           <CampoFormulario
-            etiqueta={serviciosOfrecidos.length > 0 ? "Otro servicio" : "Servicio"}
+            etiqueta={serviciosOfrecidos.length > 0 ? frases.servicio.otro : frases.servicio.etiqueta}
             placeholder={textoDeEjemplo(ejemplosDe(rubro).servicios)}
             value={form.servicio}
             onChange={(e) => onCambiarCampo("servicio", e.target.value)}
@@ -413,7 +414,7 @@ export function ModalNuevaCita({
 
         {puedeAsignarProfesional && profesionales.length > 0 && (
           <Selector
-            etiqueta={conMayuscula(vocabulario.profesional)}
+            etiqueta={frases.profesional.etiqueta}
             value={form.memberId}
             onChange={(e) => cambiarProfesional(e.target.value)}
             opciones={profesionales.map((profesional) => ({ valor: profesional.id, texto: profesional.nombre }))}
@@ -470,7 +471,7 @@ export function ModalNuevaCita({
             </Boton>
           ) : (
             <Boton type="submit" className="w-full" cargando={guardando}>
-              Guardar cita
+              {frases.guardarCita}
             </Boton>
           )}
         </div>

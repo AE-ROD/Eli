@@ -8,6 +8,7 @@
  * para que el inicio y el modal de bienvenida marquen el enlace igual.
  */
 
+import { concordar, un } from "@/lib/concordancia"
 import { pedir, type Resultado } from "@/lib/peticiones"
 import { vocabularioDe } from "@/lib/vocabulario"
 
@@ -52,17 +53,52 @@ export const PASOS_DE_INICIO: readonly PasoDeInicio[] = [
   },
 ]
 
-/** Lo que devuelve `GET /api/dashboard/lista-de-inicio`. */
 /**
- * Los pasos con las palabras del rubro: en una clínica dental, "Cuando un
- * paciente reserve…"; en los demás rubros, como en `PASOS_DE_INICIO`.
+ * Los pasos con las palabras del rubro (`lib/vocabulario.ts`): en una clínica
+ * dental, "Agrega tus prestaciones" y "Cuando un paciente reserve…"; en los
+ * demás, "Agrega tus servicios" y "Cuando un cliente reserve…". Un rubro
+ * desconocido o `null`: los textos de `PASOS_DE_INICIO`. El artículo sale de
+ * `lib/concordancia.ts`, no se pega a la palabra.
  */
 export function pasosDeInicioPara(rubro: string | null | undefined): PasoDeInicio[] {
-  const { cliente } = vocabularioDe(rubro)
-  return PASOS_DE_INICIO.map((paso) =>
-    paso.id === "primeraReserva" ? { ...paso, texto: `Cuando un ${cliente} reserve desde tu página, se marca sola.` } : paso
-  )
+  const { cliente, servicio } = vocabularioDe(rubro).palabras
+  return PASOS_DE_INICIO.map((paso) => {
+    switch (paso.id) {
+      case "servicios":
+        return {
+          ...paso,
+          titulo: `Agrega tus ${servicio.plural}`,
+          accion: { ...paso.accion, texto: `Agregar ${servicio.plural}` },
+        }
+      case "primeraReserva":
+        return { ...paso, texto: `Cuando ${un(cliente)} reserve desde tu página, se marca sola.` }
+      default:
+        return paso
+    }
+  })
 }
+
+/** El título y el subtítulo de la tarjeta "Deja tu negocio listo", con las palabras del rubro. */
+export interface TextosDeLaLista {
+  titulo: string
+  subtitulo: string
+}
+
+/**
+ * "Deja tu negocio listo" / "Deja tu salón listo" / "Deja tu barbería lista",
+ * y "Cuatro pasos para que tus clientes empiecen a reservar solos" (los
+ * "solos" y el "listo" concuerdan con la palabra). Un rubro desconocido o
+ * `null`: los textos de siempre.
+ */
+export function textosDeLaLista(rubro: string | null | undefined): TextosDeLaLista {
+  const { cliente, negocio } = vocabularioDe(rubro).palabras
+  return {
+    titulo: `Deja tu ${negocio.singular} ${concordar("listo", negocio)}`,
+    subtitulo: `Cuatro pasos para que tus ${cliente.plural} empiecen a reservar ${concordar("solo", cliente, "plural")}.`,
+  }
+}
+
+/** Lo que devuelve `GET /api/dashboard/lista-de-inicio`. */
 
 export interface DatosDeListaDeInicio {
   pasos: PasosHechos

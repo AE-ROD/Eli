@@ -11,7 +11,7 @@ import { CampoHora } from "@/components/panel/campo-hora"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { ETIQUETA } from "@/components/panel/estilos"
 import type { Advertencia } from "@/lib/mover-cita"
-import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
+import { vocabularioDe } from "@/lib/vocabulario"
 import {
   asignarProfesional,
   leerProfesionales,
@@ -24,6 +24,7 @@ import {
   type Profesional,
   type SillonDeLaAgenda,
 } from "../_datos"
+import { frasesDeLaAgenda } from "../_frases"
 import { fechaEn, horaEn } from "../_hora-del-negocio"
 import { useZonaDelNegocio } from "./zona-del-negocio"
 
@@ -62,8 +63,9 @@ export function ModalMoverCita({
   onMovida,
   onCerrar,
 }: PropsDeModalMoverCita) {
-  // "Profesional", con la palabra del rubro: "Odontólogo" en una clínica dental.
-  const vocabulario = vocabularioDe(useRubroDelPanel())
+  // Cliente, profesional y cita, con las palabras del rubro: "Odontólogo" en una clínica dental, "Estilista" en un salón.
+  const { palabras } = vocabularioDe(useRubroDelPanel())
+  const frases = frasesDeLaAgenda(palabras)
   const conSillon = sillones !== null && !soloAsignar
   // Fecha y horas en la zona del negocio, como se muestran y se guardan (#99).
   const zona = useZonaDelNegocio()
@@ -107,12 +109,18 @@ export function ModalMoverCita({
     // también si está desactivado (mandarlo de nuevo lo rechazaría).
     const sillonCambio = conSillon && (form.sillonId ?? "") !== (cita.sillonId ?? "")
     const resultado = soloAsignar
-      ? await asignarProfesional(cita.id, form.memberId, { confirmar })
-      : await moverCita(cita.id, { ...form, sillonId: sillonCambio ? form.sillonId : undefined }, zona, {
-          confirmar,
-          // Si el equipo no cargó, no se manda el profesional: se deja el que tenía.
-          asignaProfesional: puedeAsignarProfesional && profesionales.length > 0,
-        })
+      ? await asignarProfesional(cita.id, form.memberId, { confirmar }, palabras)
+      : await moverCita(
+          cita.id,
+          { ...form, sillonId: sillonCambio ? form.sillonId : undefined },
+          zona,
+          {
+            confirmar,
+            // Si el equipo no cargó, no se manda el profesional: se deja el que tenía.
+            asignaProfesional: puedeAsignarProfesional && profesionales.length > 0,
+          },
+          palabras
+        )
     setGuardando(false)
 
     if (resultado.tipo === "guardada") return onMovida()
@@ -128,8 +136,8 @@ export function ModalMoverCita({
 
   return (
     <MarcoDeModal
-      titulo={soloAsignar ? `Asignar ${vocabulario.profesional}` : "Cambiar fecha y hora"}
-      antetitulo={nombreDeCliente(cita, vocabulario.cliente)}
+      titulo={soloAsignar ? frases.profesional.asignar : "Cambiar fecha y hora"}
+      antetitulo={nombreDeCliente(cita, palabras.cliente.singular)}
       bloqueado={guardando}
       alCerrar={onCerrar}
     >
@@ -182,10 +190,10 @@ export function ModalMoverCita({
 
         {puedeAsignarProfesional && profesionales.length > 0 && (
           <Selector
-            etiqueta={conMayuscula(vocabulario.profesional)}
+            etiqueta={frases.profesional.etiqueta}
             value={form.memberId}
             onChange={(e) => cambiar("memberId", e.target.value)}
-            opciones={opcionesDeProfesional(profesionales, cita)}
+            opciones={opcionesDeProfesional(profesionales, cita, frases.profesional.etiqueta)}
           >
             <option value="">Sin asignar</option>
           </Selector>

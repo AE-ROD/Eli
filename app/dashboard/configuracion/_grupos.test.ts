@@ -22,7 +22,7 @@ const DUEÑA_DE_UN_SALON = (
 const DUEÑA_DE_UNA_CLINICA = (
   ["horario", "pagina", "servicios", "sillones", "laboratorios", "productos", "plazo-de-cambios", "por-confirmar", "mensajes"] as const
 ).map(seccion)
-const PROFESIONAL = (["horario", "pagina"] as const).map(seccion)
+const PROFESIONAL = (["horario", "mi-foto", "pagina"] as const).map(seccion)
 
 describe("GRUPOS", () => {
   it("cada sección está en exactamente un grupo", () => {
@@ -33,13 +33,13 @@ describe("GRUPOS", () => {
 })
 
 describe("agruparSecciones", () => {
-  it("reparte las once secciones en los cinco grupos, en su orden, lleguen como lleguen", () => {
+  it("reparte las doce secciones en los cinco grupos, en su orden, lleguen como lleguen", () => {
     const grupos = agruparSecciones(
-      [...DUEÑA_DE_UN_SALON, seccion("sillones"), seccion("laboratorios")].reverse(),
+      [...DUEÑA_DE_UN_SALON, seccion("sillones"), seccion("laboratorios"), seccion("mi-foto")].reverse(),
       DE_SIEMPRE
     )
     expect(grupos.map((grupo) => [grupo.id, grupo.secciones.map((s) => s.id)])).toEqual([
-      ["horario-y-equipo", ["horario"]],
+      ["horario-y-equipo", ["horario", "mi-foto"]],
       ["tu-negocio", ["pagina", "productos"]],
       ["catalogo-y-clinica", ["servicios", "sillones", "laboratorios"]],
       ["reservas-y-clientes", ["plazo-de-cambios", "por-confirmar", "hora-valle", "fila-virtual"]],
@@ -82,6 +82,13 @@ describe("agruparSecciones", () => {
   it("conserva el resto de lo que trae cada sección (el contenido ya renderizado)", () => {
     const grupos = agruparSecciones([{ id: "horario" as const, contenido: "<Horario />" }], DE_SIEMPRE)
     expect(grupos[0].secciones[0].contenido).toBe("<Horario />")
+  })
+
+  it("«Mi foto» va con el horario: la dueña (que no es del equipo) no la tiene, el resto sí", () => {
+    const grupos = agruparSecciones(PROFESIONAL, DE_SIEMPRE)
+    expect(grupos[0].secciones.map((s) => s.id)).toEqual(["horario", "mi-foto"])
+    expect(grupos[0].resumen).toBe("Horario · Mi foto")
+    expect(agruparSecciones(DUEÑA_DE_UN_SALON, DE_SIEMPRE)[0].resumen).toBe("Horario")
   })
 
   it("el resumen nombra sólo las secciones visibles, separadas por «·»", () => {
@@ -138,9 +145,10 @@ describe("anclaDelHash", () => {
 })
 
 describe("grupoDeAncla", () => {
-  const grupos = agruparSecciones(DUEÑA_DE_UNA_CLINICA, DE_LA_CLINICA)
+  const grupos = agruparSecciones([...DUEÑA_DE_UNA_CLINICA, seccion("mi-foto")], DE_LA_CLINICA)
 
   it.each([
+    ["#mi-foto", "horario-y-equipo"],
     ["#horario", "horario-y-equipo"],
     ["#pagina", "tu-negocio"],
     ["#productos", "tu-negocio"],
@@ -175,6 +183,8 @@ describe("grupoDeAncla", () => {
     expect(grupoDeAncla("#sillones", delSalon)).toBeNull()
     expect(grupoDeAncla("#laboratorios", delSalon)).toBeNull()
     expect(grupoDeAncla("#hora-valle", agruparSecciones(PROFESIONAL, DE_SIEMPRE))).toBeNull()
+    // La dueña no es del equipo y no tiene «Mi foto».
+    expect(grupoDeAncla("#mi-foto", delSalon)).toBeNull()
   })
 
   it("distingue mayúsculas, como el id del elemento", () => {

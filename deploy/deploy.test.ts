@@ -383,6 +383,18 @@ describe("deploy/README.md — las variables de entorno", () => {
     }
   })
 
+  it("documenta las variables de las fotos (R2_*) y que sin ellas no están disponibles, sin pedirlas como obligatorias", () => {
+    const guia = leer("deploy/README.md")
+    const fila = guia.split("\n").find((linea) => linea.includes("`R2_ACCOUNT_ID`"))
+    expect(fila, "falta la fila de R2 en la tabla de variables").toBeDefined()
+    for (const variable of ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET"]) {
+      expect(fila).toContain(`\`${variable}\``)
+    }
+    expect(fila).toMatch(/no están disponibles/)
+    // Con "CAMBIAR" en la plantilla quedarían configuradas con valores falsos y subir una foto fallaría de otra manera.
+    expect(guia).not.toMatch(/^R2_[A-Z_]+=/m)
+  })
+
   it("la plantilla de /etc/eli/eli.env trae las obligatorias", () => {
     const guia = leer("deploy/README.md")
     for (const variable of ["NODE_ENV", "DATABASE_URL", "DIRECT_URL", "NEXTAUTH_URL", "NEXTAUTH_SECRET", "CRON_SECRET", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"]) {

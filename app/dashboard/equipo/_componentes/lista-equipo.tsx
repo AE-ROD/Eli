@@ -1,7 +1,7 @@
 "use client"
 
 import { useId, type ReactNode } from "react"
-import { Clock, ListChecks, Mail, RotateCw, UsersRound, X } from "lucide-react"
+import { Camera, Clock, ListChecks, Mail, RotateCw, UsersRound, X } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { Esqueleto } from "@/components/comunes/esqueleto"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
@@ -52,6 +52,10 @@ interface PropsDeListaEquipo {
   alAnular: (invitacion: InvitacionPendiente) => void
   /** Abre "Servicios que hace" de un miembro. */
   alEditarServicios: (miembro: MiembroDelEquipo) => void
+  /** Si quien mira puede cambiar la foto de ese integrante (`puedeEditarFotoDelMiembro`): la pantalla lo pregunta, la lista no compara roles. */
+  puedeCambiarLaFotoDe: (miembro: MiembroDelEquipo) => boolean
+  /** Abre la foto de un miembro para subirla, cambiarla o quitarla. */
+  alEditarFoto: (miembro: MiembroDelEquipo) => void
 }
 
 export function ListaEquipo({
@@ -63,6 +67,8 @@ export function ListaEquipo({
   alReenviar,
   alAnular,
   alEditarServicios,
+  puedeCambiarLaFotoDe,
+  alEditarFoto,
 }: PropsDeListaEquipo) {
   const { profesionales } = vocabularioDe(useRubroDelPanel())
   if (cargando) return <ListaCargando />
@@ -90,13 +96,13 @@ export function ListaEquipo({
             {miembros.map((miembro) => (
               <li key={miembro.id} className={FILA_DE_PERSONA}>
                 <span className={LUGAR_DEL_AVATAR}>
-                  <AvatarUsuario nombre={miembro.user.name} tamaño="md" />
+                  <AvatarUsuario nombre={miembro.user.name} imagenUrl={miembro.fotoUrl ?? undefined} tamaño="md" />
                 </span>
                 <DatosDeLaPersona nombre={miembro.user.name} email={miembro.user.email} />
                 <div className={LUGAR_DEL_ROL}>
                   <InsigniaDelRol rol={miembro.role} />
                 </div>
-                <div className="col-start-2 sm:col-span-2 sm:col-start-2">
+                <div className="col-start-2 flex flex-wrap gap-2 sm:col-span-2 sm:col-start-2">
                   <Boton
                     variante="fantasma"
                     tamano="sm"
@@ -106,6 +112,17 @@ export function ListaEquipo({
                   >
                     Servicios que hace
                   </Boton>
+                  {puedeCambiarLaFotoDe(miembro) && (
+                    <Boton
+                      variante="fantasma"
+                      tamano="sm"
+                      icono={<Camera className="size-4" aria-hidden="true" />}
+                      onClick={() => alEditarFoto(miembro)}
+                      aria-label={`${miembro.fotoUrl ? "Cambiar foto" : "Subir foto"} de ${miembro.user.name}`}
+                    >
+                      {miembro.fotoUrl ? "Cambiar foto" : "Subir foto"}
+                    </Boton>
+                  )}
                 </div>
               </li>
             ))}

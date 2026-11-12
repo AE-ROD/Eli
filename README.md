@@ -28,6 +28,7 @@ Necesita un `.env` con:
 | `SOPORTE_EMAIL` | Casilla que recibe las solicitudes de soporte (`/soporte` y `/dashboard/ayuda`). Sin esto la solicitud se guarda igual y el usuario recibe su acuse, pero no llega aviso a soporte. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Rate limiting. En desarrollo, sin esto queda desactivado. **En producción es obligatorio:** sin él el límite falla cerrado y todo endpoint responde 429. |
 | `CRON_SECRET` | Protege los crons (recordatorios y correos del ciclo de prueba). |
+| `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` | Fotos (logo, portada y foto de cada integrante): Cloudflare R2, accedido sólo desde el servidor. Son las cuatro juntas: el ID de la cuenta, la llave y el secreto de un token S3 con permiso sobre ese bucket, y el nombre del bucket (privado). **Sin ellas, en producción las fotos no están disponibles:** subir una responde 503, las páginas muestran las iniciales y nada más se rompe. En desarrollo, sin ellas las fotos se guardan en una carpeta temporal del sistema (`eli-fotos`). |
 
 ## Comandos
 
@@ -674,7 +675,8 @@ lib/                          Lógica compartida, cada archivo con su test al la
   validaciones.ts             Esquemas zod compartidos: registro, reserva y contraseña.
                               El resto de los endpoints define el suyo en su route.ts
   peticiones.ts               Cómo la interfaz le pide cosas al servidor
-  cuerpo-del-pedido.ts        Leer el JSON de un pedido sin que uno roto termine en 500
+  cuerpo-del-pedido.ts        Leer el JSON (o los bytes de una foto) de un pedido con tope, sin que
+                              uno roto o gigante termine en 500
   slug.ts                     La dirección pública de cada negocio
   telefono.ts                 Teléfonos chilenos: a E.164 para guardar y con espacios
                               para mostrar
@@ -693,6 +695,12 @@ lib/                          Lógica compartida, cada archivo con su test al la
   prisma.ts                   (servidor) Conexión a la base
   email.ts                    (servidor) Correos (Resend)
   rate-limit.ts               (servidor) Límite de peticiones (Upstash)
+  procesar-foto.ts            (servidor) Valida por su contenido y reduce una foto a WebP sin
+                              metadatos (sharp): logo, portada o integrante
+  almacenamiento-de-fotos.ts  (servidor) Dónde viven las fotos: R2 (producción), disco
+                              (sólo desarrollo) y las claves válidas. Sin R2_* no hay fotos
+  cambiar-foto.ts             (servidor) Subir y quitar una foto: límite, validación y orden
+                              de escritura que comparten los dos endpoints de fotos
   invitaciones-de-equipo.ts   (servidor) Vigencia, enlace nuevo y correo de una
                               invitación al equipo (invitar, reemplazar una vencida, reenviar)
 pruebas/                      Ayudas compartidas de los tests: la base falsa en memoria

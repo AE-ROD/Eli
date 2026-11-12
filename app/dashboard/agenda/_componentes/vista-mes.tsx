@@ -1,13 +1,14 @@
 "use client"
 
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { diaParaLeer } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { diasSemana } from "./controles-de-agenda"
 import type { Cita } from "../_datos"
+import { frasesDeLaAgenda } from "../_frases"
 import { caeEnElDia, esHoyEn } from "../_hora-del-negocio"
 import { useZonaDelNegocio } from "./zona-del-negocio"
-
-const cuantasCitas = (cantidad: number) => (cantidad === 1 ? "1 cita" : `${cantidad} citas`)
 
 interface PropsDeVistaMes {
   fechaActual: Date
@@ -29,6 +30,8 @@ interface PropsDeVistaMes {
 export function VistaMes({ fechaActual, citas, onElegirDia }: PropsDeVistaMes) {
   // Qué día es cada cita y cuál es hoy, en la zona del negocio (#99).
   const zona = useZonaDelNegocio()
+  // "3 citas" / "3 horas", según cómo llame el rubro a la reserva.
+  const frases = frasesDeLaAgenda(vocabularioDe(useRubroDelPanel()).palabras)
   const primerDia = new Date(fechaActual.getFullYear(), fechaActual.getMonth(), 1)
   // Cuántas celdas de la grilla quedan antes del día 1: la semana empieza en domingo.
   const celdasAntesDelPrimero = primerDia.getDay()
@@ -63,7 +66,7 @@ export function VistaMes({ fechaActual, citas, onElegirDia }: PropsDeVistaMes) {
               key={i}
               type="button"
               onClick={() => onElegirDia(fecha)}
-              aria-label={`${diaParaLeer(fecha)}, ${citasDelDia.length > 0 ? cuantasCitas(citasDelDia.length) : "sin citas"}`}
+              aria-label={`${diaParaLeer(fecha)}, ${citasDelDia.length > 0 ? frases.cuantasCitas(citasDelDia.length) : frases.sinCitas}`}
               aria-current={hoy ? "date" : undefined}
               className={cn(
                 "flex min-h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-campo p-1 text-navy squircle",
@@ -85,7 +88,7 @@ export function VistaMes({ fechaActual, citas, onElegirDia }: PropsDeVistaMes) {
                 <>
                   <span aria-hidden="true" className="size-1.5 rounded-full bg-navy @lg:hidden" />
                   <span className="hidden h-6 max-w-full truncate rounded-full bg-tarjeta px-2 text-xs leading-6 font-medium tabular-nums @lg:inline-block">
-                    {cuantasCitas(citasDelDia.length)}
+                    {frases.cuantasCitas(citasDelDia.length)}
                   </span>
                 </>
               )}
