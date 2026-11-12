@@ -147,14 +147,17 @@ export function franjasParaElDia(
 /**
  * Si el tramo queda fuera del horario de atención. `nombre` es el del
  * profesional (se usa si tiene horario propio). `filas` son las activas del
- * negocio, de toda la semana.
+ * negocio, de toda la semana. `sede` es el nombre de la sede cuando `filas` son
+ * las de una sede en particular (plan Independiente): el mensaje habla de ella
+ * y no "del negocio", que sí atiende ese día en otra sede.
  */
 export function advertenciaDeHorario(
   tramo: Tramo,
   filas: FilaDeHorarioSemanal[],
   memberId: string | null,
   nombre: string | null,
-  zona: string
+  zona: string,
+  sede?: string | null
 ): Advertencia | null {
   const inicio = fechaYMinutosEn(tramo.startTime, zona)
   const resultado = franjasParaElDia(filas, memberId, diaDeLaSemana(inicio.fecha))
@@ -165,8 +168,8 @@ export function advertenciaDeHorario(
   const duracion = Math.round((tramo.endTime.getTime() - tramo.startTime.getTime()) / 60000)
   if (cabeEnAtencion(resultado.franjas, inicio.minutos, inicio.minutos + duracion)) return null
 
-  const quien = resultado.propias && nombre ? nombre : "El negocio"
-  const de = resultado.propias && nombre ? `de ${nombre}` : "del negocio"
+  const quien = resultado.propias && nombre ? nombre : sede ? `La sede ${sede}` : "El negocio"
+  const de = resultado.propias && nombre ? `de ${nombre}` : sede ? `de la sede ${sede}` : "del negocio"
   const mensaje =
     resultado.franjas.length === 0
       ? `${quien} no atiende ese día.`
