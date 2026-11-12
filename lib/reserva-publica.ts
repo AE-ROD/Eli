@@ -5,7 +5,10 @@
  * (qué horas se aceptan), con la misma regla para que nunca den distinto.
  */
 
+import { al, concordar, el, pronombreDe } from "@/lib/concordancia"
 import { horaAMinutos } from "@/lib/horario-dia"
+import { palabrasDeLaReserva } from "@/lib/palabras-de-la-reserva"
+import { RUBRO_DENTAL } from "@/lib/rubros"
 import { aE164Chile } from "@/lib/telefono"
 import { diaDeLaSemana, diasEntre, esFechaCalendario, fechaYMinutosEn, instanteEn } from "@/lib/zona-horaria"
 
@@ -137,16 +140,30 @@ export function quedaSinCambiosPorElEnlace(fecha: string, hora: string, zona: st
   }
 }
 
-/** Lo que se dice antes de confirmar cuando la hora ya está dentro del plazo (QA#8). */
-export function avisoSinCambiosPorElEnlace(plazoHoras: number): string {
-  const plazo = `${plazoHoras} ${plazoHoras === 1 ? "hora" : "horas"}`
-  return `Tu hora es en menos de ${plazo}: una vez confirmada, no podrás cancelarla ni cambiarla por el enlace. Si lo necesitas, tendrás que contactar al local.`
+/**
+ * "hora" y "horas" del plazo: son horas del reloj, no la reserva, y no cambian
+ * con el rubro.
+ */
+const horasDelPlazo = (plazoHoras: number) => `${plazoHoras} ${plazoHoras === 1 ? "hora" : "horas"}`
+
+/**
+ * Lo que se dice antes de confirmar cuando la hora ya está dentro del plazo
+ * (QA#8). `rubro` (`Business.type`) pone las palabras del negocio: "Tu hora es
+ * en menos de 24 horas: una vez confirmada, no podrás cancelarla ni cambiarla
+ * por el enlace. Si lo necesitas, tendrás que contactar al salón." Sin rubro, el
+ * texto de siempre ("al local").
+ */
+export function avisoSinCambiosPorElEnlace(plazoHoras: number, rubro?: string | null): string {
+  const { hora, local } = palabrasDeLaReserva(rubro)
+  const confirmada = concordar("confirmado", hora)
+  const lo = pronombreDe(hora)
+  return `Tu ${hora.singular} es en menos de ${horasDelPlazo(plazoHoras)}: una vez ${confirmada}, no podrás cancelar${lo} ni cambiar${lo} por el enlace. Si lo necesitas, tendrás que contactar ${al(local)}.`
 }
 
 /** Lo mismo, en la pantalla de reserva confirmada: en vez de "Gestiona tu cita acá". */
-export function avisoSinCambiosDespuesDeReservar(plazoHoras: number): string {
-  const plazo = `${plazoHoras} ${plazoHoras === 1 ? "hora" : "horas"}`
-  return `Tu hora es en menos de ${plazo}, así que no se puede cancelar ni cambiar por el enlace. Si lo necesitas, contacta directamente al local.`
+export function avisoSinCambiosDespuesDeReservar(plazoHoras: number, rubro?: string | null): string {
+  const { hora, local } = palabrasDeLaReserva(rubro)
+  return `Tu ${hora.singular} es en menos de ${horasDelPlazo(plazoHoras)}, así que no se puede cancelar ni cambiar por el enlace. Si lo necesitas, contacta directamente ${al(local)}.`
 }
 
 // ─── Clínica dental: primera vez y urgencia ──────────────────────────────────

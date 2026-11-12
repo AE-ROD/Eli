@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest"
 import {
   CABECERA_DE_ATENCIONES,
   CABECERA_DE_CLIENTES,
+  cabeceraDeAtenciones,
+  cabeceraDeClientes,
   fechaYHora,
   filasDeAtenciones,
   filasDeClientes,
@@ -11,6 +13,7 @@ import {
 } from "./exportar"
 import { MARCA_DE_CLIENTE_ELIMINADO } from "./clientes-eliminados"
 import { aceptaWhatsapp, sugerirMapeo } from "./importar-clientes"
+import { vocabularioDe } from "./vocabulario"
 
 const SANTIAGO = "America/Santiago"
 
@@ -81,6 +84,56 @@ describe("filasDeAtenciones", () => {
     const [, fila] = filasDeAtenciones([{ ...atencion, status: "en-espera", totalCents: null, paidAt: null }], SANTIAGO)
     expect(fila[5]).toBe("18000,5")
     expect(fila[6]).toBe("")
+  })
+})
+
+describe("las cabeceras con las palabras del rubro", () => {
+  const palabras = (rubro: string | null) => vocabularioDe(rubro).palabras
+
+  it("sin rubro, o con uno sin palabras propias, son las de siempre", () => {
+    expect(CABECERA_DE_CLIENTES[9]).toBe("Cliente desde")
+    expect(CABECERA_DE_ATENCIONES).toEqual(["Llegada", "Cliente", "Estado", "Servicios", "Profesionales", "Total", "Cobrada el"])
+    for (const rubro of [null, "otro", "salud", "constructor"]) {
+      expect(cabeceraDeClientes(palabras(rubro))).toEqual(CABECERA_DE_CLIENTES)
+      expect(cabeceraDeAtenciones(palabras(rubro))).toEqual(CABECERA_DE_ATENCIONES)
+    }
+  })
+
+  it("una clínica dental habla de pacientes, prestaciones y odontólogos", () => {
+    expect(cabeceraDeClientes(palabras("odontologia"))[9]).toBe("Paciente desde")
+    expect(cabeceraDeAtenciones(palabras("odontologia"))).toEqual([
+      "Llegada",
+      "Paciente",
+      "Estado",
+      "Prestaciones",
+      "Odontólogos",
+      "Total",
+      "Cobrada el",
+    ])
+  })
+
+  it("una barbería y un salón de uñas dicen quién atiende con su palabra", () => {
+    expect(cabeceraDeAtenciones(palabras("barberia"))[4]).toBe("Barberos")
+    expect(cabeceraDeAtenciones(palabras("spa-de-unas"))[4]).toBe("Manicuristas")
+    expect(cabeceraDeAtenciones(palabras("salon"))[4]).toBe("Estilistas")
+  })
+
+  it("las filas llevan la cabecera del rubro y la importación sigue entendiendo la de clientes", () => {
+    const cliente = {
+      name: "Ana",
+      lastName: null,
+      cedula: null,
+      phone: null,
+      email: null,
+      tags: [],
+      notes: null,
+      whatsappConsentAt: null,
+      createdAt: new Date("2026-01-02T15:00:00.000Z"),
+    }
+    const [cabecera] = filasDeClientes([cliente], SANTIAGO, palabras("odontologia"))
+    expect(cabecera?.[9]).toBe("Paciente desde")
+    expect(sugerirMapeo(cabecera as string[])).toMatchObject({ nombre: 0, apellido: 1, telefono: 3, email: 4, notas: 6, whatsapp: 7 })
+    expect(filasDeAtenciones([], SANTIAGO, palabras("odontologia"))[0]?.[3]).toBe("Prestaciones")
   })
 })
 

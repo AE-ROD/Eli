@@ -1,7 +1,15 @@
 import { deCentavos, nombreDeEstado, totalEnCentavos } from "./atenciones"
 import { esEtiquetaReservada } from "./clientes-eliminados"
 import { DIAS_MAXIMOS } from "./periodos"
+import { conMayuscula, vocabularioDe, type PalabrasDelRubro } from "./vocabulario"
 import { diasEntre, esFechaCalendario, fechaYMinutosEn, rangoDelDiaEn } from "./zona-horaria"
+
+/**
+ * Las palabras de un rubro sin palabras propias: las que llevan las cabeceras
+ * de las planillas si quien llama no pasa las suyas ("Cliente", "Servicios",
+ * "Profesionales").
+ */
+const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
 
 /**
  * Las planillas que se descargan del panel: los clientes del negocio y sus
@@ -34,28 +42,42 @@ export interface ClienteParaExportar {
   createdAt: Date
 }
 
-export const CABECERA_DE_CLIENTES = [
-  "Nombre",
-  "Apellido",
-  "Cédula",
-  "Teléfono",
-  "Correo",
-  "Etiquetas",
-  "Notas",
-  "Acepta WhatsApp",
-  "Fecha del consentimiento",
-  "Cliente desde",
-] as const
+/**
+ * La cabecera de la planilla de clientes con las palabras del rubro: la última
+ * columna dice "Cliente desde" o, en una clínica dental, "Paciente desde". Las
+ * demás son las mismas en todos los rubros y la importación las sigue leyendo.
+ */
+export function cabeceraDeClientes(palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): string[] {
+  return [
+    "Nombre",
+    "Apellido",
+    "Cédula",
+    "Teléfono",
+    "Correo",
+    "Etiquetas",
+    "Notas",
+    "Acepta WhatsApp",
+    "Fecha del consentimiento",
+    `${conMayuscula(palabras.cliente.singular)} desde`,
+  ]
+}
+
+/** La cabecera de siempre, la de un rubro sin palabras propias. */
+export const CABECERA_DE_CLIENTES = cabeceraDeClientes()
 
 /**
  * Las filas de la planilla de clientes, con la cabecera primero. "Acepta
  * WhatsApp" dice "Sí" o "No", que es lo que la importación vuelve a leer.
  * La marca de cliente eliminado no sale nunca, aunque el endpoint ya los
- * excluye.
+ * excluye. `palabras` (opcional) pone la cabecera con las palabras del rubro.
  */
-export function filasDeClientes(clientes: readonly ClienteParaExportar[], zona: string): (string | null)[][] {
+export function filasDeClientes(
+  clientes: readonly ClienteParaExportar[],
+  zona: string,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): (string | null)[][] {
   return [
-    [...CABECERA_DE_CLIENTES],
+    cabeceraDeClientes(palabras),
     ...clientes.map((cliente) => [
       cliente.name,
       cliente.lastName,
@@ -80,28 +102,40 @@ export interface AtencionParaExportar {
   services: { serviceName: string; professionalName: string; priceCents: number }[]
 }
 
-export const CABECERA_DE_ATENCIONES = [
-  "Llegada",
-  "Cliente",
-  "Estado",
-  "Servicios",
-  "Profesionales",
-  "Total",
-  "Cobrada el",
-] as const
+/**
+ * La cabecera de la planilla de atenciones con las palabras del rubro:
+ * "Cliente", "Servicios" y "Profesionales" o, en una clínica dental,
+ * "Paciente", "Prestaciones" y "Odontólogos".
+ */
+export function cabeceraDeAtenciones(palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): string[] {
+  return [
+    "Llegada",
+    conMayuscula(palabras.cliente.singular),
+    "Estado",
+    conMayuscula(palabras.servicio.plural),
+    conMayuscula(palabras.profesional.plural),
+    "Total",
+    "Cobrada el",
+  ]
+}
+
+/** La cabecera de siempre, la de un rubro sin palabras propias. */
+export const CABECERA_DE_ATENCIONES = cabeceraDeAtenciones()
 
 /**
  * Las filas de la planilla de atenciones, con la cabecera primero. El total
  * es el congelado al cobrar; mientras la atención está abierta, la suma de
  * sus líneas (como en el tablero). En pesos y escrito como número
- * (`montoParaPlanilla`): la planilla lo suma.
+ * (`montoParaPlanilla`): la planilla lo suma. `palabras` (opcional) pone la
+ * cabecera con las palabras del rubro.
  */
 export function filasDeAtenciones(
   atenciones: readonly AtencionParaExportar[],
-  zona: string
+  zona: string,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
 ): (string | null)[][] {
   return [
-    [...CABECERA_DE_ATENCIONES],
+    cabeceraDeAtenciones(palabras),
     ...atenciones.map((atencion) => [
       fechaYHora(atencion.arrivedAt, zona),
       atencion.customerName,

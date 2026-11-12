@@ -10,7 +10,8 @@ import { nombreEnElNegocio } from "@/lib/tablero"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { sumarDias, zonaDelNegocio } from "@/lib/zona-horaria"
-import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
+import { cantidadDe, numeroDe } from "@/lib/concordancia"
+import { conMayuscula, vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
 import {
   configuracionDelNegocio,
   fechaDeColumna,
@@ -341,19 +342,27 @@ export function calcularTotales(
   }
 }
 
-/** Por qué no se puede cerrar, o `null`. El orden es el de lo que hay que resolver primero. */
+/**
+ * Por qué no se puede cerrar, o `null`. El orden es el de lo que hay que
+ * resolver primero. `palabras` pone el "servicio" del rubro ("Hay 2
+ * prestaciones sin porcentaje de comisión"); sin ellas, "servicios", que es lo
+ * que arma el servidor, que no mira el rubro.
+ */
 export function motivoParaNoCerrar(opciones: {
   sinPorcentaje: number
   desde: string
   hoy: string
   totales: TotalesDeLiquidacion
+  palabras?: Pick<PalabrasDelRubro, "servicio">
 }): string | null {
   const { sinPorcentaje, desde, hoy, totales } = opciones
+  const { servicio } = opciones.palabras ?? vocabularioDe(null).palabras
   if (desde > hoy) return "Este período todavía no empieza."
   if (sinPorcentaje > 0) {
-    return sinPorcentaje === 1
-      ? "Hay 1 servicio sin porcentaje de comisión: configúralo en Comisiones antes de cerrar."
-      : `Hay ${sinPorcentaje} servicios sin porcentaje de comisión: configúralos en Comisiones antes de cerrar.`
+    // "Hay 1 servicio" / "Hay 2 servicios": con una sola, el verbo sigue en singular.
+    return numeroDe(sinPorcentaje) === "singular"
+      ? `Hay ${cantidadDe(sinPorcentaje, servicio)} sin porcentaje de comisión: configúralo en Comisiones antes de cerrar.`
+      : `Hay ${cantidadDe(sinPorcentaje, servicio)} sin porcentaje de comisión: configúralos en Comisiones antes de cerrar.`
   }
   const montos = Object.values(totales)
   if (montos.some((monto) => Math.abs(monto) > TOPE_DE_CENTAVOS)) {
@@ -1064,15 +1073,16 @@ export const enPesos = (centavos: number): number | string =>
  * volvió a quedar pendiente, así que no se paga. Lo de cuando se cerró queda
  * como "Total al cerrarse (anulada)" y el total a pagar es 0.
  *
- * `rubro`: en una clínica dental los encabezados dicen "Odontólogo" y
- * "Paciente" (`vocabularioDe`); en los demás rubros, como siempre. Una clínica
+ * `rubro`: cada rubro con sus palabras (`vocabularioDe`): "Odontólogo",
+ * "Paciente" y "Prestación" en una clínica dental, "Estilista" en un salón;
+ * en un rubro sin palabras propias, como siempre. Una clínica
  * dental tampoco trabaja con propinas: sin plata en ellas, el comprobante no
  * trae la sección ni la fila de propinas (`veLaLineaDePropinas`). Con propinas
  * guardadas de antes sí, y los totales no cambian.
  */
 export function filasDelComprobante(detalle: DetalleDeLiquidacion, rubro?: string | null): (string | number | null)[][] {
-  const palabras = vocabularioDe(rubro)
-  const cliente = conMayuscula(palabras.cliente)
+  const { palabras } = vocabularioDe(rubro)
+  const cliente = conMayuscula(palabras.cliente.singular)
   const t = detalle.totales
   const vacia: (string | null)[] = []
   const anulada = detalle.estado === "anulada"
@@ -1082,7 +1092,7 @@ export function filasDelComprobante(detalle: DetalleDeLiquidacion, rubro?: strin
   const conPropinas = detalle.propinas.length > 0 || veLaLineaDePropinas(rubro, t.propinasCents)
   return [
     ["Liquidación", detalle.texto],
-    [conMayuscula(palabras.profesional), detalle.miembro],
+    [conMayuscula(palabras.profesional.singular), detalle.miembro],
     ["Período", `${detalle.desde} al ${detalle.hasta}`],
     ["Estado", NOMBRES_DE_ESTADO[detalle.estado]],
     ["Pagada con", detalle.medioDePagoTexto],
@@ -1099,7 +1109,7 @@ export function filasDelComprobante(detalle: DetalleDeLiquidacion, rubro?: strin
       l.fecha,
       l.cliente,
       l.detalle,
-      l.tipo === "producto" ? "Producto" : "Servicio",
+      l.tipo === "producto" ? "Producto" : conMayuscula(palabras.servicio.singular),
       enPesos(l.precioCents),
       l.porcentaje === null ? null : String(l.porcentaje).replace(".", ","),
       l.comisionCents === null ? null : enPesos(l.comisionCents),
@@ -1136,7 +1146,7 @@ export function filasDelComprobante(detalle: DetalleDeLiquidacion, rubro?: strin
       enPesos(m.tipo === "ajuste" ? m.montoCents : -m.montoCents),
     ]),
     vacia,
-    ["Comisión por servicios", enPesos(t.comisionServiciosCents)],
+    [`Comisión por ${palabras.servicio.plural}`, enPesos(t.comisionServiciosCents)],
     ["Comisión por productos", enPesos(t.comisionProductosCents)],
     ...(conProtesis ? [["Comisión por prótesis", enPesos(t.comisionProtesisCents)]] : []),
     ...(conPropinas ? [["Propinas", enPesos(t.propinasCents)]] : []),

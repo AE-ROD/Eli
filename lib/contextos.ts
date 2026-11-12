@@ -123,7 +123,11 @@ export function contextoDeLaSesion(contextos: readonly Contexto[], elegido: unkn
   return sinElegir ? contextoSinElegir(contextos) : buscarContexto(contextos, elegido)
 }
 
-/** El rol en palabras, con el vocabulario del rubro: "Dueño", "Encargado", "Profesional" u "Odontólogo". */
+/**
+ * El rol en palabras, con el vocabulario del rubro: "Dueño", "Encargado" y,
+ * para quien atiende, la palabra del rubro ("Estilista", "Barbero",
+ * "Manicurista", "Odontólogo") o "Profesional" si no tiene una propia.
+ */
 export function nombreDelRolDelContexto(contexto: Pick<Contexto, "rol" | "rubro">): string {
   return contexto.rol === "owner" ? "Dueño" : nombreDelRol(contexto.rol, contexto.rubro)
 }

@@ -15,14 +15,19 @@ describe("nombreDelRol", () => {
     expect(nombreDelRol(undefined)).toBe("Profesional")
   })
 
-  it("en una clínica dental el worker se llama Odontólogo; el encargado sigue siendo Encargado", () => {
+  it("el worker se llama como quien atiende en el rubro: Estilista, Barbero, Manicurista u Odontólogo; el encargado sigue siendo Encargado", () => {
+    expect(nombreDelRol("worker", "salon")).toBe("Estilista")
+    expect(nombreDelRol("worker", "barberia")).toBe("Barbero")
+    expect(nombreDelRol("worker", "spa-de-unas")).toBe("Manicurista")
     expect(nombreDelRol("worker", "odontologia")).toBe("Odontólogo")
     expect(nombreDelRol(undefined, "odontologia")).toBe("Odontólogo")
-    expect(nombreDelRol("admin", "odontologia")).toBe("Encargado")
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "odontologia"]) {
+      expect(nombreDelRol("admin", rubro)).toBe("Encargado")
+    }
   })
 
-  it("los demás rubros, uno desconocido o ninguno, dicen lo de siempre", () => {
-    for (const rubro of ["salon", "barberia", "spa-de-unas", "constructor", "", null, undefined]) {
+  it("un rubro desconocido o ninguno dice lo de siempre", () => {
+    for (const rubro of ["salud", "fitness", "otro", "constructor", "", null, undefined]) {
       expect(nombreDelRol("worker", rubro)).toBe("Profesional")
       expect(nombreDelRol("admin", rubro)).toBe("Encargado")
     }

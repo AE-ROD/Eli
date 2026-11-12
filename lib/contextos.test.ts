@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest"
-import { buscarContexto, cambioElContextoDelPanel, contextoDeLaSesion, contextoSinElegir, contextosDe, opcionDeContexto } from "./contextos"
+import {
+  buscarContexto,
+  cambioElContextoDelPanel,
+  contextoDeLaSesion,
+  contextoSinElegir,
+  contextosDe,
+  nombreDelRolDelContexto,
+  opcionDeContexto,
+} from "./contextos"
 
 const salon = { id: "negocio-1", name: "Salón Uno", slug: "salon-uno", type: "salon" }
 const clinica = { id: "negocio-2", name: "Clínica Dos", slug: "clinica-dos", type: "odontologia" }
@@ -76,6 +84,13 @@ describe("opcionDeContexto", () => {
 
     expect(opcionDeContexto(dueña)).toEqual({ id: "dueño:negocio-1", negocio: "Salón Uno", rubro: "Salón de belleza", rol: "Dueño" })
     expect(opcionDeContexto(odontologa)).toEqual({ id: "miembro:m", negocio: "Clínica Dos", rubro: "Clínica dental", rol: "Odontólogo" })
+  })
+
+  it("quien atiende en un salón es Estilista; el encargado, Encargado en cualquier rubro; sin rubro, Profesional", () => {
+    const estilista = contextosDe({ business: null, memberships: [{ id: "m", role: "worker", business: salon }] })[0]
+    expect(opcionDeContexto(estilista).rol).toBe("Estilista")
+    expect(nombreDelRolDelContexto({ rol: "admin", rubro: "salon" })).toBe("Encargado")
+    expect(nombreDelRolDelContexto({ rol: "worker", rubro: null })).toBe("Profesional")
   })
 })
 

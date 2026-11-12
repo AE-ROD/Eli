@@ -6,6 +6,8 @@ import type { ReactNode } from "react"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Insignia } from "@/components/comunes/insignia"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
+import { frasesDelPanel } from "@/components/panel/frases-del-panel"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import type { ColorDeModulo } from "@/lib/modulos"
 import {
@@ -17,19 +19,16 @@ import {
   PRECIO_PERSONA_ADICIONAL,
 } from "@/lib/precios"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 
 /*
- * Los mismos dos planes y los mismos textos que la sección de precios de la
- * landing (`components/landing/seccion-precios.tsx`), en corto. Los montos
- * salen de `lib/precios.ts`. Todavía no hay cobro: no hay botón para elegir
- * un plan, sólo el aviso de que llega.
+ * Los mismos dos planes que la sección de precios de la landing
+ * (`components/landing/seccion-precios.tsx`), en corto. La landing habla de
+ * todos los rubros; el panel conoce el del negocio y escribe lo mismo con sus
+ * palabras (`frasesDelPanel`: "tus pacientes", "las prestaciones", "tus
+ * odontólogos"). Los montos salen de `lib/precios.ts`. Todavía no hay cobro:
+ * no hay botón para elegir un plan, sólo el aviso de que llega.
  */
-
-const ROLES = [
-  { rol: "Dueño", texto: "Ve todo el negocio. El plan y el pago son solo tuyos." },
-  { rol: "Encargado", texto: "Organiza la agenda, los servicios y el equipo. No cuenta como persona que atiende." },
-  { rol: "Profesional", texto: "Ve su agenda, sus citas y lo que lleva cobrado. Siempre cuenta." },
-] as const
 
 interface PropsDeModalPrecios {
   abierto: boolean
@@ -83,6 +82,7 @@ function Plan({
 
 export function ModalPrecios({ abierto, onCerrar, diasTrialRestantes }: PropsDeModalPrecios) {
   const adicional = formatearPesos(PRECIO_PERSONA_ADICIONAL)
+  const { precios } = frasesDelPanel(vocabularioDe(useRubroDelPanel()).palabras)
 
   return (
     <AnimatePresence>
@@ -117,24 +117,22 @@ export function ModalPrecios({ abierto, onCerrar, diasTrialRestantes }: PropsDeM
               nota="IVA incluido"
               fondo="bg-azul-suave"
             >
-              <p>Tu agenda, tu página de reservas, el tablero del día y los reportes. Todo Eli, para ti.</p>
-              <p className="mt-3">
-                ¿Sumas a alguien? Te pasas a Equipo y tu agenda, tus clientes y tu historial siguen ahí.
-              </p>
+              <p>{precios.independiente}</p>
+              <p className="mt-3">{precios.sumarAlguien}</p>
             </Plan>
             <Plan
               id="modal-plan-equipo"
               icono={Users}
               color="turquesa"
-              insignia="Para el negocio con equipo"
+              insignia={precios.paraElNegocioConEquipo}
               nombre="Equipo"
               precio={PRECIO_EQUIPO}
               nota={`IVA incluido · ${PERSONAS_INCLUIDAS_EQUIPO} personas que atienden · +${adicional}/mes por cada persona más`}
               fondo="bg-turquesa-suave"
             >
-              <p>Tú, tu encargado y tus profesionales, cada uno con su rol.</p>
+              <p>{precios.equipo}</p>
               <dl className="mt-3 flex flex-col gap-1.5">
-                {ROLES.map(({ rol, texto }) => (
+                {precios.roles.map(({ rol, texto }) => (
                   <div key={rol}>
                     <dt className="inline font-semibold">{rol}: </dt>
                     <dd className="inline">{texto}</dd>

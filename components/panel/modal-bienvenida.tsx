@@ -8,42 +8,49 @@ import { Boton } from "@/components/comunes/boton"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
+import { frasesDelPanel } from "@/components/panel/frases-del-panel"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { pasosDeBienvenida, type PasoDeBienvenida } from "@/components/panel/pasos-de-bienvenida"
 import { marcarEnlaceCompartido } from "@/lib/lista-de-inicio"
 import { actorDeSesion } from "@/lib/permisos"
 import { cn } from "@/lib/utils"
-import { vocabularioDe } from "@/lib/vocabulario"
+import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
 
 const STORAGE_KEY = "eli_onboarding_completado"
 
-/** Los pasos, con la palabra del rubro para quienes reservan: "tus clientes" o, en una clínica dental, "tus pacientes". */
-const pasosPara = (clientes: string) => [
-  {
-    id: "horario" as PasoDeBienvenida,
-    icono: Clock,
-    titulo: "Configura tu horario",
-    descripcion: `Define los días y horas en que atiendes. Así tus ${clientes} solo podrán reservar en tu disponibilidad real.`,
-    accion: "Ir a configuración",
-    ruta: "/dashboard/configuracion#horario",
-  },
-  {
-    id: "servicios" as PasoDeBienvenida,
-    icono: Scissors,
-    titulo: "Agrega tus servicios",
-    descripcion: "Crea el catálogo de servicios que ofreces con su duración y precio. Esto aparecerá en tu página de reservas.",
-    accion: "Agregar servicios",
-    ruta: "/dashboard/configuracion#servicios",
-  },
-  {
-    id: "enlace" as PasoDeBienvenida,
-    icono: Link2,
-    titulo: "Comparte tu enlace",
-    descripcion: `Este es tu link único de reservas. Compártelo con tus ${clientes} por WhatsApp, redes sociales o donde quieras.`,
-    accion: null,
-    ruta: null,
-  },
-]
+/**
+ * Los pasos, con las palabras del rubro (`frasesDelPanel`): "tus clientes" o,
+ * en una clínica dental, "tus pacientes"; "servicios" o "prestaciones".
+ */
+const pasosPara = (palabras: PalabrasDelRubro) => {
+  const { bienvenida } = frasesDelPanel(palabras)
+  return [
+    {
+      id: "horario" as PasoDeBienvenida,
+      icono: Clock,
+      titulo: bienvenida.horario.titulo,
+      descripcion: bienvenida.horario.descripcion,
+      accion: bienvenida.horario.accion,
+      ruta: "/dashboard/configuracion#horario",
+    },
+    {
+      id: "servicios" as PasoDeBienvenida,
+      icono: Scissors,
+      titulo: bienvenida.servicios.titulo,
+      descripcion: bienvenida.servicios.descripcion,
+      accion: bienvenida.servicios.accion,
+      ruta: "/dashboard/configuracion#servicios",
+    },
+    {
+      id: "enlace" as PasoDeBienvenida,
+      icono: Link2,
+      titulo: bienvenida.enlace.titulo,
+      descripcion: bienvenida.enlace.descripcion,
+      accion: null,
+      ruta: null,
+    },
+  ]
+}
 
 interface PropsDeModalBienvenida {
   nombreNegocio: string
@@ -73,7 +80,7 @@ export function ModalBienvenida({ nombreNegocio, slug, marcarAlCopiar = false }:
   const enfocarElBotonPrincipal = useRef(false)
   const { data: sesion, status: estadoDeLaSesion } = useSession()
   const queHace = pasosDeBienvenida(actorDeSesion(sesion))
-  const pasos = pasosPara(vocabularioDe(useRubroDelPanel()).clientes).filter((paso) => queHace.includes(paso.id))
+  const pasos = pasosPara(vocabularioDe(useRubroDelPanel()).palabras).filter((paso) => queHace.includes(paso.id))
 
   const enlace = typeof window !== "undefined" ? `${window.location.origin}/reservar/${slug}` : `/reservar/${slug}`
 

@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 import { Clock, Timer } from "lucide-react"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
+import { frasesDelPanel } from "@/components/panel/frases-del-panel"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { cn } from "@/lib/utils"
 import { formatearTiempoLibre as formatearDuracion } from "@/lib/horario-dia"
@@ -34,7 +35,9 @@ interface PropsDeTarjetaCita {
 /**
  * El estado de la cita en palabras, sobre un pastel: el color solo no le dice
  * nada a quien no lo distingue. El texto es navy, que pasa el contraste sobre
- * todos, salvo en la cancelada, que va en el rojo de error.
+ * todos, salvo en la cancelada, que va en el rojo de error. "No vino" es el de
+ * un rubro sin palabras propias: cada rubro dice el suyo (`EstadoDeLaCita`,
+ * "No asistió" en una clínica dental).
  */
 const ESTADOS: Record<CitaEnTarjeta["estado"], { texto: string; clases: string }> = {
   pendiente: { texto: "Pendiente", clases: "bg-borde text-navy" },
@@ -49,22 +52,29 @@ const ESTADOS: Record<CitaEnTarjeta["estado"], { texto: string; clases: string }
 const POR_CONFIRMAR = { texto: "Por confirmar", clases: "bg-tarjeta text-navy ring-1 ring-inset ring-navy" }
 
 /**
- * "Sin profesional" ("Sin odontólogo" en una clínica dental), en el naranja
- * del tablero y con borde punteado: se distingue sin depender del color.
+ * "Sin profesional" ("Sin estilista", "Sin odontólogo": la palabra del rubro),
+ * en el naranja del tablero y con borde punteado: se distingue sin depender
+ * del color.
  */
 function MarcaSinProfesional() {
-  const { profesional } = vocabularioDe(useRubroDelPanel())
+  const { tarjetaDeCita } = frasesDelPanel(vocabularioDe(useRubroDelPanel()).palabras)
   return (
     <span className="inline-flex h-5 shrink-0 items-center rounded-full border border-dashed border-navy/40 bg-naranja-suave px-2 text-[11px] leading-none font-medium whitespace-nowrap text-navy">
-      Sin {profesional}
+      {tarjetaDeCita.sinProfesional}
     </span>
   )
 }
 
 function EstadoDeLaCita({ estado, porConfirmar = false }: { estado: CitaEnTarjeta["estado"]; porConfirmar?: boolean }) {
+  const { tarjetaDeCita } = frasesDelPanel(vocabularioDe(useRubroDelPanel()).palabras)
   // El endpoint no restringe el string: un estado desconocido se muestra tal cual, sin color.
+  const conocido = ESTADOS[estado]
   const { texto, clases } =
-    porConfirmar && estado === "pendiente" ? POR_CONFIRMAR : (ESTADOS[estado] ?? { texto: estado, clases: "bg-borde text-navy" })
+    porConfirmar && estado === "pendiente"
+      ? POR_CONFIRMAR
+      : conocido
+        ? { ...conocido, texto: estado === "no-asistio" ? tarjetaDeCita.noVino : conocido.texto }
+        : { texto: estado, clases: "bg-borde text-navy" }
   return (
     <span
       className={cn(
