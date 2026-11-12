@@ -1200,6 +1200,56 @@ export function crearBaseFalsa() {
     }
   }
 
+  // ─── Triggers de la sede de una hora viva (`20261112140000_etapa_9_endurecer_planes_y_sedes`) ─
+  // Toman el mismo candado por negocio, que acá no tiene nada que ordenar, y
+  // exigen que la sede de una fila VIVA esté activa. Si la sede no existe (o es
+  // de otro negocio) no rechazan: lo hace la FK compuesta, después.
+
+  /** Los estados de una cita que sigue en pie (`ESTADOS_DE_HORA_POR_DELANTE`, `lib/sedes-servidor.ts`). */
+  const ESTADOS_DE_CITA_VIVA = ["pendiente", "confirmada"]
+
+  /** Un instante, sea `Date` o texto ISO. */
+  const milisegundos = (valor: unknown) => (valor instanceof Date ? valor.getTime() : new Date(String(valor)).getTime())
+
+  /** Si la fila lleva una sede del MISMO negocio que existe y está desactivada. */
+  const conSedeInactiva = (fila: Registro) =>
+    tablas.sede.some((sede) => sede.id === fila.sedeId && sede.businessId === fila.businessId && sede.activo !== true)
+
+  /** Una hora por delante con sede: pendiente o confirmada, con `startTime` en el futuro. */
+  const citaViva = (cita: Registro, ahora: number) =>
+    (cita.sedeId ?? null) !== null && ESTADOS_DE_CITA_VIVA.includes(String(cita.status)) && milisegundos(cita.startTime) > ahora
+
+  /**
+   * El trigger `citas_exigen_sede_activa` (BEFORE INSERT OR UPDATE OF sedeId,
+   * status, startTime en `citas`): una cita viva con sede exige la sede
+   * activa. Sólo juzga cuando la cita SE VUELVE viva en esa sede (nueva,
+   * reactivada, movida al futuro, con otra sede): una que ya estaba viva en la
+   * misma sede no se vuelve a juzgar. Una pasada, cancelada, completada, de "no
+   * vino" o sin sede sale sin mirar. `viejo` es `null` en un INSERT.
+   */
+  function citaExigeSedeActiva(viejo: Registro | null, nuevo: Registro) {
+    const ahora = Date.now()
+    if (!citaViva(nuevo, ahora)) return
+    if (viejo && citaViva(viejo, ahora) && viejo.sedeId === nuevo.sedeId) return
+    if (conSedeInactiva(nuevo)) {
+      throw errorDeTrigger(`citas ${String(nuevo.id)}: la sede ${String(nuevo.sedeId)} no está activa`)
+    }
+  }
+
+  /**
+   * El trigger `lista_de_espera_exige_sede_activa` (BEFORE INSERT OR UPDATE OF
+   * sedeId, estado en `lista_de_espera`): una inscripción ACTIVA con sede exige
+   * la sede activa. Una que ya estaba activa en la misma sede no se vuelve a
+   * juzgar; una resuelta (reservo, expirada, salio) o sin sede sale sin mirar.
+   */
+  function inscripcionExigeSedeActiva(viejo: Registro | null, nuevo: Registro) {
+    if ((nuevo.sedeId ?? null) === null || nuevo.estado !== "activa") return
+    if (viejo && viejo.estado === "activa" && (viejo.sedeId ?? null) === nuevo.sedeId) return
+    if (conSedeInactiva(nuevo)) {
+      throw errorDeTrigger(`lista_de_espera ${String(nuevo.id)}: la sede ${String(nuevo.sedeId)} no está activa`)
+    }
+  }
+
   /** Los triggers `BEFORE INSERT` de la base de verdad que la falsa reproduce, en el orden de Postgres (alfabético). */
   const ANTES_DE_INSERTAR: Partial<Record<NombreDeModelo, (nuevo: Registro) => void>> = {
     visitService: (nuevo) => {
@@ -1209,6 +1259,8 @@ export function crearBaseFalsa() {
     workerInvitation: invitacionExigePlanEquipo,
     sede: (nuevo) => reglasDeSede(null, nuevo),
     workSchedule: franjaSinPisarse,
+    appointment: (nuevo) => citaExigeSedeActiva(null, nuevo),
+    inscripcionEnEspera: (nuevo) => inscripcionExigeSedeActiva(null, nuevo),
   }
 
   /** Los triggers `BEFORE UPDATE` de la base de verdad que la falsa reproduce, en el orden de Postgres (alfabético). */
@@ -1224,6 +1276,8 @@ export function crearBaseFalsa() {
     business: cambioDePlan,
     sede: reglasDeSede,
     workSchedule: (_viejo, nuevo) => franjaSinPisarse(nuevo),
+    appointment: citaExigeSedeActiva,
+    inscripcionEnEspera: inscripcionExigeSedeActiva,
   }
 
   /** Los triggers `BEFORE DELETE` de la base de verdad que la falsa reproduce. */

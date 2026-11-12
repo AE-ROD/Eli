@@ -1,14 +1,18 @@
 import { describe, it, expect, beforeEach } from "vitest"
 import { crearBaseFalsa, type NombreDeModelo } from "./base-falsa"
+import { esRechazoPorSedeInactiva } from "@/lib/rechazo-de-sede-inactiva"
 
 /**
  * La base falsa y la etapa 9 (`20261112120000_etapa_9_planes_y_sedes`): el
  * plan del negocio, las sedes, el `sedeId` de horarios, citas y lista de
  * espera con su FK compuesta, los CHECK nuevos y los cuatro triggers
  * (`invitaciones_exigen_plan_equipo`, `negocios_cambio_de_plan`, `sedes_reglas`
- * y `horarios_sedes_sin_pisarse`) con los mismos mensajes que la base real. Cada
- * caso de abajo se probó también contra Postgres 16 con la migración aplicada
- * (README, "Migraciones en producción").
+ * y `horarios_sedes_sin_pisarse`) con los mismos mensajes que la base real. Y,
+ * de `20261112140000_etapa_9_endurecer_planes_y_sedes`, los dos triggers que
+ * exigen la sede activa a una hora o inscripción viva (`citas_exigen_sede_activa`
+ * y `lista_de_espera_exige_sede_activa`). Cada caso de abajo se probó también
+ * contra Postgres 16 con la migración aplicada (README, "Migraciones en
+ * producción").
  */
 
 const base = crearBaseFalsa()
@@ -581,6 +585,163 @@ describe("base falsa: planes y sedes (etapa 9)", () => {
       await prisma.sede.update({ where: { id: "B" }, data: { activo: false } })
       await expect(prisma.sede.update({ where: { id: "B" }, data: { activo: true } })).resolves.toMatchObject({ activo: true })
       expect(fila("workSchedule", "fb1")).toMatchObject({ active: false })
+    })
+  })
+
+  describe("los triggers citas_exigen_sede_activa y lista_de_espera_exige_sede_activa", () => {
+    const DIA = 24 * 60 * 60 * 1000
+    /** Una hora que empieza dentro de `dias` días (negativo: ya pasó). */
+    const en = (dias: number) => new Date(Date.now() + dias * DIA)
+    const hora = (id: string, sedeId: string | null, dias: number, extra: Record<string, unknown> = {}) => ({
+      id,
+      businessId: "n1",
+      title: "Corte",
+      startTime: en(dias),
+      endTime: new Date(en(dias).getTime() + 3600_000),
+      sedeId,
+      ...extra,
+    })
+    const seRechazaLaCita = /23514: citas \S+: la sede B no está activa/
+    const seRechazaLaInscripcion = /23514: lista_de_espera \S+: la sede B no está activa/
+
+    /** B es la sede que la dueña desactivó. Lo sembrado entra sin pasar por los triggers (como lo que ya estaba en la base). */
+    const conBDesactivada = async (sembrado: Record<string, unknown>[] = [], inscripciones: Record<string, unknown>[] = []) => {
+      base.reiniciar({ ...datos(), appointment: sembrado, inscripcionEnEspera: inscripciones })
+      await prisma.sede.update({ where: { id: "B" }, data: { activo: false } })
+    }
+
+    describe("citas: al crear", () => {
+      beforeEach(() => conBDesactivada())
+
+      it("una hora viva en una sede ACTIVA se crea", async () => {
+        await expect(prisma.appointment.create({ data: hora("c1", "A", 2) })).resolves.toMatchObject({ sedeId: "A", status: "pendiente" })
+        await expect(prisma.appointment.create({ data: hora("c2", "A", 2, { status: "confirmada" }) })).resolves.toBeTruthy()
+      })
+
+      it.each([["pendiente"], ["confirmada"]])("una hora %s por delante en una sede INACTIVA se rechaza y no deja nada", async (status) => {
+        const antes = base.volcado()
+        await expect(prisma.appointment.create({ data: hora("c1", "B", 2, { status }) })).rejects.toThrow(seRechazaLaCita)
+        expect(base.volcado()).toEqual(antes)
+      })
+
+      it("el rechazo es el que reconoce la aplicación para responder 409", async () => {
+        const error = await prisma.appointment.create({ data: hora("c1", "B", 2) }).catch((falla: unknown) => falla)
+        expect(esRechazoPorSedeInactiva(error)).toBe(true)
+      })
+
+      it.each([
+        ["pasada (pendiente, ya empezó)", { dias: -1, status: "pendiente" }],
+        ["cancelada", { dias: 2, status: "cancelada" }],
+        ["completada", { dias: 2, status: "completada" }],
+        ["de \"no vino\"", { dias: 2, status: "no-asistio" }],
+        ["en progreso", { dias: 2, status: "en-progreso" }],
+      ])("una hora %s en una sede inactiva se crea: no cuenta como hora por delante", async (_caso, { dias, status }) => {
+        await expect(prisma.appointment.create({ data: hora("c1", "B", dias, { status }) })).resolves.toMatchObject({ sedeId: "B", status })
+      })
+
+      it("una hora viva SIN sede se crea (todo negocio sin sedes pasa por acá sin que el trigger mire nada)", async () => {
+        await expect(prisma.appointment.create({ data: hora("c1", null, 2) })).resolves.toMatchObject({ sedeId: null })
+      })
+
+      it("con la sede de OTRO negocio no es el trigger quien rechaza, es la FK compuesta (P2003)", async () => {
+        const error = await prisma.appointment.create({ data: hora("c1", "G", 2) }).catch((falla: unknown) => falla)
+        expect(error).toMatchObject({ code: "P2003" })
+        expect(esRechazoPorSedeInactiva(error)).toBe(false)
+      })
+
+      it("createMany es todo o nada: una hora viva en la sede inactiva tira abajo a las demás", async () => {
+        const antes = base.volcado()
+        await expect(prisma.appointment.createMany({ data: [hora("c1", "A", 2), hora("c2", "B", 2)] })).rejects.toThrow(seRechazaLaCita)
+        expect(base.volcado()).toEqual(antes)
+      })
+    })
+
+    describe("citas: al actualizar", () => {
+      beforeEach(() => conBDesactivada([hora("cancelada-b", "B", 2, { status: "cancelada" }), hora("pasada-b", "B", -2), hora("viva-b", "B", 3), hora("cancelada-a", "A", 2, { status: "cancelada" }), hora("pasada-a", "A", -2), hora("viva-a", "A", 3), hora("sin-sede", null, 3)]))
+
+      it.each([["pendiente"], ["confirmada"]])("REACTIVAR una cancelada de una sede inactiva (-> %s) se rechaza y la cita sigue cancelada", async (status) => {
+        const antes = base.volcado()
+        await expect(prisma.appointment.update({ where: { id: "cancelada-b" }, data: { status } })).rejects.toThrow(/23514: citas cancelada-b: la sede B no está activa/)
+        expect(base.volcado()).toEqual(antes)
+        expect(fila("appointment", "cancelada-b")).toMatchObject({ status: "cancelada" })
+      })
+
+      it("reactivar una cancelada de una sede ACTIVA pasa", async () => {
+        await expect(prisma.appointment.update({ where: { id: "cancelada-a" }, data: { status: "pendiente" } })).resolves.toMatchObject({ status: "pendiente" })
+      })
+
+      it("updateMany que reactiva es todo o nada: la de la sede activa tampoco se toca", async () => {
+        const antes = base.volcado()
+        await expect(prisma.appointment.updateMany({ where: { status: "cancelada" }, data: { status: "pendiente" } })).rejects.toThrow(/23514: citas cancelada-b: la sede B no está activa/)
+        expect(base.volcado()).toEqual(antes)
+        expect(fila("appointment", "cancelada-a")).toMatchObject({ status: "cancelada" })
+      })
+
+      it("mover al futuro una pasada de una sede inactiva se rechaza; en una sede activa pasa", async () => {
+        await expect(prisma.appointment.update({ where: { id: "pasada-b" }, data: { startTime: en(2), endTime: en(2) } })).rejects.toThrow(/23514: citas pasada-b: la sede B no está activa/)
+        await expect(prisma.appointment.update({ where: { id: "pasada-a" }, data: { startTime: en(2), endTime: en(2) } })).resolves.toBeTruthy()
+      })
+
+      it("cambiarle la sede a una hora viva hacia una inactiva se rechaza; ponerle sede a una que no tenía también", async () => {
+        await expect(prisma.appointment.update({ where: { id: "viva-a" }, data: { sedeId: "B" } })).rejects.toThrow(/23514: citas viva-a: la sede B no está activa/)
+        await expect(prisma.appointment.update({ where: { id: "sin-sede" }, data: { sedeId: "B" } })).rejects.toThrow(/23514: citas sin-sede: la sede B no está activa/)
+        await expect(prisma.appointment.update({ where: { id: "sin-sede" }, data: { sedeId: "A" } })).resolves.toMatchObject({ sedeId: "A" })
+      })
+
+      it("lo que ya estaba vivo en la sede desactivada sigue andando: cancelar, completar, no vino, confirmar, cambiar la hora, editar", async () => {
+        await expect(prisma.appointment.update({ where: { id: "viva-b" }, data: { status: "confirmada" } })).resolves.toBeTruthy()
+        await expect(prisma.appointment.update({ where: { id: "viva-b" }, data: { startTime: en(5), endTime: en(5), notes: "x" } })).resolves.toBeTruthy()
+        await expect(prisma.appointment.update({ where: { id: "viva-b" }, data: { status: "cancelada" } })).resolves.toMatchObject({ status: "cancelada" })
+        await expect(prisma.appointment.update({ where: { id: "pasada-b" }, data: { status: "completada" } })).resolves.toMatchObject({ status: "completada" })
+        await conBDesactivada([hora("viva-b", "B", 3)])
+        await expect(prisma.appointment.update({ where: { id: "viva-b" }, data: { status: "no-asistio" } })).resolves.toBeTruthy()
+        await conBDesactivada([hora("viva-b", "B", 3)])
+        await expect(prisma.appointment.update({ where: { id: "viva-b" }, data: { sedeId: null } })).resolves.toMatchObject({ sedeId: null })
+      })
+
+      it("una hora sin sede cambia de estado sin que el trigger mire nada", async () => {
+        await expect(prisma.appointment.update({ where: { id: "sin-sede" }, data: { status: "confirmada" } })).resolves.toBeTruthy()
+      })
+    })
+
+    describe("lista de espera", () => {
+      beforeEach(() => conBDesactivada([], [inscripcion("previa-b", "n1", "s1", "B"), { ...inscripcion("salio-b", "n1", "s1", "B"), estado: "salio" }, inscripcion("activa-a", "n1", "s1", "A")]))
+
+      it("una inscripción activa en una sede ACTIVA o sin sede se crea", async () => {
+        await expect(prisma.inscripcionEnEspera.create({ data: inscripcion("e1", "n1", "s1", "A") })).resolves.toBeTruthy()
+        await expect(prisma.inscripcionEnEspera.create({ data: inscripcion("e2", "n1", "s1", null) })).resolves.toBeTruthy()
+      })
+
+      it("una inscripción activa en una sede INACTIVA se rechaza y no deja nada", async () => {
+        const antes = base.volcado()
+        const error = await prisma.inscripcionEnEspera.create({ data: inscripcion("e1", "n1", "s1", "B") }).catch((falla: unknown) => falla)
+        expect(String((error as Error).message)).toMatch(seRechazaLaInscripcion)
+        expect(esRechazoPorSedeInactiva(error)).toBe(true)
+        expect(base.volcado()).toEqual(antes)
+      })
+
+      it.each([["reservo"], ["expirada"], ["salio"]])("una inscripción %s en una sede inactiva se crea: ya no está en pie", async (estado) => {
+        await expect(prisma.inscripcionEnEspera.create({ data: { ...inscripcion("e1", "n1", "s1", "B"), estado } })).resolves.toMatchObject({ estado })
+      })
+
+      it("con la sede de OTRO negocio rechaza la FK compuesta, no el trigger (P2003)", async () => {
+        const error = await prisma.inscripcionEnEspera.create({ data: inscripcion("e1", "n1", "s1", "G") }).catch((falla: unknown) => falla)
+        expect(error).toMatchObject({ code: "P2003" })
+        expect(esRechazoPorSedeInactiva(error)).toBe(false)
+      })
+
+      it("resolver una inscripción activa de una sede desactivada (reservó, expiró, salió) pasa", async () => {
+        await expect(prisma.inscripcionEnEspera.update({ where: { id: "previa-b" }, data: { estado: "reservo" } })).resolves.toMatchObject({ estado: "reservo" })
+      })
+
+      it("revivir una resuelta de una sede inactiva, o mover una activa a una inactiva, se rechaza", async () => {
+        await expect(prisma.inscripcionEnEspera.update({ where: { id: "salio-b" }, data: { estado: "activa" } })).rejects.toThrow(/23514: lista_de_espera salio-b: la sede B no está activa/)
+        await expect(prisma.inscripcionEnEspera.update({ where: { id: "activa-a" }, data: { sedeId: "B" } })).rejects.toThrow(/23514: lista_de_espera activa-a: la sede B no está activa/)
+      })
+
+      it("tocar otra columna de una activa de sede desactivada (los avisos) pasa", async () => {
+        await expect(prisma.inscripcionEnEspera.update({ where: { id: "previa-b" }, data: { avisos: 1 } })).resolves.toMatchObject({ avisos: 1 })
+      })
     })
   })
 })

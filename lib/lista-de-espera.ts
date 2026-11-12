@@ -12,6 +12,7 @@ import {
   type ContextoDeCorrida,
   type ResumenDeTrabajo,
 } from "@/lib/envios-a-clientes"
+import { esRechazoPorSedeInactiva } from "@/lib/rechazo-de-sede-inactiva"
 import { registrarError } from "@/lib/registro-de-errores"
 import {
   MENSAJE_FECHA_MUY_LEJANA,
@@ -175,6 +176,8 @@ export type ResultadoDeInscripcion =
   | { tipo: "rechazada"; error: string }
   /** Con dos o más sedes activas, la sede falta o no es una sede activa del negocio: 400. */
   | { tipo: "sede-no-valida" }
+  /** La sede se desactivó mientras se inscribía (la base la rechazó): 409, y no se guardó nada. */
+  | { tipo: "sede-inactiva" }
 
 /**
  * Anota a alguien en la lista de espera de un día. `negocio` es el del slug
@@ -325,6 +328,12 @@ export async function inscribirEnListaDeEspera(
       select: { id: true },
     })
     return { tipo: "inscrita" } as const
+  }).catch((error: unknown) => {
+    // La sede se desactivó mientras se inscribía: el trigger de la base
+    // (`lista_de_espera_exige_sede_activa`) la rechazó bajo el candado del
+    // negocio y la transacción se deshizo: no se guardó nada.
+    if (esRechazoPorSedeInactiva(error)) return { tipo: "sede-inactiva" } as const
+    throw error
   })
 }
 

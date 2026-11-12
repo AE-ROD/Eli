@@ -25,6 +25,7 @@ import { leerHoraValle, preciosConHoraValle } from "@/lib/hora-valle"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { datosDeConsentimientoPromocional } from "@/lib/envios-a-clientes"
 import { marcarReservo } from "@/lib/lista-de-espera"
+import { MENSAJE_SEDE_YA_NO_DISPONIBLE, esRechazoPorSedeInactiva } from "@/lib/rechazo-de-sede-inactiva"
 import { DIAS_EN_QUE_CUENTAN_LAS_FALTAS } from "@/lib/por-confirmar"
 import {
   filasDeServicios,
@@ -616,6 +617,12 @@ export async function POST(
     // Algo que la reserva ligaba (servicio, profesional) se borró entretanto.
     if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2025" || error.code === "P2003")) {
       return NextResponse.json({ error: "Algo cambió mientras reservabas. Vuelve a elegir la hora." }, { status: 409 })
+    }
+    // La sede se desactivó mientras se reservaba: el trigger de la base la
+    // rechazó (segunda barrera, bajo el candado del negocio) y la transacción
+    // se deshizo entera: no se guardó ni la cita ni el cliente.
+    if (esRechazoPorSedeInactiva(error)) {
+      return NextResponse.json({ error: MENSAJE_SEDE_YA_NO_DISPONIBLE }, { status: 409 })
     }
     // Sin volcar el error: uno de Prisma trae en `meta` los datos de quien reserva.
     registrarError("confirmando una reserva", error)

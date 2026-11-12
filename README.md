@@ -104,7 +104,8 @@ Antes de aplicar, siempre:
    Es una copia instantánea: si la migración deja algo mal después del
    COMMIT, se vuelve a ese punto restaurando el branch. Obligatorio en las que
    reescriben filas (hoy `20261109120000_etapa_7c_protesis_por_tipo` y, sólo
-   por el relleno de `negocios.plan`, `20261112120000_etapa_9_planes_y_sedes`);
+   por el relleno de `negocios.plan`, `20261112120000_etapa_9_planes_y_sedes`
+   y `20261112140000_etapa_9_endurecer_planes_y_sedes`);
    igual de barato en todas. Se borra cuando el despliegue quedó andando.
 2. **El orden.** Cada sección dice qué migración requiere antes; la consulta
    de "Qué migraciones están aplicadas" (más abajo) lo responde sin adivinar.
@@ -590,7 +591,11 @@ medio; la única diferencia es lo de invitar, arriba). El código nuevo **no**
 anda sin ella: lee y escribe `plan` y `sedeId`. Orden: respaldo (el relleno es
 un UPDATE), aplicarla, desplegar, y
 `npx prisma migrate resolve --applied 20261112120000_etapa_9_planes_y_sedes`.
-No depende de la clínica dental, pero va después de la 8 en el historial.
+No depende de la clínica dental, pero va después de la 8 en el historial. El
+relleno de arriba no miraba `negocios.teamSize` (un negocio que dijo ser más
+de una persona y todavía no invitó a nadie quedó en Independiente):
+`20261112140000_etapa_9_endurecer_planes_y_sedes` (más abajo) lo corrige y va
+con ésta, en el mismo despliegue.
 
 Bloqueos y ventana: trae `SET LOCAL lock_timeout = '5s'`. Los `ALTER TABLE`
 sobre `negocios`, `horarios_laborales`, `citas` y `lista_de_espera` toman un
@@ -619,9 +624,9 @@ apunte a su propia carpeta las exige la aplicación (`claveDeFotoDeLaCuenta`,
 columna puesta (no la lee ni la escribe); el nuevo **no** anda sin ella: Prisma
 pide todas las columnas de `usuarios` en cada `findUnique` sin `select` (el
 inicio de sesión en `lib/auth.ts`, el registro y recuperar la contraseña), y
-esas consultas fallan si falta. Las dos migraciones de la etapa 9 se aplican
-antes de desplegar, en el orden de su fecha: `planes_y_sedes` y después ésta.
-Luego de desplegar,
+esas consultas fallan si falta. Las tres migraciones de la etapa 9 se aplican
+antes de desplegar, en el orden de su fecha: `planes_y_sedes`, ésta y
+`endurecer_planes_y_sedes`. Luego de desplegar,
 `npx prisma migrate resolve --applied 20261112130000_etapa_9_foto_de_la_cuenta`.
 No pide un respaldo aparte (no reescribe ni borra filas); el del despliegue
 completo cubre la corrida.
@@ -630,6 +635,86 @@ Bloqueos: trae `SET LOCAL lock_timeout = '5s'`. El `ALTER TABLE` toma un candado
 exclusivo sobre `usuarios` hasta el COMMIT y el inicio de sesión la lee a cada
 rato; `ADD COLUMN` sin default es sólo un cambio de catálogo, instantáneo. Si el
 candado no llega en 5 segundos, falla entera y se reintenta en otro momento.
+
+### `20261112140000_etapa_9_endurecer_planes_y_sedes`
+
+Dos arreglos que salieron de la revisión de seguridad de la etapa 9, en una
+migración nueva (las dos anteriores de la etapa pueden estar aplicadas y no se
+editan: Prisma guarda su checksum).
+
+1. **El relleno por `teamSize`.** La migración de planes y sedes pasó a
+   Independiente a todo negocio sin integrantes ni invitaciones pendientes,
+   sin mirar `negocios.teamSize` (cuántas personas dijo el negocio que son al
+   crearse, de 1 a 500): uno que declaró más de una y todavía no invitó a nadie
+   perdió la opción de invitar. Esta migración lo devuelve a `equipo`: un
+   `UPDATE` que sólo toca `plan` (no `updatedAt`, ninguna otra columna) de los
+   negocios `independiente` con `teamSize > 1` y **ninguna** fila en `sedes`
+   (activa o no: el trigger `negocios_cambio_de_plan` sólo deja pasar a Equipo
+   sin sedes activas, y así tampoco se deshace la elección de quien ya creó
+   sedes). Es seguro porque corre **justo después de la de planes y sedes, en
+   el mismo despliegue y antes de desplegar el código**: nadie ha podido
+   cambiar de plan en el medio, así que todo Independiente con `teamSize > 1`
+   viene del relleno y no de una decisión de la dueña (el código nuevo crea los
+   Independiente con `teamSize` 1). **No se vuelve a correr después de
+   desplegar**: quien pasa de Equipo a Independiente conserva su `teamSize` y
+   esto lo devolvería a Equipo.
+2. **La carrera entre agendar en una sede y desactivarla.** Desactivar una sede
+   cuenta las horas por delante bajo el candado del negocio, pero crear una
+   hora validaba la sede fuera de él, y la FK `(sedeId, businessId)` no mira
+   `activo`: si la dueña desactivaba la sede (0 horas por delante) justo
+   mientras un cliente confirmaba ahí, las dos pasaban y quedaba una hora
+   futura en una sede inactiva. Dos triggers nuevos (`check_violation`, `SET
+   search_path = public`, sin SECURITY DEFINER), con el mismo candado
+   `pg_advisory_xact_lock(hashtext('plan-y-sedes:' || businessId))`:
+   `citas_exigen_sede_activa` (una cita `pendiente` o `confirmada` con
+   `startTime` por delante y `sedeId` exige la sede activa) y
+   `lista_de_espera_exige_sede_activa` (una inscripción `activa` con `sedeId`
+   exige la sede activa). Lo que no lleva sede, o es pasado, cancelado,
+   completado o "no vino", sale sin tomar el candado ni fallar (cancelar o
+   completar una hora vieja de una sede desactivada sigue andando; una reserva
+   de un negocio sin sedes no paga nada). En un `UPDATE` sólo miran cuando la
+   fila **se vuelve** viva en esa sede (reactivar una cancelada, mover una
+   pasada al futuro, ponerle o cambiarle la sede). El `SELECT` de la sede lleva
+   `FOR SHARE`: la reserva pública corre en una transacción `Serializable` con
+   una foto vieja, y sin él leería la sede como estaba y la carrera seguiría
+   abierta (con `FOR SHARE`, Postgres aborta con 40001, la reserva reintenta y
+   ahí la rechaza el trigger). La aplicación lo responde con un 409 claro
+   (`lib/rechazo-de-sede-inactiva.ts`): "Esa sede ya no está disponible. Elige
+   otra." en la reserva pública y la lista de espera; un mensaje del panel al
+   agendar o al reactivar o mover una hora.
+
+Aditiva: no agrega columnas ni tablas, no reescribe filas más que ese `UPDATE`
+(sólo `plan`) y no toca ninguna hora ni inscripción existente.
+
+**Antes de desplegar, junto con las otras dos de la etapa 9.** Con respaldo (el
+relleno es un `UPDATE`) y en el orden de la fecha: `planes_y_sedes`,
+`foto_de_la_cuenta` y ésta; después desplegar, y
+`npx prisma migrate resolve --applied 20261112140000_etapa_9_endurecer_planes_y_sedes`.
+El código viejo no escribe `sedeId`, así que nunca entra en los triggers; el
+nuevo anda con y sin ella (la aplicación ya valida la sede y esto es la segunda
+barrera), pero sin ella la carrera sigue abierta: no se deja para después.
+
+Bloqueos: trae `SET LOCAL lock_timeout = '5s'`. El `UPDATE` toma un candado por
+negocio actualizado (el trigger de plan), que Postgres suelta al COMMIT, y
+`CREATE TRIGGER` toma SHARE ROW EXCLUSIVE sobre `citas` y `lista_de_espera`
+hasta el COMMIT: sus escrituras esperan un instante (no revisa filas, no hay
+`ALTER TABLE`). Si un candado no llega en 5 segundos, falla entera y se
+reintenta en otro momento. Para deshacerla (los triggers; el relleno no se
+deshace): `DROP TRIGGER citas_exigen_sede_activa ON citas;`,
+`DROP TRIGGER lista_de_espera_exige_sede_activa ON lista_de_espera;` y
+`DROP FUNCTION` de las dos funciones.
+
+Para comprobarla después de aplicarla, sólo lectura (los dos primeros números
+tienen que ser 0 y 2):
+
+```sql
+SELECT count(*) FROM negocios n
+WHERE n.plan = 'independiente' AND n."teamSize" > 1
+  AND NOT EXISTS (SELECT 1 FROM sedes s WHERE s."businessId" = n.id);
+SELECT count(*) FROM pg_trigger
+WHERE tgname IN ('citas_exigen_sede_activa', 'lista_de_espera_exige_sede_activa');
+SELECT plan, count(*) FROM negocios GROUP BY plan;
+```
 
 ### Qué migraciones están aplicadas
 
@@ -651,6 +736,7 @@ SELECT
   EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sedes')               AS "planes_y_sedes",
   EXISTS (SELECT 1 FROM information_schema.columns
           WHERE table_name = 'usuarios' AND column_name = 'fotoUrl')                         AS "foto_de_la_cuenta",
+  EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'citas_exigen_sede_activa')                  AS "endurecer_planes_y_sedes",
   EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'atencion_servicios_reparto_de_protesis'
           AND prosrc LIKE '%otro paciente%')                                                 AS "reglas_7d_vigentes";
 ```
@@ -660,7 +746,10 @@ de un `t` es una migración salteada: avisar antes de seguir). `planes_y_sedes`
 es la etapa 9 (`20261112120000_etapa_9_planes_y_sedes`): existe la tabla
 `sedes`, que la migración crea junto con todo lo demás en una sola
 transacción. `foto_de_la_cuenta` es `20261112130000_etapa_9_foto_de_la_cuenta`:
-existe la columna `usuarios.fotoUrl`. Si `7d = t` y
+existe la columna `usuarios.fotoUrl`. `endurecer_planes_y_sedes` es
+`20261112140000_etapa_9_endurecer_planes_y_sedes`: existe la función del
+trigger `citas_exigen_sede_activa` (la migración crea los dos triggers y el
+relleno en una sola transacción). Si `7d = t` y
 `reglas_7d_vigentes = f`, la 7b se aplicó después de la 7d y le borró las
 reglas: aplicar la etapa 8, que las vuelve a poner.
 

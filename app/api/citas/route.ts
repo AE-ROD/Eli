@@ -14,6 +14,7 @@ import {
   rechazoDeSede,
   sedeDeLaCita,
 } from "@/lib/sede-de-la-cita"
+import { MENSAJE_SEDE_DESACTIVADA_AL_AGENDAR, esRechazoPorSedeInactiva } from "@/lib/rechazo-de-sede-inactiva"
 import { registrarError } from "@/lib/registro-de-errores"
 import {
   actorDeSesion,
@@ -402,6 +403,11 @@ export async function POST(request: NextRequest) {
     // Lo que se iba a ligar (cliente, profesional, sillón) se borró entretanto.
     if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2025" || error.code === "P2003")) {
       return NextResponse.json({ error: "Algo de la cita cambió recién: vuelve a cargar la agenda" }, { status: 409 })
+    }
+    // Etapa 9: la sede se desactivó mientras se agendaba. La rechazó el trigger
+    // de la base bajo el candado del negocio (segunda barrera): no se guardó nada.
+    if (esRechazoPorSedeInactiva(error)) {
+      return NextResponse.json({ error: MENSAJE_SEDE_DESACTIVADA_AL_AGENDAR }, { status: 409 })
     }
     // Sin volcar el error: uno de Prisma trae en `meta` los datos del cliente.
     registrarError("creando una cita", error)

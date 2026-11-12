@@ -65,6 +65,7 @@ import { seleccionDeCitaDelPanel, soltarLoClinicoDeLaCita } from "@/lib/citas-de
 import { SELECCION_DE_LA_SEDE_DE_LA_CITA, sedeDelHorarioDeLaCita } from "@/lib/sede-de-la-cita"
 import { leerAlertaDeAlergias } from "@/lib/ficha-clinica-servidor"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
+import { MENSAJE_SEDE_DE_LA_HORA_DESACTIVADA, esRechazoPorSedeInactiva } from "@/lib/rechazo-de-sede-inactiva"
 import { registrarError } from "@/lib/registro-de-errores"
 
 const edicionDeCitaSchema = z.object({
@@ -723,6 +724,12 @@ export async function PUT(
     // La cita se borró entre la lectura y la escritura (`update` no la encontró).
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
       return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 })
+    }
+    // Etapa 9: reactivar (o mover al futuro) una hora cuya sede está desactivada:
+    // la rechazó el trigger de la base, que no deja una hora en pie en una sede
+    // que ya no atiende. Nada se escribió: la transacción se deshizo.
+    if (esRechazoPorSedeInactiva(error)) {
+      return NextResponse.json({ error: MENSAJE_SEDE_DE_LA_HORA_DESACTIVADA }, { status: 409 })
     }
     registrarError("editando una cita", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
