@@ -763,6 +763,29 @@ lib/                          Lógica compartida, cada archivo con su test al la
   sedes.ts                    Las sedes del plan Independiente (hasta 5): una o varias según
                               el plan, la sede de una reserva y los choques de horario entre
                               sedes. Cálculo puro
+  sedes-servidor.ts           El lado servidor de las sedes: leerlas, crearlas, convertir un
+                              negocio de cero a dos sedes y escribir su horario, con el candado
+                              `plan-y-sedes:<negocio>` que también toman los triggers
+  reglas-de-sedes.ts          Las decisiones de los endpoints de sedes sin base: tope, horas por
+                              delante, choques; entra lo leído y sale si se puede o el 409
+  grilla-de-sede.ts           La semana de una sede (días y franjas "HH:MM"): validar, unir las que
+                              se pisan y pasar de y a filas de `horarios_laborales`
+  cambio-de-plan.ts           Cambiar de plan sin base: qué hacer con las sedes y las citas, o el
+                              rechazo con su mensaje
+  cambio-de-plan-servidor.ts  El cambio de plan dentro de la transacción (`PATCH /api/configuracion/plan`)
+  sede-de-la-reserva.ts       La sede de una reserva pública: leerla del pedido y revalidarla
+                              contra las sedes activas del negocio del `slug`
+  sede-de-la-cita.ts          La sede de una hora agendada desde el panel, contra las sedes del
+                              negocio de la sesión
+  lugar-de-la-cita.ts         El "Dónde" de los correos: una hora que tiene sede dice dónde queda
+  orden-de-lista.ts           Subir y bajar un elemento de una lista con `orden` (las sedes)
+  sesion-del-servidor.ts      La sesión leída una sola vez por render del servidor (`cache` de
+                              React); los route handlers siguen llamando `getServerSession`
+  zona-horaria-servidor.ts    La zona horaria del negocio, leída una sola vez por render
+  sondeo-visible.ts           Un sondeo que sólo corre con la pestaña a la vista y pide en el
+                              acto al volver
+  foto-de-la-cuenta.ts        La foto de la cuenta de la sesión para el avatar del panel (no va
+                              en el token)
   vocabulario.ts              Las palabras de cada rubro, con singular, plural y género
                               (`vocabularioDe(rubro).palabras`): estilista, barbero,
                               paciente, sala de espera…
