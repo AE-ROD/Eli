@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useId, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import type { FormEvent, ReactNode, Ref } from "react"
 import { motion } from "framer-motion"
@@ -61,11 +61,11 @@ import {
 } from "./reglas-de-la-reserva"
 import {
   confirmarReserva,
-  leerDisponibilidad,
   leerProfesionales,
   type ProfesionalDelEquipo,
   type ProfesionalPublico,
 } from "../_datos"
+import { useCargarHoras } from "./use-cargar-horas"
 
 interface HorarioPublico {
   dayOfWeek: number
@@ -391,11 +391,7 @@ export function FormularioReserva({
   // Sólo en una clínica dental: con "primera vez" la cita dura 15 minutos
   // más y las horas son otras. El servidor suma; acá sólo va la respuesta.
   const primeraVezQueSeManda = clinicaDental ? primeraVez : null
-  const cargarHoras = useCallback(
-    (dia: string) =>
-      leerDisponibilidad(slug, dia, claveDeServicios ? claveDeServicios.split(",") : [], profesionalId, primeraVezQueSeManda),
-    [slug, claveDeServicios, profesionalId, primeraVezQueSeManda]
-  )
+  const cargarHoras = useCargarHoras(slug, claveDeServicios, profesionalId, primeraVezQueSeManda)
   const claveDeHoras = `${claveDeServicios}|${profesionalId ?? ""}${clinicaDental ? `|${primeraVez ?? ""}` : ""}`
   // En una clínica, el calendario aparece cuando se respondió la pregunta.
   const faltaLaPrimeraVez = clinicaDental && primeraVez === null
