@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { CalendarCheck, CalendarClock, CalendarX2, Check, Navigation, X } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
@@ -10,15 +10,31 @@ import { Tarjeta } from "@/components/comunes/tarjeta"
 import { formatearMonto } from "@/lib/dinero"
 import { deTexto, formatearDuracionDeServicio } from "@/lib/fechas"
 import { rebajaDeLaHora, type PrecioDeLaHora } from "@/lib/hora-valle"
+import { cn } from "@/lib/utils"
 import { EncabezadoDeReserva } from "../../../_componentes/encabezado-de-reserva"
 import { direccionConComuna } from "../../../_componentes/reglas-de-la-sede"
 import { SelectorFechaHora, fechaParaLeer } from "../../../_componentes/selector-fecha-hora"
+import { SelectorProfesional } from "../../../_componentes/selector-profesional"
 import { frasesDeLaGestion } from "../../../_frases"
 import { FRASES_DE_LAS_SEDES } from "../../../_frases-de-sedes"
-import { cancelarCita, leerCita, leerHorasParaReagendar, reagendarCita, type CitaDelEnlace } from "../_datos"
-
-/** Si el servidor no dijo qué días atiende (ya no hay quién la tome), todos: la disponibilidad lo explica. */
-const TODOS_LOS_DIAS = [0, 1, 2, 3, 4, 5, 6]
+import {
+  cancelarCita,
+  leerCita,
+  leerHorasParaReagendar,
+  reagendarCita,
+  type CitaDelEnlace,
+  type ProfesionalParaCambiar,
+} from "../_datos"
+import {
+  NADIE_MARCADO,
+  alElegirProfesional,
+  conQuienQuedo,
+  diasDeLaEleccion,
+  eleccionDelPedido,
+  noHayNadaQueCambiar,
+  nombreDeLoMarcado,
+  profesionalMarcadoAlAbrir,
+} from "./reglas-de-la-gestion"
 
 type Vista =
   | { tipo: "cargando" }
@@ -66,6 +82,17 @@ export function GestionDeCita({ slug, token, rubro = null }: { slug: string; tok
   const [recargasDeHoras, setRecargasDeHoras] = useState(0)
   const titulo = useRef<HTMLHeadingElement>(null)
 
+  // Con quién se reagenda (plan con varios profesionales): `undefined` es "no se
+  // tocó el selector", y vale lo que había al abrir (quien atiende hoy). Al
+  // marcar a otro, el día y la hora se sueltan y se dice (`avisoDelProfesional`).
+  const [marcadoPorQuien, setMarcadoPorQuien] = useState<string | null | undefined>(undefined)
+  const [avisoDelProfesional, setAvisoDelProfesional] = useState("")
+  const citaDeLaVista = vista.tipo === "cita" ? vista.cita : null
+  const profesionales = citaDeLaVista?.profesionales ?? []
+  const marcadoAlAbrir = citaDeLaVista ? profesionalMarcadoAlAbrir(citaDeLaVista, profesionales) : null
+  const marcado = marcadoPorQuien === undefined ? marcadoAlAbrir : marcadoPorQuien
+  const eleccion = useMemo(() => eleccionDelPedido(marcadoAlAbrir, marcado), [marcadoAlAbrir, marcado])
+
   const cargar = useCallback(async () => {
     const resultado = await leerCita(slug, token, rubro)
     if (resultado.ok) setVista({ tipo: "cita", cita: resultado.datos })
@@ -78,7 +105,7 @@ export function GestionDeCita({ slug, token, rubro = null }: { slug: string; tok
     void cargar()
   }, [cargar])
 
-  const cargarHoras = useCallback((dia: string) => leerHorasParaReagendar(slug, token, dia), [slug, token])
+  const cargarHoras = useCallback((dia: string) => leerHorasParaReagendar(slug, token, dia, eleccion), [slug, token, eleccion])
 
   if (vista.tipo === "cargando") {
     return (
@@ -155,7 +182,7 @@ export function GestionDeCita({ slug, token, rubro = null }: { slug: string; tok
   const reagendar = async () => {
     setTrabajando(true)
     setError("")
-    const resultado = await reagendarCita(slug, token, fecha, hora, rubro)
+    const resultado = await reagendarCita(slug, token, fecha, hora, rubro, eleccion)
     setTrabajando(false)
     if (!resultado.ok) {
       setError(resultado.error)
@@ -175,7 +202,11 @@ export function GestionDeCita({ slug, token, rubro = null }: { slug: string; tok
     setModo("ver")
     setFecha("")
     elegirHora("", null)
-    setAviso(frases.reagendada(diaParaLeer(resultado.datos.fecha), resultado.datos.hora))
+    setMarcadoPorQuien(undefined)
+    setAvisoDelProfesional("")
+    setAviso(
+      frases.reagendada(diaParaLeer(resultado.datos.fecha), resultado.datos.hora, conQuienQuedo(eleccion, resultado.datos.profesional))
+    )
     // El plazo se cuenta desde la cita nueva: se vuelve a leer.
     void cargar()
   }
@@ -184,7 +215,32 @@ export function GestionDeCita({ slug, token, rubro = null }: { slug: string; tok
     setModo(nuevo)
     setError("")
     setAviso("")
+    // Cada vez que se abre el cambio, parte de quien atiende la cita hoy.
+    setMarcadoPorQuien(undefined)
+    setAvisoDelProfesional("")
   }
+
+  const elegirFecha = (nueva: string) => {
+    setAvisoDelProfesional("")
+    setFecha(nueva)
+  }
+
+  // Otro profesional es otra agenda: el día y la hora que ya se habían elegido se
+  // sueltan, con un aviso, y el calendario vuelve a pedir las horas de la nueva.
+  const elegirProfesional = (nuevo: string | null) => {
+    const { cambia, avisa } = alElegirProfesional(marcado, nuevo, { fecha, hora })
+    if (!cambia) return
+    setMarcadoPorQuien(nuevo)
+    setFecha("")
+    elegirHora("", null)
+    setAvisoDelProfesional(avisa ? frases.profesional.cambiaste : "")
+  }
+
+  // Con a quién elegir, el selector va antes del calendario; sin nadie marcado
+  // (quien la atiende ya no se puede elegir) no hay horas que mostrar todavía.
+  const hayQueElegir = profesionales.length > 0
+  const sinElegirConQuien = marcado === NADIE_MARCADO
+  const sinCambios = noHayNadaQueCambiar(cita, { fecha, hora }, eleccion)
 
   return (
     <>
@@ -235,24 +291,42 @@ export function GestionDeCita({ slug, token, rubro = null }: { slug: string; tok
           <div className="mt-8">
             <h2 className="titulo-3 text-navy">Elige otro día y hora</h2>
             <p className="mt-1 text-sm text-texto-2">
-              {frases.mismoServicio(cita.profesional)}
+              {frases.mismoServicio(nombreDeLoMarcado(cita.profesional, profesionales, marcadoAlAbrir, marcado))}
               {/* Reagendar no cambia de sede: las horas son las de esa sede. */}
               {cita.sede && ` ${FRASES_DE_LAS_SEDES.reagendarEnLaSede(cita.sede.nombre)}`}
             </p>
-            <div className="mt-6">
-              <SelectorFechaHora
-                cargarHoras={cargarHoras}
-                claveDeHoras={`${token}|${recargasDeHoras}`}
-                diasDisponibles={cita.diasConAtencion && cita.diasConAtencion.length > 0 ? cita.diasConAtencion : TODOS_LOS_DIAS}
-                zona={cita.zona}
-                fechaSeleccionada={fecha}
-                horaSeleccionada={hora}
-                onFecha={setFecha}
-                onHora={elegirHora}
-                // Clínica dental: una urgencia sólo se mueve a otra hora de hoy.
-                soloHoy={cita.soloHoy === true}
+            {hayQueElegir && (
+              <ProfesionalAlReagendar
+                profesionales={profesionales}
+                marcado={marcado}
+                onElegir={elegirProfesional}
+                aviso={avisoDelProfesional}
+                cualquiera={frases.profesional.cualquiera}
               />
+            )}
+            <div className="mt-6">
+              {sinElegirConQuien ? (
+                <p className="text-sm text-texto-2">{frases.profesional.elige}</p>
+              ) : (
+                <SelectorFechaHora
+                  cargarHoras={cargarHoras}
+                  claveDeHoras={`${token}|${recargasDeHoras}|${eleccion.tipo === "uno" ? eleccion.id : eleccion.tipo}`}
+                  diasDisponibles={diasDeLaEleccion(cita.diasConAtencion, profesionales, eleccion)}
+                  zona={cita.zona}
+                  fechaSeleccionada={fecha}
+                  horaSeleccionada={hora}
+                  onFecha={elegirFecha}
+                  onHora={elegirHora}
+                  // Clínica dental: una urgencia sólo se mueve a otra hora de hoy.
+                  soloHoy={cita.soloHoy === true}
+                />
+              )}
             </div>
+            {fecha && hora && sinCambios && (
+              <p role="status" className="mt-6 text-sm text-texto-2">
+                {frases.sinCambios}
+              </p>
+            )}
             {hora && precioNuevo && precioNuevo.precio !== null && (
               <p role="status" className="mt-6 rounded-campo bg-azul-suave px-4 py-3 text-sm text-navy">
                 A esta hora el precio cambia:{" "}
@@ -277,7 +351,7 @@ export function GestionDeCita({ slug, token, rubro = null }: { slug: string; tok
               <Boton variante="secundario" onClick={() => elegirModo("ver")} disabled={trabajando} className="w-full sm:w-auto">
                 Volver
               </Boton>
-              <Boton icono={<Check />} disabled={!fecha || !hora} cargando={trabajando} onClick={reagendar} className="w-full sm:w-auto">
+              <Boton icono={<Check />} disabled={!fecha || !hora || sinCambios} cargando={trabajando} onClick={reagendar} className="w-full sm:w-auto">
                 Cambiar a esta hora
               </Boton>
             </div>
@@ -290,6 +364,41 @@ export function GestionDeCita({ slug, token, rubro = null }: { slug: string; tok
           </div>
         )}
       </Tarjeta>
+    </>
+  )
+}
+
+/**
+ * "¿Con quién?" al cambiar la cita: el mismo selector de la reserva
+ * (`SelectorProfesional`: "Cualquiera disponible" primero y una persona por
+ * botón, con `aria-pressed`, 44px y foco visible), antes del calendario. `marcado`
+ * es un id, `null` para "cualquiera", o `NADIE_MARCADO` si quien la atiende hoy ya
+ * no se puede elegir (no sale marcado ningún botón). El `aviso` ("Cambiaste de
+ * estilista: elige de nuevo el día y la hora.") va en una región `status` que
+ * existe siempre, para que el lector de pantalla lo anuncie al aparecer.
+ */
+export function ProfesionalAlReagendar({
+  profesionales,
+  marcado,
+  onElegir,
+  aviso,
+  cualquiera,
+}: {
+  profesionales: ProfesionalParaCambiar[]
+  marcado: string | null
+  onElegir: (profesionalId: string | null) => void
+  aviso: string
+  /** Cómo se dice "cualquiera" (`frasesDeLaGestion`): en una clínica, "La primera hora disponible". */
+  cualquiera?: { nombre: string; detalle: string }
+}) {
+  return (
+    <>
+      <div className="mt-6">
+        <SelectorProfesional profesionales={profesionales} elegido={marcado} onElegir={onElegir} cualquiera={cualquiera} />
+      </div>
+      <p role="status" className={cn("text-sm text-texto-2", aviso && "mt-4")}>
+        {aviso}
+      </p>
     </>
   )
 }

@@ -1,8 +1,17 @@
 import type { Prisma } from "@prisma/client"
+import {
+  diasConHorarioDelProfesional,
+  filasDeQuienesAtienden,
+  haceLosServicios,
+  leerProfesionalesQueAtienden,
+  type ProfesionalQueAtiende,
+} from "@/lib/agenda-publica"
 import { al, el, este } from "@/lib/concordancia"
+import type { FilaDeHorarioSemanal } from "@/lib/horario-de-atencion"
 import { SIN_ATENCION_VIVA } from "@/lib/mover-cita"
 import { hastaElMomentoDe, palabrasDeLaReserva } from "@/lib/palabras-de-la-reserva"
 import { SELECCION_DE_LA_SEDE_DE_LA_CITA, lugarDeLaSede, type LugarDeLaReserva } from "@/lib/sede-de-la-reserva"
+import { whereDelHorarioDeLaSede } from "@/lib/sedes"
 import { SELECCION_DE_SERVICIOS_DE_LA_CITA } from "@/lib/servicios-de-la-reserva"
 import { hashDeToken } from "@/lib/tokens"
 import { conMayuscula } from "@/lib/vocabulario"
@@ -25,6 +34,10 @@ import { conMayuscula } from "@/lib/vocabulario"
  *   (`whereDeEscrituraDelEnlace`): una llegada que entre entretanto gana.
  * - Cambiar (cancelar o reagendar) sólo hasta `Business.cancelacionHorasAntes`
  *   horas antes. Después, la cita se ve pero hay que contactar al local.
+ * - Al reagendar también se puede cambiar de profesional (ver abajo, "Con
+ *   quién"): sólo entre quienes la reserva pública ofrece para ESOS servicios
+ *   en la sede de la cita. Cambiar sólo de profesional cuenta como reagendar:
+ *   mismo plazo, mismos candados.
  */
 
 /** Estados en que el cliente todavía puede ver y cambiar su cita. */
@@ -210,4 +223,166 @@ export async function leerCitaDelEnlace(
 /** La clave del límite por token: su hash, para no guardar el token en claro en Upstash. */
 export function claveDeLimite(token: string): string {
   return `token:${hashDeToken(token)}`
+}
+
+// ─── Con quién: cambiar de profesional al reagendar ──────────────────────────
+//
+// Quien tiene el enlace puede, además de mover el día y la hora, pasar su cita a
+// OTRO profesional del negocio, igual que al reservar ("Cualquiera" incluido).
+// Lo que se ofrece y lo que se acepta es una sola regla (`profesionalesQueSePuedenElegir`):
+//
+// - Atiende en la reserva pública (`leerProfesionalesQueAtienden`: el rol que
+//   atiende, del negocio del `slug`; el encargado no, ni nadie de otro negocio).
+// - Hace TODOS los servicios de la cita (`haceLosServicios`, la regla de
+//   `MemberService` de la reserva).
+// - Atiende en la sede de la cita (`whereDelHorarioDeLaSede`, la misma lectura
+//   de horario con que la disponibilidad ofrece horas): tiene algún día con
+//   horario ahí, el propio o el general de esa sede.
+//
+// El servidor revalida todo en cada pedido: lo que llega del navegador es sólo
+// una elección (`leerProfesionalDelPedido`), nunca una verdad.
+
+/**
+ * Con quién queda la cita al reagendar:
+ * - `mismo`: no se mandó `profesionalId`. Quien la atiende hoy (`cita.memberId`);
+ *   si no tiene a nadie asignado, cualquiera, como siempre.
+ * - `cualquiera`: `profesionalId` vacío o `null`. Se asigna con el criterio de la
+ *   reserva (`asignarCandidatoLibre`: el que tenga menos citas ese día).
+ * - `uno`: un id, que `resolverProfesionalDelEnlace` revalida.
+ */
+export type EleccionDeProfesional = { tipo: "mismo" } | { tipo: "cualquiera" } | { tipo: "uno"; id: string }
+
+/** Un id (`cuid()`, 25 caracteres): el tope corta un texto arbitrario antes de la base. */
+export const LARGO_MAXIMO_DE_ID_DE_PROFESIONAL = 64
+
+/** El 400 de un `profesionalId` que no es un texto razonable. */
+export const MENSAJE_PROFESIONAL_NO_VALIDO = "El profesional no es válido"
+
+/**
+ * Lo que mandó el navegador como `profesionalId`, sin creerle: no mandarlo
+ * (`undefined`) es `mismo`; `null` o vacío (o de puros espacios) es `cualquiera`;
+ * un texto de hasta 64 caracteres es ese id, sin espacios en las puntas; y
+ * cualquier otra cosa (un número, un objeto, un texto enorme) es `null`: un 400.
+ * Nunca lanza. Que el id sea de alguien que se puede elegir lo decide
+ * `resolverProfesionalDelEnlace`, no esto.
+ */
+export function leerProfesionalDelPedido(valor: unknown): EleccionDeProfesional | null {
+  if (valor === undefined) return { tipo: "mismo" }
+  if (valor === null) return { tipo: "cualquiera" }
+  if (typeof valor !== "string") return null
+  const id = valor.trim()
+  if (id.length > LARGO_MAXIMO_DE_ID_DE_PROFESIONAL) return null
+  return id === "" ? { tipo: "cualquiera" } : { tipo: "uno", id }
+}
+
+/** Quien puede tomar la cita, con los días en que atiende en la sede de la cita. */
+export type ProfesionalElegible = ProfesionalQueAtiende & { diasConAtencion: number[] }
+
+/**
+ * De los profesionales que atienden, los que se pueden elegir: hacen todos los
+ * servicios de la cita y tienen algún día con horario en la sede de la cita.
+ * `filas` son las filas de horario de ESA sede (o las vigentes, si la cita no
+ * tiene sede) ya acotadas a quienes atienden (`filasDeQuienesAtienden`). Pura.
+ */
+export function profesionalesQueSePuedenElegir(
+  profesionales: readonly ProfesionalQueAtiende[],
+  serviceIds: string[],
+  filas: FilaDeHorarioSemanal[]
+): ProfesionalElegible[] {
+  return profesionales
+    .filter((profesional) => haceLosServicios(profesional, serviceIds))
+    .map((profesional) => ({ ...profesional, diasConAtencion: diasConHorarioDelProfesional(filas, profesional.id) }))
+    .filter((profesional) => profesional.diasConAtencion.length > 0)
+}
+
+/**
+ * Los profesionales que se pueden elegir para esta cita (`profesionalesQueSePuedenElegir`),
+ * leídos del negocio de la cita y con el horario de su sede. El horario se lee
+ * igual que `candidatosDeLaReserva`, para que lo que se ofrece acá y las horas
+ * que ofrece la disponibilidad no den distinto.
+ */
+export async function leerProfesionalesParaCambiar(
+  db: Pick<Prisma.TransactionClient, "businessMember" | "workSchedule">,
+  cita: Pick<CitaDelEnlace, "businessId" | "sedeId">,
+  serviceIds: string[]
+): Promise<ProfesionalElegible[]> {
+  const [profesionales, filas] = await Promise.all([
+    leerProfesionalesQueAtienden(db, cita.businessId),
+    db.workSchedule.findMany({
+      where: { ...whereDelHorarioDeLaSede(cita.sedeId), businessId: cita.businessId, active: true },
+      select: { memberId: true, dayOfWeek: true, startTime: true, endTime: true },
+      orderBy: { startTime: "asc" },
+    }),
+  ])
+  return profesionalesQueSePuedenElegir(profesionales, serviceIds, filasDeQuienesAtienden(filas, profesionales))
+}
+
+/**
+ * Si la pantalla tiene algo que preguntar: con dos o más profesionales que se
+ * pueden elegir, sí. Con uno solo no hay a quién elegir, salvo que quien
+ * atiende la cita hoy ya no se pueda elegir (dejó de hacer el servicio o de
+ * atender en la sede): entonces el único que queda es la salida. Una cita sin
+ * profesional asignado con un solo profesional posible tampoco pregunta nada:
+ * "cualquiera" ya es él.
+ */
+export function hayQueElegirProfesional(elegibles: readonly Pick<ProfesionalElegible, "id">[], memberIdActual: string | null): boolean {
+  if (elegibles.length >= 2) return true
+  return elegibles.length === 1 && memberIdActual !== null && elegibles[0].id !== memberIdActual
+}
+
+/** Un profesional de la lista que ve quien tiene el enlace: sólo lo que ya publica la reserva, nada del correo, el teléfono, el rol ni la comisión. */
+export interface ProfesionalParaElegir {
+  id: string
+  nombre: string
+  especialidad: string | null
+  fotoUrl: string | null
+  /** Los días de la semana (0 domingo a 6 sábado) en que atiende en la sede de la cita. */
+  diasConAtencion: number[]
+  /** Sólo en quien atiende la cita hoy. */
+  actual?: true
+}
+
+/**
+ * La lista del enlace: vacía si no hay nada que elegir (`hayQueElegirProfesional`)
+ * y, si no, los profesionales que se pueden elegir, con `actual` en quien atiende
+ * la cita hoy (si es uno de ellos).
+ */
+export function profesionalesParaMostrar(
+  elegibles: readonly ProfesionalElegible[],
+  memberIdActual: string | null
+): ProfesionalParaElegir[] {
+  if (!hayQueElegirProfesional(elegibles, memberIdActual)) return []
+  return elegibles.map((profesional) => ({
+    id: profesional.id,
+    nombre: profesional.nombre,
+    especialidad: profesional.especialidad,
+    fotoUrl: profesional.fotoUrl,
+    diasConAtencion: profesional.diasConAtencion,
+    ...(profesional.id === memberIdActual && { actual: true as const }),
+  }))
+}
+
+/** A quién se le pide la agenda: `profesionalId` null es "cualquiera de los que pueden" (o el carril único de un negocio sin equipo). */
+export type ProfesionalDelCambio = { tipo: "ok"; profesionalId: string | null } | { tipo: "no-disponible" }
+
+/**
+ * Traduce la elección del pedido a lo que se le pide a la agenda
+ * (`candidatosDeLaReserva`): `mismo` es quien atiende hoy, `cualquiera` es
+ * nadie en particular, y un id se revalida contra los profesionales que se
+ * pueden elegir para ESTA cita (negocio del `slug`, servicios y sede). Un id que
+ * no existe, es de otro negocio, no atiende, no hace los servicios o no atiende
+ * en la sede da el mismo `no-disponible`, sin decir cuál de esas cosas pasó.
+ */
+export async function resolverProfesionalDelEnlace(
+  db: Pick<Prisma.TransactionClient, "businessMember" | "workSchedule">,
+  cita: Pick<CitaDelEnlace, "businessId" | "sedeId" | "memberId">,
+  serviceIds: string[],
+  eleccion: EleccionDeProfesional
+): Promise<ProfesionalDelCambio> {
+  if (eleccion.tipo === "mismo") return { tipo: "ok", profesionalId: cita.memberId }
+  if (eleccion.tipo === "cualquiera") return { tipo: "ok", profesionalId: null }
+  const elegibles = await leerProfesionalesParaCambiar(db, cita, serviceIds)
+  return elegibles.some((profesional) => profesional.id === eleccion.id)
+    ? { tipo: "ok", profesionalId: eleccion.id }
+    : { tipo: "no-disponible" }
 }

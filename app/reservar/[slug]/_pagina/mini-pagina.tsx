@@ -49,7 +49,9 @@ interface PropsDeMiniPagina {
  * Plan Independiente con dos o más sedes activas (`modoDeSedes`): en vez del
  * horario y la ubicación del negocio, el bloque "Dónde atiendo", con cada sede,
  * su dirección, cómo llegar y sus días y horas, y un botón para reservar en ella.
- * Con una sola sede, o sin sedes, la página es la de siempre.
+ * Con una sola sede, o sin sedes, la página es la de siempre; con exactamente
+ * una sede activa, su dirección y su comuna ya vienen en `pagina.direccion` y
+ * `pagina.comuna` (`leerPaginaDelNegocio`): es la misma de la cita y los correos.
  */
 export function MiniPagina({ pagina, ahora }: PropsDeMiniPagina) {
   const sedes = sedesParaMostrar(pagina)

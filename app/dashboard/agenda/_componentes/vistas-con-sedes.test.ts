@@ -59,7 +59,7 @@ const semana = () =>
   })
 
 const con = (sedes: SedesDeLaAgenda | null, vista: ReactElement) =>
-  renderToString(sedes ? createElement(ProveedorDeSedes, { sedes, children: vista }) : vista)
+  renderToString(sedes ? createElement(ProveedorDeSedes, { sedes }, vista) : vista)
 
 /** El texto visible: sin etiquetas, para buscar frases enteras (React parte el texto con comentarios). */
 const texto = (html: string) => html.replace(/<!-- -->/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ")

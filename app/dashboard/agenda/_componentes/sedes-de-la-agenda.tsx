@@ -16,6 +16,6 @@ export function useSedesDeLaAgenda(): SedesDeLaAgenda {
   return useContext(SedesDeLaAgendaContexto)
 }
 
-export function ProveedorDeSedes({ sedes, children }: { sedes: SedesDeLaAgenda; children: ReactNode }) {
+export function ProveedorDeSedes({ sedes, children }: { sedes: SedesDeLaAgenda; children?: ReactNode }) {
   return <SedesDeLaAgendaContexto.Provider value={sedes}>{children}</SedesDeLaAgendaContexto.Provider>
 }

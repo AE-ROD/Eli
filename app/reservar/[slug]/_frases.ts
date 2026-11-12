@@ -223,7 +223,7 @@ export function frasesDeLaEspera(rubro: Rubro) {
  * salón, "Contacta al local" / "al salón" / "a la clínica".
  */
 export function frasesDeLaGestion(rubro: Rubro) {
-  const { cita, local, servicioDeLaReserva: elegido } = palabrasDeLaReserva(rubro)
+  const { cita, local, profesional, servicioDeLaReserva: elegido } = palabrasDeLaReserva(rubro)
   const lo = pronombreDe(cita)
   /** "hasta 24 horas antes" / "hasta que llegue la hora" / "hasta la hora de la cita". */
   const plazoParaLeer = (horas: number): string =>
@@ -242,9 +242,28 @@ export function frasesDeLaGestion(rubro: Rubro) {
       /** "Le avisamos al local. El horario quedó libre." */
       bajada: `Le avisamos ${al(local)}. El horario quedó libre.`,
     },
-    /** Después de cambiarla: "Listo: tu cita quedó el jueves 15 de octubre a las 10:00. Le avisamos al local." */
-    reagendada: (dia: string, horaDelDia: string): string =>
-      `Listo: tu ${cita.singular} quedó el ${dia} a las ${horaDelDia}. Le avisamos ${al(local)}.`,
+    /**
+     * Después de cambiarla: "Listo: tu cita quedó el jueves 15 de octubre a las
+     * 10:00. Le avisamos al local." Si también cambió de profesional, con quién
+     * quedó: "…a las 10:00, con Carla. Le avisamos al salón."
+     */
+    reagendada: (dia: string, horaDelDia: string, conQuien?: string | null): string =>
+      `Listo: tu ${cita.singular} quedó el ${dia} a las ${horaDelDia}${conQuien ? `, con ${conQuien}` : ""}. Le avisamos ${al(local)}.`,
+    /**
+     * Cambiar de profesional al reagendar ("¿Con quién?", el mismo selector de la
+     * reserva): cómo se dice "cualquiera" (en una clínica, "La primera hora
+     * disponible"), el aviso al soltar el día y la hora, y qué pasa si quien la
+     * atiende ya no se puede elegir.
+     */
+    profesional: {
+      cualquiera: frasesDelFormulario(rubro).cualquiera,
+      /** Al elegir a otra persona con un día o una hora ya elegidos: "Cambiaste de estilista: elige de nuevo el día y la hora." */
+      cambiaste: `Cambiaste de ${profesional.singular}: elige de nuevo el día y la hora.`,
+      /** Sin nadie marcado, no hay horas que mostrar todavía. */
+      elige: "Elige con quién para ver los días y las horas libres.",
+    },
+    /** El día y la hora elegidos son los que ya tiene (y con la misma persona): no hay nada que cambiar. */
+    sinCambios: "Es el mismo día y la misma hora que ya tienes. Elige otros para hacer el cambio.",
     /** Ya no se puede cambiar por el enlace: "Esta cita se puede cancelar o cambiar por acá hasta 24 horas antes. Ya no se puede: …". */
     fueraDePlazo: (horas: number, nombreDelNegocio: string): string =>
       `${conMayuscula(este(cita))} se puede cancelar o cambiar por acá ${plazoParaLeer(horas)}. Ya no se puede: si necesitas cancelar${lo} o cambiar${lo}, contacta directamente a ${nombreDelNegocio}.`,

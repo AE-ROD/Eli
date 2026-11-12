@@ -164,6 +164,12 @@ describe("GET: ver la cita", () => {
       sePuedeReagendar: true,
       // El negocio atiende todos los días y Carla no cargó horario propio.
       diasConAtencion: [0, 1, 2, 3, 4, 5, 6],
+      // Con dos profesionales que hacen el servicio hay a quién elegir al reagendar:
+      // sólo lo que ya publica la reserva, y `actual` en quien la atiende hoy.
+      profesionales: [
+        { id: "m-carla", nombre: "Carla Profesional", especialidad: null, fotoUrl: null, diasConAtencion: [0, 1, 2, 3, 4, 5, 6], actual: true },
+        { id: "m-pedro", nombre: "Pedro Profesional", especialidad: null, fotoUrl: null, diasConAtencion: [0, 1, 2, 3, 4, 5, 6] },
+      ],
     })
   })
 

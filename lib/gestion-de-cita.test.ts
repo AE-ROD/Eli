@@ -4,11 +4,16 @@ import {
   dentroDelPlazo,
   esGestionable,
   esTokenConForma,
+  hayQueElegirProfesional,
+  leerProfesionalDelPedido,
   mensajeEnlaceInvalido,
   mensajeFueraDePlazo,
   mensajeServicioYaNoSeReserva,
   mensajeSinHorasParaReagendar,
   plazoParaQuienReserva,
+  profesionalesParaMostrar,
+  profesionalesQueSePuedenElegir,
+  resolverProfesionalDelEnlace,
   whereDeCitaPorToken,
 } from "./gestion-de-cita"
 import { generarToken, hashDeToken } from "./tokens"
@@ -138,5 +143,106 @@ describe("whereDeCitaPorToken", () => {
       AND: [SIN_ATENCION_VIVA],
     })
     expect(JSON.stringify(where)).not.toContain(token)
+  })
+})
+
+describe("leerProfesionalDelPedido: lo que mandó el navegador, sin creerle", () => {
+  it("no mandarlo es 'el mismo'; null o vacío, 'cualquiera'; un texto, ese id sin espacios en las puntas", () => {
+    expect(leerProfesionalDelPedido(undefined)).toEqual({ tipo: "mismo" })
+    expect(leerProfesionalDelPedido(null)).toEqual({ tipo: "cualquiera" })
+    expect(leerProfesionalDelPedido("")).toEqual({ tipo: "cualquiera" })
+    expect(leerProfesionalDelPedido("   ")).toEqual({ tipo: "cualquiera" })
+    expect(leerProfesionalDelPedido("  m-pedro ")).toEqual({ tipo: "uno", id: "m-pedro" })
+  })
+
+  it.each([[123], [true], [{ id: "m-pedro" }], [["m-pedro"]], ["m".repeat(65)]])("%j no es un profesional: null (un 400)", (valor) => {
+    expect(leerProfesionalDelPedido(valor)).toBeNull()
+  })
+
+  it("64 caracteres todavía pasan", () => {
+    expect(leerProfesionalDelPedido("m".repeat(64))).toEqual({ tipo: "uno", id: "m".repeat(64) })
+  })
+})
+
+describe("quién se puede elegir al reagendar", () => {
+  const equipo = [
+    { id: "a", nombre: "Ana", especialidad: null, fotoUrl: null, serviceIds: [] },
+    { id: "b", nombre: "Beto", especialidad: "Barbero", fotoUrl: null, serviceIds: ["corte"] },
+    { id: "c", nombre: "Caro", especialidad: null, fotoUrl: null, serviceIds: ["color"] },
+  ]
+  const general = (dayOfWeek: number, memberId: string | null = null) => ({ memberId, dayOfWeek, startTime: "09:00", endTime: "12:00" })
+
+  it("hacen TODOS los servicios de la cita (sin filas hacen todos) y tienen algún día con horario, con sus días", () => {
+    const filas = [general(1), general(2)]
+
+    expect(profesionalesQueSePuedenElegir(equipo, ["corte"], filas).map((p) => [p.id, p.diasConAtencion])).toEqual([
+      ["a", [1, 2]],
+      ["b", [1, 2]],
+    ])
+    // Con dos servicios, sólo quien hace los dos: Beto no hace el color.
+    expect(profesionalesQueSePuedenElegir(equipo, ["corte", "color"], filas).map((p) => p.id)).toEqual(["a"])
+  })
+
+  it("su propio horario en la sede manda sobre el general; sin ningún horario en la sede, nadie", () => {
+    // Ana no cargó horario propio: tiene el general (lunes y martes) y, el miércoles, que sólo hay horario de Beto,
+    // el de él (la misma regla de `franjasDeAtencion` con que la disponibilidad le ofrece horas).
+    const filas = [general(1), general(2), general(3, "b")]
+
+    expect(profesionalesQueSePuedenElegir(equipo, ["corte"], filas).map((p) => [p.id, p.diasConAtencion])).toEqual([
+      ["a", [1, 2, 3]],
+      ["b", [3]],
+    ])
+    expect(profesionalesQueSePuedenElegir(equipo, ["corte"], [])).toEqual([])
+  })
+
+  it("una cita sin servicios no tiene a quién ofrecer (`haceLosServicios` exige alguno)", () => {
+    expect(profesionalesQueSePuedenElegir(equipo, [], [general(1)])).toEqual([])
+  })
+
+  it("hayQueElegirProfesional: con dos o más sí; con uno sólo si es otro que quien la atiende; con ninguno, no", () => {
+    expect(hayQueElegirProfesional([{ id: "a" }, { id: "b" }], "a")).toBe(true)
+    expect(hayQueElegirProfesional([{ id: "a" }, { id: "b" }], null)).toBe(true)
+    expect(hayQueElegirProfesional([{ id: "a" }], "a")).toBe(false)
+    expect(hayQueElegirProfesional([{ id: "a" }], null)).toBe(false)
+    expect(hayQueElegirProfesional([{ id: "a" }], "b")).toBe(true)
+    expect(hayQueElegirProfesional([], "a")).toBe(false)
+  })
+
+  it("profesionalesParaMostrar: vacía si no hay nada que elegir; si no, sólo lo público y `actual` en quien la atiende", () => {
+    const elegibles = profesionalesQueSePuedenElegir(equipo, ["corte"], [general(1)])
+
+    expect(profesionalesParaMostrar(elegibles, "b")).toEqual([
+      { id: "a", nombre: "Ana", especialidad: null, fotoUrl: null, diasConAtencion: [1] },
+      { id: "b", nombre: "Beto", especialidad: "Barbero", fotoUrl: null, diasConAtencion: [1], actual: true },
+    ])
+    expect(profesionalesParaMostrar(elegibles.slice(0, 1), "a")).toEqual([])
+    // Nunca el `serviceIds` interno.
+    expect(JSON.stringify(profesionalesParaMostrar(elegibles, null))).not.toContain("serviceIds")
+  })
+})
+
+describe("resolverProfesionalDelEnlace", () => {
+  /** La base mínima: dos miembros del negocio (Ana y Beto) y un horario general del lunes. */
+  const db = {
+    businessMember: {
+      findMany: async () => [
+        { id: "a", especialidad: null, fotoUrl: null, user: { name: "Ana" }, memberServices: [] },
+        { id: "b", especialidad: null, fotoUrl: null, user: { name: "Beto" }, memberServices: [{ serviceId: "color" }] },
+      ],
+    },
+    workSchedule: { findMany: async () => [{ memberId: null, dayOfWeek: 1, startTime: "09:00", endTime: "12:00" }] },
+  } as unknown as Parameters<typeof resolverProfesionalDelEnlace>[0]
+  const cita = { businessId: "n1", sedeId: null, memberId: "a" }
+
+  it("'el mismo' es quien la atiende hoy (null si no tiene), y 'cualquiera' es nadie en particular: sin leer nada", async () => {
+    expect(await resolverProfesionalDelEnlace(db, cita, ["corte"], { tipo: "mismo" })).toEqual({ tipo: "ok", profesionalId: "a" })
+    expect(await resolverProfesionalDelEnlace(db, { ...cita, memberId: null }, ["corte"], { tipo: "mismo" })).toEqual({ tipo: "ok", profesionalId: null })
+    expect(await resolverProfesionalDelEnlace(db, cita, ["corte"], { tipo: "cualquiera" })).toEqual({ tipo: "ok", profesionalId: null })
+  })
+
+  it("un id se revalida: uno que hace el servicio vale; uno que no, o que no existe, es el mismo 'no disponible'", async () => {
+    expect(await resolverProfesionalDelEnlace(db, cita, ["color"], { tipo: "uno", id: "b" })).toEqual({ tipo: "ok", profesionalId: "b" })
+    expect(await resolverProfesionalDelEnlace(db, cita, ["corte"], { tipo: "uno", id: "b" })).toEqual({ tipo: "no-disponible" })
+    expect(await resolverProfesionalDelEnlace(db, cita, ["corte"], { tipo: "uno", id: "de-otro-negocio" })).toEqual({ tipo: "no-disponible" })
   })
 })

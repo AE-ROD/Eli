@@ -3,10 +3,13 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { candidatosDeLaReserva, horasConElSillonLibre, horasLibresDelDia } from "@/lib/agenda-publica"
 import {
+  MENSAJE_PROFESIONAL_NO_VALIDO,
   dentroDelPlazo,
+  leerProfesionalDelPedido,
   mensajeFueraDePlazo,
   mensajeServicioYaNoSeReserva,
   mensajeSinHorasParaReagendar,
+  resolverProfesionalDelEnlace,
 } from "@/lib/gestion-de-cita"
 import {
   MENSAJE_FECHA_MUY_LEJANA,
@@ -14,6 +17,7 @@ import {
   MENSAJE_URGENCIA_SOLO_HOY,
   esHoyEn,
   fechaNoReservable,
+  mensajeProfesionalNoDisponible,
 } from "@/lib/reserva-publica"
 import { esRubroDental } from "@/lib/rubros"
 import { horasConOtroPrecio, leerHoraValle } from "@/lib/hora-valle"
@@ -38,6 +42,13 @@ const fechaSchema = z
  * la duración total copiada al reservar, o la que tiene hoy si es mayor. La
  * propia cita no se ocupa a sí misma.
  *
+ * Con quién: `profesionalId` es opcional. Sin él, quien atiende la cita hoy; con
+ * un id, esa persona, y vacío (`profesionalId=`), cualquiera de las que pueden
+ * (`resolverProfesionalDelEnlace`). El id se revalida contra el negocio del
+ * `slug`, los servicios y la sede de la cita: uno que no existe, es de otro
+ * negocio, no hace los servicios o no atiende en la sede es el mismo 404, sin
+ * decir cuál; uno que no es un texto razonable, 400.
+ *
  * Clínica dental: si la cita tiene sillón, sólo las horas en que el sillón
  * también está libre (reagendar lo conserva); una urgencia, sólo horas de hoy.
  *
@@ -49,8 +60,12 @@ export async function GET(request: NextRequest, contexto: Params) {
   if (enlace instanceof NextResponse) return enlace
   const { cita, zona, ahora } = enlace
 
-  const fecha = fechaSchema.safeParse(new URL(request.url).searchParams.get("fecha") ?? undefined)
+  const parametros = new URL(request.url).searchParams
+  const fecha = fechaSchema.safeParse(parametros.get("fecha") ?? undefined)
   if (!fecha.success) return NextResponse.json({ error: fecha.error.issues[0].message }, { status: 400 })
+  // Sin `profesionalId` es "el mismo"; con él (aunque vacío), una elección que se revalida abajo.
+  const eleccion = leerProfesionalDelPedido(parametros.has("profesionalId") ? parametros.get("profesionalId") : undefined)
+  if (!eleccion) return NextResponse.json({ error: MENSAJE_PROFESIONAL_NO_VALIDO }, { status: 400 })
 
   const plazo = cita.business.cancelacionHorasAntes
   if (!dentroDelPlazo(cita.startTime, plazo, ahora)) {
@@ -60,6 +75,12 @@ export async function GET(request: NextRequest, contexto: Params) {
   const duracion = duracionAlReagendar(cita, servicios)
   if (!servicios.activos || duracion === null) {
     return NextResponse.json({ slots: [], mensaje: mensajeServicioYaNoSeReserva(cita.business.type) })
+  }
+
+  // Con quién: el mismo, cualquiera o uno que se revalida acá (nunca se le cree al navegador).
+  const quien = await resolverProfesionalDelEnlace(prisma, cita, servicios.ids, eleccion)
+  if (quien.tipo === "no-disponible") {
+    return NextResponse.json({ error: mensajeProfesionalNoDisponible(cita.business.type) }, { status: 404 })
   }
 
   const noReservable = fechaNoReservable(fecha.data, ahora, zona)
@@ -77,7 +98,7 @@ export async function GET(request: NextRequest, contexto: Params) {
   const reserva = await candidatosDeLaReserva(prisma, {
     businessId: cita.businessId,
     serviceIds: servicios.ids,
-    profesionalId: cita.memberId,
+    profesionalId: quien.profesionalId,
     fecha: fecha.data,
     sedeId: cita.sedeId,
   })

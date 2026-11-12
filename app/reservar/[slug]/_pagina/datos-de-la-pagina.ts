@@ -21,7 +21,7 @@ import {
 } from "@/lib/pagina-del-negocio"
 import { rubroOfreceHoraValle } from "@/lib/permisos"
 import { prisma } from "@/lib/prisma"
-import { WHERE_HORARIO_VIGENTE, modoDeSedes, ordenarSedes, type ModoDeSedes } from "@/lib/sedes"
+import { WHERE_HORARIO_VIGENTE, direccionDeLaCita, modoDeSedes, ordenarSedes, type ModoDeSedes } from "@/lib/sedes"
 import { servicioIdsPublicos } from "@/lib/servicios-del-profesional"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
 
@@ -71,6 +71,12 @@ export interface PaginaDelNegocio {
    */
   rubro: string
   zona: string
+  /**
+   * La dirección y la comuna del local (`lugarDeLaPagina`): las del negocio, o las
+   * de su única sede activa si tiene exactamente una (la que llevan la cita y los
+   * correos). Con dos o más sedes siguen siendo las del negocio, pero la mini
+   * página no las usa: muestra cada sede en "Dónde atiendo".
+   */
   direccion: string | null
   comuna: string | null
   color: ColorDelLocal
@@ -78,6 +84,7 @@ export interface PaginaDelNegocio {
   portada: string | null
   whatsapp: string | null
   instagram: { usuario: string; enlace: string } | null
+  /** "Cómo llegar" a `direccion` y `comuna`. */
   mapas: { googleMaps: string; waze: string } | null
   medios: { id: string; nombre: string }[]
   equipo: ProfesionalPublico[]
@@ -98,6 +105,21 @@ export interface PaginaDelNegocio {
 }
 
 const textoONull = (texto: string | null) => (texto ?? "").trim() || null
+
+/**
+ * Dónde queda el local que muestra la página (la dirección, la comuna y "Cómo
+ * llegar"): con EXACTAMENTE una sede activa, la de esa sede (es la misma que
+ * llevan la cita y los correos: `direccionDeLaCita`); sin sedes, la del negocio
+ * (`Business.address` y `comuna`), como siempre. Con dos o más no hay un solo
+ * lugar: la página muestra el bloque "Dónde atiendo" y esto queda como el
+ * negocio, sin que la mini página lo use.
+ */
+function lugarDeLaPagina(
+  sedes: readonly { nombre: string; direccion: string; comuna: string }[],
+  negocio: { address: string | null; comuna: string | null }
+) {
+  return direccionDeLaCita({ sede: sedes.length === 1 ? sedes[0] : null, negocio })
+}
 
 export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDelNegocio | null> => {
   const negocio = await prisma.business.findUnique({
@@ -161,6 +183,7 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
   // El horario que cuenta: el general y el de quienes atienden.
   const filasDeHorario = filasDeQuienesAtienden(negocio.workSchedules, profesionales)
   const sedes = ordenarSedes(negocio.sedes)
+  const lugar = lugarDeLaPagina(sedes, negocio)
 
   const usuarioDeInstagram = normalizarInstagram(negocio.instagram)
   const enlaceDelPerfil = enlaceDeInstagram(negocio.instagram)
@@ -170,14 +193,14 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
     slug: negocio.slug,
     rubro: negocio.type,
     zona: zonaDelNegocio(negocio.timezone),
-    direccion: textoONull(negocio.address),
-    comuna: textoONull(negocio.comuna),
+    direccion: lugar.direccion,
+    comuna: lugar.comuna,
     color: colorDelNegocio(negocio.color),
     logo: imagenPublica(negocio.logoUrl),
     portada: imagenPublica(negocio.coverUrl),
     whatsapp: enlaceDeWhatsapp(negocio.whatsapp),
     instagram: usuarioDeInstagram && enlaceDelPerfil ? { usuario: usuarioDeInstagram, enlace: enlaceDelPerfil } : null,
-    mapas: enlacesDeMapa(negocio.address, negocio.comuna),
+    mapas: enlacesDeMapa(lugar.direccion, lugar.comuna),
     medios: mediosParaMostrar(negocio.mediosDePago),
     // Sólo quien la reserva también lee (`profesionales`): de quien queda
     // fuera del tope no se sabe qué hace, y tampoco se le podría reservar.

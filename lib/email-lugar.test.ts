@@ -205,3 +205,56 @@ describe("lib/email: dónde queda la hora (varias sedes)", () => {
     })
   })
 })
+
+describe("lib/email: el aviso de cambio cuando cambió el profesional", () => {
+  beforeEach(() => {
+    vi.stubEnv("RESEND_API_KEY", "clave-de-prueba")
+    vi.resetModules()
+    enviarMock.mockClear()
+  })
+
+  const textoDe = () => (enviarMock.mock.calls[0][0].html as string).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ")
+
+  it("dice quién la tenía antes y con quién queda, en 'Antes' y en 'Ahora'", async () => {
+    const { enviarAvisoDeCambioDelCliente } = await import("./email")
+
+    await enviarAvisoDeCambioDelCliente({ ...avisoDeCambio, profesional: "Bea", profesionalAnterior: "Ana" })
+
+    const texto = textoDe()
+    expect(texto).toMatch(/Antes: jueves, 10 de septiembre de 2026, 10:00 · con Ana/i)
+    expect(texto).toMatch(/Ahora: viernes, 11 de septiembre de 2026, 11:00 · con Bea/i)
+  })
+
+  it("si sólo cambió la persona (misma fecha y hora), las dos filas ya no son iguales", async () => {
+    const { enviarAvisoDeCambioDelCliente } = await import("./email")
+
+    await enviarAvisoDeCambioDelCliente({
+      ...avisoDeCambio,
+      fecha: avisoDeCambio.fechaAnterior,
+      hora: avisoDeCambio.horaAnterior,
+      profesional: "Bea",
+      profesionalAnterior: "Ana",
+    })
+
+    const texto = textoDe()
+    expect(texto).toContain("10:00 · con Ana")
+    expect(texto).toContain("10:00 · con Bea")
+  })
+
+  it("sin profesional anterior, o con el mismo, el correo es el de siempre", async () => {
+    const { enviarAvisoDeCambioDelCliente } = await import("./email")
+
+    await enviarAvisoDeCambioDelCliente({ ...avisoDeCambio, profesional: "Ana" })
+    await enviarAvisoDeCambioDelCliente({ ...avisoDeCambio, profesional: "Ana", profesionalAnterior: "Ana" })
+
+    for (const llamada of enviarMock.mock.calls) expect(llamada[0].html as string).not.toContain(" · con ")
+  })
+
+  it("un nombre con HTML se escapa", async () => {
+    const { enviarAvisoDeCambioDelCliente } = await import("./email")
+
+    await enviarAvisoDeCambioDelCliente({ ...avisoDeCambio, profesional: "Bea", profesionalAnterior: "<img src=x onerror=robar()>" })
+
+    expect(enviarMock.mock.calls[0][0].html as string).not.toContain("<img src=x")
+  })
+})

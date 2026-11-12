@@ -497,7 +497,7 @@ export interface DatosConfirmacionCliente {
   precioNormal?: number | null
   /** Algún servicio no tiene precio: el total suma los que sí y dice "+ a consultar". */
   precioIncompleto?: boolean
-  /** Dónde queda la hora: sólo con varias sedes (`LugarEnElCorreo`). Sin él, el correo no lo dice. */
+  /** Dónde queda la hora: si la hora tiene sede (`LugarEnElCorreo`). Sin él, el correo no lo dice. */
   lugar?: LugarEnElCorreo | null
 }
 
@@ -570,7 +570,7 @@ export interface DatosAvisoProfesional {
   profesional?: string | null
   /** Entró por confirmar (#84): el aviso pide confirmarla o cancelarla en el panel. */
   porConfirmar?: boolean
-  /** Dónde queda la hora: sólo con varias sedes (`LugarEnElCorreo`). Sin él, el correo no lo dice. */
+  /** Dónde queda la hora: si la hora tiene sede (`LugarEnElCorreo`). Sin él, el correo no lo dice. */
   lugar?: LugarEnElCorreo | null
 }
 
@@ -616,7 +616,7 @@ export interface DatosReservaConfirmadaPorElLocal {
   profesional?: string | null
   /** El precio guardado en la cita: el rebajado, si se reservó en hora valle (#138). */
   precio?: number | null
-  /** Dónde queda la hora: sólo con varias sedes (`LugarEnElCorreo`). Sin él, el correo no lo dice. */
+  /** Dónde queda la hora: si la hora tiene sede (`LugarEnElCorreo`). Sin él, el correo no lo dice. */
   lugar?: LugarEnElCorreo | null
 }
 
@@ -649,13 +649,19 @@ export interface DatosAvisoDeCambioDelCliente {
   nombreCliente: string
   servicio: string
   profesional?: string | null
+  /**
+   * Si reagendó y cambió de profesional: quien la tenía antes. El correo lo dice
+   * en "Antes" y "Ahora" (si sólo cambió la persona, la fecha y la hora son las
+   * mismas y sin esto las dos filas serían iguales).
+   */
+  profesionalAnterior?: string | null
   /** La fecha y hora de la cita (la nueva, si reagendó), en el reloj del negocio. */
   fecha: string
   hora: string
   /** Si reagendó: la que tenía antes. */
   fechaAnterior?: string
   horaAnterior?: string
-  /** Dónde queda la hora (la de ahora, si reagendó): sólo con varias sedes (`LugarEnElCorreo`). */
+  /** Dónde queda la hora (la de ahora, si reagendó): si la hora tiene sede (`LugarEnElCorreo`). */
   lugar?: LugarEnElCorreo | null
 }
 
@@ -670,8 +676,18 @@ export function enviarAvisoDeCambioDelCliente(datos: DatosAvisoDeCambioDelClient
   ]
   if (datos.profesional) detalle.push([conMayuscula(palabras.profesional.singular), datos.profesional])
   if (reagendo && datos.fechaAnterior && datos.horaAnterior) {
-    detalle.push(["Antes", `${fechaLegible(datos.fechaAnterior)}, ${datos.horaAnterior}`])
-    detalle.push(["Ahora", `${fechaLegible(datos.fecha)}, ${datos.hora}`])
+    // Sólo cuando de verdad cambió de persona (y se sabe quién era): si no, las filas son las de siempre.
+    const cambioDePersona = Boolean(
+      datos.profesionalAnterior && datos.profesional && datos.profesionalAnterior !== datos.profesional
+    )
+    detalle.push([
+      "Antes",
+      `${fechaLegible(datos.fechaAnterior)}, ${datos.horaAnterior}${cambioDePersona ? ` · con ${datos.profesionalAnterior}` : ""}`,
+    ])
+    detalle.push([
+      "Ahora",
+      `${fechaLegible(datos.fecha)}, ${datos.hora}${cambioDePersona ? ` · con ${datos.profesional}` : ""}`,
+    ])
   } else {
     detalle.push(["Fecha", fechaLegible(datos.fecha)], ["Hora", datos.hora])
   }
@@ -716,7 +732,7 @@ export interface DatosRecordatorio {
    * como en la confirmación (#164).
    */
   sePuedeCambiar?: boolean
-  /** Dónde queda la hora: sólo con varias sedes (`LugarEnElCorreo`). Sin él, el correo no lo dice. */
+  /** Dónde queda la hora: si la hora tiene sede (`LugarEnElCorreo`). Sin él, el correo no lo dice. */
   lugar?: LugarEnElCorreo | null
 }
 
