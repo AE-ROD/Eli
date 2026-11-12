@@ -650,9 +650,26 @@ lib/                          Lógica compartida, cada archivo con su test al la
   fechas.ts                   Cálculos y formatos de fecha
   horario-dia.ts              La jornada de un profesional: citas y huecos del día,
                               y la conversión entre "HH:MM" y minutos
-  nombres-de-roles.ts         Cómo se escribe cada rol (Encargado, Profesional). Sólo
-                              la etiqueta: lo que puede hacer cada uno está en permisos.ts
+  nombres-de-roles.ts         Cómo se escribe cada rol (Encargado y, según el rubro,
+                              Estilista, Barbero, Manicurista, Odontólogo; Profesional sin
+                              rubro). Sólo la etiqueta: lo que puede hacer cada uno está
+                              en permisos.ts
   rubros.ts                   Los cuatro rubros que atiende Eli
+  vocabulario.ts              Las palabras de cada rubro, con singular, plural y género
+                              (`vocabularioDe(rubro).palabras`): estilista, barbero,
+                              paciente, sala de espera…
+  concordancia.ts             El artículo y la concordancia a partir del género: "una
+                              estilista", "al paciente", "nueva", "todas". Nunca se pega
+                              un artículo a mano a una palabra del vocabulario
+  ejemplos-por-rubro.ts       Ejemplos y placeholders de cada pantalla, por rubro
+  palabras-de-la-reserva.ts   Las palabras que lee quien reserva (hora/cita, motivo…)
+  catalogo-de-preguntas.ts    Las preguntas de la ayuda, escritas como función de las
+                              palabras del rubro
+  servicios-del-profesional.ts Qué servicios hace cada profesional en la página pública
+  renovacion-de-sesion.ts     Cada cuánto el navegador renueva la cookie dentro del panel
+                              (y el plazo de revalidación que comparte con auth.ts)
+  ajustar-foto-en-cliente.ts  (navegador) Reglas para achicar una foto antes de subirla
+  enviar-foto.ts              (navegador) Manda la foto al servidor sin lanzar errores
   servicios-de-ejemplo.ts     Los servicios con que nace un negocio, según su rubro
   modulos.ts                  Los cinco módulos del panel: nombre, frase, ruta y color
   correos-de-prueba.ts        Qué correo del ciclo de prueba le toca hoy a un negocio
