@@ -17,6 +17,8 @@ import { GruposDeConfiguracion, type SeccionDeConfiguracion } from "./_component
 import { SeccionSillones } from "./_componentes/seccion-sillones"
 import { SeccionLaboratorios } from "./_componentes/seccion-laboratorios"
 import { SeccionMiFoto } from "./_componentes/seccion-mi-foto"
+import { SeccionNombreDelNegocio } from "./_componentes/seccion-nombre-del-negocio"
+import { SeccionZonaHoraria } from "./_componentes/seccion-zona-horaria"
 import { leerLaboratorios } from "@/lib/protesis-servidor"
 import { contarEnviosDelMes } from "@/lib/envios-a-clientes"
 import {
@@ -34,9 +36,11 @@ import {
   puedeActivarMensajesAClientes,
   puedeConfigurarHoraValle,
   puedeConfigurarPorConfirmar,
+  puedeConfigurarZonaHoraria,
   puedeEditarFotoDelMiembro,
   puedeEditarFotosDelNegocio,
   puedeEditarHorarioDe,
+  puedeEditarNombreDelNegocio,
   puedeEditarPaginaDelNegocio,
   puedeEditarPlazoDeCambios,
   puedeFijarComisionDeProducto,
@@ -44,6 +48,7 @@ import {
   puedeGestionarProductos,
   puedeGestionarServicios,
   puedeGestionarSillones,
+  puedeMarcarServicioComoUrgencia,
   puedeVerMensajesAClientes,
   whereDeProductos,
   whereDeSillones,
@@ -52,6 +57,7 @@ import { formatearProducto } from "@/lib/productos"
 import { ORDEN_DE_SILLONES, SELECCION_DE_SILLON } from "@/lib/sillones"
 import { mostrarTelefono } from "@/lib/telefono"
 import { vocabularioDe } from "@/lib/vocabulario"
+import { zonaVigente } from "@/lib/zonas-de-chile"
 import { frasesDeConfiguracion } from "./_frases"
 
 export default async function PaginaConfiguracion() {
@@ -210,6 +216,12 @@ export default async function PaginaConfiguracion() {
     },
   ]
 
+  // Zona horaria: sólo la dueña. Se muestra la zona con que el negocio trabaja de verdad
+  // (`zonaVigente`: la guardada, o Santiago si no hay una válida).
+  if (pagina && puedeConfigurarZonaHoraria(actor)) {
+    secciones.push({ id: "zona-horaria", contenido: <SeccionZonaHoraria zonaGuardada={zonaVigente(pagina.timezone).id} /> })
+  }
+
   // Mi foto: cada integrante sube la suya (el profesional no ve Equipo).
   if (miMembresia) {
     secciones.push({
@@ -229,37 +241,45 @@ export default async function PaginaConfiguracion() {
     secciones.push({
       id: "pagina",
       contenido: (
-        <SeccionPaginaPublica
-          slug={pagina.slug}
-          nombreDelNegocio={pagina.name}
-          soloLectura={!puedeEditarPaginaDelNegocio(actor)}
-          puedeEditarFotos={puedeEditarFotosDelNegocio(actor)}
-          fotosIniciales={{ logo: imagenPublica(pagina.logoUrl), portada: imagenPublica(pagina.coverUrl) }}
-          inicial={{
-            address: pagina.address ?? "",
-            comuna: pagina.comuna ?? "",
-            whatsapp: mostrarTelefono(pagina.whatsapp),
-            instagram: usuarioDeInstagram ? `@${usuarioDeInstagram}` : "",
-            enlaceResenas: pagina.enlaceResenas ?? "",
-            color: colorDelNegocio(pagina.color).clave,
-            mediosDePago: pagina.mediosDePago,
-            // Sólo quienes aparecen en "Equipo" de la página pública.
-            especialidades: pagina.members
-              .filter((miembro) => apareceEnLaPagina(miembro.role))
-              .map((miembro) => ({
-                memberId: miembro.id,
-                nombre: miembro.user.name,
-                especialidad: miembro.especialidad ?? "",
-              })),
-          }}
-        />
+        <div className="space-y-6">
+          {/* El nombre del negocio, arriba de su página: todo rol lo ve; "Editar nombre" sólo quien edita la página. */}
+          <SeccionNombreDelNegocio nombreInicial={pagina.name} soloLectura={!puedeEditarNombreDelNegocio(actor)} />
+          <SeccionPaginaPublica
+            slug={pagina.slug}
+            nombreDelNegocio={pagina.name}
+            soloLectura={!puedeEditarPaginaDelNegocio(actor)}
+            puedeEditarFotos={puedeEditarFotosDelNegocio(actor)}
+            fotosIniciales={{ logo: imagenPublica(pagina.logoUrl), portada: imagenPublica(pagina.coverUrl) }}
+            inicial={{
+              address: pagina.address ?? "",
+              comuna: pagina.comuna ?? "",
+              whatsapp: mostrarTelefono(pagina.whatsapp),
+              instagram: usuarioDeInstagram ? `@${usuarioDeInstagram}` : "",
+              enlaceResenas: pagina.enlaceResenas ?? "",
+              color: colorDelNegocio(pagina.color).clave,
+              mediosDePago: pagina.mediosDePago,
+              // Sólo quienes aparecen en "Equipo" de la página pública.
+              especialidades: pagina.members
+                .filter((miembro) => apareceEnLaPagina(miembro.role))
+                .map((miembro) => ({
+                  memberId: miembro.id,
+                  nombre: miembro.user.name,
+                  especialidad: miembro.especialidad ?? "",
+                })),
+            }}
+          />
+        </div>
       ),
     })
   }
 
   // Servicios: dueño y encargado, no el profesional
   if (puedeGestionarServicios(actor)) {
-    secciones.push({ id: "servicios", contenido: <SeccionServicios serviciosIniciales={servicios} /> })
+    // "Es una urgencia" sólo en una clínica dental: lo pregunta `lib/permisos.ts` y el servidor lo vuelve a decidir.
+    secciones.push({
+      id: "servicios",
+      contenido: <SeccionServicios serviciosIniciales={servicios} puedeMarcarUrgencia={puedeMarcarServicioComoUrgencia(actor)} />,
+    })
   }
 
   // Sillones: sólo en una clínica dental, para dueña y encargado

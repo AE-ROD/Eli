@@ -20,6 +20,7 @@ import {
   type FilaOmitida,
 } from "@/lib/importar-clientes"
 import { actorDeSesion, puedeImportarExportarClientes, whereDeClientes, type Actor } from "@/lib/permisos"
+import { vocabularioDe } from "@/lib/vocabulario"
 
 /**
  * Importar clientes desde un CSV. La pantalla ya leyó el archivo (y lo pasó a
@@ -130,6 +131,8 @@ async function guardarClientes(
   candidatos: ClienteAImportar[],
   ahora: Date
 ): Promise<{ creados: number; duplicados: FilaOmitida[]; errores: FilaOmitida[] }> {
+  // El rubro sale de la sesión, nunca del archivo: "Ya existe un cliente…" o "Ya existe un paciente…".
+  const { palabras } = vocabularioDe(actor.rubro)
   try {
     return await prisma.$transaction(
       async (tx) => {
@@ -141,7 +144,7 @@ async function guardarClientes(
         let creados = 0
         const duplicados: FilaOmitida[] = []
         for (let desde = 0; desde < candidatos.length; desde += CLIENTES_POR_LOTE) {
-          const lote = descartarExistentes(candidatos.slice(desde, desde + CLIENTES_POR_LOTE), existentes)
+          const lote = descartarExistentes(candidatos.slice(desde, desde + CLIENTES_POR_LOTE), existentes, palabras)
           duplicados.push(...lote.duplicados)
           if (lote.nuevos.length === 0) continue
           const { count } = await tx.customer.createMany({

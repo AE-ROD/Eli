@@ -57,10 +57,11 @@ export function frasesDeLasLiquidaciones(palabras: PalabrasDelRubro) {
       /** El aviso que frena el cierre, con las palabras del rubro. */
       sinPorcentaje: (cantidad: number): string => sinPorcentajeAlCerrar(cantidad, servicio),
       /**
-       * Lo que impide cerrar, tal como lo dijo el servidor, que no mira el
-       * rubro: si es el aviso de las líneas sin % con las palabras de siempre,
-       * se dice con las del rubro; cualquier otro motivo ("Este período todavía
-       * no empieza") no nombra al servicio y queda como llegó.
+       * Lo que impide cerrar, tal como lo dijo el servidor. El servidor ya lo
+       * dice con las palabras del rubro de la sesión; si llegara con las de
+       * siempre (una respuesta armada sin rubro), se dice con las del rubro.
+       * Cualquier otro motivo ("Este período todavía no empieza") no nombra al
+       * servicio y queda como llegó.
        */
       motivoParaNoCerrar: (delServidor: string | null, sinPorcentaje: number): string | null =>
         delServidor !== null && delServidor === sinPorcentajeAlCerrar(sinPorcentaje, PALABRAS_NEUTRAS.servicio)

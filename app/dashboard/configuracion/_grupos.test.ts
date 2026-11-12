@@ -18,11 +18,11 @@ const DE_LA_CLINICA = vocabularioDe("odontologia").palabras
 
 /** Lo que ve cada quien, en el orden en que `page.tsx` las arma. */
 const DUEÑA_DE_UN_SALON = (
-  ["horario", "pagina", "servicios", "productos", "plazo-de-cambios", "por-confirmar", "hora-valle", "mensajes", "fila-virtual"] as const
+  ["horario", "zona-horaria", "pagina", "servicios", "productos", "plazo-de-cambios", "por-confirmar", "hora-valle", "mensajes", "fila-virtual"] as const
 ).map(seccion)
 // Sin "hora-valle" ni "fila-virtual": en una clínica dental no existen (`lib/permisos.ts`).
 const DUEÑA_DE_UNA_CLINICA = (
-  ["horario", "pagina", "servicios", "sillones", "laboratorios", "productos", "plazo-de-cambios", "por-confirmar", "mensajes"] as const
+  ["horario", "zona-horaria", "pagina", "servicios", "sillones", "laboratorios", "productos", "plazo-de-cambios", "por-confirmar", "mensajes"] as const
 ).map(seccion)
 const PROFESIONAL = (["horario", "mi-foto", "pagina"] as const).map(seccion)
 
@@ -35,13 +35,13 @@ describe("GRUPOS", () => {
 })
 
 describe("agruparSecciones", () => {
-  it("reparte las doce secciones en los cinco grupos, en su orden, lleguen como lleguen", () => {
+  it("reparte las trece secciones en los cinco grupos, en su orden, lleguen como lleguen", () => {
     const grupos = agruparSecciones(
       [...DUEÑA_DE_UN_SALON, seccion("sillones"), seccion("laboratorios"), seccion("mi-foto")].reverse(),
       DE_SIEMPRE
     )
     expect(grupos.map((grupo) => [grupo.id, grupo.secciones.map((s) => s.id)])).toEqual([
-      ["horario-y-equipo", ["horario", "mi-foto"]],
+      ["horario-y-equipo", ["horario", "zona-horaria", "mi-foto"]],
       ["tu-negocio", ["pagina", "productos"]],
       ["catalogo-y-clinica", ["servicios", "sillones", "laboratorios"]],
       ["reservas-y-clientes", ["plazo-de-cambios", "por-confirmar", "hora-valle", "fila-virtual"]],
@@ -52,7 +52,7 @@ describe("agruparSecciones", () => {
   it("una clínica dental no tiene hora valle ni fila virtual: su grupo de reservas sigue con las otras dos, en los cinco grupos", () => {
     const grupos = agruparSecciones(DUEÑA_DE_UNA_CLINICA, DE_LA_CLINICA)
     expect(grupos.map((grupo) => [grupo.id, grupo.secciones.map((s) => s.id)])).toEqual([
-      ["horario-y-equipo", ["horario"]],
+      ["horario-y-equipo", ["horario", "zona-horaria"]],
       ["tu-negocio", ["pagina", "productos"]],
       ["catalogo-y-clinica", ["servicios", "sillones", "laboratorios"]],
       ["reservas-y-clientes", ["plazo-de-cambios", "por-confirmar"]],
@@ -90,7 +90,15 @@ describe("agruparSecciones", () => {
     const grupos = agruparSecciones(PROFESIONAL, DE_SIEMPRE)
     expect(grupos[0].secciones.map((s) => s.id)).toEqual(["horario", "mi-foto"])
     expect(grupos[0].resumen).toBe("Horario · Mi foto")
-    expect(agruparSecciones(DUEÑA_DE_UN_SALON, DE_SIEMPRE)[0].resumen).toBe("Horario")
+    expect(agruparSecciones(DUEÑA_DE_UN_SALON, DE_SIEMPRE)[0].resumen).toBe("Horario · Zona horaria")
+  })
+
+  it("la zona horaria va con el horario y sólo la tiene la dueña: el encargado y el profesional ven el grupo sin ella", () => {
+    const delEncargado = (["horario", "pagina", "servicios"] as const).map(seccion)
+    expect(agruparSecciones(delEncargado, DE_SIEMPRE)[0].resumen).toBe("Horario")
+    expect(agruparSecciones(PROFESIONAL, DE_SIEMPRE)[0].secciones.map((s) => s.id)).not.toContain("zona-horaria")
+    // Una clínica dental también la tiene: no depende del rubro.
+    expect(agruparSecciones(DUEÑA_DE_UNA_CLINICA, DE_LA_CLINICA)[0].resumen).toBe("Horario · Zona horaria")
   })
 
   it("el resumen nombra sólo las secciones visibles, separadas por «·»", () => {
@@ -184,6 +192,7 @@ describe("grupoDeAncla", () => {
   it.each([
     ["#mi-foto", "horario-y-equipo"],
     ["#horario", "horario-y-equipo"],
+    ["#zona-horaria", "horario-y-equipo"],
     ["#pagina", "tu-negocio"],
     ["#productos", "tu-negocio"],
     ["#servicios", "catalogo-y-clinica"],
@@ -219,6 +228,8 @@ describe("grupoDeAncla", () => {
     expect(grupoDeAncla("#hora-valle", agruparSecciones(PROFESIONAL, DE_SIEMPRE))).toBeNull()
     // La dueña no es del equipo y no tiene «Mi foto».
     expect(grupoDeAncla("#mi-foto", delSalon)).toBeNull()
+    // La zona horaria es de la dueña: quien no la ve no abre nada con su ancla.
+    expect(grupoDeAncla("#zona-horaria", agruparSecciones(PROFESIONAL, DE_SIEMPRE))).toBeNull()
   })
 
   it("distingue mayúsculas, como el id del elemento", () => {

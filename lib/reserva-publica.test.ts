@@ -25,6 +25,14 @@ import {
   duracionDeLaReserva,
   esHoyEn,
   esReservaDeUrgencia,
+  MENSAJE_TOPE_POR_CONTACTO,
+  MENSAJE_TOPE_POR_NEGOCIO,
+  mensajeDeTopePorContacto,
+  mensajeDeTopePorNegocio,
+  mensajeFueraDeLaAtencion,
+  mensajeProfesionalNoDisponible,
+  mensajeServicioNoDisponible,
+  mensajeServicioNoEncontrado,
 } from "./reserva-publica"
 import { dentroDelPlazo } from "./gestion-de-cita"
 import { instanteEn } from "./zona-horaria"
@@ -394,5 +402,63 @@ describe("clínica dental: urgencia (esReservaDeUrgencia, esHoyEn)", () => {
     )
     expect(mensajeDeUrgenciaSoloHoy("odontologia")).toBe(MENSAJE_URGENCIA_SOLO_HOY)
     expect(mensajeDeUrgenciaSinHoras("odontologia")).toBe(MENSAJE_URGENCIA_SIN_HORAS)
+  })
+})
+
+describe("los rechazos de la reserva con las palabras del rubro", () => {
+  const DESCONOCIDOS = [undefined, null, "", "salud", "fitness", "otro", "no-existe", "Odontologia", "constructor", "__proto__"]
+
+  it.each(DESCONOCIDOS)("rubro %j: los textos de siempre, letra por letra", (rubro) => {
+    expect(mensajeServicioNoDisponible(rubro)).toBe("Servicio no disponible")
+    expect(mensajeServicioNoEncontrado(rubro)).toBe("Servicio no encontrado")
+    expect(mensajeProfesionalNoDisponible(rubro)).toBe("Ese profesional no está disponible para este servicio")
+    expect(mensajeFueraDeLaAtencion(rubro)).toBe("Ese horario está fuera de la atención del negocio. Elige otra hora.")
+    expect(mensajeDeTopePorContacto(rubro)).toBe(
+      "Ya tienes 3 reservas pendientes en este negocio. Para pedir otra, contáctalo directamente."
+    )
+    expect(mensajeDeTopePorNegocio(rubro)).toBe(
+      "Este negocio recibió demasiadas reservas en línea en las últimas horas. Intenta más tarde o contáctalo directamente."
+    )
+  })
+
+  it("las constantes de los topes son las de un rubro desconocido", () => {
+    expect(MENSAJE_TOPE_POR_CONTACTO).toBe(mensajeDeTopePorContacto(null))
+    expect(MENSAJE_TOPE_POR_NEGOCIO).toBe(mensajeDeTopePorNegocio(null))
+  })
+
+  it("el salón: la estilista y el salón", () => {
+    expect(mensajeProfesionalNoDisponible("salon")).toBe("Esa estilista no está disponible para este servicio")
+    expect(mensajeFueraDeLaAtencion("salon")).toBe("Ese horario está fuera de la atención del salón. Elige otra hora.")
+    expect(mensajeDeTopePorContacto("salon")).toBe(
+      "Ya tienes 3 reservas pendientes en este salón. Para pedir otra, contáctalo directamente."
+    )
+  })
+
+  it("la barbería y el salón de uñas concuerdan con el género de su palabra", () => {
+    expect(mensajeProfesionalNoDisponible("barberia")).toBe("Ese barbero no está disponible para este servicio")
+    expect(mensajeFueraDeLaAtencion("barberia")).toBe("Ese horario está fuera de la atención de la barbería. Elige otra hora.")
+    expect(mensajeDeTopePorNegocio("barberia")).toBe(
+      "Esta barbería recibió demasiadas reservas en línea en las últimas horas. Intenta más tarde o contáctala directamente."
+    )
+    expect(mensajeProfesionalNoDisponible("spa-de-unas")).toBe("Esa manicurista no está disponible para este servicio")
+    expect(mensajeFueraDeLaAtencion("spa-de-unas")).toBe(
+      "Ese horario está fuera de la atención del salón de uñas. Elige otra hora."
+    )
+    expect(mensajeDeTopePorContacto("spa-de-unas")).toBe(
+      "Ya tienes 3 reservas pendientes en este salón de uñas. Para pedir otra, contáctalo directamente."
+    )
+  })
+
+  it("la clínica dental: motivo, odontólogo y clínica", () => {
+    expect(mensajeServicioNoDisponible("odontologia")).toBe("Motivo no disponible")
+    expect(mensajeServicioNoEncontrado("odontologia")).toBe("Motivo no encontrado")
+    expect(mensajeProfesionalNoDisponible("odontologia")).toBe("Ese odontólogo no está disponible para este motivo")
+    expect(mensajeFueraDeLaAtencion("odontologia")).toBe("Ese horario está fuera de la atención de la clínica. Elige otra hora.")
+    expect(mensajeDeTopePorContacto("odontologia")).toBe(
+      "Ya tienes 3 reservas pendientes en esta clínica. Para pedir otra, contáctala directamente."
+    )
+    expect(mensajeDeTopePorNegocio("odontologia")).toBe(
+      "Esta clínica recibió demasiadas reservas en línea en las últimas horas. Intenta más tarde o contáctala directamente."
+    )
   })
 })

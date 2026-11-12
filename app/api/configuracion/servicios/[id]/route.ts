@@ -4,10 +4,24 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
 import { z } from "zod"
-import { categoriaDeServicio, descripcion, duracion, nombre, precioDeServicio } from "@/lib/campos-del-panel"
+import {
+  MENSAJE_URGENCIA_SOLO_EN_CLINICA,
+  categoriaDeServicio,
+  descripcion,
+  duracion,
+  nombre,
+  precioDeServicio,
+  urgenciaDeServicio,
+} from "@/lib/campos-del-panel"
 import { frecuenciaDeServicio } from "@/lib/frecuencia-de-visitas"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
-import { actorDeSesion, esClinicaDental, puedeGestionarServicios, whereDePrestacionesDelPlan } from "@/lib/permisos"
+import {
+  actorDeSesion,
+  esClinicaDental,
+  puedeGestionarServicios,
+  puedeMarcarServicioComoUrgencia,
+  whereDePrestacionesDelPlan,
+} from "@/lib/permisos"
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { registrarError } from "@/lib/registro-de-errores"
 
@@ -20,6 +34,9 @@ const edicionDeServicioSchema = z.object({
   category: categoriaDeServicio().optional().nullable(),
   // Cada cuántos días vuelve un cliente por este servicio ("te toca", #75). null la borra.
   frecuenciaDias: frecuenciaDeServicio().optional(),
+  // Clínica dental: el motivo es una urgencia y la reserva pública sólo ofrece horas de hoy.
+  // En otro rubro no corresponde: el servidor la rechaza (ver `puedeMarcarServicioComoUrgencia`).
+  esUrgencia: urgenciaDeServicio().optional(),
 })
 
 const MENSAJE_CON_COMISIONES =
@@ -50,6 +67,12 @@ export async function PUT(
   try {
     const cuerpo = await leerJsonConTope(request)
     const datos = edicionDeServicioSchema.parse(cuerpo)
+
+    // La bandera de urgencia es de la clínica dental: la decide el servidor con el rubro de la
+    // sesión, no el navegador. En otro rubro ni `false` se acepta (no hay nada que marcar).
+    if (datos.esUrgencia !== undefined && !puedeMarcarServicioComoUrgencia(actor)) {
+      return NextResponse.json({ error: MENSAJE_URGENCIA_SOLO_EN_CLINICA }, { status: 401 })
+    }
 
     const servicio = await prisma.service.update({
       where: { id },

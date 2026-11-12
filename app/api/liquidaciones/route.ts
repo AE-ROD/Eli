@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma"
 import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { esFechaCalendario } from "@/lib/zona-horaria"
 import { actorDeSesion, puedeCerrarLiquidacion, whereDeLiquidaciones } from "@/lib/permisos"
+import { vocabularioDe } from "@/lib/vocabulario"
 import {
   ErrorDeLiquidacion,
   SELECCION_DE_RESUMEN,
@@ -96,6 +97,8 @@ export async function POST(request: NextRequest) {
         nota: cuerpo.nota ? cuerpo.nota : null,
         cerradaPorId: firma.id,
         cerradaPorNombre: firma.nombre,
+        // El rubro sale de la sesión: si no se puede cerrar, el 409 dice "servicios" o "prestaciones".
+        palabras: vocabularioDe(actor.rubro).palabras,
       })
       const creada = await tx.liquidacion.findFirst({ where: { id, businessId: actor.businessId }, select: SELECCION_DE_RESUMEN })
       if (!creada) throw new ErrorDeLiquidacion(409, "La liquidación no se pudo leer después de cerrarla.")

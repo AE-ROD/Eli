@@ -1,4 +1,4 @@
-import { esRubroDental, RUBRO_DENTAL, type RubroId } from "@/lib/rubros"
+import { RUBRO_DENTAL, type RubroId } from "@/lib/rubros"
 
 /**
  * El género gramatical de un sustantivo. Sólo hay dos porque la interfaz no
@@ -79,72 +79,17 @@ export interface PalabrasDelRubro {
  * palabras neutras, así que en un negocio sin rubro conocido no aparece nunca
  * "paciente" ni "estilista".
  *
- * Lo nuevo es `palabras`: cada palabra con su género y su número, para que la
- * interfaz concuerde ("una estilista", "ninguna manicurista", "al paciente").
- * Las seis cadenas sueltas de antes se conservan, con los mismos valores,
- * mientras las pantallas se migran de a poco a `palabras`.
+ * `palabras` es la única API: cada palabra con su género y su número, para que
+ * la interfaz concuerde ("una estilista", "ninguna manicurista", "al
+ * paciente") con `lib/concordancia.ts`.
  *
  * El rubro sale de la sesión (`session.user.rubro`) o del negocio
  * (`Business.type`). Qué se muestra o no lo decide `lib/permisos.ts`; esto
  * sólo cambia palabras.
  */
 export interface Vocabulario {
-  /**
-   * "clientes" / "pacientes": la sección y la lista.
-   * @deprecated Se retira en la última oleada, cuando todas las pantallas usen `palabras`: usa `palabras.cliente.plural`.
-   */
-  clientes: string
-  /**
-   * "cliente" / "paciente".
-   * @deprecated Se retira en la última oleada, cuando todas las pantallas usen `palabras`: usa `palabras.cliente.singular`.
-   */
-  cliente: string
-  /**
-   * "tablero" / "sala de espera": la sección de quienes ya llegaron. Cuidado
-   * con el artículo: "el tablero", pero "la sala de espera".
-   * @deprecated Se retira en la última oleada, cuando todas las pantallas usen `palabras`: usa `palabras.tablero` con `lib/concordancia.ts`.
-   */
-  tablero: string
-  /**
-   * "profesional" / "odontólogo": quien atiende. Sigue diciendo "profesional"
-   * en el salón, la barbería y el salón de uñas, que ya tienen su palabra en
-   * `palabras.profesional`.
-   * @deprecated Se retira en la última oleada, cuando todas las pantallas usen `palabras`: usa `palabras.profesional.singular`.
-   */
-  profesional: string
-  /**
-   * "profesionales" / "odontólogos".
-   * @deprecated Se retira en la última oleada, cuando todas las pantallas usen `palabras`: usa `palabras.profesional.plural`.
-   */
-  profesionales: string
-  /**
-   * "servicio" / "motivo": lo que se elige en la reserva pública.
-   * @deprecated Se retira en la última oleada, cuando todas las pantallas usen `palabras`: usa `palabras.servicioDeLaReserva.singular`.
-   */
-  servicioDeLaReserva: string
   /** Las palabras con género y número, para escribir con concordancia. */
   palabras: PalabrasDelRubro
-}
-
-/** Las seis cadenas de siempre: lo que `Vocabulario` tenía antes de `palabras`. */
-type CadenasSueltas = Omit<Vocabulario, "palabras">
-
-const DE_SIEMPRE: CadenasSueltas = {
-  clientes: "clientes",
-  cliente: "cliente",
-  tablero: "tablero",
-  profesional: "profesional",
-  profesionales: "profesionales",
-  servicioDeLaReserva: "servicio",
-}
-
-const DE_LA_CLINICA_DENTAL: CadenasSueltas = {
-  clientes: "pacientes",
-  cliente: "paciente",
-  tablero: "sala de espera",
-  profesional: "odontólogo",
-  profesionales: "odontólogos",
-  servicioDeLaReserva: "motivo",
 }
 
 /**
@@ -275,17 +220,11 @@ function palabrasDe(rubro: unknown): PalabrasDelRubro {
 }
 
 /**
- * El vocabulario del rubro: las seis cadenas de siempre y, en `palabras`, las
- * mismas ideas con género y número. Las cadenas sueltas se eligen con
- * `esRubroDental` (id exacto, como las palabras) y valen lo mismo que antes
- * para todos los rubros. Copia nueva y profunda en cada llamada: quien la
- * recibe no cambia la de los demás.
+ * El vocabulario del rubro. Copia nueva y profunda en cada llamada: quien la
+ * recibe puede cambiar las palabras sin tocar las de los demás.
  */
 export function vocabularioDe(rubro: string | null | undefined): Vocabulario {
-  return {
-    ...(esRubroDental(rubro) ? DE_LA_CLINICA_DENTAL : DE_SIEMPRE),
-    palabras: palabrasDe(rubro),
-  }
+  return { palabras: palabrasDe(rubro) }
 }
 
 /** "sala de espera" → "Sala de espera": para títulos, menús y comienzos de frase. */

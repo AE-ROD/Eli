@@ -6,7 +6,9 @@ import {
   cuerpoDeProducto,
   cuerpoDeServicio,
   editarServicio,
+  guardarNombreDelNegocio,
   guardarPaginaPublica,
+  guardarZonaHoraria,
   leerPorcentaje,
   moverSillon,
   quitarFotoDelNegocio,
@@ -19,7 +21,7 @@ import {
 const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
   JSON.parse(String((fetchFalso.mock.calls[0][1] as RequestInit).body))
 
-const SERVICIO: DatosDeServicio = { name: "Corte", description: "", duration: 30, price: "", category: "", frecuenciaDias: "" }
+const SERVICIO: DatosDeServicio = { name: "Corte", description: "", duration: 30, price: "", category: "", frecuenciaDias: "", esUrgencia: false }
 
 const precioLeido = (texto: string) => {
   const cuerpo = cuerpoDeServicio({ ...SERVICIO, price: texto })
@@ -79,7 +81,41 @@ describe("cuerpoDeServicio: frecuencia (#75)", () => {
   })
 })
 
+describe("cuerpoDeServicio: urgencia (clínica dental)", () => {
+  it("sin permiso para marcarla no se manda ni como false: el servidor la rechaza fuera de una clínica dental", () => {
+    for (const esUrgencia of [false, true]) {
+      const cuerpo = cuerpoDeServicio({ ...SERVICIO, esUrgencia })
+      expect(cuerpo.ok && cuerpo.datos).not.toHaveProperty("esUrgencia")
+      const deEdicion = cuerpoDeServicio({ ...SERVICIO, esUrgencia }, "editar", false)
+      expect(deEdicion.ok && deEdicion.datos).not.toHaveProperty("esUrgencia")
+    }
+  })
+
+  it("con permiso se manda tal cual, también desmarcada: así se desmarca al editar", () => {
+    const marcada = cuerpoDeServicio({ ...SERVICIO, esUrgencia: true }, "crear", true)
+    expect(marcada.ok && marcada.datos.esUrgencia).toBe(true)
+    const desmarcada = cuerpoDeServicio({ ...SERVICIO, esUrgencia: false }, "editar", true)
+    expect(desmarcada.ok && desmarcada.datos.esUrgencia).toBe(false)
+  })
+})
+
 describe("crearServicio y editarServicio", () => {
+  it("crear y editar mandan la urgencia sólo cuando se les dice que se puede", async () => {
+    const sin = simularRespuesta(json({ id: "s1" }, 201))
+    await crearServicio({ ...SERVICIO, esUrgencia: true })
+    expect(cuerpoEnviado(sin)).not.toHaveProperty("esUrgencia")
+    vi.unstubAllGlobals()
+
+    const alCrear = simularRespuesta(json({ id: "s1" }, 201))
+    await crearServicio({ ...SERVICIO, esUrgencia: true }, undefined, true)
+    expect(cuerpoEnviado(alCrear)).toHaveProperty("esUrgencia", true)
+    vi.unstubAllGlobals()
+
+    const alEditar = simularRespuesta(json({ id: "s1" }))
+    await editarServicio("s1", { ...SERVICIO, esUrgencia: false }, undefined, true)
+    expect(cuerpoEnviado(alEditar)).toHaveProperty("esUrgencia", false)
+  })
+
   it("crear manda 8.000 como 8000", async () => {
     const fetchFalso = simularRespuesta(json({ id: "s1" }, 201))
 
@@ -165,6 +201,55 @@ describe("productos (#67): cuerpoDeProducto y leerPorcentaje", () => {
     expect(leerPorcentaje("-1").ok).toBe(false)
     expect(leerPorcentaje("33,333").ok).toBe(false)
     expect(leerPorcentaje("abc").ok).toBe(false)
+  })
+})
+
+describe("guardarNombreDelNegocio", () => {
+  it("manda el nombre por PUT a su ruta y devuelve cómo quedó", async () => {
+    const fetchFalso = simularRespuesta(json({ nombre: "Salón Ana" }))
+
+    const resultado = await guardarNombreDelNegocio("  Salón Ana ")
+
+    expect(fetchFalso.mock.calls[0][0]).toBe("/api/configuracion/nombre")
+    expect((fetchFalso.mock.calls[0][1] as RequestInit).method).toBe("PUT")
+    expect(cuerpoEnviado(fetchFalso)).toEqual({ nombre: "  Salón Ana " })
+    expect(resultado).toEqual({ ok: true, datos: { nombre: "Salón Ana" } })
+  })
+
+  it("el 400 vuelve con el mensaje del servidor", async () => {
+    simularRespuesta(json({ error: "El nombre del negocio tiene que tener al menos 2 caracteres" }, 400))
+
+    expect(await guardarNombreDelNegocio("A")).toEqual({
+      ok: false,
+      error: "El nombre del negocio tiene que tener al menos 2 caracteres",
+    })
+  })
+
+  it("sin respuesta del servidor, un mensaje y no una excepción", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fallo de red")))
+
+    const resultado = await guardarNombreDelNegocio("Salón Ana")
+
+    expect(resultado.ok).toBe(false)
+  })
+})
+
+describe("guardarZonaHoraria", () => {
+  it("manda la zona por PUT a su ruta y devuelve la que quedó", async () => {
+    const fetchFalso = simularRespuesta(json({ zona: "Pacific/Easter" }))
+
+    const resultado = await guardarZonaHoraria("Pacific/Easter")
+
+    expect(fetchFalso.mock.calls[0][0]).toBe("/api/configuracion/zona-horaria")
+    expect((fetchFalso.mock.calls[0][1] as RequestInit).method).toBe("PUT")
+    expect(cuerpoEnviado(fetchFalso)).toEqual({ zona: "Pacific/Easter" })
+    expect(resultado).toEqual({ ok: true, datos: { zona: "Pacific/Easter" } })
+  })
+
+  it("el 401 de quien no es la dueña vuelve con el mensaje del servidor", async () => {
+    simularRespuesta(json({ error: "No autorizado" }, 401))
+
+    expect(await guardarZonaHoraria("Pacific/Easter")).toEqual({ ok: false, error: "No autorizado" })
   })
 })
 

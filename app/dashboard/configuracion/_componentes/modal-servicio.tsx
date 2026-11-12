@@ -51,6 +51,14 @@ interface PropsDeModalServicio {
    */
   frecuenciaDias?: string
   onCambiarFrecuencia?: (valor: string) => void
+  /**
+   * "Es una urgencia" (`Service.esUrgencia`): en la reserva pública, un motivo
+   * así sólo ofrece horas de hoy. La casilla se dibuja sólo si viene
+   * `onCambiarUrgencia`, y quien arma el modal lo pasa si
+   * `puedeMarcarServicioComoUrgencia` dice que sí (una clínica dental).
+   */
+  urgencia?: boolean
+  onCambiarUrgencia?: (valor: boolean) => void
 }
 
 export function ModalServicio({
@@ -64,8 +72,11 @@ export function ModalServicio({
   onCerrar,
   frecuenciaDias = "",
   onCambiarFrecuencia,
+  urgencia = false,
+  onCambiarUrgencia,
 }: PropsDeModalServicio) {
   const idDeLaDescripcion = useId()
+  const idDeLaAyudaDeUrgencia = useId()
   const rubro = useRubroDelPanel()
   const frases = frasesDeConfiguracion(vocabularioDe(rubro).palabras).servicios.modal
   // Los ejemplos, en el oficio del negocio: en una clínica dental no se corta el pelo ni en una barbería se hacen las uñas.
@@ -186,6 +197,25 @@ export function ModalServicio({
             {/* El aviso con el nombre del rubro: «Te toca volver» o, en una clínica dental, «Control». */}
             <p id={idDeAyudaDeFrecuencia} className="text-sm text-texto-2">
               {ayudaDeLaFrecuencia(rubro)}
+            </p>
+          </div>
+        )}
+
+        {onCambiarUrgencia && (
+          // Toda la fila es el área táctil (44 px de alto); el anillo de foco es el del propio casillero.
+          <div>
+            <label className="flex min-h-11 cursor-pointer items-start gap-3 py-2 text-sm font-medium text-navy">
+              <input
+                type="checkbox"
+                checked={urgencia}
+                onChange={(e) => onCambiarUrgencia(e.target.checked)}
+                aria-describedby={idDeLaAyudaDeUrgencia}
+                className="anillo-foco mt-0.5 size-5 shrink-0 accent-navy"
+              />
+              {frases.urgencia}
+            </label>
+            <p id={idDeLaAyudaDeUrgencia} className="ml-8 text-sm text-texto-2">
+              {frases.urgenciaAyuda}
             </p>
           </div>
         )}

@@ -398,3 +398,36 @@ describe("POST /api/atenciones/[id]/cobro: topes", () => {
     expect(pagosDe("v-mixta")).toEqual([])
   })
 })
+
+describe("POST /api/atenciones/[id]/cobro: el mensaje habla el rubro de la sesión", () => {
+  /** La dueña de una clínica dental: el rubro sale de la sesión, nunca del pedido. */
+  const dueñaDental = { user: { ...sesiones.dueña.user, rubro: "odontologia" } }
+
+  it("una prestación sin odontólogo: el 400 lo dice con las palabras de la clínica", async () => {
+    const antes = base.volcado()
+
+    const res = await cobrar(dueñaDental, "v-ex-miembro", { pagos: [{ medio: "efectivo", monto: 8000 }] })
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe("Hay prestaciones sin odontólogo: indica quién hizo cada una antes de cobrar.")
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("sin rubro en la sesión, las palabras de siempre", async () => {
+    const res = await cobrar(sesiones.dueña, "v-ex-miembro", { pagos: [{ medio: "efectivo", monto: 8000 }] })
+
+    expect((await res.json()).error).toBe("Hay servicios sin profesional: indica quién hizo cada uno antes de cobrar.")
+  })
+
+  it("el tope de servicios dice prestaciones en una clínica", async () => {
+    base.reiniciar({
+      ...datosBase(),
+      visit: [atencion("v-larga", { status: "por-cobrar" })],
+      visitService: Array.from({ length: 21 }, (_, i) => linea(`l-${i}`, "v-larga", { priceCents: centavos(1000) })),
+    })
+
+    const res = await cobrar(dueñaDental, "v-larga", { pagos: [{ medio: "efectivo", monto: 20000 }] })
+
+    expect((await res.json()).error).toBe("Una atención puede tener hasta 20 prestaciones.")
+  })
+})

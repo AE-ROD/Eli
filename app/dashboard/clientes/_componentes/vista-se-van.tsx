@@ -139,7 +139,13 @@ export function VistaSeVan({ nombreNegocio, palabras = PALABRAS_NEUTRAS }: Props
           <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {clientes.map((cliente) => (
               <li key={cliente.id} className="min-w-0">
-                <FilaSeVa cliente={cliente} nombreNegocio={nombreNegocio} segunElServicio={seVan.segunElServicio} onEscribir={() => anotar(cliente)} />
+                <FilaSeVa
+                  cliente={cliente}
+                  nombreNegocio={nombreNegocio}
+                  palabras={palabras}
+                  segunElServicio={seVan.segunElServicio}
+                  onEscribir={() => anotar(cliente)}
+                />
               </li>
             ))}
           </ul>
@@ -157,17 +163,20 @@ export function VistaSeVan({ nombreNegocio, palabras = PALABRAS_NEUTRAS }: Props
 function FilaSeVa({
   cliente,
   nombreNegocio,
+  palabras,
   segunElServicio,
   onEscribir,
 }: {
   cliente: ClienteQueSeVa
   nombreNegocio: string
+  /** Las del rubro: el mensaje sugerido propone "tu próxima visita" sin concordar con el nombre del servicio. */
+  palabras: PalabrasDelRubro
   /** "(según el servicio)" / "(según la prestación)": de dónde sale cada cuánto vuelve. */
   segunElServicio: string
   onEscribir: () => void
 }) {
   const nombreCompleto = nombreCompletoDeCliente({ name: cliente.nombre, lastName: cliente.apellido })
-  const mensaje = mensajeSugerido({ nombre: cliente.nombre, nombreNegocio, ultimoServicio: cliente.ultimoServicio })
+  const mensaje = mensajeSugerido({ nombre: cliente.nombre, nombreNegocio, ultimoServicio: cliente.ultimoServicio, palabras })
   const whatsapp = enlaceDeWhatsapp(cliente.telefono, mensaje)
   const correo = enlaceDeCorreo(cliente.email, asuntoSugerido(nombreNegocio), mensaje)
   const idDelNombre = `se-va-${cliente.id}`

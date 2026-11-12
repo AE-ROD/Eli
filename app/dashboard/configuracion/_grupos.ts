@@ -12,11 +12,12 @@ import type { PalabrasDelRubro } from "@/lib/vocabulario"
 import { frasesDeConfiguracion } from "./_frases"
 
 /**
- * Las doce secciones, por su ancla: el `id` del elemento al que llevan los
+ * Las trece secciones, por su ancla: el `id` del elemento al que llevan los
  * enlaces de otras pantallas (`#horario`, `#servicios`, `#sillones`…).
  */
 export type AnclaDeConfiguracion =
   | "horario"
+  | "zona-horaria"
   | "mi-foto"
   | "pagina"
   | "servicios"
@@ -38,6 +39,7 @@ export type IdDeGrupo = "horario-y-equipo" | "tu-negocio" | "catalogo-y-clinica"
  */
 export const NOMBRE_DE_SECCION: Readonly<Record<AnclaDeConfiguracion, string>> = {
   horario: "Horario",
+  "zona-horaria": "Zona horaria",
   "mi-foto": "Mi foto",
   pagina: "Página pública",
   servicios: "Servicios",
@@ -68,7 +70,7 @@ export function nombreDeLaSeccion(ancla: AnclaDeConfiguracion, palabras: Palabra
  * también en su orden. Toda sección está en exactamente un grupo.
  */
 export const GRUPOS: readonly { id: IdDeGrupo; secciones: readonly AnclaDeConfiguracion[] }[] = [
-  { id: "horario-y-equipo", secciones: ["horario", "mi-foto"] },
+  { id: "horario-y-equipo", secciones: ["horario", "zona-horaria", "mi-foto"] },
   { id: "tu-negocio", secciones: ["pagina", "productos"] },
   { id: "catalogo-y-clinica", secciones: ["servicios", "sillones", "laboratorios"] },
   { id: "reservas-y-clientes", secciones: ["plazo-de-cambios", "por-confirmar", "hora-valle", "fila-virtual"] },

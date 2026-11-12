@@ -128,9 +128,9 @@ export function faltaAsignar(linea: LineaEnPantalla): boolean {
  * coincide con el servidor. El profesional ve sólo las suyas: lo que le diga
  * esto es parcial, y el 400 del servidor puede llegar igual.
  *
- * `palabras` pone el "servicio" y el "profesional" del rubro: el mensaje del
- * servidor sale sin ellas, así que con una clínica los dos pueden decir
- * "servicio" y "prestación" para lo mismo hasta que el servidor lo mire.
+ * `palabras` pone el "servicio" y el "profesional" del rubro. El servidor
+ * arma el mismo mensaje con las palabras del rubro de la sesión, así que la
+ * pantalla y el 400 dicen "prestación" y "odontólogo" en una clínica.
  */
 export function requisitoParaPasarA(
   lineas: readonly LineaEnPantalla[],

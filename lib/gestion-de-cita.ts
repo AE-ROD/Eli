@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client"
-import { al, este } from "@/lib/concordancia"
+import { al, el, este } from "@/lib/concordancia"
 import { SIN_ATENCION_VIVA } from "@/lib/mover-cita"
 import { hastaElMomentoDe, palabrasDeLaReserva } from "@/lib/palabras-de-la-reserva"
 import { SELECCION_DE_SERVICIOS_DE_LA_CITA } from "@/lib/servicios-de-la-reserva"
@@ -37,7 +37,17 @@ export const PLAZO_POR_DEFECTO_HORAS = 24
 /** Un token tiene 43 caracteres (32 bytes en base64url). Cualquier cosa muy distinta no se busca. */
 const LARGO_MAXIMO_DE_TOKEN = 100
 
-export const MENSAJE_ENLACE_INVALIDO = "Este enlace no es válido o la cita ya no se puede cambiar"
+/**
+ * El 404 de todo enlace que no sirve: "Este enlace no es válido o la cita ya no
+ * se puede cambiar". `rubro` (`Business.type`, de la base) pone la palabra de la
+ * reserva: "…o la hora ya no se puede cambiar" en un salón.
+ */
+export function mensajeEnlaceInvalido(rubro?: string | null): string {
+  return `Este enlace no es válido o ${el(palabrasDeLaReserva(rubro).cita)} ya no se puede cambiar`
+}
+
+/** El 404 con las palabras de un rubro desconocido: el texto de siempre. */
+export const MENSAJE_ENLACE_INVALIDO = mensajeEnlaceInvalido(null)
 
 export function esTokenConForma(token: string): boolean {
   return token.length >= 20 && token.length <= LARGO_MAXIMO_DE_TOKEN && /^[A-Za-z0-9_-]+$/.test(token)

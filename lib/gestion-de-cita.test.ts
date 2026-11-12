@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest"
 import {
+  MENSAJE_ENLACE_INVALIDO,
   dentroDelPlazo,
   esGestionable,
   esTokenConForma,
+  mensajeEnlaceInvalido,
   mensajeFueraDePlazo,
   mensajeServicioYaNoSeReserva,
   mensajeSinHorasParaReagendar,
@@ -106,6 +108,21 @@ describe("los mensajes del enlace que nombran el servicio y el lugar", () => {
     expect(mensajeServicioYaNoSeReserva("salon")).toBe("Este servicio ya no se reserva por acá. Contacta al salón.")
     expect(mensajeServicioYaNoSeReserva("odontologia")).toBe("Este motivo ya no se reserva por acá. Contacta a la clínica.")
     expect(mensajeSinHorasParaReagendar("barberia")).toBe("No hay horas para reagendar por acá. Contacta a la barbería.")
+  })
+})
+
+describe("mensajeEnlaceInvalido: el 404 del enlace con la palabra de la reserva", () => {
+  it("sin rubro, o con uno desconocido, es el de siempre", () => {
+    expect(MENSAJE_ENLACE_INVALIDO).toBe("Este enlace no es válido o la cita ya no se puede cambiar")
+    for (const rubro of [undefined, null, "", "salud", "fitness", "otro", "constructor"]) {
+      expect(mensajeEnlaceInvalido(rubro)).toBe(MENSAJE_ENLACE_INVALIDO)
+    }
+  })
+
+  it("con rubro, la reserva se llama como la lee quien reserva", () => {
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "odontologia"]) {
+      expect(mensajeEnlaceInvalido(rubro)).toBe("Este enlace no es válido o la hora ya no se puede cambiar")
+    }
   })
 })
 

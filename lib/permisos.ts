@@ -154,6 +154,14 @@ export const puedeEditarPaginaDelNegocio = gestionaElNegocio
 export const puedeEditarFotosDelNegocio = gestionaElNegocio
 
 /**
+ * El nombre del negocio (`Business.name`): es lo primero que lee quien abre la
+ * página pública, así que lo cambia quien edita esa página (dueño y
+ * encargado); el profesional lo ve sin botón. El `slug` no cambia con el
+ * nombre: los enlaces ya compartidos siguen funcionando.
+ */
+export const puedeEditarNombreDelNegocio = puedeEditarPaginaDelNegocio
+
+/**
  * La foto de un integrante del equipo (la que se ve en "Quiénes atienden").
  * Dueño y encargado cambian la de cualquiera del negocio; el profesional,
  * SÓLO la suya: su membresía (`memberId` de la sesión) tiene que ser la del
@@ -242,6 +250,14 @@ export const puedeDefinirServiciosDe = (actor: Actor | null, miembro: Miembro): 
  * clientes, como los servicios: dueño y encargado.
  */
 export const puedeEditarPlazoDeCambios = gestionaElNegocio
+
+/**
+ * La zona horaria del negocio (`Business.timezone`): con ella se leen las
+ * citas en la agenda y se ofrecen las horas de la reserva pública. Cambiarla
+ * mueve lo que ve cada cliente, así que es de la dueña. Vale en todos los
+ * rubros (una clínica dental también la tiene).
+ */
+export const puedeConfigurarZonaHoraria = esDueño
 
 // ─── Tablero de atenciones (docs/PRODUCTO.md, sección 7) ─────────────────────
 
@@ -611,6 +627,15 @@ export const veSillones = esClinicaDental
 /** Crear, renombrar, ordenar y desactivar sillones: dueño y encargado, como los servicios. */
 export const puedeGestionarSillones = (actor: Actor | null): boolean =>
   esClinicaDental(actor) && gestionaElNegocio(actor)
+
+/**
+ * Marcar o desmarcar un servicio como urgencia (`Service.esUrgencia`): en la
+ * reserva pública un motivo de urgencia sólo ofrece horas de hoy. Es de la
+ * clínica dental (en los otros rubros la bandera no se usa y el servidor no la
+ * acepta) y de quien gestiona el catálogo, dueño y encargado.
+ */
+export const puedeMarcarServicioComoUrgencia = (actor: Actor | null): boolean =>
+  esClinicaDental(actor) && puedeGestionarServicios(actor)
 
 /**
  * Asignar o cambiar el sillón de una cita: todo rol de la clínica. Qué citas

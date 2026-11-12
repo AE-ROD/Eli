@@ -13,6 +13,8 @@ import {
   esHoyEn,
   esReservaDeUrgencia,
   fechaNoReservable,
+  mensajeProfesionalNoDisponible,
+  mensajeServicioNoEncontrado,
 } from "@/lib/reserva-publica"
 import { esRubroDental } from "@/lib/rubros"
 import { leerServiciosDeLaReserva, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
@@ -104,7 +106,7 @@ export async function GET(
 
   // Todos del negocio y activos, o el mismo 404 sin decir cuál falló.
   const servicios = await leerServiciosDeLaReserva(prisma, negocio.id, servicioIds)
-  if (!servicios) return NextResponse.json({ error: "Servicio no encontrado" }, { status: 404 })
+  if (!servicios) return NextResponse.json({ error: mensajeServicioNoEncontrado(negocio.type) }, { status: 404 })
   // Clínica dental: la primera vez suma 15 minutos, con la misma cuenta que
   // `confirmar` (`duracionDeLaReserva`). En otro rubro, la suma de siempre.
   const clinicaDental = esRubroDental(negocio.type)
@@ -148,7 +150,7 @@ export async function GET(
     fecha,
   })
   if (reserva.tipo === "profesional-no-disponible") {
-    return NextResponse.json({ error: "Ese profesional no está disponible para este servicio" }, { status: 404 })
+    return NextResponse.json({ error: mensajeProfesionalNoDisponible(negocio.type) }, { status: 404 })
   }
 
   const candidatos = reserva.candidatos.filter((candidato) => candidato.franjas.length > 0)

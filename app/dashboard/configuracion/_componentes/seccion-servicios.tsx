@@ -26,7 +26,7 @@ import {
 } from "../_datos"
 import { frasesDeConfiguracion } from "../_frases"
 
-const SERVICIO_EN_BLANCO: DatosDeServicio = { name: "", description: "", duration: 30, price: "", category: "", frecuenciaDias: "" }
+const SERVICIO_EN_BLANCO: DatosDeServicio = { name: "", description: "", duration: 30, price: "", category: "", frecuenciaDias: "", esUrgencia: false }
 
 /** Los botones de sólo ícono de cada servicio: 44 × 44, lo mínimo para un dedo. */
 const BOTON_DE_ICONO =
@@ -34,9 +34,15 @@ const BOTON_DE_ICONO =
 
 interface PropsDeSeccionServicios {
   serviciosIniciales: Servicio[]
+  /**
+   * Si puede marcar un servicio como urgencia (`puedeMarcarServicioComoUrgencia`,
+   * una clínica dental): `page.tsx` lo pregunta a `lib/permisos.ts` y acá no se
+   * compara ningún rol ni rubro. El servidor lo vuelve a decidir.
+   */
+  puedeMarcarUrgencia?: boolean
 }
 
-export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios) {
+export function SeccionServicios({ serviciosIniciales, puedeMarcarUrgencia = false }: PropsDeSeccionServicios) {
   const idDelTitulo = useId()
   const palabras = vocabularioDe(useRubroDelPanel()).palabras
   const { servicios: frases } = frasesDeConfiguracion(palabras)
@@ -68,6 +74,7 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
       price: servicio.price == null ? "" : montoParaEscribir(servicio.price),
       category: servicio.category ?? "",
       frecuenciaDias: servicio.frecuenciaDias?.toString() ?? "",
+      esUrgencia: servicio.esUrgencia,
     })
     setAvisoDelModal("")
     setModalAbierto(true)
@@ -87,8 +94,8 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
     setAvisoDelModal("")
     setGuardando(true)
     const resultado = servicioEditando
-      ? await editarServicio(servicioEditando.id, form, palabras)
-      : await crearServicio(form, palabras)
+      ? await editarServicio(servicioEditando.id, form, palabras, puedeMarcarUrgencia)
+      : await crearServicio(form, palabras, puedeMarcarUrgencia)
     setGuardando(false)
 
     // Si el servidor lo rechaza, el modal queda abierto con lo cargado y el
@@ -215,6 +222,8 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
             onCerrar={cerrarModal}
             frecuenciaDias={form.frecuenciaDias}
             onCambiarFrecuencia={(valor) => setForm((previo) => ({ ...previo, frecuenciaDias: valor }))}
+            urgencia={form.esUrgencia}
+            onCambiarUrgencia={puedeMarcarUrgencia ? (valor) => setForm((previo) => ({ ...previo, esUrgencia: valor })) : undefined}
           />
         )}
       </AnimatePresence>

@@ -188,7 +188,7 @@ export async function POST(request: NextRequest, contexto: Params) {
   )
 
   if (resultado.tipo === "rechazada") {
-    return resultado.status === 404 ? noEncontrada() : NextResponse.json({ error: resultado.error }, { status: resultado.status })
+    return resultado.status === 404 ? noEncontrada(cita.business.type) : NextResponse.json({ error: resultado.error }, { status: resultado.status })
   }
 
   // La hora anterior quedó libre: a la lista de espera de ese día.

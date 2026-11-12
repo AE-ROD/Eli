@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest"
+import { vocabularioDe } from "@/lib/vocabulario"
 import {
   asuntoDelSaludo,
   asuntoSugerido,
@@ -27,6 +28,36 @@ describe("mensajeSugerido", () => {
     expect(mensajeSugerido({ nombre: "María José", nombreNegocio: "Salón Uno", ultimoServicio: "Corte" })).toBe(
       "¡Hola, María! Te escribimos de Salón Uno. Hace un tiempo que no te vemos y queríamos saber cómo estás. ¿Te reservamos una hora para tu próximo corte?"
     )
+  })
+
+  it("en un rubro con palabras propias no concuerda con el nombre del servicio: lo escribe el negocio y no tiene género conocido", () => {
+    const mensaje = (rubro: string, ultimoServicio: string) =>
+      mensajeSugerido({ nombre: "María José", nombreNegocio: "Clínica Sonrisa", ultimoServicio, palabras: vocabularioDe(rubro).palabras })
+
+    expect(mensaje("odontologia", "Limpieza dental")).toBe(
+      "¡Hola, María! Te escribimos de Clínica Sonrisa. Hace un tiempo que no te vemos y queríamos saber cómo estás. ¿Te reservamos una hora para tu próxima visita: limpieza dental?"
+    )
+    expect(mensaje("salon", "Corte")).toMatch(/¿Te reservamos una hora para tu próxima visita: corte\?$/)
+    expect(mensaje("spa-de-unas", "Manicure")).toMatch(/para tu próxima visita: manicure\?$/)
+    expect(mensaje("barberia", "Barba")).toMatch(/para tu próxima visita: barba\?$/)
+  })
+
+  it("un rubro sin palabras propias, o sin pasar las palabras, deja el texto de siempre", () => {
+    const esperado =
+      "¡Hola, María! Te escribimos de Salón Uno. Hace un tiempo que no te vemos y queríamos saber cómo estás. ¿Te reservamos una hora para tu próximo corte?"
+    for (const rubro of [null, undefined, "", "salud", "otro", "no-existe"]) {
+      expect(
+        mensajeSugerido({ nombre: "María José", nombreNegocio: "Salón Uno", ultimoServicio: "Corte", palabras: vocabularioDe(rubro).palabras })
+      ).toBe(esperado)
+    }
+  })
+
+  it("sin servicio, igual en todos los rubros", () => {
+    for (const rubro of ["odontologia", "salon", null]) {
+      expect(
+        mensajeSugerido({ nombre: "Ana", nombreNegocio: "", ultimoServicio: null, palabras: vocabularioDe(rubro).palabras })
+      ).toBe("¡Hola, Ana! Hace un tiempo que no te vemos y queríamos saber cómo estás. ¿Te reservamos una hora?")
+    }
   })
 
   it("sin servicio ni negocio, igual se lee bien", () => {

@@ -76,6 +76,43 @@ export function frasesDeConfiguracion(palabras: PalabrasDelRubro) {
       sinGuardar: `Tus ${cliente.plural} no ven horas hasta que lo guardes. Revisa los días y las horas, y toca “Guardar horario”.`,
     },
 
+    /** El nombre del negocio, editable en el lugar (Tu negocio). */
+    nombreDelNegocio: {
+      /** "Nombre del negocio" / "Nombre del salón" / "Nombre de la clínica": el título de la tarjeta y la etiqueta del campo. */
+      etiqueta: `Nombre ${del(negocio)}`,
+      /** Lo que se tranquiliza al cambiarlo: la dirección de la página no se mueve. */
+      ayuda: "La dirección de tu página pública no cambia: los enlaces que ya compartiste siguen funcionando.",
+      /** Lo que lee el lector de pantalla al guardar. */
+      guardado: "Nombre guardado",
+    },
+
+    /** La zona horaria (sólo la dueña). */
+    zonaHoraria: {
+      /** "La hora con que se leen la agenda y las horas que ofrece tu página de reservas." */
+      subtitulo: "La hora con que se leen la agenda y las horas que ofrece tu página de reservas.",
+      /** "Elige dónde está el local." / "…la clínica." */
+      ayuda: `Elige dónde está ${el(local)}.`,
+      /** Una zona guardada que no está en la lista (un dato puesto a mano): se dice cuál es en vez de marcar otra. */
+      otraZona: (zona: string): string =>
+        `Tu ${negocio.singular} tiene guardada la zona ${zona}, que no está en la lista. Elige una para cambiarla.`,
+      confirmar: {
+        titulo: "¿Cambiar la zona horaria?",
+        /**
+         * Qué cambia y qué no. Lo agendado son instantes: no se mueven, cambia
+         * a qué hora se leen. Donde la reserva se llama "hora" no se repite
+         * la palabra ("las horas ya guardadas" se lee como reloj).
+         */
+        descripcion: seLlamaHora(cita)
+          ? "Cambia el reloj con que se leen la agenda y los horarios que ofrece la reserva pública. Lo que ya está agendado no se mueve en el tiempo: cambia cómo se lee."
+          : `Cambia a qué hora se muestran ${el(cita, "plural")} y qué horas ofrece la reserva pública. ${conMayuscula(el(cita, "plural"))} ya ${concordar("guardado", cita, "plural")} no se mueven en el tiempo: cambia cómo se leen.`,
+        /** "Pasas de Chile continental a Isla de Pascua." */
+        cambio: (de: string, a: string): string => `Pasas de ${de} a ${a}.`,
+        confirmar: "Cambiar zona horaria",
+        cancelar: "No cambiar",
+      },
+      guardado: "Zona horaria guardada",
+    },
+
     /** Tu página pública. */
     paginaPublica: {
       subtitulo: `Lo que ven tus ${cliente.plural} al reservar.`,
@@ -156,6 +193,9 @@ export function frasesDeConfiguracion(palabras: PalabrasDelRubro) {
         crear: `Crear ${servicio.singular}`,
         /** "Cada cuántos días vuelve un cliente (opcional)". */
         frecuencia: `Cada cuántos días vuelve ${un(cliente)} (opcional)`,
+        /** Sólo en una clínica dental: la casilla y lo que cambia al marcarla. */
+        urgencia: "Es una urgencia",
+        urgenciaAyuda: "En la reserva pública sólo ofrece horas de hoy.",
       },
     },
 

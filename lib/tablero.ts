@@ -27,6 +27,7 @@ import {
   whereDePropinas,
   type Actor,
 } from "@/lib/permisos"
+import { vocabularioDe } from "@/lib/vocabulario"
 
 /**
  * Lo que comparten los endpoints del tablero de atenciones y de los reportes:
@@ -335,7 +336,9 @@ const SELECCION_PARA_REGLAS = { memberId: true, byOwner: true, priceCents: true 
 export async function lineasDeLaAtencion(tx: Prisma.TransactionClient, actor: Actor, visitId: string) {
   const deLaAtencion = { visitId, visit: { is: { businessId: actor.businessId } } }
 
-  const demasiadas = errorDeCantidadDeLineas(await tx.visitService.count({ where: deLaAtencion }))
+  // El rubro sale del actor (la sesión): el tope dice "servicios" o "prestaciones".
+  const { palabras } = vocabularioDe(actor.rubro)
+  const demasiadas = errorDeCantidadDeLineas(await tx.visitService.count({ where: deLaAtencion }), palabras)
   if (demasiadas) throw new ErrorDeAtencion(400, demasiadas)
 
   const todas = await tx.visitService.findMany({

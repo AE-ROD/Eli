@@ -39,8 +39,10 @@ export function ModalAnular({ atencion, aviso, rechazo, guardando, onAnular, onC
   const idDelMotivo = useId()
   const [motivo, setMotivo] = useState("")
   const cobrada = atencion.estado === "finalizada"
-  // El ejemplo nombra a quien se atiende con la palabra del rubro: "a otro cliente" o "a otro paciente".
-  const frases = frasesDelPanel(vocabularioDe(useRubroDelPanel()).palabras)
+  // Las palabras del rubro: "a otro cliente" o "a otro paciente" en el ejemplo, y "los ingresos de la
+  // clínica" o "sale de la sala de espera" en lo que pasa al anular.
+  const { palabras } = vocabularioDe(useRubroDelPanel())
+  const frases = frasesDelPanel(palabras)
 
   const anular = (evento: FormEvent<HTMLFormElement>) => {
     evento.preventDefault()
@@ -50,7 +52,7 @@ export function ModalAnular({ atencion, aviso, rechazo, guardando, onAnular, onC
   return (
     <MarcoDeModal
       titulo={cobrada ? `¿Anular el cobro de ${atencion.cliente.nombre}?` : `¿Anular la atención de ${atencion.cliente.nombre}?`}
-      descripcion={consecuenciasDeAnular(atencion)}
+      descripcion={consecuenciasDeAnular(atencion, palabras)}
       bloqueado={guardando}
       alCerrar={onCerrar}
     >

@@ -42,7 +42,7 @@ export async function POST(request: NextRequest, contexto: Params) {
     if (canceladas > 0) await soltarLoClinicoDeLaCita(tx, cita.businessId, cita.id, "cancela")
     return canceladas
   })
-  if (count === 0) return noEncontrada()
+  if (count === 0) return noEncontrada(cita.business.type)
 
   // La hora quedó libre: a la lista de espera de ese día, después de responder.
   programarAvisoDeHoraLiberada({ businessId: cita.businessId, inicio: cita.startTime })

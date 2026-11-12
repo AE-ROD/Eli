@@ -228,6 +228,24 @@ describe("POST /api/clientes/importar", () => {
   })
 
   it.each([
+    ["una clínica dental", "odontologia", "paciente"],
+    ["un salón", "salon", "cliente"],
+    ["un rubro viejo", "salud", "cliente"],
+  ])("%s: el motivo del duplicado dice la palabra del rubro de la sesión", async (_caso, rubro, palabra) => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce({ user: { ...sesion("owner").user, rubro } })
+
+    const csv = ["Nombre;Teléfono;Email", "Beto;9 1111 1111;", "Carla;;existe@correo.cl"].join("\n")
+    const res = await POST(pedido({ csv, mapeo: { nombre: 0, telefono: 1, email: 2 } }))
+
+    expect(res.status).toBe(200)
+    expect((await res.json()).duplicados).toEqual([
+      { fila: 2, motivo: `Ya existe un ${palabra} con ese teléfono` },
+      { fila: 3, motivo: `Ya existe un ${palabra} con ese correo` },
+    ])
+  })
+
+  it.each([
     ["el profesional", sesion("worker")],
     ["sin sesión", null],
     ["una sesión sin negocio", { user: { id: "x", role: "owner", businessId: "" } }],

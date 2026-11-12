@@ -14,6 +14,7 @@ import {
   respuestaCsv,
 } from "@/lib/exportar"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { actorDeSesion, puedeImportarExportarClientes, whereDeAtenciones } from "@/lib/permisos"
 
 /**
@@ -70,8 +71,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // El rubro sale de la sesión, nunca del navegador: la cabecera dice "Servicios" o "Prestaciones".
+    const { palabras } = vocabularioDe(actor.rubro)
     return respuestaCsv(
-      escribirCsv(filasDeAtenciones(atenciones, zona)),
+      escribirCsv(filasDeAtenciones(atenciones, zona, palabras)),
       nombreDeArchivo("atenciones", `${desdeTexto}-al-${hastaTexto}`)
     )
   } catch (error) {

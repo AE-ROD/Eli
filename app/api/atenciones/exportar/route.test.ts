@@ -99,6 +99,22 @@ describe("GET /api/atenciones/exportar", () => {
     }
   )
 
+  it.each([
+    ["una clínica dental", "odontologia", ["Llegada", "Paciente", "Estado", "Prestaciones", "Odontólogos", "Total", "Cobrada el"]],
+    ["un salón", "salon", ["Llegada", "Cliente", "Estado", "Servicios", "Estilistas", "Total", "Cobrada el"]],
+    ["una barbería", "barberia", ["Llegada", "Cliente", "Estado", "Servicios", "Barberos", "Total", "Cobrada el"]],
+    ["un rubro viejo", "salud", ["Llegada", "Cliente", "Estado", "Servicios", "Profesionales", "Total", "Cobrada el"]],
+  ])("%s: la cabecera sale con las palabras del rubro de la sesión", async (_caso, rubro, cabecera) => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce({ user: { ...sesiones.dueña.user, rubro } })
+
+    const filas = leerCsv(await (await GET(pedido(OCTUBRE))).text(), ";")
+
+    expect(filas[0]).toEqual(cabecera)
+    // Las filas de datos no cambian con el rubro: sólo la cabecera.
+    expect(filas[1]).toEqual(["2026-10-06 09:00", "María González", "Finalizada", "Corte", "Carla Profesional", "8000", "2026-10-06 10:00"])
+  })
+
   it("el encargado también descarga", async () => {
     const { GET } = await import("./route")
     mockGetServerSession.mockResolvedValueOnce(sesiones.encargado)

@@ -189,6 +189,15 @@ describe("GET /api/liquidaciones/vista-previa", () => {
     expect(cuerpo.noSePuedeCerrar).toMatch(/1 servicio sin porcentaje/)
   })
 
+  it.each([
+    ["una clínica dental", "odontologia", "Hay 1 prestación sin porcentaje de comisión: configúralo en Comisiones antes de cerrar."],
+    ["un salón", "salon", "Hay 1 servicio sin porcentaje de comisión: configúralo en Comisiones antes de cerrar."],
+    ["un rubro viejo", "salud", "Hay 1 servicio sin porcentaje de comisión: configúralo en Comisiones antes de cerrar."],
+  ])("%s: el motivo para no cerrar habla el rubro de la sesión", async (_caso, rubro, mensaje) => {
+    enSesion({ user: { ...sesiones.dueña.user, rubro } })
+    expect((await (await vista("m-pedro")).json()).noSePuedeCerrar).toBe(mensaje)
+  })
+
   it("una excepción por servicio le gana al % del miembro", async () => {
     base.reiniciar({
       ...escenario(),
@@ -367,6 +376,17 @@ describe("POST /api/liquidaciones (cerrar)", () => {
     const res = await cerrar({ miembroId: "m-pedro", desde: "2026-10-01" })
     expect(res.status).toBe(409)
     expect((await res.json()).error).toMatch(/sin porcentaje/)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("no cierra con líneas sin %: el 409 habla el rubro de la sesión", async () => {
+    enSesion({ user: { ...sesiones.dueña.user, rubro: "odontologia" } })
+    const antes = base.volcado()
+    const res = await cerrar({ miembroId: "m-pedro", desde: "2026-10-01" })
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe(
+      "Hay 1 prestación sin porcentaje de comisión: configúralo en Comisiones antes de cerrar."
+    )
     expect(base.volcado()).toEqual(antes)
   })
 

@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "incremental": false, "tsBuildInfoFile": null },
+  "include": [
+    "next-env.d.ts",
+    "types/**/*.ts",
+    "lib/fotos-para-compartir.ts",
+    "lib/fotos-para-compartir.test.ts",
+    "lib/cambios-de-reparto-servidor.ts",
+    "app/reservar/[slug]/opengraph-image.tsx",
+    "app/reservar/[slug]/opengraph-image.test.ts",
+    "app/dashboard/comisiones/protesis/**/*.ts",
+    "app/dashboard/comisiones/protesis/**/*.tsx"
+  ]
+}

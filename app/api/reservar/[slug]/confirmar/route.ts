@@ -41,8 +41,6 @@ import {
   MAX_RESERVAS_PUBLICAS_POR_DIA,
   MENSAJE_FECHA_MUY_LEJANA,
   MENSAJE_HORA_PASADA,
-  MENSAJE_TOPE_POR_CONTACTO,
-  MENSAJE_TOPE_POR_NEGOCIO,
   MENSAJE_URGENCIA_SOLO_HOY,
   ORIGEN_RESERVA_PUBLICA,
   WHERE_RESERVA_PUBLICA,
@@ -52,6 +50,11 @@ import {
   esHoyEn,
   esReservaDeUrgencia,
   fechaNoReservable,
+  mensajeDeTopePorContacto,
+  mensajeDeTopePorNegocio,
+  mensajeFueraDeLaAtencion,
+  mensajeProfesionalNoDisponible,
+  mensajeServicioNoDisponible,
   normalizarEmail,
   normalizarTelefono,
   notaDeContactoPorConfirmar,
@@ -72,6 +75,8 @@ type Resultado =
 
 interface Reserva {
   negocioId: string
+  /** `Business.type`, de la base: pone las palabras de los rechazos de los topes. */
+  rubro: string | null
   /** Los servicios, en orden, leídos del catálogo del negocio (#89a). */
   servicios: ServicioDeLaReserva[]
   /** Nombre, duración y precio de la reserva entera, calculados en el servidor. */
@@ -113,6 +118,7 @@ async function reservar(
   tx: Prisma.TransactionClient,
   {
     negocioId,
+    rubro,
     servicios,
     resumen,
     datos,
@@ -149,7 +155,7 @@ async function reservar(
     },
   })
   if (reservasDelDia >= MAX_RESERVAS_PUBLICAS_POR_DIA) {
-    return { tipo: "rechazada", error: MENSAJE_TOPE_POR_NEGOCIO, status: 429 }
+    return { tipo: "rechazada", error: mensajeDeTopePorNegocio(rubro), status: 429 }
   }
 
   const contacto = { email: datos.email, telefono: datos.telefono }
@@ -169,7 +175,7 @@ async function reservar(
     })
     const delContacto = futuras.filter((cita) => cita.customer && compartenContacto(cita.customer, contacto))
     if (delContacto.length >= MAX_RESERVAS_FUTURAS_POR_CONTACTO) {
-      return { tipo: "rechazada", error: MENSAJE_TOPE_POR_CONTACTO, status: 429 }
+      return { tipo: "rechazada", error: mensajeDeTopePorContacto(rubro), status: 429 }
     }
   }
 
@@ -353,7 +359,7 @@ export async function POST(
     // Todos del negocio y activos, o el mismo 404 sin decir cuál falló. La
     // duración y el precio salen de acá, nunca de lo que mande el cliente.
     const servicios = await leerServiciosDeLaReserva(prisma, negocio.id, datos.servicioIds)
-    if (!servicios) return NextResponse.json({ error: "Servicio no disponible" }, { status: 404 })
+    if (!servicios) return NextResponse.json({ error: mensajeServicioNoDisponible(negocio.type) }, { status: 404 })
     // Clínica dental (`lib/reserva-publica.ts`): la primera vez suma 15
     // minutos a la duración, con la misma cuenta con que `disponibilidad`
     // ofreció la hora. En otro rubro `primeraVez` se ignora y no se guarda.
@@ -375,10 +381,7 @@ export async function POST(
     // el horario de verano, no es un horario de atención de nadie. Es la
     // misma regla con la que `disponibilidad` descarta horas.
     if (!existeLaHora(datos.fecha, datos.hora, zona)) {
-      return NextResponse.json(
-        { error: "Ese horario está fuera de la atención del negocio. Elige otra hora." },
-        { status: 409 }
-      )
+      return NextResponse.json({ error: mensajeFueraDeLaAtencion(negocio.type) }, { status: 409 })
     }
 
     // Ni horas que ya pasaron ni fechas a más de `DIAS_MAXIMOS_DE_ANTICIPACION`
@@ -427,14 +430,11 @@ export async function POST(
       fecha: datos.fecha,
     })
     if (reserva.tipo === "profesional-no-disponible") {
-      return NextResponse.json({ error: "Ese profesional no está disponible para este servicio" }, { status: 404 })
+      return NextResponse.json({ error: mensajeProfesionalNoDisponible(negocio.type) }, { status: 404 })
     }
     const candidatos = candidatosQueOfrecen(reserva.candidatos, datos.hora, resumen.duracion)
     if (candidatos.length === 0) {
-      return NextResponse.json(
-        { error: "Ese horario está fuera de la atención del negocio. Elige otra hora." },
-        { status: 409 }
-      )
+      return NextResponse.json({ error: mensajeFueraDeLaAtencion(negocio.type) }, { status: 409 })
     }
 
     // El chequeo de choque, los topes y la creación del cliente y la cita van
@@ -445,6 +445,7 @@ export async function POST(
     const enlace = generarToken()
     const resultado = await reservarEnTransaccion({
       negocioId: negocio.id,
+      rubro: negocio.type,
       servicios: serviciosConPrecio,
       resumen: resumenConPrecio,
       datos,

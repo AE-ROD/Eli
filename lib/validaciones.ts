@@ -2,6 +2,11 @@ import { z } from "zod"
 import { IDS_DE_RUBROS } from "@/lib/rubros"
 import { telefonoChileno } from "@/lib/campos-del-panel"
 import { LARGO_MAXIMO_NOMBRE_EN_FILA } from "@/lib/fila-virtual"
+import {
+  LARGO_MAXIMO_DEL_NOMBRE_DEL_NEGOCIO,
+  LARGO_MINIMO_DEL_NOMBRE_DEL_NEGOCIO,
+  MENSAJES_DEL_NOMBRE_DEL_NEGOCIO,
+} from "@/lib/nombre-del-negocio"
 import { MAX_SERVICIOS_POR_RESERVA } from "@/lib/servicios-de-la-reserva"
 
 /**
@@ -82,15 +87,26 @@ export const contrasenaNuevaSchema = z
     "La contraseña es demasiado larga: hasta 72 caracteres (menos si usa tildes o símbolos)"
   )
 
+/**
+ * El nombre de un negocio: sin espacios en las puntas, de 2 a 80 caracteres.
+ * Lo usan el registro y el endpoint que lo edita
+ * (`PUT /api/configuracion/nombre`); los números y los mensajes son los de
+ * `lib/nombre-del-negocio.ts`, que también lee la pantalla.
+ */
+export const nombreDelNegocioSchema = z
+  .string({
+    required_error: MENSAJES_DEL_NOMBRE_DEL_NEGOCIO.falta,
+    invalid_type_error: MENSAJES_DEL_NOMBRE_DEL_NEGOCIO.noEsTexto,
+  })
+  .trim()
+  .min(LARGO_MINIMO_DEL_NOMBRE_DEL_NEGOCIO, MENSAJES_DEL_NOMBRE_DEL_NEGOCIO.muyCorto)
+  .max(LARGO_MAXIMO_DEL_NOMBRE_DEL_NEGOCIO, MENSAJES_DEL_NOMBRE_DEL_NEGOCIO.muyLargo)
+
 export const registroSchema = z.object({
   nombre: nombreSchema("nombre"),
   email: emailDeCuentaSchema,
   contrasena: contrasenaNuevaSchema,
-  nombreNegocio: z
-    .string({ required_error: "Falta el nombre del negocio", invalid_type_error: "El nombre del negocio no es válido" })
-    .trim()
-    .min(2, "El nombre del negocio tiene que tener al menos 2 caracteres")
-    .max(80, "El nombre del negocio puede tener hasta 80 caracteres"),
+  nombreNegocio: nombreDelNegocioSchema,
   tipoNegocio: tipoNegocioSchema,
 })
 

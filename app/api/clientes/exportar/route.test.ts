@@ -68,6 +68,31 @@ describe("GET /api/clientes/exportar", () => {
     expect(texto).not.toMatch(/Ajena|Cliente eliminado|eli:cliente-eliminado/)
   })
 
+  it.each([
+    ["una clínica dental", "odontologia", "Paciente desde"],
+    ["un salón", "salon", "Cliente desde"],
+    ["un rubro viejo", "salud", "Cliente desde"],
+    ["una sesión sin rubro", undefined, "Cliente desde"],
+  ])("%s: la cabecera sale con la palabra del rubro de la sesión", async (_caso, rubro, ultimaColumna) => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(rubro ? { user: { ...sesiones.dueña.user, rubro } } : sesiones.dueña)
+
+    const filas = leerCsv(await (await GET()).text(), ";")
+
+    expect(filas[0]).toEqual([
+      "Nombre",
+      "Apellido",
+      "Cédula",
+      "Teléfono",
+      "Correo",
+      "Etiquetas",
+      "Notas",
+      "Acepta WhatsApp",
+      "Fecha del consentimiento",
+      ultimaColumna,
+    ])
+  })
+
   it("el encargado también descarga", async () => {
     const { GET } = await import("./route")
     mockGetServerSession.mockResolvedValueOnce(sesiones.encargado)

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { pedidoFalso } from "@/pruebas/pedidos"
+import { MENSAJE_URGENCIA_SOLO_EN_CLINICA } from "@/lib/campos-del-panel"
 
 const mockGetServerSession = vi.fn()
 
@@ -258,3 +259,83 @@ describe("POST /api/configuracion/servicios — frecuencia de visitas", () => {
   })
 })
 
+
+describe("POST /api/configuracion/servicios — urgencia (sólo clínica dental)", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const valido = { name: "Urgencia dental", duration: 30 }
+  const enUnaClinica = (sesion: { user: object }) => ({ user: { ...sesion.user, rubro: "odontologia" } })
+  const enUnSalon = (sesion: { user: object }) => ({ user: { ...sesion.user, rubro: "salon" } })
+
+  it.each([
+    ["la dueña", sesionDueño],
+    ["el encargado", sesionEncargado],
+  ])("%s de una clínica dental marca el servicio como urgencia", async (_quien, sesion) => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(enUnaClinica(sesion))
+    prismaMock.service.create.mockResolvedValueOnce({ id: "srv-1", esUrgencia: true })
+
+    const res = await POST(pedidoFalso({ ...valido, esUrgencia: true }))
+
+    expect(res.status).toBe(201)
+    expect(prismaMock.service.create.mock.calls[0][0].data).toMatchObject({ esUrgencia: true, businessId: "negocio-1" })
+  })
+
+  it("en una clínica dental, sin la bandera el servicio no se toca (queda como la base lo tenga) y `false` se guarda", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(enUnaClinica(sesionDueño))
+    prismaMock.service.create.mockResolvedValueOnce({ id: "srv-1" })
+    await POST(pedidoFalso(valido))
+    expect(prismaMock.service.create.mock.calls[0][0].data).not.toHaveProperty("esUrgencia")
+
+    mockGetServerSession.mockResolvedValueOnce(enUnaClinica(sesionDueño))
+    prismaMock.service.create.mockResolvedValueOnce({ id: "srv-2" })
+    await POST(pedidoFalso({ ...valido, esUrgencia: false }))
+    expect(prismaMock.service.create.mock.calls[1][0].data.esUrgencia).toBe(false)
+  })
+
+  it.each([
+    ["un salón", enUnSalon(sesionDueño)],
+    ["un negocio sin rubro en la sesión", sesionDueño],
+    ["un encargado de un salón", enUnSalon(sesionEncargado)],
+  ])("en %s el servidor rechaza la bandera aunque el navegador la mande: 401 y no crea nada", async (_donde, sesion) => {
+    const { POST } = await import("./route")
+    for (const esUrgencia of [true, false]) {
+      mockGetServerSession.mockResolvedValueOnce(sesion)
+
+      const res = await POST(pedidoFalso({ ...valido, esUrgencia }))
+
+      expect(res.status).toBe(401)
+      expect((await res.json()).error).toBe(MENSAJE_URGENCIA_SOLO_EN_CLINICA)
+    }
+    expect(prismaMock.service.create).not.toHaveBeenCalled()
+  })
+
+  it("en un negocio que no es dental, un servicio sin la bandera se crea como siempre", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(enUnSalon(sesionDueño))
+    prismaMock.service.create.mockResolvedValueOnce({ id: "srv-1" })
+
+    expect((await POST(pedidoFalso({ name: "Corte", duration: 30 }))).status).toBe(201)
+    expect(prismaMock.service.create.mock.calls[0][0].data).not.toHaveProperty("esUrgencia")
+  })
+
+  it.each([["texto", "true"], ["número", 1], ["nulo", null]])("una urgencia que es %s es 400", async (_que, esUrgencia) => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(enUnaClinica(sesionDueño))
+
+    const res = await POST(pedidoFalso({ ...valido, esUrgencia }))
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: "Urgencia tiene que ser sí o no" })
+    expect(prismaMock.service.create).not.toHaveBeenCalled()
+  })
+
+  it("el profesional de una clínica no marca nada: 401 antes de leer el cuerpo", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(enUnaClinica(sesionProfesional))
+
+    expect((await POST(pedidoFalso({ ...valido, esUrgencia: true }))).status).toBe(401)
+    expect(prismaMock.service.create).not.toHaveBeenCalled()
+  })
+})

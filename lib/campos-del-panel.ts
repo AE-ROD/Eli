@@ -168,3 +168,14 @@ export const textoOpcional = (campo: string, n: number) =>
 
 /** La categoría de un servicio ("Corte", "Color"): agrupa en la página pública. Hasta 40. */
 export const categoriaDeServicio = () => textoOpcional("La categoría", 40)
+
+/**
+ * Si un servicio es una urgencia (`Service.esUrgencia`): sí o no, nada más. La
+ * reserva pública de una clínica dental sólo ofrece horas de hoy para un motivo
+ * así. Quién puede mandarla lo decide el endpoint con `puedeMarcarServicioComoUrgencia`
+ * (`lib/permisos.ts`); en un negocio que no es una clínica dental no corresponde.
+ */
+export const urgenciaDeServicio = () => z.boolean({ invalid_type_error: "Urgencia tiene que ser sí o no" })
+
+/** Lo que dice el servidor cuando alguien manda la bandera de urgencia en un negocio que no es una clínica dental. */
+export const MENSAJE_URGENCIA_SOLO_EN_CLINICA = "Sólo una clínica dental puede marcar un servicio como urgencia."

@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
-import { claveDeLimite, leerCitaDelEnlace, MENSAJE_ENLACE_INVALIDO, type CitaDelEnlace } from "@/lib/gestion-de-cita"
+import { claveDeLimite, leerCitaDelEnlace, mensajeEnlaceInvalido, type CitaDelEnlace } from "@/lib/gestion-de-cita"
 import { obtenerIp, verificarLimite, type TipoLimite } from "@/lib/rate-limit"
 import { fechaYMinutosEn, zonaDelNegocio } from "@/lib/zona-horaria"
 import { minutosAHora } from "@/lib/horario-dia"
@@ -11,7 +11,7 @@ import { minutosAHora } from "@/lib/horario-dia"
 /**
  * Lo que comparten los endpoints del enlace de gestión: los dos límites (por
  * IP y por token) y leer la cita. Todo lo que no encuentra una cita
- * gestionable responde el mismo 404 (`MENSAJE_ENLACE_INVALIDO`).
+ * gestionable responde el mismo 404 (`mensajeEnlaceInvalido`).
  */
 
 export type Params = { params: Promise<{ slug: string; token: string }> }
@@ -24,7 +24,12 @@ export interface EnlaceAbierto {
   slug: string
 }
 
-export const noEncontrada = () => NextResponse.json({ error: MENSAJE_ENLACE_INVALIDO }, { status: 404 })
+/**
+ * El 404 del enlace. `rubro` (`Business.type`, de la base) pone la palabra de la
+ * reserva; sin él, la de siempre ("cita").
+ */
+export const noEncontrada = (rubro?: string | null) =>
+  NextResponse.json({ error: mensajeEnlaceInvalido(rubro) }, { status: 404 })
 
 const demasiadas = () => NextResponse.json({ error: "Demasiadas solicitudes, intenta más tarde" }, { status: 429 })
 
@@ -50,7 +55,13 @@ export async function abrirEnlace(
   // que se guarda (`canceladaEn`). Una sola lectura por pedido.
   const ahora = await horaDeLaBase(prisma)
   const cita = await leerCitaDelEnlace(prisma, slug, token, ahora)
-  if (!cita) return noEncontrada()
+  if (!cita) {
+    // El mismo 404 para todo lo que no sirve, con la palabra del rubro del
+    // negocio del slug (público: es el de su página). Un slug que no existe
+    // lo dice con las palabras de siempre.
+    const negocio = await prisma.business.findUnique({ where: { slug }, select: { type: true } })
+    return noEncontrada(negocio?.type)
+  }
   return { cita, zona: zonaDelNegocio(cita.business.timezone), ahora, token, slug }
 }
 

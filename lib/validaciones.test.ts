@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
 import {
+  nombreDelNegocioSchema,
   registroSchema,
   reservaSchema,
   listaDeEsperaSchema,
@@ -52,6 +53,36 @@ describe("registroSchema", () => {
   it("rechaza un registro sin rubro", () => {
     const { tipoNegocio: _sinRubro, ...sinRubro } = datosValidos
     expect(registroSchema.safeParse(sinRubro).success).toBe(false)
+  })
+})
+
+describe("nombreDelNegocioSchema", () => {
+  it("recorta y acepta de 2 a 80 caracteres, el mismo nombre que pide el registro", () => {
+    expect(nombreDelNegocioSchema.parse("  Salón Ana  ")).toBe("Salón Ana")
+    expect(nombreDelNegocioSchema.safeParse("Ab").success).toBe(true)
+    expect(nombreDelNegocioSchema.safeParse("a".repeat(80)).success).toBe(true)
+  })
+
+  it.each([
+    ["uno de 1 carácter", "A", "al menos 2 caracteres"],
+    ["uno de solo espacios", "    ", "al menos 2 caracteres"],
+    ["uno de 81 caracteres", "a".repeat(81), "hasta 80 caracteres"],
+    ["un número", 7, "no es válido"],
+    ["nada", undefined, "Falta el nombre del negocio"],
+  ])("rechaza %s con el mensaje en español", (_que, valor, mensaje) => {
+    const resultado = nombreDelNegocioSchema.safeParse(valor)
+    expect(resultado.success).toBe(false)
+    if (!resultado.success) expect(resultado.error.issues[0].message).toContain(mensaje)
+  })
+
+  it("el registro usa el mismo: los mensajes de siempre no cambian", () => {
+    const datos = { nombre: "Ana", email: "ana@example.com", contrasena: "password123", tipoNegocio: "salon" }
+    const corto = registroSchema.safeParse({ ...datos, nombreNegocio: "A" })
+    expect(corto.success).toBe(false)
+    if (!corto.success) expect(corto.error.issues[0].message).toBe("El nombre del negocio tiene que tener al menos 2 caracteres")
+    const largo = registroSchema.safeParse({ ...datos, nombreNegocio: "a".repeat(81) })
+    expect(largo.success).toBe(false)
+    if (!largo.success) expect(largo.error.issues[0].message).toBe("El nombre del negocio puede tener hasta 80 caracteres")
   })
 })
 

@@ -114,6 +114,24 @@ describe("sin rubro: exactamente los textos de siempre", () => {
     )
   })
 
+  it("el nombre del negocio y la zona horaria", () => {
+    expect(f.nombreDelNegocio.etiqueta).toBe("Nombre del negocio")
+    expect(f.nombreDelNegocio.ayuda).toBe(
+      "La dirección de tu página pública no cambia: los enlaces que ya compartiste siguen funcionando."
+    )
+    expect(f.zonaHoraria.ayuda).toBe("Elige dónde está el local.")
+    expect(f.zonaHoraria.otraZona("America/Lima")).toBe(
+      "Tu negocio tiene guardada la zona America/Lima, que no está en la lista. Elige una para cambiarla."
+    )
+    expect(f.zonaHoraria.confirmar.titulo).toBe("¿Cambiar la zona horaria?")
+    expect(f.zonaHoraria.confirmar.cambio("Chile continental", "Isla de Pascua")).toBe("Pasas de Chile continental a Isla de Pascua.")
+    expect(f.zonaHoraria.confirmar.confirmar).toBe("Cambiar zona horaria")
+    expect(f.zonaHoraria.confirmar.cancelar).toBe("No cambiar")
+    expect(f.zonaHoraria.confirmar.descripcion).toBe(
+      "Cambia a qué hora se muestran las citas y qué horas ofrece la reserva pública. Las citas ya guardadas no se mueven en el tiempo: cambia cómo se leen."
+    )
+  })
+
   it("los errores de los pedidos", () => {
     expect(f.errores).toEqual({
       crearServicio: "No se pudo crear el servicio",
@@ -133,6 +151,11 @@ describe("los rubros sin palabras propias hablan como sin rubro", () => {
   })
 })
 
+const salonDe = (rubro: string) => {
+  const f = frasesDeConfiguracion(palabrasDe(rubro))
+  return { etiqueta: f.nombreDelNegocio.etiqueta, ayudaDeLaZona: f.zonaHoraria.ayuda }
+}
+
 describe("salón, barbería y salón de uñas: la reserva es una hora, sin chocar con el reloj", () => {
   for (const rubro of ["salon", "barberia", "spa-de-unas"]) {
     it(rubro, () => {
@@ -146,6 +169,10 @@ describe("salón, barbería y salón de uñas: la reserva es una hora, sin choca
       )
       expect(f.porConfirmar.ayuda(1, 5)).toContain("Cuentan las horas marcadas “No vino” con el mismo correo")
       expect(f.servicios.titulo).toBe("Servicios")
+      // Donde la reserva se llama hora no se repite la palabra: "las horas ya guardadas" se leería como reloj.
+      expect(f.zonaHoraria.confirmar.descripcion).toBe(
+        "Cambia el reloj con que se leen la agenda y los horarios que ofrece la reserva pública. Lo que ya está agendado no se mueve en el tiempo: cambia cómo se lee."
+      )
     })
   }
 
@@ -170,6 +197,12 @@ describe("salón, barbería y salón de uñas: la reserva es una hora, sin choca
     expect(unas.productos.vacio).toBe("Agrega lo que vendes en el salón de uñas para anotarlo en el tablero")
     expect(frasesDeConfiguracion(palabrasDe("salon")).paginaPublica.especialidad).toBe("Especialidad de cada estilista")
   })
+
+  it("el rótulo del nombre usa la palabra del rubro", () => {
+    expect(salonDe("salon")).toEqual({ etiqueta: "Nombre del salón", ayudaDeLaZona: "Elige dónde está el salón." })
+    expect(salonDe("barberia")).toEqual({ etiqueta: "Nombre de la barbería", ayudaDeLaZona: "Elige dónde está la barbería." })
+    expect(salonDe("spa-de-unas")).toEqual({ etiqueta: "Nombre del salón de uñas", ayudaDeLaZona: "Elige dónde está el salón de uñas." })
+  })
 })
 
 describe("clínica dental: prestaciones, pacientes y sala de espera", () => {
@@ -191,6 +224,8 @@ describe("clínica dental: prestaciones, pacientes y sala de espera", () => {
     expect(f.servicios.modal.nombre).toBe("Nombre de la prestación")
     expect(f.servicios.modal.descripcionPlaceholder).toBe("Describe brevemente la prestación...")
     expect(f.servicios.modal.frecuencia).toBe("Cada cuántos días vuelve un paciente (opcional)")
+    expect(f.servicios.modal.urgencia).toBe("Es una urgencia")
+    expect(f.servicios.modal.urgenciaAyuda).toBe("En la reserva pública sólo ofrece horas de hoy.")
     expect(f.mensajes.avisoDeVuelta.descripcion).toBe(
       "Un correo cuando a un paciente ya le toca volver, según cada cuánto viene o la frecuencia de su prestación."
     )
@@ -217,6 +252,15 @@ describe("clínica dental: prestaciones, pacientes y sala de espera", () => {
       "Los sillones no se borran: se desactivan. Uno desactivado no se ofrece para citas nuevas, y las citas que ya lo tienen lo conservan."
     )
     expect(f.sillones.vacio).toBe("Agrega los sillones de la clínica para ver la agenda por sillón y asignárselos a las citas.")
+  })
+
+  it("el nombre de la clínica y la zona horaria", () => {
+    expect(f.nombreDelNegocio.etiqueta).toBe("Nombre de la clínica")
+    expect(f.zonaHoraria.ayuda).toBe("Elige dónde está la clínica.")
+    expect(f.zonaHoraria.otraZona("America/Lima")).toContain("Tu clínica tiene guardada la zona America/Lima")
+    expect(f.zonaHoraria.confirmar.descripcion).toBe(
+      "Cambia a qué hora se muestran las citas y qué horas ofrece la reserva pública. Las citas ya guardadas no se mueven en el tiempo: cambia cómo se leen."
+    )
   })
 
   it("el horario del negocio", () => {
@@ -255,5 +299,10 @@ describe("la concordancia sale del género y no de las palabras de hoy: una labo
     expect(f.pagina.negocioSinNombre).toBe("El taller")
     expect(f.productos.vacio).toBe("Agrega lo que vendes en el taller para anotarlo en el mostrador")
     expect(f.horario.atiendeEnElDelNegocio).toContain("atiende en el del taller")
+    expect(f.nombreDelNegocio.etiqueta).toBe("Nombre del taller")
+    expect(f.zonaHoraria.ayuda).toBe("Elige dónde está el taller.")
+    expect(f.zonaHoraria.confirmar.descripcion).toBe(
+      "Cambia a qué hora se muestran los turnos y qué horas ofrece la reserva pública. Los turnos ya guardados no se mueven en el tiempo: cambia cómo se leen."
+    )
   })
 })

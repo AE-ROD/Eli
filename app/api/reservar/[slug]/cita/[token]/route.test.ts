@@ -205,8 +205,36 @@ describe("GET: ver la cita", () => {
     escenario({ cita })
     const respuestas = [await ver(token, slug), await cancelar(token, slug), await reagendar("2030-01-08", "09:00", token, slug)]
     for (const respuesta of respuestas) {
-      expect(respuesta).toEqual({ status: 404, cuerpo: { error: "Este enlace no es válido o la cita ya no se puede cambiar" } })
+      // El negocio del escenario es un salón: la reserva se llama "hora".
+      expect(respuesta).toEqual({ status: 404, cuerpo: { error: "Este enlace no es válido o la hora ya no se puede cambiar" } })
     }
+  })
+
+  it.each([
+    ["una clínica dental", "odontologia", "Este enlace no es válido o la hora ya no se puede cambiar"],
+    ["un salón", "salon", "Este enlace no es válido o la hora ya no se puede cambiar"],
+    ["un rubro viejo", "salud", "Este enlace no es válido o la cita ya no se puede cambiar"],
+  ])("%s: el 404 dice la palabra de la reserva del negocio, igual para todo lo que no sirve", async (_caso, type, mensaje) => {
+    escenario({ negocio: { type } })
+    const sinToken = generarToken().token
+    const respuestas = [
+      await ver(sinToken),
+      await cancelar(sinToken),
+      await reagendar("2030-01-08", "09:00", sinToken),
+      await horas("2030-01-08", sinToken),
+    ]
+    for (const respuesta of respuestas) {
+      expect(respuesta).toEqual({ status: 404, cuerpo: { error: mensaje } })
+    }
+  })
+
+  it("un slug que no existe: el 404 de siempre, con las palabras de siempre", async () => {
+    escenario({ negocio: { type: "odontologia" } })
+
+    expect(await ver(TOKEN, "no-existe")).toEqual({
+      status: 404,
+      cuerpo: { error: "Este enlace no es válido o la cita ya no se puede cambiar" },
+    })
   })
 
   it("una cita de otro negocio con el mismo hash no se encuentra por este slug", async () => {

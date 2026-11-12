@@ -3,60 +3,21 @@ import { IDS_DE_RUBROS } from "./rubros"
 import { conMayuscula, vocabularioDe, type Genero, type PalabrasDelRubro } from "./vocabulario"
 
 /*
- * Estas pruebas conservan lo que ya probaba la API de antes (las seis cadenas
- * sueltas, con los mismos valores) y suman las `palabras` con género y número.
- * Las cadenas se comparan con `toMatchObject` porque el vocabulario ahora trae
- * además `palabras`; lo que se exige de ellas es igual de estricto.
+ * `palabras` es la única API del vocabulario: cada palabra con su género y su
+ * número. Las seis cadenas sueltas de antes (`cliente`, `clientes`, `tablero`,
+ * `profesional`, `profesionales`, `servicioDeLaReserva`) se retiraron cuando la
+ * última pantalla pasó a `palabras`; las tablas de abajo conservan sus valores.
  */
 
-describe("vocabularioDe: las seis cadenas de siempre", () => {
-  it("la clínica dental dice pacientes, sala de espera, odontólogo y motivo", () => {
-    expect(vocabularioDe("odontologia")).toMatchObject({
-      clientes: "pacientes",
-      cliente: "paciente",
-      tablero: "sala de espera",
-      profesional: "odontólogo",
-      profesionales: "odontólogos",
-      servicioDeLaReserva: "motivo",
-    })
-  })
-
-  it.each(["salon", "barberia", "spa-de-unas"])("el rubro %s habla como siempre", (rubro) => {
-    expect(vocabularioDe(rubro)).toMatchObject({
-      clientes: "clientes",
-      cliente: "cliente",
-      tablero: "tablero",
-      profesional: "profesional",
-      profesionales: "profesionales",
-      servicioDeLaReserva: "servicio",
-    })
-  })
-
-  it.each([
-    ["un rubro viejo", "salud"],
-    ["uno desconocido", "peluqueria-canina"],
-    ["casi el dental", "Odontologia"],
-    ["vacío", ""],
-    ["null (sesión de antes del rubro)", null],
-    ["undefined", undefined],
-    ["una propiedad del prototipo", "constructor"],
-    ["otra", "__proto__"],
-  ])("%s usa las palabras de siempre", (_caso, rubro) => {
-    expect(vocabularioDe(rubro)).toMatchObject({
-      clientes: "clientes",
-      cliente: "cliente",
-      tablero: "tablero",
-      profesional: "profesional",
-      profesionales: "profesionales",
-      servicioDeLaReserva: "servicio",
-    })
-    expect(vocabularioDe(rubro).cliente).toBe("cliente")
+describe("vocabularioDe: la forma", () => {
+  it.each(["salon", "odontologia", "otro", null, undefined, ""])("el rubro %j trae sólo `palabras`", (rubro) => {
+    expect(Object.keys(vocabularioDe(rubro))).toEqual(["palabras"])
   })
 
   it("devuelve una copia: cambiarla no cambia la próxima", () => {
     const primera = vocabularioDe("odontologia")
-    primera.cliente = "otra cosa"
-    expect(vocabularioDe("odontologia").cliente).toBe("paciente")
+    primera.palabras.cliente.singular = "otra cosa"
+    expect(vocabularioDe("odontologia").palabras.cliente.singular).toBe("paciente")
   })
 })
 
@@ -275,22 +236,6 @@ describe("vocabularioDe: las palabras con género y número", () => {
         expect(etiqueta.trim()).not.toBe("")
         expect(etiqueta).toBe(conMayuscula(etiqueta))
       }
-    })
-  })
-
-  describe("las cadenas de siempre y las palabras no se contradicen donde deben coincidir", () => {
-    it.each([
-      ["la clínica dental", "odontologia"],
-      ["un rubro neutro", "otro"],
-    ])("%s", (_caso, rubro) => {
-      const { clientes, cliente, tablero, profesional, profesionales, servicioDeLaReserva, palabras } =
-        vocabularioDe(rubro)
-      expect(clientes).toBe(palabras.cliente.plural)
-      expect(cliente).toBe(palabras.cliente.singular)
-      expect(tablero).toBe(palabras.tablero.singular)
-      expect(profesional).toBe(palabras.profesional.singular)
-      expect(profesionales).toBe(palabras.profesional.plural)
-      expect(servicioDeLaReserva).toBe(palabras.servicioDeLaReserva.singular)
     })
   })
 })

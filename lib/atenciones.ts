@@ -269,8 +269,9 @@ export function idDeProfesional(linea: Pick<LineaDeAtencion, "memberId" | "byOwn
  *   comisiones: una línea sin dueño no se le puede pagar a nadie.
  *
  * `palabras` pone el "servicio" y el "profesional" del rubro ("una
- * prestación con su odontólogo"); sin ellas salen los de siempre, que es lo
- * que dice el servidor.
+ * prestación con su odontólogo"); sin ellas salen los de siempre. Los
+ * endpoints la llaman con las palabras del rubro de la sesión, así que el
+ * servidor y la pantalla dicen lo mismo.
  */
 export function requisitoFaltante(
   destino: string,

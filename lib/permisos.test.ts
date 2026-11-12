@@ -19,6 +19,9 @@ import {
   puedeGestionarBloqueoDe,
   puedeDefinirServiciosDe,
   puedeEditarPlazoDeCambios,
+  puedeEditarNombreDelNegocio,
+  puedeConfigurarZonaHoraria,
+  puedeMarcarServicioComoUrgencia,
   puedeVerTodoElTablero,
   puedeCobrar,
   puedeAsignarLineasAOtros,
@@ -196,6 +199,8 @@ describe("jerarquía de roles", () => {
     ["editar la página pública del negocio", puedeEditarPaginaDelNegocio, true, true, false],
     // El logo y la portada son parte de esa cara: el profesional no los cambia.
     ["cambiar el logo y la portada del negocio", puedeEditarFotosDelNegocio, true, true, false],
+    // El nombre es lo primero de esa página: lo cambia quien la edita.
+    ["cambiar el nombre del negocio", puedeEditarNombreDelNegocio, true, true, false],
   ])("%s — dueño/encargado/profesional", (_que, puede, esperaDueño, esperaEncargado, esperaProfesional) => {
     expect(puede(dueño)).toBe(esperaDueño)
     expect(puede(encargado)).toBe(esperaEncargado)
@@ -419,6 +424,7 @@ describe("falla cerrado", () => {
     expect(puedeImportarExportarClientes(null)).toBe(false)
     expect(puedeEditarPaginaDelNegocio(null)).toBe(false)
     expect(puedeEditarFotosDelNegocio(null)).toBe(false)
+    expect(puedeEditarNombreDelNegocio(null)).toBe(false)
     expect(puedeEditarFotoDelMiembro(null, miembro)).toBe(false)
   })
 
@@ -431,6 +437,7 @@ describe("falla cerrado", () => {
     expect(puedeAsignarCitasAOtros(desconocido)).toBe(false)
     expect(puedeEditarPaginaDelNegocio(desconocido)).toBe(false)
     expect(puedeEditarFotosDelNegocio(desconocido)).toBe(false)
+    expect(puedeEditarNombreDelNegocio(desconocido)).toBe(false)
     expect(puedeEditarFotoDelMiembro(desconocido, miembro)).toBe(false)
     // Ni siquiera con su propia membresía: un rol que no existe no cuenta como profesional.
     expect(puedeEditarFotoDelMiembro(desconocido, yoMismo)).toBe(false)
@@ -688,6 +695,30 @@ describe("servicios que hace cada profesional", () => {
 
   it("falla cerrado sin actor", () => {
     expect(puedeDefinirServiciosDe(null, miembro)).toBe(false)
+  })
+})
+
+describe("zona horaria del negocio", () => {
+  const conRubro = (rol: Rol, rubro: unknown): Actor => ({ ...actor(rol), rubro }) as Actor
+  const desconocido = { rol: "gerente", businessId: NEGOCIO, memberId: "yo" } as unknown as Actor
+
+  it("sólo la dueña; el encargado y el profesional no", () => {
+    expect(puedeConfigurarZonaHoraria(dueño)).toBe(true)
+    expect(puedeConfigurarZonaHoraria(encargado)).toBe(false)
+    expect(puedeConfigurarZonaHoraria(profesional)).toBe(false)
+  })
+
+  it("no depende del rubro: la dueña de una clínica dental y la de un salón la configuran igual", () => {
+    for (const rubro of ["odontologia", "salon", "barberia", "spa-de-unas", "salud", "", undefined, null]) {
+      expect(puedeConfigurarZonaHoraria(conRubro("owner", rubro))).toBe(true)
+      expect(puedeConfigurarZonaHoraria(conRubro("admin", rubro))).toBe(false)
+      expect(puedeConfigurarZonaHoraria(conRubro("worker", rubro))).toBe(false)
+    }
+  })
+
+  it("falla cerrado sin actor y con un rol desconocido", () => {
+    expect(puedeConfigurarZonaHoraria(null)).toBe(false)
+    expect(puedeConfigurarZonaHoraria(desconocido)).toBe(false)
   })
 })
 
@@ -1091,6 +1122,8 @@ describe("clínica dental (rubro odontología)", () => {
     ["veSillones", veSillones, [true, true, true]],
     ["puedeGestionarSillones", puedeGestionarSillones, [true, true, false]],
     ["puedeAsignarSillon", puedeAsignarSillon, [true, true, true]],
+    // Marcar un servicio como urgencia: dueño y encargado, como el resto del catálogo; el odontólogo no.
+    ["puedeMarcarServicioComoUrgencia", puedeMarcarServicioComoUrgencia, [true, true, false]],
   ]
 
   it.each(TABLA)("%s sigue la tabla por rol en una clínica dental", (_nombre, permiso, [deDueña, deEncargado, deOdontologo]) => {

@@ -45,6 +45,8 @@ export interface Servicio {
   category: string | null
   /** Cada cuántos días vuelve un cliente por este servicio (#75). `null` es sin frecuencia. */
   frecuenciaDias: number | null
+  /** Clínica dental: es una urgencia y la reserva pública sólo ofrece horas de hoy. En otro rubro siempre `false`. */
+  esUrgencia: boolean
   active: boolean
 }
 
@@ -58,6 +60,8 @@ export interface DatosDeServicio {
   category: string
   /** "Cada cuántos días vuelve", como texto del campo. Vacío es `null`: se borra. */
   frecuenciaDias: string
+  /** "Es una urgencia". Sólo cuenta si quien edita puede marcarla (`cuerpoDeServicio`). */
+  esUrgencia: boolean
 }
 
 /**
@@ -88,8 +92,12 @@ export async function guardarHorario(memberId: string | null, horarios: HorarioD
  * precio que no se puede leer sin adivinar es un error, no un servicio
  * guardado sin precio o con otro. La frecuencia, igual: vacía es `null` (se
  * borra) y una que no es un entero de 7 a 365 es un error, no se manda.
+ *
+ * `esUrgencia` va sólo si `conUrgencia` (la pantalla lo pide con
+ * `puedeMarcarServicioComoUrgencia`, una clínica dental): en otro rubro no se
+ * manda ni como `false`, porque el servidor rechaza la bandera ahí.
  */
-export function cuerpoDeServicio(datos: DatosDeServicio, para: "crear" | "editar" = "crear") {
+export function cuerpoDeServicio(datos: DatosDeServicio, para: "crear" | "editar" = "crear", conUrgencia = false) {
   const f = frecuenciaDelFormulario(datos.frecuenciaDias)
   if (!f.ok) return f
   const vacio = para === "editar" ? null : undefined
@@ -99,6 +107,7 @@ export function cuerpoDeServicio(datos: DatosDeServicio, para: "crear" | "editar
     duration: datos.duration,
     category: datos.category.trim() || null,
     frecuenciaDias: f.valor,
+    ...(conUrgencia && { esUrgencia: datos.esUrgencia }),
   }
   if (!datos.price.trim()) return { ok: true as const, datos: { ...base, price: vacio } }
   const precio = leerMonto(datos.price)
@@ -108,8 +117,12 @@ export function cuerpoDeServicio(datos: DatosDeServicio, para: "crear" | "editar
 }
 
 /** Devuelve el servicio tal como quedó guardado. */
-export async function crearServicio(datos: DatosDeServicio, palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado<Servicio>> {
-  const cuerpo = cuerpoDeServicio(datos)
+export async function crearServicio(
+  datos: DatosDeServicio,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS,
+  conUrgencia = false
+): Promise<Resultado<Servicio>> {
+  const cuerpo = cuerpoDeServicio(datos, "crear", conUrgencia)
   if (!cuerpo.ok) return cuerpo
   return pedir<Servicio>(
     "/api/configuracion/servicios",
@@ -122,9 +135,10 @@ export async function crearServicio(datos: DatosDeServicio, palabras: PalabrasDe
 export async function editarServicio(
   id: string,
   datos: DatosDeServicio,
-  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS,
+  conUrgencia = false
 ): Promise<Resultado<Servicio>> {
-  const cuerpo = cuerpoDeServicio(datos, "editar")
+  const cuerpo = cuerpoDeServicio(datos, "editar", conUrgencia)
   if (!cuerpo.ok) return cuerpo
   return pedir<Servicio>(
     `/api/configuracion/servicios/${id}`,
@@ -287,6 +301,27 @@ export async function guardarPaginaPublica(
         .filter((fila) => antes.get(fila.memberId) !== fila.especialidad)
         .map(({ memberId, especialidad }) => ({ memberId, especialidad })),
     })
+  )
+}
+
+/**
+ * Cambia el nombre del negocio. El servidor lo recorta y devuelve cómo quedó.
+ * El `slug` (la dirección de la página pública) no cambia.
+ */
+export async function guardarNombreDelNegocio(nombre: string): Promise<Resultado<{ nombre: string }>> {
+  return pedir<{ nombre: string }>(
+    "/api/configuracion/nombre",
+    "No se pudo guardar el nombre",
+    conJson("PUT", { nombre })
+  )
+}
+
+/** Cambia la zona horaria del negocio (sólo la dueña; una de `lib/zonas-de-chile.ts`). Devuelve la que quedó. */
+export async function guardarZonaHoraria(zona: string): Promise<Resultado<{ zona: string }>> {
+  return pedir<{ zona: string }>(
+    "/api/configuracion/zona-horaria",
+    "No se pudo guardar la zona horaria",
+    conJson("PUT", { zona })
   )
 }
 

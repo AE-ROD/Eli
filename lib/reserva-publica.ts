@@ -5,11 +5,12 @@
  * (qué horas se aceptan), con la misma regla para que nunca den distinto.
  */
 
-import { al, concordar, el, pronombreDe } from "@/lib/concordancia"
+import { al, concordar, del, el, ese, este, pronombreDe } from "@/lib/concordancia"
 import { horaAMinutos } from "@/lib/horario-dia"
 import { palabrasDeLaReserva } from "@/lib/palabras-de-la-reserva"
 import { RUBRO_DENTAL } from "@/lib/rubros"
 import { aE164Chile } from "@/lib/telefono"
+import { conMayuscula } from "@/lib/vocabulario"
 import { diaDeLaSemana, diasEntre, esFechaCalendario, fechaYMinutosEn, instanteEn } from "@/lib/zona-horaria"
 
 /**
@@ -280,9 +281,66 @@ export const MAX_RESERVAS_FUTURAS_POR_CONTACTO = 3
  */
 export const MAX_RESERVAS_PUBLICAS_POR_DIA = 50
 
-export const MENSAJE_TOPE_POR_CONTACTO = `Ya tienes ${MAX_RESERVAS_FUTURAS_POR_CONTACTO} reservas pendientes en este negocio. Para pedir otra, contáctalo directamente.`
-export const MENSAJE_TOPE_POR_NEGOCIO =
-  "Este negocio recibió demasiadas reservas en línea en las últimas horas. Intenta más tarde o contáctalo directamente."
+/**
+ * El 429 del tope por contacto: "Ya tienes 3 reservas pendientes en este
+ * negocio. Para pedir otra, contáctalo directamente." `rubro` (`Business.type`,
+ * de la base) pone el negocio: "en este salón… contáctalo", "en esta clínica…
+ * contáctala". "Reservas" es la palabra de siempre en todos los rubros.
+ */
+export function mensajeDeTopePorContacto(rubro?: string | null): string {
+  const { negocio } = palabrasDeLaReserva(rubro)
+  return `Ya tienes ${MAX_RESERVAS_FUTURAS_POR_CONTACTO} reservas pendientes en ${este(negocio)}. Para pedir otra, contácta${pronombreDe(negocio)} directamente.`
+}
+
+/**
+ * El 429 del tope por negocio: "Este negocio recibió demasiadas reservas en
+ * línea en las últimas horas. Intenta más tarde o contáctalo directamente."
+ * Con el negocio del rubro: "Esta clínica recibió… o contáctala…".
+ */
+export function mensajeDeTopePorNegocio(rubro?: string | null): string {
+  const { negocio } = palabrasDeLaReserva(rubro)
+  return `${conMayuscula(este(negocio))} recibió demasiadas reservas en línea en las últimas horas. Intenta más tarde o contácta${pronombreDe(negocio)} directamente.`
+}
+
+/** Los dos topes con las palabras de un rubro desconocido: los textos de siempre. */
+export const MENSAJE_TOPE_POR_CONTACTO = mensajeDeTopePorContacto(null)
+export const MENSAJE_TOPE_POR_NEGOCIO = mensajeDeTopePorNegocio(null)
+
+// ─── Los rechazos de la reserva, con las palabras del rubro ──────────────────
+//
+// Lo que ve quien reserva cuando `confirmar` o `disponibilidad` dicen que no.
+// `rubro` es el `Business.type` que la ruta leyó por el `slug`, nunca algo que
+// mande el navegador. Un rubro desconocido, `null` o ausente da los textos de
+// siempre ("Servicio no disponible", "Ese profesional…", "del negocio").
+
+/** El 404 de un servicio que no es del negocio o no está activo: "Servicio no disponible" / "Motivo no disponible". */
+export function mensajeServicioNoDisponible(rubro?: string | null): string {
+  const { servicioDeLaReserva } = palabrasDeLaReserva(rubro)
+  return `${conMayuscula(servicioDeLaReserva.singular)} no ${concordar("disponible", servicioDeLaReserva)}`
+}
+
+/** Lo mismo al consultar las horas: "Servicio no encontrado" / "Motivo no encontrado". */
+export function mensajeServicioNoEncontrado(rubro?: string | null): string {
+  const { servicioDeLaReserva } = palabrasDeLaReserva(rubro)
+  return `${conMayuscula(servicioDeLaReserva.singular)} no ${concordar("encontrado", servicioDeLaReserva)}`
+}
+
+/**
+ * El 404 de quien no está disponible para lo elegido: "Ese profesional no está
+ * disponible para este servicio", "Esa estilista no está disponible para este
+ * servicio", "Ese odontólogo no está disponible para este motivo". Es el mismo
+ * para quien no existe, es de otro negocio o no hace el servicio.
+ */
+export function mensajeProfesionalNoDisponible(rubro?: string | null): string {
+  const { profesional, servicioDeLaReserva } = palabrasDeLaReserva(rubro)
+  return `${conMayuscula(ese(profesional))} no está ${concordar("disponible", profesional)} para ${este(servicioDeLaReserva)}`
+}
+
+/** El 409 de una hora que no es de atención: "Ese horario está fuera de la atención del negocio. Elige otra hora." / "…de la clínica…". */
+export function mensajeFueraDeLaAtencion(rubro?: string | null): string {
+  const { negocio } = palabrasDeLaReserva(rubro)
+  return `Ese horario está fuera de la atención ${del(negocio)}. Elige otra hora.`
+}
 
 /** El origen con que `confirmar` crea las citas. */
 export const ORIGEN_RESERVA_PUBLICA: OrigenDeCita = "reserva-publica"

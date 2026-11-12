@@ -243,7 +243,8 @@ describe("disponibilidad por profesional", () => {
     for (const id of ["m-ajeno", "m-encargado", "no-existe"]) {
       const { status, cuerpo } = await horas(`&profesionalId=${id}`)
       expect(status).toBe(404)
-      expect(cuerpo).toEqual({ error: "Ese profesional no está disponible para este servicio" })
+      // El negocio del escenario es un salón (el rubro por defecto de la base falsa): nombra a la estilista.
+      expect(cuerpo).toEqual({ error: "Esa estilista no está disponible para este servicio" })
     }
   })
 

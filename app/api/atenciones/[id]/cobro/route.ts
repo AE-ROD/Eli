@@ -13,6 +13,7 @@ import {
   transicionPermitida,
 } from "@/lib/atenciones"
 import { actorDeSesion, puedeCobrar, puedeRegistrarPropina } from "@/lib/permisos"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { horaDeLaBase, tomarCandadoDeCajaCompartido } from "@/lib/bloqueos-de-dinero"
 import { congelarComisiones, lineasQueQuedaranSinPorcentaje } from "@/lib/lineas-de-atencion"
@@ -166,7 +167,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const excedido = errorDeTotal(totalCentavos)
       if (excedido) throw new ErrorDeAtencion(400, excedido)
 
-      const falta = requisitoFaltante("finalizada", lineas)
+      // El rubro sale de la sesión: "una prestación con su odontólogo" en una clínica dental.
+      const falta = requisitoFaltante("finalizada", lineas, vocabularioDe(actor.rubro).palabras)
       if (falta) throw new ErrorDeAtencion(400, falta)
 
       const errorDePagos = errorDeCobro(totalCentavos, pagos)

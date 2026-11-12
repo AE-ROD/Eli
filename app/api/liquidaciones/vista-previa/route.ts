@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { actorDeSesion, puedeCerrarLiquidacion } from "@/lib/permisos"
 import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { respuestaDeErrorDePlata, vistaPrevia } from "@/lib/liquidacion"
+import { vocabularioDe } from "@/lib/vocabulario"
 
 /**
  * La próxima liquidación de `?miembro=`, calculada sin guardar nada. Es el
@@ -32,6 +33,8 @@ export async function GET(request: NextRequest) {
       // cerca del fin del período la vista previa y el cierre podían ver
       // períodos distintos (y el total confirmado, no coincidir).
       ahora: await horaDeLaBase(prisma),
+      // El rubro sale de la sesión: el aviso de las líneas sin % dice "servicios" o "prestaciones".
+      palabras: vocabularioDe(actor.rubro).palabras,
     })
     if (!vista) return NextResponse.json({ error: "Profesional no encontrado" }, { status: 404 })
     return NextResponse.json(vista)

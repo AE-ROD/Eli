@@ -345,8 +345,8 @@ export function calcularTotales(
 /**
  * Por qué no se puede cerrar, o `null`. El orden es el de lo que hay que
  * resolver primero. `palabras` pone el "servicio" del rubro ("Hay 2
- * prestaciones sin porcentaje de comisión"); sin ellas, "servicios", que es lo
- * que arma el servidor, que no mira el rubro.
+ * prestaciones sin porcentaje de comisión"); sin ellas, "servicios". La vista
+ * previa y el cierre se las pasan con el rubro de la sesión.
  */
 export function motivoParaNoCerrar(opciones: {
   sinPorcentaje: number
@@ -399,11 +399,19 @@ export function liberadoEl(cobrado: Date, entregada: Date): Date {
 /**
  * Lo que tendría la próxima liquidación de `memberId`, sin guardar nada.
  * `null` si la persona no es del negocio. `ahora` decide "hoy" y la fecha
- * con que se congelaría lo pendiente.
+ * con que se congelaría lo pendiente. `palabras` (opcional, las del rubro de
+ * la sesión) pone el "servicio" en el motivo para no cerrar (`noSePuedeCerrar`):
+ * "Hay 2 prestaciones sin porcentaje de comisión"; sin ellas, "servicios".
  */
 export async function vistaPrevia(
   db: Db,
-  opciones: { businessId: string; memberId: string; excluirMovimientos?: readonly string[]; ahora: Date }
+  opciones: {
+    businessId: string
+    memberId: string
+    excluirMovimientos?: readonly string[]
+    ahora: Date
+    palabras?: Pick<PalabrasDelRubro, "servicio">
+  }
 ): Promise<VistaPrevia | null> {
   const { businessId, memberId, ahora } = opciones
   const excluir = new Set(opciones.excluirMovimientos ?? [])
@@ -602,7 +610,7 @@ export async function vistaPrevia(
     movimientos: movimientosEnLiquidacion,
     totales,
     sinPorcentaje,
-    noSePuedeCerrar: motivoParaNoCerrar({ sinPorcentaje, desde: periodo.desde, hoy, totales }),
+    noSePuedeCerrar: motivoParaNoCerrar({ sinPorcentaje, desde: periodo.desde, hoy, totales, palabras: opciones.palabras }),
   }
 }
 
@@ -637,6 +645,8 @@ export async function cerrarLiquidacion(
     nota: string | null
     cerradaPorId: string
     cerradaPorNombre: string
+    /** Las palabras del rubro de la sesión, para el motivo de no poder cerrar (409). Sin ellas, las neutras. */
+    palabras?: Pick<PalabrasDelRubro, "servicio">
   }
 ): Promise<string> {
   const { businessId, memberId } = opciones
@@ -649,7 +659,13 @@ export async function cerrarLiquidacion(
   // (#152), igual que la anulación de la liquidación.
   const ahora = await horaDeLaBase(tx)
 
-  const vista = await vistaPrevia(tx, { businessId, memberId, excluirMovimientos: opciones.excluirMovimientos, ahora })
+  const vista = await vistaPrevia(tx, {
+    businessId,
+    memberId,
+    excluirMovimientos: opciones.excluirMovimientos,
+    ahora,
+    palabras: opciones.palabras,
+  })
   if (!vista) throw new ErrorDeLiquidacion(404, "Profesional no encontrado")
   if (vista.periodo.desde !== opciones.desdeEsperado) throw new ErrorDeLiquidacion(409, CAMBIO_A_MITAD)
   const excluidos = new Set(opciones.excluirMovimientos)
