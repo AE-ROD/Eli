@@ -42,7 +42,7 @@ export function FilaDeDia({
         alineacion === "centro" ? "items-center" : "items-start"
       )}
     >
-      <div className={cn("w-full sm:w-40", alineacion === "arriba" && "sm:flex sm:min-h-11 sm:items-center")}>
+      <div className={cn("w-full sm:w-40", alineacion === "arriba" && "sm:flex sm:min-h-11 sm:items-center sm:[&>*]:w-full")}>
         <Interruptor id={idDelInterruptor} etiqueta={etiqueta} activo={activo} alCambiar={() => alAlternar()} />
       </div>
 
