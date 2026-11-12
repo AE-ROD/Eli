@@ -180,7 +180,9 @@ export class AlmacenEnDisco implements AlmacenDeFotos {
   private readonly carpeta: string
 
   constructor(carpeta: string = CARPETA_DE_FOTOS_EN_DESARROLLO) {
-    this.carpeta = path.resolve(carpeta)
+    // La carpeta es de desarrollo y vive fuera del proyecto (`os.tmpdir()`): sin
+    // el comentario, Turbopack rastrea el proyecto entero al construir.
+    this.carpeta = path.resolve(/* turbopackIgnore: true */ carpeta)
   }
 
   /** La ruta del archivo, ya validada la clave y comprobado que no sale de la carpeta. */

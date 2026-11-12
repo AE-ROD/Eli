@@ -1,5 +1,22 @@
 import { describe, it, expect } from "vitest"
-import { al, concordar, del, el, ese, este, ningun, todos, un, type Numero } from "./concordancia"
+import {
+  al,
+  articuloDe,
+  cantidadDe,
+  concordar,
+  del,
+  el,
+  ese,
+  este,
+  ningun,
+  numeroDe,
+  pronombreDe,
+  todoDe,
+  todos,
+  un,
+  unoDe,
+  type Numero,
+} from "./concordancia"
 import { vocabularioDe, type PalabrasDelRubro, type Sustantivo } from "./vocabulario"
 
 /*
@@ -445,5 +462,33 @@ describe("toda frase sale en minúscula, con cualquier palabra de cualquier rubr
         expect(frase, `${rubro}.${clave}`).toBe(frase.toLocaleLowerCase("es-CL"))
       }
     }
+  })
+})
+
+describe("las formas sueltas, sin el sustantivo", () => {
+  it.each([
+    ["articuloDe", articuloDe, "el", "la"],
+    ["pronombreDe", pronombreDe, "lo", "la"],
+    ["unoDe", unoDe, "uno", "una"],
+    ["todoDe", todoDe, "todo", "toda"],
+  ] as const)("%s sigue el género de la palabra", (_nombre, funcion, masculino, femenino) => {
+    expect(funcion(CLIENTE)).toBe(masculino)
+    expect(funcion(ESTILISTA)).toBe(femenino)
+    expect(funcion(SALA_DE_ESPERA)).toBe(femenino)
+    expect(funcion(SALON_DE_UNAS)).toBe(masculino)
+  })
+
+  it("numeroDe: uno es singular; cero y el resto, plural", () => {
+    expect(numeroDe(1)).toBe("singular")
+    expect(numeroDe(0)).toBe("plural")
+    expect(numeroDe(2)).toBe("plural")
+    expect(numeroDe(120)).toBe("plural")
+  })
+
+  it("cantidadDe escribe la cantidad con el número que toca", () => {
+    expect(cantidadDe(1, ESTILISTA)).toBe("1 estilista")
+    expect(cantidadDe(3, ESTILISTA)).toBe("3 estilistas")
+    expect(cantidadDe(0, SALA_DE_ESPERA)).toBe("0 salas de espera")
+    expect(cantidadDe(1, SALON_DE_UNAS)).toBe("1 salón de uñas")
   })
 })

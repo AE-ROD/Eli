@@ -155,3 +155,32 @@ export function concordar(adjetivo: string, sustantivo: Sustantivo, numero: Nume
     sustantivo.genero === "f" && adjetivo.endsWith("o") ? `${adjetivo.slice(0, -1)}a` : adjetivo
   return numero === "plural" ? enPlural(enGenero) : enGenero
 }
+
+/**
+ * Las formas sueltas, sin el sustantivo: el artículo, el pronombre, "uno" y
+ * "todo" cuando la palabra ya se dijo o va en otra parte de la frase. Se eligen
+ * por el género de la palabra y no se pegan a ninguna: si el vocabulario cambia
+ * una palabra de género, la frase la sigue.
+ */
+function segunElGenero(masculino: string, femenino: string): (sustantivo: Sustantivo) => string {
+  return (sustantivo) => (sustantivo.genero === "f" ? femenino : masculino)
+}
+
+/** "el" / "la": el artículo solo, para "La próxima es…". */
+export const articuloDe = segunElGenero("el", "la")
+/** "lo" / "la": el pronombre de la palabra, para "Confírmala" o "créalo". */
+export const pronombreDe = segunElGenero("lo", "la")
+/** "uno" / "una": "Elige uno de la lista", cuando el sustantivo ya se dijo. */
+export const unoDe = segunElGenero("uno", "una")
+/** "todo" / "toda": "Todo el salón", "Toda la clínica". */
+export const todoDe = segunElGenero("todo", "toda")
+
+/** El número gramatical de una cantidad: 1 es singular; 0 y el resto, plural. */
+export function numeroDe(cantidad: number): Numero {
+  return cantidad === 1 ? "singular" : "plural"
+}
+
+/** "1 cita" / "3 citas" / "0 citas". */
+export function cantidadDe(cantidad: number, sustantivo: Sustantivo): string {
+  return `${cantidad} ${sustantivo[numeroDe(cantidad)]}`
+}

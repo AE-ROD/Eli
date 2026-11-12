@@ -16,39 +16,26 @@
  * (`seLlamaHora`); el resto del tiempo, la reserva es un sustantivo más.
  */
 
-import { al, concordar, del, el, type Numero } from "@/lib/concordancia"
+import {
+  al,
+  articuloDe,
+  cantidadDe,
+  concordar,
+  del,
+  el,
+  numeroDe,
+  pronombreDe,
+  todoDe,
+  unoDe,
+} from "@/lib/concordancia"
 import { conMayuscula, vocabularioDe, type PalabrasDelRubro, type Sustantivo } from "@/lib/vocabulario"
 
 const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
 
-/**
- * Las formas sueltas que `lib/concordancia.ts` todavía no trae (el artículo, el
- * pronombre, "uno" y "todo" sin su sustantivo). Se eligen por el género de la
- * palabra y no se pegan a ninguna: si el vocabulario cambia una palabra de
- * género, la frase la sigue. Cuando `concordancia.ts` las incluya, se mudan.
- */
-function segunElGenero(masculino: string, femenino: string): (sustantivo: Sustantivo) => string {
-  return (sustantivo) => (sustantivo.genero === "f" ? femenino : masculino)
-}
-
-/** "el" / "la": el artículo solo, para "La próxima es…". */
-export const articuloDe = segunElGenero("el", "la")
-/** "lo" / "la": el pronombre de la palabra, para "Confírmala" o "créalo". */
-export const pronombreDe = segunElGenero("lo", "la")
-/** "uno" / "una": "Elige uno de la lista", cuando el sustantivo ya se dijo. */
-export const unoDe = segunElGenero("uno", "una")
-/** "todo" / "toda": "Todo el salón", "Toda la clínica". */
-export const todoDe = segunElGenero("todo", "toda")
-
-/** El número gramatical de una cantidad: 1 es singular; 0 y el resto, plural. */
-export function numeroDe(cantidad: number): Numero {
-  return cantidad === 1 ? "singular" : "plural"
-}
-
-/** "1 cita" / "3 citas" / "0 citas". */
-export function cantidadDe(cantidad: number, sustantivo: Sustantivo): string {
-  return `${cantidad} ${sustantivo[numeroDe(cantidad)]}`
-}
+// Estas formas sueltas viven ahora en `lib/concordancia.ts`, para todas las
+// pantallas; se reexportan acá para no tocar a quienes ya las importan de este
+// archivo.
+export { articuloDe, cantidadDe, numeroDe, pronombreDe, todoDe, unoDe }
 
 /** La palabra del reloj: la reserva de un salón, una barbería y un salón de uñas se llama igual. */
 const LA_HORA = "hora"
