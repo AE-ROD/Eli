@@ -14,16 +14,18 @@ import { Selector } from "@/components/comunes/selector"
 import { Aviso } from "@/components/panel/aviso"
 import { enviarSolicitud, mensajeDeErrorDeEnvio } from "@/components/soporte/enviar-solicitud"
 import {
-  AREAS,
   CAMPO_TRAMPA,
   LIMITES,
+  ejemploDeAsuntoDeFalla,
   esquemaDeContacto,
   esquemaDeSolicitud,
+  type AreaConEtiqueta,
   type AreaDeSoporte,
   type CuerpoDeSolicitudDeSoporte,
   type TipoDeSolicitud,
 } from "@/lib/soporte"
 import { cn } from "@/lib/utils"
+import type { PalabrasDelRubro } from "@/lib/vocabulario"
 
 /** Lo que la persona lleva escrito. Vive en el centro de ayuda: ir atrás y volver no lo borra. */
 export interface Borrador {
@@ -41,14 +43,24 @@ type Campo = "nombre" | "email" | "area" | "asunto" | "descripcion" | "dondeOcur
 /** En el orden en que aparecen: el foco va al primero que tenga un error. */
 const ORDEN_DE_LOS_CAMPOS: readonly Campo[] = ["nombre", "email", "area", "asunto", "descripcion", "dondeOcurrio"]
 
-/** Lo que cambia según el tipo de solicitud: las etiquetas, las ayudas y el botón. */
+/**
+ * Lo que cambia según el tipo de solicitud: las etiquetas, las ayudas y el
+ * botón. El ejemplo del asunto de una falla nombra algo del rubro ("un
+ * servicio", "una prestación"), así que se escribe con las palabras del rubro.
+ */
 const TEXTOS: Record<
   TipoDeSolicitud,
-  { asunto: string; ejemploDeAsunto: string; descripcion: string; ayuda: ReactNode; enviar: string }
+  {
+    asunto: string
+    ejemploDeAsunto: string | ((palabras: PalabrasDelRubro) => string)
+    descripcion: string
+    ayuda: ReactNode
+    enviar: string
+  }
 > = {
   falla: {
     asunto: "¿Qué pasó?",
-    ejemploDeAsunto: "Ej.: No se guarda un servicio nuevo",
+    ejemploDeAsunto: ejemploDeAsuntoDeFalla,
     descripcion: "Cuéntanos el detalle",
     ayuda: (
       <>
@@ -82,6 +94,10 @@ interface PropsDeFormulario {
   tipo: TipoDeSolicitud
   /** El área elegida en el paso anterior. En una consulta puede faltar: se elige acá. */
   area: AreaDeSoporte | null
+  /** Las áreas con los nombres del rubro (`areasDelRubro`, `lib/soporte.ts`). */
+  areas: readonly AreaConEtiqueta[]
+  /** Las palabras del rubro, para el ejemplo del asunto. */
+  palabras: PalabrasDelRubro
   /** Sólo la consulta elige el área en el formulario; la falla y el reclamo ya la eligieron. */
   areaEditable: boolean
   alCambiarArea: (area: AreaDeSoporte) => void
@@ -103,6 +119,8 @@ interface PropsDeFormulario {
 export function FormularioDeSoporte({
   tipo,
   area,
+  areas,
+  palabras,
   areaEditable,
   alCambiarArea,
   borrador,
@@ -118,6 +136,7 @@ export function FormularioDeSoporte({
   const prefijo = useId()
   const idDe = (campo: Campo) => `${prefijo}-${campo}`
   const textos = TEXTOS[tipo]
+  const ejemploDeAsunto = typeof textos.ejemploDeAsunto === "function" ? textos.ejemploDeAsunto(palabras) : textos.ejemploDeAsunto
 
   const cambiar = (campo: keyof Borrador, valor: string) => {
     alCambiarBorrador({ ...borrador, [campo]: valor })
@@ -243,7 +262,7 @@ export function FormularioDeSoporte({
             alCambiarArea(evento.target.value as AreaDeSoporte)
             if (errores.area) setErrores((anteriores) => ({ ...anteriores, area: undefined }))
           }}
-          opciones={AREAS.map((opcion) => ({ valor: opcion.valor, texto: opcion.etiqueta }))}
+          opciones={areas.map((opcion) => ({ valor: opcion.valor, texto: opcion.etiqueta }))}
           error={errores.area}
         >
           <option value="" disabled>
@@ -259,7 +278,7 @@ export function FormularioDeSoporte({
         onChange={(evento) => cambiar("asunto", evento.target.value)}
         onKeyDown={(evento) => pasarAlSiguiente(evento, "descripcion")}
         error={errores.asunto}
-        placeholder={textos.ejemploDeAsunto}
+        placeholder={ejemploDeAsunto}
         autoComplete="off"
         autoCapitalize="sentences"
         enterKeyHint="next"

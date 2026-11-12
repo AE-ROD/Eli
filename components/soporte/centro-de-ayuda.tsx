@@ -12,9 +12,10 @@ import { BuscadorDePreguntas } from "@/components/soporte/buscador-de-preguntas"
 import { BORRADOR_VACIO, FormularioDeSoporte, type Borrador } from "@/components/soporte/formulario-de-soporte"
 import { IconoDeArea } from "@/components/soporte/icono-de-area"
 import { FiltroDeAreas, SelectorDeArea } from "@/components/soporte/selector-de-area"
-import { buscarPreguntas, preguntasParaFallas, type PreguntaFrecuente } from "@/lib/preguntas-frecuentes"
-import { AREAS, LIMITES, etiquetaDeArea, type AreaDeSoporte, type TipoDeSolicitud } from "@/lib/soporte"
+import { buscarPreguntas, preguntasDelRubro, preguntasParaFallas, type PreguntaFrecuente } from "@/lib/preguntas-frecuentes"
+import { LIMITES, areasDelRubro, type AreaConEtiqueta, type AreaDeSoporte, type TipoDeSolicitud } from "@/lib/soporte"
 import { cn } from "@/lib/utils"
+import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
 
 /**
  * El centro de ayuda: el mismo en el panel (/dashboard/ayuda, con sesión) y en
@@ -36,6 +37,11 @@ import { cn } from "@/lib/utils"
  * Al cambiar de paso el contenido entra con un fundido y el foco va al título
  * nuevo: el botón que se apretó ya no existe, y sin esto el foco caería al
  * `<body>`. Lo escrito vive acá y no en el formulario: ir atrás no lo borra.
+ *
+ * Las preguntas frecuentes y el nombre de las áreas hablan el idioma del rubro
+ * (`rubro`): en una clínica dental, "paciente", "sala de espera" y "odontólogo";
+ * en un salón, "estilista" y "hora". Sin rubro (la página pública, que puede no
+ * tener sesión) usan las palabras neutras.
  */
 
 type Paso = "inicio" | "preguntas" | "area" | "formulario" | "listo"
@@ -87,9 +93,20 @@ interface PropsDeCentroDeAyuda {
   conSesion: boolean
   /** El correo de la cuenta, para decir a dónde llegará la respuesta. */
   emailDeSesion?: string
+  /**
+   * El rubro del negocio de la sesión (`session.user.rubro`). Sin él, las
+   * palabras neutras: es lo que usa /soporte, que es pública.
+   */
+  rubro?: string | null
 }
 
-export function CentroDeAyuda({ conSesion, emailDeSesion }: PropsDeCentroDeAyuda) {
+export function CentroDeAyuda({ conSesion, emailDeSesion, rubro }: PropsDeCentroDeAyuda) {
+  const palabras = useMemo(() => vocabularioDe(rubro).palabras, [rubro])
+  const areas = useMemo(() => areasDelRubro(palabras), [palabras])
+  const preguntas = useMemo(() => preguntasDelRubro(rubro), [rubro])
+  const nombreDelArea = (elegida: AreaDeSoporte | null) =>
+    elegida ? (areas.find((area) => area.valor === elegida)?.etiqueta ?? elegida) : null
+
   /** Los pasos recorridos, el actual al final. Nunca está vacío. */
   const [historial, setHistorial] = useState<readonly Paso[]>(["inicio"])
   const paso = historial[historial.length - 1]
@@ -188,7 +205,7 @@ export function CentroDeAyuda({ conSesion, emailDeSesion }: PropsDeCentroDeAyuda
       {tipo && (paso === "area" || paso === "preguntas" || paso === "formulario") && (
         <EncabezadoDelCamino
           camino={NOMBRE_DEL_CAMINO[tipo]}
-          area={paso === "formulario" && tipo !== "consulta" ? area : null}
+          nombreDelArea={paso === "formulario" && tipo !== "consulta" ? nombreDelArea(area) : null}
           numeroDePaso={numeroDePaso}
           totalDePasos={totalDePasos}
           alVolver={atras}
@@ -198,6 +215,7 @@ export function CentroDeAyuda({ conSesion, emailDeSesion }: PropsDeCentroDeAyuda
       {paso === "inicio" && (
         <PasoDeInicio
           titulo={titulo("¿En qué te ayudamos?")}
+          preguntas={preguntas}
           consulta={consulta}
           alCambiarConsulta={setConsulta}
           alElegir={elegirTipo}
@@ -208,6 +226,8 @@ export function CentroDeAyuda({ conSesion, emailDeSesion }: PropsDeCentroDeAyuda
       {paso === "preguntas" && (
         <PasoDePreguntas
           titulo={titulo("Preguntas frecuentes")}
+          preguntas={preguntas}
+          areas={areas}
           consulta={consulta}
           alCambiarConsulta={setConsulta}
           filtro={filtro}
@@ -221,7 +241,7 @@ export function CentroDeAyuda({ conSesion, emailDeSesion }: PropsDeCentroDeAyuda
           {titulo(tipo === "falla" ? "¿Dónde está el problema?" : "¿Sobre qué parte de Eli es tu reclamo?")}
           <p className="mt-2 text-pretty text-texto-2">Elige el área; si no estás seguro, elige Otro.</p>
           <div className="mt-6">
-            <SelectorDeArea elegida={area} alElegir={elegirArea} idDelTitulo={idDelTitulo} />
+            <SelectorDeArea areas={areas} elegida={area} alElegir={elegirArea} idDelTitulo={idDelTitulo} />
           </div>
         </div>
       )}
@@ -233,6 +253,9 @@ export function CentroDeAyuda({ conSesion, emailDeSesion }: PropsDeCentroDeAyuda
           )}
           tipo={tipo}
           area={area}
+          areas={areas}
+          palabras={palabras}
+          preguntas={preguntas}
           alCambiarArea={setArea}
           borrador={borrador}
           alCambiarBorrador={setBorrador}
@@ -279,13 +302,14 @@ function TituloDelPaso({
 /** Arriba de los pasos 2 y 3: "Atrás", el camino elegido y en qué paso va. */
 function EncabezadoDelCamino({
   camino,
-  area,
+  nombreDelArea,
   numeroDePaso,
   totalDePasos,
   alVolver,
 }: {
   camino: string
-  area: AreaDeSoporte | null
+  /** El nombre del área elegida con las palabras del rubro, o `null` si no hay. */
+  nombreDelArea: string | null
   numeroDePaso: number
   totalDePasos: number
   alVolver: () => void
@@ -304,10 +328,10 @@ function EncabezadoDelCamino({
       <div className="flex items-center gap-3">
         <Antetitulo className="flex flex-wrap items-center gap-x-1.5">
           <span>{camino}</span>
-          {area && (
+          {nombreDelArea && (
             <>
               <span aria-hidden="true">·</span>
-              <span>{etiquetaDeArea(area)}</span>
+              <span>{nombreDelArea}</span>
             </>
           )}
           <span aria-hidden="true">·</span>
@@ -327,18 +351,20 @@ function EncabezadoDelCamino({
 
 function PasoDeInicio({
   titulo,
+  preguntas,
   consulta,
   alCambiarConsulta,
   alElegir,
   alEscribirnos,
 }: {
   titulo: ReactNode
+  preguntas: readonly PreguntaFrecuente[]
   consulta: string
   alCambiarConsulta: (consulta: string) => void
   alElegir: (tipo: TipoDeSolicitud) => void
   alEscribirnos: () => void
 }) {
-  const resultados = useMemo(() => buscarPreguntas(consulta), [consulta])
+  const resultados = useMemo(() => buscarPreguntas(consulta, { preguntas }), [consulta, preguntas])
   const buscando = consulta.trim() !== ""
   const prefijo = useId()
 
@@ -433,6 +459,8 @@ function SinResultados({ consulta, alEscribirnos }: { consulta: string; alEscrib
 
 function PasoDePreguntas({
   titulo,
+  preguntas,
+  areas,
   consulta,
   alCambiarConsulta,
   filtro,
@@ -440,23 +468,30 @@ function PasoDePreguntas({
   alEscribirnos,
 }: {
   titulo: ReactNode
+  preguntas: readonly PreguntaFrecuente[]
+  areas: readonly AreaConEtiqueta[]
   consulta: string
   alCambiarConsulta: (consulta: string) => void
   filtro: AreaDeSoporte | null
   alCambiarFiltro: (area: AreaDeSoporte | null) => void
   alEscribirnos: () => void
 }) {
-  const resultados = useMemo(() => buscarPreguntas(consulta, { area: filtro }), [consulta, filtro])
+  const resultados = useMemo(
+    () => buscarPreguntas(consulta, { area: filtro, preguntas }),
+    [consulta, filtro, preguntas]
+  )
 
   // Agrupadas por área, en el orden de las áreas; dentro de cada una, el de la búsqueda.
   const grupos = useMemo(
     () =>
-      AREAS.map((area) => ({
-        area: area.valor,
-        etiqueta: area.etiqueta,
-        preguntas: resultados.filter((pregunta) => pregunta.area === area.valor),
-      })).filter((grupo) => grupo.preguntas.length > 0),
-    [resultados]
+      areas
+        .map((area) => ({
+          area: area.valor,
+          etiqueta: area.etiqueta,
+          preguntas: resultados.filter((pregunta) => pregunta.area === area.valor),
+        }))
+        .filter((grupo) => grupo.preguntas.length > 0),
+    [areas, resultados]
   )
 
   return (
@@ -471,7 +506,7 @@ function PasoDePreguntas({
         className="mt-6"
       />
       <div className="mt-4">
-        <FiltroDeAreas elegida={filtro} alElegir={alCambiarFiltro} />
+        <FiltroDeAreas areas={areas} elegida={filtro} alElegir={alCambiarFiltro} />
       </div>
 
       <div className="mt-8 space-y-8">
@@ -522,6 +557,9 @@ function PasoDeFormulario({
   titulo,
   tipo,
   area,
+  areas,
+  palabras,
+  preguntas,
   alCambiarArea,
   borrador,
   alCambiarBorrador,
@@ -532,6 +570,9 @@ function PasoDeFormulario({
   titulo: ReactNode
   tipo: TipoDeSolicitud
   area: AreaDeSoporte | null
+  areas: readonly AreaConEtiqueta[]
+  palabras: PalabrasDelRubro
+  preguntas: readonly PreguntaFrecuente[]
   alCambiarArea: (area: AreaDeSoporte) => void
   borrador: Borrador
   alCambiarBorrador: (borrador: Borrador) => void
@@ -539,7 +580,7 @@ function PasoDeFormulario({
   emailDeSesion?: string
   alEnviar: (numero: string) => void
 }) {
-  const sugeridas = tipo === "falla" && area ? preguntasParaFallas(area, 3) : []
+  const sugeridas = tipo === "falla" && area ? preguntasParaFallas(area, 3, preguntas) : []
   const idDeSugeridas = useId()
 
   return (
@@ -566,6 +607,8 @@ function PasoDeFormulario({
         <FormularioDeSoporte
           tipo={tipo}
           area={area}
+          areas={areas}
+          palabras={palabras}
           areaEditable={tipo === "consulta"}
           alCambiarArea={alCambiarArea}
           borrador={borrador}

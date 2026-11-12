@@ -79,6 +79,7 @@ export default async function PaginaSoporte() {
           </p>
 
           <div className="mt-10 md:mt-12">
+            {/* Sin `rubro` a propósito: esta página es pública y habla con las palabras neutras. */}
             <CentroDeAyuda conSesion={conSesion} emailDeSesion={session?.user?.email || undefined} />
           </div>
         </div>

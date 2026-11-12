@@ -1,5 +1,16 @@
 import { describe, it, expect } from "vitest"
-import { correosDeSolicitud, esquemaDeContacto, esquemaDeSolicitud, formatearNumeroDeCaso } from "./soporte"
+import {
+  AREAS,
+  areasDelRubro,
+  correosDeSolicitud,
+  ejemploDeAsuntoDeFalla,
+  esquemaDeContacto,
+  esquemaDeSolicitud,
+  etiquetaDeArea,
+  etiquetaDeAreaDelRubro,
+  formatearNumeroDeCaso,
+} from "./soporte"
+import { vocabularioDe } from "./vocabulario"
 
 describe("formatearNumeroDeCaso", () => {
   it.each([
@@ -84,5 +95,50 @@ describe("correosDeSolicitud", () => {
     expect(aSoporte).toMatchObject({ tipo: "Reclamo", area: "Reservas en línea", responderA: "ana@ejemplo.com" })
     expect(aSoporte?.detalle).toContainEqual(["Negocio", "Peluquería (n1)"])
     expect(aSoporte?.detalle).toContainEqual(["Descripción", "Descripción larga"])
+  })
+})
+
+describe("las áreas con las palabras del rubro", () => {
+  const palabrasDe = (rubro: string | null) => vocabularioDe(rubro).palabras
+
+  it("sin rubro, el nombre de siempre", () => {
+    expect(areasDelRubro(palabrasDe(null))).toEqual(AREAS.map((area) => ({ valor: area.valor, etiqueta: area.etiqueta })))
+    expect(etiquetaDeAreaDelRubro("tablero", palabrasDe(null))).toBe("Tablero del día")
+    expect(etiquetaDeAreaDelRubro("clientes", palabrasDe(null))).toBe("Clientes")
+  })
+
+  it("el salón, la barbería y el salón de uñas siguen diciendo Tablero del día y Clientes", () => {
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "salud", "fitness", "otro"]) {
+      expect(areasDelRubro(palabrasDe(rubro)), rubro).toEqual(areasDelRubro(palabrasDe(null)))
+    }
+  })
+
+  it("la clínica dental: Sala de espera y Pacientes; el resto, igual", () => {
+    const etiquetas = Object.fromEntries(areasDelRubro(palabrasDe("odontologia")).map((area) => [area.valor, area.etiqueta]))
+    expect(etiquetas).toEqual({
+      agenda: "Agenda",
+      reservas: "Reservas en línea",
+      tablero: "Sala de espera",
+      clientes: "Pacientes",
+      reportes: "Reportes",
+      equipo: "Equipo",
+      "cuenta-y-plan": "Cuenta y plan",
+      otro: "Otro",
+    })
+  })
+
+  it("tiene las mismas áreas, en el mismo orden, que las de siempre", () => {
+    expect(areasDelRubro(palabrasDe("odontologia")).map((area) => area.valor)).toEqual(AREAS.map((area) => area.valor))
+  })
+
+  it("los correos a soporte siguen con el nombre fijo del área, sea cual sea el rubro", () => {
+    expect(etiquetaDeArea("tablero")).toBe("Tablero del día")
+    expect(etiquetaDeArea("clientes")).toBe("Clientes")
+  })
+
+  it("el ejemplo del asunto de una falla nombra el servicio del rubro, con su género", () => {
+    expect(ejemploDeAsuntoDeFalla(palabrasDe(null))).toBe("Ej.: No se guarda un servicio nuevo")
+    expect(ejemploDeAsuntoDeFalla(palabrasDe("salon"))).toBe("Ej.: No se guarda un servicio nuevo")
+    expect(ejemploDeAsuntoDeFalla(palabrasDe("odontologia"))).toBe("Ej.: No se guarda una prestación nueva")
   })
 })
