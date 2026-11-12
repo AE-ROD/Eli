@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { Clock, Timer } from "lucide-react"
+import { Clock, MapPin, Timer } from "lucide-react"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { frasesDelPanel } from "@/components/panel/frases-del-panel"
@@ -24,6 +24,11 @@ export interface CitaEnTarjeta {
   porConfirmar?: boolean
   /** Sin profesional asignado habiendo equipo (#103): ocupa la hora de todos, y se marca para asignarla. */
   sinProfesional?: boolean
+  /**
+   * El nombre de la sede donde se atiende (etapa 9): sólo se pasa con varias
+   * sedes activas. Sin él, la tarjeta es la de siempre.
+   */
+  sede?: string
 }
 
 interface PropsDeTarjetaCita {
@@ -61,6 +66,22 @@ function MarcaSinProfesional() {
   return (
     <span className="inline-flex h-5 shrink-0 items-center rounded-full border border-dashed border-navy/40 bg-naranja-suave px-2 text-[11px] leading-none font-medium whitespace-nowrap text-navy">
       {tarjetaDeCita.sinProfesional}
+    </span>
+  )
+}
+
+/**
+ * La sede, como insignia discreta junto a la hora: el nombre con un pin, en
+ * navy sobre blanco (pasa el contraste) y con borde, para distinguirse de los
+ * estados. El lector de pantalla oye "Sede Centro"; el pin es decoración. Un
+ * nombre largo se corta con "…".
+ */
+function MarcaDeSede({ nombre }: { nombre: string }) {
+  return (
+    <span className="inline-flex h-5 max-w-32 min-w-0 items-center gap-1 rounded-full bg-tarjeta px-2 text-[11px] leading-none font-medium text-navy ring-1 ring-inset ring-borde">
+      <MapPin className="size-3 shrink-0" aria-hidden="true" strokeWidth={1.75} />
+      <span className="sr-only">Sede </span>
+      <span className="truncate">{nombre}</span>
     </span>
   )
 }
@@ -135,6 +156,7 @@ export function TarjetaCita({ cita, compacta = false, onClick }: PropsDeTarjetaC
         </span>
         <span className="flex shrink-0 flex-col items-end gap-1">
           <span className="text-sm font-medium tabular-nums">{cita.horaInicio}</span>
+          {cita.sede && <MarcaDeSede nombre={cita.sede} />}
           <EstadoDeLaCita estado={cita.estado} porConfirmar={cita.porConfirmar} />
           {cita.sinProfesional && <MarcaSinProfesional />}
         </span>
@@ -173,6 +195,13 @@ export function TarjetaCita({ cita, compacta = false, onClick }: PropsDeTarjetaC
           <Timer className="size-4" aria-hidden="true" strokeWidth={1.75} />
           {formatearDuracion(cita.duracion)}
         </span>
+        {cita.sede && (
+          <span className="flex min-w-0 items-center gap-1.5">
+            <MapPin className="size-4 shrink-0" aria-hidden="true" strokeWidth={1.75} />
+            <span className="sr-only">Sede </span>
+            <span className="truncate">{cita.sede}</span>
+          </span>
+        )}
       </span>
 
       {cita.notas && (

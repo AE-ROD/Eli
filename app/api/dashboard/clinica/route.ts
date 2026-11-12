@@ -54,21 +54,23 @@ export async function GET() {
   if (!actor) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
   if (!esClinicaDental(actor)) return NextResponse.json({ error: "No encontrado" }, { status: 404 })
 
-  const negocio = await prisma.business.findUnique({ where: { id: actor.businessId }, select: { timezone: true } })
+  // La zona y los sillones no dependen uno del otro: una sola ida a la base en vez de dos seguidas (esta ruta se pide cada minuto).
+  const [negocio, sillones] = await Promise.all([
+    prisma.business.findUnique({ where: { id: actor.businessId }, select: { timezone: true } }),
+    veSillones(actor)
+      ? prisma.sillon.findMany({
+          where: whereDeSillones(actor, { activo: true }),
+          select: { id: true, nombre: true, orden: true },
+          orderBy: ORDEN_DE_SILLONES,
+          take: TOPE_DE_SILLONES,
+        })
+      : Promise.resolve([]),
+  ])
   const zona = zonaDelNegocio(negocio?.timezone)
   const ahora = new Date()
   const hoy = fechaYMinutosEn(ahora, zona).fecha
   const dia = rangoDelDiaEn(hoy, zona)
   const conMontos = puedeVerIngresosDelNegocio(actor)
-
-  const sillones = veSillones(actor)
-    ? await prisma.sillon.findMany({
-        where: whereDeSillones(actor, { activo: true }),
-        select: { id: true, nombre: true, orden: true },
-        orderBy: ORDEN_DE_SILLONES,
-        take: TOPE_DE_SILLONES,
-      })
-    : []
 
   const [citas, enEspera, etapas] = await Promise.all([
     sillones.length > 0

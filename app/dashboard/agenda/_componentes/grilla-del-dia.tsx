@@ -38,6 +38,8 @@ import {
   type VerPor,
 } from "../_grilla-del-dia"
 import { caeEnElDia, esHoyEn, horaEn } from "../_hora-del-negocio"
+import { sedeParaMostrar } from "../_sedes"
+import { useSedesDeLaAgenda } from "./sedes-de-la-agenda"
 
 /** El ancho de la columna de las horas: la clase `w-14`. */
 const ANCHO_DE_LAS_HORAS = 56
@@ -411,6 +413,9 @@ function BloqueDeCita({ cita, zona, desde, hasta, lugar, verPor, elegida, sinPro
   // "Sin paciente", el estado y "sin odontólogo": la grilla es de la clínica dental.
   const { palabras } = vocabularioDe(useRubroDelPanel())
   const frases = frasesDeLaAgenda(palabras)
+  // Etapa 9: con varias sedes la hora dice la suya; con una o ninguna, la grilla de siempre.
+  const { modo: modoDeSedes } = useSedesDeLaAgenda()
+  const sede = sedeParaMostrar(cita, modoDeSedes)
   const posicion = posicionDelBloque(tramoDeCita(cita, zona), desde, hasta)
   if (!posicion) return null
 
@@ -434,6 +439,7 @@ function BloqueDeCita({ cita, zona, desde, hasta, lugar, verPor, elegida, sinPro
     cita.title,
     estado.texto,
     otraColumna,
+    sede ? frases.sede.enNombreAccesible(sede) : null,
     cita.primeraVez ? frases.grilla.primeraVez : null,
     sinProfesional ? frases.profesional.sinEnMedioDeFrase : null,
   ]
@@ -489,6 +495,7 @@ function BloqueDeCita({ cita, zona, desde, hasta, lugar, verPor, elegida, sinPro
           {/* El estado en palabras va primero: en una columna angosta, lo que se corta es el motivo. */}
           <span className="block truncate text-xs leading-4">
             <span className="font-medium">{estado.texto}</span> · {cita.title}
+            {sede && ` · ${sede}`}
           </span>
         </>
       )}

@@ -298,7 +298,7 @@ export function GestionDeCita({ slug, token, rubro = null }: { slug: string; tok
 const AFUERA = { target: "_blank", rel: "noopener noreferrer" } as const
 
 /** "Cómo llegar" a la sede de la cita, en Google Maps y en Waze. El nombre de la sede va en el texto para el lector de pantalla. */
-function ComoLlegar({ sede, mapas }: { sede: string; mapas: { googleMaps: string; waze: string } }) {
+export function ComoLlegar({ sede, mapas }: { sede: string; mapas: { googleMaps: string; waze: string } }) {
   return (
     <div className="mt-4 flex flex-wrap gap-2">
       <Boton
@@ -323,7 +323,7 @@ function ComoLlegar({ sede, mapas }: { sede: string; mapas: { googleMaps: string
   )
 }
 
-function ResumenDeLaCita({
+export function ResumenDeLaCita({
   cita,
   sinServicio = false,
   terminoDelServicio,

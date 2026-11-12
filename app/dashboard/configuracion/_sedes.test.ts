@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { Sede } from "./_datos"
 import {
-  armarSedes,
   choquesConOtrasSedes,
   choquesDelCuerpo,
   cupoDeSedes,
@@ -201,6 +200,12 @@ describe("franjaNueva", () => {
     expect(franjaNueva([franja("09:00", "21:30")])).toEqual({ startTime: "22:30", endTime: "23:55" })
   })
 
+  it("un día acepta como mucho 4 franjas (lo que acepta el servidor): con 4, ya no se agrega otra", () => {
+    const cuatro = [franja("06:00", "07:00"), franja("08:00", "09:00"), franja("10:00", "11:00"), franja("12:00", "13:00")]
+    expect(franjaNueva(cuatro.slice(0, 3))).toEqual({ startTime: "14:00", endTime: "17:00" })
+    expect(franjaNueva(cuatro)).toBeNull()
+  })
+
   it("si ya no queda lugar en el día, null", () => {
     expect(franjaNueva([franja("09:00", "22:30")])).toBeNull()
     expect(franjaNueva([franja("00:00", "23:55")])).toBeNull()
@@ -352,41 +357,6 @@ describe("choques que dice el servidor", () => {
         sedes
       )
     ).toEqual(["Lunes: con «Providencia»", "Domingo: con «Las Condes»"])
-  })
-})
-
-describe("armarSedes (de la base a lo que ve la pantalla)", () => {
-  const filas = [
-    { id: "b", nombre: "Ñuñoa", direccion: "Irarrázaval 3000", comuna: "Ñuñoa", telefono: "+56912345678", orden: 1, activo: true },
-    { id: "a", nombre: "Providencia", direccion: "Av. Providencia 1234", comuna: "Providencia", telefono: null, orden: 0, activo: false },
-  ]
-  const horarios = [
-    { sedeId: "a", dayOfWeek: 1, startTime: "09:00", endTime: "12:00" },
-    { sedeId: "a", dayOfWeek: 1, startTime: "12:00", endTime: "13:00" },
-    { sedeId: "a", dayOfWeek: 0, startTime: "10:00", endTime: "12:00" },
-    { sedeId: "b", dayOfWeek: 2, startTime: "14:00", endTime: "18:00" },
-    { sedeId: null, dayOfWeek: 3, startTime: "09:00", endTime: "18:00" },
-    { sedeId: "otra", dayOfWeek: 4, startTime: "09:00", endTime: "18:00" },
-  ]
-
-  it("las deja en el orden de la lista, con el horario por día de lunes a domingo y las franjas fusionadas", () => {
-    const sedes = armarSedes(filas, horarios, new Map([["b", 3]]))
-    expect(sedes.map((s) => s.id)).toEqual(["a", "b"])
-    expect(sedes[0].horarios).toEqual([
-      { dayOfWeek: 1, franjas: [franja("09:00", "13:00")] },
-      { dayOfWeek: 0, franjas: [franja("10:00", "12:00")] },
-    ])
-    expect(sedes[1].horarios).toEqual([{ dayOfWeek: 2, franjas: [franja("14:00", "18:00")] }])
-  })
-
-  it("cuenta las horas por delante de cada sede; sin dato, cero", () => {
-    const sedes = armarSedes(filas, horarios, new Map([["b", 3]]))
-    expect(sedes.map((s) => [s.id, s.horasFuturas])).toEqual([["a", 0], ["b", 3]])
-  })
-
-  it("el horario sin sede o de otra sede no se cuela", () => {
-    const sedes = armarSedes(filas, horarios, new Map())
-    expect(sedes.flatMap((s) => s.horarios.map((dia) => dia.dayOfWeek)).sort()).toEqual([0, 1, 2])
   })
 })
 

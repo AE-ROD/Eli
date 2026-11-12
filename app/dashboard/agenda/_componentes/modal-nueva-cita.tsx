@@ -17,6 +17,7 @@ import {
   buscarClientes,
   idsDeServiciosElegidos,
   leerCatalogoDeLaCita,
+  leerHorarioDeAtencion,
   leerProfesionales,
   opcionesDeSillon,
   precioDeLosServicios,
@@ -29,6 +30,9 @@ import {
   type SillonDeLaAgenda,
 } from "../_datos"
 import { frasesDeLaAgenda } from "../_frases"
+import { franjasDeLaSedeEseDia, type SedeDeLaAgenda } from "../_sedes"
+import { SelectorDeSede } from "./selector-de-sede"
+import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import { Aviso } from "@/components/panel/aviso"
 import type { Advertencia } from "@/lib/mover-cita"
 import { MAX_SERVICIOS_POR_RESERVA, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
@@ -73,6 +77,12 @@ interface PropsDeModalNuevaCita {
    */
   sillones?: SillonDeLaAgenda[] | null
   /**
+   * Etapa 9: las sedes activas, para elegir dónde se atiende. Sólo con varias
+   * sedes (lo decide el servidor, `modoDeSedes`): `null` (o sin dato) en
+   * cualquier otro caso, y el modal es el de siempre, sin selector.
+   */
+  sedes?: SedeDeLaAgenda[] | null
+  /**
    * Lo que el servidor advirtió del primer envío (choque, bloqueo, fuera de
    * horario). Con advertencias, el botón pasa a "Guardar igual": como al
    * mover una cita. Cambiar un campo las descarta (lo hace la página).
@@ -92,6 +102,7 @@ export function ModalNuevaCita({
   aviso,
   avisoDeSillonOcupado = false,
   sillones = null,
+  sedes = null,
   advertencias,
   onGuardarIgual,
   puedeAsignarProfesional,
@@ -125,6 +136,7 @@ export function ModalNuevaCita({
   const idDelCatalogo = `${idBase}-catalogo`
   const idDeHoraInicio = `${idBase}-hora-inicio`
   const idDeHoraFin = `${idBase}-hora-fin`
+  const idDelHorarioDeLaSede = `${idBase}-horario-de-la-sede`
 
   useEffect(() => {
     if (!puedeAsignarProfesional) return
@@ -136,6 +148,32 @@ export function ModalNuevaCita({
       else setAvisoDeEquipo(resultado.error)
     })
   }, [puedeAsignarProfesional])
+
+  // Con varias sedes: el horario de la sede elegida, para decir debajo de la
+  // hora cuándo atiende ese día. Si no carga, se dice; el servidor igual avisa
+  // al guardar si la hora cae fuera de su horario.
+  const [horarioDeLaSede, setHorarioDeLaSede] = useState<{ sedeId: string; franjas: FranjaDelDia[] | null } | null>(null)
+  const sedeElegida = sedes ? (form.sedeId ?? "") : ""
+  useEffect(() => {
+    if (!sedeElegida) return
+    let vigente = true
+    leerHorarioDeAtencion(sedeElegida).then((resultado) => {
+      if (vigente) setHorarioDeLaSede({ sedeId: sedeElegida, franjas: resultado.ok ? resultado.datos : null })
+    })
+    return () => {
+      vigente = false
+    }
+  }, [sedeElegida])
+  // Lo que llega tarde de otra sede no se muestra en ésta.
+  const horarioDeLaSedeElegida = sedeElegida && horarioDeLaSede?.sedeId === sedeElegida ? horarioDeLaSede : null
+  const avisoDelHorarioDeLaSede = !sedeElegida
+    ? frases.sede.ayuda
+    : horarioDeLaSedeElegida
+      ? horarioDeLaSedeElegida.franjas
+        ? frases.sede.horarioEseDia(franjasDeLaSedeEseDia(horarioDeLaSedeElegida.franjas, form.fecha))
+        : frases.sede.horarioNoCargo
+      : // Mientras llega el horario de la sede recién elegida, la ayuda de antes.
+        frases.sede.ayuda
 
   // El catálogo (#159). Si no carga, queda el texto libre, con el aviso.
   useEffect(() => {
@@ -357,6 +395,18 @@ export function ModalNuevaCita({
           />
         )}
 
+        {/* Con varias sedes, dónde se atiende: antes de la fecha y la hora, que dependen de ella. */}
+        {sedes && (
+          <SelectorDeSede
+            etiqueta={frases.sede.etiqueta}
+            elegir={frases.sede.elegir}
+            sedes={sedes}
+            value={form.sedeId ?? ""}
+            onChange={(sedeId) => onCambiarCampo("sedeId", sedeId)}
+            idDeLaAyuda={idDelHorarioDeLaSede}
+          />
+        )}
+
         <CampoFormulario
           etiqueta="Fecha"
           type="date"
@@ -395,6 +445,13 @@ export function ModalNuevaCita({
             />
           </div>
         </div>
+
+        {/* El horario de la sede elegida ese día; se anuncia al cambiar de sede o de fecha. */}
+        {sedes && (
+          <p id={idDelHorarioDeLaSede} aria-live="polite" className="-mt-2 text-xs text-texto-2">
+            {avisoDelHorarioDeLaSede}
+          </p>
+        )}
 
         <CampoFormulario
           etiqueta="Precio (opcional)"

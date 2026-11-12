@@ -9,9 +9,17 @@ import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import { aQuienBloquea, citaPorConfirmar, destacaSinProfesional, nombreDeCliente, type Bloqueo, type Cita } from "../_datos"
 import { citasPorHora, rangoDeHoras, recortarAHoras, tramoDeCita, tramoEnElDia, tramosDeFranjas } from "../_disposicion"
 import { caeEnElDia, horaEn } from "../_hora-del-negocio"
+import { sedeParaMostrar } from "../_sedes"
+import { useSedesDeLaAgenda } from "./sedes-de-la-agenda"
 import { useZonaDelNegocio } from "./zona-del-negocio"
 
-function paraTarjeta(cita: Cita, zona: string, conProfesionales: boolean, palabraCliente: string): CitaEnTarjeta {
+function paraTarjeta(
+  cita: Cita,
+  zona: string,
+  conProfesionales: boolean,
+  palabraCliente: string,
+  sede: string | null
+): CitaEnTarjeta {
   const estado = (ESTADOS_DE_CITA as readonly string[]).includes(cita.status)
     ? (cita.status as CitaEnTarjeta["estado"])
     : "pendiente"
@@ -26,6 +34,8 @@ function paraTarjeta(cita: Cita, zona: string, conProfesionales: boolean, palabr
     notas: cita.notes ?? undefined,
     porConfirmar: citaPorConfirmar(cita),
     sinProfesional: destacaSinProfesional(cita, conProfesionales),
+    // Etapa 9: sólo con varias sedes; con una o ninguna, la tarjeta de siempre.
+    ...(sede && { sede }),
   }
 }
 
@@ -59,6 +69,7 @@ export function VistaDia({
   destacarSinProfesional = false,
 }: PropsDeVistaDia) {
   const zona = useZonaDelNegocio()
+  const { modo: modoDeSedes } = useSedesDeLaAgenda()
   // "Sin paciente" en una clínica dental; "Todo el salón" en un salón.
   const { palabras } = vocabularioDe(useRubroDelPanel())
   // El día y las horas, en la zona del negocio (#99).
@@ -106,7 +117,12 @@ export function VistaDia({
                   </button>
                 ))}
                 {citasEnHora.map((cita) => (
-                  <TarjetaCita key={cita.id} cita={paraTarjeta(cita, zona, destacarSinProfesional, palabras.cliente.singular)} compacta onClick={() => onSeleccionar(cita)} />
+                  <TarjetaCita
+                    key={cita.id}
+                    cita={paraTarjeta(cita, zona, destacarSinProfesional, palabras.cliente.singular, sedeParaMostrar(cita, modoDeSedes))}
+                    compacta
+                    onClick={() => onSeleccionar(cita)}
+                  />
                 ))}
               </div>
             ) : cubierta ? (

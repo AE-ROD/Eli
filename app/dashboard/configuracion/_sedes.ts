@@ -1,7 +1,7 @@
 /**
  * Lo que la sección «Sedes y horarios» calcula sin pantalla (plan
- * Independiente, etapa 9): leer una sede como la manda el servidor, armarla
- * desde la base, la semana que se edita (días con una o más franjas), el
+ * Independiente, etapa 9): leer una sede como la manda el servidor (la API y
+ * `page.tsx` mandan la misma forma), la semana que se edita (días con una o más franjas), el
  * choque de una sede con las otras mientras se edita, el cupo de sedes
  * activas, el horario de cada sede dicho en palabras y la revisión de los
  * datos de una sede antes de enviarlos.
@@ -12,6 +12,7 @@
  */
 
 import { fusionarFranjas } from "@/lib/horario-de-atencion"
+import { FRANJAS_MAXIMAS_POR_DIA } from "@/lib/grilla-de-sede"
 import { franjaValida, horaAMinutos, type FranjaHorario } from "@/lib/horario-dia"
 import { choquesEntreSedes, MAX_SEDES, ordenarSedes, resumenDeHorarioPorSede, type FranjaDeSede } from "@/lib/sedes"
 import { aE164Chile, MENSAJE_DE_TELEFONO_ILEGIBLE } from "@/lib/telefono"
@@ -201,10 +202,13 @@ const comoHora = (minutos: number) =>
 /**
  * La franja que se propone al agregar otra a un día: la primera, de 09:00 a
  * 18:00; las siguientes, una hora después de que termina la última, por tres
- * horas (sin pasar de las 23:55). `null` si ya no queda lugar en el día.
+ * horas (sin pasar de las 23:55). `null` si ya no se puede agregar otra: el día
+ * ya tiene las que acepta el servidor (`FRANJAS_MAXIMAS_POR_DIA`) o no queda
+ * lugar en el día.
  */
 export function franjaNueva(delDia: readonly FranjaHorario[]): FranjaHorario | null {
   if (delDia.length === 0) return { ...FRANJA_POR_DEFECTO }
+  if (delDia.length >= FRANJAS_MAXIMAS_POR_DIA) return null
   const ultimoFin = Math.max(...delDia.filter(franjaValida).map((franja) => horaAMinutos(franja.endTime)))
   if (!Number.isFinite(ultimoFin)) return { ...FRANJA_POR_DEFECTO }
   const inicio = ultimoFin + PAUSA_ENTRE_FRANJAS_MIN
@@ -349,48 +353,7 @@ export function textosDeChoquesDelServidor(
   return choques.map((choque) => `${DIAS[choque.dayOfWeek] ?? "Un día"}: con «${nombres.get(choque.conSede) ?? choque.conSede}»`)
 }
 
-// ─── De la base y del servidor a una `Sede` ──────────────────────────────────
-
-/** Una sede como la guarda la base (`Sede` de Prisma, sin las fechas). */
-export interface FilaDeSede {
-  id: string
-  nombre: string
-  direccion: string
-  comuna: string
-  telefono: string | null
-  orden: number
-  activo: boolean
-}
-
-/** Una fila de `WorkSchedule` con sede. */
-export interface FilaDeHorarioConSede {
-  sedeId: string | null
-  dayOfWeek: number
-  startTime: string
-  endTime: string
-}
-
-/**
- * Las sedes que lee `page.tsx` en el servidor, armadas como las manda la API
- * (`Sede`): cada una con su horario por día (franjas fusionadas) y con cuántas
- * horas agendadas tiene por delante. En el orden de la lista. Las filas de
- * horario de otra sede o sin sede no cuentan.
- */
-export function armarSedes(
-  sedes: readonly FilaDeSede[],
-  filasDeHorario: readonly FilaDeHorarioConSede[],
-  horasFuturasPorSede: ReadonlyMap<string, number>
-): Sede[] {
-  const armadas = sedes.map((fila): Sede => {
-    const propias = filasDeHorario.filter((otra) => otra.sedeId === fila.id)
-    const horarios = SEMANA_DE_LUNES_A_DOMINGO.flatMap((dayOfWeek) => {
-      const franjas = fusionarFranjas(propias.filter((otra) => otra.dayOfWeek === dayOfWeek))
-      return franjas.length > 0 ? [{ dayOfWeek, franjas }] : []
-    })
-    return { ...fila, horarios, horasFuturas: horasFuturasPorSede.get(fila.id) ?? 0 }
-  })
-  return ordenarSedes(armadas)
-}
+// ─── Del servidor a una `Sede` ───────────────────────────────────────────────
 
 const esObjeto = (valor: unknown): valor is Record<string, unknown> => typeof valor === "object" && valor !== null
 const esHora = (valor: unknown): valor is string => typeof valor === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(valor)

@@ -67,7 +67,7 @@ export function EditorDeHorarioDeSede({ sede, sedes, alGuardar, alCambiarPendien
   const [guardado, setGuardado] = useState(false)
   const [rechazo, setRechazo] = useState<{ mensaje: string; choques: ChoqueDelServidor[] } | null>(null)
   // Los elementos a los que debe ir el foco después del próximo dibujo: el primero que exista (una franja nueva, el botón que sobrevive).
-  const [pedirFoco, setPedirFoco] = useState<string[] | null>(null)
+  const pedirFoco = useRef<string[] | null>(null)
 
   const pendiente = huboCambios(guardada, semana)
   const problemas = problemasDeLaSemana(semana)
@@ -84,11 +84,13 @@ export function EditorDeHorarioDeSede({ sede, sedes, alGuardar, alCambiarPendien
   }, [alCambiarPendiente])
   useEffect(() => () => avisarAlIrse.current(false), [])
 
+  // Corre después de cada dibujo, ya con la franja nueva (o sin la quitada) en el DOM.
   useEffect(() => {
-    if (!pedirFoco) return
-    pedirFoco.map((id) => document.getElementById(id)).find((elemento) => elemento !== null)?.focus()
-    setPedirFoco(null)
-  }, [pedirFoco])
+    const candidatos = pedirFoco.current
+    if (!candidatos) return
+    pedirFoco.current = null
+    candidatos.map((id) => document.getElementById(id)).find((elemento) => elemento !== null)?.focus()
+  })
 
   const idDelInterruptor = (dia: number) => `${base}-dia-${dia}`
   const idDelDesde = (dia: number, indice: number) => `${base}-dia-${dia}-franja-${indice}`
@@ -109,15 +111,14 @@ export function EditorDeHorarioDeSede({ sede, sedes, alGuardar, alCambiarPendien
     const nueva = franjaNueva(dia.franjas)
     if (!nueva) return
     cambiarFranjas(dia.dayOfWeek, (franjas) => [...franjas, nueva])
-    setPedirFoco([idDelDesde(dia.dayOfWeek, dia.franjas.length)])
+    pedirFoco.current = [idDelDesde(dia.dayOfWeek, dia.franjas.length)]
   }
 
   const quitarFranja = (dia: DiaDeLaSemana, indice: number) => {
     cambiarFranjas(dia.dayOfWeek, (franjas) => franjas.filter((_, i) => i !== indice))
     // La franja que tenía el foco desaparece: pasa al botón de agregar, o al interruptor si el día queda apagado.
-    setPedirFoco(
+    pedirFoco.current =
       dia.franjas.length > 1 ? [idDeAgregar(dia.dayOfWeek), idDelInterruptor(dia.dayOfWeek)] : [idDelInterruptor(dia.dayOfWeek)]
-    )
   }
 
   const guardar = async () => {

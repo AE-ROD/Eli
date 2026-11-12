@@ -56,6 +56,8 @@ import { ModalBloquearHorario } from "./_componentes/modal-bloquear-horario"
 import { ModalBloqueo } from "./_componentes/modal-bloqueo"
 import { ListaDeEsperaDelDia } from "./_componentes/lista-de-espera-del-dia"
 import { useZonaDelNegocio } from "./_componentes/zona-del-negocio"
+import { useSedesDeLaAgenda } from "./_componentes/sedes-de-la-agenda"
+import { sedeDelBorrador } from "./_sedes"
 import { useEsEscritorio } from "./_componentes/usar-escritorio"
 import { frasesDeLaAgenda } from "./_frases"
 import { hoyEn } from "./_hora-del-negocio"
@@ -77,6 +79,12 @@ export default function PaginaAgenda() {
   // de cada cita y la alerta de alergias. En otro rubro, la agenda de siempre.
   const clinica = esClinicaDental(actor)
   const conSillones = clinica && veSillones(actor)
+
+  // Etapa 9: con varias sedes cada hora dice la suya y "Nueva cita" pide la sede.
+  // El servidor decide el modo y trae las sedes activas (layout); con una sola
+  // sede o ninguna, la agenda es la de siempre.
+  const { modo: modoDeSedes, sedes } = useSedesDeLaAgenda()
+  const conVariasSedes = modoDeSedes === "varias"
 
   // "Hoy" es el del negocio, no el del navegador (#99).
   const zona = useZonaDelNegocio()
@@ -233,7 +241,8 @@ export default function PaginaAgenda() {
       ? { ...citaEnBlanco(fecha), clienteId: cliente.id, clienteNombre: cliente.nombre }
       : citaEnBlanco(fecha)
     // En la clínica, el borrador lleva el sillón (vacío: sin sillón); en otro rubro, ni la clave.
-    setNuevaCita(conSillones ? { ...borrador, sillonId: "" } : borrador)
+    // Con varias sedes, la sede (vacía: todavía sin elegir); con una o ninguna, ni la clave.
+    setNuevaCita({ ...(conSillones ? { ...borrador, sillonId: "" } : borrador), ...sedeDelBorrador(modoDeSedes) })
     setModalAbierto(true)
   }
 
@@ -424,6 +433,7 @@ export default function PaginaAgenda() {
             aviso={avisoDelModal}
             avisoDeSillonOcupado={sillonOcupadoEnElModal}
             sillones={conSillones ? sillones : null}
+            sedes={conVariasSedes ? sedes : null}
             advertencias={advertenciasDeNuevaCita}
             onGuardarIgual={() => guardarNuevaCita(true)}
             puedeAsignarProfesional={puedeAsignarProfesional}

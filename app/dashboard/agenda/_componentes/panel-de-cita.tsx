@@ -43,8 +43,10 @@ import {
   type SillonDeLaCita,
 } from "../_datos"
 import { frasesDeLaAgenda } from "../_frases"
+import { sedeParaMostrar } from "../_sedes"
 import { AsignarSillon } from "./asignar-sillon"
 import { estiloDeEstado } from "./estados-de-cita"
+import { useSedesDeLaAgenda } from "./sedes-de-la-agenda"
 import { useAhora } from "./usar-ahora"
 import { useZonaDelNegocio } from "./zona-del-negocio"
 import { useEsEscritorio } from "./usar-escritorio"
@@ -116,6 +118,8 @@ export function PanelDeCita({
   const escritorio = useEsEscritorio()
   // El día y las horas de la cita, en la zona del negocio (#99).
   const zona = useZonaDelNegocio()
+  // Etapa 9: con varias sedes la ficha dice dónde se atiende; con una o ninguna, la de siempre.
+  const sede = sedeParaMostrar(cita, useSedesDeLaAgenda().modo)
   const reactiva = puedeReactivarCita(actorDeSesion(sesion))
   // Por confirmar tras faltas (#84): la confirman o la cancelan dueña y
   // encargado. En una por confirmar, al profesional el servidor le responde
@@ -322,6 +326,7 @@ export function PanelDeCita({
             </span>
           </Dato>
           <Dato termino="Duración">{formatearDuracion(duracion)}</Dato>
+          {sede && <Dato termino={frases.sede.etiqueta}>{sede}</Dato>}
           {(profesional || sinProfesional) && (
             <Dato termino={frases.profesional.etiqueta}>{profesional ?? "Sin asignar"}</Dato>
           )}

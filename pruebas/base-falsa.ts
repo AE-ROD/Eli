@@ -48,6 +48,8 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     password: "",
     correosDesactivados: false,
     sesionesValidasDesde: null,
+    // La foto de la cuenta (etapa 9, extra f): sin foto hasta que la persona la sube. Sin CHECK en la base.
+    fotoUrl: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),

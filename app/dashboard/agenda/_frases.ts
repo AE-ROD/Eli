@@ -188,6 +188,8 @@ export function frasesDeLaAgenda(palabras: PalabrasDelRubro) {
         franjas.length === 0
           ? "Esta sede no atiende ese día."
           : `Atiende ese día de ${enumerar(franjas.map((franja) => `${franja.startTime} a ${franja.endTime}`))}.`,
+      /** Debajo de la hora del modal mientras no se elige sede: por qué hay que elegirla primero. */
+      ayuda: "Cada sede tiene su horario: elige la sede para ver cuándo atiende.",
       /** Si el horario de la sede no cargó: no se avisa nada de horas, sólo se dice. */
       horarioNoCargo: "No se pudo cargar el horario de la sede.",
     },

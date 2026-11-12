@@ -62,6 +62,14 @@ export interface Cita {
   sillon?: SillonDeLaCita | null
   /** Clínica dental: el paciente viene por primera vez. */
   primeraVez?: boolean
+  /** Etapa 9: la sede donde se atiende (`null`: la hora no lleva sede). La agenda la muestra sólo con varias sedes. */
+  sede?: SedeDeLaCita | null
+}
+
+/** La sede de una cita, como viene en la lista y en el detalle: sólo su id y su nombre. */
+export interface SedeDeLaCita {
+  id: string
+  nombre: string
 }
 
 /** El sillón de una cita, como viene en la lista y en el detalle. */
@@ -133,6 +141,11 @@ export interface DatosDeNuevaCita {
    * clínica no está, y la cita se crea como siempre, sin la clave.
    */
   sillonId?: string
+  /**
+   * Etapa 9: la sede elegida ("" es todavía ninguna). Sólo está con varias
+   * sedes activas; si no, la clave no existe y la hora se crea como siempre.
+   */
+  sedeId?: string
 }
 
 /**
@@ -461,9 +474,14 @@ export async function reactivarCita(
   return leido.tipo === "guardada" ? { tipo: "lista" } : leido
 }
 
-/** El horario de atención del negocio, para que la agenda dibuje esas horas. */
-export async function leerHorarioDeAtencion(): Promise<Resultado<FranjaDelDia[]>> {
-  return pedir<FranjaDelDia[]>("/api/citas/horario-de-atencion", "No se pudo cargar el horario de atención")
+/**
+ * El horario de atención del negocio, para que la agenda dibuje esas horas.
+ * Con `sedeId` (varias sedes), el de esa sede: lo que el modal de nueva hora
+ * dice al elegirla.
+ */
+export async function leerHorarioDeAtencion(sedeId?: string): Promise<Resultado<FranjaDelDia[]>> {
+  const consulta = sedeId ? `?sedeId=${encodeURIComponent(sedeId)}` : ""
+  return pedir<FranjaDelDia[]>(`/api/citas/horario-de-atencion${consulta}`, "No se pudo cargar el horario de atención")
 }
 
 /**
@@ -502,6 +520,8 @@ export async function crearCita(
       memberId: datos.memberId || null,
       // Clínica dental: el sillón, si se eligió uno. Fuera de una clínica la clave no va.
       ...(datos.sillonId !== undefined && { sillonId: datos.sillonId || null }),
+      // Varias sedes: la sede elegida. Sin varias, la clave no va y la hora se crea como siempre.
+      ...(datos.sedeId !== undefined && { sedeId: datos.sedeId || null }),
       ...(opciones.confirmar && { confirmarAdvertencias: true }),
     })
   )

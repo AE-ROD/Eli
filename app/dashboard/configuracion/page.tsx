@@ -23,7 +23,6 @@ import { SeccionNombreDelNegocio } from "./_componentes/seccion-nombre-del-negoc
 import { SeccionZonaHoraria } from "./_componentes/seccion-zona-horaria"
 import { leerLaboratorios } from "@/lib/protesis-servidor"
 import { contarEnviosDelMes } from "@/lib/envios-a-clientes"
-import { ESTADOS_QUE_LIBERAN } from "@/lib/ocupacion"
 import {
   apareceEnLaPagina,
   colorDelNegocio,
@@ -56,56 +55,17 @@ import {
   puedeMarcarServicioComoUrgencia,
   puedeVerMensajesAClientes,
   whereDeProductos,
-  whereDeSedes,
   whereDeSillones,
-  type Actor,
 } from "@/lib/permisos"
 import { planConocido } from "@/lib/planes"
 import { formatearProducto } from "@/lib/productos"
+import { leerSedes } from "@/lib/sedes-servidor"
 import { ORDEN_DE_SILLONES, SELECCION_DE_SILLON } from "@/lib/sillones"
 import { mostrarTelefono } from "@/lib/telefono"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { zonaVigente } from "@/lib/zonas-de-chile"
-import type { Sede } from "./_datos"
 import { frasesDeConfiguracion } from "./_frases"
-import { armarSedes } from "./_sedes"
-
-/**
- * Las sedes del negocio de la sesión (`whereDeSedes`: nunca las de otro) con su
- * horario por día y las horas agendadas que tiene cada una por delante (las que
- * ocupan su horario, de ahora en adelante). Sólo la pide quien gestiona las
- * sedes; el horario y las citas se filtran por el negocio de la sesión y por
- * las sedes ya leídas.
- */
-async function leerSedesDelNegocio(actor: Actor): Promise<Sede[]> {
-  const sedes = await prisma.sede.findMany({
-    where: whereDeSedes(actor),
-    select: { id: true, nombre: true, direccion: true, comuna: true, telefono: true, orden: true, activo: true },
-    orderBy: [{ orden: "asc" }, { nombre: "asc" }],
-    take: 50,
-  })
-  if (sedes.length === 0) return []
-
-  const ids = sedes.map((sede) => sede.id)
-  const [horarios, porDelante] = await Promise.all([
-    prisma.workSchedule.findMany({
-      where: { businessId: actor.businessId, sedeId: { in: ids }, active: true },
-      select: { sedeId: true, dayOfWeek: true, startTime: true, endTime: true },
-    }),
-    prisma.appointment.groupBy({
-      by: ["sedeId"],
-      where: {
-        businessId: actor.businessId,
-        sedeId: { in: ids },
-        startTime: { gte: new Date() },
-        status: { notIn: [...ESTADOS_QUE_LIBERAN] },
-      },
-      _count: { _all: true },
-    }),
-  ])
-  const horasFuturas = new Map(porDelante.flatMap((fila) => (fila.sedeId ? [[fila.sedeId, fila._count._all] as const] : [])))
-  return armarSedes(sedes, horarios, horasFuturas)
-}
+import { sedesDeLaRespuesta } from "./_sedes"
 
 export default async function PaginaConfiguracion() {
   const session = await getServerSession(authOptions)
@@ -210,15 +170,18 @@ export default async function PaginaConfiguracion() {
           select: { id: true, role: true, fotoUrl: true },
         })
       : Promise.resolve(null),
-    // Sedes (plan Independiente, sólo la dueña): las del negocio de la sesión, con su horario.
-    gestionaSedes ? leerSedesDelNegocio(actor) : Promise.resolve([]),
-    // Para decidir si se puede pasar a Independiente (no con invitaciones vigentes): sólo se cuentan para quien cambia el plan.
+    // Sedes (plan Independiente, sólo la dueña): las del negocio de la sesión (`whereDeSedes`), con su horario y
+    // las horas que tienen por delante: lo mismo que responde `GET /api/configuracion/sedes`.
+    gestionaSedes ? leerSedes(prisma, actor) : Promise.resolve([]),
+    // Para saber si se puede pasar a Independiente: con una invitación sin aceptar (también vencida; la regla del
+    // servidor la cuenta) no se puede. Sólo se cuenta para quien cambia el plan.
     cambiaDePlan
-      ? prisma.workerInvitation.count({
-          where: { businessId: actor.businessId, acceptedAt: null, expiresAt: { gt: new Date() } },
-        })
+      ? prisma.workerInvitation.count({ where: { businessId: actor.businessId, acceptedAt: null } })
       : Promise.resolve(0),
   ])
+
+  // Las sedes como las usa la pantalla (franjas `{ startTime, endTime }`); sin ellas, la lista vacía.
+  const sedesDelNegocio = sedesDeLaRespuesta(sedes) ?? []
 
   // Dueño y encargado editan el horario de cualquier miembro: cargan el
   // equipo para el selector de tabs. El profesional sólo ve el propio.
@@ -255,7 +218,7 @@ export default async function PaginaConfiguracion() {
 
   // Con una o más sedes, «Sedes y horarios» reemplaza a «Horario»: el horario general ya no se edita
   // (el servidor lo rechaza) y se lo muestra por sede. Sin sedes, y para todo otro rol, no cambia nada.
-  if (!(gestionaSedes && sedes.length > 0)) {
+  if (!(gestionaSedes && sedesDelNegocio.length > 0)) {
     secciones.push({
       // Horario: quien gestiona el negocio y tiene equipo → selector de tabs; el resto → directo.
       id: "horario",
@@ -287,7 +250,7 @@ export default async function PaginaConfiguracion() {
     secciones.push({
       id: "sedes",
       contenido: (
-        <SeccionSedes sedesIniciales={sedes} direccionDelNegocio={pagina?.address ?? ""} comunaDelNegocio={pagina?.comuna ?? ""} />
+        <SeccionSedes sedesIniciales={sedesDelNegocio} direccionDelNegocio={pagina?.address ?? ""} comunaDelNegocio={pagina?.comuna ?? ""} />
       ),
     })
   }

@@ -2227,6 +2227,24 @@ describe("base falsa: lo que Prisma valida antes de consultar (revisión del lot
     expect(base.buscar("appointment", { id: "cita-1" })[0]).toMatchObject({ commissionPercent: null, commissionAmount: null, commissionAt: null })
     expect(base.buscar("user", { id: "u1" })[0]).toMatchObject({ sesionesValidasDesde: null })
   })
+
+  it("la foto de la cuenta (`usuarios.fotoUrl`, etapa 9): nace en null, se escribe y se quita; sin CHECK, como la del integrante", async () => {
+    const nueva = await prisma.user.create({ data: { id: "u-foto", name: "Fiona", email: "f@test" } })
+    expect(nueva).toMatchObject({ fotoUrl: null })
+    expect(base.buscar("user", { id: "u1" })[0]).toMatchObject({ fotoUrl: null })
+
+    await prisma.user.updateMany({ where: { id: "u-foto" }, data: { fotoUrl: "/fotos/usuarios/u-foto/cuenta-0b8a7c1e-2d3f-4a5b-8c9d-0e1f2a3b4c5d.webp" } })
+    expect(await prisma.user.findUnique({ where: { id: "u-foto" }, select: { fotoUrl: true } })).toEqual({
+      fotoUrl: "/fotos/usuarios/u-foto/cuenta-0b8a7c1e-2d3f-4a5b-8c9d-0e1f2a3b4c5d.webp",
+    })
+    // Las demás cuentas no se tocan.
+    expect(base.buscar("user", { id: "u1" })[0]).toMatchObject({ fotoUrl: null })
+
+    // Sin CHECK en la migración: la forma de la ruta la exige la aplicación, no la base (igual que `miembros_negocio.fotoUrl`).
+    await expect(prisma.user.updateMany({ where: { id: "u-foto" }, data: { fotoUrl: "cualquier-cosa" } })).resolves.toEqual({ count: 1 })
+    await prisma.user.updateMany({ where: { id: "u-foto" }, data: { fotoUrl: null } })
+    expect(base.buscar("user", { id: "u-foto" })[0]).toMatchObject({ fotoUrl: null })
+  })
 })
 
 describe("base falsa: los textos se ordenan con collation (revisión del lote 11)", () => {
