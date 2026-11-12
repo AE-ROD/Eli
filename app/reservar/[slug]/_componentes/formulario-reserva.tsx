@@ -47,6 +47,7 @@ import { FormularioListaDeEspera } from "./formulario-lista-de-espera"
 import { SelectorProfesional } from "./selector-profesional"
 import { SelectorDeSede } from "./selector-de-sede"
 import {
+  alElegirSede,
   diasConLaSede,
   direccionConComuna,
   hayQueElegirSede,
@@ -428,12 +429,12 @@ export function FormularioReserva({
   // Otra sede es otro horario: el día y la hora que ya se habían elegido se
   // sueltan, con un aviso, y el calendario vuelve a pedir las horas de la nueva.
   const elegirSede = (nueva: string) => {
-    if (nueva === sedeId) return
-    const habiaDiaOHora = fechaElegida !== "" || hora !== ""
+    const { cambia, avisa } = alElegirSede(sedeId, nueva, { fecha: fechaElegida, hora })
+    if (!cambia) return
     setSedeId(nueva)
     setFecha("")
     elegirHora("", null)
-    setAvisoDelDia(habiaDiaOHora ? FRASES_DE_LAS_SEDES.cambioDeSede : "")
+    setAvisoDelDia(avisa ? FRASES_DE_LAS_SEDES.cambioDeSede : "")
   }
   const claveDeServicios = servicioIds.join(",")
   // Sólo en una clínica dental: con "primera vez" la cita dura 15 minutos

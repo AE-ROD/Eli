@@ -10,6 +10,7 @@ const AL_REVES: PalabrasDelRubro = {
   ...NEUTRAS,
   profesional: { singular: "operaria", plural: "operarias", genero: "f" },
   negocio: { singular: "taller", plural: "talleres", genero: "m" },
+  cita: { singular: "turno", plural: "turnos", genero: "m" },
 }
 
 describe("las frases del plan, sin rubro", () => {
@@ -48,14 +49,22 @@ describe("las frases del plan, sin rubro", () => {
     expect(f.bloqueo.detalle(0, 3)).toContain("Hoy tienes 3 invitaciones pendientes.")
   })
 
-  it("el modal a Equipo pide elegir la sede y avisa que las demás se desactivan", () => {
+  it("el modal a Equipo: la sede elegida pasa a ser el negocio y todas se desactivan sin borrarse", () => {
     const { aEquipo } = f.modal
-    expect(aEquipo.elegirSede).toBe(
-      "Elige cuál de tus sedes queda como la dirección del negocio. Las demás se desactivan y dejan de verse en tu página de reservas."
+    expect(aEquipo.elegirSede).toBe("Elige cuál de tus sedes pasa a ser la dirección y el horario del negocio.")
+    expect(aEquipo.unaSedeQueda("Providencia")).toBe("Tu sede Providencia pasa a ser la dirección y el horario del negocio.")
+    expect(aEquipo.sinSedes).toBe("No tienes sedes activas, así que la dirección del negocio sigue como está.")
+    expect(aEquipo.seDesactivan(1)).toBe("La sede se desactiva sin borrarse y deja de verse en tu página de reservas.")
+    expect(aEquipo.seDesactivan(3)).toBe("Tus 3 sedes activas se desactivan sin borrarse y dejan de verse en tu página de reservas.")
+    expect(aEquipo.siguenLasHoras).toBe("Las citas agendadas por delante en esa sede siguen, ahora en la dirección del negocio.")
+  })
+
+  it("avisa que otras sedes con horas por delante impiden el paso, con cuántas y dónde", () => {
+    const { aEquipo } = f.modal
+    expect(aEquipo.horasQueImpiden([{ nombre: "Ñuñoa", horasFuturas: 3 }, { nombre: "Centro", horasFuturas: 1 }], "Providencia")).toBe(
+      "Todavía no se puede: otras sedes tienen citas agendadas por delante (Ñuñoa: 3, Centro: 1). Muévelas a Providencia o cancélalas, o elige otra sede."
     )
-    expect(aEquipo.seDesactivan(1)).toBe("Se desactiva 1 sede.")
-    expect(aEquipo.seDesactivan(3)).toBe("Se desactivan 3 sedes.")
-    expect(aEquipo.unaSedeQueda("Providencia")).toContain("Providencia")
+    expect(aEquipo.noSePuedeTodavia).toContain("Todavía no se puede pasar a Equipo")
   })
 
   it("el precio sale de lib/precios.ts", () => {
@@ -75,18 +84,22 @@ describe("con las palabras de cada rubro", () => {
     const f = frasesDelPlan(palabrasDe("odontologia"))
     expect(f.incluye("independiente")[2].texto).toBe("Invitar a un encargado o a tus odontólogos a tu equipo.")
     expect(f.incluye("equipo")[1].texto).toBe("Una sola sede: la dirección de la clínica.")
-    expect(f.modal.aEquipo.elegirSede).toContain("la dirección de la clínica")
+    expect(f.modal.aEquipo.elegirSede).toContain("la dirección y el horario de la clínica")
+    expect(f.modal.aEquipo.siguenLasHoras).toContain("Las citas agendadas por delante")
   })
 
   it("un salón: estilistas y salón", () => {
     const f = frasesDelPlan(palabrasDe("salon"))
     expect(f.incluye("equipo")[0].texto).toContain("tus estilistas")
     expect(f.modal.aIndependiente.sedes).toContain("la dirección del salón")
+    expect(f.modal.aEquipo.siguenLasHoras).toContain("Las horas agendadas por delante")
   })
 
   it("un rubro con otros géneros: «de la» donde es femenino y «del» donde es masculino", () => {
     const f = frasesDelPlan(AL_REVES)
     expect(f.incluye("equipo")[1].texto).toBe("Una sola sede: la dirección del taller.")
     expect(f.incluye("independiente")[2].texto).toContain("tus operarias")
+    expect(f.modal.aEquipo.horasQueImpiden([{ nombre: "A", horasFuturas: 2 }], "B")).toContain("turnos agendados")
+    expect(f.modal.aEquipo.siguenLasHoras).toBe("Los turnos agendados por delante en esa sede siguen, ahora en la dirección del taller.")
   })
 })

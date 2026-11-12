@@ -291,10 +291,16 @@ export async function inscribirEnListaDeEspera(
 
     const activas = await tx.inscripcionEnEspera.findMany({
       where: { businessId: negocio.id, email, estado: "activa" },
-      select: { serviceId: true, memberId: true, fecha: true },
+      select: { serviceId: true, memberId: true, sedeId: true, fecha: true },
     })
+    // Lo mismo en otra sede es otra inscripción: se espera por una sede, no por todas.
+    const sedeDeLaInscripcion = eleccionDeSede.sede?.id ?? null
     const repetida = activas.some(
-      (fila) => fila.serviceId === servicioId && fila.memberId === memberId && fila.fecha === datos.fecha
+      (fila) =>
+        fila.serviceId === servicioId &&
+        fila.memberId === memberId &&
+        (fila.sedeId ?? null) === sedeDeLaInscripcion &&
+        fila.fecha === datos.fecha
     )
     if (repetida) return { tipo: "inscrita" } as const
     if (activas.length >= INSCRIPCIONES_ACTIVAS_POR_EMAIL) return { tipo: "tope" } as const

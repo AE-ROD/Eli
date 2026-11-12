@@ -90,6 +90,37 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+describe("inscribirse, con varias sedes", () => {
+  const NEGOCIO = { id: "n1", timezone: "America/Santiago" }
+  const datos = (sedeId: string | null) => ({
+    servicioIds: ["s1"],
+    fecha: LUNES,
+    nombre: "Lucía",
+    apellido: "Pérez",
+    email: "lucia@correo.test",
+    telefono: null,
+    sedeId,
+  })
+
+  it("esperar la misma hora en dos sedes son dos inscripciones; repetir la misma sede no crea otra", async () => {
+    escenario()
+
+    expect(await m.inscribirEnListaDeEspera(NEGOCIO, datos("centro"), AHORA)).toEqual({ tipo: "inscrita" })
+    expect(await m.inscribirEnListaDeEspera(NEGOCIO, datos("nunoa"), AHORA)).toEqual({ tipo: "inscrita" })
+    expect(await m.inscribirEnListaDeEspera(NEGOCIO, datos("centro"), AHORA)).toEqual({ tipo: "inscrita" })
+
+    expect(base.buscar("inscripcionEnEspera", {}).map((fila) => fila.sedeId).sort()).toEqual(["centro", "nunoa"])
+  })
+
+  it("sin elegir sede con varias, o con una de otro negocio o inactiva: 'sede-no-valida', y no se guarda nada", async () => {
+    escenario({ sedes: ["centro", "nunoa"] })
+
+    expect(await m.inscribirEnListaDeEspera(NEGOCIO, datos(null), AHORA)).toEqual({ tipo: "sede-no-valida" })
+    expect(await m.inscribirEnListaDeEspera(NEGOCIO, datos("ajena"), AHORA)).toEqual({ tipo: "sede-no-valida" })
+    expect(base.buscar("inscripcionEnEspera", {})).toHaveLength(0)
+  })
+})
+
 describe("avisar cuando se libera una hora, con varias sedes", () => {
   it("avisa sólo a quien espera por la sede donde se liberó, y el enlace deja esa sede elegida", async () => {
     escenario({ inscripciones: [inscripcion("i-centro", { sedeId: "centro" }), inscripcion("i-nunoa", { sedeId: "nunoa" })] })

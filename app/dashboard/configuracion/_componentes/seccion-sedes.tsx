@@ -34,9 +34,11 @@ interface PropsDeSeccionSedes {
  * «Sedes y horarios» (plan Independiente, sólo la dueña: `page.tsx` la arma
  * con `puedeGestionarSedes`). Sin sedes es un llamado, «Trabajo en más de un
  * lugar», que abre el paso a varias; con una o más es la lista de sedes con su
- * horario por día, y entonces reemplaza a la sección «Horario» (`page.tsx`
- * vuelve a pedir la página cuando se pasa de una a otra, para que el horario
- * de siempre aparezca o desaparezca).
+ * horario por día. Con alguna sede activa reemplaza a la sección «Horario»: el
+ * servidor rechaza el horario general (409) mientras haya sedes activas, así
+ * que `page.tsx` no lo arma. Por eso, cuando se pasa de tener sedes activas a no
+ * tenerlas (o al revés), se vuelve a pedir la página: el horario de siempre
+ * aparece o desaparece.
  */
 export function SeccionSedes({ sedesIniciales, direccionDelNegocio, comunaDelNegocio }: PropsDeSeccionSedes) {
   const router = useRouter()
@@ -49,13 +51,14 @@ export function SeccionSedes({ sedesIniciales, direccionDelNegocio, comunaDelNeg
   const [huboSedes, setHuboSedes] = useState(!sinSedes)
   if (!sinSedes && !huboSedes) setHuboSedes(true)
 
-  // Pasar de cero a una o más sedes (o al revés) cambia qué secciones arma el servidor: se vuelve a pedir la página.
-  const estabaSinSedes = useRef(sinSedes)
+  // Pasar de no tener sedes activas a tener alguna (o al revés) cambia qué secciones arma el servidor: se vuelve a pedir la página.
+  const conActivas = sedes.some((sede) => sede.activo)
+  const teniaActivas = useRef(conActivas)
   useEffect(() => {
-    if (estabaSinSedes.current === sinSedes) return
-    estabaSinSedes.current = sinSedes
+    if (teniaActivas.current === conActivas) return
+    teniaActivas.current = conActivas
     router.refresh()
-  }, [sinSedes, router])
+  }, [conActivas, router])
 
   if (sinSedes) {
     return (

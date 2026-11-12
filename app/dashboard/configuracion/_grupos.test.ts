@@ -27,7 +27,7 @@ const DUEÑA_DE_UNA_CLINICA = (
 const PROFESIONAL = (["horario", "mi-foto", "pagina"] as const).map(seccion)
 /**
  * La dueña de un negocio Independiente (la única que ve «Sedes y horarios» y «Plan»):
- * sin sedes ve el «Horario» de siempre y el llamado a «Sedes y horarios»; con una o más,
+ * sin sedes ve el «Horario» de siempre y el llamado a «Sedes y horarios»; con alguna sede activa,
  * «Sedes y horarios» reemplaza a «Horario».
  */
 const DUEÑA_INDEPENDIENTE_SIN_SEDES = (
@@ -120,7 +120,7 @@ describe("agruparSecciones", () => {
     expect(sinSedes.find((grupo) => grupo.id === "tu-negocio")?.resumen).toBe("Página pública · Productos · Plan")
   })
 
-  it("con una o más sedes, «Sedes y horarios» reemplaza a «Horario»: el grupo no repite el horario", () => {
+  it("con alguna sede activa, «Sedes y horarios» reemplaza a «Horario»: el grupo no repite el horario", () => {
     const conSedes = agruparSecciones(DUEÑA_INDEPENDIENTE_CON_SEDES, DE_LA_CLINICA)
     expect(conSedes[0].secciones.map((s) => s.id)).toEqual(["sedes", "zona-horaria"])
     expect(conSedes[0].resumen).toBe("Sedes y horarios · Zona horaria")

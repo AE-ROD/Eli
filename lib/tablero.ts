@@ -103,6 +103,21 @@ export function leerRango(searchParams: URLSearchParams, maximoMs: number, cuant
   return { ok: true, desde: inicio, hasta: fin }
 }
 
+export type SoloAtenciones = { ok: true; soloAtenciones: boolean } | { ok: false; error: string }
+
+/**
+ * `soloAtenciones` de la querystring del tablero: con `1`, la respuesta deja
+ * fuera el catálogo (servicios, productos, profesionales, fila), que casi no
+ * cambia y es la mitad de las consultas. Sin el parámetro, la respuesta es la
+ * completa de siempre. Cualquier otro valor es un 400, no se adivina.
+ */
+export function leerSoloAtenciones(searchParams: URLSearchParams): SoloAtenciones {
+  const valor = searchParams.get("soloAtenciones")
+  if (valor === null) return { ok: true, soloAtenciones: false }
+  if (valor === "1") return { ok: true, soloAtenciones: true }
+  return { ok: false, error: "El parámetro soloAtenciones solo admite el valor 1." }
+}
+
 // ─── Lectura ─────────────────────────────────────────────────────────────────
 
 /**

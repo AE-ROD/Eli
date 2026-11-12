@@ -255,3 +255,41 @@ describe("la concordancia sale del género y no de las palabras de hoy", () => {
     )
   })
 })
+
+describe("las sedes (etapa 9, plan Independiente)", () => {
+  const f = frasesDeLaAgenda(NEUTRAS)
+
+  it("los rótulos del selector y del detalle", () => {
+    expect(f.sede.etiqueta).toBe("Sede")
+    expect(f.sede.elegir).toBe("Elige la sede")
+    expect(f.sede.enNombreAccesible("Centro")).toBe("sede Centro")
+  })
+
+  it("lo que dice el modal de la sede elegida ese día", () => {
+    expect(f.sede.horarioEseDia([])).toBe("Esta sede no atiende ese día.")
+    expect(f.sede.horarioEseDia([{ startTime: "09:00", endTime: "13:00" }])).toBe("Atiende ese día de 09:00 a 13:00.")
+    expect(
+      f.sede.horarioEseDia([
+        { startTime: "09:00", endTime: "13:00" },
+        { startTime: "15:00", endTime: "19:00" },
+      ])
+    ).toBe("Atiende ese día de 09:00 a 13:00 y 15:00 a 19:00.")
+    expect(
+      f.sede.horarioEseDia([
+        { startTime: "08:00", endTime: "10:00" },
+        { startTime: "11:00", endTime: "13:00" },
+        { startTime: "15:00", endTime: "19:00" },
+      ])
+    ).toBe("Atiende ese día de 08:00 a 10:00, 11:00 a 13:00 y 15:00 a 19:00.")
+  })
+
+  it("las frases de la sede no llevan palabras del rubro: son las mismas en una clínica y en un salón", () => {
+    const franjas = [{ startTime: "09:00", endTime: "13:00" }]
+    for (const rubro of [null, "odontologia", "barberia", "salon"]) {
+      const { sede } = frasesDeLaAgenda(palabrasDe(rubro))
+      expect([sede.etiqueta, sede.elegir, sede.ayuda, sede.horarioNoCargo]).toEqual([f.sede.etiqueta, f.sede.elegir, f.sede.ayuda, f.sede.horarioNoCargo])
+      expect(sede.enNombreAccesible("Centro")).toBe(f.sede.enNombreAccesible("Centro"))
+      expect(sede.horarioEseDia(franjas)).toBe(f.sede.horarioEseDia(franjas))
+    }
+  })
+})

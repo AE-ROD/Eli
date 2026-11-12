@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  alElegirSede,
   diasConLaSede,
   direccionConComuna,
   hayQueElegirSede,
@@ -69,6 +70,23 @@ describe("diasConLaSede", () => {
 
   it("sin sede elegida, ningún día: el calendario no se ofrece antes de saber dónde", () => {
     expect(diasConLaSede([1, 2, 3], null)).toEqual([])
+  })
+})
+
+describe("alElegirSede", () => {
+  it("la misma sede de antes no cambia nada: ni se sueltan el día y la hora ni se avisa", () => {
+    expect(alElegirSede("centro", "centro", { fecha: "2030-01-07", hora: "10:00" })).toEqual({ cambia: false, avisa: false })
+  })
+
+  it("otra sede con un día o una hora ya elegidos: cambia y avisa (se sueltan)", () => {
+    expect(alElegirSede("centro", "nunoa", { fecha: "2030-01-07", hora: "10:00" })).toEqual({ cambia: true, avisa: true })
+    expect(alElegirSede("centro", "nunoa", { fecha: "2030-01-07", hora: "" })).toEqual({ cambia: true, avisa: true })
+    expect(alElegirSede("centro", "nunoa", { fecha: "", hora: "10:00" })).toEqual({ cambia: true, avisa: true })
+  })
+
+  it("otra sede sin nada elegido todavía: cambia, sin aviso (no hay nada que soltar); la primera elección tampoco avisa", () => {
+    expect(alElegirSede("centro", "nunoa", { fecha: "", hora: "" })).toEqual({ cambia: true, avisa: false })
+    expect(alElegirSede(null, "centro", { fecha: "", hora: "" })).toEqual({ cambia: true, avisa: false })
   })
 })
 

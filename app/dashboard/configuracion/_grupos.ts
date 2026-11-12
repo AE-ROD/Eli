@@ -16,9 +16,9 @@ import { frasesDeConfiguracion } from "./_frases"
  * enlaces de otras pantallas (`#horario`, `#servicios`, `#sillones`…).
  *
  * `sedes` (plan Independiente, sólo la dueña) y `plan` (sólo la dueña) las
- * arma `page.tsx` con `puedeGestionarSedes` y `puedeCambiarDePlan`. Con una o
- * más sedes, «Sedes y horarios» reemplaza a «Horario» (`page.tsx` no arma las
- * dos a la vez).
+ * arma `page.tsx` con `puedeGestionarSedes` y `puedeCambiarDePlan`. Con alguna
+ * sede activa, «Sedes y horarios» reemplaza a «Horario» (`page.tsx` no arma las
+ * dos a la vez: el servidor rechaza el horario general mientras haya sedes activas).
  */
 export type AnclaDeConfiguracion =
   | "horario"

@@ -81,9 +81,10 @@ describe("MiniPagina con varias sedes", () => {
   it("cada sede tiene su botón 'Reservar en esta sede', que deja la sede elegida en la dirección", () => {
     expect(html).toContain('href="?sede=a#reservar"')
     expect(html).toContain('href="?sede=b#reservar"')
-    expect(html).toContain('aria-label="Reservar en Centro"')
-    expect(html).toContain('aria-label="Reservar en Ñuñoa"')
-    expect(html.match(/Reservar en esta sede/g)).toHaveLength(2)
+    // El nombre accesible empieza con lo que se ve y suma el de la sede.
+    expect(html).toContain('aria-label="Reservar en esta sede: Centro"')
+    expect(html).toContain('aria-label="Reservar en esta sede: Ñuñoa"')
+    expect(html.match(/>Reservar en esta sede<\/span>/g)).toHaveLength(2)
   })
 
   it("el horario y la ubicación del negocio dan lugar a los de cada sede; 'Cómo llegar' de la cabecera baja a ellas", () => {
@@ -104,8 +105,8 @@ describe("MiniPagina con varias sedes", () => {
     )
 
     expect(conUnaSinHorario).toContain("Todavía sin horario para reservar")
-    expect(conUnaSinHorario).not.toContain('aria-label="Reservar en Maipú"')
-    expect(conUnaSinHorario).toContain('aria-label="Reservar en Centro"')
+    expect(conUnaSinHorario).not.toContain('aria-label="Reservar en esta sede: Maipú"')
+    expect(conUnaSinHorario).toContain('aria-label="Reservar en esta sede: Centro"')
   })
 })
 

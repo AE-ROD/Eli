@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { cambiarDePlan } from "../_datos"
 import { frasesDeConfiguracion } from "../_frases"
-import { cuerpoDelCambio, type CambioDePlan } from "../_plan"
+import { cuerpoDelCambio, sedesConHorasQueImpiden, type CambioDePlan } from "../_plan"
 
 /** Como en el resto de las opciones: el radio no se ve y el anillo lo dibuja la opción entera. */
 const ANILLO_DE_LA_OPCION =
@@ -38,8 +38,7 @@ interface PropsDeModalCambiarDePlan {
  */
 export function ModalCambiarDePlan({ cambio, alCambiar, alCerrar }: PropsDeModalCambiarDePlan) {
   const palabras = vocabularioDe(useRubroDelPanel()).palabras
-  const { plan: frases } = frasesDeConfiguracion(palabras)
-  const idDeLaLeyenda = useId()
+  const { plan: frases, sedes: frasesDeSedes } = frasesDeConfiguracion(palabras)
   const nombreDeGrupo = useId()
   const grupo = useRef<HTMLFieldSetElement>(null)
   const [elegida, setElegida] = useState<string | null>(cambio.sedePorDefecto)
@@ -49,13 +48,16 @@ export function ModalCambiarDePlan({ cambio, alCambiar, alCerrar }: PropsDeModal
   const destino = cambio.destino
   const nombreDelDestino = nombreDePlan(destino)
   const deberiaElegir = cambio.sedesParaElegir.length > 1
+  const laElegida = cambio.sedesParaElegir.find((sede) => sede.id === elegida) ?? null
+  // Con esta elección, otras sedes con horas por delante: el servidor lo rechazaría (409), así que se dice antes.
+  const impiden = sedesConHorasQueImpiden(cambio, elegida)
 
   const confirmar = async () => {
     if (trabajando) return
     const cuerpo = cuerpoDelCambio(cambio, elegida)
     if (!cuerpo.ok) {
-      setAviso(frases.modal.aEquipo.faltaElegir)
-      requestAnimationFrame(() => grupo.current?.querySelector<HTMLInputElement>("input")?.focus())
+      setAviso(cuerpo.falta === "horas-por-delante" ? frases.modal.aEquipo.noSePuedeTodavia : frases.modal.aEquipo.faltaElegir)
+      if (cuerpo.falta === "elegir-sede") requestAnimationFrame(() => grupo.current?.querySelector<HTMLInputElement>("input")?.focus())
       return
     }
     setAviso("")
@@ -89,6 +91,7 @@ export function ModalCambiarDePlan({ cambio, alCambiar, alCerrar }: PropsDeModal
             {cambio.sedesParaElegir.length === 1 && <li>{frases.modal.aEquipo.unaSedeQueda(cambio.sedesParaElegir[0].nombre)}</li>}
             {deberiaElegir && <li>{frases.modal.aEquipo.elegirSede}</li>}
             {cambio.sedesQueSeDesactivan > 0 && <li className="font-medium">{frases.modal.aEquipo.seDesactivan(cambio.sedesQueSeDesactivan)}</li>}
+            {laElegida && laElegida.horasFuturas > 0 && <li>{frases.modal.aEquipo.siguenLasHoras}</li>}
           </ul>
         ) : (
           <ul className="list-disc space-y-1.5 pl-5 text-pretty">
@@ -98,8 +101,8 @@ export function ModalCambiarDePlan({ cambio, alCambiar, alCerrar }: PropsDeModal
         )}
 
         {deberiaElegir && (
-          <fieldset ref={grupo} aria-describedby={idDeLaLeyenda} className="min-w-0">
-            <legend id={idDeLaLeyenda} className={cn(CLASES_DE_ETIQUETA, "mb-1")}>
+          <fieldset ref={grupo} className="min-w-0">
+            <legend className={cn(CLASES_DE_ETIQUETA, "mb-1")}>
               {frases.modal.aEquipo.leyenda}
             </legend>
             <div className="mt-2 grid gap-2">
@@ -134,12 +137,19 @@ export function ModalCambiarDePlan({ cambio, alCambiar, alCerrar }: PropsDeModal
                       <span className="block text-[13px] break-words text-texto-2">
                         {[sede.direccion, sede.comuna].filter(Boolean).join(", ")}
                       </span>
+                      <span className="block text-[13px] text-texto-2">{frasesDeSedes.fila.horasPorDelante(sede.horasFuturas)}</span>
                     </span>
                   </label>
                 )
               })}
             </div>
           </fieldset>
+        )}
+
+        {laElegida && impiden.length > 0 && (
+          <Aviso tono="atencion" rol="status">
+            {frases.modal.aEquipo.horasQueImpiden(impiden, laElegida.nombre)}
+          </Aviso>
         )}
 
         <p className="font-medium text-pretty">{frases.modal.precio(destino, nombreDelDestino)}</p>

@@ -7,8 +7,9 @@ import { Menu, Plus, UserRound, type LucideIcon } from "lucide-react"
 import { Antetitulo } from "@/components/comunes/antetitulo"
 import { Boton } from "@/components/comunes/boton"
 import { LogoEli } from "@/components/comunes/logo-eli"
-import { AvatarUsuario } from "@/components/panel/avatar-usuario"
+import { BotonDeMiFoto } from "@/components/panel/boton-de-mi-foto"
 import { ID_DEL_CAJON, useBarraLateral } from "@/components/panel/contexto-barra-lateral"
+import { useCuentaDelPanel } from "@/components/panel/contexto-de-la-cuenta"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CuadroDeSeccion } from "@/components/panel/icono-de-seccion"
 import { seccionConNombreDelRubro, seccionDeLaRuta } from "@/components/panel/secciones-del-panel"
@@ -101,6 +102,7 @@ export function BarraSuperior({ titulo, subtitulo, accionPrincipal }: PropsDeBar
 function FilaDelTelefono() {
   const { cajonAbierto, abrirCajon, refBotonMenu } = useBarraLateral()
   const { data: sesion } = useSession()
+  const { fotoUrl, abrirMiFoto } = useCuentaDelPanel()
   const nombreUsuario = sesion?.user?.name
 
   return (
@@ -132,7 +134,8 @@ function FilaDelTelefono() {
         <div className="flex shrink-0 items-center gap-1.5">
           {/* Sin sesión no se inventa un nombre: va la silueta. */}
           {nombreUsuario ? (
-            <AvatarUsuario nombre={nombreUsuario} tamaño="md" />
+            // La foto de la cuenta, si la tiene; tocarla abre "Mi foto". Con el cajón cerrado: no hay nada que cerrar.
+            <BotonDeMiFoto nombre={nombreUsuario} imagenUrl={fotoUrl ?? undefined} alAbrir={abrirMiFoto} />
           ) : (
             <span aria-hidden="true" className="grid size-10 place-items-center rounded-full bg-superficie text-texto-2">
               <UserRound className="size-5" strokeWidth={1.75} />

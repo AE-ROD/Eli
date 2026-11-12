@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { cuerpoDelCambio, evaluarCambioDePlan, otroPlan, precioDelPlan, type SedeParaElegir } from "./_plan"
+import { cuerpoDelCambio, evaluarCambioDePlan, otroPlan, precioDelPlan, sedesConHorasQueImpiden, type SedeParaElegir } from "./_plan"
 
 const sede = (id: string, extra: Partial<SedeParaElegir> = {}): SedeParaElegir => ({
   id,
@@ -8,6 +8,7 @@ const sede = (id: string, extra: Partial<SedeParaElegir> = {}): SedeParaElegir =
   comuna: "Providencia",
   orden: 0,
   activo: true,
+  horasFuturas: 0,
   ...extra,
 })
 
@@ -68,24 +69,24 @@ describe("evaluarCambioDePlan: a Equipo", () => {
     })
   })
 
-  it("con una sola sede activa, ella queda elegida y no se desactiva ninguna", () => {
+  it("con una sola sede activa, ella queda elegida; y se desactiva, como todas (el servidor deja cero sedes activas)", () => {
     const cambio = evaluarCambioDePlan({ ...base, sedes: [sede("a")] })
     expect(cambio.sedePorDefecto).toBe("a")
-    expect(cambio.sedesQueSeDesactivan).toBe(0)
+    expect(cambio.sedesQueSeDesactivan).toBe(1)
   })
 
-  it("con varias sedes activas hay que elegir una a propósito, y las demás se desactivan", () => {
+  it("con varias sedes activas hay que elegir una a propósito, y todas se desactivan", () => {
     const cambio = evaluarCambioDePlan({ ...base, sedes: [sede("a", { orden: 1 }), sede("b", { orden: 0 }), sede("c", { orden: 2 })] })
     expect(cambio.sedesParaElegir.map((s) => s.id)).toEqual(["b", "a", "c"])
     expect(cambio.sedePorDefecto).toBeNull()
-    expect(cambio.sedesQueSeDesactivan).toBe(2)
+    expect(cambio.sedesQueSeDesactivan).toBe(3)
   })
 
   it("las sedes que ya están desactivadas no se ofrecen ni cuentan", () => {
     const cambio = evaluarCambioDePlan({ ...base, sedes: [sede("a"), sede("b", { activo: false }), sede("c", { activo: false })] })
     expect(cambio.sedesParaElegir.map((s) => s.id)).toEqual(["a"])
     expect(cambio.sedePorDefecto).toBe("a")
-    expect(cambio.sedesQueSeDesactivan).toBe(0)
+    expect(cambio.sedesQueSeDesactivan).toBe(1)
   })
 
   it("con sedes y todas desactivadas no hay nada que elegir", () => {
@@ -110,6 +111,52 @@ describe("cuerpoDelCambio", () => {
     expect(cuerpoDelCambio(cambio, null)).toEqual({ ok: false, falta: "elegir-sede" })
     expect(cuerpoDelCambio(cambio, "z")).toEqual({ ok: false, falta: "elegir-sede" })
     expect(cuerpoDelCambio(cambio, "")).toEqual({ ok: false, falta: "elegir-sede" })
+  })
+
+  it("otra sede con horas por delante impide el paso: lo mismo que responde el servidor con 409", () => {
+    const cambio = evaluarCambioDePlan({
+      actual: "independiente",
+      integrantes: 0,
+      invitacionesPendientes: 0,
+      sedes: [sede("a", { horasFuturas: 5 }), sede("b", { horasFuturas: 2 }), sede("c")],
+    })
+    // Quedándose con «a», «b» tiene horas por delante.
+    const conA = cuerpoDelCambio(cambio, "a")
+    expect(conA.ok).toBe(false)
+    expect(!conA.ok && conA.falta === "horas-por-delante" && conA.sedes.map((s) => s.id)).toEqual(["b"])
+    // Quedándose con «b», lo impide «a».
+    expect(sedesConHorasQueImpiden(cambio, "b").map((s) => s.id)).toEqual(["a"])
+  })
+
+  it("las horas por delante de la sede que se queda no impiden nada: siguen, ahora en el negocio", () => {
+    const cambio = evaluarCambioDePlan({
+      actual: "independiente",
+      integrantes: 0,
+      invitacionesPendientes: 0,
+      sedes: [sede("a", { horasFuturas: 5 }), sede("b")],
+    })
+    expect(cuerpoDelCambio(cambio, "a")).toEqual({ ok: true, plan: "equipo", sedeQueSeQueda: "a" })
+  })
+
+  it("una sede desactivada con horas por delante (un dato viejo) no impide el paso", () => {
+    const cambio = evaluarCambioDePlan({
+      actual: "independiente",
+      integrantes: 0,
+      invitacionesPendientes: 0,
+      sedes: [sede("a"), sede("b", { activo: false, horasFuturas: 4 })],
+    })
+    expect(cuerpoDelCambio(cambio, "a")).toEqual({ ok: true, plan: "equipo", sedeQueSeQueda: "a" })
+  })
+
+  it("sin sede elegida, no se sabe qué impide", () => {
+    const cambio = evaluarCambioDePlan({
+      actual: "independiente",
+      integrantes: 0,
+      invitacionesPendientes: 0,
+      sedes: [sede("a", { horasFuturas: 1 }), sede("b", { horasFuturas: 1 })],
+    })
+    expect(sedesConHorasQueImpiden(cambio, null)).toEqual([])
+    expect(sedesConHorasQueImpiden(cambio, "z")).toEqual([])
   })
 
   it("a Equipo con la sede elegida: el plan y la sede que queda", () => {

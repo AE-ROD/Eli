@@ -216,9 +216,10 @@ export default async function PaginaConfiguracion() {
   // lista de inicio del panel y la agenda llevan a algunas.
   const secciones: SeccionDeConfiguracion[] = []
 
-  // Con una o más sedes, «Sedes y horarios» reemplaza a «Horario»: el horario general ya no se edita
-  // (el servidor lo rechaza) y se lo muestra por sede. Sin sedes, y para todo otro rol, no cambia nada.
-  if (!(gestionaSedes && sedesDelNegocio.length > 0)) {
+  // Con alguna sede activa, «Sedes y horarios» reemplaza a «Horario»: el horario general ya no se edita
+  // (el servidor lo rechaza con 409 mientras haya sedes activas) y se lo muestra por sede. Sin sedes, con
+  // todas desactivadas y para todo otro rol, no cambia nada.
+  if (!(gestionaSedes && sedesDelNegocio.some((sede) => sede.activo))) {
     secciones.push({
       // Horario: quien gestiona el negocio y tiene equipo → selector de tabs; el resto → directo.
       id: "horario",

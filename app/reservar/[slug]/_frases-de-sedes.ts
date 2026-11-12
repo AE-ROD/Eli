@@ -26,8 +26,12 @@ export const FRASES_DE_LAS_SEDES = {
   sinHorario: "Todavía sin horario para reservar",
   /** El botón de cada sede en la mini página. */
   reservarAca: "Reservar en esta sede",
-  /** Lo mismo para el lector de pantalla, con el nombre de la sede. */
-  reservarEn: (sede: string): string => `Reservar en ${sede}`,
+  /**
+   * Lo mismo para el lector de pantalla, con el nombre de la sede. Empieza con el
+   * texto que se ve (`reservarAca`): el nombre accesible de un botón tiene que
+   * contener lo que dice.
+   */
+  reservarEn: (sede: string): string => `Reservar en esta sede: ${sede}`,
   /** Al cambiar de sede con un día o una hora ya elegidos: las horas son otras. */
   cambioDeSede: "Cambiaste de sede: elige de nuevo el día y la hora.",
   /** El texto para el lector de pantalla del botón "Cambiar": "Cambiar de sede: ahora en Centro". */

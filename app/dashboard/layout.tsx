@@ -6,8 +6,10 @@ import { ModalBienvenida } from "@/components/panel/modal-bienvenida"
 import { ProveedorDePrecios } from "@/components/panel/contexto-precios"
 import { ProveedorDeSesionDelPanel } from "@/components/panel/proveedor-de-sesion-del-panel"
 import { ProveedorDeBarraLateral } from "@/components/panel/contexto-barra-lateral"
+import { ProveedorDeLaCuenta } from "@/components/panel/contexto-de-la-cuenta"
 import { ProveedorDeRubro } from "@/components/panel/contexto-rubro"
 import { nombreDelRolDelContexto } from "@/lib/contextos"
+import { leerFotoDeLaCuenta } from "@/lib/foto-de-la-cuenta"
 import {
   actorDeSesion,
   puedeEditarComisiones,
@@ -38,10 +40,17 @@ export default async function LayoutDelPanel({
       ? `${nombreDelRolDelContexto({ rol: actor.rol, rubro: actor.rubro ?? null })} · ${session.user.businessName}`
       : (session?.user?.businessName ?? "")
 
+  // La foto de la CUENTA (la persona, no la del integrante que ve el cliente).
+  // No viaja en el token: se lee acá, de la base, con la cuenta de la sesión, y
+  // baja por props. Sin foto o con una que no es de esta cuenta: `null`, y el
+  // avatar muestra las iniciales.
+  const fotoDeLaCuenta = await leerFotoDeLaCuenta(session?.user?.id)
+
   const usuario = session?.user
     ? {
         nombre: session.user.name ?? "",
         email: session.user.email ?? "",
+        imagenUrl: fotoDeLaCuenta ?? undefined,
         negocio: negocioEnLaBarra,
       }
     : undefined
@@ -85,26 +94,28 @@ export default async function LayoutDelPanel({
       <ProveedorDePrecios diasTrialRestantes={diasTrialRestantes}>
         <ProveedorDeRubro rubro={rubro}>
           <ProveedorDeBarraLateral>
-            <div className="min-h-dvh bg-crema text-navy">
-              <BarraLateral
-                usuario={usuario}
-                puedeGestionarSuscripcion={verSuscripcion}
-                diasTrialRestantes={diasTrialRestantes}
-                puedeVerEquipo={puedeVerEquipo}
-                accesoALaPlata={accesoALaPlata}
-                rubro={rubro}
-                puedeCambiarDeNegocio={puedeCambiarDeNegocio}
-                contexto={session?.user?.contexto ?? null}
-              />
-              <ContenidoDelPanel>{children}</ContenidoDelPanel>
-              {businessName && businessSlug && (
-                <ModalBienvenida
-                  nombreNegocio={businessName}
-                  slug={businessSlug}
-                  marcarAlCopiar={veLaListaDeInicio(actor)}
+            <ProveedorDeLaCuenta nombre={usuario?.nombre ?? ""} fotoUrl={fotoDeLaCuenta}>
+              <div className="min-h-dvh bg-crema text-navy">
+                <BarraLateral
+                  usuario={usuario}
+                  puedeGestionarSuscripcion={verSuscripcion}
+                  diasTrialRestantes={diasTrialRestantes}
+                  puedeVerEquipo={puedeVerEquipo}
+                  accesoALaPlata={accesoALaPlata}
+                  rubro={rubro}
+                  puedeCambiarDeNegocio={puedeCambiarDeNegocio}
+                  contexto={session?.user?.contexto ?? null}
                 />
-              )}
-            </div>
+                <ContenidoDelPanel>{children}</ContenidoDelPanel>
+                {businessName && businessSlug && (
+                  <ModalBienvenida
+                    nombreNegocio={businessName}
+                    slug={businessSlug}
+                    marcarAlCopiar={veLaListaDeInicio(actor)}
+                  />
+                )}
+              </div>
+            </ProveedorDeLaCuenta>
           </ProveedorDeBarraLateral>
         </ProveedorDeRubro>
       </ProveedorDePrecios>

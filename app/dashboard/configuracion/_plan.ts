@@ -5,11 +5,13 @@
  * con el motivo): esto sólo evita ofrecer lo que se sabe que no se puede y
  * explica las consecuencias antes de confirmar.
  *
- * - **Independiente → Equipo**: siempre se puede. Equipo tiene una sola sede,
- *   la dirección del negocio: con sedes activas hay que elegir cuál queda
- *   (las demás se desactivan).
- * - **Equipo → Independiente**: sólo si no hay integrantes ni invitaciones
- *   pendientes; Independiente atiende sólo la dueña.
+ * - **Independiente → Equipo**: se puede. Equipo tiene una sola sede, la
+ *   dirección del negocio: con sedes activas hay que elegir cuál pasa a ser esa
+ *   dirección y ese horario, y todas las sedes quedan desactivadas (no se
+ *   borran). Si otra sede tiene horas agendadas por delante, no se puede hasta
+ *   que se muevan o se cancelen.
+ * - **Equipo → Independiente**: sólo si no hay integrantes ni invitaciones sin
+ *   aceptar; Independiente atiende sólo la dueña.
  *
  * Los precios salen de `lib/precios.ts`; los planes, de `lib/planes.ts`.
  */
@@ -58,13 +60,15 @@ export interface SedeParaElegir {
   comuna: string
   orden: number
   activo: boolean
+  /** Las horas agendadas que tiene por delante. */
+  horasFuturas: number
 }
 
 export interface EntradaDelCambio {
   actual: PlanId
   /** Las personas del equipo (sin la dueña). */
   integrantes: number
-  /** Las invitaciones que nadie aceptó y siguen vigentes. */
+  /** Las invitaciones que nadie aceptó (también las vencidas: el servidor las cuenta). */
   invitacionesPendientes: number
   /** Las sedes que tiene hoy el negocio (activas e inactivas). */
   sedes: readonly SedeParaElegir[]
@@ -74,11 +78,11 @@ export interface CambioDePlan {
   destino: PlanId
   /** Por qué no se puede, o `null`. Sólo Equipo → Independiente se bloquea. */
   bloqueo: { integrantes: number; invitaciones: number } | null
-  /** Al pasar a Equipo: las sedes activas entre las que se elige la que queda. Vacío si no hace falta elegir. */
+  /** Al pasar a Equipo: las sedes activas entre las que se elige la que pasa a ser el negocio. Vacío si no hace falta elegir. */
   sedesParaElegir: SedeParaElegir[]
   /** La que ya viene elegida: la única sede activa. Con varias, ninguna (se elige a propósito). */
   sedePorDefecto: string | null
-  /** Cuántas sedes activas se desactivan al confirmar. */
+  /** Cuántas sedes activas se desactivan al confirmar: todas, también la que pasa a ser el negocio. */
   sedesQueSeDesactivan: number
 }
 
@@ -103,23 +107,38 @@ export function evaluarCambioDePlan(entrada: EntradaDelCambio): CambioDePlan {
     bloqueo: null,
     sedesParaElegir: activas,
     sedePorDefecto: activas.length === 1 ? activas[0].id : null,
-    sedesQueSeDesactivan: Math.max(0, activas.length - 1),
+    sedesQueSeDesactivan: activas.length,
   }
+}
+
+/**
+ * Las otras sedes que todavía tienen horas agendadas por delante: con ellas el
+ * servidor rechaza el paso a Equipo (409), porque esas horas se quedarían sin
+ * sede. Las de la sede elegida no cuentan: siguen, ahora en el negocio. Sin
+ * una sede elegida (o con una que no se ofrece), ninguna.
+ */
+export function sedesConHorasQueImpiden(cambio: CambioDePlan, elegida: string | null): SedeParaElegir[] {
+  if (!elegida || !cambio.sedesParaElegir.some((sede) => sede.id === elegida)) return []
+  return cambio.sedesParaElegir.filter((sede) => sede.id !== elegida && sede.horasFuturas > 0)
 }
 
 /** Lo que se envía al confirmar, o qué falta para poder hacerlo. */
 export type CuerpoDelCambio =
   | { ok: true; plan: PlanId; sedeQueSeQueda?: string }
   | { ok: false; falta: "nada-que-hacer" | "elegir-sede" }
+  | { ok: false; falta: "horas-por-delante"; sedes: SedeParaElegir[] }
 
 /**
  * El pedido para confirmar el cambio con la sede elegida (`elegida`). Un
  * cambio bloqueado no se pide. Con sedes activas hay que haber elegido una de
- * ellas: un id que no es de las que se ofrecen cuenta como no haber elegido.
+ * ellas (un id que no es de las que se ofrecen cuenta como no haber elegido) y
+ * ninguna de las otras puede tener horas por delante.
  */
 export function cuerpoDelCambio(cambio: CambioDePlan, elegida: string | null): CuerpoDelCambio {
   if (cambio.bloqueo) return { ok: false, falta: "nada-que-hacer" }
   if (cambio.sedesParaElegir.length === 0) return { ok: true, plan: cambio.destino }
   if (!elegida || !cambio.sedesParaElegir.some((sede) => sede.id === elegida)) return { ok: false, falta: "elegir-sede" }
+  const impiden = sedesConHorasQueImpiden(cambio, elegida)
+  if (impiden.length > 0) return { ok: false, falta: "horas-por-delante", sedes: impiden }
   return { ok: true, plan: cambio.destino, sedeQueSeQueda: elegida }
 }

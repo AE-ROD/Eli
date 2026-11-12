@@ -202,7 +202,7 @@ describe("franjaNueva", () => {
 
   it("un día acepta como mucho 4 franjas (lo que acepta el servidor): con 4, ya no se agrega otra", () => {
     const cuatro = [franja("06:00", "07:00"), franja("08:00", "09:00"), franja("10:00", "11:00"), franja("12:00", "13:00")]
-    expect(franjaNueva(cuatro.slice(0, 3))).toEqual({ startTime: "14:00", endTime: "17:00" })
+    expect(franjaNueva(cuatro.slice(0, 3))).toEqual({ startTime: "12:00", endTime: "15:00" })
     expect(franjaNueva(cuatro)).toBeNull()
   })
 

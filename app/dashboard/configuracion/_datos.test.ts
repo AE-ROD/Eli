@@ -670,14 +670,6 @@ describe("agregarSede", () => {
     })
   })
 
-  it("las palabras del rubro llegan a los mensajes", async () => {
-    simularRespuesta(json({}, 409))
-    expect(await borrarSede("s1", vocabularioDe("odontologia").palabras)).toEqual({
-      ok: false,
-      error: "Esta sede ya tiene citas agendadas, así que no se puede borrar. Desactívala y deja de ofrecerse.",
-    })
-  })
-
   it("una respuesta sin sede no se da por buena", async () => {
     simularRespuesta(json({ algo: 1 }, 201))
     expect(await agregarSede(CUERPO_DE_SEDE)).toEqual({ ok: false, error: "No se pudo agregar la sede. Inténtalo de nuevo." })
@@ -763,6 +755,19 @@ describe("borrarSede", () => {
   it("una sede con horas: el 409 del servidor", async () => {
     simularRespuesta(json({ error: "Esta sede tiene horas agendadas: desactívala" }, 409))
     expect(await borrarSede("s1")).toEqual({ ok: false, error: "Esta sede tiene horas agendadas: desactívala" })
+  })
+
+  it("un 409 sin motivo del servidor: dice que la sede ya tuvo citas, con las palabras del rubro", async () => {
+    simularRespuesta(json({}, 409))
+    expect(await borrarSede("s1", vocabularioDe("odontologia").palabras)).toEqual({
+      ok: false,
+      error: "Esta sede ya tuvo citas, así que no se puede borrar. Desactívala y deja de ofrecerse.",
+    })
+    simularRespuesta(json({}, 409))
+    expect(await borrarSede("s1", vocabularioDe("salon").palabras)).toEqual({
+      ok: false,
+      error: "Esta sede ya tuvo horas, así que no se puede borrar. Desactívala y deja de ofrecerse.",
+    })
   })
 
   it("un 404 y la falta de red no lanzan", async () => {

@@ -18,7 +18,7 @@
  * futuras» se lee como reloj; por eso siempre «horas agendadas».
  */
 
-import { cantidadDe, concordar, del, numeroDe } from "@/lib/concordancia"
+import { cantidadDe, concordar, del, el, numeroDe } from "@/lib/concordancia"
 import { MAX_SEDES } from "@/lib/sedes"
 import type { PalabrasDelRubro } from "@/lib/vocabulario"
 
@@ -69,7 +69,7 @@ export function frasesDeLasSedes(palabras: PalabrasDelRubro) {
   const conflicto = (accion: AccionDeSedes): string => {
     switch (accion) {
       case "borrar":
-        return `Esta sede ya tiene ${cita.plural} ${agendadas}, así que no se puede borrar. Desactívala y deja de ofrecerse.`
+        return `Esta sede ya tuvo ${cita.plural}, así que no se puede borrar. Desactívala y deja de ofrecerse.`
       case "desactivar":
         return `Esta sede tiene ${cita.plural} ${agendadas} por delante. Muévelas o cancélalas antes de desactivarla.`
       case "activar":
@@ -117,13 +117,11 @@ export function frasesDeLasSedes(palabras: PalabrasDelRubro) {
     /** La regla que el servidor hace respetar, dicha una vez. */
     regla:
       "Dos sedes no pueden tener franjas que se pisen el mismo día, porque no puedes estar en dos lugares a la vez. Que una termine justo cuando empieza la otra sí se puede.",
-    noSeBorran: `Una sede que ya tiene ${cita.plural} ${agendadas} no se borra: se desactiva y deja de ofrecerse.`,
 
     /** «2 de 5 sedes activas». */
     cupo: (activas: number): string => `${activas} de ${MAX_SEDES} sedes activas`,
     sinCupo: `Ya tienes ${MAX_SEDES} sedes activas. Desactiva una para agregar otra.`,
     agregar: "Agregar sede",
-    vacio: "Todavía no tienes sedes.",
 
     fila: {
       lugar: (lugar: number, total: number): string => `Lugar ${lugar} de ${total}`,
@@ -156,7 +154,7 @@ export function frasesDeLasSedes(palabras: PalabrasDelRubro) {
 
     borrar: {
       titulo: (nombre: string): string => `¿Borrar ${nombre}?`,
-      descripcion: `Se borra la sede con su horario y no se puede deshacer. Si ya tiene ${cita.plural} ${agendadas}, no se puede borrar: desactívala y queda guardada.`,
+      descripcion: `Se borra la sede con su horario y no se puede deshacer. Si alguna vez tuvo ${cita.plural}, no se puede borrar: desactívala y queda guardada.`,
       confirmar: "Borrar sede",
       cancelar: "No borrar",
     },
@@ -223,7 +221,7 @@ export function frasesDeLasSedes(palabras: PalabrasDelRubro) {
         descripcion: `Tus ${cliente.plural} van a ver dónde atiendes y cuándo estás en cada lugar.`,
         principal: {
           leyenda: "Donde atiendes hoy",
-          ayuda: `Le damos nombre a la dirección ${del(negocio)} que ya tienes. Su horario es el que tienes cargado hoy.`,
+          ayuda: `Le damos nombre a la dirección ${del(negocio)} que ya tienes. Su horario es el que tienes cargado hoy, y ${el(cita, "plural")} ${agendadas} por delante quedan en ella.`,
         },
         nueva: {
           leyenda: "El otro lugar",

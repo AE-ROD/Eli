@@ -50,6 +50,21 @@ export function diasConLaSede(dias: readonly number[], sede: Pick<SedeParaElegir
   return sede ? dias.filter((dia) => sede.dias.includes(dia)) : []
 }
 
+/**
+ * Lo que pasa al elegir una sede en "¿Dónde?": si es la misma que ya estaba no
+ * pasa nada (`cambia` en false); si es otra, el día y la hora elegidos se sueltan
+ * (otra sede es otro horario) y se avisa (`avisa`) sólo si había algo que soltar.
+ * Es lo mismo que hace el cambio de profesional con un día que ya no tiene atención.
+ */
+export function alElegirSede(
+  actual: string | null,
+  nueva: string,
+  elegido: { fecha: string; hora: string }
+): { cambia: boolean; avisa: boolean } {
+  if (nueva === actual) return { cambia: false, avisa: false }
+  return { cambia: true, avisa: elegido.fecha !== "" || elegido.hora !== "" }
+}
+
 /** "Av. Italia 1234, Providencia": la dirección con su comuna, para leer y para el evento del calendario. */
 export function direccionConComuna(lugar: { direccion: string; comuna: string }): string {
   return [lugar.direccion, lugar.comuna].filter((parte) => parte.trim() !== "").join(", ")

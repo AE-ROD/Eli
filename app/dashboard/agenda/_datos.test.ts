@@ -105,6 +105,25 @@ describe("crearCita", () => {
     expect(await crearCita(CITA, ZONA)).toEqual({ tipo: "guardada" })
   })
 
+  it("con varias sedes manda la sede elegida; sin ellas, la clave no va y la cita se crea como siempre (etapa 9)", async () => {
+    const conSede = simularRespuesta(json({ id: "c1" }, 201))
+    await crearCita({ ...CITA, sedeId: "sede-centro" }, ZONA)
+    expect(cuerpoEnviado(conSede).sedeId).toBe("sede-centro")
+
+    const sinSedes = simularRespuesta(json({ id: "c1" }, 201))
+    await crearCita(CITA, ZONA)
+    expect(cuerpoEnviado(sinSedes)).not.toHaveProperty("sedeId")
+  })
+
+  it("una sede todavía sin elegir se manda como null: el servidor responde 400 y dice cuál falta", async () => {
+    const fetchFalso = simularRespuesta(json({ error: "Elige la sede donde se atiende" }, 400))
+
+    const resultado = await crearCita({ ...CITA, sedeId: "" }, ZONA)
+
+    expect(cuerpoEnviado(fetchFalso).sedeId).toBeNull()
+    expect(resultado).toEqual({ tipo: "error", error: "Elige la sede donde se atiende" })
+  })
+
   it("un 409 con advertencias las devuelve para preguntar, sin dar la cita por creada", async () => {
     const advertencias = [{ tipo: "bloqueo", mensaje: "Carla tiene bloqueado de 13:00 a 14:00." }]
     simularRespuesta(json({ error: advertencias[0].mensaje, advertencias }, 409))

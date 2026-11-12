@@ -14,10 +14,10 @@
  * dice acá promete un cobro, una fecha ni un descuento.
  */
 
-import { del } from "@/lib/concordancia"
+import { concordar, del, el } from "@/lib/concordancia"
 import { MAX_SEDES } from "@/lib/sedes"
 import type { PlanId } from "@/lib/planes"
-import type { PalabrasDelRubro } from "@/lib/vocabulario"
+import { conMayuscula, type PalabrasDelRubro } from "@/lib/vocabulario"
 import { precioDelPlan } from "./_plan"
 
 /** Una línea de «qué incluye»: lo que el plan trae, o lo que no. */
@@ -35,7 +35,8 @@ function descripcionDelEquipo(integrantes: number, invitaciones: number): string
 }
 
 export function frasesDelPlan(palabras: PalabrasDelRubro) {
-  const { profesional, negocio } = palabras
+  const { profesional, negocio, cita } = palabras
+  const agendadas = concordar("agendado", cita, "plural")
 
   /** Lo que trae cada plan y lo que no, en las palabras del rubro. */
   const incluye = (plan: PlanId): LineaDelPlan[] =>
@@ -88,15 +89,23 @@ export function frasesDelPlan(palabras: PalabrasDelRubro) {
         invitar: `Podrás invitar a un encargado y a tus ${profesional.plural}.`,
         unaSede: `Equipo tiene una sola sede: la dirección ${del(negocio)}.`,
         sinSedes: `No tienes sedes activas, así que la dirección ${del(negocio)} sigue como está.`,
-        /** Con sedes activas: pide elegir y avisa que las demás se desactivan. */
-        elegirSede: `Elige cuál de tus sedes queda como la dirección ${del(negocio)}. Las demás se desactivan y dejan de verse en tu página de reservas.`,
-        unaSedeQueda: (nombre: string): string =>
-          `Tu única sede activa, ${nombre}, queda como la dirección ${del(negocio)}.`,
-        leyenda: `Sede que queda como la dirección ${del(negocio)}`,
-        faltaElegir: "Elige la sede que queda antes de confirmar.",
-        /** «Se desactivan 2 sedes.» */
+        /** Con una sola sede activa: ella pasa a ser el negocio. */
+        unaSedeQueda: (nombre: string): string => `Tu sede ${nombre} pasa a ser la dirección y el horario ${del(negocio)}.`,
+        /** Con varias: se elige cuál. */
+        elegirSede: `Elige cuál de tus sedes pasa a ser la dirección y el horario ${del(negocio)}.`,
+        /** Todas se desactivan, también la que se elige: sin borrarse. */
         seDesactivan: (cantidad: number): string =>
-          cantidad === 1 ? "Se desactiva 1 sede." : `Se desactivan ${cantidad} sedes.`,
+          cantidad === 1
+            ? "La sede se desactiva sin borrarse y deja de verse en tu página de reservas."
+            : `Tus ${cantidad} sedes activas se desactivan sin borrarse y dejan de verse en tu página de reservas.`,
+        /** Las horas por delante de la sede elegida siguen, en el negocio. */
+        siguenLasHoras: `${conMayuscula(el(cita, "plural"))} ${agendadas} por delante en esa sede siguen, ahora en la dirección ${del(negocio)}.`,
+        leyenda: `Sede que pasa a ser la dirección ${del(negocio)}`,
+        faltaElegir: "Elige la sede que pasa a ser el negocio antes de confirmar.",
+        /** Con la sede elegida, otras tienen horas por delante: el servidor lo rechaza. «Providencia (3) y Ñuñoa (1)». */
+        horasQueImpiden: (sedes: readonly { nombre: string; horasFuturas: number }[], elegida: string): string =>
+          `Todavía no se puede: otras sedes tienen ${cita.plural} ${agendadas} por delante (${sedes.map((sede) => `${sede.nombre}: ${sede.horasFuturas}`).join(", ")}). Muévelas a ${elegida} o cancélalas, o elige otra sede.`,
+        noSePuedeTodavia: "Todavía no se puede pasar a Equipo: primero resuelve las horas que tienen por delante las otras sedes.",
       },
       aIndependiente: {
         atiendesTu: "Pasas a atender sólo tú: ya no podrás invitar a nadie.",

@@ -23,7 +23,9 @@ describe("las frases de las sedes, sin rubro", () => {
     expect(f.titulo).toBe("Sedes y horarios")
     expect(f.subtitulo).toBe("Tus clientes eligen la sede al reservar y ven qué días y a qué horas estás en cada una.")
     expect(f.regla).toContain("no puedes estar en dos lugares a la vez")
-    expect(f.noSeBorran).toBe("Una sede que ya tiene citas agendadas no se borra: se desactiva y deja de ofrecerse.")
+    expect(f.borrar.descripcion).toBe(
+      "Se borra la sede con su horario y no se puede deshacer. Si alguna vez tuvo citas, no se puede borrar: desactívala y queda guardada."
+    )
   })
 
   it("el cupo y el límite de 5 sedes activas", () => {
@@ -42,7 +44,7 @@ describe("las frases de las sedes, sin rubro", () => {
       "Hoy atiendes sólo en la dirección del negocio. Si trabajas en más de un lugar, agrega cada sede con su dirección y los días y las horas en que estás ahí. Tus clientes eligen dónde reservar."
     )
     expect(f.convertir.modal.principal.ayuda).toBe(
-      "Le damos nombre a la dirección del negocio que ya tienes. Su horario es el que tienes cargado hoy."
+      "Le damos nombre a la dirección del negocio que ya tienes. Su horario es el que tienes cargado hoy, y las citas agendadas por delante quedan en ella."
     )
     expect(f.convertir.boton).toBe("Trabajo en más de un lugar")
   })
@@ -59,7 +61,7 @@ describe("con las palabras de cada rubro", () => {
     expect(f.fila.horasPorDelante(1)).toBe("1 hora agendada por delante")
     expect(f.fila.horasPorDelante(4)).toBe("4 horas agendadas por delante")
     expect(f.convertir.descripcion).toContain("la dirección del salón")
-    expect(f.noSeBorran).toBe("Una sede que ya tiene horas agendadas no se borra: se desactiva y deja de ofrecerse.")
+    expect(f.borrar.descripcion).toContain("Si alguna vez tuvo horas, no se puede borrar")
   })
 
   it("una clínica dental: pacientes y citas", () => {
@@ -74,7 +76,8 @@ describe("con las palabras de cada rubro", () => {
     const f = frasesDeLasSedes(AL_REVES)
     expect(f.fila.horasPorDelante(2)).toBe("2 turnos agendados por delante")
     expect(f.fila.horasPorDelante(1)).toBe("1 turno agendado por delante")
-    expect(f.noSeBorran).toBe("Una sede que ya tiene turnos agendados no se borra: se desactiva y deja de ofrecerse.")
+    expect(f.borrar.descripcion).toContain("Si alguna vez tuvo turnos, no se puede borrar")
+    expect(f.convertir.modal.principal.ayuda).toContain("los turnos agendados por delante quedan en ella")
     expect(f.convertir.descripcion).toContain("la dirección del taller")
     expect(f.subtitulo).toContain("Tus clientas eligen")
   })
@@ -103,7 +106,7 @@ describe("error: el mensaje por código", () => {
   })
 
   it("409 sin motivo: lo más probable de cada acción, con las palabras del rubro", () => {
-    expect(f.error(409, "", "borrar")).toBe("Esta sede ya tiene citas agendadas, así que no se puede borrar. Desactívala y deja de ofrecerse.")
+    expect(f.error(409, "", "borrar")).toBe("Esta sede ya tuvo citas, así que no se puede borrar. Desactívala y deja de ofrecerse.")
     expect(f.error(409, "", "desactivar")).toBe("Esta sede tiene citas agendadas por delante. Muévelas o cancélalas antes de desactivarla.")
     expect(f.error(409, "", "activar")).toContain("ya tienes 5 sedes activas")
     expect(f.error(409, "", "guardar-horario")).toContain("se pisa con el de otra sede")

@@ -9,8 +9,9 @@ import { ArrowLeftRight, ArrowRight, LogOut, PanelLeftClose, PanelLeftOpen, Spar
 import { FONDO_SUAVE, HALO_DE_MODULO } from "@/components/comunes/colores-de-modulo"
 import { LogoEli } from "@/components/comunes/logo-eli"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
-import { AvatarUsuario } from "@/components/panel/avatar-usuario"
+import { BotonDeMiFoto } from "@/components/panel/boton-de-mi-foto"
 import { ID_DEL_CAJON, useBarraLateral } from "@/components/panel/contexto-barra-lateral"
+import { useCuentaDelPanel } from "@/components/panel/contexto-de-la-cuenta"
 import { usePrecios } from "@/components/panel/contexto-precios"
 import { CuadroDeSeccion } from "@/components/panel/icono-de-seccion"
 import {
@@ -49,6 +50,7 @@ interface PropsDeBarraLateral {
   usuario?: {
     nombre: string
     email: string
+    /** La foto de la CUENTA de quien está en sesión (no la del integrante), ya comprobada en el servidor. Sin ella, las iniciales. */
     imagenUrl?: string
     negocio: string
   }
@@ -149,6 +151,7 @@ export function BarraLateral({
 }: PropsDeBarraLateral) {
   useRecargarSiCambiaElContexto(contexto)
   const { abrirPrecios } = usePrecios()
+  const { abrirMiFoto } = useCuentaDelPanel()
   const pathname = usePathname()
   const { cajonAbierto, cerrarCajon, cerrarCajonParaIrA, colapsada, alternarColapso, enfocarBotonMenu } =
     useBarraLateral()
@@ -391,7 +394,18 @@ export function BarraLateral({
               className={cn("flex items-center rounded-[24px] bg-superficie p-2", colapsada ? "flex-col gap-1.5" : "gap-2")}
             >
               {usuario ? (
-                <AvatarUsuario nombre={usuario.nombre} imagenUrl={usuario.imagenUrl} tamaño="md" />
+                <BotonDeMiFoto
+                  nombre={usuario.nombre}
+                  imagenUrl={usuario.imagenUrl}
+                  alAbrir={
+                    abrirMiFoto &&
+                    (() => {
+                      // Como los planes: el modal se abre con el cajón ya cerrado; abierto, seguiría reteniendo el foco detrás.
+                      cerrarCajon()
+                      abrirMiFoto()
+                    })
+                  }
+                />
               ) : (
                 <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-full bg-tarjeta text-texto-2">
                   <UserRound className="size-5" strokeWidth={1.75} />
