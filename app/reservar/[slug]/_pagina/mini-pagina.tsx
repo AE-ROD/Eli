@@ -9,10 +9,17 @@ import { estadoDeAtencion, textoDeEstado } from "@/lib/abierto-ahora"
 import { formatearMonto } from "@/lib/dinero"
 import { formatearDuracionDeServicio } from "@/lib/fechas"
 import { plazoParaQuienReserva } from "@/lib/gestion-de-cita"
-import { CATEGORIA_SIN_NOMBRE, horarioParaMostrar, iniciales, serviciosPorCategoria } from "@/lib/pagina-del-negocio"
+import {
+  CATEGORIA_SIN_NOMBRE,
+  horarioParaMostrar,
+  iniciales,
+  serviciosPorCategoria,
+  type SedeDeLaPagina,
+} from "@/lib/pagina-del-negocio"
 import { haceAlgunServicio, textoDeLoQueHace } from "@/lib/servicios-del-profesional"
 import { cn } from "@/lib/utils"
 import { frasesDeLaPagina } from "../_frases"
+import { FRASES_DE_LAS_SEDES } from "../_frases-de-sedes"
 import type { PaginaDelNegocio, ProfesionalPublico } from "./datos-de-la-pagina"
 
 /** El ancla del flujo de reserva, que vive más abajo en la misma página. */
@@ -38,24 +45,41 @@ interface PropsDeMiniPagina {
  * por categoría, su horario y sus medios de pago. Cada bloque aparece sólo si
  * hay datos: un negocio recién creado ve su nombre, sus servicios de ejemplo
  * y el botón para reservar.
+ *
+ * Plan Independiente con dos o más sedes activas (`modoDeSedes`): en vez del
+ * horario y la ubicación del negocio, el bloque "Dónde atiendo", con cada sede,
+ * su dirección, cómo llegar y sus días y horas, y un botón para reservar en ella.
+ * Con una sola sede, o sin sedes, la página es la de siempre.
  */
 export function MiniPagina({ pagina, ahora }: PropsDeMiniPagina) {
+  const sedes = sedesParaMostrar(pagina)
   return (
     <div className="flex flex-col gap-4 md:gap-6">
       <Cabecera pagina={pagina} ahora={ahora} />
+      {sedes.length > 0 && <DondeAtiendo sedes={sedes} />}
       {pagina.equipo.length > 0 && (
         <Equipo equipo={pagina.equipo} servicios={pagina.servicios} color={pagina.color.clave} rubro={pagina.rubro} />
       )}
       {pagina.servicios.length > 0 && <Servicios servicios={pagina.servicios} rubro={pagina.rubro} />}
-      <Datos pagina={pagina} />
+      <Datos pagina={pagina} conSedes={sedes.length > 0} />
     </div>
   )
+}
+
+/** Las sedes que muestra la página: sólo con dos o más sedes activas. En cualquier otro caso, ninguna. */
+function sedesParaMostrar(pagina: PaginaDelNegocio): SedeDeLaPagina[] {
+  return pagina.modoDeSedes === "varias" ? (pagina.sedes ?? []) : []
 }
 
 function Cabecera({ pagina, ahora }: PropsDeMiniPagina) {
   const idDelTitulo = useId()
   const estado = estadoDeAtencion(pagina.horario, ahora, pagina.zona)
   const clasesDelColor = CLASES_DEL_LOCAL[pagina.color.clave]
+  // Con varias sedes, las comunas donde atiende y "Cómo llegar" a sus direcciones;
+  // si no, la comuna y los mapas del negocio, como siempre.
+  const sedes = sedesParaMostrar(pagina)
+  const comunas = sedes.length > 0 ? [...new Set(sedes.map((sede) => sede.comuna))].join(", ") : pagina.comuna
+  const hayComoLlegar = sedes.length > 0 ? sedes.some((sede) => sede.mapas !== null) : !!pagina.mapas
 
   return (
     <Tarjeta como="section" aria-labelledby={idDelTitulo} className="overflow-hidden">
@@ -90,10 +114,10 @@ function Cabecera({ pagina, ahora }: PropsDeMiniPagina) {
         <h1 id={idDelTitulo} className="mt-4 font-serif text-[32px] leading-[1.1] font-medium tracking-[-1px] text-balance break-words text-navy md:text-[40px]">
           {pagina.nombre}
         </h1>
-        {pagina.comuna && (
+        {comunas && (
           <p className="mt-2 flex items-center gap-1.5 text-texto-2">
             <MapPin className="size-4 shrink-0" aria-hidden="true" />
-            {pagina.comuna}
+            {comunas}
           </p>
         )}
         {estado && (
@@ -128,7 +152,7 @@ function Cabecera({ pagina, ahora }: PropsDeMiniPagina) {
               Instagram
             </Boton>
           )}
-          {pagina.mapas && (
+          {hayComoLlegar && (
             <Boton href={`#${ANCLA_DE_UBICACION}`} variante="secundario" icono={<Navigation />}>
               Cómo llegar
             </Boton>
@@ -152,13 +176,30 @@ function Cabecera({ pagina, ahora }: PropsDeMiniPagina) {
   )
 }
 
-function EnlacesDeMapa({ mapas }: { mapas: NonNullable<PaginaDelNegocio["mapas"]> }) {
+/**
+ * "Cómo llegar" en Google Maps y en Waze. Con varias sedes cada una lleva los
+ * suyos, y `sede` (su nombre) los distingue para el lector de pantalla: "Cómo
+ * llegar a Centro con Waze". Sin `sede`, los de siempre.
+ */
+function EnlacesDeMapa({ mapas, sede }: { mapas: NonNullable<PaginaDelNegocio["mapas"]>; sede?: string }) {
   return (
     <>
-      <Boton href={mapas.googleMaps} variante="secundario" icono={<Navigation />} aria-label="Cómo llegar con Google Maps" {...AFUERA}>
+      <Boton
+        href={mapas.googleMaps}
+        variante="secundario"
+        icono={<Navigation />}
+        aria-label={sede ? FRASES_DE_LAS_SEDES.comoLlegar(sede, "Google Maps") : "Cómo llegar con Google Maps"}
+        {...AFUERA}
+      >
         Google Maps
       </Boton>
-      <Boton href={mapas.waze} variante="secundario" icono={<Navigation />} aria-label="Cómo llegar con Waze" {...AFUERA}>
+      <Boton
+        href={mapas.waze}
+        variante="secundario"
+        icono={<Navigation />}
+        aria-label={sede ? FRASES_DE_LAS_SEDES.comoLlegar(sede, "Waze") : "Cómo llegar con Waze"}
+        {...AFUERA}
+      >
         Waze
       </Boton>
     </>
@@ -182,6 +223,70 @@ function Bloque({ titulo, children, className, id }: PropsDeBloque) {
       </h2>
       {children}
     </Tarjeta>
+  )
+}
+
+/**
+ * "Dónde atiendo": cada sede activa con su dirección, cómo llegar y sus días y
+ * horas, y un botón que lleva al formulario con ESA sede elegida (`?sede=`, que
+ * el formulario revalida contra las sedes del negocio). Es también el destino de
+ * "Cómo llegar" de la cabecera. Una sede sin ningún día cargado no se puede
+ * reservar todavía y no lleva botón.
+ */
+function DondeAtiendo({ sedes }: { sedes: SedeDeLaPagina[] }) {
+  return (
+    <Bloque titulo={FRASES_DE_LAS_SEDES.bloque} id={ANCLA_DE_UBICACION}>
+      <ul className="mt-5 grid gap-3 md:grid-cols-2">
+        {sedes.map((sede) => {
+          const sePuedeReservar = sede.dias.length > 0
+          return (
+            // `min-w-0`: igual que en Equipo, una dirección larga y sin espacios no ensancha la tarjeta.
+            <li key={sede.id} className="flex min-w-0 flex-col gap-4 rounded-[24px] bg-superficie p-4 squircle">
+              <div className="flex flex-col gap-3">
+                <div>
+                  <h3 className="font-medium break-words text-navy">{sede.nombre}</h3>
+                  <p className="mt-1 flex items-start gap-2 text-sm text-navy">
+                    <MapPin className="mt-0.5 size-4 shrink-0 text-texto-2" aria-hidden="true" />
+                    <span className="break-words">{[sede.direccion, sede.comuna].filter(Boolean).join(", ")}</span>
+                  </p>
+                </div>
+                {sePuedeReservar ? (
+                  <ul className="text-sm text-texto-2 tabular-nums">
+                    {sede.horario.map((linea) => (
+                      <li key={linea} className="break-words">
+                        {linea}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-texto-2">{FRASES_DE_LAS_SEDES.sinHorario}</p>
+                )}
+                {sede.mapas && (
+                  <div className="flex flex-wrap gap-2">
+                    <EnlacesDeMapa mapas={sede.mapas} sede={sede.nombre} />
+                  </div>
+                )}
+              </div>
+              {/*
+                Un `<a>` común y no `Link`, como "Reservar con …": carga la página con
+                la sede en la dirección, así el formulario nace con ella elegida. Con
+                `mt-auto` los botones de una fila quedan alineados abajo. En el teléfono
+                mide 44px de verdad (`max-sm:min-h-11`, sin el `::after` que estira el `sm`).
+              */}
+              {sePuedeReservar && (
+                <a
+                  href={`?sede=${encodeURIComponent(sede.id)}#${ANCLA_DE_RESERVA}`}
+                  aria-label={FRASES_DE_LAS_SEDES.reservarEn(sede.nombre)}
+                  className={clasesDeBoton({ variante: "primario", tamano: "sm", className: "mt-auto w-full max-sm:min-h-11 max-sm:after:inset-y-0" })}
+                >
+                  <span className="truncate">{FRASES_DE_LAS_SEDES.reservarAca}</span>
+                </a>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </Bloque>
   )
 }
 
@@ -304,9 +409,14 @@ function Servicios({ servicios, rubro }: { servicios: PaginaDelNegocio["servicio
   )
 }
 
-function Datos({ pagina }: { pagina: PaginaDelNegocio }) {
-  const hayUbicacion = !!(pagina.direccion || pagina.comuna)
-  const hayHorario = pagina.horario.length > 0
+/**
+ * Horario, ubicación y medios de pago. Con varias sedes (`conSedes`), el horario y
+ * la ubicación son los de cada sede, en "Dónde atiendo": juntarlos acá daría un
+ * horario que mezcla lugares y una dirección que no es la de ninguna cita.
+ */
+function Datos({ pagina, conSedes }: { pagina: PaginaDelNegocio; conSedes: boolean }) {
+  const hayUbicacion = !conSedes && !!(pagina.direccion || pagina.comuna)
+  const hayHorario = !conSedes && pagina.horario.length > 0
   const hayMedios = pagina.medios.length > 0
   if (!hayUbicacion && !hayHorario && !hayMedios) return null
 

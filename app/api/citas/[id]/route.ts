@@ -62,6 +62,7 @@ import {
   type ConsultaDeSillon,
 } from "@/lib/sillones"
 import { seleccionDeCitaDelPanel, soltarLoClinicoDeLaCita } from "@/lib/citas-de-la-clinica"
+import { SELECCION_DE_LA_SEDE_DE_LA_CITA, sedeDelHorarioDeLaCita } from "@/lib/sede-de-la-cita"
 import { leerAlertaDeAlergias } from "@/lib/ficha-clinica-servidor"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
 import { registrarError } from "@/lib/registro-de-errores"
@@ -203,8 +204,8 @@ export async function GET(
     where: whereDeAgenda(actor, { id }),
     // Columnas explícitas (`lib/citas-de-la-clinica.ts`): ni el hash del
     // enlace, ni las comisiones. Fuera de una clínica dental, sin el sillón
-    // ni `primeraVez`, como en la lista (`GET /api/citas`).
-    select: seleccionDeCitaDelPanel(veSillones(actor)),
+    // ni `primeraVez`, como en la lista (`GET /api/citas`). Y la sede (etapa 9).
+    select: { ...seleccionDeCitaDelPanel(veSillones(actor)), ...SELECCION_DE_LA_SEDE_DE_LA_CITA },
   })
 
   if (!cita) {
@@ -409,12 +410,17 @@ export async function PUT(
       if (ocupado) throw ocupado
     }
 
+    // Etapa 9: mover no cambia la sede de la cita (para eso se cancela y se crea
+    // otra: un `sedeId` en el pedido no cuenta). Con varias sedes, el horario de
+    // atención que se advierte es el de ESA sede. Quién está libre sigue siendo
+    // del negocio entero: la persona está en un solo lugar a la vez.
     if (seMueve && !datos.confirmarAdvertencias) {
       const advertencias = await advertenciasDeAgenda(prisma, {
         businessId: actor.businessId,
         citaId: existente.id,
         tramo: { startTime: inicio, endTime: fin },
         memberId,
+        sedeId: await sedeDelHorarioDeLaCita(prisma, actor, existente),
       })
       if (advertencias.length > 0) {
         return NextResponse.json(
@@ -463,6 +469,7 @@ export async function PUT(
         citaId: existente.id,
         tramo: { startTime: inicio, endTime: fin },
         memberId,
+        sedeId: await sedeDelHorarioDeLaCita(prisma, actor, existente),
       })
       if (advertencias.length > 0) {
         return NextResponse.json(
@@ -509,8 +516,8 @@ export async function PUT(
         // no pisa la hora ni el autor de la primera cancelación.
         ...(canceladaEn && { canceladaPor: "negocio", canceladaEn }),
       },
-      // Columnas explícitas: ni el hash del enlace, ni las comisiones.
-      select: seleccionDeCitaDelPanel(veSillones(actor)),
+      // Columnas explícitas: ni el hash del enlace, ni las comisiones. Y la sede (etapa 9).
+      select: { ...seleccionDeCitaDelPanel(veSillones(actor)), ...SELECCION_DE_LA_SEDE_DE_LA_CITA },
     } satisfies Prisma.AppointmentUpdateArgs
 
     // Resolver una por confirmar (#84) es condicional: sólo si sigue

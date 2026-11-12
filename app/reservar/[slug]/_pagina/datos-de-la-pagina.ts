@@ -15,10 +15,13 @@ import {
   imagenPublica,
   mediosParaMostrar,
   normalizarInstagram,
+  sedesParaLaPagina,
   type ColorDelLocal,
+  type SedeDeLaPagina,
 } from "@/lib/pagina-del-negocio"
 import { rubroOfreceHoraValle } from "@/lib/permisos"
 import { prisma } from "@/lib/prisma"
+import { WHERE_HORARIO_VIGENTE, modoDeSedes, ordenarSedes, type ModoDeSedes } from "@/lib/sedes"
 import { servicioIdsPublicos } from "@/lib/servicios-del-profesional"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
 
@@ -27,9 +30,10 @@ import { zonaDelNegocio } from "@/lib/zona-horaria"
  * slug. Es público y sin sesión: el `select` trae sólo lo que se puede
  * mostrar a cualquiera. Ni correos, ni teléfonos de las personas del equipo,
  * ni comisiones, ni ids internos más allá del `memberId` que usa "Reservar
- * con…" (el mismo que la reserva ya acepta) y los ids de los servicios activos
+ * con…" (el mismo que la reserva ya acepta), los ids de los servicios activos
  * de este negocio que hace cada uno (los mismos que ya publica
- * `/api/reservar/[slug]/profesionales`).
+ * `/api/reservar/[slug]/profesionales`) y el id de cada sede activa (el mismo
+ * que la reserva ya acepta en `sedeId`).
  *
  * Con `cache`: la página, sus metadatos y la imagen para compartir lo piden
  * en la misma petición y se lee una sola vez.
@@ -83,6 +87,14 @@ export interface PaginaDelNegocio {
   plazoDeCambiosHoras: number
   /** Si hay precios de hora valle (#89c): encendida y con alguna franja. */
   horaValle: boolean
+  /**
+   * Plan Independiente: `varias` con dos o más sedes activas, `una` en cualquier
+   * otro caso (sin sedes, una sola, o el plan Equipo). Ausente es `una`: la
+   * página de siempre.
+   */
+  modoDeSedes?: ModoDeSedes
+  /** Las sedes ACTIVAS, en el orden de la lista, con su dirección y su horario. Ausente o vacía: sin sedes. */
+  sedes?: SedeDeLaPagina[]
 }
 
 const textoONull = (texto: string | null) => (texto ?? "").trim() || null
@@ -105,6 +117,8 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
       mediosDePago: true,
       cancelacionHorasAntes: true,
       type: true,
+      // El plan decide si hay modo de varias sedes (`modoDeSedes`).
+      plan: true,
       horaValleActiva: true,
       // Basta saber si hay alguna: la página no lista las franjas.
       franjasDeHoraValle: { select: { id: true }, take: 1 },
@@ -117,9 +131,17 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
         select: { id: true, name: true, description: true, duration: true, price: true, category: true },
         orderBy: { createdAt: "asc" },
       },
+      // Sólo las sedes activas, y nada más que lo que se muestra: ni el negocio
+      // al que pertenecen ni fechas. El orden de la lista lo da `ordenarSedes`.
+      sedes: {
+        where: { activo: true },
+        select: { id: true, nombre: true, direccion: true, comuna: true, telefono: true, orden: true, activo: true },
+      },
       workSchedules: {
-        where: { active: true },
-        select: { dayOfWeek: true, memberId: true, startTime: true, endTime: true },
+        // El horario vigente (sin sede, o de una sede activa): el de una sede
+        // desactivada queda guardado pero no se publica.
+        where: { active: true, ...WHERE_HORARIO_VIGENTE },
+        select: { dayOfWeek: true, memberId: true, sedeId: true, startTime: true, endTime: true },
         orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
       },
     },
@@ -135,6 +157,10 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
   const serviciosDeCadaUno = new Map(
     profesionales.map((profesional) => [profesional.id, servicioIdsPublicos(profesional.serviceIds, idsDeServiciosActivos)])
   )
+
+  // El horario que cuenta: el general y el de quienes atienden.
+  const filasDeHorario = filasDeQuienesAtienden(negocio.workSchedules, profesionales)
+  const sedes = ordenarSedes(negocio.sedes)
 
   const usuarioDeInstagram = normalizarInstagram(negocio.instagram)
   const enlaceDelPerfil = enlaceDeInstagram(negocio.instagram)
@@ -171,7 +197,7 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
     // Sin el horario propio de quien no atiende (un encargado), que abría
     // días sin horario general (#168).
     horario: horarioSemanalPublicado(
-      filasDeQuienesAtienden(negocio.workSchedules, profesionales),
+      filasDeHorario,
       profesionales.length > 0
         ? profesionalesConHorarioPublicado(
             profesionales,
@@ -182,5 +208,7 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
     plazoDeCambiosHoras: negocio.cancelacionHorasAntes,
     // Una clínica dental no tiene hora valle, aunque la bandera siga guardada.
     horaValle: rubroOfreceHoraValle(negocio.type) && negocio.horaValleActiva && negocio.franjasDeHoraValle.length > 0,
+    modoDeSedes: modoDeSedes(negocio.plan, sedes),
+    sedes: sedesParaLaPagina(sedes, filasDeHorario),
   }
 })

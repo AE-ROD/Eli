@@ -4,9 +4,13 @@ import { cn } from "@/lib/utils"
 /** Los pasos de la reserva, en orden: el número de cada uno es su lugar más uno. */
 export const PASOS_DE_RESERVA = ["Servicio", "Día y hora", "Tus datos"] as const
 
-/** Los mismos pasos con el nombre del primero según el rubro: "Servicio", o "Motivo" en una clínica dental (`frasesDelFormulario`). */
-export function pasosDeLaReserva(servicioDeLaReserva: string): readonly [string, string, string] {
-  return [servicioDeLaReserva, PASOS_DE_RESERVA[1], PASOS_DE_RESERVA[2]]
+/**
+ * Los mismos pasos con el nombre del primero según el rubro: "Servicio", o "Motivo" en una clínica dental (`frasesDelFormulario`).
+ * Con varias sedes (plan Independiente) se suma "Dónde" al principio (`dondeAtiendo`: su nombre, de `_frases-de-sedes.ts`).
+ */
+export function pasosDeLaReserva(servicioDeLaReserva: string, dondeAtiendo?: string): readonly string[] {
+  const pasos = [servicioDeLaReserva, PASOS_DE_RESERVA[1], PASOS_DE_RESERVA[2]]
+  return dondeAtiendo ? [dondeAtiendo, ...pasos] : pasos
 }
 
 type EstadoDelPaso = "hecho" | "actual" | "pendiente"
@@ -40,7 +44,7 @@ function estadoDelPaso(numero: number, pasoActual: number): EstadoDelPaso {
 }
 
 interface PropsDeIndicadorDePasos {
-  /** El paso en el que está la clienta: 1, 2 o 3. */
+  /** El paso en el que está la clienta: 1, 2 o 3 (hasta 4 con varias sedes). */
   paso: number
   /** Los nombres de los pasos; sin él, los de siempre. En una clínica dental el primero es "Motivo". */
   pasos?: readonly string[]
@@ -50,12 +54,15 @@ interface PropsDeIndicadorDePasos {
  * Dónde está la clienta dentro de la reserva: una barra por paso, con su
  * número y su nombre debajo. Sólo informa; para volver está el botón "Atrás".
  *
- * El lector de pantalla lo lee como una lista de tres pasos con el actual
- * marcado (`aria-current="step"`) y los hechos con "listo".
+ * El lector de pantalla lo lee como una lista de tres pasos (cuatro con varias
+ * sedes) con el actual marcado (`aria-current="step"`) y los hechos con "listo".
+ * Con cuatro, en el teléfono cada nombre va debajo de su número: a 360px de ancho
+ * una columna mide unos 70px y "Servicio" no entra al lado del círculo.
  */
 export function IndicadorDePasos({ paso, pasos = PASOS_DE_RESERVA }: PropsDeIndicadorDePasos) {
+  const cuatro = pasos.length > 3
   return (
-    <ol aria-label="Pasos de la reserva" className="grid grid-cols-3 gap-2 sm:gap-3">
+    <ol aria-label="Pasos de la reserva" className={cn("grid gap-2 sm:gap-3", cuatro ? "grid-cols-4" : "grid-cols-3")}>
       {pasos.map((nombre, indice) => {
         const numero = indice + 1
         const estado = estadoDelPaso(numero, paso)
@@ -69,7 +76,12 @@ export function IndicadorDePasos({ paso, pasos = PASOS_DE_RESERVA }: PropsDeIndi
               aria-hidden="true"
               className={cn("h-1.5 rounded-full transition-colors duration-300 ease-suave", BARRA[estado])}
             />
-            <span className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+            <span
+              className={cn(
+                "flex min-w-0 gap-1.5 sm:gap-2",
+                cuatro ? "flex-col items-start sm:flex-row sm:items-center" : "items-center"
+              )}
+            >
               <span
                 aria-hidden="true"
                 className={cn(

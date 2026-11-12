@@ -12,14 +12,21 @@ import type { PalabrasDelRubro } from "@/lib/vocabulario"
 import { frasesDeConfiguracion } from "./_frases"
 
 /**
- * Las trece secciones, por su ancla: el `id` del elemento al que llevan los
+ * Las quince secciones, por su ancla: el `id` del elemento al que llevan los
  * enlaces de otras pantallas (`#horario`, `#servicios`, `#sillones`…).
+ *
+ * `sedes` (plan Independiente, sólo la dueña) y `plan` (sólo la dueña) las
+ * arma `page.tsx` con `puedeGestionarSedes` y `puedeCambiarDePlan`. Con una o
+ * más sedes, «Sedes y horarios» reemplaza a «Horario» (`page.tsx` no arma las
+ * dos a la vez).
  */
 export type AnclaDeConfiguracion =
   | "horario"
+  | "sedes"
   | "zona-horaria"
   | "mi-foto"
   | "pagina"
+  | "plan"
   | "servicios"
   | "sillones"
   | "laboratorios"
@@ -39,9 +46,11 @@ export type IdDeGrupo = "horario-y-equipo" | "tu-negocio" | "catalogo-y-clinica"
  */
 export const NOMBRE_DE_SECCION: Readonly<Record<AnclaDeConfiguracion, string>> = {
   horario: "Horario",
+  sedes: "Sedes y horarios",
   "zona-horaria": "Zona horaria",
   "mi-foto": "Mi foto",
   pagina: "Página pública",
+  plan: "Plan",
   servicios: "Servicios",
   sillones: "Sillones",
   laboratorios: "Laboratorios",
@@ -70,8 +79,8 @@ export function nombreDeLaSeccion(ancla: AnclaDeConfiguracion, palabras: Palabra
  * también en su orden. Toda sección está en exactamente un grupo.
  */
 export const GRUPOS: readonly { id: IdDeGrupo; secciones: readonly AnclaDeConfiguracion[] }[] = [
-  { id: "horario-y-equipo", secciones: ["horario", "zona-horaria", "mi-foto"] },
-  { id: "tu-negocio", secciones: ["pagina", "productos"] },
+  { id: "horario-y-equipo", secciones: ["horario", "sedes", "zona-horaria", "mi-foto"] },
+  { id: "tu-negocio", secciones: ["pagina", "productos", "plan"] },
   { id: "catalogo-y-clinica", secciones: ["servicios", "sillones", "laboratorios"] },
   { id: "reservas-y-clientes", secciones: ["plazo-de-cambios", "por-confirmar", "hora-valle", "fila-virtual"] },
   { id: "mensajes", secciones: ["mensajes"] },

@@ -7,6 +7,13 @@ import { z } from "zod"
 import { ESTADOS_AL_CREAR, MENSAJE_DE_ESTADO_AL_CREAR, MENSAJE_DE_HORARIO_INVERTIDO, notas, precioDeCita, terminaDespuesDeEmpezar, titulo } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { seleccionDeCitaDelPanel } from "@/lib/citas-de-la-clinica"
+import {
+  SELECCION_DE_LA_SEDE_DE_LA_CITA,
+  decidirSedeDeLaCita,
+  leerSedesParaAgendar,
+  rechazoDeSede,
+  sedeDeLaCita,
+} from "@/lib/sede-de-la-cita"
 import { registrarError } from "@/lib/registro-de-errores"
 import {
   actorDeSesion,
@@ -81,6 +88,12 @@ const citaSchema = z
      * ignora, como el `memberId` del profesional, y nunca se guarda.
      */
     sillonId: sillonDeLaCita().optional(),
+    /**
+     * Etapa 9: la sede donde se atiende (plan Independiente). Con varias sedes
+     * activas es obligatoria; con una sola se estampa esa, y sin sedes se
+     * ignora. Siempre se revalida contra las sedes del negocio de la sesión.
+     */
+    sedeId: sedeDeLaCita().optional(),
     /** Segundo envío: quien agenda ya vio las advertencias (choque, bloqueo, horario) y guarda igual. */
     confirmarAdvertencias: z.boolean().optional(),
   })
@@ -164,6 +177,9 @@ export async function GET(request: NextRequest) {
         sillon: { select: { id: true, nombre: true } },
         primeraVez: true,
       }),
+      // Etapa 9: la sede de la cita (`sede: { id, nombre }` o `null`). La
+      // pantalla la muestra sólo con varias sedes.
+      ...SELECCION_DE_LA_SEDE_DE_LA_CITA,
     },
     orderBy: { startTime: "asc" },
     // Siempre con tope: con un rango amplio, sin él se traía el histórico entero.
@@ -233,6 +249,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Etapa 9: la sede. Se lee del negocio de la sesión y se revalida lo que
+    // llegó: con varias sedes activas hay que elegir una activa del negocio
+    // (400 si falta o está desactivada; 404 si no es del negocio, sin decir si
+    // existe en otro); con una sola se estampa esa; sin sedes, la cita va sin
+    // sede. Con sede, el horario de atención que se advierte es el de ella.
+    const decisionDeSede = decidirSedeDeLaCita(await leerSedesParaAgendar(prisma, actor), datos.sedeId)
+    if (decisionDeSede.tipo !== "ok") {
+      const rechazo = rechazoDeSede(decisionDeSede)
+      return NextResponse.json({ error: rechazo.error }, { status: rechazo.status })
+    }
+    const { sedeId, sedeDelHorario } = decisionDeSede
+
     const tramo = { startTime: new Date(datos.startTime), endTime: new Date(datos.endTime) }
     const status = datos.status ?? "pendiente"
 
@@ -301,6 +329,7 @@ export async function POST(request: NextRequest) {
         citaId: null,
         tramo,
         memberId,
+        sedeId: sedeDelHorario,
       })
       if (advertencias.length > 0) {
         return NextResponse.json(
@@ -326,11 +355,13 @@ export async function POST(request: NextRequest) {
         customerId: datos.customerId,
         memberId,
         ...(sillonId && { sillonId }),
+        // Etapa 9: la sede que decidió el servidor (nunca la cruda del navegador).
+        ...(sedeId && { sedeId }),
         businessId: actor.businessId,
       },
       // Columnas explícitas (`lib/citas-de-la-clinica.ts`): ni el hash del
       // enlace, ni las comisiones; fuera de una clínica, sin sillón ni `primeraVez`.
-      select: seleccionDeCitaDelPanel(veSillones(actor)),
+      select: { ...seleccionDeCitaDelPanel(veSillones(actor)), ...SELECCION_DE_LA_SEDE_DE_LA_CITA },
     } satisfies Prisma.AppointmentCreateArgs
 
     // Con servicios, la cita y sus filas en la misma transacción, como en la

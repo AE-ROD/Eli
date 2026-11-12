@@ -2,17 +2,24 @@ import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
 import { vocabularioDe } from "@/lib/vocabulario"
 import {
+  agregarSede,
+  borrarSede,
+  cambiarDePlan,
   cambiarMensajesAClientes,
   cambiarServiciosEnLote,
   cargarServiciosEnLote,
+  convertirEnVariasSedes,
   crearServicio,
   cuerpoDeProducto,
   cuerpoDeServicio,
+  editarSede,
   editarServicio,
+  guardarHorarioDeSede,
   guardarNombreDelNegocio,
   guardarPaginaPublica,
   guardarZonaHoraria,
   leerPorcentaje,
+  leerSedes,
   leerServicios,
   leerSugeridos,
   moverSillon,
@@ -562,5 +569,308 @@ describe("leerSugeridos y leerServicios", () => {
     expect(fetchFalso.mock.calls[0][0]).toBe("/api/configuracion/servicios")
     simularRespuesta(json({ no: "es una lista" }))
     expect(await leerServicios()).toMatchObject({ ok: false })
+  })
+})
+
+
+// ─── Sedes y plan (etapa 9) ──────────────────────────────────────────────────
+
+/** Una sede como la manda la API. */
+const SEDE_DE_LA_API = {
+  id: "s1",
+  nombre: "Consulta Providencia",
+  direccion: "Av. Providencia 1234",
+  comuna: "Providencia",
+  telefono: "+56912345678",
+  orden: 0,
+  activo: true,
+  horarios: [{ dayOfWeek: 1, franjas: [{ start: "09:00", end: "13:00" }] }],
+  horasFuturas: 2,
+}
+
+const SEDE_LEIDA = {
+  ...SEDE_DE_LA_API,
+  horarios: [{ dayOfWeek: 1, franjas: [{ startTime: "09:00", endTime: "13:00" }] }],
+}
+
+const CUERPO_DE_SEDE = { nombre: "Consulta Providencia", direccion: "Av. Providencia 1234", comuna: "Providencia", telefono: null }
+
+/** El método, la ruta y el cuerpo de la última llamada a `fetch`. */
+const llamada = (fetchFalso: ReturnType<typeof simularRespuesta>) => {
+  const [ruta, opciones] = fetchFalso.mock.calls[0] as [string, RequestInit]
+  return { ruta, metodo: opciones?.method ?? "GET", cuerpo: opciones?.body ? JSON.parse(String(opciones.body)) : undefined }
+}
+
+describe("leerSedes", () => {
+  it("lee el plan y las sedes, con las franjas {start, end} ya como {startTime, endTime}", async () => {
+    const fetchFalso = simularRespuesta(json({ plan: "independiente", sedes: [SEDE_DE_LA_API] }))
+    expect(await leerSedes()).toEqual({ ok: true, datos: { plan: "independiente", sedes: [SEDE_LEIDA] } })
+    expect(llamada(fetchFalso)).toMatchObject({ ruta: "/api/configuracion/sedes", metodo: "GET" })
+  })
+
+  it("un plan que no se conoce es null; las sedes siguen", async () => {
+    simularRespuesta(json({ plan: "gratis", sedes: [] }))
+    expect(await leerSedes()).toEqual({ ok: true, datos: { plan: null, sedes: [] } })
+  })
+
+  it("una respuesta sin lista de sedes no se da por buena", async () => {
+    simularRespuesta(json({ plan: "equipo" }))
+    expect(await leerSedes()).toEqual({ ok: false, error: "No se pudieron cargar las sedes. Recarga la página para verlas al día." })
+  })
+
+  it("una sede a medias en la lista tampoco", async () => {
+    simularRespuesta(json({ plan: "independiente", sedes: [SEDE_DE_LA_API, { nombre: "sin id" }] }))
+    expect((await leerSedes()).ok).toBe(false)
+  })
+
+  it("401, 404, 429 y 5xx: un mensaje humano, no el del servidor", async () => {
+    simularRespuesta(json({ error: "No autorizado" }, 401))
+    expect(await leerSedes()).toEqual({
+      ok: false,
+      error: "Tu sesión terminó o no tienes permiso para hacer este cambio. Vuelve a entrar e inténtalo de nuevo.",
+    })
+    simularRespuesta(json({ error: "No encontrado" }, 404))
+    expect(await leerSedes()).toEqual({ ok: false, error: "No se encontró lo que querías cambiar. Recarga la página e inténtalo de nuevo." })
+    simularRespuesta(json({ error: "Demasiadas solicitudes" }, 429))
+    expect(await leerSedes()).toEqual({ ok: false, error: "Hiciste varios cambios seguidos. Espera un momento e inténtalo de nuevo." })
+    simularRespuesta(json({ error: "Error interno" }, 500))
+    expect(await leerSedes()).toEqual({ ok: false, error: "No se pudieron cargar las sedes. Recarga la página para verlas al día." })
+  })
+
+  it("sin red no lanza: dice que no hay conexión", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fallo de red")))
+    expect(await leerSedes()).toEqual({ ok: false, error: "Sin conexión con el servidor" })
+  })
+})
+
+describe("agregarSede", () => {
+  it("manda la sede sin el teléfono si no hay, y devuelve la sede como quedó", async () => {
+    const fetchFalso = simularRespuesta(json({ sede: SEDE_DE_LA_API }, 201))
+    expect(await agregarSede(CUERPO_DE_SEDE)).toEqual({ ok: true, datos: SEDE_LEIDA })
+    expect(llamada(fetchFalso)).toEqual({
+      ruta: "/api/configuracion/sedes",
+      metodo: "POST",
+      cuerpo: { nombre: "Consulta Providencia", direccion: "Av. Providencia 1234", comuna: "Providencia" },
+    })
+  })
+
+  it("con teléfono, lo manda", async () => {
+    const fetchFalso = simularRespuesta(json({ sede: SEDE_DE_LA_API }, 201))
+    await agregarSede({ ...CUERPO_DE_SEDE, telefono: "+56912345678" })
+    expect(llamada(fetchFalso).cuerpo.telefono).toBe("+56912345678")
+  })
+
+  it("un 409 trae el motivo del servidor; sin motivo, uno propio", async () => {
+    simularRespuesta(json({ error: "Ya tienes 5 sedes activas" }, 409))
+    expect(await agregarSede(CUERPO_DE_SEDE)).toEqual({ ok: false, error: "Ya tienes 5 sedes activas" })
+    simularRespuesta(json({}, 409))
+    expect(await agregarSede(CUERPO_DE_SEDE)).toEqual({
+      ok: false,
+      error: "Ya tienes una sede con ese nombre, o ya tienes 5 sedes activas.",
+    })
+  })
+
+  it("las palabras del rubro llegan a los mensajes", async () => {
+    simularRespuesta(json({}, 409))
+    expect(await borrarSede("s1", vocabularioDe("odontologia").palabras)).toEqual({
+      ok: false,
+      error: "Esta sede ya tiene citas agendadas, así que no se puede borrar. Desactívala y deja de ofrecerse.",
+    })
+  })
+
+  it("una respuesta sin sede no se da por buena", async () => {
+    simularRespuesta(json({ algo: 1 }, 201))
+    expect(await agregarSede(CUERPO_DE_SEDE)).toEqual({ ok: false, error: "No se pudo agregar la sede. Inténtalo de nuevo." })
+  })
+})
+
+describe("convertirEnVariasSedes", () => {
+  const OTRA = { ...CUERPO_DE_SEDE, nombre: "Consulta Ñuñoa", direccion: "Irarrázaval 3000", comuna: "Ñuñoa", telefono: "+56223456789" }
+
+  it("manda la principal y la nueva, y devuelve las dos sedes", async () => {
+    const fetchFalso = simularRespuesta(json({ sedes: [SEDE_DE_LA_API, { ...SEDE_DE_LA_API, id: "s2", nombre: "Consulta Ñuñoa", orden: 1, horarios: [] }] }, 201))
+    const resultado = await convertirEnVariasSedes({ principal: CUERPO_DE_SEDE, nueva: OTRA })
+    expect(resultado.ok && resultado.datos.map((sede) => sede.id)).toEqual(["s1", "s2"])
+    expect(llamada(fetchFalso)).toEqual({
+      ruta: "/api/configuracion/sedes/convertir",
+      metodo: "POST",
+      cuerpo: {
+        principal: { nombre: "Consulta Providencia", direccion: "Av. Providencia 1234", comuna: "Providencia" },
+        nueva: { nombre: "Consulta Ñuñoa", direccion: "Irarrázaval 3000", comuna: "Ñuñoa", telefono: "+56223456789" },
+      },
+    })
+  })
+
+  it("una lista vacía no es éxito", async () => {
+    simularRespuesta(json({ sedes: [] }, 201))
+    expect(await convertirEnVariasSedes({ principal: CUERPO_DE_SEDE, nueva: OTRA })).toEqual({
+      ok: false,
+      error: "No se pudieron crear las sedes. Inténtalo de nuevo.",
+    })
+  })
+
+  it("un 409 (por ejemplo, ya hay sedes) trae el motivo del servidor", async () => {
+    simularRespuesta(json({ error: "Tu negocio ya tiene sedes" }, 409))
+    expect(await convertirEnVariasSedes({ principal: CUERPO_DE_SEDE, nueva: OTRA })).toEqual({ ok: false, error: "Tu negocio ya tiene sedes" })
+  })
+})
+
+describe("editarSede", () => {
+  it("cambia por PUT a la ruta de la sede, con el id escapado", async () => {
+    const fetchFalso = simularRespuesta(json({ sede: SEDE_DE_LA_API }))
+    await editarSede("a/b", { nombre: "Nuevo", telefono: null })
+    expect(llamada(fetchFalso)).toEqual({ ruta: "/api/configuracion/sedes/a%2Fb", metodo: "PUT", cuerpo: { nombre: "Nuevo", telefono: null } })
+  })
+
+  it("devuelve la sede como quedó", async () => {
+    simularRespuesta(json({ sede: { ...SEDE_DE_LA_API, activo: false } }))
+    const resultado = await editarSede("s1", { activo: false })
+    expect(resultado.ok && resultado.datos.activo).toBe(false)
+  })
+
+  it("desactivar con horas por delante: el 409 del servidor, o el de siempre si no lo manda", async () => {
+    simularRespuesta(json({ error: "Tiene 2 horas agendadas por delante: muévelas primero." }, 409))
+    expect(await editarSede("s1", { activo: false })).toEqual({ ok: false, error: "Tiene 2 horas agendadas por delante: muévelas primero." })
+    simularRespuesta(json({}, 409))
+    expect(await editarSede("s1", { activo: false })).toEqual({
+      ok: false,
+      error: "Esta sede tiene citas agendadas por delante. Muévelas o cancélalas antes de desactivarla.",
+    })
+  })
+
+  it("reactivar: sin motivo del servidor, dice que se pisaría o que ya hay 5", async () => {
+    simularRespuesta(json({}, 409))
+    expect(await editarSede("s1", { activo: true })).toEqual({
+      ok: false,
+      error: "No se pudo activar la sede: su horario se pisaría con el de otra sede activa, o ya tienes 5 sedes activas.",
+    })
+  })
+
+  it("ordenar y editar tienen su propio texto cuando el servidor no dice nada", async () => {
+    simularRespuesta(json({}, 500))
+    expect(await editarSede("s1", { orden: 2 })).toEqual({ ok: false, error: "No se pudo cambiar el orden. Inténtalo de nuevo." })
+    expect(await editarSede("s1", { nombre: "x" })).toEqual({ ok: false, error: "No se pudo guardar la sede. Inténtalo de nuevo." })
+  })
+})
+
+describe("borrarSede", () => {
+  it("borra por DELETE y devuelve ok", async () => {
+    const fetchFalso = simularRespuesta(json({ ok: true }))
+    expect(await borrarSede("s1")).toEqual({ ok: true, datos: undefined })
+    expect(llamada(fetchFalso)).toMatchObject({ ruta: "/api/configuracion/sedes/s1", metodo: "DELETE" })
+  })
+
+  it("una sede con horas: el 409 del servidor", async () => {
+    simularRespuesta(json({ error: "Esta sede tiene horas agendadas: desactívala" }, 409))
+    expect(await borrarSede("s1")).toEqual({ ok: false, error: "Esta sede tiene horas agendadas: desactívala" })
+  })
+
+  it("un 404 y la falta de red no lanzan", async () => {
+    simularRespuesta(json({ error: "No encontrado" }, 404))
+    expect((await borrarSede("s1")).ok).toBe(false)
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fallo")))
+    expect(await borrarSede("s1")).toEqual({ ok: false, error: "Sin conexión con el servidor" })
+  })
+})
+
+describe("guardarHorarioDeSede", () => {
+  const DIAS = [
+    { dayOfWeek: 1, franjas: [{ startTime: "09:00", endTime: "13:00" }, { startTime: "15:00", endTime: "19:00" }] },
+    { dayOfWeek: 6, franjas: [{ startTime: "10:00", endTime: "14:00" }] },
+  ]
+
+  it("reemplaza toda la grilla: PUT a /horarios con las franjas como {start, end}", async () => {
+    const fetchFalso = simularRespuesta(json({ sede: SEDE_DE_LA_API }))
+    const resultado = await guardarHorarioDeSede("s1", DIAS)
+    expect(resultado).toEqual({ ok: true, datos: SEDE_LEIDA })
+    expect(llamada(fetchFalso)).toEqual({
+      ruta: "/api/configuracion/sedes/s1/horarios",
+      metodo: "PUT",
+      cuerpo: {
+        dias: [
+          { dayOfWeek: 1, franjas: [{ start: "09:00", end: "13:00" }, { start: "15:00", end: "19:00" }] },
+          { dayOfWeek: 6, franjas: [{ start: "10:00", end: "14:00" }] },
+        ],
+      },
+    })
+  })
+
+  it("sin días manda una grilla vacía (la sede queda sin atención)", async () => {
+    const fetchFalso = simularRespuesta(json({ sede: SEDE_DE_LA_API }))
+    await guardarHorarioDeSede("s1", [])
+    expect(llamada(fetchFalso).cuerpo).toEqual({ dias: [] })
+  })
+
+  it("un 409 por choque trae el mensaje del servidor y los días que se pisan", async () => {
+    simularRespuesta(json({ error: "Se pisa con Ñuñoa el lunes", choques: [{ dayOfWeek: 1, conSede: "Ñuñoa" }] }, 409))
+    expect(await guardarHorarioDeSede("s1", DIAS)).toEqual({
+      ok: false,
+      error: "Se pisa con Ñuñoa el lunes",
+      choques: [{ dayOfWeek: 1, conSede: "Ñuñoa" }],
+    })
+  })
+
+  it("otros errores no traen choques, ni siquiera si el cuerpo los tuviera", async () => {
+    simularRespuesta(json({ error: "x", choques: [{ dayOfWeek: 1, conSede: "Ñuñoa" }] }, 500))
+    expect(await guardarHorarioDeSede("s1", DIAS)).toEqual({
+      ok: false,
+      error: "No se pudo guardar el horario. Inténtalo de nuevo.",
+      choques: [],
+    })
+  })
+
+  it("un 409 sin cuerpo útil: el mensaje de siempre y sin días", async () => {
+    simularRespuesta(json({}, 409))
+    expect(await guardarHorarioDeSede("s1", DIAS)).toEqual({
+      ok: false,
+      error: "El horario de esta sede se pisa con el de otra sede el mismo día. Revisa los días y las horas.",
+      choques: [],
+    })
+  })
+
+  it("sin red, no lanza", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fallo")))
+    expect(await guardarHorarioDeSede("s1", DIAS)).toEqual({ ok: false, error: "Sin conexión con el servidor", choques: [] })
+  })
+})
+
+describe("cambiarDePlan", () => {
+  it("manda el plan por PATCH y devuelve el que quedó", async () => {
+    const fetchFalso = simularRespuesta(json({ plan: "equipo" }))
+    expect(await cambiarDePlan("equipo")).toEqual({ ok: true, datos: { plan: "equipo" } })
+    expect(llamada(fetchFalso)).toEqual({ ruta: "/api/configuracion/plan", metodo: "PATCH", cuerpo: { plan: "equipo" } })
+  })
+
+  it("con la sede que se queda, la manda", async () => {
+    const fetchFalso = simularRespuesta(json({ plan: "equipo" }))
+    await cambiarDePlan("equipo", "s2")
+    expect(llamada(fetchFalso).cuerpo).toEqual({ plan: "equipo", sedeQueSeQueda: "s2" })
+  })
+
+  it("un 409 trae el motivo; sin motivo, uno propio", async () => {
+    simularRespuesta(json({ error: "Tienes 2 personas en tu equipo: quítalas antes de pasar a Independiente" }, 409))
+    expect(await cambiarDePlan("independiente")).toEqual({
+      ok: false,
+      error: "Tienes 2 personas en tu equipo: quítalas antes de pasar a Independiente",
+    })
+    simularRespuesta(json({}, 409))
+    expect(await cambiarDePlan("independiente")).toEqual({
+      ok: false,
+      error: "Por ahora no se puede cambiar de plan. Revisa tu equipo y tus sedes e inténtalo de nuevo.",
+    })
+  })
+
+  it("una respuesta con un plan que no existe no se da por buena", async () => {
+    simularRespuesta(json({ plan: "gratis" }))
+    expect(await cambiarDePlan("equipo")).toEqual({ ok: false, error: "No se pudo cambiar el plan. Inténtalo de nuevo." })
+  })
+
+  it("401, 429 y 5xx: mensajes humanos", async () => {
+    simularRespuesta(json({ error: "No autorizado" }, 401))
+    expect((await cambiarDePlan("equipo")).ok).toBe(false)
+    simularRespuesta(json({}, 429))
+    expect(await cambiarDePlan("equipo")).toEqual({ ok: false, error: "Hiciste varios cambios seguidos. Espera un momento e inténtalo de nuevo." })
+    simularRespuesta(json({ error: "Error interno" }, 500))
+    expect(await cambiarDePlan("equipo")).toEqual({ ok: false, error: "No se pudo cambiar el plan. Inténtalo de nuevo." })
   })
 })

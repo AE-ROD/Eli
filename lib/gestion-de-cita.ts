@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client"
 import { al, el, este } from "@/lib/concordancia"
 import { SIN_ATENCION_VIVA } from "@/lib/mover-cita"
 import { hastaElMomentoDe, palabrasDeLaReserva } from "@/lib/palabras-de-la-reserva"
+import { SELECCION_DE_LA_SEDE_DE_LA_CITA, lugarDeLaSede, type LugarDeLaReserva } from "@/lib/sede-de-la-reserva"
 import { SELECCION_DE_SERVICIOS_DE_LA_CITA } from "@/lib/servicios-de-la-reserva"
 import { hashDeToken } from "@/lib/tokens"
 import { conMayuscula } from "@/lib/vocabulario"
@@ -155,6 +156,11 @@ const SELECCION = {
   // y sólo ofrece y acepta horas en que está libre. Nunca se le muestra al
   // paciente.
   sillonId: true,
+  // Plan Independiente: la sede donde se atiende (null en un negocio sin sedes y
+  // en las citas de antes). Reagendar no la cambia: ofrece sólo horas de esa sede.
+  // Sólo nombre, dirección y comuna: nada interno.
+  sedeId: true,
+  sede: { select: SELECCION_DE_LA_SEDE_DE_LA_CITA },
   customer: { select: { name: true, lastName: true } },
   member: { select: { user: { select: { name: true } } } },
   service: { select: { id: true, name: true, duration: true, active: true } },
@@ -175,6 +181,15 @@ const SELECCION = {
 } satisfies Prisma.AppointmentSelect
 
 export type CitaDelEnlace = Prisma.AppointmentGetPayload<{ select: typeof SELECCION }>
+
+/**
+ * Dónde se atiende la cita del enlace: su sede (nombre, dirección y comuna), o
+ * `null` si no tiene (un negocio sin sedes, o una cita de antes): ahí la
+ * pantalla y los correos son los de siempre.
+ */
+export function lugarDeLaCitaDelEnlace(cita: Pick<CitaDelEnlace, "sede">): LugarDeLaReserva | null {
+  return cita.sede ? lugarDeLaSede(cita.sede) : null
+}
 
 /**
  * La cita del enlace, o `null` (el 404) si el token no tiene forma de token,

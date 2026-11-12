@@ -3,12 +3,12 @@
 import { useEffect, useId, useRef, useState } from "react"
 import { Clock, Save } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
-import { Interruptor } from "@/components/comunes/interruptor"
 import { Aviso } from "@/components/panel/aviso"
-import { CampoHora } from "@/components/panel/campo-hora"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { FilaDeDia } from "@/components/panel/fila-de-dia"
+import { RangoDeHoras } from "@/components/panel/rango-de-horas"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { guardarHorario, type HorarioDelDia } from "../_datos"
@@ -151,31 +151,15 @@ export function SeccionHorario({
         {horarios.map((horario) => {
           const dia = DIAS[horario.dayOfWeek]
           return (
-            <li key={horario.dayOfWeek} className="flex flex-wrap items-center gap-x-6 gap-y-2.5 py-3.5 first:pt-0 last:pb-0">
-              <div className="w-full sm:w-40">
-                <Interruptor etiqueta={dia} activo={horario.active} alCambiar={() => alternarDia(horario.dayOfWeek)} />
-              </div>
-
-              {horario.active ? (
-                <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:flex-1">
-                  <CampoHora
-                    etiqueta={`${dia}: desde`}
-                    value={horario.startTime}
-                    onChange={(valor) => cambiarHora(horario.dayOfWeek, "startTime", valor)}
-                    className="min-w-0 flex-1 sm:w-40 sm:flex-none"
-                  />
-                  <span className="shrink-0 text-sm text-texto-2">hasta</span>
-                  <CampoHora
-                    etiqueta={`${dia}: hasta`}
-                    value={horario.endTime}
-                    onChange={(valor) => cambiarHora(horario.dayOfWeek, "endTime", valor)}
-                    className="min-w-0 flex-1 sm:w-40 sm:flex-none"
-                  />
-                </div>
-              ) : (
-                <p className="text-sm text-texto-2">No disponible</p>
-              )}
-            </li>
+            <FilaDeDia key={horario.dayOfWeek} etiqueta={dia} activo={horario.active} alAlternar={() => alternarDia(horario.dayOfWeek)}>
+              <RangoDeHoras
+                etiqueta={dia}
+                desde={horario.startTime}
+                hasta={horario.endTime}
+                alCambiarDesde={(valor) => cambiarHora(horario.dayOfWeek, "startTime", valor)}
+                alCambiarHasta={(valor) => cambiarHora(horario.dayOfWeek, "endTime", valor)}
+              />
+            </FilaDeDia>
           )
         })}
       </ul>

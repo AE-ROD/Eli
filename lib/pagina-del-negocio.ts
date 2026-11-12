@@ -10,6 +10,7 @@
 import { MEDIOS_DE_PAGO, type MedioDePagoId } from "@/lib/medios-de-pago"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import { palabrasDeLaReserva } from "@/lib/palabras-de-la-reserva"
+import { resumenDeHorarioPorSede, type FilaDeHorarioDeSede, type SedeDelNegocio } from "@/lib/sedes"
 import { agruparPorCategoria, CATEGORIA_SIN_NOMBRE } from "@/lib/servicios-por-categoria"
 import { aE164Chile } from "@/lib/telefono"
 
@@ -122,6 +123,50 @@ export function enlacesDeMapa(
     googleMaps: `https://www.google.com/maps/search/?api=1&query=${consulta}`,
     waze: `https://waze.com/ul?q=${consulta}`,
   }
+}
+
+// ─── Sedes (plan Independiente) ──────────────────────────────────────────────
+
+/**
+ * Una sede activa tal como la ve cualquiera en la mini página: su nombre, su
+ * dirección con "Cómo llegar" a ESA dirección, y los días y horas en que se
+ * atiende. Nada interno: ni el orden, ni ids de otras tablas.
+ */
+export interface SedeDeLaPagina {
+  id: string
+  nombre: string
+  direccion: string
+  comuna: string
+  /** E.164 (+56...) o null. */
+  telefono: string | null
+  mapas: { googleMaps: string; waze: string } | null
+  /** Los días de la semana (0 domingo a 6 sábado) en que atiende, de lunes a domingo. Vacío: aún sin horario. */
+  dias: number[]
+  /** Su horario por días agrupados, ya escrito: `Lun, Mié: 09:00–13:00`. Vacío: aún sin horario. */
+  horario: string[]
+}
+
+/**
+ * Las sedes ACTIVAS para la página, en el orden de la lista, cada una con su
+ * horario resumido (`resumenDeHorarioPorSede`) y los enlaces de mapa de su
+ * dirección. `filas` son las franjas activas del negocio con su `sedeId`: las
+ * de otra sede o sin sede no cuentan para una sede. Las sedes inactivas no
+ * salen.
+ */
+export function sedesParaLaPagina(
+  sedes: readonly Pick<SedeDelNegocio, "id" | "nombre" | "direccion" | "comuna" | "telefono" | "orden" | "activo">[],
+  filas: readonly FilaDeHorarioDeSede[]
+): SedeDeLaPagina[] {
+  return resumenDeHorarioPorSede(sedes, filas).map(({ sede, dias, grupos }) => ({
+    id: sede.id,
+    nombre: sede.nombre,
+    direccion: sede.direccion,
+    comuna: sede.comuna,
+    telefono: sede.telefono,
+    mapas: enlacesDeMapa(sede.direccion, sede.comuna),
+    dias: dias.map((dia) => dia.dayOfWeek),
+    horario: grupos.map((grupo) => grupo.texto),
+  }))
 }
 
 // ─── Reseñas en Google (#77) ─────────────────────────────────────────────────

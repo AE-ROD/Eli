@@ -25,6 +25,19 @@ const DUEÑA_DE_UNA_CLINICA = (
   ["horario", "zona-horaria", "pagina", "servicios", "sillones", "laboratorios", "productos", "plazo-de-cambios", "por-confirmar", "mensajes"] as const
 ).map(seccion)
 const PROFESIONAL = (["horario", "mi-foto", "pagina"] as const).map(seccion)
+/**
+ * La dueña de un negocio Independiente (la única que ve «Sedes y horarios» y «Plan»):
+ * sin sedes ve el «Horario» de siempre y el llamado a «Sedes y horarios»; con una o más,
+ * «Sedes y horarios» reemplaza a «Horario».
+ */
+const DUEÑA_INDEPENDIENTE_SIN_SEDES = (
+  ["horario", "sedes", "zona-horaria", "pagina", "servicios", "productos", "plan", "plazo-de-cambios", "mensajes"] as const
+).map(seccion)
+const DUEÑA_INDEPENDIENTE_CON_SEDES = (
+  ["sedes", "zona-horaria", "pagina", "servicios", "productos", "plan", "plazo-de-cambios", "mensajes"] as const
+).map(seccion)
+/** La dueña de un negocio con equipo: sin sedes, con «Plan». */
+const DUEÑA_CON_EQUIPO = (["horario", "zona-horaria", "pagina", "servicios", "plan", "mensajes"] as const).map(seccion)
 
 describe("GRUPOS", () => {
   it("cada sección está en exactamente un grupo", () => {
@@ -35,14 +48,14 @@ describe("GRUPOS", () => {
 })
 
 describe("agruparSecciones", () => {
-  it("reparte las trece secciones en los cinco grupos, en su orden, lleguen como lleguen", () => {
+  it("reparte las quince secciones en los cinco grupos, en su orden, lleguen como lleguen", () => {
     const grupos = agruparSecciones(
-      [...DUEÑA_DE_UN_SALON, seccion("sillones"), seccion("laboratorios"), seccion("mi-foto")].reverse(),
+      [...DUEÑA_DE_UN_SALON, seccion("sillones"), seccion("laboratorios"), seccion("mi-foto"), seccion("sedes"), seccion("plan")].reverse(),
       DE_SIEMPRE
     )
     expect(grupos.map((grupo) => [grupo.id, grupo.secciones.map((s) => s.id)])).toEqual([
-      ["horario-y-equipo", ["horario", "zona-horaria", "mi-foto"]],
-      ["tu-negocio", ["pagina", "productos"]],
+      ["horario-y-equipo", ["horario", "sedes", "zona-horaria", "mi-foto"]],
+      ["tu-negocio", ["pagina", "productos", "plan"]],
       ["catalogo-y-clinica", ["servicios", "sillones", "laboratorios"]],
       ["reservas-y-clientes", ["plazo-de-cambios", "por-confirmar", "hora-valle", "fila-virtual"]],
       ["mensajes", ["mensajes"]],
@@ -99,6 +112,31 @@ describe("agruparSecciones", () => {
     expect(agruparSecciones(PROFESIONAL, DE_SIEMPRE)[0].secciones.map((s) => s.id)).not.toContain("zona-horaria")
     // Una clínica dental también la tiene: no depende del rubro.
     expect(agruparSecciones(DUEÑA_DE_UNA_CLINICA, DE_LA_CLINICA)[0].resumen).toBe("Horario · Zona horaria")
+  })
+
+  it("«Sedes y horarios» va con el horario y «Plan» con tu negocio", () => {
+    const sinSedes = agruparSecciones(DUEÑA_INDEPENDIENTE_SIN_SEDES, DE_SIEMPRE)
+    expect(sinSedes[0].resumen).toBe("Horario · Sedes y horarios · Zona horaria")
+    expect(sinSedes.find((grupo) => grupo.id === "tu-negocio")?.resumen).toBe("Página pública · Productos · Plan")
+  })
+
+  it("con una o más sedes, «Sedes y horarios» reemplaza a «Horario»: el grupo no repite el horario", () => {
+    const conSedes = agruparSecciones(DUEÑA_INDEPENDIENTE_CON_SEDES, DE_LA_CLINICA)
+    expect(conSedes[0].secciones.map((s) => s.id)).toEqual(["sedes", "zona-horaria"])
+    expect(conSedes[0].resumen).toBe("Sedes y horarios · Zona horaria")
+    expect(conSedes[0].titulo).toBe("Horario y equipo")
+  })
+
+  it("la dueña de un negocio con equipo ve «Plan» pero no «Sedes y horarios»", () => {
+    const grupos = agruparSecciones(DUEÑA_CON_EQUIPO, DE_SIEMPRE)
+    expect(grupos[0].secciones.map((s) => s.id)).toEqual(["horario", "zona-horaria"])
+    expect(grupos.find((grupo) => grupo.id === "tu-negocio")?.secciones.map((s) => s.id)).toEqual(["pagina", "plan"])
+  })
+
+  it("quien no es la dueña no ve ni «Sedes y horarios» ni «Plan»", () => {
+    const todas = agruparSecciones(PROFESIONAL, DE_SIEMPRE).flatMap((grupo) => grupo.secciones.map((s) => s.id))
+    expect(todas).not.toContain("sedes")
+    expect(todas).not.toContain("plan")
   })
 
   it("el resumen nombra sólo las secciones visibles, separadas por «·»", () => {
@@ -203,6 +241,17 @@ describe("grupoDeAncla", () => {
     ["#mensajes", "mensajes"],
   ])("%s abre %s", (hash, esperado) => {
     expect(grupoDeAncla(hash, grupos)).toBe(esperado)
+  })
+
+  it("#sedes abre «Horario y equipo» y #plan abre «Tu negocio», sólo si la sección existe", () => {
+    const independiente = agruparSecciones(DUEÑA_INDEPENDIENTE_CON_SEDES, DE_SIEMPRE)
+    expect(grupoDeAncla("#sedes", independiente)).toBe("horario-y-equipo")
+    expect(grupoDeAncla("#plan", independiente)).toBe("tu-negocio")
+    // Con sedes, «Horario» deja de existir: su ancla ya no abre nada.
+    expect(grupoDeAncla("#horario", independiente)).toBeNull()
+    // Quien no la ve (el profesional, o un negocio con equipo para #sedes) no abre nada.
+    expect(grupoDeAncla("#sedes", agruparSecciones(DUEÑA_CON_EQUIPO, DE_SIEMPRE))).toBeNull()
+    expect(grupoDeAncla("#plan", agruparSecciones(PROFESIONAL, DE_SIEMPRE))).toBeNull()
   })
 
   it("#hora-valle y #fila-virtual abren su grupo en un salón, y nada en una clínica dental", () => {

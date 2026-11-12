@@ -422,6 +422,41 @@ function laHoraDeSuCita(cita: Sustantivo): string {
  * es una preposición y no tiene palabra en el vocabulario.
  */
 
+/**
+ * Dónde queda una hora concreta (etapa 9, plan Independiente con varias sedes):
+ * lo que devuelve `direccionDeLaCita` (`lib/sedes.ts`) de la sede de la cita.
+ * Sólo se pasa cuando el negocio tiene varias sedes activas y la hora lleva la
+ * suya: es lo que le dice al cliente a cuál ir. Sin `lugar`, el correo sale
+ * exactamente como siempre.
+ */
+export interface LugarEnElCorreo {
+  /** El nombre de la sede. */
+  nombre?: string | null
+  direccion?: string | null
+  comuna?: string | null
+}
+
+/**
+ * La fila "Dónde" del bloque de la hora: `<nombre> · <dirección>, <comuna>`,
+ * con lo que haya de cada parte. `null` (sin fila) si no hay `lugar` o no trae
+ * nada que decir. Como el resto del detalle, se escapa al armar el HTML.
+ */
+function filaDeLugar(lugar: LugarEnElCorreo | null | undefined): [string, string] | null {
+  if (!lugar) return null
+  const direccion = [lugar.direccion, lugar.comuna]
+    .map((parte) => parte?.trim())
+    .filter((parte): parte is string => !!parte)
+    .join(", ")
+  const texto = [lugar.nombre?.trim(), direccion].filter(Boolean).join(" · ")
+  return texto ? ["Dónde", texto] : null
+}
+
+/** Suma la fila "Dónde" al detalle, si hay `lugar` que decir. */
+function conLugar(detalle: Array<[string, string]>, lugar: LugarEnElCorreo | null | undefined): void {
+  const fila = filaDeLugar(lugar)
+  if (fila) detalle.push(fila)
+}
+
 export interface DatosConfirmacionCliente {
   /**
    * El rubro del negocio (`Business.type`): pone las palabras del correo
@@ -462,6 +497,8 @@ export interface DatosConfirmacionCliente {
   precioNormal?: number | null
   /** Algún servicio no tiene precio: el total suma los que sí y dice "+ a consultar". */
   precioIncompleto?: boolean
+  /** Dónde queda la hora: sólo con varias sedes (`LugarEnElCorreo`). Sin él, el correo no lo dice. */
+  lugar?: LugarEnElCorreo | null
 }
 
 /**
@@ -485,6 +522,7 @@ export function enviarConfirmacionCliente(datos: DatosConfirmacionCliente) {
   const detalle: Array<[string, string]> = [[conMayuscula(palabras.servicioDeLaReserva.singular), datos.servicio]]
   if (datos.profesional) detalle.push(["Con", datos.profesional])
   detalle.push(["Fecha", fechaLegible(datos.fecha)], ["Hora", datos.hora], ["Duración", `${datos.duracion} minutos`])
+  conLugar(detalle, datos.lugar)
   const precio = filaDePrecio(datos)
   if (precio) detalle.push(precio)
   return enviar({
@@ -532,6 +570,8 @@ export interface DatosAvisoProfesional {
   profesional?: string | null
   /** Entró por confirmar (#84): el aviso pide confirmarla o cancelarla en el panel. */
   porConfirmar?: boolean
+  /** Dónde queda la hora: sólo con varias sedes (`LugarEnElCorreo`). Sin él, el correo no lo dice. */
+  lugar?: LugarEnElCorreo | null
 }
 
 export function enviarAvisoProfesional(datos: DatosAvisoProfesional) {
@@ -544,6 +584,7 @@ export function enviarAvisoProfesional(datos: DatosAvisoProfesional) {
     ["Fecha", fechaLegible(datos.fecha)],
     ["Hora", datos.hora],
   ]
+  conLugar(detalle, datos.lugar)
   if (datos.comentarios) detalle.push(["Comentarios", datos.comentarios])
 
   return enviar({
@@ -575,6 +616,8 @@ export interface DatosReservaConfirmadaPorElLocal {
   profesional?: string | null
   /** El precio guardado en la cita: el rebajado, si se reservó en hora valle (#138). */
   precio?: number | null
+  /** Dónde queda la hora: sólo con varias sedes (`LugarEnElCorreo`). Sin él, el correo no lo dice. */
+  lugar?: LugarEnElCorreo | null
 }
 
 /** Al cliente: el local confirmó la reserva que había entrado por confirmar (#84). */
@@ -583,6 +626,7 @@ export function enviarReservaConfirmadaPorElLocal(datos: DatosReservaConfirmadaP
   const detalle: Array<[string, string]> = [[conMayuscula(palabras.servicioDeLaReserva.singular), datos.servicio]]
   if (datos.profesional) detalle.push(["Con", datos.profesional])
   detalle.push(["Fecha", fechaLegible(datos.fecha)], ["Hora", datos.hora])
+  conLugar(detalle, datos.lugar)
   const precio = filaDePrecio({ precio: datos.precio })
   if (precio) detalle.push(precio)
   return enviar({
@@ -611,6 +655,8 @@ export interface DatosAvisoDeCambioDelCliente {
   /** Si reagendó: la que tenía antes. */
   fechaAnterior?: string
   horaAnterior?: string
+  /** Dónde queda la hora (la de ahora, si reagendó): sólo con varias sedes (`LugarEnElCorreo`). */
+  lugar?: LugarEnElCorreo | null
 }
 
 /** Aviso al negocio: el cliente canceló o reagendó con su enlace. */
@@ -629,6 +675,7 @@ export function enviarAvisoDeCambioDelCliente(datos: DatosAvisoDeCambioDelClient
   } else {
     detalle.push(["Fecha", fechaLegible(datos.fecha)], ["Hora", datos.hora])
   }
+  conLugar(detalle, datos.lugar)
 
   return enviar({
     tipo: reagendo ? "aviso-reagendada" : "aviso-cancelada",
@@ -669,23 +716,27 @@ export interface DatosRecordatorio {
    * como en la confirmación (#164).
    */
   sePuedeCambiar?: boolean
+  /** Dónde queda la hora: sólo con varias sedes (`LugarEnElCorreo`). Sin él, el correo no lo dice. */
+  lugar?: LugarEnElCorreo | null
 }
 
 export function enviarRecordatorio(datos: DatosRecordatorio) {
   const palabras = palabrasDelCorreo(datos.rubro)
   const { cita } = palabras
   const alLocal = al(palabras.local)
+  const detalle: Array<[string, string]> = [
+    [conMayuscula(palabras.servicioDeLaReserva.singular), datos.servicio],
+    ["Fecha", fechaLegible(datos.fecha)],
+    ["Hora", datos.hora],
+  ]
+  conLugar(detalle, datos.lugar)
   return enviar({
     tipo: "recordatorio",
     para: datos.emailCliente,
     asunto: asunto`Recordatorio — tu ${cita.singular} es mañana`,
     titulo: `Tu ${cita.singular} es mañana`,
     intro: html`Hola <strong>${datos.nombreCliente}</strong>, te recordamos que tienes ${un(cita)} mañana en <strong>${datos.nombreNegocio}</strong>.`,
-    detalle: [
-      [conMayuscula(palabras.servicioDeLaReserva.singular), datos.servicio],
-      ["Fecha", fechaLegible(datos.fecha)],
-      ["Hora", datos.hora],
-    ],
+    detalle,
     ...(datos.sePuedeCambiar === false
       ? { cierre: html`¡Te esperamos! Si no puedes asistir, contacta directamente ${alLocal}.` }
       : datos.enlaceDeGestion

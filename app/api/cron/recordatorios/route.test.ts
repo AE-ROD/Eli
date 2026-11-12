@@ -516,4 +516,65 @@ describe("GET /api/cron/recordatorios", () => {
       expect(prismaMock.appointment.updateMany).toHaveBeenCalledTimes(3)
     })
   })
+
+  describe("dónde queda la hora, con varias sedes (etapa 9)", () => {
+    const autorizada = () => llamada({ authorization: `Bearer ${SECRETO}` })
+    const providencia = { nombre: "Providencia", direccion: "Av. Providencia 1234", comuna: "Providencia" }
+    const negocioConVariasSedes = {
+      ...citaDeMañana.business,
+      plan: "independiente",
+      sedes: [{ activo: true }, { activo: true }],
+    }
+
+    it("con varias sedes activas y una cita con sede, el recordatorio dice dónde", async () => {
+      prismaMock.appointment.findMany.mockResolvedValue([{ ...citaDeMañana, sede: providencia, business: negocioConVariasSedes }])
+      const { GET } = await import("./route")
+
+      await GET(autorizada())
+
+      expect(mockEnviarRecordatorio).toHaveBeenCalledWith(expect.objectContaining({ lugar: providencia }))
+    })
+
+    it("con una sola sede activa sale como siempre: sin `lugar`", async () => {
+      const unaSola = { ...negocioConVariasSedes, sedes: [{ activo: true }] }
+      prismaMock.appointment.findMany.mockResolvedValue([{ ...citaDeMañana, sede: providencia, business: unaSola }])
+      const { GET } = await import("./route")
+
+      await GET(autorizada())
+
+      expect(mockEnviarRecordatorio.mock.calls[0][0]).not.toHaveProperty("lugar")
+    })
+
+    it("sin sedes (todo negocio de hoy y todo plan Equipo) sale como siempre: sin `lugar`", async () => {
+      const { GET } = await import("./route")
+
+      await GET(autorizada())
+      prismaMock.appointment.findMany.mockResolvedValue([
+        { ...citaDeMañana, sede: null, business: { ...citaDeMañana.business, plan: "equipo", sedes: [] } },
+      ])
+      await GET(autorizada())
+
+      for (const llamadaAlCorreo of mockEnviarRecordatorio.mock.calls) expect(llamadaAlCorreo[0]).not.toHaveProperty("lugar")
+    })
+
+    it("una cita sin sede en un negocio con varias (de antes de tenerlas) sale como siempre", async () => {
+      prismaMock.appointment.findMany.mockResolvedValue([{ ...citaDeMañana, sede: null, business: negocioConVariasSedes }])
+      const { GET } = await import("./route")
+
+      await GET(autorizada())
+
+      expect(mockEnviarRecordatorio.mock.calls[0][0]).not.toHaveProperty("lugar")
+    })
+
+    it("la consulta pide de la sede sólo el nombre, la dirección y la comuna, y del negocio su plan y sus sedes activas", async () => {
+      const { GET } = await import("./route")
+
+      await GET(autorizada())
+
+      const { select } = prismaMock.appointment.findMany.mock.calls[0][0]
+      expect(select.sede).toEqual({ select: { nombre: true, direccion: true, comuna: true } })
+      expect(select.business.select.plan).toBe(true)
+      expect(select.business.select.sedes).toMatchObject({ where: { activo: true }, select: { activo: true } })
+    })
+  })
 })

@@ -40,6 +40,9 @@ const fechaSchema = z
  *
  * Clínica dental: si la cita tiene sillón, sólo las horas en que el sillón
  * también está libre (reagendar lo conserva); una urgencia, sólo horas de hoy.
+ *
+ * Plan Independiente: si la cita tiene sede, sólo las horas de ESA sede
+ * (reagendar no cambia de sede: para eso se cancela y se reserva de nuevo).
  */
 export async function GET(request: NextRequest, contexto: Params) {
   const enlace = await abrirEnlace(request, contexto, "lecturaPublica")
@@ -76,6 +79,7 @@ export async function GET(request: NextRequest, contexto: Params) {
     serviceIds: servicios.ids,
     profesionalId: cita.memberId,
     fecha: fecha.data,
+    sedeId: cita.sedeId,
   })
   if (reserva.tipo === "profesional-no-disponible") {
     return NextResponse.json({ slots: [], mensaje: mensajeSinHorasParaReagendar(cita.business.type) })

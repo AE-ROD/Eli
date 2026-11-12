@@ -4,6 +4,11 @@ import { prisma } from "@/lib/prisma"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { enviarReservaConfirmadaPorElLocal } from "@/lib/email"
 import { fechaYHoraEnElNegocio } from "@/lib/recordatorios"
+import {
+  SELECCION_DE_LAS_SEDES_ACTIVAS,
+  SELECCION_DE_LA_SEDE_DEL_CORREO,
+  lugarParaElCorreo,
+} from "@/lib/lugar-de-la-cita"
 import { registrarError } from "@/lib/registro-de-errores"
 
 /**
@@ -44,12 +49,18 @@ export async function enviarAvisoDeReservaConfirmada({ businessId, citaId }: Res
         price: true,
         customer: { select: { name: true, lastName: true, email: true } },
         member: { select: { user: { select: { name: true } } } },
-        business: { select: { name: true, timezone: true, type: true } },
+        // Etapa 9: con varias sedes el correo dice dónde queda la hora. Sólo el
+        // nombre, la dirección y la comuna de la sede; del negocio, su plan y
+        // cuántas sedes activas tiene (para saber si son varias).
+        sede: { select: SELECCION_DE_LA_SEDE_DEL_CORREO },
+        business: { select: { name: true, timezone: true, type: true, plan: true, sedes: SELECCION_DE_LAS_SEDES_ACTIVAS } },
       },
     })
     if (!cita?.customer?.email) return false
 
     const { fecha, hora } = fechaYHoraEnElNegocio(cita.startTime, cita.business.timezone)
+    // Sólo con varias sedes: en cualquier otro negocio el correo sale como siempre.
+    const lugar = lugarParaElCorreo({ plan: cita.business.plan, sedesActivas: cita.business.sedes, sede: cita.sede })
     const resultado = await enviarReservaConfirmadaPorElLocal({
       rubro: cita.business.type,
       emailCliente: cita.customer.email,
@@ -60,6 +71,7 @@ export async function enviarAvisoDeReservaConfirmada({ businessId, citaId }: Res
       hora,
       profesional: cita.member?.user.name ?? null,
       precio: cita.price,
+      ...(lugar && { lugar }),
     })
     if (resultado?.error) {
       // Sólo el código de Resend: su mensaje puede repetir el destinatario.

@@ -10,6 +10,11 @@ import { ORIGEN_RESERVA_PUBLICA } from "@/lib/reserva-publica"
 import { generarToken } from "@/lib/tokens"
 import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import {
+  SELECCION_DE_LAS_SEDES_ACTIVAS,
+  SELECCION_DE_LA_SEDE_DEL_CORREO,
+  lugarParaElCorreo,
+} from "@/lib/lugar-de-la-cita"
+import {
   ESTADOS_SIN_RECORDATORIO,
   esDeMañana,
   fechaYHoraEnElNegocio,
@@ -163,7 +168,21 @@ export async function GET(request: NextRequest) {
         source: true,
         manageTokenHash: true,
         customer: { select: { name: true, lastName: true, email: true, businessId: true } },
-        business: { select: { name: true, slug: true, timezone: true, cancelacionHorasAntes: true, type: true } },
+        // Etapa 9: con varias sedes el correo dice dónde queda la hora. Sólo el
+        // nombre, la dirección y la comuna de la sede; del negocio, su plan y
+        // cuántas sedes activas tiene (para saber si son varias).
+        sede: { select: SELECCION_DE_LA_SEDE_DEL_CORREO },
+        business: {
+          select: {
+            name: true,
+            slug: true,
+            timezone: true,
+            cancelacionHorasAntes: true,
+            type: true,
+            plan: true,
+            sedes: SELECCION_DE_LAS_SEDES_ACTIVAS,
+          },
+        },
       },
       orderBy: [{ startTime: "asc" }, { id: "asc" }],
       take: POR_PAGINA,
@@ -209,6 +228,8 @@ export async function GET(request: NextRequest) {
           const sePuedeCambiar = dentroDelPlazo(cita.startTime, cita.business.cancelacionHorasAntes, ahora)
           enlaceNuevo = baseUrl ? await enlaceParaCitaSinToken(cita, sePuedeCambiar) : null
           const { fecha, hora } = fechaYHoraEnElNegocio(cita.startTime, cita.business.timezone)
+          // Sólo con varias sedes: en cualquier otro negocio el correo sale como siempre.
+          const lugar = lugarParaElCorreo({ plan: cita.business.plan, sedesActivas: cita.business.sedes, sede: cita.sede })
           // Desde acá el correo pudo salir aunque después algo falle.
           noSalio = false
           const resultado = await enviarRecordatorio({
@@ -226,6 +247,7 @@ export async function GET(request: NextRequest) {
                 }
               : {}),
             sePuedeCambiar,
+            ...(lugar && { lugar }),
           })
           if (resultado?.error) {
             // Sólo el código de Resend: su mensaje puede repetir el destinatario.

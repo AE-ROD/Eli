@@ -38,12 +38,21 @@ import { IndicadorDePasos, PASOS_DE_RESERVA, pasosDeLaReserva } from "./indicado
 import { AgregarAlCalendario } from "./agregar-al-calendario"
 import { InvitacionAEli } from "./pie-de-eli"
 import { frasesDelFormulario } from "../_frases"
+import { FRASES_DE_LAS_SEDES } from "../_frases-de-sedes"
 import type { PrecioDeLaHora } from "@/lib/hora-valle"
 import { ResumenDeReserva } from "./resumen-de-reserva"
 import { SelectorServicio, type ServicioPublico } from "./selector-servicio"
 import { SelectorFechaHora, fechaParaLeer } from "./selector-fecha-hora"
 import { FormularioListaDeEspera } from "./formulario-lista-de-espera"
 import { SelectorProfesional } from "./selector-profesional"
+import { SelectorDeSede } from "./selector-de-sede"
+import {
+  diasConLaSede,
+  direccionConComuna,
+  hayQueElegirSede,
+  sedeDeLaUrl,
+  type SedeParaElegir,
+} from "./reglas-de-la-sede"
 import {
   avisoDeServiciosQuitados,
   erroresDeTusDatos,
@@ -64,6 +73,7 @@ import {
   leerProfesionales,
   type ProfesionalDelEquipo,
   type ProfesionalPublico,
+  type ReservaConfirmada,
 } from "../_datos"
 import { useCargarHoras } from "./use-cargar-horas"
 
@@ -115,9 +125,22 @@ interface PropsDeFormularioReserva {
    * de "Agregar al calendario". Sin dirección, el evento va sin lugar.
    */
   direccion?: string | null
+  /**
+   * Plan Independiente con dos o más sedes activas: las sedes entre las que se
+   * elige en el primer paso, "¿Dónde?", con su dirección y los días y horas en
+   * que se atiende (`leerPaginaDelNegocio`). El calendario sólo ofrece los días
+   * de la sede elegida y pide las horas con `sedeId`; el servidor revalida la
+   * sede. Sin ellas, o con una sola, no hay paso "¿Dónde?" y todo es como
+   * siempre (`direccion` es la del negocio).
+   */
+  sedes?: SedeParaElegir[]
 }
 
-type Paso = 1 | 2 | 3
+/**
+ * Los pasos: 1 Servicio, 2 Día y hora, 3 Tus datos; con varias sedes, el 0 es
+ * "¿Dónde?" y va antes de todos (en el indicador, el paso 1 de 4).
+ */
+type Paso = 0 | 1 | 2 | 3
 
 /**
  * A dónde lleva el foco un gesto en "¿Con quién?" del paso 2: `elegido`, al
@@ -174,6 +197,7 @@ export function FormularioReserva({
   plazoDeCambios,
   plazoDeCambiosHoras,
   direccion = null,
+  sedes = [],
 }: PropsDeFormularioReserva) {
   const parametros = useSearchParams()
   // `?servicio=<id>&fecha=AAAA-MM-DD` (el enlace del aviso de la lista de
@@ -183,7 +207,19 @@ export function FormularioReserva({
   const servicioDeLaUrl = servicios.find((servicio) => servicio.id === parametros.get("servicio")) ?? null
   const fechaDeLaUrl = parametros.get("fecha") ?? ""
   const conFechaDeLaUrl = servicioDeLaUrl !== null && deTexto(fechaDeLaUrl) !== null
-  const [paso, setPaso] = useState<Paso>(servicioDeLaUrl ? 2 : 1)
+  // Varias sedes: `?sede=<id>` (el "Reservar en esta sede" de la mini página y el
+  // aviso de la lista de espera) la deja elegida de entrada; un id que no es de
+  // una sede de este negocio, o que no tiene horario, se ignora (`sedeDeLaUrl`) y
+  // el formulario empieza preguntando "¿Dónde?". Con una sola sede, o sin
+  // ninguna, no se pregunta nunca.
+  const conSedes = hayQueElegirSede(sedes)
+  const idDeLaSedeDeLaUrl = conSedes ? sedeDeLaUrl(parametros.get("sede"), sedes) : null
+  const pasoInicial: Paso = conSedes && !idDeLaSedeDeLaUrl ? 0 : servicioDeLaUrl ? 2 : 1
+  const [paso, setPaso] = useState<Paso>(pasoInicial)
+  const [sedeId, setSedeId] = useState<string | null>(idDeLaSedeDeLaUrl)
+  const sedeElegida = conSedes ? (sedes.find((sede) => sede.id === sedeId) ?? null) : null
+  // La sede tal como la guardó el servidor, para la confirmación.
+  const [sedeConfirmada, setSedeConfirmada] = useState<ReservaConfirmada["sede"] | null>(null)
   // Varios servicios (#89a): en el orden en que se eligen, que es el orden en que se hacen.
   const [seleccionados, setSeleccionados] = useState<ServicioPublico[]>(servicioDeLaUrl ? [servicioDeLaUrl] : [])
   const servicioSeleccionado = comoUnServicio(seleccionados)
@@ -354,12 +390,14 @@ export function FormularioReserva({
   // Los días con atención para estos servicios y este profesional (o
   // cualquiera), los mismos que la disponibilidad (N3): no se puede elegir un
   // día que después diga "No hay atención ese día".
-  const diasDisponibles = diasDelCalendarioDeReserva({
+  const diasDeLoElegido = diasDelCalendarioDeReserva({
     diasPublicados: horarios.map((horario) => horario.dayOfWeek),
     equipo: equipoLeido ? profesionales : null,
     servicioIds,
     profesionalId,
   })
+  // Con varias sedes, sólo los días en que atiende la sede elegida.
+  const diasDisponibles = conSedes ? diasConLaSede(diasDeLoElegido, sedeElegida) : diasDeLoElegido
 
   // Urgencia dental: sólo hoy, en el reloj de la clínica (el servidor no
   // ofrece ni acepta otro día). Si hoy nadie que la haga atiende, ningún día.
@@ -387,12 +425,25 @@ export function FormularioReserva({
     setAvisoDelDia("")
     setFecha(nueva)
   }
+  // Otra sede es otro horario: el día y la hora que ya se habían elegido se
+  // sueltan, con un aviso, y el calendario vuelve a pedir las horas de la nueva.
+  const elegirSede = (nueva: string) => {
+    if (nueva === sedeId) return
+    const habiaDiaOHora = fechaElegida !== "" || hora !== ""
+    setSedeId(nueva)
+    setFecha("")
+    elegirHora("", null)
+    setAvisoDelDia(habiaDiaOHora ? FRASES_DE_LAS_SEDES.cambioDeSede : "")
+  }
   const claveDeServicios = servicioIds.join(",")
   // Sólo en una clínica dental: con "primera vez" la cita dura 15 minutos
   // más y las horas son otras. El servidor suma; acá sólo va la respuesta.
   const primeraVezQueSeManda = clinicaDental ? primeraVez : null
-  const cargarHoras = useCargarHoras(slug, claveDeServicios, profesionalId, primeraVezQueSeManda)
-  const claveDeHoras = `${claveDeServicios}|${profesionalId ?? ""}${clinicaDental ? `|${primeraVez ?? ""}` : ""}`
+  // Con varias sedes, las horas son las de la sede elegida: va en la clave, así
+  // el calendario las vuelve a pedir al cambiar de sede.
+  const sedeQueSeManda = conSedes ? sedeId : null
+  const cargarHoras = useCargarHoras(slug, claveDeServicios, profesionalId, primeraVezQueSeManda, sedeQueSeManda)
+  const claveDeHoras = `${claveDeServicios}|${profesionalId ?? ""}${clinicaDental ? `|${primeraVez ?? ""}` : ""}${sedeQueSeManda ? `|${sedeQueSeManda}` : ""}`
   // En una clínica, el calendario aparece cuando se respondió la pregunta.
   const faltaLaPrimeraVez = clinicaDental && primeraVez === null
 
@@ -411,6 +462,7 @@ export function FormularioReserva({
   // urgencia sin horas ya tiene su aviso.
   const sinDias = !urgencia && diasDisponibles.length === 0
 
+  const puedeAvanzarPaso0 = sedeElegida !== null
   const puedeAvanzarPaso1 = !!servicioSeleccionado
   const puedeAvanzarPaso2 = !!fecha && !!hora && !faltaLaPrimeraVez
 
@@ -436,6 +488,7 @@ export function FormularioReserva({
     const resultado = await confirmarReserva(slug, {
       servicioIds,
       profesionalId,
+      sedeId: sedeQueSeManda,
       fecha,
       hora,
       nombre: nombre.trim(),
@@ -455,6 +508,7 @@ export function FormularioReserva({
       setEnlaceDeGestion(resultado.datos.enlaceDeGestion ?? null)
       setSePuedeCambiar(resultado.datos.sePuedeCambiar !== false)
       setConRecordatorio(resultado.datos.recibiraRecordatorio === true)
+      setSedeConfirmada(resultado.datos.sede ?? null)
       setCitaId(resultado.datos.citaId)
     }
     else setError(resultado.error)
@@ -494,6 +548,9 @@ export function FormularioReserva({
     boton.current?.focus()
   }, [pedidoDeFoco])
 
+  // Con varias sedes, la que guardó el servidor; si no la devolvió, la que se eligió.
+  const lugarDeLaCita = conSedes ? (sedeConfirmada ?? sedeElegida) : null
+
   if (confirmado && servicioSeleccionado) {
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={FUNDIDO}>
@@ -515,6 +572,7 @@ export function FormularioReserva({
             fecha={fecha}
             hora={hora}
             profesional={profesionalAsignado}
+            sede={lugarDeLaCita}
             precioDeLaHora={precioDeLaHora}
             detalleDeDuracion={detalleDeDuracion}
             sinServicio
@@ -530,7 +588,8 @@ export function FormularioReserva({
               hora,
               duracionMinutos: servicioConDuracion?.duration ?? servicioSeleccionado.duration,
               zona,
-              direccion,
+              // Con varias sedes, el evento lleva la dirección de la sede de la cita.
+              direccion: lugarDeLaCita ? direccionConComuna(lugarDeLaCita) : direccion,
             }}
           />
           {enlaceDeGestion && !sePuedeCambiar && (
@@ -553,7 +612,10 @@ export function FormularioReserva({
 
   // La primera vista (el paso 1 sin nada elegido) es la que pinta el servidor:
   // entra sin fundido, para no quedar invisible hasta que cargue JavaScript.
-  const esLaPrimeraVista = paso === 1 && !servicioSeleccionado
+  const esLaPrimeraVista = paso === (conSedes && !idDeLaSedeDeLaUrl ? 0 : 1) && !servicioSeleccionado
+  // Con varias sedes hay un paso más al principio: "¿Dónde?" es el 1 de 4.
+  const desfase = conSedes ? 1 : 0
+  const totalDePasos = PASOS_DE_RESERVA.length + desfase
 
   return (
     <div>
@@ -571,7 +633,10 @@ export function FormularioReserva({
         a 768px entre al lado de los horarios.
       */}
       <Tarjeta className="mt-8 px-4 py-6 sm:p-8 md:mt-12 lg:p-10">
-        <IndicadorDePasos paso={paso} pasos={pasosDeLaReserva(frases.primerPaso)} />
+        <IndicadorDePasos
+          paso={paso + desfase}
+          pasos={pasosDeLaReserva(frases.primerPaso, conSedes ? FRASES_DE_LAS_SEDES.nombreDelPaso : undefined)}
+        />
 
         <motion.div
           key={paso}
@@ -580,12 +645,36 @@ export function FormularioReserva({
           transition={FUNDIDO}
           className="mt-8"
         >
+          {/* Paso 0 (sólo con varias sedes): ¿Dónde? */}
+          {paso === 0 && conSedes && (
+            <>
+              <TituloDelPaso ref={titulo} numero={1} total={totalDePasos}>
+                {FRASES_DE_LAS_SEDES.titulo}
+              </TituloDelPaso>
+              <p className="mt-2 text-sm text-texto-2">{FRASES_DE_LAS_SEDES.bajada}</p>
+              <div className="mt-5">
+                <SelectorDeSede sedes={sedes} elegida={sedeId} onElegir={elegirSede} />
+              </div>
+              <BarraDeAcciones>
+                <Boton
+                  icono={<ArrowRight />}
+                  disabled={!puedeAvanzarPaso0}
+                  onClick={() => setPaso(1)}
+                  className="w-full sm:ml-auto sm:w-auto"
+                >
+                  Continuar
+                </Boton>
+              </BarraDeAcciones>
+            </>
+          )}
+
           {/* Paso 1: Servicio (en una clínica dental, el motivo) */}
           {paso === 1 && (
             <>
-              <TituloDelPaso ref={titulo} paso={1}>
+              <TituloDelPaso ref={titulo} numero={1 + desfase} total={totalDePasos}>
                 {frases.paso1.titulo}
               </TituloDelPaso>
+              {sedeElegida && <SedeYaElegida sede={sedeElegida} onCambiar={() => setPaso(0)} />}
               {/*
                 ¿Con quién?, arriba: elegir a alguien deja ver sólo lo que hace;
                 "cualquiera" los muestra todos. Sin equipo (el dueño solo) no hay
@@ -630,6 +719,16 @@ export function FormularioReserva({
                 </div>
               )}
               <BarraDeAcciones>
+                {conSedes && (
+                  <Boton
+                    variante="secundario"
+                    icono={<ArrowLeft />}
+                    onClick={() => setPaso(0)}
+                    className="w-full sm:w-auto"
+                  >
+                    Atrás
+                  </Boton>
+                )}
                 <Boton
                   icono={<ArrowRight />}
                   disabled={!puedeAvanzarPaso1}
@@ -649,9 +748,10 @@ export function FormularioReserva({
           {/* Paso 2: Fecha y hora */}
           {paso === 2 && (
             <>
-              <TituloDelPaso ref={titulo} paso={2}>
+              <TituloDelPaso ref={titulo} numero={2 + desfase} total={totalDePasos}>
                 ¿Cuándo quieres venir?
               </TituloDelPaso>
+              {sedeElegida && <SedeYaElegida sede={sedeElegida} onCambiar={() => setPaso(0)} />}
               {servicioSeleccionado && (
                 <ServicioElegido
                   servicio={servicioSeleccionado}
@@ -738,10 +838,11 @@ export function FormularioReserva({
                             <FormularioListaDeEspera
                               // Otro día, servicios o profesional es otra inscripción: empieza de cero.
                               // Se revisa con todos los servicios; se guarda el primero (#162).
-                              key={`${dia}|${claveDeServicios}|${profesionalId ?? ""}|${primeraVezQueSeManda ?? ""}`}
+                              key={`${dia}|${claveDeServicios}|${profesionalId ?? ""}|${primeraVezQueSeManda ?? ""}|${sedeQueSeManda ?? ""}`}
                               slug={slug}
                               servicioIds={servicioIds}
                               profesionalId={profesionalId}
+                              sedeId={sedeQueSeManda}
                               fecha={dia}
                               fechaParaLeer={fechaParaLeer(deTexto(dia) ?? new Date())}
                               primeraVez={primeraVezQueSeManda}
@@ -778,7 +879,7 @@ export function FormularioReserva({
           {/* Paso 3: Datos del cliente */}
           {paso === 3 && (
             <>
-              <TituloDelPaso ref={titulo} paso={3}>
+              <TituloDelPaso ref={titulo} numero={3 + desfase} total={totalDePasos}>
                 Tus datos
               </TituloDelPaso>
               {/*
@@ -893,6 +994,7 @@ export function FormularioReserva({
                   precioDeLaHora={precioDeLaHora}
                   terminoDelServicio={frases.terminoDelServicio}
                   detalleDeDuracion={detalleDeDuracion}
+                  sede={lugarDeLaCita}
                   profesional={
                     profesionalElegido?.nombre ??
                     (profesionalesDelServicio.length > 0
@@ -951,14 +1053,49 @@ export function FormularioReserva({
  * pantalla, que lo anuncia al recibir el foco. Se enfoca desde el código y
  * no con Tab, y no muestra contorno: no es un control.
  */
-function TituloDelPaso({ paso, children, ref }: { paso: Paso; children: ReactNode; ref: Ref<HTMLHeadingElement> }) {
+function TituloDelPaso({
+  numero,
+  total,
+  children,
+  ref,
+}: {
+  /** El lugar del paso en la reserva: 1 a 3, o 1 a 4 con varias sedes. */
+  numero: number
+  total: number
+  children: ReactNode
+  ref: Ref<HTMLHeadingElement>
+}) {
   return (
     <h3 ref={ref} tabIndex={-1} className="titulo-3 text-navy outline-none">
       <span className="sr-only">
-        Paso {paso} de {PASOS_DE_RESERVA.length}:{" "}
+        Paso {numero} de {total}:{" "}
       </span>
       {children}
     </h3>
+  )
+}
+
+/**
+ * La sede que se eligió en "¿Dónde?", a la vista mientras se elige el servicio y
+ * el día, para saber de quién son esos días y horas: "En Centro, Av. Italia 1234,
+ * Providencia · Cambiar". "Cambiar" vuelve a "¿Dónde?" (lo ya elegido se
+ * conserva, menos el día y la hora). El botón mide 44px de alto para el pulgar.
+ */
+function SedeYaElegida({ sede, onCambiar }: { sede: SedeParaElegir; onCambiar: () => void }) {
+  return (
+    <p className="mt-4 flex flex-wrap items-center gap-x-3 text-sm text-texto-2">
+      <span className="min-w-0 break-words">
+        En <strong className="font-medium text-navy">{sede.nombre}</strong>, {direccionConComuna(sede)}
+      </span>
+      <button
+        type="button"
+        onClick={onCambiar}
+        aria-label={FRASES_DE_LAS_SEDES.cambiarDeSede(sede.nombre)}
+        className="inline-flex min-h-11 items-center font-medium text-navy underline underline-offset-4 anillo-foco"
+      >
+        Cambiar
+      </button>
+    </p>
   )
 }
 

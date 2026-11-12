@@ -463,9 +463,12 @@ export async function borrarSede(tx: Db, actor: Actor, id: string): Promise<void
 }
 
 /**
- * Reemplaza TODA la grilla de una sede (vacía = no atiende). Una sede activa
- * no puede pisarse con otra sede activa (`choquesEntreSedes`); una inactiva
- * guarda lo que le manden y se revisa al reactivarla.
+ * Reemplaza TODA la grilla de una sede (vacía = no atiende). Las franjas que se
+ * guardan no pueden pisarse con las de otra sede ACTIVA (`choquesEntreSedes`),
+ * esté la sede activa o no: el trigger `horarios_sedes_sin_pisarse` no mira si
+ * la sede de la franja que se escribe está activa, así que una sede desactivada
+ * tampoco guarda un horario que ya chocaría. (Las franjas de las OTRAS sedes
+ * inactivas no cuentan para nadie.)
  */
 export async function guardarHorarioDeSede(tx: Db, actor: Actor, id: string, grilla: GrillaDeSede, ahora: Date = new Date()): Promise<SedeDelPanel> {
   const { businessId } = actor
@@ -475,7 +478,7 @@ export async function guardarHorarioDeSede(tx: Db, actor: Actor, id: string, gri
   if (!sede) throw noEncontrada()
 
   const nuevas = filasDeLaGrilla(grilla, { businessId, sedeId: id })
-  if (sede.activo && nuevas.length > 0) {
+  if (nuevas.length > 0) {
     const ajenas = (await franjasDeLasSedesActivas(tx, businessId)).filter((franja) => franja.sedeId !== id)
     const nombres = new Map(sedes.map((candidata) => [candidata.id, candidata.nombre]))
     const choques = choquesDeLaSede(

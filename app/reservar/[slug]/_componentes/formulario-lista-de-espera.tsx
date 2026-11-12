@@ -14,6 +14,8 @@ interface PropsDeFormularioListaDeEspera {
   servicioIds: string[]
   /** `null`: con cualquiera. */
   profesionalId: string | null
+  /** La sede elegida (plan Independiente con varias sedes): el día se revisa con su horario. `null` o sin dar: no se manda. */
+  sedeId?: string | null
   /** El día sin horas, `YYYY-MM-DD`. */
   fecha: string
   /** Cómo se lee ese día ("lunes 2 de noviembre"). */
@@ -36,6 +38,7 @@ export function FormularioListaDeEspera({
   slug,
   servicioIds,
   profesionalId,
+  sedeId = null,
   fecha,
   fechaParaLeer,
   primeraVez = null,
@@ -96,6 +99,7 @@ export function FormularioListaDeEspera({
     const resultado = await inscribirEnListaDeEspera(slug, {
       servicioIds,
       profesionalId,
+      sedeId,
       fecha,
       nombre,
       apellido,

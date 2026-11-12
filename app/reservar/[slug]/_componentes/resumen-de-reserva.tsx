@@ -3,6 +3,8 @@ import { formatearMonto } from "@/lib/dinero"
 import { deTexto, formatearDuracionDeServicio } from "@/lib/fechas"
 import { rebajaDeLaHora, type PrecioDeLaHora } from "@/lib/hora-valle"
 import { cn } from "@/lib/utils"
+import { FRASES_DE_LAS_SEDES } from "../_frases-de-sedes"
+import { direccionConComuna } from "./reglas-de-la-sede"
 import { fechaParaLeer } from "./selector-fecha-hora"
 import type { ServicioPublico } from "./selector-servicio"
 
@@ -18,6 +20,11 @@ interface PropsDeResumenDeReserva {
   hora: string
   /** Con quién; `null` o sin dar, no se muestra la fila. */
   profesional?: string | null
+  /**
+   * Dónde (plan Independiente con varias sedes): la sede con su dirección. `null`
+   * o sin dar, no se muestra la fila: un negocio sin sedes se ve como siempre.
+   */
+  sede?: { nombre: string; direccion: string; comuna: string } | null
   /**
    * El precio de la hora elegida, si es de hora valle (#89c): se muestra el
    * normal tachado y el rebajado. El que vale lo calcula el servidor.
@@ -42,6 +49,7 @@ export function ResumenDeReserva({
   fecha,
   hora,
   profesional,
+  sede,
   precioDeLaHora,
   sinServicio = false,
   terminoDelServicio = "Servicio",
@@ -64,6 +72,12 @@ export function ResumenDeReserva({
         </Fila>
       )}
       {profesional && <Fila termino="Con">{profesional}</Fila>}
+      {sede && (
+        <Fila termino={FRASES_DE_LAS_SEDES.terminoDeLaSede}>
+          {sede.nombre}
+          <span className="mt-0.5 block text-xs font-normal text-texto-2">{direccionConComuna(sede)}</span>
+        </Fila>
+      )}
       <Fila termino="Día">{dia ? fechaParaLeer(dia) : fecha}</Fila>
       <Fila termino="Hora">{hora}</Fila>
       {servicio?.price != null && (

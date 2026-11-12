@@ -134,6 +134,21 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
         // El lugar del evento de "Agregar al calendario": la dirección y la comuna.
         // Sin calle no hay lugar (como los enlaces de mapa): la comuna sola no lleva a ninguna parte.
         direccion={pagina.direccion ? [pagina.direccion, pagina.comuna].filter(Boolean).join(", ") : null}
+        // Plan Independiente con dos o más sedes activas: el primer paso es "¿Dónde?".
+        // Sólo lo que se muestra de cada sede (sin teléfono ni enlaces de mapa); con
+        // una sola, o sin ellas, no se manda nada y la reserva es la de siempre.
+        sedes={
+          pagina.modoDeSedes === "varias"
+            ? (pagina.sedes ?? []).map(({ id, nombre, direccion, comuna, dias, horario }) => ({
+                id,
+                nombre,
+                direccion,
+                comuna,
+                dias,
+                horario,
+              }))
+            : undefined
+        }
       />
       </div>
     </MarcoDeReserva>

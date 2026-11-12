@@ -7,6 +7,7 @@ import { correosDelAviso } from "@/lib/avisos-al-negocio"
 import { enviarAvisoDeCambioDelCliente } from "@/lib/email"
 import {
   dentroDelPlazo,
+  lugarDeLaCitaDelEnlace,
   mensajeFueraDePlazo,
   mensajeServicioYaNoSeReserva,
   mensajeSinHorasParaReagendar,
@@ -62,6 +63,10 @@ type Resultado =
  * reserva pública nunca lo elige) y la hora nueva tiene que dejarlo libre
  * (`asegurarSillonLibre`, dentro de la transacción): si no, 409. Una
  * urgencia sólo se mueve a otra hora de hoy.
+ *
+ * Plan Independiente: la cita conserva su sede (`sedeId` no se toca) y la hora
+ * nueva tiene que caer en el horario de ESA sede. Para cambiar de sede se
+ * cancela y se reserva de nuevo.
  */
 export async function POST(request: NextRequest, contexto: Params) {
   const enlace = await abrirEnlace(request, contexto, "reserva")
@@ -103,6 +108,7 @@ export async function POST(request: NextRequest, contexto: Params) {
     serviceIds: servicios.ids,
     profesionalId: cita.memberId,
     fecha,
+    sedeId: cita.sedeId,
   })
   if (reserva.tipo === "profesional-no-disponible") {
     return NextResponse.json({ error: mensajeSinHorasParaReagendar(cita.business.type) }, { status: 409 })
@@ -201,6 +207,7 @@ export async function POST(request: NextRequest, contexto: Params) {
   // A la dueña y al profesional (#104). Si cambió de profesional (la cita no
   // tenía y se asignó al reagendar), a los dos: al de antes se le liberó la
   // hora y al de ahora le llegó la cita.
+  const lugar = lugarDeLaCitaDelEnlace(cita)
   const avisados = await correosDelAviso(cita.businessId, cita.business.user.email, [cita.memberId, resultado.memberId])
   await Promise.all(
     avisados.map((emailNegocio) =>
@@ -216,6 +223,8 @@ export async function POST(request: NextRequest, contexto: Params) {
         hora,
         fechaAnterior: antes.fecha,
         horaAnterior: antes.hora,
+        // Dónde es: sólo si la cita tiene sede (si no, el correo es el de siempre).
+        ...(lugar && { lugar }),
       }).catch(() => null)
     )
   )

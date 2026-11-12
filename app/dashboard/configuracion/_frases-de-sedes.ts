@@ -40,7 +40,7 @@ export function frasesDeLasSedes(palabras: PalabrasDelRubro) {
   const agendadas = concordar("agendado", cita, "plural")
 
   /** Lo que se dice cuando no hay un motivo mejor, por acción. */
-  const pordefecto = (accion: AccionDeSedes): string => {
+  const porDefecto = (accion: AccionDeSedes): string => {
     switch (accion) {
       case "leer":
         return "No se pudieron cargar las sedes. Recarga la página para verlas al día."
@@ -96,19 +96,19 @@ export function frasesDeLasSedes(palabras: PalabrasDelRubro) {
    */
   const error = (codigo: number | null, delServidor: string, accion: AccionDeSedes): string => {
     const mensaje = delServidor.trim()
-    if (codigo === null) return mensaje || pordefecto(accion)
+    if (codigo === null) return mensaje || porDefecto(accion)
     if (codigo === 401) {
       return "Tu sesión terminó o no tienes permiso para hacer este cambio. Vuelve a entrar e inténtalo de nuevo."
     }
     if (codigo === 404) return "No se encontró lo que querías cambiar. Recarga la página e inténtalo de nuevo."
     if (codigo === 429) return "Hiciste varios cambios seguidos. Espera un momento e inténtalo de nuevo."
     if (codigo === 503) return "Por ahora no se puede hacer este cambio. Inténtalo más tarde."
-    if (codigo >= 500) return pordefecto(accion)
+    if (codigo >= 500) return porDefecto(accion)
     if (codigo === 409) return mensaje || conflicto(accion)
     if (codigo === 400 || codigo === 422) {
       return mensaje || "Algo de lo que enviaste no se pudo leer. Revisa los datos e inténtalo de nuevo."
     }
-    return pordefecto(accion)
+    return porDefecto(accion)
   }
 
   return {

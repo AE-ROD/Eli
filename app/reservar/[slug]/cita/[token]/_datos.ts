@@ -26,6 +26,17 @@ export interface CitaDelEnlace {
   diasConAtencion: number[] | null
   /** Clínica dental: es una urgencia y sólo se mueve a otra hora de hoy. Sólo viene en ese caso. */
   soloHoy?: boolean
+  /**
+   * Plan Independiente: la sede donde se atiende la cita, con su dirección y los
+   * enlaces de "Cómo llegar". Sólo viene si la cita tiene sede: sin ella (un
+   * negocio sin sedes, o una cita de antes) la pantalla es la de siempre.
+   */
+  sede?: {
+    nombre: string
+    direccion: string
+    comuna: string
+    mapas: { googleMaps: string; waze: string } | null
+  }
 }
 
 const ruta = (slug: string, token: string, resto = "") =>

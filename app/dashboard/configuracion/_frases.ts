@@ -1,6 +1,6 @@
 /**
  * Las frases de Configuración (el horario, la página pública, los servicios, los
- * productos, los sillones y los mensajes a los clientes) con las palabras del
+ * productos, los sillones, los mensajes a los clientes, las sedes y el plan) con las palabras del
  * rubro (`vocabularioDe(rubro).palabras`, `lib/vocabulario.ts`) y la
  * concordancia de `lib/concordancia.ts`: "Servicios" en un salón, "Prestaciones"
  * en una clínica dental; "Tus pacientes reciben un enlace…"; "desactívala" en
@@ -27,6 +27,8 @@
 import { al, concordar, del, el, pronombreDe, un } from "@/lib/concordancia"
 import { conMayuscula, type PalabrasDelRubro, type Sustantivo } from "@/lib/vocabulario"
 import { elLocal, seLlamaHora } from "../_frases"
+import { frasesDeLasSedes } from "./_frases-de-sedes"
+import { frasesDelPlan } from "./_frases-del-plan"
 import { frasesDeLosServicios } from "./_frases-de-servicios"
 
 /** El mismo sustantivo con un adjetivo antes, concordado: "nuevo servicio" / "nueva prestación". */
@@ -222,6 +224,12 @@ export function frasesDeConfiguracion(palabras: PalabrasDelRubro) {
       /** El aviso de arriba: a quiénes les llegan los mensajes promocionales. */
       soloConConsentimiento: `“${etiquetas.seguimiento}” y “Pedir reseña” sólo les llegan a quienes aceptaron recibir avisos y novedades de tu ${negocio.singular} por correo, y cada correo trae cómo darse de baja. La lista de espera le llega a quien se anotó.`,
     },
+
+    /** Sedes y horarios (plan Independiente): la lista, el editor de la semana, el paso a varios lugares y los errores por código. */
+    sedes: frasesDeLasSedes(palabras),
+
+    /** Plan (sólo la dueña): qué incluye cada uno y qué cambia al pasar al otro. */
+    plan: frasesDelPlan(palabras),
 
     /** Lo que dicen los pedidos al servidor cuando algo falla, con las palabras del rubro. */
     errores: {

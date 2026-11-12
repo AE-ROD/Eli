@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { CalendarCheck, CalendarClock, CalendarX2, Check, X } from "lucide-react"
+import { CalendarCheck, CalendarClock, CalendarX2, Check, Navigation, X } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
 import { Esqueleto } from "@/components/comunes/esqueleto"
@@ -11,8 +11,10 @@ import { formatearMonto } from "@/lib/dinero"
 import { deTexto, formatearDuracionDeServicio } from "@/lib/fechas"
 import { rebajaDeLaHora, type PrecioDeLaHora } from "@/lib/hora-valle"
 import { EncabezadoDeReserva } from "../../../_componentes/encabezado-de-reserva"
+import { direccionConComuna } from "../../../_componentes/reglas-de-la-sede"
 import { SelectorFechaHora, fechaParaLeer } from "../../../_componentes/selector-fecha-hora"
 import { frasesDeLaGestion } from "../../../_frases"
+import { FRASES_DE_LAS_SEDES } from "../../../_frases-de-sedes"
 import { cancelarCita, leerCita, leerHorasParaReagendar, reagendarCita, type CitaDelEnlace } from "../_datos"
 
 /** Si el servidor no dijo qué días atiende (ya no hay quién la tome), todos: la disponibilidad lo explica. */
@@ -193,6 +195,7 @@ export function GestionDeCita({ slug, token, rubro = null }: { slug: string; tok
           <p className="titulo-3 min-w-0 break-words text-navy">{cita.servicio.nombre}</p>
         </div>
         <ResumenDeLaCita className="mt-6 border-t border-borde pt-3" cita={cita} sinServicio terminoDelServicio={frases.terminoDelServicio} />
+        {cita.sede?.mapas && <ComoLlegar sede={cita.sede.nombre} mapas={cita.sede.mapas} />}
 
         {aviso && (
           <p role="status" className="mt-6 rounded-campo bg-azul-suave px-4 py-3 text-sm text-navy">
@@ -233,6 +236,8 @@ export function GestionDeCita({ slug, token, rubro = null }: { slug: string; tok
             <h2 className="titulo-3 text-navy">Elige otro día y hora</h2>
             <p className="mt-1 text-sm text-texto-2">
               {frases.mismoServicio(cita.profesional)}
+              {/* Reagendar no cambia de sede: las horas son las de esa sede. */}
+              {cita.sede && ` ${FRASES_DE_LAS_SEDES.reagendarEnLaSede(cita.sede.nombre)}`}
             </p>
             <div className="mt-6">
               <SelectorFechaHora
@@ -289,6 +294,35 @@ export function GestionDeCita({ slug, token, rubro = null }: { slug: string; tok
   )
 }
 
+/** Los enlaces de mapa abren aparte y no le pasan quién los abrió. */
+const AFUERA = { target: "_blank", rel: "noopener noreferrer" } as const
+
+/** "Cómo llegar" a la sede de la cita, en Google Maps y en Waze. El nombre de la sede va en el texto para el lector de pantalla. */
+function ComoLlegar({ sede, mapas }: { sede: string; mapas: { googleMaps: string; waze: string } }) {
+  return (
+    <div className="mt-4 flex flex-wrap gap-2">
+      <Boton
+        href={mapas.googleMaps}
+        variante="secundario"
+        icono={<Navigation />}
+        aria-label={FRASES_DE_LAS_SEDES.comoLlegar(sede, "Google Maps")}
+        {...AFUERA}
+      >
+        Google Maps
+      </Boton>
+      <Boton
+        href={mapas.waze}
+        variante="secundario"
+        icono={<Navigation />}
+        aria-label={FRASES_DE_LAS_SEDES.comoLlegar(sede, "Waze")}
+        {...AFUERA}
+      >
+        Waze
+      </Boton>
+    </div>
+  )
+}
+
 function ResumenDeLaCita({
   cita,
   sinServicio = false,
@@ -305,6 +339,10 @@ function ResumenDeLaCita({
   if (!sinServicio) filas.push([terminoDelServicio, cita.servicio.nombre])
   if (cita.servicio.duracion) filas.push(["Duración", formatearDuracionDeServicio(cita.servicio.duracion)])
   if (cita.profesional) filas.push(["Con", cita.profesional])
+  // Plan Independiente: la sede de la cita, con su dirección. Sin sede, nada cambia.
+  if (cita.sede) {
+    filas.push([FRASES_DE_LAS_SEDES.terminoDeLaSede, cita.sede.nombre], [FRASES_DE_LAS_SEDES.terminoDeLaDireccion, direccionConComuna(cita.sede)])
+  }
   filas.push(["Día", diaParaLeer(cita.fecha)], ["Hora", cita.hora])
   // El precio guardado en la cita (#156): el de hora valle si se reservó o
   // reagendó en una, y el nuevo después de reagendar. Sin precio, no se muestra.

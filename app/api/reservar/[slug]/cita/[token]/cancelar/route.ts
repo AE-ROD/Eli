@@ -3,7 +3,12 @@ import { prisma } from "@/lib/prisma"
 import { correosDelAviso } from "@/lib/avisos-al-negocio"
 import { soltarLoClinicoDeLaCita } from "@/lib/citas-de-la-clinica"
 import { enviarAvisoDeCambioDelCliente } from "@/lib/email"
-import { dentroDelPlazo, mensajeFueraDePlazo, whereDeEscrituraDelEnlace } from "@/lib/gestion-de-cita"
+import {
+  dentroDelPlazo,
+  lugarDeLaCitaDelEnlace,
+  mensajeFueraDePlazo,
+  whereDeEscrituraDelEnlace,
+} from "@/lib/gestion-de-cita"
 import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
 import { serviciosDeLaCita } from "@/lib/servicios-de-la-reserva"
 import { abrirEnlace, fechaYHora, noEncontrada, nombreDelCliente, type Params } from "../_comun"
@@ -49,6 +54,7 @@ export async function POST(request: NextRequest, contexto: Params) {
 
   // A la dueña y al profesional de la cita, como el aviso de reserva nueva (#104).
   const { fecha, hora } = fechaYHora(cita.startTime, zona)
+  const lugar = lugarDeLaCitaDelEnlace(cita)
   const avisados = await correosDelAviso(cita.businessId, cita.business.user.email, [cita.memberId])
   await Promise.all(
     avisados.map((emailNegocio) =>
@@ -62,6 +68,8 @@ export async function POST(request: NextRequest, contexto: Params) {
         profesional: cita.member?.user?.name ?? null,
         fecha,
         hora,
+        // Dónde era: sólo si la cita tiene sede (si no, el correo es el de siempre).
+        ...(lugar && { lugar }),
       }).catch(() => null)
     )
   )
