@@ -9,12 +9,14 @@ import { calcularMiPlata, type Ganado } from "@/lib/mi-plata"
 import { NOMBRES_DE_MOVIMIENTO } from "@/lib/movimientos"
 import { fechaParaLeer } from "@/lib/periodos-de-liquidacion"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { InsigniaDeEstado, pesos } from "../liquidaciones/_componentes/piezas"
+import { frasesDeMiPlata } from "./_frases"
 
 /** Comisiones, prótesis y propinas debajo del total, sólo si hay algo además de las comisiones que separar. */
 function Desglose({ ganado }: { ganado: Ganado }) {
@@ -46,6 +48,8 @@ export default async function PaginaMiPlata() {
   const plata = await calcularMiPlata(prisma, { businessId: actor.businessId, memberId: actor.memberId, ahora: new Date() })
   if (!plata) redirect("/dashboard")
   const clinica = esClinicaDental(actor)
+  // "1 prestación espera su porcentaje…" en una clínica dental; en los demás rubros, con sus palabras.
+  const frases = frasesDeMiPlata(vocabularioDe(actor.rubro).palabras)
   // Una clínica dental no trabaja con propinas: el texto no las nombra, salvo que alguna de las cifras de arriba las tenga.
   const conPropinas = [plata.periodo, plata.hoy, plata.semana].some((ganado) => veLaLineaDePropinas(actor.rubro, ganado.propinasCents))
   const queCuenta = conPropinas ? "tus comisiones ya calculadas y tus propinas" : "tus comisiones ya calculadas"
@@ -112,9 +116,7 @@ export default async function PaginaMiPlata() {
 
         {plata.esperanPorcentaje > 0 && (
           <Aviso tono="atencion" rol="status">
-            {plata.esperanPorcentaje === 1
-              ? "1 servicio espera su porcentaje de comisión: avísale a la dueña."
-              : `${plata.esperanPorcentaje} servicios esperan su porcentaje de comisión: avísale a la dueña.`}
+            {frases.esperanSuPorcentaje(plata.esperanPorcentaje)}
           </Aviso>
         )}
 

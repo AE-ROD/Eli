@@ -11,9 +11,12 @@ import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Aviso } from "@/components/panel/aviso"
 import { CAMPO } from "@/components/panel/estilos"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { MEDIOS_DE_PAGO } from "@/lib/medios-de-pago"
 import type { EstadoDeLiquidacion } from "@/lib/liquidacion"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { anularLiquidacion, marcarPagada } from "../_datos"
+import { frasesDeLasLiquidaciones } from "../_frases"
 import { pesos } from "./piezas"
 
 interface Props {
@@ -216,6 +219,8 @@ function ModalAnularLiquidacion({
   alTerminar: () => void
 }) {
   const idDelMotivo = useId()
+  // "Las prestaciones…" en una clínica dental; "Los servicios…" en los demás rubros.
+  const frases = frasesDeLasLiquidaciones(vocabularioDe(useRubroDelPanel()).palabras)
   const [motivo, setMotivo] = useState("")
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState("")
@@ -238,7 +243,7 @@ function ModalAnularLiquidacion({
   return (
     <MarcoDeModal
       titulo="Anular liquidación"
-      descripcion={`Los servicios${conProtesis ? ", abonos de prótesis" : ""}${conPropinas ? ", propinas" : ""} y movimientos que incluía vuelven a quedar pendientes para la próxima. Lo que se congeló al cerrarla sigue congelado.`}
+      descripcion={frases.anular.descripcion(conProtesis, conPropinas)}
       bloqueado={guardando}
       alCerrar={alCerrar}
     >

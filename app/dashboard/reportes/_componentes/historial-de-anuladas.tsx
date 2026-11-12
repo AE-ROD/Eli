@@ -7,8 +7,9 @@ import { TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos
 import { formatearMonto } from "@/lib/dinero"
 import { formatearHora } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
-import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
+import { vocabularioDe } from "@/lib/vocabulario"
 import type { FilaAnulada, ReporteDeAnuladas } from "../_datos"
+import { frasesDeLosReportes } from "../_frases"
 import { CLASES_DE_CELDA, ENCABEZADO_DE_COLUMNA, MediosDeLaFila, SinFilas, diaCorto } from "./historial-de-cobros"
 import { Paginador } from "./paginador"
 import { Cifra } from "./resumen-de-reporte"
@@ -35,8 +36,8 @@ function Momento({ iso }: { iso: string }) {
   )
 }
 
-function Servicios({ fila }: { fila: FilaAnulada }) {
-  if (fila.lineas.length === 0) return <span className="text-texto-2">Sin servicios</span>
+function Servicios({ fila, sinServicios }: { fila: FilaAnulada; sinServicios: string }) {
+  if (fila.lineas.length === 0) return <span className="text-texto-2">{sinServicios}</span>
   return (
     <ul className="space-y-1">
       {fila.lineas.map((linea) => (
@@ -85,8 +86,8 @@ interface PropsDeHistorialDeAnuladas {
  */
 export function HistorialDeAnuladas({ reporte, actualizando, onPagina }: PropsDeHistorialDeAnuladas) {
   const idDelTitulo = useId()
-  // "Paciente" en una clínica dental; en los demás rubros, igual que siempre.
-  const vocabulario = vocabularioDe(useRubroDelPanel())
+  // "Paciente" y "Prestaciones" en una clínica dental; en los demás rubros, igual que siempre.
+  const { historial: frases } = frasesDeLosReportes(vocabularioDe(useRubroDelPanel()).palabras)
   const { pagina, paginas, total: cantidad } = reporte
   const { seccion, irA } = useIrALaSeccion(onPagina, actualizando, reporte)
 
@@ -126,10 +127,10 @@ export function HistorialDeAnuladas({ reporte, actualizando, onPagina }: PropsDe
                   Por
                 </th>
                 <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
-                  {conMayuscula(vocabulario.cliente)}
+                  {frases.cliente}
                 </th>
                 <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
-                  Servicios
+                  {frases.servicios}
                 </th>
                 <th scope="col" className={cn(ENCABEZADO_DE_COLUMNA, "text-right")}>
                   Total
@@ -159,7 +160,7 @@ export function HistorialDeAnuladas({ reporte, actualizando, onPagina }: PropsDe
                   </td>
                   <td className={cn(CLASES_DE_CELDA, "font-medium break-words")}>{fila.cliente.nombre}</td>
                   <td className={CLASES_DE_CELDA}>
-                    <Servicios fila={fila} />
+                    <Servicios fila={fila} sinServicios={frases.sinServicios} />
                   </td>
                   <td className={cn(CLASES_DE_CELDA, "text-right font-semibold whitespace-nowrap tabular-nums")}>
                     {formatearMonto(fila.total)}

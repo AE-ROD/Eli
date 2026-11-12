@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
-import { anularCobro, formatearCambio, formatearMinutos, formatearTasa } from "./_datos"
+import { vocabularioDe } from "@/lib/vocabulario"
+import { anularCobro, formatearCambio, formatearMinutos, formatearTasa, leerOpcionesDeFiltro } from "./_datos"
 
 describe("formato de Llenar horas", () => {
   it("formatearTasa", () => {
@@ -52,5 +53,34 @@ describe("anularCobro", () => {
       codigo: 409,
       corregirConAjuste: false,
     })
+  })
+})
+
+describe("leerOpcionesDeFiltro: el mensaje de cuando falla habla con las palabras del rubro", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("sin palabras, lo de siempre; en una clínica dental, odontólogos y prestaciones", async () => {
+    simularRespuesta(json({}, 500))
+    expect(await leerOpcionesDeFiltro()).toEqual({
+      ok: false,
+      error: "No se pudieron cargar los profesionales y servicios para filtrar",
+    })
+    simularRespuesta(json({}, 500))
+    expect(await leerOpcionesDeFiltro(vocabularioDe("odontologia").palabras)).toEqual({
+      ok: false,
+      error: "No se pudieron cargar los odontólogos y prestaciones para filtrar",
+    })
+    simularRespuesta(json({}, 500))
+    expect(await leerOpcionesDeFiltro(vocabularioDe("salon").palabras)).toEqual({
+      ok: false,
+      error: "No se pudieron cargar las estilistas y servicios para filtrar",
+    })
+  })
+
+  it("el mensaje que manda el servidor sigue ganando", async () => {
+    simularRespuesta(json({ error: "Sin permiso" }, 403))
+    expect(await leerOpcionesDeFiltro(vocabularioDe("odontologia").palabras)).toEqual({ ok: false, error: "Sin permiso" })
   })
 })

@@ -9,7 +9,9 @@ import { Boton } from "@/components/comunes/boton"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { PantallaDeComisiones } from "./_componentes/pantalla-de-comisiones"
+import { frasesDeLasComisiones } from "./_frases"
 
 /**
  * Comisiones (#64, #35): sólo la dueña. El permiso se mira en el servidor:
@@ -22,10 +24,12 @@ export default async function PaginaComisiones() {
   // El historial muestra cuándo se cambió cada % en la zona del negocio, no en la del dispositivo.
   const negocio = await prisma.business.findUnique({ where: { id: actor.businessId }, select: { timezone: true } })
   const zona = zonaDelNegocio(negocio?.timezone)
+  // "El porcentaje de cada odontólogo, por prestación…" en una clínica dental; "Comisiones" no se renombra en ningún rubro.
+  const frases = frasesDeLasComisiones(vocabularioDe(actor.rubro).palabras)
 
   return (
     <div className="min-h-dvh">
-      <BarraSuperior titulo="Comisiones" subtitulo="El porcentaje de cada profesional, por servicio y por producto." mostrarBusqueda={false} />
+      <BarraSuperior titulo="Comisiones" subtitulo={frases.subtitulo} mostrarBusqueda={false} />
 
       <div className="max-w-5xl space-y-6 px-4 pt-6 pb-12 sm:px-6 lg:pt-8">
         {/* Sólo en una clínica dental: las prótesis se reparten en tres partes, aparte de la comisión. */}
@@ -34,7 +38,7 @@ export default async function PaginaComisiones() {
             <EncabezadoDeTarjeta
               id="reparto-de-protesis"
               titulo="Reparto de prótesis"
-              subtitulo="Las prótesis se reparten en tres partes (la tratante, la clínica y el laboratorio) según el material. El resto de las prestaciones sigue con el % de comisión de cada profesional, aquí abajo."
+              subtitulo={frases.protesis.tarjeta}
               icono={{ figura: Smile }}
               accion={
                 <Boton href="/dashboard/comisiones/protesis" variante="secundario" tamano="sm">

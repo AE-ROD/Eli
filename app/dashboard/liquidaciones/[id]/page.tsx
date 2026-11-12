@@ -15,13 +15,14 @@ import {
   puedeVerLiquidacionesDelEquipo,
   veLaLineaDePropinas,
 } from "@/lib/permisos"
-import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { fechaParaLeer } from "@/lib/periodos-de-liquidacion"
 import { cn } from "@/lib/utils"
 import { HORA_24 } from "@/lib/fechas"
 import { AccionesDelComprobante } from "../_componentes/acciones-del-comprobante"
 import { FilaDeTotal, InsigniaDeEstado, pesos, porcentaje } from "../_componentes/piezas"
 import { TablaDeProtesis } from "../_componentes/protesis-en-liquidacion"
+import { frasesDeLasLiquidaciones } from "../_frases"
 
 /**
  * Al imprimir (o guardar como PDF desde el diálogo del navegador) la hoja es
@@ -70,8 +71,8 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
   // tachados y el total a pagar queda en $0 (QA#13).
   const anulada = detalle.estado === "anulada"
   const volverA = puedeVerLiquidacionesDelEquipo(actor) ? "/dashboard/liquidaciones" : "/dashboard/mi-plata"
-  // "Odontólogo" y "Paciente" en una clínica dental; en los demás rubros, igual que siempre.
-  const vocabulario = vocabularioDe(actor.rubro)
+  // "Odontólogo", "Paciente" y "Prestaciones" en una clínica dental; en los demás rubros, con sus palabras.
+  const frases = frasesDeLasLiquidaciones(vocabularioDe(actor.rubro).palabras)
   const clinica = esClinicaDental(actor)
   // Una clínica dental no trabaja con propinas: no se nombran, salvo que esta liquidación tenga plata en ellas.
   const conPropinas = veLaLineaDePropinas(actor.rubro, t.propinasCents)
@@ -115,7 +116,7 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
             </div>
             <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-texto-2">{conMayuscula(vocabulario.profesional)}</dt>
+                <dt className="text-texto-2">{frases.profesional}</dt>
                 <dd className="font-medium">{detalle.miembro}</dd>
               </div>
               <div>
@@ -152,22 +153,21 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
 
           <section aria-labelledby="titulo-servicios" className="space-y-2">
             <h3 id="titulo-servicios" className="font-medium">
-              Servicios y productos
+              {frases.comprobante.serviciosYProductos}
             </h3>
             {anulada && detalle.lineas.length === 0 ? (
               <p className="text-sm text-texto-2">
-                Anulada: los servicios, productos{clinica ? ", abonos de prótesis" : ""}{conPropinas ? ", propinas" : ""} y movimientos que incluía
-                volvieron a quedar pendientes para la próxima liquidación.
+                {frases.comprobante.anuladaSinLineas(clinica, conPropinas)}
               </p>
             ) : detalle.lineas.length === 0 ? (
-              <p className="text-sm text-texto-2">No incluye servicios ni productos.</p>
+              <p className="text-sm text-texto-2">{frases.comprobante.noIncluye}</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[520px] text-sm">
                   <thead>
                     <tr className="border-b border-borde">
                       <th className={CABECERA}>Fecha</th>
-                      <th className={CABECERA}>{conMayuscula(vocabulario.cliente)}</th>
+                      <th className={CABECERA}>{frases.cliente}</th>
                       <th className={CABECERA}>Detalle</th>
                       <th className={cn(CABECERA, "text-right")}>Precio</th>
                       <th className={cn(CABECERA, "text-right")}>%</th>
@@ -198,7 +198,7 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
             )}
           </section>
 
-          <TablaDeProtesis protesis={detalle.protesis} />
+          <TablaDeProtesis protesis={detalle.protesis} encabezadoDelCliente={frases.cliente} />
 
           {detalle.propinas.length > 0 && (
             <section aria-labelledby="titulo-propinas" className="space-y-2">
@@ -249,7 +249,7 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
               Totales
             </h3>
             <dl className="ml-auto max-w-sm space-y-2">
-              <FilaDeTotal concepto="Comisión por servicios" centavos={t.comisionServiciosCents} tachado={anulada} />
+              <FilaDeTotal concepto={frases.comprobante.comisionPorServicios} centavos={t.comisionServiciosCents} tachado={anulada} />
               {t.comisionProductosCents !== 0 && (
                 <FilaDeTotal concepto="Comisión por productos" centavos={t.comisionProductosCents} tachado={anulada} />
               )}

@@ -9,6 +9,7 @@ import { Esqueleto } from "@/components/comunes/esqueleto"
 import { Insignia } from "@/components/comunes/insignia"
 import { Interruptor } from "@/components/comunes/interruptor"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { CAMPO, ETIQUETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
@@ -27,6 +28,7 @@ import {
   type Unidad,
 } from "@/lib/protesis"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import {
   borrarExcepcionDeProtesis,
   crearExcepcionDeProtesis,
@@ -44,6 +46,7 @@ import {
   type MaterialEscrito,
   type RepartoEscrito,
 } from "../_datos"
+import { frasesDeLasComisiones } from "../_frases"
 
 /** El color de cada parte: el pastel fuerte de un módulo, con texto navy. Nunca la única pista: cada una va con su nombre. */
 const PARTES = [
@@ -99,6 +102,8 @@ async function leerTodo(): Promise<{ ok: true; datos: Datos } | { ok: false; err
  * nuevas.
  */
 export function RepartoDeProtesisConfig() {
+  // Una clínica dental: "paciente", "odontólogo" y "prestaciones" salen del vocabulario como en el resto del panel.
+  const frases = frasesDeLasComisiones(vocabularioDe(useRubroDelPanel()).palabras).protesis
   const [datos, setDatos] = useState<Datos | null>(null)
   const [error, setError] = useState("")
   const [anuncio, setAnuncio] = useState("")
@@ -208,7 +213,7 @@ export function RepartoDeProtesisConfig() {
         <ul className="mt-4 grid gap-3 sm:grid-cols-2">
           <li className="rounded-[24px] bg-superficie p-4 squircle">
             <p className="antetitulo">Porcentajes sobre</p>
-            <p className="mt-1.5 font-medium">El valor que paga el paciente</p>
+            <p className="mt-1.5 font-medium">{frases.valorQuePaga}</p>
             <p className="mt-1 text-sm text-texto-2">Cada parte es un % de lo cobrado. No se descuenta el costo de los materiales.</p>
           </li>
           <li className="rounded-[24px] bg-superficie p-4 squircle">
@@ -218,9 +223,7 @@ export function RepartoDeProtesisConfig() {
           </li>
         </ul>
         <p className="mt-4 text-sm text-texto-2">
-          Las prótesis se reparten en tres partes: la tratante, la clínica y el laboratorio. El resto de las prestaciones
-          sigue con el % de comisión de cada profesional. Cada prótesis guarda su regla al crearse: lo que cambies aquí
-          aplica a las prótesis nuevas; las creadas antes mantienen su regla.
+          {frases.comoSeCalcula}
         </p>
       </section>
 
@@ -238,7 +241,7 @@ export function RepartoDeProtesisConfig() {
         <Leyenda className="mt-4" />
         {datos.materiales.length === 0 ? (
           <EstadoVacio className="mt-4" titulo="Sin materiales">
-            Agrega los materiales con que trabaja la clínica para poder crear prótesis.
+            {frases.agregaLosMateriales}
           </EstadoVacio>
         ) : (
           <ul className="mt-3 space-y-2">
@@ -276,7 +279,7 @@ export function RepartoDeProtesisConfig() {
       <section aria-labelledby={idExcepciones} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
         <EncabezadoDeTarjeta
           id={idExcepciones}
-          titulo="Excepciones por profesional"
+          titulo={frases.excepcionesPor}
           subtitulo="Para quien tenga un acuerdo distinto en un material. La excepción manda sobre la regla del material."
           accion={
             <Boton
@@ -293,9 +296,7 @@ export function RepartoDeProtesisConfig() {
         />
         {datos.excepciones.length === 0 ? (
           <EstadoVacio className="mt-4" titulo="Sin excepciones">
-            {datos.odontologos.length === 0
-              ? "Cuando tengas odontólogos en el equipo, aquí les puedes dar un reparto propio por material."
-              : "Todos siguen la regla de cada material."}
+            {datos.odontologos.length === 0 ? frases.sinProfesionales : frases.todosSiguenLaRegla}
           </EstadoVacio>
         ) : (
           <ul className="mt-4 space-y-2">
@@ -351,6 +352,7 @@ export function RepartoDeProtesisConfig() {
             excepcion={modalExcepcion.excepcion}
             materiales={datos.materiales}
             odontologos={datos.odontologos}
+            frases={frases}
             alGuardar={alGuardarExcepcion}
             alCerrar={() => setModalExcepcion(null)}
           />
@@ -674,12 +676,14 @@ interface PropsDeModalExcepcion {
   excepcion: ExcepcionDeProtesis | null
   materiales: MaterialDeProtesis[]
   odontologos: Odontologo[]
+  /** Las frases del reparto con las palabras del rubro ("odontólogo", "ese odontólogo"). */
+  frases: ReturnType<typeof frasesDeLasComisiones>["protesis"]
   alGuardar: (excepcion: ExcepcionDeProtesis, eraNueva: boolean) => void
   alCerrar: () => void
 }
 
 /** Agregar la regla de un odontólogo en un material, o cambiarla. Al elegir el material, parte de su regla. */
-function ModalExcepcion({ excepcion, materiales, odontologos, alGuardar, alCerrar }: PropsDeModalExcepcion) {
+function ModalExcepcion({ excepcion, materiales, odontologos, frases, alGuardar, alCerrar }: PropsDeModalExcepcion) {
   const [memberId, setMemberId] = useState(excepcion?.memberId ?? odontologos[0]?.id ?? "")
   const [materialId, setMaterialId] = useState(excepcion?.materialId ?? materiales[0]?.id ?? "")
   const delMaterial = materiales.find((material) => material.id === materialId)
@@ -717,7 +721,7 @@ function ModalExcepcion({ excepcion, materiales, odontologos, alGuardar, alCerra
       descripcion={
         excepcion
           ? `En ${excepcion.materialNombre}. Aplica a sus prótesis nuevas; las creadas antes mantienen su regla.`
-          : "Manda sobre la regla del material para ese odontólogo, en sus prótesis nuevas."
+          : frases.mandaSobreLaRegla
       }
       bloqueado={guardando}
       ancho="lg"
@@ -728,7 +732,7 @@ function ModalExcepcion({ excepcion, materiales, odontologos, alGuardar, alCerra
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor={`${id}-odontologo`} className={ETIQUETA}>
-                Odontólogo
+                {frases.etiquetaDelProfesional}
               </label>
               <select
                 id={`${id}-odontologo`}

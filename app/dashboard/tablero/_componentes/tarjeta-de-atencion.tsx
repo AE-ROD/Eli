@@ -19,9 +19,9 @@ import { puedeCobrarAbonosDeProtesis, type Actor } from "@/lib/permisos"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { esAbono, nombreDelAbono, type Atencion, type LineaDeServicio as Linea, type PagoRegistrado } from "../_datos"
+import { frasesDelTablero } from "../_frases"
 import { CLASES_DE_TARJETA, Herramienta, LineaDeServicio, MomentoDeTarjeta, NombreDeTarjeta } from "./partes-de-tarjeta"
 import type { PropsDeArrastre } from "./tarjeta-de-reserva"
-import { frasesDelTablero } from "../_frases"
 
 /**
  * Desde cuándo está en la columna, dicho como se lee en el local: "Llegó

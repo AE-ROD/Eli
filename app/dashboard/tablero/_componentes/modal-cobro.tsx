@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react"
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { CircleAlert, CircleCheck, CircleDashed, HandCoins, Plus, Trash2, type LucideIcon } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { Esqueleto } from "@/components/comunes/esqueleto"
@@ -22,9 +22,10 @@ import {
 } from "@/lib/acciones-del-tablero"
 import { formatearMonto } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
-import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { Insignia } from "@/components/comunes/insignia"
 import { esAbono, leerLineasSinPorcentaje, nombreDelAbono, type Atencion } from "../_datos"
+import { frasesDelTablero } from "../_frases"
 import { Aviso } from "@/components/panel/aviso"
 
 /**
@@ -85,8 +86,11 @@ export function ModalCobro({
   onCerrar,
 }: PropsDeModalCobro) {
   const idBase = useId()
-  // "Sala de espera" en una clínica dental.
-  const deDonde = conMayuscula(vocabularioDe(useRubroDelPanel()).tablero)
+  // La palabra del rubro y sus avisos: "Sala de espera" en una clínica dental, "prestación" en vez de "servicio".
+  // Memorizadas: la lectura de comisiones de más abajo depende de ellas y no debe repetirse en cada dibujo.
+  const rubro = useRubroDelPanel()
+  const palabras = useMemo(() => vocabularioDe(rubro).palabras, [rubro])
+  const deDonde = frasesDelTablero(palabras).titulo
   const botonAgregar = useRef<HTMLButtonElement>(null)
   const botonAgregarPropina = useRef<HTMLButtonElement>(null)
   const totalCentavos = totalEnCentavosDe(atencion)
@@ -119,13 +123,13 @@ export function ModalCobro({
   const [esperaVencida, setEsperaVencida] = useState(false)
   useEffect(() => {
     let vigente = true
-    leerLineasSinPorcentaje(atencion.id).then((resultado) => {
+    leerLineasSinPorcentaje(atencion.id, palabras).then((resultado) => {
       if (vigente) setSinPorcentaje({ firma: firmaDeLineas, ids: resultado.ok ? resultado.datos : [] })
     })
     return () => {
       vigente = false
     }
-  }, [atencion.id, firmaDeLineas])
+  }, [atencion.id, firmaDeLineas, palabras])
   useEffect(() => {
     const espera = setTimeout(() => setEsperaVencida(true), ESPERA_MAXIMA_DE_LA_REVISION_MS)
     return () => clearTimeout(espera)
@@ -133,7 +137,7 @@ export function ModalCobro({
   const revisando = sinPorcentaje === null && !esperaVencida
   const idsSinPorcentaje = new Set(sinPorcentaje?.firma === firmaDeLineas ? sinPorcentaje.ids : [])
   const lineasSinPorcentaje = atencion.lineas.filter((linea) => idsSinPorcentaje.has(linea.id)).length
-  const avisoDeComisiones = avisoAntesDeCobrar(lineasSinPorcentaje)
+  const avisoDeComisiones = avisoAntesDeCobrar(lineasSinPorcentaje, palabras)
 
   const cobro = estadoDelCobro(totalCentavos, filas)
   const deLasPropinas = propinasDesdeFilas(propinas)

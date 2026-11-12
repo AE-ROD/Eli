@@ -50,7 +50,14 @@ const CELDA = "py-2 pr-3 align-top"
 const CABECERA = "py-2 pr-3 text-left text-xs font-medium uppercase tracking-[0.04em] text-texto-2"
 
 /** En el comprobante: una tabla, como la de servicios, que se desplaza de lado en el teléfono. */
-export function TablaDeProtesis({ protesis }: { protesis: readonly AbonoDeProtesisEnLiquidacion[] }) {
+export function TablaDeProtesis({
+  protesis,
+  encabezadoDelCliente,
+}: {
+  protesis: readonly AbonoDeProtesisEnLiquidacion[]
+  /** El encabezado de la columna de quien se atendió, con la palabra del rubro ("Paciente"). */
+  encabezadoDelCliente: string
+}) {
   if (protesis.length === 0) return null
   return (
     <section aria-labelledby="titulo-protesis" className="space-y-2">
@@ -64,7 +71,7 @@ export function TablaDeProtesis({ protesis }: { protesis: readonly AbonoDeProtes
           <thead>
             <tr className="border-b border-borde">
               <th className={CABECERA}>Liberado el</th>
-              <th className={CABECERA}>Paciente</th>
+              <th className={CABECERA}>{encabezadoDelCliente}</th>
               <th className={CABECERA}>Prótesis</th>
               <th className={CABECERA}>Cobrado el</th>
               <th className={CABECERA}>Entregada el</th>

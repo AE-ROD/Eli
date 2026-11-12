@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils"
 import { formatearHora } from "@/lib/fechas"
 import { fechaDelNegocio, fechaParaLeer } from "@/lib/periodos-de-liquidacion"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
-import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { Paginador } from "../../reportes/_componentes/paginador"
 import {
   formatearPorcentaje,
@@ -22,6 +22,7 @@ import {
   type FiltroDeHistorial,
   type HistorialDeComisiones,
 } from "../_datos"
+import { frasesDeLasComisiones } from "../_frases"
 
 interface PropsDeHistorial {
   miembros: { id: string; nombre: string }[]
@@ -36,9 +37,9 @@ function cuandoParaLeer(iso: string, zona: string): string {
   return `${fechaParaLeer(fechaDelNegocio(new Date(iso), zona))}, ${formatearHora(iso, zona)}`
 }
 
-/** "el % por defecto", "Color" o "el producto Shampoo". */
-function sobreQue(cambio: CambioDeComision): string {
-  if (cambio.alcance === "service") return `en ${cambio.sobre ?? "un servicio"}`
+/** "el % por defecto", "Color" o "el producto Shampoo". `unServicio` es "un servicio" / "una prestación". */
+function sobreQue(cambio: CambioDeComision, unServicio: string): string {
+  if (cambio.alcance === "service") return `en ${cambio.sobre ?? unServicio}`
   if (cambio.alcance === "product") return `del producto ${cambio.sobre ?? "borrado"}`
   return "por defecto"
 }
@@ -63,8 +64,8 @@ function filtroDelSelector(valor: string): FiltroDeHistorial {
  */
 export function HistorialDeComisionesTarjeta({ miembros, version, zona }: PropsDeHistorial) {
   const idDelTitulo = useId()
-  // "Odontólogo" en una clínica dental; en los demás rubros, igual que siempre.
-  const vocabulario = vocabularioDe(useRubroDelPanel())
+  // "Odontólogo" y "prestación" en una clínica dental; en los demás rubros, con sus palabras.
+  const frases = frasesDeLasComisiones(vocabularioDe(useRubroDelPanel()).palabras).historial
   const [miembro, setMiembro] = useState("")
   const [pagina, setPagina] = useState(1)
   const [reintentos, setReintentos] = useState(0)
@@ -108,7 +109,7 @@ export function HistorialDeComisionesTarjeta({ miembros, version, zona }: PropsD
         />
         <div className="max-w-xs">
           <Selector
-            etiqueta={conMayuscula(vocabulario.profesional)}
+            etiqueta={frases.profesional}
             value={miembro}
             onChange={(evento) => {
               setCargando(true)
@@ -153,7 +154,7 @@ export function HistorialDeComisionesTarjeta({ miembros, version, zona }: PropsD
 
         {historial && historial.cambios.length === 0 && (
           <EstadoVacio>
-            Todavía no hay cambios de porcentaje{miembro ? ` de este ${vocabulario.profesional}` : ""}.
+            {frases.sinCambios(miembro !== "")}
           </EstadoVacio>
         )}
 
@@ -168,7 +169,7 @@ export function HistorialDeComisionesTarjeta({ miembros, version, zona }: PropsD
                   {cambio.miembro.id === null && cambio.alcance !== "product" && (
                     <span className="text-texto-2"> (ya no está en el equipo)</span>
                   )}{" "}
-                  {sobreQue(cambio)}:{" "}
+                  {sobreQue(cambio, frases.unServicio)}:{" "}
                   <span className="tabular-nums">
                     {formatearPorcentaje(cambio.antes)} → {formatearPorcentaje(cambio.despues)}
                   </span>

@@ -1,7 +1,16 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
 import { zonaDelDispositivo } from "@/lib/fechas"
-import { anularAtencion, buscarClientes, marcarLlegada, marcarNoVino } from "./_datos"
+import { vocabularioDe } from "@/lib/vocabulario"
+import {
+  anularAtencion,
+  buscarClientes,
+  guardarServicios,
+  leerLineasSinPorcentaje,
+  leerTablero,
+  marcarLlegada,
+  marcarNoVino,
+} from "./_datos"
 
 // La zona del dispositivo, fija: la del proceso de los tests depende de la máquina.
 vi.mock("@/lib/fechas", async (importarOriginal) => {
@@ -111,5 +120,58 @@ describe("anularAtencion", () => {
 
     expect(resultado.ok).toBe(false)
     if (!resultado.ok) expect(resultado.motivo).toBe("desactualizada")
+  })
+})
+
+describe("los mensajes de un pedido que falla sin decir por qué hablan con las palabras del rubro", () => {
+  const clinica = vocabularioDe("odontologia").palabras
+  const salon = vocabularioDe("salon").palabras
+  const falla = () => simularRespuesta(json({}, 500))
+
+  it("sin palabras, o con un rubro desconocido, dicen lo de siempre", async () => {
+    const desconocido = vocabularioDe("no-existe").palabras
+    falla()
+    expect(await leerTablero(new Date())).toEqual({ ok: false, error: "No se pudo cargar el tablero" })
+    falla()
+    expect(await leerTablero(new Date(), desconocido)).toEqual({ ok: false, error: "No se pudo cargar el tablero" })
+    falla()
+    expect(await buscarClientes("ana")).toEqual({ ok: false, error: "No se pudieron buscar los clientes" })
+    falla()
+    expect(await marcarNoVino("c1")).toMatchObject({ ok: false, error: "No se pudo marcar que no vino" })
+    falla()
+    expect(await guardarServicios("v1", [])).toMatchObject({ ok: false, error: "No se pudieron guardar los servicios" })
+    falla()
+    expect(await leerLineasSinPorcentaje("v1")).toEqual({
+      ok: false,
+      error: "No se pudo saber qué servicios quedarán sin porcentaje de comisión",
+    })
+  })
+
+  it("una clínica dental: la sala de espera, los pacientes, «no asistió» y las prestaciones", async () => {
+    falla()
+    expect(await leerTablero(new Date(), clinica)).toEqual({ ok: false, error: "No se pudo cargar la sala de espera" })
+    falla()
+    expect(await buscarClientes("ana", clinica)).toEqual({ ok: false, error: "No se pudieron buscar los pacientes" })
+    falla()
+    expect(await marcarNoVino("c1", clinica)).toMatchObject({ ok: false, error: "No se pudo marcar que no asistió" })
+    falla()
+    expect(await guardarServicios("v1", [], clinica)).toMatchObject({ ok: false, error: "No se pudieron guardar las prestaciones" })
+    falla()
+    expect(await leerLineasSinPorcentaje("v1", clinica)).toEqual({
+      ok: false,
+      error: "No se pudo saber qué prestaciones quedarán sin porcentaje de comisión",
+    })
+  })
+
+  it("un salón sigue con tablero y servicios", async () => {
+    falla()
+    expect(await leerTablero(new Date(), salon)).toEqual({ ok: false, error: "No se pudo cargar el tablero" })
+    falla()
+    expect(await marcarNoVino("c1", salon)).toMatchObject({ ok: false, error: "No se pudo marcar que no vino" })
+  })
+
+  it("el mensaje que manda el servidor sigue ganando sobre el del rubro", async () => {
+    simularRespuesta(json({ error: "La atención ya cambió" }, 409))
+    expect(await guardarServicios("v1", [], clinica)).toEqual({ ok: false, error: "La atención ya cambió", motivo: "desactualizada" })
   })
 })

@@ -10,8 +10,9 @@ import { MAXIMO_DE_LINEAS_POR_ATENCION, deCentavos } from "@/lib/atenciones"
 import { esDeProducto, totalDeFilasEnCentavos, type ErroresDeFila, type FilaDeServicio } from "@/lib/acciones-del-tablero"
 import { formatearMonto, montoParaEscribir } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
-import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
+import { vocabularioDe } from "@/lib/vocabulario"
 import type { Catalogo } from "../_datos"
+import { frasesDelTablero } from "../_frases"
 import { Aviso } from "@/components/panel/aviso"
 
 /**
@@ -89,8 +90,8 @@ export function EditorDeServicios({
   // Lo que se puede agregar: el tope del servidor cuenta también los abonos.
   const sinLugar = !quedaLugarParaOtraFila(filas.length, lineasAparte)
   const idBase = useId()
-  // "Odontólogo" en una clínica dental.
-  const { profesional: quienAtiende } = vocabularioDe(useRubroDelPanel())
+  // "Odontólogo" y "prestación" en una clínica dental.
+  const frases = frasesDelTablero(vocabularioDe(useRubroDelPanel()).palabras)
   const botonAgregar = useRef<HTMLButtonElement>(null)
   const totalCentavos = totalDeFilasEnCentavos(filas)
   // Un tablero viejo, cargado antes de que el servidor mandara productos, no los trae.
@@ -134,21 +135,21 @@ export function EditorDeServicios({
     <div className="space-y-3">
       {catalogo.servicios.length === 0 && (
         <Aviso tono="atencion">
-          Todavía no hay servicios en el catálogo.{" "}
+          {frases.editor.catalogoVacio}{" "}
           {puedeConfigurarServicios ? (
             <Link
               href="/dashboard/configuracion#servicios"
               className="rounded-sm underline decoration-[1.5px] underline-offset-4 anillo-foco"
             >
-              Agrégalos en Configuración
+              {frases.editor.agregalos}
             </Link>
           ) : (
-            "Pídele al dueño o al encargado que los cargue en Configuración."
+            frases.editor.pideQueLosCarguen
           )}
         </Aviso>
       )}
 
-      {filas.length === 0 && catalogo.servicios.length > 0 && <p className="text-sm text-texto-2">Sin servicios todavía.</p>}
+      {filas.length === 0 && catalogo.servicios.length > 0 && <p className="text-sm text-texto-2">{frases.editor.sinServicios}</p>}
 
       {filas.map((fila, indice) => {
         const numero = indice + 1
@@ -161,7 +162,7 @@ export function EditorDeServicios({
           ? (productos.find((candidato) => candidato.id === fila.productoId)?.nombre ?? fila.servicioOriginal)
           : (catalogo.servicios.find((servicio) => servicio.id === fila.servicioId)?.nombre ?? fila.servicioOriginal)
         const elegido = producto ? fila.productoId : fila.servicioId
-        const loQueEs = producto ? "Producto" : "Servicio"
+        const loQueEs = frases.editor.linea(producto)
 
         return (
           // Cada servicio en un bloque gris: los campos blancos se recortan
@@ -171,12 +172,12 @@ export function EditorDeServicios({
             className="grid grid-cols-1 items-start gap-3 rounded-[20px] bg-superficie p-3 squircle sm:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.2fr)_auto] sm:p-4"
           >
             <legend className="sr-only">
-              {loQueEs} {numero}
+              {loQueEs.titulo} {numero}
             </legend>
 
             <div className={cn(!eligeProfesional && "sm:col-span-2")}>
               <label htmlFor={id("servicio")} className={ETIQUETA}>
-                {loQueEs}
+                {loQueEs.titulo}
               </label>
               <select
                 id={id("servicio")}
@@ -190,7 +191,7 @@ export function EditorDeServicios({
                 }
                 className={cn(CAMPO, deLaFila.servicio && CAMPO_CON_ERROR)}
               >
-                <option value="">{producto ? "Elegir producto" : "Elegir servicio"}</option>
+                <option value="">{loQueEs.elegir}</option>
                 {(producto ? productos : catalogo.servicios).map((opcion) => (
                   <option key={opcion.id} value={opcion.id}>
                     {opcion.nombre}
@@ -198,7 +199,7 @@ export function EditorDeServicios({
                 ))}
                 {/* Uno desactivado no está en el catálogo, pero la línea lo tiene: se conserva. */}
                 {!producto && fila.servicioId && !servicioEnCatalogo && (
-                  <option value={fila.servicioId}>{fila.servicioOriginal ?? "Servicio"} (fuera del catálogo)</option>
+                  <option value={fila.servicioId}>{fila.servicioOriginal ?? frases.editor.servicioPorDefecto} (fuera del catálogo)</option>
                 )}
                 {producto && fila.productoId && !productoEnCatalogo && (
                   <option value={fila.productoId}>{fila.servicioOriginal ?? "Producto"} (ya no se vende)</option>
@@ -213,7 +214,7 @@ export function EditorDeServicios({
                 !elegido &&
                 fila.servicioOriginal && (
                   <AyudaDeCampo id={id("servicio-ayuda")}>
-                    «{fila.servicioOriginal}» no está en el catálogo: elige otro.
+                    «{fila.servicioOriginal}» no está en el catálogo: {loQueEs.eligeOtro}.
                   </AyudaDeCampo>
                 )
               )}
@@ -222,7 +223,7 @@ export function EditorDeServicios({
             {eligeProfesional && (
               <div>
                 <label htmlFor={id("profesional")} className={ETIQUETA}>
-                  {conMayuscula(quienAtiende)}
+                  {frases.editor.profesional}
                 </label>
                 <select
                   id={id("profesional")}
@@ -236,7 +237,7 @@ export function EditorDeServicios({
                   onChange={(evento) => cambiarFila(fila.clave, { profesional: evento.target.value })}
                   className={cn(CAMPO, deLaFila.profesional && CAMPO_CON_ERROR)}
                 >
-                  <option value="">{`Elegir ${quienAtiende}`}</option>
+                  <option value="">{frases.editor.elegirProfesional}</option>
                   {catalogo.profesionales.map((profesional) => (
                     <option key={profesional.id} value={profesional.id}>
                       {profesional.nombre}
@@ -309,7 +310,7 @@ export function EditorDeServicios({
                 tamano="sm"
                 onClick={() => quitar(fila.clave)}
                 disabled={deshabilitado}
-                aria-label={`Quitar el ${loQueEs.toLowerCase()} ${numero}${nombreDelServicio ? `: ${nombreDelServicio}` : ""}`}
+                aria-label={`${loQueEs.quitar(numero)}${nombreDelServicio ? `: ${nombreDelServicio}` : ""}`}
                 title="Quitar"
                 className="text-texto-2 hover:bg-error/8 hover:text-error sm:mt-6.5 sm:size-11 sm:px-0 sm:after:hidden"
               >
@@ -332,7 +333,7 @@ export function EditorDeServicios({
             disabled={deshabilitado || sinLugar || catalogo.servicios.length === 0}
           >
             <Plus aria-hidden="true" className="size-4" strokeWidth={2} />
-            Agregar servicio
+            {frases.editor.agregarServicio}
           </Boton>
           {productos.length > 0 && (
             <Boton
@@ -347,7 +348,7 @@ export function EditorDeServicios({
           )}
         </div>
         <p className="text-sm" aria-live="polite">
-          <span className="text-texto-2">{eligeProfesional ? "Total" : "Total de tus servicios"}:</span>{" "}
+          <span className="text-texto-2">{eligeProfesional ? "Total" : frases.servicios.totalDeTusServicios}:</span>{" "}
           <span className="text-base font-semibold tabular-nums">{formatearMonto(deCentavos(totalCentavos))}</span>
         </p>
       </div>

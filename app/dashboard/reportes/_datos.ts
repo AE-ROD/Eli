@@ -8,6 +8,14 @@ import { rangoDelDia, zonaDelDispositivo } from "@/lib/fechas"
 import { CODIGO_CORREGIR_CON_AJUSTE, CODIGO_PAGADO_AL_LABORATORIO } from "@/lib/bloqueos-de-dinero"
 import { codigoDelServidor, conJson, pedir, pedirConCuerpo, type Resultado } from "@/lib/peticiones"
 import type { TurnoId } from "@/lib/reportes"
+import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
+import { frasesDeLosReportes } from "./_frases"
+
+/**
+ * Las palabras de un rubro sin palabras propias: lo que dice el mensaje de
+ * `leerOpcionesDeFiltro` si quien llama no pasa las de su rubro.
+ */
+const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
 
 // ─── Lo que devuelve el servidor ─────────────────────────────────────────────
 
@@ -160,12 +168,12 @@ export interface OpcionesDeFiltro {
  * catálogo del tablero de hoy, que ya viene recortado según quién mira: al
  * profesional sólo le llega él mismo.
  */
-export async function leerOpcionesDeFiltro(): Promise<Resultado<OpcionesDeFiltro>> {
+export async function leerOpcionesDeFiltro(palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado<OpcionesDeFiltro>> {
   const { desde, hasta } = rangoDelDia(new Date())
   const parametros = new URLSearchParams({ desde: desde.toISOString(), hasta: hasta.toISOString() })
   const resultado = await pedir<{ catalogo: OpcionesDeFiltro }>(
     `/api/atenciones?${parametros}`,
-    "No se pudieron cargar los profesionales y servicios para filtrar"
+    frasesDeLosReportes(palabras).filtros.noSePudieronCargar
   )
   if (!resultado.ok) return resultado
 

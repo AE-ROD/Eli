@@ -9,6 +9,7 @@ import { formatearMonto } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 import type { Reporte } from "../_datos"
+import { frasesDeLosReportes } from "../_frases"
 
 interface PropsDeCifra {
   titulo: string
@@ -108,18 +109,6 @@ function conMarca(nombre: string, sigue: boolean, marca: string): ReactNode {
   )
 }
 
-/**
- * Por qué no hay desglose por medio: un pago es de la atención entera, no de
- * una línea. Con la palabra del rubro para quien atiende ("odontólogo" en una
- * clínica dental).
- */
-const sinDesglosePorMedio = (profesional: string) =>
-  `No se puede repartir por medio de pago cuando filtras por ${profesional} o servicio.`
-/** Y al revés: lo pagado con un medio no se puede repartir entre las líneas. */
-const sinDesglosePorProfesional = (profesional: string) =>
-  `No se puede repartir por ${profesional} cuando filtras por medio de pago.`
-const SIN_DESGLOSE_POR_SERVICIO = "No se puede repartir por servicio cuando filtras por medio de pago."
-
 interface PropsDeResumenDeReporte {
   reporte: Reporte
   /**
@@ -140,7 +129,8 @@ interface PropsDeResumenDeReporte {
 export function ResumenDeReporte({ reporte, rotuloDeIngresos }: PropsDeResumenDeReporte) {
   const { resumen, alcance } = reporte
   const propio = alcance === "propio"
-  const { profesional } = vocabularioDe(useRubroDelPanel())
+  // Con las palabras del rubro: "Por odontólogo", "Por prestación".
+  const { resumen: frases } = frasesDeLosReportes(vocabularioDe(useRubroDelPanel()).palabras)
 
   return (
     <div className="space-y-4">
@@ -164,21 +154,21 @@ export function ResumenDeReporte({ reporte, rotuloDeIngresos }: PropsDeResumenDe
         {/* Al profesional, el desglose por profesional sería una sola fila: la suya, que ya está arriba. */}
         {!propio && (
           <Desglose
-            titulo={`Por ${profesional}`}
-            sinDesglose={sinDesglosePorProfesional(profesional)}
+            titulo={frases.porProfesional}
+            sinDesglose={frases.sinDesglosePorProfesional}
             renglones={
               resumen.porProfesional?.map((grupo) => ({
                 clave: grupo.clave,
                 nombre: conMarca(grupo.nombre, grupo.id !== null, "ya no está en el equipo"),
-                detalle: cuantos(grupo.servicios, "servicio", "servicios"),
+                detalle: frases.cuantos(grupo.servicios),
                 monto: grupo.monto,
               })) ?? null
             }
           />
         )}
         <Desglose
-          titulo={propio ? "Lo que atendiste, por servicio" : "Por servicio"}
-          sinDesglose={SIN_DESGLOSE_POR_SERVICIO}
+          titulo={propio ? frases.loQueAtendisteDeCadaServicio : frases.porServicio}
+          sinDesglose={frases.sinDesglosePorServicio}
           renglones={
             resumen.porServicio?.map((grupo) => ({
               clave: grupo.clave,
@@ -192,7 +182,7 @@ export function ResumenDeReporte({ reporte, rotuloDeIngresos }: PropsDeResumenDe
         {resumen.porMedio !== undefined && (
           <Desglose
             titulo="Por medio de pago"
-            sinDesglose={sinDesglosePorMedio(profesional)}
+            sinDesglose={frases.sinDesglosePorMedio}
             renglones={
               resumen.porMedio?.map((grupo) => ({ clave: grupo.medio, nombre: grupo.nombre, monto: grupo.monto })) ?? null
             }

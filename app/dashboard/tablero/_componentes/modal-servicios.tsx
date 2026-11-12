@@ -13,9 +13,10 @@ import {
   type LineaPedida,
 } from "@/lib/acciones-del-tablero"
 import { esAbono, nombreDelAbono, type Atencion, type Catalogo } from "../_datos"
+import { frasesDelTablero } from "../_frases"
 import { Aviso } from "@/components/panel/aviso"
 import { formatearMonto } from "@/lib/dinero"
-import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { EditorDeServicios, filaVacia } from "./editor-de-servicios"
 
 /**
@@ -64,8 +65,9 @@ export function ModalServicios({
   onGuardar,
   onCerrar,
 }: PropsDeModalServicios) {
-  // "Sala de espera" en una clínica dental.
-  const deDonde = conMayuscula(vocabularioDe(useRubroDelPanel()).tablero)
+  // "Sala de espera" y "Prestaciones" en una clínica dental.
+  const palabras = vocabularioDe(useRubroDelPanel()).palabras
+  const frases = frasesDelTablero(palabras)
   // Las filas se toman una sola vez, al abrir: la recarga del tablero cada
   // 30 segundos no pisa lo que se está escribiendo. Si la atención cambió
   // entretanto, el servidor responde 409 y el tablero se recarga.
@@ -74,7 +76,7 @@ export function ModalServicios({
   const idDeLosAbonos = useId()
   const abonos = atencion.lineas.filter(esAbono)
 
-  const validacion = lineasDesdeFilas(filas, eligeProfesional)
+  const validacion = lineasDesdeFilas(filas, eligeProfesional, palabras)
   const errores = intentoGuardar && !validacion.ok ? validacion.errores : {}
 
   const guardar = (evento: FormEvent<HTMLFormElement>) => {
@@ -85,8 +87,8 @@ export function ModalServicios({
 
   return (
     <MarcoDeModal
-      antetitulo={deDonde}
-      titulo={`Servicios de ${atencion.cliente.nombre}`}
+      antetitulo={frases.titulo}
+      titulo={frases.servicios.deLaAtencion(atencion.cliente.nombre)}
       descripcion={
         requisito ? (
           // Por qué se abrió: lo que le falta a la atención para avanzar.
@@ -95,7 +97,7 @@ export function ModalServicios({
             <span className="min-w-0">{requisito}</span>
           </span>
         ) : eligeProfesional ? undefined : (
-          "Ves y cambias solo tus servicios; los de tus compañeros no se tocan. Quedan a tu nombre."
+          frases.servicios.soloLosTuyos
         )
       }
       ancho="lg"
@@ -129,14 +131,14 @@ export function ModalServicios({
               ))}
             </ul>
             <p className="mt-2 text-[13px] text-texto-2">
-              No se editan aquí y guardar los servicios no los cambia. Se quitan desde la tarjeta, antes de cobrar.
+              {frases.servicios.losAbonosNoSeEditan}
             </p>
           </section>
         )}
 
         {intentoGuardar && !validacion.ok && (
           <Aviso tono="error" rol="alert">
-            Revisa los servicios marcados.
+            {frases.servicios.revisaLosMarcados}
           </Aviso>
         )}
         {aviso && (

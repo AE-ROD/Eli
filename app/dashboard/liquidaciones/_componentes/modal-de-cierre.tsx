@@ -14,7 +14,9 @@ import { NOMBRES_DE_MOVIMIENTO } from "@/lib/movimientos"
 import { veLaLineaDePropinas } from "@/lib/permisos"
 import { avisoDeCierreAnticipado, fechaParaLeer } from "@/lib/periodos-de-liquidacion"
 import type { Resultado } from "@/lib/peticiones"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { cerrarLiquidacion, leerVistaPrevia, type VistaPrevia } from "../_datos"
+import { frasesDeLasLiquidaciones } from "../_frases"
 import { FilaDeTotal, pesos, porcentaje } from "./piezas"
 import { ListaDeProtesis } from "./protesis-en-liquidacion"
 
@@ -40,6 +42,8 @@ interface Props {
 export function ModalDeCierre({ miembro, alCerrar }: Props) {
   const router = useRouter()
   const rubro = useRubroDelPanel()
+  // "Prestaciones y productos" en una clínica dental; en los demás rubros, "Servicios y productos".
+  const frases = frasesDeLasLiquidaciones(vocabularioDe(rubro).palabras).vistaPrevia
   const idDeLaNota = useId()
   const [excluidos, setExcluidos] = useState<string[]>([])
   const [respuesta, setRespuesta] = useState<{ clave: string; resultado: Resultado<VistaPrevia> } | null>(null)
@@ -80,6 +84,8 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
 
   const cargando = !respuesta || respuesta.clave !== clave
   const vista = respuesta?.resultado.ok ? respuesta.resultado.datos : null
+  // Lo que impide cerrar, con las palabras del rubro: el servidor lo arma sin mirarlas.
+  const motivoParaNoCerrar = vista ? frases.motivoParaNoCerrar(vista.noSePuedeCerrar, vista.sinPorcentaje) : null
 
   const alternar = (id: string) => {
     setErrorAlCerrar("")
@@ -105,7 +111,8 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
       // Vuelve a la vista previa, que se recalcula: lo que hizo fallar el
       // cierre (algo cambió mientras tanto) se ve ahí.
       setConfirmando(false)
-      setErrorAlCerrar(resultado.error)
+      // Si el servidor frenó el cierre por líneas sin %, lo dice con las palabras del rubro.
+      setErrorAlCerrar(frases.motivoParaNoCerrar(resultado.error, vista.sinPorcentaje) ?? resultado.error)
       setReintentos((n) => n + 1)
       return
     }
@@ -156,7 +163,7 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
       ) : (
         <div className={cargando ? "space-y-6 opacity-60" : "space-y-6"} aria-busy={cargando}>
           <section className="space-y-2">
-            <h3 className="font-medium">Servicios y productos ({vista.lineas.length})</h3>
+            <h3 className="font-medium">{frases.lineas(vista.lineas.length)}</h3>
             {vista.lineas.length === 0 ? (
               <p className="text-sm text-texto-2">Nada cobrado en este período.</p>
             ) : (
@@ -256,7 +263,7 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
           )}
 
           <dl className="space-y-2 rounded-campo bg-superficie p-4 squircle">
-            <FilaDeTotal concepto="Comisión por servicios" centavos={vista.totales.comisionServiciosCents} />
+            <FilaDeTotal concepto={frases.comisionPorServicios} centavos={vista.totales.comisionServiciosCents} />
             <FilaDeTotal concepto="Comisión por productos" centavos={vista.totales.comisionProductosCents} />
             {(vista.protesis.length > 0 || vista.totales.comisionProtesisCents !== 0) && (
               <FilaDeTotal concepto="Comisión por prótesis" centavos={vista.totales.comisionProtesisCents} />
@@ -284,9 +291,9 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
             />
           </div>
 
-          {vista.noSePuedeCerrar && (
+          {motivoParaNoCerrar && (
             <Aviso tono="atencion" rol="status">
-              {vista.noSePuedeCerrar}
+              {motivoParaNoCerrar}
             </Aviso>
           )}
           {errorAlCerrar && <Aviso>{errorAlCerrar}</Aviso>}
@@ -299,7 +306,7 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
               type="button"
               anchoCompleto
               cargando={cerrando}
-              disabled={cargando || !!vista.noSePuedeCerrar}
+              disabled={cargando || !!motivoParaNoCerrar}
               onClick={() => {
                 setErrorAlCerrar("")
                 setConfirmando(true)

@@ -12,8 +12,9 @@ import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import type { ResumenDeLiquidacion } from "@/lib/liquidacion"
 import { cn } from "@/lib/utils"
-import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { LIQUIDACIONES_POR_PAGINA, leerHistorialDeLiquidaciones } from "../_datos"
+import { frasesDeLasLiquidaciones } from "../_frases"
 import { InsigniaDeEstado, pesos } from "./piezas"
 
 interface Props {
@@ -41,7 +42,8 @@ interface Pagina {
  */
 export function HistorialDeLiquidaciones({ liquidaciones, hayMas, personas }: Props) {
   const idDelTitulo = useId()
-  const vocabulario = vocabularioDe(useRubroDelPanel())
+  // "Odontólogo" y "Todos" en una clínica dental; "Estilista" y "Todas" en un salón.
+  const frases = frasesDeLasLiquidaciones(vocabularioDe(useRubroDelPanel()).palabras)
   const [vista, setVista] = useState<Pagina>({ miembro: "", liquidaciones, paginas: 1, hayMas })
   const [elegido, setElegido] = useState("")
   const [cargando, setCargando] = useState(false)
@@ -83,7 +85,7 @@ export function HistorialDeLiquidaciones({ liquidaciones, hayMas, personas }: Pr
           {opciones.length > 1 && (
             <div className="mt-5 max-w-xs">
               <Selector
-                etiqueta={conMayuscula(vocabulario.profesional)}
+                etiqueta={frases.profesional}
                 value={elegido}
                 onChange={(evento) => {
                   setElegido(evento.target.value)
@@ -91,7 +93,7 @@ export function HistorialDeLiquidaciones({ liquidaciones, hayMas, personas }: Pr
                 }}
                 opciones={opciones.map(([id, nombre]) => ({ valor: id, texto: nombre }))}
               >
-                <option value="">Todos</option>
+                <option value="">{frases.todosLosProfesionales}</option>
               </Selector>
             </div>
           )}

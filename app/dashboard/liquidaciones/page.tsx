@@ -19,12 +19,14 @@ import {
   puedeManejarMovimiento,
 } from "@/lib/movimientos"
 import { fechaDeColumna, fechaDelNegocio } from "@/lib/periodos-de-liquidacion"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { SeccionPeriodo } from "./_componentes/seccion-periodo"
 import { SeccionLiquidarDesde } from "./_componentes/seccion-liquidar-desde"
 import { SeccionEquipo, type MiembroParaLiquidar } from "./_componentes/seccion-equipo"
 import { SeccionMovimientos } from "./_componentes/seccion-movimientos"
 import { HistorialDeLiquidaciones } from "./_componentes/historial-de-liquidaciones"
 import { LIQUIDACIONES_POR_PAGINA } from "./_datos"
+import { frasesDeLasLiquidaciones } from "./_frases"
 
 /**
  * Liquidaciones del equipo (#68, #69): dueña y encargado. El profesional ve
@@ -101,7 +103,11 @@ export default async function PaginaLiquidaciones() {
 
   return (
     <div className="min-h-dvh">
-      <BarraSuperior titulo="Liquidaciones" subtitulo="Lo que se le paga a cada profesional por período." mostrarBusqueda={false} />
+      <BarraSuperior
+        titulo="Liquidaciones"
+        subtitulo={frasesDeLasLiquidaciones(vocabularioDe(actor.rubro).palabras).subtitulo}
+        mostrarBusqueda={false}
+      />
 
       <div className="max-w-4xl space-y-6 px-4 pt-6 pb-12 sm:px-6 lg:pt-8">
         {/* Sin fecha no se liquida: va primero, para que la dueña la vea antes que nada. */}

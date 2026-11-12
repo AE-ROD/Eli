@@ -14,8 +14,9 @@ import { aCentavos } from "@/lib/atenciones"
 import { errorDeMontoDePago } from "@/lib/acciones-del-tablero"
 import { formatearMonto, leerMonto, montoParaEscribir } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
-import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { leerProtesisParaAbonar, type Atencion, type ProtesisParaAbonar } from "../_datos"
+import { frasesDelTablero } from "../_frases"
 
 interface PropsDeModalAbono {
   atencion: Atencion
@@ -56,7 +57,8 @@ function errorDelMonto(texto: string, saldo: number): string | null {
  */
 export function ModalAbono({ atencion, aviso, guardando, version, onAbonar, onCerrar }: PropsDeModalAbono) {
   const idBase = useId()
-  const deDonde = conMayuscula(vocabularioDe(useRubroDelPanel()).tablero)
+  // "Sala de espera" en una clínica dental.
+  const deDonde = frasesDelTablero(vocabularioDe(useRubroDelPanel()).palabras).titulo
   const [lectura, setLectura] = useState<{ protesis: ProtesisParaAbonar[] } | { error: string } | null>(null)
   const [reintentos, setReintentos] = useState(0)
   const [elegida, setElegida] = useState("")
