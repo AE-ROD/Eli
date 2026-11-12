@@ -117,9 +117,10 @@ esperar un candado (un cobro largo en curso), todo lo que llegue después
 queda en fila detrás de ella. `PGOPTIONS='-c lock_timeout=5s'` corta eso: si
 un candado no llega en 5 segundos, la migración falla entera (no queda nada
 a medias, va en una transacción) y se reintenta en otro momento. Las
-migraciones desde `20261110120000_etapa_8_endurecer_protesis` (la 8 y la 9)
-lo traen adentro (`SET LOCAL lock_timeout = '5s'`); las anteriores no, por eso
-va en la línea de `psql`. Igual: fuera del horario de atención.
+migraciones desde `20261110120000_etapa_8_endurecer_protesis` (la 8 y las dos
+de la etapa 9) lo traen adentro (`SET LOCAL lock_timeout = '5s'`); las
+anteriores no, por eso va en la línea de `psql`. Igual: fuera del horario de
+atención.
 
 Las migraciones ya escritas no se editan (pueden estar aplicadas): lo que
 haya que corregir va en una migración nueva.
@@ -601,6 +602,35 @@ tabla mientras se construyen. Antes del relleno bloquea las escrituras de
 mientras corre) para que el relleno y los triggers vean lo mismo. Con el
 tamaño de hoy son segundos: fuera del horario de atención.
 
+### `20261112130000_etapa_9_foto_de_la_cuenta`
+
+La foto de la cuenta: la persona, no el negocio, tiene su propia foto (hasta
+ahora había la del negocio, logo y portada, y la de cada integrante). Sigue a
+la persona en todos sus contextos y sólo se ve en el panel; no reemplaza ni
+respalda la del integrante. Aditiva y sin pérdida: una sola columna,
+`usuarios.fotoUrl` (TEXT, nullable, sin default y sin relleno), así que no
+reescribe ni toca ninguna fila: todas las cuentas quedan sin foto (se ven las
+iniciales). Sin CHECK: la forma de la ruta
+(`/fotos/usuarios/<id de la cuenta>/cuenta-<uuid>.webp`) y que una cuenta sólo
+apunte a su propia carpeta las exige la aplicación (`claveDeFotoDeLaCuenta`,
+`lib/almacenamiento-de-fotos.ts`), al escribir y al leer.
+
+**Antes de desplegar, no después.** El código viejo sigue andando con la
+columna puesta (no la lee ni la escribe); el nuevo **no** anda sin ella: Prisma
+pide todas las columnas de `usuarios` en cada `findUnique` sin `select` (el
+inicio de sesión en `lib/auth.ts`, el registro y recuperar la contraseña), y
+esas consultas fallan si falta. Las dos migraciones de la etapa 9 se aplican
+antes de desplegar, en el orden de su fecha: `planes_y_sedes` y después ésta.
+Luego de desplegar,
+`npx prisma migrate resolve --applied 20261112130000_etapa_9_foto_de_la_cuenta`.
+No pide un respaldo aparte (no reescribe ni borra filas); el del despliegue
+completo cubre la corrida.
+
+Bloqueos: trae `SET LOCAL lock_timeout = '5s'`. El `ALTER TABLE` toma un candado
+exclusivo sobre `usuarios` hasta el COMMIT y el inicio de sesión la lee a cada
+rato; `ADD COLUMN` sin default es sólo un cambio de catálogo, instantáneo. Si el
+candado no llega en 5 segundos, falla entera y se reintenta en otro momento.
+
 ### Qué migraciones están aplicadas
 
 Sólo lectura. Responde, por lo que cada migración deja en la base, cuáles de
@@ -619,6 +649,8 @@ SELECT
   EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'atencion_servicios_reparto_de_protesis'
           AND prosrc LIKE '%anulada y no recibe abonos%')                                    AS "8",
   EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sedes')               AS "planes_y_sedes",
+  EXISTS (SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'usuarios' AND column_name = 'fotoUrl')                         AS "foto_de_la_cuenta",
   EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'atencion_servicios_reparto_de_protesis'
           AND prosrc LIKE '%otro paciente%')                                                 AS "reglas_7d_vigentes";
 ```
@@ -627,7 +659,8 @@ Cómo leerla: tienen que ser `t` desde la izquierda sin huecos (un `f` seguido
 de un `t` es una migración salteada: avisar antes de seguir). `planes_y_sedes`
 es la etapa 9 (`20261112120000_etapa_9_planes_y_sedes`): existe la tabla
 `sedes`, que la migración crea junto con todo lo demás en una sola
-transacción. Si `7d = t` y
+transacción. `foto_de_la_cuenta` es `20261112130000_etapa_9_foto_de_la_cuenta`:
+existe la columna `usuarios.fotoUrl`. Si `7d = t` y
 `reglas_7d_vigentes = f`, la 7b se aplicó después de la 7d y le borró las
 reglas: aplicar la etapa 8, que las vuelve a poner.
 
@@ -722,6 +755,14 @@ lib/                          Lógica compartida, cada archivo con su test al la
                               rubro). Sólo la etiqueta: lo que puede hacer cada uno está
                               en permisos.ts
   rubros.ts                   Los cuatro rubros que atiende Eli
+  planes.ts                   Los dos planes (independiente y equipo, `Business.plan`).
+                              Un plan que falta o no se conoce no habilita nada
+                              (`planConocido`)
+  precios.ts                  Los precios de los planes y `calcularPrecio(personas, plan)`:
+                              la landing, su calculadora y el modal de precios leen de acá
+  sedes.ts                    Las sedes del plan Independiente (hasta 5): una o varias según
+                              el plan, la sede de una reserva y los choques de horario entre
+                              sedes. Cálculo puro
   vocabulario.ts              Las palabras de cada rubro, con singular, plural y género
                               (`vocabularioDe(rubro).palabras`): estilista, barbero,
                               paciente, sala de espera…
@@ -738,6 +779,18 @@ lib/                          Lógica compartida, cada archivo con su test al la
   ajustar-foto-en-cliente.ts  (navegador) Reglas para achicar una foto antes de subirla
   enviar-foto.ts              (navegador) Manda la foto al servidor sin lanzar errores
   servicios-de-ejemplo.ts     Los servicios con que nace un negocio, según su rubro
+  servicios-sugeridos.ts      Los servicios que se sugieren cargar de una vez, por rubro,
+                              con duración y precio de referencia
+  servicios-por-categoria.ts  Agrupar y buscar servicios por categoría, y cuándo la reserva
+                              pública agrupa (más de 8 y 2 categorías) y suma buscador (más de 12)
+  servicios-en-lote.ts        Cargar muchos servicios: leer una planilla pegada o un CSV, los
+                              repetidos y los topes (100 por carga, 300 por negocio). Lo corre
+                              el navegador en la vista previa y el servidor al validar
+  carga-de-servicios.ts       La "Carga rápida" de Configuración sin pantalla: tandas de 100,
+                              sugeridos filtrados, tabla editable, plantilla y archivo
+  lista-de-servicios.ts       La lista de servicios de Configuración sin pantalla: filtros,
+                              grupos por categoría y cambios en lote
+  seleccion-multiple.ts       Marcar varias filas de una lista: una, una categoría o todas
   modulos.ts                  Los cinco módulos del panel: nombre, frase, ruta y color
   correos-de-prueba.ts        Qué correo del ciclo de prueba le toca hoy a un negocio
   recordatorios.ts            Qué cita recibe el recordatorio "es mañana" (en la zona
@@ -810,6 +863,10 @@ Cada vista del panel se arma igual:
 <vista>/page.tsx              Sólo compone: estado, llamadas y componentes
 <vista>/_datos.ts             Todo lo que la vista le pide al servidor. Devuelve
                               { ok } en vez de lanzar, y la pantalla no conoce URLs
+<vista>/_frases.ts            Los textos de la vista que dependen del rubro: recibe
+                              `palabras` (lib/vocabulario.ts) y concuerda con
+                              lib/concordancia.ts. Sólo las vistas que nombran
+                              cliente, profesional, servicio o reserva
 <vista>/_componentes/         Las piezas que sólo usa esa vista
 ```
 
@@ -829,6 +886,13 @@ Cada vista del panel se arma igual:
   - la lógica sin pantalla, en `lib/`, con su test al lado.
 - **Nombres que dicen qué contienen**, con palabras completas: `respuesta`, no
   `res`; `servicio`, no `s`.
+- **Las palabras del rubro, con concordancia.** Un texto que nombra al cliente,
+  al profesional, el servicio, la reserva o el local no escribe esa palabra ni
+  su artículo: la pide a `vocabularioDe(rubro).palabras` y concuerda con
+  `lib/concordancia.ts` (`el`, `un`, `al`, `ningun`, `concordar`…). Nunca un
+  "el", "un" o "ningún" pegado a mano. El rubro sale de la sesión o del negocio,
+  no del navegador. El texto de una vista va en su `_frases.ts`, y su test
+  comprueba la concordancia (docs/PRODUCTO.md, sección 1).
 - **Diseño:** tokens y componentes base en `docs/diseno/README.md`; se usan
   sus clases (`bg-crema`, `rounded-tarjeta`), no colores ni medidas sueltos.
 
@@ -844,6 +908,16 @@ Cada vista del panel se arma igual:
   `Appointment.price`) siguen en `Float`. La API habla en unidades y toda suma o
   comparación de dinero se hace en centavos (`lib/atenciones.ts`): 0,1 + 0,2
   tiene que dar 0,3 cuando se cuadra una caja.
+- **Las reglas de datos que importan se repiten en la base.** Los topes y las
+  reglas que no pueden fallar (planes y sedes, la clínica dental) los valida
+  primero la aplicación, para responder con un mensaje claro, y la base los
+  repite con CHECK y triggers como segunda barrera; en planes y sedes, si la
+  base rechaza algo, la API lo responde como rechazo (409 o 403), no como 500. Lo que depende de leer
+  o contar filas antes de escribir (un tope, un nombre único sin tildes, que dos
+  horarios no se pisen) va en una transacción con un candado por negocio,
+  `pg_advisory_xact_lock(hashtext('<tema>:<businessId>'))` (`servicios:`,
+  `plan-y-sedes:`, `horario:`, `caja:`…); los triggers de planes y sedes toman el
+  mismo candado que la aplicación.
 - **NextAuth sigue en v4.** Auth.js v5 existe, pero migrar rompe lo que funciona
   sin aportar valor.
 - **`npm audit fix --force` no se corre.** `npm audit` muestra avisos (next-auth
