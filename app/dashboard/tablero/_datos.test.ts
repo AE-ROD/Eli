@@ -4,12 +4,17 @@ import { zonaDelDispositivo } from "@/lib/fechas"
 import { vocabularioDe } from "@/lib/vocabulario"
 import {
   anularAtencion,
+  aplicarSondeo,
   buscarClientes,
   guardarServicios,
+  leerAtencionesDelDia,
   leerLineasSinPorcentaje,
   leerTablero,
   marcarLlegada,
   marcarNoVino,
+  type Atencion,
+  type Reserva,
+  type Tablero,
 } from "./_datos"
 
 // La zona del dispositivo, fija: la del proceso de los tests depende de la máquina.
@@ -24,6 +29,107 @@ const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+/** La dirección a la que se llamó a `fetch`, como pedido: la ruta y sus parámetros. */
+const direccionPedida = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
+  new URL(String(fetchFalso.mock.calls[0][0]), "http://localhost")
+
+describe("leerTablero y leerAtencionesDelDia", () => {
+  const hoy = new Date("2026-10-06T15:00:00.000Z")
+
+  it("el tablero completo pide el día sin el parámetro: el servidor responde con el catálogo", async () => {
+    const fetchFalso = simularRespuesta(json({ reservas: [], atenciones: [], truncado: false }))
+
+    await leerTablero(hoy)
+
+    const direccion = direccionPedida(fetchFalso)
+    expect(direccion.pathname).toBe("/api/atenciones")
+    expect(direccion.searchParams.has("desde")).toBe(true)
+    expect(direccion.searchParams.has("hasta")).toBe(true)
+    expect(direccion.searchParams.has("soloAtenciones")).toBe(false)
+  })
+
+  it("el sondeo pide el mismo día, más soloAtenciones=1", async () => {
+    const completo = simularRespuesta(json({}))
+    await leerTablero(hoy)
+    const deLaCompleta = direccionPedida(completo)
+
+    const fetchFalso = simularRespuesta(json({ reservas: [], atenciones: [], truncado: false }))
+    const resultado = await leerAtencionesDelDia(hoy)
+
+    const direccion = direccionPedida(fetchFalso)
+    expect(direccion.pathname).toBe("/api/atenciones")
+    expect(direccion.searchParams.get("desde")).toBe(deLaCompleta.searchParams.get("desde"))
+    expect(direccion.searchParams.get("hasta")).toBe(deLaCompleta.searchParams.get("hasta"))
+    expect(direccion.searchParams.get("soloAtenciones")).toBe("1")
+    expect(resultado).toEqual({ ok: true, datos: { reservas: [], atenciones: [], truncado: false } })
+  })
+
+  it("si el sondeo falla, dice lo mismo que el tablero (con las palabras del rubro)", async () => {
+    simularRespuesta(json({}, 500))
+    expect(await leerAtencionesDelDia(hoy)).toEqual({ ok: false, error: "No se pudo cargar el tablero" })
+
+    simularRespuesta(json({}, 500))
+    expect(await leerAtencionesDelDia(hoy, vocabularioDe("odontologia").palabras)).toEqual({
+      ok: false,
+      error: "No se pudo cargar la sala de espera",
+    })
+  })
+})
+
+describe("aplicarSondeo", () => {
+  const reserva = (id: string) => ({ id }) as Reserva
+  const atencion = (id: string) => ({ id }) as Atencion
+  const catalogo = {
+    servicios: [{ id: "s1", nombre: "Corte", precio: 8000 }],
+    productos: [],
+    profesionales: [{ id: "duenio", nombre: "Ana" }],
+    mediosDePago: [{ id: "efectivo", nombre: "Efectivo" }],
+  }
+  const previo: Tablero = {
+    reservas: [reserva("r1")],
+    atenciones: [atencion("a1")],
+    catalogo,
+    truncado: false,
+    filaVirtual: true,
+  }
+
+  it("reemplaza reservas, atenciones y truncado, y conserva el catálogo y la fila", () => {
+    const siguiente = aplicarSondeo(previo, {
+      reservas: [reserva("r2")],
+      atenciones: [atencion("a1"), atencion("a2")],
+      truncado: true,
+    })
+
+    expect(siguiente.reservas).toEqual([reserva("r2")])
+    expect(siguiente.atenciones.map((a) => a.id)).toEqual(["a1", "a2"])
+    expect(siguiente.truncado).toBe(true)
+    expect(siguiente.catalogo).toBe(catalogo)
+    expect(siguiente.filaVirtual).toBe(true)
+  })
+
+  it("no toca el tablero que ya se veía", () => {
+    aplicarSondeo(previo, { reservas: [], atenciones: [], truncado: true })
+
+    expect(previo.reservas).toHaveLength(1)
+    expect(previo.truncado).toBe(false)
+  })
+
+  it("aunque el servidor mande de más, el catálogo no se pisa", () => {
+    const conDeMas = {
+      reservas: [],
+      atenciones: [],
+      truncado: false,
+      catalogo: { ...catalogo, servicios: [] },
+      filaVirtual: false,
+    }
+
+    const siguiente = aplicarSondeo(previo, conDeMas)
+
+    expect(siguiente.catalogo).toBe(catalogo)
+    expect(siguiente.filaVirtual).toBe(true)
+  })
 })
 
 describe("marcarLlegada", () => {

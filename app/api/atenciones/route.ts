@@ -25,6 +25,7 @@ import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-de
 import {
   formatearAtencion,
   leerRango,
+  leerSoloAtenciones,
   respuestaDeError,
   seleccionDeAtencion,
 } from "@/lib/tablero"
@@ -164,21 +165,14 @@ async function profesionalesAsignables(actor: Actor) {
   ]
 }
 
-export async function GET(request: NextRequest) {
-  const session = await getServerSession(authOptions)
-  const actor = actorDeSesion(session)
-  if (!actor) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 })
-  }
-
-  const rango = leerRango(new URL(request.url).searchParams, RANGO_MAXIMO_MS, "48 horas")
-  if (!rango.ok) {
-    return NextResponse.json({ error: rango.error }, { status: 400 })
-  }
-
-  const [reservas, { atenciones, truncado }, servicios, productos, profesionales, negocio] = await Promise.all([
-    buscarReservas(actor, rango.desde, rango.hasta),
-    buscarAtenciones(actor, rango.desde, rango.hasta),
+/**
+ * Lo que se elige en el tablero (servicios, productos, a quién se le puede
+ * anotar, medios de pago) y si la fila virtual está encendida. Casi no cambia
+ * durante el día: por eso el sondeo del tablero lo deja fuera
+ * (`?soloAtenciones=1`) y lo pide una vez al abrir y al volver a la pestaña.
+ */
+async function buscarCatalogo(actor: Actor) {
+  const [servicios, productos, profesionales, negocio] = await Promise.all([
     prisma.service.findMany({
       where: { businessId: actor.businessId, active: true },
       select: { id: true, name: true, price: true },
@@ -201,6 +195,45 @@ export async function GET(request: NextRequest) {
       : Promise.resolve(null),
   ])
 
+  return {
+    catalogo: {
+      servicios: servicios.map((servicio) => ({ id: servicio.id, nombre: servicio.name, precio: servicio.price })),
+      productos: productos.map((producto) => ({
+        id: producto.id,
+        nombre: producto.name,
+        precio: producto.priceCents === null ? null : deCentavos(producto.priceCents),
+      })),
+      profesionales,
+      mediosDePago: MEDIOS_DE_PAGO,
+    },
+    filaVirtual: negocio?.filaVirtualActiva === true,
+  }
+}
+
+export async function GET(request: NextRequest) {
+  const session = await getServerSession(authOptions)
+  const actor = actorDeSesion(session)
+  if (!actor) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  }
+
+  const parametros = new URL(request.url).searchParams
+  const rango = leerRango(parametros, RANGO_MAXIMO_MS, "48 horas")
+  if (!rango.ok) {
+    return NextResponse.json({ error: rango.error }, { status: 400 })
+  }
+  const solo = leerSoloAtenciones(parametros)
+  if (!solo.ok) {
+    return NextResponse.json({ error: solo.error }, { status: 400 })
+  }
+
+  // Todo se pide a la vez; con `soloAtenciones` el catálogo ni se consulta.
+  const [reservas, { atenciones, truncado }, delCatalogo] = await Promise.all([
+    buscarReservas(actor, rango.desde, rango.hasta),
+    buscarAtenciones(actor, rango.desde, rango.hasta),
+    solo.soloAtenciones ? null : buscarCatalogo(actor),
+  ])
+
   return NextResponse.json({
     reservas: reservas.map((cita) => ({
       id: cita.id,
@@ -214,18 +247,9 @@ export async function GET(request: NextRequest) {
       profesional: cita.member ? { id: cita.member.id, nombre: cita.member.user.name } : null,
     })),
     atenciones: atenciones.map((atencion) => formatearAtencion(actor, atencion)),
-    catalogo: {
-      servicios: servicios.map((servicio) => ({ id: servicio.id, nombre: servicio.name, precio: servicio.price })),
-      productos: productos.map((producto) => ({
-        id: producto.id,
-        nombre: producto.name,
-        precio: producto.priceCents === null ? null : deCentavos(producto.priceCents),
-      })),
-      profesionales,
-      mediosDePago: MEDIOS_DE_PAGO,
-    },
+    ...(delCatalogo && { catalogo: delCatalogo.catalogo }),
     truncado,
-    filaVirtual: negocio?.filaVirtualActiva === true,
+    ...(delCatalogo && { filaVirtual: delCatalogo.filaVirtual }),
   })
 }
 

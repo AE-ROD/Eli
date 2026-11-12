@@ -186,6 +186,22 @@ export interface Tablero {
   filaVirtual?: boolean
 }
 
+/**
+ * Lo que trae el sondeo cada 30 segundos: lo que cambia durante el día. El
+ * catálogo y la fila virtual no vienen: se piden completos al abrir, al volver
+ * a la pestaña y tras cada acción, y casi no cambian entre una y otra.
+ */
+export type Sondeo = Pick<Tablero, "reservas" | "atenciones" | "truncado">
+
+/**
+ * El tablero que ya se ve, con lo que trajo el sondeo encima: reservas,
+ * atenciones y `truncado` se reemplazan; el catálogo y la fila quedan como
+ * estaban. Sólo se copian esos tres campos, venga lo que venga.
+ */
+export function aplicarSondeo(previo: Tablero, sondeo: Sondeo): Tablero {
+  return { ...previo, reservas: sondeo.reservas, atenciones: sondeo.atenciones, truncado: sondeo.truncado }
+}
+
 /** Un cliente que coincide con lo que se escribe en el buscador. */
 export interface ClienteEncontrado {
   id: string
@@ -225,14 +241,31 @@ const urlDeAtencion = (id: string) => `${URL_DE_ATENCIONES}/${encodeURIComponent
 // ─── Lecturas ────────────────────────────────────────────────────────────────
 
 /**
- * El tablero del día que contiene a `hoy`: de 00:00 a 00:00 del día
- * siguiente en la hora del dispositivo, enviado como instantes ISO. El
+ * La dirección del tablero del día que contiene a `hoy`: de 00:00 a 00:00 del
+ * día siguiente en la hora del dispositivo, enviado como instantes ISO. El
  * servidor no sabe en qué huso está el local; el navegador sí.
  */
-export async function leerTablero(hoy: Date, palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado<Tablero>> {
+function urlDelTablero(hoy: Date, soloAtenciones: boolean): string {
   const { desde, hasta } = rangoDelDia(hoy)
   const parametros = new URLSearchParams({ desde: desde.toISOString(), hasta: hasta.toISOString() })
-  return pedir<Tablero>(`${URL_DE_ATENCIONES}?${parametros}`, frasesDelTablero(palabras).errores.cargarElTablero)
+  if (soloAtenciones) parametros.set("soloAtenciones", "1")
+  return `${URL_DE_ATENCIONES}?${parametros}`
+}
+
+/** El tablero completo del día que contiene a `hoy`: reservas, atenciones, catálogo y fila. */
+export async function leerTablero(hoy: Date, palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado<Tablero>> {
+  return pedir<Tablero>(urlDelTablero(hoy, false), frasesDelTablero(palabras).errores.cargarElTablero)
+}
+
+/**
+ * Sólo lo que cambia del día que contiene a `hoy`: reservas y atenciones. Es
+ * el sondeo de cada 30 segundos; el servidor ni consulta el catálogo.
+ */
+export async function leerAtencionesDelDia(
+  hoy: Date,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<Sondeo>> {
+  return pedir<Sondeo>(urlDelTablero(hoy, true), frasesDelTablero(palabras).errores.cargarElTablero)
 }
 
 /** Hasta ocho clientes cuyo nombre, correo o teléfono contiene `texto`. */

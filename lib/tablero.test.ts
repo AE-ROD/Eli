@@ -223,3 +223,25 @@ describe("comisionDeLinea (#65)", () => {
     expect(comisionDeLinea(dueña, { ...sinCongelar, memberId: null, byOwner: true })).toEqual({ estado: "no-aplica" })
   })
 })
+
+describe("leerSoloAtenciones", () => {
+  const leer = async (consulta: string) => {
+    const { leerSoloAtenciones } = await import("./tablero")
+    return leerSoloAtenciones(new URLSearchParams(consulta))
+  }
+
+  it("sin el parámetro, el tablero completo", async () => {
+    expect(await leer("desde=2026-10-06T03:00:00.000Z")).toEqual({ ok: true, soloAtenciones: false })
+  })
+
+  it("con 1, sólo las atenciones", async () => {
+    expect(await leer("soloAtenciones=1")).toEqual({ ok: true, soloAtenciones: true })
+  })
+
+  it.each(["0", "true", "", "2", " 1", "1 "])("el valor %j no se adivina: error", async (valor) => {
+    expect(await leer(`soloAtenciones=${encodeURIComponent(valor)}`)).toEqual({
+      ok: false,
+      error: "El parámetro soloAtenciones solo admite el valor 1.",
+    })
+  })
+})

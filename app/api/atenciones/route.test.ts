@@ -398,6 +398,150 @@ describe("GET /api/atenciones", () => {
   })
 })
 
+describe("GET /api/atenciones?soloAtenciones=1: el sondeo del tablero, sin el catálogo", () => {
+  const URL_SOLO = `${URL_DEL_DIA}&soloAtenciones=1`
+
+  /** Cuántas consultas de cada tabla hizo el endpoint desde que empezó el test. */
+  const consultas = () => ({
+    reservas: base.prisma.appointment.findMany.mock.calls.length,
+    atenciones: base.prisma.visit.findMany.mock.calls.length,
+    servicios: base.prisma.service.findMany.mock.calls.length,
+    productos: base.prisma.producto.findMany.mock.calls.length,
+    miembros: base.prisma.businessMember.findMany.mock.calls.length + base.prisma.businessMember.findFirst.mock.calls.length,
+    negocio: base.prisma.business.findUnique.mock.calls.length,
+  })
+
+  it("trae reservas, atenciones y truncado, y deja fuera el catálogo y la fila", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const res = await GET(pedido(URL_SOLO))
+    const data = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(Object.keys(data).sort()).toEqual(["atenciones", "reservas", "truncado"])
+    expect(data.reservas.map((r: { id: string }) => r.id)).toEqual(["cita-carla", "cita-pedro", "cita-publica"])
+    expect(ids(data.atenciones)).toEqual(["v-cobrada-hoy", "v-de-ayer", "v-de-cita", "v-mixta", "v-pedro"])
+    expect(data.truncado).toBe(false)
+  })
+
+  it("no consulta el catálogo: 4 consultas en vez de 9 para la dueña", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    await GET(pedido(URL_DEL_DIA))
+    const completa = consultas()
+    vi.clearAllMocks()
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+    await GET(pedido(URL_SOLO))
+    const sondeo = consultas()
+
+    // Completa: 1 de reservas + 3 de atenciones + servicios + productos + miembros y negocio (2) + fila (1).
+    expect(completa).toEqual({ reservas: 1, atenciones: 3, servicios: 1, productos: 1, miembros: 1, negocio: 2 })
+    // El sondeo: sólo lo que cambia.
+    expect(sondeo).toEqual({ reservas: 1, atenciones: 3, servicios: 0, productos: 0, miembros: 0, negocio: 0 })
+  })
+
+  it("lo que trae es lo mismo que la respuesta completa, para cada rol", async () => {
+    const { GET } = await import("./route")
+    for (const sesion of [sesiones.dueña, sesiones.encargado, sesiones.carla, sesiones.pedro, sesiones.sinMiembro, sesiones.dueñoAjeno]) {
+      mockGetServerSession.mockResolvedValueOnce(sesion)
+      const completa = await (await GET(pedido(URL_DEL_DIA))).json()
+      mockGetServerSession.mockResolvedValueOnce(sesion)
+      const sondeo = await (await GET(pedido(URL_SOLO))).json()
+
+      expect(sondeo.reservas).toEqual(completa.reservas)
+      expect(sondeo.atenciones).toEqual(completa.atenciones)
+      expect(sondeo.truncado).toBe(completa.truncado)
+    }
+  })
+
+  it("la profesional ve lo suyo, sin pagos ni total, como en la respuesta completa", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
+
+    const data = await (await GET(pedido(URL_SOLO))).json()
+    const mixta = data.atenciones.find((a: { id: string }) => a.id === "v-mixta")
+
+    expect(data.reservas.map((r: { id: string }) => r.id)).toEqual(["cita-carla"])
+    // `v-pedro` es sólo de Pedro: no viaja. `v-mixta` sí, con sólo su línea.
+    expect(ids(data.atenciones)).toEqual(["v-cobrada-hoy", "v-de-ayer", "v-de-cita", "v-mixta"])
+    expect(mixta.lineas.map((l: { id: string }) => l.id)).toEqual(["l-mixta-carla"])
+    for (const visible of data.atenciones) {
+      expect(visible).not.toHaveProperty("total")
+      expect(visible).not.toHaveProperty("pagos")
+    }
+    for (const [argumentos] of base.prisma.visit.findMany.mock.calls) {
+      expect((argumentos as { select: { totalCents: boolean } }).select.totalCents).toBe(false)
+    }
+  })
+
+  it("un profesional sin memberId no ve nada (falla cerrado)", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.sinMiembro)
+
+    const data = await (await GET(pedido(URL_SOLO))).json()
+
+    expect(data.reservas).toEqual([])
+    expect(data.atenciones).toEqual([])
+  })
+
+  it("el otro negocio ve sólo lo suyo, y toda consulta lleva el negocio de la sesión y un tope", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueñoAjeno)
+
+    const data = await (await GET(pedido(URL_SOLO))).json()
+
+    expect(data.reservas.map((r: { id: string }) => r.id)).toEqual(["cita-ajena"])
+    expect(ids(data.atenciones)).toEqual(["v-ajena"])
+    for (const delegado of [base.prisma.appointment, base.prisma.visit]) {
+      expect(delegado.findMany).toHaveBeenCalled()
+      for (const [argumentos] of delegado.findMany.mock.calls) {
+        expect(argumentos).toHaveProperty("take")
+        expect(JSON.stringify((argumentos as { where: unknown }).where)).toContain(OTRO_NEGOCIO)
+        expect(JSON.stringify((argumentos as { where: unknown }).where)).not.toContain(NEGOCIO)
+      }
+    }
+  })
+
+  it("sin sesión recibe 401 y no toca la base", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(null)
+
+    const res = await GET(pedido(URL_SOLO))
+
+    expect(res.status).toBe(401)
+    expect(base.prisma.visit.findMany).not.toHaveBeenCalled()
+  })
+
+  it.each(["0", "true", "", "2", "si"])("soloAtenciones=%j no es 1: responde 400 sin consultar", async (valor) => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const res = await GET(pedido(`${URL_DEL_DIA}&soloAtenciones=${valor}`))
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: "El parámetro soloAtenciones solo admite el valor 1." })
+    expect(base.prisma.visit.findMany).not.toHaveBeenCalled()
+    expect(base.prisma.appointment.findMany).not.toHaveBeenCalled()
+  })
+
+  it("sin el parámetro la respuesta sigue siendo la completa, con catálogo y fila", async () => {
+    const { GET } = await import("./route")
+    base.reiniciar({
+      ...escenario(),
+      business: [{ ...datosBase().business[0], filaVirtualActiva: true }, ...datosBase().business.slice(1)],
+    })
+    mockGetServerSession.mockResolvedValueOnce(sesiones.dueña)
+
+    const data = await (await GET(pedido(URL_DEL_DIA))).json()
+
+    expect(Object.keys(data).sort()).toEqual(["atenciones", "catalogo", "filaVirtual", "reservas", "truncado"])
+    expect(Object.keys(data.catalogo).sort()).toEqual(["mediosDePago", "productos", "profesionales", "servicios"])
+    expect(data.filaVirtual).toBe(true)
+  })
+})
+
 describe("POST /api/atenciones con { citaId }: llegó una reserva", () => {
   it("crea la atención en espera, con el cliente copiado y la línea de la reserva precargada", async () => {
     const { POST } = await import("./route")

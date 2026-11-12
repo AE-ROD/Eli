@@ -39,12 +39,14 @@ import {
   cobrarAtencion,
   deshacerLlegada,
   guardarServicios,
+  leerAtencionesDelDia,
   leerTablero,
   marcarLlegada,
   marcarNoVino,
   moverAtencion,
   quitarAbono,
   vaciarFilaDeHoy,
+  aplicarSondeo,
   type Atencion,
   type LineaDeServicio,
   type DatosSinReserva,
@@ -60,7 +62,11 @@ import { ModalCobro } from "./_componentes/modal-cobro"
 import { ModalAbono } from "./_componentes/modal-abono"
 import { frasesDelTablero } from "./_frases"
 
-/** Cada cuánto se recarga solo: lo que hacen los demás en el local aparece sin tocar nada. */
+/**
+ * Cada cuánto se sondea solo: lo que hacen los demás en el local aparece sin
+ * tocar nada. El sondeo trae sólo reservas y atenciones; el catálogo se pide
+ * completo al abrir, al volver a la pestaña y tras cada acción.
+ */
 const RECARGA_CADA_MS = 30_000
 
 /** Al volver a la pestaña llegan `focus` y `visibilitychange` casi juntos: con una recarga alcanza. */
@@ -138,6 +144,10 @@ export default function PaginaTablero() {
   // anterior (más lento), se descarta en vez de pisar datos más nuevos.
   const ultimoPedido = useRef(0)
   const inicioDeLaUltimaRecarga = useRef(0)
+  // Si ya llegó un tablero completo (con su catálogo), y cuántas recargas
+  // completas están en camino: el sondeo de sólo atenciones espera a ambas.
+  const hayCatalogo = useRef(false)
+  const completasEnCamino = useRef(0)
 
   // Guardas contra el doble envío. El estado (`guardando`, `enCurso`) dibuja
   // el botón ocupado, pero recién en el render siguiente: un doble clic o un
@@ -147,13 +157,15 @@ export default function PaginaTablero() {
   const enviandoDesdeUnModal = useRef(false)
   const idsEnviando = useRef(new Set<string>())
 
-  /** Pide el tablero y lo muestra. Devuelve lo que llegó, o `null` si falló o ya había otro pedido más nuevo. */
+  /** Pide el tablero completo y lo muestra. Devuelve lo que llegó, o `null` si falló o ya había otro pedido más nuevo. */
   const recargar = useCallback(async (): Promise<Tablero | null> => {
     const numero = ++ultimoPedido.current
     inicioDeLaUltimaRecarga.current = Date.now()
     // El día se calcula en cada recarga: si la pestaña sigue abierta pasada
     // la medianoche, la siguiente recarga ya trae el día nuevo.
+    completasEnCamino.current++
     const resultado = await leerTablero(new Date(), palabras)
+    completasEnCamino.current--
     if (numero !== ultimoPedido.current) return null
 
     setAhora(Date.now())
@@ -161,18 +173,47 @@ export default function PaginaTablero() {
       setErrorDeCarga(resultado.error)
       return null
     }
+    hayCatalogo.current = true
     setTablero(resultado.datos)
     setErrorDeCarga("")
     return resultado.datos
   }, [palabras])
 
+  /**
+   * El sondeo de cada 30 segundos: sólo reservas y atenciones, que son lo que
+   * cambia; el catálogo que ya se ve se conserva. Si todavía no hay catálogo
+   * (la primera carga falló), pide el tablero completo. Si hay una recarga
+   * completa en camino, no pide nada: ésa ya trae todo, y una respuesta más
+   * nueva sin catálogo la descartaría.
+   */
+  const sondear = useCallback(async (): Promise<void> => {
+    if (!hayCatalogo.current) {
+      await recargar()
+      return
+    }
+    if (completasEnCamino.current > 0) return
+
+    const numero = ++ultimoPedido.current
+    inicioDeLaUltimaRecarga.current = Date.now()
+    const resultado = await leerAtencionesDelDia(new Date(), palabras)
+    if (numero !== ultimoPedido.current) return
+
+    setAhora(Date.now())
+    if (!resultado.ok) {
+      setErrorDeCarga(resultado.error)
+      return
+    }
+    setTablero((previo) => previo && aplicarSondeo(previo, resultado.datos))
+    setErrorDeCarga("")
+  }, [palabras, recargar])
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- primera carga del tablero; el estado se escribe recién cuando llega la respuesta
     recargar()
 
-    // Con la pestaña escondida no se recarga: al volver se recarga una vez.
+    // Con la pestaña escondida no se sondea: al volver se recarga una vez, completa.
     const intervalo = setInterval(() => {
-      if (document.visibilityState === "visible") recargar()
+      if (document.visibilityState === "visible") sondear()
     }, RECARGA_CADA_MS)
 
     const alVolver = () => {
@@ -188,7 +229,7 @@ export default function PaginaTablero() {
       document.removeEventListener("visibilitychange", alVolver)
       window.removeEventListener("focus", alVolver)
     }
-  }, [recargar])
+  }, [recargar, sondear])
 
   const focoAplicado = useCallback(() => setFoco(null), [])
 
