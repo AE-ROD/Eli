@@ -43,9 +43,14 @@ describe("servicioIdsPublicos", () => {
 })
 
 describe("haceAlgunServicio", () => {
-  it("null hace todos, haya o no servicios que mirar", () => {
+  it("null hace todos: cuenta si hay algún servicio que mirar", () => {
     expect(haceAlgunServicio(null, catalogo)).toBe(true)
-    expect(haceAlgunServicio(null, [])).toBe(true)
+  })
+
+  it("sin ningún servicio activo nadie hace algo que se pueda reservar, ni quien 'hace todos'", () => {
+    expect(haceAlgunServicio(null, [])).toBe(false)
+    expect(haceAlgunServicio(["corte"], [])).toBe(false)
+    expect(haceAlgunServicio([], [])).toBe(false)
   })
 
   it("con servicios acotados, depende de si alguno está entre los que se miran", () => {
@@ -92,5 +97,11 @@ describe("textoDeLoQueHace", () => {
   it("sin ninguno de los servicios que hay: sin servicios para reservar", () => {
     expect(textoDeLoQueHace([], catalogo)).toBe(TEXTO_SIN_SERVICIOS)
     expect(textoDeLoQueHace(["viejo-inactivo"], catalogo)).toBe(TEXTO_SIN_SERVICIOS)
+  })
+
+  it("el negocio sin ningún servicio activo: nadie promete 'todos', todos dicen lo mismo que quien no hace ninguno", () => {
+    expect(textoDeLoQueHace(null, [])).toBe(TEXTO_SIN_SERVICIOS)
+    expect(textoDeLoQueHace([], [])).toBe(TEXTO_SIN_SERVICIOS)
+    expect(textoDeLoQueHace(["corte"], [])).toBe(TEXTO_SIN_SERVICIOS)
   })
 })

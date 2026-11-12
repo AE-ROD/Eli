@@ -92,6 +92,32 @@ export function profesionalSigueValiendo(
   return !!profesional && haceTodos(profesional, elegidos)
 }
 
+/**
+ * El `?profesional=` de la dirección, listo para usar: el id tal cual, o
+ * `null` ("cualquiera") si falta, viene vacío o es sólo espacios. Un valor
+ * vacío es como cualquier id que no sirve: no deja a nadie sin marcar, queda
+ * "cualquiera". Si el id es de alguien que no es del equipo o que no hace lo
+ * elegido, lo descarta `profesionalSigueValiendo`.
+ */
+export function profesionalDeLaUrl(valor: string | null): string | null {
+  return valor !== null && valor.trim() !== "" ? valor : null
+}
+
+/**
+ * El servicio de urgencia del que avisa la reserva de una clínica dental
+ * ("¿Tienes dolor fuerte? Elige «Urgencia dental»…"): sólo si quien reserva lo
+ * ve entre sus motivos (`visibles`: los de `serviciosQueVe`). Con un odontólogo
+ * que no hace urgencias el motivo no está en la lista, y el aviso mandaría a
+ * elegir algo que no se puede elegir. Sin odontólogo elegido ("cualquiera") ve
+ * todos, igual que antes. Fuera de una clínica dental, nunca hay aviso.
+ */
+export function servicioDeUrgenciaQueVe<S extends { esUrgencia?: boolean }>(
+  clinicaDental: boolean,
+  visibles: readonly S[]
+): S | null {
+  return clinicaDental ? (visibles.find((servicio) => servicio.esUrgencia === true) ?? null) : null
+}
+
 /** Lo que se pide en "Tus datos": nombre y apellido; el correo, opcional. */
 export interface TusDatos {
   nombre: string

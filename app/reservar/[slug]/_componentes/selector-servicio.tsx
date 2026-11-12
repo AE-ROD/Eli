@@ -65,7 +65,9 @@ export function SelectorServicio({
         // El gris secundario da 4,3:1 sobre el azul suave del elegido: ahí el texto chico pasa a navy al 75%.
         const textoSecundario = elegido ? "text-navy/75" : "text-texto-2"
         return (
-          <li key={servicio.id} className="flex">
+          // `min-w-0`: en el teléfono la lista es una sola columna sin plantilla; sin esto,
+          // un nombre largo y sin espacios ensancha la tarjeta y la saca de la pantalla.
+          <li key={servicio.id} className="flex min-w-0">
             <button
               type="button"
               aria-pressed={elegido}

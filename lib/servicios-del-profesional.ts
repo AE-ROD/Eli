@@ -14,8 +14,10 @@
 export const TEXTO_HACE_TODOS = "Hace todos los servicios"
 
 /**
- * Lo que dice la tarjeta de quien, con sus servicios acotados, ya no hace
- * ninguno de los que hoy se pueden reservar (por ejemplo, los desactivaron).
+ * Lo que dice la tarjeta de quien no tiene nada que se pueda reservar: con sus
+ * servicios acotados, ya no hace ninguno de los que hoy hay (por ejemplo, los
+ * desactivaron); o el negocio no tiene ningún servicio activo, y entonces
+ * tampoco quien "hace todos" tiene qué prometer.
  */
 export const TEXTO_SIN_SERVICIOS = "Sin servicios para reservar por ahora"
 
@@ -39,9 +41,13 @@ export function servicioIdsPublicos(filas: readonly string[], activos: readonly 
   return activos.filter((servicioId) => lasQueHace.has(servicioId))
 }
 
-/** Si hace al menos uno de esos servicios. `null` (hace todos) cuenta aunque no haya servicios que mirar. */
+/**
+ * Si hace al menos uno de esos servicios. `null` (hace todos) cuenta, pero sólo
+ * si hay algún servicio: "hace todos" de un catálogo vacío no es nada que se
+ * pueda reservar (el negocio sin servicios activos no ofrece reservas).
+ */
 export function haceAlgunServicio(servicioIds: readonly string[] | null, servicios: readonly { id: string }[]): boolean {
-  if (servicioIds === null) return true
+  if (servicioIds === null) return servicios.length > 0
   return servicios.some((servicio) => servicioIds.includes(servicio.id))
 }
 
@@ -50,13 +56,16 @@ export function haceAlgunServicio(servicioIds: readonly string[] | null, servici
  * Corte, Barba, Tinte, +2 más" (hasta `tope` nombres, en el orden del
  * catálogo). Si sobra uno solo se escribe su nombre en vez de "+1 más": ocupa
  * lo mismo y dice más. Quien hace todos los que hay, aunque los tenga
- * marcados uno por uno, también "hace todos".
+ * marcados uno por uno, también "hace todos". Sin ningún servicio que reservar
+ * (ni siquiera quien "hace todos" promete algo), "Sin servicios para reservar
+ * por ahora": la misma línea de quien tiene servicios pero ninguno activo.
  */
 export function textoDeLoQueHace(
   servicioIds: readonly string[] | null,
   servicios: readonly { id: string; name: string }[],
   tope: number = TOPE_DE_NOMBRES_EN_LA_TARJETA
 ): string {
+  if (servicios.length === 0) return TEXTO_SIN_SERVICIOS
   if (servicioIds === null) return TEXTO_HACE_TODOS
   const hechos = servicios.filter((servicio) => servicioIds.includes(servicio.id))
   if (hechos.length === 0) return TEXTO_SIN_SERVICIOS

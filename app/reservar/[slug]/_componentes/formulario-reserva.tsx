@@ -51,8 +51,10 @@ import {
   haceElServicio,
   haceTodos,
   ORDEN_DE_TUS_DATOS,
+  profesionalDeLaUrl,
   profesionalSigueValiendo,
   separarLosQueNoHace,
+  servicioDeUrgenciaQueVe,
   serviciosQueNoSePuedenSumar,
   serviciosQueVe,
   type ErroresDeTusDatos,
@@ -117,6 +119,16 @@ interface PropsDeFormularioReserva {
 type Paso = 1 | 2 | 3
 
 /**
+ * A dónde lleva el foco un gesto en "¿Con quién?" del paso 2: `elegido`, al
+ * botón de la persona ya elegida (o de "cualquiera") del selector que se abrió;
+ * `cambiar`, al botón "Cambiar" que reemplazó al selector. Cada gesto crea uno
+ * nuevo (un objeto, no un texto) para que el efecto corra aunque el destino sea el mismo.
+ */
+interface PedidoDeFoco {
+  destino: "elegido" | "cambiar"
+}
+
+/**
  * Un fundido corto al cambiar de paso. En un formulario, el de 600ms de la
  * landing hace esperar; con movimiento reducido se queda igual, porque es
  * sólo opacidad.
@@ -178,8 +190,9 @@ export function FormularioReserva({
   // la lista de espera) lo deja elegido de entrada, ya en la primera pintura:
   // se revisa contra el equipo que trajo el servidor, no contra `/profesionales`.
   // Si no es de este negocio, no hace ninguno de los servicios que hay o no hace
-  // el de `?servicio=`, se ignora: el servidor igual lo rechazaría.
-  const profesionalDeLaUrl = parametros.get("profesional")
+  // el de `?servicio=`, se ignora: el servidor igual lo rechazaría. Vacío o de
+  // puros espacios (`?profesional=`) es como no ponerlo: queda "cualquiera".
+  const idDeLaUrl = profesionalDeLaUrl(parametros.get("profesional"))
   const [profesionales, setProfesionales] = useState<ProfesionalPublico[]>([])
   // Si ya se leyó `/profesionales`: hasta entonces el calendario usa el horario
   // publicado (los días de cada uno vienen de esa lectura).
@@ -188,16 +201,22 @@ export function FormularioReserva({
   const equipo: ProfesionalDelEquipo[] = equipoLeido ? profesionales : equipoDeLaPagina
   const [profesionalId, setProfesionalId] = useState<string | null>(() =>
     profesionalSigueValiendo(
-      profesionalDeLaUrl,
+      idDeLaUrl,
       equipoDeLaPagina.filter((profesional) => haceAlgunServicio(profesional.servicioIds, servicios)),
       servicioDeLaUrl ? [servicioDeLaUrl.id] : []
     )
-      ? profesionalDeLaUrl
+      ? idDeLaUrl
       : null
   )
   // En el segundo paso, con alguien ya elegido en el primero, se muestra "Con X · Cambiar";
   // el selector completo aparece al querer cambiar (o si todavía es "cualquiera").
   const [cambiandoProfesional, setCambiandoProfesional] = useState(false)
+  // A dónde lleva el foco el siguiente gesto en "¿Con quién?" del paso 2 (ver el
+  // efecto de `pedidoDeFoco`). Nace en `null`: al cargar la página o el paso no
+  // se mueve el foco, sólo después de que quien reserva hace algo ahí.
+  const [pedidoDeFoco, setPedidoDeFoco] = useState<PedidoDeFoco | null>(null)
+  const botonCambiarProfesional = useRef<HTMLButtonElement>(null)
+  const botonDelProfesionalElegido = useRef<HTMLButtonElement>(null)
   // Lo que se quitó del paso 1 al elegir a alguien que no lo hace (se dice, discreto).
   const [avisoDeServicios, setAvisoDeServicios] = useState("")
   const [profesionalAsignado, setProfesionalAsignado] = useState<string | null>(null)
@@ -242,8 +261,6 @@ export function FormularioReserva({
   // una clínica dental; las de siempre en cualquier otro.
   const vocabulario = vocabularioDe(clinicaDental ? RUBRO_DENTAL : null)
   const servicioDeLaReserva = vocabulario.servicioDeLaReserva
-  // El servicio de urgencia activo de la clínica, para el aviso "¿Tienes dolor fuerte?".
-  const servicioDeUrgencia = clinicaDental ? (servicios.find((servicio) => servicio.esUrgencia) ?? null) : null
   const urgencia = esReservaDeUrgencia(clinicaDental, seleccionados)
 
   const idDeComentarios = useId()
@@ -273,6 +290,10 @@ export function FormularioReserva({
   const profesionalElegido = equipo.find((profesional) => profesional.id === profesionalId) ?? null
   // Con un profesional elegido, sólo los servicios que hace (`serviciosQueVe`).
   const serviciosVisibles = serviciosQueVe(profesionalElegido, servicios)
+  // El servicio de urgencia de la clínica, para el aviso "¿Tienes dolor fuerte?":
+  // sólo si está entre los motivos que ve quien reserva. Con un odontólogo que
+  // no hace urgencias el aviso mandaría a elegir algo que no está en la lista.
+  const servicioDeUrgencia = servicioDeUrgenciaQueVe(clinicaDental, serviciosVisibles)
   // Entre quienes se elige en el paso 1: el equipo, menos quien no hace ninguno
   // de los servicios que hay (elegirlo dejaría la lista de servicios vacía).
   const profesionalesParaElegir = equipo.filter((profesional) => haceAlgunServicio(profesional.servicioIds, servicios))
@@ -319,6 +340,10 @@ export function FormularioReserva({
     const { quedan, quitados } = separarLosQueNoHace(profesional, seleccionados)
     setProfesionalId(profesional?.id ?? null)
     setCambiandoProfesional(false)
+    // En el paso 2, elegir a alguien pliega el selector a "Con X · Cambiar": el
+    // botón que se tocó desaparece, y el foco va al "Cambiar" nuevo. En el paso
+    // 1 el selector sigue y el botón tocado conserva el foco.
+    if (paso === 2 && profesional) setPedidoDeFoco({ destino: "cambiar" })
     setAvisoDeServicios(profesional ? avisoDeServiciosQuitados(profesional.nombre, quitados) : "")
     if (quitados.length > 0) {
       setSeleccionados(quedan)
@@ -457,6 +482,24 @@ export function FormularioReserva({
     pantallaAnterior.current = pantalla
     titulo.current?.focus()
   }, [pantalla])
+
+  /*
+   * "Cambiar" y el selector de "¿Con quién?" del paso 2 se reemplazan uno al
+   * otro: al abrir el selector desaparece el botón "Cambiar", y al elegir a
+   * alguien desaparece el selector. En ambos casos el foco caía al <body> y con
+   * teclado había que volver a recorrer la página. Tras el gesto, el foco va al
+   * botón de la persona ya elegida (o a "cualquiera") al abrir, y al nuevo
+   * "Cambiar" al elegir. Sólo si el foco se perdió: si el botón tocado sigue ahí
+   * (hay un selector abierto igual), el foco se queda donde está. Nace en `null`
+   * y cada gesto trae un pedido nuevo, así que nunca corre en la primera pintura.
+   */
+  useEffect(() => {
+    if (!pedidoDeFoco) return
+    const enfocado = document.activeElement
+    if (enfocado && enfocado !== document.body) return
+    const boton = pedidoDeFoco.destino === "cambiar" ? botonCambiarProfesional : botonDelProfesionalElegido
+    boton.current?.focus()
+  }, [pedidoDeFoco])
 
   if (confirmado && servicioSeleccionado) {
     return (
@@ -636,9 +679,13 @@ export function FormularioReserva({
                 <div className="mt-6">
                   {profesionalElegido && !cambiandoProfesional && !sinDias ? (
                     <ProfesionalYaElegido
+                      ref={botonCambiarProfesional}
                       nombre={profesionalElegido.nombre}
                       profesional={vocabulario.profesional}
-                      onCambiar={() => setCambiandoProfesional(true)}
+                      onCambiar={() => {
+                        setCambiandoProfesional(true)
+                        setPedidoDeFoco({ destino: "elegido" })
+                      }}
                     />
                   ) : (
                     <SelectorProfesional
@@ -646,6 +693,7 @@ export function FormularioReserva({
                       elegido={profesionalId}
                       onElegir={elegirProfesional}
                       cualquiera={cualquiera}
+                      refDelElegido={botonDelProfesionalElegido}
                     />
                   )}
                 </div>
@@ -929,11 +977,14 @@ function ProfesionalYaElegido({
   nombre,
   profesional,
   onCambiar,
+  ref,
 }: {
   nombre: string
   /** "profesional", u "odontólogo" en una clínica dental. */
   profesional: string
   onCambiar: () => void
+  /** Para llevarle el foco cuando vuelve a aparecer tras elegir a alguien. */
+  ref: Ref<HTMLButtonElement>
 }) {
   return (
     <p className="flex flex-wrap items-center gap-x-3 text-sm text-texto-2">
@@ -941,6 +992,7 @@ function ProfesionalYaElegido({
         Con <strong className="font-medium text-navy">{nombre}</strong>
       </span>
       <button
+        ref={ref}
         type="button"
         onClick={onCambiar}
         aria-label={`Cambiar de ${profesional}: ahora con ${nombre}`}

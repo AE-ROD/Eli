@@ -1,6 +1,7 @@
 "use client"
 
 import { useId } from "react"
+import type { Ref } from "react"
 import { UsersRound } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ProfesionalDelEquipo } from "../_datos"
@@ -16,6 +17,12 @@ interface PropsDeSelectorProfesional {
    * "La primera hora disponible · Con cualquier odontólogo".
    */
   cualquiera?: { nombre: string; detalle: string }
+  /**
+   * Para llevarle el foco al botón de quien está elegido (o a "cualquiera", el
+   * primero, si no hay nadie): al abrir el selector desde "Cambiar" el botón
+   * que se tocó desaparece y el foco tiene que ir a algún lado.
+   */
+  refDelElegido?: Ref<HTMLButtonElement>
 }
 
 const CUALQUIERA_DE_SIEMPRE = { nombre: "Cualquiera disponible", detalle: "Te asignamos a quien esté libre" }
@@ -45,6 +52,7 @@ export function SelectorProfesional({
   elegido,
   onElegir,
   cualquiera = CUALQUIERA_DE_SIEMPRE,
+  refDelElegido,
 }: PropsDeSelectorProfesional) {
   const idDelTitulo = useId()
   const opciones: { id: string | null; nombre: string; detalle: string | null; fotoUrl: string | null }[] = [
@@ -57,17 +65,24 @@ export function SelectorProfesional({
     })),
   ]
 
+  // El botón que recibe `refDelElegido`: el de quien está elegido, o el primero si ninguno coincide.
+  const indiceDelElegido = Math.max(
+    0,
+    opciones.findIndex((opcion) => opcion.id === elegido)
+  )
+
   return (
     <div>
       <h3 id={idDelTitulo} className="font-medium text-navy">
         ¿Con quién?
       </h3>
       <div role="group" aria-labelledby={idDelTitulo} className="mt-3 flex flex-wrap gap-2">
-        {opciones.map((opcion) => {
+        {opciones.map((opcion, indice) => {
           const activo = opcion.id === elegido
           return (
             <button
               key={opcion.id ?? "cualquiera"}
+              ref={indice === indiceDelElegido ? refDelElegido : undefined}
               type="button"
               aria-pressed={activo}
               onClick={() => onElegir(opcion.id)}

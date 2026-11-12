@@ -191,7 +191,10 @@ function Equipo({
           // Quien ya no hace ninguno de los servicios que hay no se puede reservar: sin botón que no lleve a nada.
           const sePuedeReservar = haceAlgunServicio(profesional.servicioIds, servicios)
           return (
-            <li key={profesional.id} className="flex flex-col gap-4 rounded-[24px] bg-superficie p-4 squircle">
+            // `min-w-0`: en el teléfono la lista es una sola columna sin plantilla y un
+            // `<li>` no baja de lo que mide su palabra más larga; sin esto, un nombre
+            // de servicio largo y sin espacios ensancha la tarjeta y la saca de la pantalla.
+            <li key={profesional.id} className="flex min-w-0 flex-col gap-4 rounded-[24px] bg-superficie p-4 squircle">
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-3">
                   <span
@@ -220,13 +223,16 @@ function Equipo({
                 Un `<a>` común y no `Link`: carga la página con el profesional en
                 la dirección, así el flujo de reserva nace con él elegido. Con
                 `mt-auto` los botones de una fila quedan alineados abajo aunque
-                la línea de "Hace:" ocupe más o menos renglones.
+                la línea de "Hace:" ocupe más o menos renglones. En el teléfono el
+                botón mide 44px de verdad (`max-sm:min-h-11`, y sin el `::after` que
+                estira el `sm`): con el borde de 1,5px el `::after` sólo llegaba a
+                ~42px, y 36px de caja no alcanzan para un dedo.
               */}
               {sePuedeReservar && (
                 <a
                   href={`?profesional=${encodeURIComponent(profesional.id)}#${ANCLA_DE_RESERVA}`}
                   aria-label={`Reservar con ${profesional.nombre}`}
-                  className={clasesDeBoton({ variante: "secundario", tamano: "sm", className: "mt-auto w-full bg-tarjeta" })}
+                  className={clasesDeBoton({ variante: "secundario", tamano: "sm", className: "mt-auto w-full bg-tarjeta max-sm:min-h-11 max-sm:after:inset-y-0" })}
                 >
                   <span className="truncate">Reservar con {primerNombre}</span>
                 </a>

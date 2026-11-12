@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest"
 import {
   avisoDeServiciosQuitados,
   erroresDeTusDatos,
+  profesionalDeLaUrl,
   profesionalSigueValiendo,
   separarLosQueNoHace,
+  servicioDeUrgenciaQueVe,
   serviciosQueNoSePuedenSumar,
   serviciosQueVe,
 } from "./reglas-de-la-reserva"
@@ -148,6 +150,65 @@ describe("profesionalSigueValiendo", () => {
   it("sin elegido, o con el equipo sin leer, no se decide acá", () => {
     expect(profesionalSigueValiendo(null, equipo, ["color"])).toBe(true)
     expect(profesionalSigueValiendo("otra", null, ["color"])).toBe(true)
+  })
+})
+
+describe("profesionalDeLaUrl", () => {
+  it("el id que viene se usa tal cual", () => {
+    expect(profesionalDeLaUrl("m-carla")).toBe("m-carla")
+  })
+
+  it("sin ?profesional= queda en 'cualquiera' (null)", () => {
+    expect(profesionalDeLaUrl(null)).toBeNull()
+  })
+
+  it("vacío o de puros espacios también es 'cualquiera': no deja a nadie sin marcar", () => {
+    expect(profesionalDeLaUrl("")).toBeNull()
+    expect(profesionalDeLaUrl("   ")).toBeNull()
+    expect(profesionalDeLaUrl("\t\n")).toBeNull()
+  })
+
+  it("un id que no sirve pasa igual: lo descarta profesionalSigueValiendo, como a cualquier otro", () => {
+    expect(profesionalDeLaUrl("de-otro-negocio")).toBe("de-otro-negocio")
+    expect(profesionalSigueValiendo(profesionalDeLaUrl("de-otro-negocio"), equipo, [])).toBe(false)
+    expect(profesionalSigueValiendo(profesionalDeLaUrl(""), equipo, [])).toBe(true)
+  })
+})
+
+describe("servicioDeUrgenciaQueVe", () => {
+  /* Una clínica: motivos de siempre y una urgencia. El odontólogo de Beatriz no hace urgencias. */
+  const motivos = [
+    { id: "limpieza", name: "Limpieza" },
+    { id: "urgencia", name: "Urgencia dental", esUrgencia: true },
+    { id: "control", name: "Control", esUrgencia: false },
+  ]
+  const urgencia = motivos[1]
+
+  it("sin odontólogo elegido ('cualquiera') se ven todos: el aviso nombra la urgencia, como antes", () => {
+    expect(servicioDeUrgenciaQueVe(true, serviciosQueVe(null, motivos))).toBe(urgencia)
+  })
+
+  it("con un odontólogo que hace la urgencia, la sigue ofreciendo", () => {
+    const quienLaHace = { id: "ana", servicioIds: ["limpieza", "urgencia"] }
+    expect(servicioDeUrgenciaQueVe(true, serviciosQueVe(quienLaHace, motivos))).toBe(urgencia)
+  })
+
+  it("con un odontólogo que NO hace la urgencia, el motivo no está en la lista y no hay aviso", () => {
+    const quienNoLaHace = { id: "bea", servicioIds: ["limpieza", "control"] }
+    expect(servicioDeUrgenciaQueVe(true, serviciosQueVe(quienNoLaHace, motivos))).toBeNull()
+  })
+
+  it("quien hace todos (servicioIds en null) la ve", () => {
+    expect(servicioDeUrgenciaQueVe(true, serviciosQueVe({ id: "caro", servicioIds: null }, motivos))).toBe(urgencia)
+  })
+
+  it("fuera de una clínica dental nunca hay aviso, aunque un servicio venga marcado", () => {
+    expect(servicioDeUrgenciaQueVe(false, motivos)).toBeNull()
+  })
+
+  it("una clínica sin servicio de urgencia, o sin motivos, no avisa de nada", () => {
+    expect(servicioDeUrgenciaQueVe(true, [motivos[0], motivos[2]])).toBeNull()
+    expect(servicioDeUrgenciaQueVe(true, [])).toBeNull()
   })
 })
 
