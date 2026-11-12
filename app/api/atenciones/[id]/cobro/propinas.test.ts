@@ -12,6 +12,7 @@ import {
   pedido,
   sesiones,
 } from "@/pruebas/datos"
+import { sesionesDentales } from "@/pruebas/clinica-con-sillones"
 
 /**
  * #66: propinas al cobrar. Van a su tabla, aparte de los pagos: los pagos
@@ -196,6 +197,67 @@ describe("POST /api/atenciones/[id]/cobro: propinas (#66)", () => {
 
     expect((await cobrar(sesiones.dueña, "v-mixta", cuerpo)).status).toBe(200)
     expect((await cobrar(sesiones.dueña, "v-mixta", cuerpo)).status).toBe(409)
+    expect(propinasDe("v-mixta")).toHaveLength(1)
+  })
+})
+
+describe("POST /api/atenciones/[id]/cobro: una clínica dental no registra propinas", () => {
+  const clinica = () => {
+    const datos = escenario()
+    return { ...datos, business: datos.business.map((b) => (b.id === NEGOCIO ? { ...b, type: "odontologia" } : b)) }
+  }
+  const CON_PROPINA = { pagos: PAGO_EXACTO, propinas: [{ profesional: "m-carla", monto: 2000, medio: "efectivo" }] }
+
+  it.each([
+    ["la dueña", sesionesDentales.dueña],
+    ["la recepción", sesionesDentales.encargado],
+  ])("%s: con propinas en el cuerpo, 401 y no se cobra nada (el rubro sale de la sesión, no del navegador)", async (_quien, sesion) => {
+    base.reiniciar(clinica())
+    const antes = base.volcado()
+
+    const res = await cobrar(sesion, "v-mixta", CON_PROPINA)
+
+    expect(res.status).toBe(401)
+    expect((await res.json()).error).toBe("No autorizado")
+    expect(base.volcado()).toEqual(antes)
+    expect(propinasDe("v-mixta")).toEqual([])
+  })
+
+  it("el cobro sin propinas anda como siempre, y con la lista vacía también", async () => {
+    base.reiniciar(clinica())
+    expect((await cobrar(sesionesDentales.dueña, "v-mixta", { pagos: PAGO_EXACTO })).status).toBe(200)
+    expect((await cobrar(sesionesDentales.encargado, "v-sola", { pagos: [{ medio: "efectivo", monto: 8000 }], propinas: [] })).status).toBe(200)
+    expect(propinasDe("v-mixta")).toEqual([])
+    expect(base.buscar("visit", { id: "v-mixta" })[0].totalCents).toBe(centavos(33000))
+  })
+
+  it("las propinas que ya estaban guardadas siguen en la atención y en el total: no se borran", async () => {
+    base.reiniciar({
+      ...clinica(),
+      propinaDeAtencion: [
+        {
+          id: "p-vieja",
+          businessId: NEGOCIO,
+          visitId: "v-mixta",
+          memberId: "m-carla",
+          byOwner: false,
+          professionalName: "Carla Profesional",
+          method: "efectivo",
+          amountCents: centavos(2000),
+          createdAt: AHORA,
+        },
+      ],
+    })
+    expect(propinasDe("v-mixta")).toHaveLength(1)
+    const { GET } = await import("../../route")
+    mockGetServerSession.mockResolvedValueOnce(sesionesDentales.dueña)
+    const tablero = await (await GET(pedido(`http://localhost/api/atenciones?${DIA}`))).json()
+    const mixta = tablero.atenciones.find((a: { id: string }) => a.id === "v-mixta")
+    expect(mixta.propinas.map((p: { monto: number }) => p.monto)).toEqual([2000])
+  })
+
+  it("un salón con los mismos datos las sigue registrando (sólo cambia el rubro)", async () => {
+    expect((await cobrar(sesiones.dueña, "v-mixta", CON_PROPINA)).status).toBe(200)
     expect(propinasDe("v-mixta")).toHaveLength(1)
   })
 })

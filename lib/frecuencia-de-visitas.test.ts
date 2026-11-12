@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest"
 import {
   FACTOR_SE_VA,
+  FRECUENCIA_MAXIMA_DIAS,
+  FRECUENCIA_MINIMA_DIAS,
+  ayudaDeLaFrecuencia,
   MINIMO_DE_VISITAS_PARA_MEDIANA,
   cicloDelCliente,
   diasSinVenir,
@@ -166,3 +169,23 @@ describe("frecuencia del servicio", () => {
   })
 })
 
+describe("ayudaDeLaFrecuencia: el nombre del aviso en el campo de frecuencia del servicio", () => {
+  const DE_SIEMPRE = "De 7 a 365 días. Sirve para avisarle a quien todavía no tiene su propio ritmo de visitas que ya le toca volver."
+
+  it("una clínica dental lo llama «Control», como en Configuración", () => {
+    const ayuda = ayudaDeLaFrecuencia("odontologia")
+    expect(ayuda).toBe("De 7 a 365 días. Sirve para el aviso «Control» de quien todavía no tiene su propio ritmo de visitas.")
+    expect(ayuda).not.toContain("toca volver")
+  })
+
+  it("salón, barbería, salón de uñas y rubros desconocidos o ausentes: el texto de siempre", () => {
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "salud", "fitness", "otro", "Odontologia", "", null, undefined]) {
+      expect(ayudaDeLaFrecuencia(rubro)).toBe(DE_SIEMPRE)
+    }
+  })
+
+  it("el rango sale de los mismos límites que valida el formulario", () => {
+    expect(ayudaDeLaFrecuencia("salon")).toContain(`De ${FRECUENCIA_MINIMA_DIAS} a ${FRECUENCIA_MAXIMA_DIAS} días`)
+    expect(ayudaDeLaFrecuencia("odontologia")).toContain(`De ${FRECUENCIA_MINIMA_DIAS} a ${FRECUENCIA_MAXIMA_DIAS} días`)
+  })
+})

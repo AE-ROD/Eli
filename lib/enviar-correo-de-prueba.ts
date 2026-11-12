@@ -27,6 +27,8 @@ export const SELECCION_PARA_CORREO = {
   name: true,
   slug: true,
   timezone: true,
+  // El rubro: la bienvenida y el consejo hablan con las palabras del rubro (`lib/vocabulario.ts`).
+  type: true,
   createdAt: true,
   pruebaTerminaEl: true,
   recibeCorreosDePrueba: true,
@@ -61,6 +63,7 @@ export async function mandarCorreoDePrueba(
   try {
     const base = urlBase()
     const resultado = await enviarCorreoDePrueba(tipo, {
+      rubro: negocio.type,
       emailDueno: negocio.user.email,
       nombreDueno: negocio.user.name,
       nombreNegocio: negocio.name,

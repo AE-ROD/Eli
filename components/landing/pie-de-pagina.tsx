@@ -42,7 +42,7 @@ export function PieDePagina() {
         <Revelar className="px-6 pb-8 pt-12 md:px-12 md:pb-12 md:pt-[52px] xl:px-14">
           <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:gap-x-8 lg:grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))] lg:gap-x-10">
             <p className="col-span-2 max-w-[300px] text-[19px] font-medium leading-[1.45] tracking-[-0.01em] lg:col-span-1">
-              Reservas y gestión para salones de belleza, barberías, spas de uñas y odontología.
+              Reservas y gestión para salones de belleza, barberías, salones de uñas y odontología.
             </p>
             <ColumnaDelPie titulo="Producto" enlaces={ENLACES_DE_PRODUCTO} />
             <ColumnaDelPie titulo="Para quién" enlaces={ENLACES_DE_OFICIOS} />

@@ -163,7 +163,7 @@ export async function GET(request: NextRequest) {
         source: true,
         manageTokenHash: true,
         customer: { select: { name: true, lastName: true, email: true, businessId: true } },
-        business: { select: { name: true, slug: true, timezone: true, cancelacionHorasAntes: true } },
+        business: { select: { name: true, slug: true, timezone: true, cancelacionHorasAntes: true, type: true } },
       },
       orderBy: [{ startTime: "asc" }, { id: "asc" }],
       take: POR_PAGINA,
@@ -212,6 +212,7 @@ export async function GET(request: NextRequest) {
           // Desde acá el correo pudo salir aunque después algo falle.
           noSalio = false
           const resultado = await enviarRecordatorio({
+            rubro: cita.business.type,
             emailCliente: cita.customer.email,
             nombreCliente: nombreCompletoDeCliente(cita.customer),
             nombreNegocio: cita.business.name,

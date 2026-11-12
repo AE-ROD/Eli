@@ -55,7 +55,7 @@ interface Area {
  * Las cuatro áreas, en el orden del diseño, con las fotos y videos reales de
  * `public/landing/<oficio>/`. Son material de referencia de terceros: hay que
  * cambiarlos por licenciados antes del lanzamiento (`docs/PRODUCTO.md`, §10).
- * Peluquería y odontología abren con un video; de barbería y spa de uñas
+ * Peluquería y odontología abren con un video; de barbería y salón de uñas
  * todavía no hay videos, sólo fotos.
  */
 const AREAS: readonly Area[] = [
@@ -103,7 +103,7 @@ const AREAS: readonly Area[] = [
   },
   {
     id: "unas",
-    nombre: "Spa de uñas",
+    nombre: "Salón de uñas",
     icono: Hand,
     fondo: "bg-rosa-suave",
     texto: "text-frambuesa-texto",

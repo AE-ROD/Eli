@@ -159,11 +159,53 @@ describe("filasDelComprobante", () => {
     const dental = filasDelComprobante(detalle, "odontologia")
     expect(fila(dental, "Odontólogo")).toEqual(["Odontólogo", "Carla"])
     expect(fila(dental, "Profesional")).toBeUndefined()
-    expect(dental.filter((f) => f[0] === "Fecha").map((f) => f[1])).toEqual(["Paciente", "Paciente", "Movimiento"])
+    // Sin la sección de propinas: una clínica dental no trabaja con ellas.
+    expect(dental.filter((f) => f[0] === "Fecha").map((f) => f[1])).toEqual(["Paciente", "Movimiento"])
     const salon = filasDelComprobante(detalle, "salon")
     expect(fila(salon, "Profesional")).toEqual(["Profesional", "Carla"])
     expect(salon.filter((f) => f[0] === "Fecha").map((f) => f[1])).toEqual(["Cliente", "Cliente", "Movimiento"])
     expect(filasDelComprobante(detalle)).toEqual(salon)
+  })
+
+  describe("propinas", () => {
+    const conPropinas: DetalleDeLiquidacion = {
+      ...detalle,
+      totales: { ...detalle.totales, propinasCents: 300_000, brutoCents: 2_860_000, totalCents: 2_860_000 },
+      propinas: [{ id: "p-1", visitId: "at-1", fecha: "2026-11-03", cliente: "Camila Rojas", medio: "efectivo", montoCents: 300_000 }],
+    }
+    /** El encabezado de la sección y una fila por propina. */
+    const seccionDePropinas = (filas: (string | number | null)[][]) => filas.filter((f) => f[2] === "Propina")
+
+    it("un salón y los rubros sin rubro: la sección y la fila de propinas salen siempre, también en $0, como siempre", () => {
+      for (const rubro of ["salon", "barberia", "spa-de-unas", "salud", undefined, null]) {
+        const filas = filasDelComprobante(detalle, rubro)
+        expect(seccionDePropinas(filas)).toHaveLength(1)
+        expect(fila(filas, "Propinas")).toEqual(["Propinas", 0])
+      }
+    })
+
+    it("clínica dental sin propinas: no hay sección ni fila de propinas, y lo demás queda igual", () => {
+      const filas = filasDelComprobante(detalle, "odontologia")
+      expect(seccionDePropinas(filas)).toHaveLength(0)
+      expect(fila(filas, "Propinas")).toBeUndefined()
+      expect(fila(filas, "Comisión por servicios")).toEqual(["Comisión por servicios", 25_600])
+      expect(fila(filas, "Total a pagar")).toEqual(["Total a pagar", 25_600])
+    })
+
+    it("clínica dental con propinas guardadas de antes: se muestran y suman, sin esconder dinero", () => {
+      const filas = filasDelComprobante(conPropinas, "odontologia")
+      expect(seccionDePropinas(filas)).toEqual([
+        ["Fecha", "Paciente", "Propina", "Medio", "Monto"],
+        ["2026-11-03", "Camila Rojas", "Propina", "Efectivo", 3_000],
+      ])
+      expect(fila(filas, "Propinas")).toEqual(["Propinas", 3_000])
+      expect(fila(filas, "Total a pagar")).toEqual(["Total a pagar", 28_600])
+    })
+
+    it("clínica dental anulada con propinas en el total congelado: la fila se conserva", () => {
+      const filas = filasDelComprobante({ ...conPropinas, estado: "anulada", propinas: [] }, "odontologia")
+      expect(fila(filas, "Propinas")).toEqual(["Propinas", 3_000])
+    })
   })
 
   it("anulada: dice que está anulada y el total a pagar queda en 0", () => {

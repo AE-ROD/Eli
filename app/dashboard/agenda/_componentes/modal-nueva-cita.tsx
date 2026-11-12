@@ -11,7 +11,7 @@ import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { CampoHora } from "@/components/panel/campo-hora"
 import { cn } from "@/lib/utils"
-import { esRubroDental } from "@/lib/rubros"
+import { ejemplosDe, textoDeEjemplo } from "@/lib/ejemplos-por-rubro"
 import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import {
   buscarClientes,
@@ -348,7 +348,7 @@ export function ModalNuevaCita({
         {!resumen && (
           <CampoFormulario
             etiqueta={serviciosOfrecidos.length > 0 ? "Otro servicio" : "Servicio"}
-            placeholder={esRubroDental(rubro) ? "Ej.: Limpieza, Control, Urgencia..." : "Ej.: Corte, Color, Manicura..."}
+            placeholder={textoDeEjemplo(ejemplosDe(rubro).servicios)}
             value={form.servicio}
             onChange={(e) => onCambiarCampo("servicio", e.target.value)}
             icono={<Scissors className="size-4" aria-hidden="true" strokeWidth={1.75} />}

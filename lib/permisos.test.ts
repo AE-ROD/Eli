@@ -108,6 +108,10 @@ import {
   whereDePagosAlLaboratorio,
   puedeCobrarAbonosDeProtesis,
   puedePagarAlLaboratorio,
+  veLaLineaDePropinas,
+  rubroOfreceFilaVirtual,
+  rubroOfreceHoraValle,
+  rubroOfrecePropinas,
   whereDeProtesisParaCobrar,
   whereDeAbonosPorPagarAlLaboratorio,
   type Actor,
@@ -949,6 +953,63 @@ describe("reservas a medida (etapa 5)", () => {
     const desconocido = { rol: "gerente", businessId: NEGOCIO, memberId: "yo" } as unknown as Actor
     expect(puedeConfigurarHoraValle(null)).toBe(false)
     expect(puedeConfigurarHoraValle(desconocido)).toBe(false)
+  })
+})
+
+describe("lo de salón que la clínica dental no usa (propinas, hora valle y fila virtual)", () => {
+  type Permiso = (quien: Actor | null) => boolean
+  const conRubro = (rol: Rol, rubro: unknown): Actor => ({ ...actor(rol), rubro }) as Actor
+  const desconocido = { rol: "gerente", businessId: NEGOCIO, memberId: "yo", rubro: "odontologia" } as unknown as Actor
+
+  /** Lo que cada rol puede fuera de una clínica dental: [dueña, encargado, profesional]. */
+  const TABLA: [string, Permiso, [boolean, boolean, boolean]][] = [
+    ["puedeRegistrarPropina", puedeRegistrarPropina, [true, true, false]],
+    ["puedeConfigurarHoraValle", puedeConfigurarHoraValle, [true, false, false]],
+    ["puedeActivarFilaVirtual", puedeActivarFilaVirtual, [true, false, false]],
+    ["puedeVerPantallaDeFila", puedeVerPantallaDeFila, [true, true, false]],
+    ["puedeVaciarFilaVirtual", puedeVaciarFilaVirtual, [true, true, false]],
+  ]
+
+  it.each(TABLA)("%s: en una clínica dental, nadie (ni la dueña)", (_nombre, permiso) => {
+    for (const rol of ["owner", "admin", "worker"] as const) {
+      expect(permiso(conRubro(rol, "odontologia"))).toBe(false)
+    }
+  })
+
+  it.each(TABLA)("%s: salón, barbería, salón de uñas, rubros viejos y sin rubro siguen como siempre", (_nombre, permiso, [deDueña, deEncargado, deProfesional]) => {
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "salud", "fitness", "otro", "Odontologia", "odontología", "", undefined, null, 7, ["odontologia"]]) {
+      expect(permiso(conRubro("owner", rubro))).toBe(deDueña)
+      expect(permiso(conRubro("admin", rubro))).toBe(deEncargado)
+      expect(permiso(conRubro("worker", rubro))).toBe(deProfesional)
+    }
+  })
+
+  it.each(TABLA)("%s falla cerrado sin actor y con un rol desconocido (también en una clínica)", (_nombre, permiso) => {
+    expect(permiso(null)).toBe(false)
+    expect(permiso(desconocido)).toBe(false)
+    expect(permiso({ ...desconocido, rubro: "salon" })).toBe(false)
+  })
+
+  describe("las preguntas por rubro (sin actor)", () => {
+    const rubrosQueSi = ["salon", "barberia", "spa-de-unas", "salud", "fitness", "otro", "Odontologia", "odontología", "", undefined, null, 7, ["odontologia"]]
+
+    it("sólo el rubro dental dice que no; todo lo demás, también lo desconocido, sigue como siempre", () => {
+      for (const pregunta of [rubroOfrecePropinas, rubroOfreceHoraValle, rubroOfreceFilaVirtual]) {
+        expect(pregunta("odontologia")).toBe(false)
+        for (const rubro of rubrosQueSi) expect(pregunta(rubro)).toBe(true)
+      }
+    })
+
+    it("veLaLineaDePropinas: donde hay propinas, siempre; en una clínica dental, sólo si hay plata (nunca esconde dinero)", () => {
+      for (const rubro of rubrosQueSi) {
+        expect(veLaLineaDePropinas(rubro, 0)).toBe(true)
+        expect(veLaLineaDePropinas(rubro, 2500)).toBe(true)
+      }
+      expect(veLaLineaDePropinas("odontologia", 0)).toBe(false)
+      expect(veLaLineaDePropinas("odontologia", 2500)).toBe(true)
+      expect(veLaLineaDePropinas("odontologia", 25)).toBe(true)
+      expect(veLaLineaDePropinas("odontologia", -2500)).toBe(true)
+    })
   })
 })
 

@@ -4,7 +4,7 @@ import { z } from "zod"
 import { comisionParaCongelar, type PorcentajesVigentes } from "@/lib/comisiones"
 import { nombreDeMedio } from "@/lib/medios-de-pago"
 import { NOMBRES_DE_MOVIMIENTO, type TipoDeMovimiento } from "@/lib/movimientos"
-import { whereDeLiquidaciones, type Actor } from "@/lib/permisos"
+import { veLaLineaDePropinas, whereDeLiquidaciones, type Actor } from "@/lib/permisos"
 import { registrarError } from "@/lib/registro-de-errores"
 import { nombreEnElNegocio } from "@/lib/tablero"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
@@ -1065,7 +1065,10 @@ export const enPesos = (centavos: number): number | string =>
  * como "Total al cerrarse (anulada)" y el total a pagar es 0.
  *
  * `rubro`: en una clínica dental los encabezados dicen "Odontólogo" y
- * "Paciente" (`vocabularioDe`); en los demás rubros, como siempre.
+ * "Paciente" (`vocabularioDe`); en los demás rubros, como siempre. Una clínica
+ * dental tampoco trabaja con propinas: sin plata en ellas, el comprobante no
+ * trae la sección ni la fila de propinas (`veLaLineaDePropinas`). Con propinas
+ * guardadas de antes sí, y los totales no cambian.
  */
 export function filasDelComprobante(detalle: DetalleDeLiquidacion, rubro?: string | null): (string | number | null)[][] {
   const palabras = vocabularioDe(rubro)
@@ -1076,6 +1079,7 @@ export function filasDelComprobante(detalle: DetalleDeLiquidacion, rubro?: strin
   // La sección de prótesis sólo si hubo (clínica dental): el comprobante de
   // los demás rubros sale igual que siempre.
   const conProtesis = detalle.protesis.length > 0 || t.comisionProtesisCents !== 0
+  const conPropinas = detalle.propinas.length > 0 || veLaLineaDePropinas(rubro, t.propinasCents)
   return [
     ["Liquidación", detalle.texto],
     [conMayuscula(palabras.profesional), detalle.miembro],
@@ -1115,9 +1119,13 @@ export function filasDelComprobante(detalle: DetalleDeLiquidacion, rubro?: strin
           ]),
         ]
       : []),
-    vacia,
-    ["Fecha", cliente, "Propina", "Medio", "Monto"],
-    ...detalle.propinas.map((p) => [p.fecha, p.cliente, "Propina", nombreDeMedio(p.medio), enPesos(p.montoCents)]),
+    ...(conPropinas
+      ? [
+          vacia,
+          ["Fecha", cliente, "Propina", "Medio", "Monto"],
+          ...detalle.propinas.map((p) => [p.fecha, p.cliente, "Propina", nombreDeMedio(p.medio), enPesos(p.montoCents)]),
+        ]
+      : []),
     vacia,
     ["Fecha", "Movimiento", "Motivo", "Monto"],
     ...detalle.movimientos.map((m) => [
@@ -1131,7 +1139,7 @@ export function filasDelComprobante(detalle: DetalleDeLiquidacion, rubro?: strin
     ["Comisión por servicios", enPesos(t.comisionServiciosCents)],
     ["Comisión por productos", enPesos(t.comisionProductosCents)],
     ...(conProtesis ? [["Comisión por prótesis", enPesos(t.comisionProtesisCents)]] : []),
-    ["Propinas", enPesos(t.propinasCents)],
+    ...(conPropinas ? [["Propinas", enPesos(t.propinasCents)]] : []),
     ["Adelantos y vales", enPesos(-t.adelantosCents)],
     ["Ajustes", enPesos(t.ajustesCents)],
     ...(anulada

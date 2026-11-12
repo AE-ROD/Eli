@@ -199,6 +199,7 @@ export async function POST(request: NextRequest, contexto: Params) {
   await Promise.all(
     avisados.map((emailNegocio) =>
       enviarAvisoDeCambioDelCliente({
+        rubro: cita.business.type,
         tipo: "reagendo",
         emailNegocio,
         nombreNegocio: cita.business.name,

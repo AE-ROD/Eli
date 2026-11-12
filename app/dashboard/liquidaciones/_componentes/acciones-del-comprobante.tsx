@@ -27,6 +27,8 @@ interface Props {
   totalCents: number
   /** Clínica dental: lo que libera anular incluye abonos de prótesis. */
   conProtesis: boolean
+  /** Lo que libera anular incluye propinas: siempre, salvo en una clínica dental sin propinas guardadas. */
+  conPropinas: boolean
   volverA: string
   puedePagar: boolean
   puedeAnular: boolean
@@ -49,6 +51,7 @@ export function AccionesDelComprobante({
   periodo,
   totalCents,
   conProtesis,
+  conPropinas,
   volverA,
   puedePagar,
   puedeAnular,
@@ -133,6 +136,7 @@ export function AccionesDelComprobante({
             key="anular"
             id={id}
             conProtesis={conProtesis}
+            conPropinas={conPropinas}
             alCerrar={() => setModal(null)}
             alTerminar={() => listo("Liquidación anulada: lo que incluía vuelve a la próxima.")}
           />
@@ -201,11 +205,13 @@ function ModalPagar({ id, miembro, periodo, totalCents, alCerrar, alTerminar }: 
 function ModalAnularLiquidacion({
   id,
   conProtesis,
+  conPropinas,
   alCerrar,
   alTerminar,
 }: {
   id: string
   conProtesis: boolean
+  conPropinas: boolean
   alCerrar: () => void
   alTerminar: () => void
 }) {
@@ -232,7 +238,7 @@ function ModalAnularLiquidacion({
   return (
     <MarcoDeModal
       titulo="Anular liquidación"
-      descripcion={`Los servicios${conProtesis ? ", abonos de prótesis" : ""}, propinas y movimientos que incluía vuelven a quedar pendientes para la próxima. Lo que se congeló al cerrarla sigue congelado.`}
+      descripcion={`Los servicios${conProtesis ? ", abonos de prótesis" : ""}${conPropinas ? ", propinas" : ""} y movimientos que incluía vuelven a quedar pendientes para la próxima. Lo que se congeló al cerrarla sigue congelado.`}
       bloqueado={guardando}
       alCerrar={alCerrar}
     >

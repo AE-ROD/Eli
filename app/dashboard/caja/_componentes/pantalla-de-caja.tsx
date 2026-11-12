@@ -8,10 +8,12 @@ import { Esqueleto } from "@/components/comunes/esqueleto"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { formatearMonto } from "@/lib/dinero"
 import { HORA_24, formatearHora } from "@/lib/fechas"
+import { veLaLineaDePropinas } from "@/lib/permisos"
 import { cn } from "@/lib/utils"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { Paginador } from "../../reportes/_componentes/paginador"
@@ -183,6 +185,8 @@ interface PropsDeCajaAbierta {
 }
 
 function CajaAbierta({ estado, actualizando, onActualizar, onCerrada, onCambio }: PropsDeCajaAbierta) {
+  // Una clínica dental no trabaja con propinas: la línea de $0 no se muestra, la que tenga plata sí.
+  const rubro = useRubroDelPanel()
   const { abierta, zona } = estado
   const idDelTitulo = useId()
   const idDelFondo = useId()
@@ -268,7 +272,9 @@ function CajaAbierta({ estado, actualizando, onActualizar, onCerrada, onCambio }
 
       <dl className="mt-4 divide-y divide-borde border-y border-borde text-sm">
         <Renglon termino="Efectivo cobrado" valor={formatearMonto(abierta.efectivoCobrado)} />
-        <Renglon termino="Propinas en efectivo" valor={formatearMonto(abierta.propinasEfectivo)} />
+        {veLaLineaDePropinas(rubro, abierta.propinasEfectivo) && (
+          <Renglon termino="Propinas en efectivo" valor={formatearMonto(abierta.propinasEfectivo)} />
+        )}
       </dl>
       <OtrosMedios desglose={abierta.desglose} />
 
@@ -419,6 +425,7 @@ function CierresAnteriores({
 }) {
   const idDelTitulo = useId()
   const { zona } = estado
+  const rubro = useRubroDelPanel()
   return (
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "overflow-hidden")}>
       <div className="p-5 sm:p-6">
@@ -442,10 +449,18 @@ function CierresAnteriores({
                     {cierre.diferencia === 0 ? "Cuadró" : `Diferencia ${conSigno(cierre.diferencia)}`}
                   </p>
                 </div>
-                <dl className="mt-2 grid grid-cols-2 gap-x-4 sm:grid-cols-5">
+                {/* Sin la columna de propinas en una clínica dental, salvo que el cierre tenga plata en ella. */}
+                <dl
+                  className={cn(
+                    "mt-2 grid grid-cols-2 gap-x-4",
+                    veLaLineaDePropinas(rubro, cierre.propinasEfectivo) ? "sm:grid-cols-5" : "sm:grid-cols-4"
+                  )}
+                >
                   <Renglon termino="Fondo" valor={formatearMonto(cierre.fondoInicial)} />
                   <Renglon termino="Efectivo" valor={formatearMonto(cierre.efectivoCobrado)} />
-                  <Renglon termino="Propinas en efectivo" valor={formatearMonto(cierre.propinasEfectivo)} />
+                  {veLaLineaDePropinas(rubro, cierre.propinasEfectivo) && (
+                    <Renglon termino="Propinas en efectivo" valor={formatearMonto(cierre.propinasEfectivo)} />
+                  )}
                   <Renglon termino="Esperado" valor={formatearMonto(cierre.esperado)} />
                   <Renglon termino="Contado" valor={formatearMonto(cierre.contado)} />
                 </dl>

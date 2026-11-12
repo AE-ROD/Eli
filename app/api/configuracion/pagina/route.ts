@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { textoOpcional, telefonoChileno } from "@/lib/campos-del-panel"
 import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
+import { ejemplosDe } from "@/lib/ejemplos-por-rubro"
 import { IDS_DE_MEDIOS_DE_PAGO } from "@/lib/medios-de-pago"
 import {
   CLAVES_DE_COLOR,
@@ -50,7 +51,8 @@ import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 const MENSAJE_SOLO_LA_DUEÑA_APAGA_RESENAS =
   "Pedir reseña está encendido y sólo la dueña puede apagarlo. Pídele que lo apague en Mensajes a clientes, o que borre ella el enlace."
 
-const MENSAJE_DE_INSTAGRAM = "No pudimos leer el Instagram. Escribe el usuario (@tu.salon) o pega el enlace del perfil"
+// El ejemplo es el neutro: este esquema es de todo el módulo y el mensaje no sabe de qué rubro es el negocio.
+const MENSAJE_DE_INSTAGRAM = `No pudimos leer el Instagram. Escribe el usuario (${ejemplosDe(null).instagram}) o pega el enlace del perfil`
 
 const instagram = () =>
   z

@@ -294,7 +294,7 @@ describe("avisar cuando se libera una hora", () => {
     expect(resumen).toMatchObject({ enviados: 1, fallidos: 0 })
     expect(enviarAviso).toHaveBeenCalledTimes(1)
     const correo = enviarAviso.mock.calls[0][0]
-    expect(correo).toMatchObject({ emailCliente: "i1@correo.test", nombreNegocio: "Salón Uno", servicio: "Corte", fecha: LUNES })
+    expect(correo).toMatchObject({ emailCliente: "i1@correo.test", nombreNegocio: "Salón Uno", servicio: "Corte", fecha: LUNES, rubro: "salon" })
     expect(correo.enlaceReservar).toBe(`https://eli.test/reservar/uno?servicio=s1&fecha=${LUNES}#reservar`)
     const token = m.tokenDeInscripcion("i1")
     expect(correo.enlaceSalir).toBe(`https://eli.test/reservar/uno/espera/${token}`)
@@ -303,6 +303,22 @@ describe("avisar cuando se libera una hora", () => {
     expect(envios()).toEqual([expect.objectContaining({ businessId: "n1", tipo: "lista-de-espera", esperaId: "i1", referencia: "i1:1" })])
     expect(inscripciones({ id: "i1" })[0]).toMatchObject({ avisos: 1, ultimoAvisoAt: AHORA })
     expect(inscripciones({ id: "i-ajena" })[0]).toMatchObject({ avisos: 0 })
+  })
+
+  it("el correo lleva el rubro del negocio al que se le liberó la hora, no el de otro", async () => {
+    escenario({
+      business: [
+        { id: "n1", name: "Clínica Uno", slug: "uno", userId: "u1", type: "odontologia" },
+        { id: "n2", name: "Barbería Dos", slug: "dos", userId: "u2", type: "barberia" },
+      ],
+      inscripcionEnEspera: [inscripcion("i1")],
+    })
+    await liberar("a9")
+
+    await m.avisarHoraLiberada({ businessId: "n1", inicio: A_LAS_9 }, AHORA)
+
+    expect(enviarAviso).toHaveBeenCalledTimes(1)
+    expect(enviarAviso.mock.calls[0][0]).toMatchObject({ rubro: "odontologia", nombreNegocio: "Clínica Uno" })
   })
 
   it("en producción sin NEXTAUTH_URL no manda un enlace a localhost: se cuenta como fallido, se libera y sigue", async () => {

@@ -234,3 +234,45 @@ describe("leerPaginaDelNegocio: qué servicios hace cada integrante del equipo",
     expect((await equipoDe()).map((profesional) => profesional.id)).toEqual(["m-carla", "m-pedro"])
   })
 })
+
+/**
+ * `horaValle` dice si la mini página anuncia precios más bajos en horas valle:
+ * encendida y con alguna franja. Una clínica dental no tiene hora valle, aunque
+ * la bandera y las franjas sigan guardadas.
+ */
+describe("leerPaginaDelNegocio: hora valle", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const franjaDeValle = (businessId: string) => ({ id: `f-${businessId}`, businessId, dayOfWeek: LUNES, desde: "10:00", hasta: "12:00", porcentaje: 20 })
+
+  async function anunciaHoraValle({ type, activa = true, franjas = true }: { type?: string; activa?: boolean; franjas?: boolean }) {
+    const datos = datosBase()
+    base.reiniciar({
+      ...datos,
+      business: datos.business.map((negocio) => ({
+        ...negocio,
+        ...CAMPOS_DE_LA_PAGINA,
+        ...(negocio.id === NEGOCIO ? { horaValleActiva: activa, ...(type ? { type } : {}) } : {}),
+      })),
+      service: datos.service.map((servicio) => ({ description: null, category: null, duration: 60, ...servicio })),
+      franjaDeHoraValle: franjas ? [franjaDeValle(NEGOCIO)] : [],
+    })
+    const { leerPaginaDelNegocio } = await import("./datos-de-la-pagina")
+    return (await leerPaginaDelNegocio("salon-uno"))?.horaValle
+  }
+
+  it.each(["salon", "barberia", "spa-de-unas", undefined])("%s: encendida y con franjas, la anuncia", async (type) => {
+    expect(await anunciaHoraValle({ type })).toBe(true)
+  })
+
+  it("sin franjas o apagada, no la anuncia", async () => {
+    expect(await anunciaHoraValle({ type: "salon", franjas: false })).toBe(false)
+    expect(await anunciaHoraValle({ type: "salon", activa: false })).toBe(false)
+  })
+
+  it("clínica dental: no la anuncia, aunque esté encendida y con franjas guardadas", async () => {
+    expect(await anunciaHoraValle({ type: "odontologia" })).toBe(false)
+  })
+})

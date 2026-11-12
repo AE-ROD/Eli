@@ -1,6 +1,6 @@
 # Eli
 
-Sistema de reservas para **salones de belleza, barberías, spas de uñas y
+Sistema de reservas para **salones de belleza, barberías, salones de uñas y
 clínicas dentales**. Cada negocio tiene su agenda, su equipo y su página
 pública de reserva; los profesionales cobran un porcentaje del servicio que
 atienden. La clínica dental suma lo clínico: ficha del paciente, odontograma,

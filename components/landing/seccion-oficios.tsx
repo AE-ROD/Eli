@@ -3,7 +3,7 @@
 import { useEffect, useState, type CSSProperties, type FocusEvent } from "react"
 import Image from "next/image"
 import { MaquetaVisita } from "@/components/landing/maquetas/maqueta-oficios"
-import { OFICIOS, type Oficio } from "@/components/landing/menu-desplegable"
+import { OFICIOS, type OficioDelMenu } from "@/components/landing/menu-desplegable"
 import { EncabezadoDeLanding, SeccionDeLanding } from "@/components/landing/seccion-de-landing"
 import { TRAZOS_DE_OFICIOS } from "@/components/landing/trazos-de-la-landing"
 import { BotonDePausa } from "@/components/movimiento/boton-de-pausa"
@@ -42,7 +42,7 @@ interface FotoDeOficio {
  * caja de la derecha y, chica y redonda, en la etiqueta del oficio. Son las
  * mismas fotos de la sección de áreas.
  */
-const FOTOS: Record<string, FotoDeOficio> = {
+const FOTOS: Record<OficioDelMenu["nombre"], FotoDeOficio> = {
   "Salones de belleza": {
     src: "/landing/peluqueria/pel-pelo.jpg",
     descripcion: "Tres cabelleras vistas de espalda",
@@ -63,7 +63,7 @@ const FOTOS: Record<string, FotoDeOficio> = {
     duracion: "7s",
     retraso: "-2s",
   },
-  "Spas de uñas": {
+  "Salones de uñas": {
     src: "/landing/spa-de-unas/spa-manicura.jpg",
     descripcion: "Manicurista sonriendo mientras trabaja",
     tarjeta: "bg-rosa",
@@ -190,7 +190,7 @@ export function SeccionOficios() {
                 Hecho para <span className="resaltado">cuatro oficios.</span>
               </>
             }
-            subtitulo="Salones de belleza, barberías, spas de uñas y odontología, trabajes solo o con equipo."
+            subtitulo="Salones de belleza, barberías, salones de uñas y odontología, trabajes solo o con equipo."
           />
 
           <div
@@ -265,7 +265,7 @@ export function SeccionOficios() {
  * Una foto del oficio (o, si falta el archivo, su reemplazo) con la tarjeta
  * de color inclinada detrás. Decorativa: el oficio ya está en el texto.
  */
-function FotoGrande({ oficio }: { oficio: Oficio }) {
+function FotoGrande({ oficio }: { oficio: OficioDelMenu }) {
   const foto = FOTOS[oficio.nombre]
   const [faltaElArchivo, setFaltaElArchivo] = useState(false)
   if (!foto) return null
@@ -301,7 +301,7 @@ function FotoGrande({ oficio }: { oficio: Oficio }) {
 }
 
 /** Un oficio en una píldora blanca, con su foto chica y redonda (o su ícono si falta el archivo). */
-function EtiquetaDeOficio({ oficio }: { oficio: Oficio }) {
+function EtiquetaDeOficio({ oficio }: { oficio: OficioDelMenu }) {
   const foto = FOTOS[oficio.nombre]
   const [faltaElArchivo, setFaltaElArchivo] = useState(false)
   const Icono = oficio.icono

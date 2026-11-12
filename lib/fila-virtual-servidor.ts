@@ -18,7 +18,7 @@ import {
 } from "@/lib/fila-virtual"
 import { leerHorarioDeQuienesAtienden } from "@/lib/agenda-publica"
 import { horarioSemanalDeAtencion } from "@/lib/horario-de-atencion"
-import { whereDeAtenciones, type Actor } from "@/lib/permisos"
+import { rubroOfreceFilaVirtual, whereDeAtenciones, type Actor } from "@/lib/permisos"
 import { registrarError } from "@/lib/registro-de-errores"
 import { generarToken, hashDeToken } from "@/lib/tokens"
 import { fechaYMinutosEn, zonaDelNegocio } from "@/lib/zona-horaria"
@@ -75,14 +75,16 @@ const TOPE_DE_BLOQUEOS = 50
  * personal de un encargado no abre la fila, #168; `horarioSemanalDeAtencion`
  * decide cuál manda cada día) y los bloqueos de
  * todo el negocio (`memberId` null: un feriado, un cierre) que cubren
- * `ahora`. `null` si el slug no existe.
+ * `ahora`. `null` si el slug no existe o si es de un rubro sin fila virtual
+ * (la clínica dental, `rubroOfreceFilaVirtual`): el mismo 404 que un slug
+ * inventado, aunque `filaVirtualActiva` siga encendida de antes.
  */
 export async function negocioDeLaFila(slug: string, ahora = new Date()) {
   const negocio = await prisma.business.findUnique({
     where: { slug },
-    select: { id: true, name: true, slug: true, timezone: true, filaVirtualActiva: true, filaVirtualTope: true },
+    select: { id: true, name: true, slug: true, type: true, timezone: true, filaVirtualActiva: true, filaVirtualTope: true },
   })
-  if (!negocio) return null
+  if (!negocio || !rubroOfreceFilaVirtual(negocio.type)) return null
   const [workSchedules, bloqueos] = await Promise.all([
     leerHorarioDeQuienesAtienden(prisma, negocio.id),
     prisma.timeBlock.findMany({
@@ -219,12 +221,15 @@ function estadoDelTurno(status: string, filaFecha: string | null, hoy: string): 
   return "terminado"
 }
 
-/** El turno de ese token en ese negocio, o `null` si no existe o es de otro negocio. */
+/**
+ * El turno de ese token en ese negocio, o `null` si no existe, es de otro
+ * negocio o el negocio es de un rubro sin fila virtual (la clínica dental).
+ */
 async function turnoDelToken(slug: string, token: string) {
   const hash = hashDelTokenDeFila(token)
   if (!hash) return null
-  const negocio = await prisma.business.findUnique({ where: { slug }, select: { id: true, name: true, timezone: true } })
-  if (!negocio) return null
+  const negocio = await prisma.business.findUnique({ where: { slug }, select: { id: true, name: true, timezone: true, type: true } })
+  if (!negocio || !rubroOfreceFilaVirtual(negocio.type)) return null
   const turno = await prisma.visit.findFirst({
     where: { filaTokenHash: hash, businessId: negocio.id, origen: ORIGEN_FILA },
     select: { id: true, status: true, customerName: true, filaFecha: true, filaNumero: true },
@@ -367,7 +372,7 @@ export async function vaciarLaFilaDeHoy(
 export async function avisarFilaVirtual(businessId: string, ahora = new Date()): Promise<number> {
   let enviados = 0
   try {
-    const negocio = await prisma.business.findUnique({ where: { id: businessId }, select: { name: true, timezone: true } })
+    const negocio = await prisma.business.findUnique({ where: { id: businessId }, select: { name: true, timezone: true, type: true } })
     if (!negocio) return 0
 
     // Los dos primeros de la fila: sólo a ellos les puede tocar.
@@ -390,6 +395,7 @@ export async function avisarFilaVirtual(businessId: string, ahora = new Date()):
       let enviado = false
       try {
         const resultado = await enviarAvisoFilaVirtual({
+          rubro: negocio.type,
           emailCliente: turno.filaEmail,
           // Sólo el primer nombre: lo escribió un anónimo y va en un correo.
           nombreCliente: primerNombre(turno.customerName),

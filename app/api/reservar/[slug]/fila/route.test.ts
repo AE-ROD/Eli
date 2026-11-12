@@ -493,12 +493,22 @@ describe("aviso por correo cuando queda 1 persona adelante", () => {
       nombreCliente: "Bea",
       nombreNegocio: "Salón Uno",
       numero: 2,
+      rubro: "salon",
     })
     expect(base.buscar("visit", { id: "b" })[0].filaAvisadaAt).toEqual(AHORA)
 
     // Otra vuelta sin cambios: nadie más.
     expect(await avisarFilaVirtual(NEGOCIO)).toBe(0)
     expect(correos.aviso).toHaveBeenCalledTimes(1)
+  })
+
+  it("el correo lleva el rubro del negocio de la fila", async () => {
+    const { avisarFilaVirtual } = await import("@/lib/fila-virtual-servidor")
+    escenario({ negocio: { type: "barberia" }, visitas: [enFila("a", 1), enFila("b", 2, { filaEmail: "b@correo.test" })] })
+
+    await avisarFilaVirtual(NEGOCIO)
+
+    expect(correos.aviso).toHaveBeenCalledWith(expect.objectContaining({ rubro: "barberia" }))
   })
 
   it("salir de la fila dispara el aviso al que quedó segundo", async () => {
@@ -568,5 +578,45 @@ describe("la fila que pasa la medianoche: cuenta la jornada, no el día del cale
     expect((await anotarse({ nombre: "Juan Pérez" })).status).toBe(201)
     expect(deLaFila().find((v) => v.customerName === "Juan Pérez")).toMatchObject({ filaFecha: "2030-01-08", filaNumero: 1 })
     expect((await miTurno(token)).cuerpo.estado).toBe("vencido")
+  })
+})
+
+// ─── Clínica dental ──────────────────────────────────────────────────────────
+
+describe("clínica dental: no hay fila virtual, aunque quede encendida de antes", () => {
+  const NO_ENCONTRADO = { status: 404, cuerpo: { error: "No encontrado" } }
+
+  it("anotarse: el mismo 404 que un slug inventado, sin crear nada ni gastar el cupo del negocio", async () => {
+    escenario({ negocio: { type: "odontologia" } })
+    const inventado = await anotarse({ nombre: "Juan Pérez" }, "no-existe")
+
+    expect(await anotarse({ nombre: "Juan Pérez" })).toEqual(NO_ENCONTRADO)
+    expect(inventado).toEqual(NO_ENCONTRADO)
+    expect(deLaFila()).toHaveLength(0)
+    expect(mockVerificarLimite.mock.calls.filter(([tipo]) => tipo === "filaVirtualPorNegocio")).toHaveLength(0)
+    expect(tareas).toHaveLength(0)
+  })
+
+  it("el turno de alguien que se anotó antes: ni se lee ni se sale desde el celular, y no se toca la atención", async () => {
+    const { token, tokenHash } = generarToken()
+    escenario({ negocio: { type: "odontologia" }, visitas: [enFila("vieja", 1, { filaTokenHash: tokenHash })] })
+
+    expect(await miTurno(token)).toEqual(NO_ENCONTRADO)
+    expect(await salir(token)).toEqual(NO_ENCONTRADO)
+    expect(deLaFila()[0].status).toBe("en-espera")
+    expect(deLaFila()[0].voidReason ?? null).toBeNull()
+  })
+
+  it("el mismo negocio como salón, con los mismos datos, sí funciona (sólo cambia el rubro)", async () => {
+    const { token, tokenHash } = generarToken()
+    escenario({ negocio: { type: "salon" }, visitas: [enFila("vieja", 1, { filaTokenHash: tokenHash })] })
+
+    expect((await anotarse()).status).toBe(201)
+    expect((await miTurno(token)).status).toBe(200)
+  })
+
+  it("la clínica no afecta al salón de al lado: su fila sigue abierta", async () => {
+    escenario({ negocio: { type: "odontologia" } })
+    expect((await anotarse({ nombre: "Del Salón" }, "salon-dos")).status).toBe(201)
   })
 })

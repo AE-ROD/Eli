@@ -34,13 +34,21 @@ export interface Oficio {
 /**
  * Los cuatro oficios que atiende Eli. En la landing todos llevan a la sección
  * de oficios. Los usan el menú "Para quién", el menú del teléfono y el pie.
+ *
+ * Va `as const satisfies`: los nombres quedan como tipo literal, y las fotos
+ * de la sección de oficios (`FOTOS`, `seccion-oficios.tsx`) se buscan por ese
+ * nombre. Si uno cambia y el otro no, `tsc` lo avisa en vez de dejar al oficio
+ * sin foto en silencio.
  */
-export const OFICIOS: readonly Oficio[] = [
+export const OFICIOS = [
   { nombre: "Salones de belleza", descripcion: "Varios profesionales en una misma visita.", icono: Sparkles, color: "lila" },
   { nombre: "Barberías", descripcion: "Con reserva o sin ella, en la misma fila.", icono: Scissors, color: "azul" },
-  { nombre: "Spas de uñas", descripcion: "Servicios, horarios y pago dividido.", icono: Hand, color: "naranja" },
+  { nombre: "Salones de uñas", descripcion: "Servicios, horarios y pago dividido.", icono: Hand, color: "naranja" },
   { nombre: "Odontología", descripcion: "Ficha clínica, odontograma y sillones.", icono: Smile, color: "lima" },
-]
+] as const satisfies readonly Oficio[]
+
+/** Un oficio del menú, con su nombre como literal (la llave de `FOTOS`). */
+export type OficioDelMenu = (typeof OFICIOS)[number]
 
 export const SECCION_DE_OFICIOS = "#oficios"
 

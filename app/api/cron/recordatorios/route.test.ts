@@ -25,7 +25,7 @@ const citaDeMañana = {
   startTime: new Date("2026-10-07T13:00:00.000Z"),
   title: "Corte",
   customer: { name: "María", lastName: "González", email: "maria@example.com", businessId: "negocio-1" },
-  business: { name: "Salón Uno", timezone: "America/Santiago" },
+  business: { name: "Salón Uno", timezone: "America/Santiago", type: "salon" },
 }
 
 const ENVIADO = { data: { id: "correo-1" }, error: null }
@@ -64,6 +64,18 @@ describe("GET /api/cron/recordatorios", () => {
     expect(await res.json()).toMatchObject({ total: 1 })
     expect(mockEnviarRecordatorio).toHaveBeenCalledTimes(1)
     expect(mockEnviarRecordatorio).toHaveBeenCalledWith(expect.objectContaining({ emailCliente: "maria@example.com" }))
+  })
+
+  it("el recordatorio lleva el rubro del negocio de la cita, y la consulta lo trae", async () => {
+    prismaMock.appointment.findMany.mockResolvedValue([{ ...citaDeMañana, business: { ...citaDeMañana.business, type: "odontologia" } }])
+    const { GET } = await import("./route")
+
+    await GET(llamada({ authorization: `Bearer ${SECRETO}` }))
+
+    expect(mockEnviarRecordatorio).toHaveBeenCalledWith(expect.objectContaining({ rubro: "odontologia" }))
+    // El negocio de este test se arma a mano: la consulta de verdad tiene que pedir el rubro.
+    const { select } = prismaMock.appointment.findMany.mock.calls[0][0]
+    expect(select.business.select).toMatchObject({ type: true })
   })
 
   it("con un Bearer incorrecto: 401", async () => {

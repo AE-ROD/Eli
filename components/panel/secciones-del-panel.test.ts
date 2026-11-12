@@ -185,7 +185,7 @@ describe("las secciones con el nombre del rubro", () => {
     expect(cambiadas.map((seccion) => seccion.id)).toEqual(["tablero", "clientes"])
   })
 
-  it("salón, barbería, spa de uñas, un rubro desconocido o ninguno: las mismas secciones, sin tocar", () => {
+  it("salón, barbería, salón de uñas, un rubro desconocido o ninguno: las mismas secciones, sin tocar", () => {
     for (const rubro of ["salon", "barberia", "spa-de-unas", "constructor", "", null, undefined]) {
       const secciones = seccionesConNombreDelRubro(SECCIONES_DEL_PANEL, rubro)
       secciones.forEach((seccion, i) => expect(seccion).toBe(SECCIONES_DEL_PANEL[i]))

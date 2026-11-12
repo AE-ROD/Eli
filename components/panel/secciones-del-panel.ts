@@ -123,7 +123,7 @@ export const SECCIONES_DEL_PANEL: readonly SeccionDelPanel[] = [
  * clínica dental, Clientes se llama "Pacientes" y Tablero, "Sala de espera".
  * El id, la ruta y el módulo (el color y el ícono) no cambian. En cualquier
  * otro rubro, uno desconocido o ninguno, devuelve la misma sección, sin
- * tocarla: el salón, la barbería y el spa de uñas se ven como siempre.
+ * tocarla: el salón, la barbería y el salón de uñas se ven como siempre.
  *
  * Es para el panel (la barra lateral y el antetítulo de cada página). Los
  * nombres fijos de `SECCIONES_DEL_PANEL` y de `lib/modulos.ts` no cambian:

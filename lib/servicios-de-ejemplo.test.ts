@@ -4,10 +4,10 @@ import { RUBROS } from "./rubros"
 import { duracion, nombre, precioDeServicio } from "./campos-del-panel"
 
 describe("serviciosDeEjemplo", () => {
-  it.each(RUBROS.map((rubro) => rubro.id))("el rubro %s tiene de 4 a 6 servicios válidos para el panel", (rubro) => {
+  it.each(RUBROS.map((rubro) => rubro.id))("el rubro %s tiene de 5 a 6 servicios válidos para el panel", (rubro) => {
     const servicios = serviciosDeEjemplo(rubro)
 
-    expect(servicios.length).toBeGreaterThanOrEqual(4)
+    expect(servicios.length).toBeGreaterThanOrEqual(5)
     expect(servicios.length).toBeLessThanOrEqual(6)
     for (const servicio of servicios) {
       // Los mismos esquemas con que el panel crea y edita servicios: un
@@ -38,6 +38,19 @@ describe("serviciosDeEjemplo", () => {
 
   it.each(["salon", "barberia", "spa-de-unas"])("el rubro %s no trae urgencias (queda el default de la base)", (rubro) => {
     for (const servicio of serviciosDeEjemplo(rubro)) expect(servicio).not.toHaveProperty("esUrgencia")
+  })
+
+  it("el salón de uñas nace con relleno de acrílicas, y ningún servicio dice 'spa' (el rubro ya no se llama así)", () => {
+    const nombres = serviciosDeEjemplo("spa-de-unas").map((servicio) => servicio.name)
+
+    expect(nombres).toContain("Relleno de acrílicas")
+    expect(nombres.join(" ")).not.toMatch(/\bspa\b/i)
+  })
+
+  it("el salón nace con el retoque de raíz, que es de las visitas que más se repiten", () => {
+    const retoque = serviciosDeEjemplo("salon").find((servicio) => servicio.name === "Retoque de raíz")
+
+    expect(retoque).toMatchObject({ category: "Color", duration: 90 })
   })
 
   it("devuelve copias: cambiar lo devuelto no cambia la próxima llamada", () => {

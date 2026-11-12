@@ -14,7 +14,7 @@ import { MEDIOS_DE_PAGO } from "@/lib/medios-de-pago"
 import { PALETA_DEL_LOCAL, colorDelNegocio, iniciales } from "@/lib/pagina-del-negocio"
 import { mostrarTelefono } from "@/lib/telefono"
 import { cn } from "@/lib/utils"
-import { esRubroDental } from "@/lib/rubros"
+import { ejemplosDe, textoDeEjemplo } from "@/lib/ejemplos-por-rubro"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { guardarPaginaPublica, type DatosDePaginaPublica } from "../_datos"
 
@@ -43,6 +43,8 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
   // "Pacientes" y "odontólogo" en una clínica dental.
   const rubro = useRubroDelPanel()
   const { clientes, profesional } = vocabularioDe(rubro)
+  // Los ejemplos de los campos, del oficio del negocio (`lib/ejemplos-por-rubro.ts`).
+  const ejemplos = ejemplosDe(rubro)
   const [datos, setDatos] = useState<DatosDePaginaPublica>(inicial)
   // Las especialidades como están guardadas: al guardar se mandan sólo las que cambiaron (#113).
   const [especialidadesGuardadas, setEspecialidadesGuardadas] = useState(inicial.especialidades)
@@ -157,7 +159,7 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
           <Campo etiqueta="Dirección" valor={datos.address} alCambiar={(valor) => cambiar("address", valor)} maximo={200} placeholder="Av. Providencia 1234, local 5" autoComplete="street-address" />
           <Campo etiqueta="Comuna" valor={datos.comuna} alCambiar={(valor) => cambiar("comuna", valor)} maximo={80} placeholder="Providencia" />
           <Campo etiqueta="WhatsApp del negocio" valor={datos.whatsapp} alCambiar={(valor) => cambiar("whatsapp", valor)} maximo={30} placeholder="+56 9 1234 5678" tipo="tel" />
-          <Campo etiqueta="Instagram" valor={datos.instagram} alCambiar={(valor) => cambiar("instagram", valor)} maximo={200} placeholder={esRubroDental(rubro) ? "@tu.clinica" : "@tu.salon"} />
+          <Campo etiqueta="Instagram" valor={datos.instagram} alCambiar={(valor) => cambiar("instagram", valor)} maximo={200} placeholder={ejemplos.instagram} />
           <div className="sm:col-span-2">
             <Campo
               etiqueta="Enlace para dejar una reseña en Google"
@@ -250,7 +252,7 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
                   valor={fila.especialidad}
                   alCambiar={(valor) => cambiarEspecialidad(fila.memberId, valor)}
                   maximo={60}
-                  placeholder={esRubroDental(rubro) ? "Ej.: Ortodoncista" : "Ej.: Colorista"}
+                  placeholder={textoDeEjemplo(ejemplos.especialidad)}
                 />
               ))}
             </div>

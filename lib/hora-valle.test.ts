@@ -1,8 +1,9 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import {
   HORA_VALLE_APAGADA,
   configuracionDeHoraValleSchema,
   horasConOtroPrecio,
+  leerHoraValle,
   porcentajeDeHoraValle,
   precioAlReagendar,
   precioSigueAlCatalogo,
@@ -251,5 +252,44 @@ describe("rebajaDeLaHora (QA#14)", () => {
     expect(rebajaDeLaHora({ precio: 8000, precioNormal: 8000, porcentaje: 20 })).toBeNull()
     expect(rebajaDeLaHora({ precio: 8000, precioNormal: 6400, porcentaje: 0 })).toBeNull()
     expect(rebajaDeLaHora({ precio: null, precioNormal: 8000, porcentaje: 20 })).toBeNull()
+  })
+})
+
+describe("leerHoraValle: una clínica dental no tiene hora valle", () => {
+  const FRANJAS = [{ dayOfWeek: LUNES, desde: "10:00", hasta: "12:00", porcentaje: 20 }]
+
+  /** Un negocio con la hora valle encendida y sus franjas guardadas, del rubro que se diga. */
+  function baseCon(type: string | null | undefined, horaValleActiva = true) {
+    const findUnique = vi.fn(async () => ({ horaValleActiva, type }))
+    const findMany = vi.fn(async () => FRANJAS)
+    return { db: { business: { findUnique }, franjaDeHoraValle: { findMany } } as never, findUnique, findMany }
+  }
+
+  it.each(["salon", "barberia", "spa-de-unas", "salud", "otro", null, undefined])(
+    "%s: encendida y con sus franjas, como siempre",
+    async (rubro) => {
+      const { db, findMany } = baseCon(rubro)
+      expect(await leerHoraValle(db, "negocio-1")).toEqual({ activa: true, franjas: FRANJAS })
+      expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { businessId: "negocio-1" } }))
+    }
+  )
+
+  it("clínica dental: sale apagada aunque la bandera y las franjas sigan guardadas, y ni se leen las franjas", async () => {
+    const { db, findMany } = baseCon("odontologia")
+    expect(await leerHoraValle(db, "negocio-1")).toEqual(HORA_VALLE_APAGADA)
+    expect(findMany).not.toHaveBeenCalled()
+  })
+
+  it("apagada o sin negocio: apagada, ni se leen las franjas", async () => {
+    const apagada = baseCon("salon", false)
+    expect(await leerHoraValle(apagada.db, "negocio-1")).toEqual(HORA_VALLE_APAGADA)
+    expect(apagada.findMany).not.toHaveBeenCalled()
+  })
+
+  it("con la salida apagada, el precio no se rebaja en ninguna hora", () => {
+    const apagada = HORA_VALLE_APAGADA
+    const lunesALas10 = new Date("2030-01-07T13:00:00Z")
+    const precios = preciosConHoraValle([{ price: 8000 }], lunesALas10, SANTIAGO, apagada)
+    expect(precios).toMatchObject({ porcentaje: 0, precios: [8000], total: 8000, hayRebaja: false })
   })
 })

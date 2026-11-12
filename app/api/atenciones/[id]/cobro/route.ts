@@ -110,7 +110,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
     const { pagos, propinas } = cobroSchema.parse(recibido.cuerpo)
 
-    // Hoy registra propinas quien cobra; si alguna vez no, falla cerrado.
+    // Registra propinas quien cobra, salvo en una clínica dental, que no
+    // trabaja con ellas: ahí se rechazan aunque el navegador las mande (el
+    // rubro sale de la sesión, nunca del cuerpo). Falla cerrado.
     if (propinas.length > 0 && !puedeRegistrarPropina(actor)) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }

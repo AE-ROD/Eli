@@ -67,7 +67,7 @@ arena. Se escribe la clase de siempre; el color que sale es el de esta tabla.
 | `ciruela`, `-suave`, `-claro` | `#4A1F1F`, `#EFE6D6`, `#E0D2BC` | **Burdeos.** Lo que Eli ordena ("acomoda."). Texto de cualquier tamaño; `-claro`, barras secundarias de gráficos |
 | `pistacho`, `-suave`, `-oscuro`, `-texto` | `#D1C0A6`, `#F3EADB`, `#7A5A36`, `#6B4E2E` | **Arena.** El toque: puntos, subrayado, tildes, cuadro del ícono del botón. `-oscuro` para íconos y tildes (5,3:1 sobre su suave), `-texto` para texto chico (6,4:1) |
 | `anil`, `-suave` | `#6E3F34`, `#E9DECB` | **Tierra.** El cuarto tinte de los pasos y su texto (6,5:1 sobre su suave) |
-| `lavanda`, `pervinca`, `rosa` (y `-suave`) | `#D1C0A6`/`#F0E6D5`, `#9B6B5F`/`#EBDFCB`, `#D7857F`/`#F5DDD8` | Un par por oficio: peluquería (arena), barbería (cacao), spa de uñas (rosa viejo); odontología usa `pistacho`. Tarjeta detrás de la foto y fondo de la sección |
+| `lavanda`, `pervinca`, `rosa` (y `-suave`) | `#D1C0A6`/`#F0E6D5`, `#9B6B5F`/`#EBDFCB`, `#D7857F`/`#F5DDD8` | Un par por oficio: peluquería (arena), barbería (cacao), salón de uñas (rosa viejo); odontología usa `pistacho`. Tarjeta detrás de la foto y fondo de la sección |
 | `orquidea`, `violeta` | `#EE7B72`, `#F6C6BA` | Los dos tramos claros de `degradado-frutos` (salmón y rosa pálido), tras el rojo vivo `#E3383E` |
 | `cereza`, `-oscuro` | `#B81D23`, `#9E1A1F` | La acción principal ("Crear cuenta", `Boton variante="destacado"`, con el cuadro del ícono en arena) y su hover. Blanco encima: 6,5:1 |
 | `borde-suave` | `#EFE4D2` | Bordes de maquetas y separadores. Decorativo |
@@ -550,7 +550,7 @@ Cada una en su archivo de `components/landing/`, en el orden del diseño:
 verticales 3:4, ya optimizados: no se vuelven a comprimir; un `.mp4` sin audio
 para peluquería y otro para odontología, con su foto como póster). Son
 **material de referencia de terceros**: hay que cambiarlos por licenciados
-antes del lanzamiento, y faltan los videos de barbería y spa de uñas (hoy sólo
+antes del lanzamiento, y faltan los videos de barbería y salón de uñas (hoy sólo
 foto). Qué foto va dónde, con su `alt` en español, está en `AREAS`
 (`seccion-areas.tsx`) y en `FOTOS` (`seccion-oficios.tsx`); la misma foto va
 grande en la caja de Oficios y chica en la etiqueta del oficio. Si un archivo

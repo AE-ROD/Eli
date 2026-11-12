@@ -42,7 +42,7 @@ export function InvitacionAEli() {
         <p className="text-sm text-white/75">Esta página de reservas es de Eli</p>
       </div>
       <h2 id="invitacion-a-eli" className="mt-4 font-serif text-2xl leading-tight font-medium tracking-[-0.5px] text-balance">
-        ¿Tienes un salón, barbería, spa de uñas o clínica dental?
+        ¿Tienes un salón, barbería, salón de uñas o clínica dental?
       </h2>
       <p className="mt-2.5 text-pretty text-white/75">
         Que tus clientes reserven solos, como acabas de hacerlo tú. Prueba Eli {DIAS_DE_PRUEBA} días, sin tarjeta.

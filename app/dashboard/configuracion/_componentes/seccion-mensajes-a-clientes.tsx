@@ -14,9 +14,15 @@ import { cambiarMensajesAClientes, type EstadoDeMensajes, type InterruptoresDeMe
 
 /**
  * Cada interruptor con lo que hace, en una línea, como se lo explicaríamos a
- * la dueña. Con la palabra del rubro: "pacientes" en una clínica dental.
+ * la dueña. Con las palabras del rubro: "pacientes" en una clínica dental, y
+ * el aviso de vuelta se llama "Te toca volver" o, en una clínica, "Control"
+ * (`palabras.etiquetas.seguimiento`). Sólo cambia el nombre: hace lo mismo.
  */
-const mensajesPara = ({ cliente, clientes }: Vocabulario): { campo: keyof InterruptoresDeMensajes; etiqueta: string; descripcion: string }[] => [
+const mensajesPara = ({
+  cliente,
+  clientes,
+  palabras,
+}: Vocabulario): { campo: keyof InterruptoresDeMensajes; etiqueta: string; descripcion: string }[] => [
   {
     campo: "listaDeEsperaActiva",
     etiqueta: "Lista de espera",
@@ -24,7 +30,7 @@ const mensajesPara = ({ cliente, clientes }: Vocabulario): { campo: keyof Interr
   },
   {
     campo: "avisoDeVueltaActivo",
-    etiqueta: "Te toca volver",
+    etiqueta: palabras.etiquetas.seguimiento,
     descripcion: `Un correo cuando a un ${cliente} ya le toca volver, según cada cuánto viene o la frecuencia de su servicio.`,
   },
   {
@@ -34,10 +40,10 @@ const mensajesPara = ({ cliente, clientes }: Vocabulario): { campo: keyof Interr
   },
 ]
 
-/** Los tipos de envío (`TIPOS_DE_ENVIO`) como se leen en la tarjeta. */
-const TIPOS: { tipo: string; nombre: string }[] = [
+/** Los tipos de envío (`TIPOS_DE_ENVIO`) como se leen en la tarjeta, con el nombre del aviso de vuelta del rubro. */
+const tiposPara = ({ palabras }: Vocabulario): { tipo: string; nombre: string }[] => [
   { tipo: "lista-de-espera", nombre: "Avisos de lista de espera" },
-  { tipo: "te-toca", nombre: "Te toca volver" },
+  { tipo: "te-toca", nombre: palabras.etiquetas.seguimiento },
   { tipo: "resena", nombre: "Pedidos de reseña" },
   { tipo: "contacto-manual", nombre: "Escritos por ti a quienes se están yendo" },
 ]
@@ -61,7 +67,9 @@ const numero = (valor: number | undefined) => new Intl.NumberFormat("es-CL").for
  */
 export function SeccionMensajesAClientes({ inicial }: { inicial: EstadoDeMensajes }) {
   const idDelTitulo = useId()
-  const mensajes = mensajesPara(vocabularioDe(useRubroDelPanel()))
+  const vocabulario = vocabularioDe(useRubroDelPanel())
+  const mensajes = mensajesPara(vocabulario)
+  const tipos = tiposPara(vocabulario)
   const idDelMes = useId()
   const [interruptores, setInterruptores] = useState(inicial.interruptores)
   const [guardando, setGuardando] = useState<keyof InterruptoresDeMensajes | null>(null)
@@ -99,7 +107,7 @@ export function SeccionMensajesAClientes({ inicial }: { inicial: EstadoDeMensaje
       />
 
       <Aviso tono="info" className="mt-5">
-        &ldquo;Te toca volver&rdquo; y &ldquo;Pedir reseña&rdquo; sólo les llegan a quienes aceptaron recibir avisos y
+        &ldquo;{vocabulario.palabras.etiquetas.seguimiento}&rdquo; y &ldquo;Pedir reseña&rdquo; sólo les llegan a quienes aceptaron recibir avisos y
         novedades de tu negocio por correo, y cada correo trae cómo darse de baja. La lista de espera le llega a quien se
         anotó.
       </Aviso>
@@ -156,7 +164,7 @@ export function SeccionMensajesAClientes({ inicial }: { inicial: EstadoDeMensaje
         </p>
 
         <dl className="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-          {TIPOS.map(({ tipo, nombre }) => (
+          {tipos.map(({ tipo, nombre }) => (
             <div key={tipo} className="flex items-baseline justify-between gap-3">
               <dt className="min-w-0 text-texto-2">{nombre}</dt>
               <dd className="shrink-0 font-medium text-navy tabular-nums">{numero(mes.porTipo[tipo])}</dd>

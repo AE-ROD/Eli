@@ -17,6 +17,7 @@ import {
   normalizarInstagram,
   type ColorDelLocal,
 } from "@/lib/pagina-del-negocio"
+import { rubroOfreceHoraValle } from "@/lib/permisos"
 import { prisma } from "@/lib/prisma"
 import { servicioIdsPublicos } from "@/lib/servicios-del-profesional"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
@@ -97,6 +98,7 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
       coverUrl: true,
       mediosDePago: true,
       cancelacionHorasAntes: true,
+      type: true,
       horaValleActiva: true,
       // Basta saber si hay alguna: la página no lista las franjas.
       franjasDeHoraValle: { select: { id: true }, take: 1 },
@@ -171,6 +173,7 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
         : null
     ),
     plazoDeCambiosHoras: negocio.cancelacionHorasAntes,
-    horaValle: negocio.horaValleActiva && negocio.franjasDeHoraValle.length > 0,
+    // Una clínica dental no tiene hora valle, aunque la bandera siga guardada.
+    horaValle: rubroOfreceHoraValle(negocio.type) && negocio.horaValleActiva && negocio.franjasDeHoraValle.length > 0,
   }
 })

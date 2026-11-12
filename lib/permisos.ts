@@ -344,8 +344,12 @@ export const puedeGestionarProductos = gestionaElNegocio
  */
 export const puedeFijarComisionDeProducto = puedeEditarComisiones
 
-/** Las propinas se anotan al cobrar, así que las registra quien cobra. */
-export const puedeRegistrarPropina = puedeCobrar
+/**
+ * Las propinas se anotan al cobrar, así que las registra quien cobra. Una
+ * clínica dental no trabaja con propinas (`rubroOfrecePropinas`): ahí nadie las
+ * registra, ni el servidor las acepta aunque el navegador las mande.
+ */
+export const puedeRegistrarPropina = (actor: Actor | null): boolean => puedeCobrar(actor) && !esClinicaDental(actor)
 
 /** Tipo de período de liquidación del negocio (y su día de inicio de semana). */
 export const puedeConfigurarLiquidacion = esDueño
@@ -441,16 +445,20 @@ export const puedeEditarConsentimientoPromocional = puedeEditarDatosDeCliente
 /** Con cuántas faltas una reserva pública entra por confirmar (#84). Sólo la dueña. */
 export const puedeConfigurarPorConfirmar = esDueño
 
-/** Encender o apagar la fila virtual y fijar su tope (#85). Sólo la dueña. */
-export const puedeActivarFilaVirtual = esDueño
+/**
+ * Encender o apagar la fila virtual y fijar su tope (#85). Sólo la dueña, y
+ * no en una clínica dental, donde no hay fila virtual (`rubroOfreceFilaVirtual`).
+ */
+export const puedeActivarFilaVirtual = (actor: Actor | null): boolean => esDueño(actor) && !esClinicaDental(actor)
 
 // ─── Reservas a medida (etapa 5) ────────────────────────────────────────────
 
 /**
  * Encender o apagar los precios de hora valle, sus franjas y qué servicios
- * quedan fuera (#89c). Es precio, o sea dinero: sólo la dueña.
+ * quedan fuera (#89c). Es precio, o sea dinero: sólo la dueña, y no en una
+ * clínica dental, donde no hay hora valle (`rubroOfreceHoraValle`).
  */
-export const puedeConfigurarHoraValle = esDueño
+export const puedeConfigurarHoraValle = (actor: Actor | null): boolean => esDueño(actor) && !esClinicaDental(actor)
 
 /**
  * Confirmar o cancelar una reserva que entró por confirmar por faltas
@@ -471,7 +479,7 @@ export const puedeResolverPorConfirmar = gestionaElNegocio
  * Tablero entero (`puedeVerTodoElTablero`); la pantalla la deja abierta en el
  * equipo del local quien gestiona el negocio. Falla cerrado.
  */
-export const puedeVerPantallaDeFila = gestionaElNegocio
+export const puedeVerPantallaDeFila = (actor: Actor | null): boolean => gestionaElNegocio(actor) && !esClinicaDental(actor)
 
 /**
  * "Vaciar la fila de hoy": anula de una vez a todos los que esperan en la
@@ -479,12 +487,12 @@ export const puedeVerPantallaDeFila = gestionaElNegocio
  * cerrar). Dueña y encargado, los mismos que ven la fila entera. El
  * profesional no: la fila es de todo el negocio. Falla cerrado.
  */
-export const puedeVaciarFilaVirtual = gestionaElNegocio
+export const puedeVaciarFilaVirtual = (actor: Actor | null): boolean => gestionaElNegocio(actor) && !esClinicaDental(actor)
 
 // ─── Clínica dental (rubro "odontologia") ────────────────────────────────────
 //
 // Todo lo clínico existe sólo en un negocio dental: en un salón, una barbería
-// o un spa de uñas cada una de estas funciones dice que no, y sus endpoints
+// o un salón de uñas cada una de estas funciones dice que no, y sus endpoints
 // responden 404 (como lo ajeno: no se confirma que exista). El rubro viene de
 // la sesión (`Actor.rubro`); sin él, nada es dental.
 //
@@ -503,6 +511,41 @@ const tieneRolConocido = (actor: Actor | null): actor is Actor => !!actor && ROL
 
 /** El negocio del actor es una clínica dental. Falla cerrado sin actor, con un rol desconocido o sin rubro. */
 export const esClinicaDental = (actor: Actor | null): boolean => tieneRolConocido(actor) && esRubroDental(actor.rubro)
+
+// ─── Lo de salón que la clínica dental no usa ────────────────────────────────
+//
+// Las propinas, la hora valle y la fila virtual son costumbres de salón,
+// barbería y salón de uñas. En una clínica dental no corresponden: no se ofrecen,
+// sus secciones no aparecen y sus endpoints dicen que no. Sólo el rubro dental
+// las niega; cualquier otro, también uno desconocido o ausente (una sesión de
+// antes del rubro), sigue como siempre.
+//
+// Se pregunta de dos maneras que dicen lo mismo: con el actor, en los permisos
+// del panel (`puedeRegistrarPropina`, `puedeConfigurarHoraValle`,
+// `puedeActivarFilaVirtual`, `puedeVerPantallaDeFila`, `puedeVaciarFilaVirtual`),
+// y con el rubro del negocio (`Business.type`), donde no hay sesión: la reserva
+// pública, la fila y los archivos. Lo que ya está guardado no se borra ni se
+// migra: la plata que exista se sigue mostrando y sumando (la pantalla sólo
+// esconde la línea cuando vale cero, `veLaLineaDePropinas`); lo que cambia es
+// qué se ofrece y qué se acepta de ahora en adelante.
+
+/** El rubro trabaja con propinas. Todos menos la clínica dental. */
+export const rubroOfrecePropinas = (rubro: unknown): boolean => !esRubroDental(rubro)
+
+/** El rubro tiene precios de hora valle. Todos menos la clínica dental. */
+export const rubroOfreceHoraValle = (rubro: unknown): boolean => !esRubroDental(rubro)
+
+/** El rubro tiene fila virtual. Todos menos la clínica dental. */
+export const rubroOfreceFilaVirtual = (rubro: unknown): boolean => !esRubroDental(rubro)
+
+/**
+ * Si una pantalla muestra la línea "Propinas" de un resumen de dinero (la
+ * caja, una liquidación, Mi plata). Donde se trabaja con propinas, siempre,
+ * también en $0, como siempre. En una clínica dental, sólo si hay plata: la
+ * línea de $0 no tiene nada que decir, pero lo que exista (datos de antes) se
+ * muestra y se suma. Nunca esconde dinero.
+ */
+export const veLaLineaDePropinas = (rubro: unknown, monto: number): boolean => rubroOfrecePropinas(rubro) || monto !== 0
 
 /** Dueño y odontólogos: los que atienden en la clínica. El encargado no. */
 const atiendeEnLaClinica = (actor: Actor | null): boolean =>

@@ -5,6 +5,7 @@ import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, datosBase } from "@/pruebas/datos"
 import { cuerpoDePrueba } from "@/pruebas/pedidos"
 import { generarToken } from "@/lib/tokens"
+import { enviarAvisoDeCambioDelCliente } from "@/lib/email"
 import { MENSAJE_URGENCIA_SOLO_HOY } from "@/lib/reserva-publica"
 
 /**
@@ -181,6 +182,24 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers()
+})
+
+describe("los avisos al negocio por el enlace llevan el rubro del negocio de la cita", () => {
+  it.each(["odontologia", "salon"] as const)("cancelar (%s)", async (rubro) => {
+    escenario(rubro)
+
+    expect((await cancelar()).status).toBe(200)
+
+    expect(enviarAvisoDeCambioDelCliente).toHaveBeenCalledWith(expect.objectContaining({ tipo: "cancelo", rubro }))
+  })
+
+  it.each(["odontologia", "salon"] as const)("reagendar (%s)", async (rubro) => {
+    escenario(rubro)
+
+    expect((await reagendar(LUNES, "12:00")).status).toBe(200)
+
+    expect(enviarAvisoDeCambioDelCliente).toHaveBeenCalledWith(expect.objectContaining({ tipo: "reagendo", rubro }))
+  })
 })
 
 describe("POST cancelar por el enlace, clínica dental", () => {

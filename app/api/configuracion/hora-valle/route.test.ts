@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase, pedido, sesiones } from "@/pruebas/datos"
+import { sesionesDentales } from "@/pruebas/clinica-con-sillones"
 
 const mockGetServerSession = vi.fn()
 
@@ -145,5 +146,36 @@ describe("PUT /api/configuracion/hora-valle/servicios/[id] (#89c)", () => {
     expect((await excluir(sesiones.dueña, "s-corte", { excluido: "si" })).status).toBe(400)
     expect((await excluir(sesiones.dueña, "s-corte", undefined)).status).toBe(400)
     expect(excluido("s-corte")).toBe(false)
+  })
+})
+
+describe("clínica dental: la hora valle no se configura", () => {
+  const clinica = () => ({
+    ...datosBase(),
+    business: datosBase().business.map((negocio) => ({ ...negocio, type: "odontologia" })),
+    franjaDeHoraValle: [FRANJA_AJENA],
+  })
+
+  it("ni la dueña guarda franjas ni la enciende: 401 como con cualquier permiso negado, sin escribir nada", async () => {
+    base.reiniciar(clinica())
+    const antes = base.volcado()
+    const respuesta = await guardar(sesionesDentales.dueña, { activa: true, franjas: [FRANJA] })
+    expect(respuesta).toEqual({ status: 401, cuerpo: { error: "No autorizado" } })
+    expect(base.volcado()).toEqual(antes)
+    expect(activaEn(NEGOCIO)).toBe(false)
+  })
+
+  it("ni la dueña excluye un servicio de la rebaja: 401 sin escribir nada", async () => {
+    base.reiniciar(clinica())
+    const antes = base.volcado()
+    expect((await excluir(sesionesDentales.dueña, "s-corte", { excluido: true })).status).toBe(401)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("el rubro sale de la sesión, no del cuerpo: mandar `rubro` o `type` no cambia lo que puede un salón", async () => {
+    base.reiniciar({ ...datosBase(), franjaDeHoraValle: [FRANJA_AJENA] })
+    const { status } = await guardar(sesiones.dueña, { activa: true, franjas: [FRANJA], rubro: "odontologia", type: "odontologia" })
+    expect(status).toBe(200)
+    expect(activaEn(NEGOCIO)).toBe(true)
   })
 })

@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, datosBase } from "@/pruebas/datos"
 import { cuerpoDePrueba } from "@/pruebas/pedidos"
+import { enviarAvisoProfesional, enviarConfirmacionCliente } from "@/lib/email"
 import { MENSAJE_URGENCIA_SOLO_HOY } from "@/lib/reserva-publica"
 
 /**
@@ -93,6 +94,23 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers()
+})
+
+describe("POST confirmar: el rubro de los correos sale del negocio", () => {
+  beforeEach(() => relojEn(SEMANA_ANTES))
+
+  it.each(["odontologia", "salon"] as const)("la confirmación y el aviso llevan el rubro del negocio (%s)", async (rubro) => {
+    escenario(rubro)
+
+    // Un navegador que manda su propio "rubro" no cambia nada: sale de la base.
+    const { status } = await confirmar(
+      reserva({ servicioId: "s-limpieza", fecha: LUNES, hora: "09:00", email: "lucia@correo.test", primeraVez: false, rubro: "otro" })
+    )
+
+    expect(status).toBe(201)
+    expect(vi.mocked(enviarConfirmacionCliente)).toHaveBeenCalledWith(expect.objectContaining({ rubro }))
+    expect(vi.mocked(enviarAvisoProfesional)).toHaveBeenCalledWith(expect.objectContaining({ rubro }))
+  })
 })
 
 describe("POST confirmar, clínica dental: la primera vez", () => {

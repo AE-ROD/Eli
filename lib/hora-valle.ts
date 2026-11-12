@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client"
 import { z } from "zod"
+import { rubroOfreceHoraValle } from "@/lib/permisos"
 import { mismoPrecio, precioEditadoAMano } from "@/lib/servicios-de-la-reserva"
 import { diaDeLaSemana, esHoraDelDia, fechaYMinutosEn, instanteEn } from "@/lib/zona-horaria"
 
@@ -260,13 +261,19 @@ export function horasConOtroPrecio(
 /**
  * La configuración de hora valle de un negocio, leída con su `businessId`.
  * Apagada, ni se leen las franjas.
+ *
+ * Es el punto único por el que pasa el servidor para saber si hay hora valle
+ * (la disponibilidad, confirmar y reagendar de la reserva pública): una
+ * clínica dental no la tiene (`rubroOfreceHoraValle`), así que ahí sale
+ * apagada aunque `horaValleActiva` y las franjas sigan guardadas de antes.
+ * No se borra ni se migra nada: si el rubro cambiara, volverían a valer.
  */
 export async function leerHoraValle(
   db: Pick<Prisma.TransactionClient, "business" | "franjaDeHoraValle">,
   businessId: string
 ): Promise<ConfiguracionDeHoraValle> {
-  const negocio = await db.business.findUnique({ where: { id: businessId }, select: { horaValleActiva: true } })
-  if (!negocio?.horaValleActiva) return HORA_VALLE_APAGADA
+  const negocio = await db.business.findUnique({ where: { id: businessId }, select: { horaValleActiva: true, type: true } })
+  if (!negocio?.horaValleActiva || !rubroOfreceHoraValle(negocio.type)) return HORA_VALLE_APAGADA
   const franjas = await db.franjaDeHoraValle.findMany({
     where: { businessId },
     select: { dayOfWeek: true, desde: true, hasta: true, porcentaje: true },

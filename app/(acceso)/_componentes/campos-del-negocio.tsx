@@ -2,6 +2,7 @@
 
 import { Hand, Scissors, Smile, Sparkles, type LucideIcon } from "lucide-react"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
+import { ejemplosDe } from "@/lib/ejemplos-por-rubro"
 import type { ColorDeModulo } from "@/lib/modulos"
 import { RUBROS, type RubroId } from "@/lib/rubros"
 import { GrupoDeOpciones, type OpcionDeGrupo } from "./grupo-de-opciones"
@@ -33,7 +34,8 @@ interface PropsDeCamposDelNegocio {
 /**
  * El nombre y el tipo del negocio, lo mismo en las dos pantallas que lo piden:
  * el segundo paso de crear la cuenta y completar el perfil después de entrar
- * con Google.
+ * con Google. El ejemplo del nombre es el del rubro ya elegido, y uno neutro
+ * mientras no se haya elegido (`lib/ejemplos-por-rubro.ts`).
  */
 export function CamposDelNegocio({ nombre, alCambiarNombre, rubro, alElegirRubro, errorDeRubro }: PropsDeCamposDelNegocio) {
   return (
@@ -42,7 +44,7 @@ export function CamposDelNegocio({ nombre, alCambiarNombre, rubro, alElegirRubro
         etiqueta="Nombre de tu negocio"
         type="text"
         autoComplete="organization"
-        placeholder="Por ejemplo, Salón María"
+        placeholder={`Por ejemplo, ${ejemplosDe(rubro).negocio}`}
         value={nombre}
         onChange={(evento) => alCambiarNombre(evento.target.value)}
         required

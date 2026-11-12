@@ -505,6 +505,8 @@ export async function POST(
     if (datos.email) {
       emailsPromises.push(
         enviarConfirmacionCliente({
+          // El rubro del negocio, de la base: pone las palabras del correo.
+          rubro: negocio.type,
           emailCliente: datos.email,
           nombreCliente: `${datos.nombre} ${datos.apellido}`,
           nombreNegocio: negocio.name,
@@ -533,6 +535,7 @@ export async function POST(
     for (const emailProfesional of avisados) {
       emailsPromises.push(
         enviarAvisoProfesional({
+          rubro: negocio.type,
           emailProfesional,
           nombreNegocio: negocio.name,
           nombreCliente: `${datos.nombre} ${datos.apellido}`,

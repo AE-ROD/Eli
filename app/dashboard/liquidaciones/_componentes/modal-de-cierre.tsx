@@ -6,10 +6,12 @@ import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Esqueleto } from "@/components/comunes/esqueleto"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPO } from "@/components/panel/estilos"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { NOMBRES_DE_MOVIMIENTO } from "@/lib/movimientos"
+import { veLaLineaDePropinas } from "@/lib/permisos"
 import { avisoDeCierreAnticipado, fechaParaLeer } from "@/lib/periodos-de-liquidacion"
 import type { Resultado } from "@/lib/peticiones"
 import { cerrarLiquidacion, leerVistaPrevia, type VistaPrevia } from "../_datos"
@@ -37,6 +39,7 @@ interface Props {
  */
 export function ModalDeCierre({ miembro, alCerrar }: Props) {
   const router = useRouter()
+  const rubro = useRubroDelPanel()
   const idDeLaNota = useId()
   const [excluidos, setExcluidos] = useState<string[]>([])
   const [respuesta, setRespuesta] = useState<{ clave: string; resultado: Resultado<VistaPrevia> } | null>(null)
@@ -258,7 +261,10 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
             {(vista.protesis.length > 0 || vista.totales.comisionProtesisCents !== 0) && (
               <FilaDeTotal concepto="Comisión por prótesis" centavos={vista.totales.comisionProtesisCents} />
             )}
-            <FilaDeTotal concepto="Propinas" centavos={vista.totales.propinasCents} />
+            {/* Una clínica dental no trabaja con propinas: la línea de $0 no se muestra, la que tenga plata sí. */}
+            {veLaLineaDePropinas(rubro, vista.totales.propinasCents) && (
+              <FilaDeTotal concepto="Propinas" centavos={vista.totales.propinasCents} />
+            )}
             <FilaDeTotal concepto="Adelantos y vales" centavos={-vista.totales.adelantosCents} />
             <FilaDeTotal concepto="Ajustes" centavos={vista.totales.ajustesCents} />
             <FilaDeTotal concepto="Total a pagar" centavos={vista.totales.totalCents} fuerte />

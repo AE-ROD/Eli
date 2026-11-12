@@ -71,7 +71,17 @@ describe("enviarAvisoDeReservaConfirmada (#84)", () => {
       hora: "10:00",
       profesional: "Carla Profesional",
       precio: null,
+      rubro: "salon",
     })
+  })
+
+  it("el correo lleva el rubro del negocio de la cita, leído de la base", async () => {
+    await base.prisma.business.updateMany({ where: { id: NEGOCIO }, data: { type: "odontologia" } })
+    const { enviarAvisoDeReservaConfirmada } = await import("./aviso-de-reserva-confirmada")
+
+    await enviarAvisoDeReservaConfirmada({ businessId: NEGOCIO, citaId: "confirmada" })
+
+    expect(mockEnviar).toHaveBeenCalledWith(expect.objectContaining({ rubro: "odontologia" }))
   })
 
   it("#138: con el precio guardado en la cita (el rebajado, si fue en hora valle)", async () => {

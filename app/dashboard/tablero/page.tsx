@@ -26,6 +26,7 @@ import {
   puedeAnotarSinReserva,
   puedeAsignarLineasAOtros,
   puedeGestionarServicios,
+  puedeRegistrarPropina,
   puedeVaciarFilaVirtual,
   puedeVerTodoElTablero,
 } from "@/lib/permisos"
@@ -725,6 +726,7 @@ export default function PaginaTablero() {
             atencion={modal.atencion}
             mediosDePago={tablero.catalogo.mediosDePago}
             profesionales={tablero.catalogo.profesionales}
+            conPropinas={puedeRegistrarPropina(actor)}
             aviso={avisoDelModal}
             guardando={guardando}
             onCobrar={(pagos, propinas) => cobrarCon(modal.atencion, pagos, propinas)}

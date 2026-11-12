@@ -386,7 +386,7 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
 
     const negocio = await prisma.business.findUnique({
       where: { id: liberada.businessId },
-      select: { id: true, name: true, slug: true, timezone: true, listaDeEsperaActiva: true },
+      select: { id: true, name: true, slug: true, timezone: true, listaDeEsperaActiva: true, type: true },
     })
     if (!negocio?.listaDeEsperaActiva) return resumen
 
@@ -500,6 +500,7 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
         ahora,
         enviar: () =>
           enviarAvisoListaDeEspera({
+            rubro: negocio.type,
             emailCliente: fila.email,
             nombreCliente: `${fila.nombre} ${fila.apellido}`.trim(),
             nombreNegocio: negocio.name,

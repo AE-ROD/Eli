@@ -156,8 +156,21 @@ describe("ejecutarTeToca: a quién le sale", () => {
       servicio: "Corte",
       enlaceReservar: "https://eli.test/reservar/salon-uno",
     })
+    expect(elena.rubro).toBe("salon")
     expect(elena.enlaceDeBaja).toMatch(/^https:\/\/eli\.test\/baja-de-correos\/cliente\//)
     expect(elena.enlaceDeBajaEnUnClic).toMatch(/^https:\/\/eli\.test\/api\/correos\/baja-de-cliente\?token=/)
+  })
+
+  it("el correo lleva el rubro del negocio que lo encendió", async () => {
+    const datos = escenario()
+    base.reiniciar({
+      ...datos,
+      business: datos.business.map((negocio) => (negocio.id === "n1" ? { ...negocio, type: "odontologia" } : negocio)),
+    })
+
+    await ejecutarTeToca(contexto())
+
+    expect(mockEnviarTeToca.mock.calls.map(([d]) => d.rubro)).toEqual(["odontologia", "odontologia"])
   })
 
   it("registra el envío con la referencia customerId:fechaUltimaVisita", async () => {

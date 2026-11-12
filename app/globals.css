@@ -87,7 +87,7 @@
    *   cuadro del ícono del botón destacado).
    * - `anil` = TIERRA #6E3F34: el cuarto tinte de pasos y tarjetas.
    * - `lavanda` / `pervinca` / `rosa` = el color de cada oficio (peluquería:
-   *   arena; barbería: cacao; spa de uñas: rosa viejo).
+   *   arena; barbería: cacao; salón de uñas: rosa viejo).
    * - `orquidea` / `violeta` = los tramos claros del degradado de la marca
    *   (salmón y rosa pálido), que sólo se usa sobre fondo oscuro.
    *
@@ -132,7 +132,7 @@
   --color-lavanda-suave: #f0e6d5;
   --color-pervinca: #9b6b5f; /* Barbería */
   --color-pervinca-suave: #ebdfcb;
-  --color-rosa: #d7857f; /* Spa de uñas */
+  --color-rosa: #d7857f; /* Salón de uñas */
   --color-rosa-suave: #f5ddd8;
 
   /* Los dos tramos claros del degradado de la marca (`degradado-frutos`), tras el rojo vivo del pie. */

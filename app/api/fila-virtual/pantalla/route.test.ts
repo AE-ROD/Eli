@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase, sesiones } from "@/pruebas/datos"
+import { sesionesDentales } from "@/pruebas/clinica-con-sillones"
 
 const mockGetServerSession = vi.fn()
 vi.mock("next-auth", () => ({
@@ -95,6 +96,14 @@ describe("GET /api/fila-virtual/pantalla", () => {
   it("el profesional, uno sin miembro y sin sesión: 401", async () => {
     for (const sesion of [sesiones.carla, sesiones.sinMiembro, null]) {
       expect((await pantalla(sesion)).status).toBe(401)
+    }
+  })
+
+  it("en una clínica dental no hay pantalla de la fila: 401 para la dueña y la recepción, aunque quede encendida de antes", async () => {
+    const datos = base.volcado()
+    base.reiniciar({ ...datos, business: datos.business.map((b) => (b.id === NEGOCIO ? { ...b, type: "odontologia" } : b)) })
+    for (const sesion of [sesionesDentales.dueña, sesionesDentales.encargado, sesionesDentales.carla]) {
+      expect(await pantalla(sesion)).toEqual({ status: 401, cuerpo: { error: "No autorizado" } })
     }
   })
 })

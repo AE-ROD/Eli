@@ -10,7 +10,7 @@
 export const RUBROS = [
   { id: "salon", nombre: "Salón de belleza", icono: "💇" },
   { id: "barberia", nombre: "Barbería", icono: "💈" },
-  { id: "spa-de-unas", nombre: "Spa de uñas", icono: "💅" },
+  { id: "spa-de-unas", nombre: "Salón de uñas", icono: "💅" },
   { id: "odontologia", nombre: "Clínica dental", icono: "🦷" },
 ] as const
 

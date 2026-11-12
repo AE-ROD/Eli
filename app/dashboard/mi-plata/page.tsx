@@ -4,7 +4,7 @@ import { redirect } from "next/navigation"
 import { ChevronRight, HandCoins, History, Smile } from "lucide-react"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { actorDeSesion, esClinicaDental, veMiPlata } from "@/lib/permisos"
+import { actorDeSesion, esClinicaDental, veLaLineaDePropinas, veMiPlata } from "@/lib/permisos"
 import { calcularMiPlata, type Ganado } from "@/lib/mi-plata"
 import { NOMBRES_DE_MOVIMIENTO } from "@/lib/movimientos"
 import { fechaParaLeer } from "@/lib/periodos-de-liquidacion"
@@ -46,6 +46,9 @@ export default async function PaginaMiPlata() {
   const plata = await calcularMiPlata(prisma, { businessId: actor.businessId, memberId: actor.memberId, ahora: new Date() })
   if (!plata) redirect("/dashboard")
   const clinica = esClinicaDental(actor)
+  // Una clínica dental no trabaja con propinas: el texto no las nombra, salvo que alguna de las cifras de arriba las tenga.
+  const conPropinas = [plata.periodo, plata.hoy, plata.semana].some((ganado) => veLaLineaDePropinas(actor.rubro, ganado.propinasCents))
+  const queCuenta = conPropinas ? "tus comisiones ya calculadas y tus propinas" : "tus comisiones ya calculadas"
 
   return (
     <div className="min-h-dvh">
@@ -79,8 +82,8 @@ export default async function PaginaMiPlata() {
 
         <p className="px-1 text-sm text-texto-2">
           {clinica
-            ? "Cuenta tus comisiones ya calculadas y tus propinas de lo cobrado, por el día en que se cobró, y tu parte de las prótesis desde que se entregan."
-            : "Cuenta tus comisiones ya calculadas y tus propinas de lo cobrado, por el día en que se cobró."}
+            ? `Cuenta ${queCuenta} de lo cobrado, por el día en que se cobró, y tu parte de las prótesis desde que se entregan.`
+            : `Cuenta ${queCuenta} de lo cobrado, por el día en que se cobró.`}
         </p>
 
         {/* Clínica dental: lo ya cobrado de prótesis suyas que todavía no se entregan. */}

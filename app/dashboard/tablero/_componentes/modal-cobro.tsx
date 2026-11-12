@@ -46,6 +46,8 @@ interface PropsDeModalCobro {
   mediosDePago: { id: string; nombre: string }[]
   /** El equipo y la dueña (`duenio`): la propina se ofrece a quienes de ellos atendieron. */
   profesionales: { id: string; nombre: string }[]
+  /** Si se ofrece registrar propinas (`puedeRegistrarPropina`): no en una clínica dental. */
+  conPropinas: boolean
   /** Por qué no se pudo cobrar, si falló. */
   aviso: string
   guardando: boolean
@@ -75,6 +77,7 @@ export function ModalCobro({
   atencion,
   mediosDePago,
   profesionales,
+  conPropinas,
   aviso,
   guardando,
   onCobrar,
@@ -179,7 +182,8 @@ export function ModalCobro({
 
   const cobrar = (evento: FormEvent<HTMLFormElement>) => {
     evento.preventDefault()
-    if (listo && deLasPropinas.ok) onCobrar(cobro.pagos, deLasPropinas.propinas)
+    // Sin propinas en pantalla (`conPropinas` falso), tampoco se mandan.
+    if (listo && deLasPropinas.ok) onCobrar(cobro.pagos, conPropinas ? deLasPropinas.propinas : [])
   }
 
   const nombreDeMedio = (id: string) => mediosDePago.find((medio) => medio.id === id)?.nombre ?? "medio"
@@ -332,121 +336,125 @@ export function ModalCobro({
           {/*
             Propinas (#66): aparte del total y de los pagos. Van 100 % a quien
             la recibe y se le pagan en la liquidación; no son ingreso del local.
+            Una clínica dental no trabaja con propinas (`puedeRegistrarPropina`):
+            ahí el bloque no existe, y el servidor tampoco las acepta.
           */}
-          <fieldset className="space-y-3">
-            <legend className="mb-1 text-sm font-semibold">Propinas</legend>
-            <p className="text-[13px] text-texto-2">Opcional. No suman al total: van completas a quien las recibe.</p>
+          {conPropinas && (
+            <fieldset className="space-y-3">
+              <legend className="mb-1 text-sm font-semibold">Propinas</legend>
+              <p className="text-[13px] text-texto-2">Opcional. No suman al total: van completas a quien las recibe.</p>
 
-            {propinas.map((fila, indice) => {
-              const numero = indice + 1
-              const error = errorDeMontoDePago(fila.monto)
-              const id = (campo: string) => `${idBase}-${fila.clave}-${campo}`
-              return (
-                <div
-                  key={fila.clave}
-                  role="group"
-                  aria-label={`Propina ${numero}`}
-                  className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 rounded-[20px] bg-superficie p-3 squircle sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:gap-3"
-                >
-                  <div className="col-span-2 sm:col-span-1">
-                    <label htmlFor={id("profesional")} className={ETIQUETA}>
-                      Para
-                    </label>
-                    <select
-                      id={id("profesional")}
-                      value={fila.profesional}
-                      disabled={guardando}
-                      required
-                      onChange={(evento) => cambiarPropina(fila.clave, { profesional: evento.target.value })}
-                      className={CAMPO}
-                    >
-                      <option value="">Elegir</option>
-                      {paraPropina.map((profesional) => (
-                        <option key={profesional.id} value={profesional.id}>
-                          {profesional.nombre}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label htmlFor={id("monto")} className={ETIQUETA}>
-                      Monto
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-texto-2" aria-hidden="true">
-                        $
-                      </span>
-                      <input
-                        id={id("monto")}
-                        type="text"
-                        inputMode="decimal"
-                        autoComplete="off"
-                        value={fila.monto}
+              {propinas.map((fila, indice) => {
+                const numero = indice + 1
+                const error = errorDeMontoDePago(fila.monto)
+                const id = (campo: string) => `${idBase}-${fila.clave}-${campo}`
+                return (
+                  <div
+                    key={fila.clave}
+                    role="group"
+                    aria-label={`Propina ${numero}`}
+                    className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 rounded-[20px] bg-superficie p-3 squircle sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:gap-3"
+                  >
+                    <div className="col-span-2 sm:col-span-1">
+                      <label htmlFor={id("profesional")} className={ETIQUETA}>
+                        Para
+                      </label>
+                      <select
+                        id={id("profesional")}
+                        value={fila.profesional}
                         disabled={guardando}
                         required
-                        aria-invalid={error ? true : undefined}
-                        aria-describedby={error ? id("error") : undefined}
-                        onChange={(evento) => cambiarPropina(fila.clave, { monto: evento.target.value })}
-                        className={cn(CAMPO, "pl-7 tabular-nums", error && CAMPO_CON_ERROR)}
-                      />
+                        onChange={(evento) => cambiarPropina(fila.clave, { profesional: evento.target.value })}
+                        className={CAMPO}
+                      >
+                        <option value="">Elegir</option>
+                        {paraPropina.map((profesional) => (
+                          <option key={profesional.id} value={profesional.id}>
+                            {profesional.nombre}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                    {error && (
-                      <p id={id("error")} className={ERROR_DE_CAMPO}>
-                        {error}
-                      </p>
-                    )}
-                  </div>
-                  <div className="col-start-1 sm:col-start-auto">
-                    <label htmlFor={id("medio")} className={ETIQUETA}>
-                      Medio
-                    </label>
-                    <select
-                      id={id("medio")}
-                      value={fila.medio}
+                    <div>
+                      <label htmlFor={id("monto")} className={ETIQUETA}>
+                        Monto
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-texto-2" aria-hidden="true">
+                          $
+                        </span>
+                        <input
+                          id={id("monto")}
+                          type="text"
+                          inputMode="decimal"
+                          autoComplete="off"
+                          value={fila.monto}
+                          disabled={guardando}
+                          required
+                          aria-invalid={error ? true : undefined}
+                          aria-describedby={error ? id("error") : undefined}
+                          onChange={(evento) => cambiarPropina(fila.clave, { monto: evento.target.value })}
+                          className={cn(CAMPO, "pl-7 tabular-nums", error && CAMPO_CON_ERROR)}
+                        />
+                      </div>
+                      {error && (
+                        <p id={id("error")} className={ERROR_DE_CAMPO}>
+                          {error}
+                        </p>
+                      )}
+                    </div>
+                    <div className="col-start-1 sm:col-start-auto">
+                      <label htmlFor={id("medio")} className={ETIQUETA}>
+                        Medio
+                      </label>
+                      <select
+                        id={id("medio")}
+                        value={fila.medio}
+                        disabled={guardando}
+                        onChange={(evento) => cambiarPropina(fila.clave, { medio: evento.target.value })}
+                        className={CAMPO}
+                      >
+                        {mediosDePago.map((medio) => (
+                          <option key={medio.id} value={medio.id}>
+                            {medio.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <Boton
+                      variante="fantasma"
+                      onClick={() => quitarPropina(fila.clave)}
                       disabled={guardando}
-                      onChange={(evento) => cambiarPropina(fila.clave, { medio: evento.target.value })}
-                      className={CAMPO}
+                      aria-label={`Quitar la propina ${numero}`}
+                      title="Quitar"
+                      className="col-start-2 row-start-2 mt-6.5 size-11 px-0 text-texto-2 hover:bg-error/8 hover:text-error sm:col-start-auto sm:row-start-auto"
                     >
-                      {mediosDePago.map((medio) => (
-                        <option key={medio.id} value={medio.id}>
-                          {medio.nombre}
-                        </option>
-                      ))}
-                    </select>
+                      <Trash2 aria-hidden="true" className="size-[18px]" strokeWidth={1.75} />
+                    </Boton>
                   </div>
-                  <Boton
-                    variante="fantasma"
-                    onClick={() => quitarPropina(fila.clave)}
-                    disabled={guardando}
-                    aria-label={`Quitar la propina ${numero}`}
-                    title="Quitar"
-                    className="col-start-2 row-start-2 mt-6.5 size-11 px-0 text-texto-2 hover:bg-error/8 hover:text-error sm:col-start-auto sm:row-start-auto"
-                  >
-                    <Trash2 aria-hidden="true" className="size-[18px]" strokeWidth={1.75} />
-                  </Boton>
-                </div>
-              )
-            })}
+                )
+              })}
 
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <Boton
-                ref={botonAgregarPropina}
-                variante="secundario"
-                tamano="sm"
-                onClick={agregarPropina}
-                disabled={guardando || propinas.length >= MAXIMO_DE_PROPINAS || mediosDePago.length === 0}
-              >
-                <HandCoins aria-hidden="true" className="size-4" strokeWidth={2} />
-                Agregar propina
-              </Boton>
-              {propinas.length > 0 && (
-                <p className="text-sm" aria-live="polite">
-                  <span className="text-texto-2">Propinas:</span>{" "}
-                  <span className="font-semibold tabular-nums">{formatearMonto(deCentavos(totalDePropinasEnCentavos(propinas)))}</span>
-                </p>
-              )}
-            </div>
-          </fieldset>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <Boton
+                  ref={botonAgregarPropina}
+                  variante="secundario"
+                  tamano="sm"
+                  onClick={agregarPropina}
+                  disabled={guardando || propinas.length >= MAXIMO_DE_PROPINAS || mediosDePago.length === 0}
+                >
+                  <HandCoins aria-hidden="true" className="size-4" strokeWidth={2} />
+                  Agregar propina
+                </Boton>
+                {propinas.length > 0 && (
+                  <p className="text-sm" aria-live="polite">
+                    <span className="text-texto-2">Propinas:</span>{" "}
+                    <span className="font-semibold tabular-nums">{formatearMonto(deCentavos(totalDePropinasEnCentavos(propinas)))}</span>
+                  </p>
+                )}
+              </div>
+            </fieldset>
+          )}
 
           {/*
             En vivo, para que se lea mientras se escribe: cuánto falta o sobra.

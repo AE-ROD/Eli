@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, atencion, conId, datosBase, linea, pedido, sesiones } from "@/pruebas/datos"
+import { sesionesDentales } from "@/pruebas/clinica-con-sillones"
 
 /**
  * La fila virtual en el Tablero (#85): quien se anotó entra como una atención
@@ -93,6 +94,16 @@ describe("la fila virtual en el Tablero", () => {
     mockGetServerSession.mockResolvedValueOnce(sesiones.carla)
     const tablero = await (await GET(pedido(URL_DEL_DIA))).json()
     expect(tablero.filaVirtual).toBe(false)
+  })
+
+  it("en una clínica dental el Tablero no ofrece la pantalla de la fila, aunque quede encendida de antes", async () => {
+    const datos = base.volcado()
+    base.reiniciar({ ...datos, business: datos.business.map((b) => (b.id === NEGOCIO ? { ...b, type: "odontologia" } : b)) })
+    const { GET } = await import("./route")
+    for (const sesion of [sesionesDentales.dueña, sesionesDentales.encargado]) {
+      mockGetServerSession.mockResolvedValueOnce(sesion)
+      expect((await (await GET(pedido(URL_DEL_DIA))).json()).filaVirtual).toBe(false)
+    }
   })
 
   it("empezar a atender a uno de la fila funciona y avisa al que quedó con 1 adelante", async () => {

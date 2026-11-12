@@ -13,6 +13,7 @@ import {
   puedeAnularLiquidacion,
   puedePagarLiquidacion,
   puedeVerLiquidacionesDelEquipo,
+  veLaLineaDePropinas,
 } from "@/lib/permisos"
 import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import { fechaParaLeer } from "@/lib/periodos-de-liquidacion"
@@ -72,6 +73,8 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
   // "Odontólogo" y "Paciente" en una clínica dental; en los demás rubros, igual que siempre.
   const vocabulario = vocabularioDe(actor.rubro)
   const clinica = esClinicaDental(actor)
+  // Una clínica dental no trabaja con propinas: no se nombran, salvo que esta liquidación tenga plata en ellas.
+  const conPropinas = veLaLineaDePropinas(actor.rubro, t.propinasCents)
 
   return (
     <div className="min-h-dvh">
@@ -94,6 +97,7 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
             periodo={detalle.texto}
             totalCents={t.totalCents}
             conProtesis={clinica}
+            conPropinas={conPropinas}
             volverA={volverA}
             puedePagar={puedePagarLiquidacion(actor)}
             puedeAnular={puedeAnularLiquidacion(actor)}
@@ -152,7 +156,7 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
             </h3>
             {anulada && detalle.lineas.length === 0 ? (
               <p className="text-sm text-texto-2">
-                Anulada: los servicios, productos{clinica ? ", abonos de prótesis" : ""}, propinas y movimientos que incluía
+                Anulada: los servicios, productos{clinica ? ", abonos de prótesis" : ""}{conPropinas ? ", propinas" : ""} y movimientos que incluía
                 volvieron a quedar pendientes para la próxima liquidación.
               </p>
             ) : detalle.lineas.length === 0 ? (

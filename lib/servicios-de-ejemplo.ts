@@ -27,6 +27,7 @@ const SERVICIOS_POR_RUBRO: Record<RubroId, readonly ServicioDeEjemplo[]> = {
     { name: "Corte de pelo", duration: 45, price: 15000, category: "Corte" },
     { name: "Brushing", duration: 45, price: 12000, category: "Peinado" },
     { name: "Tintura completa", duration: 120, price: 35000, category: "Color" },
+    { name: "Retoque de raíz", duration: 90, price: 25000, category: "Color" },
     { name: "Mechas o balayage", duration: 180, price: 60000, category: "Color" },
     { name: "Tratamiento de hidratación", duration: 45, price: 18000, category: "Tratamientos" },
   ],
@@ -41,7 +42,8 @@ const SERVICIOS_POR_RUBRO: Record<RubroId, readonly ServicioDeEjemplo[]> = {
     { name: "Manicure tradicional", duration: 45, price: 10000, category: "Manos" },
     { name: "Esmaltado permanente", duration: 60, price: 15000, category: "Manos" },
     { name: "Uñas acrílicas", duration: 120, price: 30000, category: "Manos" },
-    { name: "Pedicure spa", duration: 60, price: 18000, category: "Pies" },
+    { name: "Relleno de acrílicas", duration: 90, price: 20000, category: "Manos" },
+    { name: "Pedicure tradicional", duration: 60, price: 15000, category: "Pies" },
     { name: "Retiro de esmaltado permanente", duration: 15, price: 5000, category: "Extras" },
   ],
   odontologia: [

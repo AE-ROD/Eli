@@ -44,13 +44,14 @@ export async function enviarAvisoDeReservaConfirmada({ businessId, citaId }: Res
         price: true,
         customer: { select: { name: true, lastName: true, email: true } },
         member: { select: { user: { select: { name: true } } } },
-        business: { select: { name: true, timezone: true } },
+        business: { select: { name: true, timezone: true, type: true } },
       },
     })
     if (!cita?.customer?.email) return false
 
     const { fecha, hora } = fechaYHoraEnElNegocio(cita.startTime, cita.business.timezone)
     const resultado = await enviarReservaConfirmadaPorElLocal({
+      rubro: cita.business.type,
       emailCliente: cita.customer.email,
       nombreCliente: nombreCompletoDeCliente(cita.customer),
       nombreNegocio: cita.business.name,

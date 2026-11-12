@@ -9,7 +9,7 @@ import { TrazosOndulantes } from "@/components/movimiento/trazos-ondulantes"
 import { useBloqueEnMovimiento } from "@/components/movimiento/usar-bloque-en-movimiento"
 import { cn } from "@/lib/utils"
 
-/** Servicios que se reservan en los cuatro oficios (salones, barberías, spas de uñas y clínicas dentales), para las marquesinas. */
+/** Servicios que se reservan en los cuatro oficios (salones, barberías, salones de uñas y clínicas dentales), para las marquesinas. */
 const SERVICIOS = [
   "Pedicura",
   "Uñas esculpidas",

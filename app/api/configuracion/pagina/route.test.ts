@@ -143,6 +143,17 @@ describe("PUT /api/configuracion/pagina", () => {
     expect(prismaMock.$transaction).not.toHaveBeenCalled()
   })
 
+  it("el mensaje de un Instagram ilegible da un ejemplo que sirve en cualquier rubro (no '@tu.salon')", async () => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesion("owner", "negocio-1", null))
+
+    const respuesta = await PUT(pedidoFalso({ ...PAGINA, instagram: "https://evil.com/x" }))
+
+    const { error } = await respuesta.json()
+    expect(error).toContain("(@tu.negocio)")
+    expect(error).not.toMatch(/salon/i)
+  })
+
   it("un cuerpo que no es JSON da 400, no 500", async () => {
     const { PUT } = await import("./route")
     mockGetServerSession.mockResolvedValueOnce(sesion("owner", "negocio-1", null))

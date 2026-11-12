@@ -9,10 +9,10 @@ import { Aviso } from "@/components/panel/aviso"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPO, ETIQUETA } from "@/components/panel/estilos"
-import { esRubroDental } from "@/lib/rubros"
+import { ejemplosDe, textoDeEjemplo } from "@/lib/ejemplos-por-rubro"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
-import { FRECUENCIA_MAXIMA_DIAS, FRECUENCIA_MINIMA_DIAS } from "@/lib/frecuencia-de-visitas"
+import { ayudaDeLaFrecuencia } from "@/lib/frecuencia-de-visitas"
 import type { DatosDeServicio } from "../_datos"
 
 const DURACIONES = [
@@ -67,8 +67,8 @@ export function ModalServicio({
   const idDeLaDescripcion = useId()
   const rubro = useRubroDelPanel()
   const { cliente } = vocabularioDe(rubro)
-  // Los ejemplos, en el oficio del negocio: en una clínica dental no se corta el pelo.
-  const dental = esRubroDental(rubro)
+  // Los ejemplos, en el oficio del negocio: en una clínica dental no se corta el pelo ni en una barbería se hacen las uñas.
+  const ejemplos = ejemplosDe(rubro)
   const idDeAyudaDeFrecuencia = useId()
   const idDeLasCategorias = useId()
   const nombreDeLaDuracion = useId()
@@ -83,7 +83,7 @@ export function ModalServicio({
       <form onSubmit={onSubmit} className="space-y-5">
         <CampoFormulario
           etiqueta="Nombre del servicio"
-          placeholder={dental ? "Ej.: Limpieza, Control, Extracción..." : "Ej.: Corte de cabello, Arreglo de barba, Manicura..."}
+          placeholder={textoDeEjemplo(ejemplos.servicios)}
           value={form.name}
           onChange={(e) => onCambiarCampo("name", e.target.value)}
           icono={<Scissors className="h-4 w-4" />}
@@ -93,7 +93,7 @@ export function ModalServicio({
         {/* Agrupa los servicios en la página pública; los sin categoría van a "Otros". */}
         <CampoFormulario
           etiqueta="Categoría (opcional)"
-          placeholder={dental ? "Ej.: Prevención, Endodoncia, Urgencias..." : "Ej.: Corte, Color, Uñas..."}
+          placeholder={textoDeEjemplo(ejemplos.categorias)}
           value={form.category}
           onChange={(e) => onCambiarCampo("category", e.target.value)}
           icono={<Tag className="h-4 w-4" />}
@@ -182,9 +182,9 @@ export function ModalServicio({
               aria-describedby={idDeAyudaDeFrecuencia}
               className="tabular-nums"
             />
+            {/* El aviso con el nombre del rubro: «Te toca volver» o, en una clínica dental, «Control». */}
             <p id={idDeAyudaDeFrecuencia} className="text-sm text-texto-2">
-              De {FRECUENCIA_MINIMA_DIAS} a {FRECUENCIA_MAXIMA_DIAS} días. Sirve para avisarle a quien todavía no tiene su
-              propio ritmo de visitas que ya le toca volver.
+              {ayudaDeLaFrecuencia(rubro)}
             </p>
           </div>
         )}

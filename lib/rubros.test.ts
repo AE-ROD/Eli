@@ -27,7 +27,7 @@ describe("nombreDeRubro", () => {
   it.each([
     ["salon", "Salón de belleza"],
     ["barberia", "Barbería"],
-    ["spa-de-unas", "Spa de uñas"],
+    ["spa-de-unas", "Salón de uñas"],
     ["odontologia", "Clínica dental"],
   ])("el id %s se muestra como %s", (id, nombre) => {
     expect(nombreDeRubro(id)).toBe(nombre)

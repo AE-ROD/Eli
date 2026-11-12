@@ -51,7 +51,7 @@ export async function ejecutarTeToca(contexto: ContextoDeCorrida): Promise<Resum
 
   const negocios = await prisma.business.findMany({
     where: { avisoDeVueltaActivo: true },
-    select: { id: true, name: true, slug: true, timezone: true },
+    select: { id: true, name: true, slug: true, timezone: true, type: true },
     orderBy: { id: "asc" },
   })
 
@@ -81,6 +81,8 @@ interface Negocio {
   name: string
   slug: string
   timezone: string | null
+  /** El rubro: pone las palabras del correo (`lib/vocabulario.ts`). */
+  type: string | null
 }
 
 async function teTocaEnElNegocio(negocio: Negocio, contexto: ContextoDeCorrida, resumen: ResumenDeTrabajo): Promise<Corte> {
@@ -171,6 +173,7 @@ async function teTocaEnElNegocio(negocio: Negocio, contexto: ContextoDeCorrida, 
       ahora: contexto.ahora,
       enviar: () =>
         enviarTeToca({
+          rubro: negocio.type,
           emailCliente: cliente.email,
           nombreCliente: cliente.name,
           nombreNegocio: negocio.name,

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase, pedido, sesiones } from "@/pruebas/datos"
+import { sesionesDentales } from "@/pruebas/clinica-con-sillones"
 
 const mockGetServerSession = vi.fn()
 vi.mock("next-auth", () => ({
@@ -57,4 +58,16 @@ describe("PUT /api/configuracion/fila-virtual", () => {
       expect(filaDe(NEGOCIO)).toEqual({ activa: false, tope: 15 })
     }
   )
+})
+
+describe("PUT /api/configuracion/fila-virtual: clínica dental", () => {
+  it("ni la dueña la enciende ni fija el tope: 401 como con cualquier permiso negado, sin escribir nada", async () => {
+    base.reiniciar({ ...datosBase(), business: datosBase().business.map((negocio) => ({ ...negocio, type: "odontologia" })) })
+    const antes = base.volcado()
+    expect(await guardar(sesionesDentales.dueña, { activa: true, tope: 3 })).toEqual({
+      status: 401,
+      cuerpo: { error: "No autorizado" },
+    })
+    expect(base.volcado()).toEqual(antes)
+  })
 })
