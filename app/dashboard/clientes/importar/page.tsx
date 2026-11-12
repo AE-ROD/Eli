@@ -5,13 +5,15 @@ import { useSession } from "next-auth/react"
 import { ArrowLeft, Upload } from "lucide-react"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { Boton, clasesDeBoton } from "@/components/comunes/boton"
 import { Tarjeta } from "@/components/comunes/tarjeta"
 import { actorDeSesion, puedeImportarExportarClientes } from "@/lib/permisos"
 import { decodificarCsv, leerCsv } from "@/lib/csv"
 import { FILAS_MAXIMAS, TAMAÑO_MAXIMO_EN_BYTES, sugerirMapeo, type CampoDeImportacion } from "@/lib/importar-clientes"
-import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { importarClientes, type ResumenDeImportacion as Resumen } from "../_datos"
+import { frasesDeClientes } from "../_frases"
 import { VistaPrevia, type MapeoEnPantalla } from "./_componentes/vista-previa"
 import { ResumenDeImportacion } from "./_componentes/resumen-de-importacion"
 
@@ -36,7 +38,8 @@ export default function PaginaImportarClientes() {
   const { data: sesion, status } = useSession()
   const puede = puedeImportarExportarClientes(actorDeSesion(sesion))
   // "Pacientes" en una clínica dental.
-  const { cliente, clientes } = vocabularioDe(sesion?.user?.rubro)
+  const palabras = vocabularioDe(useRubroDelPanel()).palabras
+  const frases = frasesDeClientes(palabras).importar
   const idDelArchivo = useId()
 
   const [archivo, setArchivo] = useState<ArchivoLeido | null>(null)
@@ -64,7 +67,7 @@ export default function PaginaImportarClientes() {
     } catch {
       return setAviso("No se pudo leer el archivo. Vuelve a elegirlo; si sigue sin leerse, guárdalo otra vez como CSV.")
     }
-    if (filas.length < 2) return setAviso(`El archivo no tiene ${clientes}: le falta la cabecera o las filas.`)
+    if (filas.length < 2) return setAviso(frases.sinFilas)
     if (filas.length - 1 > FILAS_MAXIMAS) {
       return setAviso(`El archivo tiene más de ${FILAS_MAXIMAS.toLocaleString("es-CL")} filas. Divídelo en partes.`)
     }
@@ -86,7 +89,7 @@ export default function PaginaImportarClientes() {
 
   const importar = async () => {
     if (!archivo) return
-    if (mapeo.nombre === undefined) return setAviso(`Elige qué columna tiene el nombre de los ${clientes}.`)
+    if (mapeo.nombre === undefined) return setAviso(frases.elegirLaColumna)
     setAviso("")
     setImportando(true)
     const resultado = await importarClientes(archivo.texto, mapeo)
@@ -99,21 +102,21 @@ export default function PaginaImportarClientes() {
   return (
     <div className="min-h-dvh">
       <BarraSuperior
-        titulo={`Importar ${clientes}`}
+        titulo={frases.titulo}
         subtitulo="Desde un CSV: el que exporta tu sistema anterior (AgendaPro u otro) o una planilla de Excel."
         mostrarBusqueda={false}
       />
 
       <div className="space-y-4 px-4 pt-6 pb-10 sm:space-y-6 sm:px-6">
         <Boton href="/dashboard/clientes" variante="fantasma" tamano="sm" icono={<ArrowLeft aria-hidden="true" strokeWidth={1.75} />}>
-          Volver a {conMayuscula(clientes)}
+          {frases.volver}
         </Boton>
 
         {status !== "loading" && !puede ? (
-          <Aviso tono="info">Sólo el dueño y el encargado pueden importar {clientes}.</Aviso>
+          <Aviso tono="info">{frases.soloQuienPuede}</Aviso>
         ) : (
           <>
-            {resumen && <ResumenDeImportacion resumen={resumen} vocabulario={{ cliente, clientes }} />}
+            {resumen && <ResumenDeImportacion resumen={resumen} palabras={palabras} />}
 
             <Tarjeta como="section" className="space-y-4 p-5 sm:p-6" aria-labelledby="titulo-archivo">
               <div>
@@ -121,9 +124,7 @@ export default function PaginaImportarClientes() {
                   {resumen ? "Importar otro archivo" : "Elige el archivo"}
                 </h2>
                 <p className="mt-1 text-sm text-texto-2">
-                  Un CSV de hasta 2 MB y {FILAS_MAXIMAS.toLocaleString("es-CL")} filas, con una primera fila de
-                  títulos. No se crean {clientes} repetidos: si el teléfono o el correo ya están en Eli (o más arriba en el
-                  archivo), la fila se omite.
+                  {frases.ayuda(FILAS_MAXIMAS.toLocaleString("es-CL"))}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
@@ -153,7 +154,7 @@ export default function PaginaImportarClientes() {
               <>
                 <VistaPrevia filas={archivo.filas} mapeo={mapeo} alCambiarMapeo={cambiarMapeo} />
                 <Boton type="button" className="w-full sm:w-auto" cargando={importando} onClick={importar}>
-                  Importar {clientes}
+                  {frases.titulo}
                 </Boton>
               </>
             )}

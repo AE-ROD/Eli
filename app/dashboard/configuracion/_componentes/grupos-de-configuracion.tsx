@@ -38,7 +38,7 @@ export interface SeccionDeConfiguracion {
  */
 export function GruposDeConfiguracion({ secciones }: { secciones: readonly SeccionDeConfiguracion[] }) {
   const rubro = useRubroDelPanel()
-  const grupos = agruparSecciones(secciones, vocabularioDe(rubro))
+  const grupos = agruparSecciones(secciones, vocabularioDe(rubro).palabras)
 
   const [abiertos, setAbiertos] = useState<ReadonlySet<IdDeGrupo>>(() => new Set(gruposAbiertosAlEntrar(grupos)))
   // Un objeto nuevo en cada pedido: aunque el ancla sea la misma, se vuelve a desplazar.

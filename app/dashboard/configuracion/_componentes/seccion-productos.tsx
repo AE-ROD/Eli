@@ -6,11 +6,13 @@ import { Package, Pencil, Plus } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { Insignia } from "@/components/comunes/insignia"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { formatearMonto, montoParaEscribir } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { ModalProducto } from "./modal-producto"
 import {
   activarODesactivarProducto,
@@ -19,6 +21,7 @@ import {
   type DatosDeProducto,
   type Producto,
 } from "../_datos"
+import { frasesDeConfiguracion } from "../_frases"
 
 const PRODUCTO_EN_BLANCO: DatosDeProducto = { nombre: "", precio: "", porcentaje: "" }
 
@@ -44,6 +47,7 @@ interface PropsDeSeccionProductos {
  */
 export function SeccionProductos({ productosIniciales, conPorcentaje }: PropsDeSeccionProductos) {
   const idDelTitulo = useId()
+  const { productos: frases } = frasesDeConfiguracion(vocabularioDe(useRubroDelPanel()).palabras)
   const [productos, setProductos] = useState<Producto[]>(productosIniciales)
   const [modalAbierto, setModalAbierto] = useState(false)
   const [editando, setEditando] = useState<Producto | null>(null)
@@ -109,7 +113,7 @@ export function SeccionProductos({ productosIniciales, conPorcentaje }: PropsDeS
         id={idDelTitulo}
         nivel={3}
         titulo="Productos"
-        subtitulo="Lo que vendes además de tus servicios"
+        subtitulo={frases.subtitulo}
         icono={{ figura: Package }}
         accion={
           <BotonPrimario tamaño="sm" icono={<Plus className="h-4 w-4" />} onClick={abrirNuevo}>
@@ -122,7 +126,7 @@ export function SeccionProductos({ productosIniciales, conPorcentaje }: PropsDeS
 
       {productos.length === 0 ? (
         <EstadoVacio className="mt-5" titulo="Sin productos aún">
-          Agrega lo que vendes en el local para anotarlo en el tablero
+          {frases.vacio}
         </EstadoVacio>
       ) : (
         <ul className="mt-5 divide-y divide-borde">

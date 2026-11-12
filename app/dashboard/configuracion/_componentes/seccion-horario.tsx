@@ -12,6 +12,7 @@ import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { guardarHorario, type HorarioDelDia } from "../_datos"
+import { frasesDeConfiguracion } from "../_frases"
 import { DIAS, horarioParaMostrar } from "../_horario"
 
 interface PropsDeSeccionHorario {
@@ -41,7 +42,7 @@ export function SeccionHorario({
   alGuardar,
 }: PropsDeSeccionHorario) {
   const idDelTitulo = useId()
-  const { clientes } = vocabularioDe(useRubroDelPanel())
+  const { horario: frases } = frasesDeConfiguracion(vocabularioDe(useRubroDelPanel()).palabras)
   const [alAbrir] = useState(() => horarioParaMostrar(horariosIniciales, memberId ? horarioDelNegocio : undefined))
   const [horarios, setHorarios] = useState<HorarioDelDia[]>(alAbrir.semana)
   // Lo último que está en la base, para saber si hay cambios sin guardar.
@@ -128,14 +129,12 @@ export function SeccionHorario({
 
       {nuncaGuardado && (
         <Aviso tono="atencion" titulo="Este horario todavía no está guardado" className="mt-5">
-          Tus {clientes} no ven horas hasta que lo guardes. Revisa los días y las horas, y toca &ldquo;Guardar horario&rdquo;.
+          {frases.sinGuardar}
         </Aviso>
       )}
       {usaElDelNegocio && (
-        <Aviso tono="info" titulo="Usa el horario del negocio" className="mt-5">
-          {negocioSinHorario
-            ? "No tiene horario propio y el negocio todavía no guardó el suyo, así que no ofrece horas. Marca sus días y guarda para darle un horario propio."
-            : "No tiene horario propio: atiende en el del negocio, que es el que ves. Si lo cambias y guardas, pasa a tener el suyo."}
+        <Aviso tono="info" titulo={frases.usaElDelNegocio} className="mt-5">
+          {negocioSinHorario ? frases.negocioSinHorario : frases.atiendeEnElDelNegocio}
         </Aviso>
       )}
       {!nuncaGuardado && pendiente && !guardando && (

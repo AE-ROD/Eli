@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils"
 import { ejemplosDe, textoDeEjemplo } from "@/lib/ejemplos-por-rubro"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { guardarPaginaPublica, quitarFotoDelNegocio, subirFotoDelNegocio, type DatosDePaginaPublica } from "../_datos"
+import { frasesDeConfiguracion } from "../_frases"
 
 /** Como en el modal de servicio: el radio no se ve y el anillo lo dibuja la opción entera. */
 const ANILLO_DE_LA_OPCION =
@@ -62,7 +63,7 @@ export function SeccionPaginaPublica({
   const nombreDelColor = useId()
   // "Pacientes" y "odontólogo" en una clínica dental.
   const rubro = useRubroDelPanel()
-  const { clientes, profesional } = vocabularioDe(rubro)
+  const frases = frasesDeConfiguracion(vocabularioDe(rubro).palabras).paginaPublica
   // Los ejemplos de los campos, del oficio del negocio (`lib/ejemplos-por-rubro.ts`).
   const ejemplos = ejemplosDe(rubro)
   const [datos, setDatos] = useState<DatosDePaginaPublica>(inicial)
@@ -134,7 +135,7 @@ export function SeccionPaginaPublica({
         titulo="Tu página pública"
         subtitulo={
           <>
-            Lo que ven tus {clientes} al reservar.{" "}
+            {frases.subtitulo}{" "}
             <a
               href={`/reservar/${slug}`}
               target="_blank"
@@ -180,8 +181,7 @@ export function SeccionPaginaPublica({
           <fieldset className="min-w-0">
             <legend className={cn(CLASES_DE_ETIQUETA, "mb-1")}>Logo y portada</legend>
             <p className="mb-4 text-[13px] text-texto-2">
-              Las fotos se guardan al subirlas: no hace falta apretar &ldquo;Guardar&rdquo;. La foto de cada {profesional} se
-              sube en Equipo, o en &ldquo;Mi foto&rdquo; por quien atiende.
+              {frases.fotos}
             </p>
             <div className="space-y-6">
               <SelectorDeFoto
@@ -217,7 +217,7 @@ export function SeccionPaginaPublica({
         <div className="grid gap-4 sm:grid-cols-2">
           <Campo etiqueta="Dirección" valor={datos.address} alCambiar={(valor) => cambiar("address", valor)} maximo={200} placeholder="Av. Providencia 1234, local 5" autoComplete="street-address" />
           <Campo etiqueta="Comuna" valor={datos.comuna} alCambiar={(valor) => cambiar("comuna", valor)} maximo={80} placeholder="Providencia" />
-          <Campo etiqueta="WhatsApp del negocio" valor={datos.whatsapp} alCambiar={(valor) => cambiar("whatsapp", valor)} maximo={30} placeholder="+56 9 1234 5678" tipo="tel" />
+          <Campo etiqueta={frases.whatsapp} valor={datos.whatsapp} alCambiar={(valor) => cambiar("whatsapp", valor)} maximo={30} placeholder="+56 9 1234 5678" tipo="tel" />
           <Campo etiqueta="Instagram" valor={datos.instagram} alCambiar={(valor) => cambiar("instagram", valor)} maximo={200} placeholder={ejemplos.instagram} />
           <div className="sm:col-span-2">
             <Campo
@@ -227,7 +227,7 @@ export function SeccionPaginaPublica({
               maximo={500}
               placeholder="https://g.page/r/…/review"
               tipo="url"
-              ayuda="Lo copias desde tu Perfil de Empresa en Google, en «Pedir reseñas». Se usa en el correo que pide una reseña el día después de la visita, si lo activas en Mensajes a clientes."
+              ayuda={frases.ayudaDeLasResenas}
             />
           </div>
         </div>
@@ -316,7 +316,7 @@ export function SeccionPaginaPublica({
 
         {datos.especialidades.length > 0 && (
           <fieldset className="min-w-0">
-            <legend className={cn(CLASES_DE_ETIQUETA, "mb-1")}>Especialidad de cada {profesional}</legend>
+            <legend className={cn(CLASES_DE_ETIQUETA, "mb-1")}>{frases.especialidad}</legend>
             <p className="mb-3 text-[13px] text-texto-2">Se muestra bajo su nombre, en &ldquo;Equipo&rdquo;.</p>
             <div className="grid gap-4 sm:grid-cols-2">
               {datos.especialidades.map((fila) => (

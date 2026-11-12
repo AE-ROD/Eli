@@ -51,11 +51,15 @@ import {
 import { formatearProducto } from "@/lib/productos"
 import { ORDEN_DE_SILLONES, SELECCION_DE_SILLON } from "@/lib/sillones"
 import { mostrarTelefono } from "@/lib/telefono"
+import { vocabularioDe } from "@/lib/vocabulario"
+import { frasesDeConfiguracion } from "./_frases"
 
 export default async function PaginaConfiguracion() {
   const session = await getServerSession(authOptions)
   const actor = actorDeSesion(session)
   if (!actor) redirect("/iniciar-sesion")
+  // Las palabras del rubro del negocio de la sesión: "Prestaciones" en una clínica dental.
+  const frases = frasesDeConfiguracion(vocabularioDe(actor.rubro).palabras)
 
   // Horario propio: el dueño no es miembro del equipo (clave null → horario
   // general del negocio); encargado y profesional tienen su propio memberId.
@@ -190,7 +194,7 @@ export default async function PaginaConfiguracion() {
             horariosDelDueño={horariosActuales}
             miembros={miembrosParaElSelector}
             // El encargado ve el general con el nombre del negocio; la dueña, con el suyo.
-            nombreDelDueño={esDueño(actor) ? nombreActor : (pagina?.name ?? "El negocio")}
+            nombreDelDueño={esDueño(actor) ? nombreActor : (pagina?.name ?? frases.pagina.negocioSinNombre)}
             sufijoDelGeneral={esDueño(actor) ? "(tú)" : "Horario general"}
             // El encargado se ve también en su propia pestaña: con "(tú)", para que no parezca repetido.
             memberIdPropio={esDueño(actor) ? null : memberIdPropio}
@@ -326,7 +330,7 @@ export default async function PaginaConfiguracion() {
     <div className="min-h-dvh">
       <BarraSuperior
         titulo="Configuración"
-        subtitulo={gestionaElNegocio(actor) ? "Gestiona horarios, servicios y equipo" : "Gestiona tu horario de atención"}
+        subtitulo={frases.pagina.subtitulo(gestionaElNegocio(actor))}
       />
 
       <div className="max-w-3xl px-4 pt-6 pb-10 sm:px-6">

@@ -15,6 +15,15 @@ import { frecuenciaDelFormulario } from "@/lib/frecuencia-de-visitas"
 import { enviarFoto, pedirQuitarFoto, type ResultadoDeFoto } from "@/lib/enviar-foto"
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
 import type { LaboratorioRespuesta } from "@/lib/edicion-de-protesis"
+import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
+import { frasesDeConfiguracion } from "./_frases"
+
+/**
+ * Las palabras de un rubro sin palabras propias: lo que dicen los mensajes de
+ * error de los pedidos de servicios si quien llama no pasa las suyas ("No se
+ * pudo crear el servicio"). Las pantallas pasan las del rubro.
+ */
+const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
 
 /** Un día del horario semanal: si se atiende y de qué hora a qué hora. */
 export interface HorarioDelDia {
@@ -99,30 +108,47 @@ export function cuerpoDeServicio(datos: DatosDeServicio, para: "crear" | "editar
 }
 
 /** Devuelve el servicio tal como quedó guardado. */
-export async function crearServicio(datos: DatosDeServicio): Promise<Resultado<Servicio>> {
+export async function crearServicio(datos: DatosDeServicio, palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado<Servicio>> {
   const cuerpo = cuerpoDeServicio(datos)
   if (!cuerpo.ok) return cuerpo
-  return pedir<Servicio>("/api/configuracion/servicios", "No se pudo crear el servicio", conJson("POST", cuerpo.datos))
+  return pedir<Servicio>(
+    "/api/configuracion/servicios",
+    frasesDeConfiguracion(palabras).errores.crearServicio,
+    conJson("POST", cuerpo.datos)
+  )
 }
 
 /** Devuelve el servicio tal como quedó guardado. */
-export async function editarServicio(id: string, datos: DatosDeServicio): Promise<Resultado<Servicio>> {
+export async function editarServicio(
+  id: string,
+  datos: DatosDeServicio,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<Servicio>> {
   const cuerpo = cuerpoDeServicio(datos, "editar")
   if (!cuerpo.ok) return cuerpo
-  return pedir<Servicio>(`/api/configuracion/servicios/${id}`, "No se pudo guardar el servicio", conJson("PUT", cuerpo.datos))
+  return pedir<Servicio>(
+    `/api/configuracion/servicios/${id}`,
+    frasesDeConfiguracion(palabras).errores.guardarServicio,
+    conJson("PUT", cuerpo.datos)
+  )
 }
 
 /** Un servicio inactivo no aparece en la página pública de reservas. */
-export async function activarODesactivarServicio(id: string, activo: boolean): Promise<Resultado<Servicio>> {
+export async function activarODesactivarServicio(
+  id: string,
+  activo: boolean,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<Servicio>> {
+  const { errores } = frasesDeConfiguracion(palabras)
   return pedir<Servicio>(
     `/api/configuracion/servicios/${id}`,
-    activo ? "No se pudo activar el servicio" : "No se pudo desactivar el servicio",
+    activo ? errores.activarServicio : errores.desactivarServicio,
     conJson("PUT", { active: activo })
   )
 }
 
-export async function borrarServicio(id: string): Promise<Resultado> {
-  return pedir(`/api/configuracion/servicios/${id}`, "No se pudo borrar el servicio", { method: "DELETE" })
+export async function borrarServicio(id: string, palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado> {
+  return pedir(`/api/configuracion/servicios/${id}`, frasesDeConfiguracion(palabras).errores.borrarServicio, { method: "DELETE" })
 }
 
 // ─── Productos (#67) ─────────────────────────────────────────────────────────

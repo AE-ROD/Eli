@@ -5,9 +5,11 @@ import { useSession } from "next-auth/react"
 import { AnimatePresence } from "framer-motion"
 import { UserPlus } from "lucide-react"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { actorDeSesion, puedeEditarFotoDelMiembro, puedeGestionarEquipo } from "@/lib/permisos"
+import { vocabularioDe } from "@/lib/vocabulario"
 import {
   anularInvitacion,
   leerEquipo,
@@ -15,6 +17,7 @@ import {
   type InvitacionPendiente,
   type MiembroDelEquipo,
 } from "../_datos"
+import { frasesDeEquipo } from "../_frases"
 import { ListaEquipo } from "./lista-equipo"
 import { ModalFotoDelMiembro } from "./modal-foto-del-miembro"
 import { ModalInvitar } from "./modal-invitar"
@@ -27,6 +30,7 @@ export function PantallaDeEquipo() {
   // sesión carga, el botón tampoco se ofrece: falla cerrado.
   const actor = actorDeSesion(sesion)
   const invita = puedeGestionarEquipo(actor)
+  const frases = frasesDeEquipo(vocabularioDe(useRubroDelPanel()).palabras)
   const [miembros, setMiembros] = useState<MiembroDelEquipo[]>([])
   const [invitaciones, setInvitaciones] = useState<InvitacionPendiente[]>([])
   const [cargando, setCargando] = useState(true)
@@ -111,7 +115,7 @@ export function PantallaDeEquipo() {
     <div className="min-h-dvh">
       <BarraSuperior
         titulo="Equipo"
-        subtitulo="Gestiona el equipo de tu negocio"
+        subtitulo={frases.subtitulo}
         accionPrincipal={
           invita
             ? {

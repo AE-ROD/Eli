@@ -9,6 +9,7 @@ import { delRol } from "@/lib/nombres-de-roles"
 import { apareceEnLaPagina } from "@/lib/pagina-del-negocio"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { quitarFotoDelMiembro, subirFotoDelMiembro, type MiembroDelEquipo } from "../_datos"
+import { frasesDeEquipo } from "../_frases"
 
 interface PropsDeModalFotoDelMiembro {
   miembro: MiembroDelEquipo
@@ -27,7 +28,7 @@ interface PropsDeModalFotoDelMiembro {
 export function ModalFotoDelMiembro({ miembro, alCerrar, alCambiar }: PropsDeModalFotoDelMiembro) {
   const rubro = useRubroDelPanel()
   // "tus pacientes" en una clínica dental.
-  const { clientes } = vocabularioDe(rubro)
+  const { foto } = frasesDeEquipo(vocabularioDe(rubro).palabras)
   const [fotoUrl, setFotoUrl] = useState(miembro.fotoUrl ?? null)
   const primerNombre = miembro.user.name.trim().split(/\s+/)[0] || miembro.user.name
 
@@ -35,11 +36,7 @@ export function ModalFotoDelMiembro({ miembro, alCerrar, alCambiar }: PropsDeMod
     <MarcoDeModal
       titulo={`Foto de ${miembro.user.name}`}
       antetitulo="Equipo"
-      descripcion={
-        apareceEnLaPagina(miembro.role)
-          ? `La ven tus ${clientes} en la página de reservas, junto al nombre.`
-          : "Se ve en la lista del equipo. En la página de reservas sólo salen quienes atienden."
-      }
+      descripcion={foto.descripcion(apareceEnLaPagina(miembro.role))}
       alCerrar={alCerrar}
     >
       <div className="space-y-6">

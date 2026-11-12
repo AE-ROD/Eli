@@ -82,7 +82,8 @@ export function FichaDelPaciente({
   veProtesis,
   usuario,
 }: PropsDeFichaDelPaciente) {
-  const vocabulario = vocabularioDe(usuario.rubro)
+  // "Pacientes" en la clínica dental (la ficha clínica sólo existe en ella).
+  const { cliente } = vocabularioDe(usuario.rubro).palabras
   const [ficha, setFicha] = useState(fichaInicial)
   const [plan, setPlan] = useState(planInicial)
   /** Las marcas del odontograma como están guardadas: la prótesis dibuja punteado lo ausente. */
@@ -136,7 +137,7 @@ export function FichaDelPaciente({
           prevision: ficha?.prevision ?? null,
           desde: paciente.desde,
           zona,
-          palabraPaciente: vocabulario.cliente,
+          palabraPaciente: cliente.singular,
         })}`}
         mostrarBusqueda={false}
       />
@@ -147,7 +148,7 @@ export function FichaDelPaciente({
           className="inline-flex min-h-11 items-center gap-2 rounded-[12px] text-sm font-medium text-navy underline-offset-4 anillo-foco hover:underline"
         >
           <ArrowLeft className="size-4" aria-hidden="true" strokeWidth={1.75} />
-          {conMayuscula(vocabulario.clientes)}
+          {conMayuscula(cliente.plural)}
         </Link>
 
         <TarjetasDeResumen

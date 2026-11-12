@@ -5,6 +5,7 @@ import { Tarjeta } from "@/components/comunes/tarjeta"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPOS_DE_IMPORTACION, type CampoDeImportacion } from "@/lib/importar-clientes"
 import { vocabularioDe } from "@/lib/vocabulario"
+import { frasesDeClientes } from "../../_frases"
 
 /** Cuántas filas de datos muestra la vista previa. */
 const FILAS_DE_MUESTRA = 5
@@ -30,7 +31,7 @@ function nombreDeColumna(cabecera: string, indice: number): string {
  */
 export function VistaPrevia({ filas, mapeo, alCambiarMapeo }: PropsDeVistaPrevia) {
   // "los pacientes importados" en una clínica dental.
-  const { clientes } = vocabularioDe(useRubroDelPanel())
+  const { importar } = frasesDeClientes(vocabularioDe(useRubroDelPanel()).palabras)
   const [cabecera, ...datos] = filas
   const muestra = datos.slice(0, FILAS_DE_MUESTRA)
   const opciones = cabecera.map((texto, indice) => ({ valor: String(indice), texto: nombreDeColumna(texto, indice) }))
@@ -63,10 +64,7 @@ export function VistaPrevia({ filas, mapeo, alCambiarMapeo }: PropsDeVistaPrevia
           ))}
         </div>
         {mapeo.whatsapp === undefined && (
-          <p className="text-sm text-texto-2">
-            Sin una columna de &ldquo;Acepta WhatsApp&rdquo;, los {clientes} importados quedan sin consentimiento para
-            recibir mensajes.
-          </p>
+          <p className="text-sm text-texto-2">{importar.sinConsentimiento}</p>
         )}
       </Tarjeta>
 

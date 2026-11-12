@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { AnimatePresence } from "framer-motion"
 import { useSession } from "next-auth/react"
 import { BarraSuperior } from "@/components/panel/barra-superior"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { Download, Upload } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
@@ -81,7 +82,7 @@ export default function PaginaClientes() {
   const leeAlergias = veAlertaDeAlergias(actor)
   // Memoizado por rubro: `vocabularioDe` arma objetos nuevos en cada llamada, y `cargarClientes`
   // depende de las palabras: sin esto cambiaría en cada render y volvería a pedir la lista.
-  const rubro = sesion?.user?.rubro
+  const rubro = useRubroDelPanel()
   const palabras = useMemo(() => vocabularioDe(rubro).palabras, [rubro])
   const frases = frasesDeClientes(palabras)
   const vistasDeClientes = [

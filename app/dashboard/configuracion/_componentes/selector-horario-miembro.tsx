@@ -10,8 +10,10 @@ import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { nombreDelRol } from "@/lib/nombres-de-roles"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { SeccionHorario } from "./seccion-horario"
 import { leerHorario, type HorarioDelDia } from "../_datos"
+import { frasesDeConfiguracion } from "../_frases"
 
 export interface MiembroHorario {
   id: string        // BusinessMember.id
@@ -43,6 +45,7 @@ export function SelectorHorarioMiembro({
   const [seleccionado, setSeleccionado] = useState<string | null>(null)
   // "Odontólogo" en vez de "Profesional" en una clínica dental.
   const rubro = useRubroDelPanel()
+  const frases = frasesDeConfiguracion(vocabularioDe(rubro).palabras)
   // El del dueño viene del servidor una sola vez: lo que se guarda después se
   // anota acá, o volver a su pestaña mostraría el de antes (y, si no tenía
   // nada, el aviso de "todavía no está guardado").
@@ -187,7 +190,7 @@ export function SelectorHorarioMiembro({
               seleccionado === null
                 ? sufijoDelGeneral === "(tú)"
                   ? "Mi horario"
-                  : "Horario general del negocio"
+                  : frases.horario.general
                 : `Horario de ${pestañaActiva?.nombre}`
             }
             alCambiarPendiente={setPendiente}

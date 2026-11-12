@@ -7,12 +7,15 @@ import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { Insignia } from "@/components/comunes/insignia"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { LARGO_MAXIMO_DEL_NOMBRE } from "@/lib/sillones"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
+import { frasesDeConfiguracion } from "../_frases"
 import { crearSillon, editarSillon, leerSillonesDeLaClinica, moverSillon, type Sillon } from "../_datos"
 
 /** Los botones de sólo ícono de cada sillón: 44 × 44, lo mínimo para un dedo. */
@@ -37,6 +40,7 @@ interface PropsDeSeccionSillones {
  */
 export function SeccionSillones({ sillonesIniciales }: PropsDeSeccionSillones) {
   const idDelTitulo = useId()
+  const { sillones: frases } = frasesDeConfiguracion(vocabularioDe(useRubroDelPanel()).palabras)
   const [sillones, setSillones] = useState<Sillon[]>(sillonesIniciales)
   const [aviso, setAviso] = useState("")
   const [anuncio, setAnuncio] = useState("")
@@ -105,10 +109,7 @@ export function SeccionSillones({ sillonesIniciales }: PropsDeSeccionSillones) {
         }
       />
 
-      <p className="mt-4 text-sm text-pretty text-texto-2">
-        Los sillones no se borran: se desactivan. Uno desactivado no se ofrece para citas nuevas, y las citas que ya lo
-        tienen lo conservan.
-      </p>
+      <p className="mt-4 text-sm text-pretty text-texto-2">{frases.desactivados}</p>
 
       {aviso && <Aviso className="mt-5">{aviso}</Aviso>}
       {/* Lo que cambió al ordenar o al activar, para el lector de pantalla. */}
@@ -118,7 +119,7 @@ export function SeccionSillones({ sillonesIniciales }: PropsDeSeccionSillones) {
 
       {sillones.length === 0 ? (
         <EstadoVacio className="mt-5" titulo="Sin sillones aún">
-          Agrega los sillones de la clínica para ver la agenda por sillón y asignárselos a las citas.
+          {frases.vacio}
         </EstadoVacio>
       ) : (
         <ul ref={lista} aria-busy={ordenando || undefined} className="mt-5 divide-y divide-borde">

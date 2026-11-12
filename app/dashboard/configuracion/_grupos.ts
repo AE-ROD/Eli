@@ -8,7 +8,8 @@
  * ninguna sección visible no existe: no se muestra ni cuenta como "el primero".
  */
 
-import type { Vocabulario } from "@/lib/vocabulario"
+import type { PalabrasDelRubro } from "@/lib/vocabulario"
+import { frasesDeConfiguracion } from "./_frases"
 
 /**
  * Las doce secciones, por su ancla: el `id` del elemento al que llevan los
@@ -30,7 +31,11 @@ export type AnclaDeConfiguracion =
 
 export type IdDeGrupo = "horario-y-equipo" | "tu-negocio" | "catalogo-y-clinica" | "reservas-y-clientes" | "mensajes"
 
-/** Cómo se nombra cada sección en la línea que resume su grupo. */
+/**
+ * Cómo se nombra cada sección en la línea que resume su grupo, con las palabras
+ * de un rubro sin palabras propias. "Servicios" y "Mensajes a clientes" cambian
+ * con el rubro: `nombreDeLaSeccion`.
+ */
 export const NOMBRE_DE_SECCION: Readonly<Record<AnclaDeConfiguracion, string>> = {
   horario: "Horario",
   "mi-foto": "Mi foto",
@@ -44,6 +49,18 @@ export const NOMBRE_DE_SECCION: Readonly<Record<AnclaDeConfiguracion, string>> =
   "hora-valle": "Precios de hora valle",
   mensajes: "Mensajes a clientes",
   "fila-virtual": "Fila virtual",
+}
+
+/**
+ * El nombre de una sección con las palabras del rubro: "Servicios" o, en una
+ * clínica dental, "Prestaciones"; "Mensajes a clientes" o "Mensajes a
+ * pacientes". Las demás se llaman igual en todos los rubros.
+ */
+export function nombreDeLaSeccion(ancla: AnclaDeConfiguracion, palabras: PalabrasDelRubro): string {
+  const frases = frasesDeConfiguracion(palabras)
+  if (ancla === "servicios") return frases.servicios.titulo
+  if (ancla === "mensajes") return frases.mensajes.titulo
+  return NOMBRE_DE_SECCION[ancla]
 }
 
 /**
@@ -62,21 +79,22 @@ export const GRUPOS: readonly { id: IdDeGrupo; secciones: readonly AnclaDeConfig
 const SECCIONES_DE_CLINICA: readonly AnclaDeConfiguracion[] = ["sillones", "laboratorios"]
 
 /**
- * El título de un grupo. "Reservas y clientes" dice "pacientes" en una
- * clínica dental (`vocabularioDe`), y "Catálogo y clínica" se queda en
+ * El título de un grupo. "Tu negocio" dice "Tu salón" o "Tu clínica" según el
+ * rubro, "Reservas y clientes" dice "pacientes" en una clínica dental
+ * (`vocabularioDe`), y "Catálogo y clínica" se queda en
  * "Catálogo" cuando no hay nada de clínica que mostrar (un salón no tiene
  * sillones ni laboratorios).
  */
-function tituloDelGrupo(id: IdDeGrupo, visibles: readonly AnclaDeConfiguracion[], vocabulario: Pick<Vocabulario, "clientes">): string {
+function tituloDelGrupo(id: IdDeGrupo, visibles: readonly AnclaDeConfiguracion[], palabras: PalabrasDelRubro): string {
   switch (id) {
     case "horario-y-equipo":
       return "Horario y equipo"
     case "tu-negocio":
-      return "Tu negocio"
+      return `Tu ${palabras.negocio.singular}`
     case "catalogo-y-clinica":
       return visibles.some((ancla) => SECCIONES_DE_CLINICA.includes(ancla)) ? "Catálogo y clínica" : "Catálogo"
     case "reservas-y-clientes":
-      return `Reservas y ${vocabulario.clientes}`
+      return `Reservas y ${palabras.cliente.plural}`
     case "mensajes":
       return "Mensajes"
   }
@@ -99,7 +117,7 @@ export interface GrupoDeConfiguracion<T extends { id: AnclaDeConfiguracion }> {
  */
 export function agruparSecciones<T extends { id: AnclaDeConfiguracion }>(
   visibles: readonly T[],
-  vocabulario: Pick<Vocabulario, "clientes">
+  palabras: PalabrasDelRubro
 ): GrupoDeConfiguracion<T>[] {
   const grupos: GrupoDeConfiguracion<T>[] = []
   for (const grupo of GRUPOS) {
@@ -108,8 +126,8 @@ export function agruparSecciones<T extends { id: AnclaDeConfiguracion }>(
     const anclas = secciones.map((seccion) => seccion.id)
     grupos.push({
       id: grupo.id,
-      titulo: tituloDelGrupo(grupo.id, anclas, vocabulario),
-      resumen: anclas.map((ancla) => NOMBRE_DE_SECCION[ancla]).join(" · "),
+      titulo: tituloDelGrupo(grupo.id, anclas, palabras),
+      resumen: anclas.map((ancla) => nombreDeLaSeccion(ancla, palabras)).join(" · "),
       secciones,
     })
   }

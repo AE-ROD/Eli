@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useId, useState } from "react"
+import { useEffect, useId, useMemo, useState } from "react"
 import { Check, LoaderCircle } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
@@ -9,6 +9,7 @@ import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
+import { frasesDeEquipo } from "../_frases"
 import {
   guardarServiciosDelMiembro,
   leerCatalogoDeServicios,
@@ -35,8 +36,11 @@ const CASILLA = "size-4 shrink-0 accent-navy"
  * la persona sólo aparece para los servicios que hace.
  */
 export function ModalServiciosDelMiembro({ miembro, alCerrar, alGuardar }: PropsDeModalServiciosDelMiembro) {
-  // "tus pacientes" en una clínica dental.
-  const { clientes } = vocabularioDe(useRubroDelPanel())
+  // "Prestaciones" y "tus pacientes" en una clínica dental. Memoizado por rubro: el efecto
+  // que carga el catálogo depende de las palabras y no tiene que volver a correr en cada render.
+  const rubro = useRubroDelPanel()
+  const palabras = useMemo(() => vocabularioDe(rubro).palabras, [rubro])
+  const frases = frasesDeEquipo(palabras).servicios
   const [catalogo, setCatalogo] = useState<ServicioDelCatalogo[]>([])
   const [todos, setTodos] = useState(true)
   const [elegidos, setElegidos] = useState<Set<string>>(new Set())
@@ -49,7 +53,7 @@ export function ModalServiciosDelMiembro({ miembro, alCerrar, alGuardar }: Props
 
   useEffect(() => {
     let vigente = true
-    Promise.all([leerCatalogoDeServicios(), leerServiciosDelMiembro(miembro.id)]).then(([servicios, delMiembro]) => {
+    Promise.all([leerCatalogoDeServicios(palabras), leerServiciosDelMiembro(miembro.id, palabras)]).then(([servicios, delMiembro]) => {
       if (!vigente) return
       if (!servicios.ok) setErrorDeCarga(servicios.error)
       else if (!delMiembro.ok) setErrorDeCarga(delMiembro.error)
@@ -63,7 +67,7 @@ export function ModalServiciosDelMiembro({ miembro, alCerrar, alGuardar }: Props
     return () => {
       vigente = false
     }
-  }, [miembro.id])
+  }, [miembro.id, palabras])
 
   const alternar = (id: string) => {
     setElegidos((actuales) => {
@@ -78,35 +82,35 @@ export function ModalServiciosDelMiembro({ miembro, alCerrar, alGuardar }: Props
     evento.preventDefault()
     setError("")
     if (!todos && elegidos.size === 0) {
-      setError("Elige al menos un servicio, o marca \"Todos los servicios\".")
+      setError(frases.elegirAlMenosUno)
       return
     }
     setGuardando(true)
-    const resultado = await guardarServiciosDelMiembro(miembro.id, todos ? null : [...elegidos])
+    const resultado = await guardarServiciosDelMiembro(miembro.id, todos ? null : [...elegidos], palabras)
     setGuardando(false)
     if (!resultado.ok) return setError(resultado.error)
-    alGuardar(`Se guardaron los servicios de ${miembro.user.name}.`)
+    alGuardar(frases.guardado(miembro.user.name))
   }
 
   return (
     <MarcoDeModal
-      titulo={`Servicios de ${miembro.user.name}`}
+      titulo={frases.titulo(miembro.user.name)}
       antetitulo="Equipo"
-      descripcion={`En la página de reservas, tus ${clientes} sólo pueden elegir a esta persona para los servicios que hace.`}
+      descripcion={frases.descripcion}
       bloqueado={guardando}
       alCerrar={alCerrar}
     >
       {cargando ? (
         <div aria-busy="true" className="grid h-32 place-items-center">
           <LoaderCircle className="size-6 animate-spin text-navy" aria-hidden="true" />
-          <span className="sr-only">Cargando los servicios...</span>
+          <span className="sr-only">{frases.cargando}</span>
         </div>
       ) : errorDeCarga ? (
         <Aviso>{errorDeCarga}</Aviso>
       ) : (
         <form onSubmit={guardar} className="space-y-5">
           <fieldset className="min-w-0">
-            <legend className={cn(CLASES_DE_ETIQUETA, "mb-2")}>Servicios que hace</legend>
+            <legend className={cn(CLASES_DE_ETIQUETA, "mb-2")}>{frases.queHace}</legend>
             <label className={cn(FILA, "font-medium")}>
               <input
                 type="checkbox"
@@ -115,10 +119,10 @@ export function ModalServiciosDelMiembro({ miembro, alCerrar, alGuardar }: Props
                 onChange={(evento) => setTodos(evento.target.checked)}
                 aria-controls={idDeLaLista}
               />
-              Todos los servicios
+              {frases.todos}
             </label>
             {catalogo.length === 0 ? (
-              <p className="mt-2 px-3 text-sm text-texto-2">Todavía no hay servicios en Configuración.</p>
+              <p className="mt-2 px-3 text-sm text-texto-2">{frases.sinCatalogo}</p>
             ) : (
               <ul id={idDeLaLista} className="mt-1 space-y-0.5 border-t border-borde pt-1">
                 {catalogo.map((servicio) => (
@@ -143,7 +147,7 @@ export function ModalServiciosDelMiembro({ miembro, alCerrar, alGuardar }: Props
           {error && <Aviso>{error}</Aviso>}
 
           <BotonPrimario type="submit" anchoCompleto cargando={guardando} icono={<Check className="h-4 w-4" />}>
-            Guardar servicios
+            {frases.guardar}
           </BotonPrimario>
         </form>
       )}

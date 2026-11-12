@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { ayudaDeLaFrecuencia } from "@/lib/frecuencia-de-visitas"
 import type { DatosDeServicio } from "../_datos"
+import { frasesDeConfiguracion } from "../_frases"
 
 const DURACIONES = [
   { valor: 15, etiqueta: "15 min" },
@@ -66,7 +67,7 @@ export function ModalServicio({
 }: PropsDeModalServicio) {
   const idDeLaDescripcion = useId()
   const rubro = useRubroDelPanel()
-  const { cliente } = vocabularioDe(rubro)
+  const frases = frasesDeConfiguracion(vocabularioDe(rubro).palabras).servicios.modal
   // Los ejemplos, en el oficio del negocio: en una clínica dental no se corta el pelo ni en una barbería se hacen las uñas.
   const ejemplos = ejemplosDe(rubro)
   const idDeAyudaDeFrecuencia = useId()
@@ -75,14 +76,14 @@ export function ModalServicio({
 
   return (
     <MarcoDeModal
-      titulo={modoEdicion ? "Editar servicio" : "Nuevo servicio"}
-      antetitulo="Servicios"
+      titulo={frases.titulo(modoEdicion)}
+      antetitulo={frases.antetitulo}
       bloqueado={guardando}
       alCerrar={onCerrar}
     >
       <form onSubmit={onSubmit} className="space-y-5">
         <CampoFormulario
-          etiqueta="Nombre del servicio"
+          etiqueta={frases.nombre}
           placeholder={textoDeEjemplo(ejemplos.servicios)}
           value={form.name}
           onChange={(e) => onCambiarCampo("name", e.target.value)}
@@ -115,7 +116,7 @@ export function ModalServicio({
             id={idDeLaDescripcion}
             value={form.description}
             onChange={(e) => onCambiarCampo("description", e.target.value)}
-            placeholder="Describe brevemente el servicio..."
+            placeholder={frases.descripcionPlaceholder}
             className={cn(CAMPO, "h-24 resize-none")}
           />
         </div>
@@ -171,7 +172,7 @@ export function ModalServicio({
         {onCambiarFrecuencia && (
           <div className="space-y-1.5">
             <CampoFormulario
-              etiqueta={`Cada cuántos días vuelve un ${cliente} (opcional)`}
+              etiqueta={frases.frecuencia}
               type="text"
               inputMode="numeric"
               autoComplete="off"
@@ -197,7 +198,7 @@ export function ModalServicio({
             Cancelar
           </BotonPrimario>
           <BotonPrimario type="submit" anchoCompleto cargando={guardando}>
-            {modoEdicion ? "Guardar cambios" : "Crear servicio"}
+            {modoEdicion ? "Guardar cambios" : frases.crear}
           </BotonPrimario>
         </div>
       </form>

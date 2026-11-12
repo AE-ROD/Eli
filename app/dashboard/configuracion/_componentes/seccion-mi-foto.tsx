@@ -9,6 +9,7 @@ import { SelectorDeFoto } from "@/components/panel/selector-de-foto"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { quitarFotoDelMiembro, subirFotoDelMiembro } from "../../equipo/_datos"
+import { frasesDeConfiguracion } from "../_frases"
 
 interface PropsDeSeccionMiFoto {
   /** El id de la membresía de quien mira (el `memberId` de su sesión): la foto es de ese integrante. */
@@ -29,7 +30,7 @@ interface PropsDeSeccionMiFoto {
 export function SeccionMiFoto({ miembroId, nombre, fotoInicial, apareceEnLaPagina }: PropsDeSeccionMiFoto) {
   const idDelTitulo = useId()
   // "tus pacientes" en una clínica dental.
-  const { clientes } = vocabularioDe(useRubroDelPanel())
+  const { miFoto: frases } = frasesDeConfiguracion(vocabularioDe(useRubroDelPanel()).palabras)
   const [fotoUrl, setFotoUrl] = useState(fotoInicial)
 
   return (
@@ -38,11 +39,7 @@ export function SeccionMiFoto({ miembroId, nombre, fotoInicial, apareceEnLaPagin
         id={idDelTitulo}
         nivel={3}
         titulo="Mi foto"
-        subtitulo={
-          apareceEnLaPagina
-            ? `Es la que ven tus ${clientes} en la página de reservas, junto a tu nombre.`
-            : "Se ve en la lista del equipo. En la página de reservas sólo salen quienes atienden."
-        }
+        subtitulo={frases.subtitulo(apareceEnLaPagina)}
         icono={{ figura: Camera }}
       />
 

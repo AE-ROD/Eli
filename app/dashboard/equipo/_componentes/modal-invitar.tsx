@@ -12,7 +12,9 @@ import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { nombreDelRol } from "@/lib/nombres-de-roles"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { invitarAlEquipo, reenviarInvitacion } from "../_datos"
+import { frasesDeEquipo } from "../_frases"
 
 interface PropsDeModalInvitar {
   abierto: boolean
@@ -23,21 +25,13 @@ interface PropsDeModalInvitar {
 /**
  * Los roles que se pueden dar al invitar. El nombre de cada uno sale de
  * `nombreDelRol`, con la palabra del rubro ("Odontólogo" en una clínica
- * dental). Lo que dice cada uno es lo que le permite `lib/permisos.ts`: el
- * encargado gestiona la operación, pero no define comisiones ni anula lo
- * cobrado.
+ * dental), y lo que dice cada uno, de `frasesDeEquipo`. Lo que dice cada uno
+ * es lo que le permite `lib/permisos.ts`: el encargado gestiona la operación,
+ * pero no define comisiones ni anula lo cobrado.
  */
-const roles: readonly { id: "worker" | "admin"; descripcion: string; icono: LucideIcon }[] = [
-  {
-    id: "worker",
-    descripcion: "Gestiona su propio horario y citas",
-    icono: UserRound,
-  },
-  {
-    id: "admin",
-    descripcion: "Gestiona el equipo, la agenda, los horarios, los servicios y los cobros. Puede invitar a otros.",
-    icono: UsersRound,
-  },
+const roles: readonly { id: "worker" | "admin"; icono: LucideIcon }[] = [
+  { id: "worker", icono: UserRound },
+  { id: "admin", icono: UsersRound },
 ]
 
 export function ModalInvitar({ abierto, onCerrar, onInvitado }: PropsDeModalInvitar) {
@@ -185,6 +179,7 @@ const ANILLO_DE_LA_FILA =
 function EleccionDeRol({ elegido, alElegir }: { elegido: "worker" | "admin"; alElegir: (rol: "worker" | "admin") => void }) {
   const nombreDelGrupo = useId()
   const rubro = useRubroDelPanel()
+  const { roles: descripciones } = frasesDeEquipo(vocabularioDe(rubro).palabras)
 
   return (
     <fieldset className="min-w-0">
@@ -212,7 +207,9 @@ function EleccionDeRol({ elegido, alElegir }: { elegido: "worker" | "admin"; alE
               <CuadroDeIcono icono={opcion.icono} color="turquesa" activo={esElElegido} />
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-semibold">{nombreDelRol(opcion.id, rubro)}</span>
-                <span className="mt-0.5 block text-[13px] leading-snug text-texto-2">{opcion.descripcion}</span>
+                <span className="mt-0.5 block text-[13px] leading-snug text-texto-2">
+                  {opcion.id === "admin" ? descripciones.encargado : descripciones.quienAtiende}
+                </span>
               </span>
               {/* El círculo vacío o con el punto: lo que dice que es una elección, con contraste de 3:1. */}
               <span

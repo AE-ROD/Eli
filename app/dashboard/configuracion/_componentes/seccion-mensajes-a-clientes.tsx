@@ -9,8 +9,9 @@ import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
-import { vocabularioDe, type Vocabulario } from "@/lib/vocabulario"
+import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
 import { cambiarMensajesAClientes, type EstadoDeMensajes, type InterruptoresDeMensajes } from "../_datos"
+import { frasesDeConfiguracion } from "../_frases"
 
 /**
  * Cada interruptor con lo que hace, en una línea, como se lo explicaríamos a
@@ -18,30 +19,31 @@ import { cambiarMensajesAClientes, type EstadoDeMensajes, type InterruptoresDeMe
  * el aviso de vuelta se llama "Te toca volver" o, en una clínica, "Control"
  * (`palabras.etiquetas.seguimiento`). Sólo cambia el nombre: hace lo mismo.
  */
-const mensajesPara = ({
-  cliente,
-  clientes,
-  palabras,
-}: Vocabulario): { campo: keyof InterruptoresDeMensajes; etiqueta: string; descripcion: string }[] => [
-  {
-    campo: "listaDeEsperaActiva",
-    etiqueta: "Lista de espera",
-    descripcion: `Si un día no tiene horas, tus ${clientes} se anotan y les avisamos por correo cuando se libere una.`,
-  },
-  {
-    campo: "avisoDeVueltaActivo",
-    etiqueta: palabras.etiquetas.seguimiento,
-    descripcion: `Un correo cuando a un ${cliente} ya le toca volver, según cada cuánto viene o la frecuencia de su servicio.`,
-  },
-  {
-    campo: "pideResenas",
-    etiqueta: "Pedir reseña en Google",
-    descripcion: "El día después de su visita, un correo con tu enlace de reseñas de Google. A todos por igual.",
-  },
-]
+const mensajesPara = (
+  palabras: PalabrasDelRubro
+): { campo: keyof InterruptoresDeMensajes; etiqueta: string; descripcion: string }[] => {
+  const { mensajes } = frasesDeConfiguracion(palabras)
+  return [
+    {
+      campo: "listaDeEsperaActiva",
+      etiqueta: "Lista de espera",
+      descripcion: mensajes.listaDeEspera,
+    },
+    {
+      campo: "avisoDeVueltaActivo",
+      etiqueta: mensajes.avisoDeVuelta.etiqueta,
+      descripcion: mensajes.avisoDeVuelta.descripcion,
+    },
+    {
+      campo: "pideResenas",
+      etiqueta: "Pedir reseña en Google",
+      descripcion: "El día después de su visita, un correo con tu enlace de reseñas de Google. A todos por igual.",
+    },
+  ]
+}
 
 /** Los tipos de envío (`TIPOS_DE_ENVIO`) como se leen en la tarjeta, con el nombre del aviso de vuelta del rubro. */
-const tiposPara = ({ palabras }: Vocabulario): { tipo: string; nombre: string }[] => [
+const tiposPara = (palabras: PalabrasDelRubro): { tipo: string; nombre: string }[] => [
   { tipo: "lista-de-espera", nombre: "Avisos de lista de espera" },
   { tipo: "te-toca", nombre: palabras.etiquetas.seguimiento },
   { tipo: "resena", nombre: "Pedidos de reseña" },
@@ -67,9 +69,10 @@ const numero = (valor: number | undefined) => new Intl.NumberFormat("es-CL").for
  */
 export function SeccionMensajesAClientes({ inicial }: { inicial: EstadoDeMensajes }) {
   const idDelTitulo = useId()
-  const vocabulario = vocabularioDe(useRubroDelPanel())
-  const mensajes = mensajesPara(vocabulario)
-  const tipos = tiposPara(vocabulario)
+  const palabras = vocabularioDe(useRubroDelPanel()).palabras
+  const { mensajes: frases } = frasesDeConfiguracion(palabras)
+  const mensajes = mensajesPara(palabras)
+  const tipos = tiposPara(palabras)
   const idDelMes = useId()
   const [interruptores, setInterruptores] = useState(inicial.interruptores)
   const [guardando, setGuardando] = useState<keyof InterruptoresDeMensajes | null>(null)
@@ -101,15 +104,13 @@ export function SeccionMensajesAClientes({ inicial }: { inicial: EstadoDeMensaje
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         nivel={3}
-        titulo="Mensajes a clientes"
+        titulo={frases.titulo}
         subtitulo="Correos que Eli manda por ti, sin que tengas que acordarte"
         icono={{ figura: MailCheck }}
       />
 
       <Aviso tono="info" className="mt-5">
-        &ldquo;{vocabulario.palabras.etiquetas.seguimiento}&rdquo; y &ldquo;Pedir reseña&rdquo; sólo les llegan a quienes aceptaron recibir avisos y
-        novedades de tu negocio por correo, y cada correo trae cómo darse de baja. La lista de espera le llega a quien se
-        anotó.
+        {frases.soloConConsentimiento}
       </Aviso>
       {!inicial.puedeCambiar && (
         <Aviso tono="info" className="mt-3">

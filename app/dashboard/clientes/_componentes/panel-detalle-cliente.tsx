@@ -28,11 +28,15 @@ import { formatearMonto } from "@/lib/dinero"
 import { formatearHora, duracionParaMostrar } from "@/lib/fechas"
 import { sigueSinConfirmar } from "@/lib/por-confirmar"
 import { cn } from "@/lib/utils"
-import type { Vocabulario } from "@/lib/vocabulario"
+import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
 import { Aviso } from "@/components/panel/aviso"
 import { EtiquetaDeCliente, type ClienteEnTarjeta } from "./tarjeta-cliente"
 import type { CitaDeCliente } from "../_datos"
 import { asuntoDelSaludo, enlaceDeCorreo, enlaceDeWhatsapp, saludoSugerido } from "../_escribirle"
+import { frasesDeClientes } from "../_frases"
+
+/** Las palabras de un rubro sin palabras propias: lo que dice la ficha si quien la usa no pasa las suyas. */
+const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
 
 /** Un fundido corto al abrir y al cerrar: la ficha no se desliza. */
 const FUNDIDO = { duration: DURACION.sombra, ease: CURVA.suave }
@@ -84,8 +88,8 @@ function fechaDeLaCita(iso: string, zona: string): string {
 
 interface PropsDePanelDetalleCliente {
   cliente: ClienteEnTarjeta
-  /** "cliente" o, en una clínica dental, "paciente". */
-  vocabulario?: Pick<Vocabulario, "cliente">
+  /** Las palabras del rubro: "cliente" o, en una clínica dental, "paciente". Sin ellas, las de siempre. */
+  palabras?: PalabrasDelRubro
   /**
    * Sólo en una clínica dental: el acceso a la ficha clínica del paciente y,
    * si las hay anotadas, sus alergias, que salen como alerta para todo rol de
@@ -158,7 +162,7 @@ interface PropsDePanelDetalleCliente {
  */
 export function PanelDetalleCliente({
   cliente,
-  vocabulario = { cliente: "cliente" },
+  palabras = PALABRAS_NEUTRAS,
   fichaClinica,
   citas,
   zona,
@@ -179,6 +183,7 @@ export function PanelDetalleCliente({
   comoHoja = false,
   enSegundoPlano = false,
 }: PropsDePanelDetalleCliente) {
+  const { ficha } = frasesDeClientes(palabras)
   const idDelNombre = useId()
   const idDelHistorial = useId()
   const idDeNotas = useId()
@@ -217,7 +222,7 @@ export function PanelDetalleCliente({
       <div className="flex items-start gap-3 pt-1 pl-2">
         <AvatarUsuario nombre={cliente.nombre} tamaño="xl" />
         <div className="min-w-0 flex-1 pt-1">
-          <p className="antetitulo">Ficha del {vocabulario.cliente}</p>
+          <p className="antetitulo">{ficha.antetitulo}</p>
           <h2 id={idDelNombre} className="titulo-3 mt-1 font-serif text-balance break-words">
             {cliente.nombre}
           </h2>
@@ -270,7 +275,7 @@ export function PanelDetalleCliente({
       )}
 
       {/* Datos de contacto */}
-      <section aria-label={`Datos del ${vocabulario.cliente}`} className={BLOQUE}>
+      <section aria-label={ficha.datos} className={BLOQUE}>
         <ul className="space-y-3 text-sm">
           <li className="flex items-start gap-3">
             <Mail className="mt-0.5 size-4 shrink-0 text-texto-2" aria-hidden="true" strokeWidth={1.75} />
@@ -287,11 +292,7 @@ export function PanelDetalleCliente({
           <li className="flex items-start gap-3">
             <CalendarX className="mt-0.5 size-4 shrink-0 text-texto-2" aria-hidden="true" strokeWidth={1.75} />
             <span className={cliente.inasistencias > 0 ? undefined : "text-texto-2"}>
-              {cliente.inasistencias === 0
-                ? "Sin inasistencias"
-                : cliente.inasistencias === 1
-                  ? "1 vez no vino"
-                  : `${cliente.inasistencias} veces no vino`}
+              {ficha.inasistencias(cliente.inasistencias)}
             </span>
           </li>
           <li className="flex items-start gap-3">
@@ -311,7 +312,7 @@ export function PanelDetalleCliente({
           {cliente.proximaCita && (
             <li className="flex items-start gap-3">
               <CalendarClock className="mt-0.5 size-4 shrink-0 text-texto-2" aria-hidden="true" strokeWidth={1.75} />
-              <span className="text-texto-2">Próxima cita: {cliente.proximaCita}</span>
+              <span className="text-texto-2">{ficha.proxima}: {cliente.proximaCita}</span>
             </li>
           )}
         </ul>
@@ -324,7 +325,7 @@ export function PanelDetalleCliente({
         */}
         <div className="mt-4 flex flex-wrap gap-2">
           <Boton href={rutaParaAgendar} tamano="sm" className="min-w-36 flex-1" icono={<CalendarPlus aria-hidden="true" strokeWidth={1.75} />}>
-            Agendar cita
+            {ficha.agendar}
           </Boton>
           {whatsapp && (
             <a
@@ -367,7 +368,7 @@ export function PanelDetalleCliente({
                 icono={<Trash2 className="size-4" aria-hidden="true" />}
                 onClick={onEliminar}
               >
-                Eliminar {vocabulario.cliente}
+                {ficha.eliminar}
               </Boton>
             )}
           </div>
@@ -377,7 +378,7 @@ export function PanelDetalleCliente({
       {/* Historial, con la tarjeta compacta de las citas */}
       <section aria-labelledby={idDelHistorial} className={BLOQUE}>
         <h3 id={idDelHistorial} className="font-semibold">
-          Últimas citas
+          {ficha.historial}
         </h3>
         {citas.length > 0 ? (
           <ul className="mt-3 space-y-3">
@@ -393,7 +394,7 @@ export function PanelDetalleCliente({
           </ul>
         ) : (
           <p className="mt-3 rounded-[20px] border-2 border-dashed border-borde px-4 py-5 text-center text-sm text-texto-2 squircle">
-            Sin citas registradas
+            {ficha.sinHistorial}
           </p>
         )}
       </section>
@@ -409,7 +410,7 @@ export function PanelDetalleCliente({
           value={notas}
           onChange={(e) => onCambiarNotas(e.target.value)}
           onBlur={onNotasBlur}
-          placeholder={`Agregar notas sobre el ${vocabulario.cliente}...`}
+          placeholder={ficha.notasPlaceholder}
           aria-describedby={idDeLaAyuda}
           className={cn(CAMPO, "mt-2 h-28 resize-none px-4 py-3 text-base")}
         />

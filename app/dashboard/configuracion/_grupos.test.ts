@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { vocabularioDe } from "@/lib/vocabulario"
 import {
   GRUPOS,
   NOMBRE_DE_SECCION,
@@ -6,13 +7,14 @@ import {
   anclaDelHash,
   grupoDeAncla,
   gruposAbiertosAlEntrar,
+  nombreDeLaSeccion,
   type AnclaDeConfiguracion,
 } from "./_grupos"
 
 const seccion = (id: AnclaDeConfiguracion) => ({ id })
 
-const DE_SIEMPRE = { clientes: "clientes" }
-const DE_LA_CLINICA = { clientes: "pacientes" }
+const DE_SIEMPRE = vocabularioDe(null).palabras
+const DE_LA_CLINICA = vocabularioDe("odontologia").palabras
 
 /** Lo que ve cada quien, en el orden en que `page.tsx` las arma. */
 const DUEÑA_DE_UN_SALON = (
@@ -103,8 +105,21 @@ describe("agruparSecciones", () => {
     const encargado = (["horario", "pagina", "servicios", "sillones", "productos", "plazo-de-cambios", "mensajes"] as const).map(seccion)
     const grupos = agruparSecciones(encargado, DE_LA_CLINICA)
     expect(grupos.map((grupo) => grupo.id)).toEqual(["horario-y-equipo", "tu-negocio", "catalogo-y-clinica", "reservas-y-clientes", "mensajes"])
-    expect(grupos.find((grupo) => grupo.id === "catalogo-y-clinica")?.resumen).toBe("Servicios · Sillones")
+    expect(grupos.find((grupo) => grupo.id === "catalogo-y-clinica")?.resumen).toBe("Prestaciones · Sillones")
     expect(grupos.find((grupo) => grupo.id === "reservas-y-clientes")?.resumen).toBe("Cancelar o reagendar")
+  })
+
+  it("«Servicios» y «Mensajes a clientes» se llaman como el rubro: Prestaciones y Mensajes a pacientes en una clínica dental", () => {
+    const resumenes = (palabras: typeof DE_SIEMPRE, secciones: readonly { id: AnclaDeConfiguracion }[]) =>
+      Object.fromEntries(agruparSecciones(secciones, palabras).map((grupo) => [grupo.id, grupo.resumen]))
+    const clinica = resumenes(DE_LA_CLINICA, DUEÑA_DE_UNA_CLINICA)
+    expect(clinica["catalogo-y-clinica"]).toBe("Prestaciones · Sillones · Laboratorios")
+    expect(clinica["mensajes"]).toBe("Mensajes a pacientes")
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "otro", null]) {
+      const delRubro = resumenes(vocabularioDe(rubro).palabras, DUEÑA_DE_UN_SALON)
+      expect(delRubro["catalogo-y-clinica"]).toBe("Servicios")
+      expect(delRubro["mensajes"]).toBe("Mensajes a clientes")
+    }
   })
 
   describe("títulos", () => {
@@ -113,17 +128,36 @@ describe("agruparSecciones", () => {
     it("los cinco, con las palabras del rubro", () => {
       expect(titulos(agruparSecciones(DUEÑA_DE_UNA_CLINICA, DE_LA_CLINICA))).toEqual([
         "Horario y equipo",
-        "Tu negocio",
+        "Tu clínica",
         "Catálogo y clínica",
         "Reservas y pacientes",
         "Mensajes",
       ])
       expect(titulos(agruparSecciones(DUEÑA_DE_UN_SALON, DE_SIEMPRE))[3]).toBe("Reservas y clientes")
+      expect(titulos(agruparSecciones(DUEÑA_DE_UN_SALON, DE_SIEMPRE))[1]).toBe("Tu negocio")
+      expect(titulos(agruparSecciones(DUEÑA_DE_UN_SALON, vocabularioDe("salon").palabras))[1]).toBe("Tu salón")
+      expect(titulos(agruparSecciones(DUEÑA_DE_UN_SALON, vocabularioDe("barberia").palabras))[1]).toBe("Tu barbería")
+      expect(titulos(agruparSecciones(DUEÑA_DE_UN_SALON, vocabularioDe("spa-de-unas").palabras))[1]).toBe("Tu salón de uñas")
     })
 
     it("un salón no tiene nada de clínica: el grupo se llama «Catálogo»", () => {
       expect(titulos(agruparSecciones(DUEÑA_DE_UN_SALON, DE_SIEMPRE))[2]).toBe("Catálogo")
     })
+  })
+})
+
+describe("nombreDeLaSeccion", () => {
+  it("sin rubro, el nombre fijo de cada sección", () => {
+    for (const ancla of Object.keys(NOMBRE_DE_SECCION) as AnclaDeConfiguracion[]) {
+      expect(nombreDeLaSeccion(ancla, DE_SIEMPRE)).toBe(NOMBRE_DE_SECCION[ancla])
+    }
+  })
+
+  it("en una clínica dental cambian sólo dos", () => {
+    const cambiadas = (Object.keys(NOMBRE_DE_SECCION) as AnclaDeConfiguracion[]).filter(
+      (ancla) => nombreDeLaSeccion(ancla, DE_LA_CLINICA) !== NOMBRE_DE_SECCION[ancla]
+    )
+    expect(cambiadas).toEqual(["servicios", "mensajes"])
   })
 })
 

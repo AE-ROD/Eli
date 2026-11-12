@@ -14,6 +14,7 @@ import { nombreDelRol } from "@/lib/nombres-de-roles"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 import type { InvitacionPendiente, MiembroDelEquipo } from "../_datos"
+import { frasesDeEquipo } from "../_frases"
 
 /**
  * Una persona por fila: el avatar, el nombre con el correo y el rol. Desde sm
@@ -70,7 +71,7 @@ export function ListaEquipo({
   puedeCambiarLaFotoDe,
   alEditarFoto,
 }: PropsDeListaEquipo) {
-  const { profesionales } = vocabularioDe(useRubroDelPanel())
+  const frases = frasesDeEquipo(vocabularioDe(useRubroDelPanel()).palabras)
   if (cargando) return <ListaCargando />
 
   if (miembros.length === 0 && invitaciones.length === 0) {
@@ -78,9 +79,9 @@ export function ListaEquipo({
       <div className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
         <EstadoVacio
           icono={<CuadroDeIcono icono={UsersRound} color="turquesa" tamano="lg" />}
-          titulo="Todavía no hay nadie en tu equipo"
+          titulo={frases.sinNadie.titulo}
         >
-          Usa el botón &ldquo;Invitar al equipo&rdquo; para sumar a tu encargado o a tus {profesionales}.
+          {frases.sinNadie.ayuda}
         </EstadoVacio>
       </div>
     )
@@ -108,9 +109,9 @@ export function ListaEquipo({
                     tamano="sm"
                     icono={<ListChecks className="size-4" aria-hidden="true" />}
                     onClick={() => alEditarServicios(miembro)}
-                    aria-label={`Servicios que hace ${miembro.user.name}`}
+                    aria-label={frases.servicios.queHaceDe(miembro.user.name)}
                   >
-                    Servicios que hace
+                    {frases.servicios.queHace}
                   </Boton>
                   {puedeCambiarLaFotoDe(miembro) && (
                     <Boton

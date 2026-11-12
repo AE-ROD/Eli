@@ -76,7 +76,7 @@ const nombreDePrestacion = (prestacion: PrestacionRespuesta) =>
 export function PestanaPlan({ pacienteId, plan: respuesta, alCambiar, conOdontograma, zona, hoy, usuario }: PropsDePestanaPlan) {
   const { plan, versionesAnteriores, puedeEditar } = respuesta
   // La columna de quién hace cada prestación: "Odontólogo".
-  const quienAtiende = conMayuscula(vocabularioDe(usuario.rubro).profesional)
+  const quienAtiende = conMayuscula(vocabularioDe(usuario.rubro).palabras.profesional.singular)
   const [pendiente, setPendiente] = useState<Pendiente | null>(null)
   const [trabajando, setTrabajando] = useState<string | null>(null)
   const [aviso, setAviso] = useState("")

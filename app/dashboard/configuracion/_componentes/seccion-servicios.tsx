@@ -24,6 +24,7 @@ import {
   type DatosDeServicio,
   type Servicio,
 } from "../_datos"
+import { frasesDeConfiguracion } from "../_frases"
 
 const SERVICIO_EN_BLANCO: DatosDeServicio = { name: "", description: "", duration: 30, price: "", category: "", frecuenciaDias: "" }
 
@@ -37,7 +38,8 @@ interface PropsDeSeccionServicios {
 
 export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios) {
   const idDelTitulo = useId()
-  const { clientes } = vocabularioDe(useRubroDelPanel())
+  const palabras = vocabularioDe(useRubroDelPanel()).palabras
+  const { servicios: frases } = frasesDeConfiguracion(palabras)
   const [servicios, setServicios] = useState<Servicio[]>(serviciosIniciales)
   const [modalAbierto, setModalAbierto] = useState(false)
   const [servicioEditando, setServicioEditando] = useState<Servicio | null>(null)
@@ -85,8 +87,8 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
     setAvisoDelModal("")
     setGuardando(true)
     const resultado = servicioEditando
-      ? await editarServicio(servicioEditando.id, form)
-      : await crearServicio(form)
+      ? await editarServicio(servicioEditando.id, form, palabras)
+      : await crearServicio(form, palabras)
     setGuardando(false)
 
     // Si el servidor lo rechaza, el modal queda abierto con lo cargado y el
@@ -104,7 +106,7 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
 
   const alternarActivo = async (servicio: Servicio) => {
     setAviso("")
-    const resultado = await activarODesactivarServicio(servicio.id, !servicio.active)
+    const resultado = await activarODesactivarServicio(servicio.id, !servicio.active, palabras)
     if (resultado.ok) reemplazarEnLista(resultado.datos)
     else setAviso(resultado.error)
   }
@@ -120,7 +122,7 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
     const id = aEliminar.id
     setAvisoDeEliminar("")
     setEliminando(true)
-    const resultado = await borrarServicio(id)
+    const resultado = await borrarServicio(id, palabras)
     setEliminando(false)
     if (!resultado.ok) return setAvisoDeEliminar(resultado.error)
     setAviso("")
@@ -133,12 +135,12 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         nivel={3}
-        titulo="Servicios"
-        subtitulo={`Los servicios que ofreces a tus ${clientes}`}
+        titulo={frases.titulo}
+        subtitulo={frases.subtitulo}
         icono={{ figura: Scissors }}
         accion={
           <BotonPrimario tamaño="sm" icono={<Plus className="h-4 w-4" />} onClick={abrirNuevo}>
-            Nuevo servicio
+            {frases.nuevo}
           </BotonPrimario>
         }
       />
@@ -146,8 +148,8 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
       {aviso && <Aviso className="mt-5">{aviso}</Aviso>}
 
       {servicios.length === 0 ? (
-        <EstadoVacio className="mt-5" titulo="Sin servicios aún">
-          Agrega el primer servicio que ofreces
+        <EstadoVacio className="mt-5" titulo={frases.sinServicios.titulo}>
+          {frases.sinServicios.ayuda}
         </EstadoVacio>
       ) : (
         <ul className="mt-5 divide-y divide-borde">
@@ -175,7 +177,7 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
               </div>
 
               <div className="ml-auto flex shrink-0 items-center gap-1">
-                <InterruptorDelServicio servicio={servicio} alCambiar={() => alternarActivo(servicio)} />
+                <InterruptorDelServicio servicio={servicio} etiqueta={frases.activo(servicio.name)} alCambiar={() => alternarActivo(servicio)} />
                 <button
                   type="button"
                   onClick={() => abrirEdicion(servicio)}
@@ -221,8 +223,8 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
         {aEliminar && (
           <ModalConfirmar
             titulo={`¿Eliminar ${aEliminar.name}?`}
-            descripcion="No se puede deshacer. Si sólo quieres dejar de ofrecerlo por un tiempo, desactívalo con su interruptor: sale de la página pública y lo vuelves a encender cuando quieras."
-            textoConfirmar="Eliminar servicio"
+            descripcion={frases.eliminar.descripcion}
+            textoConfirmar={frases.eliminar.confirmar}
             textoCancelar="No eliminar"
             peligro
             trabajando={eliminando}
@@ -242,13 +244,13 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
  * cada fila el nombre del servicio ya está al lado, y va en su nombre para el
  * lector de pantalla.
  */
-function InterruptorDelServicio({ servicio, alCambiar }: { servicio: Servicio; alCambiar: () => void }) {
+function InterruptorDelServicio({ servicio, etiqueta, alCambiar }: { servicio: Servicio; etiqueta: string; alCambiar: () => void }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={servicio.active}
-      aria-label={`Servicio activo: ${servicio.name}`}
+      aria-label={etiqueta}
       title={servicio.active ? "Desactivar" : "Activar"}
       onClick={alCambiar}
       className={cn(

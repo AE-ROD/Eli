@@ -8,6 +8,7 @@ import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Interruptor } from "@/components/comunes/interruptor"
 import { Aviso } from "@/components/panel/aviso"
 import { CampoHora } from "@/components/panel/campo-hora"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import {
@@ -19,6 +20,8 @@ import {
 } from "@/lib/hora-valle"
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
+import { frasesDeConfiguracion } from "../_frases"
 
 const DIAS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
 
@@ -72,6 +75,7 @@ export function FormularioHoraValle({
 }) {
   const idDelTitulo = useId()
   const idBase = useId()
+  const { horaValle: frases } = frasesDeConfiguracion(vocabularioDe(useRubroDelPanel()).palabras)
   const [activa, setActiva] = useState(activaInicial)
   const [guardadas, setGuardadas] = useState<FranjaDeHoraValle[]>(franjasIniciales)
   const [franjas, setFranjas] = useState<FranjaDeHoraValle[]>(franjasIniciales)
@@ -131,7 +135,7 @@ export function FormularioHoraValle({
       <div className="mt-5">
         <Interruptor
           etiqueta="Rebajar las horas valle"
-          descripcion="Quien reserva por tu página a una hora de estas franjas paga menos: lo ve en las horas y en el resumen. Cuenta la hora en que empieza la cita. Las citas que anotas en la agenda no se rebajan solas."
+          descripcion={frases.descripcion}
           activo={activa}
           alCambiar={cambiarInterruptor}
         />
@@ -257,8 +261,8 @@ export function FormularioHoraValle({
 
           {servicios.length > 0 && (
             <fieldset className="mt-6">
-              <legend className={CLASES_DE_ETIQUETA}>Servicios sin rebaja</legend>
-              <p className="mt-1 text-sm text-texto-2">Los marcados cuestan lo mismo a cualquier hora.</p>
+              <legend className={CLASES_DE_ETIQUETA}>{frases.sinRebaja}</legend>
+              <p className="mt-1 text-sm text-texto-2">{frases.sinRebajaAyuda}</p>
               <ul className="mt-3 space-y-2">
                 {servicios.map((servicio) => (
                   <li key={servicio.id}>
