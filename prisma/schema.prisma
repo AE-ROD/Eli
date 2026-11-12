@@ -138,6 +138,17 @@ model Business {
   /// dueña (`puedeConfigurarHoraValle`).
   horaValleActiva Boolean @default(false)
 
+  // ─── Planes y sedes (etapa 9) ───────────────────────────────────────────
+  /// El plan contratado: id de un plan de `lib/planes.ts` ("independiente" |
+  /// "equipo"); CHECK en la base. Independiente: atiende sólo la dueña, puede
+  /// tener hasta 5 sedes y no puede invitar. Equipo: puede invitar y tiene una
+  /// sola sede, la dirección del negocio. Default "equipo": un negocio que
+  /// una versión vieja del código cree nace con el comportamiento de siempre.
+  /// Triggers de la migración `etapa_9_planes_y_sedes` hacen respetar los
+  /// cambios de plan y la regla de invitar; la migración dejó en
+  /// "independiente" a los negocios que no tenían integrantes ni invitaciones.
+  plan String @default("equipo")
+
   invitados                Business[]                     @relation("Referidos")
   correosDeCuenta          CorreoDeCuenta[]
   customers                Customer[]
@@ -179,6 +190,8 @@ model Business {
   protesis                 Protesis[]
   eventosDeProtesis        EventoDeProtesis[]
   pagosAlLaboratorio       PagoAlLaboratorio[]
+  // Sedes del plan Independiente (etapa 9).
+  sedes                    Sede[]
 
   @@index([invitadoPorId])
   @@map("negocios")
@@ -391,9 +404,20 @@ model WorkSchedule {
   startTime  String // "09:00"
   endTime    String // "18:00"
   active     Boolean         @default(true)
+  /// Etapa 9: la sede a la que pertenece la franja (plan Independiente). Null =
+  /// el horario general del negocio, como siempre. FK compuesta (sedeId,
+  /// businessId) contra `sedes`, CASCADE: al borrar una sede se van sus
+  /// franjas. Una franja con sede exige "HH:MM" válido y inicio < fin (CHECK
+  /// `horarios_laborales_sede_horas_check`), y un trigger
+  /// (`horarios_sedes_sin_pisarse`) impide que se pise con la de otra sede
+  /// activa el mismo día. Se escribe con el id (`sedeId`), no con `connect`:
+  /// desconectar una relación compuesta intentaría anular también `businessId`.
+  sedeId     String?
+  sede       Sede?           @relation(fields: [sedeId, businessId], references: [id, businessId], onDelete: Cascade)
 
   @@index([businessId])
   @@index([memberId])
+  @@index([businessId, sedeId])
   @@map("horarios_laborales")
 }
 
@@ -430,6 +454,13 @@ model Appointment {
   // de las dos. Los sillones no se borran: se desactivan.
   sillonId              String?
   sillon                Sillon?         @relation(fields: [sillonId, businessId], references: [id, businessId], onDelete: NoAction)
+  // Etapa 9: la sede donde se atiende la cita (plan Independiente). Null = la
+  // cita no pertenece a una sede (todas las de antes y las del plan Equipo).
+  // FK compuesta (sedeId, businessId) contra `sedes` y NO ACTION, por la misma
+  // razón que el sillón: una sede con citas no se borra (se desactiva), y
+  // Restrict rompería el borrado en cascada del negocio entero.
+  sedeId                String?
+  sede                  Sede?           @relation(fields: [sedeId, businessId], references: [id, businessId], onDelete: NoAction)
   notes                 String? // notas internas del profesional
   clientComments        String? // comentarios del cliente al reservar
   price                 Float?
@@ -533,6 +564,7 @@ model Appointment {
   @@index([businessId, memberId, startTime])
   @@index([customerId])
   @@index([memberId])
+  @@index([sedeId])
   @@map("citas")
 }
 
@@ -1216,11 +1248,17 @@ model InscripcionEnEspera {
   createdAt         DateTime        @default(now())
   /// Cuándo dejó de estar activa (reservó, expiró o salió).
   resueltaAt        DateTime?
+  /// Etapa 9: la sede por la que se anotó (plan Independiente); null = el
+  /// negocio sin sedes. FK compuesta (sedeId, businessId) y CASCADE, como el
+  /// servicio: una inscripción es un dato de un día, y se va con su sede.
+  sedeId            String?
+  sede              Sede?           @relation(fields: [sedeId, businessId], references: [id, businessId], onDelete: Cascade)
 
   envios EnvioAClientes[]
 
   @@index([businessId, fecha, estado])
   @@index([businessId, email])
+  @@index([sedeId])
   @@map("lista_de_espera")
 }
 

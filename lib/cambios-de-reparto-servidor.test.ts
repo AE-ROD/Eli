@@ -11,8 +11,11 @@ beforeAll(async () => {
   m = await import("./cambios-de-reparto-servidor")
 })
 
-const dueña = actorDeSesion(sesionesDentales.dueña) as Actor
-const dueñaAjena = actorDeSesion(sesionesDentales.dueñaAjena) as Actor
+/** El actor de una sesión de prueba (son parciales: lo que `actorDeSesion` mira es el rol, el negocio, el miembro y el rubro). */
+const actorDe = (sesion: unknown): Actor | null => actorDeSesion(sesion as Parameters<typeof actorDeSesion>[0])
+
+const dueña = actorDe(sesionesDentales.dueña) as Actor
+const dueñaAjena = actorDe(sesionesDentales.dueñaAjena) as Actor
 
 type Registro = Record<string, unknown>
 
@@ -94,10 +97,10 @@ describe("leerCambiosDeReparto: el historial del reparto de prótesis de la due�
     })
     const buscar = vi.spyOn(base.prisma.cambioDeRepartoDeProtesis, "findMany")
     const quienes = [
-      actorDeSesion(sesionesDentales.encargado),
-      actorDeSesion(sesionesDentales.perez),
-      actorDeSesion(sesionesDentales.salon),
-      actorDeSesion(sesionesDentales.sinRubro),
+      actorDe(sesionesDentales.encargado),
+      actorDe(sesionesDentales.perez),
+      actorDe(sesionesDentales.salon),
+      actorDe(sesionesDentales.sinRubro),
       { rol: "desconocido", businessId: CLINICA, memberId: null, rubro: "odontologia" } as unknown as Actor,
       null,
     ]

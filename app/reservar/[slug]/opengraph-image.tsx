@@ -56,7 +56,6 @@ export default async function ImagenParaCompartir({ params }: { params: Promise<
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: CREMA }}>
         <div style={{ display: "flex", height: MEDIDAS_DE_LA_IMAGEN.banda, background: fondo }}>
           {fotos.portada && (
-            // eslint-disable-next-line @next/next/no-img-element -- next/og dibuja con <img>; no hay next/image acá
             <img src={fotos.portada} alt="" width={MEDIDAS_DE_LA_IMAGEN.ancho} height={MEDIDAS_DE_LA_IMAGEN.banda} />
           )}
         </div>
@@ -78,7 +77,6 @@ export default async function ImagenParaCompartir({ params }: { params: Promise<
             }}
           >
             {fotos.logo ? (
-              // eslint-disable-next-line @next/next/no-img-element -- next/og dibuja con <img>; no hay next/image acá
               <img src={fotos.logo} alt="" width={MEDIDAS_DE_LA_IMAGEN.logo} height={MEDIDAS_DE_LA_IMAGEN.logo} />
             ) : (
               iniciales(pagina.nombre)
