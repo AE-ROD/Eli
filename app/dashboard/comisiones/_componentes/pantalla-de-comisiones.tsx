@@ -129,7 +129,7 @@ function ProductosSoloLectura({ productos }: { productos: DatosDeComisiones["pro
         subtitulo="Quien vende un producto se lleva su %. Se cambia en Configuración, en Productos."
         icono={{ figura: Package }}
         accion={
-          <Boton href="/dashboard/configuracion" variante="secundario" tamano="sm">
+          <Boton href="/dashboard/configuracion#productos" variante="secundario" tamano="sm">
             Editar en Configuración
           </Boton>
         }

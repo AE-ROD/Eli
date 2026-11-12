@@ -25,7 +25,7 @@ const pasosPara = (clientes: string) => [
     titulo: "Configura tu horario",
     descripcion: `Define los días y horas en que atiendes. Así tus ${clientes} solo podrán reservar en tu disponibilidad real.`,
     accion: "Ir a configuración",
-    ruta: "/dashboard/configuracion",
+    ruta: "/dashboard/configuracion#horario",
   },
   {
     id: "servicios" as PasoDeBienvenida,
@@ -33,7 +33,7 @@ const pasosPara = (clientes: string) => [
     titulo: "Agrega tus servicios",
     descripcion: "Crea el catálogo de servicios que ofreces con su duración y precio. Esto aparecerá en tu página de reservas.",
     accion: "Agregar servicios",
-    ruta: "/dashboard/configuracion",
+    ruta: "/dashboard/configuracion#servicios",
   },
   {
     id: "enlace" as PasoDeBienvenida,

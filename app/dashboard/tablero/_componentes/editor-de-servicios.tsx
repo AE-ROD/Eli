@@ -137,7 +137,7 @@ export function EditorDeServicios({
           Todavía no hay servicios en el catálogo.{" "}
           {puedeConfigurarServicios ? (
             <Link
-              href="/dashboard/configuracion"
+              href="/dashboard/configuracion#servicios"
               className="rounded-sm underline decoration-[1.5px] underline-offset-4 anillo-foco"
             >
               Agrégalos en Configuración
