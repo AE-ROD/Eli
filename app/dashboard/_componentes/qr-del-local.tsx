@@ -2,7 +2,6 @@
 
 import { useEffect, useId, useState } from "react"
 import { createPortal } from "react-dom"
-import QRCode from "qrcode"
 import { Download, Printer, QrCode } from "lucide-react"
 import { Antetitulo } from "@/components/comunes/antetitulo"
 import { Boton } from "@/components/comunes/boton"
@@ -21,6 +20,13 @@ interface PropsDeQrDelLocal {
   slug: string
   nombreNegocio: string
 }
+
+/**
+ * `qrcode` se baja cuando hace falta, no con el resto del inicio del panel:
+ * son unos 19 KB comprimidos que sólo este recuadro usa. El módulo queda en
+ * memoria tras la primera vez, así que "Descargar imagen" no vuelve a pedirlo.
+ */
+const cargarQrcode = () => import("qrcode").then((modulo) => modulo.default)
 
 /**
  * El navy del sistema, leído del token (`--color-navy`) para no escribirlo a
@@ -67,15 +73,18 @@ export function QrDelLocal({ slug, nombreNegocio }: PropsDeQrDelLocal) {
   useEffect(() => {
     const url = `${window.location.origin}/reservar/${slug}`
     let vigente = true
-    QRCode.toString(url, { ...opcionesDelQr(), type: "svg", margin: 2 })
-      .then((svg) => {
-        if (!vigente) return
-        setEnlace(url)
-        setImagen(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`)
-      })
-      .catch(() => {
-        if (vigente) setError("No se pudo generar el código QR.")
-      })
+    const generar = async () => {
+      const QRCode = await cargarQrcode()
+      // Si el recuadro se fue (o cambió el negocio) mientras cargaba, no se dibuja nada.
+      if (!vigente) return
+      const svg = await QRCode.toString(url, { ...opcionesDelQr(), type: "svg", margin: 2 })
+      if (!vigente) return
+      setEnlace(url)
+      setImagen(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`)
+    }
+    generar().catch(() => {
+      if (vigente) setError("No se pudo generar el código QR.")
+    })
     return () => {
       vigente = false
     }
@@ -84,6 +93,7 @@ export function QrDelLocal({ slug, nombreNegocio }: PropsDeQrDelLocal) {
   const descargar = async () => {
     setErrorAlDescargar("")
     try {
+      const QRCode = await cargarQrcode()
       const datos = await QRCode.toDataURL(enlace, { ...opcionesDelQr(), width: 1200, margin: 4 })
       const vinculo = document.createElement("a")
       vinculo.href = datos

@@ -10,14 +10,19 @@ import {
   whereDeLiquidaciones,
   whereDeMovimientos,
 } from "@/lib/permisos"
-import { SELECCION_DE_RESUMEN, formatearResumen, leerNegocioParaLiquidar } from "@/lib/liquidacion"
+import {
+  SELECCION_DE_RESUMEN,
+  formatearResumen,
+  leerNegocioParaLiquidar,
+  ultimasLiquidacionesPorMiembro,
+} from "@/lib/liquidacion"
 import {
   SELECCION_DE_MOVIMIENTO,
   TIPOS_DE_MOVIMIENTO,
   formatearMovimiento,
   puedeManejarMovimiento,
 } from "@/lib/movimientos"
-import { fechaDeColumna, fechaDelNegocio } from "@/lib/periodos-de-liquidacion"
+import { fechaDelNegocio } from "@/lib/periodos-de-liquidacion"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { SeccionPeriodo } from "./_componentes/seccion-periodo"
 import { SeccionLiquidarDesde } from "./_componentes/seccion-liquidar-desde"
@@ -26,6 +31,14 @@ import { SeccionMovimientos } from "./_componentes/seccion-movimientos"
 import { HistorialDeLiquidaciones } from "./_componentes/historial-de-liquidaciones"
 import { LIQUIDACIONES_POR_PAGINA } from "./_datos"
 import { frasesDeLasLiquidaciones } from "./_frases"
+
+/**
+ * Cuántos miembros se listan para liquidar. Es el tope con que la pantalla de
+ * Equipo (`GET /api/equipo`) lista al equipo: quien pasara de 200 personas no
+ * las vería ahí tampoco, y un local real tiene decenas. Sólo evita una lectura
+ * sin límite; no cambia lo que ve ningún negocio.
+ */
+const TOPE_DE_MIEMBROS = 200
 
 /**
  * Liquidaciones del equipo (#68, #69): dueña y encargado. El profesional ve
@@ -44,6 +57,7 @@ export default async function PaginaLiquidaciones() {
       where: { businessId: actor.businessId },
       select: { id: true, user: { select: { name: true } } },
       orderBy: { createdAt: "asc" },
+      take: TOPE_DE_MIEMBROS,
     }),
     // La primera página del historial (una más, para saber si hay otra); el
     // resto lo pide "Ver más" a la API, con el mismo orden.
@@ -65,30 +79,24 @@ export default async function PaginaLiquidaciones() {
   ])
 
   const resumenes = historial.slice(0, LIQUIDACIONES_POR_PAGINA).map(formatearResumen)
-  // La última no anulada de cada uno, leída por persona: con un historial
-  // largo, la de alguien puede no estar entre las primeras de todo el negocio.
-  const ultimas = await Promise.all(
-    miembros.map((miembro) =>
-      prisma.liquidacion.findFirst({
-        where: whereDeLiquidaciones(actor, { memberId: miembro.id, estado: { not: "anulada" } }),
-        select: { desde: true, hasta: true },
-        orderBy: [{ hasta: "desc" }, { cerradaAt: "desc" }],
-      })
-    )
+  // La última no anulada de cada uno, leída por persona (con un historial
+  // largo, la de alguien puede no estar entre las primeras de todo el negocio),
+  // pero en una sola consulta para todo el equipo.
+  const ultimas = await ultimasLiquidacionesPorMiembro(
+    prisma,
+    actor,
+    miembros.map((miembro) => miembro.id)
   )
   // Lo de antes de "Liquidar desde" no entra en ninguna liquidación (la vista
   // previa lo deja afuera): tampoco se muestra como pendiente.
   const movimientosPendientes = pendientes
     .map(formatearMovimiento)
     .filter((movimiento) => !liquidarDesde || movimiento.fecha >= liquidarDesde)
-  const equipo: MiembroParaLiquidar[] = miembros.map((miembro, indice) => {
-    const ultima = ultimas[indice]
-    return {
-      id: miembro.id,
-      nombre: miembro.user.name,
-      ultima: ultima ? { desde: fechaDeColumna(ultima.desde), hasta: fechaDeColumna(ultima.hasta) } : null,
-    }
-  })
+  const equipo: MiembroParaLiquidar[] = miembros.map((miembro) => ({
+    id: miembro.id,
+    nombre: miembro.user.name,
+    ultima: ultimas.get(miembro.id) ?? null,
+  }))
 
   const hoy = fechaDelNegocio(new Date(), zona)
   const fechaFijada = (

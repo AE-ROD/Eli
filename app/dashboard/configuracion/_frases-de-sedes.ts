@@ -187,7 +187,6 @@ export function frasesDeLasSedes(palabras: PalabrasDelRubro) {
       sinLugar: "No queda lugar para otra franja este día",
       quitarFranja: (dia: string, numero: number): string => `Quitar la franja ${numero} de ${dia}`,
       guardar: "Guardar horario",
-      guardando: "Guardando…",
       guardado: "Guardado",
       cerrar: "Cerrar",
       sinGuardar: "Tienes cambios sin guardar.",

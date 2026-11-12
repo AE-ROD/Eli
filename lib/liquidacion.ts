@@ -924,6 +924,46 @@ export function formatearResumen(fila: FilaDeResumen): ResumenDeLiquidacion {
   }
 }
 
+/** El último período que se le liquidó a alguien: sus fechas, como se leen. */
+export interface UltimaLiquidacion {
+  desde: string
+  hasta: string
+}
+
+/**
+ * La última liquidación no anulada de cada uno de estos miembros (la de
+ * `hasta` más reciente; a igual `hasta`, la cerrada después), en una sola
+ * consulta en vez de una por persona. Con el filtro de plata del actor
+ * (`whereDeLiquidaciones`). Quien no tiene ninguna no está en el mapa.
+ *
+ * `distinct` deja la primera fila de cada miembro en el orden pedido. Va sin
+ * `take` a propósito: el resultado ya está acotado (una fila por miembro de
+ * `miembroIds`) y un tope en la consulta podría cortar filas antes de repartir
+ * por persona. El último desempate, `id`, hace estable la elección si dos
+ * cierres comparten `hasta` y `cerradaAt`.
+ */
+export async function ultimasLiquidacionesPorMiembro(
+  db: Db,
+  actor: Actor,
+  miembroIds: string[]
+): Promise<Map<string, UltimaLiquidacion>> {
+  const ultimas = new Map<string, UltimaLiquidacion>()
+  if (miembroIds.length === 0) return ultimas
+
+  const filas = await db.liquidacion.findMany({
+    where: whereDeLiquidaciones(actor, { memberId: { in: miembroIds }, estado: { not: "anulada" } }),
+    select: { memberId: true, desde: true, hasta: true },
+    orderBy: [{ hasta: "desc" }, { cerradaAt: "desc" }, { id: "desc" }],
+    distinct: ["memberId"],
+  })
+
+  for (const fila of filas) {
+    if (ultimas.has(fila.memberId)) continue
+    ultimas.set(fila.memberId, { desde: fechaDeColumna(fila.desde), hasta: fechaDeColumna(fila.hasta) })
+  }
+  return ultimas
+}
+
 /**
  * Una liquidación con todo lo que incluye, si el actor la ve
  * (`whereDeLiquidaciones`: la gestión, todas las del negocio; el

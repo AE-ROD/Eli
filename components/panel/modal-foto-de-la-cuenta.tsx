@@ -33,7 +33,7 @@ export function ModalFotoDeLaCuenta({ nombre, fotoUrl: inicial, alCerrar, alCamb
     <MarcoDeModal
       titulo="Mi foto"
       antetitulo="Tu cuenta"
-      descripcion="Es la foto de tu cuenta: sigue contigo en todos tus negocios y solo la ves tú, en el panel. No se publica en la página de reservas."
+      descripcion="Es la foto de tu cuenta: te acompaña donde trabajes y solo la ves tú, en el panel. No se publica en la página de reservas."
       alCerrar={alCerrar}
     >
       <div className="space-y-6">
