@@ -20,13 +20,13 @@ import {
   conCategoria,
   conCategoriaRenombrada,
   contarDeLaCategoria,
-  escriturasDeLaCategoria,
   fusionarServicios,
   vistaDeLaLista,
   type FiltroDeLaLista,
   type GrupoDeLaLista,
 } from "@/lib/lista-de-servicios"
 import { alternarUna, conMarca, estadoDeLaSeleccion, marcadasEntre } from "@/lib/seleccion-multiple"
+import { claveDeCategoria } from "@/lib/servicios-por-categoria"
 import type { ServicioParaCargar } from "@/lib/servicios-en-lote"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
@@ -47,7 +47,7 @@ import {
   editarServicio,
   activarODesactivarServicio,
   leerServicios,
-  renombrarCategoriaConVariantes,
+  renombrarCategoria,
   type DatosDeServicio,
   type Servicio,
 } from "../_datos"
@@ -292,30 +292,35 @@ export function SeccionServicios({ serviciosIniciales, puedeMarcarUrgencia = fal
 
   /**
    * Renombra una categoría, o la une con otra que ya existe (el plan lo dice
-   * el modal). La categoría puede estar guardada con más de una escritura
-   * ("Color" y "color "): se manda cada una.
+   * el modal). El servidor compara el nombre sin mayúsculas ni espacios de más,
+   * así que un solo pedido cambia todas sus escrituras. Si cambió justo los
+   * que se esperaban, la lista se actualiza sin pedirla; si no (el servidor
+   * también compara sin tildes, y puede haber movido más), se vuelve a leer.
    */
   const confirmarRenombrar = async (plan: PlanConfirmable) => {
     if (!aRenombrar) return
     const { clave, categoria } = aRenombrar
-    const esperados = contarDeLaCategoria(servicios, clave)
+    const esperados = servicios.filter(
+      (servicio) => (servicio.category ?? "").trim() !== "" && claveDeCategoria(servicio.category) === clave && servicio.category !== plan.nuevo
+    ).length
     setAvisoDelLote("")
     setTrabajandoEnLote(true)
-    const hecho = await renombrarCategoriaConVariantes(escriturasDeLaCategoria(servicios, clave), plan.nuevo, palabras)
-    if (!hecho.ok) {
+    const hecho = await renombrarCategoria(categoria, plan.nuevo, palabras)
+    if (hecho.ok && hecho.datos.actualizados === esperados) {
+      setServicios((previos) => conCategoriaRenombrada(previos, clave, plan.nuevo))
+    } else {
       await refrescarLista()
-      setTrabajandoEnLote(false)
-      return setAvisoDelLote(hecho.error)
     }
-    if (hecho.datos.actualizados === esperados) setServicios((previos) => conCategoriaRenombrada(previos, clave, plan.nuevo))
-    else await refrescarLista()
     setTrabajandoEnLote(false)
+    if (!hecho.ok) return setAvisoDelLote(hecho.error)
 
-    const n = hecho.datos.actualizados
     setAviso("")
     setResultado({
       tono: "listo",
-      titulo: plan.tipo === "unir" ? frases.renombrarCategoria.resultadoUnir(categoria, plan.nuevo, n) : frases.renombrarCategoria.resultadoRenombrar(categoria, plan.nuevo, n),
+      titulo:
+        plan.tipo === "unir"
+          ? frases.renombrarCategoria.resultadoUnir(categoria, plan.nuevo, hecho.datos.actualizados)
+          : frases.renombrarCategoria.resultadoRenombrar(categoria, plan.nuevo, hecho.datos.actualizados),
       detalles: [],
     })
     setARenombrar(null)

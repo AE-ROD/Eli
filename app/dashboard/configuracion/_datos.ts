@@ -1,7 +1,8 @@
 /**
  * Todo lo que la configuración le pide al servidor desde el navegador: el
- * horario de un miembro (leer y guardar), el catálogo de servicios y las
- * fotos de la página pública. Lo que se
+ * horario de un miembro (leer y guardar), el catálogo de servicios (uno a uno
+ * y en lote: la carga rápida, los cambios de varios a la vez y las categorías)
+ * y las fotos de la página pública. Lo que se
  * ve al entrar ya viene resuelto por `page.tsx`, que es de servidor y consulta
  * la base directo.
  *
@@ -16,6 +17,7 @@ import { enviarFoto, pedirQuitarFoto, type ResultadoDeFoto } from "@/lib/enviar-
 import { pedir, pedirConCodigo, conJson, type Resultado } from "@/lib/peticiones"
 import {
   leerActualizados,
+  MAX_SERVICIOS_POR_CAMBIO,
   leerRespuestaDeLote,
   partirEnTandas,
   type ResumenDeCarga,
@@ -266,10 +268,10 @@ export interface CambiosEnLote {
 }
 
 /**
- * Cambia la categoría o el estado de varios servicios, de a 100 por pedido.
- * Devuelve cuántos actualizó el servidor; si un pedido falla, `actualizados`
- * es lo que se alcanzó a cambiar antes (la pantalla vuelve a leer la lista).
- * Nunca lanza.
+ * Cambia la categoría o el estado de varios servicios, de a 200 por pedido (lo
+ * que acepta el servidor). Devuelve cuántos actualizó el servidor; si un
+ * pedido falla, `actualizados` es lo que se alcanzó a cambiar antes (la
+ * pantalla vuelve a leer la lista). Nunca lanza.
  */
 export async function cambiarServiciosEnLote(
   ids: readonly string[],
@@ -277,7 +279,7 @@ export async function cambiarServiciosEnLote(
   palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
 ): Promise<{ ok: true; actualizados: number } | { ok: false; error: string; actualizados: number }> {
   let actualizados = 0
-  for (const tanda of partirEnTandas(ids)) {
+  for (const tanda of partirEnTandas(ids, MAX_SERVICIOS_POR_CAMBIO)) {
     const resultado = await pedirEnLote<unknown>("/api/configuracion/servicios/lote", "cambiar", palabras, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -292,7 +294,9 @@ export async function cambiarServiciosEnLote(
 /**
  * Renombra una categoría: los servicios que la tienen pasan a `a` (`null`, sin
  * categoría). Si `a` ya existe, los junta con los de esa. `de: null` son los
- * que no tienen categoría. Devuelve cuántos cambió.
+ * que no tienen categoría. El servidor compara `de` sin mayúsculas, tildes ni
+ * espacios de más: "Color" y "color " son la misma. Devuelve cuántos cambió (los
+ * que ya estaban escritos exactamente como `a` no cuentan).
  */
 export async function renombrarCategoria(
   de: string | null,
@@ -306,26 +310,6 @@ export async function renombrarCategoria(
     conJson("POST", { de, a })
   )
   return resultado.ok ? { ok: true, datos: { actualizados: leerActualizados(resultado.datos) } } : resultado
-}
-
-/**
- * Renombra una categoría que está guardada con más de una escritura ("Color" y
- * "color "): una vez por cada una, sin depender de cómo compara el servidor. La
- * que ya se escribe como `a` no se manda (no hay nada que cambiar). Se detiene
- * en el primer fallo.
- */
-export async function renombrarCategoriaConVariantes(
-  escrituras: readonly string[],
-  a: string,
-  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
-): Promise<Resultado<{ actualizados: number }>> {
-  let actualizados = 0
-  for (const de of escrituras.filter((escritura) => escritura !== a)) {
-    const resultado = await renombrarCategoria(de, a, palabras)
-    if (!resultado.ok) return resultado
-    actualizados += resultado.datos.actualizados
-  }
-  return { ok: true, datos: { actualizados } }
 }
 
 // ─── Productos (#67) ─────────────────────────────────────────────────────────

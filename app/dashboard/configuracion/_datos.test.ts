@@ -18,7 +18,6 @@ import {
   moverSillon,
   quitarFotoDelNegocio,
   renombrarCategoria,
-  renombrarCategoriaConVariantes,
   subirFotoDelNegocio,
   type DatosDePaginaPublica,
   type DatosDeServicio,
@@ -493,19 +492,23 @@ describe("cambiarServiciosEnLote", () => {
     expect(JSON.parse(String((fetchFalso.mock.calls[1][1] as RequestInit).body))).toEqual({ ids: ["a"], active: false })
   })
 
-  it("más de 100 ids van en tandas y se suman", async () => {
-    const ids = Array.from({ length: 230 }, (_, i) => `id${i}`)
-    const fetchFalso = simularRespuestas(json({ actualizados: 100 }), json({ actualizados: 100 }), json({ actualizados: 30 }))
-    expect(await cambiarServiciosEnLote(ids, { active: true })).toEqual({ ok: true, actualizados: 230 })
-    expect([0, 1, 2].map((n) => cuerpoDeLaLlamada(fetchFalso, n).ids.length)).toEqual([100, 100, 30])
+  it("hasta 200 ids van en un solo pedido; más, en tandas que se suman (el servidor acepta 200 por pedido)", async () => {
+    const unPedido = simularRespuesta(json({ actualizados: 200 }))
+    expect(await cambiarServiciosEnLote(Array.from({ length: 200 }, (_, i) => `id${i}`), { active: true })).toEqual({ ok: true, actualizados: 200 })
+    expect(unPedido).toHaveBeenCalledTimes(1)
+
+    const ids = Array.from({ length: 430 }, (_, i) => `id${i}`)
+    const fetchFalso = simularRespuestas(json({ actualizados: 200 }), json({ actualizados: 200 }), json({ actualizados: 30 }))
+    expect(await cambiarServiciosEnLote(ids, { active: true })).toEqual({ ok: true, actualizados: 430 })
+    expect([0, 1, 2].map((n) => cuerpoDeLaLlamada(fetchFalso, n).ids.length)).toEqual([200, 200, 30])
   })
 
   it("si falla a la mitad, dice cuántos alcanzó a cambiar", async () => {
-    const ids = Array.from({ length: 150 }, (_, i) => `id${i}`)
-    simularRespuestas(json({ actualizados: 100 }), json({ error: "Error interno" }, 500))
+    const ids = Array.from({ length: 250 }, (_, i) => `id${i}`)
+    simularRespuestas(json({ actualizados: 200 }), json({ error: "Error interno" }, 500))
     expect(await cambiarServiciosEnLote(ids, { active: false }, PRESTACIONES)).toEqual({
       ok: false,
-      actualizados: 100,
+      actualizados: 200,
       error: "No se pudieron cambiar las prestaciones. Inténtalo de nuevo.",
     })
   })
@@ -534,22 +537,6 @@ describe("renombrarCategoria", () => {
       ok: false,
       error: "Hiciste varios cambios seguidos. Espera un momento e inténtalo de nuevo.",
     })
-  })
-
-  it("con variantes, manda una por cada escritura distinta de la nueva y suma", async () => {
-    const fetchFalso = simularRespuestas(json({ actualizados: 3 }), json({ actualizados: 1 }))
-    expect(await renombrarCategoriaConVariantes(["Color", "color", "Tintes"], "Tintes")).toEqual({ ok: true, datos: { actualizados: 4 } })
-    expect(fetchFalso).toHaveBeenCalledTimes(2)
-    expect(cuerpoDeLaLlamada(fetchFalso, 0)).toEqual({ de: "Color", a: "Tintes" })
-    expect(cuerpoDeLaLlamada(fetchFalso, 1)).toEqual({ de: "color", a: "Tintes" })
-  })
-
-  it("si todas ya se escriben igual no pide nada, y se detiene en el primer fallo", async () => {
-    const fetchFalso = simularRespuestas(json({ error: "No" }, 400), json({ actualizados: 1 }))
-    expect(await renombrarCategoriaConVariantes(["Color"], "Color")).toEqual({ ok: true, datos: { actualizados: 0 } })
-    expect(fetchFalso).not.toHaveBeenCalled()
-    expect(await renombrarCategoriaConVariantes(["A", "B"], "C")).toEqual({ ok: false, error: "No" })
-    expect(fetchFalso).toHaveBeenCalledTimes(1)
   })
 })
 

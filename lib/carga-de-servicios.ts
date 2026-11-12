@@ -68,6 +68,14 @@ export function opcionesDeDuracion(actual: number): number[] {
 
 // ─── Tandas y respuestas ─────────────────────────────────────────────────────
 
+/**
+ * Cuántos servicios acepta el servidor en un cambio en lote (`PATCH .../lote`:
+ * hasta 200 ids). Una carga, en cambio, acepta 100 (`MAX_SERVICIOS_POR_LOTE`).
+ * Cada pedido gasta del cupo de escrituras masivas (20 por hora), así que no se
+ * parte en tandas más chicas de lo que hace falta.
+ */
+export const MAX_SERVICIOS_POR_CAMBIO = 200
+
 /** La lista en tandas de a lo más `tamano` (100, lo que el servidor acepta en una carga). */
 export function partirEnTandas<T>(lista: readonly T[], tamano = MAX_SERVICIOS_POR_LOTE): T[][] {
   const tandas: T[][] = []
