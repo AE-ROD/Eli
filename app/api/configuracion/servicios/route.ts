@@ -16,6 +16,8 @@ import { frecuenciaDeServicio } from "@/lib/frecuencia-de-visitas"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { actorDeSesion, puedeGestionarServicios, puedeMarcarServicioComoUrgencia } from "@/lib/permisos"
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
+import { MAX_SERVICIOS_POR_NEGOCIO, TopeDeServicios, mensajeDeTopeDeServicios } from "@/lib/servicios-en-lote"
+import { vocabularioDe } from "@/lib/vocabulario"
 
 export async function GET() {
   const session = await getServerSession(authOptions)
@@ -28,7 +30,8 @@ export async function GET() {
   const servicios = await prisma.service.findMany({
     where: { businessId: actor.businessId },
     orderBy: { createdAt: "asc" },
-    take: 200,
+    // El tope de servicios de un negocio: la lista siempre los trae todos.
+    take: MAX_SERVICIOS_POR_NEGOCIO,
   })
 
   return NextResponse.json(servicios)
@@ -66,13 +69,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: MENSAJE_URGENCIA_SOLO_EN_CLINICA }, { status: 401 })
     }
 
-    const servicio = await prisma.service.create({
-      data: {
-        ...datos,
-        price: datos.price ?? null,
-        frecuenciaDias: datos.frecuenciaDias ?? null,
-        businessId: actor.businessId,
-      },
+    // Con el candado del negocio (el mismo de la carga en lote): sin él, un servicio suelto y
+    // una carga a la vez contaban los mismos servicios y pasaban los dos del tope.
+    const servicio = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`servicios:${actor.businessId}`}))`
+      const existentes = await tx.service.count({ where: { businessId: actor.businessId } })
+      if (existentes >= MAX_SERVICIOS_POR_NEGOCIO) throw new TopeDeServicios(existentes, 1)
+
+      return tx.service.create({
+        data: {
+          ...datos,
+          price: datos.price ?? null,
+          frecuenciaDias: datos.frecuenciaDias ?? null,
+          businessId: actor.businessId,
+        },
+      })
     })
 
     return NextResponse.json(servicio, { status: 201 })
@@ -80,6 +91,12 @@ export async function POST(request: NextRequest) {
     if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       return respuestaDeDatosInvalidos(error)
+    }
+    if (error instanceof TopeDeServicios) {
+      return NextResponse.json(
+        { error: mensajeDeTopeDeServicios(error.existentes, error.nuevos, vocabularioDe(actor.rubro).palabras.servicio) },
+        { status: 409 }
+      )
     }
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }

@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
+import { vocabularioDe } from "@/lib/vocabulario"
 import {
   cambiarMensajesAClientes,
+  cambiarServiciosEnLote,
+  cargarServiciosEnLote,
   crearServicio,
   cuerpoDeProducto,
   cuerpoDeServicio,
@@ -10,8 +13,12 @@ import {
   guardarPaginaPublica,
   guardarZonaHoraria,
   leerPorcentaje,
+  leerServicios,
+  leerSugeridos,
   moverSillon,
   quitarFotoDelNegocio,
+  renombrarCategoria,
+  renombrarCategoriaConVariantes,
   subirFotoDelNegocio,
   type DatosDePaginaPublica,
   type DatosDeServicio,
@@ -373,5 +380,200 @@ describe("fotos del negocio", () => {
       ok: false,
       error: "La foto pesa más de 5 MB. Sube una más liviana.",
     })
+  })
+})
+
+// ─── Servicios en lote ───────────────────────────────────────────────────────
+
+/** Varias respuestas en orden, una por pedido. */
+const simularRespuestas = (...respuestas: Response[]) => {
+  const fetchFalso = vi.fn()
+  for (const respuesta of respuestas) fetchFalso.mockResolvedValueOnce(respuesta)
+  vi.stubGlobal("fetch", fetchFalso)
+  return fetchFalso
+}
+
+const cuerpoDeLaLlamada = (fetchFalso: ReturnType<typeof vi.fn>, n: number) => JSON.parse(String((fetchFalso.mock.calls[n][1] as RequestInit).body))
+
+const paraCargar = (cuantos: number) =>
+  Array.from({ length: cuantos }, (_, i) => ({ name: `Servicio ${i + 1}`, duration: 30, price: null, category: null, description: null }))
+
+const PRESTACIONES = vocabularioDe("odontologia").palabras
+
+describe("cargarServiciosEnLote", () => {
+  it("manda una sola carga si caben en 100 y cuenta lo creado y lo omitido", async () => {
+    const fetchFalso = simularRespuesta(json({ creados: 2, omitidos: [{ fila: 3, name: "Corte", motivo: "Ya existe un servicio con ese nombre" }] }, 201))
+    const resultado = await cargarServiciosEnLote(paraCargar(3))
+    expect(fetchFalso).toHaveBeenCalledTimes(1)
+    expect(fetchFalso.mock.calls[0][0]).toBe("/api/configuracion/servicios/lote")
+    expect((fetchFalso.mock.calls[0][1] as RequestInit).method).toBe("POST")
+    expect(cuerpoEnviado(fetchFalso).servicios).toHaveLength(3)
+    expect(resultado).toEqual({
+      ok: true,
+      creados: 2,
+      omitidos: [{ fila: 3, name: "Corte", motivo: "Ya existe un servicio con ese nombre" }],
+      sinEnviar: 0,
+      error: null,
+    })
+  })
+
+  it("250 servicios van en tres tandas (100, 100 y 50) y se juntan los resultados, con la fila de la carga entera", async () => {
+    const fetchFalso = simularRespuestas(
+      json({ creados: 100, omitidos: [] }, 201),
+      json({ creados: 99, omitidos: [{ fila: 4, name: "Servicio 104", motivo: "x" }] }, 201),
+      json({ creados: 50, omitidos: [] }, 201)
+    )
+    const resultado = await cargarServiciosEnLote(paraCargar(250))
+    expect(fetchFalso).toHaveBeenCalledTimes(3)
+    expect([0, 1, 2].map((n) => cuerpoDeLaLlamada(fetchFalso, n).servicios.length)).toEqual([100, 100, 50])
+    // Una tanda no repite lo que mandó la anterior.
+    expect(cuerpoDeLaLlamada(fetchFalso, 1).servicios[0].name).toBe("Servicio 101")
+    expect(resultado).toMatchObject({ ok: true, creados: 249, omitidos: [{ fila: 104, name: "Servicio 104" }], sinEnviar: 0 })
+  })
+
+  it("si una tanda falla, corta: dice lo que sí se creó y cuántos quedaron sin enviar", async () => {
+    const fetchFalso = simularRespuestas(json({ creados: 100, omitidos: [] }, 201), new Response("<html>", { status: 429 }), json({ creados: 1 }))
+    const resultado = await cargarServiciosEnLote(paraCargar(250))
+    expect(fetchFalso).toHaveBeenCalledTimes(2)
+    expect(resultado).toEqual({
+      ok: false,
+      creados: 100,
+      omitidos: [],
+      sinEnviar: 150,
+      error: "Hiciste varios cambios seguidos. Espera un momento e inténtalo de nuevo.",
+    })
+  })
+
+  it("el 409 del tope trae el mensaje del servidor", async () => {
+    simularRespuesta(json({ error: "Se pueden tener hasta 300 servicios y ya tienes 290." }, 409))
+    expect(await cargarServiciosEnLote(paraCargar(20))).toMatchObject({
+      ok: false,
+      creados: 0,
+      sinEnviar: 20,
+      error: "Se pueden tener hasta 300 servicios y ya tienes 290.",
+    })
+  })
+
+  it("sin mensaje del servidor, el del código, con las palabras del rubro", async () => {
+    simularRespuesta(new Response("", { status: 401 }))
+    expect(await cargarServiciosEnLote(paraCargar(1), PRESTACIONES)).toMatchObject({ ok: false, error: expect.stringContaining("sesión terminó") })
+    simularRespuesta(new Response("", { status: 502 }))
+    expect(await cargarServiciosEnLote(paraCargar(1), PRESTACIONES)).toMatchObject({
+      error: "No se pudieron agregar las prestaciones. Inténtalo de nuevo.",
+    })
+  })
+
+  it("sin conexión no lanza: devuelve el aviso", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")))
+    expect(await cargarServiciosEnLote(paraCargar(2))).toMatchObject({ ok: false, creados: 0, sinEnviar: 2, error: "Sin conexión con el servidor" })
+  })
+
+  it("sin nada que cargar no pide nada", async () => {
+    const fetchFalso = simularRespuesta(json({}))
+    expect(await cargarServiciosEnLote([])).toMatchObject({ ok: true, creados: 0 })
+    expect(fetchFalso).not.toHaveBeenCalled()
+  })
+})
+
+describe("cambiarServiciosEnLote", () => {
+  it("manda los ids y el cambio con PATCH y devuelve cuántos actualizó", async () => {
+    const fetchFalso = simularRespuesta(json({ actualizados: 2 }))
+    const resultado = await cambiarServiciosEnLote(["a", "b"], { category: "Color" })
+    expect(fetchFalso.mock.calls[0][0]).toBe("/api/configuracion/servicios/lote")
+    expect((fetchFalso.mock.calls[0][1] as RequestInit).method).toBe("PATCH")
+    expect(cuerpoEnviado(fetchFalso)).toEqual({ ids: ["a", "b"], category: "Color" })
+    expect(resultado).toEqual({ ok: true, actualizados: 2 })
+  })
+
+  it("quitar la categoría manda null; activar o desactivar manda active", async () => {
+    const fetchFalso = simularRespuesta(json({ actualizados: 1 }))
+    await cambiarServiciosEnLote(["a"], { category: null })
+    expect(cuerpoEnviado(fetchFalso)).toEqual({ ids: ["a"], category: null })
+    await cambiarServiciosEnLote(["a"], { active: false })
+    expect(JSON.parse(String((fetchFalso.mock.calls[1][1] as RequestInit).body))).toEqual({ ids: ["a"], active: false })
+  })
+
+  it("más de 100 ids van en tandas y se suman", async () => {
+    const ids = Array.from({ length: 230 }, (_, i) => `id${i}`)
+    const fetchFalso = simularRespuestas(json({ actualizados: 100 }), json({ actualizados: 100 }), json({ actualizados: 30 }))
+    expect(await cambiarServiciosEnLote(ids, { active: true })).toEqual({ ok: true, actualizados: 230 })
+    expect([0, 1, 2].map((n) => cuerpoDeLaLlamada(fetchFalso, n).ids.length)).toEqual([100, 100, 30])
+  })
+
+  it("si falla a la mitad, dice cuántos alcanzó a cambiar", async () => {
+    const ids = Array.from({ length: 150 }, (_, i) => `id${i}`)
+    simularRespuestas(json({ actualizados: 100 }), json({ error: "Error interno" }, 500))
+    expect(await cambiarServiciosEnLote(ids, { active: false }, PRESTACIONES)).toEqual({
+      ok: false,
+      actualizados: 100,
+      error: "No se pudieron cambiar las prestaciones. Inténtalo de nuevo.",
+    })
+  })
+
+  it("sin ids no pide nada", async () => {
+    const fetchFalso = simularRespuesta(json({}))
+    expect(await cambiarServiciosEnLote([], { active: true })).toEqual({ ok: true, actualizados: 0 })
+    expect(fetchFalso).not.toHaveBeenCalled()
+  })
+})
+
+describe("renombrarCategoria", () => {
+  it("manda de y a, y null es sin categoría", async () => {
+    const fetchFalso = simularRespuesta(json({ actualizados: 4 }))
+    expect(await renombrarCategoria("Color", "Tintes")).toEqual({ ok: true, datos: { actualizados: 4 } })
+    expect(fetchFalso.mock.calls[0][0]).toBe("/api/configuracion/servicios/categorias")
+    expect((fetchFalso.mock.calls[0][1] as RequestInit).method).toBe("POST")
+    expect(cuerpoEnviado(fetchFalso)).toEqual({ de: "Color", a: "Tintes" })
+    await renombrarCategoria(null, "Otros")
+    expect(JSON.parse(String((fetchFalso.mock.calls[1][1] as RequestInit).body))).toEqual({ de: null, a: "Otros" })
+  })
+
+  it("un fallo es un { ok: false } con el mensaje, no una excepción", async () => {
+    simularRespuesta(new Response("", { status: 429 }))
+    expect(await renombrarCategoria("Color", "Tintes")).toEqual({
+      ok: false,
+      error: "Hiciste varios cambios seguidos. Espera un momento e inténtalo de nuevo.",
+    })
+  })
+
+  it("con variantes, manda una por cada escritura distinta de la nueva y suma", async () => {
+    const fetchFalso = simularRespuestas(json({ actualizados: 3 }), json({ actualizados: 1 }))
+    expect(await renombrarCategoriaConVariantes(["Color", "color", "Tintes"], "Tintes")).toEqual({ ok: true, datos: { actualizados: 4 } })
+    expect(fetchFalso).toHaveBeenCalledTimes(2)
+    expect(cuerpoDeLaLlamada(fetchFalso, 0)).toEqual({ de: "Color", a: "Tintes" })
+    expect(cuerpoDeLaLlamada(fetchFalso, 1)).toEqual({ de: "color", a: "Tintes" })
+  })
+
+  it("si todas ya se escriben igual no pide nada, y se detiene en el primer fallo", async () => {
+    const fetchFalso = simularRespuestas(json({ error: "No" }, 400), json({ actualizados: 1 }))
+    expect(await renombrarCategoriaConVariantes(["Color"], "Color")).toEqual({ ok: true, datos: { actualizados: 0 } })
+    expect(fetchFalso).not.toHaveBeenCalled()
+    expect(await renombrarCategoriaConVariantes(["A", "B"], "C")).toEqual({ ok: false, error: "No" })
+    expect(fetchFalso).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("leerSugeridos y leerServicios", () => {
+  const SUGERIDO = { clave: "corte", name: "Corte", duration: 45, price: 15000, category: "Corte", yaExiste: false }
+
+  it("leerSugeridos devuelve la lista de { sugeridos }", async () => {
+    const fetchFalso = simularRespuesta(json({ sugeridos: [SUGERIDO] }))
+    expect(await leerSugeridos()).toEqual({ ok: true, datos: [SUGERIDO] })
+    expect(fetchFalso.mock.calls[0][0]).toBe("/api/configuracion/servicios/sugeridos")
+  })
+
+  it("una respuesta que no es la esperada es un error, no una pantalla rota", async () => {
+    simularRespuesta(json({ otra: 1 }))
+    expect(await leerSugeridos()).toEqual({ ok: false, error: "No se pudieron cargar los servicios sugeridos. Inténtalo de nuevo." })
+    simularRespuesta(json({ error: "No autorizado" }, 401))
+    expect(await leerSugeridos(PRESTACIONES)).toEqual({ ok: false, error: "No autorizado" })
+  })
+
+  it("leerServicios devuelve la lista del servidor", async () => {
+    const fetchFalso = simularRespuesta(json([{ id: "a" }]))
+    expect(await leerServicios()).toEqual({ ok: true, datos: [{ id: "a" }] })
+    expect(fetchFalso.mock.calls[0][0]).toBe("/api/configuracion/servicios")
+    simularRespuesta(json({ no: "es una lista" }))
+    expect(await leerServicios()).toMatchObject({ ok: false })
   })
 })

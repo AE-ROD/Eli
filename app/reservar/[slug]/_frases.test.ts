@@ -5,6 +5,7 @@ import {
   frasesDeLaGestion,
   frasesDeLaListaDeEspera,
   frasesDeLaPagina,
+  frasesDelCatalogo,
   frasesDelFormulario,
   lineaDeLaImagen,
   pestanaDeLaReserva,
@@ -288,5 +289,46 @@ describe("ningún rubro con palabras propias deja una palabra de siempre", () =>
       expect(texto, texto).not.toMatch(/\bpersona\b/i)
       expect(texto, texto).not.toMatch(/\bnegocio\b/i)
     }
+  })
+})
+
+describe("el catálogo ordenado del primer paso: la búsqueda, 'Todos' y lo elegido", () => {
+  it.each([undefined, null, "", "salud", "otro", "salon", "barberia", "spa-de-unas"] as const)(
+    "%j: 'servicio'",
+    (rubro) => {
+      const c = frasesDelFormulario(rubro).paso1.catalogo
+
+      expect(c.buscar).toBe("Buscar servicio")
+      expect(c.todos).toBe("Todos")
+      expect(c.filtrarPorCategoria).toBe("Filtrar por categoría")
+      expect(c.elegiste).toBe("Elegiste:")
+      expect(c.quitar("Corte de pelo")).toBe("Quitar Corte de pelo")
+      expect(c.resultados(1)).toBe("1 servicio encontrado")
+      expect(c.resultados(7)).toBe("7 servicios encontrados")
+      expect(c.sinResultados).toBe("No encontramos servicios con esa búsqueda.")
+      expect(c.quitarFiltros).toBe("Quitar filtros")
+    }
+  )
+
+  it("una clínica dental: 'motivo', no 'servicio'", () => {
+    const c = frasesDelFormulario("odontologia").paso1.catalogo
+
+    expect(c.buscar).toBe("Buscar motivo")
+    expect(c.todos).toBe("Todos")
+    expect(c.resultados(1)).toBe("1 motivo encontrado")
+    expect(c.resultados(3)).toBe("3 motivos encontrados")
+    expect(c.resultados(0)).toBe("0 motivos encontrados")
+    expect(c.sinResultados).toBe("No encontramos motivos con esa búsqueda.")
+    for (const texto of [c.buscar, c.todos, c.resultados(2), c.sinResultados]) expect(texto).not.toMatch(/servicio/i)
+  })
+
+  it("una palabra femenina concuerda: 'Todas', '1 prestación encontrada', 'No encontramos prestaciones…'", () => {
+    const c = frasesDelCatalogo({ singular: "prestación", plural: "prestaciones", genero: "f" })
+
+    expect(c.buscar).toBe("Buscar prestación")
+    expect(c.todos).toBe("Todas")
+    expect(c.resultados(1)).toBe("1 prestación encontrada")
+    expect(c.resultados(4)).toBe("4 prestaciones encontradas")
+    expect(c.sinResultados).toBe("No encontramos prestaciones con esa búsqueda.")
   })
 })

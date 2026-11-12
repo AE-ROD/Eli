@@ -52,8 +52,26 @@ export type NombreDeModelo =
   | "protesis"
   | "eventoDeProtesis"
   | "pagoAlLaboratorio"
+  // Planes y sedes (migración `20261112120000_etapa_9_planes_y_sedes`).
+  | "sede"
+  // Las invitaciones al equipo (`invitaciones`): existen desde antes, pero la
+  // base falsa no las tenía hasta que el trigger de la etapa 9 las mira.
+  | "workerInvitation"
 
-export type Tablas = Record<NombreDeModelo, Registro[]>
+/** Las tablas de la base falsa: todos los modelos, cada uno con sus filas. */
+export type TablasCompletas = Record<NombreDeModelo, Registro[]>
+
+/**
+ * Los modelos que una `Tablas` armada a mano puede no traer (se leen como
+ * vacíos): los tests de antes de la etapa 9 listan las tablas una por una y no
+ * tienen por qué conocer las nuevas. La base falsa, en cambio, siempre las tiene
+ * (`TablasCompletas`).
+ */
+type ModeloOpcional = "sede" | "workerInvitation"
+export type Tablas = Record<Exclude<NombreDeModelo, ModeloOpcional>, Registro[]> & Partial<Record<ModeloOpcional, Registro[]>>
+
+/** Las filas de un modelo; vacías si una `Tablas` armada a mano no lo trae. */
+export const filasDe = (tablas: Tablas, modelo: NombreDeModelo): Registro[] => tablas[modelo] ?? []
 
 export interface Relacion {
   modelo: NombreDeModelo
@@ -98,6 +116,8 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     protesis: muchos("protesis", "businessId"),
     eventosDeProtesis: muchos("eventoDeProtesis", "businessId"),
     pagosAlLaboratorio: muchos("pagoAlLaboratorio", "businessId"),
+    sedes: muchos("sede", "businessId"),
+    invitations: muchos("workerInvitation", "businessId"),
   },
   businessMember: {
     user: uno("user", "userId"),
@@ -131,6 +151,7 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     visit: uno("visit", "id", "appointmentId"),
     servicios: muchos("appointmentService", "appointmentId"),
     sillon: uno("sillon", "sillonId"),
+    sede: uno("sede", "sedeId"),
     evoluciones: muchos("evolucion", "appointmentId"),
     prestacionesDelPlan: muchos("prestacionDelPlan", "appointmentId"),
   },
@@ -152,7 +173,7 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     pagoAlLaboratorio: uno("pagoAlLaboratorio", "pagoAlLaboratorioId"),
   },
   visitPayment: { visit: uno("visit", "visitId") },
-  workSchedule: { business: uno("business", "businessId"), member: uno("businessMember", "memberId") },
+  workSchedule: { business: uno("business", "businessId"), member: uno("businessMember", "memberId"), sede: uno("sede", "sedeId") },
   timeBlock: { business: uno("business", "businessId"), member: uno("businessMember", "memberId") },
   memberService: {
     business: uno("business", "businessId"),
@@ -195,6 +216,7 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     business: uno("business", "businessId"),
     service: uno("service", "serviceId"),
     member: uno("businessMember", "memberId"),
+    sede: uno("sede", "sedeId"),
     envios: muchos("envioAClientes", "esperaId"),
   },
   envioAClientes: {
@@ -269,6 +291,13 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     laboratorio: uno("laboratorio", "laboratorioId"),
     lineas: muchos("visitService", "pagoAlLaboratorioId"),
   },
+  sede: {
+    business: uno("business", "businessId"),
+    horarios: muchos("workSchedule", "sedeId"),
+    citas: muchos("appointment", "sedeId"),
+    inscripcionesEnEspera: muchos("inscripcionEnEspera", "sedeId"),
+  },
+  workerInvitation: { business: uno("business", "businessId") },
 }
 
 /**
@@ -278,6 +307,9 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
  * como en Postgres.
  */
 export const COMPUESTAS: Partial<Record<NombreDeModelo, string[]>> = {
+  // La sede de una franja del horario (etapa 9, `horarios_laborales_sedeId_businessId_fkey`);
+  // su profesional es FK simple.
+  workSchedule: ["sede"],
   commissionRate: ["member", "service"],
   memberService: ["member", "service"],
   timeBlock: ["member"],
@@ -285,15 +317,17 @@ export const COMPUESTAS: Partial<Record<NombreDeModelo, string[]>> = {
   liquidacion: ["member"],
   movimientoDeLiquidacion: ["member", "visit", "liquidacion"],
   // El servicio de una inscripción es FK compuesta; el profesional, simple.
-  inscripcionEnEspera: ["service"],
+  // La sede (etapa 9) también (`lista_de_espera_sedeId_businessId_fkey`).
+  inscripcionEnEspera: ["service", "sede"],
   // La cita es FK compuesta; el servicio, simple, pero el trigger
   // `cita_servicios_mismo_negocio` exige que sea del mismo negocio: acá se
   // emula igual que una compuesta.
   appointmentService: ["appointment", "service"],
   // Clínica dental: toda FK a otra fila del negocio es compuesta, también el
   // sillón de la cita (`citas_sillonId_businessId_fkey`). Sólo `business` es
-  // simple en cada tabla nueva.
-  appointment: ["sillon"],
+  // simple en cada tabla nueva. La sede de la cita, de la etapa 9, también
+  // (`citas_sedeId_businessId_fkey`).
+  appointment: ["sillon", "sede"],
   fichaClinica: ["customer"],
   marcaDental: ["customer"],
   evolucion: ["customer", "member", "appointment"],
@@ -335,7 +369,7 @@ function comparable(valor: unknown): number | string {
 export function relacionados(tablas: Tablas, rel: Relacion, registro: Registro): Registro[] {
   const valor = registro[rel.local]
   if (valor === null || valor === undefined) return []
-  return tablas[rel.modelo].filter((otro) => iguales(otro[rel.remoto], valor))
+  return filasDe(tablas, rel.modelo).filter((otro) => iguales(otro[rel.remoto], valor))
 }
 
 // ─── where ───────────────────────────────────────────────────────────────────

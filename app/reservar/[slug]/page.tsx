@@ -68,7 +68,7 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
       listaDeEsperaActiva: true,
       services: {
         where: { active: true },
-        select: { id: true, name: true, description: true, duration: true, price: true, esUrgencia: true },
+        select: { id: true, name: true, description: true, duration: true, price: true, category: true, esUrgencia: true },
         orderBy: { createdAt: "asc" },
       },
     },

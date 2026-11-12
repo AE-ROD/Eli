@@ -27,6 +27,7 @@
 import { al, concordar, del, el, pronombreDe, un } from "@/lib/concordancia"
 import { conMayuscula, type PalabrasDelRubro, type Sustantivo } from "@/lib/vocabulario"
 import { elLocal, seLlamaHora } from "../_frases"
+import { frasesDeLosServicios } from "./_frases-de-servicios"
 
 /** El mismo sustantivo con un adjetivo antes, concordado: "nuevo servicio" / "nueva prestación". */
 function conAdjetivoAntes(adjetivo: string, sustantivo: Sustantivo): Sustantivo {
@@ -50,8 +51,6 @@ export function frasesDeConfiguracion(palabras: PalabrasDelRubro) {
   const { cliente, profesional, servicio, cita, negocio, tablero, etiquetas } = palabras
   const local = elLocal(palabras)
   const nuevoServicio = conAdjetivoAntes("nuevo", servicio)
-  // "primer" se acorta ante un sustantivo masculino y `concordar` no lo sabe: "primer servicio" / "primera prestación".
-  const primerServicio: Sustantivo = { ...servicio, singular: `${servicio.genero === "f" ? "primera" : "primer"} ${servicio.singular}` }
   const loDelServicio = pronombreDe(servicio)
 
   return {
@@ -173,11 +172,8 @@ export function frasesDeConfiguracion(palabras: PalabrasDelRubro) {
       subtitulo: `${conMayuscula(el(servicio, "plural"))} que ofreces a tus ${cliente.plural}`,
       /** "Nuevo servicio" / "Nueva prestación": el botón y el título del modal. */
       nuevo: conMayuscula(nuevoServicio.singular),
-      sinServicios: {
-        titulo: `Sin ${servicio.plural} aún`,
-        /** "Agrega el primer servicio que ofreces" / "Agrega la primera prestación que ofreces". */
-        ayuda: `Agrega ${el(primerServicio)} que ofreces`,
-      },
+      /** La lista ordenada, la selección en lote, las categorías y la carga rápida (`_frases-de-servicios.ts`). */
+      ...frasesDeLosServicios(palabras),
       /** El nombre accesible del interruptor de la fila: "Servicio activo: Corte" / "Prestación activa: Limpieza". */
       activo: (nombre: string): string => `${conMayuscula(servicio.singular)} ${concordar("activo", servicio)}: ${nombre}`,
       eliminar: {

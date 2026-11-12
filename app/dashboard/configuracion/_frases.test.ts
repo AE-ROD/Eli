@@ -83,7 +83,10 @@ describe("sin rubro: exactamente los textos de siempre", () => {
     expect(f.servicios.titulo).toBe("Servicios")
     expect(f.servicios.subtitulo).toBe("Los servicios que ofreces a tus clientes")
     expect(f.servicios.nuevo).toBe("Nuevo servicio")
-    expect(f.servicios.sinServicios).toEqual({ titulo: "Sin servicios aún", ayuda: "Agrega el primer servicio que ofreces" })
+    expect(f.servicios.sinServicios).toEqual({
+      titulo: "Sin servicios aún",
+      ayuda: "Agrega los servicios que ofreces de una vez con la carga rápida, o crea un servicio a la vez.",
+    })
     expect(f.servicios.activo("Corte")).toBe("Servicio activo: Corte")
     expect(f.servicios.eliminar.descripcion).toBe(
       "No se puede deshacer. Si sólo quieres dejar de ofrecerlo por un tiempo, desactívalo con su interruptor: sale de la página pública y lo vuelves a encender cuando quieras."
@@ -146,7 +149,15 @@ describe("sin rubro: exactamente los textos de siempre", () => {
 describe("los rubros sin palabras propias hablan como sin rubro", () => {
   it.each(["salud", "fitness", "otro", "", "constructor", undefined])("%s", (rubro) => {
     const texto = (palabras: PalabrasDelRubro) =>
-      JSON.stringify(frasesDeConfiguracion(palabras), (_, v) => (typeof v === "function" ? [v(true), v(false)] : v))
+      JSON.stringify(frasesDeConfiguracion(palabras), (_, v) => {
+        if (typeof v !== "function") return v
+        // Las frases que piden otra cosa que un booleano (un texto, un resumen) se comparan en `_frases-de-servicios.test.ts`.
+        try {
+          return [v(true), v(false)]
+        } catch {
+          return "función"
+        }
+      })
     expect(texto(palabrasDe(rubro as string | null))).toBe(texto(NEUTRAS))
   })
 })
@@ -213,7 +224,10 @@ describe("clínica dental: prestaciones, pacientes y sala de espera", () => {
     expect(f.servicios.titulo).toBe("Prestaciones")
     expect(f.servicios.subtitulo).toBe("Las prestaciones que ofreces a tus pacientes")
     expect(f.servicios.nuevo).toBe("Nueva prestación")
-    expect(f.servicios.sinServicios).toEqual({ titulo: "Sin prestaciones aún", ayuda: "Agrega la primera prestación que ofreces" })
+    expect(f.servicios.sinServicios).toEqual({
+      titulo: "Sin prestaciones aún",
+      ayuda: "Agrega las prestaciones que ofreces de una vez con la carga rápida, o crea una prestación a la vez.",
+    })
     expect(f.servicios.activo("Limpieza")).toBe("Prestación activa: Limpieza")
     expect(f.servicios.eliminar.descripcion).toBe(
       "No se puede deshacer. Si sólo quieres dejar de ofrecerla por un tiempo, desactívala con su interruptor: sale de la página pública y la vuelves a encender cuando quieras."
@@ -278,7 +292,7 @@ describe("la concordancia sale del género y no de las palabras de hoy: una labo
 
   it("\"la primera labor\", \"desactívala\", \"Las marcadas\", \"Nueva labor\"", () => {
     expect(f.servicios.nuevo).toBe("Nueva labor")
-    expect(f.servicios.sinServicios.ayuda).toBe("Agrega la primera labor que ofreces")
+    expect(f.servicios.sinServicios.ayuda).toBe("Agrega las labores que ofreces de una vez con la carga rápida, o crea una labor a la vez.")
     expect(f.servicios.activo("Tejido")).toBe("Labor activa: Tejido")
     expect(f.servicios.eliminar.descripcion).toContain("dejar de ofrecerla")
     expect(f.servicios.eliminar.descripcion).toContain("desactívala")

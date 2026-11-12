@@ -1809,3 +1809,53 @@ model PagoAlLaboratorio {
   @@index([businessId, laboratorioId, pagadoEn])
   @@map("pagos_al_laboratorio")
 }
+
+// ─── Planes y sedes (etapa 9) ───────────────────────────────────────────────
+//
+// Dos planes (`Business.plan`, `lib/planes.ts`): Independiente (sólo atiende la
+// dueña; hasta 5 sedes, cada una con su horario por día; no puede invitar) y
+// Equipo (puede invitar; una sola sede, que es la dirección del negocio y no
+// tiene fila acá). Las reglas que no son de una sola fila las hacen cuatro
+// triggers escritos a mano en la migración `20261112120000_etapa_9_planes_y_sedes`
+// (Prisma no los representa): `invitaciones_exigen_plan_equipo`,
+// `negocios_cambio_de_plan`, `sedes_reglas` y `horarios_sedes_sin_pisarse`. Los
+// cuatro toman el mismo candado por negocio (`pg_advisory_xact_lock(hashtext(
+// 'plan-y-sedes:' || businessId))`) para no correr carreras entre
+// transacciones; la aplicación puede tomarlo igual para leer-y-decidir.
+
+/**
+ * Una sede (local) de un negocio del plan Independiente: nombre, dirección,
+ * comuna y teléfono propios, y su horario por día (`WorkSchedule.sedeId`). No
+ * se borra: se desactiva con `activo`, y las citas y las inscripciones viejas
+ * la siguen nombrando (una sede con citas no se borra: la FK de las citas es NO
+ * ACTION). Nombre único por negocio. Hasta 5 sedes activas, y sólo con el plan
+ * Independiente: lo hace respetar el trigger `sedes_reglas` (que también
+ * revalida los horarios al reactivar una sede). Desactivar una sede con citas
+ * futuras activas lo bloquea la aplicación. CHECKs en la migración: nombre
+ * (1 a 40), dirección (1 a 200) y comuna (1 a 80) recortados y no vacíos,
+ * teléfono en E.164 o null, orden 0..999.
+ */
+model Sede {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  nombre     String
+  direccion  String
+  comuna     String
+  /// E.164 (+56...), como `Business.whatsapp`; opcional.
+  telefono   String?
+  orden      Int      @default(0)
+  activo     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  horarios              WorkSchedule[]
+  citas                 Appointment[]
+  inscripcionesEnEspera InscripcionEnEspera[]
+
+  // Habilita las FK compuestas (sedeId, businessId) de horarios, citas y lista
+  // de espera.
+  @@unique([id, businessId])
+  @@unique([businessId, nombre])
+  @@map("sedes")
+}

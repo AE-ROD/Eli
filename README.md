@@ -103,8 +103,9 @@ Antes de aplicar, siempre:
    la consola (Branches → New branch, desde `main`, "Current point in time").
    Es una copia instantánea: si la migración deja algo mal después del
    COMMIT, se vuelve a ese punto restaurando el branch. Obligatorio en las que
-   reescriben filas (hoy `20261109120000_etapa_7c_protesis_por_tipo`); igual
-   de barato en todas. Se borra cuando el despliegue quedó andando.
+   reescriben filas (hoy `20261109120000_etapa_7c_protesis_por_tipo` y, sólo
+   por el relleno de `negocios.plan`, `20261112120000_etapa_9_planes_y_sedes`);
+   igual de barato en todas. Se borra cuando el despliegue quedó andando.
 2. **El orden.** Cada sección dice qué migración requiere antes; la consulta
    de "Qué migraciones están aplicadas" (más abajo) lo responde sin adivinar.
 
@@ -116,9 +117,9 @@ esperar un candado (un cobro largo en curso), todo lo que llegue después
 queda en fila detrás de ella. `PGOPTIONS='-c lock_timeout=5s'` corta eso: si
 un candado no llega en 5 segundos, la migración falla entera (no queda nada
 a medias, va en una transacción) y se reintenta en otro momento. Las
-migraciones desde `20261110120000_etapa_8_endurecer_protesis` lo traen
-adentro (`SET LOCAL lock_timeout = '5s'`); las anteriores no, por eso va en
-la línea de `psql`. Igual: fuera del horario de atención.
+migraciones desde `20261110120000_etapa_8_endurecer_protesis` (la 8 y la 9)
+lo traen adentro (`SET LOCAL lock_timeout = '5s'`); las anteriores no, por eso
+va en la línea de `psql`. Igual: fuera del horario de atención.
 
 Las migraciones ya escritas no se editan (pueden estar aplicadas): lo que
 haya que corregir va en una migración nueva.
@@ -538,11 +539,73 @@ desplegar. Orden: aplicarla y
 `npx prisma migrate resolve --applied 20261110120000_etapa_8_endurecer_protesis`.
 Bloqueos: reemplazar una función no bloquea tablas.
 
+### `20261112120000_etapa_9_planes_y_sedes`
+
+Los dos planes: **Independiente** (sólo atiende la dueña; hasta 5 sedes, cada
+una con su horario por día; no puede invitar) y **Equipo** (puede invitar; una
+sola sede, que es la dirección del negocio y no tiene fila). Aditiva, con una
+sola excepción: el relleno de `negocios.plan`. No reescribe ninguna otra fila.
+
+- `negocios.plan` (`'independiente'` | `'equipo'`, default `'equipo'`, CHECK).
+- Tabla `sedes` (nombre, dirección, comuna, teléfono E.164, orden, activo;
+  nombre único por negocio; CHECKs de texto).
+- `sedeId` nullable, con índice y FK compuesta `(sedeId, businessId)`, en
+  `horarios_laborales` y `lista_de_espera` (CASCADE) y en `citas` (NO ACTION:
+  una sede con citas no se borra, se desactiva). Una franja con sede exige
+  "HH:MM" válido e inicio < fin (`horarios_laborales_sede_horas_check`); las
+  franjas sin sede no cambian.
+- Cuatro triggers (check_violation, `SET search_path = public`, sin SECURITY
+  DEFINER): `invitaciones_exigen_plan_equipo` (sólo un negocio Equipo crea
+  invitaciones), `negocios_cambio_de_plan` (a Independiente sólo sin
+  integrantes ni invitaciones pendientes; a Equipo sólo sin sedes activas),
+  `sedes_reglas` (una sede que queda activa exige plan Independiente y no más
+  de 5 activas; al reactivar una, se revalidan sus horarios) y
+  `horarios_sedes_sin_pisarse` (una franja activa con sede no se solapa, el
+  mismo día, con la de otra sede activa; tocarse no es solaparse). Los cuatro
+  toman el mismo candado por negocio,
+  `pg_advisory_xact_lock(hashtext('plan-y-sedes:' || businessId))`, para que
+  dos transacciones a la vez no pasen cada una una regla que se contradice con
+  la de la otra; el código que lee y decide (crear una sede, cambiar de plan,
+  invitar) puede tomarlo igual con `tx.$executeRaw`. Desactivar una sede con
+  citas futuras activas lo bloquea la aplicación, no la base.
+
+**El efecto visible del relleno.** Un negocio con algún integrante en
+`miembros_negocio` o una invitación pendiente (sin aceptar, aunque esté
+vencida) queda en `equipo`; **todos los demás** —los que hoy atienden solos—
+pasan a `independiente` y **dejan de poder invitar** hasta que pasen a Equipo:
+el trigger rechaza la invitación (con el código viejo, un 500). Para ver cómo
+quedó y pasar a Equipo a quien corresponda (pasa siempre que no tenga sedes
+activas):
+
+```sql
+SELECT plan, count(*) FROM negocios GROUP BY plan;
+UPDATE negocios SET plan = 'equipo' WHERE slug = '<slug>';
+```
+
+**Antes de desplegar, no después.** El código viejo sigue andando con ella
+aplicada (las columnas nuevas quedan en NULL, un negocio nuevo nace `equipo`
+por el default y los triggers salen enseguida cuando no hay sede de por
+medio; la única diferencia es lo de invitar, arriba). El código nuevo **no**
+anda sin ella: lee y escribe `plan` y `sedeId`. Orden: respaldo (el relleno es
+un UPDATE), aplicarla, desplegar, y
+`npx prisma migrate resolve --applied 20261112120000_etapa_9_planes_y_sedes`.
+No depende de la clínica dental, pero va después de la 8 en el historial.
+
+Bloqueos y ventana: trae `SET LOCAL lock_timeout = '5s'`. Los `ALTER TABLE`
+sobre `negocios`, `horarios_laborales`, `citas` y `lista_de_espera` toman un
+candado exclusivo hasta el COMMIT (no reescriben: `ADD COLUMN` sin default o
+con default constante, y las FK y los CHECK sólo recorren filas con `sedeId` en
+NULL); los `CREATE INDEX` no son concurrentes y frenan las escrituras de su
+tabla mientras se construyen. Antes del relleno bloquea las escrituras de
+`miembros_negocio` e `invitaciones` (nadie invita ni acepta una invitación
+mientras corre) para que el relleno y los triggers vean lo mismo. Con el
+tamaño de hoy son segundos: fuera del horario de atención.
+
 ### Qué migraciones están aplicadas
 
 Sólo lectura. Responde, por lo que cada migración deja en la base, cuáles de
-las de la clínica dental ya están (`t`) y cuáles no (`f`), sin depender de
-`_prisma_migrations` (que se marca a mano y puede no coincidir):
+las de la clínica dental y de la etapa 9 ya están (`t`) y cuáles no (`f`), sin
+depender de `_prisma_migrations` (que se marca a mano y puede no coincidir):
 
 ```sql
 SELECT
@@ -555,12 +618,16 @@ SELECT
   EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'protesis_entrega_con_laboratorio_check') AS "7d",
   EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'atencion_servicios_reparto_de_protesis'
           AND prosrc LIKE '%anulada y no recibe abonos%')                                    AS "8",
+  EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sedes')               AS "planes_y_sedes",
   EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'atencion_servicios_reparto_de_protesis'
           AND prosrc LIKE '%otro paciente%')                                                 AS "reglas_7d_vigentes";
 ```
 
 Cómo leerla: tienen que ser `t` desde la izquierda sin huecos (un `f` seguido
-de un `t` es una migración salteada: avisar antes de seguir). Si `7d = t` y
+de un `t` es una migración salteada: avisar antes de seguir). `planes_y_sedes`
+es la etapa 9 (`20261112120000_etapa_9_planes_y_sedes`): existe la tabla
+`sedes`, que la migración crea junto con todo lo demás en una sola
+transacción. Si `7d = t` y
 `reglas_7d_vigentes = f`, la 7b se aplicó después de la 7d y le borró las
 reglas: aplicar la etapa 8, que las vuelve a poner.
 

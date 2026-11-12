@@ -16,10 +16,10 @@ import {
   type NombreDeModelo,
   type Registro,
   type Relacion,
-  type Tablas,
+  type TablasCompletas,
 } from "./consultas-falsas"
 
-export type { NombreDeModelo, Tablas } from "./consultas-falsas"
+export type { NombreDeModelo, Tablas, TablasCompletas } from "./consultas-falsas"
 
 /**
  * Una base en memoria con la forma del cliente de Prisma, para los tests del
@@ -83,6 +83,8 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     filaVirtualActiva: false,
     filaVirtualTope: 15,
     horaValleActiva: false,
+    // Default del esquema (etapa 9): el negocio que nadie pasó a Independiente es Equipo.
+    plan: "equipo",
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
@@ -129,6 +131,7 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     confirmacionPorFaltas: false,
     primeraVez: false,
     sillonId: null,
+    sedeId: null,
     notes: null,
     clientComments: null,
     price: null,
@@ -187,7 +190,7 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     pagoAlLaboratorioId: null,
   }),
   visitPayment: () => ({ createdAt: new Date() }),
-  workSchedule: () => ({ memberId: null, active: true }),
+  workSchedule: () => ({ memberId: null, active: true, sedeId: null }),
   timeBlock: () => ({ memberId: null, motivo: null, createdById: null, createdAt: new Date() }),
   memberService: () => ({ createdAt: new Date() }),
   commissionRate: () => ({ createdAt: new Date(), updatedAt: new Date() }),
@@ -238,6 +241,7 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     ultimoAvisoAt: null,
     createdAt: new Date(),
     resueltaAt: null,
+    sedeId: null,
   }),
   envioAClientes: () => ({ customerId: null, esperaId: null, enviadoAt: new Date() }),
   appointmentService: () => ({ serviceId: null, price: null, createdAt: new Date() }),
@@ -317,6 +321,11 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
   }),
   eventoDeProtesis: () => ({ autorUserId: null, createdAt: new Date() }),
   pagoAlLaboratorio: () => ({ pagadoEn: new Date(), anuladoEn: null, anuladoPorNombre: null, createdAt: new Date() }),
+  // Planes y sedes (etapa 9). Sin default en el esquema (los pone quien escribe):
+  // `nombre`, `direccion` y `comuna` de la sede; `email`, `name`, `tokenHash` y
+  // `expiresAt` de la invitación.
+  sede: () => ({ telefono: null, orden: 0, activo: true, createdAt: new Date(), updatedAt: new Date() }),
+  workerInvitation: () => ({ role: "worker", acceptedAt: null, createdAt: new Date() }),
 }
 
 /** Campos `Json` del esquema: aceptan un objeto como valor (cualquier otro objeto es una escritura anidada). */
@@ -377,6 +386,10 @@ const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
   laboratorio: [{ campos: ["businessId", "nombre"], sinMayusculas: ["nombre"] }],
   materialDeProtesis: [{ campos: ["businessId", "nombre"], sinMayusculas: ["nombre"] }],
   excepcionDeRepartoDeProtesis: [{ campos: ["memberId", "materialId"] }],
+  // Planes y sedes. `sedes_businessId_nombre_key`: nombre único por negocio.
+  // `invitaciones_token_key`: el sha256 del token (la columna se llama `token`).
+  sede: [{ campos: ["businessId", "nombre"] }],
+  workerInvitation: [{ campos: ["tokenHash"] }],
 }
 
 /**
@@ -391,7 +404,7 @@ const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
  * también `businessId`, que es NOT NULL; ver `CommissionChange` en el
  * esquema), así que SET NULL anula sólo el campo de la lista.
  *
- * Quedan fuera las tablas que la base falsa no tiene: `invitaciones`,
+ * Quedan fuera las tablas que la base falsa no tiene:
  * `conversaciones`/`mensajes`, `tokens_recuperacion`, `correos_de_cuenta` y
  * `solicitudes_de_soporte` (ésta con SET NULL a negocio y usuario).
  *
@@ -414,6 +427,7 @@ const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]
     ["workSchedule", "businessId", "cascade"], // horarios_laborales_businessId_fkey
     ["appointment", "businessId", "cascade"], // citas_businessId_fkey
     ["businessMember", "businessId", "cascade"], // miembros_negocio_businessId_fkey
+    ["workerInvitation", "businessId", "cascade"], // invitaciones_businessId_fkey
     ["commissionRate", "businessId", "cascade"], // porcentajes_comision_businessId_fkey
     ["commissionChange", "businessId", "cascade"], // cambios_comision_businessId_fkey
     ["visit", "businessId", "cascade"], // atenciones_businessId_fkey
@@ -443,6 +457,7 @@ const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]
     ["protesis", "businessId", "cascade"], // protesis_businessId_fkey
     ["eventoDeProtesis", "businessId", "cascade"], // eventos_de_protesis_businessId_fkey
     ["pagoAlLaboratorio", "businessId", "cascade"], // pagos_al_laboratorio_businessId_fkey
+    ["sede", "businessId", "cascade"], // sedes_businessId_fkey
   ],
   businessMember: [
     ["workSchedule", "memberId", "cascade"], // horarios_laborales_memberId_fkey
@@ -544,6 +559,14 @@ const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]
     ["excepcionDeRepartoDeProtesis", "materialId", "cascade"], // excepciones_de_reparto_de_protesis_materialId_businessId_fkey
     ["protesis", "materialId", "no action"], // protesis_materialId_businessId_fkey
   ],
+  // Sedes (`20261112120000_etapa_9_planes_y_sedes`). Las franjas y las
+  // inscripciones de la lista de espera se van con su sede; las citas la
+  // frenan (NO ACTION, P2003): una sede con citas no se borra, se desactiva.
+  sede: [
+    ["workSchedule", "sedeId", "cascade"], // horarios_laborales_sedeId_businessId_fkey
+    ["inscripcionEnEspera", "sedeId", "cascade"], // lista_de_espera_sedeId_businessId_fkey
+    ["appointment", "sedeId", "no action"], // citas_sedeId_businessId_fkey
+  ],
 }
 
 /** Consultas crudas que la base falsa acepta: sólo candados, que en memoria no tienen nada que ordenar. */
@@ -627,7 +650,7 @@ function exigirOpciones(modelo: NombreDeModelo, operacion: string, args: unknown
 
 const distintos = (a: unknown, b: unknown) => !iguales(a ?? null, b ?? null)
 
-function tablasVacias(): Tablas {
+function tablasVacias(): TablasCompletas {
   return {
     user: [],
     business: [],
@@ -666,6 +689,8 @@ function tablasVacias(): Tablas {
     protesis: [],
     eventoDeProtesis: [],
     pagoAlLaboratorio: [],
+    sede: [],
+    workerInvitation: [],
   }
 }
 
@@ -680,7 +705,7 @@ export function crearBaseFalsa() {
    * Una copia de las tablas que sirve para deshacer una sentencia. Es
    * profunda porque el SET NULL de un borrado cambia filas que ya estaban.
    */
-  const instantanea = (): Tablas => structuredClone(tablas)
+  const instantanea = (): TablasCompletas => structuredClone(tablas)
 
   /**
    * Una sentencia DELETE entera, como la corre Postgres: cada FK es un
@@ -1075,12 +1100,113 @@ export function crearBaseFalsa() {
     }
   }
 
+  // ─── Triggers de los planes y las sedes (`20261112120000_etapa_9_planes_y_sedes`) ─
+  // Los cuatro toman en la base un `pg_advisory_xact_lock` por negocio para no
+  // correr carreras entre transacciones. Acá las transacciones ya corren de a
+  // una (ver "Transacciones"), así que el candado no tiene nada que ordenar.
+
+  /** El negocio con ese id, o `undefined` si no existe (entonces el que lo rechaza es la FK, no el trigger). */
+  const negocioDe = (id: unknown) => tablas.business.find((negocio) => negocio.id === id)
+
+  /**
+   * El trigger `invitaciones_exigen_plan_equipo` (BEFORE INSERT en
+   * `invitaciones`): sólo un negocio del plan "equipo" crea invitaciones. Un
+   * UPDATE (reenviar, aceptar) no pasa por él.
+   */
+  function invitacionExigePlanEquipo(nuevo: Registro) {
+    const negocio = negocioDe(nuevo.businessId)
+    if (negocio && negocio.plan !== "equipo") {
+      throw errorDeTrigger(`invitaciones ${String(nuevo.id)}: sólo el plan Equipo invita`)
+    }
+  }
+
+  /**
+   * El trigger `negocios_cambio_de_plan` (BEFORE UPDATE OF plan en
+   * `negocios`): sólo mira cuando el plan cambia de verdad. A "independiente"
+   * únicamente sin integrantes ni invitaciones pendientes (`acceptedAt` null,
+   * aunque estén vencidas, como la lista del Equipo); a "equipo" únicamente
+   * sin sedes activas.
+   */
+  function cambioDePlan(viejo: Registro, nuevo: Registro) {
+    if (!distintos(nuevo.plan, viejo.plan)) return
+    const id = String(nuevo.id)
+    if (
+      nuevo.plan === "independiente" &&
+      (tablas.businessMember.some((miembro) => miembro.businessId === nuevo.id) ||
+        tablas.workerInvitation.some((invitacion) => invitacion.businessId === nuevo.id && (invitacion.acceptedAt ?? null) === null))
+    ) {
+      throw errorDeTrigger(`negocios ${id}: no pasa al plan Independiente con integrantes o invitaciones pendientes`)
+    }
+    if (nuevo.plan === "equipo" && tablas.sede.some((sede) => sede.businessId === nuevo.id && sede.activo === true)) {
+      throw errorDeTrigger(`negocios ${id}: no pasa al plan Equipo con sedes activas; se desactivan antes`)
+    }
+  }
+
+  /** Cuántas sedes activas puede tener un negocio (`sedes_reglas`). */
+  const TOPE_DE_SEDES_ACTIVAS = 5
+
+  /**
+   * El trigger `sedes_reglas` (BEFORE INSERT OR UPDATE en `sedes`): sólo
+   * cuando la sede QUEDA activa (nueva, o una inactiva que se reactiva);
+   * editar una activa o desactivarla no pasa por él. Exige el plan
+   * "independiente" y no más de 5 activas en el negocio (sin contar a ésta).
+   * Al reactivar, cada franja activa de la sede pasa de nuevo por
+   * `horarios_sedes_sin_pisarse` (la migración las reescribe con `active =
+   * active`). `viejo` es `null` en un INSERT.
+   */
+  function reglasDeSede(viejo: Registro | null, nuevo: Registro) {
+    if (nuevo.activo !== true || (viejo && viejo.activo === true)) return
+    const id = String(nuevo.id)
+    const negocio = negocioDe(nuevo.businessId)
+    if (negocio && negocio.plan !== "independiente") {
+      throw errorDeTrigger(`sedes ${id}: sólo el plan Independiente tiene sedes`)
+    }
+    const otras = tablas.sede.filter((sede) => sede.businessId === nuevo.businessId && sede.activo === true && sede.id !== nuevo.id)
+    if (otras.length >= TOPE_DE_SEDES_ACTIVAS) {
+      throw errorDeTrigger(`sedes ${id}: un negocio tiene hasta ${TOPE_DE_SEDES_ACTIVAS} sedes activas`)
+    }
+    if (viejo) {
+      for (const franja of tablas.workSchedule) {
+        if (franja.sedeId === nuevo.id && franja.businessId === nuevo.businessId && franja.active === true) franjaSinPisarse(franja)
+      }
+    }
+  }
+
+  /**
+   * El trigger `horarios_sedes_sin_pisarse` (BEFORE INSERT OR UPDATE en
+   * `horarios_laborales`): una franja activa con sede no se solapa (inicio <
+   * fin de la otra Y fin > inicio de la otra, el mismo día) con una franja
+   * activa de OTRA sede ACTIVA del mismo negocio. Tocarse (fin = inicio) no es
+   * solaparse; las franjas sin sede, las inactivas y las de una sede inactiva
+   * no cuentan; la franja no se compara consigo misma ni con las de su propia
+   * sede. No mira si su propia sede está activa. Las "HH:MM" se comparan como
+   * texto (el CHECK `horarios_laborales_sede_horas_check` garantiza el formato).
+   */
+  function franjaSinPisarse(nuevo: Registro) {
+    const sedeId = nuevo.sedeId ?? null
+    if (sedeId === null || nuevo.active !== true) return
+    for (const otra of tablas.workSchedule) {
+      if (otra.id === nuevo.id || otra.businessId !== nuevo.businessId || otra.active !== true) continue
+      if (otra.sedeId === null || otra.sedeId === undefined || otra.sedeId === sedeId) continue
+      const sede = tablas.sede.find((candidata) => candidata.id === otra.sedeId && candidata.businessId === otra.businessId)
+      if (!sede || sede.activo !== true || otra.dayOfWeek !== nuevo.dayOfWeek) continue
+      if (String(nuevo.startTime) < String(otra.endTime) && String(nuevo.endTime) > String(otra.startTime)) {
+        throw errorDeTrigger(
+          `horarios_laborales ${String(nuevo.id)}: la franja se pisa con la de la sede "${String(sede.nombre)}" (${String(otra.startTime)} a ${String(otra.endTime)}) el mismo día`
+        )
+      }
+    }
+  }
+
   /** Los triggers `BEFORE INSERT` de la base de verdad que la falsa reproduce, en el orden de Postgres (alfabético). */
   const ANTES_DE_INSERTAR: Partial<Record<NombreDeModelo, (nuevo: Registro) => void>> = {
     visitService: (nuevo) => {
       lineaDelMismoNegocio(null, nuevo)
       abonoDeProtesis(null, nuevo)
     },
+    workerInvitation: invitacionExigePlanEquipo,
+    sede: (nuevo) => reglasDeSede(null, nuevo),
+    workSchedule: franjaSinPisarse,
   }
 
   /** Los triggers `BEFORE UPDATE` de la base de verdad que la falsa reproduce, en el orden de Postgres (alfabético). */
@@ -1093,6 +1219,9 @@ export function crearBaseFalsa() {
     evolucion: evolucionInmutable,
     protesis: protesisCongelada,
     eventoDeProtesis: eventoNoSeEdita,
+    business: cambioDePlan,
+    sede: reglasDeSede,
+    workSchedule: (_viejo, nuevo) => franjaSinPisarse(nuevo),
   }
 
   /** Los triggers `BEFORE DELETE` de la base de verdad que la falsa reproduce. */
@@ -1473,6 +1602,8 @@ export function crearBaseFalsa() {
     protesis: delegado("protesis"),
     eventoDeProtesis: delegado("eventoDeProtesis"),
     pagoAlLaboratorio: delegado("pagoAlLaboratorio"),
+    sede: delegado("sede"),
+    workerInvitation: delegado("workerInvitation"),
   }
 
   // ─── Consultas crudas ────────────────────────────────────────────────────
@@ -1599,7 +1730,7 @@ export function crearBaseFalsa() {
       }
     },
     /** Una copia del estado entero, para comprobar que un pedido no escribió nada. */
-    volcado(): Tablas {
+    volcado(): TablasCompletas {
       return structuredClone(tablas)
     },
     /** Los registros de un modelo que cumplen `where` (sin `where`, todos). */

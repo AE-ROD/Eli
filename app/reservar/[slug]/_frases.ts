@@ -30,11 +30,13 @@
 import {
   al,
   articuloDe,
+  cantidadDe,
   concordar,
   del,
   el,
   este,
   ningun,
+  numeroDe,
   pronombreDe,
   un,
   unoDe,
@@ -58,6 +60,38 @@ export function tituloDeLaReserva(rubro: Rubro): string {
 export function pestanaDeLaReserva(rubro: Rubro): string {
   return `Reservar ${palabrasDeLaReserva(rubro).cita.singular}`
 }
+
+/**
+ * Las frases del catálogo ordenado del primer paso (la barra de categorías, la
+ * búsqueda y lo ya elegido), con la palabra de lo que se elige
+ * (`servicioDeLaReserva`): "Buscar servicio" / "Buscar motivo". Recibe la
+ * palabra y no el rubro para que se pueda probar con una femenina: "Todas",
+ * "1 prestación encontrada".
+ */
+export function frasesDelCatalogo(palabra: Sustantivo) {
+  return {
+    /** El rótulo de la caja de búsqueda: "Buscar servicio" / "Buscar motivo". */
+    buscar: `Buscar ${palabra.singular}`,
+    /** El nombre de la barra de categorías para el lector de pantalla (los botones ya dicen cuál es). */
+    filtrarPorCategoria: "Filtrar por categoría",
+    /** El botón que quita el filtro de categoría: "Todos" / "Todas". */
+    todos: conMayuscula(concordar("todo", palabra, "plural")),
+    /** Lo ya elegido, siempre a la vista aunque el filtro lo esconda de la lista. */
+    elegiste: "Elegiste:",
+    /** El texto del botón de cada elegido para el lector de pantalla: "Quitar Corte de pelo". */
+    quitar: (nombre: string): string => `Quitar ${nombre}`,
+    /** Cuántos pasan la búsqueda: "3 servicios encontrados" / "1 motivo encontrado". */
+    resultados: (cantidad: number): string =>
+      `${cantidadDe(cantidad, palabra)} ${concordar("encontrado", palabra, numeroDe(cantidad))}`,
+    /** La búsqueda sin resultados: "No encontramos servicios con esa búsqueda." */
+    sinResultados: `No encontramos ${palabra.plural} con esa búsqueda.`,
+    /** El botón de ese estado vacío. */
+    quitarFiltros: "Quitar filtros",
+  }
+}
+
+/** Las frases del catálogo ordenado del primer paso. */
+export type FrasesDelCatalogo = ReturnType<typeof frasesDelCatalogo>
 
 /**
  * Las frases del formulario de reserva (los tres pasos y la reserva
@@ -101,6 +135,8 @@ export function frasesDelFormulario(rubro: Rubro) {
         if (conPalabrasPropias) return `${conMayuscula(ningun(profesional))} lo hace junto con lo que elegiste.`
         return "Nadie del equipo lo hace junto con lo que elegiste."
       },
+      /** Con muchos servicios en varias categorías: la barra de categorías y la búsqueda. */
+      catalogo: frasesDelCatalogo(elegido),
     },
 
     /** "¿Con quién?" cuando es cualquiera: sólo la clínica lo dice con sus palabras. */

@@ -617,6 +617,7 @@ export function FormularioReserva({
                   tope={MAX_SERVICIOS_POR_RESERVA}
                   sinCombinacion={sinCombinacion}
                   motivoSinCombinacion={motivoSinCombinacion}
+                  frases={frases.paso1.catalogo}
                 />
               </div>
               {servicioSeleccionado && seleccionados.length > 1 && (

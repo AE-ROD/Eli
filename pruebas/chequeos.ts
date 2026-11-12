@@ -65,6 +65,8 @@ export const TABLAS_SQL: Record<NombreDeModelo, string> = {
   protesis: "protesis",
   eventoDeProtesis: "eventos_de_protesis",
   pagoAlLaboratorio: "pagos_al_laboratorio",
+  sede: "sedes",
+  workerInvitation: "invitaciones",
 }
 
 // ─── Lógica de tres valores, como SQL ────────────────────────────────────────
@@ -150,6 +152,7 @@ const TOPE = 2000000000
 const MEDIOS_DE_PAGO = ["efectivo", "tarjeta-debito", "tarjeta-credito", "transferencia", "billetera-digital"]
 const FECHA = /^\d{4}-\d{2}-\d{2}$/
 const HORA = /^([01]\d|2[0-3]):[0-5]\d$/
+const TELEFONO_E164 = /^\+[0-9]{8,15}$/
 const SUPERIOR = [11, 12, 13, 14, 15, 16, 17, 18, 21, 22, 23, 24, 25, 26, 27, 28]
 const INFERIOR = [31, 32, 33, 34, 35, 36, 37, 38, 41, 42, 43, 44, 45, 46, 47, 48]
 const CORDALES = [18, 28, 38, 48]
@@ -219,7 +222,13 @@ export const CHEQUEOS: Partial<Record<NombreDeModelo, Chequeo[]>> = {
       O(esNulo(f.whatsappConsentSource), EN(f.whatsappConsentSource, ["reserva-publica", "panel", "importacion"]))
     ),
   ],
-  workSchedule: [chequeo("horarios_laborales_dayOfWeek_check", (f) => ENTRE(f.dayOfWeek, 0, 6))],
+  workSchedule: [
+    chequeo("horarios_laborales_dayOfWeek_check", (f) => ENTRE(f.dayOfWeek, 0, 6)),
+    // `20261112120000_etapa_9_planes_y_sedes`: la franja de una sede exige "HH:MM" y inicio < fin; las sin sede no entran.
+    chequeo("horarios_laborales_sede_horas_check", (f) =>
+      O(esNulo(f.sedeId), Y(CALZA(f.startTime, HORA), CALZA(f.endTime, HORA), MENOR(f.startTime, f.endTime)))
+    ),
+  ],
   timeBlock: [chequeo("time_blocks_endTime_check", (f) => MAYOR(f.endTime, f.startTime))],
   business: [
     chequeo("negocios_liquidacionPeriodo_check", (f) => EN(f.liquidacionPeriodo, ["semanal", "quincenal", "mensual"])),
@@ -228,7 +237,10 @@ export const CHEQUEOS: Partial<Record<NombreDeModelo, Chequeo[]>> = {
     chequeo("negocios_filaVirtualTope_check", (f) => ENTRE(f.filaVirtualTope, 1, 100)),
     chequeo("negocios_cancelacionHorasAntes_check", (f) => ENTRE(f.cancelacionHorasAntes, 0, 72)),
     chequeo("negocios_type_check", (f) => EN(f.type, ["salon", "barberia", "spa-de-unas", "odontologia", "salud", "fitness", "otro"])),
+    // `20261112120000_etapa_9_planes_y_sedes`: los ids de `PLANES` (lib/planes.ts).
+    chequeo("negocios_plan_check", (f) => EN(f.plan, ["independiente", "equipo"])),
   ],
+  workerInvitation: [chequeo("invitaciones_role_check", (f) => EN(f.role, ["admin", "worker"]))],
 
   // ─── 20261006122500_tablero_de_atenciones, 20261030120000_etapa_4_reservas_seguras ─
   visit: [
@@ -621,6 +633,21 @@ export const CHEQUEOS: Partial<Record<NombreDeModelo, Chequeo[]>> = {
     chequeo("pagos_al_laboratorio_medio_check", (f) => EN(f.medio, MEDIOS_DE_PAGO)),
     chequeo("pagos_al_laboratorio_anulado_check", (f) => esNulo(f.anuladoEn) === esNulo(f.anuladoPorNombre)),
     chequeo("pagos_al_laboratorio_nombres_check", (f) => Y(NO_VACIO(f.laboratorioNombre), NO_VACIO(f.pagadoPorNombre))),
+  ],
+
+  // ─── 20261112120000_etapa_9_planes_y_sedes ────────────────────────────────
+  // Los textos recortados y con su largo, el teléfono E.164 y el orden, en un
+  // solo CHECK como en la migración.
+  sede: [
+    chequeo("sedes_texto_check", (f) =>
+      Y(
+        NOMBRE_LIMPIO(f.nombre, 1, 40),
+        NOMBRE_LIMPIO(f.direccion, 1, 200),
+        NOMBRE_LIMPIO(f.comuna, 1, 80),
+        O(esNulo(f.telefono), CALZA(f.telefono, TELEFONO_E164)),
+        ENTRE(f.orden, 0, 999)
+      )
+    ),
   ],
 }
 

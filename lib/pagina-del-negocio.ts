@@ -10,6 +10,7 @@
 import { MEDIOS_DE_PAGO, type MedioDePagoId } from "@/lib/medios-de-pago"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
 import { palabrasDeLaReserva } from "@/lib/palabras-de-la-reserva"
+import { agruparPorCategoria, CATEGORIA_SIN_NOMBRE } from "@/lib/servicios-por-categoria"
 import { aE164Chile } from "@/lib/telefono"
 
 // ─── Paleta del local ────────────────────────────────────────────────────────
@@ -211,34 +212,21 @@ export function apareceEnLaPagina(rol: string): boolean {
   return rol === "worker"
 }
 
-/** Lo que se muestra de los servicios sin categoría. */
-export const CATEGORIA_SIN_NOMBRE = "Otros"
+/** Lo que se muestra de los servicios sin categoría ("Otros"); vive junto a la regla de agrupar. */
+export { CATEGORIA_SIN_NOMBRE }
 
 /**
  * Los servicios agrupados por `Service.category`, en el orden en que aparece
  * cada categoría (el del catálogo). Los sin categoría van al final, en
  * "Otros". "Color" y "color " son la misma: se agrupa sin mayúsculas ni
- * espacios de más y se muestra como la escribió el primero.
+ * espacios de más y se muestra como la escribió el primero. La regla es la de
+ * `lib/servicios-por-categoria.ts`, la misma que usa el primer paso de la
+ * reserva.
  */
 export function serviciosPorCategoria<T extends { category: string | null }>(
   servicios: T[]
 ): { categoria: string; servicios: T[] }[] {
-  const grupos = new Map<string, { categoria: string; servicios: T[] }>()
-  const sinCategoria: T[] = []
-  for (const servicio of servicios) {
-    const nombre = (servicio.category ?? "").trim()
-    if (!nombre) {
-      sinCategoria.push(servicio)
-      continue
-    }
-    const clave = nombre.toLocaleLowerCase("es-CL")
-    const grupo = grupos.get(clave) ?? { categoria: nombre, servicios: [] }
-    grupo.servicios.push(servicio)
-    grupos.set(clave, grupo)
-  }
-  const resultado = [...grupos.values()]
-  if (sinCategoria.length > 0) resultado.push({ categoria: CATEGORIA_SIN_NOMBRE, servicios: sinCategoria })
-  return resultado
+  return agruparPorCategoria(servicios).map(({ categoria, servicios: delGrupo }) => ({ categoria, servicios: delGrupo }))
 }
 
 /** Los medios que acepta el negocio, en el orden del catálogo, sin los que el catálogo no conoce. */

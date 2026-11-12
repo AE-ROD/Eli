@@ -13,7 +13,17 @@
 import { leerMonto } from "@/lib/dinero"
 import { frecuenciaDelFormulario } from "@/lib/frecuencia-de-visitas"
 import { enviarFoto, pedirQuitarFoto, type ResultadoDeFoto } from "@/lib/enviar-foto"
-import { pedir, conJson, type Resultado } from "@/lib/peticiones"
+import { pedir, pedirConCodigo, conJson, type Resultado } from "@/lib/peticiones"
+import {
+  leerActualizados,
+  leerRespuestaDeLote,
+  partirEnTandas,
+  type ResumenDeCarga,
+  type ServicioOmitido,
+  type SugeridoDelRubro,
+} from "@/lib/carga-de-servicios"
+import type { ServicioParaCargar } from "@/lib/servicios-en-lote"
+import type { AccionDeLote } from "./_frases-de-servicios"
 import type { LaboratorioRespuesta } from "@/lib/edicion-de-protesis"
 import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
 import { frasesDeConfiguracion } from "./_frases"
@@ -163,6 +173,159 @@ export async function activarODesactivarServicio(
 
 export async function borrarServicio(id: string, palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado> {
   return pedir(`/api/configuracion/servicios/${id}`, frasesDeConfiguracion(palabras).errores.borrarServicio, { method: "DELETE" })
+}
+
+// ─── Servicios en lote: categorías y carga rápida ────────────────────────────
+
+export type { ServicioOmitido, SugeridoDelRubro }
+
+/**
+ * Sin mensaje por defecto: así se distingue lo que dijo el servidor de lo que
+ * no (`pedirConCodigo` devuelve el texto por defecto cuando no hay otro) y el
+ * mensaje de un fallo lo elige `errorDeLote` por código, con las palabras del rubro.
+ */
+const SIN_MENSAJE = ""
+
+/**
+ * Un pedido de servicios en lote. Si falla, el mensaje ya viene en español y
+ * con las palabras del rubro; `codigo` es con el que respondió el servidor
+ * (`null` si no respondió).
+ */
+async function pedirEnLote<T>(
+  ruta: string,
+  accion: AccionDeLote,
+  palabras: PalabrasDelRubro,
+  opciones?: RequestInit
+): Promise<{ ok: true; datos: T } | { ok: false; error: string }> {
+  const resultado = await pedirConCodigo<T>(ruta, SIN_MENSAJE, opciones)
+  if (resultado.ok) return resultado
+  return { ok: false, error: frasesDeConfiguracion(palabras).servicios.errorDeLote(resultado.codigo, resultado.error, accion) }
+}
+
+/** Todos los servicios del negocio, para actualizar la lista después de una carga sin recargar la página. */
+export async function leerServicios(palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado<Servicio[]>> {
+  const resultado = await pedirEnLote<unknown>("/api/configuracion/servicios", "leer", palabras)
+  if (!resultado.ok) return resultado
+  return Array.isArray(resultado.datos)
+    ? { ok: true, datos: resultado.datos as Servicio[] }
+    : { ok: false, error: frasesDeConfiguracion(palabras).servicios.errorDeLote(200, "", "leer") }
+}
+
+/** Los servicios que Eli sugiere para el rubro, cada uno con si el negocio ya lo tiene. */
+export async function leerSugeridos(palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado<SugeridoDelRubro[]>> {
+  const resultado = await pedirEnLote<{ sugeridos?: unknown }>("/api/configuracion/servicios/sugeridos", "sugeridos", palabras)
+  if (!resultado.ok) return resultado
+  const sugeridos = resultado.datos?.sugeridos
+  return Array.isArray(sugeridos)
+    ? { ok: true, datos: sugeridos as SugeridoDelRubro[] }
+    : { ok: false, error: frasesDeConfiguracion(palabras).servicios.errorDeLote(200, "", "sugeridos") }
+}
+
+/**
+ * Lo que pasó al agregar: `ok` es que llegó todo al servidor (aunque haya
+ * omitido alguno, que se cuenta en `omitidos`); si no, `error` dice por qué se
+ * cortó y `sinEnviar`, cuántos no llegaron a enviarse.
+ */
+export type ResultadoDeCarga = ResumenDeCarga & { ok: boolean }
+
+/**
+ * Agrega servicios de a 100 (lo que acepta una carga), de a una tanda por vez y
+ * juntando los resultados. Si una tanda falla, las que seguían no se envían: se
+ * devuelve lo que sí se creó y cuántos quedaron sin enviar, para que la pantalla
+ * deje reintentar sólo eso (los ya creados quedan como "ya existe"). Nunca lanza.
+ */
+export async function cargarServiciosEnLote(
+  servicios: readonly ServicioParaCargar[],
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<ResultadoDeCarga> {
+  let creados = 0
+  const omitidos: ServicioOmitido[] = []
+  let enviados = 0
+  for (const tanda of partirEnTandas(servicios)) {
+    const resultado = await pedirEnLote<unknown>(
+      "/api/configuracion/servicios/lote",
+      "agregar",
+      palabras,
+      conJson("POST", { servicios: tanda })
+    )
+    if (!resultado.ok) {
+      return { ok: false, creados, omitidos, sinEnviar: servicios.length - enviados, error: resultado.error }
+    }
+    const leido = leerRespuestaDeLote(resultado.datos, enviados)
+    creados += leido.creados
+    omitidos.push(...leido.omitidos)
+    enviados += tanda.length
+  }
+  return { ok: true, creados, omitidos, sinEnviar: 0, error: null }
+}
+
+/** Lo que se puede cambiar a la vez en varios servicios: su categoría (`null`, ninguna) o si están activos. */
+export interface CambiosEnLote {
+  category?: string | null
+  active?: boolean
+}
+
+/**
+ * Cambia la categoría o el estado de varios servicios, de a 100 por pedido.
+ * Devuelve cuántos actualizó el servidor; si un pedido falla, `actualizados`
+ * es lo que se alcanzó a cambiar antes (la pantalla vuelve a leer la lista).
+ * Nunca lanza.
+ */
+export async function cambiarServiciosEnLote(
+  ids: readonly string[],
+  cambios: CambiosEnLote,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<{ ok: true; actualizados: number } | { ok: false; error: string; actualizados: number }> {
+  let actualizados = 0
+  for (const tanda of partirEnTandas(ids)) {
+    const resultado = await pedirEnLote<unknown>("/api/configuracion/servicios/lote", "cambiar", palabras, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: tanda, ...cambios }),
+    })
+    if (!resultado.ok) return { ok: false, error: resultado.error, actualizados }
+    actualizados += leerActualizados(resultado.datos)
+  }
+  return { ok: true, actualizados }
+}
+
+/**
+ * Renombra una categoría: los servicios que la tienen pasan a `a` (`null`, sin
+ * categoría). Si `a` ya existe, los junta con los de esa. `de: null` son los
+ * que no tienen categoría. Devuelve cuántos cambió.
+ */
+export async function renombrarCategoria(
+  de: string | null,
+  a: string | null,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<{ actualizados: number }>> {
+  const resultado = await pedirEnLote<unknown>(
+    "/api/configuracion/servicios/categorias",
+    "renombrar",
+    palabras,
+    conJson("POST", { de, a })
+  )
+  return resultado.ok ? { ok: true, datos: { actualizados: leerActualizados(resultado.datos) } } : resultado
+}
+
+/**
+ * Renombra una categoría que está guardada con más de una escritura ("Color" y
+ * "color "): una vez por cada una, sin depender de cómo compara el servidor. La
+ * que ya se escribe como `a` no se manda (no hay nada que cambiar). Se detiene
+ * en el primer fallo.
+ */
+export async function renombrarCategoriaConVariantes(
+  escrituras: readonly string[],
+  a: string,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<{ actualizados: number }>> {
+  let actualizados = 0
+  for (const de of escrituras.filter((escritura) => escritura !== a)) {
+    const resultado = await renombrarCategoria(de, a, palabras)
+    if (!resultado.ok) return resultado
+    actualizados += resultado.datos.actualizados
+  }
+  return { ok: true, datos: { actualizados } }
 }
 
 // ─── Productos (#67) ─────────────────────────────────────────────────────────

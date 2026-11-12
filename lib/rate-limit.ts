@@ -148,6 +148,14 @@ const limitadorFotos = crearLimitador("fotos", 20, "1 h")
 // son inmutables y el navegador las cachea un año, así que el tope sólo corta
 // a quien las pide en bucle (cada lectura es un pedido al almacenamiento).
 const limitadorFotosPublicas = crearLimitador("fotos-publicas", 600, "1 m")
+// Escrituras masivas de servicios (`/api/configuracion/servicios/lote` y
+// `/categorias`): 20 por hora por usuario. Cada una toca hasta 100 o 200
+// filas de una vez y el límite de escritura del panel (60 por minuto) dejaría
+// repetirlas en bucle. Es un solo balde para las tres rutas: crear está
+// acotado además por el tope de servicios del negocio, y ordenar un catálogo
+// (mover grupos a una categoría, renombrar, unir) son una docena de pasos
+// seguidos la primera vez, así que 10 se quedaban cortos para el uso normal.
+const limitadorServiciosEnLote = crearLimitador("servicios-en-lote", 20, "1 h")
 
 export type TipoLimite =
   | "login"
@@ -172,6 +180,7 @@ export type TipoLimite =
   | "posicionEnFila"
   | "fotos"
   | "fotosPublicas"
+  | "serviciosEnLote"
 
 const limitadores: Record<TipoLimite, Ratelimit | null> = {
   login: limitadorLogin,
@@ -196,6 +205,7 @@ const limitadores: Record<TipoLimite, Ratelimit | null> = {
   posicionEnFila: limitadorPosicionEnFila,
   fotos: limitadorFotos,
   fotosPublicas: limitadorFotosPublicas,
+  serviciosEnLote: limitadorServiciosEnLote,
 }
 
 /**
@@ -244,6 +254,10 @@ const fallaAbiertoSiUpstashFalla: Record<TipoLimite, boolean> = {
   // en R2). Exige sesión de dueño, encargado o profesional, así que una caída
   // del proveedor sólo demora el cambio de una foto.
   fotos: false,
+  // Cerrado: es una escritura masiva (hasta 100 o 200 filas por pedido). Exige
+  // sesión de dueño o encargado, así que una caída del proveedor sólo demora una
+  // carga o un reordenamiento del catálogo que se puede hacer después.
+  serviciosEnLote: false,
   // Abierto, como las lecturas del panel: exige sesión de dueño o encargado y
   // cortarla dejaría al negocio sin sus datos por una caída ajena.
   exportacion: true,

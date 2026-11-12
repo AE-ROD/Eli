@@ -180,6 +180,18 @@ describe("serviciosPorCategoria", () => {
   it("sin servicios no hay grupos", () => {
     expect(serviciosPorCategoria([])).toEqual([])
   })
+
+  it("una categoría escrita 'Otros' es la de los sin categoría: un solo grupo, al final (no dos títulos iguales)", () => {
+    const servicios = [
+      { id: "1", category: "Otros" },
+      { id: "2", category: "Color" },
+      { id: "3", category: null },
+    ]
+    expect(serviciosPorCategoria(servicios)).toEqual([
+      { categoria: "Color", servicios: [servicios[1]] },
+      { categoria: CATEGORIA_SIN_NOMBRE, servicios: [servicios[0], servicios[2]] },
+    ])
+  })
 })
 
 describe("mediosParaMostrar", () => {
