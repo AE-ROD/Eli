@@ -17,6 +17,12 @@ import {
   mensajeServicioNoEncontrado,
 } from "@/lib/reserva-publica"
 import { esRubroDental } from "@/lib/rubros"
+import {
+  MENSAJE_SEDE_NO_VALIDA,
+  leerSedeDelPedido,
+  leerSedesDeLaReserva,
+  resolverSedeDeLaReserva,
+} from "@/lib/sede-de-la-reserva"
 import { leerServiciosDeLaReserva, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
 import { servicioIdsSchema } from "@/lib/validaciones"
 import { esFechaCalendario, zonaDelNegocio } from "@/lib/zona-horaria"
@@ -37,6 +43,12 @@ const FALTA_EL_SERVICIO = "Falta el servicio (servicioId)"
  *
  * Clínica dental: `primeraVez=1` suma 15 minutos (`duracionDeLaReserva`); en
  * otro rubro se ignora. `0`, o sin él, no suma nada.
+ *
+ * Sedes (plan Independiente): `sedeId` es la sede que eligió quien reserva; no
+ * pasa por este esquema sino por `resolverSedeDeLaReserva`, que la revalida
+ * contra las sedes activas del negocio del `slug`. Con dos o más sedes activas
+ * es obligatoria: sin ella, o con una que no es una sede activa de este
+ * negocio, 400. Sin sedes se ignora, y con una sola se usa esa.
  */
 const parametrosSchema = z.object({
   fecha: z
@@ -104,6 +116,16 @@ export async function GET(
   })
   if (!negocio) return NextResponse.json({ error: "Negocio no encontrado" }, { status: 404 })
 
+  // La sede, revalidada contra las sedes activas de ESTE negocio: el id del
+  // navegador no se usa tal cual. Con varias sedes, el horario que se mira es el
+  // de la elegida; si no, el vigente de siempre.
+  const eleccionDeSede = resolverSedeDeLaReserva(
+    await leerSedesDeLaReserva(prisma, negocio.id),
+    leerSedeDelPedido(searchParams.get("sedeId"))
+  )
+  if (eleccionDeSede.tipo === "no-valida") return NextResponse.json({ error: MENSAJE_SEDE_NO_VALIDA }, { status: 400 })
+  const sedeId = eleccionDeSede.sedeDelHorario
+
   // Todos del negocio y activos, o el mismo 404 sin decir cuál falló.
   const servicios = await leerServiciosDeLaReserva(prisma, negocio.id, servicioIds)
   if (!servicios) return NextResponse.json({ error: mensajeServicioNoEncontrado(negocio.type) }, { status: 404 })
@@ -148,6 +170,7 @@ export async function GET(
     serviceIds: servicios.map((servicio) => servicio.id),
     profesionalId,
     fecha,
+    sedeId,
   })
   if (reserva.tipo === "profesional-no-disponible") {
     return NextResponse.json({ error: mensajeProfesionalNoDisponible(negocio.type) }, { status: 404 })
@@ -172,6 +195,7 @@ export async function GET(
       zona,
       duracion,
       ahora,
+      sedeId,
     })
     // Una urgencia sin horas hoy lo dice claro, con o sin lista de espera.
     const sinHorasDeUrgencia = urgencia ? { mensaje: MENSAJE_URGENCIA_SIN_HORAS } : {}

@@ -6,9 +6,11 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { diaDeLaSemana } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
-import { actorDeSesion, mismoNegocio, puedeEditarHorarioDe, type Actor, type Miembro } from "@/lib/permisos"
+import { actorDeSesion, mismoNegocio, puedeEditarHorarioDe, whereDeSedes, type Actor, type Miembro } from "@/lib/permisos"
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { registrarError } from "@/lib/registro-de-errores"
+import { MENSAJE_HORARIO_POR_SEDE } from "@/lib/reglas-de-sedes"
+import { RechazoDeSedes, tomarCandadoDePlanYSedes } from "@/lib/sedes-servidor"
 
 type Objetivo = { ok: true; miembro: Miembro | null } | { ok: false; status: 404 | 401 | 400 }
 
@@ -101,8 +103,12 @@ export async function GET(request: NextRequest) {
 
   const memberId = objetivo.miembro?.id ?? null
 
+  // `sedeId: null`: este es el horario del negocio o de un integrante. Las
+  // franjas de una sede (etapa 9) son de la sede y se leen con ella
+  // (`GET /api/configuracion/sedes`); sin este filtro, `memberId: null` las
+  // traería junto con el horario general.
   const horarios = await prisma.workSchedule.findMany({
-    where: { businessId: actor.businessId, memberId },
+    where: { businessId: actor.businessId, memberId, sedeId: null },
     orderBy: { dayOfWeek: "asc" },
   })
 
@@ -151,20 +157,32 @@ export async function POST(request: NextRequest) {
     // duplicado. Con el candado, el segundo espera y reemplaza lo del primero.
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`horario:${businessId}:${memberId ?? "general"}`}))`
-      await tx.workSchedule.deleteMany({ where: { businessId, memberId } })
+      if (memberId === null) {
+        // El horario general es el de un negocio SIN sedes (etapa 9): con
+        // sedes, el horario se configura por sede. Se revisa bajo el candado
+        // de planes y sedes, el mismo de `/api/configuracion/sedes/convertir`,
+        // así un guardado que llega a la vez que la conversión no deja filas
+        // generales sueltas en un negocio que ya tiene sedes.
+        await tomarCandadoDePlanYSedes(tx, businessId)
+        const conSedes = await tx.sede.findFirst({ where: whereDeSedes(actor, { activo: true }), select: { id: true } })
+        if (conSedes) throw new RechazoDeSedes(409, { error: MENSAJE_HORARIO_POR_SEDE })
+      }
+      // `sedeId: null`: no se llevan por delante las franjas de ninguna sede.
+      await tx.workSchedule.deleteMany({ where: { businessId, memberId, sedeId: null } })
       await tx.workSchedule.createMany({
         data: horarios.map((h) => ({ ...h, businessId, memberId })),
       })
     })
 
     const resultado = await prisma.workSchedule.findMany({
-      where: { businessId, memberId },
+      where: { businessId, memberId, sedeId: null },
       orderBy: { dayOfWeek: "asc" },
     })
 
     return NextResponse.json(resultado)
   } catch (error) {
     if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
+    if (error instanceof RechazoDeSedes) return NextResponse.json(error.cuerpo, { status: error.status })
     if (error instanceof z.ZodError) {
       return respuestaDeDatosInvalidos(error)
     }

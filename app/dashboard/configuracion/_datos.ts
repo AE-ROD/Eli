@@ -1,8 +1,9 @@
 /**
  * Todo lo que la configuración le pide al servidor desde el navegador: el
  * horario de un miembro (leer y guardar), el catálogo de servicios (uno a uno
- * y en lote: la carga rápida, los cambios de varios a la vez y las categorías)
- * y las fotos de la página pública. Lo que se
+ * y en lote: la carga rápida, los cambios de varios a la vez y las categorías),
+ * las fotos de la página pública, las sedes del plan Independiente y el
+ * cambio de plan. Lo que se
  * ve al entrar ya viene resuelto por `page.tsx`, que es de servidor y consulta
  * la base directo.
  *
@@ -14,7 +15,9 @@
 import { leerMonto } from "@/lib/dinero"
 import { frecuenciaDelFormulario } from "@/lib/frecuencia-de-visitas"
 import { enviarFoto, pedirQuitarFoto, type ResultadoDeFoto } from "@/lib/enviar-foto"
-import { pedir, pedirConCodigo, conJson, type Resultado } from "@/lib/peticiones"
+import type { FranjaHorario } from "@/lib/horario-dia"
+import { pedir, pedirConCodigo, pedirConCuerpo, conJson, type Resultado, type ResultadoConCuerpo } from "@/lib/peticiones"
+import { planConocido, type PlanId } from "@/lib/planes"
 import {
   leerActualizados,
   MAX_SERVICIOS_POR_CAMBIO,
@@ -29,6 +32,8 @@ import type { AccionDeLote } from "./_frases-de-servicios"
 import type { LaboratorioRespuesta } from "@/lib/edicion-de-protesis"
 import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
 import { frasesDeConfiguracion } from "./_frases"
+import type { AccionDeSedes } from "./_frases-de-sedes"
+import { choquesDelCuerpo, sedeDeLaRespuesta, sedesDeLaRespuesta, type CuerpoDeSede } from "./_sedes"
 
 /**
  * Las palabras de un rubro sin palabras propias: lo que dicen los mensajes de
@@ -635,4 +640,201 @@ export async function editarLaboratorio(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(cambios),
   })
+}
+
+// ─── Sedes del plan Independiente (etapa 9) ──────────────────────────────────
+
+/** Un día con atención en una sede: las franjas, en el formato de `lib/horario-dia.ts`. */
+export interface HorarioDeSedeDelDia {
+  /** 0 domingo a 6 sábado. */
+  dayOfWeek: number
+  franjas: FranjaHorario[]
+}
+
+/**
+ * Una sede del negocio como la usa la pantalla. El servidor manda las franjas
+ * como `{ start, end }`; acá ya vienen como `{ startTime, endTime }`
+ * (`sedeDeLaRespuesta`), igual que las lee todo `lib/horario-*`.
+ */
+export interface Sede {
+  id: string
+  nombre: string
+  direccion: string
+  comuna: string
+  /** E.164 (+56...) o `null`. */
+  telefono: string | null
+  /** El lugar en la lista (0 a 999). */
+  orden: number
+  activo: boolean
+  /** Sólo los días con atención. */
+  horarios: HorarioDeSedeDelDia[]
+  /** Cuántas horas agendadas (que ocupan su horario) tiene por delante. */
+  horasFuturas: number
+}
+
+/** Un día que el servidor dice que se pisa con otra sede (`conSede`: su nombre o su id). */
+export interface ChoqueDelServidor {
+  dayOfWeek: number
+  conSede: string
+}
+
+/**
+ * Un pedido de sedes. Si falla, el mensaje ya viene en español y con las
+ * palabras del rubro (`frases.sedes.error`); `codigo` es con el que respondió
+ * el servidor (`null` si no respondió) y `cuerpo` lo que mandó, ya leído.
+ */
+async function pedirDeSedes<T>(
+  ruta: string,
+  accion: AccionDeSedes,
+  palabras: PalabrasDelRubro,
+  opciones?: RequestInit
+): Promise<ResultadoConCuerpo<T>> {
+  const resultado = await pedirConCuerpo<T>(ruta, SIN_MENSAJE, opciones)
+  if (resultado.ok) return resultado
+  return { ...resultado, error: frasesDeConfiguracion(palabras).sedes.error(resultado.codigo, resultado.error, accion) }
+}
+
+const rutaDeLaSede = (id: string) => `/api/configuracion/sedes/${encodeURIComponent(id)}`
+
+/** Lo que se manda al crear una sede: sin teléfono si no hay (en un alta no se "borra" nada). */
+const cuerpoDeAlta = (cuerpo: CuerpoDeSede) => ({
+  nombre: cuerpo.nombre,
+  direccion: cuerpo.direccion,
+  comuna: cuerpo.comuna,
+  ...(cuerpo.telefono ? { telefono: cuerpo.telefono } : {}),
+})
+
+/** Las sedes del negocio, con su horario, y el plan con que responde el servidor (`null` si no es uno conocido). */
+export async function leerSedes(
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<{ plan: PlanId | null; sedes: Sede[] }>> {
+  const resultado = await pedirDeSedes<{ plan?: unknown; sedes?: unknown }>("/api/configuracion/sedes", "leer", palabras)
+  if (!resultado.ok) return { ok: false, error: resultado.error }
+  const sedes = sedesDeLaRespuesta(resultado.datos?.sedes)
+  if (!sedes) return { ok: false, error: frasesDeConfiguracion(palabras).sedes.error(200, "", "leer") }
+  return { ok: true, datos: { plan: planConocido(resultado.datos.plan), sedes } }
+}
+
+/** Agrega una sede (activa, al final). Devuelve la sede como quedó. */
+export async function agregarSede(cuerpo: CuerpoDeSede, palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado<Sede>> {
+  const resultado = await pedirDeSedes<{ sede?: unknown }>(
+    "/api/configuracion/sedes",
+    "agregar",
+    palabras,
+    conJson("POST", cuerpoDeAlta(cuerpo))
+  )
+  if (!resultado.ok) return { ok: false, error: resultado.error }
+  const sede = sedeDeLaRespuesta(resultado.datos?.sede)
+  return sede ? { ok: true, datos: sede } : { ok: false, error: frasesDeConfiguracion(palabras).sedes.error(200, "", "agregar") }
+}
+
+/**
+ * Pasa de «un solo lugar» (cero sedes) a dos: la principal se arma con lo que
+ * se pide (la dirección que hoy tiene el negocio, precargada) y recibe el
+ * horario general de siempre; la otra empieza sin horario. Devuelve las dos.
+ */
+export async function convertirEnVariasSedes(
+  sedes: { principal: CuerpoDeSede; nueva: CuerpoDeSede },
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<Sede[]>> {
+  const resultado = await pedirDeSedes<{ sedes?: unknown }>(
+    "/api/configuracion/sedes/convertir",
+    "convertir",
+    palabras,
+    conJson("POST", { principal: cuerpoDeAlta(sedes.principal), nueva: cuerpoDeAlta(sedes.nueva) })
+  )
+  if (!resultado.ok) return { ok: false, error: resultado.error }
+  const creadas = sedesDeLaRespuesta(resultado.datos?.sedes)
+  return creadas && creadas.length > 0
+    ? { ok: true, datos: creadas }
+    : { ok: false, error: frasesDeConfiguracion(palabras).sedes.error(200, "", "convertir") }
+}
+
+/** Lo que se cambia de una sede. `telefono: null` borra el teléfono. */
+export type CambiosDeSede = Partial<CuerpoDeSede> & { orden?: number; activo?: boolean }
+
+/** Qué se estaba haciendo, para el mensaje de un pedido que falla. */
+function accionDeLosCambios(cambios: CambiosDeSede): AccionDeSedes {
+  if (cambios.activo === true) return "activar"
+  if (cambios.activo === false) return "desactivar"
+  const soloElOrden = Object.keys(cambios).every((clave) => clave === "orden")
+  return soloElOrden ? "ordenar" : "editar"
+}
+
+/** Cambia los datos de una sede, su lugar en la lista o si está activa. Devuelve la sede como quedó. */
+export async function editarSede(
+  id: string,
+  cambios: CambiosDeSede,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<Sede>> {
+  const accion = accionDeLosCambios(cambios)
+  const resultado = await pedirDeSedes<{ sede?: unknown }>(rutaDeLaSede(id), accion, palabras, conJson("PUT", cambios))
+  if (!resultado.ok) return { ok: false, error: resultado.error }
+  const sede = sedeDeLaRespuesta(resultado.datos?.sede)
+  return sede ? { ok: true, datos: sede } : { ok: false, error: frasesDeConfiguracion(palabras).sedes.error(200, "", accion) }
+}
+
+/** Borra una sede sin horas. Con horas el servidor responde 409: se desactiva en vez de borrarla. */
+export async function borrarSede(id: string, palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado> {
+  const resultado = await pedirDeSedes<unknown>(rutaDeLaSede(id), "borrar", palabras, { method: "DELETE" })
+  return resultado.ok ? { ok: true, datos: undefined } : { ok: false, error: resultado.error }
+}
+
+/** Por qué no se guardó el horario de una sede; si se pisa con otra, en qué días y con cuál. */
+export type ResultadoDeHorarioDeSede =
+  | { ok: true; datos: Sede }
+  | { ok: false; error: string; choques: ChoqueDelServidor[] }
+
+/**
+ * Guarda el horario semanal de una sede: reemplaza toda la grilla (los días que
+ * no van quedan sin atención). Devuelve la sede como quedó. Si se pisa con otra
+ * sede el servidor responde 409 con el motivo y los días en `choques`.
+ */
+export async function guardarHorarioDeSede(
+  id: string,
+  dias: readonly HorarioDeSedeDelDia[],
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<ResultadoDeHorarioDeSede> {
+  const cuerpo = {
+    dias: dias.map((dia) => ({
+      dayOfWeek: dia.dayOfWeek,
+      franjas: dia.franjas.map((franja) => ({ start: franja.startTime, end: franja.endTime })),
+    })),
+  }
+  const resultado = await pedirDeSedes<{ sede?: unknown }>(
+    `${rutaDeLaSede(id)}/horarios`,
+    "guardar-horario",
+    palabras,
+    conJson("PUT", cuerpo)
+  )
+  if (!resultado.ok) {
+    return { ok: false, error: resultado.error, choques: resultado.codigo === 409 ? choquesDelCuerpo(resultado.cuerpo) : [] }
+  }
+  const sede = sedeDeLaRespuesta(resultado.datos?.sede)
+  return sede
+    ? { ok: true, datos: sede }
+    : { ok: false, error: frasesDeConfiguracion(palabras).sedes.error(200, "", "guardar-horario"), choques: [] }
+}
+
+// ─── Plan (sólo la dueña) ────────────────────────────────────────────────────
+
+/**
+ * Cambia el plan del negocio. Al pasar a Equipo con sedes, `sedeQueSeQueda` es
+ * la que queda como la dirección del negocio (las demás se desactivan). El
+ * servidor responde 409, con el motivo, si no se puede (por ejemplo, pasar a
+ * Independiente con equipo o con invitaciones). Devuelve el plan que quedó.
+ */
+export async function cambiarDePlan(
+  plan: PlanId,
+  sedeQueSeQueda?: string,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<{ plan: PlanId }>> {
+  const resultado = await pedirDeSedes<{ plan?: unknown }>("/api/configuracion/plan", "cambiar-de-plan", palabras, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(sedeQueSeQueda ? { plan, sedeQueSeQueda } : { plan }),
+  })
+  if (!resultado.ok) return { ok: false, error: resultado.error }
+  const quedo = planConocido(resultado.datos?.plan)
+  return quedo ? { ok: true, datos: { plan: quedo } } : { ok: false, error: frasesDeConfiguracion(palabras).sedes.error(200, "", "cambiar-de-plan") }
 }

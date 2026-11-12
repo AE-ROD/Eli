@@ -61,6 +61,13 @@ import {
   yaPasoLaHora,
 } from "@/lib/reserva-publica"
 import { esRubroDental } from "@/lib/rubros"
+import {
+  MENSAJE_SEDE_NO_VALIDA,
+  leerSedeDelCuerpo,
+  leerSedesDeLaReserva,
+  lugarDeLaSede,
+  resolverSedeDeLaReserva,
+} from "@/lib/sede-de-la-reserva"
 
 const MS_POR_DIA = 24 * 60 * 60 * 1000
 
@@ -98,6 +105,12 @@ interface Reserva {
    * `null` en cualquier otro rubro: la cita no lo escribe y queda el default.
    */
   primeraVez: boolean | null
+  /**
+   * La sede donde queda la cita (plan Independiente), ya revalidada contra las
+   * sedes activas del negocio. `null` en un negocio sin sedes: la cita va sin
+   * sede, como siempre.
+   */
+  sedeId: string | null
 }
 
 async function reservarEnTransaccion(reserva: Reserva): Promise<Resultado> {
@@ -130,6 +143,7 @@ async function reservar(
     manageTokenHash,
     porConfirmarTrasFaltas,
     primeraVez,
+    sedeId,
   }: Reserva
 ): Promise<Resultado> {
   // A quién va, re-verificado dentro de la transacción con la misma regla con
@@ -279,6 +293,8 @@ async function reservar(
       // Sólo en una clínica dental. El sillón no se asigna acá: lo asigna la
       // clínica (`PATCH /api/citas/[id]/sillon`).
       ...(primeraVez !== null && { primeraVez }),
+      // La sede que el servidor revalidó (nunca el id crudo del navegador).
+      ...(sedeId !== null && { sedeId }),
       businessId: negocioId,
     },
     select: { id: true, memberId: true, confirmacionPorFaltas: true },
@@ -356,6 +372,20 @@ export async function POST(
     const cuerpo = await leerJsonConTope(request)
     const datos = reservaSchema.parse(cuerpo)
 
+    // La sede (plan Independiente): se revalida contra las sedes ACTIVAS de este
+    // negocio, nunca se usa el id del navegador tal cual. Con dos o más hay que
+    // elegir una; con una sola se estampa esa; sin sedes, la cita va sin sede
+    // como siempre y el id que llegue se ignora.
+    const eleccionDeSede = resolverSedeDeLaReserva(
+      await leerSedesDeLaReserva(prisma, negocio.id),
+      leerSedeDelCuerpo(cuerpo)
+    )
+    if (eleccionDeSede.tipo === "no-valida") {
+      return NextResponse.json({ error: MENSAJE_SEDE_NO_VALIDA }, { status: 400 })
+    }
+    const sede = eleccionDeSede.sede
+    const lugar = sede ? lugarDeLaSede(sede) : null
+
     // Todos del negocio y activos, o el mismo 404 sin decir cuál falló. La
     // duración y el precio salen de acá, nunca de lo que mande el cliente.
     const servicios = await leerServiciosDeLaReserva(prisma, negocio.id, datos.servicioIds)
@@ -428,6 +458,8 @@ export async function POST(
       serviceIds: servicios.map((servicio) => servicio.id),
       profesionalId: datos.profesionalId || null,
       fecha: datos.fecha,
+      // Con varias sedes, el horario de la elegida; si no, el vigente de siempre.
+      sedeId: eleccionDeSede.sedeDelHorario,
     })
     if (reserva.tipo === "profesional-no-disponible") {
       return NextResponse.json({ error: mensajeProfesionalNoDisponible(negocio.type) }, { status: 404 })
@@ -457,6 +489,7 @@ export async function POST(
       manageTokenHash: enlace.tokenHash,
       porConfirmarTrasFaltas: negocio.porConfirmarTrasFaltas,
       primeraVez,
+      sedeId: sede?.id ?? null,
     })
     if (resultado.tipo === "rechazada") {
       return NextResponse.json({ error: resultado.error }, { status: resultado.status })
@@ -525,6 +558,8 @@ export async function POST(
           precio: precios.total,
           precioNormal: precios.hayRebaja ? precios.totalNormal : null,
           precioIncompleto: resumen.precioIncompleto,
+          // Dónde es: sólo si la cita tiene sede (si no, el correo es el de siempre).
+          ...(lugar && { lugar }),
         }).catch(() => null)
       )
     }
@@ -546,6 +581,7 @@ export async function POST(
           comentarios: datos.comentarios,
           profesional: profesional?.nombre ?? null,
           porConfirmar: cita.confirmacionPorFaltas,
+          ...(lugar && { lugar }),
         }).catch(() => null)
       )
     }
@@ -561,6 +597,8 @@ export async function POST(
         sePuedeCambiar,
         recibiraRecordatorio: conRecordatorio,
         profesional: profesional ? { id: profesional.id, nombre: profesional.nombre } : null,
+        // La sede que quedó guardada (nombre y dirección), para decirla en la confirmación.
+        ...(lugar && { sede: lugar }),
         mensaje: "Reserva confirmada",
       },
       { status: 201 }
