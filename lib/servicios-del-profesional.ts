@@ -10,16 +10,35 @@
  * llama `null` a "hace todos".
  */
 
-/** Lo que dice la tarjeta de quien hace todos los servicios. */
-export const TEXTO_HACE_TODOS = "Hace todos los servicios"
+import { todos } from "@/lib/concordancia"
+import { palabrasDeLaReserva } from "@/lib/palabras-de-la-reserva"
+
+/**
+ * Lo que dice la tarjeta de quien hace todos los servicios: "Hace todos los
+ * servicios", o "Hace todas las prestaciones" en una clínica dental. Lo que el
+ * negocio ofrece y cobra es el `servicio` del vocabulario, no lo que se elige
+ * al reservar (el "motivo").
+ */
+export function textoHaceTodos(rubro?: string | null): string {
+  return `Hace ${todos(palabrasDeLaReserva(rubro).servicio)}`
+}
+
+/** Lo que dice la tarjeta de quien hace todos los servicios, en un rubro sin palabras propias. */
+export const TEXTO_HACE_TODOS = textoHaceTodos()
 
 /**
  * Lo que dice la tarjeta de quien no tiene nada que se pueda reservar: con sus
  * servicios acotados, ya no hace ninguno de los que hoy hay (por ejemplo, los
  * desactivaron); o el negocio no tiene ningún servicio activo, y entonces
- * tampoco quien "hace todos" tiene qué prometer.
+ * tampoco quien "hace todos" tiene qué prometer. "Sin servicios para reservar
+ * por ahora", o "Sin prestaciones…" en una clínica dental.
  */
-export const TEXTO_SIN_SERVICIOS = "Sin servicios para reservar por ahora"
+export function textoSinServicios(rubro?: string | null): string {
+  return `Sin ${palabrasDeLaReserva(rubro).servicio.plural} para reservar por ahora`
+}
+
+/** Lo mismo, en un rubro sin palabras propias. */
+export const TEXTO_SIN_SERVICIOS = textoSinServicios()
 
 /** Cuántos nombres de servicio caben en la tarjeta antes del "+N más". */
 export const TOPE_DE_NOMBRES_EN_LA_TARJETA = 3
@@ -63,13 +82,14 @@ export function haceAlgunServicio(servicioIds: readonly string[] | null, servici
 export function textoDeLoQueHace(
   servicioIds: readonly string[] | null,
   servicios: readonly { id: string; name: string }[],
-  tope: number = TOPE_DE_NOMBRES_EN_LA_TARJETA
+  tope: number = TOPE_DE_NOMBRES_EN_LA_TARJETA,
+  rubro?: string | null
 ): string {
-  if (servicios.length === 0) return TEXTO_SIN_SERVICIOS
-  if (servicioIds === null) return TEXTO_HACE_TODOS
+  if (servicios.length === 0) return textoSinServicios(rubro)
+  if (servicioIds === null) return textoHaceTodos(rubro)
   const hechos = servicios.filter((servicio) => servicioIds.includes(servicio.id))
-  if (hechos.length === 0) return TEXTO_SIN_SERVICIOS
-  if (hechos.length === servicios.length) return TEXTO_HACE_TODOS
+  if (hechos.length === 0) return textoSinServicios(rubro)
+  if (hechos.length === servicios.length) return textoHaceTodos(rubro)
   const visibles = hechos.length === tope + 1 ? hechos : hechos.slice(0, tope)
   const resto = hechos.length - visibles.length
   return `Hace: ${visibles.map((servicio) => servicio.name).join(", ")}${resto > 0 ? `, +${resto} más` : ""}`

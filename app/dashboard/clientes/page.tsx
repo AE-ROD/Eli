@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { AnimatePresence } from "framer-motion"
 import { useSession } from "next-auth/react"
 import { BarraSuperior } from "@/components/panel/barra-superior"
@@ -28,6 +28,7 @@ import {
   type DatosDeNuevoCliente,
 } from "./_datos"
 import { Aviso } from "@/components/panel/aviso"
+import { frasesDeClientes } from "./_frases"
 import { FiltrosClientes } from "./_componentes/filtros-clientes"
 import { ListaClientes } from "./_componentes/lista-clientes"
 import { PanelDetalleCliente, type AlergiasDelPanel } from "./_componentes/panel-detalle-cliente"
@@ -37,7 +38,7 @@ import { VistaSeVan } from "./_componentes/vista-se-van"
 import { clienteParaTarjeta, type ClienteEnTarjeta } from "./_componentes/tarjeta-cliente"
 import { mostrarTelefono } from "@/lib/telefono"
 import { cn } from "@/lib/utils"
-import { conMayuscula, vocabularioDe, type Vocabulario } from "@/lib/vocabulario"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { useCoincideMedia } from "@/components/movimiento/usar-coincide-media"
 import { useZonaDelNegocio } from "../agenda/_componentes/zona-del-negocio"
 
@@ -49,17 +50,8 @@ const CLIENTE_EN_BLANCO: DatosDeNuevoCliente = {
   aceptaCorreoPromo: false,
 }
 
-/** Las dos vistas de la página: todos los clientes, o los que se están yendo (#76). */
-const VISTAS_DE_CLIENTES = [
-  { id: "todos", texto: "Todos" },
-  { id: "se-van", texto: "Se están yendo" },
-] as const
-type VistaDeClientes = (typeof VISTAS_DE_CLIENTES)[number]["id"]
-
-/** `1 cliente registrado`, `12 clientes registrados` (en una clínica dental, pacientes). */
-function cuantosClientes(total: number, vocabulario: Vocabulario): string {
-  return total === 1 ? `1 ${vocabulario.cliente} registrado` : `${total} ${vocabulario.clientes} registrados`
-}
+/** Las dos vistas de la página: todos los clientes, o los que se están yendo (#76). Su texto lo pone `frasesDeClientes`. */
+type VistaDeClientes = "todos" | "se-van"
 
 /** La ficha clínica de un paciente: sólo existe en una clínica dental. */
 const rutaDeLaFicha = (id: string) => `/dashboard/clientes/${encodeURIComponent(id)}`
@@ -87,7 +79,15 @@ export default function PaginaClientes() {
   // Clínica dental: "pacientes", la ficha clínica y la alerta de alergias. Los demás rubros, como siempre.
   const esDental = esClinicaDental(actor)
   const leeAlergias = veAlertaDeAlergias(actor)
-  const vocabulario = vocabularioDe(sesion?.user?.rubro)
+  // Memoizado por rubro: `vocabularioDe` arma objetos nuevos en cada llamada, y `cargarClientes`
+  // depende de las palabras: sin esto cambiaría en cada render y volvería a pedir la lista.
+  const rubro = sesion?.user?.rubro
+  const palabras = useMemo(() => vocabularioDe(rubro).palabras, [rubro])
+  const frases = frasesDeClientes(palabras)
+  const vistasDeClientes = [
+    { id: "todos", texto: frases.pagina.vistas.todos },
+    { id: "se-van", texto: frases.pagina.vistas.seVan },
+  ] as const
   const nombreNegocio = sesion?.user?.businessName ?? ""
   const zona = useZonaDelNegocio()
   const pantallaAncha = useCoincideMedia(PANTALLA_ANCHA)
@@ -157,7 +157,7 @@ export default function PaginaClientes() {
       else setCargando(true)
       setAviso("")
 
-      const resultado = await leerClientes({ busqueda: textoBuscado, etiqueta, pagina: paginaPedida })
+      const resultado = await leerClientes({ busqueda: textoBuscado, etiqueta, pagina: paginaPedida }, palabras)
       // Hubo un pedido después de éste: el que manda es ése, y él apaga la carga.
       if (numero !== ultimoPedido.current) return
 
@@ -177,7 +177,7 @@ export default function PaginaClientes() {
       setCargando(false)
       setCargandoMas(false)
     },
-    []
+    [palabras]
   )
 
   // Clínica dental: al abrir la ficha de un paciente se piden sus alergias, para la alerta.
@@ -298,7 +298,7 @@ export default function PaginaClientes() {
     setAvisoDelModal("")
     setAvisoListo("")
     setGuardando(true)
-    const resultado = editandoId ? await editarCliente(editandoId, nuevoCliente) : await crearCliente(nuevoCliente)
+    const resultado = editandoId ? await editarCliente(editandoId, nuevoCliente, palabras) : await crearCliente(nuevoCliente, palabras)
     setGuardando(false)
 
     // El aviso va dentro del modal, que sigue abierto con lo que se cargó: en
@@ -328,7 +328,7 @@ export default function PaginaClientes() {
     if (!aEliminar) return
     setAvisoDeEliminar("")
     setEliminando(true)
-    const resultado = await eliminarCliente(aEliminar.id)
+    const resultado = await eliminarCliente(aEliminar.id, palabras)
     setEliminando(false)
 
     if (!resultado.ok) return setAvisoDeEliminar(resultado.error)
@@ -336,7 +336,7 @@ export default function PaginaClientes() {
     const nombre = aEliminar.nombre
     if (clienteSeleccionado?.id === aEliminar.id) setClienteSeleccionado(null)
     setAEliminar(null)
-    setAvisoListo(`Se eliminaron los datos de ${nombre}. Sus citas y cobros siguen en la agenda y en los reportes, a nombre de "Cliente eliminado".`)
+    setAvisoListo(frases.eliminar.listo(nombre))
     cargarClientes(busqueda, etiquetaActiva, 1)
   }
 
@@ -344,9 +344,9 @@ export default function PaginaClientes() {
     <div className="min-h-dvh">
       {/* Sin la búsqueda de la cabecera: la página tiene la suya, justo debajo. */}
       <BarraSuperior
-        titulo={conMayuscula(vocabulario.clientes)}
-        subtitulo={cargando ? "Cargando..." : cuantosClientes(total, vocabulario)}
-        accionPrincipal={{ texto: `Nuevo ${vocabulario.cliente}`, onClick: abrirModal }}
+        titulo={frases.pagina.titulo}
+        subtitulo={cargando ? "Cargando..." : frases.pagina.subtitulo(total)}
+        accionPrincipal={{ texto: frases.pagina.nuevo, onClick: abrirModal }}
         mostrarBusqueda={false}
       />
 
@@ -360,8 +360,8 @@ export default function PaginaClientes() {
 
         {/* "Se están yendo" (#76): dueña y encargado. El servidor lo vuelve a verificar. */}
         {puedeVerSeVan && (
-          <div role="group" aria-label={`Qué ${vocabulario.clientes} ver`} className="flex w-full gap-1 rounded-full bg-superficie p-1 sm:w-fit">
-            {VISTAS_DE_CLIENTES.map(({ id, texto }) => (
+          <div role="group" aria-label={frases.pagina.queVer} className="flex w-full gap-1 rounded-full bg-superficie p-1 sm:w-fit">
+            {vistasDeClientes.map(({ id, texto }) => (
               <button
                 key={id}
                 type="button"
@@ -379,7 +379,7 @@ export default function PaginaClientes() {
         )}
 
         {vistaDeClientes === "se-van" && puedeVerSeVan ? (
-          <VistaSeVan nombreNegocio={nombreNegocio} vocabulario={vocabulario} />
+          <VistaSeVan nombreNegocio={nombreNegocio} palabras={palabras} />
         ) : (
           <>
             {/* Cargar y llevarse la base: dueño y encargado. El servidor lo vuelve a verificar. */}
@@ -426,7 +426,7 @@ export default function PaginaClientes() {
                   pagina={pagina}
                   paginas={paginas}
                   seleccionadoId={clienteSeleccionado?.id}
-                  vocabulario={vocabulario}
+                  palabras={palabras}
                   rutaDeLaFicha={esDental ? rutaDeLaFicha : undefined}
                   onSeleccionar={seleccionarCliente}
                   onCargarMas={() => cargarClientes(busqueda, etiquetaActiva, pagina + 1, true)}
@@ -438,7 +438,7 @@ export default function PaginaClientes() {
                   <PanelDetalleCliente
                     key={pantallaAncha ? "al-lado" : "hoja"}
                     cliente={clienteSeleccionado}
-                    vocabulario={vocabulario}
+                    palabras={palabras}
                     fichaClinica={
                       esDental
                         ? {
@@ -482,7 +482,7 @@ export default function PaginaClientes() {
         {modalAbierto && (
           <ModalNuevoCliente
             editando={editandoId !== null}
-            palabraCliente={vocabulario.cliente}
+            palabras={palabras}
             form={nuevoCliente}
             guardando={guardando}
             aviso={avisoDelModal}
@@ -503,7 +503,7 @@ export default function PaginaClientes() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {exportando && <ModalExportar vocabulario={vocabulario} alCerrar={() => setExportando(false)} />}
+        {exportando && <ModalExportar palabras={palabras} alCerrar={() => setExportando(false)} />}
       </AnimatePresence>
 
       <AnimatePresence>
@@ -511,7 +511,7 @@ export default function PaginaClientes() {
           <ModalConfirmar
             titulo={`¿Eliminar a ${aEliminar.nombre}?`}
             descripcion="Se borran sus datos personales y no se pueden recuperar."
-            textoConfirmar={`Eliminar ${vocabulario.cliente}`}
+            textoConfirmar={frases.eliminar.boton}
             textoCancelar="No eliminar"
             peligro
             trabajando={eliminando}
@@ -523,13 +523,13 @@ export default function PaginaClientes() {
               <div>
                 <p className="font-medium text-navy">Se borra</p>
                 <p className="mt-1">
-                  Su nombre, correo, teléfono, cédula, notas y etiquetas; su nombre en cada cobro, que pasa a decir &ldquo;Cliente eliminado&rdquo;; y las notas y comentarios de sus citas y atenciones. Deja de aparecer en {conMayuscula(vocabulario.clientes)} y en los buscadores.
+                  {frases.eliminar.seBorra}
                 </p>
               </div>
               <div>
                 <p className="font-medium text-navy">Queda</p>
                 <p className="mt-1">
-                  Sus citas y sus cobros, con sus fechas, servicios, profesionales y montos, para que la agenda y los reportes sumen lo mismo.
+                  {frases.eliminar.queda}
                   {esDental &&
                     " Y su ficha clínica (antecedentes, odontograma, evoluciones, plan y prótesis): queda guardada, aunque ya no se ve en ninguna pantalla."}
                 </p>

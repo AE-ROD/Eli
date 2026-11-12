@@ -4,6 +4,7 @@ import { useId } from "react"
 import { ArrowLeft, Ban, Check, Pencil, Trash2, Undo2, Wallet } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { Insignia } from "@/components/comunes/insignia"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { aCentavos, deCentavos, esEstadoActivo, nombreDeEstado, type EstadoActivo } from "@/lib/atenciones"
 import {
   accionPrincipal,
@@ -16,9 +17,11 @@ import { formatearMonto } from "@/lib/dinero"
 import { formatearHora, tiempoDesde } from "@/lib/fechas"
 import { puedeCobrarAbonosDeProtesis, type Actor } from "@/lib/permisos"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { esAbono, nombreDelAbono, type Atencion, type LineaDeServicio as Linea, type PagoRegistrado } from "../_datos"
 import { CLASES_DE_TARJETA, Herramienta, LineaDeServicio, MomentoDeTarjeta, NombreDeTarjeta } from "./partes-de-tarjeta"
 import type { PropsDeArrastre } from "./tarjeta-de-reserva"
+import { frasesDelTablero } from "../_frases"
 
 /**
  * Desde cuándo está en la columna, dicho como se lee en el local: "Llegó
@@ -108,6 +111,8 @@ export function TarjetaDeAtencion({
   onQuitarAbono,
 }: PropsDeTarjetaDeAtencion) {
   const idDelNombre = useId()
+  // "Prestaciones" y "Sin prestaciones todavía." en una clínica dental.
+  const frases = frasesDelTablero(vocabularioDe(useRubroDelPanel()).palabras).tarjeta
   const momento = momentoDe(atencion, ahora)
   const principal = accionPrincipal(actor, atencion.estado)
   const secundarias = accionesSecundarias(actor, atencion.estado)
@@ -146,7 +151,7 @@ export function TarjetaDeAtencion({
       </NombreDeTarjeta>
 
       {servicios.length > 0 ? (
-        <ul className="flex flex-col gap-1" aria-label="Servicios">
+        <ul className="flex flex-col gap-1" aria-label={frases.listaDeServicios}>
           {servicios.map((linea) => (
             <LineaDeServicio key={linea.id} servicio={linea.servicio} profesional={linea.profesional.nombre}>
               {faltaAsignar(linea) && (
@@ -170,7 +175,7 @@ export function TarjetaDeAtencion({
           ))}
         </ul>
       ) : abonos.length === 0 ? (
-        <p className="text-[13px] leading-snug text-texto-2">Sin servicios todavía.</p>
+        <p className="text-[13px] leading-snug text-texto-2">{frases.sinServicios}</p>
       ) : null}
 
       {/* Los abonos de prótesis, con su monto: no son un servicio y se quitan aparte, antes de cobrar. */}
@@ -269,8 +274,8 @@ export function TarjetaDeAtencion({
           {secundarias.editar && (
             <Herramienta
               icono={Pencil}
-              etiqueta={`Editar servicios de ${quien}`}
-              globo="Editar servicios"
+              etiqueta={frases.editarDe(quien)}
+              globo={frases.editarGlobo}
               ocupado={enCurso}
               onClick={onEditar}
             />

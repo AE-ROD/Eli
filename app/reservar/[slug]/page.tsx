@@ -13,19 +13,21 @@ import { ANCLA_DE_RESERVA, MiniPagina } from "./_pagina/mini-pagina"
 import { EncabezadoDeReserva } from "./_componentes/encabezado-de-reserva"
 import { FormularioReserva } from "./_componentes/formulario-reserva"
 import { PieDeEli } from "./_componentes/pie-de-eli"
+import { frasesDeLaPagina, pestanaDeLaReserva, tituloDeLaReserva } from "./_frases"
 
 /**
  * Título y descripción al compartir el enlace (WhatsApp, redes, buscadores).
- * La imagen la pone `opengraph-image.tsx`, en esta misma carpeta.
+ * La imagen la pone `opengraph-image.tsx`, en esta misma carpeta. La pestaña
+ * dice "Reservar hora" o "Reservar cita" según el rubro del negocio.
  */
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const pagina = await leerPaginaDelNegocio(slug)
   if (!pagina) return { title: "Negocio no encontrado" }
   const titulo = pagina.comuna ? `${pagina.nombre} · ${pagina.comuna}` : pagina.nombre
-  const descripcion = descripcionParaCompartir(pagina.nombre, pagina.comuna)
+  const descripcion = descripcionParaCompartir(pagina.nombre, pagina.comuna, pagina.rubro)
   return {
-    title: `Reservar cita — ${titulo}`,
+    title: `${pestanaDeLaReserva(pagina.rubro)} — ${titulo}`,
     description: descripcion,
     openGraph: { title: titulo, description: descripcion, type: "website", locale: "es_CL" },
     twitter: { card: "summary_large_image", title: titulo, description: descripcion },
@@ -82,11 +84,11 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
       <MarcoDeReserva>
         {miniPagina}
         <div id={ANCLA_DE_RESERVA} className="mt-10 scroll-mt-6 md:mt-14">
-        <EncabezadoDeReserva nivel={2} antetitulo={negocio.name} titulo="Reserva tu hora" />
+        <EncabezadoDeReserva nivel={2} antetitulo={negocio.name} titulo={tituloDeLaReserva(negocio.type)} />
         <Tarjeta className="mx-auto mt-8 flex max-w-xl flex-col items-center gap-5 px-6 py-10 text-center sm:px-10 md:mt-12">
           <CuadroDeIcono icono={CalendarX2} color="azul" tamano="lg" />
           <p className="cuerpo-xl text-pretty text-texto-2">
-            Este negocio aún no tiene servicios disponibles para reservar.
+            {frasesDeLaPagina(negocio.type).sinServicios}
           </p>
         </Tarjeta>
         </div>
@@ -94,9 +96,10 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
     )
   }
 
-  // Clínica dental: la reserva habla de "motivo" y "odontólogo", pregunta si
-  // es la primera vez y avisa de la urgencia. Lo único que sale de más es si
-  // cada servicio es urgencia, y sólo en una clínica: nada clínico ni de
+  // El rubro (`negocio.type`) pone las palabras de la reserva: "estilista" en
+  // un salón; en una clínica dental, "motivo" y "odontólogo", y además pregunta
+  // si es la primera consulta y avisa de la urgencia. Lo único que sale de más
+  // es si cada servicio es urgencia, y sólo en una clínica: nada clínico ni de
   // sillones. En otro rubro, los servicios de siempre.
   const clinicaDental = esRubroDental(negocio.type)
   const servicios = negocio.services.map(({ esUrgencia, ...servicio }) =>
@@ -110,7 +113,7 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
       <FormularioReserva
         slug={negocio.slug}
         nombreNegocio={negocio.name}
-        clinicaDental={clinicaDental}
+        rubro={negocio.type}
         zona={zonaDelNegocio(negocio.timezone)}
         servicios={servicios}
         // Quién atiende y qué servicios hace cada uno, ya leído: el primer paso
@@ -126,7 +129,7 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
         // reserva ofrece. El calendario lo usa hasta leer quién atiende.
         horarios={pagina.horario}
         listaDeEsperaActiva={negocio.listaDeEsperaActiva}
-        plazoDeCambios={plazoParaQuienReserva(pagina.plazoDeCambiosHoras)}
+        plazoDeCambios={plazoParaQuienReserva(pagina.plazoDeCambiosHoras, negocio.type)}
         plazoDeCambiosHoras={plazoValido(pagina.plazoDeCambiosHoras)}
         // El lugar del evento de "Agregar al calendario": la dirección y la comuna.
         // Sin calle no hay lugar (como los enlaces de mapa): la comuna sola no lleva a ninguna parte.

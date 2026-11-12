@@ -24,6 +24,15 @@ import {
   type ResultadoConCodigo,
 } from "@/lib/peticiones"
 import { mostrarTelefono } from "@/lib/telefono"
+import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
+import { frasesDelTablero } from "./_frases"
+
+/**
+ * Las palabras de un rubro sin palabras propias: lo que dicen los mensajes de
+ * estos pedidos ("No se pudo cargar el tablero") si quien llama no pasa las
+ * del rubro. Los pedidos que traen un mensaje del servidor lo muestran tal cual.
+ */
+const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
 
 // ─── Lo que devuelve el servidor ─────────────────────────────────────────────
 
@@ -220,18 +229,21 @@ const urlDeAtencion = (id: string) => `${URL_DE_ATENCIONES}/${encodeURIComponent
  * siguiente en la hora del dispositivo, enviado como instantes ISO. El
  * servidor no sabe en qué huso está el local; el navegador sí.
  */
-export async function leerTablero(hoy: Date): Promise<Resultado<Tablero>> {
+export async function leerTablero(hoy: Date, palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado<Tablero>> {
   const { desde, hasta } = rangoDelDia(hoy)
   const parametros = new URLSearchParams({ desde: desde.toISOString(), hasta: hasta.toISOString() })
-  return pedir<Tablero>(`${URL_DE_ATENCIONES}?${parametros}`, "No se pudo cargar el tablero")
+  return pedir<Tablero>(`${URL_DE_ATENCIONES}?${parametros}`, frasesDelTablero(palabras).errores.cargarElTablero)
 }
 
 /** Hasta ocho clientes cuyo nombre, correo o teléfono contiene `texto`. */
-export async function buscarClientes(texto: string): Promise<Resultado<ClienteEncontrado[]>> {
+export async function buscarClientes(
+  texto: string,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<ClienteEncontrado[]>> {
   const parametros = new URLSearchParams({ q: texto, limite: "8" })
   const resultado = await pedir<{
     clientes: { id: string; name: string; lastName: string | null; email: string | null; phone: string | null }[]
-  }>(`/api/clientes?${parametros}`, "No se pudieron buscar los clientes")
+  }>(`/api/clientes?${parametros}`, frasesDelTablero(palabras).errores.buscarClientes)
   if (!resultado.ok) return resultado
 
   return {
@@ -272,16 +284,20 @@ export async function marcarLlegada(citaId: string): Promise<ResultadoDeAccion<A
 }
 
 /**
- * La reserva no llegó: la cita queda "No vino" (`no-asistio`), sale de
+ * La reserva no llegó: la cita queda "No vino" (`no-asistio`; "No asistió" en
+ * una clínica dental, según las `palabras` del rubro), sale de
  * "Reservas de hoy", libera su horario y cuenta en la ficha del cliente. El
  * servidor sólo lo acepta en una reserva pendiente o confirmada cuya hora ya
  * pasó y que no esté en el tablero: si no, 409 con el motivo.
  */
-export async function marcarNoVino(citaId: string): Promise<ResultadoDeAccion<unknown>> {
+export async function marcarNoVino(
+  citaId: string,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<ResultadoDeAccion<unknown>> {
   return conMotivo(
     await pedirConCodigo<unknown>(
       `/api/citas/${encodeURIComponent(citaId)}`,
-      "No se pudo marcar que no vino",
+      frasesDelTablero(palabras).errores.marcarNoVino,
       conJson("PUT", { status: "no-asistio" })
     )
   )
@@ -334,9 +350,17 @@ export async function anotarSinReserva(datos: DatosSinReserva): Promise<Resultad
  * Reemplaza los servicios de la atención. Al profesional el servidor le
  * reemplaza sólo los suyos: los de sus colegas quedan como estaban.
  */
-export async function guardarServicios(id: string, lineas: LineaPedida[]): Promise<ResultadoDeAccion<Atencion>> {
+export async function guardarServicios(
+  id: string,
+  lineas: LineaPedida[],
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<ResultadoDeAccion<Atencion>> {
   return conMotivo(
-    await pedirConCodigo<Atencion>(urlDeAtencion(id), "No se pudieron guardar los servicios", conJson("PUT", { lineas }))
+    await pedirConCodigo<Atencion>(
+      urlDeAtencion(id),
+      frasesDelTablero(palabras).errores.guardarServicios,
+      conJson("PUT", { lineas })
+    )
   )
 }
 
@@ -407,10 +431,13 @@ export async function vaciarFilaDeHoy(): Promise<ResultadoDeAccion<{ anuladas: n
  * Antes de cobrar (#118): los ids de las líneas que quedarían sin % de
  * comisión si se cobrara ahora. Sólo para avisar; el cobro no se frena.
  */
-export async function leerLineasSinPorcentaje(id: string): Promise<Resultado<string[]>> {
+export async function leerLineasSinPorcentaje(
+  id: string,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<string[]>> {
   const resultado = await pedir<{ lineasSinPorcentaje: string[] }>(
     `${urlDeAtencion(id)}/cobro`,
-    "No se pudo saber qué servicios quedarán sin porcentaje de comisión"
+    frasesDelTablero(palabras).errores.lineasSinPorcentaje
   )
   return resultado.ok ? { ok: true, datos: resultado.datos.lineasSinPorcentaje } : resultado
 }

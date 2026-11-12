@@ -5,7 +5,8 @@ import { Boton } from "@/components/comunes/boton"
 import { Esqueleto } from "@/components/comunes/esqueleto"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { cn } from "@/lib/utils"
-import type { Vocabulario } from "@/lib/vocabulario"
+import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
+import { frasesDeClientes } from "../_frases"
 import { TarjetaCliente, type ClienteEnTarjeta } from "./tarjeta-cliente"
 
 interface PropsDeListaClientes {
@@ -18,8 +19,8 @@ interface PropsDeListaClientes {
   paginas: number
   /** El que está abierto en la ficha, para marcar su tarjeta. */
   seleccionadoId?: string
-  /** "clientes" o, en una clínica dental, "pacientes". */
-  vocabulario?: Pick<Vocabulario, "clientes" | "cliente">
+  /** Las palabras del rubro: "clientes" o, en una clínica dental, "pacientes". Sin ellas, las de siempre. */
+  palabras?: PalabrasDelRubro
   /**
    * Clínica dental: la ruta de la ficha clínica de cada paciente. Por debajo
    * de `lg` la tarjeta lleva a la ficha clínica, y su botón de la esquina abre
@@ -30,6 +31,9 @@ interface PropsDeListaClientes {
   onCargarMas: () => void
 }
 
+/** Las palabras de un rubro sin palabras propias: lo que dice la lista si quien la usa no pasa las suyas. */
+const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
+
 /**
  * Las columnas salen del ancho de la lista (`@container`) y no del de la
  * ventana: con la ficha de un cliente abierta al lado, la lista se angosta
@@ -39,10 +43,10 @@ interface PropsDeListaClientes {
 const CUADRICULA = "grid grid-cols-1 gap-3 sm:gap-4 @xl:grid-cols-2 @4xl:grid-cols-3"
 const LISTA = "space-y-3"
 
-function EsqueletoDeClientes({ vista }: { vista: "grid" | "lista" }) {
+function EsqueletoDeClientes({ vista, cargando }: { vista: "grid" | "lista"; cargando: string }) {
   return (
     <div aria-busy="true">
-      <span className="sr-only">Cargando clientes...</span>
+      <span className="sr-only">{cargando}</span>
       <ul aria-hidden="true" className={vista === "grid" ? CUADRICULA : LISTA}>
         {Array.from({ length: 6 }).map((_, i) => (
           <li key={i} className="rounded-[24px] bg-tarjeta p-4 shadow-sm squircle">
@@ -70,22 +74,21 @@ export function ListaClientes({
   pagina,
   paginas,
   seleccionadoId,
-  vocabulario = { clientes: "clientes", cliente: "cliente" },
+  palabras = PALABRAS_NEUTRAS,
   rutaDeLaFicha,
   onSeleccionar,
   onCargarMas,
 }: PropsDeListaClientes) {
+  const { lista } = frasesDeClientes(palabras)
   return (
     <div className="@container">
       {cargando ? (
-        <EsqueletoDeClientes vista={vista} />
+        <EsqueletoDeClientes vista={vista} cargando={lista.cargando} />
       ) : clientes.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-panel border-2 border-dashed border-borde px-6 py-12 text-center squircle">
           <CuadroDeIcono icono={Users} color="lila" tamano="lg" />
-          <h2 className="mt-2 font-semibold text-navy">No se encontraron {vocabulario.clientes}</h2>
-          <p className="max-w-sm text-sm text-pretty text-texto-2">
-            Intenta cambiar los filtros o agrega un nuevo {vocabulario.cliente}
-          </p>
+          <h2 className="mt-2 font-semibold text-navy">{lista.sinResultados}</h2>
+          <p className="max-w-sm text-sm text-pretty text-texto-2">{lista.sinResultadosAyuda}</p>
         </div>
       ) : (
         <>

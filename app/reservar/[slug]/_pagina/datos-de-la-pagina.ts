@@ -60,6 +60,12 @@ export interface ServicioDeLaPagina {
 export interface PaginaDelNegocio {
   nombre: string
   slug: string
+  /**
+   * El rubro (`Business.type`): con él la página, sus metadatos y la imagen
+   * para compartir hablan con las palabras del rubro (`lib/vocabulario.ts`).
+   * Un rubro desconocido recibe las de siempre.
+   */
+  rubro: string
   zona: string
   direccion: string | null
   comuna: string | null
@@ -136,6 +142,7 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
   return {
     nombre: negocio.name,
     slug: negocio.slug,
+    rubro: negocio.type,
     zona: zonaDelNegocio(negocio.timezone),
     direccion: textoONull(negocio.address),
     comuna: textoONull(negocio.comuna),

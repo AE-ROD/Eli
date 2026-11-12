@@ -4,14 +4,19 @@ import { Mail, Phone, User } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
+import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
 import type { DatosDeNuevoCliente } from "../_datos"
+import { frasesDeClientes } from "../_frases"
 import { Aviso } from "@/components/panel/aviso"
+
+/** Las palabras de un rubro sin palabras propias: lo que dice el formulario si quien lo abre no pasa las suyas. */
+const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
 
 interface PropsDeModalNuevoCliente {
   /** Con `editando`, el mismo formulario cambia los datos de un cliente que ya existe. */
   editando?: boolean
-  /** "cliente" o, en una clínica dental, "paciente" (`lib/vocabulario.ts`). */
-  palabraCliente?: string
+  /** Las palabras del rubro (`lib/vocabulario.ts`): "cliente" o, en una clínica dental, "paciente". Sin ellas, las de siempre. */
+  palabras?: PalabrasDelRubro
   form: DatosDeNuevoCliente
   guardando: boolean
   /**
@@ -43,7 +48,7 @@ interface PropsDeModalNuevoCliente {
  */
 export function ModalNuevoCliente({
   editando = false,
-  palabraCliente = "cliente",
+  palabras = PALABRAS_NEUTRAS,
   form,
   guardando,
   aviso,
@@ -54,14 +59,15 @@ export function ModalNuevoCliente({
   onSubmit,
   onCerrar,
 }: PropsDeModalNuevoCliente) {
+  const { formulario } = frasesDeClientes(palabras)
   return (
-    <MarcoDeModal titulo={editando ? `Editar ${palabraCliente}` : `Nuevo ${palabraCliente}`} bloqueado={guardando} alCerrar={onCerrar}>
+    <MarcoDeModal titulo={formulario.titulo(editando)} bloqueado={guardando} alCerrar={onCerrar}>
       <form onSubmit={onSubmit} className="space-y-5">
         {/* Al abrir, el foco va al nombre. `MarcoDeModal` anota antes quién lo abrió. */}
         <CampoFormulario
           autoFocus
           etiqueta="Nombre completo"
-          placeholder={`Nombre del ${palabraCliente}`}
+          placeholder={formulario.nombre}
           value={form.nombre}
           onChange={(e) => onCambiarCampo("nombre", e.target.value)}
           icono={<User className="size-4" aria-hidden="true" strokeWidth={1.75} />}
@@ -123,7 +129,7 @@ export function ModalNuevoCliente({
             Cancelar
           </Boton>
           <Boton type="submit" className="w-full" cargando={guardando}>
-            {editando ? "Guardar cambios" : `Guardar ${palabraCliente}`}
+            {formulario.guardar(editando)}
           </Boton>
         </div>
       </form>

@@ -7,12 +7,16 @@ import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { Aviso } from "@/components/panel/aviso"
 import { comoTexto } from "@/lib/fechas"
-import { conMayuscula, type Vocabulario } from "@/lib/vocabulario"
+import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
 import { exportarAtenciones, exportarClientes } from "../_datos"
+import { frasesDeClientes } from "../_frases"
+
+/** Las palabras de un rubro sin palabras propias: lo que dice el modal si quien lo abre no pasa las suyas. */
+const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
 
 interface PropsDeModalExportar {
-  /** "clientes" o, en una clínica dental, "pacientes". */
-  vocabulario?: Pick<Vocabulario, "clientes">
+  /** Las palabras del rubro: "clientes" o, en una clínica dental, "pacientes". Sin ellas, las de siempre. */
+  palabras?: PalabrasDelRubro
   alCerrar: () => void
 }
 
@@ -28,8 +32,8 @@ function mesEnCurso(): { desde: string; hasta: string } {
  * Sólo lo abre quien puede (`puedeImportarExportarClientes`); el servidor lo
  * vuelve a verificar.
  */
-export function ModalExportar({ vocabulario = { clientes: "clientes" }, alCerrar }: PropsDeModalExportar) {
-  const { clientes } = vocabulario
+export function ModalExportar({ palabras = PALABRAS_NEUTRAS, alCerrar }: PropsDeModalExportar) {
+  const { exportar } = frasesDeClientes(palabras)
   const [rango, setRango] = useState(mesEnCurso)
   const [descargando, setDescargando] = useState<"clientes" | "atenciones" | null>(null)
   const [aviso, setAviso] = useState("")
@@ -37,7 +41,7 @@ export function ModalExportar({ vocabulario = { clientes: "clientes" }, alCerrar
   const descargar = async (cual: "clientes" | "atenciones") => {
     setAviso("")
     setDescargando(cual)
-    const resultado = cual === "clientes" ? await exportarClientes() : await exportarAtenciones(rango.desde, rango.hasta)
+    const resultado = cual === "clientes" ? await exportarClientes(palabras) : await exportarAtenciones(rango.desde, rango.hasta)
     setDescargando(null)
     if (!resultado.ok) setAviso(resultado.error)
   }
@@ -53,9 +57,9 @@ export function ModalExportar({ vocabulario = { clientes: "clientes" }, alCerrar
         <section className="space-y-3">
           <h3 className="flex items-center gap-2 font-medium text-navy">
             <Users className="size-4" aria-hidden="true" strokeWidth={1.75} />
-            {conMayuscula(clientes)}
+            {exportar.titulo}
           </h3>
-          <p className="text-sm text-texto-2">Todos los {clientes} del negocio, con sus datos de contacto y notas.</p>
+          <p className="text-sm text-texto-2">{exportar.descripcion}</p>
           <Boton
             type="button"
             variante="secundario"
@@ -64,7 +68,7 @@ export function ModalExportar({ vocabulario = { clientes: "clientes" }, alCerrar
             cargando={descargando === "clientes"}
             onClick={() => descargar("clientes")}
           >
-            Descargar {clientes}
+            {exportar.descargar}
           </Boton>
         </section>
 
@@ -73,9 +77,7 @@ export function ModalExportar({ vocabulario = { clientes: "clientes" }, alCerrar
             <CalendarDays className="size-4" aria-hidden="true" strokeWidth={1.75} />
             Atenciones
           </h3>
-          <p className="text-sm text-texto-2">
-            Cada visita al local entre dos días, con sus servicios, quién atendió y lo cobrado. Hasta un año.
-          </p>
+          <p className="text-sm text-texto-2">{exportar.atenciones}</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <CampoFormulario
               etiqueta="Desde"

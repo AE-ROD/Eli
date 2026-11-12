@@ -9,6 +9,7 @@
 
 import { MEDIOS_DE_PAGO, type MedioDePagoId } from "@/lib/medios-de-pago"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
+import { palabrasDeLaReserva } from "@/lib/palabras-de-la-reserva"
 import { aE164Chile } from "@/lib/telefono"
 
 // ─── Paleta del local ────────────────────────────────────────────────────────
@@ -271,10 +272,22 @@ export function horarioParaMostrar(franjas: FranjaDelDia[]): { dayOfWeek: number
   }))
 }
 
-/** La descripción de la página al compartirla (buscadores, WhatsApp, redes), con la comuna si la hay. */
-export function descripcionParaCompartir(nombre: string, comuna: string | null | undefined): string {
+/**
+ * La descripción de la página al compartirla (buscadores, WhatsApp, redes), con
+ * la comuna si la hay. `rubro` (`Business.type`) pone las palabras: "Reserva tu
+ * hora en Salón Ana. Mira sus servicios, precios y horarios." en un salón y
+ * "…Mira sus prestaciones, precios y horarios." en una clínica. Sin rubro, la de
+ * siempre.
+ */
+export function descripcionParaCompartir(
+  nombre: string,
+  comuna: string | null | undefined,
+  rubro?: string | null
+): string {
+  const { hora, servicio } = palabrasDeLaReserva(rubro)
   const lugar = (comuna ?? "").trim()
+  const cierre = `Mira sus ${servicio.plural}, precios y horarios.`
   return lugar
-    ? `Reserva tu hora en ${nombre}, en ${lugar}. Mira sus servicios, precios y horarios.`
-    : `Reserva tu hora en ${nombre}. Mira sus servicios, precios y horarios.`
+    ? `Reserva tu ${hora.singular} en ${nombre}, en ${lugar}. ${cierre}`
+    : `Reserva tu ${hora.singular} en ${nombre}. ${cierre}`
 }

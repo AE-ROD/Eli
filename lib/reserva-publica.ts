@@ -177,8 +177,15 @@ export function avisoSinCambiosDespuesDeReservar(plazoHoras: number, rubro?: str
 /** Los minutos que suma la primera vez en la clínica: para abrir la ficha. */
 export const MINUTOS_DE_PRIMERA_VEZ = 15
 
-/** Lo que dice la reserva junto a "¿Es tu primera vez en la clínica?". */
-export const TEXTO_DE_PRIMERA_VEZ = `La primera vez sumamos ${MINUTOS_DE_PRIMERA_VEZ} minutos para abrir tu ficha.`
+/**
+ * Lo que dice la reserva junto a "¿Es tu primera consulta en la clínica?": "En
+ * la primera consulta sumamos 15 minutos para abrir tu ficha." La palabra
+ * sale del rubro (`primeraVez`); sólo la ve quien reserva en una clínica dental.
+ */
+export function textoDePrimeraVez(rubro: string | null | undefined): string {
+  const { primeraVez } = palabrasDeLaReserva(rubro)
+  return `En ${el(primeraVez)} sumamos ${MINUTOS_DE_PRIMERA_VEZ} minutos para abrir tu ficha.`
+}
 
 /**
  * Cuánto dura la reserva entera: la suma de los servicios
@@ -203,19 +210,43 @@ export function esHoyEn(fecha: string, ahora: Date, zona: string): boolean {
   return fechaYMinutosEn(ahora, zona).fecha === fecha
 }
 
-/** El 400 de `confirmar` (y del enlace para reagendar) con una urgencia para otro día. */
-export const MENSAJE_URGENCIA_SOLO_HOY =
-  "Las urgencias se atienden el mismo día: elige una hora de hoy. Para otro día, elige otro motivo."
+/**
+ * El 400 de `confirmar` (y del enlace para reagendar) con una urgencia para
+ * otro día: "…elige una hora de hoy. Para otro día, elige otro motivo." La
+ * palabra de lo que se elige sale del rubro.
+ */
+export function mensajeDeUrgenciaSoloHoy(rubro: string | null | undefined): string {
+  const { servicioDeLaReserva } = palabrasDeLaReserva(rubro)
+  return `Las urgencias se atienden el mismo día: elige una hora de hoy. Para otro día, elige ${concordar("otro", servicioDeLaReserva)} ${servicioDeLaReserva.singular}.`
+}
 
-/** Cuando hoy no queda ninguna hora para una urgencia. */
-export const MENSAJE_URGENCIA_SIN_HORAS =
-  "Hoy ya no quedan horas de urgencia para reservar por acá. Llama a la clínica para que te orienten."
+/** Cuando hoy no queda ninguna hora para una urgencia: "…Llama a la clínica para que te orienten." */
+export function mensajeDeUrgenciaSinHoras(rubro: string | null | undefined): string {
+  const { negocio } = palabrasDeLaReserva(rubro)
+  return `Hoy ya no quedan horas de urgencia para reservar por acá. Llama ${al(negocio)} para que te orienten.`
+}
 
-/** El aviso de la reserva de una clínica con un servicio de urgencia activo, con su nombre. */
-export function avisoDeUrgencia(nombreDelServicio: string): { destacado: string; resto: string } {
+/*
+ * La urgencia es sólo de la clínica dental: las respuestas de la API (que no
+ * leen el rubro para decir esto, porque ya saben que es una clínica) usan las
+ * palabras de la clínica.
+ */
+export const MENSAJE_URGENCIA_SOLO_HOY = mensajeDeUrgenciaSoloHoy(RUBRO_DENTAL)
+export const MENSAJE_URGENCIA_SIN_HORAS = mensajeDeUrgenciaSinHoras(RUBRO_DENTAL)
+
+/**
+ * El aviso de la reserva de una clínica con un servicio de urgencia activo, con
+ * su nombre: "Elige «Urgencia dental» como motivo y te mostramos horas de hoy."
+ * Sin rubro, el de la clínica: es el único que lo muestra.
+ */
+export function avisoDeUrgencia(
+  nombreDelServicio: string,
+  rubro: string | null | undefined = RUBRO_DENTAL
+): { destacado: string; resto: string } {
+  const { servicioDeLaReserva } = palabrasDeLaReserva(rubro)
   return {
     destacado: "¿Tienes dolor fuerte?",
-    resto: `Elige «${nombreDelServicio}» como motivo y te mostramos horas de hoy.`,
+    resto: `Elige «${nombreDelServicio}» como ${servicioDeLaReserva.singular} y te mostramos horas de hoy.`,
   }
 }
 

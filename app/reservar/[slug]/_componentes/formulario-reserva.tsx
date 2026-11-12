@@ -27,18 +27,17 @@ import {
   MENSAJE_URGENCIA_SIN_HORAS,
   MINUTOS_DE_PRIMERA_VEZ,
   quedaSinCambiosPorElEnlace,
-  TEXTO_DE_PRIMERA_VEZ,
 } from "@/lib/reserva-publica"
-import { RUBRO_DENTAL } from "@/lib/rubros"
+import { esRubroDental } from "@/lib/rubros"
 import { MAX_SERVICIOS_POR_RESERVA, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
 import { haceAlgunServicio } from "@/lib/servicios-del-profesional"
 import { cn } from "@/lib/utils"
-import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
 import { fechaYMinutosEn } from "@/lib/zona-horaria"
 import { EncabezadoDeReserva } from "./encabezado-de-reserva"
 import { IndicadorDePasos, PASOS_DE_RESERVA, pasosDeLaReserva } from "./indicador-de-pasos"
 import { AgregarAlCalendario } from "./agregar-al-calendario"
 import { InvitacionAEli } from "./pie-de-eli"
+import { frasesDelFormulario } from "../_frases"
 import type { PrecioDeLaHora } from "@/lib/hora-valle"
 import { ResumenDeReserva } from "./resumen-de-reserva"
 import { SelectorServicio, type ServicioPublico } from "./selector-servicio"
@@ -78,12 +77,14 @@ interface PropsDeFormularioReserva {
   slug: string
   nombreNegocio: string
   /**
-   * Clínica dental (`esRubroDental(Business.type)`): el paso 1 es el
-   * "Motivo", se elige "odontólogo", se pregunta si es la primera vez (suma
-   * 15 minutos, que calcula el servidor) y una urgencia sólo ofrece horas de
-   * hoy. En otro rubro, la reserva de siempre.
+   * El rubro del negocio (`Business.type`, que la página lee de la base por
+   * `slug`): pone las palabras de la reserva (`vocabularioDe`: "motivo" y
+   * "odontólogo", "estilista", "servicio") y, en una clínica dental
+   * (`esRubroDental`), pregunta si es la primera consulta (suma 15 minutos,
+   * que calcula el servidor) y ofrece sólo horas de hoy para una urgencia. Un
+   * rubro desconocido o `null`: la reserva de siempre.
    */
-  clinicaDental?: boolean
+  rubro?: string | null
   /** La zona del negocio (IANA): el calendario cuenta "hoy" en su reloj. */
   zona: string
   servicios: ServicioPublico[]
@@ -164,7 +165,7 @@ function comoUnServicio(elegidos: ServicioPublico[]): (ServicioPublico & { preci
 export function FormularioReserva({
   slug,
   nombreNegocio,
-  clinicaDental = false,
+  rubro = null,
   zona,
   servicios,
   equipo: equipoDeLaPagina,
@@ -257,10 +258,12 @@ export function FormularioReserva({
   const confirmado = citaId !== null
   const [error, setError] = useState("")
 
-  // Las palabras del rubro (`lib/vocabulario.ts`): "motivo" y "odontólogo" en
-  // una clínica dental; las de siempre en cualquier otro.
-  const vocabulario = vocabularioDe(clinicaDental ? RUBRO_DENTAL : null)
-  const servicioDeLaReserva = vocabulario.servicioDeLaReserva
+  // Las palabras del rubro (`lib/vocabulario.ts`, con la concordancia de
+  // `lib/concordancia.ts`): "motivo" y "odontólogo" en una clínica dental,
+  // "estilista" en un salón, las de siempre en cualquier otro. Las frases
+  // salen de `_frases.ts`: acá no se pega ningún artículo a una palabra.
+  const frases = frasesDelFormulario(rubro)
+  const clinicaDental = esRubroDental(rubro)
   const urgencia = esReservaDeUrgencia(clinicaDental, seleccionados)
 
   const idDeComentarios = useId()
@@ -309,11 +312,7 @@ export function FormularioReserva({
     servicioIds,
     profesionalElegido ? [profesionalElegido] : equipo
   )
-  const motivoSinCombinacion = profesionalElegido
-    ? `${profesionalElegido.nombre} no lo hace junto con lo que elegiste.`
-    : clinicaDental
-      ? `Ningún ${vocabulario.profesional} lo atiende junto con lo que elegiste.`
-      : "Nadie del equipo lo hace junto con lo que elegiste."
+  const motivoSinCombinacion = frases.paso1.sinCombinacion(profesionalElegido?.nombre ?? null)
 
   const alternarServicio = (servicio: ServicioPublico) => {
     const yaEstaba = seleccionados.some((elegido) => elegido.id === servicio.id)
@@ -409,9 +408,7 @@ export function FormularioReserva({
   }
   const detalleDeDuracion =
     clinicaDental && primeraVez === true ? `Incluye ${MINUTOS_DE_PRIMERA_VEZ} min para abrir tu ficha` : null
-  const cualquiera = clinicaDental
-    ? { nombre: "La primera hora disponible", detalle: `Con cualquier ${vocabulario.profesional}` }
-    : undefined
+  const cualquiera = frases.cualquiera
 
   // Ningún día de la semana con atención para lo elegido (y con quien se
   // eligió): el calendario quedaría vacío. Se dice qué pasa y cómo salir. La
@@ -541,13 +538,13 @@ export function FormularioReserva({
             }}
           />
           {enlaceDeGestion && !sePuedeCambiar && (
-            <p className="mt-6 text-sm text-texto-2">{avisoSinCambiosDespuesDeReservar(plazoDeCambiosHoras)}</p>
+            <p className="mt-6 text-sm text-texto-2">{avisoSinCambiosDespuesDeReservar(plazoDeCambiosHoras, rubro)}</p>
           )}
           {enlaceDeGestion && sePuedeCambiar && (
             <p className="mt-6 text-sm text-texto-2">
-              ¿Necesitas cancelar o cambiar la hora?{" "}
+              {frases.confirmada.pregunta}{" "}
               <a href={enlaceDeGestion} className="font-medium text-navy underline underline-offset-4 anillo-foco">
-                Gestiona tu cita acá
+                {frases.confirmada.enlace}
               </a>
               . Guarda este enlace{email ? "; también te lo mandamos por correo" : ""}.
             </p>
@@ -568,8 +565,8 @@ export function FormularioReserva({
       <EncabezadoDeReserva
         nivel={2}
         antetitulo={nombreNegocio}
-        titulo="Reserva tu hora"
-        bajada={`Elige el ${servicioDeLaReserva}, el día y la hora, y deja tus datos.`}
+        titulo={frases.encabezado.titulo}
+        bajada={frases.encabezado.bajada}
       />
 
       {/*
@@ -578,7 +575,7 @@ export function FormularioReserva({
         a 768px entre al lado de los horarios.
       */}
       <Tarjeta className="mt-8 px-4 py-6 sm:p-8 md:mt-12 lg:p-10">
-        <IndicadorDePasos paso={paso} pasos={clinicaDental ? pasosDeLaReserva(conMayuscula(servicioDeLaReserva)) : undefined} />
+        <IndicadorDePasos paso={paso} pasos={pasosDeLaReserva(frases.primerPaso)} />
 
         <motion.div
           key={paso}
@@ -591,7 +588,7 @@ export function FormularioReserva({
           {paso === 1 && (
             <>
               <TituloDelPaso ref={titulo} paso={1}>
-                {clinicaDental ? "¿Cuál es el motivo de tu consulta?" : "¿Qué servicio necesitas?"}
+                {frases.paso1.titulo}
               </TituloDelPaso>
               {/*
                 ¿Con quién?, arriba: elegir a alguien deja ver sólo lo que hace;
@@ -613,9 +610,7 @@ export function FormularioReserva({
                 </div>
               )}
               <p className={cn("text-sm text-texto-2", profesionalesParaElegir.length > 0 ? "mt-6" : "mt-2")}>
-                {clinicaDental
-                  ? `Puedes elegir hasta ${MAX_SERVICIOS_POR_RESERVA} motivos: te atiende el mismo ${vocabulario.profesional}, en una sola hora.`
-                  : `Puedes elegir hasta ${MAX_SERVICIOS_POR_RESERVA}: te los hace la misma persona, uno después del otro.`}
+                {frases.paso1.puedesElegirHasta(MAX_SERVICIOS_POR_RESERVA)}
               </p>
               {servicioDeUrgencia && !urgencia && <AvisoDeUrgencia className="mt-4" nombre={servicioDeUrgencia.name} />}
               <div className="mt-5">
@@ -633,7 +628,7 @@ export function FormularioReserva({
                   <ServicioElegido
                     servicio={servicioSeleccionado}
                     cantidad={seleccionados.length}
-                    plural={`${servicioDeLaReserva}s`}
+                    plural={frases.elegidosEnPlural}
                   />
                 </div>
               )}
@@ -664,10 +659,12 @@ export function FormularioReserva({
                 <ServicioElegido
                   servicio={servicioSeleccionado}
                   cantidad={seleccionados.length}
-                  plural={`${servicioDeLaReserva}s`}
+                  plural={frases.elegidosEnPlural}
                 />
               )}
-              {clinicaDental && !sinDias && <PreguntaPrimeraVez valor={primeraVez} onResponder={setPrimeraVez} />}
+              {clinicaDental && !sinDias && (
+                <PreguntaPrimeraVez valor={primeraVez} onResponder={setPrimeraVez} rubro={rubro} />
+              )}
               {/*
                 Sin equipo (el dueño solo) no hay a quién elegir: no se muestra.
                 Si en el paso 1 ya se eligió a alguien no se vuelve a preguntar:
@@ -681,7 +678,7 @@ export function FormularioReserva({
                     <ProfesionalYaElegido
                       ref={botonCambiarProfesional}
                       nombre={profesionalElegido.nombre}
-                      profesional={vocabulario.profesional}
+                      textoDelBoton={frases.cambiarDeProfesional(profesionalElegido.nombre)}
                       onCambiar={() => {
                         setCambiandoProfesional(true)
                         setPedidoDeFoco({ destino: "elegido" })
@@ -715,14 +712,15 @@ export function FormularioReserva({
               {sinDias ? (
                 <SinDiasConAtencion
                   className="mt-6"
-                  lo={seleccionados.length > 1 ? `estos ${servicioDeLaReserva}s juntos` : `este ${servicioDeLaReserva}`}
+                  lo={frases.paso2.sinDias.lo(seleccionados.length)}
                   conQuien={profesionalElegido?.nombre ?? null}
                   hayOtros={profesionalesDelServicio.length > 1}
-                  textoDelBoton={`Cambiar ${seleccionados.length > 1 ? `los ${servicioDeLaReserva}s` : `el ${servicioDeLaReserva}`}`}
+                  textoDelBoton={frases.paso2.sinDias.textoDelBoton(seleccionados.length)}
+                  sinOtros={frases.paso2.sinDias.sinOtros}
                   onCambiar={() => setPaso(1)}
                 />
               ) : faltaLaPrimeraVez ? (
-                <p className="mt-6 text-sm text-texto-2">Responde si es tu primera vez para ver las horas libres.</p>
+                <p className="mt-6 text-sm text-texto-2">{frases.paso2.faltaLaPrimeraVez}</p>
               ) : urgencia && !hoyConAtencion ? null : (
                 <div className="mt-6">
                   <SelectorFechaHora
@@ -750,6 +748,7 @@ export function FormularioReserva({
                               fecha={dia}
                               fechaParaLeer={fechaParaLeer(deTexto(dia) ?? new Date())}
                               primeraVez={primeraVezQueSeManda}
+                              rubro={rubro}
                             />
                           )
                         : undefined
@@ -877,7 +876,7 @@ export function FormularioReserva({
                     id={idDeComentarios}
                     value={comentarios}
                     onChange={(e) => setComentarios(e.target.value)}
-                    placeholder="¿Algo que debamos saber antes de tu cita?"
+                    placeholder={frases.paso3.pistaDeComentarios}
                     rows={3}
                     className={cn("block min-h-24 w-full resize-y px-4 py-3 text-base", CLASES_DE_CAMPO)}
                   />
@@ -895,21 +894,19 @@ export function FormularioReserva({
                   fecha={fecha}
                   hora={hora}
                   precioDeLaHora={precioDeLaHora}
-                  terminoDelServicio={conMayuscula(servicioDeLaReserva)}
+                  terminoDelServicio={frases.terminoDelServicio}
                   detalleDeDuracion={detalleDeDuracion}
                   profesional={
                     profesionalElegido?.nombre ??
                     (profesionalesDelServicio.length > 0
-                      ? clinicaDental
-                        ? `Cualquier ${vocabulario.profesional}`
-                        : "Cualquiera disponible"
+                      ? frases.profesionalSinElegir
                       : null)
                   }
                 />
                 {quedaSinCambiosPorElEnlace(fecha, hora, zona, plazoDeCambiosHoras, new Date()) ? (
                   // La hora ya está dentro del plazo: se dice antes de confirmar, no después en el enlace.
                   <p className="mt-4 border-t border-borde pt-3 text-sm font-medium text-navy">
-                    {avisoSinCambiosPorElEnlace(plazoDeCambiosHoras)}
+                    {avisoSinCambiosPorElEnlace(plazoDeCambiosHoras, rubro)}
                   </p>
                 ) : (
                   <p className="mt-4 border-t border-borde pt-3 text-sm text-texto-2">
@@ -975,13 +972,13 @@ function TituloDelPaso({ paso, children, ref }: { paso: Paso; children: ReactNod
  */
 function ProfesionalYaElegido({
   nombre,
-  profesional,
+  textoDelBoton,
   onCambiar,
   ref,
 }: {
   nombre: string
-  /** "profesional", u "odontólogo" en una clínica dental. */
-  profesional: string
+  /** Para el lector de pantalla: "Cambiar de estilista: ahora con Carla" (`frasesDelFormulario`). */
+  textoDelBoton: string
   onCambiar: () => void
   /** Para llevarle el foco cuando vuelve a aparecer tras elegir a alguien. */
   ref: Ref<HTMLButtonElement>
@@ -995,7 +992,7 @@ function ProfesionalYaElegido({
         ref={ref}
         type="button"
         onClick={onCambiar}
-        aria-label={`Cambiar de ${profesional}: ahora con ${nombre}`}
+        aria-label={textoDelBoton}
         className="inline-flex min-h-11 items-center font-medium text-navy underline underline-offset-4 anillo-foco"
       >
         Cambiar
@@ -1059,19 +1056,28 @@ const RESPUESTA_EN_REPOSO =
   "bg-tarjeta font-medium text-navy inset-ring-1 inset-ring-texto-2 hover:bg-azul-suave hover:inset-ring-navy"
 
 /**
- * Clínica dental: "¿Es tu primera vez en la clínica?". La primera vez suma
- * 15 minutos para abrir la ficha; la cuenta la hace el servidor. Sin
- * respuesta no se muestran horas: cambia cuánto dura la cita.
+ * Clínica dental: "¿Es tu primera consulta en la clínica?". La primera
+ * consulta suma 15 minutos para abrir la ficha; la cuenta la hace el
+ * servidor. Sin respuesta no se muestran horas: cambia cuánto dura la cita.
  */
-function PreguntaPrimeraVez({ valor, onResponder }: { valor: boolean | null; onResponder: (primeraVez: boolean) => void }) {
+function PreguntaPrimeraVez({
+  valor,
+  onResponder,
+  rubro,
+}: {
+  valor: boolean | null
+  onResponder: (primeraVez: boolean) => void
+  rubro: string | null
+}) {
   const idDelTexto = useId()
+  const { paso2 } = frasesDelFormulario(rubro)
   const respuestas = [
-    { valor: true, texto: "Sí, es la primera" },
+    { valor: true, texto: paso2.respuestaDePrimeraVez },
     { valor: false, texto: "Ya me he atendido" },
   ]
   return (
     <fieldset className="mt-6">
-      <legend className="font-medium text-navy">¿Es tu primera vez en la clínica?</legend>
+      <legend className="font-medium text-navy">{paso2.preguntaDePrimeraVez}</legend>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:max-w-md">
         {respuestas.map((respuesta) => {
           const elegida = valor === respuesta.valor
@@ -1094,7 +1100,7 @@ function PreguntaPrimeraVez({ valor, onResponder }: { valor: boolean | null; onR
         })}
       </div>
       <p id={idDelTexto} className="mt-2.5 text-sm text-texto-2">
-        {TEXTO_DE_PRIMERA_VEZ}
+        {paso2.notaDePrimeraVez}
       </p>
     </fieldset>
   )
@@ -1130,6 +1136,7 @@ function SinDiasConAtencion({
   conQuien,
   hayOtros,
   textoDelBoton,
+  sinOtros,
   onCambiar,
   className,
 }: {
@@ -1140,14 +1147,13 @@ function SinDiasConAtencion({
   /** Si arriba hay a quién más elegir. */
   hayOtros: boolean
   textoDelBoton: string
+  /** Lo que se dice cuando no hay a quién más elegir: "…o escríbele al negocio" / "a la clínica". */
+  sinOtros: string
   onCambiar: () => void
   className?: string
 }) {
   const titulo = conQuien ? `${conQuien} no tiene días con atención para ${lo}.` : `No hay días con atención para ${lo}.`
-  const detalle =
-    conQuien && hayOtros
-      ? "Elige con quién más arriba, o cambia lo que elegiste."
-      : "Nadie que lo haga tiene horario para reservar por acá. Cambia lo que elegiste, o escríbele al negocio."
+  const detalle = conQuien && hayOtros ? "Elige con quién más arriba, o cambia lo que elegiste." : sinOtros
   return (
     <div role="status" className={cn("rounded-panel bg-superficie p-5 squircle sm:p-6", className)}>
       <div className="flex items-start gap-3">

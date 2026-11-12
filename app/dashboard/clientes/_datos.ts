@@ -8,6 +8,15 @@
  */
 
 import { pedir, conJson, leerCuerpo, SIN_CONEXION, type Resultado } from "@/lib/peticiones"
+import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
+import { frasesDeClientes } from "./_frases"
+
+/**
+ * Las palabras de un rubro sin palabras propias: lo que dicen los mensajes de
+ * error de estos pedidos si quien llama no pasa las suyas ("No se pudo crear el
+ * cliente"). Las pantallas pasan las del rubro de la sesión.
+ */
+const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
 
 /** Una cita del historial de un cliente: el listado trae las últimas cinco. */
 export interface CitaDeCliente {
@@ -81,18 +90,21 @@ export interface DatosDeNuevoCliente {
 /** Cuántos clientes trae cada página: seis filas de tres en la grilla. */
 const CLIENTES_POR_PAGINA = 18
 
-export async function leerClientes({ busqueda, etiqueta, pagina }: FiltroDeClientes): Promise<Resultado<PaginaDeClientes>> {
+export async function leerClientes(
+  { busqueda, etiqueta, pagina }: FiltroDeClientes,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<PaginaDeClientes>> {
   const parametros = new URLSearchParams({ pagina: String(pagina), limite: String(CLIENTES_POR_PAGINA) })
   if (busqueda) parametros.set("q", busqueda)
   if (etiqueta && etiqueta !== "Todos") parametros.set("tag", etiqueta)
 
-  return pedir<PaginaDeClientes>(`/api/clientes?${parametros}`, "No se pudieron cargar los clientes")
+  return pedir<PaginaDeClientes>(`/api/clientes?${parametros}`, frasesDeClientes(palabras).errores.cargarClientes)
 }
 
-export async function crearCliente(datos: DatosDeNuevoCliente): Promise<Resultado> {
+export async function crearCliente(datos: DatosDeNuevoCliente, palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado> {
   return pedir(
     "/api/clientes",
-    "No se pudo crear el cliente",
+    frasesDeClientes(palabras).errores.crearCliente,
     conJson("POST", {
       name: datos.nombre,
       email: datos.email || undefined,
@@ -129,10 +141,14 @@ export async function guardarNotasDeCliente(id: string, notas: string): Promise<
  * campo vacío borra el dato (salvo el nombre, que es obligatorio). Sólo dueño
  * y encargado.
  */
-export async function editarCliente(id: string, datos: DatosDeNuevoCliente): Promise<Resultado> {
+export async function editarCliente(
+  id: string,
+  datos: DatosDeNuevoCliente,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado> {
   return pedir(
     `/api/clientes/${id}`,
-    "No se pudo guardar el cliente",
+    frasesDeClientes(palabras).errores.guardarCliente,
     conJson("PUT", {
       name: datos.nombre,
       email: datos.email,
@@ -147,8 +163,8 @@ export async function editarCliente(id: string, datos: DatosDeNuevoCliente): Pro
  * Elimina al cliente: borra sus datos personales y deja sus citas y cobros,
  * para que los reportes no cambien. Sólo dueño y encargado.
  */
-export async function eliminarCliente(id: string): Promise<Resultado> {
-  return pedir(`/api/clientes/${id}`, "No se pudo eliminar el cliente", { method: "DELETE" })
+export async function eliminarCliente(id: string, palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado> {
+  return pedir(`/api/clientes/${id}`, frasesDeClientes(palabras).errores.eliminarCliente, { method: "DELETE" })
 }
 
 /** Una fila del CSV que no se importó, con su número en la planilla (la cabecera es la 1). */
@@ -209,8 +225,8 @@ async function descargar(url: string, respaldo: string, errorPorDefecto: string)
 }
 
 /** Todos los clientes del negocio, en CSV para Excel. Sólo dueño y encargado. */
-export async function exportarClientes(): Promise<Resultado> {
-  return descargar("/api/clientes/exportar", "clientes.csv", "No se pudo descargar la planilla de clientes")
+export async function exportarClientes(palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado> {
+  return descargar("/api/clientes/exportar", "clientes.csv", frasesDeClientes(palabras).errores.descargarPlanilla)
 }
 
 /** Las atenciones que llegaron entre dos días (incluidos, "AAAA-MM-DD"), en CSV. Sólo dueño y encargado. */
@@ -248,8 +264,8 @@ export interface ListaDeQuienesSeVan {
 }
 
 /** Sólo dueña y encargado: a la profesional el servidor le responde 401. */
-export async function leerClientesQueSeVan(): Promise<Resultado<ListaDeQuienesSeVan>> {
-  return pedir<ListaDeQuienesSeVan>("/api/clientes/se-van", "No se pudo cargar la lista de clientes que se están yendo")
+export async function leerClientesQueSeVan(palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado<ListaDeQuienesSeVan>> {
+  return pedir<ListaDeQuienesSeVan>("/api/clientes/se-van", frasesDeClientes(palabras).errores.cargarLosQueSeVan)
 }
 
 /**

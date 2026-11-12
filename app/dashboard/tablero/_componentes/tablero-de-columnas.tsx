@@ -20,6 +20,7 @@ import type { Actor } from "@/lib/permisos"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 import type { Atencion, LineaDeServicio, Reserva, Tablero } from "../_datos"
+import { frasesDelTablero } from "../_frases"
 import { TarjetaDeAtencion } from "./tarjeta-de-atencion"
 import { TarjetaDeReserva, type PropsDeArrastre } from "./tarjeta-de-reserva"
 
@@ -293,7 +294,7 @@ export function TableroDeColumnas({
 }: PropsDeTableroDeColumnas) {
   const punteroFino = usePunteroFino()
   // "Sin paciente" en una clínica dental.
-  const sinCliente = `Sin ${vocabularioDe(useRubroDelPanel()).cliente}`
+  const sinCliente = frasesDelTablero(vocabularioDe(useRubroDelPanel()).palabras).sinCliente
   const [arrastrada, setArrastrada] = useState<Arrastrada | null>(null)
   const [encima, setEncima] = useState<ColumnaId | null>(null)
 
@@ -498,9 +499,11 @@ export function TableroDeColumnas({
 
 /** Mientras llega el tablero: las cinco columnas con tarjetas en gris, sin cifras inventadas. */
 export function TableroCargando() {
+  // "Cargando el tablero…" / "Cargando la sala de espera…".
+  const { cargando } = frasesDelTablero(vocabularioDe(useRubroDelPanel()).palabras)
   return (
     <div className={CONTENEDOR} role="status">
-      <span className="sr-only">Cargando el tablero…</span>
+      <span className="sr-only">{cargando}</span>
       {COLUMNAS_DEL_TABLERO.map(({ id, titulo }) => (
         <div key={id} aria-hidden="true" className={cn(ANCHO_DE_COLUMNA, ISLA)}>
           <p className={TITULO_DE_COLUMNA}>{titulo}</p>

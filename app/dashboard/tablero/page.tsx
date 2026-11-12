@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { AnimatePresence } from "framer-motion"
 import Link from "next/link"
@@ -31,7 +31,7 @@ import {
   puedeVerTodoElTablero,
 } from "@/lib/permisos"
 import { cn } from "@/lib/utils"
-import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
+import { vocabularioDe } from "@/lib/vocabulario"
 import {
   agregarAbono,
   anotarSinReserva,
@@ -58,15 +58,13 @@ import { ModalAnotarSinReserva } from "./_componentes/modal-anotar-sin-reserva"
 import { ModalServicios } from "./_componentes/modal-servicios"
 import { ModalCobro } from "./_componentes/modal-cobro"
 import { ModalAbono } from "./_componentes/modal-abono"
+import { frasesDelTablero } from "./_frases"
 
 /** Cada cuánto se recarga solo: lo que hacen los demás en el local aparece sin tocar nada. */
 const RECARGA_CADA_MS = 30_000
 
 /** Al volver a la pestaña llegan `focus` y `visibilitychange` casi juntos: con una recarga alcanza. */
 const PAUSA_ENTRE_RECARGAS_MS = 2_000
-
-/** El aviso cuando lo que se veía quedó viejo (409 o 404): la ficha lo fija con estas palabras. */
-const AVISO_DE_CAMBIO = "La atención cambió; se recargó el tablero."
 
 /** Lo que se hace después de guardar los servicios, si el editor se abrió porque faltaba algo para avanzar. */
 type Despues = { tipo: "mover"; hacia: EstadoActivo } | { tipo: "cobrar" }
@@ -110,13 +108,14 @@ function columnaDe(atencion: Atencion): ColumnaDeAtencion {
 /** La tarjeta de una atención, en la columna donde estaba: adonde vuelve el foco si se recarga. */
 const tarjetaDe = (atencion: Atencion): DestinoDelFoco => ({ atencionId: atencion.id, columna: columnaDe(atencion) })
 
-/** El mensaje del servidor sobre una reserva que cambió, seguido de que se recargó. */
-const conRecarga = (mensaje: string) => `${mensaje.replace(/\.$/, "")}. Se recargó el tablero.`
-
 export default function PaginaTablero() {
   const { data: sesion, status: estadoDeSesion } = useSession()
   const actor = actorDeSesion(sesion)
   const rubro = useRubroDelPanel()
+  // Las palabras del rubro: "Tablero" / "Sala de espera", "No vino" / "No asistió", "servicio" / "prestación".
+  // Memorizadas: `recargar` depende de ellas, y una copia nueva en cada dibujo la recrearía y reiniciaría el intervalo de recarga.
+  const palabras = useMemo(() => vocabularioDe(rubro).palabras, [rubro])
+  const frases = useMemo(() => frasesDelTablero(palabras), [palabras])
 
   const [tablero, setTablero] = useState<Tablero | null>(null)
   const [errorDeCarga, setErrorDeCarga] = useState("")
@@ -154,7 +153,7 @@ export default function PaginaTablero() {
     inicioDeLaUltimaRecarga.current = Date.now()
     // El día se calcula en cada recarga: si la pestaña sigue abierta pasada
     // la medianoche, la siguiente recarga ya trae el día nuevo.
-    const resultado = await leerTablero(new Date())
+    const resultado = await leerTablero(new Date(), palabras)
     if (numero !== ultimoPedido.current) return null
 
     setAhora(Date.now())
@@ -165,7 +164,7 @@ export default function PaginaTablero() {
     setTablero(resultado.datos)
     setErrorDeCarga("")
     return resultado.datos
-  }, [])
+  }, [palabras])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- primera carga del tablero; el estado se escribe recién cuando llega la respuesta
@@ -275,7 +274,7 @@ export default function PaginaTablero() {
    * espera a la recarga para no enfocar la tarjeta vieja, que se desmonta
    * apenas llega la nueva.
    */
-  const tableroDesactualizado = (destino: DestinoDelFoco, mensaje = AVISO_DE_CAMBIO) => {
+  const tableroDesactualizado = (destino: DestinoDelFoco, mensaje = frases.avisoDeCambio) => {
     cerrarModal()
     setAviso(mensaje)
     recargar().then(() => setFoco(destino))
@@ -299,7 +298,7 @@ export default function PaginaTablero() {
         // Otro ya la marcó, la cancelaron o no es de hoy: el mensaje del
         // servidor dice cuál, y se muestra tal cual.
         if (resultado.motivo === "desactualizada") {
-          return tableroDesactualizado({ reservaId: reserva.id, columna: "reservas" }, conRecarga(resultado.error))
+          return tableroDesactualizado({ reservaId: reserva.id, columna: "reservas" }, frases.conRecarga(resultado.error))
         }
         return setAviso(resultado.error)
       }
@@ -317,16 +316,16 @@ export default function PaginaTablero() {
       recargar()
     })
 
-  /** La reserva no llegó: sale de "Reservas de hoy" y la cita queda "No vino". */
+  /** La reserva no llegó: sale de "Reservas de hoy" y la cita queda "No vino" ("No asistió" en una clínica). */
   const noVino = (reserva: Reserva) =>
     enTarjeta(reserva.id, async () => {
       setAviso("")
-      const resultado = await marcarNoVino(reserva.id)
+      const resultado = await marcarNoVino(reserva.id, palabras)
 
       if (!resultado.ok) {
         // Ya llegó, la cancelaron o la movieron: el mensaje del servidor dice cuál.
         if (resultado.motivo === "desactualizada") {
-          return tableroDesactualizado({ columna: "reservas" }, conRecarga(resultado.error))
+          return tableroDesactualizado({ columna: "reservas" }, frases.conRecarga(resultado.error))
         }
         return setAviso(resultado.error)
       }
@@ -344,7 +343,7 @@ export default function PaginaTablero() {
 
       if (!resultado.ok) {
         // Ya empezó, o ya no está: se dice por qué y se recarga.
-        if (resultado.motivo === "desactualizada") return tableroDesactualizado(tarjetaDe(atencion), conRecarga(resultado.error))
+        if (resultado.motivo === "desactualizada") return tableroDesactualizado(tarjetaDe(atencion), frases.conRecarga(resultado.error))
         return setAviso(resultado.error)
       }
 
@@ -364,7 +363,7 @@ export default function PaginaTablero() {
    */
   const mover = (atencion: Atencion, hacia: EstadoActivo) => {
     setAviso("")
-    const falta = requisitoParaPasarA(atencion.lineas, hacia)
+    const falta = requisitoParaPasarA(atencion.lineas, hacia, palabras)
     if (falta) return editarServicios(atencion, { tipo: "mover", hacia }, falta)
 
     return enTarjeta(atencion.id, async () => {
@@ -388,7 +387,7 @@ export default function PaginaTablero() {
 
   /** Cobrar. Si a alguna línea le falta quién la hizo, primero el editor; si no, el cobro. */
   const cobrar = (atencion: Atencion) => {
-    const falta = requisitoParaPasarA(atencion.lineas, "finalizada")
+    const falta = requisitoParaPasarA(atencion.lineas, "finalizada", palabras)
     if (falta) return editarServicios(atencion, { tipo: "cobrar" }, falta)
     abrirModal({ tipo: "cobro", atencion })
   }
@@ -397,7 +396,7 @@ export default function PaginaTablero() {
 
   const guardarServiciosDe = (abierto: ModalDeServicios, lineas: LineaPedida[]) =>
     desdeUnModal(async () => {
-      const guardado = await guardarServicios(abierto.atencion.id, lineas)
+      const guardado = await guardarServicios(abierto.atencion.id, lineas, palabras)
       if (!guardado.ok) return falloEnModal(guardado, abierto.atencion)
 
       const atencion = guardado.datos
@@ -413,7 +412,7 @@ export default function PaginaTablero() {
 
       // Se guardó, pero si todavía no alcanza para avanzar, el editor sigue
       // abierto diciendo qué falta.
-      const falta = requisitoParaPasarA(atencion.lineas, despues.tipo === "cobrar" ? "finalizada" : despues.hacia)
+      const falta = requisitoParaPasarA(atencion.lineas, despues.tipo === "cobrar" ? "finalizada" : despues.hacia, palabras)
       if (falta) {
         setGuardando(false)
         setModal({ ...abierto, atencion, requisito: falta })
@@ -450,7 +449,7 @@ export default function PaginaTablero() {
       if (resultado.ok) {
         ponerAtencion(resultado.datos)
         cerrarModal()
-        setAvisoDeCobro(avisoDeComisionesPendientes(actor, resultado.datos) ?? "")
+        setAvisoDeCobro(avisoDeComisionesPendientes(actor, resultado.datos, palabras) ?? "")
         seguirA(resultado.datos)
         recargar()
         return
@@ -464,10 +463,10 @@ export default function PaginaTablero() {
       // total nuevo, los pagos escritos y el mensaje del servidor.
       const fresco = await recargar()
       const actual = fresco?.atenciones.find((otra) => otra.id === atencion.id)
-      if (!actual || actual.estado !== "por-cobrar" || requisitoParaPasarA(actual.lineas, "finalizada")) {
+      if (!actual || actual.estado !== "por-cobrar" || requisitoParaPasarA(actual.lineas, "finalizada", palabras)) {
         // Ya no se puede cobrar desde acá: la movieron, o le falta algo que
         // se completa en el editor. Se cierra y se dice por qué.
-        return tableroDesactualizado(tarjetaDe(atencion), conRecarga(resultado.error))
+        return tableroDesactualizado(tarjetaDe(atencion), frases.conRecarga(resultado.error))
       }
       setModal({ tipo: "cobro", atencion: actual })
       setGuardando(false)
@@ -496,7 +495,7 @@ export default function PaginaTablero() {
       // recarga por si la atención cambió.
       if (!resultado.ok && resultado.motivo === "desactualizada") {
         setGuardando(false)
-        return tableroDesactualizado(tarjetaDe(atencion), conRecarga(resultado.error))
+        return tableroDesactualizado(tarjetaDe(atencion), frases.conRecarga(resultado.error))
       }
       if (!resultado.ok) return falloEnModal(resultado, atencion)
 
@@ -535,7 +534,7 @@ export default function PaginaTablero() {
       setAviso("")
       const resultado = await quitarAbono(atencion.id, linea.id)
       if (!resultado.ok) {
-        if (resultado.motivo === "desactualizada") return tableroDesactualizado(tarjetaDe(atencion), conRecarga(resultado.error))
+        if (resultado.motivo === "desactualizada") return tableroDesactualizado(tarjetaDe(atencion), frases.conRecarga(resultado.error))
         return setAviso(resultado.error)
       }
       ponerAtencion(resultado.datos)
@@ -582,14 +581,12 @@ export default function PaginaTablero() {
     ? tablero.atenciones.filter((atencion) => atencion.turno !== null && atencion.estado === "en-espera").length
     : 0
   const puedeVaciarFila = esperandoEnFila > 0 && puedeVaciarFilaVirtual(actor)
-  // En una clínica dental se llama "Sala de espera"; en otro rubro, "Tablero".
-  const tituloDeLaPagina = conMayuscula(vocabularioDe(rubro).tablero)
 
   return (
     <div className="min-h-screen">
       {/* En el teléfono la cabecera muestra la acción como botón de ícono: no hace falta otro abajo. */}
       <BarraSuperior
-        titulo={tituloDeLaPagina}
+        titulo={frases.titulo}
         subtitulo={ahora ? fechaLarga(ahora) : "Cargando..."}
         accionPrincipal={
           puedeAnotar ? { texto: "Anotar sin reserva", onClick: () => abrirModal({ tipo: "anotar" }), icono: UserPlus } : undefined
@@ -645,13 +642,13 @@ export default function PaginaTablero() {
               </Boton>
             }
           >
-            No se pudo actualizar el tablero: {errorDeCarga}. Se vuelve a intentar solo.
+            {frases.noSePudoActualizar(errorDeCarga)}
           </Aviso>
         )}
 
         {listo && tablero.truncado && (
           <Aviso tono="atencion" rol="status">
-            Hay más atenciones de las que el tablero muestra de una vez: algunas no se ven.
+            {frases.hayMasAtenciones}
           </Aviso>
         )}
 

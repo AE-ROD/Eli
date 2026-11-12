@@ -5,6 +5,7 @@ import { BellRing, Check } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
+import { frasesDeLaListaDeEspera } from "../_frases"
 import { inscribirEnListaDeEspera } from "../_datos"
 
 interface PropsDeFormularioListaDeEspera {
@@ -17,14 +18,17 @@ interface PropsDeFormularioListaDeEspera {
   fecha: string
   /** Cómo se lee ese día ("lunes 2 de noviembre"). */
   fechaParaLeer: string
-  /** Clínica dental: lo que respondió a "¿Es tu primera vez?" (suma minutos). Fuera de una clínica, `null`. */
+  /** Clínica dental: lo que respondió a "¿Es tu primera consulta?" (suma minutos). Fuera de una clínica, `null`. */
   primeraVez?: boolean | null
+  /** El rubro del negocio (`Business.type`): la palabra de la reserva que se libera ("una hora"). Sin él, la de siempre. */
+  rubro?: string | null
 }
 
 /**
  * "Avísame si se libera una hora" (#74): cuando el día elegido no tiene horas
  * libres, quien reserva puede dejar su correo. Si una hora se libera, le
  * llega un aviso con la reserva ya llenada; la toma quien confirme primero.
+ * Las palabras salen del rubro (`frasesDeLaListaDeEspera`).
  * Primero es un botón, para no llenar de campos a quien sólo quiere probar
  * otro día.
  */
@@ -35,7 +39,9 @@ export function FormularioListaDeEspera({
   fecha,
   fechaParaLeer,
   primeraVez = null,
+  rubro = null,
 }: PropsDeFormularioListaDeEspera) {
+  const frases = frasesDeLaListaDeEspera(rubro)
   const [abierto, setAbierto] = useState(false)
   const [nombre, setNombre] = useState("")
   const [apellido, setApellido] = useState("")
@@ -69,7 +75,7 @@ export function FormularioListaDeEspera({
         className="outline-none flex items-start gap-2 rounded-boton-lg bg-superficie px-4 py-3 text-sm text-navy squircle">
         <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" strokeWidth={2} />
         <span>
-          Listo. Si se libera una hora el {fechaParaLeer}, te escribimos a <strong className="font-medium break-all">{email}</strong>.
+          {frases.listo(fechaParaLeer)} <strong className="font-medium break-all">{email}</strong>.
         </span>
       </p>
     )
@@ -78,7 +84,7 @@ export function FormularioListaDeEspera({
   if (!abierto) {
     return (
       <Boton variante="secundario" icono={<BellRing />} onClick={() => setAbierto(true)} className="w-full">
-        Avísame si se libera una hora
+        {frases.avisame}
       </Boton>
     )
   }
@@ -111,12 +117,9 @@ export function FormularioListaDeEspera({
     >
       <div>
         <h4 ref={titulo} id={idDelTitulo} tabIndex={-1} className="font-medium text-navy outline-none">
-          Avísame si se libera una hora
+          {frases.avisame}
         </h4>
-        <p className="mt-1 text-sm text-texto-2">
-          Si alguien cancela el {fechaParaLeer}, te mandamos un correo para que la reserves. Avisamos a todos los que esperan:
-          la hora es de quien reserve primero.
-        </p>
+        <p className="mt-1 text-sm text-texto-2">{frases.explicacion(fechaParaLeer)}</p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
         <CampoFormulario

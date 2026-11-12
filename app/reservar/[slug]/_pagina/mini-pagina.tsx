@@ -12,6 +12,7 @@ import { plazoParaQuienReserva } from "@/lib/gestion-de-cita"
 import { CATEGORIA_SIN_NOMBRE, horarioParaMostrar, iniciales, serviciosPorCategoria } from "@/lib/pagina-del-negocio"
 import { haceAlgunServicio, textoDeLoQueHace } from "@/lib/servicios-del-profesional"
 import { cn } from "@/lib/utils"
+import { frasesDeLaPagina } from "../_frases"
 import type { PaginaDelNegocio, ProfesionalPublico } from "./datos-de-la-pagina"
 
 /** El ancla del flujo de reserva, que vive más abajo en la misma página. */
@@ -42,8 +43,10 @@ export function MiniPagina({ pagina, ahora }: PropsDeMiniPagina) {
   return (
     <div className="flex flex-col gap-4 md:gap-6">
       <Cabecera pagina={pagina} ahora={ahora} />
-      {pagina.equipo.length > 0 && <Equipo equipo={pagina.equipo} servicios={pagina.servicios} color={pagina.color.clave} />}
-      {pagina.servicios.length > 0 && <Servicios servicios={pagina.servicios} />}
+      {pagina.equipo.length > 0 && (
+        <Equipo equipo={pagina.equipo} servicios={pagina.servicios} color={pagina.color.clave} rubro={pagina.rubro} />
+      )}
+      {pagina.servicios.length > 0 && <Servicios servicios={pagina.servicios} rubro={pagina.rubro} />}
       <Datos pagina={pagina} />
     </div>
   )
@@ -135,7 +138,7 @@ function Cabecera({ pagina, ahora }: PropsDeMiniPagina) {
         {/* El plazo para cancelar o cambiar, dicho antes de reservar (#83). */}
         <p className="mt-4 flex items-start gap-2 text-sm text-texto-2">
           <CalendarClock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          {plazoParaQuienReserva(pagina.plazoDeCambiosHoras)}
+          {plazoParaQuienReserva(pagina.plazoDeCambiosHoras, pagina.rubro)}
         </p>
         {/* Hora valle (#89c): sólo que existe; los precios se ven al elegir la hora. */}
         {pagina.horaValle && (
@@ -186,10 +189,12 @@ function Equipo({
   equipo,
   servicios,
   color,
+  rubro,
 }: {
   equipo: ProfesionalPublico[]
   servicios: PaginaDelNegocio["servicios"]
   color: PaginaDelNegocio["color"]["clave"]
+  rubro: PaginaDelNegocio["rubro"]
 }) {
   return (
     <Bloque titulo="Equipo">
@@ -232,7 +237,7 @@ function Equipo({
                   </span>
                 </div>
                 {/* Qué hace: sus servicios por nombre (con tope) o "todos". Debajo de la foto, a todo el ancho de la tarjeta. */}
-                <p className="text-sm text-pretty break-words text-texto-2">{textoDeLoQueHace(profesional.servicioIds, servicios)}</p>
+                <p className="text-sm text-pretty break-words text-texto-2">{textoDeLoQueHace(profesional.servicioIds, servicios, undefined, rubro)}</p>
               </div>
               {/*
                 Un `<a>` común y no `Link`: carga la página con el profesional en
@@ -260,13 +265,13 @@ function Equipo({
   )
 }
 
-function Servicios({ servicios }: { servicios: PaginaDelNegocio["servicios"] }) {
+function Servicios({ servicios, rubro }: { servicios: PaginaDelNegocio["servicios"]; rubro: PaginaDelNegocio["rubro"] }) {
   const grupos = serviciosPorCategoria(servicios)
   // Si nadie cargó categorías, un solo título "Otros" no ayuda a leer.
   const conTitulos = !(grupos.length === 1 && grupos[0].categoria === CATEGORIA_SIN_NOMBRE)
 
   return (
-    <Bloque titulo="Servicios">
+    <Bloque titulo={frasesDeLaPagina(rubro).catalogo}>
       <div className="mt-5 flex flex-col gap-6">
         {grupos.map((grupo) => (
           <div key={grupo.categoria}>

@@ -1,5 +1,7 @@
 import type { Prisma } from "@prisma/client"
+import { al } from "@/lib/concordancia"
 import { SIN_ATENCION_VIVA } from "@/lib/mover-cita"
+import { hastaElMomentoDe, palabrasDeLaReserva } from "@/lib/palabras-de-la-reserva"
 import { SELECCION_DE_SERVICIOS_DE_LA_CITA } from "@/lib/servicios-de-la-reserva"
 import { hashDeToken } from "@/lib/tokens"
 
@@ -60,18 +62,26 @@ export function plazoValido(horasAntes: number): number {
 /**
  * El plazo dicho ANTES de reservar (#83), en la mini página y en el paso de
  * confirmar: lo mismo que después aplica `dentroDelPlazo`, incluido leer un
- * plazo raro como el de por defecto.
+ * plazo raro como el de por defecto. `rubro` (`Business.type`) pone la palabra
+ * de la reserva: sin plazo, "Puedes cancelar o cambiar tu hora hasta el momento
+ * de la cita." en un rubro desconocido y "…tu hora hasta que llegue la hora." en
+ * los que la llaman "hora" ("hasta el momento de la hora" no se dice).
  */
-export function plazoParaQuienReserva(horasAntes: number): string {
+export function plazoParaQuienReserva(horasAntes: number, rubro?: string | null): string {
   const plazo = plazoValido(horasAntes)
-  if (plazo === 0) return "Puedes cancelar o cambiar tu hora hasta el momento de la cita."
+  if (plazo === 0) {
+    const { cita, hora } = palabrasDeLaReserva(rubro)
+    return `Puedes cancelar o cambiar tu ${hora.singular} ${hastaElMomentoDe(cita)}.`
+  }
   return `Puedes cancelar o cambiar hasta ${plazo} ${plazo === 1 ? "hora" : "horas"} antes.`
 }
 
-export function mensajeFueraDePlazo(horasAntes: number): string {
+/** "…Contacta al local." en un rubro desconocido, "…Contacta al salón." o "…Contacta a la clínica." en los demás. */
+export function mensajeFueraDePlazo(horasAntes: number, rubro?: string | null): string {
+  const { local } = palabrasDeLaReserva(rubro)
   return horasAntes === 1
-    ? "Ya no se puede cambiar por acá: falta menos de 1 hora. Contacta al local."
-    : `Ya no se puede cambiar por acá: se puede hasta ${horasAntes} horas antes. Contacta al local.`
+    ? `Ya no se puede cambiar por acá: falta menos de 1 hora. Contacta ${al(local)}.`
+    : `Ya no se puede cambiar por acá: se puede hasta ${horasAntes} horas antes. Contacta ${al(local)}.`
 }
 
 /** El `where` de la cita del enlace: hash del token, negocio del slug, estado gestionable y sin atención viva. */
