@@ -212,6 +212,24 @@ export function esRechazoDeLaBase(error: unknown): boolean {
   return false
 }
 
+/**
+ * Otra operación tenía el candado del negocio y esta no alcanzó, o dos
+ * transacciones se cruzaron: Postgres cortó una (deadlock, 40P01), no llegó al
+ * candado a tiempo (55P03) o Prisma venció la transacción (P2028) o la dio por
+ * conflictiva (P2034). No es un error nuestro: se vuelve a intentar.
+ */
+export function esConflictoDeConcurrencia(error: unknown): boolean {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return error.code === "P2034" || error.code === "P2028" || /\b(40P01|55P03)\b/.test(error.message)
+  }
+  if (error instanceof Prisma.PrismaClientUnknownRequestError) {
+    return /\b(40P01|55P03)\b|deadlock detected|lock timeout/i.test(error.message)
+  }
+  return false
+}
+
+export const MENSAJE_CONFLICTO_DE_CONCURRENCIA = "Hubo otro cambio al mismo tiempo. Espera un momento e intenta de nuevo."
+
 /** El único `(businessId, nombre)` de la base. */
 const esNombreRepetido = (error: unknown): boolean =>
   error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
@@ -246,6 +264,7 @@ export function respuestaDeErrorDeSedes(error: unknown, contexto: string): NextR
   if (error instanceof RechazoDeSedes) return NextResponse.json(error.cuerpo, { status: error.status })
   if (esNombreRepetido(error)) return NextResponse.json({ error: MENSAJE_NOMBRE_DE_SEDE_REPETIDO }, { status: 409 })
   if (esRechazoDeLaBase(error)) return NextResponse.json({ error: mensajeDeRechazoDeLaBase(error) }, { status: 409 })
+  if (esConflictoDeConcurrencia(error)) return NextResponse.json({ error: MENSAJE_CONFLICTO_DE_CONCURRENCIA }, { status: 409 })
   registrarError(contexto, error)
   return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
 }

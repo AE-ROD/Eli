@@ -55,7 +55,7 @@ describe("GET /fotos/<ruta>", () => {
     }
   })
 
-  it("sirve la foto de una cuenta (usuarios/<cuenta>/cuenta-<uuid>.webp) con las mismas cabeceras y el mismo límite", async () => {
+  it("sirve la foto de una cuenta (usuarios/<cuenta>/cuenta-<uuid>.webp) con las mismas cabeceras (menos el caché público) y el mismo límite", async () => {
     const clave = `usuarios/u-1/cuenta-${UUID}.webp`
     almacen.objetos.set(clave, { bytes: BYTES, tipoMime: "text/html" })
 
@@ -63,7 +63,8 @@ describe("GET /fotos/<ruta>", () => {
 
     expect(respuesta.status).toBe(200)
     expect(respuesta.headers.get("content-type")).toBe("image/webp")
-    expect(respuesta.headers.get("cache-control")).toBe("public, max-age=31536000, immutable")
+    // La de una cuenta no se guarda en cachés compartidos: `private`, no `public`.
+    expect(respuesta.headers.get("cache-control")).toBe("private, max-age=31536000, immutable")
     expect(respuesta.headers.get("x-content-type-options")).toBe("nosniff")
     expect(respuesta.headers.get("content-disposition")).toBe("inline")
     expect(respuesta.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox")

@@ -50,7 +50,10 @@ export async function leerSedesDeLaReserva(
   businessId: string
 ): Promise<SedeDeLaReserva[]> {
   return db.sede.findMany({
-    where: { businessId, activo: true },
+    // Defensa en profundidad: la base ya no deja sedes activas fuera del plan
+    // Independiente (trigger `sedes_reglas`), pero si un negocio Equipo tuviera
+    // una de antes, la reserva no la usa.
+    where: { businessId, activo: true, business: { is: { plan: "independiente" } } },
     select: { id: true, nombre: true, direccion: true, comuna: true, activo: true },
     orderBy: [{ orden: "asc" }, { nombre: "asc" }],
     take: TOPE_DE_SEDES_LEIDAS,

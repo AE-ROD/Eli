@@ -62,7 +62,10 @@ export async function GET(request: NextRequest, { params }: Contexto) {
       "Content-Type": "image/webp",
       "Content-Length": String(foto.bytes.byteLength),
       "Content-Disposition": "inline",
-      "Cache-Control": "public, max-age=31536000, immutable",
+      // Las del negocio son públicas como su página. La de una cuenta, no: `private`
+      // para que ningún caché compartido (un CDN) la siga sirviendo después de que
+      // la persona la quite o la cambie.
+      "Cache-Control": clave.startsWith("usuarios/") ? "private, max-age=31536000, immutable" : "public, max-age=31536000, immutable",
       "X-Content-Type-Options": "nosniff",
       // Es una imagen, no un documento: si alguien abre la URL a mano, no ejecuta nada.
       "Content-Security-Policy": "default-src 'none'; sandbox",
