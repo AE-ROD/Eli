@@ -5,7 +5,6 @@ import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { enviarReservaConfirmadaPorElLocal } from "@/lib/email"
 import { fechaYHoraEnElNegocio } from "@/lib/recordatorios"
 import {
-  SELECCION_DE_LAS_SEDES_ACTIVAS,
   SELECCION_DE_LA_SEDE_DEL_CORREO,
   lugarParaElCorreo,
 } from "@/lib/lugar-de-la-cita"
@@ -49,18 +48,17 @@ export async function enviarAvisoDeReservaConfirmada({ businessId, citaId }: Res
         price: true,
         customer: { select: { name: true, lastName: true, email: true } },
         member: { select: { user: { select: { name: true } } } },
-        // Etapa 9: con varias sedes el correo dice dónde queda la hora. Sólo el
-        // nombre, la dirección y la comuna de la sede; del negocio, su plan y
-        // cuántas sedes activas tiene (para saber si son varias).
+        // Etapa 9: si la hora tiene sede, el correo dice dónde queda. Sólo el
+        // nombre, la dirección y la comuna de la sede.
         sede: { select: SELECCION_DE_LA_SEDE_DEL_CORREO },
-        business: { select: { name: true, timezone: true, type: true, plan: true, sedes: SELECCION_DE_LAS_SEDES_ACTIVAS } },
+        business: { select: { name: true, timezone: true, type: true } },
       },
     })
     if (!cita?.customer?.email) return false
 
     const { fecha, hora } = fechaYHoraEnElNegocio(cita.startTime, cita.business.timezone)
-    // Sólo con varias sedes: en cualquier otro negocio el correo sale como siempre.
-    const lugar = lugarParaElCorreo({ plan: cita.business.plan, sedesActivas: cita.business.sedes, sede: cita.sede })
+    // Sólo si la hora tiene sede: en cualquier otro negocio el correo sale como siempre.
+    const lugar = lugarParaElCorreo(cita.sede)
     const resultado = await enviarReservaConfirmadaPorElLocal({
       rubro: cita.business.type,
       emailCliente: cita.customer.email,

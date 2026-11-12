@@ -10,7 +10,6 @@ import { ORIGEN_RESERVA_PUBLICA } from "@/lib/reserva-publica"
 import { generarToken } from "@/lib/tokens"
 import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import {
-  SELECCION_DE_LAS_SEDES_ACTIVAS,
   SELECCION_DE_LA_SEDE_DEL_CORREO,
   lugarParaElCorreo,
 } from "@/lib/lugar-de-la-cita"
@@ -179,8 +178,6 @@ export async function GET(request: NextRequest) {
             timezone: true,
             cancelacionHorasAntes: true,
             type: true,
-            plan: true,
-            sedes: SELECCION_DE_LAS_SEDES_ACTIVAS,
           },
         },
       },
@@ -228,8 +225,8 @@ export async function GET(request: NextRequest) {
           const sePuedeCambiar = dentroDelPlazo(cita.startTime, cita.business.cancelacionHorasAntes, ahora)
           enlaceNuevo = baseUrl ? await enlaceParaCitaSinToken(cita, sePuedeCambiar) : null
           const { fecha, hora } = fechaYHoraEnElNegocio(cita.startTime, cita.business.timezone)
-          // Sólo con varias sedes: en cualquier otro negocio el correo sale como siempre.
-          const lugar = lugarParaElCorreo({ plan: cita.business.plan, sedesActivas: cita.business.sedes, sede: cita.sede })
+          // Sólo si la hora tiene sede: en cualquier otro negocio el correo sale como siempre.
+          const lugar = lugarParaElCorreo(cita.sede)
           // Desde acá el correo pudo salir aunque después algo falle.
           noSalio = false
           const resultado = await enviarRecordatorio({

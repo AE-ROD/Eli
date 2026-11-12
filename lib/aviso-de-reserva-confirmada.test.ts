@@ -152,7 +152,7 @@ describe("enviarAvisoDeReservaConfirmada: dónde queda la hora (etapa 9)", () =>
     expect(JSON.stringify(mockEnviar.mock.calls[0][0])).not.toMatch(/sede-|\+569|Ajena|Calle 1 #23/)
   })
 
-  it("con una sola sede activa, el correo sale como siempre: sin `lugar`", async () => {
+  it("con una sola sede activa, la hora igual dice dónde queda: tiene sede, como la página de la cita", async () => {
     escenario({
       sedes: [
         { id: "sede-centro", businessId: SOLO, nombre: "Centro", direccion: "Calle 1 #23", comuna: "Santiago", activo: false },
@@ -163,7 +163,7 @@ describe("enviarAvisoDeReservaConfirmada: dónde queda la hora (etapa 9)", () =>
 
     await enviarAvisoDeReservaConfirmada({ businessId: SOLO, citaId: "confirmada" })
 
-    expect(mockEnviar.mock.calls[0][0]).not.toHaveProperty("lugar")
+    expect(mockEnviar.mock.calls[0][0]).toMatchObject({ lugar: { nombre: "Providencia" } })
   })
 
   it("sin sedes, el correo es exactamente el de siempre", async () => {
@@ -175,7 +175,7 @@ describe("enviarAvisoDeReservaConfirmada: dónde queda la hora (etapa 9)", () =>
     expect(mockEnviar.mock.calls[0][0]).not.toHaveProperty("lugar")
   })
 
-  it("una cita sin sede, en un negocio con varias, sale como siempre", async () => {
+  it("una cita sin sede (de antes de tener sedes), en un negocio con varias, sale como siempre", async () => {
     escenario({ cita: { sedeId: null } })
     const { enviarAvisoDeReservaConfirmada } = await import("./aviso-de-reserva-confirmada")
 
@@ -184,7 +184,7 @@ describe("enviarAvisoDeReservaConfirmada: dónde queda la hora (etapa 9)", () =>
     expect(mockEnviar.mock.calls[0][0]).not.toHaveProperty("lugar")
   })
 
-  it("la sede de la cita cuenta aunque se haya desactivado después, mientras queden varias activas", async () => {
+  it("la sede de la cita cuenta aunque se haya desactivado después: la hora ya se dio ahí", async () => {
     escenario({
       sedes: [
         { id: "sede-centro", businessId: SOLO, nombre: "Centro", direccion: "Calle 1 #23", comuna: "Santiago" },
