@@ -107,6 +107,7 @@ export function SeccionProductos({ productosIniciales, conPorcentaje }: PropsDeS
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
+        nivel={3}
         titulo="Productos"
         subtitulo="Lo que vendes además de tus servicios"
         icono={{ figura: Package }}

@@ -107,6 +107,7 @@ export function SeccionPaginaPublica({ slug, nombreDelNegocio, inicial, soloLect
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
+        nivel={3}
         titulo="Tu página pública"
         subtitulo={
           <>

@@ -58,6 +58,7 @@ export function SeccionLaboratorios({ laboratoriosIniciales }: PropsDeSeccionLab
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
+        nivel={3}
         titulo="Laboratorios"
         subtitulo="Los laboratorios a los que la clínica encarga las prótesis. No tienen cuenta en Eli."
         icono={{ figura: FlaskConical }}

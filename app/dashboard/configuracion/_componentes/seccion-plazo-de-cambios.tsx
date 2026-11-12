@@ -49,6 +49,7 @@ export function SeccionPlazoDeCambios({ horasIniciales }: { horasIniciales: numb
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
+        nivel={3}
         titulo="Cancelar o reagendar"
         subtitulo={`Tus ${clientes} reciben un enlace en el correo de confirmación`}
         icono={{ figura: CalendarClock }}

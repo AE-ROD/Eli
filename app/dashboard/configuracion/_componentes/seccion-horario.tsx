@@ -103,6 +103,7 @@ export function SeccionHorario({
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
+        nivel={3}
         titulo={titulo ?? "Horario laboral"}
         subtitulo="Define los días y horas de atención"
         icono={{ figura: Clock }}

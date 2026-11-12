@@ -85,6 +85,7 @@ export function FormularioPorConfirmar({ faltasIniciales }: { faltasIniciales: n
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
+        nivel={3}
         titulo="Reservas por confirmar"
         subtitulo="Para quienes reservan y no llegan"
         icono={{ figura: UserCheck }}

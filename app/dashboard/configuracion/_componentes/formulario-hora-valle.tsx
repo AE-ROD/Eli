@@ -122,6 +122,7 @@ export function FormularioHoraValle({
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
+        nivel={3}
         titulo="Precios de hora valle"
         subtitulo="Llena las horas más tranquilas"
         icono={{ figura: Percent }}

@@ -6,7 +6,8 @@ import { FormularioHoraValle } from "./formulario-hora-valle"
  * (servidor) "Precios de hora valle" en Configuración (#89c). Sólo la dueña
  * (`puedeConfigurarHoraValle`); a los demás no se les muestra. Lee sus
  * propios datos, siempre con el `businessId` de la sesión, para que
- * `page.tsx` sólo tenga que montarla.
+ * `page.tsx` sólo tenga que montarla. El ancla (`#hora-valle`) la pone
+ * `GruposDeConfiguracion`, como la de las demás.
  */
 export async function SeccionHoraValle({ actor }: { actor: Actor }) {
   if (!puedeConfigurarHoraValle(actor)) return null
@@ -25,16 +26,14 @@ export async function SeccionHoraValle({ actor }: { actor: Actor }) {
   ])
   if (!negocio) return null
   return (
-    <div id="hora-valle" className="scroll-mt-24">
-      <FormularioHoraValle
-        activaInicial={negocio.horaValleActiva}
-        franjasIniciales={franjas}
-        serviciosIniciales={servicios.map((servicio) => ({
-          id: servicio.id,
-          nombre: servicio.name,
-          excluido: servicio.excluidoDeHoraValle,
-        }))}
-      />
-    </div>
+    <FormularioHoraValle
+      activaInicial={negocio.horaValleActiva}
+      franjasIniciales={franjas}
+      serviciosIniciales={servicios.map((servicio) => ({
+        id: servicio.id,
+        nombre: servicio.name,
+        excluido: servicio.excluidoDeHoraValle,
+      }))}
+    />
   )
 }

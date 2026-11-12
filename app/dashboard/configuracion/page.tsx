@@ -13,6 +13,7 @@ import { SeccionPorConfirmar } from "./_componentes/seccion-por-confirmar"
 import { SeccionHoraValle } from "./_componentes/seccion-hora-valle"
 import { SeccionMensajesAClientes } from "./_componentes/seccion-mensajes-a-clientes"
 import { SeccionFilaVirtual } from "./_componentes/seccion-fila-virtual"
+import { GruposDeConfiguracion, type SeccionDeConfiguracion } from "./_componentes/grupos-de-configuracion"
 import { SeccionSillones } from "./_componentes/seccion-sillones"
 import { SeccionLaboratorios } from "./_componentes/seccion-laboratorios"
 import { leerLaboratorios } from "@/lib/protesis-servidor"
@@ -22,7 +23,10 @@ import {
   actorDeSesion,
   esDueño,
   gestionaElNegocio,
+  puedeActivarFilaVirtual,
   puedeActivarMensajesAClientes,
+  puedeConfigurarHoraValle,
+  puedeConfigurarPorConfirmar,
   puedeEditarHorarioDe,
   puedeEditarPaginaDelNegocio,
   puedeEditarPlazoDeCambios,
@@ -149,6 +153,135 @@ export default async function PaginaConfiguracion() {
   const usuarioDeInstagram = normalizarInstagram(pagina?.instagram)
   const nombreActor = session?.user?.name ?? "Yo"
 
+  // Las secciones que este rol y este rubro ven, en el orden de siempre; la
+  // agrupación (qué va en qué grupo) y el plegado los resuelve `GruposDeConfiguracion`.
+  // Cada `id` es el ancla (`/dashboard/configuracion#horario`): los pasos de la
+  // lista de inicio del panel y la agenda llevan a algunas.
+  const secciones: SeccionDeConfiguracion[] = [
+    {
+      // Horario: quien gestiona el negocio y tiene equipo → selector de tabs; el resto → directo.
+      id: "horario",
+      contenido:
+        puedeEditarHorarioDeOtros && tieneEquipo ? (
+          <SelectorHorarioMiembro
+            horariosDelDueño={horariosActuales}
+            miembros={miembrosParaElSelector}
+            // El encargado ve el general con el nombre del negocio; la dueña, con el suyo.
+            nombreDelDueño={esDueño(actor) ? nombreActor : (pagina?.name ?? "El negocio")}
+            sufijoDelGeneral={esDueño(actor) ? "(tú)" : "Horario general"}
+            // El encargado se ve también en su propia pestaña: con "(tú)", para que no parezca repetido.
+            memberIdPropio={esDueño(actor) ? null : memberIdPropio}
+          />
+        ) : (
+          <SeccionHorario
+            horariosIniciales={horariosActuales}
+            memberId={horarioInicial}
+            horarioDelNegocio={horarioDelNegocio}
+            titulo={esDueño(actor) ? "Mi horario" : "Mi horario de atención"}
+          />
+        ),
+    },
+  ]
+
+  if (pagina) {
+    secciones.push({
+      id: "pagina",
+      contenido: (
+        <SeccionPaginaPublica
+          slug={pagina.slug}
+          nombreDelNegocio={pagina.name}
+          soloLectura={!puedeEditarPaginaDelNegocio(actor)}
+          inicial={{
+            address: pagina.address ?? "",
+            comuna: pagina.comuna ?? "",
+            whatsapp: mostrarTelefono(pagina.whatsapp),
+            instagram: usuarioDeInstagram ? `@${usuarioDeInstagram}` : "",
+            enlaceResenas: pagina.enlaceResenas ?? "",
+            color: colorDelNegocio(pagina.color).clave,
+            mediosDePago: pagina.mediosDePago,
+            // Sólo quienes aparecen en "Equipo" de la página pública.
+            especialidades: pagina.members
+              .filter((miembro) => apareceEnLaPagina(miembro.role))
+              .map((miembro) => ({
+                memberId: miembro.id,
+                nombre: miembro.user.name,
+                especialidad: miembro.especialidad ?? "",
+              })),
+          }}
+        />
+      ),
+    })
+  }
+
+  // Servicios: dueño y encargado, no el profesional
+  if (puedeGestionarServicios(actor)) {
+    secciones.push({ id: "servicios", contenido: <SeccionServicios serviciosIniciales={servicios} /> })
+  }
+
+  // Sillones: sólo en una clínica dental, para dueña y encargado
+  if (gestionaSillones) {
+    secciones.push({ id: "sillones", contenido: <SeccionSillones sillonesIniciales={sillones} /> })
+  }
+
+  // Laboratorios: sólo en una clínica dental, para la dueña
+  if (gestionaLaboratorios) {
+    secciones.push({ id: "laboratorios", contenido: <SeccionLaboratorios laboratoriosIniciales={laboratorios} /> })
+  }
+
+  // Productos (#67): dueña y encargado; el % de comisión, sólo la dueña
+  if (puedeGestionarProductos(actor)) {
+    secciones.push({
+      id: "productos",
+      contenido: (
+        <SeccionProductos
+          productosIniciales={productos.map((producto) => formatearProducto(producto, conPorcentaje))}
+          conPorcentaje={conPorcentaje}
+        />
+      ),
+    })
+  }
+
+  // Plazo del enlace para cancelar o reagendar: dueño y encargado
+  if (puedeEditarPlazoDeCambios(actor)) {
+    secciones.push({
+      id: "plazo-de-cambios",
+      contenido: <SeccionPlazoDeCambios horasIniciales={pagina?.cancelacionHorasAntes ?? 24} />,
+    })
+  }
+
+  // Las tres siguientes son de servidor y leen lo suyo; se montan con el mismo permiso
+  // que ellas se preguntan (y devuelven null sin negocio), para que su grupo no quede vacío.
+  if (pagina && puedeConfigurarPorConfirmar(actor)) {
+    secciones.push({ id: "por-confirmar", contenido: <SeccionPorConfirmar actor={actor} /> })
+  }
+  if (pagina && puedeConfigurarHoraValle(actor)) {
+    secciones.push({ id: "hora-valle", contenido: <SeccionHoraValle actor={actor} /> })
+  }
+
+  if (pagina && mensajesDelMes) {
+    secciones.push({
+      id: "mensajes",
+      contenido: (
+        <SeccionMensajesAClientes
+          inicial={{
+            interruptores: {
+              listaDeEsperaActiva: pagina.listaDeEsperaActiva,
+              avisoDeVueltaActivo: pagina.avisoDeVueltaActivo,
+              pideResenas: pagina.pideResenas,
+            },
+            tieneEnlaceDeResenas: esEnlaceDeResenasValido(pagina.enlaceResenas),
+            puedeCambiar: puedeActivarMensajesAClientes(actor),
+            mes: mensajesDelMes,
+          }}
+        />
+      ),
+    })
+  }
+
+  if (pagina && puedeActivarFilaVirtual(actor)) {
+    secciones.push({ id: "fila-virtual", contenido: <SeccionFilaVirtual actor={actor} /> })
+  }
+
   return (
     <div className="min-h-dvh">
       <BarraSuperior
@@ -156,115 +289,8 @@ export default async function PaginaConfiguracion() {
         subtitulo={gestionaElNegocio(actor) ? "Gestiona horarios, servicios y equipo" : "Gestiona tu horario de atención"}
       />
 
-      <div className="max-w-3xl space-y-6 px-4 pt-6 pb-10 sm:px-6">
-        {/*
-          Horario: quien gestiona el negocio y tiene equipo → selector de tabs; el resto → directo.
-          Los `id` son a dónde llevan los pasos de la lista de inicio del panel.
-        */}
-        <div id="horario" className="scroll-mt-24">
-          {puedeEditarHorarioDeOtros && tieneEquipo ? (
-            <SelectorHorarioMiembro
-              horariosDelDueño={horariosActuales}
-              miembros={miembrosParaElSelector}
-              // El encargado ve el general con el nombre del negocio; la dueña, con el suyo.
-              nombreDelDueño={esDueño(actor) ? nombreActor : (pagina?.name ?? "El negocio")}
-              sufijoDelGeneral={esDueño(actor) ? "(tú)" : "Horario general"}
-              // El encargado se ve también en su propia pestaña: con "(tú)", para que no parezca repetido.
-              memberIdPropio={esDueño(actor) ? null : memberIdPropio}
-            />
-          ) : (
-            <SeccionHorario
-              horariosIniciales={horariosActuales}
-              memberId={horarioInicial}
-              horarioDelNegocio={horarioDelNegocio}
-              titulo={esDueño(actor) ? "Mi horario" : "Mi horario de atención"}
-            />
-          )}
-        </div>
-
-        {pagina && (
-          <div id="pagina" className="scroll-mt-24">
-            <SeccionPaginaPublica
-              slug={pagina.slug}
-              nombreDelNegocio={pagina.name}
-              soloLectura={!puedeEditarPaginaDelNegocio(actor)}
-              inicial={{
-                address: pagina.address ?? "",
-                comuna: pagina.comuna ?? "",
-                whatsapp: mostrarTelefono(pagina.whatsapp),
-                instagram: usuarioDeInstagram ? `@${usuarioDeInstagram}` : "",
-                enlaceResenas: pagina.enlaceResenas ?? "",
-                color: colorDelNegocio(pagina.color).clave,
-                mediosDePago: pagina.mediosDePago,
-                // Sólo quienes aparecen en "Equipo" de la página pública.
-                especialidades: pagina.members
-                  .filter((miembro) => apareceEnLaPagina(miembro.role))
-                  .map((miembro) => ({
-                    memberId: miembro.id,
-                    nombre: miembro.user.name,
-                    especialidad: miembro.especialidad ?? "",
-                  })),
-              }}
-            />
-          </div>
-        )}
-
-        {/* Servicios: dueño y encargado, no el profesional */}
-        {puedeGestionarServicios(actor) && (
-          <div id="servicios" className="scroll-mt-24">
-            <SeccionServicios serviciosIniciales={servicios} />
-          </div>
-        )}
-
-        {/* Sillones: sólo en una clínica dental, para dueña y encargado */}
-        {gestionaSillones && (
-          <div id="sillones" className="scroll-mt-24">
-            <SeccionSillones sillonesIniciales={sillones} />
-          </div>
-        )}
-
-        {/* Laboratorios: sólo en una clínica dental, para la dueña */}
-        {gestionaLaboratorios && (
-          <div id="laboratorios" className="scroll-mt-24">
-            <SeccionLaboratorios laboratoriosIniciales={laboratorios} />
-          </div>
-        )}
-
-        {/* Productos (#67): dueña y encargado; el % de comisión, sólo la dueña */}
-        {puedeGestionarProductos(actor) && (
-          <div id="productos" className="scroll-mt-24">
-            <SeccionProductos
-              productosIniciales={productos.map((producto) => formatearProducto(producto, conPorcentaje))}
-              conPorcentaje={conPorcentaje}
-            />
-          </div>
-        )}
-
-        {/* Plazo del enlace para cancelar o reagendar: dueño y encargado */}
-        {puedeEditarPlazoDeCambios(actor) && (
-          <SeccionPlazoDeCambios horasIniciales={pagina?.cancelacionHorasAntes ?? 24} />
-        )}
-        <SeccionPorConfirmar actor={actor} />
-        <SeccionHoraValle actor={actor} />
-
-        {pagina && mensajesDelMes && (
-          <div id="mensajes" className="scroll-mt-24">
-            <SeccionMensajesAClientes
-              inicial={{
-                interruptores: {
-                  listaDeEsperaActiva: pagina.listaDeEsperaActiva,
-                  avisoDeVueltaActivo: pagina.avisoDeVueltaActivo,
-                  pideResenas: pagina.pideResenas,
-                },
-                tieneEnlaceDeResenas: esEnlaceDeResenasValido(pagina.enlaceResenas),
-                puedeCambiar: puedeActivarMensajesAClientes(actor),
-                mes: mensajesDelMes,
-              }}
-            />
-          </div>
-        )}
-
-        <SeccionFilaVirtual actor={actor} />
+      <div className="max-w-3xl px-4 pt-6 pb-10 sm:px-6">
+        <GruposDeConfiguracion secciones={secciones} />
       </div>
     </div>
   )

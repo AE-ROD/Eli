@@ -94,6 +94,7 @@ export function SeccionSillones({ sillonesIniciales }: PropsDeSeccionSillones) {
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
+        nivel={3}
         titulo="Sillones"
         subtitulo="Cada sillón es una columna de la agenda del día y se elige al agendar."
         icono={{ figura: Armchair }}

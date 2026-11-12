@@ -132,6 +132,7 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
+        nivel={3}
         titulo="Servicios"
         subtitulo={`Los servicios que ofreces a tus ${clientes}`}
         icono={{ figura: Scissors }}

@@ -92,6 +92,7 @@ export function SeccionMensajesAClientes({ inicial }: { inicial: EstadoDeMensaje
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
+        nivel={3}
         titulo="Mensajes a clientes"
         subtitulo="Correos que Eli manda por ti, sin que tengas que acordarte"
         icono={{ figura: MailCheck }}
@@ -144,9 +145,9 @@ export function SeccionMensajesAClientes({ inicial }: { inicial: EstadoDeMensaje
       </ul>
 
       <section aria-labelledby={idDelMes} className="mt-6 rounded-[20px] bg-superficie p-4 squircle sm:p-5">
-        <h3 id={idDelMes} className="text-sm font-medium text-navy">
+        <h4 id={idDelMes} className="text-sm font-medium text-navy">
           Mensajes de este mes
-        </h3>
+        </h4>
         <p className="mt-1 text-[13px] text-texto-2">Lo enviado en {nombreDelMes(mes.mes)}, contando hasta hoy.</p>
 
         <p className="mt-3 font-serif text-3xl font-medium text-navy">

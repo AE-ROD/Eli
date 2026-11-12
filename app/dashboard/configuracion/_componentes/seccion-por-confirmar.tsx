@@ -5,7 +5,8 @@ import { FormularioPorConfirmar } from "./formulario-por-confirmar"
 /**
  * (servidor) "Reservas por confirmar" en Configuración (#84). Sólo la dueña
  * (`puedeConfigurarPorConfirmar`); a los demás no se les muestra. Lee su
- * propio dato para que `page.tsx` sólo tenga que montarla.
+ * propio dato para que `page.tsx` sólo tenga que montarla. El ancla
+ * (`#por-confirmar`) la pone `GruposDeConfiguracion`, como la de las demás.
  */
 export async function SeccionPorConfirmar({ actor }: { actor: Actor }) {
   if (!puedeConfigurarPorConfirmar(actor)) return null
@@ -14,9 +15,5 @@ export async function SeccionPorConfirmar({ actor }: { actor: Actor }) {
     select: { porConfirmarTrasFaltas: true },
   })
   if (!negocio) return null
-  return (
-    <div id="por-confirmar" className="scroll-mt-24">
-      <FormularioPorConfirmar faltasIniciales={negocio.porConfirmarTrasFaltas} />
-    </div>
-  )
+  return <FormularioPorConfirmar faltasIniciales={negocio.porConfirmarTrasFaltas} />
 }

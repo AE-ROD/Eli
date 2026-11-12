@@ -93,6 +93,7 @@ export function FormularioFilaVirtual({ slug, activaInicial, topeInicial }: Prop
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
+        nivel={3}
         titulo="Fila virtual"
         subtitulo="Para atender por orden de llegada sin que esperen en el local"
         icono={{ figura: ListOrdered }}
