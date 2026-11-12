@@ -5,6 +5,7 @@ import { BarraLateral } from "@/components/panel/barra-lateral"
 import { ContenidoDelPanel } from "@/components/panel/contenido-del-panel"
 import { ModalBienvenida } from "@/components/panel/modal-bienvenida"
 import { ProveedorDePrecios } from "@/components/panel/contexto-precios"
+import { ProveedorDeSesionDelPanel } from "@/components/panel/proveedor-de-sesion-del-panel"
 import { ProveedorDeBarraLateral } from "@/components/panel/contexto-barra-lateral"
 import { ProveedorDeRubro } from "@/components/panel/contexto-rubro"
 import { nombreDelRolDelContexto } from "@/lib/contextos"
@@ -77,32 +78,37 @@ export default async function LayoutDelPanel({
     }
   }
 
+  // La sesión que ya leyó el servidor llega al `useSession()` del panel en
+  // cuanto la página se hidrata (sin esperar a `/api/auth/session`). Va por
+  // fuera de todo lo demás: la barra, el modal y las pantallas la leen.
   return (
-    <ProveedorDePrecios diasTrialRestantes={diasTrialRestantes}>
-      <ProveedorDeRubro rubro={rubro}>
-        <ProveedorDeBarraLateral>
-          <div className="min-h-dvh bg-crema text-navy">
-            <BarraLateral
-              usuario={usuario}
-              puedeGestionarSuscripcion={verSuscripcion}
-              diasTrialRestantes={diasTrialRestantes}
-              puedeVerEquipo={puedeVerEquipo}
-              accesoALaPlata={accesoALaPlata}
-              rubro={rubro}
-              puedeCambiarDeNegocio={puedeCambiarDeNegocio}
-              contexto={session?.user?.contexto ?? null}
-            />
-            <ContenidoDelPanel>{children}</ContenidoDelPanel>
-            {businessName && businessSlug && (
-              <ModalBienvenida
-                nombreNegocio={businessName}
-                slug={businessSlug}
-                marcarAlCopiar={veLaListaDeInicio(actor)}
+    <ProveedorDeSesionDelPanel session={session}>
+      <ProveedorDePrecios diasTrialRestantes={diasTrialRestantes}>
+        <ProveedorDeRubro rubro={rubro}>
+          <ProveedorDeBarraLateral>
+            <div className="min-h-dvh bg-crema text-navy">
+              <BarraLateral
+                usuario={usuario}
+                puedeGestionarSuscripcion={verSuscripcion}
+                diasTrialRestantes={diasTrialRestantes}
+                puedeVerEquipo={puedeVerEquipo}
+                accesoALaPlata={accesoALaPlata}
+                rubro={rubro}
+                puedeCambiarDeNegocio={puedeCambiarDeNegocio}
+                contexto={session?.user?.contexto ?? null}
               />
-            )}
-          </div>
-        </ProveedorDeBarraLateral>
-      </ProveedorDeRubro>
-    </ProveedorDePrecios>
+              <ContenidoDelPanel>{children}</ContenidoDelPanel>
+              {businessName && businessSlug && (
+                <ModalBienvenida
+                  nombreNegocio={businessName}
+                  slug={businessSlug}
+                  marcarAlCopiar={veLaListaDeInicio(actor)}
+                />
+              )}
+            </div>
+          </ProveedorDeBarraLateral>
+        </ProveedorDeRubro>
+      </ProveedorDePrecios>
+    </ProveedorDeSesionDelPanel>
   )
 }
