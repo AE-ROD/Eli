@@ -1,5 +1,6 @@
 import NextAuth from "next-auth"
 import type { Rol } from "@/lib/permisos"
+import type { PlanId } from "@/lib/planes"
 
 declare module "next-auth" {
   interface Session {
@@ -17,6 +18,13 @@ declare module "next-auth" {
        * sesión de antes de este campo: no es dental (`esRubroDental`).
        */
       rubro: string | null
+      /**
+       * El plan del negocio (`Business.plan`, `lib/planes.ts`). Lo arma
+       * `lib/auth.ts` desde la base, nunca el navegador. Null en una sesión de
+       * antes de este campo o si no es un plan conocido: no habilita nada que
+       * dependa del plan (invitar, sedes) hasta la próxima revalidación.
+       */
+      plan: PlanId | null
       memberId: string | null
       /**
        * El id del contexto con el que trabaja la sesión (`lib/contextos.ts`):
@@ -39,6 +47,7 @@ declare module "next-auth" {
     businessName?: string | null
     businessSlug?: string | null
     rubro?: string | null
+    plan?: PlanId | null
     memberId?: string | null
     contexto?: string | null
     contextos?: number
@@ -56,6 +65,8 @@ declare module "next-auth/jwt" {
     businessSlug?: string | null
     /** El rubro del negocio. Lo trae `perfilDe`; un token viejo no lo tiene hasta revalidarse. */
     rubro?: string | null
+    /** El plan del negocio. Lo trae `perfilDe`; un token viejo no lo tiene (null) hasta revalidarse. */
+    plan?: PlanId | null
     memberId?: string | null
     /**
      * El id del contexto elegido (`lib/contextos.ts`). Se vuelve a buscar

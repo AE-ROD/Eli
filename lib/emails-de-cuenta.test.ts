@@ -22,6 +22,7 @@ describe("emails de cuenta normalizados", () => {
       contrasena: "password123",
       nombreNegocio: "Spa Ana",
       tipoNegocio: "salon",
+      plan: "equipo",
     })
     expect(datos.email).toBe("ana@correo.com")
   })

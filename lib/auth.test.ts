@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import type { JWT } from "next-auth/jwt"
 import type { Session } from "next-auth"
-import { actorDeSesion } from "@/lib/permisos"
+import { actorDeSesion, puedeCambiarDePlan, puedeGestionarSedes, puedeInvitarAlEquipo } from "@/lib/permisos"
 // bcryptjs guarda `setImmediate` al cargarse: si lo cargara `./auth` por
 // primera vez con los relojes falsos de abajo, sus comparaciones no
 // terminarían nunca. Cargado acá, antes, se queda con el de verdad.
@@ -19,12 +19,14 @@ vi.mock("@/lib/rate-limit", async (original) => ({
   verificarLimite: (...args: unknown[]) => mockVerificarLimite(...args),
 }))
 
+const cuentaGoogle = { provider: "google", type: "oauth", providerAccountId: "g-1" }
+
 const MINUTO = 60 * 1000
 const AHORA = new Date("2026-10-20T15:00:00Z").getTime()
 
 // Lo que devuelve `buscarUsuario`: el usuario con su negocio y su membresía.
-const negocio = { id: "negocio-1", name: "Barbería Uno", slug: "barberia-uno" }
-const otroNegocio = { id: "negocio-2", name: "Spa Dos", slug: "spa-dos" }
+const negocio = { id: "negocio-1", name: "Barbería Uno", slug: "barberia-uno", plan: "equipo" }
+const otroNegocio = { id: "negocio-2", name: "Spa Dos", slug: "spa-dos", plan: "equipo" }
 
 function usuarioMiembro(rol: "admin" | "worker", extra: Record<string, unknown> = {}) {
   return {
@@ -94,7 +96,7 @@ describe("sesiones revocables (lib/auth.ts, callback jwt)", () => {
     const { actor } = await leerSesion(tokenDeProfesional(4))
 
     expect(prismaMock.user.findUnique).not.toHaveBeenCalled()
-    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-1" })
+    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-1", plan: null })
   })
 
   it("un miembro eliminado del equipo pierde el acceso en la siguiente revalidación", async () => {
@@ -118,7 +120,7 @@ describe("sesiones revocables (lib/auth.ts, callback jwt)", () => {
 
     const { actor } = await leerSesion(tokenDeProfesional(6))
 
-    expect(actor).toEqual({ rol: "admin", businessId: "negocio-1", memberId: "miembro-1" })
+    expect(actor).toEqual({ rol: "admin", businessId: "negocio-1", memberId: "miembro-1", plan: "equipo" })
   })
 
   it("si cambió el negocio, el token pasa al nuevo y no se queda con el viejo", async () => {
@@ -128,7 +130,7 @@ describe("sesiones revocables (lib/auth.ts, callback jwt)", () => {
 
     const { token, actor } = await leerSesion(tokenDeProfesional(6))
 
-    expect(actor).toEqual({ rol: "worker", businessId: "negocio-2", memberId: "miembro-9" })
+    expect(actor).toEqual({ rol: "worker", businessId: "negocio-2", memberId: "miembro-9", plan: "equipo" })
     expect(token.businessName).toBe("Spa Dos")
   })
 
@@ -180,7 +182,7 @@ describe("sesiones revocables (lib/auth.ts, callback jwt)", () => {
 
     const { actor } = await leerSesion(tokenDeProfesional(8))
 
-    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-1" })
+    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-1", plan: "equipo" })
   })
 
   it("un token de antes de este cambio (sin fecha de emisión) cuenta como emitido en 0: vencido y revocado", async () => {
@@ -214,7 +216,7 @@ describe("sesiones revocables (lib/auth.ts, callback jwt)", () => {
       tokenDeProfesional(sieteDiasMenosUnMinuto, { revalidadoEn: AHORA - 6 * MINUTO })
     )
 
-    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-1" })
+    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-1", plan: "equipo" })
   })
 
   it("un token sin fecha de emisión no sobrevive a un restablecimiento", async () => {
@@ -228,7 +230,7 @@ describe("sesiones revocables (lib/auth.ts, callback jwt)", () => {
   })
 
   it("el rubro del negocio llega a la sesión y al actor al revalidar", async () => {
-    const clinica = { id: "negocio-1", name: "Clínica Aurora", slug: "clinica-aurora", type: "odontologia" }
+    const clinica = { id: "negocio-1", name: "Clínica Aurora", slug: "clinica-aurora", type: "odontologia", plan: "equipo" }
     prismaMock.user.findUnique.mockResolvedValueOnce(
       usuarioMiembro("worker", { memberships: [{ id: "miembro-1", role: "worker", business: clinica }] })
     )
@@ -236,21 +238,21 @@ describe("sesiones revocables (lib/auth.ts, callback jwt)", () => {
     const { token, actor } = await leerSesion(tokenDeProfesional(6))
 
     expect(token.rubro).toBe("odontologia")
-    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-1", rubro: "odontologia" })
+    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-1", rubro: "odontologia", plan: "equipo" })
   })
 
   it("el rubro es el del negocio del contexto elegido, nunca el de otro contexto de la cuenta", async () => {
-    const propio = { id: "negocio-3", name: "Salón Tres", slug: "salon-tres", type: "salon" }
-    const clinicaAjena = { id: "negocio-1", name: "Clínica", slug: "clinica", type: "odontologia" }
+    const propio = { id: "negocio-3", name: "Salón Tres", slug: "salon-tres", type: "salon", plan: "independiente" }
+    const clinicaAjena = { id: "negocio-1", name: "Clínica", slug: "clinica", type: "odontologia", plan: "equipo" }
     const usuario = usuarioMiembro("worker", { business: propio, memberships: [{ id: "miembro-1", role: "worker", business: clinicaAjena }] })
 
     prismaMock.user.findUnique.mockResolvedValueOnce(usuario)
     const comoDueña = await leerSesion(tokenDeProfesional(6, { contexto: "dueño:negocio-3" }))
-    expect(comoDueña.actor).toEqual({ rol: "owner", businessId: "negocio-3", memberId: null, rubro: "salon" })
+    expect(comoDueña.actor).toEqual({ rol: "owner", businessId: "negocio-3", memberId: null, rubro: "salon", plan: "independiente" })
 
     prismaMock.user.findUnique.mockResolvedValueOnce(usuario)
     const comoOdontologa = await leerSesion(tokenDeProfesional(6, { contexto: "miembro:miembro-1" }))
-    expect(comoOdontologa.actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-1", rubro: "odontologia" })
+    expect(comoOdontologa.actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-1", rubro: "odontologia", plan: "equipo" })
   })
 
   it("un token de antes del rubro sigue valiendo, sin rubro (no dental), hasta la próxima revalidación", async () => {
@@ -258,7 +260,7 @@ describe("sesiones revocables (lib/auth.ts, callback jwt)", () => {
 
     expect(prismaMock.user.findUnique).not.toHaveBeenCalled()
     expect(token.rubro).toBeUndefined()
-    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-1" })
+    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-1", plan: null })
   })
 
   it("al quedarse sin negocio, el token pierde también el rubro", async () => {
@@ -279,6 +281,144 @@ describe("sesiones revocables (lib/auth.ts, callback jwt)", () => {
     } as unknown as Parameters<NonNullable<typeof jwt>>[0])) as JWT
 
     expect(token.rubro).toBe("odontologia")
+  })
+
+  it("el plan del negocio llega al token, a la sesión y al actor al revalidar", async () => {
+    const independiente = { id: "negocio-1", name: "Spa Ana", slug: "spa-ana", type: "salon", plan: "independiente" }
+    prismaMock.user.findUnique.mockResolvedValueOnce(usuarioMiembro("worker", { business: independiente, memberships: [] }))
+
+    const { token, actor } = await leerSesion(tokenDeProfesional(6, { contexto: "dueño:negocio-1" }))
+
+    expect(token.plan).toBe("independiente")
+    expect(actor).toEqual({ rol: "owner", businessId: "negocio-1", memberId: null, rubro: "salon", plan: "independiente" })
+  })
+
+  it("la sesión lleva el plan en session.user.plan", async () => {
+    const { session } = await callbacks()
+    const sesion = await session!({
+      session: { user: { name: "Carla", email: "carla@x.com" }, expires: "" },
+      token: tokenDeProfesional(1, { plan: "equipo" }),
+    } as unknown as Parameters<NonNullable<typeof session>>[0])
+
+    expect((sesion as Session).user.plan).toBe("equipo")
+  })
+
+  it("el plan es el del negocio del contexto elegido: una clínica Equipo y su propio negocio Independiente, cada uno con lo suyo", async () => {
+    const usuario = usuarioMiembro("worker", {
+      business: { id: "negocio-3", name: "Salón Tres", slug: "salon-tres", type: "salon", plan: "independiente" },
+      memberships: [{ id: "miembro-1", role: "admin", business: { id: "negocio-1", name: "Clínica", slug: "clinica", type: "odontologia", plan: "equipo" } }],
+    })
+
+    prismaMock.user.findUnique.mockResolvedValueOnce(usuario)
+    const comoDueña = await leerSesion(tokenDeProfesional(6, { contexto: "dueño:negocio-3" }))
+    expect(comoDueña.token.plan).toBe("independiente")
+    expect(puedeGestionarSedes(comoDueña.actor)).toBe(true)
+    expect(puedeInvitarAlEquipo(comoDueña.actor)).toBe(false)
+
+    prismaMock.user.findUnique.mockResolvedValueOnce(usuario)
+    const comoEncargada = await leerSesion(tokenDeProfesional(6, { contexto: "miembro:miembro-1" }))
+    expect(comoEncargada.token.plan).toBe("equipo")
+    expect(puedeInvitarAlEquipo(comoEncargada.actor)).toBe(true)
+    expect(puedeGestionarSedes(comoEncargada.actor)).toBe(false)
+  })
+
+  it("un cambio de plan en la base se refleja en la siguiente revalidación", async () => {
+    const pasaAIndependiente = { ...negocio, plan: "independiente" }
+    prismaMock.user.findUnique.mockResolvedValueOnce(usuarioMiembro("worker", { business: pasaAIndependiente, memberships: [] }))
+
+    const { token, actor } = await leerSesion(tokenDeProfesional(6, { contexto: "dueño:negocio-1", plan: "equipo" }))
+
+    expect(token.plan).toBe("independiente")
+    expect(puedeInvitarAlEquipo(actor)).toBe(false)
+    expect(puedeGestionarSedes(actor)).toBe(true)
+    expect(puedeCambiarDePlan(actor)).toBe(true)
+  })
+
+  it.each([
+    ["uno que la base no conoce", "pro"],
+    ["con otras mayúsculas", "Equipo"],
+    ["vacío", ""],
+    ["sin plan", null],
+    ["algo que no es texto", { id: "equipo" }],
+  ])("un plan %s queda en null y no habilita nada que dependa del plan (falla cerrado)", async (_caso, plan) => {
+    const raro = { id: "negocio-1", name: "Spa Ana", slug: "spa-ana", type: "salon", plan }
+    prismaMock.user.findUnique.mockResolvedValueOnce(usuarioMiembro("worker", { business: raro, memberships: [] }))
+
+    const { token, actor } = await leerSesion(tokenDeProfesional(6, { contexto: "dueño:negocio-1", plan: "equipo" }))
+
+    expect(token.plan).toBeNull()
+    expect(actor).toMatchObject({ rol: "owner", businessId: "negocio-1", plan: null })
+    expect(puedeInvitarAlEquipo(actor)).toBe(false)
+    expect(puedeGestionarSedes(actor)).toBe(false)
+  })
+
+  it("un token de antes del plan sigue valiendo, con plan null (no invita, no tiene sedes), hasta la próxima revalidación", async () => {
+    const { token, actor } = await leerSesion(tokenDeProfesional(4, { role: "owner", memberId: undefined }))
+
+    expect(prismaMock.user.findUnique).not.toHaveBeenCalled()
+    expect(token.plan).toBeUndefined()
+    expect(actor).toMatchObject({ rol: "owner", plan: null })
+    expect(puedeInvitarAlEquipo(actor)).toBe(false)
+    expect(puedeGestionarSedes(actor)).toBe(false)
+  })
+
+  it("al quedarse sin negocio, el token pierde también el plan", async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce(usuarioMiembro("worker", { memberships: [] }))
+
+    const { token } = await leerSesion(tokenDeProfesional(6, { plan: "equipo" }))
+
+    expect(token.plan).toBeNull()
+  })
+
+  it("la consulta pide el plan del negocio propio y el de cada membresía: se repone de la base en cada revalidación", async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce(usuarioMiembro("worker"))
+
+    await leerSesion(tokenDeProfesional(6))
+
+    const { include } = prismaMock.user.findUnique.mock.calls[0][0]
+    expect(include.business.select.plan).toBe(true)
+    expect(include.memberships.select.business.select.plan).toBe(true)
+  })
+
+  it("el login con credenciales lleva el plan que devolvió `authorize`", async () => {
+    const { jwt } = await callbacks()
+    const token = (await jwt!({
+      token: { email: "carla@x.com" },
+      user: { id: "usuario-1", name: "Carla", email: "carla@x.com", role: "owner", businessId: "negocio-1", plan: "independiente", memberId: null },
+      account: { provider: "credentials", type: "credentials", providerAccountId: "usuario-1" },
+      trigger: "signIn",
+    } as unknown as Parameters<NonNullable<typeof jwt>>[0])) as JWT
+
+    expect(token.plan).toBe("independiente")
+  })
+
+  it("el login con credenciales no guarda un plan que no es de la lista", async () => {
+    const { jwt } = await callbacks()
+    const token = (await jwt!({
+      token: { email: "carla@x.com" },
+      user: { id: "usuario-1", name: "Carla", email: "carla@x.com", role: "owner", businessId: "negocio-1", plan: "pro", memberId: null },
+      account: { provider: "credentials", type: "credentials", providerAccountId: "usuario-1" },
+      trigger: "signIn",
+    } as unknown as Parameters<NonNullable<typeof jwt>>[0])) as JWT
+
+    expect(token.plan).toBeNull()
+  })
+
+  it("el login con Google arma el plan desde la base", async () => {
+    const { jwt } = await callbacks()
+    prismaMock.user.findUnique.mockResolvedValueOnce(
+      usuarioMiembro("worker", { business: { ...negocio, type: "salon", plan: "independiente" }, memberships: [] })
+    )
+
+    const token = (await jwt!({
+      token: { email: "carla@x.com" },
+      user: { id: "g-1", email: "carla@x.com" },
+      account: cuentaGoogle,
+      trigger: "signIn",
+    } as unknown as Parameters<NonNullable<typeof jwt>>[0])) as JWT
+
+    expect(token.plan).toBe("independiente")
+    expect(token.businessId).toBe("negocio-1")
   })
 
   it("el login con credenciales marca la emisión y la revalidación", async () => {
@@ -304,8 +444,6 @@ describe("sesiones revocables (lib/auth.ts, callback jwt)", () => {
     expect(prismaMock.user.findUnique).not.toHaveBeenCalled()
   })
 })
-
-const cuentaGoogle = { provider: "google", type: "oauth", providerAccountId: "g-1" }
 
 async function authorize(credenciales: Record<string, string>) {
   const { authOptions } = await import("./auth")
@@ -410,8 +548,8 @@ describe("emails de cuenta normalizados en el login (B4)", () => {
 
 // ─── Contextos: una cuenta en varios negocios (PRODUCTO.md, sección 5) ──────
 
-const salonPropio = { id: "negocio-3", name: "Salón Tres", slug: "salon-tres", type: "salon" }
-const clinica = { id: "negocio-1", name: "Clínica Aurora", slug: "clinica-aurora", type: "odontologia" }
+const salonPropio = { id: "negocio-3", name: "Salón Tres", slug: "salon-tres", type: "salon", plan: "independiente" }
+const clinica = { id: "negocio-1", name: "Clínica Aurora", slug: "clinica-aurora", type: "odontologia", plan: "equipo" }
 
 /** Dueña del Salón Tres, profesional en la Clínica y además profesional en su propio salón. */
 function dueñaEnVariosNegocios(extra: Record<string, unknown> = {}) {
@@ -453,7 +591,7 @@ describe("contextos de la cuenta (lib/auth.ts)", () => {
 
     const { token, actor } = await leerSesion(tokenDeProfesional(6, { contexto: undefined }))
 
-    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-1" })
+    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-1", plan: "equipo" })
     expect(token.contexto).toBe("miembro:miembro-1")
     expect(token.contextos).toBe(1)
   })
@@ -476,12 +614,12 @@ describe("contextos de la cuenta (lib/auth.ts)", () => {
 
     prismaMock.user.findUnique.mockResolvedValueOnce(usuario)
     const comoDueña = await actualizarSesion(tokenDeProfesional(1, { contexto: null }), { contexto: "dueño:negocio-3" })
-    expect(comoDueña.actor).toEqual({ rol: "owner", businessId: "negocio-3", memberId: null, rubro: "salon" })
+    expect(comoDueña.actor).toEqual({ rol: "owner", businessId: "negocio-3", memberId: null, rubro: "salon", plan: "independiente" })
 
     prismaMock.user.findUnique.mockResolvedValueOnce(usuario)
     const comoProfesional = await actualizarSesion(comoDueña.token, { contexto: "miembro:miembro-propio" })
     // Profesional a todos los efectos: rol worker y su memberId, en su propio negocio.
-    expect(comoProfesional.actor).toEqual({ rol: "worker", businessId: "negocio-3", memberId: "miembro-propio", rubro: "salon" })
+    expect(comoProfesional.actor).toEqual({ rol: "worker", businessId: "negocio-3", memberId: "miembro-propio", rubro: "salon", plan: "independiente" })
     expect(comoProfesional.sesion.user.contexto).toBe("miembro:miembro-propio")
     expect(comoProfesional.sesion.user.contextos).toBe(3)
   })
@@ -492,7 +630,7 @@ describe("contextos de la cuenta (lib/auth.ts)", () => {
     const { actor } = await actualizarSesion(tokenDeProfesional(0, { contexto: "dueño:negocio-3" }), { contexto: "miembro:miembro-clinica" })
 
     expect(prismaMock.user.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "usuario-1" } }))
-    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-clinica", rubro: "odontologia" })
+    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-clinica", rubro: "odontologia", plan: "equipo" })
   })
 
   it.each([
@@ -505,7 +643,7 @@ describe("contextos de la cuenta (lib/auth.ts)", () => {
 
     const { token, actor } = await actualizarSesion(tokenDeProfesional(0, { contexto: "miembro:miembro-clinica" }), { contexto: pedido })
 
-    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-clinica", rubro: "odontologia" })
+    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-clinica", rubro: "odontologia", plan: "equipo" })
     expect(token.contexto).toBe("miembro:miembro-clinica")
   })
 
@@ -518,7 +656,37 @@ describe("contextos de la cuenta (lib/auth.ts)", () => {
       memberId: "miembro-ajeno",
     })
 
-    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-clinica", rubro: "odontologia" })
+    expect(actor).toEqual({ rol: "worker", businessId: "negocio-1", memberId: "miembro-clinica", rubro: "odontologia", plan: "equipo" })
+  })
+
+  it("el plan que mande el navegador con update() no se usa: manda la base", async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce(dueñaEnVariosNegocios())
+
+    const { token, actor } = await actualizarSesion(tokenDeProfesional(0, { contexto: "dueño:negocio-3", plan: "independiente" }), {
+      contexto: "dueño:negocio-3",
+      plan: "equipo",
+    })
+
+    expect(token.plan).toBe("independiente")
+    expect(actor).toMatchObject({ rol: "owner", businessId: "negocio-3", plan: "independiente" })
+    expect(puedeInvitarAlEquipo(actor)).toBe(false)
+  })
+
+  it("al cambiar de contexto con update(), el plan cambia con el negocio, nunca queda el del anterior", async () => {
+    const usuario = dueñaEnVariosNegocios()
+
+    prismaMock.user.findUnique.mockResolvedValueOnce(usuario)
+    const enSalon = await actualizarSesion(tokenDeProfesional(0, { contexto: null }), { contexto: "dueño:negocio-3" })
+    expect(enSalon.sesion.user.plan).toBe("independiente")
+
+    prismaMock.user.findUnique.mockResolvedValueOnce(usuario)
+    const enClinica = await actualizarSesion(enSalon.token, { contexto: "miembro:miembro-clinica" })
+    expect(enClinica.sesion.user.plan).toBe("equipo")
+    expect(enClinica.actor).toMatchObject({ businessId: "negocio-1", plan: "equipo" })
+
+    prismaMock.user.findUnique.mockResolvedValueOnce(usuario)
+    const deVueltaEnSalon = await actualizarSesion(enClinica.token, { contexto: "dueño:negocio-3" })
+    expect(deVueltaEnSalon.sesion.user.plan).toBe("independiente")
   })
 
   it("si borran la membresía del contexto elegido, falla cerrado: sin negocio y a elegir de nuevo", async () => {
@@ -574,7 +742,7 @@ describe("contextos de la cuenta (lib/auth.ts)", () => {
 
     const { actor } = await actualizarSesion(tokenDeProfesional(0, { contexto: null }), { contexto: "miembro:miembro-b" })
 
-    expect(actor).toEqual({ rol: "admin", businessId: "negocio-2", memberId: "miembro-b" })
+    expect(actor).toEqual({ rol: "admin", businessId: "negocio-2", memberId: "miembro-b", plan: "equipo" })
   })
 
   it("si deja de ser dueña, el contexto de dueña deja de valer aunque el token lo traiga", async () => {

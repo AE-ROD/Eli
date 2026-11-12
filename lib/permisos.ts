@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client"
 import type { Session } from "next-auth"
 import { esEstadoActivo } from "@/lib/atenciones"
+import { planConocido, type PlanId } from "@/lib/planes"
 import { esRubroDental } from "@/lib/rubros"
 
 /**
@@ -24,6 +25,14 @@ export interface Actor {
    * armado sin rubro, o una sesión de antes de este campo, no ve nada clínico.
    */
   rubro?: string
+  /**
+   * El plan del negocio (`Business.plan`, `lib/planes.ts`), de la sesión.
+   * `actorDeSesion` siempre lo trae: `null` si la sesión no lo tiene o no es un
+   * plan conocido. Opcional en el tipo para los actores armados a mano
+   * (pruebas): ausente cuenta igual que `null`. Sin plan no se habilita nada
+   * que dependa de él (`puedeInvitarAlEquipo`, `puedeGestionarSedes`).
+   */
+  plan?: PlanId | null
 }
 
 /** Miembro sobre el que se decide algo. Trae su negocio para poder validarlo. */
@@ -39,7 +48,7 @@ const ROLES: readonly string[] = ["owner", "admin", "worker"]
  * viejo o mal formado no debe producir un actor.
  */
 export function actorDeSesion(session: Pick<Session, "user"> | null | undefined): Actor | null {
-  const { role, businessId, memberId, rubro } = (session?.user ?? {}) as Record<string, unknown>
+  const { role, businessId, memberId, rubro, plan } = (session?.user ?? {}) as Record<string, unknown>
 
   if (typeof role !== "string" || !ROLES.includes(role)) return null
   if (typeof businessId !== "string" || !businessId) return null
@@ -50,6 +59,8 @@ export function actorDeSesion(session: Pick<Session, "user"> | null | undefined)
     memberId: typeof memberId === "string" && memberId ? memberId : null,
     // Sólo si es texto: lo demás queda fuera y el negocio no es dental.
     ...(typeof rubro === "string" && rubro ? { rubro } : {}),
+    // Un plan que no es de la lista (o una sesión de antes del campo) es null.
+    plan: planConocido(plan),
   }
 }
 
@@ -532,6 +543,43 @@ export const puedeVerPantallaDeFila = (actor: Actor | null): boolean => gestiona
  * profesional no: la fila es de todo el negocio. Falla cerrado.
  */
 export const puedeVaciarFilaVirtual = (actor: Actor | null): boolean => gestionaElNegocio(actor) && !esClinicaDental(actor)
+
+// ─── Planes y sedes (etapa 9) ────────────────────────────────────────────────
+//
+// El plan viene de la sesión (`Actor.plan`), que `lib/auth.ts` arma desde la
+// base: nunca de lo que mande el navegador. Un plan ausente (`null`, o un actor
+// armado sin él) o desconocido no habilita nada que dependa del plan: se
+// compara con `=== "equipo"` / `=== "independiente"`, nunca con `!== otro`.
+// Una misma cuenta puede estar en una clínica Equipo y ser dueña de su negocio
+// Independiente: son contextos distintos (`lib/contextos.ts`) y cada actor
+// trae el plan de SU negocio.
+
+/**
+ * Invitar a alguien al equipo (crear la invitación, reenviarla): quien ya
+ * gestiona el equipo (`puedeGestionarEquipo`) y sólo en un negocio del plan
+ * Equipo. Un negocio Independiente atiende sólo la dueña y no invita a nadie.
+ * Ver y gestionar la lista del equipo no depende del plan.
+ */
+export const puedeInvitarAlEquipo = (actor: Actor | null): boolean =>
+  puedeGestionarEquipo(actor) && actor?.plan === "equipo"
+
+/**
+ * Si hay que explicar que el plan del negocio no incluye equipo ("Tu plan es
+ * Independiente…" en Equipo y en los precios). Es para EXPLICAR, no para
+ * habilitar nada: un plan ausente o desconocido no dice nada (`false`), así que
+ * una sesión de antes del campo no muestra un aviso que podría estar mal.
+ */
+export const elPlanNoIncluyeEquipo = (actor: Actor | null): boolean => actor?.plan === "independiente"
+
+/**
+ * Crear, editar y desactivar las sedes del negocio y su horario por día: sólo
+ * la dueña y sólo en el plan Independiente. El plan Equipo tiene una sola
+ * sede, la dirección del negocio.
+ */
+export const puedeGestionarSedes = (actor: Actor | null): boolean => esDueño(actor) && actor?.plan === "independiente"
+
+/** Cambiar el plan del negocio: lo paga la dueña, así que sólo ella. */
+export const puedeCambiarDePlan = esDueño
 
 // ─── Clínica dental (rubro "odontologia") ────────────────────────────────────
 //
@@ -1168,4 +1216,20 @@ export function whereDeSillones(
   extra: Prisma.SillonWhereInput = {}
 ): Prisma.SillonWhereInput {
   return { AND: [filtroClinico(actor, veSillones), extra] }
+}
+
+/**
+ * Las sedes son del negocio, no de quien las ve: todo rol las ve (el profesional
+ * las necesita en la agenda y en lo que anota). Quién las gestiona lo decide
+ * `puedeGestionarSedes`, no este filtro. Sin actor, nada. No se exporta, igual
+ * que `filtroDeAgenda`.
+ */
+function filtroDeSedes(actor: Actor | null): Prisma.SedeWhereInput {
+  if (!actor) return NADA
+  return { businessId: actor.businessId }
+}
+
+/** Igual que `whereDeAgenda`, para las sedes. */
+export function whereDeSedes(actor: Actor | null, extra: Prisma.SedeWhereInput = {}): Prisma.SedeWhereInput {
+  return { AND: [filtroDeSedes(actor), extra] }
 }

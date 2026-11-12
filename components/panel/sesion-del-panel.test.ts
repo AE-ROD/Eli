@@ -13,6 +13,7 @@ const DEL_SERVIDOR: Session = {
     businessName: "Salón Ana",
     businessSlug: "salon-ana",
     rubro: null,
+    plan: null,
     memberId: null,
     contexto: "c1",
     contextos: 1,

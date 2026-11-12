@@ -2,10 +2,16 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { actorDeSesion, puedeGestionarEquipo } from "@/lib/permisos"
+import { actorDeSesion, puedeGestionarEquipo, puedeInvitarAlEquipo } from "@/lib/permisos"
 import { verificarLimite } from "@/lib/rate-limit"
 import { registrarError } from "@/lib/registro-de-errores"
-import { CAMPOS_DE_INVITACION, claveDeReenvio, enlaceNuevo, mandarCorreoDeInvitacion } from "@/lib/invitaciones-de-equipo"
+import {
+  CAMPOS_DE_INVITACION,
+  claveDeReenvio,
+  enlaceNuevo,
+  ERROR_PLAN_NO_INVITA,
+  mandarCorreoDeInvitacion,
+} from "@/lib/invitaciones-de-equipo"
 
 /**
  * POST /api/equipo/pendientes/[id]/reenviar — manda de nuevo una invitación
@@ -18,6 +24,11 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
 
   if (!actor || !puedeGestionarEquipo(actor)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  }
+  // Reenviar manda un correo en nombre del equipo: sólo donde se puede invitar.
+  // (Anular una invitación, en cambio, no depende del plan.)
+  if (!puedeInvitarAlEquipo(actor)) {
+    return NextResponse.json({ error: ERROR_PLAN_NO_INVITA }, { status: 403 })
   }
 
   const { id } = await params

@@ -17,7 +17,7 @@
  */
 
 import { seLlamaHora } from "@/app/dashboard/_frases"
-import { concordar, el, todoDe } from "@/lib/concordancia"
+import { concordar, del, el, todoDe } from "@/lib/concordancia"
 import { conMayuscula, type PalabrasDelRubro } from "@/lib/vocabulario"
 
 /** Un rol del equipo, como lo cuenta el modal de los planes: su nombre y lo que puede hacer. */
@@ -69,6 +69,10 @@ export function frasesDelPanel(palabras: PalabrasDelRubro) {
       independiente: `Tu agenda, tu página de reservas, ${el(tablero)} del día y los reportes. Todo Eli, para ti.`,
       /** "¿Sumas a alguien? Te pasas a Equipo y tu agenda, tus clientes y tu historial siguen ahí." */
       sumarAlguien: `¿Sumas a alguien? Te pasas a Equipo y tu agenda, tus ${cliente.plural} y tu historial siguen ahí.`,
+      /** Lo que distingue a Independiente: varias sedes, cada una con su horario por día. */
+      variasSedes: "Si trabajas en más de un lugar, agrega hasta 5 sedes, cada una con su dirección y los días y horas en que estás ahí.",
+      /** Lo que distingue a Equipo: una sola sede. "Una sola sede: la dirección del salón." */
+      unaSede: `Una sola sede: la dirección ${del(negocio)}.`,
       /** "Para el negocio con equipo" / "Para el salón con equipo" / "Para la clínica con equipo". */
       paraElNegocioConEquipo: `Para ${el(negocio)} con equipo`,
       /** "Tú, tu encargado y tus profesionales, cada uno con su rol." ("cada uno": el grupo mezcla géneros.) */

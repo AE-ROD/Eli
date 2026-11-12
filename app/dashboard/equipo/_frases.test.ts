@@ -117,3 +117,26 @@ describe("la concordancia sale del género y no de las palabras de hoy: un traba
     expect(f.subtitulo).toBe("Gestiona el equipo de tu taller")
   })
 })
+
+describe("el plan Independiente no tiene equipo", () => {
+  it("sin rubro: las palabras neutras", () => {
+    const f = frasesDeEquipo(NEUTRAS).sinEquipoPorElPlan
+    expect(f.titulo).toBe("Tu plan es Independiente: atiendes tú solo")
+    expect(f.descripcion).toBe(
+      "Para invitar a tu encargado o a tus profesionales, pasa al plan Equipo. Tu agenda, tus clientes y tu historial siguen ahí."
+    )
+  })
+
+  it.each([
+    ["salon", "a tus estilistas", "tus clientes"],
+    ["odontologia", "a tus odontólogos", "tus pacientes"],
+  ])("%s: nombra a quien atiende y a quien se atiende con las palabras del rubro", (rubro, profesionales, clientes) => {
+    const { descripcion } = frasesDeEquipo(palabrasDe(rubro)).sinEquipoPorElPlan
+    expect(descripcion).toContain(profesionales)
+    expect(descripcion).toContain(clientes)
+  })
+
+  it("con otros géneros no cambia nada que dependa de un artículo pegado a mano", () => {
+    expect(frasesDeEquipo(AL_REVES).sinEquipoPorElPlan.descripcion).toContain("a tus maestras")
+  })
+})

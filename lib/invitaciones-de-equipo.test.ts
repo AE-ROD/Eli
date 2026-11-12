@@ -4,6 +4,8 @@ import {
   DIAS_DE_VIGENCIA,
   claveDeReenvio,
   enlaceNuevo,
+  ERROR_PLAN_NO_INVITA,
+  esRechazoPorPlan,
   estaVencida,
   mandarCorreoDeInvitacion,
   vencimientoDesde,
@@ -83,5 +85,24 @@ describe("mandarCorreoDeInvitacion", () => {
 
     await expect(mandarCorreoDeInvitacion(datos)).resolves.toBeUndefined()
     expect(mockEnviarInvitacion).not.toHaveBeenCalled()
+  })
+})
+
+describe("esRechazoPorPlan", () => {
+  it("reconoce el rechazo del trigger que sólo deja invitar al plan Equipo", () => {
+    expect(esRechazoPorPlan(new Error("23514: invitaciones inv-1: sólo el plan Equipo invita"))).toBe(true)
+  })
+
+  it.each([
+    ["otro error de la base", new Error("Unique constraint failed on the fields: (`tokenHash`)")],
+    ["un texto suelto", "sólo el plan Equipo invita"],
+    ["null", null],
+    ["undefined", undefined],
+  ])("%s no es un rechazo por plan", (_caso, error) => {
+    expect(esRechazoPorPlan(error)).toBe(false)
+  })
+
+  it("el mensaje para quien lo recibe manda al plan Equipo", () => {
+    expect(ERROR_PLAN_NO_INVITA).toMatch(/plan Equipo/)
   })
 })

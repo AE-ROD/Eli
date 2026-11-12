@@ -5,12 +5,14 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { email as campoEmail, nombre as campoNombre } from "@/lib/campos-del-panel"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
-import { actorDeSesion, puedeGestionarEquipo } from "@/lib/permisos"
+import { actorDeSesion, puedeGestionarEquipo, puedeInvitarAlEquipo } from "@/lib/permisos"
 import { verificarLimite } from "@/lib/rate-limit"
 import {
   CAMPOS_DE_INVITACION,
   claveDeReenvio,
   enlaceNuevo,
+  ERROR_PLAN_NO_INVITA,
+  esRechazoPorPlan,
   estaVencida,
   mandarCorreoDeInvitacion,
 } from "@/lib/invitaciones-de-equipo"
@@ -66,6 +68,11 @@ export async function POST(request: NextRequest) {
 
   if (!actor || !puedeGestionarEquipo(actor)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  }
+  // Gestiona el equipo, pero su negocio no es del plan Equipo (o la sesión no
+  // dice el plan): no invita. Va antes de leer el cuerpo ni tocar la base.
+  if (!puedeInvitarAlEquipo(actor)) {
+    return NextResponse.json({ error: ERROR_PLAN_NO_INVITA }, { status: 403 })
   }
 
   try {
@@ -169,6 +176,10 @@ export async function POST(request: NextRequest) {
     if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       return respuestaDeDatosInvalidos(error)
+    }
+    // Segunda barrera: la base rechazó la invitación porque el negocio ya no es Equipo.
+    if (esRechazoPorPlan(error)) {
+      return NextResponse.json({ error: ERROR_PLAN_NO_INVITA }, { status: 403 })
     }
     registrarError("invitando al equipo", error)
     return NextResponse.json({ error: "Error interno" }, { status: 500 })

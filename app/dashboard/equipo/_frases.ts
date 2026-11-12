@@ -37,6 +37,18 @@ export function frasesDeEquipo(palabras: PalabrasDelRubro) {
       ayuda: `Usa el botón “Invitar al equipo” para sumar a tu encargado o a tus ${profesional.plural}.`,
     },
 
+    /**
+     * Lo que se dice en lugar de la lista cuando el plan del negocio es
+     * Independiente: atiende sólo la dueña y no invita a nadie.
+     */
+    sinEquipoPorElPlan: {
+      titulo: "Tu plan es Independiente: atiendes tú solo",
+      /** "Para invitar a tu encargado o a tus profesionales, pasa al plan Equipo. Tu agenda, tus clientes y tu historial siguen ahí." */
+      descripcion: `Para invitar a tu encargado o a tus ${profesional.plural}, pasa al plan Equipo. Tu agenda, tus ${cliente.plural} y tu historial siguen ahí.`,
+      verMiPlan: "Ver mi plan",
+      verPrecios: "Ver los precios",
+    },
+
     /** Los servicios de cada integrante. */
     servicios: {
       /** El botón de la fila y el título del grupo: "Servicios que hace" / "Prestaciones que hace". */

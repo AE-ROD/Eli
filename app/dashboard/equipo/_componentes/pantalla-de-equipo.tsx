@@ -8,7 +8,13 @@ import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
-import { actorDeSesion, puedeEditarFotoDelMiembro, puedeGestionarEquipo } from "@/lib/permisos"
+import {
+  actorDeSesion,
+  elPlanNoIncluyeEquipo,
+  puedeCambiarDePlan,
+  puedeEditarFotoDelMiembro,
+  puedeInvitarAlEquipo,
+} from "@/lib/permisos"
 import { vocabularioDe } from "@/lib/vocabulario"
 import {
   anularInvitacion,
@@ -21,15 +27,20 @@ import { frasesDeEquipo } from "../_frases"
 import { ListaEquipo } from "./lista-equipo"
 import { ModalFotoDelMiembro } from "./modal-foto-del-miembro"
 import { ModalInvitar } from "./modal-invitar"
+import { PlanSinEquipo } from "./plan-sin-equipo"
 import { ModalServiciosDelMiembro } from "./modal-servicios-del-miembro"
 
 export function PantallaDeEquipo() {
   const { data: sesion } = useSession()
-  // Invitar es de quien gestiona el equipo (la API ya rechaza al resto). A
-  // quien no lo gestiona la página ya lo devolvió al panel (#49); mientras la
-  // sesión carga, el botón tampoco se ofrece: falla cerrado.
+  // Invitar es de quien gestiona el equipo, y sólo en un negocio del plan
+  // Equipo (la API ya rechaza al resto). A quien no gestiona el equipo la
+  // página ya lo devolvió al panel (#49); mientras la sesión carga, o si no
+  // dice el plan, el botón tampoco se ofrece: falla cerrado.
   const actor = actorDeSesion(sesion)
-  const invita = puedeGestionarEquipo(actor)
+  const invita = puedeInvitarAlEquipo(actor)
+  // Sólo para explicar por qué no hay a quién invitar: un plan que no se
+  // conoce no afirma nada.
+  const sinEquipoPorElPlan = elPlanNoIncluyeEquipo(actor)
   const frases = frasesDeEquipo(vocabularioDe(useRubroDelPanel()).palabras)
   const [miembros, setMiembros] = useState<MiembroDelEquipo[]>([])
   const [invitaciones, setInvitaciones] = useState<InvitacionPendiente[]>([])
@@ -135,24 +146,33 @@ export function PantallaDeEquipo() {
           </Aviso>
         )}
 
-        <ListaEquipo
-          miembros={miembros}
-          invitaciones={invitaciones}
-          cargando={cargando}
-          ahora={ahora}
-          reenviandoId={reenviandoId}
-          alReenviar={pedirReenviar}
-          alAnular={pedirAnular}
-          alEditarServicios={(miembro) => {
-            setAvisoListo("")
-            setServiciosDe(miembro)
-          }}
-          puedeCambiarLaFotoDe={(miembro) => puedeEditarFotoDelMiembro(actor, miembro)}
-          alEditarFoto={(miembro) => {
-            setAvisoListo("")
-            setFotoDeId(miembro.id)
-          }}
-        />
+        {sinEquipoPorElPlan && <PlanSinEquipo puedeCambiarDePlan={puedeCambiarDePlan(actor)} />}
+
+        {/*
+          En el plan Independiente no hay equipo que listar: la explicación
+          ocupa su lugar. Si igual hubiera alguien (una invitación que quedó
+          de antes de un cambio de plan), se muestra y se puede anular.
+        */}
+        {(!sinEquipoPorElPlan || miembros.length > 0 || invitaciones.length > 0) && (
+          <ListaEquipo
+            miembros={miembros}
+            invitaciones={invitaciones}
+            cargando={cargando}
+            ahora={ahora}
+            reenviandoId={reenviandoId}
+            alReenviar={pedirReenviar}
+            alAnular={pedirAnular}
+            alEditarServicios={(miembro) => {
+              setAvisoListo("")
+              setServiciosDe(miembro)
+            }}
+            puedeCambiarLaFotoDe={(miembro) => puedeEditarFotoDelMiembro(actor, miembro)}
+            alEditarFoto={(miembro) => {
+              setAvisoListo("")
+              setFotoDeId(miembro.id)
+            }}
+          />
+        )}
       </div>
 
       <AnimatePresence>

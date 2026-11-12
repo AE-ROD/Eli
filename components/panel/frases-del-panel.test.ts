@@ -51,6 +51,10 @@ describe("sin rubro: exactamente los textos de siempre", () => {
     expect(f.precios.sumarAlguien).toBe("¿Sumas a alguien? Te pasas a Equipo y tu agenda, tus clientes y tu historial siguen ahí.")
     expect(f.precios.paraElNegocioConEquipo).toBe("Para el negocio con equipo")
     expect(f.precios.equipo).toBe("Tú, tu encargado y tus profesionales, cada uno con su rol.")
+    expect(f.precios.variasSedes).toBe(
+      "Si trabajas en más de un lugar, agrega hasta 5 sedes, cada una con su dirección y los días y horas en que estás ahí."
+    )
+    expect(f.precios.unaSede).toBe("Una sola sede: la dirección del negocio.")
     expect(f.precios.roles).toEqual([
       { rol: "Dueño", texto: "Ve todo el negocio. El plan y el pago son solo tuyos." },
       { rol: "Encargado", texto: "Organiza la agenda, los servicios y el equipo. No cuenta como persona que atiende." },
@@ -78,6 +82,7 @@ describe("salón, barbería y salón de uñas", () => {
     })
     expect(salon.precios.roles[0].texto).toBe("Ve todo el salón. El plan y el pago son solo tuyos.")
     expect(salon.precios.paraElNegocioConEquipo).toBe("Para el salón con equipo")
+    expect(salon.precios.unaSede).toBe("Una sola sede: la dirección del salón.")
   })
 
   it("la barbería es femenina y su profesional, masculino", () => {
@@ -123,6 +128,7 @@ describe("clínica dental: pacientes, prestaciones, sala de espera", () => {
     )
     expect(f.precios.sumarAlguien).toContain("tus pacientes y tu historial")
     expect(f.precios.paraElNegocioConEquipo).toBe("Para la clínica con equipo")
+    expect(f.precios.unaSede).toBe("Una sola sede: la dirección de la clínica.")
     expect(f.precios.equipo).toBe("Tú, tu encargado y tus odontólogos, cada uno con su rol.")
     expect(f.precios.roles).toEqual([
       { rol: "Dueño", texto: "Ve toda la clínica. El plan y el pago son solo tuyos." },

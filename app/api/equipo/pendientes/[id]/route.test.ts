@@ -74,10 +74,12 @@ const prismaMock = {
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
 
 const sesiones = {
-  dueña: { user: { id: "u-duena", role: "owner", businessId: "negocio-1", businessName: "Salón Uno" } },
-  encargado: { user: { id: "u-enc", role: "admin", businessId: "negocio-1", businessName: "Salón Uno", memberId: "m-enc" } },
-  profesional: { user: { id: "u-pro", role: "worker", businessId: "negocio-1", businessName: "Salón Uno", memberId: "m-pro" } },
-  dueñoAjeno: { user: { id: "u-otro", role: "owner", businessId: "negocio-2", businessName: "Salón Dos" } },
+  dueña: { user: { id: "u-duena", role: "owner", businessId: "negocio-1", businessName: "Salón Uno", plan: "equipo" } },
+  encargado: { user: { id: "u-enc", role: "admin", businessId: "negocio-1", businessName: "Salón Uno", plan: "equipo", memberId: "m-enc" } },
+  profesional: { user: { id: "u-pro", role: "worker", businessId: "negocio-1", businessName: "Salón Uno", plan: "equipo", memberId: "m-pro" } },
+  dueñoAjeno: { user: { id: "u-otro", role: "owner", businessId: "negocio-2", businessName: "Salón Dos", plan: "equipo" } },
+  /** La dueña de un negocio Independiente: gestiona su equipo (vacío) pero no invita. */
+  independiente: { user: { id: "u-duena", role: "owner", businessId: "negocio-1", businessName: "Salón Uno", plan: "independiente" } },
 }
 
 const DIA = 24 * 60 * 60 * 1000
@@ -201,6 +203,24 @@ describe("POST /api/equipo/pendientes/[id]/reenviar", () => {
     expect(prismaMock.workerInvitation.findFirst).not.toHaveBeenCalled()
   })
 
+  it.each([
+    ["un negocio Independiente", sesiones.independiente],
+    ["una sesión sin plan", { user: { ...sesiones.dueña.user, plan: null } }],
+  ])("%s no reenvía: 403, sin correo y sin escribir nada", async (_quien, sesion) => {
+    const { POST } = await import("./reenviar/route")
+    const { enviarInvitacionTrabajador } = await import("@/lib/email")
+
+    mockGetServerSession.mockResolvedValueOnce(sesion)
+    const antes = copia()
+
+    const res = await POST(pedido, conId("vigente"))
+
+    expect(res.status).toBe(403)
+    expect(invitaciones).toEqual(antes)
+    expect(enviarInvitacionTrabajador).not.toHaveBeenCalled()
+    expect(prismaMock.workerInvitation.findFirst).not.toHaveBeenCalled()
+  })
+
   it("pasado el límite de reenvíos: 429, sin correo y el enlace sigue siendo el de antes", async () => {
     const { POST } = await import("./reenviar/route")
     const { enviarInvitacionTrabajador } = await import("@/lib/email")
@@ -220,6 +240,17 @@ describe("POST /api/equipo/pendientes/[id]/reenviar", () => {
 })
 
 describe("DELETE /api/equipo/pendientes/[id]", () => {
+  it("anular no depende del plan: un negocio Independiente puede limpiar una invitación que le quedó", async () => {
+    const { DELETE } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesiones.independiente)
+
+    const res = await DELETE(pedido, conId("vigente"))
+
+    expect(res.status).toBe(200)
+    expect(invitaciones.map((i) => i.id)).not.toContain("vigente")
+  })
+
   it.each([
     ["la dueña", sesiones.dueña],
     ["el encargado", sesiones.encargado],

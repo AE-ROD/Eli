@@ -71,6 +71,62 @@ describe("calcularPrecio", () => {
   })
 })
 
+describe("calcularPrecio con el plan del negocio", () => {
+  const INDEPENDIENTE = { plan: "independiente", montoBase: 9990, adicionales: 0, montoAdicional: 0, total: 9990 }
+
+  it("Independiente es siempre $9.990, con una persona o con las que lleguen", () => {
+    for (const personas of [1, 2, 5, 6, 30]) {
+      expect(calcularPrecio(personas, "independiente")).toEqual(INDEPENDIENTE)
+    }
+  })
+
+  it("Equipo con una sola persona cobra el precio base completo: $34.990, no $9.990", () => {
+    expect(calcularPrecio(1, "equipo")).toEqual({
+      plan: "equipo",
+      montoBase: 34990,
+      adicionales: 0,
+      montoAdicional: 0,
+      total: 34990,
+    })
+  })
+
+  it("Equipo incluye cinco personas y desde la sexta suma lo de siempre por cada una", () => {
+    expect(calcularPrecio(2, "equipo")).toMatchObject({ plan: "equipo", adicionales: 0, total: 34990 })
+    expect(calcularPrecio(5, "equipo")).toMatchObject({ adicionales: 0, total: 34990 })
+    expect(calcularPrecio(6, "equipo")).toEqual({
+      plan: "equipo",
+      montoBase: 34990,
+      adicionales: 1,
+      montoAdicional: 4990,
+      total: 39980,
+    })
+    expect(calcularPrecio(30, "equipo")).toMatchObject({ adicionales: 25, montoAdicional: 124750, total: 159740 })
+  })
+
+  it("sin plan (undefined, o null de una sesión sin plan) es lo de siempre, por cuántas personas son", () => {
+    for (const personas of [1, 2, 5, 6, 7, 30]) {
+      expect(calcularPrecio(personas, undefined)).toEqual(calcularPrecio(personas))
+      expect(calcularPrecio(personas, null)).toEqual(calcularPrecio(personas))
+    }
+    expect(calcularPrecio(1)).toMatchObject({ plan: "independiente", total: 9990 })
+    expect(calcularPrecio(2)).toMatchObject({ plan: "equipo", total: 34990 })
+  })
+
+  it("con plan igual rechaza las personas que no son un entero de 1 o más", () => {
+    for (const plan of ["independiente", "equipo"] as const) {
+      for (const invalida of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+        expect(() => calcularPrecio(invalida, plan)).toThrow(RangeError)
+      }
+    }
+  })
+
+  it("un plan que no existe no inventa un precio", () => {
+    for (const plan of ["pro", "Equipo", "", "clinica"]) {
+      expect(() => calcularPrecio(3, plan as never)).toThrow(RangeError)
+    }
+  })
+})
+
 describe("formatearPesos", () => {
   it("pone el punto de miles y ningún decimal", () => {
     expect(formatearPesos(9990)).toBe("$9.990")

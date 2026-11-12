@@ -1,5 +1,6 @@
 import type { Rol } from "@/lib/permisos"
 import { nombreDelRol } from "@/lib/nombres-de-roles"
+import { planConocido, type PlanId } from "@/lib/planes"
 import { nombreDeRubro } from "@/lib/rubros"
 
 /**
@@ -26,6 +27,13 @@ export interface NegocioDeContexto {
   slug: string
   /** `Business.type`. Puede faltar en un usuario armado a mano (pruebas): queda sin rubro, no dental. */
   type?: string | null
+  /**
+   * `Business.plan`. Puede faltar en un usuario armado a mano (pruebas) y la
+   * base sólo guarda ids de plan, pero igual se valida: lo que no es un plan
+   * conocido queda en `null` (`planConocido`), que no habilita nada que dependa
+   * del plan.
+   */
+  plan?: string | null
 }
 
 /** Lo que hace falta del usuario: su negocio propio y sus membresías, con su negocio. */
@@ -42,6 +50,13 @@ export interface Contexto {
   businessName: string
   businessSlug: string
   rubro: string | null
+  /**
+   * El plan del negocio de este contexto (`Business.plan`, `lib/planes.ts`).
+   * Es el de ESTE negocio: una cuenta con una clínica Equipo y su propio negocio
+   * Independiente tiene un plan distinto en cada contexto. Null si no es un plan
+   * conocido.
+   */
+  plan: PlanId | null
   /** Null sólo en el contexto de dueña: la dueña no es miembro del equipo. */
   memberId: string | null
 }
@@ -76,6 +91,7 @@ export function contextosDe(usuario: UsuarioConContextos): Contexto[] {
       businessName: usuario.business.name,
       businessSlug: usuario.business.slug,
       rubro: usuario.business.type ?? null,
+      plan: planConocido(usuario.business.plan),
       memberId: null,
     })
   }
@@ -87,6 +103,7 @@ export function contextosDe(usuario: UsuarioConContextos): Contexto[] {
       businessName: membresia.business.name,
       businessSlug: membresia.business.slug,
       rubro: membresia.business.type ?? null,
+      plan: planConocido(membresia.business.plan),
       memberId: membresia.id,
     })
   }

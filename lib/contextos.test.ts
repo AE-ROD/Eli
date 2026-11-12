@@ -9,8 +9,8 @@ import {
   opcionDeContexto,
 } from "./contextos"
 
-const salon = { id: "negocio-1", name: "Salón Uno", slug: "salon-uno", type: "salon" }
-const clinica = { id: "negocio-2", name: "Clínica Dos", slug: "clinica-dos", type: "odontologia" }
+const salon = { id: "negocio-1", name: "Salón Uno", slug: "salon-uno", type: "salon", plan: "independiente" }
+const clinica = { id: "negocio-2", name: "Clínica Dos", slug: "clinica-dos", type: "odontologia", plan: "equipo" }
 
 describe("contextosDe", () => {
   it("dueña de un negocio, encargada en otro y profesional en el suyo: tres contextos, el de dueña primero", () => {
@@ -23,10 +23,34 @@ describe("contextosDe", () => {
     })
 
     expect(contextos).toEqual([
-      { id: "dueño:negocio-1", rol: "owner", businessId: "negocio-1", businessName: "Salón Uno", businessSlug: "salon-uno", rubro: "salon", memberId: null },
-      { id: "miembro:m-clinica", rol: "admin", businessId: "negocio-2", businessName: "Clínica Dos", businessSlug: "clinica-dos", rubro: "odontologia", memberId: "m-clinica" },
-      { id: "miembro:m-salon", rol: "worker", businessId: "negocio-1", businessName: "Salón Uno", businessSlug: "salon-uno", rubro: "salon", memberId: "m-salon" },
+      { id: "dueño:negocio-1", rol: "owner", businessId: "negocio-1", businessName: "Salón Uno", businessSlug: "salon-uno", rubro: "salon", plan: "independiente", memberId: null },
+      { id: "miembro:m-clinica", rol: "admin", businessId: "negocio-2", businessName: "Clínica Dos", businessSlug: "clinica-dos", rubro: "odontologia", plan: "equipo", memberId: "m-clinica" },
+      { id: "miembro:m-salon", rol: "worker", businessId: "negocio-1", businessName: "Salón Uno", businessSlug: "salon-uno", rubro: "salon", plan: "independiente", memberId: "m-salon" },
     ])
+  })
+
+  it("el plan es el de cada negocio: la misma cuenta, Equipo en la clínica e Independiente en el suyo", () => {
+    const contextos = contextosDe({ business: salon, memberships: [{ id: "m-clinica", role: "admin", business: clinica }] })
+
+    expect(contextos.map((c) => [c.id, c.plan])).toEqual([
+      ["dueño:negocio-1", "independiente"],
+      ["miembro:m-clinica", "equipo"],
+    ])
+  })
+
+  it.each([
+    ["no es un plan", "pro"],
+    ["tiene otras mayúsculas", "Equipo"],
+    ["está vacío", ""],
+    ["es null", null],
+    ["no viene (un usuario armado a mano)", undefined],
+    ["no es texto", 7],
+  ])("un plan que %s queda en null, tanto en el negocio propio como en una membresía", (_caso, plan) => {
+    const negocio = { id: "negocio-9", name: "Raro", slug: "raro", type: "salon", plan: plan as string | null | undefined }
+    const [propio, membresia] = contextosDe({ business: negocio, memberships: [{ id: "m", role: "worker", business: negocio }] })
+
+    expect(propio.plan).toBeNull()
+    expect(membresia.plan).toBeNull()
   })
 
   it("un rol de membresía desconocido cuenta como profesional, el de menos permisos", () => {

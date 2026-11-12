@@ -97,6 +97,11 @@ import {
   whereDeEtapasDelPlan,
   whereDePrestacionesDelPlan,
   whereDeSillones,
+  elPlanNoIncluyeEquipo,
+  puedeInvitarAlEquipo,
+  puedeGestionarSedes,
+  puedeCambiarDePlan,
+  whereDeSedes,
   veProtesis,
   puedeEditarProtesis,
   puedeConfigurarRepartoDeProtesis,
@@ -151,6 +156,7 @@ describe("actorDeSesion", () => {
       rol: "admin",
       businessId: NEGOCIO,
       memberId: "yo",
+      plan: null,
     })
   })
 
@@ -1161,7 +1167,7 @@ describe("clínica dental (rubro odontología)", () => {
 
     it("copia el rubro de la sesión", () => {
       const desdeLaSesion = actorDeSesion(sesion({ role: "worker", businessId: NEGOCIO, memberId: "yo", rubro: "odontologia" }))
-      expect(desdeLaSesion).toEqual({ rol: "worker", businessId: NEGOCIO, memberId: "yo", rubro: "odontologia" })
+      expect(desdeLaSesion).toEqual({ rol: "worker", businessId: NEGOCIO, memberId: "yo", rubro: "odontologia", plan: null })
       expect(esClinicaDental(desdeLaSesion)).toBe(true)
     })
 
@@ -1173,7 +1179,7 @@ describe("clínica dental (rubro odontología)", () => {
       ["rubro en una lista", { rubro: ["odontologia"] }],
     ])("%s: el actor sale igual, sin rubro, y no es dental", (_caso, extra) => {
       const desdeLaSesion = actorDeSesion(sesion({ role: "owner", businessId: NEGOCIO, ...extra }))
-      expect(desdeLaSesion).toEqual({ rol: "owner", businessId: NEGOCIO, memberId: null })
+      expect(desdeLaSesion).toEqual({ rol: "owner", businessId: NEGOCIO, memberId: null, plan: null })
       expect(desdeLaSesion).not.toHaveProperty("rubro")
       expect(esClinicaDental(desdeLaSesion)).toBe(false)
     })
@@ -1460,6 +1466,245 @@ describe("prótesis (clínica dental)", () => {
       it("falla cerrado: encargado, odontólogo, sin actor, rol desconocido u otro rubro", () => {
         for (const quien of [recepcion, odontologo, null, desconocido, dueño, { ...duenaDental, rubro: "salon" }]) expect(abonos(quien)).toEqual([])
       })
+    })
+  })
+})
+
+describe("planes y sedes (etapa 9)", () => {
+  type Permiso = (quien: Actor | null) => boolean
+  const sesion = (user: Record<string, unknown>) => ({ user }) as never
+
+  /** El mismo actor con otro plan (o, con `undefined`, un actor armado sin él). */
+  const conPlan = (quien: Actor, plan: unknown): Actor => ({ ...quien, plan }) as Actor
+  const sinPlan = (quien: Actor): Actor => {
+    const { plan: _plan, ...resto } = quien
+    return resto
+  }
+
+  /** Todo lo que puede pasar con el plan: los dos conocidos, ninguno y los que no existen. */
+  const PLANES_QUE_NO_HABILITAN = [
+    ["plan null", null],
+    ["plan ausente (un actor armado sin él)", undefined],
+    ["plan desconocido", "pro"],
+    ["plan con otras mayúsculas", "Equipo"],
+    ["plan vacío", ""],
+    ["plan que no es texto", ["equipo"]],
+  ] as const
+  const DE_CADA_PLAN = [["independiente", "independiente"], ["equipo", "equipo"], ...PLANES_QUE_NO_HABILITAN] as const
+
+  /** Los tres roles de un mismo negocio con ese plan: [dueña, encargado, profesional]. */
+  const roles = (plan: unknown): [Actor, Actor, Actor] =>
+    plan === undefined ? [sinPlan(dueño), sinPlan(encargado), sinPlan(profesional)] : [conPlan(dueño, plan), conPlan(encargado, plan), conPlan(profesional, plan)]
+  const resultado = (permiso: Permiso, plan: unknown) => roles(plan).map(permiso)
+
+  describe("actorDeSesion lleva el plan", () => {
+    it.each(["independiente", "equipo"] as const)("copia el plan %s de la sesión", (plan) => {
+      const actorDelPlan = actorDeSesion(sesion({ role: "owner", businessId: NEGOCIO, plan }))
+      expect(actorDelPlan).toEqual({ rol: "owner", businessId: NEGOCIO, memberId: null, plan })
+    })
+
+    it.each([
+      ["sin plan (sesión de antes del campo)", {}],
+      ["plan null", { plan: null }],
+      ["plan vacío", { plan: "" }],
+      ["plan desconocido", { plan: "pro" }],
+      ["plan con otras mayúsculas", { plan: "EQUIPO" }],
+      ["plan que no es texto", { plan: 1 }],
+      ["plan en una lista", { plan: ["equipo"] }],
+      ["plan en un objeto", { plan: { id: "equipo" } }],
+    ])("%s: el actor sale con plan null", (_caso, extra) => {
+      const actorSinPlan = actorDeSesion(sesion({ role: "owner", businessId: NEGOCIO, ...extra }))
+      expect(actorSinPlan).toEqual({ rol: "owner", businessId: NEGOCIO, memberId: null, plan: null })
+      expect(puedeInvitarAlEquipo(actorSinPlan)).toBe(false)
+      expect(puedeGestionarSedes(actorSinPlan)).toBe(false)
+    })
+
+    it("no cambia el resto del actor: rol, negocio, miembro y rubro salen como siempre", () => {
+      expect(actorDeSesion(sesion({ role: "admin", businessId: NEGOCIO, memberId: "yo", rubro: "odontologia", plan: "equipo" }))).toEqual({
+        rol: "admin",
+        businessId: NEGOCIO,
+        memberId: "yo",
+        rubro: "odontologia",
+        plan: "equipo",
+      })
+    })
+
+    it("un plan válido no rescata una sesión sin rol o sin negocio", () => {
+      expect(actorDeSesion(sesion({ businessId: NEGOCIO, plan: "equipo" }))).toBeNull()
+      expect(actorDeSesion(sesion({ role: "owner", plan: "equipo" }))).toBeNull()
+    })
+  })
+
+  describe("elPlanNoIncluyeEquipo: sólo para explicar, nunca para habilitar", () => {
+    it.each([
+      ["independiente", [true, true, true]],
+      ["equipo", [false, false, false]],
+    ] as const)("en el plan %s: [dueña, encargado, profesional]", (plan, esperado) => {
+      expect(resultado(elPlanNoIncluyeEquipo, plan)).toEqual(esperado)
+    })
+
+    it.each(PLANES_QUE_NO_HABILITAN)("con %s no dice nada (no afirma un plan que no conoce)", (_caso, plan) => {
+      expect(resultado(elPlanNoIncluyeEquipo, plan)).toEqual([false, false, false])
+    })
+
+    it("sin actor, no", () => {
+      expect(elPlanNoIncluyeEquipo(null)).toBe(false)
+    })
+
+    it("nunca coincide con poder invitar: o el plan incluye equipo, o no, o no se sabe", () => {
+      for (const [, plan] of DE_CADA_PLAN) {
+        for (const quien of roles(plan)) {
+          expect(elPlanNoIncluyeEquipo(quien) && puedeInvitarAlEquipo(quien)).toBe(false)
+        }
+      }
+    })
+  })
+
+  describe("puedeInvitarAlEquipo: quien gestiona el equipo, y sólo en el plan Equipo", () => {
+    it.each([
+      ["equipo", [true, true, false]],
+      ["independiente", [false, false, false]],
+    ] as const)("en el plan %s: [dueña, encargado, profesional]", (plan, esperado) => {
+      expect(resultado(puedeInvitarAlEquipo, plan)).toEqual(esperado)
+    })
+
+    it.each(PLANES_QUE_NO_HABILITAN)("con %s nadie invita, ni la dueña (falla cerrado)", (_caso, plan) => {
+      expect(resultado(puedeInvitarAlEquipo, plan)).toEqual([false, false, false])
+    })
+
+    it("sin actor, no", () => {
+      expect(puedeInvitarAlEquipo(null)).toBe(false)
+    })
+
+    it("es `puedeGestionarEquipo` y además el plan Equipo: nunca más que lo que gestiona", () => {
+      for (const [, plan] of DE_CADA_PLAN) {
+        for (const quien of roles(plan)) {
+          if (puedeInvitarAlEquipo(quien)) expect(puedeGestionarEquipo(quien)).toBe(true)
+          expect(puedeInvitarAlEquipo(quien)).toBe(puedeGestionarEquipo(quien) && plan === "equipo")
+        }
+      }
+    })
+
+    it("un rol desconocido no invita ni en el plan Equipo", () => {
+      expect(puedeInvitarAlEquipo({ rol: "gerente", businessId: NEGOCIO, memberId: null, plan: "equipo" } as unknown as Actor)).toBe(false)
+    })
+  })
+
+  describe("puedeGestionarEquipo (ver y gestionar la lista) no depende del plan", () => {
+    it.each(DE_CADA_PLAN)("con %s sigue siendo [dueña, encargado, profesional] = [sí, sí, no]", (_caso, plan) => {
+      expect(resultado(puedeGestionarEquipo, plan)).toEqual([true, true, false])
+    })
+
+    it("sin actor, no", () => {
+      expect(puedeGestionarEquipo(null)).toBe(false)
+    })
+  })
+
+  describe("puedeGestionarSedes: la dueña, y sólo en el plan Independiente", () => {
+    it.each([
+      ["independiente", [true, false, false]],
+      ["equipo", [false, false, false]],
+    ] as const)("en el plan %s: [dueña, encargado, profesional]", (plan, esperado) => {
+      expect(resultado(puedeGestionarSedes, plan)).toEqual(esperado)
+    })
+
+    it.each(PLANES_QUE_NO_HABILITAN)("con %s nadie gestiona sedes, ni la dueña (falla cerrado)", (_caso, plan) => {
+      expect(resultado(puedeGestionarSedes, plan)).toEqual([false, false, false])
+    })
+
+    it("sin actor, no", () => {
+      expect(puedeGestionarSedes(null)).toBe(false)
+    })
+
+    it("la dueña invitada como profesional de su propio negocio Independiente trabaja ahí como profesional: no gestiona sedes", () => {
+      const comoProfesional: Actor = { rol: "worker", businessId: NEGOCIO, memberId: "miembro-propio", plan: "independiente" }
+      expect(puedeGestionarSedes(comoProfesional)).toBe(false)
+    })
+  })
+
+  describe("puedeCambiarDePlan: sólo la dueña, sea cual sea el plan", () => {
+    it.each(DE_CADA_PLAN)("con %s: [dueña, encargado, profesional] = [sí, no, no]", (_caso, plan) => {
+      expect(resultado(puedeCambiarDePlan, plan)).toEqual([true, false, false])
+    })
+
+    it("sin actor, no", () => {
+      expect(puedeCambiarDePlan(null)).toBe(false)
+    })
+  })
+
+  describe("otro negocio", () => {
+    const sedes = [
+      { id: "s-1", businessId: NEGOCIO, nombre: "Centro", activo: true },
+      { id: "s-2", businessId: NEGOCIO, nombre: "Providencia", activo: false },
+      { id: "s-ajena", businessId: OTRO_NEGOCIO, nombre: "Centro", activo: true },
+    ]
+    const tablas = { sede: sedes } as unknown as Tablas
+    const visibles = (quien: Actor | null, extra: object = {}) =>
+      sedes.filter((sede) => coincide(tablas, "sede", sede, whereDeSedes(quien, extra))).map((sede) => sede.id)
+
+    it("caso 1, el recurso es de otro negocio: ni la dueña con el plan correcto lo alcanza", () => {
+      const dueñaIndependiente = conPlan(dueño, "independiente")
+      expect(puedeGestionarSedes(dueñaIndependiente)).toBe(true)
+      expect(mismoNegocio(dueñaIndependiente, OTRO_NEGOCIO)).toBe(false)
+      expect(visibles(dueñaIndependiente)).toEqual(["s-1", "s-2"])
+      expect(visibles(dueñaIndependiente, { id: "s-ajena" })).toEqual([])
+      expect(visibles(dueñaIndependiente, { businessId: OTRO_NEGOCIO })).toEqual([])
+
+      const encargadoEquipo = conPlan(encargado, "equipo")
+      expect(puedeInvitarAlEquipo(encargadoEquipo)).toBe(true)
+      expect(mismoNegocio(encargadoEquipo, OTRO_NEGOCIO)).toBe(false)
+    })
+
+    it("caso 2, la misma cuenta en dos negocios: lo que puede depende del plan de ESE negocio, y no ve las sedes del otro", () => {
+      const enSuNegocio: Actor = { rol: "owner", businessId: OTRO_NEGOCIO, memberId: null, plan: "independiente" }
+      const enLaClinica: Actor = { rol: "admin", businessId: NEGOCIO, memberId: "yo", plan: "equipo" }
+
+      // En su negocio Independiente: sedes sí, invitar no.
+      expect(puedeGestionarSedes(enSuNegocio)).toBe(true)
+      expect(puedeInvitarAlEquipo(enSuNegocio)).toBe(false)
+      expect(visibles(enSuNegocio)).toEqual(["s-ajena"])
+
+      // En la clínica Equipo: invitar sí, sedes no.
+      expect(puedeInvitarAlEquipo(enLaClinica)).toBe(true)
+      expect(puedeGestionarSedes(enLaClinica)).toBe(false)
+      expect(visibles(enLaClinica)).toEqual(["s-1", "s-2"])
+    })
+  })
+
+  describe("whereDeSedes", () => {
+    const sedes = [
+      { id: "s-1", businessId: NEGOCIO, nombre: "Centro", activo: true },
+      { id: "s-2", businessId: NEGOCIO, nombre: "Providencia", activo: false },
+      { id: "s-ajena", businessId: OTRO_NEGOCIO, nombre: "Centro", activo: true },
+    ]
+    const tablas = { sede: sedes } as unknown as Tablas
+    const visibles = (quien: Actor | null, extra: object = {}) =>
+      sedes.filter((sede) => coincide(tablas, "sede", sede, whereDeSedes(quien, extra))).map((sede) => sede.id)
+
+    it("acota al negocio del actor, con el mismo patrón de los demás whereDe*", () => {
+      expect(whereDeSedes(dueño)).toEqual({ AND: [{ businessId: NEGOCIO }, {}] })
+      expect(whereDeSedes(dueño, { activo: true })).toEqual({ AND: [{ businessId: NEGOCIO }, { activo: true }] })
+    })
+
+    it("todo rol ve las sedes de su negocio, sea cual sea el plan (quién las gestiona lo decide `puedeGestionarSedes`)", () => {
+      for (const [, plan] of DE_CADA_PLAN) {
+        for (const quien of roles(plan)) expect(visibles(quien)).toEqual(["s-1", "s-2"])
+      }
+    })
+
+    it("sin actor no matchea nada, aunque lo que agrega el endpoint lo intente", () => {
+      expect(whereDeSedes(null)).toEqual({ AND: [NADA, {}] })
+      expect(visibles(null)).toEqual([])
+      expect(visibles(null, { businessId: NEGOCIO })).toEqual([])
+      expect(visibles(null, { OR: [{ id: "s-1" }] })).toEqual([])
+    })
+
+    it("lo que agrega el endpoint no anula el filtro (businessId, id, OR, AND)", () => {
+      expect(visibles(dueño, { businessId: OTRO_NEGOCIO })).toEqual([])
+      expect(visibles(dueño, { id: "s-ajena" })).toEqual([])
+      expect(visibles(profesional, { OR: [{ id: "s-ajena" }] })).toEqual([])
+      expect(visibles(encargado, { AND: [{ businessId: OTRO_NEGOCIO }] })).toEqual([])
+      expect(visibles(dueño, { activo: true })).toEqual(["s-1"])
     })
   })
 })

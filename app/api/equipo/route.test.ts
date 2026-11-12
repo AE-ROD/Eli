@@ -29,21 +29,21 @@ const prismaMock = {
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
 
 const sesionDueño = {
-  user: { id: "owner-1", role: "owner", businessId: "negocio-1", businessName: "Mi negocio" },
+  user: { id: "owner-1", role: "owner", businessId: "negocio-1", businessName: "Mi negocio", plan: "equipo" },
 }
 
 const sesionEncargado = {
-  user: { id: "admin-1", role: "admin", businessId: "negocio-1", businessName: "Mi negocio", memberId: "member-admin-1" },
+  user: { id: "admin-1", role: "admin", businessId: "negocio-1", businessName: "Mi negocio", plan: "equipo", memberId: "member-admin-1" },
 }
 
 const sesionProfesional = {
-  user: { id: "worker-1", role: "worker", businessId: "negocio-1", businessName: "Mi negocio", memberId: "member-worker-1" },
+  user: { id: "worker-1", role: "worker", businessId: "negocio-1", businessName: "Mi negocio", plan: "equipo", memberId: "member-worker-1" },
 }
 
 // Segundo negocio, sin relación con "negocio-1": si un handler hardcodeara
 // businessId: "negocio-1" en vez de leerlo del actor, estos tests fallarían.
 const sesionEncargadoNegocio2 = {
-  user: { id: "admin-2", role: "admin", businessId: "negocio-2", businessName: "Otro negocio", memberId: "member-admin-2" },
+  user: { id: "admin-2", role: "admin", businessId: "negocio-2", businessName: "Otro negocio", plan: "equipo", memberId: "member-admin-2" },
 }
 
 describe("GET /api/equipo", () => {
@@ -274,6 +274,88 @@ describe("POST /api/equipo", () => {
     const res = await POST(pedidoFalso({ nombre: "Ana", email: "ana@x.com", rol: "worker" }))
 
     expect(res.status).toBe(401)
+  })
+})
+
+describe("POST /api/equipo — el plan decide si se invita", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const cuerpo = { nombre: "Ana", email: "ana@x.com", rol: "worker" }
+
+  it("un negocio Independiente no invita: 403 con el motivo, y no toca la base ni manda correo", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce({ user: { ...sesionDueño.user, plan: "independiente" } })
+
+    const res = await POST(pedidoFalso(cuerpo))
+    const data = await res.json()
+
+    expect(res.status).toBe(403)
+    expect(data.error).toMatch(/plan Equipo/)
+    expect(prismaMock.user.findFirst).not.toHaveBeenCalled()
+    expect(prismaMock.workerInvitation.create).not.toHaveBeenCalled()
+    expect(prismaMock.workerInvitation.updateMany).not.toHaveBeenCalled()
+  })
+
+  it("una sesión sin plan (de antes de este campo) o con un plan desconocido no invita: falla cerrado", async () => {
+    const { POST } = await import("./route")
+
+    for (const plan of [undefined, null, "premium", ""]) {
+      mockGetServerSession.mockResolvedValueOnce({ user: { ...sesionDueño.user, plan } })
+      const res = await POST(pedidoFalso(cuerpo))
+      expect(res.status).toBe(403)
+    }
+    expect(prismaMock.workerInvitation.create).not.toHaveBeenCalled()
+  })
+
+  it("el plan lo dice la sesión, no el cuerpo del pedido: un plan en el cuerpo no cambia nada", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce({ user: { ...sesionDueño.user, plan: "independiente" } })
+
+    const res = await POST(pedidoFalso({ ...cuerpo, plan: "equipo" }))
+
+    expect(res.status).toBe(403)
+    expect(prismaMock.workerInvitation.create).not.toHaveBeenCalled()
+  })
+
+  it("el profesional sigue recibiendo 401 (el permiso va antes que el plan) aunque el plan sea Independiente", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce({ user: { ...sesionProfesional.user, plan: "independiente" } })
+
+    const res = await POST(pedidoFalso(cuerpo))
+
+    expect(res.status).toBe(401)
+  })
+
+  it("segunda barrera: si la sesión decía Equipo pero la base ya lo pasó a Independiente, el trigger rechaza y responde 403, no 500", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.user.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.findFirst.mockResolvedValueOnce(null)
+    prismaMock.workerInvitation.create.mockRejectedValueOnce(
+      new Error("23514: invitaciones inv-9: sólo el plan Equipo invita")
+    )
+
+    const res = await POST(pedidoFalso(cuerpo))
+    const data = await res.json()
+
+    expect(res.status).toBe(403)
+    expect(data.error).toMatch(/plan Equipo/)
+  })
+
+  it("ver la lista del equipo no depende del plan: un negocio Independiente la lee igual", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce({ user: { ...sesionDueño.user, plan: "independiente" } })
+    prismaMock.businessMember.findMany.mockResolvedValueOnce([])
+    prismaMock.workerInvitation.findMany.mockResolvedValueOnce([])
+
+    const res = await GET()
+
+    expect(res.status).toBe(200)
   })
 })
 

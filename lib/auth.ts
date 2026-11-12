@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 import { prisma } from "@/lib/prisma"
 import { buscarContexto, contextoDeLaSesion, contextosDe, MAXIMO_DE_CONTEXTOS, type Contexto } from "@/lib/contextos"
+import { planConocido } from "@/lib/planes"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { REVALIDAR_CADA_MS } from "@/lib/renovacion-de-sesion"
 import { hashDeToken } from "@/lib/tokens"
@@ -11,7 +12,7 @@ import { normalizarEmail } from "@/lib/validaciones"
 import bcrypt from "bcryptjs"
 
 /** Lo justo del negocio para armar un contexto (`lib/contextos.ts`). */
-const NEGOCIO_DE_CONTEXTO = { select: { id: true, name: true, slug: true, type: true } } as const
+const NEGOCIO_DE_CONTEXTO = { select: { id: true, name: true, slug: true, type: true, plan: true } } as const
 
 /**
  * El usuario con todos sus contextos: el negocio propio y cada membresía, la
@@ -58,9 +59,10 @@ export async function contextosDeLaCuenta(userId: string): Promise<Contexto[]> {
  * único contexto si hay uno solo. Sin negocio, el proxy manda a elegir
  * (`/elegir-negocio`), o a completar el perfil si no queda ninguno.
  *
- * `rol`, `businessId`, `memberId` y `rubro` salen siempre del MISMO contexto:
- * el par `(businessId, memberId)` nunca apunta a dos negocios distintos, y el
- * rubro (que abre lo clínico en `lib/permisos.ts`) es el de ese negocio.
+ * `rol`, `businessId`, `memberId`, `rubro` y `plan` salen siempre del MISMO
+ * contexto: el par `(businessId, memberId)` nunca apunta a dos negocios
+ * distintos, el rubro (que abre lo clínico en `lib/permisos.ts`) es el de ese
+ * negocio y el plan (que decide si se puede invitar o tener sedes) también.
  */
 function perfilDe(usuario: UsuarioConNegocio, elegido?: unknown) {
   const contextos = contextosDe(usuario)
@@ -75,6 +77,7 @@ function perfilDe(usuario: UsuarioConNegocio, elegido?: unknown) {
     businessName: contexto?.businessName ?? null,
     businessSlug: contexto?.businessSlug ?? null,
     rubro: contexto?.rubro ?? null,
+    plan: contexto?.plan ?? null,
     memberId: contexto?.memberId ?? null,
   }
 }
@@ -162,6 +165,7 @@ function quitarNegocio(token: JWT): JWT {
   token.businessName = null
   token.businessSlug = null
   token.rubro = null
+  token.plan = null
   token.memberId = null
   return token
 }
@@ -305,6 +309,7 @@ export const authOptions: NextAuthOptions = {
           businessName: user.businessName,
           businessSlug: user.businessSlug,
           rubro: user.rubro,
+          plan: planConocido(user.plan),
           memberId: user.memberId,
           emitidoEn: ahora,
           revalidadoEn: ahora,
@@ -337,6 +342,9 @@ export const authOptions: NextAuthOptions = {
         // Una sesión de antes de este campo no lo trae: null, que no es dental
         // (falla cerrado) hasta la próxima revalidación, que lo completa.
         session.user.rubro = token.rubro ?? null
+        // Igual con el plan: sin él (o con uno que no es un plan) queda null y
+        // no habilita nada que dependa del plan hasta la próxima revalidación.
+        session.user.plan = planConocido(token.plan)
         session.user.memberId = token.memberId ?? null
         session.user.contexto = token.contexto ?? null
         session.user.contextos = token.contextos ?? 0

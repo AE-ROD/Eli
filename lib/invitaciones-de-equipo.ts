@@ -11,6 +11,26 @@ import { registrarError } from "@/lib/registro-de-errores"
  * (`POST /api/equipo/pendientes/[id]/reenviar`).
  */
 
+/**
+ * Lo que se responde (403) cuando el negocio no es del plan Equipo y alguien
+ * intenta invitar o reenviar. Un negocio Independiente atiende sólo la dueña;
+ * para sumar gente se pasa al plan Equipo (`lib/planes.ts`).
+ */
+export const ERROR_PLAN_NO_INVITA =
+  "Tu plan Independiente es para atender sin equipo, así que no incluye invitar a nadie. Para sumar personas pasa al plan Equipo desde Configuración."
+
+/**
+ * Si el error es el rechazo de la base a una invitación en un negocio que no
+ * es del plan Equipo (el trigger `invitaciones_exigen_plan_equipo`). Es la
+ * segunda barrera: la primera es `puedeInvitarAlEquipo` con el plan de la
+ * sesión, que puede estar desfasado hasta 5 minutos si el plan cambió justo
+ * antes. Llega como un error de Prisma sin código propio; se reconoce por el
+ * texto que pone la migración.
+ */
+export function esRechazoPorPlan(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("sólo el plan Equipo invita")
+}
+
 /** Días que vale el enlace. El correo dice "expira en 7 días". */
 export const DIAS_DE_VIGENCIA = 7
 
