@@ -256,9 +256,21 @@ describe("cancelar", () => {
     relojEn("2030-01-05T14:00:00.000Z")
     const { status, cuerpo } = await cancelar()
     expect(status).toBe(409)
-    expect(cuerpo.error).toMatch(/48 horas antes.*Contacta al local/)
+    // El negocio del escenario es un salón: el motivo nombra al lugar con la palabra de su rubro.
+    expect(cuerpo.error).toMatch(/48 horas antes.*Contacta al salón/)
     expect(laCita().status).toBe("pendiente")
     expect(correos.cambio).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ["salud", "Contacta al local"],
+    ["odontologia", "Contacta a la clínica"],
+  ])("fuera del plazo, el motivo habla con las palabras del rubro %s", async (type, contacto) => {
+    escenario({ negocio: { cancelacionHorasAntes: 48, type } })
+    relojEn("2030-01-05T14:00:00.000Z")
+    const { status, cuerpo } = await cancelar()
+    expect(status).toBe(409)
+    expect(cuerpo.error).toContain(contacto)
   })
 })
 

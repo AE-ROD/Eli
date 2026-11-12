@@ -29,10 +29,11 @@ const persona = (id: string, nombre: string, servicioIds: string[] | null): Prof
   servicioIds,
 })
 
-function pagina(equipo: ProfesionalPublico[], servicios: ServicioDeLaPagina[]): PaginaDelNegocio {
+function pagina(equipo: ProfesionalPublico[], servicios: ServicioDeLaPagina[], rubro = "salon"): PaginaDelNegocio {
   return {
     nombre: "Salón Uno",
     slug: "salon-uno",
+    rubro,
     zona: "America/Santiago",
     direccion: null,
     comuna: null,
@@ -98,5 +99,53 @@ describe("MiniPagina: el bloque Equipo", () => {
 
     const enlace = html.split("<a ").find((a) => a.includes("Reservar con Nina Paz")) ?? ""
     expect(enlace.split(">")[0]).toContain("max-sm:min-h-11")
+  })
+})
+
+describe("MiniPagina: las palabras del rubro", () => {
+  const CARLA = persona("m-carla", "Carla Soto", ["s-corte"])
+  const NINA = persona("m-nina", "Nina Paz", null)
+  const SERVICIOS = [servicio("s-corte", "Corte"), servicio("s-barba", "Barba")]
+
+  /** El texto visible, sin etiquetas ni los comentarios con que React separa los textos. */
+  const texto = (html: string) => html.replace(/<!-- -->/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ")
+
+  it("sin rubro, o con uno desconocido, es la página de siempre: 'Servicios' y 'Hace todos los servicios'", () => {
+    for (const rubro of ["", "salud", "otro"]) {
+      const visible = texto(pintar(pagina([NINA], SERVICIOS, rubro)))
+
+      expect(visible).toContain("Servicios")
+      expect(visible).toContain("Hace todos los servicios")
+    }
+  })
+
+  it("un salón ofrece servicios", () => {
+    const visible = texto(pintar(pagina([NINA], SERVICIOS, "salon")))
+
+    expect(visible).toContain("Servicios")
+    expect(visible).toContain("Hace todos los servicios")
+    expect(visible).not.toContain("Prestaciones")
+  })
+
+  it("una clínica dental ofrece prestaciones, y 'todas' concuerda con ellas", () => {
+    const visible = texto(pintar(pagina([NINA, CARLA], SERVICIOS, "odontologia")))
+
+    expect(visible).toContain("Prestaciones")
+    expect(visible).toContain("Hace todas las prestaciones")
+    expect(visible).toContain("Hace: Corte")
+    expect(visible).not.toContain("Hace todos los")
+  })
+
+  it("una clínica sin ninguna prestación activa: 'Sin prestaciones para reservar por ahora'", () => {
+    const visible = texto(pintar(pagina([NINA], [], "odontologia")))
+
+    expect(visible).toContain("Sin prestaciones para reservar por ahora")
+  })
+
+  it("el plazo para cancelar o cambiar, sin plazo, no dice 'el momento de la hora' en un salón", () => {
+    const sinPlazo = (rubro: string) => texto(pintar({ ...pagina([NINA], SERVICIOS, rubro), plazoDeCambiosHoras: 0 }))
+
+    expect(sinPlazo("salon")).toContain("Puedes cancelar o cambiar tu hora hasta que llegue la hora.")
+    expect(sinPlazo("")).toContain("Puedes cancelar o cambiar tu hora hasta el momento de la cita.")
   })
 })

@@ -343,7 +343,7 @@ export function FormularioReserva({
     // botón que se tocó desaparece, y el foco va al "Cambiar" nuevo. En el paso
     // 1 el selector sigue y el botón tocado conserva el foco.
     if (paso === 2 && profesional) setPedidoDeFoco({ destino: "cambiar" })
-    setAvisoDeServicios(profesional ? avisoDeServiciosQuitados(profesional.nombre, quitados) : "")
+    setAvisoDeServicios(profesional ? avisoDeServiciosQuitados(profesional.nombre, quitados, frases.servicioElegido) : "")
     if (quitados.length > 0) {
       setSeleccionados(quedan)
       // Otra combinación es otra duración: la hora elegida puede no caber.

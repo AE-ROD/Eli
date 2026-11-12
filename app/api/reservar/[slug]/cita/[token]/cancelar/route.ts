@@ -24,7 +24,7 @@ export async function POST(request: NextRequest, contexto: Params) {
 
   const plazo = cita.business.cancelacionHorasAntes
   if (!dentroDelPlazo(cita.startTime, plazo, ahora)) {
-    return NextResponse.json({ error: mensajeFueraDePlazo(plazo) }, { status: 409 })
+    return NextResponse.json({ error: mensajeFueraDePlazo(plazo, cita.business.type) }, { status: 409 })
   }
 
   // Acotado por negocio, estado y hora de inicio también al escribir: si

@@ -2,7 +2,12 @@ import { NextResponse, type NextRequest } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { candidatosDeLaReserva, horasConElSillonLibre, horasLibresDelDia } from "@/lib/agenda-publica"
-import { dentroDelPlazo, mensajeFueraDePlazo } from "@/lib/gestion-de-cita"
+import {
+  dentroDelPlazo,
+  mensajeFueraDePlazo,
+  mensajeServicioYaNoSeReserva,
+  mensajeSinHorasParaReagendar,
+} from "@/lib/gestion-de-cita"
 import {
   MENSAJE_FECHA_MUY_LEJANA,
   MENSAJE_FECHA_PASADA,
@@ -46,12 +51,12 @@ export async function GET(request: NextRequest, contexto: Params) {
 
   const plazo = cita.business.cancelacionHorasAntes
   if (!dentroDelPlazo(cita.startTime, plazo, ahora)) {
-    return NextResponse.json({ slots: [], mensaje: mensajeFueraDePlazo(plazo) })
+    return NextResponse.json({ slots: [], mensaje: mensajeFueraDePlazo(plazo, cita.business.type) })
   }
   const servicios = serviciosDeLaCita(cita)
   const duracion = duracionAlReagendar(cita, servicios)
   if (!servicios.activos || duracion === null) {
-    return NextResponse.json({ slots: [], mensaje: "Este servicio ya no se reserva por acá. Contacta al local." })
+    return NextResponse.json({ slots: [], mensaje: mensajeServicioYaNoSeReserva(cita.business.type) })
   }
 
   const noReservable = fechaNoReservable(fecha.data, ahora, zona)
@@ -73,7 +78,7 @@ export async function GET(request: NextRequest, contexto: Params) {
     fecha: fecha.data,
   })
   if (reserva.tipo === "profesional-no-disponible") {
-    return NextResponse.json({ slots: [], mensaje: "No hay horas para reagendar por acá. Contacta al local." })
+    return NextResponse.json({ slots: [], mensaje: mensajeSinHorasParaReagendar(cita.business.type) })
   }
   const candidatos = reserva.candidatos.filter((candidato) => candidato.franjas.length > 0)
   if (candidatos.length === 0) return NextResponse.json({ slots: [], mensaje: "No hay atención ese día" })

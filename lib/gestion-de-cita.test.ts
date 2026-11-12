@@ -4,6 +4,8 @@ import {
   esGestionable,
   esTokenConForma,
   mensajeFueraDePlazo,
+  mensajeServicioYaNoSeReserva,
+  mensajeSinHorasParaReagendar,
   plazoParaQuienReserva,
   whereDeCitaPorToken,
 } from "./gestion-de-cita"
@@ -62,11 +64,48 @@ describe("plazoParaQuienReserva (#83)", () => {
     expect(plazoParaQuienReserva(500)).toBe("Puedes cancelar o cambiar hasta 24 horas antes.")
     expect(plazoParaQuienReserva(-3)).toBe("Puedes cancelar o cambiar hasta 24 horas antes.")
   })
+  it("las horas del plazo son horas del reloj: no cambian con el rubro", () => {
+    for (const rubro of [undefined, null, "salud", "salon", "odontologia"]) {
+      expect(plazoParaQuienReserva(24, rubro)).toBe("Puedes cancelar o cambiar hasta 24 horas antes.")
+      expect(plazoParaQuienReserva(1, rubro)).toBe("Puedes cancelar o cambiar hasta 1 hora antes.")
+    }
+  })
+  it("con 0 horas, un rubro con 'hora' no dice 'el momento de la hora': hasta que llegue la hora", () => {
+    expect(plazoParaQuienReserva(0, null)).toBe("Puedes cancelar o cambiar tu hora hasta el momento de la cita.")
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "odontologia"]) {
+      expect(plazoParaQuienReserva(0, rubro)).toBe("Puedes cancelar o cambiar tu hora hasta que llegue la hora.")
+    }
+  })
 })
 
 describe("mensajeFueraDePlazo", () => {
   it("dice el plazo y que se contacte al local", () => {
     expect(mensajeFueraDePlazo(24)).toMatch(/24 horas antes.*Contacta al local/)
+  })
+  it("sin rubro, o con uno desconocido, es el de siempre", () => {
+    expect(mensajeFueraDePlazo(1)).toBe("Ya no se puede cambiar por acá: falta menos de 1 hora. Contacta al local.")
+    expect(mensajeFueraDePlazo(24, null)).toBe("Ya no se puede cambiar por acá: se puede hasta 24 horas antes. Contacta al local.")
+    expect(mensajeFueraDePlazo(24, "salud")).toBe(mensajeFueraDePlazo(24))
+  })
+  it("con rubro, nombra al negocio con su artículo", () => {
+    expect(mensajeFueraDePlazo(24, "salon")).toMatch(/Contacta al salón\.$/)
+    expect(mensajeFueraDePlazo(1, "barberia")).toMatch(/Contacta a la barbería\.$/)
+    expect(mensajeFueraDePlazo(24, "odontologia")).toMatch(/Contacta a la clínica\.$/)
+  })
+})
+
+describe("los mensajes del enlace que nombran el servicio y el lugar", () => {
+  it("sin rubro, o con uno desconocido, son los de siempre", () => {
+    for (const rubro of [undefined, null, "salud"]) {
+      expect(mensajeServicioYaNoSeReserva(rubro)).toBe("Este servicio ya no se reserva por acá. Contacta al local.")
+      expect(mensajeSinHorasParaReagendar(rubro)).toBe("No hay horas para reagendar por acá. Contacta al local.")
+    }
+  })
+
+  it("con rubro, lo que se elige y el lugar salen de su vocabulario", () => {
+    expect(mensajeServicioYaNoSeReserva("salon")).toBe("Este servicio ya no se reserva por acá. Contacta al salón.")
+    expect(mensajeServicioYaNoSeReserva("odontologia")).toBe("Este motivo ya no se reserva por acá. Contacta a la clínica.")
+    expect(mensajeSinHorasParaReagendar("barberia")).toBe("No hay horas para reagendar por acá. Contacta a la barbería.")
   })
 })
 

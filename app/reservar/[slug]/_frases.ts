@@ -112,6 +112,8 @@ export function frasesDelFormulario(rubro: Rubro) {
     /** El texto para el lector de pantalla del botón "Cambiar": "Cambiar de estilista: ahora con Carla". */
     cambiarDeProfesional: (nombre: string): string => `Cambiar de ${profesional.singular}: ahora con ${nombre}`,
 
+    /** La palabra de lo que se elige, para concordar el "lo" / "los" del aviso de lo que se quitó. */
+    servicioElegido: elegido,
     /** El plural de lo elegido, para "3 servicios · en total": "servicios" / "motivos". */
     elegidosEnPlural: elegido.plural,
     /** "Servicio" / "Motivo": la fila del resumen. */

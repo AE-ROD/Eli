@@ -5,6 +5,11 @@
  * es para que la pantalla no lleve a un callejón sin salida.
  */
 
+import { pronombreDe } from "@/lib/concordancia"
+import { vocabularioDe, type Sustantivo } from "@/lib/vocabulario"
+
+const SERVICIO_DE_SIEMPRE = vocabularioDe(null).palabras.servicioDeLaReserva
+
 /** Quien atiende, con lo que importa acá: qué servicios hace (`null`: todos). */
 interface QuienAtiende {
   id: string
@@ -48,11 +53,18 @@ export function separarLosQueNoHace<S extends { id: string }>(
  * El aviso discreto de lo que se quitó al cambiar de profesional: "Quitamos
  * Barba y Tinte porque Carla no los hace." Sin nombres, una cadena vacía. La
  * lista la arma `Intl.ListFormat`, que también cambia "y" por "e" ante una "i".
+ * `servicio` es la palabra de lo que se elige (`servicioDeLaReserva`) y pone
+ * el género del "lo" / "los" ("la" / "las" si fuera femenina); sin ella, "servicio".
  */
-export function avisoDeServiciosQuitados(profesional: string, quitados: readonly { name: string }[]): string {
+export function avisoDeServiciosQuitados(
+  profesional: string,
+  quitados: readonly { name: string }[],
+  servicio: Sustantivo = SERVICIO_DE_SIEMPRE
+): string {
   if (quitados.length === 0) return ""
-  const lista = new Intl.ListFormat("es", { style: "long", type: "conjunction" }).format(quitados.map((servicio) => servicio.name))
-  return `Quitamos ${lista} porque ${profesional} no ${quitados.length === 1 ? "lo" : "los"} hace.`
+  const lista = new Intl.ListFormat("es", { style: "long", type: "conjunction" }).format(quitados.map((quitado) => quitado.name))
+  const losQueNoHace = `${pronombreDe(servicio)}${quitados.length === 1 ? "" : "s"}`
+  return `Quitamos ${lista} porque ${profesional} no ${losQueNoHace} hace.`
 }
 
 /**

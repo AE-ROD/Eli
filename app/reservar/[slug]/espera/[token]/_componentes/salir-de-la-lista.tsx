@@ -8,13 +8,16 @@ import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Tarjeta } from "@/components/comunes/tarjeta"
 import { EncabezadoDeReserva } from "../../../_componentes/encabezado-de-reserva"
 import { salirDeLaListaDeEspera } from "../../../_datos"
+import { frasesDeLaEspera } from "../../../_frases"
 
 /**
  * Confirmar la salida de la lista de espera. La respuesta del servidor es la
  * misma con un enlace válido o uno que ya no sirve, así que la pantalla
- * también: "Listo".
+ * también: "Listo". `rubro` (`Business.type`) pone la palabra de la reserva
+ * que se libera ("una hora").
  */
-export function SalirDeLaLista({ slug, token }: { slug: string; token: string }) {
+export function SalirDeLaLista({ slug, token, rubro = null }: { slug: string; token: string; rubro?: string | null }) {
+  const frases = frasesDeLaEspera(rubro)
   const [enviando, setEnviando] = useState(false)
   const [listo, setListo] = useState(false)
   const [error, setError] = useState("")
@@ -42,11 +45,7 @@ export function SalirDeLaLista({ slug, token }: { slug: string; token: string })
         ref={titulo}
         antetitulo="Lista de espera"
         titulo={listo ? "Listo" : "¿Salir de la lista de espera?"}
-        bajada={
-          listo
-            ? "Ya no estás en la lista de espera y no te vamos a avisar si se libera una hora. Tus datos se borraron."
-            : "Si sales, no te vamos a avisar cuando se libere una hora ese día. Tus reservas no cambian."
-        }
+        bajada={listo ? frases.listo : frases.confirmar}
       />
       {!listo && (
         <Tarjeta className="mx-auto mt-8 max-w-xl px-6 py-8 sm:p-10 md:mt-12">

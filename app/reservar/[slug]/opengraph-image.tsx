@@ -2,6 +2,7 @@ import { ImageResponse } from "next/og"
 import { headers } from "next/headers"
 import { iniciales } from "@/lib/pagina-del-negocio"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
+import { lineaDeLaImagen } from "./_frases"
 import { leerPaginaDelNegocio } from "./_pagina/datos-de-la-pagina"
 
 /**
@@ -15,6 +16,8 @@ import { leerPaginaDelNegocio } from "./_pagina/datos-de-la-pagina"
  * (`lecturaPublica`), porque el proxy no limita las páginas públicas.
  */
 
+// `alt` es una constante de Next y no puede leer el rubro del negocio: queda con
+// la palabra que hoy usan todos los rubros ("hora"). La imagen sí la lee.
 export const alt = "Reserva tu hora en línea"
 export const size = { width: 1200, height: 630 }
 export const contentType = "image/png"
@@ -33,6 +36,8 @@ export default async function ImagenParaCompartir({ params }: { params: Promise<
   if (!pagina) return new Response("Negocio no encontrado", { status: 404 })
 
   const { fondo, texto } = pagina.color
+  // "Reserva tu hora en línea": la palabra de la reserva sale del rubro del negocio.
+  const linea = lineaDeLaImagen(pagina.rubro)
   // Un nombre muy largo baja de tamaño en vez de salirse de la imagen.
   const tamañoDelNombre = pagina.nombre.length > 28 ? 64 : 84
 
@@ -73,7 +78,7 @@ export default async function ImagenParaCompartir({ params }: { params: Promise<
             {pagina.nombre.slice(0, 60)}
           </div>
           <div style={{ display: "flex", marginTop: 16, fontSize: 36, color: TEXTO_2 }}>
-            {pagina.comuna ? `${pagina.comuna.slice(0, 60)} · Reserva tu hora en línea` : "Reserva tu hora en línea"}
+            {pagina.comuna ? `${pagina.comuna.slice(0, 60)} · ${linea}` : linea}
           </div>
         </div>
       </div>

@@ -5,7 +5,13 @@ import { asignarCandidatoLibre, candidatosDeLaReserva, candidatosQueOfrecen, tra
 import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { correosDelAviso } from "@/lib/avisos-al-negocio"
 import { enviarAvisoDeCambioDelCliente } from "@/lib/email"
-import { dentroDelPlazo, mensajeFueraDePlazo, whereDeEscrituraDelEnlace } from "@/lib/gestion-de-cita"
+import {
+  dentroDelPlazo,
+  mensajeFueraDePlazo,
+  mensajeServicioYaNoSeReserva,
+  mensajeSinHorasParaReagendar,
+  whereDeEscrituraDelEnlace,
+} from "@/lib/gestion-de-cita"
 import { programarAvisoDeHoraLiberada } from "@/lib/lista-de-espera"
 import {
   MENSAJE_FECHA_MUY_LEJANA,
@@ -72,13 +78,13 @@ export async function POST(request: NextRequest, contexto: Params) {
 
   const plazo = cita.business.cancelacionHorasAntes
   if (!dentroDelPlazo(cita.startTime, plazo, ahora)) {
-    return NextResponse.json({ error: mensajeFueraDePlazo(plazo) }, { status: 409 })
+    return NextResponse.json({ error: mensajeFueraDePlazo(plazo, cita.business.type) }, { status: 409 })
   }
   const servicios = serviciosDeLaCita(cita)
   // La mayor entre la suma de las filas y lo que dura hoy (`duracionAlReagendar`).
   const duracion = duracionAlReagendar(cita, servicios)
   if (!servicios.activos || duracion === null) {
-    return NextResponse.json({ error: "Este servicio ya no se reserva por acá. Contacta al local." }, { status: 409 })
+    return NextResponse.json({ error: mensajeServicioYaNoSeReserva(cita.business.type) }, { status: 409 })
   }
 
   if (!existeLaHora(fecha, hora, zona)) return NextResponse.json({ error: FUERA_DE_ATENCION }, { status: 409 })
@@ -99,7 +105,7 @@ export async function POST(request: NextRequest, contexto: Params) {
     fecha,
   })
   if (reserva.tipo === "profesional-no-disponible") {
-    return NextResponse.json({ error: "No hay horas para reagendar por acá. Contacta al local." }, { status: 409 })
+    return NextResponse.json({ error: mensajeSinHorasParaReagendar(cita.business.type) }, { status: 409 })
   }
   // Sólo una hora de la grilla que ofrece la disponibilidad (#46).
   const candidatos = candidatosQueOfrecen(reserva.candidatos, hora, duracion)

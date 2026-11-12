@@ -33,6 +33,18 @@ describe("opengraph-image de la página del negocio", () => {
     expect(mockLeer).toHaveBeenCalledWith("salon-nandu")
   }, 20_000)
 
+  it("con el rubro del negocio (`rubro`), también genera el PNG: la palabra de la reserva sale de su vocabulario", async () => {
+    const { default: Imagen } = await import("./opengraph-image")
+    for (const rubro of ["salon", "odontologia", "salud"]) {
+      mockLeer.mockResolvedValueOnce({ nombre: "Casa Ana", comuna: null, rubro, color: colorDelNegocio(null) })
+
+      const respuesta = await Imagen(params("casa-ana"))
+
+      expect(respuesta.status).toBe(200)
+      expect(respuesta.headers.get("content-type")).toBe("image/png")
+    }
+  }, 30_000)
+
   it("un slug que no existe da 404", async () => {
     const { default: Imagen } = await import("./opengraph-image")
     mockLeer.mockResolvedValueOnce(null)

@@ -72,19 +72,23 @@ export interface PalabrasDeLaReserva {
   clinicaDental: boolean
 }
 
-/** Las palabras de la reserva del rubro; un rubro desconocido, `null` o ausente recibe las de siempre. */
+/**
+ * Las palabras de la reserva del rubro; un rubro desconocido, `null` o ausente
+ * recibe las de siempre. Copias nuevas en cada llamada, como `vocabularioDe`:
+ * quien las recibe puede cambiarlas sin tocar las de los demás.
+ */
 export function palabrasDeLaReserva(rubro: string | null | undefined): PalabrasDeLaReserva {
   const palabras = vocabularioDe(rubro).palabras
   const conPalabrasPropias = palabras.negocio.singular !== PALABRAS_NEUTRAS.negocio.singular
   return {
     cita: palabras.citaParaElCliente,
-    hora: conPalabrasPropias ? palabras.citaParaElCliente : HORA,
+    hora: conPalabrasPropias ? palabras.citaParaElCliente : { ...HORA },
     servicioDeLaReserva: palabras.servicioDeLaReserva,
     servicio: palabras.servicio,
     profesional: palabras.profesional,
-    quienAtiende: conPalabrasPropias ? palabras.profesional : PERSONA,
+    quienAtiende: conPalabrasPropias ? palabras.profesional : { ...PERSONA },
     negocio: palabras.negocio,
-    local: conPalabrasPropias ? palabras.negocio : LOCAL,
+    local: conPalabrasPropias ? palabras.negocio : { ...LOCAL },
     primeraVez: palabras.primeraVez,
     conPalabrasPropias,
     clinicaDental: esRubroDental(rubro),

@@ -7,6 +7,7 @@ import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Tarjeta } from "@/components/comunes/tarjeta"
 import { EncabezadoDeReserva } from "@/app/reservar/[slug]/_componentes/encabezado-de-reserva"
+import { frasesDeLaFila } from "@/app/reservar/[slug]/_frases"
 import { POLLING_DEL_CELULAR_MS } from "@/lib/fila-virtual"
 import { pedir, pedirConCodigo } from "@/lib/peticiones"
 
@@ -42,19 +43,24 @@ function textoDeMinutos(minutos: number): string {
  */
 const ESTADOS_FINALES: ReadonlySet<EstadoDelTurno> = new Set(["terminado", "fuera", "vencido"])
 
-const TEXTOS: Record<Exclude<EstadoDelTurno, "esperando">, { titulo: string; bajada: string }> = {
-  atendiendo: { titulo: "Es tu turno", bajada: "Ya te están atendiendo. ¡Que te vaya bien!" },
-  terminado: { titulo: "Listo", bajada: "Tu atención terminó. Gracias por venir." },
-  fuera: { titulo: "Ya no estás en la fila", bajada: "Saliste de la fila o el local cerró tu turno. Si quieres, vuelve a anotarte." },
-  vencido: { titulo: "Este turno ya pasó", bajada: "Era de otro día. Si quieres, vuelve a anotarte." },
+/** Lo que dice cada estado final. El texto de "fuera" nombra al lugar, y sale del rubro del negocio. */
+function textosDelTurno(fuera: string): Record<Exclude<EstadoDelTurno, "esperando">, { titulo: string; bajada: string }> {
+  return {
+    atendiendo: { titulo: "Es tu turno", bajada: "Ya te están atendiendo. ¡Que te vaya bien!" },
+    terminado: { titulo: "Listo", bajada: "Tu atención terminó. Gracias por venir." },
+    fuera: { titulo: "Ya no estás en la fila", bajada: fuera },
+    vencido: { titulo: "Este turno ya pasó", bajada: "Era de otro día. Si quieres, vuelve a anotarte." },
+  }
 }
 
 /**
  * El turno en el celular: el número en grande, cuántas personas van antes y
  * el tiempo estimado, que se actualizan solos cada ~20 s mientras la página
- * está a la vista. "Salir de la fila" pide confirmar antes.
+ * está a la vista. "Salir de la fila" pide confirmar antes. `rubro`
+ * (`Business.type`) pone la palabra del lugar: "el salón cerró tu turno".
  */
-export function MiTurno({ slug, token }: { slug: string; token: string }) {
+export function MiTurno({ slug, token, rubro = null }: { slug: string; token: string; rubro?: string | null }) {
+  const frases = frasesDeLaFila(rubro)
   const idDelError = useId()
   const [turno, setTurno] = useState<Turno | null>(null)
   const [noExiste, setNoExiste] = useState(false)
@@ -125,7 +131,7 @@ export function MiTurno({ slug, token }: { slug: string; token: string }) {
   }
 
   const esperando = turno.estado === "esperando"
-  const textos = turno.estado === "esperando" ? null : TEXTOS[turno.estado]
+  const textos = turno.estado === "esperando" ? null : textosDelTurno(frases.fuera)[turno.estado]
 
   return (
     <>

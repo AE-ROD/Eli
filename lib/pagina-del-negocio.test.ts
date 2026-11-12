@@ -212,6 +212,22 @@ describe("descripcionParaCompartir", () => {
     expect(descripcionParaCompartir("Salón Ana", "Ñuñoa")).toContain("Salón Ana, en Ñuñoa")
     expect(descripcionParaCompartir("Salón Ana", null)).not.toContain(", en")
   })
+
+  it("sin rubro, o con uno desconocido, es la de siempre", () => {
+    const deSiempre = "Reserva tu hora en Salón Ana, en Ñuñoa. Mira sus servicios, precios y horarios."
+    expect(descripcionParaCompartir("Salón Ana", "Ñuñoa")).toBe(deSiempre)
+    expect(descripcionParaCompartir("Salón Ana", "Ñuñoa", null)).toBe(deSiempre)
+    expect(descripcionParaCompartir("Salón Ana", "Ñuñoa", "salud")).toBe(deSiempre)
+  })
+
+  it("una clínica ofrece prestaciones; un salón, servicios", () => {
+    expect(descripcionParaCompartir("Clínica Sur", null, "odontologia")).toBe(
+      "Reserva tu hora en Clínica Sur. Mira sus prestaciones, precios y horarios."
+    )
+    expect(descripcionParaCompartir("Salón Ana", null, "salon")).toBe(
+      "Reserva tu hora en Salón Ana. Mira sus servicios, precios y horarios."
+    )
+  })
 })
 
 describe("normalizarEnlaceDeResenas (#77)", () => {

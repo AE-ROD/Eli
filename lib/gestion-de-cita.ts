@@ -1,9 +1,10 @@
 import type { Prisma } from "@prisma/client"
-import { al } from "@/lib/concordancia"
+import { al, este } from "@/lib/concordancia"
 import { SIN_ATENCION_VIVA } from "@/lib/mover-cita"
 import { hastaElMomentoDe, palabrasDeLaReserva } from "@/lib/palabras-de-la-reserva"
 import { SELECCION_DE_SERVICIOS_DE_LA_CITA } from "@/lib/servicios-de-la-reserva"
 import { hashDeToken } from "@/lib/tokens"
+import { conMayuscula } from "@/lib/vocabulario"
 
 /**
  * El enlace para que el cliente cancele o reagende su cita sin cuenta
@@ -82,6 +83,21 @@ export function mensajeFueraDePlazo(horasAntes: number, rubro?: string | null): 
   return horasAntes === 1
     ? `Ya no se puede cambiar por acá: falta menos de 1 hora. Contacta ${al(local)}.`
     : `Ya no se puede cambiar por acá: se puede hasta ${horasAntes} horas antes. Contacta ${al(local)}.`
+}
+
+/**
+ * Lo que se dice al querer cambiar una reserva cuyo servicio ya no se reserva
+ * por el enlace: "Este servicio ya no se reserva por acá. Contacta al local.",
+ * y con las palabras del rubro, "Este motivo… Contacta a la clínica."
+ */
+export function mensajeServicioYaNoSeReserva(rubro?: string | null): string {
+  const { servicioDeLaReserva, local } = palabrasDeLaReserva(rubro)
+  return `${conMayuscula(este(servicioDeLaReserva))} ya no se reserva por acá. Contacta ${al(local)}.`
+}
+
+/** Lo que se dice si ya no hay quién pueda tomar la reserva: "No hay horas para reagendar por acá. Contacta al local." */
+export function mensajeSinHorasParaReagendar(rubro?: string | null): string {
+  return `No hay horas para reagendar por acá. Contacta ${al(palabrasDeLaReserva(rubro).local)}.`
 }
 
 /** El `where` de la cita del enlace: hash del token, negocio del slug, estado gestionable y sin atención viva. */

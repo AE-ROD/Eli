@@ -16,7 +16,11 @@ import {
   avisoSinCambiosDespuesDeReservar,
   quedaSinCambiosPorElEnlace,
   MINUTOS_DE_PRIMERA_VEZ,
-  TEXTO_DE_PRIMERA_VEZ,
+  MENSAJE_URGENCIA_SIN_HORAS,
+  MENSAJE_URGENCIA_SOLO_HOY,
+  textoDePrimeraVez,
+  mensajeDeUrgenciaSinHoras,
+  mensajeDeUrgenciaSoloHoy,
   avisoDeUrgencia,
   duracionDeLaReserva,
   esHoyEn,
@@ -251,6 +255,25 @@ describe("quedaSinCambiosPorElEnlace (QA#8)", () => {
     expect(avisoSinCambiosPorElEnlace(24)).toMatch(/menos de 24 horas.*no podrás cancelarla ni cambiarla/)
     expect(avisoSinCambiosPorElEnlace(1)).toMatch(/menos de 1 hora:/)
   })
+
+  it("sin rubro (o desconocido), el texto de siempre: 'al local'", () => {
+    const deSiempre =
+      "Tu hora es en menos de 24 horas: una vez confirmada, no podrás cancelarla ni cambiarla por el enlace. Si lo necesitas, tendrás que contactar al local."
+    expect(avisoSinCambiosPorElEnlace(24)).toBe(deSiempre)
+    expect(avisoSinCambiosPorElEnlace(24, null)).toBe(deSiempre)
+    expect(avisoSinCambiosPorElEnlace(24, "salud")).toBe(deSiempre)
+  })
+
+  it("con rubro, nombra al negocio con su artículo", () => {
+    expect(avisoSinCambiosPorElEnlace(24, "salon")).toMatch(/contactar al salón\.$/)
+    expect(avisoSinCambiosPorElEnlace(24, "barberia")).toMatch(/contactar a la barbería\.$/)
+    expect(avisoSinCambiosPorElEnlace(24, "spa-de-unas")).toMatch(/contactar al salón de uñas\.$/)
+    expect(avisoSinCambiosPorElEnlace(24, "odontologia")).toMatch(/contactar a la clínica\.$/)
+    // "Tu hora" en todos: no es "Tu cita", y concuerda ("confirmada", "cancelarla").
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "odontologia"]) {
+      expect(avisoSinCambiosPorElEnlace(24, rubro)).toMatch(/^Tu hora es en menos de 24 horas: una vez confirmada, no podrás cancelarla ni cambiarla/)
+    }
+  })
 })
 
 describe("avisoSinCambiosDespuesDeReservar (QA#8)", () => {
@@ -258,6 +281,13 @@ describe("avisoSinCambiosDespuesDeReservar (QA#8)", () => {
     expect(avisoSinCambiosDespuesDeReservar(24)).toBe(
       "Tu hora es en menos de 24 horas, así que no se puede cancelar ni cambiar por el enlace. Si lo necesitas, contacta directamente al local."
     )
+  })
+
+  it("con rubro, 'al salón' o 'a la clínica'", () => {
+    expect(avisoSinCambiosDespuesDeReservar(1, "salon")).toBe(
+      "Tu hora es en menos de 1 hora, así que no se puede cancelar ni cambiar por el enlace. Si lo necesitas, contacta directamente al salón."
+    )
+    expect(avisoSinCambiosDespuesDeReservar(24, "odontologia")).toMatch(/contacta directamente a la clínica\.$/)
   })
 })
 
@@ -309,9 +339,9 @@ describe("elDiaElegidoQuedoSinAtencion: al cambiar de profesional o servicios, e
 })
 
 describe("clínica dental: la primera vez suma 15 minutos (duracionDeLaReserva)", () => {
-  it("son 15 minutos, y el texto lo dice", () => {
+  it("son 15 minutos, y el texto lo dice con la palabra de la clínica: 'primera consulta'", () => {
     expect(MINUTOS_DE_PRIMERA_VEZ).toBe(15)
-    expect(TEXTO_DE_PRIMERA_VEZ).toBe("La primera vez sumamos 15 minutos para abrir tu ficha.")
+    expect(textoDePrimeraVez("odontologia")).toBe("En la primera consulta sumamos 15 minutos para abrir tu ficha.")
   })
 
   it("en una clínica dental, primera vez: la suma de los servicios más 15", () => {
@@ -353,5 +383,16 @@ describe("clínica dental: urgencia (esReservaDeUrgencia, esHoyEn)", () => {
       destacado: "¿Tienes dolor fuerte?",
       resto: "Elige «Urgencia dental» como motivo y te mostramos horas de hoy.",
     })
+  })
+
+  it("los mensajes de la urgencia son los de la clínica, con sus palabras", () => {
+    expect(MENSAJE_URGENCIA_SOLO_HOY).toBe(
+      "Las urgencias se atienden el mismo día: elige una hora de hoy. Para otro día, elige otro motivo."
+    )
+    expect(MENSAJE_URGENCIA_SIN_HORAS).toBe(
+      "Hoy ya no quedan horas de urgencia para reservar por acá. Llama a la clínica para que te orienten."
+    )
+    expect(mensajeDeUrgenciaSoloHoy("odontologia")).toBe(MENSAJE_URGENCIA_SOLO_HOY)
+    expect(mensajeDeUrgenciaSinHoras("odontologia")).toBe(MENSAJE_URGENCIA_SIN_HORAS)
   })
 })

@@ -7,6 +7,7 @@
 import type { PrecioDeLaHora } from "@/lib/hora-valle"
 import { conJson, pedir, pedirConCodigo, type Resultado, type ResultadoConCodigo } from "@/lib/peticiones"
 import type { HorasDelDia } from "../../_componentes/selector-fecha-hora"
+import { frasesDeLaGestion } from "../../_frases"
 
 export interface CitaDelEnlace {
   negocio: { nombre: string }
@@ -30,9 +31,17 @@ export interface CitaDelEnlace {
 const ruta = (slug: string, token: string, resto = "") =>
   `/api/reservar/${encodeURIComponent(slug)}/cita/${encodeURIComponent(token)}${resto}`
 
-/** Con el código: un 404 es "este enlace no sirve", no un error de conexión. */
-export async function leerCita(slug: string, token: string): Promise<ResultadoConCodigo<CitaDelEnlace>> {
-  return pedirConCodigo<CitaDelEnlace>(ruta(slug, token), "No se pudo cargar tu cita")
+/**
+ * Con el código: un 404 es "este enlace no sirve", no un error de conexión.
+ * `rubro` (`Business.type`) pone la palabra de la reserva en lo que se dice si
+ * el servidor no dio otro motivo ("No se pudo cargar tu hora"); sin él, la de siempre.
+ */
+export async function leerCita(
+  slug: string,
+  token: string,
+  rubro?: string | null
+): Promise<ResultadoConCodigo<CitaDelEnlace>> {
+  return pedirConCodigo<CitaDelEnlace>(ruta(slug, token), frasesDeLaGestion(rubro).errores.cargar)
 }
 
 /** Las horas libres y, con hora valle (#89c), las que dejarían la cita con otro precio. */
@@ -46,15 +55,16 @@ export async function leerHorasParaReagendar(slug: string, token: string, fecha:
     : resultado
 }
 
-export async function cancelarCita(slug: string, token: string): Promise<Resultado> {
-  return pedir(ruta(slug, token, "/cancelar"), "No se pudo cancelar la cita", { method: "POST" })
+export async function cancelarCita(slug: string, token: string, rubro?: string | null): Promise<Resultado> {
+  return pedir(ruta(slug, token, "/cancelar"), frasesDeLaGestion(rubro).errores.cancelar, { method: "POST" })
 }
 
 export async function reagendarCita(
   slug: string,
   token: string,
   fecha: string,
-  hora: string
+  hora: string,
+  rubro?: string | null
 ): Promise<Resultado<{ fecha: string; hora: string; profesional: string | null; precio: number | null }>> {
-  return pedir(ruta(slug, token, "/reagendar"), "No se pudo cambiar la cita", conJson("POST", { fecha, hora }))
+  return pedir(ruta(slug, token, "/reagendar"), frasesDeLaGestion(rubro).errores.cambiar, conJson("POST", { fecha, hora }))
 }

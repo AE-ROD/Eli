@@ -105,6 +105,16 @@ describe("avisoDeServiciosQuitados", () => {
   it("sin nada quitado, ningún aviso", () => {
     expect(avisoDeServiciosQuitados("Carla", [])).toBe("")
   })
+
+  it("el 'lo' / 'los' concuerda con la palabra de lo que se elige: 'la' / 'las' si fuera femenina", () => {
+    const motivo = { singular: "motivo", plural: "motivos", genero: "m" } as const
+    const prestacion = { singular: "prestación", plural: "prestaciones", genero: "f" } as const
+    expect(avisoDeServiciosQuitados("Ana", [catalogo[1]], motivo)).toBe("Quitamos Barba porque Ana no lo hace.")
+    expect(avisoDeServiciosQuitados("Ana", [catalogo[1]], prestacion)).toBe("Quitamos Barba porque Ana no la hace.")
+    expect(avisoDeServiciosQuitados("Ana", [catalogo[1], catalogo[2]], prestacion)).toBe(
+      "Quitamos Barba y Tinte porque Ana no las hace."
+    )
+  })
 })
 
 describe("serviciosQueNoSePuedenSumar", () => {

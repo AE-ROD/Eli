@@ -105,3 +105,25 @@ describe("textoDeLoQueHace", () => {
     expect(textoDeLoQueHace(["corte"], [])).toBe(TEXTO_SIN_SERVICIOS)
   })
 })
+
+describe("textoDeLoQueHace con las palabras del rubro", () => {
+  it("sin rubro, o con uno sin palabras propias, dice lo de siempre", () => {
+    expect(TEXTO_HACE_TODOS).toBe("Hace todos los servicios")
+    expect(TEXTO_SIN_SERVICIOS).toBe("Sin servicios para reservar por ahora")
+    for (const rubro of [undefined, null, "salud", "salon", "barberia", "spa-de-unas"]) {
+      expect(textoDeLoQueHace(null, catalogo, undefined, rubro)).toBe("Hace todos los servicios")
+      expect(textoDeLoQueHace([], catalogo, undefined, rubro)).toBe("Sin servicios para reservar por ahora")
+    }
+  })
+
+  it("una clínica dental ofrece prestaciones, con su género: 'todas las prestaciones'", () => {
+    expect(textoDeLoQueHace(null, catalogo, undefined, "odontologia")).toBe("Hace todas las prestaciones")
+    expect(textoDeLoQueHace(activos, catalogo, undefined, "odontologia")).toBe("Hace todas las prestaciones")
+    expect(textoDeLoQueHace([], catalogo, undefined, "odontologia")).toBe("Sin prestaciones para reservar por ahora")
+    expect(textoDeLoQueHace(null, [], undefined, "odontologia")).toBe("Sin prestaciones para reservar por ahora")
+  })
+
+  it("los nombres de lo que hace no cambian con el rubro", () => {
+    expect(textoDeLoQueHace(["corte", "barba"], catalogo, undefined, "odontologia")).toBe("Hace: Corte, Barba")
+  })
+})

@@ -276,3 +276,24 @@ describe("leerPaginaDelNegocio: hora valle", () => {
     expect(await anunciaHoraValle({ type: "odontologia" })).toBe(false)
   })
 })
+
+describe("leerPaginaDelNegocio: el rubro", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("trae el rubro del negocio del slug (`Business.type`), y no el de otro negocio", async () => {
+    const datos = datosBase()
+    escenario({
+      business: datos.business.map((negocio) => ({
+        ...negocio,
+        ...CAMPOS_DE_LA_PAGINA,
+        type: negocio.id === NEGOCIO ? "odontologia" : "barberia",
+      })),
+    })
+    const { leerPaginaDelNegocio } = await import("./datos-de-la-pagina")
+
+    expect((await leerPaginaDelNegocio("salon-uno"))?.rubro).toBe("odontologia")
+    expect((await leerPaginaDelNegocio("salon-dos"))?.rubro).toBe("barberia")
+  })
+})

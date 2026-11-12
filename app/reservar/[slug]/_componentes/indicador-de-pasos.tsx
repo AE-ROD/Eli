@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils"
 /** Los pasos de la reserva, en orden: el número de cada uno es su lugar más uno. */
 export const PASOS_DE_RESERVA = ["Servicio", "Día y hora", "Tus datos"] as const
 
-/** Los mismos pasos en una clínica dental, donde el primero es el "Motivo" (`vocabularioDe`). */
+/** Los mismos pasos con el nombre del primero según el rubro: "Servicio", o "Motivo" en una clínica dental (`frasesDelFormulario`). */
 export function pasosDeLaReserva(servicioDeLaReserva: string): readonly [string, string, string] {
   return [servicioDeLaReserva, PASOS_DE_RESERVA[1], PASOS_DE_RESERVA[2]]
 }
