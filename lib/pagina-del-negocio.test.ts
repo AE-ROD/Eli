@@ -151,6 +151,18 @@ describe("iniciales", () => {
     expect(iniciales("  Ñandú   Óscar ")).toBe("ÑÓ")
     expect(iniciales("")).toBe("?")
   })
+
+  it("no cuenta el tratamiento: 'Dra. Camila Rojas' es CR, no DC", () => {
+    expect(iniciales("Dra. Camila Rojas")).toBe("CR")
+    expect(iniciales("Dr. Matías Fuentes")).toBe("MF")
+    expect(iniciales("Doctora Valentina Soto")).toBe("VS")
+    expect(iniciales("Dra. Camila")).toBe("C")
+  })
+
+  it("si todo es tratamiento, queda lo que hay", () => {
+    expect(iniciales("Dra.")).toBe("D")
+    expect(iniciales("Dr. Dra.")).toBe("DD")
+  })
 })
 
 describe("primerNombreDelProfesional", () => {
