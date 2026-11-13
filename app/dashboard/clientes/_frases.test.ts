@@ -99,8 +99,11 @@ describe("sin rubro: exactamente los textos de siempre", () => {
     expect(f.importar.sinFilas).toBe("El archivo no tiene clientes: le falta la cabecera o las filas.")
     expect(f.importar.elegirLaColumna).toBe("Elige qué columna tiene el nombre de los clientes.")
     expect(f.importar.ayuda("5.000")).toBe(
-      "Un CSV de hasta 2 MB y 5.000 filas, con una primera fila de títulos. No se crean clientes repetidos: si el teléfono o el correo ya están en Eli (o más arriba en el archivo), la fila se omite."
+      "Un CSV de hasta 2 MB y 5.000 filas, con una primera fila de títulos, o los contactos de tu teléfono en un archivo .vcf (en Google Contactos o iCloud: Exportar vCard). No se crean clientes repetidos: si el teléfono o el correo ya están en Eli (o más arriba en el archivo), la fila se omite."
     )
+    expect(f.importar.sinContactos).toBe("No encontramos contactos con nombre en el archivo.")
+    expect(f.importar.contactosSinNombre(1)).toBe("1 contacto sin nombre no se importó.")
+    expect(f.importar.contactosSinNombre(3)).toBe("3 contactos sin nombre no se importaron.")
     expect(f.importar.sinConsentimiento).toBe(
       "Sin una columna de “Acepta WhatsApp”, los clientes importados quedan sin consentimiento para recibir mensajes."
     )

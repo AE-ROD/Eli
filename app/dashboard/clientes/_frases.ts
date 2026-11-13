@@ -159,9 +159,16 @@ export function frasesDeClientes(palabras: PalabrasDelRubro) {
       soloQuienPuede: `Sólo el dueño y el encargado pueden importar ${cliente.plural}.`,
       sinFilas: `El archivo no tiene ${cliente.plural}: le falta la cabecera o las filas.`,
       elegirLaColumna: `Elige qué columna tiene el nombre ${del(cliente, "plural")}.`,
-      /** "Un CSV de hasta 2 MB y 5.000 filas, con una primera fila de títulos. No se crean clientes repetidos: …" */
+      /** "Un CSV de hasta 2 MB y 5.000 filas, con una primera fila de títulos, o los contactos de tu teléfono (.vcf). No se crean clientes repetidos: …" */
       ayuda: (filasMaximas: string): string =>
-        `Un CSV de hasta 2 MB y ${filasMaximas} filas, con una primera fila de títulos. No se crean ${cliente.plural} ${concordar("repetido", cliente, "plural")}: si el teléfono o el correo ya están en Eli (o más arriba en el archivo), la fila se omite.`,
+        `Un CSV de hasta 2 MB y ${filasMaximas} filas, con una primera fila de títulos, o los contactos de tu teléfono en un archivo .vcf (en Google Contactos o iCloud: Exportar vCard). No se crean ${cliente.plural} ${concordar("repetido", cliente, "plural")}: si el teléfono o el correo ya están en Eli (o más arriba en el archivo), la fila se omite.`,
+      /** El archivo no es ni CSV ni de contactos. */
+      archivoNoValido: "El archivo tiene que ser un CSV (.csv) o de contactos (.vcf). Desde Excel: Guardar como → CSV.",
+      /** Un .vcf sin ningún contacto con nombre. */
+      sinContactos: "No encontramos contactos con nombre en el archivo.",
+      /** Contactos que no se importan por no tener nombre: "1 contacto sin nombre no se importó." */
+      contactosSinNombre: (cuantos: number): string =>
+        cuantos === 1 ? "1 contacto sin nombre no se importó." : `${cuantos} contactos sin nombre no se importaron.`,
       /** Sin columna de consentimiento: "los clientes importados quedan sin consentimiento…". */
       sinConsentimiento: `Sin una columna de “Acepta WhatsApp”, ${el(cliente, "plural")} ${concordar("importado", cliente, "plural")} quedan sin consentimiento para recibir mensajes.`,
       resumen: {
