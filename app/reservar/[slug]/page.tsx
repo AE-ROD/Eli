@@ -46,7 +46,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 function MarcoDeReserva({ children }: { children: ReactNode }) {
   return (
     <main className="min-h-dvh bg-crema halo-agenda">
-      <div className="mx-auto w-full max-w-[52rem] px-2 pt-10 pb-6 sm:px-4 md:px-6 md:pt-16 md:pb-10">
+      <div className="mx-auto w-full max-w-[70rem] px-2 pt-10 pb-6 sm:px-4 md:px-6 md:pt-16 md:pb-10">
         {children}
         <PieDeEli />
       </div>
@@ -83,7 +83,7 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
     return (
       <MarcoDeReserva>
         {miniPagina}
-        <div id={ANCLA_DE_RESERVA} className="mt-10 scroll-mt-6 md:mt-14">
+        <div id={ANCLA_DE_RESERVA} className="mx-auto mt-10 max-w-[52rem] scroll-mt-6 md:mt-14">
         <EncabezadoDeReserva nivel={2} antetitulo={negocio.name} titulo={tituloDeLaReserva(negocio.type)} />
         <Tarjeta className="mx-auto mt-8 flex max-w-xl flex-col items-center gap-5 px-6 py-10 text-center sm:px-10 md:mt-12">
           <CuadroDeIcono icono={CalendarX2} color="azul" tamano="lg" />
@@ -109,7 +109,7 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
   return (
     <MarcoDeReserva>
       {miniPagina}
-      <div id={ANCLA_DE_RESERVA} className="mt-10 scroll-mt-6 md:mt-14">
+      <div id={ANCLA_DE_RESERVA} className="mx-auto mt-10 max-w-[52rem] scroll-mt-6 md:mt-14">
       <FormularioReserva
         slug={negocio.slug}
         nombreNegocio={negocio.name}

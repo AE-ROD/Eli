@@ -57,7 +57,7 @@ interface PropsDeMiniPagina {
 export function MiniPagina({ pagina, ahora }: PropsDeMiniPagina) {
   const sedes = sedesParaMostrar(pagina)
   return (
-    <div className="flex flex-col gap-4 md:gap-6">
+    <div className="flex flex-col gap-8 md:gap-10">
       <Cabecera pagina={pagina} ahora={ahora} />
       {sedes.length > 0 && <DondeAtiendo sedes={sedes} />}
       {pagina.equipo.length > 0 && (
@@ -83,6 +83,13 @@ function Cabecera({ pagina, ahora }: PropsDeMiniPagina) {
   const sedes = sedesParaMostrar(pagina)
   const comunas = sedes.length > 0 ? [...new Set(sedes.map((sede) => sede.comuna))].join(", ") : pagina.comuna
   const hayComoLlegar = sedes.length > 0 ? sedes.some((sede) => sede.mapas !== null) : !!pagina.mapas
+  // El segundo recuadro: varias sedes o un equipo. Sin ninguno de los dos, no hay recuadro.
+  const datoDelLugar =
+    sedes.length > 0
+      ? { titulo: `${sedes.length} sedes`, detalle: "Elige la que te queda mejor." }
+      : pagina.equipo.length > 1
+        ? { titulo: `Equipo de ${pagina.equipo.length} personas`, detalle: "Elige con quién atenderte o la primera hora libre." }
+        : null
 
   return (
     // Dos capas: la portada (o el color del negocio) y, montada sobre ella, la
@@ -98,7 +105,7 @@ function Cabecera({ pagina, ahora }: PropsDeMiniPagina) {
         className={cn(
           "relative mx-3 -mt-14 rounded-[32px] px-5 pb-5 sm:mx-7 sm:-mt-20 sm:rounded-[40px] sm:px-7 sm:pb-6",
           "shadow-[0_1px_0_var(--color-borde),0_22px_40px_-24px_rgb(7_26_49/0.3)]",
-          "sm:grid sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-x-6"
+          "sm:grid sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-x-6 lg:grid-cols-[auto_minmax(0,1fr)_auto]"
         )}
       >
         <div
@@ -145,7 +152,7 @@ function Cabecera({ pagina, ahora }: PropsDeMiniPagina) {
         )}
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-2 sm:col-span-full sm:mt-2 sm:flex sm:flex-wrap">
+        <div className="mt-5 grid grid-cols-2 gap-2 sm:col-span-full sm:mt-2 sm:flex sm:flex-wrap lg:col-span-1 lg:col-start-3 lg:row-start-1 lg:mt-0 lg:justify-end lg:self-end lg:pb-4">
           <Boton href={`#${ANCLA_DE_RESERVA}`} icono={<CalendarCheck />}>
             Reservar
           </Boton>
@@ -173,10 +180,26 @@ function Cabecera({ pagina, ahora }: PropsDeMiniPagina) {
         </div>
 
         {/* El plazo para cancelar o cambiar, dicho antes de reservar (#83). */}
-        <p className="mt-4 flex items-start gap-2 text-sm text-texto-2 sm:col-span-full">
+        <p className="mt-4 flex items-start gap-2 text-sm text-texto-2 sm:hidden">
           <CalendarClock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           {plazoParaQuienReserva(pagina.plazoDeCambiosHoras, pagina.rubro)}
         </p>
+        {/* Desde sm: recuadros de color con lo que hay que saber antes de reservar. */}
+        <div className="mt-3 hidden gap-3 sm:col-span-full sm:grid sm:grid-cols-2">
+          <p className="flex items-start gap-2.5 rounded-[20px] bg-naranja-suave px-4 py-3 text-sm text-navy">
+            <CalendarClock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            {plazoParaQuienReserva(pagina.plazoDeCambiosHoras, pagina.rubro)}
+          </p>
+          {datoDelLugar && (
+            <p className="flex items-start gap-2.5 rounded-[20px] bg-lila-suave px-4 py-3 text-sm text-navy">
+              <MapPin className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <span>
+                <strong className="block font-semibold">{datoDelLugar.titulo}</strong>
+                {datoDelLugar.detalle}
+              </span>
+            </p>
+          )}
+        </div>
         {/* Hora valle (#89c): sólo que existe; los precios se ven al elegir la hora. */}
         {pagina.horaValle && (
           <p className="mt-2 flex items-start gap-2 text-sm text-texto-2 sm:col-span-full">
@@ -194,10 +217,13 @@ function Cabecera({ pagina, ahora }: PropsDeMiniPagina) {
  * suyos, y `sede` (su nombre) los distingue para el lector de pantalla: "Cómo
  * llegar a Centro con Waze". Sin `sede`, los de siempre.
  */
-function EnlacesDeMapa({ mapas, sede }: { mapas: NonNullable<PaginaDelNegocio["mapas"]>; sede?: string }) {
+function EnlacesDeMapa({ mapas, sede, compacto = false }: { mapas: NonNullable<PaginaDelNegocio["mapas"]>; sede?: string; compacto?: boolean }) {
+  // En la tarjeta de una sede, los dos botones van lado a lado y más bajos.
+  const medida = compacto ? ({ tamano: "sm", className: "min-w-0 flex-1" } as const) : {}
   return (
     <>
       <Boton
+        {...medida}
         href={mapas.googleMaps}
         variante="secundario"
         icono={<Navigation />}
@@ -207,6 +233,7 @@ function EnlacesDeMapa({ mapas, sede }: { mapas: NonNullable<PaginaDelNegocio["m
         Google Maps
       </Boton>
       <Boton
+        {...medida}
         href={mapas.waze}
         variante="secundario"
         icono={<Navigation />}
@@ -224,10 +251,23 @@ interface PropsDeBloque {
   children: ReactNode
   className?: string
   id?: string
+  /** Sin la tarjeta blanca alrededor: el título y el contenido van directo sobre el fondo, y el contenido pone sus propias tarjetas. */
+  plano?: boolean
 }
 
-function Bloque({ titulo, children, className, id }: PropsDeBloque) {
+function Bloque({ titulo, children, className, id, plano = false }: PropsDeBloque) {
   const idDelTitulo = useId()
+  if (plano) {
+    return (
+      <section aria-labelledby={idDelTitulo} className={className}>
+        {id && <span id={id} className="block scroll-mt-6" aria-hidden="true" />}
+        <h2 id={idDelTitulo} className={cn(TITULO_DE_SECCION, "px-5 text-[26px] sm:px-1 md:text-[28px]")}>
+          {titulo}
+        </h2>
+        {children}
+      </section>
+    )
+  }
   return (
     <Tarjeta como="section" aria-labelledby={idDelTitulo} className={cn("p-6 sm:p-8", className)}>
       {id && <span id={id} className="block scroll-mt-6" aria-hidden="true" />}
@@ -248,17 +288,23 @@ function Bloque({ titulo, children, className, id }: PropsDeBloque) {
  */
 function DondeAtiendo({ sedes }: { sedes: SedeDeLaPagina[] }) {
   return (
-    <Bloque titulo={FRASES_DE_LAS_SEDES.bloque} id={ANCLA_DE_UBICACION}>
+    <Bloque titulo={FRASES_DE_LAS_SEDES.bloque} id={ANCLA_DE_UBICACION} plano>
       {/* En el teléfono, un carrusel que se desliza de lado (con el margen del bloque); desde `md`, dos columnas. */}
-      <ul className="-mx-6 mt-5 flex snap-x snap-mandatory scroll-px-6 gap-3 overflow-x-auto px-6 pb-1 [scrollbar-width:none] sm:-mx-8 sm:scroll-px-8 sm:px-8 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 md:pb-0 [&::-webkit-scrollbar]:hidden">
+      <ul className="-mx-2 mt-4 flex snap-x snap-mandatory scroll-px-5 gap-3 overflow-x-auto px-5 pb-1 [scrollbar-width:none] sm:-mx-4 sm:scroll-px-8 sm:px-8 md:mx-0 md:mt-5 md:grid md:grid-cols-2 md:overflow-visible md:px-0 md:pb-0 [&::-webkit-scrollbar]:hidden">
         {sedes.map((sede) => {
           const sePuedeReservar = sede.dias.length > 0
           return (
             // `min-w-0`: igual que en Equipo, una dirección larga y sin espacios no ensancha la tarjeta.
-            <li key={sede.id} className="flex min-w-0 shrink-0 basis-[80%] snap-start flex-col gap-4 rounded-[24px] bg-superficie p-4 squircle md:basis-auto">
+            <li
+              key={sede.id}
+              className={cn(
+                "flex min-w-0 shrink-0 basis-[82%] snap-start flex-col gap-4 rounded-[28px] border p-5 squircle md:basis-auto",
+                sePuedeReservar ? "border-borde bg-tarjeta" : "border-transparent bg-superficie"
+              )}
+            >
               <div className="flex flex-col gap-3">
                 <div>
-                  <h3 className="font-medium break-words text-navy">{sede.nombre}</h3>
+                  <h3 className="font-serif text-xl font-medium break-words text-navy">{sede.nombre}</h3>
                   <p className="mt-1 flex items-start gap-2 text-sm text-navy">
                     <MapPin className="mt-0.5 size-4 shrink-0 text-texto-2" aria-hidden="true" />
                     <span className="break-words">{[sede.direccion, sede.comuna].filter(Boolean).join(", ")}</span>
@@ -276,8 +322,8 @@ function DondeAtiendo({ sedes }: { sedes: SedeDeLaPagina[] }) {
                   <p className="text-sm text-texto-2">{FRASES_DE_LAS_SEDES.sinHorario}</p>
                 )}
                 {sede.mapas && (
-                  <div className="flex flex-wrap gap-2">
-                    <EnlacesDeMapa mapas={sede.mapas} sede={sede.nombre} />
+                  <div className="flex gap-2">
+                    <EnlacesDeMapa mapas={sede.mapas} sede={sede.nombre} compacto />
                   </div>
                 )}
               </div>
@@ -316,9 +362,9 @@ function Equipo({
   rubro: PaginaDelNegocio["rubro"]
 }) {
   return (
-    <Bloque titulo="Equipo">
+    <Bloque titulo="Equipo" plano>
       {/* En el teléfono, una lista compacta de filas; desde `sm`, tarjetas en dos columnas. */}
-      <ul className="mt-4 divide-y divide-borde sm:mt-5 sm:grid sm:grid-cols-2 sm:gap-3 sm:divide-y-0">
+      <ul className="mx-3 mt-4 divide-y divide-borde rounded-[28px] border border-borde bg-tarjeta px-4 py-1 sm:mx-0 sm:mt-5 sm:grid sm:grid-cols-2 sm:gap-3 sm:divide-y-0 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0">
         {equipo.map((profesional) => {
           const primerNombre = primerNombreDelProfesional(profesional.nombre)
           // Quien ya no hace ninguno de los servicios que hay no se puede reservar: sin botón que no lleve a nada.
@@ -329,7 +375,7 @@ function Equipo({
             // de servicio largo y sin espacios ensancha la tarjeta y la saca de la pantalla.
             <li
               key={profesional.id}
-              className="flex min-w-0 items-center justify-between gap-3 py-3 first:pt-0 last:pb-0 sm:flex-col sm:items-stretch sm:justify-start sm:gap-4 sm:rounded-[24px] sm:bg-superficie sm:p-4 sm:squircle sm:first:pt-4 sm:last:pb-4"
+              className="flex min-w-0 items-center justify-between gap-3 py-3 sm:flex-col sm:items-stretch sm:justify-start sm:gap-4 sm:rounded-[28px] sm:border sm:border-borde sm:bg-tarjeta sm:p-5 sm:squircle"
             >
               <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-none">
                 <div className="flex items-center gap-3">
@@ -395,8 +441,8 @@ function Servicios({ servicios, rubro }: { servicios: PaginaDelNegocio["servicio
   const conTitulos = !(grupos.length === 1 && grupos[0].categoria === CATEGORIA_SIN_NOMBRE)
 
   return (
-    <Bloque titulo={frasesDeLaPagina(rubro).catalogo}>
-      <div className="mt-5 flex flex-col gap-6">
+    <Bloque titulo={frasesDeLaPagina(rubro).catalogo} plano>
+      <div className="mx-3 mt-4 flex flex-col gap-6 rounded-[28px] border border-borde bg-tarjeta p-5 sm:mx-0 sm:mt-5 sm:rounded-[32px] sm:p-7">
         {grupos.map((grupo) => (
           <div key={grupo.categoria}>
             {conTitulos && <h3 className="antetitulo mb-2">{grupo.categoria}</h3>}
