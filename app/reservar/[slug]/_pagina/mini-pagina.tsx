@@ -84,17 +84,25 @@ function Cabecera({ pagina, ahora }: PropsDeMiniPagina) {
   const hayComoLlegar = sedes.length > 0 ? sedes.some((sede) => sede.mapas !== null) : !!pagina.mapas
 
   return (
-    <Tarjeta como="section" aria-labelledby={idDelTitulo} className="overflow-hidden">
-      <div className={cn("relative h-28 sm:h-40", clasesDelColor)}>
+    // Dos capas: la portada (o el color del negocio) y, montada sobre ella, la
+    // ficha con la foto, el nombre y cómo reservar o llegar.
+    <section aria-labelledby={idDelTitulo}>
+      <div className={cn("relative h-36 overflow-hidden rounded-tarjeta squircle sm:h-56", clasesDelColor)}>
         {pagina.portada && (
           <ImagenConRespaldo src={pagina.portada} alt="" fill priority sizes="(min-width: 832px) 832px, 100vw" className="object-cover" />
         )}
       </div>
 
-      <div className="px-5 pb-6 sm:px-8 sm:pb-8">
+      <Tarjeta
+        className={cn(
+          "relative mx-3 -mt-14 rounded-[32px] px-5 pb-5 sm:mx-7 sm:-mt-20 sm:rounded-[40px] sm:px-7 sm:pb-6",
+          "shadow-[0_1px_0_var(--color-borde),0_22px_40px_-24px_rgb(7_26_49/0.3)]",
+          "sm:grid sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-x-6"
+        )}
+      >
         <div
           className={cn(
-            "relative -mt-10 grid size-20 place-items-center overflow-hidden rounded-full text-2xl font-medium ring-4 ring-tarjeta select-none",
+            "relative -mt-10 grid size-20 place-items-center overflow-hidden rounded-full text-2xl font-medium ring-4 ring-tarjeta select-none sm:-mt-16 sm:size-28 sm:self-start sm:text-4xl sm:ring-[6px]",
             clasesDelColor
           )}
         >
@@ -104,7 +112,7 @@ function Cabecera({ pagina, ahora }: PropsDeMiniPagina) {
               src={pagina.logo}
               alt={`Logo de ${pagina.nombre}`}
               fill
-              sizes="80px"
+              sizes="(min-width: 640px) 112px, 80px"
               className="object-cover"
               respaldo={<span aria-hidden="true">{iniciales(pagina.nombre)}</span>}
             />
@@ -113,7 +121,8 @@ function Cabecera({ pagina, ahora }: PropsDeMiniPagina) {
           )}
         </div>
 
-        <h1 id={idDelTitulo} className="mt-4 font-serif text-[32px] leading-[1.1] font-medium tracking-[-1px] text-balance break-words text-navy md:text-[40px]">
+        <div className="min-w-0 sm:py-4">
+        <h1 id={idDelTitulo} className="mt-3 font-serif text-[30px] leading-[1.1] font-medium tracking-[-1px] text-balance break-words text-navy sm:mt-0 md:text-[40px]">
           {pagina.nombre}
         </h1>
         {comunas && (
@@ -133,8 +142,9 @@ function Cabecera({ pagina, ahora }: PropsDeMiniPagina) {
             {textoDeEstado(estado)}
           </p>
         )}
+        </div>
 
-        <div className="mt-5 flex flex-wrap gap-2">
+        <div className="mt-5 grid grid-cols-2 gap-2 sm:col-span-full sm:mt-2 sm:flex sm:flex-wrap">
           <Boton href={`#${ANCLA_DE_RESERVA}`} icono={<CalendarCheck />}>
             Reservar
           </Boton>
@@ -162,19 +172,19 @@ function Cabecera({ pagina, ahora }: PropsDeMiniPagina) {
         </div>
 
         {/* El plazo para cancelar o cambiar, dicho antes de reservar (#83). */}
-        <p className="mt-4 flex items-start gap-2 text-sm text-texto-2">
+        <p className="mt-4 flex items-start gap-2 text-sm text-texto-2 sm:col-span-full">
           <CalendarClock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           {plazoParaQuienReserva(pagina.plazoDeCambiosHoras, pagina.rubro)}
         </p>
         {/* Hora valle (#89c): sólo que existe; los precios se ven al elegir la hora. */}
         {pagina.horaValle && (
-          <p className="mt-2 flex items-start gap-2 text-sm text-texto-2">
+          <p className="mt-2 flex items-start gap-2 text-sm text-texto-2 sm:col-span-full">
             <Percent className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
             Precios más bajos en horas valle: los verás al elegir la hora.
           </p>
         )}
-      </div>
-    </Tarjeta>
+      </Tarjeta>
+    </section>
   )
 }
 
@@ -238,12 +248,13 @@ function Bloque({ titulo, children, className, id }: PropsDeBloque) {
 function DondeAtiendo({ sedes }: { sedes: SedeDeLaPagina[] }) {
   return (
     <Bloque titulo={FRASES_DE_LAS_SEDES.bloque} id={ANCLA_DE_UBICACION}>
-      <ul className="mt-5 grid gap-3 md:grid-cols-2">
+      {/* En el teléfono, un carrusel que se desliza de lado (con el margen del bloque); desde `md`, dos columnas. */}
+      <ul className="-mx-6 mt-5 flex snap-x snap-mandatory scroll-px-6 gap-3 overflow-x-auto px-6 pb-1 [scrollbar-width:none] sm:-mx-8 sm:scroll-px-8 sm:px-8 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 md:pb-0 [&::-webkit-scrollbar]:hidden">
         {sedes.map((sede) => {
           const sePuedeReservar = sede.dias.length > 0
           return (
             // `min-w-0`: igual que en Equipo, una dirección larga y sin espacios no ensancha la tarjeta.
-            <li key={sede.id} className="flex min-w-0 flex-col gap-4 rounded-[24px] bg-superficie p-4 squircle">
+            <li key={sede.id} className="flex min-w-0 shrink-0 basis-[80%] snap-start flex-col gap-4 rounded-[24px] bg-superficie p-4 squircle md:basis-auto">
               <div className="flex flex-col gap-3">
                 <div>
                   <h3 className="font-medium break-words text-navy">{sede.nombre}</h3>
@@ -305,7 +316,8 @@ function Equipo({
 }) {
   return (
     <Bloque titulo="Equipo">
-      <ul className="mt-5 grid gap-3 sm:grid-cols-2">
+      {/* En el teléfono, una lista compacta de filas; desde `sm`, tarjetas en dos columnas. */}
+      <ul className="mt-4 divide-y divide-borde sm:mt-5 sm:grid sm:grid-cols-2 sm:gap-3 sm:divide-y-0">
         {equipo.map((profesional) => {
           const primerNombre = profesional.nombre.trim().split(/\s+/)[0] || profesional.nombre
           // Quien ya no hace ninguno de los servicios que hay no se puede reservar: sin botón que no lleve a nada.
@@ -314,12 +326,15 @@ function Equipo({
             // `min-w-0`: en el teléfono la lista es una sola columna sin plantilla y un
             // `<li>` no baja de lo que mide su palabra más larga; sin esto, un nombre
             // de servicio largo y sin espacios ensancha la tarjeta y la saca de la pantalla.
-            <li key={profesional.id} className="flex min-w-0 flex-col gap-4 rounded-[24px] bg-superficie p-4 squircle">
-              <div className="flex flex-col gap-3">
+            <li
+              key={profesional.id}
+              className="flex min-w-0 items-center justify-between gap-3 py-3 first:pt-0 last:pb-0 sm:flex-col sm:items-stretch sm:justify-start sm:gap-4 sm:rounded-[24px] sm:bg-superficie sm:p-4 sm:squircle sm:first:pt-4 sm:last:pb-4"
+            >
+              <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-none">
                 <div className="flex items-center gap-3">
                   <span
                     className={cn(
-                      "relative grid size-14 shrink-0 place-items-center overflow-hidden rounded-full text-lg font-medium select-none",
+                      "relative grid size-12 shrink-0 place-items-center overflow-hidden rounded-full text-base font-medium select-none sm:size-14 sm:text-lg",
                       CLASES_DEL_LOCAL[color]
                     )}
                   >
@@ -344,7 +359,7 @@ function Equipo({
                   </span>
                 </div>
                 {/* Qué hace: sus servicios por nombre (con tope) o "todos". Debajo de la foto, a todo el ancho de la tarjeta. */}
-                <p className="text-sm text-pretty break-words text-texto-2">{textoDeLoQueHace(profesional.servicioIds, servicios, undefined, rubro)}</p>
+                <p className="text-sm text-pretty break-words text-texto-2 max-sm:hidden">{textoDeLoQueHace(profesional.servicioIds, servicios, undefined, rubro)}</p>
               </div>
               {/*
                 Un `<a>` común y no `Link`: carga la página con el profesional en
@@ -359,9 +374,10 @@ function Equipo({
                 <a
                   href={`?profesional=${encodeURIComponent(profesional.id)}#${ANCLA_DE_RESERVA}`}
                   aria-label={`Reservar con ${profesional.nombre}`}
-                  className={clasesDeBoton({ variante: "secundario", tamano: "sm", className: "mt-auto w-full bg-tarjeta max-sm:min-h-11 max-sm:after:inset-y-0" })}
+                  className={clasesDeBoton({ variante: "secundario", tamano: "sm", className: "bg-tarjeta max-sm:min-h-11 max-sm:shrink-0 max-sm:after:inset-y-0 sm:mt-auto sm:w-full" })}
                 >
-                  <span className="truncate">Reservar con {primerNombre}</span>
+                  <span className="truncate sm:hidden" aria-hidden="true">Reservar</span>
+                  <span className="hidden truncate sm:inline">Reservar con {primerNombre}</span>
                 </a>
               )}
             </li>
