@@ -78,6 +78,10 @@ export function ModalServicios({
 
   const validacion = lineasDesdeFilas(filas, eligeProfesional, palabras)
   const errores = intentoGuardar && !validacion.ok ? validacion.errores : {}
+  // El requisito se explica al abrir; en cuanto las filas escritas ya alcanzan
+  // para guardar, deja de aparecer, para no decir que falta lo que ya se puso.
+  // Si el servidor igual lo rechaza, el tablero lo vuelve a poner.
+  const requisitoPendiente = requisito && !(validacion.ok && validacion.lineas.length > 0) ? requisito : null
 
   const guardar = (evento: FormEvent<HTMLFormElement>) => {
     evento.preventDefault()
@@ -90,11 +94,11 @@ export function ModalServicios({
       antetitulo={frases.titulo}
       titulo={frases.servicios.deLaAtencion(atencion.cliente.nombre)}
       descripcion={
-        requisito ? (
+        requisitoPendiente ? (
           // Por qué se abrió: lo que le falta a la atención para avanzar.
           <span className="mt-3 flex items-start gap-2.5 rounded-campo bg-naranja-suave px-4 py-3 font-medium text-navy squircle">
             <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" strokeWidth={2} />
-            <span className="min-w-0">{requisito}</span>
+            <span className="min-w-0">{requisitoPendiente}</span>
           </span>
         ) : eligeProfesional ? undefined : (
           frases.servicios.soloLosTuyos
