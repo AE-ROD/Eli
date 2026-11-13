@@ -3,14 +3,15 @@
 import { useEffect, useRef } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { signOut } from "next-auth/react"
+import { signOut, useSession } from "next-auth/react"
 import { motion, AnimatePresence } from "framer-motion"
-import { ArrowRight, LogOut, PanelLeftClose, PanelLeftOpen, Sparkles, UserRound, X } from "lucide-react"
+import { ArrowLeftRight, ArrowRight, LogOut, PanelLeftClose, PanelLeftOpen, Sparkles, UserRound, X } from "lucide-react"
 import { FONDO_SUAVE, HALO_DE_MODULO } from "@/components/comunes/colores-de-modulo"
 import { LogoEli } from "@/components/comunes/logo-eli"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
-import { AvatarUsuario } from "@/components/panel/avatar-usuario"
+import { BotonDeMiFoto } from "@/components/panel/boton-de-mi-foto"
 import { ID_DEL_CAJON, useBarraLateral } from "@/components/panel/contexto-barra-lateral"
+import { useCuentaDelPanel } from "@/components/panel/contexto-de-la-cuenta"
 import { usePrecios } from "@/components/panel/contexto-precios"
 import { CuadroDeSeccion } from "@/components/panel/icono-de-seccion"
 import {
@@ -19,10 +20,12 @@ import {
   SECCION_DE_INICIO,
   SECCIONES_DE_MODULOS,
   seccionMarcadaEnLaBarra,
+  seccionesConNombreDelRubro,
   seccionesDeLaPlata,
   type AccesoALaPlata,
   type SeccionDelPanel,
 } from "@/components/panel/secciones-del-panel"
+import { CLAVE_DEL_CONTEXTO_DEL_PANEL, cambioElContextoDelPanel } from "@/lib/contextos"
 import { moduloPorId } from "@/lib/modulos"
 import { DIA_DEL_AVISO_DE_PRUEBA, DIAS_DE_PRUEBA } from "@/lib/precios"
 import { cn } from "@/lib/utils"
@@ -47,6 +50,7 @@ interface PropsDeBarraLateral {
   usuario?: {
     nombre: string
     email: string
+    /** La foto de la CUENTA de quien está en sesión (no la del integrante), ya comprobada en el servidor. Sin ella, las iniciales. */
     imagenUrl?: string
     negocio: string
   }
@@ -60,6 +64,79 @@ interface PropsDeBarraLateral {
    * Comisiones). Resuelto en el servidor con `lib/permisos.ts`; sin dato, ninguna.
    */
   accesoALaPlata?: AccesoALaPlata
+  /**
+   * El rubro del negocio, del actor en el servidor: elige el nombre de cada
+   * sección (`seccionesConNombreDelRubro`). En una clínica dental, "Pacientes"
+   * y "Sala de espera"; en otro rubro o sin dato, los de siempre.
+   */
+  rubro?: string | null
+  /**
+   * Si la cuenta tiene más de un negocio o rol (PRODUCTO.md, sección 5): junto
+   * a cerrar sesión aparece "Cambiar de negocio". Resuelto en el servidor.
+   */
+  puedeCambiarDeNegocio?: boolean
+  /**
+   * El contexto (negocio y rol) con que el servidor dibujó el panel. Si la
+   * sesión pasa a otro (se cambió en otra pestaña, o la revalidación la dejó
+   * sin negocio), la pestaña se recarga (`useRecargarSiCambiaElContexto`).
+   */
+  contexto?: string | null
+}
+
+/** Lee la clave compartida entre pestañas; `undefined` si no hay o no se puede leer (modo privado). */
+function contextoAnotado(): string | null | undefined {
+  try {
+    const valor = window.localStorage.getItem(CLAVE_DEL_CONTEXTO_DEL_PANEL)
+    return valor === null ? undefined : valor
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Una pestaña del panel abierta con otro contexto no sigue trabajando: en
+ * cuanto sabe que la sesión ya es de otro negocio o rol, se recarga y el
+ * servidor la dibuja con el de ahora (o el proxy la manda a elegir). Ver
+ * `CLAVE_DEL_CONTEXTO_DEL_PANEL` en `lib/contextos.ts`.
+ */
+function useRecargarSiCambiaElContexto(cargado: string | null | undefined) {
+  const { data: sesion, status } = useSession()
+
+  // Al cargar, anota con qué contexto quedó esta pestaña; las demás lo oyen.
+  // Al volver a la pestaña mira lo anotado en el acto, antes de cualquier clic.
+  useEffect(() => {
+    if (cargado === undefined) return
+    try {
+      window.localStorage.setItem(CLAVE_DEL_CONTEXTO_DEL_PANEL, cargado ?? "")
+    } catch {
+      // Sin localStorage queda la revisión de la sesión, de abajo.
+    }
+    const recargarSiCambio = (actual: string | null | undefined) => {
+      if (cambioElContextoDelPanel(cargado, actual)) window.location.reload()
+    }
+    const alOirOtraPestaña = (evento: StorageEvent) => {
+      if (evento.key === CLAVE_DEL_CONTEXTO_DEL_PANEL) recargarSiCambio(evento.newValue ?? undefined)
+    }
+    const alVolver = () => {
+      if (document.visibilityState === "visible") recargarSiCambio(contextoAnotado())
+    }
+    window.addEventListener("storage", alOirOtraPestaña)
+    document.addEventListener("visibilitychange", alVolver)
+    window.addEventListener("focus", alVolver)
+    return () => {
+      window.removeEventListener("storage", alOirOtraPestaña)
+      document.removeEventListener("visibilitychange", alVolver)
+      window.removeEventListener("focus", alVolver)
+    }
+  }, [cargado])
+
+  // La sesión que `SessionProvider` vuelve a leer al volver el foco (y cuando
+  // otra pestaña la actualiza): si ya trabaja con otro contexto, recarga. Sólo
+  // con una sesión leída: un error de red no es "sin contexto".
+  const actual = status === "authenticated" ? (sesion?.user?.contexto ?? null) : undefined
+  useEffect(() => {
+    if (cargado !== undefined && cambioElContextoDelPanel(cargado, actual)) window.location.reload()
+  }, [cargado, actual])
 }
 
 export function BarraLateral({
@@ -68,8 +145,13 @@ export function BarraLateral({
   diasTrialRestantes,
   puedeVerEquipo,
   accesoALaPlata,
+  rubro,
+  puedeCambiarDeNegocio,
+  contexto,
 }: PropsDeBarraLateral) {
+  useRecargarSiCambiaElContexto(contexto)
   const { abrirPrecios } = usePrecios()
+  const { abrirMiFoto } = useCuentaDelPanel()
   const pathname = usePathname()
   const { cajonAbierto, cerrarCajon, cerrarCajonParaIrA, colapsada, alternarColapso, enfocarBotonMenu } =
     useBarraLateral()
@@ -81,13 +163,17 @@ export function BarraLateral({
    * configuración y ayuda. Chats está escondido hasta que exista WhatsApp
    * (`secciones-del-panel.ts`). Tablero y reportes son para todos los roles: cada
    * endpoint ya recorta lo que ve cada uno. Equipo, sólo para quien lo gestiona.
-   * Después, las de la plata del equipo que le tocan a cada rol.
+   * Después, las de la plata del equipo que le tocan a cada rol. Cada una,
+   * con el nombre que le da el rubro (en una clínica dental, "Pacientes").
    */
-  const principales: SeccionDelPanel[] = [
-    SECCION_DE_INICIO,
-    ...SECCIONES_DE_MODULOS.filter((seccion) => seccion.id !== "equipo" || puedeVerEquipo),
-    ...seccionesDeLaPlata(accesoALaPlata),
-  ]
+  const principales: SeccionDelPanel[] = seccionesConNombreDelRubro(
+    [
+      SECCION_DE_INICIO,
+      ...SECCIONES_DE_MODULOS.filter((seccion) => seccion.id !== "equipo" || puedeVerEquipo),
+      ...seccionesDeLaPlata(accesoALaPlata),
+    ],
+    rubro
+  )
   const secundarias: SeccionDelPanel[] = [SECCION_DE_CONFIGURACION, SECCION_DE_AYUDA]
   const seccionActiva = seccionMarcadaEnLaBarra(pathname, [...principales, ...secundarias])
 
@@ -308,7 +394,18 @@ export function BarraLateral({
               className={cn("flex items-center rounded-[24px] bg-superficie p-2", colapsada ? "flex-col gap-1.5" : "gap-2")}
             >
               {usuario ? (
-                <AvatarUsuario nombre={usuario.nombre} imagenUrl={usuario.imagenUrl} tamaño="md" />
+                <BotonDeMiFoto
+                  nombre={usuario.nombre}
+                  imagenUrl={usuario.imagenUrl}
+                  alAbrir={
+                    abrirMiFoto &&
+                    (() => {
+                      // Como los planes: el modal se abre con el cajón ya cerrado; abierto, seguiría reteniendo el foco detrás.
+                      cerrarCajon()
+                      abrirMiFoto()
+                    })
+                  }
+                />
               ) : (
                 <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-full bg-tarjeta text-texto-2">
                   <UserRound className="size-5" strokeWidth={1.75} />
@@ -331,6 +428,18 @@ export function BarraLateral({
                   <p className="text-[13px] leading-tight text-texto-2">Sesión no disponible</p>
                 )}
               </div>
+              {/* Va a otra página (elegir con qué negocio trabajar): es un enlace. */}
+              {puedeCambiarDeNegocio && (
+                <Link
+                  href="/elegir-negocio"
+                  onNavigate={cerrarCajon}
+                  aria-label="Cambiar de negocio"
+                  title="Cambiar de negocio"
+                  className={cn(BOTON_DE_ICONO, "relative size-10 rounded-[12px] after:absolute after:-inset-0.5 hover:bg-tarjeta")}
+                >
+                  <ArrowLeftRight className="size-[18px]" aria-hidden="true" strokeWidth={1.75} />
+                </Link>
+              )}
               <button
                 type="button"
                 onClick={() => signOut({ callbackUrl: "/iniciar-sesion" })}

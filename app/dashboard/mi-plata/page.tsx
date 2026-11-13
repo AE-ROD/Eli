@@ -1,29 +1,37 @@
 import Link from "next/link"
-import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
-import { ChevronRight, HandCoins, History } from "lucide-react"
-import { authOptions } from "@/lib/auth"
+import { ChevronRight, HandCoins, History, Smile } from "lucide-react"
+import { sesionDelServidor } from "@/lib/sesion-del-servidor"
 import { prisma } from "@/lib/prisma"
-import { actorDeSesion, veMiPlata } from "@/lib/permisos"
+import { actorDeSesion, esClinicaDental, veLaLineaDePropinas, veMiPlata } from "@/lib/permisos"
 import { calcularMiPlata, type Ganado } from "@/lib/mi-plata"
 import { NOMBRES_DE_MOVIMIENTO } from "@/lib/movimientos"
 import { fechaParaLeer } from "@/lib/periodos-de-liquidacion"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { InsigniaDeEstado, pesos } from "../liquidaciones/_componentes/piezas"
+import { frasesDeMiPlata } from "./_frases"
 
-/** Comisiones y propinas debajo del total, sólo si hay propinas que separar. */
+/** Comisiones, prótesis y propinas debajo del total, sólo si hay algo además de las comisiones que separar. */
 function Desglose({ ganado }: { ganado: Ganado }) {
-  if (ganado.propinasCents === 0) return null
-  return (
-    <p className="text-sm text-texto-2">
-      {pesos(ganado.comisionesCents)} en comisiones · {pesos(ganado.propinasCents)} en propinas
-    </p>
-  )
+  if (ganado.propinasCents === 0 && ganado.protesisCents === 0) return null
+  const partes = [
+    `${pesos(ganado.comisionesCents)} en comisiones`,
+    ...(ganado.protesisCents !== 0 ? [`${pesos(ganado.protesisCents)} en prótesis`] : []),
+    ...(ganado.propinasCents !== 0 ? [`${pesos(ganado.propinasCents)} en propinas`] : []),
+  ]
+  return <p className="text-sm text-texto-2">{partes.join(" · ")}</p>
+}
+
+/** Debajo del total de hoy o de la semana: lo de prótesis, si hay (clínica dental). */
+function DeProtesis({ ganado }: { ganado: Ganado }) {
+  if (ganado.protesisCents === 0) return null
+  return <p className="text-[13px] text-texto-2 tabular-nums">{pesos(ganado.protesisCents)} de prótesis</p>
 }
 
 /**
@@ -32,12 +40,18 @@ function Desglose({ ganado }: { ganado: Ganado }) {
  * `memberId` (la dueña) no se ve: de vuelta al inicio.
  */
 export default async function PaginaMiPlata() {
-  const actor = actorDeSesion(await getServerSession(authOptions))
+  const actor = actorDeSesion(await sesionDelServidor())
   if (!actor) redirect("/iniciar-sesion")
   if (!veMiPlata(actor) || !actor.memberId) redirect("/dashboard")
 
   const plata = await calcularMiPlata(prisma, { businessId: actor.businessId, memberId: actor.memberId, ahora: new Date() })
   if (!plata) redirect("/dashboard")
+  const clinica = esClinicaDental(actor)
+  // "1 prestación espera su porcentaje…" en una clínica dental; en los demás rubros, con sus palabras.
+  const frases = frasesDeMiPlata(vocabularioDe(actor.rubro).palabras)
+  // Una clínica dental no trabaja con propinas: el texto no las nombra, salvo que alguna de las cifras de arriba las tenga.
+  const conPropinas = [plata.periodo, plata.hoy, plata.semana].some((ganado) => veLaLineaDePropinas(actor.rubro, ganado.propinasCents))
+  const queCuenta = conPropinas ? "tus comisiones ya calculadas y tus propinas" : "tus comisiones ya calculadas"
 
   return (
     <div className="min-h-dvh">
@@ -58,24 +72,50 @@ export default async function PaginaMiPlata() {
               Hoy
             </h2>
             <p className="text-2xl font-medium tabular-nums">{pesos(plata.hoy.totalCents)}</p>
+            <DeProtesis ganado={plata.hoy} />
           </section>
           <section aria-labelledby="titulo-semana" className={cn(TARJETA_DEL_PANEL, "space-y-1 p-4 sm:p-5")}>
             <h2 id="titulo-semana" className="text-sm text-texto-2">
               Esta semana
             </h2>
             <p className="text-2xl font-medium tabular-nums">{pesos(plata.semana.totalCents)}</p>
+            <DeProtesis ganado={plata.semana} />
           </section>
         </div>
 
         <p className="px-1 text-sm text-texto-2">
-          Cuenta tus comisiones ya calculadas y tus propinas de lo cobrado, por el día en que se cobró.
+          {clinica
+            ? `Cuenta ${queCuenta} de lo cobrado, por el día en que se cobró, y tu parte de las prótesis desde que se entregan.`
+            : `Cuenta ${queCuenta} de lo cobrado, por el día en que se cobró.`}
         </p>
+
+        {/* Clínica dental: lo ya cobrado de prótesis suyas que todavía no se entregan. */}
+        {clinica && (
+          <section aria-labelledby="titulo-por-liberar" className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+            <EncabezadoDeTarjeta
+              id="titulo-por-liberar"
+              titulo="Prótesis por liberar"
+              subtitulo={
+                plata.protesisPorLiberar.abonos > 0
+                  ? `Tu parte de ${plata.protesisPorLiberar.abonos === 1 ? "1 abono ya cobrado" : `${plata.protesisPorLiberar.abonos} abonos ya cobrados`} de prótesis que todavía no se entregan.`
+                  : "Nada cobrado de prótesis tuyas sin entregar."
+              }
+              icono={{ figura: Smile }}
+            />
+            {plata.protesisPorLiberar.abonos > 0 && (
+              <>
+                <p className="mt-4 text-2xl font-medium tabular-nums">{pesos(plata.protesisPorLiberar.totalCents)}</p>
+                <p className="mt-1 text-sm text-texto-2">
+                  Se libera al entregar cada prótesis: desde ese día cuenta en lo ganado y entra en tu liquidación.
+                </p>
+              </>
+            )}
+          </section>
+        )}
 
         {plata.esperanPorcentaje > 0 && (
           <Aviso tono="atencion" rol="status">
-            {plata.esperanPorcentaje === 1
-              ? "1 servicio espera su porcentaje de comisión: avísale a la dueña."
-              : `${plata.esperanPorcentaje} servicios esperan su porcentaje de comisión: avísale a la dueña.`}
+            {frases.esperanSuPorcentaje(plata.esperanPorcentaje)}
           </Aviso>
         )}
 

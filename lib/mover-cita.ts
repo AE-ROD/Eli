@@ -24,6 +24,7 @@ import { franjasDeAtencion, cabeEnAtencion, type FilaDeHorarioSemanal } from "@/
 import { minutosAHora, type FranjaHorario } from "@/lib/horario-dia"
 import { diaDeLaSemana, fechaYMinutosEn } from "@/lib/zona-horaria"
 import type { BloqueoQueOcupa, Tramo } from "@/lib/ocupacion"
+import type { Prisma } from "@prisma/client"
 
 export type { Tramo } from "@/lib/ocupacion"
 
@@ -33,6 +34,17 @@ export const ESTADOS_QUE_NO_SE_MUEVEN = ["cancelada", "completada", "no-asistio"
 export const MENSAJE_CITA_CERRADA = "Una cita cancelada, completada o de alguien que no vino no se puede mover"
 export const MENSAJE_CITA_CON_ATENCION =
   "Esta cita ya tiene una atención en el Tablero: no se puede mover. Si fue un error, deshaz la llegada primero"
+
+/**
+ * La cita no tiene atención, o la que tuvo se anuló: el cliente no está en el
+ * Tablero. Va en el `where` de la escritura que cancela, mueve o marca "No
+ * vino" (en el panel y en el enlace del cliente): una llegada que entre
+ * entretanto no deja una atención viva colgando de una cita cancelada o en
+ * otra hora. Es un `OR`: se usa dentro de un `AND`, o como única clave `OR`.
+ */
+export const SIN_ATENCION_VIVA = {
+  OR: [{ visit: { is: null } }, { visit: { is: { status: "anulada" } } }],
+} satisfies Prisma.AppointmentWhereInput
 
 export function sePuedeMover(estado: string): boolean {
   return !(ESTADOS_QUE_NO_SE_MUEVEN as readonly string[]).includes(estado)
@@ -135,14 +147,17 @@ export function franjasParaElDia(
 /**
  * Si el tramo queda fuera del horario de atención. `nombre` es el del
  * profesional (se usa si tiene horario propio). `filas` son las activas del
- * negocio, de toda la semana.
+ * negocio, de toda la semana. `sede` es el nombre de la sede cuando `filas` son
+ * las de una sede en particular (plan Independiente): el mensaje habla de ella
+ * y no "del negocio", que sí atiende ese día en otra sede.
  */
 export function advertenciaDeHorario(
   tramo: Tramo,
   filas: FilaDeHorarioSemanal[],
   memberId: string | null,
   nombre: string | null,
-  zona: string
+  zona: string,
+  sede?: string | null
 ): Advertencia | null {
   const inicio = fechaYMinutosEn(tramo.startTime, zona)
   const resultado = franjasParaElDia(filas, memberId, diaDeLaSemana(inicio.fecha))
@@ -153,8 +168,8 @@ export function advertenciaDeHorario(
   const duracion = Math.round((tramo.endTime.getTime() - tramo.startTime.getTime()) / 60000)
   if (cabeEnAtencion(resultado.franjas, inicio.minutos, inicio.minutos + duracion)) return null
 
-  const quien = resultado.propias && nombre ? nombre : "El negocio"
-  const de = resultado.propias && nombre ? `de ${nombre}` : "del negocio"
+  const quien = resultado.propias && nombre ? nombre : sede ? `La sede ${sede}` : "El negocio"
+  const de = resultado.propias && nombre ? `de ${nombre}` : sede ? `de la sede ${sede}` : "del negocio"
   const mensaje =
     resultado.franjas.length === 0
       ? `${quien} no atiende ese día.`

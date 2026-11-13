@@ -7,9 +7,12 @@ import { Esqueleto } from "@/components/comunes/esqueleto"
 import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { formatearPorcentaje, leerComisiones, type DatosDeComisiones } from "../_datos"
+import { frasesDeLasComisiones } from "../_frases"
 import { TarjetaDeMiembro } from "./tarjeta-de-miembro"
 import { HistorialDeComisionesTarjeta } from "./historial-de-comisiones"
 
@@ -19,7 +22,9 @@ import { HistorialDeComisionesTarjeta } from "./historial-de-comisiones"
  * pantalla la ve sólo la dueña: la página lo verifica en el servidor y cada
  * endpoint de nuevo.
  */
-export function PantallaDeComisiones() {
+export function PantallaDeComisiones({ zona }: { zona: string }) {
+  // "Prestaciones" y "odontólogo" en una clínica dental; en los demás rubros, con sus palabras.
+  const frases = frasesDeLasComisiones(vocabularioDe(useRubroDelPanel()).palabras)
   const [datos, setDatos] = useState<DatosDeComisiones | null>(null)
   const [error, setError] = useState("")
   const [version, setVersion] = useState(0)
@@ -91,7 +96,7 @@ export function PantallaDeComisiones() {
       )}
       {datos.pendientesTruncado && (
         <Aviso tono="atencion" rol="status">
-          Hay demasiados servicios pendientes para contarlos de una vez: los números de cada profesional se quedan cortos.
+          {frases.demasiadosPendientes}
         </Aviso>
       )}
 
@@ -112,6 +117,7 @@ export function PantallaDeComisiones() {
       <HistorialDeComisionesTarjeta
         miembros={datos.miembros.map(({ id, nombre }) => ({ id, nombre }))}
         version={version}
+        zona={zona}
       />
     </div>
   )
@@ -128,7 +134,7 @@ function ProductosSoloLectura({ productos }: { productos: DatosDeComisiones["pro
         subtitulo="Quien vende un producto se lleva su %. Se cambia en Configuración, en Productos."
         icono={{ figura: Package }}
         accion={
-          <Boton href="/dashboard/configuracion" variante="secundario" tamano="sm">
+          <Boton href="/dashboard/configuracion#productos" variante="secundario" tamano="sm">
             Editar en Configuración
           </Boton>
         }

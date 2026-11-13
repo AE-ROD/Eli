@@ -95,6 +95,17 @@ describe("lib/email — escapado de datos de origen humano", () => {
     expect(html).toContain('href="https://eli.app/invitacion/token-real"')
   })
 
+  it("en una clínica dental la invitación nombra el rol \"Odontólogo\"; sin rubro, \"Profesional\"", async () => {
+    const { enviarInvitacionTrabajador } = await import("./email")
+    const base = { emailTrabajador: "t@ejemplo.com", nombreTrabajador: "Ana", nombreNegocio: "Uno", rol: "worker", enlaceAceptar: "https://eli.app/unirse/x" }
+
+    await enviarInvitacionTrabajador({ ...base, rubro: "odontologia" })
+    await enviarInvitacionTrabajador(base)
+
+    expect(enviarMock.mock.calls[0][0].html as string).toContain("<strong>Odontólogo</strong>")
+    expect(enviarMock.mock.calls[1][0].html as string).toContain("<strong>Profesional</strong>")
+  })
+
   it("escapa los comentarios del cliente en el aviso al profesional (enviarAvisoProfesional)", async () => {
     const { enviarAvisoProfesional } = await import("./email")
 
@@ -811,5 +822,454 @@ describe("enviarConfirmacionCliente: reservada dentro del plazo (QA#8)", () => {
     const html = enviarMock.mock.calls[0][0].html as string
     expect(html).toContain("token-de-prueba")
     expect(html).toContain("Cancelar o cambiar mi cita")
+  })
+})
+
+// ─── Cada rubro con sus palabras (E5) ────────────────────────────────────────
+//
+// El rubro llega desde `Business.type` a cada función de envío y pone las
+// palabras del correo (`lib/vocabulario.ts`) con la concordancia de
+// `lib/concordancia.ts`. La tabla escribe a mano lo que tiene que decir cada
+// rubro: no calcula nada con el vocabulario, así que un error de género o de
+// palabra en la plantilla no se compensa con el mismo error en el test.
+
+/** Lo que lee quien abre el correo: sin etiquetas, sin el título del documento y sin el pie. */
+function textoVisible(html: string): string {
+  return html
+    .replace(/<title>[\s\S]*?<\/title>/, "")
+    .replace(/<\/?strong>/g, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .split("Enviado por Eli")[0]
+    .trim()
+}
+
+interface CorreoEnviado {
+  subject: string
+  texto: string
+}
+
+/** Manda un correo de cada plantilla que habla del rubro y devuelve lo que salió, por nombre. */
+async function correosDe(rubro: string | null | undefined): Promise<Record<string, CorreoEnviado>> {
+  vi.resetModules()
+  const email = await import("./email")
+  const r = { rubro }
+  const cliente = { emailCliente: "ana@ejemplo.com", nombreCliente: "Ana" }
+  const reserva = { nombreNegocio: "Estudio Sol", servicio: "Limpieza", fecha: "2026-11-02", hora: "10:00" }
+  const gestion = { enlaceDeGestion: "https://eli.app/reservar/estudio-sol/cita/abc" }
+  const baja = { enlaceDeBaja: "https://eli.app/baja/x", enlaceDeBajaEnUnClic: "https://eli.app/api/baja?token=x" }
+  const cambio = { emailNegocio: "dueno@ejemplo.com", ...reserva, nombreCliente: "Ana", profesional: "Carla", fechaAnterior: "2026-11-01", horaAnterior: "09:00" }
+  const prueba = {
+    ...r,
+    emailDueno: "dueno@ejemplo.com",
+    nombreDueno: "Ana",
+    nombreNegocio: "Estudio Sol",
+    enlacePanel: "https://eli.app/dashboard",
+    enlaceReservas: "https://eli.app/reservar/estudio-sol",
+    enlaceDeBaja: "https://eli.app/baja-de-correos/abc.def",
+    ultimoDia: "2026-10-24",
+    diasRestantes: 3,
+  }
+  const aviso = { ...r, ...reserva, emailProfesional: "carla@ejemplo.com", nombreCliente: "Ana", profesional: "Carla" }
+
+  const envios: Array<[string, () => unknown]> = [
+    ["confirmacion", () => email.enviarConfirmacionCliente({ ...r, ...cliente, ...reserva, ...gestion, duracion: 30, profesional: "Carla", plazoHoras: 24, sePuedeCambiar: true })],
+    ["confirmacion-sin-plazo", () => email.enviarConfirmacionCliente({ ...r, ...cliente, ...reserva, ...gestion, duracion: 30, plazoHoras: 0, sePuedeCambiar: true })],
+    ["confirmacion-dentro-del-plazo", () => email.enviarConfirmacionCliente({ ...r, ...cliente, ...reserva, ...gestion, duracion: 30, plazoHoras: 24, sePuedeCambiar: false })],
+    ["confirmacion-sin-enlace", () => email.enviarConfirmacionCliente({ ...r, ...cliente, ...reserva, duracion: 30 })],
+    ["confirmacion-por-confirmar", () => email.enviarConfirmacionCliente({ ...r, ...cliente, ...reserva, duracion: 30, porConfirmar: true })],
+    ["confirmada-por-el-local", () => email.enviarReservaConfirmadaPorElLocal({ ...r, ...cliente, ...reserva, profesional: "Carla" })],
+    ["recordatorio", () => email.enviarRecordatorio({ ...r, ...cliente, ...reserva, ...gestion, plazoHoras: 24 })],
+    ["recordatorio-sin-plazo", () => email.enviarRecordatorio({ ...r, ...cliente, ...reserva, ...gestion, plazoHoras: 0 })],
+    ["recordatorio-dentro-del-plazo", () => email.enviarRecordatorio({ ...r, ...cliente, ...reserva, ...gestion, plazoHoras: 24, sePuedeCambiar: false })],
+    ["recordatorio-sin-enlace", () => email.enviarRecordatorio({ ...r, ...cliente, ...reserva })],
+    ["lista-de-espera", () => email.enviarAvisoListaDeEspera({ ...r, ...cliente, nombreNegocio: "Estudio Sol", servicio: "Limpieza", profesional: "Carla", fecha: "2026-11-02", enlaceReservar: "https://eli.app/reservar/estudio-sol", enlaceSalir: "https://eli.app/espera/tok", enlaceSalirEnUnClic: "https://eli.app/api/espera/tok" })],
+    ["te-toca", () => email.enviarTeToca({ ...r, ...cliente, nombreNegocio: "Estudio Sol", servicio: "Limpieza", enlaceReservar: "https://eli.app/reservar/estudio-sol", ...baja })],
+    ["te-toca-sin-servicio", () => email.enviarTeToca({ ...r, ...cliente, nombreNegocio: "Estudio Sol", enlaceReservar: "https://eli.app/reservar/estudio-sol", ...baja })],
+    ["resena", () => email.enviarPedirResena({ ...r, ...cliente, nombreNegocio: "Estudio Sol", enlaceResenas: "https://g.page/r/estudio-sol/review", ...baja })],
+    ["fila", () => email.enviarAvisoFilaVirtual({ ...r, ...cliente, nombreNegocio: "Estudio Sol", numero: 4 })],
+    ["aviso-profesional", () => email.enviarAvisoProfesional(aviso)],
+    ["aviso-profesional-por-confirmar", () => email.enviarAvisoProfesional({ ...aviso, porConfirmar: true })],
+    ["aviso-cancelo", () => email.enviarAvisoDeCambioDelCliente({ ...r, ...cambio, tipo: "cancelo" })],
+    ["aviso-reagendo", () => email.enviarAvisoDeCambioDelCliente({ ...r, ...cambio, tipo: "reagendo" })],
+    ["invitacion", () => email.enviarInvitacionTrabajador({ ...r, emailTrabajador: "tomas@ejemplo.com", nombreTrabajador: "Tomás", nombreNegocio: "Estudio Sol", rol: "worker", enlaceAceptar: "https://eli.app/unirse/x" })],
+    ["bienvenida", () => email.enviarCorreoDePrueba("bienvenida", prueba)],
+    ["consejo", () => email.enviarCorreoDePrueba("consejo", prueba)],
+    ["quedan-3-dias", () => email.enviarCorreoDePrueba("quedan-3-dias", prueba)],
+    ["termina-hoy", () => email.enviarCorreoDePrueba("termina-hoy", prueba)],
+  ]
+
+  const salida: Record<string, CorreoEnviado> = {}
+  for (const [nombre, enviar] of envios) {
+    enviarMock.mockClear()
+    await enviar()
+    const envio = enviarMock.mock.calls[0][0] as { subject: string; html: string }
+    salida[nombre] = { subject: envio.subject, texto: textoVisible(envio.html) }
+  }
+  return salida
+}
+
+/** Lo que dice un rubro, escrito a mano, con el género y el número ya resueltos. */
+interface PalabrasEsperadas {
+  nombre: string
+  rubro: string | null
+  /** Las etiquetas de las tablas: quien se atiende, lo que se atiende y quien atiende (panel). */
+  cliente: string
+  servicioDelPanel: string
+  profesional: string
+  /** La etiqueta de lo que eligió quien reservó. */
+  servicioDeLaReserva: string
+  /** Quien reservó lee su reserva como... */
+  suCita: string
+  unaCita: string
+  citaConfirmada: string
+  alLocal: string
+  hastaSinPlazo: string
+  /** El negocio lee la reserva como... */
+  unaNuevaCita: string
+  citasAnteriores: string
+  citaCancelada: string
+  citaReagendada: string
+  tituloCancelo: string
+  tituloCambio: string
+  introCancelo: string
+  introCambio: string
+  /** El negocio mismo. */
+  negocio: string
+  conMayusculaNegocio: string
+  lo: string
+  tocaVolver: string
+  clientes: string
+  servicios: string
+  elServicioDeLaReserva: string
+  laCitaEnLaAgenda: string
+  /** Las palabras que NO pueden aparecer en ningún correo de este rubro. */
+  prohibidas: RegExp
+}
+
+const DE_UN_SALON_DE_BELLEZA = {
+  cliente: "Cliente",
+  servicioDelPanel: "Servicio",
+  servicioDeLaReserva: "Servicio",
+  suCita: "hora",
+  unaCita: "una hora",
+  citaConfirmada: "Hora confirmada",
+  hastaSinPlazo: "hasta que llegue la hora",
+  unaNuevaCita: "una nueva hora",
+  citasAnteriores: "horas anteriores",
+  citaCancelada: "Hora cancelada",
+  citaReagendada: "Hora reagendada",
+  tituloCancelo: "Un cliente canceló su hora",
+  tituloCambio: "Un cliente cambió su hora",
+  introCancelo: "Ana canceló su hora en Estudio Sol",
+  introCambio: "Ana cambió su hora en Estudio Sol",
+  clientes: "clientes",
+  servicios: "servicios",
+  elServicioDeLaReserva: "el servicio",
+  laCitaEnLaAgenda: "esa hora",
+  tocaVolver: "Ya te toca volver",
+  prohibidas: /paciente|odontólog|prestaci|clínica|motivo|control|\bcita\b|\blocal\b/i,
+}
+
+const RUBROS_CON_PALABRAS: PalabrasEsperadas[] = [
+  {
+    ...DE_UN_SALON_DE_BELLEZA,
+    nombre: "salón",
+    rubro: "salon",
+    profesional: "Estilista",
+    alLocal: "al salón",
+    negocio: "salón",
+    conMayusculaNegocio: "Salón",
+    lo: "lo",
+  },
+  {
+    ...DE_UN_SALON_DE_BELLEZA,
+    nombre: "barbería",
+    rubro: "barberia",
+    profesional: "Barbero",
+    alLocal: "a la barbería",
+    negocio: "barbería",
+    conMayusculaNegocio: "Barbería",
+    lo: "la",
+  },
+  {
+    ...DE_UN_SALON_DE_BELLEZA,
+    nombre: "salón de uñas",
+    rubro: "spa-de-unas",
+    profesional: "Manicurista",
+    alLocal: "al salón de uñas",
+    negocio: "salón de uñas",
+    conMayusculaNegocio: "Salón de uñas",
+    lo: "lo",
+  },
+  {
+    // En la clínica el panel dice "cita" y "prestación"; quien reserva lee "hora" y "motivo".
+    nombre: "clínica dental",
+    rubro: "odontologia",
+    cliente: "Paciente",
+    servicioDelPanel: "Prestación",
+    profesional: "Odontólogo",
+    servicioDeLaReserva: "Motivo",
+    suCita: "hora",
+    unaCita: "una hora",
+    citaConfirmada: "Hora confirmada",
+    alLocal: "a la clínica",
+    hastaSinPlazo: "hasta que llegue la hora",
+    unaNuevaCita: "una nueva cita",
+    citasAnteriores: "citas anteriores",
+    citaCancelada: "Cita cancelada",
+    citaReagendada: "Cita reagendada",
+    tituloCancelo: "Un paciente canceló su cita",
+    tituloCambio: "Un paciente cambió su cita",
+    introCancelo: "Ana canceló su cita en Estudio Sol",
+    introCambio: "Ana cambió la hora de su cita en Estudio Sol",
+    negocio: "clínica",
+    conMayusculaNegocio: "Clínica",
+    lo: "la",
+    tocaVolver: "Ya te toca tu control",
+    clientes: "pacientes",
+    servicios: "prestaciones",
+    elServicioDeLaReserva: "el motivo",
+    laCitaEnLaAgenda: "la cita",
+    prohibidas: /cliente|estilista|barbero|manicurista|salón|barbería|\blocal\b|servicio/i,
+  },
+  {
+    // Las palabras de siempre: lo que decían los correos antes del vocabulario.
+    nombre: "sin rubro",
+    rubro: null,
+    cliente: "Cliente",
+    servicioDelPanel: "Servicio",
+    profesional: "Profesional",
+    servicioDeLaReserva: "Servicio",
+    suCita: "cita",
+    unaCita: "una cita",
+    citaConfirmada: "Cita confirmada",
+    alLocal: "al local",
+    hastaSinPlazo: "hasta la hora de la cita",
+    unaNuevaCita: "una nueva cita",
+    citasAnteriores: "citas anteriores",
+    citaCancelada: "Cita cancelada",
+    citaReagendada: "Cita reagendada",
+    tituloCancelo: "Un cliente canceló su cita",
+    tituloCambio: "Un cliente cambió su cita",
+    introCancelo: "Ana canceló su cita en Estudio Sol",
+    introCambio: "Ana cambió la hora de su cita en Estudio Sol",
+    negocio: "negocio",
+    conMayusculaNegocio: "Negocio",
+    lo: "lo",
+    tocaVolver: "Ya te toca volver",
+    clientes: "clientes",
+    servicios: "servicios",
+    elServicioDeLaReserva: "el servicio",
+    laCitaEnLaAgenda: "la cita",
+    prohibidas: /paciente|odontólog|estilista|barbero|manicurista|salón|barbería|clínica|prestaci|motivo|control/i,
+  },
+]
+
+describe.each(RUBROS_CON_PALABRAS)("lib/email — los correos de $nombre", (p) => {
+  let correos: Record<string, CorreoEnviado>
+
+  beforeEach(async () => {
+    vi.stubEnv("RESEND_API_KEY", "clave-de-prueba")
+    correos = await correosDe(p.rubro)
+  })
+
+  describe("a quien reservó", () => {
+    it("la confirmación: el asunto, el título y las etiquetas con las palabras del rubro", () => {
+      const { subject, texto } = correos["confirmacion"]
+      expect(subject).toBe(`${p.citaConfirmada} — Estudio Sol`)
+      expect(texto).toContain(`¡Tu ${p.suCita} está confirmada!`)
+      expect(texto).toContain(`${p.servicioDeLaReserva}: Limpieza`)
+      // "Con" es una preposición y "Hora" la hora del reloj: no cambian con el rubro.
+      expect(texto).toContain("Con: Carla")
+      expect(texto).toContain("Hora: 10:00")
+      expect(texto).toContain(`Cancelar o cambiar mi ${p.suCita}`)
+      expect(texto).toContain(`Puedes cancelar o cambiar tu ${p.suCita} con el botón hasta 24 horas antes. Después, contacta directamente ${p.alLocal}.`)
+    })
+
+    it("la confirmación, sin plazo, dentro del plazo, sin enlace y por confirmar", () => {
+      expect(correos["confirmacion-sin-plazo"].texto).toContain(`Puedes cancelar o cambiar tu ${p.suCita} con el botón ${p.hastaSinPlazo}.`)
+      expect(correos["confirmacion-dentro-del-plazo"].texto).toContain(
+        `Tu hora es en menos de 24 horas, así que no se puede cancelar ni cambiar por el enlace. Si lo necesitas, contacta directamente ${p.alLocal}.`,
+      )
+      expect(correos["confirmacion-sin-enlace"].texto).toContain(`Si necesitas cancelar o cambiar tu ${p.suCita}, contáctanos con anticipación.`)
+      // "Reserva" es el acto de reservar, no la cita: no depende del rubro.
+      expect(correos["confirmacion-por-confirmar"].subject).toBe("Reserva recibida — Estudio Sol")
+      expect(correos["confirmacion-por-confirmar"].texto).toContain("Recibimos tu reserva")
+    })
+
+    it("el recordatorio: 'tu hora es mañana' / 'tu cita es mañana'", () => {
+      const { subject, texto } = correos["recordatorio"]
+      expect(subject).toBe(`Recordatorio — tu ${p.suCita} es mañana`)
+      expect(texto).toContain(`Tu ${p.suCita} es mañana`)
+      expect(texto).toContain(`te recordamos que tienes ${p.unaCita} mañana en Estudio Sol`)
+      expect(texto).toContain(`${p.servicioDeLaReserva}: Limpieza`)
+      expect(texto).toContain(`Cancelar o cambiar mi ${p.suCita}`)
+      expect(texto).toContain(`cancela o cambia tu ${p.suCita} con el botón hasta 24 horas antes. Después, contacta directamente ${p.alLocal}.`)
+      expect(correos["recordatorio-sin-plazo"].texto).toContain(`cancela o cambia tu ${p.suCita} con el botón ${p.hastaSinPlazo}.`)
+      expect(correos["recordatorio-dentro-del-plazo"].texto).toContain(`Si no puedes asistir, contacta directamente ${p.alLocal}.`)
+      expect(correos["recordatorio-sin-enlace"].texto).toContain("por favor avísanos con anticipación")
+    })
+
+    it("la reserva confirmada por el local", () => {
+      const { subject, texto } = correos["confirmada-por-el-local"]
+      expect(subject).toBe("Reserva confirmada — Estudio Sol")
+      expect(texto).toContain(`${p.servicioDeLaReserva}: Limpieza`)
+      expect(texto).toContain(`Si necesitas cancelar o cambiar tu ${p.suCita}, usa el enlace del correo de tu reserva o contacta ${p.alLocal}.`)
+    })
+
+    it("la lista de espera: 'se liberó una hora' en todos los rubros", () => {
+      const { subject, texto } = correos["lista-de-espera"]
+      expect(subject).toBe("Se liberó una hora — Estudio Sol")
+      expect(texto).toContain("Se liberó una hora Hola Ana, se liberó una hora en Estudio Sol")
+      expect(texto).toContain(`${p.servicioDeLaReserva}: Limpieza`)
+      expect(texto).toContain("Reservar la hora")
+      expect(texto).toContain("la hora es de quien reserve primero. Si ya no la necesitas, puedes salir de la lista.")
+    })
+
+    it("te toca volver: la clínica lo llama control", () => {
+      const conServicio = correos["te-toca"]
+      expect(conServicio.subject).toBe("¿Agendamos tu próxima hora? — Estudio Sol")
+      expect(conServicio.texto).toContain(p.tocaVolver)
+      expect(conServicio.texto).toContain("desde tu último Limpieza en Estudio Sol. Cuando quieras, reserva tu próxima hora.")
+      expect(conServicio.texto).toContain("Reservar mi hora")
+      expect(correos["te-toca-sin-servicio"].texto).toContain("desde tu última visita a Estudio Sol. Cuando quieras, reserva tu próxima hora.")
+    })
+
+    it("la reseña: el pronombre sigue el género del negocio", () => {
+      expect(correos["resena"].texto).toContain(`ayuda a que más personas ${p.lo} conozcan.`)
+    })
+
+    it("la fila: el local con su palabra, y el turno sigue siendo el turno", () => {
+      const { subject, texto } = correos["fila"]
+      expect(subject).toBe("Ya casi es tu turno — Estudio Sol")
+      expect(texto).toContain("Ya casi es tu turno")
+      expect(texto).toContain("Tu número: 4")
+      expect(texto).toContain(`Acércate ${p.alLocal} para no perderlo.`)
+    })
+  })
+
+  describe("al negocio y a quien atiende", () => {
+    it("el aviso de reserva: las etiquetas y la cita con las palabras del panel", () => {
+      const { subject, texto } = correos["aviso-profesional"]
+      expect(subject).toBe("Nueva reserva — Ana")
+      expect(texto).toContain(`Tienes ${p.unaNuevaCita} en Estudio Sol.`)
+      expect(texto).toContain(`${p.cliente}: Ana`)
+      expect(texto).toContain(`${p.servicioDelPanel}: Limpieza`)
+      expect(texto).toContain(`${p.profesional}: Carla`)
+      expect(texto).toContain("Hora: 10:00")
+    })
+
+    it("el aviso de reserva por confirmar: 'faltó a horas anteriores' / 'a citas anteriores'", () => {
+      const { subject, texto } = correos["aviso-profesional-por-confirmar"]
+      expect(subject).toBe("Reserva por confirmar — Ana")
+      expect(texto).toContain(`Este contacto faltó a ${p.citasAnteriores}. Entra a la agenda de tu panel para confirmar la reserva o cancelarla.`)
+    })
+
+    it("el cliente canceló: asunto, título, introducción y etiquetas", () => {
+      const { subject, texto } = correos["aviso-cancelo"]
+      expect(subject).toBe(`${p.citaCancelada} — Ana`)
+      expect(texto).toContain(p.tituloCancelo)
+      expect(texto).toContain(`${p.introCancelo} desde su enlace. El horario quedó libre.`)
+      expect(texto).toContain(`${p.cliente}: Ana ${p.servicioDelPanel}: Limpieza ${p.profesional}: Carla`)
+    })
+
+    it("el cliente reagendó: asunto, título, introducción y etiquetas", () => {
+      const { subject, texto } = correos["aviso-reagendo"]
+      expect(subject).toBe(`${p.citaReagendada} — Ana`)
+      expect(texto).toContain(p.tituloCambio)
+      expect(texto).toContain(`${p.introCambio} desde su enlace.`)
+      expect(texto).toContain(`${p.cliente}: Ana ${p.servicioDelPanel}: Limpieza ${p.profesional}: Carla`)
+      expect(texto).toContain("Antes: domingo, 1 de noviembre de 2026, 09:00")
+    })
+
+    it("la invitación al equipo: la etiqueta del negocio con la palabra del rubro", () => {
+      // El rol ("Tu rol: Odontólogo") sale de `nombreDelRol` (`lib/nombres-de-roles.ts`),
+      // que también usa el panel y todavía distingue sólo la clínica: lo prueba el test de la invitación.
+      expect(correos["invitacion"].texto).toContain(`${p.conMayusculaNegocio}: Estudio Sol Tu rol:`)
+    })
+
+    it("la bienvenida: el negocio, los clientes, los servicios y la cita con sus palabras", () => {
+      const { texto } = correos["bienvenida"]
+      expect(texto).toContain(`Tu ${p.negocio} ya está en Eli`)
+      expect(texto).toContain(`Tus ${p.clientes} solo ven horas libres dentro de ese horario.`)
+      expect(texto).toContain(`Agrega tus ${p.servicios}`)
+      expect(texto).toContain(`Tus ${p.clientes} eligen ${p.elServicioDeLaReserva} y la hora, y ${p.laCitaEnLaAgenda} aparece en tu agenda.`)
+    })
+
+    it("el consejo: a quién le pega el enlace", () => {
+      const { texto } = correos["consejo"]
+      expect(texto).toContain(`es que tus ${p.clientes} reserven solos.`)
+      expect(texto).toContain("cuando alguien te pregunte por una hora.")
+    })
+  })
+
+  it("ningún correo dice una palabra de otro rubro", () => {
+    for (const [nombre, { subject, texto }] of Object.entries(correos)) {
+      expect(`${subject} ${texto}`, nombre).not.toMatch(p.prohibidas)
+    }
+  })
+})
+
+describe("lib/email — el rubro cambia las palabras, no el resto", () => {
+  beforeEach(() => {
+    vi.stubEnv("RESEND_API_KEY", "clave-de-prueba")
+  })
+
+  it("un rubro desconocido, vacío o ausente (los viejos salud, fitness y otro) sale con las palabras de siempre", async () => {
+    const deSiempre = await correosDe(null)
+    for (const rubro of [undefined, "", "salud", "fitness", "otro", "inexistente", "constructor"]) {
+      expect(await correosDe(rubro), `rubro ${JSON.stringify(rubro)}`).toEqual(deSiempre)
+    }
+  })
+
+  it("las palabras de siempre siguen siendo las de los textos de antes del vocabulario", async () => {
+    const c = await correosDe(null)
+    expect(c["confirmacion"].subject).toBe("Cita confirmada — Estudio Sol")
+    expect(c["confirmacion"].texto).toContain("¡Tu cita está confirmada! Hola Ana, te esperamos en Estudio Sol. Servicio: Limpieza Con: Carla Fecha:")
+    expect(c["confirmacion-dentro-del-plazo"].texto).toContain("Tu hora es en menos de 24 horas")
+    expect(c["recordatorio"].subject).toBe("Recordatorio — tu cita es mañana")
+    expect(c["recordatorio"].texto).toContain("te recordamos que tienes una cita mañana en Estudio Sol")
+    expect(c["aviso-profesional"].texto).toContain("Tienes una nueva cita en Estudio Sol. Cliente: Ana Servicio: Limpieza Profesional: Carla")
+    expect(c["aviso-cancelo"].subject).toBe("Cita cancelada — Ana")
+    expect(c["aviso-reagendo"].texto).toContain("Ana cambió la hora de su cita en Estudio Sol desde su enlace.")
+    expect(c["lista-de-espera"].subject).toBe("Se liberó una hora — Estudio Sol")
+    expect(c["te-toca"].texto).toContain("Ya te toca volver")
+    expect(c["resena"].texto).toContain("ayuda a que más personas lo conozcan.")
+    expect(c["fila"].texto).toContain("Acércate al local para no perderlo.")
+    expect(c["invitacion"].texto).toContain("Negocio: Estudio Sol Tu rol: Profesional")
+    expect(c["bienvenida"].texto).toContain("Tu negocio ya está en Eli")
+    expect(c["bienvenida"].texto).toContain("Tus clientes eligen el servicio y la hora, y la cita aparece en tu agenda.")
+  })
+
+  it("los dos avisos de fin de la prueba no dependen del rubro", async () => {
+    const deSiempre = await correosDe(null)
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "odontologia"]) {
+      const c = await correosDe(rubro)
+      expect(c["quedan-3-dias"], rubro).toEqual(deSiempre["quedan-3-dias"])
+      expect(c["termina-hoy"], rubro).toEqual(deSiempre["termina-hoy"])
+    }
+  })
+
+  it("lo que escribió una persona se sigue escapando con el rubro puesto", async () => {
+    vi.resetModules()
+    const { enviarRecordatorio } = await import("./email")
+    enviarMock.mockClear()
+
+    await enviarRecordatorio({
+      rubro: "odontologia",
+      emailCliente: "ana@ejemplo.com",
+      nombreCliente: "<script>x</script>",
+      nombreNegocio: "Clínica\r\nBcc: x@y.z",
+      servicio: '"><img>',
+      fecha: "2026-11-02",
+      hora: "10:00",
+    })
+
+    const { html, subject } = enviarMock.mock.calls[0][0]
+    expect(html).not.toContain("<script>x")
+    expect(html).not.toContain('"><img>')
+    expect(subject).not.toMatch(/[\r\n]/)
   })
 })

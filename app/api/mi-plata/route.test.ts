@@ -122,7 +122,13 @@ describe("GET /api/mi-plata", () => {
     const plata = await res.json()
 
     expect(plata.nombre).toBe("Carla Profesional")
-    expect(plata.hoy).toEqual({ fecha: "2026-10-21", comisionesCents: centavos(3200), propinasCents: centavos(2000), totalCents: centavos(5200) })
+    expect(plata.hoy).toEqual({
+      fecha: "2026-10-21",
+      comisionesCents: centavos(3200),
+      protesisCents: 0,
+      propinasCents: centavos(2000),
+      totalCents: centavos(5200),
+    })
     expect(plata.semana).toMatchObject({ desde: "2026-10-19", hasta: "2026-10-25", comisionesCents: centavos(4200), totalCents: centavos(6200) })
     expect(plata.periodo).toMatchObject({
       tipo: "mensual",

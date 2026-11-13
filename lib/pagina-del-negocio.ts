@@ -9,6 +9,9 @@
 
 import { MEDIOS_DE_PAGO, type MedioDePagoId } from "@/lib/medios-de-pago"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
+import { palabrasDeLaReserva } from "@/lib/palabras-de-la-reserva"
+import { resumenDeHorarioPorSede, type FilaDeHorarioDeSede, type SedeDelNegocio } from "@/lib/sedes"
+import { agruparPorCategoria, CATEGORIA_SIN_NOMBRE } from "@/lib/servicios-por-categoria"
 import { aE164Chile } from "@/lib/telefono"
 
 // ─── Paleta del local ────────────────────────────────────────────────────────
@@ -122,6 +125,50 @@ export function enlacesDeMapa(
   }
 }
 
+// ─── Sedes (plan Independiente) ──────────────────────────────────────────────
+
+/**
+ * Una sede activa tal como la ve cualquiera en la mini página: su nombre, su
+ * dirección con "Cómo llegar" a ESA dirección, y los días y horas en que se
+ * atiende. Nada interno: ni el orden, ni ids de otras tablas.
+ */
+export interface SedeDeLaPagina {
+  id: string
+  nombre: string
+  direccion: string
+  comuna: string
+  /** E.164 (+56...) o null. */
+  telefono: string | null
+  mapas: { googleMaps: string; waze: string } | null
+  /** Los días de la semana (0 domingo a 6 sábado) en que atiende, de lunes a domingo. Vacío: aún sin horario. */
+  dias: number[]
+  /** Su horario por días agrupados, ya escrito: `Lun, Mié: 09:00–13:00`. Vacío: aún sin horario. */
+  horario: string[]
+}
+
+/**
+ * Las sedes ACTIVAS para la página, en el orden de la lista, cada una con su
+ * horario resumido (`resumenDeHorarioPorSede`) y los enlaces de mapa de su
+ * dirección. `filas` son las franjas activas del negocio con su `sedeId`: las
+ * de otra sede o sin sede no cuentan para una sede. Las sedes inactivas no
+ * salen.
+ */
+export function sedesParaLaPagina(
+  sedes: readonly Pick<SedeDelNegocio, "id" | "nombre" | "direccion" | "comuna" | "telefono" | "orden" | "activo">[],
+  filas: readonly FilaDeHorarioDeSede[]
+): SedeDeLaPagina[] {
+  return resumenDeHorarioPorSede(sedes, filas).map(({ sede, dias, grupos }) => ({
+    id: sede.id,
+    nombre: sede.nombre,
+    direccion: sede.direccion,
+    comuna: sede.comuna,
+    telefono: sede.telefono,
+    mapas: enlacesDeMapa(sede.direccion, sede.comuna),
+    dias: dias.map((dia) => dia.dayOfWeek),
+    horario: grupos.map((grupo) => grupo.texto),
+  }))
+}
+
 // ─── Reseñas en Google (#77) ─────────────────────────────────────────────────
 
 /** El largo máximo que se acepta para el enlace de reseñas. */
@@ -174,9 +221,10 @@ export function esEnlaceDeResenasValido(guardado: string | null | undefined): gu
 
 /**
  * La URL de una foto (logo, portada, profesional) sólo si es del mismo sitio
- * ("/..."). Todavía no hay subida de fotos ni almacenamiento aprobado, y la
- * CSP (`lib/csp.ts`) sólo deja cargar imágenes propias: una URL externa se
- * vería rota. Cuando exista la subida, esto y la CSP se abren juntos.
+ * ("/..."). Las fotos que sube el panel se guardan como `/fotos/negocios/...`
+ * (`lib/almacenamiento-de-fotos.ts`) y las sirve nuestra propia ruta, así que
+ * la CSP (`lib/csp.ts`) sigue dejando cargar sólo imágenes propias: una URL
+ * externa se vería rota, y por eso no pasa.
  */
 export function imagenPublica(url: string | null | undefined): string | null {
   const limpia = (url ?? "").trim()
@@ -184,12 +232,30 @@ export function imagenPublica(url: string | null | undefined): string | null {
   return limpia
 }
 
-/** Hasta dos iniciales, en mayúsculas: "Ana María Pérez" → "AM". */
+/** Los tratamientos que preceden a un nombre propio y no son parte de él, sin tilde ni punto. */
+const TRATAMIENTOS = new Set(["dr", "dra", "doctor", "doctora", "sr", "sra", "srta", "don", "dona", "lic", "ing", "mg"])
+
+/** Las palabras del nombre sin el tratamiento del principio ("Dra. Camila Rojas" → Camila, Rojas). Si todas son tratamientos, quedan todas. */
+function palabrasSinTratamiento(nombre: string): string[] {
+  const palabras = nombre.trim().split(/\s+/).filter(Boolean)
+  const primera = palabras.findIndex(
+    (palabra) => !TRATAMIENTOS.has(palabra.normalize("NFD").replace(/\p{M}/gu, "").replace(/\.$/, "").toLowerCase())
+  )
+  return primera === -1 ? palabras : palabras.slice(primera)
+}
+
+/**
+ * El nombre de pila de un profesional para hablarle al cliente, sin el
+ * tratamiento: "Dra. Camila Rojas" → "Camila", no "Dra.". Si el nombre es sólo
+ * un tratamiento (o está vacío), se devuelve tal cual.
+ */
+export function primerNombreDelProfesional(nombre: string): string {
+  return palabrasSinTratamiento(nombre)[0] ?? nombre
+}
+
+/** Hasta dos iniciales, en mayúsculas, sin el tratamiento: "Ana María Pérez" → "AM"; "Dra. Camila Rojas" → "CR". */
 export function iniciales(nombre: string): string {
-  const letras = nombre
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
+  const letras = palabrasSinTratamiento(nombre)
     .slice(0, 2)
     .map((palabra) => Array.from(palabra)[0])
     .join("")
@@ -209,34 +275,21 @@ export function apareceEnLaPagina(rol: string): boolean {
   return rol === "worker"
 }
 
-/** Lo que se muestra de los servicios sin categoría. */
-export const CATEGORIA_SIN_NOMBRE = "Otros"
+/** Lo que se muestra de los servicios sin categoría ("Otros"); vive junto a la regla de agrupar. */
+export { CATEGORIA_SIN_NOMBRE }
 
 /**
  * Los servicios agrupados por `Service.category`, en el orden en que aparece
  * cada categoría (el del catálogo). Los sin categoría van al final, en
  * "Otros". "Color" y "color " son la misma: se agrupa sin mayúsculas ni
- * espacios de más y se muestra como la escribió el primero.
+ * espacios de más y se muestra como la escribió el primero. La regla es la de
+ * `lib/servicios-por-categoria.ts`, la misma que usa el primer paso de la
+ * reserva.
  */
 export function serviciosPorCategoria<T extends { category: string | null }>(
   servicios: T[]
 ): { categoria: string; servicios: T[] }[] {
-  const grupos = new Map<string, { categoria: string; servicios: T[] }>()
-  const sinCategoria: T[] = []
-  for (const servicio of servicios) {
-    const nombre = (servicio.category ?? "").trim()
-    if (!nombre) {
-      sinCategoria.push(servicio)
-      continue
-    }
-    const clave = nombre.toLocaleLowerCase("es-CL")
-    const grupo = grupos.get(clave) ?? { categoria: nombre, servicios: [] }
-    grupo.servicios.push(servicio)
-    grupos.set(clave, grupo)
-  }
-  const resultado = [...grupos.values()]
-  if (sinCategoria.length > 0) resultado.push({ categoria: CATEGORIA_SIN_NOMBRE, servicios: sinCategoria })
-  return resultado
+  return agruparPorCategoria(servicios).map(({ categoria, servicios: delGrupo }) => ({ categoria, servicios: delGrupo }))
 }
 
 /** Los medios que acepta el negocio, en el orden del catálogo, sin los que el catálogo no conoce. */
@@ -270,10 +323,22 @@ export function horarioParaMostrar(franjas: FranjaDelDia[]): { dayOfWeek: number
   }))
 }
 
-/** La descripción de la página al compartirla (buscadores, WhatsApp, redes), con la comuna si la hay. */
-export function descripcionParaCompartir(nombre: string, comuna: string | null | undefined): string {
+/**
+ * La descripción de la página al compartirla (buscadores, WhatsApp, redes), con
+ * la comuna si la hay. `rubro` (`Business.type`) pone las palabras: "Reserva tu
+ * hora en Salón Ana. Mira sus servicios, precios y horarios." en un salón y
+ * "…Mira sus prestaciones, precios y horarios." en una clínica. Sin rubro, la de
+ * siempre.
+ */
+export function descripcionParaCompartir(
+  nombre: string,
+  comuna: string | null | undefined,
+  rubro?: string | null
+): string {
+  const { hora, servicio } = palabrasDeLaReserva(rubro)
   const lugar = (comuna ?? "").trim()
+  const cierre = `Mira sus ${servicio.plural}, precios y horarios.`
   return lugar
-    ? `Reserva tu hora en ${nombre}, en ${lugar}. Mira sus servicios, precios y horarios.`
-    : `Reserva tu hora en ${nombre}. Mira sus servicios, precios y horarios.`
+    ? `Reserva tu ${hora.singular} en ${nombre}, en ${lugar}. ${cierre}`
+    : `Reserva tu ${hora.singular} en ${nombre}. ${cierre}`
 }

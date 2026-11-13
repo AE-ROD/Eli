@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { actorDeSesion, puedeEditarComisiones } from "@/lib/permisos"
+import { respuestaDeErrorDePlata } from "@/lib/liquidacion"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { autorDelCambio, bloquearMiembro, mismoPorcentaje, pedidoDePorcentajeSchema } from "../../_comun"
 
@@ -31,31 +32,37 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   if (!datos.success) return respuestaDeDatosInvalidos(datos.error)
   const nuevo = datos.data.porcentaje
 
-  const resultado = await prisma.$transaction(async (tx) => {
-    await bloquearMiembro(tx, actor.businessId, id)
-    const miembro = await tx.businessMember.findFirst({
-      where: { id, businessId: actor.businessId },
-      select: { id: true, commissionPercent: true, user: { select: { name: true } } },
-    })
-    if (!miembro) return null
+  let resultado
+  try {
+    resultado = await prisma.$transaction(async (tx) => {
+      await bloquearMiembro(tx, actor.businessId, id)
+      const miembro = await tx.businessMember.findFirst({
+        where: { id, businessId: actor.businessId },
+        select: { id: true, commissionPercent: true, user: { select: { name: true } } },
+      })
+      if (!miembro) return null
 
-    const anterior = miembro.commissionPercent
-    if (mismoPorcentaje(anterior, nuevo)) return { porcentaje: anterior, cambio: false }
+      const anterior = miembro.commissionPercent
+      if (mismoPorcentaje(anterior, nuevo)) return { porcentaje: anterior, cambio: false }
 
-    await tx.businessMember.update({ where: { id: miembro.id }, data: { commissionPercent: nuevo } })
-    await tx.commissionChange.create({
-      data: {
-        businessId: actor.businessId,
-        memberId: miembro.id,
-        memberName: miembro.user.name,
-        scope: "default",
-        previousPercent: anterior,
-        newPercent: nuevo,
-        ...(await autorDelCambio(tx, actor.businessId)),
-      },
+      await tx.businessMember.update({ where: { id: miembro.id }, data: { commissionPercent: nuevo } })
+      await tx.commissionChange.create({
+        data: {
+          businessId: actor.businessId,
+          memberId: miembro.id,
+          memberName: miembro.user.name,
+          scope: "default",
+          previousPercent: anterior,
+          newPercent: nuevo,
+          ...(await autorDelCambio(tx, actor.businessId)),
+        },
+      })
+      return { porcentaje: nuevo, cambio: true }
     })
-    return { porcentaje: nuevo, cambio: true }
-  })
+  } catch (error) {
+    // Una carrera (el profesional o el servicio se borró entretanto) es 404/409, no 500.
+    return respuestaDeErrorDePlata(error, "cambiando el % por defecto de un profesional")
+  }
 
   if (!resultado) return NextResponse.json({ error: "Profesional no encontrado" }, { status: 404 })
   return NextResponse.json(resultado)

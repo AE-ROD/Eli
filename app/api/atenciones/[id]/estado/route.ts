@@ -15,6 +15,7 @@ import {
 import { ORIGEN_FILA } from "@/lib/fila-virtual"
 import { programarAvisoDeFila } from "@/lib/fila-virtual-servidor"
 import { actorDeSesion } from "@/lib/permisos"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import {
   ErrorDeAtencion,
@@ -88,7 +89,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Los requisitos, sobre todas las líneas.
       const { lineas, errorDelTotalQueVe } = await lineasDeLaAtencion(tx, actor, existente.id)
       if (destino === "por-cobrar" && errorDelTotalQueVe) throw new ErrorDeAtencion(400, errorDelTotalQueVe)
-      const falta = requisitoFaltante(destino, lineas)
+      // El rubro sale de la sesión: "una prestación con su odontólogo" en una clínica dental.
+      const falta = requisitoFaltante(destino, lineas, vocabularioDe(actor.rubro).palabras)
       if (falta) throw new ErrorDeAtencion(400, falta)
 
       // La agenda se entera sola (PRODUCTO.md, sección 7). Sólo si la cita no
@@ -97,6 +99,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         await tx.appointment.updateMany({
           where: { id: existente.appointmentId, businessId: actor.businessId, status: { in: CITA_SIN_EMPEZAR } },
           data: { status: "en-progreso" },
+        })
+      }
+      // Y al revés: si la atención vuelve a la sala de espera, la cita deja de
+      // estar "en progreso" y vuelve a confirmada (el cliente está, pero no lo
+      // están atendiendo). Sólo si sigue en progreso: una cita que se cerró
+      // a mano en la agenda no se pisa.
+      if (desde === "en-atencion" && destino === "en-espera" && existente.appointmentId) {
+        await tx.appointment.updateMany({
+          where: { id: existente.appointmentId, businessId: actor.businessId, status: "en-progreso" },
+          data: { status: "confirmada" },
         })
       }
 

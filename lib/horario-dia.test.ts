@@ -242,3 +242,26 @@ describe("citas que no ocupan su horario (#97)", () => {
     expect(citasFueraDeFranjas([franja], [conEstado("tarde", "18:00", "19:00", "no-asistio")])).toEqual([])
   })
 })
+
+describe("con la zona del negocio", () => {
+  // 14:00 a 15:00 en Santiago (UTC-3, sin horario de verano el 15 de julio): 17:00 a 18:00 en UTC.
+  const enSantiago = {
+    id: "santiago",
+    title: "Corte",
+    startTime: "2026-07-15T18:00:00.000Z",
+    endTime: "2026-07-15T19:00:00.000Z",
+    status: "confirmada",
+    customer: null,
+  }
+
+  it("lee la hora de la cita en la zona que se le pasa, no en la del dispositivo", () => {
+    const segmentos = segmentosDeFranja({ startTime: "14:00", endTime: "16:00" }, [enSantiago], "America/Santiago")
+    expect(segmentos.find((segmento) => segmento.tipo === "cita")).toMatchObject({ inicioMin: 14 * 60, finMin: 15 * 60 })
+    expect(minutosLibresEnFranjas([{ startTime: "14:00", endTime: "16:00" }], [enSantiago], "America/Santiago")).toBe(60)
+    expect(citasFueraDeFranjas([{ startTime: "14:00", endTime: "16:00" }], [enSantiago], "America/Santiago")).toEqual([])
+  })
+
+  it("en UTC la misma cita cae fuera de esa franja", () => {
+    expect(citasFueraDeFranjas([{ startTime: "14:00", endTime: "16:00" }], [enSantiago], "UTC")).toEqual([enSantiago])
+  })
+})

@@ -5,6 +5,8 @@ import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { Aviso } from "@/components/panel/aviso"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
+import { ejemplosDe, textoDeEjemplo } from "@/lib/ejemplos-por-rubro"
 import type { DatosDeProducto } from "../_datos"
 
 interface PropsDeModalProducto {
@@ -31,6 +33,9 @@ export function ModalProducto({
   onSubmit,
   onCerrar,
 }: PropsDeModalProducto) {
+  // Los ejemplos, del oficio del negocio: una cera para el pelo no se vende en una clínica dental.
+  const rubro = useRubroDelPanel()
+  const ejemplos = ejemplosDe(rubro)
   return (
     <MarcoDeModal
       titulo={modoEdicion ? "Editar producto" : "Nuevo producto"}
@@ -41,7 +46,7 @@ export function ModalProducto({
       <form onSubmit={onSubmit} className="space-y-5">
         <CampoFormulario
           etiqueta="Nombre del producto"
-          placeholder="Ej.: Shampoo, Cera para el pelo..."
+          placeholder={textoDeEjemplo(ejemplos.productos)}
           value={form.nombre}
           onChange={(e) => onCambiarCampo("nombre", e.target.value)}
           icono={<Package className="h-4 w-4" />}

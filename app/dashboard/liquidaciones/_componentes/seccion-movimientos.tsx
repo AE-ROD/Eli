@@ -41,12 +41,16 @@ export function SeccionMovimientos({ miembros, pendientes, tipos, hoy }: Props) 
   const [trabajando, setTrabajando] = useState(false)
   const [errorAlAnular, setErrorAlAnular] = useState("")
   const [aviso, setAviso] = useState("")
+  /** Un ref y no sólo el estado: un doble clic llega antes de que se dibuje el botón ocupado. */
+  const anulacionEnviada = useRef(false)
 
   const anular = async () => {
-    if (!anulando || trabajando) return
+    if (!anulando || anulacionEnviada.current) return
+    anulacionEnviada.current = true
     setTrabajando(true)
     setErrorAlAnular("")
     const resultado = await anularMovimiento(anulando.id)
+    anulacionEnviada.current = false
     setTrabajando(false)
     if (!resultado.ok) return setErrorAlAnular(resultado.error)
     setAnulando(null)

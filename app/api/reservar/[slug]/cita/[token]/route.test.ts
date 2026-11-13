@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import type { NextRequest } from "next/server"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
-import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
+import { NEGOCIO, OTRO_NEGOCIO, atencion, datosBase } from "@/pruebas/datos"
 import { generarToken, hashDeToken } from "@/lib/tokens"
 import { cuerpoDePrueba } from "@/pruebas/pedidos"
 
@@ -164,6 +164,12 @@ describe("GET: ver la cita", () => {
       sePuedeReagendar: true,
       // El negocio atiende todos los días y Carla no cargó horario propio.
       diasConAtencion: [0, 1, 2, 3, 4, 5, 6],
+      // Con dos profesionales que hacen el servicio hay a quién elegir al reagendar:
+      // sólo lo que ya publica la reserva, y `actual` en quien la atiende hoy.
+      profesionales: [
+        { id: "m-carla", nombre: "Carla Profesional", especialidad: null, fotoUrl: null, diasConAtencion: [0, 1, 2, 3, 4, 5, 6], actual: true },
+        { id: "m-pedro", nombre: "Pedro Profesional", especialidad: null, fotoUrl: null, diasConAtencion: [0, 1, 2, 3, 4, 5, 6] },
+      ],
     })
   })
 
@@ -205,8 +211,36 @@ describe("GET: ver la cita", () => {
     escenario({ cita })
     const respuestas = [await ver(token, slug), await cancelar(token, slug), await reagendar("2030-01-08", "09:00", token, slug)]
     for (const respuesta of respuestas) {
-      expect(respuesta).toEqual({ status: 404, cuerpo: { error: "Este enlace no es válido o la cita ya no se puede cambiar" } })
+      // El negocio del escenario es un salón: la reserva se llama "hora".
+      expect(respuesta).toEqual({ status: 404, cuerpo: { error: "Este enlace no es válido o la hora ya no se puede cambiar" } })
     }
+  })
+
+  it.each([
+    ["una clínica dental", "odontologia", "Este enlace no es válido o la hora ya no se puede cambiar"],
+    ["un salón", "salon", "Este enlace no es válido o la hora ya no se puede cambiar"],
+    ["un rubro viejo", "salud", "Este enlace no es válido o la cita ya no se puede cambiar"],
+  ])("%s: el 404 dice la palabra de la reserva del negocio, igual para todo lo que no sirve", async (_caso, type, mensaje) => {
+    escenario({ negocio: { type } })
+    const sinToken = generarToken().token
+    const respuestas = [
+      await ver(sinToken),
+      await cancelar(sinToken),
+      await reagendar("2030-01-08", "09:00", sinToken),
+      await horas("2030-01-08", sinToken),
+    ]
+    for (const respuesta of respuestas) {
+      expect(respuesta).toEqual({ status: 404, cuerpo: { error: mensaje } })
+    }
+  })
+
+  it("un slug que no existe: el 404 de siempre, con las palabras de siempre", async () => {
+    escenario({ negocio: { type: "odontologia" } })
+
+    expect(await ver(TOKEN, "no-existe")).toEqual({
+      status: 404,
+      cuerpo: { error: "Este enlace no es válido o la cita ya no se puede cambiar" },
+    })
   })
 
   it("una cita de otro negocio con el mismo hash no se encuentra por este slug", async () => {
@@ -256,9 +290,21 @@ describe("cancelar", () => {
     relojEn("2030-01-05T14:00:00.000Z")
     const { status, cuerpo } = await cancelar()
     expect(status).toBe(409)
-    expect(cuerpo.error).toMatch(/48 horas antes.*Contacta al local/)
+    // El negocio del escenario es un salón: el motivo nombra al lugar con la palabra de su rubro.
+    expect(cuerpo.error).toMatch(/48 horas antes.*Contacta al salón/)
     expect(laCita().status).toBe("pendiente")
     expect(correos.cambio).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ["salud", "Contacta al local"],
+    ["odontologia", "Contacta a la clínica"],
+  ])("fuera del plazo, el motivo habla con las palabras del rubro %s", async (type, contacto) => {
+    escenario({ negocio: { cancelacionHorasAntes: 48, type } })
+    relojEn("2030-01-05T14:00:00.000Z")
+    const { status, cuerpo } = await cancelar()
+    expect(status).toBe(409)
+    expect(cuerpo.error).toContain(contacto)
   })
 })
 
@@ -433,5 +479,65 @@ describe("reagendar", () => {
   it("datos inválidos: 400", async () => {
     escenario()
     expect((await reagendar("mañana", "09:00")).status).toBe(400)
+  })
+})
+
+describe("el enlace y la llegada: con una atención viva en el Tablero, gana la llegada (PRODUCTO.md §6)", () => {
+  /** María ya llegó: su atención está viva en el Tablero, ligada a la cita. */
+  function conAtencion(status = "en-espera") {
+    escenario()
+    base.reiniciar({ ...base.volcado(), visit: [atencion("v-lucia", { appointmentId: "c-lucia", status })] })
+  }
+
+  it("la cita no se ve por el enlace, ni se cancela, ni se reagenda: el mismo 404, sin tocarla", async () => {
+    conAtencion()
+    const antes = laCita()
+
+    expect((await ver()).status).toBe(404)
+    expect((await cancelar()).status).toBe(404)
+    expect((await reagendar("2030-01-08", "09:00")).status).toBe(404)
+    expect((await horas("2030-01-08")).status).toBe(404)
+    expect(laCita()).toEqual(antes)
+  })
+
+  it("con la atención anulada, el enlace vuelve a servir", async () => {
+    conAtencion("anulada")
+
+    expect((await ver()).status).toBe(200)
+    expect((await cancelar()).status).toBe(200)
+    expect(laCita().status).toBe("cancelada")
+  })
+
+  it("si el cliente llega entre que se leyó la cita y se escribe, cancelar no la pisa", async () => {
+    escenario()
+    const transaccionReal = base.prisma.$transaction.getMockImplementation()!
+    base.prisma.$transaction.mockImplementationOnce(async (fn: unknown) => {
+      await base.prisma.visit.create({ data: atencion("v-lucia", { appointmentId: "c-lucia" }) })
+      return transaccionReal(fn)
+    })
+
+    expect((await cancelar()).status).toBe(404)
+    expect(laCita().status).toBe("pendiente")
+  })
+
+  it("y reagendar tampoco la mueve", async () => {
+    escenario()
+    const transaccionReal = base.prisma.$transaction.getMockImplementation()!
+    base.prisma.$transaction.mockImplementationOnce(async (fn: unknown, ...resto: unknown[]) => {
+      await base.prisma.visit.create({ data: atencion("v-lucia", { appointmentId: "c-lucia" }) })
+      return (transaccionReal as (...args: unknown[]) => unknown)(fn, ...resto)
+    })
+
+    expect((await reagendar("2030-01-08", "09:00")).status).toBe(404)
+    expect(laCita().startTime).toEqual(aLas("10:00"))
+  })
+})
+
+describe("reagendar y el recordatorio", () => {
+  it("una cita movida a otra hora vuelve a recibir su recordatorio: reminderSentAt queda vacío", async () => {
+    escenario({ cita: { reminderSentAt: new Date("2030-01-06T13:00:00.000Z") } })
+
+    expect((await reagendar("2030-01-08", "09:00")).status).toBe(200)
+    expect(laCita().reminderSentAt).toBeNull()
   })
 })

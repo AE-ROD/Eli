@@ -1,4 +1,6 @@
 import { z } from "zod"
+import { esRubroDental } from "@/lib/rubros"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { diasEntre, fechaYMinutosEn } from "@/lib/zona-horaria"
 
 /**
@@ -70,6 +72,21 @@ export function frecuenciaDelFormulario(texto: string): { ok: true; valor: numbe
     return { ok: false, error: `La frecuencia tiene que ser un número de días entre ${FRECUENCIA_MINIMA_DIAS} y ${FRECUENCIA_MAXIMA_DIAS}.` }
   }
   return { ok: true, valor: resultado.data }
+}
+
+/**
+ * La ayuda del campo "Cada cuántos días vuelve" del modal de servicio. En una
+ * clínica dental el aviso no se llama "Te toca volver" sino "Control"
+ * (`palabras.etiquetas.seguimiento`): la ayuda lo nombra como lo ve en
+ * Configuración, para que se entienda que es el mismo aviso. En los demás
+ * rubros, también en uno desconocido o ausente, el texto es el de siempre.
+ */
+export function ayudaDeLaFrecuencia(rubro: string | null | undefined): string {
+  const rango = `De ${FRECUENCIA_MINIMA_DIAS} a ${FRECUENCIA_MAXIMA_DIAS} días.`
+  if (!esRubroDental(rubro)) {
+    return `${rango} Sirve para avisarle a quien todavía no tiene su propio ritmo de visitas que ya le toca volver.`
+  }
+  return `${rango} Sirve para el aviso «${vocabularioDe(rubro).palabras.etiquetas.seguimiento}» de quien todavía no tiene su propio ritmo de visitas.`
 }
 
 export type OrigenDelCiclo = "propio" | "servicio"

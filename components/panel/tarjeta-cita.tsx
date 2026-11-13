@@ -1,8 +1,11 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { Clock, Timer } from "lucide-react"
+import { Clock, MapPin, Timer } from "lucide-react"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
+import { frasesDelPanel } from "@/components/panel/frases-del-panel"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { cn } from "@/lib/utils"
 import { formatearTiempoLibre as formatearDuracion } from "@/lib/horario-dia"
 import type { EstadoDeCita } from "@/lib/campos-del-panel"
@@ -21,6 +24,11 @@ export interface CitaEnTarjeta {
   porConfirmar?: boolean
   /** Sin profesional asignado habiendo equipo (#103): ocupa la hora de todos, y se marca para asignarla. */
   sinProfesional?: boolean
+  /**
+   * El nombre de la sede donde se atiende (etapa 9): sólo se pasa con varias
+   * sedes activas. Sin él, la tarjeta es la de siempre.
+   */
+  sede?: string
 }
 
 interface PropsDeTarjetaCita {
@@ -32,7 +40,9 @@ interface PropsDeTarjetaCita {
 /**
  * El estado de la cita en palabras, sobre un pastel: el color solo no le dice
  * nada a quien no lo distingue. El texto es navy, que pasa el contraste sobre
- * todos, salvo en la cancelada, que va en el rojo de error.
+ * todos, salvo en la cancelada, que va en el rojo de error. "No vino" es el de
+ * un rubro sin palabras propias: cada rubro dice el suyo (`EstadoDeLaCita`,
+ * "No asistió" en una clínica dental).
  */
 const ESTADOS: Record<CitaEnTarjeta["estado"], { texto: string; clases: string }> = {
   pendiente: { texto: "Pendiente", clases: "bg-borde text-navy" },
@@ -46,19 +56,46 @@ const ESTADOS: Record<CitaEnTarjeta["estado"], { texto: string; clases: string }
 /** Una pendiente que el local tiene que confirmar (#84): el gris de la pendiente, con borde, y dicho en palabras. */
 const POR_CONFIRMAR = { texto: "Por confirmar", clases: "bg-tarjeta text-navy ring-1 ring-inset ring-navy" }
 
-/** "Sin profesional", en el naranja del tablero y con borde punteado: se distingue sin depender del color. */
+/**
+ * "Sin profesional" ("Sin estilista", "Sin odontólogo": la palabra del rubro),
+ * en el naranja del tablero y con borde punteado: se distingue sin depender
+ * del color.
+ */
 function MarcaSinProfesional() {
+  const { tarjetaDeCita } = frasesDelPanel(vocabularioDe(useRubroDelPanel()).palabras)
   return (
     <span className="inline-flex h-5 shrink-0 items-center rounded-full border border-dashed border-navy/40 bg-naranja-suave px-2 text-[11px] leading-none font-medium whitespace-nowrap text-navy">
-      Sin profesional
+      {tarjetaDeCita.sinProfesional}
+    </span>
+  )
+}
+
+/**
+ * La sede, como insignia discreta junto a la hora: el nombre con un pin, en
+ * navy sobre blanco (pasa el contraste) y con borde, para distinguirse de los
+ * estados. El lector de pantalla oye "Sede Centro"; el pin es decoración. Un
+ * nombre largo se corta con "…".
+ */
+function MarcaDeSede({ nombre }: { nombre: string }) {
+  return (
+    <span className="inline-flex h-5 max-w-32 min-w-0 items-center gap-1 rounded-full bg-tarjeta px-2 text-[11px] leading-none font-medium text-navy ring-1 ring-inset ring-borde">
+      <MapPin className="size-3 shrink-0" aria-hidden="true" strokeWidth={1.75} />
+      <span className="sr-only">Sede </span>
+      <span className="truncate">{nombre}</span>
     </span>
   )
 }
 
 function EstadoDeLaCita({ estado, porConfirmar = false }: { estado: CitaEnTarjeta["estado"]; porConfirmar?: boolean }) {
+  const { tarjetaDeCita } = frasesDelPanel(vocabularioDe(useRubroDelPanel()).palabras)
   // El endpoint no restringe el string: un estado desconocido se muestra tal cual, sin color.
+  const conocido = ESTADOS[estado]
   const { texto, clases } =
-    porConfirmar && estado === "pendiente" ? POR_CONFIRMAR : (ESTADOS[estado] ?? { texto: estado, clases: "bg-borde text-navy" })
+    porConfirmar && estado === "pendiente"
+      ? POR_CONFIRMAR
+      : conocido
+        ? { ...conocido, texto: estado === "no-asistio" ? tarjetaDeCita.noVino : conocido.texto }
+        : { texto: estado, clases: "bg-borde text-navy" }
   return (
     <span
       className={cn(
@@ -119,6 +156,7 @@ export function TarjetaCita({ cita, compacta = false, onClick }: PropsDeTarjetaC
         </span>
         <span className="flex shrink-0 flex-col items-end gap-1">
           <span className="text-sm font-medium tabular-nums">{cita.horaInicio}</span>
+          {cita.sede && <MarcaDeSede nombre={cita.sede} />}
           <EstadoDeLaCita estado={cita.estado} porConfirmar={cita.porConfirmar} />
           {cita.sinProfesional && <MarcaSinProfesional />}
         </span>
@@ -157,6 +195,13 @@ export function TarjetaCita({ cita, compacta = false, onClick }: PropsDeTarjetaC
           <Timer className="size-4" aria-hidden="true" strokeWidth={1.75} />
           {formatearDuracion(cita.duracion)}
         </span>
+        {cita.sede && (
+          <span className="flex min-w-0 items-center gap-1.5">
+            <MapPin className="size-4 shrink-0" aria-hidden="true" strokeWidth={1.75} />
+            <span className="sr-only">Sede </span>
+            <span className="truncate">{cita.sede}</span>
+          </span>
+        )}
       </span>
 
       {cita.notas && (

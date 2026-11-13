@@ -1,6 +1,6 @@
 "use client"
 
-import { useId, useState } from "react"
+import { useId, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { CalendarRange, Save } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
@@ -28,6 +28,8 @@ export function SeccionPeriodo({ inicial, editable }: { inicial: ConfiguracionDe
   const idDelTitulo = useId()
   const [config, setConfig] = useState(inicial)
   const [guardando, setGuardando] = useState(false)
+  /** Un ref y no sólo el estado: un doble clic llega antes de que se dibuje el botón ocupado. */
+  const enviado = useRef(false)
   const [error, setError] = useState("")
   const [listo, setListo] = useState(false)
   const pendiente = config.periodo !== inicial.periodo || config.inicioSemana !== inicial.inicioSemana
@@ -39,10 +41,13 @@ export function SeccionPeriodo({ inicial, editable }: { inicial: ConfiguracionDe
 
   const guardar = async (evento: React.FormEvent) => {
     evento.preventDefault()
+    if (enviado.current) return
+    enviado.current = true
     setError("")
     setListo(false)
     setGuardando(true)
     const resultado = await guardarConfiguracion(config)
+    enviado.current = false
     setGuardando(false)
     if (!resultado.ok) return setError(resultado.error)
     setListo(true)

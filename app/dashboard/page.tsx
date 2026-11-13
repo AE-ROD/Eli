@@ -1,8 +1,16 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { actorDeSesion, puedeInvitarNegocios, veElPanelDeSuDia, veLaListaDeInicio } from "@/lib/permisos"
+import {
+  actorDeSesion,
+  esClinicaDental,
+  puedeGestionarSillones,
+  puedeInvitarNegocios,
+  veElPanelDeSuDia,
+  veLaListaDeInicio,
+} from "@/lib/permisos"
 import {
   leerListaDeInicio,
   marcarEnlaceCompartido,
@@ -12,8 +20,12 @@ import {
 import { leerInvitacion, type DatosDeInvitacion } from "@/lib/invitar-negocios"
 import { Aviso } from "@/components/panel/aviso"
 import { BarraSuperior } from "@/components/panel/barra-superior"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { fechaLargaEn } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
+import { frasesDelInicio } from "./_frases"
 import { leerEstadisticas, type EstadisticasDelPanel } from "./_datos"
 import { VistaDiaProfesional } from "./_componentes/vista-dia-profesional"
 import { EstadisticasDelNegocio } from "./_componentes/estadisticas-del-negocio"
@@ -25,22 +37,21 @@ import { ResumenDelNegocio } from "./_componentes/resumen-del-negocio"
 import { ListaDeInicio } from "./_componentes/lista-de-inicio"
 import { QrDelLocal } from "./_componentes/qr-del-local"
 import { InvitarNegocios } from "./_componentes/invitar-negocios"
+import { InicioDeLaClinica } from "./_componentes/inicio-de-la-clinica"
 
-/** `Lunes, 8 de marzo de 2026`, con mayúscula inicial. */
-function fechaDeHoy(): string {
-  const fecha = new Date().toLocaleDateString("es-CL", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })
-  return fecha.charAt(0).toUpperCase() + fecha.slice(1)
-}
+/**
+ * La agenda abre el modal de cita nueva al llegar con `?nueva=1`, y lo saca de
+ * la dirección: recargar o volver atrás no lo abre otra vez.
+ */
+const AGENDA_CON_CITA_NUEVA = "/dashboard/agenda?nueva=1"
 
 export default function PaginaPanel() {
   const [estadisticas, setEstadisticas] = useState<EstadisticasDelPanel | null>(null)
   const [aviso, setAviso] = useState("")
+  const router = useRouter()
   const { data: sesion, status: estadoSesion } = useSession()
+  // "Nueva hora" en un salón, "Nueva cita" en una clínica o sin rubro.
+  const nuevaCita = frasesDelInicio(vocabularioDe(useRubroDelPanel()).palabras).nuevaCita
   // El panel del profesional es su día (F-014), no el tablero del negocio:
   // dueño y encargado siguen viendo exactamente lo de antes, sin tocar su rama.
   // Mientras no se sabe el rol no se elige ninguna rama: evita el parpadeo de
@@ -52,6 +63,9 @@ export default function PaginaPanel() {
   const verListaDeInicio = veLaListaDeInicio(actorDeSesion(sesion))
   const [listaDeInicio, setListaDeInicio] = useState<DatosDeListaDeInicio | null>(null)
   const verInvitacion = puedeInvitarNegocios(actorDeSesion(sesion))
+  // Clínica dental: "Sillones ahora", la sala de espera y los presupuestos,
+  // arriba de lo de siempre (dueña, encargado y odontólogo). En otro rubro, nada.
+  const clinica = esClinicaDental(actorDeSesion(sesion))
   const [invitacion, setInvitacion] = useState<DatosDeInvitacion | null>(null)
 
   useEffect(() => {
@@ -90,15 +104,19 @@ export default function PaginaPanel() {
   // no depende de ellas y se queda.
   const sinEstadisticas = aviso !== ""
   const citasDeHoy = estadisticas?.citasHoyLista ?? null
+  // El día en la zona del negocio, la misma con que el servidor contó "hoy".
+  // Recién con las cifras: en el servidor (y en la primera pintura) no hay
+  // fecha, así el HTML no cambia al hidratar ni dice el día del dispositivo.
+  const subtitulo = estadisticas ? fechaLargaEn(estadisticas.zona) : undefined
 
   return (
     <div className="min-h-dvh">
       <BarraSuperior
         titulo="Inicio"
-        subtitulo={fechaDeHoy()}
+        subtitulo={subtitulo}
         accionPrincipal={{
-          texto: "Nueva cita",
-          onClick: () => {},
+          texto: nuevaCita,
+          onClick: () => router.push(AGENDA_CON_CITA_NUEVA),
         }}
       />
 
@@ -110,9 +128,14 @@ export default function PaginaPanel() {
             Cargando...
           </div>
         ) : verPanelDeSuDia ? (
-          !sinEstadisticas && <VistaDiaProfesional estadisticas={estadisticas} />
+          <>
+            {clinica && <InicioDeLaClinica gestionaSillones={false} />}
+            {!sinEstadisticas && <VistaDiaProfesional estadisticas={estadisticas} />}
+          </>
         ) : (
           <>
+            {clinica && <InicioDeLaClinica gestionaSillones={puedeGestionarSillones(actorDeSesion(sesion))} />}
+
             {listaDeInicio && mostrarListaDeInicio(listaDeInicio) && <ListaDeInicio pasos={listaDeInicio.pasos} />}
 
             {invitacion && <InvitarNegocios datos={invitacion} />}
@@ -122,7 +145,7 @@ export default function PaginaPanel() {
                 <EstadisticasDelNegocio estadisticas={estadisticas} />
 
                 <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
-                  <CitasDeHoy citas={citasDeHoy} className="lg:col-span-2" />
+                  <CitasDeHoy citas={citasDeHoy} zona={estadisticas?.zona} className="lg:col-span-2" />
                   <ResumenDeClientes estadisticas={estadisticas} />
                 </div>
               </>
@@ -137,7 +160,7 @@ export default function PaginaPanel() {
 
             {!sinEstadisticas && (
               <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
-                <CitasPorHora citas={citasDeHoy} />
+                <CitasPorHora citas={citasDeHoy} zona={estadisticas?.zona} />
                 <ResumenDelNegocio estadisticas={estadisticas} />
               </div>
             )}

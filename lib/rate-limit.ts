@@ -38,8 +38,22 @@ function crearLimitador(prefix: string, tokens: number, ventana: `${number} ${"s
 
 // Login: 10 intentos por minuto por IP
 const limitadorLogin = crearLimitador("login", 10, "1 m")
+// Login por cuenta (el correo normalizado, en hash; ver `lib/auth.ts`): 30
+// intentos por 15 minutos. Más amplio que el de IP a propósito: este balde lo
+// puede gastar cualquiera que escriba el correo de otra persona, así que si
+// fuera igual de estrecho (10), un tercero con 10 intentos dejaba a la dueña
+// de la cuenta fuera del panel. Con 30 por 15 minutos, quien rota IPs sigue
+// probando a lo más 2 contraseñas por minuto contra una misma cuenta, y quien
+// se equivoca de verdad no llega nunca al tope. Una sola IP se corta antes
+// por su propio balde (10 por minuto).
+const limitadorLoginPorCuenta = crearLimitador("login-cuenta", 30, "15 m")
 // Registro y recuperación de contraseña: 5 por 10 minutos por IP
 const limitadorAuth = crearLimitador("auth", 5, "10 m")
+// Recuperar la contraseña, por correo de destino (en hash): 3 por hora. El de
+// `auth` cuenta por IP; sin éste, alguien que rota IPs podía llenarle la
+// bandeja a una persona de enlaces de recuperación. Al pasarse, el endpoint
+// responde lo mismo que siempre y no manda nada (no revela que el tope existe).
+const limitadorRecuperacionPorCorreo = crearLimitador("recuperacion-correo", 3, "1 h")
 // Reserva pública: 20 por hora por IP
 const limitadorReserva = crearLimitador("reserva", 20, "1 h")
 // Lectura pública, sin sesión (las horas libres de la página de reservas): 60
@@ -121,10 +135,33 @@ const limitadorFilaVirtualPorNegocio = crearLimitador("fila-virtual-negocio", 60
 // una espera que puede pasar de una hora, y cortarlo dejaría a la persona sin
 // saber cuándo le toca. A un enlace filtrado lo deja en una consulta cada 15 s.
 const limitadorPosicionEnFila = crearLimitador("fila-posicion", 240, "1 h")
+// Subir o quitar una foto (logo, portada, foto de un integrante): 20 por hora
+// por sesión. Cada subida decodifica una imagen de hasta 5 MB, la reencoda y
+// escribe en el almacenamiento externo (R2): es de lo más caro que hace la
+// API, y el límite de escritura del panel (60 por minuto) dejaría llenar el
+// bucket y gastar CPU en bucle. Nadie cambia el logo, la portada y la foto de
+// cada profesional más de un puñado de veces por hora.
+const limitadorFotos = crearLimitador("fotos", 20, "1 h")
+// Leer una foto (`GET /fotos/...`), sin sesión: 600 por minuto por IP. La
+// página pública de un negocio carga su portada, su logo y la foto de cada
+// profesional, y los celulares de un local comparten la misma IP; las fotos
+// son inmutables y el navegador las cachea un año, así que el tope sólo corta
+// a quien las pide en bucle (cada lectura es un pedido al almacenamiento).
+const limitadorFotosPublicas = crearLimitador("fotos-publicas", 600, "1 m")
+// Escrituras masivas de servicios (`/api/configuracion/servicios/lote` y
+// `/categorias`): 20 por hora por usuario. Cada una toca hasta 100 o 200
+// filas de una vez y el límite de escritura del panel (60 por minuto) dejaría
+// repetirlas en bucle. Es un solo balde para las tres rutas: crear está
+// acotado además por el tope de servicios del negocio, y ordenar un catálogo
+// (mover grupos a una categoría, renombrar, unir) son una docena de pasos
+// seguidos la primera vez, así que 10 se quedaban cortos para el uso normal.
+const limitadorServiciosEnLote = crearLimitador("servicios-en-lote", 20, "1 h")
 
 export type TipoLimite =
   | "login"
+  | "loginPorCuenta"
   | "auth"
+  | "recuperacionPorCorreo"
   | "reserva"
   | "lecturaPublica"
   | "panelLectura"
@@ -141,10 +178,15 @@ export type TipoLimite =
   | "filaVirtual"
   | "filaVirtualPorNegocio"
   | "posicionEnFila"
+  | "fotos"
+  | "fotosPublicas"
+  | "serviciosEnLote"
 
 const limitadores: Record<TipoLimite, Ratelimit | null> = {
   login: limitadorLogin,
+  loginPorCuenta: limitadorLoginPorCuenta,
   auth: limitadorAuth,
+  recuperacionPorCorreo: limitadorRecuperacionPorCorreo,
   reserva: limitadorReserva,
   lecturaPublica: limitadorLecturaPublica,
   panelLectura: limitadorPanelLectura,
@@ -161,6 +203,9 @@ const limitadores: Record<TipoLimite, Ratelimit | null> = {
   filaVirtual: limitadorFilaVirtual,
   filaVirtualPorNegocio: limitadorFilaVirtualPorNegocio,
   posicionEnFila: limitadorPosicionEnFila,
+  fotos: limitadorFotos,
+  fotosPublicas: limitadorFotosPublicas,
+  serviciosEnLote: limitadorServiciosEnLote,
 }
 
 /**
@@ -177,7 +222,10 @@ const limitadores: Record<TipoLimite, Ratelimit | null> = {
  */
 const fallaAbiertoSiUpstashFalla: Record<TipoLimite, boolean> = {
   login: false,
+  loginPorCuenta: false,
   auth: false,
+  // Cerrado: sin sesión, y manda un correo a una casilla que escribe un anónimo.
+  recuperacionPorCorreo: false,
   reserva: false,
   soporte: false,
   // Cerrado sólo omite el acuse: la solicitud se guarda igual.
@@ -202,12 +250,23 @@ const fallaAbiertoSiUpstashFalla: Record<TipoLimite, boolean> = {
   // Cerrado: sin sesión. Una caída del proveedor deja a la persona sin
   // actualizar su posición unos segundos; el siguiente intento la trae.
   posicionEnFila: false,
+  // Cerrado: es una escritura cara (decodifica y reencoda una imagen y escribe
+  // en R2). Exige sesión de dueño, encargado o profesional, así que una caída
+  // del proveedor sólo demora el cambio de una foto.
+  fotos: false,
+  // Cerrado: es una escritura masiva (hasta 100 o 200 filas por pedido). Exige
+  // sesión de dueño o encargado, así que una caída del proveedor sólo demora una
+  // carga o un reordenamiento del catálogo que se puede hacer después.
+  serviciosEnLote: false,
   // Abierto, como las lecturas del panel: exige sesión de dueño o encargado y
   // cortarla dejaría al negocio sin sus datos por una caída ajena.
   exportacion: true,
   panelEscritura: true,
   lecturaPublica: true,
   panelLectura: true,
+  // Abierto: es una lectura pública; cortarla dejaría a todos los negocios
+  // sin fotos en su página por una caída ajena.
+  fotosPublicas: true,
 }
 
 function primerValor(cabecera: string | null): string | null {

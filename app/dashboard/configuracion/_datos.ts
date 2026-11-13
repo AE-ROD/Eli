@@ -1,6 +1,9 @@
 /**
  * Todo lo que la configuración le pide al servidor desde el navegador: el
- * horario de un miembro (leer y guardar) y el catálogo de servicios. Lo que se
+ * horario de un miembro (leer y guardar), el catálogo de servicios (uno a uno
+ * y en lote: la carga rápida, los cambios de varios a la vez y las categorías),
+ * las fotos de la página pública, las sedes del plan Independiente y el
+ * cambio de plan. Lo que se
  * ve al entrar ya viene resuelto por `page.tsx`, que es de servidor y consulta
  * la base directo.
  *
@@ -11,7 +14,33 @@
 
 import { leerMonto } from "@/lib/dinero"
 import { frecuenciaDelFormulario } from "@/lib/frecuencia-de-visitas"
-import { pedir, conJson, type Resultado } from "@/lib/peticiones"
+import { enviarFoto, pedirQuitarFoto, type ResultadoDeFoto } from "@/lib/enviar-foto"
+import type { FranjaHorario } from "@/lib/horario-dia"
+import { pedir, pedirConCodigo, pedirConCuerpo, conJson, type Resultado, type ResultadoConCuerpo } from "@/lib/peticiones"
+import { planConocido, type PlanId } from "@/lib/planes"
+import {
+  leerActualizados,
+  MAX_SERVICIOS_POR_CAMBIO,
+  leerRespuestaDeLote,
+  partirEnTandas,
+  type ResumenDeCarga,
+  type ServicioOmitido,
+  type SugeridoDelRubro,
+} from "@/lib/carga-de-servicios"
+import type { ServicioParaCargar } from "@/lib/servicios-en-lote"
+import type { AccionDeLote } from "./_frases-de-servicios"
+import type { LaboratorioRespuesta } from "@/lib/edicion-de-protesis"
+import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
+import { frasesDeConfiguracion } from "./_frases"
+import type { AccionDeSedes } from "./_frases-de-sedes"
+import { choquesDelCuerpo, sedeDeLaRespuesta, sedesDeLaRespuesta, type CuerpoDeSede } from "./_sedes"
+
+/**
+ * Las palabras de un rubro sin palabras propias: lo que dicen los mensajes de
+ * error de los pedidos de servicios si quien llama no pasa las suyas ("No se
+ * pudo crear el servicio"). Las pantallas pasan las del rubro.
+ */
+const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
 
 /** Un día del horario semanal: si se atiende y de qué hora a qué hora. */
 export interface HorarioDelDia {
@@ -33,6 +62,8 @@ export interface Servicio {
   category: string | null
   /** Cada cuántos días vuelve un cliente por este servicio (#75). `null` es sin frecuencia. */
   frecuenciaDias: number | null
+  /** Clínica dental: es una urgencia y la reserva pública sólo ofrece horas de hoy. En otro rubro siempre `false`. */
+  esUrgencia: boolean
   active: boolean
 }
 
@@ -46,14 +77,19 @@ export interface DatosDeServicio {
   category: string
   /** "Cada cuántos días vuelve", como texto del campo. Vacío es `null`: se borra. */
   frecuenciaDias: string
+  /** "Es una urgencia". Sólo cuenta si quien edita puede marcarla (`cuerpoDeServicio`). */
+  esUrgencia: boolean
 }
 
 /**
- * Sin `memberId`, el endpoint opera sobre el horario propio de quien está en
- * sesión (el del dueño es el horario general del negocio).
+ * Con `memberId`, el horario de ese miembro; con `null`, el horario general
+ * del negocio, dicho explícitamente (`?general=1`): el del dueño, y el que
+ * también edita el encargado. Un profesional sólo edita el suyo (con su id).
  */
 function rutaDelHorario(memberId: string | null): string {
-  return memberId ? `/api/configuracion/horarios?memberId=${memberId}` : "/api/configuracion/horarios"
+  return memberId
+    ? `/api/configuracion/horarios?memberId=${encodeURIComponent(memberId)}`
+    : "/api/configuracion/horarios?general=1"
 }
 
 export async function leerHorario(memberId: string | null): Promise<Resultado<HorarioDelDia[]>> {
@@ -65,24 +101,32 @@ export async function guardarHorario(memberId: string | null, horarios: HorarioD
 }
 
 /**
- * Del formulario a lo que espera el servidor: descripción o precio vacíos no
- * se mandan. El precio lo lee `leerMonto`, así "8.000", "8000" y "8.000,50"
+ * Del formulario a lo que espera el servidor. Al crear, descripción o precio
+ * vacíos no se mandan; al editar se mandan como `null`, que los borra: sin
+ * mandarlos, vaciar el campo no hacía nada y el servicio seguía con el precio
+ * de antes. El precio lo lee `leerMonto`, así "8.000", "8000" y "8.000,50"
  * son el monto que se quiso escribir (con `parseFloat`, "8.000" era 8). Un
  * precio que no se puede leer sin adivinar es un error, no un servicio
  * guardado sin precio o con otro. La frecuencia, igual: vacía es `null` (se
  * borra) y una que no es un entero de 7 a 365 es un error, no se manda.
+ *
+ * `esUrgencia` va sólo si `conUrgencia` (la pantalla lo pide con
+ * `puedeMarcarServicioComoUrgencia`, una clínica dental): en otro rubro no se
+ * manda ni como `false`, porque el servidor rechaza la bandera ahí.
  */
-export function cuerpoDeServicio(datos: DatosDeServicio) {
+export function cuerpoDeServicio(datos: DatosDeServicio, para: "crear" | "editar" = "crear", conUrgencia = false) {
   const f = frecuenciaDelFormulario(datos.frecuenciaDias)
   if (!f.ok) return f
+  const vacio = para === "editar" ? null : undefined
   const base = {
     name: datos.name,
-    description: datos.description || undefined,
+    description: datos.description.trim() ? datos.description : vacio,
     duration: datos.duration,
     category: datos.category.trim() || null,
     frecuenciaDias: f.valor,
+    ...(conUrgencia && { esUrgencia: datos.esUrgencia }),
   }
-  if (!datos.price.trim()) return { ok: true as const, datos: { ...base, price: undefined } }
+  if (!datos.price.trim()) return { ok: true as const, datos: { ...base, price: vacio } }
   const precio = leerMonto(datos.price)
   return precio === null
     ? { ok: false as const, error: "No se entiende el precio. Escríbelo así: 8000 o 8000,50." }
@@ -90,30 +134,187 @@ export function cuerpoDeServicio(datos: DatosDeServicio) {
 }
 
 /** Devuelve el servicio tal como quedó guardado. */
-export async function crearServicio(datos: DatosDeServicio): Promise<Resultado<Servicio>> {
-  const cuerpo = cuerpoDeServicio(datos)
+export async function crearServicio(
+  datos: DatosDeServicio,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS,
+  conUrgencia = false
+): Promise<Resultado<Servicio>> {
+  const cuerpo = cuerpoDeServicio(datos, "crear", conUrgencia)
   if (!cuerpo.ok) return cuerpo
-  return pedir<Servicio>("/api/configuracion/servicios", "No se pudo crear el servicio", conJson("POST", cuerpo.datos))
+  return pedir<Servicio>(
+    "/api/configuracion/servicios",
+    frasesDeConfiguracion(palabras).errores.crearServicio,
+    conJson("POST", cuerpo.datos)
+  )
 }
 
 /** Devuelve el servicio tal como quedó guardado. */
-export async function editarServicio(id: string, datos: DatosDeServicio): Promise<Resultado<Servicio>> {
-  const cuerpo = cuerpoDeServicio(datos)
+export async function editarServicio(
+  id: string,
+  datos: DatosDeServicio,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS,
+  conUrgencia = false
+): Promise<Resultado<Servicio>> {
+  const cuerpo = cuerpoDeServicio(datos, "editar", conUrgencia)
   if (!cuerpo.ok) return cuerpo
-  return pedir<Servicio>(`/api/configuracion/servicios/${id}`, "No se pudo guardar el servicio", conJson("PUT", cuerpo.datos))
+  return pedir<Servicio>(
+    `/api/configuracion/servicios/${id}`,
+    frasesDeConfiguracion(palabras).errores.guardarServicio,
+    conJson("PUT", cuerpo.datos)
+  )
 }
 
 /** Un servicio inactivo no aparece en la página pública de reservas. */
-export async function activarODesactivarServicio(id: string, activo: boolean): Promise<Resultado<Servicio>> {
+export async function activarODesactivarServicio(
+  id: string,
+  activo: boolean,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<Servicio>> {
+  const { errores } = frasesDeConfiguracion(palabras)
   return pedir<Servicio>(
     `/api/configuracion/servicios/${id}`,
-    activo ? "No se pudo activar el servicio" : "No se pudo desactivar el servicio",
+    activo ? errores.activarServicio : errores.desactivarServicio,
     conJson("PUT", { active: activo })
   )
 }
 
-export async function borrarServicio(id: string): Promise<Resultado> {
-  return pedir(`/api/configuracion/servicios/${id}`, "No se pudo borrar el servicio", { method: "DELETE" })
+export async function borrarServicio(id: string, palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado> {
+  return pedir(`/api/configuracion/servicios/${id}`, frasesDeConfiguracion(palabras).errores.borrarServicio, { method: "DELETE" })
+}
+
+// ─── Servicios en lote: categorías y carga rápida ────────────────────────────
+
+export type { ServicioOmitido, SugeridoDelRubro }
+
+/**
+ * Sin mensaje por defecto: así se distingue lo que dijo el servidor de lo que
+ * no (`pedirConCodigo` devuelve el texto por defecto cuando no hay otro) y el
+ * mensaje de un fallo lo elige `errorDeLote` por código, con las palabras del rubro.
+ */
+const SIN_MENSAJE = ""
+
+/**
+ * Un pedido de servicios en lote. Si falla, el mensaje ya viene en español y
+ * con las palabras del rubro; `codigo` es con el que respondió el servidor
+ * (`null` si no respondió).
+ */
+async function pedirEnLote<T>(
+  ruta: string,
+  accion: AccionDeLote,
+  palabras: PalabrasDelRubro,
+  opciones?: RequestInit
+): Promise<{ ok: true; datos: T } | { ok: false; error: string }> {
+  const resultado = await pedirConCodigo<T>(ruta, SIN_MENSAJE, opciones)
+  if (resultado.ok) return resultado
+  return { ok: false, error: frasesDeConfiguracion(palabras).servicios.errorDeLote(resultado.codigo, resultado.error, accion) }
+}
+
+/** Todos los servicios del negocio, para actualizar la lista después de una carga sin recargar la página. */
+export async function leerServicios(palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado<Servicio[]>> {
+  const resultado = await pedirEnLote<unknown>("/api/configuracion/servicios", "leer", palabras)
+  if (!resultado.ok) return resultado
+  return Array.isArray(resultado.datos)
+    ? { ok: true, datos: resultado.datos as Servicio[] }
+    : { ok: false, error: frasesDeConfiguracion(palabras).servicios.errorDeLote(200, "", "leer") }
+}
+
+/** Los servicios que Eli sugiere para el rubro, cada uno con si el negocio ya lo tiene. */
+export async function leerSugeridos(palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado<SugeridoDelRubro[]>> {
+  const resultado = await pedirEnLote<{ sugeridos?: unknown }>("/api/configuracion/servicios/sugeridos", "sugeridos", palabras)
+  if (!resultado.ok) return resultado
+  const sugeridos = resultado.datos?.sugeridos
+  return Array.isArray(sugeridos)
+    ? { ok: true, datos: sugeridos as SugeridoDelRubro[] }
+    : { ok: false, error: frasesDeConfiguracion(palabras).servicios.errorDeLote(200, "", "sugeridos") }
+}
+
+/**
+ * Lo que pasó al agregar: `ok` es que llegó todo al servidor (aunque haya
+ * omitido alguno, que se cuenta en `omitidos`); si no, `error` dice por qué se
+ * cortó y `sinEnviar`, cuántos no llegaron a enviarse.
+ */
+export type ResultadoDeCarga = ResumenDeCarga & { ok: boolean }
+
+/**
+ * Agrega servicios de a 100 (lo que acepta una carga), de a una tanda por vez y
+ * juntando los resultados. Si una tanda falla, las que seguían no se envían: se
+ * devuelve lo que sí se creó y cuántos quedaron sin enviar, para que la pantalla
+ * deje reintentar sólo eso (los ya creados quedan como "ya existe"). Nunca lanza.
+ */
+export async function cargarServiciosEnLote(
+  servicios: readonly ServicioParaCargar[],
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<ResultadoDeCarga> {
+  let creados = 0
+  const omitidos: ServicioOmitido[] = []
+  let enviados = 0
+  for (const tanda of partirEnTandas(servicios)) {
+    const resultado = await pedirEnLote<unknown>(
+      "/api/configuracion/servicios/lote",
+      "agregar",
+      palabras,
+      conJson("POST", { servicios: tanda })
+    )
+    if (!resultado.ok) {
+      return { ok: false, creados, omitidos, sinEnviar: servicios.length - enviados, error: resultado.error }
+    }
+    const leido = leerRespuestaDeLote(resultado.datos, enviados)
+    creados += leido.creados
+    omitidos.push(...leido.omitidos)
+    enviados += tanda.length
+  }
+  return { ok: true, creados, omitidos, sinEnviar: 0, error: null }
+}
+
+/** Lo que se puede cambiar a la vez en varios servicios: su categoría (`null`, ninguna) o si están activos. */
+export interface CambiosEnLote {
+  category?: string | null
+  active?: boolean
+}
+
+/**
+ * Cambia la categoría o el estado de varios servicios, de a 200 por pedido (lo
+ * que acepta el servidor). Devuelve cuántos actualizó el servidor; si un
+ * pedido falla, `actualizados` es lo que se alcanzó a cambiar antes (la
+ * pantalla vuelve a leer la lista). Nunca lanza.
+ */
+export async function cambiarServiciosEnLote(
+  ids: readonly string[],
+  cambios: CambiosEnLote,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<{ ok: true; actualizados: number } | { ok: false; error: string; actualizados: number }> {
+  let actualizados = 0
+  for (const tanda of partirEnTandas(ids, MAX_SERVICIOS_POR_CAMBIO)) {
+    const resultado = await pedirEnLote<unknown>("/api/configuracion/servicios/lote", "cambiar", palabras, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: tanda, ...cambios }),
+    })
+    if (!resultado.ok) return { ok: false, error: resultado.error, actualizados }
+    actualizados += leerActualizados(resultado.datos)
+  }
+  return { ok: true, actualizados }
+}
+
+/**
+ * Renombra una categoría: los servicios que la tienen pasan a `a` (`null`, sin
+ * categoría). Si `a` ya existe, los junta con los de esa. `de: null` son los
+ * que no tienen categoría. El servidor compara `de` sin mayúsculas, tildes ni
+ * espacios de más: "Color" y "color " son la misma. Devuelve cuántos cambió (los
+ * que ya estaban escritos exactamente como `a` no cuentan).
+ */
+export async function renombrarCategoria(
+  de: string | null,
+  a: string | null,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<{ actualizados: number }>> {
+  const resultado = await pedirEnLote<unknown>(
+    "/api/configuracion/servicios/categorias",
+    "renombrar",
+    palabras,
+    conJson("POST", { de, a })
+  )
+  return resultado.ok ? { ok: true, datos: { actualizados: leerActualizados(resultado.datos) } } : resultado
 }
 
 // ─── Productos (#67) ─────────────────────────────────────────────────────────
@@ -255,6 +456,48 @@ export async function guardarPaginaPublica(
   )
 }
 
+/**
+ * Cambia el nombre del negocio. El servidor lo recorta y devuelve cómo quedó.
+ * El `slug` (la dirección de la página pública) no cambia.
+ */
+export async function guardarNombreDelNegocio(nombre: string): Promise<Resultado<{ nombre: string }>> {
+  return pedir<{ nombre: string }>(
+    "/api/configuracion/nombre",
+    "No se pudo guardar el nombre",
+    conJson("PUT", { nombre })
+  )
+}
+
+/** Cambia la zona horaria del negocio (sólo la dueña; una de `lib/zonas-de-chile.ts`). Devuelve la que quedó. */
+export async function guardarZonaHoraria(zona: string): Promise<Resultado<{ zona: string }>> {
+  return pedir<{ zona: string }>(
+    "/api/configuracion/zona-horaria",
+    "No se pudo guardar la zona horaria",
+    conJson("PUT", { zona })
+  )
+}
+
+// ─── Fotos del negocio ───────────────────────────────────────────────────────
+
+/** Las dos fotos de la página pública que se suben aparte del resto de los datos. */
+export type TipoDeFotoDelNegocio = "logo" | "portada"
+
+const rutaDeFotoDelNegocio = (tipo: TipoDeFotoDelNegocio) => `/api/configuracion/fotos/${tipo}`
+
+/**
+ * Sube el logo o la portada (la imagen ya ajustada por el navegador). Se
+ * guarda al instante, no con "Guardar" de la página. Devuelve la URL con que
+ * quedó.
+ */
+export function subirFotoDelNegocio(tipo: TipoDeFotoDelNegocio, foto: Blob): Promise<ResultadoDeFoto> {
+  return enviarFoto(rutaDeFotoDelNegocio(tipo), foto)
+}
+
+/** Quita el logo o la portada: la página vuelve a usar el color y las iniciales. */
+export function quitarFotoDelNegocio(tipo: TipoDeFotoDelNegocio): Promise<ResultadoDeFoto> {
+  return pedirQuitarFoto(rutaDeFotoDelNegocio(tipo))
+}
+
 /** Hasta cuántas horas antes el cliente puede cancelar o reagendar con su enlace (0 a 72). */
 export async function guardarPlazoDeCambios(horas: number): Promise<Resultado<{ horas: number }>> {
   return pedir<{ horas: number }>(
@@ -302,4 +545,296 @@ export async function cambiarMensajesAClientes(
     "No se pudo guardar el cambio",
     conJson("PUT", cambios)
   )
+}
+
+// ─── Sillones (clínica dental) ───────────────────────────────────────────────
+
+/** Un sillón de la clínica, como lo devuelve el servidor. */
+export interface Sillon {
+  id: string
+  nombre: string
+  /** En qué lugar sale en la agenda y en el inicio (0 a 999). */
+  orden: number
+  activo: boolean
+}
+
+/** Todos los sillones, activos e inactivos, por orden y nombre. */
+export async function leerSillonesDeLaClinica(): Promise<Resultado<Sillon[]>> {
+  return pedir<Sillon[]>("/api/configuracion/sillones", "No se pudieron cargar los sillones")
+}
+
+/** Un sillón nuevo va al final (el servidor le pone el orden). Devuelve el sillón como quedó. */
+export async function crearSillon(nombre: string): Promise<Resultado<Sillon>> {
+  return pedir<Sillon>("/api/configuracion/sillones", "No se pudo agregar el sillón", conJson("POST", { nombre: nombre.trim() }))
+}
+
+/**
+ * Cambia el nombre, el orden o si está activo. Un sillón no se borra: se
+ * desactiva, y las citas que ya lo tienen lo conservan. Devuelve el sillón
+ * como quedó.
+ */
+export async function editarSillon(
+  id: string,
+  cambios: { nombre?: string; orden?: number; activo?: boolean }
+): Promise<Resultado<Sillon>> {
+  const errorPorDefecto =
+    cambios.activo === true
+      ? "No se pudo activar el sillón"
+      : cambios.activo === false
+        ? "No se pudo desactivar el sillón"
+        : "No se pudo guardar el sillón"
+  return pedir<Sillon>(`/api/configuracion/sillones/${encodeURIComponent(id)}`, errorPorDefecto, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(cambios.nombre === undefined ? cambios : { ...cambios, nombre: cambios.nombre.trim() }),
+  })
+}
+
+/**
+ * Los sillones con `sillon` movido un lugar (`-1` sube, `1` baja), y el orden
+ * que le toca a cada uno: su posición en la lista, de 0 en adelante. Devuelve
+ * también qué sillones cambian de orden, para guardar sólo esos. Si no se
+ * puede mover (ya está primero o último, o no está), `null`.
+ */
+export function moverSillon(
+  sillones: readonly Sillon[],
+  id: string,
+  direccion: -1 | 1
+): { lista: Sillon[]; cambios: { id: string; orden: number }[] } | null {
+  const desde = sillones.findIndex((sillon) => sillon.id === id)
+  const hasta = desde + direccion
+  if (desde === -1 || hasta < 0 || hasta >= sillones.length) return null
+
+  const reordenados = [...sillones]
+  ;[reordenados[desde], reordenados[hasta]] = [reordenados[hasta], reordenados[desde]]
+  const cambios = reordenados.flatMap((sillon, orden) => (sillon.orden === orden ? [] : [{ id: sillon.id, orden }]))
+  return { lista: reordenados.map((sillon, orden) => ({ ...sillon, orden })), cambios }
+}
+
+// ─── Laboratorios (clínica dental, sólo la dueña) ────────────────────────────
+
+/** Un laboratorio de la clínica, como lo devuelve el servidor (`LaboratorioRespuesta`). */
+export type Laboratorio = LaboratorioRespuesta
+
+export async function crearLaboratorio(datos: { nombre: string; contacto: string | null }): Promise<Resultado<Laboratorio>> {
+  return pedir<Laboratorio>(
+    "/api/configuracion/laboratorios",
+    "No se pudo agregar el laboratorio",
+    conJson("POST", { nombre: datos.nombre.trim(), contacto: datos.contacto?.trim() || null })
+  )
+}
+
+/** Renombra, cambia el contacto o lo activa o desactiva. No se borra: las prótesis que lo tienen lo siguen nombrando. */
+export async function editarLaboratorio(
+  id: string,
+  cambios: { nombre?: string; contacto?: string | null; activo?: boolean }
+): Promise<Resultado<Laboratorio>> {
+  const errorPorDefecto =
+    cambios.activo === true
+      ? "No se pudo activar el laboratorio"
+      : cambios.activo === false
+        ? "No se pudo desactivar el laboratorio"
+        : "No se pudo guardar el laboratorio"
+  return pedir<Laboratorio>(`/api/configuracion/laboratorios/${encodeURIComponent(id)}`, errorPorDefecto, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(cambios),
+  })
+}
+
+// ─── Sedes del plan Independiente (etapa 9) ──────────────────────────────────
+
+/** Un día con atención en una sede: las franjas, en el formato de `lib/horario-dia.ts`. */
+export interface HorarioDeSedeDelDia {
+  /** 0 domingo a 6 sábado. */
+  dayOfWeek: number
+  franjas: FranjaHorario[]
+}
+
+/**
+ * Una sede del negocio como la usa la pantalla. El servidor manda las franjas
+ * como `{ start, end }`; acá ya vienen como `{ startTime, endTime }`
+ * (`sedeDeLaRespuesta`), igual que las lee todo `lib/horario-*`.
+ */
+export interface Sede {
+  id: string
+  nombre: string
+  direccion: string
+  comuna: string
+  /** E.164 (+56...) o `null`. */
+  telefono: string | null
+  /** El lugar en la lista (0 a 999). */
+  orden: number
+  activo: boolean
+  /** Sólo los días con atención. */
+  horarios: HorarioDeSedeDelDia[]
+  /** Cuántas horas agendadas (que ocupan su horario) tiene por delante. */
+  horasFuturas: number
+}
+
+/** Un día que el servidor dice que se pisa con otra sede (`conSede`: su nombre o su id). */
+export interface ChoqueDelServidor {
+  dayOfWeek: number
+  conSede: string
+}
+
+/**
+ * Un pedido de sedes. Si falla, el mensaje ya viene en español y con las
+ * palabras del rubro (`frases.sedes.error`); `codigo` es con el que respondió
+ * el servidor (`null` si no respondió) y `cuerpo` lo que mandó, ya leído.
+ */
+async function pedirDeSedes<T>(
+  ruta: string,
+  accion: AccionDeSedes,
+  palabras: PalabrasDelRubro,
+  opciones?: RequestInit
+): Promise<ResultadoConCuerpo<T>> {
+  const resultado = await pedirConCuerpo<T>(ruta, SIN_MENSAJE, opciones)
+  if (resultado.ok) return resultado
+  return { ...resultado, error: frasesDeConfiguracion(palabras).sedes.error(resultado.codigo, resultado.error, accion) }
+}
+
+const rutaDeLaSede = (id: string) => `/api/configuracion/sedes/${encodeURIComponent(id)}`
+
+/** Lo que se manda al crear una sede: sin teléfono si no hay (en un alta no se "borra" nada). */
+const cuerpoDeAlta = (cuerpo: CuerpoDeSede) => ({
+  nombre: cuerpo.nombre,
+  direccion: cuerpo.direccion,
+  comuna: cuerpo.comuna,
+  ...(cuerpo.telefono ? { telefono: cuerpo.telefono } : {}),
+})
+
+/** Las sedes del negocio, con su horario, y el plan con que responde el servidor (`null` si no es uno conocido). */
+export async function leerSedes(
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<{ plan: PlanId | null; sedes: Sede[] }>> {
+  const resultado = await pedirDeSedes<{ plan?: unknown; sedes?: unknown }>("/api/configuracion/sedes", "leer", palabras)
+  if (!resultado.ok) return { ok: false, error: resultado.error }
+  const sedes = sedesDeLaRespuesta(resultado.datos?.sedes)
+  if (!sedes) return { ok: false, error: frasesDeConfiguracion(palabras).sedes.error(200, "", "leer") }
+  return { ok: true, datos: { plan: planConocido(resultado.datos.plan), sedes } }
+}
+
+/** Agrega una sede (activa, al final). Devuelve la sede como quedó. */
+export async function agregarSede(cuerpo: CuerpoDeSede, palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado<Sede>> {
+  const resultado = await pedirDeSedes<{ sede?: unknown }>(
+    "/api/configuracion/sedes",
+    "agregar",
+    palabras,
+    conJson("POST", cuerpoDeAlta(cuerpo))
+  )
+  if (!resultado.ok) return { ok: false, error: resultado.error }
+  const sede = sedeDeLaRespuesta(resultado.datos?.sede)
+  return sede ? { ok: true, datos: sede } : { ok: false, error: frasesDeConfiguracion(palabras).sedes.error(200, "", "agregar") }
+}
+
+/**
+ * Pasa de «un solo lugar» (cero sedes) a dos: la principal se arma con lo que
+ * se pide (la dirección que hoy tiene el negocio, precargada) y recibe el
+ * horario general de siempre; la otra empieza sin horario. Devuelve las dos.
+ */
+export async function convertirEnVariasSedes(
+  sedes: { principal: CuerpoDeSede; nueva: CuerpoDeSede },
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<Sede[]>> {
+  const resultado = await pedirDeSedes<{ sedes?: unknown }>(
+    "/api/configuracion/sedes/convertir",
+    "convertir",
+    palabras,
+    conJson("POST", { principal: cuerpoDeAlta(sedes.principal), nueva: cuerpoDeAlta(sedes.nueva) })
+  )
+  if (!resultado.ok) return { ok: false, error: resultado.error }
+  const creadas = sedesDeLaRespuesta(resultado.datos?.sedes)
+  return creadas && creadas.length > 0
+    ? { ok: true, datos: creadas }
+    : { ok: false, error: frasesDeConfiguracion(palabras).sedes.error(200, "", "convertir") }
+}
+
+/** Lo que se cambia de una sede. `telefono: null` borra el teléfono. */
+export type CambiosDeSede = Partial<CuerpoDeSede> & { orden?: number; activo?: boolean }
+
+/** Qué se estaba haciendo, para el mensaje de un pedido que falla. */
+function accionDeLosCambios(cambios: CambiosDeSede): AccionDeSedes {
+  if (cambios.activo === true) return "activar"
+  if (cambios.activo === false) return "desactivar"
+  const soloElOrden = Object.keys(cambios).every((clave) => clave === "orden")
+  return soloElOrden ? "ordenar" : "editar"
+}
+
+/** Cambia los datos de una sede, su lugar en la lista o si está activa. Devuelve la sede como quedó. */
+export async function editarSede(
+  id: string,
+  cambios: CambiosDeSede,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<Sede>> {
+  const accion = accionDeLosCambios(cambios)
+  const resultado = await pedirDeSedes<{ sede?: unknown }>(rutaDeLaSede(id), accion, palabras, conJson("PUT", cambios))
+  if (!resultado.ok) return { ok: false, error: resultado.error }
+  const sede = sedeDeLaRespuesta(resultado.datos?.sede)
+  return sede ? { ok: true, datos: sede } : { ok: false, error: frasesDeConfiguracion(palabras).sedes.error(200, "", accion) }
+}
+
+/** Borra una sede sin horas. Con horas el servidor responde 409: se desactiva en vez de borrarla. */
+export async function borrarSede(id: string, palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado> {
+  const resultado = await pedirDeSedes<unknown>(rutaDeLaSede(id), "borrar", palabras, { method: "DELETE" })
+  return resultado.ok ? { ok: true, datos: undefined } : { ok: false, error: resultado.error }
+}
+
+/** Por qué no se guardó el horario de una sede; si se pisa con otra, en qué días y con cuál. */
+export type ResultadoDeHorarioDeSede =
+  | { ok: true; datos: Sede }
+  | { ok: false; error: string; choques: ChoqueDelServidor[] }
+
+/**
+ * Guarda el horario semanal de una sede: reemplaza toda la grilla (los días que
+ * no van quedan sin atención). Devuelve la sede como quedó. Si se pisa con otra
+ * sede el servidor responde 409 con el motivo y los días en `choques`.
+ */
+export async function guardarHorarioDeSede(
+  id: string,
+  dias: readonly HorarioDeSedeDelDia[],
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<ResultadoDeHorarioDeSede> {
+  const cuerpo = {
+    dias: dias.map((dia) => ({
+      dayOfWeek: dia.dayOfWeek,
+      franjas: dia.franjas.map((franja) => ({ start: franja.startTime, end: franja.endTime })),
+    })),
+  }
+  const resultado = await pedirDeSedes<{ sede?: unknown }>(
+    `${rutaDeLaSede(id)}/horarios`,
+    "guardar-horario",
+    palabras,
+    conJson("PUT", cuerpo)
+  )
+  if (!resultado.ok) {
+    return { ok: false, error: resultado.error, choques: resultado.codigo === 409 ? choquesDelCuerpo(resultado.cuerpo) : [] }
+  }
+  const sede = sedeDeLaRespuesta(resultado.datos?.sede)
+  return sede
+    ? { ok: true, datos: sede }
+    : { ok: false, error: frasesDeConfiguracion(palabras).sedes.error(200, "", "guardar-horario"), choques: [] }
+}
+
+// ─── Plan (sólo la dueña) ────────────────────────────────────────────────────
+
+/**
+ * Cambia el plan del negocio. Al pasar a Equipo con sedes, `sedeQueSeQueda` es
+ * la que queda como la dirección del negocio (las demás se desactivan). El
+ * servidor responde 409, con el motivo, si no se puede (por ejemplo, pasar a
+ * Independiente con equipo o con invitaciones). Devuelve el plan que quedó.
+ */
+export async function cambiarDePlan(
+  plan: PlanId,
+  sedeQueSeQueda?: string,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<{ plan: PlanId }>> {
+  const resultado = await pedirDeSedes<{ plan?: unknown }>("/api/configuracion/plan", "cambiar-de-plan", palabras, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(sedeQueSeQueda ? { plan, sedeQueSeQueda } : { plan }),
+  })
+  if (!resultado.ok) return { ok: false, error: resultado.error }
+  const quedo = planConocido(resultado.datos?.plan)
+  return quedo ? { ok: true, datos: { plan: quedo } } : { ok: false, error: frasesDeConfiguracion(palabras).sedes.error(200, "", "cambiar-de-plan") }
 }

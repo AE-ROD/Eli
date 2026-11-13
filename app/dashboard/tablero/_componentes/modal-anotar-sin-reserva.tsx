@@ -1,20 +1,24 @@
 "use client"
 
-import { useEffect, useId, useRef, useState, type FormEvent } from "react"
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react"
 import { Search, User, UserPlus } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { avisoDeLargo, lineasDesdeFilas, type FilaDeServicio } from "@/lib/acciones-del-tablero"
 import type { Resultado } from "@/lib/peticiones"
+import { esRubroDental } from "@/lib/rubros"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import {
   buscarClientes,
   type Catalogo,
   type ClienteEncontrado,
   type DatosSinReserva,
 } from "../_datos"
+import { frasesDelTablero } from "../_frases"
 import { Aviso } from "@/components/panel/aviso"
 import { EditorDeServicios, filaVacia } from "./editor-de-servicios"
 
@@ -74,6 +78,11 @@ export function ModalAnotarSinReserva({
   onCerrar,
 }: PropsDeModalAnotarSinReserva) {
   const idBase = useId()
+  // "Paciente", "Sala de espera" y "prestación" en una clínica dental; la concordancia la arma `frasesDelTablero`.
+  const rubro = useRubroDelPanel()
+  // Memorizadas: la búsqueda de más abajo depende de ellas y no debe repetirse en cada dibujo.
+  const palabras = useMemo(() => vocabularioDe(rubro).palabras, [rubro])
+  const frases = useMemo(() => frasesDelTablero(palabras), [palabras])
   const botonCambiar = useRef<HTMLButtonElement>(null)
   const campoNombre = useRef<HTMLInputElement>(null)
   const campoBusqueda = useRef<HTMLInputElement>(null)
@@ -99,14 +108,14 @@ export function ModalAnotarSinReserva({
     if (!debeBuscar) return
     let vigente = true
     const espera = setTimeout(async () => {
-      const resultado = await buscarClientes(textoBuscado)
+      const resultado = await buscarClientes(textoBuscado, palabras)
       if (vigente) setBusquedaHecha({ texto: textoBuscado, resultado })
     }, 300)
     return () => {
       vigente = false
       clearTimeout(espera)
     }
-  }, [debeBuscar, textoBuscado])
+  }, [debeBuscar, textoBuscado, palabras])
 
   const resultadoActual = debeBuscar && busquedaHecha?.texto === textoBuscado ? busquedaHecha.resultado : null
   const buscando = debeBuscar && resultadoActual === null
@@ -115,17 +124,16 @@ export function ModalAnotarSinReserva({
   const sinResultados = resultadoActual?.ok === true && sugerencias.length === 0
 
   // Validación: se calcula siempre, se muestra después del primer intento.
-  const validacionDeServicios = lineasDesdeFilas(filas, eligeProfesional)
+  const validacionDeServicios = lineasDesdeFilas(filas, eligeProfesional, palabras)
   const errorDeCliente =
     modo === "existente"
       ? elegido
         ? null
-        : "Elige un cliente de la lista, o anótalo como cliente nuevo."
+        : frases.anotar.eligeDeLaLista
       : nombre.trim().length >= LARGO_MINIMO_DEL_NOMBRE
         ? null
-        : `Escribe el nombre del cliente (al menos ${LARGO_MINIMO_DEL_NOMBRE} letras).`
-  const errorDeServicios =
-    servicioObligatorio && filas.length === 0 ? "Agrega el servicio que vas a hacer: la atención queda a tu nombre." : null
+        : frases.anotar.escribeElNombre(LARGO_MINIMO_DEL_NOMBRE)
+  const errorDeServicios = servicioObligatorio && filas.length === 0 ? frases.servicios.agregaElQueVasAHacer : null
   const mostrarErrores = intentoAnotar
 
   // Al abrir, el foco va al buscador: es lo primero que se hace. Con un
@@ -169,9 +177,10 @@ export function ModalAnotarSinReserva({
 
   return (
     <MarcoDeModal
-      antetitulo="Tablero"
+      antetitulo={frases.titulo}
       titulo="Anotar sin reserva"
-      descripcion="Entra al tablero en espera."
+      // Una clínica espera en una sala: ahí la frase cambia de forma ("Queda esperando en…"), no sólo de palabra.
+      descripcion={esRubroDental(rubro) ? frases.anotar.quedaEsperando : frases.anotar.entraEnEspera}
       ancho="lg"
       bloqueado={guardando}
       alCerrar={onCerrar}
@@ -179,14 +188,14 @@ export function ModalAnotarSinReserva({
       <form onSubmit={anotar} noValidate className="space-y-6">
         {/* ── Cliente ── */}
         <fieldset className="space-y-3">
-          <legend className="mb-3 text-sm font-semibold">Cliente</legend>
+          <legend className="mb-3 text-sm font-semibold">{frases.anotar.cliente}</legend>
 
           {/* Las dos opciones lado a lado, la elegida en navy: el borde gris de los campos dice que son controles. */}
-          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="¿Ya es cliente?">
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label={frases.anotar.yaEsCliente}>
             {(
               [
-                { id: "existente", texto: "Ya es cliente", icono: User },
-                { id: "nuevo", texto: "Cliente nuevo", icono: UserPlus },
+                { id: "existente", texto: frases.anotar.opcionYaEs, icono: User },
+                { id: "nuevo", texto: frases.anotar.opcionNuevo, icono: UserPlus },
               ] as const
             ).map(({ id, texto, icono: Icono }) => (
               <label
@@ -236,7 +245,7 @@ export function ModalAnotarSinReserva({
             ) : (
               <div>
                 <label htmlFor={`${idBase}-buscar`} className={ETIQUETA}>
-                  Buscar cliente
+                  {frases.anotar.buscar}
                 </label>
                 <div className="relative">
                   <Search
@@ -265,9 +274,8 @@ export function ModalAnotarSinReserva({
                 <div id={`${idBase}-estado-busqueda`} aria-live="polite" className="mt-1.5 text-xs text-texto-2">
                   {textoBuscado.length < LETRAS_PARA_BUSCAR && `Escribe al menos ${LETRAS_PARA_BUSCAR} letras para buscar.`}
                   {buscando && "Buscando…"}
-                  {sugerencias.length > 0 &&
-                    (sugerencias.length === 1 ? "1 cliente encontrado." : `${sugerencias.length} clientes encontrados.`)}
-                  {sinResultados && "No hay clientes con ese texto."}
+                  {sugerencias.length > 0 && frases.anotar.encontrados(sugerencias.length)}
+                  {sinResultados && frases.anotar.sinResultados}
                 </div>
 
                 {avisoDeBusqueda && (
@@ -304,7 +312,7 @@ export function ModalAnotarSinReserva({
 
                 {sinResultados && (
                   <Boton variante="enlace" tamano="sm" onClick={anotarComoNuevo} disabled={guardando} className="mt-1">
-                    Anotarlo como cliente nuevo
+                    {frases.anotar.anotarComoNuevo}
                   </Boton>
                 )}
               </div>
@@ -360,10 +368,10 @@ export function ModalAnotarSinReserva({
 
         {/* ── Servicios ── */}
         <fieldset className="space-y-3">
-          <legend className="text-sm font-semibold">Servicios</legend>
+          <legend className="text-sm font-semibold">{frases.servicios.titulo}</legend>
           <p className="text-sm text-texto-2">
             {servicioObligatorio
-              ? "Agrega el servicio que vas a hacer: la atención queda a tu nombre."
+              ? frases.servicios.agregaElQueVasAHacer
               : "Opcional: si todavía no se sabe, se agregan después desde la tarjeta."}
           </p>
           <EditorDeServicios

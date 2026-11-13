@@ -9,7 +9,10 @@ import { Boton, clasesDeBoton } from "@/components/comunes/boton"
 import { MarcaDeEli } from "@/components/comunes/marca-de-eli"
 import { POLLING_DE_LA_PANTALLA_MS } from "@/lib/fila-virtual"
 import { pedir } from "@/lib/peticiones"
+import { iniciarSondeoVisible } from "@/lib/sondeo-visible"
 import { cn } from "@/lib/utils"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
+import { esRubroDental } from "@/lib/rubros"
 
 interface TurnoEnPantalla {
   numero: number
@@ -35,9 +38,12 @@ const TURNOS_VISIBLES = 12
  * lateral) para ponerla en un televisor o una tablet. A la izquierda, quiénes
  * están en atención y la fila de espera, con número y nombre con inicial; a
  * la derecha, el QR y el enlace para anotarse, en grande. Se refresca sola
- * cada ~15 s; si un refresco falla, deja lo último que tenía y lo dice.
+ * cada ~15 s mientras la pestaña está a la vista; si un refresco falla, deja
+ * lo último que tenía y lo dice.
  */
 export function PantallaDeFila() {
+  // "Volver al Tablero", o "a la Sala de espera" en una clínica dental: el nombre de la sección del rubro.
+  const volverA = esRubroDental(useRubroDelPanel()) ? "Volver a la Sala de espera" : "Volver al Tablero"
   const [pantalla, setPantalla] = useState<Pantalla | null>(null)
   const [error, setError] = useState("")
   const [qr, setQr] = useState<string | null>(null)
@@ -59,10 +65,11 @@ export function PantallaDeFila() {
       if (vigente) void cargar()
     }
     tick()
-    const intervalo = window.setInterval(tick, POLLING_DE_LA_PANTALLA_MS)
+    // Con la pestaña oculta no se pide nada (nadie ve la pantalla); al volver se actualiza en el acto.
+    const detener = iniciarSondeoVisible({ alTocar: tick, cadaMs: POLLING_DE_LA_PANTALLA_MS })
     return () => {
       vigente = false
-      window.clearInterval(intervalo)
+      detener()
     }
   }, [cargar])
 
@@ -98,7 +105,7 @@ export function PantallaDeFila() {
       <div className="flex items-center justify-between gap-3 px-6 pt-4">
         <Link href="/dashboard/tablero" className={clasesDeBoton({ variante: "fantasma", tamano: "sm" })}>
           <ArrowLeft aria-hidden="true" className="size-4" strokeWidth={2} />
-          Volver al Tablero
+          {volverA}
         </Link>
         <Boton variante="fantasma" tamano="sm" onClick={pantallaCompleta}>
           <Maximize aria-hidden="true" className="size-4" strokeWidth={2} />

@@ -6,14 +6,19 @@ import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Esqueleto } from "@/components/comunes/esqueleto"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPO } from "@/components/panel/estilos"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { NOMBRES_DE_MOVIMIENTO } from "@/lib/movimientos"
+import { veLaLineaDePropinas } from "@/lib/permisos"
 import { avisoDeCierreAnticipado, fechaParaLeer } from "@/lib/periodos-de-liquidacion"
 import type { Resultado } from "@/lib/peticiones"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { cerrarLiquidacion, leerVistaPrevia, type VistaPrevia } from "../_datos"
+import { frasesDeLasLiquidaciones } from "../_frases"
 import { FilaDeTotal, pesos, porcentaje } from "./piezas"
+import { ListaDeProtesis } from "./protesis-en-liquidacion"
 
 interface Props {
   miembro: { id: string; nombre: string }
@@ -28,12 +33,17 @@ interface Props {
  * negativo). Sólo la dueña llega acá.
  *
  * Cerrar pide confirmación (QA#5): congela comisiones y saca lo incluido de
- * las próximas, y si el período todavía no termina, lo dice. Mientras se
+ * las próximas, y si el período todavía no termina, lo dice. Se cierra con el
+ * total que se confirmó: si entretanto se cobró o se anuló algo, el servidor
+ * responde 409 ("cambió mientras confirmabas") y la vista previa se recalcula. Mientras se
  * confirma, este componente sigue montado y guarda lo elegido (excluidos y
  * nota): cancelar vuelve a la vista previa tal como estaba.
  */
 export function ModalDeCierre({ miembro, alCerrar }: Props) {
   const router = useRouter()
+  const rubro = useRubroDelPanel()
+  // "Prestaciones y productos" en una clínica dental; en los demás rubros, "Servicios y productos".
+  const frases = frasesDeLasLiquidaciones(vocabularioDe(rubro).palabras).vistaPrevia
   const idDeLaNota = useId()
   const [excluidos, setExcluidos] = useState<string[]>([])
   const [respuesta, setRespuesta] = useState<{ clave: string; resultado: Resultado<VistaPrevia> } | null>(null)
@@ -74,6 +84,8 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
 
   const cargando = !respuesta || respuesta.clave !== clave
   const vista = respuesta?.resultado.ok ? respuesta.resultado.datos : null
+  // Lo que impide cerrar, con las palabras del rubro: el servidor lo arma sin mirarlas.
+  const motivoParaNoCerrar = vista ? frases.motivoParaNoCerrar(vista.noSePuedeCerrar, vista.sinPorcentaje) : null
 
   const alternar = (id: string) => {
     setErrorAlCerrar("")
@@ -88,6 +100,8 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
     const resultado = await cerrarLiquidacion({
       miembroId: miembro.id,
       desde: vista.periodo.desde,
+      // El total que se vio al confirmar: si cambió entretanto, 409 y se recalcula.
+      totalEsperadoCents: vista.totales.totalCents,
       excluirMovimientos: excluidos,
       nota: nota.trim(),
     })
@@ -97,7 +111,8 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
       // Vuelve a la vista previa, que se recalcula: lo que hizo fallar el
       // cierre (algo cambió mientras tanto) se ve ahí.
       setConfirmando(false)
-      setErrorAlCerrar(resultado.error)
+      // Si el servidor frenó el cierre por líneas sin %, lo dice con las palabras del rubro.
+      setErrorAlCerrar(frases.motivoParaNoCerrar(resultado.error, vista.sinPorcentaje) ?? resultado.error)
       setReintentos((n) => n + 1)
       return
     }
@@ -148,7 +163,7 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
       ) : (
         <div className={cargando ? "space-y-6 opacity-60" : "space-y-6"} aria-busy={cargando}>
           <section className="space-y-2">
-            <h3 className="font-medium">Servicios y productos ({vista.lineas.length})</h3>
+            <h3 className="font-medium">{frases.lineas(vista.lineas.length)}</h3>
             {vista.lineas.length === 0 ? (
               <p className="text-sm text-texto-2">Nada cobrado en este período.</p>
             ) : (
@@ -179,6 +194,8 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
             )}
           </section>
 
+          <ListaDeProtesis protesis={vista.protesis} />
+
           {vista.propinas.length > 0 && (
             <section className="space-y-2">
               <h3 className="font-medium">Propinas ({vista.propinas.length})</h3>
@@ -199,37 +216,62 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
           {vista.movimientos.length > 0 && (
             <fieldset className="space-y-2">
               <legend className="font-medium">Adelantos, vales y ajustes</legend>
-              <p className="text-sm text-texto-2">Lo que desmarques queda para la próxima liquidación.</p>
+              <p className="text-sm text-texto-2">
+                Los adelantos y vales que desmarques quedan para la próxima liquidación. Los ajustes entran siempre.
+              </p>
               <ul className="divide-y divide-borde/60 text-sm">
-                {vista.movimientos.map((movimiento) => (
-                  <li key={movimiento.id}>
-                    <label className="flex min-h-11 cursor-pointer items-center gap-3 py-2">
-                      <input
-                        type="checkbox"
-                        checked={movimiento.incluido}
-                        onChange={() => alternar(movimiento.id)}
-                        disabled={cerrando}
-                        className="size-5 accent-navy"
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="text-texto-2">{fechaParaLeer(movimiento.fecha)} · </span>
-                        {NOMBRES_DE_MOVIMIENTO[movimiento.tipo]}
-                        {movimiento.motivo && <span className="text-texto-2">: {movimiento.motivo}</span>}
-                      </span>
-                      <span className="tabular-nums">
-                        {pesos(movimiento.tipo === "ajuste" ? movimiento.montoCents : -movimiento.montoCents)}
-                      </span>
-                    </label>
-                  </li>
-                ))}
+                {vista.movimientos.map((movimiento) => {
+                  const detalle = (
+                    <span className="min-w-0 flex-1">
+                      <span className="text-texto-2">{fechaParaLeer(movimiento.fecha)} · </span>
+                      {NOMBRES_DE_MOVIMIENTO[movimiento.tipo]}
+                      {movimiento.motivo && <span className="text-texto-2">: {movimiento.motivo}</span>}
+                    </span>
+                  )
+                  const monto = (
+                    <span className="tabular-nums">
+                      {pesos(movimiento.tipo === "ajuste" ? movimiento.montoCents : -movimiento.montoCents)}
+                    </span>
+                  )
+                  // Un ajuste corrige algo ya cobrado (§3.7): no se deja para la siguiente.
+                  if (movimiento.tipo === "ajuste") {
+                    return (
+                      <li key={movimiento.id} className="flex min-h-11 items-center gap-3 py-2 pl-8">
+                        {detalle}
+                        {monto}
+                      </li>
+                    )
+                  }
+                  return (
+                    <li key={movimiento.id}>
+                      <label className="flex min-h-11 cursor-pointer items-center gap-3 py-2">
+                        <input
+                          type="checkbox"
+                          checked={movimiento.incluido}
+                          onChange={() => alternar(movimiento.id)}
+                          disabled={cerrando}
+                          className="size-5 accent-navy"
+                        />
+                        {detalle}
+                        {monto}
+                      </label>
+                    </li>
+                  )
+                })}
               </ul>
             </fieldset>
           )}
 
           <dl className="space-y-2 rounded-campo bg-superficie p-4 squircle">
-            <FilaDeTotal concepto="Comisión por servicios" centavos={vista.totales.comisionServiciosCents} />
+            <FilaDeTotal concepto={frases.comisionPorServicios} centavos={vista.totales.comisionServiciosCents} />
             <FilaDeTotal concepto="Comisión por productos" centavos={vista.totales.comisionProductosCents} />
-            <FilaDeTotal concepto="Propinas" centavos={vista.totales.propinasCents} />
+            {(vista.protesis.length > 0 || vista.totales.comisionProtesisCents !== 0) && (
+              <FilaDeTotal concepto="Comisión por prótesis" centavos={vista.totales.comisionProtesisCents} />
+            )}
+            {/* Una clínica dental no trabaja con propinas: la línea de $0 no se muestra, la que tenga plata sí. */}
+            {veLaLineaDePropinas(rubro, vista.totales.propinasCents) && (
+              <FilaDeTotal concepto="Propinas" centavos={vista.totales.propinasCents} />
+            )}
             <FilaDeTotal concepto="Adelantos y vales" centavos={-vista.totales.adelantosCents} />
             <FilaDeTotal concepto="Ajustes" centavos={vista.totales.ajustesCents} />
             <FilaDeTotal concepto="Total a pagar" centavos={vista.totales.totalCents} fuerte />
@@ -249,9 +291,9 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
             />
           </div>
 
-          {vista.noSePuedeCerrar && (
+          {motivoParaNoCerrar && (
             <Aviso tono="atencion" rol="status">
-              {vista.noSePuedeCerrar}
+              {motivoParaNoCerrar}
             </Aviso>
           )}
           {errorAlCerrar && <Aviso>{errorAlCerrar}</Aviso>}
@@ -264,7 +306,7 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
               type="button"
               anchoCompleto
               cargando={cerrando}
-              disabled={cargando || !!vista.noSePuedeCerrar}
+              disabled={cargando || !!motivoParaNoCerrar}
               onClick={() => {
                 setErrorAlCerrar("")
                 setConfirmando(true)

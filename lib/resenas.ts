@@ -59,7 +59,7 @@ export async function ejecutarResenas(contexto: ContextoDeCorrida): Promise<Resu
 
   const negocios = await prisma.business.findMany({
     where: { pideResenas: true, enlaceResenas: { not: null } },
-    select: { id: true, name: true, timezone: true, enlaceResenas: true },
+    select: { id: true, name: true, timezone: true, enlaceResenas: true, type: true },
     orderBy: { id: "asc" },
   })
 
@@ -149,6 +149,7 @@ export async function ejecutarResenas(contexto: ContextoDeCorrida): Promise<Resu
         ahora,
         enviar: () =>
           enviarPedirResena({
+            rubro: negocio.type,
             emailCliente: candidato.email,
             nombreCliente: candidato.nombre,
             nombreNegocio: negocio.name,

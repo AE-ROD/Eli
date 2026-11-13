@@ -1,10 +1,11 @@
 "use client"
 
-import { useCallback, useEffect, useId, useRef, useState } from "react"
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { AnimatePresence } from "framer-motion"
 import { RefreshCw } from "lucide-react"
 import { BarraSuperior } from "@/components/panel/barra-superior"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { Boton } from "@/components/comunes/boton"
 import { Esqueleto } from "@/components/comunes/esqueleto"
 import { ModalAnular } from "@/components/panel/modal-anular"
@@ -15,6 +16,7 @@ import { actorDeSesion, puedeAnular, puedeVerAnuladas } from "@/lib/permisos"
 import type { Resultado } from "@/lib/peticiones"
 import { rotuloDeIngresos } from "@/lib/reportes"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import {
   anularCobro,
   leerAnuladas,
@@ -25,6 +27,7 @@ import {
   type Reporte,
   type ReporteDeAnuladas,
 } from "./_datos"
+import { frasesDeLosReportes } from "./_frases"
 import { Aviso } from "@/components/panel/aviso"
 import { FiltrosDeReporte, type FiltrosElegidos } from "./_componentes/filtros-de-reporte"
 import { ResumenDeReporte } from "./_componentes/resumen-de-reporte"
@@ -94,6 +97,11 @@ function AvisoDeTruncado() {
 
 export default function PaginaReportes() {
   const { data: sesion } = useSession()
+  // "Pacientes", "odontólogo", "prestación" y "sala de espera" en una clínica dental.
+  const rubro = useRubroDelPanel()
+  // Memorizadas: la lectura de las opciones de más abajo depende de ellas y no debe repetirse en cada dibujo.
+  const palabras = useMemo(() => vocabularioDe(rubro).palabras, [rubro])
+  const frases = useMemo(() => frasesDeLosReportes(palabras), [palabras])
   const actor = actorDeSesion(sesion)
   const verAnuladas = puedeVerAnuladas(actor)
   // Lo cobrado lo anula sólo el dueño (`puedeAnular`). Todas las filas son del
@@ -135,7 +143,7 @@ export default function PaginaReportes() {
 
   useEffect(() => {
     let vigente = true
-    leerOpcionesDeFiltro().then((resultado) => {
+    leerOpcionesDeFiltro(palabras).then((resultado) => {
       if (!vigente) return
       if (resultado.ok) setOpciones(resultado.datos)
       else setErrorDeOpciones(resultado.error)
@@ -143,7 +151,7 @@ export default function PaginaReportes() {
     return () => {
       vigente = false
     }
-  }, [pedidoDeOpciones])
+  }, [pedidoDeOpciones, palabras])
 
   const reintentarOpciones = () => {
     setErrorDeOpciones("")
@@ -276,14 +284,14 @@ export default function PaginaReportes() {
   // ─── Pantalla ─────────────────────────────────────────────────────────────
 
   const subtitulo = llenarHoras
-    ? "Ocupación del equipo, clientes nuevos y quién no vino"
+    ? frases.subtitulo.llenarHoras
     : !reporte
       ? errorDelReporte
         ? undefined
         : "Cargando..."
       : reporte.alcance === "propio"
         ? "Lo que atendiste"
-        : "Lo atendido y cobrado en el tablero"
+        : frases.subtitulo.deLoCobrado
 
   // Con un rango que no sirve o un pedido que falló, lo último que llegó ya
   // no es lo de lo elegido: no se muestra como si lo fuera.
@@ -296,11 +304,15 @@ export default function PaginaReportes() {
   const nombreDe = (lista: { id: string; nombre: string }[] | undefined, id: string, siNoEsta: string) =>
     id ? (lista?.find((opcion) => opcion.id === id)?.nombre ?? siNoEsta) : ""
   const rotulo = reporte
-    ? rotuloDeIngresos(reporte.alcance === "propio", {
-        profesional: nombreDe(opciones?.profesionales, filtros.profesional, "el profesional elegido"),
-        servicio: nombreDe(opciones?.servicios, filtros.servicio, "el servicio elegido"),
-        medio: filtros.medio,
-      })
+    ? rotuloDeIngresos(
+        reporte.alcance === "propio",
+        {
+          profesional: nombreDe(opciones?.profesionales, filtros.profesional, frases.elegido.profesional),
+          servicio: nombreDe(opciones?.servicios, filtros.servicio, frases.elegido.servicio),
+          medio: filtros.medio,
+        },
+        palabras
+      )
     : ""
 
   return (

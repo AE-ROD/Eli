@@ -15,6 +15,7 @@ import {
 import { ErrorDeAtencion, formatearAtencion, seleccionDeAtencion } from "@/lib/tablero"
 import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
+import { telefonoChileno } from "@/lib/campos-del-panel"
 
 /**
  * Traba la fila del cliente hasta que termine la transacción (`FOR UPDATE`).
@@ -92,7 +93,10 @@ export const llegadaSinReservaSchema = z
     clienteNuevo: z
       .object({
         nombre: z.string().trim().min(2).max(100),
-        telefono: z.string().trim().max(30).optional(),
+        // En E.164, como el resto de los clientes (`telefonoChileno`): con otro
+        // formato no se lo encuentra por teléfono ni se le puede escribir.
+        // Vacío es sin teléfono (`null`); lo ilegible, 400.
+        telefono: telefonoChileno().optional(),
       })
       .optional(),
     lineas: lineasPedidasSchema.optional(),
@@ -354,7 +358,7 @@ export async function anotarSinReserva(actor: Actor, usuarioId: string | null, d
       ? await tx.customer.create({
           data: {
             name: datos.clienteNuevo.nombre,
-            phone: datos.clienteNuevo.telefono || null,
+            phone: datos.clienteNuevo.telefono ?? null,
             // Explícito: la columna no tiene default y quedaba en NULL (ver `clienteNoEliminado`).
             tags: [],
             businessId: actor.businessId,

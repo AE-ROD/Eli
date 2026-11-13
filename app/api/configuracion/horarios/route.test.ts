@@ -13,7 +13,12 @@ vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 const prismaMock = {
   businessMember: { findUnique: vi.fn() },
   workSchedule: { findMany: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
-  $transaction: vi.fn(),
+  // ¿El negocio ya tiene sedes activas? (etapa 9). Por defecto no.
+  sede: { findFirst: vi.fn() },
+  // El candado del horario, dentro de la transacción.
+  $executeRaw: vi.fn(),
+  // Transacción interactiva: corre la función con el mismo cliente.
+  $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(prismaMock)),
 }
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
@@ -38,7 +43,10 @@ const pedidoFalso = (url: string, body?: unknown): NextRequest =>
   }) as unknown as NextRequest
 
 describe("GET /api/configuracion/horarios", () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    prismaMock.sede.findFirst.mockResolvedValue(null)
+  })
 
   it("sin sesión recibe 401", async () => {
     const { GET } = await import("./route")
@@ -60,7 +68,7 @@ describe("GET /api/configuracion/horarios", () => {
 
     expect(res.status).toBe(200)
     const argumentos = prismaMock.workSchedule.findMany.mock.calls[0][0]
-    expect(argumentos.where).toEqual({ businessId: "negocio-1", memberId: null })
+    expect(argumentos.where).toEqual({ businessId: "negocio-1", memberId: null, sedeId: null })
   })
 
   it("un profesional sin memberId en la URL ve su propio horario", async () => {
@@ -73,7 +81,7 @@ describe("GET /api/configuracion/horarios", () => {
 
     expect(res.status).toBe(200)
     const argumentos = prismaMock.workSchedule.findMany.mock.calls[0][0]
-    expect(argumentos.where).toEqual({ businessId: "negocio-1", memberId: "member-worker-1" })
+    expect(argumentos.where).toEqual({ businessId: "negocio-1", memberId: "member-worker-1", sedeId: null })
   })
 
   it("un encargado (admin) puede ver el horario de otro miembro de su negocio", async () => {
@@ -90,7 +98,7 @@ describe("GET /api/configuracion/horarios", () => {
 
     expect(res.status).toBe(200)
     const argumentos = prismaMock.workSchedule.findMany.mock.calls[0][0]
-    expect(argumentos.where).toEqual({ businessId: "negocio-1", memberId: "member-worker-1" })
+    expect(argumentos.where).toEqual({ businessId: "negocio-1", memberId: "member-worker-1", sedeId: null })
   })
 
   it("un profesional (worker) pidiendo el horario de otro miembro recibe 401", async () => {
@@ -137,7 +145,10 @@ describe("GET /api/configuracion/horarios", () => {
 })
 
 describe("POST /api/configuracion/horarios", () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    prismaMock.sede.findFirst.mockResolvedValue(null)
+  })
 
   const horarios = [{ dayOfWeek: 1, startTime: "09:00", endTime: "18:00", active: true }]
 
@@ -159,7 +170,6 @@ describe("POST /api/configuracion/horarios", () => {
       id: "member-worker-1",
       businessId: "negocio-1",
     })
-    prismaMock.$transaction.mockResolvedValueOnce(undefined)
     prismaMock.workSchedule.findMany.mockResolvedValueOnce(horarios)
 
     const res = await POST(pedidoFalso("/api/configuracion/horarios?memberId=member-worker-1", horarios))
@@ -173,7 +183,6 @@ describe("POST /api/configuracion/horarios", () => {
     const { POST } = await import("./route")
 
     mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
-    prismaMock.$transaction.mockResolvedValueOnce(undefined)
     prismaMock.workSchedule.findMany.mockResolvedValueOnce(horarios)
 
     const res = await POST(pedidoFalso("/api/configuracion/horarios", horarios))
@@ -223,7 +232,6 @@ describe("POST /api/configuracion/horarios", () => {
     const { POST } = await import("./route")
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
-    prismaMock.$transaction.mockResolvedValueOnce(undefined)
     prismaMock.workSchedule.findMany.mockResolvedValueOnce(horarios)
 
     const res = await POST(pedidoFalso("/api/configuracion/horarios", horarios))
@@ -273,8 +281,72 @@ describe("POST /api/configuracion/horarios", () => {
   })
 })
 
+describe("el horario general con destino explícito (?general=1)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    prismaMock.sede.findFirst.mockResolvedValue(null)
+  })
+
+  const horarios = [{ dayOfWeek: 1, startTime: "09:00", endTime: "18:00", active: true }]
+
+  it("el encargado lo lee y lo edita (§5: lleva los horarios): clave null", async () => {
+    const { GET, POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    prismaMock.workSchedule.findMany.mockResolvedValueOnce([])
+    expect((await GET(pedidoFalso("/api/configuracion/horarios?general=1"))).status).toBe(200)
+    expect(prismaMock.workSchedule.findMany.mock.calls[0][0].where).toEqual({ businessId: "negocio-1", memberId: null, sedeId: null })
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    prismaMock.workSchedule.findMany.mockResolvedValueOnce(horarios)
+    const res = await POST(pedidoFalso("/api/configuracion/horarios?general=1", horarios))
+
+    expect(res.status).toBe(200)
+    expect(prismaMock.workSchedule.deleteMany).toHaveBeenCalledWith({ where: { businessId: "negocio-1", memberId: null, sedeId: null } })
+    expect(prismaMock.workSchedule.createMany.mock.calls[0][0].data[0]).toMatchObject({ businessId: "negocio-1", memberId: null })
+  })
+
+  it("el profesional no: 401 y no escribe", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+    const res = await POST(pedidoFalso("/api/configuracion/horarios?general=1", horarios))
+
+    expect(res.status).toBe(401)
+    expect(prismaMock.$transaction).not.toHaveBeenCalled()
+  })
+
+  it("con general y memberId a la vez: 400, el destino tiene que ser uno", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    const res = await POST(pedidoFalso("/api/configuracion/horarios?general=1&memberId=member-worker-1", horarios))
+
+    expect(res.status).toBe(400)
+    expect(prismaMock.$transaction).not.toHaveBeenCalled()
+  })
+
+  it("reemplazar va bajo el candado de ese horario, antes de borrar y crear: dos guardados a la vez no lo duplican", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.workSchedule.findMany.mockResolvedValueOnce(horarios)
+    await POST(pedidoFalso("/api/configuracion/horarios?general=1", horarios))
+
+    const [sql, clave] = prismaMock.$executeRaw.mock.calls[0] as [TemplateStringsArray, string]
+    expect(sql.join("?")).toContain("pg_advisory_xact_lock")
+    expect(clave).toBe("horario:negocio-1:general")
+    expect(prismaMock.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      prismaMock.workSchedule.deleteMany.mock.invocationCallOrder[0]
+    )
+  })
+})
+
 describe("POST /api/configuracion/horarios — largos y tipos", () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    prismaMock.sede.findFirst.mockResolvedValue(null)
+  })
 
   const franja = (datos: Record<string, unknown> = {}) => ({
     dayOfWeek: 1,
@@ -314,12 +386,88 @@ describe("POST /api/configuracion/horarios — largos y tipos", () => {
     const { POST } = await import("./route")
 
     mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
-    prismaMock.$transaction.mockResolvedValueOnce(undefined)
     prismaMock.workSchedule.findMany.mockResolvedValueOnce(semanaCompleta)
 
     const res = await POST(pedidoFalso("/api/configuracion/horarios", semanaCompleta))
 
     expect(res.status).toBe(200)
     expect(prismaMock.workSchedule.createMany.mock.calls[0][0].data).toHaveLength(28)
+  })
+})
+
+describe("el horario general y las sedes (etapa 9)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    prismaMock.sede.findFirst.mockResolvedValue(null)
+  })
+
+  const horarios = [{ dayOfWeek: 1, startTime: "09:00", endTime: "18:00", active: true }]
+
+  it("con sedes activas el horario general no se escribe: 409 \"El horario se configura por sede\" y no borra nada", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.sede.findFirst.mockResolvedValueOnce({ id: "sede-1" })
+    const res = await POST(pedidoFalso("/api/configuracion/horarios?general=1", horarios))
+
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: "El horario se configura por sede" })
+    expect(prismaMock.workSchedule.deleteMany).not.toHaveBeenCalled()
+    expect(prismaMock.workSchedule.createMany).not.toHaveBeenCalled()
+  })
+
+  it("lo mismo para la dueña sin destino en la URL (su horario propio es el general)", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.sede.findFirst.mockResolvedValueOnce({ id: "sede-1" })
+    const res = await POST(pedidoFalso("/api/configuracion/horarios", horarios))
+
+    expect(res.status).toBe(409)
+    expect(prismaMock.workSchedule.createMany).not.toHaveBeenCalled()
+  })
+
+  it("pregunta por las sedes ACTIVAS del negocio de la sesión, bajo el candado de planes y sedes y después del de ese horario", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.workSchedule.findMany.mockResolvedValueOnce(horarios)
+    await POST(pedidoFalso("/api/configuracion/horarios?general=1", horarios))
+
+    const claves = prismaMock.$executeRaw.mock.calls.map((llamada) => (llamada as unknown[])[1])
+    expect(claves).toEqual(["horario:negocio-1:general", "plan-y-sedes:negocio-1"])
+    expect(prismaMock.sede.findFirst).toHaveBeenCalledTimes(1)
+    const { where } = prismaMock.sede.findFirst.mock.calls[0][0]
+    expect(JSON.stringify(where)).toContain("negocio-1")
+    expect(JSON.stringify(where)).toContain('"activo":true')
+    expect(prismaMock.$executeRaw.mock.invocationCallOrder[1]).toBeLessThan(prismaMock.sede.findFirst.mock.invocationCallOrder[0])
+    expect(prismaMock.sede.findFirst.mock.invocationCallOrder[0]).toBeLessThan(prismaMock.workSchedule.deleteMany.mock.invocationCallOrder[0])
+  })
+
+  it("el horario de un integrante no depende de las sedes: ni las pregunta ni toma su candado", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    prismaMock.workSchedule.findMany.mockResolvedValueOnce(horarios)
+    const res = await POST(pedidoFalso("/api/configuracion/horarios", horarios))
+
+    expect(res.status).toBe(200)
+    expect(prismaMock.sede.findFirst).not.toHaveBeenCalled()
+    expect(prismaMock.$executeRaw).toHaveBeenCalledTimes(1)
+    expect(prismaMock.workSchedule.deleteMany).toHaveBeenCalledWith({
+      where: { businessId: "negocio-1", memberId: "member-admin-1", sedeId: null },
+    })
+  })
+
+  it("leer sigue andando con sedes y trae sólo el horario general (nunca las franjas de una sede)", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.workSchedule.findMany.mockResolvedValueOnce([])
+    const res = await GET(pedidoFalso("/api/configuracion/horarios"))
+
+    expect(res.status).toBe(200)
+    expect(prismaMock.sede.findFirst).not.toHaveBeenCalled()
+    expect(prismaMock.workSchedule.findMany.mock.calls[0][0].where).toMatchObject({ sedeId: null })
   })
 })

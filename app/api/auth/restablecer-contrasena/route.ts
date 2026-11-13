@@ -6,6 +6,7 @@ import { restablecerContrasenaSchema as schema } from "@/lib/validaciones"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import type { Prisma } from "@prisma/client"
 import { hashDeToken } from "@/lib/tokens"
+import { registrarError } from "@/lib/registro-de-errores"
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 const ENLACE_INVALIDO = () => NextResponse.json({ error: "Enlace inválido o expirado" }, { status: 410 })
@@ -65,10 +66,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ mensaje: "Contraseña actualizada" })
   } catch (error) {
     if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
-    if (error instanceof z.ZodError) {
+    // Un cuerpo que no es JSON (o vacío) es un pedido mal hecho: 400, no 500.
+    if (error instanceof SyntaxError || error instanceof z.ZodError) {
       return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
     }
-    console.error("Error en restablecer-contrasena:", error)
+    // Sólo el nombre y el código: el error de Prisma trae los argumentos (hashes, ids).
+    registrarError("en restablecer-contrasena", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
 }

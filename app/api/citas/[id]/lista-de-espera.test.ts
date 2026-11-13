@@ -101,9 +101,9 @@ describe("DELETE", () => {
     expect(programar).toHaveBeenCalledWith({ businessId: NEGOCIO, inicio: INICIO })
   })
 
-  it("borrar una cancelada no avisa (su hora ya estaba libre)", async () => {
+  it("una cancelada no se borra (queda en el historial) y no avisa", async () => {
     escenario({ status: "cancelada" })
-    expect(await borrar("c1")).toBe(200)
+    expect(await borrar("c1")).toBe(409)
     expect(programar).not.toHaveBeenCalled()
   })
 

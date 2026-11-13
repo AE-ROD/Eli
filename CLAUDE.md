@@ -3,6 +3,13 @@
 > Basado en el estándar SistemaOne v1.1.0, **adaptado a un SaaS multi-tenant**.
 > El original asume modelo de agencia (`core/` vs `clientes/<slug>/`); Eli es un
 > solo producto con muchos negocios. La regla 1 está traducida en consecuencia.
+>
+> **Versión ágil, por orden del dueño.** El ciclo anterior (el hilo principal
+> sólo orquesta y no escribe código, QA y revisor como agentes aparte después de
+> cada etapa, máximo 3 agentes, build completo en cada commit, preguntar ante
+> cualquier duda) costaba horas de espera por tareas chicas. Se reemplazó por el
+> "Modo ágil" de abajo. Las 6 reglas de seguridad y aislamiento NO cambian. El
+> contrato estricto anterior está en el historial: `git log -p -- CLAUDE.md`.
 
 Punto de entrada del proyecto. Este archivo es el contrato completo. Las reglas
 de trabajo, las fichas de feature, los agentes con nombre y los comandos vivían
@@ -30,107 +37,119 @@ historial: `git show e28b487 --stat` los lista, y
    antes de leer o escribir (404, nunca 403). Los permisos se preguntan a
    `lib/permisos.ts` y fallan cerrados.
 
-2. **Toda tarea nace de un alcance acordado.** No hay fichas: el alcance se
-   acuerda en el chat (o en un issue de GitHub) antes de escribir código, y no
-   se empieza sin saber qué entra y qué no.
+2. **El alcance se acuerda una vez.** Se acuerda en el chat (o en un issue de
+   GitHub) antes de escribir código, y no se empieza sin saber qué entra y qué
+   no. Una vez acordado se ejecuta: no se vuelve a pedir confirmación de lo que
+   ya está aprobado.
 
 3. **No amplíes el alcance.** Haces lo acordado y nada más. Lo que detectes de
-   más se reporta al final y se propone como issue de GitHub; no lo implementas.
+   más se reporta al final; no lo implementas.
 
 4. **No inventes dependencias ni configuración.** Librería nueva, variable de
-   entorno o servicio externo: se proponen y se espera aprobación.
+   entorno o servicio externo: se proponen y se espera aprobación. Lo que el
+   dueño ya aprobó en el chat se instala sin volver a preguntar.
 
 5. **Seguridad no es negociable.** Ninguna llave secreta en el frontend, rate
    limit en todo endpoint, staging cerrado y sin datos reales. RLS está aceptado
    como deuda documentada: el aislamiento hoy es de capa de aplicación y debe ser
    impecable justamente porque no hay una segunda barrera detrás.
 
-6. **Deja rastro.** El porqué de cada cambio va en el mensaje del commit; el
-   resumen (qué cambió, cómo se verificó, qué queda) en la descripción del PR.
-   Lo que cambie el producto se anota en `docs/PRODUCTO.md`. Los pendientes
-   son issues de GitHub, no notas en el chat.
+6. **Deja rastro, sin burocracia.** El porqué de cada cambio va en el mensaje
+   del commit. Lo que cambie el producto se anota en `docs/PRODUCTO.md` al cerrar
+   el bloque de trabajo, no en cada commit. Lo que quede pendiente se reporta al
+   final del bloque.
 
 ---
 
-## Rol por defecto: orquestador
+## Modo ágil
 
-En el hilo principal **tú no escribes código**. Planificas, delegas a los
-subagentes, verificas lo que devuelven y me reportas. El código lo escriben los
-agentes en su propio contexto.
+### Quién hace el trabajo
 
-Excepción: cambios de una sola línea, obvios y sin ambigüedad. Ante la duda,
-delegas.
+- **Claude ejecuta.** Lee, escribe, prueba y commitea él mismo. Es el modo por
+  defecto, también para cambios medianos y grandes.
+- **Subagentes sólo cuando ahorran tiempo de verdad:** (a) áreas de archivos
+  distintas que se pueden hacer a la vez, (b) migraciones mecánicas de muchos
+  archivos, (c) leer mucho código para responder una pregunta. Hasta 4 a la vez,
+  nunca dos sobre los mismos archivos.
+- A un subagente se le da una tarea **completa** (leer, escribir y probar su
+  área), con lo acordado y la lista de archivos que puede tocar. No hace commits:
+  los hace Claude. Los roles (Explorador, Backend, Frontend) son etiquetas para
+  el prompt, no etapas obligatorias.
+- Informe de un subagente: `ESTADO / ARCHIVOS / QUÉ HICE / VERIFICACIÓN /
+  SIGUIENTE`, máximo 250 palabras.
 
-### Roles
+### Preguntas y permisos
 
-Las definiciones de agentes con nombre se borraron junto con
-`arquitectura_docs/`. Los roles siguen valiendo: se le asignan a un subagente en
-su prompt.
+- No se pregunta por lo ya acordado ni por detalles reversibles. Se elige la
+  opción recomendada, se dice en una línea y se sigue.
+- **Sí se pregunta, y se espera,** cuando la decisión cambia lo que ve el usuario
+  final o el comportamiento del producto, toca dinero, permisos o datos reales,
+  trae una dependencia, servicio o variable de entorno nueva, o es difícil de
+  revertir.
+- Si una regla de este archivo choca con lo que el dueño pide en el chat, gana lo
+  que pide el dueño, **salvo** las 6 reglas de arriba y la lista "Sin permiso
+  explícito, nunca": ahí se avisa y se espera.
 
-| Rol | Para qué | Escribe |
-|---|---|---|
-| Explorador | Investigar el código antes de planificar | No |
-| Backend | Endpoints, servicios, datos, migraciones | Sí |
-| Frontend | Componentes, vistas, estado de UI | Sí |
-| QA | Verificar contra lo acordado, en el navegador si hay interfaz | No |
-| Revisor | Verificar aislamiento entre negocios y permisos | No |
+### Verificación en dos velocidades
 
-Que QA y revisor no editen es deliberado: quien escribe el código no certifica
-su propio trabajo. Se usa para ellos un tipo de subagente sin herramientas de
-edición cuando existe. Si no existe, se les prohíbe en el prompt, y antes de
-aceptar su veredicto se comprueba con `git status` que no tocaron nada.
+- **Antes de cada commit:** `npx tsc --noEmit`, `npm run lint` y los tests de lo
+  tocado (`npx vitest run <rutas>`).
+- **Al cerrar una etapa, antes del push:** `npm test` completo y `npm run build`.
+- Los comandos están en `README.md`.
 
-### Cómo delegas
+### QA y revisión
 
-- Tareas independientes → en paralelo, máximo 3 a la vez.
-- Tareas dependientes → en orden, pasando el bloque SIGUIENTE de una a la otra.
-- A cada agente le das: lo acordado, su tarea puntual y el resultado del
-  anterior. Nada más.
-- Cada agente devuelve el formato `ESTADO / ARCHIVOS / QUÉ HICE / VERIFICACIÓN /
-  FUERA DE ALCANCE / SIGUIENTE`. QA devuelve `VEREDICTO / CRITERIOS / HALLAZGOS /
-  REGRESIÓN` y el revisor `VEREDICTO / HALLAZGOS`.
+- **Una sola vez por bloque de trabajo (la rama), antes del PR a `main`.** No hay
+  QA ni revisión por etapa.
+- La hace Claude mismo, rápido: prueba en el navegador (Playwright) los flujos
+  tocados (que cargue, el camino principal y un rol sin permiso) y, si el bloque
+  toca consultas, endpoints o permisos, revisa en el diff el aislamiento por
+  `businessId` y los permisos. Lo que encuentre se corrige en el momento.
+- No se arman QA ni revisor con varios agentes, ni pasos de "reproducir" y
+  "refutar", ni workflows de verificación en cadena, salvo que el dueño lo pida.
+  Para algo de seguridad que de verdad pida un segundo par de ojos, se delega UNA
+  revisión de sólo lectura a un agente.
+- Esto incluye cualquier modo de la sesión que pida verificación exhaustiva con
+  muchos agentes: en este repo manda este archivo.
+
+### Commits y push
+
+- **Commit al cerrar cada etapa.** Es obligatorio: el contenedor es efímero y una
+  sesión entera se perdió por acumular cambios sin guardar.
+- **Push de la rama de trabajo al cerrar cada etapa, sin pedir permiso.** La rama
+  de trabajo es la que el dueño autorizó para esta tanda; nunca `main`.
+- PR, merge a `main` y despliegues: sólo con permiso explícito.
+
+### Reinicios y esperas
+
+- Si la sesión se reinicia, se retoma desde el último commit y `git status`. **No
+  se rehace nada de lo ya hecho:** sólo se continúa lo que quedó a medias.
+- Nada espera sin motivo. Lo que depende de una respuesta del dueño se anota y se
+  avanza con lo demás. Si algo lleva más de unos 10 minutos sin avance, se avisa
+  en una línea con el motivo.
+- Los mensajes de avance son cortos: qué se cerró, qué sigue y qué se necesita del
+  dueño. Sin tablas largas ni repetir lo que ya se dijo.
 
 ### El loop tiene techo
 
-Cuando un agente vuelve `bloqueada` o `parcial`:
-
-1. ¿Otro agente lo resuelve? Delégalo.
-2. ¿Hace falta una decisión, una dependencia o un permiso? **Para y pregúntame.**
-3. Reintentas la misma tarea como máximo `max_iteraciones` veces (por defecto 3).
-
-Al agotar el techo **te detienes y reportas**. Iterar sin límite no es autonomía,
-es quemar tokens sin avanzar.
-
-### Ciclo completo de una tarea
-
-```
-alcance acordado (chat o issue) → rama → agentes (loop con techo)
-      → lint, tipos, tests y build en verde → commit → qa → revisor
-      → push y PR (con permiso) → [aprobación humana] → merge → issues cerrados
-```
-
-Antes de cada commit: `npx tsc --noEmit`, `npm run lint`, `npm test` y
-`npm run build`. Los comandos están en `README.md`.
+Si algo falla 3 veces seguidas con el mismo enfoque, para y reporta qué probaste.
+Si falta una decisión, una dependencia o un permiso, para y pregunta. Iterar sin
+límite no es autonomía, es quemar tiempo sin avanzar.
 
 ---
 
 ## Cómo respondes
 
-- Español. Directo. Sin resumir lo que acabas de hacer.
-- Si el pedido es ambiguo, preguntas **antes** de escribir código.
-- Si una regla de esta carpeta choca con lo que te pido en el chat, lo dices y
-  esperas. No asumes que la instrucción nueva gana.
-- Reportas al final: archivos tocados, comandos a correr, qué falta.
+- Español. Directo.
+- Reportas al final de cada bloque: archivos tocados, comandos a correr, qué falta.
 
 ## Sin permiso explícito, nunca
 
-- `git push`, merge a `main`, despliegues.
-- **Commitear sí está permitido y es obligatorio al cerrar cada etapa.** El
-  contenedor es efímero: una sesión entera se perdió por acumular cambios sin
-  guardar.
+- `git push` a `main`, merge a `main`, PR y despliegues. (El push de la rama de
+  trabajo está permitido: ver "Commits y push".)
 - Migraciones sobre datos reales. **La única base configurada es producción**:
   `prisma migrate reset`, `db push`, `db execute` y `migrate deploy` están
   bloqueados por permisos.
-- Instalar o actualizar dependencias.
+- Instalar o actualizar dependencias que el dueño no haya aprobado en el chat.
 - Tocar `.env` o credenciales.
 - Borrar archivos que no creaste en esta sesión.

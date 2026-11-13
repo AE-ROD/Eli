@@ -1,11 +1,12 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { AnimatePresence } from "framer-motion"
 import Link from "next/link"
 import { CircleAlert, ListX, MonitorPlay, RefreshCw, UserPlus } from "lucide-react"
 import { BarraSuperior } from "@/components/panel/barra-superior"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { Boton, clasesDeBoton } from "@/components/comunes/boton"
 import { ModalAnular } from "@/components/panel/modal-anular"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
@@ -25,22 +26,29 @@ import {
   puedeAnotarSinReserva,
   puedeAsignarLineasAOtros,
   puedeGestionarServicios,
+  puedeRegistrarPropina,
   puedeVaciarFilaVirtual,
   puedeVerTodoElTablero,
 } from "@/lib/permisos"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import {
+  agregarAbono,
   anotarSinReserva,
   anularAtencion,
   cobrarAtencion,
   deshacerLlegada,
   guardarServicios,
+  leerAtencionesDelDia,
   leerTablero,
   marcarLlegada,
   marcarNoVino,
   moverAtencion,
+  quitarAbono,
   vaciarFilaDeHoy,
+  aplicarSondeo,
   type Atencion,
+  type LineaDeServicio,
   type DatosSinReserva,
   type MotivoDeFallo,
   type Reserva,
@@ -51,15 +59,18 @@ import { TableroCargando, TableroDeColumnas, type DestinoDelFoco } from "./_comp
 import { ModalAnotarSinReserva } from "./_componentes/modal-anotar-sin-reserva"
 import { ModalServicios } from "./_componentes/modal-servicios"
 import { ModalCobro } from "./_componentes/modal-cobro"
+import { ModalAbono } from "./_componentes/modal-abono"
+import { frasesDelTablero } from "./_frases"
 
-/** Cada cuánto se recarga solo: lo que hacen los demás en el local aparece sin tocar nada. */
+/**
+ * Cada cuánto se sondea solo: lo que hacen los demás en el local aparece sin
+ * tocar nada. El sondeo trae sólo reservas y atenciones; el catálogo se pide
+ * completo al abrir, al volver a la pestaña y tras cada acción.
+ */
 const RECARGA_CADA_MS = 30_000
 
 /** Al volver a la pestaña llegan `focus` y `visibilitychange` casi juntos: con una recarga alcanza. */
 const PAUSA_ENTRE_RECARGAS_MS = 2_000
-
-/** El aviso cuando lo que se veía quedó viejo (409 o 404): la ficha lo fija con estas palabras. */
-const AVISO_DE_CAMBIO = "La atención cambió; se recargó el tablero."
 
 /** Lo que se hace después de guardar los servicios, si el editor se abrió porque faltaba algo para avanzar. */
 type Despues = { tipo: "mover"; hacia: EstadoActivo } | { tipo: "cobrar" }
@@ -70,11 +81,14 @@ type ModalAbierto =
   | { tipo: "cobro"; atencion: Atencion }
   /**
    * `rechazo`: el servidor dijo que ya entró en una caja cerrada o en una
-   * liquidación (`corregir-con-ajuste`). El modal sigue abierto con lo escrito
+   * liquidación, o que tiene un abono pagado al laboratorio
+   * (`corregir-con-ajuste`). El modal sigue abierto con lo escrito
    * y dice cómo se corrige, en vez de cerrarse y perder el motivo (QA#12).
    */
   | { tipo: "anular"; atencion: Atencion; rechazo?: string }
   | { tipo: "vaciar-fila"; personas: number }
+  /** Clínica dental: abonar a una prótesis del paciente. */
+  | { tipo: "abono"; atencion: Atencion }
 
 type ModalDeServicios = Extract<ModalAbierto, { tipo: "servicios" }>
 
@@ -100,12 +114,14 @@ function columnaDe(atencion: Atencion): ColumnaDeAtencion {
 /** La tarjeta de una atención, en la columna donde estaba: adonde vuelve el foco si se recarga. */
 const tarjetaDe = (atencion: Atencion): DestinoDelFoco => ({ atencionId: atencion.id, columna: columnaDe(atencion) })
 
-/** El mensaje del servidor sobre una reserva que cambió, seguido de que se recargó. */
-const conRecarga = (mensaje: string) => `${mensaje.replace(/\.$/, "")}. Se recargó el tablero.`
-
 export default function PaginaTablero() {
   const { data: sesion, status: estadoDeSesion } = useSession()
   const actor = actorDeSesion(sesion)
+  const rubro = useRubroDelPanel()
+  // Las palabras del rubro: "Tablero" / "Sala de espera", "No vino" / "No asistió", "servicio" / "prestación".
+  // Memorizadas: `recargar` depende de ellas, y una copia nueva en cada dibujo la recrearía y reiniciaría el intervalo de recarga.
+  const palabras = useMemo(() => vocabularioDe(rubro).palabras, [rubro])
+  const frases = useMemo(() => frasesDelTablero(palabras), [palabras])
 
   const [tablero, setTablero] = useState<Tablero | null>(null)
   const [errorDeCarga, setErrorDeCarga] = useState("")
@@ -121,11 +137,17 @@ export default function PaginaTablero() {
   const [modal, setModal] = useState<ModalAbierto | null>(null)
   const [avisoDelModal, setAvisoDelModal] = useState("")
   const [guardando, setGuardando] = useState(false)
+  /** Sube cada vez que un abono falla: el modal vuelve a leer las prótesis y su saldo. */
+  const [versionDelAbono, setVersionDelAbono] = useState(0)
 
   // El número del último pedido de recarga: si llega la respuesta de uno
   // anterior (más lento), se descarta en vez de pisar datos más nuevos.
   const ultimoPedido = useRef(0)
   const inicioDeLaUltimaRecarga = useRef(0)
+  // Si ya llegó un tablero completo (con su catálogo), y cuántas recargas
+  // completas están en camino: el sondeo de sólo atenciones espera a ambas.
+  const hayCatalogo = useRef(false)
+  const completasEnCamino = useRef(0)
 
   // Guardas contra el doble envío. El estado (`guardando`, `enCurso`) dibuja
   // el botón ocupado, pero recién en el render siguiente: un doble clic o un
@@ -135,13 +157,15 @@ export default function PaginaTablero() {
   const enviandoDesdeUnModal = useRef(false)
   const idsEnviando = useRef(new Set<string>())
 
-  /** Pide el tablero y lo muestra. Devuelve lo que llegó, o `null` si falló o ya había otro pedido más nuevo. */
+  /** Pide el tablero completo y lo muestra. Devuelve lo que llegó, o `null` si falló o ya había otro pedido más nuevo. */
   const recargar = useCallback(async (): Promise<Tablero | null> => {
     const numero = ++ultimoPedido.current
     inicioDeLaUltimaRecarga.current = Date.now()
     // El día se calcula en cada recarga: si la pestaña sigue abierta pasada
     // la medianoche, la siguiente recarga ya trae el día nuevo.
-    const resultado = await leerTablero(new Date())
+    completasEnCamino.current++
+    const resultado = await leerTablero(new Date(), palabras)
+    completasEnCamino.current--
     if (numero !== ultimoPedido.current) return null
 
     setAhora(Date.now())
@@ -149,18 +173,47 @@ export default function PaginaTablero() {
       setErrorDeCarga(resultado.error)
       return null
     }
+    hayCatalogo.current = true
     setTablero(resultado.datos)
     setErrorDeCarga("")
     return resultado.datos
-  }, [])
+  }, [palabras])
+
+  /**
+   * El sondeo de cada 30 segundos: sólo reservas y atenciones, que son lo que
+   * cambia; el catálogo que ya se ve se conserva. Si todavía no hay catálogo
+   * (la primera carga falló), pide el tablero completo. Si hay una recarga
+   * completa en camino, no pide nada: ésa ya trae todo, y una respuesta más
+   * nueva sin catálogo la descartaría.
+   */
+  const sondear = useCallback(async (): Promise<void> => {
+    if (!hayCatalogo.current) {
+      await recargar()
+      return
+    }
+    if (completasEnCamino.current > 0) return
+
+    const numero = ++ultimoPedido.current
+    inicioDeLaUltimaRecarga.current = Date.now()
+    const resultado = await leerAtencionesDelDia(new Date(), palabras)
+    if (numero !== ultimoPedido.current) return
+
+    setAhora(Date.now())
+    if (!resultado.ok) {
+      setErrorDeCarga(resultado.error)
+      return
+    }
+    setTablero((previo) => previo && aplicarSondeo(previo, resultado.datos))
+    setErrorDeCarga("")
+  }, [palabras, recargar])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- primera carga del tablero; el estado se escribe recién cuando llega la respuesta
     recargar()
 
-    // Con la pestaña escondida no se recarga: al volver se recarga una vez.
+    // Con la pestaña escondida no se sondea: al volver se recarga una vez, completa.
     const intervalo = setInterval(() => {
-      if (document.visibilityState === "visible") recargar()
+      if (document.visibilityState === "visible") sondear()
     }, RECARGA_CADA_MS)
 
     const alVolver = () => {
@@ -176,7 +229,7 @@ export default function PaginaTablero() {
       document.removeEventListener("visibilitychange", alVolver)
       window.removeEventListener("focus", alVolver)
     }
-  }, [recargar])
+  }, [recargar, sondear])
 
   const focoAplicado = useCallback(() => setFoco(null), [])
 
@@ -262,7 +315,7 @@ export default function PaginaTablero() {
    * espera a la recarga para no enfocar la tarjeta vieja, que se desmonta
    * apenas llega la nueva.
    */
-  const tableroDesactualizado = (destino: DestinoDelFoco, mensaje = AVISO_DE_CAMBIO) => {
+  const tableroDesactualizado = (destino: DestinoDelFoco, mensaje = frases.avisoDeCambio) => {
     cerrarModal()
     setAviso(mensaje)
     recargar().then(() => setFoco(destino))
@@ -286,7 +339,7 @@ export default function PaginaTablero() {
         // Otro ya la marcó, la cancelaron o no es de hoy: el mensaje del
         // servidor dice cuál, y se muestra tal cual.
         if (resultado.motivo === "desactualizada") {
-          return tableroDesactualizado({ reservaId: reserva.id, columna: "reservas" }, conRecarga(resultado.error))
+          return tableroDesactualizado({ reservaId: reserva.id, columna: "reservas" }, frases.conRecarga(resultado.error))
         }
         return setAviso(resultado.error)
       }
@@ -304,16 +357,16 @@ export default function PaginaTablero() {
       recargar()
     })
 
-  /** La reserva no llegó: sale de "Reservas de hoy" y la cita queda "No vino". */
+  /** La reserva no llegó: sale de "Reservas de hoy" y la cita queda "No vino" ("No asistió" en una clínica). */
   const noVino = (reserva: Reserva) =>
     enTarjeta(reserva.id, async () => {
       setAviso("")
-      const resultado = await marcarNoVino(reserva.id)
+      const resultado = await marcarNoVino(reserva.id, palabras)
 
       if (!resultado.ok) {
         // Ya llegó, la cancelaron o la movieron: el mensaje del servidor dice cuál.
         if (resultado.motivo === "desactualizada") {
-          return tableroDesactualizado({ columna: "reservas" }, conRecarga(resultado.error))
+          return tableroDesactualizado({ columna: "reservas" }, frases.conRecarga(resultado.error))
         }
         return setAviso(resultado.error)
       }
@@ -331,7 +384,7 @@ export default function PaginaTablero() {
 
       if (!resultado.ok) {
         // Ya empezó, o ya no está: se dice por qué y se recarga.
-        if (resultado.motivo === "desactualizada") return tableroDesactualizado(tarjetaDe(atencion), conRecarga(resultado.error))
+        if (resultado.motivo === "desactualizada") return tableroDesactualizado(tarjetaDe(atencion), frases.conRecarga(resultado.error))
         return setAviso(resultado.error)
       }
 
@@ -351,7 +404,7 @@ export default function PaginaTablero() {
    */
   const mover = (atencion: Atencion, hacia: EstadoActivo) => {
     setAviso("")
-    const falta = requisitoParaPasarA(atencion.lineas, hacia)
+    const falta = requisitoParaPasarA(atencion.lineas, hacia, palabras)
     if (falta) return editarServicios(atencion, { tipo: "mover", hacia }, falta)
 
     return enTarjeta(atencion.id, async () => {
@@ -375,7 +428,7 @@ export default function PaginaTablero() {
 
   /** Cobrar. Si a alguna línea le falta quién la hizo, primero el editor; si no, el cobro. */
   const cobrar = (atencion: Atencion) => {
-    const falta = requisitoParaPasarA(atencion.lineas, "finalizada")
+    const falta = requisitoParaPasarA(atencion.lineas, "finalizada", palabras)
     if (falta) return editarServicios(atencion, { tipo: "cobrar" }, falta)
     abrirModal({ tipo: "cobro", atencion })
   }
@@ -384,7 +437,7 @@ export default function PaginaTablero() {
 
   const guardarServiciosDe = (abierto: ModalDeServicios, lineas: LineaPedida[]) =>
     desdeUnModal(async () => {
-      const guardado = await guardarServicios(abierto.atencion.id, lineas)
+      const guardado = await guardarServicios(abierto.atencion.id, lineas, palabras)
       if (!guardado.ok) return falloEnModal(guardado, abierto.atencion)
 
       const atencion = guardado.datos
@@ -400,7 +453,7 @@ export default function PaginaTablero() {
 
       // Se guardó, pero si todavía no alcanza para avanzar, el editor sigue
       // abierto diciendo qué falta.
-      const falta = requisitoParaPasarA(atencion.lineas, despues.tipo === "cobrar" ? "finalizada" : despues.hacia)
+      const falta = requisitoParaPasarA(atencion.lineas, despues.tipo === "cobrar" ? "finalizada" : despues.hacia, palabras)
       if (falta) {
         setGuardando(false)
         setModal({ ...abierto, atencion, requisito: falta })
@@ -437,7 +490,7 @@ export default function PaginaTablero() {
       if (resultado.ok) {
         ponerAtencion(resultado.datos)
         cerrarModal()
-        setAvisoDeCobro(avisoDeComisionesPendientes(actor, resultado.datos) ?? "")
+        setAvisoDeCobro(avisoDeComisionesPendientes(actor, resultado.datos, palabras) ?? "")
         seguirA(resultado.datos)
         recargar()
         return
@@ -451,10 +504,10 @@ export default function PaginaTablero() {
       // total nuevo, los pagos escritos y el mensaje del servidor.
       const fresco = await recargar()
       const actual = fresco?.atenciones.find((otra) => otra.id === atencion.id)
-      if (!actual || actual.estado !== "por-cobrar" || requisitoParaPasarA(actual.lineas, "finalizada")) {
+      if (!actual || actual.estado !== "por-cobrar" || requisitoParaPasarA(actual.lineas, "finalizada", palabras)) {
         // Ya no se puede cobrar desde acá: la movieron, o le falta algo que
         // se completa en el editor. Se cierra y se dice por qué.
-        return tableroDesactualizado(tarjetaDe(atencion), conRecarga(resultado.error))
+        return tableroDesactualizado(tarjetaDe(atencion), frases.conRecarga(resultado.error))
       }
       setModal({ tipo: "cobro", atencion: actual })
       setGuardando(false)
@@ -469,14 +522,21 @@ export default function PaginaTablero() {
   const anular = (atencion: Atencion, motivo: string) =>
     desdeUnModal(async () => {
       const resultado = await anularAtencion(atencion.id, motivo)
-      // Ya entró en una liquidación o en un cierre de caja: la atención no
-      // cambió, no hay nada que recargar ni reintentar. El modal se queda con
-      // el motivo escrito y el mensaje del servidor, que dice cómo se corrige
-      // (con un ajuste), y ya no ofrece anular.
+      // Ya entró en una liquidación o en un cierre de caja, o lleva un abono
+      // ya pagado al laboratorio: la atención no cambió, no hay nada que
+      // recargar ni reintentar. El modal se queda con el motivo escrito y el
+      // mensaje del servidor, que dice cómo se corrige (con un ajuste, o
+      // anulando primero el pago al laboratorio), y ya no ofrece anular.
       if (!resultado.ok && resultado.motivo === "corregir-con-ajuste") {
         setGuardando(false)
         setModal({ tipo: "anular", atencion, rechazo: resultado.error })
         return
+      }
+      // Otro 409 o un 404: el mensaje del servidor se muestra tal cual, y se
+      // recarga por si la atención cambió.
+      if (!resultado.ok && resultado.motivo === "desactualizada") {
+        setGuardando(false)
+        return tableroDesactualizado(tarjetaDe(atencion), frases.conRecarga(resultado.error))
       }
       if (!resultado.ok) return falloEnModal(resultado, atencion)
 
@@ -485,6 +545,41 @@ export default function PaginaTablero() {
       quitarAtencion(atencion.id)
       cerrarModal()
       setFoco({ columna: columnaDe(atencion) })
+      recargar()
+    })
+
+  /**
+   * Clínica dental: agrega un abono a una prótesis. Cualquier rechazo (el
+   * monto pasa el saldo, la atención ya se cobró, la prótesis se anuló) se
+   * dice adentro con el mensaje del servidor, y el modal vuelve a leer las
+   * prótesis; el tablero se recarga por detrás.
+   */
+  const abonar = (atencion: Atencion, protesisId: string, monto: number) =>
+    desdeUnModal(async () => {
+      const resultado = await agregarAbono(atencion.id, protesisId, monto)
+      if (!resultado.ok) {
+        setGuardando(false)
+        setAvisoDelModal(resultado.error)
+        setVersionDelAbono((n) => n + 1)
+        recargar()
+        return
+      }
+      ponerAtencion(resultado.datos)
+      cerrarModal()
+      recargar()
+    })
+
+  /** Quita un abono antes de cobrar. El botón se va con la línea: el foco, a la tarjeta. */
+  const quitarElAbono = (atencion: Atencion, linea: LineaDeServicio) =>
+    enTarjeta(atencion.id, async () => {
+      setAviso("")
+      const resultado = await quitarAbono(atencion.id, linea.id)
+      if (!resultado.ok) {
+        if (resultado.motivo === "desactualizada") return tableroDesactualizado(tarjetaDe(atencion), frases.conRecarga(resultado.error))
+        return setAviso(resultado.error)
+      }
+      ponerAtencion(resultado.datos)
+      setFoco(tarjetaDe(resultado.datos))
       recargar()
     })
 
@@ -532,7 +627,7 @@ export default function PaginaTablero() {
     <div className="min-h-screen">
       {/* En el teléfono la cabecera muestra la acción como botón de ícono: no hace falta otro abajo. */}
       <BarraSuperior
-        titulo="Tablero"
+        titulo={frases.titulo}
         subtitulo={ahora ? fechaLarga(ahora) : "Cargando..."}
         accionPrincipal={
           puedeAnotar ? { texto: "Anotar sin reserva", onClick: () => abrirModal({ tipo: "anotar" }), icono: UserPlus } : undefined
@@ -588,13 +683,13 @@ export default function PaginaTablero() {
               </Boton>
             }
           >
-            No se pudo actualizar el tablero: {errorDeCarga}. Se vuelve a intentar solo.
+            {frases.noSePudoActualizar(errorDeCarga)}
           </Aviso>
         )}
 
         {listo && tablero.truncado && (
           <Aviso tono="atencion" rol="status">
-            Hay más atenciones de las que el tablero muestra de una vez: algunas no se ven.
+            {frases.hayMasAtenciones}
           </Aviso>
         )}
 
@@ -626,6 +721,8 @@ export default function PaginaTablero() {
             onCobrar={cobrar}
             onEditar={(atencion) => editarServicios(atencion)}
             onAnular={(atencion) => abrirModal({ tipo: "anular", atencion })}
+            onAbonar={(atencion) => abrirModal({ tipo: "abono", atencion })}
+            onQuitarAbono={quitarElAbono}
           />
         )}
       </div>
@@ -667,6 +764,7 @@ export default function PaginaTablero() {
             atencion={modal.atencion}
             mediosDePago={tablero.catalogo.mediosDePago}
             profesionales={tablero.catalogo.profesionales}
+            conPropinas={puedeRegistrarPropina(actor)}
             aviso={avisoDelModal}
             guardando={guardando}
             onCobrar={(pagos, propinas) => cobrarCon(modal.atencion, pagos, propinas)}
@@ -683,6 +781,18 @@ export default function PaginaTablero() {
             rechazo={modal.rechazo}
             guardando={guardando}
             onAnular={(motivo) => anular(modal.atencion, motivo)}
+            onCerrar={cerrarModal}
+          />
+        )}
+
+        {modal?.tipo === "abono" && (
+          <ModalAbono
+            key={`abono-${modal.atencion.id}`}
+            atencion={modal.atencion}
+            aviso={avisoDelModal}
+            guardando={guardando}
+            version={versionDelAbono}
+            onAbonar={(protesisId, monto) => abonar(modal.atencion, protesisId, monto)}
             onCerrar={cerrarModal}
           />
         )}

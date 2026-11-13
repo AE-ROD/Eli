@@ -15,6 +15,7 @@ import {
   type AtencionParaReporte,
   type LineaParaReporte,
 } from "./reportes"
+import { vocabularioDe } from "./vocabulario"
 
 const instante = (iso: string) => new Date(iso)
 
@@ -532,6 +533,23 @@ describe("rotuloDeIngresos", () => {
       "Ingresos · Color de Carla"
     )
     expect(rotuloDeIngresos(true, { ...sinFiltros, servicio: "Color" })).toBe("Lo que atendiste · Color")
+  })
+
+  it("con las palabras del rubro, 'servicios de Carla' pasa a 'prestaciones de Carla' en una clínica dental", () => {
+    const dental = vocabularioDe("odontologia").palabras
+    expect(rotuloDeIngresos(false, { ...sinFiltros, profesional: "Carla" }, dental)).toBe("Ingresos · prestaciones de Carla")
+    expect(rotuloDeIngresos(false, { profesional: "Carla", servicio: "", medio: "efectivo" }, dental)).toBe(
+      "Ingresos · prestaciones de Carla · atenciones con algún pago en efectivo"
+    )
+    // El nombre de un servicio elegido y los rótulos sin la palabra no cambian.
+    expect(rotuloDeIngresos(false, { ...sinFiltros, profesional: "Carla", servicio: "Limpieza" }, dental)).toBe("Ingresos · Limpieza de Carla")
+    expect(rotuloDeIngresos(false, sinFiltros, dental)).toBe("Ingresos")
+    // Un salón y un rubro desconocido dicen "servicios", como siempre.
+    for (const rubro of ["salon", null, "no-existe"]) {
+      expect(rotuloDeIngresos(false, { ...sinFiltros, profesional: "Carla" }, vocabularioDe(rubro).palabras)).toBe(
+        "Ingresos · servicios de Carla"
+      )
+    }
   })
 
   it("con sólo el medio, es lo cobrado con ese medio", () => {

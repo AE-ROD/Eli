@@ -44,11 +44,20 @@ type Registro = Record<string, unknown>
  * valle del negocio: lunes de 10:00 a 12:00, 20%. El otro negocio tiene una
  * franja del lunes de 9:00 a 10:00 con 50%: nunca tiene que contar acá.
  */
-function escenario({ activa = true, appointment = [], appointmentService = [] }: { activa?: boolean; appointment?: Registro[]; appointmentService?: Registro[] } = {}) {
+function escenario({
+  activa = true,
+  rubro,
+  appointment = [],
+  appointmentService = [],
+}: { activa?: boolean; rubro?: string; appointment?: Registro[]; appointmentService?: Registro[] } = {}) {
   const datos = datosBase()
   base.reiniciar({
     ...datos,
-    business: datos.business.map((negocio) => ({ ...negocio, horaValleActiva: negocio.id === NEGOCIO ? activa : true })),
+    business: datos.business.map((negocio) => ({
+      ...negocio,
+      horaValleActiva: negocio.id === NEGOCIO ? activa : true,
+      ...(negocio.id === NEGOCIO && rubro ? { type: rubro } : {}),
+    })),
     service: datos.service.map((servicio) => ({
       ...servicio,
       duration: 60,
@@ -319,5 +328,77 @@ describe("reagendar por el enlace con hora valle", () => {
     expect((await reagendar("10:00")).status).toBe(200)
     expect(laCita().price).toBe(6400)
     expect(base.buscar("appointmentService")).toHaveLength(0)
+  })
+})
+
+/**
+ * Una clínica dental no tiene hora valle: aunque la bandera siga encendida y
+ * las franjas guardadas de antes (los mismos datos de arriba, con lunes de
+ * 10:00 a 12:00 al 20%), el servidor las ignora al ofrecer las horas, al
+ * reservar y al reagendar. `leerHoraValle` es el punto único.
+ */
+describe("clínica dental: sin hora valle aunque quede encendida y con franjas guardadas", () => {
+  const { token: TOKEN, tokenHash: HASH } = generarToken()
+  const params = { params: Promise.resolve({ slug: "salon-uno", token: TOKEN }) }
+
+  const cita = (hora: string, price: number): Registro => ({
+    id: "c-lucia",
+    businessId: NEGOCIO,
+    serviceId: "s-corte",
+    title: "Corte",
+    customerId: "c-maria",
+    source: "reserva-publica",
+    startTime: aLas(hora),
+    endTime: aLas(`${String(Number(hora.slice(0, 2)) + 1).padStart(2, "0")}:00`),
+    price,
+    manageTokenHash: HASH,
+  })
+  const fila = (price: number): Registro => ({
+    id: "as-1",
+    appointmentId: "c-lucia",
+    businessId: NEGOCIO,
+    serviceId: "s-corte",
+    serviceName: "Corte",
+    duration: 60,
+    price,
+    orden: 1,
+  })
+  const laCita = () => base.buscar("appointment", { id: "c-lucia" })[0]
+
+  it("la disponibilidad no marca ninguna hora con rebaja: la respuesta de siempre, sin `valle`", async () => {
+    escenario({ rubro: "odontologia" })
+    const { status, cuerpo } = await horas("servicioIds=s-corte")
+    expect(status).toBe(200)
+    expect(cuerpo).toEqual({ slots: ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00"] })
+  })
+
+  it("el mismo negocio como salón sí las marca (el rubro es lo único que cambia)", async () => {
+    escenario({ rubro: "salon" })
+    expect((await horas("servicioIds=s-corte")).cuerpo.valle).toHaveLength(4)
+  })
+
+  it("confirmar en plena franja guarda el precio normal, en la cita y en cada fila, y el correo no dice rebaja", async () => {
+    escenario({ rubro: "odontologia" })
+    const { status, cuerpo } = await confirmar({ servicioIds: ["s-corte", "s-color"], hora: "10:00" })
+    expect(status).toBe(201)
+    expect(reservaPublica().price).toBe(33000)
+    expect(preciosDeLasFilas(cuerpo.citaId)).toEqual([8000, 25000])
+    expect(vi.mocked(enviarConfirmacionCliente)).toHaveBeenCalledWith(expect.objectContaining({ precio: 33000, precioNormal: null }))
+  })
+
+  it("reagendar a una hora de franja no toca el precio, y las horas no traen `precios`", async () => {
+    escenario({ rubro: "odontologia", appointment: [cita("09:00", 8000)], appointmentService: [fila(8000)] })
+
+    const { GET } = await import("./cita/[token]/disponibilidad/route")
+    const disponibles = await (await GET(pedido(`http://localhost/x?fecha=${FECHA}`), params)).json()
+    expect(disponibles.slots).toContain("10:00")
+    expect(disponibles.precios).toBeUndefined()
+
+    const { POST } = await import("./cita/[token]/reagendar/route")
+    const respuesta = await POST(pedido("http://localhost/x", { fecha: FECHA, hora: "10:00" }), params)
+    expect(respuesta.status).toBe(200)
+    expect((await respuesta.json()).precio).toBe(8000)
+    expect(laCita().price).toBe(8000)
+    expect(preciosDeLasFilas("c-lucia")).toEqual([8000])
   })
 })

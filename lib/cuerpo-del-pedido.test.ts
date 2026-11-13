@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest"
 import {
   CuerpoDemasiadoGrande,
   cuerpoConTope,
+  leerBytesConTope,
   leerJsonConTope,
   respuestaDeCuerpoDemasiadoGrande,
+  TOPE_DE_CUALQUIER_PEDIDO,
+  TOPE_DE_UNA_FOTO,
   TOPE_DEL_CUERPO_POR_DEFECTO,
 } from "./cuerpo-del-pedido"
 
@@ -87,5 +90,80 @@ describe("respuestaDeCuerpoDemasiadoGrande", () => {
     const respuesta = respuestaDeCuerpoDemasiadoGrande()
     expect(respuesta.status).toBe(413)
     expect(await respuesta.json()).toEqual({ error: "El pedido es demasiado grande." })
+  })
+})
+
+/** Un pedido por partes de bytes crudos, sin `Content-Length` (o con uno que miente). */
+function pedidoDeBytes(trozos: Uint8Array[], cabeceras?: Record<string, string>): Request {
+  let leidos = 0
+  const body = new ReadableStream<Uint8Array>({
+    pull(controlador) {
+      if (leidos < trozos.length) controlador.enqueue(trozos[leidos++])
+      else controlador.close()
+    },
+  })
+  return { headers: new Headers(cabeceras), body } as unknown as Request
+}
+
+describe("leerBytesConTope", () => {
+  const bytes = (largo: number, valor = 7) => new Uint8Array(largo).fill(valor)
+
+  it("devuelve los bytes tal cual, sin tocarlos (no es texto)", async () => {
+    const original = Uint8Array.from([0xff, 0xd8, 0xff, 0x00, 0x80, 0xfe, 0x01])
+    const leido = await leerBytesConTope(new Request("http://localhost/api", { method: "PUT", body: original }), 100)
+    expect(leido.excedido).toBe(false)
+    if (!leido.excedido) expect(Array.from(leido.bytes)).toEqual(Array.from(original))
+  })
+
+  it("justo en el tope pasa; un byte de más no", async () => {
+    const justo = await leerBytesConTope(pedidoDeBytes([bytes(60), bytes(40)]), 100)
+    expect(justo.excedido).toBe(false)
+    if (!justo.excedido) expect(justo.bytes.byteLength).toBe(100)
+    expect(await leerBytesConTope(pedidoDeBytes([bytes(60), bytes(41)]), 100)).toEqual({ excedido: true })
+  })
+
+  it("un Content-Length declarado de más corta sin leer el flujo", async () => {
+    const pedido = pedidoDeBytes([bytes(10)], { "content-length": "5000" })
+    expect(await leerBytesConTope(pedido, 100)).toEqual({ excedido: true })
+    // No se tocó el flujo: sigue sin bloquear.
+    expect((pedido.body as ReadableStream).locked).toBe(false)
+  })
+
+  it("si el Content-Length miente (dice poco y manda mucho), corta al pasar el tope real", async () => {
+    let enviados = 0
+    const body = new ReadableStream<Uint8Array>({
+      pull(controlador) {
+        enviados += 50
+        controlador.enqueue(bytes(50))
+      },
+    })
+    const mentiroso = { headers: new Headers({ "content-length": "10" }), body } as unknown as Request
+    expect(await leerBytesConTope(mentiroso, 120)).toEqual({ excedido: true })
+    // Cortó apenas pasó el tope: no siguió leyendo un flujo sin fin.
+    expect(enviados).toBeLessThanOrEqual(200)
+  })
+
+  it("sin Content-Length (cuerpo por partes) también corta", async () => {
+    expect(await leerBytesConTope(pedidoDeBytes([bytes(80), bytes(80)]), 100)).toEqual({ excedido: true })
+  })
+
+  it("un pedido sin cuerpo son cero bytes", async () => {
+    const leido = await leerBytesConTope(new Request("http://localhost/api", { method: "PUT" }), 100)
+    expect(leido.excedido).toBe(false)
+    if (!leido.excedido) expect(leido.bytes.byteLength).toBe(0)
+  })
+
+  it("un error al leer el flujo se propaga", async () => {
+    const body = new ReadableStream<Uint8Array>({
+      pull(controlador) {
+        controlador.error(new Error("conexión cortada"))
+      },
+    })
+    await expect(leerBytesConTope({ headers: new Headers(), body } as unknown as Request, 100)).rejects.toThrow("conexión cortada")
+  })
+
+  it("el tope de una foto es el techo de la API: 5 MB", () => {
+    expect(TOPE_DE_UNA_FOTO).toBe(5 * 1024 * 1024)
+    expect(TOPE_DE_UNA_FOTO).toBeLessThanOrEqual(TOPE_DE_CUALQUIER_PEDIDO)
   })
 })

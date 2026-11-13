@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
-import { generarSlug } from "@/lib/slug"
+import { slugDelNombre } from "@/lib/slug"
 import { registroSchema } from "@/lib/validaciones"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { finDeLaPrueba, generarCodigoInvitacion } from "@/lib/prueba"
@@ -11,10 +11,27 @@ import { enviarBienvenida } from "@/lib/enviar-correo-de-prueba"
 import { negocioQueInvita } from "@/lib/referidos"
 import { registrarError } from "@/lib/registro-de-errores"
 import { serviciosDeEjemplo } from "@/lib/servicios-de-ejemplo"
+import { materialesDeProtesisDeEjemplo } from "@/lib/protesis"
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
+/**
+ * Los campos de crear-cuenta, que se pide en tres pasos: tus datos (nombre,
+ * email, contraseña), tu negocio (nombre y tipo) y tu plan. Si el error es de
+ * uno de éstos, la respuesta lo dice en `campo` y la pantalla vuelve al paso
+ * donde está, o lo muestra debajo del plan, en vez de dejarlo como un aviso
+ * suelto sobre el botón.
+ */
+type CampoDelRegistro = "nombre" | "email" | "contrasena" | "nombreNegocio" | "tipoNegocio" | "plan"
+
+function datosInvalidos(mensaje: string, campo?: unknown) {
+  return NextResponse.json(
+    { error: mensaje, ...(typeof campo === "string" ? { campo: campo as CampoDelRegistro } : {}) },
+    { status: 400 }
+  )
+}
+
 async function slugUnico(base: string): Promise<string> {
-  let slug = generarSlug(base)
+  const slug = slugDelNombre(base)
   let intento = slug
   let contador = 1
   while (await prisma.business.findUnique({ where: { slug: intento } })) {
@@ -38,10 +55,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (usuarioExistente) {
-      return NextResponse.json(
-        { error: "Ya existe una cuenta con ese correo" },
-        { status: 400 }
-      )
+      return datosInvalidos("Ya existe una cuenta con ese correo", "email")
     }
 
     // El código del enlace de invitación, si vino (`?invita=` de crear-cuenta).
@@ -65,6 +79,12 @@ export async function POST(request: NextRequest) {
             create: {
               name: datos.nombreNegocio,
               type: datos.tipoNegocio,
+              // El plan elegido y las personas que atienden, que el esquema ya
+              // dejó según el plan (`personasAlCrearElNegocio`): una sola en
+              // Independiente, aunque el navegador mande otra cosa. En la
+              // misma escritura anidada que la cuenta.
+              plan: datos.plan,
+              teamSize: datos.teamSize,
               slug,
               createdAt: ahora,
               pruebaTerminaEl: finDeLaPrueba(ahora),
@@ -74,6 +94,10 @@ export async function POST(request: NextRequest) {
               // página de reservas vacía. En la misma escritura anidada: sin
               // negocio no quedan servicios sueltos, y al revés.
               services: { create: serviciosDeEjemplo(datos.tipoNegocio) },
+              // Una clínica dental nace con los materiales de prótesis del
+              // diseño (ninguno en otro rubro). Las que ya existían los
+              // recibieron en la migración `etapa_7_protesis`.
+              materialesDeProtesis: { create: materialesDeProtesisDeEjemplo(datos.tipoNegocio) },
             },
           },
         },
@@ -112,9 +136,21 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
+    // Un cuerpo que no es JSON (o vacío) es un pedido mal hecho, no un error del servidor.
+    if (error instanceof SyntaxError) return datosInvalidos("Datos inválidos")
     if (error instanceof z.ZodError) {
       // Público: el primer mensaje, legible, y no los issues crudos de zod.
-      return NextResponse.json({ error: error.errors[0]?.message ?? "Datos inválidos" }, { status: 400 })
+      const primero = error.errors[0]
+      return datosInvalidos(primero?.message ?? "Datos inválidos", primero?.path[0])
+    }
+    // Un `@unique` que chocó entre la verificación de arriba y el `create`:
+    // otro registro simultáneo (un doble clic) se quedó con el correo, o con
+    // el mismo slug. No es un error del servidor.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const campos = ([] as unknown[]).concat(error.meta?.target ?? [])
+      return campos.includes("email")
+        ? NextResponse.json({ error: "Ya existe una cuenta con ese correo", campo: "email" }, { status: 409 })
+        : NextResponse.json({ error: "No se pudo crear la cuenta, intenta de nuevo" }, { status: 409 })
     }
     registrarError("en registro", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })

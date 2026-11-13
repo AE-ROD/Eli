@@ -1,5 +1,7 @@
 import { z } from "zod"
 import { nombre as campoNombre } from "@/lib/campos-del-panel"
+import { concordar, un } from "@/lib/concordancia"
+import { conMayuscula, vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
 
 /**
  * Soporte: lo que comparten `POST /api/soporte` y las pantallas de ayuda
@@ -36,6 +38,53 @@ export function etiquetaDeTipo(tipo: string): string {
 
 export function etiquetaDeArea(area: string): string {
   return AREAS.find((a) => a.valor === area)?.etiqueta ?? area
+}
+
+/** Un área con el nombre que se le muestra a quien pide ayuda. */
+export interface AreaConEtiqueta {
+  valor: AreaDeSoporte
+  etiqueta: string
+}
+
+const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
+
+/**
+ * El nombre de un área con las palabras del rubro (`vocabularioDe(rubro).palabras`).
+ * Sólo dos áreas llevan una palabra del rubro: Clientes ("Pacientes" en una
+ * clínica) y Tablero del día ("Sala de espera"; el rubro que sigue diciendo
+ * "tablero" conserva el nombre de siempre, con su "del día"). El resto de las
+ * etiquetas son nombres propios de Eli y no cambian.
+ *
+ * Es sólo para lo que ve quien pide ayuda. Los correos a soporte siguen con
+ * `etiquetaDeArea`: quien los lee es el equipo de Eli y necesita un nombre fijo
+ * para el área, sea cual sea el rubro de quien escribe.
+ */
+export function etiquetaDeAreaDelRubro(area: AreaDeSoporte, palabras: PalabrasDelRubro): string {
+  switch (area) {
+    case "clientes":
+      return conMayuscula(palabras.cliente.plural)
+    case "tablero":
+      return palabras.tablero.singular === PALABRAS_NEUTRAS.tablero.singular
+        ? etiquetaDeArea(area)
+        : conMayuscula(palabras.tablero.singular)
+    default:
+      return etiquetaDeArea(area)
+  }
+}
+
+/** Las áreas, en su orden, con los nombres del rubro. Sin rubro, las de siempre (`AREAS`). */
+export function areasDelRubro(palabras: PalabrasDelRubro): readonly AreaConEtiqueta[] {
+  return AREAS.map((area) => ({ valor: area.valor, etiqueta: etiquetaDeAreaDelRubro(area.valor, palabras) }))
+}
+
+/**
+ * El ejemplo del asunto de una falla: "Ej.: No se guarda un servicio nuevo",
+ * "Ej.: No se guarda una prestación nueva". El artículo y el adjetivo salen del
+ * género de la palabra del rubro.
+ */
+export function ejemploDeAsuntoDeFalla(palabras: PalabrasDelRubro): string {
+  const { servicio } = palabras
+  return `Ej.: No se guarda ${un(servicio)} ${concordar("nuevo", servicio)}`
 }
 
 /** Topes de largo: los mismos los usa el formulario para sus `maxLength`. */

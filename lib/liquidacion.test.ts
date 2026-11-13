@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest"
-import { calcularTotales, filasDelComprobante, motivoParaNoCerrar, type DetalleDeLiquidacion } from "./liquidacion"
+import { Prisma } from "@prisma/client"
+import { vocabularioDe } from "@/lib/vocabulario"
+import {
+  calcularTotales,
+  enPesos,
+  filasDelComprobante,
+  liberadoEl,
+  motivoParaNoCerrar,
+  respuestaDeErrorDePlata,
+  type DetalleDeLiquidacion,
+} from "./liquidacion"
 
 describe("calcularTotales", () => {
   it("bruto = comisiones + propinas; total = bruto − adelantos y vales + ajustes; lo excluido no cuenta", () => {
@@ -20,12 +30,28 @@ describe("calcularTotales", () => {
     expect(totales).toEqual({
       comisionServiciosCents: 599600,
       comisionProductosCents: 1200,
+      comisionProtesisCents: 0,
       propinasCents: 2000,
       adelantosCents: 5300,
       ajustesCents: -700,
       brutoCents: 602800,
       totalCents: 602800 - 5300 - 700,
     })
+  })
+
+  it("la parte de la odontóloga de los abonos de prótesis suma al bruto, aparte de servicios y productos", () => {
+    const totales = calcularTotales([{ tipo: "servicio", comisionCents: 1000 }], [], [], [{ comisionCents: 720_000 }, { comisionCents: 1 }])
+    expect(totales).toMatchObject({ comisionServiciosCents: 1000, comisionProtesisCents: 720_001, brutoCents: 721_001, totalCents: 721_001 })
+  })
+})
+
+describe("liberadoEl", () => {
+  const antes = new Date("2026-10-20T15:00:00.000Z")
+  const despues = new Date("2026-11-03T15:00:00.000Z")
+
+  it("cobrado antes de entregar: se libera al entregar; cobrado después: al cobrarse", () => {
+    expect(liberadoEl(antes, despues)).toEqual(despues)
+    expect(liberadoEl(despues, antes)).toEqual(despues)
   })
 })
 
@@ -34,6 +60,31 @@ describe("motivoParaNoCerrar", () => {
 
   it("sin problemas, null; total 0 se puede cerrar", () => {
     expect(motivoParaNoCerrar({ sinPorcentaje: 0, desde: "2026-10-01", hoy: "2026-11-03", totales })).toBeNull()
+  })
+
+  it("el servicio sale con las palabras del rubro, con su número: una prestación, dos prestaciones", () => {
+    const sinPorcentaje = (cantidad: number, rubro: string | null) =>
+      motivoParaNoCerrar({
+        sinPorcentaje: cantidad,
+        desde: "2026-10-01",
+        hoy: "2026-11-03",
+        totales,
+        palabras: vocabularioDe(rubro).palabras,
+      })
+    expect(sinPorcentaje(1, "odontologia")).toBe(
+      "Hay 1 prestación sin porcentaje de comisión: configúralo en Comisiones antes de cerrar."
+    )
+    expect(sinPorcentaje(2, "odontologia")).toBe(
+      "Hay 2 prestaciones sin porcentaje de comisión: configúralos en Comisiones antes de cerrar."
+    )
+    expect(sinPorcentaje(2, "salon")).toMatch(/Hay 2 servicios sin porcentaje/)
+    // Sin palabras, o con las de un rubro desconocido, el texto de siempre.
+    expect(motivoParaNoCerrar({ sinPorcentaje: 1, desde: "2026-10-01", hoy: "2026-11-03", totales })).toBe(
+      "Hay 1 servicio sin porcentaje de comisión: configúralo en Comisiones antes de cerrar."
+    )
+    expect(sinPorcentaje(1, null)).toBe(
+      "Hay 1 servicio sin porcentaje de comisión: configúralo en Comisiones antes de cerrar."
+    )
   })
 
   it("en orden: período futuro, líneas sin %, tope, total negativo", () => {
@@ -65,6 +116,7 @@ describe("filasDelComprobante", () => {
     totales: {
       comisionServiciosCents: 2_560_000,
       comisionProductosCents: 0,
+      comisionProtesisCents: 0,
       propinasCents: 0,
       adelantosCents: 0,
       ajustesCents: 0,
@@ -80,6 +132,7 @@ describe("filasDelComprobante", () => {
     motivoAnulacion: null,
     nota: null,
     lineas: [],
+    protesis: [],
     propinas: [],
     movimientos: [],
   }
@@ -90,6 +143,126 @@ describe("filasDelComprobante", () => {
     expect(fila(filas, "Total a pagar")).toEqual(["Total a pagar", 25_600])
     expect(fila(filas, "Total al cerrarse (anulada)")).toBeUndefined()
     expect(fila(filas, "Anulada por")).toBeUndefined()
+    // Sin prótesis, el comprobante es el de siempre: no hay sección ni fila de prótesis.
+    expect(fila(filas, "Comisión por prótesis")).toBeUndefined()
+    expect(fila(filas, "Liberado el")).toBeUndefined()
+  })
+
+  it("con abonos de prótesis: su sección con cobro y entrega, y la comisión por prótesis en los totales", () => {
+    const filas = filasDelComprobante({
+      ...detalle,
+      totales: { ...detalle.totales, comisionProtesisCents: 720_000, brutoCents: 3_280_000, totalCents: 3_280_000 },
+      protesis: [
+        {
+          id: "ab-1",
+          visitId: "at-1",
+          protesisId: "pt-1",
+          fecha: "2026-11-03",
+          cobradoEl: "2026-10-20",
+          entregadaEl: "2026-11-03",
+          cliente: "Camila Rojas",
+          detalle: "Abono prótesis · Removible parcial · Acrílico (45, 46, 47)",
+          abonoCents: 1_800_000,
+          comisionCents: 720_000,
+        },
+      ],
+    })
+    expect(fila(filas, "Liberado el")).toEqual(["Liberado el", "Cliente", "Prótesis", "Cobrado el", "Entregada el", "Abono", "Parte de la odontóloga"])
+    expect(fila(filas, "2026-11-03")).toEqual([
+      "2026-11-03",
+      "Camila Rojas",
+      "Abono prótesis · Removible parcial · Acrílico (45, 46, 47)",
+      "2026-10-20",
+      "2026-11-03",
+      18_000,
+      7_200,
+    ])
+    expect(fila(filas, "Comisión por prótesis")).toEqual(["Comisión por prótesis", 7_200])
+    expect(fila(filas, "Total a pagar")).toEqual(["Total a pagar", 32_800])
+  })
+
+  it("clínica dental: los encabezados dicen odontólogo y paciente; un salón, estilista; un rubro sin palabras propias, como siempre", () => {
+    const dental = filasDelComprobante(detalle, "odontologia")
+    expect(fila(dental, "Odontólogo")).toEqual(["Odontólogo", "Carla"])
+    expect(fila(dental, "Profesional")).toBeUndefined()
+    // Sin la sección de propinas: una clínica dental no trabaja con ellas.
+    expect(dental.filter((f) => f[0] === "Fecha").map((f) => f[1])).toEqual(["Paciente", "Movimiento"])
+    const salon = filasDelComprobante(detalle, "salon")
+    expect(fila(salon, "Estilista")).toEqual(["Estilista", "Carla"])
+    expect(fila(salon, "Profesional")).toBeUndefined()
+    expect(salon.filter((f) => f[0] === "Fecha").map((f) => f[1])).toEqual(["Cliente", "Cliente", "Movimiento"])
+    // Sin rubro, con uno desconocido o con los viejos: las palabras neutras.
+    const neutro = filasDelComprobante(detalle)
+    expect(fila(neutro, "Profesional")).toEqual(["Profesional", "Carla"])
+    expect(neutro.filter((f) => f[0] === "Fecha").map((f) => f[1])).toEqual(["Cliente", "Cliente", "Movimiento"])
+    for (const rubro of [null, "salud", "fitness", "otro", "no-existe"]) expect(filasDelComprobante(detalle, rubro)).toEqual(neutro)
+  })
+
+  it("el servicio del comprobante sigue al rubro: la columna Tipo y la comisión por servicios", () => {
+    const conUnServicio: DetalleDeLiquidacion = {
+      ...detalle,
+      lineas: [
+        {
+          id: "l-1",
+          visitId: "at-1",
+          fecha: "2026-11-02",
+          cliente: "Camila Rojas",
+          detalle: "Limpieza",
+          tipo: "servicio",
+          precioCents: 5_000_000,
+          porcentaje: 50,
+          comisionCents: 2_500_000,
+        },
+      ],
+    }
+    const tipo = (rubro: string | null) => filasDelComprobante(conUnServicio, rubro).find((f) => f[0] === "2026-11-02")?.[3]
+    expect(tipo("odontologia")).toBe("Prestación")
+    expect(tipo("salon")).toBe("Servicio")
+    expect(tipo(null)).toBe("Servicio")
+    expect(fila(filasDelComprobante(conUnServicio, "odontologia"), "Comisión por prestaciones")).toBeDefined()
+    expect(fila(filasDelComprobante(conUnServicio, "odontologia"), "Comisión por servicios")).toBeUndefined()
+    expect(fila(filasDelComprobante(conUnServicio, null), "Comisión por servicios")).toBeDefined()
+  })
+
+  describe("propinas", () => {
+    const conPropinas: DetalleDeLiquidacion = {
+      ...detalle,
+      totales: { ...detalle.totales, propinasCents: 300_000, brutoCents: 2_860_000, totalCents: 2_860_000 },
+      propinas: [{ id: "p-1", visitId: "at-1", fecha: "2026-11-03", cliente: "Camila Rojas", medio: "efectivo", montoCents: 300_000 }],
+    }
+    /** El encabezado de la sección y una fila por propina. */
+    const seccionDePropinas = (filas: (string | number | null)[][]) => filas.filter((f) => f[2] === "Propina")
+
+    it("un salón y los rubros sin rubro: la sección y la fila de propinas salen siempre, también en $0, como siempre", () => {
+      for (const rubro of ["salon", "barberia", "spa-de-unas", "salud", undefined, null]) {
+        const filas = filasDelComprobante(detalle, rubro)
+        expect(seccionDePropinas(filas)).toHaveLength(1)
+        expect(fila(filas, "Propinas")).toEqual(["Propinas", 0])
+      }
+    })
+
+    it("clínica dental sin propinas: no hay sección ni fila de propinas, y lo demás queda igual", () => {
+      const filas = filasDelComprobante(detalle, "odontologia")
+      expect(seccionDePropinas(filas)).toHaveLength(0)
+      expect(fila(filas, "Propinas")).toBeUndefined()
+      expect(fila(filas, "Comisión por prestaciones")).toEqual(["Comisión por prestaciones", 25_600])
+      expect(fila(filas, "Total a pagar")).toEqual(["Total a pagar", 25_600])
+    })
+
+    it("clínica dental con propinas guardadas de antes: se muestran y suman, sin esconder dinero", () => {
+      const filas = filasDelComprobante(conPropinas, "odontologia")
+      expect(seccionDePropinas(filas)).toEqual([
+        ["Fecha", "Paciente", "Propina", "Medio", "Monto"],
+        ["2026-11-03", "Camila Rojas", "Propina", "Efectivo", 3_000],
+      ])
+      expect(fila(filas, "Propinas")).toEqual(["Propinas", 3_000])
+      expect(fila(filas, "Total a pagar")).toEqual(["Total a pagar", 28_600])
+    })
+
+    it("clínica dental anulada con propinas en el total congelado: la fila se conserva", () => {
+      const filas = filasDelComprobante({ ...conPropinas, estado: "anulada", propinas: [] }, "odontologia")
+      expect(fila(filas, "Propinas")).toEqual(["Propinas", 3_000])
+    })
   })
 
   it("anulada: dice que está anulada y el total a pagar queda en 0", () => {
@@ -105,5 +278,27 @@ describe("filasDelComprobante", () => {
     expect(fila(filas, "Motivo de la anulación")).toEqual(["Motivo de la anulación", "Se cerró antes de tiempo"])
     expect(fila(filas, "Total al cerrarse (anulada)")).toEqual(["Total al cerrarse (anulada)", 25_600])
     expect(fila(filas, "Total a pagar")).toEqual(["Total a pagar", 0])
+  })
+})
+
+describe("enPesos (CSV del comprobante)", () => {
+  it("entero como número; con centavos, siempre dos decimales con coma", () => {
+    expect(enPesos(1_000_000)).toBe(10000)
+    expect(enPesos(1990)).toBe("19,90")
+    expect(enPesos(1905)).toBe("19,05")
+    expect(enPesos(-1990)).toBe("-19,90")
+    expect(enPesos(1)).toBe("0,01")
+  })
+})
+
+describe("respuestaDeErrorDePlata", () => {
+  const conocido = (code: string) => new Prisma.PrismaClientKnownRequestError("x", { code, clientVersion: "prueba" })
+
+  it("lo que ya no existe (P2025) es 404 y una referencia perdida (P2003) es 409, no 500", async () => {
+    const noExiste = respuestaDeErrorDePlata(conocido("P2025"), "prueba")
+    expect(noExiste.status).toBe(404)
+    expect((await noExiste.json()).error).toMatch(/vuelve a cargar/)
+    expect(respuestaDeErrorDePlata(conocido("P2003"), "prueba").status).toBe(409)
+    expect(respuestaDeErrorDePlata(conocido("P2002"), "prueba").status).toBe(409)
   })
 })

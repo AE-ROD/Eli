@@ -13,6 +13,7 @@ import {
   minutosPorPersona,
   nombreParaPantalla,
   primerNombre,
+  jornadaDeLaFila,
 } from "@/lib/fila-virtual"
 import { filaVirtualSchema } from "@/lib/validaciones"
 
@@ -150,5 +151,17 @@ describe("el turno guardado en el navegador (#155)", () => {
     expect(turnoSigueVivo("esperando")).toBe(true)
     expect(turnoSigueVivo("atendiendo")).toBe(true)
     for (const estado of ["terminado", "fuera", "vencido", ""]) expect(turnoSigueVivo(estado)).toBe(false)
+  })
+})
+
+describe("jornadaDeLaFila", () => {
+  it.each([
+    ["2030-01-08", 0, "2030-01-07"],
+    ["2030-01-08", 4 * 60 + 59, "2030-01-07"],
+    ["2030-01-08", 5 * 60, "2030-01-08"],
+    ["2030-01-08", 23 * 60 + 59, "2030-01-08"],
+    ["2030-03-01", 30, "2030-02-28"],
+  ])("%s a los %i minutos → jornada %s", (fecha, minutos, esperada) => {
+    expect(jornadaDeLaFila(fecha, minutos)).toBe(esperada)
   })
 })

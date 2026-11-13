@@ -1,6 +1,7 @@
 "use client"
 
-import { CalendarDays, Mail, Phone } from "lucide-react"
+import Link from "next/link"
+import { CalendarDays, Contact, Mail, Phone } from "lucide-react"
 import { Insignia } from "@/components/comunes/insignia"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { fechaRelativa } from "@/lib/fechas"
@@ -33,6 +34,15 @@ interface PropsDeTarjetaCliente {
   cliente: ClienteEnTarjeta
   /** Si es el que está abierto en la ficha de al lado. La ficha se ve desde `lg`, y la marca también. */
   seleccionado?: boolean
+  /**
+   * Clínica dental: la ficha clínica del paciente. Por debajo de `lg` la
+   * tarjeta es un enlace a la ficha clínica, y un botón aparte, en la
+   * esquina, abre la ficha del paciente en una hoja (contacto, editar,
+   * eliminar y notas, que la ficha clínica no tiene). Desde `lg` la tarjeta
+   * sigue siendo el botón que abre la de al lado (que tiene "Abrir ficha
+   * clínica").
+   */
+  rutaDeLaFicha?: string
   onClick?: () => void
 }
 
@@ -98,19 +108,49 @@ export function EtiquetaDeCliente({
  * van debajo del nombre; ancha, en la lista, todo va en una fila. Un nombre o
  * un correo largos se cortan en renglones y no ensanchan la página.
  */
-export function TarjetaCliente({ cliente, seleccionado = false, onClick }: PropsDeTarjetaCliente) {
+export function TarjetaCliente({ cliente, seleccionado = false, rutaDeLaFicha, onClick }: PropsDeTarjetaCliente) {
+  const clases = cn(
+    // Todo el alto de su celda: en la cuadrícula, las de una fila miden lo mismo.
+    "@container block h-full w-full rounded-[24px] bg-tarjeta p-4 text-left text-navy shadow-sm squircle anillo-foco",
+    "cursor-pointer transition-[box-shadow,background-color] duration-200 ease-suave hover:shadow-md",
+    // La abierta, con el lila de Clientes. Sólo marca: el nombre está en la ficha.
+    seleccionado && "lg:bg-lila-suave/50 lg:inset-ring-2 lg:inset-ring-lila"
+  )
+
+  if (rutaDeLaFicha) {
+    return (
+      // El botón de los datos va al lado del enlace y no adentro: un botón dentro de un enlace no se puede usar.
+      <div className="relative h-full">
+        <Link href={rutaDeLaFicha} className={cn(clases, "pr-14 lg:hidden")}>
+          <ContenidoDeLaTarjeta cliente={cliente} />
+        </Link>
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={`Datos y notas de ${cliente.nombre}`}
+          title="Datos y notas"
+          className="absolute top-2 right-2 grid size-11 place-items-center rounded-[14px] text-navy squircle anillo-foco transition-colors duration-150 ease-suave hover:bg-superficie lg:hidden"
+        >
+          <Contact className="size-5" aria-hidden="true" strokeWidth={1.75} />
+        </button>
+        <button type="button" onClick={onClick} className={cn(clases, "hidden lg:block")}>
+          <ContenidoDeLaTarjeta cliente={cliente} />
+        </button>
+      </div>
+    )
+  }
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        // Todo el alto de su celda: en la cuadrícula, las de una fila miden lo mismo.
-        "@container block h-full w-full rounded-[24px] bg-tarjeta p-4 text-left text-navy shadow-sm squircle anillo-foco",
-        "cursor-pointer transition-[box-shadow,background-color] duration-200 ease-suave hover:shadow-md",
-        // La abierta, con el lila de Clientes. Sólo marca: el nombre está en la ficha.
-        seleccionado && "lg:bg-lila-suave/50 lg:inset-ring-2 lg:inset-ring-lila"
-      )}
-    >
+    <button type="button" onClick={onClick} className={clases}>
+      <ContenidoDeLaTarjeta cliente={cliente} />
+    </button>
+  )
+}
+
+/** Lo de adentro de la tarjeta: todo `span`, que va tanto en un botón como en un enlace. */
+function ContenidoDeLaTarjeta({ cliente }: { cliente: ClienteEnTarjeta }) {
+  return (
+    <>
       {/* En columna, los datos quedan al pie: alineados entre las tarjetas de una fila. */}
       <span className="flex h-full flex-col justify-between gap-4 @xl:flex-row @xl:items-center @xl:gap-6">
         <span className="flex min-w-0 items-center gap-3 @xl:flex-1">
@@ -140,6 +180,6 @@ export function TarjetaCliente({ cliente, seleccionado = false, onClick }: Props
           {cliente.proximaCita && <span>Próxima: {cliente.proximaCita}</span>}
         </span>
       </span>
-    </button>
+    </>
   )
 }

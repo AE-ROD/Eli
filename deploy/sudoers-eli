@@ -1,0 +1,16 @@
+# /etc/sudoers.d/eli  --  lo ÚNICO que el usuario "eli" puede hacer como root sin
+# contraseña. Se instala siguiendo deploy/README.md, paso 8.2 (validando ANTES
+# con "visudo -cf" sobre un archivo temporal; un sudoers roto puede dejarte sin
+# sudo).
+#
+# Son comandos EXACTOS: sudo sólo acepta la línea completa (con "eli" al
+# final); "systemctl restart otra-cosa" o "systemctl stop eli" no pasan. No hay
+# comodines (*) ni se usa ALL como comando, y las rutas son absolutas.
+#
+#  - restart eli       : lo usan actualizar.sh y volver-atras.sh.
+#  - reset-failed eli  : si la versión nueva muere al arrancar, la unidad
+#    pasa a "failed (start-limit-hit)" (eli.service permite 10 arranques en 5
+#    minutos) y systemd RECHAZA el siguiente "restart" hasta un "reset-failed".
+#    Sin esta línea, el regreso automático a la versión anterior fallaría justo
+#    cuando más se necesita.
+eli ALL=(root) NOPASSWD: /usr/bin/systemctl restart eli, /usr/bin/systemctl reset-failed eli

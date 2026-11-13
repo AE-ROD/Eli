@@ -5,6 +5,7 @@ import { tokenDeBaja } from "@/lib/baja-de-correos"
 import type { CorreoQueToca } from "@/lib/correos-de-prueba"
 import { diasEntre, fechaYMinutosEn, zonaDelNegocio } from "@/lib/zona-horaria"
 import { registrarError } from "@/lib/registro-de-errores"
+import { urlBase } from "@/lib/url-base"
 
 /**
  * (servidor) Manda un correo del ciclo de prueba y lleva la cuenta en
@@ -26,6 +27,8 @@ export const SELECCION_PARA_CORREO = {
   name: true,
   slug: true,
   timezone: true,
+  // El rubro: la bienvenida y el consejo hablan con las palabras del rubro (`lib/vocabulario.ts`).
+  type: true,
   createdAt: true,
   pruebaTerminaEl: true,
   recibeCorreosDePrueba: true,
@@ -36,10 +39,6 @@ export const SELECCION_PARA_CORREO = {
 export type NegocioParaCorreo = Prisma.BusinessGetPayload<{ select: typeof SELECCION_PARA_CORREO }>
 
 export type ResultadoDeCorreo = "enviado" | "ya-enviado" | "fallido"
-
-function urlBase(): string {
-  return process.env.NEXTAUTH_URL ?? "http://localhost:3000"
-}
 
 /** Si el negocio y su dueño aceptan los correos del ciclo de prueba. */
 export function recibeCorreos(negocio: NegocioParaCorreo): boolean {
@@ -64,6 +63,7 @@ export async function mandarCorreoDePrueba(
   try {
     const base = urlBase()
     const resultado = await enviarCorreoDePrueba(tipo, {
+      rubro: negocio.type,
       emailDueno: negocio.user.email,
       nombreDueno: negocio.user.name,
       nombreNegocio: negocio.name,

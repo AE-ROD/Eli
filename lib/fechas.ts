@@ -133,13 +133,36 @@ export function limitesDelMesDe(fecha: Date): { desde: Date; hasta: Date } {
   }
 }
 
-/** Mueve la fecha según lo que se esté mirando: un día, una semana o un mes. */
+/**
+ * Mueve la fecha según lo que se esté mirando: un día, una semana o un mes.
+ *
+ * Por mes va al día 1 del mes de destino. Con `setMonth` sobre el mismo día,
+ * un 31 de octubre más un mes era el "31 de noviembre", que JavaScript corre
+ * al 1 de diciembre: "Mes siguiente" saltaba noviembre entero.
+ */
 export function desplazarFecha(fecha: Date, unidad: UnidadDeTiempo, pasos: number): Date {
+  if (unidad === "mes") return new Date(fecha.getFullYear(), fecha.getMonth() + pasos, 1)
   const movida = new Date(fecha)
   if (unidad === "dia") movida.setDate(movida.getDate() + pasos)
-  else if (unidad === "semana") movida.setDate(movida.getDate() + pasos * 7)
-  else movida.setMonth(movida.getMonth() + pasos)
+  else movida.setDate(movida.getDate() + pasos * 7)
   return movida
+}
+
+/**
+ * `Lunes, 8 de marzo de 2026`, con mayúscula inicial: el día de hoy en la
+ * zona `zona` (la del negocio), no en la del dispositivo. Para el subtítulo
+ * del inicio.
+ */
+export function fechaLargaEn(zona: string, ahora: Date = new Date()): string {
+  const opciones = { weekday: "long", year: "numeric", month: "long", day: "numeric" } as const
+  let fecha: string
+  try {
+    fecha = ahora.toLocaleDateString("es-CL", { ...opciones, timeZone: zona || undefined })
+  } catch {
+    // Una zona que el navegador no conoce lanza: queda la del dispositivo antes que nada.
+    fecha = ahora.toLocaleDateString("es-CL", opciones)
+  }
+  return fecha.charAt(0).toUpperCase() + fecha.slice(1)
 }
 
 /**

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import { aCentavos } from "./atenciones"
 import type { Actor } from "./permisos"
+import { vocabularioDe } from "./vocabulario"
 import {
   avisoDeLargo,
   filaDePropinaSugerida,
@@ -46,6 +47,9 @@ const encargado: Actor = { rol: "admin", businessId: NEGOCIO, memberId: "yo" }
 const profesional: Actor = { rol: "worker", businessId: NEGOCIO, memberId: "yo" }
 
 const linea = (profesionalId: string | null, precio = 8000) => ({ profesional: { id: profesionalId }, precio })
+
+/** Las palabras de un rubro, como las recibe cada mensaje. */
+const palabrasDe = (rubro: string | null) => vocabularioDe(rubro).palabras
 
 describe("COLUMNAS_DEL_TABLERO", () => {
   it("son las cinco de la ficha, en orden, y ninguna para las anuladas", () => {
@@ -163,6 +167,32 @@ describe("requisitoParaPasarA", () => {
 
   it("volver a en espera no pide nada", () => {
     expect(requisitoParaPasarA([], "en-espera")).toBeNull()
+  })
+
+  it("con las palabras del rubro: una prestación con su odontólogo, y 'cada una' en femenino", () => {
+    const dental = palabrasDe("odontologia")
+    expect(requisitoParaPasarA([], "en-atencion", dental)).toBe(
+      "Para empezar la atención hace falta al menos una prestación con su odontólogo."
+    )
+    expect(requisitoParaPasarA([], "por-cobrar", dental)).toBe("Para cobrar hace falta al menos una prestación.")
+    expect(requisitoParaPasarA([linea("m-carla"), linea(null)], "por-cobrar", dental)).toBe(
+      "Hay prestaciones sin odontólogo: indica quién hizo cada una antes de cobrar."
+    )
+    expect(requisitoParaPasarA([linea("m-carla", -1)], "finalizada", dental)).toBe(
+      "Hay prestaciones con un precio inválido: corrígelo antes de cobrar."
+    )
+    // Un salón dice "estilista" para quien atiende en el resto de los textos, pero acá el requisito habla de servicios.
+    expect(requisitoParaPasarA([linea("m-carla"), linea(null)], "por-cobrar", palabrasDe("salon"))).toBe(
+      "Hay servicios sin estilista: indica quién hizo cada uno antes de cobrar."
+    )
+  })
+
+  it("un rubro desconocido o nulo dice lo mismo que el servidor", () => {
+    for (const rubro of [null, "salud", "no-existe"]) {
+      expect(requisitoParaPasarA([linea("m-carla"), linea(null)], "por-cobrar", palabrasDe(rubro))).toBe(
+        requisitoParaPasarA([linea("m-carla"), linea(null)], "por-cobrar")
+      )
+    }
   })
 })
 
@@ -319,6 +349,25 @@ describe("editor de servicios", () => {
 
   it("quien no elige profesional no necesita elegirlo", () => {
     expect(erroresDeFila(fila({ profesional: "" }), false)).toEqual({})
+  })
+
+  it("la fila sin servicio pide la palabra del rubro, con su artículo: 'Elige la prestación.'", () => {
+    const sinServicio = fila({ servicioId: "" })
+    expect(erroresDeFila(sinServicio, true, palabrasDe("odontologia")).servicio).toBe("Elige la prestación.")
+    expect(erroresDeFila(sinServicio, true, palabrasDe("salon")).servicio).toBe("Elige el servicio.")
+    expect(erroresDeFila(sinServicio, true, palabrasDe(null)).servicio).toBe("Elige el servicio.")
+    // Un producto es un producto en todos los rubros.
+    expect(erroresDeFila({ ...sinServicio, tipo: "producto", productoId: "" }, true, palabrasDe("odontologia")).servicio).toBe(
+      "Elige el producto."
+    )
+    // Lo que no nombra al servicio no cambia.
+    expect(erroresDeFila(fila({ profesional: "" }), true, palabrasDe("odontologia")).profesional).toBe("Elige quién lo hace.")
+  })
+
+  it("lineasDesdeFilas pasa las palabras a los errores de cada fila", () => {
+    const resultado = lineasDesdeFilas([fila({ servicioId: "" })], true, palabrasDe("odontologia"))
+    expect(resultado.ok).toBe(false)
+    if (!resultado.ok) expect(Object.values(resultado.errores)[0].servicio).toBe("Elige la prestación.")
   })
 
   it("un precio de cero vale; uno negativo, con tres decimales o sobre el tope no", () => {
@@ -600,6 +649,28 @@ describe("consecuenciasDeAnular", () => {
     )
     expect(consecuenciasDeAnular({ estado: "por-cobrar", cliente, citaId: null })).not.toContain("reserva")
   })
+
+  it("con las palabras del rubro: el negocio y el tablero con su artículo", () => {
+    const cobradaEn = new Date(2026, 9, 5, 10, 30).toISOString()
+    const cobrada = { estado: "finalizada", cliente, total: 25000, cobradaEn }
+    expect(consecuenciasDeAnular(cobrada, palabrasDe("odontologia"))).toBe(
+      "Se cobró el lunes, 5 de octubre a las 10:30, por $25.000. Al anularla deja de sumar a los ingresos de la clínica y queda en el historial como anulada. No se puede deshacer."
+    )
+    expect(consecuenciasDeAnular(cobrada, palabrasDe("salon"))).toContain("a los ingresos del salón y")
+    expect(consecuenciasDeAnular(cobrada, palabrasDe("barberia"))).toContain("a los ingresos de la barbería y")
+    expect(consecuenciasDeAnular(cobrada, palabrasDe("spa-de-unas"))).toContain("a los ingresos del salón de uñas y")
+    expect(consecuenciasDeAnular({ estado: "en-espera", cliente }, palabrasDe("odontologia"))).toBe(
+      "La atención sale de la sala de espera y queda en el historial como anulada. No se puede deshacer."
+    )
+    expect(consecuenciasDeAnular({ estado: "en-espera", cliente }, palabrasDe("salon"))).toContain("sale del tablero")
+  })
+
+  it("un rubro desconocido o nulo dice lo mismo que sin palabras", () => {
+    const sinCobrar = { estado: "en-espera", cliente, citaId: "c1" }
+    for (const rubro of [null, "salud", "no-existe"]) {
+      expect(consecuenciasDeAnular(sinCobrar, palabrasDe(rubro))).toBe(consecuenciasDeAnular(sinCobrar))
+    }
+  })
 })
 
 describe("ofreceDeshacerLlegada", () => {
@@ -757,6 +828,21 @@ describe("avisoDeComisionesPendientes (#65)", () => {
     )
   })
 
+  it("con las palabras del rubro: una prestación, dos prestaciones", () => {
+    const dental = palabrasDe("odontologia")
+    expect(avisoDeComisionesPendientes(encargado, cobrada("pendiente", "pendiente"), dental)).toBe(
+      "2 prestaciones sin porcentaje de comisión: avísale a la dueña."
+    )
+    expect(avisoDeComisionesPendientes(dueña, cobrada("pendiente"), dental)).toBe(
+      "1 prestación sin porcentaje de comisión: configúralo en Comisiones antes de liquidar."
+    )
+    for (const rubro of [null, "salon", "no-existe"]) {
+      expect(avisoDeComisionesPendientes(dueña, cobrada("pendiente"), palabrasDe(rubro))).toBe(
+        "1 servicio sin porcentaje de comisión: configúralo en Comisiones antes de liquidar."
+      )
+    }
+  })
+
   it("una atención abierta no avisa: todavía no se congeló nada", () => {
     expect(avisoDeComisionesPendientes(dueña, { ...cobrada("pendiente"), estado: "por-cobrar" })).toBeNull()
     expect(quedoSinPorcentaje({ estado: "por-cobrar" }, { comision: { estado: "pendiente" } })).toBe(false)
@@ -827,6 +913,18 @@ describe("avisoAntesDeCobrar (#118)", () => {
     expect(avisoAntesDeCobrar(3)).toBe(
       "3 servicios quedarán sin porcentaje de comisión. Se cobra igual: quedan pendientes hasta que se configuren en Comisiones."
     )
+  })
+
+  it("con las palabras del rubro: 1 prestación quedará, 3 prestaciones quedarán", () => {
+    const dental = palabrasDe("odontologia")
+    expect(avisoAntesDeCobrar(1, dental)).toBe(
+      "1 prestación quedará sin porcentaje de comisión. Se cobra igual: queda pendiente hasta que se configure en Comisiones."
+    )
+    expect(avisoAntesDeCobrar(3, dental)).toBe(
+      "3 prestaciones quedarán sin porcentaje de comisión. Se cobra igual: quedan pendientes hasta que se configuren en Comisiones."
+    )
+    expect(avisoAntesDeCobrar(0, dental)).toBeNull()
+    expect(avisoAntesDeCobrar(3, palabrasDe(null))).toBe(avisoAntesDeCobrar(3))
   })
 })
 

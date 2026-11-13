@@ -1,29 +1,31 @@
 "use client"
 
-import { useEffect, useId, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { Clock, Save } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
-import { Interruptor } from "@/components/comunes/interruptor"
 import { Aviso } from "@/components/panel/aviso"
-import { CampoHora } from "@/components/panel/campo-hora"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { FilaDeDia } from "@/components/panel/fila-de-dia"
+import { RangoDeHoras } from "@/components/panel/rango-de-horas"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { guardarHorario, type HorarioDelDia } from "../_datos"
-
-const DIAS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
-
-const HORARIO_INICIAL: HorarioDelDia[] = DIAS.map((_, i) => ({
-  dayOfWeek: i,
-  startTime: "09:00",
-  endTime: "18:00",
-  active: i >= 1 && i <= 5, // Lun-Vie activos por defecto
-}))
+import { frasesDeConfiguracion } from "../_frases"
+import { DIAS, horarioParaMostrar } from "../_horario"
 
 interface PropsDeSeccionHorario {
   horariosIniciales: HorarioDelDia[]
   /** De quién es el horario. Sin él, el propio de quien está en sesión. */
   memberId?: string | null
+  /**
+   * El horario general del negocio, para el horario de una persona del
+   * equipo. Quien no tiene horario propio atiende en el del negocio
+   * (`lib/agenda-publica.ts`): eso es lo que se le muestra, y no el ejemplo de
+   * lunes a viernes, que al guardarlo le borraba los sábados.
+   */
+  horarioDelNegocio?: HorarioDelDia[]
   titulo?: string
   /** Avisa si hay cambios sin guardar: el selector de personas pregunta antes de descartarlos. */
   alCambiarPendiente?: (pendiente: boolean) => void
@@ -31,34 +33,26 @@ interface PropsDeSeccionHorario {
   alGuardar?: (horarios: HorarioDelDia[]) => void
 }
 
-/**
- * Los siete días, aunque la base tenga guardados sólo algunos: los que faltan
- * se muestran como no laborables. Sin nada guardado, el horario de ejemplo
- * (lunes a viernes de 9 a 18), que es sólo una propuesta: la página pública
- * no ofrece horas hasta que se guarda, y la sección lo dice.
- */
-function semanaCompleta(guardados: HorarioDelDia[]): HorarioDelDia[] {
-  if (guardados.length === 0) return HORARIO_INICIAL
-  return DIAS.map((_, i) => {
-    const existente = guardados.find((horario) => horario.dayOfWeek === i)
-    return existente ?? { dayOfWeek: i, startTime: "09:00", endTime: "18:00", active: false }
-  })
-}
-
 export function SeccionHorario({
   horariosIniciales,
   memberId,
+  horarioDelNegocio,
   titulo,
   alCambiarPendiente,
   alGuardar,
 }: PropsDeSeccionHorario) {
   const idDelTitulo = useId()
-  const [horarios, setHorarios] = useState<HorarioDelDia[]>(() => semanaCompleta(horariosIniciales))
+  const { horario: frases } = frasesDeConfiguracion(vocabularioDe(useRubroDelPanel()).palabras)
+  const [alAbrir] = useState(() => horarioParaMostrar(horariosIniciales, memberId ? horarioDelNegocio : undefined))
+  const [horarios, setHorarios] = useState<HorarioDelDia[]>(alAbrir.semana)
   // Lo último que está en la base, para saber si hay cambios sin guardar.
-  const [enLaBase, setEnLaBase] = useState<HorarioDelDia[]>(() => semanaCompleta(horariosIniciales))
+  const [enLaBase, setEnLaBase] = useState<HorarioDelDia[]>(alAbrir.semana)
+  // Sin horario propio, atiende en el del negocio, que es lo que se ve.
+  const [usaElDelNegocio, setUsaElDelNegocio] = useState(alAbrir.usaElDelNegocio)
   // Sin nada guardado, lo que se ve es el ejemplo: parece configurado, pero
   // la página pública no ofrece ninguna hora (K1).
-  const [nuncaGuardado, setNuncaGuardado] = useState(horariosIniciales.length === 0)
+  const [nuncaGuardado, setNuncaGuardado] = useState(horariosIniciales.length === 0 && !alAbrir.usaElDelNegocio)
+  const negocioSinHorario = usaElDelNegocio && !alAbrir.semana.some((dia) => dia.active)
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
   const [aviso, setAviso] = useState("")
@@ -67,6 +61,13 @@ export function SeccionHorario({
   useEffect(() => {
     alCambiarPendiente?.(pendiente)
   }, [pendiente, alCambiarPendiente])
+  // Al irse (otra persona, otra carga), deja de haber cambios sin guardar de
+  // esta sección: si no, el selector seguía preguntando por ellos.
+  const avisarAlIrse = useRef(alCambiarPendiente)
+  useEffect(() => {
+    avisarAlIrse.current = alCambiarPendiente
+  }, [alCambiarPendiente])
+  useEffect(() => () => avisarAlIrse.current?.(false), [])
 
   const alternarDia = (dia: number) => {
     setHorarios((previos) =>
@@ -94,6 +95,7 @@ export function SeccionHorario({
     if (!resultado.ok) return setAviso(resultado.error)
     setGuardado(true)
     setNuncaGuardado(false)
+    setUsaElDelNegocio(false)
     setEnLaBase(horarios)
     alGuardar?.(horarios)
   }
@@ -102,6 +104,7 @@ export function SeccionHorario({
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
+        nivel={3}
         titulo={titulo ?? "Horario laboral"}
         subtitulo="Define los días y horas de atención"
         icono={{ figura: Clock }}
@@ -126,7 +129,12 @@ export function SeccionHorario({
 
       {nuncaGuardado && (
         <Aviso tono="atencion" titulo="Este horario todavía no está guardado" className="mt-5">
-          Tus clientes no ven horas hasta que lo guardes. Revisa los días y las horas, y toca &ldquo;Guardar horario&rdquo;.
+          {frases.sinGuardar}
+        </Aviso>
+      )}
+      {usaElDelNegocio && (
+        <Aviso tono="info" titulo={frases.usaElDelNegocio} className="mt-5">
+          {negocioSinHorario ? frases.negocioSinHorario : frases.atiendeEnElDelNegocio}
         </Aviso>
       )}
       {!nuncaGuardado && pendiente && !guardando && (
@@ -143,31 +151,15 @@ export function SeccionHorario({
         {horarios.map((horario) => {
           const dia = DIAS[horario.dayOfWeek]
           return (
-            <li key={horario.dayOfWeek} className="flex flex-wrap items-center gap-x-6 gap-y-2.5 py-3.5 first:pt-0 last:pb-0">
-              <div className="w-full sm:w-40">
-                <Interruptor etiqueta={dia} activo={horario.active} alCambiar={() => alternarDia(horario.dayOfWeek)} />
-              </div>
-
-              {horario.active ? (
-                <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:flex-1">
-                  <CampoHora
-                    etiqueta={`${dia}: desde`}
-                    value={horario.startTime}
-                    onChange={(valor) => cambiarHora(horario.dayOfWeek, "startTime", valor)}
-                    className="min-w-0 flex-1 sm:w-40 sm:flex-none"
-                  />
-                  <span className="shrink-0 text-sm text-texto-2">hasta</span>
-                  <CampoHora
-                    etiqueta={`${dia}: hasta`}
-                    value={horario.endTime}
-                    onChange={(valor) => cambiarHora(horario.dayOfWeek, "endTime", valor)}
-                    className="min-w-0 flex-1 sm:w-40 sm:flex-none"
-                  />
-                </div>
-              ) : (
-                <p className="text-sm text-texto-2">No disponible</p>
-              )}
-            </li>
+            <FilaDeDia key={horario.dayOfWeek} etiqueta={dia} activo={horario.active} alAlternar={() => alternarDia(horario.dayOfWeek)}>
+              <RangoDeHoras
+                etiqueta={dia}
+                desde={horario.startTime}
+                hasta={horario.endTime}
+                alCambiarDesde={(valor) => cambiarHora(horario.dayOfWeek, "startTime", valor)}
+                alCambiarHasta={(valor) => cambiarHora(horario.dayOfWeek, "endTime", valor)}
+              />
+            </FilaDeDia>
           )
         })}
       </ul>

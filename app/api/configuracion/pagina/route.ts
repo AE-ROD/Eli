@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { textoOpcional, telefonoChileno } from "@/lib/campos-del-panel"
 import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
+import { ejemplosDe } from "@/lib/ejemplos-por-rubro"
 import { IDS_DE_MEDIOS_DE_PAGO } from "@/lib/medios-de-pago"
 import {
   CLAVES_DE_COLOR,
@@ -32,9 +33,11 @@ import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
  * especialidades sólo de miembros de ese negocio: un id ajeno o inexistente
  * es 404 y no se guarda nada.
  *
- * Fotos (logo, portada, profesionales): no se editan acá. Todavía no hay
- * subida ni almacenamiento aprobado, y pegar una URL cualquiera dejaría a un
- * negocio mostrar lo que quiera desde donde quiera.
+ * Fotos (logo, portada, profesionales): no se editan acá. Se suben por sus
+ * propios endpoints (`/api/configuracion/fotos/[tipo]` y
+ * `/api/equipo/miembros/[id]/foto`), que validan y reducen la imagen: pegar
+ * una URL cualquiera dejaría a un negocio mostrar lo que quiera desde donde
+ * quiera.
  *
  * El enlace de reseñas de Google (#77, `puedeEditarEnlaceDeResenas`) es
  * opcional en el cuerpo: si no viene, no se toca. Sólo se acepta uno de Google
@@ -50,7 +53,8 @@ import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 const MENSAJE_SOLO_LA_DUEÑA_APAGA_RESENAS =
   "Pedir reseña está encendido y sólo la dueña puede apagarlo. Pídele que lo apague en Mensajes a clientes, o que borre ella el enlace."
 
-const MENSAJE_DE_INSTAGRAM = "No pudimos leer el Instagram. Escribe el usuario (@tu.salon) o pega el enlace del perfil"
+// El ejemplo es el neutro: este esquema es de todo el módulo y el mensaje no sabe de qué rubro es el negocio.
+const MENSAJE_DE_INSTAGRAM = `No pudimos leer el Instagram. Escribe el usuario (${ejemplosDe(null).instagram}) o pega el enlace del perfil`
 
 const instagram = () =>
   z

@@ -40,9 +40,38 @@ function esRutaDePanel(pathname: string): boolean {
   return pathname.startsWith("/api/") && !PREFIJOS_SIN_LIMITE_DE_PANEL.some((prefijo) => cubre(pathname, prefijo))
 }
 
-/** Páginas que exigen sesión: las que el proxy cubría antes de sumar la CSP. */
+/** Páginas que exigen sesión: el panel, completar el perfil y elegir con qué negocio trabajar. */
 function esPaginaConSesion(pathname: string): boolean {
-  return pathname === "/dashboard" || pathname.startsWith("/dashboard/") || pathname === "/completar-perfil"
+  return (
+    pathname === "/dashboard" ||
+    pathname.startsWith("/dashboard/") ||
+    pathname === "/completar-perfil" ||
+    pathname === "/elegir-negocio"
+  )
+}
+
+/**
+ * La ruta como la entiende el enrutador: cada segmento decodificado.
+ * `req.nextUrl.pathname` llega tal como se escribió, y Next igual enruta
+ * `/api/auth/callback/credential%73` a `[...nextauth]` con el segmento ya
+ * decodificado (`credentials`): comparar la ruta cruda dejaba saltarse el
+ * límite de login, y el de `update()`, con sólo codificar una letra.
+ *
+ * Por segmento y no la ruta entera: un segmento mal codificado (`%E0%A4`)
+ * queda como vino sin impedir que se decodifiquen los demás. No es ninguna de
+ * las rutas que se comparan, y Next lo rechaza solo.
+ */
+export function rutaDecodificada(pathname: string): string {
+  return pathname
+    .split("/")
+    .map((segmento) => {
+      try {
+        return decodeURIComponent(segmento)
+      } catch {
+        return segmento
+      }
+    })
+    .join("/")
 }
 
 /**
@@ -104,7 +133,7 @@ export default async function proxy(req: NextRequest) {
  * la CSP adentro; cualquier otra respuesta (429, redirect) corta acá.
  */
 async function decidir(req: NextRequest, continuar: () => NextResponse): Promise<NextResponse> {
-  const pathname = req.nextUrl.pathname
+  const pathname = rutaDecodificada(req.nextUrl.pathname)
 
   // Primera barrera contra cuerpos absurdos (GHSA-mrhx-c7xc-m3w5): si el
   // `Content-Length` declarado ya pasa el techo de toda la API, ni se llega al
@@ -115,11 +144,21 @@ async function decidir(req: NextRequest, continuar: () => NextResponse): Promise
     return respuestaDeCuerpoDemasiadoGrande()
   }
 
-  // Rate limiting sobre el intento de login por credenciales, antes de que NextAuth lo procese
+  // Rate limiting sobre el intento de login por credenciales, antes de que
+  // NextAuth lo procese. Es la primera barrera; la que no depende de cómo se
+  // escriba la ruta está adentro de `authorize` (`lib/auth.ts`). El 429 trae
+  // además `url` con el código del error, que es lo que lee `signIn` de
+  // next-auth: sin ella lanzaba un TypeError y el botón quedaba girando.
   if (pathname === "/api/auth/callback/credentials") {
     const { permitido } = await verificarLimite("login", obtenerIp(req))
     if (!permitido) {
-      return NextResponse.json({ error: "Demasiados intentos, intenta más tarde" }, { status: 429 })
+      return NextResponse.json(
+        {
+          error: "Demasiados intentos, intenta más tarde",
+          url: new URL("/iniciar-sesion?error=DemasiadosIntentos", req.url).toString(),
+        },
+        { status: 429 }
+      )
     }
     return continuar()
   }
@@ -185,14 +224,25 @@ async function decidir(req: NextRequest, continuar: () => NextResponse): Promise
     return cerrarSesion(req)
   }
 
-  // Autenticado pero sin negocio → completar perfil antes de entrar al dashboard
+  // Sin contexto elegido no se entra al panel: con algún negocio (propio o
+  // de una membresía) se elige con cuál trabajar; sin ninguno, se completa el
+  // perfil. Un token de antes de los contextos no trae la cuenta: va a
+  // completar el perfil como antes, y ahí el `update()` lo rearma.
+  const contextos = token.contextos ?? 0
   if (pathname.startsWith("/dashboard") && !token.businessId) {
-    return NextResponse.redirect(new URL("/completar-perfil", req.url))
+    return NextResponse.redirect(new URL(contextos > 0 ? "/elegir-negocio" : "/completar-perfil", req.url))
   }
 
-  // Ya tiene negocio → no necesita estar en completar-perfil
-  if (pathname === "/completar-perfil" && token.businessId) {
+  // Completar el perfil crea el negocio propio: quien ya es dueño de uno no
+  // tiene nada que hacer ahí. Quien sólo es miembro de otros, sí: puede crear
+  // el suyo (suma un contexto de dueño).
+  if (pathname === "/completar-perfil" && (token.tieneNegocioPropio || (token.businessId && token.role === "owner"))) {
     return NextResponse.redirect(new URL("/dashboard", req.url))
+  }
+
+  // Sin ningún negocio no hay nada que elegir.
+  if (pathname === "/elegir-negocio" && contextos === 0 && !token.businessId) {
+    return NextResponse.redirect(new URL("/completar-perfil", req.url))
   }
 
   return continuar()

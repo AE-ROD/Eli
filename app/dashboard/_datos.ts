@@ -7,11 +7,15 @@
  * quedarse en "Cargando..." para siempre.
  */
 
-import { zonaDelDispositivo } from "@/lib/fechas"
-import { pedir, type Resultado } from "@/lib/peticiones"
+import { conJson, pedir, type Resultado } from "@/lib/peticiones"
 import type { CitaDelDia, FranjaHorario } from "@/lib/horario-dia"
 
 export interface EstadisticasDelPanel {
+  /**
+   * La zona del negocio (`Business.timezone`). "Hoy" y el mes se calcularon en
+   * ella, y las horas de las citas se muestran en ella.
+   */
+  zona: string
   citasHoy: number
   /** `customer` puede venir nulo: en el esquema una cita puede no tener cliente. */
   citasHoyLista: CitaDelDia[]
@@ -43,15 +47,11 @@ export interface EstadisticasDelPanel {
 }
 
 /**
- * Con la zona del dispositivo, el mes de los ingresos es el del calendario de
- * quien mira, el mismo que cuentan los reportes: con la del servidor (UTC), un
- * cobro del 30 a la noche ya caía en el mes siguiente. Si el navegador no la
- * informa, no se manda y el servidor usa la suya, como antes.
+ * "Hoy", el mes y las horas son los del negocio: el servidor los calcula con
+ * `Business.timezone` y devuelve la zona. La del dispositivo no se manda.
  */
 export async function leerEstadisticas(): Promise<Resultado<EstadisticasDelPanel>> {
-  const zona = zonaDelDispositivo()
-  const url = zona ? `/api/dashboard/stats?${new URLSearchParams({ zona })}` : "/api/dashboard/stats"
-  return pedir<EstadisticasDelPanel>(url, "No se pudieron cargar las estadísticas")
+  return pedir<EstadisticasDelPanel>("/api/dashboard/stats", "No se pudieron cargar las estadísticas")
 }
 
 /**
@@ -61,4 +61,83 @@ export async function leerEstadisticas(): Promise<Resultado<EstadisticasDelPanel
  */
 export function puedeVerIngresos(estadisticas: EstadisticasDelPanel | null): boolean {
   return estadisticas?.ingresosMes !== undefined
+}
+
+// ─── Clínica dental: el inicio de la clínica ─────────────────────────────────
+
+/** Una cita en un sillón, como la manda `GET /api/dashboard/clinica`. Fechas en ISO. */
+export interface CitaEnElSillon {
+  citaId: string
+  titulo: string
+  paciente: { id: string; nombre: string } | null
+  odontologo: { id: string; nombre: string } | null
+  inicio: string
+  fin: string
+}
+
+export interface SillonAhora {
+  id: string
+  nombre: string
+  orden: number
+  estado: "atendiendo" | "libre"
+  /** La que se está atendiendo, desde cuándo. Sólo "atendiendo". */
+  actual: (CitaEnElSillon & { desde: string }) | null
+  /** La próxima del día en ese sillón, que todavía no empieza. */
+  siguiente: CitaEnElSillon | null
+  /** Libre hasta el inicio de la siguiente; `null`, libre el resto del día. */
+  libreHasta: string | null
+}
+
+export interface PersonaEnLaSalaDeEspera {
+  atencionId: string
+  /** La cita de la que nació, si quien mira la ve; `null` sin reserva o si es de un colega. */
+  citaId: string | null
+  paciente: { id: string | null; nombre: string }
+  minutos: number
+  titulo: string | null
+  sillon: { id: string; nombre: string } | null
+}
+
+export interface PresupuestoPorResponder {
+  etapaId: string
+  planId: string
+  etapa: string
+  paciente: { id: string; nombre: string }
+  presentadaEn: string | null
+  /** Sólo para quien ve la plata del negocio (dueña y encargado). */
+  montoCents?: number
+}
+
+export interface InicioDeLaClinica {
+  fecha: string
+  zona: string
+  ahora: string
+  /**
+   * "negocio": dueña y encargado ven toda la clínica. "propias": el
+   * odontólogo ve sólo sus citas en los sillones, así que un sillón "libre"
+   * para él es uno sin citas suyas, no uno vacío.
+   */
+  alcance: "negocio" | "propias"
+  sillones: SillonAhora[]
+  salaDeEspera: { cantidad: number; mayorEsperaMinutos: number | null; lista: PersonaEnLaSalaDeEspera[] }
+  /** Sin la clave si quien mira no ve los planes. */
+  presupuestosPorResponder?: { cantidad: number; totalCents?: number; lista: PresupuestoPorResponder[] }
+}
+
+/** "Sillones ahora", la sala de espera y los presupuestos por responder, para hoy en la zona de la clínica. */
+export async function leerInicioDeLaClinica(): Promise<Resultado<InicioDeLaClinica>> {
+  return pedir<InicioDeLaClinica>("/api/dashboard/clinica", "No se pudo cargar el inicio de la clínica")
+}
+
+/**
+ * "Pasar al sillón": la atención de la sala de espera pasa a "en atención",
+ * como en la sala de espera (el Tablero). Si le falta el motivo o el
+ * odontólogo, el servidor responde 400 con lo que falta.
+ */
+export async function pasarAlSillon(atencionId: string): Promise<Resultado> {
+  return pedir(
+    `/api/atenciones/${encodeURIComponent(atencionId)}/estado`,
+    "No se pudo pasar al sillón",
+    conJson("POST", { estado: "en-atencion" })
+  )
 }

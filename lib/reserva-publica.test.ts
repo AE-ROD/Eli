@@ -15,6 +15,24 @@ import {
   avisoSinCambiosPorElEnlace,
   avisoSinCambiosDespuesDeReservar,
   quedaSinCambiosPorElEnlace,
+  MINUTOS_DE_PRIMERA_VEZ,
+  MENSAJE_URGENCIA_SIN_HORAS,
+  MENSAJE_URGENCIA_SOLO_HOY,
+  textoDePrimeraVez,
+  mensajeDeUrgenciaSinHoras,
+  mensajeDeUrgenciaSoloHoy,
+  avisoDeUrgencia,
+  duracionDeLaReserva,
+  esHoyEn,
+  esReservaDeUrgencia,
+  MENSAJE_TOPE_POR_CONTACTO,
+  MENSAJE_TOPE_POR_NEGOCIO,
+  mensajeDeTopePorContacto,
+  mensajeDeTopePorNegocio,
+  mensajeFueraDeLaAtencion,
+  mensajeProfesionalNoDisponible,
+  mensajeServicioNoDisponible,
+  mensajeServicioNoEncontrado,
 } from "./reserva-publica"
 import { dentroDelPlazo } from "./gestion-de-cita"
 import { instanteEn } from "./zona-horaria"
@@ -94,6 +112,16 @@ describe("yaPasoLaHora", () => {
     ["mañana, más temprano que ahora", "2026-10-20", "08:00", false],
   ])("%s en Santiago (%s %s) → %s", (_caso, fecha, hora, esperado) => {
     expect(yaPasoLaHora(fecha, hora, LUNES_10_30_SANTIAGO, SANTIAGO)).toBe(esperado)
+  })
+
+  it("la noche en que el reloj retrocede, una hora repetida ya pasó si pasó la primera vez (es la que se guarda)", () => {
+    // Santiago, sábado 4 de abril de 2026: a las 24:00 el reloj vuelve a las 23:00.
+    // Las 23:10 de la segunda vez son las 03:10 UTC del 5; las 23:30 de la primera, las 02:30 UTC.
+    const segundaVez = new Date("2026-04-05T03:10:00.000Z")
+    expect(instanteEn("2026-04-04", "23:30", SANTIAGO)).toEqual(new Date("2026-04-05T02:30:00.000Z"))
+    expect(yaPasoLaHora("2026-04-04", "23:30", segundaVez, SANTIAGO)).toBe(true)
+    // La primera vez, a las 23:10, las 23:30 todavía no llegan.
+    expect(yaPasoLaHora("2026-04-04", "23:30", new Date("2026-04-05T02:10:00.000Z"), SANTIAGO)).toBe(false)
   })
 
   it("con el reloj de Tokio, a las 13:30 UTC del 19 ya son las 22:30", () => {
@@ -235,6 +263,25 @@ describe("quedaSinCambiosPorElEnlace (QA#8)", () => {
     expect(avisoSinCambiosPorElEnlace(24)).toMatch(/menos de 24 horas.*no podrás cancelarla ni cambiarla/)
     expect(avisoSinCambiosPorElEnlace(1)).toMatch(/menos de 1 hora:/)
   })
+
+  it("sin rubro (o desconocido), el texto de siempre: 'al local'", () => {
+    const deSiempre =
+      "Tu hora es en menos de 24 horas: una vez confirmada, no podrás cancelarla ni cambiarla por el enlace. Si lo necesitas, tendrás que contactar al local."
+    expect(avisoSinCambiosPorElEnlace(24)).toBe(deSiempre)
+    expect(avisoSinCambiosPorElEnlace(24, null)).toBe(deSiempre)
+    expect(avisoSinCambiosPorElEnlace(24, "salud")).toBe(deSiempre)
+  })
+
+  it("con rubro, nombra al negocio con su artículo", () => {
+    expect(avisoSinCambiosPorElEnlace(24, "salon")).toMatch(/contactar al salón\.$/)
+    expect(avisoSinCambiosPorElEnlace(24, "barberia")).toMatch(/contactar a la barbería\.$/)
+    expect(avisoSinCambiosPorElEnlace(24, "spa-de-unas")).toMatch(/contactar al salón de uñas\.$/)
+    expect(avisoSinCambiosPorElEnlace(24, "odontologia")).toMatch(/contactar a la clínica\.$/)
+    // "Tu hora" en todos: no es "Tu cita", y concuerda ("confirmada", "cancelarla").
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "odontologia"]) {
+      expect(avisoSinCambiosPorElEnlace(24, rubro)).toMatch(/^Tu hora es en menos de 24 horas: una vez confirmada, no podrás cancelarla ni cambiarla/)
+    }
+  })
 })
 
 describe("avisoSinCambiosDespuesDeReservar (QA#8)", () => {
@@ -242,6 +289,13 @@ describe("avisoSinCambiosDespuesDeReservar (QA#8)", () => {
     expect(avisoSinCambiosDespuesDeReservar(24)).toBe(
       "Tu hora es en menos de 24 horas, así que no se puede cancelar ni cambiar por el enlace. Si lo necesitas, contacta directamente al local."
     )
+  })
+
+  it("con rubro, 'al salón' o 'a la clínica'", () => {
+    expect(avisoSinCambiosDespuesDeReservar(1, "salon")).toBe(
+      "Tu hora es en menos de 1 hora, así que no se puede cancelar ni cambiar por el enlace. Si lo necesitas, contacta directamente al salón."
+    )
+    expect(avisoSinCambiosDespuesDeReservar(24, "odontologia")).toMatch(/contacta directamente a la clínica\.$/)
   })
 })
 
@@ -289,5 +343,122 @@ describe("elDiaElegidoQuedoSinAtencion: al cambiar de profesional o servicios, e
   it("sin día elegido, o con uno inválido, no hay nada que limpiar", () => {
     expect(elDiaElegidoQuedoSinAtencion("", [1])).toBe(false)
     expect(elDiaElegidoQuedoSinAtencion("2026-13-40", [1])).toBe(false)
+  })
+})
+
+describe("clínica dental: la primera vez suma 15 minutos (duracionDeLaReserva)", () => {
+  it("son 15 minutos, y el texto lo dice con la palabra de la clínica: 'primera consulta'", () => {
+    expect(MINUTOS_DE_PRIMERA_VEZ).toBe(15)
+    expect(textoDePrimeraVez("odontologia")).toBe("En la primera consulta sumamos 15 minutos para abrir tu ficha.")
+  })
+
+  it("en una clínica dental, primera vez: la suma de los servicios más 15", () => {
+    expect(duracionDeLaReserva(45, { clinicaDental: true, primeraVez: true })).toBe(60)
+  })
+
+  it("en una clínica dental, ya se atendió: la suma de los servicios", () => {
+    expect(duracionDeLaReserva(45, { clinicaDental: true, primeraVez: false })).toBe(45)
+  })
+
+  it("en otro rubro la primera vez no cuenta", () => {
+    expect(duracionDeLaReserva(45, { clinicaDental: false, primeraVez: true })).toBe(45)
+    expect(duracionDeLaReserva(45, { clinicaDental: false, primeraVez: false })).toBe(45)
+  })
+})
+
+describe("clínica dental: urgencia (esReservaDeUrgencia, esHoyEn)", () => {
+  it("es urgencia si algún servicio elegido lo es, sólo en una clínica dental", () => {
+    expect(esReservaDeUrgencia(true, [{ esUrgencia: false }, { esUrgencia: true }])).toBe(true)
+    expect(esReservaDeUrgencia(true, [{ esUrgencia: false }, {}])).toBe(false)
+    expect(esReservaDeUrgencia(true, [])).toBe(false)
+    // En un salón la columna no cuenta, aunque diga que sí.
+    expect(esReservaDeUrgencia(false, [{ esUrgencia: true }])).toBe(false)
+  })
+
+  it("hoy es el del reloj del negocio, no el del servidor", () => {
+    // Lunes 19 a las 10:30 en Santiago; en Tokio ya son las 22:30 del lunes.
+    expect(esHoyEn("2026-10-19", LUNES_10_30_SANTIAGO, SANTIAGO)).toBe(true)
+    expect(esHoyEn("2026-10-20", LUNES_10_30_SANTIAGO, SANTIAGO)).toBe(false)
+    expect(esHoyEn("2026-10-18", LUNES_10_30_SANTIAGO, SANTIAGO)).toBe(false)
+    // A las 02:00 UTC del 19, en Santiago todavía es el 18.
+    expect(esHoyEn("2026-10-18", new Date("2026-10-19T02:00:00.000Z"), SANTIAGO)).toBe(true)
+    // Y a las 16:00 UTC del 19, en Tokio ya es el 20.
+    expect(esHoyEn("2026-10-20", new Date("2026-10-19T16:00:00.000Z"), TOKIO)).toBe(true)
+  })
+
+  it("el aviso nombra el servicio de urgencia de la clínica", () => {
+    expect(avisoDeUrgencia("Urgencia dental")).toEqual({
+      destacado: "¿Tienes dolor fuerte?",
+      resto: "Elige «Urgencia dental» como motivo y te mostramos horas de hoy.",
+    })
+  })
+
+  it("los mensajes de la urgencia son los de la clínica, con sus palabras", () => {
+    expect(MENSAJE_URGENCIA_SOLO_HOY).toBe(
+      "Las urgencias se atienden el mismo día: elige una hora de hoy. Para otro día, elige otro motivo."
+    )
+    expect(MENSAJE_URGENCIA_SIN_HORAS).toBe(
+      "Hoy ya no quedan horas de urgencia para reservar por acá. Llama a la clínica para que te orienten."
+    )
+    expect(mensajeDeUrgenciaSoloHoy("odontologia")).toBe(MENSAJE_URGENCIA_SOLO_HOY)
+    expect(mensajeDeUrgenciaSinHoras("odontologia")).toBe(MENSAJE_URGENCIA_SIN_HORAS)
+  })
+})
+
+describe("los rechazos de la reserva con las palabras del rubro", () => {
+  const DESCONOCIDOS = [undefined, null, "", "salud", "fitness", "otro", "no-existe", "Odontologia", "constructor", "__proto__"]
+
+  it.each(DESCONOCIDOS)("rubro %j: los textos de siempre, letra por letra", (rubro) => {
+    expect(mensajeServicioNoDisponible(rubro)).toBe("Servicio no disponible")
+    expect(mensajeServicioNoEncontrado(rubro)).toBe("Servicio no encontrado")
+    expect(mensajeProfesionalNoDisponible(rubro)).toBe("Ese profesional no está disponible para este servicio")
+    expect(mensajeFueraDeLaAtencion(rubro)).toBe("Ese horario está fuera de la atención del negocio. Elige otra hora.")
+    expect(mensajeDeTopePorContacto(rubro)).toBe(
+      "Ya tienes 3 reservas pendientes en este negocio. Para pedir otra, contáctalo directamente."
+    )
+    expect(mensajeDeTopePorNegocio(rubro)).toBe(
+      "Este negocio recibió demasiadas reservas en línea en las últimas horas. Intenta más tarde o contáctalo directamente."
+    )
+  })
+
+  it("las constantes de los topes son las de un rubro desconocido", () => {
+    expect(MENSAJE_TOPE_POR_CONTACTO).toBe(mensajeDeTopePorContacto(null))
+    expect(MENSAJE_TOPE_POR_NEGOCIO).toBe(mensajeDeTopePorNegocio(null))
+  })
+
+  it("el salón: la estilista y el salón", () => {
+    expect(mensajeProfesionalNoDisponible("salon")).toBe("Esa estilista no está disponible para este servicio")
+    expect(mensajeFueraDeLaAtencion("salon")).toBe("Ese horario está fuera de la atención del salón. Elige otra hora.")
+    expect(mensajeDeTopePorContacto("salon")).toBe(
+      "Ya tienes 3 reservas pendientes en este salón. Para pedir otra, contáctalo directamente."
+    )
+  })
+
+  it("la barbería y el salón de uñas concuerdan con el género de su palabra", () => {
+    expect(mensajeProfesionalNoDisponible("barberia")).toBe("Ese barbero no está disponible para este servicio")
+    expect(mensajeFueraDeLaAtencion("barberia")).toBe("Ese horario está fuera de la atención de la barbería. Elige otra hora.")
+    expect(mensajeDeTopePorNegocio("barberia")).toBe(
+      "Esta barbería recibió demasiadas reservas en línea en las últimas horas. Intenta más tarde o contáctala directamente."
+    )
+    expect(mensajeProfesionalNoDisponible("spa-de-unas")).toBe("Esa manicurista no está disponible para este servicio")
+    expect(mensajeFueraDeLaAtencion("spa-de-unas")).toBe(
+      "Ese horario está fuera de la atención del salón de uñas. Elige otra hora."
+    )
+    expect(mensajeDeTopePorContacto("spa-de-unas")).toBe(
+      "Ya tienes 3 reservas pendientes en este salón de uñas. Para pedir otra, contáctalo directamente."
+    )
+  })
+
+  it("la clínica dental: motivo, odontólogo y clínica", () => {
+    expect(mensajeServicioNoDisponible("odontologia")).toBe("Motivo no disponible")
+    expect(mensajeServicioNoEncontrado("odontologia")).toBe("Motivo no encontrado")
+    expect(mensajeProfesionalNoDisponible("odontologia")).toBe("Ese odontólogo no está disponible para este motivo")
+    expect(mensajeFueraDeLaAtencion("odontologia")).toBe("Ese horario está fuera de la atención de la clínica. Elige otra hora.")
+    expect(mensajeDeTopePorContacto("odontologia")).toBe(
+      "Ya tienes 3 reservas pendientes en esta clínica. Para pedir otra, contáctala directamente."
+    )
+    expect(mensajeDeTopePorNegocio("odontologia")).toBe(
+      "Esta clínica recibió demasiadas reservas en línea en las últimas horas. Intenta más tarde o contáctala directamente."
+    )
   })
 })

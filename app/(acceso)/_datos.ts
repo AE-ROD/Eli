@@ -9,7 +9,8 @@
  * la pantalla está obligada a decidir qué mostrar cuando algo falla.
  */
 
-import { pedir, pedirConCuerpo, conJson, type Resultado } from "@/lib/peticiones"
+import { pedir, pedirConCodigo, pedirConCuerpo, conJson, type Resultado, type ResultadoConCodigo } from "@/lib/peticiones"
+import type { PlanId } from "@/lib/planes"
 import type { RubroId } from "@/lib/rubros"
 
 export interface DatosDeRegistro {
@@ -18,6 +19,8 @@ export interface DatosDeRegistro {
   contrasena: string
   nombreNegocio: string
   tipoNegocio: RubroId
+  /** El plan elegido (`lib/planes.ts`). El servidor lo valida: sólo acepta uno de los dos. */
+  plan: PlanId
   /**
    * El código del enlace de invitación (`?invita=`), tal como vino. El
    * servidor lo valida y, si no corresponde a un negocio, lo ignora.
@@ -25,16 +28,39 @@ export interface DatosDeRegistro {
   invita?: string
 }
 
+/**
+ * Como un `Resultado`, pero el error dice además de qué campo es, si el
+ * servidor lo sabe (`campo`): la pantalla vuelve al paso donde está ese campo.
+ */
+export type ResultadoDeCrearCuenta =
+  | { ok: true; datos: void }
+  | { ok: false; error: string; campo: keyof DatosDeRegistro | null }
+
+const CAMPOS_DEL_REGISTRO: readonly string[] = ["nombre", "email", "contrasena", "nombreNegocio", "tipoNegocio", "plan"]
+
 /** Crea la cuenta y su negocio. No inicia sesión: eso lo hace la pantalla después. */
-export async function crearCuenta(datos: DatosDeRegistro): Promise<Resultado> {
-  return pedir("/api/auth/registro", "Error al crear la cuenta", conJson("POST", datos))
+export async function crearCuenta(datos: DatosDeRegistro): Promise<ResultadoDeCrearCuenta> {
+  const resultado = await pedirConCuerpo("/api/auth/registro", "Error al crear la cuenta", conJson("POST", datos))
+  if (resultado.ok) return { ok: true, datos: undefined }
+  const campo = (resultado.cuerpo as { campo?: unknown } | null)?.campo
+  return {
+    ok: false,
+    error: resultado.error,
+    campo: typeof campo === "string" && CAMPOS_DEL_REGISTRO.includes(campo) ? (campo as keyof DatosDeRegistro) : null,
+  }
 }
 
 export interface DatosDelNegocio {
   nombreNegocio: string
   tipoNegocio: RubroId
-  /** Cuántas personas trabajan en el negocio, contando a quien se registra. */
-  teamSize: number
+  /** El plan elegido (`lib/planes.ts`). El servidor lo valida: sólo acepta uno de los dos. */
+  plan: PlanId
+  /**
+   * Cuántas personas trabajan en el negocio, contando a quien se registra. Sólo
+   * en el plan Equipo: en Independiente no se manda (es una, y el servidor
+   * decide con `personasAlCrearElNegocio`).
+   */
+  teamSize?: number
 }
 
 /**
@@ -46,9 +72,13 @@ export async function recordarInvitacion(codigo: string): Promise<Resultado> {
   return pedir("/api/referidos/invitacion", "No se pudo guardar la invitación", conJson("POST", { codigo }))
 }
 
-/** El último paso de quien entró con Google: todavía no tiene negocio. */
-export async function completarPerfil(datos: DatosDelNegocio): Promise<Resultado> {
-  return pedir("/api/auth/completar-perfil", "Error al guardar el negocio", conJson("POST", datos))
+/**
+ * Crea el negocio propio: el último paso de quien entró con Google, o el de
+ * quien ya trabaja en otros negocios y quiere el suyo. Devuelve su id, para
+ * entrar a él como dueña.
+ */
+export async function completarPerfil(datos: DatosDelNegocio): Promise<Resultado<{ id: string }>> {
+  return pedir<{ id: string }>("/api/auth/completar-perfil", "Error al guardar el negocio", conJson("POST", datos))
 }
 
 /**
@@ -77,11 +107,23 @@ export interface Invitacion {
   email: string
   rol: string
   negocio: string
+  /** El rubro del negocio que invita, para nombrar el rol ("Odontólogo" en una clínica dental). */
+  rubro?: string | null
 }
 
-/** Falla si la invitación no existe, ya se aceptó o venció. */
-export async function leerInvitacion(token: string): Promise<Resultado<Invitacion>> {
-  return pedir<Invitacion>(`/api/equipo/invitacion/${token}`, "Invitación no válida")
+/**
+ * Falla si la invitación no existe, ya se aceptó o venció (404 o 410), y
+ * también si no hubo respuesta (`codigo: null`) o el servidor falló (5xx) o
+ * pidió esperar (429): con el código, la pantalla distingue "este enlace no
+ * sirve" de "no se pudo cargar, reintenta".
+ */
+export async function leerInvitacion(token: string): Promise<ResultadoConCodigo<Invitacion>> {
+  return pedirConCodigo<Invitacion>(`/api/equipo/invitacion/${encodeURIComponent(token)}`, "Invitación no válida")
+}
+
+/** Si el fallo al leer una invitación dice que el enlace no sirve (y no que algo falló en el camino). */
+export function invitacionNoValida(codigo: number | null): boolean {
+  return codigo === 404 || codigo === 410
 }
 
 /**
@@ -90,13 +132,14 @@ export async function leerInvitacion(token: string): Promise<Resultado<Invitacio
  * ella. La pantalla usa ese dato para ofrecer ir a iniciar sesión.
  */
 export type ResultadoDeAceptar =
-  | { ok: true; datos: { cuentaNueva: boolean } }
+  | { ok: true; datos: { cuentaNueva: boolean; contexto: string | null } }
   | { ok: false; error: string; requiereSesion: boolean }
 
 /** Lo que puede traer el cuerpo de la respuesta, ok o no: sin validar, se lee con cuidado. */
 interface RespuestaDeAceptar {
   requiereSesion?: unknown
   cuentaNueva?: unknown
+  contexto?: unknown
 }
 
 /**
@@ -108,11 +151,12 @@ interface RespuestaDeAceptar {
  * 200 con una página HTML (un portal cautivo, un proxy) es un fallo, no una
  * cuenta creada que no existe.
  */
-export async function aceptarInvitacion(token: string, contrasena: string): Promise<ResultadoDeAceptar> {
+export async function aceptarInvitacion(token: string, contrasena?: string): Promise<ResultadoDeAceptar> {
   const resultado = await pedirConCuerpo<RespuestaDeAceptar | undefined>(
-    `/api/equipo/invitacion/${token}/aceptar`,
-    "Error al crear la cuenta",
-    conJson("POST", { contrasena })
+    `/api/equipo/invitacion/${encodeURIComponent(token)}/aceptar`,
+    "No se pudo aceptar la invitación",
+    // Con una cuenta que ya existe no se manda contraseña: sólo se suma el negocio.
+    conJson("POST", contrasena === undefined ? {} : { contrasena })
   )
 
   if (!resultado.ok) {
@@ -121,7 +165,11 @@ export async function aceptarInvitacion(token: string, contrasena: string): Prom
   }
 
   // Un 204 no trae cuerpo: sin decir lo contrario, la cuenta es nueva.
-  return { ok: true, datos: { cuentaNueva: resultado.datos?.cuentaNueva !== false } }
+  const contexto = resultado.datos?.contexto
+  return {
+    ok: true,
+    datos: { cuentaNueva: resultado.datos?.cuentaNueva !== false, contexto: typeof contexto === "string" ? contexto : null },
+  }
 }
 
 /**

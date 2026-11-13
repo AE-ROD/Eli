@@ -1,13 +1,21 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { AnimatePresence } from "framer-motion"
 import { UserPlus } from "lucide-react"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
-import { actorDeSesion, puedeGestionarEquipo } from "@/lib/permisos"
+import {
+  actorDeSesion,
+  elPlanNoIncluyeEquipo,
+  puedeCambiarDePlan,
+  puedeEditarFotoDelMiembro,
+  puedeInvitarAlEquipo,
+} from "@/lib/permisos"
+import { vocabularioDe } from "@/lib/vocabulario"
 import {
   anularInvitacion,
   leerEquipo,
@@ -15,16 +23,25 @@ import {
   type InvitacionPendiente,
   type MiembroDelEquipo,
 } from "../_datos"
+import { frasesDeEquipo } from "../_frases"
 import { ListaEquipo } from "./lista-equipo"
+import { ModalFotoDelMiembro } from "./modal-foto-del-miembro"
 import { ModalInvitar } from "./modal-invitar"
+import { PlanSinEquipo } from "./plan-sin-equipo"
 import { ModalServiciosDelMiembro } from "./modal-servicios-del-miembro"
 
 export function PantallaDeEquipo() {
   const { data: sesion } = useSession()
-  // Invitar es de quien gestiona el equipo (la API ya rechaza al resto). A
-  // quien no lo gestiona la página ya lo devolvió al panel (#49); mientras la
-  // sesión carga, el botón tampoco se ofrece: falla cerrado.
-  const invita = puedeGestionarEquipo(actorDeSesion(sesion))
+  // Invitar es de quien gestiona el equipo, y sólo en un negocio del plan
+  // Equipo (la API ya rechaza al resto). A quien no gestiona el equipo la
+  // página ya lo devolvió al panel (#49); mientras la sesión carga, o si no
+  // dice el plan, el botón tampoco se ofrece: falla cerrado.
+  const actor = actorDeSesion(sesion)
+  const invita = puedeInvitarAlEquipo(actor)
+  // Sólo para explicar por qué no hay a quién invitar: un plan que no se
+  // conoce no afirma nada.
+  const sinEquipoPorElPlan = elPlanNoIncluyeEquipo(actor)
+  const frases = frasesDeEquipo(vocabularioDe(useRubroDelPanel()).palabras)
   const [miembros, setMiembros] = useState<MiembroDelEquipo[]>([])
   const [invitaciones, setInvitaciones] = useState<InvitacionPendiente[]>([])
   const [cargando, setCargando] = useState(true)
@@ -34,10 +51,18 @@ export function PantallaDeEquipo() {
   const [ahora, setAhora] = useState(0)
   const [avisoListo, setAvisoListo] = useState("")
   const [reenviandoId, setReenviandoId] = useState<string | null>(null)
+  /** La invitación que se va a reenviar: se confirma antes, porque el enlace anterior deja de servir. */
+  const [aReenviar, setAReenviar] = useState<InvitacionPendiente | null>(null)
+  const [avisoDeReenviar, setAvisoDeReenviar] = useState("")
+  /** Un ref y no sólo el estado: un doble clic llega antes de que se dibuje el botón ocupado. */
+  const enviado = useRef(false)
   const [aAnular, setAAnular] = useState<InvitacionPendiente | null>(null)
   const [anulando, setAnulando] = useState(false)
   const [avisoDeAnular, setAvisoDeAnular] = useState("")
   const [serviciosDe, setServiciosDe] = useState<MiembroDelEquipo | null>(null)
+  /** La persona cuya foto se está cambiando: su id, no la fila, para que el modal vea la foto que se acaba de guardar. */
+  const [fotoDeId, setFotoDeId] = useState<string | null>(null)
+  const fotoDe = miembros.find((miembro) => miembro.id === fotoDeId) ?? null
 
   const cargar = async () => {
     setCargando(true)
@@ -53,13 +78,24 @@ export function PantallaDeEquipo() {
     setCargando(false)
   }
 
-  const reenviar = async (invitacion: InvitacionPendiente) => {
+  const pedirReenviar = (invitacion: InvitacionPendiente) => {
     setAviso("")
     setAvisoListo("")
+    setAvisoDeReenviar("")
+    setAReenviar(invitacion)
+  }
+
+  const confirmarReenviar = async () => {
+    if (!aReenviar || enviado.current) return
+    enviado.current = true
+    const invitacion = aReenviar
+    setAvisoDeReenviar("")
     setReenviandoId(invitacion.id)
     const resultado = await reenviarInvitacion(invitacion.id)
+    enviado.current = false
     setReenviandoId(null)
-    if (!resultado.ok) return setAviso(resultado.error)
+    if (!resultado.ok) return setAvisoDeReenviar(resultado.error)
+    setAReenviar(null)
     setAvisoListo(`Se reenvió la invitación a ${invitacion.email}, con un enlace nuevo que vale 7 días.`)
     cargar()
   }
@@ -70,10 +106,12 @@ export function PantallaDeEquipo() {
   }
 
   const confirmarAnular = async () => {
-    if (!aAnular) return
+    if (!aAnular || enviado.current) return
+    enviado.current = true
     setAvisoDeAnular("")
     setAnulando(true)
     const resultado = await anularInvitacion(aAnular.id)
+    enviado.current = false
     setAnulando(false)
     if (!resultado.ok) return setAvisoDeAnular(resultado.error)
     setAvisoListo(`Se anuló la invitación de ${aAnular.name}.`)
@@ -88,7 +126,7 @@ export function PantallaDeEquipo() {
     <div className="min-h-dvh">
       <BarraSuperior
         titulo="Equipo"
-        subtitulo="Gestiona el equipo de tu negocio"
+        subtitulo={frases.subtitulo}
         accionPrincipal={
           invita
             ? {
@@ -108,20 +146,49 @@ export function PantallaDeEquipo() {
           </Aviso>
         )}
 
-        <ListaEquipo
-          miembros={miembros}
-          invitaciones={invitaciones}
-          cargando={cargando}
-          ahora={ahora}
-          reenviandoId={reenviandoId}
-          alReenviar={reenviar}
-          alAnular={pedirAnular}
-          alEditarServicios={(miembro) => {
-            setAvisoListo("")
-            setServiciosDe(miembro)
-          }}
-        />
+        {sinEquipoPorElPlan && <PlanSinEquipo puedeCambiarDePlan={puedeCambiarDePlan(actor)} />}
+
+        {/*
+          En el plan Independiente no hay equipo que listar: la explicación
+          ocupa su lugar. Si igual hubiera alguien (una invitación que quedó
+          de antes de un cambio de plan), se muestra y se puede anular.
+        */}
+        {(!sinEquipoPorElPlan || miembros.length > 0 || invitaciones.length > 0) && (
+          <ListaEquipo
+            miembros={miembros}
+            invitaciones={invitaciones}
+            cargando={cargando}
+            ahora={ahora}
+            reenviandoId={reenviandoId}
+            alReenviar={pedirReenviar}
+            alAnular={pedirAnular}
+            alEditarServicios={(miembro) => {
+              setAvisoListo("")
+              setServiciosDe(miembro)
+            }}
+            puedeCambiarLaFotoDe={(miembro) => puedeEditarFotoDelMiembro(actor, miembro)}
+            alEditarFoto={(miembro) => {
+              setAvisoListo("")
+              setFotoDeId(miembro.id)
+            }}
+          />
+        )}
       </div>
+
+      <AnimatePresence>
+        {aReenviar && (
+          <ModalConfirmar
+            titulo={`¿Reenviar la invitación de ${aReenviar.name}?`}
+            descripcion={`Le llega a ${aReenviar.email} un correo con un enlace nuevo que vale 7 días. El enlace que tenía deja de servir.`}
+            textoConfirmar="Reenviar invitación"
+            textoCancelar="No reenviar"
+            trabajando={reenviandoId === aReenviar.id}
+            aviso={avisoDeReenviar}
+            onConfirmar={confirmarReenviar}
+            onCerrar={() => setAReenviar(null)}
+          />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {aAnular && (
@@ -148,6 +215,21 @@ export function PantallaDeEquipo() {
               setServiciosDe(null)
               setAvisoListo(texto)
             }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {fotoDe && (
+          <ModalFotoDelMiembro
+            miembro={fotoDe}
+            alCerrar={() => setFotoDeId(null)}
+            // La lista se actualiza detrás sin volver a pedirla: sólo cambió una foto.
+            alCambiar={(miembroId, url) =>
+              setMiembros((actuales) =>
+                actuales.map((miembro) => (miembro.id === miembroId ? { ...miembro, fotoUrl: url } : miembro))
+              )
+            }
           />
         )}
       </AnimatePresence>

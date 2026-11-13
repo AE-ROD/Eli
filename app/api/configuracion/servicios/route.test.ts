@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { pedidoFalso } from "@/pruebas/pedidos"
+import { MENSAJE_URGENCIA_SOLO_EN_CLINICA } from "@/lib/campos-del-panel"
+import { MAX_SERVICIOS_POR_NEGOCIO } from "@/lib/servicios-en-lote"
 
 const mockGetServerSession = vi.fn()
 
@@ -9,8 +11,12 @@ vi.mock("next-auth", () => ({
 
 vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
+// El servicio suelto se crea dentro de una transacción con el candado del negocio (para contar el
+// tope sin carreras): el `tx` es el mismo mock, y el candado y el conteo quedan registrados.
 const prismaMock = {
-  service: { findMany: vi.fn(), create: vi.fn() },
+  service: { findMany: vi.fn(), create: vi.fn(), count: vi.fn(async () => 0) },
+  $executeRaw: vi.fn(async () => 0),
+  $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(prismaMock)),
 }
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
@@ -68,6 +74,18 @@ describe("GET /api/configuracion/servicios", () => {
 
     const argumentos = prismaMock.service.findMany.mock.calls[0][0]
     expect(argumentos.where.businessId).toBe("negocio-2")
+  })
+
+  it("trae hasta el tope de servicios del negocio (300), no un número menor", async () => {
+    const { GET } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.service.findMany.mockResolvedValueOnce([])
+
+    await GET()
+
+    expect(MAX_SERVICIOS_POR_NEGOCIO).toBe(300)
+    expect(prismaMock.service.findMany.mock.calls[0][0].take).toBe(300)
   })
 
   it("devuelve la frecuencia de cada servicio, para que el modal la muestre al editar (#75)", async () => {
@@ -152,6 +170,67 @@ describe("POST /api/configuracion/servicios", () => {
 
     expect(res.status).toBe(401)
     expect(prismaMock.service.create).not.toHaveBeenCalled()
+  })
+
+  it("cuenta los servicios del negocio de la sesión, con el candado del negocio, antes de crear", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargadoNegocio2)
+    prismaMock.service.create.mockResolvedValueOnce({ id: "srv-1" })
+
+    await POST(pedidoFalso(payload))
+
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1)
+    const [partes, ...valores] = prismaMock.$executeRaw.mock.calls[0] as unknown as [TemplateStringsArray, ...unknown[]]
+    expect(partes.join("?")).toContain("pg_advisory_xact_lock")
+    expect(valores).toEqual(["servicios:negocio-2"])
+    expect(prismaMock.service.count).toHaveBeenCalledWith({ where: { businessId: "negocio-2" } })
+  })
+
+  it("con 299 servicios todavía cabe uno más", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.service.count.mockResolvedValueOnce(MAX_SERVICIOS_POR_NEGOCIO - 1)
+    prismaMock.service.create.mockResolvedValueOnce({ id: "srv-300" })
+
+    expect((await POST(pedidoFalso(payload))).status).toBe(201)
+  })
+
+  it("con 300 servicios no crea otro: 409 con un mensaje claro", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.service.count.mockResolvedValueOnce(MAX_SERVICIOS_POR_NEGOCIO)
+
+    const res = await POST(pedidoFalso(payload))
+
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({
+      error: "Ya tienes el máximo de 300 servicios. Borra los servicios que ya no uses para agregar más.",
+    })
+    expect(prismaMock.service.create).not.toHaveBeenCalled()
+  })
+
+  it("en una clínica el 409 habla de prestaciones", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce({ user: { ...sesionDueño.user, rubro: "odontologia" } })
+    prismaMock.service.count.mockResolvedValueOnce(MAX_SERVICIOS_POR_NEGOCIO)
+
+    const res = await POST(pedidoFalso(payload))
+
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe("Ya tienes el máximo de 300 prestaciones. Borra las prestaciones que ya no uses para agregar más.")
+  })
+
+  it("un cuerpo inválido no llega a contar ni a abrir la transacción", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+
+    expect((await POST(pedidoFalso({ name: "C", duration: 30 }))).status).toBe(400)
+    expect(prismaMock.$transaction).not.toHaveBeenCalled()
   })
 
   it("sin sesión recibe 401", async () => {
@@ -258,3 +337,83 @@ describe("POST /api/configuracion/servicios — frecuencia de visitas", () => {
   })
 })
 
+
+describe("POST /api/configuracion/servicios — urgencia (sólo clínica dental)", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const valido = { name: "Urgencia dental", duration: 30 }
+  const enUnaClinica = (sesion: { user: object }) => ({ user: { ...sesion.user, rubro: "odontologia" } })
+  const enUnSalon = (sesion: { user: object }) => ({ user: { ...sesion.user, rubro: "salon" } })
+
+  it.each([
+    ["la dueña", sesionDueño],
+    ["el encargado", sesionEncargado],
+  ])("%s de una clínica dental marca el servicio como urgencia", async (_quien, sesion) => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(enUnaClinica(sesion))
+    prismaMock.service.create.mockResolvedValueOnce({ id: "srv-1", esUrgencia: true })
+
+    const res = await POST(pedidoFalso({ ...valido, esUrgencia: true }))
+
+    expect(res.status).toBe(201)
+    expect(prismaMock.service.create.mock.calls[0][0].data).toMatchObject({ esUrgencia: true, businessId: "negocio-1" })
+  })
+
+  it("en una clínica dental, sin la bandera el servicio no se toca (queda como la base lo tenga) y `false` se guarda", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(enUnaClinica(sesionDueño))
+    prismaMock.service.create.mockResolvedValueOnce({ id: "srv-1" })
+    await POST(pedidoFalso(valido))
+    expect(prismaMock.service.create.mock.calls[0][0].data).not.toHaveProperty("esUrgencia")
+
+    mockGetServerSession.mockResolvedValueOnce(enUnaClinica(sesionDueño))
+    prismaMock.service.create.mockResolvedValueOnce({ id: "srv-2" })
+    await POST(pedidoFalso({ ...valido, esUrgencia: false }))
+    expect(prismaMock.service.create.mock.calls[1][0].data.esUrgencia).toBe(false)
+  })
+
+  it.each([
+    ["un salón", enUnSalon(sesionDueño)],
+    ["un negocio sin rubro en la sesión", sesionDueño],
+    ["un encargado de un salón", enUnSalon(sesionEncargado)],
+  ])("en %s el servidor rechaza la bandera aunque el navegador la mande: 401 y no crea nada", async (_donde, sesion) => {
+    const { POST } = await import("./route")
+    for (const esUrgencia of [true, false]) {
+      mockGetServerSession.mockResolvedValueOnce(sesion)
+
+      const res = await POST(pedidoFalso({ ...valido, esUrgencia }))
+
+      expect(res.status).toBe(401)
+      expect((await res.json()).error).toBe(MENSAJE_URGENCIA_SOLO_EN_CLINICA)
+    }
+    expect(prismaMock.service.create).not.toHaveBeenCalled()
+  })
+
+  it("en un negocio que no es dental, un servicio sin la bandera se crea como siempre", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(enUnSalon(sesionDueño))
+    prismaMock.service.create.mockResolvedValueOnce({ id: "srv-1" })
+
+    expect((await POST(pedidoFalso({ name: "Corte", duration: 30 }))).status).toBe(201)
+    expect(prismaMock.service.create.mock.calls[0][0].data).not.toHaveProperty("esUrgencia")
+  })
+
+  it.each([["texto", "true"], ["número", 1], ["nulo", null]])("una urgencia que es %s es 400", async (_que, esUrgencia) => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(enUnaClinica(sesionDueño))
+
+    const res = await POST(pedidoFalso({ ...valido, esUrgencia }))
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: "Urgencia tiene que ser sí o no" })
+    expect(prismaMock.service.create).not.toHaveBeenCalled()
+  })
+
+  it("el profesional de una clínica no marca nada: 401 antes de leer el cuerpo", async () => {
+    const { POST } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(enUnaClinica(sesionProfesional))
+
+    expect((await POST(pedidoFalso({ ...valido, esUrgencia: true }))).status).toBe(401)
+    expect(prismaMock.service.create).not.toHaveBeenCalled()
+  })
+})

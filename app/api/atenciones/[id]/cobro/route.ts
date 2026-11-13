@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import {
   MAXIMO_DE_PAGOS,
+  PROFESIONAL_DUEÑO,
   aCentavos,
   errorDeCobro,
   errorDeTotal,
@@ -12,9 +13,12 @@ import {
   transicionPermitida,
 } from "@/lib/atenciones"
 import { actorDeSesion, puedeCobrar, puedeRegistrarPropina } from "@/lib/permisos"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { horaDeLaBase, tomarCandadoDeCajaCompartido } from "@/lib/bloqueos-de-dinero"
 import { congelarComisiones, lineasQueQuedaranSinPorcentaje } from "@/lib/lineas-de-atencion"
+import { tomarCandadosDeLaAtencion } from "@/lib/liquidacion"
+import { congelarRepartoDeAbonos } from "@/lib/abonos-de-protesis"
 import { errorDePropinas, propinasPedidasSchema, resolverPropinas } from "@/lib/propinas"
 import {
   ErrorDeAtencion,
@@ -107,7 +111,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
     const { pagos, propinas } = cobroSchema.parse(recibido.cuerpo)
 
-    // Hoy registra propinas quien cobra; si alguna vez no, falla cerrado.
+    // Registra propinas quien cobra, salvo en una clínica dental, que no
+    // trabaja con ellas: ahí se rechazan aunque el navegador las mande (el
+    // rubro sale de la sesión, nunca del cuerpo). Falla cerrado.
     if (propinas.length > 0 && !puedeRegistrarPropina(actor)) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }
@@ -122,6 +128,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const nombre = await nombreEnElNegocio(prisma, actor, usuarioId)
 
     const atencion = await prisma.$transaction(async (tx) => {
+      // Primero los candados de liquidación de quienes atendieron y de
+      // quienes reciben propina (§7): si se está cerrando la liquidación de
+      // alguno, el cobro espera a que termine, en el mismo orden que la
+      // anulación (liquidación, después caja) para no cruzarse.
+      await tomarCandadosDeLaAtencion(
+        tx,
+        actor.businessId,
+        existente.id,
+        propinas.flatMap((propina) => (propina.profesional === PROFESIONAL_DUEÑO ? [] : [propina.profesional]))
+      )
       // Antes de fijar la hora del cobro: si la caja se está cerrando, se
       // espera a que termine, y la hora queda después de ese cierre. La hora
       // es la de la base, la misma que usa el cierre: no la de esta instancia.
@@ -151,7 +167,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const excedido = errorDeTotal(totalCentavos)
       if (excedido) throw new ErrorDeAtencion(400, excedido)
 
-      const falta = requisitoFaltante("finalizada", lineas)
+      // El rubro sale de la sesión: "una prestación con su odontólogo" en una clínica dental.
+      const falta = requisitoFaltante("finalizada", lineas, vocabularioDe(actor.rubro).palabras)
       if (falta) throw new ErrorDeAtencion(400, falta)
 
       const errorDePagos = errorDeCobro(totalCentavos, pagos)
@@ -177,8 +194,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (count === 0) throw new ErrorDeAtencion(409, "La atención cambió mientras tanto: vuelve a cargar el tablero.")
 
       // Las propinas, a nombre de quien las recibe (de la base, nunca del
-      // cuerpo). Un miembro ajeno da 404 y no se escribe nada.
-      const resueltas = await resolverPropinas(tx, actor, propinas)
+      // cuerpo). Un miembro ajeno da 404; uno que no atendió esta atención,
+      // 400. En los dos casos no se escribe nada.
+      const resueltas = await resolverPropinas(tx, actor, existente.id, propinas)
       if (resueltas.length > 0) {
         await tx.propinaDeAtencion.createMany({
           data: resueltas.map((propina) => ({ ...propina, businessId: actor.businessId, visitId: existente.id })),
@@ -189,6 +207,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Sin % queda pendiente (null, nunca 0) y el cobro no se frena: la
       // atención vuelve con cada línea en `pendiente` y el tablero avisa.
       await congelarComisiones(tx, actor.businessId, existente.id, ahora)
+      // Los abonos de prótesis no llevan la comisión de arriba: se reparten en
+      // tres partes con la regla congelada de su prótesis.
+      await congelarRepartoDeAbonos(tx, actor.businessId, existente.id)
 
       if (existente.appointmentId) {
         await tx.appointment.updateMany({

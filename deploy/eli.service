@@ -1,0 +1,100 @@
+# Servicio systemd de Eli. Se instala en /etc/systemd/system/eli.service.
+# (ver deploy/README.md, paso 8)
+#
+# - Corre como el usuario "eli" (sin privilegios), nunca como root.
+# - Next escucha SOLO en 127.0.0.1:3000: desde afuera no se llega directo, sólo
+#   por Caddy (que es quien fija la IP real del cliente; ver deploy/Caddyfile).
+# - Las variables salen de /etc/eli/eli.env. systemd lee ese archivo como root
+#   antes de bajar privilegios, así que el servicio funciona aunque el archivo
+#   no fuera legible por "eli".
+# - El código vive en /opt/eli/current (enlace simbólico al release activo).
+
+[Unit]
+Description=Eli (Next.js)
+Documentation=file:///opt/eli/current/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+# Si falla 10 veces en 5 minutos, systemd deja de insistir y queda "failed
+# (start-limit-hit)": mejor eso que un bucle infinito que llena el disco de
+# logs. (Se ve con "systemctl status eli"; "systemctl reset-failed eli" lo
+# rearma.) OJO: en ese estado systemd RECHAZA "restart" hasta un reset-failed;
+# por eso actualizar.sh y volver-atras.sh lo hacen antes de cada reinicio y
+# deploy/sudoers-eli lo permite.
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=eli
+Group=eli
+WorkingDirectory=/opt/eli/current
+EnvironmentFile=/etc/eli/eli.env
+
+# Misma zona horaria que Vercel (UTC). Varias partes del código y el horario
+# del cron suponen un servidor en UTC; no lo cambies.
+Environment=TZ=UTC
+# Next no envía telemetría ni intenta escribir su archivo de configuración en un
+# HOME que este servicio no puede tocar (ProtectHome).
+Environment=NEXT_TELEMETRY_DISABLED=1
+
+# node directo (no "npm start"): una capa menos entre systemd y la app, y las
+# señales (reinicio, apagado) le llegan a Next. -H 127.0.0.1 es lo que lo deja
+# escuchando sólo en local. El tope de heap (1536 MB) es para que un pico de
+# memoria termine en un reinicio ordenado y no en un servidor tirado.
+ExecStart=/usr/bin/node --max-old-space-size=1536 /opt/eli/current/node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3000
+
+Restart=always
+RestartSec=3
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+# Logs a journald: "journalctl -u eli -f".
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=eli
+
+# Límites razonables para un servidor de 8 GB compartido con Caddy y el SO.
+MemoryHigh=2500M
+MemoryMax=3G
+TasksMax=512
+LimitNOFILE=65535
+
+# --- Endurecimiento (sin romper Next ni Prisma) ---
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0077
+# El proceso de Eli no tiene por qué ver los respaldos de la base (son datos de
+# clientes): para él, esa carpeta no existe. Los hace cron, como usuario eli
+# pero FUERA de este servicio. El "-" delante hace que no falle si la carpeta
+# todavía no existe (se crea en el paso 10, después de arrancar por primera vez).
+InaccessiblePaths=-/var/backups/eli
+# Sin grupos extra declarados en la unidad. A COMPROBAR EN EL VPS (paso 8.5):
+# systemd igual suma los grupos que "eli" tiene en /etc/group, así que lo que
+# manda es qué grupos tenga el usuario; mira con
+#   grep Groups /proc/$(systemctl show eli -p MainPID --value)/status
+SupplementaryGroups=
+# Con ProtectSystem=strict todo el disco es de sólo lectura salvo lo que se
+# liste aquí. Next escribe su caché dentro del release (.next/cache).
+ReadWritePaths=/opt/eli/releases
+# NO se agrega MemoryDenyWriteExecute=yes: V8 (Node) necesita memoria
+# ejecutable para compilar JavaScript y el servicio no arrancaría.
+
+[Install]
+WantedBy=multi-user.target

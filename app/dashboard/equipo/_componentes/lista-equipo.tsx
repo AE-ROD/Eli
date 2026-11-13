@@ -1,17 +1,20 @@
 "use client"
 
 import { useId, type ReactNode } from "react"
-import { Clock, ListChecks, Mail, RotateCw, UsersRound, X } from "lucide-react"
+import { Camera, Clock, ListChecks, Mail, RotateCw, UsersRound, X } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { Esqueleto } from "@/components/comunes/esqueleto"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Insignia } from "@/components/comunes/insignia"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
 import { nombreDelRol } from "@/lib/nombres-de-roles"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import type { InvitacionPendiente, MiembroDelEquipo } from "../_datos"
+import { frasesDeEquipo } from "../_frases"
 
 /**
  * Una persona por fila: el avatar, el nombre con el correo y el rol. Desde sm
@@ -23,9 +26,14 @@ const FILA_DE_PERSONA =
 const LUGAR_DEL_AVATAR = "row-span-2 self-start sm:row-span-1 sm:self-center"
 const LUGAR_DEL_ROL = "col-start-2 justify-self-start sm:col-start-3 sm:justify-self-end"
 
-/** El encargado lleva el turquesa del equipo; el profesional, gris. El nombre del rol va siempre escrito. */
+/**
+ * El encargado lleva el turquesa del equipo; el profesional, gris. El nombre
+ * del rol va siempre escrito, con la palabra del rubro ("Odontólogo" en una
+ * clínica dental).
+ */
 function InsigniaDelRol({ rol }: { rol: string }) {
-  return <Insignia tono={rol === "admin" ? "turquesa" : "gris"}>{nombreDelRol(rol)}</Insignia>
+  const rubro = useRubroDelPanel()
+  return <Insignia tono={rol === "admin" ? "turquesa" : "gris"}>{nombreDelRol(rol, rubro)}</Insignia>
 }
 
 /** `2 de noviembre`: el día en que vence el enlace. */
@@ -45,6 +53,10 @@ interface PropsDeListaEquipo {
   alAnular: (invitacion: InvitacionPendiente) => void
   /** Abre "Servicios que hace" de un miembro. */
   alEditarServicios: (miembro: MiembroDelEquipo) => void
+  /** Si quien mira puede cambiar la foto de ese integrante (`puedeEditarFotoDelMiembro`): la pantalla lo pregunta, la lista no compara roles. */
+  puedeCambiarLaFotoDe: (miembro: MiembroDelEquipo) => boolean
+  /** Abre la foto de un miembro para subirla, cambiarla o quitarla. */
+  alEditarFoto: (miembro: MiembroDelEquipo) => void
 }
 
 export function ListaEquipo({
@@ -56,7 +68,10 @@ export function ListaEquipo({
   alReenviar,
   alAnular,
   alEditarServicios,
+  puedeCambiarLaFotoDe,
+  alEditarFoto,
 }: PropsDeListaEquipo) {
+  const frases = frasesDeEquipo(vocabularioDe(useRubroDelPanel()).palabras)
   if (cargando) return <ListaCargando />
 
   if (miembros.length === 0 && invitaciones.length === 0) {
@@ -64,9 +79,9 @@ export function ListaEquipo({
       <div className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
         <EstadoVacio
           icono={<CuadroDeIcono icono={UsersRound} color="turquesa" tamano="lg" />}
-          titulo="Todavía no hay nadie en tu equipo"
+          titulo={frases.sinNadie.titulo}
         >
-          Usa el botón &ldquo;Invitar al equipo&rdquo; para sumar a tu encargado o a tus profesionales.
+          {frases.sinNadie.ayuda}
         </EstadoVacio>
       </div>
     )
@@ -82,22 +97,33 @@ export function ListaEquipo({
             {miembros.map((miembro) => (
               <li key={miembro.id} className={FILA_DE_PERSONA}>
                 <span className={LUGAR_DEL_AVATAR}>
-                  <AvatarUsuario nombre={miembro.user.name} tamaño="md" />
+                  <AvatarUsuario nombre={miembro.user.name} imagenUrl={miembro.fotoUrl ?? undefined} tamaño="md" />
                 </span>
                 <DatosDeLaPersona nombre={miembro.user.name} email={miembro.user.email} />
                 <div className={LUGAR_DEL_ROL}>
                   <InsigniaDelRol rol={miembro.role} />
                 </div>
-                <div className="col-start-2 sm:col-span-2 sm:col-start-2">
+                <div className="col-start-2 flex flex-wrap gap-2 sm:col-span-2 sm:col-start-2">
                   <Boton
                     variante="fantasma"
                     tamano="sm"
                     icono={<ListChecks className="size-4" aria-hidden="true" />}
                     onClick={() => alEditarServicios(miembro)}
-                    aria-label={`Servicios que hace ${miembro.user.name}`}
+                    aria-label={frases.servicios.queHaceDe(miembro.user.name)}
                   >
-                    Servicios que hace
+                    {frases.servicios.queHace}
                   </Boton>
+                  {puedeCambiarLaFotoDe(miembro) && (
+                    <Boton
+                      variante="fantasma"
+                      tamano="sm"
+                      icono={<Camera className="size-4" aria-hidden="true" />}
+                      onClick={() => alEditarFoto(miembro)}
+                      aria-label={`${miembro.fotoUrl ? "Cambiar foto" : "Subir foto"} de ${miembro.user.name}`}
+                    >
+                      {miembro.fotoUrl ? "Cambiar foto" : "Subir foto"}
+                    </Boton>
+                  )}
                 </div>
               </li>
             ))}

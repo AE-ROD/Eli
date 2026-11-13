@@ -1,4 +1,5 @@
 import { Resend } from "resend"
+import { al, concordar, el, ese, un } from "@/lib/concordancia"
 import { formatearMonto } from "@/lib/dinero"
 import { nombreDelRol } from "@/lib/nombres-de-roles"
 import {
@@ -10,6 +11,7 @@ import {
   formatearPesos,
 } from "@/lib/precios"
 import type { DatosAcuseDeSoporte, DatosAvisoASoporte } from "@/lib/soporte"
+import { conMayuscula, vocabularioDe, type Genero, type Sustantivo } from "@/lib/vocabulario"
 
 const FROM = process.env.RESEND_FROM_EMAIL ?? "Eli <no-reply@eli.app>"
 
@@ -308,7 +310,160 @@ function fechaLegible(fechaISO: string): string {
   })
 }
 
+/*
+ * Las palabras del rubro en los correos (`lib/vocabulario.ts`). Cada plantilla
+ * pide las suyas con `palabrasDelCorreo(rubro)` y arma las frases con los
+ * helpers de `lib/concordancia.ts`, así que una clínica dental lee "paciente",
+ * "odontólogo" y "a la clínica" y un salón "estilista", "hora" y "al salón",
+ * con el artículo y el adjetivo que corresponden. El rubro llega siempre desde
+ * `Business.type`, nunca desde datos del navegador.
+ *
+ * Un rubro desconocido, `null` o ausente (los viejos `salud`, `fitness` y
+ * `otro`, o un negocio sin rubro) deja los correos con las palabras de antes
+ * del vocabulario, sin un cambio: el vocabulario neutro dice "cita" y los
+ * correos de siempre decían "hora" donde se habla de la hora que se reserva o
+ * se libera ("Se liberó una hora", "Reservar mi hora") y "el local" donde
+ * nombran al negocio, así que el rubro sin palabras propias conserva esas dos
+ * (`hora` y `local`). Los rubros con palabras propias siguen el vocabulario.
+ */
+
+const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
+
+/** La hora como cosa que se reserva o se libera: la palabra con que hablaban los correos de siempre. */
+const HORA: Sustantivo = { singular: "hora", plural: "horas", genero: "f" }
+
+/** El negocio como lugar al que se va: la palabra con que hablaban los correos de siempre. */
+const LOCAL: Sustantivo = { singular: "local", plural: "locales", genero: "m" }
+
+/** "lo" / "la": el pronombre de un sustantivo. `lib/concordancia.ts` todavía no tiene pronombres. */
+const PRONOMBRE: Record<Genero, string> = { m: "lo", f: "la" }
+
+interface PalabrasDelCorreo {
+  /** Quien se atiende (panel): cliente / paciente. */
+  cliente: Sustantivo
+  /** Quien atiende (panel): estilista / barbero / manicurista / odontólogo / profesional. */
+  profesional: Sustantivo
+  /** Lo que se atiende, en los correos al negocio (panel): servicio / prestación. */
+  servicio: Sustantivo
+  /** Lo que eligió quien reserva, en los correos al cliente: servicio / motivo. */
+  servicioDeLaReserva: Sustantivo
+  /** La reserva, en los correos al negocio (panel): hora / cita. */
+  citaDelPanel: Sustantivo
+  /** La reserva, en los correos a quien reservó: hora / cita. */
+  cita: Sustantivo
+  /** La hora que se reserva o se libera: siempre "hora", salvo que el vocabulario diga otra cosa. */
+  hora: Sustantivo
+  /** El negocio como lugar: "el salón", "la clínica", y "el local" si el rubro no tiene palabras propias. */
+  local: Sustantivo
+  /** Tu negocio, en el título de bienvenida: salón / barbería / salón de uñas / clínica / negocio. */
+  negocio: Sustantivo
+  /** El aviso de que le toca volver: "Te toca volver" / "Control". */
+  seguimiento: string
+}
+
+function palabrasDelCorreo(rubro: string | null | undefined): PalabrasDelCorreo {
+  const palabras = vocabularioDe(rubro).palabras
+  const sinPalabrasPropias = palabras.negocio.singular === PALABRAS_NEUTRAS.negocio.singular
+  return {
+    cliente: palabras.cliente,
+    profesional: palabras.profesional,
+    servicio: palabras.servicio,
+    servicioDeLaReserva: palabras.servicioDeLaReserva,
+    citaDelPanel: palabras.cita,
+    cita: palabras.citaParaElCliente,
+    hora: sinPalabrasPropias ? HORA : palabras.citaParaElCliente,
+    local: sinPalabrasPropias ? LOCAL : palabras.negocio,
+    negocio: palabras.negocio,
+    seguimiento: palabras.etiquetas.seguimiento,
+  }
+}
+
+/**
+ * El sustantivo con su adjetivo antepuesto y concordado ("nueva hora", "próxima
+ * cita"), con el mismo género, para pasarlo a `un` o `el`: "una nueva hora".
+ */
+function conAdjetivoAntes(adjetivo: string, sustantivo: Sustantivo): Sustantivo {
+  return {
+    singular: `${concordar(adjetivo, sustantivo)} ${sustantivo.singular}`,
+    plural: `${concordar(adjetivo, sustantivo, "plural")} ${sustantivo.plural}`,
+    genero: sustantivo.genero,
+  }
+}
+
+/** "Cita confirmada" / "Hora confirmada": la reserva con su participio concordado, para un asunto. */
+function conParticipio(participio: string, cita: Sustantivo): string {
+  return `${conMayuscula(cita.singular)} ${concordar(participio, cita)}`
+}
+
+/**
+ * Hasta cuándo se puede cambiar una reserva sin plazo: "hasta la hora de la
+ * cita", o "hasta que llegue la hora" si la reserva ya se llama hora ("la hora
+ * de la hora" no se dice).
+ */
+function hastaLaHoraDe(cita: Sustantivo): string {
+  return cita.singular === HORA.singular ? "hasta que llegue la hora" : `hasta la hora de ${el(cita)}`
+}
+
+/** "la cita" en "...y la cita aparece en tu agenda"; si la reserva ya se llama hora, "esa hora" ("y la hora aparece" repite lo recién dicho). */
+function laReservaEnLaAgenda(cita: Sustantivo): string {
+  return cita.singular === HORA.singular ? ese(cita) : el(cita)
+}
+
+/** "la hora de su cita", o "su hora" si la reserva ya se llama hora ("la hora de su hora" no se dice). */
+function laHoraDeSuCita(cita: Sustantivo): string {
+  return cita.singular === HORA.singular ? "su hora" : `la hora de su ${cita.singular}`
+}
+
+/*
+ * Las etiquetas de las tablas salen de las palabras del rubro con
+ * `conMayuscula` ("Servicio" / "Motivo", "Cliente" / "Paciente", "Profesional"
+ * / "Odontólogo"), salvo dos. "Hora" es la hora del reloj ("Hora: 10:00"), no
+ * el nombre de la reserva, así que no cambia con el rubro. "Con" ("Con: Carla")
+ * es una preposición y no tiene palabra en el vocabulario.
+ */
+
+/**
+ * Dónde queda una hora concreta (etapa 9, plan Independiente con varias sedes):
+ * lo que devuelve `direccionDeLaCita` (`lib/sedes.ts`) de la sede de la cita.
+ * Sólo se pasa cuando el negocio tiene varias sedes activas y la hora lleva la
+ * suya: es lo que le dice al cliente a cuál ir. Sin `lugar`, el correo sale
+ * exactamente como siempre.
+ */
+export interface LugarEnElCorreo {
+  /** El nombre de la sede. */
+  nombre?: string | null
+  direccion?: string | null
+  comuna?: string | null
+}
+
+/**
+ * La fila "Dónde" del bloque de la hora: `<nombre> · <dirección>, <comuna>`,
+ * con lo que haya de cada parte. `null` (sin fila) si no hay `lugar` o no trae
+ * nada que decir. Como el resto del detalle, se escapa al armar el HTML.
+ */
+function filaDeLugar(lugar: LugarEnElCorreo | null | undefined): [string, string] | null {
+  if (!lugar) return null
+  const direccion = [lugar.direccion, lugar.comuna]
+    .map((parte) => parte?.trim())
+    .filter((parte): parte is string => !!parte)
+    .join(", ")
+  const texto = [lugar.nombre?.trim(), direccion].filter(Boolean).join(" · ")
+  return texto ? ["Dónde", texto] : null
+}
+
+/** Suma la fila "Dónde" al detalle, si hay `lugar` que decir. */
+function conLugar(detalle: Array<[string, string]>, lugar: LugarEnElCorreo | null | undefined): void {
+  const fila = filaDeLugar(lugar)
+  if (fila) detalle.push(fila)
+}
+
 export interface DatosConfirmacionCliente {
+  /**
+   * El rubro del negocio (`Business.type`): pone las palabras del correo
+   * ("hora" o "cita", "servicio" o "motivo", "al salón" o "a la clínica").
+   * Sin rubro, las de siempre.
+   */
+  rubro?: string | null
   emailCliente: string
   nombreCliente: string
   nombreNegocio: string
@@ -342,6 +497,8 @@ export interface DatosConfirmacionCliente {
   precioNormal?: number | null
   /** Algún servicio no tiene precio: el total suma los que sí y dice "+ a consultar". */
   precioIncompleto?: boolean
+  /** Dónde queda la hora: si la hora tiene sede (`LugarEnElCorreo`). Sin él, el correo no lo dice. */
+  lugar?: LugarEnElCorreo | null
 }
 
 /**
@@ -359,9 +516,13 @@ function filaDePrecio(datos: Pick<DatosConfirmacionCliente, "precio" | "precioNo
 }
 
 export function enviarConfirmacionCliente(datos: DatosConfirmacionCliente) {
-  const detalle: Array<[string, string]> = [["Servicio", datos.servicio]]
+  const palabras = palabrasDelCorreo(datos.rubro)
+  const { cita } = palabras
+  const alLocal = al(palabras.local)
+  const detalle: Array<[string, string]> = [[conMayuscula(palabras.servicioDeLaReserva.singular), datos.servicio]]
   if (datos.profesional) detalle.push(["Con", datos.profesional])
   detalle.push(["Fecha", fechaLegible(datos.fecha)], ["Hora", datos.hora], ["Duración", `${datos.duracion} minutos`])
+  conLugar(detalle, datos.lugar)
   const precio = filaDePrecio(datos)
   if (precio) detalle.push(precio)
   return enviar({
@@ -374,28 +535,30 @@ export function enviarConfirmacionCliente(datos: DatosConfirmacionCliente) {
           intro: html`Hola <strong>${datos.nombreCliente}</strong>, <strong>${datos.nombreNegocio}</strong> confirmará tu reserva y te avisaremos por correo cuando lo haga.`,
         }
       : {
-          asunto: asunto`Cita confirmada — ${datos.nombreNegocio}`,
-          titulo: "¡Tu cita está confirmada!",
+          asunto: asunto`${conParticipio("confirmado", cita)} — ${datos.nombreNegocio}`,
+          titulo: `¡Tu ${cita.singular} está ${concordar("confirmado", cita)}!`,
           intro: html`Hola <strong>${datos.nombreCliente}</strong>, te esperamos en <strong>${datos.nombreNegocio}</strong>.`,
         }),
     detalle,
     ...(datos.enlaceDeGestion && datos.sePuedeCambiar === false
       ? {
-          cierre: html`Tu hora es en menos de ${datos.plazoHoras ?? 0} ${datos.plazoHoras === 1 ? "hora" : "horas"}, así que no se puede cancelar ni cambiar por el enlace. Si lo necesitas, contacta directamente al local.`,
+          cierre: html`Tu ${palabras.hora.singular} es en menos de ${datos.plazoHoras ?? 0} ${datos.plazoHoras === 1 ? "hora" : "horas"}, así que no se puede cancelar ni cambiar por el enlace. Si lo necesitas, contacta directamente ${alLocal}.`,
         }
       : datos.enlaceDeGestion
       ? {
-          boton: { texto: "Cancelar o cambiar mi cita", enlace: datos.enlaceDeGestion },
+          boton: { texto: `Cancelar o cambiar mi ${cita.singular}`, enlace: datos.enlaceDeGestion },
           cierre:
             datos.plazoHoras && datos.plazoHoras > 0
-              ? html`Puedes cancelar o cambiar tu cita con el botón hasta ${datos.plazoHoras} ${datos.plazoHoras === 1 ? "hora" : "horas"} antes. Después, contacta directamente al local.`
-              : html`Puedes cancelar o cambiar tu cita con el botón hasta la hora de la cita.`,
+              ? html`Puedes cancelar o cambiar tu ${cita.singular} con el botón hasta ${datos.plazoHoras} ${datos.plazoHoras === 1 ? "hora" : "horas"} antes. Después, contacta directamente ${alLocal}.`
+              : html`Puedes cancelar o cambiar tu ${cita.singular} con el botón ${hastaLaHoraDe(cita)}.`,
         }
-      : { cierre: html`Si necesitas cancelar o cambiar tu cita, contáctanos con anticipación.` }),
+      : { cierre: html`Si necesitas cancelar o cambiar tu ${cita.singular}, contáctanos con anticipación.` }),
   })
 }
 
 export interface DatosAvisoProfesional {
+  /** El rubro del negocio (`Business.type`): las palabras del panel ("paciente", "prestación", "cita"). Sin rubro, las de siempre. */
+  rubro?: string | null
   emailProfesional: string
   nombreNegocio: string
   nombreCliente: string
@@ -407,16 +570,21 @@ export interface DatosAvisoProfesional {
   profesional?: string | null
   /** Entró por confirmar (#84): el aviso pide confirmarla o cancelarla en el panel. */
   porConfirmar?: boolean
+  /** Dónde queda la hora: si la hora tiene sede (`LugarEnElCorreo`). Sin él, el correo no lo dice. */
+  lugar?: LugarEnElCorreo | null
 }
 
 export function enviarAvisoProfesional(datos: DatosAvisoProfesional) {
+  const palabras = palabrasDelCorreo(datos.rubro)
+  const cita = palabras.citaDelPanel
   const detalle: Array<[string, string]> = [
-    ["Cliente", datos.nombreCliente],
-    ["Servicio", datos.servicio],
-    ...(datos.profesional ? [["Profesional", datos.profesional] as [string, string]] : []),
+    [conMayuscula(palabras.cliente.singular), datos.nombreCliente],
+    [conMayuscula(palabras.servicio.singular), datos.servicio],
+    ...(datos.profesional ? [[conMayuscula(palabras.profesional.singular), datos.profesional] as [string, string]] : []),
     ["Fecha", fechaLegible(datos.fecha)],
     ["Hora", datos.hora],
   ]
+  conLugar(detalle, datos.lugar)
   if (datos.comentarios) detalle.push(["Comentarios", datos.comentarios])
 
   return enviar({
@@ -426,16 +594,18 @@ export function enviarAvisoProfesional(datos: DatosAvisoProfesional) {
       ? asunto`Reserva por confirmar — ${datos.nombreCliente}`
       : asunto`Nueva reserva — ${datos.nombreCliente}`,
     titulo: datos.porConfirmar ? "Nueva reserva por confirmar" : "Nueva reserva recibida",
-    intro: html`Tienes una nueva cita en <strong>${datos.nombreNegocio}</strong>.`,
+    intro: html`Tienes ${un(conAdjetivoAntes("nuevo", cita))} en <strong>${datos.nombreNegocio}</strong>.`,
     detalle,
     destacado: true,
     cierre: datos.porConfirmar
-      ? html`Este contacto faltó a citas anteriores. Entra a la agenda de tu panel para confirmar la reserva o cancelarla.`
+      ? html`Este contacto faltó a ${cita.plural} ${concordar("anterior", cita, "plural")}. Entra a la agenda de tu panel para confirmar la reserva o cancelarla.`
       : html`Revisa tu calendario en tu panel para ver todos los detalles.`,
   })
 }
 
 export interface DatosReservaConfirmadaPorElLocal {
+  /** El rubro del negocio (`Business.type`): las palabras del correo a quien reservó. Sin rubro, las de siempre. */
+  rubro?: string | null
   emailCliente: string
   nombreCliente: string
   nombreNegocio: string
@@ -446,13 +616,17 @@ export interface DatosReservaConfirmadaPorElLocal {
   profesional?: string | null
   /** El precio guardado en la cita: el rebajado, si se reservó en hora valle (#138). */
   precio?: number | null
+  /** Dónde queda la hora: si la hora tiene sede (`LugarEnElCorreo`). Sin él, el correo no lo dice. */
+  lugar?: LugarEnElCorreo | null
 }
 
 /** Al cliente: el local confirmó la reserva que había entrado por confirmar (#84). */
 export function enviarReservaConfirmadaPorElLocal(datos: DatosReservaConfirmadaPorElLocal) {
-  const detalle: Array<[string, string]> = [["Servicio", datos.servicio]]
+  const palabras = palabrasDelCorreo(datos.rubro)
+  const detalle: Array<[string, string]> = [[conMayuscula(palabras.servicioDeLaReserva.singular), datos.servicio]]
   if (datos.profesional) detalle.push(["Con", datos.profesional])
   detalle.push(["Fecha", fechaLegible(datos.fecha)], ["Hora", datos.hora])
+  conLugar(detalle, datos.lugar)
   const precio = filaDePrecio({ precio: datos.precio })
   if (precio) detalle.push(precio)
   return enviar({
@@ -462,45 +636,73 @@ export function enviarReservaConfirmadaPorElLocal(datos: DatosReservaConfirmadaP
     titulo: "¡Tu reserva está confirmada!",
     intro: html`Hola <strong>${datos.nombreCliente}</strong>, <strong>${datos.nombreNegocio}</strong> confirmó tu reserva. Te esperamos.`,
     detalle,
-    cierre: html`Si necesitas cancelar o cambiar tu cita, usa el enlace del correo de tu reserva o contacta al local.`,
+    cierre: html`Si necesitas cancelar o cambiar tu ${palabras.cita.singular}, usa el enlace del correo de tu reserva o contacta ${al(palabras.local)}.`,
   })
 }
 
 export interface DatosAvisoDeCambioDelCliente {
+  /** El rubro del negocio (`Business.type`): las palabras del panel ("paciente", "prestación", "cita"). Sin rubro, las de siempre. */
+  rubro?: string | null
   tipo: "cancelo" | "reagendo"
   emailNegocio: string
   nombreNegocio: string
   nombreCliente: string
   servicio: string
   profesional?: string | null
+  /**
+   * Si reagendó y cambió de profesional: quien la tenía antes. El correo lo dice
+   * en "Antes" y "Ahora" (si sólo cambió la persona, la fecha y la hora son las
+   * mismas y sin esto las dos filas serían iguales).
+   */
+  profesionalAnterior?: string | null
   /** La fecha y hora de la cita (la nueva, si reagendó), en el reloj del negocio. */
   fecha: string
   hora: string
   /** Si reagendó: la que tenía antes. */
   fechaAnterior?: string
   horaAnterior?: string
+  /** Dónde queda la hora (la de ahora, si reagendó): si la hora tiene sede (`LugarEnElCorreo`). */
+  lugar?: LugarEnElCorreo | null
 }
 
 /** Aviso al negocio: el cliente canceló o reagendó con su enlace. */
 export function enviarAvisoDeCambioDelCliente(datos: DatosAvisoDeCambioDelCliente) {
   const reagendo = datos.tipo === "reagendo"
-  const detalle: Array<[string, string]> = [["Cliente", datos.nombreCliente], ["Servicio", datos.servicio]]
-  if (datos.profesional) detalle.push(["Profesional", datos.profesional])
+  const palabras = palabrasDelCorreo(datos.rubro)
+  const cita = palabras.citaDelPanel
+  const detalle: Array<[string, string]> = [
+    [conMayuscula(palabras.cliente.singular), datos.nombreCliente],
+    [conMayuscula(palabras.servicio.singular), datos.servicio],
+  ]
+  if (datos.profesional) detalle.push([conMayuscula(palabras.profesional.singular), datos.profesional])
   if (reagendo && datos.fechaAnterior && datos.horaAnterior) {
-    detalle.push(["Antes", `${fechaLegible(datos.fechaAnterior)}, ${datos.horaAnterior}`])
-    detalle.push(["Ahora", `${fechaLegible(datos.fecha)}, ${datos.hora}`])
+    // Sólo cuando de verdad cambió de persona (y se sabe quién era): si no, las filas son las de siempre.
+    const cambioDePersona = Boolean(
+      datos.profesionalAnterior && datos.profesional && datos.profesionalAnterior !== datos.profesional
+    )
+    detalle.push([
+      "Antes",
+      `${fechaLegible(datos.fechaAnterior)}, ${datos.horaAnterior}${cambioDePersona ? ` · con ${datos.profesionalAnterior}` : ""}`,
+    ])
+    detalle.push([
+      "Ahora",
+      `${fechaLegible(datos.fecha)}, ${datos.hora}${cambioDePersona ? ` · con ${datos.profesional}` : ""}`,
+    ])
   } else {
     detalle.push(["Fecha", fechaLegible(datos.fecha)], ["Hora", datos.hora])
   }
+  conLugar(detalle, datos.lugar)
 
   return enviar({
     tipo: reagendo ? "aviso-reagendada" : "aviso-cancelada",
     para: datos.emailNegocio,
-    asunto: reagendo ? asunto`Cita reagendada — ${datos.nombreCliente}` : asunto`Cita cancelada — ${datos.nombreCliente}`,
-    titulo: reagendo ? "Un cliente cambió su cita" : "Un cliente canceló su cita",
+    asunto: reagendo
+      ? asunto`${conParticipio("reagendado", cita)} — ${datos.nombreCliente}`
+      : asunto`${conParticipio("cancelado", cita)} — ${datos.nombreCliente}`,
+    titulo: `${conMayuscula(un(palabras.cliente))} ${reagendo ? "cambió" : "canceló"} su ${cita.singular}`,
     intro: reagendo
-      ? html`<strong>${datos.nombreCliente}</strong> cambió la hora de su cita en <strong>${datos.nombreNegocio}</strong> desde su enlace.`
-      : html`<strong>${datos.nombreCliente}</strong> canceló su cita en <strong>${datos.nombreNegocio}</strong> desde su enlace. El horario quedó libre.`,
+      ? html`<strong>${datos.nombreCliente}</strong> cambió ${laHoraDeSuCita(cita)} en <strong>${datos.nombreNegocio}</strong> desde su enlace.`
+      : html`<strong>${datos.nombreCliente}</strong> canceló su ${cita.singular} en <strong>${datos.nombreNegocio}</strong> desde su enlace. El horario quedó libre.`,
     detalle,
     destacado: true,
     cierre: html`Revisa tu agenda en el panel.`,
@@ -508,6 +710,8 @@ export function enviarAvisoDeCambioDelCliente(datos: DatosAvisoDeCambioDelClient
 }
 
 export interface DatosRecordatorio {
+  /** El rubro del negocio (`Business.type`): las palabras del correo a quien reservó. Sin rubro, las de siempre. */
+  rubro?: string | null
   emailCliente: string
   nombreCliente: string
   nombreNegocio: string
@@ -528,29 +732,36 @@ export interface DatosRecordatorio {
    * como en la confirmación (#164).
    */
   sePuedeCambiar?: boolean
+  /** Dónde queda la hora: si la hora tiene sede (`LugarEnElCorreo`). Sin él, el correo no lo dice. */
+  lugar?: LugarEnElCorreo | null
 }
 
 export function enviarRecordatorio(datos: DatosRecordatorio) {
+  const palabras = palabrasDelCorreo(datos.rubro)
+  const { cita } = palabras
+  const alLocal = al(palabras.local)
+  const detalle: Array<[string, string]> = [
+    [conMayuscula(palabras.servicioDeLaReserva.singular), datos.servicio],
+    ["Fecha", fechaLegible(datos.fecha)],
+    ["Hora", datos.hora],
+  ]
+  conLugar(detalle, datos.lugar)
   return enviar({
     tipo: "recordatorio",
     para: datos.emailCliente,
-    asunto: asunto`Recordatorio — tu cita es mañana`,
-    titulo: "Tu cita es mañana",
-    intro: html`Hola <strong>${datos.nombreCliente}</strong>, te recordamos que tienes una cita mañana en <strong>${datos.nombreNegocio}</strong>.`,
-    detalle: [
-      ["Servicio", datos.servicio],
-      ["Fecha", fechaLegible(datos.fecha)],
-      ["Hora", datos.hora],
-    ],
+    asunto: asunto`Recordatorio — tu ${cita.singular} es mañana`,
+    titulo: `Tu ${cita.singular} es mañana`,
+    intro: html`Hola <strong>${datos.nombreCliente}</strong>, te recordamos que tienes ${un(cita)} mañana en <strong>${datos.nombreNegocio}</strong>.`,
+    detalle,
     ...(datos.sePuedeCambiar === false
-      ? { cierre: html`¡Te esperamos! Si no puedes asistir, contacta directamente al local.` }
+      ? { cierre: html`¡Te esperamos! Si no puedes asistir, contacta directamente ${alLocal}.` }
       : datos.enlaceDeGestion
       ? {
-          boton: { texto: "Cancelar o cambiar mi cita", enlace: datos.enlaceDeGestion },
+          boton: { texto: `Cancelar o cambiar mi ${cita.singular}`, enlace: datos.enlaceDeGestion },
           cierre:
             datos.plazoHoras && datos.plazoHoras > 0
-              ? html`¡Te esperamos! Si no puedes asistir, cancela o cambia tu cita con el botón hasta ${datos.plazoHoras} ${datos.plazoHoras === 1 ? "hora" : "horas"} antes. Después, contacta directamente al local.`
-              : html`¡Te esperamos! Si no puedes asistir, cancela o cambia tu cita con el botón hasta la hora de la cita.`,
+              ? html`¡Te esperamos! Si no puedes asistir, cancela o cambia tu ${cita.singular} con el botón hasta ${datos.plazoHoras} ${datos.plazoHoras === 1 ? "hora" : "horas"} antes. Después, contacta directamente ${alLocal}.`
+              : html`¡Te esperamos! Si no puedes asistir, cancela o cambia tu ${cita.singular} con el botón ${hastaLaHoraDe(cita)}.`,
         }
       : { cierre: html`¡Te esperamos! Si no puedes asistir, por favor avísanos con anticipación.` }),
   })
@@ -579,11 +790,14 @@ export interface DatosInvitacionTrabajador {
   nombreTrabajador: string
   nombreNegocio: string
   rol: string
+  /** El rubro del negocio: en una clínica dental el rol dice "Odontólogo" y la tabla "Clínica". */
+  rubro?: string | null
   enlaceAceptar: string
 }
 
 export function enviarInvitacionTrabajador(datos: DatosInvitacionTrabajador) {
-  const rol = nombreDelRol(datos.rol)
+  const rol = nombreDelRol(datos.rol, datos.rubro)
+  const palabras = palabrasDelCorreo(datos.rubro)
 
   return enviar({
     tipo: "invitacion-trabajador",
@@ -592,7 +806,7 @@ export function enviarInvitacionTrabajador(datos: DatosInvitacionTrabajador) {
     titulo: "Tienes una invitación",
     intro: html`Hola <strong>${datos.nombreTrabajador}</strong>, te invitaron a formar parte de <strong>${datos.nombreNegocio}</strong> como <strong>${rol}</strong>.`,
     detalle: [
-      ["Negocio", datos.nombreNegocio],
+      [conMayuscula(palabras.negocio.singular), datos.nombreNegocio],
       ["Tu rol", rol],
     ],
     destacado: true,
@@ -604,6 +818,12 @@ export function enviarInvitacionTrabajador(datos: DatosInvitacionTrabajador) {
 // ─── Ciclo de prueba ─────────────────────────────────────────────────────────
 
 export interface DatosCorreoDePrueba {
+  /**
+   * El rubro del negocio (`Business.type`): la bienvenida y el consejo hablan
+   * con las palabras del panel ("pacientes", "prestaciones"). Sin rubro, las
+   * de siempre.
+   */
+  rubro?: string | null
   emailDueno: string
   nombreDueno: string
   nombreNegocio: string
@@ -650,18 +870,23 @@ const SIN_COBRO_TODAVIA = html`Todavía no se cobra nada y no tienes que hacer n
 
 function correoDePrueba(tipo: TipoCorreoDePrueba, datos: DatosCorreoDePrueba): Correo {
   const base = { tipo, para: datos.emailDueno, enlaceDeBaja: datos.enlaceDeBaja }
+  const palabras = palabrasDelCorreo(datos.rubro)
+  const clientes = palabras.cliente.plural
 
   switch (tipo) {
     case "bienvenida":
       return {
         ...base,
         asunto: asunto`Te damos la bienvenida a Eli`,
-        titulo: "Tu negocio ya está en Eli",
+        titulo: `Tu ${palabras.negocio.singular} ya está en Eli`,
         intro: html`Hola <strong>${datos.nombreDueno}</strong>, <strong>${datos.nombreNegocio}</strong> ya tiene su espacio en Eli. Tienes ${DIAS_DE_PRUEBA} días de prueba gratis, sin tarjeta. Para empezar a recibir reservas, te faltan tres pasos:`,
         pasos: [
-          { titulo: "Define tu horario", texto: "Los días y las horas en que atiendes. Tus clientes solo ven horas libres dentro de ese horario." },
-          { titulo: "Agrega tus servicios", texto: "Qué ofreces, cuánto dura y cuánto cuesta." },
-          { titulo: "Comparte tu enlace de reservas", texto: "Tus clientes eligen el servicio y la hora, y la cita aparece en tu agenda." },
+          { titulo: "Define tu horario", texto: `Los días y las horas en que atiendes. Tus ${clientes} solo ven horas libres dentro de ese horario.` },
+          { titulo: `Agrega tus ${palabras.servicio.plural}`, texto: "Qué ofreces, cuánto dura y cuánto cuesta." },
+          {
+            titulo: "Comparte tu enlace de reservas",
+            texto: `Tus ${clientes} eligen ${el(palabras.servicioDeLaReserva)} y la hora, y ${laReservaEnLaAgenda(palabras.citaDelPanel)} aparece en tu agenda.`,
+          },
         ],
         boton: { texto: "Ir a mi panel", enlace: datos.enlacePanel },
       }
@@ -671,7 +896,7 @@ function correoDePrueba(tipo: TipoCorreoDePrueba, datos: DatosCorreoDePrueba): C
         ...base,
         asunto: asunto`Un consejo para recibir tus primeras reservas`,
         titulo: "Pon tu enlace donde ya te buscan",
-        intro: html`Hola <strong>${datos.nombreDueno}</strong>, la forma más rápida de llenar tu agenda es que tus clientes reserven solos. Pega tu enlace de reservas en la biografía de Instagram y compártelo por WhatsApp: en tu estado, o como respuesta cuando alguien te pregunte por una hora.`,
+        intro: html`Hola <strong>${datos.nombreDueno}</strong>, la forma más rápida de llenar tu agenda es que tus ${clientes} reserven solos. Pega tu enlace de reservas en la biografía de Instagram y compártelo por WhatsApp: en tu estado, o como respuesta cuando alguien te pregunte por ${un(palabras.hora)}.`,
         detalle: [["Tu enlace", datos.enlaceReservas]],
         boton: { texto: "Ver mi página de reservas", enlace: datos.enlaceReservas },
         cierre: html`Cada reserva que llegue por ahí aparece en tu agenda, sin que tengas que anotarla.`,
@@ -757,6 +982,8 @@ export function enviarAcuseDeSoporte(datos: DatosAcuseDeSoporte) {
 // (`enlacesDeBajaDeCliente`): sin ellos no compila.
 
 export interface DatosAvisoListaDeEspera {
+  /** El rubro del negocio (`Business.type`): las palabras del correo a quien reservó. Sin rubro, las de siempre. */
+  rubro?: string | null
   emailCliente: string
   nombreCliente: string
   nombreNegocio: string
@@ -779,19 +1006,22 @@ export interface DatosAvisoListaDeEspera {
  * quien reserve primero, así que el correo lo dice.
  */
 export function enviarAvisoListaDeEspera(datos: DatosAvisoListaDeEspera) {
-  const detalle: Array<[string, string]> = [["Servicio", datos.servicio]]
+  const palabras = palabrasDelCorreo(datos.rubro)
+  const { hora } = palabras
+  const seLibero = `se liberó ${un(hora)}`
+  const detalle: Array<[string, string]> = [[conMayuscula(palabras.servicioDeLaReserva.singular), datos.servicio]]
   if (datos.profesional) detalle.push(["Con", datos.profesional])
   detalle.push(["Día", fechaLegible(datos.fecha)])
   return enviar({
     tipo: "aviso-lista-de-espera",
     para: datos.emailCliente,
-    asunto: asunto`Se liberó una hora — ${datos.nombreNegocio}`,
-    titulo: "Se liberó una hora",
-    intro: html`Hola <strong>${datos.nombreCliente}</strong>, se liberó una hora en <strong>${datos.nombreNegocio}</strong> el día que estabas esperando.`,
+    asunto: asunto`${conMayuscula(seLibero)} — ${datos.nombreNegocio}`,
+    titulo: conMayuscula(seLibero),
+    intro: html`Hola <strong>${datos.nombreCliente}</strong>, ${seLibero} en <strong>${datos.nombreNegocio}</strong> el día que estabas esperando.`,
     detalle,
     destacado: true,
-    boton: { texto: "Reservar la hora", enlace: datos.enlaceReservar },
-    cierre: html`Les avisamos a todas las personas que esperaban este día: la hora es de quien reserve primero. Si ya no la necesitas, puedes salir de la lista.`,
+    boton: { texto: `Reservar ${el(hora)}`, enlace: datos.enlaceReservar },
+    cierre: html`Les avisamos a todas las personas que esperaban este día: ${el(hora)} es de quien reserve primero. Si ya no ${PRONOMBRE[hora.genero]} necesitas, puedes salir de la lista.`,
     enlaceDeBaja: datos.enlaceSalir,
     textoDeBaja: "Salir de la lista de espera",
     bajaEnUnClic: datos.enlaceSalirEnUnClic,
@@ -799,6 +1029,8 @@ export function enviarAvisoListaDeEspera(datos: DatosAvisoListaDeEspera) {
 }
 
 export interface DatosTeToca {
+  /** El rubro del negocio (`Business.type`): las palabras del correo a quien reservó. Sin rubro, las de siempre. */
+  rubro?: string | null
   emailCliente: string
   nombreCliente: string
   nombreNegocio: string
@@ -813,15 +1045,24 @@ export interface DatosTeToca {
 
 /** "Te toca" (#75). Promocional: sólo con consentimiento vigente. */
 export function enviarTeToca(datos: DatosTeToca) {
+  const palabras = palabrasDelCorreo(datos.rubro)
+  const { hora } = palabras
+  const proxima = `${concordar("próximo", hora)} ${hora.singular}`
+  // "Te toca volver" es una frase y no cabe tras "Ya": un rubro que la
+  // cambia por un sustantivo ("Control") la usa como "Ya te toca tu control".
+  const toca =
+    palabras.seguimiento === PALABRAS_NEUTRAS.etiquetas.seguimiento
+      ? "Ya te toca volver"
+      : `Ya te toca tu ${palabras.seguimiento.toLocaleLowerCase("es-CL")}`
   return enviar({
     tipo: "te-toca",
     para: datos.emailCliente,
-    asunto: asunto`¿Agendamos tu próxima hora? — ${datos.nombreNegocio}`,
-    titulo: "Ya te toca volver",
+    asunto: asunto`¿Agendamos tu ${proxima}? — ${datos.nombreNegocio}`,
+    titulo: toca,
     intro: datos.servicio
-      ? html`Hola <strong>${datos.nombreCliente}</strong>, ya pasó un tiempo desde tu último <strong>${datos.servicio}</strong> en <strong>${datos.nombreNegocio}</strong>. Cuando quieras, reserva tu próxima hora.`
-      : html`Hola <strong>${datos.nombreCliente}</strong>, ya pasó un tiempo desde tu última visita a <strong>${datos.nombreNegocio}</strong>. Cuando quieras, reserva tu próxima hora.`,
-    boton: { texto: "Reservar mi hora", enlace: datos.enlaceReservar },
+      ? html`Hola <strong>${datos.nombreCliente}</strong>, ya pasó un tiempo desde tu último <strong>${datos.servicio}</strong> en <strong>${datos.nombreNegocio}</strong>. Cuando quieras, reserva tu ${proxima}.`
+      : html`Hola <strong>${datos.nombreCliente}</strong>, ya pasó un tiempo desde tu última visita a <strong>${datos.nombreNegocio}</strong>. Cuando quieras, reserva tu ${proxima}.`,
+    boton: { texto: `Reservar mi ${hora.singular}`, enlace: datos.enlaceReservar },
     cierre: html`Te escribimos porque aceptaste recibir avisos y novedades de ${datos.nombreNegocio}. Puedes dejar de recibirlos cuando quieras.`,
     enlaceDeBaja: datos.enlaceDeBaja,
     bajaEnUnClic: datos.enlaceDeBajaEnUnClic,
@@ -829,6 +1070,8 @@ export function enviarTeToca(datos: DatosTeToca) {
 }
 
 export interface DatosPedirResena {
+  /** El rubro del negocio (`Business.type`): las palabras del correo a quien reservó. Sin rubro, las de siempre. */
+  rubro?: string | null
   emailCliente: string
   nombreCliente: string
   nombreNegocio: string
@@ -845,12 +1088,13 @@ export interface DatosPedirResena {
  * vigente (decisión del dueño).
  */
 export function enviarPedirResena(datos: DatosPedirResena) {
+  const { local } = palabrasDelCorreo(datos.rubro)
   return enviar({
     tipo: "pedir-resena",
     para: datos.emailCliente,
     asunto: asunto`¿Cómo te fue en ${datos.nombreNegocio}?`,
     titulo: "Gracias por tu visita",
-    intro: html`Hola <strong>${datos.nombreCliente}</strong>, gracias por venir a <strong>${datos.nombreNegocio}</strong>. Si tienes un minuto, contar cómo te fue en Google ayuda a que más personas lo conozcan.`,
+    intro: html`Hola <strong>${datos.nombreCliente}</strong>, gracias por venir a <strong>${datos.nombreNegocio}</strong>. Si tienes un minuto, contar cómo te fue en Google ayuda a que más personas ${PRONOMBRE[local.genero]} conozcan.`,
     boton: { texto: "Dejar mi reseña", enlace: datos.enlaceResenas },
     cierre: html`Te escribimos porque aceptaste recibir avisos y novedades de ${datos.nombreNegocio}. Puedes dejar de recibirlos cuando quieras.`,
     enlaceDeBaja: datos.enlaceDeBaja,
@@ -859,6 +1103,8 @@ export function enviarPedirResena(datos: DatosPedirResena) {
 }
 
 export interface DatosAvisoFilaVirtual {
+  /** El rubro del negocio (`Business.type`): "Acércate al salón", "a la clínica". Sin rubro, "al local". */
+  rubro?: string | null
   emailCliente: string
   /** El nombre con que se anotó en la fila. */
   nombreCliente: string
@@ -883,6 +1129,6 @@ export function enviarAvisoFilaVirtual(datos: DatosAvisoFilaVirtual) {
     intro: html`Hola <strong>${datos.nombreCliente}</strong>, en <strong>${datos.nombreNegocio}</strong> ya casi es tu turno: queda a lo más una persona antes que tú.`,
     detalle: [["Tu número", String(datos.numero)]],
     destacado: true,
-    cierre: html`Acércate al local para no perderlo. Si ya no puedes ir, sal de la fila desde la página de tu turno.`,
+    cierre: html`Acércate ${al(palabrasDelCorreo(datos.rubro).local)} para no perderlo. Si ya no puedes ir, sal de la fila desde la página de tu turno.`,
   })
 }

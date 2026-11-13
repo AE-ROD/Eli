@@ -1,6 +1,6 @@
 "use client"
 
-import { useId, useState } from "react"
+import { useId, useRef, useState } from "react"
 import { AnimatePresence } from "framer-motion"
 import { Mail, MailCheck, User, UserRound, UsersRound, type LucideIcon } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
@@ -9,8 +9,12 @@ import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Aviso } from "@/components/panel/aviso"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
+import { nombreDelRol } from "@/lib/nombres-de-roles"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { invitarAlEquipo, reenviarInvitacion } from "../_datos"
+import { frasesDeEquipo } from "../_frases"
 
 interface PropsDeModalInvitar {
   abierto: boolean
@@ -19,23 +23,15 @@ interface PropsDeModalInvitar {
 }
 
 /**
- * Los roles que se pueden dar al invitar, con los nombres del producto. Lo
- * que dice cada uno es lo que le permite `lib/permisos.ts`: el encargado
- * gestiona la operación, pero no define comisiones ni anula lo cobrado.
+ * Los roles que se pueden dar al invitar. El nombre de cada uno sale de
+ * `nombreDelRol`, con la palabra del rubro ("Odontólogo" en una clínica
+ * dental), y lo que dice cada uno, de `frasesDeEquipo`. Lo que dice cada uno
+ * es lo que le permite `lib/permisos.ts`: el encargado gestiona la operación,
+ * pero no define comisiones ni anula lo cobrado.
  */
-const roles: readonly { id: "worker" | "admin"; nombre: string; descripcion: string; icono: LucideIcon }[] = [
-  {
-    id: "worker",
-    nombre: "Profesional",
-    descripcion: "Gestiona su propio horario y citas",
-    icono: UserRound,
-  },
-  {
-    id: "admin",
-    nombre: "Encargado",
-    descripcion: "Gestiona el equipo, la agenda, los horarios, los servicios y los cobros. Puede invitar a otros.",
-    icono: UsersRound,
-  },
+const roles: readonly { id: "worker" | "admin"; icono: LucideIcon }[] = [
+  { id: "worker", icono: UserRound },
+  { id: "admin", icono: UsersRound },
 ]
 
 export function ModalInvitar({ abierto, onCerrar, onInvitado }: PropsDeModalInvitar) {
@@ -47,6 +43,7 @@ export function ModalInvitar({ abierto, onCerrar, onInvitado }: PropsDeModalInvi
   const [vigenteId, setVigenteId] = useState<string | null>(null)
   const [exito, setExito] = useState(false)
   const [enviando, setEnviando] = useState(false)
+  const enviado = useRef(false)
 
   const resetear = () => {
     setNombre("")
@@ -65,11 +62,15 @@ export function ModalInvitar({ abierto, onCerrar, onInvitado }: PropsDeModalInvi
 
   const enviar = async (e: React.FormEvent) => {
     e.preventDefault()
+    // Un doble clic llega antes de que se dibuje el botón ocupado: sin esto, dos invitaciones.
+    if (enviado.current) return
+    enviado.current = true
     setError("")
     setVigenteId(null)
     setEnviando(true)
 
     const resultado = await invitarAlEquipo({ nombre, email, rol })
+    enviado.current = false
 
     if (!resultado.ok) {
       setError(resultado.error)
@@ -85,10 +86,12 @@ export function ModalInvitar({ abierto, onCerrar, onInvitado }: PropsDeModalInvi
 
   /** La invitación vigente de ese correo, con un enlace nuevo: lo que ofrece el error. */
   const reenviarLaVigente = async () => {
-    if (!vigenteId) return
+    if (!vigenteId || enviado.current) return
+    enviado.current = true
     setError("")
     setEnviando(true)
     const resultado = await reenviarInvitacion(vigenteId)
+    enviado.current = false
     setEnviando(false)
     if (!resultado.ok) return setError(resultado.error)
     setVigenteId(null)
@@ -175,6 +178,8 @@ const ANILLO_DE_LA_FILA =
  */
 function EleccionDeRol({ elegido, alElegir }: { elegido: "worker" | "admin"; alElegir: (rol: "worker" | "admin") => void }) {
   const nombreDelGrupo = useId()
+  const rubro = useRubroDelPanel()
+  const { roles: descripciones } = frasesDeEquipo(vocabularioDe(rubro).palabras)
 
   return (
     <fieldset className="min-w-0">
@@ -201,8 +206,10 @@ function EleccionDeRol({ elegido, alElegir }: { elegido: "worker" | "admin"; alE
               />
               <CuadroDeIcono icono={opcion.icono} color="turquesa" activo={esElElegido} />
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold">{opcion.nombre}</span>
-                <span className="mt-0.5 block text-[13px] leading-snug text-texto-2">{opcion.descripcion}</span>
+                <span className="block text-sm font-semibold">{nombreDelRol(opcion.id, rubro)}</span>
+                <span className="mt-0.5 block text-[13px] leading-snug text-texto-2">
+                  {opcion.id === "admin" ? descripciones.encargado : descripciones.quienAtiende}
+                </span>
               </span>
               {/* El círculo vacío o con el punto: lo que dice que es una elección, con contraste de 3:1. */}
               <span

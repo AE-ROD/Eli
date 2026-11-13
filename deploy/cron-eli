@@ -1,0 +1,45 @@
+# /etc/cron.d/eli  --  tareas programadas de Eli en el VPS (deploy/README.md, paso 10).
+#
+# Se instala con:  sudo install -m 644 -o root -g root deploy/cron-eli /etc/cron.d/eli
+# (el nombre dentro de /etc/cron.d no puede llevar punto: "eli", no "eli.txt").
+#
+# HORA: cron usa la hora del sistema. El servidor debe estar en UTC (se comprueba
+# con "timedatectl"; deploy/README.md, paso 10). Con otra zona, los 13:00 de
+# abajo NO serían los 13:00 UTC que espera el código (HORA_UTC_DEL_CRON en
+# lib/recordatorios.ts).
+#
+# Los dos primeros crons son los de vercel.json, con la MISMA ruta y el MISMO
+# horario ("0 13 * * *" = todos los días 13:00 UTC, ~10:00 en Chile). Hay una
+# prueba (deploy/deploy.test.ts) que falla si se separan.
+#
+# /api/cron/mensajes-a-clientes NO se programa acá: igual que en Vercel, lo corre
+# solo /api/cron/correos-de-prueba al terminar lo suyo.
+#
+# IMPORTANTE: regla conservadora, no tener estos crons activos acá y en Vercel a
+# la vez. Verificado en el código: cada envío se "reclama" en la base antes de
+# mandarse (Appointment.reminderSentAt se marca ANTES de enviar y sólo si estaba
+# vacío), así que repetir una corrida o correr dos a la vez NO duplica un
+# recordatorio; pero un fallo ambiguo a mitad de envío puede dejar uno perdido o,
+# con dos corridas, mandado por quien no corresponde (y el enlace del correo
+# llevaría el NEXTAUTH_URL de quien lo mandó). Ver deploy/README.md, paso 13.
+#
+# Horarios siempre con los 5 campos numéricos. NO uses alias como @daily o
+# @reboot: no se pueden comparar con vercel.json (la prueba automática los
+# rechaza) y @reboot correría cada vez que se reinicia el servidor.
+#
+# Resultado de cada corrida:  journalctl -t eli-cron      (y -t eli-respaldo)
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+CRON_TZ=UTC
+# Sin esto cron intenta mandar correo con la salida; el servidor no tiene correo
+# configurado. Todo queda en journald (ver arriba).
+MAILTO=""
+
+# min hora día mes díaSemana  usuario  comando
+0 13 * * *  eli  /opt/eli/current/deploy/llamar-cron.sh /api/cron/recordatorios
+0 13 * * *  eli  /opt/eli/current/deploy/llamar-cron.sh /api/cron/correos-de-prueba
+
+# Respaldo nocturno de la base: 06:30 UTC = 03:30 en Chile en verano (02:30 en
+# invierno), con poca gente usando Eli.
+30 6 * * *  eli  /opt/eli/current/deploy/respaldo.sh

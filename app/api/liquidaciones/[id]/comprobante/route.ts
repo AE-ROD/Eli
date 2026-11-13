@@ -33,7 +33,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
     const quien = detalle.miembro.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
     return respuestaCsv(
-      escribirCsv(filasDelComprobante(detalle)),
+      escribirCsv(filasDelComprobante(detalle, actor.rubro)),
       nombreDeArchivo(`liquidacion-${quien}`, `${detalle.desde}-al-${detalle.hasta}`)
     )
   } catch (error) {

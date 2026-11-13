@@ -1,3 +1,5 @@
+import { esPlanValido, type PlanId } from "@/lib/planes"
+
 /**
  * Los precios de Eli, en pesos chilenos con IVA incluido y cobro sólo mensual
  * (`docs/PRODUCTO.md`, sección 4). La landing, su calculadora y el modal de
@@ -35,10 +37,14 @@ export const DIAS_EXTRA_POR_REFERIDO = 7
  */
 export const DIA_DEL_AVISO_DE_PRUEBA = 5
 
-export type PlanId = "independiente" | "equipo"
+// El tipo vive en `lib/planes.ts`; se vuelve a exportar para no romper a quien lo importaba de acá.
+export type { PlanId }
 
 export interface CalculoDePrecio {
-  /** El plan que corresponde: Independiente con una persona, Equipo con dos o más. */
+  /**
+   * El plan al que corresponde el cálculo: el que se pidió, o, sin plan,
+   * Independiente con una persona y Equipo con dos o más.
+   */
   plan: PlanId
   /** Lo que cuesta el plan, sin adicionales. */
   montoBase: number
@@ -51,23 +57,36 @@ export interface CalculoDePrecio {
 }
 
 /**
- * Cuánto se paga al mes según cuántas personas atienden.
+ * Cuánto se paga al mes según cuántas personas atienden y, si se sabe, el plan
+ * contratado.
  *
+ * Sin plan (`undefined` o `null`: la calculadora de la landing, que sugiere uno
+ * según cuántas personas son):
  * - 1 → Independiente, $9.990.
  * - 2 a 5 → Equipo, $34.990.
  * - 6 o más → Equipo más $4.990 por cada una desde la sexta.
  *
+ * Con plan (el de un negocio que ya lo eligió, `lib/planes.ts`):
+ * - `"independiente"` → siempre $9.990, sin adicionales.
+ * - `"equipo"` → $34.990, que incluye 5 personas, aunque haya una sola; desde
+ *   la sexta suma $4.990 por cada una, como siempre.
+ *
  * Una entrada que no es un entero de 1 o más (0, negativos, decimales, NaN,
- * Infinity) lanza un `RangeError` en vez de redondearse o caer a un plan: un
- * negocio sin nadie que atienda o con "2,5 personas" es un error de quien
- * llama, y un precio inventado en silencio es justo lo que no puede mostrarse.
+ * Infinity), o un plan que no existe, lanza un `RangeError` en vez de
+ * redondearse o caer a un plan: un negocio sin nadie que atienda o con "2,5
+ * personas" es un error de quien llama, y un precio inventado en silencio es
+ * justo lo que no puede mostrarse.
  */
-export function calcularPrecio(personas: number): CalculoDePrecio {
+export function calcularPrecio(personas: number, plan?: PlanId | null): CalculoDePrecio {
   if (!Number.isSafeInteger(personas) || personas < 1) {
     throw new RangeError(`Las personas que atienden tienen que ser un entero de 1 o más; llegó ${personas}.`)
   }
+  if (plan !== undefined && plan !== null && !esPlanValido(plan)) {
+    throw new RangeError(`El plan no existe: ${String(plan)}.`)
+  }
 
-  if (personas === 1) {
+  // Independiente: un solo precio, sin importar cuántas personas lleguen.
+  if (plan === "independiente" || (!plan && personas === 1)) {
     return {
       plan: "independiente",
       montoBase: PRECIO_INDEPENDIENTE,

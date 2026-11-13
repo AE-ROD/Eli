@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest"
+import { vocabularioDe } from "./vocabulario"
 import {
   ESTADOS_ACTIVOS,
   ESTADOS_DE_ATENCION,
@@ -183,6 +184,15 @@ describe("topes del dinero: nada desborda la columna Int de Postgres", () => {
     expect(errorDeCantidadDeLineas(20)).toBeNull()
     expect(errorDeCantidadDeLineas(21)).toBe("Una atención puede tener hasta 20 servicios.")
   })
+
+  it("el tope se dice con la palabra del rubro: prestaciones en una clínica dental", () => {
+    expect(errorDeCantidadDeLineas(21, vocabularioDe("odontologia").palabras)).toBe(
+      "Una atención puede tener hasta 20 prestaciones."
+    )
+    expect(errorDeCantidadDeLineas(21, vocabularioDe("salon").palabras)).toBe("Una atención puede tener hasta 20 servicios.")
+    expect(errorDeCantidadDeLineas(21, vocabularioDe(null).palabras)).toBe("Una atención puede tener hasta 20 servicios.")
+    expect(errorDeCantidadDeLineas(20, vocabularioDe("odontologia").palabras)).toBeNull()
+  })
 })
 
 describe("sePuedeDeshacerLaLlegada", () => {
@@ -239,6 +249,34 @@ describe("idDeProfesional", () => {
 describe("requisitoFaltante", () => {
   it("en espera no pide nada", () => {
     expect(requisitoFaltante("en-espera", [])).toBeNull()
+  })
+
+  it("con las palabras del rubro, con su género: una prestación con su odontólogo, cada una", () => {
+    const dental = vocabularioDe("odontologia").palabras
+    expect(requisitoFaltante("en-atencion", [], dental)).toBe(
+      "Para empezar la atención hace falta al menos una prestación con su odontólogo."
+    )
+    expect(requisitoFaltante("por-cobrar", [], dental)).toBe("Para cobrar hace falta al menos una prestación.")
+    expect(requisitoFaltante("finalizada", [deCarla(8000), deExMiembro(8000)], dental)).toBe(
+      "Hay prestaciones sin odontólogo: indica quién hizo cada una antes de cobrar."
+    )
+    expect(requisitoFaltante("finalizada", [deCarla(-1)], dental)).toBe(
+      "Hay prestaciones con un precio inválido: corrígelo antes de cobrar."
+    )
+    expect(requisitoFaltante("en-atencion", [deCarla(8000)], dental)).toBeNull()
+  })
+
+  it("sin palabras, o con las de un rubro desconocido, el mensaje de siempre", () => {
+    const neutras = vocabularioDe("no-existe").palabras
+    expect(requisitoFaltante("finalizada", [deCarla(8000), deExMiembro(8000)])).toBe(
+      "Hay servicios sin profesional: indica quién hizo cada uno antes de cobrar."
+    )
+    expect(requisitoFaltante("finalizada", [deCarla(8000), deExMiembro(8000)], neutras)).toBe(
+      requisitoFaltante("finalizada", [deCarla(8000), deExMiembro(8000)])
+    )
+    expect(requisitoFaltante("en-atencion", [], neutras)).toBe(
+      "Para empezar la atención hace falta al menos un servicio con su profesional."
+    )
   })
 
   it("para empezar la atención, al menos un servicio con su profesional", () => {

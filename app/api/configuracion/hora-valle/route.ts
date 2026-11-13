@@ -31,6 +31,10 @@ export async function PUT(request: NextRequest) {
   const businessId = actor.businessId
 
   const resultado = await prisma.$transaction(async (tx) => {
+    // Reemplazar es borrar y crear: bajo un candado de las franjas del
+    // negocio, dos guardados a la vez (dos pestañas) no dejan las franjas
+    // duplicadas; el segundo espera y reemplaza lo del primero.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`hora-valle:${businessId}`}))`
     const negocio = await tx.business.update({
       where: { id: businessId },
       data: { horaValleActiva: activa },

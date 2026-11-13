@@ -36,8 +36,42 @@ export type NombreDeModelo =
   | "envioAClientes"
   | "appointmentService"
   | "franjaDeHoraValle"
+  // Clínica dental (migración `20261106120000_etapa_6_odontologia`).
+  | "sillon"
+  | "fichaClinica"
+  | "marcaDental"
+  | "evolucion"
+  | "planDeTratamiento"
+  | "etapaDelPlan"
+  | "prestacionDelPlan"
+  // Prótesis (migración `20261108120000_etapa_7_protesis`).
+  | "laboratorio"
+  | "materialDeProtesis"
+  | "excepcionDeRepartoDeProtesis"
+  | "cambioDeRepartoDeProtesis"
+  | "protesis"
+  | "eventoDeProtesis"
+  | "pagoAlLaboratorio"
+  // Planes y sedes (migración `20261112120000_etapa_9_planes_y_sedes`).
+  | "sede"
+  // Las invitaciones al equipo (`invitaciones`): existen desde antes, pero la
+  // base falsa no las tenía hasta que el trigger de la etapa 9 las mira.
+  | "workerInvitation"
 
-export type Tablas = Record<NombreDeModelo, Registro[]>
+/** Las tablas de la base falsa: todos los modelos, cada uno con sus filas. */
+export type TablasCompletas = Record<NombreDeModelo, Registro[]>
+
+/**
+ * Los modelos que una `Tablas` armada a mano puede no traer (se leen como
+ * vacíos): los tests de antes de la etapa 9 listan las tablas una por una y no
+ * tienen por qué conocer las nuevas. La base falsa, en cambio, siempre las tiene
+ * (`TablasCompletas`).
+ */
+type ModeloOpcional = "sede" | "workerInvitation"
+export type Tablas = Record<Exclude<NombreDeModelo, ModeloOpcional>, Registro[]> & Partial<Record<ModeloOpcional, Registro[]>>
+
+/** Las filas de un modelo; vacías si una `Tablas` armada a mano no lo trae. */
+export const filasDe = (tablas: Tablas, modelo: NombreDeModelo): Registro[] => tablas[modelo] ?? []
 
 export interface Relacion {
   modelo: NombreDeModelo
@@ -52,7 +86,13 @@ export interface Relacion {
 const uno = (modelo: NombreDeModelo, local: string, remoto = "id"): Relacion => ({ modelo, tipo: "uno", local, remoto })
 const muchos = (modelo: NombreDeModelo, remoto: string): Relacion => ({ modelo, tipo: "muchos", local: "id", remoto })
 
-/** Sólo las relaciones que usan los endpoints. Una que falte acá, lanza. */
+/**
+ * Sólo las relaciones que usan los endpoints. Una que falte acá, lanza. Las
+ * de la clínica dental están todas las del esquema (también las inversas en
+ * negocio, miembro, cliente, servicio y cita), para los tests de sus
+ * endpoints. Cada relación a uno que apunta a un `id` es además una FK que la
+ * base revisa al escribir (`verificarClaves` en `base-falsa.ts`).
+ */
 export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
   user: {},
   business: {
@@ -62,6 +102,22 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     services: muchos("service", "businessId"),
     workSchedules: muchos("workSchedule", "businessId"),
     franjasDeHoraValle: muchos("franjaDeHoraValle", "businessId"),
+    sillones: muchos("sillon", "businessId"),
+    fichasClinicas: muchos("fichaClinica", "businessId"),
+    marcasDentales: muchos("marcaDental", "businessId"),
+    evoluciones: muchos("evolucion", "businessId"),
+    planesDeTratamiento: muchos("planDeTratamiento", "businessId"),
+    etapasDelPlan: muchos("etapaDelPlan", "businessId"),
+    prestacionesDelPlan: muchos("prestacionDelPlan", "businessId"),
+    laboratorios: muchos("laboratorio", "businessId"),
+    materialesDeProtesis: muchos("materialDeProtesis", "businessId"),
+    excepcionesDeReparto: muchos("excepcionDeRepartoDeProtesis", "businessId"),
+    cambiosDeReparto: muchos("cambioDeRepartoDeProtesis", "businessId"),
+    protesis: muchos("protesis", "businessId"),
+    eventosDeProtesis: muchos("eventoDeProtesis", "businessId"),
+    pagosAlLaboratorio: muchos("pagoAlLaboratorio", "businessId"),
+    sedes: muchos("sede", "businessId"),
+    invitations: muchos("workerInvitation", "businessId"),
   },
   businessMember: {
     user: uno("user", "userId"),
@@ -69,9 +125,23 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     memberServices: muchos("memberService", "memberId"),
     commissionRates: muchos("commissionRate", "memberId"),
     liquidaciones: muchos("liquidacion", "memberId"),
+    evoluciones: muchos("evolucion", "memberId"),
+    prestacionesDelPlan: muchos("prestacionDelPlan", "memberId"),
+    protesis: muchos("protesis", "memberId"),
+    excepcionesDeReparto: muchos("excepcionDeRepartoDeProtesis", "memberId"),
   },
-  customer: {},
-  service: { commissionRates: muchos("commissionRate", "serviceId") },
+  customer: {
+    // La ficha guarda la FK: del lado del paciente es la relación inversa (1:1).
+    fichaClinica: uno("fichaClinica", "id", "customerId"),
+    marcasDentales: muchos("marcaDental", "customerId"),
+    evoluciones: muchos("evolucion", "customerId"),
+    planesDeTratamiento: muchos("planDeTratamiento", "customerId"),
+    protesis: muchos("protesis", "customerId"),
+  },
+  service: {
+    commissionRates: muchos("commissionRate", "serviceId"),
+    prestacionesDelPlan: muchos("prestacionDelPlan", "serviceId"),
+  },
   appointment: {
     customer: uno("customer", "customerId"),
     member: uno("businessMember", "memberId"),
@@ -80,6 +150,10 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     // La atención guarda la FK: del lado de la cita es la relación inversa.
     visit: uno("visit", "id", "appointmentId"),
     servicios: muchos("appointmentService", "appointmentId"),
+    sillon: uno("sillon", "sillonId"),
+    sede: uno("sede", "sedeId"),
+    evoluciones: muchos("evolucion", "appointmentId"),
+    prestacionesDelPlan: muchos("prestacionDelPlan", "appointmentId"),
   },
   visit: {
     business: uno("business", "businessId"),
@@ -95,9 +169,11 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     service: uno("service", "serviceId"),
     product: uno("producto", "productId"),
     liquidacion: uno("liquidacion", "liquidacionId"),
+    protesis: uno("protesis", "protesisId"),
+    pagoAlLaboratorio: uno("pagoAlLaboratorio", "pagoAlLaboratorioId"),
   },
   visitPayment: { visit: uno("visit", "visitId") },
-  workSchedule: { business: uno("business", "businessId"), member: uno("businessMember", "memberId") },
+  workSchedule: { business: uno("business", "businessId"), member: uno("businessMember", "memberId"), sede: uno("sede", "sedeId") },
   timeBlock: { business: uno("business", "businessId"), member: uno("businessMember", "memberId") },
   memberService: {
     business: uno("business", "businessId"),
@@ -140,6 +216,7 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     business: uno("business", "businessId"),
     service: uno("service", "serviceId"),
     member: uno("businessMember", "memberId"),
+    sede: uno("sede", "sedeId"),
     envios: muchos("envioAClientes", "esperaId"),
   },
   envioAClientes: {
@@ -153,6 +230,74 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     service: uno("service", "serviceId"),
   },
   franjaDeHoraValle: { business: uno("business", "businessId") },
+  sillon: { business: uno("business", "businessId"), citas: muchos("appointment", "sillonId") },
+  fichaClinica: { business: uno("business", "businessId"), customer: uno("customer", "customerId") },
+  marcaDental: { business: uno("business", "businessId"), customer: uno("customer", "customerId") },
+  evolucion: {
+    business: uno("business", "businessId"),
+    customer: uno("customer", "customerId"),
+    member: uno("businessMember", "memberId"),
+    appointment: uno("appointment", "appointmentId"),
+  },
+  planDeTratamiento: {
+    business: uno("business", "businessId"),
+    customer: uno("customer", "customerId"),
+    etapas: muchos("etapaDelPlan", "planId"),
+  },
+  etapaDelPlan: {
+    business: uno("business", "businessId"),
+    plan: uno("planDeTratamiento", "planId"),
+    prestaciones: muchos("prestacionDelPlan", "etapaId"),
+  },
+  prestacionDelPlan: {
+    business: uno("business", "businessId"),
+    etapa: uno("etapaDelPlan", "etapaId"),
+    service: uno("service", "serviceId"),
+    member: uno("businessMember", "memberId"),
+    appointment: uno("appointment", "appointmentId"),
+    protesis: uno("protesis", "protesisId"),
+  },
+  laboratorio: {
+    business: uno("business", "businessId"),
+    materialesPorDefecto: muchos("materialDeProtesis", "laboratorioPorDefectoId"),
+    protesis: muchos("protesis", "laboratorioId"),
+    pagos: muchos("pagoAlLaboratorio", "laboratorioId"),
+  },
+  materialDeProtesis: {
+    business: uno("business", "businessId"),
+    laboratorioPorDefecto: uno("laboratorio", "laboratorioPorDefectoId"),
+    excepciones: muchos("excepcionDeRepartoDeProtesis", "materialId"),
+    protesis: muchos("protesis", "materialId"),
+  },
+  excepcionDeRepartoDeProtesis: {
+    business: uno("business", "businessId"),
+    member: uno("businessMember", "memberId"),
+    material: uno("materialDeProtesis", "materialId"),
+  },
+  cambioDeRepartoDeProtesis: { business: uno("business", "businessId") },
+  protesis: {
+    business: uno("business", "businessId"),
+    customer: uno("customer", "customerId"),
+    member: uno("businessMember", "memberId"),
+    material: uno("materialDeProtesis", "materialId"),
+    laboratorio: uno("laboratorio", "laboratorioId"),
+    eventos: muchos("eventoDeProtesis", "protesisId"),
+    prestacionesDelPlan: muchos("prestacionDelPlan", "protesisId"),
+    abonos: muchos("visitService", "protesisId"),
+  },
+  eventoDeProtesis: { business: uno("business", "businessId"), protesis: uno("protesis", "protesisId") },
+  pagoAlLaboratorio: {
+    business: uno("business", "businessId"),
+    laboratorio: uno("laboratorio", "laboratorioId"),
+    lineas: muchos("visitService", "pagoAlLaboratorioId"),
+  },
+  sede: {
+    business: uno("business", "businessId"),
+    horarios: muchos("workSchedule", "sedeId"),
+    citas: muchos("appointment", "sedeId"),
+    inscripcionesEnEspera: muchos("inscripcionEnEspera", "sedeId"),
+  },
+  workerInvitation: { business: uno("business", "businessId") },
 }
 
 /**
@@ -162,6 +307,9 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
  * como en Postgres.
  */
 export const COMPUESTAS: Partial<Record<NombreDeModelo, string[]>> = {
+  // La sede de una franja del horario (etapa 9, `horarios_laborales_sedeId_businessId_fkey`);
+  // su profesional es FK simple.
+  workSchedule: ["sede"],
   commissionRate: ["member", "service"],
   memberService: ["member", "service"],
   timeBlock: ["member"],
@@ -169,11 +317,32 @@ export const COMPUESTAS: Partial<Record<NombreDeModelo, string[]>> = {
   liquidacion: ["member"],
   movimientoDeLiquidacion: ["member", "visit", "liquidacion"],
   // El servicio de una inscripción es FK compuesta; el profesional, simple.
-  inscripcionEnEspera: ["service"],
+  // La sede (etapa 9) también (`lista_de_espera_sedeId_businessId_fkey`).
+  inscripcionEnEspera: ["service", "sede"],
   // La cita es FK compuesta; el servicio, simple, pero el trigger
   // `cita_servicios_mismo_negocio` exige que sea del mismo negocio: acá se
   // emula igual que una compuesta.
   appointmentService: ["appointment", "service"],
+  // Clínica dental: toda FK a otra fila del negocio es compuesta, también el
+  // sillón de la cita (`citas_sillonId_businessId_fkey`). Sólo `business` es
+  // simple en cada tabla nueva. La sede de la cita, de la etapa 9, también
+  // (`citas_sedeId_businessId_fkey`).
+  appointment: ["sillon", "sede"],
+  fichaClinica: ["customer"],
+  marcaDental: ["customer"],
+  evolucion: ["customer", "member", "appointment"],
+  planDeTratamiento: ["customer"],
+  etapaDelPlan: ["plan"],
+  prestacionDelPlan: ["etapa", "service", "member", "appointment", "protesis"],
+  // Prótesis: como las de la clínica dental, toda FK a otra fila del negocio
+  // es compuesta. Las dos nuevas de `atencion_servicios` (prótesis y pago al
+  // laboratorio) son simples, y el trigger `atencion_servicios_reparto_de_protesis`
+  // exige el negocio de la atención: lo emula `base-falsa.ts`.
+  materialDeProtesis: ["laboratorioPorDefecto"],
+  excepcionDeRepartoDeProtesis: ["member", "material"],
+  protesis: ["customer", "member", "material", "laboratorio"],
+  eventoDeProtesis: ["protesis"],
+  pagoAlLaboratorio: ["laboratorio"],
 }
 
 const OPERADORES_DE_CAMPO = new Set(["equals", "in", "notIn", "not", "gt", "gte", "lt", "lte", "has"])
@@ -200,7 +369,7 @@ function comparable(valor: unknown): number | string {
 export function relacionados(tablas: Tablas, rel: Relacion, registro: Registro): Registro[] {
   const valor = registro[rel.local]
   if (valor === null || valor === undefined) return []
-  return tablas[rel.modelo].filter((otro) => iguales(otro[rel.remoto], valor))
+  return filasDe(tablas, rel.modelo).filter((otro) => iguales(otro[rel.remoto], valor))
 }
 
 // ─── where ───────────────────────────────────────────────────────────────────
@@ -344,22 +513,42 @@ function coincideCampo(guardado: unknown, condicion: unknown, ruta: string): Log
         return operador === "in" ? esta : valor !== null && !esta
       }
       if (valor === null) return false
-      const a = comparable(valor)
-      const b = comparable(argumento)
-      if (operador === "gt") return a > b
-      if (operador === "gte") return a >= b
-      if (operador === "lt") return a < b
-      return a <= b
+      const orden = comparar(valor, argumento)
+      if (operador === "gt") return orden > 0
+      if (operador === "gte") return orden >= 0
+      if (operador === "lt") return orden < 0
+      return orden <= 0
     })
   )
 }
 
 // ─── orderBy ─────────────────────────────────────────────────────────────────
 
-export function ordenar(registros: Registro[], orderBy: unknown): Registro[] {
-  if (orderBy === undefined) return registros
+/**
+ * Los textos se ordenan con una collation, como Postgres (`es`: mayúsculas y
+ * minúsculas juntas, la tilde junto a su letra), no por punto de código como
+ * `<` de JavaScript, que pone "Zoe" antes que "ana" y "Ángela" al final. Los
+ * `gt`/`lt` sobre textos usan la misma, para que un keyset (`orderBy` más
+ * `where: { campo: { gt } }`) recorra todo sin saltarse ni repetir filas.
+ */
+const COLLATION = new Intl.Collator("es")
+
+/** -1, 0 o 1: fechas por instante, números por valor, textos con la collation. */
+function comparar(a: unknown, b: unknown): number {
+  if (typeof a === "string" && typeof b === "string") return Math.sign(COLLATION.compare(a, b))
+  // Prisma acepta una fecha ISO en texto donde va un `DateTime`.
+  const comoFecha = (valor: unknown, otro: unknown) =>
+    otro instanceof Date && typeof valor === "string" && !Number.isNaN(Date.parse(valor)) ? new Date(valor) : valor
+  const x = comparable(comoFecha(a, b))
+  const y = comparable(comoFecha(b, a))
+  if (typeof x !== typeof y) return falla(`no sé comparar ${JSON.stringify(a)} con ${JSON.stringify(b)}`)
+  return x < y ? -1 : x > y ? 1 : 0
+}
+
+/** El criterio de un `orderBy` como función de comparación para `sort`. */
+export function comparador(orderBy: unknown): (x: Registro, y: Registro) => number {
   const criterios = (Array.isArray(orderBy) ? orderBy : [orderBy]) as Condicion[]
-  return [...registros].sort((x, y) => {
+  return (x, y) => {
     for (const criterio of criterios) {
       const entradas = Object.entries(criterio)
       if (entradas.length !== 1) return falla(`orderBy con más de un campo por objeto: ${JSON.stringify(criterio)}`)
@@ -372,11 +561,17 @@ export function ordenar(registros: Registro[], orderBy: unknown): Registro[] {
       // Como Postgres: los null van al final en asc y al principio en desc.
       if (a === null) return sentido === "asc" ? 1 : -1
       if (b === null) return sentido === "asc" ? -1 : 1
-      const resultado = comparable(a) < comparable(b) ? -1 : 1
+      const resultado = comparar(a, b)
+      if (resultado === 0) continue
       return sentido === "asc" ? resultado : -resultado
     }
     return 0
-  })
+  }
+}
+
+export function ordenar(registros: Registro[], orderBy: unknown): Registro[] {
+  if (orderBy === undefined) return registros
+  return [...registros].sort(comparador(orderBy))
 }
 
 // ─── select / include ────────────────────────────────────────────────────────
@@ -385,6 +580,7 @@ export function ordenar(registros: Registro[], orderBy: unknown): Registro[] {
 export function proyectar(tablas: Tablas, modelo: NombreDeModelo, registro: Registro, args: unknown): Registro {
   const opciones = esObjetoPlano(args) ? args : {}
   const salida: Registro = {}
+  if (opciones.select !== undefined && opciones.omit !== undefined) return falla(`select y omit juntos en ${modelo}`)
 
   if (opciones.select !== undefined) {
     if (!esObjetoPlano(opciones.select)) return falla(`select inválido en ${modelo}`)
@@ -403,6 +599,14 @@ export function proyectar(tablas: Tablas, modelo: NombreDeModelo, registro: Regi
   }
 
   for (const [clave, valor] of Object.entries(registro)) salida[clave] = valor
+  // `omit`: todos los campos menos los marcados en `true`.
+  if (opciones.omit !== undefined) {
+    if (!esObjetoPlano(opciones.omit)) return falla(`omit inválido en ${modelo}`)
+    for (const [clave, fuera] of Object.entries(opciones.omit)) {
+      if (!(clave in registro) || RELACIONES[modelo][clave]) return falla(`omit de un campo que no existe: ${modelo}.${clave}`)
+      if (fuera) delete salida[clave]
+    }
+  }
   if (opciones.include !== undefined) {
     if (!esObjetoPlano(opciones.include)) return falla(`include inválido en ${modelo}`)
     for (const [clave, pedido] of Object.entries(opciones.include)) {
@@ -434,19 +638,25 @@ function contar(tablas: Tablas, modelo: NombreDeModelo, registro: Registro, pedi
   return cuentas
 }
 
+/** Lo que entiende un `select`/`include` anidado; `distinct` y `cursor` anidados lanzan en vez de ignorarse. */
+const OPCIONES_A_UNO = ["select", "include", "omit"]
+const OPCIONES_A_MUCHOS = [...OPCIONES_A_UNO, "where", "orderBy", "take", "skip"]
+
 function resolver(tablas: Tablas, rel: Relacion, registro: Registro, pedido: unknown): unknown {
   const args = esObjetoPlano(pedido) ? pedido : undefined
   const otros = relacionados(tablas, rel, registro)
-
-  if (rel.tipo === "uno") {
-    if (args && ("where" in args || "orderBy" in args || "take" in args)) {
-      return falla(`where/orderBy/take en una relación a uno (${rel.modelo})`)
+  const permitidas = rel.tipo === "uno" ? OPCIONES_A_UNO : OPCIONES_A_MUCHOS
+  for (const [clave, valor] of Object.entries(args ?? {})) {
+    if (valor !== undefined && !permitidas.includes(clave)) {
+      return falla(`${clave} no está soportado en una relación a ${rel.tipo} (${rel.modelo})`)
     }
-    return otros[0] ? proyectar(tablas, rel.modelo, otros[0], args) : null
   }
+
+  if (rel.tipo === "uno") return otros[0] ? proyectar(tablas, rel.modelo, otros[0], args) : null
 
   let lista = args?.where === undefined ? otros : otros.filter((otro) => coincide(tablas, rel.modelo, otro, args.where))
   lista = ordenar(lista, args?.orderBy)
+  if (args?.skip !== undefined) lista = lista.slice(args.skip as number)
   if (args?.take !== undefined) lista = lista.slice(0, args.take as number)
   return lista.map((otro) => proyectar(tablas, rel.modelo, otro, args))
 }

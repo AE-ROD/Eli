@@ -1,7 +1,7 @@
 "use client"
 
-import Image from "next/image"
 import { FONDO_FUERTE } from "@/components/comunes/colores-de-modulo"
+import { ImagenConRespaldo } from "@/components/comunes/imagen-con-respaldo"
 import type { ColorDeModulo } from "@/lib/modulos"
 import { cn } from "@/lib/utils"
 
@@ -34,7 +34,7 @@ const tamañosIndicador = {
  */
 const COLORES = Object.keys(FONDO_FUERTE) as ColorDeModulo[]
 
-function obtenerIniciales(nombre: string): string {
+export function obtenerIniciales(nombre: string): string {
   return nombre
     .split(" ")
     .filter(Boolean)
@@ -45,39 +45,45 @@ function obtenerIniciales(nombre: string): string {
 }
 
 /** El mismo nombre da siempre el mismo color. */
-function obtenerColorFondo(nombre: string): string {
+export function obtenerColorFondo(nombre: string): string {
   const indice = nombre.split("").reduce((suma, letra) => suma + letra.charCodeAt(0), 0) % COLORES.length
   return FONDO_FUERTE[COLORES[indice]]
 }
 
 /**
- * La foto de una persona o, sin foto, sus iniciales sobre un pastel. Es
+ * La foto de una persona o, sin foto (o si no carga), sus iniciales sobre un pastel. Es
  * decorativo: siempre va junto al nombre, que es lo que se lee, así que no
  * repite el nombre para el lector de pantalla. Todo es `span` para que pueda
  * ir dentro de un botón (una tarjeta que se abre).
  */
 export function AvatarUsuario({ nombre, imagenUrl, tamaño = "md", enLinea }: PropsDeAvatarUsuario) {
+  const conIniciales = (
+    <span
+      aria-hidden="true"
+      className={cn(
+        tamañosClases[tamaño],
+        obtenerColorFondo(nombre),
+        "flex items-center justify-center rounded-full font-medium tracking-[0.02em] text-navy select-none"
+      )}
+    >
+      {obtenerIniciales(nombre)}
+    </span>
+  )
+
   return (
     <span className="relative block shrink-0">
       {imagenUrl ? (
-        <Image
+        // Si la foto no carga, las iniciales: nunca un círculo vacío o con el ícono de imagen rota.
+        <ImagenConRespaldo
           src={imagenUrl}
           alt=""
           width={64}
           height={64}
           className={cn(tamañosClases[tamaño], "block rounded-full object-cover")}
+          respaldo={conIniciales}
         />
       ) : (
-        <span
-          aria-hidden="true"
-          className={cn(
-            tamañosClases[tamaño],
-            obtenerColorFondo(nombre),
-            "flex items-center justify-center rounded-full font-medium tracking-[0.02em] text-navy select-none"
-          )}
-        >
-          {obtenerIniciales(nombre)}
-        </span>
+        conIniciales
       )}
       {enLinea !== undefined && (
         <span

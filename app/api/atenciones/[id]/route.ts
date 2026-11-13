@@ -79,7 +79,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
       if (datos.lineas !== undefined) {
         // Por `whereDeLineas`: al profesional sólo se le reemplazan las suyas.
-        const reemplazables = whereDeLineas(actor, { visitId: existente.id })
+        // Los abonos de prótesis no se reemplazan acá: se agregan y se quitan
+        // en `/api/atenciones/[id]/abonos`, que mide el saldo de la prótesis.
+        // El pedido no los trae y quedan como estaban.
+        const reemplazables = whereDeLineas(actor, { visitId: existente.id, protesisId: null })
         // Una más que las que devuelve una lectura: si llega, hay líneas que
         // quien edita nunca vio, y el reemplazo se las llevaría.
         const reemplazadas = await tx.visitService.findMany({

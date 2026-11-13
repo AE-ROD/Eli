@@ -92,6 +92,7 @@ describe("ejecutarResenas: a quién le sale", () => {
     expect(deMaria).toMatchObject({
       nombreCliente: "María",
       nombreNegocio: "Salón Uno",
+      rubro: "salon",
       enlaceResenas: ENLACE,
       enlaceDeBaja: expect.stringMatching(/^https:\/\/eli\.test\/baja-de-correos\/cliente\/.+/),
       enlaceDeBajaEnUnClic: expect.stringMatching(/^https:\/\/eli\.test\/api\/correos\/baja-de-cliente\?token=.+/),
@@ -103,6 +104,15 @@ describe("ejecutarResenas: a quién le sale", () => {
       ])
     )
     expect(resumen).toMatchObject({ enviados: 2, fallidos: 0, incompleto: false })
+  })
+
+  it("el correo lleva el rubro de su propio negocio", async () => {
+    await base.prisma.business.update({ where: { id: "n2" }, data: { type: "odontologia" } })
+
+    await m.ejecutarResenas(contexto())
+
+    const rubros = Object.fromEntries(mockEnviarPedirResena.mock.calls.map(([d]) => [d.emailCliente, d.rubro]))
+    expect(rubros).toEqual({ "maria@test": "salon", "dora@test": "odontologia" })
   })
 
   it("sin interruptor no sale, aunque tenga enlace", async () => {

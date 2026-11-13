@@ -166,6 +166,23 @@ describe("POST /api/atenciones/[id]/estado: transiciones", () => {
     expect((await res.json()).estado).toBe("en-atencion")
   })
 
+  it("volver a la sala de espera devuelve la cita de en progreso a confirmada", async () => {
+    await mover(sesiones.encargado, "v-espera", "en-atencion")
+    expect(citaGuardada("cita-confirmada").status).toBe("en-progreso")
+
+    const res = await mover(sesiones.encargado, "v-espera", "en-espera")
+
+    expect(res.status).toBe(200)
+    expect(citaGuardada("cita-confirmada").status).toBe("confirmada")
+  })
+
+  it("y no pisa una cita que se cerró a mano en la agenda", async () => {
+    await mover(sesiones.dueña, "v-espera-de-cita-cancelada", "en-atencion")
+    await mover(sesiones.dueña, "v-espera-de-cita-cancelada", "en-espera")
+
+    expect(citaGuardada("cita-cancelada-a-mano").status).toBe("cancelada")
+  })
+
   it("una cita cancelada a mano en la agenda no se pisa al empezar la atención", async () => {
     await mover(sesiones.dueña, "v-espera-de-cita-cancelada", "en-atencion")
 
@@ -331,4 +348,46 @@ describe("POST /api/atenciones/[id]/estado: topes", () => {
       expect(base.volcado()).toEqual(antes)
     }
   )
+})
+
+describe("POST /api/atenciones/[id]/estado: el mensaje habla el rubro de la sesión", () => {
+  /** La dueña de un negocio de ese rubro: el rubro sale de la sesión, nunca del pedido. */
+  const dueñaDe = (rubro: string) => ({ user: { ...sesiones.dueña.user, rubro } })
+
+  it.each([
+    ["odontologia", "Para empezar la atención hace falta al menos una prestación con su odontólogo."],
+    ["salon", "Para empezar la atención hace falta al menos un servicio con su estilista."],
+    ["barberia", "Para empezar la atención hace falta al menos un servicio con su barbero."],
+    ["salud", "Para empezar la atención hace falta al menos un servicio con su profesional."],
+  ])("rubro %s: lo que falta para empezar", async (rubro, mensaje) => {
+    const res = await mover(dueñaDe(rubro), "v-espera-vacia", "en-atencion")
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe(mensaje)
+  })
+
+  it("sin rubro en la sesión, las palabras de siempre", async () => {
+    const res = await mover(sesiones.dueña, "v-espera-vacia", "en-atencion")
+
+    expect((await res.json()).error).toBe("Para empezar la atención hace falta al menos un servicio con su profesional.")
+  })
+
+  it("una clínica: lo que falta antes de cobrar nombra la prestación y al odontólogo", async () => {
+    const antes = base.volcado()
+
+    const res = await mover(dueñaDe("odontologia"), "v-atencion-ex-miembro", "por-cobrar")
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe("Hay prestaciones sin odontólogo: indica quién hizo cada una antes de cobrar.")
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("una clínica: el tope de líneas dice prestaciones; en un salón, servicios", async () => {
+    const dental = await mover(dueñaDe("odontologia"), "v-compartida-larga", "por-cobrar")
+    const salon = await mover(dueñaDe("salon"), "v-compartida-larga", "por-cobrar")
+
+    expect(dental.status).toBe(400)
+    expect((await dental.json()).error).toBe("Una atención puede tener hasta 20 prestaciones.")
+    expect((await salon.json()).error).toBe("Una atención puede tener hasta 20 servicios.")
+  })
 })

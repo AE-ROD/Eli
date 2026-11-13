@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { actorDeSesion, puedeEditarComisiones } from "@/lib/permisos"
+import { respuestaDeErrorDePlata } from "@/lib/liquidacion"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { autorDelCambio, bloquearMiembro, mismoPorcentaje, pedidoDePorcentajeSchema } from "../../../../_comun"
 
@@ -33,51 +34,57 @@ export async function PUT(
   if (!datos.success) return respuestaDeDatosInvalidos(datos.error)
   const nuevo = datos.data.porcentaje
 
-  const resultado = await prisma.$transaction(async (tx) => {
-    await bloquearMiembro(tx, actor.businessId, id)
-    const [miembro, servicio] = await Promise.all([
-      tx.businessMember.findFirst({
-        where: { id, businessId: actor.businessId },
-        select: { id: true, user: { select: { name: true } } },
-      }),
-      tx.service.findFirst({ where: { id: servicioId, businessId: actor.businessId }, select: { id: true, name: true } }),
-    ])
-    if (!miembro) return { error: "Profesional no encontrado" }
-    if (!servicio) return { error: "Servicio no encontrado" }
+  let resultado
+  try {
+    resultado = await prisma.$transaction(async (tx) => {
+      await bloquearMiembro(tx, actor.businessId, id)
+      const [miembro, servicio] = await Promise.all([
+        tx.businessMember.findFirst({
+          where: { id, businessId: actor.businessId },
+          select: { id: true, user: { select: { name: true } } },
+        }),
+        tx.service.findFirst({ where: { id: servicioId, businessId: actor.businessId }, select: { id: true, name: true } }),
+      ])
+      if (!miembro) return { error: "Profesional no encontrado" }
+      if (!servicio) return { error: "Servicio no encontrado" }
 
-    const actual = await tx.commissionRate.findFirst({
-      where: { businessId: actor.businessId, memberId: miembro.id, serviceId: servicio.id },
-      select: { percent: true },
-    })
-    const anterior = actual?.percent ?? null
-    if (mismoPorcentaje(anterior, nuevo)) return { porcentaje: anterior, cambio: false }
-
-    if (nuevo === null) {
-      await tx.commissionRate.deleteMany({
+      const actual = await tx.commissionRate.findFirst({
         where: { businessId: actor.businessId, memberId: miembro.id, serviceId: servicio.id },
+        select: { percent: true },
       })
-    } else {
-      await tx.commissionRate.upsert({
-        where: { memberId_serviceId: { memberId: miembro.id, serviceId: servicio.id } },
-        create: { businessId: actor.businessId, memberId: miembro.id, serviceId: servicio.id, percent: nuevo },
-        update: { percent: nuevo },
+      const anterior = actual?.percent ?? null
+      if (mismoPorcentaje(anterior, nuevo)) return { porcentaje: anterior, cambio: false }
+
+      if (nuevo === null) {
+        await tx.commissionRate.deleteMany({
+          where: { businessId: actor.businessId, memberId: miembro.id, serviceId: servicio.id },
+        })
+      } else {
+        await tx.commissionRate.upsert({
+          where: { memberId_serviceId: { memberId: miembro.id, serviceId: servicio.id } },
+          create: { businessId: actor.businessId, memberId: miembro.id, serviceId: servicio.id, percent: nuevo },
+          update: { percent: nuevo },
+        })
+      }
+      await tx.commissionChange.create({
+        data: {
+          businessId: actor.businessId,
+          memberId: miembro.id,
+          memberName: miembro.user.name,
+          scope: "service",
+          serviceId: servicio.id,
+          serviceName: servicio.name,
+          previousPercent: anterior,
+          newPercent: nuevo,
+          ...(await autorDelCambio(tx, actor.businessId)),
+        },
       })
-    }
-    await tx.commissionChange.create({
-      data: {
-        businessId: actor.businessId,
-        memberId: miembro.id,
-        memberName: miembro.user.name,
-        scope: "service",
-        serviceId: servicio.id,
-        serviceName: servicio.name,
-        previousPercent: anterior,
-        newPercent: nuevo,
-        ...(await autorDelCambio(tx, actor.businessId)),
-      },
+      return { porcentaje: nuevo, cambio: true }
     })
-    return { porcentaje: nuevo, cambio: true }
-  })
+  } catch (error) {
+    // Una carrera (el profesional o el servicio se borró entretanto) es 404/409, no 500.
+    return respuestaDeErrorDePlata(error, "cambiando el % de un profesional en un servicio")
+  }
 
   if ("error" in resultado) return NextResponse.json({ error: resultado.error }, { status: 404 })
   return NextResponse.json(resultado)

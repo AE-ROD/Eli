@@ -19,6 +19,7 @@ const negocio = {
   name: "Peluquería Sol",
   slug: "peluqueria-sol",
   timezone: "America/Santiago",
+  type: "salon",
   createdAt: new Date("2026-10-20T15:00:00Z"),
   pruebaTerminaEl: new Date("2026-10-27T15:00:00Z"),
   recibeCorreosDePrueba: true,
@@ -81,6 +82,18 @@ describe("mandarCorreoDePrueba: el candado de CorreoDeCuenta", () => {
     expect(usuarioDelTokenDeBaja(token)).toBe("usuario-1")
   })
 
+  it("el correo lleva el rubro del negocio, para que hable con sus palabras", async () => {
+    const { mandarCorreoDePrueba, SELECCION_PARA_CORREO } = await import("./enviar-correo-de-prueba")
+
+    await mandarCorreoDePrueba(negocio, consejo)
+    await mandarCorreoDePrueba({ ...negocio, id: "negocio-2", type: "odontologia" }, consejo)
+
+    expect(mockEnviarCorreoDePrueba.mock.calls[0][1]).toMatchObject({ rubro: "salon" })
+    expect(mockEnviarCorreoDePrueba.mock.calls[1][1]).toMatchObject({ rubro: "odontologia" })
+    // La consulta de verdad tiene que traerlo: el negocio de este test se arma a mano.
+    expect(SELECCION_PARA_CORREO).toMatchObject({ type: true })
+  })
+
   it("con la fila ya existente (P2002) no envía: 'ya-enviado'", async () => {
     const { mandarCorreoDePrueba } = await import("./enviar-correo-de-prueba")
     prismaMock.correoDeCuenta.create.mockRejectedValueOnce(choqueDeUnico())
@@ -123,6 +136,18 @@ describe("mandarCorreoDePrueba: el candado de CorreoDeCuenta", () => {
     expect(await mandarCorreoDePrueba(negocio, consejo)).toBe("fallido")
     expect(mockEnviarCorreoDePrueba).not.toHaveBeenCalled()
     expect(prismaMock.correoDeCuenta.deleteMany).toHaveBeenCalled()
+  })
+
+  it("en producción sin NEXTAUTH_URL no manda enlaces a localhost: no envía y libera la fila (el cron reintenta)", async () => {
+    const { mandarCorreoDePrueba } = await import("./enviar-correo-de-prueba")
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    vi.stubEnv("NEXTAUTH_URL", "")
+    vi.stubEnv("NODE_ENV", "production")
+
+    expect(await mandarCorreoDePrueba(negocio, consejo)).toBe("fallido")
+    expect(mockEnviarCorreoDePrueba).not.toHaveBeenCalled()
+    expect(prismaMock.correoDeCuenta.deleteMany).toHaveBeenCalled()
+    vi.unstubAllEnvs()
   })
 })
 

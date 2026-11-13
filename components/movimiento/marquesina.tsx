@@ -1,7 +1,7 @@
 "use client"
 
 import { motion, useInView, type Variants } from "framer-motion"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { Pause, Play } from "lucide-react"
 import { ChipDePalabra } from "@/components/comunes/chip-de-palabra"
 import { cn } from "@/lib/utils"
@@ -55,6 +55,26 @@ interface PropsDeMarquesina {
   palabras: readonly string[]
   /** El nombre de la lista para el lector de pantalla. */
   etiqueta: string
+  /**
+   * Hacia dónde se desplazan las palabras. Por defecto, `izquierda`. Dos
+   * marquesinas en sentidos opuestos, una encima de otra, es el cierre de la
+   * landing.
+   */
+  sentido?: "izquierda" | "derecha"
+  /**
+   * La pausa, cuando la lleva quien usa la marquesina (un `BotonDePausa` que
+   * detiene varias cosas a la vez). Con esto la marquesina no muestra su
+   * propio botón. Sin esto, lo muestra y guarda ella la pausa.
+   */
+  pausada?: boolean
+  /**
+   * Cómo se dibuja cada palabra. Por defecto, un `ChipDePalabra` (la serif
+   * sobre una píldora blanca). Sin elementos que se enfoquen: es una lista de
+   * palabras.
+   */
+  ficha?: (palabra: string, orden: number) => ReactNode
+  /** Sin el achique hacia los bordes: todas las palabras del mismo tamaño. */
+  sinEscala?: boolean
   className?: string
 }
 
@@ -73,18 +93,32 @@ interface PropsDeMarquesina {
  *
  * Con movimiento reducido no se desplaza: las palabras quedan quietas y
  * enteras, en varias filas.
+ *
+ * Por defecto avanza hacia la izquierda y lleva su botón de pausa; `sentido`
+ * la da vuelta y `pausada` deja la pausa en manos de quien la usa.
  */
-export function Marquesina({ palabras, etiqueta, className }: PropsDeMarquesina) {
+export function Marquesina({
+  palabras,
+  etiqueta,
+  sentido = "izquierda",
+  pausada: pausadaDeAfuera,
+  ficha,
+  sinEscala = false,
+  className,
+}: PropsDeMarquesina) {
   const contenedorRef = useRef<HTMLDivElement>(null)
   const pistaRef = useRef<HTMLDivElement>(null)
   // Fuera del estado a propósito: cambia en cada cuadro y no tiene que repintar React.
   const desplazamientoRef = useRef(0)
   const [conCursor, setConCursor] = useState(false)
-  const [pausada, setPausada] = useState(false)
+  const [pausadaPropia, setPausadaPropia] = useState(false)
+  const conPausaDeAfuera = pausadaDeAfuera !== undefined
+  const pausada = pausadaDeAfuera ?? pausadaPropia
   const enPantalla = useInView(contenedorRef, { margin: "100px 0px" })
   const reducido = useCoincideMedia("(prefers-reduced-motion: reduce)")
   const enMarcha = enPantalla && !conCursor && !pausada && !reducido
   const porCopia = palabras.length
+  const haciaLaDerecha = sentido === "derecha"
 
   useEffect(() => {
     const contenedor = contenedorRef.current
@@ -101,11 +135,16 @@ export function Marquesina({ palabras, etiqueta, className }: PropsDeMarquesina)
     let medidas = medir(contenedor, enLaPista, porCopia)
 
     const pintar = () => {
-      const desplazamiento = desplazamientoRef.current
-      pista.style.transform = `translate3d(${-desplazamiento}px, 0, 0)`
+      // Hacia la derecha, la pista arranca corrida una copia a la izquierda y
+      // vuelve hacia el cero: así siempre hay palabras a los dos lados.
+      const corrimiento = haciaLaDerecha
+        ? desplazamientoRef.current - medidas.anchoDeCopia
+        : -desplazamientoRef.current
+      pista.style.transform = `translate3d(${corrimiento}px, 0, 0)`
+      if (sinEscala) return
       const mitad = Math.max(1, medidas.centroDelContenedor)
       enLaPista.forEach((palabra, indice) => {
-        const centro = (medidas.centros[indice] ?? 0) - desplazamiento
+        const centro = (medidas.centros[indice] ?? 0) + corrimiento
         const distancia = Math.min(1, Math.abs(centro - medidas.centroDelContenedor) / mitad)
         // Cuadrática: cerca del centro casi no cambia y el achique se nota hacia los bordes.
         const escala = 1 - (1 - ESCALA_EN_EL_BORDE) * distancia * distancia
@@ -139,7 +178,7 @@ export function Marquesina({ palabras, etiqueta, className }: PropsDeMarquesina)
       window.cancelAnimationFrame(cuadro)
       alCambiarDeTamano.disconnect()
     }
-  }, [enMarcha, reducido, porCopia])
+  }, [enMarcha, reducido, porCopia, haciaLaDerecha, sinEscala])
 
   return (
     <div className={className}>
@@ -165,7 +204,7 @@ export function Marquesina({ palabras, etiqueta, className }: PropsDeMarquesina)
                 {palabras.map((palabra, orden) => (
                   <li key={palabra} data-palabra="" className="mr-3 shrink-0 motion-reduce:mx-1.5">
                     <motion.span className="block" variants={ENTRADA} custom={orden}>
-                      <ChipDePalabra>{palabra}</ChipDePalabra>
+                      {ficha ? ficha(palabra, orden) : <ChipDePalabra>{palabra}</ChipDePalabra>}
                     </motion.span>
                   </li>
                 ))}
@@ -180,22 +219,25 @@ export function Marquesina({ palabras, etiqueta, className }: PropsDeMarquesina)
         contenido de una sección, y fuera de la máscara, que lo desvanecería.
         Toma el color del texto de alrededor, así sirve sobre navy y sobre
         crema. Con movimiento reducido no hace falta: la fila ya está quieta.
+        Tampoco cuando la pausa la lleva quien usa la marquesina.
       */}
-      <div className="flex justify-end px-5 md:px-12 motion-reduce:hidden">
-        <button
-          type="button"
-          aria-label="Pausar el movimiento de las palabras"
-          aria-pressed={pausada}
-          onClick={() => setPausada((antes) => !antes)}
-          className="grid size-11 cursor-pointer place-items-center rounded-full bg-current/10 transition-colors duration-150 ease-suave hover:bg-current/20 anillo-foco"
-        >
-          {pausada ? (
-            <Play aria-hidden="true" strokeWidth={1.75} className="size-4" />
-          ) : (
-            <Pause aria-hidden="true" strokeWidth={1.75} className="size-4" />
-          )}
-        </button>
-      </div>
+      {!conPausaDeAfuera && (
+        <div className="flex justify-end px-5 md:px-12 motion-reduce:hidden">
+          <button
+            type="button"
+            aria-label="Pausar el movimiento de las palabras"
+            aria-pressed={pausada}
+            onClick={() => setPausadaPropia((antes) => !antes)}
+            className="grid size-11 cursor-pointer place-items-center rounded-full bg-current/10 transition-colors duration-150 ease-suave hover:bg-current/20 anillo-foco"
+          >
+            {pausada ? (
+              <Play aria-hidden="true" strokeWidth={1.75} className="size-4" />
+            ) : (
+              <Pause aria-hidden="true" strokeWidth={1.75} className="size-4" />
+            )}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

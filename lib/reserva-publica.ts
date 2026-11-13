@@ -5,8 +5,12 @@
  * (qué horas se aceptan), con la misma regla para que nunca den distinto.
  */
 
+import { al, concordar, del, el, ese, este, pronombreDe } from "@/lib/concordancia"
 import { horaAMinutos } from "@/lib/horario-dia"
+import { palabrasDeLaReserva } from "@/lib/palabras-de-la-reserva"
+import { RUBRO_DENTAL } from "@/lib/rubros"
 import { aE164Chile } from "@/lib/telefono"
+import { conMayuscula } from "@/lib/vocabulario"
 import { diaDeLaSemana, diasEntre, esFechaCalendario, fechaYMinutosEn, instanteEn } from "@/lib/zona-horaria"
 
 /**
@@ -101,12 +105,23 @@ export const AVISO_DIA_SIN_ATENCION = "El día que habías elegido no tiene aten
  * Si la hora `hora` ("HH:MM") de `fecha` ya pasó en el reloj de la zona. La
  * hora en curso cuenta como pasada: a las 10:30 ya no se reserva a las 10:30.
  * Es la regla con la que `disponibilidad` siempre filtró las horas de hoy.
+ *
+ * Hoy se compara el instante en que se guardaría la cita (`instanteEn`), no
+ * la hora de pared: la noche en que el reloj retrocede (Santiago, de las
+ * 24:00 a las 23:00), las 23:30 ocurren dos veces y la cita se guarda en la
+ * primera. Pasada esa primera, ya no se ofrece aunque el reloj vuelva a
+ * marcar las 23:10.
  */
 export function yaPasoLaHora(fecha: string, hora: string, ahora: Date, zona: string): boolean {
   const hoy = fechaYMinutosEn(ahora, zona)
   const dias = diasEntre(hoy.fecha, fecha)
   if (dias !== 0) return dias < 0
-  return horaAMinutos(hora) <= hoy.minutos
+  try {
+    return instanteEn(fecha, hora, zona).getTime() <= ahora.getTime()
+  } catch {
+    // Una hora que no se puede leer: la regla de siempre, con la hora de pared.
+    return horaAMinutos(hora) <= hoy.minutos
+  }
 }
 
 /**
@@ -126,16 +141,114 @@ export function quedaSinCambiosPorElEnlace(fecha: string, hora: string, zona: st
   }
 }
 
-/** Lo que se dice antes de confirmar cuando la hora ya está dentro del plazo (QA#8). */
-export function avisoSinCambiosPorElEnlace(plazoHoras: number): string {
-  const plazo = `${plazoHoras} ${plazoHoras === 1 ? "hora" : "horas"}`
-  return `Tu hora es en menos de ${plazo}: una vez confirmada, no podrás cancelarla ni cambiarla por el enlace. Si lo necesitas, tendrás que contactar al local.`
+/**
+ * "hora" y "horas" del plazo: son horas del reloj, no la reserva, y no cambian
+ * con el rubro.
+ */
+const horasDelPlazo = (plazoHoras: number) => `${plazoHoras} ${plazoHoras === 1 ? "hora" : "horas"}`
+
+/**
+ * Lo que se dice antes de confirmar cuando la hora ya está dentro del plazo
+ * (QA#8). `rubro` (`Business.type`) pone las palabras del negocio: "Tu hora es
+ * en menos de 24 horas: una vez confirmada, no podrás cancelarla ni cambiarla
+ * por el enlace. Si lo necesitas, tendrás que contactar al salón." Sin rubro, el
+ * texto de siempre ("al local").
+ */
+export function avisoSinCambiosPorElEnlace(plazoHoras: number, rubro?: string | null): string {
+  const { hora, local } = palabrasDeLaReserva(rubro)
+  const confirmada = concordar("confirmado", hora)
+  const lo = pronombreDe(hora)
+  return `Tu ${hora.singular} es en menos de ${horasDelPlazo(plazoHoras)}: una vez ${confirmada}, no podrás cancelar${lo} ni cambiar${lo} por el enlace. Si lo necesitas, tendrás que contactar ${al(local)}.`
 }
 
 /** Lo mismo, en la pantalla de reserva confirmada: en vez de "Gestiona tu cita acá". */
-export function avisoSinCambiosDespuesDeReservar(plazoHoras: number): string {
-  const plazo = `${plazoHoras} ${plazoHoras === 1 ? "hora" : "horas"}`
-  return `Tu hora es en menos de ${plazo}, así que no se puede cancelar ni cambiar por el enlace. Si lo necesitas, contacta directamente al local.`
+export function avisoSinCambiosDespuesDeReservar(plazoHoras: number, rubro?: string | null): string {
+  const { hora, local } = palabrasDeLaReserva(rubro)
+  return `Tu ${hora.singular} es en menos de ${horasDelPlazo(plazoHoras)}, así que no se puede cancelar ni cambiar por el enlace. Si lo necesitas, contacta directamente ${al(local)}.`
+}
+
+// ─── Clínica dental: primera vez y urgencia ──────────────────────────────────
+//
+// Sólo en una clínica dental (`esRubroDental(Business.type)`). En cualquier
+// otro rubro la reserva es la de siempre: `primeraVez` se ignora y ningún
+// servicio es urgencia, aunque la columna diga otra cosa. La duración y si es
+// urgencia los decide el servidor (disponibilidad, confirmar y el enlace para
+// reagendar), con estas mismas funciones; la página sólo las muestra.
+
+/** Los minutos que suma la primera vez en la clínica: para abrir la ficha. */
+export const MINUTOS_DE_PRIMERA_VEZ = 15
+
+/**
+ * Lo que dice la reserva junto a "¿Es tu primera consulta en la clínica?": "En
+ * la primera consulta sumamos 15 minutos para abrir tu ficha." La palabra
+ * sale del rubro (`primeraVez`); sólo la ve quien reserva en una clínica dental.
+ */
+export function textoDePrimeraVez(rubro: string | null | undefined): string {
+  const { primeraVez } = palabrasDeLaReserva(rubro)
+  return `En ${el(primeraVez)} sumamos ${MINUTOS_DE_PRIMERA_VEZ} minutos para abrir tu ficha.`
+}
+
+/**
+ * Cuánto dura la reserva entera: la suma de los servicios
+ * (`resumenDeLaReserva`) y, en una clínica dental y si es la primera vez del
+ * paciente, `MINUTOS_DE_PRIMERA_VEZ` más. Con la misma cuenta se ofrecen las
+ * horas y se aceptan: una hora en que caben 45 minutos puede no tener 60.
+ */
+export function duracionDeLaReserva(
+  duracionDeLosServicios: number,
+  { clinicaDental, primeraVez }: { clinicaDental: boolean; primeraVez: boolean }
+): number {
+  return duracionDeLosServicios + (clinicaDental && primeraVez ? MINUTOS_DE_PRIMERA_VEZ : 0)
+}
+
+/** Si la reserva es una urgencia: en una clínica dental, alguno de los servicios elegidos está marcado como urgencia. */
+export function esReservaDeUrgencia(clinicaDental: boolean, servicios: readonly { esUrgencia?: boolean | null }[]): boolean {
+  return clinicaDental && servicios.some((servicio) => servicio.esUrgencia === true)
+}
+
+/** Si `fecha` ("AAAA-MM-DD") es hoy en el reloj de la zona. Una urgencia sólo se reserva para hoy. */
+export function esHoyEn(fecha: string, ahora: Date, zona: string): boolean {
+  return fechaYMinutosEn(ahora, zona).fecha === fecha
+}
+
+/**
+ * El 400 de `confirmar` (y del enlace para reagendar) con una urgencia para
+ * otro día: "…elige una hora de hoy. Para otro día, elige otro motivo." La
+ * palabra de lo que se elige sale del rubro.
+ */
+export function mensajeDeUrgenciaSoloHoy(rubro: string | null | undefined): string {
+  const { servicioDeLaReserva } = palabrasDeLaReserva(rubro)
+  return `Las urgencias se atienden el mismo día: elige una hora de hoy. Para otro día, elige ${concordar("otro", servicioDeLaReserva)} ${servicioDeLaReserva.singular}.`
+}
+
+/** Cuando hoy no queda ninguna hora para una urgencia: "…Llama a la clínica para que te orienten." */
+export function mensajeDeUrgenciaSinHoras(rubro: string | null | undefined): string {
+  const { negocio } = palabrasDeLaReserva(rubro)
+  return `Hoy ya no quedan horas de urgencia para reservar por acá. Llama ${al(negocio)} para que te orienten.`
+}
+
+/*
+ * La urgencia es sólo de la clínica dental: las respuestas de la API (que no
+ * leen el rubro para decir esto, porque ya saben que es una clínica) usan las
+ * palabras de la clínica.
+ */
+export const MENSAJE_URGENCIA_SOLO_HOY = mensajeDeUrgenciaSoloHoy(RUBRO_DENTAL)
+export const MENSAJE_URGENCIA_SIN_HORAS = mensajeDeUrgenciaSinHoras(RUBRO_DENTAL)
+
+/**
+ * El aviso de la reserva de una clínica con un servicio de urgencia activo, con
+ * su nombre: "Elige «Urgencia dental» como motivo y te mostramos horas de hoy."
+ * Sin rubro, el de la clínica: es el único que lo muestra.
+ */
+export function avisoDeUrgencia(
+  nombreDelServicio: string,
+  rubro: string | null | undefined = RUBRO_DENTAL
+): { destacado: string; resto: string } {
+  const { servicioDeLaReserva } = palabrasDeLaReserva(rubro)
+  return {
+    destacado: "¿Tienes dolor fuerte?",
+    resto: `Elige «${nombreDelServicio}» como ${servicioDeLaReserva.singular} y te mostramos horas de hoy.`,
+  }
 }
 
 // ─── Topes anti-abuso ────────────────────────────────────────────────────────
@@ -168,9 +281,66 @@ export const MAX_RESERVAS_FUTURAS_POR_CONTACTO = 3
  */
 export const MAX_RESERVAS_PUBLICAS_POR_DIA = 50
 
-export const MENSAJE_TOPE_POR_CONTACTO = `Ya tienes ${MAX_RESERVAS_FUTURAS_POR_CONTACTO} reservas pendientes en este negocio. Para pedir otra, contáctalo directamente.`
-export const MENSAJE_TOPE_POR_NEGOCIO =
-  "Este negocio recibió demasiadas reservas en línea en las últimas horas. Intenta más tarde o contáctalo directamente."
+/**
+ * El 429 del tope por contacto: "Ya tienes 3 reservas pendientes en este
+ * negocio. Para pedir otra, contáctalo directamente." `rubro` (`Business.type`,
+ * de la base) pone el negocio: "en este salón… contáctalo", "en esta clínica…
+ * contáctala". "Reservas" es la palabra de siempre en todos los rubros.
+ */
+export function mensajeDeTopePorContacto(rubro?: string | null): string {
+  const { negocio } = palabrasDeLaReserva(rubro)
+  return `Ya tienes ${MAX_RESERVAS_FUTURAS_POR_CONTACTO} reservas pendientes en ${este(negocio)}. Para pedir otra, contácta${pronombreDe(negocio)} directamente.`
+}
+
+/**
+ * El 429 del tope por negocio: "Este negocio recibió demasiadas reservas en
+ * línea en las últimas horas. Intenta más tarde o contáctalo directamente."
+ * Con el negocio del rubro: "Esta clínica recibió… o contáctala…".
+ */
+export function mensajeDeTopePorNegocio(rubro?: string | null): string {
+  const { negocio } = palabrasDeLaReserva(rubro)
+  return `${conMayuscula(este(negocio))} recibió demasiadas reservas en línea en las últimas horas. Intenta más tarde o contácta${pronombreDe(negocio)} directamente.`
+}
+
+/** Los dos topes con las palabras de un rubro desconocido: los textos de siempre. */
+export const MENSAJE_TOPE_POR_CONTACTO = mensajeDeTopePorContacto(null)
+export const MENSAJE_TOPE_POR_NEGOCIO = mensajeDeTopePorNegocio(null)
+
+// ─── Los rechazos de la reserva, con las palabras del rubro ──────────────────
+//
+// Lo que ve quien reserva cuando `confirmar` o `disponibilidad` dicen que no.
+// `rubro` es el `Business.type` que la ruta leyó por el `slug`, nunca algo que
+// mande el navegador. Un rubro desconocido, `null` o ausente da los textos de
+// siempre ("Servicio no disponible", "Ese profesional…", "del negocio").
+
+/** El 404 de un servicio que no es del negocio o no está activo: "Servicio no disponible" / "Motivo no disponible". */
+export function mensajeServicioNoDisponible(rubro?: string | null): string {
+  const { servicioDeLaReserva } = palabrasDeLaReserva(rubro)
+  return `${conMayuscula(servicioDeLaReserva.singular)} no ${concordar("disponible", servicioDeLaReserva)}`
+}
+
+/** Lo mismo al consultar las horas: "Servicio no encontrado" / "Motivo no encontrado". */
+export function mensajeServicioNoEncontrado(rubro?: string | null): string {
+  const { servicioDeLaReserva } = palabrasDeLaReserva(rubro)
+  return `${conMayuscula(servicioDeLaReserva.singular)} no ${concordar("encontrado", servicioDeLaReserva)}`
+}
+
+/**
+ * El 404 de quien no está disponible para lo elegido: "Ese profesional no está
+ * disponible para este servicio", "Esa estilista no está disponible para este
+ * servicio", "Ese odontólogo no está disponible para este motivo". Es el mismo
+ * para quien no existe, es de otro negocio o no hace el servicio.
+ */
+export function mensajeProfesionalNoDisponible(rubro?: string | null): string {
+  const { profesional, servicioDeLaReserva } = palabrasDeLaReserva(rubro)
+  return `${conMayuscula(ese(profesional))} no está ${concordar("disponible", profesional)} para ${este(servicioDeLaReserva)}`
+}
+
+/** El 409 de una hora que no es de atención: "Ese horario está fuera de la atención del negocio. Elige otra hora." / "…de la clínica…". */
+export function mensajeFueraDeLaAtencion(rubro?: string | null): string {
+  const { negocio } = palabrasDeLaReserva(rubro)
+  return `Ese horario está fuera de la atención ${del(negocio)}. Elige otra hora.`
+}
 
 /** El origen con que `confirmar` crea las citas. */
 export const ORIGEN_RESERVA_PUBLICA: OrigenDeCita = "reserva-publica"

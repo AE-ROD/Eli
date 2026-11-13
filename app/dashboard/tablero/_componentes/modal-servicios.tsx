@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
+import { useId, useState, type FormEvent } from "react"
 import { TriangleAlert } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import {
   filaDesdeLinea,
@@ -11,8 +12,11 @@ import {
   type FilaDeServicio,
   type LineaPedida,
 } from "@/lib/acciones-del-tablero"
-import type { Atencion, Catalogo } from "../_datos"
+import { esAbono, nombreDelAbono, type Atencion, type Catalogo } from "../_datos"
+import { frasesDelTablero } from "../_frases"
 import { Aviso } from "@/components/panel/aviso"
+import { formatearMonto } from "@/lib/dinero"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { EditorDeServicios, filaVacia } from "./editor-de-servicios"
 
 /**
@@ -21,7 +25,10 @@ import { EditorDeServicios, filaVacia } from "./editor-de-servicios"
  * si no, una fila vacía.
  */
 function filasIniciales(atencion: Atencion, catalogo: Catalogo): FilaDeServicio[] {
-  if (atencion.lineas.length > 0) return atencion.lineas.map(filaDesdeLinea)
+  // Los abonos de prótesis no son servicios: no se editan acá ni viajan en el
+  // PUT (el servidor los conserva; mandados como servicio darían 400).
+  const servicios = atencion.lineas.filter((linea) => !esAbono(linea))
+  if (servicios.length > 0) return servicios.map(filaDesdeLinea)
   if (atencion.reserva) return [filaDesdeReserva(atencion.reserva, catalogo, "fila-inicial")]
   return [filaVacia(catalogo, "fila-inicial")]
 }
@@ -58,14 +65,23 @@ export function ModalServicios({
   onGuardar,
   onCerrar,
 }: PropsDeModalServicios) {
+  // "Sala de espera" y "Prestaciones" en una clínica dental.
+  const palabras = vocabularioDe(useRubroDelPanel()).palabras
+  const frases = frasesDelTablero(palabras)
   // Las filas se toman una sola vez, al abrir: la recarga del tablero cada
   // 30 segundos no pisa lo que se está escribiendo. Si la atención cambió
   // entretanto, el servidor responde 409 y el tablero se recarga.
   const [filas, setFilas] = useState<FilaDeServicio[]>(() => filasIniciales(atencion, catalogo))
   const [intentoGuardar, setIntentoGuardar] = useState(false)
+  const idDeLosAbonos = useId()
+  const abonos = atencion.lineas.filter(esAbono)
 
-  const validacion = lineasDesdeFilas(filas, eligeProfesional)
+  const validacion = lineasDesdeFilas(filas, eligeProfesional, palabras)
   const errores = intentoGuardar && !validacion.ok ? validacion.errores : {}
+  // El requisito se explica al abrir; en cuanto las filas escritas ya alcanzan
+  // para guardar, deja de aparecer, para no decir que falta lo que ya se puso.
+  // Si el servidor igual lo rechaza, el tablero lo vuelve a poner.
+  const requisitoPendiente = requisito && !(validacion.ok && validacion.lineas.length > 0) ? requisito : null
 
   const guardar = (evento: FormEvent<HTMLFormElement>) => {
     evento.preventDefault()
@@ -75,17 +91,17 @@ export function ModalServicios({
 
   return (
     <MarcoDeModal
-      antetitulo="Tablero"
-      titulo={`Servicios de ${atencion.cliente.nombre}`}
+      antetitulo={frases.titulo}
+      titulo={frases.servicios.deLaAtencion(atencion.cliente.nombre)}
       descripcion={
-        requisito ? (
+        requisitoPendiente ? (
           // Por qué se abrió: lo que le falta a la atención para avanzar.
           <span className="mt-3 flex items-start gap-2.5 rounded-campo bg-naranja-suave px-4 py-3 font-medium text-navy squircle">
             <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" strokeWidth={2} />
-            <span className="min-w-0">{requisito}</span>
+            <span className="min-w-0">{requisitoPendiente}</span>
           </span>
         ) : eligeProfesional ? undefined : (
-          "Ves y cambias solo tus servicios; los de tus compañeros no se tocan. Quedan a tu nombre."
+          frases.servicios.soloLosTuyos
         )
       }
       ancho="lg"
@@ -100,12 +116,33 @@ export function ModalServicios({
           puedeConfigurarServicios={puedeConfigurarServicios}
           errores={errores}
           deshabilitado={guardando}
+          lineasAparte={abonos.length}
           onCambiar={setFilas}
         />
 
+        {/* Los abonos se quitan desde la tarjeta: guardar los servicios no los toca. */}
+        {abonos.length > 0 && (
+          <section aria-labelledby={idDeLosAbonos} className="rounded-[20px] bg-superficie p-4 text-sm squircle">
+            <h3 id={idDeLosAbonos} className="font-semibold">
+              {abonos.length === 1 ? "Abono de prótesis" : "Abonos de prótesis"}
+            </h3>
+            <ul className="mt-2 space-y-1">
+              {abonos.map((linea) => (
+                <li key={linea.id} className="flex items-baseline justify-between gap-3">
+                  <span className="min-w-0 break-words">{nombreDelAbono(linea.servicio)}</span>
+                  <span className="shrink-0 tabular-nums">{formatearMonto(linea.precio)}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-[13px] text-texto-2">
+              {frases.servicios.losAbonosNoSeEditan}
+            </p>
+          </section>
+        )}
+
         {intentoGuardar && !validacion.ok && (
           <Aviso tono="error" rol="alert">
-            Revisa los servicios marcados.
+            {frases.servicios.revisaLosMarcados}
           </Aviso>
         )}
         {aviso && (

@@ -21,11 +21,25 @@ const prismaMock = {
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
 
+// `after` de verdad exige estar dentro de un pedido de Next: acá se guardan
+// las tareas y el test las corre cuando quiere ver lo que pasa después.
+const pendientes: (() => unknown)[] = []
+vi.mock("next/server", async (original) => ({
+  ...(await original<typeof import("next/server")>()),
+  after: (tarea: () => unknown) => pendientes.push(tarea),
+}))
+
+/** Corre lo que el endpoint dejó para después de responder. */
+async function despuesDeResponder() {
+  while (pendientes.length) await pendientes.shift()!()
+}
+
 const usuario = { id: "usuario-1", email: "ana@example.com", name: "Ana", password: "hash" }
 
 describe("POST /api/auth/recuperar-contrasena", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    pendientes.length = 0
     mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 4 })
     mockEnviarRecuperacion.mockResolvedValue(null)
     prismaMock.user.findUnique.mockResolvedValue(usuario)
@@ -49,6 +63,7 @@ describe("POST /api/auth/recuperar-contrasena", () => {
     const { POST } = await import("./route")
 
     const res = await POST(pedidoFalso({ email: "ana@example.com" }))
+    await despuesDeResponder()
 
     expect(res.status).toBe(200)
     expect(mockEnviarRecuperacion).toHaveBeenCalledWith(
@@ -63,6 +78,7 @@ describe("POST /api/auth/recuperar-contrasena", () => {
     const { POST } = await import("./route")
 
     const res = await POST(pedidoFalso({ email: "ana@example.com" }))
+    await despuesDeResponder()
 
     expect(res.status).toBe(200)
     const enlace: string = mockEnviarRecuperacion.mock.calls[0][0].enlaceRestablecer
@@ -82,8 +98,11 @@ describe("POST /api/auth/recuperar-contrasena", () => {
     const conCuenta = await POST(pedidoFalso({ email: "ana@example.com" }))
     const cuerpoConCuenta = await conCuenta.json()
 
+    await despuesDeResponder()
+
     prismaMock.user.findUnique.mockResolvedValueOnce(null)
     const sinCuenta = await POST(pedidoFalso({ email: "nadie@example.com" }))
+    await despuesDeResponder()
 
     expect(sinCuenta.status).toBe(conCuenta.status)
     expect(await sinCuenta.json()).toEqual(cuerpoConCuenta)
@@ -98,6 +117,7 @@ describe("POST /api/auth/recuperar-contrasena", () => {
     prismaMock.user.findUnique.mockResolvedValueOnce({ ...usuario, password: "" })
 
     const res = await POST(pedidoFalso({ email: "ana@example.com" }))
+    await despuesDeResponder()
 
     expect(res.status).toBe(200)
     expect(mockEnviarRecuperacion).not.toHaveBeenCalled()
@@ -110,5 +130,71 @@ describe("POST /api/auth/recuperar-contrasena", () => {
 
     expect(res.status).toBe(400)
     expect(prismaMock.user.findUnique).not.toHaveBeenCalled()
+  })
+
+  it.each(["{roto", ""])("un cuerpo que no es JSON (%j) da 400, no 500", async (cuerpo) => {
+    const { POST } = await import("./route")
+
+    const res = await POST(pedidoFalso(cuerpo))
+
+    expect(res.status).toBe(400)
+    expect(pendientes).toHaveLength(0)
+  })
+
+  it("responde antes de buscar la cuenta: ni el cuerpo ni el tiempo dicen si existe", async () => {
+    const { POST } = await import("./route")
+
+    const res = await POST(pedidoFalso({ email: "ana@example.com" }))
+
+    // La respuesta ya salió y todavía no se buscó a nadie ni se mandó nada.
+    expect(res.status).toBe(200)
+    expect(prismaMock.user.findUnique).not.toHaveBeenCalled()
+    expect(mockEnviarRecuperacion).not.toHaveBeenCalled()
+    await despuesDeResponder()
+    expect(mockEnviarRecuperacion).toHaveBeenCalledTimes(1)
+  })
+
+  it("tope por correo de destino, contado por el hash del correo: pasado, responde igual y no manda nada", async () => {
+    const { POST } = await import("./route")
+    mockVerificarLimite.mockImplementation(async (tipo: string) => ({ permitido: tipo !== "recuperacionPorCorreo", restantes: 0 }))
+
+    const res = await POST(pedidoFalso({ email: "ana@example.com" }))
+    await despuesDeResponder()
+
+    expect(res.status).toBe(200)
+    expect(mockVerificarLimite).toHaveBeenCalledWith(
+      "recuperacionPorCorreo",
+      createHash("sha256").update("ana@example.com").digest("hex")
+    )
+    expect(prismaMock.passwordResetToken.create).not.toHaveBeenCalled()
+    expect(mockEnviarRecuperacion).not.toHaveBeenCalled()
+  })
+
+  it("un error al mandar va al log sin el error completo (ni el correo)", async () => {
+    const { POST } = await import("./route")
+    const consola = vi.spyOn(console, "error").mockImplementation(() => {})
+    mockEnviarRecuperacion.mockRejectedValueOnce(Object.assign(new Error("fallo para ana@example.com"), { name: "ErrorDeResend" }))
+
+    await POST(pedidoFalso({ email: "ana@example.com" }))
+    await despuesDeResponder()
+
+    expect(consola).toHaveBeenCalledWith("Error mandando el enlace de recuperar contraseña:", { name: "ErrorDeResend", code: undefined })
+    expect(JSON.stringify(consola.mock.calls)).not.toContain("ana@example.com")
+    consola.mockRestore()
+  })
+
+  it("en producción sin NEXTAUTH_URL no guarda ni manda un enlace a localhost", async () => {
+    const { POST } = await import("./route")
+    const consola = vi.spyOn(console, "error").mockImplementation(() => {})
+    vi.stubEnv("NEXTAUTH_URL", "")
+    vi.stubEnv("NODE_ENV", "production")
+
+    await POST(pedidoFalso({ email: "ana@example.com" }))
+    await despuesDeResponder()
+
+    expect(prismaMock.passwordResetToken.create).not.toHaveBeenCalled()
+    expect(mockEnviarRecuperacion).not.toHaveBeenCalled()
+    vi.unstubAllEnvs()
+    consola.mockRestore()
   })
 })

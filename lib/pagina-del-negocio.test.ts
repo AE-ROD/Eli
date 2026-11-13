@@ -20,6 +20,7 @@ import {
   iniciales,
   mediosParaMostrar,
   normalizarInstagram,
+  primerNombreDelProfesional,
   serviciosPorCategoria,
 } from "./pagina-del-negocio"
 
@@ -150,6 +151,41 @@ describe("iniciales", () => {
     expect(iniciales("  Ñandú   Óscar ")).toBe("ÑÓ")
     expect(iniciales("")).toBe("?")
   })
+
+  it("no cuenta el tratamiento: 'Dra. Camila Rojas' es CR, no DC", () => {
+    expect(iniciales("Dra. Camila Rojas")).toBe("CR")
+    expect(iniciales("Dr. Matías Fuentes")).toBe("MF")
+    expect(iniciales("Doctora Valentina Soto")).toBe("VS")
+    expect(iniciales("Dra. Camila")).toBe("C")
+  })
+
+  it("si todo es tratamiento, queda lo que hay", () => {
+    expect(iniciales("Dra.")).toBe("D")
+    expect(iniciales("Dr. Dra.")).toBe("DD")
+  })
+})
+
+describe("primerNombreDelProfesional", () => {
+  it("salta el tratamiento: el botón dice 'Reservar con Camila', no 'Reservar con Dra.'", () => {
+    expect(primerNombreDelProfesional("Dra. Camila Rojas")).toBe("Camila")
+    expect(primerNombreDelProfesional("Dr. Matías Fuentes")).toBe("Matías")
+    expect(primerNombreDelProfesional("Doctora Valentina Soto")).toBe("Valentina")
+    expect(primerNombreDelProfesional("dr Ignacio Parra")).toBe("Ignacio")
+    expect(primerNombreDelProfesional("Doña Rosa")).toBe("Rosa")
+    expect(primerNombreDelProfesional("Lic. Paz Díaz")).toBe("Paz")
+  })
+
+  it("sin tratamiento devuelve la primera palabra, como antes", () => {
+    expect(primerNombreDelProfesional("Carla Soto")).toBe("Carla")
+    expect(primerNombreDelProfesional("  Nina   Paz ")).toBe("Nina")
+    expect(primerNombreDelProfesional("Dracula Pérez")).toBe("Dracula")
+  })
+
+  it("si es sólo un tratamiento o está vacío, lo devuelve tal cual", () => {
+    expect(primerNombreDelProfesional("Dra.")).toBe("Dra.")
+    expect(primerNombreDelProfesional("Dr. Dra.")).toBe("Dr.")
+    expect(primerNombreDelProfesional("")).toBe("")
+  })
 })
 
 describe("apareceEnLaPagina", () => {
@@ -179,6 +215,18 @@ describe("serviciosPorCategoria", () => {
 
   it("sin servicios no hay grupos", () => {
     expect(serviciosPorCategoria([])).toEqual([])
+  })
+
+  it("una categoría escrita 'Otros' es la de los sin categoría: un solo grupo, al final (no dos títulos iguales)", () => {
+    const servicios = [
+      { id: "1", category: "Otros" },
+      { id: "2", category: "Color" },
+      { id: "3", category: null },
+    ]
+    expect(serviciosPorCategoria(servicios)).toEqual([
+      { categoria: "Color", servicios: [servicios[1]] },
+      { categoria: CATEGORIA_SIN_NOMBRE, servicios: [servicios[0], servicios[2]] },
+    ])
   })
 })
 
@@ -211,6 +259,22 @@ describe("descripcionParaCompartir", () => {
   it("nombra la comuna si la hay", () => {
     expect(descripcionParaCompartir("Salón Ana", "Ñuñoa")).toContain("Salón Ana, en Ñuñoa")
     expect(descripcionParaCompartir("Salón Ana", null)).not.toContain(", en")
+  })
+
+  it("sin rubro, o con uno desconocido, es la de siempre", () => {
+    const deSiempre = "Reserva tu hora en Salón Ana, en Ñuñoa. Mira sus servicios, precios y horarios."
+    expect(descripcionParaCompartir("Salón Ana", "Ñuñoa")).toBe(deSiempre)
+    expect(descripcionParaCompartir("Salón Ana", "Ñuñoa", null)).toBe(deSiempre)
+    expect(descripcionParaCompartir("Salón Ana", "Ñuñoa", "salud")).toBe(deSiempre)
+  })
+
+  it("una clínica ofrece prestaciones; un salón, servicios", () => {
+    expect(descripcionParaCompartir("Clínica Sur", null, "odontologia")).toBe(
+      "Reserva tu hora en Clínica Sur. Mira sus prestaciones, precios y horarios."
+    )
+    expect(descripcionParaCompartir("Salón Ana", null, "salon")).toBe(
+      "Reserva tu hora en Salón Ana. Mira sus servicios, precios y horarios."
+    )
   })
 })
 

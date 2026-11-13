@@ -1,5 +1,7 @@
+import { AsyncLocalStorage } from "node:async_hooks"
 import { vi } from "vitest"
 import { Prisma } from "@prisma/client"
+import { TABLAS_SQL, chequeoQueFalla } from "./chequeos"
 import {
   COMPUESTAS,
   RELACIONES,
@@ -7,37 +9,64 @@ import {
   esObjetoPlano,
   falla,
   iguales,
+  comparador,
   ordenar,
   proyectar,
   type Condicion,
   type NombreDeModelo,
   type Registro,
   type Relacion,
-  type Tablas,
+  type TablasCompletas,
 } from "./consultas-falsas"
 
-export type { NombreDeModelo, Tablas } from "./consultas-falsas"
+export type { NombreDeModelo, Tablas, TablasCompletas } from "./consultas-falsas"
 
 /**
  * Una base en memoria con la forma del cliente de Prisma, para los tests del
  * tablero y de los reportes. Filtra de verdad con el `where` que arma el
  * endpoint (incluidos los filtros por relación de `lib/permisos.ts`), proyecta
- * `select`/`include` con sus `where` anidados, respeta claves foráneas y
- * únicos, y deshace una transacción que lanza. Así un test de aislamiento
- * comprueba lo que la consulta trae, no sólo qué argumento recibió.
+ * `select`/`include` con sus `where` anidados, respeta claves foráneas,
+ * únicos, los triggers y los CHECK de las migraciones (`chequeos.ts`), y
+ * deshace una transacción que lanza. Así un test de aislamiento comprueba lo
+ * que la consulta trae, no sólo qué argumento recibió.
+ *
+ * Transacciones: corren de a una, en orden de llegada (dos en un
+ * `Promise.all` no se pisan; ver "Transacciones" más abajo), y el `tx` que
+ * recibe la función tiene sus propias `$queryRaw`/`$executeRaw`. Un candado
+ * (`FOR UPDATE`, `pg_advisory_xact_lock`) pedido fuera de una transacción, o
+ * con `prisma` en vez del `tx`, lanza: en Postgres no protegería nada.
  *
  * Cómo se leen `where`, `orderBy` y `select` está en `consultas-falsas.ts`,
- * con la misma regla para todo: ante lo que no entiende, lanza (F-018).
+ * con la misma regla para todo: ante lo que no entiende, lanza (F-018). Lo
+ * mismo con las opciones: una que no soporta (o un `where` de único sin
+ * valor, que Prisma rechaza) lanza en vez de ignorarse.
  */
 
 /** Los defaults del esquema: todo campo existe en el registro, aunque sea en null. */
 const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
-  user: () => ({ password: "", correosDesactivados: false, createdAt: new Date(), updatedAt: new Date() }),
+  user: () => ({
+    password: "",
+    correosDesactivados: false,
+    sesionesValidasDesde: null,
+    // La foto de la cuenta (etapa 9, extra f): sin foto hasta que la persona la sube. Sin CHECK en la base.
+    fotoUrl: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
   // `pruebaTerminaEl` y `codigoInvitacion` no tienen default en el esquema: los
   // pone quien crea el negocio, igual que en la base de verdad.
   business: () => ({
     type: "salon",
+    address: null,
+    comuna: null,
+    whatsapp: null,
+    instagram: null,
+    color: null,
+    logoUrl: null,
+    coverUrl: null,
     teamSize: 1,
+    // Default `{}` del esquema: sin medios declarados.
+    mediosDePago: [],
     timezone: "America/Santiago",
     recibeCorreosDePrueba: true,
     enlaceCompartidoAt: null,
@@ -56,6 +85,8 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     filaVirtualActiva: false,
     filaVirtualTope: 15,
     horaValleActiva: false,
+    // Default del esquema (etapa 9): el negocio que nadie pasó a Independiente es Equipo.
+    plan: "equipo",
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
@@ -85,10 +116,12 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
   }),
   service: () => ({
     description: null,
+    category: null,
     duration: 30,
     price: null,
     frecuenciaDias: null,
     excluidoDeHoraValle: false,
+    esUrgencia: false,
     active: true,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -98,6 +131,9 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     status: "pendiente",
     source: "panel",
     confirmacionPorFaltas: false,
+    primeraVez: false,
+    sillonId: null,
+    sedeId: null,
     notes: null,
     clientComments: null,
     price: null,
@@ -107,6 +143,10 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     canceladaPor: null,
     canceladaEn: null,
     reminderSentAt: null,
+    // La comisión congelada de la cita (de antes del tablero): pendiente, los tres en null.
+    commissionPercent: null,
+    commissionAmount: null,
+    commissionAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
@@ -144,9 +184,15 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     commissionCents: null,
     commissionAt: null,
     liquidacionId: null,
+    // El abono de una prótesis (etapa 7): sin prótesis, sin reparto ni pago al laboratorio.
+    protesisId: null,
+    odontologoCents: null,
+    clinicaCents: null,
+    tecnicoCents: null,
+    pagoAlLaboratorioId: null,
   }),
   visitPayment: () => ({ createdAt: new Date() }),
-  workSchedule: () => ({ memberId: null, active: true }),
+  workSchedule: () => ({ memberId: null, active: true, sedeId: null }),
   timeBlock: () => ({ memberId: null, motivo: null, createdById: null, createdAt: new Date() }),
   memberService: () => ({ createdAt: new Date() }),
   commissionRate: () => ({ createdAt: new Date(), updatedAt: new Date() }),
@@ -165,6 +211,8 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
   propinaDeAtencion: () => ({ memberId: null, byOwner: false, liquidacionId: null, createdAt: new Date() }),
   liquidacion: () => ({
     estado: "cerrada",
+    // Default 0 desde `20261108130000_etapa_7b_abonos_de_protesis`.
+    comisionProtesisCents: 0,
     cerradaAt: new Date(),
     pagadaAt: null,
     pagadaPorId: null,
@@ -195,10 +243,91 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     ultimoAvisoAt: null,
     createdAt: new Date(),
     resueltaAt: null,
+    sedeId: null,
   }),
   envioAClientes: () => ({ customerId: null, esperaId: null, enviadoAt: new Date() }),
   appointmentService: () => ({ serviceId: null, price: null, createdAt: new Date() }),
   franjaDeHoraValle: () => ({ createdAt: new Date() }),
+  // Clínica dental. Sin default en el esquema (los pone quien escribe):
+  // `nombre`, `actualizadaPor`, `pieza` y `tipo` de la marca, `texto` y
+  // `autorNombre`, `version` y `creadoPorNombre`, `orden` de etapa y
+  // prestación, `valorCents`.
+  sillon: () => ({ orden: 0, activo: true, createdAt: new Date(), updatedAt: new Date() }),
+  fichaClinica: () => ({
+    fechaNacimiento: null,
+    prevision: null,
+    alergias: null,
+    antecedentes: null,
+    odontogramaActualizadoEn: null,
+    odontogramaActualizadoPor: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
+  marcaDental: () => ({ cara: null, createdAt: new Date() }),
+  evolucion: () => ({ autorUserId: null, memberId: null, appointmentId: null, createdAt: new Date() }),
+  planDeTratamiento: () => ({ vigente: true, createdAt: new Date() }),
+  etapaDelPlan: () => ({
+    estado: "por-aprobar",
+    presentadaEn: null,
+    aprobadaEn: null,
+    aprobadaPorNombre: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
+  prestacionDelPlan: () => ({
+    pieza: null,
+    caras: [],
+    serviceId: null,
+    memberId: null,
+    profesionalNombre: null,
+    estado: "por-agendar",
+    appointmentId: null,
+    realizadaEn: null,
+    protesisId: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
+  // Prótesis. Sin default en el esquema (los pone quien escribe): `nombre`,
+  // `unidad`, `tipos`, `precioCents` y las tres partes del material; en la
+  // prótesis, el diseño, el material copiado, el valor, el reparto y
+  // `creadoPorNombre`; en el evento, `estado` y `autorNombre`.
+  laboratorio: () => ({ contacto: null, activo: true, createdAt: new Date(), updatedAt: new Date() }),
+  materialDeProtesis: () => ({ laboratorioPorDefectoId: null, orden: 0, activo: true, createdAt: new Date(), updatedAt: new Date() }),
+  excepcionDeRepartoDeProtesis: () => ({ createdAt: new Date(), updatedAt: new Date() }),
+  cambioDeRepartoDeProtesis: () => ({
+    memberId: null,
+    memberName: null,
+    anteriorPbOdontologo: null,
+    anteriorPbClinica: null,
+    anteriorPbTecnico: null,
+    nuevoPbOdontologo: null,
+    nuevoPbClinica: null,
+    nuevoPbTecnico: null,
+    createdAt: new Date(),
+  }),
+  protesis: () => ({
+    memberId: null,
+    byOwner: false,
+    pilares: [],
+    zonas: [],
+    laboratorioId: null,
+    laboratorioNombre: null,
+    entregaEstimada: null,
+    tono: null,
+    estado: "impresion",
+    entregadaEn: null,
+    anuladaEn: null,
+    anuladaPorNombre: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
+  eventoDeProtesis: () => ({ autorUserId: null, createdAt: new Date() }),
+  pagoAlLaboratorio: () => ({ pagadoEn: new Date(), anuladoEn: null, anuladoPorNombre: null, createdAt: new Date() }),
+  // Planes y sedes (etapa 9). Sin default en el esquema (los pone quien escribe):
+  // `nombre`, `direccion` y `comuna` de la sede; `email`, `name`, `tokenHash` y
+  // `expiresAt` de la invitación.
+  sede: () => ({ telefono: null, orden: 0, activo: true, createdAt: new Date(), updatedAt: new Date() }),
+  workerInvitation: () => ({ role: "worker", acceptedAt: null, createdAt: new Date() }),
 }
 
 /** Campos `Json` del esquema: aceptan un objeto como valor (cualquier otro objeto es una escritura anidada). */
@@ -213,8 +342,19 @@ const esJson = (modelo: NombreDeModelo, campo: string) => (CAMPOS_JSON[modelo] ?
 interface Unico {
   campos: string[]
   si?: (registro: Registro) => boolean
+  /** Los campos que el índice compara con `lower(...)`: sin distinguir mayúsculas. */
+  sinMayusculas?: string[]
 }
 const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
+  // `usuarios_email_key`: el email se guarda ya normalizado (`normalizarEmail`,
+  // migración `20261020120200_emails_normalizados`), así que el índice es
+  // sobre la columna tal cual, sin `lower(...)`.
+  user: [{ campos: ["email"] }],
+  // `negocios_slug_key`, `negocios_userId_key` (un negocio por cuenta) y
+  // `negocios_codigoInvitacion_key`.
+  business: [{ campos: ["slug"] }, { campos: ["userId"] }, { campos: ["codigoInvitacion"] }],
+  // `miembros_negocio_businessId_userId_key`: una membresía por negocio y cuenta.
+  businessMember: [{ campos: ["businessId", "userId"] }],
   visit: [{ campos: ["appointmentId"] }, { campos: ["filaTokenHash"] }, { campos: ["businessId", "filaFecha", "filaNumero"] }],
   appointment: [{ campos: ["manageTokenHash"] }],
   commissionRate: [{ campos: ["memberId", "serviceId"] }],
@@ -226,6 +366,32 @@ const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
   // El candado de los mensajes a clientes.
   envioAClientes: [{ campos: ["businessId", "tipo", "referencia"] }],
   appointmentService: [{ campos: ["appointmentId", "orden"] }],
+  // Clínica dental. Los `[id, businessId]` que habilitan las FK compuestas no
+  // hacen falta: `id` ya es único.
+  sillon: [{ campos: ["businessId", "nombre"] }],
+  fichaClinica: [{ campos: ["customerId", "businessId"] }],
+  marcaDental: [
+    // `odontograma_marcas_customerId_pieza_cara_key`: con `cara` null no
+    // choca, así que es "una marca por cara".
+    { campos: ["customerId", "pieza", "cara"] },
+    // `odontograma_marcas_marca_de_pieza_key`, parcial: la misma marca de
+    // pieza (cara null) no se repite en la pieza.
+    { campos: ["customerId", "pieza", "tipo"], si: (registro) => registro.cara === null || registro.cara === undefined },
+  ],
+  planDeTratamiento: [
+    { campos: ["customerId", "version"] },
+    // `planes_de_tratamiento_vigente_key`, parcial: un solo plan vigente por paciente.
+    { campos: ["customerId"], si: (registro) => registro.vigente === true },
+  ],
+  // Prótesis. `laboratorios_businessId_nombre_key` y
+  // `materiales_de_protesis_businessId_nombre_key` son sobre `lower("nombre")`.
+  laboratorio: [{ campos: ["businessId", "nombre"], sinMayusculas: ["nombre"] }],
+  materialDeProtesis: [{ campos: ["businessId", "nombre"], sinMayusculas: ["nombre"] }],
+  excepcionDeRepartoDeProtesis: [{ campos: ["memberId", "materialId"] }],
+  // Planes y sedes. `sedes_businessId_nombre_key`: nombre único por negocio.
+  // `invitaciones_token_key`: el sha256 del token (la columna se llama `token`).
+  sede: [{ campos: ["businessId", "nombre"] }],
+  workerInvitation: [{ campos: ["tokenHash"] }],
 }
 
 /**
@@ -240,7 +406,7 @@ const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
  * también `businessId`, que es NOT NULL; ver `CommissionChange` en el
  * esquema), así que SET NULL anula sólo el campo de la lista.
  *
- * Quedan fuera las tablas que la base falsa no tiene: `invitaciones`,
+ * Quedan fuera las tablas que la base falsa no tiene:
  * `conversaciones`/`mensajes`, `tokens_recuperacion`, `correos_de_cuenta` y
  * `solicitudes_de_soporte` (ésta con SET NULL a negocio y usuario).
  *
@@ -263,6 +429,7 @@ const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]
     ["workSchedule", "businessId", "cascade"], // horarios_laborales_businessId_fkey
     ["appointment", "businessId", "cascade"], // citas_businessId_fkey
     ["businessMember", "businessId", "cascade"], // miembros_negocio_businessId_fkey
+    ["workerInvitation", "businessId", "cascade"], // invitaciones_businessId_fkey
     ["commissionRate", "businessId", "cascade"], // porcentajes_comision_businessId_fkey
     ["commissionChange", "businessId", "cascade"], // cambios_comision_businessId_fkey
     ["visit", "businessId", "cascade"], // atenciones_businessId_fkey
@@ -278,6 +445,21 @@ const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]
     ["envioAClientes", "businessId", "cascade"], // envios_a_clientes_businessId_fkey
     ["appointmentService", "businessId", "cascade"], // cita_servicios_businessId_fkey
     ["franjaDeHoraValle", "businessId", "cascade"], // franjas_de_hora_valle_businessId_fkey
+    ["sillon", "businessId", "cascade"], // sillones_businessId_fkey
+    ["fichaClinica", "businessId", "cascade"], // fichas_clinicas_businessId_fkey
+    ["marcaDental", "businessId", "cascade"], // odontograma_marcas_businessId_fkey
+    ["evolucion", "businessId", "cascade"], // evoluciones_businessId_fkey
+    ["planDeTratamiento", "businessId", "cascade"], // planes_de_tratamiento_businessId_fkey
+    ["etapaDelPlan", "businessId", "cascade"], // etapas_del_plan_businessId_fkey
+    ["prestacionDelPlan", "businessId", "cascade"], // prestaciones_del_plan_businessId_fkey
+    ["laboratorio", "businessId", "cascade"], // laboratorios_businessId_fkey
+    ["materialDeProtesis", "businessId", "cascade"], // materiales_de_protesis_businessId_fkey
+    ["excepcionDeRepartoDeProtesis", "businessId", "cascade"], // excepciones_de_reparto_de_protesis_businessId_fkey
+    ["cambioDeRepartoDeProtesis", "businessId", "cascade"], // cambios_de_reparto_de_protesis_businessId_fkey
+    ["protesis", "businessId", "cascade"], // protesis_businessId_fkey
+    ["eventoDeProtesis", "businessId", "cascade"], // eventos_de_protesis_businessId_fkey
+    ["pagoAlLaboratorio", "businessId", "cascade"], // pagos_al_laboratorio_businessId_fkey
+    ["sede", "businessId", "cascade"], // sedes_businessId_fkey
   ],
   businessMember: [
     ["workSchedule", "memberId", "cascade"], // horarios_laborales_memberId_fkey
@@ -291,11 +473,20 @@ const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]
     ["liquidacion", "memberId", "no action"], // liquidaciones_memberId_businessId_fkey
     ["movimientoDeLiquidacion", "memberId", "no action"], // movimientos_de_liquidacion_memberId_businessId_fkey
     ["inscripcionEnEspera", "memberId", "set null"], // lista_de_espera_memberId_fkey
+    ["evolucion", "memberId", "no action"], // evoluciones_memberId_businessId_fkey
+    ["prestacionDelPlan", "memberId", "no action"], // prestaciones_del_plan_memberId_businessId_fkey
+    ["excepcionDeRepartoDeProtesis", "memberId", "cascade"], // excepciones_de_reparto_de_protesis_memberId_businessId_fkey
+    ["protesis", "memberId", "no action"], // protesis_memberId_businessId_fkey
   ],
   customer: [
     ["appointment", "customerId", "set null"], // citas_patientId_fkey
     ["visit", "customerId", "set null"], // atenciones_customerId_fkey
     ["envioAClientes", "customerId", "set null"], // envios_a_clientes_customerId_fkey
+    ["fichaClinica", "customerId", "cascade"], // fichas_clinicas_customerId_businessId_fkey
+    ["marcaDental", "customerId", "cascade"], // odontograma_marcas_customerId_businessId_fkey
+    ["evolucion", "customerId", "cascade"], // evoluciones_customerId_businessId_fkey
+    ["planDeTratamiento", "customerId", "cascade"], // planes_de_tratamiento_customerId_businessId_fkey
+    ["protesis", "customerId", "cascade"], // protesis_customerId_businessId_fkey
   ],
   service: [
     ["appointment", "serviceId", "set null"], // citas_serviceId_fkey
@@ -305,10 +496,13 @@ const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]
     ["memberService", "serviceId", "cascade"], // member_services_serviceId_businessId_fkey
     ["inscripcionEnEspera", "serviceId", "cascade"], // lista_de_espera_serviceId_businessId_fkey
     ["appointmentService", "serviceId", "set null"], // cita_servicios_serviceId_fkey
+    ["prestacionDelPlan", "serviceId", "no action"], // prestaciones_del_plan_serviceId_businessId_fkey
   ],
   appointment: [
     ["visit", "appointmentId", "set null"], // atenciones_appointmentId_fkey
     ["appointmentService", "appointmentId", "cascade"], // cita_servicios_appointmentId_businessId_fkey
+    ["evolucion", "appointmentId", "no action"], // evoluciones_appointmentId_businessId_fkey
+    ["prestacionDelPlan", "appointmentId", "no action"], // prestaciones_del_plan_appointmentId_businessId_fkey
   ],
   // Borrar una atención que esperaba (`app/api/atenciones/[id]`) se lleva sus
   // líneas, pagos y propinas. Es también la excepción de los triggers de
@@ -331,6 +525,50 @@ const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]
   inscripcionEnEspera: [
     ["envioAClientes", "esperaId", "set null"], // envios_a_clientes_esperaId_fkey
   ],
+  // Clínica dental (`20261106120000_etapa_6_odontologia`). Lo que cuelga del
+  // paciente, del negocio, del plan y de la etapa es CASCADE; lo que apunta a
+  // citas, sillones, servicios y miembros es NO ACTION (P2003): el endpoint
+  // desvincula antes de borrar, o responde 409. Los sillones no se borran
+  // (se desactivan), pero la FK está igual.
+  sillon: [
+    ["appointment", "sillonId", "no action"], // citas_sillonId_businessId_fkey
+  ],
+  planDeTratamiento: [
+    ["etapaDelPlan", "planId", "cascade"], // etapas_del_plan_planId_businessId_fkey
+  ],
+  etapaDelPlan: [
+    ["prestacionDelPlan", "etapaId", "cascade"], // prestaciones_del_plan_etapaId_businessId_fkey
+  ],
+  // Prótesis (`20261108120000_etapa_7_protesis`). Lo que cuelga del negocio,
+  // del paciente, de la prótesis y (la excepción) del miembro y del material
+  // es CASCADE; lo que apunta a una prótesis, un material, un laboratorio o un
+  // pago desde otra tabla es NO ACTION. Nada de esto se borra desde un
+  // endpoint (se desactiva o se anula), pero las FK están igual.
+  protesis: [
+    ["visitService", "protesisId", "no action"], // atencion_servicios_protesisId_fkey
+    ["prestacionDelPlan", "protesisId", "no action"], // prestaciones_del_plan_protesisId_businessId_fkey
+    ["eventoDeProtesis", "protesisId", "cascade"], // eventos_de_protesis_protesisId_businessId_fkey
+  ],
+  pagoAlLaboratorio: [
+    ["visitService", "pagoAlLaboratorioId", "no action"], // atencion_servicios_pagoAlLaboratorioId_fkey
+  ],
+  laboratorio: [
+    ["materialDeProtesis", "laboratorioPorDefectoId", "no action"], // materiales_de_protesis_laboratorioPorDefectoId_businessId_fkey
+    ["protesis", "laboratorioId", "no action"], // protesis_laboratorioId_businessId_fkey
+    ["pagoAlLaboratorio", "laboratorioId", "no action"], // pagos_al_laboratorio_laboratorioId_businessId_fkey
+  ],
+  materialDeProtesis: [
+    ["excepcionDeRepartoDeProtesis", "materialId", "cascade"], // excepciones_de_reparto_de_protesis_materialId_businessId_fkey
+    ["protesis", "materialId", "no action"], // protesis_materialId_businessId_fkey
+  ],
+  // Sedes (`20261112120000_etapa_9_planes_y_sedes`). Las franjas y las
+  // inscripciones de la lista de espera se van con su sede; las citas la
+  // frenan (NO ACTION, P2003): una sede con citas no se borra, se desactiva.
+  sede: [
+    ["workSchedule", "sedeId", "cascade"], // horarios_laborales_sedeId_businessId_fkey
+    ["inscripcionEnEspera", "sedeId", "cascade"], // lista_de_espera_sedeId_businessId_fkey
+    ["appointment", "sedeId", "no action"], // citas_sedeId_businessId_fkey
+  ],
 }
 
 /** Consultas crudas que la base falsa acepta: sólo candados, que en memoria no tienen nada que ordenar. */
@@ -349,9 +587,72 @@ function errorDeTrigger(mensaje: string) {
   return new Prisma.PrismaClientUnknownRequestError(`23514: ${mensaje}`, { clientVersion: "base-falsa" })
 }
 
+/**
+ * Una fila que no cumple un CHECK (`chequeos.ts`): Postgres responde
+ * `check_violation` (23514) con el nombre de la restricción, y Prisma lo trae
+ * como error desconocido, igual que el de un trigger (en una consulta cruda
+ * sería P2010, pero la base falsa no escribe con SQL crudo).
+ */
+function revisarChequeos(modelo: NombreDeModelo, fila: Registro) {
+  const fallido = chequeoQueFalla(modelo, fila)
+  if (!fallido) return
+  throw new Prisma.PrismaClientUnknownRequestError(
+    `23514: new row for relation "${TABLAS_SQL[modelo]}" violates check constraint "${fallido.nombre}"`,
+    { clientVersion: "base-falsa" }
+  )
+}
+
+/**
+ * Lo que Prisma valida antes de mandar la consulta: un `where` de
+ * `findUnique`, `update`, `upsert` o `delete` tiene que nombrar un único con
+ * valor. Con `{ id: undefined }` Prisma lanza; filtrar por el resto traería
+ * la primera fila que calce, y un test pasaría por la razón equivocada.
+ */
+function exigirDondeUnico(modelo: NombreDeModelo, operacion: string, where: unknown) {
+  if (!esObjetoPlano(where)) return falla(`${modelo}.${operacion} sin where`)
+  const definido = (valor: unknown) => valor !== undefined
+  const simples = new Set(["id", ...(UNICOS[modelo] ?? []).filter((u) => u.campos.length === 1 && !u.si).map((u) => u.campos[0])])
+  const nombraUnico = Object.entries(where).some(([clave, valor]) => {
+    if (simples.has(clave)) return definido(valor) && valor !== null
+    // Un único compuesto, como lo arma Prisma: `memberId_serviceId: { memberId, serviceId }`.
+    return clave.includes("_") && esObjetoPlano(valor) && Object.values(valor).every((parte) => definido(parte) && parte !== null)
+  })
+  if (!nombraUnico) {
+    throw new Prisma.PrismaClientValidationError(
+      `Invalid \`prisma.${modelo}.${operacion}()\` invocation: Argument \`where\` needs at least one unique argument with a value (${JSON.stringify(where)})`,
+      { clientVersion: "base-falsa" }
+    )
+  }
+}
+
+/** Las opciones que entiende cada operación; cualquier otra lanza en vez de ignorarse en silencio. */
+const OPCIONES_DE_LECTURA = ["where", "select", "include", "omit"]
+const OPCIONES: Record<string, string[]> = {
+  findFirst: [...OPCIONES_DE_LECTURA, "orderBy", "take", "skip", "distinct", "cursor"],
+  findMany: [...OPCIONES_DE_LECTURA, "orderBy", "take", "skip", "distinct", "cursor"],
+  findUnique: OPCIONES_DE_LECTURA,
+  count: ["where"],
+  create: ["data", "select", "include", "omit"],
+  createMany: ["data"],
+  update: ["where", "data", "select", "include", "omit"],
+  upsert: ["where", "create", "update", "select", "include", "omit"],
+  delete: OPCIONES_DE_LECTURA,
+  updateMany: ["where", "data"],
+  deleteMany: ["where"],
+}
+function exigirOpciones(modelo: NombreDeModelo, operacion: string, args: unknown) {
+  if (args === undefined) return
+  if (!esObjetoPlano(args)) return falla(`${modelo}.${operacion}: argumentos inválidos`)
+  for (const [clave, valor] of Object.entries(args)) {
+    if (valor !== undefined && !OPCIONES[operacion].includes(clave)) {
+      return falla(`${modelo}.${operacion}: la opción ${clave} no está soportada`)
+    }
+  }
+}
+
 const distintos = (a: unknown, b: unknown) => !iguales(a ?? null, b ?? null)
 
-function tablasVacias(): Tablas {
+function tablasVacias(): TablasCompletas {
   return {
     user: [],
     business: [],
@@ -376,6 +677,22 @@ function tablasVacias(): Tablas {
     workSchedule: [],
     timeBlock: [],
     memberService: [],
+    sillon: [],
+    fichaClinica: [],
+    marcaDental: [],
+    evolucion: [],
+    planDeTratamiento: [],
+    etapaDelPlan: [],
+    prestacionDelPlan: [],
+    laboratorio: [],
+    materialDeProtesis: [],
+    excepcionDeRepartoDeProtesis: [],
+    cambioDeRepartoDeProtesis: [],
+    protesis: [],
+    eventoDeProtesis: [],
+    pagoAlLaboratorio: [],
+    sede: [],
+    workerInvitation: [],
   }
 }
 
@@ -390,7 +707,7 @@ export function crearBaseFalsa() {
    * Una copia de las tablas que sirve para deshacer una sentencia. Es
    * profunda porque el SET NULL de un borrado cambia filas que ya estaban.
    */
-  const instantanea = (): Tablas => structuredClone(tablas)
+  const instantanea = (): TablasCompletas => structuredClone(tablas)
 
   /**
    * Una sentencia DELETE entera, como la corre Postgres: cada FK es un
@@ -443,7 +760,7 @@ export function crearBaseFalsa() {
   /**
    * El UPDATE que hace un `ON DELETE SET NULL`: cada fila pasa por sus
    * triggers `BEFORE UPDATE` (los de `atencion_servicios` sí se disparan con
-   * la cascada) y queda con el campo en null. No revisa las demás FK de la
+   * la cascada) y por sus CHECK, y queda con el campo en null. No revisa las demás FK de la
    * fila (Postgres sólo revisa las columnas que cambian, y un null no se
    * revisa) ni toca `updatedAt`, que lo pone Prisma y no la base.
    */
@@ -451,6 +768,7 @@ export function crearBaseFalsa() {
     for (const registro of registros) {
       const nuevo = { ...registro, [campo]: null }
       ANTES_DE_ACTUALIZAR[modelo]?.(registro, nuevo)
+      revisarChequeos(modelo, nuevo)
       Object.assign(registro, nuevo)
     }
   }
@@ -486,15 +804,17 @@ export function crearBaseFalsa() {
         throw errorDePrisma("P2003", `FK compuesta rota: ${modelo}.${clave} → ${String(valor)} es de otro negocio`)
       }
     }
-    for (const { campos, si } of UNICOS[modelo] ?? []) {
+    for (const { campos, si, sinMayusculas = [] } of UNICOS[modelo] ?? []) {
       if (campos.some((campo) => registro[campo] === null || registro[campo] === undefined)) continue
       if (si && !si(registro)) continue
+      const comparable = (fila: Registro, campo: string) =>
+        sinMayusculas.includes(campo) && typeof fila[campo] === "string" ? (fila[campo] as string).toLowerCase() : fila[campo]
       const choca = tablas[modelo].some(
         (otro) =>
           otro !== registro &&
           otro !== anterior &&
           (!si || si(otro)) &&
-          campos.every((campo) => iguales(otro[campo], registro[campo]))
+          campos.every((campo) => iguales(comparable(otro, campo), comparable(registro, campo)))
       )
       if (choca) throw errorDePrisma("P2002", `Unique constraint failed: ${modelo}.${campos.join("_")}`)
     }
@@ -585,9 +905,362 @@ export function crearBaseFalsa() {
     throw errorDeTrigger(`atencion_servicios ${String(viejo.id)}: la línea está en una liquidación; no se borra`)
   }
 
-  /** Los triggers `BEFORE INSERT` de la base de verdad que la falsa reproduce. */
+  /**
+   * El trigger `evoluciones_inmutables` (migración
+   * `20261106120000_etapa_6_odontologia`): una evolución no se edita. Se
+   * compara la fila entera menos `memberId` y `appointmentId`, y esas dos sólo
+   * pueden pasar a null (desvincular la cita o el miembro, para poder
+   * borrarlos después). Escribir lo mismo que ya tiene no es un cambio.
+   */
+  function evolucionInmutable(viejo: Registro, nuevo: Registro) {
+    const desvinculables = ["memberId", "appointmentId"]
+    const campos = new Set([...Object.keys(viejo), ...Object.keys(nuevo)])
+    const cambia = [...campos].some((campo) => !desvinculables.includes(campo) && distintos(nuevo[campo], viejo[campo]))
+    const apuntaAOtro = desvinculables.some(
+      (campo) => nuevo[campo] !== null && nuevo[campo] !== undefined && distintos(nuevo[campo], viejo[campo])
+    )
+    if (cambia || apuntaAOtro) {
+      throw errorDeTrigger(`evoluciones ${String(viejo.id)}: una evolución no se edita; se anota una nueva`)
+    }
+  }
+
+  /**
+   * El trigger `evoluciones_no_se_borran` (misma migración): una evolución no
+   * se borra mientras existan su paciente y su negocio. Sin alguno de los dos
+   * es la cascada de borrar el paciente o el negocio entero, y pasa (como
+   * `lineaLiquidadaNoSeBorra`). Igual que el de verdad, mira las dos filas:
+   * un test que siembra evoluciones sin su negocio no ve el rechazo.
+   */
+  function evolucionNoSeBorra(viejo: Registro) {
+    const existe = (modelo: NombreDeModelo, id: unknown) => tablas[modelo].some((fila) => fila.id === id)
+    if (existe("customer", viejo.customerId) && existe("business", viejo.businessId)) {
+      throw errorDeTrigger(`evoluciones ${String(viejo.id)}: una evolución no se borra`)
+    }
+  }
+
+  // ─── Triggers de las prótesis (`20261108120000_etapa_7_protesis`; `protesis_congelada` como la reemplazó `20261109120000_etapa_7c_protesis_por_tipo`) ─
+
+  /** Las columnas de una prótesis que se pueden mover (`protesis_congelada`). */
+  const MOVIBLES_DE_PROTESIS = [
+    "estado",
+    "laboratorioId",
+    "laboratorioNombre",
+    "entregaEstimada",
+    "tono",
+    "entregadaEn",
+    "anuladaEn",
+    "anuladaPorNombre",
+    "memberId",
+    "updatedAt",
+  ]
+  /** Los pasos según el tipo (la removible y la total, con rodete y enfilado; el resto, con una prueba). */
+  const pasosDeProtesis = (tipo: unknown) =>
+    tipo === "removible" || tipo === "total" ? ["impresion", "rodete", "enfilado", "entregada"] : ["impresion", "prueba", "entregada"]
+
+  /** `distintos`, también para listas (piezas, pilares, zonas): Postgres compara el arreglo entero. */
+  const distintosOListas = (a: unknown, b: unknown) =>
+    Array.isArray(a) || Array.isArray(b) ? JSON.stringify(a ?? null) !== JSON.stringify(b ?? null) : distintos(a, b)
+
+  /**
+   * El trigger `protesis_congelada`: lo copiado al crear la prótesis no
+   * cambia (se compara la fila entera menos lo movible); `memberId` sólo pasa
+   * a null; una entregada o anulada no cambia más (tampoco el tono); el
+   * estado sólo avanza por los pasos de su tipo (o pasa a anulada).
+   */
+  function protesisCongelada(viejo: Registro, nuevo: Registro) {
+    const id = String(viejo.id)
+    const campos = new Set([...Object.keys(viejo), ...Object.keys(nuevo)])
+    if ([...campos].some((campo) => !MOVIBLES_DE_PROTESIS.includes(campo) && distintosOListas(nuevo[campo], viejo[campo]))) {
+      throw errorDeTrigger(`protesis ${id}: el diseño, el material, el valor y el reparto no cambian; se anula y se crea otra`)
+    }
+    if (nuevo.memberId !== null && nuevo.memberId !== undefined && distintos(nuevo.memberId, viejo.memberId)) {
+      throw errorDeTrigger(`protesis ${id}: la tratante no cambia`)
+    }
+    const cierre = MOVIBLES_DE_PROTESIS.filter((campo) => campo !== "memberId" && campo !== "updatedAt")
+    if ((viejo.estado === "entregada" || viejo.estado === "anulada") && cierre.some((campo) => distintos(nuevo[campo], viejo[campo]))) {
+      throw errorDeTrigger(`protesis ${id}: una prótesis entregada o anulada ya no cambia`)
+    }
+    if (distintos(nuevo.estado, viejo.estado) && nuevo.estado !== "anulada") {
+      const pasos = pasosDeProtesis(viejo.tipo)
+      const antes = pasos.indexOf(String(viejo.estado))
+      const despues = pasos.indexOf(String(nuevo.estado))
+      if (antes < 0 || despues < 0 || despues <= antes) throw errorDeTrigger(`protesis ${id}: el seguimiento sólo avanza por los pasos de su tipo`)
+    }
+  }
+
+  /** El trigger `protesis_no_se_borra`: sólo en la cascada de su paciente o su negocio, como `evolucionNoSeBorra`. */
+  function protesisNoSeBorra(viejo: Registro) {
+    const existe = (modelo: NombreDeModelo, id: unknown) => tablas[modelo].some((fila) => fila.id === id)
+    if (existe("customer", viejo.customerId) && existe("business", viejo.businessId)) {
+      throw errorDeTrigger(`protesis ${String(viejo.id)}: una prótesis no se borra; se anula`)
+    }
+  }
+
+  /** El trigger `eventos_de_protesis_inmutables`, en el UPDATE: un paso del seguimiento no se edita. */
+  function eventoNoSeEdita(viejo: Registro) {
+    throw errorDeTrigger(`eventos_de_protesis ${String(viejo.id)}: un paso del seguimiento no se edita`)
+  }
+
+  /**
+   * El mismo trigger, en el DELETE: sólo en la cascada de su prótesis, del
+   * paciente de esa prótesis o de su negocio. Desde
+   * `20261110120000_etapa_8_endurecer_protesis` mira los tres, como
+   * `protesisNoSeBorra`: al borrar un negocio, Postgres puede correr la
+   * cascada de los eventos antes que la de las prótesis.
+   */
+  function eventoNoSeBorra(viejo: Registro) {
+    const protesis = tablas.protesis.find((fila) => fila.id === viejo.protesisId)
+    const existe = (modelo: NombreDeModelo, id: unknown) => tablas[modelo].some((fila) => fila.id === id)
+    if (protesis && existe("customer", protesis.customerId) && existe("business", viejo.businessId)) {
+      throw errorDeTrigger(`eventos_de_protesis ${String(viejo.id)}: un paso del seguimiento no se borra`)
+    }
+  }
+
+  /**
+   * El trigger `atencion_servicios_reparto_de_protesis`: la prótesis y el pago
+   * al laboratorio de una línea tienen que ser del negocio de su atención (la
+   * línea no tiene `businessId`); un reparto congelado no cambia; una línea
+   * pagada no pasa a otro pago. Sin atención (cascada del negocio), pasa.
+   * Desde la etapa 7b, además, sólo se le paga al laboratorio de la prótesis
+   * y si la prótesis está entregada. Desde la 7d
+   * (`20261109130000_etapa_7d_protesis_entrega_con_laboratorio`), un abono es
+   * del mismo paciente que su atención, va a nombre de la tratante de la
+   * prótesis (`memberId` a null sigue permitido: desvincular) y sólo entra a
+   * una liquidación con la prótesis entregada y a nombre de la tratante.
+   * Desde la etapa 8 (`20261110120000_etapa_8_endurecer_protesis`), una
+   * prótesis anulada no recibe abonos nuevos (ni una línea pasa a ella).
+   * `viejo` es `null` en un INSERT.
+   */
+  function abonoDeProtesis(viejo: Registro | null, nuevo: Registro) {
+    const id = String(nuevo.id)
+    const atencionExiste = (visitId: unknown) => tablas.visit.some((atencion) => atencion.id === visitId)
+    const valor = (registro: Registro | null, campo: string) => (registro ? (registro[campo] ?? null) : null)
+    if (viejo) {
+      const congelado = viejo.odontologoCents !== null && viejo.odontologoCents !== undefined
+      const cambia = ["protesisId", "priceCents", "odontologoCents", "clinicaCents", "tecnicoCents"].some((campo) =>
+        distintos(nuevo[campo], viejo[campo])
+      )
+      if (congelado && cambia && atencionExiste(viejo.visitId)) {
+        throw errorDeTrigger(`atencion_servicios ${id}: el reparto del abono ya está congelado`)
+      }
+      const pagoViejo = viejo.pagoAlLaboratorioId ?? null
+      const pagoNuevo = nuevo.pagoAlLaboratorioId ?? null
+      if (pagoViejo !== null && pagoNuevo !== null && pagoNuevo !== pagoViejo && atencionExiste(viejo.visitId)) {
+        throw errorDeTrigger(`atencion_servicios ${id}: la línea ya está en otro pago al laboratorio`)
+      }
+    }
+    const cambiaLinea = !viejo || nuevo.visitId !== viejo.visitId || distintos(nuevo.protesisId, viejo.protesisId)
+    const cambiaPago = distintos(valor(nuevo, "pagoAlLaboratorioId"), valor(viejo, "pagoAlLaboratorioId"))
+    const memberId = nuevo.memberId ?? null
+    const byOwner = nuevo.byOwner ?? false
+    const cambiaTratante = !viejo || distintos(byOwner, viejo.byOwner ?? false) || (memberId !== null && distintos(memberId, viejo.memberId))
+    const liquidacionId = nuevo.liquidacionId ?? null
+    const entraALiquidacion = liquidacionId !== null && distintos(liquidacionId, valor(viejo, "liquidacionId"))
+    if (viejo && !cambiaLinea && !cambiaPago && !cambiaTratante && !entraALiquidacion) return
+
+    const protesisId = nuevo.protesisId ?? null
+    const pagoId = nuevo.pagoAlLaboratorioId ?? null
+    if (protesisId === null && pagoId === null) return
+    const atencion = tablas.visit.find((otra) => otra.id === nuevo.visitId)
+    const negocio = atencion?.businessId ?? null
+    if (negocio === null && viejo) return
+    const delNegocio = (modelo: NombreDeModelo, otroId: unknown) =>
+      negocio !== null && tablas[modelo].some((otro) => otro.id === otroId && otro.businessId === negocio)
+    const protesis = protesisId === null ? undefined : tablas.protesis.find((otra) => otra.id === protesisId)
+
+    if (cambiaLinea || cambiaPago) {
+      if (protesisId !== null && !delNegocio("protesis", protesisId)) {
+        throw errorDePrisma("P2003", `atencion_servicios ${id}: la prótesis es de otro negocio`)
+      }
+      if (pagoId !== null && !delNegocio("pagoAlLaboratorio", pagoId)) {
+        throw errorDePrisma("P2003", `atencion_servicios ${id}: el pago al laboratorio es de otro negocio`)
+      }
+      if (pagoId !== null) {
+        const pago = tablas.pagoAlLaboratorio.find((otro) => otro.id === pagoId)
+        const entregada = protesis?.entregadaEn !== null && protesis?.entregadaEn !== undefined
+        if (!pago || !protesis || protesis.laboratorioId !== pago.laboratorioId || !entregada) {
+          throw errorDeTrigger(`atencion_servicios ${id}: el pago es a otro laboratorio o la prótesis no está entregada`)
+        }
+      }
+    }
+
+    // Etapa 7d. `protesis` existe: la FK y la regla de negocio de arriba ya lo exigen.
+    if (!protesis) return
+    if (cambiaLinea && protesis.estado === "anulada") {
+      throw errorDeTrigger(`atencion_servicios ${id}: la prótesis está anulada y no recibe abonos`)
+    }
+    if (cambiaLinea && distintos(protesis.customerId, atencion?.customerId)) {
+      throw errorDeTrigger(`atencion_servicios ${id}: la prótesis es de otro paciente`)
+    }
+    const deLaDuena = protesis.byOwner === true
+    if ((cambiaLinea || cambiaTratante) && (distintos(byOwner, deLaDuena) || distintos(memberId, deLaDuena ? null : protesis.memberId))) {
+      throw errorDeTrigger(`atencion_servicios ${id}: el abono va a nombre de la tratante de la prótesis`)
+    }
+    const entregada = protesis.entregadaEn !== null && protesis.entregadaEn !== undefined
+    if (entraALiquidacion && (!entregada || memberId === null || distintos(memberId, protesis.memberId) || distintos(byOwner, deLaDuena))) {
+      throw errorDeTrigger(`atencion_servicios ${id}: el abono sólo se liquida a la tratante y con la prótesis entregada`)
+    }
+  }
+
+  // ─── Triggers de los planes y las sedes (`20261112120000_etapa_9_planes_y_sedes`) ─
+  // Los cuatro toman en la base un `pg_advisory_xact_lock` por negocio para no
+  // correr carreras entre transacciones. Acá las transacciones ya corren de a
+  // una (ver "Transacciones"), así que el candado no tiene nada que ordenar.
+
+  /** El negocio con ese id, o `undefined` si no existe (entonces el que lo rechaza es la FK, no el trigger). */
+  const negocioDe = (id: unknown) => tablas.business.find((negocio) => negocio.id === id)
+
+  /**
+   * El trigger `invitaciones_exigen_plan_equipo` (BEFORE INSERT en
+   * `invitaciones`): sólo un negocio del plan "equipo" crea invitaciones. Un
+   * UPDATE (reenviar, aceptar) no pasa por él.
+   */
+  function invitacionExigePlanEquipo(nuevo: Registro) {
+    const negocio = negocioDe(nuevo.businessId)
+    if (negocio && negocio.plan !== "equipo") {
+      throw errorDeTrigger(`invitaciones ${String(nuevo.id)}: sólo el plan Equipo invita`)
+    }
+  }
+
+  /**
+   * El trigger `negocios_cambio_de_plan` (BEFORE UPDATE OF plan en
+   * `negocios`): sólo mira cuando el plan cambia de verdad. A "independiente"
+   * únicamente sin integrantes ni invitaciones pendientes (`acceptedAt` null,
+   * aunque estén vencidas, como la lista del Equipo); a "equipo" únicamente
+   * sin sedes activas.
+   */
+  function cambioDePlan(viejo: Registro, nuevo: Registro) {
+    if (!distintos(nuevo.plan, viejo.plan)) return
+    const id = String(nuevo.id)
+    if (
+      nuevo.plan === "independiente" &&
+      (tablas.businessMember.some((miembro) => miembro.businessId === nuevo.id) ||
+        tablas.workerInvitation.some((invitacion) => invitacion.businessId === nuevo.id && (invitacion.acceptedAt ?? null) === null))
+    ) {
+      throw errorDeTrigger(`negocios ${id}: no pasa al plan Independiente con integrantes o invitaciones pendientes`)
+    }
+    if (nuevo.plan === "equipo" && tablas.sede.some((sede) => sede.businessId === nuevo.id && sede.activo === true)) {
+      throw errorDeTrigger(`negocios ${id}: no pasa al plan Equipo con sedes activas; se desactivan antes`)
+    }
+  }
+
+  /** Cuántas sedes activas puede tener un negocio (`sedes_reglas`). */
+  const TOPE_DE_SEDES_ACTIVAS = 5
+
+  /**
+   * El trigger `sedes_reglas` (BEFORE INSERT OR UPDATE en `sedes`): sólo
+   * cuando la sede QUEDA activa (nueva, o una inactiva que se reactiva);
+   * editar una activa o desactivarla no pasa por él. Exige el plan
+   * "independiente" y no más de 5 activas en el negocio (sin contar a ésta).
+   * Al reactivar, cada franja activa de la sede pasa de nuevo por
+   * `horarios_sedes_sin_pisarse` (la migración las reescribe con `active =
+   * active`). `viejo` es `null` en un INSERT.
+   */
+  function reglasDeSede(viejo: Registro | null, nuevo: Registro) {
+    if (nuevo.activo !== true || (viejo && viejo.activo === true)) return
+    const id = String(nuevo.id)
+    const negocio = negocioDe(nuevo.businessId)
+    if (negocio && negocio.plan !== "independiente") {
+      throw errorDeTrigger(`sedes ${id}: sólo el plan Independiente tiene sedes`)
+    }
+    const otras = tablas.sede.filter((sede) => sede.businessId === nuevo.businessId && sede.activo === true && sede.id !== nuevo.id)
+    if (otras.length >= TOPE_DE_SEDES_ACTIVAS) {
+      throw errorDeTrigger(`sedes ${id}: un negocio tiene hasta ${TOPE_DE_SEDES_ACTIVAS} sedes activas`)
+    }
+    if (viejo) {
+      for (const franja of tablas.workSchedule) {
+        if (franja.sedeId === nuevo.id && franja.businessId === nuevo.businessId && franja.active === true) franjaSinPisarse(franja)
+      }
+    }
+  }
+
+  /**
+   * El trigger `horarios_sedes_sin_pisarse` (BEFORE INSERT OR UPDATE en
+   * `horarios_laborales`): una franja activa con sede no se solapa (inicio <
+   * fin de la otra Y fin > inicio de la otra, el mismo día) con una franja
+   * activa de OTRA sede ACTIVA del mismo negocio. Tocarse (fin = inicio) no es
+   * solaparse; las franjas sin sede, las inactivas y las de una sede inactiva
+   * no cuentan; la franja no se compara consigo misma ni con las de su propia
+   * sede. No mira si su propia sede está activa. Las "HH:MM" se comparan como
+   * texto (el CHECK `horarios_laborales_sede_horas_check` garantiza el formato).
+   */
+  function franjaSinPisarse(nuevo: Registro) {
+    const sedeId = nuevo.sedeId ?? null
+    if (sedeId === null || nuevo.active !== true) return
+    for (const otra of tablas.workSchedule) {
+      if (otra.id === nuevo.id || otra.businessId !== nuevo.businessId || otra.active !== true) continue
+      if (otra.sedeId === null || otra.sedeId === undefined || otra.sedeId === sedeId) continue
+      const sede = tablas.sede.find((candidata) => candidata.id === otra.sedeId && candidata.businessId === otra.businessId)
+      if (!sede || sede.activo !== true || otra.dayOfWeek !== nuevo.dayOfWeek) continue
+      if (String(nuevo.startTime) < String(otra.endTime) && String(nuevo.endTime) > String(otra.startTime)) {
+        throw errorDeTrigger(
+          `horarios_laborales ${String(nuevo.id)}: la franja se pisa con la de la sede "${String(sede.nombre)}" (${String(otra.startTime)} a ${String(otra.endTime)}) el mismo día`
+        )
+      }
+    }
+  }
+
+  // ─── Triggers de la sede de una hora viva (`20261112140000_etapa_9_endurecer_planes_y_sedes`) ─
+  // Toman el mismo candado por negocio, que acá no tiene nada que ordenar, y
+  // exigen que la sede de una fila VIVA esté activa. Si la sede no existe (o es
+  // de otro negocio) no rechazan: lo hace la FK compuesta, después.
+
+  /** Los estados de una cita que sigue en pie (`ESTADOS_DE_HORA_POR_DELANTE`, `lib/sedes-servidor.ts`). */
+  const ESTADOS_DE_CITA_VIVA = ["pendiente", "confirmada"]
+
+  /** Un instante, sea `Date` o texto ISO. */
+  const milisegundos = (valor: unknown) => (valor instanceof Date ? valor.getTime() : new Date(String(valor)).getTime())
+
+  /** Si la fila lleva una sede del MISMO negocio que existe y está desactivada. */
+  const conSedeInactiva = (fila: Registro) =>
+    tablas.sede.some((sede) => sede.id === fila.sedeId && sede.businessId === fila.businessId && sede.activo !== true)
+
+  /** Una hora por delante con sede: pendiente o confirmada, con `startTime` en el futuro. */
+  const citaViva = (cita: Registro, ahora: number) =>
+    (cita.sedeId ?? null) !== null && ESTADOS_DE_CITA_VIVA.includes(String(cita.status)) && milisegundos(cita.startTime) > ahora
+
+  /**
+   * El trigger `citas_exigen_sede_activa` (BEFORE INSERT OR UPDATE OF sedeId,
+   * status, startTime en `citas`): una cita viva con sede exige la sede
+   * activa. Sólo juzga cuando la cita SE VUELVE viva en esa sede (nueva,
+   * reactivada, movida al futuro, con otra sede): una que ya estaba viva en la
+   * misma sede no se vuelve a juzgar. Una pasada, cancelada, completada, de "no
+   * vino" o sin sede sale sin mirar. `viejo` es `null` en un INSERT.
+   */
+  function citaExigeSedeActiva(viejo: Registro | null, nuevo: Registro) {
+    const ahora = Date.now()
+    if (!citaViva(nuevo, ahora)) return
+    if (viejo && citaViva(viejo, ahora) && viejo.sedeId === nuevo.sedeId) return
+    if (conSedeInactiva(nuevo)) {
+      throw errorDeTrigger(`citas ${String(nuevo.id)}: la sede ${String(nuevo.sedeId)} no está activa`)
+    }
+  }
+
+  /**
+   * El trigger `lista_de_espera_exige_sede_activa` (BEFORE INSERT OR UPDATE OF
+   * sedeId, estado en `lista_de_espera`): una inscripción ACTIVA con sede exige
+   * la sede activa. Una que ya estaba activa en la misma sede no se vuelve a
+   * juzgar; una resuelta (reservo, expirada, salio) o sin sede sale sin mirar.
+   */
+  function inscripcionExigeSedeActiva(viejo: Registro | null, nuevo: Registro) {
+    if ((nuevo.sedeId ?? null) === null || nuevo.estado !== "activa") return
+    if (viejo && viejo.estado === "activa" && (viejo.sedeId ?? null) === nuevo.sedeId) return
+    if (conSedeInactiva(nuevo)) {
+      throw errorDeTrigger(`lista_de_espera ${String(nuevo.id)}: la sede ${String(nuevo.sedeId)} no está activa`)
+    }
+  }
+
+  /** Los triggers `BEFORE INSERT` de la base de verdad que la falsa reproduce, en el orden de Postgres (alfabético). */
   const ANTES_DE_INSERTAR: Partial<Record<NombreDeModelo, (nuevo: Registro) => void>> = {
-    visitService: (nuevo) => lineaDelMismoNegocio(null, nuevo),
+    visitService: (nuevo) => {
+      lineaDelMismoNegocio(null, nuevo)
+      abonoDeProtesis(null, nuevo)
+    },
+    workerInvitation: invitacionExigePlanEquipo,
+    sede: (nuevo) => reglasDeSede(null, nuevo),
+    workSchedule: franjaSinPisarse,
+    appointment: (nuevo) => citaExigeSedeActiva(null, nuevo),
+    inscripcionEnEspera: (nuevo) => inscripcionExigeSedeActiva(null, nuevo),
   }
 
   /** Los triggers `BEFORE UPDATE` de la base de verdad que la falsa reproduce, en el orden de Postgres (alfabético). */
@@ -595,17 +1268,29 @@ export function crearBaseFalsa() {
     visitService: (viejo, nuevo) => {
       comisionInmutable(viejo, nuevo)
       lineaDelMismoNegocio(viejo, nuevo)
+      abonoDeProtesis(viejo, nuevo)
     },
+    evolucion: evolucionInmutable,
+    protesis: protesisCongelada,
+    eventoDeProtesis: eventoNoSeEdita,
+    business: cambioDePlan,
+    sede: reglasDeSede,
+    workSchedule: (_viejo, nuevo) => franjaSinPisarse(nuevo),
+    appointment: citaExigeSedeActiva,
+    inscripcionEnEspera: inscripcionExigeSedeActiva,
   }
 
   /** Los triggers `BEFORE DELETE` de la base de verdad que la falsa reproduce. */
   const ANTES_DE_BORRAR: Partial<Record<NombreDeModelo, (viejo: Registro) => void>> = {
     visitService: lineaLiquidadaNoSeBorra,
+    evolucion: evolucionNoSeBorra,
+    protesis: protesisNoSeBorra,
+    eventoDeProtesis: eventoNoSeBorra,
   }
 
   /**
-   * Un UPDATE de una fila: arma la fila nueva, la pasa por el trigger y recién
-   * entonces la escribe, como `BEFORE UPDATE`. Devuelve la escritura para que
+   * Un UPDATE de una fila: arma la fila nueva, la pasa por el trigger y por
+   * los CHECK (`chequeos.ts`) y recién entonces la escribe, como Postgres. Devuelve la escritura para que
    * `updateMany` pueda revisar todas las filas antes de tocar ninguna (en
    * Postgres la sentencia entera falla o pasa). La escritura revisa FK y
    * únicos antes de copiar: si fallan, la fila queda como estaba.
@@ -614,6 +1299,7 @@ export function crearBaseFalsa() {
     const nuevo = { ...registro }
     aplicar(modelo, nuevo, datos)
     ANTES_DE_ACTUALIZAR[modelo]?.(registro, nuevo)
+    revisarChequeos(modelo, nuevo)
     return () => {
       verificarClaves(modelo, nuevo, registro)
       Object.assign(registro, nuevo)
@@ -633,7 +1319,25 @@ export function crearBaseFalsa() {
     if ("updatedAt" in registro) registro.updatedAt = new Date()
   }
 
+  /**
+   * Un INSERT, con sus `create` anidados. Es una sola sentencia para Prisma:
+   * si un hijo falla (un CHECK, una FK, un único), no queda ni el padre ni
+   * los hijos que ya entraron, como en Postgres.
+   */
   function crear(modelo: NombreDeModelo, datos: unknown): Registro {
+    // Sin escrituras anidadas, `insertar` revisa todo antes de tocar la tabla: no hace falta la copia.
+    const anidada = esObjetoPlano(datos) && Object.entries(datos).some(([clave, valor]) => valor !== undefined && RELACIONES[modelo][clave])
+    if (!anidada) return insertar(modelo, datos)
+    const antes = instantanea()
+    try {
+      return insertar(modelo, datos)
+    } catch (error) {
+      tablas = antes
+      throw error
+    }
+  }
+
+  function insertar(modelo: NombreDeModelo, datos: unknown): Registro {
     if (!esObjetoPlano(datos)) return falla(`data inválido en ${modelo}`)
 
     const escalares: Registro = {}
@@ -654,15 +1358,29 @@ export function crearBaseFalsa() {
 
     const registro: Registro = { id: `${modelo}-${siguienteId++}`, ...POR_DEFECTO[modelo](), ...escalares }
     ANTES_DE_INSERTAR[modelo]?.(registro)
+    // Después de los triggers `BEFORE`, como Postgres.
+    revisarChequeos(modelo, registro)
     verificarClaves(modelo, registro)
     tablas[modelo].push(registro)
 
     for (const [rel, hijos] of anidados) {
+      // Por una FK compuesta (las `etapas` de un plan, las `prestaciones` de
+      // una etapa), Prisma completa también el `businessId` del hijo con el del
+      // padre: el `create` anidado no lo lleva.
+      const negocio = esInversaDeCompuesta(modelo, rel) ? { businessId: registro.businessId } : {}
       for (const hijo of Array.isArray(hijos) ? hijos : [hijos]) {
-        crear(rel.modelo, { ...(hijo as Registro), [rel.remoto]: registro[rel.local] })
+        insertar(rel.modelo, { ...(hijo as Registro), [rel.remoto]: registro[rel.local], ...negocio })
       }
     }
     return registro
+  }
+
+  /** Si la relación a muchos `rel` de `modelo` es, del lado del hijo, una FK compuesta `(id, businessId)`. */
+  function esInversaDeCompuesta(modelo: NombreDeModelo, rel: Relacion): boolean {
+    const inversa = Object.entries(RELACIONES[rel.modelo]).find(
+      ([, otra]) => otra.tipo === "uno" && otra.modelo === modelo && otra.local === rel.remoto && otra.remoto === rel.local
+    )
+    return !!inversa && (COMPUESTAS[rel.modelo] ?? []).includes(inversa[0])
   }
 
   /**
@@ -688,6 +1406,70 @@ export function crearBaseFalsa() {
     })
   }
 
+  // ─── Transacciones ───────────────────────────────────────────────────────
+
+  /**
+   * Las transacciones corren de a una, en orden de llegada: dos
+   * `$transaction` en un `Promise.all` se encolan en vez de mezclarse. En
+   * memoria no hay MVCC, y sin la fila una que se deshace restauraría una
+   * copia que borra lo que la otra ya escribió. Encoladas se comportan como
+   * transacciones aisladas (serializables: nunca hay un 40001). Un test que
+   * quiere ver la carrera la arma él (`enFila` en los de liquidaciones y
+   * abonos, que siguen valiendo encima de ésta).
+   *
+   * Una operación fuera de toda transacción que llega mientras una está
+   * abierta también espera su turno, como una sentencia que se confirma sola:
+   * si la abierta se deshace, no se lleva lo que esa operación escribió.
+   *
+   * Qué corre dentro de cuál se sabe con `AsyncLocalStorage`: la función de
+   * la transacción corre con su número, y todo lo que llama (con `await` de
+   * por medio) lo hereda. Una transacción anidada lanza: con Prisma de
+   * verdad abriría otra conexión, y acá esperaría su turno para siempre.
+   */
+  interface Contexto {
+    /** El número de la transacción en cuya función se está. */
+    transaccion: number
+    /** Si la consulta cruda llegó por el `tx` de esa transacción, y no por `prisma`. */
+    porTx: boolean
+  }
+  const contexto = new AsyncLocalStorage<Contexto>()
+  let ocupada = false
+  let esperando: (() => void)[] = []
+  let transaccionActiva: number | null = null
+  let siguienteTransaccion = 1
+
+  const esperarTurno = () => new Promise<void>((resolver) => esperando.push(resolver))
+  /** Le pasa el turno al siguiente de la fila, o deja la base libre. */
+  function soltarTurno() {
+    const siguiente = esperando.shift()
+    if (siguiente) siguiente()
+    else ocupada = false
+  }
+
+  /**
+   * Una operación de un delegado. Dentro de una transacción, o con la base
+   * libre, corre en el acto (sin un `await` de por medio, como antes). Fuera
+   * de toda transacción y con una abierta, espera su turno.
+   */
+  function enTurno<A extends unknown[], R>(operacion: (...args: A) => R): (...args: A) => Promise<R> {
+    return (...args) => {
+      if (!ocupada || contexto.getStore()) {
+        try {
+          return Promise.resolve(operacion(...args))
+        } catch (error) {
+          return Promise.reject(error)
+        }
+      }
+      return esperarTurno().then(() => {
+        try {
+          return operacion(...args)
+        } finally {
+          soltarTurno()
+        }
+      })
+    }
+  }
+
   // ─── El cliente ──────────────────────────────────────────────────────────
 
   /** Lo que devuelve la base es una copia: el endpoint no puede tocar el estado por referencia. */
@@ -701,85 +1483,144 @@ export function crearBaseFalsa() {
       skip?: number
       data?: unknown
       distinct?: unknown
+      cursor?: unknown
     }
 
-    const buscar = (args: Args = {}) => {
+    const buscar = (operacion: string, args: Args = {}) => {
+      exigirOpciones(modelo, operacion, args)
       let lista = ordenar(filtrar(modelo, args.where), args.orderBy)
       if (args.distinct !== undefined) lista = sinRepetidos(modelo, lista, args.distinct)
+      if (args.cursor !== undefined) lista = desdeElCursor(modelo, lista, args.cursor, args.orderBy)
       if (args.skip !== undefined) lista = lista.slice(args.skip)
-      if (args.take !== undefined) lista = lista.slice(0, args.take)
+      if (args.take !== undefined) {
+        if (args.take < 0) return falla(`take negativo en ${modelo}: no está soportado`)
+        lista = lista.slice(0, args.take)
+      }
       return lista
+    }
+    /** El registro de un `where` de único (`findUnique`, `update`, `upsert`, `delete`). */
+    const unico = (operacion: string, args: Args) => {
+      exigirOpciones(modelo, operacion, args)
+      exigirDondeUnico(modelo, operacion, args?.where)
+      return filtrar(modelo, args.where)[0]
     }
     const salida = (registro: Registro, args: Args) => copia(proyectar(tablas, modelo, registro, args))
 
     return {
-      findFirst: vi.fn(async (args: Args = {}) => {
-        const [primero] = buscar(args)
-        return primero ? salida(primero, args) : null
-      }),
-      findUnique: vi.fn(async (args: Args) => {
-        const [unico] = filtrar(modelo, args.where)
-        return unico ? salida(unico, args) : null
-      }),
-      findMany: vi.fn(async (args: Args = {}) => buscar(args).map((registro) => salida(registro, args))),
-      count: vi.fn(async (args: Args = {}) => filtrar(modelo, args.where).length),
-      create: vi.fn(async (args: Args) => salida(crear(modelo, args.data), args)),
+      findFirst: vi.fn(
+        enTurno((args: Args = {}) => {
+          const [primero] = buscar("findFirst", args)
+          return primero ? salida(primero, args) : null
+        })
+      ),
+      findUnique: vi.fn(
+        enTurno((args: Args) => {
+          const registro = unico("findUnique", args)
+          return registro ? salida(registro, args) : null
+        })
+      ),
+      findMany: vi.fn(enTurno((args: Args = {}) => buscar("findMany", args).map((registro) => salida(registro, args)))),
+      count: vi.fn(
+        enTurno((args: Args = {}) => {
+          exigirOpciones(modelo, "count", args)
+          return filtrar(modelo, args.where).length
+        })
+      ),
+      create: vi.fn(
+        enTurno((args: Args) => {
+          exigirOpciones(modelo, "create", args)
+          return salida(crear(modelo, args.data), args)
+        })
+      ),
       // Un solo INSERT: si una fila falla un trigger, una FK o un único, no
       // queda ninguna, como en Postgres.
-      createMany: vi.fn(async (args: Args) => {
-        const lista = Array.isArray(args.data) ? args.data : [args.data]
-        const antes = instantanea()
-        try {
-          lista.forEach((datos) => crear(modelo, datos))
-        } catch (error) {
-          tablas = antes
-          throw error
-        }
-        return { count: lista.length }
-      }),
-      update: vi.fn(async (args: Args) => {
-        const [registro] = filtrar(modelo, args.where)
-        if (!registro) throw errorDePrisma("P2025", `No existe el registro a actualizar en ${modelo}`)
-        prepararActualizacion(modelo, registro, args.data)()
-        return salida(registro, args)
-      }),
-      upsert: vi.fn(async (args: Args & { create?: unknown; update?: unknown }) => {
-        const [registro] = filtrar(modelo, args.where)
-        if (!registro) return salida(crear(modelo, args.create), args)
-        prepararActualizacion(modelo, registro, args.update)()
-        return salida(registro, args)
-      }),
-      delete: vi.fn(async (args: Args) => {
-        const [registro] = filtrar(modelo, args.where)
-        if (!registro) throw errorDePrisma("P2025", `No existe el registro a borrar en ${modelo}`)
-        const copiaDeSalida = salida(registro, args)
-        borrarSentencia(modelo, new Set([registro]))
-        return copiaDeSalida
-      }),
-      // Una sola sentencia: si una fila falla una FK o un único, no queda
-      // ninguna cambiada, como en Postgres.
-      updateMany: vi.fn(async (args: Args) => {
-        const registros = filtrar(modelo, args.where)
-        const escrituras = registros.map((registro) => prepararActualizacion(modelo, registro, args.data))
-        const antes = instantanea()
-        try {
-          escrituras.forEach((escribir) => escribir())
-        } catch (error) {
-          tablas = antes
-          throw error
-        }
-        return { count: registros.length }
-      }),
-      deleteMany: vi.fn(async (args: Args = {}) => {
-        const registros = new Set(filtrar(modelo, args.where))
-        borrarSentencia(modelo, registros)
-        return { count: registros.size }
-      }),
+      createMany: vi.fn(
+        enTurno((args: Args) => {
+          exigirOpciones(modelo, "createMany", args)
+          const lista = Array.isArray(args.data) ? args.data : [args.data]
+          const antes = instantanea()
+          try {
+            lista.forEach((datos) => insertar(modelo, datos))
+          } catch (error) {
+            tablas = antes
+            throw error
+          }
+          return { count: lista.length }
+        })
+      ),
+      update: vi.fn(
+        enTurno((args: Args) => {
+          const registro = unico("update", args)
+          if (!registro) throw errorDePrisma("P2025", `No existe el registro a actualizar en ${modelo}`)
+          prepararActualizacion(modelo, registro, args.data)()
+          return salida(registro, args)
+        })
+      ),
+      upsert: vi.fn(
+        enTurno((args: Args & { create?: unknown; update?: unknown }) => {
+          const registro = unico("upsert", args)
+          if (!registro) return salida(crear(modelo, args.create), args)
+          prepararActualizacion(modelo, registro, args.update)()
+          return salida(registro, args)
+        })
+      ),
+      delete: vi.fn(
+        enTurno((args: Args) => {
+          const registro = unico("delete", args)
+          if (!registro) throw errorDePrisma("P2025", `No existe el registro a borrar en ${modelo}`)
+          const copiaDeSalida = salida(registro, args)
+          borrarSentencia(modelo, new Set([registro]))
+          return copiaDeSalida
+        })
+      ),
+      // Una sola sentencia: si una fila falla una FK, un único o un CHECK, no
+      // queda ninguna cambiada, como en Postgres.
+      updateMany: vi.fn(
+        enTurno((args: Args) => {
+          exigirOpciones(modelo, "updateMany", args)
+          const registros = filtrar(modelo, args.where)
+          const escrituras = registros.map((registro) => prepararActualizacion(modelo, registro, args.data))
+          const antes = instantanea()
+          try {
+            escrituras.forEach((escribir) => escribir())
+          } catch (error) {
+            tablas = antes
+            throw error
+          }
+          return { count: registros.length }
+        })
+      ),
+      deleteMany: vi.fn(
+        enTurno((args: Args = {}) => {
+          exigirOpciones(modelo, "deleteMany", args)
+          const registros = new Set(filtrar(modelo, args.where))
+          borrarSentencia(modelo, registros)
+          return { count: registros.size }
+        })
+      ),
     }
   }
 
-  /** Lo que recibe la función de una transacción: como el cliente real, sin `$transaction`. */
-  const cliente = {
+  /**
+   * `cursor` de Prisma: la lista (ya filtrada y ordenada) desde la fila del
+   * cursor, incluida; con `skip: 1`, desde la siguiente. Como Prisma, compara
+   * con los valores de esa fila según el `orderBy` (más el campo del cursor
+   * como desempate), así que el cursor no tiene que cumplir el `where`. Si
+   * la fila del cursor no existe, no trae nada. Sólo un cursor de un campo
+   * único (`{ id }`).
+   */
+  function desdeElCursor(modelo: NombreDeModelo, lista: Registro[], cursor: unknown, orderBy: unknown): Registro[] {
+    exigirDondeUnico(modelo, "cursor", cursor)
+    const campos = Object.keys(cursor as Condicion)
+    if (campos.length !== 1 || campos[0].includes("_")) return falla(`cursor de más de un campo en ${modelo}: no está soportado`)
+    const [delCursor] = filtrar(modelo, cursor)
+    if (!delCursor) return []
+    const criterios = orderBy === undefined ? [] : Array.isArray(orderBy) ? orderBy : [orderBy]
+    const comparar = comparador([...criterios, { [campos[0]]: "asc" }])
+    return lista.filter((registro) => comparar(registro, delCursor) >= 0)
+  }
+
+  const delegados = {
     user: delegado("user"),
     business: delegado("business"),
     businessMember: delegado("businessMember"),
@@ -803,59 +1644,149 @@ export function crearBaseFalsa() {
     envioAClientes: delegado("envioAClientes"),
     appointmentService: delegado("appointmentService"),
     franjaDeHoraValle: delegado("franjaDeHoraValle"),
-    /**
-     * Sólo para candados (`SELECT … FOR UPDATE` o `pg_advisory_xact_lock`): en
-     * memoria no hay concurrencia que ordenar, así que no devuelve nada. Queda
-     * registrado para que un test compruebe que se pidió, con qué valores y
-     * dentro de la transacción. También responde la hora de la base
-     * (`SELECT clock_timestamp() AS ahora`) con `new Date()`, que los tests
-     * controlan con el reloj falso de vitest. Cualquier otra consulta cruda
-     * lanza: no se sabe leerla.
-     */
-    $queryRaw: vi.fn(async (partes: TemplateStringsArray, ..._valores: unknown[]) => {
-      const sql = partes.join("?")
-      if (sql.trim() === "SELECT clock_timestamp() AS ahora") return [{ ahora: new Date() }]
-      if (!CANDADOS.some((candado) => sql.includes(candado))) return falla(`$queryRaw sólo para candados: ${sql}`)
-      return []
-    }),
-    /** Como `$queryRaw`, sólo para `pg_advisory_xact_lock`. Devuelve filas afectadas: 0. */
-    $executeRaw: vi.fn(async (partes: TemplateStringsArray, ..._valores: unknown[]) => {
-      const sql = partes.join("?")
-      if (!sql.includes("pg_advisory_xact_lock")) return falla(`$executeRaw sólo para candados: ${sql}`)
-      return 0
-    }),
+    sillon: delegado("sillon"),
+    fichaClinica: delegado("fichaClinica"),
+    marcaDental: delegado("marcaDental"),
+    evolucion: delegado("evolucion"),
+    planDeTratamiento: delegado("planDeTratamiento"),
+    etapaDelPlan: delegado("etapaDelPlan"),
+    prestacionDelPlan: delegado("prestacionDelPlan"),
+    laboratorio: delegado("laboratorio"),
+    materialDeProtesis: delegado("materialDeProtesis"),
+    excepcionDeRepartoDeProtesis: delegado("excepcionDeRepartoDeProtesis"),
+    cambioDeRepartoDeProtesis: delegado("cambioDeRepartoDeProtesis"),
+    protesis: delegado("protesis"),
+    eventoDeProtesis: delegado("eventoDeProtesis"),
+    pagoAlLaboratorio: delegado("pagoAlLaboratorio"),
+    sede: delegado("sede"),
+    workerInvitation: delegado("workerInvitation"),
+  }
+
+  // ─── Consultas crudas ────────────────────────────────────────────────────
+
+  /**
+   * Si la consulta cruda que se está atendiendo llegó por el `tx` de la
+   * transacción abierta. Se lee al empezar, antes de cualquier `await`.
+   */
+  const porElTx = () => {
+    const actual = contexto.getStore()
+    return actual?.porTx === true && actual.transaccion === transaccionActiva
+  }
+
+  /**
+   * Un candado sólo sirve dentro de una transacción: fuera, Postgres lo suelta
+   * al terminar la sentencia y no ordena nada. Por eso se rechaza un candado
+   * pedido por `prisma` (aunque sea desde la función de una transacción: va
+   * por otra conexión) o por un `tx` cuya transacción ya terminó.
+   */
+  function exigirTransaccion(sql: string) {
+    if (!porElTx()) return falla(`candado fuera de una transacción (pídelo con el tx de $transaction): ${sql}`)
+  }
+
+  /**
+   * Sólo para candados (`SELECT … FOR UPDATE` o `pg_advisory_xact_lock`): en
+   * memoria no hay concurrencia que ordenar (las transacciones ya van de a
+   * una), así que no devuelve nada. Queda registrado para que un test
+   * compruebe que se pidió y con qué valores; que fue dentro de la
+   * transacción lo garantiza la base, que lo rechaza fuera de ella. También
+   * responde la hora de la base (`SELECT clock_timestamp() AS ahora`) con
+   * `new Date()`, que los tests controlan con el reloj falso de vitest.
+   * Cualquier otra consulta cruda lanza: no se sabe leerla.
+   *
+   * `prisma.$queryRaw` registra todas las consultas (también las que llegan
+   * por el `tx`, que pasan por acá); `transaccion.$queryRaw`, sólo las del `tx`.
+   */
+  const $queryRaw = vi.fn(async (partes: TemplateStringsArray, ..._valores: unknown[]) => {
+    const sql = partes.join("?")
+    if (sql.trim() === "SELECT clock_timestamp() AS ahora") return [{ ahora: new Date() }]
+    if (!CANDADOS.some((candado) => sql.includes(candado))) return falla(`$queryRaw sólo para candados: ${sql}`)
+    exigirTransaccion(sql)
+    return []
+  })
+  /**
+   * Como `$queryRaw`, sólo para `pg_advisory_xact_lock` y para la versión
+   * nueva de la fila del sillón (`tomarCandadoDelSillon`), que no cambia
+   * ninguna columna y es también un candado: las dos, sólo dentro de una
+   * transacción. Devuelve filas afectadas: 0.
+   */
+  const $executeRaw = vi.fn(async (partes: TemplateStringsArray, ..._valores: unknown[]) => {
+    const sql = partes.join("?")
+    const marcaDelSillon = sql.startsWith('UPDATE "sillones" SET "orden" = "orden" WHERE')
+    if (!sql.includes("pg_advisory_xact_lock") && !marcaDelSillon) return falla(`$executeRaw sólo para candados: ${sql}`)
+    exigirTransaccion(sql)
+    return 0
+  })
+
+  /**
+   * Las consultas crudas del `tx`: funciones propias (no las de `prisma`),
+   * que marcan que la consulta llegó por la transacción y la pasan a las de
+   * `prisma`, así un test que reemplaza `prisma.$queryRaw` (la hora de la
+   * base, por ejemplo) sigue viendo también las de adentro.
+   */
+  const porLaTransaccion = <T>(cruda: (partes: TemplateStringsArray, ...valores: unknown[]) => Promise<T>) =>
+    vi.fn((partes: TemplateStringsArray, ...valores: unknown[]) => {
+      const actual = contexto.getStore()
+      // Sin transacción (un `tx` que se usa después de terminada), `transaccion` no calza con ninguna.
+      return contexto.run({ transaccion: actual?.transaccion ?? -1, porTx: true }, () => cruda(partes, ...valores))
+    })
+
+  /** Lo que recibe la función de una transacción: como el cliente real, sin `$transaction`. */
+  const tx = {
+    ...delegados,
+    $queryRaw: porLaTransaccion($queryRaw),
+    $executeRaw: porLaTransaccion($executeRaw),
   }
 
   const prisma = {
-    ...cliente,
+    ...delegados,
+    $queryRaw,
+    $executeRaw,
     /**
      * Sólo la forma interactiva, que es la que usan estos endpoints. Si la
-     * función lanza, la base vuelve a como estaba: igual que Postgres.
+     * función lanza, la base vuelve a como estaba: igual que Postgres. Las
+     * opciones (`isolationLevel`) no cambian nada: ya van de a una.
      */
-    $transaction: vi.fn(async (fn: unknown) => {
+    $transaction: vi.fn(async (fn: unknown, _opciones?: unknown) => {
       if (typeof fn !== "function") return falla("sólo se soportan transacciones interactivas")
-      const antes = structuredClone(tablas)
+      if (contexto.getStore()) return falla("transacción anidada: con Prisma de verdad sería otra conexión, fuera de ésta")
+      if (ocupada) await esperarTurno()
+      else ocupada = true
+      const numero = siguienteTransaccion++
+      transaccionActiva = numero
+      const antes = instantanea()
       try {
-        return await fn(cliente)
+        return await contexto.run({ transaccion: numero, porTx: false }, () => fn(tx))
       } catch (error) {
         tablas = antes
         throw error
+      } finally {
+        transaccionActiva = null
+        soltarTurno()
       }
     }),
   }
 
   return {
     prisma,
+    /**
+     * El `tx` que recibe la función de cada transacción. Sus `$queryRaw` y
+     * `$executeRaw` son propios: `transaccion.$queryRaw.mock.calls` son sólo
+     * las consultas crudas que se hicieron dentro de una transacción.
+     */
+    transaccion: tx,
     /** Vacía la base y carga `datos`, con los defaults del esquema en cada registro. */
     reiniciar(datos: Partial<Record<NombreDeModelo, Registro[]>>) {
       tablas = tablasVacias()
       siguienteId = 1
+      ocupada = false
+      esperando = []
+      transaccionActiva = null
       for (const [modelo, registros] of Object.entries(datos) as [NombreDeModelo, Registro[]][]) {
         tablas[modelo] = registros.map((registro) => ({ ...POR_DEFECTO[modelo](), ...structuredClone(registro) }))
       }
     },
     /** Una copia del estado entero, para comprobar que un pedido no escribió nada. */
-    volcado(): Tablas {
+    volcado(): TablasCompletas {
       return structuredClone(tablas)
     },
     /** Los registros de un modelo que cumplen `where` (sin `where`, todos). */

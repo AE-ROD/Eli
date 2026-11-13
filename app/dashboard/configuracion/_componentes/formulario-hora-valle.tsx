@@ -8,6 +8,7 @@ import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Interruptor } from "@/components/comunes/interruptor"
 import { Aviso } from "@/components/panel/aviso"
 import { CampoHora } from "@/components/panel/campo-hora"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import {
@@ -19,6 +20,8 @@ import {
 } from "@/lib/hora-valle"
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
+import { frasesDeConfiguracion } from "../_frases"
 
 const DIAS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
 
@@ -72,6 +75,7 @@ export function FormularioHoraValle({
 }) {
   const idDelTitulo = useId()
   const idBase = useId()
+  const { horaValle: frases } = frasesDeConfiguracion(vocabularioDe(useRubroDelPanel()).palabras)
   const [activa, setActiva] = useState(activaInicial)
   const [guardadas, setGuardadas] = useState<FranjaDeHoraValle[]>(franjasIniciales)
   const [franjas, setFranjas] = useState<FranjaDeHoraValle[]>(franjasIniciales)
@@ -92,7 +96,10 @@ export function FormularioHoraValle({
     if (!resultado.ok) return setError(resultado.error)
     setActiva(resultado.datos.activa)
     setGuardadas(resultado.datos.franjas)
-    setFranjas(resultado.datos.franjas)
+    // Lo guardado reemplaza a lo que se ve sólo si es lo mismo que se mandó.
+    // Al encender o apagar se mandan las guardadas: si había franjas a medio
+    // editar (o se editó mientras se guardaba), se quedan como estaban.
+    setFranjas((previas) => (igual(previas, nuevasFranjas) ? resultado.datos.franjas : previas))
     setAnuncio(resultado.datos.activa ? "Hora valle: guardado" : "Hora valle: apagada")
   }
 
@@ -101,7 +108,7 @@ export function FormularioHoraValle({
   const cambiarInterruptor = (nueva: boolean) => guardar(nueva, guardadas)
 
   const cambiarFranja = (indice: number, cambio: Partial<FranjaDeHoraValle>) => {
-    setFranjas(franjas.map((franja, i) => (i === indice ? { ...franja, ...cambio } : franja)))
+    setFranjas((previas) => previas.map((franja, i) => (i === indice ? { ...franja, ...cambio } : franja)))
     setAnuncio("")
   }
 
@@ -110,7 +117,8 @@ export function FormularioHoraValle({
     setAnuncio("")
     const resultado = await guardarExclusion(servicio.id, excluido)
     if (!resultado.ok) return setError(resultado.error)
-    setServicios(servicios.map((s) => (s.id === servicio.id ? { ...s, excluido: resultado.datos.excluido } : s)))
+    // Con la lista de ahora, no la de cuando se tocó: marcar dos seguidos no deshace el primero.
+    setServicios((previos) => previos.map((s) => (s.id === servicio.id ? { ...s, excluido: resultado.datos.excluido } : s)))
     setAnuncio(`${servicio.nombre}: ${resultado.datos.excluido ? "sin rebaja" : "con rebaja"}`)
   }
 
@@ -118,6 +126,7 @@ export function FormularioHoraValle({
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
+        nivel={3}
         titulo="Precios de hora valle"
         subtitulo="Llena las horas más tranquilas"
         icono={{ figura: Percent }}
@@ -126,7 +135,7 @@ export function FormularioHoraValle({
       <div className="mt-5">
         <Interruptor
           etiqueta="Rebajar las horas valle"
-          descripcion="Quien reserva por tu página a una hora de estas franjas paga menos: lo ve en las horas y en el resumen. Cuenta la hora en que empieza la cita. Las citas que anotas en la agenda no se rebajan solas."
+          descripcion={frases.descripcion}
           activo={activa}
           alCambiar={cambiarInterruptor}
         />
@@ -217,7 +226,7 @@ export function FormularioHoraValle({
                       etiqueta={`Quitar la franja del ${DIAS[franja.dayOfWeek]?.toLowerCase() ?? ""}`}
                       icono={<Trash2 />}
                       tamano="sm"
-                      onClick={() => setFranjas(franjas.filter((_, i) => i !== indice))}
+                      onClick={() => setFranjas((previas) => previas.filter((_, i) => i !== indice))}
                     />
                   </li>
                 )
@@ -230,7 +239,7 @@ export function FormularioHoraValle({
                 variante="secundario"
                 icono={<Plus className="h-4 w-4" />}
                 disabled={franjas.length >= MAX_FRANJAS_DE_HORA_VALLE}
-                onClick={() => setFranjas([...franjas, FRANJA_SUGERIDA])}
+                onClick={() => setFranjas((previas) => [...previas, FRANJA_SUGERIDA])}
               >
                 Agregar franja
               </BotonPrimario>
@@ -252,8 +261,8 @@ export function FormularioHoraValle({
 
           {servicios.length > 0 && (
             <fieldset className="mt-6">
-              <legend className={CLASES_DE_ETIQUETA}>Servicios sin rebaja</legend>
-              <p className="mt-1 text-sm text-texto-2">Los marcados cuestan lo mismo a cualquier hora.</p>
+              <legend className={CLASES_DE_ETIQUETA}>{frases.sinRebaja}</legend>
+              <p className="mt-1 text-sm text-texto-2">{frases.sinRebajaAyuda}</p>
               <ul className="mt-3 space-y-2">
                 {servicios.map((servicio) => (
                   <li key={servicio.id}>

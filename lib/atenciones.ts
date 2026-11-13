@@ -1,4 +1,14 @@
+import { un, unoDe } from "@/lib/concordancia"
 import { esMedioDePago } from "@/lib/medios-de-pago"
+import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
+
+/**
+ * Las palabras de un rubro sin palabras propias: lo que dicen los mensajes de
+ * este archivo si quien llama no pasa las del suyo. Con ellas salen los textos
+ * de siempre ("servicio", "profesional"), así que el servidor, que arma estos
+ * mensajes sin mirar el rubro, no cambia ni una palabra.
+ */
+const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
 
 /**
  * Reglas del tablero de atenciones (docs/PRODUCTO.md, sección 7): por qué
@@ -199,10 +209,16 @@ export function errorDeTotal(totalCentavos: number): string | null {
     : null
 }
 
-/** Por qué una atención tiene demasiados servicios, o `null` si está bien. */
-export function errorDeCantidadDeLineas(cantidad: number): string | null {
+/**
+ * Por qué una atención tiene demasiados servicios, o `null` si está bien. Con
+ * las palabras del rubro dice "servicios" o "prestaciones".
+ */
+export function errorDeCantidadDeLineas(
+  cantidad: number,
+  palabras: Pick<PalabrasDelRubro, "servicio"> = PALABRAS_NEUTRAS
+): string | null {
   return cantidad > MAXIMO_DE_LINEAS_POR_ATENCION
-    ? `Una atención puede tener hasta ${MAXIMO_DE_LINEAS_POR_ATENCION} servicios.`
+    ? `Una atención puede tener hasta ${MAXIMO_DE_LINEAS_POR_ATENCION} ${palabras.servicio.plural}.`
     : null
 }
 
@@ -251,21 +267,32 @@ export function idDeProfesional(linea: Pick<LineaDeAtencion, "memberId" | "byOwn
  * - `por-cobrar` (y `finalizada`, que es cobrarla): al menos un servicio, y
  *   todos con su profesional y un precio válido. Es lo que se reparte en
  *   comisiones: una línea sin dueño no se le puede pagar a nadie.
+ *
+ * `palabras` pone el "servicio" y el "profesional" del rubro ("una
+ * prestación con su odontólogo"); sin ellas salen los de siempre. Los
+ * endpoints la llaman con las palabras del rubro de la sesión, así que el
+ * servidor y la pantalla dicen lo mismo.
  */
-export function requisitoFaltante(destino: string, lineas: readonly LineaDeAtencion[]): string | null {
+export function requisitoFaltante(
+  destino: string,
+  lineas: readonly LineaDeAtencion[],
+  palabras: Pick<PalabrasDelRubro, "servicio" | "profesional"> = PALABRAS_NEUTRAS
+): string | null {
+  const { servicio, profesional } = palabras
+
   if (destino === "en-atencion") {
     return lineas.some(tieneProfesional)
       ? null
-      : "Para empezar la atención hace falta al menos un servicio con su profesional."
+      : `Para empezar la atención hace falta al menos ${un(servicio)} con su ${profesional.singular}.`
   }
 
   if (destino === "por-cobrar" || destino === "finalizada") {
-    if (lineas.length === 0) return "Para cobrar hace falta al menos un servicio."
+    if (lineas.length === 0) return `Para cobrar hace falta al menos ${un(servicio)}.`
     if (!lineas.every(tieneProfesional)) {
-      return "Hay servicios sin profesional: indica quién hizo cada uno antes de cobrar."
+      return `Hay ${servicio.plural} sin ${profesional.singular}: indica quién hizo cada ${unoDe(servicio)} antes de cobrar.`
     }
     if (!lineas.every((linea) => esPrecioValido(linea.price))) {
-      return "Hay servicios con un precio inválido: corrígelo antes de cobrar."
+      return `Hay ${servicio.plural} con un precio inválido: corrígelo antes de cobrar.`
     }
   }
 

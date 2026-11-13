@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { cuerpoConTope } from "@/lib/cuerpo-del-pedido"
 import { enlaceDelTurno } from "@/lib/fila-virtual"
 import { anotarseEnLaFila, negocioDeLaFila } from "@/lib/fila-virtual-servidor"
+import { prisma } from "@/lib/prisma"
 import { devolverLimite, obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { registrarError } from "@/lib/registro-de-errores"
+import { hayVariasSedes, leerSedesDeLaReserva } from "@/lib/sede-de-la-reserva"
 import { filaVirtualSchema } from "@/lib/validaciones"
 
 /**
@@ -18,6 +20,9 @@ import { filaVirtualSchema } from "@/lib/validaciones"
  *   (local cerrado, fila llena) lo gastara, unas pocas IPs lo agotarían y
  *   dejarían a la gente real sin poder anotarse una hora.
  * - Negocio inexistente o con la fila apagada: el mismo 404, sin decir cuál.
+ *   Lo mismo con dos o más sedes activas (plan Independiente): la fila mira el
+ *   "abierto ahora" del negocio sin sede, que con varias sedes no dice dónde
+ *   está la persona, así que se comporta como apagada.
  * - Local cerrado en este momento, o fila llena (tope del negocio): 409 con
  *   el motivo, que la persona puede leer en el local.
  * - Al anotarse: 201 con el número de turno y el enlace a su turno
@@ -48,6 +53,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const ahora = new Date()
   const negocio = await negocioDeLaFila(slug, ahora)
   if (!negocio?.filaVirtualActiva) return NO_ENCONTRADO()
+  // Con varias sedes la fila se comporta como apagada: el mismo 404, sin gastar cupo.
+  if (hayVariasSedes(await leerSedesDeLaReserva(prisma, negocio.id))) return NO_ENCONTRADO()
 
   const porNegocio = await verificarLimite("filaVirtualPorNegocio", negocio.id)
   if (!porNegocio.permitido) return DEMASIADAS()

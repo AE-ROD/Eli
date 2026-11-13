@@ -31,6 +31,7 @@ export default async function PaginaDeLaFila({ params }: { params: Promise<{ slu
       <AnotarseEnLaFila
         slug={negocio.slug}
         nombreNegocio={negocio.name}
+        rubro={negocio.type}
         abierto={abierto}
         esperando={esperando}
         llena={esperando >= negocio.filaVirtualTope}

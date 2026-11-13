@@ -5,12 +5,15 @@ import { Ban, Receipt } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Insignia } from "@/components/comunes/insignia"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
 import { formatearMonto } from "@/lib/dinero"
 import { formatearHora, horaConArticulo } from "@/lib/fechas"
 import { TURNOS } from "@/lib/reportes"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import type { FilaDeReporte, Reporte } from "../_datos"
+import { frasesDeLosReportes } from "../_frases"
 import { Paginador } from "./paginador"
 import { useIrALaSeccion } from "./usar-ir-a-la-seccion"
 
@@ -112,6 +115,8 @@ export function HistorialDeCobros({
   onTituloEnfocado,
 }: PropsDeHistorialDeCobros) {
   const idDelTitulo = useId()
+  // "Paciente" y "Prestaciones" en una clínica dental; en los demás rubros, igual que siempre.
+  const { historial: frases } = frasesDeLosReportes(vocabularioDe(useRubroDelPanel()).palabras)
   const titulo = useRef<HTMLHeadingElement>(null)
   const delNegocio = reporte.alcance === "negocio"
   const anula = delNegocio && onAnular !== undefined
@@ -170,10 +175,10 @@ export function HistorialDeCobros({
                   Turno
                 </th>
                 <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
-                  Cliente
+                  {frases.cliente}
                 </th>
                 <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
-                  Servicios
+                  {frases.servicios}
                 </th>
                 {delNegocio && (
                   <>

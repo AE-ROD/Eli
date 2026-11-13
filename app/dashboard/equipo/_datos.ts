@@ -6,12 +6,24 @@
  * la pantalla está obligada a decidir qué mostrar cuando algo falla.
  */
 
+import { enviarFoto, pedirQuitarFoto, type ResultadoDeFoto } from "@/lib/enviar-foto"
 import { pedir, pedirConCuerpo, conJson, type Resultado } from "@/lib/peticiones"
+import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
+import { frasesDeEquipo } from "./_frases"
+
+/**
+ * Las palabras de un rubro sin palabras propias: lo que dicen los mensajes de
+ * error de los pedidos de servicios si quien llama no pasa las suyas ("No se
+ * pudieron cargar los servicios"). Las pantallas pasan las del rubro.
+ */
+const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
 
 export interface MiembroDelEquipo {
   id: string
   role: string
   createdAt: string
+  /** La foto del integrante (una URL del propio sitio), o `null` si no subió ninguna. */
+  fotoUrl: string | null
   user: { id: string; name: string; email: string }
 }
 
@@ -86,25 +98,47 @@ export interface ServicioDelCatalogo {
 export type ServiciosDelMiembro = { todos: true; serviceIds: string[] } | { todos: false; serviceIds: string[] }
 
 /** El catálogo de servicios del negocio, activos e inactivos. */
-export async function leerCatalogoDeServicios(): Promise<Resultado<ServicioDelCatalogo[]>> {
-  return pedir<ServicioDelCatalogo[]>("/api/configuracion/servicios", "No se pudieron cargar los servicios")
+export async function leerCatalogoDeServicios(palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado<ServicioDelCatalogo[]>> {
+  return pedir<ServicioDelCatalogo[]>("/api/configuracion/servicios", frasesDeEquipo(palabras).errores.cargarServicios)
 }
 
-export async function leerServiciosDelMiembro(memberId: string): Promise<Resultado<ServiciosDelMiembro>> {
+export async function leerServiciosDelMiembro(
+  memberId: string,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<ServiciosDelMiembro>> {
   return pedir<ServiciosDelMiembro>(
     `/api/equipo/miembros/${encodeURIComponent(memberId)}/servicios`,
-    "No se pudieron cargar los servicios de esta persona"
+    frasesDeEquipo(palabras).errores.cargarServiciosDeLaPersona
   )
 }
 
 /** Guarda qué servicios hace: `null` es "todos". */
 export async function guardarServiciosDelMiembro(
   memberId: string,
-  serviceIds: string[] | null
+  serviceIds: string[] | null,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
 ): Promise<Resultado<ServiciosDelMiembro>> {
   return pedir<ServiciosDelMiembro>(
     `/api/equipo/miembros/${encodeURIComponent(memberId)}/servicios`,
-    "No se pudieron guardar los servicios",
+    frasesDeEquipo(palabras).errores.guardarServicios,
     conJson("PUT", serviceIds === null ? { todos: true } : { todos: false, serviceIds })
   )
+}
+
+// ─── Foto del integrante ─────────────────────────────────────────────────────
+
+const rutaDeLaFotoDelMiembro = (miembroId: string) => `/api/equipo/miembros/${encodeURIComponent(miembroId)}/foto`
+
+/**
+ * Sube la foto de un integrante (`miembroId` es el de su membresía, no el de
+ * su cuenta). La imagen ya viene ajustada por el navegador. Devuelve la URL
+ * con que quedó.
+ */
+export function subirFotoDelMiembro(miembroId: string, foto: Blob): Promise<ResultadoDeFoto> {
+  return enviarFoto(rutaDeLaFotoDelMiembro(miembroId), foto)
+}
+
+/** Quita la foto: vuelven a verse las iniciales. */
+export function quitarFotoDelMiembro(miembroId: string): Promise<ResultadoDeFoto> {
+  return pedirQuitarFoto(rutaDeLaFotoDelMiembro(miembroId))
 }

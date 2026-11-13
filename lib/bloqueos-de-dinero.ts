@@ -11,7 +11,7 @@ import type { Prisma } from "@prisma/client"
  * (frente C), dentro de la misma transacción que escribe.
  */
 
-export type MotivoDeBloqueo = "liquidacion" | "caja"
+export type MotivoDeBloqueo = "liquidacion" | "caja" | "laboratorio"
 
 /**
  * El `codigo` de la respuesta 409 "corrígelo con un ajuste". Sale en dos
@@ -21,6 +21,15 @@ export type MotivoDeBloqueo = "liquidacion" | "caja"
  * mensaje, que puede cambiar.
  */
 export const CODIGO_CORREGIR_CON_AJUSTE = "corregir-con-ajuste"
+
+/**
+ * El `codigo` del 409 al anular una atención con un abono de prótesis ya
+ * pagado al laboratorio (clínica dental). Tampoco se anula, pero no se
+ * corrige con un ajuste: primero se anula ese pago. La interfaz lo trata como
+ * el de arriba (no recarga, no pierde el motivo escrito, deja de ofrecer
+ * anular) con el mensaje del servidor, que dice qué hacer.
+ */
+export const CODIGO_PAGADO_AL_LABORATORIO = "pagado-al-laboratorio"
 
 /**
  * Candado de la caja del negocio. El cierre lo toma exclusivo; cobrar y anular
@@ -65,6 +74,9 @@ export interface AtencionBloqueada {
  *   bloquea aunque alguno siguiera apuntándole.
  * - Caja: la atención tiene `paidAt` dentro de un cierre del negocio, en
  *   `(desde, hasta]` (un pago justo en el límite es del cierre que termina ahí).
+ * - Laboratorio (clínica dental): algún abono de prótesis de la atención ya
+ *   se le pagó al laboratorio en un pago no anulado. Lo rendido no se anula:
+ *   primero se anula ese pago (que suelta sus líneas).
  *
  * Siempre acota por `businessId`: una atención de otro negocio no existe para
  * este y devuelve `null` (el endpoint ya respondió 404 antes de preguntar).
@@ -87,6 +99,12 @@ export async function atencionBloqueada(
     }),
   ])
   if (lineaLiquidada || propinaLiquidada) return { motivo: "liquidacion" }
+
+  const pagadaAlLaboratorio = await db.visitService.findFirst({
+    where: { visitId, visit: { is: { businessId } }, pagoAlLaboratorio: { is: { businessId, anuladoEn: null } } },
+    select: { id: true },
+  })
+  if (pagadaAlLaboratorio) return { motivo: "laboratorio" }
 
   const atencion = await db.visit.findFirst({ where: { id: visitId, businessId }, select: { paidAt: true } })
   if (!atencion?.paidAt) return null

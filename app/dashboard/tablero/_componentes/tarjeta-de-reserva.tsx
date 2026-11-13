@@ -3,9 +3,12 @@
 import { useId, type DragEvent } from "react"
 import { Boton } from "@/components/comunes/boton"
 import { Insignia } from "@/components/comunes/insignia"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { formatearHora } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import type { Reserva } from "../_datos"
+import { frasesDelTablero } from "../_frases"
 import { CLASES_DE_TARJETA, MomentoDeTarjeta, NombreDeTarjeta } from "./partes-de-tarjeta"
 
 /** Lo que el tablero le pasa a una tarjeta para que se pueda arrastrar (sólo en escritorio). */
@@ -35,8 +38,8 @@ interface PropsDeTarjetaDeReserva {
 }
 
 /**
- * Una cita de hoy que todavía no llegó: hora, cliente, servicio y profesional,
- * y el botón "Llegó". Atrasada, también "No vino".
+ * Una reserva de hoy que todavía no llegó: hora, cliente, servicio y profesional,
+ * y el botón "Llegó". Atrasada, también "No vino" ("No asistió" en una clínica).
  *
  * La tarjeta se puede enfocar desde el código (`data-reserva`): si "Llegó"
  * falla porque el tablero quedó viejo y la reserva sigue ahí, el foco vuelve a
@@ -44,6 +47,8 @@ interface PropsDeTarjetaDeReserva {
  */
 export function TarjetaDeReserva({ reserva, quien, atrasada, enCurso, arrastre, onLlego, onNoVino }: PropsDeTarjetaDeReserva) {
   const idDelNombre = useId()
+  // "Sin paciente", "Sin odontólogo asignado" y "No asistió" en una clínica dental.
+  const frases = frasesDelTablero(vocabularioDe(useRubroDelPanel()).palabras)
 
   return (
     <article
@@ -59,11 +64,11 @@ export function TarjetaDeReserva({ reserva, quien, atrasada, enCurso, arrastre, 
       </div>
 
       <NombreDeTarjeta id={idDelNombre} apagado={!reserva.cliente}>
-        {reserva.cliente?.nombre ?? "Sin cliente"}
+        {reserva.cliente?.nombre ?? frases.sinCliente}
       </NombreDeTarjeta>
 
       <p className="text-[13px] leading-snug break-words">
-        {reserva.titulo} <span className="text-texto-2">· {reserva.profesional?.nombre ?? "Sin profesional asignado"}</span>
+        {reserva.titulo} <span className="text-texto-2">· {reserva.profesional?.nombre ?? frases.sinProfesionalAsignado}</span>
       </p>
 
       <div className="flex gap-2">
@@ -83,10 +88,10 @@ export function TarjetaDeReserva({ reserva, quien, atrasada, enCurso, arrastre, 
             tamano="sm"
             onClick={onNoVino}
             disabled={enCurso}
-            aria-label={`No vino: ${quien}`}
+            aria-label={frases.noVino.etiqueta(quien)}
             className="w-full"
           >
-            No vino
+            {frases.noVino.boton}
           </Boton>
         )}
       </div>

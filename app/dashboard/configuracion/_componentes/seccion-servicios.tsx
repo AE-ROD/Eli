@@ -1,39 +1,82 @@
 "use client"
 
-import { useId, useState } from "react"
+import { useId, useMemo, useRef, useState } from "react"
 import { AnimatePresence } from "framer-motion"
-import { Clock, Pencil, Plus, Scissors, Trash2 } from "lucide-react"
+import { ListPlus, Plus, Scissors } from "lucide-react"
+import { Boton } from "@/components/comunes/boton"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
-import { Insignia } from "@/components/comunes/insignia"
 import { Aviso } from "@/components/panel/aviso"
+import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
-import { formatearMonto, montoParaEscribir } from "@/lib/dinero"
-import { formatearDuracionDeServicio } from "@/lib/fechas"
-import { cn } from "@/lib/utils"
-import { ModalServicio } from "./modal-servicio"
+import { montoParaEscribir } from "@/lib/dinero"
 import {
+  SIN_FILTRO_DE_LA_LISTA,
+  categoriaCanonica,
+  categoriasDe,
+  conActivo,
+  conCategoria,
+  conCategoriaRenombrada,
+  contarDeLaCategoria,
+  fusionarServicios,
+  vistaDeLaLista,
+  type FiltroDeLaLista,
+  type GrupoDeLaLista,
+} from "@/lib/lista-de-servicios"
+import { alternarUna, conMarca, estadoDeLaSeleccion, marcadasEntre } from "@/lib/seleccion-multiple"
+import { claveDeCategoria } from "@/lib/servicios-por-categoria"
+import type { ServicioParaCargar } from "@/lib/servicios-en-lote"
+import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
+import { BarraDeSeleccion } from "./barra-de-seleccion"
+import { BarraDeServicios } from "./barra-de-servicios"
+import { FilaDeServicio } from "./fila-de-servicio"
+import { GrupoDeServicios } from "./grupo-de-servicios"
+import { ModalCargaRapida } from "./modal-carga-rapida"
+import { ModalCategoriaDeServicios } from "./modal-categoria-de-servicios"
+import { ModalRenombrarCategoria, type PlanConfirmable } from "./modal-renombrar-categoria"
+import { ModalServicio } from "./modal-servicio"
+import { ResumenDeCargaAviso } from "./resumen-de-carga-aviso"
+import {
+  borrarServicio,
+  cambiarServiciosEnLote,
+  cargarServiciosEnLote,
   crearServicio,
   editarServicio,
   activarODesactivarServicio,
-  borrarServicio,
+  leerServicios,
+  renombrarCategoria,
   type DatosDeServicio,
   type Servicio,
 } from "../_datos"
+import { frasesDeConfiguracion } from "../_frases"
+import type { ResumenParaMostrar } from "../_frases-de-servicios"
 
-const SERVICIO_EN_BLANCO: DatosDeServicio = { name: "", description: "", duration: 30, price: "", category: "", frecuenciaDias: "" }
-
-/** Los botones de sólo ícono de cada servicio: 44 × 44, lo mínimo para un dedo. */
-const BOTON_DE_ICONO =
-  "grid size-11 shrink-0 place-items-center rounded-[14px] text-navy squircle anillo-foco transition-colors duration-150 ease-suave hover:bg-superficie"
+const SERVICIO_EN_BLANCO: DatosDeServicio = { name: "", description: "", duration: 30, price: "", category: "", frecuenciaDias: "", esUrgencia: false }
 
 interface PropsDeSeccionServicios {
   serviciosIniciales: Servicio[]
+  /**
+   * Si puede marcar un servicio como urgencia (`puedeMarcarServicioComoUrgencia`,
+   * una clínica dental): `page.tsx` lo pregunta a `lib/permisos.ts` y acá no se
+   * compara ningún rol ni rubro. El servidor lo vuelve a decidir.
+   *
+   * La sección entera sólo se dibuja para quien `puedeGestionarServicios`
+   * (dueño y encargado): `page.tsx` lo decide y no la monta para nadie más.
+   */
+  puedeMarcarUrgencia?: boolean
 }
 
-export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios) {
+/** Lo que pide un cambio en lote que se está por confirmar. */
+type CambioDeEstado = "activar" | "desactivar"
+
+export function SeccionServicios({ serviciosIniciales, puedeMarcarUrgencia = false }: PropsDeSeccionServicios) {
   const idDelTitulo = useId()
+  const rubro = useRubroDelPanel()
+  const palabras = useMemo(() => vocabularioDe(rubro).palabras, [rubro])
+  const { servicios: frases } = useMemo(() => frasesDeConfiguracion(palabras), [palabras])
   const [servicios, setServicios] = useState<Servicio[]>(serviciosIniciales)
   const [modalAbierto, setModalAbierto] = useState(false)
   const [servicioEditando, setServicioEditando] = useState<Servicio | null>(null)
@@ -41,6 +84,34 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
   const [guardando, setGuardando] = useState(false)
   const [aviso, setAviso] = useState("")
   const [avisoDelModal, setAvisoDelModal] = useState("")
+  // El servicio que se está por eliminar, con su modal de confirmación.
+  const [aEliminar, setAEliminar] = useState<Servicio | null>(null)
+  const [eliminando, setEliminando] = useState(false)
+  const [avisoDeEliminar, setAvisoDeEliminar] = useState("")
+
+  // La lista: qué se ve y qué está plegado.
+  const [filtro, setFiltro] = useState<FiltroDeLaLista>(SIN_FILTRO_DE_LA_LISTA)
+  const [plegadas, setPlegadas] = useState<ReadonlySet<string>>(new Set())
+  // La selección en lote.
+  const [seleccionando, setSeleccionando] = useState(false)
+  const [seleccion, setSeleccion] = useState<ReadonlySet<string>>(new Set())
+  const [categoriaAbierta, setCategoriaAbierta] = useState(false)
+  const [cambioDeEstado, setCambioDeEstado] = useState<CambioDeEstado | null>(null)
+  const [aRenombrar, setARenombrar] = useState<GrupoDeLaLista<Servicio> | null>(null)
+  const [trabajandoEnLote, setTrabajandoEnLote] = useState(false)
+  const [avisoDelLote, setAvisoDelLote] = useState("")
+  // La carga rápida y lo que dijo la última acción en lote, para el lector de pantalla.
+  const [cargaAbierta, setCargaAbierta] = useState(false)
+  const [resultado, setResultado] = useState<ResumenParaMostrar | null>(null)
+  const botonDeCarga = useRef<HTMLButtonElement>(null)
+  const botonDeSeleccion = useRef<HTMLButtonElement>(null)
+
+  const vista = useMemo(() => vistaDeLaLista(servicios, filtro), [servicios, filtro])
+  const categorias = useMemo(() => categoriasDe(servicios), [servicios])
+  const idsVisibles = useMemo(() => vista.visibles.map((servicio) => servicio.id), [vista.visibles])
+  // Sólo cuenta lo marcado que se ve: una acción no debe tocar lo que un filtro esconde.
+  const marcados = useMemo(() => marcadasEntre(seleccion, idsVisibles), [seleccion, idsVisibles])
+  const unSoloGrupoSinNombre = vista.grupos.length === 1 && vista.grupos[0].sinCategoria
 
   const abrirNuevo = () => {
     setServicioEditando(null)
@@ -58,6 +129,7 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
       price: servicio.price == null ? "" : montoParaEscribir(servicio.price),
       category: servicio.category ?? "",
       frecuenciaDias: servicio.frecuenciaDias?.toString() ?? "",
+      esUrgencia: servicio.esUrgencia,
     })
     setAvisoDelModal("")
     setModalAbierto(true)
@@ -76,9 +148,11 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
     e.preventDefault()
     setAvisoDelModal("")
     setGuardando(true)
+    // Una categoría que ya existe con otras mayúsculas ("color" y "Color") se guarda como la existente.
+    const datos = { ...form, category: categoriaCanonica(categorias, form.category) }
     const resultado = servicioEditando
-      ? await editarServicio(servicioEditando.id, form)
-      : await crearServicio(form)
+      ? await editarServicio(servicioEditando.id, datos, palabras, puedeMarcarUrgencia)
+      : await crearServicio(datos, palabras, puedeMarcarUrgencia)
     setGuardando(false)
 
     // Si el servidor lo rechaza, el modal queda abierto con lo cargado y el
@@ -88,6 +162,7 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
     // El aviso de una falla anterior (activar, borrar) ya no corresponde: si
     // quedara, parecería que esto tampoco se guardó.
     setAviso("")
+    setResultado(null)
     const guardado = resultado.datos
     if (servicioEditando) reemplazarEnLista(guardado)
     else setServicios((previos) => [...previos, guardado])
@@ -96,95 +171,353 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
 
   const alternarActivo = async (servicio: Servicio) => {
     setAviso("")
-    const resultado = await activarODesactivarServicio(servicio.id, !servicio.active)
+    setResultado(null)
+    const resultado = await activarODesactivarServicio(servicio.id, !servicio.active, palabras)
     if (resultado.ok) reemplazarEnLista(resultado.datos)
     else setAviso(resultado.error)
   }
 
-  const eliminar = async (id: string) => {
-    if (!confirm("¿Eliminar este servicio?")) return
+  const pedirEliminar = (servicio: Servicio) => {
+    setAvisoDeEliminar("")
+    setAEliminar(servicio)
+  }
+
+  /** Si el servidor no lo deja (por ejemplo, porque tiene citas), el motivo queda en el modal. */
+  const confirmarEliminar = async () => {
+    if (!aEliminar) return
+    const id = aEliminar.id
+    setAvisoDeEliminar("")
+    setEliminando(true)
+    const resultado = await borrarServicio(id, palabras)
+    setEliminando(false)
+    if (!resultado.ok) return setAvisoDeEliminar(resultado.error)
     setAviso("")
-    const resultado = await borrarServicio(id)
-    if (resultado.ok) setServicios((previos) => previos.filter((servicio) => servicio.id !== id))
-    else setAviso(resultado.error)
+    setResultado(null)
+    setServicios((previos) => previos.filter((servicio) => servicio.id !== id))
+    setAEliminar(null)
+  }
+
+  // ─── La lista: plegar, seleccionar ─────────────────────────────────────────
+
+  const alternarGrupo = (clave: string) =>
+    setPlegadas((previas) => {
+      const nuevas = new Set(previas)
+      if (!nuevas.delete(clave)) nuevas.add(clave)
+      return nuevas
+    })
+
+  const alternarSeleccion = () => {
+    setSeleccionando((antes) => !antes)
+    setSeleccion(new Set())
+  }
+
+  /** Sale del modo de selección, cuando una acción en lote terminó. */
+  const terminarSeleccion = () => {
+    setSeleccionando(false)
+    setSeleccion(new Set())
+  }
+
+  /**
+   * Cuando se cierra un modal de la lista y lo que lo abrió ya no está (la
+   * barra de selección se fue, o la categoría se unió con otra), el foco vuelve
+   * al botón de seleccionar, que sigue ahí: no cae al <body>.
+   */
+  const devolverElFoco = () => {
+    const actual = document.activeElement
+    if (!actual || actual === document.body) botonDeSeleccion.current?.focus()
+  }
+
+  /** Trae la lista del servidor y la junta con la que se tenía (una carga o un cambio agregó o movió servicios). `false` si no se pudo. */
+  const refrescarLista = async (): Promise<boolean> => {
+    const leidos = await leerServicios(palabras)
+    if (leidos.ok) setServicios((previos) => fusionarServicios(previos, leidos.datos))
+    return leidos.ok
+  }
+
+  // ─── Cambios en lote ───────────────────────────────────────────────────────
+
+  const abrirCategoria = () => {
+    setAvisoDelLote("")
+    setCategoriaAbierta(true)
+  }
+
+  const abrirCambioDeEstado = (cambio: CambioDeEstado) => {
+    setAvisoDelLote("")
+    setCambioDeEstado(cambio)
+  }
+
+  const abrirRenombrar = (grupo: GrupoDeLaLista<Servicio>) => {
+    setAvisoDelLote("")
+    setARenombrar(grupo)
+  }
+
+  /**
+   * Cambia la categoría o el estado de los marcados. Si el servidor cambió
+   * todos, la lista se actualiza sin pedirla otra vez; si cambió menos (o falló
+   * a medias), se vuelve a leer para mostrar lo que de verdad quedó. Si falla,
+   * el motivo queda en el modal, abierto.
+   */
+  const aplicarCambio = async (cambios: { category: string | null } | { active: boolean }, decir: (n: number) => string) => {
+    const ids = marcados
+    setAvisoDelLote("")
+    setTrabajandoEnLote(true)
+    const hecho = await cambiarServiciosEnLote(ids, cambios, palabras)
+    const cambiados = hecho.actualizados
+    if (!hecho.ok || cambiados < ids.length) await refrescarLista()
+    else {
+      const conjunto = new Set(ids)
+      setServicios((previos) =>
+        "category" in cambios ? conCategoria(previos, conjunto, cambios.category) : conActivo(previos, conjunto, cambios.active)
+      )
+    }
+    setTrabajandoEnLote(false)
+    if (!hecho.ok) return setAvisoDelLote(hecho.error)
+
+    setAviso("")
+    setResultado(
+      cambiados === 0
+        ? { tono: "atencion", titulo: frases.seleccion.sinCambios, detalles: [] }
+        : { tono: "listo", titulo: decir(cambiados), detalles: [] }
+    )
+    setCategoriaAbierta(false)
+    setCambioDeEstado(null)
+    terminarSeleccion()
+  }
+
+  const confirmarCategoria = (categoria: string) =>
+    aplicarCambio({ category: categoria === "" ? null : categoria }, (n) => frases.cambiarCategoria.resultado(n, categoria === "" ? null : categoria))
+
+  const confirmarEstado = (cambio: CambioDeEstado) =>
+    aplicarCambio({ active: cambio === "activar" }, cambio === "activar" ? frases.activarEnLote.resultadoActivar : frases.activarEnLote.resultadoDesactivar)
+
+  /**
+   * Renombra una categoría, o la une con otra que ya existe (el plan lo dice
+   * el modal). El servidor compara el nombre sin mayúsculas ni espacios de más,
+   * así que un solo pedido cambia todas sus escrituras. Si cambió justo los
+   * que se esperaban, la lista se actualiza sin pedirla; si no (el servidor
+   * también compara sin tildes, y puede haber movido más), se vuelve a leer.
+   */
+  const confirmarRenombrar = async (plan: PlanConfirmable) => {
+    if (!aRenombrar) return
+    const { clave, categoria } = aRenombrar
+    const esperados = servicios.filter(
+      (servicio) => (servicio.category ?? "").trim() !== "" && claveDeCategoria(servicio.category) === clave && servicio.category !== plan.nuevo
+    ).length
+    setAvisoDelLote("")
+    setTrabajandoEnLote(true)
+    const hecho = await renombrarCategoria(categoria, plan.nuevo, palabras)
+    if (hecho.ok && hecho.datos.actualizados === esperados) {
+      setServicios((previos) => conCategoriaRenombrada(previos, clave, plan.nuevo))
+    } else {
+      await refrescarLista()
+    }
+    setTrabajandoEnLote(false)
+    if (!hecho.ok) return setAvisoDelLote(hecho.error)
+
+    setAviso("")
+    setResultado({
+      tono: "listo",
+      titulo:
+        plan.tipo === "unir"
+          ? frases.renombrarCategoria.resultadoUnir(categoria, plan.nuevo, hecho.datos.actualizados)
+          : frases.renombrarCategoria.resultadoRenombrar(categoria, plan.nuevo, hecho.datos.actualizados),
+      detalles: [],
+    })
+    setARenombrar(null)
+  }
+
+  // ─── La carga rápida ───────────────────────────────────────────────────────
+
+  const abrirCarga = () => {
+    setAviso("")
+    setCargaAbierta(true)
+  }
+
+  /**
+   * Envía lo que eligió la carga rápida (de a 100) y trae la lista al día, sin
+   * recargar la página. Si todo llegó y se agregó algo, el resumen queda en la
+   * sección y el modal se cierra. Si no (nada se agregó, o se cortó a la
+   * mitad), el resumen se muestra en el modal, que sigue abierto.
+   */
+  const agregarEnLote = async (lista: ServicioParaCargar[]): Promise<{ resumen: ResumenParaMostrar; cerrar: boolean }> => {
+    const enviado = await cargarServiciosEnLote(lista, palabras)
+    let resumen = frases.resumenDeCarga(enviado)
+    if (enviado.creados > 0 && !(await refrescarLista())) {
+      resumen = { ...resumen, detalles: [frases.errorDeLote(null, "", "leer"), ...resumen.detalles] }
+    }
+    const cerrar = enviado.error === null && enviado.creados > 0
+    if (cerrar) {
+      setAviso("")
+      setResultado(resumen)
+    }
+    return { resumen, cerrar }
+  }
+
+  /** Si lo que abrió la carga rápida ya no está (el estado vacío se fue al agregar), el foco vuelve a su botón. */
+  const devolverElFocoALaCarga = () => {
+    const actual = document.activeElement
+    if (!actual || actual === document.body) botonDeCarga.current?.focus()
   }
 
   return (
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
-        titulo="Servicios"
-        subtitulo="Los servicios que ofreces a tus clientes"
+        nivel={3}
+        titulo={frases.titulo}
+        subtitulo={frases.subtitulo}
         icono={{ figura: Scissors }}
         accion={
-          <BotonPrimario tamaño="sm" icono={<Plus className="h-4 w-4" />} onClick={abrirNuevo}>
-            Nuevo servicio
-          </BotonPrimario>
+          <div className="flex flex-wrap items-center gap-2">
+            <Boton ref={botonDeCarga} variante="secundario" tamano="sm" icono={<ListPlus />} onClick={abrirCarga}>
+              {frases.carga.boton}
+            </Boton>
+            <BotonPrimario tamaño="sm" icono={<Plus className="h-4 w-4" />} onClick={abrirNuevo}>
+              {frases.nuevo}
+            </BotonPrimario>
+          </div>
         }
       />
 
       {aviso && <Aviso className="mt-5">{aviso}</Aviso>}
 
+      {/* Lo que dijo la última carga o cambio en lote. La región está siempre: el lector anuncia lo que aparece adentro. */}
+      <div role="status" aria-live="polite">
+        {resultado && (
+          <ResumenDeCargaAviso
+            resumen={resultado}
+            className="mt-5"
+            accion={
+              <BotonPrimario variante="fantasma" tamaño="sm" onClick={() => setResultado(null)}>
+                {frases.entendido}
+              </BotonPrimario>
+            }
+          />
+        )}
+      </div>
+
       {servicios.length === 0 ? (
-        <EstadoVacio className="mt-5" titulo="Sin servicios aún">
-          Agrega el primer servicio que ofreces
+        <EstadoVacio className="mt-5" titulo={frases.sinServicios.titulo}>
+          {frases.sinServicios.ayuda}
+          <span className="mt-4 flex justify-center">
+            <BotonPrimario icono={<ListPlus className="h-4 w-4" />} onClick={abrirCarga}>
+              {frases.carga.boton}
+            </BotonPrimario>
+          </span>
         </EstadoVacio>
       ) : (
-        <ul className="mt-5 divide-y divide-borde">
-          {servicios.map((servicio) => (
-            // Si no entran los botones al lado (el teléfono), bajan a la derecha, debajo del servicio.
-            <li key={servicio.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3.5 first:pt-0 last:pb-0">
-              <div className="min-w-48 flex-1">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <p className="font-medium break-words">{servicio.name}</p>
-                  {servicio.category && <Insignia>{servicio.category}</Insignia>}
-                  {!servicio.active && <Insignia>Inactivo</Insignia>}
-                </div>
-                {servicio.description && (
-                  <p className="mt-0.5 line-clamp-2 text-[13px] text-texto-2">{servicio.description}</p>
-                )}
-                <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-texto-2">
-                  <span className="flex items-center gap-1">
-                    <Clock className="size-3.5" aria-hidden="true" strokeWidth={1.75} />
-                    {formatearDuracionDeServicio(servicio.duration)}
-                  </span>
-                  {servicio.price != null && (
-                    <span className="font-medium text-navy tabular-nums">{formatearMonto(servicio.price)}</span>
-                  )}
-                </p>
-              </div>
+        <>
+          <BarraDeServicios
+            frases={frases}
+            conFiltros={vista.conFiltros}
+            filtro={vista.filtro}
+            alCambiarFiltro={setFiltro}
+            seleccionando={seleccionando}
+            alAlternarSeleccion={alternarSeleccion}
+            botonDeSeleccion={botonDeSeleccion}
+          />
 
-              <div className="ml-auto flex shrink-0 items-center gap-1">
-                <InterruptorDelServicio servicio={servicio} alCambiar={() => alternarActivo(servicio)} />
-                <button
-                  type="button"
-                  onClick={() => abrirEdicion(servicio)}
-                  aria-label={`Editar ${servicio.name}`}
-                  title="Editar"
-                  className={BOTON_DE_ICONO}
-                >
-                  <Pencil className="size-4" aria-hidden="true" strokeWidth={1.75} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => eliminar(servicio.id)}
-                  aria-label={`Eliminar ${servicio.name}`}
-                  title="Eliminar"
-                  className={cn(BOTON_DE_ICONO, "hover:bg-error/6 hover:text-error")}
-                >
-                  <Trash2 className="size-4" aria-hidden="true" strokeWidth={1.75} />
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+          {/* Lo que el filtro deja a la vista, para el lector de pantalla. */}
+          {vista.conFiltros && (
+            <p role="status" className="mt-3 min-h-5 text-sm text-texto-2">
+              {vista.filtrando ? frases.lista.mostrando(vista.visibles.length, vista.total) : ""}
+            </p>
+          )}
+
+          {vista.visibles.length === 0 ? (
+            <EstadoVacio className="mt-5" titulo={frases.lista.sinResultados.titulo}>
+              {frases.lista.sinResultados.ayuda}
+              <span className="mt-4 flex justify-center">
+                <BotonPrimario variante="secundario" tamaño="sm" onClick={() => setFiltro(SIN_FILTRO_DE_LA_LISTA)}>
+                  {frases.lista.sinResultados.quitar}
+                </BotonPrimario>
+              </span>
+            </EstadoVacio>
+          ) : unSoloGrupoSinNombre ? (
+            // Sin ninguna categoría puesta, un título "Sin categoría" sobre todo no dice nada: la lista de siempre.
+            <ul className="mt-5 divide-y divide-borde">
+              {vista.grupos[0].servicios.map((servicio) => (
+                <FilaDeServicio
+                  key={servicio.id}
+                  servicio={servicio}
+                  frases={frases}
+                  seleccionando={seleccionando}
+                  marcado={seleccion.has(servicio.id)}
+                  alMarcar={() => setSeleccion((previa) => alternarUna(previa, servicio.id))}
+                  alAlternarActivo={() => alternarActivo(servicio)}
+                  alEditar={() => abrirEdicion(servicio)}
+                  alEliminar={() => pedirEliminar(servicio)}
+                />
+              ))}
+            </ul>
+          ) : (
+            <div className="mt-5 space-y-4">
+              {vista.grupos.map((grupo) => {
+                const nombre = grupo.sinCategoria ? frases.lista.sinCategoria : grupo.categoria
+                const ids = grupo.servicios.map((servicio) => servicio.id)
+                return (
+                  <GrupoDeServicios
+                    key={grupo.clave}
+                    nombre={nombre}
+                    cantidad={ids.length}
+                    conteoEnPalabras={frases.lista.cuantos(ids.length)}
+                    // Una búsqueda despliega lo que encontró: un resultado plegado no se vería.
+                    abierto={vista.buscando || !plegadas.has(grupo.clave)}
+                    alAlternar={() => alternarGrupo(grupo.clave)}
+                    seleccion={
+                      seleccionando
+                        ? {
+                            etiqueta: frases.seleccion.marcarCategoria(nombre),
+                            estado: estadoDeLaSeleccion(seleccion, ids),
+                            alCambiar: (marcado) => setSeleccion((previa) => conMarca(previa, ids, marcado)),
+                          }
+                        : undefined
+                    }
+                    renombrar={
+                      !seleccionando && !grupo.sinCategoria
+                        ? { etiqueta: frases.lista.renombrarLa(nombre), texto: frases.lista.renombrar, alPulsar: () => abrirRenombrar(grupo) }
+                        : undefined
+                    }
+                  >
+                    {grupo.servicios.map((servicio) => (
+                      <FilaDeServicio
+                        key={servicio.id}
+                        servicio={servicio}
+                        frases={frases}
+                        seleccionando={seleccionando}
+                        marcado={seleccion.has(servicio.id)}
+                        alMarcar={() => setSeleccion((previa) => alternarUna(previa, servicio.id))}
+                        alAlternarActivo={() => alternarActivo(servicio)}
+                        alEditar={() => abrirEdicion(servicio)}
+                        alEliminar={() => pedirEliminar(servicio)}
+                      />
+                    ))}
+                  </GrupoDeServicios>
+                )
+              })}
+            </div>
+          )}
+
+          {seleccionando && (
+            <BarraDeSeleccion
+              frases={frases}
+              marcados={marcados.length}
+              visibles={idsVisibles.length}
+              alMarcarTodos={() => setSeleccion((previa) => conMarca(previa, idsVisibles, true))}
+              alQuitarSeleccion={() => setSeleccion((previa) => conMarca(previa, idsVisibles, false))}
+              alCambiarCategoria={abrirCategoria}
+              alActivar={() => abrirCambioDeEstado("activar")}
+              alDesactivar={() => abrirCambioDeEstado("desactivar")}
+            />
+          )}
+        </>
       )}
 
       <AnimatePresence>
         {modalAbierto && (
           <ModalServicio
             form={form}
-            categorias={[...new Set(servicios.map((servicio) => servicio.category?.trim()).filter((categoria): categoria is string => !!categoria))]}
+            categorias={categorias}
             guardando={guardando}
             aviso={avisoDelModal}
             modoEdicion={!!servicioEditando}
@@ -193,42 +526,76 @@ export function SeccionServicios({ serviciosIniciales }: PropsDeSeccionServicios
             onCerrar={cerrarModal}
             frecuenciaDias={form.frecuenciaDias}
             onCambiarFrecuencia={(valor) => setForm((previo) => ({ ...previo, frecuenciaDias: valor }))}
+            urgencia={form.esUrgencia}
+            onCambiarUrgencia={puedeMarcarUrgencia ? (valor) => setForm((previo) => ({ ...previo, esUrgencia: valor })) : undefined}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {aEliminar && (
+          <ModalConfirmar
+            titulo={`¿Eliminar ${aEliminar.name}?`}
+            descripcion={frases.eliminar.descripcion}
+            textoConfirmar={frases.eliminar.confirmar}
+            textoCancelar="No eliminar"
+            peligro
+            trabajando={eliminando}
+            aviso={avisoDeEliminar}
+            onConfirmar={confirmarEliminar}
+            onCerrar={() => setAEliminar(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence onExitComplete={devolverElFocoALaCarga}>
+        {cargaAbierta && <ModalCargaRapida servicios={servicios} alAgregar={agregarEnLote} alCerrar={() => setCargaAbierta(false)} />}
+      </AnimatePresence>
+
+      <AnimatePresence onExitComplete={devolverElFoco}>
+        {categoriaAbierta && (
+          <ModalCategoriaDeServicios
+            frases={frases}
+            cantidad={marcados.length}
+            categorias={categorias}
+            trabajando={trabajandoEnLote}
+            aviso={avisoDelLote}
+            alConfirmar={confirmarCategoria}
+            alCerrar={() => setCategoriaAbierta(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence onExitComplete={devolverElFoco}>
+        {cambioDeEstado && (
+          <ModalConfirmar
+            titulo={cambioDeEstado === "activar" ? frases.activarEnLote.tituloActivar(marcados.length) : frases.activarEnLote.tituloDesactivar(marcados.length)}
+            descripcion={cambioDeEstado === "activar" ? frases.activarEnLote.descripcionActivar : frases.activarEnLote.descripcionDesactivar}
+            textoConfirmar={cambioDeEstado === "activar" ? frases.activarEnLote.confirmarActivar : frases.activarEnLote.confirmarDesactivar}
+            textoCancelar={frases.activarEnLote.cancelar}
+            trabajando={trabajandoEnLote}
+            aviso={avisoDelLote}
+            onConfirmar={() => confirmarEstado(cambioDeEstado)}
+            onCerrar={() => setCambioDeEstado(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence onExitComplete={devolverElFoco}>
+        {aRenombrar && (
+          <ModalRenombrarCategoria
+            frases={frases}
+            categoria={aRenombrar.categoria}
+            clave={aRenombrar.clave}
+            cantidad={contarDeLaCategoria(servicios, aRenombrar.clave)}
+            servicios={servicios}
+            trabajando={trabajandoEnLote}
+            aviso={avisoDelLote}
+            alConfirmar={confirmarRenombrar}
+            alCerrar={() => setARenombrar(null)}
           />
         )}
       </AnimatePresence>
     </section>
-  )
-}
-
-/**
- * Activo o inactivo: un servicio inactivo no aparece en la página pública de
- * reservas. Es el interruptor de `Interruptor`, sin la etiqueta a la vista: en
- * cada fila el nombre del servicio ya está al lado, y va en su nombre para el
- * lector de pantalla.
- */
-function InterruptorDelServicio({ servicio, alCambiar }: { servicio: Servicio; alCambiar: () => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={servicio.active}
-      aria-label={`Servicio activo: ${servicio.name}`}
-      title={servicio.active ? "Desactivar" : "Activar"}
-      onClick={alCambiar}
-      className={cn(
-        // 52×32 a la vista; el ::after lleva el área táctil a 60×44.
-        "relative mr-1 inline-flex h-8 w-13 shrink-0 cursor-pointer items-center rounded-full p-1",
-        "anillo-foco transition-colors duration-150 ease-suave after:absolute after:-inset-x-1 after:-inset-y-1.5",
-        servicio.active ? "bg-navy" : "bg-texto-2"
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className={cn(
-          "size-6 rounded-full bg-white shadow-sm transition-transform duration-300 ease-suave",
-          servicio.active && "translate-x-5"
-        )}
-      />
-    </button>
   )
 }

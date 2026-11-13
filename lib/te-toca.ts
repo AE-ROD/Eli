@@ -11,6 +11,7 @@ import {
 } from "@/lib/envios-a-clientes"
 import { DIAS_DE_HISTORIAL, estaVencido, fechaDeVisita, frecuenciasPorCliente } from "@/lib/frecuencia-de-visitas"
 import { registrarError } from "@/lib/registro-de-errores"
+import { urlBase } from "@/lib/url-base"
 import { rangoDelDiaEn, sumarDias, zonaDelNegocio } from "@/lib/zona-horaria"
 
 /**
@@ -42,10 +43,6 @@ import { rangoDelDiaEn, sumarDias, zonaDelNegocio } from "@/lib/zona-horaria"
 /** Cuántas atenciones se leen por negocio y corrida, como mucho. */
 const TOPE_DE_ATENCIONES_POR_NEGOCIO = 20_000
 
-function urlBase(): string {
-  return process.env.NEXTAUTH_URL ?? "http://localhost:3000"
-}
-
 /** Por qué se cortó el negocio: ya no queda cupo ni tiempo, o llegó a su tope del día. */
 type Corte = "corrida" | "negocio" | null
 
@@ -54,7 +51,7 @@ export async function ejecutarTeToca(contexto: ContextoDeCorrida): Promise<Resum
 
   const negocios = await prisma.business.findMany({
     where: { avisoDeVueltaActivo: true },
-    select: { id: true, name: true, slug: true, timezone: true },
+    select: { id: true, name: true, slug: true, timezone: true, type: true },
     orderBy: { id: "asc" },
   })
 
@@ -84,6 +81,8 @@ interface Negocio {
   name: string
   slug: string
   timezone: string | null
+  /** El rubro: pone las palabras del correo (`lib/vocabulario.ts`). */
+  type: string | null
 }
 
 async function teTocaEnElNegocio(negocio: Negocio, contexto: ContextoDeCorrida, resumen: ResumenDeTrabajo): Promise<Corte> {
@@ -174,10 +173,14 @@ async function teTocaEnElNegocio(negocio: Negocio, contexto: ContextoDeCorrida, 
       ahora: contexto.ahora,
       enviar: () =>
         enviarTeToca({
+          rubro: negocio.type,
           emailCliente: cliente.email,
           nombreCliente: cliente.name,
           nombreNegocio: negocio.name,
           servicio: frecuencia.ultimoServicio,
+          // `urlBase` lanza en producción sin NEXTAUTH_URL: adentro de `enviar`,
+          // `enviarAClientes` lo registra, lo cuenta como fallido y suelta el
+          // candado (la próxima corrida lo reintenta). Nunca un enlace a localhost.
           enlaceReservar: `${urlBase()}/reservar/${negocio.slug}`,
           ...enlacesDeBajaDeCliente(frecuencia.customerId),
         }),

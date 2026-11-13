@@ -2,10 +2,13 @@
 
 import { useId } from "react"
 import { FONDO_FUERTE } from "@/components/comunes/colores-de-modulo"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
 import { formatearMonto } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { puedeVerIngresos, type EstadisticasDelPanel } from "../_datos"
+import { frasesDelInicio } from "../_frases"
 
 interface PropsDeResumenDelNegocio {
   /** Nulo mientras cargan. */
@@ -16,15 +19,17 @@ interface PropsDeResumenDelNegocio {
 export function ResumenDelNegocio({ estadisticas }: PropsDeResumenDelNegocio) {
   const idDelTitulo = useId()
   const conIngresos = puedeVerIngresos(estadisticas)
+  // "Pacientes" en una clínica dental, "Horas agendadas hoy" en un salón.
+  const frases = frasesDelInicio(vocabularioDe(useRubroDelPanel()).palabras)
 
   const renglones = [
     {
-      etiqueta: "Citas hoy",
+      etiqueta: frases.estadisticas.citasHoy,
       valor: estadisticas?.citasHoy ?? "—",
       color: FONDO_FUERTE.azul,
     },
     {
-      etiqueta: "Total clientes",
+      etiqueta: frases.resumenDelNegocio.totalDeClientes,
       valor: estadisticas?.totalClientes ?? "—",
       color: FONDO_FUERTE.lila,
     },
@@ -40,7 +45,7 @@ export function ResumenDelNegocio({ estadisticas }: PropsDeResumenDelNegocio) {
         ]
       : []),
     {
-      etiqueta: "Clientes nuevos este mes",
+      etiqueta: frases.resumenDelNegocio.clientesNuevosEsteMes,
       valor: estadisticas?.clientesNuevosMes ?? "—",
       color: FONDO_FUERTE.lila,
     },
@@ -49,7 +54,7 @@ export function ResumenDelNegocio({ estadisticas }: PropsDeResumenDelNegocio) {
   return (
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <h2 id={idDelTitulo} className={TITULO_DE_TARJETA}>
-        {conIngresos ? "Resumen del negocio" : "Tu resumen"}
+        {conIngresos ? frases.resumenDelNegocio.titulo : "Tu resumen"}
       </h2>
       <dl className="mt-4 divide-y divide-borde">
         {renglones.map((renglon) => (

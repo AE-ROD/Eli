@@ -5,7 +5,8 @@ import { rangoDelDiaEn, fechaYMinutosEn } from "@/lib/zona-horaria"
 /**
  * Cierre de caja (#71). Cada cierre cubre `(desde, hasta]`: `desde` es el
  * `hasta` del cierre anterior (o, para el primero, el inicio del día del
- * negocio) y `hasta` el momento en que se cierra. Así los cierres quedan uno
+ * negocio) y `hasta` el momento hasta el que se vio la caja al contar (la
+ * hora de la base en el GET): lo cobrado después queda para el próximo. Así los cierres quedan uno
  * detrás del otro, sin hueco ni solape, y un pago justo en el límite cae en
  * uno solo: el que termina ahí (`atencionBloqueada` usa el mismo borde).
  *
@@ -23,6 +24,8 @@ export const EFECTIVO = "efectivo"
 
 export const MENSAJE_CAJA_CAMBIO =
   "Alguien cerró la caja recién: lo que contaste puede no cuadrar con lo nuevo. Revisa los montos y vuelve a cerrar"
+export const MENSAJE_CAJA_CAMBIO_LO_COBRADO =
+  "Lo cobrado cambió mientras contabas (un cobro o una anulación): revisa el esperado nuevo y vuelve a cerrar"
 export const MENSAJE_NOTA_OBLIGATORIA = "Hay diferencia entre lo esperado y lo contado: escribe una nota que la explique"
 
 /** Lo que se suma de una atención cobrada en el rango. */

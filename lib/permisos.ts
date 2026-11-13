@@ -1,6 +1,8 @@
 import type { Prisma } from "@prisma/client"
 import type { Session } from "next-auth"
 import { esEstadoActivo } from "@/lib/atenciones"
+import { planConocido, type PlanId } from "@/lib/planes"
+import { esRubroDental } from "@/lib/rubros"
 
 /**
  * Quién puede hacer qué. Única fuente de verdad: ningún endpoint compara roles
@@ -17,6 +19,20 @@ export interface Actor {
   businessId: string
   /** El dueño no es miembro del equipo, así que no tiene memberId. */
   memberId: string | null
+  /**
+   * El rubro del negocio (`Business.type`), de la sesión. Opcional: sin él el
+   * negocio no es dental (`esClinicaDental` falla cerrado), así que un actor
+   * armado sin rubro, o una sesión de antes de este campo, no ve nada clínico.
+   */
+  rubro?: string
+  /**
+   * El plan del negocio (`Business.plan`, `lib/planes.ts`), de la sesión.
+   * `actorDeSesion` siempre lo trae: `null` si la sesión no lo tiene o no es un
+   * plan conocido. Opcional en el tipo para los actores armados a mano
+   * (pruebas): ausente cuenta igual que `null`. Sin plan no se habilita nada
+   * que dependa de él (`puedeInvitarAlEquipo`, `puedeGestionarSedes`).
+   */
+  plan?: PlanId | null
 }
 
 /** Miembro sobre el que se decide algo. Trae su negocio para poder validarlo. */
@@ -32,7 +48,7 @@ const ROLES: readonly string[] = ["owner", "admin", "worker"]
  * viejo o mal formado no debe producir un actor.
  */
 export function actorDeSesion(session: Pick<Session, "user"> | null | undefined): Actor | null {
-  const { role, businessId, memberId } = (session?.user ?? {}) as Record<string, unknown>
+  const { role, businessId, memberId, rubro, plan } = (session?.user ?? {}) as Record<string, unknown>
 
   if (typeof role !== "string" || !ROLES.includes(role)) return null
   if (typeof businessId !== "string" || !businessId) return null
@@ -41,12 +57,31 @@ export function actorDeSesion(session: Pick<Session, "user"> | null | undefined)
     rol: role as Rol,
     businessId,
     memberId: typeof memberId === "string" && memberId ? memberId : null,
+    // Sólo si es texto: lo demás queda fuera y el negocio no es dental.
+    ...(typeof rubro === "string" && rubro ? { rubro } : {}),
+    // Un plan que no es de la lista (o una sesión de antes del campo) es null.
+    plan: planConocido(plan),
   }
+}
+
+/**
+ * La cuenta (la persona) de la sesión, o `null` si no hay una vigente. Es para
+ * lo que es de la persona y no de un negocio (su foto): no pide rol ni negocio,
+ * sólo que la sesión traiga un id de cuenta. Valida en runtime: una sesión
+ * revocada (`lib/auth.ts` la deja con `id` vacío) o mal formada no es nadie, y
+ * falla cerrado.
+ *
+ * El id sale SIEMPRE de la sesión: ningún endpoint lo recibe del navegador, así
+ * que una persona no tiene cómo apuntar a la cuenta de otra.
+ */
+export function cuentaDeSesion(session: Pick<Session, "user"> | null | undefined): { id: string } | null {
+  const { id } = (session?.user ?? {}) as Record<string, unknown>
+  return typeof id === "string" && id ? { id } : null
 }
 
 // ─── Quién es ────────────────────────────────────────────────────────────────
 
-export const esDueño = (actor: Actor | null): boolean => actor?.rol === "owner"
+export const esDueño =(actor: Actor | null): boolean => actor?.rol === "owner"
 
 /** Dueño y encargado: los que gestionan el negocio. */
 export const gestionaElNegocio = (actor: Actor | null): boolean =>
@@ -138,6 +173,42 @@ export const puedeImportarExportarClientes = gestionaElNegocio
 export const puedeEditarPaginaDelNegocio = gestionaElNegocio
 
 /**
+ * Las fotos de la página pública (logo y portada del negocio): son la cara
+ * del negocio, como el resto de la página, así que dueño y encargado. El
+ * profesional no las cambia.
+ */
+export const puedeEditarFotosDelNegocio = gestionaElNegocio
+
+/**
+ * El nombre del negocio (`Business.name`): es lo primero que lee quien abre la
+ * página pública, así que lo cambia quien edita esa página (dueño y
+ * encargado); el profesional lo ve sin botón. El `slug` no cambia con el
+ * nombre: los enlaces ya compartidos siguen funcionando.
+ */
+export const puedeEditarNombreDelNegocio = puedeEditarPaginaDelNegocio
+
+/**
+ * La foto de un integrante del equipo (la que se ve en "Quiénes atienden").
+ * Dueño y encargado cambian la de cualquiera del negocio; el profesional,
+ * SÓLO la suya: su membresía (`memberId` de la sesión) tiene que ser la del
+ * integrante. Un profesional sin `memberId` no cambia ninguna (`null` no es
+ * "la suya"): falla cerrado.
+ *
+ * `businessId` es opcional para quien sólo tiene el id (la interfaz decide si
+ * muestra el botón); el endpoint lo pasa siempre, leído de la base: si viene y
+ * no es el del actor, niega aunque el actor gestione el negocio.
+ */
+export const puedeEditarFotoDelMiembro = (
+  actor: Actor | null,
+  miembro: { id: string; businessId?: string }
+): boolean => {
+  if (!actor) return false
+  if (miembro.businessId !== undefined && !mismoNegocio(actor, miembro.businessId)) return false
+  if (gestionaElNegocio(actor)) return true
+  return actor.rol === "worker" && !!actor.memberId && actor.memberId === miembro.id
+}
+
+/**
  * A quién se asigna una cita. Sólo quien puede asignar citas a otros (dueño y
  * encargado) elige: se respeta lo pedido, incluido `null` ("sin asignar").
  * Cualquier otro —el profesional, o un rol desconocido— no elige: termina
@@ -205,6 +276,14 @@ export const puedeDefinirServiciosDe = (actor: Actor | null, miembro: Miembro): 
  * clientes, como los servicios: dueño y encargado.
  */
 export const puedeEditarPlazoDeCambios = gestionaElNegocio
+
+/**
+ * La zona horaria del negocio (`Business.timezone`): con ella se leen las
+ * citas en la agenda y se ofrecen las horas de la reserva pública. Cambiarla
+ * mueve lo que ve cada cliente, así que es de la dueña. Vale en todos los
+ * rubros (una clínica dental también la tiene).
+ */
+export const puedeConfigurarZonaHoraria = esDueño
 
 // ─── Tablero de atenciones (docs/PRODUCTO.md, sección 7) ─────────────────────
 
@@ -335,8 +414,12 @@ export const puedeGestionarProductos = gestionaElNegocio
  */
 export const puedeFijarComisionDeProducto = puedeEditarComisiones
 
-/** Las propinas se anotan al cobrar, así que las registra quien cobra. */
-export const puedeRegistrarPropina = puedeCobrar
+/**
+ * Las propinas se anotan al cobrar, así que las registra quien cobra. Una
+ * clínica dental no trabaja con propinas (`rubroOfrecePropinas`): ahí nadie las
+ * registra, ni el servidor las acepta aunque el navegador las mande.
+ */
+export const puedeRegistrarPropina = (actor: Actor | null): boolean => puedeCobrar(actor) && !esClinicaDental(actor)
 
 /** Tipo de período de liquidación del negocio (y su día de inicio de semana). */
 export const puedeConfigurarLiquidacion = esDueño
@@ -432,16 +515,20 @@ export const puedeEditarConsentimientoPromocional = puedeEditarDatosDeCliente
 /** Con cuántas faltas una reserva pública entra por confirmar (#84). Sólo la dueña. */
 export const puedeConfigurarPorConfirmar = esDueño
 
-/** Encender o apagar la fila virtual y fijar su tope (#85). Sólo la dueña. */
-export const puedeActivarFilaVirtual = esDueño
+/**
+ * Encender o apagar la fila virtual y fijar su tope (#85). Sólo la dueña, y
+ * no en una clínica dental, donde no hay fila virtual (`rubroOfreceFilaVirtual`).
+ */
+export const puedeActivarFilaVirtual = (actor: Actor | null): boolean => esDueño(actor) && !esClinicaDental(actor)
 
 // ─── Reservas a medida (etapa 5) ────────────────────────────────────────────
 
 /**
  * Encender o apagar los precios de hora valle, sus franjas y qué servicios
- * quedan fuera (#89c). Es precio, o sea dinero: sólo la dueña.
+ * quedan fuera (#89c). Es precio, o sea dinero: sólo la dueña, y no en una
+ * clínica dental, donde no hay hora valle (`rubroOfreceHoraValle`).
  */
-export const puedeConfigurarHoraValle = esDueño
+export const puedeConfigurarHoraValle = (actor: Actor | null): boolean => esDueño(actor) && !esClinicaDental(actor)
 
 /**
  * Confirmar o cancelar una reserva que entró por confirmar por faltas
@@ -462,7 +549,7 @@ export const puedeResolverPorConfirmar = gestionaElNegocio
  * Tablero entero (`puedeVerTodoElTablero`); la pantalla la deja abierta en el
  * equipo del local quien gestiona el negocio. Falla cerrado.
  */
-export const puedeVerPantallaDeFila = gestionaElNegocio
+export const puedeVerPantallaDeFila = (actor: Actor | null): boolean => gestionaElNegocio(actor) && !esClinicaDental(actor)
 
 /**
  * "Vaciar la fila de hoy": anula de una vez a todos los que esperan en la
@@ -470,7 +557,247 @@ export const puedeVerPantallaDeFila = gestionaElNegocio
  * cerrar). Dueña y encargado, los mismos que ven la fila entera. El
  * profesional no: la fila es de todo el negocio. Falla cerrado.
  */
-export const puedeVaciarFilaVirtual = gestionaElNegocio
+export const puedeVaciarFilaVirtual = (actor: Actor | null): boolean => gestionaElNegocio(actor) && !esClinicaDental(actor)
+
+// ─── Planes y sedes (etapa 9) ────────────────────────────────────────────────
+//
+// El plan viene de la sesión (`Actor.plan`), que `lib/auth.ts` arma desde la
+// base: nunca de lo que mande el navegador. Un plan ausente (`null`, o un actor
+// armado sin él) o desconocido no habilita nada que dependa del plan: se
+// compara con `=== "equipo"` / `=== "independiente"`, nunca con `!== otro`.
+// Una misma cuenta puede estar en una clínica Equipo y ser dueña de su negocio
+// Independiente: son contextos distintos (`lib/contextos.ts`) y cada actor
+// trae el plan de SU negocio.
+
+/**
+ * Invitar a alguien al equipo (crear la invitación, reenviarla): quien ya
+ * gestiona el equipo (`puedeGestionarEquipo`) y sólo en un negocio del plan
+ * Equipo. Un negocio Independiente atiende sólo la dueña y no invita a nadie.
+ * Ver y gestionar la lista del equipo no depende del plan.
+ */
+export const puedeInvitarAlEquipo = (actor: Actor | null): boolean =>
+  puedeGestionarEquipo(actor) && actor?.plan === "equipo"
+
+/**
+ * Si hay que explicar que el plan del negocio no incluye equipo ("Tu plan es
+ * Independiente…" en Equipo y en los precios). Es para EXPLICAR, no para
+ * habilitar nada: un plan ausente o desconocido no dice nada (`false`), así que
+ * una sesión de antes del campo no muestra un aviso que podría estar mal.
+ */
+export const elPlanNoIncluyeEquipo = (actor: Actor | null): boolean => actor?.plan === "independiente"
+
+/**
+ * Crear, editar y desactivar las sedes del negocio y su horario por día: sólo
+ * la dueña y sólo en el plan Independiente. El plan Equipo tiene una sola
+ * sede, la dirección del negocio.
+ */
+export const puedeGestionarSedes = (actor: Actor | null): boolean => esDueño(actor) && actor?.plan === "independiente"
+
+/** Cambiar el plan del negocio: lo paga la dueña, así que sólo ella. */
+export const puedeCambiarDePlan = esDueño
+
+// ─── Clínica dental (rubro "odontologia") ────────────────────────────────────
+//
+// Todo lo clínico existe sólo en un negocio dental: en un salón, una barbería
+// o un salón de uñas cada una de estas funciones dice que no, y sus endpoints
+// responden 404 (como lo ajeno: no se confirma que exista). El rubro viene de
+// la sesión (`Actor.rubro`); sin él, nada es dental.
+//
+// Roles (decisión del dueño): dueño y odontólogos (`worker`) ven y escriben la
+// ficha clínica de todos los pacientes: antecedentes, odontograma,
+// evoluciones y plan. El encargado (`admin`, la recepción) sólo ve la alerta
+// de alergias y el plan, sin editarlo; no ve el odontograma, los
+// antecedentes ni las evoluciones.
+
+/**
+ * Un rol de la lista. El tipo ya lo dice, pero un token viejo o un objeto
+ * armado a mano pueden traer otro: lo clínico no se le abre a un rol que no
+ * se conoce.
+ */
+const tieneRolConocido = (actor: Actor | null): actor is Actor => !!actor && ROLES.includes(actor.rol)
+
+/** El negocio del actor es una clínica dental. Falla cerrado sin actor, con un rol desconocido o sin rubro. */
+export const esClinicaDental = (actor: Actor | null): boolean => tieneRolConocido(actor) && esRubroDental(actor.rubro)
+
+// ─── Lo de salón que la clínica dental no usa ────────────────────────────────
+//
+// Las propinas, la hora valle y la fila virtual son costumbres de salón,
+// barbería y salón de uñas. En una clínica dental no corresponden: no se ofrecen,
+// sus secciones no aparecen y sus endpoints dicen que no. Sólo el rubro dental
+// las niega; cualquier otro, también uno desconocido o ausente (una sesión de
+// antes del rubro), sigue como siempre.
+//
+// Se pregunta de dos maneras que dicen lo mismo: con el actor, en los permisos
+// del panel (`puedeRegistrarPropina`, `puedeConfigurarHoraValle`,
+// `puedeActivarFilaVirtual`, `puedeVerPantallaDeFila`, `puedeVaciarFilaVirtual`),
+// y con el rubro del negocio (`Business.type`), donde no hay sesión: la reserva
+// pública, la fila y los archivos. Lo que ya está guardado no se borra ni se
+// migra: la plata que exista se sigue mostrando y sumando (la pantalla sólo
+// esconde la línea cuando vale cero, `veLaLineaDePropinas`); lo que cambia es
+// qué se ofrece y qué se acepta de ahora en adelante.
+
+/** El rubro trabaja con propinas. Todos menos la clínica dental. */
+export const rubroOfrecePropinas = (rubro: unknown): boolean => !esRubroDental(rubro)
+
+/** El rubro tiene precios de hora valle. Todos menos la clínica dental. */
+export const rubroOfreceHoraValle = (rubro: unknown): boolean => !esRubroDental(rubro)
+
+/** El rubro tiene fila virtual. Todos menos la clínica dental. */
+export const rubroOfreceFilaVirtual = (rubro: unknown): boolean => !esRubroDental(rubro)
+
+/**
+ * Si una pantalla muestra la línea "Propinas" de un resumen de dinero (la
+ * caja, una liquidación, Mi plata). Donde se trabaja con propinas, siempre,
+ * también en $0, como siempre. En una clínica dental, sólo si hay plata: la
+ * línea de $0 no tiene nada que decir, pero lo que exista (datos de antes) se
+ * muestra y se suma. Nunca esconde dinero.
+ */
+export const veLaLineaDePropinas = (rubro: unknown, monto: number): boolean => rubroOfrecePropinas(rubro) || monto !== 0
+
+/** Dueño y odontólogos: los que atienden en la clínica. El encargado no. */
+const atiendeEnLaClinica = (actor: Actor | null): boolean =>
+  esClinicaDental(actor) && (actor?.rol === "owner" || actor?.rol === "worker")
+
+/**
+ * Ver la ficha clínica completa: antecedentes, odontograma y evoluciones, de
+ * cualquier paciente del negocio. Dueño y odontólogos; el encargado, no.
+ */
+export const veFichaClinica = atiendeEnLaClinica
+
+/** Escribir antecedentes, marcar el odontograma y anotar evoluciones. Los mismos que la ven. */
+export const puedeEditarFichaClinica = atiendeEnLaClinica
+
+/**
+ * La alerta de alergias en el panel de la cita y en el de Pacientes: todo rol
+ * de la clínica, también el encargado, que recibe al paciente. Es lo único de
+ * la ficha que ve el encargado, y se lee sólo con `leerAlertaDeAlergias`
+ * (`lib/ficha-clinica-servidor.ts`).
+ */
+export const veAlertaDeAlergias = esClinicaDental
+
+/** El plan de tratamiento y su presupuesto: todo rol de la clínica. El encargado, sólo lectura. */
+export const vePlanDeTratamiento = esClinicaDental
+
+/**
+ * Armar, versionar y cambiar el plan: etapas, prestaciones, aprobar una etapa
+ * y registrar que se le presentó al paciente. Dueño y odontólogos.
+ */
+export const puedeEditarPlanDeTratamiento = atiendeEnLaClinica
+
+/** Los sillones (para la agenda por sillón y "Sillones ahora"): todo rol de la clínica. */
+export const veSillones = esClinicaDental
+
+/** Crear, renombrar, ordenar y desactivar sillones: dueño y encargado, como los servicios. */
+export const puedeGestionarSillones = (actor: Actor | null): boolean =>
+  esClinicaDental(actor) && gestionaElNegocio(actor)
+
+/**
+ * Marcar o desmarcar un servicio como urgencia (`Service.esUrgencia`): en la
+ * reserva pública un motivo de urgencia sólo ofrece horas de hoy. Es de la
+ * clínica dental (en los otros rubros la bandera no se usa y el servidor no la
+ * acepta) y de quien gestiona el catálogo, dueño y encargado.
+ */
+export const puedeMarcarServicioComoUrgencia = (actor: Actor | null): boolean =>
+  esClinicaDental(actor) && puedeGestionarServicios(actor)
+
+/**
+ * Asignar o cambiar el sillón de una cita: todo rol de la clínica. Qué citas
+ * puede tocar cada uno lo sigue diciendo `whereDeAgenda` (el odontólogo, las
+ * suyas), y que el sillón sea del negocio, `whereDeSillones`.
+ */
+export const puedeAsignarSillon = esClinicaDental
+
+// ─── Prótesis (clínica dental) ───────────────────────────────────────────────
+//
+// La pestaña Prótesis de la ficha es clínica: la ven, crean y avanzan los
+// mismos que la ficha (dueño y odontólogos). El encargado no la ve (sí cobra
+// los abonos en la Sala de espera, como cualquier cobro:
+// `puedeCobrarAbonosDeProtesis`). El
+// reparto es dinero: lo configura sólo el dueño (como las comisiones,
+// §3.4), y en la ficha cada uno ve del reparto sólo lo que le toca
+// (`veMontosDelReparto`).
+
+/** Ver la pestaña Prótesis: las prótesis de cualquier paciente, con su valor y su seguimiento. Dueño y odontólogos. */
+export const veProtesis = atiendeEnLaClinica
+
+/** Crear una prótesis, avanzar su seguimiento, anularla y agregarla al plan. Los mismos que la ven. */
+export const puedeEditarProtesis = atiendeEnLaClinica
+
+/**
+ * Configurar el reparto de prótesis: materiales (precio, unidad, tipos y
+ * regla), excepciones por odontólogo y su historial. Es dinero: sólo el
+ * dueño, como `puedeEditarComisiones`.
+ */
+export const puedeConfigurarRepartoDeProtesis = (actor: Actor | null): boolean => esClinicaDental(actor) && esDueño(actor)
+
+/**
+ * El catálogo de laboratorios (nombre, contacto, activo). Sólo el dueño, y no
+ * dueño y encargado como los sillones o los servicios: el laboratorio es a
+ * quién se le paga la parte del técnico, y el encargado no ve las prótesis ni
+ * el reparto. Los odontólogos lo eligen en la ficha (`whereDeLaboratorios`,
+ * sólo los activos) sin gestionarlo.
+ */
+export const puedeGestionarLaboratorios = puedeConfigurarRepartoDeProtesis
+
+/**
+ * Agregar o quitar un abono de prótesis en una atención de la Sala de espera
+ * (y ver, para eso, las prótesis del paciente con su saldo): quien cobra,
+ * dueño y encargado (`puedeCobrar`), sólo en la clínica. El odontólogo no:
+ * no cobra, y la línea del abono queda a nombre de la tratante, no de quien
+ * la anota.
+ */
+export const puedeCobrarAbonosDeProtesis = (actor: Actor | null): boolean => esClinicaDental(actor) && puedeCobrar(actor)
+
+/**
+ * "Por pagar al laboratorio": ver lo que se le debe a cada laboratorio,
+ * marcarlo pagado y anular un pago. Es la parte del técnico del reparto:
+ * sólo el dueño, como el reparto.
+ */
+export const puedePagarAlLaboratorio = puedeConfigurarRepartoDeProtesis
+
+/** Lo que alguien ve del reparto de una prótesis: las tres partes, sólo la suya, o nada. */
+export type MontosDelReparto = "todo" | "suyo" | "nada"
+
+/**
+ * Cuánto del reparto de una prótesis ve el actor. El dueño, todo (las tres
+ * partes y de dónde salió la regla). La odontóloga tratante, sólo su parte:
+ * ni la de la clínica ni la del laboratorio (§5). Cualquier otro (otro
+ * odontólogo, el encargado, alguien fuera de la clínica o de otro negocio),
+ * nada. El valor al paciente no es parte del reparto: lo ve quien ve la
+ * prótesis. Falla cerrado.
+ */
+export function veMontosDelReparto(
+  actor: Actor | null,
+  protesis: { businessId: string; memberId: string | null }
+): MontosDelReparto {
+  if (!veProtesis(actor) || !mismoNegocio(actor, protesis.businessId)) return "nada"
+  if (esDueño(actor)) return "todo"
+  if (actor?.rol === "worker" && !!actor.memberId && actor.memberId === protesis.memberId) return "suyo"
+  return "nada"
+}
+
+/** La tratante de una prótesis: un miembro, o la dueña (`byOwner`, sin miembro). */
+export interface TratanteDeProtesis {
+  memberId: string | null
+  byOwner: boolean
+}
+
+/**
+ * Quién queda como tratante de una prótesis nueva. Sólo el dueño elige: a sí
+ * mismo (`"duenio"` o nada) o a un miembro (que el endpoint verifica del
+ * negocio y odontólogo, `role: "worker"`: el encargado no es tratante). El odontólogo queda siempre él, pida lo que pida, como
+ * `profesionalParaLinea`: así nunca congela la regla de un colega ni la ve.
+ * Cualquier otro, o un odontólogo sin `memberId`, no tiene tratante (`null`:
+ * el endpoint no crea nada). Falla cerrado.
+ */
+export function tratanteParaProtesis(actor: Actor | null, pedido: string | undefined): TratanteDeProtesis | null {
+  if (!puedeEditarProtesis(actor) || !actor) return null
+  if (esDueño(actor)) {
+    return !pedido || pedido === "duenio" ? { memberId: null, byOwner: true } : { memberId: pedido, byOwner: false }
+  }
+  if (actor.rol === "worker" && actor.memberId) return { memberId: actor.memberId, byOwner: false }
+  return null
+}
 
 // ─── Filtros para consultas ──────────────────────────────────────────────────
 
@@ -705,4 +1032,219 @@ export function whereDeProductos(
   extra: Prisma.ProductoWhereInput = {}
 ): Prisma.ProductoWhereInput {
   return { AND: [filtroDeProductos(actor), extra] }
+}
+
+// ─── Clínica dental ──────────────────────────────────────────────────────────
+
+/**
+ * Lo clínico es del negocio, no del odontólogo: quien puede verlo ve lo de
+ * todos los pacientes del negocio, y quien no, nada. Una sola regla para las
+ * tablas, que tienen `businessId` propio. No se exporta, igual que
+ * `filtroDeAgenda`.
+ */
+function filtroClinico(actor: Actor | null, puede: (actor: Actor | null) => boolean): { businessId: string } | typeof NADA {
+  if (!actor || !puede(actor)) return NADA
+  return { businessId: actor.businessId }
+}
+
+/** Igual que `whereDeAgenda`, para la ficha clínica completa (antecedentes). */
+export function whereDeFichasClinicas(
+  actor: Actor | null,
+  extra: Prisma.FichaClinicaWhereInput = {}
+): Prisma.FichaClinicaWhereInput {
+  return { AND: [filtroClinico(actor, veFichaClinica), extra] }
+}
+
+/**
+ * La ficha, leída sólo para la alerta de alergias: también para el encargado.
+ * Con este filtro el encargado alcanza la fila entera, y los antecedentes no
+ * son para él (`veFichaClinica`): por eso **se usa sólo a través de
+ * `leerAlertaDeAlergias`** (`lib/ficha-clinica-servidor.ts`), que fija el
+ * `select` en `alergias` y exige que el paciente no se haya eliminado. Se
+ * exporta para ese lector y para los tests de permisos; un endpoint o una
+ * página no lo usa directo.
+ */
+export function whereDeAlertaDeAlergias(
+  actor: Actor | null,
+  extra: Prisma.FichaClinicaWhereInput = {}
+): Prisma.FichaClinicaWhereInput {
+  return { AND: [filtroClinico(actor, veAlertaDeAlergias), extra] }
+}
+
+/** Igual que `whereDeAgenda`, para las marcas del odontograma. */
+export function whereDeMarcasDentales(
+  actor: Actor | null,
+  extra: Prisma.MarcaDentalWhereInput = {}
+): Prisma.MarcaDentalWhereInput {
+  return { AND: [filtroClinico(actor, veFichaClinica), extra] }
+}
+
+/** Igual que `whereDeAgenda`, para las evoluciones. */
+export function whereDeEvoluciones(
+  actor: Actor | null,
+  extra: Prisma.EvolucionWhereInput = {}
+): Prisma.EvolucionWhereInput {
+  return { AND: [filtroClinico(actor, veFichaClinica), extra] }
+}
+
+/** Igual que `whereDeAgenda`, para los planes de tratamiento. */
+export function whereDePlanes(
+  actor: Actor | null,
+  extra: Prisma.PlanDeTratamientoWhereInput = {}
+): Prisma.PlanDeTratamientoWhereInput {
+  return { AND: [filtroClinico(actor, vePlanDeTratamiento), extra] }
+}
+
+/** Igual que `whereDePlanes`, para las etapas de un plan. */
+export function whereDeEtapasDelPlan(
+  actor: Actor | null,
+  extra: Prisma.EtapaDelPlanWhereInput = {}
+): Prisma.EtapaDelPlanWhereInput {
+  return { AND: [filtroClinico(actor, vePlanDeTratamiento), extra] }
+}
+
+/** Igual que `whereDePlanes`, para las prestaciones de una etapa. */
+export function whereDePrestacionesDelPlan(
+  actor: Actor | null,
+  extra: Prisma.PrestacionDelPlanWhereInput = {}
+): Prisma.PrestacionDelPlanWhereInput {
+  return { AND: [filtroClinico(actor, vePlanDeTratamiento), extra] }
+}
+
+// ─── Prótesis ────────────────────────────────────────────────────────────────
+
+/** Igual que `whereDeAgenda`, para las prótesis: dueño y odontólogos, las de todos los pacientes del negocio. */
+export function whereDeProtesis(actor: Actor | null, extra: Prisma.ProtesisWhereInput = {}): Prisma.ProtesisWhereInput {
+  return { AND: [filtroClinico(actor, veProtesis), extra] }
+}
+
+/** Igual que `whereDeProtesis`, para el seguimiento de cada una. */
+export function whereDeEventosDeProtesis(
+  actor: Actor | null,
+  extra: Prisma.EventoDeProtesisWhereInput = {}
+): Prisma.EventoDeProtesisWhereInput {
+  return { AND: [filtroClinico(actor, veProtesis), extra] }
+}
+
+/**
+ * Los materiales: los gestiona el dueño y los eligen los odontólogos en la
+ * ficha. Quién ve la regla de reparto de cada uno lo decide el `select` del
+ * endpoint (`veMontosDelReparto`, `puedeConfigurarRepartoDeProtesis`), no
+ * este filtro, como el % de los productos.
+ */
+export function whereDeMaterialesDeProtesis(
+  actor: Actor | null,
+  extra: Prisma.MaterialDeProtesisWhereInput = {}
+): Prisma.MaterialDeProtesisWhereInput {
+  return { AND: [filtroClinico(actor, veProtesis), extra] }
+}
+
+/** Los laboratorios: los gestiona el dueño y los eligen los odontólogos en la ficha. El encargado, ninguno. */
+export function whereDeLaboratorios(
+  actor: Actor | null,
+  extra: Prisma.LaboratorioWhereInput = {}
+): Prisma.LaboratorioWhereInput {
+  return { AND: [filtroClinico(actor, veProtesis), extra] }
+}
+
+/**
+ * Las excepciones de reparto: el dueño, todas las del negocio; el odontólogo,
+ * sólo las suyas (el servidor las lee al crear una prótesis suya, para
+ * congelar su regla, y la ficha le muestra su parte); nadie más, ninguna. No
+ * se exporta la primitiva, igual que `filtroDeAgenda`.
+ */
+function filtroDeExcepcionesDeReparto(actor: Actor | null): { businessId: string; memberId?: string } | typeof NADA {
+  if (!actor || !veProtesis(actor)) return NADA
+  if (esDueño(actor)) return { businessId: actor.businessId }
+  if (actor.rol === "worker" && actor.memberId) return { businessId: actor.businessId, memberId: actor.memberId }
+  return NADA
+}
+
+/** Igual que `whereDeAgenda`, para las excepciones de reparto de prótesis. */
+export function whereDeExcepcionesDeReparto(
+  actor: Actor | null,
+  extra: Prisma.ExcepcionDeRepartoDeProtesisWhereInput = {}
+): Prisma.ExcepcionDeRepartoDeProtesisWhereInput {
+  return { AND: [filtroDeExcepcionesDeReparto(actor), extra] }
+}
+
+/** El historial de cambios de reparto: sólo el dueño, como `puedeVerHistorialDeComisiones`. */
+export function whereDeCambiosDeReparto(
+  actor: Actor | null,
+  extra: Prisma.CambioDeRepartoDeProtesisWhereInput = {}
+): Prisma.CambioDeRepartoDeProtesisWhereInput {
+  return { AND: [filtroClinico(actor, puedeConfigurarRepartoDeProtesis), extra] }
+}
+
+/**
+ * Los abonos de las prótesis (las líneas de atención con `protesisId`), para
+ * el pagado y el saldo de la ficha: quien ve la prótesis ve cuánto se le
+ * abonó, sea de quien sea la línea (no `whereDeLineas`, que al odontólogo le
+ * deja sólo las suyas). Va por la atención para acotar al negocio, porque la
+ * línea no tiene `businessId` propio.
+ */
+export function whereDeAbonosDeProtesis(
+  actor: Actor | null,
+  extra: Prisma.VisitServiceWhereInput = {}
+): Prisma.VisitServiceWhereInput {
+  if (!actor || !veProtesis(actor)) return { AND: [NADA, extra] }
+  return { AND: [{ protesisId: { not: null }, visit: { is: { businessId: actor.businessId } } }, extra] }
+}
+
+/** Los pagos a laboratorios ("Por pagar al laboratorio"): sólo el dueño, como el resto del dinero de las prótesis. */
+export function whereDePagosAlLaboratorio(
+  actor: Actor | null,
+  extra: Prisma.PagoAlLaboratorioWhereInput = {}
+): Prisma.PagoAlLaboratorioWhereInput {
+  return { AND: [filtroClinico(actor, puedePagarAlLaboratorio), extra] }
+}
+
+/**
+ * Las prótesis a las que se les puede cobrar un abono en la Sala de espera:
+ * las del negocio, para quien cobra (dueño y encargado, en la clínica). Es
+ * otro filtro que `whereDeProtesis` a propósito: el encargado no ve la
+ * pestaña Prótesis, pero cobra. El endpoint además las acota al paciente de
+ * la atención y lee sólo lo que el cobro necesita (nombre, valor, saldo), no
+ * el reparto.
+ */
+export function whereDeProtesisParaCobrar(actor: Actor | null, extra: Prisma.ProtesisWhereInput = {}): Prisma.ProtesisWhereInput {
+  return { AND: [filtroClinico(actor, puedeCobrarAbonosDeProtesis), extra] }
+}
+
+/**
+ * Las líneas de abono de prótesis del negocio, para lo que paga la dueña al
+ * laboratorio (la parte del técnico). Va por la atención para acotar al
+ * negocio, porque la línea no tiene `businessId` propio, igual que
+ * `whereDeAbonosDeProtesis`.
+ */
+export function whereDeAbonosPorPagarAlLaboratorio(
+  actor: Actor | null,
+  extra: Prisma.VisitServiceWhereInput = {}
+): Prisma.VisitServiceWhereInput {
+  if (!actor || !puedePagarAlLaboratorio(actor)) return { AND: [NADA, extra] }
+  return { AND: [{ protesisId: { not: null }, visit: { is: { businessId: actor.businessId } } }, extra] }
+}
+
+/** Igual que `whereDeAgenda`, para los sillones. */
+export function whereDeSillones(
+  actor: Actor | null,
+  extra: Prisma.SillonWhereInput = {}
+): Prisma.SillonWhereInput {
+  return { AND: [filtroClinico(actor, veSillones), extra] }
+}
+
+/**
+ * Las sedes son del negocio, no de quien las ve: todo rol las ve (el profesional
+ * las necesita en la agenda y en lo que anota). Quién las gestiona lo decide
+ * `puedeGestionarSedes`, no este filtro. Sin actor, nada. No se exporta, igual
+ * que `filtroDeAgenda`.
+ */
+function filtroDeSedes(actor: Actor | null): Prisma.SedeWhereInput {
+  if (!actor) return NADA
+  return { businessId: actor.businessId }
+}
+
+/** Igual que `whereDeAgenda`, para las sedes. */
+export function whereDeSedes(actor: Actor | null, extra: Prisma.SedeWhereInput = {}): Prisma.SedeWhereInput {
+  return { AND: [filtroDeSedes(actor), extra] }
 }

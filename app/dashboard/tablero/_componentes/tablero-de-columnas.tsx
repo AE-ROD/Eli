@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Esqueleto } from "@/components/comunes/esqueleto"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import type { EstadoActivo } from "@/lib/atenciones"
 import {
   COLUMNAS_DEL_TABLERO,
@@ -17,7 +18,9 @@ import {
 } from "@/lib/acciones-del-tablero"
 import type { Actor } from "@/lib/permisos"
 import { cn } from "@/lib/utils"
-import type { Atencion, Reserva, Tablero } from "../_datos"
+import { vocabularioDe } from "@/lib/vocabulario"
+import type { Atencion, LineaDeServicio, Reserva, Tablero } from "../_datos"
+import { frasesDelTablero } from "../_frases"
 import { TarjetaDeAtencion } from "./tarjeta-de-atencion"
 import { TarjetaDeReserva, type PropsDeArrastre } from "./tarjeta-de-reserva"
 
@@ -261,6 +264,9 @@ interface PropsDeTableroDeColumnas {
   onCobrar: (atencion: Atencion) => void
   onEditar: (atencion: Atencion) => void
   onAnular: (atencion: Atencion) => void
+  /** Clínica dental: abonar a una prótesis del paciente, o quitar un abono antes de cobrar. */
+  onAbonar: (atencion: Atencion) => void
+  onQuitarAbono: (atencion: Atencion, linea: LineaDeServicio) => void
 }
 
 /**
@@ -283,8 +289,12 @@ export function TableroDeColumnas({
   onCobrar,
   onEditar,
   onAnular,
+  onAbonar,
+  onQuitarAbono,
 }: PropsDeTableroDeColumnas) {
   const punteroFino = usePunteroFino()
+  // "Sin paciente" en una clínica dental.
+  const sinCliente = frasesDelTablero(vocabularioDe(useRubroDelPanel()).palabras).sinCliente
   const [arrastrada, setArrastrada] = useState<Arrastrada | null>(null)
   const [encima, setEncima] = useState<ColumnaId | null>(null)
 
@@ -331,7 +341,7 @@ export function TableroDeColumnas({
     tablero.reservas.map((reserva) => ({
       id: reserva.id,
       estado: "reserva",
-      cliente: { nombre: `${reserva.cliente?.nombre ?? "Sin cliente"}, reserva` },
+      cliente: { nombre: `${reserva.cliente?.nombre ?? sinCliente}, reserva` },
       llegoEn: reserva.inicio,
       cobradaEn: null,
     }))
@@ -445,7 +455,7 @@ export function TableroDeColumnas({
                     <TarjetaDeReserva
                       key={reserva.id}
                       reserva={reserva}
-                      quien={nombresDeReservas.get(reserva.id) ?? reserva.cliente?.nombre ?? "Sin cliente"}
+                      quien={nombresDeReservas.get(reserva.id) ?? reserva.cliente?.nombre ?? sinCliente}
                       atrasada={estaAtrasada(reserva.inicio, ahora)}
                       enCurso={enCurso.has(reserva.id)}
                       arrastre={arrastreDe({ tipo: "reserva", reserva }, reserva.id)}
@@ -474,6 +484,8 @@ export function TableroDeColumnas({
                     onCobrar={() => onCobrar(atencion)}
                     onEditar={() => onEditar(atencion)}
                     onAnular={() => onAnular(atencion)}
+                    onAbonar={() => onAbonar(atencion)}
+                    onQuitarAbono={(linea) => onQuitarAbono(atencion, linea)}
                   />
                 ))}
               </Columna>
@@ -487,9 +499,11 @@ export function TableroDeColumnas({
 
 /** Mientras llega el tablero: las cinco columnas con tarjetas en gris, sin cifras inventadas. */
 export function TableroCargando() {
+  // "Cargando el tablero…" / "Cargando la sala de espera…".
+  const { cargando } = frasesDelTablero(vocabularioDe(useRubroDelPanel()).palabras)
   return (
     <div className={CONTENEDOR} role="status">
-      <span className="sr-only">Cargando el tablero…</span>
+      <span className="sr-only">{cargando}</span>
       {COLUMNAS_DEL_TABLERO.map(({ id, titulo }) => (
         <div key={id} aria-hidden="true" className={cn(ANCHO_DE_COLUMNA, ISLA)}>
           <p className={TITULO_DE_COLUMNA}>{titulo}</p>

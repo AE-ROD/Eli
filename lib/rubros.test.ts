@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest"
-import { IDS_DE_RUBROS, RUBROS, nombreDeRubro } from "./rubros"
+import { IDS_DE_RUBROS, RUBROS, RUBRO_DENTAL, esRubroDental, nombreDeRubro } from "./rubros"
 
 describe("RUBROS", () => {
-  it("son los tres que Eli atiende, con el id de siempre para el salón", () => {
-    expect(RUBROS.map((rubro) => rubro.id)).toEqual(["salon", "barberia", "spa-de-unas"])
+  it("son los cuatro que Eli atiende, con el id de siempre para el salón", () => {
+    expect(RUBROS.map((rubro) => rubro.id)).toEqual(["salon", "barberia", "spa-de-unas", "odontologia"])
   })
 
   it("`salon` se conserva: ya está guardado en negocios reales", () => {
@@ -27,7 +27,8 @@ describe("nombreDeRubro", () => {
   it.each([
     ["salon", "Salón de belleza"],
     ["barberia", "Barbería"],
-    ["spa-de-unas", "Spa de uñas"],
+    ["spa-de-unas", "Salón de uñas"],
+    ["odontologia", "Clínica dental"],
   ])("el id %s se muestra como %s", (id, nombre) => {
     expect(nombreDeRubro(id)).toBe(nombre)
   })
@@ -48,5 +49,28 @@ describe("nombreDeRubro", () => {
     expect(nombreDeRubro("constructor")).toBe("Otro rubro")
     expect(nombreDeRubro("__proto__")).toBe("Otro rubro")
     expect(nombreDeRubro("toString")).toBe("Otro rubro")
+  })
+})
+
+describe("esRubroDental", () => {
+  it("el rubro dental es el del catálogo", () => {
+    expect(IDS_DE_RUBROS).toContain(RUBRO_DENTAL)
+    expect(esRubroDental("odontologia")).toBe(true)
+  })
+
+  it.each([
+    ["salon"],
+    ["barberia"],
+    ["spa-de-unas"],
+    ["salud"],
+    ["Odontologia"],
+    [" odontologia"],
+    [""],
+    [null],
+    [undefined],
+    [42],
+    [["odontologia"]],
+  ])("%j no es dental: falla cerrado ante lo que no es exactamente el id", (rubro) => {
+    expect(esRubroDental(rubro)).toBe(false)
   })
 })

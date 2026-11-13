@@ -10,7 +10,10 @@ import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
-import { HORA_24 } from "@/lib/fechas"
+import { formatearHora } from "@/lib/fechas"
+import { fechaDelNegocio, fechaParaLeer } from "@/lib/periodos-de-liquidacion"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { Paginador } from "../../reportes/_componentes/paginador"
 import {
   formatearPorcentaje,
@@ -19,21 +22,24 @@ import {
   type FiltroDeHistorial,
   type HistorialDeComisiones,
 } from "../_datos"
+import { frasesDeLasComisiones } from "../_frases"
 
 interface PropsDeHistorial {
   miembros: { id: string; nombre: string }[]
   /** Sube cada vez que se guarda un %: el historial se vuelve a leer. */
   version: number
+  /** La zona del negocio: el momento de cada cambio se lee ahí, no en la del dispositivo. */
+  zona: string
 }
 
-/** `12 de octubre de 2026, 15:30`, en la hora del dispositivo. */
-function cuandoParaLeer(iso: string): string {
-  return new Date(iso).toLocaleString("es-CL", { dateStyle: "long", timeStyle: "short", ...HORA_24 })
+/** `12 oct 2026, 15:30`, en la zona del negocio, como la liquidación y el laboratorio. */
+function cuandoParaLeer(iso: string, zona: string): string {
+  return `${fechaParaLeer(fechaDelNegocio(new Date(iso), zona))}, ${formatearHora(iso, zona)}`
 }
 
-/** "el % por defecto", "Color" o "el producto Shampoo". */
-function sobreQue(cambio: CambioDeComision): string {
-  if (cambio.alcance === "service") return `en ${cambio.sobre ?? "un servicio"}`
+/** "el % por defecto", "Color" o "el producto Shampoo". `unServicio` es "un servicio" / "una prestación". */
+function sobreQue(cambio: CambioDeComision, unServicio: string): string {
+  if (cambio.alcance === "service") return `en ${cambio.sobre ?? unServicio}`
   if (cambio.alcance === "product") return `del producto ${cambio.sobre ?? "borrado"}`
   return "por defecto"
 }
@@ -56,8 +62,10 @@ function filtroDelSelector(valor: string): FiltroDeHistorial {
  * tenían al cambiarse, y a ellos también se los puede elegir en el filtro
  * (#119).
  */
-export function HistorialDeComisionesTarjeta({ miembros, version }: PropsDeHistorial) {
+export function HistorialDeComisionesTarjeta({ miembros, version, zona }: PropsDeHistorial) {
   const idDelTitulo = useId()
+  // "Odontólogo" y "prestación" en una clínica dental; en los demás rubros, con sus palabras.
+  const frases = frasesDeLasComisiones(vocabularioDe(useRubroDelPanel()).palabras).historial
   const [miembro, setMiembro] = useState("")
   const [pagina, setPagina] = useState(1)
   const [reintentos, setReintentos] = useState(0)
@@ -73,7 +81,12 @@ export function HistorialDeComisionesTarjeta({ miembros, version }: PropsDeHisto
       if (resultado.ok) {
         setHistorial(resultado.datos)
         setError("")
-      } else setError(resultado.error)
+      } else {
+        // Lo que se veía era de otro filtro u otra página: no se deja como si
+        // fuera lo pedido. Queda el aviso con "Reintentar".
+        setHistorial(null)
+        setError(resultado.error)
+      }
     })
     return () => {
       vigente = false
@@ -96,7 +109,7 @@ export function HistorialDeComisionesTarjeta({ miembros, version }: PropsDeHisto
         />
         <div className="max-w-xs">
           <Selector
-            etiqueta="Profesional"
+            etiqueta={frases.profesional}
             value={miembro}
             onChange={(evento) => {
               setCargando(true)
@@ -117,7 +130,10 @@ export function HistorialDeComisionesTarjeta({ miembros, version }: PropsDeHisto
         {error && (
           <Aviso
             accion={
-              <Boton variante="secundario" tamano="sm" onClick={() => setReintentos((previos) => previos + 1)}>
+              <Boton variante="secundario" tamano="sm" onClick={() => {
+                  setCargando(true)
+                  setReintentos((previos) => previos + 1)
+                }}>
                 <RefreshCw aria-hidden="true" className="size-4" strokeWidth={2} />
                 Reintentar
               </Boton>
@@ -137,7 +153,9 @@ export function HistorialDeComisionesTarjeta({ miembros, version }: PropsDeHisto
         )}
 
         {historial && historial.cambios.length === 0 && (
-          <EstadoVacio>Todavía no hay cambios de porcentaje{miembro ? " de este profesional" : ""}.</EstadoVacio>
+          <EstadoVacio>
+            {frases.sinCambios(miembro !== "")}
+          </EstadoVacio>
         )}
 
         {historial && historial.cambios.length > 0 && (
@@ -147,13 +165,16 @@ export function HistorialDeComisionesTarjeta({ miembros, version }: PropsDeHisto
                 <p className="break-words">
                   <span className="font-medium">{cambio.quien}</span> cambió el % de{" "}
                   <span className="font-medium">{cambio.miembro.nombre}</span>
-                  {cambio.miembro.id === null && <span className="text-texto-2"> (ya no está en el equipo)</span>}{" "}
-                  {sobreQue(cambio)}:{" "}
+                  {/* El % de un producto es de todo el equipo: no es alguien que se fue. */}
+                  {cambio.miembro.id === null && cambio.alcance !== "product" && (
+                    <span className="text-texto-2"> (ya no está en el equipo)</span>
+                  )}{" "}
+                  {sobreQue(cambio, frases.unServicio)}:{" "}
                   <span className="tabular-nums">
                     {formatearPorcentaje(cambio.antes)} → {formatearPorcentaje(cambio.despues)}
                   </span>
                 </p>
-                <p className="mt-0.5 text-texto-2">{cuandoParaLeer(cambio.cuando)}</p>
+                <p className="mt-0.5 text-texto-2">{cuandoParaLeer(cambio.cuando, zona)}</p>
               </li>
             ))}
           </ol>

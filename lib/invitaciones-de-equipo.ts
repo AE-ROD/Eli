@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma"
 import { enviarInvitacionTrabajador } from "@/lib/email"
 import { generarToken } from "@/lib/tokens"
+import { urlBase } from "@/lib/url-base"
+import { registrarError } from "@/lib/registro-de-errores"
 
 /**
  * (servidor) Las invitaciones al equipo: cuánto duran, cuándo están vencidas
@@ -8,6 +10,26 @@ import { generarToken } from "@/lib/tokens"
  * reemplaza una invitación vencida, y reenviar
  * (`POST /api/equipo/pendientes/[id]/reenviar`).
  */
+
+/**
+ * Lo que se responde (403) cuando el negocio no es del plan Equipo y alguien
+ * intenta invitar o reenviar. Un negocio Independiente atiende sólo la dueña;
+ * para sumar gente se pasa al plan Equipo (`lib/planes.ts`).
+ */
+export const ERROR_PLAN_NO_INVITA =
+  "Tu plan Independiente es para atender sin equipo, así que no incluye invitar a nadie. Para sumar personas pasa al plan Equipo desde Configuración."
+
+/**
+ * Si el error es el rechazo de la base a una invitación en un negocio que no
+ * es del plan Equipo (el trigger `invitaciones_exigen_plan_equipo`). Es la
+ * segunda barrera: la primera es `puedeInvitarAlEquipo` con el plan de la
+ * sesión, que puede estar desfasado hasta 5 minutos si el plan cambió justo
+ * antes. Llega como un error de Prisma sin código propio; se reconoce por el
+ * texto que pone la migración.
+ */
+export function esRechazoPorPlan(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("sólo el plan Equipo invita")
+}
 
 /** Días que vale el enlace. El correo dice "expira en 7 días". */
 export const DIAS_DE_VIGENCIA = 7
@@ -61,14 +83,23 @@ interface DatosDelCorreo {
  * invitación ya quedó guardada y se puede reenviar.
  */
 export async function mandarCorreoDeInvitacion(datos: DatosDelCorreo): Promise<void> {
-  const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000"
-  const negocio = await prisma.business.findUnique({ where: { id: datos.businessId }, select: { name: true } })
+  // En producción sin NEXTAUTH_URL, `urlBase` lanza: mejor ningún correo (la
+  // invitación queda y se puede reenviar) que uno con un enlace a localhost.
+  let baseUrl: string
+  try {
+    baseUrl = urlBase()
+  } catch (error) {
+    registrarError("armando el enlace de la invitación", error)
+    return
+  }
+  const negocio = await prisma.business.findUnique({ where: { id: datos.businessId }, select: { name: true, type: true } })
 
   await enviarInvitacionTrabajador({
     emailTrabajador: datos.email,
     nombreTrabajador: datos.nombre,
     nombreNegocio: negocio?.name ?? datos.nombreDeRespaldo,
     rol: datos.rol,
+    rubro: negocio?.type ?? null,
     enlaceAceptar: `${baseUrl}/unirse/${datos.token}`,
   }).catch(() => null)
 }

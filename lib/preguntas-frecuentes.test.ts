@@ -78,11 +78,25 @@ describe("PREGUNTAS_FRECUENTES", () => {
   })
 
   it("no promete lo que el producto no hace", () => {
-    // Las respuestas que nombran estas cosas tienen que ser para decir que no.
-    const prohibidas = /comisi|sms|elegir (al|el) profesional al reservar/i
+    // SMS no existe. WhatsApp, pagar en línea y una app sólo se nombran para
+    // decir que no. (Las comisiones y elegir profesional al reservar sí
+    // existen: dejaron de estar en esta lista.)
     for (const pregunta of PREGUNTAS_FRECUENTES) {
-      expect(pregunta.respuesta.join(" "), pregunta.id).not.toMatch(prohibidas)
+      const texto = pregunta.respuesta.join(" ")
+      expect(texto, pregunta.id).not.toMatch(/\bsms\b/i)
+      if (/whatsapp|pagar en línea|una app/i.test(texto)) expect(texto, pregunta.id).toMatch(/^No[. ]/)
     }
+  })
+
+  it("no niega lo que el producto sí hace (lote 01, M4)", () => {
+    const todo = PREGUNTAS_FRECUENTES.map((pregunta) => pregunta.respuesta.join(" ")).join(" ")
+    // Mover una cita, la reserva por profesional, el enlace para cancelar o
+    // cambiar, exportar a CSV y reenviar invitaciones existen.
+    expect(todo).not.toMatch(/no hay un botón para mover/i)
+    expect(todo).not.toMatch(/quedan sin asignar/i)
+    expect(todo).not.toMatch(/desde la página todavía no/i)
+    expect(todo).not.toMatch(/todavía no: los reportes/i)
+    expect(todo).not.toMatch(/no se puede invitar de nuevo/i)
   })
 
   it("escribe \"solo\" sin tilde", () => {

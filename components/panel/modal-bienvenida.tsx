@@ -1,40 +1,56 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { useSession } from "next-auth/react"
 import { AnimatePresence, motion } from "framer-motion"
 import { Check, Clock, Copy, Link2, Scissors } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
+import { frasesDelPanel } from "@/components/panel/frases-del-panel"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
+import { pasosDeBienvenida, type PasoDeBienvenida } from "@/components/panel/pasos-de-bienvenida"
 import { marcarEnlaceCompartido } from "@/lib/lista-de-inicio"
+import { actorDeSesion } from "@/lib/permisos"
 import { cn } from "@/lib/utils"
+import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
 
 const STORAGE_KEY = "eli_onboarding_completado"
 
-const PASOS = [
-  {
-    icono: Clock,
-    titulo: "Configura tu horario",
-    descripcion: "Define los días y horas en que atiendes. Así tus clientes solo podrán reservar en tu disponibilidad real.",
-    accion: "Ir a configuración",
-    ruta: "/dashboard/configuracion",
-  },
-  {
-    icono: Scissors,
-    titulo: "Agrega tus servicios",
-    descripcion: "Crea el catálogo de servicios que ofreces con su duración y precio. Esto aparecerá en tu página de reservas.",
-    accion: "Agregar servicios",
-    ruta: "/dashboard/configuracion",
-  },
-  {
-    icono: Link2,
-    titulo: "Comparte tu enlace",
-    descripcion: "Este es tu link único de reservas. Compártelo con tus clientes por WhatsApp, redes sociales o donde quieras.",
-    accion: null,
-    ruta: null,
-  },
-]
+/**
+ * Los pasos, con las palabras del rubro (`frasesDelPanel`): "tus clientes" o,
+ * en una clínica dental, "tus pacientes"; "servicios" o "prestaciones".
+ */
+const pasosPara = (palabras: PalabrasDelRubro) => {
+  const { bienvenida } = frasesDelPanel(palabras)
+  return [
+    {
+      id: "horario" as PasoDeBienvenida,
+      icono: Clock,
+      titulo: bienvenida.horario.titulo,
+      descripcion: bienvenida.horario.descripcion,
+      accion: bienvenida.horario.accion,
+      ruta: "/dashboard/configuracion#horario",
+    },
+    {
+      id: "servicios" as PasoDeBienvenida,
+      icono: Scissors,
+      titulo: bienvenida.servicios.titulo,
+      descripcion: bienvenida.servicios.descripcion,
+      accion: bienvenida.servicios.accion,
+      ruta: "/dashboard/configuracion#servicios",
+    },
+    {
+      id: "enlace" as PasoDeBienvenida,
+      icono: Link2,
+      titulo: bienvenida.enlace.titulo,
+      descripcion: bienvenida.enlace.descripcion,
+      accion: null,
+      ruta: null,
+    },
+  ]
+}
 
 interface PropsDeModalBienvenida {
   nombreNegocio: string
@@ -44,8 +60,10 @@ interface PropsDeModalBienvenida {
 }
 
 /**
- * Los tres primeros pasos, la primera vez que se entra al panel: horario,
- * servicios y el enlace de reservas. Es un diálogo (`MarcoDeModal`): se
+ * Los primeros pasos, la primera vez que se entra al panel: horario,
+ * servicios y el enlace de reservas, sólo los que el rol puede hacer
+ * (`pasosDeBienvenida`: al profesional no se le piden los servicios). Es un
+ * diálogo (`MarcoDeModal`): se
  * anuncia con su título, el foco no sale y Escape lo cierra. Cerrarlo de
  * cualquier forma lo da por visto.
  *
@@ -57,8 +75,12 @@ export function ModalBienvenida({ nombreNegocio, slug, marcarAlCopiar = false }:
   const [paso, setPaso] = useState(0)
   const [cambioDePaso, setCambioDePaso] = useState(false)
   const [copiado, setCopiado] = useState(false)
+  const [noSeCopio, setNoSeCopio] = useState(false)
   const refBotonPrincipal = useRef<HTMLButtonElement>(null)
   const enfocarElBotonPrincipal = useRef(false)
+  const { data: sesion, status: estadoDeLaSesion } = useSession()
+  const queHace = pasosDeBienvenida(actorDeSesion(sesion))
+  const pasos = pasosPara(vocabularioDe(useRubroDelPanel()).palabras).filter((paso) => queHace.includes(paso.id))
 
   const enlace = typeof window !== "undefined" ? `${window.location.origin}/reservar/${slug}` : `/reservar/${slug}`
 
@@ -82,7 +104,15 @@ export function ModalBienvenida({ nombreNegocio, slug, marcarAlCopiar = false }:
   }
 
   const copiar = async () => {
-    await navigator.clipboard.writeText(enlace)
+    // El portapapeles puede negarse: se dice, y el enlace queda escrito para copiarlo a mano.
+    try {
+      await navigator.clipboard.writeText(enlace)
+    } catch {
+      setCopiado(false)
+      setNoSeCopio(true)
+      return
+    }
+    setNoSeCopio(false)
     setCopiado(true)
     setTimeout(() => setCopiado(false), 2000)
     // Sin esperarla: si falla, el enlace ya está copiado.
@@ -95,20 +125,22 @@ export function ModalBienvenida({ nombreNegocio, slug, marcarAlCopiar = false }:
     setPaso(nuevo)
   }
 
-  const pasoActual = PASOS[paso]
-  const esElUltimo = paso === PASOS.length - 1
+  // Mientras no se sabe quién entra (la sesión no llegó), no se abre: los pasos dependen del rol.
+  const pasoActual = pasos[Math.min(paso, pasos.length - 1)]
+  const esElUltimo = paso >= pasos.length - 1
+  const listo = estadoDeLaSesion !== "loading" && pasoActual !== undefined
 
   return (
     <AnimatePresence>
-      {visible && (
+      {visible && listo && (
         <MarcoDeModal
           titulo={`¡Bienvenido a Eli, ${nombreNegocio}!`}
-          antetitulo={`Paso ${paso + 1} de ${PASOS.length}`}
+          antetitulo={`Paso ${paso + 1} de ${pasos.length}`}
           alCerrar={cerrar}
         >
           {/* El avance ya lo dice el antetítulo: las barras son para el ojo. */}
           <div aria-hidden="true" className="-mt-2 mb-7 flex gap-1.5">
-            {PASOS.map((_, indice) => (
+            {pasos.map((_, indice) => (
               <span
                 key={indice}
                 className={cn(
@@ -120,7 +152,7 @@ export function ModalBienvenida({ nombreNegocio, slug, marcarAlCopiar = false }:
           </div>
 
           <p aria-live="polite" className="sr-only">
-            {cambioDePaso ? `Paso ${paso + 1} de ${PASOS.length}: ${pasoActual.titulo}` : ""}
+            {cambioDePaso ? `Paso ${paso + 1} de ${pasos.length}: ${pasoActual.titulo}` : ""}
           </p>
 
           {/* La clave rearma el paso: entra con un fundido corto, sin desplazarse. */}
@@ -137,7 +169,7 @@ export function ModalBienvenida({ nombreNegocio, slug, marcarAlCopiar = false }:
             {esElUltimo && (
               <div className="mt-5">
                 <div className="flex items-center gap-2 rounded-campo bg-superficie py-1.5 pr-1.5 pl-3.5 squircle">
-                  <p className="min-w-0 flex-1 truncate font-mono text-sm" title={enlace}>
+                  <p className={cn("min-w-0 flex-1 font-mono text-sm", noSeCopio ? "break-all select-all" : "truncate")} title={enlace}>
                     {enlace}
                   </p>
                   <Boton
@@ -149,8 +181,8 @@ export function ModalBienvenida({ nombreNegocio, slug, marcarAlCopiar = false }:
                     {copiado ? "Copiado" : "Copiar"}
                   </Boton>
                 </div>
-                <p role="status" className="sr-only">
-                  {copiado ? "Enlace copiado" : ""}
+                <p role="status" className={noSeCopio ? "mt-2 text-sm text-texto-2" : "sr-only"}>
+                  {copiado ? "Enlace copiado" : noSeCopio ? "No se pudo copiar. Selecciona el enlace y cópialo a mano." : ""}
                 </p>
               </div>
             )}

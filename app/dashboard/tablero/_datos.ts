@@ -13,7 +13,7 @@ import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import type { EstadoActivo, PagoPedido } from "@/lib/atenciones"
 import type { LineaGuardada, LineaPedida, PropinaPedida, ReservaDeOrigen } from "@/lib/acciones-del-tablero"
 import { rangoDelDia, zonaDelDispositivo } from "@/lib/fechas"
-import { CODIGO_CORREGIR_CON_AJUSTE } from "@/lib/bloqueos-de-dinero"
+import { CODIGO_CORREGIR_CON_AJUSTE, CODIGO_PAGADO_AL_LABORATORIO } from "@/lib/bloqueos-de-dinero"
 import {
   codigoDelServidor,
   conJson,
@@ -24,6 +24,15 @@ import {
   type ResultadoConCodigo,
 } from "@/lib/peticiones"
 import { mostrarTelefono } from "@/lib/telefono"
+import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
+import { frasesDelTablero } from "./_frases"
+
+/**
+ * Las palabras de un rubro sin palabras propias: lo que dicen los mensajes de
+ * estos pedidos ("No se pudo cargar el tablero") si quien llama no pasa las
+ * del rubro. Los pedidos que traen un mensaje del servidor lo muestran tal cual.
+ */
+const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
 
 // ─── Lo que devuelve el servidor ─────────────────────────────────────────────
 
@@ -33,7 +42,46 @@ import { mostrarTelefono } from "@/lib/telefono"
  * copiado). `profesional.id` en null: quien lo hizo dejó el equipo, y hay que
  * reasignarla antes de cobrar.
  */
-export type LineaDeServicio = LineaGuardada
+export type LineaDeServicio = LineaGuardada & {
+  /**
+   * Sólo en un abono de prótesis (clínica dental): a qué prótesis abona y,
+   * ya cobrado, lo que quien mira ve del reparto (en unidades). La dueña, las
+   * tres partes; la odontóloga tratante, sólo la suya; el encargado, nada
+   * (`null`). Antes de cobrar, `null` para todos.
+   */
+  abono?: AbonoDeLinea
+}
+
+export interface AbonoDeLinea {
+  protesisId: string
+  reparto: { odontologo: number; clinica?: number; tecnico?: number } | null
+}
+
+/** Si la línea es un abono de prótesis: no se edita como servicio ni viaja en el PUT de líneas. */
+export const esAbono = (linea: { abono?: unknown }): boolean => !!linea.abono
+
+/**
+ * Cómo se lee un abono en la tarjeta y en el cobro: "Abono · Removible
+ * parcial · Acrílico (45, 46)". El servidor lo guarda como "Abono prótesis ·
+ * …" (así queda en reportes); acá se acorta, porque la tarjeta es angosta.
+ */
+export const nombreDelAbono = (servicio: string): string => servicio.replace(/^Abono prótesis · /, "Abono · ")
+
+/** Una prótesis del paciente a la que se puede abonar (no anulada), en unidades como el tablero. */
+export interface ProtesisParaAbonar {
+  id: string
+  nombre: string
+  estado: string
+  nombreDeEstado: string
+  tratante: string
+  valor: number
+  /** Abonos de atenciones ya cobradas. */
+  pagado: number
+  /** Abonos en atenciones abiertas de la Sala de espera (esta incluida). */
+  porCobrar: number
+  /** Valor − pagado − por cobrar: el máximo del abono. */
+  saldo: number
+}
 
 export interface PagoRegistrado {
   id: string
@@ -138,6 +186,22 @@ export interface Tablero {
   filaVirtual?: boolean
 }
 
+/**
+ * Lo que trae el sondeo cada 30 segundos: lo que cambia durante el día. El
+ * catálogo y la fila virtual no vienen: se piden completos al abrir, al volver
+ * a la pestaña y tras cada acción, y casi no cambian entre una y otra.
+ */
+export type Sondeo = Pick<Tablero, "reservas" | "atenciones" | "truncado">
+
+/**
+ * El tablero que ya se ve, con lo que trajo el sondeo encima: reservas,
+ * atenciones y `truncado` se reemplazan; el catálogo y la fila quedan como
+ * estaban. Sólo se copian esos tres campos, venga lo que venga.
+ */
+export function aplicarSondeo(previo: Tablero, sondeo: Sondeo): Tablero {
+  return { ...previo, reservas: sondeo.reservas, atenciones: sondeo.atenciones, truncado: sondeo.truncado }
+}
+
 /** Un cliente que coincide con lo que se escribe en el buscador. */
 export interface ClienteEncontrado {
   id: string
@@ -154,8 +218,9 @@ export interface ClienteEncontrado {
  * - `falta-requisito`: el servidor dice que falta algo para avanzar (400),
  *   con el mensaje de qué.
  * - `corregir-con-ajuste`: la atención ya entró en una liquidación o en un
- *   cierre de caja (409 con `codigo: "corregir-con-ajuste"`): no cambió, no
- *   se toca, y el mensaje dice cómo se corrige.
+ *   cierre de caja (409 con `codigo: "corregir-con-ajuste"`), o lleva un
+ *   abono ya pagado al laboratorio (`codigo: "pagado-al-laboratorio"`): no
+ *   cambió, no se toca, y el mensaje dice cómo se corrige.
  * - `otro`: cualquier otro motivo; se muestra el mensaje y nada más.
  */
 export type MotivoDeFallo = "desactualizada" | "falta-requisito" | "corregir-con-ajuste" | "otro"
@@ -176,22 +241,42 @@ const urlDeAtencion = (id: string) => `${URL_DE_ATENCIONES}/${encodeURIComponent
 // ─── Lecturas ────────────────────────────────────────────────────────────────
 
 /**
- * El tablero del día que contiene a `hoy`: de 00:00 a 00:00 del día
- * siguiente en la hora del dispositivo, enviado como instantes ISO. El
+ * La dirección del tablero del día que contiene a `hoy`: de 00:00 a 00:00 del
+ * día siguiente en la hora del dispositivo, enviado como instantes ISO. El
  * servidor no sabe en qué huso está el local; el navegador sí.
  */
-export async function leerTablero(hoy: Date): Promise<Resultado<Tablero>> {
+function urlDelTablero(hoy: Date, soloAtenciones: boolean): string {
   const { desde, hasta } = rangoDelDia(hoy)
   const parametros = new URLSearchParams({ desde: desde.toISOString(), hasta: hasta.toISOString() })
-  return pedir<Tablero>(`${URL_DE_ATENCIONES}?${parametros}`, "No se pudo cargar el tablero")
+  if (soloAtenciones) parametros.set("soloAtenciones", "1")
+  return `${URL_DE_ATENCIONES}?${parametros}`
+}
+
+/** El tablero completo del día que contiene a `hoy`: reservas, atenciones, catálogo y fila. */
+export async function leerTablero(hoy: Date, palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado<Tablero>> {
+  return pedir<Tablero>(urlDelTablero(hoy, false), frasesDelTablero(palabras).errores.cargarElTablero)
+}
+
+/**
+ * Sólo lo que cambia del día que contiene a `hoy`: reservas y atenciones. Es
+ * el sondeo de cada 30 segundos; el servidor ni consulta el catálogo.
+ */
+export async function leerAtencionesDelDia(
+  hoy: Date,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<Sondeo>> {
+  return pedir<Sondeo>(urlDelTablero(hoy, true), frasesDelTablero(palabras).errores.cargarElTablero)
 }
 
 /** Hasta ocho clientes cuyo nombre, correo o teléfono contiene `texto`. */
-export async function buscarClientes(texto: string): Promise<Resultado<ClienteEncontrado[]>> {
+export async function buscarClientes(
+  texto: string,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<ClienteEncontrado[]>> {
   const parametros = new URLSearchParams({ q: texto, limite: "8" })
   const resultado = await pedir<{
     clientes: { id: string; name: string; lastName: string | null; email: string | null; phone: string | null }[]
-  }>(`/api/clientes?${parametros}`, "No se pudieron buscar los clientes")
+  }>(`/api/clientes?${parametros}`, frasesDelTablero(palabras).errores.buscarClientes)
   if (!resultado.ok) return resultado
 
   return {
@@ -232,16 +317,20 @@ export async function marcarLlegada(citaId: string): Promise<ResultadoDeAccion<A
 }
 
 /**
- * La reserva no llegó: la cita queda "No vino" (`no-asistio`), sale de
+ * La reserva no llegó: la cita queda "No vino" (`no-asistio`; "No asistió" en
+ * una clínica dental, según las `palabras` del rubro), sale de
  * "Reservas de hoy", libera su horario y cuenta en la ficha del cliente. El
  * servidor sólo lo acepta en una reserva pendiente o confirmada cuya hora ya
  * pasó y que no esté en el tablero: si no, 409 con el motivo.
  */
-export async function marcarNoVino(citaId: string): Promise<ResultadoDeAccion<unknown>> {
+export async function marcarNoVino(
+  citaId: string,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<ResultadoDeAccion<unknown>> {
   return conMotivo(
     await pedirConCodigo<unknown>(
       `/api/citas/${encodeURIComponent(citaId)}`,
-      "No se pudo marcar que no vino",
+      frasesDelTablero(palabras).errores.marcarNoVino,
       conJson("PUT", { status: "no-asistio" })
     )
   )
@@ -294,9 +383,17 @@ export async function anotarSinReserva(datos: DatosSinReserva): Promise<Resultad
  * Reemplaza los servicios de la atención. Al profesional el servidor le
  * reemplaza sólo los suyos: los de sus colegas quedan como estaban.
  */
-export async function guardarServicios(id: string, lineas: LineaPedida[]): Promise<ResultadoDeAccion<Atencion>> {
+export async function guardarServicios(
+  id: string,
+  lineas: LineaPedida[],
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<ResultadoDeAccion<Atencion>> {
   return conMotivo(
-    await pedirConCodigo<Atencion>(urlDeAtencion(id), "No se pudieron guardar los servicios", conJson("PUT", { lineas }))
+    await pedirConCodigo<Atencion>(
+      urlDeAtencion(id),
+      frasesDelTablero(palabras).errores.guardarServicios,
+      conJson("PUT", { lineas })
+    )
   )
 }
 
@@ -325,6 +422,35 @@ export async function cobrarAtencion(
   )
 }
 
+// ─── Abonos de prótesis (clínica dental) ─────────────────────────────────────
+
+const urlDeAbonos = (id: string) => `${urlDeAtencion(id)}/abonos`
+
+/** Las prótesis no anuladas del paciente de la atención, con su valor, lo pagado, lo por cobrar y el saldo. */
+export async function leerProtesisParaAbonar(id: string): Promise<Resultado<ProtesisParaAbonar[]>> {
+  const resultado = await pedir<{ protesis: ProtesisParaAbonar[] }>(urlDeAbonos(id), "No se pudieron cargar las prótesis")
+  return resultado.ok ? { ok: true, datos: resultado.datos.protesis } : resultado
+}
+
+/**
+ * Agrega un abono a la atención: una línea ligada a la prótesis, de monto
+ * libre hasta el saldo. Responde la atención con la línea nueva. Los fallos
+ * se muestran tal cual (el monto pasa el saldo, la atención ya se cobró…):
+ * el código no cambia lo que hace la pantalla, que vuelve a leer las prótesis.
+ */
+export async function agregarAbono(id: string, protesisId: string, monto: number): Promise<ResultadoConCodigo<Atencion>> {
+  return pedirConCodigo<Atencion>(urlDeAbonos(id), "No se pudo agregar el abono", conJson("POST", { protesisId, monto }))
+}
+
+/** Quita un abono antes de cobrar. Responde la atención sin esa línea. */
+export async function quitarAbono(id: string, lineaId: string): Promise<ResultadoDeAccion<Atencion>> {
+  return conMotivo(
+    await pedirConCodigo<Atencion>(`${urlDeAbonos(id)}/${encodeURIComponent(lineaId)}`, "No se pudo quitar el abono", {
+      method: "DELETE",
+    })
+  )
+}
+
 /** "Vaciar la fila de hoy" (#85): anula a todos los que esperan en la fila virtual del día. */
 export async function vaciarFilaDeHoy(): Promise<ResultadoDeAccion<{ anuladas: number }>> {
   return conMotivo(
@@ -338,10 +464,13 @@ export async function vaciarFilaDeHoy(): Promise<ResultadoDeAccion<{ anuladas: n
  * Antes de cobrar (#118): los ids de las líneas que quedarían sin % de
  * comisión si se cobrara ahora. Sólo para avisar; el cobro no se frena.
  */
-export async function leerLineasSinPorcentaje(id: string): Promise<Resultado<string[]>> {
+export async function leerLineasSinPorcentaje(
+  id: string,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<string[]>> {
   const resultado = await pedir<{ lineasSinPorcentaje: string[] }>(
     `${urlDeAtencion(id)}/cobro`,
-    "No se pudo saber qué servicios quedarán sin porcentaje de comisión"
+    frasesDelTablero(palabras).errores.lineasSinPorcentaje
   )
   return resultado.ok ? { ok: true, datos: resultado.datos.lineasSinPorcentaje } : resultado
 }
@@ -349,7 +478,12 @@ export async function leerLineasSinPorcentaje(id: string): Promise<Resultado<str
 /**
  * Anula la atención. Queda en el historial como anulada y deja de sumar. Si
  * ya se rindió (liquidación o cierre de caja), el servidor lo dice con un
- * código, no con el texto (#117).
+ * código, no con el texto (#117). Lo mismo si lleva un abono de prótesis ya
+ * pagado al laboratorio (`pagado-al-laboratorio`): no cambió nada, así que no
+ * es "la atención cambió". Las dos se tratan igual (`corregir-con-ajuste`):
+ * el modal se queda con el motivo escrito y el mensaje del servidor, que dice
+ * cómo seguir; antes ese 409 se leía como desactualizada, el tablero recargaba
+ * y el motivo se perdía.
  */
 export async function anularAtencion(id: string, motivo: string): Promise<ResultadoDeAccion<Atencion>> {
   const resultado = await pedirConCuerpo<Atencion>(
@@ -357,7 +491,8 @@ export async function anularAtencion(id: string, motivo: string): Promise<Result
     "No se pudo anular la atención",
     conJson("POST", motivo.trim() ? { motivo: motivo.trim() } : {})
   )
-  if (!resultado.ok && codigoDelServidor(resultado.cuerpo) === CODIGO_CORREGIR_CON_AJUSTE) {
+  const codigo = codigoDelServidor(resultado.ok ? null : resultado.cuerpo)
+  if (!resultado.ok && (codigo === CODIGO_CORREGIR_CON_AJUSTE || codigo === CODIGO_PAGADO_AL_LABORATORIO)) {
     return { ok: false, error: resultado.error, motivo: "corregir-con-ajuste" }
   }
   return conMotivo(resultado)

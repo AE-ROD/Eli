@@ -9,6 +9,7 @@ import { Insignia } from "@/components/comunes/insignia"
 import { Tarjeta } from "@/components/comunes/tarjeta"
 import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import { Aviso } from "@/components/panel/aviso"
+import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
 import { leerClientesQueSeVan, registrarContacto, type ClienteQueSeVa } from "../_datos"
 import {
   asuntoSugerido,
@@ -18,10 +19,16 @@ import {
   fechaParaLeer,
   mensajeSugerido,
 } from "../_escribirle"
+import { frasesDeClientes } from "../_frases"
+
+/** Las palabras de un rubro sin palabras propias: lo que dice la vista si quien la usa no pasa las suyas. */
+const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
 
 interface PropsDeVistaSeVan {
   /** Para firmar el mensaje sugerido: "Te escribimos de …". */
   nombreNegocio: string
+  /** Las palabras del rubro: "cliente(s)" o, en una clínica dental, "paciente(s)". Sin ellas, las de siempre. */
+  palabras?: PalabrasDelRubro
 }
 
 const ICONO = "size-4"
@@ -36,7 +43,8 @@ const ICONO = "size-4"
  * Primero el teléfono: una columna de tarjetas, con los botones de un toque.
  * Sólo la ven dueña y encargado; el servidor lo vuelve a verificar.
  */
-export function VistaSeVan({ nombreNegocio }: PropsDeVistaSeVan) {
+export function VistaSeVan({ nombreNegocio, palabras = PALABRAS_NEUTRAS }: PropsDeVistaSeVan) {
+  const { seVan } = frasesDeClientes(palabras)
   const [clientes, setClientes] = useState<ClienteQueSeVa[]>([])
   const [total, setTotal] = useState(0)
   const [diasOculto, setDiasOculto] = useState(14)
@@ -47,7 +55,7 @@ export function VistaSeVan({ nombreNegocio }: PropsDeVistaSeVan) {
   const cargar = useCallback(async () => {
     setCargando(true)
     setAviso("")
-    const resultado = await leerClientesQueSeVan()
+    const resultado = await leerClientesQueSeVan(palabras)
     if (resultado.ok) {
       setClientes(resultado.datos.clientes)
       setTotal(resultado.datos.total)
@@ -56,7 +64,7 @@ export function VistaSeVan({ nombreNegocio }: PropsDeVistaSeVan) {
       setAviso(resultado.error)
     }
     setCargando(false)
-  }, [])
+  }, [palabras])
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- carga la lista al montar
   useEffect(() => { cargar() }, [cargar])
@@ -82,9 +90,7 @@ export function VistaSeVan({ nombreNegocio }: PropsDeVistaSeVan) {
           Se están yendo
         </h2>
         <p className="max-w-prose text-sm text-pretty text-texto-2">
-          Clientes que no vienen hace al menos una vez y media lo que suelen tardar, y no tienen hora. Al tocar
-          &ldquo;Escribirle&rdquo; se abre tu WhatsApp o tu correo con un mensaje listo para cambiar, y el cliente sale
-          de esta lista por {dias(diasOculto)}.
+          {seVan.descripcion(dias(diasOculto))}
         </p>
       </div>
 
@@ -107,7 +113,7 @@ export function VistaSeVan({ nombreNegocio }: PropsDeVistaSeVan) {
 
       {cargando ? (
         <div aria-busy="true">
-          <span className="sr-only">Cargando clientes que se están yendo...</span>
+          <span className="sr-only">{seVan.cargando}</span>
           <ul aria-hidden="true" className="space-y-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <li key={i} className="space-y-3 rounded-[24px] bg-tarjeta p-4 shadow-sm squircle">
@@ -124,8 +130,7 @@ export function VistaSeVan({ nombreNegocio }: PropsDeVistaSeVan) {
             <CuadroDeIcono icono={HeartHandshake} color="lila" tamano="lg" />
             <p className="mt-2 font-semibold text-navy">Nadie se está yendo por ahora</p>
             <p className="max-w-sm text-sm text-pretty text-texto-2">
-              Aparecen acá los clientes con al menos 3 visitas, o cuyo último servicio tiene una frecuencia, cuando se
-              atrasan.
+              {seVan.vacio}
             </p>
           </div>
         )
@@ -134,7 +139,13 @@ export function VistaSeVan({ nombreNegocio }: PropsDeVistaSeVan) {
           <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {clientes.map((cliente) => (
               <li key={cliente.id} className="min-w-0">
-                <FilaSeVa cliente={cliente} nombreNegocio={nombreNegocio} onEscribir={() => anotar(cliente)} />
+                <FilaSeVa
+                  cliente={cliente}
+                  nombreNegocio={nombreNegocio}
+                  palabras={palabras}
+                  segunElServicio={seVan.segunElServicio}
+                  onEscribir={() => anotar(cliente)}
+                />
               </li>
             ))}
           </ul>
@@ -152,14 +163,20 @@ export function VistaSeVan({ nombreNegocio }: PropsDeVistaSeVan) {
 function FilaSeVa({
   cliente,
   nombreNegocio,
+  palabras,
+  segunElServicio,
   onEscribir,
 }: {
   cliente: ClienteQueSeVa
   nombreNegocio: string
+  /** Las del rubro: el mensaje sugerido propone "tu próxima visita" sin concordar con el nombre del servicio. */
+  palabras: PalabrasDelRubro
+  /** "(según el servicio)" / "(según la prestación)": de dónde sale cada cuánto vuelve. */
+  segunElServicio: string
   onEscribir: () => void
 }) {
   const nombreCompleto = nombreCompletoDeCliente({ name: cliente.nombre, lastName: cliente.apellido })
-  const mensaje = mensajeSugerido({ nombre: cliente.nombre, nombreNegocio, ultimoServicio: cliente.ultimoServicio })
+  const mensaje = mensajeSugerido({ nombre: cliente.nombre, nombreNegocio, ultimoServicio: cliente.ultimoServicio, palabras })
   const whatsapp = enlaceDeWhatsapp(cliente.telefono, mensaje)
   const correo = enlaceDeCorreo(cliente.email, asuntoSugerido(nombreNegocio), mensaje)
   const idDelNombre = `se-va-${cliente.id}`
@@ -180,7 +197,7 @@ function FilaSeVa({
           <dt>Suele venir cada</dt>
           <dd className="text-navy">
             {dias(cliente.ciclo)}
-            {cliente.origenDelCiclo === "servicio" && <span className="text-texto-2"> (según el servicio)</span>}
+            {cliente.origenDelCiclo === "servicio" && <span className="text-texto-2"> {segunElServicio}</span>}
           </dd>
         </div>
         <div className="flex flex-wrap gap-1">

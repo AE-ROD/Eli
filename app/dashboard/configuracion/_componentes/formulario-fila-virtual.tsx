@@ -7,11 +7,14 @@ import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Interruptor } from "@/components/comunes/interruptor"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { TOPE_DE_FILA_MAXIMO, TOPE_DE_FILA_MINIMO } from "@/lib/fila-virtual"
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
+import { frasesDeConfiguracion } from "../_frases"
 
 interface FilaVirtual {
   activa: boolean
@@ -39,6 +42,7 @@ interface PropsDeFormularioFilaVirtual {
  */
 export function FormularioFilaVirtual({ slug, activaInicial, topeInicial }: PropsDeFormularioFilaVirtual) {
   const idDelTitulo = useId()
+  const { filaVirtual: frases } = frasesDeConfiguracion(vocabularioDe(useRubroDelPanel()).palabras)
   const idDelTope = useId()
   const [activa, setActiva] = useState(activaInicial)
   const [texto, setTexto] = useState(String(topeInicial))
@@ -90,15 +94,16 @@ export function FormularioFilaVirtual({ slug, activaInicial, topeInicial }: Prop
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
+        nivel={3}
         titulo="Fila virtual"
-        subtitulo="Para atender por orden de llegada sin que esperen en el local"
+        subtitulo={frases.subtitulo}
         icono={{ figura: ListOrdered }}
       />
 
       <div className="mt-5">
         <Interruptor
           etiqueta="Fila virtual"
-          descripcion="Tus clientes se anotan desde su celular mientras el local está abierto, ven cuántas personas tienen adelante y les avisamos por correo cuando ya casi es su turno."
+          descripcion={frases.descripcion}
           activo={activa}
           alCambiar={cambiar}
         />
@@ -148,10 +153,7 @@ export function FormularioFilaVirtual({ slug, activaInicial, topeInicial }: Prop
             <MonitorPlay aria-hidden="true" className="size-4" strokeWidth={2} />
             Abrir la pantalla de la fila
           </Link>
-          <p className="mt-2 text-sm text-texto-2">
-            La pantalla usa la sesión de quien la abre: en el televisor o la tablet del local queda abierto el panel de esa
-            cuenta. Déjala en pantalla completa y no dejes el panel a mano de los clientes en ese equipo.
-          </p>
+          <p className="mt-2 text-sm text-texto-2">{frases.pantalla}</p>
         </div>
       )}
 

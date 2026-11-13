@@ -134,6 +134,30 @@ describe("POST /api/auth/restablecer-contrasena", () => {
     expect(prismaMock.user.update).not.toHaveBeenCalled()
   })
 
+  it.each(["{roto", ""])("un cuerpo que no es JSON (%j) da 400, no 500", async (cuerpo) => {
+    const { POST } = await import("./route")
+
+    const res = await POST(pedidoFalso(cuerpo))
+
+    expect(res.status).toBe(400)
+    expect(prismaMock.passwordResetToken.findUnique).not.toHaveBeenCalled()
+  })
+
+  it("un error inesperado da 500 y al log va sólo el nombre y el código, no el error completo", async () => {
+    const { POST } = await import("./route")
+    const consola = vi.spyOn(console, "error").mockImplementation(() => {})
+    prismaMock.passwordResetToken.findUnique.mockRejectedValueOnce(
+      Object.assign(new Error("falló buscando token-abc"), { name: "PrismaClientKnownRequestError", code: "P1001" })
+    )
+
+    const res = await POST(pedidoFalso({ token: "token-abc", contrasena: "nuevaClave1" }))
+
+    expect(res.status).toBe(500)
+    expect(consola).toHaveBeenCalledWith("Error en restablecer-contrasena:", { name: "PrismaClientKnownRequestError", code: "P1001" })
+    expect(JSON.stringify(consola.mock.calls)).not.toContain("token-abc")
+    consola.mockRestore()
+  })
+
   it("un enlace ya usado responde 410 y no cambia la contraseña", async () => {
     const { POST } = await import("./route")
 

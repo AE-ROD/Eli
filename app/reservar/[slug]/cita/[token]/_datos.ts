@@ -4,9 +4,26 @@
  * enlace; devuelve `Resultado` en vez de lanzar (`lib/peticiones.ts`).
  */
 
+import type { EleccionDeProfesional } from "@/lib/gestion-de-cita"
 import type { PrecioDeLaHora } from "@/lib/hora-valle"
 import { conJson, pedir, pedirConCodigo, type Resultado, type ResultadoConCodigo } from "@/lib/peticiones"
 import type { HorasDelDia } from "../../_componentes/selector-fecha-hora"
+import { frasesDeLaGestion } from "../../_frases"
+
+/**
+ * A quién se puede pasar la cita al reagendar, tal como lo responde el
+ * servidor: sólo lo que ya publica la reserva (el mismo `SelectorProfesional`).
+ */
+export interface ProfesionalParaCambiar {
+  id: string
+  nombre: string
+  especialidad: string | null
+  fotoUrl: string | null
+  /** Los días de la semana (0 domingo a 6 sábado) en que atiende en la sede de la cita. */
+  diasConAtencion: number[]
+  /** Sólo en quien atiende la cita hoy. */
+  actual?: true
+}
 
 export interface CitaDelEnlace {
   negocio: { nombre: string }
@@ -23,20 +40,76 @@ export interface CitaDelEnlace {
   sePuedeReagendar: boolean
   /** Los días de la semana (0 domingo a 6 sábado) que se pueden elegir al reagendar; `null`: todos. */
   diasConAtencion: number[] | null
+  /**
+   * Con quién se puede dejar la cita al reagendar. Sólo viene si hay a quién
+   * elegir (dos o más profesionales que hacen todos los servicios de la cita y
+   * atienden en su sede): sin la clave, la pantalla no pregunta y reagendar es
+   * con la misma persona de siempre.
+   */
+  profesionales?: ProfesionalParaCambiar[]
+  /** Clínica dental: es una urgencia y sólo se mueve a otra hora de hoy. Sólo viene en ese caso. */
+  soloHoy?: boolean
+  /**
+   * Plan Independiente: la sede donde se atiende la cita, con su dirección y los
+   * enlaces de "Cómo llegar". Sólo viene si la cita tiene sede: sin ella (un
+   * negocio sin sedes, o una cita de antes) la pantalla es la de siempre.
+   */
+  sede?: {
+    nombre: string
+    direccion: string
+    comuna: string
+    mapas: { googleMaps: string; waze: string } | null
+  }
 }
 
 const ruta = (slug: string, token: string, resto = "") =>
   `/api/reservar/${encodeURIComponent(slug)}/cita/${encodeURIComponent(token)}${resto}`
 
-/** Con el código: un 404 es "este enlace no sirve", no un error de conexión. */
-export async function leerCita(slug: string, token: string): Promise<ResultadoConCodigo<CitaDelEnlace>> {
-  return pedirConCodigo<CitaDelEnlace>(ruta(slug, token), "No se pudo cargar tu cita")
+/**
+ * Con el código: un 404 es "este enlace no sirve", no un error de conexión.
+ * `rubro` (`Business.type`) pone la palabra de la reserva en lo que se dice si
+ * el servidor no dio otro motivo ("No se pudo cargar tu hora"); sin él, la de siempre.
+ */
+export async function leerCita(
+  slug: string,
+  token: string,
+  rubro?: string | null
+): Promise<ResultadoConCodigo<CitaDelEnlace>> {
+  return pedirConCodigo<CitaDelEnlace>(ruta(slug, token), frasesDeLaGestion(rubro).errores.cargar)
 }
 
-/** Las horas libres y, con hora valle (#89c), las que dejarían la cita con otro precio. */
-export async function leerHorasParaReagendar(slug: string, token: string, fecha: string): Promise<Resultado<HorasDelDia>> {
+/** Quien atiende la cita hoy: lo que se hace si la pantalla no cambia nada. */
+export const EL_MISMO_PROFESIONAL: EleccionDeProfesional = { tipo: "mismo" }
+
+/**
+ * Cómo viaja la elección de con quién en la URL de las horas: nada para "el
+ * mismo", `profesionalId=` vacío para "cualquiera" y el id para una persona. El
+ * servidor la revalida.
+ */
+function parametroDeLaConsulta(eleccion: EleccionDeProfesional): Record<string, string> {
+  if (eleccion.tipo === "uno") return { profesionalId: eleccion.id }
+  return eleccion.tipo === "cualquiera" ? { profesionalId: "" } : {}
+}
+
+/** Lo mismo en el cuerpo de reagendar: nada para "el mismo", `null` para "cualquiera" y el id para una persona. */
+function parametroDelCuerpo(eleccion: EleccionDeProfesional): { profesionalId?: string | null } {
+  if (eleccion.tipo === "uno") return { profesionalId: eleccion.id }
+  return eleccion.tipo === "cualquiera" ? { profesionalId: null } : {}
+}
+
+/**
+ * Las horas libres y, con hora valle (#89c), las que dejarían la cita con otro
+ * precio. Con `eleccion`, las de esa persona (o de cualquiera de las que
+ * pueden); sin ella, las de quien atiende la cita hoy.
+ */
+export async function leerHorasParaReagendar(
+  slug: string,
+  token: string,
+  fecha: string,
+  eleccion: EleccionDeProfesional = EL_MISMO_PROFESIONAL
+): Promise<Resultado<HorasDelDia>> {
   const resultado = await pedir<{ slots: string[]; precios?: PrecioDeLaHora[] }>(
-    ruta(slug, token, `/disponibilidad?${new URLSearchParams({ fecha })}`),
+    ruta(slug, token, `/disponibilidad?${new URLSearchParams({ fecha, ...parametroDeLaConsulta(eleccion) })}`),
     "No se pudieron cargar los horarios disponibles"
   )
   return resultado.ok
@@ -44,15 +117,21 @@ export async function leerHorasParaReagendar(slug: string, token: string, fecha:
     : resultado
 }
 
-export async function cancelarCita(slug: string, token: string): Promise<Resultado> {
-  return pedir(ruta(slug, token, "/cancelar"), "No se pudo cancelar la cita", { method: "POST" })
+export async function cancelarCita(slug: string, token: string, rubro?: string | null): Promise<Resultado> {
+  return pedir(ruta(slug, token, "/cancelar"), frasesDeLaGestion(rubro).errores.cancelar, { method: "POST" })
 }
 
 export async function reagendarCita(
   slug: string,
   token: string,
   fecha: string,
-  hora: string
+  hora: string,
+  rubro?: string | null,
+  eleccion: EleccionDeProfesional = EL_MISMO_PROFESIONAL
 ): Promise<Resultado<{ fecha: string; hora: string; profesional: string | null; precio: number | null }>> {
-  return pedir(ruta(slug, token, "/reagendar"), "No se pudo cambiar la cita", conJson("POST", { fecha, hora }))
+  return pedir(
+    ruta(slug, token, "/reagendar"),
+    frasesDeLaGestion(rubro).errores.cambiar,
+    conJson("POST", { fecha, hora, ...parametroDelCuerpo(eleccion) })
+  )
 }

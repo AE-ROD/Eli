@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
-import { centavos, conId, datosBase, pedido, sesiones } from "@/pruebas/datos"
+import { NEGOCIO, centavos, conId, datosBase, pedido, sesiones } from "@/pruebas/datos"
 
 const mockGetServerSession = vi.fn()
 
@@ -109,5 +109,21 @@ describe("PUT /api/configuracion/productos/[id]", () => {
   it("no hay DELETE: los productos se desactivan, no se borran", async () => {
     const modulo = await import("./route")
     expect("DELETE" in modulo).toBe(false)
+  })
+})
+
+describe("PUT /api/configuracion/productos/[id]: la auditoría con la fila trabada", () => {
+  it("traba la fila del producto (del negocio) antes de leer el 'antes' que se audita", async () => {
+    const res = await editar(sesiones.dueña, "p-shampoo", { porcentaje: 15 })
+    expect(res.status).toBe(200)
+
+    const [partes, ...valores] = base.prisma.$queryRaw.mock.calls[0]
+    expect(partes.join("?")).toBe('SELECT id FROM productos WHERE id = ? AND "businessId" = ? FOR UPDATE')
+    expect(valores).toEqual(["p-shampoo", NEGOCIO])
+    const lecturaDelAntes = base.prisma.producto.findFirst.mock.invocationCallOrder.find(
+      (orden) => orden > base.prisma.$transaction.mock.invocationCallOrder[0]
+    )!
+    expect(base.prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(lecturaDelAntes)
+    expect(cambiosDeComision()).toEqual([expect.objectContaining({ scope: "product", previousPercent: 10, newPercent: 15 })])
   })
 })

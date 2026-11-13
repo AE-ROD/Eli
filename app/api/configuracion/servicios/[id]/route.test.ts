@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { Prisma } from "@prisma/client"
 import { pedidoFalso } from "@/pruebas/pedidos"
+import { MENSAJE_URGENCIA_SOLO_EN_CLINICA } from "@/lib/campos-del-panel"
 
 const mockGetServerSession = vi.fn()
 
@@ -45,6 +46,22 @@ describe("PUT /api/configuracion/servicios/[id]", () => {
     const res = await PUT(pedidoFalso({ name: "Nuevo nombre" }), paramsCon("srv-1"))
 
     expect(res.status).toBe(200)
+  })
+
+  it("si otro lo borró entre la lectura y la escritura (P2025): 404, no 500", async () => {
+    const { PUT, DELETE } = await import("./route")
+    const borrado = () =>
+      new Prisma.PrismaClientKnownRequestError("No record was found for an update.", { code: "P2025", clientVersion: "prueba" })
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    prismaMock.service.findFirst.mockResolvedValueOnce({ id: "srv-1", businessId: "negocio-1" })
+    prismaMock.service.update.mockRejectedValueOnce(borrado())
+    expect((await PUT(pedidoFalso({ name: "Nuevo nombre" }), paramsCon("srv-1"))).status).toBe(404)
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    prismaMock.service.findFirst.mockResolvedValueOnce({ id: "srv-1", businessId: "negocio-1" })
+    prismaMock.service.delete.mockRejectedValueOnce(borrado())
+    expect((await DELETE(pedidoFalso(undefined), paramsCon("srv-1"))).status).toBe(404)
   })
 
   it("la búsqueda de pertenencia queda acotada por el businessId del actor", async () => {
@@ -172,8 +189,9 @@ describe("DELETE /api/configuracion/servicios/[id] — servicio con comisiones",
 
     mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
     prismaMock.service.findFirst.mockResolvedValueOnce({ id: "srv-1", businessId: "negocio-1" })
-    const otroError = new Prisma.PrismaClientKnownRequestError("Record not found", {
-      code: "P2025",
+    // P2025 (se borró entretanto) es 404; cualquier otro, como una base caída, no se disfraza.
+    const otroError = new Prisma.PrismaClientKnownRequestError("Can't reach database server", {
+      code: "P1001",
       clientVersion: "test",
     })
     prismaMock.service.delete.mockRejectedValueOnce(otroError)
@@ -282,3 +300,95 @@ describe("PUT /api/configuracion/servicios/[id] — frecuencia de visitas", () =
   })
 })
 
+
+describe("PUT /api/configuracion/servicios/[id] — urgencia (sólo clínica dental)", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const enUnaClinica = (sesion: { user: object }) => ({ user: { ...sesion.user, rubro: "odontologia" } })
+  const enUnSalon = (sesion: { user: object }) => ({ user: { ...sesion.user, rubro: "salon" } })
+  const propio = () => prismaMock.service.findFirst.mockResolvedValueOnce({ id: "srv-1", businessId: "negocio-1" })
+
+  it.each([
+    ["marcar", true],
+    ["desmarcar", false],
+  ])("el encargado de una clínica dental puede %s un servicio como urgencia", async (_accion, esUrgencia) => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(enUnaClinica(sesionEncargado))
+    propio()
+    prismaMock.service.update.mockResolvedValueOnce({ id: "srv-1", esUrgencia })
+
+    const res = await PUT(pedidoFalso({ esUrgencia }), paramsCon("srv-1"))
+
+    expect(res.status).toBe(200)
+    expect(prismaMock.service.update.mock.calls[0][0]).toMatchObject({ where: { id: "srv-1" }, data: { esUrgencia } })
+  })
+
+  it("en una clínica dental, editar otro dato no toca la bandera", async () => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(enUnaClinica(sesionEncargado))
+    propio()
+    prismaMock.service.update.mockResolvedValueOnce({ id: "srv-1" })
+
+    await PUT(pedidoFalso({ name: "Limpieza" }), paramsCon("srv-1"))
+
+    expect(prismaMock.service.update.mock.calls[0][0].data).not.toHaveProperty("esUrgencia")
+  })
+
+  it.each([
+    ["un salón", enUnSalon(sesionEncargado)],
+    ["un negocio sin rubro en la sesión", sesionEncargado],
+  ])("en %s el servidor rechaza la bandera aunque el navegador la mande: 401 y no escribe", async (_donde, sesion) => {
+    const { PUT } = await import("./route")
+    for (const esUrgencia of [true, false]) {
+      mockGetServerSession.mockResolvedValueOnce(sesion)
+      propio()
+
+      const res = await PUT(pedidoFalso({ esUrgencia }), paramsCon("srv-1"))
+
+      expect(res.status).toBe(401)
+      expect((await res.json()).error).toBe(MENSAJE_URGENCIA_SOLO_EN_CLINICA)
+    }
+    expect(prismaMock.service.update).not.toHaveBeenCalled()
+  })
+
+  it("en un negocio que no es dental, el resto del servicio se edita como siempre", async () => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(enUnSalon(sesionEncargado))
+    propio()
+    prismaMock.service.update.mockResolvedValueOnce({ id: "srv-1" })
+
+    expect((await PUT(pedidoFalso({ name: "Corte" }), paramsCon("srv-1"))).status).toBe(200)
+  })
+
+  it("un servicio de otro negocio sigue siendo 404 (no 401) aunque traiga la bandera", async () => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(enUnaClinica(sesionEncargadoNegocio2))
+    prismaMock.service.findFirst.mockResolvedValueOnce(null)
+
+    const res = await PUT(pedidoFalso({ esUrgencia: true }), paramsCon("srv-de-negocio-1"))
+
+    expect(res.status).toBe(404)
+    expect(prismaMock.service.findFirst.mock.calls[0][0].where).toEqual({ id: "srv-de-negocio-1", businessId: "negocio-2" })
+    expect(prismaMock.service.update).not.toHaveBeenCalled()
+  })
+
+  it("el profesional de una clínica no marca nada: 401", async () => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(enUnaClinica(sesionProfesional))
+
+    expect((await PUT(pedidoFalso({ esUrgencia: true }), paramsCon("srv-1"))).status).toBe(401)
+    expect(prismaMock.service.update).not.toHaveBeenCalled()
+  })
+
+  it.each([["texto", "true"], ["número", 1], ["nulo", null]])("una urgencia que es %s es 400 y no escribe", async (_que, esUrgencia) => {
+    const { PUT } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(enUnaClinica(sesionEncargado))
+    propio()
+
+    const res = await PUT(pedidoFalso({ esUrgencia }), paramsCon("srv-1"))
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: "Urgencia tiene que ser sí o no" })
+    expect(prismaMock.service.update).not.toHaveBeenCalled()
+  })
+})

@@ -12,10 +12,23 @@ import {
   type ContextoDeCorrida,
   type ResumenDeTrabajo,
 } from "@/lib/envios-a-clientes"
+import { esRechazoPorSedeInactiva } from "@/lib/rechazo-de-sede-inactiva"
 import { registrarError } from "@/lib/registro-de-errores"
-import { MENSAJE_FECHA_MUY_LEJANA, MENSAJE_FECHA_PASADA, fechaNoReservable, normalizarEmail } from "@/lib/reserva-publica"
+import {
+  MENSAJE_FECHA_MUY_LEJANA,
+  MENSAJE_FECHA_PASADA,
+  MENSAJE_URGENCIA_SOLO_HOY,
+  duracionDeLaReserva,
+  esHoyEn,
+  esReservaDeUrgencia,
+  fechaNoReservable,
+  normalizarEmail,
+} from "@/lib/reserva-publica"
+import { esRubroDental } from "@/lib/rubros"
+import { hayVariasSedes, leerSedesDeLaReserva, resolverSedeDeLaReserva } from "@/lib/sede-de-la-reserva"
 import { leerServiciosDeLaReserva, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
 import { hashDeToken } from "@/lib/tokens"
+import { urlBase } from "@/lib/url-base"
 import { fechaYMinutosEn, zonaDelNegocio } from "@/lib/zona-horaria"
 
 /**
@@ -34,7 +47,8 @@ import { fechaYMinutosEn, zonaDelNegocio } from "@/lib/zona-horaria"
  *   tope por evento; la hora es de quien confirme primero, y la transacción
  *   `Serializable` de `confirmar` ya resuelve la carrera.
  * - **Reservó** (`marcarReservo`): al confirmar una reserva con el mismo email
- *   y para el mismo día, sus inscripciones activas pasan a "reservo".
+ *   y para el mismo día, sus inscripciones activas pasan a "reservo" y se
+ *   borran sus datos personales (ya no se le va a escribir).
  * - **Salir** (`salirDeLaLista`): por el token del correo (página o POST de un
  *   clic, RFC 8058). Borra los datos personales.
  * - **Expirar** (`expirarListaDeEspera`, cron diario): las de días pasados en
@@ -100,22 +114,26 @@ export function hashDelTokenDeEspera(token: unknown): string | null {
   return typeof token === "string" && FORMA_DEL_TOKEN.test(token) ? hashDeToken(token) : null
 }
 
-function urlBase(): string {
-  return process.env.NEXTAUTH_URL ?? "http://localhost:3000"
-}
-
-/** Los enlaces de un aviso: reservar con todo elegido, y salir de la lista (página y un clic). */
+/**
+ * Los enlaces de un aviso: reservar con todo elegido, y salir de la lista
+ * (página y un clic). Lanza en producción sin `NEXTAUTH_URL` (`urlBase`) y sin
+ * `NEXTAUTH_SECRET` (el token): quien la llame dentro de un envío lo cuenta
+ * como fallido y sigue, nunca manda un enlace a localhost.
+ */
 export function enlacesDelAviso(datos: {
   slug: string
   esperaId: string
   serviceId: string
   memberId: string | null
   fecha: string
+  /** La sede por la que se anotó (plan Independiente): el enlace la deja elegida. */
+  sedeId?: string | null
 }) {
   const base = urlBase()
   const slug = encodeURIComponent(datos.slug)
   const consulta = new URLSearchParams({ servicio: datos.serviceId, fecha: datos.fecha })
   if (datos.memberId) consulta.set("profesional", datos.memberId)
+  if (datos.sedeId) consulta.set("sede", datos.sedeId)
   const token = tokenDeInscripcion(datos.esperaId)
   return {
     enlaceReservar: `${base}/reservar/${slug}?${consulta}#reservar`,
@@ -140,6 +158,14 @@ export interface DatosDeInscripcion {
   /** Ya en E.164, o null. */
   telefono: string | null
   whatsappConsentimiento?: boolean
+  /** Clínica dental: la primera vez del paciente suma minutos a la duración. En otro rubro se ignora. */
+  primeraVez?: boolean
+  /**
+   * La sede que eligió quien se anota (plan Independiente), tal como llegó del
+   * navegador: se revalida acá contra las sedes activas del negocio
+   * (`resolverSedeDeLaReserva`), igual que en `confirmar`.
+   */
+  sedeId?: string | null
 }
 
 export type ResultadoDeInscripcion =
@@ -148,6 +174,10 @@ export type ResultadoDeInscripcion =
   | { tipo: "no-encontrada" }
   | { tipo: "tope" }
   | { tipo: "rechazada"; error: string }
+  /** Con dos o más sedes activas, la sede falta o no es una sede activa del negocio: 400. */
+  | { tipo: "sede-no-valida" }
+  /** La sede se desactivó mientras se inscribía (la base la rechazó): 409, y no se guardó nada. */
+  | { tipo: "sede-inactiva" }
 
 /**
  * Anota a alguien en la lista de espera de un día. `negocio` es el del slug
@@ -163,9 +193,14 @@ export type ResultadoDeInscripcion =
  * trabaja, o está bloqueado entero) pero otro sí, se anota con "cualquiera"
  * (#166): si no, el aviso se calculaba sólo para esa persona y nunca llegaba.
  * La respuesta es la misma en los dos casos: no dice nada de su agenda.
+ *
+ * Clínica dental (`negocio.type`), con las reglas de la reserva
+ * (`lib/reserva-publica.ts`): la primera vez suma minutos a la duración
+ * (`duracionDeLaReserva`), así que un día que la página mostró sin horas no
+ * se rechaza con "todavía hay horas"; y una urgencia sólo espera por hoy.
  */
 export async function inscribirEnListaDeEspera(
-  negocio: { id: string; timezone: string | null },
+  negocio: { id: string; timezone: string | null; type?: string | null },
   datos: DatosDeInscripcion,
   ahora = new Date()
 ): Promise<ResultadoDeInscripcion> {
@@ -175,14 +210,27 @@ export async function inscribirEnListaDeEspera(
   // Todos del negocio y activos, o el mismo 404 sin decir cuál falló.
   const servicios = await leerServiciosDeLaReserva(prisma, negocio.id, datos.servicioIds)
   if (!servicios) return { tipo: "no-encontrada" }
+  // La sede, revalidada contra las sedes activas de ESTE negocio. Con varias, el
+  // día se revisa con el horario de la elegida; con una sola o sin sedes, el de siempre.
+  const eleccionDeSede = resolverSedeDeLaReserva(await leerSedesDeLaReserva(prisma, negocio.id), datos.sedeId)
+  if (eleccionDeSede.tipo === "no-valida") return { tipo: "sede-no-valida" }
+  const sedeDelHorario = eleccionDeSede.sedeDelHorario
   const serviceIds = servicios.map((servicio) => servicio.id)
   const servicioId = serviceIds[0]
-  const { duracion } = resumenDeLaReserva(servicios)
+  const clinicaDental = esRubroDental(negocio.type)
+  const duracion = duracionDeLaReserva(resumenDeLaReserva(servicios).duracion, {
+    clinicaDental,
+    primeraVez: datos.primeraVez === true,
+  })
 
   const zona = zonaDelNegocio(negocio.timezone)
   const noReservable = fechaNoReservable(datos.fecha, ahora, zona)
   if (noReservable) {
     return { tipo: "rechazada", error: noReservable === "pasada" ? MENSAJE_FECHA_PASADA : MENSAJE_FECHA_MUY_LEJANA }
+  }
+  // Una urgencia se atiende el mismo día: no se espera por otro, como no se reserva para otro.
+  if (esReservaDeUrgencia(clinicaDental, servicios) && !esHoyEn(datos.fecha, ahora, zona)) {
+    return { tipo: "rechazada", error: MENSAJE_URGENCIA_SOLO_HOY }
   }
 
   const elegido = datos.profesionalId || null
@@ -191,6 +239,7 @@ export async function inscribirEnListaDeEspera(
     serviceIds,
     profesionalId: elegido,
     fecha: datos.fecha,
+    sedeId: sedeDelHorario,
   })
   if (reserva.tipo === "profesional-no-disponible") return { tipo: "no-encontrada" }
 
@@ -221,6 +270,7 @@ export async function inscribirEnListaDeEspera(
     zona,
     duracion,
     ahora,
+    sedeId: sedeDelHorario,
   })
   if (delNegocio !== "con-horas-posibles") return { tipo: "rechazada", error: MENSAJE_SIN_ATENCION }
 
@@ -244,10 +294,16 @@ export async function inscribirEnListaDeEspera(
 
     const activas = await tx.inscripcionEnEspera.findMany({
       where: { businessId: negocio.id, email, estado: "activa" },
-      select: { serviceId: true, memberId: true, fecha: true },
+      select: { serviceId: true, memberId: true, sedeId: true, fecha: true },
     })
+    // Lo mismo en otra sede es otra inscripción: se espera por una sede, no por todas.
+    const sedeDeLaInscripcion = eleccionDeSede.sede?.id ?? null
     const repetida = activas.some(
-      (fila) => fila.serviceId === servicioId && fila.memberId === memberId && fila.fecha === datos.fecha
+      (fila) =>
+        fila.serviceId === servicioId &&
+        fila.memberId === memberId &&
+        (fila.sedeId ?? null) === sedeDeLaInscripcion &&
+        fila.fecha === datos.fecha
     )
     if (repetida) return { tipo: "inscrita" } as const
     if (activas.length >= INSCRIPCIONES_ACTIVAS_POR_EMAIL) return { tipo: "tope" } as const
@@ -258,6 +314,8 @@ export async function inscribirEnListaDeEspera(
         businessId: negocio.id,
         serviceId: servicioId,
         memberId,
+        // La sede que el servidor revalidó; sin sedes, queda NULL como siempre.
+        ...(eleccionDeSede.sede && { sedeId: eleccionDeSede.sede.id }),
         fecha: datos.fecha,
         nombre: datos.nombre,
         apellido: datos.apellido,
@@ -270,6 +328,12 @@ export async function inscribirEnListaDeEspera(
       select: { id: true },
     })
     return { tipo: "inscrita" } as const
+  }).catch((error: unknown) => {
+    // La sede se desactivó mientras se inscribía: el trigger de la base
+    // (`lista_de_espera_exige_sede_activa`) la rechazó bajo el candado del
+    // negocio y la transacción se deshizo: no se guardó nada.
+    if (esRechazoPorSedeInactiva(error)) return { tipo: "sede-inactiva" } as const
+    throw error
   })
 }
 
@@ -277,8 +341,9 @@ export async function inscribirEnListaDeEspera(
 
 /**
  * Al confirmar una reserva: las inscripciones activas de ese email para ese
- * día en el negocio pasan a "reservo" y no se les avisa más. Va con el `tx`
- * de `confirmar`, así que queda junto con la cita o no queda.
+ * día en el negocio pasan a "reservo", no se les avisa más y se borran sus
+ * datos personales (como al salir o expirar: ya no hacen falta). Va con el
+ * `tx` de `confirmar`, así que queda junto con la cita o no queda.
  */
 export async function marcarReservo(
   db: Pick<Prisma.TransactionClient, "inscripcionEnEspera">,
@@ -288,7 +353,7 @@ export async function marcarReservo(
   if (!email) return 0
   const { count } = await db.inscripcionEnEspera.updateMany({
     where: { businessId: datos.businessId, email, fecha: datos.fecha, estado: "activa" },
-    data: { estado: "reservo", resueltaAt: datos.ahora },
+    data: { estado: "reservo", resueltaAt: datos.ahora, ...SIN_DATOS_PERSONALES },
   })
   return count
 }
@@ -357,7 +422,7 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
 
     const negocio = await prisma.business.findUnique({
       where: { id: liberada.businessId },
-      select: { id: true, name: true, slug: true, timezone: true, listaDeEsperaActiva: true },
+      select: { id: true, name: true, slug: true, timezone: true, listaDeEsperaActiva: true, type: true },
     })
     if (!negocio?.listaDeEsperaActiva) return resumen
 
@@ -377,6 +442,7 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
         id: true,
         serviceId: true,
         memberId: true,
+        sedeId: true,
         nombre: true,
         apellido: true,
         email: true,
@@ -417,10 +483,15 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
       historial.set(envio.esperaId, actual)
     }
 
-    // Si hay hora libre se calcula una vez por servicio y profesional.
+    // Con dos o más sedes activas, la hora libre se busca en la sede por la que
+    // se anotó cada una (como la inscripción): una hora de otra sede no le sirve.
+    const conVariasSedes = hayVariasSedes(await leerSedesDeLaReserva(prisma, negocio.id))
+    const sedeDelHorario = (fila: { sedeId: string | null }) => (conVariasSedes ? fila.sedeId : null)
+
+    // Si hay hora libre se calcula una vez por servicio, profesional y sede.
     const hayHora = new Map<string, boolean>()
     const tieneHoraLibre = async (fila: (typeof inscripciones)[number]): Promise<boolean> => {
-      const llave = `${fila.serviceId}|${fila.memberId ?? ""}`
+      const llave = `${fila.serviceId}|${fila.memberId ?? ""}|${sedeDelHorario(fila) ?? ""}`
       const guardada = hayHora.get(llave)
       if (guardada !== undefined) return guardada
       let libre = false
@@ -430,6 +501,7 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
           serviceIds: [fila.serviceId],
           profesionalId: fila.memberId,
           fecha,
+          sedeId: sedeDelHorario(fila),
         })
         if (reserva.tipo === "ok") {
           const candidatos = reserva.candidatos.filter((candidato) => candidato.franjas.length > 0)
@@ -461,13 +533,6 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
         continue
       }
 
-      const enlaces = enlacesDelAviso({
-        slug: negocio.slug,
-        esperaId: fila.id,
-        serviceId: fila.serviceId,
-        memberId: fila.memberId,
-        fecha,
-      })
       const resultado = await enviarAClientes({
         businessId: negocio.id,
         zona,
@@ -478,13 +543,25 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
         ahora,
         enviar: () =>
           enviarAvisoListaDeEspera({
+            rubro: negocio.type,
             emailCliente: fila.email,
             nombreCliente: `${fila.nombre} ${fila.apellido}`.trim(),
             nombreNegocio: negocio.name,
             servicio: fila.service?.name ?? "",
             profesional: fila.memberId ? (nombreDelProfesional.get(fila.memberId) ?? null) : null,
             fecha,
-            ...enlaces,
+            // Adentro de `enviar`: si los enlaces no se pueden armar (sin
+            // NEXTAUTH_URL o NEXTAUTH_SECRET en producción), `enviarAClientes`
+            // lo registra, lo cuenta como fallido y suelta el candado; el resto
+            // de la lista sigue.
+            ...enlacesDelAviso({
+              slug: negocio.slug,
+              esperaId: fila.id,
+              serviceId: fila.serviceId,
+              memberId: fila.memberId,
+              fecha,
+              sedeId: fila.sedeId,
+            }),
           }),
       })
 

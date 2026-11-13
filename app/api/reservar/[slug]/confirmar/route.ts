@@ -15,12 +15,17 @@ import {
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { contabilizarReferido } from "@/lib/referidos"
 import { registrarError } from "@/lib/registro-de-errores"
+import { urlBase } from "@/lib/url-base"
+// El mismo detector que el enlace de gestión: P2034, y P2010 con 40001 cuando
+// lo que choca es una consulta cruda (el candado del sillón, por ejemplo).
+import { esConflictoDeSerializacion } from "../cita/[token]/_comun"
 import { correosDelAviso } from "@/lib/avisos-al-negocio"
 import { generarToken } from "@/lib/tokens"
 import { leerHoraValle, preciosConHoraValle } from "@/lib/hora-valle"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { datosDeConsentimientoPromocional } from "@/lib/envios-a-clientes"
 import { marcarReservo } from "@/lib/lista-de-espera"
+import { MENSAJE_SEDE_YA_NO_DISPONIBLE, esRechazoPorSedeInactiva } from "@/lib/rechazo-de-sede-inactiva"
 import { DIAS_EN_QUE_CUENTAN_LAS_FALTAS } from "@/lib/por-confirmar"
 import {
   filasDeServicios,
@@ -37,18 +42,33 @@ import {
   MAX_RESERVAS_PUBLICAS_POR_DIA,
   MENSAJE_FECHA_MUY_LEJANA,
   MENSAJE_HORA_PASADA,
-  MENSAJE_TOPE_POR_CONTACTO,
-  MENSAJE_TOPE_POR_NEGOCIO,
+  MENSAJE_URGENCIA_SOLO_HOY,
   ORIGEN_RESERVA_PUBLICA,
   WHERE_RESERVA_PUBLICA,
   compartenContacto,
+  duracionDeLaReserva,
   esElMismoCliente,
+  esHoyEn,
+  esReservaDeUrgencia,
   fechaNoReservable,
+  mensajeDeTopePorContacto,
+  mensajeDeTopePorNegocio,
+  mensajeFueraDeLaAtencion,
+  mensajeProfesionalNoDisponible,
+  mensajeServicioNoDisponible,
   normalizarEmail,
   normalizarTelefono,
   notaDeContactoPorConfirmar,
   yaPasoLaHora,
 } from "@/lib/reserva-publica"
+import { esRubroDental } from "@/lib/rubros"
+import {
+  MENSAJE_SEDE_NO_VALIDA,
+  leerSedeDelCuerpo,
+  leerSedesDeLaReserva,
+  lugarDeLaSede,
+  resolverSedeDeLaReserva,
+} from "@/lib/sede-de-la-reserva"
 
 const MS_POR_DIA = 24 * 60 * 60 * 1000
 
@@ -63,6 +83,8 @@ type Resultado =
 
 interface Reserva {
   negocioId: string
+  /** `Business.type`, de la base: pone las palabras de los rechazos de los topes. */
+  rubro: string | null
   /** Los servicios, en orden, leídos del catálogo del negocio (#89a). */
   servicios: ServicioDeLaReserva[]
   /** Nombre, duración y precio de la reserva entera, calculados en el servidor. */
@@ -79,11 +101,17 @@ interface Reserva {
   manageTokenHash: string
   /** `Business.porConfirmarTrasFaltas`: con cuántas faltas entra por confirmar (#84). Null: apagado. */
   porConfirmarTrasFaltas: number | null
-}
-
-/** P2034: Postgres no pudo ordenar la transacción con otra concurrente; hay que reintentarla. */
-function esConflictoDeSerializacion(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034"
+  /**
+   * Clínica dental: si es la primera vez del paciente (`Appointment.primeraVez`).
+   * `null` en cualquier otro rubro: la cita no lo escribe y queda el default.
+   */
+  primeraVez: boolean | null
+  /**
+   * La sede donde queda la cita (plan Independiente), ya revalidada contra las
+   * sedes activas del negocio. `null` en un negocio sin sedes: la cita va sin
+   * sede, como siempre.
+   */
+  sedeId: string | null
 }
 
 async function reservarEnTransaccion(reserva: Reserva): Promise<Resultado> {
@@ -104,6 +132,7 @@ async function reservar(
   tx: Prisma.TransactionClient,
   {
     negocioId,
+    rubro,
     servicios,
     resumen,
     datos,
@@ -114,6 +143,8 @@ async function reservar(
     dia,
     manageTokenHash,
     porConfirmarTrasFaltas,
+    primeraVez,
+    sedeId,
   }: Reserva
 ): Promise<Resultado> {
   // A quién va, re-verificado dentro de la transacción con la misma regla con
@@ -139,7 +170,7 @@ async function reservar(
     },
   })
   if (reservasDelDia >= MAX_RESERVAS_PUBLICAS_POR_DIA) {
-    return { tipo: "rechazada", error: MENSAJE_TOPE_POR_NEGOCIO, status: 429 }
+    return { tipo: "rechazada", error: mensajeDeTopePorNegocio(rubro), status: 429 }
   }
 
   const contacto = { email: datos.email, telefono: datos.telefono }
@@ -159,7 +190,7 @@ async function reservar(
     })
     const delContacto = futuras.filter((cita) => cita.customer && compartenContacto(cita.customer, contacto))
     if (delContacto.length >= MAX_RESERVAS_FUTURAS_POR_CONTACTO) {
-      return { tipo: "rechazada", error: MENSAJE_TOPE_POR_CONTACTO, status: 429 }
+      return { tipo: "rechazada", error: mensajeDeTopePorContacto(rubro), status: 429 }
     }
   }
 
@@ -260,6 +291,11 @@ async function reservar(
       memberId: asignacion.memberId,
       manageTokenHash,
       confirmacionPorFaltas,
+      // Sólo en una clínica dental. El sillón no se asigna acá: lo asigna la
+      // clínica (`PATCH /api/citas/[id]/sillon`).
+      ...(primeraVez !== null && { primeraVez }),
+      // La sede que el servidor revalidó (nunca el id crudo del navegador).
+      ...(sedeId !== null && { sedeId }),
       businessId: negocioId,
     },
     select: { id: true, memberId: true, confirmacionPorFaltas: true },
@@ -323,6 +359,7 @@ export async function POST(
       name: true,
       slug: true,
       timezone: true,
+      type: true,
       cancelacionHorasAntes: true,
       porConfirmarTrasFaltas: true,
       invitadoPorId: true,
@@ -336,11 +373,34 @@ export async function POST(
     const cuerpo = await leerJsonConTope(request)
     const datos = reservaSchema.parse(cuerpo)
 
+    // La sede (plan Independiente): se revalida contra las sedes ACTIVAS de este
+    // negocio, nunca se usa el id del navegador tal cual. Con dos o más hay que
+    // elegir una; con una sola se estampa esa; sin sedes, la cita va sin sede
+    // como siempre y el id que llegue se ignora.
+    const eleccionDeSede = resolverSedeDeLaReserva(
+      await leerSedesDeLaReserva(prisma, negocio.id),
+      leerSedeDelCuerpo(cuerpo)
+    )
+    if (eleccionDeSede.tipo === "no-valida") {
+      return NextResponse.json({ error: MENSAJE_SEDE_NO_VALIDA }, { status: 400 })
+    }
+    const sede = eleccionDeSede.sede
+    const lugar = sede ? lugarDeLaSede(sede) : null
+
     // Todos del negocio y activos, o el mismo 404 sin decir cuál falló. La
     // duración y el precio salen de acá, nunca de lo que mande el cliente.
     const servicios = await leerServiciosDeLaReserva(prisma, negocio.id, datos.servicioIds)
-    if (!servicios) return NextResponse.json({ error: "Servicio no disponible" }, { status: 404 })
-    const resumen = resumenDeLaReserva(servicios)
+    if (!servicios) return NextResponse.json({ error: mensajeServicioNoDisponible(negocio.type) }, { status: 404 })
+    // Clínica dental (`lib/reserva-publica.ts`): la primera vez suma 15
+    // minutos a la duración, con la misma cuenta con que `disponibilidad`
+    // ofreció la hora. En otro rubro `primeraVez` se ignora y no se guarda.
+    const clinicaDental = esRubroDental(negocio.type)
+    const primeraVez = clinicaDental ? datos.primeraVez === true : null
+    const resumenDeLosServicios = resumenDeLaReserva(servicios)
+    const resumen = {
+      ...resumenDeLosServicios,
+      duracion: duracionDeLaReserva(resumenDeLosServicios.duracion, { clinicaDental, primeraVez: primeraVez === true }),
+    }
 
     // La fecha y la hora son las del reloj del negocio (`Business.timezone`):
     // la cita se guarda en el instante UTC que les corresponde ahí, no en el
@@ -352,10 +412,7 @@ export async function POST(
     // el horario de verano, no es un horario de atención de nadie. Es la
     // misma regla con la que `disponibilidad` descarta horas.
     if (!existeLaHora(datos.fecha, datos.hora, zona)) {
-      return NextResponse.json(
-        { error: "Ese horario está fuera de la atención del negocio. Elige otra hora." },
-        { status: 409 }
-      )
+      return NextResponse.json({ error: mensajeFueraDeLaAtencion(negocio.type) }, { status: 409 })
     }
 
     // Ni horas que ya pasaron ni fechas a más de `DIAS_MAXIMOS_DE_ANTICIPACION`
@@ -372,6 +429,12 @@ export async function POST(
     }
     if (fechaNoReservable(datos.fecha, ahora, zona) === "muy-lejana") {
       return NextResponse.json({ error: MENSAJE_FECHA_MUY_LEJANA }, { status: 409 })
+    }
+    // Urgencia dental: sólo para hoy, en el reloj de la clínica. Es la regla
+    // con que `disponibilidad` ofrece las horas; acá se rechaza también un
+    // pedido armado a mano para otro día.
+    if (esReservaDeUrgencia(clinicaDental, servicios) && !esHoyEn(datos.fecha, ahora, zona)) {
+      return NextResponse.json({ error: MENSAJE_URGENCIA_SOLO_HOY }, { status: 400 })
     }
 
     const startTime = instanteEn(datos.fecha, datos.hora, zona)
@@ -396,16 +459,15 @@ export async function POST(
       serviceIds: servicios.map((servicio) => servicio.id),
       profesionalId: datos.profesionalId || null,
       fecha: datos.fecha,
+      // Con varias sedes, el horario de la elegida; si no, el vigente de siempre.
+      sedeId: eleccionDeSede.sedeDelHorario,
     })
     if (reserva.tipo === "profesional-no-disponible") {
-      return NextResponse.json({ error: "Ese profesional no está disponible para este servicio" }, { status: 404 })
+      return NextResponse.json({ error: mensajeProfesionalNoDisponible(negocio.type) }, { status: 404 })
     }
     const candidatos = candidatosQueOfrecen(reserva.candidatos, datos.hora, resumen.duracion)
     if (candidatos.length === 0) {
-      return NextResponse.json(
-        { error: "Ese horario está fuera de la atención del negocio. Elige otra hora." },
-        { status: 409 }
-      )
+      return NextResponse.json({ error: mensajeFueraDeLaAtencion(negocio.type) }, { status: 409 })
     }
 
     // El chequeo de choque, los topes y la creación del cliente y la cita van
@@ -416,6 +478,7 @@ export async function POST(
     const enlace = generarToken()
     const resultado = await reservarEnTransaccion({
       negocioId: negocio.id,
+      rubro: negocio.type,
       servicios: serviciosConPrecio,
       resumen: resumenConPrecio,
       datos,
@@ -426,6 +489,8 @@ export async function POST(
       dia: rangoDelDiaEn(datos.fecha, zona),
       manageTokenHash: enlace.tokenHash,
       porConfirmarTrasFaltas: negocio.porConfirmarTrasFaltas,
+      primeraVez,
+      sedeId: sede?.id ?? null,
     })
     if (resultado.tipo === "rechazada") {
       return NextResponse.json({ error: resultado.error }, { status: resultado.status })
@@ -459,7 +524,15 @@ export async function POST(
     // Lleva el token en claro: va en el correo del cliente y en la respuesta a
     // quien acaba de reservar (que sin correo no tendría otra forma de verlo).
     const rutaDeGestion = `/reservar/${encodeURIComponent(negocio.slug)}/cita/${enlace.token}`
-    const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000"
+    // En producción sin NEXTAUTH_URL, `urlBase` lanza. La cita ya está creada:
+    // eso no puede volverse un 500. Se registra y la confirmación sale sin el
+    // botón de gestión (la pantalla igual muestra el enlace, que es relativo).
+    let baseUrl: string | null = null
+    try {
+      baseUrl = urlBase()
+    } catch (error) {
+      registrarError("armando el enlace de gestión de la reserva", error)
+    }
 
     // Enviar emails en paralelo (sin bloquear la respuesta si fallan)
     const emailsPromises: Promise<unknown>[] = []
@@ -467,6 +540,8 @@ export async function POST(
     if (datos.email) {
       emailsPromises.push(
         enviarConfirmacionCliente({
+          // El rubro del negocio, de la base: pone las palabras del correo.
+          rubro: negocio.type,
           emailCliente: datos.email,
           nombreCliente: `${datos.nombre} ${datos.apellido}`,
           nombreNegocio: negocio.name,
@@ -475,7 +550,7 @@ export async function POST(
           hora: datos.hora,
           duracion: resumen.duracion,
           profesional: profesional?.nombre ?? null,
-          enlaceDeGestion: `${baseUrl}${rutaDeGestion}`,
+          enlaceDeGestion: baseUrl ? `${baseUrl}${rutaDeGestion}` : null,
           plazoHoras: plazoValido(negocio.cancelacionHorasAntes),
           sePuedeCambiar,
           // El correo sí lo dice: el local la confirmará (#84).
@@ -484,6 +559,8 @@ export async function POST(
           precio: precios.total,
           precioNormal: precios.hayRebaja ? precios.totalNormal : null,
           precioIncompleto: resumen.precioIncompleto,
+          // Dónde es: sólo si la cita tiene sede (si no, el correo es el de siempre).
+          ...(lugar && { lugar }),
         }).catch(() => null)
       )
     }
@@ -495,6 +572,7 @@ export async function POST(
     for (const emailProfesional of avisados) {
       emailsPromises.push(
         enviarAvisoProfesional({
+          rubro: negocio.type,
           emailProfesional,
           nombreNegocio: negocio.name,
           nombreCliente: `${datos.nombre} ${datos.apellido}`,
@@ -504,6 +582,7 @@ export async function POST(
           comentarios: datos.comentarios,
           profesional: profesional?.nombre ?? null,
           porConfirmar: cita.confirmacionPorFaltas,
+          ...(lugar && { lugar }),
         }).catch(() => null)
       )
     }
@@ -519,6 +598,8 @@ export async function POST(
         sePuedeCambiar,
         recibiraRecordatorio: conRecordatorio,
         profesional: profesional ? { id: profesional.id, nombre: profesional.nombre } : null,
+        // La sede que quedó guardada (nombre y dirección), para decirla en la confirmación.
+        ...(lugar && { sede: lugar }),
         mensaje: "Reserva confirmada",
       },
       { status: 201 }
@@ -529,6 +610,22 @@ export async function POST(
       // Público: el primer mensaje, legible, y no los issues crudos de zod.
       return NextResponse.json({ error: error.errors[0]?.message ?? "Datos inválidos" }, { status: 400 })
     }
+    // Un cuerpo que no es JSON: es un pedido mal hecho, no un error del servidor.
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ error: "El pedido no es un JSON válido" }, { status: 400 })
+    }
+    // Algo que la reserva ligaba (servicio, profesional) se borró entretanto.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2025" || error.code === "P2003")) {
+      return NextResponse.json({ error: "Algo cambió mientras reservabas. Vuelve a elegir la hora." }, { status: 409 })
+    }
+    // La sede se desactivó mientras se reservaba: el trigger de la base la
+    // rechazó (segunda barrera, bajo el candado del negocio) y la transacción
+    // se deshizo entera: no se guardó ni la cita ni el cliente.
+    if (esRechazoPorSedeInactiva(error)) {
+      return NextResponse.json({ error: MENSAJE_SEDE_YA_NO_DISPONIBLE }, { status: 409 })
+    }
+    // Sin volcar el error: uno de Prisma trae en `meta` los datos de quien reserva.
+    registrarError("confirmando una reserva", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
 }

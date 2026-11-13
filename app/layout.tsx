@@ -24,8 +24,9 @@ const fraunces = Fraunces({
 })
 
 export const metadata: Metadata = {
-  title: 'Eli — Reservas para salones, barberías y spas de uñas',
-  description: 'Agenda, clientes y equipo para salones de belleza, barberías y spas de uñas, en un solo lugar.',
+  title: 'Eli — Reservas para salones, barberías, salones de uñas y clínicas dentales',
+  description:
+    'Agenda, clientes y equipo para salones de belleza, barberías, salones de uñas y clínicas dentales, en un solo lugar.',
   icons: {
     icon: '/images/logo-eli.png',
     apple: '/images/logo-eli.png',

@@ -7,12 +7,15 @@ import { Esqueleto } from "@/components/comunes/esqueleto"
 import { Selector } from "@/components/comunes/selector"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { CAMPO, TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
 import { comoTexto, desplazarFecha, diasDeLaSemanaDe, limitesDelMesDe } from "@/lib/fechas"
 import { DIAS_MAXIMOS } from "@/lib/periodos"
+import { periodoParaLeer } from "@/lib/periodos-de-liquidacion"
 import type { Resultado } from "@/lib/peticiones"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import {
   formatearCambio,
   formatearMinutos,
@@ -21,6 +24,7 @@ import {
   type ComparacionDeMetrica,
   type ReporteLlenarHoras,
 } from "../_datos"
+import { frasesDeLosReportes } from "../_frases"
 import { Cifra } from "./resumen-de-reporte"
 
 type PeriodoDeOcupacion = "semana" | "mes" | "30-dias" | "personalizado"
@@ -69,6 +73,8 @@ function textoDeComparacion(comparacion: ComparacionDeMetrica, tipo: "cantidad" 
  */
 export function LlenarHoras() {
   const idDeOcupacion = useId()
+  // "Pacientes", "odontólogo" y "No asistieron" en una clínica dental; en un salón, "horas agendadas".
+  const { llenarHoras: frases } = frasesDeLosReportes(vocabularioDe(useRubroDelPanel()).palabras)
   const idDeInasistencia = useId()
   const idDelDesde = useId()
   const idDelHasta = useId()
@@ -179,14 +185,13 @@ export function LlenarHoras() {
         <div aria-busy={cargando} className={cn("space-y-6 transition-opacity duration-200 ease-suave", cargando && "opacity-60")}>
           {reporte.truncado && (
             <Aviso tono="atencion" rol="status">
-              El período tiene demasiadas citas o atenciones para sumarlas de una vez: las cifras están incompletas. Acota el
-              período.
+              {frases.demasiadas}
             </Aviso>
           )}
 
           <p className="text-sm text-texto-2">
-            Comparado con el período anterior de igual largo ({reporte.periodoAnterior.desde} al{" "}
-            {reporte.periodoAnterior.hasta}), en la zona horaria del negocio.
+            Comparado con el período anterior de igual largo (
+            {periodoParaLeer(reporte.periodoAnterior.desde, reporte.periodoAnterior.hasta)}), {frases.zonaHoraria}.
           </p>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -198,19 +203,19 @@ export function LlenarHoras() {
               principal
             />
             <CifraConComparacion
-              titulo="Clientes nuevos"
+              titulo={frases.clientesNuevos}
               valor={String(reporte.clientes.nuevos)}
               icono={UserPlus}
               comparacion={textoDeComparacion(reporte.comparacion.clientesNuevos, "cantidad")}
             />
             <CifraConComparacion
-              titulo="Clientes que volvieron"
+              titulo={frases.clientesQueVolvieron}
               valor={String(reporte.clientes.recurrentes)}
               icono={UserCheck}
               comparacion={textoDeComparacion(reporte.comparacion.clientesRecurrentes, "cantidad")}
             />
             <CifraConComparacion
-              titulo="No vinieron"
+              titulo={frases.noVinieron}
               valor={formatearTasa(reporte.inasistencia.total.tasa)}
               icono={UserX}
               comparacion={textoDeComparacion(reporte.comparacion.inasistencia, "tasa")}
@@ -219,10 +224,10 @@ export function LlenarHoras() {
 
           <section aria-labelledby={idDeOcupacion} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
             <h2 id={idDeOcupacion} className={TITULO_DE_TARJETA}>
-              Ocupación por profesional
+              {frases.ocupacionPor}
             </h2>
             <p className="mt-1 text-sm text-texto-2">
-              Minutos con citas dentro de su horario, sin bloqueos. Si no cargó horario propio, cuenta el del negocio.
+              {frases.queCuentaLaOcupacion}
             </p>
             {reporte.ocupacion.porProfesional.length === 0 ? (
               <EstadoVacio className="mt-4">Todavía no hay equipo.</EstadoVacio>
@@ -256,12 +261,11 @@ export function LlenarHoras() {
               Inasistencia
             </h2>
             <p className="mt-1 text-sm text-texto-2">
-              Citas marcadas como &ldquo;no vino&rdquo;, sobre las que ya empezaron y no se cancelaron.
-              {reporte.clientes.sinFicha > 0 &&
-                ` ${reporte.clientes.sinFicha} atención${reporte.clientes.sinFicha === 1 ? "" : "es"} sin ficha de cliente no entra${reporte.clientes.sinFicha === 1 ? "" : "n"} en nuevos ni recurrentes.`}
+              {frases.queCuentaLaInasistencia}
+              {reporte.clientes.sinFicha > 0 && frases.sinFicha(reporte.clientes.sinFicha)}
             </p>
             {reporte.inasistencia.porProfesional.length === 0 ? (
-              <EstadoVacio className="mt-4">No hubo citas pasadas en el período.</EstadoVacio>
+              <EstadoVacio className="mt-4">{frases.sinCitasPasadas}</EstadoVacio>
             ) : (
               <ul className="mt-4 divide-y divide-borde border-y border-borde">
                 {reporte.inasistencia.porProfesional.map((fila) => (

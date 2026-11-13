@@ -7,10 +7,14 @@ import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Aviso } from "@/components/panel/aviso"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPO, ETIQUETA } from "@/components/panel/estilos"
+import { ejemplosDe, textoDeEjemplo } from "@/lib/ejemplos-por-rubro"
 import { cn } from "@/lib/utils"
-import { FRECUENCIA_MAXIMA_DIAS, FRECUENCIA_MINIMA_DIAS } from "@/lib/frecuencia-de-visitas"
+import { vocabularioDe } from "@/lib/vocabulario"
+import { ayudaDeLaFrecuencia } from "@/lib/frecuencia-de-visitas"
 import type { DatosDeServicio } from "../_datos"
+import { frasesDeConfiguracion } from "../_frases"
 
 const DURACIONES = [
   { valor: 15, etiqueta: "15 min" },
@@ -47,6 +51,14 @@ interface PropsDeModalServicio {
    */
   frecuenciaDias?: string
   onCambiarFrecuencia?: (valor: string) => void
+  /**
+   * "Es una urgencia" (`Service.esUrgencia`): en la reserva pública, un motivo
+   * así sólo ofrece horas de hoy. La casilla se dibuja sólo si viene
+   * `onCambiarUrgencia`, y quien arma el modal lo pasa si
+   * `puedeMarcarServicioComoUrgencia` dice que sí (una clínica dental).
+   */
+  urgencia?: boolean
+  onCambiarUrgencia?: (valor: boolean) => void
 }
 
 export function ModalServicio({
@@ -60,23 +72,30 @@ export function ModalServicio({
   onCerrar,
   frecuenciaDias = "",
   onCambiarFrecuencia,
+  urgencia = false,
+  onCambiarUrgencia,
 }: PropsDeModalServicio) {
   const idDeLaDescripcion = useId()
+  const idDeLaAyudaDeUrgencia = useId()
+  const rubro = useRubroDelPanel()
+  const frases = frasesDeConfiguracion(vocabularioDe(rubro).palabras).servicios.modal
+  // Los ejemplos, en el oficio del negocio: en una clínica dental no se corta el pelo ni en una barbería se hacen las uñas.
+  const ejemplos = ejemplosDe(rubro)
   const idDeAyudaDeFrecuencia = useId()
   const idDeLasCategorias = useId()
   const nombreDeLaDuracion = useId()
 
   return (
     <MarcoDeModal
-      titulo={modoEdicion ? "Editar servicio" : "Nuevo servicio"}
-      antetitulo="Servicios"
+      titulo={frases.titulo(modoEdicion)}
+      antetitulo={frases.antetitulo}
       bloqueado={guardando}
       alCerrar={onCerrar}
     >
       <form onSubmit={onSubmit} className="space-y-5">
         <CampoFormulario
-          etiqueta="Nombre del servicio"
-          placeholder="Ej.: Corte de cabello, Arreglo de barba, Manicura..."
+          etiqueta={frases.nombre}
+          placeholder={textoDeEjemplo(ejemplos.servicios)}
           value={form.name}
           onChange={(e) => onCambiarCampo("name", e.target.value)}
           icono={<Scissors className="h-4 w-4" />}
@@ -86,7 +105,7 @@ export function ModalServicio({
         {/* Agrupa los servicios en la página pública; los sin categoría van a "Otros". */}
         <CampoFormulario
           etiqueta="Categoría (opcional)"
-          placeholder="Ej.: Corte, Color, Uñas..."
+          placeholder={textoDeEjemplo(ejemplos.categorias)}
           value={form.category}
           onChange={(e) => onCambiarCampo("category", e.target.value)}
           icono={<Tag className="h-4 w-4" />}
@@ -108,7 +127,7 @@ export function ModalServicio({
             id={idDeLaDescripcion}
             value={form.description}
             onChange={(e) => onCambiarCampo("description", e.target.value)}
-            placeholder="Describe brevemente el servicio..."
+            placeholder={frases.descripcionPlaceholder}
             className={cn(CAMPO, "h-24 resize-none")}
           />
         </div>
@@ -164,7 +183,7 @@ export function ModalServicio({
         {onCambiarFrecuencia && (
           <div className="space-y-1.5">
             <CampoFormulario
-              etiqueta="Cada cuántos días vuelve un cliente (opcional)"
+              etiqueta={frases.frecuencia}
               type="text"
               inputMode="numeric"
               autoComplete="off"
@@ -175,9 +194,28 @@ export function ModalServicio({
               aria-describedby={idDeAyudaDeFrecuencia}
               className="tabular-nums"
             />
+            {/* El aviso con el nombre del rubro: «Te toca volver» o, en una clínica dental, «Control». */}
             <p id={idDeAyudaDeFrecuencia} className="text-sm text-texto-2">
-              De {FRECUENCIA_MINIMA_DIAS} a {FRECUENCIA_MAXIMA_DIAS} días. Sirve para avisarle a quien todavía no tiene su
-              propio ritmo de visitas que ya le toca volver.
+              {ayudaDeLaFrecuencia(rubro)}
+            </p>
+          </div>
+        )}
+
+        {onCambiarUrgencia && (
+          // Toda la fila es el área táctil (44 px de alto); el anillo de foco es el del propio casillero.
+          <div>
+            <label className="flex min-h-11 cursor-pointer items-start gap-3 py-2 text-sm font-medium text-navy">
+              <input
+                type="checkbox"
+                checked={urgencia}
+                onChange={(e) => onCambiarUrgencia(e.target.checked)}
+                aria-describedby={idDeLaAyudaDeUrgencia}
+                className="anillo-foco mt-0.5 size-5 shrink-0 accent-navy"
+              />
+              {frases.urgencia}
+            </label>
+            <p id={idDeLaAyudaDeUrgencia} className="ml-8 text-sm text-texto-2">
+              {frases.urgenciaAyuda}
             </p>
           </div>
         )}
@@ -190,7 +228,7 @@ export function ModalServicio({
             Cancelar
           </BotonPrimario>
           <BotonPrimario type="submit" anchoCompleto cargando={guardando}>
-            {modoEdicion ? "Guardar cambios" : "Crear servicio"}
+            {modoEdicion ? "Guardar cambios" : frases.crear}
           </BotonPrimario>
         </div>
       </form>

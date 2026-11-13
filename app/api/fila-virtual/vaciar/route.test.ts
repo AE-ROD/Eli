@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase, sesiones } from "@/pruebas/datos"
+import { sesionesDentales } from "@/pruebas/clinica-con-sillones"
 import { MOTIVO_FILA_VACIADA } from "@/lib/fila-virtual"
 
 /**
@@ -104,6 +105,16 @@ describe("POST /api/fila-virtual/vaciar", () => {
 
   it("el profesional, uno sin miembro y sin sesión: 401 sin tocar nada", async () => {
     for (const sesion of [sesiones.carla, sesiones.sinMiembro, null]) {
+      expect((await vaciar(sesion)).status).toBe(401)
+    }
+    expect(estado("espera-1")).toBe("en-espera")
+    expect(estado("espera-2")).toBe("en-espera")
+  })
+
+  it("en una clínica dental no hay fila que vaciar: 401 aunque haya quedado gente de antes, sin tocar nada", async () => {
+    const datos = base.volcado()
+    base.reiniciar({ ...datos, business: datos.business.map((b) => (b.id === NEGOCIO ? { ...b, type: "odontologia" } : b)) })
+    for (const sesion of [sesionesDentales.dueña, sesionesDentales.encargado]) {
       expect((await vaciar(sesion)).status).toBe(401)
     }
     expect(estado("espera-1")).toBe("en-espera")

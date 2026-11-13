@@ -11,6 +11,8 @@ import { franjasParaElDia } from "@/lib/mover-cita"
 import { imagenPublica } from "@/lib/pagina-del-negocio"
 import { ESTADOS_QUE_LIBERAN, estaLibre, leerOcupacion, type Ocupacion, type Tramo } from "@/lib/ocupacion"
 import { yaPasoLaHora } from "@/lib/reserva-publica"
+import { whereDelHorarioDeLaSede } from "@/lib/sedes"
+import { whereDeChoqueEnSillon } from "@/lib/sillones"
 import { diaDeLaSemana, existeLaHora, instanteEn, rangoDelDiaEn } from "@/lib/zona-horaria"
 
 /**
@@ -38,6 +40,18 @@ import { diaDeLaSemana, existeLaHora, instanteEn, rangoDelDiaEn } from "@/lib/zo
  *   único carril, como siempre. Horario del negocio (`franjasDeAtencion`),
  *   ocupado por cualquier cita activa del negocio y por los bloqueos de todo
  *   el negocio. La cita queda sin asignar (`memberId` null).
+ * - **Sedes** (plan Independiente, `lib/sedes.ts`): cada sede tiene su propio
+ *   horario semanal (`WorkSchedule.sedeId`). Los lectores y los candidatos
+ *   reciben un `sedeId` opcional: con una sede, sólo cuentan las filas de ESA
+ *   sede (activa); sin él, las vigentes (`WHERE_HORARIO_VIGENTE`: las sin
+ *   sede y las de las sedes activas). En un negocio sin sedes todas las filas
+ *   tienen `sedeId` NULL, así que eso es exactamente el horario de siempre; en
+ *   uno con sedes es la unión de las activas, que sirve para "¿atiende ese día
+ *   en alguna sede?". **La ocupación (citas y bloqueos) NO se parte por sede:
+ *   sigue siendo la del negocio entero**, porque quien atiende no puede estar
+ *   en dos lugares a la vez; una cita en la sede A ocupa esa hora también para
+ *   la sede B. Lo que cambia por sede es cuándo se atiende, no quién está
+ *   libre.
  */
 
 export const ROLES_QUE_ATIENDEN = ["worker"] as const
@@ -123,10 +137,16 @@ const TOPE_DE_FILAS_DE_HORARIO = 500
  * usan la fila virtual, las horas que dibuja la agenda y las advertencias de
  * horario del panel: el horario personal de un encargado no abre el negocio
  * un día sin horario general (#168).
+ *
+ * Con `sedeId`, sólo las filas de esa sede (activa); sin él (`undefined` o
+ * `null`), las vigentes (`WHERE_HORARIO_VIGENTE`: las sin sede y las de las
+ * sedes activas). En un negocio sin sedes todas las filas tienen `sedeId`
+ * NULL, así que son todas, como siempre.
  */
 export async function leerHorarioDeQuienesAtienden(
   db: Pick<Prisma.TransactionClient, "businessMember" | "workSchedule">,
-  businessId: string
+  businessId: string,
+  sedeId?: string | null
 ): Promise<FilaDeHorarioSemanal[]> {
   const [atienden, filas] = await Promise.all([
     db.businessMember.findMany({
@@ -134,7 +154,7 @@ export async function leerHorarioDeQuienesAtienden(
       select: { id: true },
     }),
     db.workSchedule.findMany({
-      where: { businessId, active: true },
+      where: { ...whereDelHorarioDeLaSede(sedeId), businessId, active: true },
       select: { memberId: true, dayOfWeek: true, startTime: true, endTime: true },
       orderBy: { startTime: "asc" },
       take: TOPE_DE_FILAS_DE_HORARIO,
@@ -379,6 +399,43 @@ export async function horasLibresDelDia(
 }
 
 /**
+ * Clínica dental: al reagendar por el enlace una cita que ya tiene sillón
+ * (lo asignó la clínica), de `horas` sólo las que dejan el sillón libre en
+ * todo el tramo, con la misma regla de choque que el panel
+ * (`whereDeChoqueEnSillon`; la propia cita no choca consigo misma).
+ * Reagendar conserva el sillón y lo vuelve a revisar con
+ * `asegurarSillonLibre` dentro de su transacción: así se ofrece lo mismo que
+ * se acepta. El paciente nunca ve el sillón; sólo ve menos horas.
+ */
+export async function horasConElSillonLibre(
+  db: Pick<Prisma.TransactionClient, "appointment">,
+  consulta: {
+    businessId: string
+    sillonId: string
+    fecha: string
+    zona: string
+    duracion: number
+    horas: string[]
+    ignorarCitaId: string
+  }
+): Promise<string[]> {
+  const { businessId, sillonId, fecha, zona, duracion, horas, ignorarCitaId } = consulta
+  if (horas.length === 0) return []
+  const tramos = horas.map((hora) => ({ hora, tramo: tramoDeLaReserva(fecha, hora, duracion, zona) }))
+  const desde = new Date(Math.min(...tramos.map(({ tramo }) => tramo.startTime.getTime())))
+  const hasta = new Date(Math.max(...tramos.map(({ tramo }) => tramo.endTime.getTime())))
+  const ocupado = await db.appointment.findMany({
+    where: whereDeChoqueEnSillon({ businessId, sillonId, tramo: { startTime: desde, endTime: hasta }, ignorarCitaId }),
+    select: { startTime: true, endTime: true },
+    orderBy: { startTime: "asc" },
+    take: 500,
+  })
+  return tramos
+    .filter(({ tramo }) => !ocupado.some((cita) => cita.startTime < tramo.endTime && cita.endTime > tramo.startTime))
+    .map(({ hora }) => hora)
+}
+
+/**
  * Si el día tiene alguna hora que podría liberarse: en horario, no pasada y
  * fuera de los bloqueos, aunque hoy esté tomada por una cita. Un día cerrado,
  * bloqueado entero o cuyas horas ya pasaron no tiene ninguna, y ahí no se
@@ -409,13 +466,26 @@ export async function hayHorasPosiblesDelDia(
  * espera" y uno sólo lleno no, y la página pública dejaba deducir su agenda
  * personal. A nivel del negocio la respuesta sólo dice lo que ya es del
  * negocio: cerrado, bloqueado para todos o sin nadie que lo haga.
+ *
+ * `sedeId` (opcional) acota el horario a esa sede (`candidatosDeLaReserva`);
+ * sin él, vale el de cualquier sede activa, que es lo que corresponde a "¿el
+ * negocio atiende ese día?". Los bloqueos y las citas son del negocio entero,
+ * sea cual sea la sede: quien atiende no está en dos lugares a la vez.
  */
 export async function horasPosiblesEnElNegocio(
   db: Pick<Prisma.TransactionClient, "businessMember" | "workSchedule"> & BaseDeAgendaPublica,
-  consulta: { businessId: string; serviceIds: string[]; fecha: string; zona: string; duracion: number; ahora: Date }
+  consulta: {
+    businessId: string
+    serviceIds: string[]
+    fecha: string
+    zona: string
+    duracion: number
+    ahora: Date
+    sedeId?: string | null
+  }
 ): Promise<"sin-atencion" | "sin-horas-posibles" | "con-horas-posibles"> {
-  const { businessId, serviceIds, fecha, zona, duracion, ahora } = consulta
-  const reserva = await candidatosDeLaReserva(db, { businessId, serviceIds, profesionalId: null, fecha })
+  const { businessId, serviceIds, fecha, zona, duracion, ahora, sedeId } = consulta
+  const reserva = await candidatosDeLaReserva(db, { businessId, serviceIds, profesionalId: null, fecha, sedeId })
   const candidatos = reserva.tipo === "ok" ? reserva.candidatos.filter((candidato) => candidato.franjas.length > 0) : []
   if (candidatos.length === 0) return "sin-atencion"
   const posibles = await hayHorasPosiblesDelDia(db, { businessId, zona, fecha, duracion, candidatos, ahora })
@@ -496,10 +566,19 @@ export type CandidatosDeLaReserva =
  * atiende o no hace alguno de los servicios da `profesional-no-disponible`,
  * sin distinguir por qué. Los servicios llegan ya validados como del negocio
  * (`leerServiciosDeLaReserva`).
+ *
+ * `sedeId` (opcional): con una sede, el horario de cada candidato es el de ESA
+ * sede (sólo si está activa; la de otro negocio o una inactiva no tiene filas
+ * y deja a todos sin franjas). Sin él, el vigente del negocio
+ * (`WHERE_HORARIO_VIGENTE`): en uno sin sedes, el de siempre. Quien reserva ya
+ * validó la sede con `sedeParaReservar`. La ocupación no se acota por sede
+ * (`ocupacionDelCandidato`): la persona que atiende no puede estar en dos
+ * lugares a la vez, así que una cita o un bloqueo en cualquier sede ocupa esa
+ * hora en todas.
  */
 export async function candidatosDeLaReserva(
   db: Pick<Prisma.TransactionClient, "businessMember" | "workSchedule">,
-  consulta: { businessId: string; serviceIds: string[]; profesionalId: string | null; fecha: string }
+  consulta: { businessId: string; serviceIds: string[]; profesionalId: string | null; fecha: string; sedeId?: string | null }
 ): Promise<CandidatosDeLaReserva> {
   const leidos = await leerQuienesPuedenTomarla(db, consulta)
   if (leidos.tipo === "profesional-no-disponible") return leidos
@@ -516,10 +595,13 @@ export async function candidatosDeLaReserva(
  * candidatos de la reserva tiene horario: con los mismos candidatos que
  * `candidatosDeLaReserva`, para que el calendario de reagendar no deje elegir
  * un día cerrado (QA#19). `null` si el profesional ya no puede tomarla.
+ *
+ * `sedeId` (opcional) acota los días al horario de esa sede, igual que en
+ * `candidatosDeLaReserva`; sin él, son los días con atención en alguna sede.
  */
 export async function diasConAtencionDeLaReserva(
   db: Pick<Prisma.TransactionClient, "businessMember" | "workSchedule">,
-  consulta: { businessId: string; serviceIds: string[]; profesionalId: string | null }
+  consulta: { businessId: string; serviceIds: string[]; profesionalId: string | null; sedeId?: string | null }
 ): Promise<number[] | null> {
   const leidos = await leerQuienesPuedenTomarla(db, consulta)
   if (leidos.tipo === "profesional-no-disponible") return null
@@ -529,19 +611,23 @@ export async function diasConAtencionDeLaReserva(
   )
 }
 
-/** Lo que leen `candidatosDeLaReserva` y `diasConAtencionDeLaReserva`: el equipo, los elegidos y el horario de la semana. */
+/**
+ * Lo que leen `candidatosDeLaReserva` y `diasConAtencionDeLaReserva`: el
+ * equipo, los elegidos y el horario de la semana (el de la sede `sedeId` si se
+ * da; si no, el vigente: `whereDelHorarioDeLaSede`).
+ */
 async function leerQuienesPuedenTomarla(
   db: Pick<Prisma.TransactionClient, "businessMember" | "workSchedule">,
-  consulta: { businessId: string; serviceIds: string[]; profesionalId: string | null }
+  consulta: { businessId: string; serviceIds: string[]; profesionalId: string | null; sedeId?: string | null }
 ): Promise<
   | { tipo: "ok"; profesionales: ProfesionalQueAtiende[]; elegidos: string[]; filas: FilaDeHorarioSemanal[] }
   | { tipo: "profesional-no-disponible" }
 > {
-  const { businessId, serviceIds, profesionalId } = consulta
+  const { businessId, serviceIds, profesionalId, sedeId } = consulta
   const [profesionales, filas] = await Promise.all([
     leerProfesionalesQueAtienden(db, businessId),
     db.workSchedule.findMany({
-      where: { businessId, active: true },
+      where: { ...whereDelHorarioDeLaSede(sedeId), businessId, active: true },
       select: { memberId: true, dayOfWeek: true, startTime: true, endTime: true },
       orderBy: { startTime: "asc" },
     }),

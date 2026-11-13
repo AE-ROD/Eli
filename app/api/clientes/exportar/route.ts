@@ -8,6 +8,7 @@ import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { escribirCsv } from "@/lib/csv"
 import { filasDeClientes, nombreDeArchivo, respuestaCsv } from "@/lib/exportar"
 import { zonaDelNegocio, fechaYMinutosEn } from "@/lib/zona-horaria"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { actorDeSesion, puedeImportarExportarClientes, whereDeClientes } from "@/lib/permisos"
 
 /**
@@ -48,7 +49,9 @@ export async function GET() {
     ])
     const zona = zonaDelNegocio(negocio?.timezone)
     const hoy = fechaYMinutosEn(new Date(), zona).fecha
-    return respuestaCsv(escribirCsv(filasDeClientes(clientes, zona)), nombreDeArchivo("clientes", hoy))
+    // El rubro sale de la sesión, nunca del navegador: la última columna dice "Cliente desde" o "Paciente desde".
+    const { palabras } = vocabularioDe(actor.rubro)
+    return respuestaCsv(escribirCsv(filasDeClientes(clientes, zona, palabras)), nombreDeArchivo("clientes", hoy))
   } catch (error) {
     registrarError("exportando clientes", error)
     return NextResponse.json({ error: "No se pudo descargar la planilla" }, { status: 500 })

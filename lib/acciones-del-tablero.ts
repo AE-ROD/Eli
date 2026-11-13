@@ -19,9 +19,18 @@ import {
 } from "@/lib/atenciones"
 import type { EstadoDeComision } from "@/lib/comisiones"
 import { formatearMonto, leerMonto, montoParaEscribir } from "@/lib/dinero"
+import { cantidadDe, del, el, numeroDe } from "@/lib/concordancia"
 import { esMedioDePago } from "@/lib/medios-de-pago"
 import { esHoy, horaConArticulo } from "@/lib/fechas"
 import { esDueño, puedeAnular, puedeCobrar, puedeDeshacerLlegada, type Actor } from "@/lib/permisos"
+import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
+
+/**
+ * Las palabras de un rubro sin palabras propias: lo que dicen los mensajes de
+ * este archivo si quien llama no pasa las de su rubro. Con ellas salen los
+ * textos de siempre ("servicio", "tablero", "negocio").
+ */
+const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
 
 /**
  * El tablero de atenciones (docs/PRODUCTO.md, sección 7) visto desde la
@@ -118,9 +127,17 @@ export function faltaAsignar(linea: LineaEnPantalla): boolean {
  * Se mira con las líneas que se ven. Dueño y encargado ven todas, así que
  * coincide con el servidor. El profesional ve sólo las suyas: lo que le diga
  * esto es parcial, y el 400 del servidor puede llegar igual.
+ *
+ * `palabras` pone el "servicio" y el "profesional" del rubro. El servidor
+ * arma el mismo mensaje con las palabras del rubro de la sesión, así que la
+ * pantalla y el 400 dicen "prestación" y "odontólogo" en una clínica.
  */
-export function requisitoParaPasarA(lineas: readonly LineaEnPantalla[], destino: string): string | null {
-  return requisitoFaltante(destino, lineas.map(lineaParaReglas))
+export function requisitoParaPasarA(
+  lineas: readonly LineaEnPantalla[],
+  destino: string,
+  palabras: Pick<PalabrasDelRubro, "servicio" | "profesional"> = PALABRAS_NEUTRAS
+): string | null {
+  return requisitoFaltante(destino, lineas.map(lineaParaReglas), palabras)
 }
 
 // ─── Movimientos ─────────────────────────────────────────────────────────────
@@ -302,18 +319,24 @@ function momentoDelCobro(iso: string): string {
  * cobró y por cuánto, porque desde el historial se anulan cobros de otros
  * días. Si no estaba cobrada y venía de una reserva, la cita de la agenda pasa
  * a cancelada.
+ *
+ * `palabras` pone el negocio y el tablero del rubro: "los ingresos de la
+ * clínica" y "sale de la sala de espera" en una clínica dental.
  */
-export function consecuenciasDeAnular(atencion: AtencionParaAnular): string {
+export function consecuenciasDeAnular(
+  atencion: AtencionParaAnular,
+  palabras: Pick<PalabrasDelRubro, "negocio" | "tablero"> = PALABRAS_NEUTRAS
+): string {
   if (atencion.estado === "finalizada") {
     const porCuanto = atencion.total !== undefined ? formatearMonto(atencion.total) : null
     const cuando = atencion.cobradaEn ? momentoDelCobro(atencion.cobradaEn) : null
     const cobro = cuando
       ? `Se cobró ${cuando}${porCuanto ? `, por ${porCuanto}` : ""}.`
       : `Esta atención ya está cobrada${porCuanto ? ` (${porCuanto})` : ""}.`
-    return `${cobro} Al anularla deja de sumar a los ingresos del negocio y queda en el historial como anulada. No se puede deshacer.`
+    return `${cobro} Al anularla deja de sumar a los ingresos ${del(palabras.negocio)} y queda en el historial como anulada. No se puede deshacer.`
   }
   const reserva = atencion.citaId ? " La reserva de la agenda queda cancelada." : ""
-  return `La atención sale del tablero y queda en el historial como anulada.${reserva} No se puede deshacer.`
+  return `La atención sale ${del(palabras.tablero)} y queda en el historial como anulada.${reserva} No se puede deshacer.`
 }
 
 // ─── Arrastrar y soltar ──────────────────────────────────────────────────────
@@ -499,12 +522,16 @@ const MONTO_ILEGIBLE = "Escríbelo así: 8000 o 8000,50."
  * Qué le falta a una fila, campo por campo, con un mensaje que se puede
  * mostrar al lado del campo. Un precio de cero vale (una cortesía); vacío no:
  * un cero que nadie escribió se cobraría como cortesía sin que nadie lo
- * decidiera.
+ * decidiera. `palabras` pone el "servicio" del rubro: "Elige la prestación."
  */
-export function erroresDeFila(fila: FilaDeServicio, eligeProfesional: boolean): ErroresDeFila {
+export function erroresDeFila(
+  fila: FilaDeServicio,
+  eligeProfesional: boolean,
+  palabras: Pick<PalabrasDelRubro, "servicio"> = PALABRAS_NEUTRAS
+): ErroresDeFila {
   const errores: ErroresDeFila = {}
   if (esDeProducto(fila) ? !fila.productoId : !fila.servicioId) {
-    errores.servicio = esDeProducto(fila) ? "Elige el producto." : "Elige el servicio."
+    errores.servicio = esDeProducto(fila) ? "Elige el producto." : `Elige ${el(palabras.servicio)}.`
   }
   if (eligeProfesional && !fila.profesional) errores.profesional = "Elige quién lo hace."
 
@@ -525,12 +552,17 @@ export type LineasDesdeFilas =
 /**
  * Las filas listas para mandar, o los errores de cada fila (por su `clave`).
  * Quien no elige profesional no lo manda: el servidor deja la línea a su
- * nombre igual, y mandar otro sería prometer algo que no pasa.
+ * nombre igual, y mandar otro sería prometer algo que no pasa. `palabras` pone
+ * el "servicio" del rubro en los errores de cada fila.
  */
-export function lineasDesdeFilas(filas: readonly FilaDeServicio[], eligeProfesional: boolean): LineasDesdeFilas {
+export function lineasDesdeFilas(
+  filas: readonly FilaDeServicio[],
+  eligeProfesional: boolean,
+  palabras: Pick<PalabrasDelRubro, "servicio"> = PALABRAS_NEUTRAS
+): LineasDesdeFilas {
   const errores: Record<string, ErroresDeFila> = {}
   for (const fila of filas) {
-    const deLaFila = erroresDeFila(fila, eligeProfesional)
+    const deLaFila = erroresDeFila(fila, eligeProfesional, palabras)
     if (Object.keys(deLaFila).length > 0) errores[fila.clave] = deLaFila
   }
   if (Object.keys(errores).length > 0) return { ok: false, errores }
@@ -565,15 +597,17 @@ export function quedoSinPorcentaje(atencion: { estado: string }, linea: Pick<Lin
  * Lo que se le dice a quien acaba de cobrar si alguna línea quedó sin % de
  * comisión, o `null` si no. El cobro no se frena por eso: se avisa para que
  * alguien lo fije antes de liquidar. La dueña lo fija ella; el encargado se
- * lo avisa.
+ * lo avisa. `palabras` pone el "servicio" del rubro: "2 prestaciones sin
+ * porcentaje de comisión". "Comisión" no cambia en ningún rubro.
  */
 export function avisoDeComisionesPendientes(
   actor: Actor | null,
-  atencion: { estado: string; lineas: readonly Pick<LineaGuardada, "comision">[] }
+  atencion: { estado: string; lineas: readonly Pick<LineaGuardada, "comision">[] },
+  palabras: Pick<PalabrasDelRubro, "servicio"> = PALABRAS_NEUTRAS
 ): string | null {
   const pendientes = atencion.lineas.filter((linea) => quedoSinPorcentaje(atencion, linea)).length
   if (pendientes === 0) return null
-  const cuantos = pendientes === 1 ? "1 servicio" : `${pendientes} servicios`
+  const cuantos = cantidadDe(pendientes, palabras.servicio)
   return esDueño(actor)
     ? `${cuantos} sin porcentaje de comisión: configúralo en Comisiones antes de liquidar.`
     : `${cuantos} sin porcentaje de comisión: avísale a la dueña.`
@@ -582,12 +616,14 @@ export function avisoDeComisionesPendientes(
 /**
  * Lo que se le dice a quien va a cobrar si alguna línea quedará sin % de
  * comisión (#118), o `null` si ninguna. Es sólo un aviso: el cobro sigue.
+ * `palabras` pone el "servicio" del rubro. "Pendiente" y "pendientes" no
+ * cambian con el género, así que la frase concuerda sola.
  */
-export function avisoAntesDeCobrar(cuantas: number): string | null {
+export function avisoAntesDeCobrar(cuantas: number, palabras: Pick<PalabrasDelRubro, "servicio"> = PALABRAS_NEUTRAS): string | null {
   if (cuantas <= 0) return null
-  return cuantas === 1
-    ? "1 servicio quedará sin porcentaje de comisión. Se cobra igual: queda pendiente hasta que se configure en Comisiones."
-    : `${cuantas} servicios quedarán sin porcentaje de comisión. Se cobra igual: quedan pendientes hasta que se configuren en Comisiones.`
+  return numeroDe(cuantas) === "singular"
+    ? `${cantidadDe(cuantas, palabras.servicio)} quedará sin porcentaje de comisión. Se cobra igual: queda pendiente hasta que se configure en Comisiones.`
+    : `${cantidadDe(cuantas, palabras.servicio)} quedarán sin porcentaje de comisión. Se cobra igual: quedan pendientes hasta que se configuren en Comisiones.`
 }
 
 // ─── Cobro ───────────────────────────────────────────────────────────────────

@@ -1,7 +1,12 @@
 import { z } from "zod"
 import { emailOVacio, nombre, notas, telefonoChileno } from "./campos-del-panel"
+import { un } from "./concordancia"
 import { normalizarNombre } from "./reserva-publica"
 import { aE164Chile } from "./telefono"
+import { vocabularioDe, type PalabrasDelRubro } from "./vocabulario"
+
+/** Las palabras de un rubro sin palabras propias: lo que dicen los motivos si quien llama no pasa las suyas. */
+const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
 
 /**
  * Importar clientes desde un CSV (pensado para el export de AgendaPro, pero
@@ -50,7 +55,21 @@ export const mapeoSchema = z.object({
  * el que recibe WhatsApp.
  */
 const CABECERAS_CONOCIDAS: Record<CampoDeImportacion, readonly string[]> = {
-  nombre: ["nombre", "nombres", "nombre completo", "nombre cliente", "nombre del cliente", "cliente", "primer nombre", "name", "first name"],
+  nombre: [
+    "nombre",
+    "nombres",
+    "nombre completo",
+    "nombre cliente",
+    "nombre del cliente",
+    "cliente",
+    // La planilla de una clínica dental titula a sus pacientes así.
+    "nombre paciente",
+    "nombre del paciente",
+    "paciente",
+    "primer nombre",
+    "name",
+    "first name",
+  ],
   apellido: ["apellido", "apellidos", "apellido paterno", "last name", "surname"],
   telefono: ["celular", "telefono celular", "telefono movil", "movil", "telefono", "fono", "numero de telefono", "whatsapp", "phone", "mobile"],
   email: ["email", "correo", "correo electronico", "e mail", "mail"],
@@ -202,12 +221,15 @@ export function prepararFilas(filas: readonly (readonly string[])[], mapeo: Mape
 /**
  * Separa los candidatos que ya están en el negocio: mismo teléfono (los
  * guardados antes de normalizar también se leen en E.164) o mismo correo, sin
- * distinguir mayúsculas.
+ * distinguir mayúsculas. `palabras` (opcional) dice el motivo con la palabra
+ * del rubro: "Ya existe un cliente…" o "Ya existe un paciente…".
  */
 export function descartarExistentes(
   candidatos: readonly ClienteAImportar[],
-  existentes: readonly { phone: string | null; email: string | null }[]
+  existentes: readonly { phone: string | null; email: string | null }[],
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
 ): { nuevos: ClienteAImportar[]; duplicados: FilaOmitida[] } {
+  const yaExiste = `Ya existe ${un(palabras.cliente)} con ese`
   const telefonos = new Set(existentes.map((cliente) => aE164Chile(cliente.phone)).filter(Boolean))
   const emails = new Set(existentes.map((cliente) => claveDeEmail(cliente.email)).filter(Boolean))
 
@@ -215,9 +237,9 @@ export function descartarExistentes(
   const duplicados: FilaOmitida[] = []
   for (const candidato of candidatos) {
     if (candidato.phone && telefonos.has(candidato.phone)) {
-      duplicados.push({ fila: candidato.fila, motivo: "Ya existe un cliente con ese teléfono" })
+      duplicados.push({ fila: candidato.fila, motivo: `${yaExiste} teléfono` })
     } else if (candidato.email && emails.has(claveDeEmail(candidato.email))) {
-      duplicados.push({ fila: candidato.fila, motivo: "Ya existe un cliente con ese correo" })
+      duplicados.push({ fila: candidato.fila, motivo: `${yaExiste} correo` })
     } else {
       nuevos.push(candidato)
     }

@@ -3,10 +3,13 @@
 import { useId, useState, type FormEvent } from "react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
+import { frasesDelPanel } from "@/components/panel/frases-del-panel"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { consecuenciasDeAnular, type AtencionParaAnular } from "@/lib/acciones-del-tablero"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 
 /** El servidor acepta hasta 500 caracteres de motivo. */
 const LARGO_MAXIMO_DEL_MOTIVO = 500
@@ -16,8 +19,9 @@ interface PropsDeModalAnular {
   /** Por qué no se pudo anular, si falló. */
   aviso: string
   /**
-   * El servidor no la deja anular nunca más (ya entró en una caja cerrada o en
-   * una liquidación: código `corregir-con-ajuste`). Se muestra el mensaje, lo
+   * El servidor no la deja anular (ya entró en una caja cerrada o en una
+   * liquidación: código `corregir-con-ajuste`; o lleva un abono ya pagado al
+   * laboratorio: `pagado-al-laboratorio`). Se muestra el mensaje, lo
    * escrito queda a la vista (sólo lectura) y ya no se ofrece anular.
    */
   rechazo?: string
@@ -35,6 +39,10 @@ export function ModalAnular({ atencion, aviso, rechazo, guardando, onAnular, onC
   const idDelMotivo = useId()
   const [motivo, setMotivo] = useState("")
   const cobrada = atencion.estado === "finalizada"
+  // Las palabras del rubro: "a otro cliente" o "a otro paciente" en el ejemplo, y "los ingresos de la
+  // clínica" o "sale de la sala de espera" en lo que pasa al anular.
+  const { palabras } = vocabularioDe(useRubroDelPanel())
+  const frases = frasesDelPanel(palabras)
 
   const anular = (evento: FormEvent<HTMLFormElement>) => {
     evento.preventDefault()
@@ -44,7 +52,7 @@ export function ModalAnular({ atencion, aviso, rechazo, guardando, onAnular, onC
   return (
     <MarcoDeModal
       titulo={cobrada ? `¿Anular el cobro de ${atencion.cliente.nombre}?` : `¿Anular la atención de ${atencion.cliente.nombre}?`}
-      descripcion={consecuenciasDeAnular(atencion)}
+      descripcion={consecuenciasDeAnular(atencion, palabras)}
       bloqueado={guardando}
       alCerrar={onCerrar}
     >
@@ -60,7 +68,7 @@ export function ModalAnular({ atencion, aviso, rechazo, guardando, onAnular, onC
             disabled={guardando}
             readOnly={!!rechazo}
             onChange={(evento) => setMotivo(evento.target.value)}
-            placeholder={cobrada ? "Ej.: se cobró de más, se cargó a otro cliente…" : "Ej.: se fue sin ser atendido…"}
+            placeholder={cobrada ? frases.anular.ejemploDeCobro : "Ej.: se fue sin ser atendido…"}
             className={cn(CAMPO, "h-24 resize-none")}
           />
         </div>

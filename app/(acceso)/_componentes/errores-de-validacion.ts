@@ -12,6 +12,9 @@ export const CONTRASENAS_DISTINTAS = "Las contraseñas no coinciden"
 
 export const FALTA_EL_TIPO_DE_NEGOCIO = "Selecciona el tipo de negocio"
 
+/** El mismo texto que responde el servidor cuando el plan falta o no es uno de los dos (`planSchema`). */
+export const FALTA_EL_PLAN = "Elige un plan"
+
 /**
  * Para el `setError` de la pantalla cuando se escribe o se elige en un campo:
  * borra el error si es el de ese campo y deja cualquier otro como está. Sin

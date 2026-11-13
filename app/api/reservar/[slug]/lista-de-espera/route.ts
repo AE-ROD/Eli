@@ -4,7 +4,9 @@ import { cuerpoConTope } from "@/lib/cuerpo-del-pedido"
 import { inscribirEnListaDeEspera } from "@/lib/lista-de-espera"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { registrarError } from "@/lib/registro-de-errores"
+import { MENSAJE_SEDE_YA_NO_DISPONIBLE } from "@/lib/rechazo-de-sede-inactiva"
 import { normalizarEmail } from "@/lib/reserva-publica"
+import { MENSAJE_SEDE_NO_VALIDA, leerSedeDelCuerpo } from "@/lib/sede-de-la-reserva"
 import { hashDeToken } from "@/lib/tokens"
 import { listaDeEsperaSchema } from "@/lib/validaciones"
 
@@ -19,6 +21,12 @@ import { listaDeEsperaSchema } from "@/lib/validaciones"
  *   y no crea nada, para no revelar nada de esa casilla.
  * - Negocio inexistente, lista apagada, servicio o profesional ajenos o
  *   inactivos: el mismo 404, sin decir cuál.
+ * - Sedes (plan Independiente): `sedeId` se revalida contra las sedes activas
+ *   del negocio del `slug` (`inscribirEnListaDeEspera`). Con dos o más sedes
+ *   activas es obligatoria; sin ella, o con una que no es una sede activa de
+ *   este negocio, 400. Se guarda en la inscripción, y el aviso mira esa sede.
+ *   Si la sede se desactivó mientras tanto, la base lo rechaza (trigger
+ *   `lista_de_espera_exige_sede_activa`): 409, y no se guarda nada.
  * - La cuarta inscripción activa del mismo email en el negocio: el mismo 201
  *   que un alta, sin crear la fila. Un 429 propio diría a cualquiera que ese
  *   email ya espera en este negocio.
@@ -47,7 +55,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const negocio = await prisma.business.findUnique({
     where: { slug },
-    select: { id: true, timezone: true, listaDeEsperaActiva: true },
+    // El rubro: en una clínica dental cuentan la primera vez y la urgencia.
+    select: { id: true, timezone: true, type: true, listaDeEsperaActiva: true },
   })
   if (!negocio?.listaDeEsperaActiva) return NO_ENCONTRADO()
 
@@ -61,13 +70,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!enTodosLosNegocios.permitido) return LISTO()
 
   try {
-    const resultado = await inscribirEnListaDeEspera(negocio, datos.data)
+    // `listaDeEsperaSchema` no conoce la sede: se lee aparte y se revalida adentro.
+    const resultado = await inscribirEnListaDeEspera(negocio, { ...datos.data, sedeId: leerSedeDelCuerpo(leido.cuerpo) })
     switch (resultado.tipo) {
       case "inscrita":
       case "tope":
         return LISTO()
       case "no-encontrada":
         return NO_ENCONTRADO()
+      case "sede-no-valida":
+        return NextResponse.json({ error: MENSAJE_SEDE_NO_VALIDA }, { status: 400 })
+      case "sede-inactiva":
+        return NextResponse.json({ error: MENSAJE_SEDE_YA_NO_DISPONIBLE }, { status: 409 })
       case "rechazada":
         return NextResponse.json({ error: resultado.error }, { status: 409 })
     }

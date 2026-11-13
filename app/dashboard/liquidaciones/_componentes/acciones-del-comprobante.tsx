@@ -11,15 +11,27 @@ import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Aviso } from "@/components/panel/aviso"
 import { CAMPO } from "@/components/panel/estilos"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { MEDIOS_DE_PAGO } from "@/lib/medios-de-pago"
 import type { EstadoDeLiquidacion } from "@/lib/liquidacion"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { anularLiquidacion, marcarPagada } from "../_datos"
+import { frasesDeLasLiquidaciones } from "../_frases"
+import { pesos } from "./piezas"
 
 interface Props {
   id: string
   estado: EstadoDeLiquidacion
   /** Lo que se comparte: quién, qué período y cuánto. */
   resumen: string
+  /** A quién se le paga y cuánto, para confirmar "Marcar pagada" sabiendo qué se marca. */
+  miembro: string
+  periodo: string
+  totalCents: number
+  /** Clínica dental: lo que libera anular incluye abonos de prótesis. */
+  conProtesis: boolean
+  /** Lo que libera anular incluye propinas: siempre, salvo en una clínica dental sin propinas guardadas. */
+  conPropinas: boolean
   volverA: string
   puedePagar: boolean
   puedeAnular: boolean
@@ -34,7 +46,19 @@ type Modal = "pagar" | "anular" | null
  * enlace interno del panel: no hay enlace público, quien lo abre necesita
  * sesión y ver esa liquidación.
  */
-export function AccionesDelComprobante({ id, estado, resumen, volverA, puedePagar, puedeAnular }: Props) {
+export function AccionesDelComprobante({
+  id,
+  estado,
+  resumen,
+  miembro,
+  periodo,
+  totalCents,
+  conProtesis,
+  conPropinas,
+  volverA,
+  puedePagar,
+  puedeAnular,
+}: Props) {
   const router = useRouter()
   const [modal, setModal] = useState<Modal>(null)
   const [aviso, setAviso] = useState<{ texto: string; error: boolean } | null>(null)
@@ -100,12 +124,22 @@ export function AccionesDelComprobante({ id, estado, resumen, volverA, puedePaga
 
       <AnimatePresence>
         {modal === "pagar" && (
-          <ModalPagar key="pagar" id={id} alCerrar={() => setModal(null)} alTerminar={() => listo("Liquidación marcada como pagada.")} />
+          <ModalPagar
+            key="pagar"
+            id={id}
+            miembro={miembro}
+            periodo={periodo}
+            totalCents={totalCents}
+            alCerrar={() => setModal(null)}
+            alTerminar={() => listo(`Liquidación de ${miembro} marcada como pagada: ${pesos(totalCents)}.`)}
+          />
         )}
         {modal === "anular" && (
           <ModalAnularLiquidacion
             key="anular"
             id={id}
+            conProtesis={conProtesis}
+            conPropinas={conPropinas}
             alCerrar={() => setModal(null)}
             alTerminar={() => listo("Liquidación anulada: lo que incluía vuelve a la próxima.")}
           />
@@ -115,7 +149,16 @@ export function AccionesDelComprobante({ id, estado, resumen, volverA, puedePaga
   )
 }
 
-function ModalPagar({ id, alCerrar, alTerminar }: { id: string; alCerrar: () => void; alTerminar: () => void }) {
+interface PropsDeModalPagar {
+  id: string
+  miembro: string
+  periodo: string
+  totalCents: number
+  alCerrar: () => void
+  alTerminar: () => void
+}
+
+function ModalPagar({ id, miembro, periodo, totalCents, alCerrar, alTerminar }: PropsDeModalPagar) {
   const [medio, setMedio] = useState("transferencia")
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState("")
@@ -136,8 +179,8 @@ function ModalPagar({ id, alCerrar, alTerminar }: { id: string; alCerrar: () => 
 
   return (
     <MarcoDeModal
-      titulo="Marcar pagada"
-      descripcion="Queda registrado con qué se pagó, quién lo marcó y cuándo. Después no se puede anular."
+      titulo={`¿Marcar pagada la liquidación de ${miembro}?`}
+      descripcion={`${periodo}: ${pesos(totalCents)}. Queda registrado con qué se pagó, quién lo marcó y cuándo. Después no se puede anular.`}
       bloqueado={guardando}
       alCerrar={alCerrar}
     >
@@ -154,7 +197,7 @@ function ModalPagar({ id, alCerrar, alTerminar }: { id: string; alCerrar: () => 
             Cancelar
           </BotonPrimario>
           <BotonPrimario type="submit" anchoCompleto cargando={guardando}>
-            Marcar pagada
+            Marcar pagada {pesos(totalCents)}
           </BotonPrimario>
         </div>
       </form>
@@ -162,8 +205,22 @@ function ModalPagar({ id, alCerrar, alTerminar }: { id: string; alCerrar: () => 
   )
 }
 
-function ModalAnularLiquidacion({ id, alCerrar, alTerminar }: { id: string; alCerrar: () => void; alTerminar: () => void }) {
+function ModalAnularLiquidacion({
+  id,
+  conProtesis,
+  conPropinas,
+  alCerrar,
+  alTerminar,
+}: {
+  id: string
+  conProtesis: boolean
+  conPropinas: boolean
+  alCerrar: () => void
+  alTerminar: () => void
+}) {
   const idDelMotivo = useId()
+  // "Las prestaciones…" en una clínica dental; "Los servicios…" en los demás rubros.
+  const frases = frasesDeLasLiquidaciones(vocabularioDe(useRubroDelPanel()).palabras)
   const [motivo, setMotivo] = useState("")
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState("")
@@ -186,7 +243,7 @@ function ModalAnularLiquidacion({ id, alCerrar, alTerminar }: { id: string; alCe
   return (
     <MarcoDeModal
       titulo="Anular liquidación"
-      descripcion="Los servicios, propinas y movimientos que incluía vuelven a quedar pendientes para la próxima. Lo que se congeló al cerrarla sigue congelado."
+      descripcion={frases.anular.descripcion(conProtesis, conPropinas)}
       bloqueado={guardando}
       alCerrar={alCerrar}
     >

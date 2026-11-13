@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma"
 import { transicionPermitida } from "@/lib/atenciones"
 import {
   CODIGO_CORREGIR_CON_AJUSTE,
+  CODIGO_PAGADO_AL_LABORATORIO,
   atencionBloqueada,
   horaDeLaBase,
   tomarCandadoDeCajaCompartido,
@@ -15,7 +16,8 @@ import { tomarCandadosDeLaAtencion } from "@/lib/liquidacion"
 import { ESTADOS_DE_RESERVA } from "@/lib/llegadas"
 import { ORIGEN_FILA } from "@/lib/fila-virtual"
 import { programarAvisoDeFila } from "@/lib/fila-virtual-servidor"
-import { actorDeSesion, puedeAnular } from "@/lib/permisos"
+import { actorDeSesion, esClinicaDental, puedeAnular } from "@/lib/permisos"
+import { soltarLoClinicoDeLaCita } from "@/lib/citas-de-la-clinica"
 import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import {
   ErrorDeAtencion,
@@ -30,6 +32,8 @@ import {
 const MENSAJE_DE_BLOQUEO: Record<MotivoDeBloqueo, string> = {
   liquidacion: "Esta atención ya está en una liquidación cerrada: no se anula, corrígelo con un ajuste.",
   caja: "Esta atención ya entró en un cierre de caja: no se anula, corrígelo con un ajuste.",
+  laboratorio:
+    "Un abono de prótesis de esta atención ya se le pagó al laboratorio: anula primero ese pago (Comisiones → Por pagar al laboratorio).",
 }
 
 const anulacionSchema = z.object({
@@ -105,14 +109,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // un cierre de caja ya se rindió, y no se anula (#65, #68, #71). Se
       // corrige con un ajuste en la liquidación.
       const bloqueo = await atencionBloqueada(tx, actor.businessId, existente.id)
-      if (bloqueo) throw new ErrorDeAtencion(409, MENSAJE_DE_BLOQUEO[bloqueo.motivo], CODIGO_CORREGIR_CON_AJUSTE)
+      if (bloqueo) {
+        // Lo del laboratorio no se corrige con un ajuste: se anula el pago.
+        // Lleva su propio código para que la pantalla no lo lea como "la
+        // atención cambió" (y recargue perdiendo el motivo escrito).
+        const codigo = bloqueo.motivo === "laboratorio" ? CODIGO_PAGADO_AL_LABORATORIO : CODIGO_CORREGIR_CON_AJUSTE
+        throw new ErrorDeAtencion(409, MENSAJE_DE_BLOQUEO[bloqueo.motivo], codigo)
+      }
 
       if (existente.appointmentId && existente.status !== "finalizada") {
-        await tx.appointment.updateMany({
+        const { count } = await tx.appointment.updateMany({
           where: { id: existente.appointmentId, businessId: actor.businessId, status: { in: ESTADOS_DE_RESERVA } },
           // La cancela el negocio al anular (#121): queda quién y cuándo.
           data: { status: "cancelada", canceladaPor: "negocio", canceladaEn: ahora },
         })
+        // Clínica dental: cancelar la cita devuelve lo agendado en ella a
+        // "por agendar", como cancelarla desde la agenda.
+        if (count === 1 && esClinicaDental(actor)) {
+          await soltarLoClinicoDeLaCita(tx, actor.businessId, existente.appointmentId, "cancela")
+        }
       }
 
       return leerAtencion(tx, actor, existente.id)

@@ -174,6 +174,20 @@ const tablas: Tablas = {
   envioAClientes: [],
   appointmentService: [],
   franjaDeHoraValle: [],
+  sillon: [],
+  fichaClinica: [],
+  marcaDental: [],
+  evolucion: [],
+  planDeTratamiento: [],
+  etapaDelPlan: [],
+  prestacionDelPlan: [],
+  laboratorio: [],
+  materialDeProtesis: [],
+  excepcionDeRepartoDeProtesis: [],
+  cambioDeRepartoDeProtesis: [],
+  protesis: [],
+  eventoDeProtesis: [],
+  pagoAlLaboratorio: [],
   customer: clientesFake,
   appointment: citasFake,
 }
@@ -939,6 +953,27 @@ describe("POST /api/clientes", () => {
     const { data } = prismaMock.customer.create.mock.calls[0][0]
     expect(data).toMatchObject({ whatsappConsentAt: deLaBase, whatsappConsentSource: "panel" })
     expect(prismaMock.$queryRaw.mock.calls[0][0].join("?")).toBe("SELECT clock_timestamp() AS ahora")
+  })
+
+  it("el profesional crea el cliente, pero no registra su consentimiento de WhatsApp: 401 y no crea nada", async () => {
+    const { POST } = await import("./route")
+
+    mockGetServerSession.mockResolvedValueOnce(sesionProfesional)
+
+    const res = await POST(fakePost({ name: "Carla Díaz", whatsappConsent: true }))
+
+    expect(res.status).toBe(401)
+    expect(prismaMock.customer.create).not.toHaveBeenCalled()
+  })
+
+  it("el encargado sí registra el consentimiento de WhatsApp al crearlo", async () => {
+    const { POST } = await import("./route")
+    prismaMock.$queryRaw.mockImplementationOnce(async () => [{ ahora: new Date("2026-11-04T12:00:00.000Z") }])
+
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+
+    expect((await POST(fakePost({ name: "Carla Díaz", whatsappConsent: true }))).status).toBe(201)
+    expect(prismaMock.customer.create.mock.calls[0][0].data.whatsappConsentSource).toBe("panel")
   })
 
   it("sin marcar el consentimiento no se pide la hora ni se registra", async () => {

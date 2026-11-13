@@ -6,6 +6,7 @@ import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Interruptor } from "@/components/comunes/interruptor"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
@@ -15,6 +16,8 @@ import {
   FALTAS_PARA_CONFIRMAR_MINIMO,
 } from "@/lib/por-confirmar"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
+import { frasesDeConfiguracion } from "../_frases"
 
 /** Con cuántas faltas se propone al encenderlo por primera vez. */
 const FALTAS_SUGERIDAS = 2
@@ -38,6 +41,8 @@ function guardarPorConfirmar(faltas: number | null): Promise<Resultado<{ faltas:
 export function FormularioPorConfirmar({ faltasIniciales }: { faltasIniciales: number | null }) {
   const idDelTitulo = useId()
   const idDelCampo = useId()
+  // "Cuentan las citas marcadas “No vino”": las palabras del rubro ("No asistió" en una clínica dental).
+  const { porConfirmar: frases } = frasesDeConfiguracion(vocabularioDe(useRubroDelPanel()).palabras)
   const [guardadas, setGuardadas] = useState<number | null>(faltasIniciales)
   const [texto, setTexto] = useState(String(faltasIniciales ?? FALTAS_SUGERIDAS))
   const [guardando, setGuardando] = useState(false)
@@ -85,6 +90,7 @@ export function FormularioPorConfirmar({ faltasIniciales }: { faltasIniciales: n
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
+        nivel={3}
         titulo="Reservas por confirmar"
         subtitulo="Para quienes reservan y no llegan"
         icono={{ figura: UserCheck }}
@@ -131,9 +137,7 @@ export function FormularioPorConfirmar({ faltasIniciales }: { faltasIniciales: n
             {pendiente || !valido ? "Guardar" : "Guardado"}
           </BotonPrimario>
           <p id={`${idDelCampo}-ayuda`} className="w-full text-sm text-texto-2">
-            De {FALTAS_PARA_CONFIRMAR_MINIMO} a {FALTAS_PARA_CONFIRMAR_MAXIMO}. Cuentan las citas marcadas &ldquo;No vino&rdquo; con
-            el mismo correo de quien reserva; el teléfono no cuenta, y una reserva sin correo nunca entra por
-            confirmar.
+            {frases.ayuda(FALTAS_PARA_CONFIRMAR_MINIMO, FALTAS_PARA_CONFIRMAR_MAXIMO)}
           </p>
         </form>
       )}

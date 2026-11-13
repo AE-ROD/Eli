@@ -1,5 +1,9 @@
 import { PROFESIONAL_DUEÑO, deCentavos, idDeProfesional } from "@/lib/atenciones"
 import { nombreDeMedio } from "@/lib/medios-de-pago"
+import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
+
+/** Las palabras de un rubro sin palabras propias: lo que dice `rotuloDeIngresos` si no se le pasan las del rubro. */
+const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
 
 /**
  * Reglas de los reportes (docs/PRODUCTO.md, sección 8): a qué turno pertenece
@@ -512,8 +516,15 @@ export interface FiltrosConNombre {
  *
  * Al profesional no le llegan los filtros de profesional ni de medio: su
  * reporte ya es sólo lo suyo y no ve medios de pago.
+ *
+ * `palabras` pone el "servicio" del rubro: "Ingresos · prestaciones de Carla"
+ * en una clínica dental. Sin ellas, "servicios".
  */
-export function rotuloDeIngresos(propio: boolean, filtros: FiltrosConNombre): string {
+export function rotuloDeIngresos(
+  propio: boolean,
+  filtros: FiltrosConNombre,
+  palabras: Pick<PalabrasDelRubro, "servicio"> = PALABRAS_NEUTRAS
+): string {
   const { profesional, servicio, medio } = filtros
   if (propio) return servicio ? `Lo que atendiste · ${servicio}` : "Lo que atendiste"
 
@@ -521,7 +532,7 @@ export function rotuloDeIngresos(propio: boolean, filtros: FiltrosConNombre): st
     profesional && servicio
       ? `${servicio} de ${profesional}`
       : profesional
-        ? `servicios de ${profesional}`
+        ? `${palabras.servicio.plural} de ${profesional}`
         : servicio
   if (!lineas) return medio ? `Cobrado ${conElMedio(medio)}` : "Ingresos"
   return medio ? `Ingresos · ${lineas} · atenciones con algún pago ${conElMedio(medio)}` : `Ingresos · ${lineas}`

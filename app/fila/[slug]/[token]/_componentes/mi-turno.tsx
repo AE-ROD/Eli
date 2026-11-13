@@ -1,12 +1,13 @@
 "use client"
 
 import { useCallback, useEffect, useId, useState } from "react"
-import { CircleCheck, Hourglass, LogOut, Scissors, SearchX } from "lucide-react"
+import { CircleCheck, Hourglass, LogOut, SearchX, UserRoundCheck } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Tarjeta } from "@/components/comunes/tarjeta"
 import { EncabezadoDeReserva } from "@/app/reservar/[slug]/_componentes/encabezado-de-reserva"
+import { frasesDeLaFila } from "@/app/reservar/[slug]/_frases"
 import { POLLING_DEL_CELULAR_MS } from "@/lib/fila-virtual"
 import { pedir, pedirConCodigo } from "@/lib/peticiones"
 
@@ -36,19 +37,30 @@ function textoDeMinutos(minutos: number): string {
   return `Unas ${horas} h${resto ? ` ${resto} min` : ""}`
 }
 
-const TEXTOS: Record<Exclude<EstadoDelTurno, "esperando">, { titulo: string; bajada: string }> = {
-  atendiendo: { titulo: "Es tu turno", bajada: "Ya te están atendiendo. ¡Que te vaya bien!" },
-  terminado: { titulo: "Listo", bajada: "Tu atención terminó. Gracias por venir." },
-  fuera: { titulo: "Ya no estás en la fila", bajada: "Saliste de la fila o el local cerró tu turno. Si quieres, vuelve a anotarte." },
-  vencido: { titulo: "Este turno ya pasó", bajada: "Era de otro día. Si quieres, vuelve a anotarte." },
+/**
+ * Los estados de los que no se vuelve: el turno ya no cambia, así que se deja
+ * de preguntar. "atendiendo" no es final: todavía pasa a "terminado".
+ */
+const ESTADOS_FINALES: ReadonlySet<EstadoDelTurno> = new Set(["terminado", "fuera", "vencido"])
+
+/** Lo que dice cada estado final. El texto de "fuera" nombra al lugar, y sale del rubro del negocio. */
+function textosDelTurno(fuera: string): Record<Exclude<EstadoDelTurno, "esperando">, { titulo: string; bajada: string }> {
+  return {
+    atendiendo: { titulo: "Es tu turno", bajada: "Ya te están atendiendo. ¡Que te vaya bien!" },
+    terminado: { titulo: "Listo", bajada: "Tu atención terminó. Gracias por venir." },
+    fuera: { titulo: "Ya no estás en la fila", bajada: fuera },
+    vencido: { titulo: "Este turno ya pasó", bajada: "Era de otro día. Si quieres, vuelve a anotarte." },
+  }
 }
 
 /**
  * El turno en el celular: el número en grande, cuántas personas van antes y
  * el tiempo estimado, que se actualizan solos cada ~20 s mientras la página
- * está a la vista. "Salir de la fila" pide confirmar antes.
+ * está a la vista. "Salir de la fila" pide confirmar antes. `rubro`
+ * (`Business.type`) pone la palabra del lugar: "el salón cerró tu turno".
  */
-export function MiTurno({ slug, token }: { slug: string; token: string }) {
+export function MiTurno({ slug, token, rubro = null }: { slug: string; token: string; rubro?: string | null }) {
+  const frases = frasesDeLaFila(rubro)
   const idDelError = useId()
   const [turno, setTurno] = useState<Turno | null>(null)
   const [noExiste, setNoExiste] = useState(false)
@@ -70,7 +82,11 @@ export function MiTurno({ slug, token }: { slug: string; token: string }) {
     }
   }, [url])
 
+  // Un turno que terminó (o que no existe) ya no cambia: no se consulta más.
+  const turnoCerrado = noExiste || (turno !== null && ESTADOS_FINALES.has(turno.estado))
+
   useEffect(() => {
+    if (turnoCerrado) return
     let vigente = true
     const tick = () => {
       if (vigente && document.visibilityState === "visible") void cargar()
@@ -83,7 +99,7 @@ export function MiTurno({ slug, token }: { slug: string; token: string }) {
       window.clearInterval(intervalo)
       document.removeEventListener("visibilitychange", tick)
     }
-  }, [cargar])
+  }, [cargar, turnoCerrado])
 
   const salir = async () => {
     setSaliendo(true)
@@ -115,7 +131,7 @@ export function MiTurno({ slug, token }: { slug: string; token: string }) {
   }
 
   const esperando = turno.estado === "esperando"
-  const textos = turno.estado === "esperando" ? null : TEXTOS[turno.estado]
+  const textos = turno.estado === "esperando" ? null : textosDelTurno(frases.fuera)[turno.estado]
 
   return (
     <>
@@ -143,7 +159,8 @@ export function MiTurno({ slug, token }: { slug: string; token: string }) {
             <p className="text-[13px] text-texto-2">Es una estimación: depende de lo que se haga cada persona.</p>
           </div>
         ) : (
-          <CuadroDeIcono icono={turno.estado === "atendiendo" ? Scissors : CircleCheck} color="azul" tamano="lg" />
+          // Un ícono neutro: la fila es de cualquier rubro (unas tijeras no van en una clínica).
+          <CuadroDeIcono icono={turno.estado === "atendiendo" ? UserRoundCheck : CircleCheck} color="azul" tamano="lg" />
         )}
 
         {error && (

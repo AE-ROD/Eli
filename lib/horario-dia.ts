@@ -6,8 +6,9 @@
  *
  * `WorkSchedule` guarda `startTime`/`endTime` como `"HH:MM"`, sin fecha ni zona
  * horaria: se comparan como minutos desde la medianoche, nunca como `Date`.
- * Las citas sí son instantes reales (ISO), así que su hora se lee con `Date`
- * en la zona local del navegador — igual que ya hace `page.tsx`.
+ * Las citas sí son instantes reales (ISO): su hora se lee en la zona del
+ * negocio cuando quien llama la pasa (`zona`, la que manda
+ * `/api/dashboard/stats`), y si no, en la del navegador.
  *
  * Sólo cuentan las citas que ocupan su horario (`ocupaElHorario`): una
  * cancelada o una de "No vino" no se dibuja ni tapa un hueco (#97), aunque
@@ -15,6 +16,7 @@
  */
 
 import { ocupaElHorario } from "@/lib/ocupacion"
+import { fechaYMinutosEn } from "@/lib/zona-horaria"
 
 export interface FranjaHorario {
   startTime: string
@@ -44,8 +46,10 @@ export function horaAMinutos(hhmm: string): number {
   return horas * 60 + minutos
 }
 
-function minutosDeInstante(iso: string): number {
+/** Minuto del día (0 a 1439) de un instante, en `zona` si viene y si no en la del navegador. */
+function minutosDeInstante(iso: string, zona?: string): number {
   const fecha = new Date(iso)
+  if (zona) return fechaYMinutosEn(fecha, zona).minutos
   return fecha.getHours() * 60 + fecha.getMinutes()
 }
 
@@ -94,7 +98,7 @@ function fusionarIntervalos(
  * Una franja inválida (`endTime` <= `startTime`) no genera segmentos: no hay
  * nada honesto que dibujar sobre un rango que no se puede medir.
  */
-export function segmentosDeFranja(franja: FranjaHorario, citas: CitaDelDia[]): SegmentoDia[] {
+export function segmentosDeFranja(franja: FranjaHorario, citas: CitaDelDia[], zona?: string): SegmentoDia[] {
   if (!franjaValida(franja)) return []
 
   const inicioFranja = horaAMinutos(franja.startTime)
@@ -102,8 +106,8 @@ export function segmentosDeFranja(franja: FranjaHorario, citas: CitaDelDia[]): S
 
   const citasEnFranja = citasQueOcupan(citas)
     .map((cita) => {
-      const inicioReal = minutosDeInstante(cita.startTime)
-      const finReal = minutosDeInstante(cita.endTime)
+      const inicioReal = minutosDeInstante(cita.startTime, zona)
+      const finReal = minutosDeInstante(cita.endTime, zona)
       return {
         cita,
         // Semiabierto (igual que `citasFueraDeFranjas`): una cita que termina
@@ -145,12 +149,12 @@ export function segmentosDeFranja(franja: FranjaHorario, citas: CitaDelDia[]): S
  * saber si una cita cae "dentro" de un rango que no se puede medir, así que
  * se ignora para esta decisión (la cita cae del lado de "fuera de franjas").
  */
-export function citasFueraDeFranjas(franjas: FranjaHorario[], citas: CitaDelDia[]): CitaDelDia[] {
+export function citasFueraDeFranjas(franjas: FranjaHorario[], citas: CitaDelDia[], zona?: string): CitaDelDia[] {
   const franjasValidas = franjas.filter(franjaValida)
 
   return citasQueOcupan(citas).filter((cita) => {
-    const inicio = minutosDeInstante(cita.startTime)
-    const fin = minutosDeInstante(cita.endTime)
+    const inicio = minutosDeInstante(cita.startTime, zona)
+    const fin = minutosDeInstante(cita.endTime, zona)
     return !franjasValidas.some((franja) => {
       const inicioFranja = horaAMinutos(franja.startTime)
       const finFranja = horaAMinutos(franja.endTime)
@@ -168,11 +172,15 @@ export function citasFueraDeFranjas(franjas: FranjaHorario[], citas: CitaDelDia[
  * `null`, nunca `0`: cero minutos libres es una afirmación ("no te queda
  * nada"), y un rango que no se puede medir no permite afirmar eso ni nada.
  */
-export function minutosLibresEnFranjas(franjas: FranjaHorario[], citas: CitaDelDia[]): number | null {
+export function minutosLibresEnFranjas(
+  franjas: FranjaHorario[],
+  citas: CitaDelDia[],
+  zona?: string
+): number | null {
   if (franjas.some((franja) => !franjaValida(franja))) return null
 
   return franjas.reduce((total, franja) => {
-    const libresDeLaFranja = segmentosDeFranja(franja, citas)
+    const libresDeLaFranja = segmentosDeFranja(franja, citas, zona)
       .filter((segmento) => segmento.tipo === "hueco")
       .reduce((acc, segmento) => acc + (segmento.finMin - segmento.inicioMin), 0)
     return total + libresDeLaFranja

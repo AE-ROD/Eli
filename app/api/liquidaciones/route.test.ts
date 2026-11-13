@@ -103,8 +103,19 @@ const vista = async (miembro = "m-carla", excluir = "") => {
   const { GET } = await import("./vista-previa/route")
   return GET(pedido(`${URL}/vista-previa?miembro=${miembro}${excluir ? `&excluir=${excluir}` : ""}`))
 }
+/**
+ * Cierra como la pantalla: con el total que mostró la vista previa (lo
+ * calcula acá si el caso no lo trae). Si la vista previa no responde (sin
+ * permiso, ajeno), manda 0: el cierre lo rechaza antes por lo suyo.
+ */
 const cerrar = async (cuerpo: Record<string, unknown>) => {
   const { POST } = await import("./route")
+  if (!("totalEsperadoCents" in cuerpo) && typeof cuerpo.miembroId === "string") {
+    const excluir = Array.isArray(cuerpo.excluirMovimientos) ? cuerpo.excluirMovimientos.join(",") : ""
+    const res = await vista(cuerpo.miembroId, excluir)
+    const total = res.status === 200 ? (await res.json()).totales.totalCents : 0
+    cuerpo = { ...cuerpo, totalEsperadoCents: total }
+  }
   return POST(pedido(URL, cuerpo))
 }
 const lineaGuardada = (id: string) => base.buscar("visitService", { id })[0]
@@ -142,6 +153,7 @@ describe("GET /api/liquidaciones/vista-previa", () => {
     expect(cuerpo.totales).toEqual({
       comisionServiciosCents: centavos(3200 + 3200 + 4000),
       comisionProductosCents: centavos(1200),
+      comisionProtesisCents: 0,
       propinasCents: centavos(2000),
       adelantosCents: centavos(5000),
       ajustesCents: centavos(1000),
@@ -175,6 +187,15 @@ describe("GET /api/liquidaciones/vista-previa", () => {
     expect(cuerpo.sinPorcentaje).toBe(1)
     expect(cuerpo.lineas[0]).toMatchObject({ id: "l-pedro", estado: "sin-porcentaje", comisionCents: null })
     expect(cuerpo.noSePuedeCerrar).toMatch(/1 servicio sin porcentaje/)
+  })
+
+  it.each([
+    ["una clínica dental", "odontologia", "Hay 1 prestación sin porcentaje de comisión: configúralo en Comisiones antes de cerrar."],
+    ["un salón", "salon", "Hay 1 servicio sin porcentaje de comisión: configúralo en Comisiones antes de cerrar."],
+    ["un rubro viejo", "salud", "Hay 1 servicio sin porcentaje de comisión: configúralo en Comisiones antes de cerrar."],
+  ])("%s: el motivo para no cerrar habla el rubro de la sesión", async (_caso, rubro, mensaje) => {
+    enSesion({ user: { ...sesiones.dueña.user, rubro } })
+    expect((await (await vista("m-pedro")).json()).noSePuedeCerrar).toBe(mensaje)
   })
 
   it("una excepción por servicio le gana al % del miembro", async () => {
@@ -242,6 +263,10 @@ describe("POST /api/liquidaciones (cerrar)", () => {
 
   it("la hora del cierre es la de la base, leída después de los candados, no la de esta instancia (#152)", async () => {
     enSesion(sesiones.dueña)
+    // La vista previa que se confirmó, antes: también lee la hora de la base.
+    const totalEsperadoCents = (await (await vista()).json()).totales.totalCents
+    base.prisma.$queryRaw.mockClear()
+    base.prisma.$executeRaw.mockClear()
     const deLaBase = new Date("2026-11-03T15:00:07.000Z")
     const delReloj = base.prisma.$queryRaw.getMockImplementation()!
     base.prisma.$queryRaw.mockImplementation(async (partes: TemplateStringsArray, ...valores: unknown[]) =>
@@ -249,7 +274,7 @@ describe("POST /api/liquidaciones (cerrar)", () => {
     )
 
     try {
-      expect((await cerrar({ miembroId: "m-carla", desde: "2026-10-01" })).status).toBe(201)
+      expect((await cerrar({ miembroId: "m-carla", desde: "2026-10-01", totalEsperadoCents })).status).toBe(201)
     } finally {
       base.prisma.$queryRaw.mockImplementation(delReloj)
     }
@@ -351,6 +376,17 @@ describe("POST /api/liquidaciones (cerrar)", () => {
     const res = await cerrar({ miembroId: "m-pedro", desde: "2026-10-01" })
     expect(res.status).toBe(409)
     expect((await res.json()).error).toMatch(/sin porcentaje/)
+    expect(base.volcado()).toEqual(antes)
+  })
+
+  it("no cierra con líneas sin %: el 409 habla el rubro de la sesión", async () => {
+    enSesion({ user: { ...sesiones.dueña.user, rubro: "odontologia" } })
+    const antes = base.volcado()
+    const res = await cerrar({ miembroId: "m-pedro", desde: "2026-10-01" })
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe(
+      "Hay 1 prestación sin porcentaje de comisión: configúralo en Comisiones antes de cerrar."
+    )
     expect(base.volcado()).toEqual(antes)
   })
 
@@ -823,5 +859,134 @@ describe("Liquidar desde", () => {
     const { POST } = await import("./[id]/anulacion/route")
     await POST(pedido(URL, { motivo: "Otra fecha" }), conId(id))
     expect((await fijar({ fecha: "2026-09-01" })).status).toBe(200)
+  })
+})
+
+describe("Confirmar lo visto al cerrar (revisión 2026-11-10)", () => {
+  it("si se cobra algo mientras la dueña confirma: 409 'cambió mientras confirmabas' y nada se escribe; con el total nuevo, cierra", async () => {
+    enSesion(sesiones.dueña)
+    const visto = (await (await vista()).json()).totales.totalCents
+    expect(visto).toBe(centavos(9600))
+
+    // Entretanto se cobra otro corte de Carla en octubre.
+    base.reiniciar({
+      ...escenario(),
+      visit: [...escenario().visit, cobrada("v-nueva", "2026-10-20T15:00:00.000Z")],
+      visitService: [...escenario().visitService, linea("l-nueva", "v-nueva")],
+    })
+    const antes = base.volcado()
+
+    const res = await cerrar({ miembroId: "m-carla", desde: "2026-10-01", totalEsperadoCents: visto })
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toMatch(/cambió mientras confirmabas/)
+    expect(base.volcado()).toEqual(antes)
+
+    const nuevo = (await (await vista()).json()).totales.totalCents
+    expect(nuevo).toBe(visto + centavos(3200))
+    const ok = await cerrar({ miembroId: "m-carla", desde: "2026-10-01", totalEsperadoCents: nuevo })
+    expect(ok.status).toBe(201)
+    expect(lineaGuardada("l-nueva").liquidacionId).toBe((await ok.json()).id)
+  })
+
+  it("sin el total visto no se cierra: 400", async () => {
+    enSesion(sesiones.dueña)
+    const { POST } = await import("./route")
+    const res = await POST(pedido(URL, { miembroId: "m-carla", desde: "2026-10-01" }))
+    expect(res.status).toBe(400)
+    expect(base.buscar("liquidacion")).toHaveLength(0)
+  })
+
+  it("un ajuste no se deja para la siguiente: la vista previa lo incluye igual y el cierre que lo excluye es 400", async () => {
+    enSesion(sesiones.dueña)
+    const cuerpo = await (await vista("m-carla", "mv-ajuste,mv-adelanto")).json()
+    const porId = Object.fromEntries(cuerpo.movimientos.map((m: { id: string; incluido: boolean }) => [m.id, m.incluido]))
+    expect(porId).toEqual({ "mv-adelanto": false, "mv-ajuste": true })
+
+    const res = await cerrar({
+      miembroId: "m-carla",
+      desde: "2026-10-01",
+      excluirMovimientos: ["mv-ajuste"],
+      totalEsperadoCents: cuerpo.totales.totalCents,
+    })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/ajustes no se dejan/)
+    expect(base.buscar("liquidacion")).toHaveLength(0)
+  })
+
+  it("la vista previa usa la hora de la base, como el cierre", async () => {
+    enSesion(sesiones.dueña)
+    // El reloj de esta instancia va un mes adelantado; la base dice el 3 de noviembre.
+    vi.setSystemTime(new Date("2026-12-03T15:00:00.000Z"))
+    const delReloj = base.prisma.$queryRaw.getMockImplementation()!
+    base.prisma.$queryRaw.mockImplementation(async (partes: TemplateStringsArray, ...valores: unknown[]) =>
+      partes.join("?") === "SELECT clock_timestamp() AS ahora" ? [{ ahora: AHORA }] : delReloj(partes, ...valores)
+    )
+    try {
+      expect((await (await vista()).json()).hoy).toBe("2026-11-03")
+    } finally {
+      base.prisma.$queryRaw.mockImplementation(delReloj)
+    }
+  })
+})
+
+describe("El historial de liquidaciones, por páginas", () => {
+  const liquidaciones = (cantidad: number) =>
+    Array.from({ length: cantidad }, (_, i) => {
+      const desde = new Date(Date.UTC(2020, i, 1))
+      return {
+        id: `liq-${String(i).padStart(3, "0")}`,
+        businessId: NEGOCIO,
+        memberId: "m-carla",
+        memberName: "Carla Profesional",
+        periodo: "mensual",
+        desde,
+        hasta: new Date(Date.UTC(2020, i + 1, 0)),
+        zona: "America/Santiago",
+        estado: "pagada",
+        totalCents: 100,
+        cerradaAt: desde,
+        cerradaPorId: "u-duena",
+        cerradaPorNombre: "Ana Dueña",
+      }
+    })
+
+  it("de a 50, de la más nueva a la más vieja; la página siguiente trae el resto", async () => {
+    base.reiniciar({ ...escenario(), liquidacion: liquidaciones(53) })
+    enSesion(sesiones.dueña)
+    const { GET } = await import("./route")
+    const primera = await (await GET(pedido(URL))).json()
+    expect(primera).toHaveLength(50)
+    expect(primera[0].id).toBe("liq-052")
+    const segunda = await (await GET(pedido(`${URL}?pagina=2`))).json()
+    expect(segunda.map((l: { id: string }) => l.id)).toEqual(["liq-002", "liq-001", "liq-000"])
+    // Una página que no sirve es la primera.
+    expect(await (await GET(pedido(`${URL}?pagina=abc`))).json()).toEqual(primera)
+  })
+})
+
+describe("Una dueña que también atiende como profesional en su negocio (decisión 1)", () => {
+  it("sus líneas como miembro del equipo llevan comisión y se liquidan como las de cualquiera", async () => {
+    // La dueña (u-duena) tiene además un lugar en el equipo: m-ana, con 30 %.
+    base.reiniciar({
+      ...escenario(),
+      businessMember: [
+        ...escenario().businessMember,
+        { id: "m-ana", businessId: NEGOCIO, userId: "u-duena", role: "worker", commissionPercent: 30, createdAt: new Date("2026-01-04") },
+      ],
+      visitService: [
+        ...escenario().visitService,
+        linea("l-ana", "v-pendiente", { memberId: "m-ana", professionalName: "Ana Dueña", priceCents: centavos(10000) }),
+      ],
+    })
+    enSesion(sesiones.dueña)
+    const cuerpo = await (await vista("m-ana")).json()
+    expect(cuerpo.lineas).toEqual([expect.objectContaining({ id: "l-ana", estado: "se-congelara", porcentaje: 30, comisionCents: centavos(3000) })])
+    expect(cuerpo.totales.totalCents).toBe(centavos(3000))
+
+    const res = await cerrar({ miembroId: "m-ana", desde: "2026-10-01" })
+    expect(res.status).toBe(201)
+    expect(lineaGuardada("l-ana")).toMatchObject({ commissionPercent: 30, commissionCents: centavos(3000), liquidacionId: (await res.json()).id })
+    // Su línea "como dueña" (byOwner) sigue sin comisión ni liquidación.
+    expect(lineaGuardada("l-duena")).toMatchObject({ liquidacionId: null })
   })
 })

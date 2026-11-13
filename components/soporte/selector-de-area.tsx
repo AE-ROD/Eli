@@ -4,7 +4,7 @@ import { Check } from "lucide-react"
 import { FONDO_SUAVE } from "@/components/comunes/colores-de-modulo"
 import { IconoDeArea, moduloDelArea } from "@/components/soporte/icono-de-area"
 import { moduloPorId } from "@/lib/modulos"
-import { AREAS, type AreaDeSoporte } from "@/lib/soporte"
+import type { AreaConEtiqueta, AreaDeSoporte } from "@/lib/soporte"
 import { cn } from "@/lib/utils"
 
 /** El fondo de un área elegida: el pastel suave de su módulo, o el gris de superficie. */
@@ -14,6 +14,8 @@ export function fondoDelArea(area: AreaDeSoporte): string {
 }
 
 interface PropsDeSelectorDeArea {
+  /** Las áreas con los nombres del rubro (`areasDelRubro`, `lib/soporte.ts`). */
+  areas: readonly AreaConEtiqueta[]
   elegida: AreaDeSoporte | null
   alElegir: (area: AreaDeSoporte) => void
   /** Lo que nombra al grupo para el lector de pantalla: el título del paso. */
@@ -25,10 +27,10 @@ interface PropsDeSelectorDeArea {
  * desde sm. Tocar una la elige y pasa al paso siguiente; si se vuelve atrás,
  * la elegida queda marcada (`aria-pressed`).
  */
-export function SelectorDeArea({ elegida, alElegir, idDelTitulo }: PropsDeSelectorDeArea) {
+export function SelectorDeArea({ areas, elegida, alElegir, idDelTitulo }: PropsDeSelectorDeArea) {
   return (
     <ul role="list" aria-labelledby={idDelTitulo} className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
-      {AREAS.map((area) => {
+      {areas.map((area) => {
         const activa = elegida === area.valor
         return (
           <li key={area.valor}>
@@ -56,6 +58,8 @@ export function SelectorDeArea({ elegida, alElegir, idDelTitulo }: PropsDeSelect
 }
 
 interface PropsDeFiltroDeAreas {
+  /** Las áreas con los nombres del rubro (`areasDelRubro`, `lib/soporte.ts`). */
+  areas: readonly AreaConEtiqueta[]
   /** `null` es "Todas". */
   elegida: AreaDeSoporte | null
   alElegir: (area: AreaDeSoporte | null) => void
@@ -69,7 +73,7 @@ const CHIP =
  * renglones (nada queda escondido detrás de un desplazamiento lateral). Cada
  * una es un botón con `aria-pressed`; "Todas" quita el filtro.
  */
-export function FiltroDeAreas({ elegida, alElegir }: PropsDeFiltroDeAreas) {
+export function FiltroDeAreas({ areas, elegida, alElegir }: PropsDeFiltroDeAreas) {
   return (
     <div role="group" aria-label="Filtrar por área" className="flex flex-wrap gap-2">
       <button
@@ -84,7 +88,7 @@ export function FiltroDeAreas({ elegida, alElegir }: PropsDeFiltroDeAreas) {
       >
         Todas
       </button>
-      {AREAS.map((area) => {
+      {areas.map((area) => {
         const activa = elegida === area.valor
         return (
           <button

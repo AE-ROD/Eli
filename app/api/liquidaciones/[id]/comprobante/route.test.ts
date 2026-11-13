@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
-import { NEGOCIO, atencion, centavos, conId, datosBase, linea, pedido, sesiones } from "@/pruebas/datos"
+import { NEGOCIO, atencion, centavos, conId, datosBase, linea, pedido, propina, sesiones } from "@/pruebas/datos"
+import { sesionesDentales } from "@/pruebas/clinica-con-sillones"
 import { leerCsv } from "@/lib/csv"
 
 const mockGetServerSession = vi.fn()
@@ -122,5 +123,49 @@ describe("GET /api/liquidaciones/[id]/comprobante", () => {
     mockVerificarLimite.mockResolvedValueOnce({ permitido: false, restantes: 0 })
     expect((await GET(pedido(URL), conId("liq-carla"))).status).toBe(429)
     expect((await GET(pedido(URL), conId("liq-carla"))).status).toBe(200)
+  })
+})
+
+describe("GET /api/liquidaciones/[id]/comprobante: clínica dental y propinas", () => {
+  async function descargar(sesion: unknown) {
+    const { GET } = await import("./route")
+    enSesion(sesion)
+    const res = await GET(pedido(URL), conId("liq-carla"))
+    expect(res.status).toBe(200)
+    return leerCsv(await res.text())
+  }
+  /** El mismo negocio de arriba como clínica dental. */
+  const comoClinica = (extra: Record<string, unknown[]> = {}) => {
+    const datos = base.volcado()
+    base.reiniciar({ ...datos, business: datos.business.map((b) => (b.id === NEGOCIO ? { ...b, type: "odontologia" } : b)), ...extra })
+  }
+
+  it("un salón: la sección y la fila de propinas salen, también en $0 (como siempre)", async () => {
+    const filas = await descargar(sesiones.dueña)
+    expect(filas.some((fila) => fila[2] === "Propina")).toBe(true)
+    expect(filas.find((fila) => fila[0] === "Propinas")).toEqual(["Propinas", "0"])
+  })
+
+  it("una clínica dental sin propinas: ni la sección ni la fila, y el total a pagar no cambia", async () => {
+    comoClinica()
+    const filas = await descargar(sesionesDentales.dueña)
+    expect(filas.some((fila) => fila[2] === "Propina")).toBe(false)
+    expect(filas.some((fila) => fila[0] === "Propinas")).toBe(false)
+    expect(filas.find((fila) => fila[0] === "Total a pagar")).toEqual(["Total a pagar", "2000"])
+  })
+
+  it("una clínica dental con propinas guardadas de antes: se descargan y suman, nada se esconde", async () => {
+    comoClinica({
+      propinaDeAtencion: [propina("p-vieja", "v-1", { liquidacionId: "liq-carla", amountCents: centavos(1500) })],
+    })
+    const datos = base.volcado()
+    base.reiniciar({
+      ...datos,
+      liquidacion: datos.liquidacion.map((l) => ({ ...l, propinasCents: centavos(1500), brutoCents: centavos(4700), totalCents: centavos(3500) })),
+    })
+    const filas = await descargar(sesionesDentales.dueña)
+    expect(filas.find((fila) => fila[2] === "Propina" && fila[0] !== "Fecha")).toEqual([expect.any(String), expect.any(String), "Propina", "Efectivo", "1500"])
+    expect(filas.find((fila) => fila[0] === "Propinas")).toEqual(["Propinas", "1500"])
+    expect(filas.find((fila) => fila[0] === "Total a pagar")).toEqual(["Total a pagar", "3500"])
   })
 })

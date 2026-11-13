@@ -21,6 +21,14 @@ export const TOPE_DEL_CUERPO_POR_DEFECTO = 100 * 1024
  */
 export const TOPE_DE_CUALQUIER_PEDIDO = 5 * 1024 * 1024
 
+/**
+ * Tope del cuerpo de la subida de una foto (`leerBytesConTope`): 5 MB, el
+ * techo de `/api` (y Caddy corta en 6 MB, un poco más arriba). Es el original
+ * que sube la persona, antes de reducirlo a WebP: una foto de celular ronda
+ * los 2 a 4 MB.
+ */
+export const TOPE_DE_UNA_FOTO = 5 * 1024 * 1024
+
 export const MENSAJE_DE_CUERPO_DEMASIADO_GRANDE = "El pedido es demasiado grande."
 
 /** El 413 de un pedido que pasó el tope. */
@@ -70,6 +78,23 @@ async function bytesConTope(request: Request, maxBytes: number): Promise<Uint8Ar
     desde += trozo.byteLength
   }
   return bytes
+}
+
+/** Lo que devuelve `leerBytesConTope`: los bytes, o que pasó del tope. */
+export type BytesLeidos = { excedido: true } | { excedido: false; bytes: Uint8Array }
+
+/**
+ * El cuerpo crudo del pedido (una imagen, no un JSON) sin leer más de
+ * `maxBytes`. Respeta el `Content-Length` declarado y, como puede faltar o
+ * mentir, corta el flujo apenas lo leído pasa el tope. Pasado el tope el
+ * endpoint responde 413 (`respuestaDeCuerpoDemasiadoGrande`).
+ *
+ * A diferencia de `cuerpoConTope`, un error al leer el flujo (la conexión se
+ * cortó a mitad de la subida) se propaga: el endpoint decide qué responder.
+ */
+export async function leerBytesConTope(request: Request, maxBytes: number): Promise<BytesLeidos> {
+  const bytes = await bytesConTope(request, maxBytes)
+  return bytes ? { excedido: false, bytes } : { excedido: true }
 }
 
 /**

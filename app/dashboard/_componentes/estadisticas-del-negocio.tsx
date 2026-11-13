@@ -4,8 +4,13 @@ import { CalendarDays, Users, DollarSign, type LucideIcon } from "lucide-react"
 import { formatearHora } from "@/lib/fechas"
 import { formatearMonto } from "@/lib/dinero"
 import type { ColorDeModulo } from "@/lib/modulos"
+import { vocabularioDe } from "@/lib/vocabulario"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { TarjetaEstadistica } from "./tarjeta-estadistica"
 import { puedeVerIngresos, type EstadisticasDelPanel } from "../_datos"
+import { frasesDelInicio } from "../_frases"
+
+type FrasesDeLasEstadisticas = ReturnType<typeof frasesDelInicio>["estadisticas"]
 
 interface Tarjeta {
   titulo: string
@@ -21,22 +26,28 @@ interface Tarjeta {
  * verdadero que decir: una línea vaga es la misma mentira que un `+0%`, con
  * más palabras.
  */
-function procedenciaDeCitas(estadisticas: EstadisticasDelPanel): string | undefined {
+function procedenciaDeCitas(estadisticas: EstadisticasDelPanel, frases: FrasesDeLasEstadisticas): string | undefined {
   if (estadisticas.citasHoy > 0) return undefined
-  if (!estadisticas.proximaCita) return "Ninguna agendada todavía."
+  if (!estadisticas.proximaCita) return frases.ningunaAgendada
 
+  // El día y la hora en la zona del negocio, la misma con la que el servidor decidió qué es "hoy".
+  const { zona } = estadisticas
   const cuando = new Date(estadisticas.proximaCita.startTime)
-  const dia = cuando.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
-  return `La próxima es el ${dia} a las ${formatearHora(estadisticas.proximaCita.startTime)}.`
+  const dia = cuando.toLocaleDateString("es-CL", {
+    ...(zona && { timeZone: zona }),
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  })
+  return frases.proximaCita(dia, formatearHora(estadisticas.proximaCita.startTime, zona))
 }
 
-function procedenciaDeClientes(estadisticas: EstadisticasDelPanel): string | undefined {
+function procedenciaDeClientes(estadisticas: EstadisticasDelPanel, frases: FrasesDeLasEstadisticas): string | undefined {
   const { clientesNuevosMes, totalClientes } = estadisticas
 
-  if (totalClientes === 0) return "Se suman solos cuando alguien reserva."
-  if (clientesNuevosMes === 0) return "Ninguno nuevo este mes."
+  if (totalClientes === 0) return frases.sinClientes
 
-  return clientesNuevosMes === 1 ? "1 nuevo este mes." : `${clientesNuevosMes} nuevos este mes.`
+  return frases.clientesNuevos(clientesNuevosMes)
 }
 
 /**
@@ -44,9 +55,11 @@ function procedenciaDeClientes(estadisticas: EstadisticasDelPanel): string | und
  * completada en la agenda sin pasar por el cobro no suma, así que la línea
  * habla de atenciones cobradas y no de citas.
  */
-function procedenciaDeIngresos(estadisticas: EstadisticasDelPanel): string | undefined {
+function procedenciaDeIngresos(estadisticas: EstadisticasDelPanel, frases: FrasesDeLasEstadisticas): string | undefined {
   const cobradas = estadisticas.atencionesCobradasMes ?? 0
-  if (cobradas === 0) return "Se suma al cobrar en el tablero. Todavía nada este mes."
+  // "en el tablero", o "en la sala de espera" en una clínica dental: el artículo concuerda con la palabra.
+  const dondeSeCobra = frases.dondeSeCobra
+  if (cobradas === 0) return `Se suma al cobrar en ${dondeSeCobra}. Todavía nada este mes.`
 
   const base = cobradas === 1 ? "1 atención cobrada" : `${cobradas} atenciones cobradas`
   const tendencia = estadisticas.tendencias.ingresos
@@ -56,28 +69,36 @@ function procedenciaDeIngresos(estadisticas: EstadisticasDelPanel): string | und
   return `${base} este mes · ${signo}${Math.abs(tendencia)}% vs el mes pasado.`
 }
 
-/** Mientras cargan, las tres tarjetas con un guion: nunca un cero que no es cierto. */
-const TARJETAS_CARGANDO: Tarjeta[] = [
-  { titulo: "Citas hoy", valor: "—", icono: CalendarDays, color: "azul" },
-  { titulo: "Clientes activos", valor: "—", icono: Users, color: "lila" },
-  { titulo: "Ingresos del mes", valor: "—", icono: DollarSign, color: "lima" },
-]
+/*
+ * Los títulos salen de las palabras del rubro: "Total de clientes" o "Total de
+ * pacientes" (la cifra es el total del negocio, no los que vinieron hace poco:
+ * decía "activos" y no lo eran), y "Citas hoy" u "Horas agendadas hoy".
+ */
 
-function tarjetasDe(estadisticas: EstadisticasDelPanel): Tarjeta[] {
+/** Mientras cargan, las tres tarjetas con un guion: nunca un cero que no es cierto. */
+function tarjetasCargando(frases: FrasesDeLasEstadisticas): Tarjeta[] {
+  return [
+    { titulo: frases.citasHoy, valor: "—", icono: CalendarDays, color: "azul" },
+    { titulo: frases.totalDeClientes, valor: "—", icono: Users, color: "lila" },
+    { titulo: "Ingresos del mes", valor: "—", icono: DollarSign, color: "lima" },
+  ]
+}
+
+function tarjetasDe(estadisticas: EstadisticasDelPanel, frases: FrasesDeLasEstadisticas): Tarjeta[] {
   return [
     {
-      titulo: "Citas hoy",
+      titulo: frases.citasHoy,
       valor: estadisticas.citasHoy,
       icono: CalendarDays,
       color: "azul",
-      procedencia: procedenciaDeCitas(estadisticas),
+      procedencia: procedenciaDeCitas(estadisticas, frases),
     },
     {
-      titulo: "Clientes activos",
+      titulo: frases.totalDeClientes,
       valor: estadisticas.totalClientes,
       icono: Users,
       color: "lila",
-      procedencia: procedenciaDeClientes(estadisticas),
+      procedencia: procedenciaDeClientes(estadisticas, frases),
     },
     ...(puedeVerIngresos(estadisticas)
       ? [
@@ -86,7 +107,7 @@ function tarjetasDe(estadisticas: EstadisticasDelPanel): Tarjeta[] {
             valor: formatearMonto(estadisticas.ingresosMes ?? 0),
             icono: DollarSign,
             color: "lima" as const,
-            procedencia: procedenciaDeIngresos(estadisticas),
+            procedencia: procedenciaDeIngresos(estadisticas, frases),
           },
         ]
       : []),
@@ -100,7 +121,8 @@ interface PropsDeEstadisticasDelNegocio {
 
 /** Las tarjetas de arriba del panel: citas de hoy, clientes e ingresos del mes. */
 export function EstadisticasDelNegocio({ estadisticas }: PropsDeEstadisticasDelNegocio) {
-  const tarjetas = estadisticas ? tarjetasDe(estadisticas) : TARJETAS_CARGANDO
+  const frases = frasesDelInicio(vocabularioDe(useRubroDelPanel()).palabras).estadisticas
+  const tarjetas = estadisticas ? tarjetasDe(estadisticas, frases) : tarjetasCargando(frases)
 
   return (
     <div aria-busy={!estadisticas || undefined} className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

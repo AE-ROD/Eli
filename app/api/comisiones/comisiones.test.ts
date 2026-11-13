@@ -236,7 +236,8 @@ describe("PUT /api/comisiones/miembros/[id]", () => {
 
   it("si la auditoría falla, el % no queda cambiado", async () => {
     base.prisma.commissionChange.create.mockRejectedValueOnce(new Error("se cayó"))
-    await expect(fijarMiembro(sesiones.dueña, "m-pedro", { porcentaje: 45 })).rejects.toThrow("se cayó")
+    // Responde 500 (con su JSON, no una excepción suelta) y la transacción se deshace.
+    expect((await fijarMiembro(sesiones.dueña, "m-pedro", { porcentaje: 45 })).status).toBe(500)
     expect(base.buscar("businessMember", { id: "m-pedro" })[0].commissionPercent).toBe(40)
   })
 

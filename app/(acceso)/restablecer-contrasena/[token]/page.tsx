@@ -41,7 +41,8 @@ export default function PaginaRestablecerContrasena() {
       return
     }
 
-    router.push("/iniciar-sesion")
+    // Iniciar sesión dice que salió bien: antes se llegaba sin ningún aviso.
+    router.push("/iniciar-sesion?aviso=ContrasenaCambiada")
   }
 
   // Lo que se valida acá va debajo de su campo; lo que responde el servidor, arriba del botón.

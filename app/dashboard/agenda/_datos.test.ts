@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
-import { aQuienBloquea, asignarProfesional, citaPorConfirmar, crearBloqueo, crearCita, destacaSinProfesional, hayProfesionales, moverCita, nombreDelProfesional, opcionesDeProfesional, precioDeLaCita, quienCancelo, serviciosParaElProfesional, idsDeServiciosElegidos, quitarBloqueo, reactivarCita, type Bloqueo, type DatosDeNuevaCita } from "./_datos"
+import { vocabularioDe } from "@/lib/vocabulario"
+import { aQuienBloquea, asignarProfesional, cambiarEstadoDeCita, citaPorConfirmar, conEstadoNuevo, precioDeLosServicios, crearBloqueo, crearCita, destacaSinProfesional, hayProfesionales, moverCita, nombreDelProfesional, opcionesDeProfesional, precioDeLaCita, quienCancelo, serviciosParaElProfesional, idsDeServiciosElegidos, quitarBloqueo, reactivarCita, leerCatalogoDeLaCita, leerCitas, buscarClientes, leerClienteParaLaCita, llegadaALaAgenda, type Bloqueo, type Cita, type DatosDeNuevaCita } from "./_datos"
 
 /** El cuerpo JSON con que se llamó a `fetch`. */
 const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
@@ -102,6 +103,25 @@ describe("crearCita", () => {
     simularRespuesta(json({ id: "c1" }, 201))
 
     expect(await crearCita(CITA, ZONA)).toEqual({ tipo: "guardada" })
+  })
+
+  it("con varias sedes manda la sede elegida; sin ellas, la clave no va y la cita se crea como siempre (etapa 9)", async () => {
+    const conSede = simularRespuesta(json({ id: "c1" }, 201))
+    await crearCita({ ...CITA, sedeId: "sede-centro" }, ZONA)
+    expect(cuerpoEnviado(conSede).sedeId).toBe("sede-centro")
+
+    const sinSedes = simularRespuesta(json({ id: "c1" }, 201))
+    await crearCita(CITA, ZONA)
+    expect(cuerpoEnviado(sinSedes)).not.toHaveProperty("sedeId")
+  })
+
+  it("una sede todavía sin elegir se manda como null: el servidor responde 400 y dice cuál falta", async () => {
+    const fetchFalso = simularRespuesta(json({ error: "Elige la sede donde se atiende" }, 400))
+
+    const resultado = await crearCita({ ...CITA, sedeId: "" }, ZONA)
+
+    expect(cuerpoEnviado(fetchFalso).sedeId).toBeNull()
+    expect(resultado).toEqual({ tipo: "error", error: "Elige la sede donde se atiende" })
   })
 
   it("un 409 con advertencias las devuelve para preguntar, sin dar la cita por creada", async () => {
@@ -333,6 +353,8 @@ describe("nombreDeCliente y buscarClientes: nombre y apellido (clientes viejos d
     expect(nombreDeCliente(conApellido)).toBe("Lucía Pérez")
     expect(nombreDeCliente(sinApellido)).toBe("Lucía Pérez")
     expect(nombreDeCliente({ customer: null } as unknown as Cita)).toBe("Sin cliente")
+    // Con la palabra del rubro: en una clínica dental.
+    expect(nombreDeCliente({ customer: null } as unknown as Cita, "paciente")).toBe("Sin paciente")
   })
 
   it("el buscador de \"Nueva cita\" muestra el nombre completo", async () => {
@@ -359,5 +381,159 @@ describe("catálogo de la cita nueva (#159)", () => {
   it("los ids elegidos, en orden; vacío es ninguno", () => {
     expect(idsDeServiciosElegidos("s-color,s-corte")).toEqual(["s-color", "s-corte"])
     expect(idsDeServiciosElegidos("")).toEqual([])
+  })
+})
+
+describe("precioDeLosServicios: el precio que se precarga al elegir del catálogo", () => {
+  it("suma en centavos: sin el ruido del punto flotante", () => {
+    // Con `+`, 0,1 + 0,2 era 0,30000000000000004.
+    expect(precioDeLosServicios([{ price: 0.1 }, { price: 0.2 }])).toBe("0,30")
+    expect(precioDeLosServicios([{ price: 1.15 }, { price: 2.3 }])).toBe("3,45")
+  })
+
+  it("los enteros van sin decimales, y lo escrito lo lee leerMonto igual", () => {
+    expect(precioDeLosServicios([{ price: 8000 }, { price: 12500 }])).toBe("20500")
+    expect(precioDeLaCita(precioDeLosServicios([{ price: 8000.5 }, { price: 0.25 }]))).toEqual({ ok: true, datos: 8000.75 })
+  })
+
+  it("los que no tienen precio no suman; si ninguno tiene, queda vacío", () => {
+    expect(precioDeLosServicios([{ price: 8000 }, { price: null }])).toBe("8000")
+    expect(precioDeLosServicios([{ price: null }])).toBe("")
+    expect(precioDeLosServicios([])).toBe("")
+  })
+})
+
+describe("cancelar desde el detalle: quién y cuándo, sin recargar", () => {
+  const cita: Cita = {
+    id: "c1",
+    title: "Corte",
+    startTime: "2026-11-10T13:00:00.000Z",
+    endTime: "2026-11-10T14:00:00.000Z",
+    status: "confirmada",
+    notes: null,
+    price: null,
+    customerId: "cl1",
+    customer: { id: "cl1", name: "Ana", email: null, phone: null },
+    conAtencion: false,
+  }
+
+  it("cambiarEstadoDeCita devuelve la cita como quedó en el servidor", async () => {
+    simularRespuesta(json({ ...cita, status: "cancelada", canceladaPor: "negocio", canceladaEn: "2026-11-10T12:00:00.000Z" }))
+
+    const resultado = await cambiarEstadoDeCita("c1", "cancelada")
+
+    expect(resultado.ok && resultado.datos).toMatchObject({ status: "cancelada", canceladaPor: "negocio" })
+  })
+
+  it("conEstadoNuevo trae el estado y la cancelación, y deja lo demás de la lista", () => {
+    const nueva = conEstadoNuevo(cita, { status: "cancelada", canceladaPor: "negocio", canceladaEn: "2026-11-10T12:00:00.000Z" })
+
+    expect(nueva).toMatchObject({ status: "cancelada", canceladaPor: "negocio", canceladaEn: "2026-11-10T12:00:00.000Z", conAtencion: false })
+    expect(quienCancelo(nueva)).toBe("El negocio")
+  })
+
+  it("sin datos de cancelación en la respuesta, no queda la de antes", () => {
+    const vieja = { ...cita, status: "cancelada", canceladaPor: "cliente", canceladaEn: "2026-11-01T12:00:00.000Z" }
+    expect(conEstadoNuevo(vieja, { status: "confirmada" })).toMatchObject({ canceladaPor: null, canceladaEn: null })
+  })
+})
+
+describe("llegar a la agenda con ?nueva=1&cliente=<id>", () => {
+  it("lee los dos y deja la consulta sin ellos", () => {
+    expect(llegadaALaAgenda("?nueva=1&cliente=c-1&vista=dia")).toEqual({ nueva: true, clienteId: "c-1", resto: "vista=dia" })
+    expect(llegadaALaAgenda("?nueva=1")).toEqual({ nueva: true, clienteId: null, resto: "" })
+  })
+
+  it("sin nueva=1 no abre nada, aunque venga un cliente", () => {
+    expect(llegadaALaAgenda("?cliente=c-1")).toMatchObject({ nueva: false, clienteId: null })
+    expect(llegadaALaAgenda("")).toMatchObject({ nueva: false, clienteId: null })
+  })
+
+  it("con 200, el cliente queda elegido con su nombre completo, pedido a /api/clientes/<id>", async () => {
+    const fetchFalso = simularRespuesta(json({ id: "c 1", name: "Ana", lastName: "Pérez", email: null, appointments: [] }))
+    expect(await leerClienteParaLaCita("c 1")).toEqual({ id: "c 1", nombre: "Ana Pérez", email: "" })
+    expect(fetchFalso.mock.calls[0][0]).toBe("/api/clientes/c%201")
+  })
+
+  it("con 404 (otro negocio, eliminado o inexistente) se ignora: sin cliente", async () => {
+    simularRespuesta(json({ error: "Cliente no encontrado" }, 404))
+    expect(await leerClienteParaLaCita("ajeno")).toBeNull()
+  })
+
+  it("sin conexión, también sin cliente", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")))
+    expect(await leerClienteParaLaCita("c-1")).toBeNull()
+  })
+})
+
+describe("con las palabras del rubro", () => {
+  const salon = vocabularioDe("salon").palabras
+  const clinica = vocabularioDe("odontologia").palabras
+  const barberia = vocabularioDe("barberia").palabras
+
+  it("quién canceló: el cliente o el negocio, con su artículo", () => {
+    const cancelada = (canceladaPor: string) => ({ status: "cancelada", canceladaPor })
+    expect(quienCancelo(cancelada("cliente"), salon)).toBe("El cliente")
+    expect(quienCancelo(cancelada("negocio"), salon)).toBe("El salón")
+    expect(quienCancelo(cancelada("negocio"), barberia)).toBe("La barbería")
+    expect(quienCancelo(cancelada("cliente"), clinica)).toBe("El paciente")
+    expect(quienCancelo(cancelada("negocio"), clinica)).toBe("La clínica")
+    expect(quienCancelo({ status: "confirmada", canceladaPor: "cliente" }, clinica)).toBeNull()
+  })
+
+  it("de quién es el bloqueo: todo el lugar, o el profesional con la palabra del rubro", () => {
+    const base: Bloqueo = { id: "b", memberId: null, startTime: "", endTime: "", motivo: null, member: null }
+    expect(aQuienBloquea(base, salon)).toBe("Todo el salón")
+    expect(aQuienBloquea(base, barberia)).toBe("Toda la barbería")
+    expect(aQuienBloquea(base, clinica)).toBe("Toda la clínica")
+    expect(aQuienBloquea({ ...base, memberId: "m", member: { user: { name: " " } } }, salon)).toBe("Estilista")
+    expect(aQuienBloquea({ ...base, memberId: "m", member: { user: { name: null } } }, clinica)).toBe("Odontólogo")
+    expect(aQuienBloquea({ ...base, memberId: "m", member: { user: { name: "Carla" } } }, salon)).toBe("Carla")
+  })
+
+  it("el profesional sin nombre se llama como el rubro lo llama", () => {
+    const sinNombre = { memberId: "m1", member: { id: "m1", user: { name: "" } } }
+    expect(nombreDelProfesional(sinNombre, "Estilista")).toBe("Estilista")
+    expect(nombreDelProfesional(sinNombre)).toBe("Profesional")
+    expect(nombreDelProfesional({ memberId: null, member: null }, "Estilista")).toBeNull()
+    expect(opcionesDeProfesional([], { memberId: "m1", member: null }, "Estilista")).toEqual([{ valor: "m1", texto: "Estilista" }])
+  })
+
+  it("los mensajes de error dicen qué no se pudo hacer con las palabras del rubro", async () => {
+    const falla = () => simularRespuesta(json({}, 500))
+
+    falla()
+    expect(await leerCitas(new Date(2026, 9, 20), "dia", salon)).toEqual({ ok: false, error: "No se pudieron cargar las horas" })
+    falla()
+    expect(await leerCitas(new Date(2026, 9, 20), "dia")).toEqual({ ok: false, error: "No se pudieron cargar las citas" })
+    falla()
+    expect(await crearCita(CITA, ZONA, { confirmar: false }, salon)).toEqual({ tipo: "error", error: "No se pudo crear la hora" })
+    falla()
+    expect(await crearCita(CITA, ZONA)).toEqual({ tipo: "error", error: "No se pudo crear la cita" })
+    falla()
+    expect(
+      await moverCita("c1", { fecha: "2026-10-20", horaInicio: "10:00", horaFin: "11:00", memberId: "" }, ZONA, { confirmar: false, asignaProfesional: false }, salon)
+    ).toEqual({ tipo: "error", error: "No se pudo mover la hora" })
+    falla()
+    expect(await asignarProfesional("c1", "m1", { confirmar: false }, salon)).toEqual({ tipo: "error", error: "No se pudo asignar la estilista" })
+    falla()
+    expect(await asignarProfesional("c1", "m1", { confirmar: false }, clinica)).toEqual({ tipo: "error", error: "No se pudo asignar el odontólogo" })
+    falla()
+    expect(await reactivarCita("c1", { confirmar: false }, clinica)).toEqual({ tipo: "error", error: "No se pudo reactivar la cita" })
+    falla()
+    expect(await reactivarCita("c1", { confirmar: false }, salon)).toEqual({ tipo: "error", error: "No se pudo reactivar la hora" })
+    falla()
+    expect(await leerCatalogoDeLaCita(clinica)).toEqual({ ok: false, error: "No se pudo cargar el catálogo de prestaciones" })
+    falla()
+    expect(await leerCatalogoDeLaCita()).toEqual({ ok: false, error: "No se pudo cargar el catálogo de servicios" })
+    falla()
+    expect(await buscarClientes("ana", clinica)).toEqual({ ok: false, error: "No se pudieron buscar los pacientes" })
+    falla()
+    expect(await buscarClientes("ana")).toEqual({ ok: false, error: "No se pudieron buscar los clientes" })
+  })
+
+  it("el mensaje que manda el servidor sigue ganando sobre el del rubro", async () => {
+    simularRespuesta(json({ error: "Ese horario ya pasó" }, 400))
+    expect(await crearCita(CITA, ZONA, { confirmar: false }, salon)).toEqual({ tipo: "error", error: "Ese horario ya pasó" })
   })
 })

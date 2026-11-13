@@ -5,34 +5,47 @@ import { MailCheck } from "lucide-react"
 import { Insignia } from "@/components/comunes/insignia"
 import { Interruptor } from "@/components/comunes/interruptor"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
+import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
 import { cambiarMensajesAClientes, type EstadoDeMensajes, type InterruptoresDeMensajes } from "../_datos"
+import { frasesDeConfiguracion } from "../_frases"
 
-/** Cada interruptor con lo que hace, en una línea, como se lo explicaríamos a la dueña. */
-const MENSAJES: { campo: keyof InterruptoresDeMensajes; etiqueta: string; descripcion: string }[] = [
-  {
-    campo: "listaDeEsperaActiva",
-    etiqueta: "Lista de espera",
-    descripcion: "Si un día no tiene horas, tus clientes se anotan y les avisamos por correo cuando se libere una.",
-  },
-  {
-    campo: "avisoDeVueltaActivo",
-    etiqueta: "Te toca volver",
-    descripcion: "Un correo cuando a un cliente ya le toca volver, según cada cuánto viene o la frecuencia de su servicio.",
-  },
-  {
-    campo: "pideResenas",
-    etiqueta: "Pedir reseña en Google",
-    descripcion: "El día después de su visita, un correo con tu enlace de reseñas de Google. A todos por igual.",
-  },
-]
+/**
+ * Cada interruptor con lo que hace, en una línea, como se lo explicaríamos a
+ * la dueña. Con las palabras del rubro: "pacientes" en una clínica dental, y
+ * el aviso de vuelta se llama "Te toca volver" o, en una clínica, "Control"
+ * (`palabras.etiquetas.seguimiento`). Sólo cambia el nombre: hace lo mismo.
+ */
+const mensajesPara = (
+  palabras: PalabrasDelRubro
+): { campo: keyof InterruptoresDeMensajes; etiqueta: string; descripcion: string }[] => {
+  const { mensajes } = frasesDeConfiguracion(palabras)
+  return [
+    {
+      campo: "listaDeEsperaActiva",
+      etiqueta: "Lista de espera",
+      descripcion: mensajes.listaDeEspera,
+    },
+    {
+      campo: "avisoDeVueltaActivo",
+      etiqueta: mensajes.avisoDeVuelta.etiqueta,
+      descripcion: mensajes.avisoDeVuelta.descripcion,
+    },
+    {
+      campo: "pideResenas",
+      etiqueta: "Pedir reseña en Google",
+      descripcion: "El día después de su visita, un correo con tu enlace de reseñas de Google. A todos por igual.",
+    },
+  ]
+}
 
-/** Los tipos de envío (`TIPOS_DE_ENVIO`) como se leen en la tarjeta. */
-const TIPOS: { tipo: string; nombre: string }[] = [
+/** Los tipos de envío (`TIPOS_DE_ENVIO`) como se leen en la tarjeta, con el nombre del aviso de vuelta del rubro. */
+const tiposPara = (palabras: PalabrasDelRubro): { tipo: string; nombre: string }[] => [
   { tipo: "lista-de-espera", nombre: "Avisos de lista de espera" },
-  { tipo: "te-toca", nombre: "Te toca volver" },
+  { tipo: "te-toca", nombre: palabras.etiquetas.seguimiento },
   { tipo: "resena", nombre: "Pedidos de reseña" },
   { tipo: "contacto-manual", nombre: "Escritos por ti a quienes se están yendo" },
 ]
@@ -56,6 +69,10 @@ const numero = (valor: number | undefined) => new Intl.NumberFormat("es-CL").for
  */
 export function SeccionMensajesAClientes({ inicial }: { inicial: EstadoDeMensajes }) {
   const idDelTitulo = useId()
+  const palabras = vocabularioDe(useRubroDelPanel()).palabras
+  const { mensajes: frases } = frasesDeConfiguracion(palabras)
+  const mensajes = mensajesPara(palabras)
+  const tipos = tiposPara(palabras)
   const idDelMes = useId()
   const [interruptores, setInterruptores] = useState(inicial.interruptores)
   const [guardando, setGuardando] = useState<keyof InterruptoresDeMensajes | null>(null)
@@ -76,7 +93,7 @@ export function SeccionMensajesAClientes({ inicial }: { inicial: EstadoDeMensaje
       return setError(resultado.error)
     }
     setInterruptores(resultado.datos.interruptores)
-    const etiqueta = MENSAJES.find((mensaje) => mensaje.campo === campo)?.etiqueta ?? ""
+    const etiqueta = mensajes.find((mensaje) => mensaje.campo === campo)?.etiqueta ?? ""
     setAnuncio(`${etiqueta}: ${activo ? "encendido" : "apagado"}`)
   }
 
@@ -86,15 +103,14 @@ export function SeccionMensajesAClientes({ inicial }: { inicial: EstadoDeMensaje
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
-        titulo="Mensajes a clientes"
+        nivel={3}
+        titulo={frases.titulo}
         subtitulo="Correos que Eli manda por ti, sin que tengas que acordarte"
         icono={{ figura: MailCheck }}
       />
 
       <Aviso tono="info" className="mt-5">
-        &ldquo;Te toca volver&rdquo; y &ldquo;Pedir reseña&rdquo; sólo les llegan a quienes aceptaron recibir avisos y
-        novedades de tu negocio por correo, y cada correo trae cómo darse de baja. La lista de espera le llega a quien se
-        anotó.
+        {frases.soloConConsentimiento}
       </Aviso>
       {!inicial.puedeCambiar && (
         <Aviso tono="info" className="mt-3">
@@ -107,7 +123,7 @@ export function SeccionMensajesAClientes({ inicial }: { inicial: EstadoDeMensaje
       </p>
 
       <ul className="mt-5 divide-y divide-borde">
-        {MENSAJES.map((mensaje) => {
+        {mensajes.map((mensaje) => {
           const descripcion =
             mensaje.campo === "pideResenas" && !inicial.tieneEnlaceDeResenas
               ? `${mensaje.descripcion} Antes, agrega tu enlace de reseñas en "Tu página pública".`
@@ -138,9 +154,9 @@ export function SeccionMensajesAClientes({ inicial }: { inicial: EstadoDeMensaje
       </ul>
 
       <section aria-labelledby={idDelMes} className="mt-6 rounded-[20px] bg-superficie p-4 squircle sm:p-5">
-        <h3 id={idDelMes} className="text-sm font-medium text-navy">
+        <h4 id={idDelMes} className="text-sm font-medium text-navy">
           Mensajes de este mes
-        </h3>
+        </h4>
         <p className="mt-1 text-[13px] text-texto-2">Lo enviado en {nombreDelMes(mes.mes)}, contando hasta hoy.</p>
 
         <p className="mt-3 font-serif text-3xl font-medium text-navy">
@@ -149,7 +165,7 @@ export function SeccionMensajesAClientes({ inicial }: { inicial: EstadoDeMensaje
         </p>
 
         <dl className="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-          {TIPOS.map(({ tipo, nombre }) => (
+          {tipos.map(({ tipo, nombre }) => (
             <div key={tipo} className="flex items-baseline justify-between gap-3">
               <dt className="min-w-0 text-texto-2">{nombre}</dt>
               <dd className="shrink-0 font-medium text-navy tabular-nums">{numero(mes.porTipo[tipo])}</dd>

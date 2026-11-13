@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useId, type ReactNode } from "react"
+import { useState, useEffect, useId, useRef, type ReactNode } from "react"
 import { ChevronLeft, ChevronRight, Clock } from "lucide-react"
 import { BotonIcono } from "@/components/comunes/boton-icono"
 import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
@@ -8,7 +8,7 @@ import { Esqueleto } from "@/components/comunes/esqueleto"
 import { formatearMonto } from "@/lib/dinero"
 import { comoTexto, deTexto } from "@/lib/fechas"
 import { rebajaDeLaHora, type PrecioDeLaHora } from "@/lib/hora-valle"
-import { esDiaReservable } from "@/lib/reserva-publica"
+import { esDiaReservable, esHoyEn } from "@/lib/reserva-publica"
 import { fechaYMinutosEn } from "@/lib/zona-horaria"
 import type { Resultado } from "@/lib/peticiones"
 import { cn } from "@/lib/utils"
@@ -82,6 +82,13 @@ interface PropsDeSelectorFechaHora {
    * que no hay horas (reagendar).
    */
   sinHoras?: (fecha: string) => ReactNode
+  /**
+   * Sólo se puede elegir hoy (en el reloj del negocio): la urgencia de una
+   * clínica dental. El servidor tampoco ofrece ni acepta otro día.
+   */
+  soloHoy?: boolean
+  /** Lo que se dice cuando el día no tiene horas libres, en vez del texto de siempre (la urgencia). */
+  textoSinHoras?: string
 }
 
 export function SelectorFechaHora({
@@ -94,6 +101,8 @@ export function SelectorFechaHora({
   onFecha,
   onHora,
   sinHoras,
+  soloHoy = false,
+  textoSinHoras,
 }: PropsDeSelectorFechaHora) {
   // "Hoy" es el del negocio, no el del navegador: quien reserva desde otra
   // zona ve los mismos días que `confirmar` acepta. Como medianoche local,
@@ -114,15 +123,32 @@ export function SelectorFechaHora({
   const [aviso, setAviso] = useState("")
   const idDelAviso = useId()
 
+  /*
+   * La primera carga de este calendario puede traer una hora ya elegida: se
+   * volvió de "Tus datos" (o del paso 1 sin cambiar nada). Se conserva si
+   * sigue libre, con su precio de ahora; si se la tomaron, se suelta y se
+   * dice. Después, otro día, servicio o profesional es otra elección: la
+   * hora se suelta al empezar a cargar, como siempre.
+   */
+  const horaDeAntes = useRef(horaSeleccionada)
+  // Lo último que se pidió (día y clave). Se compara la clave y no "si ya
+  // cargó": en desarrollo React corre el efecto dos veces al montar.
+  const ultimaCarga = useRef<string | null>(null)
+  const [avisoDeLaHora, setAvisoDeLaHora] = useState("")
+
   useEffect(() => {
     if (!fechaSeleccionada) return
+    const carga = `${fechaSeleccionada}|${claveDeHoras}`
+    const horaAConservar = ultimaCarga.current === null || ultimaCarga.current === carga ? horaDeAntes.current : ""
+    ultimaCarga.current = carga
     // eslint-disable-next-line react-hooks/set-state-in-effect -- arranca la carga de horas cuando cambia la fecha, el servicio o el profesional
     setCargandoHoras(true)
     setHorasLibres([])
     setPrecios(new Map())
     setSinListaDeEspera(false)
     setAviso("")
-    onHora("", null)
+    setAvisoDeLaHora("")
+    if (!horaAConservar) onHora("", null)
     let vigente = true
     cargarHoras(fechaSeleccionada).then((resultado) => {
       // Si mientras tanto cambió el día o el profesional, esta respuesta ya no vale.
@@ -130,10 +156,21 @@ export function SelectorFechaHora({
       // Un pedido que falló no es un día sin horas libres: se dice qué pasó
       // en vez de mostrar "No hay horarios disponibles".
       if (resultado.ok) {
+        const preciosDelDia = new Map(resultado.datos.precios.map((precio) => [precio.hora, precio]))
         setHorasLibres(resultado.datos.horas)
-        setPrecios(new Map(resultado.datos.precios.map((precio) => [precio.hora, precio])))
+        setPrecios(preciosDelDia)
         setSinListaDeEspera(resultado.datos.sinListaDeEspera === true)
-      } else setAviso(resultado.error)
+        if (horaAConservar) {
+          if (resultado.datos.horas.includes(horaAConservar)) onHora(horaAConservar, preciosDelDia.get(horaAConservar) ?? null)
+          else {
+            onHora("", null)
+            setAvisoDeLaHora(`La hora de las ${horaAConservar} ya no está libre. Elige otra.`)
+          }
+        }
+      } else {
+        setAviso(resultado.error)
+        if (horaAConservar) onHora("", null)
+      }
       setCargandoHoras(false)
     })
     return () => {
@@ -199,7 +236,9 @@ export function SelectorFechaHora({
             // (Madrid, Tokio) daba el día anterior al que se tocó.
             const iso = comoTexto(fecha)
             // Ni días pasados ni más allá de la ventana de reserva: la regla de `confirmar`.
-            const disponible = esDelMes && esDiaReservable(iso, diasDisponibles, ahora, zona)
+            // Con `soloHoy` (urgencia), además sólo hoy.
+            const disponible =
+              esDelMes && esDiaReservable(iso, diasDisponibles, ahora, zona) && (!soloHoy || esHoyEn(iso, ahora, zona))
             const seleccionado = iso === fechaSeleccionada
             const esHoy = fecha.toDateString() === hoy.toDateString()
 
@@ -256,7 +295,8 @@ export function SelectorFechaHora({
             {estadoDeHoras === "sin-dia" && "Elige un día para ver los horarios libres."}
             {estadoDeHoras === "cargando" && "Cargando horarios…"}
             {estadoDeHoras === "sin-horas" &&
-              (ofrecerSinHoras ? "No hay horarios disponibles para este día." : "No hay horarios disponibles para este día. Prueba con otro.")}
+              (textoSinHoras ??
+                (ofrecerSinHoras ? "No hay horarios disponibles para este día." : "No hay horarios disponibles para este día. Prueba con otro."))}
             {estadoDeHoras === "con-horas" &&
               `${horasLibres.length} ${horasLibres.length === 1 ? "horario libre" : "horarios libres"}.`}
           </p>
@@ -276,6 +316,11 @@ export function SelectorFechaHora({
           )}
 
           {estadoDeHoras === "sin-horas" && ofrecerSinHoras && <div className="mt-4">{ofrecerSinHoras(fechaSeleccionada)}</div>}
+
+          {/* Siempre en la página, para que se anuncie al aparecer. */}
+          <p role="status" className={cn("text-sm font-medium text-navy", avisoDeLaHora && "mb-3")}>
+            {estadoDeHoras === "cargando" ? "" : avisoDeLaHora}
+          </p>
 
           {estadoDeHoras === "con-horas" && (
             <div role="group" aria-label="Horarios libres" className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-3">

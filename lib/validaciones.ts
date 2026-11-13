@@ -1,7 +1,13 @@
 import { z } from "zod"
 import { IDS_DE_RUBROS } from "@/lib/rubros"
+import { personasAlCrearElNegocio, PLANES, type PlanId } from "@/lib/planes"
 import { telefonoChileno } from "@/lib/campos-del-panel"
 import { LARGO_MAXIMO_NOMBRE_EN_FILA } from "@/lib/fila-virtual"
+import {
+  LARGO_MAXIMO_DEL_NOMBRE_DEL_NEGOCIO,
+  LARGO_MINIMO_DEL_NOMBRE_DEL_NEGOCIO,
+  MENSAJES_DEL_NOMBRE_DEL_NEGOCIO,
+} from "@/lib/nombre-del-negocio"
 import { MAX_SERVICIOS_POR_RESERVA } from "@/lib/servicios-de-la-reserva"
 
 /**
@@ -12,6 +18,12 @@ import { MAX_SERVICIOS_POR_RESERVA } from "@/lib/servicios-de-la-reserva"
  * uno nuevo con un rubro que el catálogo no conoce.
  */
 export const tipoNegocioSchema = z.enum(IDS_DE_RUBROS)
+
+/**
+ * El plan que se elige al crear la cuenta (`lib/planes.ts`): sólo los ids de la
+ * lista. Cualquier otra cosa, o nada, es "Elige un plan".
+ */
+export const planSchema = z.enum(PLANES, { errorMap: () => ({ message: "Elige un plan" }) })
 
 /**
  * Largos máximos de lo que llega de afuera (M10/F-06): sin tope, la página
@@ -82,17 +94,66 @@ export const contrasenaNuevaSchema = z
     "La contraseña es demasiado larga: hasta 72 caracteres (menos si usa tildes o símbolos)"
   )
 
-export const registroSchema = z.object({
-  nombre: nombreSchema("nombre"),
-  email: emailDeCuentaSchema,
-  contrasena: contrasenaNuevaSchema,
-  nombreNegocio: z
-    .string({ required_error: "Falta el nombre del negocio", invalid_type_error: "El nombre del negocio no es válido" })
-    .trim()
-    .min(2, "El nombre del negocio tiene que tener al menos 2 caracteres")
-    .max(80, "El nombre del negocio puede tener hasta 80 caracteres"),
-  tipoNegocio: tipoNegocioSchema,
-})
+/**
+ * El nombre de un negocio: sin espacios en las puntas, de 2 a 80 caracteres.
+ * Lo usan el registro y el endpoint que lo edita
+ * (`PUT /api/configuracion/nombre`); los números y los mensajes son los de
+ * `lib/nombre-del-negocio.ts`, que también lee la pantalla.
+ */
+export const nombreDelNegocioSchema = z
+  .string({
+    required_error: MENSAJES_DEL_NOMBRE_DEL_NEGOCIO.falta,
+    invalid_type_error: MENSAJES_DEL_NOMBRE_DEL_NEGOCIO.noEsTexto,
+  })
+  .trim()
+  .min(LARGO_MINIMO_DEL_NOMBRE_DEL_NEGOCIO, MENSAJES_DEL_NOMBRE_DEL_NEGOCIO.muyCorto)
+  .max(LARGO_MAXIMO_DEL_NOMBRE_DEL_NEGOCIO, MENSAJES_DEL_NOMBRE_DEL_NEGOCIO.muyLargo)
+
+/**
+ * Cuántas personas trabajan en el negocio al crearlo (`Business.teamSize`),
+ * contando a quien se registra. Opcional: sin ella son una.
+ */
+const personasDelNegocioSchema = z
+  .number({ invalid_type_error: "La cantidad de personas no es válida" })
+  .int("La cantidad de personas no es válida")
+  .min(1, "La cantidad de personas tiene que ser al menos 1")
+  .max(500, "La cantidad de personas puede ser hasta 500")
+  .optional()
+
+/**
+ * Deja siempre `teamSize` según el plan (`personasAlCrearElNegocio`): en
+ * Independiente es una sola persona, la dueña (no se pregunta y lo que llegue
+ * se descarta); en Equipo, lo que se pidió o una.
+ */
+function conPersonasDelPlan<T extends { plan: PlanId; teamSize?: number }>(datos: T): Omit<T, "teamSize"> & { teamSize: number } {
+  return { ...datos, teamSize: personasAlCrearElNegocio(datos.plan, datos.teamSize) }
+}
+
+export const registroSchema = z
+  .object({
+    nombre: nombreSchema("nombre"),
+    email: emailDeCuentaSchema,
+    contrasena: contrasenaNuevaSchema,
+    nombreNegocio: nombreDelNegocioSchema,
+    tipoNegocio: tipoNegocioSchema,
+    plan: planSchema,
+    teamSize: personasDelNegocioSchema,
+  })
+  .transform(conPersonasDelPlan)
+
+/**
+ * Completar el perfil (quien entró con Google, o ya trabaja en otros negocios,
+ * y crea el suyo): el nombre y el rubro del negocio, el plan y, sólo con el plan
+ * Equipo, cuántas personas son. Sale siempre con `teamSize`: 1 en Independiente.
+ */
+export const completarPerfilSchema = z
+  .object({
+    nombreNegocio: nombreDelNegocioSchema,
+    tipoNegocio: tipoNegocioSchema,
+    plan: planSchema,
+    teamSize: personasDelNegocioSchema,
+  })
+  .transform(conPersonasDelPlan)
 
 /** Un id de servicio (`cuid()`, 25 caracteres): el tope corta un texto arbitrario antes de la base. */
 const servicioIdSchema = z
@@ -139,6 +200,10 @@ const camposDeReservaSchema = z.object({
     .boolean({ invalid_type_error: "El consentimiento de correos no es válido" })
     .optional(),
   comentarios: opcionalHasta("Los comentarios", 1000),
+  // "¿Es tu primera vez en la clínica?": sólo cuenta en una clínica dental,
+  // donde suma 15 minutos (`duracionDeLaReserva`). En otro rubro se ignora.
+  // La duración no se recibe nunca: la calcula `confirmar`.
+  primeraVez: z.boolean({ invalid_type_error: "La respuesta a si es tu primera vez no es válida" }).optional(),
   // Sin él, vacío o null: "cualquiera disponible" (lo asigna el servidor).
   profesionalId: z
     .string({ invalid_type_error: "El profesional no es válido" })
@@ -198,6 +263,12 @@ export const listaDeEsperaSchema = z
     email: correoPublicoSchema,
     telefono: camposDeReservaSchema.shape.telefono,
     whatsappConsentimiento: camposDeReservaSchema.shape.whatsappConsentimiento,
+    /**
+     * Clínica dental: la primera vez suma minutos (`duracionDeLaReserva`), y
+     * el día se revisa con esa duración, como lo ofreció la página. En otro
+     * rubro se ignora.
+     */
+    primeraVez: camposDeReservaSchema.shape.primeraVez,
   })
   .superRefine(revisarServicios)
   .transform(juntarServicios)

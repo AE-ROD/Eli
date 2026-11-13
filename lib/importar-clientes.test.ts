@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { aceptaWhatsapp, descartarExistentes, normalizarCabecera, prepararFilas, sugerirMapeo, type Mapeo } from "./importar-clientes"
+import { vocabularioDe } from "./vocabulario"
 
 describe("normalizarCabecera", () => {
   it.each([
@@ -35,6 +36,12 @@ describe("sugerirMapeo", () => {
       notas: 3,
       whatsapp: 4,
     })
+  })
+
+  it("reconoce la columna de los pacientes de una clínica dental", () => {
+    for (const titulo of ["Paciente", "Nombre paciente", "Nombre del paciente"]) {
+      expect(sugerirMapeo([titulo, "Teléfono"])).toEqual({ nombre: 0, telefono: 1 })
+    }
   })
 
   it("una columna \"WhatsApp\" a secas es el teléfono, no el consentimiento", () => {
@@ -169,6 +176,26 @@ describe("descartarExistentes", () => {
       { fila: 2, motivo: "Ya existe un cliente con ese teléfono" },
       { fila: 3, motivo: "Ya existe un cliente con ese correo" },
     ])
+  })
+
+  it("dice el motivo con la palabra del rubro y con su artículo", () => {
+    const motivos = (rubro: string | null) =>
+      descartarExistentes(
+        [candidato(2, "+56912345678", null), candidato(3, null, "ana@correo.cl")],
+        [
+          { phone: "+56912345678", email: null },
+          { phone: null, email: "ana@correo.cl" },
+        ],
+        vocabularioDe(rubro).palabras
+      ).duplicados.map((omitida) => omitida.motivo)
+    expect(motivos("odontologia")).toEqual(["Ya existe un paciente con ese teléfono", "Ya existe un paciente con ese correo"])
+    expect(motivos("salon")).toEqual(["Ya existe un cliente con ese teléfono", "Ya existe un cliente con ese correo"])
+    expect(motivos(null)).toEqual(["Ya existe un cliente con ese teléfono", "Ya existe un cliente con ese correo"])
+    // Con una palabra femenina, "una": el artículo sale del género, no del texto.
+    const clienta = { ...vocabularioDe(null).palabras, cliente: { singular: "clienta", plural: "clientas", genero: "f" as const } }
+    expect(descartarExistentes([candidato(2, "+56912345678", null)], [{ phone: "+56912345678", email: null }], clienta).duplicados[0].motivo).toBe(
+      "Ya existe una clienta con ese teléfono"
+    )
   })
 
   it("los clientes sin teléfono ni correo no descartan a nadie", () => {

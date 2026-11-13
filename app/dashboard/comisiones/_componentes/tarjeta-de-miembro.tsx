@@ -6,10 +6,12 @@ import { Boton } from "@/components/comunes/boton"
 import { Insignia } from "@/components/comunes/insignia"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Aviso } from "@/components/panel/aviso"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { nombreDelRol } from "@/lib/nombres-de-roles"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import {
   formatearPorcentaje,
   guardarExcepcion,
@@ -18,6 +20,7 @@ import {
   porcentajeParaEscribir,
   type MiembroConComision,
 } from "../_datos"
+import { frasesDeLasComisiones } from "../_frases"
 
 interface PropsDeTarjetaDeMiembro {
   miembro: MiembroConComision
@@ -33,6 +36,9 @@ interface PropsDeTarjetaDeMiembro {
  */
 export function TarjetaDeMiembro({ miembro, servicios, onCambio }: PropsDeTarjetaDeMiembro) {
   const idDelTitulo = useId()
+  // "Odontólogo" y "prestación" en una clínica dental; en los demás rubros, con sus palabras.
+  const rubro = useRubroDelPanel()
+  const frases = frasesDeLasComisiones(vocabularioDe(rubro).palabras).tarjeta
   const idDelCampo = useId()
   const idDelServicio = useId()
   const idDeLaExcepcion = useId()
@@ -76,10 +82,10 @@ export function TarjetaDeMiembro({ miembro, servicios, onCambio }: PropsDeTarjet
   const agregarExcepcion = async (evento: FormEvent) => {
     evento.preventDefault()
     setAviso("")
-    if (!servicioElegido) return setErrorDeExcepcion("Elige el servicio.")
+    if (!servicioElegido) return setErrorDeExcepcion(frases.eligeElServicio)
     const porcentaje = leerPorcentaje(textoDeExcepcion)
     if (!porcentaje.ok) return setErrorDeExcepcion(porcentaje.error)
-    if (porcentaje.valor === null) return setErrorDeExcepcion("Escribe el porcentaje para ese servicio.")
+    if (porcentaje.valor === null) return setErrorDeExcepcion(frases.escribeElPorcentaje)
     setErrorDeExcepcion("")
     setAgregando(true)
     const resultado = await guardarExcepcion(miembro.id, servicioElegido, porcentaje.valor)
@@ -106,16 +112,14 @@ export function TarjetaDeMiembro({ miembro, servicios, onCambio }: PropsDeTarjet
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo={miembro.nombre}
-        subtitulo={nombreDelRol(miembro.rol)}
+        subtitulo={nombreDelRol(miembro.rol, rubro)}
         icono={{ figura: Percent }}
         accion={sinConfigurar ? <Insignia tono="naranja">Sin configurar</Insignia> : undefined}
       />
 
       {miembro.pendientes > 0 && (
         <Aviso tono="atencion" className="mt-4">
-          {miembro.pendientes === 1
-            ? "1 servicio ya cobrado espera un porcentaje."
-            : `${miembro.pendientes} servicios ya cobrados esperan un porcentaje.`}{" "}
+          {frases.esperanUnPorcentaje(miembro.pendientes)}{" "}
           Se congelan al cerrar su liquidación con el % que tenga entonces.
         </Aviso>
       )}
@@ -156,12 +160,12 @@ export function TarjetaDeMiembro({ miembro, servicios, onCambio }: PropsDeTarjet
         </p>
       )}
       <p id={`${idDelCampo}-ayuda`} className="mt-2 text-sm text-texto-2">
-        Se aplica a todos sus servicios, salvo las excepciones de abajo. Vacío lo deja sin configurar (no es 0 %).
+        {frases.seAplicaATodos}
       </p>
 
-      <h3 className="mt-6 text-sm font-semibold">Excepciones por servicio</h3>
+      <h3 className="mt-6 text-sm font-semibold">{frases.excepcionesPor}</h3>
       {miembro.excepciones.length === 0 ? (
-        <p className="mt-2 text-sm text-texto-2">No tiene: en todos sus servicios rige su % por defecto.</p>
+        <p className="mt-2 text-sm text-texto-2">{frases.sinExcepciones}</p>
       ) : (
         <ul className="mt-2 divide-y divide-borde border-y border-borde">
           {miembro.excepciones.map((excepcion) => (
@@ -188,7 +192,7 @@ export function TarjetaDeMiembro({ miembro, servicios, onCambio }: PropsDeTarjet
         <form onSubmit={agregarExcepcion} className="mt-4 flex flex-wrap items-end gap-3" noValidate>
           <div className="min-w-0 flex-1 basis-48">
             <label htmlFor={idDelServicio} className={CLASES_DE_ETIQUETA}>
-              Servicio
+              {frases.etiquetaDelServicio}
             </label>
             <select
               id={idDelServicio}
@@ -199,7 +203,7 @@ export function TarjetaDeMiembro({ miembro, servicios, onCambio }: PropsDeTarjet
               }}
               className={cn(CAMPO, "mt-2")}
             >
-              <option value="">Elige un servicio</option>
+              <option value="">{frases.eligeUno}</option>
               {serviciosLibres.map((servicio) => (
                 <option key={servicio.id} value={servicio.id}>
                   {servicio.nombre}

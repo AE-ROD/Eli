@@ -6,9 +6,12 @@ import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
+import { vocabularioDe } from "@/lib/vocabulario"
 import { guardarPlazoDeCambios } from "../_datos"
+import { frasesDeConfiguracion } from "../_frases"
 
 /**
  * "Plazo para cancelar o reagendar (horas)": hasta cuántas horas antes de la
@@ -18,6 +21,7 @@ import { guardarPlazoDeCambios } from "../_datos"
  */
 export function SeccionPlazoDeCambios({ horasIniciales }: { horasIniciales: number }) {
   const idDelTitulo = useId()
+  const { plazoDeCambios: frases } = frasesDeConfiguracion(vocabularioDe(useRubroDelPanel()).palabras)
   const idDelCampo = useId()
   const [texto, setTexto] = useState(String(horasIniciales))
   const [guardadas, setGuardadas] = useState(horasIniciales)
@@ -46,8 +50,9 @@ export function SeccionPlazoDeCambios({ horasIniciales }: { horasIniciales: numb
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
+        nivel={3}
         titulo="Cancelar o reagendar"
-        subtitulo="Tus clientes reciben un enlace en el correo de confirmación"
+        subtitulo={frases.subtitulo}
         icono={{ figura: CalendarClock }}
       />
       <form onSubmit={guardar} className="mt-5 flex flex-wrap items-end gap-3">
@@ -82,8 +87,7 @@ export function SeccionPlazoDeCambios({ horasIniciales }: { horasIniciales: numb
         </BotonPrimario>
       </form>
       <p id={`${idDelCampo}-ayuda`} className="mt-3 text-sm text-texto-2">
-        Hasta cuántas horas antes de la cita pueden hacerlo solos, de 0 a 72. Después, el enlace les pide que te
-        contacten.
+        {frases.ayuda}
       </p>
       <p role="status" className="sr-only">
         {listo ? "Plazo guardado" : ""}

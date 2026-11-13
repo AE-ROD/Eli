@@ -5,6 +5,11 @@
  * servicios y sus días de atención ya vienen resueltos por `page.tsx`, que es
  * de servidor y consulta la base directo.
  *
+ * Plan Independiente con varias sedes: la sede que se eligió viaja como `sedeId`
+ * (a la disponibilidad, a la reserva y a la lista de espera). El servidor la
+ * revalida contra las sedes activas del negocio del `slug`: lo que viaja es lo
+ * que se eligió, no lo que vale.
+ *
  * Cada función devuelve un `Resultado` (`lib/peticiones.ts`) en vez de lanzar:
  * la pantalla está obligada a decidir qué mostrar cuando algo falla. Un día sin
  * horas libres y un pedido que no llegó no son lo mismo, y no deben verse igual.
@@ -14,13 +19,22 @@ import type { PrecioDeLaHora } from "@/lib/hora-valle"
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
 import type { HorasDelDia } from "./_componentes/selector-fecha-hora"
 
-/** Quien atiende, tal como lo muestra la página pública. `servicioIds` en null: hace todos. */
-export interface ProfesionalPublico {
+/**
+ * Quien atiende, con lo que alcanza para elegirlo y saber qué servicios hace.
+ * `servicioIds` en null: hace todos. Es lo que la página ya trae del servidor
+ * (`page.tsx`), antes de pedir `/profesionales`: así el primer paso filtra los
+ * servicios desde la primera pintura.
+ */
+export interface ProfesionalDelEquipo {
   id: string
   nombre: string
   especialidad: string | null
   fotoUrl: string | null
   servicioIds: string[] | null
+}
+
+/** Quien atiende, tal como lo responde `/profesionales`: suma los días en que atiende. */
+export interface ProfesionalPublico extends ProfesionalDelEquipo {
   /** Los días de la semana (0 domingo a 6 sábado) en que atiende. */
   diasConAtencion: number[]
 }
@@ -30,6 +44,8 @@ export interface DatosDeReserva {
   servicioIds: string[]
   /** `null`: cualquiera disponible (lo asigna el servidor). */
   profesionalId: string | null
+  /** La sede elegida (plan Independiente con varias sedes). `null` o sin dar: no se manda. */
+  sedeId?: string | null
   /** `YYYY-MM-DD`. */
   fecha: string
   /** `HH:MM`. */
@@ -44,6 +60,11 @@ export interface DatosDeReserva {
   /** "Quiero recibir avisos y novedades por correo". */
   correoPromo: boolean
   comentarios: string
+  /**
+   * Clínica dental: "¿Es tu primera vez en la clínica?". `null` en otro
+   * rubro (o sin él): no se manda. La duración que suma la calcula el servidor.
+   */
+  primeraVez?: boolean | null
 }
 
 /** Los profesionales que atienden. Si no se pudo leer, la reserva sigue con "cualquiera". */
@@ -60,15 +81,22 @@ export async function leerProfesionales(slug: string): Promise<Resultado<Profesi
  * con ese profesional o con cualquiera (`null`). El servidor calcula la
  * duración: acá sólo van los ids. Con hora valle (#89c), las horas rebajadas
  * traen su precio (`valle`); el que vale es el que calcula `confirmar`.
+ * Clínica dental: `primeraVez` (los 15 minutos los suma el servidor); `null`
+ * en otro rubro, y no se manda. Con varias sedes, `sedeId`: las horas son las
+ * de esa sede; `null` (un negocio sin sedes, o con una sola), no se manda.
  */
 export async function leerDisponibilidad(
   slug: string,
   fecha: string,
   servicioIds: string[],
-  profesionalId: string | null
+  profesionalId: string | null,
+  primeraVez: boolean | null = null,
+  sedeId: string | null = null
 ): Promise<Resultado<HorasDelDia>> {
   const consulta = new URLSearchParams({ fecha, servicioIds: servicioIds.join(",") })
   if (profesionalId) consulta.set("profesionalId", profesionalId)
+  if (primeraVez !== null) consulta.set("primeraVez", primeraVez ? "1" : "0")
+  if (sedeId) consulta.set("sedeId", sedeId)
   const resultado = await pedir<{ slots: string[]; valle?: PrecioDeLaHora[]; sinListaDeEspera?: boolean }>(
     `/api/reservar/${encodeURIComponent(slug)}/disponibilidad?${consulta}`,
     "No se pudieron cargar los horarios disponibles"
@@ -94,6 +122,8 @@ export interface ReservaConfirmada {
   sePuedeCambiar?: boolean
   /** Si va a llegar el recordatorio (N4): se dejó correo y el cron alcanza a mandarlo, con la hora del servidor. */
   recibiraRecordatorio?: boolean
+  /** La sede donde quedó la cita, tal como la guardó el servidor. Sólo viene si la cita tiene sede. */
+  sede?: { nombre: string; direccion: string; comuna: string }
 }
 
 /**
@@ -111,6 +141,8 @@ export async function confirmarReserva(
     conJson("POST", {
       servicioIds: datos.servicioIds,
       profesionalId: datos.profesionalId ?? undefined,
+      // Sólo con varias sedes: lo que se eligió; el servidor lo revalida.
+      sedeId: datos.sedeId ?? undefined,
       fecha: datos.fecha,
       hora: datos.hora,
       nombre: datos.nombre,
@@ -123,6 +155,8 @@ export async function confirmarReserva(
       // Sólo con email: es para esa casilla.
       correoPromoConsentimiento: datos.email ? datos.correoPromo : undefined,
       comentarios: datos.comentarios || undefined,
+      // Sólo en una clínica dental.
+      primeraVez: datos.primeraVez ?? undefined,
     })
   )
 }
@@ -131,6 +165,8 @@ export interface DatosDeListaDeEspera {
   servicioIds: string[]
   /** `null`: con cualquiera. */
   profesionalId: string | null
+  /** La sede elegida (plan Independiente con varias sedes). `null` o sin dar: no se manda. */
+  sedeId?: string | null
   /** `YYYY-MM-DD`. */
   fecha: string
   nombre: string
@@ -138,6 +174,8 @@ export interface DatosDeListaDeEspera {
   email: string
   telefono: string
   whatsapp: boolean
+  /** Clínica dental: la primera vez suma minutos; el servidor revisa el día con esa duración. Fuera de una clínica, `null`. */
+  primeraVez?: boolean | null
 }
 
 /** "Avísame si se libera una hora" (#74): anota en la lista de espera de ese día. */
@@ -148,12 +186,15 @@ export async function inscribirEnListaDeEspera(slug: string, datos: DatosDeLista
     conJson("POST", {
       servicioIds: datos.servicioIds,
       profesionalId: datos.profesionalId ?? undefined,
+      sedeId: datos.sedeId ?? undefined,
       fecha: datos.fecha,
       nombre: datos.nombre,
       apellido: datos.apellido,
       email: datos.email,
       telefono: datos.telefono || undefined,
       whatsappConsentimiento: datos.telefono ? datos.whatsapp : undefined,
+      // Sólo en una clínica dental.
+      primeraVez: datos.primeraVez ?? undefined,
     })
   )
 }

@@ -1,38 +1,27 @@
 import { NextRequest, NextResponse, after } from "next/server"
 import { getServerSession } from "next-auth"
-import { randomBytes } from "node:crypto"
 import { Prisma } from "@prisma/client"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
-import { tipoNegocioSchema } from "@/lib/validaciones"
+import { completarPerfilSchema } from "@/lib/validaciones"
 import { serviciosDeEjemplo } from "@/lib/servicios-de-ejemplo"
+import { materialesDeProtesisDeEjemplo } from "@/lib/protesis"
 import { verificarLimite } from "@/lib/rate-limit"
-import { generarSlug } from "@/lib/slug"
+import { slugDelNombre } from "@/lib/slug"
 import { finDeLaPrueba, generarCodigoInvitacion } from "@/lib/prueba"
 import { enviarBienvenida } from "@/lib/enviar-correo-de-prueba"
 import { registrarError } from "@/lib/registro-de-errores"
 import { COOKIE_DE_INVITACION, borrarCookieDeInvitacion, negocioQueInvita } from "@/lib/referidos"
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
-const schema = z.object({
-  nombreNegocio: z.string().min(2).max(80),
-  tipoNegocio: tipoNegocioSchema,
-  teamSize: z.number().int().min(1).max(500).default(1),
-})
-
 /**
- * El slug del negocio a partir de su nombre. Un nombre sin ningún carácter
- * que sirva en una URL ("!!!", emojis, otro alfabeto) daba un slug vacío o
- * de puros guiones: la página pública quedaba en `/reservar/`. En ese caso
- * va uno de respaldo con un sufijo al azar.
+ * Crea el negocio propio de la cuenta: el último paso de quien entró con
+ * Google, y también el de quien ya trabaja en otros negocios (sus
+ * membresías) y quiere el suyo. Suma un contexto de dueña
+ * (`lib/contextos.ts`); la pantalla después pide entrar a él con `update()`.
+ * Quien ya es dueña de un negocio no crea otro (`Business.userId` es único).
  */
-function slugDelNombre(nombre: string): string {
-  const slug = generarSlug(nombre)
-  if (/[a-z0-9]/.test(slug)) return slug
-  return `negocio-${randomBytes(3).toString("hex")}`
-}
-
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!(session?.user as any)?.id) {
@@ -50,7 +39,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const cuerpo = await leerJsonConTope(request)
-    const { nombreNegocio, tipoNegocio, teamSize } = schema.parse(cuerpo)
+    // `teamSize` sale ya según el plan: una sola persona en Independiente,
+    // aunque el navegador mande otra cosa (`personasAlCrearElNegocio`).
+    const { nombreNegocio, tipoNegocio, plan, teamSize } = completarPerfilSchema.parse(cuerpo)
 
     const existente = await prisma.business.findFirst({ where: { userId } })
     if (existente) {
@@ -77,6 +68,7 @@ export async function POST(request: NextRequest) {
         data: {
           name: nombreNegocio,
           type: tipoNegocio,
+          plan,
           slug,
           teamSize,
           userId,
@@ -87,6 +79,8 @@ export async function POST(request: NextRequest) {
           // Los servicios de ejemplo del rubro, como en el registro con correo
           // (`/api/auth/registro`), en la misma escritura anidada.
           services: { create: serviciosDeEjemplo(tipoNegocio) },
+          // Los materiales de prótesis, como en el registro con correo.
+          materialesDeProtesis: { create: materialesDeProtesisDeEjemplo(tipoNegocio) },
         },
         // Lo único que necesita quien llama. El registro completo trae el
         // `invitadoPorId` (el id de otro negocio), el código de invitación y
@@ -123,7 +117,8 @@ export async function POST(request: NextRequest) {
     return respuesta
   } catch (error) {
     if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
-    if (error instanceof z.ZodError) {
+    // Un cuerpo que no es JSON (o vacío) es un pedido mal hecho: 400, no 500.
+    if (error instanceof SyntaxError || error instanceof z.ZodError) {
       return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
     }
     // Un `@unique` que chocó entre la verificación de arriba y el `create`:

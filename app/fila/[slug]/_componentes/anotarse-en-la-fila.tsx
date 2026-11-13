@@ -9,6 +9,7 @@ import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Tarjeta } from "@/components/comunes/tarjeta"
 import { EncabezadoDeReserva } from "@/app/reservar/[slug]/_componentes/encabezado-de-reserva"
+import { frasesDeLaFila } from "@/app/reservar/[slug]/_frases"
 import {
   LARGO_MAXIMO_NOMBRE_EN_FILA,
   enlaceDelTurno,
@@ -23,6 +24,8 @@ import { pedir, pedirConCodigo, conJson } from "@/lib/peticiones"
 interface PropsDeAnotarse {
   slug: string
   nombreNegocio: string
+  /** El rubro del negocio (`Business.type`): "El salón no está atendiendo". Sin él, "El local". */
+  rubro?: string | null
   abierto: boolean
   esperando: number
   llena: boolean
@@ -56,7 +59,8 @@ interface TurnoGuardado {
  * nombre y deja sacarlo de la fila. Quien sí es el dueño del turno lo
  * abre con "Ver mi turno", o desde el enlace que le quedó.
  */
-export function AnotarseEnLaFila({ slug, nombreNegocio, abierto, esperando, llena }: PropsDeAnotarse) {
+export function AnotarseEnLaFila({ slug, nombreNegocio, rubro = null, abierto, esperando, llena }: PropsDeAnotarse) {
+  const frases = frasesDeLaFila(rubro)
   const router = useRouter()
   const idDelError = useId()
   const [nombre, setNombre] = useState("")
@@ -138,9 +142,7 @@ export function AnotarseEnLaFila({ slug, nombreNegocio, abierto, esperando, llen
         ) : !abierto ? (
           <div className="flex flex-col items-center gap-4 text-center">
             <CuadroDeIcono icono={Clock} color="azul" tamano="lg" />
-            <p className="cuerpo-xl text-pretty text-texto-2">
-              El local no está atendiendo en este momento. La fila se abre en su horario de atención.
-            </p>
+            <p className="cuerpo-xl text-pretty text-texto-2">{frases.cerrado}</p>
           </div>
         ) : llena ? (
           <div className="flex flex-col items-center gap-4 text-center">
