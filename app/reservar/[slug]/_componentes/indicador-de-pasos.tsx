@@ -62,7 +62,7 @@ interface PropsDeIndicadorDePasos {
 export function IndicadorDePasos({ paso, pasos = PASOS_DE_RESERVA }: PropsDeIndicadorDePasos) {
   const cuatro = pasos.length > 3
   return (
-    <ol aria-label="Pasos de la reserva" className={cn("grid gap-2 sm:gap-3", cuatro ? "grid-cols-4" : "grid-cols-3")}>
+    <ol aria-label="Pasos de la reserva" className={cn("grid gap-2 @[32rem]:gap-3", cuatro ? "grid-cols-4" : "grid-cols-3")}>
       {pasos.map((nombre, indice) => {
         const numero = indice + 1
         const estado = estadoDelPaso(numero, paso)
@@ -78,8 +78,8 @@ export function IndicadorDePasos({ paso, pasos = PASOS_DE_RESERVA }: PropsDeIndi
             />
             <span
               className={cn(
-                "flex min-w-0 gap-1.5 sm:gap-2",
-                cuatro ? "flex-col items-start sm:flex-row sm:items-center" : "items-center"
+                "flex min-w-0 gap-1.5 @[32rem]:gap-2",
+                cuatro ? "flex-col items-start @[32rem]:flex-row @[32rem]:items-center" : "items-center"
               )}
             >
               <span
@@ -91,7 +91,7 @@ export function IndicadorDePasos({ paso, pasos = PASOS_DE_RESERVA }: PropsDeIndi
               >
                 {estado === "hecho" ? <Check className="size-3.5" strokeWidth={2.5} /> : numero}
               </span>
-              <span className={cn("min-w-0 text-[13px] leading-tight sm:text-sm", NOMBRE[estado])}>
+              <span className={cn("min-w-0 text-[13px] leading-tight @[32rem]:text-sm", NOMBRE[estado])}>
                 <span className="sr-only">Paso {numero}: </span>
                 {nombre}
                 {estado === "hecho" && <span className="sr-only">, listo</span>}

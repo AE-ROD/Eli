@@ -38,6 +38,8 @@ interface PropsDeMiniPagina {
   pagina: PaginaDelNegocio
   /** El instante con que se calcula "Abierto ahora". Lo pasa la página: así esto queda puro. */
   ahora: Date
+  /** El flujo de reserva: desde lg va en una columna fija a la derecha (`#reservar`); sin él, la página sólo informa. */
+  reserva?: ReactNode
 }
 
 /**
@@ -54,17 +56,34 @@ interface PropsDeMiniPagina {
  * una sede activa, su dirección y su comuna ya vienen en `pagina.direccion` y
  * `pagina.comuna` (`leerPaginaDelNegocio`): es la misma de la cita y los correos.
  */
-export function MiniPagina({ pagina, ahora }: PropsDeMiniPagina) {
+export function MiniPagina({ pagina, ahora, reserva }: PropsDeMiniPagina) {
   const sedes = sedesParaMostrar(pagina)
   return (
     <div className="flex flex-col gap-8 md:gap-10">
       <Cabecera pagina={pagina} ahora={ahora} />
-      {sedes.length > 0 && <DondeAtiendo sedes={sedes} />}
-      {pagina.equipo.length > 0 && (
-        <Equipo equipo={pagina.equipo} servicios={pagina.servicios} color={pagina.color.clave} rubro={pagina.rubro} />
-      )}
-      {pagina.servicios.length > 0 && <Servicios servicios={pagina.servicios} rubro={pagina.rubro} />}
-      <Datos pagina={pagina} conSedes={sedes.length > 0} />
+      {/*
+        Desde lg, las secciones van a la izquierda y la reserva queda fija a la
+        derecha mientras se recorre la página. Abajo de lg, la reserva va después
+        de las secciones, centrada y más angosta.
+      */}
+      <div className={cn("flex flex-col gap-8 md:gap-10", reserva && "lg:grid lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-start lg:gap-10")}>
+        <div className="flex min-w-0 flex-col gap-8 md:gap-10">
+          {sedes.length > 0 && <DondeAtiendo sedes={sedes} />}
+          {pagina.equipo.length > 0 && (
+            <Equipo equipo={pagina.equipo} servicios={pagina.servicios} color={pagina.color.clave} rubro={pagina.rubro} />
+          )}
+          {pagina.servicios.length > 0 && <Servicios servicios={pagina.servicios} rubro={pagina.rubro} />}
+          <Datos pagina={pagina} conSedes={sedes.length > 0} />
+        </div>
+        {reserva && (
+          <div
+            id={ANCLA_DE_RESERVA}
+            className="mx-auto mt-2 w-full max-w-[52rem] scroll-mt-6 md:mt-4 lg:sticky lg:top-6 lg:-m-1 lg:max-h-[calc(100dvh-3rem)] lg:max-w-none lg:overflow-y-auto lg:p-1"
+          >
+            {reserva}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
