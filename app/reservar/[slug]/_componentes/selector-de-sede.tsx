@@ -30,7 +30,7 @@ const SIN_HORARIO = "cursor-not-allowed bg-superficie inset-ring-1 inset-ring-bo
  */
 export function SelectorDeSede({ sedes, elegida, onElegir }: PropsDeSelectorDeSede) {
   return (
-    <div role="group" aria-label={FRASES_DE_LAS_SEDES.grupo} className="grid gap-3 sm:grid-cols-2">
+    <div role="group" aria-label={FRASES_DE_LAS_SEDES.grupo} className="grid gap-3 @[32rem]:grid-cols-2">
       {sedes.map((sede) => {
         const activa = sede.id === elegida
         const sePuede = sedeSePuedeElegir(sede)

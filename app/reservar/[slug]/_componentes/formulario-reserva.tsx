@@ -158,6 +158,9 @@ interface PedidoDeFoco {
  * landing hace esperar; con movimiento reducido se queda igual, porque es
  * sólo opacidad.
  */
+/** Desde lg el formulario es el panel fijo de la derecha: el encabezado se alinea a la izquierda y baja de tamaño. */
+const CLASES_DEL_ENCABEZADO_EN_PANEL = "lg:items-start lg:px-0 lg:text-left lg:[&>h2]:text-[1.75rem] lg:[&>p]:mt-2 lg:[&>p]:text-base"
+
 const FUNDIDO = { duration: DURACION.pildora, ease: CURVA.fundido }
 
 /** Hace todos los elegidos (#89a): la reserva es con una sola persona. */
@@ -554,15 +557,16 @@ export function FormularioReserva({
 
   if (confirmado && servicioSeleccionado) {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={FUNDIDO}>
+      <motion.div className="@container" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={FUNDIDO}>
         <EncabezadoDeReserva
+          className={CLASES_DEL_ENCABEZADO_EN_PANEL}
           ref={titulo}
           nivel={2}
           antetitulo={nombreNegocio}
           titulo="¡Reserva confirmada!"
           bajada={`Te esperamos, ${nombre}. ¡Hasta pronto!`}
         />
-        <Tarjeta className="mx-auto mt-8 max-w-xl px-6 py-8 sm:p-10 md:mt-12">
+        <Tarjeta className="mx-auto mt-8 max-w-xl px-6 py-8 sm:p-10 md:mt-12 lg:mt-5 lg:p-6">
           <div className="flex items-center gap-4">
             <CuadroDeIcono icono={CalendarCheck} color="azul" tamano="lg" activo />
             <p className="titulo-3 min-w-0 break-words text-navy">{servicioSeleccionado.name}</p>
@@ -619,9 +623,10 @@ export function FormularioReserva({
   const totalDePasos = PASOS_DE_RESERVA.length + desfase
 
   return (
-    <div>
+    <div className="@container">
       {/* La mini página ya lleva el <h1> con el nombre del negocio. */}
       <EncabezadoDeReserva
+        className={CLASES_DEL_ENCABEZADO_EN_PANEL}
         nivel={2}
         antetitulo={nombreNegocio}
         titulo={frases.encabezado.titulo}
@@ -633,7 +638,7 @@ export function FormularioReserva({
         para que a 360px entren sus siete columnas de 44px, y 32px hasta lg, para que
         a 768px entre al lado de los horarios.
       */}
-      <Tarjeta className="mt-8 px-4 py-6 sm:p-8 md:mt-12 lg:p-10">
+      <Tarjeta className="mt-8 px-4 py-6 sm:p-8 md:mt-12 lg:mt-5 lg:p-6">
         <IndicadorDePasos
           paso={paso + desfase}
           pasos={pasosDeLaReserva(frases.primerPaso, conSedes ? FRASES_DE_LAS_SEDES.nombreDelPaso : undefined)}
@@ -661,7 +666,7 @@ export function FormularioReserva({
                   icono={<ArrowRight />}
                   disabled={!puedeAvanzarPaso0}
                   onClick={() => setPaso(1)}
-                  className="w-full sm:ml-auto sm:w-auto"
+                  className="w-full @[32rem]:ml-auto @[32rem]:w-auto"
                 >
                   Continuar
                 </Boton>
@@ -725,7 +730,7 @@ export function FormularioReserva({
                     variante="secundario"
                     icono={<ArrowLeft />}
                     onClick={() => setPaso(0)}
-                    className="w-full sm:w-auto"
+                    className="w-full @[32rem]:w-auto"
                   >
                     Atrás
                   </Boton>
@@ -738,7 +743,7 @@ export function FormularioReserva({
                     setAvisoDeServicios("")
                     setPaso(2)
                   }}
-                  className="w-full sm:ml-auto sm:w-auto"
+                  className="w-full @[32rem]:ml-auto @[32rem]:w-auto"
                 >
                   Continuar
                 </Boton>
@@ -861,7 +866,7 @@ export function FormularioReserva({
                   variante="secundario"
                   icono={<ArrowLeft />}
                   onClick={() => setPaso(1)}
-                  className="w-full sm:w-auto"
+                  className="w-full @[32rem]:w-auto"
                 >
                   Atrás
                 </Boton>
@@ -869,7 +874,7 @@ export function FormularioReserva({
                   icono={<ArrowRight />}
                   disabled={!puedeAvanzarPaso2}
                   onClick={() => setPaso(3)}
-                  className="w-full sm:w-auto"
+                  className="w-full @[32rem]:w-auto"
                 >
                   Continuar
                 </Boton>
@@ -889,7 +894,7 @@ export function FormularioReserva({
                 el botón no se deshabilita: al apretarlo se dice qué falta.
               */}
               <form noValidate onSubmit={confirmar} aria-describedby={error ? idDelError : undefined}>
-              <div className="mt-5 grid gap-5 sm:grid-cols-2">
+              <div className="mt-5 grid gap-5 @[32rem]:grid-cols-2">
                 <CampoFormulario
                   ref={(campo) => {
                     camposDeDatos.current.nombre = campo
@@ -930,7 +935,7 @@ export function FormularioReserva({
                 />
                 {/* Sólo con teléfono: sin número no hay a dónde escribir. Nada viene marcado. */}
                 {telefono.trim() && (
-                  <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-navy sm:col-span-2">
+                  <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-navy @[32rem]:col-span-2">
                     <input
                       type="checkbox"
                       checked={whatsapp}
@@ -940,7 +945,7 @@ export function FormularioReserva({
                     Quiero recibir recordatorios por WhatsApp
                   </label>
                 )}
-                <div className="sm:col-span-2">
+                <div className="@[32rem]:col-span-2">
                   <CampoFormulario
                     ref={(campo) => {
                       camposDeDatos.current.email = campo
@@ -956,7 +961,7 @@ export function FormularioReserva({
                 </div>
                 {/* Sólo con correo: el consentimiento es para esa casilla. Nada viene marcado. */}
                 {email.trim() && (
-                  <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-navy sm:col-span-2">
+                  <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-navy @[32rem]:col-span-2">
                     <input
                       type="checkbox"
                       checked={correoPromo}
@@ -967,7 +972,7 @@ export function FormularioReserva({
                   </label>
                 )}
                 {/* No hay área de texto en `components/comunes/`: se arma con las mismas clases que los campos. */}
-                <div className="space-y-2 sm:col-span-2">
+                <div className="space-y-2 @[32rem]:col-span-2">
                   <label htmlFor={idDeComentarios} className={CLASES_DE_ETIQUETA}>
                     Comentarios o requisitos especiales (opcional)
                   </label>
@@ -1026,7 +1031,7 @@ export function FormularioReserva({
                   variante="secundario"
                   icono={<ArrowLeft />}
                   onClick={() => setPaso(2)}
-                  className="w-full sm:w-auto"
+                  className="w-full @[32rem]:w-auto"
                 >
                   Atrás
                 </Boton>
@@ -1035,7 +1040,7 @@ export function FormularioReserva({
                   icono={<Check />}
                   cargando={enviando}
                   aria-describedby={error ? idDelError : undefined}
-                  className="w-full sm:w-auto"
+                  className="w-full @[32rem]:w-auto"
                 >
                   Confirmar reserva
                 </Boton>
@@ -1177,7 +1182,7 @@ function ServicioElegido({
  */
 function BarraDeAcciones({ children }: { children: ReactNode }) {
   return (
-    <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between md:mt-10">{children}</div>
+    <div className="mt-8 flex flex-col gap-3 @[32rem]:flex-row @[32rem]:items-center @[32rem]:justify-between @[40rem]:mt-10">{children}</div>
   )
 }
 
@@ -1213,7 +1218,7 @@ function PreguntaPrimeraVez({
   return (
     <fieldset className="mt-6">
       <legend className="font-medium text-navy">{paso2.preguntaDePrimeraVez}</legend>
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:max-w-md">
+      <div className="mt-3 grid grid-cols-2 gap-2 @[32rem]:max-w-md">
         {respuestas.map((respuesta) => {
           const elegida = valor === respuesta.valor
           return (
@@ -1298,7 +1303,7 @@ function SinDiasConAtencion({
           <p className="mt-1 text-sm text-pretty text-texto-2">{detalle}</p>
         </div>
       </div>
-      <Boton variante="secundario" icono={<ArrowLeft />} onClick={onCambiar} className="mt-4 w-full sm:w-auto">
+      <Boton variante="secundario" icono={<ArrowLeft />} onClick={onCambiar} className="mt-4 w-full @[32rem]:w-auto">
         {textoDelBoton}
       </Boton>
     </div>

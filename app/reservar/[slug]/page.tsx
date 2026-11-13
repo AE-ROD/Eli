@@ -77,12 +77,12 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
   // La mini página del negocio va arriba; el flujo de reserva, debajo, en `#reservar`.
   const pagina = await leerPaginaDelNegocio(slug)
   if (!negocio || !pagina) notFound()
-  const miniPagina = <MiniPagina pagina={pagina} ahora={new Date()} />
+  const ahora = new Date()
 
   if (negocio.services.length === 0) {
     return (
       <MarcoDeReserva>
-        {miniPagina}
+        <MiniPagina pagina={pagina} ahora={ahora} />
         <div id={ANCLA_DE_RESERVA} className="mx-auto mt-10 max-w-[52rem] scroll-mt-6 md:mt-14">
         <EncabezadoDeReserva nivel={2} antetitulo={negocio.name} titulo={tituloDeLaReserva(negocio.type)} />
         <Tarjeta className="mx-auto mt-8 flex max-w-xl flex-col items-center gap-5 px-6 py-10 text-center sm:px-10 md:mt-12">
@@ -108,8 +108,10 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
 
   return (
     <MarcoDeReserva>
-      {miniPagina}
-      <div id={ANCLA_DE_RESERVA} className="mx-auto mt-10 max-w-[52rem] scroll-mt-6 md:mt-14">
+      <MiniPagina
+        pagina={pagina}
+        ahora={ahora}
+        reserva={
       <FormularioReserva
         slug={negocio.slug}
         nombreNegocio={negocio.name}
@@ -150,7 +152,8 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
             : undefined
         }
       />
-      </div>
+        }
+      />
     </MarcoDeReserva>
   )
 }
