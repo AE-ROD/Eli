@@ -20,6 +20,7 @@ import {
   iniciales,
   mediosParaMostrar,
   normalizarInstagram,
+  primerNombreDelProfesional,
   serviciosPorCategoria,
 } from "./pagina-del-negocio"
 
@@ -149,6 +150,29 @@ describe("iniciales", () => {
     expect(iniciales("carla")).toBe("C")
     expect(iniciales("  Ñandú   Óscar ")).toBe("ÑÓ")
     expect(iniciales("")).toBe("?")
+  })
+})
+
+describe("primerNombreDelProfesional", () => {
+  it("salta el tratamiento: el botón dice 'Reservar con Camila', no 'Reservar con Dra.'", () => {
+    expect(primerNombreDelProfesional("Dra. Camila Rojas")).toBe("Camila")
+    expect(primerNombreDelProfesional("Dr. Matías Fuentes")).toBe("Matías")
+    expect(primerNombreDelProfesional("Doctora Valentina Soto")).toBe("Valentina")
+    expect(primerNombreDelProfesional("dr Ignacio Parra")).toBe("Ignacio")
+    expect(primerNombreDelProfesional("Doña Rosa")).toBe("Rosa")
+    expect(primerNombreDelProfesional("Lic. Paz Díaz")).toBe("Paz")
+  })
+
+  it("sin tratamiento devuelve la primera palabra, como antes", () => {
+    expect(primerNombreDelProfesional("Carla Soto")).toBe("Carla")
+    expect(primerNombreDelProfesional("  Nina   Paz ")).toBe("Nina")
+    expect(primerNombreDelProfesional("Dracula Pérez")).toBe("Dracula")
+  })
+
+  it("si es sólo un tratamiento o está vacío, lo devuelve tal cual", () => {
+    expect(primerNombreDelProfesional("Dra.")).toBe("Dra.")
+    expect(primerNombreDelProfesional("Dr. Dra.")).toBe("Dr.")
+    expect(primerNombreDelProfesional("")).toBe("")
   })
 })
 

@@ -232,6 +232,22 @@ export function imagenPublica(url: string | null | undefined): string | null {
   return limpia
 }
 
+/** Los tratamientos que preceden a un nombre propio y no son parte de él, sin tilde ni punto. */
+const TRATAMIENTOS = new Set(["dr", "dra", "doctor", "doctora", "sr", "sra", "srta", "don", "dona", "lic", "ing", "mg"])
+
+/**
+ * El nombre de pila de un profesional para hablarle al cliente, sin el
+ * tratamiento: "Dra. Camila Rojas" → "Camila", no "Dra.". Si el nombre es sólo
+ * un tratamiento (o está vacío), se devuelve tal cual.
+ */
+export function primerNombreDelProfesional(nombre: string): string {
+  const palabras = nombre.trim().split(/\s+/).filter(Boolean)
+  const sinTratamiento = palabras.findIndex(
+    (palabra) => !TRATAMIENTOS.has(palabra.normalize("NFD").replace(/\p{M}/gu, "").replace(/\.$/, "").toLowerCase())
+  )
+  return palabras[sinTratamiento === -1 ? 0 : sinTratamiento] ?? nombre
+}
+
 /** Hasta dos iniciales, en mayúsculas: "Ana María Pérez" → "AM". */
 export function iniciales(nombre: string): string {
   const letras = nombre

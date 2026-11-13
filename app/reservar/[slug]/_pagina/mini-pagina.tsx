@@ -13,6 +13,7 @@ import {
   CATEGORIA_SIN_NOMBRE,
   horarioParaMostrar,
   iniciales,
+  primerNombreDelProfesional,
   serviciosPorCategoria,
   type SedeDeLaPagina,
 } from "@/lib/pagina-del-negocio"
@@ -319,7 +320,7 @@ function Equipo({
       {/* En el teléfono, una lista compacta de filas; desde `sm`, tarjetas en dos columnas. */}
       <ul className="mt-4 divide-y divide-borde sm:mt-5 sm:grid sm:grid-cols-2 sm:gap-3 sm:divide-y-0">
         {equipo.map((profesional) => {
-          const primerNombre = profesional.nombre.trim().split(/\s+/)[0] || profesional.nombre
+          const primerNombre = primerNombreDelProfesional(profesional.nombre)
           // Quien ya no hace ninguno de los servicios que hay no se puede reservar: sin botón que no lleve a nada.
           const sePuedeReservar = haceAlgunServicio(profesional.servicioIds, servicios)
           return (
