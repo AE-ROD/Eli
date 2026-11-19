@@ -966,9 +966,11 @@ types/                        Tipos que extienden librerías (la sesión de Next
 public/images/                El logo
 docs/                         Producto (PRODUCTO.md) y sistema de diseño (diseno/)
 prisma.config.ts              Dónde están el esquema y las migraciones, y el comando del seed
-vercel.json                   Los crons diarios (el plan Hobby no permite más de uno al
-                              día): recordatorios y correos del ciclo de prueba, ambos
-                              a las 13:00 UTC (~10:00 en Chile)
+deploy/                       Producción: el VPS de Hostinger en eliagenda.com. Guía,
+                              scripts para actualizar y volver atrás, Caddy, respaldos
+                              y los crons diarios (deploy/cron-eli: recordatorios y
+                              correos del ciclo de prueba, a las 13:00 UTC, ~10:00 en Chile)
+vercel.json                   Resto de cuando Eli corría en Vercel; ya no es producción
 .github/workflows/ci.yml      CI: lint, tipos, tests y build en cada PR a main
 ```
 
@@ -1043,8 +1045,6 @@ Cada vista del panel se arma igual:
   pedido llega con tope de tamaño, `lib/cuerpo-del-pedido.ts`, antes de zod).
   Actualizar una dependencia es una tarea propia, con aprobación (CLAUDE.md,
   regla 4).
-- **Vercel Hobby prohíbe el uso comercial.** Antes de cobrar hay que pasar a Pro
-  o mover el despliegue.
 - **Resend:** falta verificar el dominio (SPF/DKIM) o los correos caen en spam.
 - **Pagos online:** los precios están decididos (`docs/PRODUCTO.md`, sección 4,
   y `lib/precios.ts`), pero todavía no se cobra. Falta elegir la pasarela:
