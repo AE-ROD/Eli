@@ -36,6 +36,11 @@ function pareceCsv(archivo: File): boolean {
   return archivo.name.toLowerCase().endsWith(".csv") || archivo.type.startsWith("text/")
 }
 
+/** iPhone, iPod o iPad (que en iPadOS se presenta como un Mac con pantalla táctil). */
+function esUnIphone(): boolean {
+  return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+}
+
 /** Que haya agenda no cambia mientras la página está abierta: no hay a qué suscribirse. */
 const sinSuscripcion = () => () => {}
 
@@ -73,9 +78,15 @@ export default function PaginaImportarClientes() {
   // El selector de contactos sólo existe en algunos navegadores (Chrome en
   // Android). En el servidor se pinta sin él y el navegador lo agrega al hidratar.
   const hayAgenda = useSyncExternalStore(sinSuscripcion, () => selectorDeContactos() !== null, () => false)
+  // En iPhone el camino de la app Contactos va primero y con los pasos a la vista.
+  const esIphone = useSyncExternalStore(sinSuscripcion, esUnIphone, () => false)
   const [lista, setLista] = useState("")
   const idDeLaLista = useId()
   const revision = useRef<HTMLDivElement>(null)
+
+  // En el teléfono la revisión queda más abajo: se lleva la vista hasta ella.
+  const llevarALaRevision = () =>
+    requestAnimationFrame(() => revision.current?.scrollIntoView({ behavior: "smooth", block: "start" }))
 
   const empezarDeNuevo = () => {
     setAviso("")
@@ -97,8 +108,7 @@ export default function PaginaImportarClientes() {
     setArchivo({ nombre: origen, texto: leidos.csv, filas })
     setMapeo(sugerirMapeo(filas[0]) ?? {})
     if (leidos.sinNombre > 0) setNota(frases.contactosSinNombre(leidos.sinNombre))
-    // En el teléfono la revisión queda más abajo: se lleva la vista hasta ella.
-    requestAnimationFrame(() => revision.current?.scrollIntoView({ behavior: "smooth", block: "start" }))
+    llevarALaRevision()
   }
 
   const elegirDeLaAgenda = async () => {
@@ -163,6 +173,7 @@ export default function PaginaImportarClientes() {
     setArchivo({ nombre: elegido.name, texto, filas })
     setMapeo(sugerirMapeo(filas[0]) ?? {})
     if (contactosSinNombre > 0) setNota(frases.contactosSinNombre(contactosSinNombre))
+    llevarALaRevision()
   }
 
   const cambiarMapeo = (campo: CampoDeImportacion, columna: number | undefined) => {
@@ -208,6 +219,19 @@ export default function PaginaImportarClientes() {
           <>
             {resumen && <ResumenDeImportacion resumen={resumen} palabras={palabras} />}
 
+            {/* Un solo selector de archivo, invisible pero enfocable: las etiquetas con forma de botón lo abren. */}
+            <input
+              id={idDelArchivo}
+              type="file"
+              accept=".csv,text/csv,.vcf,text/vcard,text/x-vcard"
+              className="sr-only"
+              onChange={(e) => {
+                void elegirArchivo(e.target.files?.[0])
+                // Así elegir el mismo archivo otra vez también lo vuelve a leer.
+                e.target.value = ""
+              }}
+            />
+
             {hayAgenda && (
               <Tarjeta como="section" className="space-y-4 p-5 sm:p-6" aria-labelledby="titulo-agenda">
                 <div>
@@ -220,59 +244,66 @@ export default function PaginaImportarClientes() {
               </Tarjeta>
             )}
 
-            <Tarjeta como="section" className="space-y-4 p-5 sm:p-6" aria-labelledby="titulo-lista">
-              <div>
-                <h2 id="titulo-lista" className="font-medium text-navy">{frases.escribir.titulo}</h2>
-                <p className="mt-1 text-sm text-texto-2">{frases.escribir.ayuda}</p>
-              </div>
-              <div>
-                <label htmlFor={idDeLaLista} className={ETIQUETA}>
-                  Nombre y teléfono, uno por línea
+            {esIphone && (
+              <Tarjeta como="section" className="space-y-4 p-5 sm:p-6" aria-labelledby="titulo-iphone">
+                <h2 id="titulo-iphone" className="font-medium text-navy">{frases.iphone.titulo}</h2>
+                <ol className="list-decimal space-y-2 pl-5 text-sm text-texto-2">
+                  {frases.iphone.pasos.map((paso) => (
+                    <li key={paso}>{paso}</li>
+                  ))}
+                </ol>
+                <label htmlFor={idDelArchivo} className={clasesDeBoton({ className: "w-full cursor-pointer gap-2 sm:w-auto" })}>
+                  <BookUser className="size-4" aria-hidden="true" strokeWidth={1.75} />
+                  {frases.iphone.boton}
                 </label>
-                <textarea
-                  id={idDeLaLista}
-                  rows={5}
-                  value={lista}
-                  onChange={(e) => setLista(e.target.value)}
-                  placeholder={frases.escribir.ejemplo}
-                  className={CAMPO}
-                  autoComplete="off"
-                />
-              </div>
-              <Boton type="button" variante="secundario" tamano="sm" className="gap-2" icono={<ClipboardList aria-hidden="true" strokeWidth={1.75} />} onClick={revisarLista}>
-                {frases.escribir.boton}
-              </Boton>
-            </Tarjeta>
+              </Tarjeta>
+            )}
 
-            <Tarjeta como="section" className="space-y-4 p-5 sm:p-6" aria-labelledby="titulo-archivo">
-              <div>
-                <h2 id="titulo-archivo" className="font-medium text-navy">
-                  {frases.archivo.titulo}
-                </h2>
-                <p className="mt-1 text-sm text-texto-2">
-                  {frases.ayuda(FILAS_MAXIMAS.toLocaleString("es-CL"))}
-                </p>
-                <p className="mt-2 text-sm text-texto-2">{frases.archivo.enIphone}</p>
+            {!esIphone && (
+              <Tarjeta como="section" className="space-y-4 p-5 sm:p-6" aria-labelledby="titulo-archivo">
+                <div>
+                  <h2 id="titulo-archivo" className="font-medium text-navy">
+                    {frases.archivo.titulo}
+                  </h2>
+                  <p className="mt-1 text-sm text-texto-2">
+                    {frases.ayuda(FILAS_MAXIMAS.toLocaleString("es-CL"))}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <label htmlFor={idDelArchivo} className={clasesDeBoton({ variante: "secundario", tamano: "sm", className: "cursor-pointer gap-2" })}>
+                    <Upload className="size-4" aria-hidden="true" strokeWidth={1.75} />
+                    Elegir archivo
+                  </label>
+                </div>
+              </Tarjeta>
+            )}
+
+            {/* Para unos pocos, sin archivo: queda plegado para no competir con la agenda. */}
+            <details className="group">
+              <summary className="cursor-pointer text-sm font-medium text-navy">{frases.escribir.titulo}</summary>
+              <div className="mt-3">
+                <Tarjeta className="space-y-4 p-5 sm:p-6">
+                  <p className="text-sm text-texto-2">{frases.escribir.ayuda}</p>
+                  <div>
+                    <label htmlFor={idDeLaLista} className={ETIQUETA}>
+                      Nombre y teléfono, uno por línea
+                    </label>
+                    <textarea
+                      id={idDeLaLista}
+                      rows={5}
+                      value={lista}
+                      onChange={(e) => setLista(e.target.value)}
+                      placeholder={frases.escribir.ejemplo}
+                      className={CAMPO}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <Boton type="button" variante="secundario" tamano="sm" className="gap-2" icono={<ClipboardList aria-hidden="true" strokeWidth={1.75} />} onClick={revisarLista}>
+                    {frases.escribir.boton}
+                  </Boton>
+                </Tarjeta>
               </div>
-              <div className="flex flex-wrap items-center gap-3">
-                {/* El input queda invisible pero enfocable: la etiqueta con forma de botón lo abre. */}
-                <label htmlFor={idDelArchivo} className={clasesDeBoton({ variante: "secundario", tamano: "sm", className: "cursor-pointer gap-2" })}>
-                  <Upload className="size-4" aria-hidden="true" strokeWidth={1.75} />
-                  Elegir archivo
-                </label>
-                <input
-                  id={idDelArchivo}
-                  type="file"
-                  accept=".csv,text/csv,.vcf,text/vcard,text/x-vcard"
-                  className="sr-only"
-                  onChange={(e) => {
-                    void elegirArchivo(e.target.files?.[0])
-                    // Así elegir el mismo archivo otra vez también lo vuelve a leer.
-                    e.target.value = ""
-                  }}
-                />
-              </div>
-            </Tarjeta>
+            </details>
 
             {aviso && <Aviso>{aviso}</Aviso>}
             {nota && <Aviso tono="info">{nota}</Aviso>}

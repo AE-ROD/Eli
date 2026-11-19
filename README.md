@@ -933,6 +933,9 @@ lib/                          Lógica compartida, cada archivo con su test al la
                               comillas y celdas a salvo de fórmulas
   importar-clientes.ts        Importar clientes de un CSV: qué columna es cada dato,
                               validar cada fila y descartar repetidos
+  contactos.ts                (navegador) Contactos de la agenda del teléfono o de una
+                              lista escrita al mismo CSV de la importación
+  vcard.ts                    Contactos de un archivo .vcf al mismo CSV
   exportar.ts                 Las planillas que se descargan: clientes y atenciones
   clientes-eliminados.ts      Eliminar un cliente es anonimizarlo: qué se borra y cómo
                               se lo reconoce sin columna nueva (una etiqueta reservada)

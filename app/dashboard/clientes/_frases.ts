@@ -181,8 +181,21 @@ export function frasesDeClientes(palabras: PalabrasDelRubro) {
       /** El archivo de siempre (CSV o .vcf), con el camino corto del iPhone. */
       archivo: {
         titulo: "Desde un archivo",
-        enIphone:
-          "En iPhone: abre la app Contactos, elige los contactos (o mantén presionada una lista), toca Compartir o Exportar y luego “Guardar en Archivos”. Después toca “Elegir archivo” acá y busca ese archivo.",
+      },
+      /**
+       * En iPhone ninguna página web puede abrir la agenda: Apple no lo permite.
+       * El camino más corto es que la app Contactos entregue el archivo y Eli lo
+       * tome de "Archivos", con los pasos a la vista.
+       */
+      iphone: {
+        titulo: "Desde los contactos de tu iPhone",
+        pasos: [
+          "Abre la app Contactos.",
+          "Marca los contactos: desliza con dos dedos hacia abajo sobre los nombres. Si los tienes en una lista, toca Listas y mantén presionada la lista.",
+          "Mantén presionado sobre lo marcado, toca Exportar (o Compartir) y elige “Guardar en Archivos”.",
+          "Vuelve acá y toca el botón de abajo: el archivo aparece en Recientes.",
+        ],
+        boton: "Elegir archivo de contactos",
       },
       /** Lo que se está revisando, cuando no vino de un archivo. */
       origen: {
