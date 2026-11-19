@@ -392,7 +392,7 @@ export default function PaginaClientes() {
                   tamano="sm"
                   icono={<Upload aria-hidden="true" strokeWidth={1.75} />}
                 >
-                  Importar CSV
+                  {frases.importar.titulo}
                 </Boton>
                 <Boton
                   type="button"
