@@ -28,7 +28,17 @@ interface ArchivoLeido {
 
 /** Contactos del teléfono (vCard): por su extensión o por su tipo. */
 function pareceVcf(archivo: File): boolean {
-  return archivo.name.toLowerCase().endsWith(".vcf") || /^text\/(x-)?vcard$/.test(archivo.type)
+  return /\.(vcf|vcard)$/i.test(archivo.name) || /^text\/(x-)?(vcard|directory)$/.test(archivo.type)
+}
+
+/** Un archivo de contactos que llegó sin extensión ni tipo: empieza con `BEGIN:VCARD`. */
+async function empiezaComoVcard(archivo: File): Promise<boolean> {
+  try {
+    const inicio = await archivo.slice(0, 64).text()
+    return /^\uFEFF?\s*BEGIN:VCARD/i.test(inicio)
+  } catch {
+    return false
+  }
 }
 
 /** Un CSV por su extensión o por su tipo: Windows a veces lo declara como de Excel, o sin tipo. */
@@ -137,7 +147,8 @@ export default function PaginaImportarClientes() {
     empezarDeNuevo()
     if (!elegido) return
 
-    const esVcf = pareceVcf(elegido)
+    // El iPhone a veces entrega los contactos sin extensión ni tipo: se mira el contenido.
+    const esVcf = pareceVcf(elegido) || (await empiezaComoVcard(elegido))
     if (!esVcf && !pareceCsv(elegido)) return setAviso(frases.archivoNoValido)
     const tope = esVcf ? TAMAÑO_MAXIMO_DEL_VCF_EN_BYTES : TAMAÑO_MAXIMO_EN_BYTES
     if (elegido.size > tope) {
@@ -223,7 +234,9 @@ export default function PaginaImportarClientes() {
             <input
               id={idDelArchivo}
               type="file"
-              accept=".csv,text/csv,.vcf,text/vcard,text/x-vcard"
+              // En iPhone sin filtro: Safari traduce mal los tipos y deja el .vcf en gris,
+              // sin poder tocarlo. Qué archivo sirve lo decide `elegirArchivo` al leerlo.
+              accept={esIphone ? undefined : ".csv,text/csv,.vcf,.vcard,text/vcard,text/x-vcard"}
               className="sr-only"
               onChange={(e) => {
                 void elegirArchivo(e.target.files?.[0])
