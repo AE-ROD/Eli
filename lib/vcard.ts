@@ -10,24 +10,9 @@
  * quién llamar, y el cliente quedaría con un teléfono como nombre.
  */
 
-/**
- * La celda con comillas si lleva el separador, comillas o un salto de línea.
- * Sin la protección de fórmulas de `celdaSegura` (`lib/csv.ts`): este CSV no se
- * abre en una planilla, sólo lo lee la importación, y la comilla de protección
- * se vería delante de cada teléfono que empieza con `+`.
- */
-function celda(valor: string): string {
-  return /[;"\r\n]/.test(valor) ? `"${valor.replace(/"/g, '""')}"` : valor
-}
+import { contactosACsv, type Contacto, type ContactosLeidos } from "./contactos"
 
-export interface ContactosLeidos {
-  /** El CSV listo para la importación: cabecera `Nombre;Teléfono;Correo` y una fila por contacto. */
-  csv: string
-  /** Cuántos contactos entraron al CSV. */
-  contactos: number
-  /** Cuántos se dejaron fuera por no tener nombre. */
-  sinNombre: number
-}
+export type { ContactosLeidos }
 
 interface Propiedad {
   nombre: string
@@ -117,8 +102,7 @@ function correoDelContacto(propiedades: Propiedad[]): string {
 
 /** Los contactos de un archivo .vcf (uno o muchos) como un CSV de importación. */
 export function vcardACsv(texto: string): ContactosLeidos {
-  const filas: string[][] = []
-  let sinNombre = 0
+  const contactos: Contacto[] = []
   let actual: Propiedad[] | null = null
 
   for (const linea of lineasLogicas(texto)) {
@@ -127,9 +111,7 @@ export function vcardACsv(texto: string): ContactosLeidos {
       actual = []
     } else if (marca === "END:VCARD") {
       if (actual) {
-        const nombre = nombreDelContacto(actual)
-        if (nombre) filas.push([nombre, telefonoDelContacto(actual), correoDelContacto(actual)])
-        else sinNombre++
+        contactos.push({ nombre: nombreDelContacto(actual), telefono: telefonoDelContacto(actual), correo: correoDelContacto(actual) })
       }
       actual = null
     } else if (actual) {
@@ -138,9 +120,5 @@ export function vcardACsv(texto: string): ContactosLeidos {
     }
   }
 
-  return {
-    csv: [["Nombre", "Teléfono", "Correo"], ...filas].map((fila) => fila.map(celda).join(";")).join("\r\n") + "\r\n",
-    contactos: filas.length,
-    sinNombre,
-  }
+  return contactosACsv(contactos)
 }

@@ -162,6 +162,33 @@ export function frasesDeClientes(palabras: PalabrasDelRubro) {
       /** "Un CSV de hasta 2 MB y 5.000 filas, con una primera fila de títulos, o los contactos de tu teléfono (.vcf). No se crean clientes repetidos: …" */
       ayuda: (filasMaximas: string): string =>
         `Un CSV de hasta 2 MB y ${filasMaximas} filas, con una primera fila de títulos, o los contactos de tu teléfono en un archivo .vcf (en Google Contactos o iCloud: Exportar vCard). No se crean ${cliente.plural} ${concordar("repetido", cliente, "plural")}: si el teléfono o el correo ya están en Eli (o más arriba en el archivo), la fila se omite.`,
+      /** Elegir de la agenda del teléfono: sólo donde el navegador lo permite (Chrome en Android). */
+      contactos: {
+        titulo: "Desde los contactos de tu teléfono",
+        boton: "Elegir de mis contactos",
+        ayuda: "Se abre la agenda de tu teléfono: marca los contactos que quieres traer y toca Listo. Antes de importar los revisas acá.",
+        noSeAbrio: "No se pudo abrir la agenda del teléfono. Prueba escribiendo o pegando la lista.",
+        ninguno: "No elegiste ningún contacto.",
+      },
+      /** Escribir o pegar una lista: funciona en cualquier teléfono, también en iPhone. */
+      escribir: {
+        titulo: "Escribir o pegar una lista",
+        ayuda: "Uno por línea: el nombre y el teléfono (el correo es opcional). Sirve una lista copiada de una nota, de WhatsApp o de Excel.",
+        ejemplo: "Camila Rojas 9 1234 5678\nValentina Soto +56 9 8765 4321",
+        boton: "Revisar la lista",
+        vacia: `Escribe al menos un nombre con su teléfono.`,
+      },
+      /** El archivo de siempre (CSV o .vcf), con el camino corto del iPhone. */
+      archivo: {
+        titulo: "Desde un archivo",
+        enIphone:
+          "En iPhone: abre la app Contactos, elige los contactos (o mantén presionada una lista), toca Compartir o Exportar y luego “Guardar en Archivos”. Después toca “Elegir archivo” acá y busca ese archivo.",
+      },
+      /** Lo que se está revisando, cuando no vino de un archivo. */
+      origen: {
+        contactos: (cuantos: number): string => (cuantos === 1 ? "1 contacto elegido" : `${cuantos} contactos elegidos`),
+        lista: "Lista escrita",
+      },
       /** El archivo no es ni CSV ni de contactos. */
       archivoNoValido: "El archivo tiene que ser un CSV (.csv) o de contactos (.vcf). Desde Excel: Guardar como → CSV.",
       /** Un .vcf sin ningún contacto con nombre. */
