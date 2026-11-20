@@ -49,7 +49,8 @@ function buscar(nodo: ReactNode, tipo: unknown): { props: Record<string, unknown
   }
   if (!isValidElement<{ children?: ReactNode }>(nodo)) return null
   if (nodo.type === tipo) return nodo as unknown as { props: Record<string, unknown> }
-  return buscar(nodo.props.children, tipo)
+  // La reserva va como prop de la mini página (`reserva`), no como hija.
+  return buscar((nodo.props as { reserva?: ReactNode }).reserva, tipo) ?? buscar(nodo.props.children, tipo)
 }
 
 async function formularioDe(negocio: { type: string; services: ReturnType<typeof servicio>[] } | null) {

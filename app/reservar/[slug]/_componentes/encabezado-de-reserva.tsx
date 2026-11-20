@@ -1,5 +1,6 @@
 import type { ReactNode, Ref } from "react"
 import { Antetitulo } from "@/components/comunes/antetitulo"
+import { cn } from "@/lib/utils"
 
 interface PropsDeEncabezadoDeReserva {
   antetitulo: string
@@ -17,6 +18,7 @@ interface PropsDeEncabezadoDeReserva {
    * página del negocio ya lleva el `<h1>` con su nombre arriba.
    */
   nivel?: 1 | 2
+  className?: string
 }
 
 /**
@@ -29,10 +31,10 @@ interface PropsDeEncabezadoDeReserva {
  * en todas las pantallas, y en la confirmación invita a probarlo
  * (`InvitacionAEli`).
  */
-export function EncabezadoDeReserva({ antetitulo, titulo, bajada, ref, nivel = 1 }: PropsDeEncabezadoDeReserva) {
+export function EncabezadoDeReserva({ antetitulo, titulo, bajada, ref, nivel = 1, className }: PropsDeEncabezadoDeReserva) {
   const Titulo = nivel === 1 ? "h1" : "h2"
   return (
-    <header className="flex flex-col items-center px-3 text-center sm:px-0">
+    <header className={cn("flex flex-col items-center px-3 text-center sm:px-0", className)}>
       <Antetitulo>{antetitulo}</Antetitulo>
       <Titulo
         ref={ref}

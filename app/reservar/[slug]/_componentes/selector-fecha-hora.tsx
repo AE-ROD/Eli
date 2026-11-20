@@ -205,7 +205,7 @@ export function SelectorFechaHora({
   return (
     // Desde md, calendario y horarios lado a lado: al elegir el día, las horas aparecen a la vista.
     // A 768px cada columna mide 312px, lo justo para las siete celdas de 44px.
-    <div className="grid gap-8 md:grid-cols-2 lg:gap-10">
+    <div className="grid gap-8 @[40rem]:grid-cols-2 @[40rem]:gap-10">
       <div>
         {/* Navegación del mes */}
         <div className="flex items-center justify-between gap-2">
@@ -302,7 +302,7 @@ export function SelectorFechaHora({
           </p>
 
           {estadoDeHoras === "cargando" && (
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-3">
+            <div className="grid grid-cols-3 gap-2 @[32rem]:grid-cols-4 @[40rem]:grid-cols-3">
               {Array.from({ length: LUGARES_MIENTRAS_CARGA }, (_, lugar) => (
                 <Esqueleto key={lugar} className="h-11 rounded-campo" />
               ))}
@@ -323,7 +323,7 @@ export function SelectorFechaHora({
           </p>
 
           {estadoDeHoras === "con-horas" && (
-            <div role="group" aria-label="Horarios libres" className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-3">
+            <div role="group" aria-label="Horarios libres" className="grid grid-cols-3 gap-2 @[32rem]:grid-cols-4 @[40rem]:grid-cols-3">
               {horasLibres.map((hora) => {
                 const elegida = horaSeleccionada === hora
                 const precio = precios.get(hora) ?? null

@@ -229,6 +229,9 @@ export function ModalNuevaCita({
     .map((id) => catalogo?.servicios.find((servicio) => servicio.id === id))
     .filter((servicio): servicio is ServicioDelCatalogo => servicio !== undefined)
   const resumen = elegidos.length > 0 ? resumenDeLaReserva(elegidos) : null
+  // Con servicios, la hora de fin sale de la de inicio más la duración. Si eso
+  // pasa de medianoche no hay hora que mostrar y se vuelve a pedir a mano.
+  const finCalculado = resumen ? horaDeFin(form.horaInicio, resumen.duracion) : null
 
   /**
    * Elegir servicios llena la hora de fin y el precio con la duración y el
@@ -433,17 +436,28 @@ export function ModalNuevaCita({
               }}
             />
           </div>
-          <div className="min-w-0">
-            <label htmlFor={idDeHoraFin} className={ETIQUETA}>
-              Hora fin
-            </label>
-            <CampoHora
-              id={idDeHoraFin}
-              etiqueta="Hora fin"
-              value={form.horaFin}
-              onChange={(valor) => onCambiarCampo("horaFin", valor)}
-            />
-          </div>
+          {finCalculado ? (
+            // Con servicios elegidos la duración ya está dicha: la hora de fin
+            // se calcula sola y no se le pide al usuario.
+            <div className="min-w-0">
+              <p className={ETIQUETA}>Termina</p>
+              <p className="flex min-h-12 items-center px-1 text-base tabular-nums text-texto" aria-live="polite">
+                {finCalculado}
+              </p>
+            </div>
+          ) : (
+            <div className="min-w-0">
+              <label htmlFor={idDeHoraFin} className={ETIQUETA}>
+                Hora fin
+              </label>
+              <CampoHora
+                id={idDeHoraFin}
+                etiqueta="Hora fin"
+                value={form.horaFin}
+                onChange={(valor) => onCambiarCampo("horaFin", valor)}
+              />
+            </div>
+          )}
         </div>
 
         {/* El horario de la sede elegida ese día; se anuncia al cambiar de sede o de fecha. */}

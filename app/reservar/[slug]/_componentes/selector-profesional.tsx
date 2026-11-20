@@ -4,6 +4,7 @@ import { useId } from "react"
 import type { Ref } from "react"
 import { UsersRound } from "lucide-react"
 import { ImagenConRespaldo } from "@/components/comunes/imagen-con-respaldo"
+import { iniciales } from "@/lib/pagina-del-negocio"
 import { cn } from "@/lib/utils"
 import type { ProfesionalDelEquipo } from "../_datos"
 
@@ -30,16 +31,6 @@ const CUALQUIERA_DE_SIEMPRE = { nombre: "Cualquiera disponible", detalle: "Te as
 
 const ELEGIDO = "bg-azul-suave font-semibold text-navy inset-ring-2 inset-ring-navy"
 const EN_REPOSO = "bg-tarjeta font-medium text-navy inset-ring-1 inset-ring-texto-2 hover:bg-azul-suave hover:inset-ring-navy"
-
-/** Las iniciales, para quien no tiene foto. */
-function iniciales(nombre: string): string {
-  return nombre
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((parte) => parte[0]?.toUpperCase() ?? "")
-    .join("")
-}
 
 /**
  * "¿Con quién?": cualquiera disponible (lo primero, y lo que viene elegido)

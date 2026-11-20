@@ -163,7 +163,7 @@ export function SelectorServicio({
         role="group"
         aria-label={frases.filtrarPorCategoria}
         className={cn(
-          "-mx-2 flex gap-2 overflow-x-auto px-2 py-2 sm:flex-wrap sm:overflow-visible",
+          "-mx-2 flex gap-2 overflow-x-auto px-2 py-2 @[32rem]:flex-wrap @[32rem]:overflow-visible",
           vista.conBuscador ? "mt-1" : "-mt-2"
         )}
       >
@@ -277,7 +277,7 @@ function BotonDeFiltro({
       aria-pressed={activo}
       onClick={onClick}
       className={cn(
-        "inline-flex min-h-11 max-w-full shrink-0 items-center gap-2 rounded-full px-4 py-1.5 text-left text-sm font-medium break-words whitespace-nowrap text-navy anillo-foco sm:whitespace-normal",
+        "inline-flex min-h-11 max-w-full shrink-0 items-center gap-2 rounded-full px-4 py-1.5 text-left text-sm font-medium break-words whitespace-nowrap text-navy anillo-foco @[32rem]:whitespace-normal",
         "transition-[background-color,box-shadow] duration-150 ease-suave",
         activo ? "bg-azul-suave inset-ring-2 inset-ring-navy" : "bg-tarjeta inset-ring-1 inset-ring-texto-2 hover:bg-crema hover:inset-ring-navy"
       )}
@@ -309,7 +309,7 @@ function ListaDeTarjetas({
   "aria-labelledby"?: string
 }) {
   return (
-    <ul aria-labelledby={idDelTitulo} className={cn("grid gap-3 md:grid-cols-2", className)}>
+    <ul aria-labelledby={idDelTitulo} className={cn("grid gap-3 @[40rem]:grid-cols-2", className)}>
       {servicios.map((servicio) => {
         const posicion = seleccionados.findIndex((elegido) => elegido.id === servicio.id)
         const elegido = posicion >= 0
@@ -328,7 +328,7 @@ function ListaDeTarjetas({
               disabled={bloqueado}
               onClick={() => onAlternar(servicio)}
               className={cn(
-                "flex w-full flex-col rounded-boton-lg p-4 text-left text-navy squircle anillo-foco sm:p-5",
+                "flex w-full flex-col rounded-boton-lg p-4 text-left text-navy squircle anillo-foco @[32rem]:p-5",
                 "transition-[background-color,box-shadow] duration-150 ease-suave",
                 elegido
                   ? "bg-azul-suave inset-ring-2 inset-ring-navy"
