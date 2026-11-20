@@ -222,3 +222,59 @@ describe("cliente que ya existía (mismo correo y nombre): la reserva no le escr
     expect(notaDeLaCita()).toBeNull()
   })
 })
+
+describe("reconocer por teléfono + nombre (clientas importadas sin correo)", () => {
+  const IMPORTADA = { id: "c-importada", businessId: NEGOCIO, name: "Lucía Pérez", lastName: null, email: null, phone: "+56912345678" }
+
+  it("sin correo: la reserva entra a su ficha, sin crear otra", async () => {
+    escenario([IMPORTADA])
+    const antes = { ...base.buscar("customer", { id: "c-importada" })[0] }
+    expect((await reservar({ telefono: "9 1234 5678", nombre: "lucia", apellido: "PEREZ" })).status).toBe(201)
+    expect(lucias()).toHaveLength(1)
+    expect(base.buscar("appointment")[0]).toMatchObject({ customerId: "c-importada", notes: null })
+    expect(base.buscar("customer", { id: "c-importada" })[0]).toEqual(antes)
+  })
+
+  it("un teléfono guardado de otra forma también la reconoce", async () => {
+    escenario([{ ...IMPORTADA, phone: "9 1234 5678" }])
+    await reservar({ telefono: "+56912345678" })
+    expect(base.buscar("appointment")[0]).toMatchObject({ customerId: "c-importada" })
+  })
+
+  it("con un correo que no tiene la ficha: no lo escribe, lo deja en la nota", async () => {
+    escenario([IMPORTADA])
+    await reservar({ telefono: "912345678", email: "Lucia@Correo.test", correoPromoConsentimiento: true })
+    expect(base.buscar("customer", { id: "c-importada" })[0]).toMatchObject({ email: null, correoPromoConsentAt: null })
+    expect(base.buscar("appointment")[0]).toMatchObject({ customerId: "c-importada" })
+    expect(notaDeLaCita()).toContain("lucia@correo.test")
+  })
+
+  it("mismo teléfono y otro nombre: ficha nueva con aviso de posible duplicado", async () => {
+    escenario([{ ...IMPORTADA, name: "Caro uñas" }])
+    expect((await reservar({ telefono: "912345678" })).status).toBe(201)
+    const nueva = lucias()
+    expect(nueva).toHaveLength(1)
+    expect(base.buscar("appointment")[0]).toMatchObject({ customerId: nueva[0].id })
+    expect(notaDeLaCita()).toContain("«Caro uñas»")
+  })
+
+  it("el mismo correo y nombre sigue mandando sobre el teléfono", async () => {
+    escenario([IMPORTADA, { ...LUCIA, phone: null }])
+    await reservar({ email: "lucia@correo.test", telefono: "912345678" })
+    expect(base.buscar("appointment")[0]).toMatchObject({ customerId: "c-lucia" })
+  })
+
+  it("aislamiento: una clienta con ese teléfono en otro negocio no se reutiliza ni se nombra", async () => {
+    escenario([{ ...IMPORTADA, businessId: OTRO_NEGOCIO }])
+    await reservar({ telefono: "912345678" })
+    expect(base.buscar("appointment")[0].customerId).not.toBe("c-importada")
+    expect(notaDeLaCita()).toBeNull()
+  })
+
+  it("una clienta eliminada no se reutiliza ni se nombra", async () => {
+    escenario([{ ...IMPORTADA, tags: [MARCA_DE_CLIENTE_ELIMINADO] }])
+    await reservar({ telefono: "912345678" })
+    expect(base.buscar("appointment")[0].customerId).not.toBe("c-importada")
+    expect(notaDeLaCita()).toBeNull()
+  })
+})
